@@ -21,7 +21,8 @@ DECLARE GLOBAL FUNCTION main {
 
     WAIT 2. // 2 seconds for everything to settle.
 
-    waitForLaunch().
+    // waitForLaunch().
+    countdown(5).
     startLaunch().
     ascend().
     circularizeKerbin().
@@ -72,7 +73,6 @@ DECLARE LOCAL FUNCTION waitForLaunch {
     UNTIL ch = CHAR(13) {
         SET ch TO TERMINAL:INPUT:GETCHAR().
     }
-    countdown(5).
 }
 
 DECLARE LOCAL FUNCTION myRoll {
