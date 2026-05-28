@@ -119,6 +119,16 @@ DECLARE LOCAL FUNCTION ascend {
     STAGE.
     HUDTEXT("IGNITION!", 1, 2, 15, GREEN, FALSE).
     PRINT "IGNITION!".
+
+    // Deploy fairings at >68k, altitude.
+    WAIT UNTIL ALT:RADAR > 68000.
+    HUDTEXT("Fairing jettison.", 1, 2, 15, GREEN, FALSE).
+    FOR p IN SHIP:PARTSTAGGED("main_fairing") {
+        IF p:Modules:Contains("ModuleJettison") {
+            LOCAL m IS p:GetModule("ModuleJettison").
+            m:doAction("deploy", TRUE).
+        }
+    }
 }
 
 DECLARE LOCAL FUNCTION circularizeKerbin {
