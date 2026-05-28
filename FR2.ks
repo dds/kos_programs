@@ -17,9 +17,6 @@ SET TERMINAL:WIDTH to 80.
 
 DECLARE GLOBAL FUNCTION main {
     init().
-    PRINT " ".
-    PRINT "Welcome to FR2.".
-
     WAIT 2. // 2 seconds for everything to settle.
 
     // waitForLaunch().
@@ -53,10 +50,7 @@ DECLARE GLOBAL FUNCTION main {
 }
 
 DECLARE LOCAL FUNCTION init {
-    CLEARSCREEN.
-    PRINT "INITFR".
-    PRINT " ".
-
+    PRINT "Initializing FR2.".
     // Load dependencies.
 
     // MechJeb2
@@ -147,7 +141,17 @@ DECLARE LOCAL FUNCTION ascend {
     // Deploy fairings at >68k, altitude.
     PRINT "Waiting for 68,000m altitude to deploy main fairing.".
     WAIT UNTIL SHIP:ALTITUDE >= 68000.
+    PRINT " ".
     FOR p IN SHIP:PARTSTAGGED("main_fairing") {
+        PRINT "  DEBUG: SEARCHING FOR FAIRING MODULE".
+        FOR m_name IN p:MODULES {
+            LOCAL m IS p:GETMODULE(m_name).
+            PRINT "----- Module: " + m_name + " -----".
+            PRINT "  Available Events: " + m:ALLEVENTNAMES.
+            PRINT "  Available Actions: " + m:ALLACTIONNAMES.
+        }
+        PRINT " ".
+
         IF p:Modules:Contains("ModuleAirstreamFairing") {
             LOCAL m IS p:GetModule("ModuleAirstreamFairing").
             IF m:HASEVENT("jettison") {
