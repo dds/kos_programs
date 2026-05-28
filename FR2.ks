@@ -6,7 +6,7 @@
 
 @LAZYGLOBAL OFF.
 
-DECLARE GLOBAL desiredAltitude TO 120000.
+DECLARE GLOBAL desiredAltitude TO 100000.
 DECLARE GLOBAL desiredInclination TO 0.
 DECLARE GLOBAL desiredHeading TO 90.
 
