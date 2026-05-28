@@ -223,6 +223,10 @@ FUNCTION executeNextManeuver {
     }
     mLog("Alignment locked on Prograde!").
     
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    WAIT 0.2.
+
     WAIT UNTIL TIME:SECONDS >= startTime.
     mLog("Executing maneuver...").
     
