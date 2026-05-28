@@ -40,12 +40,12 @@ DECLARE LOCAL FUNCTION init {
     // Load dependencies.
 
     // MechJeb2
-    DECLARE GLOBAL MJ TO addons:MJ.
-    PRINT "MechJeb addon version: " + MJ:core:version.
-    if MJ:core:running {
-        PRINT "MechJeb core is running.".
+    SET mj to ADDONS:MJ.
+    SET mjcore TO mj:CORE. 
+    if mj:AVAILABLE {
+        PRINT "MechJeb is available.".
     } else {
-        PRINT "MechJeb core is not running.".
+        PRINT "WARNING: MechJeb reported as NOT AVAILABLE.".
     }
 
     LOCAL libs IS LIST("lib/files.ks", "lib/countdown.ks").
