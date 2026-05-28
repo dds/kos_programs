@@ -16,24 +16,63 @@ DECLARE GLOBAL munTargetPeriapsis IS 1800000.
 
 // Put this at the very top of FR2.ks
 PARAMETER remoteCommand IS "default".
-init().
+LOCAL libs IS LIST("lib/files.ks", "lib/countdown.ks", "lib/logs.ks").
+FOR lib IN libs {
+    LOCAL archivePath IS "0:/{0}":FORMAT(lib).
+    LOCAL localPath IS "1:/{0}":FORMAT(lib).
+    COPYPATH("0:/{0}":FORMAT(lib), "1:/{0}":FORMAT(lib)).
+    RUNONCEPATH("1:/{0}":FORMAT(lib)).
+}.
+printStorageStatus().
+
+mLog(" ").
+mLog("Initializing FR2.").
+
+// MechJeb2
+LOCAL mj IS ADDONS:MJ.
+LOCAL mjCore IS mj:CORE. 
+if mj:AVAILABLE {
+    mLog("MechJeb is available.").
+    LOCAL mjRunning IS "NOT running.".
+    if mjCore:RUNNING {
+        SET mjRunning TO "running.".
+    }
+    mLog("MechJeb core is " + mjRunning).
+    // LOCAL planner IS ADDONS:MJ:PLANNER.
+    // IF DEFINED(planner) {
+    //     mLog("MechJeb Maneuver Planner is available.").
+    // } else {
+    //     mLog("MechJeb Maneuver Planner is NOT available.").
+    // }
+
+    // See https://github.com/belpyro/kOS.MechJeb2.Addon/blob/main/Tests/AscentWrapperTest.ks
+    LOCAL Asc IS ADDONS:MJ:ASCENT.
+    SET Asc:Enabled TO TRUE.
+    SET Asc:DesiredAltitude TO desiredAltitude.
+    SET Asc:DesiredInclination TO desiredInclination.
+    SET Asc:AutoStage TO TRUE.
+    SET Asc:AutoStageLimit TO 2. // CHECK YO STAGING
+    SET Asc:AutoDeployAntennas TO TRUE.
+    SET Asc:AutoDeploySolarPanels TO TRUE.
+    SET Asc:AutoWarp TO FALSE.
+    SET Asc:SkipCircularization TO FALSE.
+} else {
+    mLog("WARNING: MechJeb reported as NOT AVAILABLE.").
+}
 
 IF remoteCommand = "default" {
     // If we run the file normally without parameters, do nothing here and let the script flow
 }
 ELSE IF remoteCommand = "transfer" {
     // Manually trigger the transfer function from inside program scope!
-    init().
     ADD hohmannTransfer(Mun, munInitialPeriapsis).
     PRINT "Transfer node manually generated via Telnet!".
 }
 ELSE IF remoteCommand = "capture" {
-    init().
     ADD planMunarCapture(munTargetApoapsis).
     PRINT "Capture node manually generated via Telnet!".
 }
 ELSE IF remoteCommand = "fairing" {
-    init().
     deployMainFairing().
 }
 
@@ -72,49 +111,6 @@ FUNCTION main {
 }
 
 FUNCTION init {
-    LOCAL libs IS LIST("lib/files.ks", "lib/countdown.ks", "lib/logs.ks").
-    FOR lib IN libs {
-        LOCAL archivePath IS "0:/{0}":FORMAT(lib).
-        LOCAL localPath IS "1:/{0}":FORMAT(lib).
-        COPYPATH("0:/{0}":FORMAT(lib), "1:/{0}":FORMAT(lib)).
-        RUNONCEPATH("1:/{0}":FORMAT(lib)).
-    }.
-    printStorageStatus().
-
-    mLog(" ").
-    mLog("Initializing FR2.").
-
-    // MechJeb2
-    LOCAL mj IS ADDONS:MJ.
-    LOCAL mjCore IS mj:CORE. 
-    if mj:AVAILABLE {
-        mLog("MechJeb is available.").
-        LOCAL mjRunning IS "NOT running.".
-        if mjCore:RUNNING {
-            SET mjRunning TO "running.".
-        }
-        mLog("MechJeb core is " + mjRunning).
-        // LOCAL planner IS ADDONS:MJ:PLANNER.
-        // IF DEFINED(planner) {
-        //     mLog("MechJeb Maneuver Planner is available.").
-        // } else {
-        //     mLog("MechJeb Maneuver Planner is NOT available.").
-        // }
-
-        // See https://github.com/belpyro/kOS.MechJeb2.Addon/blob/main/Tests/AscentWrapperTest.ks
-        LOCAL Asc IS ADDONS:MJ:ASCENT.
-        SET Asc:Enabled TO TRUE.
-        SET Asc:DesiredAltitude TO desiredAltitude.
-        SET Asc:DesiredInclination TO desiredInclination.
-        SET Asc:AutoStage TO TRUE.
-        SET Asc:AutoStageLimit TO 2. // CHECK YO STAGING
-        SET Asc:AutoDeployAntennas TO TRUE.
-        SET Asc:AutoDeploySolarPanels TO TRUE.
-        SET Asc:AutoWarp TO FALSE.
-        SET Asc:SkipCircularization TO FALSE.
-    } else {
-        mLog("WARNING: MechJeb reported as NOT AVAILABLE.").
-    }
 }
 
 FUNCTION waitForLaunch {
