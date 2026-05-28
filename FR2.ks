@@ -76,12 +76,12 @@ DECLARE LOCAL FUNCTION init {
             SET mjRunning TO "running.".
         }
         PRINT "MechJeb core is " + mjRunning.
-        LOCAL planner TO ADDONS:MJ:PLANNER.
-        IF DEFINED(planner) {
-            PRINT "MechJeb Maneuver Planner is available.".
-        } else {
-            PRINT "MechJeb Maneuver Planner is NOT available.".
-        }
+        // LOCAL planner TO ADDONS:MJ:PLANNER.
+        // IF DEFINED(planner) {
+        //     PRINT "MechJeb Maneuver Planner is available.".
+        // } else {
+        //     PRINT "MechJeb Maneuver Planner is NOT available.".
+        // }
 
         // See https://github.com/belpyro/kOS.MechJeb2.Addon/blob/main/Tests/AscentWrapperTest.ks
         LOCAL Asc IS ADDONS:MJ:ASCENT.
