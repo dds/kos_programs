@@ -6,8 +6,6 @@ GLOBAL FUNCTION initializeLogFile {
 
     SET flightLogPathLocal TO "1:/logs/" + fileName.
     SET flightLogPathArchive TO "0:/logs/" + fileName.
-
-    LOG "Blackbox log initialized." TO flightLogPathLocal.
 }
 
 GLOBAL FUNCTION mLog {
@@ -17,8 +15,4 @@ GLOBAL FUNCTION mLog {
     PRINT message.
 
     LOG stampedLine TO flightLogPathLocal.
-
-    IF HomeConnection:IsConnected {
-        LOG stampedLine TO flightLogPathArchive.
-    }
 }
