@@ -35,7 +35,8 @@ DECLARE GLOBAL FUNCTION main {
 }
 
 DECLARE LOCAL FUNCTION init {
-    PRINT "INIT".
+    CLEARSCREEN.
+    PRINT "INITFR".
 
     // Load dependencies.
 
@@ -60,7 +61,7 @@ DECLARE LOCAL FUNCTION init {
         COPYPATH("0:/{0}":FORMAT(lib), "1:/{0}":FORMAT(lib)).
         PRINT "Copied {0} to {1}":FORMAT(archivePath, localPath). 
         RUNONCEPATH("1:/{0}":FORMAT(lib)).
-        PRINT "Loaded {1}":FORMAT(localPath).
+        PRINT "Loaded {0}":FORMAT(localPath).
     }.
     printStorageStatus().
 }
