@@ -35,7 +35,7 @@ DECLARE LOCAL FUNCTION init {
     // Load dependencies.
 
     // MechJeb2
-    SET MJ TO ADDONS:MJ.
+    DECLARE GLOBAL MJ TO addons:MJ.
     PRINT "MechJeb addon version: " + MJ:core:version.
     if MJ:core:running {
         PRINT "MechJeb core is running.".
