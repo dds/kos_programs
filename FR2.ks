@@ -118,8 +118,8 @@ DECLARE LOCAL FUNCTION ascend {
     HUDTEXT("IGNITION!", 1, 2, 15, GREEN, FALSE).
     PRINT "IGNITION!".
 
+    WAIT UNTIL ADDONS:MJ:ASCENT:ENABLED = FALSE.
     // executeManeuver(TIME:seconds + 30, 100, 100, 100).
-
 }
 
 DECLARE LOCAL FUNCTION circularizeKerbin {
