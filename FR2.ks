@@ -14,8 +14,6 @@ DECLARE GLOBAL munInitialPeriapsis IS 20000.
 DECLARE GLOBAL munTargetApoapsis IS 1800000.
 DECLARE GLOBAL munTargetPeriapsis IS 1800000.
 
-// Put this at the very top of FR2.ks
-PARAMETER remoteCommand IS "default".
 LOCAL libs IS LIST("lib/files.ks", "lib/countdown.ks", "lib/logs.ks").
 FOR lib IN libs {
     LOCAL archivePath IS "0:/{0}":FORMAT(lib).
@@ -61,17 +59,23 @@ if mj:AVAILABLE {
     mLog("WARNING: MechJeb reported as NOT AVAILABLE.").
 }
 
+PARAMETER remoteCommand IS "default".
 IF remoteCommand = "default" {
     // If we run the file normally without parameters, do nothing here and let the script flow
 }
 ELSE IF remoteCommand = "transfer" {
     // Manually trigger the transfer function from inside program scope!
     ADD hohmannTransfer(Mun, munInitialPeriapsis).
-    PRINT "Transfer node manually generated via Telnet!".
+    mLog("Transfer node manually generated via Telnet!").
 }
+ELSE IF remoteCommand = "burn" {
+    // Execute the current maneuver.
+    executeNextManeuver().
+}
+
 ELSE IF remoteCommand = "capture" {
     ADD planMunarCapture(munTargetApoapsis).
-    PRINT "Capture node manually generated via Telnet!".
+    mLog("Capture node manually generated via Telnet!").
 }
 ELSE IF remoteCommand = "fairing" {
     deployMainFairing().
@@ -97,7 +101,7 @@ FUNCTION main {
     LOCAL munTransfer IS hohmannTransfer(Mun, munInitialPeriapsis).
     ADD munTransfer.
     HUDTEXT("Mun Transfer Node Created", 1, 2, 15, WHITE, FALSE).
-    executeManeuver(munTransfer).
+    executeNextManeuver().
 
     WAIT 1.
     warpToMunSOI().
@@ -106,12 +110,9 @@ FUNCTION main {
     LOCAL munCapture IS planMunarCapture(munTargetApoapsis).
     ADD munCapture.
     HUDTEXT("Mun Capture Node Created", 1, 2, 15, WHITE, FALSE).
-    executeManeuver(munCapture).
+    executeNextManeuver().
 
     exit().
-}
-
-FUNCTION init {
 }
 
 FUNCTION waitForLaunch {
@@ -189,6 +190,81 @@ FUNCTION deployMainFairing {
 
 FUNCTION circularizeKerbin {
     WAIT UNTIL ADDONS:MJ:ASCENT:ENABLED = FALSE.
+}
+
+FUNCTION executeNextManeuver {
+    // 1. Core Safety Check: Verify a node actually exists on the map
+    IF NOT HASNODE {
+        mLog("ERROR: No maneuver node found on the flight path!").
+        HUDTEXT("Execution Failed: No Node", 3, 2, 15, RED, FALSE).
+        RETURN.
+    }
+    
+    // Create a local reference to the active node
+    LOCAL t IS NEXTNODE.
+
+    // 2. Calculate Burn Timing
+    LOCAL startTime IS calculateStartTime(t).
+    
+    // Hold short of the window
+    WAIT UNTIL TIME:SECONDS >= (startTime - 10).
+    HUDTEXT("Executing maneuver in T-10", 1, 2, 15, WHITE, FALSE).
+    
+    countdown(9).
+    
+    // 3. Align and Hold Position
+    lockSteeringAtManeuverTarget(t).
+    
+    WAIT UNTIL TIME:SECONDS >= startTime.
+    mLog("Executing maneuver... Holding burn vector.").
+    
+    // Capture the static starting vector direction relative to the universe
+    LOCAL burnIV IS t:BURNVECTOR. 
+    
+    // 4. The Active Burn Loop
+    UNTIL isManeuverComplete(t, burnIV) {
+        // Automatic Staging Monitor
+        LOCAL engs IS LIST().
+        LIST ENGINES IN engs.
+        LOCAL needsStage IS FALSE.
+        
+        FOR eng IN engs {
+            IF eng:FLAMEOUT { SET needsStage TO TRUE. }
+        }
+        IF SHIP:MAXTHRUST = 0 { SET needsStage TO TRUE. }
+        
+        IF needsStage {
+            HUDTEXT("Staging!", 2, 2, 15, YELLOW, FALSE).
+            STAGE.
+            WAIT 0.5.
+        }
+        
+        // Engine Throttle Calculation
+        LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
+        IF maxAcc > 0 {
+            IF t:DELTAV:MAG < (maxAcc * 0.5) {
+                LOCK THROTTLE TO MAX(0.01, t:DELTAV:MAG / maxAcc). // Fine precision
+            } ELSE {
+                LOCK THROTTLE TO 1.0. // Full power
+            }
+        }
+        WAIT 0.01.
+    }
+    
+    // 5. Clean up, Shutdown, and Maintain Attitude Orientation
+    LOCK THROTTLE TO 0.
+    
+    // REMOVE NEXTNODE completely cleans the plan map automatically
+    REMOVE t. 
+    
+    HUDTEXT("Maneuver burn finalized.", 1, 2, 15, GREEN, FALSE).
+    mLog("Engine shutdown complete. Maintaining orientation vector...").
+    
+    // CRITICAL: We DO NOT unlock steering here anymore. 
+    // Leaving 'LOCK STEERING TO t:BURNVECTOR' active would throw a crash error 
+    // because the node 't' no longer exists. 
+    // Instead, we lock your attitude to the ship's current front vector to hold direction:
+    LOCK STEERING TO SHIP:FACING.
 }
 
 FUNCTION executeManeuver {
