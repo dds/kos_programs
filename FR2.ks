@@ -22,7 +22,7 @@ IF remoteCommand = "default" {
 }
 ELSE IF remoteCommand = "transfer" {
     // Manually trigger the transfer function from inside program scope!
-    ADD hohmannTransfer(Mun, desiredMunPeriapsis).
+    ADD hohmannTransfer(Mun, munInitialPeriapsis).
     PRINT "Transfer node manually generated via Telnet!".
 }
 ELSE IF remoteCommand = "capture" {
