@@ -34,26 +34,19 @@ DECLARE GLOBAL FUNCTION main {
     HUDTEXT("Mun Transfer Node Created", 1, 2, 15, WHITE, FALSE).
     executeManeuver(munTransfer).
 
-    // Generate the capture node using the transfer node's flight path.
-    WAIT 0.1.
-    LOCAL munCapture TO NODE(0, 0, 0, 0).
-    IF munTransfer:Orbit:hasNextPatch {
-        LOCAL encounterOrbit TO munTransfer:Orbit:NextPatch.
-        // Time of Mun periapsis. 
-        LOCAL captureUt TO munTransfer:TIME + munTransfer:Orbit:NextPatchETA + encounterOrbit:Periapsis:ETA.
-        // Velocity difference at periapsis.
-        LOCAL mu TO Mun:Mu.
-        LOCAL rAtPe TO encounterOrbit:PeriApsis + Mun:Radius.
-        LOCAL vAtPe TO SQRT(mu * ((2 / rAtPe) - (1 / encounterOrbit:SemiMajorAxis))).
-        LOCAL vCirc TO SQRT(mu / rAtPe).
-        LOCAL captDV TO vCirc - vAtPe.
-
-        SET munCapture TO NODE(captureUt, 0, 0, captDV).
-        ADD munCapture.
-        HUDTEXT("Mun Capture Node Created", 1, 2, 15, WHITE, FALSE).
-    }
-
     warpToMunSOI().
+    
+    LOCAL munCapture TO planMunarCapture(10999999).
+    LOCAL captureUt IS TIME:SECONDS + SHIP:Orbit:Periapsis:ETA.
+    LOCAL mu TO Mun:Mu.
+    LOCAL rAtPe TO SHIP:Orbit:Periapsis + SHIP:Body:Radius.
+    LOCAL vAtPe TO SQRT(mu * ((2 / rAtPe) - (1 / SHIP:Orbit:SemiMajorAxis))).
+    LOCAL vCirc TO SQRT(mu / rAtPe).
+    LOCAL captDV TO vCirc - vAtPe.
+
+    SET munCapture TO NODE(captureUt, 0, 0, captDV).
+    ADD munCapture.
+    HUDTEXT("Mun Capture Node Created", 1, 2, 15, WHITE, FALSE).
     executeManeuver(munCapture).
 
     exit().
@@ -152,13 +145,13 @@ DECLARE LOCAL FUNCTION ascend {
     PRINT "IGNITION!".
 
     // Deploy fairings at >68k, altitude.
-    PRINT "Waitiing for 68,000m altitude to deploy main fairing.".
+    PRINT "Waiting for 68,000m altitude to deploy main fairing.".
     WAIT UNTIL SHIP:ALTITUDE >= 68000.
     FOR p IN SHIP:PARTSTAGGED("main_fairing") {
-        IF p:Modules:Contains("ModuleJettison") {
-            LOCAL m IS p:GetModule("ModuleJettison").
+        IF p:Modules:Contains("ModuleAirstreamFairing") {
+            LOCAL m IS p:GetModule("ModuleAirstreamFairing").
             HUDTEXT("Fairing jettison.", 1, 2, 15, GREEN, FALSE).
-            m:doAction("deploy", TRUE).
+            m:doAction("jettison").
         }
     }
 }
@@ -170,25 +163,45 @@ DECLARE LOCAL FUNCTION circularizeKerbin {
 DECLARE LOCAL FUNCTION executeManeuver {
     DECLARE PARAMETER t.
 
-    PRINT "Executing maneuver".
-    HUDTEXT("Executing maneuver.", 1, 2, 15, WHITE, FALSE).
     LOCAL startTime IS calculateStartTime(t).
-    WAIT UNTIL startTime - 10.
+    WAIT UNTIL TIME:SECONDS >= (startTime - 10).
+    HUDTEXT("Executing maneuver in T-10", 1, 2, 15, WHITE, FALSE).
     countdown(9).
     lockSteeringAtManeuverTarget(t).
-    WAIT UNTIL startTime.
-    LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
-    LOCAL burnIV IS t:DeltaV.
+    WAIT UNTIL TIME:SECONDS >= startTime.
+    PRINT "Executing maneuver".
+
+    LOCAL burnIV IS t:BurnVector.
     UNTIL isManeuverComplete(t, burnIV) { 
-        IF t:DeltaV:MAG < (maxAcc * 0.5) {
+        LOCAL engs IS LIST().
+        LIST ENGINES in engs.
+        LOCAL needsStage IS FALSE.
+
+        FOR eng IN engs {
+            IF eng:FLAMEOUT { SET needsStage TO TRUE. }
+        }
+        IF SHIP:MAXTHRUST = 0 { SET needsStage TO TRUE. }
+
+        IF needsStage {
+            HUDTEXT("Staging!", 2, 2, 15, YELLOW, FALSE).
+            STAGE.
+            WAIT 0.5.
+        }
+    
+        LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
+        IF maxAcc > 0 {
+            IF t:DeltaV:MAG < (maxAcc * 0.5) {
             LOCK THROTTLE TO MAX(0.01, t:DeltaV:MAG / maxAcc). // Precision.
         } ELSE { 
             LOCK THROTTLE TO 1.0. // Full power.
         }
+
+        WAIT 0.01.
     }
 
     // Clean up and shutdown.
     LOCK THROTTLE TO 0.
+    UNLOCK STEERING.
     REMOVE t.
     HUDTEXT("Maneuver complete.", 1, 2, 15, GREEN, FALSE).
 }
