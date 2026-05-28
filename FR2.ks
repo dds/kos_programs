@@ -33,13 +33,10 @@ FUNCTION main {
     executeManeuver(munTransfer).
 
     WAIT 1.
-
     warpToMunSOI().
-
     WAIT 1.
     
-    LOCAL munCapture IS planMunarCapture(10999999).
-
+    LOCAL munCapture IS planMunarCapture(10999000).
     ADD munCapture.
     HUDTEXT("Mun Capture Node Created", 1, 2, 15, WHITE, FALSE).
     executeManeuver(munCapture).
@@ -409,7 +406,7 @@ LOCAL FUNCTION planMunarCapture {
     // Format: NODE(universal_time, radial, normal, prograde)
     LOCAL captureNode IS NODE(captureUt, 0, 0, captureDv).
     
-    PRINT "Munar capture maneuver calculated for " + localBody:NAME.
+    PRINT "Capture maneuver calculated for " + localBody:NAME.
     PRINT " -> Target Apoapsis: " + ROUND(targetApoapsis / 1000, 1) + " km".
     PRINT " -> Required Delta-V: " + ROUND(ABS(captureDv), 1) + " m/s retrograde".
 
