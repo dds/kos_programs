@@ -6,17 +6,44 @@
 
 @LAZYGLOBAL OFF.
 
-DECLARE LOCAL FUNCTION main {
+DECLARE GLOBAL desiredAltitude TO 120000.
+DECLARE GLOBAL desiredInclination TO 0.
+DECLARE GLOBAL desiredHeading TO 90.
+
+DECLARE GLOBAL FUNCTION main {
     init().
+    PRINT "Welcome to FR2.".
+
+    WAIT 2. // 2 seconds for everything to settle.
+
     waitForLaunch().
     startLaunch().
     ascend().
-    circularize().
+    circularizeKerbin().
     endLaunch().
+    planMunTransfer().
+    transMunInjection().
+    transferToMun().
+    enterMunSOI().
+    circularizeMun().
+    exit().
 }
 
 DECLARE LOCAL FUNCTION init {
-    LOCAL libs IS LIST("lib/files.ks").
+    PRINT "INIT".
+
+    // Load dependencies.
+
+    // MechJeb2
+    DECLARE GLOBAL MJ TO addons:MJ.
+    PRINT "MechJeb addon version: " + MJ:core:version.
+    if MJ:core:running {
+        PRINT "MechJeb core is running.".
+    } else {
+        PRINT "MechJeb core is not running.".
+    }
+
+    LOCAL libs IS LIST("lib/files.ks", "lib/countdown.ks").
     FOR lib IN libs {
         LOCAL archivePath IS "0:/{0}":FORMAT(lib).
         LOCAL localPath IS "1:/{1}":FORMAT(lib).
@@ -26,51 +53,98 @@ DECLARE LOCAL FUNCTION init {
         PRINT "Loaded {1}":FORMAT(localPath).
     }.
     printStorageStatus().
-
-    // Initialize MechJeb
-    SET MJ TO addons:MJ.
 }
 
 DECLARE LOCAL FUNCTION waitForLaunch {
-    PRINT "Press ENTER to launch.".
+    PRINT "Engage autopilot then press ENTER to initiate countdown.".
     LOCAL ch is "".
     UNTIL ch = CHAR(13) {
         SET ch TO TERMINAL:INPUT:GETCHAR().
     }
-    PRINT "LAUNCH STARTED. RELEASING SAFETIES. GODSPEED.".
+    countdown(5).
 }
 
+DECLARE LOCAL FUNCTION myRoll {
+    RETURN 360 - desiredHeading.
+}
+
+DECLARE LOCAL FUNCTION lockToPrograde {
+    WAIT UNTIL (SHIP:AVAILABLETHRUST < MASS*CONSTANT:g0).
+    PRINT "Locking to prograde.".
+    LOCK STEERING TO SRFPROGRADE + R(0, 0, myRoll()).
+}
+
+// DECLARE LOCAL FUNCTION deployPayload {
+//     WAIT UNTIL ALTITUDE < deployAlt AND VERTICALSPEED < 0.
+//     STAGE.
+//     HUDTEXT("Deploying payload", 1, 2, 15, WHITE, FALSE).
+//     PRINT "Deploying payload.".
+// }
+
 DECLARE LOCAL FUNCTION startLaunch {
+    PRINT "Launch initiated.".
     LOCK THROTTLE to 1.
+    lockToPrograde().
     STAGE.
-    PRINT "IGNITION".
-    executeManeuver(TIME:seconds + 30, 100, 100, 100).
+    HUDTEXT("IGNITION!", 1, 2, 15, GREEN, FALSE).
+    PRINT "IGNITION!".
+    // executeManeuver(TIME:seconds + 30, 100, 100, 100).
 }
 
 DECLARE LOCAL FUNCTION endLaunch {
     LOCK THROTTLE to 0.
+    UNLOCK STEERING.
     PRINT "Launch successful. Control released.".
 }
 
 DECLARE LOCAL FUNCTION ascend {
+    PRINT "Utilizing MechJeb2 ascent assistance.".
+
+    SET MJ:ASCENT:ENABLED TO TRUE.
+    SET MJ:ASCENT:ASCENTTYPE TO "CLASSIC".
+    SET MJ:ASCENT:DESIREDALTITUDE TO desiredAltitude.
+    SET MJ:ASCENT:DESIREDINCLINATION TO desiredInclination.
 }
 
-DECLARE LOCAL FUNCTION circularize {
+DECLARE LOCAL FUNCTION circularizeKerbin {
+    // Wait for MJ to circularize....
 }
 
-DECLARE LOCAL FUNCTION executeManeuver {
-    PARAMETER args.
-    LOCAL mnv IS NODE(args[0], args[1], args[2], args[3]).
+// DECLARE LOCAL FUNCTION executeManeuver {
+//     DECLARE PARAMETER args.
+//     LOCAL mnv IS NODE(args[0], args[1], args[2], args[3]).
+// 
+//     ADD(mnv).
+//     LOCAL startTime IS calculateStartTime(mnv).
+//     WAIT UNTIL startTime - 10.
+//     lockSteeringAtManeuverTarget(mnv).
+//     WAIT UNTIL startTime.
+//     LOCK THROTTLE TO 1.
+//     WAIT UNTIL isManeuverComplete(mnv).
+//     LOCK THROTTLE TO 0.
+//     REMOVE(mnv).
+// }
 
-    addManeuverToFlightPlan(mnv).
-    LOCAL startTime IS calculateStartTime(mnv).
-    WAIT UNTIL startTime - 10.
-    lockSteeringAtManeuverTarget(mnv).
-    WAIT UNTIL startTime.
-    LOCK THROTTLE TO 1.
-    WAIT UNTIL isManeuverComplete(mnv).
-    LOCK THROTTLE TO 0.
-    removeManeuverFromFlightPlan(mnv).
+DECLARE LOCAL FUNCTION planMunTransfer {
+
 }
 
-main().
+DECLARE LOCAL FUNCTION transMunInjection {
+
+}
+
+DECLARE LOCAL FUNCTION transferToMun {
+
+}
+
+DECLARE LOCAL FUNCTION enterMunSOI {
+
+}
+
+DECLARE LOCAL FUNCTION circularizeMun {
+
+}
+
+DECLARE LOCAL FUNCTION exit {
+
+}
