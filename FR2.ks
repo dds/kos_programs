@@ -59,7 +59,7 @@ DECLARE LOCAL FUNCTION init {
         LOCAL localPath IS "1:/{0}":FORMAT(lib).
         COPYPATH("0:/{0}":FORMAT(lib), "1:/{0}":FORMAT(lib)).
         PRINT "Copied {0} to {1}":FORMAT(archivePath, localPath). 
-        RUNONCEPATH("1:/{0}:FORMAT(lib)").
+        RUNONCEPATH("1:/{0}":FORMAT(lib)).
         PRINT "Loaded {1}":FORMAT(localPath).
     }.
     printStorageStatus().
