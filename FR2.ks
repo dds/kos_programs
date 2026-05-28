@@ -212,11 +212,23 @@ FUNCTION executeNextManeuver {
     
     countdown(9).
     
-    // 3. Align and Hold Position
-    lockSteeringAtManeuverTarget(t).
+    // 3. Hand Steering over to KSP's Native SAS
+    UNLOCK STEERING. // Ensure kOS isn't fighting SAS
+    SET SAS TO TRUE.
+    WAIT 0.1. // Small buffer for SAS to initialize
+    
+    // Set SAS mode to track the maneuver node directly
+    SET SASMODE TO "MANEUVER".
+    mLog("SAS set to MANEUVER mode. Aligning...").
+
+    // Wait until the ship is pointed reasonably close to the vector before ignition
+    UNTIL VANG(SHIP:FACING:FOREVECTOR, t:BURNVECTOR) < 1.5 {
+        WAIT 0.1.
+    }
+    mLog("Alignment locked by SAS!").
     
     WAIT UNTIL TIME:SECONDS >= startTime.
-    mLog("Executing maneuver... Holding burn vector.").
+    mLog("Executing maneuver...").
     
     // Capture the static starting vector direction relative to the universe
     LOCAL burnIV IS t:BURNVECTOR. 
@@ -251,67 +263,94 @@ FUNCTION executeNextManeuver {
         WAIT 0.01.
     }
     
-    // 5. Clean up, Shutdown, and Maintain Attitude Orientation
+    // 5. Clean up and Shutdown
     LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE. // Hand manual throttle control back to the pilot
     
-    // REMOVE NEXTNODE completely cleans the plan map automatically
-    REMOVE t. 
+    REMOVE t. // Clear the node from the flight path
     
+    // Note: We leave SAS turned on! It will automatically switch from 
+    // "MANEUVER" to standard "STABILITYASSIST" (or "HOLD") because 
+    // the target node no longer exists. This keeps the ship perfectly frozen.
     HUDTEXT("Maneuver burn finalized.", 1, 2, 15, GREEN, FALSE).
-    mLog("Engine shutdown complete. Maintaining orientation vector...").
-    
-    // CRITICAL: We DO NOT unlock steering here anymore. 
-    // Leaving 'LOCK STEERING TO t:BURNVECTOR' active would throw a crash error 
-    // because the node 't' no longer exists. 
-    // Instead, we lock your attitude to the ship's current front vector to hold direction:
-    LOCK STEERING TO SHIP:FACING.
+    mLog("Engine shutdown complete. Native SAS holding current attitude.").
 }
 
-FUNCTION executeManeuver {
-    DECLARE PARAMETER t.
-
+FUNCTION executeNextManeuver {
+    IF NOT HASNODE {
+        mLog("ERROR: No maneuver node found on the flight path!").
+        HUDTEXT("Execution Failed: No Node", 3, 2, 15, RED, FALSE).
+        RETURN.
+    }
+    
+    LOCAL t IS NEXTNODE.
     LOCAL startTime IS calculateStartTime(t).
+    
     WAIT UNTIL TIME:SECONDS >= (startTime - 10).
     HUDTEXT("Executing maneuver in T-10", 1, 2, 15, WHITE, FALSE).
+    
     countdown(9).
-    lockSteeringAtManeuverTarget(t).
+    
+    // 1. Hand steering over to KSP's Prograde Vector Lock
+    UNLOCK STEERING. 
+    SET SAS TO TRUE.
+    WAIT 0.1. 
+    
+    // Use the basic vector locking support you have available
+    SET SASMODE TO "PROGRADE".
+    mLog("SAS set to PROGRADE vector lock. Aligning...").
+
+    // 2. Wait until the ship is aligned with Prograde (which matches the node)
+    UNTIL VANG(SHIP:FACING:FOREVECTOR, t:BURNVECTOR) < 1.5 {
+        WAIT 0.1.
+    }
+    mLog("Alignment locked on Prograde!").
+    
     WAIT UNTIL TIME:SECONDS >= startTime.
-    mLog("Executing maneuver").
-
-    LOCAL burnIV IS t:BurnVector.
-    UNTIL isManeuverComplete(t, burnIV) { 
+    mLog("Executing maneuver...").
+    
+    LOCAL burnIV IS t:BURNVECTOR. 
+    
+    // 3. The Active Burn Loop
+    UNTIL isManeuverComplete(t, burnIV) {
+        // Automatic Staging Monitor
         LOCAL engs IS LIST().
-        LIST ENGINES in engs.
+        LIST ENGINES IN engs.
         LOCAL needsStage IS FALSE.
-
-        FOR eng IN engs {
+        
+        FOR eng in engs {
             IF eng:FLAMEOUT { SET needsStage TO TRUE. }
         }
         IF SHIP:MAXTHRUST = 0 { SET needsStage TO TRUE. }
-
+        
         IF needsStage {
             HUDTEXT("Staging!", 2, 2, 15, YELLOW, FALSE).
             STAGE.
             WAIT 0.5.
         }
-    
+        
+        // Engine Throttle Calculation
         LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
         IF maxAcc > 0 {
-            IF t:DeltaV:MAG < (maxAcc * 0.5) {
-                LOCK THROTTLE TO MAX(0.01, t:DeltaV:MAG / maxAcc). // Precision.
-            } ELSE { 
-                LOCK THROTTLE TO 1.0. // Full power.
+            IF t:DELTAV:MAG < (maxAcc * 0.5) {
+                LOCK THROTTLE TO MAX(0.01, t:DELTAV:MAG / maxAcc). 
+            } ELSE {
+                LOCK THROTTLE TO 1.0. 
             }
         }
-
         WAIT 0.01.
     }
-
-    // Clean up and shutdown.
+    
+    // 4. Clean up and Shutdown
     LOCK THROTTLE TO 0.
-    UNLOCK STEERING.
-    REMOVE t.
-    HUDTEXT("Maneuver complete.", 1, 2, 15, GREEN, FALSE).
+    UNLOCK THROTTLE. 
+    REMOVE t. 
+    
+    // Switch SAS back to simple stability assist so it stops chasing prograde
+    SET SASMODE TO "STABILITYASSIST".
+    
+    HUDTEXT("Maneuver burn finalized.", 1, 2, 15, GREEN, FALSE).
+    mLog("Engine shutdown complete. SAS holding current attitude.").
 }
 
 FUNCTION calculateStartTime {
