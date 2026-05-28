@@ -214,8 +214,8 @@ FUNCTION executeNextManeuver {
     WAIT 0.1. 
     
     // Use the basic vector locking support you have available
-    SET SASMODE TO "PROGRADE".
-    mLog("SAS set to PROGRADE vector lock. Aligning...").
+    SET SASMODE TO "STABILITYASSIST".
+    mLog("SAS set to STABILITYASSIST vector lock. Aligning...").
 
     // 2. Wait until the ship is aligned with Prograde (which matches the node)
     UNTIL VANG(SHIP:FACING:FOREVECTOR, t:BURNVECTOR) < 1.5 {
@@ -223,8 +223,6 @@ FUNCTION executeNextManeuver {
     }
     mLog("Alignment locked on Prograde!").
     
-    UNLOCK STEERING.
-    SET SAS TO TRUE.
     WAIT 0.2.
 
     WAIT UNTIL TIME:SECONDS >= startTime.
