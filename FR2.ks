@@ -25,6 +25,7 @@ FOR lib IN libs {
 }.
 printStorageStatus().
 
+initializeLogFile().
 mLog(" ").
 mLog("Initializing FR2.").
 
