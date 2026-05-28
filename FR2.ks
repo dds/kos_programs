@@ -104,12 +104,16 @@ DECLARE LOCAL FUNCTION endLaunch {
 
 DECLARE LOCAL FUNCTION ascend {
     PRINT "Utilizing MechJeb2 ascent assistance.".
-    SET ADDONS:MJ:ASCENT:ENABLED TO TRUE.
-    SET ADDONS:MJ:ASCENT:AUTOSTAGE TO TRUE.
-    SET ADDONS:MJ:ASCENT:AUTOSTAGELIMIT TO 1.
-    SET ADDONS:MJ:ASCENT:DESIREDALTITUDE TO desiredAltitude.
-    SET ADDONS:MJ:ASCENT:DESIREDINCLINATION TO desiredInclination.
-    SET ADDONS:MJ:ASCENT:FAIRINGMINALTITUDE TO 68000.
+    LOCAL Asc IS ADDONS:MJ:ASCENT.
+    SET Asc:Enabled TO TRUE.
+    SET Asc:Autostage TO TRUE.
+    SET Asc:AutoStageLimit TO 1.
+    SET Asc:DesiredAltitude TO desiredAltitude.
+    SET Asc:DesiredInclination TO desiredInclination.
+    SET Asc:FairingMinAltitude TO 67000.
+    SET Asc:FairingMaxDynamicPressure TO .
+    SET Asc:FairingMaxAerothermalFlux TO 350.
+
 
     // LOCK THROTTLE to 1.
     // lockToPrograde().
