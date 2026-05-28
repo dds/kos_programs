@@ -17,6 +17,7 @@ SET TERMINAL:WIDTH to 80.
 
 DECLARE GLOBAL FUNCTION main {
     init().
+    PRINT " ".
     PRINT "Welcome to FR2.".
 
     WAIT 2. // 2 seconds for everything to settle.
@@ -38,6 +39,7 @@ DECLARE GLOBAL FUNCTION main {
 DECLARE LOCAL FUNCTION init {
     CLEARSCREEN.
     PRINT "INITFR".
+    PRINT " ".
 
     // Load dependencies.
 
@@ -121,6 +123,7 @@ DECLARE LOCAL FUNCTION ascend {
     PRINT "IGNITION!".
 
     // Deploy fairings at >68k, altitude.
+    PRINT "Waitiing for 68,000m altitude to deploy main fairing.".
     WAIT UNTIL ALT:RADAR > 68000.
     HUDTEXT("Fairing jettison.", 1, 2, 15, GREEN, FALSE).
     FOR p IN SHIP:PARTSTAGGED("main_fairing") {
