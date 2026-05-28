@@ -124,11 +124,11 @@ DECLARE LOCAL FUNCTION ascend {
 
     // Deploy fairings at >68k, altitude.
     PRINT "Waitiing for 68,000m altitude to deploy main fairing.".
-    WAIT UNTIL ALT:RADAR > 68000.
-    HUDTEXT("Fairing jettison.", 1, 2, 15, GREEN, FALSE).
+    WAIT UNTIL ALT:RADAR >= 68000.
     FOR p IN SHIP:PARTSTAGGED("main_fairing") {
         IF p:Modules:Contains("ModuleJettison") {
             LOCAL m IS p:GetModule("ModuleJettison").
+            HUDTEXT("Fairing jettison.", 1, 2, 15, GREEN, FALSE).
             m:doAction("deploy", TRUE).
         }
     }
