@@ -29,17 +29,31 @@ DECLARE GLOBAL FUNCTION main {
     circularizeKerbin().
     endLaunch().
 
-    LOCAL munTransfer TO planMunTransfer().
+    LOCAL munTransfer TO hohmannTransfer(Mun, 10000).
+    ADD munTransfer.
+    HUDTEXT("Mun Transfer Node Created", 1, 2, 15, WHITE, FALSE).
+
+    // Generate the capture node using the transfer node's flight path.
+    WAIT 0.1.
+    IF munTransfer:Orbit:hasNextPatch {
+        LOCAL encounterOrbit TO munTransfer:Orbit:NextPatch.
+        // Time of Mun periapsis. 
+        LOCAL captureUt TO munTransfer:TIME + munTransfer:Orbit:NextPatchETA + encounterOrbit:Periapsis:ETA.
+        // Velocity difference at periapsis.
+        LOCAL mu TO Mun:Mu.
+        LOCAL rAtPe TO encounterOrbit:PeriApsis + Mun:Radius.
+        LOCAL vAtPe TO SQRT(mu * ((2 / rAtPe) - (1 / encounterOrbit:SemiMajorAxis))).
+        LOCAL vCirc TO SQRT(mu / rAtPe).
+        LOCAL captDV TO vCirc - vAtPe.
+
+        LOCAL munCapture TO NODE(captureUt, 0, 0, captDV).
+        ADD munCapture.
+        HUDTEXT("Mun Capture Node Created", 1, 2, 15, WHITE, FALSE).
+    }
+
     executeManeuver(munTransfer).
-    LOCAL courseCorrection TO planMunTransferCourseCorrection().
-    executeManeuver(courseCorrection).
-
     warpToMunSOI().
-
-    LOCAL munCapture TO planMunCapture().
     executeManeuver(munCapture).
-
-    circularizeMun().
 
     exit().
 }
@@ -127,7 +141,7 @@ DECLARE LOCAL FUNCTION startLaunch {
 DECLARE LOCAL FUNCTION endLaunch {
     LOCK THROTTLE to 0.
     UNLOCK STEERING.
-    PRINT "Launch successful. Control released.".
+    HUDTEXT("Launch complete.", 1, 2, 15, WHITE, FALSE).
 }
 
 DECLARE LOCAL FUNCTION ascend {
@@ -167,27 +181,50 @@ DECLARE LOCAL FUNCTION executeManeuver {
     REMOVE(mnv).
 }
 
-DECLARE LOCAL FUNCTION planMunTransfer {
-    LOCAL n TO NODE(0, 0, 0, 0).
-    IF not DEFINED(planner) {
-        PRINT "MechJeb Maneuver Planner is not available.".
-        LOCAL targetBody TO Mun.
-        LOCAL rKerbin TO 600000.
-        LOCAL rMun TO 12000000.
-        LOCAL mu TO 3.5316000e12. 
+DECLARE LOCAL FUNCTION hohmannTransfer {
+    DECLARE PARAMETER targetBody.
+    DECLARE PARAMETER targetPe.
 
-        LOCAL aTrans TO (SHIP:ALTITUDE + BODY:RADIUS + targetBody:ALTITUDE) / 2.
-        LOCAL vOrbit TO SQRT(mu / (SHIP:ALTITUDE + BODY:RADIUS)).
-        LOCAL vTrans TO SQRT(mu * ((2 / SHIP:ALTITUDE + BODY:RADIUS)) - (1 / aTrans)).
-        LOCAL deltaV TO vTrans - vOrbit.
+    // 1. Calculate required phase angle for Hohmann Transfer.
+    LOCAL r1 TO SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL r2 TO targetBody:ORBIT:SEMIMAJORAXIS.
+    LOCAL mu TO BODY:MU.
 
-        LOCAL burnTime TO TIME:SECONDS + 60.
-        SET n TO NODE(burnTime, 0, 0, deltaV).
-    } else {
-        PRINT "Using MechJeb Maneuver Planner.".
-        // TODO: just use MJ.
-    }
-    return n.
+    LOCAL tTrans TO CONSTANT:PI * SQRT( ((r1 + r2)^3) / (8 * mu) ).
+    LOCAL targetOmega TO 360 / targetBody:ORBIT:PERIOD.
+    LOCAL idealPhase TO 180 - (targetOmega * tTrans). // Approx 111.5 degrees.
+
+    // 2. Calculate required dV aiming for trailing side periapsis.
+    LOCAL targetRadius IS targetBody:RADIUS + targetPe.
+    LOCAL aTrans IS (r1 + r2 + targetRadius) / 2.
+    LOCAL v1 TO SQRT(mu / r1).
+    LOCAL vTrans TO SQRT(mu * ((2 / r1) - (2 / (r1 + r2)))).
+    LOCAL dV TO vTrans - v1.
+
+    // 3. Find the correct time for the window
+    // Get current angles relative to Kerbin's center
+    // TODO: consider switching from ARCTAN2 to VANG and vectors
+    LOCAL shipPos TO SHIP:POSITION - BODY:POSITION.
+    LOCAL targetPos TO targetBody:POSITION - BODY:POSITION.
+    LOCAL shipAng TO ARCTAN2(shipPos:X, shipPos:Z).
+    LOCAL targetAng TO ARCTAN2(targetPos:X, targetPos:Z).
+
+    LOCAL currentPhase TO targetAng - shipAng.
+    IF currentPhase < 0 { SET currentPhase TO currentPhase + 360. }
+
+    LOCAL shipOmega TO 360 / SHIP:ORBIT:PERIOD.
+    LOCAL phaseSpeed TO shipOmega - targetOmega.
+
+    // Time until the ideal phase angle is met
+    LOCAL phaseDiff TO currentPhase - idealPhase.
+    IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
+    LOCAL timeToBurn TO phaseDiff / phaseSpeed.
+
+    // 4. Create and attach the node.
+    LOCAL burnUt TO TIME:SECONDS + timeToBurn.
+    PRINT "Ideal Mun transfer calculated!".
+    PRINT "DeltaV Required: " + ROUND(dv, 1) + " m/s".
+    return NODE(burnUt, 0, 0, dV).
 }
 
 DECLARE LOCAL FUNCTION transMunInjection {
