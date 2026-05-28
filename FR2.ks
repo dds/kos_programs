@@ -6,9 +6,9 @@
 
 @LAZYGLOBAL OFF.
 
-DECLARE GLOBAL desiredAltitude TO 100000.
-DECLARE GLOBAL desiredInclination TO 0.
-DECLARE GLOBAL desiredHeading TO 90.
+DECLARE GLOBAL desiredAltitude IS 100000.
+DECLARE GLOBAL desiredInclination IS 0.
+DECLARE GLOBAL desiredHeading IS 90.
 
 // Open and configure term
 CORE:DOACTION("Open Terminal", TRUE).
@@ -26,20 +26,20 @@ DECLARE GLOBAL FUNCTION main {
     circularizeKerbin().
     endLaunch().
 
-    LOCAL munTransfer TO hohmannTransfer(Mun, 10000).
+    LOCAL munTransfer IS hohmannTransfer(Mun, 10000).
     ADD munTransfer.
     HUDTEXT("Mun Transfer Node Created", 1, 2, 15, WHITE, FALSE).
     executeManeuver(munTransfer).
 
     warpToMunSOI().
     
-    LOCAL munCapture TO planMunarCapture(10999999).
+    LOCAL munCapture IS planMunarCapture(10999999).
     LOCAL captureUt IS TIME:SECONDS + SHIP:Orbit:Periapsis:ETA.
-    LOCAL mu TO Mun:Mu.
-    LOCAL rAtPe TO SHIP:Orbit:Periapsis + SHIP:Body:Radius.
-    LOCAL vAtPe TO SQRT(mu * ((2 / rAtPe) - (1 / SHIP:Orbit:SemiMajorAxis))).
-    LOCAL vCirc TO SQRT(mu / rAtPe).
-    LOCAL captDV TO vCirc - vAtPe.
+    LOCAL mu IS Mun:Mu.
+    LOCAL rAtPe IS SHIP:Orbit:Periapsis + SHIP:Body:Radius.
+    LOCAL vAtPe IS SQRT(mu * ((2 / rAtPe) - (1 / SHIP:Orbit:SemiMajorAxis))).
+    LOCAL vCirc IS SQRT(mu / rAtPe).
+    LOCAL captDV IS vCirc - vAtPe.
 
     SET munCapture TO NODE(captureUt, 0, 0, captDV).
     ADD munCapture.
@@ -49,7 +49,7 @@ DECLARE GLOBAL FUNCTION main {
     exit().
 }
 
-DECLARE LOCAL FUNCTION init {
+LOCAL FUNCTION init {
     PRINT "Initializing FR2.".
     // Load dependencies.
 
@@ -63,7 +63,7 @@ DECLARE LOCAL FUNCTION init {
             SET mjRunning TO "running.".
         }
         PRINT "MechJeb core is " + mjRunning.
-        // LOCAL planner TO ADDONS:MJ:PLANNER.
+        // LOCAL planner IS ADDONS:MJ:PLANNER.
         // IF DEFINED(planner) {
         //     PRINT "MechJeb Maneuver Planner is available.".
         // } else {
@@ -97,7 +97,7 @@ DECLARE LOCAL FUNCTION init {
     printStorageStatus().
 }
 
-DECLARE LOCAL FUNCTION waitForLaunch {
+LOCAL FUNCTION waitForLaunch {
     PRINT "Engage autopilot then press ENTER to initiate countdown.".
     LOCAL ch is "".
     UNTIL ch = CHAR(13) {
@@ -105,34 +105,34 @@ DECLARE LOCAL FUNCTION waitForLaunch {
     }
 }
 
-DECLARE LOCAL FUNCTION myRoll {
+LOCAL FUNCTION myRoll {
     RETURN 360 - desiredHeading.
 }
 
-DECLARE LOCAL FUNCTION lockToPrograde {
+LOCAL FUNCTION lockToPrograde {
     WAIT UNTIL (SHIP:AVAILABLETHRUST < MASS*CONSTANT:g0).
     PRINT "Locking to prograde.".
-    LOCK STEERING TO SRFPROGRADE + R(0, 0, myRoll()).
+    LOCK STEERING TO SRFPrograde + R(0, 0, myRoll()).
 }
 
-// DECLARE LOCAL FUNCTION deployPayload {
+// LOCAL FUNCTION deployPayload {
 //     WAIT UNTIL ALTITUDE < deployAlt AND VERTICALSPEED < 0.
 //     STAGE.
 //     HUDTEXT("Deploying payload", 1, 2, 15, WHITE, FALSE).
 //     PRINT "Deploying payload.".
 // }
 
-DECLARE LOCAL FUNCTION startLaunch {
+LOCAL FUNCTION startLaunch {
     PRINT "Launch initiated.".
 }
 
-DECLARE LOCAL FUNCTION endLaunch {
+LOCAL FUNCTION endLaunch {
     LOCK THROTTLE to 0.
     UNLOCK STEERING.
     HUDTEXT("Launch complete.", 1, 2, 15, WHITE, FALSE).
 }
 
-DECLARE LOCAL FUNCTION ascend {
+LOCAL FUNCTION ascend {
     PRINT "Utilizing MechJeb2 ascent assistance.".
     STAGE.
     HUDTEXT("IGNITION!", 1, 2, 15, GREEN, FALSE).
@@ -164,11 +164,11 @@ DECLARE LOCAL FUNCTION ascend {
     }
 }
 
-DECLARE LOCAL FUNCTION circularizeKerbin {
+LOCAL FUNCTION circularizeKerbin {
     WAIT UNTIL ADDONS:MJ:ASCENT:ENABLED = FALSE.
 }
 
-DECLARE LOCAL FUNCTION executeManeuver {
+LOCAL FUNCTION executeManeuver {
     DECLARE PARAMETER t.
 
     LOCAL startTime IS calculateStartTime(t).
@@ -215,7 +215,7 @@ DECLARE LOCAL FUNCTION executeManeuver {
     HUDTEXT("Maneuver complete.", 1, 2, 15, GREEN, FALSE).
 }
 
-DECLARE LOCAL FUNCTION calculateStartTime {
+LOCAL FUNCTION calculateStartTime {
     DECLARE PARAMETER t.
 
     LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
@@ -231,7 +231,7 @@ DECLARE LOCAL FUNCTION calculateStartTime {
     RETURN startUt.
 }
 
-DECLARE LOCAL FUNCTION lockSteeringAtManeuverTarget {
+LOCAL FUNCTION lockSteeringAtManeuverTarget {
     PARAMETER t.
 
     PRINT "Aligning spacecraft with burn vector.".
@@ -244,7 +244,7 @@ DECLARE LOCAL FUNCTION lockSteeringAtManeuverTarget {
     PRINT "Alignment locked.".
 }
 
-DECLARE LOCAL FUNCTION isManeuverComplete {
+LOCAL FUNCTION isManeuverComplete {
     PARAMETER t.
     PARAMETER iv.
 
@@ -260,26 +260,26 @@ DECLARE LOCAL FUNCTION isManeuverComplete {
     RETURN FALSE.
 }
 
-DECLARE LOCAL FUNCTION hohmannTransfer {
+LOCAL FUNCTION hohmannTransfer {
     DECLARE PARAMETER targetBody.
     DECLARE PARAMETER targetPe.
 
-    LOCAL r1 TO SHIP:ORBIT:SEMIMAJORAXIS.
-    LOCAL r2 TO targetBody:ORBIT:SEMIMAJORAXIS.
-    LOCAL mu TO BODY:MU.
+    LOCAL r1 IS SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL r2 IS targetBody:ORBIT:SEMIMAJORAXIS.
+    LOCAL mu IS BODY:MU.
 
     // 1. Semi-major axis and dV
     LOCAL targetRadius IS targetBody:RADIUS + targetPe.
     LOCAL aTrans IS (r1 + r2 + targetRadius) / 2.
 
-    LOCAL v1 TO SQRT(mu / r1).
-    LOCAL vTrans TO SQRT(mu * ((2 / r1) - (1 / aTrans))).
-    LOCAL dV TO vTrans - v1.
+    LOCAL v1 IS SQRT(mu / r1).
+    LOCAL vTrans IS SQRT(mu * ((2 / r1) - (1 / aTrans))).
+    LOCAL dV IS vTrans - v1.
 
     // 2. Phase angle
-    LOCAL tTrans TO CONSTANT:PI * SQRT( (aTrans^3) / mu).
-    LOCAL targetOmega TO 360 / targetBody:Orbit:Period.
-    LOCAL idealPhase TO 180 - (targetOmega * tTrans). // Approx 111.5 degrees.
+    LOCAL tTrans IS CONSTANT:PI * SQRT( (aTrans^3) / mu).
+    LOCAL targetOmega IS 360 / targetBody:Orbit:Period.
+    LOCAL idealPhase IS 180 - (targetOmega * tTrans). // Approx 111.5 degrees.
 
     // 3. Absolute position vectors
     LOCAL shipPos IS SHIP:Position - BODY:Position.
@@ -288,7 +288,7 @@ DECLARE LOCAL FUNCTION hohmannTransfer {
 
     // Calculate current phase angle using the angular vector distance.
     LOCAL currentPhase IS VANG(shipPos, targetPos).
-    LOCAL orbitNormal IS VCRS(SHIP:Velocity:Orbit, shipPos).
+    LOCAL orbitNormal IS VCRS(shipPos, SHIP:Velocity:Orbit).
     LOCAL phaseSign IS VDOT(orbitNormal, VCRS(shipPos, targetPos)).
 
     // If the sign is negative, the target is behind us; adjust to full 360 map.
@@ -297,21 +297,21 @@ DECLARE LOCAL FUNCTION hohmannTransfer {
     }
 
     // 4. Calculate the timing window.
-    LOCAL shipOmega TO 360 / SHIP:ORBIT:PERIOD.
-    LOCAL phaseSpeed TO shipOmega - targetOmega.
+    LOCAL shipOmega IS 360 / SHIP:ORBIT:PERIOD.
+    LOCAL phaseSpeed IS shipOmega - targetOmega.
     
-    LOCAL phaseDiff TO currentPhase - idealPhase.
+    LOCAL phaseDiff IS currentPhase - idealPhase.
     IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
-    LOCAL timeToBurn TO phaseDiff / phaseSpeed.
+    LOCAL timeToBurn IS phaseDiff / phaseSpeed.
 
     // 5. Generate the node.
-    LOCAL burnUt TO TIME:SECONDS + timeToBurn.
+    LOCAL burnUt IS TIME:SECONDS + timeToBurn.
     PRINT "Ideal Mun transfer calculated!".
     PRINT "DeltaV Required: " + ROUND(dv, 1) + " m/s".
     return NODE(burnUt, 0, 0, dV).
 }
 
-DECLARE LOCAL FUNCTION warpToMunSOI {
+LOCAL FUNCTION warpToMunSOI {
     IF NOT (SHIP:Orbit:HasNextPatch) {
         PRINT "ERROR: No planned Mun SOI transition found in current orbit.".
         RETURN.
@@ -331,5 +331,5 @@ DECLARE LOCAL FUNCTION warpToMunSOI {
     RETURN.
 }
 
-DECLARE LOCAL FUNCTION exit {
+LOCAL FUNCTION exit {
 }
