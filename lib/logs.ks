@@ -4,7 +4,7 @@ DECLARE GLOBAL flightLogPathArchive IS "".
 GLOBAL FUNCTION initializeLogFile {
     LOCAL fileName IS SHIP:NAME + "_" + ROUND(TIME:SECONDS) + ".log".
 
-    SET flightLogPathLocal TO "1:/" + fileName.
+    SET flightLogPathLocal TO "1:/logs/" + fileName.
     SET flightLogPathArchive TO "0:/logs/" + fileName.
 
     LOG "Blackbox log initialized." TO flightLogPathLocal.
