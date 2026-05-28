@@ -56,7 +56,7 @@ DECLARE LOCAL FUNCTION init {
     LOCAL libs IS LIST("lib/files.ks", "lib/countdown.ks").
     FOR lib IN libs {
         LOCAL archivePath IS "0:/{0}":FORMAT(lib).
-        LOCAL localPath IS "1:/{1}":FORMAT(lib).
+        LOCAL localPath IS "1:/{0}":FORMAT(lib).
         COPYPATH("0:/{0}":FORMAT(lib), "1:/{0}":FORMAT(lib)).
         PRINT "Copied {0} to {1}":FORMAT(archivePath, localPath). 
         RUNONCEPATH("1:/{0}:FORMAT(lib)").
