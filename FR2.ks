@@ -28,11 +28,19 @@ DECLARE GLOBAL FUNCTION main {
     ascend().
     circularizeKerbin().
     endLaunch().
-    planMunTransfer().
-    transMunInjection().
-    transferToMun().
-    enterMunSOI().
+
+    LOCAL munTransfer TO planMunTransfer().
+    executeManeuver(munTransfer).
+    LOCAL courseCorrection TO planMunTransferCourseCorrection().
+    executeManeuver(courseCorrection).
+
+    warpToMunSOI().
+
+    LOCAL munCapture TO planMunCapture().
+    executeManeuver(munCapture).
+
     circularizeMun().
+
     exit().
 }
 
@@ -53,6 +61,12 @@ DECLARE LOCAL FUNCTION init {
             SET mjRunning TO "running.".
         }
         PRINT "MechJeb core is " + mjRunning.
+        LOCAL planner TO ADDONS:MJ:PLANNER.
+        IF DEFINED(planner) {
+            PRINT "MechJeb Maneuver Planner is available.".
+        } else {
+            PRINT "MechJeb Maneuver Planner is NOT available.".
+        }
 
         // See https://github.com/belpyro/kOS.MechJeb2.Addon/blob/main/Tests/AscentWrapperTest.ks
         LOCAL Asc IS ADDONS:MJ:ASCENT.
@@ -124,7 +138,7 @@ DECLARE LOCAL FUNCTION ascend {
 
     // Deploy fairings at >68k, altitude.
     PRINT "Waitiing for 68,000m altitude to deploy main fairing.".
-    WAIT UNTIL ALT:RADAR >= 68000.
+    WAIT UNTIL SHIP:ALTITUDE >= 68000.
     FOR p IN SHIP:PARTSTAGGED("main_fairing") {
         IF p:Modules:Contains("ModuleJettison") {
             LOCAL m IS p:GetModule("ModuleJettison").
@@ -138,23 +152,42 @@ DECLARE LOCAL FUNCTION circularizeKerbin {
     WAIT UNTIL ADDONS:MJ:ASCENT:ENABLED = FALSE.
 }
 
-// DECLARE LOCAL FUNCTION executeManeuver {
-//     DECLARE PARAMETER args.
-//     LOCAL mnv IS NODE(args[0], args[1], args[2], args[3]).
-// 
-//     ADD(mnv).
-//     LOCAL startTime IS calculateStartTime(mnv).
-//     WAIT UNTIL startTime - 10.
-//     lockSteeringAtManeuverTarget(mnv).
-//     WAIT UNTIL startTime.
-//     LOCK THROTTLE TO 1.
-//     WAIT UNTIL isManeuverComplete(mnv).
-//     LOCK THROTTLE TO 0.
-//     REMOVE(mnv).
-// }
+DECLARE LOCAL FUNCTION executeManeuver {
+    DECLARE PARAMETER args.
+    LOCAL mnv IS NODE(args[0], args[1], args[2], args[3]).
+
+    ADD(mnv).
+    LOCAL startTime IS calculateStartTime(mnv).
+    WAIT UNTIL startTime - 10.
+    lockSteeringAtManeuverTarget(mnv).
+    WAIT UNTIL startTime.
+    LOCK THROTTLE TO 1.
+    WAIT UNTIL isManeuverComplete(mnv).
+    LOCK THROTTLE TO 0.
+    REMOVE(mnv).
+}
 
 DECLARE LOCAL FUNCTION planMunTransfer {
+    LOCAL n TO NODE(0, 0, 0, 0).
+    IF not DEFINED(planner) {
+        PRINT "MechJeb Maneuver Planner is not available.".
+        LOCAL targetBody TO Mun.
+        LOCAL rKerbin TO 600000.
+        LOCAL rMun TO 12000000.
+        LOCAL mu TO 3.5316000e12. 
 
+        LOCAL aTrans TO (SHIP:ALTITUDE + BODY:RADIUS + targetBody:ALTITUDE) / 2.
+        LOCAL vOrbit TO SQRT(mu / (SHIP:ALTITUDE + BODY:RADIUS)).
+        LOCAL vTrans TO SQRT(mu * ((2 / SHIP:ALTITUDE + BODY:RADIUS)) - (1 / aTrans)).
+        LOCAL deltaV TO vTrans - vOrbit.
+
+        LOCAL burnTime TO TIME:SECONDS + 60.
+        SET n TO NODE(burnTime, 0, 0, deltaV).
+    } else {
+        PRINT "Using MechJeb Maneuver Planner.".
+        // TODO: just use MJ.
+    }
+    return n.
 }
 
 DECLARE LOCAL FUNCTION transMunInjection {
