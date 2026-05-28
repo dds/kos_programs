@@ -14,6 +14,25 @@ DECLARE GLOBAL munInitialPeriapsis IS 20000.
 DECLARE GLOBAL munTargetApoapsis IS 1800000.
 DECLARE GLOBAL munTargetPeriapsis IS 1800000.
 
+// Put this at the very top of FR2.ks
+PARAMETER remoteCommand IS "default".
+
+IF remoteCommand = "default" {
+    // If we run the file normally without parameters, do nothing here and let the script flow
+}
+ELSE IF remoteCommand = "transfer" {
+    // Manually trigger the transfer function from inside program scope!
+    ADD hohmannTransfer(Mun, desiredMunPeriapsis).
+    PRINT "Transfer node manually generated via Telnet!".
+}
+ELSE IF remoteCommand = "capture" {
+    ADD planMunarCapture(munTargetApoapsis).
+    PRINT "Capture node manually generated via Telnet!".
+}
+ELSE IF remoteCommand = "fairing" {
+    deployMainFairing().
+}
+
 // Open and configure term
 CORE:DOACTION("Open Terminal", TRUE).
 SET TERMINAL:HEIGHT to 40.
