@@ -16,7 +16,7 @@ CORE:DOACTION("Open Terminal", TRUE).
 SET TERMINAL:HEIGHT to 40.
 SET TERMINAL:WIDTH to 80.
 
-DECLARE GLOBAL FUNCTION main {
+FUNCTION main {
     init().
     WAIT 2. // 2 seconds for everything to settle.
 
@@ -32,17 +32,14 @@ DECLARE GLOBAL FUNCTION main {
     HUDTEXT("Mun Transfer Node Created", 1, 2, 15, WHITE, FALSE).
     executeManeuver(munTransfer).
 
+    WAIT 1.
+
     warpToMunSOI().
+
+    WAIT 1.
     
     LOCAL munCapture IS planMunarCapture(10999999).
-    LOCAL captureUt IS TIME:SECONDS + SHIP:Orbit:Periapsis:ETA.
-    LOCAL mu IS Mun:Mu.
-    LOCAL rAtPe IS SHIP:Orbit:Periapsis + SHIP:Body:Radius.
-    LOCAL vAtPe IS SQRT(mu * ((2 / rAtPe) - (1 / SHIP:Orbit:SemiMajorAxis))).
-    LOCAL vCirc IS SQRT(mu / rAtPe).
-    LOCAL captDV IS vCirc - vAtPe.
 
-    SET munCapture TO NODE(captureUt, 0, 0, captDV).
     ADD munCapture.
     HUDTEXT("Mun Capture Node Created", 1, 2, 15, WHITE, FALSE).
     executeManeuver(munCapture).
@@ -125,6 +122,9 @@ LOCAL FUNCTION lockToPrograde {
 
 LOCAL FUNCTION startLaunch {
     PRINT "Launch initiated.".
+    STAGE.
+    HUDTEXT("IGNITION!", 1, 2, 15, GREEN, FALSE).
+    PRINT "IGNITION!".
 }
 
 LOCAL FUNCTION endLaunch {
@@ -135,10 +135,6 @@ LOCAL FUNCTION endLaunch {
 
 LOCAL FUNCTION ascend {
     PRINT "Utilizing MechJeb2 ascent assistance.".
-    STAGE.
-    HUDTEXT("IGNITION!", 1, 2, 15, GREEN, FALSE).
-    PRINT "IGNITION!".
-
     WAIT UNTIL SHIP:ALTITUDE >= fairingJettisonAltitude.
     deployMainFairing().
 }
@@ -372,6 +368,52 @@ LOCAL FUNCTION warpToMunSOI {
         WAIT 1.
     }
     RETURN.
+}
+
+LOCAL FUNCTION planMunarCapture {
+    PARAMETER targetApoapsis. // Target apoapsis height in meters (e.g., 20000)
+
+    // 1. Safety Check: Verify we are in an active flyby (hyperbolic orbit)
+    // Hyperbolic orbits have a negative semi-major axis in KSP physics
+    IF SHIP:ORBIT:SEMIMAJORAXIS > 0 {
+        PRINT "Warning: Vessel is already in a closed/captured orbit around " + SHIP:BODY:NAME.
+    }
+
+    // 2. Automatically discover parameters from the local SOI body
+    LOCAL localBody IS SHIP:BODY.
+    LOCAL mu        IS localBody:MU.
+    LOCAL bodyRadius IS localBody:RADIUS.
+
+    // 3. Define the geometry of the maneuver (Executed at true Periapsis)
+    LOCAL rAtPe IS SHIP:ORBIT:PERIAPSIS + bodyRadius.
+    
+    // The target capture orbit will have its periapsis equal to our current approach Pe,
+    // and its apoapsis equal to your specified parameter.
+    LOCAL targetAp IS targetApoapsis + bodyRadius.
+    LOCAL targetSMA IS (rAtPe + targetAp) / 2.
+
+    // 4. Calculate Velocities using the Vis-Viva equation: v = sqrt( mu * (2/r - 1/a) )
+    // Velocity right now when we reach the lowest point of the flyby:
+    LOCAL vAtPe IS SQRT(mu * ( (2 / rAtPe) - (1 / SHIP:ORBIT:SEMIMAJORAXIS) )).
+    
+    // Desired velocity at periapsis to settle into the new elliptical/circular orbit:
+    LOCAL vTarget IS SQRT(mu * ( (2 / rAtPe) - (1 / targetSMA) )).
+
+    // 5. Calculate braking Delta-V (Will result in a negative/retrograde value)
+    LOCAL captureDv IS vTarget - vAtPe.
+
+    // 6. Locate the exact timestamp of execution
+    LOCAL captureUt IS TIME:SECONDS + SHIP:ORBIT:PERIAPSIS:ETA.
+
+    // 7. Generate and return the maneuver node
+    // Format: NODE(universal_time, radial, normal, prograde)
+    LOCAL captureNode IS NODE(captureUt, 0, 0, captureDv).
+    
+    PRINT "Munar capture maneuver calculated for " + localBody:NAME.
+    PRINT " -> Target Apoapsis: " + ROUND(targetApoapsis / 1000, 1) + " km".
+    PRINT " -> Required Delta-V: " + ROUND(ABS(captureDv), 1) + " m/s retrograde".
+
+    RETURN captureNode.
 }
 
 LOCAL FUNCTION exit {
