@@ -23,6 +23,8 @@ FUNCTION main {
     // waitForLaunch().
     countdown(5).
     startLaunch().
+
+    armBackgroundFairingTrigger().
     ascend().
     circularizeKerbin().
     endLaunch().
@@ -36,7 +38,7 @@ FUNCTION main {
     warpToMunSOI().
     WAIT 1.
     
-    LOCAL munCapture IS planMunarCapture(10999000).
+    LOCAL munCapture IS planMunarCapture(1800000).
     ADD munCapture.
     HUDTEXT("Mun Capture Node Created", 1, 2, 15, WHITE, FALSE).
     executeManeuver(munCapture).
@@ -132,8 +134,13 @@ LOCAL FUNCTION endLaunch {
 
 LOCAL FUNCTION ascend {
     PRINT "Utilizing MechJeb2 ascent assistance.".
-    WAIT UNTIL SHIP:ALTITUDE >= fairingJettisonAltitude.
-    deployMainFairing().
+}
+
+LOCAL FUNCTION armBackgroundFairingTrigger {
+    // Sits in CPU memory and is constantly updated in the background.
+    WHEN SHIP:Altitude >= fairingJettisonAltitude THEN {
+        deployMainFairing().
+    }
 }
 
 LOCAL FUNCTION deployMainFairing {
