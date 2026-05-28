@@ -10,6 +10,9 @@ DECLARE GLOBAL desiredAltitude IS 100000.
 DECLARE GLOBAL desiredInclination IS 0.
 DECLARE GLOBAL desiredHeading IS 90.
 DECLARE GLOBAL fairingJettisonAltitude IS 68000.
+DECLARE GLOBAL munInitialPeriapsis IS 20000.
+DECLARE GLOBAL munTargetApoapsis IS 1800000.
+DECLARE GLOBAL munTargetPeriapsis IS 1800000.
 
 // Open and configure term
 CORE:DOACTION("Open Terminal", TRUE).
@@ -29,7 +32,7 @@ FUNCTION main {
     circularizeKerbin().
     endLaunch().
 
-    LOCAL munTransfer IS hohmannTransfer(Mun, 10000).
+    LOCAL munTransfer IS hohmannTransfer(Mun, munInitialPeriapsis).
     ADD munTransfer.
     HUDTEXT("Mun Transfer Node Created", 1, 2, 15, WHITE, FALSE).
     executeManeuver(munTransfer).
@@ -38,7 +41,7 @@ FUNCTION main {
     warpToMunSOI().
     WAIT 1.
     
-    LOCAL munCapture IS planMunarCapture(1800000).
+    LOCAL munCapture IS planMunarCapture(munTargetApoapsis).
     ADD munCapture.
     HUDTEXT("Mun Capture Node Created", 1, 2, 15, WHITE, FALSE).
     executeManeuver(munCapture).
@@ -46,25 +49,34 @@ FUNCTION main {
     exit().
 }
 
-LOCAL FUNCTION init {
-    PRINT "Initializing FR2.".
-    // Load dependencies.
+FUNCTION init {
+    LOCAL libs IS LIST("lib/files.ks", "lib/countdown.ks", "lib/logs.ks").
+    FOR lib IN libs {
+        LOCAL archivePath IS "0:/{0}":FORMAT(lib).
+        LOCAL localPath IS "1:/{0}":FORMAT(lib).
+        COPYPATH("0:/{0}":FORMAT(lib), "1:/{0}":FORMAT(lib)).
+        RUNONCEPATH("1:/{0}":FORMAT(lib)).
+    }.
+    printStorageStatus().
+
+    mLog(" ").
+    mLog("Initializing FR2.").
 
     // MechJeb2
     LOCAL mj IS ADDONS:MJ.
     LOCAL mjCore IS mj:CORE. 
     if mj:AVAILABLE {
-        PRINT "MechJeb is available.".
+        mLog("MechJeb is available.").
         LOCAL mjRunning IS "NOT running.".
         if mjCore:RUNNING {
             SET mjRunning TO "running.".
         }
-        PRINT "MechJeb core is " + mjRunning.
+        mLog("MechJeb core is " + mjRunning).
         // LOCAL planner IS ADDONS:MJ:PLANNER.
         // IF DEFINED(planner) {
-        //     PRINT "MechJeb Maneuver Planner is available.".
+        //     mLog("MechJeb Maneuver Planner is available.").
         // } else {
-        //     PRINT "MechJeb Maneuver Planner is NOT available.".
+        //     mLog("MechJeb Maneuver Planner is NOT available.").
         // }
 
         // See https://github.com/belpyro/kOS.MechJeb2.Addon/blob/main/Tests/AscentWrapperTest.ks
@@ -79,81 +91,71 @@ LOCAL FUNCTION init {
         SET Asc:AutoWarp TO FALSE.
         SET Asc:SkipCircularization TO FALSE.
     } else {
-        PRINT "WARNING: MechJeb reported as NOT AVAILABLE.".
+        mLog("WARNING: MechJeb reported as NOT AVAILABLE.").
     }
 
-    LOCAL libs IS LIST("lib/files.ks", "lib/countdown.ks").
-    FOR lib IN libs {
-        LOCAL archivePath IS "0:/{0}":FORMAT(lib).
-        LOCAL localPath IS "1:/{0}":FORMAT(lib).
-        COPYPATH("0:/{0}":FORMAT(lib), "1:/{0}":FORMAT(lib)).
-        PRINT "Copied {0} to {1}":FORMAT(archivePath, localPath). 
-        RUNONCEPATH("1:/{0}":FORMAT(lib)).
-        PRINT "Loaded {0}":FORMAT(localPath).
-    }.
-    printStorageStatus().
 }
 
-LOCAL FUNCTION waitForLaunch {
-    PRINT "Engage autopilot then press ENTER to initiate countdown.".
+FUNCTION waitForLaunch {
+    mLog("Engage autopilot then press ENTER to initiate countdown.").
     LOCAL ch is "".
     UNTIL ch = CHAR(13) {
         SET ch TO TERMINAL:INPUT:GETCHAR().
     }
 }
 
-LOCAL FUNCTION myRoll {
+FUNCTION myRoll {
     RETURN 360 - desiredHeading.
 }
 
-LOCAL FUNCTION lockToPrograde {
+FUNCTION lockToPrograde {
     WAIT UNTIL (SHIP:AVAILABLETHRUST < MASS*CONSTANT:g0).
-    PRINT "Locking to prograde.".
+    mLog("Locking to prograde.").
     LOCK STEERING TO SRFPrograde + R(0, 0, myRoll()).
 }
 
-// LOCAL FUNCTION deployPayload {
+// FUNCTION deployPayload {
 //     WAIT UNTIL ALTITUDE < deployAlt AND VERTICALSPEED < 0.
 //     STAGE.
 //     HUDTEXT("Deploying payload", 1, 2, 15, WHITE, FALSE).
-//     PRINT "Deploying payload.".
+//     mLog("Deploying payload.").
 // }
 
-LOCAL FUNCTION startLaunch {
-    PRINT "Launch initiated.".
+FUNCTION startLaunch {
+    mLog("Launch initiated.").
     STAGE.
     HUDTEXT("IGNITION!", 1, 2, 15, GREEN, FALSE).
-    PRINT "IGNITION!".
+    mLog("IGNITION!").
 }
 
-LOCAL FUNCTION endLaunch {
+FUNCTION endLaunch {
     LOCK THROTTLE to 0.
     UNLOCK STEERING.
     HUDTEXT("Launch complete.", 1, 2, 15, WHITE, FALSE).
 }
 
-LOCAL FUNCTION ascend {
-    PRINT "Utilizing MechJeb2 ascent assistance.".
+FUNCTION ascend {
+    mLog("Utilizing MechJeb2 ascent assistance.").
 }
 
-LOCAL FUNCTION armBackgroundFairingTrigger {
+FUNCTION armBackgroundFairingTrigger {
     // Sits in CPU memory and is constantly updated in the background.
     WHEN SHIP:Altitude >= fairingJettisonAltitude THEN {
         deployMainFairing().
     }
 }
 
-LOCAL FUNCTION deployMainFairing {
-    PRINT "Deploying main fairing.".
+FUNCTION deployMainFairing {
+    mLog("Deploying main fairing.").
     FOR p IN SHIP:PartsTagged("main_fairing") {
-        PRINT "  DEBUG: SEARCHING FOR FAIRING MODULE".
+        mLog("  DEBUG: SEARCHING FOR FAIRING MODULE").
         FOR m_name IN p:MODULES {
             LOCAL m IS p:GETMODULE(m_name).
             PRINT "----- Module: " + m_name + " -----".
             PRINT "  Available Events: " + m:AllEventNames.
             PRINT "  Available Actions: " + m:AllActionNames.
         }
-        PRINT " ".
+        mLog(" ").
 
         IF p:Modules:Contains("ModuleAirstreamFairing") {
             LOCAL m IS p:GetModule("ModuleAirstreamFairing").
@@ -161,17 +163,17 @@ LOCAL FUNCTION deployMainFairing {
                 m:doEvent("jettison").
                 HUDTEXT("Fairing jettison.", 1, 2, 15, GREEN, FALSE).
             } else {
-                PRINT "ERROR: Part tagged 'main_fairing' cannot be jettisoned.".
+                mLog("ERROR: Part tagged 'main_fairing' cannot be jettisoned.").
             }
         }
     }
 }
 
-LOCAL FUNCTION circularizeKerbin {
+FUNCTION circularizeKerbin {
     WAIT UNTIL ADDONS:MJ:ASCENT:ENABLED = FALSE.
 }
 
-LOCAL FUNCTION executeManeuver {
+FUNCTION executeManeuver {
     DECLARE PARAMETER t.
 
     LOCAL startTime IS calculateStartTime(t).
@@ -180,7 +182,7 @@ LOCAL FUNCTION executeManeuver {
     countdown(9).
     lockSteeringAtManeuverTarget(t).
     WAIT UNTIL TIME:SECONDS >= startTime.
-    PRINT "Executing maneuver".
+    mLog("Executing maneuver").
 
     LOCAL burnIV IS t:BurnVector.
     UNTIL isManeuverComplete(t, burnIV) { 
@@ -218,12 +220,12 @@ LOCAL FUNCTION executeManeuver {
     HUDTEXT("Maneuver complete.", 1, 2, 15, GREEN, FALSE).
 }
 
-LOCAL FUNCTION calculateStartTime {
+FUNCTION calculateStartTime {
     DECLARE PARAMETER t.
 
     LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
     IF maxAcc = 0 {
-        PRINT "ERROR: No active engines or out of fuel!".
+        mLog("ERROR: No active engines or out of fuel!").
         RETURN TIME:SECONDS.
     }
 
@@ -234,20 +236,20 @@ LOCAL FUNCTION calculateStartTime {
     RETURN startUt.
 }
 
-LOCAL FUNCTION lockSteeringAtManeuverTarget {
+FUNCTION lockSteeringAtManeuverTarget {
     PARAMETER t.
 
-    PRINT "Aligning spacecraft with burn vector.".
+    mLog("Aligning spacecraft with burn vector.").
     LOCK STEERING TO t:BurnVector.
 
     // Wait until the alignment error is under 1 degree before prcoeeding
     UNTIL VANG(SHIP:Facing:ForeVector, t:BurnVector) < 1.0 {
         WAIT 0.1.
     }
-    PRINT "Alignment locked.".
+    mLog("Alignment locked.").
 }
 
-LOCAL FUNCTION isManeuverComplete {
+FUNCTION isManeuverComplete {
     PARAMETER t.
     PARAMETER iv.
 
@@ -263,7 +265,7 @@ LOCAL FUNCTION isManeuverComplete {
     RETURN FALSE.
 }
 
-LOCAL FUNCTION hohmannTransfer {
+FUNCTION hohmannTransfer {
     DECLARE PARAMETER targetBody.
     DECLARE PARAMETER targetPe.
 
@@ -349,34 +351,34 @@ LOCAL FUNCTION hohmannTransfer {
 
     // 5. Generate the node.
     REMOVE testNode.
-    PRINT "Ideal Mun transfer calculated!".
+    mLog("Ideal Mun transfer calculated!").
     PRINT "DeltaV Required: " + ROUND(dv, 1) + " m/s".
     return NODE(bestUt, 0, 0, dV).
 }
 
-LOCAL FUNCTION warpToMunSOI {
+FUNCTION warpToMunSOI {
     IF NOT (SHIP:Orbit:HasNextPatch) {
-        PRINT "ERROR: No planned Mun SOI transition found in current orbit.".
+        mLog("ERROR: No planned Mun SOI transition found in current orbit.").
         RETURN.
     }
 
     LOCAL transUt IS TIME:SECONDS + SHIP:Orbit:NextPatchETA.
     LOCAL warpTargetUt IS transUt - 60.
 
-    PRINT "Warping to Mun SOI...".
+    mLog("Warping to Mun SOI...").
     HUDTEXT("Warping to Mun SOI...", 1, 2, 15, YELLOW, FALSE).
     WARPTO(warpTargetUt).
 
     WAIT UNTIL KUNIVERSE:TimeWarp:Warp = 0.
 
     UNTIL SHIP:Body:Name = "Mun" {
-        PRINT "Waiting for SOI transition ...".
+        mLog("Waiting for SOI transition ...").
         WAIT 1.
     }
     RETURN.
 }
 
-LOCAL FUNCTION planMunarCapture {
+FUNCTION planMunarCapture {
     PARAMETER targetApoapsis. // Target apoapsis height in meters (e.g., 20000)
 
     // 1. Safety Check: Verify we are in an active flyby (hyperbolic orbit)
@@ -422,5 +424,5 @@ LOCAL FUNCTION planMunarCapture {
     RETURN captureNode.
 }
 
-LOCAL FUNCTION exit {
+FUNCTION exit {
 }
