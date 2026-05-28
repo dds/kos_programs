@@ -1,6 +1,6 @@
-// files lib
+@LAZYGLOBAL OFF.
 
-GLOBAL FUNCTION printStorageStatus {
+DECLARE GLOBAL FUNCTION printStorageStatus {
     printDirectory(). 
     
     PRINT "--- STORAGE STATUS ---".
@@ -14,7 +14,7 @@ GLOBAL FUNCTION printStorageStatus {
     }
 }
 
-GLOBAL FUNCTION printDirectory {
+DECLARE GLOBAL FUNCTION printDirectory {
     PRINT "--- FILE LISTING ---".
 
     LOCAL startPath is PATH().
@@ -26,7 +26,7 @@ GLOBAL FUNCTION printDirectory {
     CD(startPath).
 }
 
-LOCAL FUNCTION scanFolder {
+DECLARE LOCAL FUNCTION scanFolder {
     PARAMETER indent.
 
     LOCAL currentItems IS LIST().
