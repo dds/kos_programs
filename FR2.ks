@@ -21,7 +21,7 @@ DECLARE GLOBAL FUNCTION main {
 
     WAIT 2. // 2 seconds for everything to settle.
 
-    // waitForLaunch().
+    waitForLaunch().
     countdown(5).
     startLaunch().
     ascend().
