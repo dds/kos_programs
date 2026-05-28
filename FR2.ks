@@ -58,14 +58,11 @@ DECLARE LOCAL FUNCTION init {
         SET Asc:DesiredAltitude TO desiredAltitude.
         SET Asc:DesiredInclination TO desiredInclination.
         SET Asc:AutoStage TO TRUE.
-        SET Asc:AutoStageLimit TO 1.
+        SET Asc:AutoStageLimit TO 2. // CHECK YO STAGING
         SET Asc:AutoDeployAntennas TO TRUE.
         SET Asc:AutoDeploySolarPanels TO TRUE.
         SET Asc:AutoWarp TO FALSE.
         SET Asc:SkipCircularization TO FALSE.
-        SET Asc:FairingMinAltitude TO 67000.
-        SET Asc:FairingMaxDynamicPressure TO 0.1.
-        SET Asc:FairingMaxAerothermalFlux TO 350.
     } else {
         PRINT "WARNING: MechJeb reported as NOT AVAILABLE.".
     }
