@@ -367,6 +367,8 @@ LOCAL FUNCTION warpToMunSOI {
     HUDTEXT("Warping to Mun SOI...", 1, 2, 15, YELLOW, FALSE).
     WARPTO(warpTargetUt).
 
+    WAIT UNTIL KUNIVERSE:TimeWarp:Warp = 0.
+
     UNTIL SHIP:Body:Name = "Mun" {
         PRINT "Waiting for SOI transition ...".
         WAIT 1.
