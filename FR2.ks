@@ -191,9 +191,10 @@ DECLARE LOCAL FUNCTION executeManeuver {
         LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
         IF maxAcc > 0 {
             IF t:DeltaV:MAG < (maxAcc * 0.5) {
-            LOCK THROTTLE TO MAX(0.01, t:DeltaV:MAG / maxAcc). // Precision.
-        } ELSE { 
-            LOCK THROTTLE TO 1.0. // Full power.
+                LOCK THROTTLE TO MAX(0.01, t:DeltaV:MAG / maxAcc). // Precision.
+            } ELSE { 
+                LOCK THROTTLE TO 1.0. // Full power.
+            }
         }
 
         WAIT 0.01.
@@ -318,5 +319,4 @@ DECLARE LOCAL FUNCTION warpToMunSOI {
 }
 
 DECLARE LOCAL FUNCTION exit {
-
 }
