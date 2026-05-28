@@ -111,7 +111,7 @@ DECLARE LOCAL FUNCTION ascend {
     SET Asc:DesiredAltitude TO desiredAltitude.
     SET Asc:DesiredInclination TO desiredInclination.
     SET Asc:FairingMinAltitude TO 67000.
-    SET Asc:FairingMaxDynamicPressure TO .
+    SET Asc:FairingMaxDynamicPressure TO 0.1.
     SET Asc:FairingMaxAerothermalFlux TO 350.
 
 
