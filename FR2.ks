@@ -9,6 +9,7 @@
 DECLARE GLOBAL desiredAltitude IS 100000.
 DECLARE GLOBAL desiredInclination IS 0.
 DECLARE GLOBAL desiredHeading IS 90.
+DECLARE GLOBAL fairingJettisonAltitude IS 68000.
 
 // Open and configure term
 CORE:DOACTION("Open Terminal", TRUE).
@@ -138,17 +139,19 @@ LOCAL FUNCTION ascend {
     HUDTEXT("IGNITION!", 1, 2, 15, GREEN, FALSE).
     PRINT "IGNITION!".
 
-    // Deploy fairings at >68k, altitude.
-    PRINT "Waiting for 68,000m altitude to deploy main fairing.".
-    WAIT UNTIL SHIP:ALTITUDE >= 68000.
-    PRINT " ".
-    FOR p IN SHIP:PARTSTAGGED("main_fairing") {
+    WAIT UNTIL SHIP:ALTITUDE >= fairingJettisonAltitude.
+    deployMainFairing().
+}
+
+LOCAL FUNCTION deployMainFairing {
+    PRINT "Deploying main fairing.".
+    FOR p IN SHIP:PartsTagged("main_fairing") {
         PRINT "  DEBUG: SEARCHING FOR FAIRING MODULE".
         FOR m_name IN p:MODULES {
             LOCAL m IS p:GETMODULE(m_name).
             PRINT "----- Module: " + m_name + " -----".
-            PRINT "  Available Events: " + m:ALLEVENTNAMES.
-            PRINT "  Available Actions: " + m:ALLACTIONNAMES.
+            PRINT "  Available Events: " + m:AllEventNames.
+            PRINT "  Available Actions: " + m:AllActionNames.
         }
         PRINT " ".
 
@@ -302,13 +305,53 @@ LOCAL FUNCTION hohmannTransfer {
     
     LOCAL phaseDiff IS currentPhase - idealPhase.
     IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
-    LOCAL timeToBurn IS phaseDiff / phaseSpeed.
+    LOCAL estimatedTimeToBurn IS phaseDiff / phaseSpeed.
+
+    // 5. Create a temporary node to fine-tune.
+    LOCAL bestUt IS TIME:SECONDS + estimatedTimeToBurn.
+    LOCAL testNode IS NODE(bestUt, 0, 0, dV).
+    ADD testNode.
+    WAIT 0.1. // Calculate the test path.
+
+    // 6. Iterative fine-tuning loop to minimize PE
+    LOCAL bestPe IS 999999999.
+    LOCAL steps IS 10.
+
+    // Run a 3-pass loop to progressively narrow down the exact second
+    FROM { LOCAL pass IS 1. } UNTIL pass > 3 STEP { SET pass TO pass + 1. } DO {
+        LOCAL scanning IS TRUE.
+
+        UNTIL NOT scanning {
+            // Test moving the burn earlier (subtracting time)
+            SET testNode:Time TO testNode:Time - steps.
+            WAIT 0.02.
+
+            IF testNode:Orbit:HasNextPatch AND testNode:Orbit:NextPatch:Body:Name = targetBody:Name {
+                LOCAL currentPe IS testNode:Orbit:NextPatch:Periapsis.
+
+                // If it's improving and hasn't crashed into the surface,
+                IF currentPe < bestPe AND currentPe > 0 {
+                    SET bestPe TO currentPe.
+                    SET bestUt TO testNode:Time.
+                } ELSE {
+                    // If it got worse, steps back and prepare to reduce steps size
+                    SET testNode:Time TO testNode:Time + steps.
+                    SET scanning TO FALSE.
+                }
+            } ELSE {
+                // If we lost the encounter completely, revert the steps
+                SET testNode:TIME to testNode:TIME + steps.
+                SET scanning TO FALSE.
+            }
+        }
+        SET steps TO steps / 5. // Drop from 10s stepss to 2s and so on.
+    }
 
     // 5. Generate the node.
-    LOCAL burnUt IS TIME:SECONDS + timeToBurn.
+    REMOVE testNode.
     PRINT "Ideal Mun transfer calculated!".
     PRINT "DeltaV Required: " + ROUND(dv, 1) + " m/s".
-    return NODE(burnUt, 0, 0, dV).
+    return NODE(bestUt, 0, 0, dV).
 }
 
 LOCAL FUNCTION warpToMunSOI {
