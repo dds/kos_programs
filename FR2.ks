@@ -260,42 +260,47 @@ DECLARE LOCAL FUNCTION hohmannTransfer {
     DECLARE PARAMETER targetBody.
     DECLARE PARAMETER targetPe.
 
-    // 1. Calculate required phase angle for Hohmann Transfer.
     LOCAL r1 TO SHIP:ORBIT:SEMIMAJORAXIS.
     LOCAL r2 TO targetBody:ORBIT:SEMIMAJORAXIS.
     LOCAL mu TO BODY:MU.
 
-    LOCAL tTrans TO CONSTANT:PI * SQRT( ((r1 + r2)^3) / (8 * mu) ).
-    LOCAL targetOmega TO 360 / targetBody:ORBIT:PERIOD.
-    LOCAL idealPhase TO 180 - (targetOmega * tTrans). // Approx 111.5 degrees.
-
-    // 2. Calculate required dV aiming for trailing side periapsis.
+    // 1. Semi-major axis and dV
     LOCAL targetRadius IS targetBody:RADIUS + targetPe.
     LOCAL aTrans IS (r1 + r2 + targetRadius) / 2.
+
     LOCAL v1 TO SQRT(mu / r1).
-    LOCAL vTrans TO SQRT(mu * ((2 / r1) - (2 / (r1 + r2)))).
+    LOCAL vTrans TO SQRT(mu * ((2 / r1) - (1 / aTrans))).
     LOCAL dV TO vTrans - v1.
 
-    // 3. Find the correct time for the window
-    // Get current angles relative to Kerbin's center
-    // TODO: consider switching from ARCTAN2 to VANG and vectors
-    LOCAL shipPos TO SHIP:POSITION - BODY:POSITION.
-    LOCAL targetPos TO targetBody:POSITION - BODY:POSITION.
-    LOCAL shipAng TO ARCTAN2(shipPos:X, shipPos:Z).
-    LOCAL targetAng TO ARCTAN2(targetPos:X, targetPos:Z).
+    // 2. Phase angle
+    LOCAL tTrans TO CONSTANT:PI * SQRT( (aTrans^3) / mu).
+    LOCAL targetOmega TO 360 / targetBody:Orbit:Period.
+    LOCAL idealPhase TO 180 - (targetOmega * tTrans). // Approx 111.5 degrees.
 
-    LOCAL currentPhase TO targetAng - shipAng.
-    IF currentPhase < 0 { SET currentPhase TO currentPhase + 360. }
+    // 3. Absolute position vectors
+    LOCAL shipPos IS SHIP:Position - BODY:Position.
+    LOCAL targetPos IS targetBody:Position - BODY:Position.
 
+
+    // Calculate current phase angle using the angular vector distance.
+    LOCAL currentPhase IS VANG(shipPos, targetPos).
+    LOCAL orbitNormal IS VCRS(SHIP:Velocity:Orbit, shipPos).
+    LOCAL phaseSign IS VDOT(orbitNormal, VCRS(shipPos, targetPos)).
+
+    // If the sign is negative, the target is behind us; adjust to full 360 map.
+    if phaseSign < 0 {
+        SET currentPhase TO 360 - currentPhase.
+    }
+
+    // 4. Calculate the timing window.
     LOCAL shipOmega TO 360 / SHIP:ORBIT:PERIOD.
     LOCAL phaseSpeed TO shipOmega - targetOmega.
-
-    // Time until the ideal phase angle is met
+    
     LOCAL phaseDiff TO currentPhase - idealPhase.
     IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
     LOCAL timeToBurn TO phaseDiff / phaseSpeed.
 
-    // 4. Create and attach the node.
+    // 5. Generate the node.
     LOCAL burnUt TO TIME:SECONDS + timeToBurn.
     PRINT "Ideal Mun transfer calculated!".
     PRINT "DeltaV Required: " + ROUND(dv, 1) + " m/s".
