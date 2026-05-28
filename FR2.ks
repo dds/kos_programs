@@ -35,7 +35,7 @@ DECLARE LOCAL FUNCTION init {
     // Load dependencies.
 
     // MechJeb2
-    DECLARE GLOBAL MJ TO addons:MJ.
+    SET MJ TO ADDONS:MJ.
     PRINT "MechJeb addon version: " + MJ:core:version.
     if MJ:core:running {
         PRINT "MechJeb core is running.".
@@ -106,6 +106,7 @@ DECLARE LOCAL FUNCTION ascend {
     SET MJ:ASCENT:ASCENTTYPE TO "CLASSIC".
     SET MJ:ASCENT:DESIREDALTITUDE TO desiredAltitude.
     SET MJ:ASCENT:DESIREDINCLINATION TO desiredInclination.
+    SET MJ:ASCENT:FAIRINGMINALTITUDE TO 68000.
 }
 
 DECLARE LOCAL FUNCTION circularizeKerbin {
