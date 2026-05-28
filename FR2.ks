@@ -16,20 +16,24 @@ DECLARE GLOBAL munTargetPeriapsis IS 1800000.
 
 // Put this at the very top of FR2.ks
 PARAMETER remoteCommand IS "default".
+init().
 
 IF remoteCommand = "default" {
     // If we run the file normally without parameters, do nothing here and let the script flow
 }
 ELSE IF remoteCommand = "transfer" {
     // Manually trigger the transfer function from inside program scope!
+    init().
     ADD hohmannTransfer(Mun, munInitialPeriapsis).
     PRINT "Transfer node manually generated via Telnet!".
 }
 ELSE IF remoteCommand = "capture" {
+    init().
     ADD planMunarCapture(munTargetApoapsis).
     PRINT "Capture node manually generated via Telnet!".
 }
 ELSE IF remoteCommand = "fairing" {
+    init().
     deployMainFairing().
 }
 
@@ -39,7 +43,6 @@ SET TERMINAL:HEIGHT to 40.
 SET TERMINAL:WIDTH to 80.
 
 FUNCTION main {
-    init().
     WAIT 2. // 2 seconds for everything to settle.
 
     // waitForLaunch().
@@ -112,7 +115,6 @@ FUNCTION init {
     } else {
         mLog("WARNING: MechJeb reported as NOT AVAILABLE.").
     }
-
 }
 
 FUNCTION waitForLaunch {
