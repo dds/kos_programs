@@ -11,7 +11,7 @@ DECLARE GLOBAL desiredInclination TO 0.
 DECLARE GLOBAL desiredHeading TO 90.
 
 // Open and configure term
-// CORE:DOACTION("Open Terminal", TRUE).
+CORE:DOACTION("Open Terminal", TRUE).
 SET TERMINAL:HEIGHT to 40.
 SET TERMINAL:WIDTH to 80.
 
