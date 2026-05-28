@@ -104,30 +104,28 @@ DECLARE LOCAL FUNCTION endLaunch {
 
 DECLARE LOCAL FUNCTION ascend {
     PRINT "Utilizing MechJeb2 ascent assistance.".
+    // See https://github.com/belpyro/kOS.MechJeb2.Addon/blob/main/Tests/AscentWrapperTest.ks
     LOCAL Asc IS ADDONS:MJ:ASCENT.
     SET Asc:Enabled TO TRUE.
-    SET Asc:Autostage TO TRUE.
-    SET Asc:AutoStageLimit TO 1.
     SET Asc:DesiredAltitude TO desiredAltitude.
     SET Asc:DesiredInclination TO desiredInclination.
+    SET Asc:AutoStage TO TRUE.
+    SET Asc:AutoStageLimit TO 1.
+    SET Asc:AutoDeployAntennas TO TRUE.
+    SET Asc:AutoDeploySolarPanels TO TRUE.
+    SET Asc:AutoWarp TO FALSE.
+    SET Asc:SkipCircularization TO FALSE.
     SET Asc:FairingMinAltitude TO 67000.
     SET Asc:FairingMaxDynamicPressure TO 0.1.
     SET Asc:FairingMaxAerothermalFlux TO 350.
 
-
-    // LOCK THROTTLE to 1.
-    // lockToPrograde().
-
     STAGE.
     HUDTEXT("IGNITION!", 1, 2, 15, GREEN, FALSE).
     PRINT "IGNITION!".
-
-    WAIT UNTIL ADDONS:MJ:ASCENT:ENABLED = FALSE.
-    // executeManeuver(TIME:seconds + 30, 100, 100, 100).
 }
 
 DECLARE LOCAL FUNCTION circularizeKerbin {
-    // Wait for MJ to circularize....
+    WAIT UNTIL ADDONS:MJ:ASCENT:ENABLED = FALSE.
 }
 
 // DECLARE LOCAL FUNCTION executeManeuver {
