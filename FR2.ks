@@ -203,25 +203,22 @@ FUNCTION executeNextManeuver {
     LOCAL t IS NEXTNODE.
     LOCAL startTime IS calculateStartTime(t).
     
+    WAIT UNTIL TIME:SECONDS >= (startTime - 30).
+    HUDTEXT("Aligning for maneuver...", 1, 2, 15, WHITE, FALSE).
+
+    // Let kOS steer toward the node burn vector
+    SET SAS TO FALSE.
+    LOCK STEERING TO t:BurnVector.
+
+    // Wait for alignment with timeout to avoid hanging
+    LOCAL alignDeadline is TIME:SECONDS + 30.
+    UNTIL VANG(SHIP:Facing:ForeVector, t:BurnVector) < 1.5 OR TIME:SECONDS > alignDeadline {
+       WAIT 0.1. 
+    }
+
     WAIT UNTIL TIME:SECONDS >= (startTime - 10).
     HUDTEXT("Executing maneuver in T-10", 1, 2, 15, WHITE, FALSE).
-    
     countdown(9).
-    
-    // 1. Hand steering over to KSP's Prograde Vector Lock
-    UNLOCK STEERING. 
-    SET SAS TO TRUE.
-    WAIT 0.1. 
-    
-    // Use the basic vector locking support you have available
-    SET SASMODE TO "STABILITYASSIST".
-    mLog("SAS set to STABILITYASSIST vector lock. Aligning...").
-
-    // 2. Wait until the ship is aligned with Prograde (which matches the node)
-    UNTIL VANG(SHIP:FACING:FOREVECTOR, t:BURNVECTOR) < 1.5 {
-        WAIT 0.1.
-    }
-    mLog("Alignment locked on Prograde!").
     
     WAIT 0.2.
 
@@ -251,23 +248,21 @@ FUNCTION executeNextManeuver {
         // Engine Throttle Calculation
         LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
         IF maxAcc > 0 {
+            LOCAL thrott IS 1.0.
             IF t:DELTAV:MAG < (maxAcc * 0.5) {
-                LOCK THROTTLE TO MAX(0.01, t:DELTAV:MAG / maxAcc). 
-            } ELSE {
-                LOCK THROTTLE TO 1.0. 
-            }
+                SET thrott TO MAX(0.01, t:DeltaV:MAG / maxAcc).
+            } 
+            LOCK THROTTLE to thrott.
         }
         WAIT 0.01.
     }
-    
+
     // 4. Clean up and Shutdown
+    SET SAS TO TRUE.
+    SET SASMODE TO "StabilityAssist".
+    REMOVE t. 
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE. 
-    REMOVE t. 
-    
-    // Switch SAS back to simple stability assist so it stops chasing prograde
-    SET SASMODE TO "STABILITYASSIST".
-    
     HUDTEXT("Maneuver burn finalized.", 1, 2, 15, GREEN, FALSE).
     mLog("Engine shutdown complete. SAS holding current attitude.").
 }
