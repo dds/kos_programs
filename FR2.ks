@@ -32,9 +32,11 @@ DECLARE GLOBAL FUNCTION main {
     LOCAL munTransfer TO hohmannTransfer(Mun, 10000).
     ADD munTransfer.
     HUDTEXT("Mun Transfer Node Created", 1, 2, 15, WHITE, FALSE).
+    executeManeuver(munTransfer).
 
     // Generate the capture node using the transfer node's flight path.
     WAIT 0.1.
+    LOCAL munCapture TO NODE(0, 0, 0, 0).
     IF munTransfer:Orbit:hasNextPatch {
         LOCAL encounterOrbit TO munTransfer:Orbit:NextPatch.
         // Time of Mun periapsis. 
@@ -46,12 +48,11 @@ DECLARE GLOBAL FUNCTION main {
         LOCAL vCirc TO SQRT(mu / rAtPe).
         LOCAL captDV TO vCirc - vAtPe.
 
-        LOCAL munCapture TO NODE(captureUt, 0, 0, captDV).
+        SET munCapture TO NODE(captureUt, 0, 0, captDV).
         ADD munCapture.
         HUDTEXT("Mun Capture Node Created", 1, 2, 15, WHITE, FALSE).
     }
 
-    executeManeuver(munTransfer).
     warpToMunSOI().
     executeManeuver(munCapture).
 
@@ -167,18 +168,74 @@ DECLARE LOCAL FUNCTION circularizeKerbin {
 }
 
 DECLARE LOCAL FUNCTION executeManeuver {
-    DECLARE PARAMETER args.
-    LOCAL mnv IS NODE(args[0], args[1], args[2], args[3]).
+    DECLARE PARAMETER t.
 
-    ADD(mnv).
-    LOCAL startTime IS calculateStartTime(mnv).
+    PRINT "Executing maneuver".
+    HUDTEXT("Executing maneuver.", 1, 2, 15, WHITE, FALSE).
+    LOCAL startTime IS calculateStartTime(t).
     WAIT UNTIL startTime - 10.
-    lockSteeringAtManeuverTarget(mnv).
+    countdown(9).
+    lockSteeringAtManeuverTarget(t).
     WAIT UNTIL startTime.
-    LOCK THROTTLE TO 1.
-    WAIT UNTIL isManeuverComplete(mnv).
+    LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
+    LOCAL burnIV IS t:DeltaV.
+    UNTIL isManeuverComplete(t, burnIV) { 
+        IF t:DeltaV:MAG < (maxAcc * 0.5) {
+            LOCK THROTTLE TO MAX(0.01, t:DeltaV:MAG / maxAcc). // Precision.
+        } ELSE { 
+            LOCK THROTTLE TO 1.0. // Full power.
+        }
+    }
+
+    // Clean up and shutdown.
     LOCK THROTTLE TO 0.
-    REMOVE(mnv).
+    REMOVE t.
+    HUDTEXT("Maneuver complete.", 1, 2, 15, GREEN, FALSE).
+}
+
+DECLARE LOCAL FUNCTION calculateStartTime {
+    DECLARE PARAMETER t.
+
+    LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
+    IF maxAcc = 0 {
+        PRINT "ERROR: No active engines or out of fuel!".
+        RETURN TIME:SECONDS.
+    }
+
+    LOCAL burnDuration IS t:DeltaV:MAG / maxAcc.
+
+    // Start the burn exactly halfway before the node time
+    LOCAL startUt IS t:TIME - (burnDuration / 2).
+    RETURN startUt.
+}
+
+DECLARE LOCAL FUNCTION lockSteeringAtManeuverTarget {
+    PARAMETER t.
+
+    PRINT "Aligning spacecraft with burn vector.".
+    LOCK STEERING TO t:BurnVector.
+
+    // Wait until the alignment error is under 1 degree before prcoeeding
+    UNTIL VANG(SHIP:Facing:ForeVector, t:BurnVector) < 1.0 {
+        WAIT 0.1.
+    }
+    PRINT "Alignment locked.".
+}
+
+DECLARE LOCAL FUNCTION isManeuverComplete {
+    PARAMETER t.
+    PARAMETER iv.
+
+    // If the remaining dV drops below a strict physics threshold
+    IF t:DeltaV:MAG < 0.05 {
+        RETURN TRUE.
+    }
+
+    IF VDOT(iv, t:DeltaV) < 0 {
+        RETURN TRUE.
+    }
+
+    RETURN FALSE.
 }
 
 DECLARE LOCAL FUNCTION hohmannTransfer {
@@ -227,20 +284,24 @@ DECLARE LOCAL FUNCTION hohmannTransfer {
     return NODE(burnUt, 0, 0, dV).
 }
 
-DECLARE LOCAL FUNCTION transMunInjection {
+DECLARE LOCAL FUNCTION warpToMunSOI {
+    IF NOT (SHIP:Orbit:HasNextPatch) {
+        PRINT "ERROR: No planned Mun SOI transition found in current orbit.".
+        RETURN.
+    }
 
-}
+    LOCAL transUt IS TIME:SECONDS + SHIP:Orbit:NextPatchETA.
+    LOCAL warpTargetUt IS transUt - 60.
 
-DECLARE LOCAL FUNCTION transferToMun {
+    PRINT "Warping to Mun SOI...".
+    HUDTEXT("Warping to Mun SOI...", 1, 2, 15, YELLOW, FALSE).
+    WARPTO(warpTargetUt).
 
-}
-
-DECLARE LOCAL FUNCTION enterMunSOI {
-
-}
-
-DECLARE LOCAL FUNCTION circularizeMun {
-
+    UNTIL SHIP:Body:Name = "Mun" {
+        PRINT "Waiting for SOI transition ...".
+        WAIT 1.
+    }
+    RETURN.
 }
 
 DECLARE LOCAL FUNCTION exit {
