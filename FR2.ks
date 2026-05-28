@@ -150,8 +150,12 @@ DECLARE LOCAL FUNCTION ascend {
     FOR p IN SHIP:PARTSTAGGED("main_fairing") {
         IF p:Modules:Contains("ModuleAirstreamFairing") {
             LOCAL m IS p:GetModule("ModuleAirstreamFairing").
-            HUDTEXT("Fairing jettison.", 1, 2, 15, GREEN, FALSE).
-            m:doAction("jettison").
+            IF m:HASEVENT("jettison") {
+                m:doEvent("jettison").
+                HUDTEXT("Fairing jettison.", 1, 2, 15, GREEN, FALSE).
+            } else {
+                PRINT "ERROR: Part tagged 'main_fairing' cannot be jettisoned.".
+            }
         }
     }
 }
