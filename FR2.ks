@@ -40,8 +40,8 @@ DECLARE LOCAL FUNCTION init {
     // Load dependencies.
 
     // MechJeb2
-    SET mj to ADDONS:MJ.
-    SET mjCore TO mj:CORE. 
+    LOCAL mj IS ADDONS:MJ.
+    LOCAL mjCore IS mj:CORE. 
     if mj:AVAILABLE {
         PRINT "MechJeb is available.".
         LOCAL mjRunning IS "NOT running.".
