@@ -41,9 +41,14 @@ DECLARE LOCAL FUNCTION init {
 
     // MechJeb2
     SET mj to ADDONS:MJ.
-    SET mjcore TO mj:CORE. 
+    SET mjCore TO mj:CORE. 
     if mj:AVAILABLE {
         PRINT "MechJeb is available.".
+        LOCAL mjRunning IS "NOT running.".
+        if mjCore:RUNNING {
+            SET mjRunning TO "running.".
+        }
+        PRINT "MechJeb core is " + mjRunning.
     } else {
         PRINT "WARNING: MechJeb reported as NOT AVAILABLE.".
     }
