@@ -55,8 +55,8 @@ LOCAL FUNCTION buildPhaseSequence {
         "CAPTURE"
     ).
     FOR ptype IN missionPayloads() {
-        LOCAL t IS ptype:TOUPPER.
-        IF t = "CRASHPROBE1" OR t = "PROBE1" {
+        LOCAL t IS _normalizePayloadType(ptype).
+        IF t = "CRASHPROBE" OR t = "PROBE" {
             seq:ADD("LOWER_PE").
             seq:ADD("RELEASE_PROBE").
         }
@@ -66,17 +66,28 @@ LOCAL FUNCTION buildPhaseSequence {
     seq:ADD("INCL_CORRECT").
 
     FOR ptype IN missionPayloads() {
-        LOCAL t IS ptype:TOUPPER.
-        IF t = "RELAY1" {
+        LOCAL t IS _normalizePayloadType(ptype).
+        IF t = "RELAY" OR t = "SCANSAT" OR t = "SCISAT" {
             seq:ADD("RELAY_OPS").
-        } ELSE IF t = "STKSAT1" {
-            seq:ADD("DEPLOY_SAT").
-        } ELSE {
-            mLogWarn("Unknown payload type: " + t + " — skipped.").
         }
     }
     seq:ADD("DONE").
     RETURN seq.
+}
+
+LOCAL FUNCTION _normalizePayloadType {
+    PARAMETER raw.
+    // Strip trailing digits and hyphens.
+    LOCAL result IS raw:TOUPPER.
+    UNTIL result:LENGTH = 0 {
+        LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
+        IF last:MATCHESPATTERN("[0-9\\-]") { 
+            SET result TO result:SUBSTRING(0, result:LENGTH - 1).
+        } ELSE { 
+            BREAK.
+        }
+    }
+    RETURN result.
 }
 
 // ── Phase advance ──────────────────────────────────────────
