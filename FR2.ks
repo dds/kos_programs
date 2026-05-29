@@ -27,7 +27,7 @@ GLOBAL CFG IS LEXICON(
     "LAUNCH_INCLINATION",       0,  // deg — 0 = equatorial
     "LAUNCH_AZIMUTH",          90,  // deg — 90 = due east from KSC
     "LAUNCH_STAGE_LIMIT",       2,  // MJ AutoStageLimit
-    "FAIRING_ALT",          75000,  // m — jettison main_fairing
+    "FAIRING_ALT",          65000,  // m — jettison main_fairing
 
     // Transfer + capture
     "RELAY_ALT",           1000000,  // m above target body
