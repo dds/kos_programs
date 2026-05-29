@@ -25,30 +25,29 @@
 // ============================================================
 GLOBAL CFG IS LEXICON(
     // Ascent
-    "PARKING_ALT",         200000,  // m — MJ target orbit altitude
-    "LAUNCH_INCLINATION",      55,  // deg — 0 = equatorial
+    "PARKING_ALT",         100000,  // m — MJ target orbit altitude
+    "LAUNCH_INCLINATION",      90,  // deg — 0 = equatorial
     "LAUNCH_AZIMUTH",           0,  // deg — 90 = due east from KSC
-    "LAUNCH_STAGE_LIMIT",       2,  // MJ AutoStageLimit
-    "FAIRING_ALT",          62000,  // m — jettison main_fairing
-    "EXTEND_ALT",           71000,  // m - extend panels & attenae 
+    "LAUNCH_STAGE_LIMIT",       3,  // MJ AutoStageLimit
+    "FAIRING_ALT",          68000,  // m — jettison main_fairing
+    "EXTEND_ALT",           72000,  // m - extend panels & attenae 
 
     // Transfer + capture
-    "RELAY_ALT",           1581000,  // m above target body
+    "RELAY_ALT",           1000000,  // m above target body
     "CAPTURE_PE",            20000,  // m — arrival Pe aim point
     "CIRC_ECC_TOL",          0.005,  // ~2.5km at 500km
-    "TARGET_INCLINATION",    55,     // deg — 0=equatorial, 90=polar, -1=match vessel
+    "TARGET_INCLINATION",    90,     // deg — 0=equatorial, 90=polar, -1=match vessel
     "INCL_MATCH_TARGET",     "",     // vessel name to match if TARGET_INCLINATION=-1
     "INCL_TOLERANCE",        0.01,   // deg
     "MAX_INCL_CHANGE_DV",    200,  // m/s — skip if correction would cost more
 
     // Probe impact
-    "PROBE_TARGET_LAT",        75.0,
-    "PROBE_TARGET_LNG",       -30.0,
+    "PROBE_TARGET_LAT",        80.0,
+    "PROBE_TARGET_LNG",         0.0,
     "PROBE_ENTRY_PE",         30000,
-    "PROBE_TARGET_TOL",        200 // m  - acceptable miss distance
+    "PROBE_TARGET_TOL",        5000 // m  - acceptable miss distance
 ).
 // ============================================================
-RUNPATH("1:/lib/inclination.ks").
 
 // ── Phase sequence builder ─────────────────────────────────
 LOCAL FUNCTION buildPhaseSequence {
@@ -438,17 +437,6 @@ LOCAL FUNCTION _phaseReleaseProbe {
     SET SAS TO TRUE.
     WAIT 1.
 
-    LOCAL dc IS parts[0].
-    IF dc:HASMODULE("ModuleDecouple") {
-        dc:GETMODULE("ModuleDecouple"):DOEVENT("Decouple").
-    } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
-        dc:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
-    } ELSE {
-        mLogError("probe_decoupler has no recognized decouple module.").
-        RETURN.
-    }
-
-    WAIT 0.5.
     // Arm parachutes on probe immediately after release
     LOCAL lChutes IS SHIP:PARTSTAGGED("probe_chute").
     IF lChutes:LENGTH > 0 {
@@ -458,6 +446,9 @@ LOCAL FUNCTION _phaseReleaseProbe {
                 IF modu:HASEVENT("Arm Parachute") {
                     modu:DOEVENT("Arm Parachute").
                     mLog("Probe chute armed.").
+                } ELSE IF modu:HASEVENT("Deploy") {
+                    modu:DOEVENT("Deploy").
+                    mLog("Probe chute deployed/armed.").
                 }
             }
         }
@@ -466,6 +457,20 @@ LOCAL FUNCTION _phaseReleaseProbe {
         mLogWarn("No parts tagged 'probe_chute' — trying AG5.").
         AG5 ON.
     }
+
+    WAIT 0.2.
+    
+    LOCAL dc IS parts[0].
+    IF dc:HASMODULE("ModuleDecouple") {
+        dc:GETMODULE("ModuleDecouple"):DOEVENT("Decouple").
+    } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
+        dc:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
+    } ELSE {
+        mLogError("probe_decoupler has no recognized decouple module.").
+        RETURN.
+    }
+    WAIT 0.5.
+    
     stateSet("probe_released_time", TIME:SECONDS).
     mLog("Probe released. Relay mass: " + ROUND(SHIP:MASS,2) + "t.").
     nextPhase().
