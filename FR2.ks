@@ -1,474 +1,312 @@
-// FR2 rockets are capable of delivering 500kg+ payloads to Kerbin system.
-// Mission sortie:
-//  1. Mun flyby
-//  2. Kerbin CommNet
-//  3. Beyond
+// ============================================================
+// FR2.ks  —  Mission: Mun Relay + Impactor  (0:/FR2.ks)
+//
+// Phases (persisted in state.json):
+//   PARKING       — wait for stable Kerbin parking orbit
+//   FAIRING       — deploy main fairing at altitude threshold
+//   TMI           — plan + execute trans-Munar injection
+//   MUN_COAST     — coast to Mun SOI
+//   MUN_CAPTURE   — capture burn at Mun periapsis
+//   CIRC_MUN      — circularize at target altitude
+//   LOWER_PE      — retrograde at Ap to put probe on impact traj
+//   RELEASE_PROBE — decouple probe
+//   RECIRC        — relay prograde burn to re-circularize
+//   RELAY_OPS     — relay station keeping, telemetry loop
+//   PROBE_COAST   — probe telemetry until impact / signal loss
+//   DONE          — mission complete
+// ============================================================
 
-@LAZYGLOBAL OFF.
+// ============================================================
+// CONFIG — edit between test launches
+// ============================================================
+LOCAL CFG IS LEXICON(
+    "PARKING_ALT",       90000,   // m — target parking orbit altitude
+    "PARKING_TOL",        2000,   // m — acceptable Pe/Ap deviation
+    "FAIRING_ALT",       68000,   // m — deploy main_fairing at this altitude
+    "MUN_RELAY_ALT",    500000,   // m above Mun surface — relay target orbit
+    "PROBE_IMPACT_PE",    5000,   // m — lower Pe to this for impact trajectory
+    "CIRC_ECC_TOL",       0.02,   // eccentricity threshold for "circular enough"
+    "MANEUVER_LEAD",        10    // s — HUD warning before burn
+).
+// ============================================================
 
-DECLARE GLOBAL desiredAltitude IS 100000.
-DECLARE GLOBAL desiredInclination IS 0.
-DECLARE GLOBAL desiredHeading IS 90.
-DECLARE GLOBAL fairingJettisonAltitude IS 68000.
-DECLARE GLOBAL munInitialPeriapsis IS 20000.
-DECLARE GLOBAL munTargetApoapsis IS 1800000.
-DECLARE GLOBAL munTargetPeriapsis IS 1800000.
+GLOBAL FUNCTION main {
+    mLogPhase("MAIN ENTRY").
+    mLog("Config: " + CFG:KEYS:JOIN(", ")).
 
-LOCAL libs IS LIST("lib/files.ks", "lib/countdown.ks", "lib/logs.ks").
-FOR lib IN libs {
-    LOCAL archivePath IS "0:/{0}":FORMAT(lib).
-    LOCAL localPath IS "1:/{0}":FORMAT(lib).
-    COPYPATH("0:/{0}":FORMAT(lib), "1:/{0}":FORMAT(lib)).
-    RUNONCEPATH("1:/{0}":FORMAT(lib)).
-}.
-printStorageStatus().
+    // Resume from persisted phase if present
+    LOCAL phase IS stateGet("phase", "PARKING").
+    mLog("Resuming from phase: " + phase).
 
-initializeLogFile().
-mLog(" ").
-mLog("Initializing FR2.").
-
-// MechJeb2
-LOCAL mj IS ADDONS:MJ.
-LOCAL mjCore IS mj:CORE. 
-if mj:AVAILABLE {
-    mLog("MechJeb is available.").
-    LOCAL mjRunning IS "NOT running.".
-    if mjCore:RUNNING {
-        SET mjRunning TO "running.".
-    }
-    mLog("MechJeb core is " + mjRunning).
-    // LOCAL planner IS ADDONS:MJ:PLANNER.
-    // IF DEFINED(planner) {
-    //     mLog("MechJeb Maneuver Planner is available.").
-    // } else {
-    //     mLog("MechJeb Maneuver Planner is NOT available.").
-    // }
-
-    // See https://github.com/belpyro/kOS.MechJeb2.Addon/blob/main/Tests/AscentWrapperTest.ks
-    LOCAL Asc IS ADDONS:MJ:ASCENT.
-    SET Asc:Enabled TO TRUE.
-    SET Asc:DesiredAltitude TO desiredAltitude.
-    SET Asc:DesiredInclination TO desiredInclination.
-    SET Asc:AutoStage TO TRUE.
-    SET Asc:AutoStageLimit TO 2. // CHECK YO STAGING
-    SET Asc:AutoDeployAntennas TO TRUE.
-    SET Asc:AutoDeploySolarPanels TO TRUE.
-    SET Asc:AutoWarp TO FALSE.
-    SET Asc:SkipCircularization TO FALSE.
-} else {
-    mLog("WARNING: MechJeb reported as NOT AVAILABLE.").
-}
-
-PARAMETER remoteCommand IS "default".
-IF remoteCommand = "default" {
-    // If we run the file normally without parameters, do nothing here and let the script flow
-}
-ELSE IF remoteCommand = "transfer" {
-    // Manually trigger the transfer function from inside program scope!
-    ADD hohmannTransfer(Mun, munInitialPeriapsis).
-    mLog("Transfer node manually generated via Telnet!").
-}
-ELSE IF remoteCommand = "burn" {
-    // Execute the current maneuver.
-    executeNextManeuver().
-}
-ELSE IF remoteCommand = "capture" {
-    ADD planMunarCapture(munTargetApoapsis).
-    mLog("Capture node manually generated via Telnet!").
-}
-ELSE IF remoteCommand = "fairing" {
-    deployMainFairing().
-}
-
-// Open and configure term
-CORE:DOACTION("Open Terminal", TRUE).
-SET TERMINAL:HEIGHT to 40.
-SET TERMINAL:WIDTH to 80.
-
-FUNCTION main {
-    WAIT 2. // 2 seconds for everything to settle.
-
-    // waitForLaunch().
-    countdown(5).
-    startLaunch().
-
-    armBackgroundFairingTrigger().
-    ascend().
-    circularizeKerbin().
-    endLaunch().
-
-    LOCAL munTransfer IS hohmannTransfer(Mun, munInitialPeriapsis).
-    ADD munTransfer.
-    HUDTEXT("Mun Transfer Node Created", 1, 2, 15, WHITE, FALSE).
-    executeNextManeuver().
-
-    WAIT 1.
-    warpToMunSOI().
-    WAIT 1.
-    
-    LOCAL munCapture IS planMunarCapture(munTargetApoapsis).
-    ADD munCapture.
-    HUDTEXT("Mun Capture Node Created", 1, 2, 15, WHITE, FALSE).
-    executeNextManeuver().
-
-    exit().
-}
-
-FUNCTION waitForLaunch {
-    mLog("Engage autopilot then press ENTER to initiate countdown.").
-    LOCAL ch is "".
-    UNTIL ch = CHAR(13) {
-        SET ch TO TERMINAL:INPUT:GETCHAR().
+    IF phase = "PARKING"      { _phaseParking().      }
+    ELSE IF phase = "FAIRING"      { _phaseFairing().      }
+    ELSE IF phase = "TMI"          { _phaseTMI().          }
+    ELSE IF phase = "MUN_COAST"    { _phaseMunCoast().     }
+    ELSE IF phase = "MUN_CAPTURE"  { _phaseMunCapture().   }
+    ELSE IF phase = "CIRC_MUN"     { _phaseCircMun().      }
+    ELSE IF phase = "LOWER_PE"     { _phaseLowerPe().      }
+    ELSE IF phase = "RELEASE_PROBE"{ _phaseReleaseProbe(). }
+    ELSE IF phase = "RECIRC"       { _phaseRecirc().       }
+    ELSE IF phase = "RELAY_OPS"    { _phaseRelayOps().     }
+    ELSE IF phase = "PROBE_COAST"  { _phaseProbeCoast().   }
+    ELSE IF phase = "DONE"         { _phaseDone().         }
+    ELSE {
+        mLogError("Unknown phase: " + phase + " — defaulting to PARKING.").
+        stateSet("phase", "PARKING").
+        _phaseParking().
     }
 }
 
-FUNCTION myRoll {
-    RETURN 360 - desiredHeading.
-}
+// ── Phase: wait for stable parking orbit ──────────────────
+LOCAL FUNCTION _phaseParking {
+    mLogPhase("PARKING").
+    stateSet("phase", "PARKING").
 
-FUNCTION lockToPrograde {
-    WAIT UNTIL (SHIP:AVAILABLETHRUST < MASS*CONSTANT:g0).
-    mLog("Locking to prograde.").
-    LOCK STEERING TO SRFPrograde + R(0, 0, myRoll()).
-}
-
-// FUNCTION deployPayload {
-//     WAIT UNTIL ALTITUDE < deployAlt AND VERTICALSPEED < 0.
-//     STAGE.
-//     HUDTEXT("Deploying payload", 1, 2, 15, WHITE, FALSE).
-//     mLog("Deploying payload.").
-// }
-
-FUNCTION startLaunch {
-    mLog("Launch initiated.").
-    STAGE.
-    HUDTEXT("IGNITION!", 1, 2, 15, GREEN, FALSE).
-    mLog("IGNITION!").
-}
-
-FUNCTION endLaunch {
-    HUDTEXT("Launch complete.", 1, 2, 15, WHITE, FALSE).
-}
-
-FUNCTION ascend {
-    mLog("Utilizing MechJeb2 ascent assistance.").
-}
-
-FUNCTION armBackgroundFairingTrigger {
-    // Sits in CPU memory and is constantly updated in the background.
-    WHEN SHIP:Altitude >= fairingJettisonAltitude THEN {
-        deployMainFairing().
+    // MechJeb is running ascent — we just wait for a stable orbit
+    UNTIL isOrbitStable(CFG["PARKING_ALT"] - CFG["PARKING_TOL"]) {
+        WAIT 5.
     }
+
+    orbitSummary().
+    mLog("Stable parking orbit confirmed.").
+    // Transition — check if fairing still needs deploying
+    // (If we're already past fairing alt this is a no-op resume path)
+    stateSet("phase", "FAIRING").
+    _phaseFairing().
 }
 
-FUNCTION deployMainFairing {
-    mLog("Deploying main fairing.").
-    FOR p IN SHIP:PartsTagged("main_fairing") {
-        mLog("  DEBUG: SEARCHING FOR FAIRING MODULE").
-        FOR m_name IN p:MODULES {
-            LOCAL m IS p:GETMODULE(m_name).
-            PRINT "----- Module: " + m_name + " -----".
-            PRINT "  Available Events: " + m:AllEventNames.
-            PRINT "  Available Actions: " + m:AllActionNames.
-        }
-        mLog(" ").
+// ── Phase: fairing deployment ──────────────────────────────
+LOCAL FUNCTION _phaseFairing {
+    mLogPhase("FAIRING").
+    stateSet("phase", "FAIRING").
 
-        IF p:Modules:Contains("ModuleAirstreamFairing") {
-            LOCAL m IS p:GetModule("ModuleAirstreamFairing").
-            IF m:HASEVENT("jettison") {
-                m:doEvent("jettison").
-                HUDTEXT("Fairing jettison.", 1, 2, 15, GREEN, FALSE).
-            } else {
-                mLog("ERROR: Part tagged 'main_fairing' cannot be jettisoned.").
-            }
-        }
-    }
-}
-
-FUNCTION circularizeKerbin {
-    WAIT UNTIL ADDONS:MJ:ASCENT:ENABLED = FALSE.
-}
-
-
-FUNCTION executeNextManeuver {
-    IF NOT HASNODE {
-        mLog("ERROR: No maneuver node found on the flight path!").
-        HUDTEXT("Execution Failed: No Node", 3, 2, 15, RED, FALSE).
+    LOCAL fairingDeployed IS stateGet("fairing_deployed", "false").
+    IF fairingDeployed = "true" {
+        mLog("Fairing already deployed — skipping.").
+        stateSet("phase", "TMI").
+        _phaseTMI().
         RETURN.
     }
-    
-    LOCAL t IS NEXTNODE.
-    LOCAL startTime IS calculateStartTime(t).
-    
-    WAIT UNTIL TIME:SECONDS >= (startTime - 30).
-    HUDTEXT("Aligning for maneuver...", 1, 2, 15, WHITE, FALSE).
 
-    // Let kOS steer toward the node burn vector
-    SET SAS TO FALSE.
-    LOCK STEERING TO t:BurnVector.
-
-    // Wait for alignment with timeout to avoid hanging
-    LOCAL alignDeadline is TIME:SECONDS + 30.
-    UNTIL VANG(SHIP:Facing:ForeVector, t:BurnVector) < 1.5 OR TIME:SECONDS > alignDeadline {
-       WAIT 0.1. 
+    // If we're already above the fairing alt (e.g. resumed mid-ascent), deploy now
+    IF SHIP:ALTITUDE >= CFG["FAIRING_ALT"] {
+        _deployFairing().
+        stateSet("phase", "TMI").
+        _phaseTMI().
+        RETURN.
     }
 
-    WAIT UNTIL TIME:SECONDS >= (startTime - 10).
-    HUDTEXT("Executing maneuver in T-10", 1, 2, 15, WHITE, FALSE).
-    countdown(9).
-    
-    WAIT 0.2.
+    // Otherwise wait for the altitude threshold
+    mLog("Waiting for fairing alt: " + ROUND(CFG["FAIRING_ALT"]/1000,0) + "km").
+    WAIT UNTIL SHIP:ALTITUDE >= CFG["FAIRING_ALT"].
+    _deployFairing().
 
-    WAIT UNTIL TIME:SECONDS >= startTime.
-    mLog("Executing maneuver...").
-    
-    LOCAL burnIV IS t:BURNVECTOR. 
-    
-    // 3. The Active Burn Loop
-    UNTIL isManeuverComplete(t, burnIV) {
-        // Automatic Staging Monitor
-        LOCAL engs IS LIST().
-        LIST ENGINES IN engs.
-        LOCAL needsStage IS FALSE.
-        
-        FOR eng in engs {
-            IF eng:FLAMEOUT { SET needsStage TO TRUE. }
-        }
-        IF SHIP:MAXTHRUST = 0 { SET needsStage TO TRUE. }
-        
-        IF needsStage {
-            HUDTEXT("Staging!", 2, 2, 15, YELLOW, FALSE).
-            STAGE.
-            WAIT 0.5.
-        }
-        
-        // Engine Throttle Calculation
-        LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
-        IF maxAcc > 0 {
-            LOCAL thrott IS 1.0.
-            IF t:DELTAV:MAG < (maxAcc * 0.5) {
-                SET thrott TO MAX(0.01, t:DeltaV:MAG / maxAcc).
-            } 
-            LOCK THROTTLE to thrott.
-        }
-        WAIT 0.01.
+    stateSet("phase", "TMI").
+    _phaseTMI().
+}
+
+LOCAL FUNCTION _deployFairing {
+    LOCAL parts IS SHIP:PARTSTAGGED("main_fairing").
+    IF parts:LENGTH = 0 {
+        mLogWarn("No part tagged 'main_fairing' found — skipping fairing deploy.").
+        RETURN.
     }
+    LOCAL fairing IS parts[0].
+    // kOS ModuleFairing event
+    IF fairing:HASMODULE("ModuleProceduralFairing") {
+        LOCAL mod IS fairing:GETMODULE("ModuleProceduralFairing").
+        IF mod:HASEVENT("Deploy") {
+            mod:DOEVENT("Deploy").
+            stateSet("fairing_deployed", "true").
+            mLog("Main fairing deployed at " + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
+        } ELSE {
+            mLogWarn("Fairing module has no Deploy event.").
+        }
+    } ELSE {
+        mLogWarn("main_fairing part has no ModuleProceduralFairing.").
+    }
+}
 
-    // 4. Clean up and Shutdown
+// ── Phase: Trans-Munar Injection ───────────────────────────
+LOCAL FUNCTION _phaseTMI {
+    mLogPhase("TMI").
+    stateSet("phase", "TMI").
+
+    orbitSummary().
+    mLog("Planning TMI burn...").
+    planTransferToMun().   // from maneuver.ks — adds node
+    executeManeuver().
+
+    stateSet("phase", "MUN_COAST").
+    _phaseMunCoast().
+}
+
+// ── Phase: Coast to Mun SOI ────────────────────────────────
+LOCAL FUNCTION _phaseMunCoast {
+    mLogPhase("MUN_COAST").
+    stateSet("phase", "MUN_COAST").
+
+    mLog("Coasting to Mun SOI. Current body: " + SHIP:ORBIT:BODY:NAME).
     SET SAS TO TRUE.
-    SET SASMODE TO "StabilityAssist".
-    REMOVE t. 
-    LOCK THROTTLE TO 0.
-    WAIT 0.01.
-    UNLOCK THROTTLE. 
-    HUDTEXT("Maneuver burn finalized.", 1, 2, 15, GREEN, FALSE).
-    mLog("Engine shutdown complete. SAS holding current attitude.").
+    UNLOCK STEERING.
+
+    waitForSOI(MUN).  // from orbit.ks — blocks until SOI entry
+    orbitSummary().
+
+    stateSet("phase", "MUN_CAPTURE").
+    _phaseMunCapture().
 }
 
+// ── Phase: Mun capture burn ────────────────────────────────
+LOCAL FUNCTION _phaseMunCapture {
+    mLogPhase("MUN_CAPTURE").
+    stateSet("phase", "MUN_CAPTURE").
 
-FUNCTION calculateStartTime {
-    DECLARE PARAMETER t.
+    mLog("Planning Mun capture at Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km").
+    planMunCapture(CFG["MUN_RELAY_ALT"]).
+    executeManeuver().
+    orbitSummary().
 
-    LOCAL maxAcc IS SHIP:MAXTHRUST / SHIP:MASS.
-    IF maxAcc = 0 {
-        mLog("ERROR: No active engines or out of fuel!").
-        RETURN TIME:SECONDS.
-    }
-
-    LOCAL burnDuration IS t:DeltaV:MAG / maxAcc.
-
-    // Start the burn exactly halfway before the node time
-    LOCAL startUt IS t:TIME - (burnDuration / 2).
-    RETURN startUt.
+    stateSet("phase", "CIRC_MUN").
+    _phaseCircMun().
 }
 
-FUNCTION lockSteeringAtManeuverTarget {
-    PARAMETER t.
+// ── Phase: Circularize at relay altitude ───────────────────
+LOCAL FUNCTION _phaseCircMun {
+    mLogPhase("CIRC_MUN").
+    stateSet("phase", "CIRC_MUN").
 
-    mLog("Aligning spacecraft with burn vector.").
-    LOCK STEERING TO t:BurnVector.
-
-    // Wait until the alignment error is under 1 degree before prcoeeding
-    UNTIL VANG(SHIP:Facing:ForeVector, t:BurnVector) < 1.0 {
-        WAIT 0.1.
+    IF SHIP:ORBIT:ECCENTRICITY < CFG["CIRC_ECC_TOL"] {
+        mLog("Orbit already circular enough (ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4) + ").").
+    } ELSE {
+        planCircularize().
+        executeManeuver().
     }
-    mLog("Alignment locked.").
+    orbitSummary().
+
+    stateSet("phase", "LOWER_PE").
+    _phaseLowerPe().
 }
 
-FUNCTION isManeuverComplete {
-    PARAMETER t.
-    PARAMETER iv.
+// ── Phase: Lower Pe for probe impact trajectory ────────────
+LOCAL FUNCTION _phaseLowerPe {
+    mLogPhase("LOWER_PE").
+    stateSet("phase", "LOWER_PE").
 
-    // If the remaining dV drops below a strict physics threshold
-    IF t:DeltaV:MAG < 0.05 {
-        RETURN TRUE.
-    }
+    mLog("Lowering Pe to " + ROUND(CFG["PROBE_IMPACT_PE"]/1000,1) + "km for probe impact.").
+    planMunPeriapsisLower(CFG["PROBE_IMPACT_PE"]).
+    executeManeuver().
+    orbitSummary().
 
-    IF VDOT(iv, t:DeltaV) < 0 {
-        RETURN TRUE.
-    }
-
-    RETURN FALSE.
+    stateSet("phase", "RELEASE_PROBE").
+    _phaseReleaseProbe().
 }
 
-FUNCTION hohmannTransfer {
-    DECLARE PARAMETER targetBody.
-    DECLARE PARAMETER targetPe.
+// ── Phase: Release probe ───────────────────────────────────
+LOCAL FUNCTION _phaseReleaseProbe {
+    mLogPhase("RELEASE_PROBE").
+    stateSet("phase", "RELEASE_PROBE").
 
-    LOCAL r1 IS SHIP:ORBIT:SEMIMAJORAXIS.
-    LOCAL r2 IS targetBody:ORBIT:SEMIMAJORAXIS.
-    LOCAL mu IS BODY:MU.
-
-    // 1. Semi-major axis and dV
-    LOCAL targetRadius IS targetBody:RADIUS + targetPe.
-    LOCAL aTrans IS (r1 + r2 + targetRadius) / 2.
-
-    LOCAL v1 IS SQRT(mu / r1).
-    LOCAL vTrans IS SQRT(mu * ((2 / r1) - (1 / aTrans))).
-    LOCAL dV IS vTrans - v1.
-
-    // 2. Phase angle
-    LOCAL tTrans IS CONSTANT:PI * SQRT( (aTrans^3) / mu).
-    LOCAL targetOmega IS 360 / targetBody:Orbit:Period.
-    LOCAL idealPhase IS 180 - (targetOmega * tTrans). // Approx 111.5 degrees.
-
-    // 3. Absolute position vectors
-    LOCAL shipPos IS SHIP:Position - BODY:Position.
-    LOCAL targetPos IS targetBody:Position - BODY:Position.
-
-
-    // Calculate current phase angle using the angular vector distance.
-    LOCAL currentPhase IS VANG(shipPos, targetPos).
-    LOCAL orbitNormal IS VCRS(shipPos, SHIP:Velocity:Orbit).
-    LOCAL phaseSign IS VDOT(orbitNormal, VCRS(shipPos, targetPos)).
-
-    // If the sign is negative, the target is behind us; adjust to full 360 map.
-    if phaseSign < 0 {
-        SET currentPhase TO 360 - currentPhase.
-    }
-
-    // 4. Calculate the timing window.
-    LOCAL shipOmega IS 360 / SHIP:ORBIT:PERIOD.
-    LOCAL phaseSpeed IS shipOmega - targetOmega.
-    
-    LOCAL phaseDiff IS currentPhase - idealPhase.
-    IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
-    LOCAL estimatedTimeToBurn IS phaseDiff / phaseSpeed.
-
-    // 5. Create a temporary node to fine-tune.
-    LOCAL bestUt IS TIME:SECONDS + estimatedTimeToBurn.
-    LOCAL testNode IS NODE(bestUt, 0, 0, dV).
-    ADD testNode.
-    WAIT 0.1. // Calculate the test path.
-
-    // 6. Iterative fine-tuning loop to minimize PE
-    LOCAL bestPe IS 999999999.
-    LOCAL steps IS 10.
-
-    // Run a 3-pass loop to progressively narrow down the exact second
-    FROM { LOCAL pass IS 1. } UNTIL pass > 3 STEP { SET pass TO pass + 1. } DO {
-        LOCAL scanning IS TRUE.
-
-        UNTIL NOT scanning {
-            // Test moving the burn earlier (subtracting time)
-            SET testNode:Time TO testNode:Time - steps.
-            WAIT 0.02.
-
-            IF testNode:Orbit:HasNextPatch AND testNode:Orbit:NextPatch:Body:Name = targetBody:Name {
-                LOCAL currentPe IS testNode:Orbit:NextPatch:Periapsis.
-
-                // If it's improving and hasn't crashed into the surface,
-                IF currentPe < bestPe AND currentPe > 0 {
-                    SET bestPe TO currentPe.
-                    SET bestUt TO testNode:Time.
-                } ELSE {
-                    // If it got worse, steps back and prepare to reduce steps size
-                    SET testNode:Time TO testNode:Time + steps.
-                    SET scanning TO FALSE.
-                }
-            } ELSE {
-                // If we lost the encounter completely, revert the steps
-                SET testNode:TIME to testNode:TIME + steps.
-                SET scanning TO FALSE.
-            }
-        }
-        SET steps TO steps / 5. // Drop from 10s stepss to 2s and so on.
-    }
-
-    // 5. Generate the node.
-    REMOVE testNode.
-    mLog("Ideal Mun transfer calculated!").
-    PRINT "DeltaV Required: " + ROUND(dv, 1) + " m/s".
-    return NODE(bestUt, 0, 0, dV).
-}
-
-FUNCTION warpToMunSOI {
-    IF NOT (SHIP:Orbit:HasNextPatch) {
-        mLog("ERROR: No planned Mun SOI transition found in current orbit.").
+    LOCAL parts IS SHIP:PARTSTAGGED("probe_decoupler").
+    IF parts:LENGTH = 0 {
+        mLogError("No part tagged 'probe_decoupler' — cannot release probe!").
+        HUDTEXT("ERROR: probe_decoupler tag missing!", 10, 2, 18, RED, FALSE).
         RETURN.
     }
 
-    LOCAL transUt IS TIME:SECONDS + SHIP:Orbit:NextPatchETA.
-    LOCAL warpTargetUt IS transUt - 60.
+    LOCAL decoupler IS parts[0].
+    mLog("Releasing probe. Current Ap=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + "km Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km").
 
-    mLog("Warping to Mun SOI...").
-    HUDTEXT("Warping to Mun SOI...", 1, 2, 15, YELLOW, FALSE).
-    WARPTO(warpTargetUt).
+    // Brief SAS hold before decoupling so we don't impart spin
+    SET SAS TO TRUE.
+    WAIT 1.
 
-    WAIT UNTIL KUNIVERSE:TimeWarp:Warp = 0.
-
-    UNTIL SHIP:Body:Name = "Mun" {
-        mLog("Waiting for SOI transition ...").
-        WAIT 1.
-    }
-    RETURN.
-}
-
-FUNCTION planMunarCapture {
-    PARAMETER targetApoapsis. // Target apoapsis height in meters (e.g., 20000)
-
-    // 1. Safety Check: Verify we are in an active flyby (hyperbolic orbit)
-    // Hyperbolic orbits have a negative semi-major axis in KSP physics
-    IF SHIP:ORBIT:SEMIMAJORAXIS > 0 {
-        PRINT "Warning: Vessel is already in a closed/captured orbit around " + SHIP:BODY:NAME.
+    IF decoupler:HASMODULE("ModuleDecouple") {
+        decoupler:GETMODULE("ModuleDecouple"):DOEVENT("Decouple").
+    } ELSE IF decoupler:HASMODULE("ModuleAnchoredDecoupler") {
+        decoupler:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
+    } ELSE {
+        mLogError("probe_decoupler has no known decouple module.").
+        RETURN.
     }
 
-    // 2. Automatically discover parameters from the local SOI body
-    LOCAL localBody IS SHIP:BODY.
-    LOCAL mu        IS localBody:MU.
-    LOCAL bodyRadius IS localBody:RADIUS.
+    WAIT 0.5.
+    mLog("Probe released. Relay mass now: " + ROUND(SHIP:MASS,2) + "t").
+    stateSet("probe_released_time", TIME:SECONDS).
 
-    // 3. Define the geometry of the maneuver (Executed at true Periapsis)
-    LOCAL rAtPe IS SHIP:ORBIT:PERIAPSIS + bodyRadius.
-    
-    // The target capture orbit will have its periapsis equal to our current approach Pe,
-    // and its apoapsis equal to your specified parameter.
-    LOCAL targetAp IS targetApoapsis + bodyRadius.
-    LOCAL targetSMA IS (rAtPe + targetAp) / 2.
-
-    // 4. Calculate Velocities using the Vis-Viva equation: v = sqrt( mu * (2/r - 1/a) )
-    // Velocity right now when we reach the lowest point of the flyby:
-    LOCAL vAtPe IS SQRT(mu * ( (2 / rAtPe) - (1 / SHIP:ORBIT:SEMIMAJORAXIS) )).
-    
-    // Desired velocity at periapsis to settle into the new elliptical/circular orbit:
-    LOCAL vTarget IS SQRT(mu * ( (2 / rAtPe) - (1 / targetSMA) )).
-
-    // 5. Calculate braking Delta-V (Will result in a negative/retrograde value)
-    LOCAL captureDv IS vTarget - vAtPe.
-
-    // 6. Locate the exact timestamp of execution
-    LOCAL captureUt IS TIME:SECONDS + SHIP:ORBIT:PERIAPSIS:ETA.
-
-    // 7. Generate and return the maneuver node
-    // Format: NODE(universal_time, radial, normal, prograde)
-    LOCAL captureNode IS NODE(captureUt, 0, 0, captureDv).
-    
-    PRINT "Capture maneuver calculated for " + localBody:NAME.
-    PRINT " -> Target Apoapsis: " + ROUND(targetApoapsis / 1000, 1) + " km".
-    PRINT " -> Required Delta-V: " + ROUND(ABS(captureDv), 1) + " m/s retrograde".
-
-    RETURN captureNode.
+    stateSet("phase", "RECIRC").
+    _phaseRecirc().
 }
 
-FUNCTION exit {
+// ── Phase: Re-circularize relay ────────────────────────────
+LOCAL FUNCTION _phaseRecirc {
+    mLogPhase("RECIRC").
+    stateSet("phase", "RECIRC").
+
+    mLog("Re-raising Pe to " + ROUND(CFG["MUN_RELAY_ALT"]/1000,0) + "km.").
+    planMunRecircularize(CFG["MUN_RELAY_ALT"]).
+    executeManeuver().
+    orbitSummary().
+
+    stateSet("phase", "RELAY_OPS").
+    _phaseRelayOps().
+}
+
+// ── Phase: Relay station keeping ──────────────────────────
+LOCAL FUNCTION _phaseRelayOps {
+    mLogPhase("RELAY_OPS").
+    stateSet("phase", "RELAY_OPS").
+
+    UNLOCK STEERING.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    SET SAS TO TRUE.
+
+    orbitSummary().
+    mLog("Relay in final orbit. SAS holding. Mission handoff to probe.").
+    HUDTEXT("Relay deployed!", 8, 2, 18, GREEN, FALSE).
+
+    // Log orbit summary every 60s for a few minutes, then hand off
+    LOCAL checks IS 0.
+    UNTIL checks >= 5 {
+        WAIT 60.
+        orbitSummary().
+        SET checks TO checks + 1.
+    }
+
+    stateSet("phase", "DONE").
+    _phaseDone().
+}
+
+// ── Phase: Probe coast (ballistic — telemetry only) ────────
+LOCAL FUNCTION _phaseProbeCoast {
+    // This phase runs on the PROBE vessel after separation.
+    // Since we don't switch vessels in kOS automatically, this
+    // is available for manual invocation from the probe's own
+    // kOS if you've uploaded FR2.ks to the probe core.
+    mLogPhase("PROBE_COAST").
+    stateSet("phase", "PROBE_COAST").
+
+    SET SAS TO TRUE.
+    mLog("Probe ballistic. Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km  ETA=" + ROUND(ETA:PERIAPSIS,0) + "s").
+
+    UNTIL NOT ADDONS:RT:HASKSCCONNECTION(SHIP) OR SHIP:ALTITUDE < 1000 {
+        mLog("Alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km  Pe=" + ROUND(SHIP:PERIAPSIS/1000,1)
+            + "km  ETA=" + ROUND(ETA:PERIAPSIS,0) + "s").
+        WAIT 10.
+    }
+
+    mLog("Signal lost or impact imminent. Telemetry end.").
+    stateSet("phase", "DONE").
+}
+
+// ── Phase: Done ────────────────────────────────────────────
+LOCAL FUNCTION _phaseDone {
+    mLogPhase("DONE").
+    stateSet("phase", "DONE").
+    UNLOCK ALL.
+    SET SAS TO TRUE.
+    mLog("Mission FR2 complete.").
+    HUDTEXT("FR2 Mission Complete", 10, 2, 20, GREEN, FALSE).
 }
