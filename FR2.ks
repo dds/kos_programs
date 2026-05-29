@@ -606,14 +606,6 @@ LOCAL FUNCTION _phaseInclCorrect {
         RETURN.
     }
 
-    IF NEXTNODE:DELTAV:MAG > CFG["MAX_INCL_CHANGE_DV"] {
-        mLogWarn("Inclination correction would cost " + ROUND(NEXTNODE:DELTAV:MAG,0)
-            + "m/s — exceeds MAX_INCL_CHANGE_DV. Skipping.").
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-        nextPhase().
-        RETURN.
-    }
-
     // If retrograde orbit and target is also retrograde family,
     // correct within retrograde — target should be 180-targetInc
     IF currentInc > 90 AND targetInc > 90 {
@@ -632,6 +624,15 @@ LOCAL FUNCTION _phaseInclCorrect {
         + "deg  delta=" + ROUND(deltaInc,2) + "deg").
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     planInclinationChange(targetInc).
+    
+    IF NEXTNODE:DELTAV:MAG > CFG["MAX_INCL_CHANGE_DV"] {
+        mLogWarn("Inclination correction would cost " + ROUND(NEXTNODE:DELTAV:MAG,0)
+            + "m/s — exceeds MAX_INCL_CHANGE_DV. Skipping.").
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        nextPhase().
+        RETURN.
+    }
+
     executeManeuver().
     orbitSummary().
     nextPhase().
