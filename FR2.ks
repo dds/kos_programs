@@ -514,19 +514,36 @@ LOCAL FUNCTION _phaseExtendAnts {
 LOCAL FUNCTION _phaseInclCorrect {
     LOCAL targetInc IS resolveTargetInclination().
     LOCAL currentInc IS SHIP:ORBIT:INCLINATION.
-    LOCAL deltaInc IS ABS(targetInc - currentInc).
 
+        // If in retrograde orbit (inc > 90) and target is prograde (< 90),
+    // this is a massive plane change — warn and skip rather than burn
+    // half the mission budget on a plane change
+    IF currentInc > 90 AND targetInc < 90 {
+        mLogWarn("Retrograde orbit detected (inc=" + ROUND(currentInc,1)
+            + "deg) but target is prograde (" + ROUND(targetInc,1)
+            + "deg) — plane change would cost ~600m/s. Skipping.").
+        HUDTEXT("WARNING: Retrograde orbit — skipping incl correction", 
+            8, 2, 15, YELLOW, FALSE).
+        nextPhase().
+        RETURN.
+    }
+
+    // If retrograde orbit and target is also retrograde family,
+    // correct within retrograde — target should be 180-targetInc
+    IF currentInc > 90 AND targetInc > 90 {
+        // Normal correction within retrograde family
+    }
+
+    LOCAL deltaInc IS ABS(currentInc - targetInc).
     IF deltaInc <= CFG["INCL_TOLERANCE"] {
-        mLog("Inclination already within tolerance ("
-            + ROUND(currentInc,2) + "deg vs target "
-            + ROUND(targetInc,2) + "deg) — skipping.").
+        mLog("Inclination within tolerance — skipping.").
         nextPhase().
         RETURN.
     }
 
     mLog("Correcting inclination: " + ROUND(currentInc,2)
-        + "deg → " + ROUND(targetInc,2) + "deg"
-        + "  delta=" + ROUND(deltaInc,2) + "deg").
+        + "deg → " + ROUND(targetInc,2)
+        + "deg  delta=" + ROUND(deltaInc,2) + "deg").
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     planInclinationChange(targetInc).
     executeManeuver().
