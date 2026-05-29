@@ -425,7 +425,7 @@ LOCAL FUNCTION _calcStartTime {
     mLog("DEBUG calcStartTime: dv=" + ROUND(nd:DELTAV:MAG,1)
     + " maxThrust=" + ROUND(SHIP:MAXTHRUST,1)
     + " availableThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)
-    + " possibleThrust=" + ROUND(SHIP:POSSIBLETHRUST,1)
+    + " possibleThrust=" + ROUND(_shipPossibleThrust())
     + " mass=" + ROUND(SHIP:MASS,2)
     + " isp=" + ROUND(_effectiveIsp(),1)
     + " burnDur=" + ROUND(burnDur,1)
