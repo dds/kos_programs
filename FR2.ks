@@ -152,10 +152,8 @@ LOCAL FUNCTION _confirmConfig {
     }
 
     _printConfig().
-    LOCAL countdownRow IS TERMINAL:CURSOR:ROW.
     PRINT "  >> ENTER to launch / 30s auto-launch".
     PRINT "  >> Edit CFG in terminal to override".
-    PRINT " ".
     PRINT " ".
     LOCAL deadline IS TIME:SECONDS + 30.
     LOCAL confirmed IS FALSE.
@@ -169,7 +167,7 @@ LOCAL FUNCTION _confirmConfig {
             ELSE { SET bar TO bar + ".". }
             SET j TO j + 1.
         }
-        PRINT "  [" + bar + "] T-" + ("" + remaining):PADLEFT(2) + "s" AT (0, countdownRow + 2).
+        PRINT "  [" + bar + "] T-" + ("" + remaining):PADLEFT(2) + "s   " AT (0, TERMINAL:HEIGHT - 1).
         IF TERMINAL:INPUT:HASCHAR {
             LOCAL ch IS TERMINAL:INPUT:GETCHAR().
             IF UNCHAR(ch) = 13 OR UNCHAR(ch) = 10 {
@@ -178,8 +176,7 @@ LOCAL FUNCTION _confirmConfig {
         }
         WAIT 0.2.
     }
-    PRINT "  [==============================] GO  " AT (0, countdownRow + 2).
-    PRINT " " AT (0, countdownRow + 3).
+    PRINT "  [==============================] GO       " AT (0, TERMINAL:HEIGHT - 1).
 }
 
 GLOBAL FUNCTION main {
