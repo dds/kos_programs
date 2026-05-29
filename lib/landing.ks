@@ -194,8 +194,8 @@ LOCAL FUNCTION _landFinal {
         LOCAL error IS -LANDING_CFG["FINAL_SPEED"] - vspd.
         LOCAL maxAcc IS _safeMaxAcc().
         IF maxAcc > 0 {
-            LOCAL throttle IS LANDING_CFG["HOVER_THROTTLE"] + (error * 0.1).
-            LOCK THROTTLE TO MAX(0, MIN(1.0, throttle)).
+            LOCAL thrott IS LANDING_CFG["HOVER_THROTTLE"] + (error * 0.1).
+            LOCK THROTTLE TO MAX(0, MIN(1.0, thrott)).
         }
 
         HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
