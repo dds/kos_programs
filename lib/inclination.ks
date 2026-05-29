@@ -67,11 +67,18 @@ GLOBAL FUNCTION planInclinationChange {
 
     LOCAL nd IS NODE(burnUT, 0, dvNormal, dvPrograde).
     ADD nd.
+
+    LOCAL whichAt IS "".
+    IF usePe {
+        SET whichAt TO "Periapsis".
+    } else {
+        SET whichAt TO "AN/DN near Apoapsis".
+    }
     mLog("Inclination node: dV=" + ROUND(dv,1) + " m/s"
         + "  normal=" + ROUND(dvNormal,1)
         + "  prograde=" + ROUND(dvPrograde,1)
         + "  ETA=" + ROUND(burnETA,0) + "s"
-        + "  at=" + (IF usePe THEN "Pe" ELSE "AN/DN near Ap")).
+        + "  at=" + whichAt).
     RETURN nd.
 }
 
