@@ -90,16 +90,16 @@ mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 
 // ── Manual override window ─────────────────────────────────
 PRINT " ".
-PRINT "Press ENTER within 5s for manual mode...".
+PRINT "Press any key within 5s for manual mode...".
 LOCAL overrideStart IS TIME:SECONDS.
 LOCAL manualMode IS FALSE.
 WAIT UNTIL TIME:SECONDS > overrideStart + 5 OR TERMINAL:INPUT:HASCHAR.
 IF TERMINAL:INPUT:HASCHAR {
-    LOCAL ch IS TERMINAL:INPUT:GETCHAR().
-    IF ch = "#13" OR ch = "#10" {
-        SET manualMode TO TRUE.
-    }
+    TERMINAL:INPUT:GETCHAR(). 
+    SET manualMode TO TRUE.
 }
+
+printStorageStatus().
 
 IF manualMode {
     PRINT "Manual mode — type RUNPATH('1:/cmd/resume.ks'). to continue.".
