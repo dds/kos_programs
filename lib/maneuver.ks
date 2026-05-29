@@ -327,13 +327,20 @@ GLOBAL FUNCTION planCapture {
 
     LOCAL mu    IS targetBody:MU.
     LOCAL rPe   IS targetBody:RADIUS + SHIP:PERIAPSIS.
-    LOCAL vAtPe IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:PERIAPSIS):ORBIT:MAG.
-    LOCAL vCirc IS SQRT(mu / rPe).
-    LOCAL dv    IS vCirc - vAtPe.
+    LOCAL rAp   IS targetBody:RADIUS + targetAlt.  // target Ap = relay altitude
+    LOCAL tSMA  IS (rPe + rAp) / 2.               // transfer ellipse SMA
+
+    // Velocity at Pe of target capture ellipse
+    LOCAL vCapture IS SQRT(mu * (2/rPe - 1/tSMA)).
+    // Current hyperbolic velocity at Pe
+    LOCAL vAtPe    IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:PERIAPSIS):ORBIT:MAG.
+    LOCAL dv       IS vCapture - vAtPe.  // negative = retrograde
 
     LOCAL nd IS NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, dv).
     ADD nd.
-    mLog("Capture at " + targetBody:NAME + ": dV=" + ROUND(dv,1) + " m/s  Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km").
+    mLog("Capture at " + targetBody:NAME + ": dV=" + ROUND(dv,1)
+        + " m/s  Pe=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + "km  targetAp=" + ROUND(targetAlt/1000,0) + "km").
     RETURN nd.
 }
 
