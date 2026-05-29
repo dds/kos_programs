@@ -9,7 +9,7 @@
 // dV drops below this fraction of original burn OR below
 // ABS_CUTOFF m/s, whichever is larger.
 LOCAL COMPLETE_FRAC   IS 0.0.    // Don't use a fraction, just use ABS_CUTOFF and slow
-LOCAL ABS_CUTOFF      IS 0.02.   // m/s — hard floor
+LOCAL ABS_CUTOFF      IS 0.01.   // m/s — hard floor
 LOCAL ALIGN_TOLERANCE IS 2.0.    // degrees — begin burn within this
 LOCAL G0 IS 9.80665. // standard gravity m/s^2  - ISP conversion constant
 
@@ -421,7 +421,9 @@ LOCAL FUNCTION _calcStartTime {
     } ELSE {
         SET halfBurn TO nd:BURNTIME / 2.
     }
-    RETURN nd:TIME - halfBurn.
+    // For big burns, we want to start a little early because we might start late.
+    LOCAL lead IS MIN(2.0, halfBurn * 0.02). // 2% of half burn, max 2 seconds
+    RETURN nd:TIME - halfBurn - lead.
 }
 
 LOCAL FUNCTION _safeMaxAcc {
