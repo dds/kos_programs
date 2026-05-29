@@ -118,101 +118,95 @@ GLOBAL FUNCTION planCircularize {
     RETURN nd.
 }
 
-GLOBAL FUNCTION planTransferToMun {
-    // Hohmann-style TMI: boost at next prograde opportunity.
-    // Returns node — caller decides when to execute.
-    LOCAL mu      IS KERBIN:MU.
-    LOCAL r1      IS SHIP:ORBIT:BODY:RADIUS + SHIP:ORBIT:APOAPSIS.
-    LOCAL munSMA  IS MUN:ORBIT:SEMIMAJORAXIS.
-    // Transfer orbit SMA
-    LOCAL tSMA    IS (r1 + munSMA) / 2.
-    LOCAL vTrans  IS SQRT(mu * (2/r1 - 1/tSMA)).
-    LOCAL vCirc   IS SQRT(mu / r1).
-    LOCAL dv      IS vTrans - vCirc.
 
-    // Phase angle math — find next window
-    LOCAL munPeriod   IS MUN:ORBIT:PERIOD.
-    LOCAL transPeriod IS 2 * CONSTANT:PI * SQRT(tSMA^3 / mu).
-    LOCAL tofHalf     IS transPeriod / 2.
+GLOBAL FUNCTION planTransfer {
+    // Hohmann TMI to any body orbiting the same parent as SHIP.
+    // e.g. ship in Kerbin orbit → MUN or MINMUS
+    PARAMETER targetBody.
 
-    LOCAL phaseNeeded IS 180 - (360 * (tofHalf / munPeriod)).
-    // Normalize to 0-360
+    LOCAL parentBody  IS SHIP:ORBIT:BODY.
+    LOCAL mu          IS parentBody:MU.
+    LOCAL r1          IS parentBody:RADIUS + SHIP:ORBIT:APOAPSIS.
+    LOCAL targetSMA   IS targetBody:ORBIT:SEMIMAJORAXIS.
+    LOCAL tSMA        IS (r1 + targetSMA) / 2.
+    LOCAL vTrans      IS SQRT(mu * (2/r1 - 1/tSMA)).
+    LOCAL vCirc       IS SQRT(mu / r1).
+    LOCAL dv          IS vTrans - vCirc.
+
+    LOCAL targetPeriod IS targetBody:ORBIT:PERIOD.
+    LOCAL transPeriod  IS 2 * CONSTANT:PI * SQRT(tSMA^3 / mu).
+    LOCAL tofHalf      IS transPeriod / 2.
+
+    LOCAL phaseNeeded IS 180 - (360 * (tofHalf / targetPeriod)).
     UNTIL phaseNeeded < 0   { SET phaseNeeded TO phaseNeeded - 360. }
     UNTIL phaseNeeded >= 0  { SET phaseNeeded TO phaseNeeded + 360. }
 
-    LOCAL currentPhase IS _phaseAngle(SHIP, MUN).
+    LOCAL currentPhase IS _phaseAngle(SHIP, targetBody).
     LOCAL phaseDiff    IS phaseNeeded - currentPhase.
     UNTIL phaseDiff < 0   { SET phaseDiff TO phaseDiff - 360. }
     UNTIL phaseDiff >= 0  { SET phaseDiff TO phaseDiff + 360. }
 
-    LOCAL munAngularV  IS 360 / munPeriod.
-    LOCAL waitTime     IS phaseDiff / munAngularV.
+    LOCAL targetAngV IS 360 / targetPeriod.
+    LOCAL waitTime   IS phaseDiff / targetAngV.
 
     LOCAL nd IS NODE(TIME:SECONDS + waitTime, 0, 0, dv).
     ADD nd.
-    mLog("TMI node: dV=" + ROUND(dv,1) + " m/s  wait=" + ROUND(waitTime,0) + "s  phase=" + ROUND(phaseNeeded,1) + "°").
+    mLog("Transfer → " + targetBody:NAME + ": dV=" + ROUND(dv,1) + " m/s  wait=" + ROUND(waitTime,0) + "s").
     RETURN nd.
 }
 
-GLOBAL FUNCTION planMunCapture {
-    // Retrograde burn at Mun periapsis to circularize at target altitude.
-    // Call this after Mun SOI entry.
-    PARAMETER targetAlt.  // meters above Mun surface
+GLOBAL FUNCTION planCapture {
+    // Retrograde burn at periapsis to circularize into target body SOI.
+    // Call after SOI entry.
+    PARAMETER targetBody.
+    PARAMETER targetAlt.
 
-    LOCAL mu    IS MUN:MU.
-    LOCAL rPe   IS MUN:RADIUS + SHIP:PERIAPSIS.
-    LOCAL rCirc IS MUN:RADIUS + targetAlt.
-
-    // Current hyperbolic/elliptical velocity at Pe
+    LOCAL mu    IS targetBody:MU.
+    LOCAL rPe   IS targetBody:RADIUS + SHIP:PERIAPSIS.
     LOCAL vAtPe IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:PERIAPSIS):ORBIT:MAG.
-    // Circular velocity at that radius
     LOCAL vCirc IS SQRT(mu / rPe).
-    LOCAL dv    IS vCirc - vAtPe.  // negative = retrograde
+    LOCAL dv    IS vCirc - vAtPe.
 
     LOCAL nd IS NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, dv).
     ADD nd.
-    mLog("Mun capture node: dV=" + ROUND(dv,1) + " m/s  Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km").
+    mLog("Capture at " + targetBody:NAME + ": dV=" + ROUND(dv,1) + " m/s  Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km").
     RETURN nd.
 }
 
-GLOBAL FUNCTION planMunPeriapsisLower {
-    // At apoapsis, retrograde burn to lower periapsis to targetPe.
-    // Used to put probe on impact trajectory.
-    PARAMETER targetPe.  // meters — e.g. 5000
+GLOBAL FUNCTION planLowerPe {
+    // At apoapsis, retrograde burn to drop periapsis to targetPe.
+    // Body is inferred from SHIP:ORBIT:BODY.
+    PARAMETER targetPe.
 
-    LOCAL mu  IS MUN:MU.
-    LOCAL rAp IS MUN:RADIUS + SHIP:APOAPSIS.
-    LOCAL rPe IS MUN:RADIUS + targetPe.
-
-    // vis-viva at apoapsis for new ellipse
+    LOCAL mu    IS SHIP:ORBIT:BODY:MU.
+    LOCAL rAp   IS SHIP:ORBIT:BODY:RADIUS + SHIP:APOAPSIS.
+    LOCAL rPe   IS SHIP:ORBIT:BODY:RADIUS + targetPe.
     LOCAL tSMA  IS (rAp + rPe) / 2.
     LOCAL vNew  IS SQRT(mu * (2/rAp - 1/tSMA)).
     LOCAL vNow  IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:APOAPSIS):ORBIT:MAG.
-    LOCAL dv    IS vNew - vNow.  // negative = retrograde
+    LOCAL dv    IS vNew - vNow.
 
     LOCAL nd IS NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, dv).
     ADD nd.
-    mLog("Lower Pe node: dV=" + ROUND(dv,1) + " m/s  targetPe=" + ROUND(targetPe/1000,1) + "km").
+    mLog("Lower Pe: dV=" + ROUND(dv,1) + " m/s  targetPe=" + ROUND(targetPe/1000,1) + "km").
     RETURN nd.
 }
 
-GLOBAL FUNCTION planMunRecircularize {
-    // After probe release, re-raise periapsis back to target altitude.
-    // Called at current position (near apoapsis).
+GLOBAL FUNCTION planRecircularize {
+    // At apoapsis, prograde burn to re-raise periapsis to targetPe.
     PARAMETER targetPe.
 
-    LOCAL mu  IS MUN:MU.
-    LOCAL rAp IS MUN:RADIUS + SHIP:APOAPSIS.
-    LOCAL rPe IS MUN:RADIUS + targetPe.
-
+    LOCAL mu   IS SHIP:ORBIT:BODY:MU.
+    LOCAL rAp  IS SHIP:ORBIT:BODY:RADIUS + SHIP:APOAPSIS.
+    LOCAL rPe  IS SHIP:ORBIT:BODY:RADIUS + targetPe.
     LOCAL tSMA IS (rAp + rPe) / 2.
     LOCAL vNew IS SQRT(mu * (2/rAp - 1/tSMA)).
     LOCAL vNow IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:APOAPSIS):ORBIT:MAG.
-    LOCAL dv   IS vNew - vNow.  // positive = prograde
+    LOCAL dv   IS vNew - vNow.
 
     LOCAL nd IS NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, dv).
     ADD nd.
-    mLog("Re-circularize node: dV=" + ROUND(dv,1) + " m/s  targetPe=" + ROUND(targetPe/1000,1) + "km").
+    mLog("Recircularize: dV=" + ROUND(dv,1) + " m/s  targetPe=" + ROUND(targetPe/1000,1) + "km").
     RETURN nd.
 }
 
