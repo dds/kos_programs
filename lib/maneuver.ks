@@ -24,15 +24,14 @@ GLOBAL FUNCTION executeManeuver {
         RETURN FALSE.
     }
 
-    // Dyanmic minimum throttle based on burn size.
-    LOCAL minThrottle IS 0.01.
-    IF burnDV < 10 {_setThrustLimit(0.25). }.
-    IF burnDV < 2 { _setThrustLimit(0.10). }.
-    IF burnDV < 0.5 { _setThrustLimit(0.05). }.
-
     LOCAL nd        IS NEXTNODE.
     LOCAL burnDV    IS nd:DELTAV:MAG.          // original magnitude
     LOCAL startTime IS _calcStartTime(nd).
+
+    // Dyanmic minimum throttle based on burn size.
+    IF burnDV < 10 {_setThrustLimit(0.25). }.
+    IF burnDV < 2 { _setThrustLimit(0.10). }.
+    IF burnDV < 0.5 { _setThrustLimit(0.05). }.
 
     IF startTime < TIME:SECONDS {
         mLogWarn("Burn window already passed by " + ROUND(TIME:SECONDS - startTime, 0) + "s — removing node.").
@@ -91,7 +90,7 @@ GLOBAL FUNCTION executeManeuver {
             LOCAL ratio IS remaining / maxAcc.
             IF ratio < 0.5 {
                 // Fine control: throttle proportional, min 2%
-                LOCK THROTTLE TO MAX(minThrottle, ratio).
+                LOCK THROTTLE TO MAX(0.02, ratio).
             } ELSE {
                 LOCK THROTTLE TO 1.0.
             }
