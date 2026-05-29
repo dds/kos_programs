@@ -147,7 +147,12 @@ GLOBAL FUNCTION planTransfer {
     LOCAL phaseSpeed IS shipOmega - targetOmega.
     LOCAL phaseDiff IS currentPhase - idealPhase.
     IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
+
+    // Clamp estimatedTimeToBurn to a positive value within one synodic period
+    LOCAL synodicPeriod IS ABS(360 / phaseSpeed).
     LOCAL estimatedTimeToBurn IS phaseDiff / phaseSpeed.
+    UNTIL estimatedTimeToBurn > 0 { SET estimatedtimeToBurn TO estimatedTimeToBurn + synodicPeriod. }
+    UNTIL estimatedTimeToBurn < synodicPeriod { SET estimatedTimeToBurn TO estimatedTimeToBurn - synodicPeriod. }
 
     LOCAL bestUt IS TIME:SECONDS + estimatedTimeToBurn.
     LOCAL testNode IS NODE(bestUt, 0, 0, dv).
