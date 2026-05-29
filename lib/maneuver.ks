@@ -432,7 +432,7 @@ LOCAL FUNCTION _calcStartTime {
 
 LOCAL FUNCTION _safeMaxAcc {
     IF SHIP:MASS <= 0 { RETURN 0. }
-    RETURN _shipPossibleThrust() / SHIP:MASS.
+    RETURN SHIP:AVAILABLETHRUST / SHIP:MASS.
 }
 
 LOCAL FUNCTION _isComplete {
