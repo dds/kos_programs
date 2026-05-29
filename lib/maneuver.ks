@@ -104,7 +104,6 @@ GLOBAL FUNCTION executeManeuver {
 GLOBAL FUNCTION planCircularize {
     // Plan a circularization node at current apoapsis.
     LOCAL etaApo IS ETA:APOAPSIS.
-    LOCAL r   IS SHIP:ORBIT:SEMIMAJORAXIS.  // approximation at Ap
     LOCAL mu  IS SHIP:ORBIT:BODY:MU.
 
     // vis-viva for circular orbit at apoapsis radius
