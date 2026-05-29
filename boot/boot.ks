@@ -88,5 +88,26 @@ IF bootCount = 1 {
 }
 mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 
-// ── Hand off to resume.ks ──────────────────────────────────
-RUNPATH("1:/lib/resume.ks").
+// ── Manual override window ─────────────────────────────────
+PRINT " ".
+PRINT "Press ENTER within 5s for manual mode...".
+LOCAL overrideStart IS TIME:SECONDS.
+LOCAL manualMode IS FALSE.
+WAIT UNTIL TIME:SECONDS > overrideStart + 5 OR TERMINAL:INPUT:HASCHAR.
+IF TERMINAL:INPUT:HASCHAR {
+    LOCAL ch IS TERMINAL:INPUT:GETCHAR().
+    IF ch = TERMINAL:CHAR:RETURN OR ch = TERMINAL:CHAR:ENTER {
+        SET manualMode TO TRUE.
+    }
+}
+
+IF manualMode {
+    PRINT "Manual mode — type RUNPATH('1:/cmd/resume.ks'). to continue.".
+    mLog("Manual override at boot.").
+    UNLOCK ALL.
+    SET SAS TO TRUE.
+    // Drop to terminal — operator takes over
+} ELSE {
+    PRINT "Auto-resuming...".
+    RUNPATH("1:/lib/resume.ks").
+} 
