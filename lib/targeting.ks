@@ -49,9 +49,10 @@ GLOBAL FUNCTION targetedDeorbit {
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     // Multi-pass converging scan
+    LOCAL period IS SHIP:ORBIT:PERIOD.
     LOCAL scanStep  IS period / 36.  // coarse: 66s
     LOCAL passes    IS LIST(1.0, 0.1, 0.01, 0.001, 0.0001).  // step multipliers
-    LOCAL windowMul IS 2.0.  // search window = +/- windowMul * current step
+    // LOCAL windowMul IS 2.0.  // search window = +/- windowMul * current step
     
     LOCAL bestUT   IS TIME:SECONDS + 30.
     LOCAL bestDist IS 999999999.
