@@ -289,10 +289,10 @@ LOCAL FUNCTION _runExperiment {
 }
 
 LOCAL FUNCTION _experimentAvailable {
-    PARAMETER mod.
+    PARAMETER modu.
     // Check known unavailability flags
-    IF mod:HASFIELD("Inoperable") AND mod:GETFIELD("Inoperable") = "True" { RETURN FALSE. }
-    IF mod:HASFIELD("Deployed")   AND mod:GETFIELD("Deployed")   = "True" { RETURN FALSE. }
+    IF modu:HASFIELD("Inoperable") AND modu:GETFIELD("Inoperable") = "True" { RETURN FALSE. }
+    IF modu:HASFIELD("Deployed")   AND modu:GETFIELD("Deployed")   = "True" { RETURN FALSE. }
     // Check if any run event exists at all
     LOCAL runEvents IS LIST(
         "Deploy Experiment", "Run Experiment",
