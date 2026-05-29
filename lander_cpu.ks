@@ -28,19 +28,32 @@ LOCAL FUNCTION _phaseMonitor {
         RETURN.
     }
 
+    // 1. SLEEP completely until we are actually dropping out of orbit
+    IF SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING" {
+        mLog("Coasting in orbit. Core hibernating...").
+        WAIT UNTIL SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING".
+    }
+
+    // 2. Now that we are descending, wait for the deployment ceiling safely
     LOCAL hasAtmo IS SHIP:BODY:ATM:EXISTS.
-    WHEN (hasAtmo AND SHIP:AIRSPEED < 100 AND ALT:RADAR < 20000)
-        OR (NOT hasAtmo AND SHIP:ALTITUDE < 20000) THEN {
-        _deployAntennas().
+    mLog("Descent detected. Monitoring altitude for hardware deploy.").
+    
+    IF hasAtmo {
+        WAIT UNTIL SHIP:AIRSPEED < 100 AND ALT:RADAR < 20000.
+    } ELSE {
+        WAIT UNTIL SHIP:ALTITUDE < 20000.
     }
+    _deployAntennas().
 
-    LOCAL chuteFired IS FALSE.
-    WHEN NOT chuteFired AND SHIP:ALTITUDE > 4000 AND SHIP:ALTITUDE < 8000
-        AND SHIP:VELOCITY:SURFACE:MAG > 40 AND SHIP:VELOCITY:SURFACE:MAG < 130 THEN {
+    // 3. Wait for the parachute deployment window
+    IF hasAtmo {
+        mLog("Waiting for safe parachute deployment window...").
+        WAIT UNTIL SHIP:ALTITUDE > 4000 AND SHIP:ALTITUDE < 8000
+               AND SHIP:VELOCITY:SURFACE:MAG > 40 AND SHIP:VELOCITY:SURFACE:MAG < 130.
         _stageChutes().
-        SET chuteFired TO TRUE.
     }
 
+    // 4. Wait for final touchdown
     WAIT UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
     mLog("Surface contact confirmed.").
     nextPhase(launchSeq).

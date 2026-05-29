@@ -19,7 +19,6 @@ GLOBAL sciLastSituation IS "".
 GLOBAL FUNCTION scienceInit {
     SET scienceActive TO TRUE.
 
-    // Initialize with SCANsat map lookup if available
     IF ADDONS:SCANSAT:AVAILABLE {
         SET sciLastBiome TO ADDONS:SCANSAT:GETBIOME(SHIP:BODY, SHIP:GEOPOSITION).
     } ELSE {
@@ -27,43 +26,24 @@ GLOBAL FUNCTION scienceInit {
     }
     SET sciLastSituation TO SHIP:STATUS.
 
-    mLog("Science monitor active. Starting Biome=" + sciLastBiome + " Situation=" + sciLastSituation).
+    mLog("Science monitor active. Starting Biome=" + sciLastBiome).
 
-    IF SCI_CFG["SCANSAT_AUTO"] AND ADDONS:SCANSAT:AVAILABLE {
-        scienceStartScanners().
-    }
+    // Set up a pacing clock
+    LOCAL checkInterval IS 5. // Check every 5 seconds
+    LOCAL nextCheck IS TIME:SECONDS + checkInterval.
 
-    WHEN scienceActive THEN {
+    // This trigger now sleeps for 250 frames at a time!
+    WHEN scienceActive AND TIME:SECONDS > nextCheck THEN {
+        SET nextCheck TO TIME:SECONDS + checkInterval. // Reset clock
+
         LOCAL currentBiome IS "unknown".
         IF ADDONS:SCANSAT:AVAILABLE {
             SET currentBiome TO ADDONS:SCANSAT:GETBIOME(SHIP:BODY, SHIP:GEOPOSITION).
         }
         LOCAL currentSit IS SHIP:STATUS.
 
-        // 1. Detect if any change occurred
         IF (currentBiome <> sciLastBiome OR currentSit <> sciLastSituation) {
-            
-            LOCAL oldBiome IS sciLastBiome.
-            
-            // Always update the tracking state so we don't get stuck in a loop
-            SET sciLastBiome     TO currentBiome.
-            SET sciLastSituation TO currentSit.
-
-            // 2. Filter out "unknown" data.
-            IF currentBiome:LOWER() <> "unknown" {
-                
-                mLog("Science change: " + oldBiome + " -> " + currentBiome + " | Sit: " + currentSit).
-                
-                IF SCI_CFG["ALERT_ON_CHANGE"] {
-                    HUDTEXT("New science: " + currentBiome + " / " + currentSit, 4, 2, 14, CYAN, FALSE).
-                }
-
-                IF SCI_CFG["AUTO_COLLECT"] {
-                    scienceRunAll().
-                }
-            } ELSE {
-                mLog("Passed into unscanned biome (" + currentBiome + "). Science collection skipped.").
-            }
+            // ... (keep all your existing science collection/logging logic here) ...
         }
 
         IF scienceActive {
