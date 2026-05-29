@@ -272,9 +272,9 @@ LOCAL FUNCTION _deployFairing {
         mLogWarn("No part tagged 'main_fairing' — skipping.").
         RETURN.
     }
-    LOCAL mod IS parts[0]:GETMODULE("ModuleProceduralFairing").
-    IF mod:HASEVENT("Deploy") {
-        mod:DOEVENT("Deploy").
+    LOCAL myMod IS parts[0]:GETMODULE("ModuleProceduralFairing").
+    IF myMod:HASEVENT("Deploy") {
+        myMod:DOEVENT("Deploy").
         stateSet("fairing_deployed", "true").
         mLog("Fairing deployed at " + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
     } ELSE {
