@@ -251,7 +251,7 @@ LOCAL FUNCTION _phaseAngle {
     // Angle from vessel to target body in orbital plane
     PARAMETER myVessel.
     PARAMETER target.
-    LOCAL vPos IS myVessel:ORBIT:BODY:POSITION - vessel:POSITION.
+    LOCAL vPos IS myVessel:ORBIT:BODY:POSITION - myVessel:POSITION.
     LOCAL tPos IS myVessel:ORBIT:BODY:POSITION - target:POSITION.
     LOCAL angle IS VANG(vPos, tPos).
     // Determine sign via cross product
