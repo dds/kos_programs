@@ -8,8 +8,8 @@
 // Threshold: maneuver considered complete when remaining
 // dV drops below this fraction of original burn OR below
 // ABS_CUTOFF m/s, whichever is larger.
-LOCAL COMPLETE_FRAC   IS 0.002.  // 0.2% of original dV remaining
-LOCAL ABS_CUTOFF      IS 0.2.    // m/s — hard floor
+LOCAL COMPLETE_FRAC   IS 0.0.    // Don't use a fraction, just use ABS_CUTOFF and slow
+LOCAL ABS_CUTOFF      IS 0.1.    // m/s — hard floor
 LOCAL ALIGN_TOLERANCE IS 2.0.    // degrees — begin burn within this
 LOCAL G0 IS 9.80665. // standard gravity m/s^2  - ISP conversion constant
 
