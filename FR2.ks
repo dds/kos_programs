@@ -198,44 +198,8 @@ LOCAL FUNCTION _ascentNeedsStage {
 
 // ── PARKING ────────────────────────────────────────────────
 LOCAL FUNCTION _phaseParking {
-    mLog("Ascent monitoring — kOS owns staging, MJ owns steering/throttle.").
-
-    UNTIL _isParkingOrbitStable() {
-        // Fairing deploy check
-        IF stateGet("fairing_deployed","false") = "false"
-                AND SHIP:ALTITUDE >= CFG["FAIRING_ALT"] {
-            _deployFairing().
-        }
-
-        // Staging monitor
-        LOCAL needsStage IS FALSE.
-        IF SHIP:MAXTHRUST = 0 { SET needsStage TO TRUE. }
-        IF NOT needsStage {
-            LOCAL engs IS LIST().
-            LIST ENGINES IN engs.
-            FOR eng IN engs {
-                IF eng:FLAMEOUT { SET needsStage TO TRUE. }
-            }
-        }
-
-        IF needsStage {
-            mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
-            HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
-            STAGE.
-            WAIT 0.5.
-        }
-
-        WAIT 0.1.
-    }
-
-    // Disable MJ ascent now that we're on station
-    IF ADDONS:MJ:AVAILABLE {
-        SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
-        mLog("MechJeb ascent disabled.").
-        // Clear any left over mechjeb nodes.
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    }
-
+    mLog("Waiting for stable parking orbit...").
+    WAIT UNTIL _isParkingOrbitStable(). 
     orbitSummary().
     mLog("Stable parking orbit confirmed.").
     nextPhase().
