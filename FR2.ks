@@ -39,6 +39,7 @@ GLOBAL CFG IS LEXICON(
     "TARGET_INCLINATION",    55,     // deg — 0=equatorial, 90=polar, -1=match vessel
     "INCL_MATCH_TARGET",     "",     // vessel name to match if TARGET_INCLINATION=-1
     "INCL_TOLERANCE",        0.01,   // deg
+    "MAX_INCL_CHANGE_DV",    200,  // m/s — skip if correction would cost more
 
     // Probe impact
     "PROBE_TARGET_LAT",        75.0,
@@ -552,7 +553,7 @@ LOCAL FUNCTION _phaseInclCorrect {
     LOCAL targetInc IS resolveTargetInclination().
     LOCAL currentInc IS SHIP:ORBIT:INCLINATION.
 
-        // If in retrograde orbit (inc > 90) and target is prograde (< 90),
+    // If in retrograde orbit (inc > 90) and target is prograde (< 90),
     // this is a massive plane change — warn and skip rather than burn
     // half the mission budget on a plane change
     IF currentInc > 90 AND targetInc < 90 {
@@ -561,6 +562,14 @@ LOCAL FUNCTION _phaseInclCorrect {
             + "deg) — plane change would cost ~600m/s. Skipping.").
         HUDTEXT("WARNING: Retrograde orbit — skipping incl correction", 
             8, 2, 15, YELLOW, FALSE).
+        nextPhase().
+        RETURN.
+    }
+
+    IF NEXTNODE:DELTAV:MAG > CFG["MAX_INCL_CHANGE_DV"] {
+        mLogWarn("Inclination correction would cost " + ROUND(NEXTNODE:DELTAV:MAG,0)
+            + "m/s — exceeds MAX_INCL_CHANGE_DV. Skipping.").
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         nextPhase().
         RETURN.
     }
