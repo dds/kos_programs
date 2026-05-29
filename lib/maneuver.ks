@@ -308,11 +308,15 @@ GLOBAL FUNCTION planRaisePeNow {
     LOCAL vNew IS SQRT(mu * (2/rNow - 1/tSMA)).
     LOCAL dv   IS vNew - vNow.
 
-    LOCAL nd IS NODE(TIME:SECONDS + 30, 0, 0, dv).
+    LOCAL lead IS 60.
+    IF ABS(dv) > 100 { SET lead TO 90. }
+    IF ABS(dv) > 300 { SET lead TO 120. }
+    LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, dv).
     ADD nd.
     mLog("Raise Pe now: dV=" + ROUND(dv,1)
         + " m/s  currentAlt=" + ROUND(SHIP:ALTITUDE/1000,1)
-        + "km  targetPe=" + ROUND(targetPe/1000,0) + "km").
+        + "km  targetPe=" + ROUND(targetPe/1000,0)
+        + "km  lead=" + lead + "s").
     RETURN nd.
 }
 

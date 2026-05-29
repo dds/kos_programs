@@ -65,12 +65,16 @@ GLOBAL FUNCTION phaseCapture {
 
 GLOBAL FUNCTION phaseCirc {
     IF _impactThreat() {
-        mLog("Impact threat — raising Pe immediately.").
+        LOCAL safePe IS CFG["PARKING_ALT"].
+        IF CFG:HASKEY("CAPTURE_PE") AND CFG["CAPTURE_PE"] > safePe {
+            SET safePe TO CFG["CAPTURE_PE"].
+        }
+        mLog("Impact threat — raising Pe to safe " + ROUND(safePe/1000,0) + "km.").
         LOCAL success IS FALSE.
         LOCAL retries IS 0.
         UNTIL success {
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-            planRaisePeNow(CFG["RELAY_ALT"]).
+            planRaisePeNow(safePe).
             WAIT 2.
             SET success TO executeManeuver().
             IF NOT success {
