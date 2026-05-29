@@ -158,11 +158,12 @@ LOCAL FUNCTION _landSuicideBurn {
             }
         }
 
+        LOCAL tDV IS "".
+        IF (useKE AND ADDONS:KE:AVAILABLE) {
+           SET tDV  TO "  dV:" + ROUND(ADDONS:KE:SUICIDEBURNDELTAV, 1).
+        } 
         HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
-            + ROUND(SHIP:VERTICALSPEED,1) + "m/s"
-            + (IF useKE AND ADDONS:KE:AVAILABLE
-                THEN "  dV:" + ROUND(ADDONS:KE:SUICIDEBURNDELTAV,1)
-                ELSE ""),
+            + ROUND(SHIP:VERTICALSPEED,1) + "m/s" + tDV,
             1, 2, 13, YELLOW, FALSE).
 
         WAIT 0.05.
