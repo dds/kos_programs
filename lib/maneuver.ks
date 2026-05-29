@@ -157,13 +157,16 @@ GLOBAL FUNCTION planTransfer {
     LOCAL bestPe IS 999999999.
     LOCAL steps IS 10.
     FROM { LOCAL pass IS 1. } UNTIL pass > 3 STEP { SET pass TO pass + 1. } DO {
+        mLog("DEBUG pass=" + pass + " steps=" + steps + " nodeTime=" + ROUND(testNode:TIME - TIME:SECONDS,0) + "s from now").
         LOCAL scanning IS TRUE.
         UNTIL NOT scanning {
             SET testNode:TIME TO testNode:TIME - steps.
             WAIT 0.02.
-            IF testNode:ORBIT:HASNEXTPATCH
-                    AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
+            LOCAL hasNext IS testNode:ORBIT:HASNEXTPATCH.
+            mLog("DEBUG hasNext=" + hasNext + " nodeETA=" + ROUND(testNode:TIME - TIME:SECONDS,0)).
+            IF hasNext AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
                 LOCAL currentPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
+                mLog("DEBUG encounter Pe=" + ROUND(currentPe/1000,1) + "km").
                 IF currentPe < bestPe AND currentPe > 0 {
                     SET bestPe TO currentPe.
                     SET bestUt TO testNode:TIME.
