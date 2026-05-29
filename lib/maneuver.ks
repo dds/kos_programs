@@ -95,7 +95,7 @@ GLOBAL FUNCTION executeManeuver {
         } ELSE IF timeToStop > 0.5 {
             // Fine control: throttle proportional, min 2%
             LOCAL timeToStop IS remaining / maxAcc.
-            LOCK THROTTLE TO MAX(0.02, MIN(0.5, timeToStop))).
+            LOCK THROTTLE TO MAX(0.02, MIN(0.5, timeToStop)).
         } ELSE IF remaining > 0.1 {
             // Very fine - minimum throttle pulse.
             LOCK THROTTLE TO 0.02.
