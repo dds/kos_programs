@@ -39,7 +39,7 @@ GLOBAL CFG IS LEXICON(
     "INCL_TOLERANCE",       0.1,   // deg — skip burn if already within this
 
     // Probe impact
-    "PROBE_IMPACT_PE",        1000  // m — impact trajectory Pe
+    "PROBE_IMPACT_PE",        -1000  // m — impact trajectory Pe
 ).
 // ============================================================
 
