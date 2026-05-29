@@ -14,8 +14,10 @@
 //   main_fairing      — fairing
 //
 // Phase sequence:
-//   LAUNCH → FAIRING → EXTEND_ANTS → PARKING → TMI → COAST → CAPTURE → CIRC
-//   → [payload phases derived from ship name tokens] → DONE
+//   LAUNCH → FAIRING → EXTEND_ANTS → PARKING 
+//   If leaving Kerbin, PARKING → TRANSFER → COAST → CAPTURE 
+//   Otherwise, skip the transfer, coast, and capture. 
+//   [payload phases derived from ship name tokens] → CIRC → DONE
 // ============================================================
 
 // ============================================================
@@ -53,10 +55,12 @@ LOCAL FUNCTION buildPhaseSequence {
         "FAIRING",
         "EXTEND_ANTS",
         "PARKING",
-        "TMI",
-        "COAST",
-        "CAPTURE"
     ).
+    IF MISSION["target"]:TOUPPER <> "KERBIN" {
+        seq.ADD("TRANSFER").
+        seq.ADD("COAST").
+        seq.ADD("CAPTURE").
+    }
     FOR ptype IN missionPayloads() {
         LOCAL t IS _normalizePayloadType(ptype).
         IF t = "CRASHPROBE" OR t = "PROBE" {
@@ -134,8 +138,8 @@ LOCAL FUNCTION _runPhaseLoop {
         IF      phase = "LAUNCH"       { _phaseLaunch().       }
         ELSE IF phase = "PARKING"      { _phaseParking().      }
         ELSE IF phase = "FAIRING"      { _phaseFairing().      }
-        ELSE IF phase = "EXTEND_ANTS"  { _phaseExtendAnts(). }
-        ELSE IF phase = "TMI"          { _phaseTMI().          }
+        ELSE IF phase = "EXTEND_ANTS"  { _phaseExtendAnts().   }
+        ELSE IF phase = "TRANSFER"     { _phaseTransfer().     }
         ELSE IF phase = "COAST"        { _phaseCoast().        }
         ELSE IF phase = "CAPTURE"      { _phaseCapture().      }
         ELSE IF phase = "CIRC"         { _phaseCirc().         }
@@ -324,8 +328,8 @@ LOCAL FUNCTION _phaseFairing {
     nextPhase().
 }
 
-// ── TMI ────────────────────────────────────────────────────
-LOCAL FUNCTION _phaseTMI {
+// ── Transfer ────────────────────────────────────────────────
+LOCAL FUNCTION _phaseTransfer {
 
     LOCAL target IS missionTargetBody().
     orbitSummary().
@@ -335,7 +339,7 @@ LOCAL FUNCTION _phaseTMI {
         planTransfer(target, CFG["CAPTURE_PE"]).
         SET success TO executeManeuver().
         IF NOT success {
-            mLog("TMI missed — waiting one orbit and replanning.").
+            mLog("Transfer missed — waiting one orbit and replanning.").
             WAIT UNTIL NOT HASNODE.
         }
     }
