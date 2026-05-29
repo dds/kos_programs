@@ -11,7 +11,7 @@ GLOBAL FUNCTION isOrbitCircular {
 GLOBAL FUNCTION isOrbitStable {
     // True if Pe and Ap are both above minAlt and orbit is closed
     PARAMETER minAlt IS 70000.  // above atmosphere by default
-    RETURN SHIP:PERIAPSIS > minAlt AND SHIP:ORBIT:ECCENTRICITY < 1.0.
+    RETURN SHIP:PERIAPSIS > minAlt AND SHIP:APOAPSIS > 0 AND SHIP:ORBIT:ECCENTRICITY < 0.05.
 }
 
 GLOBAL FUNCTION waitForSOI {
