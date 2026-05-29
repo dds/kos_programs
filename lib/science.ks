@@ -114,17 +114,17 @@ GLOBAL FUNCTION scienceTransmitAll {
     LOCAL transmitted IS 0.
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleScienceContainer") {
-            LOCAL myMod IS p:GETMODULE("ModuleScienceContainer").
-            IF myMod:HASEVENT("Transmit Data") {
-                myMod:DOEVENT("Transmit Data").
+            LOCAL modu IS p:GETMODULE("ModuleScienceContainer").
+            IF modu:HASEVENT("Transmit Data") {
+                modu:DOEVENT("Transmit Data").
                 SET transmitted TO transmitted + 1.
                 mLog("Transmitting science from " + p:NAME).
             }
         }
         IF p:HASMODULE("ModuleDataTransmitter") {
-            LOCAL myMod IS p:GETMODULE("ModuleDataTransmitter").
-            IF myMod:HASEVENT("Transmit Data") {
-                myMod:DOEVENT("Transmit Data").
+            LOCAL modu IS p:GETMODULE("ModuleDataTransmitter").
+            IF modu:HASEVENT("Transmit Data") {
+                modu:DOEVENT("Transmit Data").
                 SET transmitted TO transmitted + 1.
             }
         }
@@ -149,12 +149,12 @@ GLOBAL FUNCTION scienceStatus {
                             "DMModuleScienceAnimate",
                             "DMBasicScienceModule") {
             IF p:HASMODULE(modName) {
-                LOCAL mod IS p:GETMODULE(modName).
-                IF mod:HASFIELD("Deployed") AND mod:GETFIELD("Deployed") = "True" {
+                LOCAL modu IS p:GETMODULE(modName).
+                IF modu:HASFIELD("Deployed") AND mod:GETFIELD("Deployed") = "True" {
                     SET deployed TO deployed + 1.
-                } ELSE IF mod:HASFIELD("Inoperable") AND mod:GETFIELD("Inoperable") = "True" {
+                } ELSE IF modu:HASFIELD("Inoperable") AND mod:GETFIELD("Inoperable") = "True" {
                     SET inoperable TO inoperable + 1.
-                } ELSE IF _experimentAvailable(mod) {
+                } ELSE IF _experimentAvailable(modu) {
                     SET available TO available + 1.
                 }
             }
@@ -174,9 +174,9 @@ GLOBAL FUNCTION scienceCollectAll {
     // Collect/reset all deployed experiments into science container.
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleScienceExperiment") {
-            LOCAL mod IS p:GETMODULE("ModuleScienceExperiment").
-            IF mod:HASEVENT("Collect Data") { mod:DOEVENT("Collect Data"). }
-            IF mod:HASEVENT("Reset Experiment") { mod:DOEVENT("Reset Experiment"). }
+            LOCAL modu IS p:GETMODULE("ModuleScienceExperiment").
+            IF modu:HASEVENT("Collect Data") { modu:DOEVENT("Collect Data"). }
+            IF modu:HASEVENT("Reset Experiment") { modu:DOEVENT("Reset Experiment"). }
         }
     }
     mLog("All experiments collected/reset.").
@@ -192,17 +192,17 @@ GLOBAL FUNCTION scienceStartScanners {
     LOCAL started IS 0.
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("SCANsat") {
-            LOCAL mod IS p:GETMODULE("SCANsat").
-            IF mod:HASEVENT("Start RADAR Scan")    { mod:DOEVENT("Start RADAR Scan").    SET started TO started + 1. }
-            IF mod:HASEVENT("Start SAR Scan")      { mod:DOEVENT("Start SAR Scan").      SET started TO started + 1. }
-            IF mod:HASEVENT("Start Altimetry Scan"){ mod:DOEVENT("Start Altimetry Scan").SET started TO started + 1. }
-            IF mod:HASEVENT("Start Biome Scan")    { mod:DOEVENT("Start Biome Scan").    SET started TO started + 1. }
-            IF mod:HASEVENT("Start Anomaly Scan")  { mod:DOEVENT("Start Anomaly Scan").  SET started TO started + 1. }
+            LOCAL modu IS p:GETMODULE("SCANsat").
+            IF modu:HASEVENT("Start RADAR Scan")    { modu:DOEVENT("Start RADAR Scan").    SET started TO started + 1. }
+            IF modu:HASEVENT("Start SAR Scan")      { modu:DOEVENT("Start SAR Scan").      SET started TO started + 1. }
+            IF modu:HASEVENT("Start Altimetry Scan"){ modu:DOEVENT("Start Altimetry Scan").SET started TO started + 1. }
+            IF modu:HASEVENT("Start Biome Scan")    { modu:DOEVENT("Start Biome Scan").    SET started TO started + 1. }
+            IF modu:HASEVENT("Start Anomaly Scan")  { modu:DOEVENT("Start Anomaly Scan").  SET started TO started + 1. }
         }
         // Generic fallback
         IF p:HASMODULE("SCANsat") {
-            LOCAL mod IS p:GETMODULE("SCANsat").
-            IF mod:HASEVENT("Start Scan") { mod:DOEVENT("Start Scan"). SET started TO started + 1. }
+            LOCAL modu IS p:GETMODULE("SCANsat").
+            IF modu:HASEVENT("Start Scan") { modu:DOEVENT("Start Scan"). SET started TO started + 1. }
         }
     }
     mLog("SCANsat: " + started + " scanners started.").
@@ -213,8 +213,8 @@ GLOBAL FUNCTION scienceStopScanners {
     IF NOT ADDONS:SCANSAT:AVAILABLE { RETURN. }
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("SCANsat") {
-            LOCAL mod IS p:GETMODULE("SCANsat").
-            IF mod:HASEVENT("Stop Scan") { mod:DOEVENT("Stop Scan"). }
+            LOCAL modu IS p:GETMODULE("SCANsat").
+            IF modu:HASEVENT("Stop Scan") { modu:DOEVENT("Stop Scan"). }
         }
     }
     mLog("SCANsat: all scanners stopped.").
@@ -257,9 +257,9 @@ LOCAL FUNCTION _runExperiment {
     PARAMETER part.
     PARAMETER modName.
 
-    LOCAL mod IS part:GETMODULE(modName).
+    LOCAL modu IS part:GETMODULE(modName).
 
-    IF NOT _experimentAvailable(mod) { RETURN FALSE. }
+    IF NOT _experimentAvailable(modu) { RETURN FALSE. }
 
     // Try known run event names in order
     LOCAL runEvents IS LIST(
