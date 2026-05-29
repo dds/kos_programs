@@ -111,6 +111,220 @@ COPYPATH("0:/cmd/dump.ks", "1:/cmd/dump.ks").
 RUNPATH("1:/cmd/dump.ks").
 ```
 
+## Creating a New Vehicle
+
+Boot is generic — any vehicle works. Create `MYVEHICLE.ks` at the archive root, name your ship `MYVEHICLE-TARGET[-stuff]`, and boot handles the rest.
+
+A vehicle script must define three things:
+
+```
+GLOBAL CFG IS LEXICON(...).          // vehicle config values
+GLOBAL LIBS IS LIST(...).            // which libs to load
+GLOBAL FUNCTION main { ... }         // entry point
+```
+
+Inside `main()`, build a phase sequence LIST, a phase map LEXICON mapping names to function delegates, and call `runPhases(phaseMap)`. Each phase function calls `nextPhase(seq)` when done.
+
+### Available lib phases
+
+These are ready-made phases you can drop into your phase map:
+
+**From `launch.ks`** (needs: `maneuver`, `countdown`, `orbit`):
+- `phaseLaunch@` — MechJeb ascent, staging, abort monitoring
+- `phaseFairing@` — jettison tagged `main_fairing` at `CFG["FAIRING_ALT"]`
+- `phaseExtendAnts@` — deploy panels/antennas at `CFG["EXTEND_ALT"]`
+- `phaseParking@` — wait for stable parking orbit
+
+All call `nextPhase(launchSeq)` — set `launchSeq` to your sequence before calling `runPhases()`.
+
+**From `xfer.ks`** (needs: `maneuver`, `orbit`, `inclination`):
+- `phaseTransfer@` — plan + execute transfer burn to `missionTargetBody()`
+- `phaseCoast@` — coast to target SOI
+- `phaseCapture@` — capture burn, target Ap = `CFG["RELAY_ALT"]`
+- `phaseCirc@` — circularize (handles impact threats)
+- `phaseRaiseAlt@` — raise orbit to `CFG["RELAY_ALT"]` + circularize
+- `phaseInclCorrect@` — plane change to `CFG["TARGET_INCLINATION"]`
+
+All call `nextPhase(xferSeq)` — set `xferSeq` to your sequence.
+
+**From `phases.ks`**:
+- `phaseDone@` — unlock controls, SAS on, log complete
+
+### Available lib functions
+
+These are building blocks you can call inside your own phase functions:
+
+| Function | Lib | What it does |
+|---|---|---|
+| `landingExecute()` | landing | Full powered descent sequence |
+| `targetedDeorbit()` | targeting | Precision deorbit using Trajectories |
+| `planCircularize()` | maneuver | Add circ node at next Ap/Pe |
+| `planLowerPe(alt)` | maneuver | Add node to lower Pe |
+| `planRaisePeNow(alt)` | maneuver | Emergency Pe raise at current position |
+| `executeManeuver()` | maneuver | Execute next node, returns TRUE/FALSE |
+| `orbitSummary()` | orbit | Log current orbit parameters |
+| `scienceRunAll()` | science | Run all experiments |
+| `scienceTransmitAll()` | science | Transmit all science data |
+| `roverInit()` | rover | Start rover steering loop |
+| `roverSetWaypoint(lat,lng)` | rover | Drive to coordinates |
+| `constellationDeploy(count,alt)` | relay_constellation | Deploy relay constellation |
+
+### Example: Lander
+
+Ship name: `LANDER-MUN`
+
+```
+// LANDER.ks — Mun/Minmus lander
+GLOBAL CFG IS LEXICON(
+    "PARKING_ALT",       80000,
+    "FAIRING_ALT",       60000,
+    "EXTEND_ALT",        65000,
+    "CAPTURE_PE",        15000,
+    "RELAY_ALT",         20000,
+    "TARGET_INCLINATION", 0,
+    "CIRC_ECC_TOL",      0.01,
+    "LAUNCH_INCLINATION", 0,
+    "LAUNCH_AZIMUTH",     0,
+    "LAUNCH_STAGE_LIMIT", 0
+).
+
+GLOBAL LIBS IS LIST(
+    "phases", "launch", "xfer",
+    "countdown", "maneuver", "orbit",
+    "inclination", "landing"
+).
+
+GLOBAL FUNCTION main {
+    LOCAL seq IS LIST(
+        "LAUNCH", "FAIRING", "EXTEND_ANTS", "PARKING",
+        "TRANSFER", "COAST", "CAPTURE", "CIRC",
+        "LAND", "SCIENCE", "DONE"
+    ).
+    SET launchSeq TO seq.
+    SET xferSeq TO seq.
+    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
+
+    LOCAL phaseMap IS LEXICON(
+        "LAUNCH",      phaseLaunch@,
+        "FAIRING",     phaseFairing@,
+        "EXTEND_ANTS", phaseExtendAnts@,
+        "PARKING",     phaseParking@,
+        "TRANSFER",    phaseTransfer@,
+        "COAST",       phaseCoast@,
+        "CAPTURE",     phaseCapture@,
+        "CIRC",        phaseCirc@,
+        "LAND",        _phaseLand@,
+        "SCIENCE",     _phaseScience@
+    ).
+    runPhases(phaseMap).
+}
+
+LOCAL FUNCTION _phaseLand {
+    landingExecute().
+    nextPhase(launchSeq).
+}
+
+LOCAL FUNCTION _phaseScience {
+    scienceRunAll().
+    scienceTransmitAll().
+    mLog("Science complete.").
+    nextPhase(launchSeq).
+}
+```
+
+### Example: Rover
+
+Ship name: `ROVER-KERBIN` (already landed, no ascent phases)
+
+```
+// ROVER.ks — Surface rover
+GLOBAL CFG IS LEXICON().
+
+GLOBAL LIBS IS LIST(
+    "phases", "orbit", "rover", "science"
+).
+
+GLOBAL FUNCTION main {
+    LOCAL seq IS LIST("DRIVE", "DONE").
+    SET launchSeq TO seq.
+    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
+
+    LOCAL phaseMap IS LEXICON(
+        "DRIVE", _phaseDrive@
+    ).
+    runPhases(phaseMap).
+}
+
+LOCAL FUNCTION _phaseDrive {
+    roverInit().
+    roverSetWaypoint(-0.0972, -74.5577).
+    WAIT UNTIL roverStatus() = "ARRIVED".
+    scienceRunAll().
+    scienceTransmitAll().
+    roverShutdown().
+    nextPhase(launchSeq).
+}
+```
+
+### Example: Moon Tug
+
+Ship name: `TUG-MUN` (starts in orbit, no ascent phases)
+
+```
+// TUG.ks — Orbital tug / transfer stage
+GLOBAL CFG IS LEXICON(
+    "CAPTURE_PE",        20000,
+    "RELAY_ALT",         50000,
+    "TARGET_INCLINATION", 0,
+    "CIRC_ECC_TOL",      0.005,
+    "INCL_TOLERANCE",    0.01,
+    "MAX_INCL_CHANGE_DV", 200
+).
+
+GLOBAL LIBS IS LIST(
+    "phases", "xfer",
+    "maneuver", "orbit", "inclination"
+).
+
+GLOBAL FUNCTION main {
+    LOCAL seq IS LIST(
+        "TRANSFER", "COAST", "CAPTURE",
+        "CIRC", "RAISE_ALT", "INCL_CORRECT",
+        "STATION", "DONE"
+    ).
+    SET xferSeq TO seq.
+    SET launchSeq TO seq.
+    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
+
+    LOCAL phaseMap IS LEXICON(
+        "TRANSFER",    phaseTransfer@,
+        "COAST",       phaseCoast@,
+        "CAPTURE",     phaseCapture@,
+        "CIRC",        phaseCirc@,
+        "RAISE_ALT",   phaseRaiseAlt@,
+        "INCL_CORRECT", phaseInclCorrect@,
+        "STATION",     _phaseStation@
+    ).
+    runPhases(phaseMap).
+}
+
+LOCAL FUNCTION _phaseStation {
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    orbitSummary().
+    mLog("Tug on station. Awaiting commands.").
+    nextPhase(launchSeq).
+}
+```
+
+### Tips
+
+- **Storage-constrained probes**: Only list the libs you need. A rover with just `phases`, `rover`, `science` uses far less than the full FR2 stack.
+- **No ascent?** Skip `launch.ks` entirely. Start your sequence at `TRANSFER` or whatever your first phase is.
+- **Custom phases**: Write `LOCAL FUNCTION _phaseName { ... nextPhase(launchSeq). }` and add to the map. Mix freely with lib phases.
+- **Reboot safety**: The phase machine persists to state. On reboot, boot reloads everything and `main()` re-enters at the saved phase.
+- **CFG keys**: Lib phases read from `CFG` — check which keys each lib phase expects (documented above). Only define the keys your phases actually use.
+
 ## Tagged Parts (VAB)
 
 The flight computer finds parts by tag name, not by index:
