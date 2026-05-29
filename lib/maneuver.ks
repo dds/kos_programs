@@ -44,6 +44,8 @@ GLOBAL FUNCTION executeManeuver {
     mLog("Maneuver: dV=" + ROUND(burnDV,1) + " m/s  ETA=" + ROUND(startTime - TIME:SECONDS,1) + "s").
 
     // ── Align early ───────────────────────────────────────
+    SET SAS TO FALSE.
+    WAIT 0.1.
     LOCK STEERING TO nd:BURNVECTOR.
     mLog("Aligning to burn vector...").
 
