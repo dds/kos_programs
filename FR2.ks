@@ -224,12 +224,46 @@ LOCAL FUNCTION _phaseTargetedDeorbit {
     nextPhase(launchSeq).
 }
 
+LOCAL FUNCTION _hasFixedPanels {
+    PARAMETER dc.
+    LOCAL probeChildren IS dc:CHILDREN.
+    LOCAL queue IS LIST().
+    FOR ch IN probeChildren { queue:ADD(ch). }
+    UNTIL queue:LENGTH = 0 {
+        LOCAL p IS queue[0].
+        queue:REMOVE(0).
+        IF p:HASMODULE("ModuleDeployableSolarPanel") {
+            LOCAL m IS p:GETMODULE("ModuleDeployableSolarPanel").
+            IF NOT m:HASEVENT("Extend Solar Panel")
+                AND NOT m:HASEVENT("Retract Solar Panel")
+                AND NOT m:HASEVENT("Toggle Solar Panel") {
+                RETURN TRUE.
+            }
+        }
+        FOR ch IN p:CHILDREN { queue:ADD(ch). }
+    }
+    RETURN FALSE.
+}
+
 LOCAL FUNCTION _phaseReleaseProbe {
     LOCAL parts IS SHIP:PARTSTAGGED("probe_decoupler").
     IF parts:LENGTH = 0 {
         mLogError("No part tagged 'probe_decoupler' — cannot release probe.").
         HUDTEXT("ERROR: probe_decoupler missing!", 10, 2, 18, RED, FALSE).
         RETURN.
+    }
+
+    IF _hasFixedPanels(parts[0]) {
+        mLog("Fixed solar panels detected — orienting sunward.").
+        HUDTEXT("Orienting for solar panels...", 3, 2, 13, CYAN, FALSE).
+        LOCK sunDir TO (SUN:POSITION - SHIP:POSITION):NORMALIZED.
+        LOCK STEERING TO sunDir.
+        LOCAL alignDeadline IS TIME:SECONDS + 60.
+        WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, sunDir) < 5
+            OR TIME:SECONDS > alignDeadline.
+        mLog("Sun angle: " + ROUND(VANG(SHIP:FACING:FOREVECTOR, sunDir), 1) + "deg.").
+        UNLOCK STEERING.
+        UNLOCK sunDir.
     }
 
     SET SAS TO TRUE.
