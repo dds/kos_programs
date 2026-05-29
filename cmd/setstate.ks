@@ -1,5 +1,5 @@
 // cmd/setstate.ks — Force mission phase
-// Usage: RUNPATH("1:/cmd/setstate.ks", "TMI").
+// Usage: RUNPATH("1:/cmd/setstate.ks", "TRANSFER").
 PARAMETER newPhase.
 RUNPATH("1:/lib/state.ks").
 stateInit().
