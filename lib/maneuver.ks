@@ -29,10 +29,11 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL startTime IS _calcStartTime(nd).
 
     IF startTime < TIME:SECONDS {
-    mLogWarn("Burn window already passed by " + ROUND(TIME:SECONDS - startTime, 0) + "s — removing node.").
-    HUDTEXT("Burn window missed — replanning", 5, 2, 15, YELLOW, FALSE).
-    REMOVE nd.
-    RETURN FALSE.
+        mLogWarn("Burn window already passed by " + ROUND(TIME:SECONDS - startTime, 0) + "s — removing node.").
+        HUDTEXT("Burn window missed — replanning", 5, 2, 15, YELLOW, FALSE).
+        REMOVE nd.
+        RETURN FALSE.
+    }
 
     mLog("Maneuver: dV=" + ROUND(burnDV,1) + " m/s  ETA=" + ROUND(startTime - TIME:SECONDS,1) + "s").
 
