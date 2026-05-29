@@ -14,7 +14,7 @@
 //   main_fairing      — fairing
 //
 // Phase sequence:
-//   LAUNCH → PARKING → FAIRING → TMI → COAST → CAPTURE → CIRC
+//   LAUNCH → FAIRING → EXTEND_ANTS → PARKING → TMI → COAST → CAPTURE → CIRC
 //   → [payload phases derived from ship name tokens] → DONE
 // ============================================================
 
@@ -27,8 +27,8 @@ GLOBAL CFG IS LEXICON(
     "LAUNCH_INCLINATION",       0,  // deg — 0 = equatorial
     "LAUNCH_AZIMUTH",          90,  // deg — 90 = due east from KSC
     "LAUNCH_STAGE_LIMIT",       2,  // MJ AutoStageLimit
-    "FAIRING_ALT",          76000,  // m — jettison main_fairing
-    "EXTEND_ALT",           81000,  // m - extend panels & attenae 
+    "FAIRING_ALT",          68000,  // m — jettison main_fairing
+    "EXTEND_ALT",           72000,  // m - extend panels & attenae 
 
     // Transfer + capture
     "RELAY_ALT",           1000000,  // m above target body
@@ -44,9 +44,9 @@ GLOBAL CFG IS LEXICON(
 LOCAL FUNCTION buildPhaseSequence {
     LOCAL seq IS LIST(
         "LAUNCH",
-        "PARKING",
         "FAIRING",
         "EXTEND_ANTS",
+        "PARKING",
         "TMI",
         "COAST",
         "CAPTURE",
