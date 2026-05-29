@@ -50,7 +50,7 @@ GLOBAL FUNCTION landingExecute {
     } ELSE {
         SET landingSystem TO "manual calculation".
     }
-    mLog("Landing system: " + landingSystem)).
+    mLog("Landing system: " + landingSystem).
 
     // Tilt abort trigger
     WHEN (ABS(SHIP:FACING:PITCH) > LANDING_CFG["MAX_TILT"]
