@@ -450,7 +450,7 @@ LOCAL FUNCTION _effectiveIsp {
     FOR eng in SHIP:ENGINES {
         IF NOT eng:FLAMEOUT AND eng:POSSIBLETHRUST > 0 {
             LOCAL flow IS eng:POSSIBLETHRUST / (eng:ISP * G0).
-            SET totalFLow TO totalFlow + flow.
+            SET totalFlow TO totalFlow + flow.
             SET totalThrust TO totalThrust + eng:POSSIBLETHRUST.
         }
     }
