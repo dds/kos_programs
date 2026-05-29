@@ -143,7 +143,7 @@ LOCAL FUNCTION _phaseLaunch {
     SET asc:ENABLED               TO TRUE.
     SET asc:DESIREDALTITUDE       TO CFG["PARKING_ALT"].
     SET asc:DESIREDINCLINATION    TO CFG["LAUNCH_INCLINATION"].
-    SET asc:AUTOSTAGE             TO TRUE.
+    SET asc:AUTOSTAGE             TO FALSE.
     SET asc:AUTOSTAGELIMIT        TO CFG["LAUNCH_STAGE_LIMIT"].
     SET asc:AUTODEPLOYANTENNAS    TO TRUE.
     SET asc:AUTODEPLOYSOLARPANELS TO TRUE.
@@ -155,6 +155,20 @@ LOCAL FUNCTION _phaseLaunch {
         + "°  az=" + CFG["LAUNCH_AZIMUTH"] + "°").
 
     // Ignition
+    mLog("Press ABORT within 5s to hold launch.").
+    HUDTEXT("T-5: press ABORT to hold", 5, 2, 16, YELLOW, FALSE).
+    LOCAL aborted IS FALSE.
+    LOCAL tEnd IS TIME:SECONDS + 5.
+    WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT {
+        IF ABORT { SET aborted TO TRUE. }
+    }
+    IF aborted {
+        mLog("Launch hold — operator abort.").
+        SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
+        RETURN.  // stays in LAUNCH phase — reboot or manual resumeMission() to retry
+    }
+    countdown(3).
+    
     STAGE.
     mLog("Launch — STAGE fired.").
     HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
@@ -164,12 +178,57 @@ LOCAL FUNCTION _phaseLaunch {
 
 // ── PARKING ────────────────────────────────────────────────
 LOCAL FUNCTION _phaseParking {
-    // MechJeb owns ascent — poll for stable orbit
-    mLog("Waiting for stable parking orbit (>"
-        + ROUND((CFG["PARKING_ALT"] - 2000)/1000,0) + "km)...").
-    WAIT UNTIL isOrbitStable(CFG["PARKING_ALT"] - 2000).
+    mLog("Ascent monitoring — kOS owns staging, MJ owns steering/throttle.").
 
-    // Disable MJ ascent so it doesn't fight kOS on TMI
+    UNTIL isOrbitStable(CFG["PARKING_ALT"] - 2000) {
+
+        // Fairing deploy check
+        IF stateGet("fairing_deployed","false") = "false"
+                AND SHIP:ALTITUDE >= CFG["FAIRING_ALT"] {
+            _deployFairing().
+        }
+
+        // Staging monitor
+        LOCAL needsStage IS FALSE.
+        IF SHIP:MAXTHRUST = 0 { SET needsStage TO TRUE. }
+        IF NOT needsStage {
+            LOCAL engs IS LIST().
+            LIST ENGINES IN engs.
+            FOR eng IN engs {
+                IF eng:FLAMEOUT { SET needsStage TO TRUE. }
+            }
+        }
+
+        IF needsStage {
+            // Don't stage if the next stage only contains the fairing
+            // and we haven't hit fairing alt yet — let _deployFairing handle it
+            LOCAL safeToStage IS TRUE.
+            IF stateGet("fairing_deployed","false") = "false"
+                    AND SHIP:ALTITUDE < CFG["FAIRING_ALT"] {
+                // Check if next stage contains only the tagged fairing
+                LOCAL fairingParts IS SHIP:PARTSTAGGED("main_fairing").
+                IF fairingParts:LENGTH > 0 {
+                    LOCAL nextStageParts IS SHIP:PARTSINDECOUPLESTAGE(STAGE:NUMBER - 1).
+                    LOCAL allFairing IS TRUE.
+                    FOR p IN nextStageParts {
+                        IF p:TAG <> "main_fairing" { SET allFairing TO FALSE. }
+                    }
+                    IF allFairing { SET safeToStage TO FALSE. }
+                }
+            }
+
+            IF safeToStage {
+                mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
+                HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
+                STAGE.
+                WAIT 0.5.
+            }
+        }
+
+        WAIT 0.1.
+    }
+
+    // Disable MJ ascent now that we're on station
     IF ADDONS:MJ:AVAILABLE {
         SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
         mLog("MechJeb ascent disabled.").
