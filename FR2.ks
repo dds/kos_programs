@@ -341,6 +341,7 @@ LOCAL FUNCTION _phaseCoast {
 // ── CAPTURE ────────────────────────────────────────────────
 LOCAL FUNCTION _phaseCapture {
     LOCAL target IS missionTargetBody().
+    WAIT 2. // let KE update after warp/SOI transition
     mLog("Planning capture at " + target:NAME + ".").
     planCapture(target, CFG["RELAY_ALT"]).
     executeManeuver().
