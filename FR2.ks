@@ -190,7 +190,7 @@ LOCAL FUNCTION _phaseLaunch {
         // Manual abort keypress
         IF ABORT { SET abort TO TRUE. mLogError("Abort: manual trigger."). }
         
-        IF abort {
+        IF ABORT {
             _launchAbort().
             RETURN.  // disarm trigger
         }
