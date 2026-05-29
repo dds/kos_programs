@@ -96,13 +96,13 @@ IF TERMINAL:INPUT:HASCHAR {
 }
 
 IF manualMode {
-    LOCAL q IS CHAR(34).
+    LOCAL dq IS CHAR(34).
     PRINT " ".
     PRINT "  MANUAL MODE".
     PRINT "  Commands (copy into terminal):".
-    PRINT "  RUNPATH(" + q + "1:/cmd/resume.ks" + q + ").".
-    PRINT "  RUNPATH(" + q + "1:/cmd/setstate.ks" + q + "," + q + "PHASE" + q + ").".
-    PRINT "  RUNPATH(" + q + "1:/cmd/dump.ks" + q + ").".
+    PRINT "  RUNPATH(" + dq + "1:/cmd/resume.ks" + dq + ").".
+    PRINT "  RUNPATH(" + dq + "1:/cmd/setstate.ks" + dq + "," + dq + "PHASE" + dq + ").".
+    PRINT "  RUNPATH(" + dq + "1:/cmd/dump.ks" + dq + ").".
     mLog("Manual override at boot.").
     UNLOCK ALL.
     SET SAS TO TRUE.
