@@ -145,8 +145,8 @@ LOCAL FUNCTION _phaseLaunch {
     SET asc:DESIREDINCLINATION    TO CFG["LAUNCH_INCLINATION"].
     SET asc:AUTOSTAGE             TO FALSE.
     SET asc:AUTOSTAGELIMIT        TO CFG["LAUNCH_STAGE_LIMIT"].
-    SET asc:AUTODEPLOYANTENNAS    TO TRUE.
-    SET asc:AUTODEPLOYSOLARPANELS TO TRUE.
+    SET asc:AUTODEPLOYANTENNAS    TO FALSE.
+    SET asc:AUTODEPLOYSOLARPANELS TO FALSE.
     SET asc:AUTOWARP              TO FALSE.
     SET asc:SKIPCIRCULARIZATION   TO FALSE.
 
@@ -368,6 +368,31 @@ LOCAL FUNCTION _deployFairing {
         myMod:DOEVENT("Deploy").
         stateSet("fairing_deployed", "true").
         mLog("Fairing deployed at " + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
+
+        // Wait for fairing shards to clear before deploying panels/antennas.
+        WAIT 3.
+
+
+        // Deploy solar panels
+        FOR p IN SHIP:PARTS {
+            IF p:HASMODULE("ModuleDeployableSolarPanel") {
+                LOCAL sm IS p:GETMODULE("ModuleDeployableSolarPanel").
+                IF sm:HASEVENT("Extend Solar Panel") {
+                    sm:DOEVENT("Extend Solar Panel").
+                }
+            }
+        }
+        mLog("Solar panels deployed.").
+        
+        // Deploy antennas
+        FOR p IN SHIP:PARTS {
+            IF p:HASMODULE("ModuleDeployableAntenna") {
+                LOCAL am IS p:GETMODULE("ModuleDeployableAntenna").
+                IF am:HASEVENT("Extend Antenna") {
+                    am:DOEVENT("Extend Antenna").
+                }
+            }
+        }
     } ELSE {
         mLogWarn("Fairing Deploy event not available.").
     }
