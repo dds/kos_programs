@@ -38,7 +38,7 @@ GLOBAL FUNCTION scienceInit {
         IF ADDONS:SCANSAT:AVAILABLE {
             SET currentBiome TO ADDONS:SCANSAT:GETBIOME(SHIP:BODY, SHIP:GEOPOSITION).
         }
-        LOCAL currentSit IS SHIP:SITUATION.
+        LOCAL currentSit IS SHIP:STATUS.
 
         // 1. Detect if any change occurred (even moving into an "unknown" zone)
         IF (currentBiome <> sciLastBiome OR currentSit <> sciLastSituation) {
