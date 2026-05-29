@@ -87,11 +87,14 @@ Simple sounding rocket script. Launches, hibernates probe core, collects thermom
 
 ### Manual mode commands
 
+All commands are run via `RUNPATH(...)` in the kOS terminal:
+
 ```
-resumeMission().           // resume from saved phase
-setState("PHASE_NAME").    // force a phase
-resetBootCount().          // reset boot counter
-patchAndRun("0:/path").    // hot-patch a file from archive
+RUNPATH("1:/cmd/resume.ks").              // resume from saved phase
+RUNPATH("1:/cmd/setstate.ks", "PHASE").   // force a phase
+RUNPATH("1:/cmd/dump.ks").                // print state to console
+RUNPATH("1:/cmd/resetboot.ks").           // reset boot counter
+RUNPATH("1:/cmd/files.ks").               // storage/file listing
 ```
 
 ### Hot-reloading a lib
