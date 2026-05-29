@@ -48,6 +48,10 @@ LOCAL FUNCTION _phaseMonitor {
 
 LOCAL FUNCTION _phaseDeploy {
     mLogPhase("DEPLOY — extending hardware").
+    IF SHIP:STATUS <> "LANDED" AND SHIP:STATUS <> "SPLASHED" {
+        mLog("Not on surface yet — waiting.").
+        WAIT UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    }
     _deployAntennas().
     _deploySolarPanels().
     mLog("Deploy complete.").
@@ -56,6 +60,10 @@ LOCAL FUNCTION _phaseDeploy {
 
 LOCAL FUNCTION _phaseScience {
     mLogPhase("SCIENCE — collecting data").
+    IF SHIP:STATUS <> "LANDED" AND SHIP:STATUS <> "SPLASHED" {
+        mLog("Not on surface yet — waiting.").
+        WAIT UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    }
     scienceInit().
     scienceRunAll().
     mLog("Initial science collected. Entering idle monitor.").
