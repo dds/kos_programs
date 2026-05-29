@@ -17,7 +17,7 @@ GLOBAL sciLastSituation IS "".
 
 GLOBAL FUNCTION scienceInit {
     SET scienceActive    TO TRUE.
-    SET sciLastBiome     TO SHIP:GEOPOSITION:BIOME. // Fixed
+    SET sciLastBiome     TO SHIP:BODY:BIOMEOF(SHIP:GEOPOSITION).
     SET sciLastSituation TO SHIP:SITUATION.
 
     mLog("Science monitor active. Biome=" + sciLastBiome
