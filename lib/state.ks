@@ -23,7 +23,7 @@ GLOBAL FUNCTION stateInit {
     IF EXISTS(STATE_PATH) {
         LOCAL raw IS OPEN(STATE_PATH):READALL:STRING:TRIM.
         IF raw <> "" {
-            SET _cache TO parseJson(raw).
+            SET _cache TO ADDONS:JSON:PARSEORELSE(raw, LEXICON()).
             RETURN.
         }
     }
@@ -67,5 +67,5 @@ GLOBAL FUNCTION stateDump {
 
 LOCAL FUNCTION _flush {
     IF EXISTS(STATE_PATH) { DELETEPATH(STATE_PATH). }
-    LOG serializeJson(_cache) TO STATE_PATH.
+    LOG ADDONS:JSON:STRINGIFY(_cache) TO STATE_PATH.
 }
