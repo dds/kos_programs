@@ -58,9 +58,9 @@ Examples:
 - `FR2-MUN-CRASHPROBE1-RELAY1` — Mun mission: deploy crash probe, then relay
 - `FR2-MINMUS-RELAY1` — Minmus relay deployment
 
-**Payload types:** `RELAY`, `CRASHPROBE`/`PROBE`, `SCANSAT`, `SCISAT`, `STKSAT` (stub)
+**Payload types:** `RELAY`, `CRASHPROBE`/`PROBE`, `SCANSAT`, `SCISAT`, `STKSAT` (stub), `LANDER`
 
-**Phase sequence:** LAUNCH -> FAIRING -> EXTEND_ANTS -> PARKING -> TRANSFER -> COAST -> CAPTURE -> [payload phases] -> CIRC -> RAISE_ALT -> INCL_CORRECT -> [ops phases] -> DONE
+**Phase sequence:** LAUNCH -> FAIRING -> EXTEND_ANTS -> PARKING -> TRANSFER -> COAST -> CAPTURE -> [probe phases] -> CIRC -> RAISE_ALT -> INCL_CORRECT -> [relay/sat ops] -> [LAND_DEORBIT -> LAND] -> DONE
 
 FR2.ks declares `GLOBAL LIBS IS LIST(...)` to tell boot which libs to load. New vehicles do the same — boot only syncs what the vehicle needs.
 

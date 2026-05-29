@@ -11,7 +11,10 @@ GLOBAL LANDING_CFG IS LEXICON(
     "HOVER_THROTTLE",    0.35,
     "BURN_LEAD",          3.0,
     "MAX_TILT",          10.0,
-    "USE_KE",            TRUE
+    "USE_KE",            TRUE,
+    "TARGET_LAT",           0,
+    "TARGET_LNG",           0,
+    "TARGET_BODY",         ""
 ).
 
 GLOBAL landingAbortFlag IS FALSE.
@@ -35,6 +38,13 @@ GLOBAL FUNCTION landingExecute {
         IF NOT landingAbortFlag {
             mLogWarn("Excessive tilt — auto abort.").
             landingAbort().
+        }
+    }
+
+    IF SHIP:ORBIT:BODY:ATM:EXISTS {
+        WHEN SHIP:AIRSPEED < 100 AND ALT:RADAR < 20000 THEN {
+            _deployAntennas().
+            mLog("Antennas deployed — airspeed safe.").
         }
     }
 
@@ -66,6 +76,10 @@ GLOBAL FUNCTION landingAbort {
 }
 
 LOCAL FUNCTION _landDeorbit {
+    IF SHIP:PERIAPSIS <= LANDING_CFG["DEORBIT_PE"] {
+        mLog("Already suborbital (Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km) — skipping deorbit.").
+        RETURN.
+    }
     mLog("Planning deorbit. Target Pe="
         + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1) + "km.").
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
@@ -141,6 +155,16 @@ LOCAL FUNCTION _landSuicideBurn {
 }
 
 LOCAL FUNCTION _landFinal {
+    LOCAL legs IS SHIP:MODULESNAMED("ModuleWheelDeployment").
+    LOCAL legsMLD IS SHIP:MODULESNAMED("ModuleLandingLeg").
+    FOR m IN legsMLD { legs:ADD(m). }
+    IF legs:LENGTH > 0 {
+        FOR m IN legs {
+            IF m:HASEVENT("Extend") { m:DOEVENT("Extend"). }
+        }
+        mLog("Landing legs deployed.").
+    }
+
     mLog("Final approach. Target descent "
         + LANDING_CFG["FINAL_SPEED"] + "m/s.").
     HUDTEXT("Final approach", 3, 2, 14, GREEN, FALSE).
@@ -186,6 +210,32 @@ LOCAL FUNCTION _landTouchdown {
         stateSet("landing_lat",  SHIP:LATITUDE).
         stateSet("landing_lng",  SHIP:LONGITUDE).
         stateSet("landing_time", TIME:SECONDS).
+        _deployAntennas().
+        _deploySolarPanels().
+    }
+}
+
+GLOBAL FUNCTION landingTargetedDeorbit {
+    IF LANDING_CFG["TARGET_LAT"] = 0 AND LANDING_CFG["TARGET_LNG"] = 0 {
+        mLog("No landing target set — using blind deorbit.").
+        RETURN.
+    }
+    SET CFG["PROBE_TARGET_LAT"] TO LANDING_CFG["TARGET_LAT"].
+    SET CFG["PROBE_TARGET_LNG"] TO LANDING_CFG["TARGET_LNG"].
+    SET CFG["PROBE_ENTRY_PE"] TO LANDING_CFG["DEORBIT_PE"].
+    SET CFG["PROBE_TARGET_TOL"] TO 5000.
+    targetedDeorbit().
+}
+
+LOCAL FUNCTION _deployAntennas {
+    FOR m IN SHIP:MODULESNAMED("ModuleDeployableAntenna") {
+        IF m:HASEVENT("Extend Antenna") { m:DOEVENT("Extend Antenna"). }
+    }
+}
+
+LOCAL FUNCTION _deploySolarPanels {
+    FOR m IN SHIP:MODULESNAMED("ModuleDeployableSolarPanel") {
+        IF m:HASEVENT("Extend Solar Panel") { m:DOEVENT("Extend Solar Panel"). }
     }
 }
 

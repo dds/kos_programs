@@ -5,7 +5,7 @@
 // e.g.  FR2-MUN-CRASHPROBE1-RELAY1
 //       FR2-KERBIN-PROBE-RELAY-POLAR-02
 //
-// Recognized payload tokens: PROBE, CRASHPROBE, RELAY, SCANSAT, SCISAT
+// Recognized payload tokens: PROBE, CRASHPROBE, RELAY, SCANSAT, SCISAT, LANDER
 // Anything else (POLAR, 02, etc.) is ignored.
 // ============================================================
 
@@ -32,7 +32,7 @@ GLOBAL CFG IS LEXICON(
 GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer",
     "countdown", "maneuver", "inclination",
-    "orbit", "targeting"
+    "orbit", "targeting", "landing"
 ).
 
 LOCAL FUNCTION _normalizePayloadType {
@@ -79,6 +79,14 @@ LOCAL FUNCTION buildPhaseSequence {
             seq:ADD("RELAY_OPS").
         }
     }
+
+    FOR ptype IN missionPayloads() {
+        LOCAL t IS _normalizePayloadType(ptype).
+        IF t = "LANDER" {
+            seq:ADD("LAND_DEORBIT").
+            seq:ADD("LAND").
+        }
+    }
     seq:ADD("DONE").
     RETURN seq.
 }
@@ -86,9 +94,11 @@ LOCAL FUNCTION buildPhaseSequence {
 LOCAL FUNCTION _printConfig {
     LOCAL seq IS buildPhaseSequence().
     LOCAL hasProbe IS FALSE.
+    LOCAL hasLander IS FALSE.
     FOR ptype IN missionPayloads() {
         LOCAL t IS _normalizePayloadType(ptype).
         IF t = "CRASHPROBE" OR t = "PROBE" { SET hasProbe TO TRUE. }
+        IF t = "LANDER" { SET hasLander TO TRUE. }
     }
 
     CLEARSCREEN.
@@ -126,6 +136,12 @@ LOCAL FUNCTION _printConfig {
         PRINT "  IMPACT ..... " + ROUND(CFG["PROBE_TARGET_LAT"],1) + " lat  " + ROUND(CFG["PROBE_TARGET_LNG"],1) + " lng".
         PRINT "  ENTRY PE ... " + ROUND(CFG["PROBE_ENTRY_PE"]/1000,0) + " km".
         PRINT "  TOLERANCE .. " + ROUND(CFG["PROBE_TARGET_TOL"]/1000,0) + " km".
+    }
+    IF hasLander {
+        PRINT " ".
+        PRINT "  -- LANDING --".
+        PRINT "  TARGET ..... " + ROUND(LANDING_CFG["TARGET_LAT"],4) + " lat  " + ROUND(LANDING_CFG["TARGET_LNG"],4) + " lng".
+        PRINT "  DEORBIT PE . " + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1) + " km".
     }
     PRINT " ".
     PRINT "  -- SEQUENCE --".
@@ -206,7 +222,9 @@ GLOBAL FUNCTION main {
         "RELEASE_PROBE",    _phaseReleaseProbe@,
         "RECIRC",           _phaseRecirc@,
         "RELAY_OPS",        _phaseRelayOps@,
-        "DEPLOY_SAT",       _phaseDeploySat@
+        "DEPLOY_SAT",       _phaseDeploySat@,
+        "LAND_DEORBIT",     _phaseLandDeorbit@,
+        "LAND",             _phaseLand@
     ).
 
     runPhases(phaseMap).
@@ -227,11 +245,11 @@ LOCAL FUNCTION _phaseTargetedDeorbit {
 LOCAL FUNCTION _hasFixedPanels {
     PARAMETER dc.
     LOCAL probeChildren IS dc:CHILDREN.
-    LOCAL queue IS LIST().
-    FOR ch IN probeChildren { queue:ADD(ch). }
-    UNTIL queue:LENGTH = 0 {
-        LOCAL p IS queue[0].
-        queue:REMOVE(0).
+    LOCAL bfsQ IS LIST().
+    FOR ch IN probeChildren { bfsQ:ADD(ch). }
+    UNTIL bfsQ:LENGTH = 0 {
+        LOCAL p IS bfsQ[0].
+        bfsQ:REMOVE(0).
         IF p:HASMODULE("ModuleDeployableSolarPanel") {
             LOCAL m IS p:GETMODULE("ModuleDeployableSolarPanel").
             IF NOT m:HASEVENT("Extend Solar Panel")
@@ -240,7 +258,7 @@ LOCAL FUNCTION _hasFixedPanels {
                 RETURN TRUE.
             }
         }
-        FOR ch IN p:CHILDREN { queue:ADD(ch). }
+        FOR ch IN p:CHILDREN { bfsQ:ADD(ch). }
     }
     RETURN FALSE.
 }
@@ -329,5 +347,15 @@ LOCAL FUNCTION _phaseRelayOps {
 
 LOCAL FUNCTION _phaseDeploySat {
     mLog("DEPLOY_SAT: not yet implemented.").
+    nextPhase(launchSeq).
+}
+
+LOCAL FUNCTION _phaseLandDeorbit {
+    landingTargetedDeorbit().
+    nextPhase(launchSeq).
+}
+
+LOCAL FUNCTION _phaseLand {
+    landingExecute().
     nextPhase(launchSeq).
 }
