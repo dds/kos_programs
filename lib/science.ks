@@ -51,7 +51,7 @@ GLOBAL FUNCTION scienceInit {
             SET sciLastSituation TO currentSit.
 
             // 2. Filter out "unknown" data. Only gather science if the biome is mapped and valid.
-            IF currentBiome:LOWER() <> "unknown" {
+            IF currentBiome:TOLOWER() <> "unknown" {
                 
                 mLog("Science change: " + oldBiome + " -> " + currentBiome + " | Sit: " + currentSit).
                 
@@ -145,9 +145,9 @@ GLOBAL FUNCTION scienceStatus {
                             "DMBasicScienceModule") {
             IF p:HASMODULE(modName) {
                 LOCAL modu IS p:GETMODULE(modName).
-                IF modu:HASFIELD("Deployed") AND mod:GETFIELD("Deployed") = "True" {
+                IF modu:HASFIELD("Deployed") AND modu:GETFIELD("Deployed") = "True" {
                     SET deployed TO deployed + 1.
-                } ELSE IF modu:HASFIELD("Inoperable") AND mod:GETFIELD("Inoperable") = "True" {
+                } ELSE IF modu:HASFIELD("Inoperable") AND modu:GETFIELD("Inoperable") = "True" {
                     SET inoperable TO inoperable + 1.
                 } ELSE IF _experimentAvailable(modu) {
                     SET available TO available + 1.
@@ -255,8 +255,8 @@ LOCAL FUNCTION _runExperiment {
     ).
 
     FOR evt IN runEvents {
-        IF mod:HASEVENT(evt) {
-            mod:DOEVENT(evt).
+        IF modu:HASEVENT(evt) {
+            modu:DOEVENT(evt).
             mLog("Science: ran '" + evt + "' on " + part:NAME
                 + "  biome=" + SHIP:BIOME
                 + "  situation=" + SHIP:SITUATION).
