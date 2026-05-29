@@ -26,7 +26,7 @@ GLOBAL CFG IS LEXICON(
     "PARKING_ALT",         200000,  // m — MJ target orbit altitude
     "LAUNCH_INCLINATION",      55,  // deg — 0 = equatorial
     "LAUNCH_AZIMUTH",           0,  // deg — 90 = due east from KSC
-    // "LAUNCH_STAGE_LIMIT",       2,  // MJ AutoStageLimit
+    "LAUNCH_STAGE_LIMIT",       2,  // MJ AutoStageLimit
     "FAIRING_ALT",          62000,  // m — jettison main_fairing
     "EXTEND_ALT",           71000,  // m - extend panels & attenae 
 
