@@ -32,7 +32,7 @@ GLOBAL CFG IS LEXICON(
 
     // Transfer + capture
     "RELAY_ALT",           1000000,  // m above target body
-    "CAPTURE_PE",            10000,  // m — arrival Pe aim point
+    "CAPTURE_PE",            12000,  // m — arrival Pe aim point
     "CIRC_ECC_TOL",           0.02, // eccentricity threshold
 
     // Probe impact
