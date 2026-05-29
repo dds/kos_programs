@@ -242,6 +242,8 @@ LOCAL FUNCTION _phaseFairing {
 // ── TMI ────────────────────────────────────────────────────
 LOCAL FUNCTION _phaseTMI {
     LOCAL target IS missionTargetBody().
+    // Clear any previous planned maneuvers.
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     orbitSummary().
     mLog("Planning transfer to " + target:NAME + ".").
     planTransfer(target, CFG["CAPTURE_PE"]).
