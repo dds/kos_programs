@@ -87,9 +87,9 @@ GLOBAL FUNCTION targetedDeorbit {
     LOCAL fineUT    IS fineStart.
 
     UNTIL fineUT > fineEnd {
-        LOCAL dist IS _testDeorbitNode(fineUT, entryPe, targetLat, targetLng).
-        IF dist >= 0 AND dist < bestDist {
-            SET bestDist TO dist.
+        LOCAL t IS _testDeorbitNode(fineUT, entryPe, targetLat, targetLng).
+        IF t >= 0 AND t < bestDist {
+            SET bestDist TO t.
             SET bestUT   TO fineUT.
         }
         SET fineUT TO fineUT + fineStep.
