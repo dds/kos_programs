@@ -159,9 +159,8 @@ LOCAL FUNCTION _phaseLaunch {
     HUDTEXT("T-5: press ABORT to hold", 5, 2, 16, YELLOW, FALSE).
     LOCAL aborted IS FALSE.
     LOCAL tEnd IS TIME:SECONDS + 5.
-    WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT {
-        IF ABORT { SET aborted TO TRUE. }
-    }
+    WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT.
+    IF ABORT { SET aborted TO TRUE. }
     IF aborted {
         mLog("Launch hold — operator abort.").
         SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
