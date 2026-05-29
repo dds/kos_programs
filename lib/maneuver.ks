@@ -86,18 +86,20 @@ GLOBAL FUNCTION executeManeuver {
         // Throttle — ramp down in final approach to avoid overshoot
         LOCAL remaining IS nd:DELTAV:MAG.
         LOCAL maxAcc    IS _safeMaxAcc().
-        LOCAL timeToStop IS remaining / maxAcc. // seconds at full throttle
         LOCAL dotCheck IS VDOT(nd:BURNVECTOR:NORMALIZED, nd:DELTAV:NORMALIZED).
 
         IF dotCheck < 0 { LOCK THROTTLE TO 0. BREAK. }
 
         IF timeToStop > 1.0 { 
             LOCK THROTTLE TO 1.0.
-        } ELSE IF timeToStop > 0.1 {
+        } ELSE IF timeToStop > 0.5 {
             // Fine control: throttle proportional, min 2%
-            LOCK THROTTLE TO MAX(0.005, timeToStop).
-        } ELSE {
-            // Under 0.1s of burn left, cut
+            LOCAL timeToStop IS remaining / maxAcc.
+            LOCK THROTTLE TO MAX(0.02, MIN(0.5, timeToStop))).
+        } ELSE IF remaining > 0.1 {
+            // Very fine - minimum throttle pulse.
+            LOCK THROTTLE TO 0.02.
+        } ELSE { 
             LOCK THROTTLE TO 0.
             BREAK.
         }
