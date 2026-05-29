@@ -54,7 +54,7 @@ LOCAL FUNCTION buildPhaseSequence {
         "LAUNCH",
         "FAIRING",
         "EXTEND_ANTS",
-        "PARKING",
+        "PARKING"
     ).
     IF MISSION["target"]:TOUPPER <> "KERBIN" {
         seq.ADD("TRANSFER").
