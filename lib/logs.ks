@@ -21,6 +21,15 @@ GLOBAL FUNCTION initLog {
     mLog("Fault log: " + flightLogPath).
 }
 
+LOCAL FUNCTION _newLogPath {
+    PARAMETER logPathFile.
+    LOCAL safeName IS _sanitizeName(SHIP:NAME).
+    LOCAL p IS "1:/logs/" + safeName + "_" + ROUND(TIME:SECONDS) + ".log".
+    LOG "=== FAULT LOG START: " + SHIP:NAME + " ===" TO p.
+    LOG p TO logPathFile.
+    RETURN p.
+}
+
 LOCAL FUNCTION _sanitizeName {
     PARAMETER raw.
     LOCAL out IS "".
