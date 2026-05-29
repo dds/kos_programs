@@ -103,18 +103,18 @@ GLOBAL FUNCTION executeManeuver {
 
 GLOBAL FUNCTION planCircularize {
     // Plan a circularization node at current apoapsis.
-    LOCAL eta IS ETA:APOAPSIS.
+    LOCAL etaApo IS ETA:APOAPSIS.
     LOCAL r   IS SHIP:ORBIT:SEMIMAJORAXIS.  // approximation at Ap
     LOCAL mu  IS SHIP:ORBIT:BODY:MU.
 
     // vis-viva for circular orbit at apoapsis radius
     LOCAL vCirc IS SQRT(mu / (SHIP:ORBIT:BODY:RADIUS + SHIP:APOAPSIS)).
-    LOCAL vNow  IS VELOCITYAT(SHIP, TIME:SECONDS + eta):ORBIT:MAG.
+    LOCAL vNow  IS VELOCITYAT(SHIP, TIME:SECONDS + etaApo):ORBIT:MAG.
     LOCAL dv    IS vCirc - vNow.
 
-    LOCAL nd IS NODE(TIME:SECONDS + eta, 0, 0, dv).
+    LOCAL nd IS NODE(TIME:SECONDS + etaApo, 0, 0, dv).
     ADD nd.
-    mLog("Circularize node: dV=" + ROUND(dv,1) + " m/s at Ap in " + ROUND(eta,0) + "s").
+    mLog("Circularize node: dV=" + ROUND(dv,1) + " m/s at Ap in " + ROUND(etaApo,0) + "s").
     RETURN nd.
 }
 
