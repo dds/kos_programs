@@ -21,7 +21,7 @@ FOR dir IN LIST("lib", "boot", "logs", "state") {
 
 PRINT "Syncing archive...".
 COPYPATH("0:/lib/state.ks",          "1:/lib/state.ks").
-COPYPATH("0:/lib/logs.ks",           "1:/lib/logs.ks").
+COPYPATH("0:/lib/logs.ks",            "1:/lib/logs.ks").
 COPYPATH("0:/lib/maneuver.ks",       "1:/lib/maneuver.ks").
 COPYPATH("0:/lib/orbit.ks",          "1:/lib/orbit.ks").
 COPYPATH("0:/" + missionName + ".ks","1:/" + missionName + ".ks").
@@ -45,9 +45,9 @@ IF bootCount >= 2 {
     PRINT "*** MANUAL / RECOVERY MODE ***".
     PRINT "All locks released. Available helpers:".
     PRINT "  stateDump()               -- show all persisted state".
-    PRINT "  setState(\"PHASE\")          -- force mission phase".
+    PRINT "  setState('PHASE')         -- force mission phase".
     PRINT "  resetBootCount()          -- re-arm auto on next reboot".
-    PRINT "  patch(\"FR2\")  -- upload + hotpatch script".
+    PRINT "  patch('FR2')              -- upload + hotpatch script".
     PRINT "  resumeMission()           -- resume from saved phase".
     PRINT " ".
     mLog("Manual/recovery mode. Boot #" + bootCount + ". Phase was: " + stateGet("phase","NONE")).
