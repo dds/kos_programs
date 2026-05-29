@@ -481,7 +481,7 @@ GLOBAL FUNCTION planRaisePeNow {
     LOCAL vNew IS SQRT(mu * (2/rNow - 1/tSMA)).
     LOCAL dv   IS vNew - vNow.  // positive = prograde
 
-    LOCAL nd IS NODE(TIME:SECONDS + 10, 0, 0, dv).
+    LOCAL nd IS NODE(TIME:SECONDS + 30, 0, 0, dv).
     ADD nd.
     mLog("Raise Pe now: dV=" + ROUND(dv,1)
         + " m/s  currentAlt=" + ROUND(SHIP:ALTITUDE/1000,1)
