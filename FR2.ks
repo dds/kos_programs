@@ -30,7 +30,7 @@ GLOBAL CFG IS LEXICON(
     "FAIRING_ALT",          75000,  // m — jettison main_fairing
 
     // Transfer + capture
-    "RELAY_ALT",           500000,  // m above target body
+    "RELAY_ALT",           1000000,  // m above target body
     "CAPTURE_PE",           50000,  // m — arrival Pe aim point
     "CIRC_ECC_TOL",           0.02, // eccentricity threshold
 
@@ -239,7 +239,7 @@ LOCAL FUNCTION _phaseTMI {
     LOCAL target IS missionTargetBody().
     orbitSummary().
     mLog("Planning transfer to " + target:NAME + ".").
-    planTransfer(target).
+    planTransfer(target, CFG["CAPTURE_PE"]).
     executeManeuver().
     nextPhase().
 }

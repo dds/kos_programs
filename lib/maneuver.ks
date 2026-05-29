@@ -88,13 +88,14 @@ GLOBAL FUNCTION executeManeuver {
     }
 
     // ── Shutdown ──────────────────────────────────────────
+    LOCAL residual IS nd:DELTAV:MAG.
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
     REMOVE nd.
     SET SAS TO TRUE.
 
-    mLog("Burn complete. Residual dV ~" + ROUND(nd:DELTAV:MAG, 2) + " m/s (pre-remove).").
+    mLog("Burn complete. Residual dV ~" + ROUND(residual, 2) + " m/s.").
     HUDTEXT("Burn complete", 3, 2, 15, GREEN, FALSE).
     RETURN TRUE.
 }
@@ -117,40 +118,72 @@ GLOBAL FUNCTION planCircularize {
     RETURN nd.
 }
 
-
 GLOBAL FUNCTION planTransfer {
-    // Hohmann TMI to any body orbiting the same parent as SHIP.
-    // e.g. ship in Kerbin orbit → MUN or MINMUS
     PARAMETER targetBody.
+    PARAMETER targetPe.
 
-    LOCAL parentBody  IS SHIP:ORBIT:BODY.
-    LOCAL mu          IS parentBody:MU.
-    LOCAL r1          IS parentBody:RADIUS + SHIP:ORBIT:APOAPSIS.
-    LOCAL targetSMA   IS targetBody:ORBIT:SEMIMAJORAXIS.
-    LOCAL tSMA        IS (r1 + targetSMA) / 2.
-    LOCAL vTrans      IS SQRT(mu * (2/r1 - 1/tSMA)).
-    LOCAL vCirc       IS SQRT(mu / r1).
-    LOCAL dv          IS vTrans - vCirc.
+    LOCAL r1 IS SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL r2 IS targetBody:ORBIT:SEMIMAJORAXIS.
+    LOCAL mu IS BODY:MU.
 
-    LOCAL targetPeriod IS targetBody:ORBIT:PERIOD.
-    LOCAL transPeriod  IS 2 * CONSTANT:PI * SQRT(tSMA^3 / mu).
-    LOCAL tofHalf      IS transPeriod / 2.
+    LOCAL targetRadius IS targetBody:RADIUS + targetPe.
+    LOCAL aTrans IS (r1 + r2 + targetRadius) / 2.
+    LOCAL v1 IS SQRT(mu / r1).
+    LOCAL vTrans IS SQRT(mu * ((2 / r1) - (1 / aTrans))).
+    LOCAL dv IS vTrans - v1.
 
-    LOCAL phaseNeeded IS 180 - (360 * (tofHalf / targetPeriod)).
-    UNTIL phaseNeeded < 0   { SET phaseNeeded TO phaseNeeded - 360. }
-    UNTIL phaseNeeded >= 0  { SET phaseNeeded TO phaseNeeded + 360. }
+    LOCAL tTrans IS CONSTANT:PI * SQRT((aTrans^3) / mu).
+    LOCAL targetOmega IS 360 / targetBody:ORBIT:PERIOD.
+    LOCAL idealPhase IS 180 - (targetOmega * tTrans).
 
-    LOCAL currentPhase IS _phaseAngle(SHIP, targetBody).
-    LOCAL phaseDiff    IS phaseNeeded - currentPhase.
-    UNTIL phaseDiff < 0   { SET phaseDiff TO phaseDiff - 360. }
-    UNTIL phaseDiff >= 0  { SET phaseDiff TO phaseDiff + 360. }
+    LOCAL shipPos IS SHIP:POSITION - BODY:POSITION.
+    LOCAL targetPos IS targetBody:POSITION - BODY:POSITION.
+    LOCAL currentPhase IS VANG(shipPos, targetPos).
+    LOCAL orbitNormal IS VCRS(shipPos, SHIP:VELOCITY:ORBIT).
+    LOCAL phaseSign IS VDOT(orbitNormal, VCRS(shipPos, targetPos)).
+    IF phaseSign < 0 { SET currentPhase TO 360 - currentPhase. }
 
-    LOCAL targetAngV IS 360 / targetPeriod.
-    LOCAL waitTime   IS phaseDiff / targetAngV.
+    LOCAL shipOmega IS 360 / SHIP:ORBIT:PERIOD.
+    LOCAL phaseSpeed IS shipOmega - targetOmega.
+    LOCAL phaseDiff IS currentPhase - idealPhase.
+    IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
+    LOCAL estimatedTimeToBurn IS phaseDiff / phaseSpeed.
 
-    LOCAL nd IS NODE(TIME:SECONDS + waitTime, 0, 0, dv).
+    LOCAL bestUt IS TIME:SECONDS + estimatedTimeToBurn.
+    LOCAL testNode IS NODE(bestUt, 0, 0, dv).
+    ADD testNode.
+    WAIT 0.1.
+
+    LOCAL bestPe IS 999999999.
+    LOCAL steps IS 10.
+    FROM { LOCAL pass IS 1. } UNTIL pass > 3 STEP { SET pass TO pass + 1. } DO {
+        LOCAL scanning IS TRUE.
+        UNTIL NOT scanning {
+            SET testNode:TIME TO testNode:TIME - steps.
+            WAIT 0.02.
+            IF testNode:ORBIT:HASNEXTPATCH
+                    AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
+                LOCAL currentPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
+                IF currentPe < bestPe AND currentPe > 0 {
+                    SET bestPe TO currentPe.
+                    SET bestUt TO testNode:TIME.
+                } ELSE {
+                    SET testNode:TIME TO testNode:TIME + steps.
+                    SET scanning TO FALSE.
+                }
+            } ELSE {
+                SET testNode:TIME TO testNode:TIME + steps.
+                SET scanning TO FALSE.
+            }
+        }
+        SET steps TO steps / 5.
+    }
+
+    REMOVE testNode.
+    LOCAL nd IS NODE(bestUt, 0, 0, dv).
     ADD nd.
-    mLog("Transfer → " + targetBody:NAME + ": dV=" + ROUND(dv,1) + " m/s  wait=" + ROUND(waitTime,0) + "s").
+    mLog("Transfer → " + targetBody:NAME + ": dV=" + ROUND(dv,1)
+        + " m/s  Pe=" + ROUND(bestPe/1000,1) + "km  ETA=" + ROUND(estimatedTimeToBurn,0) + "s").
     RETURN nd.
 }
 
