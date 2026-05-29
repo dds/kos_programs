@@ -33,7 +33,7 @@ GLOBAL CFG IS LEXICON(
     "EXTEND_ALT",           71000,  // m - extend panels & attenae 
 
     // Transfer + capture
-    "RELAY_ALT",           1500000,  // m above target body
+    "RELAY_ALT",           1581000,  // m above target body
     "CAPTURE_PE",            20000,  // m — arrival Pe aim point
     "CIRC_ECC_TOL",          0.005,  // ~2.5km at 500km
     "TARGET_INCLINATION",    55,     // deg — 0=equatorial, 90=polar, -1=match vessel
@@ -71,6 +71,7 @@ LOCAL FUNCTION buildPhaseSequence {
     }
 
     seq:ADD("CIRC").
+    seq:ADD("RAISE_ALT").
     seq:ADD("INCL_CORRECT").
 
     FOR ptype IN missionPayloads() {
@@ -144,6 +145,7 @@ LOCAL FUNCTION _runPhaseLoop {
         ELSE IF phase = "COAST"        { _phaseCoast().        }
         ELSE IF phase = "CAPTURE"      { _phaseCapture().      }
         ELSE IF phase = "CIRC"         { _phaseCirc().         }
+        ELSE IF phase = "RAISE_ALT"    { _phaseRaiseAlt().         }
         ELSE IF phase = "INCL_CORRECT" { _phaseInclCorrect().  }
         ELSE IF phase = "TARGETED_DEORBIT" { _phaseTargetedDeorbit(). }
         ELSE IF phase = "RELEASE_PROBE"{ _phaseReleaseProbe(). }
@@ -546,6 +548,43 @@ LOCAL FUNCTION _phaseExtendAnts {
         }
     }
     mLog("Antennas deployed.").
+    nextPhase().
+}
+
+LOCAL FUNCTION _phaseRaiseAlt {
+    LOCAL targetAlt IS CFG["RELAY_ALT"].
+    IF SHIP:APOAPSIS > targetAlt * 0.99 {
+        mLog("Already at target altitude.").
+        nextPhase().
+        RETURN.
+    }
+    mLog("Raising to " + ROUND(targetAlt/1000,0) + "km.").
+    LOCAL success IS FALSE.
+    UNTIL success {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        // Raise Ap to target altitude
+        LOCAL mu    IS SHIP:ORBIT:BODY:MU.
+        LOCAL rNow  IS SHIP:ORBIT:BODY:RADIUS + SHIP:APOAPSIS.
+        LOCAL rTarget IS SHIP:ORBIT:BODY:RADIUS + targetAlt.
+        LOCAL tSMA  IS (rNow + rTarget) / 2.
+        LOCAL vNow  IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:APOAPSIS):ORBIT:MAG.
+        LOCAL vNew  IS SQRT(mu * (2/rNow - 1/tSMA)).
+        LOCAL dv    IS vNew - vNow.
+        LOCAL nd    IS NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, dv).
+        ADD nd.
+        mLog("Raise Ap: dV=" + ROUND(dv,1) + " m/s").
+        SET success TO executeManeuver().
+        IF NOT success { mLog("Raise Ap missed — replanning."). }
+    }
+    // Now circularize at new Ap
+    SET success TO FALSE.
+    UNTIL success {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        planCircularize().
+        SET success TO executeManeuver().
+        IF NOT success { mLog("Circ at target alt missed — replanning."). }
+    }
+    orbitSummary().
     nextPhase().
 }
 
