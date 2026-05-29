@@ -175,14 +175,15 @@ LOCAL FUNCTION _phaseLaunch {
         IF TIME:SECONDS > (stateGetNum("launch_time",0) + 15)
                 AND SHIP:APOAPSIS < 30000
                 AND SHIP:VERTICALSPEED < 0 {
-            SET abort TO TRUE.
+            SET abortTriggered TO TRUE.
             mLogError("Abort: anomalous trajectory — Ap=" + ROUND(SHIP:APOAPSIS/1000,1) + "km").
         }
         
         // Unrecoverable attitude
-        IF SHIP:ALTITUDE < 40000
+        IF SHIP:ALTITUDE > 500 
+                AND SHIP:VELOCITY:SURFACE:MAG > 10 
                 AND VANG(SHIP:FACING:FOREVECTOR, SHIP:VELOCITY:SURFACE) > 45 {
-            SET abort TO TRUE.
+            SET abortTriggered TO TRUE.
             mLogError("Abort: attitude divergence — " 
                 + ROUND(VANG(SHIP:FACING:FOREVECTOR, SHIP:VELOCITY:SURFACE),1) + "deg off prograde").
         }
