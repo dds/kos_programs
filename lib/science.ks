@@ -40,18 +40,17 @@ GLOBAL FUNCTION scienceInit {
         }
         LOCAL currentSit IS SHIP:STATUS.
 
-        // 1. Detect if any change occurred (even moving into an "unknown" zone)
+        // 1. Detect if any change occurred
         IF (currentBiome <> sciLastBiome OR currentSit <> sciLastSituation) {
             
-            // Capture the old state for logging before overwriting
             LOCAL oldBiome IS sciLastBiome.
             
             // Always update the tracking state so we don't get stuck in a loop
             SET sciLastBiome     TO currentBiome.
             SET sciLastSituation TO currentSit.
 
-            // 2. Filter out "unknown" data. Only gather science if the biome is mapped and valid.
-            IF currentBiome:TOLOWER() <> "unknown" {
+            // 2. Filter out "unknown" data.
+            IF currentBiome:LOWER() <> "unknown" {
                 
                 mLog("Science change: " + oldBiome + " -> " + currentBiome + " | Sit: " + currentSit).
                 
@@ -63,7 +62,6 @@ GLOBAL FUNCTION scienceInit {
                     scienceRunAll().
                 }
             } ELSE {
-                // Optional debug log to see when you are passing over unscanned ground
                 mLog("Passed into unscanned biome (" + currentBiome + "). Science collection skipped.").
             }
         }
@@ -126,14 +124,15 @@ GLOBAL FUNCTION scienceTransmitAll {
         }
     }
     mLog("Science transmission: " + transmitted + " parts transmitting.").
-    RETURN transmitted.
+    RETURN transmitted;
 }
 
 GLOBAL FUNCTION scienceStatus {
+    // FIXED: Swapped out SHIP:BIOME and SHIP:SITUATION to prevent crashes
     mLog("Science status:"
         + "  body="      + SHIP:ORBIT:BODY:NAME
-        + "  biome="     + SHIP:BIOME
-        + "  situation=" + SHIP:SITUATION).
+        + "  biome="     + sciLastBiome
+        + "  situation=" + SHIP:STATUS).
 
     LOCAL available IS 0.
     LOCAL deployed  IS 0.
@@ -145,6 +144,7 @@ GLOBAL FUNCTION scienceStatus {
                             "DMBasicScienceModule") {
             IF p:HASMODULE(modName) {
                 LOCAL modu IS p:GETMODULE(modName).
+                // FIXED: Changed 'mod' references to 'modu'
                 IF modu:HASFIELD("Deployed") AND modu:GETFIELD("Deployed") = "True" {
                     SET deployed TO deployed + 1.
                 } ELSE IF modu:HASFIELD("Inoperable") AND modu:GETFIELD("Inoperable") = "True" {
@@ -255,15 +255,18 @@ LOCAL FUNCTION _runExperiment {
     ).
 
     FOR evt IN runEvents {
+        // FIXED: Changed 'mod' to 'modu' to match the declared local variable
         IF modu:HASEVENT(evt) {
             modu:DOEVENT(evt).
+            
+            // FIXED: Swapped out broken suffixes for global tracked variables
             mLog("Science: ran '" + evt + "' on " + part:NAME
-                + "  biome=" + SHIP:BIOME
-                + "  situation=" + SHIP:SITUATION).
+                + "  biome=" + sciLastBiome
+                + "  situation=" + SHIP:STATUS).
 
             IF SCI_CFG["AUTO_TRANSMIT"] {
                 WAIT 1.
-                IF mod:HASEVENT("Transmit Data") { mod:DOEVENT("Transmit Data"). }
+                IF modu:HASEVENT("Transmit Data") { modu:DOEVENT("Transmit Data"). }
             }
             RETURN TRUE.
         }
