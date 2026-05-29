@@ -157,6 +157,9 @@ GLOBAL FUNCTION planTransfer {
     LOCAL bestUt IS TIME:SECONDS + estimatedTimeToBurn.
     LOCAL testNode IS NODE(bestUt, 0, 0, dv).
     ADD testNode.
+    mLog("DEBUG initial node: hasNext=" + testNode:ORBIT:HASNEXTPATCH
+    + "  body=" + testNode:ORBIT:BODY:NAME
+    + "  apoapsis=" + ROUND(testNode:ORBIT:APOAPSIS/1000,0) + "km").
     WAIT 0.1.
 
     LOCAL bestPe IS 999999999.

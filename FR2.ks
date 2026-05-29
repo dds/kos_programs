@@ -11,7 +11,7 @@
 //
 // Tagged parts required in VAB:
 //   probe_decoupler   — decoupler between relay and impactor
-//   main_fairing      — procedural fairing
+//   main_fairing      — fairing
 //
 // Phase sequence:
 //   LAUNCH → PARKING → FAIRING → TMI → COAST → CAPTURE → CIRC
@@ -182,8 +182,7 @@ LOCAL FUNCTION _phaseLaunch {
 LOCAL FUNCTION _phaseParking {
     mLog("Ascent monitoring — kOS owns staging, MJ owns steering/throttle.").
 
-    UNTIL isOrbitStable(MAX(70000, CFG["FAIRING_ALT"])) {
-
+    UNTIL _isParkingOrbitStable() {
         // Fairing deploy check
         IF stateGet("fairing_deployed","false") = "false"
                 AND SHIP:ALTITUDE >= CFG["FAIRING_ALT"] {
@@ -222,6 +221,14 @@ LOCAL FUNCTION _phaseParking {
     orbitSummary().
     mLog("Stable parking orbit confirmed.").
     nextPhase().
+}
+
+LOCAL FUNCTION _isParkingOrbitStable {
+    LOCAL target IS CFG["PARKING_ALT"].
+    LOCAL tol IS target * 0.05.
+    RETURN SHIP:PERIAPSIS > (target - tol) 
+        AND SHIP:APOAPSIS < (target + tol)
+        AND SHIP:APOAPSIS > (target - tol).
 }
 
 // ── FAIRING ────────────────────────────────────────────────
