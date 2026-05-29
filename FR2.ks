@@ -52,17 +52,22 @@ LOCAL FUNCTION buildPhaseSequence {
         "PARKING",
         "TMI",
         "COAST",
-        "CAPTURE",
-        "CIRC",
-        "INCL_CORRECT"
+        "CAPTURE"
     ).
     FOR ptype IN missionPayloads() {
         LOCAL t IS ptype:TOUPPER.
         IF t = "CRASHPROBE1" OR t = "PROBE1" {
             seq:ADD("LOWER_PE").
             seq:ADD("RELEASE_PROBE").
-            seq:ADD("RECIRC").
-        } ELSE IF t = "RELAY1" {
+        }
+    }
+
+    seq:ADD("CIRC").
+    seq:ADD("INCL_CORRECT").
+
+    FOR ptype IN missionPayloads() {
+        LOCAL t IS ptype:TOUPPER.
+        IF t = "RELAY1" {
             seq:ADD("RELAY_OPS").
         } ELSE IF t = "STKSAT1" {
             seq:ADD("DEPLOY_SAT").
