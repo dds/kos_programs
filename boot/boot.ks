@@ -70,7 +70,7 @@ PRINT "Sync complete.".
 RUNPATH("1:/lib/countdown.ks").
 RUNPATH("1:/lib/state.ks").
 stateInit().
-RUNPATH("1:/lib/log.ks").
+RUNPATH("1:/lib/logs.ks").
 initLog().
 RUNPATH("1:/lib/maneuver.ks").
 RUNPATH("1:/lib/orbit.ks").
