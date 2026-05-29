@@ -111,6 +111,34 @@ COPYPATH("0:/cmd/dump.ks", "1:/cmd/dump.ks").
 RUNPATH("1:/cmd/dump.ks").
 ```
 
+## Multi-CPU Ships (CORE:TAG Routing)
+
+Ships with multiple kOS processors use **CORE:TAG** to route each CPU to a different script. All processors share the same `boot/boot.ks`, but tagged CPUs load a role-specific script instead of the vehicle script.
+
+**How it works:**
+1. Boot parses the ship name as usual (vehicle, target, payloads)
+2. If `CORE:TAG` is non-empty and `0:/<tag>.ks` exists, that script is loaded instead of the vehicle script
+3. If the tag has no matching script, the CPU falls through to the normal vehicle script (with a warning)
+4. Untagged CPUs always load the vehicle script
+
+**Example:** Ship named `FR2-MUN-LANDER` with two processors:
+- Main CPU (untagged) → boots `FR2.ks` (flight control)
+- Secondary CPU (tagged `lander_cpu`) → boots `lander_cpu.ks` (deploy + science)
+
+Each processor has its own `1:/` volume, so state files are naturally isolated — no conflicts between CPUs.
+
+### Available role scripts
+
+| Script | Tag | Purpose |
+|---|---|---|
+| `lander_cpu.ks` | `lander_cpu` | Post-landing deploy (antennas, solar) + science collection |
+
+### Writing a role script
+
+Role scripts follow the same contract as vehicle scripts — define `CFG`, `LIBS`, and `main()`. They have access to `SHIP:NAME` parsing results via state (`vehicle`, `target`, `payloads`) set by boot on first boot of any CPU.
+
+Keep role scripts lightweight (minimal LIBS) since secondary CPUs are often on storage-constrained probe cores.
+
 ## Creating a New Vehicle
 
 Boot is generic — any vehicle works. Create `MYVEHICLE.ks` at the archive root, name your ship `MYVEHICLE-TARGET[-stuff]`, and boot handles the rest.

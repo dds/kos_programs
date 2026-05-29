@@ -70,9 +70,17 @@ IF bootCount = 1 {
 }
 mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 
-PRINT "  SYNC " + vehicleName + " ....... ".
-COPYPATH("0:/" + vehicleName + ".ks", "1:/" + vehicleName + ".ks").
-RUNPATH("1:/" + vehicleName + ".ks").
+LOCAL vehicleScript IS vehicleName.
+IF CORE:TAG <> "" AND EXISTS("0:/" + CORE:TAG + ".ks") {
+    SET vehicleScript TO CORE:TAG.
+    PRINT "  CORE TAG: " + CORE:TAG + " -> role script.".
+} ELSE IF CORE:TAG <> "" {
+    PRINT "  CORE TAG: " + CORE:TAG + " (no script, using " + vehicleName + ").".
+}
+
+PRINT "  SYNC " + vehicleScript + " ....... ".
+COPYPATH("0:/" + vehicleScript + ".ks", "1:/" + vehicleScript + ".ks").
+RUNPATH("1:/" + vehicleScript + ".ks").
 
 PRINT "  SYNC libs ......... ".
 FOR lib IN LIBS { _syncLib(lib). }

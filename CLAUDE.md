@@ -19,7 +19,10 @@ KerbalScript (.ks files) — a scripting language for the kOS mod. Not Python, n
 ## Architecture
 
 ### Boot chain
-`boot/boot.ks` → parses ship name → syncs core libs (state, logs, files) → loads core libs → syncs + runs vehicle script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
+`boot/boot.ks` → parses ship name → syncs core libs (state, logs, files) → loads core libs → checks CORE:TAG for role script override → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
+
+### CORE:TAG routing (multi-CPU ships)
+If `CORE:TAG` is non-empty and `0:/<tag>.ks` exists, boot loads that role script instead of the ship-name-derived vehicle script. Each processor has its own `1:/` volume so state is naturally isolated. Untagged CPUs always load the vehicle script.
 
 ### Pre-launch config screen
 On first boot (or when phase is LAUNCH), FR2 shows a flight plan summary listing all CFG values grouped by mission phase (ascent, transfer, orbit, probe). A 30s countdown with progress bar auto-launches; press ENTER to skip. Edit CFG values in the kOS terminal during the countdown to override defaults.
@@ -59,7 +62,7 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 - `boot/` — bootstrap only, keep minimal for easy reloading
 - `lib/` — reusable libraries, loaded via `RUNPATH()`
 - `cmd/` — operator commands, run manually from terminal (NOT synced at boot)
-- Root `.ks` files — vehicle flight computers (FR2.ks, X_SHOT.ks)
+- Root `.ks` files — vehicle flight computers (FR2.ks, X_SHOT.ks) and role scripts (lander_cpu.ks)
 
 ### Key libs
 
