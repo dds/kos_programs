@@ -249,13 +249,13 @@ LOCAL FUNCTION _needsStage {
 
 LOCAL FUNCTION _phaseAngle {
     // Angle from vessel to target body in orbital plane
-    PARAMETER vessel.
+    PARAMETER myVessel.
     PARAMETER target.
-    LOCAL vPos IS vessel:ORBIT:BODY:POSITION - vessel:POSITION.
-    LOCAL tPos IS vessel:ORBIT:BODY:POSITION - target:POSITION.
+    LOCAL vPos IS myVessel:ORBIT:BODY:POSITION - vessel:POSITION.
+    LOCAL tPos IS myVessel:ORBIT:BODY:POSITION - target:POSITION.
     LOCAL angle IS VANG(vPos, tPos).
     // Determine sign via cross product
     LOCAL cross IS VCRS(vPos, tPos).
-    IF VDOT(cross, vessel:ORBIT:BODY:ANGULARVEL) < 0 { SET angle TO 360 - angle. }
+    IF VDOT(cross, myVessel:ORBIT:BODY:ANGULARVEL) < 0 { SET angle TO 360 - angle. }
     RETURN angle.
 }
