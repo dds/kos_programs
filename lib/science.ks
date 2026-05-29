@@ -25,7 +25,7 @@ GLOBAL FUNCTION scienceInit {
     } ELSE {
         SET sciLastBiome TO "unknown".
     }
-    SET sciLastSituation TO SHIP:SITUATION.
+    SET sciLastSituation TO SHIP:STATUS.
 
     mLog("Science monitor active. Starting Biome=" + sciLastBiome + " Situation=" + sciLastSituation).
 
