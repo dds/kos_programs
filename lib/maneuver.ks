@@ -172,7 +172,7 @@ GLOBAL FUNCTION planTransfer {
             IF hasNext AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
                 LOCAL currentPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
                 mLog("DEBUG encounter Pe=" + ROUND(currentPe/1000,1) + "km").
-                IF currentPe < bestPe AND currentPe > 0 {
+                IF currentPe < bestPe AND currentPe > targetPe {
                     SET bestPe TO currentPe.
                     SET bestUt TO testNode:TIME.
                 } ELSE {
