@@ -381,8 +381,8 @@ LOCAL FUNCTION _deployFairing {
 }
 
 LOCAL FUNCTION _phaseExtendAnts {
-    IF SHIP:ALTITUDE < CFG["DEPLOY_ALT"] {
-        mLog("Waiting for deploy alt " + ROUND(CFG["DEPLOY_ALT"]/1000,0) + "km...").
+    IF SHIP:ALTITUDE < CFG["EXTEND_ALT"] {
+        mLog("Waiting for deploy alt " + ROUND(CFG["EXTEND_ALT"]/1000,0) + "km...").
         WAIT UNTIL SHIP:ALTITUDE >= CFG["EXTEND_ALT"].
     }
     FOR p IN SHIP:PARTS {
