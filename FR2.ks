@@ -111,6 +111,7 @@ LOCAL FUNCTION _runPhaseLoop {
         IF      phase = "LAUNCH"       { _phaseLaunch().       }
         ELSE IF phase = "PARKING"      { _phaseParking().      }
         ELSE IF phase = "FAIRING"      { _phaseFairing().      }
+        ELSE IF phase = "EXTEND_ANTS"  { _phaseExtendAnts(). }
         ELSE IF phase = "TMI"          { _phaseTMI().          }
         ELSE IF phase = "COAST"        { _phaseCoast().        }
         ELSE IF phase = "CAPTURE"      { _phaseCapture().      }
@@ -120,7 +121,6 @@ LOCAL FUNCTION _runPhaseLoop {
         ELSE IF phase = "RECIRC"       { _phaseRecirc().       }
         ELSE IF phase = "RELAY_OPS"    { _phaseRelayOps().     }
         ELSE IF phase = "DEPLOY_SAT"   { _phaseDeploySat().    }
-        ELSE IF phase = "EXTEND_ANTS"  { _phaseExtendAnts(). }
         ELSE IF phase = "DONE"         { _phaseDone(). RETURN. }
         ELSE {
             mLogError("Unknown phase: " + phase + " — halting.").
@@ -215,6 +215,8 @@ LOCAL FUNCTION _phaseParking {
     IF ADDONS:MJ:AVAILABLE {
         SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
         mLog("MechJeb ascent disabled.").
+        // Clear any left over mechjeb nodes.
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     }
 
     orbitSummary().
