@@ -15,44 +15,59 @@ GLOBAL scienceActive    IS FALSE.
 GLOBAL sciLastBiome     IS "".
 GLOBAL sciLastSituation IS "".
 
+
 GLOBAL FUNCTION scienceInit {
-    SET scienceActive    TO TRUE.
-    SET sciLastBiome     TO SHIP:BODY:BIOMEOF(SHIP:GEOPOSITION).
+    SET scienceActive TO TRUE.
+
+    // Initialize with SCANsat map lookup if available
+    IF ADDONS:SCANSAT:AVAILABLE {
+        SET sciLastBiome TO ADDONS:SCANSAT:GETBIOME(SHIP:BODY, SHIP:GEOPOSITION).
+    } ELSE {
+        SET sciLastBiome TO "unknown".
+    }
     SET sciLastSituation TO SHIP:SITUATION.
 
-    mLog("Science monitor active. Biome=" + sciLastBiome
-        + "  Situation=" + sciLastSituation).
+    mLog("Science monitor active. Starting Biome=" + sciLastBiome + " Situation=" + sciLastSituation).
 
     IF SCI_CFG["SCANSAT_AUTO"] AND ADDONS:SCANSAT:AVAILABLE {
         scienceStartScanners().
     }
 
-    // Optimized trigger condition
     WHEN scienceActive THEN {
-        // Fetch current states once per trigger check to avoid multi-query lag
-        LOCAL currentBiome IS SHIP:GEOPOSITION:BIOME.
-        LOCAL currentSit   IS SHIP:SITUATION.
+        LOCAL currentBiome IS "unknown".
+        IF ADDONS:SCANSAT:AVAILABLE {
+            SET currentBiome TO ADDONS:SCANSAT:GETBIOME(SHIP:BODY, SHIP:GEOPOSITION).
+        }
+        LOCAL currentSit IS SHIP:SITUATION.
 
+        // 1. Detect if any change occurred (even moving into an "unknown" zone)
         IF (currentBiome <> sciLastBiome OR currentSit <> sciLastSituation) {
-
-            mLog("Science: situation change"
-                + "  biome: " + sciLastBiome + " -> " + currentBiome
-                + "  situation: " + sciLastSituation + " -> " + currentSit).
-
-            IF SCI_CFG["ALERT_ON_CHANGE"] {
-                HUDTEXT("New science: " + currentBiome + " / " + currentSit,
-                    4, 2, 14, CYAN, FALSE).
-            }
-
+            
+            // Capture the old state for logging before overwriting
+            LOCAL oldBiome IS sciLastBiome.
+            
+            // Always update the tracking state so we don't get stuck in a loop
             SET sciLastBiome     TO currentBiome.
             SET sciLastSituation TO currentSit.
 
-            IF SCI_CFG["AUTO_COLLECT"] {
-                scienceRunAll().
+            // 2. Filter out "unknown" data. Only gather science if the biome is mapped and valid.
+            IF currentBiome:LOWER() <> "unknown" {
+                
+                mLog("Science change: " + oldBiome + " -> " + currentBiome + " | Sit: " + currentSit).
+                
+                IF SCI_CFG["ALERT_ON_CHANGE"] {
+                    HUDTEXT("New science: " + currentBiome + " / " + currentSit, 4, 2, 14, CYAN, FALSE).
+                }
+
+                IF SCI_CFG["AUTO_COLLECT"] {
+                    scienceRunAll().
+                }
+            } ELSE {
+                // Optional debug log to see when you are passing over unscanned ground
+                mLog("Passed into unscanned biome (" + currentBiome + "). Science collection skipped.").
             }
         }
 
-        // Only preserve the trigger if we actually want the monitor to stay alive
         IF scienceActive {
             PRESERVE.
         }
