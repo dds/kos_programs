@@ -77,7 +77,7 @@ RUNPATH("1:/lib/science.ks").
 RUNPATH("1:/lib/relay_constellation.ks").
 RUNPATH("1:/lib/orbit.ks").
 RUNPATH("1:/lib/files.ks").
-RUNPATH("1:/lib/landing.ks").
+// RUNPATH("1:/lib/landing.ks").
 RUNPATH("1:/lib/targeting.ks").
 
 // ── Init state on first boot ───────────────────────────────
