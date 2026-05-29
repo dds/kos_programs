@@ -124,7 +124,7 @@ GLOBAL FUNCTION scienceTransmitAll {
         }
     }
     mLog("Science transmission: " + transmitted + " parts transmitting.").
-    RETURN transmitted;
+    RETURN transmitted.
 }
 
 GLOBAL FUNCTION scienceStatus {
