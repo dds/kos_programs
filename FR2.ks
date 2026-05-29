@@ -191,7 +191,7 @@ LOCAL FUNCTION _phaseLaunch {
 LOCAL FUNCTION _ascentNeedsStage {
     LOCAL engs IS LIST().
     LIST ENGINES IN engs.
-    FOR eng IN engs { IF eng:FLAMEOUT { RETURN TURE. } }
+    FOR eng IN engs { IF eng:FLAMEOUT { RETURN TRUE. } }
     IF SHIP:MAXTHRUST = 0 { RETURN TRUE. }
     RETURN FALSE.
 }
