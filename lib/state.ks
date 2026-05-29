@@ -1,19 +1,5 @@
 // ============================================================
 // state.ks  —  Persistent mission state  (0:/lib/state.ks)
-//
-// Uses simplejson addon for clean JSON round-trips.
-// Single file: 1:/state/state.json
-// Survives reboots and quicksave/quickload.
-//
-// API:
-//   stateInit()              — call once at boot
-//   stateGet(key)            — returns string, "" if missing
-//   stateGet(key, default)   — returns default if missing
-//   stateGetNum(key)         — coerce to number
-//   stateGetNum(key, default)
-//   stateSet(key, value)     — string or number, flushes to disk
-//   stateSetNum(key, value)  — alias, same behavior
-//   stateDump()              — print all keys to console
 // ============================================================
 
 LOCAL STATE_PATH  IS "1:/state/state.json".
@@ -41,7 +27,7 @@ GLOBAL FUNCTION stateGet {
 GLOBAL FUNCTION stateGetNum {
     PARAMETER key.
     PARAMETER dflt IS 0.
-    IF _cache:HASKEY(key) { 
+    IF _cache:HASKEY(key) {
         LOCAL val IS _cache[key].
         IF val:ISTYPE("Scalar") { RETURN val. }
         RETURN val:TONUMBER(dflt).

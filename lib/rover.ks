@@ -1,38 +1,19 @@
 // ============================================================
 // rover.ks  —  Rover co-pilot library  (0:/lib/rover.ks)
-//
-// Designed for gamepad-driven manual driving. kOS acts as
-// co-pilot: safety monitor, governor, HUD, waypoint nav.
-//
-// Usage in mission script:
-//   RUNPATH("1:/lib/rover.ks").
-//   roverInit().        -- call once before driving
-//   roverHUD().         -- call to start persistent HUD loop
-//   roverSetWaypoint(lat, lng).  -- set nav target
-//
-// Safety triggers run automatically via WHEN after roverInit().
-// Disengage all with roverShutdown().
 // ============================================================
 
-// ── Config — override before calling roverInit() ───────────
 GLOBAL ROVER_CFG IS LEXICON(
-    // Speed limits m/s by body — Mun/Minmus low-g = get airborne easily
-    "MAX_SPEED_KERBIN",  20,   // m/s
-    "MAX_SPEED_MUN",      8,   // m/s — low gravity, bumpy terrain
-    "MAX_SPEED_MINMUS",   5,   // m/s — almost no gravity
-    "MAX_SPEED_DEFAULT",  8,   // m/s — fallback
-
-    // Safety limits
-    "MAX_SLOPE_DEG",     25,   // degrees — kill throttle above this
-    "MAX_ROLL_DEG",      30,   // degrees — warn above this
-    "FLIP_ROLL_DEG",     55,   // degrees — emergency brake above this
-
-    // HUD
-    "HUD_INTERVAL",       1,   // seconds between HUD refreshes
-    "WAYPOINT_WARN_DIST", 50   // m — announce arrival within this
+    "MAX_SPEED_KERBIN",  20,
+    "MAX_SPEED_MUN",      8,
+    "MAX_SPEED_MINMUS",   5,
+    "MAX_SPEED_DEFAULT",  8,
+    "MAX_SLOPE_DEG",     25,
+    "MAX_ROLL_DEG",      30,
+    "FLIP_ROLL_DEG",     55,
+    "HUD_INTERVAL",       1,
+    "WAYPOINT_WARN_DIST", 50
 ).
 
-// ── State ──────────────────────────────────────────────────
 GLOBAL roverActive     IS FALSE.
 GLOBAL roverWaypointLat IS 0.
 GLOBAL roverWaypointLng IS 0.
@@ -47,17 +28,14 @@ GLOBAL FUNCTION roverInit {
         + "  maxSlope=" + ROVER_CFG["MAX_SLOPE_DEG"] + "deg").
     HUDTEXT("Rover co-pilot ACTIVE", 3, 2, 14, GREEN, FALSE).
 
-    // ── Safety monitor trigger ─────────────────────────────
-    // Fires whenever roll or slope exceeds limits
     WHEN roverActive AND ABS(SHIP:FACING:ROLL) > ROVER_CFG["FLIP_ROLL_DEG"] THEN {
         HUDTEXT("FLIP WARNING — BRAKE!", 3, 2, 16, RED, FALSE).
         mLog("FLIP WARNING roll=" + ROUND(SHIP:FACING:ROLL,1) + "deg — braking.").
         SET SHIP:CONTROL:WHEELTHROTTLE TO 0.
         SET SHIP:CONTROL:WHEELSTEER TO 0.
-        PRESERVE.  // re-arm trigger
+        PRESERVE.
     }
 
-    // ── Speed governor trigger ─────────────────────────────
     WHEN roverActive AND roverGovernorOn
             AND SHIP:VELOCITY:SURFACE:MAG > _roverMaxSpeed() THEN {
         SET SHIP:CONTROL:WHEELTHROTTLE TO 0.
@@ -87,9 +65,6 @@ GLOBAL FUNCTION roverClearWaypoint {
 }
 
 GLOBAL FUNCTION roverHUD {
-    // Call this to start a persistent HUD loop.
-    // Runs until roverActive = FALSE.
-    // Put this in its own loop in your mission script.
     UNTIL NOT roverActive {
         LOCAL spd   IS ROUND(SHIP:VELOCITY:SURFACE:MAG, 1).
         LOCAL slope IS ROUND(_roverSlope(), 1).
@@ -112,7 +87,6 @@ GLOBAL FUNCTION roverHUD {
             }
         }
 
-        // Slope warning
         IF slope > ROVER_CFG["MAX_SLOPE_DEG"] {
             HUDTEXT("SLOPE WARNING: " + slope + "deg", 2, 2, 15, YELLOW, FALSE).
         }
@@ -132,8 +106,6 @@ GLOBAL FUNCTION roverStatus {
         + " body=" + SHIP:ORBIT:BODY:NAME).
 }
 
-// ── Private helpers ────────────────────────────────────────
-
 LOCAL FUNCTION _roverMaxSpeed {
     LOCAL body IS SHIP:ORBIT:BODY:NAME:TOUPPER.
     IF body = "KERBIN" { RETURN ROVER_CFG["MAX_SPEED_KERBIN"]. }
@@ -143,7 +115,6 @@ LOCAL FUNCTION _roverMaxSpeed {
 }
 
 LOCAL FUNCTION _roverSlope {
-    // Slope = angle between ship up vector and body up vector
     RETURN VANG(SHIP:FACING:UPVECTOR, SHIP:UP:VECTOR).
 }
 

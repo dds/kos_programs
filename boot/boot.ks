@@ -1,13 +1,10 @@
 // ============================================================
 // boot.ks  —  Generic mission boot  (0:/boot/boot.ks)
-// Minimal and stable — do not add logic here.
-// All resume/manual/phase logic lives in resume.ks
 // ============================================================
 
 CLEARSCREEN.
 PRINT "=== BOOT: " + SHIP:NAME + " ===".
 
-// ── Parse ship name: VEHICLE-TARGET-TYPE1-TYPE2 ────────────
 LOCAL rawTokens IS SHIP:NAME:SPLIT("-").
 LOCAL tokens IS LIST().
 FOR t IN rawTokens {
@@ -28,7 +25,6 @@ UNTIL idx >= tokens:LENGTH {
     SET idx TO idx + 1.
 }
 
-// ── Ensure local dirs ──────────────────────────────────────
 LOCAL FUNCTION ensureDir { PARAMETER p. IF NOT EXISTS(p) { CREATEDIR(p). } }
 ensureDir("1:/lib").
 ensureDir("1:/boot").
@@ -36,51 +32,28 @@ ensureDir("1:/logs").
 ensureDir("1:/state").
 ensureDir("1:/cmd").
 
-// ── Sync archive → local ───────────────────────────────────
-PRINT "Syncing...".
-COPYPATH("0:/boot/boot.ks",           "1:/boot/boot.ks").
-COPYPATH("0:/lib/countdown.ks",       "1:/lib/countdown.ks").
-COPYPATH("0:/lib/state.ks",           "1:/lib/state.ks").
-COPYPATH("0:/lib/logs.ks",            "1:/lib/logs.ks").
-COPYPATH("0:/lib/maneuver.ks",        "1:/lib/maneuver.ks").
-COPYPATH("0:/lib/inclination.ks",     "1:/lib/inclination.ks").
-COPYPATH("0:/lib/orbit.ks",           "1:/lib/orbit.ks").
-COPYPATH("0:/lib/files.ks",           "1:/lib/files.ks").
-COPYPATH("0:/lib/resume.ks",          "1:/lib/resume.ks").
-// COPYPATH("0:/lib/landing.ks",         "1:/lib/landing.ks").
-COPYPATH("0:/lib/science.ks",         "1:/lib/science.ks").
-COPYPATH("0:/lib/targeting.ks",       "1:/lib/targeting.ks").
-COPYPATH("0:/lib/relay_constellation.ks", "1:/lib/relay_constellation.ks").
-// COPYPATH("0:/lib/rover.ks",           "1:/lib/rover.ks").
-COPYPATH("0:/cmd/resume.ks",          "1:/cmd/resume.ks").
-COPYPATH("0:/cmd/setstate.ks",        "1:/cmd/setstate.ks").
-COPYPATH("0:/cmd/dump.ks",            "1:/cmd/dump.ks").
-COPYPATH("0:/cmd/resetboot.ks",       "1:/cmd/resetboot.ks").
-COPYPATH("0:/cmd/files.ks",           "1:/cmd/files.ks").
-COPYPATH("0:/cmd/science.ks",         "1:/cmd/science.ks").
-COPYPATH("0:/cmd/sciencestatus.ks",   "1:/cmd/sciencestatus.ks").
-// COPYPATH("0:/cmd/scanstart.ks",       "1:/cmd/scanstart.ks").
-// COPYPATH("0:/cmd/scanstatus.ks",      "1:/cmd/scanstatus.ks").
-// COPYPATH("0:/cmd/scantransmit.ks",    "1:/cmd/scantransmit.ks").
-COPYPATH("0:/" + vehicleName + ".ks", "1:/" + vehicleName + ".ks").
-PRINT "Sync complete.".
+LOCAL FUNCTION _syncLib {
+    PARAMETER libName.
+    LOCAL src IS "0:/lib/" + libName + ".ks".
+    LOCAL dst IS "1:/lib/" + libName + ".ks".
+    COPYPATH(src, dst).
+}
 
-// ── Load libs ──────────────────────────────────────────────
-RUNPATH("1:/lib/state.ks").
+LOCAL FUNCTION _loadLib {
+    PARAMETER libName.
+    RUNPATH("1:/lib/" + libName + ".ks").
+}
+
+PRINT "Syncing core libs...".
+LOCAL coreLibs IS LIST("state", "logs", "files").
+FOR lib IN coreLibs { _syncLib(lib). }
+
+_loadLib("state").
 stateInit().
-RUNPATH("1:/lib/logs.ks").
+_loadLib("logs").
 initLog().
-RUNPATH("1:/lib/countdown.ks").
-RUNPATH("1:/lib/maneuver.ks").
-RUNPATH("1:/lib/inclination.ks").
-RUNPATH("1:/lib/science.ks").
-RUNPATH("1:/lib/relay_constellation.ks").
-RUNPATH("1:/lib/orbit.ks").
-RUNPATH("1:/lib/files.ks").
-// RUNPATH("1:/lib/landing.ks").
-RUNPATH("1:/lib/targeting.ks").
+_loadLib("files").
 
-// ── Init state on first boot ───────────────────────────────
 LOCAL bootCount IS stateGetNum("boot_count", 0) + 1.
 stateSetNum("boot_count", bootCount).
 IF bootCount = 1 {
@@ -90,26 +63,45 @@ IF bootCount = 1 {
 }
 mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 
-// ── Manual override window ─────────────────────────────────
+PRINT "Syncing vehicle script...".
+COPYPATH("0:/" + vehicleName + ".ks", "1:/" + vehicleName + ".ks").
+RUNPATH("1:/" + vehicleName + ".ks").
+
+PRINT "Syncing mission libs...".
+FOR lib IN LIBS { _syncLib(lib). }
+FOR lib IN LIBS { _loadLib(lib). }
+
+_syncLib("resume").
+_loadLib("resume").
+
+PRINT "Sync complete.".
+printStorageStatus().
+
 PRINT " ".
 PRINT "Press any key within 5s for manual mode...".
 LOCAL overrideStart IS TIME:SECONDS.
 LOCAL manualMode IS FALSE.
 WAIT UNTIL TIME:SECONDS > overrideStart + 5 OR TERMINAL:INPUT:HASCHAR.
 IF TERMINAL:INPUT:HASCHAR {
-    TERMINAL:INPUT:GETCHAR(). 
+    TERMINAL:INPUT:GETCHAR().
     SET manualMode TO TRUE.
 }
 
-printStorageStatus().
-
 IF manualMode {
-    PRINT "Manual mode — type RUNPATH('1:/cmd/resume.ks'). to continue.".
+    PRINT "Manual mode — type resumeMission(). to continue.".
     mLog("Manual override at boot.").
     UNLOCK ALL.
     SET SAS TO TRUE.
-    // Drop to terminal — operator takes over
 } ELSE {
     PRINT "Auto-resuming...".
-    RUNPATH("1:/lib/resume.ks").
-} 
+    LOCAL phase IS stateGet("phase", "").
+    IF phase = "DONE" {
+        PRINT "Mission complete. Manual mode.".
+        mLog("Reboot after DONE — manual mode.").
+        UNLOCK ALL.
+        SET SAS TO TRUE.
+    } ELSE {
+        mLog("Resuming mission from phase: " + phase).
+        resumeMission().
+    }
+}

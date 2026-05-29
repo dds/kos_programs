@@ -1,37 +1,11 @@
 // ============================================================
 // targeting.ks  —  Precision deorbit targeting  (0:/lib/targeting.ks)
-//
-// Uses Trajectories addon to find the correct deorbit burn
-// timing and Pe to hit a specific lat/lng on an atmospheric
-// or airless body from a circular orbit.
-//
-// Algorithm:
-//   1. Scan orbital positions by placing test deorbit nodes
-//   2. Check ADDONS:TR:IMPACTPOS after each node
-//   3. Converge on the node that puts impact closest to target
-//   4. Execute the burn, release probe
-//
-// Requires: maneuver.ks, logs.ks loaded first.
-// Requires: Trajectories mod installed.
 // ============================================================
 
-// ── Config defaults ────────────────────────────────────────
-// Override in CFG before calling targetedDeorbit()
-// CFG["PROBE_TARGET_LAT"]   — target latitude
-// CFG["PROBE_TARGET_LNG"]   — target longitude  
-// CFG["PROBE_ENTRY_PE"]     — Pe for deorbit trajectory (m above surface)
-//                             atmospheric: 25000-35000m for clean entry
-//                             airless: -1000m for guaranteed impact
-// CFG["PROBE_TARGET_TOL"]   — acceptable miss distance in meters (default 5000)
-
 GLOBAL FUNCTION targetedDeorbit {
-    // Main entry — plans and executes a targeted deorbit burn.
-    // Call this instead of planLowerPe for precision targeting.
-    // After this returns, call _releaseProbe as normal.
-
     IF NOT ADDONS:TR:AVAILABLE {
         mLogWarn("Trajectories not available — falling back to planLowerPe.").
-        planLowerPe(CFG["PROBE_IMPACT_PE"]).
+        planLowerPe(CFG["PROBE_ENTRY_PE"]).
         executeManeuver().
         RETURN.
     }
@@ -48,16 +22,13 @@ GLOBAL FUNCTION targetedDeorbit {
         + "  tolerance=" + ROUND(tolerance/1000,1) + "km").
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
-    // Multi-pass converging scan
     LOCAL period IS SHIP:ORBIT:PERIOD.
-    LOCAL scanStep  IS period / 36.  // coarse: 66s
-    LOCAL passes    IS LIST(1.0, 0.1, 0.01, 0.001, 0.0001).  // step multipliers
-    // LOCAL windowMul IS 2.0.  // search window = +/- windowMul * current step
-    
+    LOCAL scanStep  IS period / 36.
+    LOCAL passes    IS LIST(1.0, 0.1, 0.01, 0.001, 0.0001).
+
     LOCAL bestUT   IS TIME:SECONDS + 30.
     LOCAL bestDist IS 999999999.
-    
-    // Coarse pass — full orbit
+
     LOCAL scanUT  IS TIME:SECONDS + 30.
     LOCAL scanEnd IS TIME:SECONDS + period + 30.
     UNTIL scanUT > scanEnd {
@@ -73,8 +44,7 @@ GLOBAL FUNCTION targetedDeorbit {
     }
     mLog("Coarse best: T+" + ROUND(bestUT - TIME:SECONDS,0)
         + "s  dist=" + ROUND(bestDist/1000,1) + "km").
-    
-    // Successive refinement passes
+
     FOR mult IN passes:SUBLIST(1, passes:LENGTH - 1) {
         LOCAL step    IS scanStep * mult.
         LOCAL winStart IS bestUT - (scanStep * (mult * 10)).
@@ -82,7 +52,7 @@ GLOBAL FUNCTION targetedDeorbit {
         LOCAL passUT   IS winStart.
         LOCAL passBest IS bestDist.
         LOCAL passBestUT IS bestUT.
-    
+
         UNTIL passUT > winEnd {
             LOCAL dist IS _testDeorbitNode(passUT, entryPe, targetLat, targetLng).
             IF dist >= 0 AND dist < passBest {
@@ -92,12 +62,12 @@ GLOBAL FUNCTION targetedDeorbit {
             SET passUT TO passUT + step.
             WAIT 0.05.
         }
-    
+
         SET bestDist TO passBest.
         SET bestUT   TO passBestUT.
         mLog("Pass step=" + ROUND(step,2) + "s  best dist=" + ROUND(bestDist,0) + "m"
             + "  T+" + ROUND(bestUT - TIME:SECONDS,0) + "s").
-    
+
         IF bestDist < tolerance { BREAK. }
     }
 
@@ -111,7 +81,6 @@ GLOBAL FUNCTION targetedDeorbit {
         HUDTEXT("Warning: " + ROUND(bestDist/1000,0) + "km from target", 5, 2, 14, YELLOW, FALSE).
     }
 
-    // ── Clean up test nodes and place real burn node ───────
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
 
     LOCAL realNode IS _planDeorbitNode(bestUT, entryPe).
@@ -120,8 +89,7 @@ GLOBAL FUNCTION targetedDeorbit {
 
     executeManeuver().
 
-    // ── Post-burn Trajectories verification ───────────────
-    WAIT 2.  // let Trajectories update
+    WAIT 2.
     IF ADDONS:TR:HASIMPACT {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
         LOCAL finalDist IS _geoDistance(impactPos:LAT, impactPos:LNG, targetLat, targetLng).
@@ -135,23 +103,20 @@ GLOBAL FUNCTION targetedDeorbit {
     }
 }
 
-// ── Place a test node and check Trajectories impact ────────
 LOCAL FUNCTION _testDeorbitNode {
     PARAMETER burnUT.
     PARAMETER entryPe.
     PARAMETER targetLat.
     PARAMETER targetLng.
 
-    // Remove any existing test node
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.05. }
 
-    // Plan deorbit node
     LOCAL nd IS _planDeorbitNode(burnUT, entryPe).
-    WAIT 0.2.  // let Trajectories update prediction
+    WAIT 0.2.
 
     IF NOT ADDONS:TR:HASIMPACT {
         REMOVE nd.
-        RETURN -1.  // no prediction
+        RETURN -1.
     }
 
     LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
@@ -161,32 +126,29 @@ LOCAL FUNCTION _testDeorbitNode {
     RETURN dist.
 }
 
-// ── Plan a deorbit node at a specific UT ──────────────────
 LOCAL FUNCTION _planDeorbitNode {
     PARAMETER burnUT.
     PARAMETER entryPe.
 
     LOCAL mu    IS SHIP:ORBIT:BODY:MU.
-    LOCAL oRad  IS SHIP:ORBIT:BODY:RADIUS + SHIP:ORBIT:APOAPSIS. // circular orbit radius
+    LOCAL oRad  IS SHIP:ORBIT:BODY:RADIUS + SHIP:ORBIT:APOAPSIS.
     LOCAL rPe   IS SHIP:ORBIT:BODY:RADIUS + entryPe.
     LOCAL tSMA  IS (oRad + rPe) / 2.
     LOCAL vCirc IS SQRT(mu / oRad).
     LOCAL vNew  IS SQRT(mu * (2/oRad - 1/tSMA)).
-    LOCAL dv    IS vNew - vCirc.  // negative = retrograde
+    LOCAL dv    IS vNew - vCirc.
 
     LOCAL nd IS NODE(burnUT, 0, 0, dv).
     ADD nd.
     RETURN nd.
 }
 
-// ── Great circle distance between two lat/lng points ──────
 LOCAL FUNCTION _geoDistance {
     PARAMETER lat1.
     PARAMETER lng1.
     PARAMETER lat2.
     PARAMETER lng2.
 
-    // Haversine formula
     LOCAL oRad    IS SHIP:ORBIT:BODY:RADIUS.
     LOCAL dLat IS (lat2 - lat1) * CONSTANT:PI / 180.
     LOCAL dLng IS (lng2 - lng1) * CONSTANT:PI / 180.
@@ -195,15 +157,12 @@ LOCAL FUNCTION _geoDistance {
                * COS(lat2 * CONSTANT:PI/180)
                * SIN(dLng/2)^2.
     LOCAL c    IS 2 * ARCSIN(MIN(1, SQRT(a))).
-    RETURN oRad * c * CONSTANT:PI / 180.  // meters
+    RETURN oRad * c * CONSTANT:PI / 180.
 }
 
-// ── Check if target is reachable from current inclination ─
 GLOBAL FUNCTION targetReachable {
     PARAMETER targetLat.
-    // A target latitude is reachable if it's within the orbital inclination
     LOCAL inc IS SHIP:ORBIT:INCLINATION.
-    // Handle retrograde orbits
     IF inc > 90 { SET inc TO 180 - inc. }
-    RETURN ABS(targetLat) <= inc + 0.5.  // 0.5 degree margin
+    RETURN ABS(targetLat) <= inc + 0.5.
 }

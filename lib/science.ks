@@ -1,36 +1,19 @@
 // ============================================================
 // science.ks  —  Science collection library  (0:/lib/science.ks)
-//
-// Three layers:
-//   1. Experiment runner — finds, checks, runs, stores/transmits
-//   2. Situation monitor — WHEN trigger for biome/situation changes
-//   3. SCANsat integration — scanner management and coverage reporting
-//
-// Usage:
-//   RUNPATH("1:/lib/science.ks").
-//   scienceInit().              -- call once, arms situation monitor
-//   scienceRunAll().            -- run all available experiments now
-//   scienceStatus().            -- log what's available/collected
-//   scienceStartScanners().     -- enable all SCANsat scanners
-//   scienceScanStatus().        -- log SCANsat coverage %
 // ============================================================
 
-// ── Config ─────────────────────────────────────────────────
 GLOBAL SCI_CFG IS LEXICON(
-    "AUTO_COLLECT",       TRUE,   // auto-run experiments on situation change
-    "AUTO_TRANSMIT",      FALSE,  // transmit immediately vs store for recovery
-    "ALERT_ON_CHANGE",    TRUE,   // HUDTEXT alert on biome/situation change
-    "TRANSMIT_THRESHOLD", 0,      // only transmit if science value > this
-    "SCANSAT_AUTO",       TRUE,   // auto-enable scanners on orbital insertion
-    "LOG_INTERVAL",       60      // seconds between periodic science checks
+    "AUTO_COLLECT",       TRUE,
+    "AUTO_TRANSMIT",      FALSE,
+    "ALERT_ON_CHANGE",    TRUE,
+    "TRANSMIT_THRESHOLD", 0,
+    "SCANSAT_AUTO",       TRUE,
+    "LOG_INTERVAL",       60
 ).
 
-// ── State ──────────────────────────────────────────────────
 GLOBAL scienceActive    IS FALSE.
 GLOBAL sciLastBiome     IS "".
 GLOBAL sciLastSituation IS "".
-
-// ── Init + situation monitor ───────────────────────────────
 
 GLOBAL FUNCTION scienceInit {
     SET scienceActive    TO TRUE.
@@ -40,12 +23,10 @@ GLOBAL FUNCTION scienceInit {
     mLog("Science monitor active. Biome=" + sciLastBiome
         + "  Situation=" + sciLastSituation).
 
-    // SCANsat auto-start if configured and available
     IF SCI_CFG["SCANSAT_AUTO"] AND ADDONS:SCANSAT:AVAILABLE {
         scienceStartScanners().
     }
 
-    // ── Situation/biome change trigger ─────────────────────
     WHEN scienceActive AND
             (SHIP:BIOME <> sciLastBiome OR SHIP:SITUATION <> sciLastSituation) THEN {
 
@@ -53,8 +34,8 @@ GLOBAL FUNCTION scienceInit {
         LOCAL newSit   IS SHIP:SITUATION.
 
         mLog("Science: situation change"
-            + "  biome: " + sciLastBiome + " → " + newBiome
-            + "  situation: " + sciLastSituation + " → " + newSit).
+            + "  biome: " + sciLastBiome + " -> " + newBiome
+            + "  situation: " + sciLastSituation + " -> " + newSit).
 
         IF SCI_CFG["ALERT_ON_CHANGE"] {
             HUDTEXT("New science: " + newBiome + " / " + newSit,
@@ -68,7 +49,7 @@ GLOBAL FUNCTION scienceInit {
             scienceRunAll().
         }
 
-        PRESERVE.  // re-arm trigger
+        PRESERVE.
     }
 }
 
@@ -77,21 +58,16 @@ GLOBAL FUNCTION scienceShutdown {
     mLog("Science monitor deactivated.").
 }
 
-// ── Experiment runner ──────────────────────────────────────
-
 GLOBAL FUNCTION scienceRunAll {
-    // Run all available experiments on the vessel.
     LOCAL ran     IS 0.
     LOCAL skipped IS 0.
 
     FOR p IN SHIP:PARTS {
-        // Stock science experiments
         IF p:HASMODULE("ModuleScienceExperiment") {
             LOCAL result IS _runExperiment(p, "ModuleScienceExperiment").
             IF result { SET ran TO ran + 1. }
             ELSE      { SET skipped TO skipped + 1. }
         }
-        // DMagic and other modded experiments
         IF p:HASMODULE("DMModuleScienceAnimate") {
             LOCAL result IS _runExperiment(p, "DMModuleScienceAnimate").
             IF result { SET ran TO ran + 1. }
@@ -110,7 +86,6 @@ GLOBAL FUNCTION scienceRunAll {
 }
 
 GLOBAL FUNCTION scienceTransmitAll {
-    // Transmit all stored science data.
     LOCAL transmitted IS 0.
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleScienceContainer") {
@@ -134,7 +109,6 @@ GLOBAL FUNCTION scienceTransmitAll {
 }
 
 GLOBAL FUNCTION scienceStatus {
-    // Log current science situation and available experiments.
     mLog("Science status:"
         + "  body="      + SHIP:ORBIT:BODY:NAME
         + "  biome="     + SHIP:BIOME
@@ -171,7 +145,6 @@ GLOBAL FUNCTION scienceStatus {
 }
 
 GLOBAL FUNCTION scienceCollectAll {
-    // Collect/reset all deployed experiments into science container.
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleScienceExperiment") {
             LOCAL modu IS p:GETMODULE("ModuleScienceExperiment").
@@ -181,8 +154,6 @@ GLOBAL FUNCTION scienceCollectAll {
     }
     mLog("All experiments collected/reset.").
 }
-
-// ── SCANsat integration ────────────────────────────────────
 
 GLOBAL FUNCTION scienceStartScanners {
     IF NOT ADDONS:SCANSAT:AVAILABLE {
@@ -199,7 +170,6 @@ GLOBAL FUNCTION scienceStartScanners {
             IF modu:HASEVENT("Start Biome Scan")    { modu:DOEVENT("Start Biome Scan").    SET started TO started + 1. }
             IF modu:HASEVENT("Start Anomaly Scan")  { modu:DOEVENT("Start Anomaly Scan").  SET started TO started + 1. }
         }
-        // Generic fallback
         IF p:HASMODULE("SCANsat") {
             LOCAL modu IS p:GETMODULE("SCANsat").
             IF modu:HASEVENT("Start Scan") { modu:DOEVENT("Start Scan"). SET started TO started + 1. }
@@ -226,11 +196,8 @@ GLOBAL FUNCTION scienceScanStatus {
         RETURN.
     }
     LOCAL lBody IS SHIP:ORBIT:BODY.
-    // ADDONS:SCANSAT coverage functions
     LOCAL altCoverage  IS 0.
     LOCAL biomCoverage IS 0.
-    // Try to get coverage percentages — these are the kOS SCANsat addon functions
-    // Requires SCANsat kOS addon installed in GameData
     IF ADDONS:SCANSAT:AVAILABLE {
         SET altCoverage  TO ADDONS:SCANSAT:COVERAGE(lBody, "Altimetry").
         SET biomCoverage TO ADDONS:SCANSAT:COVERAGE(lBody, "Biome").
@@ -243,15 +210,11 @@ GLOBAL FUNCTION scienceScanStatus {
 }
 
 GLOBAL FUNCTION scienceScanLoop {
-    // Periodic scan status loop — call in coast/relay ops phase.
-    // Logs coverage every LOG_INTERVAL seconds until scienceActive = FALSE.
     UNTIL NOT scienceActive {
         scienceScanStatus().
         WAIT SCI_CFG["LOG_INTERVAL"].
     }
 }
-
-// ── Private helpers ────────────────────────────────────────
 
 LOCAL FUNCTION _runExperiment {
     PARAMETER part.
@@ -261,7 +224,6 @@ LOCAL FUNCTION _runExperiment {
 
     IF NOT _experimentAvailable(modu) { RETURN FALSE. }
 
-    // Try known run event names in order
     LOCAL runEvents IS LIST(
         "Deploy Experiment",
         "Run Experiment",
@@ -279,7 +241,7 @@ LOCAL FUNCTION _runExperiment {
                 + "  situation=" + SHIP:SITUATION).
 
             IF SCI_CFG["AUTO_TRANSMIT"] {
-                WAIT 1.  // give experiment time to complete
+                WAIT 1.
                 IF mod:HASEVENT("Transmit Data") { mod:DOEVENT("Transmit Data"). }
             }
             RETURN TRUE.
@@ -290,10 +252,8 @@ LOCAL FUNCTION _runExperiment {
 
 LOCAL FUNCTION _experimentAvailable {
     PARAMETER modu.
-    // Check known unavailability flags
     IF modu:HASFIELD("Inoperable") AND modu:GETFIELD("Inoperable") = "True" { RETURN FALSE. }
     IF modu:HASFIELD("Deployed")   AND modu:GETFIELD("Deployed")   = "True" { RETURN FALSE. }
-    // Check if any run event exists at all
     LOCAL runEvents IS LIST(
         "Deploy Experiment", "Run Experiment",
         "Collect Data", "Observe", "Log Data", "Take Data"

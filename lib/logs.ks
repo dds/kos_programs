@@ -1,11 +1,5 @@
 // ============================================================
-// logs.ks  —  Logging library  (0:/lib/logs.ks)
-//
-// Log file is created ONCE per mission. Path is persisted in
-// 1:/state/state.json via the state lib so reboots reopen the
-// same file rather than creating a new one.
-//
-// Depends on: state.ks (stateGet / stateSet) — load that first.
+// logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
 
 GLOBAL flightLogPath IS "".
@@ -43,13 +37,18 @@ LOCAL FUNCTION _sanitizeName {
     RETURN out.
 }
 
+LOCAL FUNCTION _fmtTime {
+    LOCAL ts IS "" + ROUND(TIME:SECONDS, 1).
+    IF NOT ts:CONTAINS(".") { SET ts TO ts + ".0". }
+    RETURN ts.
+}
+
 GLOBAL FUNCTION mLog {
     PARAMETER message.
     PARAMETER level IS "INFO".
-    LOCAL line IS "[" + ROUND(TIME:SECONDS,1) + "][" + level + "] " + message.
+    LOCAL line IS "[" + _fmtTime() + "][" + level + "] " + message.
     PRINT line.
 
-    // Persist warnings and errors to fault log only
     IF level = "WARN" OR level = "ERROR" OR level = "PHASE" {
         IF flightLogPath <> "" AND CORE:VOLUME:FREESPACE > 500 {
             LOG line TO flightLogPath.

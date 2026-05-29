@@ -1,28 +1,12 @@
 // ============================================================
 // relay_constellation.ks  —  Multi-relay deployment
 // (0:/lib/relay_constellation.ks)
-//
-// Deploys multiple relay satellites in evenly-spaced orbits
-// from a single carrier vehicle. Each relay is a decoupled
-// stage released at the correct true anomaly for even spacing.
-//
-// For N relays: spacing = 360/N degrees apart
-// e.g. 3 relays → 120° spacing
-//      4 relays → 90° spacing
-//
-// Relay parts must be tagged in VAB:
-//   relay_1, relay_2, relay_3 ... (decouplers for each relay)
-//
-// Usage:
-//   constellationDeploy(3, 500000).  -- 3 relays at 500km
-//
-// Requires: maneuver.ks, orbit.ks, logs.ks loaded first.
 // ============================================================
 
 GLOBAL FUNCTION constellationDeploy {
-    PARAMETER relayCount.             // number of relays to deploy
-    PARAMETER targetAlt.              // m above body surface
-    PARAMETER bodyOverride IS "".     // optional — defaults to SHIP:ORBIT:BODY
+    PARAMETER relayCount.
+    PARAMETER targetAlt.
+    PARAMETER bodyOverride IS "".
 
     LOCAL targetBody IS SHIP:ORBIT:BODY.
     IF bodyOverride <> "" { SET targetBody TO BODY(bodyOverride). }
@@ -34,7 +18,6 @@ GLOBAL FUNCTION constellationDeploy {
     LOCAL spacing IS 360 / relayCount.
     mLog("Angular spacing: " + ROUND(spacing,1) + "deg").
 
-    // Deploy each relay at the correct true anomaly
     LOCAL idx IS 1.
     UNTIL idx > relayCount {
         mLog("Deploying relay " + idx + " of " + relayCount).
@@ -52,19 +35,14 @@ LOCAL FUNCTION _deployOneRelay {
     PARAMETER spacing.
     PARAMETER targetBody.
 
-    // Target true anomaly for this relay
-    // Relay 1 deploys now (wherever we are)
-    // Relay 2 deploys spacing degrees later, etc.
     LOCAL targetTA IS (relayIdx - 1) * spacing.
 
     IF relayIdx > 1 {
-        // Wait until we reach the correct true anomaly
         mLog("Waiting for TA=" + ROUND(targetTA,1) + "deg for relay " + relayIdx).
         HUDTEXT("Waiting for deploy position " + relayIdx, 3, 2, 13, WHITE, FALSE).
         WAIT UNTIL _trueAnomalyDiff(targetTA) < 1.0.
     }
 
-    // Release this relay
     LOCAL tag IS "relay_" + relayIdx.
     LOCAL parts IS SHIP:PARTSTAGGED(tag).
     IF parts:LENGTH = 0 {
@@ -92,7 +70,6 @@ LOCAL FUNCTION _deployOneRelay {
 }
 
 LOCAL FUNCTION _trueAnomalyDiff {
-    // How many degrees until we reach targetTA in current orbit
     PARAMETER targetTA.
     LOCAL currentTA IS SHIP:ORBIT:TRUEANOMALY.
     LOCAL diff IS targetTA - currentTA.
@@ -100,7 +77,6 @@ LOCAL FUNCTION _trueAnomalyDiff {
     RETURN diff.
 }
 
-// ── Constellation status ───────────────────────────────────
 GLOBAL FUNCTION constellationStatus {
     PARAMETER relayCount.
     mLog("Constellation status:").

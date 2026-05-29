@@ -25,7 +25,6 @@ GLOBAL FUNCTION printDirectory {
 }
 
 LOCAL FUNCTION _scanFolder {
-    // depth: integer, used to build indent string
     PARAMETER depth.
     LOCAL indent IS "".
     LOCAL d IS 0.
