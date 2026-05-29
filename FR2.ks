@@ -33,7 +33,7 @@ GLOBAL CFG IS LEXICON(
     "EXTEND_ALT",           71000,  // m - extend panels & attenae 
 
     // Transfer + capture
-    "RELAY_ALT",            500000,  // m above target body
+    "RELAY_ALT",           1500000,  // m above target body
     "CAPTURE_PE",            20000,  // m — arrival Pe aim point
     "CIRC_ECC_TOL",          0.005,  // ~2.5km at 500km
     "TARGET_INCLINATION",    90,     // deg — 0=equatorial, 90=polar, -1=match vessel
@@ -376,15 +376,24 @@ LOCAL FUNCTION _phaseCapture {
 // ── CIRC ───────────────────────────────────────────────────
 LOCAL FUNCTION _phaseCirc {
     IF _impactThreat() {
-        // Pe is impact trajectory - raise it now at current position
-        mLog("Impact threat detected, raising PE immediately.").
-        planRaisePeNow(CFG["RELAY_ALT"]).
-        executeManeuver().
+        mLog("Impact threat — raising Pe immediately.").
+        LOCAL success IS FALSE.
+        UNTIL success {
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            planRaisePeNow(CFG["RELAY_ALT"]).
+            SET success TO executeManeuver().
+            IF NOT success { mLog("Raise Pe missed — replanning."). }
+        }
     } ELSE IF SHIP:ORBIT:ECCENTRICITY < CFG["CIRC_ECC_TOL"] {
         mLog("Already circular (ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4) + ").").
     } ELSE {
-        planCircularize().
-        executeManeuver().
+        LOCAL success IS FALSE.
+        UNTIL success {
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            planCircularize().
+            SET success TO executeManeuver().
+            IF NOT success { mLog("Circ burn missed — replanning."). }
+        }
     }
     orbitSummary().
     nextPhase().
