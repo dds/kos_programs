@@ -286,7 +286,8 @@ GLOBAL FUNCTION planTransfer {
         WAIT 0.02.
         IF testNode:ORBIT:HASNEXTPATCH
                 AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME
-                AND testNode:ORBIT:NEXTPATCH:PERIAPSIS > 0 {
+                AND testNode:ORBIT:NEXTPATCH:PERIAPSIS > 0 
+                AND testNode:ORBIT:NEXTPATCH:INCLINATION < 90 {
             SET foundUt TO testNode:TIME.
             mLog("DEBUG coarse found Pe="
                 + ROUND(testNode:ORBIT:NEXTPATCH:PERIAPSIS/1000,1)
@@ -323,6 +324,7 @@ GLOBAL FUNCTION planTransfer {
                     AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
                 LOCAL currentPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
                 IF currentPe > 0
+                        AND testNode:ORBIT:NEXTPATCH:INCLINATION < 90
                         AND currentPe > targetPe
                         AND ABS(currentPe - targetPe) < ABS(bestPe - targetPe) {
                     SET bestPe TO currentPe.
