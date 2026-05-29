@@ -11,6 +11,7 @@
 LOCAL COMPLETE_FRAC   IS 0.003.  // 0.2% of original dV remaining
 LOCAL ABS_CUTOFF      IS 0.3.    // m/s — hard floor
 LOCAL ALIGN_TOLERANCE IS 2.0.    // degrees — begin burn within this
+LOCAL G0 IS 9.80665. // standard gravity m/s^2  - ISP conversion constant
 
 // ── Public entry point ─────────────────────────────────────
 
@@ -412,14 +413,32 @@ LOCAL FUNCTION _calcStartTime {
 
 LOCAL FUNCTION _estimateBurnDuration {
     PARAMETER dv.
-    LOCAL maxAcc IS _safeMaxAcc().
-    IF maxAcc <= 0 { RETURN 60. }
-    RETURN dv / maxAcc.
+    LOCAL isp IS _effectiveIsp().
+    IF isp <= 0 { RETURN dv / _safeMaxAcc(). }
+    LOCAL ve IS isp * G0.
+    LOCAL dm IS SHIP:MASS * (1 - CONSTANT:E^(-dv/ve)). // propellant mass
+    LOCAL mdot IS SHIP:AVAILABLETHRUST / ve. // mass flow rate
+    IF mdot <= 0 { RETURN 60. }
+    RETURN dm / mdot.
+}
+
+LOCAL FUNCTION _effectiveIsp {
+    LOCAL totalThrust IS 0.
+    LOCAL totalFlow IS 0.
+    FOR eng in SHIP:ENGINES {
+        IF eng:IGNITION AND NOT eng:FLAMEOUT {
+            LOCAL flow IS eng:AVAILABLETHRUST / (eng:ISP * G0).
+            SET totalFLow TO totalFlow + flow.
+            SET totalThrust TO totalThrust + eng:AVAILABLETHRUST.
+        }
+    }
+    IF totalFlow <= 0 { RETURN 0. }
+    RETURN totalThrust / (totalFlow * G0).
 }
 
 LOCAL FUNCTION _safeMaxAcc {
     IF SHIP:MASS <= 0 { RETURN 0. }
-    RETURN SHIP:MAXTHRUST / SHIP:MASS.
+    RETURN SHIP:AVAILBLETHRUST / SHIP:MASS.
 }
 
 LOCAL FUNCTION _isComplete {
