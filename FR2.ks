@@ -431,6 +431,23 @@ LOCAL FUNCTION _phaseReleaseProbe {
     }
 
     WAIT 0.5.
+    // Arm parachutes on probe immediately after release
+    LOCAL lChutes IS SHIP:PARTSTAGGED("probe_chute").
+    IF lChutes:LENGTH > 0 {
+        FOR c IN lChutes {
+            IF c:HASMODULE("ModuleParachute") {
+                LOCAL modu IS c:GETMODULE("ModuleParachute").
+                IF modu:HASEVENT("Arm Parachute") {
+                    modu:DOEVENT("Arm Parachute").
+                    mLog("Probe chute armed.").
+                }
+            }
+        }
+    } ELSE {
+        // Fallback — try action group
+        mLogWarn("No parts tagged 'probe_chute' — trying AG5.").
+        AG5 ON.
+    }
     stateSet("probe_released_time", TIME:SECONDS).
     mLog("Probe released. Relay mass: " + ROUND(SHIP:MASS,2) + "t.").
     nextPhase().
