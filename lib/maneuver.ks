@@ -118,6 +118,86 @@ GLOBAL FUNCTION planCircularize {
     RETURN nd.
 }
 
+// GLOBAL FUNCTION planTransfer {
+//     PARAMETER targetBody.
+//     PARAMETER targetPe.
+// 
+//     LOCAL r1 IS SHIP:ORBIT:SEMIMAJORAXIS.
+//     LOCAL r2 IS targetBody:ORBIT:SEMIMAJORAXIS.
+//     LOCAL mu IS BODY:MU.
+// 
+//     LOCAL targetRadius IS targetBody:RADIUS + targetPe.
+//     LOCAL aTrans IS (r1 + r2 + targetRadius) / 2.
+//     LOCAL v1 IS SQRT(mu / r1).
+//     LOCAL vTrans IS SQRT(mu * ((2 / r1) - (1 / aTrans))).
+//     LOCAL dv IS vTrans - v1.
+// 
+//     LOCAL tTrans IS CONSTANT:PI * SQRT((aTrans^3) / mu).
+//     LOCAL targetOmega IS 360 / targetBody:ORBIT:PERIOD.
+//     LOCAL idealPhase IS 180 - (targetOmega * tTrans).
+// 
+//     LOCAL shipPos IS SHIP:POSITION - BODY:POSITION.
+//     LOCAL targetPos IS targetBody:POSITION - BODY:POSITION.
+//     LOCAL currentPhase IS VANG(shipPos, targetPos).
+//     LOCAL orbitNormal IS VCRS(shipPos, SHIP:VELOCITY:ORBIT).
+//     LOCAL phaseSign IS VDOT(orbitNormal, VCRS(shipPos, targetPos)).
+//     IF phaseSign < 0 { SET currentPhase TO 360 - currentPhase. }
+// 
+//     LOCAL shipOmega IS 360 / SHIP:ORBIT:PERIOD.
+//     LOCAL phaseSpeed IS shipOmega - targetOmega.
+//     LOCAL phaseDiff IS currentPhase - idealPhase.
+//     IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
+// 
+//     // Clamp estimatedTimeToBurn to a positive value within one synodic period
+//     LOCAL synodicPeriod IS ABS(360 / phaseSpeed).
+//     LOCAL estimatedTimeToBurn IS phaseDiff / phaseSpeed.
+//     UNTIL estimatedTimeToBurn > 0 { SET estimatedtimeToBurn TO estimatedTimeToBurn + synodicPeriod. }
+//     UNTIL estimatedTimeToBurn < synodicPeriod { SET estimatedTimeToBurn TO estimatedTimeToBurn - synodicPeriod. }
+// 
+//     LOCAL bestUt IS TIME:SECONDS + estimatedTimeToBurn.
+//     LOCAL testNode IS NODE(bestUt, 0, 0, dv).
+//     ADD testNode.
+//     mLog("DEBUG initial node: hasNext=" + testNode:ORBIT:HASNEXTPATCH
+//     + "  body=" + testNode:ORBIT:BODY:NAME
+//     + "  apoapsis=" + ROUND(testNode:ORBIT:APOAPSIS/1000,0) + "km").
+//     WAIT 0.1.
+// 
+//     LOCAL bestPe IS 999999999.
+//     LOCAL steps IS 10.
+//     FROM { LOCAL pass IS 1. } UNTIL pass > 3 STEP { SET pass TO pass + 1. } DO {
+//         mLog("DEBUG pass=" + pass + " steps=" + steps + " nodeTime=" + ROUND(testNode:TIME - TIME:SECONDS,0) + "s from now").
+//         LOCAL scanning IS TRUE.
+//         UNTIL NOT scanning {
+//             SET testNode:TIME TO testNode:TIME - steps.
+//             WAIT 0.02.
+//             LOCAL hasNext IS testNode:ORBIT:HASNEXTPATCH.
+//             mLog("DEBUG hasNext=" + hasNext + " nodeETA=" + ROUND(testNode:TIME - TIME:SECONDS,0)).
+//             IF hasNext AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
+//                 LOCAL currentPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
+//                 mLog("DEBUG encounter Pe=" + ROUND(currentPe/1000,1) + "km").
+//                 IF currentPe < bestPe AND currentPe > targetPe {
+//                     SET bestPe TO currentPe.
+//                     SET bestUt TO testNode:TIME.
+//                 } ELSE {
+//                     SET testNode:TIME TO testNode:TIME + steps.
+//                     SET scanning TO FALSE.
+//                 }
+//             } ELSE {
+//                 SET testNode:TIME TO testNode:TIME + steps.
+//                 SET scanning TO FALSE.
+//             }
+//         }
+//         SET steps TO steps / 5.
+//     }
+// 
+//     REMOVE testNode.
+//     LOCAL nd IS NODE(bestUt, 0, 0, dv).
+//     ADD nd.
+//     mLog("Transfer → " + targetBody:NAME + ": dV=" + ROUND(dv,1)
+//         + " m/s  Pe=" + ROUND(bestPe/1000,1) + "km  ETA=" + ROUND(estimatedTimeToBurn,0) + "s").
+//     RETURN nd.
+// }
+
 GLOBAL FUNCTION planTransfer {
     PARAMETER targetBody.
     PARAMETER targetPe.
@@ -128,54 +208,93 @@ GLOBAL FUNCTION planTransfer {
 
     LOCAL targetRadius IS targetBody:RADIUS + targetPe.
     LOCAL aTrans IS (r1 + r2 + targetRadius) / 2.
-    LOCAL v1 IS SQRT(mu / r1).
+    LOCAL v1     IS SQRT(mu / r1).
     LOCAL vTrans IS SQRT(mu * ((2 / r1) - (1 / aTrans))).
-    LOCAL dv IS vTrans - v1.
+    LOCAL dv     IS vTrans - v1.
 
-    LOCAL tTrans IS CONSTANT:PI * SQRT((aTrans^3) / mu).
+    LOCAL tTrans      IS CONSTANT:PI * SQRT((aTrans^3) / mu).
     LOCAL targetOmega IS 360 / targetBody:ORBIT:PERIOD.
-    LOCAL idealPhase IS 180 - (targetOmega * tTrans).
+    LOCAL idealPhase  IS 180 - (targetOmega * tTrans).
 
-    LOCAL shipPos IS SHIP:POSITION - BODY:POSITION.
-    LOCAL targetPos IS targetBody:POSITION - BODY:POSITION.
+    LOCAL shipPos    IS SHIP:POSITION - BODY:POSITION.
+    LOCAL targetPos  IS targetBody:POSITION - BODY:POSITION.
     LOCAL currentPhase IS VANG(shipPos, targetPos).
-    LOCAL orbitNormal IS VCRS(shipPos, SHIP:VELOCITY:ORBIT).
-    LOCAL phaseSign IS VDOT(orbitNormal, VCRS(shipPos, targetPos)).
+    LOCAL orbitNormal  IS VCRS(shipPos, SHIP:VELOCITY:ORBIT).
+    LOCAL phaseSign    IS VDOT(orbitNormal, VCRS(shipPos, targetPos)).
     IF phaseSign < 0 { SET currentPhase TO 360 - currentPhase. }
 
-    LOCAL shipOmega IS 360 / SHIP:ORBIT:PERIOD.
+    LOCAL shipOmega  IS 360 / SHIP:ORBIT:PERIOD.
     LOCAL phaseSpeed IS shipOmega - targetOmega.
-    LOCAL phaseDiff IS currentPhase - idealPhase.
+    LOCAL phaseDiff  IS currentPhase - idealPhase.
     IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
 
-    // Clamp estimatedTimeToBurn to a positive value within one synodic period
     LOCAL synodicPeriod IS ABS(360 / phaseSpeed).
     LOCAL estimatedTimeToBurn IS phaseDiff / phaseSpeed.
-    UNTIL estimatedTimeToBurn > 0 { SET estimatedtimeToBurn TO estimatedTimeToBurn + synodicPeriod. }
-    UNTIL estimatedTimeToBurn < synodicPeriod { SET estimatedTimeToBurn TO estimatedTimeToBurn - synodicPeriod. }
+    UNTIL estimatedTimeToBurn > 0 {
+        SET estimatedTimeToBurn TO estimatedTimeToBurn + synodicPeriod.
+    }
+    UNTIL estimatedTimeToBurn < synodicPeriod {
+        SET estimatedTimeToBurn TO estimatedTimeToBurn - synodicPeriod.
+    }
 
-    LOCAL bestUt IS TIME:SECONDS + estimatedTimeToBurn.
-    LOCAL testNode IS NODE(bestUt, 0, 0, dv).
+    mLog("DEBUG transfer: idealPhase=" + ROUND(idealPhase,1)
+        + " currentPhase=" + ROUND(currentPhase,1)
+        + " phaseDiff=" + ROUND(phaseDiff,1)
+        + " phaseSpeed=" + ROUND(phaseSpeed,4)
+        + " dv=" + ROUND(dv,1)
+        + " estimatedETA=" + ROUND(estimatedTimeToBurn,0) + "s").
+
+    LOCAL testNode IS NODE(TIME:SECONDS + estimatedTimeToBurn, 0, 0, dv).
     ADD testNode.
-    mLog("DEBUG initial node: hasNext=" + testNode:ORBIT:HASNEXTPATCH
-    + "  body=" + testNode:ORBIT:BODY:NAME
-    + "  apoapsis=" + ROUND(testNode:ORBIT:APOAPSIS/1000,0) + "km").
     WAIT 0.1.
 
-    LOCAL bestPe IS 999999999.
-    LOCAL steps IS 10.
-    FROM { LOCAL pass IS 1. } UNTIL pass > 3 STEP { SET pass TO pass + 1. } DO {
-        mLog("DEBUG pass=" + pass + " steps=" + steps + " nodeTime=" + ROUND(testNode:TIME - TIME:SECONDS,0) + "s from now").
+    // ── Coarse scan: find first node with Pe above surface ─
+    LOCAL scanStep IS 60.
+    LOCAL scanEnd  IS TIME:SECONDS + SHIP:ORBIT:PERIOD.
+    LOCAL foundUt  IS -1.
+
+    UNTIL testNode:TIME > scanEnd {
+        WAIT 0.02.
+        IF testNode:ORBIT:HASNEXTPATCH
+                AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME
+                AND testNode:ORBIT:NEXTPATCH:PERIAPSIS > 0 {
+            SET foundUt TO testNode:TIME.
+            mLog("DEBUG coarse found Pe="
+                + ROUND(testNode:ORBIT:NEXTPATCH:PERIAPSIS/1000,1)
+                + "km at T+" + ROUND(testNode:TIME - TIME:SECONDS,0) + "s").
+            BREAK.
+        }
+        SET testNode:TIME TO testNode:TIME + scanStep.
+    }
+
+    IF foundUt < 0 {
+        mLogError("planTransfer: no valid window found in one orbit. Check conic patches.").
+        REMOVE testNode.
+        // Return a placeholder node so caller gets something visible
+        LOCAL nd IS NODE(TIME:SECONDS + 600, 0, 0, dv).
+        ADD nd.
+        RETURN nd.
+    }
+
+    // ── Fine tune: optimize toward targetPe ───────────────
+    SET testNode:TIME TO foundUt.
+    LOCAL bestPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
+    LOCAL bestUt IS foundUt.
+    LOCAL steps  IS 30.
+
+    FROM { LOCAL pass IS 1. } UNTIL pass > 4 STEP { SET pass TO pass + 1. } DO {
+        mLog("DEBUG fine pass=" + pass + " steps=" + steps
+            + " Pe=" + ROUND(bestPe/1000,1) + "km"
+            + " T+" + ROUND(bestUt - TIME:SECONDS,0) + "s").
         LOCAL scanning IS TRUE.
         UNTIL NOT scanning {
             SET testNode:TIME TO testNode:TIME - steps.
             WAIT 0.02.
-            LOCAL hasNext IS testNode:ORBIT:HASNEXTPATCH.
-            mLog("DEBUG hasNext=" + hasNext + " nodeETA=" + ROUND(testNode:TIME - TIME:SECONDS,0)).
-            IF hasNext AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
+            IF testNode:ORBIT:HASNEXTPATCH
+                    AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
                 LOCAL currentPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
-                mLog("DEBUG encounter Pe=" + ROUND(currentPe/1000,1) + "km").
-                IF currentPe < bestPe AND currentPe > targetPe {
+                IF currentPe > 0
+                        AND ABS(currentPe - targetPe) < ABS(bestPe - targetPe) {
                     SET bestPe TO currentPe.
                     SET bestUt TO testNode:TIME.
                 } ELSE {
@@ -187,6 +306,7 @@ GLOBAL FUNCTION planTransfer {
                 SET scanning TO FALSE.
             }
         }
+        SET testNode:TIME TO bestUt.
         SET steps TO steps / 5.
     }
 
@@ -194,7 +314,8 @@ GLOBAL FUNCTION planTransfer {
     LOCAL nd IS NODE(bestUt, 0, 0, dv).
     ADD nd.
     mLog("Transfer → " + targetBody:NAME + ": dV=" + ROUND(dv,1)
-        + " m/s  Pe=" + ROUND(bestPe/1000,1) + "km  ETA=" + ROUND(estimatedTimeToBurn,0) + "s").
+        + " m/s  Pe=" + ROUND(bestPe/1000,1) + "km"
+        + "  ETA=" + ROUND(bestUt - TIME:SECONDS,0) + "s").
     RETURN nd.
 }
 
