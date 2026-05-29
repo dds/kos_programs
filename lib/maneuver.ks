@@ -8,7 +8,7 @@
 // Threshold: maneuver considered complete when remaining
 // dV drops below this fraction of original burn OR below
 // ABS_CUTOFF m/s, whichever is larger.
-LOCAL COMPLETE_FRAC   IS 0.015.  // 1.5% of original dV remaining
+LOCAL COMPLETE_FRAC   IS 0.003.  // 0.2% of original dV remaining
 LOCAL ABS_CUTOFF      IS 0.3.    // m/s — hard floor
 LOCAL ALIGN_TOLERANCE IS 2.0.    // degrees — begin burn within this
 
@@ -23,6 +23,12 @@ GLOBAL FUNCTION executeManeuver {
         HUDTEXT("ERROR: No maneuver node!", 5, 2, 18, RED, FALSE).
         RETURN FALSE.
     }
+
+    // Dyanmic minimum throttle based on burn size.
+    LOCAL minThrottle IS 0.01.
+    IF burnDV < 10 {_setThrustLimit(0.25). }.
+    IF burnDV < 2 { _setThrustLimit(0.10). }.
+    IF burnDV < 0.5 { _setThrustLimit(0.05). }.
 
     LOCAL nd        IS NEXTNODE.
     LOCAL burnDV    IS nd:DELTAV:MAG.          // original magnitude
@@ -85,7 +91,7 @@ GLOBAL FUNCTION executeManeuver {
             LOCAL ratio IS remaining / maxAcc.
             IF ratio < 0.5 {
                 // Fine control: throttle proportional, min 2%
-                LOCK THROTTLE TO MAX(0.02, ratio).
+                LOCK THROTTLE TO MAX(minThrottle, ratio).
             } ELSE {
                 LOCK THROTTLE TO 1.0.
             }
@@ -101,10 +107,18 @@ GLOBAL FUNCTION executeManeuver {
     UNLOCK STEERING.
     REMOVE nd.
     SET SAS TO TRUE.
+    _setThrustLimit(1.0).
 
     mLog("Burn complete. Residual dV ~" + ROUND(residual, 2) + " m/s.").
     HUDTEXT("Burn complete", 3, 2, 15, GREEN, FALSE).
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _setThrustLimit {
+    PARAMETER pct. // 0-1
+    FOR eng IN SHIP:ENGINES {
+        SET eng:THRUSTLIMIT TO pct * 100.
+    }
 }
 
 // ── Node planning helpers ──────────────────────────────────
