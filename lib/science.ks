@@ -280,7 +280,7 @@ LOCAL FUNCTION _experimentAvailable {
         "Collect Data", "Observe", "Log Data", "Take Data"
     ).
     FOR evt IN runEvents {
-        IF mod:HASEVENT(evt) { RETURN TRUE. }
+        IF modu:HASEVENT(evt) { RETURN TRUE. }
     }
     RETURN FALSE.
 }
