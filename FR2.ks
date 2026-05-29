@@ -579,6 +579,7 @@ LOCAL FUNCTION _phaseRaiseAlt {
         LOCAL nd    IS NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, dv).
         ADD nd.
         mLog("Raise Ap: dV=" + ROUND(dv,1) + " m/s").
+        WAIT 2. // Let KE update nodeHalfBurnTime
         SET success TO executeManeuver().
         IF NOT success { mLog("Raise Ap missed — replanning."). }
     }
