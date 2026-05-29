@@ -93,7 +93,7 @@ GLOBAL FUNCTION executeManeuver {
 
         IF timeToStop > 1.0 { 
             LOCK THROTTLE TO 1.0.
-        } ELSE IF timeToStop > 0.1 {
+        } ELSE IF timeToStop > 0.022 {
             // Fine control: throttle proportional, min 2%
             LOCK THROTTLE TO MAX(0.005, timeToStop).
         } ELSE {
