@@ -433,13 +433,23 @@ LOCAL FUNCTION _calcStartTime {
     RETURN nd:TIME - (burnDur / 2).
 }
 
+LOCAL FUNCTION _shipPossibleThrust {
+    LOCAL total IS 0.
+    FOR eng IN SHIP:ENGINES {
+        IF NOT eng:FLAMEOUT AND eng:ISP > 0 {
+            SET total TO total + eng:POSSIBLETHRUST.
+        }
+    }
+    RETURN total.
+}
+
 LOCAL FUNCTION _estimateBurnDuration {
     PARAMETER dv.
     LOCAL isp IS _effectiveIsp().
     IF isp <= 0 { RETURN dv / _safeMaxAcc(). }
     LOCAL ve IS isp * G0.
     LOCAL dm IS SHIP:MASS * (1 - CONSTANT:E^(-dv/ve)). // propellant mass
-    LOCAL mdot IS SHIP:POSSIBLETHRUST / ve. // mass flow rate
+    LOCAL mdot IS _shipPossibleThrust() / ve. // mass flow rate
     IF mdot <= 0 { RETURN 60. }
     RETURN dm / mdot.
 }
@@ -460,7 +470,7 @@ LOCAL FUNCTION _effectiveIsp {
 
 LOCAL FUNCTION _safeMaxAcc {
     IF SHIP:MASS <= 0 { RETURN 0. }
-    RETURN SHIP:AVAILABLETHRUST / SHIP:MASS.
+    RETURN _shipPossibleThrust() / SHIP:MASS.
 }
 
 LOCAL FUNCTION _isComplete {
