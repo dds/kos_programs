@@ -114,17 +114,17 @@ GLOBAL FUNCTION scienceTransmitAll {
     LOCAL transmitted IS 0.
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleScienceContainer") {
-            LOCAL mod IS p:GETMODULE("ModuleScienceContainer").
-            IF mod:HASEVENT("Transmit Data") {
-                mod:DOEVENT("Transmit Data").
+            LOCAL myMod IS p:GETMODULE("ModuleScienceContainer").
+            IF myMod:HASEVENT("Transmit Data") {
+                myMod:DOEVENT("Transmit Data").
                 SET transmitted TO transmitted + 1.
                 mLog("Transmitting science from " + p:NAME).
             }
         }
         IF p:HASMODULE("ModuleDataTransmitter") {
-            LOCAL mod IS p:GETMODULE("ModuleDataTransmitter").
-            IF mod:HASEVENT("Transmit Data") {
-                mod:DOEVENT("Transmit Data").
+            LOCAL myMod IS p:GETMODULE("ModuleDataTransmitter").
+            IF myMod:HASEVENT("Transmit Data") {
+                myMod:DOEVENT("Transmit Data").
                 SET transmitted TO transmitted + 1.
             }
         }
