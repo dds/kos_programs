@@ -11,19 +11,14 @@
 GLOBAL flightLogPath IS "".
 
 GLOBAL FUNCTION initLog {
-    LOCAL persisted IS stateGet("log_path").
-    IF persisted <> "" AND EXISTS(persisted) {
-        // Reopen existing log
-        SET flightLogPath TO persisted.
-        mLog("Log reopened after reboot: " + flightLogPath).
+    LOCAL logPathFile IS "1:/state/log_path.state".
+    IF EXISTS(logPathFile) {
+        SET flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
+        IF flightLogPath = "" { SET flightLogPath TO _newLogPath(logPathFile). }
     } ELSE {
-        // First time — create new log file
-        LOCAL safeName IS _sanitizeName(SHIP:NAME).
-        SET flightLogPath TO "1:/logs/" + safeName + "_" + ROUND(TIME:SECONDS) + ".log".
-        LOG "=== LOG START: " + SHIP:NAME + " ===" TO flightLogPath.
-        stateSet("log_path", flightLogPath).
-        mLog("Log created: " + flightLogPath).
+        SET flightLogPath TO _newLogPath(logPathFile).
     }
+    mLog("Fault log: " + flightLogPath).
 }
 
 LOCAL FUNCTION _sanitizeName {
@@ -44,7 +39,13 @@ GLOBAL FUNCTION mLog {
     PARAMETER level IS "INFO".
     LOCAL line IS "[" + ROUND(TIME:SECONDS,1) + "][" + level + "] " + message.
     PRINT line.
-    IF flightLogPath <> "" { LOG line TO flightLogPath. }
+
+    // Persist warnings and errors to fault log only
+    IF level = "WARN" OR level = "ERROR" OR level = "PHASE" {
+        IF flightLogPath <> "" AND CORE:VOLUME:FREESPACE > 500 {
+            LOG line TO flightLogPath.
+        }
+    }
 }
 
 GLOBAL FUNCTION mLogWarn  { PARAMETER m. mLog(m, "WARN").  }
