@@ -34,6 +34,13 @@ LOCAL FUNCTION _phaseMonitor {
         _deployAntennas().
     }
 
+    LOCAL chuteFired IS FALSE.
+    WHEN NOT chuteFired AND SHIP:ALTITUDE > 4000 AND SHIP:ALTITUDE < 8000
+        AND SHIP:VELOCITY:SURFACE:MAG > 40 AND SHIP:VELOCITY:SURFACE:MAG < 130 THEN {
+        _stageChutes().
+        SET chuteFired TO TRUE.
+    }
+
     WAIT UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
     mLog("Surface contact confirmed.").
     nextPhase(launchSeq).
@@ -68,6 +75,11 @@ LOCAL FUNCTION _deployAntennas {
             p:GETMODULE("ModuleDeployableAntenna"):DOACTION("extend antenna", TRUE).
         }
     }
+}
+
+LOCAL FUNCTION _stageChutes {
+    mLog("Staging chute at " + ROUND(SHIP:ALTITUDE) + "m, " + ROUND(SHIP:VELOCITY:SURFACE:MAG) + "m/s.").
+    STAGE.
 }
 
 LOCAL FUNCTION _deploySolarPanels {
