@@ -225,17 +225,17 @@ GLOBAL FUNCTION scienceScanStatus {
         mLogWarn("SCANsat not available.").
         RETURN.
     }
-    LOCAL body IS SHIP:ORBIT:BODY.
+    LOCAL lBody IS SHIP:ORBIT:BODY.
     // ADDONS:SCANSAT coverage functions
     LOCAL altCoverage  IS 0.
     LOCAL biomCoverage IS 0.
     // Try to get coverage percentages — these are the kOS SCANsat addon functions
     // Requires SCANsat kOS addon installed in GameData
     IF ADDONS:SCANSAT:AVAILABLE {
-        SET altCoverage  TO ADDONS:SCANSAT:COVERAGE(body, "Altimetry").
-        SET biomCoverage TO ADDONS:SCANSAT:COVERAGE(body, "Biome").
+        SET altCoverage  TO ADDONS:SCANSAT:COVERAGE(lBody, "Altimetry").
+        SET biomCoverage TO ADDONS:SCANSAT:COVERAGE(lBody, "Biome").
     }
-    mLog("SCANsat coverage " + body:NAME + ":"
+    mLog("SCANsat coverage " + lBody:NAME + ":"
         + "  altimetry="  + ROUND(altCoverage,1)  + "%"
         + "  biome="      + ROUND(biomCoverage,1) + "%").
     HUDTEXT("Scan: alt=" + ROUND(altCoverage,0) + "% bio=" + ROUND(biomCoverage,0) + "%",
