@@ -421,51 +421,13 @@ GLOBAL FUNCTION planRecircularize {
 
 LOCAL FUNCTION _calcStartTime {
     PARAMETER nd.
-    LOCAL burnDur IS _estimateBurnDuration(nd:DELTAV:MAG).
-    mLog("DEBUG calcStartTime: dv=" + ROUND(nd:DELTAV:MAG,1)
-    + " maxThrust=" + ROUND(SHIP:MAXTHRUST,1)
-    + " availableThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)
-    + " possibleThrust=" + ROUND(_shipPossibleThrust())
-    + " mass=" + ROUND(SHIP:MASS,2)
-    + " isp=" + ROUND(_effectiveIsp(),1)
-    + " burnDur=" + ROUND(burnDur,1)
-    + " startOffset=" + ROUND(burnDur/2,1)).
-    RETURN nd:TIME - (burnDur / 2).
-}
-
-LOCAL FUNCTION _shipPossibleThrust {
-    LOCAL total IS 0.
-    FOR eng IN SHIP:ENGINES {
-        IF NOT eng:FLAMEOUT AND eng:ISP > 0 {
-            SET total TO total + eng:POSSIBLETHRUST.
-        }
+    LOCAL halfBurn IS 0.
+    IF ADDONS:KE:AVAILABLE {
+        SET halfBurn TO ADDONS:KE:NODEHALFBURNTIME.
+    } ELSE {
+        SET halfBurn TO nd:BURNTIME / 2.
     }
-    RETURN total.
-}
-
-LOCAL FUNCTION _estimateBurnDuration {
-    PARAMETER dv.
-    LOCAL isp IS _effectiveIsp().
-    IF isp <= 0 { RETURN dv / _safeMaxAcc(). }
-    LOCAL ve IS isp * G0.
-    LOCAL dm IS SHIP:MASS * (1 - CONSTANT:E^(-dv/ve)). // propellant mass
-    LOCAL mdot IS _shipPossibleThrust() / ve. // mass flow rate
-    IF mdot <= 0 { RETURN 60. }
-    RETURN dm / mdot.
-}
-
-LOCAL FUNCTION _effectiveIsp {
-    LOCAL totalThrust IS 0.
-    LOCAL totalFlow IS 0.
-    FOR eng in SHIP:ENGINES {
-        IF NOT eng:FLAMEOUT AND eng:POSSIBLETHRUST > 0 AND eng:ISP > 0 {
-            LOCAL flow IS eng:POSSIBLETHRUST / (eng:ISP * G0).
-            SET totalFlow TO totalFlow + flow.
-            SET totalThrust TO totalThrust + eng:POSSIBLETHRUST.
-        }
-    }
-    IF totalFlow <= 0 { RETURN 0. }
-    RETURN totalThrust / (totalFlow * G0).
+    RETURN nd:TIME - halfBurn.
 }
 
 LOCAL FUNCTION _safeMaxAcc {
