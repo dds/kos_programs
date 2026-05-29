@@ -41,7 +41,11 @@ GLOBAL FUNCTION stateGet {
 GLOBAL FUNCTION stateGetNum {
     PARAMETER key.
     PARAMETER dflt IS 0.
-    IF _cache:HASKEY(key) { RETURN _cache[key]:TONUMBER(dflt). }
+    IF _cache:HASKEY(key) { 
+        LOCAL val IS _cache[key].
+        IF val:ISTYPE("Scalar") { RETURN val. }
+        RETURN val:TONUMBER(dflt).
+    }
     RETURN dflt.
 }
 
