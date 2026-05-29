@@ -100,11 +100,6 @@ IF phase = "" {
     UNLOCK ALL.
     SET SAS TO TRUE.
 } ELSE {
-    // Valid phase — auto resume
-    IF bootCount >= 2 {
-        PRINT "Resuming from phase: " + phase.
-    } ELSE {
-        PRINT "First boot — starting mission.".
-    }
+    mLog("Resuming mission from phase: " + phase).
     resumeMission().
 }

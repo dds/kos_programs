@@ -1,4 +1,4 @@
-k// ============================================================
+// ============================================================
 // boot.ks  —  Generic mission boot  (0:/boot/boot.ks)
 // Minimal and stable — do not add logic here.
 // All resume/manual/phase logic lives in resume.ks
