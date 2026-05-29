@@ -166,9 +166,9 @@ GLOBAL FUNCTION setState {
 }
 
 GLOBAL FUNCTION resumeMission {
-    LOCAL v IS stateGet("vehicle", vehicleName).
-    mLog("Resuming " + v + " from phase: " + stateGet("phase","NONE")).
-    RUNPATH("1:/" + v + ".ks").
+    LOCAL vName IS stateGet("vehicle", vehicleName).
+    mLog("Resuming " + vName + " from phase: " + stateGet("phase","NONE")).
+    RUNPATH("1:/" + vName + ".ks").
     main().
 }
 
