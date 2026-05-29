@@ -294,6 +294,7 @@ GLOBAL FUNCTION planTransfer {
                     AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
                 LOCAL currentPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
                 IF currentPe > 0
+                        AND currentPe > targetPe
                         AND ABS(currentPe - targetPe) < ABS(bestPe - targetPe) {
                     SET bestPe TO currentPe.
                     SET bestUt TO testNode:TIME.
