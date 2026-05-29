@@ -9,7 +9,7 @@
 // dV drops below this fraction of original burn OR below
 // ABS_CUTOFF m/s, whichever is larger.
 LOCAL COMPLETE_FRAC   IS 0.0.    // Don't use a fraction, just use ABS_CUTOFF and slow
-LOCAL ABS_CUTOFF      IS 0.01.   // m/s — hard floor
+LOCAL ABS_CUTOFF      IS 0.001.   // m/s — hard floor
 LOCAL ALIGN_TOLERANCE IS 2.0.    // degrees — begin burn within this
 LOCAL G0 IS 9.80665. // standard gravity m/s^2  - ISP conversion constant
 
@@ -438,6 +438,9 @@ LOCAL FUNCTION _isComplete {
     LOCAL threshold IS MAX(ABS_CUTOFF, origDV * COMPLETE_FRAC).
     // Also stop if we've overshot (dot product flips negative)
     LOCAL dotCheck IS VDOT(nd:BURNVECTOR:NORMALIZED, nd:DELTAV:NORMALIZED).
+    IF remaining < 1.0 { 
+        RETURN remaining < threshold OR dotCheck < COS(ALIGN_TOLERANCE).
+    } 
     RETURN remaining < threshold OR dotCheck < 0.
 }
 
