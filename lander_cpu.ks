@@ -68,12 +68,19 @@ LOCAL FUNCTION _phaseScience {
     scienceRunAll().
     mLog("Initial science collected. Entering idle monitor.").
 
-    UNTIL FALSE {
-        LOCAL battLevel IS SHIP:ELECTRICCHARGE / MAX(1, SHIP:ELECTRICCHARGECAPACITY).
-        LOCAL hasComm IS ADDONS:RT:HASKSCCONNECTION(SHIP)
-            OR SHIP:CONNECTION:ISCONNECTED.
-        mLog("Idle: batt=" + ROUND(battLevel * 100, 1) + "% comms=" + hasComm).
-        WAIT 300.
+    LOCAL ecCapacity IS 0.
+    
+    FOR res IN SHIP:RESOURCES {
+        IF res:NAME = "ELECTRICCHARGE" {
+            SET ecCapacity TO res:CAPACITY.
+            BREAK. // Found it, no need to keep looping
+        }
+    }
+    
+    // Now you can safely use ecCapacity in your logic
+    IF ecCapacity > 0 {
+        LOCAL ecPercent IS (SHIP:ELECTRICCHARGE / ecCapacity) * 100.
+        mLog("Battery status: " + ROUND(ecPercent, 1) + "%").
     }
 }
 
