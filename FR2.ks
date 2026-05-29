@@ -34,9 +34,12 @@ GLOBAL CFG IS LEXICON(
     "RELAY_ALT",           1000000,  // m above target body
     "CAPTURE_PE",            20000,  // m — arrival Pe aim point
     "CIRC_ECC_TOL",           0.02, // eccentricity threshold
+    "TARGET_INCLINATION",   0,     // deg — 0=equatorial, 90=polar, -1=match vessel
+    "INCL_MATCH_TARGET",    "",    // vessel name to match if TARGET_INCLINATION=-1
+    "INCL_TOLERANCE",       0.1,   // deg — skip burn if already within this
 
     // Probe impact
-    "PROBE_IMPACT_PE",        5000  // m — impact trajectory Pe
+    "PROBE_IMPACT_PE",        1000  // m — impact trajectory Pe
 ).
 // ============================================================
 
@@ -50,7 +53,8 @@ LOCAL FUNCTION buildPhaseSequence {
         "TMI",
         "COAST",
         "CAPTURE",
-        "CIRC"
+        "CIRC",
+        "INCL_CORRECT"
     ).
     FOR ptype IN missionPayloads() {
         LOCAL t IS ptype:TOUPPER.
@@ -116,6 +120,7 @@ LOCAL FUNCTION _runPhaseLoop {
         ELSE IF phase = "COAST"        { _phaseCoast().        }
         ELSE IF phase = "CAPTURE"      { _phaseCapture().      }
         ELSE IF phase = "CIRC"         { _phaseCirc().         }
+        ELSE IF phase = "INCL_CORRECT" { _phaseInclCorrect().  }
         ELSE IF phase = "LOWER_PE"     { _phaseLowerPe().      }
         ELSE IF phase = "RELEASE_PROBE"{ _phaseReleaseProbe(). }
         ELSE IF phase = "RECIRC"       { _phaseRecirc().       }
@@ -394,5 +399,28 @@ LOCAL FUNCTION _phaseExtendAnts {
         }
     }
     mLog("Antennas deployed.").
+    nextPhase().
+}
+
+LOCAL FUNCTION _phaseInclCorrect {
+    LOCAL targetInc IS resolveTargetInclination().
+    LOCAL currentInc IS SHIP:ORBIT:INCLINATION.
+    LOCAL deltaInc IS ABS(targetInc - currentInc).
+
+    IF deltaInc <= CFG["INCL_TOLERANCE"] {
+        mLog("Inclination already within tolerance ("
+            + ROUND(currentInc,2) + "deg vs target "
+            + ROUND(targetInc,2) + "deg) — skipping.").
+        nextPhase().
+        RETURN.
+    }
+
+    mLog("Correcting inclination: " + ROUND(currentInc,2)
+        + "deg → " + ROUND(targetInc,2) + "deg"
+        + "  delta=" + ROUND(deltaInc,2) + "deg").
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    planInclinationChange(targetInc).
+    executeManeuver().
+    orbitSummary().
     nextPhase().
 }
