@@ -169,7 +169,7 @@ LOCAL FUNCTION _phaseLaunch {
 
     // Launch abort monitor. Arms at launch, stays active through PARKING.
     WHEN stateGet("phase","") = "LAUNCH" OR stateGet("phase","") = "PARKING" THEN {
-        LOCAL abort IS FALSE.
+        LOCAL abortTriggered IS FALSE.
         
         // Anomalous trajectory — falling back with low Ap after 15s
         IF TIME:SECONDS > (stateGetNum("launch_time",0) + 15)
@@ -188,9 +188,9 @@ LOCAL FUNCTION _phaseLaunch {
         }
         
         // Manual abort keypress
-        IF ABORT { SET abort TO TRUE. mLogError("Abort: manual trigger."). }
+        IF ABORT { SET abortTriggered TO TRUE. mLogError("Abort: manual trigger."). }
         
-        IF ABORT {
+        IF abortTriggered {
             _launchAbort().
             RETURN.  // disarm trigger
         }
