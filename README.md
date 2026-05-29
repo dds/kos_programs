@@ -81,8 +81,9 @@ Simple sounding rocket script. Launches, hibernates probe core, collects thermom
 
 1. Set boot file to `boot/boot.ks` on the kOS processor
 2. Name the vessel following the `VEHICLE-TARGET-TYPE...` convention
-3. Launch — boot syncs core libs, loads vehicle script, syncs vehicle's LIBS, auto-resumes
-4. Press any key within 5 seconds of boot to enter manual mode
+3. Boot syncs core libs, loads vehicle script, syncs vehicle's LIBS
+4. Press any key within 5s of boot to enter manual mode, or wait to auto-resume
+5. On first boot, FR2 shows a flight plan summary with all config values and a 30s countdown — press ENTER to launch immediately or wait for auto-launch
 
 ### Manual mode commands
 

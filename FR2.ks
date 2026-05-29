@@ -85,22 +85,64 @@ LOCAL FUNCTION buildPhaseSequence {
 
 LOCAL FUNCTION _printConfig {
     LOCAL seq IS buildPhaseSequence().
+    LOCAL hasProbe IS FALSE.
+    FOR ptype IN missionPayloads() {
+        LOCAL t IS _normalizePayloadType(ptype).
+        IF t = "CRASHPROBE" OR t = "PROBE" { SET hasProbe TO TRUE. }
+    }
+
     CLEARSCREEN.
-    PRINT "=== FR2 MISSION CONFIG ===".
+    PRINT "  ========================================".
+    PRINT "    FR2 FLIGHT PLAN    " + SHIP:NAME.
+    PRINT "  ========================================".
     PRINT " ".
-    PRINT "Ship:      " + SHIP:NAME.
-    PRINT "Target:    " + MISSION["target"].
-    PRINT "Payloads:  " + MISSION["payloads"].
+    PRINT "  TARGET ..... " + MISSION["target"].
+    PRINT "  PAYLOADS ... " + MISSION["payloads"].
     PRINT " ".
-    PRINT "Parking:   " + ROUND(CFG["PARKING_ALT"]/1000,0) + "km".
-    PRINT "Relay alt: " + ROUND(CFG["RELAY_ALT"]/1000,0) + "km".
-    PRINT "Launch inc:" + CFG["LAUNCH_INCLINATION"] + "deg".
-    PRINT "Target inc:" + CFG["TARGET_INCLINATION"] + "deg".
-    PRINT "Capture Pe:" + ROUND(CFG["CAPTURE_PE"]/1000,0) + "km".
+    PRINT "  -- ASCENT --".
+    PRINT "  PARK ALT ... " + ROUND(CFG["PARKING_ALT"]/1000,0) + " km".
+    LOCAL incStr IS CFG["LAUNCH_INCLINATION"] + " deg".
+    IF CFG["LAUNCH_INCLINATION"] = 0 { SET incStr TO "0 deg  (equatorial)". }
+    PRINT "  INCL ...... " + incStr.
+    PRINT "  FAIRING ... " + ROUND(CFG["FAIRING_ALT"]/1000,0) + " km".
+    IF CFG["LAUNCH_STAGE_LIMIT"] > 0 {
+        PRINT "  MJ LIMIT .. stage " + CFG["LAUNCH_STAGE_LIMIT"].
+    }
+    IF MISSION["target"]:TOUPPER <> "KERBIN" {
+        PRINT " ".
+        PRINT "  -- TRANSFER --".
+        PRINT "  CAPTURE PE . " + ROUND(CFG["CAPTURE_PE"]/1000,0) + " km".
+    }
     PRINT " ".
-    PRINT "Sequence:".
-    PRINT "  " + seq:JOIN(" -> ").
+    PRINT "  -- ORBIT --".
+    PRINT "  FINAL ALT .. " + ROUND(CFG["RELAY_ALT"]/1000,0) + " km".
+    LOCAL tincStr IS CFG["TARGET_INCLINATION"] + " deg".
+    IF CFG["TARGET_INCLINATION"] = 0 { SET tincStr TO "0 deg  (equatorial)". }
+    PRINT "  FINAL INCL . " + tincStr.
+    PRINT "  CIRC TOL ... ecc < " + CFG["CIRC_ECC_TOL"].
+    IF hasProbe {
+        PRINT " ".
+        PRINT "  -- PROBE --".
+        PRINT "  IMPACT ..... " + ROUND(CFG["PROBE_TARGET_LAT"],1) + " lat  " + ROUND(CFG["PROBE_TARGET_LNG"],1) + " lng".
+        PRINT "  ENTRY PE ... " + ROUND(CFG["PROBE_ENTRY_PE"]/1000,0) + " km".
+        PRINT "  TOLERANCE .. " + ROUND(CFG["PROBE_TARGET_TOL"]/1000,0) + " km".
+    }
     PRINT " ".
+    PRINT "  -- SEQUENCE --".
+    LOCAL i IS 0.
+    UNTIL i >= seq:LENGTH {
+        LOCAL line IS "  ".
+        LOCAL j IS i.
+        UNTIL j >= seq:LENGTH OR line:LENGTH > 42 {
+            IF j > i { SET line TO line + " > ". }
+            SET line TO line + seq[j].
+            SET j TO j + 1.
+        }
+        PRINT line.
+        SET i TO j.
+    }
+    PRINT " ".
+    PRINT "  ========================================".
 }
 
 LOCAL FUNCTION _confirmConfig {
@@ -110,13 +152,24 @@ LOCAL FUNCTION _confirmConfig {
     }
 
     _printConfig().
-    PRINT "Launching in 30s. Press ENTER to launch now.".
-    PRINT "Edit CFG in terminal to change values.".
+    LOCAL countdownRow IS TERMINAL:CURSOR:ROW.
+    PRINT "  >> ENTER to launch / 30s auto-launch".
+    PRINT "  >> Edit CFG in terminal to override".
+    PRINT " ".
+    PRINT " ".
     LOCAL deadline IS TIME:SECONDS + 30.
     LOCAL confirmed IS FALSE.
     UNTIL TIME:SECONDS >= deadline OR confirmed {
         LOCAL remaining IS ROUND(deadline - TIME:SECONDS, 0).
-        PRINT "  T-" + remaining + "s  " AT (0, 17).
+        LOCAL bar IS "".
+        LOCAL filled IS ROUND(30 - remaining, 0).
+        LOCAL j IS 0.
+        UNTIL j >= 30 {
+            IF j < filled { SET bar TO bar + "=". }
+            ELSE { SET bar TO bar + ".". }
+            SET j TO j + 1.
+        }
+        PRINT "  [" + bar + "] T-" + ("" + remaining):PADLEFT(2) + "s" AT (0, countdownRow + 2).
         IF TERMINAL:INPUT:HASCHAR {
             LOCAL ch IS TERMINAL:INPUT:GETCHAR().
             IF UNCHAR(ch) = 13 OR UNCHAR(ch) = 10 {
@@ -125,8 +178,8 @@ LOCAL FUNCTION _confirmConfig {
         }
         WAIT 0.2.
     }
-    PRINT " ".
-    PRINT "Proceeding with launch.".
+    PRINT "  [==============================] GO  " AT (0, countdownRow + 2).
+    PRINT " " AT (0, countdownRow + 3).
 }
 
 GLOBAL FUNCTION main {

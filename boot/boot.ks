@@ -3,7 +3,11 @@
 // ============================================================
 
 CLEARSCREEN.
-PRINT "=== BOOT: " + SHIP:NAME + " ===".
+PRINT " ".
+PRINT "  *  kOS FLIGHT COMPUTER  v2.0".
+PRINT "  *  " + SHIP:NAME.
+PRINT "  *  KSC UPLINK ACTIVE".
+PRINT " ".
 
 LOCAL rawTokens IS SHIP:NAME:SPLIT("-").
 LOCAL tokens IS LIST().
@@ -12,8 +16,11 @@ FOR t IN rawTokens {
     IF trimmed <> "" { tokens:ADD(trimmed). }
 }
 IF tokens:LENGTH < 2 {
-    PRINT "BOOT ERROR: name must be VEHICLE-TARGET[-TYPE...]".
-    PRINT "Got: " + SHIP:NAME.
+    PRINT "  !! NAME ERROR".
+    PRINT "  !! Expected: VEHICLE-TARGET[-TYPE...]".
+    PRINT "  !! Got: " + SHIP:NAME.
+    PRINT " ".
+    PRINT "  SYSTEM HALTED.".
     WAIT UNTIL FALSE.
 }
 LOCAL vehicleName IS tokens[0].
@@ -44,7 +51,7 @@ LOCAL FUNCTION _loadLib {
     RUNPATH("1:/lib/" + libName + ".ks").
 }
 
-PRINT "Syncing core libs...".
+PRINT "  SYNC core ......... ".
 LOCAL coreLibs IS LIST("state", "logs", "files").
 FOR lib IN coreLibs { _syncLib(lib). }
 
@@ -63,22 +70,23 @@ IF bootCount = 1 {
 }
 mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 
-PRINT "Syncing vehicle script...".
+PRINT "  SYNC " + vehicleName + " ....... ".
 COPYPATH("0:/" + vehicleName + ".ks", "1:/" + vehicleName + ".ks").
 RUNPATH("1:/" + vehicleName + ".ks").
 
-PRINT "Syncing mission libs...".
+PRINT "  SYNC libs ......... ".
 FOR lib IN LIBS { _syncLib(lib). }
 FOR lib IN LIBS { _loadLib(lib). }
 
 _syncLib("resume").
 _loadLib("resume").
 
-PRINT "Sync complete.".
+PRINT " ".
+PRINT "  BOOT #" + bootCount + " OK".
 printStorageStatus().
 
 PRINT " ".
-PRINT "Press any key within 5s for manual mode...".
+PRINT "  >> Press any key for MANUAL mode (5s)".
 LOCAL overrideStart IS TIME:SECONDS.
 LOCAL manualMode IS FALSE.
 WAIT UNTIL TIME:SECONDS > overrideStart + 5 OR TERMINAL:INPUT:HASCHAR.
@@ -88,19 +96,23 @@ IF TERMINAL:INPUT:HASCHAR {
 }
 
 IF manualMode {
-    PRINT "Manual mode — type resumeMission(). to continue.".
+    PRINT " ".
+    PRINT "  MANUAL MODE".
+    PRINT "  > resumeMission(). to continue".
+    PRINT "  > setState(PHASE). to jump".
     mLog("Manual override at boot.").
     UNLOCK ALL.
     SET SAS TO TRUE.
 } ELSE {
-    PRINT "Auto-resuming...".
     LOCAL phase IS stateGet("phase", "").
     IF phase = "DONE" {
-        PRINT "Mission complete. Manual mode.".
+        PRINT " ".
+        PRINT "  MISSION COMPLETE. MANUAL MODE.".
         mLog("Reboot after DONE — manual mode.").
         UNLOCK ALL.
         SET SAS TO TRUE.
     } ELSE {
+        PRINT "  RESUMING >> " + phase.
         mLog("Resuming mission from phase: " + phase).
         resumeMission().
     }
