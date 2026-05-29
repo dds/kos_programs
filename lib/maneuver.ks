@@ -408,6 +408,12 @@ GLOBAL FUNCTION planRecircularize {
 LOCAL FUNCTION _calcStartTime {
     PARAMETER nd.
     LOCAL burnDur IS _estimateBurnDuration(nd:DELTAV:MAG).
+    mLog("DEBUG calcStartTime: dv=" + ROUND(nd:DELTAV:MAG,1)
+    + " maxThrust=" + ROUND(SHIP:MAXTHRUST,1)
+    + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)
+    + " mass=" + ROUND(SHIP:MASS,2)
+    + " burnDur=" + ROUND(burnDur,1)
+    + " startOffset=" + ROUND(burnDur/2,1)).
     RETURN nd:TIME - (burnDur / 2).
 }
 
