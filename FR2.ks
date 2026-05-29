@@ -179,7 +179,7 @@ LOCAL FUNCTION _phaseLaunch {
 LOCAL FUNCTION _phaseParking {
     mLog("Ascent monitoring — kOS owns staging, MJ owns steering/throttle.").
 
-    UNTIL isOrbitStable(70000) {
+    UNTIL isOrbitStable(MAX(70000, CFG["FAIRING_ALT"])) {
 
         // Fairing deploy check
         IF stateGet("fairing_deployed","false") = "false"
