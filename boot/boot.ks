@@ -34,6 +34,7 @@ ensureDir("1:/lib").
 ensureDir("1:/boot").
 ensureDir("1:/logs").
 ensureDir("1:/state").
+ensureDir("1:/cmd").
 
 // ── Sync archive → local ───────────────────────────────────
 PRINT "Syncing...".
@@ -45,6 +46,11 @@ COPYPATH("0:/lib/maneuver.ks",        "1:/lib/maneuver.ks").
 COPYPATH("0:/lib/orbit.ks",           "1:/lib/orbit.ks").
 COPYPATH("0:/lib/files.ks",           "1:/lib/files.ks").
 COPYPATH("0:/lib/resume.ks",          "1:/lib/resume.ks").
+COPYPATH("0:/cmd/resume.ks",           "1:/cmd/resume.ks").
+COPYPATH("0:/cmd/setstate.ks",         "1:/cmd/setstate.ks").
+COPYPATH("0:/cmd/dump.ks",             "1:/cmd/dump.ks").
+COPYPATH("0:/cmd/resetboot.ks",        "1:/cmd/resetboot.ks").
+COPYPATH("0:/cmd/files.ks",            "1:/cmd/files.ks").
 COPYPATH("0:/" + vehicleName + ".ks", "1:/" + vehicleName + ".ks").
 PRINT "Sync complete.".
 
