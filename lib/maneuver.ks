@@ -86,36 +86,23 @@ GLOBAL FUNCTION executeManeuver {
         // Throttle — ramp down in final approach to avoid overshoot
         LOCAL remaining IS nd:DELTAV:MAG.
         LOCAL maxAcc    IS _safeMaxAcc().
+        LOCAL timeToStop IS remaining / maxAcc. // seconds at full throttle
 
-        IF maxAcc > 0 {
-            LOCAL ratio IS remaining / maxAcc.
-            IF ratio < 0.5 {
-                // Fine control: throttle proportional, min 2%
-                LOCK THROTTLE TO MAX(0.02, ratio).
-            } ELSE {
-                LOCK THROTTLE TO 1.0.
-            }
+        IF timeToStop > 1.0 { 
+            LOCK THROTTLE TO 1.0.
+        } ELSE IF timeToStop > 0.1 {
+            // Fine control: throttle proportional, min 2%
+            LOCK THROTTLE TO MAX(0.01, timeToStop).
+        } ELSE {
+            // Under 0.1s of burn left, cut
+            LOCK THROTTLE TO 0.
+            BREAK.
         }
 
         WAIT 0.01.
     }
 
-    // ── Shutdown ──────────────────────────────────────────
     LOCAL residual IS nd:DELTAV:MAG.
-
-    // Post-burn residual correction
-    IF residual > 0.1 AND residual < 5.0 {
-        mLog("Residual correction: " + ROUND(residual,2) + " m/s").
-        LOCK STEERING TO nd:BURNVECTOR.
-        WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < 1.0.
-        LOCAL corrAcc IS _safeMaxAcc().
-        IF corrAcc > 0 {
-            LOCK THROTTLE TO MIN(0.05, residual / corrAcc).
-            WAIT UNTIL nd:DELTAV:MAG < 0.1 OR VDOT(nd:BURNVECTOR:NORMALIZED, nd:DELTAV:NORMALIZED) < 0.
-            LOCK THROTTLE TO 0.
-        }
-    }
-
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
