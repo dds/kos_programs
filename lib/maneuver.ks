@@ -90,9 +90,9 @@ GLOBAL FUNCTION executeManeuver {
 
         IF dotCheck < 0 { LOCK THROTTLE TO 0. BREAK. }
 
-        IF timeToStop > 1.0 { 
+        IF remaining > 5.0 { 
             LOCK THROTTLE TO 1.0.
-        } ELSE IF timeToStop > 0.5 {
+        } ELSE IF remaining > 0.5 {
             // Fine control: throttle proportional, min 2%
             LOCAL timeToStop IS remaining / maxAcc.
             LOCK THROTTLE TO MAX(0.02, MIN(0.5, timeToStop)).
