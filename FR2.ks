@@ -33,10 +33,10 @@ GLOBAL CFG IS LEXICON(
     // Transfer + capture
     "RELAY_ALT",            500000,  // m above target body
     "CAPTURE_PE",            20000,  // m — arrival Pe aim point
-    "CIRC_ECC_TOL",          0.005, // ~2.5km at 500km
-    "TARGET_INCLINATION",   0,     // deg — 0=equatorial, 90=polar, -1=match vessel
-    "INCL_MATCH_TARGET",    "",    // vessel name to match if TARGET_INCLINATION=-1
-    "INCL_TOLERANCE",       0.5,   // deg
+    "CIRC_ECC_TOL",          0.005,  // ~2.5km at 500km
+    "TARGET_INCLINATION",    0,      // deg — 0=equatorial, 90=polar, -1=match vessel
+    "INCL_MATCH_TARGET",     "",     // vessel name to match if TARGET_INCLINATION=-1
+    "INCL_TOLERANCE",        0.5,    // deg
 
     // Probe impact
     "PROBE_IMPACT_PE",        -1000  // m — impact trajectory Pe
@@ -167,6 +167,40 @@ LOCAL FUNCTION _phaseLaunch {
         + "km  inc=" + CFG["LAUNCH_INCLINATION"]
         + "°  az=" + CFG["LAUNCH_AZIMUTH"] + "°").
 
+    // Launch abort monitor. Arms at launch, stays active through PARKING.
+    WHEN stateGet("phase","") = "LAUNCH" OR stateGet("phase","") = "PARKING" THEN {
+        LOCAL abort IS FALSE.
+        
+        // Anomalous trajectory — falling back with low Ap after 15s
+        IF TIME:SECONDS > (stateGetNum("launch_time",0) + 15)
+                AND SHIP:APOAPSIS < 30000
+                AND SHIP:VERTICALSPEED < 0 {
+            SET abort TO TRUE.
+            mLogError("Abort: anomalous trajectory — Ap=" + ROUND(SHIP:APOAPSIS/1000,1) + "km").
+        }
+        
+        // Unrecoverable attitude
+        IF SHIP:ALTITUDE < 40000
+                AND VANG(SHIP:FACING:FOREVECTOR, SHIP:VELOCITY:SURFACE) > 45 {
+            SET abort TO TRUE.
+            mLogError("Abort: attitude divergence — " 
+                + ROUND(VANG(SHIP:FACING:FOREVECTOR, SHIP:VELOCITY:SURFACE),1) + "deg off prograde").
+        }
+        
+        // Manual abort keypress
+        IF ABORT { SET abort TO TRUE. mLogError("Abort: manual trigger."). }
+        
+        IF abort {
+            _launchAbort().
+            RETURN.  // disarm trigger
+        }
+        
+        PRESERVE.
+    }
+    
+    // Store launch time for trajectory check
+    stateSetNum("launch_time", TIME:SECONDS).
+
     // Ignition
     mLog("Press ABORT within 5s to hold launch.").
     HUDTEXT("T-5: press ABORT to hold", 5, 2, 16, YELLOW, FALSE).
@@ -196,6 +230,42 @@ LOCAL FUNCTION _phaseLaunch {
     }
 
     nextPhase().
+}
+
+LOCAL FUNCTION _launchAbort {
+    mLogError("LAUNCH ABORT TRIGGERED.").
+    HUDTEXT("ABORT — CUT ENGINES", 5, 2, 20, RED, FALSE).
+    
+    // Cut engines immediately
+    SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    
+    // Deploy all parachutes
+    LOCAL chutes IS SHIP:PARTSTAGGED("chute_main").
+    IF chutes:LENGTH > 0 {
+        FOR c IN chutes {
+            IF c:HASMODULE("ModuleParachute") {
+                LOCAL mod IS c:GETMODULE("ModuleParachute").
+                IF mod:HASEVENT("Deploy Chute") {
+                    mod:DOEVENT("Deploy Chute").
+                } ELSE IF mod:HASEVENT("Arm Parachute") {
+                    mod:DOEVENT("Arm Parachute").
+                }
+            }
+        }
+        mLog("Parachutes deployed.").
+    } ELSE {
+        // No tagged chutes — try action group 6 as fallback
+        AG6 ON.
+        mLogWarn("No tagged chutes found — fired AG6.").
+    }
+    
+    HUDTEXT("ABORT — CHUTES DEPLOYED", 8, 2, 18, ORANGE, FALSE).
+    stateSet("phase", "ABORT").
+    mLog("Abort complete. Awaiting landing.").
 }
 
 LOCAL FUNCTION _ascentNeedsStage {
