@@ -38,8 +38,10 @@ GLOBAL FUNCTION targetedDeorbit {
 
     LOCAL targetLat IS CFG["PROBE_TARGET_LAT"].
     LOCAL targetLng IS CFG["PROBE_TARGET_LNG"].
-    LOCAL entryPe   IS CFG:HASKEY("PROBE_ENTRY_PE") ? CFG["PROBE_ENTRY_PE"] : 30000.
-    LOCAL tolerance IS CFG:HASKEY("PROBE_TARGET_TOL") ? CFG["PROBE_TARGET_TOL"] : 5000.
+    LOCAL entryPe   IS 30000.
+    IF CFG:HASKEY("PROBE_ENTRY_PE") { SET entryPe TO CFG["PROBE_ENTRY_PE"]. }
+    LOCAL tolerance IS 5000.
+    IF CFG:HASKEY("PROBE_TARGET_TOL") { SET tolerance TO CFG["PROBE_TARGET_TOL"]. }
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
         + "  entryPe=" + ROUND(entryPe/1000,1) + "km"
