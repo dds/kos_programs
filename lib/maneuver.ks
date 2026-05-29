@@ -459,3 +459,25 @@ LOCAL FUNCTION _phaseAngle {
     IF VDOT(cross, myVessel:ORBIT:BODY:ANGULARVEL) < 0 { SET angle TO 360 - angle. }
     RETURN angle.
 }
+
+GLOBAL FUNCTION planRaisePeNow {
+    PARAMETER targetPe.
+
+    LOCAL mu   IS SHIP:ORBIT:BODY:MU.
+    LOCAL rNow IS SHIP:ORBIT:BODY:RADIUS + SHIP:ALTITUDE.
+    LOCAL rPe  IS SHIP:ORBIT:BODY:RADIUS + targetPe.
+
+    // Current velocity
+    LOCAL vNow IS SHIP:VELOCITY:ORBIT:MAG.
+    // Velocity needed for ellipse with Pe=targetPe and Ap=current altitude
+    LOCAL tSMA IS (rNow + rPe) / 2.
+    LOCAL vNew IS SQRT(mu * (2/rNow - 1/tSMA)).
+    LOCAL dv   IS vNew - vNow.  // positive = prograde
+
+    LOCAL nd IS NODE(TIME:SECONDS + 10, 0, 0, dv).
+    ADD nd.
+    mLog("Raise Pe now: dV=" + ROUND(dv,1)
+        + " m/s  currentAlt=" + ROUND(SHIP:ALTITUDE/1000,1)
+        + "km  targetPe=" + ROUND(targetPe/1000,0) + "km").
+    RETURN nd.
+}

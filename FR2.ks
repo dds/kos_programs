@@ -279,7 +279,12 @@ LOCAL FUNCTION _phaseCapture {
 
 // ── CIRC ───────────────────────────────────────────────────
 LOCAL FUNCTION _phaseCirc {
-    IF SHIP:ORBIT:ECCENTRICITY < CFG["CIRC_ECC_TOL"] {
+    IF SHIP:PERIAPSIS < 0 OR SHIP:PERIAPSIS < SHIP:ORBIT:BODY:RADIUS * 0.01 {
+        // Pe is impact trajectory - raise it now at current position
+        mLog("On reentry trajectory, raising PE immediately.").
+        planRaisePeNow(CFG["RELAY_ALT"]).
+        executeManeuver().
+    } ELSE IF SHIP:ORBIT:ECCENTRICITY < CFG["CIRC_ECC_TOL"] {
         mLog("Already circular (ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4) + ").").
     } ELSE {
         planCircularize().
