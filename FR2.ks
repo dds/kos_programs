@@ -10,8 +10,8 @@
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
-    "PARKING_ALT",         100000,
-    "LAUNCH_INCLINATION",      0,
+    "PARKING_ALT",         120000,
+    "LAUNCH_INCLINATION",       90,
     "LAUNCH_AZIMUTH",           0,
     "LAUNCH_STAGE_LIMIT",       0,
     "FAIRING_ALT",          68000,
@@ -19,10 +19,10 @@ GLOBAL CFG IS LEXICON(
     "RELAY_ALT",           1000000,
     "CAPTURE_PE",            20000,
     "CIRC_ECC_TOL",          0.005,
-    "TARGET_INCLINATION",    0,
-    "INCL_MATCH_TARGET",     "",
-    "INCL_TOLERANCE",        0.01,
-    "MAX_INCL_CHANGE_DV",    200,
+    "TARGET_INCLINATION",      90,
+    "INCL_MATCH_TARGET",       "",
+    "INCL_TOLERANCE",         0.01,
+    "MAX_INCL_CHANGE_DV",     200,
     "PROBE_TARGET_LAT",        80.0,
     "PROBE_TARGET_LNG",         0.0,
     "PROBE_ENTRY_PE",         30000,
