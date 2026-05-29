@@ -8,8 +8,8 @@
 // Threshold: maneuver considered complete when remaining
 // dV drops below this fraction of original burn OR below
 // ABS_CUTOFF m/s, whichever is larger.
-LOCAL COMPLETE_FRAC   IS 0.003.  // 0.2% of original dV remaining
-LOCAL ABS_CUTOFF      IS 0.3.    // m/s — hard floor
+LOCAL COMPLETE_FRAC   IS 0.001.  // 0.1% of original dV remaining
+LOCAL ABS_CUTOFF      IS 0.1.    // m/s — hard floor
 LOCAL ALIGN_TOLERANCE IS 2.0.    // degrees — begin burn within this
 LOCAL G0 IS 9.80665. // standard gravity m/s^2  - ISP conversion constant
 
@@ -102,6 +102,20 @@ GLOBAL FUNCTION executeManeuver {
 
     // ── Shutdown ──────────────────────────────────────────
     LOCAL residual IS nd:DELTAV:MAG.
+
+    // Post-burn residual correction
+    IF residual > 0.1 AND residual < 5.0 {
+        mLog("Residual correction: " + ROUND(residual,2) + " m/s").
+        LOCK STEERING TO nd:BURNVECTOR.
+        WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < 1.0.
+        LOCAL corrAcc IS _safeMaxAcc().
+        IF corrAcc > 0 {
+            LOCK THROTTLE TO MIN(0.05, residual / corrAcc).
+            WAIT UNTIL nd:DELTAV:MAG < 0.1 OR VDOT(nd:BURNVECTOR:NORMALIZED, nd:DELTAV:NORMALIZED) < 0.
+            LOCK THROTTLE TO 0.
+        }
+    }
+
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
@@ -432,7 +446,7 @@ LOCAL FUNCTION _effectiveIsp {
     LOCAL totalThrust IS 0.
     LOCAL totalFlow IS 0.
     FOR eng in SHIP:ENGINES {
-        IF eng:IGNITION AND NOT eng:FLAMEOUT {
+        IF NOT eng:FLAMEOUT AND eng:AVAILABLETHRUST > 0 {
             LOCAL flow IS eng:AVAILABLETHRUST / (eng:ISP * G0).
             SET totalFLow TO totalFlow + flow.
             SET totalThrust TO totalThrust + eng:AVAILABLETHRUST.
