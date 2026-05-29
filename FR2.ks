@@ -343,8 +343,13 @@ LOCAL FUNCTION _phaseCapture {
     LOCAL target IS missionTargetBody().
     WAIT 2. // let KE update after warp/SOI transition
     mLog("Planning capture at " + target:NAME + ".").
-    planCapture(target, CFG["RELAY_ALT"]).
-    executeManeuver().
+    LOCAL success IS FALSE.
+    UNTIL success {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        planCapture(target, CFG["RELAY_ALT"]).
+        SET success TO executeManeuver().
+        IF NOT success { mLog("Capture missed - replanning."). }
+    }
     orbitSummary().
     nextPhase().
 }
