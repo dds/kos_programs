@@ -48,6 +48,7 @@ GLOBAL CFG IS LEXICON(
     "PROBE_TARGET_TOL",        200 // m  - acceptable miss distance
 ).
 // ============================================================
+RUNPATH("1:/lib/inclination.ks").
 
 // ── Phase sequence builder ─────────────────────────────────
 LOCAL FUNCTION buildPhaseSequence {
