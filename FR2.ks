@@ -207,7 +207,7 @@ LOCAL FUNCTION _phaseParking {
 
 LOCAL FUNCTION _isParkingOrbitStable {
     LOCAL target IS CFG["PARKING_ALT"].
-    LOCAL tol IS target * 0.05.
+    LOCAL tol IS target * 0.10.
     RETURN SHIP:PERIAPSIS > (target - tol) 
         AND SHIP:APOAPSIS < (target + tol)
         AND SHIP:APOAPSIS > (target - tol).
