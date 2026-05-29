@@ -81,7 +81,7 @@ LOCAL FUNCTION _normalizePayloadType {
     LOCAL result IS raw:TOUPPER.
     UNTIL result:LENGTH = 0 {
         LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
-        IF last:MATCHESPATTERN("[0-9\\-]") { 
+        IF last:MATCHESPATTERN("[0-9]") OR last = "-" {
             SET result TO result:SUBSTRING(0, result:LENGTH - 1).
         } ELSE { 
             BREAK.
