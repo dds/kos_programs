@@ -59,7 +59,7 @@ PRINT "Syncing archive...".
 COPYPATH("0:/boot/boot.ks",              "1:/boot/boot.ks").
 COPYPATH("0:/lib/countdown.ks",          "1:/lib/countdown.ks").
 COPYPATH("0:/lib/state.ks",              "1:/lib/state.ks").
-COPYPATH("0:/lib/log.ks",                "1:/lib/log.ks").
+COPYPATH("0:/lib/logs.ks",               "1:/lib/logs.ks").
 COPYPATH("0:/lib/maneuver.ks",           "1:/lib/maneuver.ks").
 COPYPATH("0:/lib/orbit.ks",              "1:/lib/orbit.ks").
 COPYPATH("0:/lib/files.ks",              "1:/lib/files.ks").
