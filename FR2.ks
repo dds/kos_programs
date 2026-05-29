@@ -199,12 +199,10 @@ LOCAL FUNCTION _phaseParking {
         }
 
         IF needsStage {
-            IF safeToStage {
-                mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
-                HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
-                STAGE.
-                WAIT 0.5.
-            }
+            mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
+            HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
+            STAGE.
+            WAIT 0.5.
         }
 
         WAIT 0.1.
