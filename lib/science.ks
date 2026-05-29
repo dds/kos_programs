@@ -17,7 +17,7 @@ GLOBAL sciLastSituation IS "".
 
 GLOBAL FUNCTION scienceInit {
     SET scienceActive    TO TRUE.
-    SET sciLastBiome     TO SHIP:BIOME.
+    SET sciLastBiome     TO SHIP:GEOPOSITION:BIOME. // Fixed
     SET sciLastSituation TO SHIP:SITUATION.
 
     mLog("Science monitor active. Biome=" + sciLastBiome
@@ -27,29 +27,35 @@ GLOBAL FUNCTION scienceInit {
         scienceStartScanners().
     }
 
-    WHEN scienceActive AND
-            (SHIP:BIOME <> sciLastBiome OR SHIP:SITUATION <> sciLastSituation) THEN {
+    // Optimized trigger condition
+    WHEN scienceActive THEN {
+        // Fetch current states once per trigger check to avoid multi-query lag
+        LOCAL currentBiome IS SHIP:GEOPOSITION:BIOME.
+        LOCAL currentSit   IS SHIP:SITUATION.
 
-        LOCAL newBiome IS SHIP:BIOME.
-        LOCAL newSit   IS SHIP:SITUATION.
+        IF (currentBiome <> sciLastBiome OR currentSit <> sciLastSituation) {
 
-        mLog("Science: situation change"
-            + "  biome: " + sciLastBiome + " -> " + newBiome
-            + "  situation: " + sciLastSituation + " -> " + newSit).
+            mLog("Science: situation change"
+                + "  biome: " + sciLastBiome + " -> " + currentBiome
+                + "  situation: " + sciLastSituation + " -> " + currentSit).
 
-        IF SCI_CFG["ALERT_ON_CHANGE"] {
-            HUDTEXT("New science: " + newBiome + " / " + newSit,
-                4, 2, 14, CYAN, FALSE).
+            IF SCI_CFG["ALERT_ON_CHANGE"] {
+                HUDTEXT("New science: " + currentBiome + " / " + currentSit,
+                    4, 2, 14, CYAN, FALSE).
+            }
+
+            SET sciLastBiome     TO currentBiome.
+            SET sciLastSituation TO currentSit.
+
+            IF SCI_CFG["AUTO_COLLECT"] {
+                scienceRunAll().
+            }
         }
 
-        SET sciLastBiome     TO newBiome.
-        SET sciLastSituation TO newSit.
-
-        IF SCI_CFG["AUTO_COLLECT"] {
-            scienceRunAll().
+        // Only preserve the trigger if we actually want the monitor to stay alive
+        IF scienceActive {
+            PRESERVE.
         }
-
-        PRESERVE.
     }
 }
 
