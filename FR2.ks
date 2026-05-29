@@ -27,7 +27,8 @@ GLOBAL CFG IS LEXICON(
     "LAUNCH_INCLINATION",       0,  // deg — 0 = equatorial
     "LAUNCH_AZIMUTH",          90,  // deg — 90 = due east from KSC
     "LAUNCH_STAGE_LIMIT",       2,  // MJ AutoStageLimit
-    "FAIRING_ALT",          75000,  // m — jettison main_fairing
+    "FAIRING_ALT",          69000,  // m — jettison main_fairing
+    "EXTEND_ALT",           75000,  // m - extend panels & attenae 
 
     // Transfer + capture
     "RELAY_ALT",           1000000,  // m above target body
@@ -45,6 +46,7 @@ LOCAL FUNCTION buildPhaseSequence {
         "LAUNCH",
         "PARKING",
         "FAIRING",
+        "EXTEND_ANTS",
         "TMI",
         "COAST",
         "CAPTURE",
@@ -118,6 +120,7 @@ LOCAL FUNCTION _runPhaseLoop {
         ELSE IF phase = "RECIRC"       { _phaseRecirc().       }
         ELSE IF phase = "RELAY_OPS"    { _phaseRelayOps().     }
         ELSE IF phase = "DEPLOY_SAT"   { _phaseDeploySat().    }
+        ELSE IF phase = "EXTEND_ANTS"  { _phaseExtendAnts(). }
         ELSE IF phase = "DONE"         { _phaseDone(). RETURN. }
         ELSE {
             mLogError("Unknown phase: " + phase + " — halting.").
@@ -368,32 +371,29 @@ LOCAL FUNCTION _deployFairing {
         myMod:DOEVENT("Deploy").
         stateSet("fairing_deployed", "true").
         mLog("Fairing deployed at " + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
-
-        // Wait for fairing shards to clear before deploying panels/antennas.
-        WAIT 3.
-
-
-        // Deploy solar panels
-        FOR p IN SHIP:PARTS {
-            IF p:HASMODULE("ModuleDeployableSolarPanel") {
-                LOCAL sm IS p:GETMODULE("ModuleDeployableSolarPanel").
-                IF sm:HASEVENT("Extend Solar Panel") {
-                    sm:DOEVENT("Extend Solar Panel").
-                }
-            }
-        }
-        mLog("Solar panels deployed.").
-        
-        // Deploy antennas
-        FOR p IN SHIP:PARTS {
-            IF p:HASMODULE("ModuleDeployableAntenna") {
-                LOCAL am IS p:GETMODULE("ModuleDeployableAntenna").
-                IF am:HASEVENT("Extend Antenna") {
-                    am:DOEVENT("Extend Antenna").
-                }
-            }
-        }
     } ELSE {
         mLogWarn("Fairing Deploy event not available.").
     }
+}
+
+LOCAL FUNCTION _phaseExtendAnts {
+    IF SHIP:ALTITUDE < CFG["DEPLOY_ALT"] {
+        mLog("Waiting for deploy alt " + ROUND(CFG["DEPLOY_ALT"]/1000,0) + "km...").
+        WAIT UNTIL SHIP:ALTITUDE >= CFG["DEPLOY_ALT"].
+    }
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleDeployableSolarPanel") {
+            LOCAL sm IS p:GETMODULE("ModuleDeployableSolarPanel").
+            IF sm:HASEVENT("Extend Solar Panel") { sm:DOEVENT("Extend Solar Panel"). }
+        }
+    }
+    mLog("Solar panels deployed.").
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleDeployableAntenna") {
+            LOCAL am IS p:GETMODULE("ModuleDeployableAntenna").
+            IF am:HASEVENT("Extend Antenna") { am:DOEVENT("Extend Antenna"). }
+        }
+    }
+    mLog("Antennas deployed.").
+    nextPhase().
 }
