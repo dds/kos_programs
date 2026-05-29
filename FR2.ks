@@ -175,7 +175,25 @@ LOCAL FUNCTION _phaseLaunch {
     mLog("Launch — STAGE fired.").
     HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
 
+    // Arm staging monitor — stays active through entire ascent
+    WHEN _ascentNeedsStage() THEN {
+        IF stateGet("phase","") = "DONE" { RETURN. }  // disarm after mission
+        mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
+        HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
+        STAGE.
+        WAIT 0.5.
+        PRESERVE.
+    }
+
     nextPhase().
+}
+
+LOCAL FUNCTION _ascentNeedsStage {
+    LOCAL engs IS LIST().
+    LIST ENGINES IN engs.
+    FOR eng IN engs { IF eng:FLAMEOUT { RETURN TURE. } }
+    IF SHIP:MAXTHRUST = 0 { RETURN TRUE. }
+    RETURN FALSE.
 }
 
 // ── PARKING ────────────────────────────────────────────────
