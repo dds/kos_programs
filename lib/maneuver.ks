@@ -47,7 +47,7 @@ GLOBAL FUNCTION executeManeuver {
     // ── Coast to T-10 ─────────────────────────────────────
     WAIT UNTIL TIME:SECONDS >= (startTime - 10).
     HUDTEXT("Burn in T-10", 3, 2, 15, WHITE, FALSE).
-    _countdown(9).
+    countdown(9).
 
     WAIT UNTIL TIME:SECONDS >= startTime.
     mLog("Burn start. dV=" + ROUND(burnDV,1) + " m/s").
@@ -246,15 +246,6 @@ LOCAL FUNCTION _needsStage {
     FOR eng IN engs { IF eng:FLAMEOUT { RETURN TRUE. } }
     IF SHIP:MAXTHRUST = 0 { RETURN TRUE. }
     RETURN FALSE.
-}
-
-LOCAL FUNCTION _countdown {
-    PARAMETER n.
-    UNTIL n <= 0 {
-        HUDTEXT("T-" + n, 1, 2, 14, WHITE, FALSE).
-        WAIT 1.
-        SET n TO n - 1.
-    }
 }
 
 LOCAL FUNCTION _phaseAngle {

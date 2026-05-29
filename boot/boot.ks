@@ -1,4 +1,4 @@
-i// ============================================================
+// ============================================================
 // boot.ks  —  Generic mission boot  (0:/boot/boot.ks)
 // Shared across ALL vehicles and missions. Never edit.
 //
@@ -57,6 +57,7 @@ ensureDir("1:/state").
 // ── Sync archive → local ───────────────────────────────────
 PRINT "Syncing archive...".
 COPYPATH("0:/boot/boot.ks",              "1:/boot/boot.ks").
+COPYPATH("0:/lib/countdown.ks",          "1:/lib/countdown.ks").
 COPYPATH("0:/lib/state.ks",              "1:/lib/state.ks").
 COPYPATH("0:/lib/log.ks",                "1:/lib/log.ks").
 COPYPATH("0:/lib/maneuver.ks",           "1:/lib/maneuver.ks").
@@ -66,6 +67,7 @@ COPYPATH("0:/" + vehicleName + ".ks",    "1:/" + vehicleName + ".ks").
 PRINT "Sync complete.".
 
 // ── Load libs ──────────────────────────────────────────────
+RUNPATH("1:/lib/countdown.ks").
 RUNPATH("1:/lib/state.ks").
 stateInit().
 RUNPATH("1:/lib/log.ks").
