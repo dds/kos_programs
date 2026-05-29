@@ -72,7 +72,6 @@ ELSE IF remoteCommand = "burn" {
     // Execute the current maneuver.
     executeNextManeuver().
 }
-
 ELSE IF remoteCommand = "capture" {
     ADD planMunarCapture(munTargetApoapsis).
     mLog("Capture node manually generated via Telnet!").
@@ -148,8 +147,6 @@ FUNCTION startLaunch {
 }
 
 FUNCTION endLaunch {
-    LOCK THROTTLE to 0.
-    UNLOCK STEERING.
     HUDTEXT("Launch complete.", 1, 2, 15, WHITE, FALSE).
 }
 
@@ -262,6 +259,7 @@ FUNCTION executeNextManeuver {
     SET SASMODE TO "StabilityAssist".
     REMOVE t. 
     LOCK THROTTLE TO 0.
+    WAIT 0.01.
     UNLOCK THROTTLE. 
     HUDTEXT("Maneuver burn finalized.", 1, 2, 15, GREEN, FALSE).
     mLog("Engine shutdown complete. SAS holding current attitude.").
