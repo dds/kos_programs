@@ -48,16 +48,17 @@ GLOBAL FUNCTION targetedDeorbit {
         + "  tolerance=" + ROUND(tolerance/1000,1) + "km").
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
-    // ── Coarse scan — one full orbit in steps ──────────────
-    LOCAL period    IS SHIP:ORBIT:PERIOD.
-    LOCAL scanStep  IS period / 36.  // 36 steps = 10 degree increments
-    LOCAL bestUT    IS -1.
-    LOCAL bestDist  IS 999999999.
-    LOCAL scanUT    IS TIME:SECONDS + 30.  // start 30s from now
-    LOCAL scanEnd   IS TIME:SECONDS + period + 30.
-
-    mLog("Coarse scan: " + ROUND(period/60,1) + " min orbit, " + ROUND(scanStep,0) + "s steps.").
-
+    // Multi-pass converging scan
+    LOCAL scanStep  IS period / 36.  // coarse: 66s
+    LOCAL passes    IS LIST(1.0, 0.1, 0.01, 0.001, 0.0001).  // step multipliers
+    LOCAL windowMul IS 2.0.  // search window = +/- windowMul * current step
+    
+    LOCAL bestUT   IS TIME:SECONDS + 30.
+    LOCAL bestDist IS 999999999.
+    
+    // Coarse pass — full orbit
+    LOCAL scanUT  IS TIME:SECONDS + 30.
+    LOCAL scanEnd IS TIME:SECONDS + period + 30.
     UNTIL scanUT > scanEnd {
         LOCAL dist IS _testDeorbitNode(scanUT, entryPe, targetLat, targetLng).
         IF dist >= 0 AND dist < bestDist {
@@ -67,33 +68,36 @@ GLOBAL FUNCTION targetedDeorbit {
                 + "s  dist=" + ROUND(dist/1000,1) + "km").
         }
         SET scanUT TO scanUT + scanStep.
-        WAIT 0.1.  // yield to physics
+        WAIT 0.1.
     }
-
-    IF bestUT < 0 {
-        mLogError("targetedDeorbit: no valid deorbit window found. Falling back.").
-        planLowerPe(CFG["PROBE_IMPACT_PE"]).
-        executeManeuver().
-        RETURN.
-    }
-
     mLog("Coarse best: T+" + ROUND(bestUT - TIME:SECONDS,0)
         + "s  dist=" + ROUND(bestDist/1000,1) + "km").
-
-    // ── Fine scan — narrow window around best coarse result ─
-    LOCAL fineStep IS scanStep / 10.
-    LOCAL fineStart IS bestUT - scanStep.
-    LOCAL fineEnd   IS bestUT + scanStep.
-    LOCAL fineUT    IS fineStart.
-
-    UNTIL fineUT > fineEnd {
-        LOCAL t IS _testDeorbitNode(fineUT, entryPe, targetLat, targetLng).
-        IF t >= 0 AND t < bestDist {
-            SET bestDist TO t.
-            SET bestUT   TO fineUT.
+    
+    // Successive refinement passes
+    FOR mult IN passes:SUBLIST(1, passes:LENGTH - 1) {
+        LOCAL step    IS scanStep * mult.
+        LOCAL winStart IS bestUT - (scanStep * (mult * 10)).
+        LOCAL winEnd   IS bestUT + (scanStep * (mult * 10)).
+        LOCAL passUT   IS winStart.
+        LOCAL passBest IS bestDist.
+        LOCAL passBestUT IS bestUT.
+    
+        UNTIL passUT > winEnd {
+            LOCAL dist IS _testDeorbitNode(passUT, entryPe, targetLat, targetLng).
+            IF dist >= 0 AND dist < passBest {
+                SET passBest   TO dist.
+                SET passBestUT TO passUT.
+            }
+            SET passUT TO passUT + step.
+            WAIT 0.05.
         }
-        SET fineUT TO fineUT + fineStep.
-        WAIT 0.05.
+    
+        SET bestDist TO passBest.
+        SET bestUT   TO passBestUT.
+        mLog("Pass step=" + ROUND(step,2) + "s  best dist=" + ROUND(bestDist,0) + "m"
+            + "  T+" + ROUND(bestUT - TIME:SECONDS,0) + "s").
+    
+        IF bestDist < tolerance { BREAK. }
     }
 
     mLog("Fine best: T+" + ROUND(bestUT - TIME:SECONDS,0)
