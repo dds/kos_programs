@@ -424,7 +424,7 @@ LOCAL FUNCTION _calcStartTime {
     LOCAL burnDur IS _estimateBurnDuration(nd:DELTAV:MAG).
     mLog("DEBUG calcStartTime: dv=" + ROUND(nd:DELTAV:MAG,1)
     + " maxThrust=" + ROUND(SHIP:MAXTHRUST,1)
-    + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)
+    + " availableThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)
     + " possibleThrust=" + ROUND(SHIP:POSSIBLETHRUST,1)
     + " mass=" + ROUND(SHIP:MASS,2)
     + " isp=" + ROUND(_effectiveIsp(),1)
