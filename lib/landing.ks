@@ -44,7 +44,13 @@ GLOBAL FUNCTION landingExecute {
     SET landingAbortFlag TO FALSE.
 
     LOCAL useKE IS LANDING_CFG["USE_KE"] AND ADDONS:KE:AVAILABLE.
-    mLog("Landing system: " + (IF useKE THEN "KerbalEngineer" ELSE "manual calculation")).
+    LOCAL landingSystem IS "".
+    IF useKE { 
+        SET landingSystem TO "KerbalEngineer".
+    } ELSE {
+        SET landingSystem TO "manual calculation".
+    }
+    mLog("Landing system: " + landingSystem)).
 
     // Tilt abort trigger
     WHEN (ABS(SHIP:FACING:PITCH) > LANDING_CFG["MAX_TILT"]
