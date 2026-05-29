@@ -47,11 +47,11 @@ COPYPATH("0:/lib/inclination.ks",     "1:/lib/inclination.ks").
 COPYPATH("0:/lib/orbit.ks",           "1:/lib/orbit.ks").
 COPYPATH("0:/lib/files.ks",           "1:/lib/files.ks").
 COPYPATH("0:/lib/resume.ks",          "1:/lib/resume.ks").
-COPYPATH("0:/lib/landing.ks",         "1:/lib/landing.ks").
+// COPYPATH("0:/lib/landing.ks",         "1:/lib/landing.ks").
 COPYPATH("0:/lib/science.ks",         "1:/lib/science.ks").
 COPYPATH("0:/lib/targeting.ks",       "1:/lib/targeting.ks").
 COPYPATH("0:/lib/relay_constellation.ks", "1:/lib/relay_constellation.ks").
-COPYPATH("0:/lib/rover.ks",           "1:/lib/rover.ks").
+// COPYPATH("0:/lib/rover.ks",           "1:/lib/rover.ks").
 COPYPATH("0:/cmd/resume.ks",          "1:/cmd/resume.ks").
 COPYPATH("0:/cmd/setstate.ks",        "1:/cmd/setstate.ks").
 COPYPATH("0:/cmd/dump.ks",            "1:/cmd/dump.ks").
@@ -59,9 +59,9 @@ COPYPATH("0:/cmd/resetboot.ks",       "1:/cmd/resetboot.ks").
 COPYPATH("0:/cmd/files.ks",           "1:/cmd/files.ks").
 COPYPATH("0:/cmd/science.ks",         "1:/cmd/science.ks").
 COPYPATH("0:/cmd/sciencestatus.ks",   "1:/cmd/sciencestatus.ks").
-COPYPATH("0:/cmd/scanstart.ks",       "1:/cmd/scanstart.ks").
-COPYPATH("0:/cmd/scanstatus.ks",      "1:/cmd/scanstatus.ks").
-COPYPATH("0:/cmd/scantransmit.ks",    "1:/cmd/scantransmit.ks").
+// COPYPATH("0:/cmd/scanstart.ks",       "1:/cmd/scanstart.ks").
+// COPYPATH("0:/cmd/scanstatus.ks",      "1:/cmd/scanstatus.ks").
+// COPYPATH("0:/cmd/scantransmit.ks",    "1:/cmd/scantransmit.ks").
 COPYPATH("0:/" + vehicleName + ".ks", "1:/" + vehicleName + ".ks").
 PRINT "Sync complete.".
 
