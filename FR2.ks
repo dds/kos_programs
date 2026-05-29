@@ -295,11 +295,11 @@ LOCAL FUNCTION _phaseCirc {
 }
 
 LOCAL FUNCTION _impactThreat {
-    LOCAL body IS SHIP:ORBIT:BODY.
+    LOCAL myBody IS SHIP:ORBIT:BODY.
     LOCAL pe   IS SHIP:PERIAPSIS.
 
-    IF body:ATM:EXISTS {
-        RETURN pe < body:ATM:HEIGHT + 1000.
+    IF myBody:ATM:EXISTS {
+        RETURN pe < myBody:ATM:HEIGHT + 1000.
     }
 
     RETURN pe < 5000.
