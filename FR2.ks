@@ -36,7 +36,7 @@ GLOBAL CFG IS LEXICON(
     "RELAY_ALT",           1500000,  // m above target body
     "CAPTURE_PE",            20000,  // m — arrival Pe aim point
     "CIRC_ECC_TOL",          0.005,  // ~2.5km at 500km
-    "TARGET_INCLINATION",    90,     // deg — 0=equatorial, 90=polar, -1=match vessel
+    "TARGET_INCLINATION",    55,     // deg — 0=equatorial, 90=polar, -1=match vessel
     "INCL_MATCH_TARGET",     "",     // vessel name to match if TARGET_INCLINATION=-1
     "INCL_TOLERANCE",        0.01,   // deg
 
