@@ -36,7 +36,7 @@ GLOBAL CFG IS LEXICON(
     "CIRC_ECC_TOL",          0.005,  // ~2.5km at 500km
     "TARGET_INCLINATION",    0,      // deg — 0=equatorial, 90=polar, -1=match vessel
     "INCL_MATCH_TARGET",     "",     // vessel name to match if TARGET_INCLINATION=-1
-    "INCL_TOLERANCE",        0.5,    // deg
+    "INCL_TOLERANCE",        0.01,   // deg
 
     // Probe impact
     "PROBE_IMPACT_PE",        -1000  // m — impact trajectory Pe
@@ -248,11 +248,11 @@ LOCAL FUNCTION _launchAbort {
     IF chutes:LENGTH > 0 {
         FOR c IN chutes {
             IF c:HASMODULE("ModuleParachute") {
-                LOCAL mod IS c:GETMODULE("ModuleParachute").
-                IF mod:HASEVENT("Deploy Chute") {
-                    mod:DOEVENT("Deploy Chute").
-                } ELSE IF mod:HASEVENT("Arm Parachute") {
-                    mod:DOEVENT("Arm Parachute").
+                LOCAL modu IS c:GETMODULE("ModuleParachute").
+                IF modu:HASEVENT("Deploy Chute") {
+                    modu:DOEVENT("Deploy Chute").
+                } ELSE IF modu:HASEVENT("Arm Parachute") {
+                    modu:DOEVENT("Arm Parachute").
                 }
             }
         }
