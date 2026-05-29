@@ -84,18 +84,10 @@ GLOBAL FUNCTION patchAndRun {
 LOCAL bootCount IS stateGetNum("boot_count", 1).
 LOCAL phase     IS stateGet("phase", "").
 
-IF phase = "" {
-    // No phase saved — something wrong, drop to manual
-    PRINT " ".
-    PRINT "*** MANUAL MODE — no saved phase ***".
-    PRINT "Check stateDump() and setState() to recover.".
-    mLog("Manual mode — no phase in state.").
-    UNLOCK ALL.
-    SET SAS TO TRUE.
-} ELSE IF phase = "DONE" {
+IF phase = "DONE" {
     // Mission complete
     PRINT " ".
-    PRINT "Mission already complete. Manual mode.".
+    PRINT "Mission complete. Manual mode.".
     mLog("Reboot after DONE — manual mode.").
     UNLOCK ALL.
     SET SAS TO TRUE.
