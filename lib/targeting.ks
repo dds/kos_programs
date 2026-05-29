@@ -162,11 +162,11 @@ LOCAL FUNCTION _planDeorbitNode {
     PARAMETER entryPe.
 
     LOCAL mu    IS SHIP:ORBIT:BODY:MU.
-    LOCAL r     IS SHIP:ORBIT:BODY:RADIUS + SHIP:ORBIT:APOAPSIS. // circular orbit radius
+    LOCAL oRad  IS SHIP:ORBIT:BODY:RADIUS + SHIP:ORBIT:APOAPSIS. // circular orbit radius
     LOCAL rPe   IS SHIP:ORBIT:BODY:RADIUS + entryPe.
-    LOCAL tSMA  IS (r + rPe) / 2.
-    LOCAL vCirc IS SQRT(mu / r).
-    LOCAL vNew  IS SQRT(mu * (2/r - 1/tSMA)).
+    LOCAL tSMA  IS (oRad + rPe) / 2.
+    LOCAL vCirc IS SQRT(mu / oRad).
+    LOCAL vNew  IS SQRT(mu * (2/oRad - 1/tSMA)).
     LOCAL dv    IS vNew - vCirc.  // negative = retrograde
 
     LOCAL nd IS NODE(burnUT, 0, 0, dv).
@@ -182,7 +182,7 @@ LOCAL FUNCTION _geoDistance {
     PARAMETER lng2.
 
     // Haversine formula
-    LOCAL R    IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL oRad    IS SHIP:ORBIT:BODY:RADIUS.
     LOCAL dLat IS (lat2 - lat1) * CONSTANT:PI / 180.
     LOCAL dLng IS (lng2 - lng1) * CONSTANT:PI / 180.
     LOCAL a    IS SIN(dLat/2)^2
@@ -190,7 +190,7 @@ LOCAL FUNCTION _geoDistance {
                * COS(lat2 * CONSTANT:PI/180)
                * SIN(dLng/2)^2.
     LOCAL c    IS 2 * ARCSIN(MIN(1, SQRT(a))).
-    RETURN R * c * CONSTANT:PI / 180.  // meters
+    RETURN oRad * c * CONSTANT:PI / 180.  // meters
 }
 
 // ── Check if target is reachable from current inclination ─
