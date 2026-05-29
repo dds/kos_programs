@@ -23,10 +23,10 @@
 // ============================================================
 GLOBAL CFG IS LEXICON(
     // Ascent
-    "PARKING_ALT",          90000,  // m — MJ target orbit altitude
-    "LAUNCH_INCLINATION",       0,  // deg — 0 = equatorial
-    "LAUNCH_AZIMUTH",          90,  // deg — 90 = due east from KSC
-    "LAUNCH_STAGE_LIMIT",       2,  // MJ AutoStageLimit
+    "PARKING_ALT",         200000,  // m — MJ target orbit altitude
+    "LAUNCH_INCLINATION",      55,  // deg — 0 = equatorial
+    "LAUNCH_AZIMUTH",           0,  // deg — 90 = due east from KSC
+    // "LAUNCH_STAGE_LIMIT",       2,  // MJ AutoStageLimit
     "FAIRING_ALT",          62000,  // m — jettison main_fairing
     "EXTEND_ALT",           71000,  // m - extend panels & attenae 
 
@@ -34,12 +34,15 @@ GLOBAL CFG IS LEXICON(
     "RELAY_ALT",            500000,  // m above target body
     "CAPTURE_PE",            20000,  // m — arrival Pe aim point
     "CIRC_ECC_TOL",          0.005,  // ~2.5km at 500km
-    "TARGET_INCLINATION",    0,      // deg — 0=equatorial, 90=polar, -1=match vessel
+    "TARGET_INCLINATION",    90,     // deg — 0=equatorial, 90=polar, -1=match vessel
     "INCL_MATCH_TARGET",     "",     // vessel name to match if TARGET_INCLINATION=-1
     "INCL_TOLERANCE",        0.01,   // deg
 
     // Probe impact
-    "PROBE_IMPACT_PE",        -1000  // m — impact trajectory Pe
+    "PROBE_TARGET_LAT",        75.0,
+    "PROBE_TARGET_LNG",       -30.0,
+    "PROBE_ENTRY_PE",         30000,
+    "PROBE_TARGET_TOL",        200 // m  - acceptable miss distance
 ).
 // ============================================================
 
@@ -57,7 +60,7 @@ LOCAL FUNCTION buildPhaseSequence {
     FOR ptype IN missionPayloads() {
         LOCAL t IS _normalizePayloadType(ptype).
         IF t = "CRASHPROBE" OR t = "PROBE" {
-            seq:ADD("LOWER_PE").
+            seq:ADD("TARGETED_DEORBIT").
             seq:ADD("RELEASE_PROBE").
         }
     }
@@ -137,7 +140,7 @@ LOCAL FUNCTION _runPhaseLoop {
         ELSE IF phase = "CAPTURE"      { _phaseCapture().      }
         ELSE IF phase = "CIRC"         { _phaseCirc().         }
         ELSE IF phase = "INCL_CORRECT" { _phaseInclCorrect().  }
-        ELSE IF phase = "LOWER_PE"     { _phaseLowerPe().      }
+        ELSE IF phase = "TARGETED_DEORBIT" { _phaseTargetedDeorbit(). }
         ELSE IF phase = "RELEASE_PROBE"{ _phaseReleaseProbe(). }
         ELSE IF phase = "RECIRC"       { _phaseRecirc().       }
         ELSE IF phase = "RELAY_OPS"    { _phaseRelayOps().     }
@@ -393,12 +396,15 @@ LOCAL FUNCTION _impactThreat {
     RETURN pe < 5000.
 }
 
-// ── LOWER_PE ───────────────────────────────────────────────
-LOCAL FUNCTION _phaseLowerPe {
-    mLog("Lowering Pe to " + ROUND(CFG["PROBE_IMPACT_PE"]/1000,1) + "km.").
-    planLowerPe(CFG["PROBE_IMPACT_PE"]).
-    executeManeuver().
-    orbitSummary().
+// ── TARGETED_DEORBIT ───────────────────────────────────────────────
+LOCAL FUNCTION _phaseTargetedDeorbit {
+    // Check target is reachable from current inclination
+    IF NOT targetReachable(CFG["PROBE_TARGET_LAT"]) {
+        mLogWarn("Target lat=" + CFG["PROBE_TARGET_LAT"]
+            + " not reachable from inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
+            + "deg — proceeding with best effort.").
+    }
+    targetedDeorbit().
     nextPhase().
 }
 

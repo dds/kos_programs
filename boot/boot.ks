@@ -49,6 +49,7 @@ COPYPATH("0:/lib/files.ks",           "1:/lib/files.ks").
 COPYPATH("0:/lib/resume.ks",          "1:/lib/resume.ks").
 COPYPATH("0:/lib/landing.ks",         "1:/lib/landing.ks").
 COPYPATH("0:/lib/science.ks",         "1:/lib/science.ks").
+COPYPATH("0:/lib/targeting.ks",       "1:/lib/targeting.ks").
 COPYPATH("0:/lib/relay_constellation.ks", "1:/lib/relay_constellation.ks").
 COPYPATH("0:/lib/rover.ks",           "1:/lib/rover.ks").
 COPYPATH("0:/cmd/resume.ks",          "1:/cmd/resume.ks").
@@ -77,6 +78,7 @@ RUNPATH("1:/lib/relay_constellation.ks").
 RUNPATH("1:/lib/orbit.ks").
 RUNPATH("1:/lib/files.ks").
 RUNPATH("1:/lib/landing.ks").
+RUNPATH("1:/lib/targeting.ks").
 
 // ── Init state on first boot ───────────────────────────────
 LOCAL bootCount IS stateGetNum("boot_count", 0) + 1.
