@@ -31,12 +31,12 @@ GLOBAL CFG IS LEXICON(
     "EXTEND_ALT",           71000,  // m - extend panels & attenae 
 
     // Transfer + capture
-    "RELAY_ALT",           1000000,  // m above target body
+    "RELAY_ALT",            500000,  // m above target body
     "CAPTURE_PE",            20000,  // m — arrival Pe aim point
-    "CIRC_ECC_TOL",           0.02, // eccentricity threshold
+    "CIRC_ECC_TOL",          0.005, // ~2.5km at 500km
     "TARGET_INCLINATION",   0,     // deg — 0=equatorial, 90=polar, -1=match vessel
     "INCL_MATCH_TARGET",    "",    // vessel name to match if TARGET_INCLINATION=-1
-    "INCL_TOLERANCE",       0.1,   // deg — skip burn if already within this
+    "INCL_TOLERANCE",       0.5,   // deg
 
     // Probe impact
     "PROBE_IMPACT_PE",        -1000  // m — impact trajectory Pe
