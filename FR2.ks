@@ -199,23 +199,6 @@ LOCAL FUNCTION _phaseParking {
         }
 
         IF needsStage {
-            // Don't stage if the next stage only contains the fairing
-            // and we haven't hit fairing alt yet — let _deployFairing handle it
-            LOCAL safeToStage IS TRUE.
-            IF stateGet("fairing_deployed","false") = "false"
-                    AND SHIP:ALTITUDE < CFG["FAIRING_ALT"] {
-                // Check if next stage contains only the tagged fairing
-                LOCAL fairingParts IS SHIP:PARTSTAGGED("main_fairing").
-                IF fairingParts:LENGTH > 0 {
-                    LOCAL nextStageParts IS SHIP:PARTSINDECOUPLESTAGE(STAGE:NUMBER - 1).
-                    LOCAL allFairing IS TRUE.
-                    FOR p IN nextStageParts {
-                        IF p:TAG <> "main_fairing" { SET allFairing TO FALSE. }
-                    }
-                    IF allFairing { SET safeToStage TO FALSE. }
-                }
-            }
-
             IF safeToStage {
                 mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
                 HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
