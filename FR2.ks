@@ -279,9 +279,9 @@ LOCAL FUNCTION _phaseCapture {
 
 // ── CIRC ───────────────────────────────────────────────────
 LOCAL FUNCTION _phaseCirc {
-    IF SHIP:PERIAPSIS < 0 OR SHIP:PERIAPSIS < SHIP:ORBIT:BODY:RADIUS * 0.01 {
+    IF _impactThreat() {
         // Pe is impact trajectory - raise it now at current position
-        mLog("On reentry trajectory, raising PE immediately.").
+        mLog("Impact threat detected, raising PE immediately.").
         planRaisePeNow(CFG["RELAY_ALT"]).
         executeManeuver().
     } ELSE IF SHIP:ORBIT:ECCENTRICITY < CFG["CIRC_ECC_TOL"] {
@@ -292,6 +292,17 @@ LOCAL FUNCTION _phaseCirc {
     }
     orbitSummary().
     nextPhase().
+}
+
+LOCAL FUNCTION _impactThreat {
+    LOCAL body IS SHIP:ORBIT:BODY.
+    LOCAL pe   IS SHIP:PERIAPSIS.
+
+    IF body:ATM:EXISTS {
+        RETURN pe < body:ATM:HEIGHT + 1000.
+    }
+
+    RETURN pe < 5000.
 }
 
 // ── LOWER_PE ───────────────────────────────────────────────
