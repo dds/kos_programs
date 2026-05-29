@@ -48,9 +48,9 @@ LOCAL FUNCTION _phaseMonitor {
 
 LOCAL FUNCTION _phaseDeploy {
     mLogPhase("DEPLOY — extending hardware").
-    IF SHIP:STATUS <> "LANDED" AND SHIP:STATUS <> "SPLASHED" {
-        mLog("Not on surface yet — waiting.").
-        WAIT UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    IF SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING" {
+        mLog("Still in orbit — waiting for descent.").
+        WAIT UNTIL SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING".
     }
     _deployAntennas().
     _deploySolarPanels().
@@ -60,9 +60,9 @@ LOCAL FUNCTION _phaseDeploy {
 
 LOCAL FUNCTION _phaseScience {
     mLogPhase("SCIENCE — collecting data").
-    IF SHIP:STATUS <> "LANDED" AND SHIP:STATUS <> "SPLASHED" {
-        mLog("Not on surface yet — waiting.").
-        WAIT UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    IF SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING" {
+        mLog("Still in orbit — waiting for descent.").
+        WAIT UNTIL SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING".
     }
     scienceInit().
     scienceRunAll().
@@ -81,6 +81,12 @@ LOCAL FUNCTION _deployAntennas {
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleDeployableAntenna") {
             p:GETMODULE("ModuleDeployableAntenna"):DOACTION("extend antenna", TRUE).
+        }
+        IF p:HASMODULE("ModuleDataTransmitter") {
+            LOCAL m IS p:GETMODULE("ModuleDataTransmitter").
+            IF m:HASFIELD("require complete") {
+                m:SETFIELD("require complete", FALSE).
+            }
         }
     }
 }
