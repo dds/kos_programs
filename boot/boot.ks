@@ -2,6 +2,7 @@
 // boot.ks  —  Generic mission boot  (0:/boot/boot.ks)
 // ============================================================
 
+CORE:DOACTION("Open Terminal", TRUE).
 CLEARSCREEN.
 PRINT " ".
 PRINT "  *  kOS FLIGHT COMPUTER  v2.0".
