@@ -23,7 +23,7 @@ GLOBAL FUNCTION targetedDeorbit {
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL period IS SHIP:ORBIT:PERIOD.
-    LOCAL scanStep  IS period / 36.
+    LOCAL scanStep  IS period / 72.
     LOCAL passes    IS LIST(1.0, 0.1, 0.01, 0.001, 0.0001).
 
     LOCAL bestUT   IS TIME:SECONDS + 30.
@@ -112,7 +112,7 @@ LOCAL FUNCTION _testDeorbitNode {
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.05. }
 
     LOCAL nd IS _planDeorbitNode(burnUT, entryPe).
-    WAIT 0.2.
+    WAIT 0.5.
 
     IF NOT ADDONS:TR:HASIMPACT {
         REMOVE nd.
@@ -130,13 +130,14 @@ LOCAL FUNCTION _planDeorbitNode {
     PARAMETER burnUT.
     PARAMETER entryPe.
 
-    LOCAL mu    IS SHIP:ORBIT:BODY:MU.
-    LOCAL oRad  IS SHIP:ORBIT:BODY:RADIUS + SHIP:ORBIT:APOAPSIS.
-    LOCAL rPe   IS SHIP:ORBIT:BODY:RADIUS + entryPe.
-    LOCAL tSMA  IS (oRad + rPe) / 2.
-    LOCAL vCirc IS SQRT(mu / oRad).
-    LOCAL vNew  IS SQRT(mu * (2/oRad - 1/tSMA)).
-    LOCAL dv    IS vNew - vCirc.
+    LOCAL mu   IS SHIP:ORBIT:BODY:MU.
+    LOCAL bPos IS POSITIONAT(SHIP, burnUT).
+    LOCAL oRad IS bPos:MAG.
+    LOCAL rPe  IS SHIP:ORBIT:BODY:RADIUS + entryPe.
+    LOCAL tSMA IS (oRad + rPe) / 2.
+    LOCAL vNow IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
+    LOCAL vNew IS SQRT(mu * (2/oRad - 1/tSMA)).
+    LOCAL dv   IS vNew - vNow.
 
     LOCAL nd IS NODE(burnUT, 0, 0, dv).
     ADD nd.
