@@ -18,7 +18,7 @@ GLOBAL PLANE_CFG IS LEXICON(
     "HDG_KI",           0.002,
     "HDG_KD",           0.015,
     "WPT_RADIUS",       500,
-    "STALL_SPEED",       60,
+    "STALL_SPEED",       39,
     "STALL_AOA",         20,
     "SURVEY_ALT",      2000,
     "SURVEY_SPACING",  500,
