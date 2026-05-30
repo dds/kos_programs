@@ -149,13 +149,11 @@ LOCAL FUNCTION _geoDistance {
     PARAMETER lat2.
     PARAMETER lng2.
 
-    LOCAL oRad    IS SHIP:ORBIT:BODY:RADIUS.
-    LOCAL dLat IS (lat2 - lat1) * CONSTANT:PI / 180.
-    LOCAL dLng IS (lng2 - lng1) * CONSTANT:PI / 180.
+    LOCAL oRad IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL dLat IS lat2 - lat1.
+    LOCAL dLng IS lng2 - lng1.
     LOCAL a    IS SIN(dLat/2)^2
-               + COS(lat1 * CONSTANT:PI/180)
-               * COS(lat2 * CONSTANT:PI/180)
-               * SIN(dLng/2)^2.
+               + COS(lat1) * COS(lat2) * SIN(dLng/2)^2.
     LOCAL c    IS 2 * ARCSIN(MIN(1, SQRT(a))).
     RETURN oRad * c * CONSTANT:PI / 180.
 }
