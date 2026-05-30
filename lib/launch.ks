@@ -164,7 +164,7 @@ LOCAL FUNCTION _launchAbort {
         mLogWarn("No tagged chutes found — fired AG6.").
     }
 
-    HUDTEXT("ABORT — CHUTES DEPLOYED", 8, 2, 18, ORANGE, FALSE).
+    HUDTEXT("ABORT — CHUTES DEPLOYED", 8, 2, 18, RED, FALSE).
     stateSet("phase", "ABORT").
     mLog("Abort complete. Awaiting landing.").
 }
