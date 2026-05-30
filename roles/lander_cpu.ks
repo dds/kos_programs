@@ -27,21 +27,13 @@ LOCAL FUNCTION _phaseDescend {
         RETURN.
     }
 
-    IF SHIP:STATUS = "PRELAUNCH" OR SHIP:STATUS = "FLYING" {
+    IF SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING" {
         mLog("Waiting for orbit (status=" + SHIP:STATUS + ").").
-        WAIT UNTIL SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
-            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
-        IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
-            mLog("Landed before reaching orbit.").
-            nextPhase(launchSeq).
-            RETURN.
-        }
+        WAIT UNTIL SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING".
     }
 
-    IF SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING" {
-        mLog("Coasting in orbit — waiting for descent.").
-        WAIT UNTIL SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING".
-    }
+    mLog("In orbit — waiting for descent.").
+    WAIT UNTIL SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING".
 
     mLog("Descent detected. Starting science + deploy monitoring.").
     LOCAL hasAtmo IS SHIP:BODY:ATM:EXISTS.
