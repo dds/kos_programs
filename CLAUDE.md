@@ -76,7 +76,8 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 | `files.ks` | Storage status and directory listing |
 | `resume.ks` | MISSION lexicon, operator helpers, resumeMission() |
 | `maneuver.ks` | Maneuver node execution with dynamic throttle |
-| `inclination.ks` | Orbital plane change planning |
+| `inclination.ks` | Orbital plane change planning + etaToTrueAnomaly() |
+| `molniya.ks` | Molniya (highly elliptical) orbit insertion |
 | `orbit.ks` | Orbit monitoring and stability checks |
 | `countdown.ks` | Launch countdown with audio |
 | `targeting.ks` | Precision deorbit via Trajectories addon |
@@ -88,7 +89,7 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 
 ## Key constraints
 
-- **Storage is scarce.** OCTO probes have 10,000 bytes. Use LIBS to load only what you need.
+- **Storage is scarce.** OCTO probes have 10,000 bytes; the primary FR2 probe core has ~100KB and runs near capacity. Minimize comments, avoid unnecessary whitespace. Use LIBS to load only what you need.
 - **No archive access in flight.** Once out of KSC physics range, you can't pull new files from 0:/.
 - **Reboots happen.** Power loss, quickload, scene changes all trigger reboot. Everything must be resumable via the state file.
 - **Periods end statements.** Forgetting the `.` at the end of a statement is the #1 syntax error.

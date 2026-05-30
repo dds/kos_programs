@@ -15,8 +15,8 @@ GLOBAL FUNCTION planInclinationChange {
         + "deg  target=" + ROUND(targetInc,2)
         + "deg  delta=" + ROUND(deltaInc,2) + "deg").
 
-    LOCAL etaAN IS _etaToTrueAnomaly(SHIP:ORBIT:LAN - SHIP:ORBIT:ARGUMENTOFPERIAPSIS).
-    LOCAL etaDN IS _etaToTrueAnomaly(SHIP:ORBIT:LAN - SHIP:ORBIT:ARGUMENTOFPERIAPSIS + 180).
+    LOCAL etaAN IS etaToTrueAnomaly(SHIP:ORBIT:LAN - SHIP:ORBIT:ARGUMENTOFPERIAPSIS).
+    LOCAL etaDN IS etaToTrueAnomaly(SHIP:ORBIT:LAN - SHIP:ORBIT:ARGUMENTOFPERIAPSIS + 180).
     LOCAL etaAp IS ETA:APOAPSIS.
 
     LOCAL burnETA IS etaAN.
@@ -89,7 +89,7 @@ GLOBAL FUNCTION resolveTargetInclination {
     RETURN SHIP:ORBIT:INCLINATION.
 }
 
-LOCAL FUNCTION _etaToTrueAnomaly {
+GLOBAL FUNCTION etaToTrueAnomaly {
     PARAMETER targetTA.
 
     UNTIL targetTA >= 0   { SET targetTA TO targetTA + 360. }

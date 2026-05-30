@@ -21,6 +21,7 @@ lib/
     resume.ks            MISSION lexicon, auto-resume logic, operator helpers
     maneuver.ks          Maneuver node execution with dynamic throttle
     inclination.ks       Orbital plane change planning
+    molniya.ks           Molniya orbit insertion
     orbit.ks             Orbit monitoring and stability checks
     countdown.ks         Launch countdown with audio
     science.ks           Experiment automation and SCANsat integration
@@ -57,10 +58,13 @@ FR2-TARGET-TYPE1-TYPE2-...
 Examples:
 - `FR2-MUN-CRASHPROBE1-RELAY1` — Mun mission: deploy crash probe, then relay
 - `FR2-MINMUS-RELAY1` — Minmus relay deployment
+- `FR2-KERBIN-RELAY-MOLNIYA-03` — Kerbin Molniya relay (63.4° incl, ~3h period, northern dwell)
 
-**Payload types:** `RELAY`, `CRASHPROBE`/`PROBE`, `SCANSAT`, `SCISAT`, `STKSAT` (stub), `LANDER`
+**Payload types:** `RELAY`, `CRASHPROBE`/`PROBE`, `SCANSAT`, `SCISAT`, `STKSAT` (stub), `LANDER`, `MOLNIYA`
 
 **Phase sequence:** LAUNCH -> FAIRING -> EXTEND_ANTS -> PARKING -> TRANSFER -> COAST -> CAPTURE -> [probe phases] -> CIRC -> RAISE_ALT -> INCL_CORRECT -> [relay/sat ops] -> [LAND_DEORBIT -> LAND] -> DONE
+
+**Molniya sequence:** ...same... -> CIRC -> INCL_CORRECT -> MOLNIYA_INSERT -> [relay/sat ops] -> DONE (inclination correction before insertion since plane changes are cheaper in circular orbits)
 
 FR2.ks declares `GLOBAL LIBS IS LIST(...)` to tell boot which libs to load. New vehicles do the same — boot only syncs what the vehicle needs.
 
@@ -175,6 +179,11 @@ All call `nextPhase(launchSeq)` — set `launchSeq` to your sequence before call
 
 All call `nextPhase(xferSeq)` — set `xferSeq` to your sequence.
 
+**From `molniya.ks`** (needs: `maneuver`, `orbit`, `inclination`):
+- `phaseMolniyaInsert@` — prograde burn to achieve target period/AoP from circular orbit. Reads `CFG["MOLNIYA_PERIOD"]` and `CFG["MOLNIYA_AOP"]`
+
+Calls `nextPhase(xferSeq)`.
+
 **From `phases.ks`**:
 - `phaseDone@` — unlock controls, SAS on, log complete
 
@@ -186,6 +195,7 @@ These are building blocks you can call inside your own phase functions:
 |---|---|---|
 | `landingExecute()` | landing | Full powered descent sequence |
 | `targetedDeorbit()` | targeting | Precision deorbit using Trajectories |
+| `planMolniyaInsert(period, aop)` | molniya | Plan Molniya insertion burn from circular orbit |
 | `planCircularize()` | maneuver | Add circ node at next Ap/Pe |
 | `planLowerPe(alt)` | maneuver | Add node to lower Pe |
 | `planRaisePeNow(alt)` | maneuver | Emergency Pe raise at current position |

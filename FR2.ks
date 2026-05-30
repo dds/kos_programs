@@ -26,13 +26,16 @@ GLOBAL CFG IS LEXICON(
     "PROBE_TARGET_LAT",        80.0,
     "PROBE_TARGET_LNG",         0.0,
     "PROBE_ENTRY_PE",         30000,
-    "PROBE_TARGET_TOL",        5000
+    "PROBE_TARGET_TOL",        5000,
+    "MOLNIYA_PERIOD",         10775,
+    "MOLNIYA_AOP",              270
 ).
 
 GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer",
     "countdown", "maneuver", "inclination",
-    "orbit", "targeting", "landing"
+    "orbit", "targeting", "landing",
+    "molniya"
 ).
 
 LOCAL FUNCTION _normalizePayloadType {
@@ -69,9 +72,19 @@ LOCAL FUNCTION buildPhaseSequence {
         }
     }
 
+    LOCAL hasMolniya IS FALSE.
+    FOR ptype IN missionPayloads() {
+        IF _normalizePayloadType(ptype) = "MOLNIYA" { SET hasMolniya TO TRUE. }
+    }
+
     seq:ADD("CIRC").
-    seq:ADD("RAISE_ALT").
-    seq:ADD("INCL_CORRECT").
+    IF hasMolniya {
+        seq:ADD("INCL_CORRECT").
+        seq:ADD("MOLNIYA_INSERT").
+    } ELSE {
+        seq:ADD("RAISE_ALT").
+        seq:ADD("INCL_CORRECT").
+    }
 
     FOR ptype IN missionPayloads() {
         LOCAL t IS _normalizePayloadType(ptype).
@@ -95,10 +108,12 @@ LOCAL FUNCTION _printConfig {
     LOCAL seq IS buildPhaseSequence().
     LOCAL hasProbe IS FALSE.
     LOCAL hasLander IS FALSE.
+    LOCAL hasMolniya IS FALSE.
     FOR ptype IN missionPayloads() {
         LOCAL t IS _normalizePayloadType(ptype).
         IF t = "CRASHPROBE" OR t = "PROBE" { SET hasProbe TO TRUE. }
         IF t = "LANDER" { SET hasLander TO TRUE. }
+        IF t = "MOLNIYA" { SET hasMolniya TO TRUE. }
     }
 
     CLEARSCREEN.
@@ -130,6 +145,26 @@ LOCAL FUNCTION _printConfig {
     IF CFG["TARGET_INCLINATION"] = 0 { SET tincStr TO "0 deg  (equatorial)". }
     PRINT "  FINAL INCL . " + tincStr.
     PRINT "  CIRC TOL ... ecc < " + CFG["CIRC_ECC_TOL"].
+    IF hasMolniya {
+        LOCAL mp IS CFG["MOLNIYA_PERIOD"].
+        LOCAL mh IS FLOOR(mp / 3600).
+        LOCAL mm IS FLOOR(MOD(mp, 3600) / 60).
+        LOCAL ms IS ROUND(MOD(mp, 60), 0).
+        LOCAL mu IS SHIP:ORBIT:BODY:MU.
+        LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+        LOCAL mSMA IS (mu * (mp / (2 * CONSTANT:PI))^2)^(1/3).
+        LOCAL mPeR IS bodyR + SHIP:PERIAPSIS.
+        LOCAL mAp IS 2 * mSMA - mPeR - bodyR.
+        LOCAL mEcc IS 1 - mPeR / mSMA.
+        LOCAL dwell IS "North".
+        IF CFG["MOLNIYA_AOP"] <= 180 { SET dwell TO "South". }
+        PRINT " ".
+        PRINT "  -- MOLNIYA --".
+        PRINT "  PERIOD .... " + mh + "h" + ("" + mm):PADLEFT(2) + "m" + ("" + ms):PADLEFT(2) + "s".
+        PRINT "  AoP ....... " + CFG["MOLNIYA_AOP"] + " deg  (" + dwell + " dwell)".
+        PRINT "  TARGET Ap . " + ROUND(mAp/1000,0) + " km".
+        PRINT "  TARGET ecc  " + ROUND(mEcc,4).
+    }
     IF hasProbe {
         PRINT " ".
         PRINT "  -- PROBE --".
@@ -218,6 +253,7 @@ GLOBAL FUNCTION main {
         "CIRC",             phaseCirc@,
         "RAISE_ALT",        phaseRaiseAlt@,
         "INCL_CORRECT",     phaseInclCorrect@,
+        "MOLNIYA_INSERT",   phaseMolniyaInsert@,
         "TARGETED_DEORBIT", _phaseTargetedDeorbit@,
         "RELEASE_PROBE",    _phaseReleaseProbe@,
         "RECIRC",           _phaseRecirc@,
