@@ -7,20 +7,19 @@ GLOBAL CFG IS LEXICON().
 GLOBAL LIBS IS LIST("phases", "science", "orbit").
 
 GLOBAL FUNCTION main {
-    LOCAL seq IS LIST("MONITOR", "DEPLOY", "SCIENCE", "DONE").
+    LOCAL seq IS LIST("DESCEND", "LANDED", "DONE").
     SET launchSeq TO seq.
     IF stateGet("phase", "") = "" { stateSet("phase", seq[0]). }
 
     LOCAL phaseMap IS LEXICON(
-        "MONITOR", _phaseMonitor@,
-        "DEPLOY",  _phaseDeploy@,
-        "SCIENCE", _phaseScience@
+        "DESCEND", _phaseDescend@,
+        "LANDED",  _phaseLanded@
     ).
     runPhases(phaseMap).
 }
 
-LOCAL FUNCTION _phaseMonitor {
-    mLogPhase("MONITOR — waiting for landing").
+LOCAL FUNCTION _phaseDescend {
+    mLogPhase("DESCEND — orbit to surface").
 
     IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
         mLog("Already on surface.").
@@ -28,73 +27,54 @@ LOCAL FUNCTION _phaseMonitor {
         RETURN.
     }
 
-    // 1. SLEEP completely until we are actually dropping out of orbit
     IF SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING" {
-        mLog("Coasting in orbit. Core hibernating...").
+        mLog("Coasting in orbit — waiting for descent.").
         WAIT UNTIL SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING".
     }
 
-    // 2. Now that we are descending, wait for the deployment ceiling safely
+    mLog("Descent detected. Starting science + deploy monitoring.").
     LOCAL hasAtmo IS SHIP:BODY:ATM:EXISTS.
-    mLog("Descent detected. Monitoring altitude for hardware deploy.").
-    
-    IF hasAtmo {
-        WAIT UNTIL SHIP:AIRSPEED < 100 AND ALT:RADAR < 20000.
-    } ELSE {
-        WAIT UNTIL SHIP:ALTITUDE < 20000.
-    }
-    _deployAntennas().
+    LOCAL antennasDeployed IS FALSE.
+    LOCAL chuteStaged IS FALSE.
+    LOCAL scienceStarted IS FALSE.
 
-    // 3. Wait for the parachute deployment window
-    IF hasAtmo {
-        mLog("Waiting for safe parachute deployment window...").
-        WAIT UNTIL SHIP:ALTITUDE > 4000 AND SHIP:ALTITUDE < 8000
-               AND SHIP:VELOCITY:SURFACE:MAG > 40 AND SHIP:VELOCITY:SURFACE:MAG < 130.
-        _stageChutes().
+    scienceInit().
+    SET scienceStarted TO TRUE.
+    mLog("Science active during descent.").
+
+    UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+        IF NOT antennasDeployed AND SHIP:ALTITUDE < 20000 {
+            _deployAntennas().
+            SET antennasDeployed TO TRUE.
+        }
+
+        IF hasAtmo AND NOT chuteStaged
+            AND SHIP:ALTITUDE > 4000 AND SHIP:ALTITUDE < 8000
+            AND SHIP:VELOCITY:SURFACE:MAG > 40
+            AND SHIP:VELOCITY:SURFACE:MAG < 130 {
+            _stageChutes().
+            SET chuteStaged TO TRUE.
+        }
+
+        IF scienceStarted {
+            scienceRunAll().
+        }
+
+        WAIT 0.5.
     }
 
-    // 4. Wait for final touchdown
-    WAIT UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
     mLog("Surface contact confirmed.").
     nextPhase(launchSeq).
 }
 
-LOCAL FUNCTION _phaseDeploy {
-    mLogPhase("DEPLOY — extending hardware").
-    IF SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING" {
-        mLog("Still in orbit — waiting for descent.").
-        WAIT UNTIL SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING".
-    }
+LOCAL FUNCTION _phaseLanded {
+    mLogPhase("LANDED — post-landing ops").
     _deployAntennas().
     _deploySolarPanels().
-    mLog("Deploy complete.").
-    nextPhase(launchSeq).
-}
-
-LOCAL FUNCTION _phaseScience {
-    mLogPhase("SCIENCE — collecting data").
-    IF SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING" {
-        mLog("Still in orbit — waiting for descent.").
-        WAIT UNTIL SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING".
-    }
-    scienceInit().
     scienceRunAll().
-    mLog("Initial science collected. Entering idle monitor.").
-
-    LOCAL ecCapacity IS 0.
-    
-    FOR res IN SHIP:RESOURCES {
-        IF res:NAME = "ELECTRICCHARGE" {
-            SET ecCapacity TO res:CAPACITY.
-            BREAK. // Found it, no need to keep looping
-        }
-    }
-    
-    // Now you can safely use ecCapacity in your logic
-    IF ecCapacity > 0 {
-        LOCAL ecPercent IS (SHIP:ELECTRICCHARGE / ecCapacity) * 100.
-        mLog("Battery status: " + ROUND(ecPercent, 1) + "%").
-    }
+    scienceTransmitAll().
+    mLog("Landed ops complete. Idle.").
+    nextPhase(launchSeq).
 }
 
 LOCAL FUNCTION _deployAntennas {
