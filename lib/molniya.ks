@@ -32,6 +32,14 @@ GLOBAL FUNCTION planMolniyaInsert {
 GLOBAL FUNCTION phaseMolniyaInsert {
     LOCAL targetPeriod IS CFG["MOLNIYA_PERIOD"].
     LOCAL targetAoP IS CFG["MOLNIYA_AOP"].
+    IF CFG:HASKEY("MOLNIYA_ECC") AND CFG["MOLNIYA_ECC"] > 0 {
+        LOCAL mu IS SHIP:ORBIT:BODY:MU.
+        LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+        LOCAL peR IS bodyR + SHIP:PERIAPSIS.
+        LOCAL sma IS peR / (1 - CFG["MOLNIYA_ECC"]).
+        SET targetPeriod TO 2 * CONSTANT:PI * SQRT(sma^3 / mu).
+        mLog("MOLNIYA_ECC=" + CFG["MOLNIYA_ECC"] + " -> period=" + ROUND(targetPeriod,0) + "s").
+    }
     mLogPhase("MOLNIYA INSERT").
     orbitSummary().
     LOCAL success IS FALSE.

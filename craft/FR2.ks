@@ -28,7 +28,8 @@ GLOBAL CFG IS LEXICON(
     "PROBE_ENTRY_PE",         30000,
     "PROBE_TARGET_TOL",        5000,
     "MOLNIYA_PERIOD",         10775,
-    "MOLNIYA_AOP",              270
+    "MOLNIYA_AOP",              270,
+    "MOLNIYA_ECC",                0
 ).
 
 GLOBAL LIBS IS LIST(
@@ -146,20 +147,30 @@ LOCAL FUNCTION _printConfig {
     PRINT "  FINAL INCL . " + tincStr.
     PRINT "  CIRC TOL ... ecc < " + CFG["CIRC_ECC_TOL"].
     IF hasMolniya {
+        LOCAL mu IS SHIP:ORBIT:BODY:MU.
+        LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+        LOCAL mPeR IS bodyR + SHIP:PERIAPSIS.
+        LOCAL mSMA IS 0.
         LOCAL mp IS CFG["MOLNIYA_PERIOD"].
+        LOCAL mEcc IS 0.
+        LOCAL modeStr IS "period".
+        IF CFG:HASKEY("MOLNIYA_ECC") AND CFG["MOLNIYA_ECC"] > 0 {
+            SET mEcc TO CFG["MOLNIYA_ECC"].
+            SET mSMA TO mPeR / (1 - mEcc).
+            SET mp TO 2 * CONSTANT:PI * SQRT(mSMA^3 / mu).
+            SET modeStr TO "ecc".
+        } ELSE {
+            SET mSMA TO (mu * (mp / (2 * CONSTANT:PI))^2)^(1/3).
+            SET mEcc TO 1 - mPeR / mSMA.
+        }
         LOCAL mh IS FLOOR(mp / 3600).
         LOCAL mm IS FLOOR(MOD(mp, 3600) / 60).
         LOCAL ms IS ROUND(MOD(mp, 60), 0).
-        LOCAL mu IS SHIP:ORBIT:BODY:MU.
-        LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
-        LOCAL mSMA IS (mu * (mp / (2 * CONSTANT:PI))^2)^(1/3).
-        LOCAL mPeR IS bodyR + SHIP:PERIAPSIS.
         LOCAL mAp IS 2 * mSMA - mPeR - bodyR.
-        LOCAL mEcc IS 1 - mPeR / mSMA.
         LOCAL dwell IS "North".
         IF CFG["MOLNIYA_AOP"] <= 180 { SET dwell TO "South". }
         PRINT " ".
-        PRINT "  -- MOLNIYA --".
+        PRINT "  -- MOLNIYA (" + modeStr + ") --".
         PRINT "  PERIOD .... " + mh + "h" + ("" + mm):PADLEFT(2) + "m" + ("" + ms):PADLEFT(2) + "s".
         PRINT "  AoP ....... " + CFG["MOLNIYA_AOP"] + " deg  (" + dwell + " dwell)".
         PRINT "  TARGET Ap . " + ROUND(mAp/1000,0) + " km".
