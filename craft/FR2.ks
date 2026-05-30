@@ -149,7 +149,9 @@ LOCAL FUNCTION _printConfig {
     IF hasMolniya {
         LOCAL mu IS SHIP:ORBIT:BODY:MU.
         LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
-        LOCAL mPeR IS bodyR + SHIP:PERIAPSIS.
+        LOCAL mPeAlt IS SHIP:PERIAPSIS.
+        IF mPeAlt < 0 { SET mPeAlt TO CFG["PARKING_ALT"]. }
+        LOCAL mPeR IS bodyR + mPeAlt.
         LOCAL mSMA IS 0.
         LOCAL mp IS CFG["MOLNIYA_PERIOD"].
         LOCAL mEcc IS 0.
