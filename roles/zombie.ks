@@ -8,5 +8,5 @@ GLOBAL LIBS IS LIST ("logs").
 GLOBAL FUNCTION main {
     // Write a message to the console with the command to run to wake the zombie
     // and shut down.
-    PRINT "Run the zombie command to wake the zombie.".
+    PRINT "Run RUNPATH('1:/zombie'). to reboot the other computers.".
 }
