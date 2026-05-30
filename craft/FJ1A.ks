@@ -8,6 +8,7 @@
 GLOBAL CFG IS LEXICON(
     "CRUISE_ALT",    5000,
     "CRUISE_SPEED",   150,
+    "TOP_SPEED",      220,
     "FLAP_AG",          1
 ).
 

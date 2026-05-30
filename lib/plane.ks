@@ -33,6 +33,7 @@ GLOBAL altHoldActive    IS FALSE.
 GLOBAL hdgHoldActive    IS FALSE.
 GLOBAL targetAlt        IS 0.
 GLOBAL targetHdg        IS 0.
+LOCAL _ctrlSurfaces     IS LIST().
 
 GLOBAL FUNCTION planeInit {
     SET planeActive TO TRUE.
@@ -47,6 +48,15 @@ GLOBAL FUNCTION planeInit {
         mLog("Stall warning: airspeed=" + ROUND(SHIP:AIRSPEED,0) + "m/s").
         PRESERVE.
     }
+
+    SET _ctrlSurfaces TO LIST().
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleControlSurface") {
+            _ctrlSurfaces:ADD(p:GETMODULE("ModuleControlSurface")).
+        }
+    }
+    mLog("Control surfaces: " + _ctrlSurfaces:LENGTH + " found. cruise="
+        + CFG["CRUISE_SPEED"] + " top=" + CFG["TOP_SPEED"] + "m/s").
 
     LOCAL steerParts IS SHIP:PARTSTAGGED(PLANE_CFG["STEER_TAG"]).
     IF steerParts:LENGTH > 0 {
@@ -70,6 +80,9 @@ GLOBAL FUNCTION planeShutdown {
     wingLevelerOff().
     altHoldOff().
     hdgHoldOff().
+    FOR sm IN _ctrlSurfaces {
+        sm:SETFIELD("Authority Limiter", 100).
+    }
     UNLOCK STEERING.
     SET planeActive TO FALSE.
     mLog("Plane autopilot shutdown.").
@@ -124,11 +137,29 @@ LOCAL FUNCTION _fbwAuthority {
                PLANE_CFG["FBW_REF_SPEED"] / MAX(SHIP:AIRSPEED, 1))).
 }
 
+LOCAL FUNCTION _surfaceAuthority {
+    LOCAL topSpd    IS CFG["TOP_SPEED"].
+    LOCAL cruiseSpd IS CFG["CRUISE_SPEED"].
+    LOCAL minAuth   IS 0.5.
+    IF topSpd > 700      { SET minAuth TO 0.2. }
+    ELSE IF topSpd > 400 { SET minAuth TO 0.3. }
+    LOCAL spd IS SHIP:AIRSPEED.
+    IF spd <= cruiseSpd { RETURN 1.0. }
+    IF spd >= topSpd    { RETURN minAuth. }
+    LOCAL frac IS (spd - cruiseSpd) / (topSpd - cruiseSpd).
+    RETURN 1.0 - (1.0 - minAuth) * frac^1.3.
+}
+
 GLOBAL FUNCTION planeUpdate {
     IF NOT planeActive { RETURN. }
 
     LOCAL auth IS _fbwAuthority().
     LOCAL clamp IS 0.3 * auth.
+
+    LOCAL surfPct IS ROUND(_surfaceAuthority() * 100, 0).
+    FOR sm IN _ctrlSurfaces {
+        sm:SETFIELD("Authority Limiter", surfPct).
+    }
 
     IF wingLevelerActive {
         LOCAL roll IS SHIP:FACING:ROLL.
