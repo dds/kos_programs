@@ -4,13 +4,20 @@
 
 GLOBAL PLANE_CFG IS LEXICON(
     "ROLL_KP",          0.02,
-    "ROLL_DEADBAND",     1.0,
+    "ROLL_KI",          0.001,
+    "ROLL_KD",          0.01,
     "ALT_KP",           0.003,
-    "ALT_DEADBAND",      10,
+    "ALT_KI",           0.0005,
+    "ALT_KD",           0.002,
     "ALT_MAX_PITCH",      8,
     "ALT_MIN_PITCH",     -6,
+    "PITCH_KP",         0.05,
+    "PITCH_KI",         0.005,
+    "PITCH_KD",         0.02,
     "HDG_KP",           0.03,
-    "HDG_DEADBAND",      1.0,
+    "HDG_KI",           0.002,
+    "HDG_KD",           0.015,
+    "WPT_RADIUS",       500,
     "STALL_SPEED",       60,
     "STALL_AOA",         20,
     "SURVEY_ALT",      2000,
@@ -33,7 +40,15 @@ GLOBAL altHoldActive    IS FALSE.
 GLOBAL hdgHoldActive    IS FALSE.
 GLOBAL targetAlt        IS 0.
 GLOBAL targetHdg        IS 0.
+GLOBAL apActive         IS FALSE.
+GLOBAL wptNavActive     IS FALSE.
+GLOBAL wptList          IS LIST().
+GLOBAL wptIndex         IS 0.
 LOCAL _ctrlSurfaces     IS LIST().
+LOCAL _rollPid          IS 0.
+LOCAL _altPid           IS 0.
+LOCAL _pitchPid         IS 0.
+LOCAL _hdgPid           IS 0.
 
 GLOBAL FUNCTION planeInit {
     SET planeActive TO TRUE.
@@ -58,6 +73,30 @@ GLOBAL FUNCTION planeInit {
     mLog("Control surfaces: " + _ctrlSurfaces:LENGTH + " found. cruise="
         + CFG["CRUISE_SPEED"] + " top=" + CFG["TOP_SPEED"] + "m/s").
 
+    SET _rollPid TO PIDLOOP(PLANE_CFG["ROLL_KP"], PLANE_CFG["ROLL_KI"],
+        PLANE_CFG["ROLL_KD"], -1, 1).
+    SET _altPid TO PIDLOOP(PLANE_CFG["ALT_KP"], PLANE_CFG["ALT_KI"],
+        PLANE_CFG["ALT_KD"], PLANE_CFG["ALT_MIN_PITCH"], PLANE_CFG["ALT_MAX_PITCH"]).
+    SET _pitchPid TO PIDLOOP(PLANE_CFG["PITCH_KP"], PLANE_CFG["PITCH_KI"],
+        PLANE_CFG["PITCH_KD"], -1, 1).
+    SET _hdgPid TO PIDLOOP(PLANE_CFG["HDG_KP"], PLANE_CFG["HDG_KI"],
+        PLANE_CFG["HDG_KD"], -1, 1).
+    mLog("PID controllers initialized (roll/alt/pitch/hdg).").
+
+    LOCAL _prevAG7 IS AG7.
+    LOCAL _prevAG8 IS AG8.
+    WHEN planeActive THEN {
+        IF AG7 <> _prevAG7 {
+            SET _prevAG7 TO AG7.
+            IF apActive { apOff(). } ELSE { apOn(). }
+        }
+        IF AG8 <> _prevAG8 {
+            SET _prevAG8 TO AG8.
+            IF wptNavActive { wptNavOff(). } ELSE { wptNavOn(). }
+        }
+        PRESERVE.
+    }
+
     LOCAL steerParts IS SHIP:PARTSTAGGED(PLANE_CFG["STEER_TAG"]).
     IF steerParts:LENGTH > 0 {
         mLog("Nosewheel steering: " + steerParts:LENGTH + " part(s) tagged '"
@@ -77,6 +116,8 @@ GLOBAL FUNCTION planeInit {
 }
 
 GLOBAL FUNCTION planeShutdown {
+    SET apActive TO FALSE.
+    SET wptNavActive TO FALSE.
     wingLevelerOff().
     altHoldOff().
     hdgHoldOff().
@@ -89,6 +130,8 @@ GLOBAL FUNCTION planeShutdown {
 }
 
 GLOBAL FUNCTION wingLevelerOn {
+    _rollPid:RESET().
+    SET _rollPid:SETPOINT TO 0.
     SET wingLevelerActive TO TRUE.
     mLog("Wing leveler ON.").
     HUDTEXT("Wing leveler ON", 2, 2, 13, CYAN, FALSE).
@@ -104,6 +147,8 @@ GLOBAL FUNCTION wingLevelerOff {
 GLOBAL FUNCTION altHoldOn {
     PARAMETER tAlt IS SHIP:ALTITUDE.
     SET targetAlt TO tAlt.
+    _altPid:RESET().
+    _pitchPid:RESET().
     SET altHoldActive TO TRUE.
     mLog("Altitude hold ON at " + ROUND(tAlt,0) + "m.").
     HUDTEXT("Alt hold ON: " + ROUND(tAlt,0) + "m", 2, 2, 13, CYAN, FALSE).
@@ -119,6 +164,7 @@ GLOBAL FUNCTION altHoldOff {
 GLOBAL FUNCTION hdgHoldOn {
     PARAMETER hdg IS SHIP:FACING:YAW.
     SET targetHdg TO hdg.
+    _hdgPid:RESET().
     SET hdgHoldActive TO TRUE.
     mLog("Heading hold ON at " + ROUND(hdg,0) + "deg.").
     HUDTEXT("Hdg hold ON: " + ROUND(hdg,0) + "deg", 2, 2, 13, CYAN, FALSE).
@@ -161,41 +207,117 @@ GLOBAL FUNCTION planeUpdate {
         sm:SETFIELD("Authority Limiter", surfPct).
     }
 
-    IF wingLevelerActive {
-        LOCAL roll IS SHIP:FACING:ROLL.
-        IF ABS(roll) > PLANE_CFG["ROLL_DEADBAND"] {
-            LOCAL correction IS -roll * PLANE_CFG["ROLL_KP"].
-            SET SHIP:CONTROL:ROLL TO MAX(-clamp, MIN(clamp, correction)).
-        } ELSE {
-            SET SHIP:CONTROL:ROLL TO 0.
+    IF wptNavActive AND wptIndex < wptList:LENGTH {
+        LOCAL wp IS wptList[wptIndex].
+        LOCAL geo IS LATLNG(wp["lat"], wp["lng"]).
+        IF geo:DISTANCE < PLANE_CFG["WPT_RADIUS"] {
+            SET wptIndex TO wptIndex + 1.
+            IF wptIndex >= wptList:LENGTH {
+                mLog("Final waypoint reached.").
+                HUDTEXT("Final waypoint reached", 3, 2, 14, GREEN, FALSE).
+                wptNavOff().
+            } ELSE {
+                mLog("Waypoint " + wptIndex + "/" + wptList:LENGTH
+                    + " reached, turning to next.").
+                HUDTEXT("WPT " + wptIndex + "/" + wptList:LENGTH,
+                    2, 2, 13, CYAN, FALSE).
+            }
+        }
+        IF wptNavActive AND wptIndex < wptList:LENGTH {
+            SET wp TO wptList[wptIndex].
+            SET geo TO LATLNG(wp["lat"], wp["lng"]).
+            SET targetHdg TO geo:HEADING.
+            IF wp:HASKEY("alt") { SET targetAlt TO wp["alt"]. }
         }
     }
 
+    IF wingLevelerActive {
+        SET _rollPid:SETPOINT TO 0.
+        LOCAL correction IS _rollPid:UPDATE(TIME:SECONDS, SHIP:FACING:ROLL).
+        SET SHIP:CONTROL:ROLL TO MAX(-clamp, MIN(clamp, correction)).
+    }
+
     IF altHoldActive {
-        LOCAL altError IS targetAlt - SHIP:ALTITUDE.
-        IF ABS(altError) > PLANE_CFG["ALT_DEADBAND"] {
-            LOCAL pitchCorr IS altError * PLANE_CFG["ALT_KP"].
-            SET pitchCorr TO MAX(PLANE_CFG["ALT_MIN_PITCH"],
-                             MIN(PLANE_CFG["ALT_MAX_PITCH"], pitchCorr)).
-            LOCAL currentPitch IS SHIP:FACING:PITCH.
-            LOCAL pitchErr IS pitchCorr - currentPitch.
-            SET SHIP:CONTROL:PITCH TO MAX(-clamp, MIN(clamp, pitchErr * 0.05)).
-        } ELSE {
-            SET SHIP:CONTROL:PITCH TO 0.
-        }
+        SET _altPid:SETPOINT TO targetAlt.
+        LOCAL tgtPitch IS _altPid:UPDATE(TIME:SECONDS, SHIP:ALTITUDE).
+        SET _pitchPid:SETPOINT TO tgtPitch.
+        LOCAL pitchOut IS _pitchPid:UPDATE(TIME:SECONDS, SHIP:FACING:PITCH).
+        SET SHIP:CONTROL:PITCH TO MAX(-clamp, MIN(clamp, pitchOut)).
     }
 
     IF hdgHoldActive {
         LOCAL hdgError IS targetHdg - SHIP:FACING:YAW.
         IF hdgError > 180  { SET hdgError TO hdgError - 360. }
         IF hdgError < -180 { SET hdgError TO hdgError + 360. }
-        IF ABS(hdgError) > PLANE_CFG["HDG_DEADBAND"] {
-            LOCAL correction IS hdgError * PLANE_CFG["HDG_KP"].
-            SET SHIP:CONTROL:YAW TO MAX(-clamp, MIN(clamp, correction)).
-        } ELSE {
-            SET SHIP:CONTROL:YAW TO 0.
-        }
+        SET _hdgPid:SETPOINT TO 0.
+        LOCAL correction IS _hdgPid:UPDATE(TIME:SECONDS, -hdgError).
+        SET SHIP:CONTROL:YAW TO MAX(-clamp, MIN(clamp, correction)).
     }
+}
+
+GLOBAL FUNCTION apOn {
+    wingLevelerOn().
+    altHoldOn().
+    hdgHoldOn().
+    SET apActive TO TRUE.
+    mLog("Autopilot ON: alt=" + ROUND(targetAlt,0) + "m hdg=" + ROUND(targetHdg,0) + "deg.").
+    HUDTEXT("AP ON", 3, 2, 14, GREEN, FALSE).
+}
+
+GLOBAL FUNCTION apOff {
+    wptNavOff().
+    wingLevelerOff().
+    altHoldOff().
+    hdgHoldOff().
+    SET apActive TO FALSE.
+    mLog("Autopilot OFF.").
+    HUDTEXT("AP OFF", 3, 2, 14, YELLOW, FALSE).
+}
+
+GLOBAL FUNCTION wptNavOn {
+    IF wptList:LENGTH = 0 {
+        mLog("No waypoints loaded.").
+        HUDTEXT("No waypoints!", 3, 2, 14, RED, FALSE).
+        RETURN.
+    }
+    IF NOT apActive { apOn(). }
+    SET wptIndex TO 0.
+    SET wptNavActive TO TRUE.
+    LOCAL wp IS wptList[0].
+    mLog("Waypoint nav ON: " + wptList:LENGTH + " waypoints. First="
+        + ROUND(wp["lat"],2) + "," + ROUND(wp["lng"],2) + ".").
+    HUDTEXT("WPT NAV ON (" + wptList:LENGTH + " wpts)", 3, 2, 14, GREEN, FALSE).
+}
+
+GLOBAL FUNCTION wptNavOff {
+    SET wptNavActive TO FALSE.
+    mLog("Waypoint nav OFF.").
+    HUDTEXT("WPT NAV OFF", 2, 2, 13, YELLOW, FALSE).
+}
+
+GLOBAL FUNCTION waypointLoad {
+    PARAMETER wpListIn.
+    SET wptList TO wpListIn.
+    SET wptIndex TO 0.
+    mLog("Loaded " + wptList:LENGTH + " waypoints.").
+}
+
+GLOBAL FUNCTION waypointAdd {
+    PARAMETER lat_.
+    PARAMETER lng_.
+    PARAMETER alt_ IS -1.
+    LOCAL wp IS LEXICON("lat", lat_, "lng", lng_).
+    IF alt_ >= 0 { wp:ADD("alt", alt_). }
+    wptList:ADD(wp).
+    mLog("Waypoint added: " + ROUND(lat_,2) + "," + ROUND(lng_,2)
+        + " (total " + wptList:LENGTH + ").").
+}
+
+GLOBAL FUNCTION waypointClear {
+    wptNavOff().
+    SET wptList TO LIST().
+    SET wptIndex TO 0.
+    mLog("Waypoints cleared.").
 }
 
 GLOBAL FUNCTION planeLandingAssist {
@@ -315,7 +437,10 @@ GLOBAL FUNCTION planeStatus {
         + " hdg=" + ROUND(SHIP:FACING:YAW,0) + "deg"
         + " pitch=" + ROUND(SHIP:FACING:PITCH,1) + "deg"
         + " roll=" + ROUND(SHIP:FACING:ROLL,1) + "deg"
+        + " ap=" + apActive
         + " wingLeveler=" + wingLevelerActive
         + " altHold=" + altHoldActive
-        + " hdgHold=" + hdgHoldActive).
+        + " hdgHold=" + hdgHoldActive
+        + " wptNav=" + wptNavActive
+        + " wpt=" + wptIndex + "/" + wptList:LENGTH).
 }
