@@ -208,7 +208,7 @@ GLOBAL FUNCTION planeUpdate {
 
     LOCAL auth IS _fbwAuthority().
     LOCAL clamp IS 0.3 * auth.
-4
+
     FROM {LOCAL i IS 0.} UNTIL i = _ctrlSurfaces:LENGTH STEP {SET i TO i+1.} DO {
         LOCAL sm IS _ctrlSurfaces[i]. 
         sm:SETFIELD("Authority Limiter", _ctrlSurfAuth[i] * _surfaceAuthority()).
