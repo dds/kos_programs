@@ -2,7 +2,7 @@
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
 
-GLOBAL flightLogPath IS "".
+DECLARE GLOBAL flightLogPath IS "".
 
 GLOBAL FUNCTION initLog {
     LOCAL logPathFile IS "1:/state/log_path.state".

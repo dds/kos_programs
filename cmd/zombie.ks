@@ -8,7 +8,7 @@ FOR p IN all_cores {
     IF p:TAG <> CORE:TAG {
         p:DOACTION("Toggle Power", TRUE).
         p:DOACTION("Toggle Power", TRUE).
-        PRINT "Zombified core: " + p:TOSTRING.
+        PRINT "Zombie core: " + p:TOSTRING.
     }
 }
 PRINT "All other cores have had their brains eaten and are reborn. Have a nice day.".
