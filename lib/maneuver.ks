@@ -78,7 +78,7 @@ GLOBAL FUNCTION executeManeuver {
         } ELSE IF remaining > 0.5 {
             LOCAL timeToStop IS remaining / maxAcc.
             LOCK THROTTLE TO MAX(0.02, MIN(0.5, timeToStop)).
-        } ELSE IF remaining > 0.06 {
+        } ELSE IF remaining >= 0.04 {
             LOCK THROTTLE TO 0.01.
         } ELSE {
             LOCK THROTTLE TO 0.
