@@ -10,6 +10,9 @@ GLOBAL ROVER_CFG IS LEXICON(
     "MAX_SLOPE_DEG",     25,
     "MAX_ROLL_DEG",      30,
     "FLIP_ROLL_DEG",     55,
+    "STEER_REF_SPEED",   5,
+    "STEER_MIN_FACTOR",  0.2,
+    "GOV_RELEASE_PCT",   0.9,
     "HUD_INTERVAL",       1,
     "WAYPOINT_WARN_DIST", 50
 ).
@@ -20,6 +23,7 @@ GLOBAL roverWaypointLng IS 0.
 GLOBAL roverWaypointSet IS FALSE.
 GLOBAL roverGovernorOn  IS TRUE.
 GLOBAL roverSafetyOn    IS TRUE.
+LOCAL  roverBraking     IS FALSE.
 
 GLOBAL FUNCTION roverInit {
     SET roverActive TO TRUE.
@@ -36,9 +40,27 @@ GLOBAL FUNCTION roverInit {
         PRESERVE.
     }
 
-    WHEN roverActive AND roverGovernorOn
-            AND SHIP:VELOCITY:SURFACE:MAG > _roverMaxSpeed() THEN {
-        SET SHIP:CONTROL:WHEELTHROTTLE TO 0.
+    WHEN roverActive AND roverGovernorOn THEN {
+        LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
+        LOCAL maxSpd IS _roverMaxSpeed().
+        IF roverBraking {
+            IF spd < maxSpd * ROVER_CFG["GOV_RELEASE_PCT"] {
+                SET roverBraking TO FALSE.
+                SET BRAKES TO FALSE.
+            }
+        } ELSE {
+            IF spd > maxSpd {
+                SET roverBraking TO TRUE.
+                SET BRAKES TO TRUE.
+                SET SHIP:CONTROL:WHEELTHROTTLE TO 0.
+            }
+        }
+        PRESERVE.
+    }
+
+    WHEN roverActive THEN {
+        LOCAL factor IS _roverSteerFactor().
+        SET SHIP:CONTROL:WHEELSTEER TO SHIP:CONTROL:PILOTMAINSTEER * factor.
         PRESERVE.
     }
 }
@@ -112,6 +134,13 @@ LOCAL FUNCTION _roverMaxSpeed {
     IF body = "MUN"    { RETURN ROVER_CFG["MAX_SPEED_MUN"].    }
     IF body = "MINMUS" { RETURN ROVER_CFG["MAX_SPEED_MINMUS"]. }
     RETURN ROVER_CFG["MAX_SPEED_DEFAULT"].
+}
+
+LOCAL FUNCTION _roverSteerFactor {
+    LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
+    LOCAL ref IS ROVER_CFG["STEER_REF_SPEED"].
+    LOCAL minF IS ROVER_CFG["STEER_MIN_FACTOR"].
+    RETURN MAX(minF, MIN(1.0, ref / MAX(spd, 0.1))).
 }
 
 LOCAL FUNCTION _roverSlope {

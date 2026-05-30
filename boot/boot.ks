@@ -165,6 +165,12 @@ IF manualMode {
         mLog("Reboot after DONE — manual mode.").
         UNLOCK ALL.
         SET SAS TO TRUE.
+    } ELSE IF phase = "ABORT" {
+        PRINT "  ABORT DETECTED — entering recovery mode.".
+        mLog("Abort detected at reboot — loading recovery.").
+        _syncLib("recovery").
+        _loadLib("recovery").
+        recoveryMode().
     } ELSE {
         PRINT "  RESUMING >> " + phase.
         mLog("Resuming mission from phase: " + phase).

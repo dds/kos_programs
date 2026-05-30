@@ -19,9 +19,12 @@ GLOBAL PLANE_CFG IS LEXICON(
     "FBW_REF_SPEED",   100,
     "FBW_MIN_AUTH",    0.15,
     "FBW_MAX_AUTH",    1.0,
-    "BRAKE_SPEED",       5,
+    "BRAKE_REF_SPEED",  80,
+    "BRAKE_STOP_SPEED",  3,
     "REVERSE_THRUST_DELAY", 1.5,
-    "REVERSE_AG",        2
+    "REVERSE_AG",        2,
+    "STEER_MAX_SPEED",  30,
+    "STEER_TAG",        "steering_gear"
 ).
 
 GLOBAL planeActive      IS FALSE.
@@ -42,6 +45,23 @@ GLOBAL FUNCTION planeInit {
         HUDTEXT("STALL WARNING — " + ROUND(SHIP:AIRSPEED,0) + "m/s", 2, 2, 16, RED, FALSE).
         mLog("Stall warning: airspeed=" + ROUND(SHIP:AIRSPEED,0) + "m/s").
         PRESERVE.
+    }
+
+    LOCAL steerParts IS SHIP:PARTSTAGGED(PLANE_CFG["STEER_TAG"]).
+    IF steerParts:LENGTH > 0 {
+        mLog("Nosewheel steering: " + steerParts:LENGTH + " part(s) tagged '"
+            + PLANE_CFG["STEER_TAG"] + "'.").
+        WHEN planeActive THEN {
+            LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
+            LOCAL maxSteer IS PLANE_CFG["STEER_MAX_SPEED"].
+            IF spd < maxSteer {
+                LOCAL factor IS 1.0 - spd / maxSteer.
+                SET SHIP:CONTROL:WHEELSTEER TO SHIP:CONTROL:PILOTWHEELSTEER * factor.
+            } ELSE {
+                SET SHIP:CONTROL:WHEELSTEER TO 0.
+            }
+            PRESERVE.
+        }
     }
 }
 
@@ -147,26 +167,43 @@ GLOBAL FUNCTION planeUpdate {
 }
 
 GLOBAL FUNCTION planeLandingAssist {
-    mLog("Landing assist: brakes ON, throttle zero.").
-    SET BRAKES TO TRUE.
+    LOCAL refSpd IS PLANE_CFG["BRAKE_REF_SPEED"].
+    LOCAL stopSpd IS PLANE_CFG["BRAKE_STOP_SPEED"].
+    LOCAL revDelay IS PLANE_CFG["REVERSE_THRUST_DELAY"].
+    LOCAL revAG IS PLANE_CFG["REVERSE_AG"].
+
+    mLog("Landing assist: brake attenuation armed, throttle zero.").
     LOCK THROTTLE TO 0.
 
-    LOCAL revDelay IS PLANE_CFG["REVERSE_THRUST_DELAY"].
+    WHEN TRUE THEN {
+        LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
+        IF spd > stopSpd {
+            SET SHIP:CONTROL:WHEELBRAKES TO MAX(0.15, 1.0 - spd / refSpd).
+            PRESERVE.
+        } ELSE {
+            SET SHIP:CONTROL:WHEELBRAKES TO 0.
+            mLog("Brake attenuation complete — stopped.").
+        }
+    }
+
     mLog("Waiting " + revDelay + "s for reverse thrust.").
     WAIT revDelay.
 
-    AG2 ON.
-    mLog("Reverse thrust AG2 engaged.").
+    IF revAG = 2 { AG2 ON. }
+    ELSE IF revAG = 3 { AG3 ON. }
+    ELSE IF revAG = 4 { AG4 ON. }
+    mLog("Reverse thrust AG" + revAG + " engaged.").
     LOCK THROTTLE TO 0.5.
     mLog("Partial reverse throttle (0.5).").
 
-    WAIT UNTIL SHIP:VELOCITY:SURFACE:MAG < PLANE_CFG["BRAKE_SPEED"].
-    mLog("Below brake speed — shutting down.").
+    WAIT UNTIL SHIP:VELOCITY:SURFACE:MAG < stopSpd.
+    mLog("Below stop speed — shutting down.").
 
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
-    SET BRAKES TO FALSE.
-    AG2 OFF.
+    IF revAG = 2 { AG2 OFF. }
+    ELSE IF revAG = 3 { AG3 OFF. }
+    ELSE IF revAG = 4 { AG4 OFF. }
     mLog("Landing assist complete.").
 }
 

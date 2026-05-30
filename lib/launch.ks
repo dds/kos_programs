@@ -166,6 +166,18 @@ LOCAL FUNCTION _launchAbort {
 
     HUDTEXT("ABORT — CHUTES DEPLOYED", 8, 2, 18, RED, FALSE).
     stateSet("phase", "ABORT").
+
+    IF HOMECONNECTION:ISCONNECTED {
+        IF NOT EXISTS("0:/logs") { CREATEDIR("0:/logs"). }
+        IF flightLogPath <> "" AND EXISTS(flightLogPath) {
+            LOCAL archivePath IS "0:/logs/" + flightLogPath:REPLACE("1:/logs/","").
+            COPYPATH(flightLogPath, archivePath).
+            mLog("Abort log archived to " + archivePath).
+        }
+    } ELSE {
+        mLogWarn("No KSC link — log NOT archived (will retry in recovery).").
+    }
+
     mLog("Abort complete. Awaiting landing.").
 }
 
