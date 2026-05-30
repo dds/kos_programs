@@ -5,7 +5,7 @@ LOCAL all_cores IS LIST().
 LIST PROCESSORS IN all_cores.
 
 FOR p IN all_cores {
-    IF p <> CORE {
+    IF p:TAG <> CORE:TAG {
         p:DOACTION("Toggle Power", TRUE).
         p:DOACTION("Toggle Power", TRUE).
         PRINT "Zombified core: " + p:TOSTRING.

@@ -52,15 +52,6 @@ ensureDir("1:/cmd").
 ensureDir("1:/craft").
 ensureDir("1:/roles").
 
-LOCAL coreId IS "".
-IF isEVA {
-    SET coreId TO "EVA-" + SHIP:NAME.
-} ELSE IF CORE:TAG <> "" {
-    SET coreId TO vehicleName + "-" + CORE:TAG.
-} ELSE {
-    SET coreId TO vehicleName + "-main".
-}
-
 LOCAL FUNCTION _resolveScript {
     PARAMETER name.
     PARAMETER dirs.
@@ -90,6 +81,7 @@ FOR lib IN coreLibs { _syncLib(lib). }
 _loadLib("state").
 stateInit().
 _loadLib("logs").
+initLog().
 _loadLib("files").
 
 LOCAL bootCount IS stateGetNum("boot_count", 0) + 1.
@@ -115,16 +107,6 @@ IF isEVA {
 IF vehicleScript = "" {
     SET vehicleScript TO _resolveScript(vehicleName, LIST("craft")).
 }
-
-LOCAL scriptBase IS vehicleScript.
-IF vehicleScript:CONTAINS("/") {
-    LOCAL sParts IS vehicleScript:SPLIT("/").
-    SET scriptBase TO sParts[sParts:LENGTH - 1].
-}
-SET coreId TO coreId + "-" + scriptBase.
-IF EXISTS("1:/state/core_id") { DELETEPATH("1:/state/core_id"). }
-LOG coreId TO "1:/state/core_id".
-initLog().
 
 mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 
