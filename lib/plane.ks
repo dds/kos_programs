@@ -15,7 +15,13 @@ GLOBAL PLANE_CFG IS LEXICON(
     "STALL_AOA",         20,
     "SURVEY_ALT",      2000,
     "SURVEY_SPACING",  500,
-    "SURVEY_SPEED",    150
+    "SURVEY_SPEED",    150,
+    "FBW_REF_SPEED",   100,
+    "FBW_MIN_AUTH",    0.15,
+    "FBW_MAX_AUTH",    1.0,
+    "BRAKE_SPEED",       5,
+    "REVERSE_THRUST_DELAY", 1.5,
+    "REVERSE_AG",        2
 ).
 
 GLOBAL planeActive      IS FALSE.
@@ -91,14 +97,23 @@ GLOBAL FUNCTION hdgHoldOff {
     HUDTEXT("Hdg hold OFF", 2, 2, 13, YELLOW, FALSE).
 }
 
+LOCAL FUNCTION _fbwAuthority {
+    RETURN MAX(PLANE_CFG["FBW_MIN_AUTH"],
+           MIN(PLANE_CFG["FBW_MAX_AUTH"],
+               PLANE_CFG["FBW_REF_SPEED"] / MAX(SHIP:AIRSPEED, 1))).
+}
+
 GLOBAL FUNCTION planeUpdate {
     IF NOT planeActive { RETURN. }
+
+    LOCAL auth IS _fbwAuthority().
+    LOCAL clamp IS 0.3 * auth.
 
     IF wingLevelerActive {
         LOCAL roll IS SHIP:FACING:ROLL.
         IF ABS(roll) > PLANE_CFG["ROLL_DEADBAND"] {
             LOCAL correction IS -roll * PLANE_CFG["ROLL_KP"].
-            SET SHIP:CONTROL:ROLL TO MAX(-0.3, MIN(0.3, correction)).
+            SET SHIP:CONTROL:ROLL TO MAX(-clamp, MIN(clamp, correction)).
         } ELSE {
             SET SHIP:CONTROL:ROLL TO 0.
         }
@@ -112,7 +127,7 @@ GLOBAL FUNCTION planeUpdate {
                              MIN(PLANE_CFG["ALT_MAX_PITCH"], pitchCorr)).
             LOCAL currentPitch IS SHIP:FACING:PITCH.
             LOCAL pitchErr IS pitchCorr - currentPitch.
-            SET SHIP:CONTROL:PITCH TO MAX(-0.3, MIN(0.3, pitchErr * 0.05)).
+            SET SHIP:CONTROL:PITCH TO MAX(-clamp, MIN(clamp, pitchErr * 0.05)).
         } ELSE {
             SET SHIP:CONTROL:PITCH TO 0.
         }
@@ -124,11 +139,35 @@ GLOBAL FUNCTION planeUpdate {
         IF hdgError < -180 { SET hdgError TO hdgError + 360. }
         IF ABS(hdgError) > PLANE_CFG["HDG_DEADBAND"] {
             LOCAL correction IS hdgError * PLANE_CFG["HDG_KP"].
-            SET SHIP:CONTROL:YAW TO MAX(-0.3, MIN(0.3, correction)).
+            SET SHIP:CONTROL:YAW TO MAX(-clamp, MIN(clamp, correction)).
         } ELSE {
             SET SHIP:CONTROL:YAW TO 0.
         }
     }
+}
+
+GLOBAL FUNCTION planeLandingAssist {
+    mLog("Landing assist: brakes ON, throttle zero.").
+    SET BRAKES TO TRUE.
+    LOCK THROTTLE TO 0.
+
+    LOCAL revDelay IS PLANE_CFG["REVERSE_THRUST_DELAY"].
+    mLog("Waiting " + revDelay + "s for reverse thrust.").
+    WAIT revDelay.
+
+    AG2 ON.
+    mLog("Reverse thrust AG2 engaged.").
+    LOCK THROTTLE TO 0.5.
+    mLog("Partial reverse throttle (0.5).").
+
+    WAIT UNTIL SHIP:VELOCITY:SURFACE:MAG < PLANE_CFG["BRAKE_SPEED"].
+    mLog("Below brake speed — shutting down.").
+
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    SET BRAKES TO FALSE.
+    AG2 OFF.
+    mLog("Landing assist complete.").
 }
 
 GLOBAL FUNCTION surveyStart {
