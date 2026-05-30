@@ -148,12 +148,70 @@ IF TERMINAL:INPUT:HASCHAR {
 
 IF manualMode {
     LOCAL dq IS CHAR(34).
+    CLEARSCREEN.
+    PRINT "  ========================================".
+    PRINT "  MANUAL MODE    " + SHIP:NAME.
+    PRINT "  ========================================".
     PRINT " ".
-    PRINT "  MANUAL MODE".
-    PRINT "  Commands (copy into terminal):".
-    PRINT "  RUNPATH(" + dq + "1:/cmd/resume.ks" + dq + ").".
-    PRINT "  RUNPATH(" + dq + "1:/cmd/setstate.ks" + dq + "," + dq + "PHASE" + dq + ").".
-    PRINT "  RUNPATH(" + dq + "1:/cmd/dump.ks" + dq + ").".
+    PRINT "  -- ENVIRONMENT --".
+    PRINT "  Body ........ " + SHIP:ORBIT:BODY:NAME.
+    PRINT "  Status ...... " + SHIP:STATUS.
+    PRINT "  Altitude .... " + ROUND(SHIP:ALTITUDE,0) + " m".
+    IF SHIP:STATUS = "FLYING" OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "PRELAUNCH" {
+        PRINT "  Airspeed .... " + ROUND(SHIP:AIRSPEED,1) + " m/s".
+        PRINT "  Ground spd .. " + ROUND(SHIP:VELOCITY:SURFACE:MAG,1) + " m/s".
+        PRINT "  Heading ..... " + ROUND(SHIP:FACING:YAW,1) + " deg".
+        PRINT "  Latitude .... " + ROUND(SHIP:GEOPOSITION:LAT,4).
+        PRINT "  Longitude ... " + ROUND(SHIP:GEOPOSITION:LNG,4).
+    }
+    IF SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "SUB_ORBITAL" {
+        PRINT "  Apoapsis .... " + ROUND(SHIP:APOAPSIS/1000,1) + " km".
+        PRINT "  Periapsis ... " + ROUND(SHIP:PERIAPSIS/1000,1) + " km".
+        PRINT "  Inclination . " + ROUND(SHIP:ORBIT:INCLINATION,2) + " deg".
+    }
+    PRINT "  KSC link .... " + HOMECONNECTION:ISCONNECTED.
+    PRINT "  Free space .. " + CORE:VOLUME:FREESPACE + " / " + CORE:VOLUME:CAPACITY + " bytes".
+    PRINT " ".
+    PRINT "  -- MISSION --".
+    PRINT "  Vehicle ..... " + vehicleName.
+    PRINT "  Target ...... " + targetName.
+    LOCAL phase IS stateGet("phase", "(none)").
+    PRINT "  Phase ....... " + phase.
+    PRINT "  Boot # ...... " + bootCount.
+    PRINT " ".
+    PRINT "  -- COMMANDS --".
+    PRINT "  Resume mission:".
+    PRINT "    RUNPATH(" + dq + "1:/cmd/resume.ks" + dq + ").".
+    PRINT "  Force phase:".
+    PRINT "    RUNPATH(" + dq + "1:/cmd/setstate.ks" + dq + "," + dq + "PHASE" + dq + ").".
+    PRINT "  State dump:".
+    PRINT "    RUNPATH(" + dq + "1:/cmd/dump.ks" + dq + ").".
+    PRINT "  Storage & files:".
+    PRINT "    RUNPATH(" + dq + "1:/cmd/files.ks" + dq + ").".
+    PRINT "  Archive log to KSC:".
+    PRINT "    RUNPATH(" + dq + "1:/cmd/logs.ks" + dq + ").".
+    IF HOMECONNECTION:ISCONNECTED {
+        PRINT "  Reset boot count:".
+        PRINT "    RUNPATH(" + dq + "1:/cmd/resetboot.ks" + dq + ").".
+    }
+    IF DEFINED planeActive {
+        PRINT " ".
+        PRINT "  -- PLANE --".
+        PRINT "  planeInit().          Arm autopilot".
+        PRINT "  planeStatus().        Show flight data".
+        PRINT "  wingLevelerOn().      Level wings".
+        PRINT "  altHoldOn(ALT).       Hold altitude".
+        PRINT "  hdgHoldOn(HDG).       Hold heading".
+        PRINT "  planeShutdown().      Disable all".
+    }
+    IF DEFINED obsActive {
+        PRINT " ".
+        PRINT "  -- OBSERVE --".
+        PRINT "  observeStart().       Begin telemetry log".
+        PRINT "  observeStop().        Stop + write sentinel".
+    }
+    PRINT " ".
+    PRINT "  ========================================".
     mLog("Manual override at boot.").
     UNLOCK ALL.
     SET SAS TO TRUE.

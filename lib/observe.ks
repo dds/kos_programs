@@ -22,6 +22,17 @@ GLOBAL FUNCTION observeStart {
     _observeLog().
     SET obsNextTime TO TIME:SECONDS + OBS_CFG["INTERVAL"].
     mLog("Observation started: " + obsLogPath).
+    PRINT " ".
+    PRINT "  -- OBSERVATION ACTIVE --".
+    PRINT "  Log ....... " + obsLogPath.
+    PRINT "  Interval .. every " + OBS_CFG["INTERVAL"] + "s".
+    PRINT "  Storage ... " + CORE:VOLUME:FREESPACE + " free (stops at " + OBS_CFG["MIN_FREE"] + ")".
+    PRINT "  Tracking .. spd gspd alt vs hdg pit rol thr".
+    IF planeActive {
+        PRINT "            + auth wbrk wstr wlev ahld hhld".
+    }
+    PRINT "  Auto-stop . abort, low storage, sentinel file".
+    PRINT " ".
     WHEN obsActive THEN {
         IF EXISTS(OBS_CFG["STOP_FILE"]) {
             SET obsActive TO FALSE.
