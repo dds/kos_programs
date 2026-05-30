@@ -76,7 +76,7 @@ LOCAL FUNCTION _phasePreflight {
         "Climb — level off, accelerate to 120 m/s"
     )).
 
-    WAIT UNTIL SHIP:STATUS = "FLYING" OR SHIP:AIRSPEED > 30.
+    WAIT UNTIL SHIP:STATUS = "FLYING".
     mLog("Airborne.").
     nextPhase(launchSeq).
 }
