@@ -8,6 +8,7 @@ LOCAL ALIGN_TOLERANCE IS 2.0.
 LOCAL G0 IS 9.80665.
 
 GLOBAL FUNCTION executeManeuver {
+    WAIT 0.1.
     IF NOT HASNODE {
         mLogError("executeManeuver: no node on flight plan.").
         HUDTEXT("ERROR: No maneuver node!", 5, 2, 18, RED, FALSE).
