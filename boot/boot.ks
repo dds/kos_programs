@@ -147,7 +147,6 @@ IF TERMINAL:INPUT:HASCHAR {
 }
 
 IF manualMode {
-    LOCAL dq IS CHAR(34).
     CLEARSCREEN.
     PRINT "  ========================================".
     PRINT "  MANUAL MODE    " + SHIP:NAME.
@@ -178,37 +177,24 @@ IF manualMode {
     LOCAL phase IS stateGet("phase", "(none)").
     PRINT "  Phase ....... " + phase.
     PRINT "  Boot # ...... " + bootCount.
-    PRINT " ".
-    PRINT "  -- COMMANDS --".
-    PRINT "  Resume mission:".
-    PRINT "    RUNPATH(" + dq + "1:/cmd/resume.ks" + dq + ").".
-    PRINT "  Force phase:".
-    PRINT "    RUNPATH(" + dq + "1:/cmd/setstate.ks" + dq + "," + dq + "PHASE" + dq + ").".
-    PRINT "  State dump:".
-    PRINT "    RUNPATH(" + dq + "1:/cmd/dump.ks" + dq + ").".
-    PRINT "  Storage & files:".
-    PRINT "    RUNPATH(" + dq + "1:/cmd/files.ks" + dq + ").".
-    PRINT "  Archive log to KSC:".
-    PRINT "    RUNPATH(" + dq + "1:/cmd/logs.ks" + dq + ").".
-    IF HOMECONNECTION:ISCONNECTED {
-        PRINT "  Reset boot count:".
-        PRINT "    RUNPATH(" + dq + "1:/cmd/resetboot.ks" + dq + ").".
-    }
     IF DEFINED planeActive {
         PRINT " ".
         PRINT "  -- PLANE --".
-        PRINT "  planeInit().          Arm autopilot".
-        PRINT "  planeStatus().        Show flight data".
-        PRINT "  wingLevelerOn().      Level wings".
-        PRINT "  altHoldOn(ALT).       Hold altitude".
-        PRINT "  hdgHoldOn(HDG).       Hold heading".
-        PRINT "  planeShutdown().      Disable all".
+        PRINT "  Stall speed . " + PLANE_CFG["STALL_SPEED"] + " m/s".
+        PRINT "  FBW ref spd . " + PLANE_CFG["FBW_REF_SPEED"] + " m/s".
+        PRINT "  Cruise alt .. " + CFG["CRUISE_ALT"] + " m".
+        PRINT "  Cruise spd .. " + CFG["CRUISE_SPEED"] + " m/s".
     }
     IF DEFINED obsActive {
         PRINT " ".
-        PRINT "  -- OBSERVE --".
-        PRINT "  observeStart().       Begin telemetry log".
-        PRINT "  observeStop().        Stop + write sentinel".
+        PRINT "  -- OBSERVATION --".
+        IF obsActive {
+            PRINT "  Status ...... ACTIVE".
+        } ELSE {
+            PRINT "  Status ...... OFF".
+        }
+        PRINT "  Interval .... " + OBS_CFG["INTERVAL"] + "s".
+        PRINT "  Min free .... " + OBS_CFG["MIN_FREE"] + " bytes".
     }
     PRINT " ".
     PRINT "  ========================================".
