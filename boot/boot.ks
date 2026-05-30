@@ -9,27 +9,37 @@ PRINT "  *  " + SHIP:NAME.
 PRINT "  *  KSC UPLINK ACTIVE".
 PRINT " ".
 
-LOCAL rawTokens IS SHIP:NAME:SPLIT("-").
-LOCAL tokens IS LIST().
-FOR t IN rawTokens {
-    LOCAL trimmed IS t:TRIM.
-    IF trimmed <> "" { tokens:ADD(trimmed). }
-}
-IF tokens:LENGTH < 2 {
-    PRINT "  !! NAME ERROR".
-    PRINT "  !! Expected: VEHICLE-TARGET[-TYPE...]".
-    PRINT "  !! Got: " + SHIP:NAME.
-    PRINT " ".
-    PRINT "  SYSTEM HALTED.".
-    WAIT UNTIL FALSE.
-}
-LOCAL vehicleName IS tokens[0].
-LOCAL targetName  IS tokens[1]:TOUPPER.
+LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
+LOCAL vehicleName IS "".
+LOCAL targetName IS "".
 LOCAL payloadTypes IS LIST().
-LOCAL idx IS 2.
-UNTIL idx >= tokens:LENGTH {
-    payloadTypes:ADD(tokens[idx]:TOUPPER).
-    SET idx TO idx + 1.
+
+IF isEVA {
+    SET vehicleName TO "EVA".
+    SET targetName TO SHIP:BODY:NAME:TOUPPER.
+    PRINT "  EVA KERBAL DETECTED".
+} ELSE {
+    LOCAL rawTokens IS SHIP:NAME:SPLIT("-").
+    LOCAL tokens IS LIST().
+    FOR t IN rawTokens {
+        LOCAL trimmed IS t:TRIM.
+        IF trimmed <> "" { tokens:ADD(trimmed). }
+    }
+    IF tokens:LENGTH < 2 {
+        PRINT "  !! NAME ERROR".
+        PRINT "  !! Expected: VEHICLE-TARGET[-TYPE...]".
+        PRINT "  !! Got: " + SHIP:NAME.
+        PRINT " ".
+        PRINT "  SYSTEM HALTED.".
+        WAIT UNTIL FALSE.
+    }
+    SET vehicleName TO tokens[0].
+    SET targetName TO tokens[1]:TOUPPER.
+    LOCAL idx IS 2.
+    UNTIL idx >= tokens:LENGTH {
+        payloadTypes:ADD(tokens[idx]:TOUPPER).
+        SET idx TO idx + 1.
+    }
 }
 
 LOCAL FUNCTION ensureDir { PARAMETER p. IF NOT EXISTS(p) { CREATEDIR(p). } }
@@ -83,7 +93,9 @@ IF bootCount = 1 {
 mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 
 LOCAL vehicleScript IS "".
-IF CORE:TAG <> "" {
+IF isEVA {
+    SET vehicleScript TO _resolveScript("EVA", LIST("roles")).
+} ELSE IF CORE:TAG <> "" {
     SET vehicleScript TO _resolveScript(CORE:TAG, LIST("roles", "craft")).
     IF vehicleScript <> "" {
         PRINT "  CORE TAG: " + CORE:TAG + " -> " + vehicleScript + ".ks".

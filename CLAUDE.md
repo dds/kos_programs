@@ -19,9 +19,7 @@ KerbalScript (.ks files) — a scripting language for the kOS mod. Not Python, n
 ## Architecture
 
 ### Boot chain
-`boot/boot.ks` → parses ship name → syncs core libs (state, logs, files) → loads core libs → `_resolveScript()` checks `roles/` and `craft/` dirs (then root fallback) for CORE:TAG or vehicle script → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
-
-`boot/eva.ks` → lightweight EVA boot, bypasses ship-name parsing → syncs core libs → resolves `roles/EVA.ks` → syncs + loads LIBS → 5s manual override → resume
+`boot/boot.ks` → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → syncs core libs (state, logs, files) → loads core libs → `_resolveScript()` checks `roles/` and `craft/` dirs (then root fallback) for CORE:TAG or vehicle script → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
 
 ### CORE:TAG routing (multi-CPU ships)
 If `CORE:TAG` is non-empty, boot resolves the tag via `_resolveScript()` checking `roles/` then `craft/` then root. Each processor has its own `1:/` volume so state is naturally isolated. Untagged CPUs always load the vehicle script from `craft/`.

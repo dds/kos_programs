@@ -11,7 +11,6 @@ An autonomous flight computer system for Kerbal craft control. Handles full miss
 ```
 boot/
     boot.ks              Bootstrap — parses ship name, resolves craft/roles
-    eva.ks               Lightweight EVA boot (no ship-name parsing)
 craft/
     FR2.ks               FR2 multi-payload launcher
     FR3.ks               FR3 next-gen rocket (leaner FR2)
@@ -163,11 +162,11 @@ Each processor has its own `1:/` volume, so state files are naturally isolated �
 | Script | Tag | Purpose |
 |---|---|---|
 | `roles/lander_cpu.ks` | `lander_cpu` | Post-landing deploy (antennas, solar) + science collection |
-| `roles/EVA.ks` | (via `boot/eva.ks`) | Trait-based EVA kerbal controller (scientist/engineer/generic) |
+| `roles/EVA.ks` | `EVA` | Trait-based EVA kerbal controller (scientist/engineer/generic) |
 
 ### EVA
 
-Set boot file to `boot/eva.ks` on a kOS-EVA processor. The EVA boot bypasses ship-name parsing and auto-detects the kerbal's trait (Scientist, Engineer, Pilot) to run role-specific logic. Scientists auto-collect and transmit science; engineers and generics get interactive stubs.
+Set boot file to `boot/boot.ks` on a kOS-EVA processor. Boot auto-detects EVA kerbals by checking if the root part is `kerbalEVA` — no special naming or CORE:TAG needed. It sets vehicle=EVA and target=current body, then resolves `roles/EVA.ks`. The EVA script auto-detects the kerbal's trait (Scientist, Engineer, Pilot) to run role-specific logic. Scientists auto-collect and transmit science; engineers and generics get interactive stubs.
 
 ### Writing a role script
 
