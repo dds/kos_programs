@@ -17,7 +17,7 @@ GLOBAL LIBS IS LIST("phases", "plane", "science", "orbit", "observe").
 LOCAL hasSciencePayload IS FALSE.
 
 LOCAL FUNCTION _printConfig {
-    LOCAL seq IS LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "DONE").
+    LOCAL seq IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
     CLEARSCREEN.
     PRINT "  ========================================".
     PRINT "    FJ1A FLIGHT PLAN    " + SHIP:NAME.
@@ -37,7 +37,7 @@ LOCAL FUNCTION _printConfig {
 }
 
 GLOBAL FUNCTION main {
-    LOCAL seq IS LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "DONE").
+    LOCAL seq IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
     SET launchSeq TO seq.
 
     FOR ptype IN missionPayloads() {
@@ -95,7 +95,7 @@ LOCAL FUNCTION _phaseFlight {
 }
 
 LOCAL FUNCTION _phasePostFlight {
-    mLogPhase("POST_FLIGHT").
+    mLogPhase("POSTFLIGHT").
     IF hasSciencePayload { scienceTransmitAll(). }
     planeLandingAssist().
     planeShutdown().

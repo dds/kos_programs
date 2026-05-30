@@ -26,8 +26,8 @@ LOCAL FUNCTION _phaseDescend {
         nextPhase(launchSeq).
         RETURN.
     }
-
-    IF SHIP:STATUS<> "FLYING" AND SHIP:STATUS <> "SUB_ORBITAL" AND SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING" {
+    // SHIP:STATUS<> "FLYING" AND SHIP:STATUS <> "SUB_ORBITAL" AND 
+    IF SHIP:STATUS <> "ORBITING" AND SHIP:STATUS <> "ESCAPING" {
         mLog("Waiting for orbit (status=" + SHIP:STATUS + ").").
         WAIT UNTIL SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING".
     }
@@ -46,17 +46,16 @@ LOCAL FUNCTION _phaseDescend {
     mLog("Science active during descent.").
 
     UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+        IF hasAtmo AND NOT chuteStaged
+            AND SHIP:ALTITUDE > 10
+            AND SHIP:VELOCITY:SURFACE:MAG > 10 {
+            _stageChutes().
+            SET chuteStaged TO TRUE.
+        }
+
         IF NOT antennasDeployed AND SHIP:ALTITUDE < 20000 {
             _deployAntennas().
             SET antennasDeployed TO TRUE.
-        }
-
-        IF hasAtmo AND NOT chuteStaged
-            AND SHIP:ALTITUDE > 4000 AND SHIP:ALTITUDE < 8000
-            AND SHIP:VELOCITY:SURFACE:MAG > 40
-            AND SHIP:VELOCITY:SURFACE:MAG < 130 {
-            _stageChutes().
-            SET chuteStaged TO TRUE.
         }
 
         IF scienceStarted {

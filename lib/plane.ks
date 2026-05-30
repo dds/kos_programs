@@ -49,6 +49,8 @@ LOCAL _rollPid          IS 0.
 LOCAL _altPid           IS 0.
 LOCAL _pitchPid         IS 0.
 LOCAL _hdgPid           IS 0.
+LOCAL _ctrlSurfAuth     IS LIST().
+
 
 GLOBAL FUNCTION planeInit {
     SET planeActive TO TRUE.
@@ -67,11 +69,14 @@ GLOBAL FUNCTION planeInit {
     SET _ctrlSurfaces TO LIST().
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleControlSurface") {
-            _ctrlSurfaces:ADD(p:GETMODULE("ModuleControlSurface")).
+            LOCAL mo IS p:GETMODULE("ModuleControlSurface").
+            _ctrlSurfaces:ADD(mo).
+            _ctrlSurfAuth:ADD(mo:GETFIELD("Authority Limiter")).
         }
     }
     mLog("Control surfaces: " + _ctrlSurfaces:LENGTH + " found. cruise="
         + CFG["CRUISE_SPEED"] + " top=" + CFG["TOP_SPEED"] + "m/s").
+
 
     SET _rollPid TO PIDLOOP(PLANE_CFG["ROLL_KP"], PLANE_CFG["ROLL_KI"],
         PLANE_CFG["ROLL_KD"], -1, 1).
@@ -121,8 +126,9 @@ GLOBAL FUNCTION planeShutdown {
     wingLevelerOff().
     altHoldOff().
     hdgHoldOff().
-    FOR sm IN _ctrlSurfaces {
-        sm:SETFIELD("Authority Limiter", 100).
+    FROM {LOCAL i IS 0.} UNTIL i = _ctrlSurfaces:LENGTH STEP {SET i TO i+1.} DO {
+        LOCAL sm IS _ctrlSurfaces[i]. 
+        sm:SETFIELD("Authority Limiter", _ctrlSurfAuth[i]).
     }
     UNLOCK STEERING.
     SET planeActive TO FALSE.
@@ -202,9 +208,9 @@ GLOBAL FUNCTION planeUpdate {
     LOCAL auth IS _fbwAuthority().
     LOCAL clamp IS 0.3 * auth.
 
-    LOCAL surfPct IS ROUND(_surfaceAuthority() * 100, 0).
-    FOR sm IN _ctrlSurfaces {
-        sm:SETFIELD("Authority Limiter", surfPct).
+    FROM {LOCAL i IS 0.} UNTIL i = _ctrlSurfaces:LENGTH STEP {SET i TO i+1.} DO {
+        LOCAL sm IS _ctrlSurfaces[i]. 
+        sm:SETFIELD("Authority Limiter", _ctrlSurfAuth[i] * _surfaceAuthority()).
     }
 
     IF wptNavActive AND wptIndex < wptList:LENGTH {
