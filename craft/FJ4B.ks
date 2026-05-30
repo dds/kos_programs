@@ -68,7 +68,7 @@ LOCAL FUNCTION _phasePreflight {
     PRINT "  ========================================".
     PRINT " ".
     PRINT "  [ ] Control surfaces — check full deflection".
-    PRINT "  [ ] Altimeter — set to RADAR (right-click)".
+    PRINT "  [ ] Altimeter — set to RADAR".
     PRINT "  [ ] Camera — chase view, raise above tail".
     PRINT "  [ ] Brakes — HOLD until ready".
     PRINT "  [ ] Stage — start engines".
