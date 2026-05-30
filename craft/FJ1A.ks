@@ -11,7 +11,7 @@ GLOBAL CFG IS LEXICON(
     "FLAP_AG",          1
 ).
 
-GLOBAL LIBS IS LIST("phases", "plane", "science", "orbit").
+GLOBAL LIBS IS LIST("phases", "plane", "science", "orbit", "observe").
 
 LOCAL hasSciencePayload IS FALSE.
 
@@ -60,6 +60,7 @@ GLOBAL FUNCTION main {
 LOCAL FUNCTION _phasePreflight {
     mLogPhase("PREFLIGHT").
     planeInit().
+    observeStart().
     mLog("Waiting for takeoff...").
     WAIT UNTIL SHIP:STATUS = "FLYING" OR SHIP:AIRSPEED > 30.
     mLog("Airborne.").

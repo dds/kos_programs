@@ -178,6 +178,7 @@ LOCAL FUNCTION _launchAbort {
         mLogWarn("No KSC link — log NOT archived (will retry in recovery).").
     }
 
+    LOG "" TO "1:/state/obs_off".
     mLog("Abort complete. Awaiting landing.").
 }
 

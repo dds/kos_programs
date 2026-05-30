@@ -60,7 +60,7 @@ GLOBAL FUNCTION roverInit {
 
     WHEN roverActive THEN {
         LOCAL factor IS _roverSteerFactor().
-        SET SHIP:CONTROL:WHEELSTEER TO SHIP:CONTROL:PILOTMAINSTEER * factor.
+        SET SHIP:CONTROL:WHEELSTEER TO SHIP:CONTROL:PILOTWHEELSTEER * factor.
         PRESERVE.
     }
 }
