@@ -129,12 +129,14 @@ IF vehicleScript:CONTAINS("/") {
     ensureDir("1:/" + parts[0]).
 }
 
+PRINT "  SYNC Zombie ........".
+COPYPATH("0:/cmd/zombie.ks", "1:/zombie").
+
 PRINT "  SYNC " + vehicleScript + " ....... ".
 COPYPATH("0:/" + vehicleScript + ".ks", "1:/" + vehicleScript + ".ks").
 RUNPATH("1:/" + vehicleScript + ".ks").
 
 PRINT "  SYNC libs ......... ".
-COPYPATH("0:/cmd/zombie.ks", "1:/zombie").
 FOR lib IN LIBS { _syncLib(lib). }
 FOR lib IN LIBS { _loadLib(lib). }
 
