@@ -80,8 +80,8 @@ LOCAL FUNCTION buildPhaseSequence {
 
     seq:ADD("CIRC").
     IF hasMolniya {
-        seq:ADD("INCL_CORRECT").
         seq:ADD("MOLNIYA_INSERT").
+        seq:ADD("INCL_CORRECT").
     } ELSE {
         seq:ADD("RAISE_ALT").
         seq:ADD("INCL_CORRECT").
