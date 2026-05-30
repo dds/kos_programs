@@ -15,11 +15,36 @@ GLOBAL FUNCTION initLog {
     mLog("Fault log: " + flightLogPath).
 }
 
+GLOBAL FUNCTION slug {
+    LOCAL safeName IS _sanitizeName(SHIP:NAME).
+    LOCAL safeCoreTag IS _sanitizeName(CORE:TAG).
+    IF safeCoreTag <> "" {
+        RETURN "{0}_{1}":FORMAT(safeName, safeCoreTag).
+    } 
+    RETURN safeName.
+}
+
+GLOBAL _logs_start_time IS TIME:SECONDS.
+
+GLOBAL FUNCTION logId {
+    LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
+    LOCAL baseId IS "{0}_{1}":FORMAT(slug(), _logs_start_time).
+
+    IF isEVA {
+        // TODO: I think TIME:SECONDS will be different for every call and,
+        // instead, we need to store a bit of state for every EVA launch to
+        // to get its time of launch and use that for its logId once. For now,
+        // we don't have EVAs.
+        RETURN "{0}_EVA_{1}":FORMAT(baseId, TIME:SECONDS).
+    }
+
+    RETURN baseId.
+}
+
 LOCAL FUNCTION _newLogPath {
     PARAMETER logPathFile.
-    LOCAL safeName IS _sanitizeName(SHIP:NAME).
-    LOCAL p IS "1:/logs/" + safeName + "_" + ROUND(TIME:SECONDS) + ".log".
-    LOG "=== FAULT LOG START: " + SHIP:NAME + " ===" TO p.
+    LOCAL p IS "1:/logs/" + logId().
+    LOG "=== FAULT LOG START: " + logId() + " ===" TO p.
     LOG p TO logPathFile.
     RETURN p.
 }

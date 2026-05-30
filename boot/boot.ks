@@ -124,7 +124,7 @@ IF vehicleScript:CONTAINS("/") {
 SET coreId TO coreId + "-" + scriptBase.
 IF EXISTS("1:/state/core_id") { DELETEPATH("1:/state/core_id"). }
 LOG coreId TO "1:/state/core_id".
-initLog(coreId).
+initLog().
 
 mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 
