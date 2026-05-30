@@ -88,11 +88,11 @@ GLOBAL FUNCTION wingLevelerOff {
 }
 
 GLOBAL FUNCTION altHoldOn {
-    PARAMETER alt IS SHIP:ALTITUDE.
-    SET targetAlt TO alt.
+    PARAMETER tAlt IS SHIP:ALTITUDE.
+    SET targetAlt TO tAlt.
     SET altHoldActive TO TRUE.
-    mLog("Altitude hold ON at " + ROUND(alt,0) + "m.").
-    HUDTEXT("Alt hold ON: " + ROUND(alt,0) + "m", 2, 2, 13, CYAN, FALSE).
+    mLog("Altitude hold ON at " + ROUND(tAlt,0) + "m.").
+    HUDTEXT("Alt hold ON: " + ROUND(tAlt,0) + "m", 2, 2, 13, CYAN, FALSE).
 }
 
 GLOBAL FUNCTION altHoldOff {
