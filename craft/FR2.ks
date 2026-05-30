@@ -22,7 +22,7 @@ GLOBAL CFG IS LEXICON(
     "TARGET_INCLINATION",     63.4,
     "INCL_MATCH_TARGET",       "",
     "INCL_TOLERANCE",         0.01,
-    "MAX_INCL_CHANGE_DV",     200,
+    "MAX_INCL_CHANGE_DV",     800,
     "PROBE_TARGET_LAT",       -90.0,
     "PROBE_TARGET_LNG",         0.0,
     "PROBE_ENTRY_PE",         30000,
