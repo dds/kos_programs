@@ -210,15 +210,15 @@ GLOBAL FUNCTION planeLandingAssist {
 GLOBAL FUNCTION surveyStart {
     PARAMETER startLat.
     PARAMETER startLng.
-    PARAMETER heading.
+    PARAMETER heading_.
     PARAMETER laneCount IS 4.
 
-    mLog("Survey start: " + laneCount + " lanes  hdg=" + heading
+    mLog("Survey start: " + laneCount + " lanes  hdg=" + heading_
         + "  alt=" + PLANE_CFG["SURVEY_ALT"] + "m").
     HUDTEXT("Survey mode active", 3, 2, 14, CYAN, FALSE).
 
     altHoldOn(SHIP:ALTITUDE).
-    hdgHoldOn(heading).
+    hdgHoldOn(heading_).
 
     LOCAL lane IS 0.
     UNTIL lane >= laneCount {
@@ -232,13 +232,13 @@ GLOBAL FUNCTION surveyStart {
         }
 
         IF lane < laneCount - 1 {
-            LOCAL newHdg IS heading + 90.
+            LOCAL newHdg IS heading_ + 90.
             IF newHdg >= 360 { SET newHdg TO newHdg - 360. }
             hdgHoldOn(newHdg).
             WAIT 10.
-            hdgHoldOn(heading + 180).
+            hdgHoldOn(heading_ + 180).
             WAIT 5.
-            hdgHoldOn(heading).
+            hdgHoldOn(heading_).
         }
         SET lane TO lane + 1.
     }
