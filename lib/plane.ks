@@ -414,7 +414,6 @@ GLOBAL FUNCTION planePreflightChecklist {
     PARAMETER craftName.
     PARAMETER items.
 
-    CLEARSCREEN.
     PRINT "  ========================================".
     PRINT "    " + craftName + " PREFLIGHT CHECKLIST".
     PRINT "  ========================================".
