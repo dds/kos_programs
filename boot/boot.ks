@@ -10,6 +10,10 @@ PRINT "  *  " + SHIP:NAME.
 PRINT "  *  KSC UPLINK ACTIVE".
 PRINT " ".
 
+IF SHIP:STATUS = "PRELAUNCH" OR SHIP:STATUS = "LANDED" {
+    SET BRAKES TO TRUE.
+}
+
 LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
 LOCAL vehicleName IS "".
 LOCAL targetName IS "".
@@ -26,20 +30,16 @@ IF isEVA {
         LOCAL trimmed IS t:TRIM.
         IF trimmed <> "" { tokens:ADD(trimmed). }
     }
-    IF tokens:LENGTH < 2 {
-        PRINT "  !! NAME ERROR".
-        PRINT "  !! Expected: VEHICLE-TARGET[-TYPE...]".
-        PRINT "  !! Got: " + SHIP:NAME.
-        PRINT " ".
-        PRINT "  SYSTEM HALTED.".
-        WAIT UNTIL FALSE.
-    }
     SET vehicleName TO tokens[0].
-    SET targetName TO tokens[1]:TOUPPER.
-    LOCAL idx IS 2.
-    UNTIL idx >= tokens:LENGTH {
-        payloadTypes:ADD(tokens[idx]:TOUPPER).
-        SET idx TO idx + 1.
+    IF tokens:LENGTH >= 2 {
+        SET targetName TO tokens[1]:TOUPPER.
+        LOCAL idx IS 2.
+        UNTIL idx >= tokens:LENGTH {
+            payloadTypes:ADD(tokens[idx]:TOUPPER).
+            SET idx TO idx + 1.
+        }
+    } ELSE {
+        SET targetName TO "KERBIN".
     }
 }
 
