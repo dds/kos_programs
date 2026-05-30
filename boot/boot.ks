@@ -197,6 +197,37 @@ IF manualMode {
         PRINT "  Min free .... " + OBS_CFG["MIN_FREE"] + " bytes".
     }
     PRINT " ".
+    PRINT "  -- LOGS --".
+    IF DEFINED flightLogPath {
+        PRINT "  Flight log .. " + flightLogPath.
+    }
+    LOCAL logFiles IS LIST().
+    IF EXISTS("1:/logs") {
+        LOCAL logDir IS OPEN("1:/logs").
+        FOR f IN logDir:LEXICON:VALUES {
+            IF NOT f:ISFILE { } ELSE { logFiles:ADD(f). }
+        }
+    }
+    IF logFiles:LENGTH > 0 {
+        FOR f IN logFiles {
+            PRINT "  " + f:NAME.
+        }
+    } ELSE {
+        PRINT "  (no log files)".
+    }
+    IF HOMECONNECTION:ISCONNECTED {
+        IF NOT EXISTS("0:/logs") { CREATEDIR("0:/logs"). }
+        FOR f IN logFiles {
+            COPYPATH("1:/logs/" + f:NAME, "0:/logs/" + f:NAME).
+        }
+        IF logFiles:LENGTH > 0 {
+            PRINT "  Archived " + logFiles:LENGTH + " log(s) to 0:/logs/".
+            mLog("Auto-archived " + logFiles:LENGTH + " log(s) to archive.").
+        }
+    } ELSE {
+        PRINT "  No KSC link — logs need manual retrieval".
+    }
+    PRINT " ".
     PRINT "  ========================================".
     mLog("Manual override at boot.").
     UNLOCK ALL.

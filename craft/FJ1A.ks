@@ -62,34 +62,18 @@ LOCAL FUNCTION _phasePreflight {
     planeInit().
     observeStart().
 
-    CLEARSCREEN.
-    PRINT "  ========================================".
-    PRINT "    FJ1A PREFLIGHT CHECKLIST".
-    PRINT "  ========================================".
-    PRINT " ".
-    PRINT "  [ ] Control surfaces — check full deflection".
-    PRINT "  [ ] Altimeter — set to RADAR".
-    PRINT "  [ ] Camera — chase view, raise above tail".
-    PRINT "  [ ] Brakes — HOLD until ready".
-    PRINT "  [ ] Stage — start engines".
-    PRINT "  [ ] Throttle — FULL".
-    PRINT "  [ ] Brakes — RELEASE at full thrust".
-    PRINT "  [ ] Rotate — pull up at 80 m/s".
-    PRINT "  [ ] Gear — retract on positive climb".
-    PRINT "  [ ] Climb — level off, accelerate to 120 m/s".
-    PRINT " ".
-    PRINT "  -- ENVIRONMENT --".
-    PRINT "  Airspeed .... " + ROUND(SHIP:AIRSPEED,1) + " m/s".
-    PRINT "  Heading ..... " + ROUND(SHIP:FACING:YAW,1) + " deg".
-    PRINT "  Stall speed . " + PLANE_CFG["STALL_SPEED"] + " m/s".
-    PRINT "  Storage ..... " + CORE:VOLUME:FREESPACE + " bytes free".
-    PRINT " ".
-    PRINT "  >> Press any key when ready for takeoff".
-
-    TERMINAL:INPUT:GETCHAR().
-    PRINT " ".
-    PRINT "  Takeoff clearance given.".
-    mLog("Takeoff clearance given.").
+    planePreflightChecklist("FJ1A", LIST(
+        "Control surfaces — check full deflection",
+        "Altimeter — set to RADAR (right-click)",
+        "Camera — chase view, raise above tail",
+        "Brakes — HOLD until ready",
+        "Stage — start engines",
+        "Throttle — FULL",
+        "Brakes — RELEASE at full thrust",
+        "Rotate — pull up at 80 m/s",
+        "Gear — retract on positive climb",
+        "Climb — level off, accelerate to 120 m/s"
+    )).
 
     WAIT UNTIL SHIP:STATUS = "FLYING" OR SHIP:AIRSPEED > 30.
     mLog("Airborne.").

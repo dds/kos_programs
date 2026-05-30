@@ -11,7 +11,7 @@ GLOBAL CFG IS LEXICON(
     "SPLASHDOWN_SPEED",   40
 ).
 
-GLOBAL LIBS IS LIST("phases", "plane", "science", "orbit").
+GLOBAL LIBS IS LIST("phases", "plane", "science", "orbit", "observe").
 
 LOCAL hasSciencePayload IS FALSE.
 
@@ -62,7 +62,21 @@ GLOBAL FUNCTION main {
 LOCAL FUNCTION _phasePreflight {
     mLogPhase("PREFLIGHT").
     planeInit().
-    mLog("Waiting for takeoff...").
+    observeStart().
+
+    planePreflightChecklist("FSP1", LIST(
+        "Control surfaces — check full deflection",
+        "Altimeter — set to RADAR (right-click)",
+        "Camera — chase view, raise above tail",
+        "Brakes — HOLD until ready",
+        "Stage — start engines",
+        "Throttle — FULL",
+        "Brakes — RELEASE at full thrust",
+        "Rotate — pull up at 80 m/s",
+        "Gear — retract on positive climb",
+        "Splashdown target — " + CFG["SPLASHDOWN_SPEED"] + " m/s"
+    )).
+
     WAIT UNTIL SHIP:STATUS = "FLYING" OR SHIP:AIRSPEED > 50.
     mLog("Airborne.").
     nextPhase(launchSeq).
