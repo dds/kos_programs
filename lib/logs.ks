@@ -49,11 +49,9 @@ GLOBAL FUNCTION mLog {
     LOCAL line IS "[" + _fmtTime() + "][" + level + "] " + message.
     PRINT line.
 
-    // IF level = "WARN" OR level = "ERROR" OR level = "PHASE" {
-        IF flightLogPath <> "" AND CORE:VOLUME:FREESPACE > 500 {
-            LOG line TO flightLogPath.
-        }
-    // }
+    IF flightLogPath <> "" AND CORE:VOLUME:FREESPACE > 500 {
+        LOG line TO flightLogPath.
+    }
 }
 
 GLOBAL FUNCTION mLogWarn  { PARAMETER m. mLog(m, "WARN").  }
