@@ -10,8 +10,8 @@
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
-    "PARKING_ALT",          90000,
-    "LAUNCH_INCLINATION",      90,
+    "PARKING_ALT",         100000,
+    "LAUNCH_INCLINATION",    63.4,
     "LAUNCH_AZIMUTH",           0,
     "LAUNCH_STAGE_LIMIT",       0,
     "FAIRING_ALT",          68000,
@@ -28,7 +28,7 @@ GLOBAL CFG IS LEXICON(
     "PROBE_ENTRY_PE",         30000,
     "PROBE_TARGET_TOL",        900,
     "MOLNIYA_PERIOD",         10775,
-    "MOLNIYA_AOP",              270,
+    "MOLNIYA_AOP",              90,
     "MOLNIYA_ECC",               0.7
 ).
 
