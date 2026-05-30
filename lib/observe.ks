@@ -79,8 +79,8 @@ LOCAL FUNCTION _observeLog {
                 PLANE_CFG["FBW_REF_SPEED"] / MAX(SHIP:AIRSPEED, 1))).
         SET line TO line
             + " auth=" + ROUND(auth,2)
-            + " wbrk=" + ROUND(SHIP:CONTROL:WHEELBRAKES,2)
-            + " wstr=" + ROUND(SHIP:CONTROL:WHEELSTEER,2)
+            + " wbrk=" + ROUND(SHIP:CONTROL:PILOTBRAKES,2)
+            + " wstr=" + ROUND(SHIP:CONTROL:PILOTSTEER,2)
             + " wlev=" + wingLevelerActive
             + " ahld=" + altHoldActive
             + " hhld=" + hdgHoldActive.
