@@ -61,7 +61,36 @@ LOCAL FUNCTION _phasePreflight {
     mLogPhase("PREFLIGHT").
     planeInit().
     observeStart().
-    mLog("Waiting for takeoff...").
+
+    CLEARSCREEN.
+    PRINT "  ========================================".
+    PRINT "    FJ4B PREFLIGHT CHECKLIST".
+    PRINT "  ========================================".
+    PRINT " ".
+    PRINT "  [ ] Control surfaces — check full deflection".
+    PRINT "  [ ] Altimeter — set to RADAR (right-click)".
+    PRINT "  [ ] Camera — chase view, raise above tail".
+    PRINT "  [ ] Brakes — HOLD until ready".
+    PRINT "  [ ] Stage — start engines".
+    PRINT "  [ ] Throttle — FULL".
+    PRINT "  [ ] Brakes — RELEASE at full thrust".
+    PRINT "  [ ] Rotate — pull up at 120 m/s".
+    PRINT "  [ ] Gear — retract on positive climb".
+    PRINT "  [ ] Climb — level off, accelerate to 200 m/s".
+    PRINT " ".
+    PRINT "  -- ENVIRONMENT --".
+    PRINT "  Airspeed .... " + ROUND(SHIP:AIRSPEED,1) + " m/s".
+    PRINT "  Heading ..... " + ROUND(SHIP:FACING:YAW,1) + " deg".
+    PRINT "  Stall speed . " + PLANE_CFG["STALL_SPEED"] + " m/s".
+    PRINT "  Storage ..... " + CORE:VOLUME:FREESPACE + " bytes free".
+    PRINT " ".
+    PRINT "  >> Press any key when ready for takeoff".
+
+    TERMINAL:INPUT:GETCHAR().
+    PRINT " ".
+    PRINT "  Takeoff clearance given.".
+    mLog("Takeoff clearance given.").
+
     WAIT UNTIL SHIP:STATUS = "FLYING" OR SHIP:AIRSPEED > 50.
     mLog("Airborne.").
     nextPhase(launchSeq).

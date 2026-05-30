@@ -40,7 +40,8 @@ GLOBAL FUNCTION planeInit {
         + PLANE_CFG["STALL_SPEED"] + "m/s").
     HUDTEXT("Plane autopilot ready", 3, 2, 13, GREEN, FALSE).
 
-    WHEN planeActive AND SHIP:AIRSPEED < PLANE_CFG["STALL_SPEED"]
+    WHEN planeActive AND ALT:RADAR > 2
+            AND SHIP:AIRSPEED < PLANE_CFG["STALL_SPEED"]
             AND SHIP:ALTITUDE < 70000 THEN {
         HUDTEXT("STALL WARNING — " + ROUND(SHIP:AIRSPEED,0) + "m/s", 2, 2, 16, RED, FALSE).
         mLog("Stall warning: airspeed=" + ROUND(SHIP:AIRSPEED,0) + "m/s").
