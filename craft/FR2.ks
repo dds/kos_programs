@@ -26,7 +26,7 @@ GLOBAL CFG IS LEXICON(
     "PROBE_TARGET_LAT",       -90.0,
     "PROBE_TARGET_LNG",         0.0,
     "PROBE_ENTRY_PE",         30000,
-    "PROBE_TARGET_TOL",        5000,
+    "PROBE_TARGET_TOL",        900,
     "MOLNIYA_PERIOD",         10775,
     "MOLNIYA_AOP",              270,
     "MOLNIYA_ECC",               0.7
