@@ -52,6 +52,15 @@ ensureDir("1:/cmd").
 ensureDir("1:/craft").
 ensureDir("1:/roles").
 
+LOCAL coreId IS "".
+IF isEVA {
+    SET coreId TO "EVA-" + SHIP:NAME.
+} ELSE IF CORE:TAG <> "" {
+    SET coreId TO vehicleName + "-" + CORE:TAG.
+} ELSE {
+    SET coreId TO vehicleName + "-main".
+}
+
 LOCAL FUNCTION _resolveScript {
     PARAMETER name.
     PARAMETER dirs.
@@ -95,27 +104,30 @@ mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 LOCAL vehicleScript IS "".
 IF isEVA {
     SET vehicleScript TO _resolveScript("EVA", LIST("roles")).
-    IF vehicleScript <> "" {
-        initLog("EVA-" + vehicleScript).
-    } else {
-        initLog("EVA").
-    }
 } ELSE IF CORE:TAG <> "" {
     SET vehicleScript TO _resolveScript(CORE:TAG, LIST("roles", "craft")).
     IF vehicleScript <> "" {
         PRINT "  CORE TAG: " + CORE:TAG + " -> " + vehicleScript + ".ks".
-        initLog(CORE:TAG + "-" + vehicleScript).
     } ELSE {
         PRINT "  CORE TAG: " + CORE:TAG + " (no script found, trying vehicle).".
-        initLog(CORE:TAG).
     }
 } ELSE {
-    // Unconditional initialization here.
-    initLog().
 }
+
 IF vehicleScript = "" {
     SET vehicleScript TO _resolveScript(vehicleName, LIST("craft")).
 }
+
+LOCAL scriptBase IS vehicleScript.
+IF vehicleScript:CONTAINS("/") {
+    LOCAL sParts IS vehicleScript:SPLIT("/").
+    SET scriptBase TO sParts[sParts:LENGTH - 1].
+}
+SET coreId TO coreId + "-" + scriptBase.
+IF EXISTS("1:/state/core_id") { DELETEPATH("1:/state/core_id"). }
+LOG coreId TO "1:/state/core_id".
+initLog(coreId).
+
 IF vehicleScript = "" {
     PRINT "  !! SCRIPT NOT FOUND: " + vehicleName.
     PRINT "  !! Checked craft/ and root.".
@@ -173,13 +185,17 @@ LOCAL FUNCTION _archiveLogs {
         PRINT "  (no log files)".
     }
     IF HOMECONNECTION:ISCONNECTED {
+        LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
+        IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
+        LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
         IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
+        IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
         FOR f IN logFiles {
-            COPYPATH("1:/logs/" + f:NAME, "0:/logs/archive/" + f:NAME).
+            COPYPATH("1:/logs/" + f:NAME, shipDir + "/" + coreId + ".log").
         }
         IF logFiles:LENGTH > 0 {
-            PRINT "  Archived " + logFiles:LENGTH + " log(s) to 0:/logs/archive".
-            mLog("Auto-archived " + logFiles:LENGTH + " log(s) to archive.").
+            PRINT "  Archived " + logFiles:LENGTH + " log(s) to " + shipDir.
+            mLog("Auto-archived " + logFiles:LENGTH + " log(s) to " + shipDir + ".").
         }
     } ELSE {
         PRINT "  No KSC link — logs need manual retrieval".
@@ -283,13 +299,17 @@ IF logFiles:LENGTH > 0 {
     PRINT "  (no log files)".
 }
 IF HOMECONNECTION:ISCONNECTED {
+    LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
+    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
+    LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
+    IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
     FOR f IN logFiles {
-        COPYPATH("1:/logs/" + f:NAME, "0:/logs/archive/" + f:NAME).
+        COPYPATH("1:/logs/" + f:NAME, shipDir + "/" + coreId + ".log").
     }
     IF logFiles:LENGTH > 0 {
-        PRINT "  Archived " + logFiles:LENGTH + " log(s) to 0:/logs/archive/".
-        mLog("Auto-archived " + logFiles:LENGTH + " log(s) to archive.").
+        PRINT "  Archived " + logFiles:LENGTH + " log(s) to " + shipDir.
+        mLog("Auto-archived " + logFiles:LENGTH + " log(s) to " + shipDir + ".").
     }
 } ELSE {
     PRINT "  No KSC link — logs need manual retrieval".
