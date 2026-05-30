@@ -81,7 +81,6 @@ FOR lib IN coreLibs { _syncLib(lib). }
 _loadLib("state").
 stateInit().
 _loadLib("logs").
-initLog().
 _loadLib("files").
 
 LOCAL bootCount IS stateGetNum("boot_count", 0) + 1.
@@ -96,14 +95,23 @@ mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 LOCAL vehicleScript IS "".
 IF isEVA {
     SET vehicleScript TO _resolveScript("EVA", LIST("roles")).
+    IF vehicleScript <> "" {
+        initLog("EVA-" + vehicleScript).
+    } else {
+        initLog("EVA").
+    }
 } ELSE IF CORE:TAG <> "" {
     SET vehicleScript TO _resolveScript(CORE:TAG, LIST("roles", "craft")).
     IF vehicleScript <> "" {
         PRINT "  CORE TAG: " + CORE:TAG + " -> " + vehicleScript + ".ks".
+        initLog(CORE:TAG + "-" + vehicleScript).
     } ELSE {
         PRINT "  CORE TAG: " + CORE:TAG + " (no script found, trying vehicle).".
-        SET vehicleScript TO "".
+        initLog(CORE:TAG).
     }
+} ELSE {
+    // Unconditional initialization here.
+    initLog().
 }
 IF vehicleScript = "" {
     SET vehicleScript TO _resolveScript(vehicleName, LIST("craft")).
