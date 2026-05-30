@@ -324,11 +324,13 @@ LOCAL FUNCTION _phaseReleaseProbe {
         mLog("Fixed solar panels detected — orienting sunward.").
         HUDTEXT("Orienting for solar panels...", 3, 2, 13, CYAN, FALSE).
         LOCK sunDir TO (SUN:POSITION - SHIP:POSITION):NORMALIZED.
+        SET SAS TO FALSE.
         LOCK STEERING TO sunDir.
         LOCAL alignDeadline IS TIME:SECONDS + 60.
         WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, sunDir) < 5
             OR TIME:SECONDS > alignDeadline.
         mLog("Sun angle: " + ROUND(VANG(SHIP:FACING:FOREVECTOR, sunDir), 1) + "deg.").
+        WAIT 2.
         UNLOCK STEERING.
         UNLOCK sunDir.
     }
