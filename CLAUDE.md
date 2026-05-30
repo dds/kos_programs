@@ -87,6 +87,7 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 | `relay_constellation.ks` | Multi-relay deployment |
 | `plane.ks` | Aircraft autopilot |
 | `rover.ks` | Ground vehicle control |
+| `utils.ks` | General-purpose utilities (fmtDuration, printOrbitRef) |
 
 ## Key constraints
 
