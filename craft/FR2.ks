@@ -10,16 +10,16 @@
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
-    "PARKING_ALT",         120000,
-    "LAUNCH_INCLINATION",       90,
+    "PARKING_ALT",         100000,
+    "LAUNCH_INCLINATION",    63.5,
     "LAUNCH_AZIMUTH",           0,
     "LAUNCH_STAGE_LIMIT",       0,
     "FAIRING_ALT",          68000,
     "EXTEND_ALT",           72000,
-    "RELAY_ALT",           1000000,
+    "RELAY_ALT",          1000000,
     "CAPTURE_PE",            20000,
     "CIRC_ECC_TOL",          0.005,
-    "TARGET_INCLINATION",      90,
+    "TARGET_INCLINATION",     63.5,
     "INCL_MATCH_TARGET",       "",
     "INCL_TOLERANCE",         0.01,
     "MAX_INCL_CHANGE_DV",     200,
@@ -29,7 +29,7 @@ GLOBAL CFG IS LEXICON(
     "PROBE_TARGET_TOL",        5000,
     "MOLNIYA_PERIOD",         10775,
     "MOLNIYA_AOP",              270,
-    "MOLNIYA_ECC",                0
+    "MOLNIYA_ECC",               0.7
 ).
 
 GLOBAL LIBS IS LIST(
