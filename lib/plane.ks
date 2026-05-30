@@ -3,54 +3,63 @@
 // ============================================================
 
 GLOBAL PLANE_CFG IS LEXICON(
-    "ROLL_KP",          0.02,
-    "ROLL_KI",          0.001,
-    "ROLL_KD",          0.01,
-    "ALT_KP",           0.003,
-    "ALT_KI",           0.0005,
-    "ALT_KD",           0.002,
-    "ALT_MAX_PITCH",      8,
-    "ALT_MIN_PITCH",     -6,
-    "PITCH_KP",         0.05,
-    "PITCH_KI",         0.005,
-    "PITCH_KD",         0.02,
-    "HDG_KP",           0.03,
-    "HDG_KI",           0.002,
-    "HDG_KD",           0.015,
-    "WPT_RADIUS",       500,
-    "STALL_SPEED",       39,
-    "STALL_AOA",         20,
-    "SURVEY_ALT",      2000,
-    "SURVEY_SPACING",  500,
-    "SURVEY_SPEED",    150,
-    "FBW_REF_SPEED",   100,
-    "FBW_MIN_AUTH",    0.15,
-    "FBW_MAX_AUTH",    1.0,
-    "BRAKE_REF_SPEED",  80,
-    "BRAKE_STOP_SPEED",  3,
+    "ROLL_KP",           0.02,
+    "ROLL_KI",           0.001,
+    "ROLL_KD",           0.01,
+    "ALT_KP",            0.003,
+    "ALT_KI",            0.0005,
+    "ALT_KD",            0.002,
+    "ALT_MAX_PITCH",       8,
+    "ALT_MIN_PITCH",      -6,
+    "PITCH_KP",          0.05,
+    "PITCH_KI",          0.005,
+    "PITCH_KD",          0.02,
+    "HDG_KP",            0.03,
+    "HDG_KI",            0.002,
+    "HDG_KD",            0.015,
+    "SPD_KP",            0.01,
+    "SPD_KI",            0.002,
+    "SPD_KD",            0.005,
+    "SPD_MIN_THROTTLE",  0.0,
+    "SPD_MAX_THROTTLE",  1.0,
+    "WPT_RADIUS",        500,
+    "STALL_SPEED",        60,
+    "STALL_AOA",          20,
+    "AOA_LIMIT",          15,
+    "SURVEY_ALT",       2000,
+    "SURVEY_SPACING",    500,
+    "SURVEY_SPEED",      150,
+    "SURVEY_LANE_LENGTH", 10000,
+    "FBW_REF_SPEED",     100,
+    "FBW_MIN_AUTH",      0.15,
+    "FBW_MAX_AUTH",      1.0,
+    "BRAKE_REF_SPEED",    80,
+    "BRAKE_STOP_SPEED",    3,
     "REVERSE_THRUST_DELAY", 1.5,
-    "REVERSE_AG",        2,
-    "STEER_MAX_SPEED",  30,
-    "STEER_TAG",        "steering_gear"
+    "REVERSE_AG",          2,
+    "STEER_MAX_SPEED",    30,
+    "STEER_TAG",         "steering_gear",
+    "SURFACE_CTRL",      FALSE
 ).
 
-GLOBAL planeActive      IS FALSE.
+GLOBAL planeActive       IS FALSE.
 GLOBAL wingLevelerActive IS FALSE.
-GLOBAL altHoldActive    IS FALSE.
-GLOBAL hdgHoldActive    IS FALSE.
-GLOBAL targetAlt        IS 0.
-GLOBAL targetHdg        IS 0.
-GLOBAL apActive         IS FALSE.
-GLOBAL wptNavActive     IS FALSE.
-GLOBAL wptList          IS LIST().
-GLOBAL wptIndex         IS 0.
-LOCAL _ctrlSurfaces     IS LIST().
-LOCAL _rollPid          IS 0.
-LOCAL _altPid           IS 0.
-LOCAL _pitchPid         IS 0.
-LOCAL _hdgPid           IS 0.
-LOCAL _ctrlSurfAuth     IS LIST().
-
+GLOBAL altHoldActive     IS FALSE.
+GLOBAL hdgHoldActive     IS FALSE.
+GLOBAL spdHoldActive     IS FALSE.
+GLOBAL targetAlt         IS 0.
+GLOBAL targetHdg         IS 0.
+GLOBAL targetSpd         IS 0.
+GLOBAL apActive          IS FALSE.
+GLOBAL wptNavActive      IS FALSE.
+GLOBAL wptList           IS LIST().
+GLOBAL wptIndex          IS 0.
+LOCAL _ctrlSurfaces      IS LIST().
+LOCAL _rollPid           IS 0.
+LOCAL _altPid            IS 0.
+LOCAL _pitchPid          IS 0.
+LOCAL _hdgPid            IS 0.
+LOCAL _spdPid            IS 0.
 
 GLOBAL FUNCTION planeInit {
     SET planeActive TO TRUE.
@@ -66,28 +75,29 @@ GLOBAL FUNCTION planeInit {
         PRESERVE.
     }
 
-    SET _ctrlSurfaces TO LIST().
-    FOR p IN SHIP:PARTS {
-        IF p:HASMODULE("ModuleControlSurface") {
-            LOCAL mo IS p:GETMODULE("ModuleControlSurface").
-            mLog("Control service " + mo:tostring + " has authority limiter setting: " + mo:GETFIELD("Authority Limiter")).
-            _ctrlSurfaces:ADD(mo).
-            _ctrlSurfAuth:ADD(mo:GETFIELD("Authority Limiter")).
+    mLog("Plane init: cruise=" + CFG["CRUISE_SPEED"] + " top=" + CFG["TOP_SPEED"] + "m/s").
+    IF PLANE_CFG["SURFACE_CTRL"] {
+        SET _ctrlSurfaces TO LIST().
+        FOR p IN SHIP:PARTS {
+            IF p:HASMODULE("ModuleControlSurface") {
+                _ctrlSurfaces:ADD(p:GETMODULE("ModuleControlSurface")).
+            }
         }
+        mLog("Control surfaces: " + _ctrlSurfaces:LENGTH + " found.").
     }
-    mLog("Control surfaces: " + _ctrlSurfaces:LENGTH + " found. cruise="
-        + CFG["CRUISE_SPEED"] + " top=" + CFG["TOP_SPEED"] + "m/s").
 
-
-    SET _rollPid TO PIDLOOP(PLANE_CFG["ROLL_KP"], PLANE_CFG["ROLL_KI"],
-        PLANE_CFG["ROLL_KD"], -1, 1).
-    SET _altPid TO PIDLOOP(PLANE_CFG["ALT_KP"], PLANE_CFG["ALT_KI"],
-        PLANE_CFG["ALT_KD"], PLANE_CFG["ALT_MIN_PITCH"], PLANE_CFG["ALT_MAX_PITCH"]).
+    SET _rollPid  TO PIDLOOP(PLANE_CFG["ROLL_KP"],  PLANE_CFG["ROLL_KI"],
+        PLANE_CFG["ROLL_KD"],  -1, 1).
+    SET _altPid   TO PIDLOOP(PLANE_CFG["ALT_KP"],   PLANE_CFG["ALT_KI"],
+        PLANE_CFG["ALT_KD"],   PLANE_CFG["ALT_MIN_PITCH"], PLANE_CFG["ALT_MAX_PITCH"]).
     SET _pitchPid TO PIDLOOP(PLANE_CFG["PITCH_KP"], PLANE_CFG["PITCH_KI"],
         PLANE_CFG["PITCH_KD"], -1, 1).
-    SET _hdgPid TO PIDLOOP(PLANE_CFG["HDG_KP"], PLANE_CFG["HDG_KI"],
-        PLANE_CFG["HDG_KD"], -1, 1).
-    mLog("PID controllers initialized (roll/alt/pitch/hdg).").
+    SET _hdgPid   TO PIDLOOP(PLANE_CFG["HDG_KP"],   PLANE_CFG["HDG_KI"],
+        PLANE_CFG["HDG_KD"],   -1, 1).
+    SET _spdPid   TO PIDLOOP(PLANE_CFG["SPD_KP"],   PLANE_CFG["SPD_KI"],
+        PLANE_CFG["SPD_KD"],
+        PLANE_CFG["SPD_MIN_THROTTLE"], PLANE_CFG["SPD_MAX_THROTTLE"]).
+    mLog("PID controllers initialized (roll/alt/pitch/hdg/spd).").
 
     LOCAL _prevAG7 IS AG7.
     LOCAL _prevAG8 IS AG8.
@@ -127,9 +137,11 @@ GLOBAL FUNCTION planeShutdown {
     wingLevelerOff().
     altHoldOff().
     hdgHoldOff().
-    FROM {LOCAL i IS 0.} UNTIL i = _ctrlSurfaces:LENGTH STEP {SET i TO i+1.} DO {
-        LOCAL sm IS _ctrlSurfaces[i]. 
-        sm:SETFIELD("Authority Limiter", _ctrlSurfAuth[i]).
+    spdHoldOff().
+    IF PLANE_CFG["SURFACE_CTRL"] {
+        FOR sm IN _ctrlSurfaces {
+            sm:SETFIELD("Authority Limiter", 100).
+        }
     }
     UNLOCK STEERING.
     SET planeActive TO FALSE.
@@ -184,6 +196,22 @@ GLOBAL FUNCTION hdgHoldOff {
     HUDTEXT("Hdg hold OFF", 2, 2, 13, YELLOW, FALSE).
 }
 
+GLOBAL FUNCTION spdHoldOn {
+    PARAMETER tSpd IS SHIP:AIRSPEED.
+    SET targetSpd TO tSpd.
+    _spdPid:RESET().
+    SET spdHoldActive TO TRUE.
+    mLog("Speed hold ON at " + ROUND(tSpd,0) + "m/s.").
+    HUDTEXT("Spd hold ON: " + ROUND(tSpd,0) + "m/s", 2, 2, 13, CYAN, FALSE).
+}
+
+GLOBAL FUNCTION spdHoldOff {
+    SET spdHoldActive TO FALSE.
+    UNLOCK THROTTLE.
+    mLog("Speed hold OFF.").
+    HUDTEXT("Spd hold OFF", 2, 2, 13, YELLOW, FALSE).
+}
+
 LOCAL FUNCTION _fbwAuthority {
     RETURN MAX(PLANE_CFG["FBW_MIN_AUTH"],
            MIN(PLANE_CFG["FBW_MAX_AUTH"],
@@ -209,9 +237,11 @@ GLOBAL FUNCTION planeUpdate {
     LOCAL auth IS _fbwAuthority().
     LOCAL clamp IS 0.3 * auth.
 
-    FROM {LOCAL i IS 0.} UNTIL i = _ctrlSurfaces:LENGTH STEP {SET i TO i+1.} DO {
-        LOCAL sm IS _ctrlSurfaces[i]. 
-        sm:SETFIELD("Authority Limiter", _ctrlSurfAuth[i] * _surfaceAuthority()).
+    IF PLANE_CFG["SURFACE_CTRL"] {
+        LOCAL surfPct IS ROUND(_surfaceAuthority() * 100, 0).
+        FOR sm IN _ctrlSurfaces {
+            sm:SETFIELD("Authority Limiter", surfPct).
+        }
     }
 
     IF wptNavActive AND wptIndex < wptList:LENGTH {
@@ -247,6 +277,13 @@ GLOBAL FUNCTION planeUpdate {
     IF altHoldActive {
         SET _altPid:SETPOINT TO targetAlt.
         LOCAL tgtPitch IS _altPid:UPDATE(TIME:SECONDS, SHIP:ALTITUDE).
+        LOCAL aoa IS VANG(SHIP:VELOCITY:SURFACE, SHIP:FACING:FOREVECTOR).
+        IF aoa > PLANE_CFG["AOA_LIMIT"] AND tgtPitch > 0 {
+            LOCAL aoaMargin IS PLANE_CFG["STALL_AOA"] - aoa.
+            IF aoaMargin < 0 { SET aoaMargin TO 0. }
+            SET tgtPitch TO tgtPitch
+                * aoaMargin / (PLANE_CFG["STALL_AOA"] - PLANE_CFG["AOA_LIMIT"]).
+        }
         SET _pitchPid:SETPOINT TO tgtPitch.
         LOCAL pitchOut IS _pitchPid:UPDATE(TIME:SECONDS, SHIP:FACING:PITCH).
         SET SHIP:CONTROL:PITCH TO MAX(-clamp, MIN(clamp, pitchOut)).
@@ -259,6 +296,12 @@ GLOBAL FUNCTION planeUpdate {
         SET _hdgPid:SETPOINT TO 0.
         LOCAL correction IS _hdgPid:UPDATE(TIME:SECONDS, -hdgError).
         SET SHIP:CONTROL:YAW TO MAX(-clamp, MIN(clamp, correction)).
+    }
+
+    IF spdHoldActive {
+        SET _spdPid:SETPOINT TO targetSpd.
+        LOCAL thr IS _spdPid:UPDATE(TIME:SECONDS, SHIP:AIRSPEED).
+        LOCK THROTTLE TO thr.
     }
 }
 
@@ -276,6 +319,7 @@ GLOBAL FUNCTION apOff {
     wingLevelerOff().
     altHoldOff().
     hdgHoldOff().
+    spdHoldOff().
     SET apActive TO FALSE.
     mLog("Autopilot OFF.").
     HUDTEXT("AP OFF", 3, 2, 14, YELLOW, FALSE).
@@ -373,47 +417,43 @@ GLOBAL FUNCTION surveyStart {
     PARAMETER startLng.
     PARAMETER heading_.
     PARAMETER laneCount IS 4.
+    PARAMETER laneLength IS PLANE_CFG["SURVEY_LANE_LENGTH"].
 
-    mLog("Survey start: " + laneCount + " lanes  hdg=" + heading_
-        + "  alt=" + PLANE_CFG["SURVEY_ALT"] + "m").
-    HUDTEXT("Survey mode active", 3, 2, 14, CYAN, FALSE).
+    LOCAL survAlt IS PLANE_CFG["SURVEY_ALT"].
+    LOCAL spacing IS PLANE_CFG["SURVEY_SPACING"].
 
-    altHoldOn(SHIP:ALTITUDE).
-    hdgHoldOn(heading_).
+    waypointClear().
 
+    LOCAL curLat IS startLat.
+    LOCAL curLng IS startLng.
     LOCAL lane IS 0.
     UNTIL lane >= laneCount {
-        mLog("Survey lane " + (lane+1) + " of " + laneCount).
-        HUDTEXT("Survey lane " + (lane+1) + "/" + laneCount, 3, 2, 13, CYAN, FALSE).
-
-        LOCAL laneStart IS TIME:SECONDS.
-        UNTIL TIME:SECONDS > laneStart + 60 {
-            planeUpdate().
-            WAIT 0.05.
-        }
-
+        LOCAL fwdHdg IS MOD(heading_ + lane * 180, 360).
+        LOCAL endPt IS _geoProject(curLat, curLng, laneLength, fwdHdg).
+        waypointAdd(endPt["lat"], endPt["lng"], survAlt).
         IF lane < laneCount - 1 {
-            LOCAL newHdg IS heading_ + 90.
-            IF newHdg >= 360 { SET newHdg TO newHdg - 360. }
-            hdgHoldOn(newHdg).
-            WAIT 10.
-            hdgHoldOn(heading_ + 180).
-            WAIT 5.
-            hdgHoldOn(heading_).
+            LOCAL turnHdg IS MOD(heading_ + 90, 360).
+            LOCAL turnPt IS _geoProject(endPt["lat"], endPt["lng"], spacing, turnHdg).
+            waypointAdd(turnPt["lat"], turnPt["lng"], survAlt).
+            SET curLat TO turnPt["lat"].
+            SET curLng TO turnPt["lng"].
         }
         SET lane TO lane + 1.
     }
 
-    mLog("Survey complete.").
-    HUDTEXT("Survey complete", 3, 2, 14, GREEN, FALSE).
-    altHoldOff().
-    hdgHoldOff().
+    mLog("Survey: " + laneCount + " lanes  hdg=" + ROUND(heading_,0)
+        + "  alt=" + survAlt + "m  len=" + laneLength + "m  "
+        + wptList:LENGTH + " waypoints.").
+    HUDTEXT("Survey: " + wptList:LENGTH + " waypoints", 3, 2, 14, CYAN, FALSE).
+    altHoldOn(survAlt).
+    wptNavOn().
 }
 
 GLOBAL FUNCTION planePreflightChecklist {
     PARAMETER craftName.
     PARAMETER items.
 
+    CLEARSCREEN.
     PRINT "  ========================================".
     PRINT "    " + craftName + " PREFLIGHT CHECKLIST".
     PRINT "  ========================================".
@@ -447,6 +487,18 @@ GLOBAL FUNCTION planeStatus {
         + " wingLeveler=" + wingLevelerActive
         + " altHold=" + altHoldActive
         + " hdgHold=" + hdgHoldActive
+        + " spdHold=" + spdHoldActive
         + " wptNav=" + wptNavActive
         + " wpt=" + wptIndex + "/" + wptList:LENGTH).
+}
+
+LOCAL FUNCTION _geoProject {
+    PARAMETER lat0.
+    PARAMETER lng0.
+    PARAMETER dist.
+    PARAMETER brng.
+    LOCAL r IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL dlat IS dist * COS(brng) / r * (180 / 3.14159265).
+    LOCAL dlng IS dist * SIN(brng) / (r * COS(lat0)) * (180 / 3.14159265).
+    RETURN LEXICON("lat", lat0 + dlat, "lng", lng0 + dlng).
 }

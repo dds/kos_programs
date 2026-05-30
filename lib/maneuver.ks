@@ -2,10 +2,12 @@
 // maneuver.ks  —  Maneuver execution  (0:/lib/maneuver.ks)
 // ============================================================
 
-LOCAL COMPLETE_FRAC   IS 0.0.
-LOCAL ABS_CUTOFF      IS 0.0001.
-LOCAL ALIGN_TOLERANCE IS 2.0.
-LOCAL G0 IS 9.80665.
+LOCAL COMPLETE_FRAC        IS 0.0.
+LOCAL ABS_CUTOFF           IS 0.0001.
+LOCAL ALIGN_TOLERANCE      IS 2.0.
+LOCAL G0                   IS 9.80665.
+LOCAL HIBERNATE_THRESHOLD  IS 300.
+LOCAL HIBERNATE_WAKE_LEAD  IS 180.
 
 GLOBAL FUNCTION executeManeuver {
     WAIT 0.1.
@@ -36,6 +38,17 @@ GLOBAL FUNCTION executeManeuver {
     WAIT 0.1.
     LOCK STEERING TO nd:BURNVECTOR.
     mLog("Aligning to burn vector...").
+
+    LOCAL wakeTime IS startTime - HIBERNATE_WAKE_LEAD.
+    IF TIME:SECONDS < wakeTime - HIBERNATE_THRESHOLD {
+        mLog("Hibernating for coast (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
+        HUDTEXT("Hibernated. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
+        _hibernateCmd().
+        WAIT MAX(0, wakeTime - TIME:SECONDS).
+        _wakeCmd().
+        mLog("Awake — " + ROUND(startTime - TIME:SECONDS, 0) + "s to burn.").
+        HUDTEXT("Core awake — burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
+    }
 
     WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ALIGN_TOLERANCE
             OR TIME:SECONDS >= (startTime - 30).
@@ -367,4 +380,28 @@ LOCAL FUNCTION _phaseAngle {
     LOCAL cross IS VCRS(vPos, tPos).
     IF VDOT(cross, myVessel:ORBIT:BODY:ANGULARVEL) < 0 { SET angle TO 360 - angle. }
     RETURN angle.
+}
+
+LOCAL FUNCTION _findCmdModule {
+    IF CORE:PART:HASMODULE("ModuleCommand") {
+        RETURN CORE:PART:GETMODULE("ModuleCommand").
+    }
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleCommand") {
+            RETURN p:GETMODULE("ModuleCommand").
+        }
+    }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _hibernateCmd {
+    LOCAL cm IS _findCmdModule().
+    IF cm = 0 { RETURN. }
+    IF cm:HASFIELD("hibernation") { cm:SETFIELD("hibernation", TRUE). }
+}
+
+LOCAL FUNCTION _wakeCmd {
+    LOCAL cm IS _findCmdModule().
+    IF cm = 0 { RETURN. }
+    IF cm:HASFIELD("hibernation") { cm:SETFIELD("hibernation", FALSE). }
 }
