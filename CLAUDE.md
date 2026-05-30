@@ -87,7 +87,27 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 | `relay_constellation.ks` | Multi-relay deployment |
 | `plane.ks` | Aircraft autopilot |
 | `rover.ks` | Ground vehicle control |
+| `observe.ks` | Periodic telemetry logger with sentinel-file control |
 | `utils.ks` | General-purpose utilities (fmtDuration, printOrbitRef) |
+
+### Observation mode (`lib/observe.ks`)
+
+Periodic telemetry logging to a separate file from the flight/fault log. Designed for long flight tests (3+ hours).
+
+- **Log file**: `1:/logs/obs_<shipname>_<time>.log` — one compact ~100-byte line per entry
+- **Fields**: `T spd gspd alt vs hdg pit rol thr free` + plane-specific (`auth wbrk wstr wlev ahld hhld`) when `planeActive`
+- **Config**: `OBS_CFG` lexicon — `INTERVAL` (default 120s), `MIN_FREE` (default 2000 bytes), `STOP_FILE` (`1:/state/obs_off`)
+- **Sentinel file** (`1:/state/obs_off`): checked at log time, not every tick. Auto-created on abort, low storage, or `observeStop()`. Deleted by `observeStart()` to re-enable.
+- **Integration**: craft scripts add `"observe"` to LIBS and call `observeStart()` in preflight. `_launchAbort()` creates the sentinel to halt logging on abort.
+- **Budget**: 120s interval over 3 hours = ~90 entries = ~9KB
+
+### Manual mode
+
+At boot, pressing any key within 5s enters manual mode. The terminal displays environment data (body, status, altitude, airspeed/position for atmospheric or orbit params for orbital), mission state (vehicle, target, phase, boot count), storage, and contextual info for loaded libs (plane config, observation status). No commands are offered — the kOS console cannot call loaded functions directly without a helper script. The `cmd/` directory contains scripts that can be run via `RUNPATH()` but these are not synced at boot and require archive access.
+
+### Rover power steering (`lib/rover.ks`)
+
+Uses `SHIP:CONTROL:PILOTWHEELSTEER` (not `PILOTMAINSTEER`, which doesn't exist in kOS) scaled by a speed-dependent factor to reduce steering sensitivity at higher speeds.
 
 ## Key constraints
 
