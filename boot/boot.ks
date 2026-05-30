@@ -151,39 +151,6 @@ IF TERMINAL:INPUT:HASCHAR {
     SET manualMode TO TRUE.
 }
 
-LOCAL FUNCTION _archiveLogs {
-    LOCAL logFiles IS LIST().
-    IF EXISTS("1:/logs") {
-        LOCAL logDir IS OPEN("1:/logs").
-        FOR f IN logDir:LEXICON:VALUES {
-            IF NOT f:ISFILE { } ELSE { logFiles:ADD(f). }
-        }
-    }
-    IF logFiles:LENGTH > 0 {
-        FOR f IN logFiles {
-            PRINT "  " + f:NAME.
-        }
-    } ELSE {
-        PRINT "  (no log files)".
-    }
-    IF HOMECONNECTION:ISCONNECTED {
-        LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
-        IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
-        LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
-        IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
-        IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
-        FOR f IN logFiles {
-            COPYPATH("1:/logs/" + f:NAME, shipDir + "/" + coreId + ".log").
-        }
-        IF logFiles:LENGTH > 0 {
-            PRINT "  Archived " + logFiles:LENGTH + " log(s) to " + shipDir.
-            mLog("Auto-archived " + logFiles:LENGTH + " log(s) to " + shipDir + ".").
-        }
-    } ELSE {
-        PRINT "  No KSC link — logs need manual retrieval".
-    }
-}
-
 IF manualMode {
     CLEARSCREEN.
     PRINT "  ========================================".
@@ -239,7 +206,6 @@ IF manualMode {
     IF DEFINED flightLogPath {
         PRINT "  Flight log .. " + flightLogPath.
     }
-    _archiveLogs().
     PRINT " ".
     PRINT "  ========================================".
     mLog("Manual override at boot.").
@@ -266,36 +232,16 @@ IF manualMode {
     }
 }
 
-LOCAL logFiles IS LIST().
-IF EXISTS("1:/logs") {
-    LOCAL logDir IS OPEN("1:/logs").
-    FOR f IN logDir:LEXICON:VALUES {
-        IF NOT f:ISFILE { } ELSE { logFiles:ADD(f). }
-    }
-}
-IF logFiles:LENGTH > 0 {
-    FOR f IN logFiles {
-        PRINT "  " + f:NAME.
-    }
-} ELSE {
-    PRINT "  (no log files)".
-}
 IF HOMECONNECTION:ISCONNECTED {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
     IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
     LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
-    FOR f IN logFiles {
-        COPYPATH("1:/logs/" + f:NAME, shipDir + "/" + coreId + ".log").
-    }
-    IF logFiles:LENGTH > 0 {
-        PRINT "  Archived " + logFiles:LENGTH + " log(s) to " + shipDir.
-        mLog("Auto-archived " + logFiles:LENGTH + " log(s) to " + shipDir + ".").
-    }
+    COPYPATH(flightLogPath, shipDir + "/" + flightLogPath).
+    mLog("Auto-archived " + flightLogPath + " to " + shipDir + ".").
 } ELSE {
-    PRINT "  No KSC link — logs need manual retrieval".
+    PRINT "  No KSC link — " + flightLogPath + " needs manual retrieval".
 }
 
-_archiveLogs().
 PRINT ("END OF LINE. GODSPEED.").
