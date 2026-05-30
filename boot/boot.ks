@@ -99,8 +99,6 @@ IF bootCount = 1 {
     stateSet("target",   targetName).
     stateSet("payloads", payloadTypes:JOIN(",")).
 }
-mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
-
 LOCAL vehicleScript IS "".
 IF isEVA {
     SET vehicleScript TO _resolveScript("EVA", LIST("roles")).
@@ -127,6 +125,8 @@ SET coreId TO coreId + "-" + scriptBase.
 IF EXISTS("1:/state/core_id") { DELETEPATH("1:/state/core_id"). }
 LOG coreId TO "1:/state/core_id".
 initLog(coreId).
+
+mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 
 IF vehicleScript = "" {
     PRINT "  !! SCRIPT NOT FOUND: " + vehicleName.
