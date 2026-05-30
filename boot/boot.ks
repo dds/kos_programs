@@ -206,6 +206,19 @@ IF manualMode {
     IF DEFINED flightLogPath {
         PRINT "  Flight log .. " + flightLogPath.
     }
+
+    IF HOMECONNECTION:ISCONNECTED {
+        LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
+        IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
+        LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
+        IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
+        IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
+        COPYPATH(flightLogPath, shipDir + "/" + flightLogPath).
+        mLog("Auto-archived " + flightLogPath + " to " + shipDir + ".").
+    } ELSE {
+        PRINT "  No KSC link — " + flightLogPath + " needs manual retrieval".
+    }
+
     PRINT " ".
     PRINT "  ========================================".
     mLog("Manual override at boot.").
