@@ -78,14 +78,16 @@ LOCAL FUNCTION buildPhaseSequence {
         IF _normalizePayloadType(ptype) = "MOLNIYA" { SET hasMolniya TO TRUE. }
     }
 
-    seq:ADD("CIRC").
     IF hasMolniya {
+        seq:ADD("CIRC").
         seq:ADD("MOLNIYA_INSERT").
         seq:ADD("INCL_CORRECT").
     } ELSE {
         seq:ADD("RAISE_ALT").
+        seq:ADD("CIRC").
         seq:ADD("INCL_CORRECT").
     }
+    
 
     FOR ptype IN missionPayloads() {
         LOCAL t IS _normalizePayloadType(ptype).
