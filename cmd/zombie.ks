@@ -6,9 +6,9 @@ LIST PROCESSORS IN all_cores.
 
 FOR p IN all_cores {
     IF p <> CORE {
-        p:DOACTION("Toggle Power", true).
-        p:DOACTION("Toggle Power", true).
+        p:DOACTION("Toggle Power", TRUE).
+        p:DOACTION("Toggle Power", TRUE).
         PRINT "Zombified core: " + p:TOSTRING.
     }
 }
-PRINT "All secondary cores successfully sent zombied.".
+PRINT "All other cores have had their brains eaten and are reborn. Have a nice day.".

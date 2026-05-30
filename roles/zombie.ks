@@ -6,7 +6,7 @@ GLOBAL CFG IS LEXICON().
 GLOBAL LIBS IS LIST ("logs").
 
 GLOBAL FUNCTION main {
-    CORE:DOACTION("Open Terminal", FALSE). // lurk in the shadows.
+    CORE:DOACTION("Close Terminal", TRUE). // lurk in the shadows.
 
     // Write a message to the console with the command to run to wake the zombie
     // and shut down.

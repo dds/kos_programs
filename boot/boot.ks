@@ -293,5 +293,5 @@ IF HOMECONNECTION:ISCONNECTED {
     PRINT "  No KSC link — logs need manual retrieval".
 }
 
-
 _archiveLogs().
+PRINT ("END OF LINE. GODSPEED.").
