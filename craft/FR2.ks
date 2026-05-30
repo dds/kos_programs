@@ -1,5 +1,5 @@
 // ============================================================
-// FR2.ks  —  FR2 vehicle flight computer  (0:/FR2.ks)
+// FR2.ks  —  FR2 vehicle flight computer  (0:/craft/FR2.ks)
 //
 // Ship name:  FR2-TARGET-TYPE1-TYPE2-...-NN
 // e.g.  FR2-MUN-CRASHPROBE1-RELAY1

@@ -1,5 +1,5 @@
 // ============================================================
-// lander_cpu.ks  —  Secondary CPU role: deploy + science
+// lander_cpu.ks  —  Secondary CPU role: deploy + science  (0:/roles/lander_cpu.ks)
 // ============================================================
 
 GLOBAL CFG IS LEXICON().

@@ -38,6 +38,18 @@ ensureDir("1:/boot").
 ensureDir("1:/logs").
 ensureDir("1:/state").
 ensureDir("1:/cmd").
+ensureDir("1:/craft").
+ensureDir("1:/roles").
+
+LOCAL FUNCTION _resolveScript {
+    PARAMETER name.
+    PARAMETER dirs.
+    FOR d IN dirs {
+        IF EXISTS("0:/" + d + "/" + name + ".ks") { RETURN d + "/" + name. }
+    }
+    IF EXISTS("0:/" + name + ".ks") { RETURN name. }
+    RETURN "".
+}
 
 LOCAL FUNCTION _syncLib {
     PARAMETER libName.
@@ -70,12 +82,30 @@ IF bootCount = 1 {
 }
 mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 
-LOCAL vehicleScript IS vehicleName.
-IF CORE:TAG <> "" AND EXISTS("0:/" + CORE:TAG + ".ks") {
-    SET vehicleScript TO CORE:TAG.
-    PRINT "  CORE TAG: " + CORE:TAG + " -> role script.".
-} ELSE IF CORE:TAG <> "" {
-    PRINT "  CORE TAG: " + CORE:TAG + " (no script, using " + vehicleName + ").".
+LOCAL vehicleScript IS "".
+IF CORE:TAG <> "" {
+    SET vehicleScript TO _resolveScript(CORE:TAG, LIST("roles", "craft")).
+    IF vehicleScript <> "" {
+        PRINT "  CORE TAG: " + CORE:TAG + " -> " + vehicleScript + ".ks".
+    } ELSE {
+        PRINT "  CORE TAG: " + CORE:TAG + " (no script found, trying vehicle).".
+        SET vehicleScript TO "".
+    }
+}
+IF vehicleScript = "" {
+    SET vehicleScript TO _resolveScript(vehicleName, LIST("craft")).
+}
+IF vehicleScript = "" {
+    PRINT "  !! SCRIPT NOT FOUND: " + vehicleName.
+    PRINT "  !! Checked craft/ and root.".
+    PRINT "  SYSTEM HALTED.".
+    mLogError("No script found for " + vehicleName).
+    WAIT UNTIL FALSE.
+}
+
+IF vehicleScript:CONTAINS("/") {
+    LOCAL parts IS vehicleScript:SPLIT("/").
+    ensureDir("1:/" + parts[0]).
 }
 
 PRINT "  SYNC " + vehicleScript + " ....... ".

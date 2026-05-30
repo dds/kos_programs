@@ -4,13 +4,24 @@ KerbalScript (kOS) mission automation framework for Kerbal Space Program.
 
 ## Overview
 
-An autonomous flight computer system for spacecraft control, built around the **FR2** multi-payload launch vehicle. Handles full mission profiles from launch through orbital insertion, payload deployment, and station-keeping.
+An autonomous flight computer system for Kerbal craft control. Handles full mission profiles from launch through orbital insertion, payload deployment, and station-keeping.
 
 ## Structure
 
 ```
 boot/
-    boot.ks              Bootstrap — parses ship name, demand-loads libs
+    boot.ks              Bootstrap — parses ship name, resolves craft/roles
+    eva.ks               Lightweight EVA boot (no ship-name parsing)
+craft/
+    FR2.ks               FR2 multi-payload launcher
+    FR3.ks               FR3 next-gen rocket (leaner FR2)
+    FJ1A.ks              Juno trainer jet
+    FJ4B.ks              Supersonic jet with autopilot assists
+    FSP1.ks              Seaplane/submersible
+    X_SHOT.ks            SHRIMP sounding rocket
+roles/
+    lander_cpu.ks        Secondary CPU: deploy + science
+    EVA.ks               EVA kerbal controller (trait-based roles)
 lib/
     phases.ks            Generic phase machine (runPhases, nextPhase)
     launch.ks            Reusable ascent phases (launch, fairing, parking)
@@ -41,8 +52,6 @@ cmd/
     scanstart.ks         Start SCANsat scanners
     scanstatus.ks        SCANsat coverage report
     scantransmit.ks      Transmit SCANsat data
-FR2.ks                   FR2 vehicle flight computer
-X_SHOT.ks                SHRIMP booster script
 ```
 
 ## Vehicles
@@ -67,6 +76,24 @@ Examples:
 **Molniya sequence:** ...same... -> CIRC -> INCL_CORRECT -> MOLNIYA_INSERT -> [relay/sat ops] -> DONE (inclination correction before insertion since plane changes are cheaper in circular orbits)
 
 FR2.ks declares `GLOBAL LIBS IS LIST(...)` to tell boot which libs to load. New vehicles do the same — boot only syncs what the vehicle needs.
+
+### FR3
+
+Next-gen rocket. Leaner than FR2 — no probe/molniya phases. Standard ascent + transfer + orbit phases with stubs for lander payloads.
+
+**Payload types:** `RELAY`, `SCANSAT`, `SCISAT`, `LANDER`
+
+### FJ1A
+
+Juno-powered trainer jet. Low speed (cruise ~80 m/s), broad wings. Same phase structure as FJ4B but with lower airspeed thresholds appropriate for the Juno engine. Supports optional SCIENCE payload for biome collection flights.
+
+### FJ4B
+
+Supersonic jet with autopilot assists. Manually-flown with `plane.ks` integration. Phases: PREFLIGHT → FLIGHT → POST_FLIGHT. Auto-collects science on biome changes when SCIENCE payload is present.
+
+### FSP1
+
+Seaplane/submersible. Similar to FJ4B with water landing support. Phases: PREFLIGHT → FLIGHT → SPLASHDOWN → SURFACE_OPS. Dive operations stub (future `marine.ks`).
 
 ### X_SHOT (SHRIMP)
 
@@ -121,9 +148,9 @@ Ships with multiple kOS processors use **CORE:TAG** to route each CPU to a diffe
 
 **How it works:**
 1. Boot parses the ship name as usual (vehicle, target, payloads)
-2. If `CORE:TAG` is non-empty and `0:/<tag>.ks` exists, that script is loaded instead of the vehicle script
+2. If `CORE:TAG` is non-empty, boot resolves the tag by checking `roles/`, then `craft/`, then root
 3. If the tag has no matching script, the CPU falls through to the normal vehicle script (with a warning)
-4. Untagged CPUs always load the vehicle script
+4. Untagged CPUs always load the vehicle script from `craft/`
 
 **Example:** Ship named `FR2-MUN-LANDER` with two processors:
 - Main CPU (untagged) → boots `FR2.ks` (flight control)
@@ -135,17 +162,22 @@ Each processor has its own `1:/` volume, so state files are naturally isolated �
 
 | Script | Tag | Purpose |
 |---|---|---|
-| `lander_cpu.ks` | `lander_cpu` | Post-landing deploy (antennas, solar) + science collection |
+| `roles/lander_cpu.ks` | `lander_cpu` | Post-landing deploy (antennas, solar) + science collection |
+| `roles/EVA.ks` | (via `boot/eva.ks`) | Trait-based EVA kerbal controller (scientist/engineer/generic) |
+
+### EVA
+
+Set boot file to `boot/eva.ks` on a kOS-EVA processor. The EVA boot bypasses ship-name parsing and auto-detects the kerbal's trait (Scientist, Engineer, Pilot) to run role-specific logic. Scientists auto-collect and transmit science; engineers and generics get interactive stubs.
 
 ### Writing a role script
 
-Role scripts follow the same contract as vehicle scripts — define `CFG`, `LIBS`, and `main()`. They have access to `SHIP:NAME` parsing results via state (`vehicle`, `target`, `payloads`) set by boot on first boot of any CPU.
+Role scripts live in `roles/` and follow the same contract as vehicle scripts — define `CFG`, `LIBS`, and `main()`. They have access to `SHIP:NAME` parsing results via state (`vehicle`, `target`, `payloads`) set by boot on first boot of any CPU.
 
 Keep role scripts lightweight (minimal LIBS) since secondary CPUs are often on storage-constrained probe cores.
 
 ## Creating a New Vehicle
 
-Boot is generic — any vehicle works. Create `MYVEHICLE.ks` at the archive root, name your ship `MYVEHICLE-TARGET[-stuff]`, and boot handles the rest.
+Boot is generic — any vehicle works. Create `craft/MYVEHICLE.ks`, name your ship `MYVEHICLE-TARGET[-stuff]`, and boot handles the rest. Boot checks `craft/` first, then falls back to root for backwards compatibility.
 
 A vehicle script must define three things:
 

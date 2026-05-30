@@ -19,10 +19,12 @@ KerbalScript (.ks files) — a scripting language for the kOS mod. Not Python, n
 ## Architecture
 
 ### Boot chain
-`boot/boot.ks` → parses ship name → syncs core libs (state, logs, files) → loads core libs → checks CORE:TAG for role script override → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
+`boot/boot.ks` → parses ship name → syncs core libs (state, logs, files) → loads core libs → `_resolveScript()` checks `roles/` and `craft/` dirs (then root fallback) for CORE:TAG or vehicle script → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
+
+`boot/eva.ks` → lightweight EVA boot, bypasses ship-name parsing → syncs core libs → resolves `roles/EVA.ks` → syncs + loads LIBS → 5s manual override → resume
 
 ### CORE:TAG routing (multi-CPU ships)
-If `CORE:TAG` is non-empty and `0:/<tag>.ks` exists, boot loads that role script instead of the ship-name-derived vehicle script. Each processor has its own `1:/` volume so state is naturally isolated. Untagged CPUs always load the vehicle script.
+If `CORE:TAG` is non-empty, boot resolves the tag via `_resolveScript()` checking `roles/` then `craft/` then root. Each processor has its own `1:/` volume so state is naturally isolated. Untagged CPUs always load the vehicle script from `craft/`.
 
 ### Pre-launch config screen
 On first boot (or when phase is LAUNCH), FR2 shows a flight plan summary listing all CFG values grouped by mission phase (ascent, transfer, orbit, probe). A 30s countdown with progress bar auto-launches; press ENTER to skip. Edit CFG values in the kOS terminal during the countdown to override defaults.
@@ -62,7 +64,8 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 - `boot/` — bootstrap only, keep minimal for easy reloading
 - `lib/` — reusable libraries, loaded via `RUNPATH()`
 - `cmd/` — operator commands, run manually from terminal (NOT synced at boot)
-- Root `.ks` files — vehicle flight computers (FR2.ks, X_SHOT.ks) and role scripts (lander_cpu.ks)
+- `craft/` — vehicle flight computers (FR2.ks, FR3.ks, FJ1A.ks, FJ4B.ks, FSP1.ks, X_SHOT.ks)
+- `roles/` — role scripts for CORE:TAG routing and EVA (lander_cpu.ks, EVA.ks)
 
 ### Key libs
 
