@@ -11,8 +11,8 @@ GLOBAL FUNCTION phaseMidCourse {
         RETURN.
     }
 
-    LOCAL targetInc IS 0.
-    LOCAL targetPe  IS 0.
+    LOCAL targetInc IS -1.
+    LOCAL targetPe  IS -1.
     LOCAL targetAoP IS -1.
     LOCAL targetLan IS -1.
     
