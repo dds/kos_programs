@@ -14,6 +14,9 @@ GLOBAL FUNCTION phaseMidCourse {
     LOCAL targetInc IS 0.
     LOCAL targetPe  IS 0.
     LOCAL targetAoP IS -1.
+    LOCAL targetLan IS -1.
+    
+    IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
     IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_PE")  { SET targetPe TO CFG["CAPTURE_PE"]. }
@@ -25,13 +28,10 @@ GLOBAL FUNCTION phaseMidCourse {
         RETURN.
     }
 
-    // Smart Timing:
-    // If we are leaving our parent's SOI (e.g. going to Duna via Sun), warp until we enter deep space.
-    // If we stay in the same SOI (e.g. going to Mun), wait until halfway.
     LOCAL waitTime IS 0.
     IF SHIP:ORBIT:NEXTPATCH:BODY:NAME <> target:NAME {
         LOCAL transitionTime IS ETA:TRANSITION.
-        SET waitTime TO transitionTime + 3600. // 1 hour after leaving origin SOI
+        SET waitTime TO transitionTime + 3600.
         mLog("MCC: Interplanetary transfer. Coasting to deep space (" + ROUND(waitTime,0) + "s).").
     } ELSE {
         SET waitTime TO ETA:TRANSITION / 2.
@@ -48,18 +48,17 @@ GLOBAL FUNCTION phaseMidCourse {
     mLog("Planning mid-course correction.").
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
 
-    // Drop blank node
     LOCAL nd IS NODE(TIME:SECONDS + 60, 0, 0, 0).
     ADD nd.
     WAIT 0.1.
 
-    // Optimize Normal and Radial using gradient descent
     LOCAL bestInc  IS 999.
     LOCAL bestPe   IS -1.
     LOCAL bestNorm IS 0.
     LOCAL bestRad  IS 0.
-    LOCAL bestAoP IS -1.
     LOCAL bestPro  IS 0.
+    LOCAL bestAoP  IS -1.
+    LOCAL bestLan  IS -1.
     LOCAL steps    IS 10. 
 
     LOCAL testPatch IS _getTargetPatch(nd, target).
@@ -67,21 +66,21 @@ GLOBAL FUNCTION phaseMidCourse {
         SET bestInc TO testPatch:INCLINATION.
         SET bestPe  TO testPatch:PERIAPSIS.
         SET bestAoP TO testPatch:ARGUMENTOFPERIAPSIS.
+        SET bestLan TO testPatch:LAN.
     }
 
     FROM { LOCAL pass IS 1. } UNTIL pass > 6 STEP { SET pass TO pass + 1. } DO {
         LOCAL improved IS TRUE.
         UNTIL NOT improved {
             SET improved TO FALSE.
-            LOCAL currentScore IS _evaluateMCC(bestInc, bestPe, bestAoP, targetInc, targetPe, targetAoP).
+            LOCAL currentScore IS _evaluateMCC(bestInc, bestPe, bestAoP, bestLan, targetInc, targetPe, targetAoP, targetLan).
             
-            // Now evaluating Normal, Radial, AND Prograde
             LOCAL moves IS LIST(
                 LIST(steps, 0, 0),   // Normal Up
                 LIST(-steps, 0, 0),  // Normal Down
                 LIST(0, steps, 0),   // Radial Out
                 LIST(0, -steps, 0),  // Radial In
-                LIST(0, 0, steps),   // Prograde (Crucial for shifting AoP)
+                LIST(0, 0, steps),   // Prograde
                 LIST(0, 0, -steps)   // Retrograde
             ).
             
@@ -93,6 +92,7 @@ GLOBAL FUNCTION phaseMidCourse {
             LOCAL foundInc  IS bestInc.
             LOCAL foundPe   IS bestPe.
             LOCAL foundAoP  IS bestAoP.
+            LOCAL foundLan  IS bestLan.
 
             FOR move IN moves {
                 SET nd:NORMAL TO bestNorm + move[0].
@@ -105,12 +105,14 @@ GLOBAL FUNCTION phaseMidCourse {
                 LOCAL tempInc IS -1.
                 LOCAL tempPe  IS -1.
                 LOCAL tempAoP IS -1.
+                LOCAL tempLan IS -1.
                 
                 IF movePatch <> 0 {
                     SET tempInc TO movePatch:INCLINATION.
                     SET tempPe  TO movePatch:PERIAPSIS.
                     SET tempAoP TO movePatch:ARGUMENTOFPERIAPSIS.
-                    SET score TO _evaluateMCC(tempInc, tempPe, tempAoP, targetInc, targetPe, targetAoP).
+                    SET tempLan TO movePatch:LAN.
+                    SET score TO _evaluateMCC(tempInc, tempPe, tempAoP, tempLan, targetInc, targetPe, targetAoP, targetLan).
                 }
                 
                 IF score < bestMoveScore {
@@ -121,10 +123,10 @@ GLOBAL FUNCTION phaseMidCourse {
                     SET foundInc  TO tempInc.
                     SET foundPe   TO tempPe.
                     SET foundAoP  TO tempAoP.
+                    SET foundLan  TO tempLan.
                 }
             }
             
-            // Reset node
             SET nd:NORMAL TO bestNorm.
             SET nd:RADIALOUT TO bestRad.
             SET nd:PROGRADE TO bestPro.
@@ -133,9 +135,11 @@ GLOBAL FUNCTION phaseMidCourse {
                 SET bestNorm TO bestNorm + bestMoveN.
                 SET bestRad  TO bestRad + bestMoveR.
                 SET bestPro  TO bestPro + bestMoveP.
+                
                 SET bestInc  TO foundInc.
                 SET bestPe   TO foundPe.
                 SET bestAoP  TO foundAoP.
+                SET bestLan  TO foundLan.
                 
                 SET nd:NORMAL TO bestNorm.
                 SET nd:RADIALOUT TO bestRad.
@@ -146,7 +150,7 @@ GLOBAL FUNCTION phaseMidCourse {
         SET steps TO steps / 5.
     }
 
-    LOCAL totalDv IS SQRT(bestNorm^2 + bestRad^2).
+    LOCAL totalDv IS SQRT(bestNorm^2 + bestRad^2 + bestPro^2).
     IF totalDv < 0.1 OR _getTargetPatch(nd, target) = 0 {
         mLog("Arrival parameters optimal or unfixable. Skipping MCC burn.").
         REMOVE nd.
@@ -172,8 +176,8 @@ GLOBAL FUNCTION phaseMidCourse {
 }
 
 LOCAL FUNCTION _evaluateMCC {
-    PARAMETER currentInc, currentPe, currentAoP.
-    PARAMETER targetInc, targetPe, targetAoP.
+    PARAMETER currentInc, currentPe, currentAoP, currentLan.
+    PARAMETER targetInc, targetPe, targetAoP, targetLan.
 
     LOCAL score IS 0.
     
@@ -186,8 +190,13 @@ LOCAL FUNCTION _evaluateMCC {
     IF targetAoP >= 0 {
         LOCAL errAoP IS ABS(currentAoP - targetAoP).
         IF errAoP > 180 { SET errAoP TO 360 - errAoP. }
-        // Scale AoP weight so it competes fairly with Inclination
         SET score TO score + (errAoP * 2000). 
+    }
+    IF targetLan >= 0 {
+        LOCAL errLan IS ABS(currentLan - targetLan).
+        IF errLan > 180 { SET errLan TO 360 - errLan. }
+        // Very high weight to ensure we pick the correct side of the planet
+        SET score TO score + (errLan * 5000). 
     }
     
     RETURN score.

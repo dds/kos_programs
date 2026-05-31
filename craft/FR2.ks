@@ -33,7 +33,7 @@ GLOBAL CFG IS LEXICON(
     "MOLNIYA_PERIOD",         21549,
     "MOLNIYA_AOP",               90,
     "MOLNIYA_ECC",               0.3,
-    "RECOVERY_PE",           29000
+    "RECOVERY_PE",           27500
 ).
 
 GLOBAL LIBS IS LIST(
