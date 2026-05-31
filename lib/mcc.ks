@@ -181,22 +181,29 @@ LOCAL FUNCTION _evaluateMCC {
 
     LOCAL score IS 0.
     
+    // Angles are heavily weighted (1 degree = 1,000,000 points)
+    // so they are prioritized over raw meters of Periapsis.
+
     IF targetInc >= 0 { 
-        SET score TO score + (ABS(currentInc - targetInc) * 10000). 
+        SET score TO score + (ABS(currentInc - targetInc) * 1000000). 
     }
-    IF targetPe >= 0 { 
-        SET score TO score + ABS(currentPe - targetPe). 
-    }
-    IF targetAoP >= 0 {
-        LOCAL errAoP IS ABS(currentAoP - targetAoP).
-        IF errAoP > 180 { SET errAoP TO 360 - errAoP. }
-        SET score TO score + (errAoP * 2000). 
-    }
+    
     IF targetLan >= 0 {
         LOCAL errLan IS ABS(currentLan - targetLan).
         IF errLan > 180 { SET errLan TO 360 - errLan. }
-        // Very high weight to ensure we pick the correct side of the planet
-        SET score TO score + (errLan * 5000). 
+        SET score TO score + (errLan * 1000000). 
+    }
+    
+    IF targetAoP >= 0 {
+        LOCAL errAoP IS ABS(currentAoP - targetAoP).
+        IF errAoP > 180 { SET errAoP TO 360 - errAoP. }
+        // Slightly lower weight than Inc/LAN so the orbital plane takes absolute priority
+        SET score TO score + (errAoP * 500000). 
+    }
+    
+    // Periapsis error remains 1 point per meter.
+    IF targetPe >= 0 { 
+        SET score TO score + ABS(currentPe - targetPe). 
     }
     
     RETURN score.
