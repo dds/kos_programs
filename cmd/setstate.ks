@@ -29,6 +29,9 @@ LOCAL FUNCTION _loadLib {
     }
 }
 
+_syncLib("logs").
+_loadLib("logs").
+initLog().
 _syncLib("state").
 _loadLib("state").
 
