@@ -67,9 +67,6 @@ GLOBAL FUNCTION phaseMidCourse {
     } ELSE {
         LOCAL logMsg IS "MCC planned: dV=" + ROUND(totalDv, 1)
             + " m/s  Pe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km".
-        IF targetAoP >= 0 {
-            SET logMsg TO logMsg + "  AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1) + "°".
-        }
         IF targetLan >= 0 {
             SET logMsg TO logMsg + "  LAN=" + ROUND(finalPatch:LAN,1) + "°".
         }
