@@ -243,8 +243,7 @@ IF manualMode {
 // Archive complete mission log.
 IF HOMECONNECTION:ISCONNECTED {
     archiveLog().
-    mLog("Auto-archived " + flightLogPath() + " to " + shipDir + ".").
 } ELSE {
-    PRINT "  No KSC link — " + flightLogPath + " needs manual retrieval".
+    PRINT "  ***   NO KSC LINK, LOGS NOT AUTO-ARCHIVED  ***".
 }
 PRINT ("END OF LINE. GODSPEED.").
