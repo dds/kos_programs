@@ -55,6 +55,40 @@ GLOBAL FUNCTION resetBootCount {
     mLog("Boot count reset.").
 }
 
+GLOBAL FUNCTION normalizePayloadType {
+    PARAMETER raw.
+    LOCAL result IS raw:TOUPPER.
+    UNTIL result:LENGTH = 0 {
+        LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
+        IF last:MATCHESPATTERN("[0-9]") OR last = "-" {
+            SET result TO result:SUBSTRING(0, result:LENGTH - 1).
+        } ELSE {
+            BREAK.
+        }
+    }
+    RETURN result.
+}
+
+GLOBAL FUNCTION buildRocketSequence {
+    PARAMETER orbitPhases.
+    PARAMETER payloadPhases.
+    LOCAL seq IS LIST("LAUNCH", "FAIRING", "EXTEND_ANTS", "PARKING").
+    IF MISSION["target"]:TOUPPER <> "KERBIN" {
+        seq:ADD("TRANSFER").
+        seq:ADD("COAST").
+        seq:ADD("CAPTURE").
+    }
+    FOR p IN orbitPhases { seq:ADD(p). }
+    FOR ptype IN missionPayloads() {
+        LOCAL t IS normalizePayloadType(ptype).
+        IF payloadPhases:HASKEY(t) {
+            FOR phaseName IN payloadPhases[t] { seq:ADD(phaseName). }
+        }
+    }
+    seq:ADD("DONE").
+    RETURN seq.
+}
+
 GLOBAL FUNCTION patchAndRun {
     PARAMETER archivePath.
     PRINT "Patching: " + archivePath.

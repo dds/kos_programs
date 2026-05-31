@@ -1,9 +1,8 @@
 // ============================================================
 // FR3.ks  —  FR3 vehicle flight computer  (0:/craft/FR3.ks)
 //
-// Next-gen rocket. Leaner than FR2 — no probe/molniya phases.
 // Ship name:  FR3-TARGET-TYPE1-TYPE2-...-NN
-// Payload tokens: RELAY, SCANSAT, SCISAT, LANDER
+// Payload tokens: RELAY, SCANSAT, SCISAT, LANDER, PROBE, CRASHPROBE
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
@@ -19,57 +18,34 @@ GLOBAL CFG IS LEXICON(
     "TARGET_INCLINATION",      90,
     "INCL_MATCH_TARGET",       "",
     "INCL_TOLERANCE",         0.01,
-    "MAX_INCL_CHANGE_DV",     200
+    "MAX_INCL_CHANGE_DV",     200,
+    "PROBE_TARGET_LAT",       90.0,
+    "PROBE_TARGET_LNG",         0.0,
+    "PROBE_ENTRY_PE",         30000,
+    "PROBE_TARGET_TOL",        2500,
+    "RECOVERY_PE",           32000
 ).
 
 GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer",
     "countdown", "maneuver", "inclination",
-    "orbit"
+    "orbit", "targeting", "landing",
+    "payload_ops"
 ).
 
-LOCAL FUNCTION _normalizePayloadType {
-    PARAMETER raw.
-    LOCAL result IS raw:TOUPPER.
-    UNTIL result:LENGTH = 0 {
-        LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
-        IF last:MATCHESPATTERN("[0-9]") OR last = "-" {
-            SET result TO result:SUBSTRING(0, result:LENGTH - 1).
-        } ELSE {
-            BREAK.
-        }
-    }
-    RETURN result.
-}
-
 LOCAL FUNCTION buildPhaseSequence {
-    LOCAL seq IS LIST(
-        "LAUNCH",
-        "FAIRING",
-        "EXTEND_ANTS",
-        "PARKING"
-    ).
-    IF MISSION["target"]:TOUPPER <> "KERBIN" {
-        seq:ADD("TRANSFER").
-        seq:ADD("COAST").
-        seq:ADD("CAPTURE").
-    }
-    seq:ADD("CIRC").
-    seq:ADD("RAISE_ALT").
-    seq:ADD("INCL_CORRECT").
+    LOCAL orbitPhases IS LIST("CIRC", "RAISE_ALT", "INCL_CORRECT").
 
-    FOR ptype IN missionPayloads() {
-        LOCAL t IS _normalizePayloadType(ptype).
-        IF t = "RELAY" OR t = "SCANSAT" OR t = "SCISAT" {
-            seq:ADD("OPS").
-        }
-        IF t = "LANDER" {
-            seq:ADD("LAND_DEORBIT").
-            seq:ADD("LAND").
-        }
-    }
-    seq:ADD("DONE").
-    RETURN seq.
+    LOCAL payloadPhases IS LEXICON(
+        "CRASHPROBE", LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
+        "PROBE",      LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
+        "RELAY",      LIST("RELAY_OPS"),
+        "SCANSAT",    LIST("RELAY_OPS"),
+        "SCISAT",     LIST("RELAY_OPS"),
+        "LANDER",     LIST("LAND_DEORBIT", "LAND")
+    ).
+
+    RETURN buildRocketSequence(orbitPhases, payloadPhases).
 }
 
 LOCAL FUNCTION _printConfig {
@@ -102,54 +78,9 @@ LOCAL FUNCTION _printConfig {
     PRINT "  CIRC TOL ... ecc < " + CFG["CIRC_ECC_TOL"].
     PRINT " ".
     PRINT "  -- SEQUENCE --".
-    LOCAL i IS 0.
-    UNTIL i >= seq:LENGTH {
-        LOCAL line IS "  ".
-        LOCAL j IS i.
-        UNTIL j >= seq:LENGTH OR line:LENGTH > 42 {
-            IF j > i { SET line TO line + " > ". }
-            SET line TO line + seq[j].
-            SET j TO j + 1.
-        }
-        PRINT line.
-        SET i TO j.
-    }
+    printSequence(seq).
     PRINT " ".
     PRINT "  ========================================".
-}
-
-LOCAL FUNCTION _confirmConfig {
-    LOCAL phase IS stateGet("phase", "").
-    IF phase <> "" AND phase <> "LAUNCH" {
-        RETURN.
-    }
-
-    _printConfig().
-    PRINT "  >> ENTER to launch / 30s auto-launch".
-    PRINT "  >> Edit CFG in terminal to override".
-    PRINT " ".
-    LOCAL deadline IS TIME:SECONDS + 30.
-    LOCAL confirmed IS FALSE.
-    UNTIL TIME:SECONDS >= deadline OR confirmed {
-        LOCAL remaining IS ROUND(deadline - TIME:SECONDS, 0).
-        LOCAL bar IS "".
-        LOCAL filled IS ROUND(30 - remaining, 0).
-        LOCAL j IS 0.
-        UNTIL j >= 30 {
-            IF j < filled { SET bar TO bar + "=". }
-            ELSE { SET bar TO bar + ".". }
-            SET j TO j + 1.
-        }
-        PRINT "  [" + bar + "] T-" + ("" + remaining):PADLEFT(2) + "s   " AT (0, TERMINAL:HEIGHT - 1).
-        IF TERMINAL:INPUT:HASCHAR {
-            LOCAL ch IS TERMINAL:INPUT:GETCHAR().
-            IF UNCHAR(ch) = 13 OR UNCHAR(ch) = 10 {
-                SET confirmed TO TRUE.
-            }
-        }
-        WAIT 0.2.
-    }
-    PRINT "  [==============================] GO       " AT (0, TERMINAL:HEIGHT - 1).
 }
 
 GLOBAL FUNCTION main {
@@ -162,7 +93,7 @@ GLOBAL FUNCTION main {
     mLog("Sequence: " + seq:JOIN(" -> ")).
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
 
-    _confirmConfig().
+    confirmLaunch(_printConfig@).
 
     LOCAL phaseMap IS LEXICON(
         "LAUNCH",           phaseLaunch@,
@@ -175,31 +106,12 @@ GLOBAL FUNCTION main {
         "CIRC",             phaseCirc@,
         "RAISE_ALT",        phaseRaiseAlt@,
         "INCL_CORRECT",     phaseInclCorrect@,
-        "OPS",              _phaseOps@,
-        "LAND_DEORBIT",     _phaseLandDeorbit@,
-        "LAND",             _phaseLand@
+        "TARGETED_DEORBIT", phaseTargetedDeorbit@,
+        "RELEASE_PROBE",    phaseReleaseProbe@,
+        "RELAY_OPS",        phaseRelayOps@,
+        "LAND_DEORBIT",     phaseLandDeorbit@,
+        "LAND",             phaseLand@
     ).
 
     runPhases(phaseMap).
-}
-
-LOCAL FUNCTION _phaseOps {
-    UNLOCK STEERING.
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
-    SET SAS TO TRUE.
-    orbitSummary().
-    mLog("On station at " + MISSION["target"] + ".").
-    HUDTEXT("Deployed: " + MISSION["target"], 8, 2, 18, GREEN, FALSE).
-    nextPhase(launchSeq).
-}
-
-LOCAL FUNCTION _phaseLandDeorbit {
-    mLog("LAND_DEORBIT: not yet implemented.").
-    nextPhase(launchSeq).
-}
-
-LOCAL FUNCTION _phaseLand {
-    mLog("LAND: not yet implemented.").
-    nextPhase(launchSeq).
 }
