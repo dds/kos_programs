@@ -72,9 +72,9 @@ GLOBAL FUNCTION normalizePayloadType {
 GLOBAL FUNCTION buildRocketSequence {
     PARAMETER orbitPhases.
     PARAMETER payloadPhases.
-    LOCAL seq IS LIST("LAUNCH", "FAIRING", "EXTEND_ANTS", "PARKING").
+    LOCAL seq IS LIST("LUNCH", "FAIR", "ANTS", "PARK").
     IF MISSION["target"]:TOUPPER <> "KERBIN" {
-        seq:ADD("TRANSFER").
+        seq:ADD("XING").
         seq:ADD("MCC").
         seq:ADD("COAST").
         seq:ADD("CAPTURE").

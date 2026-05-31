@@ -55,12 +55,11 @@ LOCAL FUNCTION buildPhaseSequence {
     IF hasMolniya {
         orbitPhases:ADD("CIRC").
         orbitPhases:ADD("MOLNIYA_INSERT").
-        orbitPhases:ADD("INCL_CORRECT").
     } ELSE {
-        orbitPhases:ADD("RAISE_ALT").
+        orbitPhases:ADD("RAISE").
         orbitPhases:ADD("CIRC").
-        orbitPhases:ADD("INCL_CORRECT").
     }
+    orbitPhases:ADD("INCLINE").
 
     LOCAL payloadPhases IS LEXICON(
         "CRASHPROBE", LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
@@ -172,17 +171,17 @@ GLOBAL FUNCTION main {
     confirmLaunch(_printConfig@).
 
     LOCAL phaseMap IS LEXICON(
-        "LAUNCH",           phaseLaunch@,
-        "FAIRING",          phaseFairing@,
-        "EXTEND_ANTS",      phaseExtendAnts@,
-        "PARKING",          phaseParking@,
-        "TRANSFER",         phaseTransfer@,
+        "LUNCH",            phaseLaunch@,
+        "FAIR",             phaseFairing@,
+        "ANTS",             phaseExtendAnts@,
+        "PARK",             phaseParking@,
+        "XING",             phaseTransfer@,
         "MCC",              phaseMidCourse@,
         "COAST",            phaseCoast@,
         "CAPTURE",          phaseCapture@,
         "CIRC",             phaseCirc@,
-        "RAISE_ALT",        phaseRaiseAlt@,
-        "INCL_CORRECT",     phaseInclCorrect@,
+        "RAISE",            phaseRaiseAlt@,
+        "INCLINE",          phaseInclCorrect@,
         "MOLNIYA_INSERT",   phaseMolniyaInsert@,
         "TARGETED_DEORBIT", phaseTargetedDeorbit@,
         "RELEASE_PROBE",    phaseReleaseProbe@,

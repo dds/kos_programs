@@ -31,7 +31,7 @@ GLOBAL FUNCTION phaseLaunch {
         + "km  inc=" + CFG["LAUNCH_INCLINATION"]
         + "°  az=" + CFG["LAUNCH_AZIMUTH"] + "°").
 
-    WHEN stateGet("phase","") = "LAUNCH" OR stateGet("phase","") = "PARKING" THEN {
+    WHEN stateGet("phase","") = "LUNCH" OR stateGet("phase","") = "PARK" THEN {
         LOCAL abortTriggered IS FALSE.
 
         IF TIME:SECONDS > (stateGetNum("launch_time",0) + 15)
@@ -258,7 +258,7 @@ LOCAL FUNCTION _deployFairing {
 GLOBAL FUNCTION confirmLaunch {
     PARAMETER printFn.
     LOCAL phase IS stateGet("phase", "").
-    IF phase <> "" AND phase <> "LAUNCH" {
+    IF phase <> "" AND phase <> "LUNCH" {
         RETURN.
     }
 

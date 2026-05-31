@@ -70,7 +70,7 @@ Examples:
 
 **Payload types:** `RELAY`, `CRASHPROBE`/`PROBE`, `SCANSAT`, `SCISAT`, `STKSAT` (stub), `LANDER`, `MOLNIYA`
 
-**Phase sequence:** LAUNCH -> FAIRING -> EXTEND_ANTS -> PARKING -> TRANSFER -> COAST -> CAPTURE -> [probe phases] -> CIRC -> RAISE_ALT -> INCL_CORRECT -> [relay/sat ops] -> [LAND_DEORBIT -> LAND] -> DONE
+**Phase sequence:** LUNCH -> FAIR -> ANTS -> PARK -> XING -> COAST -> CAPTURE -> [probe phases] -> CIRC -> RAISE -> INCLINE -> [relay/sat ops] -> [LAND_DEORBIT -> LAND] -> DONE
 
 **Molniya sequence:** ...same... -> CIRC -> INCL_CORRECT -> MOLNIYA_INSERT -> [relay/sat ops] -> DONE (inclination correction before insertion since plane changes are cheaper in circular orbits)
 
@@ -357,8 +357,8 @@ GLOBAL LIBS IS LIST(
 
 GLOBAL FUNCTION main {
     LOCAL seq IS LIST(
-        "TRANSFER", "COAST", "CAPTURE",
-        "CIRC", "RAISE_ALT", "INCL_CORRECT",
+        "XING", "COAST", "CAPTURE",
+        "CIRC", "RAISE", "INCLINE",
         "STATION", "DONE"
     ).
     SET xferSeq TO seq.
@@ -366,12 +366,12 @@ GLOBAL FUNCTION main {
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
 
     LOCAL phaseMap IS LEXICON(
-        "TRANSFER",    phaseTransfer@,
+        "XING",    phaseTransfer@,
         "COAST",       phaseCoast@,
         "CAPTURE",     phaseCapture@,
         "CIRC",        phaseCirc@,
-        "RAISE_ALT",   phaseRaiseAlt@,
-        "INCL_CORRECT", phaseInclCorrect@,
+        "RAISE",   phaseRaiseAlt@,
+        "INCLINE", phaseInclCorrect@,
         "STATION",     _phaseStation@
     ).
     runPhases(phaseMap).
