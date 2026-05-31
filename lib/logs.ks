@@ -1,14 +1,12 @@
 // ============================================================
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
-
 LOCAL FUNCTION _loadLib {
     PARAMETER libName.
     RUNONCEPATH("1:/lib/" + libName + ".ks").
 }
 
 GLOBAL FUNCTION flightLogPath {
-    _loadLib("state").
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
     IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
     LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
@@ -17,7 +15,9 @@ GLOBAL FUNCTION flightLogPath {
     LOCAL _flightLogPath IS "".
     SET _flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
     IF _flightLogPath = "" {
-        SET _flightLogPath TO _newLogPath(logPathFile).
+        SET _flightLogPath TO _logPath().
+        LOG "=== FAULT LOG START: " + logId() + " ===" TO p.
+        LOG _flightLogPath TO logPathFile.
     }
     RETURN _flightLogPath.
 }
@@ -47,6 +47,10 @@ GLOBAL FUNCTION logId {
     RETURN baseId.
 }
 
+LOCAL FUNCTION _logPath {
+    RETURN "1:/logs/" + logId().
+}
+
 GLOBAL FUNCTION archiveLog {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
     IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
@@ -54,14 +58,6 @@ GLOBAL FUNCTION archiveLog {
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
     COPYPATH(flightLogPath(), shipDir + "/" + logId()).
-}
-
-LOCAL FUNCTION _newLogPath {
-    PARAMETER logPathFile.
-    LOCAL p IS "1:/logs/" + logId().
-    LOG "=== FAULT LOG START: " + logId() + " ===" TO p.
-    LOG p TO logPathFile.
-    RETURN p.
 }
 
 LOCAL FUNCTION _sanitizeName {
