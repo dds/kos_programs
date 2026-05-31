@@ -171,14 +171,25 @@ GLOBAL FUNCTION phaseMidCourse {
     nextPhase(xferSeq).
 }
 
-// Internal score function for gradient descent
 LOCAL FUNCTION _evaluateMCC {
-    PARAMETER currentInc, currentPe, targetInc, targetPe.
+    PARAMETER currentInc, currentPe, currentAoP.
+    PARAMETER targetInc, targetPe, targetAoP.
+
     LOCAL score IS 0.
-    // Heavily weight inclination error
-    SET score TO score + (ABS(currentInc - targetInc) * 10000).
-    // Add periapsis error (scaled down so it doesn't overpower inclination)
-    SET score TO score + ABS(currentPe - targetPe).
+    
+    IF targetInc >= 0 { 
+        SET score TO score + (ABS(currentInc - targetInc) * 10000). 
+    }
+    IF targetPe >= 0 { 
+        SET score TO score + ABS(currentPe - targetPe). 
+    }
+    IF targetAoP >= 0 {
+        LOCAL errAoP IS ABS(currentAoP - targetAoP).
+        IF errAoP > 180 { SET errAoP TO 360 - errAoP. }
+        // Scale AoP weight so it competes fairly with Inclination
+        SET score TO score + (errAoP * 2000). 
+    }
+    
     RETURN score.
 }
 
