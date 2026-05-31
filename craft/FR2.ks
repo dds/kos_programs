@@ -40,7 +40,7 @@ GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer", "mcc",
     "countdown", "maneuver", "inclination",
     "orbit", "targeting", "landing",
-    "molniya", "payload_ops", "utils"
+    "molniya", "payload_ops", "science", "observe", "utils"
 ).
 
 SET KSM TO LIST("maneuver", "science", "plane", "rover", "xfer", "launch", "landing").
