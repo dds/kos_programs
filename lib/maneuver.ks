@@ -242,10 +242,17 @@ GLOBAL FUNCTION planTransfer {
     SET testNode:TIME TO foundUt.
     SET testNode:PROGRADE TO foundDv.
     WAIT 0.05.
+    LOCAL dvMax IS foundDv * 1.10.
+    LOCAL dvMin IS foundDv * 0.90.
+    LOCAL lastGoodDv IS foundDv.
 
     FROM { LOCAL i IS 0. } UNTIL i >= 12 STEP { SET i TO i + 1. } DO {
         LOCAL p IS _getTargetPatch(testNode, targetBody).
-        IF p = 0 OR p:PERIAPSIS < 0 { BREAK. }
+        IF p = 0 OR p:PERIAPSIS < 0 {
+            SET testNode:PROGRADE TO lastGoodDv.
+            BREAK.
+        }
+        SET lastGoodDv TO testNode:PROGRADE.
         LOCAL peErr IS targetPe - p:PERIAPSIS.
         IF ABS(peErr) < 200 { BREAK. }
         LOCAL basePe IS p:PERIAPSIS.
@@ -258,7 +265,8 @@ GLOBAL FUNCTION planTransfer {
         LOCAL sens IS (p2:PERIAPSIS - basePe) / 0.5.
         IF ABS(sens) < 1 { BREAK. }
         LOCAL correction IS peErr / sens * 0.7.
-        SET testNode:PROGRADE TO oldDv + correction.
+        LOCAL newDv IS MAX(dvMin, MIN(dvMax, oldDv + correction)).
+        SET testNode:PROGRADE TO newDv.
         WAIT 0.05.
     }
 
@@ -270,6 +278,8 @@ GLOBAL FUNCTION planTransfer {
         SET bestPe  TO finalPatch:PERIAPSIS.
         SET bestAoP TO finalPatch:ARGUMENTOFPERIAPSIS.
         SET bestLan TO finalPatch:LAN.
+    } ELSE {
+        SET testNode:PROGRADE TO lastGoodDv.
     }
 
     LOCAL finalDv IS testNode:PROGRADE.
