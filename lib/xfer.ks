@@ -54,35 +54,14 @@ GLOBAL FUNCTION phaseCapture {
     UNTIL success {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         
-        // Grab the target apoapsis from the config
-        LOCAL targetAp IS CFG["RELAY_ALT"].
-        IF CFG:HASKEY("TARGET_AP") { SET targetAp TO CFG["TARGET_AP"]. }
+        // 1. Resolve target altitude from config
+        LOCAL captureAlt IS CFG["RELAY_ALT"].
+        IF CFG:HASKEY("TARGET_AP") { SET captureAlt TO CFG["TARGET_AP"]. }
 
-        // --- INLINE CAPTURE SOLVER ---
-        // Plant a node exactly at Periapsis
-        LOCAL captureTime IS TIME:SECONDS + ETA:PERIAPSIS.
-        LOCAL nd IS NODE(captureTime, 0, 0, 0).
-        ADD nd.
-        WAIT 0.1.
+        // 2. Delegate math to your existing library function
+        planCapture(target, captureAlt).
 
-        LOCAL currentAp IS nd:ORBIT:APOAPSIS.
-        LOCAL stepDv IS 10.
-        
-        // Drop prograde (burn retrograde) until Apoapsis reaches the target
-        UNTIL currentAp > 0 AND currentAp <= targetAp {
-            SET nd:PROGRADE TO nd:PROGRADE - stepDv.
-            WAIT 0.01. // Let KSP physics update
-            
-            // If the orbit closes, slow down the stepping to be precise
-            IF nd:ORBIT:HASNEXTPATCH = FALSE {
-                SET stepDv TO 0.1. 
-            }
-            SET currentAp TO nd:ORBIT:APOAPSIS.
-        }
-        
-        mLog("Capture node planned: " + ROUND(ABS(nd:PROGRADE), 1) + " m/s. Target Ap: " + ROUND(targetAp/1000, 1) + "km").
-        // -----------------------------
-
+        // 3. Execute with standard retry logic
         SET success TO executeManeuver().
         
         IF NOT success {
@@ -97,9 +76,10 @@ GLOBAL FUNCTION phaseCapture {
     }
     
     orbitSummary().
-    mLog("Capture complete. Moving to next phase.").
+    mLog("Capture complete. Moving to finalization phase.").
     nextPhase(xferSeq).
 }
+
 
 // GLOBAL FUNCTION phaseCapture {
 //     LOCAL target IS missionTargetBody().
