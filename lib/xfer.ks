@@ -416,62 +416,75 @@ GLOBAL FUNCTION phaseElliptical {
     }
     
 
-    // --- 3-AXIS HILL CLIMB (Prograde, Radial, Normal) ---
+    // --- 4-AXIS HILL CLIMB (Prograde, Radial, Normal, TIME) ---
     LOCAL currentScore IS getFinalScore().
-    LOCAL stepSize IS 10.0. 
-    LOCAL minStep IS 0.01.
+    
+    // We now step both Delta-V and Time
+    LOCAL stepDv IS 10.0. 
+    LOCAL stepTime IS 120.0. // Start by shifting the node in 2-minute increments
+    LOCAL minStepDv IS 0.01.
     LOCAL iter IS 0.
 
-    UNTIL stepSize < minStep OR iter > 250 {
+    UNTIL stepDv < minStepDv OR iter > 300 {
         SET iter TO iter + 1.
         LOCAL improved IS FALSE.
 
-        LOCAL basePro IS nd:PROGRADE.
-        LOCAL baseRad IS nd:RADIALOUT.
-        LOCAL baseNor IS nd:NORMAL.
+        LOCAL basePro  IS nd:PROGRADE.
+        LOCAL baseRad  IS nd:RADIALOUT.
+        LOCAL baseNor  IS nd:NORMAL.
+        LOCAL baseTime IS nd:TIME.
 
+        // The 8 directions to probe (6 spatial, 2 temporal)
         LOCAL probes IS LIST(
-            LIST(stepSize, 0, 0), LIST(-stepSize, 0, 0),
-            LIST(0, stepSize, 0), LIST(0, -stepSize, 0),
-            LIST(0, 0, stepSize), LIST(0, 0, -stepSize)
+            LIST(stepDv, 0, 0, 0), LIST(-stepDv, 0, 0, 0),
+            LIST(0, stepDv, 0, 0), LIST(0, -stepDv, 0, 0),
+            LIST(0, 0, stepDv, 0), LIST(0, 0, -stepDv, 0),
+            LIST(0, 0, 0, stepTime), LIST(0, 0, 0, -stepTime)
         ).
 
         LOCAL bestProbeScore IS currentScore.
-        LOCAL bestPro IS basePro.
-        LOCAL bestRad IS baseRad.
-        LOCAL bestNor IS baseNor.
+        LOCAL bestPro  IS basePro.
+        LOCAL bestRad  IS baseRad.
+        LOCAL bestNor  IS baseNor.
+        LOCAL bestTime IS baseTime.
 
         FOR p IN probes {
             SET nd:PROGRADE TO basePro + p[0].
             SET nd:RADIALOUT TO baseRad + p[1].
             SET nd:NORMAL TO baseNor + p[2].
-            WAIT 0.01. 
+            SET nd:TIME TO baseTime + p[3].
+            WAIT 0.01. // Allow KSP conics to update
 
             LOCAL probeScore IS getFinalScore().
             IF probeScore < bestProbeScore {
                 SET bestProbeScore TO probeScore.
-                SET bestPro TO nd:PROGRADE.
-                SET bestRad TO nd:RADIALOUT.
-                SET bestNor TO nd:NORMAL.
+                SET bestPro  TO nd:PROGRADE.
+                SET bestRad  TO nd:RADIALOUT.
+                SET bestNor  TO nd:NORMAL.
+                SET bestTime TO nd:TIME.
                 SET improved TO TRUE.
             }
             
-            // Reset for next probe
+            // Reset for the next probe in the loop
             SET nd:PROGRADE TO basePro.
             SET nd:RADIALOUT TO baseRad.
             SET nd:NORMAL TO baseNor.
+            SET nd:TIME TO baseTime.
         }
 
         IF improved {
+            // Step in the winning direction
             SET nd:PROGRADE TO bestPro.
             SET nd:RADIALOUT TO bestRad.
             SET nd:NORMAL TO bestNor.
+            SET nd:TIME TO bestTime.
             SET currentScore TO bestProbeScore.
         } ELSE {
-            SET stepSize TO stepSize * 0.5. // Shrink step and refine
+            // Shrink both search spaces to refine the exact node
+            SET stepDv TO stepDv * 0.5.
+            SET stepTime TO stepTime * 0.5. 
         }
     }
-
     // 3. Evaluate and execute the resulting maneuver
     LOCAL totalDv IS nd:DELTAV:MAG.
     mLog("Finalization Converged: dV=" + ROUND(totalDv, 1) + " m/s").
