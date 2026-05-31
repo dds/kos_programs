@@ -225,7 +225,7 @@ GLOBAL FUNCTION planTransfer {
     IF lanTarget >= 0 {
         LOCAL lanDamp IS 0.7.
         LOCAL lanTol IS 2.
-        FROM { LOCAL i IS 0. } UNTIL i >= 4 STEP { SET i TO i + 1. } DO {
+        FROM { LOCAL i IS 0. } UNTIL i >= 6 STEP { SET i TO i + 1. } DO {
             LOCAL p IS _getTargetPatch(testNode, targetBody).
             IF p = 0 { BREAK. }
             LOCAL lanNow IS p:LAN.
@@ -238,18 +238,26 @@ GLOBAL FUNCTION planTransfer {
                 BREAK.
             }
             LOCAL baseTime IS testNode:TIME.
-            LOCAL eps IS 30.
-            SET testNode:TIME TO baseTime + eps.
-            WAIT 0.02.
-            LOCAL p2 IS _getTargetPatch(testNode, targetBody).
+            LOCAL epsList IS LIST(10, 5, 2, -10, -5).
+            LOCAL lan2 IS lanNow.
+            LOCAL eps IS 0.
+            FOR tryEps IN epsList {
+                SET testNode:TIME TO baseTime + tryEps.
+                WAIT 0.02.
+                LOCAL p2 IS _getTargetPatch(testNode, targetBody).
+                IF p2 <> 0 AND p2:PERIAPSIS > 0 {
+                    SET lan2 TO p2:LAN.
+                    SET eps TO tryEps.
+                    BREAK.
+                }
+            }
             SET testNode:TIME TO baseTime.
-            IF p2 = 0 {
-                mLog("LAN[" + i + "] perturb lost encounter, stopping.").
+            IF eps = 0 {
+                mLog("LAN[" + i + "] perturb lost encounter at all eps, stopping.").
                 BREAK.
             }
-            LOCAL lan2 IS p2:LAN.
             LOCAL dLanDt IS (lan2 - lanNow) / eps.
-            IF ABS(dLanDt) > 180 / eps {
+            IF ABS(dLanDt * eps) > 180 {
                 SET dLanDt TO dLanDt - 360 * ROUND(dLanDt * eps / 360) / eps.
             }
             IF ABS(dLanDt) < 0.0001 {
@@ -261,7 +269,7 @@ GLOBAL FUNCTION planTransfer {
             SET timeShift TO MAX(-maxShift, MIN(maxShift, timeShift)).
             LOCAL newTime IS baseTime + timeShift.
             mLog("LAN[" + i + "] cur=" + ROUND(lanNow,1) + " err=" + ROUND(lanErr,1)
-                + " sens=" + ROUND(dLanDt,4) + "/s shift=" + ROUND(timeShift,0) + "s").
+                + " eps=" + eps + " sens=" + ROUND(dLanDt,4) + "/s shift=" + ROUND(timeShift,0) + "s").
             LOCAL reacquired IS _findEncounter(testNode, targetBody,
                 newTime, SHIP:ORBIT:PERIOD, 120).
             IF reacquired < 0 {
