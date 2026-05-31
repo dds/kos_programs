@@ -184,27 +184,61 @@ GLOBAL FUNCTION planTransfer {
     ADD testNode.
     WAIT 0.1.
 
+    LOCAL lanTarget IS -1.
+    IF CFG:HASKEY("CAPTURE_LAN") { SET lanTarget TO CFG["CAPTURE_LAN"]. }
+
     LOCAL scanStep IS 60.
     LOCAL scanEnd  IS TIME:SECONDS + SHIP:ORBIT:PERIOD.
-    LOCAL foundUt  IS -1.
+    IF lanTarget >= 0 {
+        SET scanStep TO 300.
+        SET scanEnd TO TIME:SECONDS + targetBody:ORBIT:PERIOD.
+        mLog("LAN targeting: scanning " + ROUND(targetBody:ORBIT:PERIOD,0)
+            + "s window in " + scanStep + "s steps.").
+    }
 
-    UNTIL testNode:TIME > scanEnd {
-        WAIT 0.02.
-        IF testNode:ORBIT:HASNEXTPATCH
-                AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME
-                AND testNode:ORBIT:NEXTPATCH:PERIAPSIS > 0
-                AND testNode:ORBIT:NEXTPATCH:INCLINATION < 90 {
-            SET foundUt TO testNode:TIME.
-            mLog("DEBUG coarse found Pe="
-                + ROUND(testNode:ORBIT:NEXTPATCH:PERIAPSIS/1000,1)
-                + "km at T+" + ROUND(testNode:TIME - TIME:SECONDS,0) + "s").
-            BREAK.
+    LOCAL foundUt IS -1.
+    LOCAL bestLanErr IS 999.
+
+    IF lanTarget >= 0 {
+        UNTIL testNode:TIME > scanEnd {
+            WAIT 0.02.
+            IF testNode:ORBIT:HASNEXTPATCH
+                    AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME
+                    AND testNode:ORBIT:NEXTPATCH:PERIAPSIS > 0
+                    AND testNode:ORBIT:NEXTPATCH:INCLINATION < 90 {
+                LOCAL patchLAN IS testNode:ORBIT:NEXTPATCH:LAN.
+                LOCAL lanErr IS ABS(patchLAN - lanTarget).
+                IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
+                IF lanErr < bestLanErr {
+                    SET bestLanErr TO lanErr.
+                    SET foundUt TO testNode:TIME.
+                }
+            }
+            SET testNode:TIME TO testNode:TIME + scanStep.
         }
-        SET testNode:TIME TO testNode:TIME + scanStep.
+        IF foundUt > 0 {
+            mLog("LAN scan best: err=" + ROUND(bestLanErr,1)
+                + "deg at T+" + ROUND(foundUt - TIME:SECONDS,0) + "s").
+        }
+    } ELSE {
+        UNTIL testNode:TIME > scanEnd {
+            WAIT 0.02.
+            IF testNode:ORBIT:HASNEXTPATCH
+                    AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME
+                    AND testNode:ORBIT:NEXTPATCH:PERIAPSIS > 0
+                    AND testNode:ORBIT:NEXTPATCH:INCLINATION < 90 {
+                SET foundUt TO testNode:TIME.
+                mLog("DEBUG coarse found Pe="
+                    + ROUND(testNode:ORBIT:NEXTPATCH:PERIAPSIS/1000,1)
+                    + "km at T+" + ROUND(testNode:TIME - TIME:SECONDS,0) + "s").
+                BREAK.
+            }
+            SET testNode:TIME TO testNode:TIME + scanStep.
+        }
     }
 
     IF foundUt < 0 {
-        mLogError("planTransfer: no valid window found in one orbit. Check conic patches.").
+        mLogError("planTransfer: no valid window found. Check conic patches.").
         REMOVE testNode.
         LOCAL nd IS NODE(TIME:SECONDS + 600, 0, 0, dv).
         ADD nd.
@@ -249,9 +283,13 @@ GLOBAL FUNCTION planTransfer {
     REMOVE testNode.
     LOCAL nd IS NODE(bestUt, 0, 0, dv).
     ADD nd.
-    mLog("Transfer -> " + targetBody:NAME + ": dV=" + ROUND(dv,1)
+    LOCAL logMsg IS "Transfer -> " + targetBody:NAME + ": dV=" + ROUND(dv,1)
         + " m/s  Pe=" + ROUND(bestPe/1000,1) + "km"
-        + "  ETA=" + ROUND(bestUt - TIME:SECONDS,0) + "s").
+        + "  ETA=" + ROUND(bestUt - TIME:SECONDS,0) + "s".
+    IF lanTarget >= 0 {
+        SET logMsg TO logMsg + "  LAN_err=" + ROUND(bestLanErr,1) + "deg".
+    }
+    mLog(logMsg).
     RETURN nd.
 }
 
@@ -331,6 +369,50 @@ GLOBAL FUNCTION planRaisePeNow {
         + " m/s  currentAlt=" + ROUND(SHIP:ALTITUDE/1000,1)
         + "km  targetPe=" + ROUND(targetPe/1000,0)
         + "km  lead=" + lead + "s").
+    RETURN nd.
+}
+
+GLOBAL FUNCTION planAoPChange {
+    PARAMETER targetAoP.
+
+    LOCAL currentAoP IS SHIP:ORBIT:ARGUMENTOFPERIAPSIS.
+    LOCAL deltaAoP IS targetAoP - currentAoP.
+    IF deltaAoP > 180  { SET deltaAoP TO deltaAoP - 360. }
+    IF deltaAoP < -180 { SET deltaAoP TO deltaAoP + 360. }
+
+    IF ABS(deltaAoP) < 2 {
+        mLog("AoP already within 2deg — skipping.").
+        RETURN 0.
+    }
+
+    LOCAL mu IS SHIP:ORBIT:BODY:MU.
+    LOCAL a  IS SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL e  IS SHIP:ORBIT:ECCENTRICITY.
+    LOCAL h  IS SQRT(mu * a * (1 - e^2)).
+
+    LOCAL dvMag IS 2 * (mu / h) * e * SIN(ABS(deltaAoP) / 2).
+
+    LOCAL ta1 IS deltaAoP / 2.
+    LOCAL ta2 IS ta1 + 180.
+    LOCAL eta1 IS etaToTrueAnomaly(ta1).
+    LOCAL eta2 IS etaToTrueAnomaly(ta2).
+
+    LOCAL burnETA IS eta1.
+    LOCAL dvSign IS -1.
+    IF eta2 < eta1 {
+        SET burnETA TO eta2.
+        SET dvSign TO 1.
+    }
+
+    LOCAL dvRadial IS dvSign * dvMag.
+    LOCAL burnUT IS TIME:SECONDS + burnETA.
+
+    LOCAL nd IS NODE(burnUT, dvRadial, 0, 0).
+    ADD nd.
+    mLog("AoP change: " + ROUND(currentAoP,1) + " -> " + ROUND(targetAoP,1)
+        + "deg  delta=" + ROUND(deltaAoP,1)
+        + "  dV=" + ROUND(dvMag,1) + " m/s"
+        + "  ETA=" + ROUND(burnETA,0) + "s").
     RETURN nd.
 }
 

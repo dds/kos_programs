@@ -60,6 +60,63 @@ GLOBAL FUNCTION phaseCapture {
         }
     }
     orbitSummary().
+
+    IF CFG:HASKEY("CAPTURE_AOP") {
+        LOCAL targetAoP IS CFG["CAPTURE_AOP"].
+        LOCAL deltaAoP IS ABS(SHIP:ORBIT:ARGUMENTOFPERIAPSIS - targetAoP).
+        IF deltaAoP > 180 { SET deltaAoP TO 360 - deltaAoP. }
+        IF deltaAoP > 2 {
+            mLog("Post-capture AoP correction: current=" + ROUND(SHIP:ORBIT:ARGUMENTOFPERIAPSIS,1)
+                + " target=" + ROUND(targetAoP,1)).
+            LOCAL aopOk IS FALSE.
+            LOCAL aopRetries IS 0.
+            UNTIL aopOk {
+                UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+                LOCAL nd IS planAoPChange(targetAoP).
+                IF nd = 0 { SET aopOk TO TRUE. }
+                ELSE {
+                    SET aopOk TO executeManeuver().
+                    IF NOT aopOk {
+                        SET aopRetries TO aopRetries + 1.
+                        mLog("AoP correction missed (attempt " + aopRetries + ").").
+                        IF aopRetries >= MAX_RETRIES { SET aopOk TO TRUE. }
+                        WAIT 10.
+                    }
+                }
+            }
+            orbitSummary().
+        } ELSE {
+            mLog("AoP already within 2deg — skipping.").
+        }
+    }
+
+    IF CFG:HASKEY("CAPTURE_INC") {
+        LOCAL targetInc IS CFG["CAPTURE_INC"].
+        LOCAL deltaInc IS ABS(SHIP:ORBIT:INCLINATION - targetInc).
+        LOCAL incTol IS 0.5.
+        IF CFG:HASKEY("INCL_TOLERANCE") { SET incTol TO CFG["INCL_TOLERANCE"]. }
+        IF deltaInc > incTol {
+            mLog("Post-capture INC correction: current=" + ROUND(SHIP:ORBIT:INCLINATION,2)
+                + " target=" + ROUND(targetInc,2)).
+            LOCAL incOk IS FALSE.
+            LOCAL incRetries IS 0.
+            UNTIL incOk {
+                UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+                planInclinationChange(targetInc).
+                SET incOk TO executeManeuver().
+                IF NOT incOk {
+                    SET incRetries TO incRetries + 1.
+                    mLog("INC correction missed (attempt " + incRetries + ").").
+                    IF incRetries >= MAX_RETRIES { SET incOk TO TRUE. }
+                    WAIT 10.
+                }
+            }
+            orbitSummary().
+        } ELSE {
+            mLog("Inclination within tolerance — skipping.").
+        }
+    }
+
     nextPhase(xferSeq).
 }
 
