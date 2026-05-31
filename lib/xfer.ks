@@ -355,18 +355,20 @@ LOCAL FUNCTION _impactThreat {
 GLOBAL FUNCTION phaseElliptical {
     LOCAL targetBody IS missionTargetBody().
     WAIT 2.
-    mLog("Planning unified PE raise, INC, and AoP alignment at Apoapsis...").
+    mLog("Planning unified PE, INC, LAN, and AoP alignment at Apoapsis...").
 
-    // 1. Safely extract target parameters from the mission config
+    // 1. Safely extract all 4 target parameters
     LOCAL targetPe  IS -1.
     LOCAL targetInc IS -1.
     LOCAL targetAoP IS -1.
+    LOCAL targetLan IS -1.
 
     IF CFG:HASKEY("TARGET_PE")   { SET targetPe TO CFG["TARGET_PE"]. }
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
+    IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
 
-    IF targetPe < 0 AND targetInc < 0 AND targetAoP < 0 {
+    IF targetPe < 0 AND targetInc < 0 AND targetAoP < 0 AND targetLan < 0 {
         mLog("No finalization targets specified. Skipping phase.").
         nextPhase(xferSeq).
         RETURN.
@@ -374,7 +376,7 @@ GLOBAL FUNCTION phaseElliptical {
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     
-    // 2. Plant the base node exactly at Apoapsis
+    // Plant the base node exactly at Apoapsis
     LOCAL burnTime IS TIME:SECONDS + ETA:APOAPSIS.
     LOCAL nd IS NODE(burnTime, 0, 0, 0).
     ADD nd.
@@ -384,28 +386,35 @@ GLOBAL FUNCTION phaseElliptical {
     LOCAL FUNCTION getFinalScore {
         LOCAL p IS nd:ORBIT. 
         
-        // Safety catch: Do not allow solvers to crash the ship
-        IF p:PERIAPSIS < 0 { RETURN 9999999. }
+        IF p:PERIAPSIS < 0 { RETURN 9999999. } // Impact safety catch
 
         LOCAL peErr  IS 0.
         LOCAL incErr IS 0.
         LOCAL aopErr IS 0.
+        LOCAL lanErr IS 0.
 
-        IF targetPe >= 0 {
-            SET peErr TO ABS(p:PERIAPSIS - targetPe) / 1000. 
-        }
-        IF targetInc >= 0 {
-            SET incErr TO ABS(p:INCLINATION - targetInc).
-        }
+        IF targetPe >= 0 { SET peErr TO ABS(p:PERIAPSIS - targetPe) / 1000. }
+        IF targetInc >= 0 { SET incErr TO ABS(p:INCLINATION - targetInc). }
+        
         IF targetAoP >= 0 {
             LOCAL rawAoP IS ABS(p:ARGUMENTOFPERIAPSIS - targetAoP).
             IF rawAoP > 180 { SET rawAoP TO 360 - rawAoP. }
             SET aopErr TO rawAoP.
         }
+        
+        IF targetLan >= 0 {
+            LOCAL rawLan IS ABS(p:LAN - targetLan).
+            IF rawLan > 180 { SET rawLan TO 360 - rawLan. }
+            SET lanErr TO rawLan.
+        }
 
-        // Weighting: PE establishes safety/altitude, INC and AOP refine the alignment
-        RETURN (peErr * 10) + (incErr * 50) + (aopErr * 20).
+        // Weighting: 
+        // PE keeps us alive (highest priority). 
+        // INC is likely already close, but heavily weighted to prevent the solver from breaking it.
+        // LAN and AOP are dialed in using the remaining Normal/Radial flexibility.
+        RETURN (peErr * 10) + (incErr * 50) + (lanErr * 25) + (aopErr * 20).
     }
+    
 
     // --- 3-AXIS HILL CLIMB (Prograde, Radial, Normal) ---
     LOCAL currentScore IS getFinalScore().
