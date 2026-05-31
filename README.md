@@ -4,7 +4,7 @@ KerbalScript (kOS) mission automation framework for Kerbal Space Program.
 
 ## Overview
 
-An autonomous flight computer system for Kerbal craft control. Handles full mission profiles from launch through orbital insertion, payload deployment, and station-keeping.
+An autonomous flight computer system for Kerbal craft control. Handles full mission profiles from launch through orbital insertion, interplanetary transfer, payload deployment, and station-keeping. Ships can carry multiple kOS processors, each running a different role — a primary mission computer, a lander CPU, a zombie watchdog — all booting from the same `boot.ks` and routing by `CORE:TAG`.
 
 ## Structure
 
@@ -20,32 +20,44 @@ craft/
     X_SHOT.ks            SHRIMP sounding rocket
 roles/
     lander_cpu.ks        Secondary CPU: deploy + science
+    zombie.ks            Dormant watchdog — reboots other CPUs on command
     EVA.ks               EVA kerbal controller (trait-based roles)
 lib/
     phases.ks            Generic phase machine (runPhases, nextPhase)
     launch.ks            Reusable ascent phases (launch, fairing, parking)
     xfer.ks              Transfer/arrival phases (transfer, coast, capture, circ)
+    mcc.ks               Mid-course correction (Newton's method on PE/AoP/LAN)
     state.ks             Persistent JSON key-value store (survives reboots)
     logs.ks              Flight logging with fault persistence
     files.ks             Storage status and directory listing
     resume.ks            MISSION lexicon, auto-resume logic, operator helpers
-    maneuver.ks          Maneuver node execution with dynamic throttle
+    maneuver.ks          Maneuver execution + transfer/capture/circ planning
     inclination.ks       Orbital plane change planning
     molniya.ks           Molniya orbit insertion
     orbit.ks             Orbit monitoring and stability checks
     countdown.ks         Launch countdown with audio
+    payload_ops.ks       Shared payload phase implementations (deploy, deorbit, relay)
     science.ks           Experiment automation and SCANsat integration
     targeting.ks         Precision deorbit via Trajectories addon
     landing.ks           Powered descent / suicide burn
+    recovery.ks          Post-abort recovery (antenna deploy, log archive)
     relay_constellation.ks  Multi-relay deployment
     plane.ks             Aircraft autopilot (roll/alt/heading hold)
     rover.ks             Ground vehicle control
+    observe.ks           Periodic telemetry logger with sentinel-file control
+    utils.ks             General-purpose utilities (fmtDuration, printOrbitRef)
+    lib_navigation.ks    KSLib — phase angle, AN/DN calculations
+    lib_circle_nav.ks    KSLib — great circle navigation
+    lib_enum.ks          KSLib — list/queue/stack functional helpers
 cmd/
     resume.ks            Resume mission from saved phase
     setstate.ks          Force a phase change
     dump.ks              Print state to console
     resetboot.ks         Reset boot counter
     files.ks             Print storage/file listing
+    logs.ks              Archive flight log to KSC
+    zombie.ks            Reboot all other CPUs on the vessel
+    molniya.ks           Molniya orbit calculator (interactive)
     science.ks           Manual science collection
     sciencestatus.ks     Science status report
     scanstart.ks         Start SCANsat scanners
@@ -66,13 +78,13 @@ FR2-TARGET-TYPE1-TYPE2-...
 Examples:
 - `FR2-MUN-CRASHPROBE1-RELAY1` — Mun mission: deploy crash probe, then relay
 - `FR2-MINMUS-RELAY1` — Minmus relay deployment
-- `FR2-KERBIN-RELAY-MOLNIYA-03` — Kerbin Molniya relay (63.4° incl, ~3h period, northern dwell)
+- `FR2-KERBIN-RELAY-MOLNIYA-03` — Kerbin Molniya relay (63.4 incl, ~3h period, northern dwell)
 
 **Payload types:** `RELAY`, `CRASHPROBE`/`PROBE`, `SCANSAT`, `SCISAT`, `STKSAT` (stub), `LANDER`, `MOLNIYA`
 
-**Phase sequence:** LUNCH -> FAIR -> ANTS -> PARK -> XING -> COAST -> CAPTURE -> [probe phases] -> CIRC -> RAISE -> INCLINE -> [relay/sat ops] -> [LAND_DEORBIT -> LAND] -> DONE
+**Phase sequence:** LUNCH -> FAIR -> ANTS -> PARK -> XING -> MCC -> COAST -> CAPTURE -> [probe phases] -> CIRC -> RAISE -> INCLINE -> [relay/sat ops] -> [LAND_DEORBIT -> LAND] -> DONE
 
-**Molniya sequence:** ...same... -> CIRC -> INCL_CORRECT -> MOLNIYA_INSERT -> [relay/sat ops] -> DONE (inclination correction before insertion since plane changes are cheaper in circular orbits)
+**Molniya sequence:** ...same... -> CIRC -> MOLNIYA_INSERT -> INCLINE -> [relay/sat ops] -> DONE
 
 FR2.ks declares `GLOBAL LIBS IS LIST(...)` to tell boot which libs to load. New vehicles do the same — boot only syncs what the vehicle needs.
 
@@ -88,11 +100,11 @@ Juno-powered trainer jet. Low speed (cruise ~80 m/s), broad wings. Same phase st
 
 ### FJ4B
 
-Supersonic jet with autopilot assists. Manually-flown with `plane.ks` integration. Phases: PREFLIGHT → FLIGHT → POST_FLIGHT. Auto-collects science on biome changes when SCIENCE payload is present.
+Supersonic jet with autopilot assists. Manually-flown with `plane.ks` integration. Phases: PREFLIGHT -> FLIGHT -> POST_FLIGHT. Auto-collects science on biome changes when SCIENCE payload is present.
 
 ### FSP1
 
-Seaplane/submersible. Similar to FJ4B with water landing support. Phases: PREFLIGHT → FLIGHT → SPLASHDOWN → SURFACE_OPS. Dive operations stub (future `marine.ks`).
+Seaplane/submersible. Similar to FJ4B with water landing support. Phases: PREFLIGHT -> FLIGHT -> SPLASHDOWN -> SURFACE_OPS. Dive operations stub (future `marine.ks`).
 
 ### X_SHOT (SHRIMP)
 
@@ -115,6 +127,10 @@ Simple sounding rocket script. Launches, hibernates probe core, collects thermom
 4. Press any key within 5s of boot to enter manual mode, or wait to auto-resume
 5. On first boot, FR2 shows a flight plan summary with all config values and a 30s countdown — press ENTER to launch immediately or wait for auto-launch
 
+### Action groups
+
+Action group 0 toggles power on the kOS processor and opens/closes its terminal. In KSP, pressing `0` a few times will power-cycle the CPU, interrupting whatever it's doing and forcing a reboot. This is the primary way to break into a running mission and get a console — the kOS terminal opens on reboot, and boot's 5-second manual mode window gives you a chance to intervene before auto-resume kicks in.
+
 ### Manual mode commands
 
 All commands are run via `RUNPATH(...)` in the kOS terminal:
@@ -125,6 +141,9 @@ RUNPATH("1:/cmd/setstate.ks", "PHASE").   // force a phase
 RUNPATH("1:/cmd/dump.ks").                // print state to console
 RUNPATH("1:/cmd/resetboot.ks").           // reset boot counter
 RUNPATH("1:/cmd/files.ks").               // storage/file listing
+RUNPATH("1:/cmd/logs.ks").                // archive flight log to KSC
+RUNPATH("1:/cmd/zombie.ks").              // reboot all other CPUs
+RUNPATH("1:/cmd/molniya.ks").             // Molniya orbit calculator
 ```
 
 ### Hot-reloading a lib
@@ -151,18 +170,40 @@ Ships with multiple kOS processors use **CORE:TAG** to route each CPU to a diffe
 3. If the tag has no matching script, the CPU falls through to the normal vehicle script (with a warning)
 4. Untagged CPUs always load the vehicle script from `craft/`
 
-**Example:** Ship named `FR2-MUN-LANDER` with two processors:
-- Main CPU (untagged) → boots `FR2.ks` (flight control)
-- Secondary CPU (tagged `lander_cpu`) → boots `lander_cpu.ks` (deploy + science)
-
 Each processor has its own `1:/` volume, so state files are naturally isolated — no conflicts between CPUs.
+
+### Typical multi-CPU layout
+
+A typical interplanetary mission (Mun, Minmus, Duna, or remote Kerbin) uses three CPUs:
+
+| CPU | CORE:TAG | Script | Role |
+|---|---|---|---|
+| Primary (main probe core) | *(empty)* | `craft/FR2.ks` | Mission computer — ascent, transfer, capture, orbit ops |
+| Lander (OCTO on lander) | `lander_cpu` | `roles/lander_cpu.ks` | Post-separation deploy + science collection |
+| Zombie (OCTO on upper stage) | `zombie` | `roles/zombie.ks` | Dormant watchdog — remote reboot capability |
 
 ### Available role scripts
 
 | Script | Tag | Purpose |
 |---|---|---|
 | `roles/lander_cpu.ks` | `lander_cpu` | Post-landing deploy (antennas, solar) + science collection |
+| `roles/zombie.ks` | `zombie` | Dormant watchdog — closes terminal and waits for operator |
 | `roles/EVA.ks` | `EVA` | Trait-based EVA kerbal controller (scientist/engineer/generic) |
+
+### Zombie: remote reboot
+
+The zombie is a secondary kOS CPU (usually a tiny OCTO probe core on the upper stage or service module) that boots, closes its own terminal, and goes silent. Its purpose: if the primary mission computer gets stuck — infinite loop, bad state, unresponsive — the operator can regain control remotely.
+
+**To use the zombie:**
+1. In KSP, right-click the zombie's probe core and open its kOS terminal
+2. The zombie's boot.ks has already loaded; it printed a hint and went idle
+3. Run: `RUNPATH("1:/cmd/zombie.ks").`
+4. This power-cycles every *other* kOS CPU on the vessel, forcing them to reboot
+5. The primary mission computer reboots fresh, hits the 5s manual mode window, and the operator can intervene
+
+The zombie itself is unaffected by the reboot command since `cmd/zombie.ks` skips the CPU that's running it. This gives you a reliable backdoor to recover a stuck mission computer without needing physical access (action groups, EVA, etc.).
+
+The `cmd/zombie.ks` script can also be run from any CPU's terminal — it's not exclusive to the zombie role. The role just ensures there's always a clean, idle CPU available to run it from.
 
 ### EVA
 
@@ -210,6 +251,20 @@ All call `nextPhase(launchSeq)` — set `launchSeq` to your sequence before call
 
 All call `nextPhase(xferSeq)` — set `xferSeq` to your sequence.
 
+**From `mcc.ks`** (needs: `maneuver`, `orbit`):
+- `phaseMidCourse@` — mid-course correction using Newton's method. Corrects PE (prograde), AoP (radial), and LAN (normal) independently. Capped at 50 m/s total dV. Skips if encounter is already on target.
+
+Calls `nextPhase(xferSeq)`.
+
+**From `payload_ops.ks`** (needs: `targeting`, `landing`, `orbit`, `science`):
+- `phaseTargetedDeorbit@` — precision deorbit for crash probes
+- `phaseReleaseProbe@` — arm chutes, decouple, orient for solar panels
+- `phaseRelayOps@` — relay on-station (orbit summary, periodic monitoring)
+- `phaseLandDeorbit@` — lander deorbit burn
+- `phaseLand@` — powered descent via `landingExecute()`
+
+All call `nextPhase(launchSeq)`.
+
 **From `molniya.ks`** (needs: `maneuver`, `orbit`, `inclination`):
 - `phaseMolniyaInsert@` — prograde burn to achieve target period/AoP from circular orbit. Reads `CFG["MOLNIYA_PERIOD"]` and `CFG["MOLNIYA_AOP"]`
 
@@ -224,16 +279,19 @@ These are building blocks you can call inside your own phase functions:
 
 | Function | Lib | What it does |
 |---|---|---|
+| `planTransfer(body, pe, lan, aop)` | maneuver | Plan transfer with optional LAN/AoP targeting |
+| `planCapture(body, alt)` | maneuver | Plan capture burn at Pe |
+| `planCircularize()` | maneuver | Add circ node at next Ap |
+| `planRaisePeNow(alt)` | maneuver | Emergency Pe raise at current position |
+| `planAoPChange(targetAoP)` | maneuver | Radial burn to rotate argument of periapsis |
+| `executeManeuver()` | maneuver | Execute next node, returns TRUE/FALSE |
 | `landingExecute()` | landing | Full powered descent sequence |
 | `targetedDeorbit()` | targeting | Precision deorbit using Trajectories |
 | `planMolniyaInsert(period, aop)` | molniya | Plan Molniya insertion burn from circular orbit |
-| `planCircularize()` | maneuver | Add circ node at next Ap/Pe |
-| `planLowerPe(alt)` | maneuver | Add node to lower Pe |
-| `planRaisePeNow(alt)` | maneuver | Emergency Pe raise at current position |
-| `executeManeuver()` | maneuver | Execute next node, returns TRUE/FALSE |
 | `orbitSummary()` | orbit | Log current orbit parameters |
 | `scienceRunAll()` | science | Run all experiments |
 | `scienceTransmitAll()` | science | Transmit all science data |
+| `recoveryMode()` | recovery | Post-abort recovery (antennas, log archive, operator prompt) |
 | `roverInit()` | rover | Start rover steering loop |
 | `roverSetWaypoint(lat,lng)` | rover | Drive to coordinates |
 | `constellationDeploy(count,alt)` | relay_constellation | Deploy relay constellation |

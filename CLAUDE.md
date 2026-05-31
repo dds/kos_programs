@@ -24,6 +24,23 @@ KerbalScript (.ks files) — a scripting language for the kOS mod. Not Python, n
 ### CORE:TAG routing (multi-CPU ships)
 If `CORE:TAG` is non-empty, boot resolves the tag via `_resolveScript()` checking `roles/` then `craft/` then root. Each processor has its own `1:/` volume so state is naturally isolated. Untagged CPUs always load the vehicle script from `craft/`.
 
+A typical multi-CPU ship (FR2 to Mun/Minmus/Duna/remote Kerbin) has three processors:
+- **Primary** (untagged) — runs the vehicle script (FR2.ks), handles the full mission
+- **Lander CPU** (tagged `lander_cpu`) — runs `roles/lander_cpu.ks`, activates post-separation for deploy + science
+- **Zombie** (tagged `zombie`) — runs `roles/zombie.ks`, closes its terminal and goes dormant. Operator can open it later to reboot stuck CPUs
+
+### Action groups and manual intervention
+Action group 0 toggles power on the kOS processor and opens/closes its terminal window. Pressing `0` a few times in KSP power-cycles the CPU, forces a reboot, and opens the terminal. Boot then gives a 5-second window to press any key for manual mode before auto-resuming the mission. This is the standard way to interrupt a running mission and get a console.
+
+### Zombie: remote reboot for manual control
+The zombie is a dormant backup CPU (usually a tiny OCTO on the upper stage). If the primary mission computer gets stuck, the operator can:
+1. Right-click the zombie's probe core → open kOS terminal
+2. Run `RUNPATH("1:/cmd/zombie.ks").`
+3. This power-cycles every other CPU on the vessel, forcing fresh reboots
+4. The primary reboots into its 5s manual-mode window, giving the operator control
+
+The zombie itself is unaffected since `cmd/zombie.ks` skips the CPU running it. The `cmd/zombie.ks` script can also be run from any CPU — the role just ensures there's always a clean, idle CPU available.
+
 ### Pre-launch config screen
 On first boot (or when phase is LAUNCH), FR2 shows a flight plan summary listing all CFG values grouped by mission phase (ascent, transfer, orbit, probe). A 30s countdown with progress bar auto-launches; press ENTER to skip. Edit CFG values in the kOS terminal during the countdown to override defaults.
 
@@ -63,7 +80,7 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 - `lib/` — reusable libraries, loaded via `RUNPATH()`
 - `cmd/` — operator commands, run manually from terminal (NOT synced at boot)
 - `craft/` — vehicle flight computers (FR2.ks, FR3.ks, FJ1A.ks, FJ4B.ks, FSP1.ks, X_SHOT.ks)
-- `roles/` — role scripts for CORE:TAG routing and EVA (lander_cpu.ks, EVA.ks)
+- `roles/` — role scripts for CORE:TAG routing (lander_cpu.ks, zombie.ks, EVA.ks)
 
 ### Key libs
 
@@ -72,23 +89,29 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 | `phases.ks` | Generic phase machine (runPhases, nextPhase, phaseDone) |
 | `launch.ks` | Reusable ascent phases (launch, fairing, extend, parking) |
 | `xfer.ks` | Transfer/arrival phases (transfer, coast, capture, circ, raise, incl). Capture supports optional orbit targeting via CAPTURE_INC/LAN/AOP |
+| `mcc.ks` | Mid-course correction — Newton's method on PE (prograde), AoP (radial), LAN (normal). 50 m/s dV cap |
 | `state.ks` | Persistent JSON key-value store |
 | `logs.ks` | Flight logging with fault persistence |
 | `files.ks` | Storage status and directory listing |
-| `resume.ks` | MISSION lexicon, operator helpers, resumeMission() |
-| `maneuver.ks` | Maneuver node execution with dynamic throttle. Also planTransfer (with optional LAN targeting), planCapture, planCircularize, planAoPChange |
+| `resume.ks` | MISSION lexicon, operator helpers, resumeMission(), buildRocketSequence() |
+| `maneuver.ks` | Maneuver node execution with dynamic throttle. planTransfer (LAN via Newton on departure time, PE via Newton on dV), planCapture, planCircularize, planAoPChange |
 | `inclination.ks` | Orbital plane change planning + etaToTrueAnomaly() |
 | `molniya.ks` | Molniya orbit insertion (molniyaParams, printMolniyaSummary, planMolniyaInsert, phaseMolniyaInsert) |
 | `orbit.ks` | Orbit monitoring and stability checks |
 | `countdown.ks` | Launch countdown with audio |
+| `payload_ops.ks` | Shared payload phases — phaseTargetedDeorbit, phaseReleaseProbe (chute arm, sunward orient, decouple), phaseRelayOps, phaseLandDeorbit, phaseLand |
 | `targeting.ks` | Precision deorbit via Trajectories addon |
 | `science.ks` | Experiment automation and SCANsat integration |
 | `landing.ks` | Powered descent / suicide burn |
+| `recovery.ks` | Post-abort recovery — safe antenna deploy, flight log archive, operator prompt |
 | `relay_constellation.ks` | Multi-relay deployment |
 | `plane.ks` | Aircraft autopilot |
 | `rover.ks` | Ground vehicle control |
 | `observe.ks` | Periodic telemetry logger with sentinel-file control |
 | `utils.ks` | General-purpose utilities (fmtDuration, printOrbitRef) |
+| `lib_navigation.ks` | KSLib — phase angle, AN/DN, orbital vectors |
+| `lib_circle_nav.ks` | KSLib — great circle bearing/distance |
+| `lib_enum.ks` | KSLib — functional list/queue/stack operations |
 
 ### Observation mode (`lib/observe.ks`)
 
@@ -109,13 +132,26 @@ At boot, pressing any key within 5s enters manual mode. The terminal displays en
 
 Uses `SHIP:CONTROL:PILOTWHEELSTEER` (not `PILOTMAINSTEER`, which doesn't exist in kOS) scaled by a speed-dependent factor to reduce steering sensitivity at higher speeds.
 
+### Transfer planning (`lib/maneuver.ks`)
+
+`planTransfer` uses a 3-step process:
+1. **Hohmann estimate** — phase angle math gives initial departure time and dV
+2. **LAN correction** (when `CAPTURE_LAN` is set) — Newton's method on departure time. Perturbs time by 30s, measures dLAN/dt sensitivity, corrects with 0.7 damping. 4 iterations, 2 deg tolerance. Re-acquires encounter after each shift.
+3. **PE convergence** — Newton's method on dV magnitude. 0.5 m/s epsilon, 0.7 damping, +/-15% dV bounds, 200m tolerance.
+
+LAN is controlled by departure time, PE is controlled by dV — these are separable. AoP is reported but corrected later by MCC (radial burns mid-transfer).
+
+### Mid-course correction (`lib/mcc.ks`)
+
+`phaseMidCourse` fires at the coast midpoint (local transfers) or 1 hour past SOI transition (interplanetary). Corrects PE (prograde), AoP (radial), and LAN (normal) via independent Newton iterations, each with 0.5 m/s epsilon and 0.7 damping. Total dV capped at 50 m/s. Skips if encounter is already on target.
+
 ### Capture orbit targeting
 
 Optional CFG keys for precise orbital plane control at the target body:
 
 - `CAPTURE_INC` — target inclination after capture. Corrected via `planInclinationChange()` post-capture. The later `INCL_CORRECT` phase (using `TARGET_INCLINATION`) acts as a safety net.
-- `CAPTURE_LAN` — target longitude of ascending node. Achieved by timing transfer departure: `planTransfer` scans a full target body orbital period at 300s steps, scoring each valid encounter by LAN error, then fine-tunes Pe from the best match.
-- `CAPTURE_AOP` — target argument of periapsis. Corrected post-capture via `planAoPChange()`, a pure radial burn at the orbit intersection point.
+- `CAPTURE_LAN` — target longitude of ascending node. Achieved by timing transfer departure via Newton's method on departure time in `planTransfer`.
+- `CAPTURE_AOP` — target argument of periapsis. Corrected post-capture via `planAoPChange()`, a pure radial burn at the orbit intersection point. Also refined mid-transfer by MCC.
 
 Corrections run in order: AoP first (in-plane), then INC (out-of-plane). All are optional and skipped when the corresponding CFG key is absent.
 
