@@ -6,6 +6,10 @@ GLOBAL FUNCTION planMolniyaInsert {
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
     LOCAL peR IS bodyR + SHIP:PERIAPSIS.
+    
+    mLog("Molniya params: mu=" + ROUND(mu,1) + "  bodyR=" + ROUND(bodyR,1)
+        + "  peR=" + ROUND(peR,1) +  "  targetEcc=" + ROUND(targetEcc,1)
+        + "  targetAoP=" + ROUND(targetAoP,1) + "  targetPeriod=" + ROUND(targetPeriod,1) + "s").
 
     LOCAL targetSMA IS 0.
 
