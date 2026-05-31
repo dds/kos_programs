@@ -71,12 +71,12 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 |---|---|
 | `phases.ks` | Generic phase machine (runPhases, nextPhase, phaseDone) |
 | `launch.ks` | Reusable ascent phases (launch, fairing, extend, parking) |
-| `xfer.ks` | Transfer/arrival phases (transfer, coast, capture, circ, raise, incl) |
+| `xfer.ks` | Transfer/arrival phases (transfer, coast, capture, circ, raise, incl). Capture supports optional orbit targeting via CAPTURE_INC/LAN/AOP |
 | `state.ks` | Persistent JSON key-value store |
 | `logs.ks` | Flight logging with fault persistence |
 | `files.ks` | Storage status and directory listing |
 | `resume.ks` | MISSION lexicon, operator helpers, resumeMission() |
-| `maneuver.ks` | Maneuver node execution with dynamic throttle |
+| `maneuver.ks` | Maneuver node execution with dynamic throttle. Also planTransfer (with optional LAN targeting), planCapture, planCircularize, planAoPChange |
 | `inclination.ks` | Orbital plane change planning + etaToTrueAnomaly() |
 | `molniya.ks` | Molniya orbit insertion (molniyaParams, printMolniyaSummary, planMolniyaInsert, phaseMolniyaInsert) |
 | `orbit.ks` | Orbit monitoring and stability checks |
@@ -108,6 +108,16 @@ At boot, pressing any key within 5s enters manual mode. The terminal displays en
 ### Rover power steering (`lib/rover.ks`)
 
 Uses `SHIP:CONTROL:PILOTWHEELSTEER` (not `PILOTMAINSTEER`, which doesn't exist in kOS) scaled by a speed-dependent factor to reduce steering sensitivity at higher speeds.
+
+### Capture orbit targeting
+
+Optional CFG keys for precise orbital plane control at the target body:
+
+- `CAPTURE_INC` — target inclination after capture. Corrected via `planInclinationChange()` post-capture. The later `INCL_CORRECT` phase (using `TARGET_INCLINATION`) acts as a safety net.
+- `CAPTURE_LAN` — target longitude of ascending node. Achieved by timing transfer departure: `planTransfer` scans a full target body orbital period at 300s steps, scoring each valid encounter by LAN error, then fine-tunes Pe from the best match.
+- `CAPTURE_AOP` — target argument of periapsis. Corrected post-capture via `planAoPChange()`, a pure radial burn at the orbit intersection point.
+
+Corrections run in order: AoP first (in-plane), then INC (out-of-plane). All are optional and skipped when the corresponding CFG key is absent.
 
 ## Key constraints
 
