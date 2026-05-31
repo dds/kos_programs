@@ -152,12 +152,9 @@ GLOBAL FUNCTION planTransfer {
     LOCAL targetOmega IS 360 / targetBody:ORBIT:PERIOD.
     LOCAL idealPhase  IS 180 - (targetOmega * tTrans).
 
-    LOCAL shipPos    IS SHIP:POSITION - BODY:POSITION.
-    LOCAL targetPos  IS targetBody:POSITION - BODY:POSITION.
-    LOCAL currentPhase IS VANG(shipPos, targetPos).
-    LOCAL orbitNormal  IS VCRS(shipPos, SHIP:VELOCITY:ORBIT).
-    LOCAL phaseSign    IS VDOT(orbitNormal, VCRS(shipPos, targetPos)).
-    IF phaseSign < 0 { SET currentPhase TO 360 - currentPhase. }
+    SET TARGET TO targetBody.
+    LOCAL currentPhase IS phaseAngle().
+    IF currentPhase < 0 { SET currentPhase TO currentPhase + 360. }
 
     LOCAL shipOmega  IS 360 / SHIP:ORBIT:PERIOD.
     LOCAL phaseSpeed IS shipOmega - targetOmega.
