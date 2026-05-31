@@ -295,8 +295,8 @@ LOCAL FUNCTION _altAtTA {
     PARAMETER ta.
     LOCAL sma IS SHIP:ORBIT:SEMIMAJORAXIS.
     LOCAL ecc IS SHIP:ORBIT:ECCENTRICITY.
-    LOCAL r IS sma * (1 - ecc^2) / (1 + ecc * COS(ta)).
-    RETURN r - SHIP:ORBIT:BODY:RADIUS.
+    LOCAL r_ IS sma * (1 - ecc^2) / (1 + ecc * COS(ta)).
+    RETURN r_ - SHIP:ORBIT:BODY:RADIUS.
 }
 
 LOCAL FUNCTION _impactThreat {
