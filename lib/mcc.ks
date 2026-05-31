@@ -15,7 +15,6 @@ GLOBAL FUNCTION phaseMidCourse {
     LOCAL targetPe  IS 0.
     LOCAL targetAoP IS -1.
     IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
-
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_PE")  { SET targetPe TO CFG["CAPTURE_PE"]. }
 
