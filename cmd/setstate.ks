@@ -2,6 +2,7 @@
 // Usage: RUNPATH("1:/cmd/setstate.ks", "TRANSFER").
 PARAMETER newPhase.
 
+LOCAL HAS_LINK IS HOMECONNECTION:ISCONNECTED.
 LOCAL FUNCTION _syncLib {
     PARAMETER libName.
     IF NOT HAS_LINK { RETURN. }
