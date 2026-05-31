@@ -34,7 +34,7 @@ GLOBAL FUNCTION slug {
 
 GLOBAL FUNCTION logId {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
-    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS / 10, 0). }
+    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS / 10, 0) * 10. }
     stateSetNum("launch_time", launchT).
 
     LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
@@ -50,7 +50,7 @@ GLOBAL FUNCTION logId {
 
 GLOBAL FUNCTION archiveLog {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
-    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS / 10, 0). }
+    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS / 10, 0) * 10. }
     LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
