@@ -4,10 +4,10 @@
 
 GLOBAL FUNCTION flightLogPath {
     LOCAL logPathFile IS "1:/state/log_path.state".
-    LOCAL flightLogPath IS "".
-    SET flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
-    IF flightLogPath = "" { SET flightLogPath TO _newLogPath(logPathFile). }
-    RETURN flightLogPath.
+    LOCAL _flightLogPath IS "".
+    SET _flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
+    IF _flightLogPath = "" { SET _flightLogPath TO _newLogPath(logPathFile). }
+    RETURN _flightLogPath.
 }
 
 GLOBAL FUNCTION initLog {

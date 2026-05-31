@@ -48,7 +48,6 @@ GLOBAL FUNCTION phaseMolniyaInsert {
         SET targetEcc TO CFG["MOLNIYA_ECC"].
         mLog("MOLNIYA_ECC=" + targetEcc + " (overrides period).").
     }
-    mLogPhase("MOLNIYA INSERT").
     orbitSummary().
     LOCAL success IS FALSE.
     LOCAL retries IS 0.
