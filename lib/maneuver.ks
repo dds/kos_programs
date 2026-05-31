@@ -244,38 +244,62 @@ GLOBAL FUNCTION planTransfer {
         RETURN nd.
     }
 
-    SET testNode:TIME TO foundUt.
+
+SET testNode:TIME TO foundUt.
     LOCAL bestPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
     LOCAL bestUt IS foundUt.
     LOCAL steps  IS 30.
 
-    FROM { LOCAL pass IS 1. } UNTIL pass > 4 STEP { SET pass TO pass + 1. } DO {
-        mLog("DEBUG fine pass=" + pass + " steps=" + steps
-            + " Pe=" + ROUND(bestPe/1000,1) + "km"
-            + " T+" + ROUND(bestUt - TIME:SECONDS,0) + "s").
-        LOCAL scanning IS TRUE.
-        UNTIL NOT scanning {
-            SET testNode:TIME TO testNode:TIME - steps.
+    // Increased to 5 passes for slightly better resolution
+    FROM { LOCAL pass IS 1. } UNTIL pass > 5 STEP { SET pass TO pass + 1. } DO {
+        mLog("DEBUG fine pass=" + pass + " step=" + steps + " Pe=" + ROUND(bestPe/1000,1) + "km").
+        
+        LOCAL improved IS TRUE.
+        UNTIL NOT improved {
+            SET improved TO FALSE.
+            LOCAL currentErr IS ABS(bestPe - targetPe).
+            
+            LOCAL peMinus IS -1.
+            LOCAL pePlus  IS -1.
+
+            // 1. Test shifting the node backward
+            SET testNode:TIME TO bestUt - steps.
             WAIT 0.02.
-            IF testNode:ORBIT:HASNEXTPATCH
-                    AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
-                LOCAL currentPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
-                IF currentPe > 0
-                        AND testNode:ORBIT:NEXTPATCH:INCLINATION < 90
-                        AND currentPe > targetPe
-                        AND ABS(currentPe - targetPe) < ABS(bestPe - targetPe) {
-                    SET bestPe TO currentPe.
-                    SET bestUt TO testNode:TIME.
-                } ELSE {
-                    SET testNode:TIME TO testNode:TIME + steps.
-                    SET scanning TO FALSE.
-                }
-            } ELSE {
-                SET testNode:TIME TO testNode:TIME + steps.
-                SET scanning TO FALSE.
+            IF testNode:ORBIT:HASNEXTPATCH AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
+                SET peMinus TO testNode:ORBIT:NEXTPATCH:PERIAPSIS.
+            }
+
+            // 2. Test shifting the node forward
+            SET testNode:TIME TO bestUt + steps.
+            WAIT 0.02.
+            IF testNode:ORBIT:HASNEXTPATCH AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
+                SET pePlus TO testNode:ORBIT:NEXTPATCH:PERIAPSIS.
+            }
+
+            // Reset node time back to center for safety
+            SET testNode:TIME TO bestUt.
+
+            // 3. Evaluate results
+            LOCAL errMinus IS 9999999999.
+            LOCAL errPlus  IS 9999999999.
+
+            IF peMinus > 0 { SET errMinus TO ABS(peMinus - targetPe). }
+            IF pePlus > 0  { SET errPlus  TO ABS(pePlus - targetPe). }
+
+            // 4. Move in the direction of greatest improvement
+            IF errMinus < currentErr AND errMinus < errPlus {
+                SET bestPe TO peMinus.
+                SET bestUt TO bestUt - steps.
+                SET testNode:TIME TO bestUt.
+                SET improved TO TRUE.
+            } ELSE IF errPlus < currentErr {
+                SET bestPe TO pePlus.
+                SET bestUt TO bestUt + steps.
+                SET testNode:TIME TO bestUt.
+                SET improved TO TRUE.
             }
         }
-        SET testNode:TIME TO bestUt.
+        // Shrink the step size for the next pass
         SET steps TO steps / 5.
     }
 
