@@ -17,7 +17,7 @@ GLOBAL CFG IS LEXICON(
     "FAIRING_ALT",          68000,
     "EXTEND_ALT",           72000,
     "RELAY_ALT",          1000000,
-    "CAPTURE_PE",            17500,
+    "CAPTURE_PE",            12500,
     "CAPTURE_INC",              90,
     "CAPTURE_LAN",              25,
     "CAPTURE_AOP",            93.2,
