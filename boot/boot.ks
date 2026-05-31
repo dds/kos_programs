@@ -215,6 +215,9 @@ IF manualMode {
     mLog("Manual override at boot.").
     UNLOCK ALL.
     SET SAS TO TRUE.
+    IF HOMECONNECTION:ISCONNECTED {
+        archiveLog().
+    }
 } ELSE {
     LOCAL phase IS stateGet("phase", "").
     IF phase = "DONE" {
@@ -228,10 +231,16 @@ IF manualMode {
         mLog("Abort detected at reboot — loading recovery.").
         _syncLib("recovery").
         _loadLib("recovery").
+        IF HOMECONNECTION:ISCONNECTED {
+            archiveLog().
+        }
         recoveryMode().
     } ELSE {
         PRINT "  RESUMING >> " + phase.
         mLog("Resuming mission from phase: " + phase).
+        IF HOMECONNECTION:ISCONNECTED {
+            archiveLog().
+        }
         resumeMission().
     }
 }
