@@ -58,7 +58,6 @@ ensureDir("1:/cmd").
 ensureDir("1:/craft").
 ensureDir("1:/roles").
 
-// UPDATED: Checks Archive if online, falls back to Local cache if offline
 LOCAL FUNCTION _resolveScript {
     PARAMETER name.
     PARAMETER dirs.
@@ -172,7 +171,7 @@ IF HAS_LINK {
     }
 }
 
-// 1. Run the vehicle script NOW so it can define the LIBS global variable
+// 1. Run the vehicle script first so it can define the LIBS global variable
 RUNPATH("1:/" + vehicleScript + ".ks").
 
 // 2. Now that LIBS exists, sync them if we have a connection
