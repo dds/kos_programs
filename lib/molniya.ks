@@ -95,7 +95,7 @@ GLOBAL FUNCTION planMolniyaInsert {
 
     LOCAL burnETA IS etaToTrueAnomaly(burnTA).
     LOCAL burnUT IS TIME:SECONDS + burnETA.
-    LOCAL burnR IS POSITIONAT(SHIP, burnUT):MAG.
+    LOCAL burnR IS (POSITIONAT(SHIP, burnUT) - SHIP:BODY:POSITION):MAG.
 
     mLog("burnR=" + ROUND(burnR/1000,1) + "km  targetPeR=" + ROUND(targetPeR/1000,1) + "km  ETA=" + ROUND(burnETA,0) + "s").
 
