@@ -13,6 +13,9 @@ GLOBAL FUNCTION phaseMidCourse {
 
     LOCAL targetInc IS 0.
     LOCAL targetPe  IS 0.
+    LOCAL targetAoP IS -1.
+    IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
+
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_PE")  { SET targetPe TO CFG["CAPTURE_PE"]. }
 
@@ -56,72 +59,88 @@ GLOBAL FUNCTION phaseMidCourse {
     LOCAL bestPe   IS -1.
     LOCAL bestNorm IS 0.
     LOCAL bestRad  IS 0.
+    LOCAL bestAoP IS -1.
+    LOCAL bestPro  IS 0.
     LOCAL steps    IS 10. 
 
     LOCAL testPatch IS _getTargetPatch(nd, target).
     IF testPatch <> 0 {
         SET bestInc TO testPatch:INCLINATION.
         SET bestPe  TO testPatch:PERIAPSIS.
+        SET bestAoP TO testPatch:ARGUMENTOFPERIAPSIS.
     }
 
-    FROM { LOCAL pass IS 1. } UNTIL pass > 5 STEP { SET pass TO pass + 1. } DO {
+    FROM { LOCAL pass IS 1. } UNTIL pass > 6 STEP { SET pass TO pass + 1. } DO {
         LOCAL improved IS TRUE.
         UNTIL NOT improved {
             SET improved TO FALSE.
+            LOCAL currentScore IS _evaluateMCC(bestInc, bestPe, bestAoP, targetInc, targetPe, targetAoP).
             
-            // Define current score (lower is better). We heavily weight losing the encounter.
-            LOCAL currentScore IS _evaluateMCC(bestInc, bestPe, targetInc, targetPe).
-            
+            // Now evaluating Normal, Radial, AND Prograde
             LOCAL moves IS LIST(
-                LIST(steps, 0),   // Normal Up
-                LIST(-steps, 0),  // Normal Down
-                LIST(0, steps),   // Radial Out
-                LIST(0, -steps)   // Radial In
+                LIST(steps, 0, 0),   // Normal Up
+                LIST(-steps, 0, 0),  // Normal Down
+                LIST(0, steps, 0),   // Radial Out
+                LIST(0, -steps, 0),  // Radial In
+                LIST(0, 0, steps),   // Prograde (Crucial for shifting AoP)
+                LIST(0, 0, -steps)   // Retrograde
             ).
             
             LOCAL bestMoveScore IS currentScore.
             LOCAL bestMoveN IS 0.
             LOCAL bestMoveR IS 0.
+            LOCAL bestMoveP IS 0.
+            
             LOCAL foundInc  IS bestInc.
             LOCAL foundPe   IS bestPe.
+            LOCAL foundAoP  IS bestAoP.
 
             FOR move IN moves {
                 SET nd:NORMAL TO bestNorm + move[0].
                 SET nd:RADIALOUT TO bestRad + move[1].
+                SET nd:PROGRADE TO bestPro + move[2].
                 WAIT 0.02.
                 
                 LOCAL movePatch IS _getTargetPatch(nd, target).
                 LOCAL score IS 999999999.
                 LOCAL tempInc IS -1.
                 LOCAL tempPe  IS -1.
+                LOCAL tempAoP IS -1.
                 
                 IF movePatch <> 0 {
                     SET tempInc TO movePatch:INCLINATION.
                     SET tempPe  TO movePatch:PERIAPSIS.
-                    SET score TO _evaluateMCC(tempInc, tempPe, targetInc, targetPe).
+                    SET tempAoP TO movePatch:ARGUMENTOFPERIAPSIS.
+                    SET score TO _evaluateMCC(tempInc, tempPe, tempAoP, targetInc, targetPe, targetAoP).
                 }
                 
                 IF score < bestMoveScore {
                     SET bestMoveScore TO score.
                     SET bestMoveN TO move[0].
                     SET bestMoveR TO move[1].
+                    SET bestMoveP TO move[2].
                     SET foundInc  TO tempInc.
                     SET foundPe   TO tempPe.
+                    SET foundAoP  TO tempAoP.
                 }
             }
             
             // Reset node
             SET nd:NORMAL TO bestNorm.
             SET nd:RADIALOUT TO bestRad.
+            SET nd:PROGRADE TO bestPro.
 
             IF bestMoveScore < currentScore {
                 SET bestNorm TO bestNorm + bestMoveN.
                 SET bestRad  TO bestRad + bestMoveR.
+                SET bestPro  TO bestPro + bestMoveP.
                 SET bestInc  TO foundInc.
                 SET bestPe   TO foundPe.
+                SET bestAoP  TO foundAoP.
                 
                 SET nd:NORMAL TO bestNorm.
                 SET nd:RADIALOUT TO bestRad.
+                SET nd:PROGRADE TO bestPro.
                 SET improved TO TRUE.
             }
         }
