@@ -286,20 +286,24 @@ GLOBAL FUNCTION planTransfer {
     }
 
     LOCAL foundDv IS testNode:PROGRADE.
-    LOCAL dvMax IS foundDv * 1.15.
-    LOCAL dvMin IS foundDv * 0.85.
+    LOCAL dvMax IS foundDv * 1.05.
+    LOCAL dvMin IS foundDv * 0.95.
     LOCAL lastGoodDv IS foundDv.
+    LOCAL peEps IS 0.1.
+    LOCAL peDamp IS 0.5.
+    LOCAL peMaxStep IS 3.0.
+    LOCAL peIter IS 25.
 
     LOCAL preCheck IS _getTargetPatch(testNode, targetBody).
     IF preCheck = 0 {
         mLog("PE: no encounter at selected time — skipping convergence.").
     } ELSE IF preCheck:PERIAPSIS < 0 {
-        mLog("PE: impact trajectory (pe=" + ROUND(preCheck:PERIAPSIS/1000,1) + "km) — skipping convergence.").
+        mLog("PE: impact trajectory (pe=" + ROUND(preCheck:PERIAPSIS/1000,1) + "km) �� skipping convergence.").
     } ELSE {
         mLog("PE: starting convergence, current Pe=" + ROUND(preCheck:PERIAPSIS/1000,1) + "km target=" + ROUND(targetPe/1000,1) + "km.").
     }
 
-    FROM { LOCAL i IS 0. } UNTIL i >= 12 STEP { SET i TO i + 1. } DO {
+    FROM { LOCAL i IS 0. } UNTIL i >= peIter STEP { SET i TO i + 1. } DO {
         LOCAL p IS _getTargetPatch(testNode, targetBody).
         IF p = 0 OR p:PERIAPSIS < 0 {
             SET testNode:PROGRADE TO lastGoodDv.
@@ -314,14 +318,17 @@ GLOBAL FUNCTION planTransfer {
         }
         LOCAL basePe IS p:PERIAPSIS.
         LOCAL oldDv IS testNode:PROGRADE.
-        SET testNode:PROGRADE TO oldDv + 0.5.
+        SET testNode:PROGRADE TO oldDv + peEps.
         WAIT 0.02.
         LOCAL p2 IS _getTargetPatch(testNode, targetBody).
         SET testNode:PROGRADE TO oldDv.
         IF p2 = 0 { BREAK. }
-        LOCAL sens IS (p2:PERIAPSIS - basePe) / 0.5.
+        LOCAL sens IS (p2:PERIAPSIS - basePe) / peEps.
         IF ABS(sens) < 1 { BREAK. }
-        LOCAL correction IS peErr / sens * 0.7.
+        LOCAL correction IS peErr / sens * peDamp.
+        IF ABS(correction) > peMaxStep {
+            SET correction TO peMaxStep * (correction / ABS(correction)).
+        }
         LOCAL newDv IS MAX(dvMin, MIN(dvMax, oldDv + correction)).
         mLog("PE[" + i + "] pe=" + ROUND(basePe/1000,1) + "km err=" + ROUND(peErr/1000,1)
             + "km sens=" + ROUND(sens,1) + " dv=" + ROUND(oldDv,1) + "->" + ROUND(newDv,1)).
