@@ -156,12 +156,16 @@ GLOBAL FUNCTION armAscentStaging {
             WAIT 0.3.
             STAGE.
             WAIT 0.5.
-            mLog("Ascent complete post-staging, raising Pe to parking alt.").
-            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-            planRaisePeNow(CFG["PARKING_ALT"]).
-            executeManeuver().
+            mLog("Ascent complete post-staging, raising Pe now.").
+            LOCK STEERING TO SHIP:PROGRADE.
+            LOCK THROTTLE TO 1.
+            WAIT UNTIL SHIP:PERIAPSIS >= CFG["PARKING_ALT"] * 0.95.
+            LOCK THROTTLE TO 0.
+            UNLOCK THROTTLE.
+            UNLOCK STEERING.
+            SET SAS TO TRUE.
             orbitSummary().
-            stateSet("phase", "PARKING").
+            stateSet("phase", "PARK").
         }
     }
 

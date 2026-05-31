@@ -81,18 +81,18 @@ LOCAL FUNCTION _resolveScript {
     RETURN "".
 }
 
-GLOBAL KSM IS LIST().
+GLOBAL KSM_SKIP IS LIST().
 
 LOCAL FUNCTION _syncLib {
     PARAMETER libName.
-    IF NOT HAS_LINK { RETURN. } // Safety net
-    
+    IF NOT HAS_LINK { RETURN. }
+
     LOCAL src IS "0:/lib/" + libName + ".ks".
     LOCAL dst IS "1:/lib/" + libName + ".ks".
     LOCAL dstKsm IS "1:/lib/" + libName + ".ksm".
 
     IF EXISTS(src) {
-        IF KSM:CONTAINS(libName) {
+        IF NOT KSM_SKIP:CONTAINS(libName) {
             COMPILE src TO dstKsm.
         } ELSE {
             COPYPATH(src, dst).
