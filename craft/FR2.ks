@@ -104,6 +104,15 @@ LOCAL FUNCTION _printConfig {
         PRINT " ".
         PRINT "  -- TRANSFER --".
         PRINT "  CAPTURE PE . " + ROUND(CFG["CAPTURE_PE"]/1000,0) + " km".
+        IF CFG:HASKEY("CAPTURE_LAN") {
+            PRINT "  CAPTURE LAN  " + ROUND(CFG["CAPTURE_LAN"],1) + " deg".
+        }
+        IF CFG:HASKEY("CAPTURE_AOP") {
+            PRINT "  CAPTURE AoP  " + ROUND(CFG["CAPTURE_AOP"],1) + " deg".
+        }
+        IF CFG:HASKEY("CAPTURE_INC") {
+            PRINT "  CAPTURE INC  " + ROUND(CFG["CAPTURE_INC"],1) + " deg".
+        }
     }
     PRINT " ".
     PRINT "  -- ORBIT --".
