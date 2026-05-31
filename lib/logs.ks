@@ -87,7 +87,7 @@ GLOBAL FUNCTION mLog {
     LOCAL line IS "[" + _fmtTime() + "][" + level + "] " + message.
     PRINT line.
 
-    IF flightLogPath() <> "" AND CORE:VOLUME:FREESPACE > 500 {
+    IF LEVEL <> "INFO" AND flightLogPath() <> "" AND CORE:VOLUME:FREESPACE > 150 {
         LOG line TO flightLogPath().
     }
 }
