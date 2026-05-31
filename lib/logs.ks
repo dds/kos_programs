@@ -2,20 +2,16 @@
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
 
-GLOBAL _flightLogPath IS "".
 GLOBAL FUNCTION flightLogPath {
-    RETURN _flightLogPath.
+    LOCAL logPathFile IS "1:/state/log_path.state".
+    LOCAL flightLogPath IS "".
+    SET flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
+    IF flightLogPath = "" { SET flightLogPath TO _newLogPath(logPathFile). }
+    RETURN flightLogPath.
 }
 
 GLOBAL FUNCTION initLog {
-    LOCAL logPathFile IS "1:/state/log_path.state".
-    IF EXISTS(logPathFile) {
-        SET _flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
-        IF _flightLogPath = "" { SET _flightLogPath TO _newLogPath(logPathFile). }
-    } ELSE {
-        SET _flightLogPath TO _newLogPath(logPathFile).
-    }
-    mLog("Fault log: " + _flightLogPath).
+    mLog("Fault log: " + flightLogPath()).
 }
 
 GLOBAL FUNCTION slug {
@@ -40,6 +36,15 @@ GLOBAL FUNCTION logId {
     }
 
     RETURN baseId.
+}
+
+GLOBAL FUNCTION archiveLog {
+    LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
+    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
+    LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
+    IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
+    IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
+    COPYPATH(flightLogPath(), shipDir + "/" + logId()).
 }
 
 LOCAL FUNCTION _newLogPath {
