@@ -159,7 +159,6 @@ IF vehicleScript:CONTAINS("/") {
     ensureDir("1:/" + parts[0]).
 }
 
-// UPDATED: Sync block entirely protected by link status
 IF HAS_LINK {
     PRINT "  SYNC Zombie ........".
     IF EXISTS("0:/cmd/zombie.ks") { COPYPATH("0:/cmd/zombie.ks", "1:/zombie"). }
@@ -168,18 +167,27 @@ IF HAS_LINK {
     IF EXISTS("0:/" + vehicleScript + ".ks") {
         COPYPATH("0:/" + vehicleScript + ".ks", "1:/" + vehicleScript + ".ks").
     }
+}
 
+// 1. Run the vehicle script NOW so it can define the LIBS global variable
+RUNPATH("1:/" + vehicleScript + ".ks").
+
+// 2. Now that LIBS exists, sync them if we have a connection
+IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
-    FOR lib IN LIBS { _syncLib(lib). }
+    IF DEFINED LIBS {
+        FOR lib IN LIBS { _syncLib(lib). }
+    }
     _syncLib("resume").
     _syncLib("recovery").
 } ELSE {
     PRINT "  NO LINK: Bypassing library sync.".
 }
 
-// Always load from local drive
-RUNPATH("1:/" + vehicleScript + ".ks").
-FOR lib IN LIBS { _loadLib(lib). }
+// 3. Load the libraries into memory
+IF DEFINED LIBS {
+    FOR lib IN LIBS { _loadLib(lib). }
+}
 _loadLib("resume").
 
 PRINT " ".
