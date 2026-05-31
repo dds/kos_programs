@@ -148,7 +148,6 @@ GLOBAL FUNCTION armAscentStaging {
 
     IF CFG:HASKEY("RECOVERY_PE") {
         WHEN SHIP:PERIAPSIS >= CFG["RECOVERY_PE"]
-                AND SHIP:PERIAPSIS < CFG["RECOVERY_PE"] + 10000
                 AND ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED THEN {
             mLog("Recovery staging: Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km, ejecting stage.").
             HUDTEXT("Recovery staging!", 3, 2, 14, YELLOW, FALSE).
