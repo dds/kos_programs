@@ -74,7 +74,11 @@ GLOBAL FUNCTION phaseCapture {
                 UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
                 LOCAL nd IS planAoPChange(targetAoP).
                 IF nd = 0 { SET aopOk TO TRUE. }
-                ELSE {
+                ELSE IF NEXTNODE:DELTAV:MAG > 50 {
+                    mLogWarn("AoP correction would cost " + ROUND(NEXTNODE:DELTAV:MAG, 0) + "m/s. Exceeds safe limit — skipping.").
+                    REMOVE NEXTNODE.
+                    SET aopOk TO TRUE. 
+                } ELSE {
                     SET aopOk TO executeManeuver().
                     IF NOT aopOk {
                         SET aopRetries TO aopRetries + 1.
