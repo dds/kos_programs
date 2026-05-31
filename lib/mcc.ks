@@ -15,9 +15,7 @@ GLOBAL FUNCTION phaseMidCourse {
     LOCAL targetPe  IS -1.
     LOCAL targetAoP IS -1.
     LOCAL targetLan IS -1.
-    
-    IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
-    IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
+
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_PE")  { SET targetPe TO CFG["CAPTURE_PE"]. }
 
@@ -38,12 +36,12 @@ GLOBAL FUNCTION phaseMidCourse {
         mLog("MCC: Local transfer. Coasting to halfway point (" + ROUND(waitTime,0) + "s).").
     }
 
-    LOCAL midTime IS TIME:SECONDS + waitTime.
-    SET SAS TO TRUE.
-    IF waitTime > 120 {
-        KUNIVERSE:TIMEWARP:WARPTO(midTime - 60).
-        WAIT UNTIL TIME:SECONDS >= (midTime - 60).
-    }
+    // LOCAL midTime IS TIME:SECONDS + waitTime.
+    // SET SAS TO TRUE.
+    // IF waitTime > 120 {
+    //     KUNIVERSE:TIMEWARP:WARPTO(midTime - 60).
+    //     WAIT UNTIL TIME:SECONDS >= (midTime - 60).
+    // }
 
     mLog("Planning mid-course correction.").
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
