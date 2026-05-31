@@ -67,11 +67,13 @@ LOCAL FUNCTION _syncLib {
     LOCAL src IS "0:/lib/" + libName + ".ks".
     LOCAL dst IS "1:/lib/" + libName + ".ks".
     COPYPATH(src, dst).
+    COMPILE dst.
+    DELETEPATH(dst).
 }
 
 LOCAL FUNCTION _loadLib {
     PARAMETER libName.
-    RUNONCEPATH("1:/lib/" + libName + ".ks").
+    RUNONCEPATH("1:/lib/" + libName).
 }
 
 PRINT "  SYNC core ......... ".
