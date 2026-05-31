@@ -211,7 +211,7 @@ LOCAL FUNCTION _lambertHouseholder {
     LOCAL dt IS (3 * tau * x - 2 + 2 * (lambda ^ 3) * x / y) / a.
     // Second derivative
     LOCAL ddt IS (3 * tau + 5 * x * dt
-        + 2 * (1 - lambda ^ 2) * (lambda ^ 3) * x / (y ^ 3)) / a.
+        + 2 * (1 - lambda ^ 2) * (lambda ^ 3) / (y ^ 3)) / a.
     // Third derivative
     LOCAL dddt IS (7 * x * ddt + 8 * dt
         - 6 * (1 - lambda ^ 2) * (lambda ^ 5) * x / (y ^ 5)) / a.

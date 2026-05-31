@@ -193,7 +193,7 @@ GLOBAL FUNCTION planTransfer {
     FROM { LOCAL di IS 0. } UNTIL di >= nDepart STEP { SET di TO di + 1. } DO {
 
         LOCAL departUt IS TIME:SECONDS + 60 + di * shipPeriod.
-        LOCAL r1 IS POSITIONAT(SHIP, departUt) - centralBody:POSITION.
+        LOCAL r1 IS POSITIONAT(SHIP, departUt) - POSITIONAT(centralBody, departUt).
         LOCAL v1Ship IS VELOCITYAT(SHIP, departUt):ORBIT.
 
         FROM { LOCAL ti IS 0. } UNTIL ti >= nTof STEP { SET ti TO ti + 1. } DO {
@@ -203,7 +203,7 @@ GLOBAL FUNCTION planTransfer {
             IF tof < 60 { SET tof TO 60. }
 
             LOCAL arriveUt  IS departUt + tof.
-            LOCAL r2        IS POSITIONAT(targetBody, arriveUt) - centralBody:POSITION.
+            LOCAL r2        IS POSITIONAT(targetBody, arriveUt) - POSITIONAT(centralBody, arriveUt).
 
             LOCAL result IS lambertSolve(r1, r2, tof, mu, FALSE).
             LOCAL v1Lambert IS result["v1"].
