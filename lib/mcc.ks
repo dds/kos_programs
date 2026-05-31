@@ -191,7 +191,13 @@ LOCAL FUNCTION _evaluateMCC {
     }
 
     IF targetPe >= 0 {
-        SET score TO score + ABS(currentPe - targetPe).
+        IF currentPe < 0 {
+            SET score TO score + ABS(currentPe) * 100000000.
+        } ELSE {
+            SET score TO score + ABS(currentPe - targetPe).
+        }
+    } ELSE IF currentPe < 0 {
+        SET score TO score + ABS(currentPe) * 100000000.
     }
     
     RETURN score.

@@ -176,30 +176,47 @@ GLOBAL FUNCTION planTransfer {
     WAIT 0.1.
 
     LOCAL lanTarget IS -1.
+    LOCAL aopTarget IS -1.
     IF CFG:HASKEY("CAPTURE_LAN") { SET lanTarget TO CFG["CAPTURE_LAN"]. }
+    IF CFG:HASKEY("CAPTURE_AOP") { SET aopTarget TO CFG["CAPTURE_AOP"]. }
 
+    LOCAL useScoring IS (lanTarget >= 0 OR aopTarget >= 0).
     LOCAL scanStep IS 60.
     LOCAL scanEnd  IS TIME:SECONDS + SHIP:ORBIT:PERIOD.
-    IF lanTarget >= 0 {
+    IF useScoring {
         SET scanStep TO 300.
         SET scanEnd TO TIME:SECONDS + targetBody:ORBIT:PERIOD.
     }
 
     LOCAL foundUt IS -1.
     LOCAL bestLanErr IS 999.
+    LOCAL bestAopErr IS 999.
+    LOCAL bestScore IS 999999.
 
     // COARSE PASS
-    IF lanTarget >= 0 {
+    IF useScoring {
         UNTIL testNode:TIME > scanEnd {
             WAIT 0.02.
             LOCAL patch IS _getTargetPatch(testNode, targetBody).
             IF patch <> 0 AND patch:PERIAPSIS > 0 AND patch:INCLINATION < 90 {
-                LOCAL patchLAN IS patch:LAN.
-                LOCAL lanErr IS ABS(patchLAN - lanTarget).
-                IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
-                IF lanErr < bestLanErr {
-                    SET bestLanErr TO lanErr.
+                LOCAL score IS 0.
+                LOCAL lanErr IS 0.
+                LOCAL aopErr IS 0.
+                IF lanTarget >= 0 {
+                    SET lanErr TO ABS(patch:LAN - lanTarget).
+                    IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
+                    SET score TO score + lanErr.
+                }
+                IF aopTarget >= 0 {
+                    SET aopErr TO ABS(patch:ARGUMENTOFPERIAPSIS - aopTarget).
+                    IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
+                    SET score TO score + aopErr.
+                }
+                IF score < bestScore {
+                    SET bestScore TO score.
                     SET foundUt TO testNode:TIME.
+                    SET bestLanErr TO lanErr.
+                    SET bestAopErr TO aopErr.
                 }
             }
             SET testNode:TIME TO testNode:TIME + scanStep.
@@ -228,6 +245,7 @@ GLOBAL FUNCTION planTransfer {
     SET testNode:TIME TO foundUt.
     LOCAL initPatch IS _getTargetPatch(testNode, targetBody).
     LOCAL bestPe IS initPatch:PERIAPSIS.
+    LOCAL bestAoP IS initPatch:ARGUMENTOFPERIAPSIS.
     LOCAL bestUt IS foundUt.
     LOCAL steps  IS 30.
 
@@ -235,40 +253,46 @@ GLOBAL FUNCTION planTransfer {
         LOCAL improved IS TRUE.
         UNTIL NOT improved {
             SET improved TO FALSE.
-            LOCAL currentErr IS ABS(bestPe - targetPe).
-            
+            LOCAL currentErr IS _xferScore(bestPe, bestAoP, targetPe, aopTarget).
+
             LOCAL peMinus IS -1.
             LOCAL pePlus  IS -1.
+            LOCAL aopMinus IS 0.
+            LOCAL aopPlus  IS 0.
 
-            // Test Backward
             SET testNode:TIME TO bestUt - steps.
             WAIT 0.02.
             LOCAL patchMinus IS _getTargetPatch(testNode, targetBody).
-            IF patchMinus <> 0 { SET peMinus TO patchMinus:PERIAPSIS. }
+            IF patchMinus <> 0 {
+                SET peMinus TO patchMinus:PERIAPSIS.
+                SET aopMinus TO patchMinus:ARGUMENTOFPERIAPSIS.
+            }
 
-            // Test Forward
             SET testNode:TIME TO bestUt + steps.
             WAIT 0.02.
             LOCAL patchPlus IS _getTargetPatch(testNode, targetBody).
-            IF patchPlus <> 0 { SET pePlus TO patchPlus:PERIAPSIS. }
+            IF patchPlus <> 0 {
+                SET pePlus TO patchPlus:PERIAPSIS.
+                SET aopPlus TO patchPlus:ARGUMENTOFPERIAPSIS.
+            }
 
-            // Reset
             SET testNode:TIME TO bestUt.
 
             LOCAL errMinus IS 9999999999.
             LOCAL errPlus  IS 9999999999.
 
-            IF peMinus > 0 { SET errMinus TO ABS(peMinus - targetPe). }
-            IF pePlus > 0  { SET errPlus  TO ABS(pePlus - targetPe). }
+            IF peMinus > 0 { SET errMinus TO _xferScore(peMinus, aopMinus, targetPe, aopTarget). }
+            IF pePlus > 0  { SET errPlus  TO _xferScore(pePlus, aopPlus, targetPe, aopTarget). }
 
-            // Apply best result
             IF errMinus < currentErr AND errMinus < errPlus {
                 SET bestPe TO peMinus.
+                SET bestAoP TO aopMinus.
                 SET bestUt TO bestUt - steps.
                 SET testNode:TIME TO bestUt.
                 SET improved TO TRUE.
             } ELSE IF errPlus < currentErr {
                 SET bestPe TO pePlus.
+                SET bestAoP TO aopPlus.
                 SET bestUt TO bestUt + steps.
                 SET testNode:TIME TO bestUt.
                 SET improved TO TRUE.
@@ -284,6 +308,9 @@ GLOBAL FUNCTION planTransfer {
         + " m/s  Pe=" + ROUND(bestPe/1000,1) + "km  ETA=" + ROUND(bestUt - TIME:SECONDS,0) + "s".
     IF lanTarget >= 0 {
         SET logMsg TO logMsg + "  LAN_err=" + ROUND(bestLanErr,1) + "deg".
+    }
+    IF aopTarget >= 0 {
+        SET logMsg TO logMsg + "  AoP_err=" + ROUND(bestAopErr,1) + "deg".
     }
     mLog(logMsg).
     RETURN nd.
@@ -411,6 +438,17 @@ LOCAL FUNCTION _wakeCmd {
 }
 
 // Global Patch Traversal Helper
+LOCAL FUNCTION _xferScore {
+    PARAMETER pe, aop, tPe, tAoP.
+    LOCAL score IS ABS(pe - tPe).
+    IF tAoP >= 0 {
+        LOCAL aopErr IS ABS(aop - tAoP).
+        IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
+        SET score TO score + aopErr * 2000.
+    }
+    RETURN score.
+}
+
 LOCAL FUNCTION _getTargetPatch {
     PARAMETER originTarget.
     PARAMETER targetBody.
