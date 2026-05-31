@@ -13,7 +13,11 @@ GLOBAL FUNCTION phaseTransfer {
     LOCAL success IS FALSE.
     LOCAL retries IS 0.
     UNTIL success {
-        planTransfer(target, CFG["CAPTURE_PE"]).
+        LOCAL xLan IS -1.
+        LOCAL xAoP IS -1.
+        IF CFG:HASKEY("CAPTURE_LAN") { SET xLan TO CFG["CAPTURE_LAN"]. }
+        IF CFG:HASKEY("CAPTURE_AOP") { SET xAoP TO CFG["CAPTURE_AOP"]. }
+        planTransfer(target, CFG["CAPTURE_PE"], xLan, xAoP).
         SET success TO executeManeuver().
         IF NOT success {
             SET retries TO retries + 1.
