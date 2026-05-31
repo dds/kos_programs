@@ -23,6 +23,8 @@ GLOBAL CFG IS LEXICON(
     "CAPTURE_AOP",            93.2,
     "CIRC_ECC_TOL",          0.005,
     "TARGET_INCLINATION",       90,
+    "TARGET_PE",              326391,
+    "TARGET_AP",             979623,
     "INCL_MATCH_TARGET",       "",
     "INCL_TOLERANCE",          0.1,
     "MAX_INCL_CHANGE_DV",     800,
