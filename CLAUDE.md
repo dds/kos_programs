@@ -78,7 +78,7 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 | `resume.ks` | MISSION lexicon, operator helpers, resumeMission() |
 | `maneuver.ks` | Maneuver node execution with dynamic throttle |
 | `inclination.ks` | Orbital plane change planning + etaToTrueAnomaly() |
-| `molniya.ks` | Molniya (highly elliptical) orbit insertion |
+| `molniya.ks` | Molniya orbit insertion (molniyaParams, printMolniyaSummary, planMolniyaInsert, phaseMolniyaInsert) |
 | `orbit.ks` | Orbit monitoring and stability checks |
 | `countdown.ks` | Launch countdown with audio |
 | `targeting.ks` | Precision deorbit via Trajectories addon |

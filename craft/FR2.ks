@@ -148,36 +148,7 @@ LOCAL FUNCTION _printConfig {
     PRINT "  FINAL INCL . " + tincStr.
     PRINT "  CIRC TOL ... ecc < " + CFG["CIRC_ECC_TOL"].
     IF hasMolniya {
-        LOCAL mu IS SHIP:ORBIT:BODY:MU.
-        LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
-        LOCAL mPeAlt IS SHIP:PERIAPSIS.
-        IF mPeAlt < 0 { SET mPeAlt TO CFG["PARKING_ALT"]. }
-        LOCAL mPeR IS bodyR + mPeAlt.
-        LOCAL mSMA IS 0.
-        LOCAL mp IS CFG["MOLNIYA_PERIOD"].
-        LOCAL mEcc IS 0.
-        LOCAL modeStr IS "period".
-        IF CFG:HASKEY("MOLNIYA_ECC") AND CFG["MOLNIYA_ECC"] > 0 {
-            SET mEcc TO CFG["MOLNIYA_ECC"].
-            SET mSMA TO mPeR / (1 - mEcc).
-            SET mp TO 2 * CONSTANT:PI * SQRT(mSMA^3 / mu).
-            SET modeStr TO "ecc".
-        } ELSE {
-            SET mSMA TO (mu * (mp / (2 * CONSTANT:PI))^2)^(1/3).
-            SET mEcc TO 1 - mPeR / mSMA.
-        }
-        LOCAL mh IS FLOOR(mp / 3600).
-        LOCAL mm IS FLOOR(MOD(mp, 3600) / 60).
-        LOCAL ms IS ROUND(MOD(mp, 60), 0).
-        LOCAL mAp IS 2 * mSMA - mPeR - bodyR.
-        LOCAL dwell IS "North".
-        IF CFG["MOLNIYA_AOP"] <= 180 { SET dwell TO "South". }
-        PRINT " ".
-        PRINT "  -- MOLNIYA (" + modeStr + ") --".
-        PRINT "  PERIOD .... " + mh + "h" + ("" + mm):PADLEFT(2) + "m" + ("" + ms):PADLEFT(2) + "s".
-        PRINT "  AoP ....... " + CFG["MOLNIYA_AOP"] + " deg  (" + dwell + " dwell)".
-        PRINT "  TARGET Ap . " + ROUND(mAp/1000,0) + " km".
-        PRINT "  TARGET ecc  " + ROUND(mEcc,4).
+        printMolniyaSummary().
     }
     IF hasProbe {
         PRINT " ".
