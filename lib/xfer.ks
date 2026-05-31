@@ -46,15 +46,45 @@ GLOBAL FUNCTION phaseCoast {
 GLOBAL FUNCTION phaseCapture {
     LOCAL target IS missionTargetBody().
     WAIT 2.
-    mLog("Planning capture at " + target:NAME + ".").
+    mLog("Planning capture into elliptical orbit at " + target:NAME + ".").
+    
     LOCAL success IS FALSE.
     LOCAL retries IS 0.
+
     UNTIL success {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-        LOCAL captureAlt IS CFG["RELAY_ALT"].
-        IF CFG:HASKEY("TARGET_AP") { SET captureAlt TO CFG["TARGET_AP"]. }
-        planCapture(target, captureAlt).
+        
+        // Grab the target apoapsis from the config
+        LOCAL targetAp IS CFG["RELAY_ALT"].
+        IF CFG:HASKEY("TARGET_AP") { SET targetAp TO CFG["TARGET_AP"]. }
+
+        // --- INLINE CAPTURE SOLVER ---
+        // Plant a node exactly at Periapsis
+        LOCAL captureTime IS TIME:SECONDS + ETA:PERIAPSIS.
+        LOCAL nd IS NODE(captureTime, 0, 0, 0).
+        ADD nd.
+        WAIT 0.1.
+
+        LOCAL currentAp IS nd:ORBIT:APOAPSIS.
+        LOCAL stepDv IS 10.
+        
+        // Drop prograde (burn retrograde) until Apoapsis reaches the target
+        UNTIL currentAp > 0 AND currentAp <= targetAp {
+            SET nd:PROGRADE TO nd:PROGRADE - stepDv.
+            WAIT 0.01. // Let KSP physics update
+            
+            // If the orbit closes, slow down the stepping to be precise
+            IF nd:ORBIT:HASNEXTPATCH = FALSE {
+                SET stepDv TO 0.1. 
+            }
+            SET currentAp TO nd:ORBIT:APOAPSIS.
+        }
+        
+        mLog("Capture node planned: " + ROUND(ABS(nd:PROGRADE), 1) + " m/s. Target Ap: " + ROUND(targetAp/1000, 1) + "km").
+        // -----------------------------
+
         SET success TO executeManeuver().
+        
         IF NOT success {
             SET retries TO retries + 1.
             mLog("Capture missed (attempt " + retries + ") — waiting 10s.").
@@ -65,70 +95,98 @@ GLOBAL FUNCTION phaseCapture {
             WAIT 10.
         }
     }
+    
     orbitSummary().
-
-    IF CFG:HASKEY("CAPTURE_AOP") {
-        LOCAL targetAoP IS CFG["CAPTURE_AOP"].
-        LOCAL deltaAoP IS ABS(SHIP:ORBIT:ARGUMENTOFPERIAPSIS - targetAoP).
-        IF deltaAoP > 180 { SET deltaAoP TO 360 - deltaAoP. }
-        IF deltaAoP > 2 {
-            mLog("Post-capture AoP correction: current=" + ROUND(SHIP:ORBIT:ARGUMENTOFPERIAPSIS,1)
-                + " target=" + ROUND(targetAoP,1)).
-            LOCAL aopOk IS FALSE.
-            LOCAL aopRetries IS 0.
-            UNTIL aopOk {
-                UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-                LOCAL nd IS planAoPChange(targetAoP).
-                IF nd = 0 { SET aopOk TO TRUE. }
-                ELSE IF NEXTNODE:DELTAV:MAG > 200 {
-                    mLogWarn("AoP correction would cost " + ROUND(NEXTNODE:DELTAV:MAG, 0) + "m/s. Exceeds safe limit — skipping.").
-                    REMOVE NEXTNODE.
-                    SET aopOk TO TRUE. 
-                } ELSE {
-                    SET aopOk TO executeManeuver().
-                    IF NOT aopOk {
-                        SET aopRetries TO aopRetries + 1.
-                        mLog("AoP correction missed (attempt " + aopRetries + ").").
-                        IF aopRetries >= MAX_RETRIES { SET aopOk TO TRUE. }
-                        WAIT 10.
-                    }
-                }
-            }
-            orbitSummary().
-        } ELSE {
-            mLog("AoP already within 2deg — skipping.").
-        }
-    }
-
-    IF CFG:HASKEY("CAPTURE_INC") {
-        LOCAL targetInc IS CFG["CAPTURE_INC"].
-        LOCAL deltaInc IS ABS(SHIP:ORBIT:INCLINATION - targetInc).
-        LOCAL incTol IS 0.5.
-        IF CFG:HASKEY("INCL_TOLERANCE") { SET incTol TO CFG["INCL_TOLERANCE"]. }
-        IF deltaInc > incTol {
-            mLog("Post-capture INC correction: current=" + ROUND(SHIP:ORBIT:INCLINATION,2)
-                + " target=" + ROUND(targetInc,2)).
-            LOCAL incOk IS FALSE.
-            LOCAL incRetries IS 0.
-            UNTIL incOk {
-                UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-                planInclinationChange(targetInc).
-                SET incOk TO executeManeuver().
-                IF NOT incOk {
-                    SET incRetries TO incRetries + 1.
-                    mLog("INC correction missed (attempt " + incRetries + ").").
-                    IF incRetries >= MAX_RETRIES { SET incOk TO TRUE. }
-                    WAIT 10.
-                }
-            }
-            orbitSummary().
-        } ELSE {
-            mLog("Inclination within tolerance — skipping.").
-        }
-    }
-
+    mLog("Capture complete. Moving to next phase.").
     nextPhase(xferSeq).
 }
+
+// GLOBAL FUNCTION phaseCapture {
+//     LOCAL target IS missionTargetBody().
+//     WAIT 2.
+//     mLog("Planning capture at " + target:NAME + ".").
+//     LOCAL success IS FALSE.
+//     LOCAL retries IS 0.
+//     UNTIL success {
+//         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+//         LOCAL captureAlt IS CFG["RELAY_ALT"].
+//         IF CFG:HASKEY("TARGET_AP") { SET captureAlt TO CFG["TARGET_AP"]. }
+//         planCapture(target, captureAlt).
+//         SET success TO executeManeuver().
+//         IF NOT success {
+//             SET retries TO retries + 1.
+//             mLog("Capture missed (attempt " + retries + ") — waiting 10s.").
+//             IF retries >= MAX_RETRIES {
+//                 mLogError("Capture failed after " + retries + " attempts — halting.").
+//                 RETURN.
+//             }
+//             WAIT 10.
+//         }
+//     }
+//     orbitSummary().
+// 
+//     IF CFG:HASKEY("CAPTURE_AOP") {
+//         LOCAL targetAoP IS CFG["CAPTURE_AOP"].
+//         LOCAL deltaAoP IS ABS(SHIP:ORBIT:ARGUMENTOFPERIAPSIS - targetAoP).
+//         IF deltaAoP > 180 { SET deltaAoP TO 360 - deltaAoP. }
+//         IF deltaAoP > 2 {
+//             mLog("Post-capture AoP correction: current=" + ROUND(SHIP:ORBIT:ARGUMENTOFPERIAPSIS,1)
+//                 + " target=" + ROUND(targetAoP,1)).
+//             LOCAL aopOk IS FALSE.
+//             LOCAL aopRetries IS 0.
+//             UNTIL aopOk {
+//                 UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+//                 LOCAL nd IS planAoPChange(targetAoP).
+//                 IF nd = 0 { SET aopOk TO TRUE. }
+//                 ELSE IF NEXTNODE:DELTAV:MAG > 200 {
+//                     mLogWarn("AoP correction would cost " + ROUND(NEXTNODE:DELTAV:MAG, 0) + "m/s. Exceeds safe limit — skipping.").
+//                     REMOVE NEXTNODE.
+//                     SET aopOk TO TRUE. 
+//                 } ELSE {
+//                     SET aopOk TO executeManeuver().
+//                     IF NOT aopOk {
+//                         SET aopRetries TO aopRetries + 1.
+//                         mLog("AoP correction missed (attempt " + aopRetries + ").").
+//                         IF aopRetries >= MAX_RETRIES { SET aopOk TO TRUE. }
+//                         WAIT 10.
+//                     }
+//                 }
+//             }
+//             orbitSummary().
+//         } ELSE {
+//             mLog("AoP already within 2deg — skipping.").
+//         }
+//     }
+// 
+//     IF CFG:HASKEY("CAPTURE_INC") {
+//         LOCAL targetInc IS CFG["CAPTURE_INC"].
+//         LOCAL deltaInc IS ABS(SHIP:ORBIT:INCLINATION - targetInc).
+//         LOCAL incTol IS 0.5.
+//         IF CFG:HASKEY("INCL_TOLERANCE") { SET incTol TO CFG["INCL_TOLERANCE"]. }
+//         IF deltaInc > incTol {
+//             mLog("Post-capture INC correction: current=" + ROUND(SHIP:ORBIT:INCLINATION,2)
+//                 + " target=" + ROUND(targetInc,2)).
+//             LOCAL incOk IS FALSE.
+//             LOCAL incRetries IS 0.
+//             UNTIL incOk {
+//                 UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+//                 planInclinationChange(targetInc).
+//                 SET incOk TO executeManeuver().
+//                 IF NOT incOk {
+//                     SET incRetries TO incRetries + 1.
+//                     mLog("INC correction missed (attempt " + incRetries + ").").
+//                     IF incRetries >= MAX_RETRIES { SET incOk TO TRUE. }
+//                     WAIT 10.
+//                 }
+//             }
+//             orbitSummary().
+//         } ELSE {
+//             mLog("Inclination within tolerance — skipping.").
+//         }
+//     }
+// 
+//     nextPhase(xferSeq).
+// }
 
 GLOBAL FUNCTION phaseCirc {
     IF _impactThreat() {

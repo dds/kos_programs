@@ -20,9 +20,11 @@ GLOBAL FUNCTION phaseMidCourse {
     LOCAL targetPe  IS CFG["CAPTURE_PE"].
     LOCAL targetInc IS -1.
     LOCAL targetLan IS -1.
+    LOCAL targetAoP IS -1.
     
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
+    IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
 
     LOCAL patch IS _getTargetPatch(SHIP, target).
     IF patch = 0 {
@@ -54,7 +56,7 @@ GLOBAL FUNCTION phaseMidCourse {
     ADD nd.
     WAIT 0.1.
 
-    _optimizeMCC(nd, target, targetPe, targetInc, targetLan).
+    _optimizeMCC(nd, target, targetPe, targetInc, targetLan, targetAoP).
     
     WAIT 0.1. 
 
@@ -69,6 +71,9 @@ GLOBAL FUNCTION phaseMidCourse {
             + " m/s  Pe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km".
         IF targetLan >= 0 {
             SET logMsg TO logMsg + "  LAN=" + ROUND(finalPatch:LAN,1) + "°".
+        }
+        IF targetAoP >= 0 {
+            SET logMsg TO logMsg + "  AOP=" + ROUND(finalPatch:AOP,1) + "°".
         }
         mLog(logMsg).
         LOCAL success IS FALSE.
@@ -105,6 +110,7 @@ LOCAL FUNCTION _optimizeMCC {
     PARAMETER mccNode.
     PARAMETER targetBody.
     PARAMETER targetPe.
+    PARAMETER targetAoP IS 
     PARAMETER targetInc IS 90.
     PARAMETER targetLan IS 25.
 
@@ -121,12 +127,12 @@ LOCAL FUNCTION _optimizeMCC {
         // Normalize errors so they operate on similar scales
         LOCAL peErr IS ABS(p:PERIAPSIS - targetPe) / 1000. // Convert to km for scaling
         LOCAL incErr IS ABS(p:INCLINATION - targetInc).
-        
+        LOCAL aopErr IS ABS(p:ARGUMENTOFPERIAPSIS - targetAoP).
+        IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
         LOCAL lanErr IS ABS(p:LAN - targetLan).
         IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
 
-        // Weighting: PE is critical, INC is highly important, LAN is secondary
-        RETURN (peErr * 10) + (incErr * 50) + (lanErr * 15).
+        RETURN (peErr * 10) + (incErr * 50) + (lanErr * 15) + (aopErr * 20).
     }
 
     // --- HILL CLIMB ALGORITHM ---
@@ -204,103 +210,103 @@ LOCAL FUNCTION _optimizeMCC {
     RETURN mccNode.
 }
 
-GLOBAL FUNCTION phaseApoapsisCrank {
-    LOCAL targetBody IS missionTargetBody().
-
-    // Mission targets
-    LOCAL targetInc IS CFG["CAPTURE_INC"]. // 90
-    LOCAL targetAoP IS CFG["CAPTURE_AOP"]. // 93.2
-    LOCAL targetPe  IS CFG["CAPTURE_PE"].  // 12500
-
-    mLog("Starting Apoapsis Crank to Polar/AoP alignment...").
-
-    // Plant the node exactly at Apoapsis
-    LOCAL crankTime IS TIME:SECONDS + ETA:APOAPSIS.
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    LOCAL nd IS NODE(crankTime, 0, 0, 0).
-    ADD nd.
-    WAIT 0.1.
-
-    // --- FITNESS FUNCTION ---
-    LOCAL FUNCTION getCrankScore {
-        LOCAL p IS nd:ORBIT. // We use the node's resulting orbit directly
-        
-        // Massive penalties for impacting the Mun
-        IF p:PERIAPSIS < 0 { RETURN 9999999. }
-
-        // Normalize errors
-        LOCAL peErr IS ABS(p:PERIAPSIS - targetPe) / 1000. 
-        LOCAL incErr IS ABS(p:INCLINATION - targetInc).
-        
-        LOCAL aopErr IS ABS(p:ARGUMENTOFPERIAPSIS - targetAoP).
-        IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
-
-        // Weighting: INC is massive here, AOP is secondary, PE keeps us locked
-        RETURN (incErr * 50) + (aopErr * 20) + (peErr * 10).
-    }
-
-    // --- 3-AXIS HILL CLIMB ---
-    LOCAL currentScore IS getCrankScore().
-    LOCAL stepSize IS 5.0. // Smaller initial step, as velocity is low
-    LOCAL minStep IS 0.01.
-    LOCAL iter IS 0.
-
-    UNTIL stepSize < minStep OR iter > 200 {
-        SET iter TO iter + 1.
-        LOCAL improved IS FALSE.
-
-        LOCAL basePro IS nd:PROGRADE.
-        LOCAL baseRad IS nd:RADIALOUT.
-        LOCAL baseNor IS nd:NORMAL.
-
-        // 6 directions to probe
-        LOCAL probes IS LIST(
-            LIST(stepSize, 0, 0), LIST(-stepSize, 0, 0),
-            LIST(0, stepSize, 0), LIST(0, -stepSize, 0),
-            LIST(0, 0, stepSize), LIST(0, 0, -stepSize)
-        ).
-
-        LOCAL bestProbeScore IS currentScore.
-        LOCAL bestPro IS basePro.
-        LOCAL bestRad IS baseRad.
-        LOCAL bestNor IS baseNor.
-
-        FOR p IN probes {
-            SET nd:PROGRADE TO basePro + p[0].
-            SET nd:RADIALOUT TO baseRad + p[1].
-            SET nd:NORMAL TO baseNor + p[2].
-            WAIT 0.01. 
-
-            LOCAL probeScore IS getCrankScore().
-            IF probeScore < bestProbeScore {
-                SET bestProbeScore TO probeScore.
-                SET bestPro TO nd:PROGRADE.
-                SET bestRad TO nd:RADIALOUT.
-                SET bestNor TO nd:NORMAL.
-                SET improved TO TRUE.
-            }
-            
-            // Reset
-            SET nd:PROGRADE TO basePro.
-            SET nd:RADIALOUT TO baseRad.
-            SET nd:NORMAL TO baseNor.
-        }
-
-        IF improved {
-            SET nd:PROGRADE TO bestPro.
-            SET nd:RADIALOUT TO bestRad.
-            SET nd:NORMAL TO bestNor.
-            SET currentScore TO bestProbeScore.
-        } ELSE {
-            SET stepSize TO stepSize * 0.5.
-        }
-    }
-
-    LOCAL totalDv IS nd:DELTAV:MAG.
-    mLog("Crank Converged: dV=" + ROUND(totalDv, 1) + " m/s").
-    mLog("Result - INC: " + ROUND(nd:ORBIT:INCLINATION, 1) + "  AoP: " + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1) + "  Pe: " + ROUND(nd:ORBIT:PERIAPSIS/1000, 1) + "km").
-
-    // Hand off to maneuver execution
-    executeManeuver().
-    nextPhase(xferSeq).
-}
+//GLOBAL FUNCTION phaseApoapsisCrank {
+//    LOCAL targetBody IS missionTargetBody().
+//
+//    // Mission targets
+//    LOCAL targetInc IS CFG["CAPTURE_INC"]. // 90
+//    LOCAL targetAoP IS CFG["CAPTURE_AOP"]. // 93.2
+//    LOCAL targetPe  IS CFG["CAPTURE_PE"].  // 12500
+//
+//    mLog("Starting Apoapsis Crank to Polar/AoP alignment...").
+//
+//    // Plant the node exactly at Apoapsis
+//    LOCAL crankTime IS TIME:SECONDS + ETA:APOAPSIS.
+//    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+//    LOCAL nd IS NODE(crankTime, 0, 0, 0).
+//    ADD nd.
+//    WAIT 0.1.
+//
+//    // --- FITNESS FUNCTION ---
+//    LOCAL FUNCTION getCrankScore {
+//        LOCAL p IS nd:ORBIT. // We use the node's resulting orbit directly
+//        
+//        // Massive penalties for impact.
+//        IF p:PERIAPSIS < 9000 { RETURN 9999999. }
+//
+//        // Normalize errors
+//        LOCAL peErr IS ABS(p:PERIAPSIS - targetPe) / 1000. 
+//        LOCAL incErr IS ABS(p:INCLINATION - targetInc).
+//        
+//        LOCAL aopErr IS ABS(p:ARGUMENTOFPERIAPSIS - targetAoP).
+//        IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
+//
+//        // Weighting: INC is massive here, AOP is secondary, PE keeps us locked
+//        RETURN (incErr * 50) + (aopErr * 20) + (peErr * 10).
+//    }
+//
+//    // --- 3-AXIS HILL CLIMB ---
+//    LOCAL currentScore IS getCrankScore().
+//    LOCAL stepSize IS 5.0. // Smaller initial step, as velocity is low
+//    LOCAL minStep IS 0.01.
+//    LOCAL iter IS 0.
+//
+//    UNTIL stepSize < minStep OR iter > 200 {
+//        SET iter TO iter + 1.
+//        LOCAL improved IS FALSE.
+//
+//        LOCAL basePro IS nd:PROGRADE.
+//        LOCAL baseRad IS nd:RADIALOUT.
+//        LOCAL baseNor IS nd:NORMAL.
+//
+//        // 6 directions to probe
+//        LOCAL probes IS LIST(
+//            LIST(stepSize, 0, 0), LIST(-stepSize, 0, 0),
+//            LIST(0, stepSize, 0), LIST(0, -stepSize, 0),
+//            LIST(0, 0, stepSize), LIST(0, 0, -stepSize)
+//        ).
+//
+//        LOCAL bestProbeScore IS currentScore.
+//        LOCAL bestPro IS basePro.
+//        LOCAL bestRad IS baseRad.
+//        LOCAL bestNor IS baseNor.
+//
+//        FOR p IN probes {
+//            SET nd:PROGRADE TO basePro + p[0].
+//            SET nd:RADIALOUT TO baseRad + p[1].
+//            SET nd:NORMAL TO baseNor + p[2].
+//            WAIT 0.01. 
+//
+//            LOCAL probeScore IS getCrankScore().
+//            IF probeScore < bestProbeScore {
+//                SET bestProbeScore TO probeScore.
+//                SET bestPro TO nd:PROGRADE.
+//                SET bestRad TO nd:RADIALOUT.
+//                SET bestNor TO nd:NORMAL.
+//                SET improved TO TRUE.
+//            }
+//            
+//            // Reset
+//            SET nd:PROGRADE TO basePro.
+//            SET nd:RADIALOUT TO baseRad.
+//            SET nd:NORMAL TO baseNor.
+//        }
+//
+//        IF improved {
+//            SET nd:PROGRADE TO bestPro.
+//            SET nd:RADIALOUT TO bestRad.
+//            SET nd:NORMAL TO bestNor.
+//            SET currentScore TO bestProbeScore.
+//        } ELSE {
+//            SET stepSize TO stepSize * 0.5.
+//        }
+//    }
+//
+//    LOCAL totalDv IS nd:DELTAV:MAG.
+//    mLog("Crank Converged: dV=" + ROUND(totalDv, 1) + " m/s").
+//    mLog("Result - INC: " + ROUND(nd:ORBIT:INCLINATION, 1) + "  AoP: " + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1) + "  Pe: " + ROUND(nd:ORBIT:PERIAPSIS/1000, 1) + "km").
+//
+//    // Hand off to maneuver execution
+//    executeManeuver().
+//    nextPhase(xferSeq).
+//}
