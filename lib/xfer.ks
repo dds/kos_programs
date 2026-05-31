@@ -76,7 +76,7 @@ GLOBAL FUNCTION phaseCapture {
                 UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
                 LOCAL nd IS planAoPChange(targetAoP).
                 IF nd = 0 { SET aopOk TO TRUE. }
-                ELSE IF NEXTNODE:DELTAV:MAG > 50 {
+                ELSE IF NEXTNODE:DELTAV:MAG > 200 {
                     mLogWarn("AoP correction would cost " + ROUND(NEXTNODE:DELTAV:MAG, 0) + "m/s. Exceeds safe limit — skipping.").
                     REMOVE NEXTNODE.
                     SET aopOk TO TRUE. 
@@ -176,89 +176,79 @@ GLOBAL FUNCTION phaseCirc {
 
 GLOBAL FUNCTION phaseRaiseAlt {
     LOCAL elliptical IS CFG:HASKEY("TARGET_PE") AND CFG:HASKEY("TARGET_AP").
-    LOCAL targetAp IS CFG["RELAY_ALT"].
-    IF elliptical { SET targetAp TO CFG["TARGET_AP"]. }
-
-    IF SHIP:APOAPSIS > targetAp * 0.99 {
-        mLog("Already at target Ap.").
-        nextPhase(xferSeq).
-        RETURN.
-    }
-
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
-    LOCAL targetPe IS SHIP:PERIAPSIS.
-    IF elliptical { SET targetPe TO CFG["TARGET_PE"]. }
 
     IF elliptical {
+        LOCAL targetPe IS CFG["TARGET_PE"].
+        LOCAL targetAp IS CFG["TARGET_AP"].
         mLog("Target ellipse: Pe=" + ROUND(targetPe/1000,0) + "km  Ap=" + ROUND(targetAp/1000,0) + "km.").
+
+        IF ABS(SHIP:PERIAPSIS - targetPe) > targetPe * 0.05 {
+            mLog("Raising Pe to " + ROUND(targetPe/1000,0) + "km at Ap.").
+            _burnWithRetry(
+                { LOCAL rAp IS bodyR + SHIP:APOAPSIS. LOCAL rPe IS bodyR + targetPe. LOCAL tSMA IS (rAp + rPe) / 2. LOCAL vNow IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:APOAPSIS):ORBIT:MAG. LOCAL vNew IS SQRT(mu * (2/rAp - 1/tSMA)). RETURN NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, vNew - vNow). },
+                "Raise Pe").
+        } ELSE {
+            mLog("Pe already within tolerance.").
+        }
+
+        IF ABS(SHIP:APOAPSIS - targetAp) > targetAp * 0.02 {
+            LOCAL burnTA IS 0.
+            IF CFG:HASKEY("CAPTURE_AOP") {
+                LOCAL targetAoP IS CFG["CAPTURE_AOP"].
+                SET burnTA TO targetAoP - SHIP:ORBIT:ARGUMENTOFPERIAPSIS.
+                UNTIL burnTA >= 0 { SET burnTA TO burnTA + 360. }
+                UNTIL burnTA < 360 { SET burnTA TO burnTA - 360. }
+                mLog("Raise Ap at TA=" + ROUND(burnTA,1) + "deg for AoP=" + ROUND(targetAoP,1) + "deg.").
+            } ELSE {
+                mLog("Raising Ap to " + ROUND(targetAp/1000,0) + "km at Pe.").
+            }
+            _burnWithRetry(
+                { LOCAL eta IS etaToTrueAnomaly(burnTA). LOCAL burnTime IS TIME:SECONDS + eta. LOCAL rBurn IS bodyR + _altAtTA(burnTA). LOCAL rTarget IS bodyR + targetAp. LOCAL tSMA IS (rBurn + rTarget) / 2. LOCAL vNow IS VELOCITYAT(SHIP, burnTime):ORBIT:MAG. LOCAL vNew IS SQRT(mu * (2/rBurn - 1/tSMA)). RETURN NODE(burnTime, 0, 0, vNew - vNow). },
+                "Raise Ap").
+        } ELSE {
+            mLog("Ap already within tolerance.").
+        }
     } ELSE {
+        LOCAL targetAp IS CFG["RELAY_ALT"].
+        IF SHIP:APOAPSIS > targetAp * 0.99 {
+            mLog("Already at target Ap.").
+            nextPhase(xferSeq).
+            RETURN.
+        }
         mLog("Raising Ap to " + ROUND(targetAp/1000,0) + "km.").
+        _burnWithRetry(
+            { LOCAL rBurn IS bodyR + SHIP:PERIAPSIS. LOCAL rTarget IS bodyR + targetAp. LOCAL tSMA IS (rBurn + rTarget) / 2. LOCAL vNow IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:PERIAPSIS):ORBIT:MAG. LOCAL vNew IS SQRT(mu * (2/rBurn - 1/tSMA)). RETURN NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, vNew - vNow). },
+            "Raise Ap").
     }
 
+    orbitSummary().
+    nextPhase(xferSeq).
+}
+
+LOCAL FUNCTION _burnWithRetry {
+    PARAMETER planFn.
+    PARAMETER label.
     LOCAL success IS FALSE.
     LOCAL retries IS 0.
     UNTIL success {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-        LOCAL rBurn IS bodyR + SHIP:PERIAPSIS.
-        LOCAL rTarget IS bodyR + targetAp.
-        LOCAL tSMA IS (rBurn + rTarget) / 2.
-        LOCAL vNow IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:PERIAPSIS):ORBIT:MAG.
-        LOCAL vNew IS SQRT(mu * (2/rBurn - 1/tSMA)).
-        LOCAL dv IS vNew - vNow.
-        LOCAL nd IS NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, dv).
+        LOCAL nd IS planFn:CALL().
         ADD nd.
-        mLog("Raise Ap: dV=" + ROUND(dv,1) + " m/s at Pe").
+        mLog(label + ": dV=" + ROUND(nd:DELTAV:MAG,1) + " m/s").
         WAIT 2.
         SET success TO executeManeuver().
         IF NOT success {
             SET retries TO retries + 1.
-            mLog("Raise Ap missed (attempt " + retries + ") — waiting 10s.").
+            mLog(label + " missed (attempt " + retries + ") — waiting 10s.").
             IF retries >= MAX_RETRIES {
-                mLogError("Raise Ap failed after " + retries + " attempts — halting.").
-                nextPhase(xferSeq).
+                mLogError(label + " failed after " + retries + " attempts.").
                 RETURN.
             }
             WAIT 10.
         }
     }
-
-    IF elliptical {
-        LOCAL deltaPe IS ABS(SHIP:PERIAPSIS - targetPe).
-        IF deltaPe > targetPe * 0.05 {
-            SET success TO FALSE.
-            SET retries TO 0.
-            UNTIL success {
-                UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-                LOCAL rAp IS bodyR + SHIP:APOAPSIS.
-                LOCAL rPe IS bodyR + targetPe.
-                LOCAL tSMA IS (rAp + rPe) / 2.
-                LOCAL vNow IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:APOAPSIS):ORBIT:MAG.
-                LOCAL vNew IS SQRT(mu * (2/rAp - 1/tSMA)).
-                LOCAL dv IS vNew - vNow.
-                LOCAL nd IS NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, dv).
-                ADD nd.
-                mLog("Set Pe: dV=" + ROUND(dv,1) + " m/s at Ap").
-                WAIT 2.
-                SET success TO executeManeuver().
-                IF NOT success {
-                    SET retries TO retries + 1.
-                    mLog("Set Pe missed (attempt " + retries + ") — waiting 10s.").
-                    IF retries >= MAX_RETRIES {
-                        mLogError("Set Pe failed after " + retries + " attempts — halting.").
-                        nextPhase(xferSeq).
-                        RETURN.
-                    }
-                    WAIT 10.
-                }
-            }
-        } ELSE {
-            mLog("Pe already within tolerance.").
-        }
-    }
-
-    orbitSummary().
-    nextPhase(xferSeq).
 }
 
 GLOBAL FUNCTION phaseInclCorrect {
@@ -299,6 +289,14 @@ GLOBAL FUNCTION phaseInclCorrect {
     executeManeuver().
     orbitSummary().
     nextPhase(xferSeq).
+}
+
+LOCAL FUNCTION _altAtTA {
+    PARAMETER ta.
+    LOCAL sma IS SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL ecc IS SHIP:ORBIT:ECCENTRICITY.
+    LOCAL r IS sma * (1 - ecc^2) / (1 + ecc * COS(ta)).
+    RETURN r - SHIP:ORBIT:BODY:RADIUS.
 }
 
 LOCAL FUNCTION _impactThreat {

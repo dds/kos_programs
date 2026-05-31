@@ -16,6 +16,8 @@ GLOBAL FUNCTION phaseMidCourse {
     LOCAL targetAoP IS -1.
     LOCAL targetLan IS -1.
 
+    IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
+    IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_PE")  { SET targetPe TO CFG["CAPTURE_PE"]. }
 
@@ -171,30 +173,25 @@ LOCAL FUNCTION _evaluateMCC {
     PARAMETER targetInc, targetPe, targetAoP, targetLan.
 
     LOCAL score IS 0.
-    
-    // Angles are heavily weighted (1 degree = 1,000,000 points)
-    // so they are prioritized over raw meters of Periapsis.
 
-    IF targetInc >= 0 { 
-        SET score TO score + (ABS(currentInc - targetInc) * 1000000). 
+    IF targetInc >= 0 {
+        SET score TO score + (ABS(currentInc - targetInc) * 10000000).
     }
-    
+
     IF targetLan >= 0 {
         LOCAL errLan IS ABS(currentLan - targetLan).
         IF errLan > 180 { SET errLan TO 360 - errLan. }
-        SET score TO score + (errLan * 1000000). 
+        SET score TO score + (errLan * 1000000).
     }
-    
+
     IF targetAoP >= 0 {
         LOCAL errAoP IS ABS(currentAoP - targetAoP).
         IF errAoP > 180 { SET errAoP TO 360 - errAoP. }
-        // Slightly lower weight than Inc/LAN so the orbital plane takes absolute priority
-        SET score TO score + (errAoP * 500000). 
+        SET score TO score + (errAoP * 500000).
     }
-    
-    // Periapsis error remains 1 point per meter.
-    IF targetPe >= 0 { 
-        SET score TO score + ABS(currentPe - targetPe). 
+
+    IF targetPe >= 0 {
+        SET score TO score + ABS(currentPe - targetPe).
     }
     
     RETURN score.
