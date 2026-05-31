@@ -75,6 +75,7 @@ GLOBAL FUNCTION buildRocketSequence {
     LOCAL seq IS LIST("LAUNCH", "FAIRING", "EXTEND_ANTS", "PARKING").
     IF MISSION["target"]:TOUPPER <> "KERBIN" {
         seq:ADD("TRANSFER").
+        seq:ADD("MCC").
         seq:ADD("COAST").
         seq:ADD("CAPTURE").
     }

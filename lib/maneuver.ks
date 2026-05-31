@@ -16,13 +16,13 @@ GLOBAL FUNCTION executeManeuver {
         RETURN FALSE.
     }
 
-    LOCAL nd        IS NEXTNODE.
-    LOCAL burnDV    IS nd:DELTAV:MAG.
+    LOCAL nd    IS NEXTNODE.
+    LOCAL burnDV  IS nd:DELTAV:MAG.
     LOCAL startTime IS _calcStartTime(nd).
 
-    IF burnDV < 10 {_setThrustLimit(0.25). }.
-    IF burnDV < 2 { _setThrustLimit(0.10). }.
-    IF burnDV < 0.5 { _setThrustLimit(0.05). }.
+    IF burnDV < 10 { _setThrustLimit(0.25). }
+    IF burnDV < 2  { _setThrustLimit(0.10). }
+    IF burnDV < 0.5 { _setThrustLimit(0.05). }
 
     IF startTime < TIME:SECONDS {
         mLogWarn("Burn window already passed by " + ROUND(TIME:SECONDS - startTime, 0) + "s — removing node.").
@@ -96,7 +96,6 @@ GLOBAL FUNCTION executeManeuver {
             LOCK THROTTLE TO 0.
             BREAK.
         }
-
         WAIT 0.01.
     }
 
@@ -172,13 +171,6 @@ GLOBAL FUNCTION planTransfer {
         SET estimatedTimeToBurn TO estimatedTimeToBurn - synodicPeriod.
     }
 
-    mLog("DEBUG transfer: idealPhase=" + ROUND(idealPhase,1)
-        + " currentPhase=" + ROUND(currentPhase,1)
-        + " phaseDiff=" + ROUND(phaseDiff,1)
-        + " phaseSpeed=" + ROUND(phaseSpeed,4)
-        + " dv=" + ROUND(dv,1)
-        + " estimatedETA=" + ROUND(estimatedTimeToBurn,0) + "s").
-
     LOCAL testNode IS NODE(TIME:SECONDS + estimatedTimeToBurn, 0, 0, dv).
     ADD testNode.
     WAIT 0.1.
@@ -191,21 +183,18 @@ GLOBAL FUNCTION planTransfer {
     IF lanTarget >= 0 {
         SET scanStep TO 300.
         SET scanEnd TO TIME:SECONDS + targetBody:ORBIT:PERIOD.
-        mLog("LAN targeting: scanning " + ROUND(targetBody:ORBIT:PERIOD,0)
-            + "s window in " + scanStep + "s steps.").
     }
 
     LOCAL foundUt IS -1.
     LOCAL bestLanErr IS 999.
 
+    // COARSE PASS
     IF lanTarget >= 0 {
         UNTIL testNode:TIME > scanEnd {
             WAIT 0.02.
-            IF testNode:ORBIT:HASNEXTPATCH
-                    AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME
-                    AND testNode:ORBIT:NEXTPATCH:PERIAPSIS > 0
-                    AND testNode:ORBIT:NEXTPATCH:INCLINATION < 90 {
-                LOCAL patchLAN IS testNode:ORBIT:NEXTPATCH:LAN.
+            LOCAL patch IS _getTargetPatch(testNode, targetBody).
+            IF patch <> 0 AND patch:PERIAPSIS > 0 AND patch:INCLINATION < 90 {
+                LOCAL patchLAN IS patch:LAN.
                 LOCAL lanErr IS ABS(patchLAN - lanTarget).
                 IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
                 IF lanErr < bestLanErr {
@@ -215,21 +204,12 @@ GLOBAL FUNCTION planTransfer {
             }
             SET testNode:TIME TO testNode:TIME + scanStep.
         }
-        IF foundUt > 0 {
-            mLog("LAN scan best: err=" + ROUND(bestLanErr,1)
-                + "deg at T+" + ROUND(foundUt - TIME:SECONDS,0) + "s").
-        }
     } ELSE {
         UNTIL testNode:TIME > scanEnd {
             WAIT 0.02.
-            IF testNode:ORBIT:HASNEXTPATCH
-                    AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME
-                    AND testNode:ORBIT:NEXTPATCH:PERIAPSIS > 0
-                    AND testNode:ORBIT:NEXTPATCH:INCLINATION < 90 {
+            LOCAL patch IS _getTargetPatch(testNode, targetBody).
+            IF patch <> 0 AND patch:PERIAPSIS > 0 AND patch:INCLINATION < 90 {
                 SET foundUt TO testNode:TIME.
-                mLog("DEBUG coarse found Pe="
-                    + ROUND(testNode:ORBIT:NEXTPATCH:PERIAPSIS/1000,1)
-                    + "km at T+" + ROUND(testNode:TIME - TIME:SECONDS,0) + "s").
                 BREAK.
             }
             SET testNode:TIME TO testNode:TIME + scanStep.
@@ -244,16 +224,14 @@ GLOBAL FUNCTION planTransfer {
         RETURN nd.
     }
 
-
-SET testNode:TIME TO foundUt.
-    LOCAL bestPe IS testNode:ORBIT:NEXTPATCH:PERIAPSIS.
+    // FINE PASS (Bidirectional Hill Climbing)
+    SET testNode:TIME TO foundUt.
+    LOCAL initPatch IS _getTargetPatch(testNode, targetBody).
+    LOCAL bestPe IS initPatch:PERIAPSIS.
     LOCAL bestUt IS foundUt.
     LOCAL steps  IS 30.
 
-    // Increased to 5 passes for slightly better resolution
     FROM { LOCAL pass IS 1. } UNTIL pass > 5 STEP { SET pass TO pass + 1. } DO {
-        mLog("DEBUG fine pass=" + pass + " step=" + steps + " Pe=" + ROUND(bestPe/1000,1) + "km").
-        
         LOCAL improved IS TRUE.
         UNTIL NOT improved {
             SET improved TO FALSE.
@@ -262,31 +240,28 @@ SET testNode:TIME TO foundUt.
             LOCAL peMinus IS -1.
             LOCAL pePlus  IS -1.
 
-            // 1. Test shifting the node backward
+            // Test Backward
             SET testNode:TIME TO bestUt - steps.
             WAIT 0.02.
-            IF testNode:ORBIT:HASNEXTPATCH AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
-                SET peMinus TO testNode:ORBIT:NEXTPATCH:PERIAPSIS.
-            }
+            LOCAL patchMinus IS _getTargetPatch(testNode, targetBody).
+            IF patchMinus <> 0 { SET peMinus TO patchMinus:PERIAPSIS. }
 
-            // 2. Test shifting the node forward
+            // Test Forward
             SET testNode:TIME TO bestUt + steps.
             WAIT 0.02.
-            IF testNode:ORBIT:HASNEXTPATCH AND testNode:ORBIT:NEXTPATCH:BODY:NAME = targetBody:NAME {
-                SET pePlus TO testNode:ORBIT:NEXTPATCH:PERIAPSIS.
-            }
+            LOCAL patchPlus IS _getTargetPatch(testNode, targetBody).
+            IF patchPlus <> 0 { SET pePlus TO patchPlus:PERIAPSIS. }
 
-            // Reset node time back to center for safety
+            // Reset
             SET testNode:TIME TO bestUt.
 
-            // 3. Evaluate results
             LOCAL errMinus IS 9999999999.
             LOCAL errPlus  IS 9999999999.
 
             IF peMinus > 0 { SET errMinus TO ABS(peMinus - targetPe). }
             IF pePlus > 0  { SET errPlus  TO ABS(pePlus - targetPe). }
 
-            // 4. Move in the direction of greatest improvement
+            // Apply best result
             IF errMinus < currentErr AND errMinus < errPlus {
                 SET bestPe TO peMinus.
                 SET bestUt TO bestUt - steps.
@@ -299,7 +274,6 @@ SET testNode:TIME TO foundUt.
                 SET improved TO TRUE.
             }
         }
-        // Shrink the step size for the next pass
         SET steps TO steps / 5.
     }
 
@@ -307,8 +281,7 @@ SET testNode:TIME TO foundUt.
     LOCAL nd IS NODE(bestUt, 0, 0, dv).
     ADD nd.
     LOCAL logMsg IS "Transfer -> " + targetBody:NAME + ": dV=" + ROUND(dv,1)
-        + " m/s  Pe=" + ROUND(bestPe/1000,1) + "km"
-        + "  ETA=" + ROUND(bestUt - TIME:SECONDS,0) + "s".
+        + " m/s  Pe=" + ROUND(bestPe/1000,1) + "km  ETA=" + ROUND(bestUt - TIME:SECONDS,0) + "s".
     IF lanTarget >= 0 {
         SET logMsg TO logMsg + "  LAN_err=" + ROUND(bestLanErr,1) + "deg".
     }
@@ -319,123 +292,61 @@ SET testNode:TIME TO foundUt.
 GLOBAL FUNCTION planCapture {
     PARAMETER targetBody.
     PARAMETER targetAlt.
-
     LOCAL mu    IS targetBody:MU.
     LOCAL rPe   IS targetBody:RADIUS + SHIP:PERIAPSIS.
     LOCAL rAp   IS targetBody:RADIUS + targetAlt.
     LOCAL tSMA  IS (rPe + rAp) / 2.
-
     LOCAL vCapture IS SQRT(mu * (2/rPe - 1/tSMA)).
     LOCAL vAtPe    IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:PERIAPSIS):ORBIT:MAG.
     LOCAL dv       IS vCapture - vAtPe.
-
     LOCAL nd IS NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, dv).
     ADD nd.
-    mLog("Capture at " + targetBody:NAME + ": dV=" + ROUND(dv,1)
-        + " m/s  Pe=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + "km  targetAp=" + ROUND(targetAlt/1000,0) + "km").
-    RETURN nd.
-}
-
-GLOBAL FUNCTION planLowerPe {
-    PARAMETER targetPe.
-
-    LOCAL mu    IS SHIP:ORBIT:BODY:MU.
-    LOCAL rAp   IS SHIP:ORBIT:BODY:RADIUS + SHIP:APOAPSIS.
-    LOCAL rPe   IS SHIP:ORBIT:BODY:RADIUS + targetPe.
-    LOCAL tSMA  IS (rAp + rPe) / 2.
-    LOCAL vNew  IS SQRT(mu * (2/rAp - 1/tSMA)).
-    LOCAL vNow  IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:APOAPSIS):ORBIT:MAG.
-    LOCAL dv    IS vNew - vNow.
-
-    LOCAL nd IS NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, dv).
-    ADD nd.
-    mLog("Lower Pe: dV=" + ROUND(dv,1) + " m/s  targetPe=" + ROUND(targetPe/1000,1) + "km").
-    RETURN nd.
-}
-
-GLOBAL FUNCTION planRecircularize {
-    PARAMETER targetPe.
-
-    LOCAL mu   IS SHIP:ORBIT:BODY:MU.
-    LOCAL rAp  IS SHIP:ORBIT:BODY:RADIUS + SHIP:APOAPSIS.
-    LOCAL rPe  IS SHIP:ORBIT:BODY:RADIUS + targetPe.
-    LOCAL tSMA IS (rAp + rPe) / 2.
-    LOCAL vNew IS SQRT(mu * (2/rAp - 1/tSMA)).
-    LOCAL vNow IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:APOAPSIS):ORBIT:MAG.
-    LOCAL dv   IS vNew - vNow.
-
-    LOCAL nd IS NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, dv).
-    ADD nd.
-    mLog("Recircularize: dV=" + ROUND(dv,1) + " m/s  targetPe=" + ROUND(targetPe/1000,1) + "km").
     RETURN nd.
 }
 
 GLOBAL FUNCTION planRaisePeNow {
     PARAMETER targetPe.
-
     LOCAL mu   IS SHIP:ORBIT:BODY:MU.
     LOCAL rNow IS SHIP:ORBIT:BODY:RADIUS + SHIP:ALTITUDE.
     LOCAL rPe  IS SHIP:ORBIT:BODY:RADIUS + targetPe.
-
     LOCAL vNow IS SHIP:VELOCITY:ORBIT:MAG.
     LOCAL tSMA IS (rNow + rPe) / 2.
     LOCAL vNew IS SQRT(mu * (2/rNow - 1/tSMA)).
     LOCAL dv   IS vNew - vNow.
-
     LOCAL lead IS 60.
     IF ABS(dv) > 100 { SET lead TO 90. }
     IF ABS(dv) > 300 { SET lead TO 120. }
     LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, dv).
     ADD nd.
-    mLog("Raise Pe now: dV=" + ROUND(dv,1)
-        + " m/s  currentAlt=" + ROUND(SHIP:ALTITUDE/1000,1)
-        + "km  targetPe=" + ROUND(targetPe/1000,0)
-        + "km  lead=" + lead + "s").
     RETURN nd.
 }
 
 GLOBAL FUNCTION planAoPChange {
     PARAMETER targetAoP.
-
     LOCAL currentAoP IS SHIP:ORBIT:ARGUMENTOFPERIAPSIS.
     LOCAL deltaAoP IS targetAoP - currentAoP.
     IF deltaAoP > 180  { SET deltaAoP TO deltaAoP - 360. }
     IF deltaAoP < -180 { SET deltaAoP TO deltaAoP + 360. }
-
-    IF ABS(deltaAoP) < 2 {
-        mLog("AoP already within 2deg — skipping.").
-        RETURN 0.
-    }
-
+    IF ABS(deltaAoP) < 2 { RETURN 0. }
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL a  IS SHIP:ORBIT:SEMIMAJORAXIS.
     LOCAL e  IS SHIP:ORBIT:ECCENTRICITY.
     LOCAL h  IS SQRT(mu * a * (1 - e^2)).
-
     LOCAL dvMag IS 2 * (mu / h) * e * SIN(ABS(deltaAoP) / 2).
-
     LOCAL ta1 IS deltaAoP / 2.
     LOCAL ta2 IS ta1 + 180.
     LOCAL eta1 IS etaToTrueAnomaly(ta1).
     LOCAL eta2 IS etaToTrueAnomaly(ta2).
-
     LOCAL burnETA IS eta1.
     LOCAL dvSign IS -1.
     IF eta2 < eta1 {
         SET burnETA TO eta2.
         SET dvSign TO 1.
     }
-
     LOCAL dvRadial IS dvSign * dvMag.
     LOCAL burnUT IS TIME:SECONDS + burnETA.
-
     LOCAL nd IS NODE(burnUT, dvRadial, 0, 0).
     ADD nd.
-    mLog("AoP change: " + ROUND(currentAoP,1) + " -> " + ROUND(targetAoP,1)
-        + "deg  delta=" + ROUND(deltaAoP,1)
-        + "  dV=" + ROUND(dvMag,1) + " m/s"
-        + "  ETA=" + ROUND(burnETA,0) + "s").
     RETURN nd.
 }
 
@@ -457,8 +368,7 @@ LOCAL FUNCTION _safeMaxAcc {
 }
 
 LOCAL FUNCTION _isComplete {
-    PARAMETER nd.
-    PARAMETER origDV.
+    PARAMETER nd, origDV.
     LOCAL remaining IS nd:DELTAV:MAG.
     LOCAL threshold IS MAX(ABS_CUTOFF, origDV * COMPLETE_FRAC).
     LOCAL dotCheck IS VDOT(nd:BURNVECTOR:NORMALIZED, nd:DELTAV:NORMALIZED).
@@ -474,17 +384,6 @@ LOCAL FUNCTION _needsStage {
     FOR eng IN engs { IF eng:FLAMEOUT { RETURN TRUE. } }
     IF SHIP:MAXTHRUST = 0 { RETURN TRUE. }
     RETURN FALSE.
-}
-
-LOCAL FUNCTION _phaseAngle {
-    PARAMETER myVessel.
-    PARAMETER target.
-    LOCAL vPos IS myVessel:ORBIT:BODY:POSITION - myVessel:POSITION.
-    LOCAL tPos IS myVessel:ORBIT:BODY:POSITION - target:POSITION.
-    LOCAL angle IS VANG(vPos, tPos).
-    LOCAL cross IS VCRS(vPos, tPos).
-    IF VDOT(cross, myVessel:ORBIT:BODY:ANGULARVEL) < 0 { SET angle TO 360 - angle. }
-    RETURN angle.
 }
 
 LOCAL FUNCTION _findCmdModule {
@@ -509,4 +408,16 @@ LOCAL FUNCTION _wakeCmd {
     LOCAL cm IS _findCmdModule().
     IF cm = 0 { RETURN. }
     IF cm:HASFIELD("hibernation") { cm:SETFIELD("hibernation", FALSE). }
+}
+
+// Global Patch Traversal Helper
+LOCAL FUNCTION _getTargetPatch {
+    PARAMETER originTarget.
+    PARAMETER targetBody.
+    LOCAL p IS originTarget:ORBIT.
+    UNTIL NOT p:HASNEXTPATCH {
+        SET p TO p:NEXTPATCH.
+        IF p:BODY:NAME = targetBody:NAME { RETURN p. }
+    }
+    RETURN 0.
 }

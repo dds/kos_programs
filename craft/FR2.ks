@@ -37,7 +37,7 @@ GLOBAL CFG IS LEXICON(
 ).
 
 GLOBAL LIBS IS LIST(
-    "phases", "launch", "xfer",
+    "phases", "launch", "xfer", "mcc",
     "countdown", "maneuver", "inclination",
     "orbit", "targeting", "landing",
     "molniya", "payload_ops", "utils"
@@ -177,6 +177,7 @@ GLOBAL FUNCTION main {
         "EXTEND_ANTS",      phaseExtendAnts@,
         "PARKING",          phaseParking@,
         "TRANSFER",         phaseTransfer@,
+        "MCC",              phaseMidCourse@,
         "COAST",            phaseCoast@,
         "CAPTURE",          phaseCapture@,
         "CIRC",             phaseCirc@,
