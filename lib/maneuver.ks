@@ -231,10 +231,14 @@ GLOBAL FUNCTION planTransfer {
         LOCAL bestTime IS foundUt.
         LOCAL baseUt IS foundUt.
 
+        LOCAL lanTol IS 0.5.
+        IF CFG:HASKEY("LAN_ERR_TOL") { SET lanTol TO CFG["LAN_ERR_TOL"]. }
+
         mLog("LAN scan: " + nOrbits + " orbits x " + nSlices
-            + " slices, target=" + ROUND(lanTarget,1)).
+            + " slices, target=" + ROUND(lanTarget,1) + " tol=" + ROUND(lanTol,2)).
 
         FROM { LOCAL i IS 0. } UNTIL i >= nOrbits STEP { SET i TO i + 1. } DO {
+            IF ABS(bestLanErr) <= lanTol { BREAK. }
             LOCAL orbitStart IS baseUt + i * shipPeriod.
             IF orbitStart < TIME:SECONDS + 60 { }
             ELSE {
@@ -285,6 +289,15 @@ GLOBAL FUNCTION planTransfer {
     LOCAL dvMax IS foundDv * 1.15.
     LOCAL dvMin IS foundDv * 0.85.
     LOCAL lastGoodDv IS foundDv.
+
+    LOCAL preCheck IS _getTargetPatch(testNode, targetBody).
+    IF preCheck = 0 {
+        mLog("PE: no encounter at selected time — skipping convergence.").
+    } ELSE IF preCheck:PERIAPSIS < 0 {
+        mLog("PE: impact trajectory (pe=" + ROUND(preCheck:PERIAPSIS/1000,1) + "km) — skipping convergence.").
+    } ELSE {
+        mLog("PE: starting convergence, current Pe=" + ROUND(preCheck:PERIAPSIS/1000,1) + "km target=" + ROUND(targetPe/1000,1) + "km.").
+    }
 
     FROM { LOCAL i IS 0. } UNTIL i >= 12 STEP { SET i TO i + 1. } DO {
         LOCAL p IS _getTargetPatch(testNode, targetBody).
