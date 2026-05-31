@@ -16,7 +16,7 @@ GLOBAL CFG IS LEXICON(
     "LAUNCH_STAGE_LIMIT",       0,
     "FAIRING_ALT",          68000,
     "EXTEND_ALT",           72000,
-    "RELAY_ALT",          1000000,
+    "RELAY_ALT",           326391,
     "CAPTURE_PE",            12500,
     "CAPTURE_INC",              90,
     "CAPTURE_LAN",              25,
@@ -57,7 +57,6 @@ LOCAL FUNCTION buildPhaseSequence {
         orbitPhases:ADD("MOLNIYA_INSERT").
     } ELSE {
         orbitPhases:ADD("RAISE").
-        orbitPhases:ADD("CIRC").
     }
     orbitPhases:ADD("INCLINE").
 
