@@ -1,16 +1,11 @@
 // ============================================================
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
-LOCAL FUNCTION _loadLib {
-    PARAMETER libName.
-    RUNONCEPATH("1:/lib/" + libName + ".ks").
+LOCAL FUNCTION _logPath {
+    RETURN "1:/logs/" + logId() + ".log".
 }
 
 GLOBAL FUNCTION flightLogPath {
-    LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
-    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
-    LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
-
     LOCAL logPathFile IS "1:/state/log_path.state".
     LOCAL _flightLogPath IS "".
     IF EXISTS(logPathFile) {
@@ -18,7 +13,7 @@ GLOBAL FUNCTION flightLogPath {
     }
     IF _flightLogPath = "" {
         SET _flightLogPath TO _logPath().
-        LOG "=== FAULT LOG START: " + logId() + " ===" TO p.
+        LOG "=== FAULT LOG START: " + logId() + " ===" TO _flightLogPath.
         LOG _flightLogPath TO logPathFile.
     }
     RETURN _flightLogPath.
@@ -38,7 +33,11 @@ GLOBAL FUNCTION slug {
 }
 
 GLOBAL FUNCTION logId {
-    LOCAL baseId IS slug().
+    LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
+    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS / 10, 0). }
+    stateSetNum("launch_time", launchT).
+
+    LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
     
     LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
     IF isEVA {
@@ -49,17 +48,13 @@ GLOBAL FUNCTION logId {
     RETURN baseId.
 }
 
-LOCAL FUNCTION _logPath {
-    RETURN "1:/logs/" + logId().
-}
-
 GLOBAL FUNCTION archiveLog {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
-    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
+    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS / 10, 0). }
     LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
-    COPYPATH(flightLogPath(), shipDir + "/" + logId()).
+    COPYPATH(flightLogPath(), shipDir + "/" + logId() + ".log").
 }
 
 LOCAL FUNCTION _sanitizeName {
