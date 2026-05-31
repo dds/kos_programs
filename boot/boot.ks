@@ -143,8 +143,9 @@ PRINT "  BOOT #" + bootCount + " OK".
 printStorageStatus().
 
 // Archive the boot log.
-archiveLog().
-
+IF HOMECONNECTION:ISCONNECTED {
+    archiveLog().
+}
 PRINT " ".
 PRINT "  >> Press any key for MANUAL mode (5s)".
 LOCAL overrideStart IS TIME:SECONDS.
