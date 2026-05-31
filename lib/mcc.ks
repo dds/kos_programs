@@ -90,92 +90,6 @@ GLOBAL FUNCTION phaseMidCourse {
     nextPhase(xferSeq).
 }
 
-LOCAL FUNCTION _correctPe {
-    PARAMETER nd, target, targetPe.
-    FROM { LOCAL i IS 0. } UNTIL i >= 10 STEP { SET i TO i + 1. } DO {
-        LOCAL p IS _getTargetPatch(nd, target).
-        IF p = 0 OR p:PERIAPSIS < 0 { RETURN. }
-        LOCAL err IS targetPe - p:PERIAPSIS.
-        IF ABS(err) < MCC_PE_TOL { RETURN. }
-        LOCAL basePe IS p:PERIAPSIS.
-        LOCAL oldPro IS nd:PROGRADE.
-        SET nd:PROGRADE TO oldPro + MCC_EPS.
-        WAIT 0.05.
-        LOCAL p2 IS _getTargetPatch(nd, target).
-        SET nd:PROGRADE TO oldPro.
-        IF p2 = 0 { RETURN. }
-        LOCAL sens IS (p2:PERIAPSIS - basePe) / MCC_EPS.
-        IF ABS(sens) < 1 { RETURN. }
-        LOCAL dv IS err / sens * MCC_DAMP.
-        SET nd:PROGRADE TO oldPro + dv.
-        WAIT 0.05.
-        IF nd:DELTAV:MAG > MCC_DV_CAP {
-            SET nd:PROGRADE TO oldPro.
-            RETURN.
-        }
-    }
-}
-
-LOCAL FUNCTION _correctAoP {
-    PARAMETER nd, target, targetAoP.
-    FROM { LOCAL i IS 0. } UNTIL i >= 10 STEP { SET i TO i + 1. } DO {
-        LOCAL p IS _getTargetPatch(nd, target).
-        IF p = 0 { RETURN. }
-        LOCAL err IS targetAoP - p:ARGUMENTOFPERIAPSIS.
-        IF err > 180 { SET err TO err - 360. }
-        IF err < -180 { SET err TO err + 360. }
-        IF ABS(err) < MCC_ANG_TOL { RETURN. }
-        LOCAL baseAoP IS p:ARGUMENTOFPERIAPSIS.
-        LOCAL oldRad IS nd:RADIALOUT.
-        SET nd:RADIALOUT TO oldRad + MCC_EPS.
-        WAIT 0.05.
-        LOCAL p2 IS _getTargetPatch(nd, target).
-        SET nd:RADIALOUT TO oldRad.
-        IF p2 = 0 { RETURN. }
-        LOCAL dAoP IS p2:ARGUMENTOFPERIAPSIS - baseAoP.
-        IF dAoP > 180 { SET dAoP TO dAoP - 360. }
-        IF dAoP < -180 { SET dAoP TO dAoP + 360. }
-        IF ABS(dAoP) < 0.01 { RETURN. }
-        LOCAL dv IS err / (dAoP / MCC_EPS) * MCC_DAMP.
-        SET nd:RADIALOUT TO oldRad + dv.
-        WAIT 0.05.
-        IF nd:DELTAV:MAG > MCC_DV_CAP {
-            SET nd:RADIALOUT TO oldRad.
-            RETURN.
-        }
-    }
-}
-
-LOCAL FUNCTION _correctLan {
-    PARAMETER nd, target, targetLan.
-    FROM { LOCAL i IS 0. } UNTIL i >= 10 STEP { SET i TO i + 1. } DO {
-        LOCAL p IS _getTargetPatch(nd, target).
-        IF p = 0 { RETURN. }
-        LOCAL err IS targetLan - p:LAN.
-        IF err > 180 { SET err TO err - 360. }
-        IF err < -180 { SET err TO err + 360. }
-        IF ABS(err) < MCC_ANG_TOL { RETURN. }
-        LOCAL baseLan IS p:LAN.
-        LOCAL oldNrm IS nd:NORMAL.
-        SET nd:NORMAL TO oldNrm + MCC_EPS.
-        WAIT 0.05.
-        LOCAL p2 IS _getTargetPatch(nd, target).
-        SET nd:NORMAL TO oldNrm.
-        IF p2 = 0 { RETURN. }
-        LOCAL dLan IS p2:LAN - baseLan.
-        IF dLan > 180 { SET dLan TO dLan - 360. }
-        IF dLan < -180 { SET dLan TO dLan + 360. }
-        IF ABS(dLan) < 0.01 { RETURN. }
-        LOCAL dv IS err / (dLan / MCC_EPS) * MCC_DAMP.
-        SET nd:NORMAL TO oldNrm + dv.
-        WAIT 0.05.
-        IF nd:DELTAV:MAG > MCC_DV_CAP {
-            SET nd:NORMAL TO oldNrm.
-            RETURN.
-        }
-    }
-}
-
 LOCAL FUNCTION _getTargetPatch {
     PARAMETER originTarget.
     PARAMETER targetBody.
@@ -288,4 +202,105 @@ LOCAL FUNCTION _optimizeMCC {
     }
 
     RETURN mccNode.
+}
+
+GLOBAL FUNCTION phaseApoapsisCrank {
+    LOCAL targetBody IS missionTargetBody().
+
+    // Mission targets
+    LOCAL targetInc IS CFG["CAPTURE_INC"]. // 90
+    LOCAL targetAoP IS CFG["CAPTURE_AOP"]. // 93.2
+    LOCAL targetPe  IS CFG["CAPTURE_PE"].  // 12500
+
+    mLog("Starting Apoapsis Crank to Polar/AoP alignment...").
+
+    // Plant the node exactly at Apoapsis
+    LOCAL crankTime IS TIME:SECONDS + ETA:APOAPSIS.
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    LOCAL nd IS NODE(crankTime, 0, 0, 0).
+    ADD nd.
+    WAIT 0.1.
+
+    // --- FITNESS FUNCTION ---
+    LOCAL FUNCTION getCrankScore {
+        LOCAL p IS nd:ORBIT. // We use the node's resulting orbit directly
+        
+        // Massive penalties for impacting the Mun
+        IF p:PERIAPSIS < 0 { RETURN 9999999. }
+
+        // Normalize errors
+        LOCAL peErr IS ABS(p:PERIAPSIS - targetPe) / 1000. 
+        LOCAL incErr IS ABS(p:INCLINATION - targetInc).
+        
+        LOCAL aopErr IS ABS(p:ARGUMENTOFPERIAPSIS - targetAoP).
+        IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
+
+        // Weighting: INC is massive here, AOP is secondary, PE keeps us locked
+        RETURN (incErr * 50) + (aopErr * 20) + (peErr * 10).
+    }
+
+    // --- 3-AXIS HILL CLIMB ---
+    LOCAL currentScore IS getCrankScore().
+    LOCAL stepSize IS 5.0. // Smaller initial step, as velocity is low
+    LOCAL minStep IS 0.01.
+    LOCAL iter IS 0.
+
+    UNTIL stepSize < minStep OR iter > 200 {
+        SET iter TO iter + 1.
+        LOCAL improved IS FALSE.
+
+        LOCAL basePro IS nd:PROGRADE.
+        LOCAL baseRad IS nd:RADIALOUT.
+        LOCAL baseNor IS nd:NORMAL.
+
+        // 6 directions to probe
+        LOCAL probes IS LIST(
+            LIST(stepSize, 0, 0), LIST(-stepSize, 0, 0),
+            LIST(0, stepSize, 0), LIST(0, -stepSize, 0),
+            LIST(0, 0, stepSize), LIST(0, 0, -stepSize)
+        ).
+
+        LOCAL bestProbeScore IS currentScore.
+        LOCAL bestPro IS basePro.
+        LOCAL bestRad IS baseRad.
+        LOCAL bestNor IS baseNor.
+
+        FOR p IN probes {
+            SET nd:PROGRADE TO basePro + p[0].
+            SET nd:RADIALOUT TO baseRad + p[1].
+            SET nd:NORMAL TO baseNor + p[2].
+            WAIT 0.01. 
+
+            LOCAL probeScore IS getCrankScore().
+            IF probeScore < bestProbeScore {
+                SET bestProbeScore TO probeScore.
+                SET bestPro TO nd:PROGRADE.
+                SET bestRad TO nd:RADIALOUT.
+                SET bestNor TO nd:NORMAL.
+                SET improved TO TRUE.
+            }
+            
+            // Reset
+            SET nd:PROGRADE TO basePro.
+            SET nd:RADIALOUT TO baseRad.
+            SET nd:NORMAL TO baseNor.
+        }
+
+        IF improved {
+            SET nd:PROGRADE TO bestPro.
+            SET nd:RADIALOUT TO bestRad.
+            SET nd:NORMAL TO bestNor.
+            SET currentScore TO bestProbeScore.
+        } ELSE {
+            SET stepSize TO stepSize * 0.5.
+        }
+    }
+
+    LOCAL totalDv IS nd:DELTAV:MAG.
+    mLog("Crank Converged: dV=" + ROUND(totalDv, 1) + " m/s").
+    mLog("Result - INC: " + ROUND(nd:ORBIT:INCLINATION, 1) + "  AoP: " + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1) + "  Pe: " + ROUND(nd:ORBIT:PERIAPSIS/1000, 1) + "km").
+
+    // Hand off to maneuver execution
+    executeManeuver().
+    nextPhase(xferSeq).
 }

@@ -175,7 +175,7 @@ GLOBAL FUNCTION main {
         "ANTS",             phaseExtendAnts@,
         "PARK",             phaseParking@,
         "XING",             phaseTransfer@,
-        "MCC",              phaseMidCourse@,
+        "MCC",              phaseApoapsisCrank@,
         "COAST",            phaseCoast@,
         "CAPTURE",          phaseCapture@,
         "CIRC",             phaseCirc@,
