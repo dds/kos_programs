@@ -205,7 +205,7 @@ GLOBAL FUNCTION phaseRaiseAlt {
                 mLog("Raising Ap to " + ROUND(targetAp/1000,0) + "km at Pe.").
             }
             _burnWithRetry(
-                { LOCAL eta IS etaToTrueAnomaly(burnTA). LOCAL burnTime IS TIME:SECONDS + eta. LOCAL rBurn IS bodyR + _altAtTA(burnTA). LOCAL rTarget IS bodyR + targetAp. LOCAL tSMA IS (rBurn + rTarget) / 2. LOCAL vNow IS VELOCITYAT(SHIP, burnTime):ORBIT:MAG. LOCAL vNew IS SQRT(mu * (2/rBurn - 1/tSMA)). RETURN NODE(burnTime, 0, 0, vNew - vNow). },
+                { LOCAL eta_ IS etaToTrueAnomaly(burnTA). LOCAL burnTime IS TIME:SECONDS + eta_. LOCAL rBurn IS bodyR + _altAtTA(burnTA). LOCAL rTarget IS bodyR + targetAp. LOCAL tSMA IS (rBurn + rTarget) / 2. LOCAL vNow IS VELOCITYAT(SHIP, burnTime):ORBIT:MAG. LOCAL vNew IS SQRT(mu * (2/rBurn - 1/tSMA)). RETURN NODE(burnTime, 0, 0, vNew - vNow). },
                 "Raise Ap").
         } ELSE {
             mLog("Ap already within tolerance.").
