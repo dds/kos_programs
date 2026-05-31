@@ -36,13 +36,6 @@ GLOBAL FUNCTION phaseMidCourse {
         mLog("MCC: Local transfer. Coasting to halfway point (" + ROUND(waitTime,0) + "s).").
     }
 
-    // LOCAL midTime IS TIME:SECONDS + waitTime.
-    // SET SAS TO TRUE.
-    // IF waitTime > 120 {
-    //     KUNIVERSE:TIMEWARP:WARPTO(midTime - 60).
-    //     WAIT UNTIL TIME:SECONDS >= (midTime - 60).
-    // }
-
     mLog("Planning mid-course correction.").
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
 
