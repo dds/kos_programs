@@ -78,14 +78,7 @@ GLOBAL FUNCTION phaseLaunch {
     mLog("Launch — STAGE fired.").
     HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
 
-    WHEN ascentNeedsStage() THEN {
-        IF stateGet("phase","") = "DONE" { RETURN. }
-        mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
-        HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
-        STAGE.
-        WAIT 0.5.
-        PRESERVE.
-    }
+    armAscentStaging().
 
     nextPhase(launchSeq).
 }
@@ -132,6 +125,36 @@ GLOBAL FUNCTION phaseParking {
     orbitSummary().
     mLog("Stable parking orbit confirmed.").
     nextPhase(launchSeq).
+}
+
+// ── Staging ──────────────────────────────────────────────────
+
+LOCAL _stagingArmed IS FALSE.
+
+GLOBAL FUNCTION armAscentStaging {
+    IF _stagingArmed { RETURN. }
+    SET _stagingArmed TO TRUE.
+
+    WHEN ascentNeedsStage() THEN {
+        IF stateGet("phase","") = "DONE" OR stateGet("phase","") = "ABORT" { RETURN. }
+        mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
+        HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
+        STAGE.
+        WAIT 0.5.
+        PRESERVE.
+    }
+
+    IF CFG:HASKEY("RECOVERY_PE") {
+        WHEN SHIP:PERIAPSIS >= CFG["RECOVERY_PE"]
+                AND SHIP:PERIAPSIS < CFG["RECOVERY_PE"] + 10000
+                AND ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED THEN {
+            mLog("Recovery staging: Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km, ejecting stage.").
+            HUDTEXT("Recovery staging!", 3, 2, 14, YELLOW, FALSE).
+            STAGE.
+        }
+    }
+
+    mLog("Ascent staging armed.").
 }
 
 // ── Private helpers ──────────────────────────────────────────
@@ -217,4 +240,10 @@ LOCAL FUNCTION _deployFairing {
     } ELSE {
         mLogWarn("Fairing Deploy event not available.").
     }
+}
+
+// ── Reboot recovery ─────────────────────────────────────────
+IF ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED
+        AND stateGetNum("boot_count", 0) > 1 {
+    armAscentStaging().
 }

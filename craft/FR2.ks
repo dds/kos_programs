@@ -29,7 +29,8 @@ GLOBAL CFG IS LEXICON(
     "PROBE_TARGET_TOL",        2500,
     "MOLNIYA_PERIOD",         21549,
     "MOLNIYA_AOP",               90,
-    "MOLNIYA_ECC",               0.3
+    "MOLNIYA_ECC",               0.3,
+    "RECOVERY_PE",           32000
 ).
 
 GLOBAL LIBS IS LIST(
