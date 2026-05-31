@@ -130,10 +130,10 @@ GLOBAL FUNCTION lambertSolve {
 //
 // Returns: LEX("position", pos_vector, "velocity", vel_vector)
 GLOBAL FUNCTION orbitalStateVectors {
-    PARAMETER obt, epochTime.
+    PARAMETER obt_, epochTime.
     RETURN LEX(
-        "position", POSITIONAT(obt, epochTime) - BODY:POSITION,
-        "velocity", VELOCITYAT(obt, epochTime):ORBIT
+        "position", POSITIONAT(obt_, epochTime) - BODY:POSITION,
+        "velocity", VELOCITYAT(obt_, epochTime):ORBIT
     ).
 }
 
