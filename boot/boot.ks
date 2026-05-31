@@ -82,6 +82,7 @@ _loadLib("state").
 stateInit().
 _loadLib("logs").
 initLog().
+WAIT 0. // Let the start time tick and get created.
 _loadLib("files").
 
 LOCAL bootCount IS stateGetNum("boot_count", 0) + 1.
@@ -148,10 +149,10 @@ IF HOMECONNECTION:ISCONNECTED {
     LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
-    COPYPATH(flightLogPath, shipDir + "/" + logId()).
-    mLog("Auto-archived " + flightLogPath + " to " + shipDir + ".").
+    COPYPATH(flightLogPath(), shipDir + "/" + logId()).
+    mLog("Auto-archived " + flightLogPath() + " to " + shipDir + ".").
 } ELSE {
-    PRINT "  No KSC link — " + flightLogPath + " needs manual retrieval".
+    PRINT "  No KSC link — " + flightLogPath() + " needs manual retrieval".
 }
 
 PRINT " ".
@@ -216,9 +217,7 @@ IF manualMode {
     }
     PRINT " ".
     PRINT "  -- LOGS --".
-    IF DEFINED flightLogPath {
-        PRINT "  Flight log .. " + flightLogPath.
-    }
+    PRINT "  Flight log .. " + flightLogPath().
 
     IF HOMECONNECTION:ISCONNECTED {
         LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
@@ -226,10 +225,10 @@ IF manualMode {
         LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
         IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
         IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
-        COPYPATH(flightLogPath, shipDir + "/" + flightLogPath).
-        mLog("Auto-archived " + flightLogPath + " to " + shipDir + ".").
+        COPYPATH(flightLogPath(), shipDir + "/" + flightLogPath()).
+        mLog("Auto-archived " + flightLogPath() + " to " + shipDir + ".").
     } ELSE {
-        PRINT "  No KSC link — " + flightLogPath + " needs manual retrieval".
+        PRINT "  No KSC link — " + flightLogPath() + " needs manual retrieval".
     }
 
     PRINT " ".
@@ -265,9 +264,9 @@ IF HOMECONNECTION:ISCONNECTED {
     LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
-    COPYPATH(flightLogPath, shipDir + "/" + logId()).
-    mLog("Auto-archived " + flightLogPath + " to " + shipDir + ".").
+    COPYPATH(flightLogPath(), shipDir + "/" + logId()).
+    mLog("Auto-archived " + flightLogPath() + " to " + shipDir + ".").
 } ELSE {
-    PRINT "  No KSC link — " + flightLogPath + " needs manual retrieval".
+    PRINT "  No KSC link — " + flightLogPath() + " needs manual retrieval".
 }
 PRINT ("END OF LINE. GODSPEED.").

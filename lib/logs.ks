@@ -2,17 +2,20 @@
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
 
-DECLARE GLOBAL flightLogPath IS "".
+LOCAL _flightLogPath IS "".
+GLOBAL FUNCTION flightLogPath {
+    RETURN _flightLogPath.
+}
 
 GLOBAL FUNCTION initLog {
     LOCAL logPathFile IS "1:/state/log_path.state".
     IF EXISTS(logPathFile) {
-        SET flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
-        IF flightLogPath = "" { SET flightLogPath TO _newLogPath(logPathFile). }
+        SET _flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
+        IF _flightLogPath = "" { SET _flightLogPath TO _newLogPath(logPathFile). }
     } ELSE {
-        SET flightLogPath TO _newLogPath(logPathFile).
+        SET _flightLogPath TO _newLogPath(logPathFile).
     }
-    mLog("Fault log: " + flightLogPath).
+    mLog("Fault log: " + _flightLogPath).
 }
 
 GLOBAL FUNCTION slug {
@@ -72,8 +75,8 @@ GLOBAL FUNCTION mLog {
     LOCAL line IS "[" + _fmtTime() + "][" + level + "] " + message.
     PRINT line.
 
-    IF flightLogPath <> "" AND CORE:VOLUME:FREESPACE > 500 {
-        LOG line TO flightLogPath.
+    IF flightLogPath() <> "" AND CORE:VOLUME:FREESPACE > 500 {
+        LOG line TO flightLogPath().
     }
 }
 
