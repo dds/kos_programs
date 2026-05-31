@@ -148,7 +148,7 @@ IF HOMECONNECTION:ISCONNECTED {
     LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
-    COPYPATH(flightLogPath, shipDir + "/" + flightLogPath).
+    COPYPATH(flightLogPath, shipDir + "/" + logId()).
     mLog("Auto-archived " + flightLogPath + " to " + shipDir + ".").
 } ELSE {
     PRINT "  No KSC link — " + flightLogPath + " needs manual retrieval".
@@ -265,7 +265,7 @@ IF HOMECONNECTION:ISCONNECTED {
     LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
-    COPYPATH(flightLogPath, shipDir + "/" + flightLogPath).
+    COPYPATH(flightLogPath, shipDir + "/" + logId()).
     mLog("Auto-archived " + flightLogPath + " to " + shipDir + ".").
 } ELSE {
     PRINT "  No KSC link — " + flightLogPath + " needs manual retrieval".

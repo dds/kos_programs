@@ -25,10 +25,10 @@ GLOBAL FUNCTION slug {
 }
 
 GLOBAL FUNCTION logId {
-    LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
-    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
-
-    LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
+    // LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
+    // IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
+    // LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
+    LOCAL baseId IS slug().
     
     LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
     IF isEVA {
