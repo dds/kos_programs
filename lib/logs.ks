@@ -2,10 +2,17 @@
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
 
+LOCAL FUNCTION _loadLib {
+    PARAMETER libName.
+    RUNONCEPATH("1:/lib/" + libName + ".ks").
+}
+
 GLOBAL FUNCTION flightLogPath {
+    _loadLib("state").
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
     IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
     LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
+
     LOCAL logPathFile IS "1:/state/log_path.state".
     LOCAL _flightLogPath IS "".
     SET _flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
