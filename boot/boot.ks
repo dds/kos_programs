@@ -71,7 +71,7 @@ LOCAL FUNCTION _syncLib {
 
 LOCAL FUNCTION _loadLib {
     PARAMETER libName.
-    RUNPATH("1:/lib/" + libName + ".ks").
+    RUNPATHONCE("1:/lib/" + libName + ".ks").
 }
 
 PRINT "  SYNC core ......... ".
@@ -82,7 +82,7 @@ _loadLib("state").
 stateInit().
 _loadLib("logs").
 initLog().
-WAIT 0. // Let the start time tick and get created.
+WAIT 0.001. // Let the start time tick and get created.
 _loadLib("files").
 
 LOCAL bootCount IS stateGetNum("boot_count", 0) + 1.
