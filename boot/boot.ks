@@ -102,8 +102,11 @@ LOCAL FUNCTION _syncLib {
 
 LOCAL FUNCTION _loadLib {
     PARAMETER libName.
-    // RUNONCEPATH automatically checks for .ksm before .ks
-    RUNONCEPATH("1:/lib/" + libName).
+    IF EXISTS("1:/lib/" + libName + ".ksm") {
+        RUNONCEPATH("1:/lib/" + libName + ".ksm").
+    } ELSE {
+        RUNONCEPATH("1:/lib/" + libName + ".ks").
+    }
 }
 
 IF HAS_LINK {
