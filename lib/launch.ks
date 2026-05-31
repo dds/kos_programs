@@ -136,7 +136,9 @@ GLOBAL FUNCTION armAscentStaging {
     SET _stagingArmed TO TRUE.
 
     WHEN ascentNeedsStage() THEN {
-        IF stateGet("phase","") = "DONE" OR stateGet("phase","") = "ABORT" { RETURN. }
+        LOCAL ph IS stateGet("phase","").
+        IF ph = "DONE" OR ph = "ABORT" { RETURN. }
+        IF NOT ADDONS:MJ:ASCENT:ENABLED { RETURN. }
         mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
         HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
         STAGE.
