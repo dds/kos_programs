@@ -2,23 +2,15 @@
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
 
-    LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
-    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
-    LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
-    IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
-    IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
-
 GLOBAL FUNCTION flightLogPath {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
     IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
     LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
     LOCAL logPathFile IS "1:/state/log_path.state".
     LOCAL _flightLogPath IS "".
-    SET _flightLogPath TO OPEN(logPathFile).
-    IF NOT _flightLogPath OR _flightLogPath = "" {
+    SET _flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
+    IF _flightLogPath = "" {
         SET _flightLogPath TO _newLogPath(logPathFile).
-    } ELSE {
-        SET _flightLogPath TO _flightLogPath:READALL:STRING:TRIM.
     }
     RETURN _flightLogPath.
 }
