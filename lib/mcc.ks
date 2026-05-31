@@ -41,7 +41,7 @@ GLOBAL FUNCTION phaseMidCourse {
     mLog("Planning mid-course correction.").
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
 
-    LOCAL nd IS NODE(TIME:SECONDS + 60, 0, 0, 0).
+    LOCAL nd IS NODE(TIME:SECONDS + waitTime, 0, 0, 0).
     ADD nd.
     WAIT 0.1.
 
