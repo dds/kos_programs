@@ -1,17 +1,53 @@
 // ============================================================
 // orbit.ks  —  Orbit monitoring helpers  (0:/lib/orbit.ks)
+//
+// Utility functions for checking orbital parameters and waiting
+// for sphere-of-influence (SOI) transitions. Used by phase
+// machines to gate progression (e.g., "don't circularize until
+// the orbit is stable").
 // ============================================================
 
+// isOrbitCircular — check if the current orbit is nearly circular.
+//
+// Eccentricity measures how elongated an orbit is:
+//   e = 0    → perfect circle
+//   0 < e < 1 → ellipse
+//   e = 1    → parabolic escape
+//   e > 1    → hyperbolic escape
+//
+// The default threshold of 0.01 means "within 1% of circular",
+// which is typical for a parking orbit after circularization.
 GLOBAL FUNCTION isOrbitCircular {
     PARAMETER threshold IS 0.01.
     RETURN SHIP:ORBIT:ECCENTRICITY < threshold.
 }
 
+// isOrbitStable — check if the orbit is safe from atmospheric drag and decay.
+//
+// An orbit is considered stable when:
+//   1. Periapsis is above the minimum safe altitude (default 70km for Kerbin,
+//      which is just above the atmosphere at 69.1km)
+//   2. Apoapsis is positive (negative apoapsis means escape trajectory)
+//   3. Eccentricity is below 0.05 (reasonably circular — a highly eccentric
+//      orbit with low Pe could dip into atmosphere at periapsis)
+//
+// Note: the minAlt default of 70000m is Kerbin-specific. For other bodies,
+// pass the appropriate atmosphere height + margin.
 GLOBAL FUNCTION isOrbitStable {
     PARAMETER minAlt IS 70000.
     RETURN SHIP:PERIAPSIS > minAlt AND SHIP:APOAPSIS > 0 AND SHIP:ORBIT:ECCENTRICITY < 0.05.
 }
 
+// waitForSOI — block until the ship enters the target body's sphere of influence.
+//
+// KSP uses a patched-conic approximation for orbital mechanics. Each body has
+// a sphere of influence (SOI) — when your trajectory crosses from one body's
+// SOI into another, kOS reports a different SHIP:ORBIT:BODY. This function
+// polls until that transition happens.
+//
+// The pollInterval controls how often we check (default 5s). A shorter interval
+// catches the transition faster but wastes more CPU. For most transfers this
+// doesn't matter since the transition is instantaneous from the game's perspective.
 GLOBAL FUNCTION waitForSOI {
     PARAMETER targetBody.
     PARAMETER pollInterval IS 5.
@@ -22,6 +58,11 @@ GLOBAL FUNCTION waitForSOI {
     mLog("SOI entered: " + targetBody:NAME).
 }
 
+// orbitSummary — log the current orbital parameters.
+//
+// Logs periapsis (km), apoapsis (km), eccentricity, inclination (degrees),
+// and the parent body name. Called at phase transitions and after maneuvers
+// so the flight log has a record of the orbit at each stage.
 GLOBAL FUNCTION orbitSummary {
     mLog("Orbit: Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km  Ap=" + ROUND(SHIP:APOAPSIS/1000,1)
         + "km  ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)

@@ -66,7 +66,7 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 
 - 4-space indentation, no tabs
 - File headers: `// ============` block with filename, description, path
-- No inline comments — keep files lean for storage constraints
+- Liberal comments encouraged — source files are compiled to KSM bytecode before upload, so comments have zero storage cost. Explain the "why", link to references, describe algorithms and orbital mechanics concepts
 - Private functions: `LOCAL FUNCTION _name { }` (underscore prefix)
 - Public functions: `GLOBAL FUNCTION name { }` (camelCase)
 - Config: `GLOBAL CFG IS LEXICON(...)` at top of vehicle scripts
@@ -158,7 +158,7 @@ Corrections run in order: AoP first (in-plane), then INC (out-of-plane). All are
 
 ## Key constraints
 
-- **Storage is scarce.** OCTO probes have 10,000 bytes; the primary FR2 probe core has ~100KB and runs near capacity. Minimize comments, avoid unnecessary whitespace. Use LIBS to load only what you need.
+- **Storage is scarce at runtime.** OCTO probes have 10,000 bytes; the primary FR2 probe core has ~100KB. Source files are compiled to KSM bytecode before upload, so comments and whitespace are free — only the compiled size matters. Use LIBS to load only what you need.
 - **No archive access in flight.** Once out of KSC physics range, you can't pull new files from 0:/.
 - **Reboots happen.** Power loss, quickload, scene changes all trigger reboot. Everything must be resumable via the state file.
 - **Periods end statements.** Forgetting the `.` at the end of a statement is the #1 syntax error.
