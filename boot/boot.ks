@@ -62,13 +62,17 @@ LOCAL FUNCTION _resolveScript {
     RETURN "".
 }
 
+GLOBAL KSM IS LIST().
+
 LOCAL FUNCTION _syncLib {
     PARAMETER libName.
     LOCAL src IS "0:/lib/" + libName + ".ks".
     LOCAL dst IS "1:/lib/" + libName + ".ks".
     COPYPATH(src, dst).
-    COMPILE dst.
-    DELETEPATH(dst).
+    IF KSM:CONTAINS(libName) {
+        COMPILE dst.
+        DELETEPATH(dst).
+    }
 }
 
 LOCAL FUNCTION _loadLib {

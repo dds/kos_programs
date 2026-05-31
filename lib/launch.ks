@@ -156,7 +156,12 @@ GLOBAL FUNCTION armAscentStaging {
             WAIT 0.3.
             STAGE.
             WAIT 0.5.
-            SET ADDONS:MJ:ASCENT:ENABLED TO TRUE.
+            mLog("Ascent complete post-staging, raising Pe to parking alt.").
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            planRaisePeNow(CFG["PARKING_ALT"]).
+            executeManeuver().
+            orbitSummary().
+            stateSet("phase", "PARKING").
         }
     }
 

@@ -43,6 +43,8 @@ GLOBAL LIBS IS LIST(
     "molniya", "payload_ops", "utils"
 ).
 
+SET KSM TO LIST("maneuver", "science", "plane", "rover", "xfer", "launch", "landing").
+
 LOCAL FUNCTION buildPhaseSequence {
     LOCAL hasMolniya IS FALSE.
     FOR ptype IN missionPayloads() {
