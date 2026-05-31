@@ -371,3 +371,146 @@ LOCAL FUNCTION _impactThreat {
 
     RETURN pe < 5000.
 }
+
+GLOBAL FUNCTION phaseElliptical {
+    LOCAL targetBody IS missionTargetBody().
+    WAIT 2.
+    mLog("Planning unified PE raise, INC, and AoP alignment at Apoapsis...").
+
+    // 1. Safely extract target parameters from the mission config
+    LOCAL targetPe  IS -1.
+    LOCAL targetInc IS -1.
+    LOCAL targetAoP IS -1.
+
+    IF CFG:HASKEY("TARGET_PE")   { SET targetPe TO CFG["TARGET_PE"]. }
+    IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
+    IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
+
+    IF targetPe < 0 AND targetInc < 0 AND targetAoP < 0 {
+        mLog("No finalization targets specified. Skipping phase.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    
+    // 2. Plant the base node exactly at Apoapsis
+    LOCAL burnTime IS TIME:SECONDS + ETA:APOAPSIS.
+    LOCAL nd IS NODE(burnTime, 0, 0, 0).
+    ADD nd.
+    WAIT 0.1.
+
+    // --- FITNESS FUNCTION ---
+    LOCAL FUNCTION getFinalScore {
+        LOCAL p IS nd:ORBIT. 
+        
+        // Safety catch: Do not allow solvers to crash the ship
+        IF p:PERIAPSIS < 0 { RETURN 9999999. }
+
+        LOCAL peErr  IS 0.
+        LOCAL incErr IS 0.
+        LOCAL aopErr IS 0.
+
+        IF targetPe >= 0 {
+            SET peErr TO ABS(p:PERIAPSIS - targetPe) / 1000. 
+        }
+        IF targetInc >= 0 {
+            SET incErr TO ABS(p:INCLINATION - targetInc).
+        }
+        IF targetAoP >= 0 {
+            LOCAL rawAoP IS ABS(p:ARGUMENTOFPERIAPSIS - targetAoP).
+            IF rawAoP > 180 { SET rawAoP TO 360 - rawAoP. }
+            SET aopErr TO rawAoP.
+        }
+
+        // Weighting: PE establishes safety/altitude, INC and AOP refine the alignment
+        RETURN (peErr * 10) + (incErr * 50) + (aopErr * 20).
+    }
+
+    // --- 3-AXIS HILL CLIMB (Prograde, Radial, Normal) ---
+    LOCAL currentScore IS getFinalScore().
+    LOCAL stepSize IS 10.0. 
+    LOCAL minStep IS 0.01.
+    LOCAL iter IS 0.
+
+    UNTIL stepSize < minStep OR iter > 250 {
+        SET iter TO iter + 1.
+        LOCAL improved IS FALSE.
+
+        LOCAL basePro IS nd:PROGRADE.
+        LOCAL baseRad IS nd:RADIALOUT.
+        LOCAL baseNor IS nd:NORMAL.
+
+        LOCAL probes IS LIST(
+            LIST(stepSize, 0, 0), LIST(-stepSize, 0, 0),
+            LIST(0, stepSize, 0), LIST(0, -stepSize, 0),
+            LIST(0, 0, stepSize), LIST(0, 0, -stepSize)
+        ).
+
+        LOCAL bestProbeScore IS currentScore.
+        LOCAL bestPro IS basePro.
+        LOCAL bestRad IS baseRad.
+        LOCAL bestNor IS baseNor.
+
+        FOR p IN probes {
+            SET nd:PROGRADE TO basePro + p[0].
+            SET nd:RADIALOUT TO baseRad + p[1].
+            SET nd:NORMAL TO baseNor + p[2].
+            WAIT 0.01. 
+
+            LOCAL probeScore IS getFinalScore().
+            IF probeScore < bestProbeScore {
+                SET bestProbeScore TO probeScore.
+                SET bestPro TO nd:PROGRADE.
+                SET bestRad TO nd:RADIALOUT.
+                SET bestNor TO nd:NORMAL.
+                SET improved TO TRUE.
+            }
+            
+            // Reset for next probe
+            SET nd:PROGRADE TO basePro.
+            SET nd:RADIALOUT TO baseRad.
+            SET nd:NORMAL TO baseNor.
+        }
+
+        IF improved {
+            SET nd:PROGRADE TO bestPro.
+            SET nd:RADIALOUT TO bestRad.
+            SET nd:NORMAL TO bestNor.
+            SET currentScore TO bestProbeScore.
+        } ELSE {
+            SET stepSize TO stepSize * 0.5. // Shrink step and refine
+        }
+    }
+
+    // 3. Evaluate and execute the resulting maneuver
+    LOCAL totalDv IS nd:DELTAV:MAG.
+    mLog("Finalization Converged: dV=" + ROUND(totalDv, 1) + " m/s").
+    
+    LOCAL resultMsg IS "Result ->".
+    IF targetPe >= 0  { SET resultMsg TO resultMsg + " Pe: " + ROUND(nd:ORBIT:PERIAPSIS/1000, 1) + "km". }
+    IF targetInc >= 0 { SET resultMsg TO resultMsg + " Inc: " + ROUND(nd:ORBIT:INCLINATION, 1) + "°". }
+    IF targetAoP >= 0 { SET resultMsg TO resultMsg + " AoP: " + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1) + "°". }
+    mLog(resultMsg).
+
+    // Execution loop integrating your retry architecture
+    LOCAL success IS FALSE.
+    LOCAL retries IS 0.
+    UNTIL success {
+        SET success TO executeManeuver().
+        IF NOT success {
+            SET retries TO retries + 1.
+            mLog("Finalization burn missed (attempt " + retries + ") — waiting 10s.").
+            IF retries >= MAX_RETRIES {
+                mLogError("Finalization failed after " + retries + " attempts. Halting.").
+                RETURN.
+            }
+            WAIT 10.
+        }
+    }
+
+    orbitSummary().
+    mLog("Orbit finalization complete!").
+    nextPhase(xferSeq).
+}
+

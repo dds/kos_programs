@@ -52,13 +52,15 @@ LOCAL FUNCTION buildPhaseSequence {
     }
 
     LOCAL orbitPhases IS LIST().
-    IF hasMolniya {
-        orbitPhases:ADD("CIRC").
-        orbitPhases:ADD("MOLNIYA_INSERT").
-    } ELSE {
-        orbitPhases:ADD("RAISE").
-    }
-    orbitPhases:ADD("INCLINE").
+    // IF hasMolniya {
+    //     orbitPhases:ADD("CIRC").
+    //     orbitPhases:ADD("MOLNIYA_INSERT").
+    // } ELSE {
+    //     orbitPhases:ADD("RAISE").
+    // }
+    // orbitPhases:ADD("INCLINE").
+
+    orbitPhases:ADD("ELLIPTICAL").
 
     LOCAL payloadPhases IS LEXICON(
         "CRASHPROBE", LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
@@ -181,6 +183,7 @@ GLOBAL FUNCTION main {
         "CIRC",             phaseCirc@,
         "RAISE",            phaseRaiseAlt@,
         "INCLINE",          phaseInclCorrect@,
+        "ELLIPTICAL",       phaseElliptical@,
         "MOLNIYA_INSERT",   phaseMolniyaInsert@,
         "TARGETED_DEORBIT", phaseTargetedDeorbit@,
         "RELEASE_PROBE",    phaseReleaseProbe@,
