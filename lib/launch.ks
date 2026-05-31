@@ -151,11 +151,12 @@ GLOBAL FUNCTION armAscentStaging {
                 AND ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED THEN {
             mLog("Recovery staging: Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km, ejecting stage.").
             HUDTEXT("Recovery staging!", 3, 2, 14, YELLOW, FALSE).
+            SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
             LOCK THROTTLE TO 0.
             WAIT 0.3.
             STAGE.
             WAIT 0.5.
-            LOCK THROTTLE TO 1.
+            SET ADDONS:MJ:ASCENT:ENABLED TO TRUE.
         }
     }
 
