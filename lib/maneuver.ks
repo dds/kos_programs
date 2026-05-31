@@ -285,56 +285,180 @@ GLOBAL FUNCTION planTransfer {
             + "s err=" + ROUND(bestLanErr,1)).
     }
 
-    LOCAL foundDv IS testNode:PROGRADE.
-    LOCAL dvMax IS foundDv * 1.05.
-    LOCAL dvMin IS foundDv * 0.95.
-    LOCAL lastGoodDv IS foundDv.
-    LOCAL peEps IS 0.1.
-    LOCAL peDamp IS 0.5.
-    LOCAL peMaxStep IS 3.0.
-    LOCAL peIter IS 25.
+    // --- PHASE 1: Time/dV Optimization (Find the dV Floor) ---
+    mLog("Optimizing time for minimum dV...").
+    LOCAL currentTime IS testNode:TIME.
+    LOCAL currentMag IS ABS(testNode:PROGRADE).
+    
+    // Determine if this is an outward (positive) or inward (negative) transfer
+    LOCAL dvSign IS 1.
+    IF testNode:PROGRADE < 0 { SET dvSign TO -1. }
 
-    LOCAL preCheck IS _getTargetPatch(testNode, targetBody).
-    IF preCheck = 0 {
-        mLog("PE: no encounter at selected time — skipping convergence.").
-    } ELSE IF preCheck:PERIAPSIS < 0 {
-        mLog("PE: impact trajectory (pe=" + ROUND(preCheck:PERIAPSIS/1000,1) + "km) �� skipping convergence.").
-    } ELSE {
-        mLog("PE: starting convergence, current Pe=" + ROUND(preCheck:PERIAPSIS/1000,1) + "km target=" + ROUND(targetPe/1000,1) + "km.").
+    LOCAL timeStep IS 15.  // 15-second search increments
+    LOCAL magStep IS 0.5.  // 0.5 m/s increments
+
+    // Drop initial dV magnitude to the absolute edge of the encounter
+    UNTIL _getTargetPatch(testNode, targetBody) = 0 {
+        SET currentMag TO currentMag - magStep.
+        SET testNode:PROGRADE TO currentMag * dvSign.
+        WAIT 0.01. // Allow physics engine to update
     }
+    // Step back up to the last known good encounter
+    SET currentMag TO currentMag + magStep.
+    SET testNode:PROGRADE TO currentMag * dvSign.
+    WAIT 0.01.
+
+    // Scan forwards and backwards to walk the encounter boundary down
+    LOCAL searchActive IS TRUE.
+    LOCAL iter IS 0.
+    UNTIL NOT searchActive OR iter > 50 {
+        SET searchActive TO FALSE.
+        SET iter TO iter + 1.
+
+        // Test forward time shift
+        SET testNode:TIME TO currentTime + timeStep.
+        SET testNode:PROGRADE TO (currentMag - magStep) * dvSign.
+        WAIT 0.01.
+        IF _getTargetPatch(testNode, targetBody) <> 0 {
+            SET currentTime TO currentTime + timeStep.
+            SET currentMag TO currentMag - magStep.
+            SET searchActive TO TRUE.
+        } ELSE {
+            // Test backward time shift
+            SET testNode:TIME TO currentTime - timeStep.
+            SET testNode:PROGRADE TO (currentMag - magStep) * dvSign.
+            WAIT 0.01.
+            IF _getTargetPatch(testNode, targetBody) <> 0 {
+                SET currentTime TO currentTime - timeStep.
+                SET currentMag TO currentMag - magStep.
+                SET searchActive TO TRUE.
+            } ELSE {
+                // Neither direction improved dV. Revert to best known state.
+                SET testNode:TIME TO currentTime.
+                SET testNode:PROGRADE TO currentMag * dvSign.
+                WAIT 0.01.
+            }
+        }
+
+        // If shifting time successfully saved dV, keep dropping dV at this new time until it breaks
+        IF searchActive {
+            UNTIL _getTargetPatch(testNode, targetBody) = 0 {
+                SET currentMag TO currentMag - magStep.
+                SET testNode:PROGRADE TO currentMag * dvSign.
+                WAIT 0.01.
+            }
+            // Step back to safety
+            SET currentMag TO currentMag + magStep.
+            SET testNode:PROGRADE TO currentMag * dvSign.
+            WAIT 0.01.
+        }
+    }
+    mLog("Time optimization finished. Minimal dV magnitude = " + ROUND(currentMag, 1)).
+
+    // --- PHASE 2: Periapsis Targeting (Newton-Raphson Solver) ---
+    mLog("PE: Targeting " + ROUND(targetPe/1000, 1) + "km at optimized time.").
+    LOCAL peIter IS 35.
+    LOCAL peEps IS 0.1. // Probe step for calculating the derivative
+    LOCAL peDamp IS 0.5. // Damping factor to prevent overshoot
+    LOCAL lastGoodPrograde IS testNode:PROGRADE.
 
     FROM { LOCAL i IS 0. } UNTIL i >= peIter STEP { SET i TO i + 1. } DO {
         LOCAL p IS _getTargetPatch(testNode, targetBody).
+        
+        // Break condition: Lost encounter or impacting the body
         IF p = 0 OR p:PERIAPSIS < 0 {
-            SET testNode:PROGRADE TO lastGoodDv.
+            mLog("PE[" + i + "]: Impact or lost encounter. Reverting.").
+            SET testNode:PROGRADE TO lastGoodPrograde.
             BREAK.
         }
-        SET lastGoodDv TO testNode:PROGRADE.
-        LOCAL peErr IS targetPe - p:PERIAPSIS.
-        IF ABS(peErr) < 200 {
-            mLog("PE[" + i + "] converged: " + ROUND(p:PERIAPSIS/1000,1)
-                + "km err=" + ROUND(peErr/1000,1) + "km").
+        
+        SET lastGoodPrograde TO testNode:PROGRADE.
+        LOCAL currentPe IS p:PERIAPSIS.
+        LOCAL peErr IS targetPe - currentPe.
+
+        // Convergence threshold (500 meters)
+        IF ABS(peErr) < 500 { 
+            mLog("PE[" + i + "] converged: " + ROUND(currentPe/1000, 1) + "km (err=" + ROUND(peErr/1000, 1) + "km)").
             BREAK.
         }
-        LOCAL basePe IS p:PERIAPSIS.
+
+        // Probe the gradient to see how Prograde affects Periapsis
         LOCAL oldDv IS testNode:PROGRADE.
         SET testNode:PROGRADE TO oldDv + peEps.
         WAIT 0.02.
         LOCAL p2 IS _getTargetPatch(testNode, targetBody).
         SET testNode:PROGRADE TO oldDv.
+
         IF p2 = 0 { BREAK. }
-        LOCAL sens IS (p2:PERIAPSIS - basePe) / peEps.
-        IF ABS(sens) < 1 { BREAK. }
-        LOCAL correction IS peErr / sens * peDamp.
-        IF ABS(correction) > peMaxStep {
-            SET correction TO peMaxStep * (correction / ABS(correction)).
-        }
-        LOCAL newDv IS MAX(dvMin, MIN(dvMax, oldDv + correction)).
-        mLog("PE[" + i + "] pe=" + ROUND(basePe/1000,1) + "km err=" + ROUND(peErr/1000,1)
-            + "km sens=" + ROUND(sens,1) + " dv=" + ROUND(oldDv,1) + "->" + ROUND(newDv,1)).
+
+        // Calculate sensitivity (derivative)
+        LOCAL sens IS (p2:PERIAPSIS - currentPe) / peEps.
+        IF ABS(sens) < 0.001 { BREAK. } // Prevent division by zero if orbit is unresponsive
+
+        LOCAL correction IS (peErr / sens) * peDamp.
+        
+        // Clamp the correction step to avoid wild, unrecoverable swings
+        IF correction > 3.0 { SET correction TO 3.0. }
+        IF correction < -3.0 { SET correction TO -3.0. }
+
+        LOCAL newDv IS oldDv + correction.
+        mLog("PE[" + i + "] current=" + ROUND(currentPe/1000, 1) + "km err=" + ROUND(peErr/1000, 1) + "km dv=" + ROUND(oldDv, 2) + "->" + ROUND(newDv, 2)).
+        
         SET testNode:PROGRADE TO newDv.
-        WAIT 0.05.
+        WAIT 0.05. // Give KSP physics time to re-propagate the conics
     }
+
+
+    // LOCAL foundDv IS testNode:PROGRADE.
+    // LOCAL dvMax IS foundDv * 1.05.
+    // LOCAL dvMin IS foundDv * 0.95.
+    // LOCAL lastGoodDv IS foundDv.
+    // LOCAL peEps IS 0.1.
+    // LOCAL peDamp IS 0.5.
+    // LOCAL peMaxStep IS 3.0.
+    // LOCAL peIter IS 25.
+
+    // LOCAL preCheck IS _getTargetPatch(testNode, targetBody).
+    // IF preCheck = 0 {
+    //     mLog("PE: no encounter at selected time — skipping convergence.").
+    // } ELSE IF preCheck:PERIAPSIS < 0 {
+    //     mLog("PE: impact trajectory (pe=" + ROUND(preCheck:PERIAPSIS/1000,1) + "km) -- skipping convergence.").
+    // } ELSE {
+    //     mLog("PE: starting convergence, current Pe=" + ROUND(preCheck:PERIAPSIS/1000,1) + "km target=" + ROUND(targetPe/1000,1) + "km.").
+    // }
+
+    // FROM { LOCAL i IS 0. } UNTIL i >= peIter STEP { SET i TO i + 1. } DO {
+    //     LOCAL p IS _getTargetPatch(testNode, targetBody).
+    //     IF p = 0 OR p:PERIAPSIS < 0 {
+    //         SET testNode:PROGRADE TO lastGoodDv.
+    //         BREAK.
+    //     }
+    //     SET lastGoodDv TO testNode:PROGRADE.
+    //     LOCAL peErr IS targetPe - p:PERIAPSIS.
+    //     IF ABS(peErr) < 200 {
+    //         mLog("PE[" + i + "] converged: " + ROUND(p:PERIAPSIS/1000,1)
+    //             + "km err=" + ROUND(peErr/1000,1) + "km").
+    //         BREAK.
+    //     }
+    //     LOCAL basePe IS p:PERIAPSIS.
+    //     LOCAL oldDv IS testNode:PROGRADE.
+    //     SET testNode:PROGRADE TO oldDv + peEps.
+    //     WAIT 0.02.
+    //     LOCAL p2 IS _getTargetPatch(testNode, targetBody).
+    //     SET testNode:PROGRADE TO oldDv.
+    //     IF p2 = 0 { BREAK. }
+    //     LOCAL sens IS (p2:PERIAPSIS - basePe) / peEps.
+    //     IF ABS(sens) < 1 { BREAK. }
+    //     LOCAL correction IS peErr / sens * peDamp.
+    //     IF ABS(correction) > peMaxStep {
+    //         SET correction TO peMaxStep * (correction / ABS(correction)).
+    //     }
+    //     LOCAL newDv IS MAX(dvMin, MIN(dvMax, oldDv + correction)).
+    //     mLog("PE[" + i + "] pe=" + ROUND(basePe/1000,1) + "km err=" + ROUND(peErr/1000,1)
+    //         + "km sens=" + ROUND(sens,1) + " dv=" + ROUND(oldDv,1) + "->" + ROUND(newDv,1)).
+    //     SET testNode:PROGRADE TO newDv.
+    //     WAIT 0.05.
+    // }
 
     LOCAL finalPatch IS _getTargetPatch(testNode, targetBody).
     LOCAL bestPe IS targetPe.
@@ -344,8 +468,9 @@ GLOBAL FUNCTION planTransfer {
         SET bestPe  TO finalPatch:PERIAPSIS.
         SET bestAoP TO finalPatch:ARGUMENTOFPERIAPSIS.
         SET bestLan TO finalPatch:LAN.
-    } ELSE {
-        SET testNode:PROGRADE TO lastGoodDv.
+    }  ELSE {
+        mLogError("No solution to maneuver plan!").
+        RETURN.
     }
 
     LOCAL finalDv IS testNode:PROGRADE.
