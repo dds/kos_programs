@@ -47,7 +47,9 @@ GLOBAL FUNCTION phaseCapture {
     LOCAL retries IS 0.
     UNTIL success {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-        planCapture(target, CFG["RELAY_ALT"]).
+        LOCAL captureAlt IS CFG["RELAY_ALT"].
+        IF CFG:HASKEY("TARGET_AP") { SET captureAlt TO CFG["TARGET_AP"]. }
+        planCapture(target, captureAlt).
         SET success TO executeManeuver().
         IF NOT success {
             SET retries TO retries + 1.
