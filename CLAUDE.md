@@ -94,7 +94,8 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 | `logs.ks` | Flight logging with fault persistence |
 | `files.ks` | Storage status and directory listing |
 | `resume.ks` | MISSION lexicon, operator helpers, resumeMission(), buildRocketSequence() |
-| `maneuver.ks` | Maneuver node execution with dynamic throttle. planTransfer (LAN via Newton on departure time, PE via Newton on dV), planCapture, planCircularize, planAoPChange |
+| `maneuver.ks` | Maneuver node execution with dynamic throttle. planTransfer (LAN via multi-orbit scan, PE via Newton on dV), planCapture, planCircularize, planAoPChange |
+| `lambert.ks` | Lambert solver (RSVP port, GPL-3.0). lambertSolve(r1,r2,tof,mu,flip), orbitalStateVectors. For future interplanetary use |
 | `inclination.ks` | Orbital plane change planning + etaToTrueAnomaly() |
 | `molniya.ks` | Molniya orbit insertion (molniyaParams, printMolniyaSummary, planMolniyaInsert, phaseMolniyaInsert) |
 | `orbit.ks` | Orbit monitoring and stability checks |
@@ -136,10 +137,10 @@ Uses `SHIP:CONTROL:PILOTWHEELSTEER` (not `PILOTMAINSTEER`, which doesn't exist i
 
 `planTransfer` uses a 3-step process:
 1. **Hohmann estimate** — phase angle math gives initial departure time and dV
-2. **LAN correction** (when `CAPTURE_LAN` is set) — Newton's method on departure time. Perturbs time by 30s, measures dLAN/dt sensitivity, corrects with 0.7 damping. 4 iterations, 2 deg tolerance. Re-acquires encounter after each shift.
+2. **LAN selection** (when `CAPTURE_LAN` is set) — multi-orbit scan. Each orbital period produces a different approach geometry and therefore a different LAN at the target. Scans `±N` orbits around the Hohmann estimate (N = max(6, target period / ship period)), finds valid encounters via `_findEncounter`, reads LAN from the conic patch, and picks the orbit with lowest LAN error. Logs each candidate.
 3. **PE convergence** — Newton's method on dV magnitude. 0.5 m/s epsilon, 0.7 damping, +/-15% dV bounds, 200m tolerance.
 
-LAN is controlled by departure time, PE is controlled by dV — these are separable. AoP is reported but corrected later by MCC (radial burns mid-transfer).
+LAN is controlled by which orbital period to depart on, PE is controlled by dV — these are separable. AoP is reported but corrected later by MCC (radial burns mid-transfer).
 
 ### Mid-course correction (`lib/mcc.ks`)
 

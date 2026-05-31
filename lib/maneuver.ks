@@ -223,63 +223,48 @@ GLOBAL FUNCTION planTransfer {
     WAIT 0.05.
 
     IF lanTarget >= 0 {
-        LOCAL lanDamp IS 0.7.
-        LOCAL lanTol IS 2.
-        FROM { LOCAL i IS 0. } UNTIL i >= 6 STEP { SET i TO i + 1. } DO {
-            LOCAL p IS _getTargetPatch(testNode, targetBody).
-            IF p = 0 { BREAK. }
-            LOCAL lanNow IS p:LAN.
-            LOCAL lanErr IS lanTarget - lanNow.
-            IF lanErr > 180  { SET lanErr TO lanErr - 360. }
-            IF lanErr < -180 { SET lanErr TO lanErr + 360. }
-            IF ABS(lanErr) < lanTol {
-                mLog("LAN[" + i + "] converged: " + ROUND(lanNow,1)
-                    + " err=" + ROUND(lanErr,1)).
-                BREAK.
-            }
-            LOCAL baseTime IS testNode:TIME.
-            LOCAL epsList IS LIST(10, 5, 2, -10, -5).
-            LOCAL lan2 IS lanNow.
-            LOCAL eps IS 0.
-            FOR tryEps IN epsList {
-                SET testNode:TIME TO baseTime + tryEps.
-                WAIT 0.02.
-                LOCAL p2 IS _getTargetPatch(testNode, targetBody).
-                IF p2 <> 0 AND p2:PERIAPSIS > 0 {
-                    SET lan2 TO p2:LAN.
-                    SET eps TO tryEps.
-                    BREAK.
+        LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
+        LOCAL nOrbits IS MAX(6, CEILING(targetBody:ORBIT:PERIOD / shipPeriod)).
+        LOCAL bestLanErr IS 999.
+        LOCAL bestTime IS foundUt.
+        LOCAL baseUt IS foundUt.
+
+        mLog("LAN scan: " + nOrbits + " orbits, target=" + ROUND(lanTarget,1)).
+
+        FROM { LOCAL i IS -nOrbits. } UNTIL i > nOrbits STEP { SET i TO i + 1. } DO {
+            LOCAL candTime IS baseUt + i * shipPeriod.
+            IF candTime < TIME:SECONDS + 60 { }
+            ELSE {
+                LOCAL encTime IS _findEncounter(testNode, targetBody,
+                    candTime, shipPeriod * 0.4, 60).
+                IF encTime > 0 {
+                    SET testNode:TIME TO encTime.
+                    SET testNode:PROGRADE TO dv.
+                    WAIT 0.02.
+                    LOCAL p IS _getTargetPatch(testNode, targetBody).
+                    IF p <> 0 AND p:PERIAPSIS > 0 {
+                        LOCAL lanNow IS p:LAN.
+                        LOCAL lanErr IS lanTarget - lanNow.
+                        IF lanErr > 180  { SET lanErr TO lanErr - 360. }
+                        IF lanErr < -180 { SET lanErr TO lanErr + 360. }
+                        mLog("LAN orbit[" + i + "] t+" + ROUND(encTime - TIME:SECONDS,0)
+                            + "s LAN=" + ROUND(lanNow,1)
+                            + " err=" + ROUND(lanErr,1)
+                            + " dV=" + ROUND(dv,1)).
+                        IF ABS(lanErr) < ABS(bestLanErr) {
+                            SET bestLanErr TO lanErr.
+                            SET bestTime TO encTime.
+                        }
+                    }
                 }
             }
-            SET testNode:TIME TO baseTime.
-            IF eps = 0 {
-                mLog("LAN[" + i + "] perturb lost encounter at all eps, stopping.").
-                BREAK.
-            }
-            LOCAL dLanDt IS (lan2 - lanNow) / eps.
-            IF ABS(dLanDt * eps) > 180 {
-                SET dLanDt TO dLanDt - 360 * ROUND(dLanDt * eps / 360) / eps.
-            }
-            IF ABS(dLanDt) < 0.0001 {
-                mLog("LAN[" + i + "] zero sensitivity, stopping.").
-                BREAK.
-            }
-            LOCAL timeShift IS lanErr / dLanDt * lanDamp.
-            LOCAL maxShift IS SHIP:ORBIT:PERIOD.
-            SET timeShift TO MAX(-maxShift, MIN(maxShift, timeShift)).
-            LOCAL newTime IS baseTime + timeShift.
-            mLog("LAN[" + i + "] cur=" + ROUND(lanNow,1) + " err=" + ROUND(lanErr,1)
-                + " eps=" + eps + " sens=" + ROUND(dLanDt,4) + "/s shift=" + ROUND(timeShift,0) + "s").
-            LOCAL reacquired IS _findEncounter(testNode, targetBody,
-                newTime, SHIP:ORBIT:PERIOD, 120).
-            IF reacquired < 0 {
-                mLog("LAN[" + i + "] lost encounter after shift, reverting.").
-                SET testNode:TIME TO baseTime.
-                BREAK.
-            }
-            SET testNode:TIME TO reacquired.
-            WAIT 0.05.
         }
+
+        SET testNode:TIME TO bestTime.
+        SET testNode:PROGRADE TO dv.
+        WAIT 0.05.
+        mLog("LAN best: t+" + ROUND(bestTime - TIME:SECONDS,0)
+            + "s err=" + ROUND(bestLanErr,1)).
     }
 
     LOCAL foundDv IS testNode:PROGRADE.
