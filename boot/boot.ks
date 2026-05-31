@@ -2,12 +2,18 @@
 // boot.ks  —  Generic mission boot  (0:/boot/boot.ks)
 // ============================================================
 
-CORE:DOACTION("Open Terminal", TRUE).
+CORE:DOEVENT("Open Terminal").
 CLEARSCREEN.
 PRINT " ".
-PRINT "  *  kOS FLIGHT COMPUTER  v2.0".
-PRINT "  *  " + SHIP:NAME.
-PRINT "  *  KSC UPLINK ACTIVE".
+PRINT "  * kOS FLIGHT COMPUTER  v2.0".
+PRINT "  * " + SHIP:NAME.
+
+LOCAL HAS_LINK IS HOMECONNECTION:ISCONNECTED.
+IF HAS_LINK {
+    PRINT "  * KSC UPLINK ACTIVE".
+} ELSE {
+    PRINT "  * OFFLINE MODE (No KSC Link)".
+}
 PRINT " ".
 
 IF SHIP:STATUS = "PRELAUNCH" OR SHIP:STATUS = "LANDED" {
@@ -52,13 +58,26 @@ ensureDir("1:/cmd").
 ensureDir("1:/craft").
 ensureDir("1:/roles").
 
+// UPDATED: Checks Archive if online, falls back to Local cache if offline
 LOCAL FUNCTION _resolveScript {
     PARAMETER name.
     PARAMETER dirs.
-    FOR d IN dirs {
-        IF EXISTS("0:/" + d + "/" + name + ".ks") { RETURN d + "/" + name. }
+    
+    IF HAS_LINK {
+        FOR d IN dirs {
+            IF EXISTS("0:/" + d + "/" + name + ".ks") { RETURN d + "/" + name. }
+        }
+        IF EXISTS("0:/" + name + ".ks") { RETURN name. }
     }
-    IF EXISTS("0:/" + name + ".ks") { RETURN name. }
+    
+    // Fallback: Check local drive for cached or compiled scripts
+    FOR d IN dirs {
+        IF EXISTS("1:/" + d + "/" + name + ".ks") OR EXISTS("1:/" + d + "/" + name + ".ksm") { 
+            RETURN d + "/" + name. 
+        }
+    }
+    IF EXISTS("1:/" + name + ".ks") OR EXISTS("1:/" + name + ".ksm") { RETURN name. }
+    
     RETURN "".
 }
 
@@ -66,23 +85,34 @@ GLOBAL KSM IS LIST().
 
 LOCAL FUNCTION _syncLib {
     PARAMETER libName.
+    IF NOT HAS_LINK { RETURN. } // Safety net
+    
     LOCAL src IS "0:/lib/" + libName + ".ks".
     LOCAL dst IS "1:/lib/" + libName + ".ks".
-    COPYPATH(src, dst).
-    IF KSM:CONTAINS(libName) {
-        COMPILE dst.
-        DELETEPATH(dst).
+    LOCAL dstKsm IS "1:/lib/" + libName + ".ksm".
+
+    IF EXISTS(src) {
+        IF KSM:CONTAINS(libName) {
+            COMPILE src TO dstKsm.
+        } ELSE {
+            COPYPATH(src, dst).
+        }
     }
 }
 
 LOCAL FUNCTION _loadLib {
     PARAMETER libName.
+    // RUNONCEPATH automatically checks for .ksm before .ks
     RUNONCEPATH("1:/lib/" + libName).
 }
 
-PRINT "  SYNC core ......... ".
-LOCAL coreLibs IS LIST("state", "logs", "files").
-FOR lib IN coreLibs { _syncLib(lib). }
+IF HAS_LINK {
+    PRINT "  SYNC core ......... ".
+    LOCAL coreLibs IS LIST("state", "logs", "files").
+    FOR lib IN coreLibs { _syncLib(lib). }
+} ELSE {
+    PRINT "  LOAD core (cached) . ".
+}
 
 _loadLib("state").
 stateInit().
@@ -108,7 +138,6 @@ IF isEVA {
     } ELSE {
         PRINT "  CORE TAG: " + CORE:TAG + " (no script found, trying vehicle).".
     }
-} ELSE {
 }
 
 IF vehicleScript = "" {
@@ -130,18 +159,27 @@ IF vehicleScript:CONTAINS("/") {
     ensureDir("1:/" + parts[0]).
 }
 
-PRINT "  SYNC Zombie ........".
-COPYPATH("0:/cmd/zombie.ks", "1:/zombie").
+// UPDATED: Sync block entirely protected by link status
+IF HAS_LINK {
+    PRINT "  SYNC Zombie ........".
+    IF EXISTS("0:/cmd/zombie.ks") { COPYPATH("0:/cmd/zombie.ks", "1:/zombie"). }
 
-PRINT "  SYNC " + vehicleScript + " ....... ".
-COPYPATH("0:/" + vehicleScript + ".ks", "1:/" + vehicleScript + ".ks").
+    PRINT "  SYNC " + vehicleScript + " ....... ".
+    IF EXISTS("0:/" + vehicleScript + ".ks") {
+        COPYPATH("0:/" + vehicleScript + ".ks", "1:/" + vehicleScript + ".ks").
+    }
+
+    PRINT "  SYNC libs ......... ".
+    FOR lib IN LIBS { _syncLib(lib). }
+    _syncLib("resume").
+    _syncLib("recovery").
+} ELSE {
+    PRINT "  NO LINK: Bypassing library sync.".
+}
+
+// Always load from local drive
 RUNPATH("1:/" + vehicleScript + ".ks").
-
-PRINT "  SYNC libs ......... ".
-FOR lib IN LIBS { _syncLib(lib). }
 FOR lib IN LIBS { _loadLib(lib). }
-
-_syncLib("resume").
 _loadLib("resume").
 
 PRINT " ".
@@ -149,9 +187,8 @@ PRINT "  BOOT #" + bootCount + " OK".
 printStorageStatus().
 
 // Archive the boot log.
-IF HOMECONNECTION:ISCONNECTED {
-    archiveLog().
-}
+IF HAS_LINK { archiveLog(). }
+
 PRINT " ".
 PRINT "  >> Press any key for MANUAL mode (5s)".
 LOCAL overrideStart IS TIME:SECONDS.
@@ -164,9 +201,9 @@ IF TERMINAL:INPUT:HASCHAR {
 
 IF manualMode {
     CLEARSCREEN.
-    PRINT "  ========================================".
+    PRINT "  =======================================".
     PRINT "  MANUAL MODE    " + SHIP:NAME.
-    PRINT "  ========================================".
+    PRINT "  =======================================".
     PRINT " ".
     PRINT "  -- ENVIRONMENT --".
     PRINT "  Body ........ " + SHIP:ORBIT:BODY:NAME.
@@ -184,7 +221,7 @@ IF manualMode {
         PRINT "  Periapsis ... " + ROUND(SHIP:PERIAPSIS/1000,1) + " km".
         PRINT "  Inclination . " + ROUND(SHIP:ORBIT:INCLINATION,2) + " deg".
     }
-    PRINT "  KSC link .... " + HOMECONNECTION:ISCONNECTED.
+    PRINT "  KSC link .... " + HAS_LINK.
     PRINT "  Free space .. " + CORE:VOLUME:FREESPACE + " / " + CORE:VOLUME:CAPACITY + " bytes".
     PRINT " ".
     PRINT "  -- MISSION --".
@@ -217,13 +254,11 @@ IF manualMode {
     PRINT "  Flight log .. " + flightLogPath().
 
     PRINT " ".
-    PRINT "  ========================================".
+    PRINT "  =======================================".
     mLog("Manual override at boot.").
     UNLOCK ALL.
     SET SAS TO TRUE.
-    IF HOMECONNECTION:ISCONNECTED {
-        archiveLog().
-    }
+    IF HAS_LINK { archiveLog(). }
 } ELSE {
     LOCAL phase IS stateGet("phase", "").
     IF phase = "DONE" {
@@ -235,26 +270,23 @@ IF manualMode {
     } ELSE IF phase = "ABORT" {
         PRINT "  ABORT DETECTED — entering recovery mode.".
         mLog("Abort detected at reboot — loading recovery.").
-        _syncLib("recovery").
+        // Ensure recovery logic doesn't crash if offline
+        IF HAS_LINK { _syncLib("recovery"). }
         _loadLib("recovery").
-        IF HOMECONNECTION:ISCONNECTED {
-            archiveLog().
-        }
+        IF HAS_LINK { archiveLog(). }
         recoveryMode().
     } ELSE {
         PRINT "  RESUMING >> " + phase.
         mLog("Resuming mission from phase: " + phase).
-        IF HOMECONNECTION:ISCONNECTED {
-            archiveLog().
-        }
+        IF HAS_LINK { archiveLog(). }
         resumeMission().
     }
 }
 
 // Archive complete mission log.
-IF HOMECONNECTION:ISCONNECTED {
+IF HAS_LINK {
     archiveLog().
 } ELSE {
-    PRINT "  ***   NO KSC LINK, LOGS NOT AUTO-ARCHIVED  ***".
+    PRINT "  *** NO KSC LINK, LOGS NOT AUTO-ARCHIVED  ***".
 }
 PRINT ("END OF LINE. GODSPEED.").
