@@ -141,6 +141,19 @@ PRINT " ".
 PRINT "  BOOT #" + bootCount + " OK".
 printStorageStatus().
 
+// Archive the boot log.
+IF HOMECONNECTION:ISCONNECTED {
+    LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
+    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
+    LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
+    IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
+    IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
+    COPYPATH(flightLogPath, shipDir + "/" + flightLogPath).
+    mLog("Auto-archived " + flightLogPath + " to " + shipDir + ".").
+} ELSE {
+    PRINT "  No KSC link — " + flightLogPath + " needs manual retrieval".
+}
+
 PRINT " ".
 PRINT "  >> Press any key for MANUAL mode (5s)".
 LOCAL overrideStart IS TIME:SECONDS.
@@ -245,6 +258,7 @@ IF manualMode {
     }
 }
 
+// Archive complete mission log.
 IF HOMECONNECTION:ISCONNECTED {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
     IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
@@ -256,5 +270,4 @@ IF HOMECONNECTION:ISCONNECTED {
 } ELSE {
     PRINT "  No KSC link — " + flightLogPath + " needs manual retrieval".
 }
-
 PRINT ("END OF LINE. GODSPEED.").
