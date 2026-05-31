@@ -2,7 +2,7 @@
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
 
-LOCAL _flightLogPath IS "".
+GLOBAL _flightLogPath IS "".
 GLOBAL FUNCTION flightLogPath {
     RETURN _flightLogPath.
 }
