@@ -143,12 +143,7 @@ PRINT "  BOOT #" + bootCount + " OK".
 printStorageStatus().
 
 // Archive the boot log.
-IF HOMECONNECTION:ISCONNECTED {
-    archiveLog().
-    mLog("Auto-archived " + flightLogPath() + " to " + shipDir + ".").
-} ELSE {
-    PRINT "  No KSC link — " + flightLogPath() + " needs manual retrieval".
-}
+archiveLog().
 
 PRINT " ".
 PRINT "  >> Press any key for MANUAL mode (5s)".
