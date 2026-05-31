@@ -10,7 +10,7 @@
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
-    "PARKING_ALT",          80000,
+    "PARKING_ALT",         100000,
     "LAUNCH_INCLINATION",       0,
     "LAUNCH_AZIMUTH",           0,
     "LAUNCH_STAGE_LIMIT",       0,
