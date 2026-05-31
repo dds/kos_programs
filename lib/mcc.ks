@@ -110,9 +110,9 @@ LOCAL FUNCTION _optimizeMCC {
     PARAMETER mccNode.
     PARAMETER targetBody.
     PARAMETER targetPe.
-    PARAMETER targetAoP IS 
     PARAMETER targetInc IS 90.
     PARAMETER targetLan IS 25.
+    PARAMETER targetAoP IS 0.
 
     mLog("Starting 3-Axis MCC Optimization...").
 
