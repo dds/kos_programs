@@ -8,6 +8,7 @@ GLOBAL FUNCTION planMolniyaInsert {
     LOCAL peR IS bodyR + SHIP:PERIAPSIS.
 
     LOCAL targetSMA IS 0.
+
     IF targetEcc > 0 {
         SET targetSMA TO peR / (1 - targetEcc).
     } ELSE {
@@ -25,7 +26,8 @@ GLOBAL FUNCTION planMolniyaInsert {
 
     LOCAL burnETA IS etaToTrueAnomaly(burnTA).
     LOCAL burnUT IS TIME:SECONDS + burnETA.
-    LOCAL burnR IS bodyR + SHIP:ALTITUDE.
+
+    LOCAL burnR IS POSITIONAT(SHIP, burnUT):MAG - bodyR. 
     LOCAL vNew IS SQRT(mu * (2/burnR - 1/targetSMA)).
     LOCAL vNow IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
     LOCAL dv IS vNew - vNow.
