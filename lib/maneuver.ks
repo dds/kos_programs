@@ -224,37 +224,51 @@ GLOBAL FUNCTION planTransfer {
 
     IF lanTarget >= 0 {
         LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
-        LOCAL nOrbits IS MAX(6, CEILING(targetBody:ORBIT:PERIOD / shipPeriod)).
+        LOCAL nOrbits IS 10.
+        LOCAL nSlices IS 60.
+        LOCAL sliceStep IS shipPeriod / nSlices.
         LOCAL bestLanErr IS 999.
         LOCAL bestTime IS foundUt.
         LOCAL baseUt IS foundUt.
 
-        mLog("LAN scan: " + nOrbits + " orbits, target=" + ROUND(lanTarget,1)).
+        mLog("LAN scan: " + nOrbits + " orbits x " + nSlices
+            + " slices, target=" + ROUND(lanTarget,1)).
 
-        FROM { LOCAL i IS -nOrbits. } UNTIL i > nOrbits STEP { SET i TO i + 1. } DO {
-            LOCAL candTime IS baseUt + i * shipPeriod.
-            IF candTime < TIME:SECONDS + 60 { }
+        FROM { LOCAL i IS 0. } UNTIL i >= nOrbits STEP { SET i TO i + 1. } DO {
+            LOCAL orbitStart IS baseUt + i * shipPeriod.
+            IF orbitStart < TIME:SECONDS + 60 { }
             ELSE {
-                LOCAL encTime IS _findEncounter(testNode, targetBody,
-                    candTime, shipPeriod * 0.4, 60).
-                IF encTime > 0 {
-                    SET testNode:TIME TO encTime.
-                    SET testNode:PROGRADE TO dv.
-                    WAIT 0.02.
-                    LOCAL p IS _getTargetPatch(testNode, targetBody).
-                    IF p <> 0 AND p:PERIAPSIS > 0 {
-                        LOCAL lanNow IS p:LAN.
-                        LOCAL lanErr IS lanTarget - lanNow.
-                        IF lanErr > 180  { SET lanErr TO lanErr - 360. }
-                        IF lanErr < -180 { SET lanErr TO lanErr + 360. }
-                        mLog("LAN orbit[" + i + "] t+" + ROUND(encTime - TIME:SECONDS,0)
-                            + "s LAN=" + ROUND(lanNow,1)
-                            + " err=" + ROUND(lanErr,1)
-                            + " dV=" + ROUND(dv,1)).
-                        IF ABS(lanErr) < ABS(bestLanErr) {
-                            SET bestLanErr TO lanErr.
-                            SET bestTime TO encTime.
+                LOCAL orbitBestErr IS 999.
+                LOCAL orbitBestLan IS 0.
+                LOCAL orbitBestTime IS 0.
+                FROM { LOCAL j IS 0. } UNTIL j >= nSlices STEP { SET j TO j + 1. } DO {
+                    LOCAL t IS orbitStart + j * sliceStep.
+                    IF t > TIME:SECONDS + 30 {
+                        SET testNode:TIME TO t.
+                        SET testNode:PROGRADE TO dv.
+                        WAIT 0.02.
+                        LOCAL p IS _getTargetPatch(testNode, targetBody).
+                        IF p <> 0 AND p:PERIAPSIS > 0 {
+                            LOCAL lanNow IS p:LAN.
+                            LOCAL lanErr IS lanTarget - lanNow.
+                            IF lanErr > 180  { SET lanErr TO lanErr - 360. }
+                            IF lanErr < -180 { SET lanErr TO lanErr + 360. }
+                            IF ABS(lanErr) < ABS(orbitBestErr) {
+                                SET orbitBestErr TO lanErr.
+                                SET orbitBestLan TO lanNow.
+                                SET orbitBestTime TO t.
+                            }
                         }
+                    }
+                }
+                IF orbitBestTime > 0 {
+                    mLog("LAN orbit[" + i + "] t+" + ROUND(orbitBestTime - TIME:SECONDS,0)
+                        + "s LAN=" + ROUND(orbitBestLan,1)
+                        + " err=" + ROUND(orbitBestErr,1)
+                        + " dV=" + ROUND(dv,1)).
+                    IF ABS(orbitBestErr) < ABS(bestLanErr) {
+                        SET bestLanErr TO orbitBestErr.
+                        SET bestTime TO orbitBestTime.
                     }
                 }
             }
