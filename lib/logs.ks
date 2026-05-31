@@ -24,18 +24,16 @@ GLOBAL FUNCTION slug {
     RETURN safeName.
 }
 
-GLOBAL _logs_start_time IS TIME:SECONDS.
-
 GLOBAL FUNCTION logId {
-    LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
-    LOCAL baseId IS "{0}_{1}":FORMAT(slug(), _logs_start_time).
+    LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
+    IF launchT = 0 { SET launchT TO ROUND(TIME:SECONDS). }
 
+    LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
+    
+    LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
     IF isEVA {
-        // TODO: I think TIME:SECONDS will be different for every call and,
-        // instead, we need to store a bit of state for every EVA launch to
-        // to get its time of launch and use that for its logId once. For now,
-        // we don't have EVAs.
-        RETURN "{0}_EVA_{1}":FORMAT(baseId, TIME:SECONDS).
+        // TODO: support multiple EVAs.
+        RETURN baseId + "_EVA".
     }
 
     RETURN baseId.
