@@ -119,7 +119,6 @@ LOCAL FUNCTION _printConfig {
         IF t = "MOLNIYA" { SET hasMolniya TO TRUE. }
     }
 
-    CLEARSCREEN.
     PRINT "  ========================================".
     PRINT "    FR2 FLIGHT PLAN    " + SHIP:NAME.
     PRINT "  ========================================".
