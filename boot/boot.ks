@@ -235,9 +235,7 @@ IF TERMINAL:INPUT:HASCHAR {
     SET manualMode TO TRUE.
 }
 
-IF manualMode {
-    CLEARSCREEN.
-} ELSE {
+IF NOT manualMode {
     LOCAL phase IS stateGet("phase", "").
     IF phase = "DONE" {
         PRINT " ".
