@@ -204,8 +204,8 @@ IF DEFINED LIBS {
         IF lib = "rsvp" {
             FOR rsvp_lib IN RSVP_LIBS {
                 _syncLib(rsvp_lib).
-                _loadLib("rsvp/main").
             }
+            _loadLib("rsvp/main").
         } ELSE {
             _loadLib(lib). 
         }
