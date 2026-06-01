@@ -179,7 +179,12 @@ RUNPATH("1:/" + vehicleScript + ".ks").
 IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
     IF DEFINED LIBS {
-        FOR lib IN LIBS { _syncLib(lib). }
+        FOR lib IN LIBS { 
+            IF lib <> "rsvp" {
+                // Handle rsvp specially below.
+                _syncLib(lib). 
+            }
+        }
     }
     _syncLib("resume").
     _syncLib("recovery").
