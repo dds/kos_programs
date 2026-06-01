@@ -194,7 +194,7 @@ GLOBAL FUNCTION main {
         "RAISE",            phaseRaiseAlt@,
         "INCLINE",          phaseInclCorrect@,
         "ELLIPTICAL",       phaseElliptical@,
-        "MOLNIYA_INSERT",   phaseMolniyaInsert@,
+        // "MOLNIYA_INSERT",   phaseMolniyaInsert@,
         "TARGETED_DEORBIT", phaseTargetedDeorbit@,
         "RELEASE_PROBE",    phaseReleaseProbe@,
         "RECIRC",           _phaseRecirc@,
