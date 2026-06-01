@@ -33,4 +33,7 @@ initLog().
 
 _syncLib("maneuver").
 _loadLib("maneuver").
+_syncLib("countdown").
+_loadLib("countdown").
+countdown(1).
 executeManeuver().
