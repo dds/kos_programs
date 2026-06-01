@@ -41,8 +41,9 @@ GLOBAL CFG IS LEXICON(
 GLOBAL LIBS IS LIST(
     "rsvp",
     "phases", "launch", "xfer", "mcc",
-    // "countdown", "maneuver", "inclination",
-    // "orbit", "targeting", "landing",
+    "countdown", // "maneuver", 
+    "inclination",
+    // "orbit", 
     "payload_ops", "utils"
 ).
 
