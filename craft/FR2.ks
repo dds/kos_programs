@@ -39,7 +39,6 @@ GLOBAL CFG IS LEXICON(
 ).
 
 GLOBAL LIBS IS LIST(
-    "rsvp",
     "phases", "launch", "xfer", "mcc",
     "countdown", "maneuver",
     "inclination",
@@ -178,15 +177,7 @@ GLOBAL FUNCTION main {
         "FAIR",             phaseFairing@,
         "ANTS",             phaseExtendAnts@,
         "PARK",             phaseParking@,
-        "XING",             { 
-                               rsvp:goto(MUN, LEX(
-                                  "create_maneuver_nodes", "both")).
-                               // IF NOT executeManeuver() {
-                               //     mLogError("TRANSFER FAILED. HALTING.") .
-                               //     RETURN.
-                               //  }
-                               //  nextPhase(xferSeq).
-                            },
+        "XING",             phaseTransfer@,
         "MCC",              phaseMidCourse@,
         "COAST",            phaseCoast@,
         "CAPTURE",          phaseCapture@,
