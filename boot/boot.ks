@@ -172,6 +172,19 @@ IF HAS_LINK {
     }
 }
 
+// Useful for including in craft.
+GLOBAL RSVP_LIBS IS LIST(
+    "rsvp/hill_climb",
+    "rsvp/lambert",
+    "rsvp/main",
+    "rsvp/maneuver",
+    "rsvp/orbit",
+    "rsvp/refine",
+    "rsvp/search",
+    "rsvp/transfer",
+    "rsvp/validate"
+).
+
 // 1. Run the vehicle script first so it can define the LIBS global variable
 RUNPATH("1:/" + vehicleScript + ".ks").
 
