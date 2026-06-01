@@ -42,11 +42,9 @@ GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer", "mcc",
     "countdown", "maneuver", "inclination",
     "orbit", "targeting", "landing",
-    "payload_ops", "science", "observe", "utils"
+    "payload_ops", "science", "observe", "utils",
+    "rsvp"
 ).
-FOR lib IN RSVP_LIBS {
-    LIBS:ADD(lib).
-}
 
 LOCAL FUNCTION buildPhaseSequence {
     LOCAL hasMolniya IS FALSE.
