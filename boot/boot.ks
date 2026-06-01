@@ -51,6 +51,7 @@ IF isEVA {
 
 LOCAL FUNCTION ensureDir { PARAMETER p. IF NOT EXISTS(p) { CREATEDIR(p). } }
 ensureDir("1:/lib").
+ensureDir("1:/lib/rsvp").
 ensureDir("1:/boot").
 ensureDir("1:/logs").
 ensureDir("1:/state").

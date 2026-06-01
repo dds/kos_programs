@@ -44,6 +44,9 @@ GLOBAL LIBS IS LIST(
     "orbit", "targeting", "landing",
     "molniya", "lambert", "payload_ops", "science", "observe", "utils"
 ).
+FOR lib IN RSVP_LIBS {
+    LIBS:ADD(lib).
+}
 
 LOCAL FUNCTION buildPhaseSequence {
     LOCAL hasMolniya IS FALSE.
@@ -176,7 +179,15 @@ GLOBAL FUNCTION main {
         "FAIR",             phaseFairing@,
         "ANTS",             phaseExtendAnts@,
         "PARK",             phaseParking@,
-        "XING",             phaseTransfer@,
+        "XING",             { 
+                               rsvp:goto(MUN, LEX(
+                                  "create_maneuver_nodes", "both")).
+                               // IF NOT executeManeuver() {
+                               //     mLogError("TRANSFER FAILED. HALTING.") .
+                               //     RETURN.
+                               //  }
+                               //  nextPhase(xferSeq).
+                            },
         "MCC",              phaseMidCourse@,
         "COAST",            phaseCoast@,
         "CAPTURE",          phaseCapture@,
