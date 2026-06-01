@@ -237,92 +237,29 @@ IF TERMINAL:INPUT:HASCHAR {
 
 IF manualMode {
     CLEARSCREEN.
-    PRINT "  =======================================".
-    PRINT "  MANUAL MODE    " + SHIP:NAME.
-    PRINT "  =======================================".
-    PRINT " ".
-    PRINT "  -- ENVIRONMENT --".
-    PRINT "  Body ........ " + SHIP:ORBIT:BODY:NAME.
-    PRINT "  Status ...... " + SHIP:STATUS.
-    PRINT "  Altitude .... " + ROUND(SHIP:ALTITUDE,0) + " m".
-    IF SHIP:STATUS = "FLYING" OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "PRELAUNCH" {
-        PRINT "  Airspeed .... " + ROUND(SHIP:AIRSPEED,1) + " m/s".
-        PRINT "  Ground spd .. " + ROUND(SHIP:VELOCITY:SURFACE:MAG,1) + " m/s".
-        PRINT "  Heading ..... " + ROUND(SHIP:FACING:YAW,1) + " deg".
-        PRINT "  Latitude .... " + ROUND(SHIP:GEOPOSITION:LAT,4).
-        PRINT "  Longitude ... " + ROUND(SHIP:GEOPOSITION:LNG,4).
-    }
-    IF SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "SUB_ORBITAL" {
-        PRINT "  Apoapsis .... " + ROUND(SHIP:APOAPSIS/1000,1) + " km".
-        PRINT "  Periapsis ... " + ROUND(SHIP:PERIAPSIS/1000,1) + " km".
-        PRINT "  Inclination . " + ROUND(SHIP:ORBIT:INCLINATION,2) + " deg".
-    }
-    PRINT "  KSC link .... " + HAS_LINK.
-    PRINT "  Free space .. " + CORE:VOLUME:FREESPACE + " / " + CORE:VOLUME:CAPACITY + " bytes".
-    PRINT " ".
-    PRINT "  -- MISSION --".
-    PRINT "  Vehicle ..... " + vehicleName.
-    PRINT "  Target ...... " + targetName.
-    LOCAL phase IS stateGet("phase", "(none)").
-    PRINT "  Phase ....... " + phase.
-    PRINT "  Boot # ...... " + bootCount.
-    IF DEFINED planeActive {
-        PRINT " ".
-        PRINT "  -- PLANE --".
-        PRINT "  Stall speed . " + PLANE_CFG["STALL_SPEED"] + " m/s".
-        PRINT "  FBW ref spd . " + PLANE_CFG["FBW_REF_SPEED"] + " m/s".
-        PRINT "  Cruise alt .. " + CFG["CRUISE_ALT"] + " m".
-        PRINT "  Cruise spd .. " + CFG["CRUISE_SPEED"] + " m/s".
-    }
-    IF DEFINED obsActive {
-        PRINT " ".
-        PRINT "  -- OBSERVATION --".
-        IF obsActive {
-            PRINT "  Status ...... ACTIVE".
-        } ELSE {
-            PRINT "  Status ...... OFF".
-        }
-        PRINT "  Interval .... " + OBS_CFG["INTERVAL"] + "s".
-        PRINT "  Min free .... " + OBS_CFG["MIN_FREE"] + " bytes".
-    }
-    PRINT " ".
-    PRINT "  -- LOGS --".
-    PRINT "  Flight log .. " + flightLogPath().
-
-    PRINT " ".
-    PRINT "  =======================================".
-    mLog("Manual override at boot.").
-    UNLOCK ALL.
-    SET SAS TO TRUE.
-    IF HAS_LINK { archiveLog(). }
 } ELSE {
     LOCAL phase IS stateGet("phase", "").
     IF phase = "DONE" {
         PRINT " ".
         PRINT "  MISSION COMPLETE. MANUAL MODE.".
         mLog("Reboot after DONE — manual mode.").
-        UNLOCK ALL.
-        SET SAS TO TRUE.
     } ELSE IF phase = "ABORT" {
         PRINT "  ABORT DETECTED — entering recovery mode.".
         mLog("Abort detected at reboot — loading recovery.").
         // Ensure recovery logic doesn't crash if offline
-        IF HAS_LINK { _syncLib("recovery"). }
-        _loadLib("recovery").
-        IF HAS_LINK { archiveLog(). }
         recoveryMode().
     } ELSE {
         PRINT "  RESUMING >> " + phase.
         mLog("Resuming mission from phase: " + phase).
-        IF HAS_LINK { archiveLog(). }
         resumeMission().
     }
 }
 
-// Archive complete mission log.
-IF HAS_LINK {
-    archiveLog().
-} ELSE {
-    PRINT "  *** NO KSC LINK, LOGS NOT AUTO-ARCHIVED  ***".
+IF HAS_LINK { 
+    archiveLog(). 
+    _syncLib("recovery"). 
+    _loadLib("recovery").
 }
 PRINT ("END OF LINE. GODSPEED.").
+UNLOCK ALL.
+SET SAS TO TRUE.
