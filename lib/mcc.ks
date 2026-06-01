@@ -72,9 +72,9 @@ GLOBAL FUNCTION phaseMidCourse {
         IF targetLan >= 0 {
             SET logMsg TO logMsg + "  LAN=" + ROUND(finalPatch:LAN,1) + "°".
         }
-        IF targetAoP >= 0 {
-            SET logMsg TO logMsg + "  AOP=" + ROUND(finalPatch:AOP,1) + "°".
-        }
+        // IF targetAoP >= 0 {
+        //     SET logMsg TO logMsg + "  AOP=" + ROUND(finalPatch:AOP,1) + "°".
+        // }
         mLog(logMsg).
         LOCAL success IS FALSE.
         LOCAL retries IS 0.
