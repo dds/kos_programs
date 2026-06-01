@@ -40,7 +40,7 @@ GLOBAL CFG IS LEXICON(
 
 GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer", "mcc",
-    "countdown", "maneuver",
+    "countdown", "maneuver", "lib_navigation",
     "inclination",
     "orbit", 
     "payload_ops", "utils"
