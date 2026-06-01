@@ -52,10 +52,27 @@ GLOBAL FUNCTION waitForSOI {
     PARAMETER targetBody.
     PARAMETER pollInterval IS 5.
     mLog("Waiting for SOI: " + targetBody:NAME).
+
+    // Set a KAC alarm at the SOI transition so time warp stops automatically.
+    // NEXTPATCHETA gives seconds until the next SOI boundary crossing.
+    LOCAL kacAlarmId IS "".
+    IF ADDONS:KAC:AVAILABLE AND SHIP:ORBIT:HASNEXTPATCH {
+        LOCAL soiUt IS TIME:SECONDS + SHIP:ORBIT:NEXTPATCHETA.
+        LOCAL alm IS ADDALARM("Raw", soiUt, "SOI: " + targetBody:NAME, "Auto-created by waitForSOI").
+        SET alm:ACTION TO "KillWarp".
+        SET kacAlarmId TO alm:ID.
+        mLog("KAC alarm set for SOI transition in " + ROUND(SHIP:ORBIT:NEXTPATCHETA, 0) + "s.").
+    }
+
     UNTIL SHIP:ORBIT:BODY:NAME = targetBody:NAME {
         WAIT pollInterval.
     }
     mLog("SOI entered: " + targetBody:NAME).
+
+    // Clean up the alarm now that we've arrived.
+    IF kacAlarmId <> "" {
+        DELETEALARM(kacAlarmId).
+    }
 }
 
 // orbitSummary — log the current orbital parameters.

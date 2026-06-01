@@ -33,6 +33,19 @@ GLOBAL FUNCTION executeManeuver {
 
     mLog("Maneuver: dV=" + ROUND(burnDV,1) + " m/s  ETA=" + ROUND(startTime - TIME:SECONDS,1) + "s").
 
+    // Set a KAC alarm to kill warp before the burn starts.
+    // Alarm fires 60s before burn start to allow alignment time.
+    LOCAL kacAlarmId IS "".
+    IF ADDONS:KAC:AVAILABLE {
+        LOCAL alarmUt IS startTime - 60.
+        IF alarmUt > TIME:SECONDS {
+            LOCAL alm IS ADDALARM("Raw", alarmUt, "Burn: " + ROUND(burnDV,1) + "m/s", "Auto-created by executeManeuver").
+            SET alm:ACTION TO "KillWarp".
+            SET kacAlarmId TO alm:ID.
+            mLog("KAC alarm set for burn in " + ROUND(alarmUt - TIME:SECONDS, 0) + "s.").
+        }
+    }
+
     SET SAS TO FALSE.
     WAIT 0.1.
     LOCK STEERING TO nd:BURNVECTOR.
@@ -45,6 +58,7 @@ GLOBAL FUNCTION executeManeuver {
         _hibernateCmd().
         WAIT MAX(0, wakeTime - TIME:SECONDS).
         _wakeCmd().
+        SET WARP TO 0.
         mLog("Awake — " + ROUND(startTime - TIME:SECONDS, 0) + "s to burn.").
         HUDTEXT("Core awake — burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
     }
@@ -106,6 +120,11 @@ GLOBAL FUNCTION executeManeuver {
     REMOVE nd.
     SET SAS TO TRUE.
     _setThrustLimit(1.0).
+
+    // Clean up the KAC alarm now that the burn is done.
+    IF kacAlarmId <> "" {
+        DELETEALARM(kacAlarmId).
+    }
 
     mLog("Burn complete. Residual dV ~" + ROUND(residual, 2) + " m/s.").
     HUDTEXT("Burn complete", 3, 2, 15, GREEN, FALSE).
@@ -346,6 +365,19 @@ LOCAL FUNCTION _findEncounter {
 //     }
 //     mLog(logMsg).
 //     RETURN nd.
+// }
+
+// GLOBAL FUNCTION planTransfer {
+//     PARAMETER targetBody.
+//     PARAMETER targetPe.
+//     PARAMETER lanTarget IS -1.
+//     PARAMETER aopTarget IS -1.
+// 
+//     // Let's try RSVP
+//     rsvp:goto(targetBody, LEX(
+//         "",""
+//     )).
+//     return NEXTNODE.
 // }
 
 GLOBAL FUNCTION planTransfer {
