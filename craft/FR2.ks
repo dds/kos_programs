@@ -40,10 +40,10 @@ GLOBAL CFG IS LEXICON(
 
 GLOBAL LIBS IS LIST(
     "rsvp",
-    "phases", "launch", "xfer", "mcc"
+    "phases", "launch", "xfer", "mcc",
     // "countdown", "maneuver", "inclination",
     // "orbit", "targeting", "landing",
-    // "payload_ops", "utils",
+    "payload_ops", "utils"
 ).
 
 LOCAL FUNCTION buildPhaseSequence {
