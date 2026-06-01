@@ -40,9 +40,9 @@ GLOBAL CFG IS LEXICON(
 
 GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer", "mcc",
-    "lib_navigation", "countdown", "maneuver", "inclination",
+    "countdown", "maneuver", "inclination",
     "orbit", "targeting", "landing",
-    "molniya", "lambert", "payload_ops", "science", "observe", "utils"
+    "payload_ops", "science", "observe", "utils"
 ).
 FOR lib IN RSVP_LIBS {
     LIBS:ADD(lib).
