@@ -34,7 +34,7 @@ GLOBAL LIBS IS LIST(
 ).
 
 LOCAL FUNCTION buildPhaseSequence {
-    LOCAL orbitPhases IS LIST("CIRC", "RAISE_ALT", "INCL_CORRECT").
+    LOCAL orbitPhases IS LIST("CIRC", "RAISE", "INCLINE").
 
     LOCAL payloadPhases IS LEXICON(
         "CRASHPROBE", LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
@@ -96,16 +96,17 @@ GLOBAL FUNCTION main {
     confirmLaunch(_printConfig@).
 
     LOCAL phaseMap IS LEXICON(
-        "LAUNCH",           phaseLaunch@,
-        "FAIRING",          phaseFairing@,
-        "EXTEND_ANTS",      phaseExtendAnts@,
-        "PARKING",          phaseParking@,
-        "TRANSFER",         phaseTransfer@,
+        "LUNCH",            phaseLaunch@,
+        "FAIR",             phaseFairing@,
+        "ANTS",             phaseExtendAnts@,
+        "PARK",          phaseParking@,
+        "XING",         phaseTransfer@,
+        "MCC", phaseMidCourse@,
         "COAST",            phaseCoast@,
         "CAPTURE",          phaseCapture@,
         "CIRC",             phaseCirc@,
-        "RAISE_ALT",        phaseRaiseAlt@,
-        "INCL_CORRECT",     phaseInclCorrect@,
+        "RAISE",        phaseRaiseAlt@,
+        "INCLINE",     phaseInclCorrect@,
         "TARGETED_DEORBIT", phaseTargetedDeorbit@,
         "RELEASE_PROBE",    phaseReleaseProbe@,
         "RELAY_OPS",        phaseRelayOps@,
