@@ -96,12 +96,12 @@ GLOBAL FUNCTION main {
     confirmLaunch(_printConfig@).
 
     LOCAL phaseMap IS LEXICON(
-        "LUNCH",            phaseLaunch@,
-        "FAIR",             phaseFairing@,
+        "LUNCH", phaseLaunch@,
+        "FAIR", phaseFairing@,
         "ANTS",             phaseExtendAnts@,
         "PARK",          phaseParking@,
         "XING",         phaseTransfer@,
-        "MCC", phaseMidCourse@,
+        "MCC",              phaseMidCourse@,
         "COAST",            phaseCoast@,
         "CAPTURE",          phaseCapture@,
         "CIRC",             phaseCirc@,
