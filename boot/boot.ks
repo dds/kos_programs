@@ -206,11 +206,13 @@ GLOBAL RSVP_LIBS IS LIST(
 ).
 IF DEFINED LIBS {
     FOR lib IN LIBS { 
-        IF lib = "rsvp" {
+        IF (lib = "rsvp" OR lib = "maneuver") {
             FOR rsvp_lib IN RSVP_LIBS {
                 _syncLib(rsvp_lib).
             }
             _loadLib("rsvp/main").
+            _syncLib("maneuver").
+            _loadLib("maneuver").
         } ELSE {
             _loadLib(lib). 
         }
