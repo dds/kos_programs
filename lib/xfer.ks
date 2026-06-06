@@ -19,6 +19,7 @@ GLOBAL FUNCTION phaseTransfer {
         // IF CFG:HASKEY("CAPTURE_AOP") { SET xAoP TO CFG["CAPTURE_AOP"]. }
         // planTransfer(target, CFG["CAPTURE_PE"], xLan, xAoP).
         planTransfer(target, CFG["CAPTURE_PE"]).
+        mLog("Transfer planned.").
         SET success TO executeManeuver().
         IF NOT success {
             SET retries TO retries + 1.

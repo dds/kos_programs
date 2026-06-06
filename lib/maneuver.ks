@@ -182,7 +182,7 @@ GLOBAL FUNCTION planTransfer {
     PARAMETER targetPe.
 
     local options is lex(
-        "create_maneuver_nodes", "both",
+        "create_maneuver_nodes", "first",
         "final_orbit_periapsis", targetPe,
         "verbose", TRUE
     ).
