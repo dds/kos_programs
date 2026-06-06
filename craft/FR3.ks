@@ -21,9 +21,9 @@ GLOBAL CFG IS LEXICON(
     "INCL_MATCH_TARGET",       "",
     "INCL_TOLERANCE",         0.01,
     "MAX_INCL_CHANGE_DV",     200,
-    "PROBE_TARGET_LAT",       90.0,
-    "PROBE_TARGET_LNG",         0.0,
-    "PROBE_ENTRY_PE",         30000,
+    "PROBE_TARGET_LAT",       50,
+    "PROBE_TARGET_LNG",        30, 
+    "PROBE_ENTRY_PE",         5000,
     "PROBE_TARGET_TOL",        2500
 ).
 
