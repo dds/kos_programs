@@ -105,6 +105,7 @@ GLOBAL FUNCTION main {
         "CIRC",             phaseCirc@,
         "RAISE",        phaseRaiseAlt@,
         "INCLINE",     phaseInclCorrect@,
+        "MCC", phaseMidCourse@,
         "TARGETED_DEORBIT", phaseTargetedDeorbit@,
         "RELEASE_PROBE",    phaseReleaseProbe@,
         "RELAY_OPS",        phaseRelayOps@,
