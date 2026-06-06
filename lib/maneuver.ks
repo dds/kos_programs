@@ -192,11 +192,10 @@ LOCAL FUNCTION _findEncounter {
 //      widest possible encounter margin. A dead-center trajectory
 //      survives large normal dV perturbations during INC targeting,
 //      especially for local transfers where the SOI is narrow.
-//   4. INC targeting (normal) — tilt approach for desired capture
-//      inclination.
-//   5. PE targeting with INC hold — converge PE while maintaining
-//      INC via compensating normal corrections after each prograde
-//      step. Uses the HOLD option in newtonTarget.
+//   4. Coupled PE/INC targeting — solve periapsis and capture plane
+//      together. PE and INC are tightly coupled on local moon transfers,
+//      so a scalar Newton pass can report false "low sensitivity" while
+//      a larger normal/radial/prograde coordinate search still converges.
 //
 // MCC (phaseMidCourse) fires mid-coast to fine-tune any drift
 // from burn execution errors. It runs the same INC/PE/AoP/LAN
@@ -254,24 +253,16 @@ GLOBAL FUNCTION planTransfer {
     }
     IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
 
-    // --- 4. INC targeting ---
-    LOCAL incOpts IS LEXICON().
-    IF normalBias <> 0 { incOpts:ADD("BIAS", normalBias * 5). }
-
+    // --- 4. Final targeting ---
+    // If an arrival inclination is requested, solve PE and INC as a pair.
+    // A one-axis Newton step is fragile here: at a near-collision Mun
+    // encounter, tiny normal probes may not visibly change the patched
+    // conic inclination even though larger normal/radial/prograde moves do.
     IF captureInc >= 0 {
-        newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
+        _targetPeIncCoupled(nd, targetBody, targetPe, captureInc, normalBias).
+    } ELSE {
+        newtonTarget(nd, targetBody, "PE", targetPe).
     }
-
-    // --- 5. PE targeting with INC hold ---
-    // PE and INC are coupled — prograde shifts approach geometry (INC)
-    // and normal shifts energy (PE). The HOLD option makes newtonTarget
-    // apply a compensating correction on the held axis after every
-    // primary correction, keeping INC locked while PE converges.
-    LOCAL peOpts IS LEXICON().
-    IF captureInc >= 0 {
-        peOpts:ADD("HOLD", LEXICON("PARAM", "INC", "VALUE", captureInc)).
-    }
-    newtonTarget(nd, targetBody, "PE", targetPe, peOpts).
 
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
@@ -924,6 +915,185 @@ LOCAL FUNCTION _findClosestApproach {
     LOCAL midT IS (a + b) / 2.
     LOCAL midD IS (POSITIONAT(SHIP, midT) - POSITIONAT(tgt, midT)):MAG.
     RETURN LEXICON("time", midT, "distance", midD).
+}
+
+// ============================================================
+// _targetPeIncCoupled — coordinate search for capture PE + INC.
+//
+// Why this exists:
+//   A local Mun/Minmus transfer often starts as a dead-center encounter
+//   so PE targeting has a wide margin. Once we ask for a polar capture,
+//   PE and INC stop being independent:
+//     - normal dV changes the B-plane miss direction and capture plane
+//     - prograde dV changes arrival energy and periapsis
+//     - radial dV changes timing/aim point and can recover an encounter
+//
+// A scalar Newton probe of +0.5 m/s normal can look like "low
+// sensitivity" in KSP's patched conics. This search takes larger trial
+// moves on all three node axes and accepts whichever lowers the combined
+// PE/INC cost, then halves the step sizes when no axis improves.
+// ============================================================
+LOCAL FUNCTION _targetPeIncCoupled {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    PARAMETER targetInc.
+    PARAMETER normalBias IS 0.
+
+    IF normalBias <> 0 AND nd:NORMAL = 0 {
+        SET nd:NORMAL TO normalBias * 5.
+        WAIT 0.02.
+    }
+
+    LOCAL axes IS LIST("NORMAL", "PROGRADE", "RADIALOUT").
+    LOCAL signs IS LIST(1, -1).
+    LOCAL steps IS LEXICON().
+    steps:ADD("NORMAL", 40.0).
+    steps:ADD("PROGRADE", 5.0).
+    steps:ADD("RADIALOUT", 10.0).
+    LOCAL minStep IS 0.05.
+    LOCAL maxIter IS 80.
+
+    LOCAL best IS _peIncCost(nd, targetBody, targetPe, targetInc).
+    LOCAL solved IS FALSE.
+    mLog("PE/INC: coupled target Pe=" + ROUND(targetPe/1000, 1)
+        + "km inc=" + ROUND(targetInc, 1) + "°"
+        + " start Pe=" + ROUND(best["PE"]/1000, 1)
+        + "km inc=" + ROUND(best["INC"], 1) + "°").
+
+    FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
+        LOCAL converged IS FALSE.
+        IF best["PATCH"] <> 0 {
+            IF ABS(best["PE_ERR"]) < 500 AND ABS(best["INC_ERR"]) < 0.5 {
+                SET converged TO TRUE.
+            }
+        }
+        IF converged {
+            SET solved TO TRUE.
+            mLog("  PE/INC[" + i + "] converged: Pe="
+                + ROUND(best["PE"]/1000, 1) + "km inc="
+                + ROUND(best["INC"], 1) + "°").
+            BREAK.
+        }
+
+        LOCAL bestAxis IS "".
+        LOCAL bestValue IS 0.
+        LOCAL bestTrial IS best.
+
+        FOR axis IN axes {
+            LOCAL oldVal IS _nodeAxisGet(nd, axis).
+            FOR sgn IN signs {
+                LOCAL trialVal IS oldVal + sgn * steps[axis].
+                _nodeAxisSet(nd, axis, trialVal).
+                WAIT 0.02.
+
+                LOCAL trial IS _peIncCost(nd, targetBody, targetPe, targetInc).
+                IF trial["COST"] < bestTrial["COST"] {
+                    SET bestTrial TO trial.
+                    SET bestAxis TO axis.
+                    SET bestValue TO trialVal.
+                }
+            }
+            _nodeAxisSet(nd, axis, oldVal).
+            WAIT 0.01.
+        }
+
+        IF bestAxis <> "" {
+            _nodeAxisSet(nd, bestAxis, bestValue).
+            WAIT 0.02.
+            SET best TO _peIncCost(nd, targetBody, targetPe, targetInc).
+            mLog("  PE/INC[" + i + "] " + bestAxis
+                + "=" + ROUND(bestValue, 2)
+                + " Pe=" + ROUND(best["PE"]/1000, 1)
+                + "km inc=" + ROUND(best["INC"], 1)
+                + "° cost=" + ROUND(best["COST"], 2)).
+        } ELSE {
+            FOR axis IN axes {
+                SET steps[axis] TO steps[axis] / 2.
+            }
+            mLog("  PE/INC[" + i + "] refining steps: N="
+                + ROUND(steps["NORMAL"], 2)
+                + " P=" + ROUND(steps["PROGRADE"], 2)
+                + " R=" + ROUND(steps["RADIALOUT"], 2)).
+
+            LOCAL stepsSmall IS FALSE.
+            IF steps["NORMAL"] < minStep AND steps["PROGRADE"] < minStep {
+                IF steps["RADIALOUT"] < minStep { SET stepsSmall TO TRUE. }
+            }
+            IF stepsSmall {
+                mLogWarn("  PE/INC: stopped at Pe="
+                    + ROUND(best["PE"]/1000, 1) + "km inc="
+                    + ROUND(best["INC"], 1) + "°").
+                BREAK.
+            }
+        }
+    }
+
+    IF NOT solved {
+        SET best TO _peIncCost(nd, targetBody, targetPe, targetInc).
+        mLogWarn("PE/INC final error: PeErr="
+            + ROUND(best["PE_ERR"]/1000, 1) + "km incErr="
+            + ROUND(best["INC_ERR"], 2) + "°").
+    }
+
+    RETURN best.
+}
+
+LOCAL FUNCTION _peIncCost {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    PARAMETER targetInc.
+
+    LOCAL p IS _getTargetPatch(nd, targetBody).
+    IF p = 0 {
+        LOCAL miss IS LEXICON().
+        miss:ADD("PATCH", 0).
+        miss:ADD("PE", 0).
+        miss:ADD("INC", 0).
+        miss:ADD("PE_ERR", 9999999).
+        miss:ADD("INC_ERR", 999).
+        miss:ADD("COST", 999999999).
+        RETURN miss.
+    }
+
+    LOCAL peErr IS p:PERIAPSIS - targetPe.
+    LOCAL incErr IS p:INCLINATION - targetInc.
+    IF incErr >  180 { SET incErr TO incErr - 360. }
+    IF incErr < -180 { SET incErr TO incErr + 360. }
+
+    // Inclination must dominate early. A useful out-of-plane move can
+    // temporarily damage PE by many km before prograde/radial recover it.
+    LOCAL peScore IS peErr / 10000.
+    LOCAL incScore IS incErr / 0.5.
+    LOCAL cost IS peScore^2 + incScore^2.
+
+    LOCAL result IS LEXICON().
+    result:ADD("PATCH", 1).
+    result:ADD("PE", p:PERIAPSIS).
+    result:ADD("INC", p:INCLINATION).
+    result:ADD("PE_ERR", peErr).
+    result:ADD("INC_ERR", incErr).
+    result:ADD("COST", cost).
+    RETURN result.
+}
+
+LOCAL FUNCTION _nodeAxisGet {
+    PARAMETER nd.
+    PARAMETER axis.
+    IF axis = "PROGRADE"  { RETURN nd:PROGRADE. }
+    IF axis = "NORMAL"    { RETURN nd:NORMAL. }
+    IF axis = "RADIALOUT" { RETURN nd:RADIALOUT. }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _nodeAxisSet {
+    PARAMETER nd.
+    PARAMETER axis.
+    PARAMETER value.
+    IF axis = "PROGRADE"  { SET nd:PROGRADE  TO value. }
+    IF axis = "NORMAL"    { SET nd:NORMAL    TO value. }
+    IF axis = "RADIALOUT" { SET nd:RADIALOUT TO value. }
 }
 
 // ============================================================
