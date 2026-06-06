@@ -44,7 +44,7 @@ LOCAL FUNCTION buildPhaseSequence {
         "RELAY",      LIST("RELAY_OPS"),
         "SCANSAT",    LIST("RELAY_OPS"),
         "SCISAT",     LIST("RELAY_OPS"),
-        "LANDER",     LIST("LAND_DEORBIT", "LAND", "ROVER")
+        "LANDER",     LIST("LAND_DEORBIT", "LAND")
     ).
 
     RETURN buildRocketSequence(orbitPhases, payloadPhases).
