@@ -13,6 +13,7 @@ GLOBAL CFG IS LEXICON(
     "FAIRING_ALT",          71500,
     "EXTEND_ALT",           76000,
     "CAPTURE_PE",            20000,
+    "CAPTURE_DIR",          "POLAR",
     "TARGET_PE",             20000,
     "CIRC_ECC_TOL",          0.005,
     "TARGET_INCLINATION",      90,
