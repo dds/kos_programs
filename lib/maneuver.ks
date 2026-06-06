@@ -177,6 +177,24 @@ LOCAL FUNCTION _findEncounter {
     RETURN -1.
 }
 
+// ============================================================
+// planTransfer — plan a transfer burn to targetBody.
+//
+// Pipeline:
+//   1. Build raw node  (_planLocalTransfer or _planInterplanetaryTransfer)
+//      Local:  Hohmann dV + phase angle timing, prograde-only, no Lambert
+//      Interplanetary:  Lambert grid scan, full 3-axis node
+//   2. Validate encounter via KSP patched conics (_findEncounter)
+//   3. Optional LAN scan (_scanForLan) — slide departure across orbits
+//   4. Newton PE targeting (_newtonPeTarget) — prograde dV
+//   5. Newton INC targeting (_newtonIncTarget) — normal dV, if CAPTURE_DIR set
+//   6. PE cleanup — re-run PE to correct drift from normal changes
+//
+// CFG keys consumed:
+//   CAPTURE_DIR  — "PROGRADE" / "POLAR" / "RETROPOLAR" / "RETROGRADE"
+//   CAPTURE_INC  — explicit inclination (overrides CAPTURE_DIR)
+//   LAN_ERR_TOL  — LAN tolerance for scan (default 0.5°)
+// ============================================================
 GLOBAL FUNCTION planTransfer {
     PARAMETER targetBody.
     PARAMETER targetPe.
@@ -186,8 +204,6 @@ GLOBAL FUNCTION planTransfer {
     LOCAL centralBody IS BODY.
     LOCAL mu          IS centralBody:MU.
 
-    // Detect whether the target is a local moon (orbits same body as ship)
-    // or an interplanetary body (orbits a different parent).
     LOCAL isLocal IS (targetBody:BODY = BODY).
 
     LOCAL nd IS 0.
@@ -620,51 +636,68 @@ LOCAL FUNCTION _newtonIncTarget {
     PARAMETER normalBias.
 
     LOCAL normalBiasStr IS "".
-    IF (normalBias <> 0) {
-        SET normalBiasStr TO " (bias = " + normalBias + ")".
+    IF normalBias <> 0 {
+        SET normalBiasStr TO " (bias=" + normalBias + ")".
     }
     mLog("INC: Targeting " + ROUND(targetInc, 1) + "°" + normalBiasStr).
-    
-    // Seed with a small normal dV in the biased direction
+
+    // Seed with normal dV in the biased direction
     IF normalBias <> 0 AND nd:NORMAL = 0 {
-        SET nd:NORMAL TO normalBias * 1.0.
+        SET nd:NORMAL TO normalBias * 5.0.
         WAIT 0.02.
     }
 
-    LOCAL incIter IS 25.
-    LOCAL incEps  IS 0.1.
-    LOCAL incDamp IS 0.5.
+    LOCAL incIter IS 35.
+    LOCAL incEps  IS 0.5.
+    LOCAL incDamp IS 0.7.
     LOCAL lastGoodNormal IS nd:NORMAL.
+    LOCAL stepScale IS 1.0.
 
     FROM { LOCAL i IS 0. } UNTIL i >= incIter STEP { SET i TO i + 1. } DO {
         LOCAL p IS _getTargetPatch(nd, targetBody).
         IF p = 0 OR p:PERIAPSIS < 0 {
-            mLog("INC[" + i + "]: lost encounter, reverting.").
-            SET nd:NORMAL TO lastGoodNormal.
-            BREAK.
+            // Backtrack: try halfway between current and last good
+            LOCAL midNor IS (nd:NORMAL + lastGoodNormal) / 2.
+            SET nd:NORMAL TO midNor.
+            WAIT 0.02.
+            LOCAL pMid IS _getTargetPatch(nd, targetBody).
+            IF pMid <> 0 AND pMid:PERIAPSIS > 0 {
+                SET lastGoodNormal TO midNor.
+                SET stepScale TO stepScale * 0.5.
+                mLog("INC[" + i + "]: backtracked, reducing step.").
+            } ELSE {
+                SET nd:NORMAL TO lastGoodNormal.
+                SET stepScale TO stepScale * 0.5.
+                IF stepScale < 0.1 {
+                    mLog("INC[" + i + "]: step too small, stopping.").
+                    BREAK.
+                }
+                mLog("INC[" + i + "]: lost encounter, reverted.").
+            }
+        } ELSE {
+            SET lastGoodNormal TO nd:NORMAL.
+            LOCAL incErr IS targetInc - p:INCLINATION.
+            IF ABS(incErr) < 0.5 {
+                mLog("INC[" + i + "] converged: " + ROUND(p:INCLINATION, 1) + "°").
+                BREAK.
+            }
+            LOCAL oldNor IS nd:NORMAL.
+            SET nd:NORMAL TO oldNor + incEps.
+            WAIT 0.02.
+            LOCAL p2 IS _getTargetPatch(nd, targetBody).
+            SET nd:NORMAL TO oldNor.
+            IF p2 = 0 { BREAK. }
+            LOCAL sens IS (p2:INCLINATION - p:INCLINATION) / incEps.
+            IF ABS(sens) < 0.001 { BREAK. }
+            LOCAL correction IS (incErr / sens) * incDamp.
+            // Proportional clamp: aggressive for large errors, safe for small
+            LOCAL maxStep IS MAX(5.0, ABS(incErr) / 3) * stepScale.
+            IF correction >  maxStep { SET correction TO  maxStep. }
+            IF correction < -maxStep { SET correction TO -maxStep. }
+            SET nd:NORMAL TO oldNor + correction.
+            WAIT 0.05.
+            mLog("INC[" + i + "] inc=" + ROUND(p:INCLINATION, 1) + "°  corr=" + ROUND(correction, 2) + " m/s").
         }
-        SET lastGoodNormal TO nd:NORMAL.
-        LOCAL incErr IS targetInc - p:INCLINATION.
-        IF ABS(incErr) < 0.5 {
-            mLog("INC[" + i + "] converged: " + ROUND(p:INCLINATION, 1) + "°").
-            BREAK.
-        }
-        LOCAL oldNor IS nd:NORMAL.
-        SET nd:NORMAL TO oldNor + incEps.
-        WAIT 0.02.
-        LOCAL p2 IS _getTargetPatch(nd, targetBody).
-        SET nd:NORMAL TO oldNor.
-        IF p2 = 0 { BREAK. }
-        LOCAL sens IS (p2:INCLINATION - p:INCLINATION) / incEps.
-        IF ABS(sens) < 0.001 { BREAK. }
-        LOCAL correction IS (incErr / sens) * incDamp.
-        // Proportional clamp: scale with error magnitude
-        LOCAL maxStep IS MAX(3.0, ABS(incErr) / 5).
-        IF correction >  maxStep { SET correction TO  maxStep. }
-        IF correction < -maxStep { SET correction TO -maxStep. }
-        SET nd:NORMAL TO oldNor + correction.
-        WAIT 0.05.
-        mLog("INC[" + i + "] inc=" + ROUND(p:INCLINATION, 1) + "°  corr=" + ROUND(correction, 2) + " m/s").
     }
 }
 

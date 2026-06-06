@@ -18,6 +18,15 @@ GLOBAL FUNCTION phaseMidCourse {
     LOCAL targetLan IS -1.
     LOCAL targetAoP IS -1.
 
+    // Resolve CAPTURE_DIR to inclination (same mapping as planTransfer)
+    IF CFG:HASKEY("CAPTURE_DIR") {
+        LOCAL dir IS CFG["CAPTURE_DIR"]:TOUPPER.
+        IF dir = "PROGRADE"   { SET targetInc TO 0. }
+        IF dir = "POLAR"      { SET targetInc TO 90. }
+        IF dir = "RETROPOLAR" { SET targetInc TO 90. }
+        IF dir = "RETROGRADE" { SET targetInc TO 180. }
+    }
+    // Explicit CAPTURE_INC overrides CAPTURE_DIR
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
     IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
@@ -97,6 +106,14 @@ LOCAL FUNCTION _getTargetPatch {
     RETURN 0.
 }
 
+// ============================================================
+// Phased MCC optimizer — solves each orbital parameter via
+// independent Newton-Raphson on the appropriate maneuver axis.
+// Order: INC (normal) → AoP (radial) → PE (prograde) →
+//        LAN (normal) → PE cleanup.
+// Solving normal first ensures the orbital plane is right
+// before dialling in energy, matching how you'd do it manually.
+// ============================================================
 LOCAL FUNCTION _optimizeMCC {
     PARAMETER mccNode.
     PARAMETER targetBody.
@@ -105,117 +122,163 @@ LOCAL FUNCTION _optimizeMCC {
     PARAMETER targetLan.
     PARAMETER targetAoP.
 
-    mLog("Starting 3-Axis MCC Optimization...").
+    mLog("Starting phased MCC optimization...").
 
-    // --- FITNESS / COST FUNCTION ---
-    // Only includes error terms for targets that are actually set (not -1).
-    LOCAL FUNCTION getScore {
-        LOCAL p IS _getTargetPatch(mccNode, targetBody).
-
-        // Massive penalties for lost encounters or impacts
-        IF p = 0 { RETURN 9999999. }
-        IF p:PERIAPSIS < 0 { RETURN 9999999. }
-
-        LOCAL score IS 0.
-
-        // PE is always targeted
-        LOCAL peErr IS ABS(p:PERIAPSIS - targetPe) / 1000.
-        SET score TO score + peErr * 10.
-
-        IF targetInc >= 0 {
-            LOCAL incErr IS ABS(p:INCLINATION - targetInc).
-            SET score TO score + incErr * 50.
-        }
-        IF targetLan >= 0 {
-            LOCAL lanErr IS ABS(p:LAN - targetLan).
-            IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
-            SET score TO score + lanErr * 15.
-        }
-        IF targetAoP >= 0 {
-            LOCAL aopErr IS ABS(p:ARGUMENTOFPERIAPSIS - targetAoP).
-            IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
-            SET score TO score + aopErr * 20.
-        }
-
-        RETURN score.
+    // Phase 1: Inclination via NORMAL (get orbital plane right first)
+    IF targetInc >= 0 {
+        _mccNewton(mccNode, targetBody, "INC", targetInc).
     }
 
-    // --- HILL CLIMB ALGORITHM ---
-    LOCAL currentScore IS getScore().
-    LOCAL stepSize IS 10.0.
-    LOCAL minStep IS 0.01.
-    LOCAL iter IS 0.
+    // Phase 2: AoP via RADIALOUT
+    IF targetAoP >= 0 {
+        _mccNewton(mccNode, targetBody, "AOP", targetAoP).
+    }
 
-    UNTIL stepSize < minStep OR iter > 200 {
-        SET iter TO iter + 1.
-        LOCAL improved IS FALSE.
+    // Phase 3: PE via PROGRADE
+    _mccNewton(mccNode, targetBody, "PE", targetPe).
 
-        // Store baseline
-        LOCAL basePro IS mccNode:PROGRADE.
-        LOCAL baseRad IS mccNode:RADIALOUT.
-        LOCAL baseNor IS mccNode:NORMAL.
-
-        // Define the 6 directions to probe
-        LOCAL probes IS LIST(
-            LIST(stepSize, 0, 0), LIST(-stepSize, 0, 0),
-            LIST(0, stepSize, 0), LIST(0, -stepSize, 0),
-            LIST(0, 0, stepSize), LIST(0, 0, -stepSize)
-        ).
-
-        LOCAL bestProbeScore IS currentScore.
-        LOCAL bestPro IS basePro.
-        LOCAL bestRad IS baseRad.
-        LOCAL bestNor IS baseNor.
-
-        FOR p IN probes {
-            SET mccNode:PROGRADE TO basePro + p[0].
-            SET mccNode:RADIALOUT TO baseRad + p[1].
-            SET mccNode:NORMAL TO baseNor + p[2].
-            WAIT 0.01.
-
-            // Enforce dV cap — reject probes that exceed it
-            IF mccNode:DELTAV:MAG > MCC_DV_CAP {
-                SET mccNode:PROGRADE TO basePro.
-                SET mccNode:RADIALOUT TO baseRad.
-                SET mccNode:NORMAL TO baseNor.
-            } ELSE {
-                LOCAL probeScore IS getScore().
-                IF probeScore < bestProbeScore {
-                    SET bestProbeScore TO probeScore.
-                    SET bestPro TO mccNode:PROGRADE.
-                    SET bestRad TO mccNode:RADIALOUT.
-                    SET bestNor TO mccNode:NORMAL.
-                    SET improved TO TRUE.
-                }
-
-                // Reset for next probe
-                SET mccNode:PROGRADE TO basePro.
-                SET mccNode:RADIALOUT TO baseRad.
-                SET mccNode:NORMAL TO baseNor.
-            }
-        }
-
-        // Apply the best gradient step found
-        IF improved {
-            SET mccNode:PROGRADE TO bestPro.
-            SET mccNode:RADIALOUT TO bestRad.
-            SET mccNode:NORMAL TO bestNor.
-            SET currentScore TO bestProbeScore.
-        } ELSE {
-            SET stepSize TO stepSize * 0.5.
-        }
+    // Phase 4: LAN via NORMAL (small tweaks on top of inc correction)
+    IF targetLan >= 0 {
+        _mccNewton(mccNode, targetBody, "LAN", targetLan).
+        // Re-correct PE since normal changes drift it
+        _mccNewton(mccNode, targetBody, "PE", targetPe).
     }
 
     // --- FINAL REPORT ---
     LOCAL finalPatch IS _getTargetPatch(mccNode, targetBody).
     LOCAL totalDv IS mccNode:DELTAV:MAG.
 
-    mLog("MCC Converged in " + iter + " iterations.").
-    mLog("dV: " + ROUND(totalDv, 2) + " m/s (P:" + ROUND(mccNode:PROGRADE,2) + " R:" + ROUND(mccNode:RADIALOUT,2) + " N:" + ROUND(mccNode:NORMAL,2) + ")").
+    mLog("MCC complete: dV=" + ROUND(totalDv, 2)
+        + " m/s (P:" + ROUND(mccNode:PROGRADE,2)
+        + " R:" + ROUND(mccNode:RADIALOUT,2)
+        + " N:" + ROUND(mccNode:NORMAL,2) + ")").
 
     IF finalPatch <> 0 {
-        mLog("Result - PE: " + ROUND(finalPatch:PERIAPSIS/1000, 1) + "km  INC: " + ROUND(finalPatch:INCLINATION, 1) + "  LAN: " + ROUND(finalPatch:LAN, 1)).
+        mLog("Result - PE: " + ROUND(finalPatch:PERIAPSIS/1000, 1)
+            + "km  INC: " + ROUND(finalPatch:INCLINATION, 1)
+            + "°  LAN: " + ROUND(finalPatch:LAN, 1) + "°").
     }
 
     RETURN mccNode.
+}
+
+// ============================================================
+// Generic Newton-Raphson for a single orbital parameter.
+// param: "PE", "INC", "LAN", or "AOP"
+// Each maps to a specific maneuver axis:
+//   PE  → PROGRADE,  INC → NORMAL,
+//   LAN → NORMAL,    AOP → RADIALOUT
+// ============================================================
+LOCAL FUNCTION _mccNewton {
+    PARAMETER mccNode.
+    PARAMETER targetBody.
+    PARAMETER param.
+    PARAMETER targetVal.
+
+    LOCAL isAngle IS (param <> "PE").
+    LOCAL eps  IS CHOOSE 0.5 IF isAngle ELSE 0.1.
+    LOCAL damp IS 0.7.
+    LOCAL tol  IS CHOOSE 1.0 IF isAngle ELSE 500.
+    LOCAL maxIter IS 25.
+
+    mLog("MCC " + param + ": targeting " + ROUND(targetVal, CHOOSE 1 IF isAngle ELSE 0)).
+
+    FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
+        LOCAL p IS _getTargetPatch(mccNode, targetBody).
+        IF p = 0 OR p:PERIAPSIS < 0 {
+            mLog("  " + param + "[" + i + "]: lost encounter.").
+            BREAK.
+        }
+
+        LOCAL current IS _mccReadParam(p, param).
+        LOCAL err IS targetVal - current.
+
+        // Wrap angular errors to ±180
+        IF isAngle {
+            IF err > 180 { SET err TO err - 360. }
+            IF err < -180 { SET err TO err + 360. }
+        }
+
+        IF ABS(err) < tol {
+            mLog("  " + param + "[" + i + "] converged: " + ROUND(current, 1)).
+            BREAK.
+        }
+
+        // Finite difference for sensitivity
+        LOCAL oldVal IS _mccGetAxis(mccNode, param).
+        _mccSetAxis(mccNode, param, oldVal + eps).
+        WAIT 0.02.
+        LOCAL p2 IS _getTargetPatch(mccNode, targetBody).
+        _mccSetAxis(mccNode, param, oldVal).
+        IF p2 = 0 OR p2:PERIAPSIS < 0 { BREAK. }
+
+        LOCAL current2 IS _mccReadParam(p2, param).
+        LOCAL delta IS current2 - current.
+        IF isAngle {
+            IF delta > 180 { SET delta TO delta - 360. }
+            IF delta < -180 { SET delta TO delta + 360. }
+        }
+
+        LOCAL sens IS delta / eps.
+        IF ABS(sens) < 0.001 { BREAK. }
+
+        LOCAL correction IS (err / sens) * damp.
+        LOCAL maxStep IS CHOOSE MAX(5.0, ABS(err) / 3) IF isAngle ELSE MAX(3.0, ABS(err) / 5000).
+        IF correction >  maxStep { SET correction TO  maxStep. }
+        IF correction < -maxStep { SET correction TO -maxStep. }
+
+        // Apply correction, then check dV cap and encounter
+        LOCAL lastGood IS oldVal.
+        _mccSetAxis(mccNode, param, oldVal + correction).
+        WAIT 0.02.
+
+        IF mccNode:DELTAV:MAG > MCC_DV_CAP {
+            _mccSetAxis(mccNode, param, lastGood).
+            mLog("  " + param + "[" + i + "]: dV cap (" + MCC_DV_CAP + " m/s) reached.").
+            BREAK.
+        }
+
+        LOCAL pCheck IS _getTargetPatch(mccNode, targetBody).
+        IF pCheck = 0 OR pCheck:PERIAPSIS < 0 {
+            // Backtrack to half correction
+            _mccSetAxis(mccNode, param, oldVal + correction / 2).
+            WAIT 0.02.
+            LOCAL pHalf IS _getTargetPatch(mccNode, targetBody).
+            IF pHalf = 0 OR pHalf:PERIAPSIS < 0 {
+                _mccSetAxis(mccNode, param, lastGood).
+                mLog("  " + param + "[" + i + "]: backtrack failed, reverting.").
+                BREAK.
+            }
+        }
+
+        mLog("  " + param + "[" + i + "] val=" + ROUND(current, 1) + "  corr=" + ROUND(correction, 2) + " m/s").
+    }
+}
+
+// Helpers: read orbital parameter from patch
+LOCAL FUNCTION _mccReadParam {
+    PARAMETER p, param.
+    IF param = "PE"  { RETURN p:PERIAPSIS. }
+    IF param = "INC" { RETURN p:INCLINATION. }
+    IF param = "LAN" { RETURN p:LAN. }
+    IF param = "AOP" { RETURN p:ARGUMENTOFPERIAPSIS. }
+    RETURN 0.
+}
+
+// Helpers: get/set the node axis that controls a given parameter
+LOCAL FUNCTION _mccGetAxis {
+    PARAMETER nd, param.
+    IF param = "PE"  { RETURN nd:PROGRADE. }
+    IF param = "INC" { RETURN nd:NORMAL. }
+    IF param = "LAN" { RETURN nd:NORMAL. }
+    IF param = "AOP" { RETURN nd:RADIALOUT. }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _mccSetAxis {
+    PARAMETER nd, param, val.
+    IF param = "PE"  { SET nd:PROGRADE   TO val. }
+    IF param = "INC" { SET nd:NORMAL     TO val. }
+    IF param = "LAN" { SET nd:NORMAL     TO val. }
+    IF param = "AOP" { SET nd:RADIALOUT  TO val. }
 }
