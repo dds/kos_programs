@@ -29,8 +29,8 @@ GLOBAL CFG IS LEXICON(
 GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer", "mcc",
     "lib_navigation", "countdown", "maneuver", "inclination",
-    "orbit", "targeting", "landing",
-    "payload_ops", "utils", "landing", "rover"
+    "orbit", "targeting", 
+    "payload_ops", "utils", "rsvp"
 ).
 
 LOCAL FUNCTION buildPhaseSequence {
@@ -50,7 +50,6 @@ LOCAL FUNCTION buildPhaseSequence {
 
 LOCAL FUNCTION _printConfig {
     LOCAL seq IS buildPhaseSequence().
-    CLEARSCREEN.
     PRINT "  ========================================".
     PRINT "    FR3 FLIGHT PLAN    " + SHIP:NAME.
     PRINT "  ========================================".
