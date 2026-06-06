@@ -605,6 +605,66 @@ LOCAL FUNCTION _newtonPeTarget {
     }
 }
 
+// ============================================================
+// Newton-Raphson inclination targeting — operates on NORMAL dV
+// normalBias: +1 seeds positive normal (prograde-side polar),
+//             -1 seeds negative normal (retrograde-side polar),
+//              0 auto (no seed).
+// POLAR and RETROPOLAR both target 90° but converge to different
+// orbital planes (different LAN) due to opposite normal seeds.
+// ============================================================
+LOCAL FUNCTION _newtonIncTarget {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetInc.
+    PARAMETER normalBias.
+
+    mLog("INC: Targeting " + ROUND(targetInc, 1) + "°"
+        + CHOOSE " (bias=" + normalBias + ")" IF normalBias <> 0 ELSE "").
+
+    // Seed with a small normal dV in the biased direction
+    IF normalBias <> 0 AND nd:NORMAL = 0 {
+        SET nd:NORMAL TO normalBias * 1.0.
+        WAIT 0.02.
+    }
+
+    LOCAL incIter IS 25.
+    LOCAL incEps  IS 0.1.
+    LOCAL incDamp IS 0.5.
+    LOCAL lastGoodNormal IS nd:NORMAL.
+
+    FROM { LOCAL i IS 0. } UNTIL i >= incIter STEP { SET i TO i + 1. } DO {
+        LOCAL p IS _getTargetPatch(nd, targetBody).
+        IF p = 0 OR p:PERIAPSIS < 0 {
+            mLog("INC[" + i + "]: lost encounter, reverting.").
+            SET nd:NORMAL TO lastGoodNormal.
+            BREAK.
+        }
+        SET lastGoodNormal TO nd:NORMAL.
+        LOCAL incErr IS targetInc - p:INCLINATION.
+        IF ABS(incErr) < 0.5 {
+            mLog("INC[" + i + "] converged: " + ROUND(p:INCLINATION, 1) + "°").
+            BREAK.
+        }
+        LOCAL oldNor IS nd:NORMAL.
+        SET nd:NORMAL TO oldNor + incEps.
+        WAIT 0.02.
+        LOCAL p2 IS _getTargetPatch(nd, targetBody).
+        SET nd:NORMAL TO oldNor.
+        IF p2 = 0 { BREAK. }
+        LOCAL sens IS (p2:INCLINATION - p:INCLINATION) / incEps.
+        IF ABS(sens) < 0.001 { BREAK. }
+        LOCAL correction IS (incErr / sens) * incDamp.
+        // Proportional clamp: scale with error magnitude
+        LOCAL maxStep IS MAX(3.0, ABS(incErr) / 5).
+        IF correction >  maxStep { SET correction TO  maxStep. }
+        IF correction < -maxStep { SET correction TO -maxStep. }
+        SET nd:NORMAL TO oldNor + correction.
+        WAIT 0.05.
+        mLog("INC[" + i + "] inc=" + ROUND(p:INCLINATION, 1) + "°  corr=" + ROUND(correction, 2) + " m/s").
+    }
+}
+
 GLOBAL FUNCTION planCapture {
     PARAMETER targetBody.
     PARAMETER targetAlt.
