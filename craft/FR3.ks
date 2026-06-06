@@ -30,7 +30,7 @@ GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer", "mcc",
     "lib_navigation", "countdown", "maneuver", "inclination",
     "orbit", "targeting", "landing",
-    "payload_ops", "utils", "rsvp", "landing", "rover"
+    "payload_ops", "utils", "landing", "rover"
 ).
 
 LOCAL FUNCTION buildPhaseSequence {
