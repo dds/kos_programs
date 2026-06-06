@@ -6,7 +6,7 @@
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
-    "PARKING_ALT",         100000,
+    "PARKING_ALT",         85000,
     "LAUNCH_INCLINATION",       0,
     "LAUNCH_AZIMUTH",           0,
     "LAUNCH_STAGE_LIMIT",       0,
@@ -24,7 +24,7 @@ GLOBAL CFG IS LEXICON(
     "PROBE_TARGET_LNG",         0.0,
     "PROBE_ENTRY_PE",         30000,
     "PROBE_TARGET_TOL",        2500,
-    "RECOVERY_PE",           32000
+    "RECOVERY_PE",          55000
 ).
 
 GLOBAL LIBS IS LIST(
