@@ -230,27 +230,49 @@ GLOBAL FUNCTION planTransfer {
     }
     IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
 
-    // --- Inclination targeting (plane first, energy second) ---
-    // Setting the orbital plane before PE avoids large normal corrections
-    // destroying a carefully-targeted PE encounter.
+    // --- Inclination targeting ---
+    // For local moons (small SOI), large plane changes during transfer are
+    // impractical — normal dV pushes the trajectory out of the SOI before
+    // meaningfully changing capture inclination. In that case, the plane
+    // change is deferred to post-capture (INCL_CORRECT / TARGET_INCLINATION).
+    // We still attempt INC targeting, but verify the encounter remains
+    // healthy enough for PE targeting afterward. If not, revert.
     IF captureInc >= 0 {
+        LOCAL preIncNormal IS nd:NORMAL.
+        LOCAL preIncTime IS nd:TIME.
+        LOCAL preIncPrograde IS nd:PROGRADE.
+
         LOCAL incOpts IS LEXICON().
         IF normalBias <> 0 { incOpts:ADD("BIAS", normalBias * 5). }
         newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
 
-        // INC changes may lose the encounter — recover before PE targeting
+        // Verify encounter survived and PE targeting can work
         LOCAL postIncPatch IS _getTargetPatch(nd, targetBody).
+        LOCAL incUsable IS TRUE.
+
         IF postIncPatch = 0 OR postIncPatch:PERIAPSIS < 0 {
-            mLog("Encounter lost after INC targeting, searching...").
-            LOCAL foundTime IS _findEncounter(nd, targetBody, nd:TIME,
-                SHIP:ORBIT:PERIOD * 3, SHIP:ORBIT:PERIOD / 8).
-            IF foundTime >= 0 {
-                SET nd:TIME TO foundTime.
-                WAIT 0.1.
-                mLog("Encounter recovered at T+" + ROUND(foundTime - TIME:SECONDS, 0) + "s.").
-            } ELSE {
-                mLogWarn("Could not recover encounter after INC targeting.").
+            SET incUsable TO FALSE.
+            mLog("Encounter lost after INC targeting.").
+        } ELSE {
+            // Check that PE probe works (encounter isn't razor-thin)
+            LOCAL testPro IS nd:PROGRADE.
+            SET nd:PROGRADE TO testPro + 0.1.
+            WAIT 0.02.
+            LOCAL testP IS _getTargetPatch(nd, targetBody).
+            SET nd:PROGRADE TO testPro.
+            IF testP = 0 OR testP:PERIAPSIS < 0 {
+                SET incUsable TO FALSE.
+                mLog("Encounter too marginal after INC targeting.").
             }
+        }
+
+        IF NOT incUsable {
+            // Revert INC changes — plane change deferred to post-capture
+            SET nd:NORMAL TO preIncNormal.
+            SET nd:TIME TO preIncTime.
+            SET nd:PROGRADE TO preIncPrograde.
+            WAIT 0.1.
+            mLog("INC reverted — plane change deferred to post-capture.").
         }
     }
 
