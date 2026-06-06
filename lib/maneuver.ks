@@ -180,11 +180,10 @@ LOCAL FUNCTION _findEncounter {
 GLOBAL FUNCTION planTransfer {
     PARAMETER targetBody.
     PARAMETER targetPe.
-    //
 
     local options is lex(
         "create_maneuver_nodes", "both",
-        "final_orbit_periapsis", targetPe,
+        "final_orbit_periapsis", targetPe
     ).
     rsvp:goto(targetBody, options).
     RETURN NEXTNODE.
