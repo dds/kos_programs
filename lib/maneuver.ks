@@ -939,6 +939,7 @@ LOCAL FUNCTION _targetPeIncCoupled {
     PARAMETER targetPe.
     PARAMETER targetInc.
     PARAMETER normalBias IS 0.
+    PARAMETER opts IS LEXICON().
 
     IF normalBias <> 0 AND nd:NORMAL = 0 {
         SET nd:NORMAL TO normalBias * 5.
@@ -953,6 +954,14 @@ LOCAL FUNCTION _targetPeIncCoupled {
     steps:ADD("RADIALOUT", 20.0).
     LOCAL minStep IS 0.05.
     LOCAL maxIter IS 120.
+    LOCAL dvCap IS -1.
+
+    IF opts:HASKEY("STEP_NORMAL")  { SET steps["NORMAL"]    TO opts["STEP_NORMAL"]. }
+    IF opts:HASKEY("STEP_PROGRADE"){ SET steps["PROGRADE"]  TO opts["STEP_PROGRADE"]. }
+    IF opts:HASKEY("STEP_RADIAL")  { SET steps["RADIALOUT"] TO opts["STEP_RADIAL"]. }
+    IF opts:HASKEY("MIN_STEP")     { SET minStep            TO opts["MIN_STEP"]. }
+    IF opts:HASKEY("MAX_ITER")     { SET maxIter            TO opts["MAX_ITER"]. }
+    IF opts:HASKEY("DV_CAP")       { SET dvCap              TO opts["DV_CAP"]. }
 
     LOCAL best IS _peIncCost(nd, targetBody, targetPe, targetInc).
     LOCAL solved IS FALSE.
@@ -987,11 +996,13 @@ LOCAL FUNCTION _targetPeIncCoupled {
                 _nodeAxisSet(nd, axis, trialVal).
                 WAIT 0.02.
 
-                LOCAL trial IS _peIncCost(nd, targetBody, targetPe, targetInc).
-                IF trial["COST"] < bestTrial["COST"] {
-                    SET bestTrial TO trial.
-                    SET bestAxis TO axis.
-                    SET bestValue TO trialVal.
+                IF dvCap < 0 OR nd:DELTAV:MAG <= dvCap {
+                    LOCAL trial IS _peIncCost(nd, targetBody, targetPe, targetInc).
+                    IF trial["COST"] < bestTrial["COST"] {
+                        SET bestTrial TO trial.
+                        SET bestAxis TO axis.
+                        SET bestValue TO trialVal.
+                    }
                 }
             }
             _nodeAxisSet(nd, axis, oldVal).
@@ -1056,6 +1067,14 @@ LOCAL FUNCTION _peIncCost {
         miss:ADD("COST", 999999999).
         RETURN miss.
     }
+
+    RETURN _peIncPatchCost(p, targetPe, targetInc).
+}
+
+LOCAL FUNCTION _peIncPatchCost {
+    PARAMETER p.
+    PARAMETER targetPe.
+    PARAMETER targetInc.
 
     LOCAL peErr IS p:PERIAPSIS - targetPe.
     LOCAL incErr IS p:INCLINATION - targetInc.
@@ -1465,10 +1484,27 @@ GLOBAL FUNCTION phaseMidCourse {
 
     LOCAL mccOpts IS LEXICON("DV_CAP", MCC_DV_CAP).
 
-    // Phased optimization: plane first, then energy
-    IF targetInc >= 0 { newtonTarget(nd, target, "INC", targetInc, mccOpts). }
+    // Local polar approaches couple PE and INC strongly. Running INC and
+    // PE as independent Newton passes can turn a good 20km encounter into
+    // a high flyby. Use the same coupled solver as departure, but with
+    // much smaller steps and a strict MCC dV cap.
+    LOCAL preCost IS 0.
+    IF targetInc >= 0 {
+        LOCAL preEval IS _peIncPatchCost(patch, targetPe, targetInc).
+        SET preCost TO preEval["COST"].
+        LOCAL coupledOpts IS LEXICON().
+        coupledOpts:ADD("DV_CAP", MCC_DV_CAP).
+        coupledOpts:ADD("STEP_NORMAL", 2.0).
+        coupledOpts:ADD("STEP_PROGRADE", 1.0).
+        coupledOpts:ADD("STEP_RADIAL", 1.0).
+        coupledOpts:ADD("MIN_STEP", 0.02).
+        coupledOpts:ADD("MAX_ITER", 80).
+        _targetPeIncCoupled(nd, target, targetPe, targetInc, 0, coupledOpts).
+    } ELSE {
+        newtonTarget(nd, target, "PE", targetPe, mccOpts).
+    }
+
     IF targetAoP >= 0 { newtonTarget(nd, target, "AOP", targetAoP, mccOpts). }
-    newtonTarget(nd, target, "PE", targetPe, mccOpts).
     IF targetLan >= 0 {
         newtonTarget(nd, target, "LAN", targetLan, mccOpts).
         newtonTarget(nd, target, "PE", targetPe, mccOpts).
@@ -1479,7 +1515,18 @@ GLOBAL FUNCTION phaseMidCourse {
     LOCAL totalDv IS nd:DELTAV:MAG.
     LOCAL finalPatch IS _getTargetPatch(nd, target).
 
-    IF totalDv < 0.1 OR finalPatch = 0 {
+    LOCAL worsened IS FALSE.
+    IF targetInc >= 0 AND finalPatch <> 0 {
+        LOCAL finalEval IS _peIncPatchCost(finalPatch, targetPe, targetInc).
+        LOCAL finalCost IS finalEval["COST"].
+        IF finalCost > preCost * 1.05 { SET worsened TO TRUE. }
+        IF ABS(finalPatch:PERIAPSIS - targetPe) > 100000 { SET worsened TO TRUE. }
+    }
+
+    IF totalDv < 0.1 OR finalPatch = 0 OR worsened {
+        IF worsened {
+            mLogWarn("MCC made approach worse; skipping correction node.").
+        }
         mLog("Encounter on target. Skipping MCC burn.").
         REMOVE nd.
     } ELSE {
