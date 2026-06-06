@@ -12,6 +12,7 @@ GLOBAL LIBS IS LIST(
 ).
 
 LOCAL FUNCTION buildPhaseSequence {
+    RETURN LIST("TARGETED_DEORBIT", "LAND", "ROVER", "DONE").
 }
 
 LOCAL FUNCTION _printConfig {
@@ -27,7 +28,9 @@ GLOBAL FUNCTION main {
 
     LOCAL phaseMap IS LEXICON(
         "TARGETED_DEORBIT", phaseTargetedDeorbit@,
-        "LAND",             phaseLand@
+        "LAND",             phaseLand@,
+        "ROVER",            phaseRoverInit@,
+        "DONE",             phaseRoverShutdown@
     ).
 
     runPhases(phaseMap).

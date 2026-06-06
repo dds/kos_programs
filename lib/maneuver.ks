@@ -185,11 +185,155 @@ GLOBAL FUNCTION planTransfer {
 
     LOCAL centralBody IS BODY.
     LOCAL mu          IS centralBody:MU.
-    LOCAL targetRadius IS targetBody:RADIUS + targetPe.
 
-    // --- PHASE 1: Lambert scan to find best departure time ---
-    // Sample departure times over the next N ship orbital periods,
-    // and for each, sample a range of TOFs centered on the Hohmann estimate.
+    // Detect whether the target is a local moon (orbits same body as ship)
+    // or an interplanetary body (orbits a different parent).
+    LOCAL isLocal IS (targetBody:BODY = BODY).
+
+    LOCAL nd IS 0.
+    IF isLocal {
+        SET nd TO _planLocalTransfer(targetBody, targetPe, lanTarget, centralBody, mu).
+    } ELSE {
+        SET nd TO _planInterplanetaryTransfer(targetBody, targetPe, lanTarget, centralBody, mu).
+    }
+
+    IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
+
+    // --- Newton-Raphson PE targeting (shared by both paths) ---
+    _newtonPeTarget(nd, targetBody, targetPe).
+
+    // --- Final report ---
+    LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
+    IF finalPatch = 0 {
+        mLogError("planTransfer: no encounter after PE targeting.").
+        RETURN.
+    }
+
+    LOCAL logMsg IS "Transfer -> " + targetBody:NAME
+        + ": dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " m/s  Pe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km"
+        + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS,0) + "s".
+    IF lanTarget >= 0 {
+        LOCAL lanErr IS ABS(finalPatch:LAN - lanTarget).
+        IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
+        SET logMsg TO logMsg + "  LAN=" + ROUND(finalPatch:LAN,1) + "(err " + ROUND(lanErr,1) + ")".
+    }
+    IF aopTarget >= 0 {
+        LOCAL aopErr IS ABS(finalPatch:ARGUMENTOFPERIAPSIS - aopTarget).
+        IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
+        SET logMsg TO logMsg + "  AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1) + "(err " + ROUND(aopErr,1) + ")".
+    }
+    mLog(logMsg).
+    RETURN nd.
+}
+
+// ============================================================
+// Local transfer (Mun, Minmus) — Hohmann + conic validation
+// Prograde-only, no Lambert solver needed.
+// ============================================================
+LOCAL FUNCTION _planLocalTransfer {
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    PARAMETER lanTarget.
+    PARAMETER centralBody.
+    PARAMETER mu.
+
+    LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
+    LOCAL targetPeriod IS targetBody:ORBIT:PERIOD.
+
+    // --- Hohmann estimate ---
+    // vis-viva: dV to raise apoapsis from current orbit to target orbit
+    LOCAL rShip   IS SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL rTarget IS targetBody:ORBIT:SEMIMAJORAXIS.
+    LOCAL hohmannA IS (rShip + rTarget) / 2.
+    LOCAL hohmannTof IS CONSTANT:PI * SQRT(hohmannA^3 / mu).
+    LOCAL vShip   IS SQRT(mu / rShip).
+    LOCAL vDepart IS SQRT(mu * (2/rShip - 1/hohmannA)).
+    LOCAL hohmannDv IS vDepart - vShip.
+
+    mLog("Local transfer to " + targetBody:NAME
+        + ": Hohmann dV=" + ROUND(hohmannDv, 1) + " m/s"
+        + "  TOF=" + ROUND(hohmannTof, 0) + "s").
+
+    // --- Phase angle for Hohmann intercept ---
+    // The ideal phase angle is 180° minus the angle the target sweeps during TOF
+    LOCAL targetMeanMotion IS 360 / targetPeriod.
+    LOCAL targetSweep IS targetMeanMotion * hohmannTof.
+    LOCAL idealPhaseAngle IS 180 - targetSweep.
+
+    // Compute current phase angle using lib_navigation
+    // phaseAngle() requires TARGET to be set
+    SET TARGET TO targetBody.
+    WAIT 0.1.
+    LOCAL currentPhase IS phaseAngle().
+
+    // Synodic period — how often the phase angle repeats
+    LOCAL synodicPeriod IS ABS(1 / (1/shipPeriod - 1/targetPeriod)) * shipPeriod.
+
+    // Time until the phase angle is right
+    LOCAL phaseDiff IS idealPhaseAngle - currentPhase.
+    IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
+    LOCAL shipAngRate IS 360 / shipPeriod.
+    LOCAL targetAngRate IS 360 / targetPeriod.
+    LOCAL relativeRate IS shipAngRate - targetAngRate.
+    LOCAL waitTime IS phaseDiff / ABS(relativeRate).
+
+    // Ensure we depart at least 60s from now
+    IF waitTime < 60 { SET waitTime TO waitTime + synodicPeriod. }
+
+    LOCAL departUt IS TIME:SECONDS + waitTime.
+
+    mLog("Phase: current=" + ROUND(currentPhase, 1)
+        + "  ideal=" + ROUND(idealPhaseAngle, 1)
+        + "  wait=" + ROUND(waitTime, 0) + "s").
+
+    // --- Place prograde-only node ---
+    LOCAL nd IS NODE(departUt, 0, 0, hohmannDv).
+    ADD nd.
+    WAIT 0.1.
+
+    // --- Validate encounter via KSP conics ---
+    // If no encounter at the estimated time, use _findEncounter to slide
+    LOCAL patch IS _getTargetPatch(nd, targetBody).
+    IF patch = 0 OR patch:PERIAPSIS < 0 {
+        mLog("No encounter at Hohmann estimate, searching nearby...").
+        LOCAL foundTime IS _findEncounter(nd, targetBody, departUt, shipPeriod * 2, shipPeriod / 8).
+        IF foundTime < 0 {
+            // Widen the search
+            SET foundTime TO _findEncounter(nd, targetBody, departUt, shipPeriod * 6, shipPeriod / 4).
+        }
+        IF foundTime < 0 {
+            mLogError("planTransfer: no encounter found near Hohmann estimate.").
+            REMOVE nd.
+            RETURN 0.
+        }
+        SET nd:TIME TO foundTime.
+        WAIT 0.1.
+        mLog("Encounter found at T+" + ROUND(foundTime - TIME:SECONDS, 0) + "s").
+    } ELSE {
+        mLog("Encounter confirmed at Hohmann estimate. Pe=" + ROUND(patch:PERIAPSIS/1000, 1) + "km").
+    }
+
+    // --- Optional LAN scan ---
+    // If lanTarget is specified, scan across multiple orbits to find the departure
+    // that produces the closest LAN at the target body (read from KSP's conics).
+    IF lanTarget >= 0 {
+        SET nd TO _scanForLan(nd, targetBody, lanTarget, shipPeriod).
+    }
+
+    RETURN nd.
+}
+
+// ============================================================
+// Interplanetary transfer — Lambert scan + conic validation
+// Requires lambert.ks to be loaded.
+// ============================================================
+LOCAL FUNCTION _planInterplanetaryTransfer {
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    PARAMETER lanTarget.
+    PARAMETER centralBody.
+    PARAMETER mu.
 
     LOCAL hohmannA    IS (SHIP:ORBIT:SEMIMAJORAXIS + targetBody:ORBIT:SEMIMAJORAXIS) / 2.
     LOCAL hohmannTof  IS CONSTANT:PI * SQRT(hohmannA^3 / mu).
@@ -229,36 +373,30 @@ GLOBAL FUNCTION planTransfer {
             LOCAL dvVec     IS v1Lambert - v1Ship.
             LOCAL dvMag     IS dvVec:MAG.
 
-            // Quick LAN check using the arrival velocity to estimate capture orbit
-            IF dvMag < bestDv * 1.05 { // Only bother checking LAN for competitive solutions
-                LOCAL v2Lambert IS result["v2"].
-
-                // Estimate capture orbit LAN from arrival geometry
-                LOCAL captureNormal IS VCRS(r2, v2Lambert):NORMALIZED.
-                // LAN is the angle of the ascending node, derived from the orbit normal
-                LOCAL northPole IS V(0, 1, 0). // body's north in kOS world frame
-                LOCAL nodeVec   IS VCRS(northPole, captureNormal):NORMALIZED.
-                LOCAL estimatedLan IS ARCTAN2(nodeVec:Y, nodeVec:X).
-                IF estimatedLan < 0 { SET estimatedLan TO estimatedLan + 360. }
-
+            // Only evaluate competitive solutions for LAN
+            IF dvMag < bestDv * 1.05 {
                 LOCAL lanErr IS 999.
                 IF lanTarget >= 0 {
+                    // Geometric LAN estimate from Lambert arrival velocity
+                    LOCAL v2Lambert IS result["v2"].
+                    LOCAL captureNormal IS VCRS(r2, v2Lambert):NORMALIZED.
+                    LOCAL northPole IS V(0, 1, 0).
+                    LOCAL nodeVec   IS VCRS(northPole, captureNormal):NORMALIZED.
+                    LOCAL estimatedLan IS ARCTAN2(nodeVec:Y, nodeVec:X).
+                    IF estimatedLan < 0 { SET estimatedLan TO estimatedLan + 360. }
+
                     SET lanErr TO lanTarget - estimatedLan.
                     IF lanErr >  180 { SET lanErr TO lanErr - 360. }
                     IF lanErr < -180 { SET lanErr TO lanErr + 360. }
                 }
 
-                // Pick best solution: if LAN is specified, prioritise LAN error
-                // within a dV tolerance band; otherwise pure minimum dV.
                 LOCAL betterSolution IS FALSE.
                 IF lanTarget < 0 {
                     IF dvMag < bestDv { SET betterSolution TO TRUE. }
                 } ELSE {
-                    // Accept if LAN error is better AND dV is within 10% of best
                     IF ABS(lanErr) < ABS(bestLanErr) AND dvMag < bestDv * 1.10 {
                         SET betterSolution TO TRUE.
                     }
-                    // Also accept if LAN is within tolerance and dV is just better
                     IF ABS(lanErr) <= lanTol AND dvMag < bestDv {
                         SET betterSolution TO TRUE.
                     }
@@ -279,7 +417,7 @@ GLOBAL FUNCTION planTransfer {
 
     IF bestDepart < 0 {
         mLogError("planTransfer: Lambert scan found no valid solution.").
-        RETURN.
+        RETURN 0.
     }
 
     mLog("Lambert best: depart T+" + ROUND(bestDepart - TIME:SECONDS,0)
@@ -287,7 +425,7 @@ GLOBAL FUNCTION planTransfer {
         + "s  dV=" + ROUND(bestDv,1)
         + "  LAN err=" + ROUND(bestLanErr,1)).
 
-    // --- PHASE 2: Build the maneuver node from the best Lambert solution ---
+    // --- Build the maneuver node from the best Lambert solution ---
     LOCAL r1Best    IS POSITIONAT(SHIP, bestDepart) - centralBody:POSITION.
     LOCAL r2Best    IS POSITIONAT(targetBody, bestArrive) - centralBody:POSITION.
     LOCAL result    IS lambertSolve(r1Best, r2Best, bestArrive - bestDepart, mu, FALSE).
@@ -306,7 +444,104 @@ GLOBAL FUNCTION planTransfer {
     ADD nd.
     WAIT 0.1.
 
-    // --- PHASE 3: Newton-Raphson PE targeting (same as before) ---
+    // --- Validate encounter via KSP conics ---
+    LOCAL patch IS _getTargetPatch(nd, targetBody).
+    IF patch = 0 OR patch:PERIAPSIS < 0 {
+        mLog("Lambert node has no encounter, searching nearby...").
+        LOCAL foundTime IS _findEncounter(nd, targetBody, bestDepart, SHIP:ORBIT:PERIOD * 2, SHIP:ORBIT:PERIOD / 8).
+        IF foundTime < 0 {
+            mLogWarn("No encounter found near Lambert solution — proceeding anyway.").
+        } ELSE {
+            SET nd:TIME TO foundTime.
+            WAIT 0.1.
+            mLog("Encounter found at T+" + ROUND(foundTime - TIME:SECONDS, 0) + "s").
+        }
+    } ELSE {
+        mLog("Encounter confirmed. Pe=" + ROUND(patch:PERIAPSIS/1000, 1) + "km").
+    }
+
+    // --- LAN refinement from conics ---
+    // For the top solution, check actual LAN from KSP's patched conics
+    // and scan nearby orbits if LAN targeting is active.
+    IF lanTarget >= 0 {
+        SET nd TO _scanForLan(nd, targetBody, lanTarget, SHIP:ORBIT:PERIOD).
+    }
+
+    RETURN nd.
+}
+
+// ============================================================
+// LAN scan — shared by local and interplanetary paths
+// Slides departure time across orbits, reads actual LAN from
+// KSP's patched conics, picks the orbit with lowest LAN error.
+// ============================================================
+LOCAL FUNCTION _scanForLan {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER lanTarget.
+    PARAMETER shipPeriod.
+
+    LOCAL targetPeriod IS targetBody:ORBIT:PERIOD.
+    LOCAL nScan IS MAX(6, CEILING(targetPeriod / shipPeriod)).
+    LOCAL centerTime IS nd:TIME.
+    LOCAL bestLanErr IS 999.
+    LOCAL bestTime IS centerTime.
+    LOCAL baseDv IS nd:PROGRADE.
+
+    LOCAL lanTol IS 0.5.
+    IF CFG:HASKEY("LAN_ERR_TOL") { SET lanTol TO CFG["LAN_ERR_TOL"]. }
+
+    mLog("LAN scan: " + (2 * nScan + 1) + " orbits around departure, target LAN=" + ROUND(lanTarget, 1)).
+
+    FROM { LOCAL oi IS -nScan. } UNTIL oi > nScan STEP { SET oi TO oi + 1. } DO {
+        LOCAL tryTime IS centerTime + oi * shipPeriod.
+        IF tryTime > TIME:SECONDS + 30 {
+            SET nd:TIME TO tryTime.
+            SET nd:PROGRADE TO baseDv.
+            WAIT 0.02.
+            LOCAL patch IS _getTargetPatch(nd, targetBody).
+            IF patch <> 0 AND patch:PERIAPSIS > 0 {
+                LOCAL lanErr IS ABS(patch:LAN - lanTarget).
+                IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
+                IF lanErr < bestLanErr {
+                    SET bestLanErr TO lanErr.
+                    SET bestTime TO tryTime.
+                    mLog("LAN[" + oi + "] LAN=" + ROUND(patch:LAN, 1)
+                        + " err=" + ROUND(lanErr, 1)
+                        + " Pe=" + ROUND(patch:PERIAPSIS/1000, 1) + "km").
+                }
+            }
+        }
+    }
+
+    SET nd:TIME TO bestTime.
+    SET nd:PROGRADE TO baseDv.
+    WAIT 0.1.
+
+    // Verify the chosen orbit still has an encounter
+    LOCAL verifyPatch IS _getTargetPatch(nd, targetBody).
+    IF verifyPatch = 0 OR verifyPatch:PERIAPSIS < 0 {
+        mLogWarn("LAN scan: chosen orbit lost encounter, searching nearby...").
+        LOCAL foundTime IS _findEncounter(nd, targetBody, bestTime, shipPeriod / 2, shipPeriod / 16).
+        IF foundTime >= 0 {
+            SET nd:TIME TO foundTime.
+            WAIT 0.1.
+        }
+    }
+
+    mLog("LAN scan: best err=" + ROUND(bestLanErr, 1) + "°  depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
+    RETURN nd.
+}
+
+// ============================================================
+// Newton-Raphson PE targeting — shared by both paths
+// Proportional clamp: large errors allow larger steps.
+// ============================================================
+LOCAL FUNCTION _newtonPeTarget {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+
     mLog("PE: Targeting " + ROUND(targetPe/1000, 1) + "km.").
     LOCAL peIter IS 35.
     LOCAL peEps  IS 0.1.
@@ -323,7 +558,7 @@ GLOBAL FUNCTION planTransfer {
         SET lastGoodPrograde TO nd:PROGRADE.
         LOCAL peErr IS targetPe - p:PERIAPSIS.
         IF ABS(peErr) < 500 {
-            mLog("PE[" + i + "] converged: " + ROUND(p:PERIAPSIS/1000,1) + "km").
+            mLog("PE[" + i + "] converged: " + ROUND(p:PERIAPSIS/1000,1) + "km (err " + ROUND(peErr,0) + "m)").
             BREAK.
         }
         LOCAL oldDv IS nd:PROGRADE.
@@ -335,35 +570,14 @@ GLOBAL FUNCTION planTransfer {
         LOCAL sens IS (p2:PERIAPSIS - p:PERIAPSIS) / peEps.
         IF ABS(sens) < 0.001 { BREAK. }
         LOCAL correction IS (peErr / sens) * peDamp.
-        IF correction >  3.0 { SET correction TO  3.0. }
-        IF correction < -3.0 { SET correction TO -3.0. }
+        // Proportional clamp: allow larger steps for larger errors
+        LOCAL maxStep IS MAX(3.0, ABS(peErr) / 5000).
+        IF correction >  maxStep { SET correction TO  maxStep. }
+        IF correction < -maxStep { SET correction TO -maxStep. }
         SET nd:PROGRADE TO oldDv + correction.
         WAIT 0.05.
+        mLog("PE[" + i + "] Pe=" + ROUND(p:PERIAPSIS/1000,1) + "km  corr=" + ROUND(correction,2) + " m/s").
     }
-
-    // --- Final report ---
-    LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
-    IF finalPatch = 0 {
-        mLogError("planTransfer: no encounter after PE targeting.").
-        RETURN.
-    }
-
-    LOCAL logMsg IS "Transfer -> " + targetBody:NAME
-        + ": dV=" + ROUND(nd:DELTAV:MAG,1)
-        + " m/s  Pe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km"
-        + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS,0) + "s".
-    IF lanTarget >= 0 {
-        LOCAL lanErr IS ABS(finalPatch:LAN - lanTarget).
-        IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
-        SET logMsg TO logMsg + "  LAN=" + ROUND(finalPatch:LAN,1) + "(err " + ROUND(lanErr,1) + ")".
-    }
-    IF aopTarget >= 0 {
-        LOCAL aopErr IS ABS(finalPatch:ARGUMENTOFPERIAPSIS - aopTarget).
-        IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
-        SET logMsg TO logMsg + "  AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1) + "(err " + ROUND(aopErr,1) + ")".
-    }
-    mLog(logMsg).
-    RETURN nd.
 }
 
 GLOBAL FUNCTION planCapture {
