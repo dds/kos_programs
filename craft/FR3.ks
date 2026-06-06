@@ -2,7 +2,7 @@
 // FR3.ks  —  FR3 vehicle flight computer  (0:/craft/FR3.ks)
 //
 // Ship name:  FR3-TARGET-TYPE1-TYPE2-...-NN
-// Payload tokens: RELAY, SCANSAT, SCISAT, LANDER, PROBE, CRASHPROBE
+// Payload tokens: RELAY, SCANSAT, SCISAT, LANDER, ASSISTLANDER, PROBE, CRASHPROBE
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
@@ -64,7 +64,7 @@ GLOBAL CFG IS LEXICON(
 GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer",
     "lib_navigation", "countdown", "maneuver", "inclination",
-    "orbit", "targeting",
+    "orbit", "targeting", "landing", "lambert",
     "payload_ops", "utils"
 ).
 
@@ -77,6 +77,7 @@ LOCAL FUNCTION buildPhaseSequence {
         "RELAY",      LIST("RELAY_OPS"),
         "SCANSAT",    LIST("RELAY_OPS"),
         "SCISAT",     LIST("RELAY_OPS"),
+        "ASSISTLANDER", LIST("LAND_DEORBIT", "LAND_ASSIST", "LAND"),
         "LANDER",     LIST("LAND_DEORBIT", "LAND")
     ).
 
@@ -145,6 +146,7 @@ GLOBAL FUNCTION main {
         "RELEASE_PROBE",    phaseReleaseProbe@,
         "RELAY_OPS",        phaseRelayOps@,
         "LAND_DEORBIT",     phaseLandDeorbit@,
+        "LAND_ASSIST",      phaseLandAssist@,
         "LAND",             phaseLand@
     ).
 

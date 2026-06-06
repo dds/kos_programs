@@ -694,9 +694,8 @@ LOCAL FUNCTION _scanForLan {
 //   Vessel at Mun → planTransfer(Mun), capture, circ, planRendezvous
 //   Vessel at Duna → planTransfer(Duna), capture, circ, planRendezvous
 //
-// Asteroids in solar orbit (no SOI transition) are not yet supported.
-// That requires Lambert intercept targeting closest approach instead
-// of a body PE — future work using lambert.ks.
+// Asteroids/comets in the same SOI use planAsteroidIntercept(), which
+// targets closest approach with Lambert instead of Hohmann assumptions.
 //
 // Returns: the maneuver node, or 0 on failure.
 // ============================================================
@@ -708,6 +707,10 @@ GLOBAL FUNCTION planRendezvous {
         mLogError("planRendezvous: target orbits " + targetVessel:BODY:NAME
             + " but ship orbits " + SHIP:BODY:NAME + ".").
         RETURN 0.
+    }
+
+    IF _shouldUseLambertVesselIntercept(targetVessel) {
+        RETURN planAsteroidIntercept(targetVessel).
     }
 
     LOCAL mu IS SHIP:BODY:MU.
@@ -863,6 +866,129 @@ GLOBAL FUNCTION planRendezvous {
         + "  CA=" + ROUND(finalCa["distance"]/1000, 1) + "km"
         + "  relV=" + ROUND(relVel, 1) + " m/s"
         + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
+
+    RETURN nd.
+}
+
+// ============================================================
+// planAsteroidIntercept — Lambert intercept for vessel-like targets.
+//
+// Asteroids and comets are vessels in kOS. They often have eccentric,
+// inclined, or solar orbits where Hohmann phase logic is a poor seed.
+// This routine scans departure time and time-of-flight, solves Lambert
+// for each candidate, and creates the lowest-cost node.
+//
+// Scope: ship and target must already orbit the same parent body. For a
+// Kerbin-orbit craft chasing a solar asteroid, first escape Kerbin, then
+// use this routine once both are Sun-orbit vessels.
+//
+// opts:
+//   MAX_DEPART_ORBITS  default 8
+//   DEPART_SAMPLES     default 9
+//   TOF_SAMPLES        default 11
+//   MIN_TOF            default 0.25 * ship period
+//   MAX_TOF            default 6 * target period
+//   ARRIVAL_WEIGHT     default 0.25
+// ============================================================
+GLOBAL FUNCTION planAsteroidIntercept {
+    PARAMETER targetVessel.
+    PARAMETER opts IS LEXICON().
+
+    IF targetVessel:BODY:NAME <> SHIP:BODY:NAME {
+        mLogError("planAsteroidIntercept: target orbits "
+            + targetVessel:BODY:NAME + " but ship orbits "
+            + SHIP:BODY:NAME + ".").
+        RETURN 0.
+    }
+
+    LOCAL centralBody IS SHIP:BODY.
+    LOCAL mu IS centralBody:MU.
+    LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
+    LOCAL targetPeriod IS targetVessel:ORBIT:PERIOD.
+
+    LOCAL maxDepartOrbits IS 8.
+    LOCAL departSamples IS 9.
+    LOCAL tofSamples IS 11.
+    LOCAL minTof IS shipPeriod * 0.25.
+    LOCAL maxTof IS targetPeriod * 6.
+    LOCAL arrivalWeight IS 0.25.
+
+    IF opts:HASKEY("MAX_DEPART_ORBITS") { SET maxDepartOrbits TO opts["MAX_DEPART_ORBITS"]. }
+    IF opts:HASKEY("DEPART_SAMPLES")    { SET departSamples    TO opts["DEPART_SAMPLES"]. }
+    IF opts:HASKEY("TOF_SAMPLES")       { SET tofSamples       TO opts["TOF_SAMPLES"]. }
+    IF opts:HASKEY("MIN_TOF")           { SET minTof           TO opts["MIN_TOF"]. }
+    IF opts:HASKEY("MAX_TOF")           { SET maxTof           TO opts["MAX_TOF"]. }
+    IF opts:HASKEY("ARRIVAL_WEIGHT")    { SET arrivalWeight    TO opts["ARRIVAL_WEIGHT"]. }
+
+    LOCAL departSpan IS shipPeriod * maxDepartOrbits.
+    LOCAL departStep IS departSpan / MAX(1, departSamples - 1).
+    LOCAL tofStep IS (maxTof - minTof) / MAX(1, tofSamples - 1).
+
+    LOCAL bestCost IS 9e15.
+    LOCAL bestDepart IS -1.
+    LOCAL bestArrive IS -1.
+    LOCAL bestDvVec IS V(0, 0, 0).
+    LOCAL bestRelVel IS 0.
+    LOCAL bestFlip IS FALSE.
+    LOCAL transferArcs IS LIST(FALSE, TRUE).
+
+    mLog("Asteroid intercept scan: " + departSamples + " departures x "
+        + tofSamples + " TOFs around " + targetVessel:NAME + ".").
+
+    FROM { LOCAL di IS 0. } UNTIL di >= departSamples STEP { SET di TO di + 1. } DO {
+        LOCAL departUt IS TIME:SECONDS + 120 + di * departStep.
+        LOCAL r1 IS POSITIONAT(SHIP, departUt) - POSITIONAT(centralBody, departUt).
+        LOCAL vShip IS VELOCITYAT(SHIP, departUt):ORBIT.
+
+        FROM { LOCAL ti IS 0. } UNTIL ti >= tofSamples STEP { SET ti TO ti + 1. } DO {
+            LOCAL tof IS minTof + ti * tofStep.
+            LOCAL arriveUt IS departUt + tof.
+            LOCAL r2 IS POSITIONAT(targetVessel, arriveUt) - POSITIONAT(centralBody, arriveUt).
+            LOCAL vTarget IS VELOCITYAT(targetVessel, arriveUt):ORBIT.
+
+            FOR flip IN transferArcs {
+                LOCAL result IS lambertSolve(r1, r2, tof, mu, flip).
+                LOCAL dvVec IS result["v1"] - vShip.
+                LOCAL relVel IS (result["v2"] - vTarget):MAG.
+                LOCAL cost IS dvVec:MAG + relVel * arrivalWeight.
+
+                IF cost < bestCost {
+                    SET bestCost TO cost.
+                    SET bestDepart TO departUt.
+                    SET bestArrive TO arriveUt.
+                    SET bestDvVec TO dvVec.
+                    SET bestRelVel TO relVel.
+                    SET bestFlip TO flip.
+                    mLog("Asteroid candidate dV=" + ROUND(dvVec:MAG,1)
+                        + " relV=" + ROUND(relVel,1)
+                        + " depart T+" + ROUND(departUt - TIME:SECONDS,0)
+                        + " tof=" + ROUND(tof,0)
+                        + " flip=" + bestFlip + ".").
+                }
+            }
+        }
+    }
+
+    IF bestDepart < 0 {
+        mLogError("planAsteroidIntercept: no Lambert candidate found.").
+        RETURN 0.
+    }
+
+    LOCAL nd IS _nodeFromDvVector(bestDepart, bestDvVec).
+    ADD nd.
+    WAIT 0.1.
+
+    LOCAL refineWindow IS MAX(60, (bestArrive - bestDepart) * 0.05).
+    LOCAL finalCa IS _findClosestApproach(targetVessel,
+        bestArrive - refineWindow, bestArrive + refineWindow, 50).
+
+    mLog("Asteroid intercept -> " + targetVessel:NAME
+        + ": dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " m/s  relV=" + ROUND(bestRelVel,1)
+        + " m/s  CA=" + ROUND(finalCa["distance"]/1000,2)
+        + "km  ETA=" + ROUND(nd:TIME - TIME:SECONDS,0)
+        + "s  TOF=" + ROUND(bestArrive - bestDepart,0)
+        + "s.").
 
     RETURN nd.
 }
@@ -1114,6 +1240,31 @@ LOCAL FUNCTION _nodeAxisSet {
     IF axis = "PROGRADE"  { SET nd:PROGRADE  TO value. }
     IF axis = "NORMAL"    { SET nd:NORMAL    TO value. }
     IF axis = "RADIALOUT" { SET nd:RADIALOUT TO value. }
+}
+
+LOCAL FUNCTION _shouldUseLambertVesselIntercept {
+    PARAMETER targetVessel.
+    IF targetVessel:BODY:NAME <> SHIP:BODY:NAME { RETURN FALSE. }
+    IF SHIP:BODY:NAME = "Sun" { RETURN TRUE. }
+    IF targetVessel:ORBIT:ECCENTRICITY > 0.1 { RETURN TRUE. }
+    IF ABS(targetVessel:ORBIT:INCLINATION - SHIP:ORBIT:INCLINATION) > 5 { RETURN TRUE. }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _nodeFromDvVector {
+    PARAMETER burnUt.
+    PARAMETER dvVec.
+
+    LOCAL r1 IS POSITIONAT(SHIP, burnUt) - POSITIONAT(SHIP:BODY, burnUt).
+    LOCAL progradeHat IS VELOCITYAT(SHIP, burnUt):ORBIT:NORMALIZED.
+    LOCAL normalHat IS VCRS(r1, progradeHat):NORMALIZED.
+    LOCAL radialHat IS VCRS(normalHat, progradeHat):NORMALIZED.
+
+    LOCAL dvPro IS VDOT(dvVec, progradeHat).
+    LOCAL dvNor IS VDOT(dvVec, normalHat).
+    LOCAL dvRad IS VDOT(dvVec, radialHat).
+
+    RETURN NODE(burnUt, dvRad, dvNor, dvPro).
 }
 
 // ============================================================

@@ -14,7 +14,14 @@ GLOBAL LANDING_CFG IS LEXICON(
     "USE_KE",            TRUE,
     "TARGET_LAT",           0,
     "TARGET_LNG",           0,
-    "TARGET_BODY",         ""
+    "TARGET_BODY",         "",
+    "ASSIST_TARGET_SPEED", 80.0,
+    "ASSIST_MIN_ALT",      800,
+    "ASSIST_THROTTLE",       1,
+    "ASSIST_DECOUPLER_TAG", "landing_assist_decoupler",
+    "ASSIST_FLYAWAY",     FALSE,
+    "ASSIST_FLYAWAY_TIME", 4.0,
+    "ASSIST_FLYAWAY_THROTTLE", 0.6
 ).
 
 GLOBAL landingAbortFlag IS FALSE.
@@ -73,6 +80,63 @@ GLOBAL FUNCTION landingAbort {
     UNLOCK STEERING.
     SET SAS TO TRUE.
     mLog("Abort complete. Alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
+}
+
+// Use an attached descent stage for the early landing burn, then release it.
+// Intended sequence:
+//   LAND_DEORBIT -> LAND_ASSIST -> LAND
+//
+// The stage slows the stack while pointed retrograde until surface speed
+// is below ASSIST_TARGET_SPEED, or until ASSIST_MIN_ALT forces separation.
+// After decoupling, this CPU may still be on the assist stage; if so, the
+// flyaway burn points sideways/up to avoid the lander before impact.
+GLOBAL FUNCTION landingAssistStage {
+    mLogPhase("LANDING ASSIST").
+
+    LOCAL decoupler IS _taggedDecoupler(LANDING_CFG["ASSIST_DECOUPLER_TAG"]).
+    IF decoupler = 0 {
+        mLogWarn("No assist decoupler tagged '"
+            + LANDING_CFG["ASSIST_DECOUPLER_TAG"] + "' — skipping assist.").
+        RETURN FALSE.
+    }
+
+    SET SAS TO FALSE.
+    LOCK STEERING TO SHIP:RETROGRADE.
+    mLog("Assist burn: target speed " + LANDING_CFG["ASSIST_TARGET_SPEED"]
+        + "m/s, min alt " + LANDING_CFG["ASSIST_MIN_ALT"] + "m.").
+    HUDTEXT("Assist descent burn", 3, 2, 14, YELLOW, FALSE).
+
+    UNTIL SHIP:VELOCITY:SURFACE:MAG <= LANDING_CFG["ASSIST_TARGET_SPEED"]
+            OR ALT:RADAR <= LANDING_CFG["ASSIST_MIN_ALT"]
+            OR _needsStage() {
+        LOCK THROTTLE TO LANDING_CFG["ASSIST_THROTTLE"].
+        HUDTEXT("Assist v:" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
+            + "m/s alt:" + ROUND(ALT:RADAR,0) + "m",
+            1, 2, 13, YELLOW, FALSE).
+        WAIT 0.05.
+    }
+
+    LOCK THROTTLE TO 0.
+    WAIT 0.2.
+    mLog("Assist cutoff: speed=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
+        + "m/s alt=" + ROUND(ALT:RADAR,0) + "m.").
+
+    _decouplePart(decoupler).
+    WAIT 0.5.
+
+    IF LANDING_CFG["ASSIST_FLYAWAY"] {
+        mLog("Assist flyaway burn.").
+        LOCK STEERING TO (SHIP:FACING:RIGHTVECTOR + SHIP:UP):NORMALIZED.
+        WAIT 1.
+        LOCK THROTTLE TO LANDING_CFG["ASSIST_FLYAWAY_THROTTLE"].
+        WAIT LANDING_CFG["ASSIST_FLYAWAY_TIME"].
+        LOCK THROTTLE TO 0.
+    }
+
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _landDeorbit {
@@ -236,6 +300,25 @@ LOCAL FUNCTION _deployAntennas {
 LOCAL FUNCTION _deploySolarPanels {
     FOR m IN SHIP:MODULESNAMED("ModuleDeployableSolarPanel") {
         IF m:HASEVENT("Extend Solar Panel") { m:DOEVENT("Extend Solar Panel"). }
+    }
+}
+
+LOCAL FUNCTION _taggedDecoupler {
+    PARAMETER tagName.
+    LOCAL parts IS SHIP:PARTSTAGGED(tagName).
+    IF parts:LENGTH = 0 { RETURN 0. }
+    RETURN parts[0].
+}
+
+LOCAL FUNCTION _decouplePart {
+    PARAMETER partRef.
+    IF partRef:HASMODULE("ModuleDecouple") {
+        partRef:GETMODULE("ModuleDecouple"):DOEVENT("Decouple").
+    } ELSE IF partRef:HASMODULE("ModuleAnchoredDecoupler") {
+        partRef:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
+    } ELSE {
+        mLogWarn("Assist decoupler tag found, but no decouple module. Trying STAGE.").
+        STAGE.
     }
 }
 

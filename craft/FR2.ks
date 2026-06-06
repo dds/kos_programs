@@ -5,7 +5,7 @@
 // e.g.  FR2-MUN-CRASHPROBE1-RELAY1
 //       FR2-KERBIN-PROBE-RELAY-POLAR-02
 //
-// Recognized payload tokens: PROBE, CRASHPROBE, RELAY, SCANSAT, SCISAT, LANDER, MOLNIYA
+// Recognized payload tokens: PROBE, CRASHPROBE, RELAY, SCANSAT, SCISAT, LANDER, ASSISTLANDER, MOLNIYA
 // Anything else (POLAR, 02, etc.) is ignored.
 // ============================================================
 
@@ -68,6 +68,7 @@ LOCAL FUNCTION buildPhaseSequence {
         "RELAY",      LIST("RELAY_OPS"),
         "SCANSAT",    LIST("RELAY_OPS"),
         "SCISAT",     LIST("RELAY_OPS"),
+        "ASSISTLANDER", LIST("LAND_DEORBIT", "LAND_ASSIST", "LAND"),
         "LANDER",     LIST("LAND_DEORBIT", "LAND")
     ).
 
@@ -191,6 +192,7 @@ GLOBAL FUNCTION main {
         "RELAY_OPS",        phaseRelayOps@,
         "DEPLOY_SAT",       _phaseDeploySat@,
         "LAND_DEORBIT",     phaseLandDeorbit@,
+        "LAND_ASSIST",      phaseLandAssist@,
         "LAND",             phaseLand@
     ).
 

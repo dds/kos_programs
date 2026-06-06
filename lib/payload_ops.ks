@@ -94,6 +94,11 @@ GLOBAL FUNCTION phaseLandDeorbit {
     nextPhase(launchSeq).
 }
 
+GLOBAL FUNCTION phaseLandAssist {
+    landingAssistStage().
+    nextPhase(launchSeq).
+}
+
 GLOBAL FUNCTION phaseLand {
     landingExecute().
     nextPhase(launchSeq).
