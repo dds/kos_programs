@@ -7,6 +7,7 @@ LOCAL ABS_CUTOFF           IS 0.0001.
 LOCAL ALIGN_TOLERANCE      IS 2.0.
 LOCAL HIBERNATE_THRESHOLD  IS 300.
 LOCAL HIBERNATE_WAKE_LEAD  IS 180.
+LOCAL MCC_DV_CAP           IS 120.
 
 GLOBAL FUNCTION executeManeuver {
     WAIT 0.1.
@@ -229,17 +230,18 @@ GLOBAL FUNCTION planTransfer {
     }
     IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
 
-    // --- Newton-Raphson PE targeting (shared by both paths) ---
-    _newtonPeTarget(nd, targetBody, targetPe).
+    // --- Newton-Raphson PE targeting ---
+    newtonTarget(nd, targetBody, "PE", targetPe).
 
     // --- Inclination targeting ---
-    // Uses normal dV to steer capture orbit to desired inclination.
-    // normalBias seeds the solver direction: +1 prograde-side polar,
-    // -1 retrograde-side polar (produces different LAN).
+    // normalBias seeds the solver: +1 prograde-side polar,
+    // -1 retrograde-side polar (different LAN via opposite normal dV).
     IF captureInc >= 0 {
-        _newtonIncTarget(nd, targetBody, captureInc, normalBias).
-        // Re-run PE targeting to correct drift from normal dV changes
-        _newtonPeTarget(nd, targetBody, targetPe).
+        LOCAL incOpts IS LEXICON().
+        IF normalBias <> 0 { incOpts:ADD("BIAS", normalBias * 5). }
+        newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
+        // Re-run PE to correct drift from normal dV changes
+        newtonTarget(nd, targetBody, "PE", targetPe).
     }
 
     // --- Final report ---
@@ -578,127 +580,166 @@ LOCAL FUNCTION _scanForLan {
 // Newton-Raphson PE targeting — shared by both paths
 // Proportional clamp: large errors allow larger steps.
 // ============================================================
-LOCAL FUNCTION _newtonPeTarget {
+// ============================================================
+// newtonTarget — unified Newton-Raphson for any orbital param.
+//
+// param: "PE" (prograde), "INC" (normal), "LAN" (normal), "AOP" (radial)
+// opts (optional LEXICON):
+//   BIAS    — seed value for the axis when it's zero (e.g. ±5 for polar)
+//   DV_CAP  — max total node dV; aborts if exceeded (used by MCC)
+//   TOL     — convergence tolerance (default: 500m for PE, 0.5° for angles)
+//   DAMP    — damping factor (default: 0.5 for PE, 0.7 for angles)
+// ============================================================
+GLOBAL FUNCTION newtonTarget {
     PARAMETER nd.
     PARAMETER targetBody.
-    PARAMETER targetPe.
+    PARAMETER param.
+    PARAMETER targetVal.
+    PARAMETER opts IS LEXICON().
 
-    mLog("PE: Targeting " + ROUND(targetPe/1000, 1) + "km.").
-    LOCAL peIter IS 35.
-    LOCAL peEps  IS 0.1.
-    LOCAL peDamp IS 0.5.
-    LOCAL lastGoodPrograde IS nd:PROGRADE.
+    LOCAL isAngle IS (param <> "PE").
+    LOCAL eps     IS CHOOSE 0.5 IF isAngle ELSE 0.1.
+    LOCAL damp    IS CHOOSE 0.7 IF isAngle ELSE 0.5.
+    LOCAL tol     IS CHOOSE 0.5 IF isAngle ELSE 500.
+    LOCAL maxIter IS 35.
+    LOCAL dvCap   IS -1.
+    LOCAL bias    IS 0.
 
-    FROM { LOCAL i IS 0. } UNTIL i >= peIter STEP { SET i TO i + 1. } DO {
-        LOCAL p IS _getTargetPatch(nd, targetBody).
-        IF p = 0 OR p:PERIAPSIS < 0 {
-            mLog("PE[" + i + "]: lost encounter, reverting.").
-            SET nd:PROGRADE TO lastGoodPrograde.
-            BREAK.
-        }
-        SET lastGoodPrograde TO nd:PROGRADE.
-        LOCAL peErr IS targetPe - p:PERIAPSIS.
-        IF ABS(peErr) < 500 {
-            mLog("PE[" + i + "] converged: " + ROUND(p:PERIAPSIS/1000,1) + "km (err " + ROUND(peErr,0) + "m)").
-            BREAK.
-        }
-        LOCAL oldDv IS nd:PROGRADE.
-        SET nd:PROGRADE TO oldDv + peEps.
-        WAIT 0.02.
-        LOCAL p2 IS _getTargetPatch(nd, targetBody).
-        SET nd:PROGRADE TO oldDv.
-        IF p2 = 0 { BREAK. }
-        LOCAL sens IS (p2:PERIAPSIS - p:PERIAPSIS) / peEps.
-        IF ABS(sens) < 0.001 { BREAK. }
-        LOCAL correction IS (peErr / sens) * peDamp.
-        // Proportional clamp: allow larger steps for larger errors
-        LOCAL maxStep IS MAX(3.0, ABS(peErr) / 5000).
-        IF correction >  maxStep { SET correction TO  maxStep. }
-        IF correction < -maxStep { SET correction TO -maxStep. }
-        SET nd:PROGRADE TO oldDv + correction.
-        WAIT 0.05.
-        mLog("PE[" + i + "] Pe=" + ROUND(p:PERIAPSIS/1000,1) + "km  corr=" + ROUND(correction,2) + " m/s").
-    }
-}
+    IF opts:HASKEY("DAMP")     { SET damp    TO opts["DAMP"]. }
+    IF opts:HASKEY("TOL")      { SET tol     TO opts["TOL"]. }
+    IF opts:HASKEY("MAX_ITER") { SET maxIter TO opts["MAX_ITER"]. }
+    IF opts:HASKEY("DV_CAP")   { SET dvCap   TO opts["DV_CAP"]. }
+    IF opts:HASKEY("BIAS")     { SET bias    TO opts["BIAS"]. }
 
-// ============================================================
-// Newton-Raphson inclination targeting — operates on NORMAL dV
-// normalBias: +1 seeds positive normal (prograde-side polar),
-//             -1 seeds negative normal (retrograde-side polar),
-//              0 auto (no seed).
-// POLAR and RETROPOLAR both target 90° but converge to different
-// orbital planes (different LAN) due to opposite normal seeds.
-// ============================================================
-LOCAL FUNCTION _newtonIncTarget {
-    PARAMETER nd.
-    PARAMETER targetBody.
-    PARAMETER targetInc.
-    PARAMETER normalBias.
-
-    LOCAL normalBiasStr IS "".
-    IF normalBias <> 0 {
-        SET normalBiasStr TO " (bias=" + normalBias + ")".
-    }
-    mLog("INC: Targeting " + ROUND(targetInc, 1) + "°" + normalBiasStr).
-
-    // Seed with normal dV in the biased direction
-    IF normalBias <> 0 AND nd:NORMAL = 0 {
-        SET nd:NORMAL TO normalBias * 5.0.
+    // Seed bias (e.g. ±5 m/s normal for polar vs retropolar)
+    IF bias <> 0 AND _ntGetAxis(nd, param) = 0 {
+        _ntSetAxis(nd, param, bias).
         WAIT 0.02.
     }
 
-    LOCAL incIter IS 35.
-    LOCAL incEps  IS 0.5.
-    LOCAL incDamp IS 0.7.
-    LOCAL lastGoodNormal IS nd:NORMAL.
+    LOCAL label IS param.
+    LOCAL fmtVal IS ROUND(targetVal, CHOOSE 1 IF isAngle ELSE 0).
+    IF bias <> 0 {
+        mLog(label + ": targeting " + fmtVal + " (bias=" + bias + ")").
+    } ELSE {
+        mLog(label + ": targeting " + fmtVal).
+    }
+
+    LOCAL lastGood  IS _ntGetAxis(nd, param).
     LOCAL stepScale IS 1.0.
 
-    FROM { LOCAL i IS 0. } UNTIL i >= incIter STEP { SET i TO i + 1. } DO {
+    FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
         LOCAL p IS _getTargetPatch(nd, targetBody).
         IF p = 0 OR p:PERIAPSIS < 0 {
             // Backtrack: try halfway between current and last good
-            LOCAL midNor IS (nd:NORMAL + lastGoodNormal) / 2.
-            SET nd:NORMAL TO midNor.
+            LOCAL midVal IS (_ntGetAxis(nd, param) + lastGood) / 2.
+            _ntSetAxis(nd, param, midVal).
             WAIT 0.02.
             LOCAL pMid IS _getTargetPatch(nd, targetBody).
             IF pMid <> 0 AND pMid:PERIAPSIS > 0 {
-                SET lastGoodNormal TO midNor.
+                SET lastGood TO midVal.
                 SET stepScale TO stepScale * 0.5.
-                mLog("INC[" + i + "]: backtracked, reducing step.").
+                mLog("  " + label + "[" + i + "]: backtracked.").
             } ELSE {
-                SET nd:NORMAL TO lastGoodNormal.
+                _ntSetAxis(nd, param, lastGood).
                 SET stepScale TO stepScale * 0.5.
                 IF stepScale < 0.1 {
-                    mLog("INC[" + i + "]: step too small, stopping.").
+                    mLog("  " + label + "[" + i + "]: step too small, stopping.").
                     BREAK.
                 }
-                mLog("INC[" + i + "]: lost encounter, reverted.").
+                mLog("  " + label + "[" + i + "]: reverted.").
             }
         } ELSE {
-            SET lastGoodNormal TO nd:NORMAL.
-            LOCAL incErr IS targetInc - p:INCLINATION.
-            IF ABS(incErr) < 0.5 {
-                mLog("INC[" + i + "] converged: " + ROUND(p:INCLINATION, 1) + "°").
+            SET lastGood TO _ntGetAxis(nd, param).
+            LOCAL current IS _ntReadParam(p, param).
+            LOCAL err IS targetVal - current.
+            IF isAngle {
+                IF err >  180 { SET err TO err - 360. }
+                IF err < -180 { SET err TO err + 360. }
+            }
+
+            IF ABS(err) < tol {
+                mLog("  " + label + "[" + i + "] converged: " + ROUND(current, 1)).
                 BREAK.
             }
-            LOCAL oldNor IS nd:NORMAL.
-            SET nd:NORMAL TO oldNor + incEps.
+
+            // Finite difference for sensitivity
+            LOCAL oldVal IS _ntGetAxis(nd, param).
+            _ntSetAxis(nd, param, oldVal + eps).
             WAIT 0.02.
             LOCAL p2 IS _getTargetPatch(nd, targetBody).
-            SET nd:NORMAL TO oldNor.
-            IF p2 = 0 { BREAK. }
-            LOCAL sens IS (p2:INCLINATION - p:INCLINATION) / incEps.
+            _ntSetAxis(nd, param, oldVal).
+            IF p2 = 0 OR p2:PERIAPSIS < 0 { BREAK. }
+
+            LOCAL current2 IS _ntReadParam(p2, param).
+            LOCAL delta IS current2 - current.
+            IF isAngle {
+                IF delta >  180 { SET delta TO delta - 360. }
+                IF delta < -180 { SET delta TO delta + 360. }
+            }
+
+            LOCAL sens IS delta / eps.
             IF ABS(sens) < 0.001 { BREAK. }
-            LOCAL correction IS (incErr / sens) * incDamp.
-            // Proportional clamp: aggressive for large errors, safe for small
-            LOCAL maxStep IS MAX(5.0, ABS(incErr) / 3) * stepScale.
+
+            LOCAL correction IS (err / sens) * damp.
+            LOCAL maxStep IS CHOOSE MAX(5.0, ABS(err) / 3) IF isAngle ELSE MAX(3.0, ABS(err) / 5000).
+            SET maxStep TO maxStep * stepScale.
             IF correction >  maxStep { SET correction TO  maxStep. }
             IF correction < -maxStep { SET correction TO -maxStep. }
-            SET nd:NORMAL TO oldNor + correction.
-            WAIT 0.05.
-            mLog("INC[" + i + "] inc=" + ROUND(p:INCLINATION, 1) + "°  corr=" + ROUND(correction, 2) + " m/s").
+
+            _ntSetAxis(nd, param, oldVal + correction).
+            WAIT 0.02.
+
+            // dV cap check (MCC)
+            IF dvCap >= 0 AND nd:DELTAV:MAG > dvCap {
+                _ntSetAxis(nd, param, lastGood).
+                mLog("  " + label + "[" + i + "]: dV cap (" + dvCap + " m/s) reached.").
+                BREAK.
+            }
+
+            // Verify encounter survives the correction
+            LOCAL pCheck IS _getTargetPatch(nd, targetBody).
+            IF pCheck = 0 OR pCheck:PERIAPSIS < 0 {
+                _ntSetAxis(nd, param, oldVal + correction / 2).
+                WAIT 0.02.
+                LOCAL pHalf IS _getTargetPatch(nd, targetBody).
+                IF pHalf = 0 OR pHalf:PERIAPSIS < 0 {
+                    _ntSetAxis(nd, param, lastGood).
+                    SET stepScale TO stepScale * 0.5.
+                }
+            }
+
+            mLog("  " + label + "[" + i + "] " + ROUND(current, 1) + " corr=" + ROUND(correction, 2) + " m/s").
         }
     }
+}
+
+// Helpers for newtonTarget — map param name to patch field and node axis.
+// PE → PROGRADE, INC → NORMAL, LAN → NORMAL, AOP → RADIALOUT
+LOCAL FUNCTION _ntReadParam {
+    PARAMETER p, param.
+    IF param = "PE"  { RETURN p:PERIAPSIS. }
+    IF param = "INC" { RETURN p:INCLINATION. }
+    IF param = "LAN" { RETURN p:LAN. }
+    IF param = "AOP" { RETURN p:ARGUMENTOFPERIAPSIS. }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _ntGetAxis {
+    PARAMETER nd, param.
+    IF param = "PE"  { RETURN nd:PROGRADE. }
+    IF param = "INC" { RETURN nd:NORMAL. }
+    IF param = "LAN" { RETURN nd:NORMAL. }
+    IF param = "AOP" { RETURN nd:RADIALOUT. }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _ntSetAxis {
+    PARAMETER nd, param, val.
+    IF param = "PE"  { SET nd:PROGRADE   TO val. }
+    IF param = "INC" { SET nd:NORMAL     TO val. }
+    IF param = "LAN" { SET nd:NORMAL     TO val. }
+    IF param = "AOP" { SET nd:RADIALOUT  TO val. }
 }
 
 GLOBAL FUNCTION planCapture {
@@ -762,6 +803,114 @@ GLOBAL FUNCTION planAoPChange {
     RETURN nd.
 }
 
+// ============================================================
+// phaseMidCourse — mid-course correction during transfer coast.
+// Fires at coast midpoint (local) or 1h past SOI (interplanetary).
+// Uses phased Newton: INC → AoP → PE → LAN → PE cleanup.
+// Total dV capped at MCC_DV_CAP (50 m/s).
+// ============================================================
+GLOBAL FUNCTION phaseMidCourse {
+    LOCAL target IS missionTargetBody().
+
+    IF NOT CFG:HASKEY("CAPTURE_PE") {
+        mLog("No CAPTURE_PE. Skipping MCC.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
+    LOCAL targetPe  IS CFG["CAPTURE_PE"].
+    LOCAL targetInc IS -1.
+    LOCAL targetLan IS -1.
+    LOCAL targetAoP IS -1.
+
+    // Resolve CAPTURE_DIR to inclination
+    IF CFG:HASKEY("CAPTURE_DIR") {
+        LOCAL dir IS CFG["CAPTURE_DIR"]:TOUPPER.
+        IF dir = "PROGRADE"   { SET targetInc TO 0. }
+        IF dir = "POLAR"      { SET targetInc TO 90. }
+        IF dir = "RETROPOLAR" { SET targetInc TO 90. }
+        IF dir = "RETROGRADE" { SET targetInc TO 180. }
+    }
+    IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
+    IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
+    IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
+
+    LOCAL patch IS _getTargetPatch(SHIP, target).
+    IF patch = 0 {
+        mLogWarn("No encounter with " + target:NAME + ". Skipping MCC.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
+    LOCAL waitTime IS 0.
+    IF SHIP:ORBIT:NEXTPATCH:BODY:NAME <> target:NAME {
+        SET waitTime TO ETA:TRANSITION + 3600.
+        mLog("MCC: Interplanetary — coast " + ROUND(waitTime) + "s past SOI.").
+    } ELSE {
+        SET waitTime TO ETA:TRANSITION / 2.
+        mLog("MCC: Local — coast to halfway (" + ROUND(waitTime) + "s).").
+    }
+
+    mLog("MCC: Pre-correction  Pe=" + ROUND(patch:PERIAPSIS/1000,1) + "km"
+        + "  AoP=" + ROUND(patch:ARGUMENTOFPERIAPSIS,1)
+        + "°  LAN=" + ROUND(patch:LAN,1) + "°.").
+
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    LOCAL nd IS NODE(TIME:SECONDS + waitTime, 0, 0, 0).
+    ADD nd.
+    WAIT 0.1.
+
+    LOCAL mccOpts IS LEXICON("DV_CAP", MCC_DV_CAP, "TOL", 1.0).
+
+    // Phased optimization: plane first, then energy
+    IF targetInc >= 0 { newtonTarget(nd, target, "INC", targetInc, mccOpts). }
+    IF targetAoP >= 0 { newtonTarget(nd, target, "AOP", targetAoP, mccOpts). }
+    newtonTarget(nd, target, "PE", targetPe, mccOpts).
+    IF targetLan >= 0 {
+        newtonTarget(nd, target, "LAN", targetLan, mccOpts).
+        newtonTarget(nd, target, "PE", targetPe, mccOpts).
+    }
+
+    WAIT 0.1.
+
+    LOCAL totalDv IS nd:DELTAV:MAG.
+    LOCAL finalPatch IS _getTargetPatch(nd, target).
+
+    IF totalDv < 0.1 OR finalPatch = 0 {
+        mLog("Encounter on target. Skipping MCC burn.").
+        REMOVE nd.
+    } ELSE {
+        LOCAL logMsg IS "MCC planned: dV=" + ROUND(totalDv, 1)
+            + " m/s  Pe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km".
+        IF targetInc >= 0 {
+            SET logMsg TO logMsg + "  INC=" + ROUND(finalPatch:INCLINATION,1) + "°".
+        }
+        IF targetLan >= 0 {
+            SET logMsg TO logMsg + "  LAN=" + ROUND(finalPatch:LAN,1) + "°".
+        }
+        IF targetAoP >= 0 {
+            SET logMsg TO logMsg + "  AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1) + "°".
+        }
+        mLog(logMsg).
+        LOCAL success IS FALSE.
+        LOCAL retries IS 0.
+        UNTIL success {
+            SET success TO executeManeuver().
+            IF NOT success {
+                SET retries TO retries + 1.
+                IF retries >= MAX_RETRIES {
+                    mLogError("MCC failed. Abandoning.").
+                    IF HASNODE { REMOVE NEXTNODE. }
+                    BREAK.
+                }
+                WAIT 10.
+            }
+        }
+    }
+    orbitSummary().
+    nextPhase(xferSeq).
+}
+
 LOCAL FUNCTION _calcStartTime {
     PARAMETER nd.
     LOCAL halfBurn IS 0.
@@ -822,7 +971,7 @@ LOCAL FUNCTION _wakeCmd {
     IF cm:HASFIELD("hibernation") { cm:SETFIELD("hibernation", FALSE). }
 }
 
-LOCAL FUNCTION _getTargetPatch {
+GLOBAL FUNCTION _getTargetPatch {
     PARAMETER originTarget.
     PARAMETER targetBody.
     LOCAL p IS originTarget:ORBIT.
