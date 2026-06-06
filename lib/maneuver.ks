@@ -949,10 +949,10 @@ LOCAL FUNCTION _targetPeIncCoupled {
     LOCAL signs IS LIST(1, -1).
     LOCAL steps IS LEXICON().
     steps:ADD("NORMAL", 40.0).
-    steps:ADD("PROGRADE", 5.0).
-    steps:ADD("RADIALOUT", 10.0).
+    steps:ADD("PROGRADE", 20.0).
+    steps:ADD("RADIALOUT", 20.0).
     LOCAL minStep IS 0.05.
-    LOCAL maxIter IS 80.
+    LOCAL maxIter IS 120.
 
     LOCAL best IS _peIncCost(nd, targetBody, targetPe, targetInc).
     LOCAL solved IS FALSE.
@@ -1062,9 +1062,10 @@ LOCAL FUNCTION _peIncCost {
     IF incErr >  180 { SET incErr TO incErr - 360. }
     IF incErr < -180 { SET incErr TO incErr + 360. }
 
-    // Inclination must dominate early. A useful out-of-plane move can
-    // temporarily damage PE by many km before prograde/radial recover it.
-    LOCAL peScore IS peErr / 10000.
+    // Inclination still dominates from an equatorial start, but PE must
+    // become expensive once the plane is close. The previous 10 km scale
+    // let a polar-but-impacting Mun trajectory look "good enough".
+    LOCAL peScore IS peErr / 2000.
     LOCAL incScore IS incErr / 0.5.
     LOCAL cost IS peScore^2 + incScore^2.
 
