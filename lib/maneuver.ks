@@ -920,10 +920,6 @@ LOCAL FUNCTION _findClosestApproach {
 }
 
 // ============================================================
-// Newton-Raphson PE targeting — shared by both paths
-// Proportional clamp: large errors allow larger steps.
-// ============================================================
-// ============================================================
 // newtonTarget — unified Newton-Raphson for any orbital param.
 //
 // param: "PE" (prograde), "INC" (normal), "LAN" (normal), "AOP" (radial)
@@ -932,6 +928,12 @@ LOCAL FUNCTION _findClosestApproach {
 //   DV_CAP  — max total node dV; aborts if exceeded (used by MCC)
 //   TOL     — convergence tolerance (default: 500m for PE, 0.5° for angles)
 //   DAMP    — damping factor (default: 0.5 for PE, 0.7 for angles)
+//
+// Accepts negative PE encounters (trajectory below surface). The
+// closest-approach optimizer may produce a dead-center trajectory
+// with PE deep below the surface — the orbital elements are still
+// well-defined and Newton can raise PE from there. Only a truly
+// missing encounter (no patch) triggers backtracking.
 // ============================================================
 GLOBAL FUNCTION newtonTarget {
     PARAMETER nd.
@@ -973,13 +975,13 @@ GLOBAL FUNCTION newtonTarget {
 
     FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
         LOCAL p IS _getTargetPatch(nd, targetBody).
-        IF p = 0 OR p:PERIAPSIS < 0 {
-            // Backtrack: try halfway between current and last good
+        IF p = 0 {
+            // No encounter patch at all — backtrack toward last good value
             LOCAL midVal IS (_ntGetAxis(nd, param) + lastGood) / 2.
             _ntSetAxis(nd, param, midVal).
             WAIT 0.02.
             LOCAL pMid IS _getTargetPatch(nd, targetBody).
-            IF pMid <> 0 AND pMid:PERIAPSIS > 0 {
+            IF pMid <> 0 {
                 SET lastGood TO midVal.
                 SET stepScale TO stepScale * 0.5.
                 mLog("  " + label + "[" + i + "]: backtracked.").
@@ -1012,13 +1014,13 @@ GLOBAL FUNCTION newtonTarget {
             WAIT 0.02.
             LOCAL p2 IS _getTargetPatch(nd, targetBody).
             LOCAL probeSign IS 1.
-            IF p2 = 0 OR p2:PERIAPSIS < 0 {
+            IF p2 = 0 {
                 // +eps lost encounter, try -eps
                 _ntSetAxis(nd, param, oldVal - eps).
                 WAIT 0.02.
                 SET p2 TO _getTargetPatch(nd, targetBody).
                 SET probeSign TO -1.
-                IF p2 = 0 OR p2:PERIAPSIS < 0 {
+                IF p2 = 0 {
                     _ntSetAxis(nd, param, oldVal).
                     mLog("  " + label + "[" + i + "]: probe lost encounter both dirs.").
                     BREAK.
@@ -1056,11 +1058,11 @@ GLOBAL FUNCTION newtonTarget {
 
                 // Verify encounter survives the correction
                 LOCAL pCheck IS _getTargetPatch(nd, targetBody).
-                IF pCheck = 0 OR pCheck:PERIAPSIS < 0 {
+                IF pCheck = 0 {
                     _ntSetAxis(nd, param, oldVal + correction / 2).
                     WAIT 0.02.
                     LOCAL pHalf IS _getTargetPatch(nd, targetBody).
-                    IF pHalf = 0 OR pHalf:PERIAPSIS < 0 {
+                    IF pHalf = 0 {
                         _ntSetAxis(nd, param, lastGood).
                         SET stepScale TO stepScale * 0.5.
                         mLog("  " + label + "[" + i + "]: correction lost encounter, reverted.").
