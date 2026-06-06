@@ -51,7 +51,6 @@ IF isEVA {
 
 LOCAL FUNCTION ensureDir { PARAMETER p. IF NOT EXISTS(p) { CREATEDIR(p). } }
 ensureDir("1:/lib").
-ensureDir("1:/lib/rsvp").
 ensureDir("1:/boot").
 ensureDir("1:/logs").
 ensureDir("1:/state").
@@ -179,12 +178,7 @@ RUNPATH("1:/" + vehicleScript + ".ks").
 IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
     IF DEFINED LIBS {
-        FOR lib IN LIBS { 
-            IF lib <> "rsvp" {
-                // Handle rsvp specially below.
-                _syncLib(lib). 
-            }
-        }
+        FOR lib IN LIBS { _syncLib(lib). }
     }
     _syncLib("resume").
     _syncLib("recovery").
@@ -193,30 +187,8 @@ IF HAS_LINK {
 }
 
 // 3. Load the libraries into memory
-GLOBAL RSVP_LIBS IS LIST(
-    "rsvp/hill_climb",
-    "rsvp/lambert",
-    "rsvp/main",
-    "rsvp/maneuver",
-    "rsvp/orbit",
-    "rsvp/refine",
-    "rsvp/search",
-    "rsvp/transfer",
-    "rsvp/validate"
-).
 IF DEFINED LIBS {
-    FOR lib IN LIBS { 
-        IF (lib = "rsvp" OR lib = "maneuver") {
-            FOR rsvp_lib IN RSVP_LIBS {
-                _syncLib(rsvp_lib).
-            }
-            _loadLib("rsvp/main").
-            _syncLib("maneuver").
-            _loadLib("maneuver").
-        } ELSE {
-            _loadLib(lib). 
-        }
-    }
+    FOR lib IN LIBS { _loadLib(lib). }
 }
 _loadLib("resume").
 

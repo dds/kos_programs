@@ -15,10 +15,9 @@ GLOBAL FUNCTION phaseTransfer {
     UNTIL success {
         LOCAL xLan IS -1.
         LOCAL xAoP IS -1.
-        // IF CFG:HASKEY("CAPTURE_LAN") { SET xLan TO CFG["CAPTURE_LAN"]. }
-        // IF CFG:HASKEY("CAPTURE_AOP") { SET xAoP TO CFG["CAPTURE_AOP"]. }
-        // planTransfer(target, CFG["CAPTURE_PE"], xLan, xAoP).
-        planTransfer(target, CFG["CAPTURE_PE"]).
+        IF CFG:HASKEY("CAPTURE_LAN") { SET xLan TO CFG["CAPTURE_LAN"]. }
+        IF CFG:HASKEY("CAPTURE_AOP") { SET xAoP TO CFG["CAPTURE_AOP"]. }
+        planTransfer(target, CFG["CAPTURE_PE"], xLan, xAoP).
         mLog("Transfer planned.").
         SET success TO executeManeuver().
         IF NOT success {

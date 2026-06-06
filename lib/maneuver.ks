@@ -180,14 +180,190 @@ LOCAL FUNCTION _findEncounter {
 GLOBAL FUNCTION planTransfer {
     PARAMETER targetBody.
     PARAMETER targetPe.
+    PARAMETER lanTarget IS -1.
+    PARAMETER aopTarget IS -1.
 
-    local options is lex(
-        "create_maneuver_nodes", "first",
-        "final_orbit_periapsis", targetPe,
-        "verbose", TRUE
-    ).
-    rsvp:goto(targetBody, options).
-    RETURN NEXTNODE.
+    LOCAL centralBody IS BODY.
+    LOCAL mu          IS centralBody:MU.
+    LOCAL targetRadius IS targetBody:RADIUS + targetPe.
+
+    // --- PHASE 1: Lambert scan to find best departure time ---
+    // Sample departure times over the next N ship orbital periods,
+    // and for each, sample a range of TOFs centered on the Hohmann estimate.
+
+    LOCAL hohmannA    IS (SHIP:ORBIT:SEMIMAJORAXIS + targetBody:ORBIT:SEMIMAJORAXIS) / 2.
+    LOCAL hohmannTof  IS CONSTANT:PI * SQRT(hohmannA^3 / mu).
+
+    LOCAL shipPeriod  IS SHIP:ORBIT:PERIOD.
+    LOCAL nDepart     IS 12.   // how many departure slots to try (one per orbit)
+    LOCAL nTof        IS 9.    // TOF samples per departure (odd number, centred)
+    LOCAL tofSpread   IS hohmannTof * 0.3. // ±30% around Hohmann TOF
+
+    LOCAL bestDv      IS 9999999.
+    LOCAL bestDepart  IS -1.
+    LOCAL bestArrive  IS -1.
+    LOCAL bestLanErr  IS 999.
+
+    LOCAL lanTol IS 0.5.
+    IF CFG:HASKEY("LAN_ERR_TOL") { SET lanTol TO CFG["LAN_ERR_TOL"]. }
+
+    mLog("Lambert scan: " + nDepart + " departures x " + nTof + " TOFs, hohmannTof=" + ROUND(hohmannTof,0) + "s").
+
+    FROM { LOCAL di IS 0. } UNTIL di >= nDepart STEP { SET di TO di + 1. } DO {
+
+        LOCAL departUt IS TIME:SECONDS + 60 + di * shipPeriod.
+        LOCAL r1 IS POSITIONAT(SHIP, departUt) - POSITIONAT(centralBody, departUt).
+        LOCAL v1Ship IS VELOCITYAT(SHIP, departUt):ORBIT.
+
+        FROM { LOCAL ti IS 0. } UNTIL ti >= nTof STEP { SET ti TO ti + 1. } DO {
+
+            LOCAL tofFrac   IS (ti / (nTof - 1)) - 0.5. // -0.5 to +0.5
+            LOCAL tof       IS hohmannTof + tofFrac * tofSpread * 2.
+            IF tof < 60 { SET tof TO 60. }
+
+            LOCAL arriveUt  IS departUt + tof.
+            LOCAL r2        IS POSITIONAT(targetBody, arriveUt) - POSITIONAT(centralBody, arriveUt).
+
+            LOCAL result IS lambertSolve(r1, r2, tof, mu, FALSE).
+            LOCAL v1Lambert IS result["v1"].
+            LOCAL dvVec     IS v1Lambert - v1Ship.
+            LOCAL dvMag     IS dvVec:MAG.
+
+            // Quick LAN check using the arrival velocity to estimate capture orbit
+            IF dvMag < bestDv * 1.05 { // Only bother checking LAN for competitive solutions
+                LOCAL v2Lambert IS result["v2"].
+
+                // Estimate capture orbit LAN from arrival geometry
+                LOCAL captureNormal IS VCRS(r2, v2Lambert):NORMALIZED.
+                // LAN is the angle of the ascending node, derived from the orbit normal
+                LOCAL northPole IS V(0, 1, 0). // body's north in kOS world frame
+                LOCAL nodeVec   IS VCRS(northPole, captureNormal):NORMALIZED.
+                LOCAL estimatedLan IS ARCTAN2(nodeVec:Y, nodeVec:X).
+                IF estimatedLan < 0 { SET estimatedLan TO estimatedLan + 360. }
+
+                LOCAL lanErr IS 999.
+                IF lanTarget >= 0 {
+                    SET lanErr TO lanTarget - estimatedLan.
+                    IF lanErr >  180 { SET lanErr TO lanErr - 360. }
+                    IF lanErr < -180 { SET lanErr TO lanErr + 360. }
+                }
+
+                // Pick best solution: if LAN is specified, prioritise LAN error
+                // within a dV tolerance band; otherwise pure minimum dV.
+                LOCAL betterSolution IS FALSE.
+                IF lanTarget < 0 {
+                    IF dvMag < bestDv { SET betterSolution TO TRUE. }
+                } ELSE {
+                    // Accept if LAN error is better AND dV is within 10% of best
+                    IF ABS(lanErr) < ABS(bestLanErr) AND dvMag < bestDv * 1.10 {
+                        SET betterSolution TO TRUE.
+                    }
+                    // Also accept if LAN is within tolerance and dV is just better
+                    IF ABS(lanErr) <= lanTol AND dvMag < bestDv {
+                        SET betterSolution TO TRUE.
+                    }
+                }
+
+                IF betterSolution {
+                    SET bestDv     TO dvMag.
+                    SET bestDepart TO departUt.
+                    SET bestArrive TO arriveUt.
+                    SET bestLanErr TO lanErr.
+                    mLog("Lambert[d=" + di + ",t=" + ti + "] dV=" + ROUND(dvMag,1)
+                        + " LAN err=" + ROUND(lanErr,1)
+                        + " depart T+" + ROUND(departUt - TIME:SECONDS,0) + "s").
+                }
+            }
+        }
+    }
+
+    IF bestDepart < 0 {
+        mLogError("planTransfer: Lambert scan found no valid solution.").
+        RETURN.
+    }
+
+    mLog("Lambert best: depart T+" + ROUND(bestDepart - TIME:SECONDS,0)
+        + "s  tof=" + ROUND(bestArrive - bestDepart,0)
+        + "s  dV=" + ROUND(bestDv,1)
+        + "  LAN err=" + ROUND(bestLanErr,1)).
+
+    // --- PHASE 2: Build the maneuver node from the best Lambert solution ---
+    LOCAL r1Best    IS POSITIONAT(SHIP, bestDepart) - centralBody:POSITION.
+    LOCAL r2Best    IS POSITIONAT(targetBody, bestArrive) - centralBody:POSITION.
+    LOCAL result    IS lambertSolve(r1Best, r2Best, bestArrive - bestDepart, mu, FALSE).
+    LOCAL dvVec     IS result["v1"] - VELOCITYAT(SHIP, bestDepart):ORBIT.
+
+    // Decompose dvVec into prograde/normal/radial at departure
+    LOCAL progradeHat IS VELOCITYAT(SHIP, bestDepart):ORBIT:NORMALIZED.
+    LOCAL normalHat   IS VCRS(r1Best, progradeHat):NORMALIZED.
+    LOCAL radialHat   IS VCRS(normalHat, progradeHat):NORMALIZED.
+
+    LOCAL dvPro IS VDOT(dvVec, progradeHat).
+    LOCAL dvNor IS VDOT(dvVec, normalHat).
+    LOCAL dvRad IS VDOT(dvVec, radialHat).
+
+    LOCAL nd IS NODE(bestDepart, dvRad, dvNor, dvPro).
+    ADD nd.
+    WAIT 0.1.
+
+    // --- PHASE 3: Newton-Raphson PE targeting (same as before) ---
+    mLog("PE: Targeting " + ROUND(targetPe/1000, 1) + "km.").
+    LOCAL peIter IS 35.
+    LOCAL peEps  IS 0.1.
+    LOCAL peDamp IS 0.5.
+    LOCAL lastGoodPrograde IS nd:PROGRADE.
+
+    FROM { LOCAL i IS 0. } UNTIL i >= peIter STEP { SET i TO i + 1. } DO {
+        LOCAL p IS _getTargetPatch(nd, targetBody).
+        IF p = 0 OR p:PERIAPSIS < 0 {
+            mLog("PE[" + i + "]: lost encounter, reverting.").
+            SET nd:PROGRADE TO lastGoodPrograde.
+            BREAK.
+        }
+        SET lastGoodPrograde TO nd:PROGRADE.
+        LOCAL peErr IS targetPe - p:PERIAPSIS.
+        IF ABS(peErr) < 500 {
+            mLog("PE[" + i + "] converged: " + ROUND(p:PERIAPSIS/1000,1) + "km").
+            BREAK.
+        }
+        LOCAL oldDv IS nd:PROGRADE.
+        SET nd:PROGRADE TO oldDv + peEps.
+        WAIT 0.02.
+        LOCAL p2 IS _getTargetPatch(nd, targetBody).
+        SET nd:PROGRADE TO oldDv.
+        IF p2 = 0 { BREAK. }
+        LOCAL sens IS (p2:PERIAPSIS - p:PERIAPSIS) / peEps.
+        IF ABS(sens) < 0.001 { BREAK. }
+        LOCAL correction IS (peErr / sens) * peDamp.
+        IF correction >  3.0 { SET correction TO  3.0. }
+        IF correction < -3.0 { SET correction TO -3.0. }
+        SET nd:PROGRADE TO oldDv + correction.
+        WAIT 0.05.
+    }
+
+    // --- Final report ---
+    LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
+    IF finalPatch = 0 {
+        mLogError("planTransfer: no encounter after PE targeting.").
+        RETURN.
+    }
+
+    LOCAL logMsg IS "Transfer -> " + targetBody:NAME
+        + ": dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " m/s  Pe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km"
+        + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS,0) + "s".
+    IF lanTarget >= 0 {
+        LOCAL lanErr IS ABS(finalPatch:LAN - lanTarget).
+        IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
+        SET logMsg TO logMsg + "  LAN=" + ROUND(finalPatch:LAN,1) + "(err " + ROUND(lanErr,1) + ")".
+    }
+    IF aopTarget >= 0 {
+        LOCAL aopErr IS ABS(finalPatch:ARGUMENTOFPERIAPSIS - aopTarget).
+        IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
+        SET logMsg TO logMsg + "  AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1) + "(err " + ROUND(aopErr,1) + ")".
+    }
+    mLog(logMsg).
+    RETURN nd.
 }
 
 GLOBAL FUNCTION planCapture {
