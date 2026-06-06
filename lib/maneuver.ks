@@ -199,19 +199,44 @@ GLOBAL FUNCTION planTransfer {
 
     IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
 
+    // --- Resolve orbit direction from CFG ---
+    // CAPTURE_DIR: high-level orbit type (PROGRADE, POLAR, RETROPOLAR, RETROGRADE)
+    // CAPTURE_INC: overrides CAPTURE_DIR with an exact inclination value
+    LOCAL captureInc IS -1.
+    LOCAL normalBias IS 0.
+    IF CFG:HASKEY("CAPTURE_DIR") {
+        LOCAL dir IS CFG["CAPTURE_DIR"]:TOUPPER.
+        IF dir = "PROGRADE"   { SET captureInc TO 0. }
+        IF dir = "POLAR"      { SET captureInc TO 90.  SET normalBias TO 1. }
+        IF dir = "RETROPOLAR" { SET captureInc TO 90.  SET normalBias TO -1. }
+        IF dir = "RETROGRADE" { SET captureInc TO 180. }
+    }
+    IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
+
     // --- Newton-Raphson PE targeting (shared by both paths) ---
     _newtonPeTarget(nd, targetBody, targetPe).
+
+    // --- Inclination targeting ---
+    // Uses normal dV to steer capture orbit to desired inclination.
+    // normalBias seeds the solver direction: +1 prograde-side polar,
+    // -1 retrograde-side polar (produces different LAN).
+    IF captureInc >= 0 {
+        _newtonIncTarget(nd, targetBody, captureInc, normalBias).
+        // Re-run PE targeting to correct drift from normal dV changes
+        _newtonPeTarget(nd, targetBody, targetPe).
+    }
 
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
     IF finalPatch = 0 {
-        mLogError("planTransfer: no encounter after PE targeting.").
+        mLogError("planTransfer: no encounter after targeting.").
         RETURN.
     }
 
     LOCAL logMsg IS "Transfer -> " + targetBody:NAME
         + ": dV=" + ROUND(nd:DELTAV:MAG,1)
         + " m/s  Pe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km"
+        + "  inc=" + ROUND(finalPatch:INCLINATION,1) + "°"
         + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS,0) + "s".
     IF lanTarget >= 0 {
         LOCAL lanErr IS ABS(finalPatch:LAN - lanTarget).
