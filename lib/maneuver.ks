@@ -7,7 +7,7 @@ LOCAL ABS_CUTOFF           IS 0.0001.
 LOCAL ALIGN_TOLERANCE      IS 2.0.
 LOCAL HIBERNATE_THRESHOLD  IS 300.
 LOCAL HIBERNATE_WAKE_LEAD  IS 180.
-LOCAL MCC_DV_CAP           IS 120.
+LOCAL MCC_DV_CAP           IS 50.
 
 GLOBAL FUNCTION executeManeuver {
     WAIT 0.1.
@@ -187,12 +187,20 @@ LOCAL FUNCTION _findEncounter {
 //      Interplanetary:  Lambert grid scan, full 3-axis node
 //   2. Validate encounter via KSP patched conics (_findEncounter)
 //   3. Optional LAN scan (_scanForLan) — slide departure across orbits
-//   4. Newton PE targeting — prograde dV only
+//   4. PE targeting (prograde) — establish a solid encounter first
+//   5. INC targeting (normal) — tilt approach for desired capture
+//      inclination. Adding normal at departure is cheap because
+//      the long transfer lever arm amplifies small angular changes
+//      into large approach geometry shifts at the target.
+//   6. PE cleanup — normal dV shifts PE, so re-converge prograde
 //
-// Plane changes (INC, AoP) are deferred to MCC mid-coast, where normal/radial
-// burns are cheap and don't threaten the encounter. See phaseMidCourse.
+// MCC (phaseMidCourse) fires mid-coast to fine-tune any drift
+// from burn execution errors. It runs the same INC/PE/AoP/LAN
+// passes but with a per-axis dV cap since it's corrective only.
 //
 // CFG keys consumed:
+//   CAPTURE_DIR  — "PROGRADE" / "POLAR" / "RETROPOLAR" / "RETROGRADE"
+//   CAPTURE_INC  — explicit inclination (overrides CAPTURE_DIR)
 //   LAN_ERR_TOL  — LAN tolerance for scan (default 0.5°)
 // ============================================================
 GLOBAL FUNCTION planTransfer {
@@ -206,6 +214,7 @@ GLOBAL FUNCTION planTransfer {
 
     LOCAL isLocal IS (targetBody:BODY = BODY).
 
+    // --- 1. Build raw node ---
     LOCAL nd IS 0.
     IF isLocal {
         SET nd TO _planLocalTransfer(targetBody, targetPe, lanTarget, centralBody, mu).
@@ -215,11 +224,37 @@ GLOBAL FUNCTION planTransfer {
 
     IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
 
-    // --- PE targeting ---
-    // INC/AoP plane changes are handled by MCC mid-coast, where normal/radial
-    // burns are cheap and don't threaten the encounter. planTransfer focuses
-    // purely on getting a good prograde-dominated transfer with correct PE.
+    // --- 2. PE targeting ---
+    // Establish a solid encounter first. All subsequent adjustments
+    // (INC, cleanup) start from a known-good PE.
     newtonTarget(nd, targetBody, "PE", targetPe).
+
+    // --- 3. INC targeting ---
+    // Resolve capture orbit direction from CFG. Adding normal dV at
+    // departure tilts the approach trajectory so the ship enters the
+    // target's SOI at the right angle for the desired capture orbit.
+    // This is much cheaper than a mid-course or post-capture plane
+    // change because the lever arm is longest at departure.
+    LOCAL captureInc IS -1.
+    LOCAL normalBias IS 0.
+    IF CFG:HASKEY("CAPTURE_DIR") {
+        LOCAL dir IS CFG["CAPTURE_DIR"]:TOUPPER.
+        IF dir = "PROGRADE"   { SET captureInc TO 0. }
+        IF dir = "POLAR"      { SET captureInc TO 90.  SET normalBias TO 1. }
+        IF dir = "RETROPOLAR" { SET captureInc TO 90.  SET normalBias TO -1. }
+        IF dir = "RETROGRADE" { SET captureInc TO 180. }
+    }
+    IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
+
+    IF captureInc >= 0 {
+        LOCAL incOpts IS LEXICON().
+        IF normalBias <> 0 { incOpts:ADD("BIAS", normalBias * 5). }
+        newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
+
+        // --- 4. PE cleanup ---
+        // Normal dV shifts PE, so re-converge prograde.
+        newtonTarget(nd, targetBody, "PE", targetPe).
+    }
 
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
@@ -231,6 +266,7 @@ GLOBAL FUNCTION planTransfer {
     LOCAL logMsg IS "Transfer -> " + targetBody:NAME
         + ": dV=" + ROUND(nd:DELTAV:MAG,1)
         + " m/s  Pe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km"
+        + "  inc=" + ROUND(finalPatch:INCLINATION,1) + "°"
         + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS,0) + "s".
     IF lanTarget >= 0 {
         LOCAL lanErr IS ABS(finalPatch:LAN - lanTarget).
@@ -554,6 +590,240 @@ LOCAL FUNCTION _scanForLan {
 }
 
 // ============================================================
+// planRendezvous — plan a transfer to rendezvous with a vessel.
+//
+// Both ship and target must orbit the same body. Uses Hohmann dV
+// to match orbit altitude, phase angle for departure timing, then
+// scans departure time and prograde dV to minimize closest approach.
+//
+// Architecture for cross-SOI rendezvous:
+//   Vessel at Mun → planTransfer(Mun), capture, circ, planRendezvous
+//   Vessel at Duna → planTransfer(Duna), capture, circ, planRendezvous
+//
+// Asteroids in solar orbit (no SOI transition) are not yet supported.
+// That requires Lambert intercept targeting closest approach instead
+// of a body PE — future work using lambert.ks.
+//
+// Returns: the maneuver node, or 0 on failure.
+// ============================================================
+GLOBAL FUNCTION planRendezvous {
+    PARAMETER targetVessel.
+
+    // --- Validate: both must orbit the same body ---
+    IF targetVessel:BODY:NAME <> SHIP:BODY:NAME {
+        mLogError("planRendezvous: target orbits " + targetVessel:BODY:NAME
+            + " but ship orbits " + SHIP:BODY:NAME + ".").
+        RETURN 0.
+    }
+
+    LOCAL mu IS SHIP:BODY:MU.
+    LOCAL shipSMA IS SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL targetSMA IS targetVessel:ORBIT:SEMIMAJORAXIS.
+    LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
+    LOCAL targetPeriod IS targetVessel:ORBIT:PERIOD.
+
+    // --- Hohmann estimate ---
+    LOCAL hohmannA IS (shipSMA + targetSMA) / 2.
+    LOCAL hohmannTof IS CONSTANT:PI * SQRT(hohmannA^3 / mu).
+    LOCAL vShip IS SQRT(mu / shipSMA).
+    LOCAL vDepart IS SQRT(mu * (2/shipSMA - 1/hohmannA)).
+    LOCAL hohmannDv IS vDepart - vShip.
+
+    mLog("Rendezvous with " + targetVessel:NAME
+        + ": Hohmann dV=" + ROUND(hohmannDv, 1) + " m/s"
+        + "  TOF=" + ROUND(hohmannTof, 0) + "s").
+
+    // --- Phase angle timing ---
+    SET TARGET TO targetVessel.
+    WAIT 0.1.
+    LOCAL currentPhase IS phaseAngle().
+
+    LOCAL targetMeanMotion IS 360 / targetPeriod.
+    LOCAL targetSweep IS targetMeanMotion * hohmannTof.
+    LOCAL idealPhaseAngle IS 180 - targetSweep.
+
+    LOCAL phaseDiff IS idealPhaseAngle - currentPhase.
+    IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
+    LOCAL shipAngRate IS 360 / shipPeriod.
+    LOCAL targetAngRate IS 360 / targetPeriod.
+    LOCAL relativeRate IS shipAngRate - targetAngRate.
+    LOCAL waitTime IS phaseDiff / ABS(relativeRate).
+
+    // Ensure departure is at least 60s away
+    IF waitTime < 60 {
+        LOCAL synodicPeriod IS ABS(shipPeriod * targetPeriod / (shipPeriod - targetPeriod)).
+        SET waitTime TO waitTime + synodicPeriod.
+    }
+
+    LOCAL departUt IS TIME:SECONDS + waitTime.
+
+    mLog("Phase: current=" + ROUND(currentPhase, 1)
+        + "  ideal=" + ROUND(idealPhaseAngle, 1)
+        + "  wait=" + ROUND(waitTime, 0) + "s").
+
+    // --- Place prograde-only node ---
+    LOCAL nd IS NODE(departUt, 0, 0, hohmannDv).
+    ADD nd.
+    WAIT 0.1.
+
+    // --- Scan departure time to minimize closest approach ---
+    // The phase angle estimate assumes circular orbits. Scan ±1/4 orbit
+    // around the estimate to handle eccentricity and other perturbations.
+    LOCAL scanRange IS shipPeriod / 4.
+    LOCAL scanSteps IS 20.
+    LOCAL scanDt IS scanRange * 2 / scanSteps.
+
+    LOCAL bestTime IS departUt.
+    LOCAL bestCA IS _findClosestApproach(targetVessel, departUt + hohmannTof * 0.5, departUt + hohmannTof * 1.5, 40).
+
+    FROM { LOCAL si IS 0. } UNTIL si > scanSteps STEP { SET si TO si + 1. } DO {
+        LOCAL tryTime IS departUt - scanRange + si * scanDt.
+        IF tryTime > TIME:SECONDS + 30 {
+            SET nd:TIME TO tryTime.
+            WAIT 0.02.
+            LOCAL tryCa IS _findClosestApproach(targetVessel, tryTime + hohmannTof * 0.5, tryTime + hohmannTof * 1.5, 40).
+            IF tryCa["distance"] < bestCA["distance"] {
+                SET bestCA TO tryCa.
+                SET bestTime TO tryTime.
+            }
+        }
+    }
+    SET nd:TIME TO bestTime.
+    WAIT 0.1.
+    mLog("Time scan: best CA=" + ROUND(bestCA["distance"]/1000, 1) + "km"
+        + " at T+" + ROUND(bestCA["time"] - TIME:SECONDS, 0) + "s").
+
+    // --- Golden section refine departure time ---
+    LOCAL tA IS MAX(TIME:SECONDS + 30, bestTime - scanDt).
+    LOCAL tB IS bestTime + scanDt.
+    LOCAL gr IS (SQRT(5) + 1) / 2.
+
+    FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
+        LOCAL tC IS tB - (tB - tA) / gr.
+        LOCAL tD IS tA + (tB - tA) / gr.
+
+        SET nd:TIME TO tC. WAIT 0.02.
+        LOCAL caC IS _findClosestApproach(targetVessel, tC + hohmannTof * 0.4, tC + hohmannTof * 1.6, 30).
+        SET nd:TIME TO tD. WAIT 0.02.
+        LOCAL caD IS _findClosestApproach(targetVessel, tD + hohmannTof * 0.4, tD + hohmannTof * 1.6, 30).
+
+        IF caC["distance"] < caD["distance"] {
+            SET tB TO tD.
+        } ELSE {
+            SET tA TO tC.
+        }
+    }
+    SET nd:TIME TO (tA + tB) / 2.
+    WAIT 0.1.
+
+    // --- Scan prograde dV to refine orbit shape ---
+    // ±20% of Hohmann dV (or ±10 m/s minimum) to fine-tune the transfer
+    LOCAL dvRange IS MAX(10, ABS(hohmannDv) * 0.2).
+    LOCAL dvSteps IS 20.
+    LOCAL dvStep IS dvRange * 2 / dvSteps.
+    LOCAL bestDv IS hohmannDv.
+    LOCAL caTime IS nd:TIME + hohmannTof.
+    SET bestCA TO _findClosestApproach(targetVessel, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+
+    FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
+        LOCAL tryDv IS hohmannDv - dvRange + di * dvStep.
+        SET nd:PROGRADE TO tryDv.
+        WAIT 0.02.
+        LOCAL tryCa IS _findClosestApproach(targetVessel, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+        IF tryCa["distance"] < bestCA["distance"] {
+            SET bestCA TO tryCa.
+            SET bestDv TO tryDv.
+        }
+    }
+    SET nd:PROGRADE TO bestDv.
+    WAIT 0.1.
+
+    // Golden section refine prograde
+    LOCAL dvA IS MAX(bestDv - dvStep, hohmannDv - dvRange).
+    LOCAL dvB IS MIN(bestDv + dvStep, hohmannDv + dvRange).
+
+    FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
+        LOCAL dvC IS dvB - (dvB - dvA) / gr.
+        LOCAL dvD IS dvA + (dvB - dvA) / gr.
+
+        SET nd:PROGRADE TO dvC. WAIT 0.02.
+        LOCAL caC IS _findClosestApproach(targetVessel, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
+        SET nd:PROGRADE TO dvD. WAIT 0.02.
+        LOCAL caD IS _findClosestApproach(targetVessel, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
+
+        IF caC["distance"] < caD["distance"] {
+            SET dvB TO dvD.
+        } ELSE {
+            SET dvA TO dvC.
+        }
+    }
+    SET nd:PROGRADE TO (dvA + dvB) / 2.
+    WAIT 0.1.
+
+    // --- Final report ---
+    LOCAL finalCa IS _findClosestApproach(targetVessel, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
+    LOCAL relVel IS (VELOCITYAT(SHIP, finalCa["time"]):ORBIT - VELOCITYAT(targetVessel, finalCa["time"]):ORBIT):MAG.
+
+    mLog("Rendezvous -> " + targetVessel:NAME
+        + ": dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s"
+        + "  CA=" + ROUND(finalCa["distance"]/1000, 1) + "km"
+        + "  relV=" + ROUND(relVel, 1) + " m/s"
+        + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
+
+    RETURN nd.
+}
+
+// ============================================================
+// _findClosestApproach — find minimum separation between ship
+// and a target vessel over a time window.
+//
+// Uses coarse scan + golden section refinement. POSITIONAT on
+// both ship and target reflects any maneuver nodes on the flight
+// plan, so this works for evaluating planned burns.
+//
+// Returns: LEXICON("time", ut, "distance", meters)
+// ============================================================
+LOCAL FUNCTION _findClosestApproach {
+    PARAMETER tgt, tStart, tEnd, steps.
+
+    // Coarse scan
+    LOCAL dt IS (tEnd - tStart) / steps.
+    LOCAL bestT IS tStart.
+    LOCAL bestD IS 9e15.
+
+    LOCAL t IS tStart.
+    UNTIL t > tEnd {
+        LOCAL sep IS (POSITIONAT(SHIP, t) - POSITIONAT(tgt, t)):MAG.
+        IF sep < bestD {
+            SET bestD TO sep.
+            SET bestT TO t.
+        }
+        SET t TO t + dt.
+    }
+
+    // Golden section refine around the best point
+    LOCAL a IS MAX(tStart, bestT - dt * 2).
+    LOCAL b IS MIN(tEnd, bestT + dt * 2).
+    LOCAL gr IS (SQRT(5) + 1) / 2.
+
+    FROM { LOCAL i IS 0. } UNTIL i >= 15 STEP { SET i TO i + 1. } DO {
+        LOCAL c IS b - (b - a) / gr.
+        LOCAL d IS a + (b - a) / gr.
+        LOCAL fc IS (POSITIONAT(SHIP, c) - POSITIONAT(tgt, c)):MAG.
+        LOCAL fd IS (POSITIONAT(SHIP, d) - POSITIONAT(tgt, d)):MAG.
+        IF fc < fd {
+            SET b TO d.
+        } ELSE {
+            SET a TO c.
+        }
+    }
+
+    LOCAL midT IS (a + b) / 2.
+    LOCAL midD IS (POSITIONAT(SHIP, midT) - POSITIONAT(tgt, midT)):MAG.
+    RETURN LEXICON("time", midT, "distance", midD).
+}
+
+// ============================================================
 // Newton-Raphson PE targeting — shared by both paths
 // Proportional clamp: large errors allow larger steps.
 // ============================================================
@@ -680,8 +950,9 @@ GLOBAL FUNCTION newtonTarget {
                 _ntSetAxis(nd, param, oldVal + correction).
                 WAIT 0.02.
 
-                // dV cap check (MCC)
-                IF dvCap >= 0 AND nd:DELTAV:MAG > dvCap {
+                // dV cap check (MCC) — per-axis so INC (normal) and PE
+                // (prograde) don't compete for the same budget.
+                IF dvCap >= 0 AND ABS(_ntGetAxis(nd, param)) > dvCap {
                     _ntSetAxis(nd, param, lastGood).
                     mLog("  " + label + "[" + i + "]: dV cap (" + dvCap + " m/s) reached.").
                     BREAK.
@@ -797,9 +1068,14 @@ GLOBAL FUNCTION planAoPChange {
 
 // ============================================================
 // phaseMidCourse — mid-course correction during transfer coast.
+//
 // Fires at coast midpoint (local) or 1h past SOI (interplanetary).
+// This is a fine-tune pass — planTransfer handles the primary INC
+// targeting at departure where normal dV is cheapest. MCC corrects
+// drift from burn execution errors and refines the approach.
+//
 // Uses phased Newton: INC → AoP → PE → LAN → PE cleanup.
-// Total dV capped at MCC_DV_CAP (50 m/s).
+// Per-axis dV cap (MCC_DV_CAP) so axes don't compete for budget.
 // ============================================================
 GLOBAL FUNCTION phaseMidCourse {
     LOCAL target IS missionTargetBody().

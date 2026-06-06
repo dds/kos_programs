@@ -27,8 +27,42 @@ GLOBAL CFG IS LEXICON(
     "PROBE_TARGET_TOL",        2500
 ).
 
+// --- Example: rendezvous + Duna rover lander ---
+// Ship name: FR3-DUNA-LANDER-01
+// Mission: launch to LKO, rendezvous with Jeb's wreck in Kerbin
+// orbit (e.g. to pick up crew or recover parts), then transfer
+// to Duna and land a rover probe.
+//
+// CFG overrides:
+//   SET CFG["PARKING_ALT"]       TO 100000.
+//   SET CFG["CAPTURE_PE"]        TO 30000.
+//   SET CFG["CAPTURE_DIR"]       TO "POLAR".
+//   SET CFG["TARGET_PE"]         TO 30000.
+//   SET CFG["TARGET_AP"]         TO 30000.
+//   SET CFG["TARGET_INCLINATION"] TO 90.
+//   SET CFG["RENDEZVOUS_TARGET"] TO "Jeb's Wreck".
+//
+// Sequence: LUNCH → FAIR → ANTS → PARK → RDV → XING → MCC →
+//           COAST → CAPTURE → CIRC → RAISE → INCLINE →
+//           LAND_DEORBIT → LAND → DONE
+//
+// The RDV phase runs planRendezvous() + executeManeuver() to
+// intercept the target vessel in parking orbit before departing
+// for Duna. Requires "maneuver" in LIBS (already present).
+//
+// Phase handler (not yet wired into buildPhaseSequence):
+//   LOCAL FUNCTION phaseRendezvous {
+//       LOCAL tgtName IS CFG["RENDEZVOUS_TARGET"].
+//       LOCAL tgt IS VESSEL(tgtName).
+//       LOCAL nd IS planRendezvous(tgt).
+//       IF nd <> 0 { executeManeuver(). }
+//       nextPhase(launchSeq).
+//   }
+// Then add to phaseMap:  "RDV", phaseRendezvous@
+// And insert "RDV" into the sequence after PARK.
+
 GLOBAL LIBS IS LIST(
-    "phases", "launch", "xfer", 
+    "phases", "launch", "xfer",
     "lib_navigation", "countdown", "maneuver", "inclination",
     "orbit", "targeting",
     "payload_ops", "utils"
