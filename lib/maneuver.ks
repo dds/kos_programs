@@ -192,10 +192,11 @@ LOCAL FUNCTION _findEncounter {
 //      widest possible encounter margin. A dead-center trajectory
 //      survives large normal dV perturbations during INC targeting,
 //      especially for local transfers where the SOI is narrow.
-//   4. Alternating INC/PE passes (up to 3 rounds) — PE and INC are
-//      coupled: prograde shifts approach geometry (INC) and normal
-//      shifts energy (PE). Each round runs INC then PE. Exits early
-//      if both are within tolerance.
+//   4. INC targeting (normal) — tilt approach for desired capture
+//      inclination.
+//   5. PE targeting with INC hold — converge PE while maintaining
+//      INC via compensating normal corrections after each prograde
+//      step. Uses the HOLD option in newtonTarget.
 //
 // MCC (phaseMidCourse) fires mid-coast to fine-tune any drift
 // from burn execution errors. It runs the same INC/PE/AoP/LAN
@@ -253,34 +254,24 @@ GLOBAL FUNCTION planTransfer {
     }
     IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
 
-    // --- 4. Alternating PE/INC convergence ---
-    // PE and INC are coupled — prograde shifts approach geometry (INC)
-    // and normal shifts energy (PE). Alternate passes until both are
-    // within tolerance, up to 3 rounds.
+    // --- 4. INC targeting ---
     LOCAL incOpts IS LEXICON().
     IF normalBias <> 0 { incOpts:ADD("BIAS", normalBias * 5). }
 
-    LOCAL peIncRounds IS CHOOSE 3 IF captureInc >= 0 ELSE 1.
-    FROM { LOCAL ri IS 0. } UNTIL ri >= peIncRounds STEP { SET ri TO ri + 1. } DO {
-        IF captureInc >= 0 {
-            newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
-        }
-        newtonTarget(nd, targetBody, "PE", targetPe).
-
-        // Check if both are converged — skip remaining rounds if so
-        IF captureInc >= 0 AND ri < peIncRounds - 1 {
-            LOCAL checkPatch IS _getTargetPatch(nd, targetBody).
-            IF checkPatch <> 0 {
-                LOCAL peErr IS ABS(checkPatch:PERIAPSIS - targetPe).
-                LOCAL incErr IS ABS(checkPatch:INCLINATION - captureInc).
-                IF incErr > 180 { SET incErr TO 360 - incErr. }
-                IF peErr < 500 AND incErr < 0.5 {
-                    mLog("PE/INC converged after " + (ri + 1) + " round(s).").
-                    BREAK.
-                }
-            }
-        }
+    IF captureInc >= 0 {
+        newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
     }
+
+    // --- 5. PE targeting with INC hold ---
+    // PE and INC are coupled — prograde shifts approach geometry (INC)
+    // and normal shifts energy (PE). The HOLD option makes newtonTarget
+    // apply a compensating correction on the held axis after every
+    // primary correction, keeping INC locked while PE converges.
+    LOCAL peOpts IS LEXICON().
+    IF captureInc >= 0 {
+        peOpts:ADD("HOLD", LEXICON("PARAM", "INC", "VALUE", captureInc)).
+    }
+    newtonTarget(nd, targetBody, "PE", targetPe, peOpts).
 
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
@@ -944,6 +935,10 @@ LOCAL FUNCTION _findClosestApproach {
 //   DV_CAP  — max total node dV; aborts if exceeded (used by MCC)
 //   TOL     — convergence tolerance (default: 500m for PE, 0.5° for angles)
 //   DAMP    — damping factor (default: 0.5 for PE, 0.7 for angles)
+//   HOLD    — LEXICON("PARAM", name, "VALUE", target) — after each
+//             primary correction, apply a compensating single Newton
+//             step on the held axis to maintain its target. Used to
+//             keep INC locked while converging PE.
 //
 // Accepts negative PE encounters (trajectory below surface). The
 // closest-approach optimizer may produce a dead-center trajectory
@@ -971,6 +966,15 @@ GLOBAL FUNCTION newtonTarget {
     IF opts:HASKEY("MAX_ITER") { SET maxIter TO opts["MAX_ITER"]. }
     IF opts:HASKEY("DV_CAP")   { SET dvCap   TO opts["DV_CAP"]. }
     IF opts:HASKEY("BIAS")     { SET bias    TO opts["BIAS"]. }
+
+    // HOLD constraint: after each primary correction, compensate drift
+    // on a secondary axis with a single Newton step.
+    LOCAL holdParam IS "".
+    LOCAL holdValue IS 0.
+    IF opts:HASKEY("HOLD") {
+        SET holdParam TO opts["HOLD"]["PARAM"].
+        SET holdValue TO opts["HOLD"]["VALUE"].
+    }
 
     // Seed bias (e.g. ±5 m/s normal for polar vs retropolar)
     IF bias <> 0 AND _ntGetAxis(nd, param) = 0 {
@@ -1086,6 +1090,52 @@ GLOBAL FUNCTION newtonTarget {
                 }
 
                 mLog("  " + label + "[" + i + "] " + ROUND(current, 1) + " corr=" + ROUND(correction, 2) + " m/s").
+
+                // --- HOLD compensation ---
+                // After each primary correction, apply a single Newton step
+                // on the held axis to compensate for coupling drift.
+                IF holdParam <> "" {
+                    LOCAL hp IS _getTargetPatch(nd, targetBody).
+                    IF hp <> 0 {
+                        LOCAL hIsAngle IS (holdParam <> "PE").
+                        LOCAL hCurrent IS _ntReadParam(hp, holdParam).
+                        LOCAL hErr IS holdValue - hCurrent.
+                        IF hIsAngle {
+                            IF hErr >  180 { SET hErr TO hErr - 360. }
+                            IF hErr < -180 { SET hErr TO hErr + 360. }
+                        }
+                        LOCAL hTol IS CHOOSE 0.5 IF hIsAngle ELSE 500.
+                        IF ABS(hErr) > hTol {
+                            LOCAL hOld IS _ntGetAxis(nd, holdParam).
+                            LOCAL hEps IS CHOOSE 0.5 IF hIsAngle ELSE 0.1.
+                            _ntSetAxis(nd, holdParam, hOld + hEps).
+                            WAIT 0.02.
+                            LOCAL hp2 IS _getTargetPatch(nd, targetBody).
+                            IF hp2 <> 0 {
+                                LOCAL hCurrent2 IS _ntReadParam(hp2, holdParam).
+                                LOCAL hDelta IS hCurrent2 - hCurrent.
+                                IF hIsAngle {
+                                    IF hDelta >  180 { SET hDelta TO hDelta - 360. }
+                                    IF hDelta < -180 { SET hDelta TO hDelta + 360. }
+                                }
+                                LOCAL hSens IS hDelta / hEps.
+                                IF ABS(hSens) > 0.001 {
+                                    LOCAL hCorr IS (hErr / hSens) * 0.7.
+                                    _ntSetAxis(nd, holdParam, hOld + hCorr).
+                                    WAIT 0.02.
+                                    // Verify encounter survived
+                                    IF _getTargetPatch(nd, targetBody) = 0 {
+                                        _ntSetAxis(nd, holdParam, hOld).
+                                    }
+                                } ELSE {
+                                    _ntSetAxis(nd, holdParam, hOld).
+                                }
+                            } ELSE {
+                                _ntSetAxis(nd, holdParam, hOld).
+                            }
+                        }
+                    }
+                }
             }
         }
     }
