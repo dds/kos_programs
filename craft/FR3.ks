@@ -11,7 +11,7 @@ GLOBAL CFG IS LEXICON(
     "LAUNCH_AZIMUTH",           0,
     "LAUNCH_STAGE_LIMIT",       0,
     "FAIRING_ALT",          71500,
-    "EXTEND_ALT",           76000,
+    "EXTEND_ALT",           73000,
     "CAPTURE_PE",            20000,
     "CAPTURE_DIR",          "POLAR",
     "TARGET_PE",             20000,
