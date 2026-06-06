@@ -29,8 +29,8 @@ GLOBAL FUNCTION main {
     LOCAL phaseMap IS LEXICON(
         "TARGETED_DEORBIT", phaseTargetedDeorbit@,
         "LAND",             phaseLand@,
-        "ROVER",            phaseRoverInit@,
-        "DONE",             phaseRoverShutdown@
+        "ROVER",            roverInit@,
+        "DONE",             roverShutdown@
     ).
 
     runPhases(phaseMap).

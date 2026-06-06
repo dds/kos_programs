@@ -70,7 +70,7 @@ LOCAL FUNCTION _printConfig {
     }
     PRINT " ".
     PRINT "  -- ORBIT --".
-    PRINT "  FINAL ALT .. " + ROUND(CFG["RELAY_ALT"]/1000,0) + " km".
+    PRINT "  FINAL ALT .. " + ROUND(CFG["TARGET_AP"]/1000,0) + " km".
     LOCAL tincStr IS CFG["TARGET_INCLINATION"] + " deg".
     IF CFG["TARGET_INCLINATION"] = 0 { SET tincStr TO "0 deg  (equatorial)". }
     PRINT "  FINAL INCL . " + tincStr.
