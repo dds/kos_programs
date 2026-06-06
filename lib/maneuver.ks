@@ -187,13 +187,12 @@ LOCAL FUNCTION _findEncounter {
 //      Interplanetary:  Lambert grid scan, full 3-axis node
 //   2. Validate encounter via KSP patched conics (_findEncounter)
 //   3. Optional LAN scan (_scanForLan) — slide departure across orbits
-//   4. Newton PE targeting (_newtonPeTarget) — prograde dV
-//   5. Newton INC targeting (_newtonIncTarget) — normal dV, if CAPTURE_DIR set
-//   6. PE cleanup — re-run PE to correct drift from normal changes
+//   4. Newton PE targeting — prograde dV only
+//
+// Plane changes (INC, AoP) are deferred to MCC mid-coast, where normal/radial
+// burns are cheap and don't threaten the encounter. See phaseMidCourse.
 //
 // CFG keys consumed:
-//   CAPTURE_DIR  — "PROGRADE" / "POLAR" / "RETROPOLAR" / "RETROGRADE"
-//   CAPTURE_INC  — explicit inclination (overrides CAPTURE_DIR)
 //   LAN_ERR_TOL  — LAN tolerance for scan (default 0.5°)
 // ============================================================
 GLOBAL FUNCTION planTransfer {
@@ -216,67 +215,10 @@ GLOBAL FUNCTION planTransfer {
 
     IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
 
-    // --- Resolve orbit direction from CFG ---
-    // CAPTURE_DIR: high-level orbit type (PROGRADE, POLAR, RETROPOLAR, RETROGRADE)
-    // CAPTURE_INC: overrides CAPTURE_DIR with an exact inclination value
-    LOCAL captureInc IS -1.
-    LOCAL normalBias IS 0.
-    IF CFG:HASKEY("CAPTURE_DIR") {
-        LOCAL dir IS CFG["CAPTURE_DIR"]:TOUPPER.
-        IF dir = "PROGRADE"   { SET captureInc TO 0. }
-        IF dir = "POLAR"      { SET captureInc TO 90.  SET normalBias TO 1. }
-        IF dir = "RETROPOLAR" { SET captureInc TO 90.  SET normalBias TO -1. }
-        IF dir = "RETROGRADE" { SET captureInc TO 180. }
-    }
-    IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
-
-    // --- Inclination targeting ---
-    // For local moons (small SOI), large plane changes during transfer are
-    // impractical — normal dV pushes the trajectory out of the SOI before
-    // meaningfully changing capture inclination. In that case, the plane
-    // change is deferred to post-capture (INCL_CORRECT / TARGET_INCLINATION).
-    // We still attempt INC targeting, but verify the encounter remains
-    // healthy enough for PE targeting afterward. If not, revert.
-    IF captureInc >= 0 {
-        LOCAL preIncNormal IS nd:NORMAL.
-        LOCAL preIncTime IS nd:TIME.
-        LOCAL preIncPrograde IS nd:PROGRADE.
-
-        LOCAL incOpts IS LEXICON().
-        IF normalBias <> 0 { incOpts:ADD("BIAS", normalBias * 5). }
-        newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
-
-        // Verify encounter survived and PE targeting can work
-        LOCAL postIncPatch IS _getTargetPatch(nd, targetBody).
-        LOCAL incUsable IS TRUE.
-
-        IF postIncPatch = 0 OR postIncPatch:PERIAPSIS < 0 {
-            SET incUsable TO FALSE.
-            mLog("Encounter lost after INC targeting.").
-        } ELSE {
-            // Check that PE probe works (encounter isn't razor-thin)
-            LOCAL testPro IS nd:PROGRADE.
-            SET nd:PROGRADE TO testPro + 0.1.
-            WAIT 0.02.
-            LOCAL testP IS _getTargetPatch(nd, targetBody).
-            SET nd:PROGRADE TO testPro.
-            IF testP = 0 OR testP:PERIAPSIS < 0 {
-                SET incUsable TO FALSE.
-                mLog("Encounter too marginal after INC targeting.").
-            }
-        }
-
-        IF NOT incUsable {
-            // Revert INC changes — plane change deferred to post-capture
-            SET nd:NORMAL TO preIncNormal.
-            SET nd:TIME TO preIncTime.
-            SET nd:PROGRADE TO preIncPrograde.
-            WAIT 0.1.
-            mLog("INC reverted — plane change deferred to post-capture.").
-        }
-    }
-
     // --- PE targeting ---
+    // INC/AoP plane changes are handled by MCC mid-coast, where normal/radial
+    // burns are cheap and don't threaten the encounter. planTransfer focuses
+    // purely on getting a good prograde-dominated transfer with correct PE.
     newtonTarget(nd, targetBody, "PE", targetPe).
 
     // --- Final report ---
@@ -289,7 +231,6 @@ GLOBAL FUNCTION planTransfer {
     LOCAL logMsg IS "Transfer -> " + targetBody:NAME
         + ": dV=" + ROUND(nd:DELTAV:MAG,1)
         + " m/s  Pe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km"
-        + "  inc=" + ROUND(finalPatch:INCLINATION,1) + "°"
         + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS,0) + "s".
     IF lanTarget >= 0 {
         LOCAL lanErr IS ABS(finalPatch:LAN - lanTarget).
