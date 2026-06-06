@@ -230,19 +230,32 @@ GLOBAL FUNCTION planTransfer {
     }
     IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
 
-    // --- Newton-Raphson PE targeting ---
-    newtonTarget(nd, targetBody, "PE", targetPe).
-
-    // --- Inclination targeting ---
-    // normalBias seeds the solver: +1 prograde-side polar,
-    // -1 retrograde-side polar (different LAN via opposite normal dV).
+    // --- Inclination targeting (plane first, energy second) ---
+    // Setting the orbital plane before PE avoids large normal corrections
+    // destroying a carefully-targeted PE encounter.
     IF captureInc >= 0 {
         LOCAL incOpts IS LEXICON().
         IF normalBias <> 0 { incOpts:ADD("BIAS", normalBias * 5). }
         newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
-        // Re-run PE to correct drift from normal dV changes
-        newtonTarget(nd, targetBody, "PE", targetPe).
+
+        // INC changes may lose the encounter — recover before PE targeting
+        LOCAL postIncPatch IS _getTargetPatch(nd, targetBody).
+        IF postIncPatch = 0 OR postIncPatch:PERIAPSIS < 0 {
+            mLog("Encounter lost after INC targeting, searching...").
+            LOCAL foundTime IS _findEncounter(nd, targetBody, nd:TIME,
+                SHIP:ORBIT:PERIOD * 3, SHIP:ORBIT:PERIOD / 8).
+            IF foundTime >= 0 {
+                SET nd:TIME TO foundTime.
+                WAIT 0.1.
+                mLog("Encounter recovered at T+" + ROUND(foundTime - TIME:SECONDS, 0) + "s.").
+            } ELSE {
+                mLogWarn("Could not recover encounter after INC targeting.").
+            }
+        }
     }
+
+    // --- PE targeting ---
+    newtonTarget(nd, targetBody, "PE", targetPe).
 
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
@@ -311,7 +324,7 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL currentPhase IS phaseAngle().
 
     // Synodic period — how often the phase angle repeats
-    LOCAL synodicPeriod IS ABS(1 / (1/shipPeriod - 1/targetPeriod)) * shipPeriod.
+    LOCAL synodicPeriod IS ABS(shipPeriod * targetPeriod / (shipPeriod - targetPeriod)).
 
     // Time until the phase angle is right
     LOCAL phaseDiff IS idealPhaseAngle - currentPhase.
@@ -336,14 +349,15 @@ LOCAL FUNCTION _planLocalTransfer {
     WAIT 0.1.
 
     // --- Validate encounter via KSP conics ---
-    // If no encounter at the estimated time, use _findEncounter to slide
+    // If no encounter at the estimated time, scan wider windows.
+    // The phase angle estimate can be off, so search generously.
     LOCAL patch IS _getTargetPatch(nd, targetBody).
     IF patch = 0 OR patch:PERIAPSIS < 0 {
         mLog("No encounter at Hohmann estimate, searching nearby...").
-        LOCAL foundTime IS _findEncounter(nd, targetBody, departUt, shipPeriod * 2, shipPeriod / 8).
+        LOCAL foundTime IS _findEncounter(nd, targetBody, departUt, shipPeriod * 4, shipPeriod / 10).
         IF foundTime < 0 {
-            // Widen the search
-            SET foundTime TO _findEncounter(nd, targetBody, departUt, shipPeriod * 6, shipPeriod / 4).
+            // Widen search to many orbits with coarser steps
+            SET foundTime TO _findEncounter(nd, targetBody, departUt, shipPeriod * 12, shipPeriod / 4).
         }
         IF foundTime < 0 {
             mLogError("planTransfer: no encounter found near Hohmann estimate.").
@@ -599,7 +613,7 @@ GLOBAL FUNCTION newtonTarget {
 
     LOCAL isAngle IS (param <> "PE").
     LOCAL eps     IS CHOOSE 0.5 IF isAngle ELSE 0.1.
-    LOCAL damp    IS 0.7.
+    LOCAL damp    IS CHOOSE 0.7 IF isAngle ELSE 0.5.
     LOCAL tol     IS CHOOSE 0.5 IF isAngle ELSE 500.
     LOCAL maxIter IS 35.
     LOCAL dvCap   IS -1.
@@ -695,7 +709,7 @@ GLOBAL FUNCTION newtonTarget {
                 mLog("  " + label + "[" + i + "]: low sensitivity, skipping.").
             } ELSE {
                 LOCAL correction IS (err / sens) * damp.
-                LOCAL maxStep IS CHOOSE MAX(5.0, ABS(err) / 3) IF isAngle ELSE MAX(3.0, ABS(err) / 5000).
+                LOCAL maxStep IS CHOOSE MAX(5.0, ABS(err) / 3) IF isAngle ELSE MIN(20, MAX(3.0, ABS(err) / 10000)).
                 SET maxStep TO maxStep * stepScale.
                 IF correction >  maxStep { SET correction TO  maxStep. }
                 IF correction < -maxStep { SET correction TO -maxStep. }
