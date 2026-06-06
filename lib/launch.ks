@@ -267,7 +267,7 @@ GLOBAL FUNCTION confirmLaunch {
     }
 
     printFn:CALL().
-    PRINT "  >> ENTER to launch / 30s auto-launch".
+    PRINT "  >> SPACE to launch / 30s auto-launch".
     PRINT "  >> Edit CFG in terminal to override".
     PRINT " ".
     LOCAL deadline IS TIME:SECONDS + 30.
@@ -285,7 +285,7 @@ GLOBAL FUNCTION confirmLaunch {
         PRINT "  [" + bar + "] T-" + ("" + remaining):PADLEFT(2) + "s   " AT (0, TERMINAL:HEIGHT - 1).
         IF TERMINAL:INPUT:HASCHAR {
             LOCAL ch IS TERMINAL:INPUT:GETCHAR().
-            IF UNCHAR(ch) = 13 OR UNCHAR(ch) = 10 {
+            IF UNCHAR(ch) = 32 OR UNCHAR(ch) = 0 {
                 SET confirmed TO TRUE.
             }
         }
