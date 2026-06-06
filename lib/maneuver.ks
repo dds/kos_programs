@@ -599,7 +599,7 @@ GLOBAL FUNCTION newtonTarget {
 
     LOCAL isAngle IS (param <> "PE").
     LOCAL eps     IS CHOOSE 0.5 IF isAngle ELSE 0.1.
-    LOCAL damp    IS CHOOSE 0.7 IF isAngle ELSE 0.5.
+    LOCAL damp    IS 0.7.
     LOCAL tol     IS CHOOSE 0.5 IF isAngle ELSE 500.
     LOCAL maxIter IS 35.
     LOCAL dvCap   IS -1.
@@ -643,7 +643,7 @@ GLOBAL FUNCTION newtonTarget {
             } ELSE {
                 _ntSetAxis(nd, param, lastGood).
                 SET stepScale TO stepScale * 0.5.
-                IF stepScale < 0.1 {
+                IF stepScale < 0.05 {
                     mLog("  " + label + "[" + i + "]: step too small, stopping.").
                     BREAK.
                 }
@@ -663,13 +663,25 @@ GLOBAL FUNCTION newtonTarget {
                 BREAK.
             }
 
-            // Finite difference for sensitivity
+            // Finite difference for sensitivity — try +eps, fall back to -eps
             LOCAL oldVal IS _ntGetAxis(nd, param).
             _ntSetAxis(nd, param, oldVal + eps).
             WAIT 0.02.
             LOCAL p2 IS _getTargetPatch(nd, targetBody).
+            LOCAL probeSign IS 1.
+            IF p2 = 0 OR p2:PERIAPSIS < 0 {
+                // +eps lost encounter, try -eps
+                _ntSetAxis(nd, param, oldVal - eps).
+                WAIT 0.02.
+                SET p2 TO _getTargetPatch(nd, targetBody).
+                SET probeSign TO -1.
+                IF p2 = 0 OR p2:PERIAPSIS < 0 {
+                    _ntSetAxis(nd, param, oldVal).
+                    mLog("  " + label + "[" + i + "]: probe lost encounter both dirs.").
+                    BREAK.
+                }
+            }
             _ntSetAxis(nd, param, oldVal).
-            IF p2 = 0 OR p2:PERIAPSIS < 0 { BREAK. }
 
             LOCAL current2 IS _ntReadParam(p2, param).
             LOCAL delta IS current2 - current.
@@ -678,38 +690,41 @@ GLOBAL FUNCTION newtonTarget {
                 IF delta < -180 { SET delta TO delta + 360. }
             }
 
-            LOCAL sens IS delta / eps.
-            IF ABS(sens) < 0.001 { BREAK. }
+            LOCAL sens IS delta / (eps * probeSign).
+            IF ABS(sens) < 0.001 {
+                mLog("  " + label + "[" + i + "]: low sensitivity, skipping.").
+            } ELSE {
+                LOCAL correction IS (err / sens) * damp.
+                LOCAL maxStep IS CHOOSE MAX(5.0, ABS(err) / 3) IF isAngle ELSE MAX(3.0, ABS(err) / 5000).
+                SET maxStep TO maxStep * stepScale.
+                IF correction >  maxStep { SET correction TO  maxStep. }
+                IF correction < -maxStep { SET correction TO -maxStep. }
 
-            LOCAL correction IS (err / sens) * damp.
-            LOCAL maxStep IS CHOOSE MAX(5.0, ABS(err) / 3) IF isAngle ELSE MAX(3.0, ABS(err) / 5000).
-            SET maxStep TO maxStep * stepScale.
-            IF correction >  maxStep { SET correction TO  maxStep. }
-            IF correction < -maxStep { SET correction TO -maxStep. }
-
-            _ntSetAxis(nd, param, oldVal + correction).
-            WAIT 0.02.
-
-            // dV cap check (MCC)
-            IF dvCap >= 0 AND nd:DELTAV:MAG > dvCap {
-                _ntSetAxis(nd, param, lastGood).
-                mLog("  " + label + "[" + i + "]: dV cap (" + dvCap + " m/s) reached.").
-                BREAK.
-            }
-
-            // Verify encounter survives the correction
-            LOCAL pCheck IS _getTargetPatch(nd, targetBody).
-            IF pCheck = 0 OR pCheck:PERIAPSIS < 0 {
-                _ntSetAxis(nd, param, oldVal + correction / 2).
+                _ntSetAxis(nd, param, oldVal + correction).
                 WAIT 0.02.
-                LOCAL pHalf IS _getTargetPatch(nd, targetBody).
-                IF pHalf = 0 OR pHalf:PERIAPSIS < 0 {
-                    _ntSetAxis(nd, param, lastGood).
-                    SET stepScale TO stepScale * 0.5.
-                }
-            }
 
-            mLog("  " + label + "[" + i + "] " + ROUND(current, 1) + " corr=" + ROUND(correction, 2) + " m/s").
+                // dV cap check (MCC)
+                IF dvCap >= 0 AND nd:DELTAV:MAG > dvCap {
+                    _ntSetAxis(nd, param, lastGood).
+                    mLog("  " + label + "[" + i + "]: dV cap (" + dvCap + " m/s) reached.").
+                    BREAK.
+                }
+
+                // Verify encounter survives the correction
+                LOCAL pCheck IS _getTargetPatch(nd, targetBody).
+                IF pCheck = 0 OR pCheck:PERIAPSIS < 0 {
+                    _ntSetAxis(nd, param, oldVal + correction / 2).
+                    WAIT 0.02.
+                    LOCAL pHalf IS _getTargetPatch(nd, targetBody).
+                    IF pHalf = 0 OR pHalf:PERIAPSIS < 0 {
+                        _ntSetAxis(nd, param, lastGood).
+                        SET stepScale TO stepScale * 0.5.
+                        mLog("  " + label + "[" + i + "]: correction lost encounter, reverted.").
+                    }
+                }
+
+                mLog("  " + label + "[" + i + "] " + ROUND(current, 1) + " corr=" + ROUND(correction, 2) + " m/s").
+            }
         }
     }
 }
@@ -860,7 +875,7 @@ GLOBAL FUNCTION phaseMidCourse {
     ADD nd.
     WAIT 0.1.
 
-    LOCAL mccOpts IS LEXICON("DV_CAP", MCC_DV_CAP, "TOL", 1.0).
+    LOCAL mccOpts IS LEXICON("DV_CAP", MCC_DV_CAP).
 
     // Phased optimization: plane first, then energy
     IF targetInc >= 0 { newtonTarget(nd, target, "INC", targetInc, mccOpts). }
