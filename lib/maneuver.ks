@@ -619,9 +619,12 @@ LOCAL FUNCTION _newtonIncTarget {
     PARAMETER targetInc.
     PARAMETER normalBias.
 
-    mLog("INC: Targeting " + ROUND(targetInc, 1) + "°"
-        + CHOOSE " (bias=" + normalBias + ")" IF normalBias <> 0 ELSE "").
-
+    LOCAL normalBiasStr IS "".
+    IF (normalBias <> 0) {
+        SET normalBiasStr TO " (bias = " + normalBias + ")".
+    }
+    mLog("INC: Targeting " + ROUND(targetInc, 1) + "°" + normalBiasStr).
+    
     // Seed with a small normal dV in the biased direction
     IF normalBias <> 0 AND nd:NORMAL = 0 {
         SET nd:NORMAL TO normalBias * 1.0.
