@@ -183,19 +183,20 @@ LOCAL FUNCTION _findEncounter {
 //
 // Pipeline:
 //   1. Build raw node  (_planLocalTransfer or _planInterplanetaryTransfer)
-//      Local:  Hohmann dV + phase angle timing, prograde-only, no Lambert
-//      Interplanetary:  Lambert grid scan, full 3-axis node
-//   2. Validate encounter via KSP patched conics (_findEncounter)
-//   3. Optional LAN scan (_scanForLan) — slide departure across orbits
-//   4. Collision targeting (prograde) — converge PE to zero for the
+//      Local:  closest-approach optimization — Hohmann seed, then scan
+//              departure time + prograde dV to minimize distance to target.
+//              Smooth POSITIONAT objective, no binary encounter search.
+//      Interplanetary:  Lambert grid scan, full 3-axis node, conic validation
+//   2. Optional LAN scan (_scanForLan) — slide departure across orbits
+//   3. Collision targeting (prograde) — converge PE to zero for the
 //      widest possible encounter margin. A dead-center trajectory
 //      survives large normal dV perturbations during INC targeting,
 //      especially for local transfers where the SOI is narrow.
-//   5. INC targeting (normal) — tilt approach for desired capture
+//   4. INC targeting (normal) — tilt approach for desired capture
 //      inclination. Adding normal at departure is cheap because
 //      the long transfer lever arm amplifies small angular changes
 //      into large approach geometry shifts at the target.
-//   6. PE targeting (prograde) — converge to the actual desired PE.
+//   5. PE targeting (prograde) — converge to the actual desired PE.
 //      Also cleans up PE drift from the INC pass.
 //
 // MCC (phaseMidCourse) fires mid-coast to fine-tune any drift
@@ -292,8 +293,22 @@ GLOBAL FUNCTION planTransfer {
 }
 
 // ============================================================
-// Local transfer (Mun, Minmus) — Hohmann + conic validation
-// Prograde-only, no Lambert solver needed.
+// Local transfer (Mun, Minmus) — closest-approach optimization.
+//
+// Instead of relying on phase angle math (which assumes circular
+// coplanar orbits), we use the Hohmann estimate as a seed, then
+// optimize departure time and prograde dV to minimize closest
+// approach distance to the target body via POSITIONAT. This is
+// a smooth, continuous objective — no binary "encounter or not"
+// cliff — so the optimizer converges reliably.
+//
+// Pipeline:
+//   1. Hohmann dV + TOF estimate (seed values)
+//   2. Coarse scan of departure times (one per orbit, ±N orbits)
+//   3. Golden section refine departure time
+//   4. Coarse scan of prograde dV (±20% of Hohmann)
+//   5. Golden section refine dV
+//   6. Optional LAN scan
 // ============================================================
 LOCAL FUNCTION _planLocalTransfer {
     PARAMETER targetBody.
@@ -305,8 +320,7 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
     LOCAL targetPeriod IS targetBody:ORBIT:PERIOD.
 
-    // --- Hohmann estimate ---
-    // vis-viva: dV to raise apoapsis from current orbit to target orbit
+    // --- Hohmann estimate (seed) ---
     LOCAL rShip   IS SHIP:ORBIT:SEMIMAJORAXIS.
     LOCAL rTarget IS targetBody:ORBIT:SEMIMAJORAXIS.
     LOCAL hohmannA IS (rShip + rTarget) / 2.
@@ -319,22 +333,17 @@ LOCAL FUNCTION _planLocalTransfer {
         + ": Hohmann dV=" + ROUND(hohmannDv, 1) + " m/s"
         + "  TOF=" + ROUND(hohmannTof, 0) + "s").
 
-    // --- Phase angle for Hohmann intercept ---
-    // The ideal phase angle is 180° minus the angle the target sweeps during TOF
+    // --- Phase angle estimate for initial departure time ---
     LOCAL targetMeanMotion IS 360 / targetPeriod.
     LOCAL targetSweep IS targetMeanMotion * hohmannTof.
     LOCAL idealPhaseAngle IS 180 - targetSweep.
 
-    // Compute current phase angle using lib_navigation
-    // phaseAngle() requires TARGET to be set
     SET TARGET TO targetBody.
     WAIT 0.1.
     LOCAL currentPhase IS phaseAngle().
 
-    // Synodic period — how often the phase angle repeats
     LOCAL synodicPeriod IS ABS(shipPeriod * targetPeriod / (shipPeriod - targetPeriod)).
 
-    // Time until the phase angle is right
     LOCAL phaseDiff IS idealPhaseAngle - currentPhase.
     IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
     LOCAL shipAngRate IS 360 / shipPeriod.
@@ -342,7 +351,6 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL relativeRate IS shipAngRate - targetAngRate.
     LOCAL waitTime IS phaseDiff / ABS(relativeRate).
 
-    // Ensure we depart at least 60s from now
     IF waitTime < 60 { SET waitTime TO waitTime + synodicPeriod. }
 
     LOCAL departUt IS TIME:SECONDS + waitTime.
@@ -356,28 +364,107 @@ LOCAL FUNCTION _planLocalTransfer {
     ADD nd.
     WAIT 0.1.
 
-    // --- Validate encounter via KSP conics ---
-    // If no encounter at the estimated time, scan wider windows.
-    // The phase angle estimate can be off, so search generously.
-    LOCAL patch IS _getTargetPatch(nd, targetBody).
-    IF patch = 0 OR patch:PERIAPSIS < 0 {
-        mLog("No encounter at Hohmann estimate, searching nearby...").
-        LOCAL foundTime IS _findEncounter(nd, targetBody, departUt, shipPeriod * 4, shipPeriod / 10).
-        IF foundTime < 0 {
-            // Widen search to many orbits with coarser steps
-            SET foundTime TO _findEncounter(nd, targetBody, departUt, shipPeriod * 12, shipPeriod / 4).
+    // --- Scan departure time to minimize closest approach ---
+    // Scan multiple orbits around the phase angle estimate. The phase
+    // angle math can be significantly off, so we search ±N orbits
+    // where N covers at least one synodic period.
+    LOCAL nScanOrbits IS MAX(6, CEILING(synodicPeriod / shipPeriod)).
+    LOCAL scanSteps IS nScanOrbits * 4.  // 4 samples per orbit
+    LOCAL scanDt IS shipPeriod / 4.
+
+    LOCAL bestTime IS departUt.
+    LOCAL bestCA IS _findClosestApproach(targetBody, departUt + hohmannTof * 0.5, departUt + hohmannTof * 1.5, 40).
+
+    mLog("Closest approach scan: " + scanSteps + " steps over ±" + nScanOrbits + " orbits").
+
+    FROM { LOCAL si IS -scanSteps. } UNTIL si > scanSteps STEP { SET si TO si + 1. } DO {
+        LOCAL tryTime IS departUt + si * scanDt.
+        IF tryTime > TIME:SECONDS + 30 {
+            SET nd:TIME TO tryTime.
+            WAIT 0.02.
+            LOCAL tryCa IS _findClosestApproach(targetBody, tryTime + hohmannTof * 0.5, tryTime + hohmannTof * 1.5, 40).
+            IF tryCa["distance"] < bestCA["distance"] {
+                SET bestCA TO tryCa.
+                SET bestTime TO tryTime.
+            }
         }
-        IF foundTime < 0 {
-            mLogError("planTransfer: no encounter found near Hohmann estimate.").
-            REMOVE nd.
-            RETURN 0.
-        }
-        SET nd:TIME TO foundTime.
-        WAIT 0.1.
-        mLog("Encounter found at T+" + ROUND(foundTime - TIME:SECONDS, 0) + "s").
-    } ELSE {
-        mLog("Encounter confirmed at Hohmann estimate. Pe=" + ROUND(patch:PERIAPSIS/1000, 1) + "km").
     }
+    SET nd:TIME TO bestTime.
+    WAIT 0.1.
+    mLog("Time scan: best CA=" + ROUND(bestCA["distance"]/1000, 1) + "km"
+        + " at T+" + ROUND(bestCA["time"] - TIME:SECONDS, 0) + "s"
+        + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
+
+    // --- Golden section refine departure time ---
+    LOCAL tA IS MAX(TIME:SECONDS + 30, bestTime - scanDt).
+    LOCAL tB IS bestTime + scanDt.
+    LOCAL gr IS (SQRT(5) + 1) / 2.
+
+    FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
+        LOCAL tC IS tB - (tB - tA) / gr.
+        LOCAL tD IS tA + (tB - tA) / gr.
+
+        SET nd:TIME TO tC. WAIT 0.02.
+        LOCAL caC IS _findClosestApproach(targetBody, tC + hohmannTof * 0.4, tC + hohmannTof * 1.6, 30).
+        SET nd:TIME TO tD. WAIT 0.02.
+        LOCAL caD IS _findClosestApproach(targetBody, tD + hohmannTof * 0.4, tD + hohmannTof * 1.6, 30).
+
+        IF caC["distance"] < caD["distance"] {
+            SET tB TO tD.
+        } ELSE {
+            SET tA TO tC.
+        }
+    }
+    SET nd:TIME TO (tA + tB) / 2.
+    WAIT 0.1.
+
+    // --- Scan prograde dV to refine transfer shape ---
+    // ±20% of Hohmann dV (or ±10 m/s minimum)
+    LOCAL dvRange IS MAX(10, ABS(hohmannDv) * 0.2).
+    LOCAL dvSteps IS 20.
+    LOCAL dvStep IS dvRange * 2 / dvSteps.
+    LOCAL bestDv IS hohmannDv.
+    SET bestCA TO _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+
+    FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
+        LOCAL tryDv IS hohmannDv - dvRange + di * dvStep.
+        SET nd:PROGRADE TO tryDv.
+        WAIT 0.02.
+        LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+        IF tryCa["distance"] < bestCA["distance"] {
+            SET bestCA TO tryCa.
+            SET bestDv TO tryDv.
+        }
+    }
+    SET nd:PROGRADE TO bestDv.
+    WAIT 0.1.
+
+    // Golden section refine prograde
+    LOCAL dvA IS MAX(bestDv - dvStep, hohmannDv - dvRange).
+    LOCAL dvB IS MIN(bestDv + dvStep, hohmannDv + dvRange).
+
+    FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
+        LOCAL dvC IS dvB - (dvB - dvA) / gr.
+        LOCAL dvD IS dvA + (dvB - dvA) / gr.
+
+        SET nd:PROGRADE TO dvC. WAIT 0.02.
+        LOCAL caC IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
+        SET nd:PROGRADE TO dvD. WAIT 0.02.
+        LOCAL caD IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
+
+        IF caC["distance"] < caD["distance"] {
+            SET dvB TO dvD.
+        } ELSE {
+            SET dvA TO dvC.
+        }
+    }
+    SET nd:PROGRADE TO (dvA + dvB) / 2.
+    WAIT 0.1.
+
+    LOCAL finalCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
+    mLog("Optimized: CA=" + ROUND(finalCA["distance"]/1000, 1) + "km"
+        + "  dV=" + ROUND(nd:PROGRADE, 1) + " m/s"
+        + "  depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
 
     // --- Optional LAN scan ---
     // If lanTarget is specified, scan across multiple orbits to find the departure
