@@ -6,11 +6,11 @@
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
-    "PARKING_ALT",          79000,
+    "PARKING_ALT",          80000,
     "LAUNCH_INCLINATION",       0,
     "LAUNCH_AZIMUTH",           0,
     "LAUNCH_STAGE_LIMIT",       0,
-    "FAIRING_ALT",          74000,
+    "FAIRING_ALT",          73000,
     "EXTEND_ALT",           76000,
     "RELAY_ALT",           1000000,
     "CAPTURE_PE",            20000,
@@ -30,7 +30,7 @@ GLOBAL CFG IS LEXICON(
 GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer", 
     "lib_navigation", "countdown", "maneuver", "inclination",
-    "orbit", "targeting", 
+    "orbit", "targeting", "mcc",
     "payload_ops", "utils"
 ).
 
