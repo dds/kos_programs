@@ -192,12 +192,10 @@ LOCAL FUNCTION _findEncounter {
 //      widest possible encounter margin. A dead-center trajectory
 //      survives large normal dV perturbations during INC targeting,
 //      especially for local transfers where the SOI is narrow.
-//   4. INC targeting (normal) — tilt approach for desired capture
-//      inclination. Adding normal at departure is cheap because
-//      the long transfer lever arm amplifies small angular changes
-//      into large approach geometry shifts at the target.
-//   5. PE targeting (prograde) — converge to the actual desired PE.
-//      Also cleans up PE drift from the INC pass.
+//   4. Alternating INC/PE passes (up to 3 rounds) — PE and INC are
+//      coupled: prograde shifts approach geometry (INC) and normal
+//      shifts energy (PE). Each round runs INC then PE. Exits early
+//      if both are within tolerance.
 //
 // MCC (phaseMidCourse) fires mid-coast to fine-tune any drift
 // from burn execution errors. It runs the same INC/PE/AoP/LAN
@@ -255,16 +253,34 @@ GLOBAL FUNCTION planTransfer {
     }
     IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
 
-    IF captureInc >= 0 {
-        LOCAL incOpts IS LEXICON().
-        IF normalBias <> 0 { incOpts:ADD("BIAS", normalBias * 5). }
-        newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
-    }
+    // --- 4. Alternating PE/INC convergence ---
+    // PE and INC are coupled — prograde shifts approach geometry (INC)
+    // and normal shifts energy (PE). Alternate passes until both are
+    // within tolerance, up to 3 rounds.
+    LOCAL incOpts IS LEXICON().
+    IF normalBias <> 0 { incOpts:ADD("BIAS", normalBias * 5). }
 
-    // --- 4. PE targeting ---
-    // Converge to the actual desired PE. This also cleans up any PE
-    // drift from the INC pass (normal dV shifts PE).
-    newtonTarget(nd, targetBody, "PE", targetPe).
+    LOCAL peIncRounds IS CHOOSE 3 IF captureInc >= 0 ELSE 1.
+    FROM { LOCAL ri IS 0. } UNTIL ri >= peIncRounds STEP { SET ri TO ri + 1. } DO {
+        IF captureInc >= 0 {
+            newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
+        }
+        newtonTarget(nd, targetBody, "PE", targetPe).
+
+        // Check if both are converged — skip remaining rounds if so
+        IF captureInc >= 0 AND ri < peIncRounds - 1 {
+            LOCAL checkPatch IS _getTargetPatch(nd, targetBody).
+            IF checkPatch <> 0 {
+                LOCAL peErr IS ABS(checkPatch:PERIAPSIS - targetPe).
+                LOCAL incErr IS ABS(checkPatch:INCLINATION - captureInc).
+                IF incErr > 180 { SET incErr TO 360 - incErr. }
+                IF peErr < 500 AND incErr < 0.5 {
+                    mLog("PE/INC converged after " + (ri + 1) + " round(s).").
+                    BREAK.
+                }
+            }
+        }
+    }
 
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
