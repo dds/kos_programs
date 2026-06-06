@@ -73,9 +73,9 @@ GLOBAL FUNCTION executeManeuver {
         mLog("Aligned. Waiting for burn window...").
     }
 
-    WAIT UNTIL TIME:SECONDS >= (startTime - 10).
-    HUDTEXT("Burn in T-10", 3, 2, 15, WHITE, FALSE).
-    countdown(9).
+    WAIT UNTIL TIME:SECONDS >= (startTime - 5).
+    HUDTEXT("Burn in T-4", 3, 2, 15, WHITE, FALSE).
+    countdown(4).
 
     WAIT UNTIL TIME:SECONDS >= startTime.
     mLog("Burn start. dV=" + ROUND(burnDV,1) + " m/s").
@@ -187,12 +187,16 @@ LOCAL FUNCTION _findEncounter {
 //      Interplanetary:  Lambert grid scan, full 3-axis node
 //   2. Validate encounter via KSP patched conics (_findEncounter)
 //   3. Optional LAN scan (_scanForLan) — slide departure across orbits
-//   4. PE targeting (prograde) — establish a solid encounter first
+//   4. Collision targeting (prograde) — converge PE to zero for the
+//      widest possible encounter margin. A dead-center trajectory
+//      survives large normal dV perturbations during INC targeting,
+//      especially for local transfers where the SOI is narrow.
 //   5. INC targeting (normal) — tilt approach for desired capture
 //      inclination. Adding normal at departure is cheap because
 //      the long transfer lever arm amplifies small angular changes
 //      into large approach geometry shifts at the target.
-//   6. PE cleanup — normal dV shifts PE, so re-converge prograde
+//   6. PE targeting (prograde) — converge to the actual desired PE.
+//      Also cleans up PE drift from the INC pass.
 //
 // MCC (phaseMidCourse) fires mid-coast to fine-tune any drift
 // from burn execution errors. It runs the same INC/PE/AoP/LAN
@@ -224,10 +228,14 @@ GLOBAL FUNCTION planTransfer {
 
     IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
 
-    // --- 2. PE targeting ---
-    // Establish a solid encounter first. All subsequent adjustments
-    // (INC, cleanup) start from a known-good PE.
-    newtonTarget(nd, targetBody, "PE", targetPe).
+    // --- 2. Collision targeting ---
+    // Converge PE to zero (dead-center collision course) first. This
+    // gives the widest possible encounter margin — the trajectory
+    // passes through the middle of the SOI — so that subsequent INC
+    // targeting can add substantial normal dV without losing the
+    // encounter. Especially important for local transfers (Mun/Minmus)
+    // where the SOI is narrow relative to the trajectory deflection.
+    newtonTarget(nd, targetBody, "PE", 0).
 
     // --- 3. INC targeting ---
     // Resolve capture orbit direction from CFG. Adding normal dV at
@@ -250,11 +258,12 @@ GLOBAL FUNCTION planTransfer {
         LOCAL incOpts IS LEXICON().
         IF normalBias <> 0 { incOpts:ADD("BIAS", normalBias * 5). }
         newtonTarget(nd, targetBody, "INC", captureInc, incOpts).
-
-        // --- 4. PE cleanup ---
-        // Normal dV shifts PE, so re-converge prograde.
-        newtonTarget(nd, targetBody, "PE", targetPe).
     }
+
+    // --- 4. PE targeting ---
+    // Converge to the actual desired PE. This also cleans up any PE
+    // drift from the INC pass (normal dV shifts PE).
+    newtonTarget(nd, targetBody, "PE", targetPe).
 
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
