@@ -83,6 +83,9 @@ GLOBAL FUNCTION fr3BuildPhaseMap {
     IF band = "PAYLOAD_OPS" AND fr3HasPayload("SCANSAT") {
         phaseMap:ADD("SCANSAT_OPS", phaseScanSatOps@).
     }
+    IF band = "LAND_DEORBIT" {
+        phaseMap:ADD("LAND_DEORBIT", phaseLandDeorbit@).
+    }
     IF band = "LAND_ASSIST" {
         phaseMap:ADD("LAND_DEORBIT", phaseLandDeorbit@).
         phaseMap:ADD("LAND_ASSIST", phaseLandAssist@).

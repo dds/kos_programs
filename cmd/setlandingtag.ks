@@ -22,7 +22,7 @@ _loadState().
 stateSet("mission_cfg_LANDING_ASSIST_DECOUPLER_TAG", tagName).
 stateSet("phase", phaseName:TOUPPER).
 stateSet("reload_required", "false").
-stateSet("lib_band", "LAND_ASSIST").
+stateSet("lib_band", "LAND_DEORBIT").
 
 PRINT "Landing decoupler tag -> " + tagName.
 PRINT "Phase -> " + phaseName:TOUPPER.

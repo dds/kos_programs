@@ -7,11 +7,17 @@ PARAMETER phaseName IS "LAND_DEORBIT".
 LOCAL beforeFree IS CORE:VOLUME:FREESPACE.
 PRINT "Landing rescue: free before " + beforeFree + " bytes.".
 
+LOCAL phaseUpper IS phaseName:TOUPPER.
 LOCAL keepLibs IS LIST(
     "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY",
     "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE",
-    "PAYLOAD_LANDING", "TARGETING", "COUNTDOWN", "MANEUVER", "LANDING_ASSIST"
+    "PAYLOAD_LANDING", "LANDING_ASSIST"
 ).
+IF phaseUpper = "LAND_DEORBIT" {
+    keepLibs:ADD("TARGETING").
+    keepLibs:ADD("COUNTDOWN").
+    keepLibs:ADD("MANEUVER").
+}
 
 LOCAL FUNCTION _deleteIfExists {
     PARAMETER path_.
@@ -84,12 +90,16 @@ IF EXISTS("1:/lib/state.ksm") {
     RUNONCEPATH("1:/lib/state.ks").
 }
 IF DEFINED stateSet {
-    stateSet("phase", phaseName:TOUPPER).
+    stateSet("phase", phaseUpper).
     stateSet("reload_required", "false").
-    stateSet("lib_band", "LAND_ASSIST").
+    IF phaseUpper = "LAND_DEORBIT" {
+        stateSet("lib_band", "LAND_DEORBIT").
+    } ELSE {
+        stateSet("lib_band", "LAND_ASSIST").
+    }
 }
 
 PRINT "Landing rescue: removed " + removed + " files.".
-PRINT "Landing rescue: phase -> " + phaseName:TOUPPER + ".".
+PRINT "Landing rescue: phase -> " + phaseUpper + ".".
 PRINT "Landing rescue: free after  " + CORE:VOLUME:FREESPACE + " bytes.".
 PRINT "Run: REBOOT.".

@@ -26,7 +26,7 @@ LOCAL FUNCTION _cfg {
 _loadState().
 stateSet("phase", phaseName:TOUPPER).
 stateSet("reload_required", "false").
-stateSet("lib_band", "LAND_ASSIST").
+stateSet("lib_band", "LAND_DEORBIT").
 _cfg("LANDING_TARGET_TOLERANCE", "2500").
 _cfg("TARGET_DEORBIT_SCAN_ORBITS", "32").
 _cfg("TARGET_DEORBIT_SCAN_SAMPLES", "2048").
