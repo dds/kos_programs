@@ -115,6 +115,10 @@ GLOBAL FUNCTION phaseCapture {
     LOCAL target IS missionTargetBody().
     WAIT 2.
     mLog("Planning capture into elliptical orbit at " + target:NAME + ".").
+    mLogWarn("STATS capture phase setup target=" + target:NAME
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
     
     LOCAL success IS FALSE.
     LOCAL retries IS 0.
@@ -144,11 +148,19 @@ GLOBAL FUNCTION phaseCapture {
     }
     
     orbitSummary().
+    mLogWarn("STATS capture phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
     mLog("Capture complete. Moving to finalization phase.").
     nextPhase(xferSeq).
 }
 
 GLOBAL FUNCTION phaseCirc {
+    LOCAL circStatus IS "complete".
+    mLogWarn("STATS circ phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
     IF _impactThreat() {
         LOCAL safePe IS CFG["PARKING_ALT"].
         IF CFG:HASKEY("CAPTURE_PE") AND CFG["CAPTURE_PE"] > safePe {
@@ -174,6 +186,7 @@ GLOBAL FUNCTION phaseCirc {
         }
     } ELSE IF SHIP:ORBIT:ECCENTRICITY < CFG["CIRC_ECC_TOL"] {
         mLog("Already circular (ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4) + ").").
+        SET circStatus TO "skipped".
     } ELSE {
         LOCAL success IS FALSE.
         LOCAL retries IS 0.
@@ -193,6 +206,10 @@ GLOBAL FUNCTION phaseCirc {
         }
     }
     orbitSummary().
+    mLogWarn("STATS circ phase result status=" + circStatus
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
     nextPhase(xferSeq).
 }
 
@@ -200,6 +217,9 @@ GLOBAL FUNCTION phaseRaiseAlt {
     LOCAL elliptical IS CFG:HASKEY("TARGET_PE") AND CFG:HASKEY("TARGET_AP").
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    mLogWarn("STATS raise phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " elliptical=" + elliptical).
 
     IF elliptical {
         LOCAL targetPe IS CFG["TARGET_PE"].
@@ -236,6 +256,9 @@ GLOBAL FUNCTION phaseRaiseAlt {
         LOCAL targetAp IS CFG["RELAY_ALT"].
         IF SHIP:APOAPSIS > targetAp * 0.99 {
             mLog("Already at target Ap.").
+            mLogWarn("STATS raise phase result status=skipped PeKm="
+                + ROUND(SHIP:PERIAPSIS/1000,1)
+                + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
             nextPhase(xferSeq).
             RETURN.
         }
@@ -246,6 +269,10 @@ GLOBAL FUNCTION phaseRaiseAlt {
     }
 
     orbitSummary().
+    mLogWarn("STATS raise phase result status=complete PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
     nextPhase(xferSeq).
 }
 
@@ -277,11 +304,17 @@ LOCAL FUNCTION _burnWithRetry {
 GLOBAL FUNCTION phaseInclCorrect {
     LOCAL targetInc IS resolveTargetInclination().
     LOCAL currentInc IS SHIP:ORBIT:INCLINATION.
+    mLogWarn("STATS incline phase setup current=" + ROUND(currentInc,2)
+        + " target=" + ROUND(targetInc,2)
+        + " tol=" + CFG["INCL_TOLERANCE"]).
 
     IF currentInc > 90 AND targetInc < 90 {
         mLogWarn("Retrograde orbit detected (inc=" + ROUND(currentInc,1)
             + "deg) but target is prograde (" + ROUND(targetInc,1)
             + "deg) — plane change would cost ~600m/s. Skipping.").
+        mLogWarn("STATS incline phase result status=skipped reason=retrograde-safety current="
+            + ROUND(currentInc,2)
+            + " target=" + ROUND(targetInc,2)).
         HUDTEXT("WARNING: Retrograde orbit — skipping incl correction",
             8, 2, 15, YELLOW, FALSE).
         nextPhase(xferSeq).
@@ -291,6 +324,9 @@ GLOBAL FUNCTION phaseInclCorrect {
     LOCAL deltaInc IS ABS(currentInc - targetInc).
     IF deltaInc <= CFG["INCL_TOLERANCE"] {
         mLog("Inclination within tolerance — skipping.").
+        mLogWarn("STATS incline phase result status=skipped current="
+            + ROUND(currentInc,2)
+            + " target=" + ROUND(targetInc,2)).
         nextPhase(xferSeq).
         RETURN.
     }
@@ -311,6 +347,11 @@ GLOBAL FUNCTION phaseInclCorrect {
 
     executeManeuver().
     orbitSummary().
+    mLogWarn("STATS incline phase result status=complete current="
+        + ROUND(SHIP:ORBIT:INCLINATION,2)
+        + " target=" + ROUND(targetInc,2)
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     nextPhase(xferSeq).
 }
 

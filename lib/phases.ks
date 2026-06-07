@@ -8,6 +8,7 @@ GLOBAL FUNCTION runPhases {
     UNTIL FALSE {
         LOCAL phase IS stateGet("phase", "DONE").
         mLogPhase(phase).
+        _logPhaseStats(phase).
         IF phaseMap:HASKEY(phase) {
             phaseMap[phase]:CALL().
         } ELSE IF phase = "DONE" {
@@ -28,6 +29,19 @@ GLOBAL FUNCTION runPhases {
             stateSet("phase", "DONE").
         }
     }
+}
+
+LOCAL FUNCTION _logPhaseStats {
+    PARAMETER phase.
+    mLogWarn("STATS phase entry phase=" + phase
+        + " body=" + SHIP:BODY:NAME
+        + " status=" + SHIP:STATUS
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)
+        + " band=" + stateGet("lib_band", "")
+        + " free=" + ROUND(CORE:VOLUME:FREESPACE,0)).
 }
 
 GLOBAL FUNCTION nextPhase {

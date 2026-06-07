@@ -35,6 +35,11 @@ GLOBAL FUNCTION executeManeuver {
     }
 
     mLog("Maneuver: dV=" + ROUND(burnDV,1) + " m/s  ETA=" + ROUND(startTime - TIME:SECONDS,1) + "s").
+    mLogWarn("STATS burn setup dv=" + ROUND(burnDV,1)
+        + " eta=" + ROUND(startTime - TIME:SECONDS,1)
+        + " nodeEta=" + ROUND(nd:ETA,1)
+        + " body=" + SHIP:BODY:NAME
+        + " maxAcc=" + ROUND(_safeMaxAcc(),2)).
 
     // Set a KAC alarm to kill warp before the burn starts.
     // Alarm fires 60s before burn start to allow alignment time.
@@ -76,8 +81,12 @@ GLOBAL FUNCTION executeManeuver {
         WAIT 0.1.
     }
 
-    IF VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) >= ALIGN_TOLERANCE {
-        mLogWarn("Burn starting with " + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR),1) + "° misalignment.").
+    LOCAL alignErr IS VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR).
+    mLogWarn("STATS burn align angle=" + ROUND(alignErr,1)
+        + " tol=" + ALIGN_TOLERANCE
+        + " timeToBurn=" + ROUND(startTime - TIME:SECONDS,1)).
+    IF alignErr >= ALIGN_TOLERANCE {
+        mLogWarn("Burn starting with " + ROUND(alignErr,1) + "° misalignment.").
     } ELSE {
         mLog("Aligned. Waiting for burn window...").
     }
@@ -88,6 +97,7 @@ GLOBAL FUNCTION executeManeuver {
 
     WAIT UNTIL TIME:SECONDS >= startTime.
     mLog("Burn start. dV=" + ROUND(burnDV,1) + " m/s").
+    LOCAL burnStartClock IS TIME:SECONDS.
 
     LOCAL origBurnVec IS nd:BURNVECTOR.
 
@@ -137,6 +147,12 @@ GLOBAL FUNCTION executeManeuver {
     }
 
     mLog("Burn complete. Residual dV ~" + ROUND(residual, 2) + " m/s.").
+    mLogWarn("STATS burn result dv=" + ROUND(burnDV,1)
+        + " residual=" + ROUND(residual,2)
+        + " duration=" + ROUND(TIME:SECONDS - burnStartClock,1)
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)).
     HUDTEXT("Burn complete", 3, 2, 15, GREEN, FALSE).
     RETURN TRUE.
 }
@@ -168,6 +184,10 @@ GLOBAL FUNCTION planCircularize {
     LOCAL nd IS NODE(TIME:SECONDS + etaApo, 0, 0, dv).
     ADD nd.
     mLog("Circularize node: dV=" + ROUND(dv,1) + " m/s at Ap in " + ROUND(etaApo,0) + "s").
+    mLogWarn("STATS circularize plan dv=" + ROUND(dv,1)
+        + " eta=" + ROUND(etaApo,0)
+        + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     archivePlannedManeuverLog("circularize").
     RETURN nd.
 }
@@ -1374,6 +1394,11 @@ GLOBAL FUNCTION planCapture {
     mLog("Capture node: dV=" + ROUND(dv,1)
         + " m/s at Pe in " + ROUND(ETA:PERIAPSIS,0)
         + "s  targetAp=" + ROUND(targetAlt/1000,1) + "km").
+    mLogWarn("STATS capture plan target=" + targetBody:NAME
+        + " dv=" + ROUND(dv,1)
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " targetApKm=" + ROUND(targetAlt/1000,1)
+        + " etaPe=" + ROUND(ETA:PERIAPSIS,0)).
     archivePlannedManeuverLog("capture").
     RETURN nd.
 }
@@ -1394,6 +1419,10 @@ GLOBAL FUNCTION planRaisePeNow {
     ADD nd.
     mLog("Raise Pe node: dV=" + ROUND(dv,1)
         + " m/s  targetPe=" + ROUND(targetPe/1000,1) + "km").
+    mLogWarn("STATS raise-pe plan dv=" + ROUND(dv,1)
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     archivePlannedManeuverLog("raise-pe").
     RETURN nd.
 }

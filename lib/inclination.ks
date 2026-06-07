@@ -68,6 +68,14 @@ GLOBAL FUNCTION planInclinationChange {
         + "  prograde=" + ROUND(dvPrograde,1)
         + "  ETA=" + ROUND(burnETA,0) + "s"
         + "  at=" + whichAt).
+    mLogWarn("STATS inclination plan current=" + ROUND(currentInc,2)
+        + " target=" + ROUND(targetInc,2)
+        + " delta=" + ROUND(deltaInc,2)
+        + " dv=" + ROUND(nd:DELTAV:MAG,1)
+        + " normal=" + ROUND(dvNormal,1)
+        + " prograde=" + ROUND(dvPrograde,1)
+        + " eta=" + ROUND(burnETA,0)
+        + " at=" + whichAt).
     archivePlannedManeuverLog("inclination").
     RETURN nd.
 }

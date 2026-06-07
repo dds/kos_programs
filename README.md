@@ -120,7 +120,7 @@ The current band and pending reload are saved in mission state (`lib_band`, `lib
 
 Phase transitions write a WARN-level `STATS phase transition` line and archive the current flight log when a KSC link is available. If no link is available, the transition still proceeds and the log is archived later by boot/recovery or an operator `RUNPATH("1:/cmd/logs.ks").`
 
-Successful maneuver planners also archive the current flight log when a KSC link is available, immediately after the final planned-node summary and before execution/coast. This preserves transfer, MCC, capture, circularization, inclination, deorbit, rendezvous, and asteroid-intercept plan details.
+Successful maneuver planners also archive the current flight log when a KSC link is available, immediately after the final planned-node summary and before execution/coast. WARN-level `STATS` lines summarize phase entry orbit state, maneuver setup/alignment/result, transfer/MCC solver results, capture/circularization/raise/inclination cleanup, landing deorbit, assist descent handoff, powered landing, rendezvous, and asteroid-intercept plan details.
 
 Emergency rover surface-release mode is available via `missions/FR3/mun_rover_emergency_surface.cfg`. It changes the sequence to skip the separate rover powered landing phase: the second stage lands the whole stack, releases the rover on the surface, then reboots into rover recovery. On an active mission, set `stateSet("mission_id", "mun_rover_emergency_surface").` and reboot so boot reloads the emergency config.
 
