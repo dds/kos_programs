@@ -44,16 +44,9 @@ LOCAL FUNCTION _pruneDir {
 }
 
 LOCAL keepLibs IS LIST(
-    "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY",
-    "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE",
-    "PAYLOAD_LANDING", "LANDING_ASSIST", "TARGETING", "COUNTDOWN", "MANEUVER"
+    "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY"
 ).
-LOCAL keepCmds IS LIST(
-    "FR3CLEAN", "CLEANUP", "LANDINGCHECK", "LANDINGRESCUE", "LANDASSIST",
-    "LANDMIN", "SETSTATE", "SETLANDASSIST", "SETLANDINGDEORBIT",
-    "SETLANDINGTAG", "SETUP_MUN_ROVER_LANDING_REAL",
-    "SETUP_MUN_ROVER_LANDING_SIM", "SIMLANDHERE", "ZOMBIE"
-).
+LOCAL keepCmds IS LIST("FR3CLEAN", "ZOMBIE").
 
 PRINT "FR3 clean: free before " + beforeFree + " bytes.".
 
@@ -62,6 +55,8 @@ _pruneDir("1:/craft", LIST()).
 _pruneDir("1:/roles", LIST()).
 _pruneDir("1:/cmd", keepCmds).
 _pruneDir("1:/missions/FR3", LIST()).
+_pruneDir("1:/missions/FR2", LIST()).
+_pruneDir("1:/missions", LIST()).
 
 IF EXISTS("1:/logs") {
     LOCAL logItems IS LIST().
