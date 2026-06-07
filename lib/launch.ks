@@ -217,9 +217,10 @@ LOCAL FUNCTION _launchAbort {
 
     IF HOMECONNECTION:ISCONNECTED {
         IF NOT EXISTS("0:/logs") { CREATEDIR("0:/logs"). }
-        IF flightLogPath <> "" AND EXISTS(flightLogPath) {
-            LOCAL archivePath IS "0:/logs/" + flightLogPath:REPLACE("1:/logs/","").
-            COPYPATH(flightLogPath, archivePath).
+        LOCAL logPath IS flightLogPath().
+        IF logPath <> "" AND EXISTS(logPath) {
+            LOCAL archivePath IS "0:/logs/" + logPath:REPLACE("1:/logs/","").
+            COPYPATH(logPath, archivePath).
             mLog("Abort log archived to " + archivePath).
         }
     } ELSE {

@@ -5,9 +5,10 @@
 GLOBAL FUNCTION archiveFlightLog {
     IF NOT HOMECONNECTION:ISCONNECTED { RETURN FALSE. }
     IF NOT EXISTS("0:/logs") { CREATEDIR("0:/logs"). }
-    IF flightLogPath = "" OR NOT EXISTS(flightLogPath) { RETURN FALSE. }
-    LOCAL archivePath IS "0:/logs/" + flightLogPath:REPLACE("1:/logs/","").
-    COPYPATH(flightLogPath, archivePath).
+    LOCAL logPath IS flightLogPath().
+    IF logPath = "" OR NOT EXISTS(logPath) { RETURN FALSE. }
+    LOCAL archivePath IS "0:/logs/" + logPath:REPLACE("1:/logs/","").
+    COPYPATH(logPath, archivePath).
     mLog("Flight log archived to " + archivePath).
     RETURN TRUE.
 }
