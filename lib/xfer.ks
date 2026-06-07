@@ -265,29 +265,41 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
         + " recoveryPeKm=" + ROUND(recoveryPe/1000,1)
         + " recoveryApKm=" + ROUND(recoveryAp/1000,1)).
 
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    IF NOT _scanSatDisposeAttached(impactPe) { RETURN. }
+    LOCAL alreadyReleased IS stateGet("scansat_released_time", "") <> "".
 
-    IF tag <> "" {
-        IF NOT _releaseTaggedPayloadXfer(tag, "SCANsat") {
-            mLogError("SCANsat release failed after impact setup — tag '" + tag
-                + "' missing or not decouplable.").
-            HUDTEXT("ERROR: SCANsat not released", 8, 2, 16, RED, FALSE).
+    IF NOT alreadyReleased {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        IF NOT _scanSatDisposeAttached(impactPe) {
+            _scanSatImpactHalt("disposal burn failed before release").
             RETURN.
         }
+
+        IF tag <> "" {
+            IF NOT _releaseTaggedPayloadXfer(tag, "SCANsat") {
+                mLogError("SCANsat release failed after impact setup — tag '" + tag
+                    + "' missing or not decouplable.").
+                HUDTEXT("ERROR: SCANsat not released", 8, 2, 16, RED, FALSE).
+                _scanSatImpactHalt("release failed").
+                RETURN.
+            }
+        } ELSE {
+            mLogWarn("SCANSAT_DECOUPLER_TAG blank — mapper still attached after impact setup.").
+        }
+
+        stateSet("scansat_released_time", TIME:SECONDS).
+        mLogWarn("STATS scansat-release result mass=" + ROUND(SHIP:MASS,3)
+            + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+            + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+        WAIT 0.5.
     } ELSE {
-        mLogWarn("SCANSAT_DECOUPLER_TAG blank — mapper still attached after impact setup.").
+        mLogWarn("SCANsat release already recorded; skipping decoupler search.").
     }
 
-    stateSet("scansat_released_time", TIME:SECONDS).
-    mLogWarn("STATS scansat-release result mass=" + ROUND(SHIP:MASS,3)
-        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
-    WAIT 0.5.
-
-    IF CFG:HASKEY("SCANSAT_STAGE_AFTER_RELEASE")
+    IF NOT alreadyReleased
+            AND CFG:HASKEY("SCANSAT_STAGE_AFTER_RELEASE")
             AND CFG["SCANSAT_STAGE_AFTER_RELEASE"] > 0 {
         STAGE.
+        stateSet("scansat_staged", "true").
         mLog("SCANsat staged after release.").
         WAIT 1.
         mLogWarn("STATS scansat-stage result mass=" + ROUND(SHIP:MASS,3)
@@ -297,19 +309,28 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
     }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    IF NOT _scanSatRecoverPeDirect(recoveryPe) { RETURN. }
+    IF NOT _scanSatRecoverPeDirect(recoveryPe) {
+        _scanSatImpactHalt("direct recovery Pe burn failed").
+        RETURN.
+    }
 
     IF SHIP:APOAPSIS < recoveryAp * 0.95 {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         _scanSatPlanRaiseAp(recoveryAp).
-        IF NOT _executeScanSatStep("SCANsat recovery raise Ap") { RETURN. }
+        IF NOT _executeScanSatStep("SCANsat recovery raise Ap") {
+            _scanSatImpactHalt("recovery Ap raise failed").
+            RETURN.
+        }
     }
 
     IF SHIP:ORBIT:ECCENTRICITY > 0.01
             OR ABS(SHIP:APOAPSIS - recoveryAp) > recoveryAp * 0.1 {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         planCircularize().
-        IF NOT _executeScanSatStep("SCANsat recovery recircularize") { RETURN. }
+        IF NOT _executeScanSatStep("SCANsat recovery recircularize") {
+            _scanSatImpactHalt("recovery recircularize failed").
+            RETURN.
+        }
     }
 
     stateSet("scansat_recovered", "true").
@@ -319,6 +340,13 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
     nextPhase(xferSeq).
+}
+
+LOCAL FUNCTION _scanSatImpactHalt {
+    PARAMETER reason.
+    mLogError("SCANsat impact/release halted: " + reason + ".").
+    stateSet("phase", "ABORT").
+    WAIT UNTIL FALSE.
 }
 
 GLOBAL FUNCTION phaseRaiseAlt {
