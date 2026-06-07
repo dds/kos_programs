@@ -87,8 +87,16 @@ GLOBAL FUNCTION mLog {
     LOCAL line IS "[" + _fmtTime() + "][" + level + "] " + message.
     PRINT line.
 
+    LOCAL wroteLocal IS FALSE.
     IF LEVEL <> "INFO" AND flightLogPath() <> "" AND CORE:VOLUME:FREESPACE > 150 {
         LOG line TO flightLogPath().
+        SET wroteLocal TO TRUE.
+    }
+
+    IF wroteLocal AND level = "WARN" AND message:LENGTH >= 5
+            AND message:SUBSTRING(0,5) = "STATS"
+            AND HOMECONNECTION:ISCONNECTED {
+        archiveLog().
     }
 }
 
