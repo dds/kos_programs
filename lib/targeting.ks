@@ -145,6 +145,11 @@ GLOBAL FUNCTION targetedDeorbitAt {
         SET coarseStopDist TO CFG["TARGET_DEORBIT_COARSE_STOP_DIST"].
     }
     LOCAL refineTarget IS _targetDeorbitRefineTolerance(tolerance).
+    LOCAL minLead IS _targetDeorbitMinLead().
+    LOCAL refineStartLimit IS MAX(tolerance * 10, coarseStopDist * 6).
+    IF CFG:HASKEY("TARGET_DEORBIT_REFINE_MAX_START_DIST") {
+        SET refineStartLimit TO CFG["TARGET_DEORBIT_REFINE_MAX_START_DIST"].
+    }
 
     LOCAL bestUT   IS TIME:SECONDS + 30.
     LOCAL bestPe   IS entryPe.
@@ -197,9 +202,33 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + " impact=" + ROUND(coarseBest["LAT"],4)
         + "," + ROUND(coarseBest["LNG"],4)).
 
+    IF validSamples = 0 {
+        mLogWarn("STATS deorbit abort reason=no-valid-coarse-samples").
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        RETURN FALSE.
+    }
+
+    IF bestUT <= TIME:SECONDS + minLead {
+        mLogWarn("STATS deorbit abort reason=window-expired burnT="
+            + ROUND(bestUT - TIME:SECONDS,0)
+            + " minLead=" + ROUND(minLead,0)
+            + " distKm=" + ROUND(bestDist/1000,1)).
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        RETURN FALSE.
+    }
+
+    IF bestDist > refineStartLimit {
+        mLogWarn("STATS deorbit abort reason=coarse-miss-too-large distKm="
+            + ROUND(bestDist/1000,1)
+            + " refineStartLimitKm=" + ROUND(refineStartLimit/1000,1)
+            + " toleranceKm=" + ROUND(tolerance/1000,1)).
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        RETURN FALSE.
+    }
+
     FOR mult IN passes:SUBLIST(1, passes:LENGTH - 1) {
         LOCAL step    IS scanStep * mult.
-        LOCAL winStart IS bestUT - (scanStep * (mult * 10)).
+        LOCAL winStart IS MAX(TIME:SECONDS + minLead, bestUT - (scanStep * (mult * 10))).
         LOCAL winEnd   IS bestUT + (scanStep * (mult * 10)).
         LOCAL passUT   IS winStart.
         LOCAL passBest IS bestDist.
@@ -273,6 +302,14 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+
+    IF bestUT <= TIME:SECONDS + minLead {
+        mLogWarn("STATS deorbit abort reason=burn-too-soon-after-refine burnT="
+            + ROUND(bestUT - TIME:SECONDS,0)
+            + " minLead=" + ROUND(minLead,0)
+            + " distKm=" + ROUND(bestDist/1000,1)).
+        RETURN FALSE.
+    }
 
     LOCAL realNode IS _planDeorbitNode(bestUT, bestPe, bestRad, bestNor).
     mLog("Executing deorbit burn at T+" + ROUND(bestUT - TIME:SECONDS,0) + "s.").
@@ -436,7 +473,7 @@ LOCAL FUNCTION _evalDeorbitNode {
         "LNG", 0
     ).
 
-    IF burnUT <= TIME:SECONDS + 10 { RETURN result. }
+    IF burnUT <= TIME:SECONDS + _targetDeorbitMinLead() { RETURN result. }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.05. }
     LOCAL nd IS _planDeorbitNode(burnUT, entryPe, radialDv, normalDv).
@@ -469,6 +506,7 @@ LOCAL FUNCTION _refineDeorbitImpact {
     IF NOT best["VALID"] { RETURN best. }
 
     LOCAL refineTarget IS _targetDeorbitRefineTolerance(tolerance).
+    LOCAL minLead IS _targetDeorbitMinLead().
     LOCAL timeStep IS MAX(0.5, coarseStep / 4).
     LOCAL peStep IS 5000.
     LOCAL radialStep IS 2.
@@ -527,7 +565,7 @@ LOCAL FUNCTION _refineDeorbitImpact {
                 IF tryPe >= minPe AND tryPe <= maxPe
                         AND ABS(tryRad) <= maxRadial
                         AND ABS(tryNor) <= maxNormal
-                        AND tryUT > TIME:SECONDS + 10 {
+                        AND tryUT > TIME:SECONDS + minLead {
                     LOCAL trial IS _evalDeorbitNode(tryUT, tryPe, targetLat, targetLng, tryRad, tryNor).
                     IF trial["VALID"] AND trial["DIST"] < bestTrial["DIST"] {
                         SET bestTrial TO trial.
@@ -571,6 +609,14 @@ LOCAL FUNCTION _targetDeorbitRefineTolerance {
         SET refineTarget TO CFG["TARGET_DEORBIT_REFINE_TOLERANCE"].
     }
     RETURN refineTarget.
+}
+
+LOCAL FUNCTION _targetDeorbitMinLead {
+    LOCAL minLead IS 60.
+    IF CFG:HASKEY("TARGET_DEORBIT_MIN_LEAD") {
+        SET minLead TO CFG["TARGET_DEORBIT_MIN_LEAD"].
+    }
+    RETURN minLead.
 }
 
 LOCAL FUNCTION _planDeorbitNode {
