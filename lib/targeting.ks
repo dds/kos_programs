@@ -427,8 +427,15 @@ LOCAL FUNCTION _refineDeorbitImpact {
     LOCAL best IS _evalDeorbitNode(startUT, startPe, targetLat, targetLng).
     IF NOT best["VALID"] { RETURN best. }
 
-    LOCAL timeStep IS MAX(1, coarseStep / 4).
-    LOCAL peStep IS 10000.
+    LOCAL refineTarget IS tolerance.
+    IF NOT SHIP:BODY:ATM:EXISTS {
+        SET refineTarget TO MIN(tolerance, 250).
+    }
+    IF CFG:HASKEY("TARGET_DEORBIT_REFINE_TOLERANCE") {
+        SET refineTarget TO CFG["TARGET_DEORBIT_REFINE_TOLERANCE"].
+    }
+    LOCAL timeStep IS MAX(0.5, coarseStep / 4).
+    LOCAL peStep IS 5000.
     LOCAL minPe IS MAX(-50000, -SHIP:BODY:RADIUS * 0.2).
     LOCAL maxPe IS MIN(SHIP:PERIAPSIS - 100, MAX(startPe + 60000, 10000)).
     LOCAL axes IS LIST("TIME", "PE", "BOTH").
@@ -436,9 +443,10 @@ LOCAL FUNCTION _refineDeorbitImpact {
 
     mLog("Refining deorbit: start dist=" + ROUND(best["DIST"]/1000,1)
         + "km  timeStep=" + ROUND(timeStep,1) + "s"
-        + "  peStep=" + ROUND(peStep/1000,1) + "km.").
+        + "  peStep=" + ROUND(peStep/1000,1) + "km"
+        + "  target=" + ROUND(refineTarget,0) + "m.").
 
-    FROM { LOCAL iter IS 0. } UNTIL iter >= 24 STEP { SET iter TO iter + 1. } DO {
+    FROM { LOCAL iter IS 0. } UNTIL iter >= 60 STEP { SET iter TO iter + 1. } DO {
         LOCAL improved IS FALSE.
         LOCAL bestTrial IS best.
 
@@ -472,12 +480,12 @@ LOCAL FUNCTION _refineDeorbitImpact {
                 + " dist=" + ROUND(best["DIST"]/1000,2) + "km.").
         }
 
-        IF best["DIST"] < tolerance { BREAK. }
+        IF best["DIST"] < refineTarget { BREAK. }
 
         IF NOT improved {
             SET timeStep TO timeStep / 2.
             SET peStep TO peStep / 2.
-            IF timeStep < 0.25 AND peStep < 100 { BREAK. }
+            IF timeStep < 0.05 AND peStep < 25 { BREAK. }
         }
     }
 
