@@ -19,8 +19,20 @@ GLOBAL FUNCTION flightLogPath {
     RETURN _flightLogPath.
 }
 
+GLOBAL FUNCTION codeVersion {
+    LOCAL versionPath IS "1:/state/code_version.state".
+    IF EXISTS(versionPath) {
+        RETURN OPEN(versionPath):READALL:STRING:TRIM.
+    }
+    IF HOMECONNECTION:ISCONNECTED AND EXISTS("0:/VERSION") {
+        RETURN OPEN("0:/VERSION"):READALL:STRING:TRIM.
+    }
+    RETURN "unknown".
+}
+
 GLOBAL FUNCTION initLog {
     mLog("Fault log: " + flightLogPath()).
+    mLog("CODE version=" + codeVersion(), "CODE").
 }
 
 GLOBAL FUNCTION slug {

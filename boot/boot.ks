@@ -59,6 +59,12 @@ ensureDir("1:/craft").
 ensureDir("1:/roles").
 ensureDir("1:/missions").
 
+LOCAL FUNCTION _syncCodeVersion {
+    IF HAS_LINK AND EXISTS("0:/VERSION") {
+        COPYPATH("0:/VERSION", "1:/state/code_version.state").
+    }
+}
+
 LOCAL FUNCTION _resolveScript {
     PARAMETER name.
     PARAMETER dirs.
@@ -370,6 +376,7 @@ LOCAL FUNCTION _resetMissionSelection {
 
 IF HAS_LINK {
     PRINT "  SYNC core ......... ".
+    _syncCodeVersion().
     LOCAL coreLibs IS LIST("state", "logs", "files").
     FOR lib IN coreLibs { _syncLib(lib). }
 } ELSE {
