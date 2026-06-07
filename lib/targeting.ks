@@ -97,11 +97,11 @@ GLOBAL FUNCTION targetedDeorbitAt {
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL period IS SHIP:ORBIT:PERIOD.
-    LOCAL scanOrbits IS 8.
+    LOCAL scanOrbits IS 32.
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_ORBITS") {
         SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_ORBITS"].
     }
-    LOCAL scanSamples IS 288.
+    LOCAL scanSamples IS 384.
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_SAMPLES") {
         SET scanSamples TO CFG["TARGET_DEORBIT_SCAN_SAMPLES"].
     }
@@ -204,8 +204,11 @@ GLOBAL FUNCTION targetedDeorbitAt {
         mLogWarn("Best solution misses target by " + ROUND(bestDist/1000,1)
             + "km — exceeds tolerance of " + ROUND(tolerance/1000,1) + "km.").
         HUDTEXT("Warning: " + ROUND(bestDist/1000,0) + "km from target", 5, 2, 14, YELLOW, FALSE).
-        IF CFG:HASKEY("TARGET_DEORBIT_PROCEED_ON_MISS")
-                AND CFG["TARGET_DEORBIT_PROCEED_ON_MISS"] <= 0 {
+        LOCAL proceedOnMiss IS 0.
+        IF CFG:HASKEY("TARGET_DEORBIT_PROCEED_ON_MISS") {
+            SET proceedOnMiss TO CFG["TARGET_DEORBIT_PROCEED_ON_MISS"].
+        }
+        IF proceedOnMiss <= 0 {
             mLogWarn("STATS deorbit abort reason=miss-exceeds-tolerance distKm="
                 + ROUND(bestDist/1000,1)
                 + " toleranceKm=" + ROUND(tolerance/1000,1)).
