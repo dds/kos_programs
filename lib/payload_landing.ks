@@ -8,6 +8,11 @@ GLOBAL FUNCTION phaseLandDeorbit {
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
         + " targetPeKm=" + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1)).
+    IF SHIP:STATUS = "SUB_ORBITAL" AND landingImpactWithinTolerance() {
+        mLogWarn("STATS land-deorbit phase skip status=already-suborbital").
+        nextPhase(fr3Seq).
+        RETURN.
+    }
     _confirmLandingTarget().
     LOCAL deorbitOk IS landingTargetedDeorbit().
     mLogWarn("STATS land-deorbit phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)

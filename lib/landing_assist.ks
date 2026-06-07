@@ -224,9 +224,17 @@ LOCAL FUNCTION _assistSurfaceRelease {
         LOCAL hSpeed IS hVel:MAG.
         LOCAL radarAlt IS ALT:RADAR.
         LOCAL vSpeed IS SHIP:VERTICALSPEED.
+        LOCAL targetDistM IS -1.
+        IF landingTarget["FOUND"] {
+            SET targetDistM TO _assistGeoDistance(
+                SHIP:GEOPOSITION:LAT,
+                SHIP:GEOPOSITION:LNG,
+                landingTarget["LAT"],
+                landingTarget["LNG"]).
+        }
         LOCAL mode_ IS "APPROACH".
         IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_HSPEED"] {
-            IF _assistSurfaceBrakeReady(radarAlt, hSpeed, vSpeed) {
+            IF _assistSurfaceBrakeReady(radarAlt, hSpeed, vSpeed, targetDistM) {
                 SET mode_ TO "BRAKE".
             } ELSE {
                 SET mode_ TO "COAST".
@@ -239,7 +247,8 @@ LOCAL FUNCTION _assistSurfaceRelease {
             mLogWarn("STATS assist-surface mode=" + mode_
                 + " alt=" + ROUND(radarAlt,1)
                 + " h=" + ROUND(hSpeed,1)
-                + " v=" + ROUND(vSpeed,1)).
+                + " v=" + ROUND(vSpeed,1)
+                + " targetDistM=" + ROUND(targetDistM,0)).
             SET lastMode TO mode_.
         }
 
@@ -281,18 +290,10 @@ LOCAL FUNCTION _assistSurfaceRelease {
             + " v:" + ROUND(vSpeed,2),
             1, 2, 13, YELLOW, FALSE).
         IF radarAlt < nextStatsAlt {
-            LOCAL targetDist IS -1.
-            IF landingTarget["FOUND"] {
-                SET targetDist TO _assistGeoDistance(
-                    SHIP:GEOPOSITION:LAT,
-                    SHIP:GEOPOSITION:LNG,
-                    landingTarget["LAT"],
-                    landingTarget["LNG"]).
-            }
             mLogWarn("STATS assist-surface descent alt=" + ROUND(radarAlt,1)
                 + " h=" + ROUND(hSpeed,2)
                 + " v=" + ROUND(vSpeed,2)
-                + " targetDistM=" + ROUND(targetDist,0)
+                + " targetDistM=" + ROUND(targetDistM,0)
                 + " maxAcc=" + ROUND(_safeMaxAcc(),2)).
             SET nextStatsAlt TO nextStatsAlt / 2.
             IF nextStatsAlt < 100 { SET nextStatsAlt TO 100. }
@@ -481,22 +482,31 @@ LOCAL FUNCTION _assistSurfaceBrakeReady {
     PARAMETER radarAlt.
     PARAMETER hSpeed.
     PARAMETER vSpeed.
+    PARAMETER targetDistM IS -1.
 
     IF radarAlt < 500 { RETURN TRUE. }
+    LOCAL maxAcc IS _safeMaxAcc().
+    IF maxAcc <= 0 { RETURN FALSE. }
+    LOCAL netAcc IS MAX(0.1, maxAcc - _localGravity()).
+    LOCAL speed IS SQRT(hSpeed^2 + MAX(0, -vSpeed)^2).
+    LOCAL brakeDist IS (speed^2) / (2 * netAcc)
+        + LANDING_CFG["ASSIST_SURFACE_BRAKE_MARGIN"].
+    LOCAL verticalAlt IS (MAX(0, -vSpeed)^2) / (2 * netAcc)
+        + LANDING_CFG["ASSIST_SURFACE_BRAKE_MARGIN"].
+
+    IF targetDistM >= 0 {
+        IF targetDistM <= brakeDist { RETURN TRUE. }
+        IF radarAlt <= verticalAlt { RETURN TRUE. }
+        RETURN FALSE.
+    }
+
     IF ADDONS:KE:AVAILABLE {
         LOCAL countdown IS ADDONS:KE:SUICIDEBURNCOUNTDOWN.
         IF countdown <= LANDING_CFG["ASSIST_SURFACE_BRAKE_LEAD"] {
             RETURN TRUE.
         }
     }
-
-    LOCAL maxAcc IS _safeMaxAcc().
-    IF maxAcc <= 0 { RETURN FALSE. }
-    LOCAL netAcc IS MAX(0.1, maxAcc - _localGravity()).
-    LOCAL speed IS SQRT(hSpeed^2 + MAX(0, -vSpeed)^2).
-    LOCAL brakeAlt IS (speed^2) / (2 * netAcc)
-        + LANDING_CFG["ASSIST_SURFACE_BRAKE_MARGIN"].
-    RETURN radarAlt <= brakeAlt.
+    RETURN radarAlt <= brakeDist.
 }
 
 LOCAL FUNCTION _assistGeoDistance {
