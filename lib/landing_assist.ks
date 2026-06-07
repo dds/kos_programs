@@ -38,6 +38,8 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_SURFACE_BRAKE_AOA", 60.0,
     "ASSIST_SURFACE_DROP_ALT", 900.0,
     "ASSIST_SURFACE_DROP_MAX_VSPEED", 120.0,
+    "ASSIST_SURFACE_FINAL_ALT", 250.0,
+    "ASSIST_SURFACE_FINAL_MAX_SPEED", 8.0,
     "ASSIST_SURFACE_FINAL_SPEED", 0.8,
     "ASSIST_SURFACE_FINAL_HSPEED", 2.0,
     "ASSIST_SURFACE_RELEASE_ALT", 5.0,
@@ -308,7 +310,7 @@ LOCAL FUNCTION _assistSurfaceRelease {
                 landingTarget["LAT"],
                 landingTarget["LNG"]).
         }
-        LOCAL mode_ IS "APPROACH".
+        LOCAL mode_ IS "DROP".
         IF brakeCommitted {
             IF hSpeed > LANDING_CFG["ASSIST_SURFACE_FINAL_HSPEED"]
                     OR _assistSurfaceFinalBrakeReady(radarAlt, vSpeed) {
@@ -316,6 +318,8 @@ LOCAL FUNCTION _assistSurfaceRelease {
             } ELSE {
                 SET brakeCommitted TO FALSE.
             }
+        } ELSE IF radarAlt <= LANDING_CFG["ASSIST_SURFACE_FINAL_ALT"] {
+            SET mode_ TO "FINAL".
         } ELSE IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_HSPEED"] {
             IF _assistSurfaceBrakeReady(radarAlt, hSpeed, vSpeed, targetDistM) {
                 SET brakeCommitted TO TRUE.
@@ -323,11 +327,8 @@ LOCAL FUNCTION _assistSurfaceRelease {
             } ELSE {
                 SET mode_ TO "COAST".
             }
-        } ELSE IF radarAlt > LANDING_CFG["ASSIST_SURFACE_DROP_ALT"]
-                AND NOT _assistSurfaceFinalBrakeReady(radarAlt, vSpeed) {
-            SET mode_ TO "DROP".
-        } ELSE IF radarAlt < 50 {
-            SET mode_ TO "FINAL".
+        } ELSE IF _assistSurfaceFinalBrakeReady(radarAlt, vSpeed) {
+            SET mode_ TO "BRAKE".
         }
 
         IF mode_ <> lastMode {
@@ -378,13 +379,11 @@ LOCAL FUNCTION _assistSurfaceRelease {
             } ELSE {
                 LOCAL targetV IS -MAX(
                     LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"],
-                    MIN(LANDING_CFG["ASSIST_DESCENT_SPEED"], radarAlt * 0.2)).
-                IF radarAlt < 20 {
-                    SET targetV TO -LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"].
-                }
+                    MIN(LANDING_CFG["ASSIST_SURFACE_FINAL_MAX_SPEED"], radarAlt * 0.05)).
+                IF radarAlt < 25 { SET targetV TO -LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"]. }
 
                 LOCAL grav IS _localGravity().
-                LOCAL desiredAcc IS (targetV - vSpeed) * 0.35.
+                LOCAL desiredAcc IS (targetV - vSpeed) * 0.6.
                 LOCAL thrott IS (grav + desiredAcc) / maxAcc.
                 LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], thrott)).
             }
