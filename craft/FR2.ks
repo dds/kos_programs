@@ -38,6 +38,51 @@ GLOBAL CFG IS LEXICON(
     "RECOVERY_PE",            27500
 ).
 
+LOCAL FUNCTION _cfgSet {
+    PARAMETER key.
+    PARAMETER value.
+    IF CFG:HASKEY(key) { CFG:REMOVE(key). }
+    CFG:ADD(key, value).
+}
+
+LOCAL FUNCTION _cfgFromState {
+    PARAMETER key.
+    PARAMETER asNumber IS TRUE.
+    LOCAL raw IS stateGet("mission_cfg_" + key, "").
+    IF raw = "" { RETURN. }
+    IF asNumber {
+        _cfgSet(key, raw:TONUMBER(0)).
+    } ELSE {
+        _cfgSet(key, raw).
+    }
+}
+
+LOCAL FUNCTION _applyMissionState {
+    FOR key IN LIST(
+        "PARKING_ALT", "LAUNCH_INCLINATION", "LAUNCH_AZIMUTH",
+        "LAUNCH_STAGE_LIMIT", "FAIRING_ALT", "EXTEND_ALT",
+        "RELAY_ALT", "CAPTURE_PE", "CAPTURE_INC", "CAPTURE_LAN",
+        "CAPTURE_AOP", "TARGET_PE", "TARGET_AP",
+        "TARGET_INCLINATION", "CIRC_ECC_TOL", "INCL_TOLERANCE",
+        "MAX_INCL_CHANGE_DV", "PROBE_TARGET_LAT", "PROBE_TARGET_LNG",
+        "PROBE_ENTRY_PE", "PROBE_TARGET_TOL", "MOLNIYA_PERIOD",
+        "MOLNIYA_AOP", "MOLNIYA_ECC", "RECOVERY_PE",
+        "PROGRESSIVE_RELOAD", "RELOAD_AFTER_PARK"
+    ) {
+        _cfgFromState(key, TRUE).
+    }
+
+    FOR key IN LIST(
+        "SEQUENCE", "CAPTURE_DIR", "INCL_MATCH_TARGET",
+        "SCANSAT_DECOUPLER_TAG", "PROBE_TARGET_WAYPOINT",
+        "LANDING_TARGET_WAYPOINT"
+    ) {
+        _cfgFromState(key, FALSE).
+    }
+}
+
+_applyMissionState().
+
 GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer",
     "lib_navigation", "countdown", "maneuver", "inclination",
@@ -47,6 +92,10 @@ GLOBAL LIBS IS LIST(
 ).
 
 LOCAL FUNCTION buildPhaseSequence {
+    IF CFG:HASKEY("SEQUENCE") {
+        RETURN _phaseListFromString(CFG["SEQUENCE"]).
+    }
+
     LOCAL hasMolniya IS FALSE.
     FOR ptype IN missionPayloads() {
         IF normalizePayloadType(ptype) = "MOLNIYA" { SET hasMolniya TO TRUE. }
@@ -61,19 +110,32 @@ LOCAL FUNCTION buildPhaseSequence {
     // }
     // orbitPhases:ADD("INCLINE").
 
-    orbitPhases:ADD("ELLIPTICAL").
+    orbitPhases:ADD("CIRC").
+    orbitPhases:ADD("RAISE").
+    orbitPhases:ADD("INCLINE").
 
     LOCAL payloadPhases IS LEXICON(
         "CRASHPROBE", LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
         "PROBE",      LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
         "RELAY",      LIST("RELAY_OPS"),
-        "SCANSAT",    LIST("RELAY_OPS"),
+        "SCANSAT",    LIST("SCANSAT_OPS"),
         "SCISAT",     LIST("RELAY_OPS"),
         "ASSISTLANDER", LIST("LAND_DEORBIT", "LAND_ASSIST", "LAND"),
         "LANDER",     LIST("LAND_DEORBIT", "LAND")
     ).
 
     RETURN buildRocketSequence(orbitPhases, payloadPhases).
+}
+
+LOCAL FUNCTION _phaseListFromString {
+    PARAMETER raw.
+    LOCAL seq IS LIST().
+    FOR phaseRaw IN raw:SPLIT(",") {
+        LOCAL phaseName IS phaseRaw:TRIM:TOUPPER.
+        IF phaseName <> "" { seq:ADD(phaseName). }
+    }
+    IF seq:LENGTH = 0 { seq:ADD("DONE"). }
+    RETURN seq.
 }
 
 LOCAL FUNCTION _printConfig {
@@ -120,7 +182,12 @@ LOCAL FUNCTION _printConfig {
     }
     PRINT " ".
     PRINT "  -- ORBIT --".
-    PRINT "  FINAL ALT .. " + ROUND(CFG["RELAY_ALT"]/1000,0) + " km".
+    IF CFG:HASKEY("TARGET_PE") AND CFG:HASKEY("TARGET_AP") {
+        PRINT "  FINAL PE ... " + ROUND(CFG["TARGET_PE"]/1000,0) + " km".
+        PRINT "  FINAL AP ... " + ROUND(CFG["TARGET_AP"]/1000,0) + " km".
+    } ELSE {
+        PRINT "  FINAL ALT .. " + ROUND(CFG["RELAY_ALT"]/1000,0) + " km".
+    }
     LOCAL tincStr IS CFG["TARGET_INCLINATION"] + " deg".
     IF CFG["TARGET_INCLINATION"] = 0 { SET tincStr TO "0 deg  (equatorial)". }
     PRINT "  FINAL INCL . " + tincStr.
@@ -192,6 +259,7 @@ GLOBAL FUNCTION main {
         "RELEASE_PROBE",    phaseReleaseProbe@,
         "RECIRC",           _phaseRecirc@,
         "RELAY_OPS",        phaseRelayOps@,
+        "SCANSAT_OPS",      phaseScanSatOps@,
         "DEPLOY_SAT",       _phaseDeploySat@,
         "LAND_DEORBIT",     phaseLandDeorbit@,
         "LAND_ASSIST",      phaseLandAssist@,

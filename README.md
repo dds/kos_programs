@@ -130,7 +130,7 @@ Mun rover landing profiles use an extended targeted-deorbit scan window and set 
 
 When `LANDING_SITE_SCAN_ENABLE = 1`, targeted deorbit samples SCANsat `ELEVATION` and `SLOPE` around the selected/named waypoint, then retargets Trajectories to the lowest-score nearby site with known altimetry and acceptable slope. If SCANsat is unavailable or no scanned candidate passes the slope limit, it keeps the original waypoint and logs `STATS site-scan`.
 
-For a fast-follow Mun mapper, use `missions/FR3/mun_scansat_polar.cfg` (`mission_id = mun_scansat_polar`). It targets a 70 km polar Mun orbit and deploys the payload tagged `scansat_decoupler`.
+For a fast-follow Mun mapper, use `mission_id = mun_scansat_polar` on either FR2 or FR3. The matching profile under `missions/FR2/` or `missions/FR3/` targets a 70 km polar Mun orbit and deploys the payload tagged `scansat_decoupler`.
 
 ### FJ1A
 
