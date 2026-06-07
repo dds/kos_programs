@@ -47,6 +47,7 @@ FR3 progressive library bands:
 Mission profile files:
 
 - `missions/FR3/*.cfg` - data-only FR3 mission profiles. Plain `FR3` can select one on the launch pad; legacy `FR3-MUN-...` names still work as fallback.
+- `missions/FR3/mun_rover_emergency_surface.cfg` - emergency mode that soft-lands the second stage and releases the rover on the surface.
 
 ## Biggest Files
 

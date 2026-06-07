@@ -12,10 +12,13 @@ GLOBAL FUNCTION phaseLandAssist {
     landingAssistStage().
     IF CFG:HASKEY("RELOAD_AFTER_LAND_ASSIST") AND CFG["RELOAD_AFTER_LAND_ASSIST"] > 0 {
         nextPhase(fr3Seq).
+        LOCAL nextPh IS stateGet("phase", "").
+        LOCAL nextBand IS "LAND".
+        IF nextPh = "ROVER" { SET nextBand TO "ROVER". }
         stateSet("reload_required", "true").
         stateSet("reload_reason", "LAND_ASSIST_RELEASE").
-        stateSet("reload_next_phase", stateGet("phase", "")).
-        stateSet("reload_next_band", "LAND").
+        stateSet("reload_next_phase", nextPh).
+        stateSet("reload_next_band", nextBand).
         mLog("Reload point after landing assist release. Reboot rover CPU to continue.").
         PRINT " ".
         PRINT "  LANDING ASSIST RELEASE COMPLETE".

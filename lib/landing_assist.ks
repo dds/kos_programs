@@ -26,7 +26,12 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_DECOUPLER_TAG", "landing_assist_decoupler",
     "ASSIST_FLYAWAY",     FALSE,
     "ASSIST_FLYAWAY_TIME", 4.0,
-    "ASSIST_FLYAWAY_THROTTLE", 0.6
+    "ASSIST_FLYAWAY_THROTTLE", 0.6,
+    "ASSIST_RELEASE_ON_SURFACE", FALSE,
+    "ASSIST_SURFACE_FINAL_SPEED", 0.8,
+    "ASSIST_SURFACE_SETTLE_TIME", 5.0,
+    "ASSIST_SURFACE_TIPOVER", TRUE,
+    "ASSIST_SURFACE_TIP_TIME", 4.0
 ).
 
 GLOBAL landingAbortFlag IS FALSE.
@@ -59,6 +64,10 @@ GLOBAL FUNCTION landingAssistStage {
         mLogWarn("No assist decoupler tagged '"
             + LANDING_CFG["ASSIST_DECOUPLER_TAG"] + "' - skipping assist.").
         RETURN FALSE.
+    }
+
+    IF LANDING_CFG["ASSIST_RELEASE_ON_SURFACE"] {
+        RETURN _assistSurfaceRelease(decoupler).
     }
 
     SET SAS TO FALSE.
@@ -138,6 +147,77 @@ GLOBAL FUNCTION landingAssistStage {
         LOCK THROTTLE TO 0.
     }
 
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _assistSurfaceRelease {
+    PARAMETER decoupler.
+
+    SET SAS TO FALSE.
+    LOCAL landingTarget IS landingResolveTarget().
+    mLogWarn("STATS assist-surface setup release=surface finalV="
+        + LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"]
+        + " settle=" + LANDING_CFG["ASSIST_SURFACE_SETTLE_TIME"]).
+    mLog("Emergency surface assist: landing whole stack on second stage.").
+    HUDTEXT("Emergency carrier landing", 5, 2, 15, YELLOW, FALSE).
+
+    UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" OR landingAbortFlag {
+        LOCAL hVel IS _horizontalSurfaceVelocity().
+        LOCAL hSpeed IS hVel:MAG.
+        LOCAL radarAlt IS ALT:RADAR.
+        LOCAL vSpeed IS SHIP:VERTICALSPEED.
+
+        IF landingTarget["FOUND"] AND radarAlt < LANDING_CFG["GUIDANCE_ALT"] {
+            LOCK STEERING TO _assistTargetSteering(landingTarget, hVel, hSpeed).
+        } ELSE {
+            LOCK STEERING TO _assistSteering(hVel, hSpeed).
+        }
+
+        LOCAL maxAcc IS _safeMaxAcc().
+        IF maxAcc > 0 {
+            LOCAL targetV IS -MAX(
+                LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"],
+                MIN(LANDING_CFG["ASSIST_DESCENT_SPEED"], radarAlt * 0.2)).
+            IF radarAlt < 20 {
+                SET targetV TO -LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"].
+            }
+
+            LOCAL grav IS _localGravity().
+            LOCAL desiredAcc IS (targetV - vSpeed) * 0.35.
+            LOCAL thrott IS (grav + desiredAcc) / maxAcc.
+            LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], thrott)).
+        }
+
+        HUDTEXT("Carrier alt:" + ROUND(radarAlt,0)
+            + "m h:" + ROUND(hSpeed,2)
+            + " v:" + ROUND(vSpeed,2),
+            1, 2, 13, YELLOW, FALSE).
+        WAIT 0.05.
+    }
+
+    LOCK THROTTLE TO 0.
+    WAIT LANDING_CFG["ASSIST_SURFACE_SETTLE_TIME"].
+    mLog("Carrier touchdown: status=" + SHIP:STATUS
+        + " h=" + ROUND(_horizontalSurfaceVelocity():MAG,2)
+        + " v=" + ROUND(SHIP:VERTICALSPEED,2)
+        + " roll=" + ROUND(SHIP:FACING:ROLL,1)
+        + " pitch=" + ROUND(SHIP:FACING:PITCH,1)).
+    mLogWarn("STATS assist-surface result status=" + SHIP:STATUS
+        + " h=" + ROUND(_horizontalSurfaceVelocity():MAG,2)
+        + " roll=" + ROUND(SHIP:FACING:ROLL,1)
+        + " pitch=" + ROUND(SHIP:FACING:PITCH,1)).
+
+    IF LANDING_CFG["ASSIST_SURFACE_TIPOVER"] {
+        mLog("Tipping carrier before rover release.").
+        LOCK STEERING TO SHIP:FACING:RIGHTVECTOR.
+        WAIT LANDING_CFG["ASSIST_SURFACE_TIP_TIME"].
+    }
+
+    _decouplePart(decoupler).
+    WAIT 0.5.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
     SET SAS TO TRUE.
@@ -242,6 +322,44 @@ LOCAL FUNCTION _assistSteering {
         SET steerVec TO (SHIP:UP + (-hVel):NORMALIZED * lean):NORMALIZED.
     }
     RETURN steerVec.
+}
+
+LOCAL FUNCTION _assistTargetSteering {
+    PARAMETER landingTarget.
+    PARAMETER hVel.
+    PARAMETER hSpeed.
+
+    LOCAL steerVec IS _assistSteering(hVel, hSpeed).
+    LOCAL targetGeo IS LATLNG(landingTarget["LAT"], landingTarget["LNG"]).
+    LOCAL toTarget IS targetGeo:POSITION - SHIP:GEOPOSITION:POSITION.
+    LOCAL lateral IS VXCL(SHIP:UP, toTarget).
+    IF lateral:MAG < 0.001 { RETURN steerVec. }
+
+    LOCAL dist IS _assistGeoDistance(
+        SHIP:LATITUDE,
+        SHIP:LONGITUDE,
+        landingTarget["LAT"],
+        landingTarget["LNG"]).
+    IF dist < 25 { RETURN steerVec. }
+
+    LOCAL maxLean IS SIN(LANDING_CFG["ASSIST_MAX_TILT"]).
+    LOCAL lean IS MIN(maxLean, dist / 500).
+    RETURN (steerVec:NORMALIZED + lateral:NORMALIZED * lean):NORMALIZED.
+}
+
+LOCAL FUNCTION _assistGeoDistance {
+    PARAMETER lat1.
+    PARAMETER lng1.
+    PARAMETER lat2.
+    PARAMETER lng2.
+
+    LOCAL oRad IS SHIP:BODY:RADIUS.
+    LOCAL dLat IS lat2 - lat1.
+    LOCAL dLng IS lng2 - lng1.
+    LOCAL a IS SIN(dLat/2)^2
+        + COS(lat1) * COS(lat2) * SIN(dLng/2)^2.
+    LOCAL c IS 2 * ARCSIN(MIN(1, SQRT(a))).
+    RETURN oRad * c * CONSTANT:PI / 180.
 }
 
 LOCAL FUNCTION _assistReleaseStable {
