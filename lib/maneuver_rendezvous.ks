@@ -143,6 +143,7 @@ GLOBAL FUNCTION planRendezvous {
         + "  CA=" + ROUND(finalCa["distance"]/1000, 1) + "km"
         + "  relV=" + ROUND(relVel, 1) + " m/s"
         + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
+    archivePlannedManeuverLog("rendezvous").
 
     RETURN nd.
 }
@@ -250,6 +251,7 @@ GLOBAL FUNCTION planAsteroidIntercept {
         + " m/s  CA=" + ROUND(finalCa["distance"]/1000,2)
         + "km  ETA=" + ROUND(nd:TIME - TIME:SECONDS,0)
         + "s  TOF=" + ROUND(bestArrive - bestDepart,0) + "s.").
+    archivePlannedManeuverLog("asteroid-intercept").
     RETURN nd.
 }
 

@@ -259,6 +259,7 @@ LOCAL FUNCTION _burnWithRetry {
         LOCAL nd IS planFn:CALL().
         ADD nd.
         mLog(label + ": dV=" + ROUND(nd:DELTAV:MAG,1) + " m/s").
+        archivePlannedManeuverLog(label).
         WAIT 2.
         SET success TO executeManeuver().
         IF NOT success {
@@ -474,6 +475,7 @@ GLOBAL FUNCTION phaseElliptical {
     IF targetInc >= 0 { SET resultMsg TO resultMsg + " Inc: " + ROUND(nd:ORBIT:INCLINATION, 1) + "°". }
     IF targetAoP >= 0 { SET resultMsg TO resultMsg + " AoP: " + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1) + "°". }
     mLog(resultMsg).
+    archivePlannedManeuverLog("elliptical-finalization").
 
     // Execution loop integrating your retry architecture
     LOCAL success IS FALSE.

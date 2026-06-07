@@ -141,6 +141,16 @@ GLOBAL FUNCTION executeManeuver {
     RETURN TRUE.
 }
 
+GLOBAL FUNCTION archivePlannedManeuverLog {
+    PARAMETER label IS "maneuver".
+    IF HAS_LINK {
+        archiveLog().
+        mLog("Planned maneuver log archived: " + label + ".").
+    } ELSE {
+        mLog("Planned maneuver log archive skipped: no KSC link (" + label + ").").
+    }
+}
+
 LOCAL FUNCTION _setThrustLimit {
     PARAMETER pct.
     FOR eng IN SHIP:ENGINES {
@@ -158,6 +168,7 @@ GLOBAL FUNCTION planCircularize {
     LOCAL nd IS NODE(TIME:SECONDS + etaApo, 0, 0, dv).
     ADD nd.
     mLog("Circularize node: dV=" + ROUND(dv,1) + " m/s at Ap in " + ROUND(etaApo,0) + "s").
+    archivePlannedManeuverLog("circularize").
     RETURN nd.
 }
 
@@ -325,6 +336,7 @@ GLOBAL FUNCTION planTransfer {
         + " inc=" + ROUND(finalPatch:INCLINATION,1)
         + " LAN=" + ROUND(finalPatch:LAN,1)
         + " AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1)).
+    archivePlannedManeuverLog("transfer").
     RETURN nd.
 }
 
@@ -1359,6 +1371,10 @@ GLOBAL FUNCTION planCapture {
     LOCAL dv       IS vCapture - vAtPe.
     LOCAL nd IS NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, dv).
     ADD nd.
+    mLog("Capture node: dV=" + ROUND(dv,1)
+        + " m/s at Pe in " + ROUND(ETA:PERIAPSIS,0)
+        + "s  targetAp=" + ROUND(targetAlt/1000,1) + "km").
+    archivePlannedManeuverLog("capture").
     RETURN nd.
 }
 
@@ -1376,6 +1392,9 @@ GLOBAL FUNCTION planRaisePeNow {
     IF ABS(dv) > 300 { SET lead TO 120. }
     LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, dv).
     ADD nd.
+    mLog("Raise Pe node: dV=" + ROUND(dv,1)
+        + " m/s  targetPe=" + ROUND(targetPe/1000,1) + "km").
+    archivePlannedManeuverLog("raise-pe").
     RETURN nd.
 }
 
@@ -1405,6 +1424,10 @@ GLOBAL FUNCTION planAoPChange {
     LOCAL burnUT IS TIME:SECONDS + burnETA.
     LOCAL nd IS NODE(burnUT, dvRadial, 0, 0).
     ADD nd.
+    mLog("AoP node: dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " m/s  targetAoP=" + ROUND(targetAoP,1)
+        + " ETA=" + ROUND(burnETA,0) + "s").
+    archivePlannedManeuverLog("aop").
     RETURN nd.
 }
 
@@ -1567,6 +1590,7 @@ GLOBAL FUNCTION phaseMidCourse {
             + " inc=" + ROUND(finalPatch:INCLINATION,1)
             + " LAN=" + ROUND(finalPatch:LAN,1)
             + " AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1)).
+        archivePlannedManeuverLog("mcc").
         LOCAL success IS FALSE.
         LOCAL retries IS 0.
         UNTIL success {

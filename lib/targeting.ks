@@ -182,6 +182,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL realNode IS _planDeorbitNode(bestUT, bestPe).
     mLog("Executing deorbit burn at T+" + ROUND(bestUT - TIME:SECONDS,0) + "s.").
+    archivePlannedManeuverLog("targeted-deorbit").
     HUDTEXT("Deorbit burn in " + ROUND(bestUT - TIME:SECONDS,0) + "s", 3, 2, 13, CYAN, FALSE).
 
     executeManeuver().
