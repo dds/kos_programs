@@ -54,11 +54,11 @@ GLOBAL landingAbortFlag IS FALSE.
 
 // Effective gravity accounting for centrifugal force from ground speed
 LOCAL FUNCTION _grav {
-    LOCAL r IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
+    LOCAL r_ IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
     LOCAL mu IS SHIP:BODY:MU.
-    LOCAL g IS mu / (r^2).
+    LOCAL g IS mu / (r_^2).
     LOCAL gs IS SHIP:GROUNDSPEED.
-    IF gs > 1 AND r > 0 {
+    IF gs > 1 AND r_ > 0 {
         SET g TO g - (gs^2) / r.
     }
     RETURN MAX(0.01, g).
