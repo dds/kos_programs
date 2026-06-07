@@ -111,7 +111,29 @@ GLOBAL FUNCTION targetedDeorbitAt {
         mLogWarn("STATS deorbit scan mode=sim scanOrbits="
             + scanOrbits + " samples=" + scanSamples).
     }
-    LOCAL scanStep IS period * scanOrbits / scanSamples.
+    LOCAL scanStart IS TIME:SECONDS + 30.
+    LOCAL scanEnd IS TIME:SECONDS + period * scanOrbits + 30.
+    LOCAL scanMode IS "orbits".
+    IF CFG:HASKEY("TARGET_DEORBIT_SCAN_CENTER_MINUTES") {
+        LOCAL centerMin IS CFG["TARGET_DEORBIT_SCAN_CENTER_MINUTES"].
+        LOCAL windowMin IS 4.
+        IF CFG:HASKEY("TARGET_DEORBIT_SCAN_WINDOW_MINUTES") {
+            SET windowMin TO CFG["TARGET_DEORBIT_SCAN_WINDOW_MINUTES"].
+        }
+        LOCAL centerUT IS TIME:SECONDS + centerMin * 60.
+        LOCAL halfWin IS MAX(30, windowMin * 30).
+        SET scanStart TO MAX(TIME:SECONDS + 30, centerUT - halfWin).
+        SET scanEnd TO centerUT + halfWin.
+        SET scanMode TO "minutes".
+        IF scanSamples > 256 { SET scanSamples TO 256. }
+        mLogWarn("STATS deorbit scan window centerMin="
+            + ROUND(centerMin,1)
+            + " windowMin=" + ROUND(windowMin,1)
+            + " startT=" + ROUND(scanStart - TIME:SECONDS,0)
+            + " endT=" + ROUND(scanEnd - TIME:SECONDS,0)
+            + " samples=" + scanSamples).
+    }
+    LOCAL scanStep IS (scanEnd - scanStart) / scanSamples.
     LOCAL passes    IS LIST(1.0, 0.1, 0.01, 0.001, 0.0001).
     LOCAL coarseStopDist IS 1000.
     IF SHIP:BODY:ATM:EXISTS {
@@ -132,10 +154,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL validSamples IS 0.
     LOCAL invalidSamples IS 0.
 
-    LOCAL scanUT  IS TIME:SECONDS + 30.
-    LOCAL scanEnd IS TIME:SECONDS + period * scanOrbits + 30.
-    mLog("Coarse target scan: " + scanSamples + " samples over "
-        + ROUND(scanOrbits,1) + " orbits"
+    LOCAL scanUT  IS scanStart.
+    mLog("Coarse target scan: " + scanSamples + " samples mode=" + scanMode
+        + " start=T+" + ROUND(scanStart - TIME:SECONDS,0)
+        + " end=T+" + ROUND(scanEnd - TIME:SECONDS,0)
         + " step=" + ROUND(scanStep,1) + "s.").
     UNTIL scanUT > scanEnd {
         LOCAL trial IS _evalDeorbitNode(scanUT, entryPe, targetLat, targetLng).
