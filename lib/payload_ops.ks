@@ -108,6 +108,10 @@ GLOBAL FUNCTION phaseScanSatOps {
 
     orbitSummary().
     mLog("SCANsat payload on station at " + MISSION["target"] + ".").
+
+    LOCAL tag IS "scansat_decoupler".
+    IF CFG:HASKEY("SCANSAT_DECOUPLER_TAG") { SET tag TO CFG["SCANSAT_DECOUPLER_TAG"]. }
+
     IF stateGet("scansat_recovered", "false") = "true" {
         scienceStartScanners().
         WAIT 1.
@@ -141,8 +145,24 @@ GLOBAL FUNCTION phaseScanSatOps {
     WAIT 1.
     scienceScanStatus().
 
-    LOCAL tag IS "scansat_decoupler".
-    IF CFG:HASKEY("SCANSAT_DECOUPLER_TAG") { SET tag TO CFG["SCANSAT_DECOUPLER_TAG"]. }
+    IF tag <> "" AND SHIP:PARTSTAGGED(tag):LENGTH = 0 {
+        mLogWarn("SCANsat decoupler tag '" + tag
+            + "' missing in ops; assuming payload was already released.").
+        stateSet("scansat_released_time", TIME:SECONDS).
+        LOCAL recoveryPe IS 70000.
+        LOCAL recoveryAp IS 70000.
+        IF CFG:HASKEY("SCANSAT_RECOVERY_PE") { SET recoveryPe TO CFG["SCANSAT_RECOVERY_PE"]. }
+        ELSE IF CFG:HASKEY("TARGET_PE") { SET recoveryPe TO CFG["TARGET_PE"]. }
+        IF CFG:HASKEY("SCANSAT_RECOVERY_AP") { SET recoveryAp TO CFG["SCANSAT_RECOVERY_AP"]. }
+        ELSE IF CFG:HASKEY("TARGET_AP") { SET recoveryAp TO CFG["TARGET_AP"]. }
+        IF NOT _scanSatRecoverOrbit(recoveryPe, recoveryAp) { RETURN. }
+        stateSet("scansat_recovered", "true").
+        scienceStartScanners().
+        WAIT 1.
+        scienceScanStatus().
+        nextPhase(_payloadSeq()).
+        RETURN.
+    }
 
     IF CFG:HASKEY("SCANSAT_DISPOSE_BEFORE_RELEASE")
             AND CFG["SCANSAT_DISPOSE_BEFORE_RELEASE"] > 0 {
@@ -361,7 +381,13 @@ LOCAL FUNCTION _scanSatRecoverOrbit {
             OR (ABS(SHIP:APOAPSIS - recoveryAp) <= tol
                 AND ABS(SHIP:PERIAPSIS - recoveryPe) <= tol) {
         LOCAL burnOk IS TRUE.
-        IF ABS(SHIP:APOAPSIS - recoveryAp) > tol {
+        LOCAL firstPeTarget IS recoveryPe.
+        IF firstPeTarget > SHIP:APOAPSIS - tol { SET firstPeTarget TO SHIP:APOAPSIS - tol. }
+        IF SHIP:PERIAPSIS < firstPeTarget - tol {
+            SET burnOk TO _scanSatBurn(
+                { RETURN _scanSatPlanSetPeAtAp(firstPeTarget). },
+                "SCANsat recovery safe Pe").
+        } ELSE IF ABS(SHIP:APOAPSIS - recoveryAp) > tol {
             SET burnOk TO _scanSatBurn(
                 { RETURN _scanSatPlanSetApAtPe(recoveryAp). },
                 "SCANsat recovery set Ap").
