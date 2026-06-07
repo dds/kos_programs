@@ -163,8 +163,43 @@ LOCAL FUNCTION _fr3PhaseBand {
     RETURN "MISSION".
 }
 
+LOCAL FUNCTION _fr3BandForPhase {
+    PARAMETER phaseName.
+    LOCAL phaseUp IS phaseName:TOUPPER.
+    IF phaseUp = "" OR _phaseIn(phaseUp, LIST("LUNCH", "FAIR", "ANTS", "PARK")) {
+        RETURN "LAUNCH".
+    }
+    IF _phaseIn(phaseUp, LIST("RDV", "XING", "MCC", "COAST", "CAPTURE",
+            "CIRC", "RAISE", "INCLINE")) {
+        RETURN "TRANSFER".
+    }
+    IF _phaseIn(phaseUp, LIST("TARGETED_DEORBIT", "RELEASE_PROBE",
+            "RELAY_OPS", "SCANSAT_OPS")) {
+        RETURN "PAYLOAD_OPS".
+    }
+    IF _phaseIn(phaseUp, LIST("LAND_DEORBIT", "LAND_ASSIST")) {
+        RETURN "LAND_ASSIST".
+    }
+    IF phaseUp = "LAND" { RETURN "LAND". }
+    IF phaseUp = "ROVER" { RETURN "ROVER". }
+    RETURN "MISSION".
+}
+
+LOCAL FUNCTION _saveReloadState {
+    PARAMETER reason.
+    PARAMETER nextPhaseName.
+    stateSet("reload_required", "true").
+    stateSet("reload_reason", reason).
+    stateSet("reload_next_phase", nextPhaseName).
+    stateSet("reload_next_band", _fr3BandForPhase(nextPhaseName)).
+}
+
 LOCAL FUNCTION _fr3Libs {
     LOCAL band IS _fr3PhaseBand().
+    LOCAL phase IS stateGet("phase", ""):TOUPPER.
+    stateSet("lib_band", band).
+    stateSet("lib_band_phase", phase).
+    stateSet("reload_required", "false").
     LOCAL libs IS LIST("phases", "utils").
 
     IF band = "LAUNCH" {
@@ -221,6 +256,7 @@ LOCAL FUNCTION _fr3Libs {
             AND (_bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT")) {
         libs:ADD("science").
     }
+    stateSet("lib_band_libs", libs:JOIN(",")).
     RETURN libs.
 }
 
@@ -325,6 +361,7 @@ LOCAL FUNCTION _applyMissionProfile {
 LOCAL FUNCTION _phaseParkingReload {
     phaseParking().
     IF CFG:HASKEY("RELOAD_AFTER_PARK") AND CFG["RELOAD_AFTER_PARK"] > 0 {
+        _saveReloadState("PARKING_ORBIT", stateGet("phase", "")).
         mLog("Reload point after parking orbit. Reboot to load transfer libraries.").
         PRINT " ".
         PRINT "  PARKING ORBIT READY".

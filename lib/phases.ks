@@ -14,6 +14,10 @@ GLOBAL FUNCTION runPhases {
             phaseDone().
             RETURN.
         } ELSE IF CFG:HASKEY("PROGRESSIVE_RELOAD") AND CFG["PROGRESSIVE_RELOAD"] > 0 {
+            stateSet("reload_required", "true").
+            stateSet("reload_reason", "PHASE_BAND_CHANGE").
+            stateSet("reload_next_phase", phase).
+            stateSet("reload_next_band", "UNKNOWN").
             mLog("Phase " + phase + " requires a different library band. Reboot to continue.").
             PRINT " ".
             PRINT "  PHASE READY: " + phase.

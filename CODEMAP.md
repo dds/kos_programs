@@ -42,6 +42,7 @@ FR3 progressive library bands:
 - `LAND_ASSIST`: targeted deorbit and assist-stage release.
 - `LAND`: full powered landing.
 - `ROVER`: rover driving/co-pilot code.
+- Band/reload state is saved via `state.ks` as `lib_band`, `lib_band_phase`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, and `reload_next_band`.
 
 Mission profile files:
 

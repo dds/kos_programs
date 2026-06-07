@@ -114,6 +114,8 @@ On boot, `boot.ks` syncs `missions/<craft>/*.cfg` to the local processor. If the
 
 FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only launch/countdown/orbit plus lightweight `landing_assist.ks` when needed; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Rover landing missions then reload again after assist-stage release for full `landing.ks`, and after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
 
+The current band and pending reload are saved in mission state (`lib_band`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, `reload_next_band`) so a reboot or state dump shows why the computer is waiting.
+
 ### FJ1A
 
 Juno-powered trainer jet. Low speed (cruise ~80 m/s), broad wings. Same phase structure as FJ4B but with lower airspeed thresholds appropriate for the Juno engine. Supports optional SCIENCE payload for biome collection flights.
