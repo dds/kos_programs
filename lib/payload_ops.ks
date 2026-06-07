@@ -381,20 +381,22 @@ LOCAL FUNCTION _scanSatRecoverOrbit {
             OR (ABS(SHIP:APOAPSIS - recoveryAp) <= tol
                 AND ABS(SHIP:PERIAPSIS - recoveryPe) <= tol) {
         LOCAL burnOk IS TRUE.
-        LOCAL firstPeTarget IS recoveryPe.
-        IF firstPeTarget > SHIP:APOAPSIS - tol { SET firstPeTarget TO SHIP:APOAPSIS - tol. }
-        IF SHIP:PERIAPSIS < firstPeTarget - tol {
-            SET burnOk TO _scanSatBurn(
-                { RETURN _scanSatPlanSetPeAtAp(firstPeTarget). },
-                "SCANsat recovery safe Pe").
-        } ELSE IF ABS(SHIP:APOAPSIS - recoveryAp) > tol {
+        IF SHIP:APOAPSIS < recoveryAp - tol {
             SET burnOk TO _scanSatBurn(
                 { RETURN _scanSatPlanSetApAtPe(recoveryAp). },
                 "SCANsat recovery set Ap").
-        } ELSE IF ABS(SHIP:PERIAPSIS - recoveryPe) > tol {
+        } ELSE IF SHIP:PERIAPSIS < recoveryPe - tol {
             SET burnOk TO _scanSatBurn(
                 { RETURN _scanSatPlanSetPeAtAp(recoveryPe). },
                 "SCANsat recovery set Pe").
+        } ELSE IF ABS(SHIP:APOAPSIS - recoveryAp) > tol {
+            SET burnOk TO _scanSatBurn(
+                { RETURN _scanSatPlanSetApAtPe(recoveryAp). },
+                "SCANsat recovery trim Ap").
+        } ELSE IF ABS(SHIP:PERIAPSIS - recoveryPe) > tol {
+            SET burnOk TO _scanSatBurn(
+                { RETURN _scanSatPlanSetPeAtAp(recoveryPe). },
+                "SCANsat recovery trim Pe").
         }
         IF NOT burnOk { RETURN FALSE. }
         SET iter TO iter + 1.
