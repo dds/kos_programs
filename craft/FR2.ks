@@ -71,7 +71,7 @@ LOCAL FUNCTION _applyMissionState {
         "SCANSAT_DISPOSE_CARRIER", "SCANSAT_DISPOSE_PE",
         "SCANSAT_DISPOSE_MAX_TIME", "SCANSAT_DISPOSE_BEFORE_RELEASE",
         "SCANSAT_STAGE_AFTER_RELEASE", "SCANSAT_RECOVERY_PE",
-        "SCANSAT_RECOVERY_AP"
+        "SCANSAT_RECOVERY_AP", "SCANSAT_RELEASE_AFTER_CAPTURE"
     ) {
         _cfgFromState(key, TRUE).
     }
@@ -117,6 +117,10 @@ LOCAL FUNCTION buildPhaseSequence {
     orbitPhases:ADD("CIRC").
     orbitPhases:ADD("RAISE").
     orbitPhases:ADD("INCLINE").
+    IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
+            AND CFG["SCANSAT_RELEASE_AFTER_CAPTURE"] > 0 {
+        SET orbitPhases TO LIST("SCANSAT_IMPACT_RELEASE").
+    }
 
     LOCAL payloadPhases IS LEXICON(
         "CRASHPROBE", LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
@@ -252,6 +256,7 @@ GLOBAL FUNCTION main {
         "RELEASE_PROBE",    phaseReleaseProbe@,
         "RECIRC",           _phaseRecirc@,
         "RELAY_OPS",        phaseRelayOps@,
+        "SCANSAT_IMPACT_RELEASE", phaseScanSatImpactRelease@,
         "SCANSAT_OPS",      phaseScanSatOps@,
         "DEPLOY_SAT",       _phaseDeploySat@,
         "LAND_DEORBIT",     phaseLandDeorbit@,

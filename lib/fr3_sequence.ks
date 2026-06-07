@@ -31,6 +31,10 @@ GLOBAL FUNCTION fr3BuildPhaseSequence {
     }
 
     LOCAL orbitPhases IS LIST("CIRC", "RAISE", "INCLINE").
+    IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
+            AND CFG["SCANSAT_RELEASE_AFTER_CAPTURE"] > 0 {
+        SET orbitPhases TO LIST("SCANSAT_IMPACT_RELEASE").
+    }
     LOCAL payloadPhases IS LEXICON(
         "CRASHPROBE", LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
         "PROBE",      LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
@@ -66,6 +70,7 @@ GLOBAL FUNCTION fr3BuildPhaseMap {
         phaseMap:ADD("CIRC", phaseCirc@).
         phaseMap:ADD("RAISE", phaseRaiseAlt@).
         phaseMap:ADD("INCLINE", phaseInclCorrect@).
+        phaseMap:ADD("SCANSAT_IMPACT_RELEASE", phaseScanSatImpactRelease@).
     }
 
     IF band = "PAYLOAD_OPS" AND (fr3HasPayload("PROBE") OR fr3HasPayload("CRASHPROBE")) {

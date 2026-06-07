@@ -46,11 +46,12 @@ Profile-only FR3 libraries:
 FR3 progressive library bands:
 
 - `LAUNCH`: `fr3_payload`, `fr3_profile`, `fr3_sequence`, `fr3_ui`, `launch`, `countdown`, `orbit`, and `landing_assist` for landing payloads. Stops after `PARK` when `RELOAD_AFTER_PARK=1`.
-- `TRANSFER`: `fr3_payload`, `fr3_profile`, `fr3_sequence`, `xfer`, `countdown`, `maneuver`, `inclination`, `orbit`, and optional Lambert/rendezvous/science libraries.
+- `TRANSFER`: `fr3_payload`, `fr3_profile`, `fr3_sequence`, `xfer`, `countdown`, `maneuver`, `inclination`, `orbit`, and optional Lambert/rendezvous libraries.
 - `PAYLOAD_OPS`: FR3 mission runtime plus probe, relay, or SCANsat operation libraries only.
 - `LAND_ASSIST`: FR3 mission runtime, targeted deorbit, and assist-stage release, including maneuver countdown support.
 - `LAND`: FR3 mission runtime plus full powered landing, including maneuver countdown support.
 - `ROVER`: FR3 mission runtime plus rover driving/co-pilot code.
+- SCANsat profiles can insert `SCANSAT_IMPACT_RELEASE` after capture while still in the transfer band, lowering the attached carrier's Pe before releasing and recovering the mapper.
 - Band/reload state is saved via `state.ks` as `lib_band`, `lib_band_phase`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, and `reload_next_band`.
 
 Mission profile files:

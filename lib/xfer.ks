@@ -181,6 +181,14 @@ GLOBAL FUNCTION phaseCapture {
 }
 
 GLOBAL FUNCTION phaseCirc {
+    IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
+            AND CFG["SCANSAT_RELEASE_AFTER_CAPTURE"] > 0 {
+        mLog("CIRC redirected to SCANsat impact/release profile.").
+        stateSet("phase", "SCANSAT_IMPACT_RELEASE").
+        phaseScanSatImpactRelease().
+        RETURN.
+    }
+
     LOCAL circStatus IS "complete".
     mLogWarn("STATS circ phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
@@ -232,6 +240,78 @@ GLOBAL FUNCTION phaseCirc {
     orbitSummary().
     mLogWarn("STATS circ phase result status=" + circStatus
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
+    nextPhase(xferSeq).
+}
+
+GLOBAL FUNCTION phaseScanSatImpactRelease {
+    LOCAL impactPe IS 2000.
+    LOCAL recoveryPe IS 75000.
+    LOCAL recoveryAp IS 75000.
+    LOCAL tag IS "scansat_decoupler".
+
+    IF CFG:HASKEY("SCANSAT_DISPOSE_PE") { SET impactPe TO CFG["SCANSAT_DISPOSE_PE"]. }
+    IF CFG:HASKEY("SCANSAT_RECOVERY_PE") { SET recoveryPe TO CFG["SCANSAT_RECOVERY_PE"]. }
+    ELSE IF CFG:HASKEY("TARGET_PE") { SET recoveryPe TO CFG["TARGET_PE"]. }
+    IF CFG:HASKEY("SCANSAT_RECOVERY_AP") { SET recoveryAp TO CFG["SCANSAT_RECOVERY_AP"]. }
+    ELSE IF CFG:HASKEY("TARGET_AP") { SET recoveryAp TO CFG["TARGET_AP"]. }
+    IF CFG:HASKEY("SCANSAT_DECOUPLER_TAG") { SET tag TO CFG["SCANSAT_DECOUPLER_TAG"]. }
+
+    mLogWarn("STATS scansat-impact-release setup PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " impactPeKm=" + ROUND(impactPe/1000,1)
+        + " recoveryPeKm=" + ROUND(recoveryPe/1000,1)
+        + " recoveryApKm=" + ROUND(recoveryAp/1000,1)).
+
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    _scanSatPlanPeAtAp(impactPe, "SCANsat impact Pe").
+    IF NOT _executeScanSatStep("SCANsat impact Pe") { RETURN. }
+
+    IF tag <> "" {
+        IF NOT _releaseTaggedPayloadXfer(tag, "SCANsat") {
+            mLogError("SCANsat release failed after impact setup — tag '" + tag
+                + "' missing or not decouplable.").
+            HUDTEXT("ERROR: SCANsat not released", 8, 2, 16, RED, FALSE).
+            RETURN.
+        }
+    } ELSE {
+        mLogWarn("SCANSAT_DECOUPLER_TAG blank — mapper still attached after impact setup.").
+    }
+
+    stateSet("scansat_released_time", TIME:SECONDS).
+    mLogWarn("STATS scansat-release result mass=" + ROUND(SHIP:MASS,3)
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+    WAIT 0.5.
+
+    IF CFG:HASKEY("SCANSAT_STAGE_AFTER_RELEASE")
+            AND CFG["SCANSAT_STAGE_AFTER_RELEASE"] > 0 {
+        STAGE.
+        mLog("SCANsat staged after release.").
+        WAIT 1.
+        mLogWarn("STATS scansat-stage result mass=" + ROUND(SHIP:MASS,3)
+            + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+            + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+            + " availableThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
+    }
+
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    _scanSatPlanPeAtAp(recoveryPe, "SCANsat recover Pe").
+    IF NOT _executeScanSatStep("SCANsat recover Pe") { RETURN. }
+
+    IF SHIP:ORBIT:ECCENTRICITY > 0.01
+            OR ABS(SHIP:APOAPSIS - recoveryAp) > recoveryAp * 0.1 {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        planCircularize().
+        IF NOT _executeScanSatStep("SCANsat recovery recircularize") { RETURN. }
+    }
+
+    stateSet("scansat_recovered", "true").
+    orbitSummary().
+    mLogWarn("STATS scansat-impact-release result PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
     nextPhase(xferSeq).
@@ -323,6 +403,75 @@ LOCAL FUNCTION _burnWithRetry {
             WAIT 10.
         }
     }
+}
+
+LOCAL FUNCTION _executeScanSatStep {
+    PARAMETER label.
+
+    LOCAL success IS FALSE.
+    LOCAL retries IS 0.
+    UNTIL success {
+        IF NOT HASNODE {
+            mLogError(label + " has no maneuver node.").
+            RETURN FALSE.
+        }
+        mLogWarn("STATS scansat-burn setup label=" + label
+            + " dv=" + ROUND(NEXTNODE:DELTAV:MAG,1)
+            + " eta=" + ROUND(NEXTNODE:ETA,1)).
+        SET success TO executeManeuver().
+        IF NOT success {
+            SET retries TO retries + 1.
+            mLog(label + " missed (attempt " + retries + ") — waiting 5s.").
+            IF retries >= 3 {
+                mLogError(label + " failed after " + retries + " attempts.").
+                RETURN FALSE.
+            }
+            WAIT 5.
+        }
+    }
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _scanSatPlanPeAtAp {
+    PARAMETER targetPe.
+    PARAMETER label.
+
+    LOCAL mu IS SHIP:ORBIT:BODY:MU.
+    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL burnTime IS TIME:SECONDS + ETA:APOAPSIS.
+    LOCAL rBurn IS bodyR + SHIP:APOAPSIS.
+    LOCAL rTarget IS bodyR + targetPe.
+    LOCAL tSMA IS (rBurn + rTarget) / 2.
+    LOCAL vNow IS VELOCITYAT(SHIP, burnTime):ORBIT:MAG.
+    LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
+    LOCAL nd IS NODE(burnTime, 0, 0, vNew - vNow).
+    ADD nd.
+    mLog(label + " node: dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " targetPe=" + ROUND(targetPe/1000,1) + "km").
+    archivePlannedManeuverLog(label).
+    RETURN nd.
+}
+
+LOCAL FUNCTION _releaseTaggedPayloadXfer {
+    PARAMETER tagName.
+    PARAMETER label.
+
+    LOCAL parts IS SHIP:PARTSTAGGED(tagName).
+    IF parts:LENGTH = 0 { RETURN FALSE. }
+
+    LOCAL dc IS parts[0].
+    IF dc:HASMODULE("ModuleDecouple") {
+        dc:GETMODULE("ModuleDecouple"):DOEVENT("Decouple").
+    } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
+        dc:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
+    } ELSE {
+        RETURN FALSE.
+    }
+
+    WAIT 0.5.
+    mLog(label + " released via '" + tagName + "'. Remaining mass: "
+        + ROUND(SHIP:MASS,2) + "t.").
+    RETURN TRUE.
 }
 
 GLOBAL FUNCTION phaseInclCorrect {

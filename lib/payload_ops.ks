@@ -108,6 +108,14 @@ GLOBAL FUNCTION phaseScanSatOps {
 
     orbitSummary().
     mLog("SCANsat payload on station at " + MISSION["target"] + ".").
+    IF stateGet("scansat_recovered", "false") = "true" {
+        scienceStartScanners().
+        WAIT 1.
+        scienceScanStatus().
+        nextPhase(_payloadSeq()).
+        RETURN.
+    }
+
     scienceStartScanners().
     WAIT 1.
     scienceScanStatus().
@@ -305,8 +313,7 @@ LOCAL FUNCTION _scanSatImpactThenRecover {
     WAIT 2.
 
     IF NOT _scanSatRecoverOrbit(recoveryPe, recoveryAp) { RETURN FALSE. }
-    scienceStartScanners().
-    scienceScanStatus().
+    stateSet("scansat_recovered", "true").
     HUDTEXT("SCANsat recovered to mapping orbit", 8, 2, 16, GREEN, FALSE).
     mLog("SCANsat released and recovered to mapping orbit.").
     RETURN TRUE.

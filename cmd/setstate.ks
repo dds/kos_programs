@@ -12,11 +12,7 @@ LOCAL FUNCTION _syncLib {
     LOCAL dstKsm IS "1:/lib/" + libName + ".ksm".
 
     IF EXISTS(src) {
-        IF NOT KSM_SKIP:CONTAINS(libName) {
-            COMPILE src TO dstKsm.
-        } ELSE {
-            COPYPATH(src, dst).
-        }
+        COMPILE src TO dstKsm.
     }
 }
 
@@ -29,12 +25,13 @@ LOCAL FUNCTION _loadLib {
     }
 }
 
+_syncLib("state").
+_loadLib("state").
 _syncLib("logs").
 _loadLib("logs").
 initLog().
-_syncLib("state").
-_loadLib("state").
 
-stateSet("phase", newPhase).
-PRINT "Phase -> " + newPhase.
-mLog("Phase forced: " + newPhase).
+LOCAL phaseName IS newPhase:TOUPPER.
+stateSet("phase", phaseName).
+PRINT "Phase -> " + phaseName.
+mLog("Phase forced: " + phaseName).
