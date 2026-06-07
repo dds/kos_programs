@@ -354,7 +354,7 @@ LOCAL FUNCTION _scanSatImpactHalt {
     PRINT "  SCANSAT RECOVERY HOLD".
     PRINT "  " + reason.
     PRINT "  Manual mode remains available; reboot/resume after review.".
-    WAIT UNTIL FALSE.
+    RETURN FALSE.
 }
 
 GLOBAL FUNCTION phaseRaiseAlt {
