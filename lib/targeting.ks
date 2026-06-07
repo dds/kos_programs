@@ -105,6 +105,12 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_SAMPLES") {
         SET scanSamples TO CFG["TARGET_DEORBIT_SCAN_SAMPLES"].
     }
+    IF CFG:HASKEY("LANDING_SIM_MODE") AND CFG["LANDING_SIM_MODE"] > 0 {
+        IF scanOrbits > 2 { SET scanOrbits TO 2. }
+        IF scanSamples > 256 { SET scanSamples TO 256. }
+        mLogWarn("STATS deorbit scan mode=sim scanOrbits="
+            + scanOrbits + " samples=" + scanSamples).
+    }
     LOCAL scanStep IS period * scanOrbits / scanSamples.
     LOCAL passes    IS LIST(1.0, 0.1, 0.01, 0.001, 0.0001).
     LOCAL coarseStopDist IS 1000.
