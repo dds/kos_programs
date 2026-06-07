@@ -315,9 +315,10 @@ LOCAL FUNCTION _assistSurfaceRelease {
         }
         LOCAL mode_ IS "DROP".
         IF brakeCommitted {
-            IF hSpeed > LANDING_CFG["ASSIST_SURFACE_FINAL_HSPEED"]
-                    OR _assistSurfaceFinalBrakeReady(radarAlt, vSpeed) {
-                SET mode_ TO "BRAKE".
+            IF hSpeed > LANDING_CFG["ASSIST_SURFACE_FINAL_HSPEED"] {
+                SET mode_ TO "HBRAKE".
+            } ELSE IF _assistSurfaceFinalBrakeReady(radarAlt, vSpeed) {
+                SET mode_ TO "VBRAKE".
             } ELSE {
                 SET brakeCommitted TO FALSE.
             }
@@ -326,12 +327,12 @@ LOCAL FUNCTION _assistSurfaceRelease {
         } ELSE IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_HSPEED"] {
             IF _assistSurfaceBrakeReady(radarAlt, hSpeed, vSpeed, targetDistM) {
                 SET brakeCommitted TO TRUE.
-                SET mode_ TO "BRAKE".
+                SET mode_ TO "HBRAKE".
             } ELSE {
                 SET mode_ TO "COAST".
             }
         } ELSE IF _assistSurfaceFinalBrakeReady(radarAlt, vSpeed) {
-            SET mode_ TO "BRAKE".
+            SET mode_ TO "VBRAKE".
         }
 
         IF mode_ <> lastMode {
@@ -361,8 +362,10 @@ LOCAL FUNCTION _assistSurfaceRelease {
 
         IF mode_ = "COAST" {
             LOCK STEERING TO _surfaceRetrograde().
-        } ELSE IF mode_ = "BRAKE" {
+        } ELSE IF mode_ = "HBRAKE" {
             LOCK STEERING TO _assistBrakeSteering(hVel, hSpeed).
+        } ELSE IF mode_ = "VBRAKE" {
+            LOCK STEERING TO _assistSteering(hVel, hSpeed).
         } ELSE IF mode_ = "DROP" {
             LOCK STEERING TO _assistSteering(hVel, hSpeed).
         } ELSE IF landingTarget["FOUND"] AND radarAlt < LANDING_CFG["GUIDANCE_ALT"] {
@@ -375,12 +378,24 @@ LOCAL FUNCTION _assistSurfaceRelease {
         IF maxAcc > 0 {
             IF mode_ = "COAST" OR mode_ = "DROP" {
                 LOCK THROTTLE TO 0.
-            } ELSE IF mode_ = "BRAKE" {
+            } ELSE IF mode_ = "HBRAKE" {
                 LOCAL brakeThrottle IS LANDING_CFG["ASSIST_SURFACE_BRAKE_THROTTLE"].
                 IF vSpeed < -LANDING_CFG["ASSIST_DESCENT_SPEED"] {
                     SET brakeThrottle TO MIN(1, brakeThrottle + 0.2).
                 }
-                LOCK THROTTLE TO MAX(0.1, MIN(LANDING_CFG["ASSIST_THROTTLE"], brakeThrottle)).
+                IF vSpeed > 2 {
+                    LOCK THROTTLE TO 0.
+                } ELSE {
+                    LOCK THROTTLE TO MAX(0.1, MIN(LANDING_CFG["ASSIST_THROTTLE"], brakeThrottle)).
+                }
+            } ELSE IF mode_ = "VBRAKE" {
+                LOCAL targetVb IS -MAX(
+                    LANDING_CFG["ASSIST_SURFACE_FINAL_MAX_SPEED"],
+                    MIN(LANDING_CFG["ASSIST_DESCENT_SPEED"], radarAlt * 0.08)).
+                LOCAL gravB IS _localGravity().
+                LOCAL desiredB IS (targetVb - vSpeed) * 0.45.
+                LOCAL throttB IS (gravB + desiredB) / maxAcc.
+                LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], throttB)).
             } ELSE {
                 LOCAL targetV IS -MAX(
                     LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"],
@@ -772,26 +787,15 @@ LOCAL FUNCTION _assistSurfaceBrakeReady {
     LOCAL hBrakeDist IS ((hSpeed^2) / (2 * netAcc))
         * LANDING_CFG["ASSIST_SURFACE_HBRAKE_FACTOR"]
         + LANDING_CFG["ASSIST_SURFACE_HBRAKE_MARGIN"].
-    LOCAL verticalAlt IS ((MAX(0, -vSpeed)^2) / (2 * netAcc))
-        * LANDING_CFG["ASSIST_SURFACE_BRAKE_FACTOR"]
-        + LANDING_CFG["ASSIST_SURFACE_BRAKE_MARGIN"].
-
     IF targetDistM >= 0 {
         IF _assistTargetAoa(targetDistM, radarAlt)
                 >= LANDING_CFG["ASSIST_SURFACE_BRAKE_AOA"] {
             RETURN TRUE.
         }
         IF targetDistM <= hBrakeDist { RETURN TRUE. }
-        IF radarAlt <= verticalAlt { RETURN TRUE. }
         RETURN FALSE.
     }
 
-    IF ADDONS:KE:AVAILABLE {
-        LOCAL countdown IS ADDONS:KE:SUICIDEBURNCOUNTDOWN.
-        IF countdown <= LANDING_CFG["ASSIST_SURFACE_BRAKE_LEAD"] {
-            RETURN TRUE.
-        }
-    }
     RETURN FALSE.
 }
 
