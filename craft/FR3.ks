@@ -372,7 +372,7 @@ LOCAL FUNCTION _applyMissionProfile {
             AND _hasLandingPayload() {
         // Mun mapper + rover stack: deploy mapper in a useful polar orbit,
         // then spend the remaining vehicle on targeted rover landing.
-        SET CFG["CAPTURE_PE"] TO 20000.
+        SET CFG["CAPTURE_PE"] TO 15000.
         SET CFG["CAPTURE_INC"] TO 90.
         SET CFG["TARGET_PE"] TO 250000.
         SET CFG["TARGET_AP"] TO 250000.
