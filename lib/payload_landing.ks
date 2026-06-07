@@ -7,7 +7,14 @@ GLOBAL FUNCTION phaseLandDeorbit {
     mLogWarn("STATS land-deorbit phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
-        + " targetPeKm=" + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1)).
+        + " targetPeKm=" + ROUND(_landingDeorbitPe()/1000,1)).
+    IF SHIP:STATUS = "SUB_ORBITAL"
+            AND (CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH")
+                AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0) {
+        mLogWarn("STATS land-deorbit phase skip status=already-suborbital mode=sim").
+        nextPhase(fr3Seq).
+        RETURN.
+    }
     IF SHIP:STATUS = "SUB_ORBITAL" AND landingImpactAcceptableForAssist() {
         mLogWarn("STATS land-deorbit phase skip status=already-suborbital").
         nextPhase(fr3Seq).
@@ -46,7 +53,8 @@ LOCAL FUNCTION _timedLandingDeorbit {
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL rBurn IS (POSITIONAT(SHIP, burnUT) - POSITIONAT(SHIP:BODY, burnUT)):MAG.
-    LOCAL rPe IS bodyR + LANDING_CFG["DEORBIT_PE"].
+    LOCAL deorbitPe IS _landingDeorbitPe().
+    LOCAL rPe IS bodyR + deorbitPe.
     LOCAL tSMA IS (rBurn + rPe) / 2.
     LOCAL vNow IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
@@ -56,12 +64,15 @@ LOCAL FUNCTION _timedLandingDeorbit {
     ADD nd.
     mLogWarn("STATS land-deorbit timed setup leadMin=" + ROUND(leadMin,1)
         + " burnT=" + ROUND(burnUT - TIME:SECONDS,0)
-        + " targetPeKm=" + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1)
+        + " targetPeKm=" + ROUND(deorbitPe/1000,1)
         + " dv=" + ROUND(nd:DELTAV:MAG,1)).
     mLog("Timed sim deorbit node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " m/s at T+" + ROUND(nd:ETA,0) + "s.").
-    archivePlannedManeuverLog("timed-landing-deorbit").
-    LOCAL ok IS executeManeuver().
+    IF HOMECONNECTION:ISCONNECTED {
+        archiveLog().
+        mLog("Planned maneuver log archived: timed-landing-deorbit.").
+    }
+    LOCAL ok IS _executeTimedDeorbitNode(nd).
     mLogWarn("STATS land-deorbit timed result ok=" + ok
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
@@ -75,6 +86,74 @@ LOCAL FUNCTION _timedLandingDeorbit {
         RETURN FALSE.
     }
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _executeTimedDeorbitNode {
+    PARAMETER nd.
+    LOCAL burnDV IS nd:DELTAV:MAG.
+    IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {
+        mLogError("Timed deorbit cannot burn: no available thrust.").
+        REMOVE nd.
+        RETURN FALSE.
+    }
+    LOCAL maxAcc IS SHIP:AVAILABLETHRUST / SHIP:MASS.
+    LOCAL burnTime IS burnDV / MAX(0.1, maxAcc).
+    LOCAL startTime IS nd:TIME - burnTime / 2.
+    IF startTime < TIME:SECONDS + 5 { SET startTime TO TIME:SECONDS + 5. }
+
+    mLogWarn("STATS timed-burn setup dv=" + ROUND(burnDV,1)
+        + " eta=" + ROUND(startTime - TIME:SECONDS,1)
+        + " nodeEta=" + ROUND(nd:ETA,1)
+        + " maxAcc=" + ROUND(maxAcc,2)).
+    SET SAS TO FALSE.
+    LOCK STEERING TO nd:BURNVECTOR.
+    LOCAL alignDeadline IS MIN(startTime - 2, TIME:SECONDS + 45).
+    UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < 5
+            OR TIME:SECONDS >= alignDeadline {
+        LOCK STEERING TO nd:BURNVECTOR.
+        WAIT 0.1.
+    }
+    mLogWarn("STATS timed-burn align angle="
+        + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR),1)
+        + " timeToBurn=" + ROUND(startTime - TIME:SECONDS,1)).
+
+    WAIT UNTIL TIME:SECONDS >= startTime.
+    LOCAL burnStart IS TIME:SECONDS.
+    mLog("Timed deorbit burn start. dV=" + ROUND(burnDV,1) + " m/s.").
+    UNTIL nd:DELTAV:MAG < MAX(0.08, burnDV * 0.01)
+            OR TIME:SECONDS - burnStart > burnTime * 2 + 8 {
+        LOCK STEERING TO nd:BURNVECTOR.
+        IF nd:DELTAV:MAG > 3 {
+            LOCK THROTTLE TO 1.
+        } ELSE IF nd:DELTAV:MAG > 0.4 {
+            LOCK THROTTLE TO 0.25.
+        } ELSE {
+            LOCK THROTTLE TO 0.05.
+        }
+        WAIT 0.02.
+    }
+
+    LOCAL residual IS nd:DELTAV:MAG.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    REMOVE nd.
+    SET SAS TO TRUE.
+    mLog("Timed deorbit burn complete. Residual=" + ROUND(residual,2) + " m/s.").
+    mLogWarn("STATS timed-burn result dv=" + ROUND(burnDV,1)
+        + " residual=" + ROUND(residual,2)
+        + " duration=" + ROUND(TIME:SECONDS - burnStart,1)).
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _landingDeorbitPe {
+    IF DEFINED LANDING_CFG {
+        RETURN LANDING_CFG["DEORBIT_PE"].
+    }
+    IF CFG:HASKEY("LANDING_DEORBIT_PE") {
+        RETURN CFG["LANDING_DEORBIT_PE"].
+    }
+    RETURN 5000.
 }
 
 LOCAL FUNCTION _confirmLandingTarget {

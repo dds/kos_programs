@@ -382,10 +382,13 @@ LOCAL FUNCTION _fr3Libs {
         }
     } ELSE IF band = "LAND_DEORBIT" {
         libs:ADD("payload_landing").
-        libs:ADD("targeting").
-        libs:ADD("countdown").
-        libs:ADD("maneuver").
-        libs:ADD("landing_assist").
+        IF NOT (CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH")
+                AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0) {
+            libs:ADD("countdown").
+            libs:ADD("maneuver").
+            libs:ADD("targeting").
+            libs:ADD("landing_assist").
+        }
     } ELSE IF band = "LAND_ASSIST" {
         libs:ADD("payload_landing").
         libs:ADD("landing_assist").
