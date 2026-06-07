@@ -28,6 +28,8 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_FLYAWAY_TIME", 4.0,
     "ASSIST_FLYAWAY_THROTTLE", 0.6,
     "ASSIST_RELEASE_ON_SURFACE", FALSE,
+    "ASSIST_SURFACE_BRAKE_HSPEED", 80.0,
+    "ASSIST_SURFACE_BRAKE_THROTTLE", 0.7,
     "ASSIST_SURFACE_FINAL_SPEED", 0.8,
     "ASSIST_SURFACE_SETTLE_TIME", 5.0,
     "ASSIST_SURFACE_TIPOVER", TRUE,
@@ -214,13 +216,31 @@ LOCAL FUNCTION _assistSurfaceRelease {
     HUDTEXT("Emergency carrier landing", 5, 2, 15, YELLOW, FALSE).
 
     LOCAL nextStatsAlt IS 5000.
+    LOCAL lastMode IS "".
     UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" OR landingAbortFlag {
         LOCAL hVel IS _horizontalSurfaceVelocity().
         LOCAL hSpeed IS hVel:MAG.
         LOCAL radarAlt IS ALT:RADAR.
         LOCAL vSpeed IS SHIP:VERTICALSPEED.
+        LOCAL mode IS "APPROACH".
+        IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_HSPEED"]
+                AND radarAlt > 500 {
+            SET mode TO "BRAKE".
+        } ELSE IF radarAlt < 50 {
+            SET mode TO "FINAL".
+        }
 
-        IF landingTarget["FOUND"] AND radarAlt < LANDING_CFG["GUIDANCE_ALT"] {
+        IF mode <> lastMode {
+            mLogWarn("STATS assist-surface mode=" + mode
+                + " alt=" + ROUND(radarAlt,1)
+                + " h=" + ROUND(hSpeed,1)
+                + " v=" + ROUND(vSpeed,1)).
+            SET lastMode TO mode.
+        }
+
+        IF mode = "BRAKE" {
+            LOCK STEERING TO SHIP:RETROGRADE.
+        } ELSE IF landingTarget["FOUND"] AND radarAlt < LANDING_CFG["GUIDANCE_ALT"] {
             LOCK STEERING TO _assistTargetSteering(landingTarget, hVel, hSpeed).
         } ELSE {
             LOCK STEERING TO _assistSteering(hVel, hSpeed).
@@ -228,17 +248,25 @@ LOCAL FUNCTION _assistSurfaceRelease {
 
         LOCAL maxAcc IS _safeMaxAcc().
         IF maxAcc > 0 {
-            LOCAL targetV IS -MAX(
-                LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"],
-                MIN(LANDING_CFG["ASSIST_DESCENT_SPEED"], radarAlt * 0.2)).
-            IF radarAlt < 20 {
-                SET targetV TO -LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"].
-            }
+            IF mode = "BRAKE" {
+                LOCAL brakeThrottle IS LANDING_CFG["ASSIST_SURFACE_BRAKE_THROTTLE"].
+                IF vSpeed < -LANDING_CFG["ASSIST_DESCENT_SPEED"] {
+                    SET brakeThrottle TO MIN(1, brakeThrottle + 0.2).
+                }
+                LOCK THROTTLE TO MAX(0.1, MIN(LANDING_CFG["ASSIST_THROTTLE"], brakeThrottle)).
+            } ELSE {
+                LOCAL targetV IS -MAX(
+                    LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"],
+                    MIN(LANDING_CFG["ASSIST_DESCENT_SPEED"], radarAlt * 0.2)).
+                IF radarAlt < 20 {
+                    SET targetV TO -LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"].
+                }
 
-            LOCAL grav IS _localGravity().
-            LOCAL desiredAcc IS (targetV - vSpeed) * 0.35.
-            LOCAL thrott IS (grav + desiredAcc) / maxAcc.
-            LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], thrott)).
+                LOCAL grav IS _localGravity().
+                LOCAL desiredAcc IS (targetV - vSpeed) * 0.35.
+                LOCAL thrott IS (grav + desiredAcc) / maxAcc.
+                LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], thrott)).
+            }
         }
 
         HUDTEXT("Carrier alt:" + ROUND(radarAlt,0)
