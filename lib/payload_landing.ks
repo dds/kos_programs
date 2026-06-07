@@ -13,6 +13,12 @@ GLOBAL FUNCTION phaseLandDeorbit {
         nextPhase(fr3Seq).
         RETURN.
     }
+    IF CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH") AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0 {
+        IF _timedLandingDeorbit() {
+            nextPhase(fr3Seq).
+        }
+        RETURN.
+    }
     IF NOT _confirmLandingTarget() { RETURN. }
     LOCAL deorbitOk IS landingTargetedDeorbit().
     mLogWarn("STATS land-deorbit phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -29,6 +35,46 @@ GLOBAL FUNCTION phaseLandDeorbit {
         RETURN.
     }
     nextPhase(fr3Seq).
+}
+
+LOCAL FUNCTION _timedLandingDeorbit {
+    LOCAL leadMin IS 5.
+    IF CFG:HASKEY("LANDING_DEORBIT_LEAD_MINUTES") {
+        SET leadMin TO CFG["LANDING_DEORBIT_LEAD_MINUTES"].
+    }
+    LOCAL burnUT IS TIME:SECONDS + MAX(30, leadMin * 60).
+    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL mu IS SHIP:ORBIT:BODY:MU.
+    LOCAL rBurn IS (POSITIONAT(SHIP, burnUT) - POSITIONAT(SHIP:BODY, burnUT)):MAG.
+    LOCAL rPe IS bodyR + LANDING_CFG["DEORBIT_PE"].
+    LOCAL tSMA IS (rBurn + rPe) / 2.
+    LOCAL vNow IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
+    LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
+    LOCAL nd IS NODE(burnUT, 0, 0, vNew - vNow).
+
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    ADD nd.
+    mLogWarn("STATS land-deorbit timed setup leadMin=" + ROUND(leadMin,1)
+        + " burnT=" + ROUND(burnUT - TIME:SECONDS,0)
+        + " targetPeKm=" + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1)
+        + " dv=" + ROUND(nd:DELTAV:MAG,1)).
+    mLog("Timed sim deorbit node: dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " m/s at T+" + ROUND(nd:ETA,0) + "s.").
+    archivePlannedManeuverLog("timed-landing-deorbit").
+    LOCAL ok IS executeManeuver().
+    mLogWarn("STATS land-deorbit timed result ok=" + ok
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " status=" + SHIP:STATUS).
+    IF NOT ok {
+        stateSet("phase", "LAND_DEORBIT").
+        PRINT " ".
+        PRINT "  TIMED LANDING DEORBIT MISSED".
+        PRINT "  Reboot/resume or rerun setup when ready.".
+        yieldToPrompt().
+        RETURN FALSE.
+    }
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _confirmLandingTarget {
@@ -89,7 +135,9 @@ GLOBAL FUNCTION phaseLandAssist {
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " releaseSurface=" + LANDING_CFG["ASSIST_RELEASE_ON_SURFACE"]).
     IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
-    IF NOT landingImpactAcceptableForAssist() {
+    IF CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH") AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0 {
+        mLogWarn("STATS landing-impact skipped reason=sim-no-target-search").
+    } ELSE IF NOT landingImpactAcceptableForAssist() {
         mLogError("Predicted landing impact is not within target tolerance; holding LAND_ASSIST.").
         stateSet("phase", "LAND_ASSIST").
         LOCK THROTTLE TO 0.
