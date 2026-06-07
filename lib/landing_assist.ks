@@ -38,6 +38,10 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_SURFACE_BRAKE_AOA", 60.0,
     "ASSIST_SURFACE_FINAL_SPEED", 0.8,
     "ASSIST_SURFACE_FINAL_HSPEED", 2.0,
+    "ASSIST_SURFACE_RELEASE_ALT", 5.0,
+    "ASSIST_SURFACE_RELEASE_HSPEED", 2.0,
+    "ASSIST_SURFACE_RELEASE_VSPEED", 1.5,
+    "ASSIST_SURFACE_RELEASE_SETTLE", 0.5,
     "ASSIST_SURFACE_SETTLE_TIME", 5.0,
     "ASSIST_SURFACE_TIPOVER", TRUE,
     "ASSIST_SURFACE_TIP_TIME", 4.0,
@@ -82,8 +86,12 @@ GLOBAL FUNCTION landingAssistStage {
         IF LANDING_CFG["ASSIST_RELEASE_ON_SURFACE"] {
             mLogWarn("No assist decoupler tagged '"
                 + LANDING_CFG["ASSIST_DECOUPLER_TAG"]
-                + "' - landing whole stack without release.").
-            RETURN _assistSurfaceRelease(0).
+                + "' - cannot hand rover off near touchdown.").
+            IF CFG:HASKEY("LANDING_SIM_MODE") AND CFG["LANDING_SIM_MODE"] > 0 {
+                mLogWarn("SIM fallback: landing whole stack without release.").
+                RETURN _assistSurfaceRelease(0).
+            }
+            RETURN FALSE.
         } ELSE {
             mLogWarn("No assist decoupler tagged '"
                 + LANDING_CFG["ASSIST_DECOUPLER_TAG"] + "' - skipping assist.").
@@ -259,9 +267,11 @@ LOCAL FUNCTION _assistSurfaceRelease {
             SET landingTarget["SOURCE"] TO "site-grid".
         }
     }
-    mLogWarn("STATS assist-surface setup release=surface finalV="
+    mLogWarn("STATS assist-surface setup release=near-touchdown finalV="
         + LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"]
-        + " settle=" + LANDING_CFG["ASSIST_SURFACE_SETTLE_TIME"]).
+        + " releaseAlt=" + LANDING_CFG["ASSIST_SURFACE_RELEASE_ALT"]
+        + " releaseH=" + LANDING_CFG["ASSIST_SURFACE_RELEASE_HSPEED"]
+        + " releaseV=" + LANDING_CFG["ASSIST_SURFACE_RELEASE_VSPEED"]).
     IF landingTarget["FOUND"] {
         mLogWarn("STATS assist-surface target source=" + landingTarget["SOURCE"]
             + " lat=" + ROUND(landingTarget["LAT"],4)
@@ -269,8 +279,13 @@ LOCAL FUNCTION _assistSurfaceRelease {
     } ELSE {
         mLogWarn("STATS assist-surface target status=missing").
     }
-    mLog("Emergency surface assist: landing whole stack on second stage.").
-    HUDTEXT("Emergency carrier landing", 5, 2, 15, YELLOW, FALSE).
+    IF decoupler <> 0 {
+        mLog("Emergency carrier descent: release rover just above touchdown.").
+        HUDTEXT("Carrier descent to rover handoff", 5, 2, 15, YELLOW, FALSE).
+    } ELSE {
+        mLog("Emergency surface assist: landing whole stack on second stage.").
+        HUDTEXT("Emergency carrier landing", 5, 2, 15, YELLOW, FALSE).
+    }
 
     LOCAL nextStatsAlt IS 5000.
     LOCAL lastMode IS "".
@@ -315,6 +330,18 @@ LOCAL FUNCTION _assistSurfaceRelease {
                 + " v=" + ROUND(vSpeed,1)
                 + " targetDistM=" + ROUND(targetDistM,0)).
             SET lastMode TO mode_.
+        }
+
+        IF decoupler <> 0
+                AND _assistSurfaceHandoffReady(radarAlt, hSpeed, vSpeed) {
+            LOCK THROTTLE TO 0.
+            mLogWarn("STATS assist-surface handoff alt=" + ROUND(radarAlt,2)
+                + " h=" + ROUND(hSpeed,2)
+                + " v=" + ROUND(vSpeed,2)).
+            mLog("Rover handoff: decoupling near touchdown.").
+            _decouplePart(decoupler).
+            WAIT LANDING_CFG["ASSIST_SURFACE_RELEASE_SETTLE"].
+            RETURN _assistRoverFinalTouchdown().
         }
 
         IF mode_ = "COAST" OR mode_ = "BRAKE" {
@@ -398,22 +425,113 @@ LOCAL FUNCTION _assistSurfaceRelease {
         + " roll=" + ROUND(SHIP:FACING:ROLL,1)
         + " pitch=" + ROUND(SHIP:FACING:PITCH,1)).
 
-    IF LANDING_CFG["ASSIST_SURFACE_TIPOVER"] {
+    IF decoupler = 0 AND LANDING_CFG["ASSIST_SURFACE_TIPOVER"] {
         mLog("Tipping carrier before rover release.").
         LOCK STEERING TO SHIP:FACING:RIGHTVECTOR.
         WAIT LANDING_CFG["ASSIST_SURFACE_TIP_TIME"].
     }
 
-    IF decoupler <> 0 {
-        _decouplePart(decoupler).
-        WAIT 0.5.
-    } ELSE {
-        mLogWarn("STATS assist-surface release status=skipped reason=no-decoupler").
-    }
+    mLogWarn("STATS assist-surface release status=skipped reason=no-decoupler").
     UNLOCK THROTTLE.
     UNLOCK STEERING.
     SET SAS TO TRUE.
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _assistSurfaceHandoffReady {
+    PARAMETER radarAlt.
+    PARAMETER hSpeed.
+    PARAMETER vSpeed.
+
+    LOCAL releaseAlt IS LANDING_CFG["ASSIST_SURFACE_RELEASE_ALT"].
+    LOCAL releaseH IS LANDING_CFG["ASSIST_SURFACE_RELEASE_HSPEED"].
+    LOCAL releaseV IS LANDING_CFG["ASSIST_SURFACE_RELEASE_VSPEED"].
+    IF radarAlt <= releaseAlt
+            AND hSpeed <= releaseH
+            AND ABS(vSpeed) <= releaseV {
+        RETURN TRUE.
+    }
+
+    LOCAL floorAlt IS MAX(1.0, releaseAlt * 0.5).
+    IF radarAlt <= floorAlt
+            AND hSpeed <= MAX(releaseH * 2, 4)
+            AND vSpeed > -MAX(releaseV * 2, 4) {
+        mLogWarn("STATS assist-surface handoff forced alt="
+            + ROUND(radarAlt,2) + " h=" + ROUND(hSpeed,2)
+            + " v=" + ROUND(vSpeed,2)).
+        RETURN TRUE.
+    }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _assistRoverFinalTouchdown {
+    LOCAL nextStatsAlt IS 20.
+    LOCAL lastMode IS "".
+    mLog("Rover final touchdown: holding wheels-down attitude.").
+    HUDTEXT("Rover final touchdown", 4, 2, 15, GREEN, FALSE).
+
+    UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" OR landingAbortFlag {
+        LOCAL hVel IS _horizontalSurfaceVelocity().
+        LOCAL hSpeed IS hVel:MAG.
+        LOCAL radarAlt IS ALT:RADAR.
+        LOCAL vSpeed IS SHIP:VERTICALSPEED.
+        LOCAL mode_ IS "FINAL".
+        IF hSpeed > LANDING_CFG["ASSIST_SURFACE_FINAL_HSPEED"] {
+            SET mode_ TO "KILL_H".
+        }
+        IF mode_ <> lastMode {
+            mLogWarn("STATS rover-final mode=" + mode_
+                + " alt=" + ROUND(radarAlt,2)
+                + " h=" + ROUND(hSpeed,2)
+                + " v=" + ROUND(vSpeed,2)).
+            SET lastMode TO mode_.
+        }
+
+        LOCK STEERING TO _assistSteering(hVel, hSpeed).
+        LOCAL maxAcc IS _safeMaxAcc().
+        IF maxAcc > 0 {
+            LOCAL targetV IS -LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"].
+            IF radarAlt > 15 {
+                SET targetV TO -MIN(LANDING_CFG["ASSIST_DESCENT_SPEED"], radarAlt * 0.15).
+            }
+            LOCAL grav IS _localGravity().
+            LOCAL desiredAcc IS (targetV - vSpeed) * 0.45.
+            LOCAL thrott IS (grav + desiredAcc) / maxAcc.
+            LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], thrott)).
+        } ELSE {
+            LOCK THROTTLE TO 0.
+        }
+
+        IF radarAlt <= nextStatsAlt {
+            mLogWarn("STATS rover-final descent alt=" + ROUND(radarAlt,2)
+                + " h=" + ROUND(hSpeed,2)
+                + " v=" + ROUND(vSpeed,2)
+                + " maxAcc=" + ROUND(maxAcc,2)).
+            SET nextStatsAlt TO nextStatsAlt / 2.
+            IF nextStatsAlt < 2 { SET nextStatsAlt TO 2. }
+        }
+        WAIT 0.03.
+    }
+
+    LOCK THROTTLE TO 0.
+    IF landingAbortFlag {
+        mLogError("Rover final touchdown aborted.").
+        UNLOCK THROTTLE.
+        UNLOCK STEERING.
+        SET SAS TO TRUE.
+        RETURN FALSE.
+    }
+    WAIT LANDING_CFG["ASSIST_SURFACE_SETTLE_TIME"].
+    mLogWarn("STATS rover-final result status=" + SHIP:STATUS
+        + " h=" + ROUND(_horizontalSurfaceVelocity():MAG,2)
+        + " v=" + ROUND(SHIP:VERTICALSPEED,2)
+        + " roll=" + ROUND(SHIP:FACING:ROLL,1)
+        + " pitch=" + ROUND(SHIP:FACING:PITCH,1)).
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN TRUE. }
+    RETURN FALSE.
 }
 
 GLOBAL FUNCTION landingResolveTarget {
