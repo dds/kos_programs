@@ -297,16 +297,7 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
     }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    IF recoveryPe >= SHIP:APOAPSIS - 1000 {
-        mLogWarn("STATS scansat-recover clamp requestedPeKm="
-            + ROUND(recoveryPe/1000,1)
-            + " currentApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-            + " action=circularize").
-        planCircularize().
-    } ELSE {
-        _scanSatPlanPeAtAp(recoveryPe, "SCANsat recover Pe").
-    }
-    IF NOT _executeScanSatStep("SCANsat recover Pe") { RETURN. }
+    IF NOT _scanSatRecoverPeDirect(recoveryPe) { RETURN. }
 
     IF SHIP:APOAPSIS < recoveryAp * 0.95 {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
@@ -428,6 +419,7 @@ LOCAL FUNCTION _executeScanSatStep {
             mLogError(label + " has no maneuver node.").
             RETURN FALSE.
         }
+        WAIT 0.5.
         LOCAL maxDv IS 1000.
         IF CFG:HASKEY("SCANSAT_MAX_NODE_DV") { SET maxDv TO CFG["SCANSAT_MAX_NODE_DV"]. }
         IF NEXTNODE:DELTAV:MAG > maxDv {
@@ -457,6 +449,78 @@ LOCAL FUNCTION _executeScanSatStep {
         }
     }
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _scanSatRecoverPeDirect {
+    PARAMETER requestedPe.
+
+    LOCAL targetPe IS requestedPe.
+    IF targetPe >= SHIP:APOAPSIS - 1000 {
+        SET targetPe TO SHIP:APOAPSIS - 1000.
+    }
+    IF targetPe < 10000 { SET targetPe TO MIN(10000, SHIP:APOAPSIS - 1000). }
+
+    LOCAL maxTime IS 120.
+    IF CFG:HASKEY("SCANSAT_RECOVER_MAX_TIME") {
+        SET maxTime TO CFG["SCANSAT_RECOVER_MAX_TIME"].
+    }
+
+    mLogWarn("STATS scansat-recover-direct setup PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " requestedPeKm=" + ROUND(requestedPe/1000,1)
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " maxTime=" + ROUND(maxTime,0)
+        + " thrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
+
+    IF SHIP:PERIAPSIS >= targetPe {
+        mLog("SCANsat recovery Pe already safe.").
+        RETURN TRUE.
+    }
+    IF SHIP:AVAILABLETHRUST <= 0 {
+        mLogWarn("SCANsat direct recovery skipped: no available thrust.").
+        RETURN FALSE.
+    }
+
+    SET SAS TO FALSE.
+    LOCK STEERING TO SHIP:PROGRADE.
+    LOCAL startT IS TIME:SECONDS.
+    LOCAL aligned IS FALSE.
+    UNTIL aligned OR TIME:SECONDS - startT > 30 {
+        IF VANG(SHIP:FACING:FOREVECTOR, SHIP:PROGRADE:FOREVECTOR) < 5 {
+            SET aligned TO TRUE.
+        }
+        WAIT 0.1.
+    }
+    IF NOT aligned {
+        mLogWarn("SCANsat direct recovery starting with poor prograde alignment.").
+    }
+
+    LOCK THROTTLE TO 1.
+    UNTIL SHIP:PERIAPSIS >= targetPe
+            OR SHIP:AVAILABLETHRUST <= 0
+            OR TIME:SECONDS - startT > maxTime {
+        LOCK STEERING TO SHIP:PROGRADE.
+        WAIT 0.1.
+    }
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+
+    LOCAL status_ IS "complete".
+    IF SHIP:PERIAPSIS < targetPe AND SHIP:AVAILABLETHRUST <= 0 {
+        SET status_ TO "out-of-thrust".
+    } ELSE IF SHIP:PERIAPSIS < targetPe {
+        SET status_ TO "timeout".
+    }
+    mLogWarn("STATS scansat-recover-direct result status=" + status_
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " duration=" + ROUND(TIME:SECONDS - startT,1)).
+
+    IF status_ = "complete" { RETURN TRUE. }
+    RETURN FALSE.
 }
 
 LOCAL FUNCTION _scanSatDisposeAttached {
