@@ -55,7 +55,10 @@ GLOBAL FUNCTION phaseTransfer {
 
     IF HASNODE {
         LOCAL existing IS NEXTNODE.
-        mLogWarn("STATS transfer resume existing-node dv="
+        LOCAL pending IS stateGet("burn_pending", "false").
+        mLogWarn("STATS transfer resume existing-node pending=" + pending
+            + " burnPhase=" + stateGet("burn_phase", "")
+            + " dv="
             + ROUND(existing:DELTAV:MAG,1)
             + " eta=" + ROUND(existing:ETA,1)
             + " body=" + SHIP:BODY:NAME).
@@ -67,6 +70,11 @@ GLOBAL FUNCTION phaseTransfer {
         }
         mLogWarn("Existing transfer node was not usable; replanning.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    } ELSE IF stateGet("burn_pending", "false") = "true" {
+        mLogWarn("STATS transfer resume missing-node pending=true burnPhase="
+            + stateGet("burn_phase", "")
+            + " burnDv=" + ROUND(stateGetNum("burn_dv", 0),1)
+            + " — replanning.").
     }
 
     UNTIL success {

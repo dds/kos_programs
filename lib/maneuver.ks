@@ -22,6 +22,8 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL nd    IS NEXTNODE.
     LOCAL burnDV  IS nd:DELTAV:MAG.
     LOCAL startTime IS _calcStartTime(nd).
+    _wakeCmd().
+    _markPendingBurn(nd, burnDV, startTime).
 
     IF burnDV < 10 { _setThrustLimit(0.25). }
     IF burnDV < 2  { _setThrustLimit(0.10). }
@@ -31,6 +33,7 @@ GLOBAL FUNCTION executeManeuver {
         mLogWarn("Burn window already passed by " + ROUND(TIME:SECONDS - startTime, 0) + "s — removing node.").
         HUDTEXT("Burn window missed — replanning", 5, 2, 15, YELLOW, FALSE).
         REMOVE nd.
+        _clearPendingBurn("missed-window").
         RETURN FALSE.
     }
 
@@ -40,6 +43,12 @@ GLOBAL FUNCTION executeManeuver {
         + " nodeEta=" + ROUND(nd:ETA,1)
         + " body=" + SHIP:BODY:NAME
         + " maxAcc=" + ROUND(_safeMaxAcc(),2)).
+    IF _safeMaxAcc() <= 0 {
+        mLogWarn("STATS burn thrust status=no-thrust maxThrust="
+            + ROUND(SHIP:MAXTHRUST,1)
+            + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)
+            + " stage=" + STAGE:NUMBER).
+    }
 
     // Set a KAC alarm to kill warp before the burn starts.
     // Alarm fires 60s before burn start to allow alignment time.
@@ -61,8 +70,8 @@ GLOBAL FUNCTION executeManeuver {
 
     LOCAL wakeTime IS startTime - HIBERNATE_WAKE_LEAD.
     IF TIME:SECONDS < wakeTime - HIBERNATE_THRESHOLD {
-        mLog("Hibernating for coast (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
-        HUDTEXT("Hibernated. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
+        mLog("Long coast wait (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
+        HUDTEXT("Coasting. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
         _hibernateCmd().
         WAIT MAX(0, wakeTime - TIME:SECONDS).
         _wakeCmd().
@@ -140,6 +149,7 @@ GLOBAL FUNCTION executeManeuver {
     REMOVE nd.
     SET SAS TO TRUE.
     _setThrustLimit(1.0).
+    _clearPendingBurn("complete").
 
     // Clean up the KAC alarm now that the burn is done.
     IF kacAlarmId <> "" {
@@ -1687,10 +1697,35 @@ LOCAL FUNCTION _findCmdModule {
     RETURN 0.
 }
 
+LOCAL FUNCTION _markPendingBurn {
+    PARAMETER nd.
+    PARAMETER burnDV.
+    PARAMETER startTime.
+    stateSet("burn_pending", "true").
+    stateSet("burn_phase", stateGet("phase", "")).
+    stateSetNum("burn_node_time", nd:TIME).
+    stateSetNum("burn_start_time", startTime).
+    stateSetNum("burn_dv", burnDV).
+}
+
+LOCAL FUNCTION _clearPendingBurn {
+    PARAMETER reason.
+    IF stateGet("burn_pending", "") = "true" {
+        mLog("Clearing pending burn state: " + reason + ".").
+    }
+    FOR key IN LIST(
+        "burn_pending", "burn_phase", "burn_node_time",
+        "burn_start_time", "burn_dv"
+    ) {
+        stateRemove(key).
+    }
+}
+
 LOCAL FUNCTION _hibernateCmd {
-    LOCAL cm IS _findCmdModule().
-    IF cm = 0 { RETURN. }
-    IF cm:HASFIELD("hibernation") { cm:SETFIELD("hibernation", TRUE). }
+    // Do not hibernate the control core during planned burns. If the vessel
+    // is unloaded or rebooted during the coast, a sleeping core can prevent
+    // the resumed script from steering and burning.
+    RETURN.
 }
 
 LOCAL FUNCTION _wakeCmd {
