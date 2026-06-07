@@ -89,18 +89,28 @@ GLOBAL FUNCTION phaseFairing {
         nextPhase(launchSeq).
         RETURN.
     }
-    IF SHIP:ALTITUDE < CFG["FAIRING_ALT"] {
-        mLog("Waiting for fairing alt " + ROUND(CFG["FAIRING_ALT"]/1000,0) + "km...").
-        WAIT UNTIL SHIP:ALTITUDE >= CFG["FAIRING_ALT"].
+    LOCAL fairingAlt IS CFG["FAIRING_ALT"].
+    IF fairingAlt < 10000 {
+        mLogWarn("Unsafe FAIRING_ALT=" + fairingAlt + "m; using 70000m.").
+        SET fairingAlt TO 70000.
+    }
+    IF SHIP:ALTITUDE < fairingAlt {
+        mLog("Waiting for fairing alt " + ROUND(fairingAlt/1000,0) + "km...").
+        WAIT UNTIL SHIP:ALTITUDE >= fairingAlt.
     }
     _deployFairing().
     nextPhase(launchSeq).
 }
 
 GLOBAL FUNCTION phaseExtendAnts {
-    IF SHIP:ALTITUDE < CFG["EXTEND_ALT"] {
-        mLog("Waiting for deploy alt " + ROUND(CFG["EXTEND_ALT"]/1000,0) + "km...").
-        WAIT UNTIL SHIP:ALTITUDE >= CFG["EXTEND_ALT"].
+    LOCAL extendAlt IS CFG["EXTEND_ALT"].
+    IF extendAlt < 10000 {
+        mLogWarn("Unsafe EXTEND_ALT=" + extendAlt + "m; using 72000m.").
+        SET extendAlt TO 72000.
+    }
+    IF SHIP:ALTITUDE < extendAlt {
+        mLog("Waiting for deploy alt " + ROUND(extendAlt/1000,0) + "km...").
+        WAIT UNTIL SHIP:ALTITUDE >= extendAlt.
     }
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleDeployableSolarPanel") {

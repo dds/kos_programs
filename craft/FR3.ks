@@ -101,7 +101,20 @@ LOCAL FUNCTION _applyMissionState {
     }
 }
 
+LOCAL FUNCTION _sanitizeAscentConfig {
+    IF CFG["FAIRING_ALT"] < 10000 {
+        _cfgSet("FAIRING_ALT", 71500).
+    }
+    IF CFG["EXTEND_ALT"] < 10000 {
+        _cfgSet("EXTEND_ALT", 73000).
+    }
+    IF CFG["EXTEND_ALT"] < CFG["FAIRING_ALT"] {
+        _cfgSet("EXTEND_ALT", CFG["FAIRING_ALT"] + 1500).
+    }
+}
+
 _applyMissionState().
+_sanitizeAscentConfig().
 
 // --- Example: rendezvous + Duna rover lander ---
 // Ship name: FR3-DUNA-LANDER-01
