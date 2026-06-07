@@ -325,7 +325,7 @@ LOCAL FUNCTION _landFinal {
 
     UNTIL ALT:RADAR < 5 OR landingAbortFlag {
         LOCAL hVel IS SHIP:VELOCITY:SURFACE
-            - (VDOT(SHIP:VELOCITY:SURFACE, SHIP:UP) * SHIP:UP).
+            - (VDOT(SHIP:VELOCITY:SURFACE, SHIP:UP:VECTOR) * SHIP:UP:VECTOR).
         IF landingTarget["FOUND"] AND ALT:RADAR < LANDING_CFG["GUIDANCE_ALT"] {
             LOCAL targetDist IS _landingTargetDistance(landingTarget).
             IF targetDist > 25 {
@@ -490,7 +490,7 @@ LOCAL FUNCTION _landingGuidanceVector {
     IF targetDist < 25 { RETURN fallbackVec. }
 
     LOCAL toTarget IS targetGeo:POSITION - SHIP:GEOPOSITION:POSITION.
-    LOCAL lateral IS VXCL(SHIP:UP, toTarget).
+    LOCAL lateral IS VXCL(SHIP:UP:VECTOR, toTarget).
     IF lateral:MAG < 0.001 { RETURN fallbackVec. }
 
     LOCAL maxLean IS SIN(LANDING_CFG["GUIDANCE_MAX_TILT"]).
@@ -557,8 +557,9 @@ LOCAL FUNCTION _manualBurnAlt {
 }
 
 LOCAL FUNCTION _horizontalSurfaceVelocity {
+    LOCAL upVec IS SHIP:UP:VECTOR.
     LOCAL hVel IS SHIP:VELOCITY:SURFACE
-        - (VDOT(SHIP:VELOCITY:SURFACE, SHIP:UP) * SHIP:UP).
+        - (VDOT(SHIP:VELOCITY:SURFACE, upVec) * upVec).
     RETURN hVel.
 }
 
@@ -566,11 +567,12 @@ LOCAL FUNCTION _assistSteering {
     PARAMETER hVel.
     PARAMETER hSpeed.
 
-    LOCAL steerVec IS SHIP:UP.
+    LOCAL upVec IS SHIP:UP:VECTOR.
+    LOCAL steerVec IS upVec.
     IF hSpeed > LANDING_CFG["ASSIST_RELEASE_HSPEED"] {
         LOCAL maxLean IS SIN(LANDING_CFG["ASSIST_MAX_TILT"]).
         LOCAL lean IS MIN(maxLean, hSpeed / 10).
-        SET steerVec TO (SHIP:UP + (-hVel):NORMALIZED * lean):NORMALIZED.
+        SET steerVec TO (upVec + (-hVel):NORMALIZED * lean):NORMALIZED.
     }
     RETURN steerVec.
 }
