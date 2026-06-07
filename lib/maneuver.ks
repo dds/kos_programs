@@ -46,8 +46,7 @@ GLOBAL FUNCTION executeManeuver {
     IF _safeMaxAcc() <= 0 {
         mLogWarn("STATS burn thrust status=no-thrust maxThrust="
             + ROUND(SHIP:MAXTHRUST,1)
-            + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)
-            + " stage=" + STAGE:NUMBER).
+            + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
     }
 
     // Set a KAC alarm to kill warp before the burn starts.
