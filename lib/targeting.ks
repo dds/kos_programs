@@ -99,6 +99,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL bestUT   IS TIME:SECONDS + 30.
     LOCAL bestPe   IS entryPe.
     LOCAL bestDist IS 999999999.
+    LOCAL validSamples IS 0.
+    LOCAL invalidSamples IS 0.
 
     LOCAL scanUT  IS TIME:SECONDS + 30.
     LOCAL scanEnd IS TIME:SECONDS + period * scanOrbits + 30.
@@ -106,22 +108,34 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + ROUND(scanOrbits,1) + " orbits.").
     UNTIL scanUT > scanEnd {
         LOCAL trial IS _evalDeorbitNode(scanUT, entryPe, targetLat, targetLng).
-        IF trial["VALID"] AND trial["DIST"] < bestDist {
-            SET bestDist TO trial["DIST"].
-            SET bestUT   TO scanUT.
-            SET bestPe   TO entryPe.
-            mLog("DEBUG coarse: T+" + ROUND(scanUT - TIME:SECONDS,0)
-                + "s  dist=" + ROUND(bestDist/1000,1) + "km").
+        IF trial["VALID"] {
+            SET validSamples TO validSamples + 1.
+            IF trial["DIST"] < bestDist {
+                SET bestDist TO trial["DIST"].
+                SET bestUT   TO scanUT.
+                SET bestPe   TO entryPe.
+                mLog("DEBUG coarse: T+" + ROUND(scanUT - TIME:SECONDS,0)
+                    + "s  dist=" + ROUND(bestDist/1000,1) + "km"
+                    + " impact=" + ROUND(trial["LAT"],4)
+                    + "," + ROUND(trial["LNG"],4)).
+            }
+        } ELSE {
+            SET invalidSamples TO invalidSamples + 1.
         }
         SET scanUT TO scanUT + scanStep.
         WAIT 0.1.
     }
     mLog("Coarse best: T+" + ROUND(bestUT - TIME:SECONDS,0)
         + "s  dist=" + ROUND(bestDist/1000,1) + "km").
+    LOCAL coarseBest IS _evalDeorbitNode(bestUT, bestPe, targetLat, targetLng).
     mLogWarn("STATS deorbit coarse distKm=" + ROUND(bestDist/1000,1)
         + " burnT=" + ROUND(bestUT - TIME:SECONDS,0)
         + " scanOrbits=" + scanOrbits
-        + " samples=" + scanSamples).
+        + " samples=" + scanSamples
+        + " valid=" + validSamples
+        + " invalid=" + invalidSamples
+        + " impact=" + ROUND(coarseBest["LAT"],4)
+        + "," + ROUND(coarseBest["LNG"],4)).
 
     FOR mult IN passes:SUBLIST(1, passes:LENGTH - 1) {
         LOCAL step    IS scanStep * mult.
@@ -165,17 +179,28 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + "  dist=" + ROUND(bestDist/1000,1) + "km").
     LOCAL deorbitStatus IS "ok".
     IF bestDist > tolerance { SET deorbitStatus TO "miss". }
+    LOCAL finalEval IS _evalDeorbitNode(bestUT, bestPe, targetLat, targetLng).
     mLogWarn("STATS deorbit final status=" + deorbitStatus
         + " distKm=" + ROUND(bestDist/1000,1)
         + " toleranceKm=" + ROUND(tolerance/1000,1)
         + " burnT=" + ROUND(bestUT - TIME:SECONDS,0)
-        + " PeKm=" + ROUND(bestPe/1000,1)).
+        + " PeKm=" + ROUND(bestPe/1000,1)
+        + " impact=" + ROUND(finalEval["LAT"],4)
+        + "," + ROUND(finalEval["LNG"],4)).
 
     IF bestDist > tolerance {
         mLogWarn("Best solution misses target by " + ROUND(bestDist/1000,1)
             + "km — exceeds tolerance of " + ROUND(tolerance/1000,1) + "km.").
-        mLogWarn("Proceeding anyway — check orbital inclination vs target latitude.").
         HUDTEXT("Warning: " + ROUND(bestDist/1000,0) + "km from target", 5, 2, 14, YELLOW, FALSE).
+        IF CFG:HASKEY("TARGET_DEORBIT_PROCEED_ON_MISS")
+                AND CFG["TARGET_DEORBIT_PROCEED_ON_MISS"] <= 0 {
+            mLogWarn("STATS deorbit abort reason=miss-exceeds-tolerance distKm="
+                + ROUND(bestDist/1000,1)
+                + " toleranceKm=" + ROUND(tolerance/1000,1)).
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            RETURN.
+        }
+        mLogWarn("Proceeding anyway — check orbital inclination vs target latitude.").
     }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
