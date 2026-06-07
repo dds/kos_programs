@@ -94,7 +94,7 @@ IF EXISTS("1:/lib/state.ksm") {
 IF DEFINED stateSet {
     stateSet("phase", phaseUpper).
     stateSet("reload_required", "false").
-    IF phaseUpper = "LAND_DEORBIT" {
+    IF phaseUpper = "LAND_DEORBIT" OR phaseUpper = "LAND_ASSIST" {
         stateSet("lib_band", "LAND_DEORBIT").
     } ELSE {
         stateSet("lib_band", "LAND_ASSIST").

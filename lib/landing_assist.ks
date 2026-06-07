@@ -42,6 +42,7 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_SURFACE_RELEASE_HSPEED", 2.0,
     "ASSIST_SURFACE_RELEASE_VSPEED", 1.5,
     "ASSIST_SURFACE_RELEASE_SETTLE", 0.5,
+    "ASSIST_SURFACE_POWERED_ROVER", FALSE,
     "ASSIST_SURFACE_SETTLE_TIME", 5.0,
     "ASSIST_SURFACE_TIPOVER", TRUE,
     "ASSIST_SURFACE_TIP_TIME", 4.0,
@@ -341,7 +342,10 @@ LOCAL FUNCTION _assistSurfaceRelease {
             mLog("Rover handoff: decoupling near touchdown.").
             _decouplePart(decoupler).
             WAIT LANDING_CFG["ASSIST_SURFACE_RELEASE_SETTLE"].
-            RETURN _assistRoverFinalTouchdown().
+            IF LANDING_CFG["ASSIST_SURFACE_POWERED_ROVER"] {
+                RETURN _assistRoverFinalTouchdown().
+            }
+            RETURN _assistRoverDropTouchdown().
         }
 
         IF mode_ = "COAST" OR mode_ = "BRAKE" {
@@ -358,12 +362,6 @@ LOCAL FUNCTION _assistSurfaceRelease {
                 LOCK THROTTLE TO 0.
             } ELSE IF mode_ = "BRAKE" {
                 LOCAL brakeThrottle IS LANDING_CFG["ASSIST_SURFACE_BRAKE_THROTTLE"].
-                LOCAL aoa IS _assistTargetAoa(targetDistM, radarAlt).
-                IF targetDistM >= 0
-                        AND aoa < LANDING_CFG["ASSIST_SURFACE_BRAKE_AOA"]
-                        AND radarAlt > 500 {
-                    SET brakeThrottle TO MAX(0.3, brakeThrottle * 0.5).
-                }
                 IF vSpeed < -LANDING_CFG["ASSIST_DESCENT_SPEED"] {
                     SET brakeThrottle TO MIN(1, brakeThrottle + 0.2).
                 }
@@ -461,6 +459,43 @@ LOCAL FUNCTION _assistSurfaceHandoffReady {
             + " v=" + ROUND(vSpeed,2)).
         RETURN TRUE.
     }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _assistRoverDropTouchdown {
+    LOCAL nextStatsAlt IS 20.
+    mLog("Rover drop touchdown: unpowered rover, wheels-down only.").
+    HUDTEXT("Rover unpowered drop", 4, 2, 15, GREEN, FALSE).
+    LOCK THROTTLE TO 0.
+
+    UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" OR landingAbortFlag {
+        LOCAL hVel IS _horizontalSurfaceVelocity().
+        LOCAL hSpeed IS hVel:MAG.
+        LOCAL radarAlt IS ALT:RADAR.
+        LOCAL vSpeed IS SHIP:VERTICALSPEED.
+        LOCK STEERING TO _assistSteering(hVel, hSpeed).
+        LOCK THROTTLE TO 0.
+        IF radarAlt <= nextStatsAlt {
+            mLogWarn("STATS rover-drop descent alt=" + ROUND(radarAlt,2)
+                + " h=" + ROUND(hSpeed,2)
+                + " v=" + ROUND(vSpeed,2)).
+            SET nextStatsAlt TO nextStatsAlt / 2.
+            IF nextStatsAlt < 2 { SET nextStatsAlt TO 2. }
+        }
+        WAIT 0.03.
+    }
+
+    LOCK THROTTLE TO 0.
+    WAIT LANDING_CFG["ASSIST_SURFACE_SETTLE_TIME"].
+    mLogWarn("STATS rover-drop result status=" + SHIP:STATUS
+        + " h=" + ROUND(_horizontalSurfaceVelocity():MAG,2)
+        + " v=" + ROUND(SHIP:VERTICALSPEED,2)
+        + " roll=" + ROUND(SHIP:FACING:ROLL,1)
+        + " pitch=" + ROUND(SHIP:FACING:PITCH,1)).
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN TRUE. }
     RETURN FALSE.
 }
 

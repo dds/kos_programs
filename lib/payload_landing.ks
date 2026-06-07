@@ -37,7 +37,7 @@ GLOBAL FUNCTION phaseLandDeorbit {
         stateSet("phase", "LAND_DEORBIT").
         PRINT " ".
         PRINT "  LANDING DEORBIT FAILED TARGET CHECK".
-        PRINT "  Keep/reselect the waypoint, check orbit reachability, then reboot/resume.".
+        PRINT "  Keep/reselect the waypoint, check orbit reachability, then resume manually.".
         yieldToPrompt().
         RETURN.
     }
@@ -81,7 +81,7 @@ LOCAL FUNCTION _timedLandingDeorbit {
         stateSet("phase", "LAND_DEORBIT").
         PRINT " ".
         PRINT "  TIMED LANDING DEORBIT MISSED".
-        PRINT "  Reboot/resume or rerun setup when ready.".
+        PRINT "  Resume manually or rerun setup when ready.".
         yieldToPrompt().
         RETURN FALSE.
     }
@@ -243,23 +243,7 @@ GLOBAL FUNCTION phaseLandAssist {
         LOCK THROTTLE TO 0.
         PRINT " ".
         PRINT "  LANDING ASSIST FAILED".
-        PRINT "  Review target, decoupler tag, attitude, fuel, and phase before reboot.".
-        yieldToPrompt().
-        RETURN.
-    }
-    IF CFG:HASKEY("RELOAD_AFTER_LAND_ASSIST") AND CFG["RELOAD_AFTER_LAND_ASSIST"] > 0 {
-        nextPhase(fr3Seq).
-        LOCAL nextPh IS stateGet("phase", "").
-        LOCAL nextBand IS "LAND".
-        IF nextPh = "ROVER" { SET nextBand TO "ROVER". }
-        stateSet("reload_required", "true").
-        stateSet("reload_reason", "LAND_ASSIST_RELEASE").
-        stateSet("reload_next_phase", nextPh).
-        stateSet("reload_next_band", nextBand).
-        mLog("Reload point after landing assist release. Reboot rover CPU to continue.").
-        PRINT " ".
-        PRINT "  LANDING ASSIST RELEASE COMPLETE".
-        PRINT "  Reboot this CPU to load rover landing code.".
+        PRINT "  Review target, decoupler tag, attitude, fuel, and phase before resuming.".
         yieldToPrompt().
         RETURN.
     }
@@ -279,19 +263,6 @@ GLOBAL FUNCTION phaseLand {
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " v=" + ROUND(SHIP:VERTICALSPEED,1)
         + " status=" + SHIP:STATUS).
-    IF CFG:HASKEY("RELOAD_AFTER_LAND") AND CFG["RELOAD_AFTER_LAND"] > 0 {
-        nextPhase(fr3Seq).
-        stateSet("reload_required", "true").
-        stateSet("reload_reason", "TOUCHDOWN").
-        stateSet("reload_next_phase", stateGet("phase", "")).
-        stateSet("reload_next_band", "ROVER").
-        mLog("Reload point after touchdown. Reboot rover CPU to load rover code.").
-        PRINT " ".
-        PRINT "  TOUCHDOWN COMPLETE".
-        PRINT "  Reboot this CPU to load rover code.".
-        yieldToPrompt().
-        RETURN.
-    }
     nextPhase(fr3Seq).
 }
 
@@ -304,7 +275,7 @@ LOCAL FUNCTION _redirectOrbitalLandingPhase {
         PRINT " ".
         PRINT "  LANDING TARGET CHECK".
         PRINT "  Select the landing waypoint in map/navigation.".
-        PRINT "  Phase reset to LAND_DEORBIT. Reboot/resume when ready.".
+        PRINT "  Phase reset to LAND_DEORBIT. Resume manually when ready.".
         yieldToPrompt().
         RETURN TRUE.
     }
