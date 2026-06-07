@@ -45,7 +45,11 @@ LOCAL FUNCTION _cfgFromState {
     LOCAL raw IS stateGet("mission_cfg_" + key, "").
     IF raw = "" { RETURN. }
     IF asNumber {
-        cfgSet(key, raw:TONUMBER(0)).
+        IF raw:ISTYPE("Scalar") {
+            cfgSet(key, raw).
+        } ELSE {
+            cfgSet(key, raw:TONUMBER(0)).
+        }
     } ELSE {
         cfgSet(key, raw).
     }
