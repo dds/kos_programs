@@ -110,12 +110,12 @@ LOCAL FUNCTION _loadLib {
 }
 
 LOCAL FUNCTION _compiledPath {
-    PARAMETER scriptPath.
-    IF scriptPath:CONTAINS("/") {
-        LOCAL parts IS scriptPath:SPLIT("/").
+    PARAMETER scriptPath_.
+    IF scriptPath_:CONTAINS("/") {
+        LOCAL parts IS scriptPath_:SPLIT("/").
         RETURN "1:/" + parts[0] + "/" + parts[1] + ".ksm".
     }
-    RETURN "1:/" + scriptPath + ".ksm".
+    RETURN "1:/" + scriptPath_ + ".ksm".
 }
 
 LOCAL FUNCTION _sourcePath {
