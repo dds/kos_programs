@@ -177,6 +177,7 @@ GLOBAL FUNCTION main {
         "FAIR",             phaseFairing@,
         "ANTS",             phaseExtendAnts@,
         "PARK",             phaseParking@,
+        "RDV",              phaseRendezvous@,
         "XING",             phaseTransfer@,
         "MCC",              phaseMidCourse@,
         "COAST",            phaseCoast@,

@@ -46,20 +46,8 @@ GLOBAL CFG IS LEXICON(
 //           COAST → CAPTURE → CIRC → RAISE → INCLINE →
 //           LAND_DEORBIT → LAND → DONE
 //
-// The RDV phase runs planRendezvous() + executeManeuver() to
-// intercept the target vessel in parking orbit before departing
-// for Duna. Requires "maneuver" in LIBS (already present).
-//
-// Phase handler (not yet wired into buildPhaseSequence):
-//   LOCAL FUNCTION phaseRendezvous {
-//       LOCAL tgtName IS CFG["RENDEZVOUS_TARGET"].
-//       LOCAL tgt IS VESSEL(tgtName).
-//       LOCAL nd IS planRendezvous(tgt).
-//       IF nd <> 0 { executeManeuver(). }
-//       nextPhase(launchSeq).
-//   }
-// Then add to phaseMap:  "RDV", phaseRendezvous@
-// And insert "RDV" into the sequence after PARK.
+// The RDV phase runs planRendezvous() + executeManeuver() when
+// RENDEZVOUS_TARGET or ASTEROID_TARGET is configured.
 
 GLOBAL LIBS IS LIST(
     "phases", "launch", "xfer",
@@ -135,6 +123,7 @@ GLOBAL FUNCTION main {
         "FAIR", phaseFairing@,
         "ANTS",             phaseExtendAnts@,
         "PARK",          phaseParking@,
+        "RDV",              phaseRendezvous@,
         "XING",         phaseTransfer@,
         "COAST",            phaseCoast@,
         "CAPTURE",          phaseCapture@,

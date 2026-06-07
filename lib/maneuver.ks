@@ -718,6 +718,7 @@ LOCAL FUNCTION _scanForLan {
 // ============================================================
 GLOBAL FUNCTION planRendezvous {
     PARAMETER targetVessel.
+    PARAMETER opts IS LEXICON().
 
     // --- Validate: both must orbit the same body ---
     IF targetVessel:BODY:NAME <> SHIP:BODY:NAME {
@@ -727,7 +728,7 @@ GLOBAL FUNCTION planRendezvous {
     }
 
     IF _shouldUseLambertVesselIntercept(targetVessel) {
-        RETURN planAsteroidIntercept(targetVessel).
+        RETURN planAsteroidIntercept(targetVessel, opts).
     }
 
     LOCAL mu IS SHIP:BODY:MU.
@@ -906,6 +907,7 @@ GLOBAL FUNCTION planRendezvous {
 //   MIN_TOF            default 0.25 * ship period
 //   MAX_TOF            default 6 * target period
 //   ARRIVAL_WEIGHT     default 0.25
+//   REFINE_ITERS       default 35
 // ============================================================
 GLOBAL FUNCTION planAsteroidIntercept {
     PARAMETER targetVessel.
@@ -929,6 +931,7 @@ GLOBAL FUNCTION planAsteroidIntercept {
     LOCAL minTof IS shipPeriod * 0.25.
     LOCAL maxTof IS targetPeriod * 6.
     LOCAL arrivalWeight IS 0.25.
+    LOCAL refineIters IS 35.
 
     IF opts:HASKEY("MAX_DEPART_ORBITS") { SET maxDepartOrbits TO opts["MAX_DEPART_ORBITS"]. }
     IF opts:HASKEY("DEPART_SAMPLES")    { SET departSamples    TO opts["DEPART_SAMPLES"]. }
@@ -936,6 +939,7 @@ GLOBAL FUNCTION planAsteroidIntercept {
     IF opts:HASKEY("MIN_TOF")           { SET minTof           TO opts["MIN_TOF"]. }
     IF opts:HASKEY("MAX_TOF")           { SET maxTof           TO opts["MAX_TOF"]. }
     IF opts:HASKEY("ARRIVAL_WEIGHT")    { SET arrivalWeight    TO opts["ARRIVAL_WEIGHT"]. }
+    IF opts:HASKEY("REFINE_ITERS")       { SET refineIters      TO opts["REFINE_ITERS"]. }
 
     LOCAL departSpan IS shipPeriod * maxDepartOrbits.
     LOCAL departStep IS departSpan / MAX(1, departSamples - 1).
@@ -991,6 +995,26 @@ GLOBAL FUNCTION planAsteroidIntercept {
         RETURN 0.
     }
 
+    LOCAL refine IS _refineLambertIntercept(
+        targetVessel,
+        centralBody,
+        mu,
+        bestDepart,
+        bestArrive - bestDepart,
+        departStep,
+        tofStep,
+        minTof,
+        maxTof,
+        arrivalWeight,
+        refineIters).
+
+    SET bestCost TO refine["COST"].
+    SET bestDepart TO refine["DEPART"].
+    SET bestArrive TO refine["ARRIVE"].
+    SET bestDvVec TO refine["DVVEC"].
+    SET bestRelVel TO refine["RELVEL"].
+    SET bestFlip TO refine["FLIP"].
+
     LOCAL nd IS _nodeFromDvVector(bestDepart, bestDvVec).
     ADD nd.
     WAIT 0.1.
@@ -1008,6 +1032,111 @@ GLOBAL FUNCTION planAsteroidIntercept {
         + "s.").
 
     RETURN nd.
+}
+
+LOCAL FUNCTION _refineLambertIntercept {
+    PARAMETER targetVessel.
+    PARAMETER centralBody.
+    PARAMETER mu.
+    PARAMETER startDepart.
+    PARAMETER startTof.
+    PARAMETER startDepartStep.
+    PARAMETER startTofStep.
+    PARAMETER minTof.
+    PARAMETER maxTof.
+    PARAMETER arrivalWeight.
+    PARAMETER maxIter.
+
+    LOCAL departStep IS startDepartStep / 2.
+    LOCAL tofStep IS startTofStep / 2.
+    LOCAL best IS _evalLambertIntercept(
+        targetVessel, centralBody, mu, startDepart, startTof, FALSE, arrivalWeight).
+    LOCAL alt IS _evalLambertIntercept(
+        targetVessel, centralBody, mu, startDepart, startTof, TRUE, arrivalWeight).
+    IF alt["COST"] < best["COST"] { SET best TO alt. }
+
+    LOCAL signs IS LIST(1, -1).
+    LOCAL transferArcs IS LIST(FALSE, TRUE).
+    FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
+        LOCAL improved IS FALSE.
+        LOCAL bestTrial IS best.
+
+        FOR sgn IN signs {
+            LOCAL departTry IS best["DEPART"] + sgn * departStep.
+            IF departTry > TIME:SECONDS + 60 {
+                FOR flip IN transferArcs {
+                    LOCAL departTrial IS _evalLambertIntercept(
+                        targetVessel, centralBody, mu,
+                        departTry, best["TOF"], flip, arrivalWeight).
+                    IF departTrial["COST"] < bestTrial["COST"] {
+                        SET bestTrial TO departTrial.
+                        SET improved TO TRUE.
+                    }
+                }
+            }
+        }
+
+        FOR sgn IN signs {
+            LOCAL tofTry IS best["TOF"] + sgn * tofStep.
+            IF tofTry >= minTof AND tofTry <= maxTof {
+                FOR flip IN transferArcs {
+                    LOCAL tofTrial IS _evalLambertIntercept(
+                        targetVessel, centralBody, mu,
+                        best["DEPART"], tofTry, flip, arrivalWeight).
+                    IF tofTrial["COST"] < bestTrial["COST"] {
+                        SET bestTrial TO tofTrial.
+                        SET improved TO TRUE.
+                    }
+                }
+            }
+        }
+
+        IF improved {
+            SET best TO bestTrial.
+            mLog("Asteroid refine[" + i + "] dV=" + ROUND(best["DV"],1)
+                + " relV=" + ROUND(best["RELVEL"],1)
+                + " depart T+" + ROUND(best["DEPART"] - TIME:SECONDS,0)
+                + " tof=" + ROUND(best["TOF"],0)
+                + " flip=" + best["FLIP"] + ".").
+        } ELSE {
+            SET departStep TO departStep / 2.
+            SET tofStep TO tofStep / 2.
+            IF departStep < 60 AND tofStep < 60 { BREAK. }
+        }
+    }
+
+    RETURN best.
+}
+
+LOCAL FUNCTION _evalLambertIntercept {
+    PARAMETER targetVessel.
+    PARAMETER centralBody.
+    PARAMETER mu.
+    PARAMETER departUt.
+    PARAMETER tof.
+    PARAMETER flip.
+    PARAMETER arrivalWeight.
+
+    LOCAL arriveUt IS departUt + tof.
+    LOCAL r1 IS POSITIONAT(SHIP, departUt) - POSITIONAT(centralBody, departUt).
+    LOCAL r2 IS POSITIONAT(targetVessel, arriveUt) - POSITIONAT(centralBody, arriveUt).
+    LOCAL vShip IS VELOCITYAT(SHIP, departUt):ORBIT.
+    LOCAL vTarget IS VELOCITYAT(targetVessel, arriveUt):ORBIT.
+    LOCAL result IS lambertSolve(r1, r2, tof, mu, flip).
+    LOCAL dvVec IS result["v1"] - vShip.
+    LOCAL relVel IS (result["v2"] - vTarget):MAG.
+    LOCAL cost IS dvVec:MAG + relVel * arrivalWeight.
+
+    LOCAL out IS LEXICON().
+    out:ADD("COST", cost).
+    out:ADD("DEPART", departUt).
+    out:ADD("TOF", tof).
+    out:ADD("ARRIVE", arriveUt).
+    out:ADD("DVVEC", dvVec).
+    out:ADD("DV", dvVec:MAG).
+    out:ADD("RELVEL", relVel).
+    out:ADD("FLIP", flip).
+    RETURN out.
 }
 
 // ============================================================
