@@ -453,26 +453,18 @@ GLOBAL FUNCTION planePreflightChecklist {
     PARAMETER craftName.
     PARAMETER items.
 
-    CLEARSCREEN.
-    PRINT "  ========================================".
-    PRINT "    " + craftName + " PREFLIGHT CHECKLIST".
-    PRINT "  ========================================".
-    PRINT " ".
-    FOR item IN items {
-        PRINT "  [ ] " + item.
-    }
-    PRINT " ".
-    PRINT "  -- ENVIRONMENT --".
-    PRINT "  Airspeed .... " + ROUND(SHIP:AIRSPEED,1) + " m/s".
-    PRINT "  Heading ..... " + ROUND(SHIP:FACING:YAW,1) + " deg".
-    PRINT "  Stall speed . " + PLANE_CFG["STALL_SPEED"] + " m/s".
-    PRINT "  Storage ..... " + CORE:VOLUME:FREESPACE + " bytes free".
-    PRINT " ".
-    PRINT "  >> Press any key when ready for takeoff".
-
-    TERMINAL:INPUT:GETCHAR().
-    PRINT " ".
-    PRINT "  Takeoff clearance given.".
+    LOCAL envRows IS LIST(
+        "Airspeed .... " + ROUND(SHIP:AIRSPEED,1) + " m/s",
+        "Heading ..... " + ROUND(SHIP:FACING:YAW,1) + " deg",
+        "Stall speed . " + PLANE_CFG["STALL_SPEED"] + " m/s",
+        "Storage ..... " + CORE:VOLUME:FREESPACE + " bytes free"
+    ).
+    flightPlanChecklist(
+        craftName + " PREFLIGHT CHECKLIST",
+        items,
+        envRows,
+        "Press any key when ready for takeoff"
+    ).
     mLog("Takeoff clearance given.").
 }
 

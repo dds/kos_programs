@@ -220,6 +220,7 @@ LOCAL FUNCTION _fr3Libs {
     LOCAL libs IS LIST("phases", "utils", "ui", "fr3_payload", "fr3_profile", "fr3_sequence").
 
     IF band = "LAUNCH" {
+        libs:ADD("flightplan").
         libs:ADD("fr3_ui").
         libs:ADD("launch").
         libs:ADD("countdown").

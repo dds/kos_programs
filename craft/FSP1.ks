@@ -12,29 +12,21 @@ GLOBAL CFG IS LEXICON(
     "SPLASHDOWN_SPEED",   40
 ).
 
-GLOBAL LIBS IS LIST("phases", "plane", "science", "orbit", "observe").
+GLOBAL LIBS IS LIST("phases", "flightplan", "plane", "science", "orbit", "observe").
 
 LOCAL hasSciencePayload IS FALSE.
 
 LOCAL FUNCTION _printConfig {
     LOCAL seq IS LIST("PREFLIGHT", "FLIGHT", "SPLASHDOWN", "SURFACE_OPS", "DONE").
-    CLEARSCREEN.
-    PRINT "  ========================================".
-    PRINT "    FSP1 FLIGHT PLAN    " + SHIP:NAME.
-    PRINT "  ========================================".
-    PRINT " ".
-    PRINT "  TARGET ..... " + MISSION["target"].
-    PRINT "  PAYLOADS ... " + MISSION["payloads"].
-    PRINT " ".
-    PRINT "  -- CRUISE --".
-    PRINT "  ALT ........ " + CFG["CRUISE_ALT"] + " m".
-    PRINT "  SPEED ...... " + CFG["CRUISE_SPEED"] + " m/s".
-    PRINT "  SPLASH SPD . " + CFG["SPLASHDOWN_SPEED"] + " m/s".
-    PRINT " ".
-    PRINT "  -- SEQUENCE --".
-    PRINT "  " + seq:JOIN(" > ").
-    PRINT " ".
-    PRINT "  ========================================".
+    flightPlanTitle("FSP1 FLIGHT PLAN", SHIP:NAME).
+    flightPlanIdentity().
+    flightPlanSection("CRUISE").
+    flightPlanRow("ALT", CFG["CRUISE_ALT"] + " m").
+    flightPlanRow("SPEED", CFG["CRUISE_SPEED"] + " m/s").
+    flightPlanRow("SPLASH SPD", CFG["SPLASHDOWN_SPEED"] + " m/s").
+    flightPlanSection("SEQUENCE").
+    flightPlanSequence(seq).
+    flightPlanLine().
 }
 
 GLOBAL FUNCTION main {
@@ -66,16 +58,16 @@ LOCAL FUNCTION _phasePreflight {
     observeStart().
 
     planePreflightChecklist("FSP1", LIST(
-        "Control surfaces — check full deflection",
-        "Altimeter — set to RADAR (right-click)",
-        "Camera — chase view, raise above tail",
-        "Brakes — HOLD until ready",
-        "Stage — start engines",
-        "Throttle — FULL",
-        "Brakes — RELEASE at full thrust",
-        "Rotate — pull up at 80 m/s",
-        "Gear — retract on positive climb",
-        "Splashdown target — " + CFG["SPLASHDOWN_SPEED"] + " m/s"
+        "Control surfaces - check full deflection",
+        "Altimeter - set to RADAR (right-click)",
+        "Camera - chase view, raise above tail",
+        "Brakes - HOLD until ready",
+        "Stage - start engines",
+        "Throttle - FULL",
+        "Brakes - RELEASE at full thrust",
+        "Rotate - pull up at 80 m/s",
+        "Gear - retract on positive climb",
+        "Splashdown target - " + CFG["SPLASHDOWN_SPEED"] + " m/s"
     )).
 
     WAIT UNTIL SHIP:STATUS = "FLYING" OR SHIP:AIRSPEED > 50.

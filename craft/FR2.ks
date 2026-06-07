@@ -86,7 +86,7 @@ LOCAL FUNCTION _applyMissionState {
 _applyMissionState().
 
 GLOBAL LIBS IS LIST(
-    "phases", "launch", "xfer",
+    "phases", "flightplan", "launch", "xfer",
     "lib_navigation", "countdown", "maneuver", "inclination",
     "orbit", "targeting", "landing",
     "lambert", "maneuver_intersystem", "maneuver_rendezvous",
@@ -152,69 +152,58 @@ LOCAL FUNCTION _printConfig {
         IF t = "MOLNIYA" { SET hasMolniya TO TRUE. }
     }
 
-    PRINT "  ========================================".
-    PRINT "    FR2 FLIGHT PLAN    " + SHIP:NAME.
-    PRINT "  ========================================".
-    PRINT " ".
-    PRINT "  TARGET ..... " + MISSION["target"].
-    PRINT "  PAYLOADS ... " + MISSION["payloads"].
-    PRINT " ".
-    PRINT "  -- ASCENT --".
-    PRINT "  PARK ALT ... " + ROUND(CFG["PARKING_ALT"]/1000,0) + " km".
+    flightPlanTitle("FR2 FLIGHT PLAN", SHIP:NAME).
+    flightPlanIdentity().
+    flightPlanSection("ASCENT").
+    flightPlanRow("PARK ALT", ROUND(CFG["PARKING_ALT"]/1000,0) + " km").
     LOCAL incStr IS CFG["LAUNCH_INCLINATION"] + " deg".
     IF CFG["LAUNCH_INCLINATION"] = 0 { SET incStr TO "0 deg  (equatorial)". }
-    PRINT "  INCL ...... " + incStr.
-    PRINT "  FAIRING ... " + ROUND(CFG["FAIRING_ALT"]/1000,0) + " km".
+    flightPlanRow("INCL", incStr).
+    flightPlanRow("FAIRING", ROUND(CFG["FAIRING_ALT"]/1000,0) + " km").
     IF CFG["LAUNCH_STAGE_LIMIT"] > 0 {
-        PRINT "  MJ LIMIT .. stage " + CFG["LAUNCH_STAGE_LIMIT"].
+        flightPlanRow("MJ LIMIT", "stage " + CFG["LAUNCH_STAGE_LIMIT"]).
     }
     IF MISSION["target"]:TOUPPER <> "KERBIN" {
-        PRINT " ".
-        PRINT "  -- TRANSFER --".
-        PRINT "  CAPTURE PE . " + ROUND(CFG["CAPTURE_PE"]/1000,0) + " km".
+        flightPlanSection("TRANSFER").
+        flightPlanRow("CAPTURE PE", ROUND(CFG["CAPTURE_PE"]/1000,0) + " km").
         IF CFG:HASKEY("CAPTURE_LAN") {
-            PRINT "  CAPTURE LAN  " + ROUND(CFG["CAPTURE_LAN"],1) + " deg".
+            flightPlanRow("CAPTURE LAN", ROUND(CFG["CAPTURE_LAN"],1) + " deg").
         }
         IF CFG:HASKEY("CAPTURE_AOP") {
-            PRINT "  CAPTURE AoP  " + ROUND(CFG["CAPTURE_AOP"],1) + " deg".
+            flightPlanRow("CAPTURE AOP", ROUND(CFG["CAPTURE_AOP"],1) + " deg").
         }
         IF CFG:HASKEY("CAPTURE_INC") {
-            PRINT "  CAPTURE INC  " + ROUND(CFG["CAPTURE_INC"],1) + " deg".
+            flightPlanRow("CAPTURE INC", ROUND(CFG["CAPTURE_INC"],1) + " deg").
         }
     }
-    PRINT " ".
-    PRINT "  -- ORBIT --".
+    flightPlanSection("ORBIT").
     IF CFG:HASKEY("TARGET_PE") AND CFG:HASKEY("TARGET_AP") {
-        PRINT "  FINAL PE ... " + ROUND(CFG["TARGET_PE"]/1000,0) + " km".
-        PRINT "  FINAL AP ... " + ROUND(CFG["TARGET_AP"]/1000,0) + " km".
+        flightPlanRow("FINAL PE", ROUND(CFG["TARGET_PE"]/1000,0) + " km").
+        flightPlanRow("FINAL AP", ROUND(CFG["TARGET_AP"]/1000,0) + " km").
     } ELSE {
-        PRINT "  FINAL ALT .. " + ROUND(CFG["RELAY_ALT"]/1000,0) + " km".
+        flightPlanRow("FINAL ALT", ROUND(CFG["RELAY_ALT"]/1000,0) + " km").
     }
     LOCAL tincStr IS CFG["TARGET_INCLINATION"] + " deg".
     IF CFG["TARGET_INCLINATION"] = 0 { SET tincStr TO "0 deg  (equatorial)". }
-    PRINT "  FINAL INCL . " + tincStr.
-    PRINT "  CIRC TOL ... ecc < " + CFG["CIRC_ECC_TOL"].
+    flightPlanRow("FINAL INCL", tincStr).
+    flightPlanRow("CIRC TOL", "ecc < " + CFG["CIRC_ECC_TOL"]).
     IF hasMolniya {
         printMolniyaSummary().
     }
     IF hasProbe {
-        PRINT " ".
-        PRINT "  -- PROBE --".
-        PRINT "  IMPACT ..... " + ROUND(CFG["PROBE_TARGET_LAT"],1) + " lat  " + ROUND(CFG["PROBE_TARGET_LNG"],1) + " lng".
-        PRINT "  ENTRY PE ... " + ROUND(CFG["PROBE_ENTRY_PE"]/1000,0) + " km".
-        PRINT "  TOLERANCE .. " + ROUND(CFG["PROBE_TARGET_TOL"]/1000,0) + " km".
+        flightPlanSection("PROBE").
+        flightPlanRow("IMPACT", ROUND(CFG["PROBE_TARGET_LAT"],1) + " lat  " + ROUND(CFG["PROBE_TARGET_LNG"],1) + " lng").
+        flightPlanRow("ENTRY PE", ROUND(CFG["PROBE_ENTRY_PE"]/1000,0) + " km").
+        flightPlanRow("TOLERANCE", ROUND(CFG["PROBE_TARGET_TOL"]/1000,0) + " km").
     }
     IF hasLander {
-        PRINT " ".
-        PRINT "  -- LANDING --".
-        PRINT "  TARGET ..... " + ROUND(LANDING_CFG["TARGET_LAT"],4) + " lat  " + ROUND(LANDING_CFG["TARGET_LNG"],4) + " lng".
-        PRINT "  DEORBIT PE . " + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1) + " km".
+        flightPlanSection("LANDING").
+        flightPlanRow("TARGET", ROUND(LANDING_CFG["TARGET_LAT"],4) + " lat  " + ROUND(LANDING_CFG["TARGET_LNG"],4) + " lng").
+        flightPlanRow("DEORBIT PE", ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1) + " km").
     }
-    PRINT " ".
-    PRINT "  -- SEQUENCE --".
-    printSequence(seq).
-    PRINT " ".
-    PRINT "  ========================================".
+    flightPlanSection("SEQUENCE").
+    flightPlanSequence(seq).
+    flightPlanLine().
 }
 
 LOCAL FUNCTION _phaseRecirc {

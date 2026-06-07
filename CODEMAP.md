@@ -6,6 +6,7 @@
 - `boot/boot.ks` reads mission profile files from the archive when connected and prunes stale local `1:/missions` files after persisting the selected config into state.
 - `boot/boot.ks` prunes stale local `1:/lib` files before syncing the selected `LIBS`, so progressive reloads actually free storage.
 - `lib/resume.ks` builds `MISSION`, normalizes payload tokens, and builds common rocket sequences.
+- `lib/flightplan.ks` renders shared flight-plan and checklist screens for rockets and planes.
 - Vehicle scripts in `craft/` define default `CFG`, `LIBS`, phase sequence, phase map, and mission profile tweaks.
 
 ## FR3 Loaded Libraries
@@ -31,7 +32,9 @@ Base FR3 libraries:
 
 Profile-only FR3 libraries:
 
+- `flightplan` - shared flight-plan/checklist renderer, loaded by FR3 only for launch confirmation.
 - `fr3_ui` - launch confirmation display, loaded only in the launch band.
+- `lib_term` - KSLib terminal drawing helpers, available in the archive for future positioned terminal widgets but not loaded by FR3 yet.
 - `payload_ops` - loaded for probe, relay, SCANsat, or SCISAT payloads.
 - `science` - loaded only for `SCANSAT`/`SCISAT` payloads.
 - `lambert` - loaded only when the target is not Mun.
