@@ -74,7 +74,7 @@ GLOBAL FUNCTION nextPhase {
 }
 
 GLOBAL FUNCTION archivePhaseLog {
-    IF HAS_LINK {
+    IF HOMECONNECTION:ISCONNECTED {
         archiveLog().
         mLog("Phase log archived.").
     } ELSE {

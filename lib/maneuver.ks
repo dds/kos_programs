@@ -159,7 +159,7 @@ GLOBAL FUNCTION executeManeuver {
 
 GLOBAL FUNCTION archivePlannedManeuverLog {
     PARAMETER label IS "maneuver".
-    IF HAS_LINK {
+    IF HOMECONNECTION:ISCONNECTED {
         archiveLog().
         mLog("Planned maneuver log archived: " + label + ".").
     } ELSE {
