@@ -219,6 +219,7 @@ LOCAL FUNCTION _assistSurfaceRelease {
 
     LOCAL nextStatsAlt IS 5000.
     LOCAL lastMode IS "".
+    LOCAL brakeCommitted IS FALSE.
     UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" OR landingAbortFlag {
         LOCAL hVel IS _horizontalSurfaceVelocity().
         LOCAL hSpeed IS hVel:MAG.
@@ -233,8 +234,16 @@ LOCAL FUNCTION _assistSurfaceRelease {
                 landingTarget["LNG"]).
         }
         LOCAL mode_ IS "APPROACH".
-        IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_HSPEED"] {
+        IF brakeCommitted {
+            IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_HSPEED"] / 2
+                    OR radarAlt < 1000 {
+                SET mode_ TO "BRAKE".
+            } ELSE {
+                SET brakeCommitted TO FALSE.
+            }
+        } ELSE IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_HSPEED"] {
             IF _assistSurfaceBrakeReady(radarAlt, hSpeed, vSpeed, targetDistM) {
+                SET brakeCommitted TO TRUE.
                 SET mode_ TO "BRAKE".
             } ELSE {
                 SET mode_ TO "COAST".
