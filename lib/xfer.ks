@@ -297,8 +297,22 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
     }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    _scanSatPlanPeAtAp(recoveryPe, "SCANsat recover Pe").
+    IF recoveryPe >= SHIP:APOAPSIS - 1000 {
+        mLogWarn("STATS scansat-recover clamp requestedPeKm="
+            + ROUND(recoveryPe/1000,1)
+            + " currentApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+            + " action=circularize").
+        planCircularize().
+    } ELSE {
+        _scanSatPlanPeAtAp(recoveryPe, "SCANsat recover Pe").
+    }
     IF NOT _executeScanSatStep("SCANsat recover Pe") { RETURN. }
+
+    IF SHIP:APOAPSIS < recoveryAp * 0.95 {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        _scanSatPlanRaiseAp(recoveryAp).
+        IF NOT _executeScanSatStep("SCANsat recovery raise Ap") { RETURN. }
+    }
 
     IF SHIP:ORBIT:ECCENTRICITY > 0.01
             OR ABS(SHIP:APOAPSIS - recoveryAp) > recoveryAp * 0.1 {
@@ -527,6 +541,29 @@ LOCAL FUNCTION _scanSatPlanPeAtAp {
     mLog(label + " node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " targetPe=" + ROUND(targetPe/1000,1) + "km").
     archivePlannedManeuverLog(label).
+    RETURN nd.
+}
+
+LOCAL FUNCTION _scanSatPlanRaiseAp {
+    PARAMETER targetAp.
+
+    LOCAL mu IS SHIP:ORBIT:BODY:MU.
+    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL burnTime IS TIME:SECONDS + ETA:PERIAPSIS.
+    LOCAL rBurn IS bodyR + SHIP:PERIAPSIS.
+    LOCAL rTarget IS bodyR + targetAp.
+    LOCAL tSMA IS (rBurn + rTarget) / 2.
+    LOCAL vNow IS VELOCITYAT(SHIP, burnTime):ORBIT:MAG.
+    LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
+    LOCAL nd IS NODE(burnTime, 0, 0, vNew - vNow).
+    ADD nd.
+    mLog("SCANsat raise Ap node: dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " targetAp=" + ROUND(targetAp/1000,1) + "km").
+    mLogWarn("STATS scansat-raise-ap plan dv=" + ROUND(nd:DELTAV:MAG,1)
+        + " targetApKm=" + ROUND(targetAp/1000,1)
+        + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+    archivePlannedManeuverLog("scansat-raise-ap").
     RETURN nd.
 }
 
