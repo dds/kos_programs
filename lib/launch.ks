@@ -334,8 +334,13 @@ GLOBAL FUNCTION confirmLaunch {
     }
 
     printFn:CALL().
-    PRINT "  >> SPACE to launch / 30s auto-launch".
-    PRINT "  >> Edit CFG in terminal to override".
+    IF DEFINED uiPrompt {
+        uiPrompt("SPACE to launch / 30s auto-launch").
+        uiPrompt("Edit CFG in terminal to override").
+    } ELSE {
+        PRINT "  >> SPACE to launch / 30s auto-launch".
+        PRINT "  >> Edit CFG in terminal to override".
+    }
     PRINT " ".
     LOCAL deadline IS TIME:SECONDS + 30.
     LOCAL confirmed IS FALSE.

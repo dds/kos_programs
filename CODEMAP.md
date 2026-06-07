@@ -24,6 +24,7 @@ Base FR3 libraries:
 - `landing_assist` - targeted deorbit plus assist-stage hover/release for landing missions before rover separation.
 - `payload_landing` - minimal landing phase wrappers for landing-only missions.
 - `utils` - small shared helpers.
+- `ui` - small terminal formatting helpers.
 - `fr3_payload` - FR3 payload classification helpers.
 - `fr3_profile` - FR3 mission profile tweaks.
 - `fr3_sequence` - FR3 sequence construction and phase map.

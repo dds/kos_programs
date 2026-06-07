@@ -217,7 +217,7 @@ LOCAL FUNCTION _fr3Libs {
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
-    LOCAL libs IS LIST("phases", "utils", "fr3_payload", "fr3_profile", "fr3_sequence").
+    LOCAL libs IS LIST("phases", "utils", "ui", "fr3_payload", "fr3_profile", "fr3_sequence").
 
     IF band = "LAUNCH" {
         libs:ADD("fr3_ui").

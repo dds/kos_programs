@@ -221,14 +221,16 @@ LOCAL FUNCTION _selectMissionId {
     IF ids:LENGTH = 1 { RETURN ids[0]. }
 
     PRINT " ".
+    PRINT "  ========================================".
     PRINT "  " + craftName + " MISSION SELECT".
-    PRINT "  ------------------".
+    PRINT "  Pick your poison. Confirm your glory.".
+    PRINT "  ========================================".
     LOCAL maxShown IS MIN(ids:LENGTH, 9).
     FROM { LOCAL i IS 0. } UNTIL i >= maxShown STEP { SET i TO i + 1. } DO {
-        PRINT "  " + (i + 1) + ") " + ids[i].
+        PRINT "  [" + (i + 1) + "] " + ids[i].
     }
-    PRINT " ".
-    PRINT "  Press 1-" + maxShown + " to choose, or ENTER for " + ids[0] + ".".
+    PRINT "  ----------------------------------------".
+    PRINT "  Press 1-" + maxShown + " to choose, ENTER for " + ids[0] + ".".
 
     LOCAL choice IS 0.
     LOCAL picked IS FALSE.
