@@ -319,9 +319,7 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
     }
 
     IF SHIP:APOAPSIS < recoveryAp * 0.95 {
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-        _scanSatPlanRaiseAp(recoveryAp).
-        IF NOT _executeScanSatStep("SCANsat recovery raise Ap") {
+        IF NOT _scanSatPlanAndExecuteRaiseAp(recoveryAp) {
             _scanSatImpactHalt("recovery Ap raise failed").
             RETURN.
         }
@@ -349,7 +347,13 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
 LOCAL FUNCTION _scanSatImpactHalt {
     PARAMETER reason.
     mLogError("SCANsat impact/release halted: " + reason + ".").
-    stateSet("phase", "ABORT").
+    stateSet("phase", "SCANSAT_IMPACT_RELEASE").
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    PRINT " ".
+    PRINT "  SCANSAT RECOVERY HOLD".
+    PRINT "  " + reason.
+    PRINT "  Manual mode remains available; reboot/resume after review.".
     WAIT UNTIL FALSE.
 }
 
@@ -473,6 +477,10 @@ LOCAL FUNCTION _executeScanSatStep {
         IF NOT success {
             SET retries TO retries + 1.
             mLog(label + " missed (attempt " + retries + ") — waiting 5s.").
+            IF retries >= 1 AND NOT HASNODE {
+                mLogWarn(label + " node was removed after miss; caller should replan.").
+                RETURN FALSE.
+            }
             IF retries >= 3 {
                 mLogError(label + " failed after " + retries + " attempts.").
                 RETURN FALSE.
@@ -481,6 +489,33 @@ LOCAL FUNCTION _executeScanSatStep {
         }
     }
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _executeScanSatPlanStep {
+    PARAMETER planFn.
+    PARAMETER label.
+
+    LOCAL tries IS 0.
+    UNTIL tries >= 3 {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        LOCAL nd IS planFn:CALL().
+        IF nd = 0 {
+            mLogWarn(label + " planner returned no node.").
+        } ELSE {
+            IF NOT HASNODE { ADD nd. }
+            IF NEXTNODE:ETA < 30 {
+                mLogWarn(label + " planned too close/past ETA="
+                    + ROUND(NEXTNODE:ETA,1) + "; replanning next opportunity.").
+                REMOVE NEXTNODE.
+            } ELSE IF _executeScanSatStep(label) {
+                RETURN TRUE.
+            }
+        }
+        SET tries TO tries + 1.
+        WAIT 5.
+    }
+    mLogError(label + " failed after replanning attempts.").
+    RETURN FALSE.
 }
 
 LOCAL FUNCTION _scanSatRecoverPeDirect {
@@ -557,6 +592,13 @@ LOCAL FUNCTION _scanSatRecoverPeDirect {
 
     IF status_ = "complete" { RETURN TRUE. }
     RETURN FALSE.
+}
+
+LOCAL FUNCTION _scanSatPlanAndExecuteRaiseAp {
+    PARAMETER recoveryAp.
+    RETURN _executeScanSatPlanStep(
+        { RETURN _scanSatPlanRaiseAp(recoveryAp). },
+        "SCANsat recovery raise Ap").
 }
 
 LOCAL FUNCTION _scanSatClearDisposedStage {
@@ -717,7 +759,8 @@ LOCAL FUNCTION _scanSatPlanRaiseAp {
 
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
-    LOCAL burnTime IS TIME:SECONDS + ETA:PERIAPSIS.
+    LOCAL etaPe IS _scanSatNextApsisEta(ETA:PERIAPSIS).
+    LOCAL burnTime IS TIME:SECONDS + etaPe.
     LOCAL rBurn IS bodyR + SHIP:PERIAPSIS.
     LOCAL rTarget IS bodyR + targetAp.
     LOCAL tSMA IS (rBurn + rTarget) / 2.
@@ -726,13 +769,24 @@ LOCAL FUNCTION _scanSatPlanRaiseAp {
     LOCAL nd IS NODE(burnTime, 0, 0, vNew - vNow).
     ADD nd.
     mLog("SCANsat raise Ap node: dV=" + ROUND(nd:DELTAV:MAG,1)
-        + " targetAp=" + ROUND(targetAp/1000,1) + "km").
+        + " targetAp=" + ROUND(targetAp/1000,1) + "km"
+        + " etaPe=" + ROUND(etaPe,1)).
     mLogWarn("STATS scansat-raise-ap plan dv=" + ROUND(nd:DELTAV:MAG,1)
         + " targetApKm=" + ROUND(targetAp/1000,1)
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     archivePlannedManeuverLog("scansat-raise-ap").
     RETURN nd.
+}
+
+LOCAL FUNCTION _scanSatNextApsisEta {
+    PARAMETER eta_.
+    LOCAL outEta IS eta_.
+    LOCAL period IS SHIP:ORBIT:PERIOD.
+    UNTIL outEta >= 30 {
+        SET outEta TO outEta + period.
+    }
+    RETURN outEta.
 }
 
 LOCAL FUNCTION _releaseTaggedPayloadXfer {
