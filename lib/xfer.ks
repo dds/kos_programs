@@ -495,18 +495,18 @@ LOCAL FUNCTION _scanSatDisposeAttached {
     UNLOCK STEERING.
     SET SAS TO TRUE.
 
-    LOCAL status IS "complete".
+    LOCAL status_ IS "complete".
     IF SHIP:PERIAPSIS > targetPe AND SHIP:AVAILABLETHRUST <= 0 {
-        SET status TO "out-of-thrust".
+        SET status_ TO "out-of-thrust".
     } ELSE IF SHIP:PERIAPSIS > targetPe {
-        SET status TO "timeout".
+        SET status_ TO "timeout".
     }
-    mLogWarn("STATS scansat-dispose result status=" + status
+    mLogWarn("STATS scansat-dispose result status=" + status_
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " duration=" + ROUND(TIME:SECONDS - startT,1)).
 
-    IF status = "complete" { RETURN TRUE. }
+    IF status_ = "complete" { RETURN TRUE. }
     RETURN FALSE.
 }
 
