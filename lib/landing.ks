@@ -31,7 +31,7 @@ GLOBAL LAND_CFG IS LEXICON(
     "TARGET_TOLERANCE",  2500,
 
     // Deorbit
-    "DEORBIT_PE",        5000,
+    "DEORBIT_PE",       -3000,
     "DEORBIT_OVERSHOOT",    0,    // meters to overshoot target for carrier braking
     "DEORBIT_OVERSHOOT_TOLERANCE", 1200,
     "GUIDANCE_ALT",      5000,    // alt below which guidance steers toward target

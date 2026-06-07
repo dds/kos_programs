@@ -45,7 +45,7 @@ GLOBAL FUNCTION phaseLandDeorbit {
 }
 
 LOCAL FUNCTION _timedLandingDeorbit {
-    LOCAL leadMin IS 5.
+    LOCAL leadMin IS 0.5.
     IF CFG:HASKEY("LANDING_DEORBIT_LEAD_MINUTES") {
         SET leadMin TO CFG["LANDING_DEORBIT_LEAD_MINUTES"].
     }
@@ -58,14 +58,23 @@ LOCAL FUNCTION _timedLandingDeorbit {
     LOCAL tSMA IS (rBurn + rPe) / 2.
     LOCAL vNow IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
-    LOCAL nd IS NODE(burnUT, 0, 0, vNew - vNow).
+    LOCAL rawDV IS vNew - vNow.
+
+    // Clamp dV to configurable min/max bounds
+    LOCAL minDV IS 350.
+    LOCAL maxDV IS 600.
+    IF CFG:HASKEY("LANDING_DEORBIT_MIN_DV") { SET minDV TO CFG["LANDING_DEORBIT_MIN_DV"]. }
+    IF CFG:HASKEY("LANDING_DEORBIT_MAX_DV") { SET maxDV TO CFG["LANDING_DEORBIT_MAX_DV"]. }
+    LOCAL clampedDV IS MIN(-minDV, MAX(-maxDV, rawDV)).
+    LOCAL nd IS NODE(burnUT, 0, 0, clampedDV).
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     ADD nd.
     mLogWarn("STATS land-deorbit timed setup leadMin=" + ROUND(leadMin,1)
         + " burnT=" + ROUND(burnUT - TIME:SECONDS,0)
         + " targetPeKm=" + ROUND(deorbitPe/1000,1)
-        + " dv=" + ROUND(nd:DELTAV:MAG,1)).
+        + " rawDV=" + ROUND(rawDV,1)
+        + " dv=" + ROUND(clampedDV,1)).
     mLog("Timed sim deorbit node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " m/s at T+" + ROUND(nd:ETA,0) + "s.").
     IF HOMECONNECTION:ISCONNECTED {
@@ -158,7 +167,7 @@ LOCAL FUNCTION _landingDeorbitPe {
     IF CFG:HASKEY("LANDING_DEORBIT_PE") {
         RETURN CFG["LANDING_DEORBIT_PE"].
     }
-    RETURN 5000.
+    RETURN -3000.
 }
 
 LOCAL FUNCTION _confirmLandingTarget {
