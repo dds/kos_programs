@@ -52,12 +52,55 @@ GLOBAL CFG IS LEXICON(
 // The RDV phase runs planRendezvous() + executeManeuver() when
 // RENDEZVOUS_TARGET or ASTEROID_TARGET is configured.
 
-GLOBAL LIBS IS LIST(
-    "phases", "launch", "xfer",
-    "lib_navigation", "countdown", "maneuver", "inclination",
-    "orbit", "targeting", "landing", "lambert",
-    "payload_ops", "science", "utils"
-).
+LOCAL FUNCTION _bootPayloads {
+    LOCAL raw IS stateGet("payloads", "").
+    IF raw = "" { RETURN LIST(). }
+    RETURN raw:SPLIT(",").
+}
+
+LOCAL FUNCTION _bootHasPayload {
+    PARAMETER payloadName.
+    LOCAL targetName IS payloadName:TOUPPER.
+    FOR raw IN _bootPayloads() {
+        LOCAL result IS raw:TOUPPER.
+        UNTIL result:LENGTH = 0 {
+            LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
+            IF last:MATCHESPATTERN("[0-9]") OR last = "-" {
+                SET result TO result:SUBSTRING(0, result:LENGTH - 1).
+            } ELSE {
+                BREAK.
+            }
+        }
+        IF result = targetName { RETURN TRUE. }
+    }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _fr3Libs {
+    LOCAL libs IS LIST(
+        "phases", "launch", "xfer",
+        "lib_navigation", "countdown", "maneuver", "inclination",
+        "orbit", "targeting", "landing",
+        "utils"
+    ).
+
+    IF _bootHasPayload("PROBE") OR _bootHasPayload("CRASHPROBE")
+            OR _bootHasPayload("RELAY") OR _bootHasPayload("SCANSAT")
+            OR _bootHasPayload("SCISAT") {
+        libs:ADD("payload_ops").
+    } ELSE {
+        libs:ADD("payload_landing").
+    }
+    IF stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
+        libs:ADD("lambert").
+    }
+    IF _bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT") {
+        libs:ADD("science").
+    }
+    RETURN libs.
+}
+
+GLOBAL LIBS IS _fr3Libs().
 
 LOCAL FUNCTION _hasLandingPayload {
     FOR ptype IN missionPayloads() {
@@ -125,6 +168,41 @@ LOCAL FUNCTION buildPhaseSequence {
     ).
 
     RETURN buildRocketSequence(orbitPhases, payloadPhases).
+}
+
+LOCAL FUNCTION _buildPhaseMap {
+    LOCAL phaseMap IS LEXICON(
+        "LUNCH", phaseLaunch@,
+        "FAIR", phaseFairing@,
+        "ANTS",             phaseExtendAnts@,
+        "PARK",          phaseParking@,
+        "RDV",              phaseRendezvous@,
+        "XING",         phaseTransfer@,
+        "COAST",            phaseCoast@,
+        "CAPTURE",          phaseCapture@,
+        "CIRC",             phaseCirc@,
+        "RAISE",        phaseRaiseAlt@,
+        "INCLINE",     phaseInclCorrect@,
+        "MCC", phaseMidCourse@
+    ).
+
+    IF _hasPayload("PROBE") OR _hasPayload("CRASHPROBE") {
+        phaseMap:ADD("TARGETED_DEORBIT", phaseTargetedDeorbit@).
+        phaseMap:ADD("RELEASE_PROBE", phaseReleaseProbe@).
+    }
+    IF _hasPayload("RELAY") OR _hasPayload("SCISAT") {
+        phaseMap:ADD("RELAY_OPS", phaseRelayOps@).
+    }
+    IF _hasPayload("SCANSAT") {
+        phaseMap:ADD("SCANSAT_OPS", phaseScanSatOps@).
+    }
+    IF _hasLandingPayload() {
+        phaseMap:ADD("LAND_DEORBIT", phaseLandDeorbit@).
+        phaseMap:ADD("LAND_ASSIST", phaseLandAssist@).
+        phaseMap:ADD("LAND", phaseLand@).
+    }
+
+    RETURN phaseMap.
 }
 
 LOCAL FUNCTION _printConfig {
@@ -205,27 +283,5 @@ GLOBAL FUNCTION main {
 
     confirmLaunch(_printConfig@).
 
-    LOCAL phaseMap IS LEXICON(
-        "LUNCH", phaseLaunch@,
-        "FAIR", phaseFairing@,
-        "ANTS",             phaseExtendAnts@,
-        "PARK",          phaseParking@,
-        "RDV",              phaseRendezvous@,
-        "XING",         phaseTransfer@,
-        "COAST",            phaseCoast@,
-        "CAPTURE",          phaseCapture@,
-        "CIRC",             phaseCirc@,
-        "RAISE",        phaseRaiseAlt@,
-        "INCLINE",     phaseInclCorrect@,
-        "MCC", phaseMidCourse@,
-        "TARGETED_DEORBIT", phaseTargetedDeorbit@,
-        "RELEASE_PROBE",    phaseReleaseProbe@,
-        "RELAY_OPS",        phaseRelayOps@,
-        "SCANSAT_OPS",      phaseScanSatOps@,
-        "LAND_DEORBIT",     phaseLandDeorbit@,
-        "LAND_ASSIST",      phaseLandAssist@,
-        "LAND",             phaseLand@
-    ).
-
-    runPhases(phaseMap).
+    runPhases(_buildPhaseMap()).
 }
