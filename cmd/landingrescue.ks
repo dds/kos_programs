@@ -69,6 +69,7 @@ SET removed TO removed + _pruneDir("1:/craft", LIST("FR3")).
 SET removed TO removed + _pruneDir("1:/roles", LIST()).
 SET removed TO removed + _pruneDir("1:/cmd", LIST("LANDASSIST", "LANDINGRESCUE", "SETLANDASSIST")).
 SET removed TO removed + _pruneDir("1:/missions/FR3", LIST()).
+IF _deleteIfExists("1:/zombie") { SET removed TO removed + 1. }
 
 IF EXISTS("1:/logs") {
     LOCAL logItems IS LIST().

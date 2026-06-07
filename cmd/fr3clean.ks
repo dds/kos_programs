@@ -46,7 +46,7 @@ LOCAL FUNCTION _pruneDir {
 LOCAL keepLibs IS LIST(
     "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY"
 ).
-LOCAL keepCmds IS LIST("FR3CLEAN", "ZOMBIE").
+LOCAL keepCmds IS LIST("FR3CLEAN").
 
 PRINT "FR3 clean: free before " + beforeFree + " bytes.".
 
@@ -57,6 +57,7 @@ _pruneDir("1:/cmd", keepCmds).
 _pruneDir("1:/missions/FR3", LIST()).
 _pruneDir("1:/missions/FR2", LIST()).
 _pruneDir("1:/missions", LIST()).
+_deleteIfExists("1:/zombie").
 
 IF EXISTS("1:/logs") {
     LOCAL logItems IS LIST().

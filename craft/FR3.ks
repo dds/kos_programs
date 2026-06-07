@@ -297,7 +297,7 @@ LOCAL FUNCTION _fr3EmergencyCleanup {
         "CLEANUP", "DUMP", "FILES", "LANDASSIST", "LANDINGCHECK",
         "LANDINGRESCUE", "LANDMIN", "SETLANDASSIST", "SETLANDINGDEORBIT",
         "SETLANDINGTAG", "SETSTATE", "SETUP_MUN_ROVER_LANDING_REAL",
-        "SETUP_MUN_ROVER_LANDING_SIM", "SIMLANDHERE", "ZOMBIE"
+        "SETUP_MUN_ROVER_LANDING_SIM", "SIMLANDHERE"
     ).
 
     LOCAL beforeFree IS CORE:VOLUME:FREESPACE.
@@ -307,6 +307,7 @@ LOCAL FUNCTION _fr3EmergencyCleanup {
     SET removed TO removed + _fr3PruneDir("1:/roles", LIST()).
     SET removed TO removed + _fr3PruneDir("1:/cmd", keepCmds).
     SET removed TO removed + _fr3PruneDir("1:/missions/FR3", LIST()).
+    IF _fr3DeleteIfExists("1:/zombie") { SET removed TO removed + 1. }
     SET removed TO removed + _fr3PruneLogs().
 
     IF removed > 0 {
