@@ -107,6 +107,13 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
     LOCAL scanStep IS period * scanOrbits / scanSamples.
     LOCAL passes    IS LIST(1.0, 0.1, 0.01, 0.001, 0.0001).
+    LOCAL coarseStopDist IS 1000.
+    IF SHIP:BODY:ATM:EXISTS {
+        SET coarseStopDist TO tolerance.
+    }
+    IF CFG:HASKEY("TARGET_DEORBIT_COARSE_STOP_DIST") {
+        SET coarseStopDist TO CFG["TARGET_DEORBIT_COARSE_STOP_DIST"].
+    }
 
     LOCAL bestUT   IS TIME:SECONDS + 30.
     LOCAL bestPe   IS entryPe.
@@ -131,6 +138,13 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     + "s  dist=" + ROUND(bestDist/1000,1) + "km"
                     + " impact=" + ROUND(trial["LAT"],4)
                     + "," + ROUND(trial["LNG"],4)).
+                IF bestDist <= coarseStopDist {
+                    mLogWarn("STATS deorbit coarse early-stop distKm="
+                        + ROUND(bestDist/1000,2)
+                        + " stopKm=" + ROUND(coarseStopDist/1000,2)
+                        + " burnT=" + ROUND(scanUT - TIME:SECONDS,0)).
+                    SET scanUT TO scanEnd + scanStep.
+                }
             }
         } ELSE {
             SET invalidSamples TO invalidSamples + 1.

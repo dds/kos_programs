@@ -30,9 +30,10 @@ stateSet("lib_band", "LAND_ASSIST").
 _cfg("LANDING_TARGET_TOLERANCE", "2500").
 _cfg("TARGET_DEORBIT_SCAN_ORBITS", "32").
 _cfg("TARGET_DEORBIT_SCAN_SAMPLES", "2048").
+_cfg("TARGET_DEORBIT_COARSE_STOP_DIST", "1000").
 _cfg("TARGET_DEORBIT_PROCEED_ON_MISS", "0").
 _cfg("LANDING_DEORBIT_PE", "-5000").
 
 PRINT "Landing deorbit settings forced.".
 PRINT "Phase -> " + phaseName:TOUPPER.
-PRINT "Scan: 32 orbits / 2048 samples, Pe=-5km, no proceed on miss.".
+PRINT "Scan: 32 orbits / 2048 samples, stop<=1km, Pe=-5km.".
