@@ -116,6 +116,27 @@ GLOBAL FUNCTION phaseScanSatOps {
         RETURN.
     }
 
+    IF stateGet("scansat_released_time", "") <> "" {
+        LOCAL recoveryPe IS 70000.
+        LOCAL recoveryAp IS 70000.
+        IF CFG:HASKEY("SCANSAT_RECOVERY_PE") { SET recoveryPe TO CFG["SCANSAT_RECOVERY_PE"]. }
+        ELSE IF CFG:HASKEY("TARGET_PE") { SET recoveryPe TO CFG["TARGET_PE"]. }
+        IF CFG:HASKEY("SCANSAT_RECOVERY_AP") { SET recoveryAp TO CFG["SCANSAT_RECOVERY_AP"]. }
+        ELSE IF CFG:HASKEY("TARGET_AP") { SET recoveryAp TO CFG["TARGET_AP"]. }
+        mLogWarn("STATS scansat-ops resume-recovery PeKm="
+            + ROUND(SHIP:PERIAPSIS/1000,1)
+            + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+            + " targetPeKm=" + ROUND(recoveryPe/1000,1)
+            + " targetApKm=" + ROUND(recoveryAp/1000,1)).
+        IF NOT _scanSatRecoverOrbit(recoveryPe, recoveryAp) { RETURN. }
+        stateSet("scansat_recovered", "true").
+        scienceStartScanners().
+        WAIT 1.
+        scienceScanStatus().
+        nextPhase(_payloadSeq()).
+        RETURN.
+    }
+
     scienceStartScanners().
     WAIT 1.
     scienceScanStatus().
