@@ -55,12 +55,10 @@ GLOBAL FUNCTION nextPhase {
                 LOCAL nxt IS seq[i + 1].
                 stateSet("phase", nxt).
                 mLog("Phase: " + current + " -> " + nxt).
-                mLogWarn("STATS phase transition from=" + current + " to=" + nxt).
                 archivePhaseLog().
                 RETURN nxt.
             } ELSE {
                 stateSet("phase", "DONE").
-                mLogWarn("STATS phase transition from=" + current + " to=DONE").
                 archivePhaseLog().
                 RETURN "DONE".
             }
