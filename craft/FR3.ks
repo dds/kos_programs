@@ -329,9 +329,8 @@ LOCAL FUNCTION _bandForPhase {
             "RELAY_OPS", "SCANSAT_OPS")) {
         RETURN "PAYLOAD_OPS".
     }
-    IF phase = "LAND_DEORBIT" OR phase = "LAND_ASSIST" {
-        RETURN "LAND_DEORBIT".
-    }
+    IF phase = "LAND_DEORBIT" { RETURN "LAND_DEORBIT". }
+    IF phase = "LAND_ASSIST" { RETURN "LAND_ASSIST". }
     IF phase = "LAND" { RETURN "LAND". }
     IF phase = "ROVER" { RETURN "ROVER". }
     RETURN "MISSION".
@@ -404,8 +403,7 @@ LOCAL FUNCTION _fr3Libs {
             libs:ADD("landing_assist").
         }
     } ELSE IF band = "LAND_ASSIST" {
-        libs:ADD("payload_landing").
-        libs:ADD("landing_assist").
+        libs:ADD("landing_carrier").
     } ELSE IF band = "LAND" {
         libs:ADD("payload_landing").
         libs:ADD("targeting").

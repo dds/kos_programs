@@ -89,7 +89,6 @@ GLOBAL FUNCTION fr3BuildPhaseMap {
         phaseMap:ADD("LAND_ASSIST", phaseLandAssist@).
     }
     IF band = "LAND_ASSIST" {
-        phaseMap:ADD("LAND_DEORBIT", phaseLandDeorbit@).
         phaseMap:ADD("LAND_ASSIST", phaseLandAssist@).
     }
     IF band = "LAND" {

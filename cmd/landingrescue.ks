@@ -10,10 +10,13 @@ PRINT "Landing rescue: free before " + beforeFree + " bytes.".
 LOCAL phaseUpper IS phaseName:TOUPPER.
 LOCAL keepLibs IS LIST(
     "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY",
-    "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE",
-    "PAYLOAD_LANDING", "LANDING_ASSIST"
+    "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE"
 ).
-IF phaseUpper = "LAND_DEORBIT" {
+IF phaseUpper = "LAND_ASSIST" {
+    keepLibs:ADD("LANDING_CARRIER").
+} ELSE IF phaseUpper = "LAND_DEORBIT" {
+    keepLibs:ADD("PAYLOAD_LANDING").
+    keepLibs:ADD("LANDING_ASSIST").
     keepLibs:ADD("TARGETING").
     keepLibs:ADD("COUNTDOWN").
     keepLibs:ADD("MANEUVER").
@@ -94,8 +97,10 @@ IF EXISTS("1:/lib/state.ksm") {
 IF DEFINED stateSet {
     stateSet("phase", phaseUpper).
     stateSet("reload_required", "false").
-    IF phaseUpper = "LAND_DEORBIT" OR phaseUpper = "LAND_ASSIST" {
+    IF phaseUpper = "LAND_DEORBIT" {
         stateSet("lib_band", "LAND_DEORBIT").
+    } ELSE IF phaseUpper = "LAND_ASSIST" {
+        stateSet("lib_band", "LAND_ASSIST").
     } ELSE {
         stateSet("lib_band", "LAND_ASSIST").
     }
