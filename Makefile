@@ -1,6 +1,6 @@
 TAG ?=
 
-.PHONY: help require-tag stamp-version commit-version tag-version push-version release-version
+.PHONY: help require-tag stamp-version commit-version tag-version push-version release-version watch-sync
 
 help:
 	@echo "Version/log tag workflow:"
@@ -9,6 +9,7 @@ help:
 	@echo "  make tag-version TAG=kos-YYYYMMDD-N"
 	@echo "  make push-version TAG=kos-YYYYMMDD-N"
 	@echo "  make release-version TAG=kos-YYYYMMDD-N"
+	@echo "  make watch-sync"
 
 require-tag:
 	@test -n "$(TAG)" || (echo "Set TAG=kos-YYYYMMDD-N" && exit 1)
@@ -34,3 +35,6 @@ push-version: require-tag
 	git push origin "$(TAG)"
 
 release-version: commit-version tag-version push-version
+
+watch-sync:
+	./scripts/watch-sync.sh
