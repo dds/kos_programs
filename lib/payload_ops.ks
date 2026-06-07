@@ -176,7 +176,12 @@ GLOBAL FUNCTION phaseScanSatOps {
 }
 
 GLOBAL FUNCTION phaseLandDeorbit {
-    landingTargetedDeorbit().
+    LOCAL deorbitOk IS landingTargetedDeorbit().
+    IF NOT deorbitOk {
+        mLogError("Landing deorbit did not meet target tolerance; holding phase.").
+        stateSet("phase", "LAND_DEORBIT").
+        WAIT UNTIL FALSE.
+    }
     nextPhase(_payloadSeq()).
 }
 

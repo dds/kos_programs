@@ -9,10 +9,19 @@ GLOBAL FUNCTION phaseLandDeorbit {
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
         + " targetPeKm=" + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1)).
     _confirmLandingTarget().
-    landingTargetedDeorbit().
+    LOCAL deorbitOk IS landingTargetedDeorbit().
     mLogWarn("STATS land-deorbit phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " status=" + SHIP:STATUS).
+        + " status=" + SHIP:STATUS
+        + " ok=" + deorbitOk).
+    IF NOT deorbitOk {
+        mLogError("Landing deorbit did not meet target tolerance; holding for manual review.").
+        stateSet("phase", "LAND_DEORBIT").
+        PRINT " ".
+        PRINT "  LANDING DEORBIT FAILED TARGET CHECK".
+        PRINT "  Keep/reselect the waypoint, check orbit reachability, then reboot/resume.".
+        WAIT UNTIL FALSE.
+    }
     nextPhase(fr3Seq).
 }
 
@@ -43,6 +52,15 @@ GLOBAL FUNCTION phaseLandAssist {
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " releaseSurface=" + LANDING_CFG["ASSIST_RELEASE_ON_SURFACE"]).
     IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
+    IF NOT landingImpactWithinTolerance() {
+        mLogError("Predicted landing impact is not within target tolerance; holding LAND_ASSIST.").
+        stateSet("phase", "LAND_ASSIST").
+        LOCK THROTTLE TO 0.
+        PRINT " ".
+        PRINT "  LANDING IMPACT CHECK FAILED".
+        PRINT "  Replan deorbit or verify selected waypoint before descent.".
+        WAIT UNTIL FALSE.
+    }
     LOCAL assistOk IS landingAssistStage().
     mLogWarn("STATS land-assist phase result ok=" + assistOk
         + " alt=" + ROUND(ALT:RADAR,1)

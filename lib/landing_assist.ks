@@ -39,8 +39,8 @@ GLOBAL landingAbortFlag IS FALSE.
 GLOBAL FUNCTION landingTargetedDeorbit {
     LOCAL landingTarget IS landingResolveTarget().
     IF NOT landingTarget["FOUND"] {
-        mLog("No landing target set - using blind deorbit.").
-        RETURN.
+        mLogError("No landing target set - refusing blind landing deorbit.").
+        RETURN FALSE.
     }
 
     mLogWarn("STATS landing target source=" + landingTarget["SOURCE"]
@@ -52,7 +52,7 @@ GLOBAL FUNCTION landingTargetedDeorbit {
         + "," + ROUND(landingTarget["LNG"],4)
         + " from " + landingTarget["SOURCE"] + ".").
 
-    targetedDeorbitAt(
+    RETURN targetedDeorbitAt(
         landingTarget["LAT"],
         landingTarget["LNG"],
         LANDING_CFG["DEORBIT_PE"],
@@ -154,6 +154,45 @@ GLOBAL FUNCTION landingAssistStage {
     UNLOCK STEERING.
     SET SAS TO TRUE.
     RETURN TRUE.
+}
+
+GLOBAL FUNCTION landingImpactWithinTolerance {
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN TRUE. }
+
+    LOCAL landingTarget IS landingResolveTarget().
+    IF NOT landingTarget["FOUND"] {
+        mLogError("No landing target set - refusing descent impact check.").
+        RETURN FALSE.
+    }
+    IF NOT ADDONS:TR:AVAILABLE {
+        mLogError("Trajectories not available - cannot verify landing impact.").
+        RETURN FALSE.
+    }
+
+    ADDONS:TR:SETTARGET(LATLNG(landingTarget["LAT"], landingTarget["LNG"])).
+    WAIT 0.5.
+    IF NOT ADDONS:TR:HASIMPACT {
+        mLogWarn("STATS landing-impact status=no-impact target="
+            + ROUND(landingTarget["LAT"],4)
+            + "," + ROUND(landingTarget["LNG"],4)).
+        RETURN FALSE.
+    }
+
+    LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
+    LOCAL dist IS _assistGeoDistance(
+        impactPos:LAT,
+        impactPos:LNG,
+        landingTarget["LAT"],
+        landingTarget["LNG"]).
+    LOCAL ok IS dist <= LANDING_CFG["TARGET_TOLERANCE"].
+    mLogWarn("STATS landing-impact status=" + ok
+        + " distKm=" + ROUND(dist/1000,2)
+        + " toleranceKm=" + ROUND(LANDING_CFG["TARGET_TOLERANCE"]/1000,2)
+        + " impact=" + ROUND(impactPos:LAT,4)
+        + "," + ROUND(impactPos:LNG,4)
+        + " target=" + ROUND(landingTarget["LAT"],4)
+        + "," + ROUND(landingTarget["LNG"],4)).
+    RETURN ok.
 }
 
 LOCAL FUNCTION _assistSurfaceRelease {

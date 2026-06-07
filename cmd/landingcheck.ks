@@ -30,9 +30,13 @@ FOR wp IN WAYPOINTS(SHIP:BODY:NAME) {
     }
 }
 IF selected <> 0 {
+    LOCAL reachInc IS SHIP:ORBIT:INCLINATION.
+    IF reachInc > 90 { SET reachInc TO 180 - reachInc. }
     PRINT "  Target   selected waypoint: " + selected:NAME.
     PRINT "           lat=" + ROUND(selected:GEOPOSITION:LAT,4)
         + " lng=" + ROUND(selected:GEOPOSITION:LNG,4).
+    PRINT "           reachableLat=" + (ABS(selected:GEOPOSITION:LAT) <= reachInc + 0.5)
+        + " orbitLatLimit=" + ROUND(reachInc,2).
 } ELSE {
     PRINT "  Target   no selected waypoint on " + SHIP:BODY:NAME + ".".
 }

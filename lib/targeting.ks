@@ -11,11 +11,11 @@ GLOBAL FUNCTION targetedDeorbit {
     LOCAL targetInfo IS targetResolveDeorbitTarget().
     IF NOT targetInfo["FOUND"] {
         mLogError("No deorbit target set. Configure PROBE_TARGET_LAT/LNG or select a waypoint.").
-        RETURN.
+        RETURN FALSE.
     }
 
     mLog("Deorbit target source: " + targetInfo["SOURCE"] + ".").
-    targetedDeorbitAt(targetInfo["LAT"], targetInfo["LNG"], entryPe, tolerance).
+    RETURN targetedDeorbitAt(targetInfo["LAT"], targetInfo["LNG"], entryPe, tolerance).
 }
 
 GLOBAL FUNCTION targetResolveDeorbitTarget {
@@ -66,10 +66,16 @@ GLOBAL FUNCTION targetedDeorbitAt {
     PARAMETER tolerance IS 5000.
 
     IF NOT ADDONS:TR:AVAILABLE {
-        mLogWarn("Trajectories not available — falling back to planLowerPe.").
-        planLowerPe(entryPe).
-        executeManeuver().
-        RETURN.
+        mLogError("Trajectories not available — cannot guarantee targeted deorbit.").
+        RETURN FALSE.
+    }
+
+    IF NOT targetReachable(targetLat) {
+        mLogWarn("STATS deorbit abort reason=target-lat-unreachable targetLat="
+            + ROUND(targetLat,4)
+            + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)).
+        mLogError("Target latitude is not reachable from this orbit inclination.").
+        RETURN FALSE.
     }
 
     LOCAL site IS _selectScanSatLandingSite(targetLat, targetLng).
@@ -204,7 +210,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 + ROUND(bestDist/1000,1)
                 + " toleranceKm=" + ROUND(tolerance/1000,1)).
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-            RETURN.
+            RETURN FALSE.
         }
         mLogWarn("Proceeding anyway — check orbital inclination vs target latitude.").
     }
@@ -230,9 +236,17 @@ GLOBAL FUNCTION targetedDeorbitAt {
             + "," + ROUND(impactPos:LNG,4)).
         HUDTEXT("Impact predicted " + ROUND(finalDist/1000,1) + "km from target",
             5, 2, 14, GREEN, FALSE).
+        IF finalDist > tolerance {
+            mLogWarn("STATS deorbit postburn status=miss distKm="
+                + ROUND(finalDist/1000,1)
+                + " toleranceKm=" + ROUND(tolerance/1000,1)).
+            RETURN FALSE.
+        }
     } ELSE {
         mLogWarn("Trajectories has no impact prediction post-burn.").
+        RETURN FALSE.
     }
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _testDeorbitNode {
@@ -303,7 +317,7 @@ LOCAL FUNCTION _selectScanSatLandingSite {
                 SET known TO known + 1.
                 LOCAL slope IS ADDONS:SCANSAT:SLOPE(SHIP:BODY, candGeo).
                 IF slope >= 0 AND slope <= maxSlope {
-                    LOCAL dist IS SQRT(north^2 + east^2).
+                    LOCAL dist IS SQRT(north_^2 + east_^2).
                     LOCAL score IS dist / 100 + slope * 25.
                     IF score < bestScore {
                         SET bestScore TO score.

@@ -84,7 +84,10 @@ GLOBAL FUNCTION landingExecute {
         }
     }
 
-    _landDeorbit().
+    IF NOT _landDeorbit() {
+        SET landingAbortFlag TO TRUE.
+        RETURN.
+    }
     IF landingAbortFlag { RETURN. }
     _landCoast(useKE).
     IF landingAbortFlag { RETURN. }
@@ -217,22 +220,18 @@ GLOBAL FUNCTION landingAssistStage {
 LOCAL FUNCTION _landDeorbit {
     IF SHIP:PERIAPSIS <= LANDING_CFG["DEORBIT_PE"] {
         mLog("Already suborbital (Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km) — skipping deorbit.").
-        RETURN.
+        RETURN TRUE.
     }
 
     LOCAL landingTarget IS landingResolveTarget().
     IF landingTarget["FOUND"] {
-        landingTargetedDeorbit().
+        LOCAL deorbitOk IS landingTargetedDeorbit().
         orbitSummary().
-        RETURN.
+        RETURN deorbitOk.
     }
 
-    mLog("Planning deorbit. Target Pe="
-        + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1) + "km.").
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    planLowerPe(LANDING_CFG["DEORBIT_PE"]).
-    executeManeuver().
-    orbitSummary().
+    mLogError("No landing target set — refusing blind landing deorbit.").
+    RETURN FALSE.
 }
 
 LOCAL FUNCTION _landCoast {
@@ -387,8 +386,8 @@ LOCAL FUNCTION _landTouchdown {
 GLOBAL FUNCTION landingTargetedDeorbit {
     LOCAL landingTarget IS landingResolveTarget().
     IF NOT landingTarget["FOUND"] {
-        mLog("No landing target set — using blind deorbit.").
-        RETURN.
+        mLogError("No landing target set — refusing blind landing deorbit.").
+        RETURN FALSE.
     }
 
     mLogWarn("STATS landing target source=" + landingTarget["SOURCE"]
@@ -400,7 +399,7 @@ GLOBAL FUNCTION landingTargetedDeorbit {
         + "," + ROUND(landingTarget["LNG"],4)
         + " from " + landingTarget["SOURCE"] + ".").
 
-    targetedDeorbitAt(
+    RETURN targetedDeorbitAt(
         landingTarget["LAT"],
         landingTarget["LNG"],
         LANDING_CFG["DEORBIT_PE"],
