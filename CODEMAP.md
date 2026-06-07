@@ -5,6 +5,7 @@
 - `boot/boot.ks` parses the vessel name, stores `vehicle`, `target`, and `payloads` in state, compiles the selected vehicle script to `1:/craft/*.ksm`, then syncs and loads that vehicle's `LIBS`.
 - `boot/boot.ks` reads mission profile files from the archive when connected and prunes stale local `1:/missions` files after persisting the selected config into state.
 - `boot/boot.ks` prunes stale local `1:/lib` files before syncing the selected `LIBS`, so progressive reloads actually free storage.
+- `cmd/cleanup.ks` / `lib/cleanup.ks` can be run manually to delete local source `.ks` files except `1:/boot/boot.ks` and clear local logs when an older flight computer is out of space.
 - `lib/resume.ks` builds `MISSION`, normalizes payload tokens, and builds common rocket sequences.
 - `lib/flightplan.ks` renders shared flight-plan and checklist screens for rockets and planes.
 - Vehicle scripts in `craft/` define default `CFG`, `LIBS`, phase sequence, phase map, and mission profile tweaks.
