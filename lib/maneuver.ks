@@ -62,12 +62,19 @@ GLOBAL FUNCTION executeManeuver {
         WAIT MAX(0, wakeTime - TIME:SECONDS).
         _wakeCmd().
         SET WARP TO 0.
+        SET SAS TO FALSE.
+        WAIT 0.1.
+        LOCK STEERING TO nd:BURNVECTOR.
         mLog("Awake — " + ROUND(startTime - TIME:SECONDS, 0) + "s to burn.").
+        mLog("Re-aligning to burn vector after hibernation.").
         HUDTEXT("Core awake — burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
     }
 
-    WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ALIGN_TOLERANCE
-            OR TIME:SECONDS >= (startTime - 30).
+    UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ALIGN_TOLERANCE
+            OR TIME:SECONDS >= (startTime - 30) {
+        LOCK STEERING TO nd:BURNVECTOR.
+        WAIT 0.1.
+    }
 
     IF VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) >= ALIGN_TOLERANCE {
         mLogWarn("Burn starting with " + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR),1) + "° misalignment.").
