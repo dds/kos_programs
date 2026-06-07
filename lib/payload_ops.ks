@@ -393,6 +393,7 @@ LOCAL FUNCTION _scanSatBurn {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         planFn:CALL().
         WAIT 1.
+        _scanSatLogNodeDebug(label + " settled", NEXTNODE, NEXTNODE:ETA).
         LOCAL maxDv IS 1000.
         IF CFG:HASKEY("SCANSAT_MAX_NODE_DV") { SET maxDv TO CFG["SCANSAT_MAX_NODE_DV"]. }
         IF NEXTNODE:DELTAV:MAG > maxDv {
@@ -436,6 +437,7 @@ LOCAL FUNCTION _scanSatPlanSetApAtPe {
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
     LOCAL nd IS NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, vNew - vNow).
     ADD nd.
+    _scanSatLogPlanDebug("set-ap", nd, vNow, vNew, rBurn, rTarget, tSMA).
     mLog("SCANsat set Ap node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " targetAp=" + ROUND(targetAp/1000,1) + "km").
     mLogWarn("STATS scansat-set-ap plan dv=" + ROUND(nd:DELTAV:MAG,1)
@@ -458,6 +460,7 @@ LOCAL FUNCTION _scanSatPlanSetPeAtAp {
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
     LOCAL nd IS NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, vNew - vNow).
     ADD nd.
+    _scanSatLogPlanDebug("set-pe", nd, vNow, vNew, rBurn, rTarget, tSMA).
     mLog("SCANsat set Pe node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " targetPe=" + ROUND(targetPe/1000,1) + "km").
     mLogWarn("STATS scansat-set-pe plan dv=" + ROUND(nd:DELTAV:MAG,1)
@@ -466,4 +469,43 @@ LOCAL FUNCTION _scanSatPlanSetPeAtAp {
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     archivePlannedManeuverLog("scansat-set-pe").
     RETURN nd.
+}
+
+LOCAL FUNCTION _scanSatLogPlanDebug {
+    PARAMETER label.
+    PARAMETER nd.
+    PARAMETER vNow.
+    PARAMETER vNew.
+    PARAMETER rBurn.
+    PARAMETER rTarget.
+    PARAMETER sma.
+
+    LOCAL expectedDv IS vNew - vNow.
+    mLogWarn("DEBUG scansat-node-plan label=" + label
+        + " expectedDv=" + ROUND(expectedDv,3)
+        + " nodeDv=" + ROUND(nd:DELTAV:MAG,3)
+        + " pro=" + ROUND(nd:PROGRADE,3)
+        + " norm=" + ROUND(nd:NORMAL,3)
+        + " rad=" + ROUND(nd:RADIALOUT,3)
+        + " eta=" + ROUND(nd:ETA,1)
+        + " vNow=" + ROUND(vNow,3)
+        + " vNew=" + ROUND(vNew,3)
+        + " rBurnKm=" + ROUND(rBurn/1000,3)
+        + " rTargetKm=" + ROUND(rTarget/1000,3)
+        + " smaKm=" + ROUND(sma/1000,3)).
+}
+
+LOCAL FUNCTION _scanSatLogNodeDebug {
+    PARAMETER label.
+    PARAMETER nd.
+    PARAMETER eta_.
+
+    mLogWarn("DEBUG scansat-node-live label=" + label
+        + " dv=" + ROUND(nd:DELTAV:MAG,3)
+        + " pro=" + ROUND(nd:PROGRADE,3)
+        + " norm=" + ROUND(nd:NORMAL,3)
+        + " rad=" + ROUND(nd:RADIALOUT,3)
+        + " eta=" + ROUND(eta_,1)
+        + " shipPeKm=" + ROUND(SHIP:PERIAPSIS/1000,3)
+        + " shipApKm=" + ROUND(SHIP:APOAPSIS/1000,3)).
 }
