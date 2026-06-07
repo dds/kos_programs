@@ -3,19 +3,28 @@
 // ============================================================
 
 GLOBAL FUNCTION targetedDeorbit {
-    IF NOT ADDONS:TR:AVAILABLE {
-        mLogWarn("Trajectories not available — falling back to planLowerPe.").
-        planLowerPe(CFG["PROBE_ENTRY_PE"]).
-        executeManeuver().
-        RETURN.
-    }
-
-    LOCAL targetLat IS CFG["PROBE_TARGET_LAT"].
-    LOCAL targetLng IS CFG["PROBE_TARGET_LNG"].
     LOCAL entryPe   IS 30000.
     IF CFG:HASKEY("PROBE_ENTRY_PE") { SET entryPe TO CFG["PROBE_ENTRY_PE"]. }
     LOCAL tolerance IS 5000.
     IF CFG:HASKEY("PROBE_TARGET_TOL") { SET tolerance TO CFG["PROBE_TARGET_TOL"]. }
+    targetedDeorbitAt(CFG["PROBE_TARGET_LAT"], CFG["PROBE_TARGET_LNG"], entryPe, tolerance).
+}
+
+GLOBAL FUNCTION targetedDeorbitAt {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER entryPe IS 30000.
+    PARAMETER tolerance IS 5000.
+
+    IF NOT ADDONS:TR:AVAILABLE {
+        mLogWarn("Trajectories not available — falling back to planLowerPe.").
+        planLowerPe(entryPe).
+        executeManeuver().
+        RETURN.
+    }
+
+    LOCAL targetGeo IS LATLNG(targetLat, targetLng).
+    ADDONS:TR:SETTARGET(targetGeo).
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
         + "  entryPe=" + ROUND(entryPe/1000,1) + "km"

@@ -15,6 +15,10 @@ GLOBAL LANDING_CFG IS LEXICON(
     "TARGET_LAT",           0,
     "TARGET_LNG",           0,
     "TARGET_BODY",         "",
+    "TARGET_WAYPOINT",     "",
+    "TARGET_TOLERANCE",  2500,
+    "GUIDANCE_ALT",      5000,
+    "GUIDANCE_MAX_TILT",   20,
     "ASSIST_TARGET_SPEED", 80.0,
     "ASSIST_MIN_ALT",      800,
     "ASSIST_THROTTLE",       1,
@@ -38,6 +42,18 @@ GLOBAL FUNCTION landingExecute {
         SET landingSystem TO "manual calculation".
     }
     mLog("Landing system: " + landingSystem).
+
+    LOCAL landingTarget IS landingResolveTarget().
+    IF landingTarget["FOUND"] {
+        SET LANDING_CFG["TARGET_LAT"] TO landingTarget["LAT"].
+        SET LANDING_CFG["TARGET_LNG"] TO landingTarget["LNG"].
+        mLog("Landing target: " + ROUND(landingTarget["LAT"],4)
+            + "," + ROUND(landingTarget["LNG"],4)
+            + " from " + landingTarget["SOURCE"] + ".").
+        IF ADDONS:TR:AVAILABLE {
+            ADDONS:TR:SETTARGET(LATLNG(landingTarget["LAT"], landingTarget["LNG"])).
+        }
+    }
 
     WHEN (ABS(SHIP:FACING:PITCH) > LANDING_CFG["MAX_TILT"]
             OR ABS(SHIP:FACING:ROLL) > LANDING_CFG["MAX_TILT"])
@@ -144,6 +160,14 @@ LOCAL FUNCTION _landDeorbit {
         mLog("Already suborbital (Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km) — skipping deorbit.").
         RETURN.
     }
+
+    LOCAL landingTarget IS landingResolveTarget().
+    IF landingTarget["FOUND"] {
+        landingTargetedDeorbit().
+        orbitSummary().
+        RETURN.
+    }
+
     mLog("Planning deorbit. Target Pe="
         + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1) + "km.").
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
@@ -179,11 +203,18 @@ LOCAL FUNCTION _landCoast {
 LOCAL FUNCTION _landSuicideBurn {
     PARAMETER useKE.
 
+    LOCAL landingTarget IS landingResolveTarget().
     mLog("Suicide burn start.").
     HUDTEXT("SUICIDE BURN", 3, 2, 16, YELLOW, FALSE).
     LOCK STEERING TO SHIP:RETROGRADE.
 
     UNTIL ALT:RADAR <= LANDING_CFG["FINAL_ALT"] OR landingAbortFlag {
+        IF landingTarget["FOUND"] AND ALT:RADAR < LANDING_CFG["GUIDANCE_ALT"] {
+            LOCK STEERING TO _landingGuidanceVector(landingTarget, SHIP:RETROGRADE).
+        } ELSE {
+            LOCK STEERING TO SHIP:RETROGRADE.
+        }
+
         IF _needsStage() {
             LOCK THROTTLE TO 0.
             WAIT 0.2.
@@ -219,6 +250,7 @@ LOCAL FUNCTION _landSuicideBurn {
 }
 
 LOCAL FUNCTION _landFinal {
+    LOCAL landingTarget IS landingResolveTarget().
     LOCAL legs IS SHIP:MODULESNAMED("ModuleWheelDeployment").
     LOCAL legsMLD IS SHIP:MODULESNAMED("ModuleLandingLeg").
     FOR m IN legsMLD { legs:ADD(m). }
@@ -236,7 +268,16 @@ LOCAL FUNCTION _landFinal {
     UNTIL ALT:RADAR < 5 OR landingAbortFlag {
         LOCAL hVel IS SHIP:VELOCITY:SURFACE
             - (VDOT(SHIP:VELOCITY:SURFACE, SHIP:UP) * SHIP:UP).
-        IF hVel:MAG > 0.5 {
+        IF landingTarget["FOUND"] AND ALT:RADAR < LANDING_CFG["GUIDANCE_ALT"] {
+            LOCAL targetDist IS _landingTargetDistance(landingTarget).
+            IF targetDist > 25 {
+                LOCK STEERING TO _landingGuidanceVector(landingTarget, SHIP:UP).
+            } ELSE IF hVel:MAG > 0.5 {
+                LOCK STEERING TO (-hVel):NORMALIZED.
+            } ELSE {
+                LOCK STEERING TO SHIP:UP.
+            }
+        } ELSE IF hVel:MAG > 0.5 {
             LOCK STEERING TO (-hVel):NORMALIZED.
         } ELSE {
             LOCK STEERING TO SHIP:UP.
@@ -250,8 +291,13 @@ LOCAL FUNCTION _landFinal {
             LOCK THROTTLE TO MAX(0, MIN(1.0, thrott)).
         }
 
+        LOCAL targetMsg IS "".
+        IF landingTarget["FOUND"] {
+            SET targetMsg TO " tgt:" + ROUND(_landingTargetDistance(landingTarget),0) + "m".
+        }
         HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
-            + ROUND(SHIP:VERTICALSPEED,1) + "m/s", 1, 2, 13, GREEN, FALSE).
+            + ROUND(SHIP:VERTICALSPEED,1) + "m/s" + targetMsg,
+            1, 2, 13, GREEN, FALSE).
         WAIT 0.05.
     }
 }
@@ -280,15 +326,130 @@ LOCAL FUNCTION _landTouchdown {
 }
 
 GLOBAL FUNCTION landingTargetedDeorbit {
-    IF LANDING_CFG["TARGET_LAT"] = 0 AND LANDING_CFG["TARGET_LNG"] = 0 {
+    LOCAL landingTarget IS landingResolveTarget().
+    IF NOT landingTarget["FOUND"] {
         mLog("No landing target set — using blind deorbit.").
         RETURN.
     }
-    SET CFG["PROBE_TARGET_LAT"] TO LANDING_CFG["TARGET_LAT"].
-    SET CFG["PROBE_TARGET_LNG"] TO LANDING_CFG["TARGET_LNG"].
-    SET CFG["PROBE_ENTRY_PE"] TO LANDING_CFG["DEORBIT_PE"].
-    SET CFG["PROBE_TARGET_TOL"] TO 5000.
-    targetedDeorbit().
+
+    SET LANDING_CFG["TARGET_LAT"] TO landingTarget["LAT"].
+    SET LANDING_CFG["TARGET_LNG"] TO landingTarget["LNG"].
+    mLog("Landing deorbit target: " + ROUND(landingTarget["LAT"],4)
+        + "," + ROUND(landingTarget["LNG"],4)
+        + " from " + landingTarget["SOURCE"] + ".").
+
+    targetedDeorbitAt(
+        landingTarget["LAT"],
+        landingTarget["LNG"],
+        LANDING_CFG["DEORBIT_PE"],
+        LANDING_CFG["TARGET_TOLERANCE"]).
+}
+
+GLOBAL FUNCTION landingResolveTarget {
+    LOCAL result IS LEXICON().
+    result:ADD("FOUND", FALSE).
+    result:ADD("LAT", 0).
+    result:ADD("LNG", 0).
+    result:ADD("SOURCE", "none").
+
+    IF LANDING_CFG["TARGET_LAT"] <> 0 OR LANDING_CFG["TARGET_LNG"] <> 0 {
+        SET result["FOUND"] TO TRUE.
+        SET result["LAT"] TO LANDING_CFG["TARGET_LAT"].
+        SET result["LNG"] TO LANDING_CFG["TARGET_LNG"].
+        SET result["SOURCE"] TO "LANDING_CFG".
+        RETURN result.
+    }
+
+    IF LANDING_CFG["TARGET_WAYPOINT"] <> "" {
+        LOCAL namedWp IS _waypointNamed(LANDING_CFG["TARGET_WAYPOINT"]).
+        IF namedWp <> 0 {
+            SET result["FOUND"] TO TRUE.
+            SET result["LAT"] TO namedWp:GEOPOSITION:LAT.
+            SET result["LNG"] TO namedWp:GEOPOSITION:LNG.
+            SET result["SOURCE"] TO "waypoint:" + namedWp:NAME.
+            RETURN result.
+        }
+        mLogWarn("Landing waypoint '" + LANDING_CFG["TARGET_WAYPOINT"]
+            + "' not found on " + SHIP:BODY:NAME + ".").
+    }
+
+    LOCAL selectedWp IS _selectedWaypoint().
+    IF selectedWp <> 0 {
+        SET result["FOUND"] TO TRUE.
+        SET result["LAT"] TO selectedWp:GEOPOSITION:LAT.
+        SET result["LNG"] TO selectedWp:GEOPOSITION:LNG.
+        SET result["SOURCE"] TO "selected waypoint:" + selectedWp:NAME.
+        RETURN result.
+    }
+
+    RETURN result.
+}
+
+LOCAL FUNCTION _waypointNamed {
+    PARAMETER waypointName.
+    LOCAL allWps IS ALLWAYPOINTS().
+    LOCAL targetName IS waypointName:TOUPPER.
+    FOR wp IN allWps {
+        IF wp:BODY:NAME = SHIP:BODY:NAME {
+            IF wp:NAME:TOUPPER = targetName {
+                RETURN wp.
+            }
+        }
+    }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _selectedWaypoint {
+    LOCAL allWps IS ALLWAYPOINTS().
+    FOR wp IN allWps {
+        IF wp:ISSELECTED {
+            IF wp:BODY:NAME = SHIP:BODY:NAME {
+                RETURN wp.
+            }
+        }
+    }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _landingTargetDistance {
+    PARAMETER landingTarget.
+    RETURN _landingGeoDistance(
+        SHIP:LATITUDE,
+        SHIP:LONGITUDE,
+        landingTarget["LAT"],
+        landingTarget["LNG"]).
+}
+
+LOCAL FUNCTION _landingGuidanceVector {
+    PARAMETER landingTarget.
+    PARAMETER fallbackVec.
+
+    LOCAL targetGeo IS LATLNG(landingTarget["LAT"], landingTarget["LNG"]).
+    LOCAL targetDist IS _landingTargetDistance(landingTarget).
+    IF targetDist < 25 { RETURN fallbackVec. }
+
+    LOCAL toTarget IS targetGeo:POSITION - SHIP:GEOPOSITION:POSITION.
+    LOCAL lateral IS VXCL(SHIP:UP, toTarget).
+    IF lateral:MAG < 0.001 { RETURN fallbackVec. }
+
+    LOCAL maxLean IS SIN(LANDING_CFG["GUIDANCE_MAX_TILT"]).
+    LOCAL lean IS MIN(maxLean, targetDist / 500).
+    RETURN (fallbackVec:NORMALIZED + lateral:NORMALIZED * lean):NORMALIZED.
+}
+
+LOCAL FUNCTION _landingGeoDistance {
+    PARAMETER lat1.
+    PARAMETER lng1.
+    PARAMETER lat2.
+    PARAMETER lng2.
+
+    LOCAL oRad IS SHIP:BODY:RADIUS.
+    LOCAL dLat IS lat2 - lat1.
+    LOCAL dLng IS lng2 - lng1.
+    LOCAL a IS SIN(dLat/2)^2
+        + COS(lat1) * COS(lat2) * SIN(dLng/2)^2.
+    LOCAL c IS 2 * ARCSIN(MIN(1, SQRT(a))).
+    RETURN oRad * c * CONSTANT:PI / 180.
 }
 
 LOCAL FUNCTION _deployAntennas {
