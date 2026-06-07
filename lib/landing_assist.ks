@@ -34,6 +34,7 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_SURFACE_BRAKE_LEAD", 15.0,
     "ASSIST_SURFACE_BRAKE_MARGIN", 600.0,
     "ASSIST_SURFACE_BRAKE_FACTOR", 1.8,
+    "ASSIST_SURFACE_BRAKE_TILT", 25.0,
     "ASSIST_SURFACE_HBRAKE_MARGIN", 500.0,
     "ASSIST_SURFACE_HBRAKE_FACTOR", 1.1,
     "ASSIST_SURFACE_BRAKE_RELEASE_HSPEED", 5.0,
@@ -358,8 +359,10 @@ LOCAL FUNCTION _assistSurfaceRelease {
             RETURN _assistRoverDropTouchdown().
         }
 
-        IF mode_ = "COAST" OR mode_ = "BRAKE" {
+        IF mode_ = "COAST" {
             LOCK STEERING TO _surfaceRetrograde().
+        } ELSE IF mode_ = "BRAKE" {
+            LOCK STEERING TO _assistBrakeSteering(hVel, hSpeed).
         } ELSE IF mode_ = "DROP" {
             LOCK STEERING TO _assistSteering(hVel, hSpeed).
         } ELSE IF landingTarget["FOUND"] AND radarAlt < LANDING_CFG["GUIDANCE_ALT"] {
@@ -707,6 +710,17 @@ LOCAL FUNCTION _assistSteering {
         SET steerVec TO (upVec + (-hVel):NORMALIZED * lean):NORMALIZED.
     }
     RETURN steerVec.
+}
+
+LOCAL FUNCTION _assistBrakeSteering {
+    PARAMETER hVel.
+    PARAMETER hSpeed.
+
+    LOCAL upVec IS SHIP:UP:VECTOR.
+    IF hSpeed < 0.5 { RETURN upVec. }
+    LOCAL maxLean IS SIN(LANDING_CFG["ASSIST_SURFACE_BRAKE_TILT"]).
+    LOCAL lean IS MIN(maxLean, hSpeed / 25).
+    RETURN (upVec + (-hVel):NORMALIZED * lean):NORMALIZED.
 }
 
 LOCAL FUNCTION _assistTargetSteering {
