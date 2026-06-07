@@ -119,16 +119,16 @@ LOCAL FUNCTION _compiledPath {
 }
 
 LOCAL FUNCTION _sourcePath {
-    PARAMETER scriptPath.
-    RETURN "1:/" + scriptPath + ".ks".
+    PARAMETER scriptPath_.
+    RETURN "1:/" + scriptPath_ + ".ks".
 }
 
 LOCAL FUNCTION _syncScript {
-    PARAMETER scriptPath.
+    PARAMETER scriptPath_.
     IF NOT HAS_LINK { RETURN. }
-    LOCAL src IS "0:/" + scriptPath + ".ks".
-    LOCAL dst IS _sourcePath(scriptPath).
-    LOCAL dstKsm IS _compiledPath(scriptPath).
+    LOCAL src IS "0:/" + scriptPath_ + ".ks".
+    LOCAL dst IS _sourcePath(scriptPath_).
+    LOCAL dstKsm IS _compiledPath(scriptPath_).
 
     IF EXISTS(src) {
         COMPILE src TO dstKsm.
@@ -137,12 +137,12 @@ LOCAL FUNCTION _syncScript {
 }
 
 LOCAL FUNCTION _runScript {
-    PARAMETER scriptPath.
-    LOCAL compiled IS _compiledPath(scriptPath).
+    PARAMETER scriptPath_.
+    LOCAL compiled IS _compiledPath(scriptPath_).
     IF EXISTS(compiled) {
         RUNPATH(compiled).
     } ELSE {
-        RUNPATH(_sourcePath(scriptPath)).
+        RUNPATH(_sourcePath(scriptPath_)).
     }
 }
 
