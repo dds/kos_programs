@@ -281,7 +281,7 @@ LOCAL FUNCTION _fr3Libs {
         IF NOT libs:CONTAINS("lambert") { libs:ADD("lambert"). }
         libs:ADD("maneuver_rendezvous").
     }
-    IF (band = "TRANSFER" OR band = "PAYLOAD_OPS")
+    IF band = "PAYLOAD_OPS"
             AND (_bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT")) {
         libs:ADD("science").
     }
