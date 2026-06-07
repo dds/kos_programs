@@ -31,6 +31,10 @@ Profile-only FR3 libraries:
 - `maneuver_intersystem` - loaded only when the target is not Mun.
 - `maneuver_rendezvous` - loaded only for rendezvous or asteroid profiles.
 
+Mission profile files:
+
+- `missions/FR3/*.cfg` - data-only FR3 mission profiles. Plain `FR3` can select one on the launch pad; legacy `FR3-MUN-...` names still work as fallback.
+
 ## Biggest Files
 
 - `lib/maneuver.ks` - 59 KB after splitting intersystem/rendezvous code. Still the primary split candidate.

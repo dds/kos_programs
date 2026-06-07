@@ -30,6 +30,186 @@ GLOBAL CFG IS LEXICON(
     "SCANSAT_DECOUPLER_TAG", "scansat_decoupler"
 ).
 
+LOCAL FR3_MISSION_DIR IS "1:/missions/FR3".
+
+LOCAL FUNCTION _missionConfigIds {
+    LOCAL ids IS LIST().
+    IF NOT EXISTS(FR3_MISSION_DIR) { RETURN ids. }
+
+    LOCAL startPath IS PATH().
+    LOCAL items IS LIST().
+    CD(FR3_MISSION_DIR).
+    LIST FILES IN items.
+    CD(startPath).
+
+    FOR item IN items {
+        IF item:ISFILE {
+            LOCAL nm IS item:NAME.
+            LOCAL upper IS nm:TOUPPER.
+            IF upper:CONTAINS(".CFG") {
+                ids:ADD(nm:SUBSTRING(0, nm:LENGTH - 4)).
+            }
+        }
+    }
+    RETURN ids.
+}
+
+LOCAL FUNCTION _selectMissionId {
+    LOCAL configured IS stateGet("mission_id", "").
+    IF configured <> "" { RETURN configured. }
+
+    LOCAL ids IS _missionConfigIds().
+    IF ids:LENGTH = 0 { RETURN "". }
+    IF ids:LENGTH = 1 { RETURN ids[0]. }
+
+    PRINT " ".
+    PRINT "  FR3 MISSION SELECT".
+    PRINT "  ------------------".
+    LOCAL maxShown IS MIN(ids:LENGTH, 9).
+    FROM { LOCAL i IS 0. } UNTIL i >= maxShown STEP { SET i TO i + 1. } DO {
+        PRINT "  " + (i + 1) + ") " + ids[i].
+    }
+    PRINT " ".
+    PRINT "  Press 1-" + maxShown + " to choose, or ENTER for " + ids[0] + ".".
+
+    LOCAL choice IS 0.
+    LOCAL picked IS FALSE.
+    UNTIL picked {
+        WAIT UNTIL TERMINAL:INPUT:HASCHAR.
+        LOCAL ch IS TERMINAL:INPUT:GETCHAR().
+        IF ch = CHAR(13) OR ch = CHAR(10) {
+            SET picked TO TRUE.
+        } ELSE {
+            FROM { LOCAL i IS 0. } UNTIL i >= maxShown STEP { SET i TO i + 1. } DO {
+                IF ch = "" + (i + 1) {
+                    SET choice TO i.
+                    SET picked TO TRUE.
+                }
+            }
+        }
+    }
+    RETURN ids[choice].
+}
+
+LOCAL FUNCTION _setCfgNum {
+    PARAMETER key.
+    PARAMETER rawValue.
+    IF CFG:HASKEY(key) { CFG:REMOVE(key). }
+    CFG:ADD(key, rawValue:TONUMBER(0)).
+}
+
+LOCAL FUNCTION _setCfgString {
+    PARAMETER key.
+    PARAMETER rawValue.
+    IF CFG:HASKEY(key) { CFG:REMOVE(key). }
+    CFG:ADD(key, rawValue).
+}
+
+LOCAL FUNCTION _applyMissionSetting {
+    PARAMETER key.
+    PARAMETER value.
+
+    IF key = "MISSION_ID" {
+        stateSet("mission_id", value).
+    } ELSE IF key = "MISSION_NAME" {
+        stateSet("mission_name", value).
+    } ELSE IF key = "TARGET" {
+        stateSet("target", value:TOUPPER).
+    } ELSE IF key = "PAYLOADS" {
+        stateSet("payloads", value:TOUPPER).
+    } ELSE IF key = "SEQUENCE" {
+        _setCfgString("SEQUENCE", value:TOUPPER).
+
+    } ELSE IF key = "CAPTURE_DIR" OR key = "RENDEZVOUS_TARGET"
+            OR key = "ASTEROID_TARGET" OR key = "INCL_MATCH_TARGET"
+            OR key = "SCANSAT_DECOUPLER_TAG"
+            OR key = "PROBE_TARGET_WAYPOINT"
+            OR key = "LANDING_TARGET_WAYPOINT" {
+        _setCfgString(key, value).
+
+    } ELSE IF key = "PARKING_ALT" OR key = "LAUNCH_INCLINATION"
+            OR key = "LAUNCH_AZIMUTH" OR key = "LAUNCH_STAGE_LIMIT"
+            OR key = "FAIRING_ALT" OR key = "EXTEND_ALT"
+            OR key = "CAPTURE_PE" OR key = "CAPTURE_INC"
+            OR key = "CAPTURE_LAN" OR key = "CAPTURE_AOP"
+            OR key = "TARGET_PE" OR key = "TARGET_AP"
+            OR key = "TARGET_INCLINATION" OR key = "CIRC_ECC_TOL"
+            OR key = "INCL_TOLERANCE" OR key = "MAX_INCL_CHANGE_DV"
+            OR key = "PROBE_TARGET_LAT" OR key = "PROBE_TARGET_LNG"
+            OR key = "PROBE_ENTRY_PE" OR key = "PROBE_TARGET_TOL"
+            OR key = "TARGET_DEORBIT_SCAN_ORBITS"
+            OR key = "TARGET_DEORBIT_SCAN_SAMPLES"
+            OR key = "ASTEROID_MAX_DEPART_ORBITS"
+            OR key = "ASTEROID_DEPART_SAMPLES"
+            OR key = "ASTEROID_TOF_SAMPLES"
+            OR key = "ASTEROID_MIN_TOF"
+            OR key = "ASTEROID_MAX_TOF"
+            OR key = "ASTEROID_ARRIVAL_WEIGHT"
+            OR key = "ASTEROID_REFINE_ITERS"
+            OR key = "LANDING_TARGET_LAT"
+            OR key = "LANDING_TARGET_LNG"
+            OR key = "LANDING_DEORBIT_PE"
+            OR key = "LANDING_TARGET_TOLERANCE"
+            OR key = "LANDING_GUIDANCE_ALT"
+            OR key = "LANDING_ASSIST_RELEASE_ALT"
+            OR key = "LANDING_ASSIST_RELEASE_HSPEED"
+            OR key = "LANDING_ASSIST_RELEASE_VSPEED" {
+        _setCfgNum(key, value).
+    }
+}
+
+LOCAL FUNCTION _applyMissionConfig {
+    PARAMETER missionId.
+    IF missionId = "" { RETURN FALSE. }
+
+    LOCAL path IS FR3_MISSION_DIR + "/" + missionId + ".cfg".
+    IF NOT EXISTS(path) {
+        PRINT "  Mission config not found: " + path.
+        RETURN FALSE.
+    }
+
+    LOCAL raw IS OPEN(path):READALL:STRING.
+    LOCAL lines IS raw:SPLIT(CHAR(10)).
+    FOR lineRaw IN lines {
+        LOCAL line IS lineRaw:REPLACE(CHAR(13), ""):TRIM.
+        IF line <> "" {
+            LOCAL skipLine IS FALSE.
+            IF line:SUBSTRING(0, 1) = "#" { SET skipLine TO TRUE. }
+            IF line:LENGTH >= 2 AND line:SUBSTRING(0, 2) = "//" { SET skipLine TO TRUE. }
+            IF NOT skipLine {
+                LOCAL parts IS line:SPLIT("=").
+                IF parts:LENGTH >= 2 {
+                    LOCAL key IS parts[0]:TRIM:TOUPPER.
+                    LOCAL value IS parts[1]:TRIM.
+                    _applyMissionSetting(key, value).
+                }
+            }
+        }
+    }
+
+    IF stateGet("mission_id", "") = "" { stateSet("mission_id", missionId). }
+    PRINT "  Mission: " + stateGet("mission_name", missionId).
+    PRINT "  Target:  " + stateGet("target", "KERBIN").
+    PRINT "  Payload: " + stateGet("payloads", "").
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _bootMission {
+    LOCAL targetFromName IS stateGet("target", "KERBIN"):TOUPPER.
+    LOCAL payloadsFromName IS stateGet("payloads", "").
+    LOCAL hasNameMission IS targetFromName <> "KERBIN" OR payloadsFromName <> "".
+    LOCAL missionId IS stateGet("mission_id", "").
+
+    IF missionId = "" AND NOT hasNameMission {
+        SET missionId TO _selectMissionId().
+    }
+    IF missionId <> "" {
+        IF _applyMissionConfig(missionId) {
+            stateSet("mission_id", missionId).
+        }
+    }
+}
+
 // --- Example: rendezvous + Duna rover lander ---
 // Ship name: FR3-DUNA-LANDER-01
 // Mission: launch to LKO, rendezvous with Jeb's wreck in Kerbin
@@ -75,6 +255,8 @@ LOCAL FUNCTION _bootHasPayload {
     }
     RETURN FALSE.
 }
+
+_bootMission().
 
 LOCAL FUNCTION _fr3Libs {
     LOCAL libs IS LIST(
@@ -126,6 +308,17 @@ LOCAL FUNCTION _hasPayload {
     RETURN FALSE.
 }
 
+LOCAL FUNCTION _phaseListFromString {
+    PARAMETER raw.
+    LOCAL seq IS LIST().
+    FOR phaseRaw IN raw:SPLIT(",") {
+        LOCAL phaseName IS phaseRaw:TRIM:TOUPPER.
+        IF phaseName <> "" { seq:ADD(phaseName). }
+    }
+    IF seq:LENGTH = 0 { seq:ADD("DONE"). }
+    RETURN seq.
+}
+
 LOCAL FUNCTION _applyMissionProfile {
     IF MISSION["target"]:TOUPPER = "MUN" AND _hasLandingPayload() {
         SET LANDING_CFG["DEORBIT_PE"] TO 5000.
@@ -137,6 +330,34 @@ LOCAL FUNCTION _applyMissionProfile {
             SET LANDING_CFG["ASSIST_RELEASE_HSPEED"] TO 0.5.
             SET LANDING_CFG["ASSIST_RELEASE_VSPEED"] TO 0.
         }
+    }
+
+    IF CFG:HASKEY("LANDING_TARGET_LAT") {
+        SET LANDING_CFG["TARGET_LAT"] TO CFG["LANDING_TARGET_LAT"].
+    }
+    IF CFG:HASKEY("LANDING_TARGET_LNG") {
+        SET LANDING_CFG["TARGET_LNG"] TO CFG["LANDING_TARGET_LNG"].
+    }
+    IF CFG:HASKEY("LANDING_TARGET_WAYPOINT") {
+        SET LANDING_CFG["TARGET_WAYPOINT"] TO CFG["LANDING_TARGET_WAYPOINT"].
+    }
+    IF CFG:HASKEY("LANDING_DEORBIT_PE") {
+        SET LANDING_CFG["DEORBIT_PE"] TO CFG["LANDING_DEORBIT_PE"].
+    }
+    IF CFG:HASKEY("LANDING_TARGET_TOLERANCE") {
+        SET LANDING_CFG["TARGET_TOLERANCE"] TO CFG["LANDING_TARGET_TOLERANCE"].
+    }
+    IF CFG:HASKEY("LANDING_GUIDANCE_ALT") {
+        SET LANDING_CFG["GUIDANCE_ALT"] TO CFG["LANDING_GUIDANCE_ALT"].
+    }
+    IF CFG:HASKEY("LANDING_ASSIST_RELEASE_ALT") {
+        SET LANDING_CFG["ASSIST_RELEASE_ALT"] TO CFG["LANDING_ASSIST_RELEASE_ALT"].
+    }
+    IF CFG:HASKEY("LANDING_ASSIST_RELEASE_HSPEED") {
+        SET LANDING_CFG["ASSIST_RELEASE_HSPEED"] TO CFG["LANDING_ASSIST_RELEASE_HSPEED"].
+    }
+    IF CFG:HASKEY("LANDING_ASSIST_RELEASE_VSPEED") {
+        SET LANDING_CFG["ASSIST_RELEASE_VSPEED"] TO CFG["LANDING_ASSIST_RELEASE_VSPEED"].
     }
 
     IF MISSION["target"]:TOUPPER = "MUN"
@@ -155,6 +376,10 @@ LOCAL FUNCTION _applyMissionProfile {
 }
 
 LOCAL FUNCTION buildPhaseSequence {
+    IF CFG:HASKEY("SEQUENCE") {
+        RETURN _phaseListFromString(CFG["SEQUENCE"]).
+    }
+
     // Orbit phases prepare the shared carrier in the orbit required by the
     // first payload. For mapper-rover Mun missions, _applyMissionProfile()
     // changes this to a 250 km polar SCANsat orbit before landing begins.
@@ -219,6 +444,10 @@ LOCAL FUNCTION _printConfig {
     PRINT "    FR3 FLIGHT PLAN    " + SHIP:NAME.
     PRINT "  ========================================".
     PRINT " ".
+    IF stateGet("mission_id", "") <> "" {
+        PRINT "  MISSION .... " + stateGet("mission_name", stateGet("mission_id", "")).
+        PRINT "  PROFILE .... " + stateGet("mission_id", "").
+    }
     PRINT "  TARGET ..... " + MISSION["target"].
     PRINT "  PAYLOADS ... " + MISSION["payloads"].
     PRINT " ".

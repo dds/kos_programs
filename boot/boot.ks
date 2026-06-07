@@ -57,6 +57,7 @@ ensureDir("1:/state").
 ensureDir("1:/cmd").
 ensureDir("1:/craft").
 ensureDir("1:/roles").
+ensureDir("1:/missions").
 
 LOCAL FUNCTION _resolveScript {
     PARAMETER name.
@@ -105,6 +106,28 @@ LOCAL FUNCTION _loadLib {
         RUNONCEPATH("1:/lib/" + libName + ".ksm").
     } ELSE {
         RUNONCEPATH("1:/lib/" + libName + ".ks").
+    }
+}
+
+LOCAL FUNCTION _syncMissionConfigs {
+    PARAMETER craftName.
+    IF NOT HAS_LINK { RETURN. }
+    LOCAL srcDir IS "0:/missions/" + craftName.
+    IF NOT EXISTS(srcDir) { RETURN. }
+
+    LOCAL dstDir IS "1:/missions/" + craftName.
+    ensureDir(dstDir).
+
+    LOCAL startPath IS PATH().
+    LOCAL items IS LIST().
+    CD(srcDir).
+    LIST FILES IN items.
+    CD(startPath).
+
+    FOR item IN items {
+        IF item:ISFILE {
+            COPYPATH(srcDir + "/" + item:NAME, dstDir + "/" + item:NAME).
+        }
     }
 }
 
@@ -169,6 +192,7 @@ IF HAS_LINK {
     IF EXISTS("0:/" + vehicleScript + ".ks") {
         COPYPATH("0:/" + vehicleScript + ".ks", "1:/" + vehicleScript + ".ks").
     }
+    _syncMissionConfigs(vehicleName).
 }
 
 // 1. Run the vehicle script first so it can define the LIBS global variable

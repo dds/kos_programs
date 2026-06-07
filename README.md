@@ -22,6 +22,8 @@ roles/
     lander_cpu.ks        Secondary CPU: deploy + science
     zombie.ks            Dormant watchdog — reboots other CPUs on command
     EVA.ks               EVA kerbal controller (trait-based roles)
+missions/
+    FR3/*.cfg            Data-only mission profiles selectable by plain FR3
 lib/
     phases.ks            Generic phase machine (runPhases, nextPhase)
     launch.ks            Reusable ascent phases (launch, fairing, parking)
@@ -90,11 +92,25 @@ FR2.ks declares `GLOBAL LIBS IS LIST(...)` to tell boot which libs to load. New 
 
 ### FR3
 
-Next-gen rocket. Standard ascent + transfer + orbit phases, plus combined mapper/rover Mun missions.
+Next-gen rocket. Standard ascent + transfer + orbit phases, plus combined mapper/rover Mun missions. FR3 can still read target/payload tokens from a ship name such as `FR3-MUN-ASSISTROVER-01`, but the preferred path is a plain `FR3` craft with a mission profile selected on the pad.
 
 **Payload types:** `RELAY`, `SCANSAT`, `SCISAT`, `LANDER`, `ASSISTLANDER`, `ROVER`, `ASSISTROVER`, `PROBE`, `CRASHPROBE`
 
 For a Mun mapper + rover run, put `SCANSAT` before the landing payload in the ship name. Example: `FR3-MUN-SCANSAT-ASSISTROVER-01`. This deploys the SCANsat in a 250 km polar orbit, then continues to targeted rover landing using explicit landing coordinates, a named waypoint, or the selected map waypoint.
+
+Mission profiles live under `missions/FR3/` and use simple `KEY = VALUE` lines:
+
+```
+MISSION_ID = mun_rover
+MISSION_NAME = Mun Rover Lander
+TARGET = MUN
+PAYLOADS = ASSISTROVER
+CAPTURE_PE = 20000
+CAPTURE_INC = 90
+LANDING_ASSIST_RELEASE_ALT = 100
+```
+
+On boot, `boot.ks` syncs `missions/<craft>/*.cfg` to the local processor. If the vessel is named just `FR3` and no `mission_id` is already saved in state, FR3 selects a mission profile from `1:/missions/FR3`. To force a profile manually before rebooting, use `stateSet("mission_id", "mun_rover").`
 
 ### FJ1A
 
