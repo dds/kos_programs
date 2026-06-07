@@ -79,6 +79,18 @@ LOCAL FUNCTION _hasPayload {
 }
 
 LOCAL FUNCTION _applyMissionProfile {
+    IF MISSION["target"]:TOUPPER = "MUN" AND _hasLandingPayload() {
+        SET LANDING_CFG["DEORBIT_PE"] TO 5000.
+        SET LANDING_CFG["TARGET_TOLERANCE"] TO 2500.
+        SET LANDING_CFG["GUIDANCE_ALT"] TO 5000.
+
+        IF _hasPayload("ASSISTROVER") OR _hasPayload("ASSISTLANDER") {
+            SET LANDING_CFG["ASSIST_RELEASE_ALT"] TO 100.
+            SET LANDING_CFG["ASSIST_RELEASE_HSPEED"] TO 0.5.
+            SET LANDING_CFG["ASSIST_RELEASE_VSPEED"] TO 0.
+        }
+    }
+
     IF MISSION["target"]:TOUPPER = "MUN"
             AND _hasPayload("SCANSAT")
             AND _hasLandingPayload() {
@@ -91,9 +103,6 @@ LOCAL FUNCTION _applyMissionProfile {
         SET CFG["TARGET_INCLINATION"] TO 90.
         SET CFG["MAX_INCL_CHANGE_DV"] TO 300.
 
-        SET LANDING_CFG["DEORBIT_PE"] TO 5000.
-        SET LANDING_CFG["TARGET_TOLERANCE"] TO 2500.
-        SET LANDING_CFG["GUIDANCE_ALT"] TO 5000.
     }
 }
 

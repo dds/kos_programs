@@ -22,6 +22,15 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_TARGET_SPEED", 80.0,
     "ASSIST_MIN_ALT",      800,
     "ASSIST_THROTTLE",       1,
+    "ASSIST_RELEASE_ALT",  100,
+    "ASSIST_RELEASE_HSPEED", 0.5,
+    "ASSIST_RELEASE_VSPEED", 0.0,
+    "ASSIST_RELEASE_ALT_TOL", 5,
+    "ASSIST_RELEASE_H_TOL", 0.3,
+    "ASSIST_RELEASE_V_TOL", 0.3,
+    "ASSIST_RELEASE_HOLD", 1.0,
+    "ASSIST_DESCENT_SPEED", 15.0,
+    "ASSIST_MAX_TILT",     18,
     "ASSIST_DECOUPLER_TAG", "landing_assist_decoupler",
     "ASSIST_FLYAWAY",     FALSE,
     "ASSIST_FLYAWAY_TIME", 4.0,
@@ -98,12 +107,14 @@ GLOBAL FUNCTION landingAbort {
     mLog("Abort complete. Alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
 }
 
-// Use an attached descent stage for the early landing burn, then release it.
+// Use an attached descent stage for the landing burn, then release it.
 // Intended sequence:
 //   LAND_DEORBIT -> LAND_ASSIST -> LAND
 //
-// The stage slows the stack while pointed retrograde until surface speed
-// is below ASSIST_TARGET_SPEED, or until ASSIST_MIN_ALT forces separation.
+// The stage carries the rover down to a controlled release hover:
+//   ASSIST_RELEASE_ALT radar altitude
+//   ASSIST_RELEASE_HSPEED horizontal speed
+//   ASSIST_RELEASE_VSPEED vertical speed
 // After decoupling, this CPU may still be on the assist stage; if so, the
 // flyaway burn points sideways/up to avoid the lander before impact.
 GLOBAL FUNCTION landingAssistStage {
@@ -117,25 +128,69 @@ GLOBAL FUNCTION landingAssistStage {
     }
 
     SET SAS TO FALSE.
-    LOCK STEERING TO SHIP:RETROGRADE.
-    mLog("Assist burn: target speed " + LANDING_CFG["ASSIST_TARGET_SPEED"]
-        + "m/s, min alt " + LANDING_CFG["ASSIST_MIN_ALT"] + "m.").
-    HUDTEXT("Assist descent burn", 3, 2, 14, YELLOW, FALSE).
+    LOCAL stableStart IS 0.
+    mLog("Assist descent: release at "
+        + ROUND(LANDING_CFG["ASSIST_RELEASE_ALT"],0) + "m, h="
+        + LANDING_CFG["ASSIST_RELEASE_HSPEED"] + "m/s, v="
+        + LANDING_CFG["ASSIST_RELEASE_VSPEED"] + "m/s.").
+    HUDTEXT("Assist precision descent", 3, 2, 14, YELLOW, FALSE).
 
-    UNTIL SHIP:VELOCITY:SURFACE:MAG <= LANDING_CFG["ASSIST_TARGET_SPEED"]
-            OR ALT:RADAR <= LANDING_CFG["ASSIST_MIN_ALT"]
-            OR _needsStage() {
-        LOCK THROTTLE TO LANDING_CFG["ASSIST_THROTTLE"].
-        HUDTEXT("Assist v:" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
-            + "m/s alt:" + ROUND(ALT:RADAR,0) + "m",
+    UNTIL landingAbortFlag {
+        LOCAL hVel IS _horizontalSurfaceVelocity().
+        LOCAL hSpeed IS hVel:MAG.
+        LOCAL radarAlt IS ALT:RADAR.
+        LOCAL vSpeed IS SHIP:VERTICALSPEED.
+
+        LOCK STEERING TO _assistSteering(hVel, hSpeed).
+
+        LOCAL maxAcc IS _safeMaxAcc().
+        IF maxAcc > 0 {
+            LOCAL releaseAlt IS LANDING_CFG["ASSIST_RELEASE_ALT"].
+            LOCAL altErr IS radarAlt - releaseAlt.
+            LOCAL targetV IS -MAX(
+                -2,
+                MIN(LANDING_CFG["ASSIST_DESCENT_SPEED"], altErr * 0.2)).
+            IF ABS(altErr) <= LANDING_CFG["ASSIST_RELEASE_ALT_TOL"] {
+                SET targetV TO LANDING_CFG["ASSIST_RELEASE_VSPEED"].
+            }
+
+            LOCAL grav IS _localGravity().
+            LOCAL desiredAcc IS (targetV - vSpeed) * 0.35.
+            LOCAL thrott IS (grav + desiredAcc) / maxAcc.
+            LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], thrott)).
+        }
+
+        IF _assistReleaseStable(hSpeed, vSpeed, radarAlt) {
+            IF stableStart = 0 { SET stableStart TO TIME:SECONDS. }
+            IF TIME:SECONDS - stableStart >= LANDING_CFG["ASSIST_RELEASE_HOLD"] {
+                BREAK.
+            }
+        } ELSE {
+            SET stableStart TO 0.
+        }
+
+        IF _needsStage() {
+            mLogWarn("Assist stage needs staging before release target — separating now.").
+            BREAK.
+        }
+
+        HUDTEXT("Assist alt:" + ROUND(radarAlt,0)
+            + "m h:" + ROUND(hSpeed,2)
+            + " v:" + ROUND(vSpeed,2),
             1, 2, 13, YELLOW, FALSE).
         WAIT 0.05.
     }
 
+    IF landingAbortFlag {
+        LOCK THROTTLE TO 0.
+        RETURN FALSE.
+    }
+
     LOCK THROTTLE TO 0.
     WAIT 0.2.
-    mLog("Assist cutoff: speed=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
-        + "m/s alt=" + ROUND(ALT:RADAR,0) + "m.").
+    mLog("Assist release: alt=" + ROUND(ALT:RADAR,1)
+        + "m h=" + ROUND(_horizontalSurfaceVelocity():MAG,2)
+        + "m/s v=" + ROUND(SHIP:VERTICALSPEED,2) + "m/s.").
 
     _decouplePart(decoupler).
     WAIT 0.5.
@@ -487,6 +542,43 @@ LOCAL FUNCTION _manualBurnAlt {
     LOCAL maxAcc IS _safeMaxAcc().
     IF maxAcc <= 0 { RETURN 0. }
     RETURN (SHIP:VERTICALSPEED^2) / (2 * maxAcc).
+}
+
+LOCAL FUNCTION _horizontalSurfaceVelocity {
+    LOCAL hVel IS SHIP:VELOCITY:SURFACE
+        - (VDOT(SHIP:VELOCITY:SURFACE, SHIP:UP) * SHIP:UP).
+    RETURN hVel.
+}
+
+LOCAL FUNCTION _assistSteering {
+    PARAMETER hVel.
+    PARAMETER hSpeed.
+
+    LOCAL steerVec IS SHIP:UP.
+    IF hSpeed > LANDING_CFG["ASSIST_RELEASE_HSPEED"] {
+        LOCAL maxLean IS SIN(LANDING_CFG["ASSIST_MAX_TILT"]).
+        LOCAL lean IS MIN(maxLean, hSpeed / 10).
+        SET steerVec TO (SHIP:UP + (-hVel):NORMALIZED * lean):NORMALIZED.
+    }
+    RETURN steerVec.
+}
+
+LOCAL FUNCTION _assistReleaseStable {
+    PARAMETER hSpeed.
+    PARAMETER vSpeed.
+    PARAMETER radarAlt.
+
+    RETURN ABS(radarAlt - LANDING_CFG["ASSIST_RELEASE_ALT"])
+            <= LANDING_CFG["ASSIST_RELEASE_ALT_TOL"]
+        AND hSpeed <= LANDING_CFG["ASSIST_RELEASE_HSPEED"]
+            + LANDING_CFG["ASSIST_RELEASE_H_TOL"]
+        AND ABS(vSpeed - LANDING_CFG["ASSIST_RELEASE_VSPEED"])
+            <= LANDING_CFG["ASSIST_RELEASE_V_TOL"].
+}
+
+LOCAL FUNCTION _localGravity {
+    LOCAL radiusNow IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
+    RETURN SHIP:BODY:MU / (radiusNow^2).
 }
 
 LOCAL FUNCTION _safeMaxAcc {
