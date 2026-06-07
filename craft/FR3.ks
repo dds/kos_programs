@@ -274,6 +274,7 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("targeting").
         libs:ADD("countdown").
         libs:ADD("maneuver").
+        libs:ADD("landing_assist").
     } ELSE IF band = "LAND_ASSIST" {
         libs:ADD("payload_landing").
         libs:ADD("landing_assist").
