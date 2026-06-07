@@ -30,6 +30,8 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_RELEASE_ON_SURFACE", FALSE,
     "ASSIST_SURFACE_BRAKE_HSPEED", 80.0,
     "ASSIST_SURFACE_BRAKE_THROTTLE", 0.7,
+    "ASSIST_SURFACE_BRAKE_LEAD", 10.0,
+    "ASSIST_SURFACE_BRAKE_MARGIN", 300.0,
     "ASSIST_SURFACE_FINAL_SPEED", 0.8,
     "ASSIST_SURFACE_SETTLE_TIME", 5.0,
     "ASSIST_SURFACE_TIPOVER", TRUE,
@@ -222,24 +224,27 @@ LOCAL FUNCTION _assistSurfaceRelease {
         LOCAL hSpeed IS hVel:MAG.
         LOCAL radarAlt IS ALT:RADAR.
         LOCAL vSpeed IS SHIP:VERTICALSPEED.
-        LOCAL mode IS "APPROACH".
-        IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_HSPEED"]
-                AND radarAlt > 500 {
-            SET mode TO "BRAKE".
+        LOCAL mode_ IS "APPROACH".
+        IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_HSPEED"] {
+            IF _assistSurfaceBrakeReady(radarAlt, hSpeed, vSpeed) {
+                SET mode_ TO "BRAKE".
+            } ELSE {
+                SET mode_ TO "COAST".
+            }
         } ELSE IF radarAlt < 50 {
-            SET mode TO "FINAL".
+            SET mode_ TO "FINAL".
         }
 
-        IF mode <> lastMode {
-            mLogWarn("STATS assist-surface mode=" + mode
+        IF mode_ <> lastMode {
+            mLogWarn("STATS assist-surface mode=" + mode_
                 + " alt=" + ROUND(radarAlt,1)
                 + " h=" + ROUND(hSpeed,1)
                 + " v=" + ROUND(vSpeed,1)).
-            SET lastMode TO mode.
+            SET lastMode TO mode_.
         }
 
-        IF mode = "BRAKE" {
-            LOCK STEERING TO SHIP:RETROGRADE.
+        IF mode_ = "COAST" OR mode_ = "BRAKE" {
+            LOCK STEERING TO _surfaceRetrograde().
         } ELSE IF landingTarget["FOUND"] AND radarAlt < LANDING_CFG["GUIDANCE_ALT"] {
             LOCK STEERING TO _assistTargetSteering(landingTarget, hVel, hSpeed).
         } ELSE {
@@ -248,7 +253,9 @@ LOCAL FUNCTION _assistSurfaceRelease {
 
         LOCAL maxAcc IS _safeMaxAcc().
         IF maxAcc > 0 {
-            IF mode = "BRAKE" {
+            IF mode_ = "COAST" {
+                LOCK THROTTLE TO 0.
+            } ELSE IF mode_ = "BRAKE" {
                 LOCAL brakeThrottle IS LANDING_CFG["ASSIST_SURFACE_BRAKE_THROTTLE"].
                 IF vSpeed < -LANDING_CFG["ASSIST_DESCENT_SPEED"] {
                     SET brakeThrottle TO MIN(1, brakeThrottle + 0.2).
@@ -462,6 +469,37 @@ LOCAL FUNCTION _assistTargetSteering {
     LOCAL maxLean IS SIN(LANDING_CFG["ASSIST_MAX_TILT"]).
     LOCAL lean IS MIN(maxLean, dist / 500).
     RETURN (steerVec:NORMALIZED + lateral:NORMALIZED * lean):NORMALIZED.
+}
+
+LOCAL FUNCTION _surfaceRetrograde {
+    LOCAL sVel IS SHIP:VELOCITY:SURFACE.
+    IF sVel:MAG < 0.1 { RETURN SHIP:UP:VECTOR. }
+    RETURN (-sVel):NORMALIZED.
+}
+
+LOCAL FUNCTION _assistSurfaceBrakeReady {
+    PARAMETER radarAlt.
+    PARAMETER hSpeed.
+    PARAMETER vSpeed.
+
+    IF radarAlt < 500 { RETURN TRUE. }
+    IF ADDONS:KE:AVAILABLE {
+        LOCAL countdown IS ADDONS:KE:SUICIDEBURNCOUNTDOWN.
+        IF countdown <= LANDING_CFG["ASSIST_SURFACE_BRAKE_LEAD"] {
+            RETURN TRUE.
+        }
+        IF countdown < 999999 {
+            RETURN FALSE.
+        }
+    }
+
+    LOCAL maxAcc IS _safeMaxAcc().
+    IF maxAcc <= 0 { RETURN FALSE. }
+    LOCAL netAcc IS MAX(0.1, maxAcc - _localGravity()).
+    LOCAL speed IS SQRT(hSpeed^2 + MAX(0, -vSpeed)^2).
+    LOCAL brakeAlt IS (speed^2) / (2 * netAcc)
+        + LANDING_CFG["ASSIST_SURFACE_BRAKE_MARGIN"].
+    RETURN radarAlt <= brakeAlt.
 }
 
 LOCAL FUNCTION _assistGeoDistance {
