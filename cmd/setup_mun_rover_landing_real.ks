@@ -4,9 +4,9 @@
 // Cached: RUNPATH("1:/cmd/setup_mun_rover_landing_real.ks").
 
 IF EXISTS("0:/cmd/landingrescue.ks") {
-    RUNPATH("0:/cmd/landingrescue.ks", "LAND_DEORBIT").
+    RUNPATH("0:/cmd/landingrescue.ks", "LAND_ASSIST").
 } ELSE IF EXISTS("1:/cmd/landingrescue.ks") {
-    RUNPATH("1:/cmd/landingrescue.ks", "LAND_DEORBIT").
+    RUNPATH("1:/cmd/landingrescue.ks", "LAND_ASSIST").
 }
 
 LOCAL FUNCTION _loadState {
@@ -36,7 +36,7 @@ stateSet("target", "MUN").
 stateSet("payloads", "ASSISTROVER").
 stateSet("mission_id", "mun_rover_emergency_surface").
 stateSet("mission_name", "Mun Rover Emergency Surface Release").
-stateSet("phase", "LAND_DEORBIT").
+stateSet("phase", "LAND_ASSIST").
 stateSet("reload_required", "false").
 stateSet("reload_reason", "").
 stateSet("reload_next_phase", "").
@@ -104,4 +104,5 @@ _cfg("RELOAD_AFTER_LAND_ASSIST", "0").
 _cfg("RELOAD_AFTER_LAND", "0").
 
 PRINT "REAL rover landing rescue/setup complete.".
-PRINT "Select target waypoint, run landingcheck if possible, then REBOOT.".
+PRINT "Emergency assist-only setup complete.".
+PRINT "Run landingcheck if possible, then REBOOT.".
