@@ -291,10 +291,10 @@ LOCAL FUNCTION _selectScanSatLandingSite {
     LOCAL known IS 0.
     LOCAL rejectedSlope IS 0.
 
-    FROM { LOCAL north IS -radius. } UNTIL north > radius STEP { SET north TO north + step. } DO {
-        FROM { LOCAL east IS -radius. } UNTIL east > radius STEP { SET east TO east + step. } DO {
-            LOCAL candLat IS targetLat + north * degPerM.
-            LOCAL candLng IS targetLng + east * degPerM / lonScale.
+    FROM { LOCAL north_ IS -radius. } UNTIL north_ > radius STEP { SET north_ TO north_ + step. } DO {
+        FROM { LOCAL east_ IS -radius. } UNTIL east_ > radius STEP { SET east_ TO east_ + step. } DO {
+            LOCAL candLat IS targetLat + north_ * degPerM.
+            LOCAL candLng IS targetLng + east_ * degPerM / lonScale.
             LOCAL candGeo IS LATLNG(candLat, candLng).
             SET samples TO samples + 1.
 
