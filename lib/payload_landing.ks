@@ -217,8 +217,7 @@ LOCAL FUNCTION _autoLandingTarget {
 GLOBAL FUNCTION phaseLandAssist {
     IF DEFINED fr3ApplyMissionProfile { fr3ApplyMissionProfile(). }
     mLogWarn("STATS land-assist phase setup alt=" + ROUND(ALT:RADAR,1)
-        + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
-        + " releaseSurface=" + LANDING_CFG["ASSIST_RELEASE_ON_SURFACE"]).
+        + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)).
     IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
     IF CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH") AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0 {
         mLogWarn("STATS landing-impact skipped reason=sim-no-target-search").

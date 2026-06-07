@@ -1,526 +1,145 @@
 // ============================================================
-// landing.ks  —  Powered descent + landing  (0:/lib/landing.ks)
+// landing.ks  —  Suicide burn landing  (0:/lib/landing.ks)
+//
+// Clean single-file landing library built around suicide burn
+// physics. Handles powered descent from suborbital trajectory
+// to touchdown, with optional carrier handoff post-landing.
+//
+// Entry point: landExecute()
+// Also exports: landingResolveTarget(), landingTargetedDeorbit(),
+//               landingImpactWithinTolerance(),
+//               landingImpactAcceptableForAssist()
 // ============================================================
 
-GLOBAL LANDING_CFG IS LEXICON(
-    "DEORBIT_PE",        5000,
-    "FINAL_ALT",          100,
-    "FINAL_SPEED",        5.0,
-    "TOUCHDOWN_SPEED",    1.5,
-    "ABORT_ALT",        10000,
-    "HOVER_THROTTLE",    0.35,
-    "BURN_LEAD",          3.0,
-    "MAX_TILT",          10.0,
-    "USE_KE",            TRUE,
+// ------------------------------------------------------------
+// Configuration
+// ------------------------------------------------------------
+GLOBAL LAND_CFG IS LEXICON(
+    // Descent parameters
+    "TOUCHDOWN_SPEED",    2.0,    // target vertical speed at ground (m/s)
+    "HOVER_ALT",        100,      // alt to transition from full-brake to constant-decel
+    "UPRIGHT_ALT",       10,      // alt to go pure vertical and hover to touchdown
+    "BURN_MARGIN",        1.05,   // safety factor: start burn when TTI <= SBD * margin
+    "MAX_TILT",          15,      // max steering lean during descent (degrees)
+
+    // Target resolution
     "TARGET_LAT",           0,
     "TARGET_LNG",           0,
     "TARGET_BODY",         "",
     "TARGET_WAYPOINT",     "",
     "TARGET_LOCK",      FALSE,
     "TARGET_TOLERANCE",  2500,
-    "GUIDANCE_ALT",      5000,
-    "GUIDANCE_MAX_TILT",   20,
-    "ASSIST_TARGET_SPEED", 80.0,
-    "ASSIST_MIN_ALT",      800,
-    "ASSIST_THROTTLE",       1,
-    "ASSIST_RELEASE_ALT",  100,
-    "ASSIST_RELEASE_HSPEED", 0.5,
-    "ASSIST_RELEASE_VSPEED", 0.0,
-    "ASSIST_RELEASE_ALT_TOL", 5,
-    "ASSIST_RELEASE_H_TOL", 0.3,
-    "ASSIST_RELEASE_V_TOL", 0.3,
-    "ASSIST_RELEASE_HOLD", 1.0,
-    "ASSIST_DESCENT_SPEED", 15.0,
-    "ASSIST_MAX_TILT",     18,
-    "ASSIST_DECOUPLER_TAG", "landing_assist_decoupler",
-    "ASSIST_FLYAWAY",     FALSE,
-    "ASSIST_FLYAWAY_TIME", 4.0,
-    "ASSIST_FLYAWAY_THROTTLE", 0.6
+
+    // Deorbit
+    "DEORBIT_PE",        5000,
+    "DEORBIT_OVERSHOOT",    0,    // meters to overshoot target for carrier braking
+    "DEORBIT_OVERSHOOT_TOLERANCE", 1200,
+    "GUIDANCE_ALT",      5000,    // alt below which guidance steers toward target
+
+    // Carrier handoff (empty tag = no handoff)
+    "CARRIER_TAG",       "",      // decoupler tag for carrier release
+    "CARRIER_TIP",     TRUE,      // tip carrier sideways before release
+    "CARRIER_TIP_TIME",  1.5,    // seconds to hold tip
+    "CARRIER_SETTLE",    2.0     // seconds to wait after touchdown before handoff
 ).
+
+// Backward-compat alias: code that checks DEFINED LANDING_CFG still works
+GLOBAL LANDING_CFG IS LAND_CFG.
 
 GLOBAL landingAbortFlag IS FALSE.
 
-GLOBAL FUNCTION landingExecute {
-    mLogPhase("LANDING").
-    SET landingAbortFlag TO FALSE.
+// ------------------------------------------------------------
+// Core physics helpers
+// ------------------------------------------------------------
 
-    LOCAL useKE IS LANDING_CFG["USE_KE"] AND ADDONS:KE:AVAILABLE.
-    LOCAL landingSystem IS "".
-    IF useKE {
-        SET landingSystem TO "KerbalEngineer".
-    } ELSE {
-        SET landingSystem TO "manual calculation".
+// Effective gravity accounting for centrifugal force from ground speed
+LOCAL FUNCTION _grav {
+    LOCAL r IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
+    LOCAL mu IS SHIP:BODY:MU.
+    LOCAL g IS mu / (r^2).
+    LOCAL gs IS SHIP:GROUNDSPEED.
+    IF gs > 1 AND r > 0 {
+        SET g TO g - (gs^2) / r.
     }
-    mLog("Landing system: " + landingSystem).
-
-    LOCAL landingTarget IS landingResolveTarget().
-    IF landingTarget["FOUND"] {
-        mLogWarn("STATS landing target source=" + landingTarget["SOURCE"]
-            + " lat=" + ROUND(landingTarget["LAT"],4)
-            + " lng=" + ROUND(landingTarget["LNG"],4)).
-        SET LANDING_CFG["TARGET_LAT"] TO landingTarget["LAT"].
-        SET LANDING_CFG["TARGET_LNG"] TO landingTarget["LNG"].
-        mLog("Landing target: " + ROUND(landingTarget["LAT"],4)
-            + "," + ROUND(landingTarget["LNG"],4)
-            + " from " + landingTarget["SOURCE"] + ".").
-        IF ADDONS:TR:AVAILABLE {
-            ADDONS:TR:SETTARGET(LATLNG(landingTarget["LAT"], landingTarget["LNG"])).
-        }
-    }
-
-    WHEN (ABS(SHIP:FACING:PITCH) > LANDING_CFG["MAX_TILT"]
-            OR ABS(SHIP:FACING:ROLL) > LANDING_CFG["MAX_TILT"])
-            AND ALT:RADAR < LANDING_CFG["GUIDANCE_ALT"]
-            AND SHIP:STATUS <> "ORBITING" THEN {
-        IF NOT landingAbortFlag {
-            mLogWarn("Excessive tilt — auto abort.").
-            landingAbort().
-        }
-    }
-
-    IF SHIP:ORBIT:BODY:ATM:EXISTS {
-        WHEN SHIP:AIRSPEED < 100 AND ALT:RADAR < 20000 THEN {
-            _deployAntennas().
-            mLog("Antennas deployed — airspeed safe.").
-        }
-    }
-
-    IF NOT _landDeorbit() {
-        SET landingAbortFlag TO TRUE.
-        RETURN.
-    }
-    IF landingAbortFlag { RETURN. }
-    _landCoast(useKE).
-    IF landingAbortFlag { RETURN. }
-    _landSuicideBurn(useKE).
-    IF landingAbortFlag { RETURN. }
-    _landFinal().
-    IF landingAbortFlag { RETURN. }
-    _landTouchdown().
+    RETURN MAX(0.01, g).
 }
 
-GLOBAL FUNCTION landingAbort {
-    SET landingAbortFlag TO TRUE.
-    LOCK THROTTLE TO 1.0.
-    LOCK STEERING TO SHIP:UP.
-    mLogError("LANDING ABORT — climbing to "
-        + ROUND(LANDING_CFG["ABORT_ALT"]/1000,0) + "km.").
-    HUDTEXT("ABORT — CLIMBING!", 5, 2, 18, RED, FALSE).
-    WAIT UNTIL SHIP:VERTICALSPEED > 0
-            AND ALT:RADAR > LANDING_CFG["ABORT_ALT"].
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
-    UNLOCK STEERING.
-    SET SAS TO TRUE.
-    mLog("Abort complete. Alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
+// Maximum acceleration available (m/s^2)
+LOCAL FUNCTION _maxAcc {
+    IF SHIP:MASS <= 0 { RETURN 0. }
+    RETURN SHIP:AVAILABLETHRUST / SHIP:MASS.
 }
 
-// Use an attached descent stage for the landing burn, then release it.
-// Intended sequence:
-//   LAND_DEORBIT -> LAND_ASSIST -> LAND
-//
-// The stage carries the rover down to a controlled release hover:
-//   ASSIST_RELEASE_ALT radar altitude
-//   ASSIST_RELEASE_HSPEED horizontal speed
-//   ASSIST_RELEASE_VSPEED vertical speed
-// After decoupling, this CPU may still be on the assist stage; if so, the
-// flyaway burn points sideways/up to avoid the lander before impact.
-GLOBAL FUNCTION landingAssistStage {
-    mLogPhase("LANDING ASSIST").
-
-    LOCAL decoupler IS _taggedDecoupler(LANDING_CFG["ASSIST_DECOUPLER_TAG"]).
-    IF decoupler = 0 {
-        mLogWarn("No assist decoupler tagged '"
-            + LANDING_CFG["ASSIST_DECOUPLER_TAG"] + "' — skipping assist.").
-        RETURN FALSE.
-    }
-
-    SET SAS TO FALSE.
-    LOCAL stableStart IS 0.
-    mLog("Assist descent: release at "
-        + ROUND(LANDING_CFG["ASSIST_RELEASE_ALT"],0) + "m, h="
-        + LANDING_CFG["ASSIST_RELEASE_HSPEED"] + "m/s, v="
-        + LANDING_CFG["ASSIST_RELEASE_VSPEED"] + "m/s.").
-    HUDTEXT("Assist precision descent", 3, 2, 14, YELLOW, FALSE).
-
-    UNTIL landingAbortFlag {
-        LOCAL hVel IS _horizontalSurfaceVelocity().
-        LOCAL hSpeed IS hVel:MAG.
-        LOCAL radarAlt IS ALT:RADAR.
-        LOCAL vSpeed IS SHIP:VERTICALSPEED.
-
-        LOCK STEERING TO _assistSteering(hVel, hSpeed).
-
-        LOCAL maxAcc IS _safeMaxAcc().
-        IF maxAcc > 0 {
-            LOCAL releaseAlt IS LANDING_CFG["ASSIST_RELEASE_ALT"].
-            LOCAL altErr IS radarAlt - releaseAlt.
-            LOCAL targetV IS -MAX(
-                -2,
-                MIN(LANDING_CFG["ASSIST_DESCENT_SPEED"], altErr * 0.2)).
-            IF ABS(altErr) <= LANDING_CFG["ASSIST_RELEASE_ALT_TOL"] {
-                SET targetV TO LANDING_CFG["ASSIST_RELEASE_VSPEED"].
-            }
-
-            LOCAL grav IS _localGravity().
-            LOCAL desiredAcc IS (targetV - vSpeed) * 0.35.
-            LOCAL thrott IS (grav + desiredAcc) / maxAcc.
-            LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], thrott)).
-        }
-
-        IF _assistReleaseStable(hSpeed, vSpeed, radarAlt) {
-            IF stableStart = 0 { SET stableStart TO TIME:SECONDS. }
-            IF TIME:SECONDS - stableStart >= LANDING_CFG["ASSIST_RELEASE_HOLD"] {
-                BREAK.
-            }
-        } ELSE {
-            SET stableStart TO 0.
-        }
-
-        IF _needsStage() {
-            mLogWarn("Assist stage needs staging before release target — separating now.").
-            BREAK.
-        }
-
-        HUDTEXT("Assist alt:" + ROUND(radarAlt,0)
-            + "m h:" + ROUND(hSpeed,2)
-            + " v:" + ROUND(vSpeed,2),
-            1, 2, 13, YELLOW, FALSE).
-        WAIT 0.05.
-    }
-
-    IF landingAbortFlag {
-        LOCK THROTTLE TO 0.
-        RETURN FALSE.
-    }
-
-    LOCK THROTTLE TO 0.
-    WAIT 0.2.
-    mLog("Assist release: alt=" + ROUND(ALT:RADAR,1)
-        + "m h=" + ROUND(_horizontalSurfaceVelocity():MAG,2)
-        + "m/s v=" + ROUND(SHIP:VERTICALSPEED,2) + "m/s.").
-
-    _decouplePart(decoupler).
-    WAIT 0.5.
-
-    IF LANDING_CFG["ASSIST_FLYAWAY"] {
-        mLog("Assist flyaway burn.").
-        LOCK STEERING TO (SHIP:FACING:RIGHTVECTOR + SHIP:UP):NORMALIZED.
-        WAIT 1.
-        LOCK THROTTLE TO LANDING_CFG["ASSIST_FLYAWAY_THROTTLE"].
-        WAIT LANDING_CFG["ASSIST_FLYAWAY_TIME"].
-        LOCK THROTTLE TO 0.
-    }
-
-    UNLOCK THROTTLE.
-    UNLOCK STEERING.
-    SET SAS TO TRUE.
-    RETURN TRUE.
+// Duration of a full-thrust suicide burn to kill current surface speed
+LOCAL FUNCTION _suicideBurnDuration {
+    LOCAL acc IS _maxAcc().
+    LOCAL g IS _grav().
+    LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
+    LOCAL vs IS SHIP:VERTICALSPEED.
+    IF acc <= g { RETURN 99999. }
+    // Project gravity along velocity vector for more accurate estimate
+    IF spd < 0.1 { RETURN 0. }
+    RETURN spd / (acc - g * ABS(vs) / spd).
 }
 
-LOCAL FUNCTION _landDeorbit {
-    IF SHIP:PERIAPSIS <= LANDING_CFG["DEORBIT_PE"] {
-        mLog("Already suborbital (Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km) — skipping deorbit.").
-        RETURN TRUE.
-    }
-
-    LOCAL landingTarget IS landingResolveTarget().
-    IF landingTarget["FOUND"] {
-        LOCAL deorbitOk IS landingTargetedDeorbit().
-        orbitSummary().
-        RETURN deorbitOk.
-    }
-
-    mLogError("No landing target set — refusing blind landing deorbit.").
-    RETURN FALSE.
+// Time to impact assuming constant gravity, current vertical speed and alt
+LOCAL FUNCTION _timeToImpact {
+    LOCAL g IS _grav().
+    LOCAL vs IS SHIP:VERTICALSPEED.
+    LOCAL alt_ IS ALT:RADAR.
+    IF alt_ <= 0 { RETURN 0. }
+    // Quadratic: alt = vs*t + 0.5*g*t^2 (vs negative when descending)
+    LOCAL disc IS vs^2 + 2 * alt_ * g.
+    IF disc < 0 { RETURN 99999. }
+    RETURN (SQRT(disc) + vs) / g.
 }
 
-LOCAL FUNCTION _landCoast {
-    PARAMETER useKE.
-
-    SET SAS TO TRUE.
-    LOCK STEERING TO SHIP:RETROGRADE.
-    mLog("Coasting to suicide burn point...").
-    HUDTEXT("Coasting to burn point", 3, 2, 13, WHITE, FALSE).
-
-    IF useKE {
-        mLog("Using KerbalEngineer suicide burn countdown.").
-        WAIT UNTIL ADDONS:KE:SUICIDEBURNCOUNTDOWN <= LANDING_CFG["BURN_LEAD"]
-                OR landingAbortFlag.
-        mLog("KE burn countdown reached. Alt=" + ROUND(ALT:RADAR,0)
-            + "m  countdown=" + ROUND(ADDONS:KE:SUICIDEBURNCOUNTDOWN,1) + "s"
-            + "  burnLength=" + ROUND(ADDONS:KE:SUICIDEBURNLENGTH,1) + "s"
-            + "  burnDv=" + ROUND(ADDONS:KE:SUICIDEBURNDELTAV,1) + "m/s").
-    } ELSE {
-        mLog("Using manual suicide burn calculation.").
-        WAIT UNTIL ALT:RADAR <= _manualBurnAlt()
-                OR landingAbortFlag.
-        mLog("Manual burn point reached. Alt=" + ROUND(ALT:RADAR,0) + "m").
-    }
+// Horizontal surface velocity vector (surface velocity minus vertical component)
+LOCAL FUNCTION _hVel {
+    LOCAL upVec IS SHIP:UP:VECTOR.
+    RETURN SHIP:VELOCITY:SURFACE - (VDOT(SHIP:VELOCITY:SURFACE, upVec) * upVec).
 }
 
-LOCAL FUNCTION _landSuicideBurn {
-    PARAMETER useKE.
+// ------------------------------------------------------------
+// Steering helpers
+// ------------------------------------------------------------
 
-    LOCAL landingTarget IS landingResolveTarget().
-    mLog("Suicide burn start.").
-    HUDTEXT("SUICIDE BURN", 3, 2, 16, YELLOW, FALSE).
-    LOCK STEERING TO SHIP:RETROGRADE.
-
-    UNTIL ALT:RADAR <= LANDING_CFG["FINAL_ALT"] OR landingAbortFlag {
-        IF landingTarget["FOUND"] AND ALT:RADAR < LANDING_CFG["GUIDANCE_ALT"] {
-            LOCK STEERING TO _landingGuidanceVector(landingTarget, SHIP:RETROGRADE).
-        } ELSE {
-            LOCK STEERING TO SHIP:RETROGRADE.
-        }
-
-        IF _needsStage() {
-            LOCK THROTTLE TO 0.
-            WAIT 0.2.
-            STAGE.
-            WAIT 0.5.
-        }
-
-        LOCAL maxAcc IS _safeMaxAcc().
-        IF maxAcc > 0 {
-            IF useKE AND ADDONS:KE:AVAILABLE {
-                LOCAL remaining IS ADDONS:KE:SUICIDEBURNDELTAV.
-                LOCAL ratio     IS remaining / (maxAcc * ADDONS:KE:SUICIDEBURNLENGTH).
-                LOCK THROTTLE TO MAX(0.05, MIN(1.0, ratio)).
-            } ELSE {
-                LOCAL targetDecel IS (SHIP:VERTICALSPEED^2) / (2 * ALT:RADAR).
-                LOCK THROTTLE TO MAX(0.05, MIN(1.0, targetDecel / maxAcc)).
-            }
-        }
-
-        LOCAL tDV IS "".
-        IF (useKE AND ADDONS:KE:AVAILABLE) {
-           SET tDV  TO "  dV:" + ROUND(ADDONS:KE:SUICIDEBURNDELTAV, 1).
-        }
-        HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
-            + ROUND(SHIP:VERTICALSPEED,1) + "m/s" + tDV,
-            1, 2, 13, YELLOW, FALSE).
-
-        WAIT 0.05.
-    }
-
-    mLog("Suicide burn complete. Alt=" + ROUND(ALT:RADAR,0)
-        + "m  vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s").
+// Steering vector that is mostly retrograde but leans up to MAX_TILT
+// toward killing horizontal velocity
+LOCAL FUNCTION _burnSteering {
+    LOCAL sVel IS SHIP:VELOCITY:SURFACE.
+    IF sVel:MAG < 0.5 { RETURN SHIP:UP:VECTOR. }
+    LOCAL retro IS (-sVel):NORMALIZED.
+    // Lean toward vertical to preferentially kill horizontal speed
+    LOCAL hv IS _hVel().
+    IF hv:MAG < 0.5 { RETURN retro. }
+    LOCAL maxLean IS SIN(LAND_CFG["MAX_TILT"]).
+    LOCAL lean IS MIN(maxLean, hv:MAG / 20).
+    RETURN (retro + SHIP:UP:VECTOR * lean):NORMALIZED.
 }
 
-LOCAL FUNCTION _landFinal {
-    LOCAL landingTarget IS landingResolveTarget().
-    LOCAL legs IS SHIP:MODULESNAMED("ModuleWheelDeployment").
-    LOCAL legsMLD IS SHIP:MODULESNAMED("ModuleLandingLeg").
-    FOR m IN legsMLD { legs:ADD(m). }
-    IF legs:LENGTH > 0 {
-        FOR m IN legs {
-            IF m:HASEVENT("Extend") { m:DOEVENT("Extend"). }
-        }
-        mLog("Landing legs deployed.").
-    }
-
-    mLog("Final approach. Target descent "
-        + LANDING_CFG["FINAL_SPEED"] + "m/s.").
-    HUDTEXT("Final approach", 3, 2, 14, GREEN, FALSE).
-
-    UNTIL ALT:RADAR < 5 OR landingAbortFlag {
-        LOCAL hVel IS SHIP:VELOCITY:SURFACE
-            - (VDOT(SHIP:VELOCITY:SURFACE, SHIP:UP:VECTOR) * SHIP:UP:VECTOR).
-        IF landingTarget["FOUND"] AND ALT:RADAR < LANDING_CFG["GUIDANCE_ALT"] {
-            LOCAL targetDist IS _landingTargetDistance(landingTarget).
-            IF targetDist > 25 {
-                LOCK STEERING TO _landingGuidanceVector(landingTarget, SHIP:UP).
-            } ELSE IF hVel:MAG > 0.5 {
-                LOCK STEERING TO (-hVel):NORMALIZED.
-            } ELSE {
-                LOCK STEERING TO SHIP:UP.
-            }
-        } ELSE IF hVel:MAG > 0.5 {
-            LOCK STEERING TO (-hVel):NORMALIZED.
-        } ELSE {
-            LOCK STEERING TO SHIP:UP.
-        }
-
-        LOCAL vspd  IS SHIP:VERTICALSPEED.
-        LOCAL error IS -LANDING_CFG["FINAL_SPEED"] - vspd.
-        LOCAL maxAcc IS _safeMaxAcc().
-        IF maxAcc > 0 {
-            LOCAL thrott IS LANDING_CFG["HOVER_THROTTLE"] + (error * 0.1).
-            LOCK THROTTLE TO MAX(0, MIN(1.0, thrott)).
-        }
-
-        LOCAL targetMsg IS "".
-        IF landingTarget["FOUND"] {
-            SET targetMsg TO " tgt:" + ROUND(_landingTargetDistance(landingTarget),0) + "m".
-        }
-        HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
-            + ROUND(SHIP:VERTICALSPEED,1) + "m/s" + targetMsg,
-            1, 2, 13, GREEN, FALSE).
-        WAIT 0.05.
-    }
+// Hover steering: mostly UP with lean to cancel horizontal drift
+LOCAL FUNCTION _hoverSteering {
+    LOCAL hv IS _hVel().
+    IF hv:MAG < 0.3 { RETURN SHIP:UP:VECTOR. }
+    LOCAL maxLean IS SIN(LAND_CFG["MAX_TILT"]).
+    LOCAL lean IS MIN(maxLean, hv:MAG / 10).
+    RETURN (SHIP:UP:VECTOR + (-hv):NORMALIZED * lean):NORMALIZED.
 }
 
-LOCAL FUNCTION _landTouchdown {
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
-    UNLOCK STEERING.
-    SET SAS TO TRUE.
+// ------------------------------------------------------------
+// Hardware helpers
+// ------------------------------------------------------------
 
-    WAIT UNTIL SHIP:STATUS = "LANDED"
-            OR SHIP:STATUS = "SPLASHED"
-            OR landingAbortFlag.
-
-    IF NOT landingAbortFlag {
-        mLog("TOUCHDOWN. vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s"
-            + "  lat=" + ROUND(SHIP:LATITUDE,4)
-            + "  lng=" + ROUND(SHIP:LONGITUDE,4)).
-        HUDTEXT("TOUCHDOWN!", 8, 2, 20, GREEN, FALSE).
-        stateSet("landing_lat",  SHIP:LATITUDE).
-        stateSet("landing_lng",  SHIP:LONGITUDE).
-        stateSet("landing_time", TIME:SECONDS).
-        _deployAntennas().
-        _deploySolarPanels().
+LOCAL FUNCTION _deployGear {
+    // Landing legs (stock + modded)
+    FOR m IN SHIP:MODULESNAMED("ModuleWheelDeployment") {
+        IF m:HASEVENT("Extend") { m:DOEVENT("Extend"). }
     }
-}
-
-GLOBAL FUNCTION landingTargetedDeorbit {
-    LOCAL landingTarget IS landingResolveTarget().
-    IF NOT landingTarget["FOUND"] {
-        mLogError("No landing target set — refusing blind landing deorbit.").
-        RETURN FALSE.
+    FOR m IN SHIP:MODULESNAMED("ModuleLandingLeg") {
+        IF m:HASEVENT("Extend") { m:DOEVENT("Extend"). }
     }
-
-    mLogWarn("STATS landing target source=" + landingTarget["SOURCE"]
-        + " lat=" + ROUND(landingTarget["LAT"],4)
-        + " lng=" + ROUND(landingTarget["LNG"],4)).
-    SET LANDING_CFG["TARGET_LAT"] TO landingTarget["LAT"].
-    SET LANDING_CFG["TARGET_LNG"] TO landingTarget["LNG"].
-    mLog("Landing deorbit target: " + ROUND(landingTarget["LAT"],4)
-        + "," + ROUND(landingTarget["LNG"],4)
-        + " from " + landingTarget["SOURCE"] + ".").
-
-    RETURN targetedDeorbitAt(
-        landingTarget["LAT"],
-        landingTarget["LNG"],
-        LANDING_CFG["DEORBIT_PE"],
-        LANDING_CFG["TARGET_TOLERANCE"]).
-}
-
-GLOBAL FUNCTION landingResolveTarget {
-    LOCAL result IS LEXICON().
-    result:ADD("FOUND", FALSE).
-    result:ADD("LAT", 0).
-    result:ADD("LNG", 0).
-    result:ADD("SOURCE", "none").
-
-    IF LANDING_CFG["TARGET_WAYPOINT"] <> "" {
-        LOCAL namedWp IS _waypointNamed(LANDING_CFG["TARGET_WAYPOINT"]).
-        IF namedWp <> 0 {
-            SET result["FOUND"] TO TRUE.
-            SET result["LAT"] TO namedWp:GEOPOSITION:LAT.
-            SET result["LNG"] TO namedWp:GEOPOSITION:LNG.
-            SET result["SOURCE"] TO "waypoint:" + namedWp:NAME.
-            RETURN result.
-        }
-        mLogWarn("Landing waypoint '" + LANDING_CFG["TARGET_WAYPOINT"]
-            + "' not found on " + SHIP:BODY:NAME + ".").
-    }
-
-    IF LANDING_CFG["TARGET_LOCK"]
-            AND (LANDING_CFG["TARGET_LAT"] <> 0 OR LANDING_CFG["TARGET_LNG"] <> 0) {
-        SET result["FOUND"] TO TRUE.
-        SET result["LAT"] TO LANDING_CFG["TARGET_LAT"].
-        SET result["LNG"] TO LANDING_CFG["TARGET_LNG"].
-        SET result["SOURCE"] TO "locked LANDING_CFG".
-        RETURN result.
-    }
-
-    LOCAL selectedWp IS _selectedWaypoint().
-    IF selectedWp <> 0 {
-        SET result["FOUND"] TO TRUE.
-        SET result["LAT"] TO selectedWp:GEOPOSITION:LAT.
-        SET result["LNG"] TO selectedWp:GEOPOSITION:LNG.
-        SET result["SOURCE"] TO "selected waypoint:" + selectedWp:NAME.
-        RETURN result.
-    }
-
-    IF LANDING_CFG["TARGET_LAT"] <> 0 OR LANDING_CFG["TARGET_LNG"] <> 0 {
-        SET result["FOUND"] TO TRUE.
-        SET result["LAT"] TO LANDING_CFG["TARGET_LAT"].
-        SET result["LNG"] TO LANDING_CFG["TARGET_LNG"].
-        SET result["SOURCE"] TO "LANDING_CFG".
-        RETURN result.
-    }
-
-    RETURN result.
-}
-
-LOCAL FUNCTION _waypointNamed {
-    PARAMETER waypointName.
-    LOCAL allWps IS ALLWAYPOINTS().
-    LOCAL targetName IS waypointName:TOUPPER.
-    FOR wp IN allWps {
-        IF wp:BODY:NAME = SHIP:BODY:NAME {
-            IF wp:NAME:TOUPPER = targetName {
-                RETURN wp.
-            }
-        }
-    }
-    RETURN 0.
-}
-
-LOCAL FUNCTION _selectedWaypoint {
-    LOCAL allWps IS ALLWAYPOINTS().
-    FOR wp IN allWps {
-        IF wp:ISSELECTED {
-            IF wp:BODY:NAME = SHIP:BODY:NAME {
-                RETURN wp.
-            }
-        }
-    }
-    RETURN 0.
-}
-
-LOCAL FUNCTION _landingTargetDistance {
-    PARAMETER landingTarget.
-    RETURN _landingGeoDistance(
-        SHIP:LATITUDE,
-        SHIP:LONGITUDE,
-        landingTarget["LAT"],
-        landingTarget["LNG"]).
-}
-
-LOCAL FUNCTION _landingGuidanceVector {
-    PARAMETER landingTarget.
-    PARAMETER fallbackVec.
-
-    LOCAL targetGeo IS LATLNG(landingTarget["LAT"], landingTarget["LNG"]).
-    LOCAL targetDist IS _landingTargetDistance(landingTarget).
-    IF targetDist < 25 { RETURN fallbackVec. }
-
-    LOCAL toTarget IS targetGeo:POSITION - SHIP:GEOPOSITION:POSITION.
-    LOCAL lateral IS VXCL(SHIP:UP:VECTOR, toTarget).
-    IF lateral:MAG < 0.001 { RETURN fallbackVec. }
-
-    LOCAL maxLean IS SIN(LANDING_CFG["GUIDANCE_MAX_TILT"]).
-    LOCAL lean IS MIN(maxLean, targetDist / 500).
-    RETURN (fallbackVec:NORMALIZED + lateral:NORMALIZED * lean):NORMALIZED.
-}
-
-LOCAL FUNCTION _landingGeoDistance {
-    PARAMETER lat1.
-    PARAMETER lng1.
-    PARAMETER lat2.
-    PARAMETER lng2.
-
-    LOCAL oRad IS SHIP:BODY:RADIUS.
-    LOCAL dLat IS lat2 - lat1.
-    LOCAL dLng IS lng2 - lng1.
-    LOCAL a IS SIN(dLat/2)^2
-        + COS(lat1) * COS(lat2) * SIN(dLng/2)^2.
-    LOCAL c IS 2 * ARCSIN(MIN(1, SQRT(a))).
-    RETURN oRad * c * CONSTANT:PI / 180.
+    GEAR ON.
 }
 
 LOCAL FUNCTION _deployAntennas {
@@ -555,59 +174,9 @@ LOCAL FUNCTION _decouplePart {
     } ELSE IF partRef:HASMODULE("ModuleAnchoredDecoupler") {
         partRef:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
     } ELSE {
-        mLogWarn("Assist decoupler tag found, but no decouple module. Trying STAGE.").
+        mLogWarn("Decoupler tag found, but no decouple module. Trying STAGE.").
         STAGE.
     }
-}
-
-LOCAL FUNCTION _manualBurnAlt {
-    LOCAL maxAcc IS _safeMaxAcc().
-    IF maxAcc <= 0 { RETURN 0. }
-    RETURN (SHIP:VERTICALSPEED^2) / (2 * maxAcc).
-}
-
-LOCAL FUNCTION _horizontalSurfaceVelocity {
-    LOCAL upVec IS SHIP:UP:VECTOR.
-    LOCAL hVel IS SHIP:VELOCITY:SURFACE
-        - (VDOT(SHIP:VELOCITY:SURFACE, upVec) * upVec).
-    RETURN hVel.
-}
-
-LOCAL FUNCTION _assistSteering {
-    PARAMETER hVel.
-    PARAMETER hSpeed.
-
-    LOCAL upVec IS SHIP:UP:VECTOR.
-    LOCAL steerVec IS upVec.
-    IF hSpeed > LANDING_CFG["ASSIST_RELEASE_HSPEED"] {
-        LOCAL maxLean IS SIN(LANDING_CFG["ASSIST_MAX_TILT"]).
-        LOCAL lean IS MIN(maxLean, hSpeed / 10).
-        SET steerVec TO (upVec + (-hVel):NORMALIZED * lean):NORMALIZED.
-    }
-    RETURN steerVec.
-}
-
-LOCAL FUNCTION _assistReleaseStable {
-    PARAMETER hSpeed.
-    PARAMETER vSpeed.
-    PARAMETER radarAlt.
-
-    RETURN ABS(radarAlt - LANDING_CFG["ASSIST_RELEASE_ALT"])
-            <= LANDING_CFG["ASSIST_RELEASE_ALT_TOL"]
-        AND hSpeed <= LANDING_CFG["ASSIST_RELEASE_HSPEED"]
-            + LANDING_CFG["ASSIST_RELEASE_H_TOL"]
-        AND ABS(vSpeed - LANDING_CFG["ASSIST_RELEASE_VSPEED"])
-            <= LANDING_CFG["ASSIST_RELEASE_V_TOL"].
-}
-
-LOCAL FUNCTION _localGravity {
-    LOCAL radiusNow IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
-    RETURN SHIP:BODY:MU / (radiusNow^2).
-}
-
-LOCAL FUNCTION _safeMaxAcc {
-    IF SHIP:MASS <= 0 { RETURN 0. }
-    RETURN SHIP:AVAILABLETHRUST / SHIP:MASS.
 }
 
 LOCAL FUNCTION _needsStage {
@@ -616,4 +185,459 @@ LOCAL FUNCTION _needsStage {
     FOR eng IN engs { IF eng:FLAMEOUT { RETURN TRUE. } }
     IF SHIP:MAXTHRUST = 0 { RETURN TRUE. }
     RETURN FALSE.
+}
+
+// ------------------------------------------------------------
+// Main entry point
+// ------------------------------------------------------------
+
+GLOBAL FUNCTION landExecute {
+    mLogPhase("LANDING").
+    SET landingAbortFlag TO FALSE.
+
+    // Log KE availability for telemetry (not gating on it)
+    IF ADDONS:KE:AVAILABLE {
+        mLog("KerbalEngineer available — will log SB countdown for telemetry.").
+    }
+
+    // Resolve landing target
+    LOCAL landingTarget IS landingResolveTarget().
+    IF landingTarget["FOUND"] {
+        mLog("Landing target: " + ROUND(landingTarget["LAT"],4)
+            + "," + ROUND(landingTarget["LNG"],4)
+            + " from " + landingTarget["SOURCE"] + ".").
+        IF ADDONS:TR:AVAILABLE {
+            ADDONS:TR:SETTARGET(LATLNG(landingTarget["LAT"], landingTarget["LNG"])).
+        }
+    }
+
+    // Phase 1: Orient retrograde, deploy gear
+    SET SAS TO FALSE.
+    LOCK STEERING TO _burnSteering().
+    _deployGear().
+    mLog("Oriented retrograde, gear deployed. Coasting to burn point.").
+    HUDTEXT("Coast to burn point", 3, 2, 14, WHITE, FALSE).
+
+    // Phase 2: Coast — wait until TTI <= SBD * BURN_MARGIN
+    UNTIL landingAbortFlag {
+        LOCAL tti IS _timeToImpact().
+        LOCAL sbd IS _suicideBurnDuration().
+        LOCAL margin IS LAND_CFG["BURN_MARGIN"].
+
+        // Log KE telemetry if available
+        IF ADDONS:KE:AVAILABLE AND ALT:RADAR < 20000 {
+            HUDTEXT("TTI:" + ROUND(tti,1) + " SBD:" + ROUND(sbd,1)
+                + " KE:" + ROUND(ADDONS:KE:SUICIDEBURNCOUNTDOWN,1),
+                1, 2, 13, WHITE, FALSE).
+        } ELSE {
+            HUDTEXT("TTI:" + ROUND(tti,1) + " SBD:" + ROUND(sbd,1),
+                1, 2, 13, WHITE, FALSE).
+        }
+
+        IF tti <= sbd * margin { BREAK. }
+        IF _needsStage() { STAGE. WAIT 0.5. }
+        WAIT 0.1.
+    }
+    IF landingAbortFlag { _landCleanup(). RETURN. }
+
+    mLog("Burn start. Alt=" + ROUND(ALT:RADAR,0)
+        + "m  spd=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1) + "m/s.").
+    HUDTEXT("SUICIDE BURN", 3, 2, 16, YELLOW, FALSE).
+
+    // Phase 3: Suicide burn — full throttle, steer retrograde with tilt
+    LOCK THROTTLE TO 1.0.
+    UNTIL ALT:RADAR <= LAND_CFG["HOVER_ALT"] OR landingAbortFlag {
+        LOCK STEERING TO _burnSteering().
+
+        IF _needsStage() {
+            LOCK THROTTLE TO 0.
+            WAIT 0.2.
+            STAGE.
+            WAIT 0.5.
+            LOCK THROTTLE TO 1.0.
+        }
+
+        HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
+            + ROUND(SHIP:VERTICALSPEED,1) + "m/s",
+            1, 2, 13, YELLOW, FALSE).
+        WAIT 0.05.
+    }
+    IF landingAbortFlag { _landCleanup(). RETURN. }
+
+    mLog("Hover transition. Alt=" + ROUND(ALT:RADAR,0)
+        + "m  vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s.").
+
+    // Phase 4: Hover transition — constant-decel throttle to UPRIGHT_ALT
+    UNTIL ALT:RADAR <= LAND_CFG["UPRIGHT_ALT"] OR landingAbortFlag {
+        LOCK STEERING TO _hoverSteering().
+        LOCAL acc IS _maxAcc().
+        IF acc > 0 {
+            LOCAL alt_ IS ALT:RADAR - LAND_CFG["UPRIGHT_ALT"].
+            LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
+            LOCAL g IS _grav().
+            // Desired decel to reach TOUCHDOWN_SPEED at UPRIGHT_ALT
+            LOCAL desiredDecel IS (spd^2 - LAND_CFG["TOUCHDOWN_SPEED"]^2) / (2 * MAX(1, alt_)).
+            LOCAL thrott IS (desiredDecel + g) / acc.
+            LOCK THROTTLE TO MAX(0.05, MIN(1.0, thrott)).
+        }
+
+        IF _needsStage() {
+            LOCK THROTTLE TO 0.
+            WAIT 0.2.
+            STAGE.
+            WAIT 0.5.
+        }
+
+        HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
+            + ROUND(SHIP:VERTICALSPEED,1) + "m/s",
+            1, 2, 13, GREEN, FALSE).
+        WAIT 0.05.
+    }
+    IF landingAbortFlag { _landCleanup(). RETURN. }
+
+    // Phase 5: Upright — point UP, hover at grav/maxAcc until touchdown
+    mLog("Final descent. Alt=" + ROUND(ALT:RADAR,0) + "m.").
+    LOCK STEERING TO SHIP:UP.
+    UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" OR landingAbortFlag {
+        LOCAL acc IS _maxAcc().
+        LOCAL g IS _grav().
+        IF acc > 0 {
+            // Target descent at TOUCHDOWN_SPEED
+            LOCAL vs IS SHIP:VERTICALSPEED.
+            LOCAL err IS (-LAND_CFG["TOUCHDOWN_SPEED"]) - vs.
+            LOCAL thrott IS (g / acc) + (err * 0.15).
+            LOCK THROTTLE TO MAX(0, MIN(1.0, thrott)).
+        }
+        HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
+            + ROUND(SHIP:VERTICALSPEED,1) + "m/s",
+            1, 2, 13, GREEN, FALSE).
+        WAIT 0.05.
+    }
+    IF landingAbortFlag { _landCleanup(). RETURN. }
+
+    // Phase 6: Touchdown
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    mLog("TOUCHDOWN. vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s"
+        + "  lat=" + ROUND(SHIP:LATITUDE,4)
+        + "  lng=" + ROUND(SHIP:LONGITUDE,4)).
+    HUDTEXT("TOUCHDOWN!", 8, 2, 20, GREEN, FALSE).
+    stateSet("landing_lat",  SHIP:LATITUDE).
+    stateSet("landing_lng",  SHIP:LONGITUDE).
+    stateSet("landing_time", TIME:SECONDS).
+    _deployAntennas().
+    _deploySolarPanels().
+
+    // Phase 7: Carrier handoff (optional)
+    IF LAND_CFG["CARRIER_TAG"] <> "" {
+        _carrierHandoff().
+    }
+}
+
+// Backward-compat wrapper — old code calls landingExecute()
+GLOBAL FUNCTION landingExecute {
+    landExecute().
+}
+
+// ------------------------------------------------------------
+// Carrier handoff
+// ------------------------------------------------------------
+
+LOCAL FUNCTION _carrierHandoff {
+    LOCAL decoupler IS _taggedDecoupler(LAND_CFG["CARRIER_TAG"]).
+    IF decoupler = 0 {
+        mLogWarn("No decoupler tagged '" + LAND_CFG["CARRIER_TAG"]
+            + "' — skipping carrier handoff.").
+        RETURN.
+    }
+
+    mLog("Carrier handoff: settling " + ROUND(LAND_CFG["CARRIER_SETTLE"],1) + "s.").
+    WAIT LAND_CFG["CARRIER_SETTLE"].
+
+    IF LAND_CFG["CARRIER_TIP"] {
+        mLog("Tipping carrier for release.").
+        SET SAS TO FALSE.
+        LOCK STEERING TO SHIP:FACING:RIGHTVECTOR.
+        WAIT LAND_CFG["CARRIER_TIP_TIME"].
+        UNLOCK STEERING.
+    }
+
+    mLog("Decoupling carrier.").
+    _decouplePart(decoupler).
+    WAIT 0.5.
+    SET SAS TO TRUE.
+    mLog("Carrier handoff complete.").
+}
+
+// Assist stage descent: land the whole stack, then optionally decouple.
+// This replaces the old landingAssistStage() — identical contract.
+GLOBAL FUNCTION landingAssistStage {
+    mLogPhase("LANDING ASSIST").
+    SET landingAbortFlag TO FALSE.
+
+    // If a carrier tag is configured, use it; otherwise fall back to old tag
+    LOCAL tagName IS LAND_CFG["CARRIER_TAG"].
+    IF tagName = "" {
+        SET tagName TO "landing_assist_decoupler".
+    }
+    LOCAL decoupler IS _taggedDecoupler(tagName).
+    IF decoupler = 0 {
+        mLogWarn("No assist decoupler tagged '" + tagName + "' — landing without release.").
+    }
+
+    // Execute the suicide burn landing
+    landExecute().
+
+    // If landExecute already did carrier handoff, we're done
+    IF LAND_CFG["CARRIER_TAG"] <> "" { RETURN TRUE. }
+
+    // Otherwise do the handoff here with the assist decoupler
+    IF decoupler = 0 { RETURN TRUE. }
+    IF NOT (SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED") {
+        mLogWarn("Not landed after descent — skipping decoupler release.").
+        RETURN FALSE.
+    }
+
+    mLog("Assist settle: " + ROUND(LAND_CFG["CARRIER_SETTLE"],1) + "s.").
+    WAIT LAND_CFG["CARRIER_SETTLE"].
+
+    IF LAND_CFG["CARRIER_TIP"] {
+        mLog("Tipping for rover release.").
+        SET SAS TO FALSE.
+        LOCK STEERING TO SHIP:FACING:RIGHTVECTOR.
+        WAIT LAND_CFG["CARRIER_TIP_TIME"].
+        UNLOCK STEERING.
+    }
+
+    mLog("Releasing payload.").
+    _decouplePart(decoupler).
+    WAIT 0.5.
+    SET SAS TO TRUE.
+    mLog("Assist handoff complete.").
+    RETURN TRUE.
+}
+
+// ------------------------------------------------------------
+// Cleanup helper
+// ------------------------------------------------------------
+
+LOCAL FUNCTION _landCleanup {
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+}
+
+// ------------------------------------------------------------
+// Target resolution
+// ------------------------------------------------------------
+
+GLOBAL FUNCTION landingResolveTarget {
+    LOCAL result IS LEXICON().
+    result:ADD("FOUND", FALSE).
+    result:ADD("LAT", 0).
+    result:ADD("LNG", 0).
+    result:ADD("SOURCE", "none").
+
+    IF LAND_CFG["TARGET_WAYPOINT"] <> "" {
+        LOCAL namedWp IS _waypointNamed(LAND_CFG["TARGET_WAYPOINT"]).
+        IF namedWp <> 0 {
+            SET result["FOUND"] TO TRUE.
+            SET result["LAT"] TO namedWp:GEOPOSITION:LAT.
+            SET result["LNG"] TO namedWp:GEOPOSITION:LNG.
+            SET result["SOURCE"] TO "waypoint:" + namedWp:NAME.
+            RETURN result.
+        }
+        mLogWarn("Landing waypoint '" + LAND_CFG["TARGET_WAYPOINT"]
+            + "' not found on " + SHIP:BODY:NAME + ".").
+    }
+
+    IF LAND_CFG["TARGET_LOCK"]
+            AND (LAND_CFG["TARGET_LAT"] <> 0 OR LAND_CFG["TARGET_LNG"] <> 0) {
+        SET result["FOUND"] TO TRUE.
+        SET result["LAT"] TO LAND_CFG["TARGET_LAT"].
+        SET result["LNG"] TO LAND_CFG["TARGET_LNG"].
+        SET result["SOURCE"] TO "locked LAND_CFG".
+        RETURN result.
+    }
+
+    LOCAL selectedWp IS _selectedWaypoint().
+    IF selectedWp <> 0 {
+        SET result["FOUND"] TO TRUE.
+        SET result["LAT"] TO selectedWp:GEOPOSITION:LAT.
+        SET result["LNG"] TO selectedWp:GEOPOSITION:LNG.
+        SET result["SOURCE"] TO "selected waypoint:" + selectedWp:NAME.
+        RETURN result.
+    }
+
+    IF LAND_CFG["TARGET_LAT"] <> 0 OR LAND_CFG["TARGET_LNG"] <> 0 {
+        SET result["FOUND"] TO TRUE.
+        SET result["LAT"] TO LAND_CFG["TARGET_LAT"].
+        SET result["LNG"] TO LAND_CFG["TARGET_LNG"].
+        SET result["SOURCE"] TO "LAND_CFG".
+        RETURN result.
+    }
+
+    RETURN result.
+}
+
+LOCAL FUNCTION _waypointNamed {
+    PARAMETER waypointName.
+    LOCAL allWps IS ALLWAYPOINTS().
+    LOCAL targetName IS waypointName:TOUPPER.
+    FOR wp IN allWps {
+        IF wp:BODY:NAME = SHIP:BODY:NAME {
+            IF wp:NAME:TOUPPER = targetName { RETURN wp. }
+        }
+    }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _selectedWaypoint {
+    LOCAL allWps IS ALLWAYPOINTS().
+    FOR wp IN allWps {
+        IF wp:ISSELECTED {
+            IF wp:BODY:NAME = SHIP:BODY:NAME { RETURN wp. }
+        }
+    }
+    RETURN 0.
+}
+
+// ------------------------------------------------------------
+// Deorbit and impact checking
+// ------------------------------------------------------------
+
+GLOBAL FUNCTION landingTargetedDeorbit {
+    LOCAL landingTarget IS landingResolveTarget().
+    IF NOT landingTarget["FOUND"] {
+        mLogError("No landing target set — refusing blind landing deorbit.").
+        RETURN FALSE.
+    }
+
+    mLogWarn("STATS landing target source=" + landingTarget["SOURCE"]
+        + " lat=" + ROUND(landingTarget["LAT"],4)
+        + " lng=" + ROUND(landingTarget["LNG"],4)).
+    SET LAND_CFG["TARGET_LAT"] TO landingTarget["LAT"].
+    SET LAND_CFG["TARGET_LNG"] TO landingTarget["LNG"].
+    mLog("Landing deorbit target: " + ROUND(landingTarget["LAT"],4)
+        + "," + ROUND(landingTarget["LNG"],4)
+        + " from " + landingTarget["SOURCE"] + ".").
+
+    LOCAL aimTarget IS _overshootTarget(landingTarget).
+    RETURN targetedDeorbitAt(
+        aimTarget["LAT"],
+        aimTarget["LNG"],
+        LAND_CFG["DEORBIT_PE"],
+        LAND_CFG["TARGET_TOLERANCE"]).
+}
+
+LOCAL FUNCTION _overshootTarget {
+    PARAMETER landingTarget.
+    LOCAL out IS LEXICON(
+        "LAT", landingTarget["LAT"],
+        "LNG", landingTarget["LNG"]
+    ).
+    LOCAL overshoot IS LAND_CFG["DEORBIT_OVERSHOOT"].
+    IF overshoot <= 0 { RETURN out. }
+
+    LOCAL hv IS _hVel().
+    IF hv:MAG < 0.1 { RETURN out. }
+    LOCAL upVec IS SHIP:UP:VECTOR.
+    LOCAL northVec IS VXCL(upVec,
+        LATLNG(SHIP:LATITUDE + 0.01, SHIP:LONGITUDE):POSITION
+            - SHIP:GEOPOSITION:POSITION):NORMALIZED.
+    LOCAL eastVec IS VXCL(upVec,
+        LATLNG(SHIP:LATITUDE, SHIP:LONGITUDE + 0.01):POSITION
+            - SHIP:GEOPOSITION:POSITION):NORMALIZED.
+    LOCAL northM IS VDOT(hv:NORMALIZED, northVec) * overshoot.
+    LOCAL eastM IS VDOT(hv:NORMALIZED, eastVec) * overshoot.
+    LOCAL shifted IS _offsetLatLng(landingTarget["LAT"], landingTarget["LNG"], northM, eastM).
+    SET out["LAT"] TO shifted["LAT"].
+    SET out["LNG"] TO shifted["LNG"].
+    mLogWarn("STATS deorbit overshoot aim="
+        + ROUND(out["LAT"],4) + "," + ROUND(out["LNG"],4)
+        + " overshootM=" + ROUND(overshoot,0)).
+    RETURN out.
+}
+
+LOCAL FUNCTION _offsetLatLng {
+    PARAMETER lat.
+    PARAMETER lng.
+    PARAMETER northM.
+    PARAMETER eastM.
+    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
+    LOCAL lonScale IS MAX(0.01, COS(lat)).
+    RETURN LEXICON(
+        "LAT", lat + northM * degPerM,
+        "LNG", lng + eastM * degPerM / lonScale
+    ).
+}
+
+GLOBAL FUNCTION landingImpactWithinTolerance {
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN TRUE. }
+
+    LOCAL landingTarget IS landingResolveTarget().
+    IF NOT landingTarget["FOUND"] {
+        mLogError("No landing target set — refusing impact check.").
+        RETURN FALSE.
+    }
+    IF NOT ADDONS:TR:AVAILABLE {
+        mLogError("Trajectories not available — cannot verify landing impact.").
+        RETURN FALSE.
+    }
+
+    ADDONS:TR:SETTARGET(LATLNG(landingTarget["LAT"], landingTarget["LNG"])).
+    WAIT 0.5.
+    IF NOT ADDONS:TR:HASIMPACT {
+        mLogWarn("STATS landing-impact status=no-impact").
+        RETURN FALSE.
+    }
+
+    LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
+    LOCAL dist IS _geoDistance(
+        impactPos:LAT, impactPos:LNG,
+        landingTarget["LAT"], landingTarget["LNG"]).
+    LOCAL ok IS dist <= LAND_CFG["TARGET_TOLERANCE"].
+    mLogWarn("STATS landing-impact status=" + ok
+        + " distKm=" + ROUND(dist/1000,2)
+        + " toleranceKm=" + ROUND(LAND_CFG["TARGET_TOLERANCE"]/1000,2)).
+    RETURN ok.
+}
+
+GLOBAL FUNCTION landingImpactAcceptableForAssist {
+    IF LAND_CFG["DEORBIT_OVERSHOOT"] <= 0 { RETURN landingImpactWithinTolerance(). }
+    IF NOT ADDONS:TR:AVAILABLE { RETURN FALSE. }
+    LOCAL landingTarget IS landingResolveTarget().
+    IF NOT landingTarget["FOUND"] { RETURN FALSE. }
+    ADDONS:TR:SETTARGET(LATLNG(landingTarget["LAT"], landingTarget["LNG"])).
+    WAIT 0.5.
+    IF NOT ADDONS:TR:HASIMPACT { RETURN FALSE. }
+    LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
+    LOCAL dist IS _geoDistance(
+        impactPos:LAT, impactPos:LNG,
+        landingTarget["LAT"], landingTarget["LNG"]).
+    LOCAL maxDist IS LAND_CFG["DEORBIT_OVERSHOOT"]
+        + LAND_CFG["DEORBIT_OVERSHOOT_TOLERANCE"].
+    LOCAL ok IS dist <= maxDist.
+    mLogWarn("STATS landing-impact-assist status=" + ok
+        + " distKm=" + ROUND(dist/1000,2)
+        + " allowedKm=" + ROUND(maxDist/1000,2)).
+    RETURN ok.
+}
+
+LOCAL FUNCTION _geoDistance {
+    PARAMETER lat1.
+    PARAMETER lng1.
+    PARAMETER lat2.
+    PARAMETER lng2.
+
+    LOCAL oRad IS SHIP:BODY:RADIUS.
+    LOCAL dLat IS lat2 - lat1.
+    LOCAL dLng IS lng2 - lng1.
+    LOCAL a IS SIN(dLat/2)^2
+        + COS(lat1) * COS(lat2) * SIN(dLng/2)^2.
+    LOCAL c IS 2 * ARCSIN(MIN(1, SQRT(a))).
+    RETURN oRad * c * CONSTANT:PI / 180.
 }
