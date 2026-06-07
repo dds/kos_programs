@@ -36,6 +36,8 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_SURFACE_BRAKE_FACTOR", 1.8,
     "ASSIST_SURFACE_BRAKE_RELEASE_HSPEED", 5.0,
     "ASSIST_SURFACE_BRAKE_AOA", 60.0,
+    "ASSIST_SURFACE_DROP_ALT", 900.0,
+    "ASSIST_SURFACE_DROP_MAX_VSPEED", 120.0,
     "ASSIST_SURFACE_FINAL_SPEED", 0.8,
     "ASSIST_SURFACE_FINAL_HSPEED", 2.0,
     "ASSIST_SURFACE_RELEASE_ALT", 5.0,
@@ -309,8 +311,7 @@ LOCAL FUNCTION _assistSurfaceRelease {
         LOCAL mode_ IS "APPROACH".
         IF brakeCommitted {
             IF hSpeed > LANDING_CFG["ASSIST_SURFACE_FINAL_HSPEED"]
-                    OR (radarAlt < 1000
-                        AND vSpeed < -LANDING_CFG["ASSIST_DESCENT_SPEED"]) {
+                    OR _assistSurfaceFinalBrakeReady(radarAlt, vSpeed) {
                 SET mode_ TO "BRAKE".
             } ELSE {
                 SET brakeCommitted TO FALSE.
@@ -322,6 +323,9 @@ LOCAL FUNCTION _assistSurfaceRelease {
             } ELSE {
                 SET mode_ TO "COAST".
             }
+        } ELSE IF radarAlt > LANDING_CFG["ASSIST_SURFACE_DROP_ALT"]
+                AND NOT _assistSurfaceFinalBrakeReady(radarAlt, vSpeed) {
+            SET mode_ TO "DROP".
         } ELSE IF radarAlt < 50 {
             SET mode_ TO "FINAL".
         }
@@ -353,6 +357,8 @@ LOCAL FUNCTION _assistSurfaceRelease {
 
         IF mode_ = "COAST" OR mode_ = "BRAKE" {
             LOCK STEERING TO _surfaceRetrograde().
+        } ELSE IF mode_ = "DROP" {
+            LOCK STEERING TO _assistSteering(hVel, hSpeed).
         } ELSE IF landingTarget["FOUND"] AND radarAlt < LANDING_CFG["GUIDANCE_ALT"] {
             LOCK STEERING TO _assistTargetSteering(landingTarget, hVel, hSpeed).
         } ELSE {
@@ -361,7 +367,7 @@ LOCAL FUNCTION _assistSurfaceRelease {
 
         LOCAL maxAcc IS _safeMaxAcc().
         IF maxAcc > 0 {
-            IF mode_ = "COAST" {
+            IF mode_ = "COAST" OR mode_ = "DROP" {
                 LOCK THROTTLE TO 0.
             } ELSE IF mode_ = "BRAKE" {
                 LOCAL brakeThrottle IS LANDING_CFG["ASSIST_SURFACE_BRAKE_THROTTLE"].
@@ -773,6 +779,27 @@ LOCAL FUNCTION _assistSurfaceBrakeReady {
         }
     }
     RETURN radarAlt <= brakeDist.
+}
+
+LOCAL FUNCTION _assistSurfaceFinalBrakeReady {
+    PARAMETER radarAlt.
+    PARAMETER vSpeed.
+
+    IF radarAlt < LANDING_CFG["ASSIST_SURFACE_DROP_ALT"] { RETURN TRUE. }
+    IF -vSpeed >= LANDING_CFG["ASSIST_SURFACE_DROP_MAX_VSPEED"] { RETURN TRUE. }
+    LOCAL maxAcc IS _safeMaxAcc().
+    IF maxAcc <= 0 { RETURN FALSE. }
+    LOCAL netAcc IS MAX(0.1, maxAcc - _localGravity()).
+    LOCAL verticalAlt IS ((MAX(0, -vSpeed)^2) / (2 * netAcc))
+        * LANDING_CFG["ASSIST_SURFACE_BRAKE_FACTOR"]
+        + LANDING_CFG["ASSIST_SURFACE_BRAKE_MARGIN"].
+    IF ADDONS:KE:AVAILABLE {
+        LOCAL countdown IS ADDONS:KE:SUICIDEBURNCOUNTDOWN.
+        IF countdown <= LANDING_CFG["ASSIST_SURFACE_BRAKE_LEAD"] {
+            RETURN TRUE.
+        }
+    }
+    RETURN radarAlt <= verticalAlt.
 }
 
 LOCAL FUNCTION _landingOvershootTarget {
