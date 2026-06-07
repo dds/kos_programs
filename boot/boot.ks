@@ -105,9 +105,7 @@ IF vehicleScript = "" {
 mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 IF vehicleScript = "" {
     PRINT "  !! SCRIPT NOT FOUND: " + vehicleName.
-    PRINT "  SYSTEM HALTED.".
     mLogError("No script found for " + vehicleName).
-    WAIT UNTIL FALSE.
 }
 
 IF vehicleScript:CONTAINS("/") {
@@ -118,13 +116,18 @@ IF vehicleScript:CONTAINS("/") {
 IF HAS_LINK {
     PRINT "  SYNC Zombie ........".
     IF EXISTS("0:/cmd/zombie.ks") { COPYPATH("0:/cmd/zombie.ks", "1:/zombie"). }
-    PRINT "  SYNC " + vehicleScript + " ....... ".
-    bootSyncScript(vehicleScript, HAS_LINK).
-    bootMissionConfig(vehicleName, HAS_LINK).
-    bootPruneMissionConfigs(vehicleName).
+    IF vehicleScript <> "" {
+        PRINT "  SYNC " + vehicleScript + " ....... ".
+        bootSyncScript(vehicleScript, HAS_LINK).
+        bootMissionConfig(vehicleName, HAS_LINK).
+        bootPruneMissionConfigs(vehicleName).
+    }
 }
 
-bootRunScript(vehicleScript).
+
+IF vehicleScript <> "" {
+    bootRunScript(vehicleScript).
+}
 
 IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
