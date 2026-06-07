@@ -90,7 +90,7 @@ UNTIL iter >= 4 OR (ABS(SHIP:PERIAPSIS - targetAlt) <= tol
     SET ok TO executeManeuver().
     IF NOT ok {
         mLogError("Set orbit burn failed; holding for manual review.").
-        RETURN.
+        BREAK.
     }
     SET iter TO iter + 1.
 }
