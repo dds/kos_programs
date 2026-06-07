@@ -39,7 +39,7 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_SURFACE_HBRAKE_FACTOR", 1.1,
     "ASSIST_SURFACE_BRAKE_RELEASE_HSPEED", 5.0,
     "ASSIST_SURFACE_BRAKE_AOA", 60.0,
-    "ASSIST_SURFACE_DROP_ALT", 900.0,
+    "ASSIST_SURFACE_DROP_ALT", 600.0,
     "ASSIST_SURFACE_DROP_MAX_VSPEED", 120.0,
     "ASSIST_SURFACE_FINAL_ALT", 250.0,
     "ASSIST_SURFACE_FINAL_MAX_SPEED", 4.0,
@@ -392,20 +392,28 @@ LOCAL FUNCTION _assistSurfaceRelease {
                 LOCAL targetVb IS -MAX(
                     LANDING_CFG["ASSIST_SURFACE_FINAL_MAX_SPEED"],
                     MIN(LANDING_CFG["ASSIST_DESCENT_SPEED"], radarAlt * 0.08)).
-                LOCAL gravB IS _localGravity().
-                LOCAL desiredB IS (targetVb - vSpeed) * 0.45.
-                LOCAL throttB IS (gravB + desiredB) / maxAcc.
-                LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], throttB)).
+                IF vSpeed > targetVb + 1 {
+                    LOCK THROTTLE TO 0.
+                } ELSE {
+                    LOCAL gravB IS _localGravity().
+                    LOCAL desiredB IS (targetVb - vSpeed) * 0.45.
+                    LOCAL throttB IS (gravB + desiredB) / maxAcc.
+                    LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], throttB)).
+                }
             } ELSE {
                 LOCAL targetV IS -MAX(
                     LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"],
                     MIN(LANDING_CFG["ASSIST_SURFACE_FINAL_MAX_SPEED"], radarAlt * 0.05)).
                 IF radarAlt < 25 { SET targetV TO -LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"]. }
 
-                LOCAL grav IS _localGravity().
-                LOCAL desiredAcc IS (targetV - vSpeed) * 0.6.
-                LOCAL thrott IS (grav + desiredAcc) / maxAcc.
-                LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], thrott)).
+                IF vSpeed > targetV + 0.5 {
+                    LOCK THROTTLE TO 0.
+                } ELSE {
+                    LOCAL grav IS _localGravity().
+                    LOCAL desiredAcc IS (targetV - vSpeed) * 0.6.
+                    LOCAL thrott IS (grav + desiredAcc) / maxAcc.
+                    LOCK THROTTLE TO MAX(0, MIN(LANDING_CFG["ASSIST_THROTTLE"], thrott)).
+                }
             }
         }
 
@@ -811,12 +819,6 @@ LOCAL FUNCTION _assistSurfaceFinalBrakeReady {
     LOCAL verticalAlt IS ((MAX(0, -vSpeed)^2) / (2 * netAcc))
         * LANDING_CFG["ASSIST_SURFACE_BRAKE_FACTOR"]
         + LANDING_CFG["ASSIST_SURFACE_BRAKE_MARGIN"].
-    IF ADDONS:KE:AVAILABLE {
-        LOCAL countdown IS ADDONS:KE:SUICIDEBURNCOUNTDOWN.
-        IF countdown <= LANDING_CFG["ASSIST_SURFACE_BRAKE_LEAD"] {
-            RETURN TRUE.
-        }
-    }
     RETURN radarAlt <= verticalAlt.
 }
 
