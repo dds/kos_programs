@@ -15,7 +15,7 @@ Base FR3 libraries:
 - `xfer` - rendezvous/transfer/coast/capture/orbit finalization phase wrappers.
 - `lib_navigation` - phase angles, true anomaly helpers, AN/DN helpers.
 - `countdown` - launch countdown.
-- `maneuver` - maneuver execution, transfer planning, capture, MCC, rendezvous, asteroid intercept.
+- `maneuver` - maneuver execution, local body transfer, capture, MCC, patch targeting.
 - `inclination` - inclination change and target inclination resolution.
 - `orbit` - orbit summaries and SOI waits.
 - `targeting` - Trajectories-powered targeted deorbit.
@@ -28,10 +28,12 @@ Profile-only FR3 libraries:
 - `payload_ops` - loaded for probe, relay, SCANsat, or SCISAT payloads.
 - `science` - loaded only for `SCANSAT`/`SCISAT` payloads.
 - `lambert` - loaded only when the target is not Mun.
+- `maneuver_intersystem` - loaded only when the target is not Mun.
+- `maneuver_rendezvous` - loaded only for rendezvous or asteroid profiles.
 
 ## Biggest Files
 
-- `lib/maneuver.ks` - 83 KB. Primary split candidate.
+- `lib/maneuver.ks` - 59 KB after splitting intersystem/rendezvous code. Still the primary split candidate.
 - `lib/landing.ks` - 19 KB. Split candidate if rover/lander roles diverge.
 - `lib/xfer.ks` - 18 KB. Mostly phase wrappers; can shrink after `maneuver.ks` is split.
 - `lib/targeting.ks` - 12 KB. Shared by probes and landing.
@@ -41,23 +43,17 @@ Profile-only FR3 libraries:
 
 ## `maneuver.ks` Sections
 
-- Lines 12-180: maneuver execution, circularize, encounter helpers.
-- Lines 209-702: body transfer planning, local transfer, interplanetary transfer, LAN scan.
-- Lines 719-1191: vessel rendezvous, asteroid intercept, Lambert intercept refinement.
-- Lines 1208-1657: coupled PE/INC/LAN/AoP patch targeting helpers.
-- Lines 1678-1900: generic Newton patch targeting.
-- Lines 1901-1961: capture, raise Pe, AoP helpers.
-- Lines 1973-2191: mid-course correction and execution helpers.
+- `lib/maneuver.ks`: maneuver execution, local Mun/Minmus transfer, LAN scan, closest approach search, patch targeting, capture helpers, MCC.
+- `lib/maneuver_intersystem.ks`: interplanetary Lambert body transfer.
+- `lib/maneuver_rendezvous.ks`: vessel rendezvous and asteroid Lambert intercept.
 
 ## Suggested Slices
 
 - `maneuver_exec.ks`: `executeManeuver` and burn execution helpers.
 - `maneuver_orbit.ks`: circularize, capture, raise Pe, AoP helpers.
 - `maneuver_transfer_local.ks`: Mun/Minmus transfer and LAN scan.
-- `maneuver_transfer_lambert.ks`: interplanetary transfer and `lambert.ks` dependency.
 - `maneuver_patch_target.ks`: coupled patch element targeting and Newton targeting.
 - `maneuver_mcc.ks`: `phaseMidCourse` and MCC helpers.
-- `maneuver_rendezvous.ks`: rendezvous and asteroid intercept.
 
 ## Current FR3 Mun Rover Requirement
 

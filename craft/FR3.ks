@@ -93,6 +93,11 @@ LOCAL FUNCTION _fr3Libs {
     }
     IF stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
         libs:ADD("lambert").
+        libs:ADD("maneuver_intersystem").
+    }
+    IF CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET") {
+        IF NOT libs:CONTAINS("lambert") { libs:ADD("lambert"). }
+        libs:ADD("maneuver_rendezvous").
     }
     IF _bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT") {
         libs:ADD("science").
