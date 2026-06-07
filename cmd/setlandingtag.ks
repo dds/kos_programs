@@ -1,7 +1,7 @@
 // cmd/setlandingtag.ks - Set landing assist decoupler tag and phase.
-// Usage: RUNPATH("0:/cmd/setlandingtag.ks", "probe_decoupler").
+// Usage: RUNPATH("0:/cmd/setlandingtag.ks", "prober_decoupler").
 
-PARAMETER tagName IS "probe_decoupler".
+PARAMETER tagName IS "prober_decoupler".
 PARAMETER phaseName IS "LAND_DEORBIT".
 
 LOCAL FUNCTION _loadState {

@@ -43,6 +43,7 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_SURFACE_RELEASE_VSPEED", 1.5,
     "ASSIST_SURFACE_RELEASE_SETTLE", 0.5,
     "ASSIST_SURFACE_POWERED_ROVER", FALSE,
+    "ASSIST_SURFACE_RELEASE_AFTER_TOUCHDOWN", FALSE,
     "ASSIST_SURFACE_SETTLE_TIME", 5.0,
     "ASSIST_SURFACE_TIPOVER", TRUE,
     "ASSIST_SURFACE_TIP_TIME", 4.0,
@@ -268,11 +269,12 @@ LOCAL FUNCTION _assistSurfaceRelease {
             SET landingTarget["SOURCE"] TO "site-grid".
         }
     }
-    mLogWarn("STATS assist-surface setup release=near-touchdown finalV="
+    mLogWarn("STATS assist-surface setup release=surface finalV="
         + LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"]
         + " releaseAlt=" + LANDING_CFG["ASSIST_SURFACE_RELEASE_ALT"]
         + " releaseH=" + LANDING_CFG["ASSIST_SURFACE_RELEASE_HSPEED"]
-        + " releaseV=" + LANDING_CFG["ASSIST_SURFACE_RELEASE_VSPEED"]).
+        + " releaseV=" + LANDING_CFG["ASSIST_SURFACE_RELEASE_VSPEED"]
+        + " afterTouchdown=" + LANDING_CFG["ASSIST_SURFACE_RELEASE_AFTER_TOUCHDOWN"]).
     IF landingTarget["FOUND"] {
         mLogWarn("STATS assist-surface target source=" + landingTarget["SOURCE"]
             + " lat=" + ROUND(landingTarget["LAT"],4)
@@ -281,8 +283,8 @@ LOCAL FUNCTION _assistSurfaceRelease {
         mLogWarn("STATS assist-surface target status=missing").
     }
     IF decoupler <> 0 {
-        mLog("Emergency carrier descent: release rover just above touchdown.").
-        HUDTEXT("Carrier descent to rover handoff", 5, 2, 15, YELLOW, FALSE).
+        mLog("Emergency carrier descent: soft-touch first, then rover handoff.").
+        HUDTEXT("Carrier landing before rover handoff", 5, 2, 15, YELLOW, FALSE).
     } ELSE {
         mLog("Emergency surface assist: landing whole stack on second stage.").
         HUDTEXT("Emergency carrier landing", 5, 2, 15, YELLOW, FALSE).
@@ -334,6 +336,7 @@ LOCAL FUNCTION _assistSurfaceRelease {
         }
 
         IF decoupler <> 0
+                AND NOT LANDING_CFG["ASSIST_SURFACE_RELEASE_AFTER_TOUCHDOWN"]
                 AND _assistSurfaceHandoffReady(radarAlt, hSpeed, vSpeed) {
             LOCK THROTTLE TO 0.
             mLogWarn("STATS assist-surface handoff alt=" + ROUND(radarAlt,2)
@@ -423,10 +426,23 @@ LOCAL FUNCTION _assistSurfaceRelease {
         + " roll=" + ROUND(SHIP:FACING:ROLL,1)
         + " pitch=" + ROUND(SHIP:FACING:PITCH,1)).
 
-    IF decoupler = 0 AND LANDING_CFG["ASSIST_SURFACE_TIPOVER"] {
-        mLog("Tipping carrier before rover release.").
+    IF LANDING_CFG["ASSIST_SURFACE_TIPOVER"] {
+        mLog("Beginning carrier tip before rover release.").
         LOCK STEERING TO SHIP:FACING:RIGHTVECTOR.
         WAIT LANDING_CFG["ASSIST_SURFACE_TIP_TIME"].
+    }
+
+    IF decoupler <> 0 {
+        mLogWarn("STATS assist-surface handoff surface=true roll="
+            + ROUND(SHIP:FACING:ROLL,1)
+            + " pitch=" + ROUND(SHIP:FACING:PITCH,1)).
+        mLog("Rover handoff: decoupling after carrier touchdown.").
+        _decouplePart(decoupler).
+        WAIT LANDING_CFG["ASSIST_SURFACE_RELEASE_SETTLE"].
+        IF LANDING_CFG["ASSIST_SURFACE_POWERED_ROVER"] {
+            RETURN _assistRoverFinalTouchdown().
+        }
+        RETURN _assistRoverDropTouchdown().
     }
 
     mLogWarn("STATS assist-surface release status=skipped reason=no-decoupler").
