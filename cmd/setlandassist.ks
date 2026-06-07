@@ -27,6 +27,7 @@ _loadState().
 stateSet("phase", "LAND_ASSIST").
 stateSet("reload_required", "false").
 stateSet("lib_band", "LAND_ASSIST").
+stateSet("mission_cfg_LANDING_ASSIST_DECOUPLER_TAG", tagName).
 _cfg("SEQUENCE", "LAND_DEORBIT,LAND_ASSIST,ROVER,DONE").
 _cfg("LANDING_ASSIST_DECOUPLER_TAG", tagName).
 _cfg("LANDING_ASSIST_RELEASE_ON_SURFACE", "1").
