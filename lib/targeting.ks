@@ -7,7 +7,56 @@ GLOBAL FUNCTION targetedDeorbit {
     IF CFG:HASKEY("PROBE_ENTRY_PE") { SET entryPe TO CFG["PROBE_ENTRY_PE"]. }
     LOCAL tolerance IS 5000.
     IF CFG:HASKEY("PROBE_TARGET_TOL") { SET tolerance TO CFG["PROBE_TARGET_TOL"]. }
-    targetedDeorbitAt(CFG["PROBE_TARGET_LAT"], CFG["PROBE_TARGET_LNG"], entryPe, tolerance).
+
+    LOCAL targetInfo IS targetResolveDeorbitTarget().
+    IF NOT targetInfo["FOUND"] {
+        mLogError("No deorbit target set. Configure PROBE_TARGET_LAT/LNG or select a waypoint.").
+        RETURN.
+    }
+
+    mLog("Deorbit target source: " + targetInfo["SOURCE"] + ".").
+    targetedDeorbitAt(targetInfo["LAT"], targetInfo["LNG"], entryPe, tolerance).
+}
+
+GLOBAL FUNCTION targetResolveDeorbitTarget {
+    LOCAL result IS LEXICON(
+        "FOUND", FALSE,
+        "LAT", 0,
+        "LNG", 0,
+        "SOURCE", "none"
+    ).
+
+    IF CFG:HASKEY("PROBE_TARGET_WAYPOINT") AND CFG["PROBE_TARGET_WAYPOINT"] <> "" {
+        LOCAL namedWp IS _targetWaypointNamed(CFG["PROBE_TARGET_WAYPOINT"]).
+        IF namedWp <> 0 {
+            SET result["FOUND"] TO TRUE.
+            SET result["LAT"] TO namedWp:GEOPOSITION:LAT.
+            SET result["LNG"] TO namedWp:GEOPOSITION:LNG.
+            SET result["SOURCE"] TO "waypoint:" + namedWp:NAME.
+            RETURN result.
+        }
+        mLogWarn("Probe waypoint '" + CFG["PROBE_TARGET_WAYPOINT"]
+            + "' not found on " + SHIP:BODY:NAME + ".").
+    }
+
+    LOCAL selectedWp IS _targetSelectedWaypoint().
+    IF selectedWp <> 0 {
+        SET result["FOUND"] TO TRUE.
+        SET result["LAT"] TO selectedWp:GEOPOSITION:LAT.
+        SET result["LNG"] TO selectedWp:GEOPOSITION:LNG.
+        SET result["SOURCE"] TO "selected waypoint:" + selectedWp:NAME.
+        RETURN result.
+    }
+
+    IF CFG:HASKEY("PROBE_TARGET_LAT") AND CFG:HASKEY("PROBE_TARGET_LNG") {
+        SET result["FOUND"] TO TRUE.
+        SET result["LAT"] TO CFG["PROBE_TARGET_LAT"].
+        SET result["LNG"] TO CFG["PROBE_TARGET_LNG"].
+        SET result["SOURCE"] TO "CFG PROBE_TARGET_LAT/LNG".
+        RETURN result.
+    }
+
+    RETURN result.
 }
 
 GLOBAL FUNCTION targetedDeorbitAt {
@@ -281,6 +330,32 @@ LOCAL FUNCTION _geoDistance {
                + COS(lat1) * COS(lat2) * SIN(dLng/2)^2.
     LOCAL c    IS 2 * ARCSIN(MIN(1, SQRT(a))).
     RETURN oRad * c * CONSTANT:PI / 180.
+}
+
+LOCAL FUNCTION _targetWaypointNamed {
+    PARAMETER waypointName.
+    LOCAL allWps IS ALLWAYPOINTS().
+    LOCAL targetName IS waypointName:TOUPPER.
+    FOR wp IN allWps {
+        IF wp:BODY:NAME = SHIP:BODY:NAME {
+            IF wp:NAME:TOUPPER = targetName {
+                RETURN wp.
+            }
+        }
+    }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _targetSelectedWaypoint {
+    LOCAL allWps IS ALLWAYPOINTS().
+    FOR wp IN allWps {
+        IF wp:ISSELECTED {
+            IF wp:BODY:NAME = SHIP:BODY:NAME {
+                RETURN wp.
+            }
+        }
+    }
+    RETURN 0.
 }
 
 GLOBAL FUNCTION targetReachable {
