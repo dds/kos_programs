@@ -8,6 +8,7 @@ GLOBAL FUNCTION phaseLandDeorbit {
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
         + " targetPeKm=" + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1)).
+    _confirmLandingTarget().
     landingTargetedDeorbit().
     mLogWarn("STATS land-deorbit phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
@@ -15,10 +16,33 @@ GLOBAL FUNCTION phaseLandDeorbit {
     nextPhase(fr3Seq).
 }
 
+LOCAL FUNCTION _confirmLandingTarget {
+    LOCAL targetInfo IS landingResolveTarget().
+    PRINT " ".
+    PRINT "  LANDING TARGET CHECK".
+    IF targetInfo["FOUND"] {
+        PRINT "  Source: " + targetInfo["SOURCE"].
+        PRINT "  Lat/Lng: " + ROUND(targetInfo["LAT"],4)
+            + ", " + ROUND(targetInfo["LNG"],4).
+        mLogWarn("STATS landing target confirm source=" + targetInfo["SOURCE"]
+            + " lat=" + ROUND(targetInfo["LAT"],4)
+            + " lng=" + ROUND(targetInfo["LNG"],4)).
+    } ELSE {
+        PRINT "  No selected/named landing waypoint found.".
+        PRINT "  Select a waypoint in map/navigation, then reboot/resume.".
+        mLogWarn("STATS landing target confirm status=missing").
+        WAIT UNTIL FALSE.
+    }
+    PRINT "  Press any key to plan targeted deorbit.".
+    WAIT UNTIL TERMINAL:INPUT:HASCHAR.
+    TERMINAL:INPUT:GETCHAR().
+}
+
 GLOBAL FUNCTION phaseLandAssist {
     mLogWarn("STATS land-assist phase setup alt=" + ROUND(ALT:RADAR,1)
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " releaseSurface=" + LANDING_CFG["ASSIST_RELEASE_ON_SURFACE"]).
+    IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
     LOCAL assistOk IS landingAssistStage().
     mLogWarn("STATS land-assist phase result ok=" + assistOk
         + " alt=" + ROUND(ALT:RADAR,1)
@@ -47,6 +71,9 @@ GLOBAL FUNCTION phaseLand {
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " v=" + ROUND(SHIP:VERTICALSPEED,1)
         + " status=" + SHIP:STATUS).
+
+    IF _redirectOrbitalLandingPhase("LAND") { RETURN. }
+
     landingExecute().
     mLogWarn("STATS land phase result alt=" + ROUND(ALT:RADAR,1)
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
@@ -65,6 +92,21 @@ GLOBAL FUNCTION phaseLand {
         WAIT UNTIL FALSE.
     }
     nextPhase(fr3Seq).
+}
+
+LOCAL FUNCTION _redirectOrbitalLandingPhase {
+    PARAMETER phaseName.
+    IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "SUB_ORBITAL")
+            AND SHIP:PERIAPSIS > LANDING_CFG["DEORBIT_PE"] {
+        mLogWarn(phaseName + " requested while still in orbit; returning to LAND_DEORBIT.").
+        stateSet("phase", "LAND_DEORBIT").
+        PRINT " ".
+        PRINT "  LANDING TARGET CHECK".
+        PRINT "  Select the landing waypoint in map/navigation.".
+        PRINT "  Phase reset to LAND_DEORBIT. Reboot/resume when ready.".
+        WAIT UNTIL FALSE.
+    }
+    RETURN FALSE.
 }
 
 GLOBAL FUNCTION phaseRover {
