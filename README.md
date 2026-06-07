@@ -90,9 +90,11 @@ FR2.ks declares `GLOBAL LIBS IS LIST(...)` to tell boot which libs to load. New 
 
 ### FR3
 
-Next-gen rocket. Leaner than FR2 — no probe/molniya phases. Standard ascent + transfer + orbit phases with stubs for lander payloads.
+Next-gen rocket. Standard ascent + transfer + orbit phases, plus combined mapper/rover Mun missions.
 
-**Payload types:** `RELAY`, `SCANSAT`, `SCISAT`, `LANDER`
+**Payload types:** `RELAY`, `SCANSAT`, `SCISAT`, `LANDER`, `ASSISTLANDER`, `ROVER`, `ASSISTROVER`, `PROBE`, `CRASHPROBE`
+
+For a Mun mapper + rover run, put `SCANSAT` before the landing payload in the ship name. Example: `FR3-MUN-SCANSAT-ASSISTROVER-01`. This deploys the SCANsat in a 250 km polar orbit, then continues to targeted rover landing using explicit landing coordinates, a named waypoint, or the selected map waypoint.
 
 ### FJ1A
 
@@ -461,5 +463,7 @@ The flight computer finds parts by tag name, not by index:
 | `main_fairing` | Procedural fairing to jettison |
 | `probe_decoupler` | Decoupler between relay and impactor |
 | `probe_chute` | Parachute on probe payload |
+| `scansat_decoupler` | Decoupler between carrier/lander and SCANsat mapper |
+| `landing_assist_decoupler` | Decoupler between lander and expendable landing-assist stage |
 | `chute_main` | Abort parachute |
 | `relay_1`, `relay_2`, ... | Individual relay decouplers |

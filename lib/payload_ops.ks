@@ -89,6 +89,38 @@ GLOBAL FUNCTION phaseRelayOps {
     nextPhase(launchSeq).
 }
 
+GLOBAL FUNCTION phaseScanSatOps {
+    UNLOCK STEERING.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    SET SAS TO TRUE.
+
+    orbitSummary().
+    mLog("SCANsat payload on station at " + MISSION["target"] + ".").
+    scienceStartScanners().
+    WAIT 1.
+    scienceScanStatus().
+
+    LOCAL tag IS "scansat_decoupler".
+    IF CFG:HASKEY("SCANSAT_DECOUPLER_TAG") { SET tag TO CFG["SCANSAT_DECOUPLER_TAG"]. }
+    IF tag <> "" {
+        LOCAL released IS _releaseTaggedPayload(tag, "SCANsat").
+        IF NOT released {
+            mLogError("SCANsat release failed — tag '" + tag
+                + "' missing or not decouplable.").
+            HUDTEXT("ERROR: SCANsat not released", 8, 2, 16, RED, FALSE).
+            RETURN.
+        }
+    } ELSE {
+        mLogWarn("SCANSAT_DECOUPLER_TAG blank — leaving mapper attached.").
+    }
+
+    stateSet("scansat_released_time", TIME:SECONDS).
+    mLog("SCANsat deployed. Continuing primary mission.").
+    HUDTEXT("SCANsat deployed", 5, 2, 16, GREEN, FALSE).
+    nextPhase(launchSeq).
+}
+
 GLOBAL FUNCTION phaseLandDeorbit {
     landingTargetedDeorbit().
     nextPhase(launchSeq).
@@ -102,4 +134,26 @@ GLOBAL FUNCTION phaseLandAssist {
 GLOBAL FUNCTION phaseLand {
     landingExecute().
     nextPhase(launchSeq).
+}
+
+LOCAL FUNCTION _releaseTaggedPayload {
+    PARAMETER tagName.
+    PARAMETER label.
+
+    LOCAL parts IS SHIP:PARTSTAGGED(tagName).
+    IF parts:LENGTH = 0 { RETURN FALSE. }
+
+    LOCAL dc IS parts[0].
+    IF dc:HASMODULE("ModuleDecouple") {
+        dc:GETMODULE("ModuleDecouple"):DOEVENT("Decouple").
+    } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
+        dc:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
+    } ELSE {
+        RETURN FALSE.
+    }
+
+    WAIT 0.5.
+    mLog(label + " released via '" + tagName + "'. Remaining mass: "
+        + ROUND(SHIP:MASS,2) + "t.").
+    RETURN TRUE.
 }
