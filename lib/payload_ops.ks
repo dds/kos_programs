@@ -129,6 +129,12 @@ GLOBAL FUNCTION phaseScanSatOps {
     stateSet("scansat_released_time", TIME:SECONDS).
     mLog("SCANsat deployed. Continuing primary mission.").
     HUDTEXT("SCANsat deployed", 5, 2, 16, GREEN, FALSE).
+
+    IF CFG:HASKEY("SCANSAT_DISPOSE_CARRIER")
+            AND CFG["SCANSAT_DISPOSE_CARRIER"] > 0 {
+        _disposeScanSatCarrier().
+    }
+
     nextPhase(_payloadSeq()).
 }
 
@@ -167,4 +173,65 @@ LOCAL FUNCTION _releaseTaggedPayload {
     mLog(label + " released via '" + tagName + "'. Remaining mass: "
         + ROUND(SHIP:MASS,2) + "t.").
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _disposeScanSatCarrier {
+    LOCAL targetPe IS 0.
+    IF CFG:HASKEY("SCANSAT_DISPOSE_PE") {
+        SET targetPe TO CFG["SCANSAT_DISPOSE_PE"].
+    }
+    LOCAL maxTime IS 600.
+    IF CFG:HASKEY("SCANSAT_DISPOSE_MAX_TIME") {
+        SET maxTime TO CFG["SCANSAT_DISPOSE_MAX_TIME"].
+    }
+
+    WAIT 1.
+    mLogWarn("STATS scansat-dispose setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
+
+    IF SHIP:AVAILABLETHRUST <= 0 {
+        mLogWarn("STATS scansat-dispose result status=no-thrust PeKm="
+            + ROUND(SHIP:PERIAPSIS/1000,1)).
+        RETURN.
+    }
+
+    SET SAS TO FALSE.
+    LOCK STEERING TO SHIP:RETROGRADE.
+    LOCAL startT IS TIME:SECONDS.
+    LOCAL aligned IS FALSE.
+    UNTIL aligned OR TIME:SECONDS - startT > 45 {
+        IF VANG(SHIP:FACING:FOREVECTOR, SHIP:RETROGRADE:FOREVECTOR) < 5 {
+            SET aligned TO TRUE.
+        }
+        WAIT 0.1.
+    }
+
+    IF NOT aligned {
+        mLogWarn("SCANsat carrier disposal starting with poor retrograde alignment.").
+    }
+
+    LOCK THROTTLE TO 1.
+    UNTIL SHIP:PERIAPSIS < targetPe
+            OR SHIP:AVAILABLETHRUST <= 0
+            OR TIME:SECONDS - startT > maxTime {
+        LOCK STEERING TO SHIP:RETROGRADE.
+        WAIT 0.1.
+    }
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+
+    LOCAL status IS "complete".
+    IF SHIP:PERIAPSIS >= targetPe AND SHIP:AVAILABLETHRUST <= 0 {
+        SET status TO "out-of-thrust".
+    } ELSE IF SHIP:PERIAPSIS >= targetPe {
+        SET status TO "timeout".
+    }
+    mLogWarn("STATS scansat-dispose result status=" + status
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " duration=" + ROUND(TIME:SECONDS - startT,1)).
 }

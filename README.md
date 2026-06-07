@@ -132,6 +132,8 @@ When `LANDING_SITE_SCAN_ENABLE = 1`, targeted deorbit samples SCANsat `ELEVATION
 
 For a fast-follow Mun mapper, use `mission_id = mun_scansat_polar` on either FR2 or FR3. The matching profile under `missions/FR2/` or `missions/FR3/` targets a 70 km polar Mun orbit and deploys the payload tagged `scansat_decoupler`.
 
+The Mun mapper profiles set `SCANSAT_DISPOSE_CARRIER = 1`: after SCANsat release, the carrier locks retrograde and burns until it is out of usable thrust or its projected periapsis is below the surface.
+
 ### FJ1A
 
 Juno-powered trainer jet. Low speed (cruise ~80 m/s), broad wings. Same phase structure as FJ4B but with lower airspeed thresholds appropriate for the Juno engine. Supports optional SCIENCE payload for biome collection flights.
