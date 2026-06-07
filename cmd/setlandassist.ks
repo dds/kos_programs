@@ -1,7 +1,7 @@
 // cmd/setlandassist.ks - Force emergency LAND_ASSIST config for live rover.
 // Usage: RUNPATH("0:/cmd/setlandassist.ks").
 
-PARAMETER tagName IS "prober_decoupler".
+PARAMETER tagName IS "probe_decoupler".
 
 LOCAL FUNCTION _loadState {
     IF EXISTS("1:/lib/state.ksm") {
