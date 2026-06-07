@@ -22,10 +22,15 @@ IF stateGet("scansat_released_time", "") = "" {
 }
 stateSet("scansat_staged", "true").
 stateSet("scansat_recovered", "false").
+stateSet("mission_cfg_TARGET_PE", "70000").
+stateSet("mission_cfg_TARGET_AP", "70000").
+stateSet("mission_cfg_SCANSAT_RECOVERY_PE", "70000").
+stateSet("mission_cfg_SCANSAT_RECOVERY_AP", "70000").
 stateSet("reload_required", "false").
 stateSet("phase", "SCANSAT_OPS").
 
 PRINT "SCANsat state forced to SCANSAT_OPS.".
+PRINT "Recovery target forced to 70 x 70 km.".
 PRINT "Throttle off, nodes cleared. Rebooting.".
 WAIT 1.
 REBOOT.
