@@ -69,7 +69,8 @@ GLOBAL FUNCTION landingExecute {
 
     WHEN (ABS(SHIP:FACING:PITCH) > LANDING_CFG["MAX_TILT"]
             OR ABS(SHIP:FACING:ROLL) > LANDING_CFG["MAX_TILT"])
-            AND SHIP:ALTITUDE < 50000 THEN {
+            AND ALT:RADAR < LANDING_CFG["GUIDANCE_ALT"]
+            AND SHIP:STATUS <> "ORBITING" THEN {
         IF NOT landingAbortFlag {
             mLogWarn("Excessive tilt — auto abort.").
             landingAbort().

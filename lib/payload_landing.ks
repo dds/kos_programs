@@ -48,6 +48,15 @@ GLOBAL FUNCTION phaseLandAssist {
         + " alt=" + ROUND(ALT:RADAR,1)
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " status=" + SHIP:STATUS).
+    IF NOT assistOk {
+        mLogError("Landing assist failed; holding current phase for manual review.").
+        stateSet("phase", "LAND_ASSIST").
+        LOCK THROTTLE TO 0.
+        PRINT " ".
+        PRINT "  LANDING ASSIST FAILED".
+        PRINT "  Review target, decoupler tag, attitude, fuel, and phase before reboot.".
+        WAIT UNTIL FALSE.
+    }
     IF CFG:HASKEY("RELOAD_AFTER_LAND_ASSIST") AND CFG["RELOAD_AFTER_LAND_ASSIST"] > 0 {
         nextPhase(fr3Seq).
         LOCAL nextPh IS stateGet("phase", "").

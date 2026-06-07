@@ -164,9 +164,17 @@ LOCAL FUNCTION _assistSurfaceRelease {
     mLogWarn("STATS assist-surface setup release=surface finalV="
         + LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"]
         + " settle=" + LANDING_CFG["ASSIST_SURFACE_SETTLE_TIME"]).
+    IF landingTarget["FOUND"] {
+        mLogWarn("STATS assist-surface target source=" + landingTarget["SOURCE"]
+            + " lat=" + ROUND(landingTarget["LAT"],4)
+            + " lng=" + ROUND(landingTarget["LNG"],4)).
+    } ELSE {
+        mLogWarn("STATS assist-surface target status=missing").
+    }
     mLog("Emergency surface assist: landing whole stack on second stage.").
     HUDTEXT("Emergency carrier landing", 5, 2, 15, YELLOW, FALSE).
 
+    LOCAL nextStatsAlt IS 5000.
     UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" OR landingAbortFlag {
         LOCAL hVel IS _horizontalSurfaceVelocity().
         LOCAL hSpeed IS hVel:MAG.
@@ -198,10 +206,41 @@ LOCAL FUNCTION _assistSurfaceRelease {
             + "m h:" + ROUND(hSpeed,2)
             + " v:" + ROUND(vSpeed,2),
             1, 2, 13, YELLOW, FALSE).
+        IF radarAlt < nextStatsAlt {
+            LOCAL targetDist IS -1.
+            IF landingTarget["FOUND"] {
+                SET targetDist TO _assistGeoDistance(
+                    SHIP:GEOPOSITION:LAT,
+                    SHIP:GEOPOSITION:LNG,
+                    landingTarget["LAT"],
+                    landingTarget["LNG"]).
+            }
+            mLogWarn("STATS assist-surface descent alt=" + ROUND(radarAlt,1)
+                + " h=" + ROUND(hSpeed,2)
+                + " v=" + ROUND(vSpeed,2)
+                + " targetDistM=" + ROUND(targetDist,0)
+                + " maxAcc=" + ROUND(_safeMaxAcc(),2)).
+            SET nextStatsAlt TO nextStatsAlt / 2.
+            IF nextStatsAlt < 100 { SET nextStatsAlt TO 100. }
+        }
         WAIT 0.05.
     }
 
     LOCK THROTTLE TO 0.
+    IF landingAbortFlag {
+        mLogError("Surface assist aborted before touchdown.").
+        UNLOCK THROTTLE.
+        UNLOCK STEERING.
+        SET SAS TO TRUE.
+        RETURN FALSE.
+    }
+    IF NOT (SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED") {
+        mLogError("Surface assist ended without landed status: " + SHIP:STATUS + ".").
+        UNLOCK THROTTLE.
+        UNLOCK STEERING.
+        SET SAS TO TRUE.
+        RETURN FALSE.
+    }
     WAIT LANDING_CFG["ASSIST_SURFACE_SETTLE_TIME"].
     mLog("Carrier touchdown: status=" + SHIP:STATUS
         + " h=" + ROUND(_horizontalSurfaceVelocity():MAG,2)
