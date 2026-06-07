@@ -30,6 +30,8 @@ GLOBAL CFG IS LEXICON(
     "SCANSAT_DECOUPLER_TAG", "scansat_decoupler"
 ).
 
+GLOBAL fr3Seq IS LIST().
+
 LOCAL FUNCTION _cfgSet {
     PARAMETER key.
     PARAMETER value.
@@ -66,7 +68,7 @@ LOCAL FUNCTION _applyMissionState {
         "LANDING_DEORBIT_PE", "LANDING_TARGET_TOLERANCE",
         "LANDING_GUIDANCE_ALT", "LANDING_ASSIST_RELEASE_ALT",
         "LANDING_ASSIST_RELEASE_HSPEED", "LANDING_ASSIST_RELEASE_VSPEED",
-        "RELOAD_AFTER_LAND_ASSIST", "RELOAD_AFTER_LAND"
+        "RELOAD_AFTER_PARK", "RELOAD_AFTER_LAND_ASSIST", "RELOAD_AFTER_LAND"
     ) {
         _cfgFromState(key, TRUE).
     }
@@ -128,42 +130,96 @@ LOCAL FUNCTION _bootHasPayload {
     RETURN FALSE.
 }
 
-LOCAL FUNCTION _fr3Libs {
-    LOCAL phase IS stateGet("phase", ""):TOUPPER.
-    LOCAL libs IS LIST(
-        "phases", "launch", "xfer",
-        "lib_navigation", "countdown", "maneuver", "inclination",
-        "orbit", "targeting",
-        "utils"
-    ).
+LOCAL FUNCTION _phaseIn {
+    PARAMETER phase.
+    PARAMETER phaseList.
+    FOR p IN phaseList {
+        IF phase = p { RETURN TRUE. }
+    }
+    RETURN FALSE.
+}
 
+LOCAL FUNCTION _fr3PhaseBand {
+    LOCAL phase IS stateGet("phase", ""):TOUPPER.
+    IF phase = "" OR _phaseIn(phase, LIST("LUNCH", "FAIR", "ANTS", "PARK")) {
+        RETURN "LAUNCH".
+    }
+    IF _phaseIn(phase, LIST("RDV", "XING", "MCC", "COAST", "CAPTURE",
+            "CIRC", "RAISE", "INCLINE")) {
+        RETURN "TRANSFER".
+    }
+    IF _phaseIn(phase, LIST("LAND_DEORBIT", "LAND_ASSIST")) {
+        RETURN "LAND_ASSIST".
+    }
+    IF phase = "LAND" { RETURN "LAND". }
+    IF phase = "ROVER" { RETURN "ROVER". }
+    RETURN "MISSION".
+}
+
+LOCAL FUNCTION _addPayloadLibs {
+    PARAMETER libs.
     IF _bootHasPayload("PROBE") OR _bootHasPayload("CRASHPROBE")
             OR _bootHasPayload("RELAY") OR _bootHasPayload("SCANSAT")
             OR _bootHasPayload("SCISAT") {
-        libs:ADD("payload_ops").
+        IF NOT libs:CONTAINS("payload_ops") { libs:ADD("payload_ops"). }
     } ELSE {
-        libs:ADD("payload_landing").
+        IF NOT libs:CONTAINS("payload_landing") { libs:ADD("payload_landing"). }
     }
-    IF _bootHasPayload("LANDER") OR _bootHasPayload("ASSISTLANDER")
-            OR _bootHasPayload("ROVER") OR _bootHasPayload("ASSISTROVER") {
-        IF phase = "LAND" {
-            libs:ADD("landing").
-        } ELSE {
+}
+
+LOCAL FUNCTION _fr3Libs {
+    LOCAL band IS _fr3PhaseBand().
+    LOCAL libs IS LIST("phases", "utils").
+
+    IF band = "LAUNCH" {
+        libs:ADD("launch").
+        libs:ADD("countdown").
+        libs:ADD("orbit").
+        IF _bootHasPayload("LANDER") OR _bootHasPayload("ASSISTLANDER")
+                OR _bootHasPayload("ROVER") OR _bootHasPayload("ASSISTROVER") {
             libs:ADD("landing_assist").
         }
-        IF phase = "ROVER" {
-            libs:ADD("rover").
+    } ELSE IF band = "TRANSFER" {
+        libs:ADD("xfer").
+        libs:ADD("lib_navigation").
+        libs:ADD("maneuver").
+        libs:ADD("inclination").
+        libs:ADD("orbit").
+    } ELSE IF band = "LAND_ASSIST" {
+        libs:ADD("targeting").
+        libs:ADD("maneuver").
+        libs:ADD("landing_assist").
+        _addPayloadLibs(libs).
+    } ELSE IF band = "LAND" {
+        libs:ADD("targeting").
+        libs:ADD("maneuver").
+        libs:ADD("landing").
+        _addPayloadLibs(libs).
+    } ELSE IF band = "ROVER" {
+        libs:ADD("payload_landing").
+        libs:ADD("rover").
+    } ELSE {
+        libs:ADD("orbit").
+    }
+
+    IF band = "LAUNCH" {
+        // Launch-only reboots should stay small. Payload operation libraries
+        // are pulled in after parking orbit if the sequence actually needs them.
+    } ELSE IF band = "TRANSFER" {
+        IF _bootHasPayload("RELAY") OR _bootHasPayload("SCANSAT")
+                OR _bootHasPayload("SCISAT") {
+            _addPayloadLibs(libs).
         }
     }
-    IF stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
+    IF band = "TRANSFER" AND stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
         libs:ADD("lambert").
         libs:ADD("maneuver_intersystem").
     }
-    IF CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET") {
+    IF band = "TRANSFER" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
         IF NOT libs:CONTAINS("lambert") { libs:ADD("lambert"). }
         libs:ADD("maneuver_rendezvous").
     }
-    IF _bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT") {
+    IF band = "TRANSFER" AND (_bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT")) {
         libs:ADD("science").
     }
     RETURN libs.

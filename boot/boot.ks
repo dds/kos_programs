@@ -197,13 +197,13 @@ LOCAL FUNCTION _applyMissionConfig {
     PARAMETER missionId.
     IF missionId = "" { RETURN FALSE. }
 
-    LOCAL path IS "1:/missions/" + craftName + "/" + missionId + ".cfg".
-    IF NOT EXISTS(path) {
-        PRINT "  Mission config not found: " + path.
+    LOCAL path_ IS "1:/missions/" + craftName + "/" + missionId + ".cfg".
+    IF NOT EXISTS(path_) {
+        PRINT "  Mission config not found: " + path_.
         RETURN FALSE.
     }
 
-    LOCAL raw IS OPEN(path):READALL:STRING.
+    LOCAL raw IS OPEN(path_):READALL:STRING.
     LOCAL lines IS raw:SPLIT(CHAR(10)).
     FOR lineRaw IN lines {
         LOCAL line IS lineRaw:REPLACE(CHAR(13), ""):TRIM.
