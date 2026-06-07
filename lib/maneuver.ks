@@ -1051,9 +1051,9 @@ LOCAL FUNCTION _refineLambertIntercept {
     LOCAL tofStep IS startTofStep / 2.
     LOCAL best IS _evalLambertIntercept(
         targetVessel, centralBody, mu, startDepart, startTof, FALSE, arrivalWeight).
-    LOCAL alt IS _evalLambertIntercept(
+    LOCAL alt_ IS _evalLambertIntercept(
         targetVessel, centralBody, mu, startDepart, startTof, TRUE, arrivalWeight).
-    IF alt["COST"] < best["COST"] { SET best TO alt. }
+    IF alt_["COST"] < best["COST"] { SET best TO alt_. }
 
     LOCAL signs IS LIST(1, -1).
     LOCAL transferArcs IS LIST(FALSE, TRUE).
