@@ -2,7 +2,8 @@
 
 ## Boot And Mission Selection
 
-- `boot/boot.ks` parses the vessel name, stores `vehicle`, `target`, and `payloads` in state, syncs the vehicle script, then syncs and loads that vehicle's `LIBS`.
+- `boot/boot.ks` parses the vessel name, stores `vehicle`, `target`, and `payloads` in state, compiles the selected vehicle script to `1:/craft/*.ksm`, then syncs and loads that vehicle's `LIBS`.
+- `boot/boot.ks` reads mission profile files from the archive when connected and prunes stale local `1:/missions` files after persisting the selected config into state.
 - `boot/boot.ks` prunes stale local `1:/lib` files before syncing the selected `LIBS`, so progressive reloads actually free storage.
 - `lib/resume.ks` builds `MISSION`, normalizes payload tokens, and builds common rocket sequences.
 - Vehicle scripts in `craft/` define default `CFG`, `LIBS`, phase sequence, phase map, and mission profile tweaks.

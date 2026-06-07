@@ -109,6 +109,43 @@ LOCAL FUNCTION _loadLib {
     }
 }
 
+LOCAL FUNCTION _compiledPath {
+    PARAMETER scriptPath.
+    IF scriptPath:CONTAINS("/") {
+        LOCAL parts IS scriptPath:SPLIT("/").
+        RETURN "1:/" + parts[0] + "/" + parts[1] + ".ksm".
+    }
+    RETURN "1:/" + scriptPath + ".ksm".
+}
+
+LOCAL FUNCTION _sourcePath {
+    PARAMETER scriptPath.
+    RETURN "1:/" + scriptPath + ".ks".
+}
+
+LOCAL FUNCTION _syncScript {
+    PARAMETER scriptPath.
+    IF NOT HAS_LINK { RETURN. }
+    LOCAL src IS "0:/" + scriptPath + ".ks".
+    LOCAL dst IS _sourcePath(scriptPath).
+    LOCAL dstKsm IS _compiledPath(scriptPath).
+
+    IF EXISTS(src) {
+        COMPILE src TO dstKsm.
+        IF EXISTS(dst) { DELETEPATH(dst). }
+    }
+}
+
+LOCAL FUNCTION _runScript {
+    PARAMETER scriptPath.
+    LOCAL compiled IS _compiledPath(scriptPath).
+    IF EXISTS(compiled) {
+        RUNPATH(compiled).
+    } ELSE {
+        RUNPATH(_sourcePath(scriptPath)).
+    }
+}
+
 LOCAL FUNCTION _libBaseName {
     PARAMETER fileName.
     LOCAL upper IS fileName:TOUPPER.
@@ -141,32 +178,14 @@ LOCAL FUNCTION _pruneLibs {
     }
 }
 
-LOCAL FUNCTION _syncMissionConfigs {
-    PARAMETER craftName.
-    IF NOT HAS_LINK { RETURN. }
-    LOCAL srcDir IS "0:/missions/" + craftName.
-    IF NOT EXISTS(srcDir) { RETURN. }
-
-    LOCAL dstDir IS "1:/missions/" + craftName.
-    ensureDir(dstDir).
-
-    LOCAL startPath IS PATH().
-    LOCAL items IS LIST().
-    CD(srcDir).
-    LIST FILES IN items.
-    CD(startPath).
-
-    FOR item IN items {
-        IF item:ISFILE {
-            COPYPATH(srcDir + "/" + item:NAME, dstDir + "/" + item:NAME).
-        }
-    }
-}
-
 LOCAL FUNCTION _missionConfigIds {
     PARAMETER craftName.
     LOCAL ids IS LIST().
     LOCAL cfgDir IS "1:/missions/" + craftName.
+    LOCAL archiveDir IS "0:/missions/" + craftName.
+    IF HAS_LINK AND EXISTS(archiveDir) {
+        SET cfgDir TO archiveDir.
+    }
     IF NOT EXISTS(cfgDir) { RETURN ids. }
 
     LOCAL startPath IS PATH().
@@ -224,12 +243,20 @@ LOCAL FUNCTION _selectMissionId {
     RETURN ids[choice].
 }
 
+LOCAL FUNCTION _missionConfigPath {
+    PARAMETER craftName.
+    PARAMETER missionId.
+    LOCAL archivePath IS "0:/missions/" + craftName + "/" + missionId + ".cfg".
+    IF HAS_LINK AND EXISTS(archivePath) { RETURN archivePath. }
+    RETURN "1:/missions/" + craftName + "/" + missionId + ".cfg".
+}
+
 LOCAL FUNCTION _applyMissionConfig {
     PARAMETER craftName.
     PARAMETER missionId.
     IF missionId = "" { RETURN FALSE. }
 
-    LOCAL path_ IS "1:/missions/" + craftName + "/" + missionId + ".cfg".
+    LOCAL path_ IS _missionConfigPath(craftName, missionId).
     IF NOT EXISTS(path_) {
         PRINT "  Mission config not found: " + path_.
         RETURN FALSE.
@@ -268,6 +295,24 @@ LOCAL FUNCTION _applyMissionConfig {
     PRINT "  Target:  " + stateGet("target", "KERBIN").
     PRINT "  Payload: " + stateGet("payloads", "").
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _pruneMissionConfigs {
+    PARAMETER craftName.
+    LOCAL cfgDir IS "1:/missions/" + craftName.
+    IF NOT EXISTS(cfgDir) { RETURN. }
+
+    LOCAL startPath IS PATH().
+    LOCAL items IS LIST().
+    CD(cfgDir).
+    LIST FILES IN items.
+    CD(startPath).
+
+    FOR item IN items {
+        IF item:ISFILE {
+            DELETEPATH(cfgDir + "/" + item:NAME).
+        }
+    }
 }
 
 LOCAL FUNCTION _bootMissionConfig {
@@ -385,15 +430,13 @@ IF HAS_LINK {
     IF EXISTS("0:/cmd/zombie.ks") { COPYPATH("0:/cmd/zombie.ks", "1:/zombie"). }
 
     PRINT "  SYNC " + vehicleScript + " ....... ".
-    IF EXISTS("0:/" + vehicleScript + ".ks") {
-        COPYPATH("0:/" + vehicleScript + ".ks", "1:/" + vehicleScript + ".ks").
-    }
-    _syncMissionConfigs(vehicleName).
+    _syncScript(vehicleScript).
     _bootMissionConfig(vehicleName).
+    _pruneMissionConfigs(vehicleName).
 }
 
 // 1. Run the vehicle script first so it can define the LIBS global variable
-RUNPATH("1:/" + vehicleScript + ".ks").
+_runScript(vehicleScript).
 
 // 2. Now that LIBS exists, sync them if we have a connection
 IF HAS_LINK {
