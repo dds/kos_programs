@@ -118,6 +118,8 @@ While the vessel is still prelaunch, `boot.ks` clears any saved mission profile 
 
 FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only launch/countdown/orbit plus lightweight `landing_assist.ks` when needed; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Rover landing missions then reload again after assist-stage release for full `landing.ks`, and after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
 
+`craft/FR3.ks` is intentionally kept small enough to fit comfortably on the primary kOS volume. Mission profile tweaks, sequence construction, phase mapping, and the launch confirmation display live in `lib/fr3_mission.ks`, which is loaded as part of each FR3 library band and can be compiled like the rest of the libraries.
+
 Important in-flight constraint: `boot.ks` itself is installed on the kOS processor in the VAB/SPH and cannot be updated remotely during a mission. Remote reboots can load updated mission configs, craft scripts, commands, and libraries from the archive, but any fix that requires changing the installed boot file must be applied before launch or by another VAB-side update path.
 
 The current band and pending reload are saved in mission state (`lib_band`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, `reload_next_band`) so a reboot or state dump shows why the computer is waiting.

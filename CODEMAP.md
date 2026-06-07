@@ -23,6 +23,7 @@ Base FR3 libraries:
 - `landing_assist` - targeted deorbit plus assist-stage hover/release for landing missions before rover separation.
 - `payload_landing` - minimal landing phase wrappers for landing-only missions.
 - `utils` - small shared helpers.
+- `fr3_mission` - FR3 mission profile tweaks, sequence construction, phase map, and launch confirmation display.
 
 Profile-only FR3 libraries:
 
@@ -36,18 +37,20 @@ Profile-only FR3 libraries:
 
 FR3 progressive library bands:
 
-- `LAUNCH`: `launch`, `countdown`, `orbit`, and `landing_assist` for landing payloads. Stops after `PARK` when `RELOAD_AFTER_PARK=1`.
-- `TRANSFER`: `xfer`, `countdown`, `maneuver`, `inclination`, `orbit`, and optional Lambert/rendezvous/science libraries.
-- `PAYLOAD_OPS`: probe, relay, or SCANsat operation libraries only.
-- `LAND_ASSIST`: targeted deorbit and assist-stage release, including maneuver countdown support.
-- `LAND`: full powered landing, including maneuver countdown support.
-- `ROVER`: rover driving/co-pilot code.
+- `LAUNCH`: `fr3_mission`, `launch`, `countdown`, `orbit`, and `landing_assist` for landing payloads. Stops after `PARK` when `RELOAD_AFTER_PARK=1`.
+- `TRANSFER`: `fr3_mission`, `xfer`, `countdown`, `maneuver`, `inclination`, `orbit`, and optional Lambert/rendezvous/science libraries.
+- `PAYLOAD_OPS`: `fr3_mission` plus probe, relay, or SCANsat operation libraries only.
+- `LAND_ASSIST`: `fr3_mission`, targeted deorbit, and assist-stage release, including maneuver countdown support.
+- `LAND`: `fr3_mission` plus full powered landing, including maneuver countdown support.
+- `ROVER`: `fr3_mission` plus rover driving/co-pilot code.
 - Band/reload state is saved via `state.ks` as `lib_band`, `lib_band_phase`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, and `reload_next_band`.
 
 Mission profile files:
 
 - `missions/FR3/*.cfg` - data-only FR3 mission profiles. Plain `FR3` can select one on the launch pad; legacy `FR3-MUN-...` names still work as fallback.
 - `missions/FR3/mun_rover_emergency_surface.cfg` - emergency mode that soft-lands the second stage and releases the rover on the surface.
+- `craft/FR3.ks` - slim vehicle entry point. It keeps default CFG, mission-state intake, and library-band selection.
+- `lib/fr3_mission.ks` - compiled FR3 mission runtime: profile tweaks, sequence, phase map, and launch confirmation UI.
 
 ## Biggest Files
 
