@@ -78,6 +78,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
         + "  entryPe=" + ROUND(entryPe/1000,1) + "km"
         + "  tolerance=" + ROUND(tolerance/1000,1) + "km").
+    mLogWarn("STATS deorbit setup target=" + ROUND(targetLat,4)
+        + "," + ROUND(targetLng,4)
+        + " entryPeKm=" + ROUND(entryPe/1000,1)
+        + " toleranceKm=" + ROUND(tolerance/1000,1)).
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL period IS SHIP:ORBIT:PERIOD.
@@ -114,6 +118,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
     mLog("Coarse best: T+" + ROUND(bestUT - TIME:SECONDS,0)
         + "s  dist=" + ROUND(bestDist/1000,1) + "km").
+    mLogWarn("STATS deorbit coarse distKm=" + ROUND(bestDist/1000,1)
+        + " burnT=" + ROUND(bestUT - TIME:SECONDS,0)
+        + " scanOrbits=" + scanOrbits
+        + " samples=" + scanSamples).
 
     FOR mult IN passes:SUBLIST(1, passes:LENGTH - 1) {
         LOCAL step    IS scanStep * mult.
@@ -155,6 +163,13 @@ GLOBAL FUNCTION targetedDeorbitAt {
     mLog("Fine best: T+" + ROUND(bestUT - TIME:SECONDS,0)
         + "s  Pe=" + ROUND(bestPe/1000,1) + "km"
         + "  dist=" + ROUND(bestDist/1000,1) + "km").
+    LOCAL deorbitStatus IS "ok".
+    IF bestDist > tolerance { SET deorbitStatus TO "miss". }
+    mLogWarn("STATS deorbit final status=" + deorbitStatus
+        + " distKm=" + ROUND(bestDist/1000,1)
+        + " toleranceKm=" + ROUND(tolerance/1000,1)
+        + " burnT=" + ROUND(bestUT - TIME:SECONDS,0)
+        + " PeKm=" + ROUND(bestPe/1000,1)).
 
     IF bestDist > tolerance {
         mLogWarn("Best solution misses target by " + ROUND(bestDist/1000,1)
@@ -178,6 +193,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
         mLog("Post-burn impact prediction: "
             + ROUND(impactPos:LAT,4) + "," + ROUND(impactPos:LNG,4)
             + "  dist=" + ROUND(finalDist/1000,1) + "km from target").
+        mLogWarn("STATS deorbit postburn distKm=" + ROUND(finalDist/1000,1)
+            + " impact=" + ROUND(impactPos:LAT,4)
+            + "," + ROUND(impactPos:LNG,4)).
         HUDTEXT("Impact predicted " + ROUND(finalDist/1000,1) + "km from target",
             5, 2, 14, GREEN, FALSE).
     } ELSE {

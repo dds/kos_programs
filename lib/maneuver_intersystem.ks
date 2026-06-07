@@ -25,6 +25,11 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
 
     mLog("Lambert scan: " + nDepart + " departures x " + nTof
         + " TOFs, hohmannTof=" + ROUND(hohmannTof,0) + "s").
+    mLogWarn("STATS lambert setup target=" + targetBody:NAME
+        + " departSamples=" + nDepart
+        + " tofSamples=" + nTof
+        + " hohmannTof=" + ROUND(hohmannTof,0)
+        + " lanTarget=" + ROUND(lanTarget,1)).
 
     FROM { LOCAL di IS 0. } UNTIL di >= nDepart STEP { SET di TO di + 1. } DO {
         LOCAL departUt IS TIME:SECONDS + 60 + di * shipPeriod.
@@ -83,6 +88,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
 
     IF bestDepart < 0 {
         mLogError("planTransfer: Lambert scan found no valid solution.").
+        mLogWarn("STATS lambert result target=" + targetBody:NAME + " status=no-solution").
         RETURN 0.
     }
 
@@ -90,6 +96,11 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + "s  tof=" + ROUND(bestArrive - bestDepart,0)
         + "s  dV=" + ROUND(bestDv,1)
         + "  LAN err=" + ROUND(bestLanErr,1)).
+    mLogWarn("STATS lambert result target=" + targetBody:NAME
+        + " status=grid-best departT=" + ROUND(bestDepart - TIME:SECONDS,0)
+        + " tof=" + ROUND(bestArrive - bestDepart,0)
+        + " dv=" + ROUND(bestDv,1)
+        + " lanErr=" + ROUND(bestLanErr,1)).
 
     LOCAL r1Best IS POSITIONAT(SHIP, bestDepart) - centralBody:POSITION.
     LOCAL r2Best IS POSITIONAT(targetBody, bestArrive) - centralBody:POSITION.
@@ -125,6 +136,17 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
 
     IF lanTarget >= 0 {
         SET nd TO _scanForLan(nd, targetBody, lanTarget, SHIP:ORBIT:PERIOD).
+    }
+
+    LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
+    IF finalPatch = 0 {
+        mLogWarn("STATS lambert final target=" + targetBody:NAME + " status=no-patch").
+    } ELSE {
+        mLogWarn("STATS lambert final target=" + targetBody:NAME
+            + " status=patched PeKm=" + ROUND(finalPatch:PERIAPSIS/1000,1)
+            + " inc=" + ROUND(finalPatch:INCLINATION,1)
+            + " LAN=" + ROUND(finalPatch:LAN,1)
+            + " AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1)).
     }
 
     RETURN nd.

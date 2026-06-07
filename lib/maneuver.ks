@@ -218,6 +218,11 @@ GLOBAL FUNCTION planTransfer {
     LOCAL mu          IS centralBody:MU.
 
     LOCAL isLocal IS (targetBody:BODY = BODY).
+    mLogWarn("STATS transfer setup target=" + targetBody:NAME
+        + " local=" + isLocal
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " lan=" + ROUND(lanTarget,1)
+        + " aop=" + ROUND(aopTarget,1)).
 
     // --- 1. Build raw node ---
     LOCAL nd IS 0.
@@ -287,6 +292,7 @@ GLOBAL FUNCTION planTransfer {
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
     IF finalPatch = 0 {
         mLogError("planTransfer: no encounter after targeting.").
+        mLogWarn("STATS transfer result target=" + targetBody:NAME + " status=no-encounter").
         RETURN.
     }
 
@@ -306,6 +312,12 @@ GLOBAL FUNCTION planTransfer {
         SET logMsg TO logMsg + "  AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1) + "(err " + ROUND(aopErr,1) + ")".
     }
     mLog(logMsg).
+    mLogWarn("STATS transfer result target=" + targetBody:NAME
+        + " status=planned dv=" + ROUND(nd:DELTAV:MAG,1)
+        + " PeKm=" + ROUND(finalPatch:PERIAPSIS/1000,1)
+        + " inc=" + ROUND(finalPatch:INCLINATION,1)
+        + " LAN=" + ROUND(finalPatch:LAN,1)
+        + " AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1)).
     RETURN nd.
 }
 
@@ -482,6 +494,10 @@ LOCAL FUNCTION _planLocalTransfer {
     mLog("Optimized: CA=" + ROUND(finalCA["distance"]/1000, 1) + "km"
         + "  dV=" + ROUND(nd:PROGRADE, 1) + " m/s"
         + "  depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
+    mLogWarn("STATS local-transfer target=" + targetBody:NAME
+        + " caKm=" + ROUND(finalCA["distance"]/1000,1)
+        + " prograde=" + ROUND(nd:PROGRADE,1)
+        + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
 
     // --- Optional LAN scan ---
     // If lanTarget is specified, scan across multiple orbits to find the departure
@@ -553,6 +569,10 @@ GLOBAL FUNCTION _scanForLan {
     }
 
     mLog("LAN scan: best err=" + ROUND(bestLanErr, 1) + "°  depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
+    mLogWarn("STATS lan-scan target=" + targetBody:NAME
+        + " target=" + ROUND(lanTarget,1)
+        + " err=" + ROUND(bestLanErr,1)
+        + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
     RETURN nd.
 }
 
@@ -658,6 +678,13 @@ LOCAL FUNCTION _targetPeIncCoupled {
         + "km inc=" + ROUND(targetInc, 1) + "°"
         + " start Pe=" + ROUND(best["PE"]/1000, 1)
         + "km inc=" + ROUND(best["INC"], 1) + "°").
+    mLogWarn("STATS pe-inc setup target=" + targetBody:NAME
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " targetInc=" + ROUND(targetInc,1)
+        + " startPeKm=" + ROUND(best["PE"]/1000,1)
+        + " startInc=" + ROUND(best["INC"],1)
+        + " maxIter=" + maxIter
+        + " dvCap=" + ROUND(dvCap,1)).
 
     FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
         LOCAL converged IS FALSE.
@@ -735,6 +762,16 @@ LOCAL FUNCTION _targetPeIncCoupled {
             + ROUND(best["PE_ERR"]/1000, 1) + "km incErr="
             + ROUND(best["INC_ERR"], 2) + "°").
     }
+
+    SET best TO _peIncCost(nd, targetBody, targetPe, targetInc).
+    mLogWarn("STATS pe-inc result target=" + targetBody:NAME
+        + " solved=" + solved
+        + " PeKm=" + ROUND(best["PE"]/1000,1)
+        + " inc=" + ROUND(best["INC"],1)
+        + " PeErrKm=" + ROUND(best["PE_ERR"]/1000,2)
+        + " incErr=" + ROUND(best["INC_ERR"],2)
+        + " cost=" + ROUND(best["COST"],2)
+        + " dv=" + ROUND(nd:DELTAV:MAG,1)).
 
     RETURN best.
 }
@@ -829,6 +866,11 @@ LOCAL FUNCTION _targetPatchElementsCoupled {
     mLog("ELEMENTS: coupled target"
         + _elementTargetSummary(targets)
         + " start" + _elementStateSummary(best)).
+    mLogWarn("STATS elements setup target=" + targetBody:NAME
+        + _elementTargetSummary(targets)
+        + " start" + _elementStateSummary(best)
+        + " maxIter=" + maxIter
+        + " dvCap=" + ROUND(dvCap,1)).
 
     FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
         IF _elementsConverged(best, targets) {
@@ -900,6 +942,14 @@ LOCAL FUNCTION _targetPatchElementsCoupled {
         SET best TO _patchElementsCost(nd, targetBody, targets).
         mLogWarn("ELEMENTS final error" + _elementErrorSummary(best, targets)).
     }
+
+    SET best TO _patchElementsCost(nd, targetBody, targets).
+    mLogWarn("STATS elements result target=" + targetBody:NAME
+        + " solved=" + solved
+        + _elementStateSummary(best)
+        + _elementErrorSummary(best, targets)
+        + " cost=" + ROUND(best["COST"],2)
+        + " dv=" + ROUND(nd:DELTAV:MAG,1)).
 
     RETURN best.
 }
@@ -1407,6 +1457,15 @@ GLOBAL FUNCTION phaseMidCourse {
     mLog("MCC: Pre-correction  Pe=" + ROUND(patch:PERIAPSIS/1000,1) + "km"
         + "  AoP=" + ROUND(patch:ARGUMENTOFPERIAPSIS,1)
         + "°  LAN=" + ROUND(patch:LAN,1) + "°.").
+    mLogWarn("STATS mcc setup target=" + target:NAME
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " targetInc=" + ROUND(targetInc,1)
+        + " targetLAN=" + ROUND(targetLan,1)
+        + " targetAoP=" + ROUND(targetAoP,1)
+        + " startPeKm=" + ROUND(patch:PERIAPSIS/1000,1)
+        + " startInc=" + ROUND(patch:INCLINATION,1)
+        + " startLAN=" + ROUND(patch:LAN,1)
+        + " startAoP=" + ROUND(patch:ARGUMENTOFPERIAPSIS,1)).
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     LOCAL nd IS NODE(TIME:SECONDS + waitTime, 0, 0, 0).
@@ -1478,6 +1537,9 @@ GLOBAL FUNCTION phaseMidCourse {
             mLogWarn("MCC made approach worse; skipping correction node.").
         }
         mLog("Encounter on target. Skipping MCC burn.").
+        mLogWarn("STATS mcc result target=" + target:NAME
+            + " status=skipped dv=" + ROUND(totalDv,1)
+            + " worsened=" + worsened).
         REMOVE nd.
     } ELSE {
         LOCAL logMsg IS "MCC planned: dV=" + ROUND(totalDv, 1)
@@ -1492,6 +1554,12 @@ GLOBAL FUNCTION phaseMidCourse {
             SET logMsg TO logMsg + "  AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1) + "°".
         }
         mLog(logMsg).
+        mLogWarn("STATS mcc result target=" + target:NAME
+            + " status=planned dv=" + ROUND(totalDv,1)
+            + " PeKm=" + ROUND(finalPatch:PERIAPSIS/1000,1)
+            + " inc=" + ROUND(finalPatch:INCLINATION,1)
+            + " LAN=" + ROUND(finalPatch:LAN,1)
+            + " AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1)).
         LOCAL success IS FALSE.
         LOCAL retries IS 0.
         UNTIL success {
