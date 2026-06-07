@@ -204,6 +204,102 @@ LOCAL FUNCTION _phaseIn {
     RETURN FALSE.
 }
 
+LOCAL FUNCTION _fr3BaseName {
+    PARAMETER fileName.
+    LOCAL upper IS fileName:TOUPPER.
+    IF upper:CONTAINS(".KSM") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    IF upper:CONTAINS(".KS") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
+    IF upper:CONTAINS(".CFG") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    RETURN fileName.
+}
+
+LOCAL FUNCTION _fr3DeleteIfExists {
+    PARAMETER path_.
+    IF EXISTS(path_) {
+        DELETEPATH(path_).
+        RETURN TRUE.
+    }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _fr3PruneDir {
+    PARAMETER dirPath.
+    PARAMETER keepNames.
+    LOCAL removed IS 0.
+    IF NOT EXISTS(dirPath) { RETURN removed. }
+    LOCAL startPath IS PATH().
+    LOCAL items IS LIST().
+    CD(dirPath).
+    LIST FILES IN items.
+    CD(startPath).
+    FOR item IN items {
+        IF item:ISFILE {
+            LOCAL base IS _fr3BaseName(item:NAME):TOUPPER.
+            IF NOT keepNames:CONTAINS(base) {
+                IF _fr3DeleteIfExists(dirPath + "/" + item:NAME) {
+                    SET removed TO removed + 1.
+                }
+            }
+        }
+    }
+    RETURN removed.
+}
+
+LOCAL FUNCTION _fr3PruneLogs {
+    LOCAL removed IS 0.
+    IF EXISTS("1:/logs") {
+        LOCAL startPath IS PATH().
+        LOCAL items IS LIST().
+        CD("1:/logs").
+        LIST FILES IN items.
+        CD(startPath).
+        FOR item IN items {
+            IF item:ISFILE {
+                IF _fr3DeleteIfExists("1:/logs/" + item:NAME) {
+                    SET removed TO removed + 1.
+                }
+            }
+        }
+    }
+    IF _fr3DeleteIfExists("1:/state/log_path.state") {
+        SET removed TO removed + 1.
+    }
+    RETURN removed.
+}
+
+LOCAL FUNCTION _fr3EmergencyCleanup {
+    PARAMETER wantedLibs.
+    LOCAL keepLibs IS LIST(
+        "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY",
+        "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE"
+    ).
+    FOR lib IN wantedLibs {
+        LOCAL key IS lib:TOUPPER.
+        IF NOT keepLibs:CONTAINS(key) { keepLibs:ADD(key). }
+    }
+
+    LOCAL keepCmds IS LIST(
+        "CLEANUP", "DUMP", "FILES", "LANDASSIST", "LANDINGCHECK",
+        "LANDINGRESCUE", "LANDMIN", "SETLANDASSIST", "SETLANDINGDEORBIT",
+        "SETLANDINGTAG", "SETSTATE", "SETUP_MUN_ROVER_LANDING_REAL",
+        "SETUP_MUN_ROVER_LANDING_SIM", "SIMLANDHERE", "ZOMBIE"
+    ).
+
+    LOCAL beforeFree IS CORE:VOLUME:FREESPACE.
+    LOCAL removed IS 0.
+    SET removed TO removed + _fr3PruneDir("1:/lib", keepLibs).
+    SET removed TO removed + _fr3PruneDir("1:/craft", LIST("FR3")).
+    SET removed TO removed + _fr3PruneDir("1:/roles", LIST()).
+    SET removed TO removed + _fr3PruneDir("1:/cmd", keepCmds).
+    SET removed TO removed + _fr3PruneDir("1:/missions/FR3", LIST()).
+    SET removed TO removed + _fr3PruneLogs().
+
+    IF removed > 0 {
+        PRINT "  FR3 cleanup removed " + removed + " files; free "
+            + beforeFree + " -> " + CORE:VOLUME:FREESPACE + ".".
+    }
+}
+
 LOCAL FUNCTION _bandForPhase {
     PARAMETER phaseName.
     LOCAL phase IS phaseName:TOUPPER.
@@ -322,6 +418,7 @@ LOCAL FUNCTION _fr3Libs {
             AND (_bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT")) {
         libs:ADD("science").
     }
+    _fr3EmergencyCleanup(libs).
     stateSet("lib_band_libs", libs:JOIN(",")).
     RETURN libs.
 }
