@@ -1,0 +1,71 @@
+// ============================================================
+// fr3_profile.ks - FR3 mission profile tweaks
+// ============================================================
+
+LOCAL FUNCTION _landingCfgMappings {
+    RETURN LIST(
+        LIST("LANDING_TARGET_LAT", "TARGET_LAT"),
+        LIST("LANDING_TARGET_LNG", "TARGET_LNG"),
+        LIST("LANDING_TARGET_WAYPOINT", "TARGET_WAYPOINT"),
+        LIST("LANDING_DEORBIT_PE", "DEORBIT_PE"),
+        LIST("LANDING_TARGET_TOLERANCE", "TARGET_TOLERANCE"),
+        LIST("LANDING_GUIDANCE_ALT", "GUIDANCE_ALT"),
+        LIST("LANDING_ASSIST_RELEASE_ALT", "ASSIST_RELEASE_ALT"),
+        LIST("LANDING_ASSIST_RELEASE_HSPEED", "ASSIST_RELEASE_HSPEED"),
+        LIST("LANDING_ASSIST_RELEASE_VSPEED", "ASSIST_RELEASE_VSPEED"),
+        LIST("LANDING_ASSIST_RELEASE_ON_SURFACE", "ASSIST_RELEASE_ON_SURFACE"),
+        LIST("LANDING_ASSIST_SURFACE_FINAL_SPEED", "ASSIST_SURFACE_FINAL_SPEED"),
+        LIST("LANDING_ASSIST_SURFACE_SETTLE_TIME", "ASSIST_SURFACE_SETTLE_TIME"),
+        LIST("LANDING_ASSIST_SURFACE_TIPOVER", "ASSIST_SURFACE_TIPOVER"),
+        LIST("LANDING_ASSIST_SURFACE_TIP_TIME", "ASSIST_SURFACE_TIP_TIME")
+    ).
+}
+
+LOCAL FUNCTION _copyLandingCfg {
+    IF DEFINED LANDING_CFG {
+        FOR mapping IN _landingCfgMappings() {
+            LOCAL cfgKey IS mapping[0].
+            LOCAL landingKey IS mapping[1].
+            IF CFG:HASKEY(cfgKey) {
+                SET LANDING_CFG[landingKey] TO CFG[cfgKey].
+            }
+        }
+    }
+}
+
+GLOBAL FUNCTION fr3ApplyMissionProfile {
+    IF MISSION["target"]:TOUPPER = "MUN" AND fr3HasLandingPayload() {
+        IF DEFINED LANDING_CFG {
+            SET LANDING_CFG["DEORBIT_PE"] TO 5000.
+            SET LANDING_CFG["TARGET_TOLERANCE"] TO 2500.
+            SET LANDING_CFG["GUIDANCE_ALT"] TO 5000.
+        }
+
+        IF fr3HasPayload("ASSISTROVER") OR fr3HasPayload("ASSISTLANDER") {
+            IF DEFINED LANDING_CFG {
+                SET LANDING_CFG["ASSIST_RELEASE_ALT"] TO 100.
+                SET LANDING_CFG["ASSIST_RELEASE_HSPEED"] TO 0.5.
+                SET LANDING_CFG["ASSIST_RELEASE_VSPEED"] TO 0.
+            }
+            cfgSet("RELOAD_AFTER_LAND_ASSIST", 1).
+        }
+        IF fr3HasPayload("ROVER") OR fr3HasPayload("ASSISTROVER") {
+            cfgSet("RELOAD_AFTER_LAND", 1).
+        }
+    }
+
+    _copyLandingCfg().
+
+    IF MISSION["target"]:TOUPPER = "MUN"
+            AND fr3HasPayload("SCANSAT")
+            AND fr3HasLandingPayload() {
+        // Mun mapper + rover stack: deploy mapper in a useful polar orbit,
+        // then spend the remaining vehicle on targeted rover landing.
+        SET CFG["CAPTURE_PE"] TO 15000.
+        SET CFG["CAPTURE_INC"] TO 90.
+        SET CFG["TARGET_PE"] TO 250000.
+        SET CFG["TARGET_AP"] TO 250000.
+        SET CFG["TARGET_INCLINATION"] TO 90.
+        SET CFG["MAX_INCL_CHANGE_DV"] TO 300.
+    }
+}
