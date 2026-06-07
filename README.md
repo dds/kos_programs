@@ -143,7 +143,7 @@ When `LANDING_SITE_SCAN_ENABLE = 1`, targeted deorbit samples SCANsat `ELEVATION
 
 For a fast-follow Mun mapper, use `mission_id = mun_scansat_polar` on either FR2 or FR3. The matching profile under `missions/FR2/` or `missions/FR3/` targets a 70 km polar Mun orbit and deploys the payload tagged `scansat_decoupler`.
 
-The Mun mapper profiles set `SCANSAT_DISPOSE_CARRIER = 1`: after SCANsat release, the carrier locks retrograde and burns until it is out of usable thrust or its projected periapsis is below the surface.
+The Mun mapper profiles use an attached-stack disposal flow: the carrier locks retrograde and burns to a low/impact periapsis before SCANsat release, then the mapper stages and recovers itself to mapping orbit. SCANsat recovery nodes are capped by `SCANSAT_MAX_NODE_DV` so a bad planner result is rejected instead of executing an absurd burn.
 
 ### FJ1A
 

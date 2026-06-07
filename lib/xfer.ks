@@ -266,8 +266,7 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
         + " recoveryApKm=" + ROUND(recoveryAp/1000,1)).
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    _scanSatPlanPeAtAp(impactPe, "SCANsat impact Pe").
-    IF NOT _executeScanSatStep("SCANsat impact Pe") { RETURN. }
+    IF NOT _scanSatDisposeAttached(impactPe) { RETURN. }
 
     IF tag <> "" {
         IF NOT _releaseTaggedPayloadXfer(tag, "SCANsat") {
@@ -415,6 +414,20 @@ LOCAL FUNCTION _executeScanSatStep {
             mLogError(label + " has no maneuver node.").
             RETURN FALSE.
         }
+        LOCAL maxDv IS 1000.
+        IF CFG:HASKEY("SCANSAT_MAX_NODE_DV") { SET maxDv TO CFG["SCANSAT_MAX_NODE_DV"]. }
+        IF NEXTNODE:DELTAV:MAG > maxDv {
+            mLogError(label + " node rejected: dV="
+                + ROUND(NEXTNODE:DELTAV:MAG,1)
+                + " m/s exceeds SCANsat cap " + ROUND(maxDv,1) + " m/s.").
+            mLogWarn("STATS scansat-burn rejected label=" + label
+                + " dv=" + ROUND(NEXTNODE:DELTAV:MAG,1)
+                + " cap=" + ROUND(maxDv,1)
+                + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+                + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+            REMOVE NEXTNODE.
+            RETURN FALSE.
+        }
         mLogWarn("STATS scansat-burn setup label=" + label
             + " dv=" + ROUND(NEXTNODE:DELTAV:MAG,1)
             + " eta=" + ROUND(NEXTNODE:ETA,1)).
@@ -430,6 +443,71 @@ LOCAL FUNCTION _executeScanSatStep {
         }
     }
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _scanSatDisposeAttached {
+    PARAMETER targetPe.
+
+    LOCAL maxTime IS 600.
+    IF CFG:HASKEY("SCANSAT_DISPOSE_MAX_TIME") {
+        SET maxTime TO CFG["SCANSAT_DISPOSE_MAX_TIME"].
+    }
+
+    mLogWarn("STATS scansat-dispose setup PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " maxTime=" + ROUND(maxTime,0)
+        + " thrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
+
+    IF SHIP:PERIAPSIS <= targetPe {
+        mLog("SCANsat carrier already on disposal Pe.").
+        RETURN TRUE.
+    }
+    IF SHIP:AVAILABLETHRUST <= 0 {
+        mLogWarn("SCANsat carrier disposal skipped: no available thrust.").
+        RETURN FALSE.
+    }
+
+    SET SAS TO FALSE.
+    LOCK STEERING TO SHIP:RETROGRADE.
+    LOCAL startT IS TIME:SECONDS.
+    LOCAL aligned IS FALSE.
+    UNTIL aligned OR TIME:SECONDS - startT > 45 {
+        IF VANG(SHIP:FACING:FOREVECTOR, SHIP:RETROGRADE:FOREVECTOR) < 5 {
+            SET aligned TO TRUE.
+        }
+        WAIT 0.1.
+    }
+    IF NOT aligned {
+        mLogWarn("SCANsat carrier disposal starting with poor retrograde alignment.").
+    }
+
+    LOCK THROTTLE TO 1.
+    UNTIL SHIP:PERIAPSIS <= targetPe
+            OR SHIP:AVAILABLETHRUST <= 0
+            OR TIME:SECONDS - startT > maxTime {
+        LOCK STEERING TO SHIP:RETROGRADE.
+        WAIT 0.1.
+    }
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+
+    LOCAL status IS "complete".
+    IF SHIP:PERIAPSIS > targetPe AND SHIP:AVAILABLETHRUST <= 0 {
+        SET status TO "out-of-thrust".
+    } ELSE IF SHIP:PERIAPSIS > targetPe {
+        SET status TO "timeout".
+    }
+    mLogWarn("STATS scansat-dispose result status=" + status
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " duration=" + ROUND(TIME:SECONDS - startT,1)).
+
+    IF status = "complete" { RETURN TRUE. }
+    RETURN FALSE.
 }
 
 LOCAL FUNCTION _scanSatPlanPeAtAp {
