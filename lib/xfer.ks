@@ -482,11 +482,15 @@ LOCAL FUNCTION _executeScanSatStep {
 LOCAL FUNCTION _scanSatRecoverPeDirect {
     PARAMETER requestedPe.
 
-    LOCAL targetPe IS requestedPe.
+    LOCAL safePe IS 10000.
+    IF CFG:HASKEY("SCANSAT_RECOVER_SAFE_PE") {
+        SET safePe TO CFG["SCANSAT_RECOVER_SAFE_PE"].
+    }
+    LOCAL targetPe IS MIN(requestedPe, safePe).
     IF targetPe >= SHIP:APOAPSIS - 1000 {
         SET targetPe TO SHIP:APOAPSIS - 1000.
     }
-    IF targetPe < 10000 { SET targetPe TO MIN(10000, SHIP:APOAPSIS - 1000). }
+    IF targetPe < 1000 { SET targetPe TO 1000. }
 
     LOCAL maxTime IS 120.
     IF CFG:HASKEY("SCANSAT_RECOVER_MAX_TIME") {
