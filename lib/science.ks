@@ -197,17 +197,12 @@ GLOBAL FUNCTION scienceScanStatus {
         RETURN.
     }
     LOCAL lBody IS SHIP:ORBIT:BODY.
-    LOCAL altCoverage  IS 0.
-    LOCAL biomCoverage IS 0.
-    IF ADDONS:SCANSAT:AVAILABLE {
-        SET altCoverage  TO ADDONS:SCANSAT:COVERAGE(lBody, "Altimetry").
-        SET biomCoverage TO ADDONS:SCANSAT:COVERAGE(lBody, "Biome").
-    }
-    mLog("SCANsat coverage " + lBody:NAME + ":"
-        + "  altimetry="  + ROUND(altCoverage,1)  + "%"
-        + "  biome="      + ROUND(biomCoverage,1) + "%").
-    HUDTEXT("Scan: alt=" + ROUND(altCoverage,0) + "% bio=" + ROUND(biomCoverage,0) + "%",
-        3, 2, 13, CYAN, FALSE).
+    mLogWarn("STATS scansat status available=True body=" + lBody:NAME
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)
+        + " note=coverage-api-unavailable").
+    HUDTEXT("SCANsat active over " + lBody:NAME, 3, 2, 13, CYAN, FALSE).
 }
 
 GLOBAL FUNCTION scienceScanLoop {
