@@ -350,37 +350,29 @@ LOCAL FUNCTION _scanSatRecoverOrbit {
         + " targetPeKm=" + ROUND(recoveryPe/1000,1)
         + " targetApKm=" + ROUND(recoveryAp/1000,1)).
 
-    LOCAL burnOk IS _scanSatBurn({ RETURN planCircularize(). }, "SCANsat recovery circularize").
-    IF NOT burnOk {
+    LOCAL tol IS 1000.
+    LOCAL iter IS 0.
+    UNTIL iter >= 5
+            OR (ABS(SHIP:APOAPSIS - recoveryAp) <= tol
+                AND ABS(SHIP:PERIAPSIS - recoveryPe) <= tol) {
+        LOCAL burnOk IS TRUE.
+        IF ABS(SHIP:APOAPSIS - recoveryAp) > tol {
+            SET burnOk TO _scanSatBurn(
+                { RETURN _scanSatPlanSetApAtPe(recoveryAp). },
+                "SCANsat recovery set Ap").
+        } ELSE IF ABS(SHIP:PERIAPSIS - recoveryPe) > tol {
+            SET burnOk TO _scanSatBurn(
+                { RETURN _scanSatPlanSetPeAtAp(recoveryPe). },
+                "SCANsat recovery set Pe").
+        }
+        IF NOT burnOk { RETURN FALSE. }
+        SET iter TO iter + 1.
+    }
+
+    IF ABS(SHIP:APOAPSIS - recoveryAp) > tol
+            OR ABS(SHIP:PERIAPSIS - recoveryPe) > tol {
+        mLogWarn("SCANsat recovery did not converge within tolerance.").
         RETURN FALSE.
-    }
-
-    IF SHIP:APOAPSIS < recoveryAp * 0.95 {
-        SET burnOk TO _scanSatBurn({ RETURN _scanSatPlanRaiseAp(recoveryAp). }, "SCANsat recovery raise Ap").
-        IF NOT burnOk {
-            RETURN FALSE.
-        }
-    } ELSE {
-        mLog("SCANsat recovery Ap already near target.").
-    }
-
-    IF SHIP:PERIAPSIS < recoveryPe * 0.95 {
-        SET burnOk TO _scanSatBurn({ RETURN _scanSatPlanRaisePeAtAp(recoveryPe). }, "SCANsat recovery raise Pe").
-        IF NOT burnOk {
-            RETURN FALSE.
-        }
-    } ELSE {
-        mLog("SCANsat recovery Pe already safe.").
-    }
-
-    IF SHIP:ORBIT:ECCENTRICITY > 0.01
-            OR ABS(SHIP:APOAPSIS - recoveryAp) > recoveryAp * 0.1 {
-        SET burnOk TO _scanSatBurn({ RETURN planCircularize(). }, "SCANsat recovery recircularize").
-        IF NOT burnOk {
-            RETURN FALSE.
-        }
-    } ELSE {
-        mLog("SCANsat recovery recircularize skipped; orbit already close.").
     }
 
     orbitSummary().
@@ -401,6 +393,20 @@ LOCAL FUNCTION _scanSatBurn {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         planFn:CALL().
         WAIT 1.
+        LOCAL maxDv IS 1000.
+        IF CFG:HASKEY("SCANSAT_MAX_NODE_DV") { SET maxDv TO CFG["SCANSAT_MAX_NODE_DV"]. }
+        IF NEXTNODE:DELTAV:MAG > maxDv {
+            mLogError(label + " node rejected: dV="
+                + ROUND(NEXTNODE:DELTAV:MAG,1)
+                + " m/s exceeds SCANsat cap " + ROUND(maxDv,1) + " m/s.").
+            mLogWarn("STATS scansat-burn rejected label=" + label
+                + " dv=" + ROUND(NEXTNODE:DELTAV:MAG,1)
+                + " cap=" + ROUND(maxDv,1)
+                + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+                + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+            REMOVE NEXTNODE.
+            RETURN FALSE.
+        }
         mLogWarn("STATS scansat-burn setup label=" + label
             + " dv=" + ROUND(NEXTNODE:DELTAV:MAG,1)
             + " eta=" + ROUND(NEXTNODE:ETA,1)).
@@ -418,7 +424,7 @@ LOCAL FUNCTION _scanSatBurn {
     RETURN TRUE.
 }
 
-LOCAL FUNCTION _scanSatPlanRaiseAp {
+LOCAL FUNCTION _scanSatPlanSetApAtPe {
     PARAMETER targetAp.
 
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
@@ -430,17 +436,17 @@ LOCAL FUNCTION _scanSatPlanRaiseAp {
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
     LOCAL nd IS NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, vNew - vNow).
     ADD nd.
-    mLog("SCANsat raise Ap node: dV=" + ROUND(nd:DELTAV:MAG,1)
+    mLog("SCANsat set Ap node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " targetAp=" + ROUND(targetAp/1000,1) + "km").
-    mLogWarn("STATS scansat-raise-ap plan dv=" + ROUND(nd:DELTAV:MAG,1)
+    mLogWarn("STATS scansat-set-ap plan dv=" + ROUND(nd:DELTAV:MAG,1)
         + " targetApKm=" + ROUND(targetAp/1000,1)
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
-    archivePlannedManeuverLog("scansat-raise-ap").
+    archivePlannedManeuverLog("scansat-set-ap").
     RETURN nd.
 }
 
-LOCAL FUNCTION _scanSatPlanRaisePeAtAp {
+LOCAL FUNCTION _scanSatPlanSetPeAtAp {
     PARAMETER targetPe.
 
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
@@ -452,12 +458,12 @@ LOCAL FUNCTION _scanSatPlanRaisePeAtAp {
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
     LOCAL nd IS NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, vNew - vNow).
     ADD nd.
-    mLog("SCANsat raise Pe node: dV=" + ROUND(nd:DELTAV:MAG,1)
+    mLog("SCANsat set Pe node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " targetPe=" + ROUND(targetPe/1000,1) + "km").
-    mLogWarn("STATS scansat-raise-pe plan dv=" + ROUND(nd:DELTAV:MAG,1)
+    mLogWarn("STATS scansat-set-pe plan dv=" + ROUND(nd:DELTAV:MAG,1)
         + " targetPeKm=" + ROUND(targetPe/1000,1)
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
-    archivePlannedManeuverLog("scansat-raise-pe").
+    archivePlannedManeuverLog("scansat-set-pe").
     RETURN nd.
 }
