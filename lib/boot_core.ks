@@ -9,19 +9,43 @@ GLOBAL FUNCTION bootVehicleInfo {
     LOCAL vehicleName IS "".
     LOCAL targetName IS "".
     LOCAL payloadTypes IS LIST().
+    LOCAL sourceName IS SHIP:NAME.
     IF isEVA {
         SET vehicleName TO "EVA".
         SET targetName TO SHIP:BODY:NAME:TOUPPER.
         PRINT "  EVA KERBAL DETECTED".
+    } ELSE IF stateGet("vehicle", "") <> ""
+            AND NOT stateGet("vehicle", ""):CONTAINS(" ")
+            AND SHIP:STATUS <> "PRELAUNCH" {
+        SET vehicleName TO stateGet("vehicle", "").
+        SET targetName TO stateGet("target", "KERBIN"):TOUPPER.
+        LOCAL rawPayloads IS stateGet("payloads", "").
+        IF rawPayloads <> "" {
+            FOR p IN rawPayloads:SPLIT(",") {
+                LOCAL trimmedPayload IS p:TRIM:TOUPPER.
+                IF trimmedPayload <> "" { payloadTypes:ADD(trimmedPayload). }
+            }
+        }
     } ELSE {
-        LOCAL rawTokens IS SHIP:NAME:SPLIT("-").
+        IF stateGet("vessel_name", "") = "" OR SHIP:STATUS = "PRELAUNCH" {
+            stateSet("vessel_name", SHIP:NAME).
+        } ELSE {
+            SET sourceName TO stateGet("vessel_name", SHIP:NAME).
+        }
+        LOCAL structuredName IS sourceName:CONTAINS("-").
+        LOCAL rawTokens IS sourceName:SPLIT("-").
+        IF NOT structuredName { SET rawTokens TO sourceName:SPLIT(" "). }
         LOCAL tokens IS LIST().
         FOR t IN rawTokens {
             LOCAL trimmed IS t:TRIM.
             IF trimmed <> "" { tokens:ADD(trimmed). }
         }
-        SET vehicleName TO tokens[0].
-        IF tokens:LENGTH >= 2 {
+        IF tokens:LENGTH > 0 {
+            SET vehicleName TO tokens[0].
+        } ELSE {
+            SET vehicleName TO "UNKNOWN".
+        }
+        IF structuredName AND tokens:LENGTH >= 2 {
             SET targetName TO tokens[1]:TOUPPER.
             FROM { LOCAL i IS 2. } UNTIL i >= tokens:LENGTH STEP { SET i TO i + 1. } DO {
                 payloadTypes:ADD(tokens[i]:TOUPPER).
@@ -29,6 +53,9 @@ GLOBAL FUNCTION bootVehicleInfo {
         } ELSE {
             SET targetName TO "KERBIN".
         }
+    }
+    IF stateGet("vessel_name", "") = "" OR SHIP:STATUS = "PRELAUNCH" {
+        stateSet("vessel_name", SHIP:NAME).
     }
     RETURN LEXICON(
         "IS_EVA", isEVA,

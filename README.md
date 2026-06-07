@@ -115,6 +115,8 @@ Keep mission profiles in this key/value format for the current boot flow. `lib/s
 
 On boot, `lib/boot_core.ks` reads mission profiles from `0:/missions/<craft>` when a KSC link is available, falling back to cached `1:/missions/<craft>` files only when offline. After a profile is selected, the key/value config is persisted into state and stale local mission config files are pruned so they do not occupy flight-computer storage.
 
+Vessel names can be friendly. Dash-separated names such as `FR3-MUN-SCANSAT-01` still provide legacy `vehicle-target-payload` hints. Space-separated names such as `FR3 Mun Mini SCANSat 1` are treated as display names: boot uses the first word as the craft script (`FR3`) and lets the selected mission profile provide target/payload details. Boot stores the display name in `state["vessel_name"]` and prefers persisted `vehicle`, `target`, and `payloads` after launch so later vessel renames do not break in-flight reboots.
+
 While the vessel is still prelaunch, `lib/boot_core.ks` clears any saved mission profile and profile config before selecting a mission. This lets you reboot on the pad after choosing the wrong profile and get the mission picker again. Once launched, in-flight reboots keep the saved mission and phase state.
 
 FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only launch/countdown/orbit plus lightweight `landing_assist.ks` when needed; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Rover landing missions then reload again after assist-stage release for full `landing.ks`, and after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
@@ -171,7 +173,7 @@ Simple sounding rocket script. Launches, hibernates probe core, collects thermom
 ## Usage
 
 1. Set boot file to `boot/boot.ks` on the kOS processor
-2. Name the vessel following the `VEHICLE-TARGET-TYPE...` convention
+2. Name the vessel with either `VEHICLE-TARGET-TYPE...` or a friendly name beginning with the vehicle id
 3. Boot syncs core libs, loads vehicle script, syncs vehicle's LIBS
 4. Press any key within 5s of boot to enter manual mode, or wait to auto-resume
 5. On first boot, FR2 shows a flight plan summary with all config values and a 30s countdown — press ENTER to launch immediately or wait for auto-launch
@@ -273,7 +275,7 @@ Keep role scripts lightweight (minimal LIBS) since secondary CPUs are often on s
 
 ## Creating a New Vehicle
 
-Boot is generic — any vehicle works. Create `craft/MYVEHICLE.ks`, name your ship `MYVEHICLE-TARGET[-stuff]`, and boot handles the rest. Boot checks `craft/` first, then falls back to root for backwards compatibility.
+Boot is generic — any vehicle works. Create `craft/MYVEHICLE.ks`, then either name the ship `MYVEHICLE-TARGET[-stuff]` for legacy name hints or use a friendly name beginning with `MYVEHICLE` and select a mission profile. Boot checks `craft/` first, then falls back to root for backwards compatibility.
 
 A vehicle script must define three things:
 

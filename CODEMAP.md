@@ -3,7 +3,8 @@
 ## Boot And Mission Selection
 
 - `boot/boot.ks` is the small VAB-installed loader. It syncs core libraries, loads `lib/boot_core.ks`, resolves the craft/role script, and dispatches resume/manual mode.
-- `lib/boot_core.ks` parses the vessel name, stores `vehicle`, `target`, and `payloads` in state, reads mission profiles from the archive when connected, and prunes stale local `1:/missions` files after persisting config into state.
+- `lib/boot_core.ks` parses the vessel name, stores `vessel_name`, `vehicle`, `target`, and `payloads` in state, reads mission profiles from the archive when connected, and prunes stale local `1:/missions` files after persisting config into state.
+- Dash-separated vessel names still act as legacy `vehicle-target-payload` hints; space-separated friendly names use the first word as the vehicle id and rely on mission profiles/state for mission details.
 - `lib/boot_core.ks` prunes stale local `1:/lib` files before syncing the selected `LIBS`, so progressive reloads actually free storage.
 - `cmd/cleanup.ks` / `lib/cleanup.ks` can be run manually to delete local source `.ks` files except `1:/boot/boot.ks` and clear local logs when an older flight computer is out of space.
 - `lib/resume.ks` builds `MISSION`, normalizes payload tokens, and builds common rocket sequences.
