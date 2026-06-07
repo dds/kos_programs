@@ -101,7 +101,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_ORBITS") {
         SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_ORBITS"].
     }
-    LOCAL scanSamples IS 384.
+    LOCAL scanSamples IS 2048.
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_SAMPLES") {
         SET scanSamples TO CFG["TARGET_DEORBIT_SCAN_SAMPLES"].
     }
@@ -117,7 +117,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL scanUT  IS TIME:SECONDS + 30.
     LOCAL scanEnd IS TIME:SECONDS + period * scanOrbits + 30.
     mLog("Coarse target scan: " + scanSamples + " samples over "
-        + ROUND(scanOrbits,1) + " orbits.").
+        + ROUND(scanOrbits,1) + " orbits"
+        + " step=" + ROUND(scanStep,1) + "s.").
     UNTIL scanUT > scanEnd {
         LOCAL trial IS _evalDeorbitNode(scanUT, entryPe, targetLat, targetLng).
         IF trial["VALID"] {
@@ -135,7 +136,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
             SET invalidSamples TO invalidSamples + 1.
         }
         SET scanUT TO scanUT + scanStep.
-        WAIT 0.1.
+        WAIT 0.01.
     }
     mLog("Coarse best: T+" + ROUND(bestUT - TIME:SECONDS,0)
         + "s  dist=" + ROUND(bestDist/1000,1) + "km").
