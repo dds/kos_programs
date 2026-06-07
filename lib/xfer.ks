@@ -50,9 +50,25 @@ GLOBAL FUNCTION phaseRendezvous {
 GLOBAL FUNCTION phaseTransfer {
     LOCAL target IS missionTargetBody().
     orbitSummary().
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     LOCAL success IS FALSE.
     LOCAL retries IS 0.
+
+    IF HASNODE {
+        LOCAL existing IS NEXTNODE.
+        mLogWarn("STATS transfer resume existing-node dv="
+            + ROUND(existing:DELTAV:MAG,1)
+            + " eta=" + ROUND(existing:ETA,1)
+            + " body=" + SHIP:BODY:NAME).
+        SET success TO executeManeuver().
+        IF success {
+            orbitSummary().
+            nextPhase(xferSeq).
+            RETURN.
+        }
+        mLogWarn("Existing transfer node was not usable; replanning.").
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    }
+
     UNTIL success {
         LOCAL xLan IS -1.
         LOCAL xAoP IS -1.
