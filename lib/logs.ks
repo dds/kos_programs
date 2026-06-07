@@ -65,13 +65,30 @@ GLOBAL FUNCTION logId {
 GLOBAL FUNCTION archiveLog {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
     IF launchT = 0 { 
-        mLogError("Launch time is 0 in archiveLog").
+        PRINT "archiveLog: launch time is 0.".
         RETURN.
     }
     LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
-    COPYPATH(flightLogPath(), shipDir + "/" + logId() + ".log").
+
+    LOCAL localPath IS flightLogPath().
+    IF localPath = "" OR NOT EXISTS(localPath) { RETURN. }
+
+    LOCAL archivePath IS shipDir + "/" + logId() + ".log".
+    LOCAL raw IS OPEN(localPath):READALL:STRING.
+    IF raw:TRIM = "" { RETURN. }
+
+    IF NOT EXISTS(archivePath) {
+        LOG "=== ARCHIVE LOG START: " + logId() + " ===" TO archivePath.
+    }
+    FOR line IN raw:SPLIT(CHAR(10)) {
+        LOCAL clean IS line:REPLACE(CHAR(13), "").
+        IF clean <> "" { LOG clean TO archivePath. }
+    }
+
+    DELETEPATH(localPath).
+    LOG "=== LOCAL LOG ROTATED: " + ROUND(TIME:SECONDS,1) + " ===" TO localPath.
 }
 
 LOCAL FUNCTION _sanitizeName {

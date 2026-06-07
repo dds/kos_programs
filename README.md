@@ -129,7 +129,7 @@ The current band and pending reload are saved in mission state (`lib_band`, `lib
 
 The archive-root `VERSION` file contains the code tag printed by `logs.ks` at boot as `CODE version=...`. Boot copies it into `1:/state/code_version.state` when connected, so archived logs can be matched back to a Git tag even after later code changes. Use `make release-version TAG=kos-YYYYMMDD-N` to stamp `VERSION`, commit it, create the matching Git tag, and push branch plus tag.
 
-Phase transitions archive the current flight log when a KSC link is available. If no link is available, the transition still proceeds and the log is archived later by boot/recovery or an operator `RUNPATH("1:/cmd/logs.ks").`
+Phase transitions archive the current flight log when a KSC link is available. Archive is append-and-rotate: new local log lines are appended to the remote archive, then the local log spool is truncated to a short marker so storage is recovered during flight. If no link is available, the transition still proceeds and the log is archived later by boot/recovery or an operator `RUNPATH("1:/cmd/logs.ks").`
 
 Successful maneuver planners also archive the current flight log when a KSC link is available, immediately after the final planned-node summary and before execution/coast. WARN-level `STATS` lines summarize phase entry orbit state, maneuver setup/alignment/result, transfer/MCC solver results, capture/circularization/raise/inclination cleanup, landing deorbit, assist descent handoff, powered landing, rendezvous, and asteroid-intercept plan details. Each `STATS` line also triggers an immediate archive when connected, so the archive captures breadcrumbs even if the next phase fails.
 
