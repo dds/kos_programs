@@ -4,9 +4,44 @@
 
 GLOBAL launchSeq IS LIST().
 
+LOCAL FUNCTION _launchAge {
+    RETURN TIME:SECONDS - stateGetNum("launch_time", 0).
+}
+
+LOCAL FUNCTION _ascentAngleError {
+    IF SHIP:VELOCITY:SURFACE:MAG < 1 { RETURN -1. }
+    RETURN VANG(SHIP:FACING:FOREVECTOR, SHIP:VELOCITY:SURFACE).
+}
+
+LOCAL FUNCTION _ascentTwr {
+    IF SHIP:MASS <= 0 { RETURN 0. }
+    RETURN SHIP:AVAILABLETHRUST / (SHIP:MASS * 9.81).
+}
+
+LOCAL FUNCTION _logAscentTelemetry {
+    PARAMETER reason.
+    mLogWarn("STATS launch telemetry reason=" + reason
+        + " age=" + ROUND(_launchAge(),1)
+        + " status=" + SHIP:STATUS
+        + " massT=" + ROUND(SHIP:MASS,2)
+        + " twr=" + ROUND(_ascentTwr(),2)
+        + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)
+        + " maxThrust=" + ROUND(SHIP:MAXTHRUST,1)
+        + " altKm=" + ROUND(SHIP:ALTITUDE/1000,2)
+        + " radarKm=" + ROUND(ALT:RADAR/1000,2)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,2)
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,2)
+        + " vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
+        + " vVert=" + ROUND(SHIP:VERTICALSPEED,1)
+        + " pitch=" + ROUND(SHIP:FACING:PITCH,1)
+        + " roll=" + ROUND(SHIP:FACING:ROLL,1)
+        + " heading=" + ROUND(SHIP:FACING:YAW,1)
+        + " angleErr=" + ROUND(_ascentAngleError(),1)
+        + " phase=" + stateGet("phase", "")).
+}
+
 LOCAL FUNCTION _badAscentTrajectory {
-    LOCAL launchAge IS TIME:SECONDS - stateGetNum("launch_time", 0).
-    IF launchAge < 45 { RETURN FALSE. }
+    IF _launchAge() < 45 { RETURN FALSE. }
     IF SHIP:ALTITUDE < 1000 { RETURN FALSE. }
     IF SHIP:VELOCITY:SURFACE:MAG < 50 { RETURN FALSE. }
     IF SHIP:VERTICALSPEED > -20 { RETURN FALSE. }
@@ -43,11 +78,21 @@ GLOBAL FUNCTION phaseLaunch {
     WHEN stateGet("phase","") = "LUNCH" OR stateGet("phase","") = "PARK" THEN {
         LOCAL abortTriggered IS FALSE.
 
+        IF stateGet("launch_vs_nonpos_logged", "false") <> "true"
+                AND _launchAge() > 10
+                AND SHIP:ALTITUDE > 100
+                AND SHIP:VELOCITY:SURFACE:MAG > 10
+                AND SHIP:VERTICALSPEED <= 0 {
+            stateSet("launch_vs_nonpos_logged", "true").
+            _logAscentTelemetry("vertical-speed-nonpositive").
+        }
+
         IF _badAscentTrajectory() {
             SET abortTriggered TO TRUE.
             mLogError("Abort: anomalous trajectory — Ap=" + ROUND(SHIP:APOAPSIS/1000,1)
                 + "km Vs=" + ROUND(SHIP:VERTICALSPEED,1)
                 + "m/s alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km").
+            _logAscentTelemetry("abort-anomalous-trajectory").
         }
 
         IF SHIP:ALTITUDE < 40000
@@ -56,6 +101,7 @@ GLOBAL FUNCTION phaseLaunch {
             SET abortTriggered TO TRUE.
             mLogError("Abort: attitude divergence — "
                 + ROUND(VANG(SHIP:FACING:FOREVECTOR, SHIP:VELOCITY:SURFACE),1) + "deg off prograde").
+            _logAscentTelemetry("abort-attitude-divergence").
         }
 
         IF ABORT OR AG10 { SET abortTriggered TO TRUE. mLogError("Abort: manual trigger."). }
@@ -69,6 +115,7 @@ GLOBAL FUNCTION phaseLaunch {
     }
 
     stateSetNum("launch_time", TIME:SECONDS).
+    stateSet("launch_vs_nonpos_logged", "false").
 
     mLog("Press ABORT or AG10 within 5s to hold launch.").
     HUDTEXT("T-5: ABORT/AG10 to hold", 5, 2, 16, YELLOW, FALSE).
