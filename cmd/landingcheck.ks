@@ -44,8 +44,15 @@ IF selected <> 0 {
 }
 
 LOCAL decouplers IS SHIP:PARTSTAGGED("landing_assist_decoupler").
-PRINT "  Assist   decouplers tagged landing_assist_decoupler="
-    + decouplers:LENGTH.
+LOCAL assistTag IS "landing_assist_decoupler".
+IF EXISTS("1:/lib/state.ksm") {
+    RUNONCEPATH("1:/lib/state.ksm").
+    stateInit().
+    LOCAL configuredTag IS stateGet("mission_cfg_LANDING_ASSIST_DECOUPLER_TAG", "").
+    IF configuredTag <> "" { SET assistTag TO configuredTag. }
+}
+SET decouplers TO SHIP:PARTSTAGGED(assistTag).
+PRINT "  Assist   decouplers tagged " + assistTag + "=" + decouplers:LENGTH.
 PRINT "  Addons   TR=" + ADDONS:TR:AVAILABLE
     + " KE=" + ADDONS:KE:AVAILABLE
     + " SCANsat=" + ADDONS:SCANSAT:AVAILABLE.
