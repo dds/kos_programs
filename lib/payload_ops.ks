@@ -3,6 +3,11 @@
 // (0:/lib/payload_ops.ks)
 // ============================================================
 
+LOCAL FUNCTION _payloadSeq {
+    IF DEFINED fr3Seq { RETURN fr3Seq. }
+    RETURN launchSeq.
+}
+
 GLOBAL FUNCTION phaseTargetedDeorbit {
     IF NOT targetReachable(CFG["PROBE_TARGET_LAT"]) {
         mLogWarn("Target lat=" + CFG["PROBE_TARGET_LAT"]
@@ -10,7 +15,7 @@ GLOBAL FUNCTION phaseTargetedDeorbit {
             + "deg — proceeding with best effort.").
     }
     targetedDeorbit().
-    nextPhase(launchSeq).
+    nextPhase(_payloadSeq()).
 }
 
 GLOBAL FUNCTION phaseReleaseProbe {
@@ -73,7 +78,7 @@ GLOBAL FUNCTION phaseReleaseProbe {
 
     stateSet("probe_released_time", TIME:SECONDS).
     mLog("Probe released. Relay mass: " + ROUND(SHIP:MASS,2) + "t.").
-    nextPhase(launchSeq).
+    nextPhase(_payloadSeq()).
 }
 
 GLOBAL FUNCTION phaseRelayOps {
@@ -86,7 +91,7 @@ GLOBAL FUNCTION phaseRelayOps {
     HUDTEXT("Relay deployed: " + MISSION["target"], 8, 2, 18, GREEN, FALSE).
     LOCAL n IS 0.
     UNTIL n >= 5 { WAIT 60. orbitSummary(). SET n TO n + 1. }
-    nextPhase(launchSeq).
+    nextPhase(_payloadSeq()).
 }
 
 GLOBAL FUNCTION phaseScanSatOps {
@@ -118,22 +123,22 @@ GLOBAL FUNCTION phaseScanSatOps {
     stateSet("scansat_released_time", TIME:SECONDS).
     mLog("SCANsat deployed. Continuing primary mission.").
     HUDTEXT("SCANsat deployed", 5, 2, 16, GREEN, FALSE).
-    nextPhase(launchSeq).
+    nextPhase(_payloadSeq()).
 }
 
 GLOBAL FUNCTION phaseLandDeorbit {
     landingTargetedDeorbit().
-    nextPhase(launchSeq).
+    nextPhase(_payloadSeq()).
 }
 
 GLOBAL FUNCTION phaseLandAssist {
     landingAssistStage().
-    nextPhase(launchSeq).
+    nextPhase(_payloadSeq()).
 }
 
 GLOBAL FUNCTION phaseLand {
     landingExecute().
-    nextPhase(launchSeq).
+    nextPhase(_payloadSeq()).
 }
 
 LOCAL FUNCTION _releaseTaggedPayload {

@@ -13,6 +13,12 @@ GLOBAL FUNCTION runPhases {
         } ELSE IF phase = "DONE" {
             phaseDone().
             RETURN.
+        } ELSE IF CFG:HASKEY("PROGRESSIVE_RELOAD") AND CFG["PROGRESSIVE_RELOAD"] > 0 {
+            mLog("Phase " + phase + " requires a different library band. Reboot to continue.").
+            PRINT " ".
+            PRINT "  PHASE READY: " + phase.
+            PRINT "  Reboot this CPU to load the next mission library band.".
+            WAIT UNTIL FALSE.
         } ELSE {
             mLogError("Unknown phase: " + phase + " — halting.").
             stateSet("phase", "DONE").

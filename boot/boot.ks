@@ -109,6 +109,38 @@ LOCAL FUNCTION _loadLib {
     }
 }
 
+LOCAL FUNCTION _libBaseName {
+    PARAMETER fileName.
+    LOCAL upper IS fileName:TOUPPER.
+    IF upper:CONTAINS(".KSM") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    IF upper:CONTAINS(".KS") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
+    RETURN fileName.
+}
+
+LOCAL FUNCTION _pruneLibs {
+    PARAMETER wantedLibs.
+    LOCAL keep IS LIST("STATE", "LOGS", "FILES", "RESUME", "RECOVERY").
+    FOR lib IN wantedLibs {
+        LOCAL libKey IS lib:TOUPPER.
+        IF NOT keep:CONTAINS(libKey) { keep:ADD(libKey). }
+    }
+
+    LOCAL startPath IS PATH().
+    LOCAL items IS LIST().
+    CD("1:/lib").
+    LIST FILES IN items.
+    CD(startPath).
+
+    FOR item IN items {
+        IF item:ISFILE {
+            LOCAL base IS _libBaseName(item:NAME).
+            IF NOT keep:CONTAINS(base:TOUPPER) {
+                DELETEPATH("1:/lib/" + item:NAME).
+            }
+        }
+    }
+}
+
 LOCAL FUNCTION _syncMissionConfigs {
     PARAMETER craftName.
     IF NOT HAS_LINK { RETURN. }
@@ -325,6 +357,7 @@ RUNPATH("1:/" + vehicleScript + ".ks").
 IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
     IF DEFINED LIBS {
+        _pruneLibs(LIBS).
         FOR lib IN LIBS { _syncLib(lib). }
     }
     _syncLib("resume").

@@ -112,7 +112,7 @@ LANDING_ASSIST_RELEASE_ALT = 100
 
 On boot, `boot.ks` syncs `missions/<craft>/*.cfg` to the local processor. If the vessel is named just `FR3` and no `mission_id` is already saved in state, FR3 selects a mission profile from `1:/missions/FR3`. To force a profile manually before rebooting, use `stateSet("mission_id", "mun_rover").`
 
-Rover landing missions use reload points to stay under kOS storage limits. Launch through assist-stage release loads `landing_assist.ks`; after separation the script advances to `LAND` and halts so the rover CPU can reboot and load full `landing.ks`; after touchdown it advances to `ROVER` and halts again so rover driving code can load only when needed.
+FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only launch/countdown/orbit plus lightweight `landing_assist.ks` when needed; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Rover landing missions then reload again after assist-stage release for full `landing.ks`, and after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
 
 ### FJ1A
 

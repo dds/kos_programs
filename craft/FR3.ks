@@ -27,7 +27,9 @@ GLOBAL CFG IS LEXICON(
     "PROBE_TARGET_LNG",        30, 
     "PROBE_ENTRY_PE",         5000,
     "PROBE_TARGET_TOL",        2500,
-    "SCANSAT_DECOUPLER_TAG", "scansat_decoupler"
+    "SCANSAT_DECOUPLER_TAG", "scansat_decoupler",
+    "PROGRESSIVE_RELOAD",       1,
+    "RELOAD_AFTER_PARK",        1
 ).
 
 GLOBAL fr3Seq IS LIST().
@@ -68,7 +70,8 @@ LOCAL FUNCTION _applyMissionState {
         "LANDING_DEORBIT_PE", "LANDING_TARGET_TOLERANCE",
         "LANDING_GUIDANCE_ALT", "LANDING_ASSIST_RELEASE_ALT",
         "LANDING_ASSIST_RELEASE_HSPEED", "LANDING_ASSIST_RELEASE_VSPEED",
-        "RELOAD_AFTER_PARK", "RELOAD_AFTER_LAND_ASSIST", "RELOAD_AFTER_LAND"
+        "PROGRESSIVE_RELOAD", "RELOAD_AFTER_PARK",
+        "RELOAD_AFTER_LAND_ASSIST", "RELOAD_AFTER_LAND"
     ) {
         _cfgFromState(key, TRUE).
     }
@@ -148,23 +151,16 @@ LOCAL FUNCTION _fr3PhaseBand {
             "CIRC", "RAISE", "INCLINE")) {
         RETURN "TRANSFER".
     }
+    IF _phaseIn(phase, LIST("TARGETED_DEORBIT", "RELEASE_PROBE",
+            "RELAY_OPS", "SCANSAT_OPS")) {
+        RETURN "PAYLOAD_OPS".
+    }
     IF _phaseIn(phase, LIST("LAND_DEORBIT", "LAND_ASSIST")) {
         RETURN "LAND_ASSIST".
     }
     IF phase = "LAND" { RETURN "LAND". }
     IF phase = "ROVER" { RETURN "ROVER". }
     RETURN "MISSION".
-}
-
-LOCAL FUNCTION _addPayloadLibs {
-    PARAMETER libs.
-    IF _bootHasPayload("PROBE") OR _bootHasPayload("CRASHPROBE")
-            OR _bootHasPayload("RELAY") OR _bootHasPayload("SCANSAT")
-            OR _bootHasPayload("SCISAT") {
-        IF NOT libs:CONTAINS("payload_ops") { libs:ADD("payload_ops"). }
-    } ELSE {
-        IF NOT libs:CONTAINS("payload_landing") { libs:ADD("payload_landing"). }
-    }
 }
 
 LOCAL FUNCTION _fr3Libs {
@@ -185,16 +181,23 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("maneuver").
         libs:ADD("inclination").
         libs:ADD("orbit").
+    } ELSE IF band = "PAYLOAD_OPS" {
+        libs:ADD("payload_ops").
+        libs:ADD("orbit").
+        IF _phaseIn(stateGet("phase", ""):TOUPPER, LIST("TARGETED_DEORBIT")) {
+            libs:ADD("targeting").
+            libs:ADD("maneuver").
+        }
     } ELSE IF band = "LAND_ASSIST" {
+        libs:ADD("payload_landing").
         libs:ADD("targeting").
         libs:ADD("maneuver").
         libs:ADD("landing_assist").
-        _addPayloadLibs(libs).
     } ELSE IF band = "LAND" {
+        libs:ADD("payload_landing").
         libs:ADD("targeting").
         libs:ADD("maneuver").
         libs:ADD("landing").
-        _addPayloadLibs(libs).
     } ELSE IF band = "ROVER" {
         libs:ADD("payload_landing").
         libs:ADD("rover").
@@ -205,11 +208,6 @@ LOCAL FUNCTION _fr3Libs {
     IF band = "LAUNCH" {
         // Launch-only reboots should stay small. Payload operation libraries
         // are pulled in after parking orbit if the sequence actually needs them.
-    } ELSE IF band = "TRANSFER" {
-        IF _bootHasPayload("RELAY") OR _bootHasPayload("SCANSAT")
-                OR _bootHasPayload("SCISAT") {
-            _addPayloadLibs(libs).
-        }
     }
     IF band = "TRANSFER" AND stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
         libs:ADD("lambert").
@@ -219,7 +217,8 @@ LOCAL FUNCTION _fr3Libs {
         IF NOT libs:CONTAINS("lambert") { libs:ADD("lambert"). }
         libs:ADD("maneuver_rendezvous").
     }
-    IF band = "TRANSFER" AND (_bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT")) {
+    IF (band = "TRANSFER" OR band = "PAYLOAD_OPS")
+            AND (_bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT")) {
         libs:ADD("science").
     }
     RETURN libs.
@@ -259,14 +258,18 @@ LOCAL FUNCTION _phaseListFromString {
 
 LOCAL FUNCTION _applyMissionProfile {
     IF MISSION["target"]:TOUPPER = "MUN" AND _hasLandingPayload() {
-        SET LANDING_CFG["DEORBIT_PE"] TO 5000.
-        SET LANDING_CFG["TARGET_TOLERANCE"] TO 2500.
-        SET LANDING_CFG["GUIDANCE_ALT"] TO 5000.
+        IF DEFINED LANDING_CFG {
+            SET LANDING_CFG["DEORBIT_PE"] TO 5000.
+            SET LANDING_CFG["TARGET_TOLERANCE"] TO 2500.
+            SET LANDING_CFG["GUIDANCE_ALT"] TO 5000.
+        }
 
         IF _hasPayload("ASSISTROVER") OR _hasPayload("ASSISTLANDER") {
-            SET LANDING_CFG["ASSIST_RELEASE_ALT"] TO 100.
-            SET LANDING_CFG["ASSIST_RELEASE_HSPEED"] TO 0.5.
-            SET LANDING_CFG["ASSIST_RELEASE_VSPEED"] TO 0.
+            IF DEFINED LANDING_CFG {
+                SET LANDING_CFG["ASSIST_RELEASE_ALT"] TO 100.
+                SET LANDING_CFG["ASSIST_RELEASE_HSPEED"] TO 0.5.
+                SET LANDING_CFG["ASSIST_RELEASE_VSPEED"] TO 0.
+            }
             _cfgSet("RELOAD_AFTER_LAND_ASSIST", 1).
         }
         IF _hasPayload("ROVER") OR _hasPayload("ASSISTROVER") {
@@ -274,32 +277,34 @@ LOCAL FUNCTION _applyMissionProfile {
         }
     }
 
-    IF CFG:HASKEY("LANDING_TARGET_LAT") {
-        SET LANDING_CFG["TARGET_LAT"] TO CFG["LANDING_TARGET_LAT"].
-    }
-    IF CFG:HASKEY("LANDING_TARGET_LNG") {
-        SET LANDING_CFG["TARGET_LNG"] TO CFG["LANDING_TARGET_LNG"].
-    }
-    IF CFG:HASKEY("LANDING_TARGET_WAYPOINT") {
-        SET LANDING_CFG["TARGET_WAYPOINT"] TO CFG["LANDING_TARGET_WAYPOINT"].
-    }
-    IF CFG:HASKEY("LANDING_DEORBIT_PE") {
-        SET LANDING_CFG["DEORBIT_PE"] TO CFG["LANDING_DEORBIT_PE"].
-    }
-    IF CFG:HASKEY("LANDING_TARGET_TOLERANCE") {
-        SET LANDING_CFG["TARGET_TOLERANCE"] TO CFG["LANDING_TARGET_TOLERANCE"].
-    }
-    IF CFG:HASKEY("LANDING_GUIDANCE_ALT") {
-        SET LANDING_CFG["GUIDANCE_ALT"] TO CFG["LANDING_GUIDANCE_ALT"].
-    }
-    IF CFG:HASKEY("LANDING_ASSIST_RELEASE_ALT") {
-        SET LANDING_CFG["ASSIST_RELEASE_ALT"] TO CFG["LANDING_ASSIST_RELEASE_ALT"].
-    }
-    IF CFG:HASKEY("LANDING_ASSIST_RELEASE_HSPEED") {
-        SET LANDING_CFG["ASSIST_RELEASE_HSPEED"] TO CFG["LANDING_ASSIST_RELEASE_HSPEED"].
-    }
-    IF CFG:HASKEY("LANDING_ASSIST_RELEASE_VSPEED") {
-        SET LANDING_CFG["ASSIST_RELEASE_VSPEED"] TO CFG["LANDING_ASSIST_RELEASE_VSPEED"].
+    IF DEFINED LANDING_CFG {
+        IF CFG:HASKEY("LANDING_TARGET_LAT") {
+            SET LANDING_CFG["TARGET_LAT"] TO CFG["LANDING_TARGET_LAT"].
+        }
+        IF CFG:HASKEY("LANDING_TARGET_LNG") {
+            SET LANDING_CFG["TARGET_LNG"] TO CFG["LANDING_TARGET_LNG"].
+        }
+        IF CFG:HASKEY("LANDING_TARGET_WAYPOINT") {
+            SET LANDING_CFG["TARGET_WAYPOINT"] TO CFG["LANDING_TARGET_WAYPOINT"].
+        }
+        IF CFG:HASKEY("LANDING_DEORBIT_PE") {
+            SET LANDING_CFG["DEORBIT_PE"] TO CFG["LANDING_DEORBIT_PE"].
+        }
+        IF CFG:HASKEY("LANDING_TARGET_TOLERANCE") {
+            SET LANDING_CFG["TARGET_TOLERANCE"] TO CFG["LANDING_TARGET_TOLERANCE"].
+        }
+        IF CFG:HASKEY("LANDING_GUIDANCE_ALT") {
+            SET LANDING_CFG["GUIDANCE_ALT"] TO CFG["LANDING_GUIDANCE_ALT"].
+        }
+        IF CFG:HASKEY("LANDING_ASSIST_RELEASE_ALT") {
+            SET LANDING_CFG["ASSIST_RELEASE_ALT"] TO CFG["LANDING_ASSIST_RELEASE_ALT"].
+        }
+        IF CFG:HASKEY("LANDING_ASSIST_RELEASE_HSPEED") {
+            SET LANDING_CFG["ASSIST_RELEASE_HSPEED"] TO CFG["LANDING_ASSIST_RELEASE_HSPEED"].
+        }
+        IF CFG:HASKEY("LANDING_ASSIST_RELEASE_VSPEED") {
+            SET LANDING_CFG["ASSIST_RELEASE_VSPEED"] TO CFG["LANDING_ASSIST_RELEASE_VSPEED"].
+        }
     }
 
     IF MISSION["target"]:TOUPPER = "MUN"
@@ -314,6 +319,17 @@ LOCAL FUNCTION _applyMissionProfile {
         SET CFG["TARGET_INCLINATION"] TO 90.
         SET CFG["MAX_INCL_CHANGE_DV"] TO 300.
 
+    }
+}
+
+LOCAL FUNCTION _phaseParkingReload {
+    phaseParking().
+    IF CFG:HASKEY("RELOAD_AFTER_PARK") AND CFG["RELOAD_AFTER_PARK"] > 0 {
+        mLog("Reload point after parking orbit. Reboot to load transfer libraries.").
+        PRINT " ".
+        PRINT "  PARKING ORBIT READY".
+        PRINT "  Reboot this CPU to load transfer code.".
+        WAIT UNTIL FALSE.
     }
 }
 
@@ -343,37 +359,45 @@ LOCAL FUNCTION buildPhaseSequence {
 }
 
 LOCAL FUNCTION _buildPhaseMap {
-    LOCAL phaseMap IS LEXICON(
-        "LUNCH", phaseLaunch@,
-        "FAIR", phaseFairing@,
-        "ANTS",             phaseExtendAnts@,
-        "PARK",          phaseParking@,
-        "RDV",              phaseRendezvous@,
-        "XING",         phaseTransfer@,
-        "COAST",            phaseCoast@,
-        "CAPTURE",          phaseCapture@,
-        "CIRC",             phaseCirc@,
-        "RAISE",        phaseRaiseAlt@,
-        "INCLINE",     phaseInclCorrect@,
-        "MCC", phaseMidCourse@
-    ).
+    LOCAL band IS _fr3PhaseBand().
+    LOCAL phaseMap IS LEXICON().
 
-    IF _hasPayload("PROBE") OR _hasPayload("CRASHPROBE") {
+    IF band = "LAUNCH" {
+        phaseMap:ADD("LUNCH", phaseLaunch@).
+        phaseMap:ADD("FAIR", phaseFairing@).
+        phaseMap:ADD("ANTS", phaseExtendAnts@).
+        phaseMap:ADD("PARK", _phaseParkingReload@).
+    }
+
+    IF band = "TRANSFER" {
+        phaseMap:ADD("RDV", phaseRendezvous@).
+        phaseMap:ADD("XING", phaseTransfer@).
+        phaseMap:ADD("MCC", phaseMidCourse@).
+        phaseMap:ADD("COAST", phaseCoast@).
+        phaseMap:ADD("CAPTURE", phaseCapture@).
+        phaseMap:ADD("CIRC", phaseCirc@).
+        phaseMap:ADD("RAISE", phaseRaiseAlt@).
+        phaseMap:ADD("INCLINE", phaseInclCorrect@).
+    }
+
+    IF band = "PAYLOAD_OPS" AND (_hasPayload("PROBE") OR _hasPayload("CRASHPROBE")) {
         phaseMap:ADD("TARGETED_DEORBIT", phaseTargetedDeorbit@).
         phaseMap:ADD("RELEASE_PROBE", phaseReleaseProbe@).
     }
-    IF _hasPayload("RELAY") OR _hasPayload("SCISAT") {
+    IF band = "PAYLOAD_OPS" AND (_hasPayload("RELAY") OR _hasPayload("SCISAT")) {
         phaseMap:ADD("RELAY_OPS", phaseRelayOps@).
     }
-    IF _hasPayload("SCANSAT") {
+    IF band = "PAYLOAD_OPS" AND _hasPayload("SCANSAT") {
         phaseMap:ADD("SCANSAT_OPS", phaseScanSatOps@).
     }
-    IF _hasLandingPayload() {
+    IF band = "LAND_ASSIST" {
         phaseMap:ADD("LAND_DEORBIT", phaseLandDeorbit@).
         phaseMap:ADD("LAND_ASSIST", phaseLandAssist@).
+    }
+    IF band = "LAND" {
         phaseMap:ADD("LAND", phaseLand@).
     }
-    IF _hasPayload("ROVER") OR _hasPayload("ASSISTROVER") {
+    IF band = "ROVER" {
         phaseMap:ADD("ROVER", phaseRover@).
     }
 
@@ -452,15 +476,18 @@ LOCAL FUNCTION _printConfig {
 GLOBAL FUNCTION main {
     _applyMissionProfile().
     LOCAL seq IS buildPhaseSequence().
-    SET launchSeq TO seq.
-    SET xferSeq TO seq.
+    SET fr3Seq TO seq.
+    IF DEFINED launchSeq { SET launchSeq TO seq. }
+    IF DEFINED xferSeq { SET xferSeq TO seq. }
 
     mLogPhase("FR3 MAIN").
     mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
     mLog("Sequence: " + seq:JOIN(" -> ")).
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
 
-    confirmLaunch(_printConfig@).
+    IF _fr3PhaseBand() = "LAUNCH" {
+        confirmLaunch(_printConfig@).
+    }
 
     runPhases(_buildPhaseMap()).
 }

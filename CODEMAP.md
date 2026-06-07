@@ -3,6 +3,7 @@
 ## Boot And Mission Selection
 
 - `boot/boot.ks` parses the vessel name, stores `vehicle`, `target`, and `payloads` in state, syncs the vehicle script, then syncs and loads that vehicle's `LIBS`.
+- `boot/boot.ks` prunes stale local `1:/lib` files before syncing the selected `LIBS`, so progressive reloads actually free storage.
 - `lib/resume.ks` builds `MISSION`, normalizes payload tokens, and builds common rocket sequences.
 - Vehicle scripts in `craft/` define default `CFG`, `LIBS`, phase sequence, phase map, and mission profile tweaks.
 
@@ -32,6 +33,15 @@ Profile-only FR3 libraries:
 - `maneuver_rendezvous` - loaded only for rendezvous or asteroid profiles.
 - `landing` - loaded only at the post-assist `LAND` reload point.
 - `rover` - loaded only at the post-touchdown `ROVER` reload point.
+
+FR3 progressive library bands:
+
+- `LAUNCH`: `launch`, `countdown`, `orbit`, and `landing_assist` for landing payloads. Stops after `PARK` when `RELOAD_AFTER_PARK=1`.
+- `TRANSFER`: `xfer`, `maneuver`, `inclination`, `orbit`, and optional Lambert/rendezvous/science libraries.
+- `PAYLOAD_OPS`: probe, relay, or SCANsat operation libraries only.
+- `LAND_ASSIST`: targeted deorbit and assist-stage release.
+- `LAND`: full powered landing.
+- `ROVER`: rover driving/co-pilot code.
 
 Mission profile files:
 
