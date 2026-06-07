@@ -23,10 +23,12 @@ PRINT "  Attitude pitch=" + ROUND(SHIP:FACING:PITCH,1)
     + " roll=" + ROUND(SHIP:FACING:ROLL,1).
 
 LOCAL selected IS 0.
-FOR wp IN WAYPOINTS(SHIP:BODY:NAME) {
+FOR wp IN ALLWAYPOINTS() {
     IF wp:ISSELECTED {
-        SET selected TO wp.
-        BREAK.
+        IF wp:BODY:NAME = SHIP:BODY:NAME {
+            SET selected TO wp.
+            BREAK.
+        }
     }
 }
 IF selected <> 0 {
