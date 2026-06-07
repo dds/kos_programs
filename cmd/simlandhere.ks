@@ -1,0 +1,129 @@
+// cmd/simlandhere.ks - Pick a reachable simulation landing target ahead.
+// Usage: RUNPATH("0:/cmd/simlandhere.ks").      // 5 minutes ahead
+//        RUNPATH("0:/cmd/simlandhere.ks", 8).   // 8 minutes ahead
+
+PARAMETER aheadMinutes IS 5.
+
+LOCAL FUNCTION _loadState {
+    IF EXISTS("1:/lib/state.ksm") {
+        RUNONCEPATH("1:/lib/state.ksm").
+    } ELSE IF EXISTS("1:/lib/state.ks") {
+        RUNONCEPATH("1:/lib/state.ks").
+    } ELSE {
+        RUNONCEPATH("0:/lib/state.ks").
+    }
+    stateInit().
+}
+
+LOCAL FUNCTION _loadLogs {
+    IF EXISTS("1:/lib/logs.ksm") {
+        RUNONCEPATH("1:/lib/logs.ksm").
+    } ELSE IF EXISTS("1:/lib/logs.ks") {
+        RUNONCEPATH("1:/lib/logs.ks").
+    } ELSE IF EXISTS("0:/lib/logs.ks") {
+        RUNONCEPATH("0:/lib/logs.ks").
+    }
+    IF DEFINED initLog { initLog(). }
+}
+
+LOCAL FUNCTION _cfg {
+    PARAMETER key.
+    PARAMETER value.
+    stateSet("mission_cfg_" + key, value).
+}
+
+LOCAL FUNCTION _offsetLatLng {
+    PARAMETER lat.
+    PARAMETER lng.
+    PARAMETER northM.
+    PARAMETER eastM.
+    LOCAL degPerM IS 180 / CONSTANT:PI / SHIP:BODY:RADIUS.
+    LOCAL lonScale IS MAX(0.01, COS(lat)).
+    RETURN LEXICON(
+        "LAT", lat + northM * degPerM,
+        "LNG", lng + eastM * degPerM / lonScale
+    ).
+}
+
+LOCAL FUNCTION _bestScanSatSite {
+    PARAMETER lat.
+    PARAMETER lng.
+    LOCAL out IS LEXICON("FOUND", FALSE, "LAT", lat, "LNG", lng, "SLOPE", -1).
+    IF NOT ADDONS:SCANSAT:AVAILABLE { RETURN out. }
+
+    LOCAL radius IS 750.
+    LOCAL step IS 250.
+    LOCAL maxSlope IS 12.
+    LOCAL bestScore IS 999999.
+    LOCAL known IS 0.
+    LOCAL samples IS 0.
+
+    FROM { LOCAL north_ IS -radius. } UNTIL north_ > radius STEP { SET north_ TO north_ + step. } DO {
+        FROM { LOCAL east_ IS -radius. } UNTIL east_ > radius STEP { SET east_ TO east_ + step. } DO {
+            LOCAL pos IS _offsetLatLng(lat, lng, north_, east_).
+            LOCAL geo IS LATLNG(pos["LAT"], pos["LNG"]).
+            SET samples TO samples + 1.
+            LOCAL elev IS ADDONS:SCANSAT:ELEVATION(SHIP:BODY, geo).
+            IF elev >= 0 {
+                SET known TO known + 1.
+                LOCAL slope IS ADDONS:SCANSAT:SLOPE(SHIP:BODY, geo).
+                IF slope >= 0 AND slope <= maxSlope {
+                    LOCAL dist IS SQRT(north_^2 + east_^2).
+                    LOCAL score IS slope * 100 + dist / 20.
+                    IF score < bestScore {
+                        SET bestScore TO score.
+                        SET out["FOUND"] TO TRUE.
+                        SET out["LAT"] TO pos["LAT"].
+                        SET out["LNG"] TO pos["LNG"].
+                        SET out["SLOPE"] TO slope.
+                    }
+                }
+            }
+        }
+        WAIT 0.01.
+    }
+    PRINT "SCANsat samples=" + samples + " known=" + known.
+    RETURN out.
+}
+
+_loadState().
+_loadLogs().
+
+LOCAL targetUT IS TIME:SECONDS + aheadMinutes * 60.
+LOCAL geo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, targetUT)).
+LOCAL lat IS geo:LAT.
+LOCAL lng IS geo:LNG.
+LOCAL site IS _bestScanSatSite(lat, lng).
+LOCAL source IS "ground track T+" + ROUND(aheadMinutes,1) + "m".
+
+IF site["FOUND"] {
+    SET lat TO site["LAT"].
+    SET lng TO site["LNG"].
+    SET source TO source + " SCANsat slope=" + ROUND(site["SLOPE"],1).
+}
+
+_cfg("LANDING_TARGET_LAT", lat).
+_cfg("LANDING_TARGET_LNG", lng).
+_cfg("LANDING_TARGET_LOCK", "1").
+_cfg("LANDING_TARGET_WAYPOINT", "").
+_cfg("TARGET_DEORBIT_SCAN_ORBITS", "4").
+_cfg("TARGET_DEORBIT_SCAN_SAMPLES", "512").
+_cfg("TARGET_DEORBIT_COARSE_STOP_DIST", "4000").
+stateSet("phase", "LAND_DEORBIT").
+stateSet("reload_required", "false").
+stateSet("reload_reason", "").
+stateSet("reload_next_phase", "").
+stateSet("reload_next_band", "").
+stateSet("lib_band", "LAND_DEORBIT").
+
+PRINT "SIM LANDING TARGET".
+PRINT "  " + source.
+PRINT "  lat=" + ROUND(lat,4) + " lng=" + ROUND(lng,4).
+PRINT "  Phase -> LAND_DEORBIT".
+IF DEFINED mLogWarn {
+    mLogWarn("STATS sim-landing-target source=" + source
+        + " lat=" + ROUND(lat,4)
+        + " lng=" + ROUND(lng,4)).
+}
+WAIT 1.
+REBOOT.

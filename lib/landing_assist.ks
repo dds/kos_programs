@@ -9,6 +9,7 @@ GLOBAL LANDING_CFG IS LEXICON(
     "TARGET_LNG",           0,
     "TARGET_BODY",         "",
     "TARGET_WAYPOINT",     "",
+    "TARGET_LOCK",      FALSE,
     "TARGET_TOLERANCE",  2500,
     "GUIDANCE_ALT",      5000,
     "ASSIST_TARGET_SPEED", 80.0,
@@ -418,6 +419,15 @@ GLOBAL FUNCTION landingResolveTarget {
         }
         mLogWarn("Landing waypoint '" + LANDING_CFG["TARGET_WAYPOINT"]
             + "' not found on " + SHIP:BODY:NAME + ".").
+    }
+
+    IF LANDING_CFG["TARGET_LOCK"]
+            AND (LANDING_CFG["TARGET_LAT"] <> 0 OR LANDING_CFG["TARGET_LNG"] <> 0) {
+        SET result["FOUND"] TO TRUE.
+        SET result["LAT"] TO LANDING_CFG["TARGET_LAT"].
+        SET result["LNG"] TO LANDING_CFG["TARGET_LNG"].
+        SET result["SOURCE"] TO "locked LANDING_CFG".
+        RETURN result.
     }
 
     LOCAL selectedWp IS _selectedWaypoint().
