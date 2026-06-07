@@ -43,6 +43,9 @@ GLOBAL FUNCTION landingTargetedDeorbit {
         RETURN.
     }
 
+    mLogWarn("STATS landing target source=" + landingTarget["SOURCE"]
+        + " lat=" + ROUND(landingTarget["LAT"],4)
+        + " lng=" + ROUND(landingTarget["LNG"],4)).
     SET LANDING_CFG["TARGET_LAT"] TO landingTarget["LAT"].
     SET LANDING_CFG["TARGET_LNG"] TO landingTarget["LNG"].
     mLog("Landing deorbit target: " + ROUND(landingTarget["LAT"],4)
@@ -231,14 +234,6 @@ GLOBAL FUNCTION landingResolveTarget {
     result:ADD("LNG", 0).
     result:ADD("SOURCE", "none").
 
-    IF LANDING_CFG["TARGET_LAT"] <> 0 OR LANDING_CFG["TARGET_LNG"] <> 0 {
-        SET result["FOUND"] TO TRUE.
-        SET result["LAT"] TO LANDING_CFG["TARGET_LAT"].
-        SET result["LNG"] TO LANDING_CFG["TARGET_LNG"].
-        SET result["SOURCE"] TO "LANDING_CFG".
-        RETURN result.
-    }
-
     IF LANDING_CFG["TARGET_WAYPOINT"] <> "" {
         LOCAL namedWp IS _waypointNamed(LANDING_CFG["TARGET_WAYPOINT"]).
         IF namedWp <> 0 {
@@ -258,6 +253,14 @@ GLOBAL FUNCTION landingResolveTarget {
         SET result["LAT"] TO selectedWp:GEOPOSITION:LAT.
         SET result["LNG"] TO selectedWp:GEOPOSITION:LNG.
         SET result["SOURCE"] TO "selected waypoint:" + selectedWp:NAME.
+        RETURN result.
+    }
+
+    IF LANDING_CFG["TARGET_LAT"] <> 0 OR LANDING_CFG["TARGET_LNG"] <> 0 {
+        SET result["FOUND"] TO TRUE.
+        SET result["LAT"] TO LANDING_CFG["TARGET_LAT"].
+        SET result["LNG"] TO LANDING_CFG["TARGET_LNG"].
+        SET result["SOURCE"] TO "LANDING_CFG".
         RETURN result.
     }
 

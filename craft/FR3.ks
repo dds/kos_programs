@@ -517,11 +517,11 @@ LOCAL FUNCTION _printConfig {
         PRINT " ".
         PRINT "  -- LANDING --".
         LOCAL targetText IS "map-selected waypoint".
-        IF LANDING_CFG["TARGET_LAT"] <> 0 OR LANDING_CFG["TARGET_LNG"] <> 0 {
+        IF LANDING_CFG["TARGET_WAYPOINT"] <> "" {
+            SET targetText TO "waypoint " + LANDING_CFG["TARGET_WAYPOINT"].
+        } ELSE IF LANDING_CFG["TARGET_LAT"] <> 0 OR LANDING_CFG["TARGET_LNG"] <> 0 {
             SET targetText TO ROUND(LANDING_CFG["TARGET_LAT"],4)
                 + " lat  " + ROUND(LANDING_CFG["TARGET_LNG"],4) + " lng".
-        } ELSE IF LANDING_CFG["TARGET_WAYPOINT"] <> "" {
-            SET targetText TO "waypoint " + LANDING_CFG["TARGET_WAYPOINT"].
         }
         PRINT "  TARGET ..... " + targetText.
         PRINT "  DEORBIT PE . " + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1) + " km".
