@@ -8,7 +8,7 @@ GLOBAL FUNCTION phaseLandDeorbit {
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
         + " targetPeKm=" + ROUND(LANDING_CFG["DEORBIT_PE"]/1000,1)).
-    IF SHIP:STATUS = "SUB_ORBITAL" AND landingImpactWithinTolerance() {
+    IF SHIP:STATUS = "SUB_ORBITAL" AND landingImpactAcceptableForAssist() {
         mLogWarn("STATS land-deorbit phase skip status=already-suborbital").
         nextPhase(fr3Seq).
         RETURN.
@@ -57,7 +57,7 @@ GLOBAL FUNCTION phaseLandAssist {
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " releaseSurface=" + LANDING_CFG["ASSIST_RELEASE_ON_SURFACE"]).
     IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
-    IF NOT landingImpactWithinTolerance() {
+    IF NOT landingImpactAcceptableForAssist() {
         mLogError("Predicted landing impact is not within target tolerance; holding LAND_ASSIST.").
         stateSet("phase", "LAND_ASSIST").
         LOCK THROTTLE TO 0.

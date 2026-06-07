@@ -34,10 +34,17 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_SURFACE_BRAKE_MARGIN", 600.0,
     "ASSIST_SURFACE_BRAKE_FACTOR", 1.8,
     "ASSIST_SURFACE_BRAKE_RELEASE_HSPEED", 5.0,
+    "ASSIST_SURFACE_BRAKE_AOA", 60.0,
     "ASSIST_SURFACE_FINAL_SPEED", 0.8,
+    "ASSIST_SURFACE_FINAL_HSPEED", 2.0,
     "ASSIST_SURFACE_SETTLE_TIME", 5.0,
     "ASSIST_SURFACE_TIPOVER", TRUE,
-    "ASSIST_SURFACE_TIP_TIME", 4.0
+    "ASSIST_SURFACE_TIP_TIME", 4.0,
+    "DEORBIT_OVERSHOOT", 1500.0,
+    "DEORBIT_OVERSHOOT_TOLERANCE", 1200.0,
+    "SITE_GRID_RADIUS", 625.0,
+    "SITE_GRID_STEP", 250.0,
+    "SITE_MAX_SLOPE", 12.0
 ).
 
 GLOBAL landingAbortFlag IS FALSE.
@@ -58,9 +65,10 @@ GLOBAL FUNCTION landingTargetedDeorbit {
         + "," + ROUND(landingTarget["LNG"],4)
         + " from " + landingTarget["SOURCE"] + ".").
 
+    LOCAL aimTarget IS _landingOvershootTarget(landingTarget).
     RETURN targetedDeorbitAt(
-        landingTarget["LAT"],
-        landingTarget["LNG"],
+        aimTarget["LAT"],
+        aimTarget["LNG"],
         LANDING_CFG["DEORBIT_PE"],
         LANDING_CFG["TARGET_TOLERANCE"]).
 }
@@ -201,11 +209,44 @@ GLOBAL FUNCTION landingImpactWithinTolerance {
     RETURN ok.
 }
 
+GLOBAL FUNCTION landingImpactAcceptableForAssist {
+    IF LANDING_CFG["DEORBIT_OVERSHOOT"] <= 0 { RETURN landingImpactWithinTolerance(). }
+    IF NOT ADDONS:TR:AVAILABLE { RETURN FALSE. }
+    LOCAL landingTarget IS landingResolveTarget().
+    IF NOT landingTarget["FOUND"] { RETURN FALSE. }
+    ADDONS:TR:SETTARGET(LATLNG(landingTarget["LAT"], landingTarget["LNG"])).
+    WAIT 0.5.
+    IF NOT ADDONS:TR:HASIMPACT { RETURN FALSE. }
+    LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
+    LOCAL dist IS _assistGeoDistance(
+        impactPos:LAT, impactPos:LNG,
+        landingTarget["LAT"], landingTarget["LNG"]).
+    LOCAL maxDist IS LANDING_CFG["DEORBIT_OVERSHOOT"]
+        + LANDING_CFG["DEORBIT_OVERSHOOT_TOLERANCE"].
+    LOCAL ok IS dist <= maxDist.
+    mLogWarn("STATS landing-impact-assist status=" + ok
+        + " distKm=" + ROUND(dist/1000,2)
+        + " allowedKm=" + ROUND(maxDist/1000,2)
+        + " impact=" + ROUND(impactPos:LAT,4)
+        + "," + ROUND(impactPos:LNG,4)
+        + " target=" + ROUND(landingTarget["LAT"],4)
+        + "," + ROUND(landingTarget["LNG"],4)).
+    RETURN ok.
+}
+
 LOCAL FUNCTION _assistSurfaceRelease {
     PARAMETER decoupler.
 
     SET SAS TO FALSE.
     LOCAL landingTarget IS landingResolveTarget().
+    IF landingTarget["FOUND"] {
+        LOCAL site IS _assistSelectLandingSite(landingTarget["LAT"], landingTarget["LNG"]).
+        IF site["FOUND"] {
+            SET landingTarget["LAT"] TO site["LAT"].
+            SET landingTarget["LNG"] TO site["LNG"].
+            SET landingTarget["SOURCE"] TO "site-grid".
+        }
+    }
     mLogWarn("STATS assist-surface setup release=surface finalV="
         + LANDING_CFG["ASSIST_SURFACE_FINAL_SPEED"]
         + " settle=" + LANDING_CFG["ASSIST_SURFACE_SETTLE_TIME"]).
@@ -237,7 +278,7 @@ LOCAL FUNCTION _assistSurfaceRelease {
         }
         LOCAL mode_ IS "APPROACH".
         IF brakeCommitted {
-            IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_RELEASE_HSPEED"]
+            IF hSpeed > LANDING_CFG["ASSIST_SURFACE_FINAL_HSPEED"]
                     OR (radarAlt < 1000
                         AND vSpeed < -LANDING_CFG["ASSIST_DESCENT_SPEED"]) {
                 SET mode_ TO "BRAKE".
@@ -278,6 +319,12 @@ LOCAL FUNCTION _assistSurfaceRelease {
                 LOCK THROTTLE TO 0.
             } ELSE IF mode_ = "BRAKE" {
                 LOCAL brakeThrottle IS LANDING_CFG["ASSIST_SURFACE_BRAKE_THROTTLE"].
+                LOCAL aoa IS _assistTargetAoa(targetDistM, radarAlt).
+                IF targetDistM >= 0
+                        AND aoa < LANDING_CFG["ASSIST_SURFACE_BRAKE_AOA"]
+                        AND radarAlt > 500 {
+                    SET brakeThrottle TO MAX(0.3, brakeThrottle * 0.5).
+                }
                 IF vSpeed < -LANDING_CFG["ASSIST_DESCENT_SPEED"] {
                     SET brakeThrottle TO MIN(1, brakeThrottle + 0.2).
                 }
@@ -490,6 +537,13 @@ LOCAL FUNCTION _surfaceRetrograde {
     RETURN (-sVel):NORMALIZED.
 }
 
+LOCAL FUNCTION _assistTargetAoa {
+    PARAMETER targetDistM.
+    PARAMETER radarAlt.
+    IF targetDistM <= 0 { RETURN 90. }
+    RETURN ARCTAN(radarAlt / targetDistM).
+}
+
 LOCAL FUNCTION _assistSurfaceBrakeReady {
     PARAMETER radarAlt.
     PARAMETER hSpeed.
@@ -509,6 +563,10 @@ LOCAL FUNCTION _assistSurfaceBrakeReady {
         + LANDING_CFG["ASSIST_SURFACE_BRAKE_MARGIN"].
 
     IF targetDistM >= 0 {
+        IF _assistTargetAoa(targetDistM, radarAlt)
+                >= LANDING_CFG["ASSIST_SURFACE_BRAKE_AOA"] {
+            RETURN TRUE.
+        }
         IF targetDistM <= brakeDist { RETURN TRUE. }
         IF radarAlt <= verticalAlt { RETURN TRUE. }
         RETURN FALSE.
@@ -521,6 +579,106 @@ LOCAL FUNCTION _assistSurfaceBrakeReady {
         }
     }
     RETURN radarAlt <= brakeDist.
+}
+
+LOCAL FUNCTION _landingOvershootTarget {
+    PARAMETER landingTarget.
+    LOCAL out IS LEXICON(
+        "LAT", landingTarget["LAT"],
+        "LNG", landingTarget["LNG"]
+    ).
+    LOCAL overshoot IS LANDING_CFG["DEORBIT_OVERSHOOT"].
+    IF overshoot <= 0 { RETURN out. }
+
+    LOCAL hVel IS _horizontalSurfaceVelocity().
+    IF hVel:MAG < 0.1 { RETURN out. }
+    LOCAL upVec IS SHIP:UP:VECTOR.
+    LOCAL northVec IS VXCL(upVec,
+        LATLNG(SHIP:LATITUDE + 0.01, SHIP:LONGITUDE):POSITION
+            - SHIP:GEOPOSITION:POSITION):NORMALIZED.
+    LOCAL eastVec IS VXCL(upVec,
+        LATLNG(SHIP:LATITUDE, SHIP:LONGITUDE + 0.01):POSITION
+            - SHIP:GEOPOSITION:POSITION):NORMALIZED.
+    LOCAL northM IS VDOT(hVel:NORMALIZED, northVec) * overshoot.
+    LOCAL eastM IS VDOT(hVel:NORMALIZED, eastVec) * overshoot.
+    LOCAL shifted IS _assistOffsetLatLng(landingTarget["LAT"], landingTarget["LNG"], northM, eastM).
+    SET out["LAT"] TO shifted["LAT"].
+    SET out["LNG"] TO shifted["LNG"].
+    mLogWarn("STATS deorbit overshoot target actual="
+        + ROUND(landingTarget["LAT"],4) + "," + ROUND(landingTarget["LNG"],4)
+        + " aim=" + ROUND(out["LAT"],4) + "," + ROUND(out["LNG"],4)
+        + " overshootM=" + ROUND(overshoot,0)).
+    RETURN out.
+}
+
+LOCAL FUNCTION _assistOffsetLatLng {
+    PARAMETER lat.
+    PARAMETER lng.
+    PARAMETER northM.
+    PARAMETER eastM.
+    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
+    LOCAL lonScale IS MAX(0.01, COS(lat)).
+    RETURN LEXICON(
+        "LAT", lat + northM * degPerM,
+        "LNG", lng + eastM * degPerM / lonScale
+    ).
+}
+
+LOCAL FUNCTION _assistSelectLandingSite {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    LOCAL out IS LEXICON(
+        "FOUND", FALSE,
+        "LAT", targetLat,
+        "LNG", targetLng,
+        "SLOPE", -1,
+        "DIST", 0
+    ).
+    IF NOT ADDONS:SCANSAT:AVAILABLE { RETURN out. }
+    LOCAL radius IS LANDING_CFG["SITE_GRID_RADIUS"].
+    LOCAL step IS LANDING_CFG["SITE_GRID_STEP"].
+    LOCAL maxSlope IS LANDING_CFG["SITE_MAX_SLOPE"].
+    LOCAL bestScore IS 999999999.
+    LOCAL samples IS 0.
+    LOCAL known IS 0.
+
+    FROM { LOCAL north_ IS -radius. } UNTIL north_ > radius STEP { SET north_ TO north_ + step. } DO {
+        FROM { LOCAL east_ IS -radius. } UNTIL east_ > radius STEP { SET east_ TO east_ + step. } DO {
+            LOCAL pos IS _assistOffsetLatLng(targetLat, targetLng, north_, east_).
+            LOCAL geo IS LATLNG(pos["LAT"], pos["LNG"]).
+            SET samples TO samples + 1.
+            LOCAL elev IS ADDONS:SCANSAT:ELEVATION(SHIP:BODY, geo).
+            IF elev >= 0 {
+                SET known TO known + 1.
+                LOCAL slope IS ADDONS:SCANSAT:SLOPE(SHIP:BODY, geo).
+                IF slope >= 0 AND slope <= maxSlope {
+                    LOCAL dist IS SQRT(north_^2 + east_^2).
+                    LOCAL score IS slope * 100 + dist / 20.
+                    IF score < bestScore {
+                        SET bestScore TO score.
+                        SET out["FOUND"] TO TRUE.
+                        SET out["LAT"] TO pos["LAT"].
+                        SET out["LNG"] TO pos["LNG"].
+                        SET out["SLOPE"] TO slope.
+                        SET out["DIST"] TO dist.
+                    }
+                }
+            }
+        }
+        WAIT 0.01.
+    }
+    IF out["FOUND"] {
+        mLogWarn("STATS assist-site result status=selected selected="
+            + ROUND(out["LAT"],4) + "," + ROUND(out["LNG"],4)
+            + " distM=" + ROUND(out["DIST"],0)
+            + " slope=" + ROUND(out["SLOPE"],1)
+            + " samples=" + samples
+            + " known=" + known).
+    } ELSE {
+        mLogWarn("STATS assist-site result status=no-site samples="
+            + samples + " known=" + known).
+    }
+    RETURN out.
 }
 
 LOCAL FUNCTION _assistGeoDistance {
