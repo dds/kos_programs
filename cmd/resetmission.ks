@@ -1,9 +1,10 @@
 // cmd/resetmission.ks - Clear selected mission profile before a fresh launch.
 // Usage:
 //   RUNPATH("1:/cmd/resetmission.ks").                    // prompt on next boot
-//   RUNPATH("1:/cmd/resetmission.ks", "mun_scansat_polar"). // force profile
+//   RUNPATH("1:/cmd/resetmission.ks", "mun_scansat_polar"). // force after launch
 //
 // Use this on the pad or in a fresh simulation. It clears phase/reload state too.
+// New boot.ks also does this automatically while the vessel is prelaunch.
 
 PARAMETER newMission IS "".
 

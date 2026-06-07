@@ -285,6 +285,44 @@ LOCAL FUNCTION _bootMissionConfig {
     }
 }
 
+LOCAL FUNCTION _isLaunchStartPhase {
+    PARAMETER phaseName.
+    LOCAL phase IS phaseName:TOUPPER.
+    RETURN phase = "" OR phase = "LUNCH" OR phase = "FAIR" OR phase = "ANTS".
+}
+
+LOCAL FUNCTION _shouldResetMissionOnBoot {
+    IF isEVA { RETURN FALSE. }
+    IF SHIP:STATUS = "PRELAUNCH" { RETURN TRUE. }
+
+    LOCAL phase IS stateGet("phase", "").
+    IF SHIP:BODY:NAME = "Kerbin"
+            AND SHIP:STATUS = "LANDED"
+            AND stateGetNum("launch_time", 0) = 0
+            AND _isLaunchStartPhase(phase) {
+        RETURN TRUE.
+    }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _resetMissionSelection {
+    LOCAL removed IS stateRemovePrefix("mission_cfg_").
+    FOR key IN LIST(
+        "mission_id", "mission_name", "phase", "fairing_deployed",
+        "lib_band", "lib_band_phase", "lib_band_libs",
+        "reload_required", "reload_reason", "reload_next_phase",
+        "reload_next_band"
+    ) {
+        stateRemove(key).
+    }
+
+    stateSet("vehicle", vehicleName).
+    stateSet("target", targetName).
+    stateSet("payloads", payloadTypes:JOIN(",")).
+    PRINT "  Mission selection reset for prelaunch.".
+    mLog("Mission selection reset before launch; cleared " + removed + " config keys.").
+}
+
 IF HAS_LINK {
     PRINT "  SYNC core ......... ".
     LOCAL coreLibs IS LIST("state", "logs", "files").
@@ -299,6 +337,10 @@ _loadLib("logs").
 initLog().
 WAIT 0.001. // Let the start time tick and get created.
 _loadLib("files").
+
+IF _shouldResetMissionOnBoot() {
+    _resetMissionSelection().
+}
 
 LOCAL bootCount IS stateGetNum("boot_count", 0) + 1.
 stateSetNum("boot_count", bootCount).
