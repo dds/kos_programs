@@ -2,8 +2,15 @@
 // phases.ks  —  Generic phase machine  (0:/lib/phases.ks)
 // ============================================================
 
+GLOBAL phaseShouldYield IS FALSE.
+
+GLOBAL FUNCTION yieldToPrompt {
+    SET phaseShouldYield TO TRUE.
+}
+
 GLOBAL FUNCTION runPhases {
     PARAMETER phaseMap.
+    SET phaseShouldYield TO FALSE.
 
     UNTIL FALSE {
         LOCAL phase IS stateGet("phase", "DONE").
@@ -11,6 +18,7 @@ GLOBAL FUNCTION runPhases {
         _logPhaseStats(phase).
         IF phaseMap:HASKEY(phase) {
             phaseMap[phase]:CALL().
+            IF phaseShouldYield { RETURN. }
         } ELSE IF phase = "DONE" {
             phaseDone().
             RETURN.
@@ -23,7 +31,8 @@ GLOBAL FUNCTION runPhases {
             PRINT " ".
             PRINT "  PHASE READY: " + phase.
             PRINT "  Reboot this CPU to load the next mission library band.".
-            WAIT UNTIL FALSE.
+            yieldToPrompt().
+            RETURN.
         } ELSE {
             mLogError("Unknown phase: " + phase + " — halting.").
             stateSet("phase", "DONE").

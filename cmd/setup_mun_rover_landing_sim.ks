@@ -24,6 +24,9 @@ LOCAL FUNCTION _cfg {
 
 _loadState().
 
+LOCAL targetUT IS TIME:SECONDS + 300.
+LOCAL targetGeo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, targetUT)).
+
 stateSet("vehicle", "FR3").
 stateSet("target", "MUN").
 stateSet("payloads", "ASSISTROVER").
@@ -45,6 +48,12 @@ _cfg("SEQUENCE", "LAND_DEORBIT,LAND_ASSIST,ROVER,DONE").
 _cfg("TARGET_PE", "15000").
 _cfg("TARGET_AP", "15000").
 _cfg("TARGET_INCLINATION", "90").
+_cfg("LANDING_TARGET_LAT", targetGeo:LAT).
+_cfg("LANDING_TARGET_LNG", targetGeo:LNG).
+_cfg("LANDING_TARGET_LOCK", "1").
+_cfg("LANDING_TARGET_WAYPOINT", "").
+_cfg("LANDING_AUTO_TARGET", "1").
+_cfg("LANDING_AUTO_TARGET_MINUTES", "5").
 _cfg("LANDING_DEORBIT_PE", "-5000").
 _cfg("LANDING_TARGET_TOLERANCE", "2500").
 _cfg("LANDING_GUIDANCE_ALT", "5000").
@@ -82,5 +91,6 @@ _cfg("RELOAD_AFTER_LAND_ASSIST", "1").
 _cfg("RELOAD_AFTER_LAND", "0").
 
 PRINT "SIM rover landing setup complete.".
-PRINT "Put craft in ~15km polar Mun orbit and select target waypoint.".
+PRINT "Target locked near ground track T+5m:".
+PRINT "  lat=" + ROUND(targetGeo:LAT,4) + " lng=" + ROUND(targetGeo:LNG,4).
 PRINT "Then run landingcheck, then REBOOT.".

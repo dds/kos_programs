@@ -21,7 +21,8 @@ LOCAL FUNCTION _phaseParkingReload {
         PRINT " ".
         PRINT "  PARKING ORBIT READY".
         PRINT "  Reboot this CPU to load transfer code.".
-        WAIT UNTIL FALSE.
+        yieldToPrompt().
+        RETURN.
     }
 }
 

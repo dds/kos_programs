@@ -13,7 +13,7 @@ GLOBAL FUNCTION phaseLandDeorbit {
         nextPhase(fr3Seq).
         RETURN.
     }
-    _confirmLandingTarget().
+    IF NOT _confirmLandingTarget() { RETURN. }
     LOCAL deorbitOk IS landingTargetedDeorbit().
     mLogWarn("STATS land-deorbit phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
@@ -25,13 +25,19 @@ GLOBAL FUNCTION phaseLandDeorbit {
         PRINT " ".
         PRINT "  LANDING DEORBIT FAILED TARGET CHECK".
         PRINT "  Keep/reselect the waypoint, check orbit reachability, then reboot/resume.".
-        WAIT UNTIL FALSE.
+        yieldToPrompt().
+        RETURN.
     }
     nextPhase(fr3Seq).
 }
 
 LOCAL FUNCTION _confirmLandingTarget {
     LOCAL targetInfo IS landingResolveTarget().
+    IF NOT targetInfo["FOUND"] {
+        IF _autoLandingTarget() {
+            SET targetInfo TO landingResolveTarget().
+        }
+    }
     PRINT " ".
     PRINT "  LANDING TARGET CHECK".
     IF targetInfo["FOUND"] {
@@ -42,14 +48,40 @@ LOCAL FUNCTION _confirmLandingTarget {
             + " lat=" + ROUND(targetInfo["LAT"],4)
             + " lng=" + ROUND(targetInfo["LNG"],4)).
     } ELSE {
-        PRINT "  No selected/named landing waypoint found.".
-        PRINT "  Select a waypoint in map/navigation, then reboot/resume.".
+        PRINT "  No landing target found.".
+        PRINT "  Select a waypoint, run simlandhere, or set LANDING_TARGET_LAT/LNG.".
         mLogWarn("STATS landing target confirm status=missing").
-        WAIT UNTIL FALSE.
+        yieldToPrompt().
+        RETURN FALSE.
     }
     PRINT "  Press any key to plan targeted deorbit.".
     WAIT UNTIL TERMINAL:INPUT:HASCHAR.
     TERMINAL:INPUT:GETCHAR().
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _autoLandingTarget {
+    IF NOT CFG:HASKEY("LANDING_AUTO_TARGET") { RETURN FALSE. }
+    IF CFG["LANDING_AUTO_TARGET"] <= 0 { RETURN FALSE. }
+
+    LOCAL minutes IS 5.
+    IF CFG:HASKEY("LANDING_AUTO_TARGET_MINUTES") {
+        SET minutes TO CFG["LANDING_AUTO_TARGET_MINUTES"].
+    }
+    LOCAL geo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, TIME:SECONDS + minutes * 60)).
+    SET LANDING_CFG["TARGET_LAT"] TO geo:LAT.
+    SET LANDING_CFG["TARGET_LNG"] TO geo:LNG.
+    SET LANDING_CFG["TARGET_LOCK"] TO TRUE.
+    IF DEFINED stateSet {
+        stateSet("mission_cfg_LANDING_TARGET_LAT", geo:LAT).
+        stateSet("mission_cfg_LANDING_TARGET_LNG", geo:LNG).
+        stateSet("mission_cfg_LANDING_TARGET_LOCK", "1").
+    }
+    mLogWarn("STATS landing target auto source=ground-track minutes="
+        + ROUND(minutes,1)
+        + " lat=" + ROUND(geo:LAT,4)
+        + " lng=" + ROUND(geo:LNG,4)).
+    RETURN TRUE.
 }
 
 GLOBAL FUNCTION phaseLandAssist {
@@ -64,7 +96,8 @@ GLOBAL FUNCTION phaseLandAssist {
         PRINT " ".
         PRINT "  LANDING IMPACT CHECK FAILED".
         PRINT "  Replan deorbit or verify selected waypoint before descent.".
-        WAIT UNTIL FALSE.
+        yieldToPrompt().
+        RETURN.
     }
     LOCAL assistOk IS landingAssistStage().
     mLogWarn("STATS land-assist phase result ok=" + assistOk
@@ -78,7 +111,8 @@ GLOBAL FUNCTION phaseLandAssist {
         PRINT " ".
         PRINT "  LANDING ASSIST FAILED".
         PRINT "  Review target, decoupler tag, attitude, fuel, and phase before reboot.".
-        WAIT UNTIL FALSE.
+        yieldToPrompt().
+        RETURN.
     }
     IF CFG:HASKEY("RELOAD_AFTER_LAND_ASSIST") AND CFG["RELOAD_AFTER_LAND_ASSIST"] > 0 {
         nextPhase(fr3Seq).
@@ -93,7 +127,8 @@ GLOBAL FUNCTION phaseLandAssist {
         PRINT " ".
         PRINT "  LANDING ASSIST RELEASE COMPLETE".
         PRINT "  Reboot this CPU to load rover landing code.".
-        WAIT UNTIL FALSE.
+        yieldToPrompt().
+        RETURN.
     }
     nextPhase(fr3Seq).
 }
@@ -121,7 +156,8 @@ GLOBAL FUNCTION phaseLand {
         PRINT " ".
         PRINT "  TOUCHDOWN COMPLETE".
         PRINT "  Reboot this CPU to load rover code.".
-        WAIT UNTIL FALSE.
+        yieldToPrompt().
+        RETURN.
     }
     nextPhase(fr3Seq).
 }
@@ -136,7 +172,8 @@ LOCAL FUNCTION _redirectOrbitalLandingPhase {
         PRINT "  LANDING TARGET CHECK".
         PRINT "  Select the landing waypoint in map/navigation.".
         PRINT "  Phase reset to LAND_DEORBIT. Reboot/resume when ready.".
-        WAIT UNTIL FALSE.
+        yieldToPrompt().
+        RETURN TRUE.
     }
     RETURN FALSE.
 }
