@@ -308,6 +308,10 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
             + " availableThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
     }
 
+    IF NOT alreadyReleased {
+        _scanSatClearDisposedStage().
+    }
+
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     IF NOT _scanSatRecoverPeDirect(recoveryPe) {
         _scanSatImpactHalt("direct recovery Pe burn failed").
@@ -553,6 +557,74 @@ LOCAL FUNCTION _scanSatRecoverPeDirect {
 
     IF status_ = "complete" { RETURN TRUE. }
     RETURN FALSE.
+}
+
+LOCAL FUNCTION _scanSatClearDisposedStage {
+    LOCAL clearDv IS 2.
+    IF CFG:HASKEY("SCANSAT_CLEARANCE_DV") { SET clearDv TO CFG["SCANSAT_CLEARANCE_DV"]. }
+    IF clearDv <= 0 {
+        mLogWarn("STATS scansat-clearance result status=disabled").
+        RETURN TRUE.
+    }
+
+    LOCAL settleTime IS 3.
+    IF CFG:HASKEY("SCANSAT_CLEARANCE_SETTLE") { SET settleTime TO CFG["SCANSAT_CLEARANCE_SETTLE"]. }
+    LOCAL throttle_ IS 0.25.
+    IF CFG:HASKEY("SCANSAT_CLEARANCE_THROTTLE") { SET throttle_ TO CFG["SCANSAT_CLEARANCE_THROTTLE"]. }
+    SET throttle_ TO MAX(0.05, MIN(1, throttle_)).
+
+    IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {
+        mLogWarn("STATS scansat-clearance result status=no-thrust").
+        WAIT settleTime.
+        RETURN FALSE.
+    }
+
+    LOCAL dirName IS "NORMAL".
+    IF CFG:HASKEY("SCANSAT_CLEARANCE_DIR") {
+        SET dirName TO CFG["SCANSAT_CLEARANCE_DIR"]:TOUPPER.
+    }
+    LOCAL dirVec IS VCRS(SHIP:POSITION, SHIP:VELOCITY:ORBIT):NORMALIZED.
+    IF dirName = "ANTINORMAL" {
+        SET dirVec TO -dirVec.
+    } ELSE IF dirName = "RADIALOUT" {
+        SET dirVec TO SHIP:UP:VECTOR.
+    } ELSE IF dirName = "RADIALIN" {
+        SET dirVec TO -SHIP:UP:VECTOR.
+    } ELSE IF dirName = "RIGHT" {
+        SET dirVec TO SHIP:FACING:RIGHTVECTOR.
+    }
+
+    LOCAL burnTime IS clearDv / ((SHIP:AVAILABLETHRUST / SHIP:MASS) * throttle_).
+    SET burnTime TO MAX(0.2, MIN(8, burnTime)).
+    mLogWarn("STATS scansat-clearance setup dv=" + ROUND(clearDv,1)
+        + " dir=" + dirName
+        + " throttle=" + ROUND(throttle_,2)
+        + " burnTime=" + ROUND(burnTime,1)
+        + " settle=" + ROUND(settleTime,1)).
+
+    SET SAS TO FALSE.
+    LOCK STEERING TO dirVec.
+    LOCAL startT IS TIME:SECONDS.
+    LOCAL aligned IS FALSE.
+    UNTIL aligned OR TIME:SECONDS - startT > 10 {
+        IF VANG(SHIP:FACING:FOREVECTOR, dirVec) < 8 { SET aligned TO TRUE. }
+        WAIT 0.1.
+    }
+    IF NOT aligned {
+        mLogWarn("SCANsat clearance nudge starting with poor alignment.").
+    }
+
+    LOCK THROTTLE TO throttle_.
+    WAIT burnTime.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    WAIT settleTime.
+    mLogWarn("STATS scansat-clearance result status=complete PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _scanSatDisposeAttached {
