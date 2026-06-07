@@ -10,7 +10,7 @@ An autonomous flight computer system for Kerbal craft control. Handles full miss
 
 ```
 boot/
-    boot.ks              Bootstrap — parses ship name, resolves craft/roles
+    boot.ks              Small VAB-installed loader
 craft/
     FR2.ks               FR2 multi-payload launcher
     FR3.ks               FR3 next-gen rocket (leaner FR2)
@@ -25,6 +25,7 @@ roles/
 missions/
     FR3/*.cfg            Data-only mission profiles selectable by plain FR3
 lib/
+    boot_core.ks         Boot helpers: mission selection, pruning, resume
     phases.ks            Generic phase machine (runPhases, nextPhase)
     launch.ks            Reusable ascent phases (launch, fairing, parking)
     xfer.ks              Transfer/arrival phases (transfer, coast, capture, circ)
@@ -110,17 +111,17 @@ CAPTURE_INC = 90
 LANDING_ASSIST_RELEASE_ALT = 100
 ```
 
-Keep mission profiles in this key/value format for the current boot flow. `lib/state.ks` uses the simplejson addon for persistent state, but mission profile parsing happens through the installed `boot.ks` path before the vehicle script is running. Switching profiles to JSON would require a VAB-installed boot update, so treat that as a future craft-prep migration rather than an in-flight refactor.
+Keep mission profiles in this key/value format for the current boot flow. `lib/state.ks` uses the simplejson addon for persistent state, but mission profile parsing happens through the boot path before the vehicle script is running. Most of that boot logic now lives in compiled `lib/boot_core.ks`; switching profiles to JSON would still require a VAB-side boot compatibility check before flight.
 
-On boot, `boot.ks` reads mission profiles from `0:/missions/<craft>` when a KSC link is available, falling back to cached `1:/missions/<craft>` files only when offline. After a profile is selected, the key/value config is persisted into state and stale local mission config files are pruned so they do not occupy flight-computer storage.
+On boot, `lib/boot_core.ks` reads mission profiles from `0:/missions/<craft>` when a KSC link is available, falling back to cached `1:/missions/<craft>` files only when offline. After a profile is selected, the key/value config is persisted into state and stale local mission config files are pruned so they do not occupy flight-computer storage.
 
-While the vessel is still prelaunch, `boot.ks` clears any saved mission profile and profile config before selecting a mission. This lets you reboot on the pad after choosing the wrong profile and get the mission picker again. Once launched, in-flight reboots keep the saved mission and phase state.
+While the vessel is still prelaunch, `lib/boot_core.ks` clears any saved mission profile and profile config before selecting a mission. This lets you reboot on the pad after choosing the wrong profile and get the mission picker again. Once launched, in-flight reboots keep the saved mission and phase state.
 
 FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only launch/countdown/orbit plus lightweight `landing_assist.ks` when needed; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Rover landing missions then reload again after assist-stage release for full `landing.ks`, and after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
 
 `craft/FR3.ks` is intentionally kept small enough to fit comfortably on the primary kOS volume. Boot compiles the selected craft script to `1:/craft/*.ksm` and deletes the local source copy when connected. Mission profile tweaks, sequence construction, phase mapping, payload classification, and launch confirmation display live in small `lib/fr3_*.ks` modules. These are loaded through the FR3 library bands and can be compiled like the rest of the libraries.
 
-Important in-flight constraint: `boot.ks` itself is installed on the kOS processor in the VAB/SPH and cannot be updated remotely during a mission. Remote reboots can load updated mission configs, craft scripts, commands, and libraries from the archive, but any fix that requires changing the installed boot file must be applied before launch or by another VAB-side update path.
+Important in-flight constraint: `boot/boot.ks` itself is installed on the kOS processor in the VAB/SPH and cannot be updated remotely during a mission. Remote reboots can load updated mission configs, craft scripts, commands, and libraries from the archive, including `lib/boot_core.ks` after the installed boot has synced it once. Any fix that changes the installed boot stub must be applied before launch or by another VAB-side update path.
 
 The current band and pending reload are saved in mission state (`lib_band`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, `reload_next_band`) so a reboot or state dump shows why the computer is waiting.
 
