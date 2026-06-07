@@ -110,6 +110,8 @@ CAPTURE_INC = 90
 LANDING_ASSIST_RELEASE_ALT = 100
 ```
 
+Keep mission profiles in this key/value format for the current boot flow. `lib/state.ks` uses the simplejson addon for persistent state, but mission profile parsing happens through the installed `boot.ks` path before the vehicle script is running. Switching profiles to JSON would require a VAB-installed boot update, so treat that as a future craft-prep migration rather than an in-flight refactor.
+
 On boot, `boot.ks` syncs `missions/<craft>/*.cfg` to the local processor. If the vessel is named just `FR3` and no `mission_id` is already saved in state, FR3 selects a mission profile from `1:/missions/FR3`. To force a profile manually before rebooting, use `stateSet("mission_id", "mun_rover").`
 
 FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only launch/countdown/orbit plus lightweight `landing_assist.ks` when needed; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Rover landing missions then reload again after assist-stage release for full `landing.ks`, and after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
