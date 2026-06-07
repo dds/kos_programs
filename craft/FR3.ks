@@ -218,6 +218,7 @@ LOCAL FUNCTION _fr3Libs {
     } ELSE IF band = "TRANSFER" {
         libs:ADD("xfer").
         libs:ADD("lib_navigation").
+        libs:ADD("countdown").
         libs:ADD("maneuver").
         libs:ADD("inclination").
         libs:ADD("orbit").
@@ -226,16 +227,19 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("orbit").
         IF _phaseIn(stateGet("phase", ""):TOUPPER, LIST("TARGETED_DEORBIT")) {
             libs:ADD("targeting").
+            libs:ADD("countdown").
             libs:ADD("maneuver").
         }
     } ELSE IF band = "LAND_ASSIST" {
         libs:ADD("payload_landing").
         libs:ADD("targeting").
+        libs:ADD("countdown").
         libs:ADD("maneuver").
         libs:ADD("landing_assist").
     } ELSE IF band = "LAND" {
         libs:ADD("payload_landing").
         libs:ADD("targeting").
+        libs:ADD("countdown").
         libs:ADD("maneuver").
         libs:ADD("landing").
     } ELSE IF band = "ROVER" {

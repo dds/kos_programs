@@ -37,10 +37,10 @@ Profile-only FR3 libraries:
 FR3 progressive library bands:
 
 - `LAUNCH`: `launch`, `countdown`, `orbit`, and `landing_assist` for landing payloads. Stops after `PARK` when `RELOAD_AFTER_PARK=1`.
-- `TRANSFER`: `xfer`, `maneuver`, `inclination`, `orbit`, and optional Lambert/rendezvous/science libraries.
+- `TRANSFER`: `xfer`, `countdown`, `maneuver`, `inclination`, `orbit`, and optional Lambert/rendezvous/science libraries.
 - `PAYLOAD_OPS`: probe, relay, or SCANsat operation libraries only.
-- `LAND_ASSIST`: targeted deorbit and assist-stage release.
-- `LAND`: full powered landing.
+- `LAND_ASSIST`: targeted deorbit and assist-stage release, including maneuver countdown support.
+- `LAND`: full powered landing, including maneuver countdown support.
 - `ROVER`: rover driving/co-pilot code.
 - Band/reload state is saved via `state.ks` as `lib_band`, `lib_band_phase`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, and `reload_next_band`.
 
