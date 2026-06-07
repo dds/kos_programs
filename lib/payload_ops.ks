@@ -9,10 +9,16 @@ LOCAL FUNCTION _payloadSeq {
 }
 
 GLOBAL FUNCTION phaseTargetedDeorbit {
-    IF NOT targetReachable(CFG["PROBE_TARGET_LAT"]) {
-        mLogWarn("Target lat=" + CFG["PROBE_TARGET_LAT"]
-            + " not reachable from inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
-            + "deg — proceeding with best effort.").
+    LOCAL targetInfo IS targetResolveDeorbitTarget().
+    IF targetInfo["FOUND"] {
+        mLogWarn("STATS probe target source=" + targetInfo["SOURCE"]
+            + " lat=" + ROUND(targetInfo["LAT"],4)
+            + " lng=" + ROUND(targetInfo["LNG"],4)).
+        IF NOT targetReachable(targetInfo["LAT"]) {
+            mLogWarn("Target lat=" + targetInfo["LAT"]
+                + " not reachable from inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
+                + "deg — proceeding with best effort.").
+        }
     }
     targetedDeorbit().
     nextPhase(_payloadSeq()).

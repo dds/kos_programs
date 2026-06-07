@@ -124,6 +124,8 @@ Successful maneuver planners also archive the current flight log when a KSC link
 
 Emergency rover surface-release mode is available via `missions/FR3/mun_rover_emergency_surface.cfg`. It changes the sequence to skip the separate rover powered landing phase: the second stage lands the whole stack, releases the rover on the surface, then reboots into rover recovery. On an active mission, set `stateSet("mission_id", "mun_rover_emergency_surface").` and reboot so boot reloads the emergency config.
 
+FR3 no longer carries default placeholder surface coordinates. Targeted deorbit and landing use a named mission waypoint first, then the currently selected map waypoint, then explicit numeric lat/lng only when a mission profile or saved state provides them.
+
 ### FJ1A
 
 Juno-powered trainer jet. Low speed (cruise ~80 m/s), broad wings. Same phase structure as FJ4B but with lower airspeed thresholds appropriate for the Juno engine. Supports optional SCIENCE payload for biome collection flights.
