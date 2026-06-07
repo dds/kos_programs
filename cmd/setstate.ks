@@ -33,5 +33,9 @@ initLog().
 
 LOCAL phaseName IS newPhase:TOUPPER.
 stateSet("phase", phaseName).
+stateSet("reload_required", "false").
+stateSet("reload_reason", "").
+stateSet("reload_next_phase", "").
+stateSet("reload_next_band", "").
 PRINT "Phase -> " + phaseName.
 mLog("Phase forced: " + phaseName).
