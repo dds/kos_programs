@@ -4,6 +4,15 @@
 
 GLOBAL launchSeq IS LIST().
 
+LOCAL FUNCTION _badAscentTrajectory {
+    LOCAL launchAge IS TIME:SECONDS - stateGetNum("launch_time", 0).
+    IF launchAge < 45 { RETURN FALSE. }
+    IF SHIP:ALTITUDE < 1000 { RETURN FALSE. }
+    IF SHIP:VELOCITY:SURFACE:MAG < 50 { RETURN FALSE. }
+    IF SHIP:VERTICALSPEED > -20 { RETURN FALSE. }
+    RETURN SHIP:APOAPSIS < 10000.
+}
+
 GLOBAL FUNCTION phaseLaunch {
     mLog("Configuring MechJeb ascent...").
 
@@ -34,11 +43,11 @@ GLOBAL FUNCTION phaseLaunch {
     WHEN stateGet("phase","") = "LUNCH" OR stateGet("phase","") = "PARK" THEN {
         LOCAL abortTriggered IS FALSE.
 
-        IF TIME:SECONDS > (stateGetNum("launch_time",0) + 15)
-                AND SHIP:APOAPSIS < 30000
-                AND SHIP:VERTICALSPEED < 0 {
+        IF _badAscentTrajectory() {
             SET abortTriggered TO TRUE.
-            mLogError("Abort: anomalous trajectory — Ap=" + ROUND(SHIP:APOAPSIS/1000,1) + "km").
+            mLogError("Abort: anomalous trajectory — Ap=" + ROUND(SHIP:APOAPSIS/1000,1)
+                + "km Vs=" + ROUND(SHIP:VERTICALSPEED,1)
+                + "m/s alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km").
         }
 
         IF SHIP:ALTITUDE < 40000
