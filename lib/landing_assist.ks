@@ -32,6 +32,8 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_SURFACE_BRAKE_THROTTLE", 1.0,
     "ASSIST_SURFACE_BRAKE_LEAD", 15.0,
     "ASSIST_SURFACE_BRAKE_MARGIN", 600.0,
+    "ASSIST_SURFACE_BRAKE_FACTOR", 1.8,
+    "ASSIST_SURFACE_BRAKE_RELEASE_HSPEED", 5.0,
     "ASSIST_SURFACE_FINAL_SPEED", 0.8,
     "ASSIST_SURFACE_SETTLE_TIME", 5.0,
     "ASSIST_SURFACE_TIPOVER", TRUE,
@@ -235,8 +237,9 @@ LOCAL FUNCTION _assistSurfaceRelease {
         }
         LOCAL mode_ IS "APPROACH".
         IF brakeCommitted {
-            IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_HSPEED"] / 2
-                    OR radarAlt < 1000 {
+            IF hSpeed > LANDING_CFG["ASSIST_SURFACE_BRAKE_RELEASE_HSPEED"]
+                    OR (radarAlt < 1000
+                        AND vSpeed < -LANDING_CFG["ASSIST_DESCENT_SPEED"]) {
                 SET mode_ TO "BRAKE".
             } ELSE {
                 SET brakeCommitted TO FALSE.
@@ -498,9 +501,11 @@ LOCAL FUNCTION _assistSurfaceBrakeReady {
     IF maxAcc <= 0 { RETURN FALSE. }
     LOCAL netAcc IS MAX(0.1, maxAcc - _localGravity()).
     LOCAL speed IS SQRT(hSpeed^2 + MAX(0, -vSpeed)^2).
-    LOCAL brakeDist IS (speed^2) / (2 * netAcc)
+    LOCAL brakeDist IS ((speed^2) / (2 * netAcc))
+        * LANDING_CFG["ASSIST_SURFACE_BRAKE_FACTOR"]
         + LANDING_CFG["ASSIST_SURFACE_BRAKE_MARGIN"].
-    LOCAL verticalAlt IS (MAX(0, -vSpeed)^2) / (2 * netAcc)
+    LOCAL verticalAlt IS ((MAX(0, -vSpeed)^2) / (2 * netAcc))
+        * LANDING_CFG["ASSIST_SURFACE_BRAKE_FACTOR"]
         + LANDING_CFG["ASSIST_SURFACE_BRAKE_MARGIN"].
 
     IF targetDistM >= 0 {
