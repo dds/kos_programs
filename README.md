@@ -112,6 +112,8 @@ LANDING_ASSIST_RELEASE_ALT = 100
 
 On boot, `boot.ks` syncs `missions/<craft>/*.cfg` to the local processor. If the vessel is named just `FR3` and no `mission_id` is already saved in state, FR3 selects a mission profile from `1:/missions/FR3`. To force a profile manually before rebooting, use `stateSet("mission_id", "mun_rover").`
 
+Rover landing missions use reload points to stay under kOS storage limits. Launch through assist-stage release loads `landing_assist.ks`; after separation the script advances to `LAND` and halts so the rover CPU can reboot and load full `landing.ks`; after touchdown it advances to `ROVER` and halts again so rover driving code can load only when needed.
+
 ### FJ1A
 
 Juno-powered trainer jet. Low speed (cruise ~80 m/s), broad wings. Same phase structure as FJ4B but with lower airspeed thresholds appropriate for the Juno engine. Supports optional SCIENCE payload for biome collection flights.

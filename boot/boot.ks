@@ -131,6 +131,128 @@ LOCAL FUNCTION _syncMissionConfigs {
     }
 }
 
+LOCAL FUNCTION _missionConfigIds {
+    PARAMETER craftName.
+    LOCAL ids IS LIST().
+    LOCAL cfgDir IS "1:/missions/" + craftName.
+    IF NOT EXISTS(cfgDir) { RETURN ids. }
+
+    LOCAL startPath IS PATH().
+    LOCAL items IS LIST().
+    CD(cfgDir).
+    LIST FILES IN items.
+    CD(startPath).
+
+    FOR item IN items {
+        IF item:ISFILE {
+            LOCAL nm IS item:NAME.
+            IF nm:TOUPPER:CONTAINS(".CFG") {
+                ids:ADD(nm:SUBSTRING(0, nm:LENGTH - 4)).
+            }
+        }
+    }
+    RETURN ids.
+}
+
+LOCAL FUNCTION _selectMissionId {
+    PARAMETER craftName.
+    LOCAL configured IS stateGet("mission_id", "").
+    IF configured <> "" { RETURN configured. }
+
+    LOCAL ids IS _missionConfigIds(craftName).
+    IF ids:LENGTH = 0 { RETURN "". }
+    IF ids:LENGTH = 1 { RETURN ids[0]. }
+
+    PRINT " ".
+    PRINT "  " + craftName + " MISSION SELECT".
+    PRINT "  ------------------".
+    LOCAL maxShown IS MIN(ids:LENGTH, 9).
+    FROM { LOCAL i IS 0. } UNTIL i >= maxShown STEP { SET i TO i + 1. } DO {
+        PRINT "  " + (i + 1) + ") " + ids[i].
+    }
+    PRINT " ".
+    PRINT "  Press 1-" + maxShown + " to choose, or ENTER for " + ids[0] + ".".
+
+    LOCAL choice IS 0.
+    LOCAL picked IS FALSE.
+    UNTIL picked {
+        WAIT UNTIL TERMINAL:INPUT:HASCHAR.
+        LOCAL ch IS TERMINAL:INPUT:GETCHAR().
+        IF ch = CHAR(13) OR ch = CHAR(10) {
+            SET picked TO TRUE.
+        } ELSE {
+            FROM { LOCAL i IS 0. } UNTIL i >= maxShown STEP { SET i TO i + 1. } DO {
+                IF ch = "" + (i + 1) {
+                    SET choice TO i.
+                    SET picked TO TRUE.
+                }
+            }
+        }
+    }
+    RETURN ids[choice].
+}
+
+LOCAL FUNCTION _applyMissionConfig {
+    PARAMETER craftName.
+    PARAMETER missionId.
+    IF missionId = "" { RETURN FALSE. }
+
+    LOCAL path IS "1:/missions/" + craftName + "/" + missionId + ".cfg".
+    IF NOT EXISTS(path) {
+        PRINT "  Mission config not found: " + path.
+        RETURN FALSE.
+    }
+
+    LOCAL raw IS OPEN(path):READALL:STRING.
+    LOCAL lines IS raw:SPLIT(CHAR(10)).
+    FOR lineRaw IN lines {
+        LOCAL line IS lineRaw:REPLACE(CHAR(13), ""):TRIM.
+        IF line <> "" {
+            LOCAL skipLine IS FALSE.
+            IF line:SUBSTRING(0, 1) = "#" { SET skipLine TO TRUE. }
+            IF line:LENGTH >= 2 AND line:SUBSTRING(0, 2) = "//" { SET skipLine TO TRUE. }
+            IF NOT skipLine {
+                LOCAL parts IS line:SPLIT("=").
+                IF parts:LENGTH >= 2 {
+                    LOCAL key IS parts[0]:TRIM:TOUPPER.
+                    LOCAL value IS parts[1]:TRIM.
+                    stateSet("mission_cfg_" + key, value).
+                    IF key = "MISSION_ID" {
+                        stateSet("mission_id", value).
+                    } ELSE IF key = "MISSION_NAME" {
+                        stateSet("mission_name", value).
+                    } ELSE IF key = "TARGET" {
+                        stateSet("target", value:TOUPPER).
+                    } ELSE IF key = "PAYLOADS" {
+                        stateSet("payloads", value:TOUPPER).
+                    }
+                }
+            }
+        }
+    }
+
+    IF stateGet("mission_id", "") = "" { stateSet("mission_id", missionId). }
+    PRINT "  Mission: " + stateGet("mission_name", missionId).
+    PRINT "  Target:  " + stateGet("target", "KERBIN").
+    PRINT "  Payload: " + stateGet("payloads", "").
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _bootMissionConfig {
+    PARAMETER craftName.
+    LOCAL targetFromName IS stateGet("target", "KERBIN"):TOUPPER.
+    LOCAL payloadsFromName IS stateGet("payloads", "").
+    LOCAL hasNameMission IS targetFromName <> "KERBIN" OR payloadsFromName <> "".
+    LOCAL missionId IS stateGet("mission_id", "").
+
+    IF missionId = "" AND NOT hasNameMission {
+        SET missionId TO _selectMissionId(craftName).
+    }
+    IF missionId <> "" {
+        _applyMissionConfig(craftName, missionId).
+    }
+}
+
 IF HAS_LINK {
     PRINT "  SYNC core ......... ".
     LOCAL coreLibs IS LIST("state", "logs", "files").
@@ -193,6 +315,7 @@ IF HAS_LINK {
         COPYPATH("0:/" + vehicleScript + ".ks", "1:/" + vehicleScript + ".ks").
     }
     _syncMissionConfigs(vehicleName).
+    _bootMissionConfig(vehicleName).
 }
 
 // 1. Run the vehicle script first so it can define the LIBS global variable

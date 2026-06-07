@@ -19,7 +19,7 @@ Base FR3 libraries:
 - `inclination` - inclination change and target inclination resolution.
 - `orbit` - orbit summaries and SOI waits.
 - `targeting` - Trajectories-powered targeted deorbit.
-- `landing` - deorbit, powered descent, landing-assist release.
+- `landing_assist` - targeted deorbit plus assist-stage hover/release for landing missions before rover separation.
 - `payload_landing` - minimal landing phase wrappers for landing-only missions.
 - `utils` - small shared helpers.
 
@@ -30,6 +30,8 @@ Profile-only FR3 libraries:
 - `lambert` - loaded only when the target is not Mun.
 - `maneuver_intersystem` - loaded only when the target is not Mun.
 - `maneuver_rendezvous` - loaded only for rendezvous or asteroid profiles.
+- `landing` - loaded only at the post-assist `LAND` reload point.
+- `rover` - loaded only at the post-touchdown `ROVER` reload point.
 
 Mission profile files:
 
@@ -66,6 +68,7 @@ Mission profile files:
 - launch stack: `phases`, `launch`, `countdown`, `orbit`, `lib_navigation`, `inclination`.
 - Mun transfer/capture: local transfer, capture, circularize, raise/incline, MCC, patch targeting.
 - landing: `targeting`, `landing`, landing payload phases.
+- rover mission reloads: `landing_assist` during launch/assist release, full `landing` after assist release, `rover` after touchdown.
 
 It does not need:
 
