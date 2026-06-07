@@ -39,6 +39,8 @@ GLOBAL LANDING_CFG IS LEXICON(
     "ASSIST_SURFACE_HBRAKE_FACTOR", 1.1,
     "ASSIST_SURFACE_BRAKE_RELEASE_HSPEED", 5.0,
     "ASSIST_SURFACE_BRAKE_AOA", 60.0,
+    "ASSIST_SURFACE_PANIC_ALT", 2000.0,
+    "ASSIST_SURFACE_PANIC_SPEED", 120.0,
     "ASSIST_SURFACE_DROP_ALT", 600.0,
     "ASSIST_SURFACE_DROP_MAX_VSPEED", 120.0,
     "ASSIST_SURFACE_FINAL_ALT", 250.0,
@@ -314,7 +316,10 @@ LOCAL FUNCTION _assistSurfaceRelease {
                 landingTarget["LNG"]).
         }
         LOCAL mode_ IS "DROP".
-        IF brakeCommitted {
+        IF _assistSurfacePanicBrake(radarAlt, hSpeed, vSpeed) {
+            SET brakeCommitted TO TRUE.
+            SET mode_ TO "HBRAKE".
+        } ELSE IF brakeCommitted {
             IF hSpeed > LANDING_CFG["ASSIST_SURFACE_FINAL_HSPEED"] {
                 SET mode_ TO "HBRAKE".
             } ELSE IF _assistSurfaceFinalBrakeReady(radarAlt, vSpeed) {
@@ -788,7 +793,7 @@ LOCAL FUNCTION _assistSurfaceBrakeReady {
     PARAMETER vSpeed.
     PARAMETER targetDistM IS -1.
 
-    IF radarAlt < 500 { RETURN TRUE. }
+    IF _assistSurfacePanicBrake(radarAlt, hSpeed, vSpeed) { RETURN TRUE. }
     LOCAL maxAcc IS _safeMaxAcc().
     IF maxAcc <= 0 { RETURN FALSE. }
     LOCAL netAcc IS MAX(0.1, maxAcc - _localGravity()).
@@ -805,6 +810,15 @@ LOCAL FUNCTION _assistSurfaceBrakeReady {
     }
 
     RETURN FALSE.
+}
+
+LOCAL FUNCTION _assistSurfacePanicBrake {
+    PARAMETER radarAlt.
+    PARAMETER hSpeed.
+    PARAMETER vSpeed.
+    LOCAL speed IS SQRT(hSpeed^2 + MAX(0, -vSpeed)^2).
+    RETURN radarAlt <= LANDING_CFG["ASSIST_SURFACE_PANIC_ALT"]
+        AND speed >= LANDING_CFG["ASSIST_SURFACE_PANIC_SPEED"].
 }
 
 LOCAL FUNCTION _assistSurfaceFinalBrakeReady {
