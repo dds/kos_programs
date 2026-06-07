@@ -116,6 +116,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF CFG:HASKEY("TARGET_DEORBIT_COARSE_STOP_DIST") {
         SET coarseStopDist TO CFG["TARGET_DEORBIT_COARSE_STOP_DIST"].
     }
+    LOCAL refineTarget IS _targetDeorbitRefineTolerance(tolerance).
 
     LOCAL bestUT   IS TIME:SECONDS + 30.
     LOCAL bestPe   IS entryPe.
@@ -192,7 +193,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
         mLog("Pass step=" + ROUND(step,2) + "s  best dist=" + ROUND(bestDist,0) + "m"
             + "  T+" + ROUND(bestUT - TIME:SECONDS,0) + "s").
 
-        IF bestDist < tolerance { BREAK. }
+        IF bestDist < refineTarget { BREAK. }
     }
 
     LOCAL refined IS _refineDeorbitImpact(
@@ -427,13 +428,7 @@ LOCAL FUNCTION _refineDeorbitImpact {
     LOCAL best IS _evalDeorbitNode(startUT, startPe, targetLat, targetLng).
     IF NOT best["VALID"] { RETURN best. }
 
-    LOCAL refineTarget IS tolerance.
-    IF NOT SHIP:BODY:ATM:EXISTS {
-        SET refineTarget TO MIN(tolerance, 250).
-    }
-    IF CFG:HASKEY("TARGET_DEORBIT_REFINE_TOLERANCE") {
-        SET refineTarget TO CFG["TARGET_DEORBIT_REFINE_TOLERANCE"].
-    }
+    LOCAL refineTarget IS _targetDeorbitRefineTolerance(tolerance).
     LOCAL timeStep IS MAX(0.5, coarseStep / 4).
     LOCAL peStep IS 5000.
     LOCAL minPe IS MAX(-50000, -SHIP:BODY:RADIUS * 0.2).
@@ -490,6 +485,18 @@ LOCAL FUNCTION _refineDeorbitImpact {
     }
 
     RETURN best.
+}
+
+LOCAL FUNCTION _targetDeorbitRefineTolerance {
+    PARAMETER tolerance.
+    LOCAL refineTarget IS tolerance.
+    IF NOT SHIP:BODY:ATM:EXISTS {
+        SET refineTarget TO MIN(tolerance, 250).
+    }
+    IF CFG:HASKEY("TARGET_DEORBIT_REFINE_TOLERANCE") {
+        SET refineTarget TO CFG["TARGET_DEORBIT_REFINE_TOLERANCE"].
+    }
+    RETURN refineTarget.
 }
 
 LOCAL FUNCTION _planDeorbitNode {
