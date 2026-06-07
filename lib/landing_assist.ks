@@ -369,9 +369,15 @@ LOCAL FUNCTION _selectedWaypoint {
 
 LOCAL FUNCTION _taggedDecoupler {
     PARAMETER tagName.
-    LOCAL parts IS SHIP:PARTSTAGGED(tagName).
-    IF parts:LENGTH = 0 { RETURN 0. }
-    RETURN parts[0].
+    FOR p IN SHIP:PARTS {
+        IF p:TAG = tagName {
+            IF p:HASMODULE("ModuleDecouple")
+                    OR p:HASMODULE("ModuleAnchoredDecoupler") {
+                RETURN p.
+            }
+        }
+    }
+    RETURN 0.
 }
 
 LOCAL FUNCTION _decouplePart {
