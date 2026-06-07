@@ -320,12 +320,13 @@ LOCAL FUNCTION _landingCfgMappings {
 }
 
 LOCAL FUNCTION _copyLandingCfg {
-    IF NOT DEFINED LANDING_CFG { RETURN. }
-    FOR mapping IN _landingCfgMappings() {
-        LOCAL cfgKey IS mapping[0].
-        LOCAL landingKey IS mapping[1].
-        IF CFG:HASKEY(cfgKey) {
-            SET LANDING_CFG[landingKey] TO CFG[cfgKey].
+    IF DEFINED LANDING_CFG {
+        FOR mapping IN _landingCfgMappings() {
+            LOCAL cfgKey IS mapping[0].
+            LOCAL landingKey IS mapping[1].
+            IF CFG:HASKEY(cfgKey) {
+                SET LANDING_CFG[landingKey] TO CFG[cfgKey].
+            }
         }
     }
 }
