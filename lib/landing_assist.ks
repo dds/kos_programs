@@ -79,9 +79,16 @@ GLOBAL FUNCTION landingAssistStage {
 
     LOCAL decoupler IS _taggedDecoupler(LANDING_CFG["ASSIST_DECOUPLER_TAG"]).
     IF decoupler = 0 {
-        mLogWarn("No assist decoupler tagged '"
-            + LANDING_CFG["ASSIST_DECOUPLER_TAG"] + "' - skipping assist.").
-        RETURN FALSE.
+        IF LANDING_CFG["ASSIST_RELEASE_ON_SURFACE"] {
+            mLogWarn("No assist decoupler tagged '"
+                + LANDING_CFG["ASSIST_DECOUPLER_TAG"]
+                + "' - landing whole stack without release.").
+            RETURN _assistSurfaceRelease(0).
+        } ELSE {
+            mLogWarn("No assist decoupler tagged '"
+                + LANDING_CFG["ASSIST_DECOUPLER_TAG"] + "' - skipping assist.").
+            RETURN FALSE.
+        }
     }
 
     IF LANDING_CFG["ASSIST_RELEASE_ON_SURFACE"] {
@@ -153,8 +160,12 @@ GLOBAL FUNCTION landingAssistStage {
         + "m h=" + ROUND(_horizontalSurfaceVelocity():MAG,2)
         + "m/s v=" + ROUND(SHIP:VERTICALSPEED,2) + "m/s.").
 
-    _decouplePart(decoupler).
-    WAIT 0.5.
+    IF decoupler <> 0 {
+        _decouplePart(decoupler).
+        WAIT 0.5.
+    } ELSE {
+        mLogWarn("STATS assist-surface release status=skipped reason=no-decoupler").
+    }
 
     IF LANDING_CFG["ASSIST_FLYAWAY"] {
         mLog("Assist flyaway burn.").
@@ -393,8 +404,12 @@ LOCAL FUNCTION _assistSurfaceRelease {
         WAIT LANDING_CFG["ASSIST_SURFACE_TIP_TIME"].
     }
 
-    _decouplePart(decoupler).
-    WAIT 0.5.
+    IF decoupler <> 0 {
+        _decouplePart(decoupler).
+        WAIT 0.5.
+    } ELSE {
+        mLogWarn("STATS assist-surface release status=skipped reason=no-decoupler").
+    }
     UNLOCK THROTTLE.
     UNLOCK STEERING.
     SET SAS TO TRUE.

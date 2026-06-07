@@ -86,6 +86,10 @@ GLOBAL FUNCTION fr3BuildPhaseMap {
     }
     IF band = "LAND_DEORBIT" {
         phaseMap:ADD("LAND_DEORBIT", phaseLandDeorbit@).
+        IF CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH")
+                AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0 {
+            phaseMap:ADD("LAND_ASSIST", phaseLandAssist@).
+        }
     }
     IF band = "LAND_ASSIST" {
         phaseMap:ADD("LAND_DEORBIT", phaseLandDeorbit@).

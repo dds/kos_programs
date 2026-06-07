@@ -119,10 +119,15 @@ LOCAL FUNCTION _executeTimedDeorbitNode {
 
     WAIT UNTIL TIME:SECONDS >= startTime.
     LOCAL burnStart IS TIME:SECONDS.
+    LOCAL origBurnVec IS nd:BURNVECTOR.
     mLog("Timed deorbit burn start. dV=" + ROUND(burnDV,1) + " m/s.").
     UNTIL nd:DELTAV:MAG < MAX(0.08, burnDV * 0.01)
             OR TIME:SECONDS - burnStart > burnTime * 2 + 8 {
         LOCK STEERING TO nd:BURNVECTOR.
+        IF nd:DELTAV:MAG > 0.1
+                AND VDOT(origBurnVec:NORMALIZED, nd:BURNVECTOR:NORMALIZED) < 0 {
+            BREAK.
+        }
         IF nd:DELTAV:MAG > 3 {
             LOCK THROTTLE TO 1.
         } ELSE IF nd:DELTAV:MAG > 0.4 {
@@ -210,6 +215,7 @@ LOCAL FUNCTION _autoLandingTarget {
 }
 
 GLOBAL FUNCTION phaseLandAssist {
+    IF DEFINED fr3ApplyMissionProfile { fr3ApplyMissionProfile(). }
     mLogWarn("STATS land-assist phase setup alt=" + ROUND(ALT:RADAR,1)
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " releaseSurface=" + LANDING_CFG["ASSIST_RELEASE_ON_SURFACE"]).
