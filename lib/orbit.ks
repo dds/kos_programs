@@ -58,10 +58,24 @@ GLOBAL FUNCTION waitForSOI {
     LOCAL kacAlarmId IS "".
     IF ADDONS:KAC:AVAILABLE AND SHIP:ORBIT:HASNEXTPATCH {
         LOCAL soiUt IS TIME:SECONDS + SHIP:ORBIT:NEXTPATCHETA.
-        LOCAL alm IS ADDALARM("Raw", soiUt, "SOI: " + targetBody:NAME, "Auto-created by waitForSOI").
-        SET alm:ACTION TO "KillWarp".
-        SET kacAlarmId TO alm:ID.
-        mLog("KAC alarm set for SOI transition in " + ROUND(SHIP:ORBIT:NEXTPATCHETA, 0) + "s.").
+        LOCAL oldTarget IS stateGet("soi_alarm_target", "").
+        LOCAL oldUt IS stateGetNum("soi_alarm_ut", 0).
+        LOCAL oldId IS stateGet("soi_alarm_id", "").
+
+        IF oldTarget = targetBody:NAME AND ABS(oldUt - soiUt) < 120 {
+            SET kacAlarmId TO oldId.
+            mLog("KAC SOI alarm already set for " + targetBody:NAME
+                + " in " + ROUND(soiUt - TIME:SECONDS, 0) + "s.").
+        } ELSE {
+            IF oldId <> "" { DELETEALARM(oldId). }
+            LOCAL alm IS ADDALARM("Raw", soiUt, "SOI: " + targetBody:NAME, "Auto-created by waitForSOI").
+            SET alm:ACTION TO "KillWarp".
+            SET kacAlarmId TO alm:ID.
+            stateSet("soi_alarm_id", kacAlarmId).
+            stateSet("soi_alarm_target", targetBody:NAME).
+            stateSetNum("soi_alarm_ut", soiUt).
+            mLog("KAC alarm set for SOI transition in " + ROUND(SHIP:ORBIT:NEXTPATCHETA, 0) + "s.").
+        }
     }
 
     UNTIL SHIP:ORBIT:BODY:NAME = targetBody:NAME {
@@ -72,6 +86,9 @@ GLOBAL FUNCTION waitForSOI {
     // Clean up the alarm now that we've arrived.
     IF kacAlarmId <> "" {
         DELETEALARM(kacAlarmId).
+    }
+    FOR key IN LIST("soi_alarm_id", "soi_alarm_target", "soi_alarm_ut") {
+        stateRemove(key).
     }
 }
 
