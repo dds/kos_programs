@@ -62,7 +62,7 @@ GLOBAL FUNCTION waitForSOI {
         LOCAL oldUt IS stateGetNum("soi_alarm_ut", 0).
         LOCAL oldId IS stateGet("soi_alarm_id", "").
 
-        IF oldTarget = targetBody:NAME AND ABS(oldUt - soiUt) < 120 {
+        IF oldTarget = targetBody:NAME AND oldId <> "" {
             SET kacAlarmId TO oldId.
             mLog("KAC SOI alarm already set for " + targetBody:NAME
                 + " in " + ROUND(soiUt - TIME:SECONDS, 0) + "s.").
