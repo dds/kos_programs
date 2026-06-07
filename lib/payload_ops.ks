@@ -114,6 +114,14 @@ GLOBAL FUNCTION phaseScanSatOps {
 
     LOCAL tag IS "scansat_decoupler".
     IF CFG:HASKEY("SCANSAT_DECOUPLER_TAG") { SET tag TO CFG["SCANSAT_DECOUPLER_TAG"]. }
+
+    IF CFG:HASKEY("SCANSAT_DISPOSE_BEFORE_RELEASE")
+            AND CFG["SCANSAT_DISPOSE_BEFORE_RELEASE"] > 0 {
+        IF NOT _scanSatImpactThenRecover(tag) { RETURN. }
+        nextPhase(_payloadSeq()).
+        RETURN.
+    }
+
     IF tag <> "" {
         LOCAL released IS _releaseTaggedPayload(tag, "SCANsat").
         IF NOT released {
@@ -234,4 +242,194 @@ LOCAL FUNCTION _disposeScanSatCarrier {
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " duration=" + ROUND(TIME:SECONDS - startT,1)).
+}
+
+LOCAL FUNCTION _scanSatImpactThenRecover {
+    PARAMETER tag.
+
+    LOCAL impactPe IS 2000.
+    IF CFG:HASKEY("SCANSAT_DISPOSE_PE") { SET impactPe TO CFG["SCANSAT_DISPOSE_PE"]. }
+
+    LOCAL recoveryPe IS 75000.
+    LOCAL recoveryAp IS 75000.
+    IF CFG:HASKEY("SCANSAT_RECOVERY_PE") { SET recoveryPe TO CFG["SCANSAT_RECOVERY_PE"]. }
+    ELSE IF CFG:HASKEY("TARGET_PE") { SET recoveryPe TO CFG["TARGET_PE"]. }
+    IF CFG:HASKEY("SCANSAT_RECOVERY_AP") { SET recoveryAp TO CFG["SCANSAT_RECOVERY_AP"]. }
+    ELSE IF CFG:HASKEY("TARGET_AP") { SET recoveryAp TO CFG["TARGET_AP"]. }
+
+    mLogWarn("STATS scansat-impact-release setup PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " impactPeKm=" + ROUND(impactPe/1000,1)
+        + " recoveryPeKm=" + ROUND(recoveryPe/1000,1)
+        + " recoveryApKm=" + ROUND(recoveryAp/1000,1)).
+
+    _disposeScanSatCarrier().
+
+    IF SHIP:PERIAPSIS > impactPe {
+        mLogWarn("SCANsat attached disposal did not reach impact Pe; continuing recovery sequence anyway.").
+    }
+
+    IF tag <> "" {
+        LOCAL released IS _releaseTaggedPayload(tag, "SCANsat").
+        IF NOT released {
+            mLogError("SCANsat release failed after impact setup — tag '" + tag
+                + "' missing or not decouplable.").
+            HUDTEXT("ERROR: SCANsat not released", 8, 2, 16, RED, FALSE).
+            RETURN FALSE.
+        }
+    } ELSE {
+        mLogWarn("SCANSAT_DECOUPLER_TAG blank — mapper still attached after disposal burn.").
+    }
+
+    stateSet("scansat_released_time", TIME:SECONDS).
+    mLogWarn("STATS scansat-release result mass=" + ROUND(SHIP:MASS,3)
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+    WAIT 0.5.
+
+    IF CFG:HASKEY("SCANSAT_STAGE_AFTER_RELEASE")
+            AND CFG["SCANSAT_STAGE_AFTER_RELEASE"] > 0 {
+        STAGE.
+        mLog("SCANsat staged after release.").
+        WAIT 1.
+        mLogWarn("STATS scansat-stage result mass=" + ROUND(SHIP:MASS,3)
+            + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+            + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+            + " availableThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
+    }
+
+    SET SAS TO TRUE.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    WAIT 2.
+
+    IF NOT _scanSatRecoverOrbit(recoveryPe, recoveryAp) { RETURN FALSE. }
+    scienceStartScanners().
+    scienceScanStatus().
+    HUDTEXT("SCANsat recovered to mapping orbit", 8, 2, 16, GREEN, FALSE).
+    mLog("SCANsat released and recovered to mapping orbit.").
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _scanSatRecoverOrbit {
+    PARAMETER recoveryPe.
+    PARAMETER recoveryAp.
+
+    mLogWarn("STATS scansat-recover setup PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " targetPeKm=" + ROUND(recoveryPe/1000,1)
+        + " targetApKm=" + ROUND(recoveryAp/1000,1)).
+
+    LOCAL burnOk IS _scanSatBurn({ RETURN planCircularize(). }, "SCANsat recovery circularize").
+    IF NOT burnOk {
+        RETURN FALSE.
+    }
+
+    IF SHIP:APOAPSIS < recoveryAp * 0.95 {
+        SET burnOk TO _scanSatBurn({ RETURN _scanSatPlanRaiseAp(recoveryAp). }, "SCANsat recovery raise Ap").
+        IF NOT burnOk {
+            RETURN FALSE.
+        }
+    } ELSE {
+        mLog("SCANsat recovery Ap already near target.").
+    }
+
+    IF SHIP:PERIAPSIS < recoveryPe * 0.95 {
+        SET burnOk TO _scanSatBurn({ RETURN _scanSatPlanRaisePeAtAp(recoveryPe). }, "SCANsat recovery raise Pe").
+        IF NOT burnOk {
+            RETURN FALSE.
+        }
+    } ELSE {
+        mLog("SCANsat recovery Pe already safe.").
+    }
+
+    IF SHIP:ORBIT:ECCENTRICITY > 0.01
+            OR ABS(SHIP:APOAPSIS - recoveryAp) > recoveryAp * 0.1 {
+        SET burnOk TO _scanSatBurn({ RETURN planCircularize(). }, "SCANsat recovery recircularize").
+        IF NOT burnOk {
+            RETURN FALSE.
+        }
+    } ELSE {
+        mLog("SCANsat recovery recircularize skipped; orbit already close.").
+    }
+
+    orbitSummary().
+    mLogWarn("STATS scansat-recover result PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _scanSatBurn {
+    PARAMETER planFn.
+    PARAMETER label.
+
+    LOCAL success IS FALSE.
+    LOCAL tries IS 0.
+    UNTIL success {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        planFn:CALL().
+        WAIT 1.
+        mLogWarn("STATS scansat-burn setup label=" + label
+            + " dv=" + ROUND(NEXTNODE:DELTAV:MAG,1)
+            + " eta=" + ROUND(NEXTNODE:ETA,1)).
+        SET success TO executeManeuver().
+        IF NOT success {
+            SET tries TO tries + 1.
+            mLogWarn("SCANsat burn missed: " + label + " attempt=" + tries + ".").
+            IF tries >= 3 {
+                mLogError("SCANsat recovery burn failed: " + label + ".").
+                RETURN FALSE.
+            }
+            WAIT 5.
+        }
+    }
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _scanSatPlanRaiseAp {
+    PARAMETER targetAp.
+
+    LOCAL mu IS SHIP:ORBIT:BODY:MU.
+    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL rBurn IS bodyR + SHIP:PERIAPSIS.
+    LOCAL rTarget IS bodyR + targetAp.
+    LOCAL tSMA IS (rBurn + rTarget) / 2.
+    LOCAL vNow IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:PERIAPSIS):ORBIT:MAG.
+    LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
+    LOCAL nd IS NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, vNew - vNow).
+    ADD nd.
+    mLog("SCANsat raise Ap node: dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " targetAp=" + ROUND(targetAp/1000,1) + "km").
+    mLogWarn("STATS scansat-raise-ap plan dv=" + ROUND(nd:DELTAV:MAG,1)
+        + " targetApKm=" + ROUND(targetAp/1000,1)
+        + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+    archivePlannedManeuverLog("scansat-raise-ap").
+    RETURN nd.
+}
+
+LOCAL FUNCTION _scanSatPlanRaisePeAtAp {
+    PARAMETER targetPe.
+
+    LOCAL mu IS SHIP:ORBIT:BODY:MU.
+    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL rBurn IS bodyR + SHIP:APOAPSIS.
+    LOCAL rTarget IS bodyR + targetPe.
+    LOCAL tSMA IS (rBurn + rTarget) / 2.
+    LOCAL vNow IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:APOAPSIS):ORBIT:MAG.
+    LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
+    LOCAL nd IS NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, vNew - vNow).
+    ADD nd.
+    mLog("SCANsat raise Pe node: dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " targetPe=" + ROUND(targetPe/1000,1) + "km").
+    mLogWarn("STATS scansat-raise-pe plan dv=" + ROUND(nd:DELTAV:MAG,1)
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+    archivePlannedManeuverLog("scansat-raise-pe").
+    RETURN nd.
 }

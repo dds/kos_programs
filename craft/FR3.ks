@@ -79,7 +79,9 @@ LOCAL FUNCTION _numericMissionKeys {
         "PROGRESSIVE_RELOAD", "RELOAD_AFTER_PARK",
         "RELOAD_AFTER_LAND_ASSIST", "RELOAD_AFTER_LAND",
         "SCANSAT_DISPOSE_CARRIER", "SCANSAT_DISPOSE_PE",
-        "SCANSAT_DISPOSE_MAX_TIME"
+        "SCANSAT_DISPOSE_MAX_TIME", "SCANSAT_DISPOSE_BEFORE_RELEASE",
+        "SCANSAT_STAGE_AFTER_RELEASE", "SCANSAT_RECOVERY_PE",
+        "SCANSAT_RECOVERY_AP"
     ).
 }
 
@@ -243,6 +245,10 @@ LOCAL FUNCTION _fr3Libs {
             libs:ADD("targeting").
             libs:ADD("countdown").
             libs:ADD("maneuver").
+        }
+        IF _bootHasPayload("SCANSAT") {
+            IF NOT libs:CONTAINS("countdown") { libs:ADD("countdown"). }
+            IF NOT libs:CONTAINS("maneuver") { libs:ADD("maneuver"). }
         }
     } ELSE IF band = "LAND_ASSIST" {
         libs:ADD("payload_landing").

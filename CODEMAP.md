@@ -35,7 +35,7 @@ Profile-only FR3 libraries:
 - `flightplan` - shared flight-plan/checklist renderer, loaded by FR3 only for launch confirmation.
 - `fr3_ui` - launch confirmation display, loaded only in the launch band.
 - `lib_term` - KSLib terminal drawing helpers, available in the archive for future positioned terminal widgets but not loaded by FR3 yet.
-- `payload_ops` - loaded for probe, relay, SCANsat, or SCISAT payloads.
+- `payload_ops` - loaded for probe, relay, SCANsat, or SCISAT payloads. SCANsat can either deploy first or ride the carrier onto an impact Pe, release, stage, and recover itself.
 - `science` - loaded only for `SCANSAT`/`SCISAT` payloads.
 - `lambert` - loaded only when the target is not Mun.
 - `maneuver_intersystem` - loaded only when the target is not Mun.
