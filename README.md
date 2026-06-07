@@ -128,6 +128,8 @@ FR3 no longer carries default placeholder surface coordinates. Targeted deorbit 
 
 Mun rover landing profiles use an extended targeted-deorbit scan window and set `TARGET_DEORBIT_PROCEED_ON_MISS = 0`, so a landing run stops and logs the miss instead of committing to a wrong deorbit burn.
 
+For a fast-follow Mun mapper, use `missions/FR3/mun_scansat_polar.cfg` (`mission_id = mun_scansat_polar`). It targets a 70 km polar Mun orbit and deploys the payload tagged `scansat_decoupler`.
+
 ### FJ1A
 
 Juno-powered trainer jet. Low speed (cruise ~80 m/s), broad wings. Same phase structure as FJ4B but with lower airspeed thresholds appropriate for the Juno engine. Supports optional SCIENCE payload for biome collection flights.
