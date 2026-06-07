@@ -181,11 +181,18 @@ All commands are run via `RUNPATH(...)` in the kOS terminal:
 RUNPATH("1:/cmd/resume.ks").              // resume from saved phase
 RUNPATH("1:/cmd/setstate.ks", "PHASE").   // force a phase
 RUNPATH("1:/cmd/dump.ks").                // print state to console
+RUNPATH("1:/cmd/resetmission.ks").        // clear selected mission profile
 RUNPATH("1:/cmd/resetboot.ks").           // reset boot counter
 RUNPATH("1:/cmd/files.ks").               // storage/file listing
 RUNPATH("1:/cmd/logs.ks").                // archive flight log to KSC
 RUNPATH("1:/cmd/zombie.ks").              // reboot all other CPUs
 RUNPATH("1:/cmd/molniya.ks").             // Molniya orbit calculator
+```
+
+To force a specific mission profile instead of prompting on the next boot:
+
+```
+RUNPATH("1:/cmd/resetmission.ks", "mun_scansat_polar").
 ```
 
 ### Hot-reloading a lib

@@ -49,6 +49,36 @@ GLOBAL FUNCTION stateSetNum {
     stateSet(key, value).
 }
 
+GLOBAL FUNCTION stateRemove {
+    PARAMETER key.
+    IF _cache:HASKEY(key) {
+        _cache:REMOVE(key).
+        _flush().
+        RETURN TRUE.
+    }
+    RETURN FALSE.
+}
+
+GLOBAL FUNCTION stateRemovePrefix {
+    PARAMETER prefix.
+    LOCAL keys IS LIST().
+    LOCAL removed IS 0.
+    FOR k IN _cache:KEYS {
+        keys:ADD(k).
+    }
+    FOR k IN keys {
+        IF k:LENGTH >= prefix:LENGTH
+                AND k:SUBSTRING(0, prefix:LENGTH) = prefix {
+            _cache:REMOVE(k).
+            SET removed TO removed + 1.
+        }
+    }
+    IF removed > 0 {
+        _flush().
+    }
+    RETURN removed.
+}
+
 GLOBAL FUNCTION stateDump {
     PRINT "=== STATE DUMP ===".
     FOR k IN _cache:KEYS { PRINT "  " + k + " = " + _cache[k]. }
