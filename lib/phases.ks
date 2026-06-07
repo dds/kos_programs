@@ -41,9 +41,13 @@ GLOBAL FUNCTION nextPhase {
                 LOCAL nxt IS seq[i + 1].
                 stateSet("phase", nxt).
                 mLog("Phase: " + current + " -> " + nxt).
+                mLogWarn("STATS phase transition from=" + current + " to=" + nxt).
+                archivePhaseLog().
                 RETURN nxt.
             } ELSE {
                 stateSet("phase", "DONE").
+                mLogWarn("STATS phase transition from=" + current + " to=DONE").
+                archivePhaseLog().
                 RETURN "DONE".
             }
         }
@@ -51,7 +55,17 @@ GLOBAL FUNCTION nextPhase {
     }
     mLogWarn("Phase " + current + " not in sequence — advancing to DONE.").
     stateSet("phase", "DONE").
+    archivePhaseLog().
     RETURN "DONE".
+}
+
+GLOBAL FUNCTION archivePhaseLog {
+    IF HAS_LINK {
+        archiveLog().
+        mLog("Phase log archived.").
+    } ELSE {
+        mLog("Phase log archive skipped: no KSC link.").
+    }
 }
 
 GLOBAL FUNCTION phaseDone {
