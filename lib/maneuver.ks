@@ -1437,6 +1437,29 @@ GLOBAL FUNCTION planRaisePeNow {
     RETURN nd.
 }
 
+GLOBAL FUNCTION planLowerPe {
+    PARAMETER targetPe.
+    LOCAL mu IS SHIP:ORBIT:BODY:MU.
+    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL burnTime IS TIME:SECONDS + ETA:APOAPSIS.
+    LOCAL rBurn IS bodyR + SHIP:APOAPSIS.
+    LOCAL rTarget IS bodyR + targetPe.
+    LOCAL tSMA IS (rBurn + rTarget) / 2.
+    LOCAL vNow IS VELOCITYAT(SHIP, burnTime):ORBIT:MAG.
+    LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
+    LOCAL nd IS NODE(burnTime, 0, 0, vNew - vNow).
+    ADD nd.
+    mLog("Lower Pe node: dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " targetPe=" + ROUND(targetPe/1000,1) + "km").
+    mLogWarn("STATS lower-pe plan dv=" + ROUND(nd:DELTAV:MAG,1)
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " etaAp=" + ROUND(ETA:APOAPSIS,0)).
+    archivePlannedManeuverLog("lower-pe").
+    RETURN nd.
+}
+
 GLOBAL FUNCTION planAoPChange {
     PARAMETER targetAoP.
     LOCAL currentAoP IS SHIP:ORBIT:ARGUMENTOFPERIAPSIS.
