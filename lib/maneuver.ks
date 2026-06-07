@@ -264,6 +264,23 @@ GLOBAL FUNCTION planTransfer {
         newtonTarget(nd, targetBody, "PE", targetPe).
     }
 
+    IF lanTarget >= 0 OR aopTarget >= 0 {
+        LOCAL elemTargets IS LEXICON().
+        elemTargets:ADD("PE", targetPe).
+        IF captureInc >= 0 { elemTargets:ADD("INC", captureInc). }
+        IF lanTarget >= 0 { elemTargets:ADD("LAN", lanTarget). }
+        IF aopTarget >= 0 { elemTargets:ADD("AOP", aopTarget). }
+
+        LOCAL elemOpts IS LEXICON().
+        elemOpts:ADD("STEP_NORMAL", 5.0).
+        elemOpts:ADD("STEP_PROGRADE", 2.0).
+        elemOpts:ADD("STEP_RADIAL", 5.0).
+        elemOpts:ADD("STEP_TIME", 60.0).
+        elemOpts:ADD("MIN_STEP", 0.05).
+        elemOpts:ADD("MAX_ITER", 100).
+        _targetPatchElementsCoupled(nd, targetBody, elemTargets, elemOpts).
+    }
+
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
     IF finalPatch = 0 {
@@ -1224,12 +1241,253 @@ LOCAL FUNCTION _peIncPatchCost {
     RETURN result.
 }
 
+// ============================================================
+// _targetPatchElementsCoupled — coordinate search for PE/INC/LAN/AOP.
+//
+// Used as a final cleanup for precise capture geometry. It optimizes
+// all requested patch elements together so a LAN or AoP correction can't
+// quietly destroy periapsis or inclination. The TIME axis is included
+// because LAN/AoP are often better changed by moving the correction node
+// slightly along the transfer than by spending more normal/radial dV.
+// ============================================================
+LOCAL FUNCTION _targetPatchElementsCoupled {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targets.
+    PARAMETER opts IS LEXICON().
+
+    LOCAL axes IS LIST("PROGRADE", "NORMAL", "RADIALOUT", "TIME").
+    LOCAL signs IS LIST(1, -1).
+    LOCAL steps IS LEXICON().
+    steps:ADD("PROGRADE", 1.0).
+    steps:ADD("NORMAL", 1.0).
+    steps:ADD("RADIALOUT", 1.0).
+    steps:ADD("TIME", 30.0).
+
+    LOCAL minStep IS 0.02.
+    LOCAL maxIter IS 80.
+    LOCAL dvCap IS -1.
+    LOCAL minTime IS TIME:SECONDS + 30.
+
+    IF opts:HASKEY("STEP_PROGRADE"){ SET steps["PROGRADE"]  TO opts["STEP_PROGRADE"]. }
+    IF opts:HASKEY("STEP_NORMAL")  { SET steps["NORMAL"]    TO opts["STEP_NORMAL"]. }
+    IF opts:HASKEY("STEP_RADIAL")  { SET steps["RADIALOUT"] TO opts["STEP_RADIAL"]. }
+    IF opts:HASKEY("STEP_TIME")    { SET steps["TIME"]      TO opts["STEP_TIME"]. }
+    IF opts:HASKEY("MIN_STEP")     { SET minStep            TO opts["MIN_STEP"]. }
+    IF opts:HASKEY("MAX_ITER")     { SET maxIter            TO opts["MAX_ITER"]. }
+    IF opts:HASKEY("DV_CAP")       { SET dvCap              TO opts["DV_CAP"]. }
+    IF opts:HASKEY("MIN_TIME")     { SET minTime            TO opts["MIN_TIME"]. }
+
+    LOCAL best IS _patchElementsCost(nd, targetBody, targets).
+    LOCAL solved IS FALSE.
+    mLog("ELEMENTS: coupled target"
+        + _elementTargetSummary(targets)
+        + " start" + _elementStateSummary(best)).
+
+    FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
+        IF _elementsConverged(best, targets) {
+            SET solved TO TRUE.
+            mLog("  ELEMENTS[" + i + "] converged" + _elementStateSummary(best)).
+            BREAK.
+        }
+
+        LOCAL bestAxis IS "".
+        LOCAL bestValue IS 0.
+        LOCAL bestTrial IS best.
+
+        FOR axis IN axes {
+            LOCAL oldVal IS _nodeAxisGet(nd, axis).
+            FOR sgn IN signs {
+                LOCAL trialVal IS oldVal + sgn * steps[axis].
+                LOCAL timeOk IS TRUE.
+                IF axis = "TIME" AND trialVal <= minTime { SET timeOk TO FALSE. }
+                IF timeOk {
+                    _nodeAxisSet(nd, axis, trialVal).
+                    WAIT 0.02.
+
+                    IF dvCap < 0 OR nd:DELTAV:MAG <= dvCap {
+                        LOCAL trial IS _patchElementsCost(nd, targetBody, targets).
+                        IF trial["COST"] < bestTrial["COST"] {
+                            SET bestTrial TO trial.
+                            SET bestAxis TO axis.
+                            SET bestValue TO trialVal.
+                        }
+                    }
+                }
+            }
+            _nodeAxisSet(nd, axis, oldVal).
+            WAIT 0.01.
+        }
+
+        IF bestAxis <> "" {
+            _nodeAxisSet(nd, bestAxis, bestValue).
+            WAIT 0.02.
+            SET best TO _patchElementsCost(nd, targetBody, targets).
+            mLog("  ELEMENTS[" + i + "] " + bestAxis
+                + "=" + ROUND(bestValue, 2)
+                + _elementStateSummary(best)
+                + " cost=" + ROUND(best["COST"], 2)).
+        } ELSE {
+            FOR axis IN axes {
+                SET steps[axis] TO steps[axis] / 2.
+            }
+            mLog("  ELEMENTS[" + i + "] refining steps: P="
+                + ROUND(steps["PROGRADE"], 2)
+                + " N=" + ROUND(steps["NORMAL"], 2)
+                + " R=" + ROUND(steps["RADIALOUT"], 2)
+                + " T=" + ROUND(steps["TIME"], 1)).
+
+            LOCAL stepsSmall IS FALSE.
+            IF steps["PROGRADE"] < minStep AND steps["NORMAL"] < minStep {
+                IF steps["RADIALOUT"] < minStep AND steps["TIME"] < 1 {
+                    SET stepsSmall TO TRUE.
+                }
+            }
+            IF stepsSmall {
+                mLogWarn("  ELEMENTS: stopped" + _elementStateSummary(best)).
+                BREAK.
+            }
+        }
+    }
+
+    IF NOT solved {
+        SET best TO _patchElementsCost(nd, targetBody, targets).
+        mLogWarn("ELEMENTS final error" + _elementErrorSummary(best, targets)).
+    }
+
+    RETURN best.
+}
+
+LOCAL FUNCTION _patchElementsCost {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targets.
+
+    LOCAL p IS _getTargetPatch(nd, targetBody).
+    IF p = 0 {
+        LOCAL miss IS LEXICON().
+        miss:ADD("PATCH", 0).
+        miss:ADD("PE", 0).
+        miss:ADD("INC", 0).
+        miss:ADD("LAN", 0).
+        miss:ADD("AOP", 0).
+        miss:ADD("PE_ERR", 9999999).
+        miss:ADD("INC_ERR", 999).
+        miss:ADD("LAN_ERR", 999).
+        miss:ADD("AOP_ERR", 999).
+        miss:ADD("COST", 999999999).
+        RETURN miss.
+    }
+
+    RETURN _patchElementsCostFromPatch(p, targets).
+}
+
+LOCAL FUNCTION _patchElementsCostFromPatch {
+    PARAMETER p.
+    PARAMETER targets.
+
+    LOCAL peErr IS 0.
+    LOCAL incErr IS 0.
+    LOCAL lanErr IS 0.
+    LOCAL aopErr IS 0.
+    LOCAL cost IS 0.
+
+    IF targets:HASKEY("PE") {
+        SET peErr TO p:PERIAPSIS - targets["PE"].
+        SET cost TO cost + (peErr / 2000)^2.
+    }
+    IF targets:HASKEY("INC") {
+        SET incErr TO _angleError(p:INCLINATION, targets["INC"]).
+        SET cost TO cost + (incErr / 0.5)^2.
+    }
+    IF targets:HASKEY("LAN") {
+        SET lanErr TO _angleError(p:LAN, targets["LAN"]).
+        SET cost TO cost + (lanErr / 1.0)^2.
+    }
+    IF targets:HASKEY("AOP") {
+        SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, targets["AOP"]).
+        SET cost TO cost + (aopErr / 1.0)^2.
+    }
+
+    LOCAL result IS LEXICON().
+    result:ADD("PATCH", 1).
+    result:ADD("PE", p:PERIAPSIS).
+    result:ADD("INC", p:INCLINATION).
+    result:ADD("LAN", p:LAN).
+    result:ADD("AOP", p:ARGUMENTOFPERIAPSIS).
+    result:ADD("PE_ERR", peErr).
+    result:ADD("INC_ERR", incErr).
+    result:ADD("LAN_ERR", lanErr).
+    result:ADD("AOP_ERR", aopErr).
+    result:ADD("COST", cost).
+    RETURN result.
+}
+
+LOCAL FUNCTION _elementsConverged {
+    PARAMETER eval.
+    PARAMETER targets.
+    IF eval["PATCH"] = 0 { RETURN FALSE. }
+    IF targets:HASKEY("PE") {
+        IF ABS(eval["PE_ERR"]) > 500 { RETURN FALSE. }
+    }
+    IF targets:HASKEY("INC") {
+        IF ABS(eval["INC_ERR"]) > 0.5 { RETURN FALSE. }
+    }
+    IF targets:HASKEY("LAN") {
+        IF ABS(eval["LAN_ERR"]) > 1.0 { RETURN FALSE. }
+    }
+    IF targets:HASKEY("AOP") {
+        IF ABS(eval["AOP_ERR"]) > 1.0 { RETURN FALSE. }
+    }
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _angleError {
+    PARAMETER current.
+    PARAMETER target.
+    LOCAL err IS current - target.
+    IF err >  180 { SET err TO err - 360. }
+    IF err < -180 { SET err TO err + 360. }
+    RETURN err.
+}
+
+LOCAL FUNCTION _elementTargetSummary {
+    PARAMETER targets.
+    LOCAL msg IS "".
+    IF targets:HASKEY("PE")  { SET msg TO msg + " Pe=" + ROUND(targets["PE"]/1000, 1) + "km". }
+    IF targets:HASKEY("INC") { SET msg TO msg + " INC=" + ROUND(targets["INC"], 1) + "°". }
+    IF targets:HASKEY("LAN") { SET msg TO msg + " LAN=" + ROUND(targets["LAN"], 1) + "°". }
+    IF targets:HASKEY("AOP") { SET msg TO msg + " AoP=" + ROUND(targets["AOP"], 1) + "°". }
+    RETURN msg.
+}
+
+LOCAL FUNCTION _elementStateSummary {
+    PARAMETER eval.
+    IF eval["PATCH"] = 0 { RETURN " no-patch". }
+    RETURN " Pe=" + ROUND(eval["PE"]/1000, 1)
+        + "km INC=" + ROUND(eval["INC"], 1)
+        + "° LAN=" + ROUND(eval["LAN"], 1)
+        + "° AoP=" + ROUND(eval["AOP"], 1) + "°".
+}
+
+LOCAL FUNCTION _elementErrorSummary {
+    PARAMETER eval.
+    PARAMETER targets.
+    LOCAL msg IS "".
+    IF targets:HASKEY("PE")  { SET msg TO msg + " PeErr=" + ROUND(eval["PE_ERR"]/1000, 1) + "km". }
+    IF targets:HASKEY("INC") { SET msg TO msg + " IncErr=" + ROUND(eval["INC_ERR"], 2) + "°". }
+    IF targets:HASKEY("LAN") { SET msg TO msg + " LanErr=" + ROUND(eval["LAN_ERR"], 2) + "°". }
+    IF targets:HASKEY("AOP") { SET msg TO msg + " AopErr=" + ROUND(eval["AOP_ERR"], 2) + "°". }
+    RETURN msg.
+}
+
 LOCAL FUNCTION _nodeAxisGet {
     PARAMETER nd.
     PARAMETER axis.
     IF axis = "PROGRADE"  { RETURN nd:PROGRADE. }
     IF axis = "NORMAL"    { RETURN nd:NORMAL. }
     IF axis = "RADIALOUT" { RETURN nd:RADIALOUT. }
+    IF axis = "TIME"      { RETURN nd:TIME. }
     RETURN 0.
 }
 
@@ -1240,6 +1498,7 @@ LOCAL FUNCTION _nodeAxisSet {
     IF axis = "PROGRADE"  { SET nd:PROGRADE  TO value. }
     IF axis = "NORMAL"    { SET nd:NORMAL    TO value. }
     IF axis = "RADIALOUT" { SET nd:RADIALOUT TO value. }
+    IF axis = "TIME"      { SET nd:TIME      TO value. }
 }
 
 LOCAL FUNCTION _shouldUseLambertVesselIntercept {
@@ -1634,15 +1893,35 @@ GLOBAL FUNCTION phaseMidCourse {
     WAIT 0.1.
 
     LOCAL mccOpts IS LEXICON("DV_CAP", MCC_DV_CAP).
+    LOCAL elementTargets IS LEXICON().
+    elementTargets:ADD("PE", targetPe).
+    IF targetInc >= 0 { elementTargets:ADD("INC", targetInc). }
+    IF targetLan >= 0 { elementTargets:ADD("LAN", targetLan). }
+    IF targetAoP >= 0 { elementTargets:ADD("AOP", targetAoP). }
+    LOCAL useElementSolver IS FALSE.
+    IF targetLan >= 0 OR targetAoP >= 0 { SET useElementSolver TO TRUE. }
 
     // Local polar approaches couple PE and INC strongly. Running INC and
     // PE as independent Newton passes can turn a good 20km encounter into
-    // a high flyby. Use the same coupled solver as departure, but with
-    // much smaller steps and a strict MCC dV cap.
+    // a high flyby. LAN and AoP have the same problem, so when they are
+    // requested we score all requested elements together.
     LOCAL preCost IS 0.
-    IF targetInc >= 0 {
-        LOCAL preEval IS _peIncPatchCost(patch, targetPe, targetInc).
-        SET preCost TO preEval["COST"].
+    IF useElementSolver {
+        LOCAL preElemEval IS _patchElementsCostFromPatch(patch, elementTargets).
+        SET preCost TO preElemEval["COST"].
+        LOCAL elemOpts IS LEXICON().
+        elemOpts:ADD("DV_CAP", MCC_DV_CAP).
+        elemOpts:ADD("STEP_NORMAL", 2.0).
+        elemOpts:ADD("STEP_PROGRADE", 1.0).
+        elemOpts:ADD("STEP_RADIAL", 1.0).
+        elemOpts:ADD("STEP_TIME", 120.0).
+        elemOpts:ADD("MIN_STEP", 0.02).
+        elemOpts:ADD("MAX_ITER", 100).
+        elemOpts:ADD("MIN_TIME", TIME:SECONDS + 60).
+        _targetPatchElementsCoupled(nd, target, elementTargets, elemOpts).
+    } ELSE IF targetInc >= 0 {
+        LOCAL prePeEval IS _peIncPatchCost(patch, targetPe, targetInc).
+        SET preCost TO prePeEval["COST"].
         LOCAL coupledOpts IS LEXICON().
         coupledOpts:ADD("DV_CAP", MCC_DV_CAP).
         coupledOpts:ADD("STEP_NORMAL", 2.0).
@@ -1655,22 +1934,21 @@ GLOBAL FUNCTION phaseMidCourse {
         newtonTarget(nd, target, "PE", targetPe, mccOpts).
     }
 
-    IF targetAoP >= 0 { newtonTarget(nd, target, "AOP", targetAoP, mccOpts). }
-    IF targetLan >= 0 {
-        newtonTarget(nd, target, "LAN", targetLan, mccOpts).
-        newtonTarget(nd, target, "PE", targetPe, mccOpts).
-    }
-
     WAIT 0.1.
 
     LOCAL totalDv IS nd:DELTAV:MAG.
     LOCAL finalPatch IS _getTargetPatch(nd, target).
 
     LOCAL worsened IS FALSE.
-    IF targetInc >= 0 AND finalPatch <> 0 {
-        LOCAL finalEval IS _peIncPatchCost(finalPatch, targetPe, targetInc).
-        LOCAL finalCost IS finalEval["COST"].
-        IF finalCost > preCost * 1.05 { SET worsened TO TRUE. }
+    IF useElementSolver AND finalPatch <> 0 {
+        LOCAL finalElemEval IS _patchElementsCostFromPatch(finalPatch, elementTargets).
+        LOCAL finalElemCost IS finalElemEval["COST"].
+        IF finalElemCost > preCost * 1.05 { SET worsened TO TRUE. }
+        IF ABS(finalElemEval["PE_ERR"]) > 100000 { SET worsened TO TRUE. }
+    } ELSE IF targetInc >= 0 AND finalPatch <> 0 {
+        LOCAL finalPeEval IS _peIncPatchCost(finalPatch, targetPe, targetInc).
+        LOCAL finalPeCost IS finalPeEval["COST"].
+        IF finalPeCost > preCost * 1.05 { SET worsened TO TRUE. }
         IF ABS(finalPatch:PERIAPSIS - targetPe) > 100000 { SET worsened TO TRUE. }
     }
 
