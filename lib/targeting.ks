@@ -120,6 +120,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL bestUT   IS TIME:SECONDS + 30.
     LOCAL bestPe   IS entryPe.
+    LOCAL bestRad  IS 0.
     LOCAL bestDist IS 999999999.
     LOCAL validSamples IS 0.
     LOCAL invalidSamples IS 0.
@@ -201,20 +202,23 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF refined["VALID"] AND refined["DIST"] < bestDist {
         SET bestUT TO refined["UT"].
         SET bestPe TO refined["PE"].
+        SET bestRad TO refined["RAD"].
         SET bestDist TO refined["DIST"].
     }
 
     mLog("Fine best: T+" + ROUND(bestUT - TIME:SECONDS,0)
         + "s  Pe=" + ROUND(bestPe/1000,1) + "km"
+        + "  Rad=" + ROUND(bestRad,2)
         + "  dist=" + ROUND(bestDist/1000,1) + "km").
     LOCAL deorbitStatus IS "ok".
     IF bestDist > tolerance { SET deorbitStatus TO "miss". }
-    LOCAL finalEval IS _evalDeorbitNode(bestUT, bestPe, targetLat, targetLng).
+    LOCAL finalEval IS _evalDeorbitNode(bestUT, bestPe, targetLat, targetLng, bestRad).
     mLogWarn("STATS deorbit final status=" + deorbitStatus
         + " distKm=" + ROUND(bestDist/1000,1)
         + " toleranceKm=" + ROUND(tolerance/1000,1)
         + " burnT=" + ROUND(bestUT - TIME:SECONDS,0)
         + " PeKm=" + ROUND(bestPe/1000,1)
+        + " radial=" + ROUND(bestRad,2)
         + " impact=" + ROUND(finalEval["LAT"],4)
         + "," + ROUND(finalEval["LNG"],4)).
 
@@ -238,7 +242,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
 
-    LOCAL realNode IS _planDeorbitNode(bestUT, bestPe).
+    LOCAL realNode IS _planDeorbitNode(bestUT, bestPe, bestRad).
     mLog("Executing deorbit burn at T+" + ROUND(bestUT - TIME:SECONDS,0) + "s.").
     archivePlannedManeuverLog("targeted-deorbit").
     HUDTEXT("Deorbit burn in " + ROUND(bestUT - TIME:SECONDS,0) + "s", 3, 2, 13, CYAN, FALSE).
@@ -386,11 +390,13 @@ LOCAL FUNCTION _evalDeorbitNode {
     PARAMETER entryPe.
     PARAMETER targetLat.
     PARAMETER targetLng.
+    PARAMETER radialDv IS 0.
 
     LOCAL result IS LEXICON(
         "VALID", FALSE,
         "UT", burnUT,
         "PE", entryPe,
+        "RAD", radialDv,
         "DIST", 999999999,
         "LAT", 0,
         "LNG", 0
@@ -399,7 +405,7 @@ LOCAL FUNCTION _evalDeorbitNode {
     IF burnUT <= TIME:SECONDS + 10 { RETURN result. }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.05. }
-    LOCAL nd IS _planDeorbitNode(burnUT, entryPe).
+    LOCAL nd IS _planDeorbitNode(burnUT, entryPe, radialDv).
     WAIT 0.35.
 
     IF NOT ADDONS:TR:HASIMPACT {
@@ -431,14 +437,17 @@ LOCAL FUNCTION _refineDeorbitImpact {
     LOCAL refineTarget IS _targetDeorbitRefineTolerance(tolerance).
     LOCAL timeStep IS MAX(0.5, coarseStep / 4).
     LOCAL peStep IS 5000.
+    LOCAL radialStep IS 2.
+    LOCAL maxRadial IS 12.
     LOCAL minPe IS MAX(-50000, -SHIP:BODY:RADIUS * 0.2).
     LOCAL maxPe IS MIN(SHIP:PERIAPSIS - 100, MAX(startPe + 60000, 10000)).
-    LOCAL axes IS LIST("TIME", "PE", "BOTH").
+    LOCAL axes IS LIST("TIME", "PE", "RADIAL", "TIME_RADIAL", "PE_RADIAL", "BOTH").
     LOCAL signs IS LIST(1, -1).
 
     mLog("Refining deorbit: start dist=" + ROUND(best["DIST"]/1000,1)
         + "km  timeStep=" + ROUND(timeStep,1) + "s"
         + "  peStep=" + ROUND(peStep/1000,1) + "km"
+        + "  radialStep=" + ROUND(radialStep,1) + "m/s"
         + "  target=" + ROUND(refineTarget,0) + "m.").
 
     FROM { LOCAL iter IS 0. } UNTIL iter >= 60 STEP { SET iter TO iter + 1. } DO {
@@ -449,6 +458,7 @@ LOCAL FUNCTION _refineDeorbitImpact {
             FOR sign IN signs {
                 LOCAL tryUT IS best["UT"].
                 LOCAL tryPe IS best["PE"].
+                LOCAL tryRad IS best["RAD"].
 
                 IF axis = "TIME" OR axis = "BOTH" {
                     SET tryUT TO tryUT + sign * timeStep.
@@ -456,10 +466,20 @@ LOCAL FUNCTION _refineDeorbitImpact {
                 IF axis = "PE" OR axis = "BOTH" {
                     SET tryPe TO tryPe + sign * peStep.
                 }
+                IF axis = "RADIAL" OR axis = "TIME_RADIAL" OR axis = "PE_RADIAL" {
+                    SET tryRad TO tryRad + sign * radialStep.
+                }
+                IF axis = "TIME_RADIAL" {
+                    SET tryUT TO tryUT + sign * timeStep.
+                }
+                IF axis = "PE_RADIAL" {
+                    SET tryPe TO tryPe + sign * peStep.
+                }
 
                 IF tryPe >= minPe AND tryPe <= maxPe
+                        AND ABS(tryRad) <= maxRadial
                         AND tryUT > TIME:SECONDS + 10 {
-                    LOCAL trial IS _evalDeorbitNode(tryUT, tryPe, targetLat, targetLng).
+                    LOCAL trial IS _evalDeorbitNode(tryUT, tryPe, targetLat, targetLng, tryRad).
                     IF trial["VALID"] AND trial["DIST"] < bestTrial["DIST"] {
                         SET bestTrial TO trial.
                     }
@@ -472,6 +492,7 @@ LOCAL FUNCTION _refineDeorbitImpact {
             SET improved TO TRUE.
             mLog("  refine[" + iter + "] T+" + ROUND(best["UT"] - TIME:SECONDS,0)
                 + "s Pe=" + ROUND(best["PE"]/1000,1) + "km"
+                + " Rad=" + ROUND(best["RAD"],2)
                 + " dist=" + ROUND(best["DIST"]/1000,2) + "km.").
         }
 
@@ -480,7 +501,8 @@ LOCAL FUNCTION _refineDeorbitImpact {
         IF NOT improved {
             SET timeStep TO timeStep / 2.
             SET peStep TO peStep / 2.
-            IF timeStep < 0.05 AND peStep < 25 { BREAK. }
+            SET radialStep TO radialStep / 2.
+            IF timeStep < 0.05 AND peStep < 25 AND radialStep < 0.05 { BREAK. }
         }
     }
 
@@ -502,6 +524,7 @@ LOCAL FUNCTION _targetDeorbitRefineTolerance {
 LOCAL FUNCTION _planDeorbitNode {
     PARAMETER burnUT.
     PARAMETER entryPe.
+    PARAMETER radialDv IS 0.
 
     LOCAL mu   IS SHIP:ORBIT:BODY:MU.
     LOCAL oRad IS SHIP:ORBIT:SEMIMAJORAXIS.
@@ -511,7 +534,7 @@ LOCAL FUNCTION _planDeorbitNode {
     LOCAL vNew IS SQRT(mu * (2/oRad - 1/tSMA)).
     LOCAL dv   IS vNew - vNow.
 
-    LOCAL nd IS NODE(burnUT, 0, 0, dv).
+    LOCAL nd IS NODE(burnUT, radialDv, 0, dv).
     ADD nd.
     RETURN nd.
 }
