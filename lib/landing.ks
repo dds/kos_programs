@@ -42,7 +42,7 @@ GLOBAL LAND_CFG IS LEXICON(
     "CARRIER_TIP_TIME",  1.5,     // seconds to hold tip
     "CARRIER_SETTLE",    2.0,     // seconds to wait after touchdown before handoff
     "ROVER_ORIENT",    TRUE,      // orient rover upright after release
-    "ROVER_ORIENT_TIME", 3.0,    // seconds to hold upright orientation
+    "ROVER_ORIENT_TIME", 8.0,    // seconds to hold upright orientation
     "ROVER_BRAKE",     TRUE       // engage brakes after rover lands on wheels
 ).
 
@@ -423,20 +423,25 @@ LOCAL FUNCTION _carrierHandoff {
         WAIT 0.5.
     }
 
-    // Step 4: Rover is now the active vessel — orient flat (wheels down)
+    // Step 4: Rover is now the active vessel — orient wheels-down.
+    // LOCK re-evaluates every tick so the target stays stable even
+    // while tumbling. We use SHIP:NORTH:VECTOR as a fixed horizontal
+    // reference rather than the tumbling FOREVECTOR.
     mLog("Orienting rover wheels-down.").
     SET SAS TO FALSE.
-    LOCK STEERING TO LOOKDIRUP(
-        VXCL(SHIP:UP:VECTOR, SHIP:FACING:FOREVECTOR):NORMALIZED,
-        SHIP:UP:VECTOR).
-    LOCAL orientEnd IS TIME:SECONDS + LAND_CFG["ROVER_ORIENT_TIME"].
+    LOCK STEERING TO LOOKDIRUP(SHIP:NORTH:VECTOR, SHIP:UP:VECTOR).
 
-    UNTIL TIME:SECONDS >= orientEnd
-            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+    // Keep orienting until wheels-down AND on the ground, with a hard timeout
+    LOCAL orientEnd IS TIME:SECONDS + LAND_CFG["ROVER_ORIENT_TIME"] + 12.
+    UNTIL TIME:SECONDS >= orientEnd {
         LOCAL topErr IS VANG(SHIP:FACING:TOPVECTOR, SHIP:UP:VECTOR).
+        LOCAL onGround IS SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
         HUDTEXT("Rover orient: alt=" + ROUND(ALT:RADAR,1)
             + "m  topErr=" + ROUND(topErr,1)
-            + "deg", 0.5, 2, 13, CYAN, FALSE).
+            + "deg" + CHOOSE " LANDED" IF onGround ELSE "",
+            0.5, 2, 13, CYAN, FALSE).
+        // Done when upright and on the ground
+        IF onGround AND topErr < 15 { BREAK. }
         WAIT 0.05.
     }
     UNLOCK STEERING.
@@ -444,16 +449,6 @@ LOCAL FUNCTION _carrierHandoff {
         + ROUND(VANG(SHIP:FACING:TOPVECTOR, SHIP:UP:VECTOR),1)
         + " alt=" + ROUND(ALT:RADAR,1)
         + " status=" + SHIP:STATUS).
-
-    // Step 5: Wait for rover to settle on its wheels
-    IF NOT (SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED") {
-        mLog("Waiting for rover to touch down on wheels.").
-        LOCAL wheelWait IS TIME:SECONDS + 15.
-        UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED"
-                OR TIME:SECONDS >= wheelWait {
-            WAIT 0.1.
-        }
-    }
 
     // Step 6: Engage brakes and finalize
     SET BRAKES TO TRUE.
