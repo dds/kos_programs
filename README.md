@@ -148,7 +148,7 @@ Important in-flight constraint: `boot/boot.ks` itself is installed on the kOS pr
 
 The current band and pending reload are saved in mission state (`lib_band`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, `reload_next_band`) so a reboot or state dump shows why the computer is waiting.
 
-The archive-root `VERSION` file contains the build identifier printed by `logs.ks` at boot as `CODE version=...`. Boot copies it into `1:/run/code_version.state` when connected, so archived logs can be matched back to the exact code loaded by the vessel even after later changes. Pushes to `main` publish a generated bundle as a short-lived GitHub Actions artifact; published GitHub releases attach a generated release bundle with a fresh UUID written to `VERSION`, plus the standalone `VERSION` file. Use `make release-version TAG=kos-YYYYMMDD-N` when you want a named Git tag for a release.
+The archive-root `VERSION` file contains the code tag printed by `logs.ks` at boot as `CODE version=...`. Boot copies it into `1:/run/code_version.state` when connected, so archived logs can be matched back to a Git tag even after later code changes. Use `make release-version TAG=kos-YYYYMMDD-N` to stamp `VERSION`, commit it, create the matching Git tag, and push branch plus tag.
 
 For live sim iteration, use `make watch-sync` instead of a raw `while true; do git pull origin main; sleep 2; done` loop. The helper fetches first, fast-forwards only when safe, skips updates when the worktree is dirty, and uses a lock so overlapping sync ticks do not race with each other.
 
