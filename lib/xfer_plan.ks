@@ -82,7 +82,16 @@ GLOBAL FUNCTION phaseTransfer {
         LOCAL xLan IS -1.
         LOCAL xAoP IS -1.
         IF CFG:HASKEY("CAPTURE_LAN") { SET xLan TO CFG["CAPTURE_LAN"]. }
-        IF CFG:HASKEY("CAPTURE_AOP") { SET xAoP TO CFG["CAPTURE_AOP"]. }
+        LOCAL finalizesAop IS FALSE.
+        IF DEFINED xferSeq {
+            IF xferSeq:CONTAINS("ELLIPTICAL") { SET finalizesAop TO TRUE. }
+        }
+        IF CFG:HASKEY("CAPTURE_AOP") AND NOT finalizesAop {
+            SET xAoP TO CFG["CAPTURE_AOP"].
+        } ELSE IF CFG:HASKEY("CAPTURE_AOP") {
+            mLogWarn("STATS transfer aop deferred phase=ELLIPTICAL targetAoP="
+                + ROUND(CFG["CAPTURE_AOP"],1)).
+        }
         LOCAL transferNode IS planTransfer(target, CFG["CAPTURE_PE"], xLan, xAoP).
         IF transferNode = 0 OR NOT transferNode:ISTYPE("Node") {
             SET retries TO retries + 1.

@@ -715,7 +715,16 @@ GLOBAL FUNCTION phaseMidCourse {
     }
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
-    IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
+    LOCAL finalizesAoP IS FALSE.
+    IF DEFINED xferSeq {
+        IF xferSeq:CONTAINS("ELLIPTICAL") { SET finalizesAoP TO TRUE. }
+    }
+    IF CFG:HASKEY("CAPTURE_AOP") AND NOT finalizesAoP {
+        SET targetAoP TO CFG["CAPTURE_AOP"].
+    } ELSE IF CFG:HASKEY("CAPTURE_AOP") {
+        mLogWarn("STATS mcc aop deferred phase=ELLIPTICAL targetAoP="
+            + ROUND(CFG["CAPTURE_AOP"],1)).
+    }
 
     LOCAL patch IS _getTargetPatch(SHIP, target).
     IF patch = 0 {
