@@ -34,7 +34,9 @@ GLOBAL LAND_CFG IS LEXICON(
     "DEORBIT_PE",       -3000,
     "DEORBIT_OVERSHOOT",    0,    // meters to overshoot target for carrier braking
     "DEORBIT_OVERSHOOT_TOLERANCE", 1200,
-    "GUIDANCE_ALT",      5000,    // alt below which guidance steers toward target
+    "GUIDANCE_ALT",      5000,    // alt below which descent guidance stops (commit to SB)
+    "GUIDANCE_CORRECTION_THRESHOLD", 500, // meters — don't correct if impact closer than this
+    "GUIDANCE_MAX_DV",     15,    // m/s total correction budget for descent guidance
 
     // Carrier handoff (empty tag = no handoff)
     "CARRIER_TAG",       "",      // decoupler tag for carrier release
@@ -149,6 +151,229 @@ LOCAL FUNCTION _hoverSteering {
 }
 
 // ------------------------------------------------------------
+// Descent guidance — mid-course corrections during coast
+// ------------------------------------------------------------
+// Called during Phase 2 coast above GUIDANCE_ALT. Uses Trajectories
+// to read predicted impact and fires small correction burns to
+// steer impact toward the target. Tracks cumulative dV and stops
+// when the budget (GUIDANCE_MAX_DV) is exhausted.
+
+LOCAL FUNCTION _descentGuidance {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+
+    IF NOT ADDONS:TR:AVAILABLE { RETURN. }
+
+    LOCAL maxDv IS LAND_CFG["GUIDANCE_MAX_DV"].
+    LOCAL threshold IS LAND_CFG["GUIDANCE_CORRECTION_THRESHOLD"].
+    LOCAL guidanceAlt IS LAND_CFG["GUIDANCE_ALT"].
+    LOCAL usedDv IS 0.
+    LOCAL lastCheck IS 0.
+
+    mLog("Descent guidance active. Budget=" + ROUND(maxDv,1)
+        + "m/s  threshold=" + ROUND(threshold,0) + "m.").
+
+    UNTIL usedDv >= maxDv OR ALT:RADAR <= guidanceAlt OR landingAbortFlag {
+        // Check every ~5 seconds
+        IF TIME:SECONDS - lastCheck < 5 { WAIT 0.2. }
+        ELSE {
+            SET lastCheck TO TIME:SECONDS.
+
+            // Also check suicide burn trigger — don't miss it
+            LOCAL tti IS _timeToImpact().
+            LOCAL sbd IS _suicideBurnDuration().
+            IF tti <= sbd * LAND_CFG["BURN_MARGIN"] { BREAK. }
+
+            IF NOT ADDONS:TR:HASIMPACT { WAIT 0.2. }
+            ELSE {
+                LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
+                LOCAL dist IS _geoDistance(impactPos:LAT, impactPos:LNG,
+                    targetLat, targetLng).
+
+                HUDTEXT("Guidance: err=" + ROUND(dist,0)
+                    + "m  dV=" + ROUND(usedDv,1) + "/" + ROUND(maxDv,0),
+                    2, 2, 13, CYAN, FALSE).
+
+                IF dist > threshold {
+                    // Compute correction: bearing from impact to target
+                    // as a surface-relative direction vector
+                    LOCAL impactGeo IS LATLNG(impactPos:LAT, impactPos:LNG).
+                    LOCAL targetGeo IS LATLNG(targetLat, targetLng).
+                    LOCAL toTarget IS (targetGeo:POSITION - impactGeo:POSITION):NORMALIZED.
+                    // Project onto surface plane (remove radial component)
+                    LOCAL upVec IS SHIP:UP:VECTOR.
+                    LOCAL corrVec IS VXCL(upVec, toTarget):NORMALIZED.
+
+                    // Scale burn: proportional to error, capped at 3 m/s per correction
+                    LOCAL burnDv IS MIN(3.0, dist / 500).
+                    SET burnDv TO MIN(burnDv, maxDv - usedDv).
+                    IF burnDv < 0.2 { WAIT 0.2. }  // too small, skip
+                    ELSE {
+                        // Orient toward correction vector
+                        LOCK STEERING TO corrVec.
+                        LOCAL orientEnd IS TIME:SECONDS + 8.
+                        UNTIL VANG(SHIP:FACING:FOREVECTOR, corrVec) < 5
+                                OR TIME:SECONDS > orientEnd {
+                            WAIT 0.1.
+                        }
+
+                        // Execute short burn
+                        LOCAL burnTime IS burnDv / MAX(0.1, _maxAcc()).
+                        LOCAL v0 IS SHIP:VELOCITY:SURFACE:MAG.
+                        LOCK THROTTLE TO 0.2.  // gentle — low throttle for precision
+                        LOCAL burnEnd IS TIME:SECONDS + burnTime * 5.  // 0.2 throttle = 5x duration
+                        UNTIL TIME:SECONDS >= burnEnd OR landingAbortFlag {
+                            WAIT 0.05.
+                        }
+                        LOCK THROTTLE TO 0.
+                        LOCAL actualDv IS ABS(SHIP:VELOCITY:SURFACE:MAG - v0).
+                        // Estimate from throttle fraction and time
+                        SET actualDv TO burnDv.  // approximate — speed change includes gravity
+                        SET usedDv TO usedDv + actualDv.
+
+                        mLog("Guidance correction: err=" + ROUND(dist,0)
+                            + "m  burn=" + ROUND(burnDv,1) + "m/s"
+                            + "  used=" + ROUND(usedDv,1) + "/" + ROUND(maxDv,0) + "m/s.").
+
+                        // Return to retrograde hold and let Trajectories settle
+                        LOCK STEERING TO _burnSteering().
+                        WAIT 2.
+                    }
+                }
+            }
+        }
+    }
+
+    mLog("Descent guidance complete. Total dV=" + ROUND(usedDv,1) + "m/s.").
+}
+
+// ------------------------------------------------------------
+// Terrain survey — one-shot flat spot check near impact point
+// ------------------------------------------------------------
+// Surveys a grid around the predicted impact and shifts the target
+// if a significantly flatter spot is found. Uses raw TERRAINHEIGHT
+// queries — independent of SCANsat coverage.
+
+LOCAL FUNCTION _descentTerrainCheck {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+
+    // Survey grid: 500m radius, 100m steps → 11x11 = 121 samples
+    LOCAL radius IS 500.
+    LOCAL step IS 100.
+    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
+    LOCAL lonScale IS MAX(0.01, COS(targetLat)).
+
+    LOCAL bestLat IS targetLat.
+    LOCAL bestLng IS targetLng.
+    LOCAL bestScore IS 999999.
+    LOCAL centerTerrain IS LATLNG(targetLat, targetLng):TERRAINHEIGHT.
+
+    LOCAL northM IS -radius.
+    UNTIL northM > radius {
+        LOCAL eastM IS -radius.
+        UNTIL eastM > radius {
+            LOCAL sLat IS targetLat + northM * degPerM.
+            LOCAL sLng IS targetLng + eastM * degPerM / lonScale.
+            LOCAL h IS LATLNG(sLat, sLng):TERRAINHEIGHT.
+
+            // Estimate slope from cardinal neighbors (±step)
+            LOCAL hN IS LATLNG(sLat + step * degPerM, sLng):TERRAINHEIGHT.
+            LOCAL hS IS LATLNG(sLat - step * degPerM, sLng):TERRAINHEIGHT.
+            LOCAL hE IS LATLNG(sLat, sLng + step * degPerM / lonScale):TERRAINHEIGHT.
+            LOCAL hW IS LATLNG(sLat, sLng - step * degPerM / lonScale):TERRAINHEIGHT.
+            LOCAL slopeNS IS ABS(hN - hS) / (2 * step).
+            LOCAL slopeEW IS ABS(hE - hW) / (2 * step).
+            LOCAL slopePenalty IS (slopeNS + slopeEW) * 500.  // heavily penalize slope
+
+            // Distance from original target penalized lightly
+            LOCAL dist IS SQRT(northM^2 + eastM^2).
+            LOCAL score IS dist / 100 + slopePenalty.
+
+            IF score < bestScore {
+                SET bestScore TO score.
+                SET bestLat TO sLat.
+                SET bestLng TO sLng.
+            }
+            SET eastM TO eastM + step.
+        }
+        SET northM TO northM + step.
+    }
+
+    LOCAL shiftDist IS _geoDistance(targetLat, targetLng, bestLat, bestLng).
+    mLog("Terrain check: center elev=" + ROUND(centerTerrain,1)
+        + "m  best score=" + ROUND(bestScore,1)
+        + "  shift=" + ROUND(shiftDist,0) + "m.").
+
+    // Only shift if the improvement is meaningful (>50m away, score much better)
+    IF shiftDist > 50 {
+        mLog("Shifting target by " + ROUND(shiftDist,0) + "m to flatter terrain"
+            + " lat=" + ROUND(bestLat,4) + " lng=" + ROUND(bestLng,4) + ".").
+        SET LAND_CFG["TARGET_LAT"] TO bestLat.
+        SET LAND_CFG["TARGET_LNG"] TO bestLng.
+        IF ADDONS:TR:AVAILABLE {
+            ADDONS:TR:SETTARGET(LATLNG(bestLat, bestLng)).
+        }
+        RETURN LEXICON("LAT", bestLat, "LNG", bestLng, "SHIFTED", TRUE).
+    }
+
+    RETURN LEXICON("LAT", targetLat, "LNG", targetLng, "SHIFTED", FALSE).
+}
+
+// ------------------------------------------------------------
+// Guided hover steering — Phase 4 target-aware descent
+// ------------------------------------------------------------
+// Adds a horizontal bias toward the target on top of the base
+// hover steering logic. Above UPRIGHT_ALT and more than 50m from
+// target: lean toward the target proportional to distance, capped
+// by MAX_TILT. Close in or low altitude: pure _hoverSteering().
+
+LOCAL FUNCTION _guidedHoverSteering {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+
+    LOCAL alt_ IS ALT:RADAR.
+    // Close to ground or no target: fall back to pure hover
+    IF alt_ <= LAND_CFG["UPRIGHT_ALT"] {
+        RETURN SHIP:UP:VECTOR.
+    }
+
+    LOCAL targetGeo IS LATLNG(targetLat, targetLng).
+    LOCAL dist IS _geoDistance(SHIP:LATITUDE, SHIP:LONGITUDE, targetLat, targetLng).
+
+    // Within 50m or very low: pure hover, prioritize safe touchdown
+    IF dist <= 50 {
+        RETURN _hoverSteering().
+    }
+
+    // Base hover component: kill existing horizontal drift
+    LOCAL hv IS _hVel().
+    LOCAL upVec IS SHIP:UP:VECTOR.
+    LOCAL maxLean IS SIN(LAND_CFG["MAX_TILT"]).
+
+    // Direction toward target projected onto surface plane
+    LOCAL toTarget IS VXCL(upVec, targetGeo:POSITION - SHIP:POSITION):NORMALIZED.
+
+    // Blend: cancel drift + bias toward target
+    // Drift cancellation (same as _hoverSteering)
+    LOCAL driftLean IS V(0,0,0).
+    IF hv:MAG > 0.3 {
+        SET driftLean TO (-hv):NORMALIZED * MIN(maxLean, hv:MAG / 10).
+    }
+
+    // Target bias: proportional to distance, 0.5 lean per 200m, max half of maxLean
+    LOCAL targetBias IS toTarget * MIN(maxLean * 0.5, dist / 400).
+
+    LOCAL totalLean IS driftLean + targetBias.
+    // Clamp total lean to MAX_TILT
+    IF totalLean:MAG > maxLean {
+        SET totalLean TO totalLean:NORMALIZED * maxLean.
+    }
+
+    RETURN (upVec + totalLean):NORMALIZED.
+}
+
+// ------------------------------------------------------------
 // Hardware helpers
 // ------------------------------------------------------------
 
@@ -248,7 +473,29 @@ GLOBAL FUNCTION landExecute {
     mLog("Oriented retrograde, gear deployed. Coasting to burn point.").
     HUDTEXT("Coast to burn point", 3, 2, 14, WHITE, FALSE).
 
-    // Phase 2: Coast — wait until TTI <= SBD * BURN_MARGIN
+    // Phase 2: Coast — descent guidance corrections, then wait for burn trigger
+    // Run descent guidance above GUIDANCE_ALT if we have a target
+    LOCAL guidanceDone IS FALSE.
+    LOCAL terrainCheckDone IS FALSE.
+    IF landingTarget["FOUND"] AND ALT:RADAR > LAND_CFG["GUIDANCE_ALT"] {
+        _descentGuidance(landingTarget["LAT"], landingTarget["LNG"]).
+        SET guidanceDone TO TRUE.
+    }
+
+    // One-shot terrain check after guidance finishes (or immediately if no guidance)
+    IF landingTarget["FOUND"] AND NOT terrainCheckDone
+            AND ALT:RADAR > LAND_CFG["GUIDANCE_ALT"] {
+        LOCAL terrainResult IS _descentTerrainCheck(
+            LAND_CFG["TARGET_LAT"], LAND_CFG["TARGET_LNG"]).
+        SET terrainCheckDone TO TRUE.
+        IF terrainResult["SHIFTED"] {
+            SET landingTarget["LAT"] TO terrainResult["LAT"].
+            SET landingTarget["LNG"] TO terrainResult["LNG"].
+        }
+    }
+
+    // Coast remainder — wait until TTI <= SBD * BURN_MARGIN
+    LOCK STEERING TO _burnSteering().
     UNTIL landingAbortFlag {
         LOCAL tti IS _timeToImpact().
         LOCAL sbd IS _suicideBurnDuration().
@@ -307,12 +554,16 @@ GLOBAL FUNCTION landExecute {
     //   100-1000 ->  lerp -20 to -8 m/s
     //   10-100   ->  lerp -8 to -3 m/s
     //   < 10m    ->  -TOUCHDOWN_SPEED (final creep)
+    LOCAL useGuidedHover IS landingTarget["FOUND"].
     UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" OR landingAbortFlag {
         LOCAL alt_ IS ALT:RADAR.
         LOCAL targetVs IS -_descentSpeed(alt_).
 
-        // Below 10m go pure vertical; above that lean to kill hvel
-        IF alt_ <= LAND_CFG["UPRIGHT_ALT"] {
+        // Guided hover steers toward target; falls back to pure hover when close/low
+        IF useGuidedHover {
+            LOCK STEERING TO _guidedHoverSteering(
+                LAND_CFG["TARGET_LAT"], LAND_CFG["TARGET_LNG"]).
+        } ELSE IF alt_ <= LAND_CFG["UPRIGHT_ALT"] {
             LOCK STEERING TO SHIP:UP.
         } ELSE {
             LOCK STEERING TO _hoverSteering().
