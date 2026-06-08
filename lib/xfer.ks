@@ -82,18 +82,29 @@ GLOBAL FUNCTION phaseTransfer {
         LOCAL xAoP IS -1.
         IF CFG:HASKEY("CAPTURE_LAN") { SET xLan TO CFG["CAPTURE_LAN"]. }
         IF CFG:HASKEY("CAPTURE_AOP") { SET xAoP TO CFG["CAPTURE_AOP"]. }
-        planTransfer(target, CFG["CAPTURE_PE"], xLan, xAoP).
-        mLog("Transfer planned.").
-        SET success TO executeManeuver().
-        IF NOT success {
+        LOCAL transferNode IS planTransfer(target, CFG["CAPTURE_PE"], xLan, xAoP).
+        IF transferNode = 0 OR NOT transferNode:ISTYPE("Node") {
             SET retries TO retries + 1.
-            mLog("Transfer missed (attempt " + retries + ") — waiting 10s and replanning.").
+            mLogError("Transfer planning failed (attempt " + retries + ").").
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
             IF retries >= MAX_RETRIES {
-                mLogError("Transfer failed after " + retries + " attempts — halting.").
+                mLogError("Transfer failed after " + retries + " planning attempts — halting.").
                 RETURN.
             }
             WAIT 10.
+        } ELSE {
+            mLog("Transfer planned.").
+            SET success TO executeManeuver().
+            IF NOT success {
+                SET retries TO retries + 1.
+                mLog("Transfer missed (attempt " + retries + ") — waiting 10s and replanning.").
+                UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+                IF retries >= MAX_RETRIES {
+                    mLogError("Transfer failed after " + retries + " attempts — halting.").
+                    RETURN.
+                }
+                WAIT 10.
+            }
         }
     }
     nextPhase(xferSeq).

@@ -303,13 +303,21 @@ GLOBAL FUNCTION planTransfer {
         }
 
         LOCAL elemOpts IS LEXICON().
-        elemOpts:ADD("STEP_NORMAL", CHOOSE 40.0 IF captureInc >= 0 AND lanTarget < 0 AND aopTarget < 0 ELSE 5.0).
-        elemOpts:ADD("STEP_PROGRADE", CHOOSE 20.0 IF captureInc >= 0 AND lanTarget < 0 AND aopTarget < 0 ELSE 2.0).
-        elemOpts:ADD("STEP_RADIAL", CHOOSE 20.0 IF captureInc >= 0 AND lanTarget < 0 AND aopTarget < 0 ELSE 5.0).
+        elemOpts:ADD("STEP_NORMAL", CHOOSE 40.0 IF captureInc >= 0 ELSE 5.0).
+        elemOpts:ADD("STEP_PROGRADE", CHOOSE 20.0 IF captureInc >= 0 ELSE 2.0).
+        elemOpts:ADD("STEP_RADIAL", CHOOSE 20.0 IF captureInc >= 0 ELSE 5.0).
         elemOpts:ADD("STEP_TIME", 60.0).
         elemOpts:ADD("MIN_STEP", 0.05).
-        elemOpts:ADD("MAX_ITER", CHOOSE 120 IF captureInc >= 0 AND lanTarget < 0 AND aopTarget < 0 ELSE 100).
-        _targetPatchElementsCoupled(nd, targetBody, elemTargets, elemOpts).
+        elemOpts:ADD("MAX_ITER", CHOOSE 140 IF captureInc >= 0 ELSE 100).
+        LOCAL elemResult IS _targetPatchElementsCoupled(nd, targetBody, elemTargets, elemOpts).
+        IF elemResult:HASKEY("SOLVED") AND NOT elemResult["SOLVED"] {
+            mLogError("planTransfer: element targeting failed; refusing bad transfer node.").
+            mLogWarn("STATS transfer result target=" + targetBody:NAME
+                + " status=elements-failed"
+                + _elementErrorSummary(elemResult, elemTargets)).
+            IF HASNODE { REMOVE nd. }
+            RETURN.
+        }
     } ELSE {
         newtonTarget(nd, targetBody, "PE", targetPe).
     }

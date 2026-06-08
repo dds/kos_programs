@@ -303,6 +303,7 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
     }
 
     SET best TO _patchElementsCost(nd, targetBody, targets).
+    best:ADD("SOLVED", solved).
     mLogWarn("STATS elements result target=" + targetBody:NAME
         + " solved=" + solved
         + _elementStateSummary(best)
