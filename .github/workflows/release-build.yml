@@ -1,0 +1,73 @@
+name: Release build
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  attach-build:
+    name: Attach build bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out release ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Build release bundle
+        id: build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          tag="${{ github.event.release.tag_name }}"
+          safe_tag="${tag//\//-}"
+          bundle_name="kos_programs-${safe_tag}"
+
+          mkdir -p dist-existing
+          if gh release download "${tag}" --pattern VERSION --dir dist-existing --clobber >/dev/null 2>&1 && [ -s dist-existing/VERSION ]; then
+            build_version="$(tr -d '\r\n' < dist-existing/VERSION)"
+          else
+            build_version="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+          fi
+
+          mkdir -p "dist/${bundle_name}"
+          git archive HEAD | tar -x -C "dist/${bundle_name}"
+          printf '%s\n' "${build_version}" > "dist/${bundle_name}/VERSION"
+          cp "dist/${bundle_name}/VERSION" dist/VERSION
+          tar -czf "dist/${bundle_name}.tar.gz" -C dist "${bundle_name}"
+
+          {
+            echo "build_version=${build_version}"
+            echo "bundle=dist/${bundle_name}.tar.gz"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Upload release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          gh release upload \
+            "${{ github.event.release.tag_name }}" \
+            "${{ steps.build.outputs.bundle }}" \
+            dist/VERSION \
+            --clobber
+
+      - name: Summarize build
+        shell: bash
+        run: |
+          {
+            echo "### Release build"
+            echo
+            echo "- Build UUID: \`${{ steps.build.outputs.build_version }}\`"
+            echo "- Bundle: \`${{ steps.build.outputs.bundle }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
