@@ -339,6 +339,7 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("xfer").
         libs:ADD("lib_navigation").
         libs:ADD("countdown").
+        libs:ADD("maneuver_targeting").
         libs:ADD("maneuver").
         libs:ADD("inclination").
         libs:ADD("orbit").
@@ -346,12 +347,14 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("payload_ops").
         libs:ADD("orbit").
         IF _phaseIn(stateGet("phase", ""):TOUPPER, LIST("TARGETED_DEORBIT")) {
-            libs:ADD("targeting").
+            libs:ADD("deorbit_targeting").
             libs:ADD("countdown").
+            libs:ADD("maneuver_targeting").
             libs:ADD("maneuver").
         }
         IF _bootHasPayload("SCANSAT") {
             IF NOT libs:CONTAINS("countdown") { libs:ADD("countdown"). }
+            IF NOT libs:CONTAINS("maneuver_targeting") { libs:ADD("maneuver_targeting"). }
             IF NOT libs:CONTAINS("maneuver") { libs:ADD("maneuver"). }
         }
     } ELSE IF band = "LAND_DEORBIT" {
@@ -360,7 +363,7 @@ LOCAL FUNCTION _fr3Libs {
                 AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0 {
             libs:ADD("landing").
         } ELSE {
-            libs:ADD("targeting").
+            libs:ADD("deorbit_targeting").
             libs:ADD("landing").
         }
     } ELSE IF band = "LAND_ASSIST" {
@@ -368,8 +371,9 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("landing").
     } ELSE IF band = "LAND" {
         libs:ADD("payload_landing").
-        libs:ADD("targeting").
+        libs:ADD("deorbit_targeting").
         libs:ADD("countdown").
+        libs:ADD("maneuver_targeting").
         libs:ADD("maneuver").
         libs:ADD("landing").
     } ELSE IF band = "ROVER" {

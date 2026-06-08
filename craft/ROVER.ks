@@ -7,9 +7,8 @@
 GLOBAL CFG IS LEXICON(
 ).
 
-GLOBAL LIBS IS LIST(
-    "landing", "targeting", "rover", "utils"
-).
+LOCAL _seq IS LIST("TARGETED_DEORBIT", "LAND", "ROVER", "DONE").
+GLOBAL LIBS IS bootLibsForPhases(_seq, LIST("utils")).
 
 LOCAL FUNCTION buildPhaseSequence {
     RETURN LIST("TARGETED_DEORBIT", "LAND", "ROVER", "DONE").

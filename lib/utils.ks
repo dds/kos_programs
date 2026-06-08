@@ -46,6 +46,51 @@ GLOBAL FUNCTION hasFixedPanels {
     RETURN FALSE.
 }
 
+// ============================================================
+// Geo-distance (Haversine) — surface distance in meters between
+// two lat/lng pairs on SHIP:BODY.
+// ============================================================
+GLOBAL FUNCTION geoDistance {
+    PARAMETER lat1.
+    PARAMETER lng1.
+    PARAMETER lat2.
+    PARAMETER lng2.
+
+    LOCAL oRad IS SHIP:BODY:RADIUS.
+    LOCAL dLat IS lat2 - lat1.
+    LOCAL dLng IS lng2 - lng1.
+    LOCAL a IS SIN(dLat/2)^2
+        + COS(lat1) * COS(lat2) * SIN(dLng/2)^2.
+    LOCAL c IS 2 * ARCSIN(MIN(1, SQRT(a))).
+    RETURN oRad * c * CONSTANT:PI / 180.
+}
+
+// ============================================================
+// Waypoint lookups — find a waypoint by name or selection state,
+// filtered to the current body.
+// ============================================================
+GLOBAL FUNCTION waypointNamed {
+    PARAMETER waypointName.
+    LOCAL allWps IS ALLWAYPOINTS().
+    LOCAL targetName IS waypointName:TOUPPER.
+    FOR wp IN allWps {
+        IF wp:BODY:NAME = SHIP:BODY:NAME {
+            IF wp:NAME:TOUPPER = targetName { RETURN wp. }
+        }
+    }
+    RETURN 0.
+}
+
+GLOBAL FUNCTION selectedWaypoint {
+    LOCAL allWps IS ALLWAYPOINTS().
+    FOR wp IN allWps {
+        IF wp:ISSELECTED {
+            IF wp:BODY:NAME = SHIP:BODY:NAME { RETURN wp. }
+        }
+    }
+    RETURN 0.
+}
+
 GLOBAL FUNCTION printSequence {
     PARAMETER seq.
     LOCAL i IS 0.

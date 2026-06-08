@@ -187,7 +187,7 @@ LOCAL FUNCTION _descentGuidance {
             IF NOT ADDONS:TR:HASIMPACT { WAIT 0.2. }
             ELSE {
                 LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-                LOCAL dist IS _geoDistance(impactPos:LAT, impactPos:LNG,
+                LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
                     targetLat, targetLng).
 
                 HUDTEXT("Guidance: err=" + ROUND(dist,0)
@@ -300,7 +300,7 @@ LOCAL FUNCTION _descentTerrainCheck {
         SET northM TO northM + step.
     }
 
-    LOCAL shiftDist IS _geoDistance(targetLat, targetLng, bestLat, bestLng).
+    LOCAL shiftDist IS geoDistance(targetLat, targetLng, bestLat, bestLng).
     mLog("Terrain check: center elev=" + ROUND(centerTerrain,1)
         + "m  best score=" + ROUND(bestScore,1)
         + "  shift=" + ROUND(shiftDist,0) + "m.").
@@ -339,7 +339,7 @@ LOCAL FUNCTION _guidedHoverSteering {
     }
 
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
-    LOCAL dist IS _geoDistance(SHIP:LATITUDE, SHIP:LONGITUDE, targetLat, targetLng).
+    LOCAL dist IS geoDistance(SHIP:LATITUDE, SHIP:LONGITUDE, targetLat, targetLng).
 
     // Within 50m or very low: pure hover, prioritize safe touchdown
     IF dist <= 50 {
@@ -815,7 +815,7 @@ GLOBAL FUNCTION landingResolveTarget {
     result:ADD("SOURCE", "none").
 
     IF LAND_CFG["TARGET_WAYPOINT"] <> "" {
-        LOCAL namedWp IS _waypointNamed(LAND_CFG["TARGET_WAYPOINT"]).
+        LOCAL namedWp IS waypointNamed(LAND_CFG["TARGET_WAYPOINT"]).
         IF namedWp <> 0 {
             SET result["FOUND"] TO TRUE.
             SET result["LAT"] TO namedWp:GEOPOSITION:LAT.
@@ -836,7 +836,7 @@ GLOBAL FUNCTION landingResolveTarget {
         RETURN result.
     }
 
-    LOCAL selectedWp IS _selectedWaypoint().
+    LOCAL selectedWp IS selectedWaypoint().
     IF selectedWp <> 0 {
         SET result["FOUND"] TO TRUE.
         SET result["LAT"] TO selectedWp:GEOPOSITION:LAT.
@@ -854,28 +854,6 @@ GLOBAL FUNCTION landingResolveTarget {
     }
 
     RETURN result.
-}
-
-LOCAL FUNCTION _waypointNamed {
-    PARAMETER waypointName.
-    LOCAL allWps IS ALLWAYPOINTS().
-    LOCAL targetName IS waypointName:TOUPPER.
-    FOR wp IN allWps {
-        IF wp:BODY:NAME = SHIP:BODY:NAME {
-            IF wp:NAME:TOUPPER = targetName { RETURN wp. }
-        }
-    }
-    RETURN 0.
-}
-
-LOCAL FUNCTION _selectedWaypoint {
-    LOCAL allWps IS ALLWAYPOINTS().
-    FOR wp IN allWps {
-        IF wp:ISSELECTED {
-            IF wp:BODY:NAME = SHIP:BODY:NAME { RETURN wp. }
-        }
-    }
-    RETURN 0.
 }
 
 // ------------------------------------------------------------
@@ -969,7 +947,7 @@ GLOBAL FUNCTION landingImpactWithinTolerance {
     }
 
     LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-    LOCAL dist IS _geoDistance(
+    LOCAL dist IS geoDistance(
         impactPos:LAT, impactPos:LNG,
         landingTarget["LAT"], landingTarget["LNG"]).
     LOCAL ok IS dist <= LAND_CFG["TARGET_TOLERANCE"].
@@ -988,7 +966,7 @@ GLOBAL FUNCTION landingImpactAcceptableForAssist {
     WAIT 0.5.
     IF NOT ADDONS:TR:HASIMPACT { RETURN FALSE. }
     LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-    LOCAL dist IS _geoDistance(
+    LOCAL dist IS geoDistance(
         impactPos:LAT, impactPos:LNG,
         landingTarget["LAT"], landingTarget["LNG"]).
     LOCAL maxDist IS LAND_CFG["DEORBIT_OVERSHOOT"]
@@ -998,19 +976,4 @@ GLOBAL FUNCTION landingImpactAcceptableForAssist {
         + " distKm=" + ROUND(dist/1000,2)
         + " allowedKm=" + ROUND(maxDist/1000,2)).
     RETURN ok.
-}
-
-LOCAL FUNCTION _geoDistance {
-    PARAMETER lat1.
-    PARAMETER lng1.
-    PARAMETER lat2.
-    PARAMETER lng2.
-
-    LOCAL oRad IS SHIP:BODY:RADIUS.
-    LOCAL dLat IS lat2 - lat1.
-    LOCAL dLng IS lng2 - lng1.
-    LOCAL a IS SIN(dLat/2)^2
-        + COS(lat1) * COS(lat2) * SIN(dLng/2)^2.
-    LOCAL c IS 2 * ARCSIN(MIN(1, SQRT(a))).
-    RETURN oRad * c * CONSTANT:PI / 180.
 }

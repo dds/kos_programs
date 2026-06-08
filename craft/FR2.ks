@@ -94,8 +94,8 @@ FOR key IN _stringMissionKeys() { _cfgFromState(key, FALSE). }
 
 GLOBAL LIBS IS LIST(
     "phases", "flightplan", "launch", "xfer",
-    "lib_navigation", "countdown", "maneuver", "inclination",
-    "orbit", "targeting", "landing",
+    "lib_navigation", "countdown", "maneuver_targeting", "maneuver", "inclination",
+    "orbit", "deorbit_targeting", "landing",
     "lambert", "maneuver_intersystem", "maneuver_rendezvous",
     "molniya", "payload_ops", "science", "observe", "utils", "config"
 ).

@@ -1,5 +1,5 @@
 // ============================================================
-// targeting.ks  —  Precision deorbit targeting  (0:/lib/targeting.ks)
+// deorbit_targeting.ks  —  Precision deorbit targeting  (0:/lib/deorbit_targeting.ks)
 // ============================================================
 
 GLOBAL FUNCTION targetedDeorbit {
@@ -27,7 +27,7 @@ GLOBAL FUNCTION targetResolveDeorbitTarget {
     ).
 
     IF CFG:HASKEY("PROBE_TARGET_WAYPOINT") AND CFG["PROBE_TARGET_WAYPOINT"] <> "" {
-        LOCAL namedWp IS _targetWaypointNamed(CFG["PROBE_TARGET_WAYPOINT"]).
+        LOCAL namedWp IS waypointNamed(CFG["PROBE_TARGET_WAYPOINT"]).
         IF namedWp <> 0 {
             SET result["FOUND"] TO TRUE.
             SET result["LAT"] TO namedWp:GEOPOSITION:LAT.
@@ -39,7 +39,7 @@ GLOBAL FUNCTION targetResolveDeorbitTarget {
             + "' not found on " + SHIP:BODY:NAME + ".").
     }
 
-    LOCAL selectedWp IS _targetSelectedWaypoint().
+    LOCAL selectedWp IS selectedWaypoint().
     IF selectedWp <> 0 {
         SET result["FOUND"] TO TRUE.
         SET result["LAT"] TO selectedWp:GEOPOSITION:LAT.
@@ -326,7 +326,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     WAIT 2.
     IF ADDONS:TR:HASIMPACT {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-        LOCAL finalDist IS _geoDistance(impactPos:LAT, impactPos:LNG, targetLat, targetLng).
+        LOCAL finalDist IS geoDistance(impactPos:LAT, impactPos:LNG, targetLat, targetLng).
         mLog("Post-burn impact prediction: "
             + ROUND(impactPos:LAT,4) + "," + ROUND(impactPos:LNG,4)
             + "  dist=" + ROUND(finalDist/1000,1) + "km from target").
@@ -493,7 +493,7 @@ LOCAL FUNCTION _evalDeorbitNode {
     SET result["VALID"] TO TRUE.
     SET result["LAT"] TO impactPos:LAT.
     SET result["LNG"] TO impactPos:LNG.
-    SET result["DIST"] TO _geoDistance(impactPos:LAT, impactPos:LNG, targetLat, targetLng).
+    SET result["DIST"] TO geoDistance(impactPos:LAT, impactPos:LNG, targetLat, targetLng).
 
     REMOVE nd.
     RETURN result.
@@ -676,47 +676,6 @@ LOCAL FUNCTION _planDeorbitNode {
     LOCAL nd IS NODE(burnUT, radialDv, normalDv, dv).
     ADD nd.
     RETURN nd.
-}
-
-LOCAL FUNCTION _geoDistance {
-    PARAMETER lat1.
-    PARAMETER lng1.
-    PARAMETER lat2.
-    PARAMETER lng2.
-
-    LOCAL oRad IS SHIP:ORBIT:BODY:RADIUS.
-    LOCAL dLat IS lat2 - lat1.
-    LOCAL dLng IS lng2 - lng1.
-    LOCAL a    IS SIN(dLat/2)^2
-               + COS(lat1) * COS(lat2) * SIN(dLng/2)^2.
-    LOCAL c    IS 2 * ARCSIN(MIN(1, SQRT(a))).
-    RETURN oRad * c * CONSTANT:PI / 180.
-}
-
-LOCAL FUNCTION _targetWaypointNamed {
-    PARAMETER waypointName.
-    LOCAL allWps IS ALLWAYPOINTS().
-    LOCAL targetName IS waypointName:TOUPPER.
-    FOR wp IN allWps {
-        IF wp:BODY:NAME = SHIP:BODY:NAME {
-            IF wp:NAME:TOUPPER = targetName {
-                RETURN wp.
-            }
-        }
-    }
-    RETURN 0.
-}
-
-LOCAL FUNCTION _targetSelectedWaypoint {
-    LOCAL allWps IS ALLWAYPOINTS().
-    FOR wp IN allWps {
-        IF wp:ISSELECTED {
-            IF wp:BODY:NAME = SHIP:BODY:NAME {
-                RETURN wp.
-            }
-        }
-    }
-    RETURN 0.
 }
 
 GLOBAL FUNCTION targetReachable {
