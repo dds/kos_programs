@@ -19,7 +19,7 @@ KerbalScript (.ks files) — a scripting language for the kOS mod. Not Python, n
 ## Architecture
 
 ### Boot chain
-`boot/boot.ks` → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → syncs core libs (state, logs, files) → loads core libs → `_resolveScript()` checks `roles/` and `craft/` dirs (then root fallback) for CORE:TAG or vehicle script → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
+`boot/boot.ks` → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → syncs core libs (`state`, `logs`, `files`, `boot_core`, `mission_plan`) → loads core libs → `_resolveScript()` checks `roles/` and `craft/` dirs (then root fallback) for CORE:TAG or vehicle script → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
 
 ### CORE:TAG routing (multi-CPU ships)
 If `CORE:TAG` is non-empty, boot resolves the tag via `_resolveScript()` checking `roles/` then `craft/` then root. Each processor has its own `1:/` volume so state is naturally isolated. Untagged CPUs always load the vehicle script from `craft/`.
@@ -49,8 +49,10 @@ On first boot (or when phase is LAUNCH), FR2 shows a flight plan summary listing
 - `1:/` = local volume on the processor (limited — OCTO has 10,000 bytes)
 - Files must be copied from archive to local before use in flight
 
-### LIBS convention
-Each vehicle script declares `GLOBAL LIBS IS LIST(...)` — the list of lib names (without path/extension) that the vehicle needs. Boot syncs and loads only these libs, keeping storage usage minimal.
+### Mission sequence and LIBS convention
+Mission profiles own `SEQUENCE`: the ordered mission steps. Craft scripts own the phase map: how this craft executes those named steps with its hardware. `lib/mission_plan.ks` translates a selected `SEQUENCE` into the libraries boot should sync and load.
+
+For simple craft, declare `GLOBAL LIBS IS missionSequenceLibs(...)` with a legacy fallback list. Use profile `LIBS = ...` only as an escape hatch; otherwise derive libraries from `SEQUENCE` and append extras with `LIBS_EXTRA`.
 
 ### State persistence
 JSON file at `1:/state/state.json` via `lib/state.ks`. Survives reboots. Use `stateGet(key, default)` / `stateSet(key, value)`.
@@ -90,19 +92,19 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 | `phases.ks` | Generic phase machine (runPhases, nextPhase, phaseDone) |
 | `launch.ks` | Reusable ascent phases (launch, fairing, extend, parking) + rocketMain() skeleton |
 | `xfer.ks` | Transfer/arrival phases (transfer, coast, capture, circ, raise, incl). Capture supports optional orbit targeting via CAPTURE_INC/LAN/AOP |
-| `mcc.ks` | Mid-course correction — Newton's method on PE (prograde), AoP (radial), LAN (normal). 50 m/s dV cap |
 | `state.ks` | Persistent JSON key-value store |
 | `logs.ks` | Flight logging with fault persistence |
 | `files.ks` | Storage status and directory listing |
+| `mission_plan.ks` | Mission `SEQUENCE` parsing and phase-to-library planning |
 | `resume.ks` | MISSION lexicon, operator helpers, resumeMission(), buildRocketSequence() |
-| `maneuver.ks` | Maneuver node execution with dynamic throttle. planTransfer (LAN via multi-orbit scan, PE via Newton on dV), planCapture, planCircularize, planAoPChange |
+| `maneuver.ks` | Maneuver node execution with dynamic throttle. planTransfer (LAN via multi-orbit scan, PE via Newton on dV), planCapture, planCircularize, planAoPChange, phaseMidCourse |
 | `lambert.ks` | Lambert solver (RSVP port, GPL-3.0). lambertSolve(r1,r2,tof,mu,flip), orbitalStateVectors. For future interplanetary use |
 | `inclination.ks` | Orbital plane change planning + etaToTrueAnomaly() |
 | `molniya.ks` | Molniya orbit insertion (molniyaParams, printMolniyaSummary, planMolniyaInsert, phaseMolniyaInsert) |
 | `orbit.ks` | Orbit monitoring and stability checks |
 | `countdown.ks` | Launch countdown with audio |
 | `payload_ops.ks` | Shared payload phases — phaseTargetedDeorbit, phaseReleaseProbe (chute arm, sunward orient, decouple), phaseRelayOps, phaseLandDeorbit, phaseLand |
-| `targeting.ks` | Precision deorbit via Trajectories addon |
+| `deorbit_targeting.ks` | Precision deorbit via Trajectories addon |
 | `science.ks` | Experiment automation and SCANsat integration |
 | `landing.ks` | Powered descent / suicide burn |
 | `recovery.ks` | Post-abort recovery — safe antenna deploy, flight log archive, operator prompt |
@@ -143,7 +145,7 @@ Uses `SHIP:CONTROL:PILOTWHEELSTEER` (not `PILOTMAINSTEER`, which doesn't exist i
 
 LAN is controlled by which orbital period to depart on, PE is controlled by dV — these are separable. AoP is reported but corrected later by MCC (radial burns mid-transfer).
 
-### Mid-course correction (`lib/mcc.ks`)
+### Mid-course correction (`lib/maneuver.ks`)
 
 `phaseMidCourse` fires at the coast midpoint (local transfers) or 1 hour past SOI transition (interplanetary). Corrects PE (prograde), AoP (radial), and LAN (normal) via independent Newton iterations, each with 0.5 m/s epsilon and 0.7 damping. Total dV capped at 50 m/s. Skips if encounter is already on target.
 

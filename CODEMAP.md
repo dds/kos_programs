@@ -2,14 +2,15 @@
 
 ## Boot And Mission Selection
 
-- `boot/boot.ks` is the small VAB-installed loader. It syncs core libraries, loads `lib/boot_core.ks`, resolves the craft/role script, and dispatches resume/manual mode.
+- `boot/boot.ks` is the small VAB-installed loader. It syncs core libraries, loads `lib/boot_core.ks` and `lib/mission_plan.ks`, resolves the craft/role script, and dispatches resume/manual mode.
 - `lib/boot_core.ks` parses the vessel name, stores `vessel_name`, `vehicle`, `target`, and `payloads` in state, reads mission profiles from the archive when connected, and prunes stale local `1:/missions` files after persisting config into state.
+- `lib/mission_plan.ks` owns mission `SEQUENCE` parsing and the phase-to-library dependency map. Craft scripts use it to derive `LIBS` from the selected profile while keeping `boot_core.ks` focused on boot mechanics.
 - Dash-separated vessel names still act as legacy `vehicle-target-payload` hints; space-separated friendly names use the first word as the vehicle id and rely on mission profiles/state for mission details.
 - `lib/boot_core.ks` prunes stale local `1:/lib` files before syncing the selected `LIBS`, so progressive reloads actually free storage.
 - `cmd/cleanup.ks` / `lib/cleanup.ks` can be run manually to delete local source `.ks` files except `1:/boot/boot.ks` and clear local logs when an older flight computer is out of space.
 - `lib/resume.ks` builds `MISSION`, normalizes payload tokens, and builds common rocket sequences.
 - `lib/flightplan.ks` renders shared flight-plan and checklist screens for rockets and planes.
-- Vehicle scripts in `craft/` define default `CFG`, `LIBS`, phase sequence, phase map, and mission profile tweaks.
+- Vehicle scripts in `craft/` define default `CFG`, fallback library plans, phase maps, and craft-specific mission profile tweaks. Mission profiles own `SEQUENCE`.
 
 ## FR3 Loaded Libraries
 
@@ -23,8 +24,7 @@ Base FR3 libraries:
 - `maneuver` - maneuver execution, local body transfer, capture, MCC, patch targeting.
 - `inclination` - inclination change and target inclination resolution.
 - `orbit` - orbit summaries and SOI waits.
-- `targeting` - Trajectories-powered targeted deorbit.
-- `landing_assist` - targeted deorbit plus assist-stage hover/release for landing missions before rover separation.
+- `deorbit_targeting` - Trajectories-powered targeted deorbit.
 - `payload_landing` - minimal landing phase wrappers for landing-only missions.
 - `utils` - small shared helpers.
 - `ui` - small terminal formatting helpers.
@@ -47,7 +47,7 @@ Profile-only FR3 libraries:
 
 FR3 progressive library bands:
 
-- `LAUNCH`: `fr3_payload`, `fr3_profile`, `fr3_sequence`, `fr3_ui`, `launch`, `countdown`, `orbit`, and `landing_assist` for landing payloads. Stops after `PARK` when `RELOAD_AFTER_PARK=1`.
+- `LAUNCH`: `fr3_payload`, `fr3_profile`, `fr3_sequence`, `fr3_ui`, `launch`, `countdown`, `orbit`, and landing support for landing payloads. Stops after `PARK` when `RELOAD_AFTER_PARK=1`.
 - `TRANSFER`: `fr3_payload`, `fr3_profile`, `fr3_sequence`, `xfer`, `countdown`, `maneuver`, `inclination`, `orbit`, and optional Lambert/rendezvous libraries.
 - `PAYLOAD_OPS`: FR3 mission runtime plus probe, relay, or SCANsat operation libraries only.
 - `LAND_ASSIST`: FR3 mission runtime, targeted deorbit, and assist-stage release, including maneuver countdown support.
@@ -68,7 +68,7 @@ Mission profile files:
 - `lib/maneuver.ks` - 59 KB after splitting intersystem/rendezvous code. Still the primary split candidate.
 - `lib/landing.ks` - 19 KB. Split candidate if rover/lander roles diverge.
 - `lib/xfer.ks` - 18 KB. Mostly phase wrappers; can shrink after `maneuver.ks` is split.
-- `lib/targeting.ks` - 12 KB. Shared by probes and landing.
+- `lib/deorbit_targeting.ks` - 12 KB. Shared by probes and landing.
 - `lib/lambert.ks` - 10 KB. Already profile-only for FR3.
 - `lib/launch.ks` - 10 KB. Needed for all launch vehicles.
 - `lib/science.ks` - 9 KB. Already profile-only for FR3.
@@ -93,8 +93,8 @@ Mission profile files:
 
 - launch stack: `phases`, `launch`, `countdown`, `orbit`, `lib_navigation`, `inclination`.
 - Mun transfer/capture: local transfer, capture, circularize, raise/incline, MCC, patch targeting.
-- landing: `targeting`, `landing`, landing payload phases.
-- rover mission reloads: `landing_assist` during launch/assist release, full `landing` after assist release, `rover` after touchdown.
+- landing: `deorbit_targeting`, `payload_landing`, `landing`.
+- rover mission reloads: landing support during launch/assist release, full `landing` after assist release, `rover` after touchdown.
 
 It does not need:
 

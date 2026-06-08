@@ -132,7 +132,10 @@ GLOBAL FUNCTION bootLibBaseName {
 
 GLOBAL FUNCTION bootPruneLibs {
     PARAMETER wantedLibs.
-    LOCAL keep IS LIST("STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY").
+    LOCAL keep IS LIST(
+        "STATE", "LOGS", "FILES", "BOOT_CORE", "MISSION_PLAN",
+        "RESUME", "RECOVERY"
+    ).
     FOR lib IN wantedLibs {
         LOCAL libKey IS lib:TOUPPER.
         IF NOT keep:CONTAINS(libKey) { keep:ADD(libKey). }
@@ -366,76 +369,4 @@ GLOBAL FUNCTION bootResumeOrManual {
     IF hasLink {
         archiveLog().
     }
-}
-
-// ============================================================
-// bootLibsForPhases — compute LIBS from a phase sequence.
-//
-// Centralizes the phase-to-libs mapping so craft files declare
-// phases (what they do) not libs (what code they need). Each
-// phase maps to a set of libraries via _bootPhaseDeps. Duplicates
-// are suppressed automatically.
-//
-// Usage:
-//   LOCAL seq IS LIST("TARGETED_DEORBIT", "LAND", "ROVER", "DONE").
-//   GLOBAL LIBS IS bootLibsForPhases(seq, LIST("utils")).
-// ============================================================
-GLOBAL FUNCTION bootLibsForPhases {
-    PARAMETER phases.
-    PARAMETER baseDeps IS LIST().
-    LOCAL libs IS LIST().
-    FOR lib IN baseDeps {
-        IF NOT libs:CONTAINS(lib) { libs:ADD(lib). }
-    }
-    FOR phase IN phases {
-        FOR lib IN _bootPhaseDeps(phase) {
-            IF NOT libs:CONTAINS(lib) { libs:ADD(lib). }
-        }
-    }
-    RETURN libs.
-}
-
-LOCAL FUNCTION _bootPhaseDeps {
-    PARAMETER phaseName.
-    LOCAL p IS phaseName:TOUPPER.
-    // Launch
-    IF p = "LUNCH" OR p = "FAIR" OR p = "ANTS"
-        { RETURN LIST("launch", "countdown", "flightplan"). }
-    IF p = "PARK"
-        { RETURN LIST("launch", "orbit"). }
-    // Transfer
-    IF p = "XING" OR p = "MCC" OR p = "COAST" OR p = "CAPTURE"
-        { RETURN LIST("xfer", "maneuver", "maneuver_targeting",
-                       "lib_navigation", "countdown"). }
-    IF p = "CIRC" OR p = "RAISE"
-        { RETURN LIST("maneuver", "maneuver_targeting",
-                       "inclination", "orbit"). }
-    IF p = "INCLINE" OR p = "ELLIPTICAL"
-        { RETURN LIST("maneuver", "maneuver_targeting",
-                       "inclination", "orbit"). }
-    // Deorbit / probes
-    IF p = "TARGETED_DEORBIT" OR p = "RELEASE_PROBE"
-        { RETURN LIST("payload_ops", "deorbit_targeting",
-                       "maneuver", "countdown"). }
-    IF p = "RELAY_OPS" OR p = "SCANSAT_OPS"
-        { RETURN LIST("payload_ops", "orbit"). }
-    // Landing
-    IF p = "LAND_DEORBIT"
-        { RETURN LIST("landing", "deorbit_targeting"). }
-    IF p = "LAND" OR p = "LAND_ASSIST"
-        { RETURN LIST("landing"). }
-    // Rover
-    IF p = "ROVER" { RETURN LIST("rover"). }
-    // Rendezvous
-    IF p = "RDV"
-        { RETURN LIST("maneuver", "maneuver_targeting",
-                       "maneuver_rendezvous", "lambert"). }
-    // Molniya
-    IF p = "MOLNIYA"
-        { RETURN LIST("molniya", "maneuver", "maneuver_targeting"). }
-    // ScanSat
-    IF p = "SCANSAT_IMPACT_RELEASE"
-        { RETURN LIST("maneuver", "maneuver_targeting",
-                       "countdown"). }
-    RETURN LIST().
 }

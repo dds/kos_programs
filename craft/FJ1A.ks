@@ -12,12 +12,29 @@ GLOBAL CFG IS LEXICON(
     "FLAP_AG",          1
 ).
 
-GLOBAL LIBS IS LIST("phases", "flightplan", "plane", "science", "orbit", "observe").
+LOCAL flightSeq IS LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "DONE").
+
+LOCAL FUNCTION _hasSciencePayload {
+    LOCAL rawPayloads IS stateGet("payloads", "").
+    IF rawPayloads = "" { RETURN FALSE. }
+    FOR ptype IN rawPayloads:SPLIT(",") {
+        IF ptype:TOUPPER = "SCIENCE" { RETURN TRUE. }
+    }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _flightLibs {
+    LOCAL libs IS missionLibsForPhases(flightSeq, LIST("orbit")).
+    IF _hasSciencePayload() { libs:ADD("science"). }
+    RETURN libs.
+}
+
+GLOBAL LIBS IS missionSequenceLibs(_flightLibs(), LIST("orbit")).
 
 LOCAL hasSciencePayload IS FALSE.
 
 LOCAL FUNCTION _printConfig {
-    LOCAL seq IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
+    LOCAL seq IS flightSeq.
     flightPlanTitle("FJ1A FLIGHT PLAN", SHIP:NAME).
     flightPlanIdentity().
     flightPlanSection("CRUISE").
@@ -29,7 +46,7 @@ LOCAL FUNCTION _printConfig {
 }
 
 GLOBAL FUNCTION main {
-    LOCAL seq IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
+    LOCAL seq IS flightSeq.
     SET launchSeq TO seq.
 
     FOR ptype IN missionPayloads() {
@@ -87,7 +104,7 @@ LOCAL FUNCTION _phaseFlight {
 }
 
 LOCAL FUNCTION _phasePostFlight {
-    mLogPhase("POSTFLIGHT").
+    mLogPhase("POST_FLIGHT").
     IF hasSciencePayload { scienceTransmitAll(). }
     planeLandingAssist().
     planeShutdown().

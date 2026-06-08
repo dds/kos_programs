@@ -92,13 +92,17 @@ LOCAL FUNCTION _cfgFromState {
 FOR key IN _numericMissionKeys() { _cfgFromState(key, TRUE). }
 FOR key IN _stringMissionKeys() { _cfgFromState(key, FALSE). }
 
-GLOBAL LIBS IS LIST(
-    "phases", "flightplan", "launch", "xfer",
-    "lib_navigation", "countdown", "maneuver_targeting", "maneuver", "inclination",
-    "orbit", "deorbit_targeting", "landing",
-    "lambert", "maneuver_intersystem", "maneuver_rendezvous",
-    "molniya", "payload_ops", "science", "observe", "utils", "config"
-).
+LOCAL FUNCTION _fallbackLibs {
+    RETURN LIST(
+        "phases", "flightplan", "launch", "xfer",
+        "lib_navigation", "countdown", "maneuver_targeting", "maneuver", "inclination",
+        "orbit", "deorbit_targeting", "landing",
+        "lambert", "maneuver_intersystem", "maneuver_rendezvous",
+        "molniya", "payload_ops", "science", "observe", "utils", "config"
+    ).
+}
+
+GLOBAL LIBS IS missionSequenceLibs(_fallbackLibs(), LIST("utils", "config")).
 
 LOCAL FUNCTION _buildSequence {
     IF CFG:HASKEY("SEQUENCE") {

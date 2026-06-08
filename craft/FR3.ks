@@ -246,7 +246,8 @@ LOCAL FUNCTION _fr3PruneLogs {
 LOCAL FUNCTION _fr3EmergencyCleanup {
     PARAMETER wantedLibs.
     LOCAL keepLibs IS LIST(
-        "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY",
+        "STATE", "LOGS", "FILES", "BOOT_CORE", "MISSION_PLAN",
+        "RESUME", "RECOVERY",
         "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE",
         "CONFIG"
     ).
@@ -399,6 +400,7 @@ LOCAL FUNCTION _fr3Libs {
             AND (_bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT")) {
         libs:ADD("science").
     }
+    missionAppendUnique(libs, missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", ""))).
     _fr3EmergencyCleanup(libs).
     stateSet("lib_band_libs", libs:JOIN(",")).
     RETURN libs.

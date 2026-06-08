@@ -52,7 +52,7 @@ _ensureDir("1:/state").
 _ensureDir("1:/logs").
 IF HAS_LINK {
     PRINT "  SYNC core ......... ".
-    FOR lib IN LIST("state", "logs", "files", "boot_core") { _syncLib(lib). }
+    FOR lib IN LIST("state", "logs", "files", "boot_core", "mission_plan") { _syncLib(lib). }
     IF EXISTS("0:/VERSION") {
         COPYPATH("0:/VERSION", "1:/state/code_version.state").
     }
@@ -67,6 +67,7 @@ initLog().
 WAIT 0.001.
 _loadLib("files").
 _loadLib("boot_core").
+_loadLib("mission_plan").
 
 bootEnsureDirs().
 LOCAL vehicleInfo IS bootVehicleInfo().

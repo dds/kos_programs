@@ -4,10 +4,11 @@
 
 GLOBAL CFG IS LEXICON().
 
-GLOBAL LIBS IS LIST("phases", "science", "orbit").
+LOCAL roleSeq IS LIST("DESCEND", "LANDED", "DONE").
+GLOBAL LIBS IS missionLibs(missionLibsForPhases(roleSeq)).
 
 GLOBAL FUNCTION main {
-    LOCAL seq IS LIST("DESCEND", "LANDED", "DONE").
+    LOCAL seq IS roleSeq.
     SET launchSeq TO seq.
     IF stateGet("phase", "") = "" { stateSet("phase", seq[0]). }
 

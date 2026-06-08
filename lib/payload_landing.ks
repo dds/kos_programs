@@ -100,7 +100,7 @@ LOCAL FUNCTION _timedLandingDeorbit {
 
 // Execute a maneuver node with align, staged throttle, and cleanup.
 // Self-contained — no dependency on maneuver.ks. Used by both the
-// timed deorbit path and targeted deorbit (via targeting.ks).
+// timed deorbit path and targeted deorbit (via deorbit_targeting.ks).
 GLOBAL FUNCTION executeDeorbitNode {
     PARAMETER nd.
     LOCAL burnDV IS nd:DELTAV:MAG.
