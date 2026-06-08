@@ -44,7 +44,7 @@ LOCAL FUNCTION _pruneDir {
 }
 
 LOCAL keepLibs IS LIST(
-    "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY"
+    "STATE", "LOGS", "FILES", "BOOT_LIB", "RESUME", "RECOVERY"
 ).
 LOCAL keepCmds IS LIST("FR3CLEAN").
 

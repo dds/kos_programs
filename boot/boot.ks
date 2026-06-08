@@ -63,8 +63,8 @@ _ensureDir("1:/lib").
 _ensureDir("1:/state").
 _ensureDir("1:/logs").
 IF HAS_LINK {
-    PRINT "  SYNC core ......... ".
-    FOR lib IN LIST("state", "logs", "files", "config", "boot_core", "mission_plan", "boot_lib") { _syncLib(lib). }
+    PRINT "  SYNC boot lib ..... ".
+    _syncLib("boot_lib").
     _syncLibText("dependencies.txt").
     IF EXISTS("0:/VERSION") {
         COPYPATH("0:/VERSION", "1:/state/code_version.state").
@@ -73,16 +73,11 @@ IF HAS_LINK {
     PRINT "  LOAD core (cached) . ".
 }
 
-_loadLib("state").
+_loadLib("boot_lib").
+bootPreamble().
 stateInit().
-_loadLib("logs").
 initLog().
 WAIT 0.001.
-_loadLib("files").
-_loadLib("config").
-_loadLib("boot_core").
-_loadLib("mission_plan").
-_loadLib("boot_lib").
 
 bootEnsureDirs().
 LOCAL vehicleInfo IS bootVehicleInfo().
@@ -157,34 +152,29 @@ IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
     IF DEFINED LIBS {
         bootPruneLibs(LIBS).
-        FOR lib IN LIBS { _syncLib(lib). }
+        bootLibLoadList(LIBS).
     }
-    _syncLib("resume").
-    // Recovery is synced post-mission (lines 157-159). Skip during
-    // active flight to save storage for logs.
+    bootLibLoad("resume").
+    // Recovery is loaded only at startup/abort or after manual mode.
     LOCAL phase_ IS stateGet("phase", "").
     IF phase_ = "" OR phase_ = "ABORT" {
-        _syncLib("recovery").
+        bootLibLoad("recovery").
     }
 } ELSE {
     PRINT "  NO LINK: Bypassing library sync.".
+    IF DEFINED LIBS { bootLibLoadList(LIBS). }
+    bootLibLoad("resume").
 }
-
-IF DEFINED LIBS {
-    FOR lib IN LIBS { _loadLib(lib). }
-}
-_loadLib("resume").
 
 PRINT " ".
 PRINT "  BOOT #" + bootCount + " OK".
 IF DEFINED printStorageStatus { printStorageStatus(). }
 IF HAS_LINK { archiveLog(). }
-IF stateGet("phase", "") = "ABORT" { _loadLib("recovery"). }
+IF stateGet("phase", "") = "ABORT" { bootLibLoad("recovery"). }
 
 bootResumeOrManual(HAS_LINK).
 IF HAS_LINK {
-    _syncLib("recovery").
-    _loadLib("recovery").
+    bootLibLoad("recovery").
 }
 PRINT "END OF LINE. GODSPEED.".
 UNLOCK ALL.

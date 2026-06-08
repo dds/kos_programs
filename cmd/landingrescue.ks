@@ -9,7 +9,7 @@ PRINT "Landing rescue: free before " + beforeFree + " bytes.".
 
 LOCAL phaseUpper IS phaseName:TOUPPER.
 LOCAL keepLibs IS LIST(
-    "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY",
+    "STATE", "LOGS", "FILES", "BOOT_LIB", "RESUME", "RECOVERY",
     "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE"
 ).
 IF phaseUpper = "LAND_ASSIST" {

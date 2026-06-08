@@ -19,7 +19,7 @@ KerbalScript (.ks files) — a scripting language for the kOS mod. Not Python, n
 ## Architecture
 
 ### Boot chain
-`boot/boot.ks` → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → syncs core libs (`state`, `logs`, `files`, `config`, `boot_core`, `mission_plan`, `boot_lib`) plus `dependencies.txt` → loads core libs → resolves `roles/` and `craft/` scripts for CORE:TAG or vehicle script → reads the selected mission config from archive and stores `mission_cfg_*` keys in `state.json` → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
+`boot/boot.ks` → syncs only `boot_lib` plus `dependencies.txt` → loads `boot_lib` → calls `bootPreamble()` to load core/preamble libs → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → resolves `roles/` and `craft/` scripts for CORE:TAG or vehicle script → reads the selected mission config from archive and stores `mission_cfg_*` keys in `state.json` → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → loads LIBS through `bootLibLoadList()` → loads resume/recovery through `bootLibLoad()` → manual override window → auto-resume or manual
 
 ### CORE:TAG routing (multi-CPU ships)
 If `CORE:TAG` is non-empty, boot resolves the tag via `_resolveScript()` checking `roles/` then `craft/` then root. Each processor has its own `1:/` volume so state is naturally isolated. Untagged CPUs always load the vehicle script from `craft/`.
@@ -102,7 +102,7 @@ Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add cra
 | `state.ks` | Persistent JSON key-value store |
 | `logs.ks` | Flight logging with fault persistence |
 | `files.ks` | Storage status and directory listing |
-| `boot_lib.ks` / `dependencies.txt` | Text-driven preamble, library dependency, phase root, and multi-phase band expansion |
+| `boot_lib.ks` / `dependencies.txt` | Boot helpers plus text-driven preamble, library dependency, phase root, and multi-phase band expansion |
 | `mission_plan.ks` | Mission `SEQUENCE` parsing and payload helpers |
 | `resume.ks` | MISSION lexicon, operator helpers, resumeMission(), buildRocketSequence() |
 | `maneuver.ks` | Maneuver node execution with dynamic throttle. planTransfer (LAN via multi-orbit scan, PE via Newton on dV), planCapture, planCircularize, planAoPChange, phaseMidCourse |

@@ -26,8 +26,7 @@ missions/
     FR2/*.cfg            Data-only mission profiles for FR2
     FR3/*.cfg            Data-only mission profiles selectable by plain FR3
 lib/
-    boot_core.ks         Boot helpers: mission selection, profile parsing, resume
-    boot_lib.ks          Dependency resolver for libs, phases, and bands
+    boot_lib.ks          Boot helpers, mission profile parsing, dependency resolver
     dependencies.txt     Text dependency roots for PREAMBLE, LIB, PHASE, BAND
     core.ks              Always-loaded helpers; dependency root for core libs
     phases.ks            Generic phase machine + central phase handler registry
@@ -121,7 +120,7 @@ LANDING_ASSIST_DECOUPLER_TAG = probe_decoupler
 LANDING_ASSIST_MAX_TILT = 15
 ```
 
-Keep mission profiles in this key/value format for the current boot flow. `lib/state.ks` uses the simplejson addon for persistent state, but mission profile parsing happens through the boot path before the vehicle script is running. Most of that boot logic now lives in compiled `lib/boot_core.ks`; switching profiles to JSON would still require a VAB-side boot compatibility check before flight.
+Keep mission profiles in this key/value format for the current boot flow. `lib/state.ks` uses the simplejson addon for persistent state, but mission profile parsing happens through the boot path before the vehicle script is running. Most of that boot logic now lives in compiled `lib/boot_lib.ks`; switching profiles to JSON would still require a VAB-side boot compatibility check before flight.
 
 Mission profiles own the phase sequence. A profile says what mission steps happen and in what order; the craft script maps those phase names to hardware-specific implementations. This lets a mission such as `mun_scansat_polar` use the same high-level steps for FR2 and FR3 while each craft executes staging, fairings, payload release, and recovery with its own code.
 
@@ -135,17 +134,17 @@ LIBS_EXTRA = observe
 
 `LIBS` is an escape hatch that replaces the craft fallback or sequence-derived library list for simple craft such as FR2. `LIBS_EXTRA` appends mission-specific libraries to the computed list. FR3 uses a banded loader instead of a single static `LIBS` line; its selected profile still controls the loaded code through payloads, `SEQUENCE`, phase state, reload flags, and optional `LIBS_EXTRA`. The boot-time dependency resolver in `lib/boot_lib.ks` refreshes compact `lib/dependencies.txt` from archive to local storage when linked, then reads the local copy. `PREAMBLE` declares roots loaded for every band/phase, `LIB` rows declare library dependencies, `PHASE` rows declare sequence roots, and `BAND` rows declare multi-phase groups that should load together. Single phases intentionally do not have `BAND` rows; their phase name is the fallback band.
 
-On boot, `lib/boot_core.ks` reads mission profiles from `0:/missions/<craft>` when a KSC link is available. After a profile is selected, the key/value config is persisted into `1:/state/state.json` as `mission_cfg_*`. Mission `.cfg` files are not copied to the probe core; in-flight reboots use persisted state.
+On boot, `boot/boot.ks` syncs only `lib/boot_lib.ks` and `lib/dependencies.txt`, then `boot_lib` loads the preamble/core libraries declared by dependencies. `lib/boot_lib.ks` reads mission profiles from `0:/missions/<craft>` when a KSC link is available. After a profile is selected, the key/value config is persisted into `1:/state/state.json` as `mission_cfg_*`. Mission `.cfg` files are not copied to the probe core; in-flight reboots use persisted state.
 
 Vessel names can be friendly. Dash-separated names such as `FR3-MUN-SCANSAT-01` still provide legacy `vehicle-target-payload` hints. Space-separated names such as `FR3 Mun Mini SCANSat 1` are treated as display names: boot uses the first word as the craft script (`FR3`) and lets the selected mission profile provide target/payload details. Boot stores the display name in `state["vessel_name"]` and prefers persisted `vehicle`, `target`, and `payloads` after launch so later vessel renames do not break in-flight reboots.
 
-While the vessel is still prelaunch, `lib/boot_core.ks` clears any saved mission profile and profile config before selecting a mission. This lets you reboot on the pad after choosing the wrong profile and get the mission picker again. Once launched, in-flight reboots keep the saved mission and phase state.
+While the vessel is still prelaunch, `lib/boot_lib.ks` clears any saved mission profile and profile config before selecting a mission. This lets you reboot on the pad after choosing the wrong profile and get the mission picker again. Once launched, in-flight reboots keep the saved mission and phase state.
 
 FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only the launch band roots and their declared dependencies; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Landing missions use a single `LANDING` band for `LAND_DEORBIT`, `LAND_ASSIST`, and `LAND` so descent does not reboot between adjacent landing phases. Rover missions reload after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
 
 `craft/FR3.ks` keeps FR3-specific mission profile tweaks, sequence construction, PARK reload behavior, and boot-time band selection together because they are preconditions for every FR3 band. Shared phase-name bindings live in `lib/phases.ks` via `phaseHandlerMap()`. Payload classification is generic in `lib/mission_plan.ks`, and dependency expansion is delegated to `lib/boot_lib.ks`. FR3 launch UI is intentionally deferred for a later redesign.
 
-Important in-flight constraint: `boot/boot.ks` itself is installed on the kOS processor in the VAB/SPH and cannot be updated remotely during a mission. Linked reboots can load updated craft scripts, commands, libraries, and archive mission configs, including `lib/boot_core.ks` and `lib/mission_plan.ks` after the installed boot has synced them once. Away from archive access, mission config comes from persisted state. Any fix that changes the installed boot stub must be applied before launch or by another VAB-side update path.
+Important in-flight constraint: `boot/boot.ks` itself is installed on the kOS processor in the VAB/SPH and cannot be updated remotely during a mission. Linked reboots can load updated craft scripts, commands, libraries, and archive mission configs, including `lib/boot_lib.ks` and `lib/mission_plan.ks` after the installed boot has synced them once. Away from archive access, mission config comes from persisted state. Any fix that changes the installed boot stub must be applied before launch or by another VAB-side update path.
 
 The current band and pending reload are saved in mission state (`lib_band`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, `reload_next_band`) so a reboot or state dump shows why the computer is waiting.
 
