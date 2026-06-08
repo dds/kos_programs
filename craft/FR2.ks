@@ -38,37 +38,8 @@ GLOBAL CFG IS LEXICON(
     "RECOVERY_PE",            27500
 ).
 
-LOCAL FUNCTION _numericMissionKeys {
-    RETURN LIST(
-        "PARKING_ALT", "LAUNCH_INCLINATION", "LAUNCH_AZIMUTH",
-        "LAUNCH_STAGE_LIMIT", "FAIRING_ALT", "EXTEND_ALT",
-        "RELAY_ALT", "CAPTURE_PE", "CAPTURE_INC", "CAPTURE_LAN",
-        "CAPTURE_AOP", "TARGET_PE", "TARGET_AP",
-        "TARGET_INCLINATION", "CIRC_ECC_TOL", "INCL_TOLERANCE",
-        "MAX_INCL_CHANGE_DV", "PROBE_TARGET_LAT", "PROBE_TARGET_LNG",
-        "PROBE_ENTRY_PE", "PROBE_TARGET_TOL", "MOLNIYA_PERIOD",
-        "MOLNIYA_AOP", "MOLNIYA_ECC", "RECOVERY_PE",
-        "PROGRESSIVE_RELOAD", "RELOAD_AFTER_PARK",
-        "SCANSAT_DISPOSE_CARRIER", "SCANSAT_DISPOSE_PE",
-        "SCANSAT_DISPOSE_MAX_TIME", "SCANSAT_DISPOSE_BEFORE_RELEASE",
-        "SCANSAT_STAGE_AFTER_RELEASE", "SCANSAT_RECOVERY_PE",
-        "SCANSAT_RECOVERY_AP", "SCANSAT_RELEASE_AFTER_CAPTURE",
-        "SCANSAT_MAX_NODE_DV", "SCANSAT_RECOVER_SAFE_PE",
-        "SCANSAT_RECOVER_MAX_TIME", "SCANSAT_CLEARANCE_DV",
-        "SCANSAT_CLEARANCE_THROTTLE", "SCANSAT_CLEARANCE_SETTLE"
-    ).
-}
-
-LOCAL FUNCTION _stringMissionKeys {
-    RETURN LIST(
-        "SEQUENCE", "CAPTURE_DIR", "INCL_MATCH_TARGET",
-        "SCANSAT_DECOUPLER_TAG", "SCANSAT_CLEARANCE_DIR", "PROBE_TARGET_WAYPOINT",
-        "LANDING_TARGET_WAYPOINT"
-    ).
-}
-
 // Load-time config application (runs before LIBS are loaded,
-// so we use local helpers instead of rocket.ks globals).
+// so boot loads config.ks as part of its core library set).
 LOCAL FUNCTION _cfgSet {
     PARAMETER key.
     PARAMETER value.
@@ -89,8 +60,8 @@ LOCAL FUNCTION _cfgFromState {
     }
 }
 
-FOR key IN _numericMissionKeys() { _cfgFromState(key, TRUE). }
-FOR key IN _stringMissionKeys() { _cfgFromState(key, FALSE). }
+FOR key IN missionNumericConfigKeys() { _cfgFromState(key, TRUE). }
+FOR key IN missionStringConfigKeys() { _cfgFromState(key, FALSE). }
 
 LOCAL FUNCTION _fallbackLibs {
     RETURN LIST(
