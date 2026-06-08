@@ -25,15 +25,11 @@ LOCAL FUNCTION _fr3PrintConfig {
 
 GLOBAL FUNCTION fr3BandForPhase {
     PARAMETER phaseName.
-    LOCAL phase IS phaseName:TOUPPER.
     LOCAL defaultBand IS "".
-    IF phase = "" OR phase:CONTAINS("MAIN") {
+    IF phaseName = "" OR phaseName:CONTAINS("MAIN") {
         SET defaultBand TO "LAUNCH".
-        IF DEFINED bootDefaultBandForVehicle {
-            SET defaultBand TO bootDefaultBandForVehicle(stateGet("vehicle", "FR3")).
-        }
     }
-    RETURN bootLibBandForPhase(phase, defaultBand).
+    RETURN bootLibBandForPhase(phaseName, defaultBand).
 }
 
 GLOBAL FUNCTION fr3PhaseBand {
@@ -50,7 +46,7 @@ GLOBAL FUNCTION fr3SaveReloadState {
 }
 
 GLOBAL FUNCTION fr3ApplyMissionProfile {
-    IF MISSION["target"]:TOUPPER = "MUN" AND missionHasLandingPayload() {
+    IF MISSION["target"] = "MUN" AND missionHasLandingPayload() {
         IF DEFINED LAND_CFG {
             SET LAND_CFG["DEORBIT_PE"] TO 5000.
             SET LAND_CFG["TARGET_TOLERANCE"] TO 2500.
@@ -108,13 +104,13 @@ GLOBAL FUNCTION fr3BuildPhaseMap {
 LOCAL FUNCTION _fr3ConditionalRoots {
     PARAMETER band.
     LOCAL roots IS LIST().
-    IF band = "XFER_PLAN" AND stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
+    IF band = "XFER_PLAN" AND stateGet("target", "KERBIN") <> "MUN" {
         roots:ADD("maneuver_intersystem").
     }
     IF band = "XFER_PLAN" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
         roots:ADD("maneuver_rendezvous").
     }
-    IF band = "PAYLOAD_OPS" AND contains(stateGet("phase", ""):TOUPPER, LIST("TARGETED_DEORBIT")) {
+    IF band = "PAYLOAD_OPS" AND contains(stateGet("phase", ""), LIST("TARGETED_DEORBIT")) {
         roots:ADD("deorbit_targeting").
     }
     IF band = "PAYLOAD_OPS"
@@ -134,7 +130,7 @@ LOCAL FUNCTION _fr3LibsForBand {
 
 LOCAL FUNCTION _fr3Libs {
     LOCAL band IS fr3PhaseBand().
-    LOCAL phase IS stateGet("phase", ""):TOUPPER.
+    LOCAL phase IS stateGet("phase", "").
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
@@ -165,7 +161,7 @@ GLOBAL FUNCTION main {
     mLogPhase("FR3 MAIN").
     mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
     mLog("Sequence: " + seq:JOIN(" -> ")).
-    LOCAL currentPhase IS stateGet("phase",""):TOUPPER.
+    LOCAL currentPhase IS stateGet("phase","").
     IF currentPhase = "" OR currentPhase:CONTAINS("MAIN") { stateSet("phase", seq[0]). }
 
     IF fr3PhaseBand() = "LAUNCH" {

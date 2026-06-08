@@ -16,17 +16,17 @@ GLOBAL FUNCTION bootVehicleInfo {
     LOCAL sourceName IS SHIP:NAME.
     IF isEVA {
         SET vehicleName TO "EVA".
-        SET targetName TO SHIP:BODY:NAME:TOUPPER.
+        SET targetName TO SHIP:BODY:NAME.
         PRINT "  EVA KERBAL DETECTED".
     } ELSE IF stateGet("vehicle", "") <> ""
             AND NOT stateGet("vehicle", ""):CONTAINS(" ")
             AND SHIP:STATUS <> "PRELAUNCH" {
         SET vehicleName TO stateGet("vehicle", "").
-        SET targetName TO stateGet("target", "KERBIN"):TOUPPER.
+        SET targetName TO stateGet("target", "KERBIN").
         LOCAL rawPayloads IS stateGet("payloads", "").
         IF rawPayloads <> "" {
             FOR p IN rawPayloads:SPLIT(",") {
-                LOCAL trimmedPayload IS p:TRIM:TOUPPER.
+                LOCAL trimmedPayload IS p:TRIM.
                 IF trimmedPayload <> "" { payloadTypes:ADD(trimmedPayload). }
             }
         }
@@ -50,9 +50,9 @@ GLOBAL FUNCTION bootVehicleInfo {
             SET vehicleName TO "UNKNOWN".
         }
         IF structuredName AND tokens:LENGTH >= 2 {
-            SET targetName TO tokens[1]:TOUPPER.
+            SET targetName TO tokens[1].
             FROM { LOCAL i IS 2. } UNTIL i >= tokens:LENGTH STEP { SET i TO i + 1. } DO {
-                payloadTypes:ADD(tokens[i]:TOUPPER).
+                payloadTypes:ADD(tokens[i]).
             }
         } ELSE {
             SET targetName TO "KERBIN".
@@ -126,18 +126,12 @@ GLOBAL FUNCTION bootRunScript {
     }
 }
 
-GLOBAL FUNCTION bootLibBaseName {
-    PARAMETER fileName.
-    RETURN bootBaseName(fileName).
-}
-
 GLOBAL FUNCTION bootBaseName {
     PARAMETER fileName.
-    LOCAL upper IS fileName:TOUPPER.
-    IF upper:CONTAINS(".KSM") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
-    IF upper:CONTAINS(".KS") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
-    IF upper:CONTAINS(".CFG") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
-    IF upper:CONTAINS(".TXT") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    IF fileName:CONTAINS(".ksm") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    IF fileName:CONTAINS(".ks") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
+    IF fileName:CONTAINS(".cfg") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    IF fileName:CONTAINS(".txt") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
     RETURN fileName.
 }
 
@@ -149,8 +143,7 @@ GLOBAL FUNCTION bootPruneLibs {
         "CONFIG", "RESUME"
     ).
     FOR lib IN wantedLibs {
-        LOCAL libKey IS lib:TOUPPER.
-        IF NOT keep:CONTAINS(libKey) { keep:ADD(libKey). }
+        IF NOT keep:CONTAINS(lib) { keep:ADD(lib). }
     }
     LOCAL startPath IS PATH().
     LOCAL items IS LIST().
@@ -159,8 +152,8 @@ GLOBAL FUNCTION bootPruneLibs {
     CD(startPath).
     FOR item IN items {
         IF item:ISFILE {
-            LOCAL base IS bootLibBaseName(item:NAME).
-            IF NOT keep:CONTAINS(base:TOUPPER) {
+            LOCAL base IS bootBaseName(item:NAME).
+            IF NOT keep:CONTAINS(base) {
                 DELETEPATH("1:/lib/" + item:NAME).
             }
         }
@@ -181,7 +174,7 @@ GLOBAL FUNCTION bootMissionConfigIds {
     FOR item IN items {
         IF item:ISFILE {
             LOCAL nm IS item:NAME.
-            IF nm:TOUPPER:CONTAINS(".CFG") {
+            IF nm:CONTAINS(".cfg") {
                 ids:ADD(nm:SUBSTRING(0, nm:LENGTH - 4)).
             }
         }
@@ -227,20 +220,12 @@ GLOBAL FUNCTION bootSelectMissionId {
     RETURN ids[choice].
 }
 
-GLOBAL FUNCTION bootMissionConfigPath {
-    PARAMETER craftName.
-    PARAMETER missionId.
-    PARAMETER hasLink.
-    LOCAL archivePath IS "0:/missions/" + craftName + "/" + missionId + ".cfg".
-    RETURN archivePath.
-}
-
 GLOBAL FUNCTION bootApplyMissionConfig {
     PARAMETER craftName.
     PARAMETER missionId.
     PARAMETER hasLink.
     IF missionId = "" { RETURN FALSE. }
-    LOCAL path_ IS bootMissionConfigPath(craftName, missionId, hasLink).
+    LOCAL path_ IS "0:/missions/" + craftName + "/" + missionId + ".cfg".
     IF NOT EXISTS(path_) {
         PRINT "  Mission config not found: " + path_.
         RETURN FALSE.
@@ -256,7 +241,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
             IF NOT skipLine {
                 LOCAL parts IS line:SPLIT("=").
                 IF parts:LENGTH >= 2 {
-                    LOCAL key IS parts[0]:TRIM:TOUPPER.
+                    LOCAL key IS parts[0]:TRIM.
                     LOCAL value IS parts[1]:TRIM.
                     IF NOT missionConfigIsKnownKey(key) {
                         LOCAL warn IS "Unknown mission config key: " + key + " in " + path_.
@@ -269,9 +254,9 @@ GLOBAL FUNCTION bootApplyMissionConfig {
                     } ELSE IF key = "MISSION_NAME" {
                         stateSet("mission_name", value).
                     } ELSE IF key = "TARGET" {
-                        stateSet("target", value:TOUPPER).
+                        stateSet("target", value).
                     } ELSE IF key = "PAYLOADS" {
-                        stateSet("payloads", value:TOUPPER).
+                        stateSet("payloads", value).
                     }
                 }
             }
@@ -288,7 +273,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
 GLOBAL FUNCTION bootMissionConfig {
     PARAMETER craftName.
     PARAMETER hasLink.
-    LOCAL targetFromName IS stateGet("target", "KERBIN"):TOUPPER.
+    LOCAL targetFromName IS stateGet("target", "KERBIN").
     LOCAL payloadsFromName IS stateGet("payloads", "").
     LOCAL hasNameMission IS targetFromName <> "KERBIN" OR payloadsFromName <> "".
     LOCAL missionId IS stateGet("mission_id", "").
@@ -302,20 +287,7 @@ GLOBAL FUNCTION bootMissionConfig {
 
 GLOBAL FUNCTION bootIsLaunchStartPhase {
     PARAMETER phaseName.
-    LOCAL phase IS phaseName:TOUPPER.
-    RETURN phase = "" OR phase = "LUNCH" OR phase = "FAIR" OR phase = "ANTS".
-}
-
-GLOBAL FUNCTION bootDefaultBandForVehicle {
-    PARAMETER vehicleName.
-    LOCAL vehicle IS vehicleName:TOUPPER.
-    IF vehicle = "ROVER" { RETURN "ROVER". }
-    IF vehicle = "FJ1A" OR vehicle = "FJ4B" OR vehicle = "FSP1"
-            OR vehicle:CONTAINS("AIR") OR vehicle:CONTAINS("PLANE")
-            OR vehicle:CONTAINS("SEA") {
-        RETURN "PREFLIGHT".
-    }
-    RETURN "LAUNCH".
+    RETURN phaseName = "" OR phaseName = "LUNCH" OR phaseName = "FAIR" OR phaseName = "ANTS".
 }
 
 GLOBAL FUNCTION bootShouldResetMissionOnBoot {
@@ -389,15 +361,6 @@ GLOBAL FUNCTION bootResumeOrManual {
 // _fr3EmergencyCleanup) with reusable boot-level utilities.
 // Called from boot.ks when a craft script sets BOOT_CLEANUP.
 
-GLOBAL FUNCTION bootDeleteIfExists {
-    PARAMETER path_.
-    IF EXISTS(path_) {
-        DELETEPATH(path_).
-        RETURN TRUE.
-    }
-    RETURN FALSE.
-}
-
 GLOBAL FUNCTION bootPruneDir {
     PARAMETER dirPath.
     PARAMETER keepNames.
@@ -410,11 +373,10 @@ GLOBAL FUNCTION bootPruneDir {
     CD(startPath).
     FOR item IN items {
         IF item:ISFILE {
-            LOCAL base IS bootBaseName(item:NAME):TOUPPER.
+            LOCAL base IS bootBaseName(item:NAME).
             IF NOT keepNames:CONTAINS(base) {
-                IF bootDeleteIfExists(dirPath + "/" + item:NAME) {
-                    SET removed TO removed + 1.
-                }
+                DELETEPATH(dirPath + "/" + item:NAME).
+                SET removed TO removed + 1.
             }
         }
     }
@@ -434,13 +396,13 @@ GLOBAL FUNCTION bootPruneLogs {
         CD(startPath).
         FOR item IN items {
             IF item:ISFILE {
-                IF bootDeleteIfExists("1:/logs/" + item:NAME) {
-                    SET removed TO removed + 1.
-                }
+                DELETEPATH("1:/logs/" + item:NAME).
+                SET removed TO removed + 1.
             }
         }
     }
-    IF bootDeleteIfExists("1:/state/log_path.state") {
+    IF EXISTS("1:/state/log_path.state") {
+        DELETEPATH("1:/state/log_path.state").
         SET removed TO removed + 1.
     }
     RETURN removed.
@@ -451,26 +413,27 @@ GLOBAL FUNCTION bootCleanup {
     PARAMETER wantedLibs.
     PARAMETER keepCmds IS LIST().
     LOCAL keepLibs IS LIST(
-        "STATE", "LOGS", "BOOT_LIB", "RESUME",
-        "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE",
-        "CONFIG"
+        "state", "logs", "boot_lib", "resume",
+        "phases", "utils", "ui", "config"
     ).
     FOR lib IN wantedLibs {
-        LOCAL key IS lib:TOUPPER.
-        IF NOT keepLibs:CONTAINS(key) { keepLibs:ADD(key). }
+        IF NOT keepLibs:CONTAINS(lib) { keepLibs:ADD(lib). }
     }
 
     LOCAL keepRoles IS LIST().
-    IF CORE:TAG <> "" { keepRoles:ADD(CORE:TAG:TOUPPER). }
+    IF CORE:TAG <> "" { keepRoles:ADD(CORE:TAG). }
 
     LOCAL beforeFree IS CORE:VOLUME:FREESPACE.
     LOCAL removed IS 0.
     SET removed TO removed + bootPruneDir("1:/lib", keepLibs).
-    SET removed TO removed + bootPruneDir("1:/craft", LIST(vehicleName:TOUPPER)).
+    SET removed TO removed + bootPruneDir("1:/craft", LIST(vehicleName)).
     SET removed TO removed + bootPruneDir("1:/roles", keepRoles).
     SET removed TO removed + bootPruneDir("1:/cmd", keepCmds).
     SET removed TO removed + bootPruneDir("1:/missions/" + vehicleName, LIST()).
-    IF bootDeleteIfExists("1:/zombie") { SET removed TO removed + 1. }
+    IF EXISTS("1:/zombie") {
+        DELETEPATH("1:/zombie").
+        SET removed TO removed + 1.
+    }
     SET removed TO removed + bootPruneLogs().
 
     IF removed > 0 {
@@ -542,11 +505,6 @@ LOCAL FUNCTION _bootLibLineValues {
     RETURN values.
 }
 
-LOCAL FUNCTION _bootLibBandKey {
-    PARAMETER band.
-    RETURN band:TOUPPER.
-}
-
 LOCAL FUNCTION _bootLibParseLines {
     PARAMETER raw.
     LOCAL lines IS raw:SPLIT(CHAR(10)).
@@ -570,20 +528,20 @@ LOCAL FUNCTION _bootLibParseLines {
                         }
                     }
                     LOCAL keys IS _bootLibLineValues(lhs:REPLACE(" ", ",")).
-                    IF keys:LENGTH >= 2 AND keys[0]:TOUPPER = "LIB" {
+                    IF keys:LENGTH >= 2 AND keys[0] = "LIB" {
                         LOCAL libName IS keys[1]:TRIM.
                         _bootLibApplyValues(BOOT_LIB_DEPS, libName, _bootLibLineValues(rhs), op).
-                    } ELSE IF keys:LENGTH >= 1 AND keys[0]:TOUPPER = "PREAMBLE" {
+                    } ELSE IF keys:LENGTH >= 1 AND keys[0] = "PREAMBLE" {
                         LOCAL preambleTable IS LEXICON("PREAMBLE", BOOT_LIB_PREAMBLE).
                         _bootLibApplyValues(preambleTable, "PREAMBLE", _bootLibLineValues(rhs), op).
                         SET BOOT_LIB_PREAMBLE TO preambleTable["PREAMBLE"].
-                    } ELSE IF keys:LENGTH >= 2 AND keys[0]:TOUPPER = "BAND" {
-                        LOCAL bandKey IS _bootLibBandKey(keys[1]).
+                    } ELSE IF keys:LENGTH >= 2 AND keys[0] = "BAND" {
+                        LOCAL bandKey IS keys[1].
                         _bootLibApplyValues(BOOT_LIB_BANDS, bandKey, _bootLibLineValues(rhs), op).
-                    } ELSE IF keys:LENGTH >= 2 AND keys[0]:TOUPPER = "PHASE" {
+                    } ELSE IF keys:LENGTH >= 2 AND keys[0] = "PHASE" {
                         LOCAL phaseIx IS 1.
                         UNTIL phaseIx >= keys:LENGTH {
-                            LOCAL phaseName IS keys[phaseIx]:TOUPPER.
+                            LOCAL phaseName IS keys[phaseIx].
                             _bootLibApplyValues(BOOT_LIB_PHASES, phaseName, _bootLibLineValues(rhs), op).
                             SET phaseIx TO phaseIx + 1.
                         }
@@ -696,13 +654,12 @@ GLOBAL FUNCTION bootLibBandRoots {
     bootLibLoadSpec().
     LOCAL roots IS LIST().
     FOR libName IN BOOT_LIB_PREAMBLE { bootLibAddUnique(roots, libName). }
-    LOCAL bandKey IS _bootLibBandKey(band).
-    IF BOOT_LIB_BANDS:HASKEY(bandKey) {
-        FOR phaseName IN BOOT_LIB_BANDS[bandKey] {
+    IF BOOT_LIB_BANDS:HASKEY(band) {
+        FOR phaseName IN BOOT_LIB_BANDS[band] {
             FOR libName IN bootLibPhaseRoots(phaseName) { bootLibAddUnique(roots, libName). }
         }
     } ELSE {
-        FOR libName IN bootLibPhaseRoots(bandKey) { bootLibAddUnique(roots, libName). }
+        FOR libName IN bootLibPhaseRoots(band) { bootLibAddUnique(roots, libName). }
     }
     RETURN roots.
 }
@@ -716,15 +673,14 @@ GLOBAL FUNCTION bootLibBandForPhase {
     PARAMETER phaseName.
     PARAMETER defaultBand IS "".
     bootLibLoadSpec().
-    LOCAL phaseKey IS phaseName:TOUPPER.
-    IF phaseKey = "" { RETURN defaultBand. }
+    IF phaseName = "" { RETURN defaultBand. }
     FOR bandKey IN BOOT_LIB_BANDS:KEYS {
         FOR bandPhase IN BOOT_LIB_BANDS[bandKey] {
-            IF bandPhase:TOUPPER = phaseKey { RETURN bandKey. }
+            IF bandPhase = phaseName { RETURN bandKey. }
         }
     }
     IF defaultBand <> "" { RETURN defaultBand. }
-    RETURN phaseKey.
+    RETURN phaseName.
 }
 
 GLOBAL FUNCTION bootLibPhaseRoots {
@@ -732,9 +688,8 @@ GLOBAL FUNCTION bootLibPhaseRoots {
     bootLibLoadSpec().
     LOCAL roots IS LIST().
     FOR libName IN BOOT_LIB_PREAMBLE { bootLibAddUnique(roots, libName). }
-    LOCAL phaseKey IS phaseName:TOUPPER.
-    IF BOOT_LIB_PHASES:HASKEY(phaseKey) {
-        FOR libName IN BOOT_LIB_PHASES[phaseKey] { bootLibAddUnique(roots, libName). }
+    IF BOOT_LIB_PHASES:HASKEY(phaseName) {
+        FOR libName IN BOOT_LIB_PHASES[phaseName] { bootLibAddUnique(roots, libName). }
     }
     RETURN roots.
 }
