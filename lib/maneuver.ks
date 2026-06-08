@@ -214,7 +214,8 @@ GLOBAL FUNCTION planCircularize {
 //              Smooth POSITIONAT objective, no binary encounter search.
 //      Interplanetary:  Lambert grid scan, full 3-axis node, conic validation
 //   2. Element-aware seed scoring — prefer departure windows that
-//      already produce the requested PE/INC/LAN/AoP geometry.
+//      already produce the requested PE/INC/LAN geometry. AoP is
+//      reported here, then refined by MCC/post-capture orbit shaping.
 //   3. Collision targeting (prograde) — converge PE to zero for the
 //      widest possible encounter margin. A dead-center trajectory
 //      survives large normal dV perturbations during INC targeting,
@@ -251,7 +252,7 @@ GLOBAL FUNCTION planTransfer {
 
     // Resolve capture orbit direction before seeding the raw transfer
     // so the coarse departure scans can prefer windows that already
-    // arrive with the right apsidal geometry.
+    // arrive near the requested capture plane.
     LOCAL captureInc IS -1.
     LOCAL normalBias IS 0.
     IF CFG:HASKEY("CAPTURE_DIR") {
@@ -265,10 +266,11 @@ GLOBAL FUNCTION planTransfer {
 
     // --- 1. Build raw node ---
     LOCAL nd IS 0.
+    LOCAL transferAopTarget IS -1.
     IF isLocal {
-        SET nd TO _planLocalTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
+        SET nd TO _planLocalTransfer(targetBody, targetPe, captureInc, lanTarget, transferAopTarget, centralBody, mu).
     } ELSE {
-        SET nd TO planInterplanetaryTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
+        SET nd TO planInterplanetaryTransfer(targetBody, targetPe, captureInc, lanTarget, transferAopTarget, centralBody, mu).
     }
 
     IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
@@ -289,20 +291,19 @@ GLOBAL FUNCTION planTransfer {
     // This is much cheaper than a mid-course or post-capture plane
     // change because the lever arm is longest at departure.
     // --- 4. Final targeting ---
-    // Solve PE (and optionally INC, LAN, AoP) as a coupled coordinate
+    // Solve PE (and optionally INC/LAN) as a coupled coordinate
     // search. A one-axis Newton step is fragile at near-collision Mun
     // encounters: tiny normal probes may not visibly change the patched
     // conic inclination even though larger normal/radial/prograde moves do.
-    // The unified element solver handles all combinations — when only PE
-    // and INC are requested the TIME axis is inert and it reduces to the
-    // same 3-axis search the old _targetPeIncCoupled performed.
+    // AoP is deliberately left for MCC and post-capture orbit shaping:
+    // forcing it during injection can destroy an otherwise good Pe/INC
+    // encounter on local transfers.
     LOCAL elemTargets IS LEXICON().
     elemTargets:ADD("PE", targetPe).
     IF captureInc >= 0 { elemTargets:ADD("INC", captureInc). }
     IF lanTarget >= 0 { elemTargets:ADD("LAN", lanTarget). }
-    IF aopTarget >= 0 { elemTargets:ADD("AOP", aopTarget). }
 
-    IF elemTargets:LENGTH > 1 OR lanTarget >= 0 OR aopTarget >= 0 {
+    IF elemTargets:LENGTH > 1 OR lanTarget >= 0 {
         elemTargets:ADD("PE_FLOOR", -25000).
 
         // Seed normal bias for polar/retropolar before the solver starts
@@ -311,7 +312,7 @@ GLOBAL FUNCTION planTransfer {
             WAIT 0.02.
         }
 
-        IF captureInc >= 0 AND (lanTarget >= 0 OR aopTarget >= 0) {
+        IF captureInc >= 0 {
             // First recover the arrival plane and periapsis using the
             // wide PE/INC search that worked well before AoP/LAN were
             // folded into this routine. Without this staging, the full
@@ -329,7 +330,7 @@ GLOBAL FUNCTION planTransfer {
             planeOpts:ADD("STEP_TIME", 60.0).
             planeOpts:ADD("MIN_STEP", 0.05).
             planeOpts:ADD("MAX_ITER", 120).
-            mLogWarn("STATS elements stage=plane-pe-inc before full targeting.").
+            mLogWarn("STATS elements stage=plane-pe-inc before optional LAN targeting.").
             LOCAL planeResult IS _targetPatchElementsCoupled(nd, targetBody, planeTargets, planeOpts).
             IF planeResult:HASKEY("SOLVED") AND NOT planeResult["SOLVED"] {
                 mLogError("planTransfer: PE/INC targeting failed; refusing bad transfer node.").
@@ -341,21 +342,23 @@ GLOBAL FUNCTION planTransfer {
             }
         }
 
-        LOCAL elemOpts IS LEXICON().
-        elemOpts:ADD("STEP_NORMAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
-        elemOpts:ADD("STEP_PROGRADE", CHOOSE 5.0 IF captureInc >= 0 ELSE 2.0).
-        elemOpts:ADD("STEP_RADIAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
-        elemOpts:ADD("STEP_TIME", 60.0).
-        elemOpts:ADD("MIN_STEP", 0.05).
-        elemOpts:ADD("MAX_ITER", CHOOSE 100 IF captureInc >= 0 ELSE 100).
-        LOCAL elemResult IS _targetPatchElementsCoupled(nd, targetBody, elemTargets, elemOpts).
-        IF elemResult:HASKEY("SOLVED") AND NOT elemResult["SOLVED"] {
-            mLogError("planTransfer: element targeting failed; refusing bad transfer node.").
-            mLogWarn("STATS transfer result target=" + targetBody:NAME
-                + " status=elements-failed"
-                + _elementErrorSummary(elemResult, elemTargets)).
-            IF HASNODE { REMOVE nd. }
-            RETURN.
+        IF lanTarget >= 0 {
+            LOCAL elemOpts IS LEXICON().
+            elemOpts:ADD("STEP_NORMAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
+            elemOpts:ADD("STEP_PROGRADE", CHOOSE 5.0 IF captureInc >= 0 ELSE 2.0).
+            elemOpts:ADD("STEP_RADIAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
+            elemOpts:ADD("STEP_TIME", 60.0).
+            elemOpts:ADD("MIN_STEP", 0.05).
+            elemOpts:ADD("MAX_ITER", CHOOSE 100 IF captureInc >= 0 ELSE 100).
+            LOCAL elemResult IS _targetPatchElementsCoupled(nd, targetBody, elemTargets, elemOpts).
+            IF elemResult:HASKEY("SOLVED") AND NOT elemResult["SOLVED"] {
+                mLogError("planTransfer: element targeting failed; refusing bad transfer node.").
+                mLogWarn("STATS transfer result target=" + targetBody:NAME
+                    + " status=elements-failed"
+                    + _elementErrorSummary(elemResult, elemTargets)).
+                IF HASNODE { REMOVE nd. }
+                RETURN.
+            }
         }
     } ELSE {
         newtonTarget(nd, targetBody, "PE", targetPe).
