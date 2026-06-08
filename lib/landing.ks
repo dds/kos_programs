@@ -36,7 +36,7 @@ GLOBAL LAND_CFG IS LEXICON(
     "DEORBIT_OVERSHOOT_TOLERANCE", 1200,
     "GUIDANCE_ALT",      5000,    // alt below which descent guidance stops (commit to SB)
     "GUIDANCE_CORRECTION_THRESHOLD", 500, // meters — don't correct if impact closer than this
-    "GUIDANCE_MAX_DV",     15,    // m/s total correction budget for descent guidance
+    "GUIDANCE_MAX_DV",     25,    // m/s total correction budget for descent guidance
 
     // Carrier handoff (empty tag = no handoff)
     "CARRIER_TAG",       "",      // decoupler tag for carrier release
