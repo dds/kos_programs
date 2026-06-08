@@ -354,7 +354,12 @@ GLOBAL FUNCTION _transferSeedScore {
     LOCAL incErr IS 999.
     LOCAL lanErr IS 999.
     LOCAL aopErr IS 999.
+    LOCAL lanTol IS 5.
+    LOCAL aopTol IS 35.
     LOCAL hasPatch IS FALSE.
+
+    IF CFG:HASKEY("LAN_ERR_TOL") { SET lanTol TO MAX(1, CFG["LAN_ERR_TOL"] * 5). }
+    IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
 
     IF p = 0 {
         SET score TO score + 1000000.
@@ -369,11 +374,17 @@ GLOBAL FUNCTION _transferSeedScore {
         }
         IF lanTarget >= 0 {
             SET lanErr TO _angleError(p:LAN, lanTarget).
-            SET score TO score + (lanErr / 2.0)^2.
+            SET score TO score + (lanErr / MAX(lanTol, 1))^2.
+            IF ABS(lanErr) > lanTol {
+                SET score TO score + ((ABS(lanErr) - lanTol) / 1.0)^2 * 50.
+            }
         }
         IF aopTarget >= 0 {
             SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, aopTarget).
-            SET score TO score + (aopErr / 2.0)^2.
+            SET score TO score + (aopErr / MAX(aopTol, 1))^2.
+            IF ABS(aopErr) > aopTol {
+                SET score TO score + ((ABS(aopErr) - aopTol) / 1.0)^2 * 50.
+            }
         }
     }
 
