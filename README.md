@@ -57,7 +57,7 @@ lib/
     lib_enum.ks          KSLib — list/queue/stack functional helpers
 cmd/
     resume.ks            Resume mission from saved phase
-    setstate.ks          Force a phase change
+    setphase.ks          Force phase, optionally changing mission profile
     dump.ks              Print state to console
     resetboot.ks         Reset boot counter
     files.ks             Print storage/file listing
@@ -207,7 +207,7 @@ All commands are run via `RUNPATH(...)` in the kOS terminal:
 
 ```
 RUNPATH("1:/cmd/resume.ks").              // resume from saved phase
-RUNPATH("1:/cmd/setstate.ks", "PHASE").   // force a phase
+RUNPATH("1:/cmd/setphase.ks", "PHASE").   // force phase, keep saved mission
 RUNPATH("1:/cmd/dump.ks").                // print state to console
 RUNPATH("1:/cmd/resetmission.ks").        // clear selected mission profile
 RUNPATH("1:/cmd/resetboot.ks").           // reset boot counter
