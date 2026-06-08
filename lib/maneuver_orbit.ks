@@ -523,6 +523,10 @@ GLOBAL FUNCTION phaseRaiseAlt {
     nextPhase(xferSeq).
 }
 
+GLOBAL FUNCTION phaseRaise {
+    phaseRaiseAlt().
+}
+
 LOCAL FUNCTION _burnWithRetry {
     PARAMETER planFn.
     PARAMETER label.
@@ -968,6 +972,10 @@ GLOBAL FUNCTION phaseInclCorrect {
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     nextPhase(xferSeq).
+}
+
+GLOBAL FUNCTION phaseIncline {
+    phaseInclCorrect().
 }
 
 LOCAL FUNCTION _altAtTA {

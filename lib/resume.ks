@@ -72,7 +72,7 @@ GLOBAL FUNCTION normalizePayloadType {
 GLOBAL FUNCTION buildRocketSequence {
     PARAMETER orbitPhases.
     PARAMETER payloadPhases.
-    LOCAL seq IS LIST("LUNCH", "FAIR", "ANTS", "PARK").
+    LOCAL seq IS LIST("LAUNCH", "FAIR", "ANTS", "PARK").
     LOCAL needsRdv IS FALSE.
     IF CFG:HASKEY("RENDEZVOUS_TARGET") { SET needsRdv TO TRUE. }
     IF CFG:HASKEY("ASTEROID_TARGET") { SET needsRdv TO TRUE. }

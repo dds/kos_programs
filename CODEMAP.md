@@ -4,8 +4,8 @@
 
 - `boot/boot.ks` is the small VAB-installed loader. It syncs only `lib/boot_lib.ks` and `lib/dependencies.txt`, loads `boot_lib`, then delegates preamble/core and mission library loading to `boot_lib`.
 - `lib/boot_lib.ks` parses the vessel name, stores `vessel_name`, `vehicle`, `target`, and `payloads` in state, reads mission profiles from the archive when connected, and refreshes compact `lib/dependencies.txt` from archive to local storage when linked.
-- `lib/mission_plan.ks` owns mission `SEQUENCE` parsing and payload helpers. `lib/boot_lib.ks` expands `PREAMBLE`, `LIB`, `PHASE`, and multi-phase `BAND` rows.
-- `lib/phases.ks` owns the central phase-handler registry. Vehicle scripts call `phaseHandlerMap()` and only add or override craft-local handlers.
+- `lib/mission_plan.ks` owns mission `SEQUENCE` parsing and payload helpers. `lib/boot_lib.ks` expands `PREAMBLE`, `LIB`, `PHASE`, and multi-phase `BAND` rows from compact `lib/dependencies.txt`.
+- `lib/dependencies.ks` is generated from `dependencies.txt` and provides the tiny phase-name to convention-delegate map used by `lib/phases.ks`.
 - Dash-separated vessel names still act as legacy `vehicle-target-payload` hints; space-separated friendly names use the first word as the vehicle id and rely on mission profiles/state for mission details.
 - `lib/boot_lib.ks` prunes stale local `1:/lib` files before syncing the selected `LIBS`, so progressive reloads actually free storage.
 - `cmd/cleanup.ks` / `lib/cleanup.ks` can be run manually to delete local source `.ks` files except `1:/boot/boot.ks` and clear local logs when an older flight computer is out of space.
@@ -17,7 +17,7 @@
 
 `lib/dependencies.txt` is the source of truth for FR3 dependency roots:
 
-- `PREAMBLE = core` means every band/phase gets `core`, which expands to `state`, `logs`, `files`, `phases`, `config`, `mission_plan`, `countdown`, and `zombie`.
+- `PREAMBLE = core` means every band/phase gets `core`, which expands to `state`, `logs`, `files`, `dependencies`, `phases`, `config`, `mission_plan`, `countdown`, and `zombie`.
 - `LIB` rows declare library dependencies.
 - `PHASE` rows declare root libraries for phase names.
 - `BAND` rows declare phase collections that should load together. Single phases intentionally do not have `BAND` rows; the phase name itself is the fallback band.
@@ -25,7 +25,8 @@
 Base/shared FR3 libraries:
 
 - `core` - always-loaded helper root.
-- `phases` - phase machine and central phase handler map.
+- `dependencies` - generated phase-name to handler delegate map.
+- `phases` - phase machine.
 - `launch` - launch, fairing, panels/antennas, parking orbit.
 - `xfer_plan` - rendezvous/transfer planning phases.
 - `lib_navigation` - phase angles, true anomaly helpers, AN/DN helpers.
@@ -53,7 +54,7 @@ Profile-only FR3 libraries:
 
 FR3 progressive library bands:
 
-- `LAUNCH`: `LUNCH`, `FAIR`, `ANTS`, `PARK`. FR3 overrides `PARK` to stop after parking orbit and reboot into the transfer band.
+- `LAUNCH`: `LAUNCH`, `FAIR`, `ANTS`, `PARK`. FR3 overrides `PARK` to stop after parking orbit and reboot into the transfer band.
 - `XFER_PLAN`: `RDV`, `XING`.
 - `XFER_ARRIVE`: `COAST`, `CAPTURE`.
 - `XFER_ORBIT`: `CIRC`, `RAISE`, `INCLINE`, `ELLIPTICAL`, `DROP_FOR_IMPACT_AND_RAISE_PE`.

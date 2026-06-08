@@ -48,6 +48,10 @@ GLOBAL FUNCTION phaseRendezvous {
     nextPhase(xferSeq).
 }
 
+GLOBAL FUNCTION phaseRdv {
+    phaseRendezvous().
+}
+
 GLOBAL FUNCTION phaseTransfer {
     LOCAL target IS missionTargetBody().
     orbitSummary().
@@ -109,6 +113,10 @@ GLOBAL FUNCTION phaseTransfer {
         }
     }
     nextPhase(xferSeq).
+}
+
+GLOBAL FUNCTION phaseXing {
+    phaseTransfer().
 }
 
 LOCAL FUNCTION _rendezvousOptions {

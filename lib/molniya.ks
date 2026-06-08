@@ -270,3 +270,7 @@ GLOBAL FUNCTION phaseMolniyaInsert {
     orbitSummary().
     nextPhase(xferSeq).
 }
+
+GLOBAL FUNCTION phaseMolniya {
+    phaseMolniyaInsert().
+}

@@ -285,17 +285,22 @@ GLOBAL FUNCTION bootMissionConfig {
     }
 }
 
+GLOBAL FUNCTION bootNormalizePhaseName {
+    PARAMETER phaseName.
+    RETURN phaseName:TOUPPER.
+}
+
 GLOBAL FUNCTION bootIsLaunchStartPhase {
     PARAMETER phaseName.
-    LOCAL phase IS phaseName:TOUPPER.
-    RETURN phase = "" OR phase = "LUNCH" OR phase = "FAIR" OR phase = "ANTS".
+    LOCAL phase IS bootNormalizePhaseName(phaseName).
+    RETURN phase = "" OR phase = "LAUNCH" OR phase = "FAIR" OR phase = "ANTS".
 }
 
 GLOBAL FUNCTION bootEnsureInitialPhase {
     PARAMETER seq.
-    LOCAL phase IS stateGet("phase", ""):TOUPPER.
+    LOCAL phase IS bootNormalizePhaseName(stateGet("phase", "")).
     IF (phase = "" OR phase:CONTAINS("MAIN")) AND seq:LENGTH > 0 {
-        stateSet("phase", seq[0]).
+        stateSet("phase", bootNormalizePhaseName(seq[0])).
     }
     RETURN stateGet("phase", "").
 }
@@ -685,7 +690,7 @@ GLOBAL FUNCTION bootLibBandForPhase {
     PARAMETER phaseName.
     PARAMETER defaultBand IS "".
     bootLibLoadSpec().
-    LOCAL phaseKey IS phaseName:TOUPPER.
+    LOCAL phaseKey IS bootNormalizePhaseName(phaseName).
     IF phaseKey = "" { RETURN defaultBand. }
     FOR bandKey IN BOOT_LIB_BANDS:KEYS {
         FOR bandPhase IN BOOT_LIB_BANDS[bandKey] {
@@ -701,7 +706,7 @@ GLOBAL FUNCTION bootLibPhaseRoots {
     bootLibLoadSpec().
     LOCAL roots IS LIST().
     FOR libName IN BOOT_LIB_PREAMBLE { bootLibAddUnique(roots, libName). }
-    LOCAL phaseKey IS phaseName:TOUPPER.
+    LOCAL phaseKey IS bootNormalizePhaseName(phaseName).
     IF BOOT_LIB_PHASES:HASKEY(phaseKey) {
         FOR libName IN BOOT_LIB_PHASES[phaseKey] { bootLibAddUnique(roots, libName). }
     }

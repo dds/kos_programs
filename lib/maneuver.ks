@@ -882,6 +882,10 @@ GLOBAL FUNCTION phaseMidCourse {
     nextPhase(xferSeq).
 }
 
+GLOBAL FUNCTION phaseMcc {
+    phaseMidCourse().
+}
+
 LOCAL FUNCTION _calcStartTime {
     PARAMETER nd.
     LOCAL halfBurn IS 0.

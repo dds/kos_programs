@@ -92,7 +92,7 @@ Examples:
 
 **Payload types:** `RELAY`, `CRASHPROBE`/`PROBE`, `SCANSAT`, `SCISAT`, `STKSAT` (stub), `LANDER`, `MOLNIYA`
 
-**Phase sequence:** LUNCH -> FAIR -> ANTS -> PARK -> XING -> MCC -> COAST -> CAPTURE -> [probe phases] -> CIRC -> RAISE -> INCLINE -> [relay/sat ops] -> [LAND_DEORBIT -> LAND] -> DONE
+**Phase sequence:** LAUNCH -> FAIR -> ANTS -> PARK -> XING -> MCC -> COAST -> CAPTURE -> [probe phases] -> CIRC -> RAISE -> INCLINE -> [relay/sat ops] -> [LAND_DEORBIT -> LAND] -> DONE
 
 **Molniya sequence:** ...same... -> CIRC -> MOLNIYA_INSERT -> INCLINE -> [relay/sat ops] -> DONE
 
@@ -113,7 +113,7 @@ MISSION_ID = mun_rover
 MISSION_NAME = Mun Rover Lander
 TARGET = MUN
 PAYLOADS = ASSISTROVER
-SEQUENCE = LUNCH,FAIR,ANTS,PARK,XING,MCC,COAST,CAPTURE,CIRC,RAISE,INCLINE,LAND_DEORBIT,LAND_ASSIST,LAND,ROVER,DONE
+SEQUENCE = LAUNCH,FAIR,ANTS,PARK,XING,MCC,COAST,CAPTURE,CIRC,RAISE,INCLINE,LAND_DEORBIT,LAND_ASSIST,LAND,ROVER,DONE
 CAPTURE_PE = 15000
 CAPTURE_INC = 90
 LANDING_ASSIST_DECOUPLER_TAG = probe_decoupler
@@ -127,7 +127,7 @@ Mission profiles own the phase sequence. A profile says what mission steps happe
 Boot derives the required libraries from `SEQUENCE` for simple craft. Profiles can still override or extend boot-time library choices when needed:
 
 ```
-SEQUENCE = LUNCH,FAIR,ANTS,PARK,XING,MCC,COAST,CAPTURE,DROP_FOR_IMPACT_AND_RAISE_PE,SCANSAT_OPS,DONE
+SEQUENCE = LAUNCH,FAIR,ANTS,PARK,XING,MCC,COAST,CAPTURE,DROP_FOR_IMPACT_AND_RAISE_PE,SCANSAT_OPS,DONE
 LIBS = phases,flightplan,launch,xfer,maneuver,orbit,payload_ops,science
 LIBS_EXTRA = observe
 ```
@@ -142,7 +142,7 @@ While the vessel is still prelaunch, `lib/boot_lib.ks` clears any saved mission 
 
 FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only the launch band roots and their declared dependencies; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Landing missions use a single `LANDING` band for `LAND_DEORBIT`, `LAND_ASSIST`, and `LAND` so descent does not reboot between adjacent landing phases. Rover missions reload after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
 
-`craft/FR3.ks` keeps FR3-specific mission profile tweaks, sequence construction, PARK reload behavior, and boot-time band selection together because they are preconditions for every FR3 band. Shared phase-name bindings live in `lib/phases.ks` via `phaseHandlerMap()`. Payload classification is generic in `lib/mission_plan.ks`, and dependency expansion is delegated to `lib/boot_lib.ks`. FR3 launch UI is intentionally deferred for a later redesign.
+`craft/FR3.ks` keeps FR3-specific mission profile tweaks, sequence construction, PARK reload behavior, and boot-time band selection together because they are preconditions for every FR3 band. Shared phase-name bindings are generated into `lib/dependencies.ks` from `lib/dependencies.txt`; `lib/phases.ks` consumes that map via `phaseHandlerMap()`. Payload classification is generic in `lib/mission_plan.ks`, and dependency expansion is delegated to `lib/boot_lib.ks`. FR3 launch UI is intentionally deferred for a later redesign.
 
 Important in-flight constraint: `boot/boot.ks` itself is installed on the kOS processor in the VAB/SPH and cannot be updated remotely during a mission. Linked reboots can load updated craft scripts, commands, libraries, and archive mission configs, including `lib/boot_lib.ks` and `lib/mission_plan.ks` after the installed boot has synced them once. Away from archive access, mission config comes from persisted state. Any fix that changes the installed boot stub must be applied before launch or by another VAB-side update path.
 
@@ -324,7 +324,7 @@ GLOBAL LIBS IS missionSequenceLibs(
 ).
 ```
 
-Inside `main()`, resolve the active phase sequence from `CFG["SEQUENCE"]` when present, call `phaseHandlerMap()` for the shared phase-name bindings, add any craft-local handlers with `phaseMapSet(...)`, and call `runPhases(phaseMap)`. Each phase function calls `nextPhase(seq)` when done.
+Inside `main()`, resolve the active phase sequence from `CFG["SEQUENCE"]` when present, call `phaseHandlerMap()` for generated shared phase-name bindings, add any craft-local handlers with `phaseMapSet(...)`, and call `runPhases(phaseMap)`. Shared library phases follow the convention `PHASE_NAME -> phasePhaseName`, for example `DROP_FOR_IMPACT_AND_RAISE_PE -> phaseDropForImpactAndRaisePe`. Each phase function calls `nextPhase(seq)` when done.
 
 ### Available lib phases
 
@@ -415,7 +415,7 @@ GLOBAL CFG IS LEXICON(
 ).
 
 LOCAL DEFAULT_SEQ IS LIST(
-    "LUNCH", "FAIR", "ANTS", "PARK",
+    "LAUNCH", "FAIR", "ANTS", "PARK",
     "XING", "COAST", "CAPTURE", "CIRC",
     "LAND", "SCIENCE", "DONE"
 ).

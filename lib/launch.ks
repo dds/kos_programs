@@ -84,7 +84,7 @@ GLOBAL FUNCTION phaseLaunch {
         + "km  inc=" + launchInc
         + "°  az=" + launchAzimuth + "°").
 
-    WHEN stateGet("phase","") = "LUNCH" OR stateGet("phase","") = "PARK" THEN {
+    WHEN stateGet("phase","") = "LAUNCH" OR stateGet("phase","") = "PARK" THEN {
         LOCAL abortTriggered IS FALSE.
 
         IF stateGet("launch_vs_nonpos_logged", "false") <> "true"
@@ -167,6 +167,10 @@ GLOBAL FUNCTION phaseFairing {
     nextPhase(launchSeq).
 }
 
+GLOBAL FUNCTION phaseFair {
+    phaseFairing().
+}
+
 GLOBAL FUNCTION phaseExtendAnts {
     LOCAL extendAlt IS _launchCfgNum("EXTEND_ALT", 73000).
     IF extendAlt < 10000 {
@@ -192,6 +196,10 @@ GLOBAL FUNCTION phaseExtendAnts {
     }
     mLog("Antennas deployed.").
     nextPhase(launchSeq).
+}
+
+GLOBAL FUNCTION phaseAnts {
+    phaseExtendAnts().
 }
 
 GLOBAL FUNCTION phaseParking {
@@ -333,12 +341,16 @@ LOCAL FUNCTION _deployFairing {
     }
 }
 
+GLOBAL FUNCTION phasePark {
+    phaseParking().
+}
+
 // ── Pre-launch config screen ────────────────────────────────
 
 GLOBAL FUNCTION confirmLaunch {
     PARAMETER printFn.
     LOCAL phase IS stateGet("phase", "").
-    IF phase <> "" AND phase <> "LUNCH" {
+    IF phase <> "" AND phase <> "LAUNCH" {
         RETURN TRUE.
     }
 
@@ -388,7 +400,7 @@ GLOBAL FUNCTION confirmLaunch {
 
 // Shared main() boilerplate for rocket craft scripts. Handles
 // both fresh launches and mid-mission resume (confirmLaunch is
-// a no-op when phase is past LUNCH).
+// a no-op when phase is past LAUNCH).
 //   vehicleName   - string for logging (e.g. "FR2")
 //   seqBuilder    - delegate that returns the phase sequence LIST
 //   configPrinter - delegate for flight plan display (passed to confirmLaunch)

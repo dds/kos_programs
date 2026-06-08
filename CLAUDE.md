@@ -50,7 +50,7 @@ On first boot (or when phase is LAUNCH), FR2 shows a flight plan summary listing
 - Files must be copied from archive to local before use in flight
 
 ### Mission sequence, phases, and LIBS convention
-Mission profiles own `SEQUENCE`: the ordered mission steps. `lib/phases.ks` owns the central phase-handler registry (`phaseHandlerMap`) for shared phase names. Craft scripts only add/override craft-specific handlers. `lib/mission_plan.ks` handles sequence parsing and payload helpers. `lib/boot_lib.ks` reads `lib/dependencies.txt` to expand preamble roots, library dependencies, phase roots, and multi-phase bands.
+Mission profiles own `SEQUENCE`: the ordered mission steps. `lib/boot_lib.ks` reads compact `lib/dependencies.txt` to expand preamble roots, library dependencies, phase roots, and multi-phase bands. `lib/dependencies.ks` is generated from the `PHASE` rows and only binds phase names to convention delegates such as `LAUNCH -> phaseLaunch@`.
 
 For simple craft, declare `GLOBAL LIBS IS missionSequenceLibs(...)` with a legacy fallback list. Use profile `LIBS = ...` only as an escape hatch; otherwise derive libraries from `SEQUENCE` and append extras with `LIBS_EXTRA`. Edit `lib/dependencies.txt` one line at a time for shared dependency updates. Keep it comment-free and compact because it is copied as text to the probe core.
 
@@ -61,12 +61,12 @@ JSON file at `1:/state/state.json` via `lib/state.ks`. Survives reboots. Use `st
 
 ### Phase machine (`lib/phases.ks`)
 - `runPhases(phaseMap)` — main loop. Takes a LEXICON mapping phase names to delegates. Reads current phase from state, calls the matching delegate, loops until DONE.
-- `phaseHandlerMap()` — central shared phase-name to handler delegate registry, with `DEFINED` guards so only loaded libraries bind handlers.
+- `phaseHandlerMap()` — returns the generated `dependencyPhaseHandlers()` map when `lib/dependencies.ks` is loaded.
 - `phaseMapSet(map, phase, delegate)` — add or override a handler.
 - `nextPhase(seq)` — advance to next phase in a given sequence LIST. Persists to state.
 - `phaseDone()` — generic mission-complete cleanup.
 
-Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add craft-specific handlers, then call `runPhases()`.
+Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add craft-specific handlers, then call `runPhases()`. Shared phase functions should follow the case-insensitive convention `PHASE_NAME -> phasePhaseName`, with underscores converted to camel case.
 
 ## Code conventions
 
@@ -185,9 +185,4 @@ Corrections run in order: AoP first (in-plane), then INC (out-of-plane). All are
 
 ## Pre-commit
 
-A git pre-commit hook enforces formatting on `.ks` files:
-- No trailing whitespace
-- Files end with exactly one newline
-- No tab characters (4-space indent)
-
-Run `./scripts/install-hooks.sh` to install.
+This repo uses the Python pre-commit framework. Install hooks with `pre-commit install`. The local hook regenerates `lib/dependencies.ks` from `lib/dependencies.txt`; run `make dependencies` or `pre-commit run generate-dependencies-ks --all-files` manually when needed.

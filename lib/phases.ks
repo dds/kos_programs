@@ -19,39 +19,10 @@ GLOBAL FUNCTION phaseMapSet {
 }
 
 GLOBAL FUNCTION phaseHandlerMap {
-    LOCAL phaseMap IS LEXICON().
-
-    IF DEFINED phaseLaunch { phaseMapSet(phaseMap, "LUNCH", phaseLaunch@). }
-    IF DEFINED phaseFairing { phaseMapSet(phaseMap, "FAIR", phaseFairing@). }
-    IF DEFINED phaseExtendAnts { phaseMapSet(phaseMap, "ANTS", phaseExtendAnts@). }
-    IF DEFINED phaseParking { phaseMapSet(phaseMap, "PARK", phaseParking@). }
-
-    IF DEFINED phaseRendezvous { phaseMapSet(phaseMap, "RDV", phaseRendezvous@). }
-    IF DEFINED phaseTransfer { phaseMapSet(phaseMap, "XING", phaseTransfer@). }
-    IF DEFINED phaseMidCourse { phaseMapSet(phaseMap, "MCC", phaseMidCourse@). }
-    IF DEFINED phaseCoast { phaseMapSet(phaseMap, "COAST", phaseCoast@). }
-    IF DEFINED phaseCapture { phaseMapSet(phaseMap, "CAPTURE", phaseCapture@). }
-
-    IF DEFINED phaseCirc { phaseMapSet(phaseMap, "CIRC", phaseCirc@). }
-    IF DEFINED phaseRaiseAlt { phaseMapSet(phaseMap, "RAISE", phaseRaiseAlt@). }
-    IF DEFINED phaseInclCorrect { phaseMapSet(phaseMap, "INCLINE", phaseInclCorrect@). }
-    IF DEFINED phaseDropForImpactAndRaisePe {
-        phaseMapSet(phaseMap, "DROP_FOR_IMPACT_AND_RAISE_PE", phaseDropForImpactAndRaisePe@).
+    IF DEFINED dependencyPhaseHandlers {
+        RETURN dependencyPhaseHandlers().
     }
-    IF DEFINED phaseElliptical { phaseMapSet(phaseMap, "ELLIPTICAL", phaseElliptical@). }
-
-    IF DEFINED phaseTargetedDeorbit { phaseMapSet(phaseMap, "TARGETED_DEORBIT", phaseTargetedDeorbit@). }
-    IF DEFINED phaseReleaseProbe { phaseMapSet(phaseMap, "RELEASE_PROBE", phaseReleaseProbe@). }
-    IF DEFINED phaseRelayOps { phaseMapSet(phaseMap, "RELAY_OPS", phaseRelayOps@). }
-    IF DEFINED phaseScanSatOps { phaseMapSet(phaseMap, "SCANSAT_OPS", phaseScanSatOps@). }
-
-    IF DEFINED phaseLandDeorbit { phaseMapSet(phaseMap, "LAND_DEORBIT", phaseLandDeorbit@). }
-    IF DEFINED phaseLandAssist { phaseMapSet(phaseMap, "LAND_ASSIST", phaseLandAssist@). }
-    IF DEFINED phaseLand { phaseMapSet(phaseMap, "LAND", phaseLand@). }
-    IF DEFINED phaseRover { phaseMapSet(phaseMap, "ROVER", phaseRover@). }
-    IF DEFINED phaseMolniyaInsert { phaseMapSet(phaseMap, "MOLNIYA_INSERT", phaseMolniyaInsert@). }
-
-    RETURN phaseMap.
+    RETURN LEXICON().
 }
 
 GLOBAL FUNCTION runPhases {

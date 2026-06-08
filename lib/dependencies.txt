@@ -1,6 +1,6 @@
 PREAMBLE = core
 
-LIB core = state, logs, files, phases, config, mission_plan, countdown, zombie
+LIB core = state, logs, files, dependencies, phases, config, mission_plan, countdown, zombie
 LIB capture = maneuver, maneuver_targeting, orbit
 LIB deorbit_targeting = maneuver_targeting, orbit, utils
 LIB flightplan = ui
@@ -20,7 +20,7 @@ LIB xfer_plan = maneuver, maneuver_targeting, lib_navigation, inclination, orbit
 
 PHASE PREFLIGHT, FLIGHT, POST_FLIGHT, POSTFLIGHT = airplane
 PHASE EVA_SCIENCE = science, orbit
-PHASE LUNCH, FAIR, ANTS, PARK = launch
+PHASE LAUNCH, FAIR, ANTS, PARK = launch
 PHASE RDV = xfer_plan, maneuver_rendezvous
 PHASE XING = xfer_plan
 PHASE MCC = maneuver
@@ -34,7 +34,7 @@ PHASE ROVER = rover
 PHASE MOLNIYA, MOLNIYA_INSERT = molniya
 PHASE DROP_FOR_IMPACT_AND_RAISE_PE = maneuver_orbit
 
-BAND LAUNCH = LUNCH, FAIR, ANTS, PARK
+BAND LAUNCH = LAUNCH, FAIR, ANTS, PARK
 BAND XFER_PLAN = RDV, XING
 BAND XFER_ARRIVE = COAST, CAPTURE
 BAND XFER_ORBIT = CIRC, RAISE, INCLINE, ELLIPTICAL, DROP_FOR_IMPACT_AND_RAISE_PE
