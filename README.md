@@ -37,7 +37,8 @@ lib/
     files.ks             Storage status and directory listing
     mission_plan.ks      Mission SEQUENCE parsing and payload helpers
     resume.ks            MISSION lexicon, auto-resume logic, operator helpers
-    maneuver.ks          Maneuver execution + transfer/capture/circ planning
+    maneuver.ks          Maneuver execution + simple capture/circ planning
+    maneuver_transfer.ks Transfer planning + mid-course correction
     maneuver_targeting.ks  Shared targeting helpers for transfer/MCC planners
     inclination.ks       Orbital plane change planning
     molniya.ks           Molniya orbit insertion
@@ -354,7 +355,7 @@ All call `nextPhase(launchSeq)` — set `launchSeq` to your sequence before call
 
 All call `nextPhase(xferSeq)` — set `xferSeq` to your sequence.
 
-**From `maneuver.ks`** (needs: `maneuver`, `maneuver_targeting`, `orbit`):
+**From `maneuver_transfer.ks`** (needs: `maneuver_transfer`):
 - `phaseMidCourse@` — mid-course correction using Newton's method. Corrects PE (prograde), AoP (radial), and LAN (normal) independently. Capped at 50 m/s total dV. Skips if encounter is already on target.
 
 Calls `nextPhase(xferSeq)`.
@@ -386,7 +387,7 @@ These are building blocks you can call inside your own phase functions:
 
 | Function | Lib | What it does |
 |---|---|---|
-| `planTransfer(body, pe, lan, aop)` | maneuver | Plan transfer with optional LAN/AoP targeting |
+| `planTransfer(body, pe, lan, aop)` | maneuver_transfer | Plan transfer with optional LAN/AoP targeting |
 | `planCapture(body, alt)` | maneuver | Plan capture burn at Pe |
 | `planCircularize()` | maneuver | Add circ node at next Ap |
 | `planRaisePeNow(alt)` | maneuver | Emergency Pe raise at current position |

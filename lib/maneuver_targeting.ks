@@ -211,6 +211,8 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
     LOCAL minIter IS 0.
     LOCAL dvCap IS -1.
     LOCAL minTime IS TIME:SECONDS + 30.
+    LOCAL aopGuideStallIter IS 0.
+    LOCAL aopGuideStallMinImprove IS 1.
 
     IF opts:HASKEY("STEP_PROGRADE"){ SET steps["PROGRADE"]  TO opts["STEP_PROGRADE"]. }
     IF opts:HASKEY("STEP_NORMAL")  { SET steps["NORMAL"]    TO opts["STEP_NORMAL"]. }
@@ -221,9 +223,16 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
     IF opts:HASKEY("MIN_ITER")     { SET minIter            TO opts["MIN_ITER"]. }
     IF opts:HASKEY("DV_CAP")       { SET dvCap              TO opts["DV_CAP"]. }
     IF opts:HASKEY("MIN_TIME")     { SET minTime            TO opts["MIN_TIME"]. }
+    IF opts:HASKEY("AOP_GUIDE_STALL_ITER") { SET aopGuideStallIter TO opts["AOP_GUIDE_STALL_ITER"]. }
+    IF opts:HASKEY("AOP_GUIDE_STALL_MIN_IMPROVE") { SET aopGuideStallMinImprove TO opts["AOP_GUIDE_STALL_MIN_IMPROVE"]. }
 
     LOCAL best IS _patchElementsCost(nd, targetBody, targets).
     LOCAL solved IS FALSE.
+    LOCAL aopGuideTol IS 35.
+    LOCAL bestAopGuideErr IS 999.
+    LOCAL aopGuideStallCount IS 0.
+    IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+    IF targets:HASKEY("AOP_GUIDE") { SET bestAopGuideErr TO ABS(best["AOP_ERR"]). }
     mLog("ELEMENTS: coupled target"
         + _elementTargetSummary(targets)
         + " start" + _elementStateSummary(best)).
@@ -294,6 +303,27 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
             }
             IF stepsSmall {
                 mLogWarn("  ELEMENTS: stopped" + _elementStateSummary(best)).
+                BREAK.
+            }
+        }
+
+        IF aopGuideStallIter > 0 AND targets:HASKEY("AOP_GUIDE") {
+            LOCAL guideErr IS ABS(best["AOP_ERR"]).
+            IF guideErr <= aopGuideTol {
+                SET aopGuideStallCount TO 0.
+                SET bestAopGuideErr TO guideErr.
+            } ELSE IF guideErr < bestAopGuideErr - aopGuideStallMinImprove {
+                SET bestAopGuideErr TO guideErr.
+                SET aopGuideStallCount TO 0.
+            } ELSE {
+                SET aopGuideStallCount TO aopGuideStallCount + 1.
+            }
+            IF aopGuideStallCount >= aopGuideStallIter {
+                mLogWarn("  ELEMENTS: AoP guide stalled err="
+                    + ROUND(guideErr,1)
+                    + " best=" + ROUND(bestAopGuideErr,1)
+                    + " tol=" + ROUND(aopGuideTol,1)
+                    + " count=" + aopGuideStallCount).
                 BREAK.
             }
         }
@@ -432,14 +462,14 @@ GLOBAL FUNCTION _patchElementsCostFromPatch {
     IF targets:HASKEY("AOP") {
         SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, targets["AOP"]).
         SET cost TO cost + (aopErr / 1.0)^2.
-    } ELSE IF targets:HASKEY("SOFT_AOP") {
-        LOCAL softAopTol IS 35.
-        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET softAopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
-        LOCAL softAopScale IS MAX(5, softAopTol / 3).
-        SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, targets["SOFT_AOP"]).
-        SET cost TO cost + (aopErr / softAopScale)^2.
-        IF ABS(aopErr) > softAopTol {
-            SET cost TO cost + ((ABS(aopErr) - softAopTol) / softAopScale)^2 * 4.
+    } ELSE IF targets:HASKEY("AOP_GUIDE") {
+        LOCAL aopGuideTol IS 35.
+        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+        LOCAL aopGuideScale IS MAX(5, aopGuideTol / 3).
+        SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, targets["AOP_GUIDE"]).
+        SET cost TO cost + (aopErr / aopGuideScale)^2.
+        IF ABS(aopErr) > aopGuideTol {
+            SET cost TO cost + ((ABS(aopErr) - aopGuideTol) / aopGuideScale)^2 * 4.
         }
     }
 
@@ -492,7 +522,7 @@ GLOBAL FUNCTION _elementTargetSummary {
     IF targets:HASKEY("INC") { SET msg TO msg + " INC=" + ROUND(targets["INC"], 1) + "°". }
     IF targets:HASKEY("LAN") { SET msg TO msg + " LAN=" + ROUND(targets["LAN"], 1) + "°". }
     IF targets:HASKEY("AOP") { SET msg TO msg + " AoP=" + ROUND(targets["AOP"], 1) + "°". }
-    IF targets:HASKEY("SOFT_AOP") { SET msg TO msg + " softAoP=" + ROUND(targets["SOFT_AOP"], 1) + "°". }
+    IF targets:HASKEY("AOP_GUIDE") { SET msg TO msg + " guideAoP=" + ROUND(targets["AOP_GUIDE"], 1) + "°". }
     RETURN msg.
 }
 
@@ -513,7 +543,7 @@ GLOBAL FUNCTION _elementErrorSummary {
     IF targets:HASKEY("INC") { SET msg TO msg + " IncErr=" + ROUND(eval["INC_ERR"], 2) + "°". }
     IF targets:HASKEY("LAN") { SET msg TO msg + " LanErr=" + ROUND(eval["LAN_ERR"], 2) + "°". }
     IF targets:HASKEY("AOP") { SET msg TO msg + " AopErr=" + ROUND(eval["AOP_ERR"], 2) + "°". }
-    IF targets:HASKEY("SOFT_AOP") { SET msg TO msg + " SoftAopErr=" + ROUND(eval["AOP_ERR"], 2) + "°". }
+    IF targets:HASKEY("AOP_GUIDE") { SET msg TO msg + " GuideAopErr=" + ROUND(eval["AOP_ERR"], 2) + "°". }
     RETURN msg.
 }
 

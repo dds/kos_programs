@@ -106,7 +106,8 @@ Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add cra
 | `boot_lib.ks` / `dependencies.txt` | Boot helpers plus text-driven preamble, library dependency, phase root, and multi-phase band expansion |
 | `mission_plan.ks` | Mission `SEQUENCE` parsing and payload helpers |
 | `resume.ks` | MISSION lexicon, operator helpers, resumeMission(), buildRocketSequence() |
-| `maneuver.ks` | Maneuver node execution with dynamic throttle. planTransfer (LAN via multi-orbit scan, PE via Newton on dV), planCapture, planCircularize, planAoPChange, phaseMidCourse |
+| `maneuver.ks` | Maneuver node execution with dynamic throttle, planCapture, planCircularize, planAoPChange |
+| `maneuver_transfer.ks` | planTransfer (LAN via multi-orbit scan, PE via Newton on dV) and phaseMidCourse |
 | `lambert.ks` | Lambert solver (RSVP port, GPL-3.0). lambertSolve(r1,r2,tof,mu,flip), orbitalStateVectors. For future interplanetary use |
 | `inclination.ks` | Orbital plane change planning + etaToTrueAnomaly() |
 | `molniya.ks` | Molniya orbit insertion (molniyaParams, printMolniyaSummary, planMolniyaInsert, phaseMolniyaInsert) |
@@ -146,7 +147,7 @@ At boot, pressing any key within 5s enters manual mode. The terminal displays en
 
 Uses `SHIP:CONTROL:PILOTWHEELSTEER` (not `PILOTMAINSTEER`, which doesn't exist in kOS) scaled by a speed-dependent factor to reduce steering sensitivity at higher speeds.
 
-### Transfer planning (`lib/maneuver.ks`)
+### Transfer planning (`lib/maneuver_transfer.ks`)
 
 `planTransfer` uses a 3-step process:
 1. **Hohmann estimate** — phase angle math gives initial departure time and dV
@@ -155,7 +156,7 @@ Uses `SHIP:CONTROL:PILOTWHEELSTEER` (not `PILOTMAINSTEER`, which doesn't exist i
 
 LAN is controlled by which orbital period to depart on, PE is controlled by dV — these are separable. AoP is reported but corrected later by MCC (radial burns mid-transfer).
 
-### Mid-course correction (`lib/maneuver.ks`)
+### Mid-course correction (`lib/maneuver_transfer.ks`)
 
 `phaseMidCourse` fires at the coast midpoint (local transfers) or 1 hour past SOI transition (interplanetary). Corrects PE (prograde), AoP (radial), and LAN (normal) via independent Newton iterations, each with 0.5 m/s epsilon and 0.7 damping. Total dV capped at 50 m/s. Skips if encounter is already on target.
 

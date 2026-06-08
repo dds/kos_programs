@@ -31,7 +31,8 @@ Base/shared FR3 libraries:
 - `xfer_plan` - rendezvous/transfer planning phases.
 - `lib_navigation` - phase angles, true anomaly helpers, AN/DN helpers.
 - `countdown` - launch countdown.
-- `maneuver` - maneuver execution, local body transfer, capture, MCC, patch targeting.
+- `maneuver` - maneuver execution plus simple capture/circularize/raise/AoP node helpers.
+- `maneuver_transfer` - local body transfer planning and MCC, using shared patch targeting.
 - `inclination` - inclination change and target inclination resolution.
 - `orbit` - orbit summaries and SOI waits.
 - `deorbit_targeting` - Trajectories-powered targeted deorbit.
@@ -55,7 +56,8 @@ Profile-only FR3 libraries:
 FR3 progressive library bands:
 
 - `LAUNCH`: `LAUNCH`, `FAIR`, `ANTS`, `PARK`. FR3 overrides `PARK` to stop after parking orbit and reboot into the transfer band.
-- `XFER_PLAN`: `RDV`, `XING`.
+- `XFER_PLAN`: `XING`.
+- `RENDEZVOUS`: `RDV`.
 - `XFER_ARRIVE`: `COAST`, `CAPTURE`.
 - `XFER_ORBIT`: `CIRC`, `RAISE`, `INCLINE`, `ELLIPTICAL`, `DROP_FOR_IMPACT_AND_RAISE_PE`.
 - `PAYLOAD_OPS`: `TARGETED_DEORBIT`, `RELEASE_PROBE`, `RELAY_OPS`, `SCANSAT_OPS`.
@@ -73,7 +75,8 @@ Mission profile files:
 
 ## Biggest Files
 
-- `lib/maneuver.ks` - 59 KB after splitting intersystem/rendezvous code. Still the primary split candidate.
+- `lib/maneuver_transfer.ks` - transfer planning and MCC.
+- `lib/maneuver.ks` - burn execution and simple node planners.
 - `lib/landing.ks` - 19 KB. Split candidate if rover/lander roles diverge.
 - `lib/xfer_plan.ks` / `lib/capture.ks` / `lib/maneuver_orbit.ks` - transfer, arrival, and orbit-cleanup phase wrappers.
 - `lib/deorbit_targeting.ks` - 12 KB. Shared by probes and landing.
@@ -83,17 +86,16 @@ Mission profile files:
 
 ## `maneuver.ks` Sections
 
-- `lib/maneuver.ks`: maneuver execution, local Mun/Minmus transfer, LAN scan, closest approach search, patch targeting, capture helpers, MCC.
+- `lib/maneuver.ks`: maneuver execution, capture/circularize/raise/AoP helpers.
+- `lib/maneuver_transfer.ks`: local Mun/Minmus transfer, LAN scan, closest approach search, MCC.
 - `lib/maneuver_intersystem.ks`: interplanetary Lambert body transfer.
 - `lib/maneuver_rendezvous.ks`: vessel rendezvous and asteroid Lambert intercept.
 
 ## Suggested Slices
 
-- `maneuver_exec.ks`: `executeManeuver` and burn execution helpers.
-- `maneuver_orbit.ks`: circularize, capture, raise Pe, AoP helpers.
-- `maneuver_transfer_local.ks`: Mun/Minmus transfer and LAN scan.
+- `maneuver.ks`: already holds `executeManeuver` and simple node helpers.
+- `maneuver_transfer.ks`: already holds Mun/Minmus transfer, LAN scan, and MCC.
 - `maneuver_patch_target.ks`: coupled patch element targeting and Newton targeting.
-- `maneuver_mcc.ks`: `phaseMidCourse` and MCC helpers.
 
 ## Current FR3 Mun Rover Requirement
 

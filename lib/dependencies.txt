@@ -1,29 +1,30 @@
 PREAMBLE = core
 
 LIB core = state, logs, files, phases, config, mission_plan, countdown, zombie
-LIB capture = maneuver, maneuver_targeting, orbit
+LIB capture = maneuver, orbit
 LIB deorbit_targeting = maneuver_targeting, orbit, utils
 LIB flightplan = ui
-LIB landing = deorbit_targeting, maneuver_targeting, maneuver, utils
+LIB landing = deorbit_targeting, maneuver, utils
 LIB launch = flightplan, orbit
-LIB maneuver = maneuver_targeting
+LIB maneuver =
 LIB maneuver_intersystem = lambert, maneuver, maneuver_targeting, lib_navigation, inclination
-LIB maneuver_orbit = maneuver, maneuver_targeting, inclination, orbit
+LIB maneuver_orbit = maneuver, inclination, orbit
 LIB maneuver_rendezvous = lambert, maneuver, maneuver_targeting, lib_navigation, inclination
-LIB molniya = maneuver, maneuver_targeting, inclination
+LIB maneuver_transfer = maneuver, maneuver_targeting, lib_navigation, orbit
+LIB molniya = maneuver, inclination
 LIB payload_landing = landing, deorbit_targeting
 LIB payload_ops = orbit, utils
 LIB airplane = observe, flightplan
 LIB rover = payload_landing
 LIB science =
-LIB xfer_plan = maneuver, maneuver_targeting, lib_navigation, inclination, orbit
+LIB xfer_plan = maneuver_transfer, orbit
 
 PHASE PREFLIGHT, FLIGHT, POST_FLIGHT, POSTFLIGHT = airplane
 PHASE EVA_SCIENCE = science, orbit
 PHASE LAUNCH, FAIR, ANTS, PARK = launch
 PHASE RDV = xfer_plan, maneuver_rendezvous
 PHASE XING = xfer_plan
-PHASE MCC = maneuver
+PHASE MCC = maneuver_transfer
 PHASE COAST, CAPTURE = capture
 PHASE CIRC, RAISE, INCLINE, ELLIPTICAL = maneuver_orbit
 PHASE TARGETED_DEORBIT = payload_ops, deorbit_targeting
@@ -35,7 +36,8 @@ PHASE MOLNIYA, MOLNIYA_INSERT = molniya
 PHASE DROP_FOR_IMPACT_AND_RAISE_PE = maneuver_orbit
 
 BAND LAUNCH = LAUNCH, FAIR, ANTS, PARK
-BAND XFER_PLAN = RDV, XING
+BAND XFER_PLAN = XING
+BAND RENDEZVOUS = RDV
 BAND XFER_ARRIVE = COAST, CAPTURE
 BAND XFER_ORBIT = CIRC, RAISE, INCLINE, ELLIPTICAL, DROP_FOR_IMPACT_AND_RAISE_PE
 BAND PAYLOAD_OPS = TARGETED_DEORBIT, RELEASE_PROBE, RELAY_OPS, SCANSAT_OPS
