@@ -35,7 +35,13 @@ GLOBAL FUNCTION fr3PrintConfig {
         }
     }
     flightPlanSection("FINAL ORBIT").
-    flightPlanRow("FINAL ALT", ROUND(CFG["TARGET_AP"]/1000,0) + " km").
+    IF CFG:HASKEY("TARGET_PE") AND CFG:HASKEY("TARGET_AP")
+            AND ABS(CFG["TARGET_PE"] - CFG["TARGET_AP"]) > 1 {
+        flightPlanRow("FINAL PE", ROUND(CFG["TARGET_PE"]/1000,0) + " km").
+        flightPlanRow("FINAL AP", ROUND(CFG["TARGET_AP"]/1000,0) + " km").
+    } ELSE {
+        flightPlanRow("FINAL ALT", ROUND(CFG["TARGET_AP"]/1000,0) + " km").
+    }
     LOCAL tincStr IS CFG["TARGET_INCLINATION"] + " deg".
     IF CFG["TARGET_INCLINATION"] = 0 { SET tincStr TO "0 deg  (equatorial)". }
     flightPlanRow("FINAL INCL", tincStr).
