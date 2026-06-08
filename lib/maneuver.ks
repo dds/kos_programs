@@ -296,19 +296,51 @@ GLOBAL FUNCTION planTransfer {
     IF aopTarget >= 0 { elemTargets:ADD("AOP", aopTarget). }
 
     IF elemTargets:LENGTH > 1 OR lanTarget >= 0 OR aopTarget >= 0 {
+        elemTargets:ADD("PE_FLOOR", -25000).
+
         // Seed normal bias for polar/retropolar before the solver starts
         IF normalBias <> 0 AND nd:NORMAL = 0 {
             SET nd:NORMAL TO normalBias * 5.
             WAIT 0.02.
         }
 
+        IF captureInc >= 0 AND (lanTarget >= 0 OR aopTarget >= 0) {
+            // First recover the arrival plane and periapsis using the
+            // wide PE/INC search that worked well before AoP/LAN were
+            // folded into this routine. Without this staging, the full
+            // solver can accept a wildly sub-surface Pe because the
+            // inclination/AoP cost appears to improve.
+            LOCAL planeTargets IS LEXICON().
+            planeTargets:ADD("PE", targetPe).
+            planeTargets:ADD("PE_FLOOR", -25000).
+            planeTargets:ADD("INC", captureInc).
+
+            LOCAL planeOpts IS LEXICON().
+            planeOpts:ADD("STEP_NORMAL", 40.0).
+            planeOpts:ADD("STEP_PROGRADE", 20.0).
+            planeOpts:ADD("STEP_RADIAL", 20.0).
+            planeOpts:ADD("STEP_TIME", 60.0).
+            planeOpts:ADD("MIN_STEP", 0.05).
+            planeOpts:ADD("MAX_ITER", 120).
+            mLogWarn("STATS elements stage=plane-pe-inc before full targeting.").
+            LOCAL planeResult IS _targetPatchElementsCoupled(nd, targetBody, planeTargets, planeOpts).
+            IF planeResult:HASKEY("SOLVED") AND NOT planeResult["SOLVED"] {
+                mLogError("planTransfer: PE/INC targeting failed; refusing bad transfer node.").
+                mLogWarn("STATS transfer result target=" + targetBody:NAME
+                    + " status=plane-elements-failed"
+                    + _elementErrorSummary(planeResult, planeTargets)).
+                IF HASNODE { REMOVE nd. }
+                RETURN.
+            }
+        }
+
         LOCAL elemOpts IS LEXICON().
-        elemOpts:ADD("STEP_NORMAL", CHOOSE 40.0 IF captureInc >= 0 ELSE 5.0).
-        elemOpts:ADD("STEP_PROGRADE", CHOOSE 20.0 IF captureInc >= 0 ELSE 2.0).
-        elemOpts:ADD("STEP_RADIAL", CHOOSE 20.0 IF captureInc >= 0 ELSE 5.0).
+        elemOpts:ADD("STEP_NORMAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
+        elemOpts:ADD("STEP_PROGRADE", CHOOSE 5.0 IF captureInc >= 0 ELSE 2.0).
+        elemOpts:ADD("STEP_RADIAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
         elemOpts:ADD("STEP_TIME", 60.0).
         elemOpts:ADD("MIN_STEP", 0.05).
-        elemOpts:ADD("MAX_ITER", CHOOSE 140 IF captureInc >= 0 ELSE 100).
+        elemOpts:ADD("MAX_ITER", CHOOSE 100 IF captureInc >= 0 ELSE 100).
         LOCAL elemResult IS _targetPatchElementsCoupled(nd, targetBody, elemTargets, elemOpts).
         IF elemResult:HASKEY("SOLVED") AND NOT elemResult["SOLVED"] {
             mLogError("planTransfer: element targeting failed; refusing bad transfer node.").

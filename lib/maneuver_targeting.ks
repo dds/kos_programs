@@ -352,6 +352,11 @@ GLOBAL FUNCTION _patchElementsCostFromPatch {
         SET peErr TO p:PERIAPSIS - targets["PE"].
         SET cost TO cost + (peErr / 2000)^2.
     }
+    IF targets:HASKEY("PE_FLOOR") {
+        IF p:PERIAPSIS < targets["PE_FLOOR"] {
+            SET cost TO cost + ((targets["PE_FLOOR"] - p:PERIAPSIS) / 500)^2.
+        }
+    }
     IF targets:HASKEY("INC") {
         SET incErr TO _angleError(p:INCLINATION, targets["INC"]).
         SET cost TO cost + (incErr / 0.5)^2.
