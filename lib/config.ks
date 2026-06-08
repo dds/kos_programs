@@ -86,10 +86,9 @@ GLOBAL FUNCTION missionConfigKeyTypes {
 
 GLOBAL FUNCTION missionConfigIsKnownKey {
     PARAMETER key.
-    LOCAL upperKey IS key:TOUPPER.
-    IF missionNumericConfigKeys():CONTAINS(upperKey) { RETURN TRUE. }
-    IF missionStringConfigKeys():CONTAINS(upperKey) { RETURN TRUE. }
-    IF missionProfileConfigKeys():CONTAINS(upperKey) { RETURN TRUE. }
+    IF missionNumericConfigKeys():CONTAINS(key) { RETURN TRUE. }
+    IF missionStringConfigKeys():CONTAINS(key) { RETURN TRUE. }
+    IF missionProfileConfigKeys():CONTAINS(key) { RETURN TRUE. }
     RETURN FALSE.
 }
 
@@ -141,13 +140,13 @@ GLOBAL FUNCTION applyKnownMissionState {
 
 // --- Phase sequence utilities ---
 
-// Parse a comma-separated phase string into a LIST of uppercase
-// phase names. Returns LIST("DONE") if the input is empty.
+// Parse a comma-separated phase string into a LIST.
+// Returns LIST("DONE") if the input is empty.
 GLOBAL FUNCTION phaseListFromString {
     PARAMETER raw.
     LOCAL seq IS LIST().
     FOR phaseRaw IN raw:SPLIT(",") {
-        LOCAL phaseName IS phaseRaw:TRIM:TOUPPER.
+        LOCAL phaseName IS phaseRaw:TRIM.
         IF phaseName <> "" { seq:ADD(phaseName). }
     }
     IF seq:LENGTH = 0 { seq:ADD("DONE"). }

@@ -25,7 +25,7 @@ LOCAL FUNCTION _fr3PrintConfig {
 
 GLOBAL FUNCTION fr3BandForPhase {
     PARAMETER phaseName.
-    LOCAL phase IS phaseName:TOUPPER.
+    LOCAL phase IS phaseName.
     LOCAL defaultBand IS "".
     IF phase = "" OR phase:CONTAINS("MAIN") {
         SET defaultBand TO "LAUNCH".
@@ -55,7 +55,7 @@ GLOBAL FUNCTION fr3ApplyMissionProfile {
         }
     }
 
-    IF DEFINED landingApplyMissionConfig { landingApplyMissionConfig(). }
+    landingApplyMissionConfig().
 }
 
 LOCAL FUNCTION _fr3PhaseParkingReload {
@@ -96,23 +96,21 @@ GLOBAL FUNCTION fr3BuildPhaseSequence {
 
 GLOBAL FUNCTION fr3BuildPhaseMap {
     LOCAL phaseMap IS phaseHandlerMap().
-    IF DEFINED phaseMapSet {
-        phaseMapSet(phaseMap, "PARK", _fr3PhaseParkingReload@).
-    }
+    phaseMapSet(phaseMap, "PARK", _fr3PhaseParkingReload@).
     RETURN phaseMap.
 }
 
 LOCAL FUNCTION _fr3ConditionalRoots {
     PARAMETER band.
-    LOCAL bandKey IS band:TOUPPER.
+    LOCAL bandKey IS band.
     LOCAL roots IS LIST().
-    IF bandKey = "XFER_PLAN" AND stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
+    IF bandKey = "XFER_PLAN" AND stateGet("target", "KERBIN") <> "MUN" {
         roots:ADD("maneuver_intersystem").
     }
     IF bandKey = "XFER_PLAN" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
         roots:ADD("maneuver_rendezvous").
     }
-    IF bandKey = "PAYLOAD_OPS" AND contains(stateGet("phase", ""):TOUPPER, LIST("TARGETED_DEORBIT")) {
+    IF bandKey = "PAYLOAD_OPS" AND contains(stateGet("phase", ""), LIST("TARGETED_DEORBIT")) {
         roots:ADD("deorbit_targeting").
     }
     IF bandKey = "PAYLOAD_OPS"
@@ -133,7 +131,7 @@ LOCAL FUNCTION _fr3LibsForBand {
 LOCAL FUNCTION _fr3Libs {
     bootEnsureInitialPhase(fr3BuildPhaseSequence()).
     LOCAL band IS fr3PhaseBand().
-    LOCAL phase IS stateGet("phase", ""):TOUPPER.
+    LOCAL phase IS stateGet("phase", "").
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
@@ -158,8 +156,8 @@ GLOBAL FUNCTION main {
     fr3ApplyMissionProfile().
     LOCAL seq IS fr3BuildPhaseSequence().
     SET fr3Seq TO seq.
-    IF DEFINED launchSeq { SET launchSeq TO seq. }
-    IF DEFINED xferSeq { SET xferSeq TO seq. }
+    SET launchSeq TO seq.
+    SET xferSeq TO seq.
 
     mLogPhase("FR3 MAIN").
     mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).

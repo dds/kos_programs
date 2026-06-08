@@ -37,9 +37,7 @@ GLOBAL FUNCTION flightPlanRow {
 }
 
 GLOBAL FUNCTION flightPlanIdentity {
-    IF DEFINED codeVersion {
-        flightPlanRow("CODE", codeVersion()).
-    }
+    flightPlanRow("CODE", codeVersion()).
     flightPlanRow("CORE", CORE:TAG).
     flightPlanRow("FREE", ROUND(CORE:VOLUME:FREESPACE,0) + " bytes").
     IF DEFINED MISSION {
@@ -64,13 +62,7 @@ GLOBAL FUNCTION flightPlanSequence {
         SET i TO j.
     }
     PRINT " ".
-    IF DEFINED printStorageStatus {
-        printStorageStatus().
-    } ELSE {
-        flightPlanSection("STORAGE").
-        flightPlanRow("FREE", ROUND(CORE:VOLUME:FREESPACE,0) + " bytes").
-        flightPlanRow("CAPACITY", ROUND(CORE:VOLUME:CAPACITY,0) + " bytes").
-    }
+    printStorageStatus().
     flightPlanLine().
 }
 

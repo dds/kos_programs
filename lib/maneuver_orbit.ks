@@ -279,13 +279,11 @@ LOCAL FUNCTION _payloadImpactHalt {
 }
 
 LOCAL FUNCTION _payloadNextPhase {
-    LOCAL current IS stateGet("phase", ""):TOUPPER.
-    IF DEFINED xferSeq {
-        FROM { LOCAL i IS 0. } UNTIL i >= xferSeq:LENGTH STEP { SET i TO i + 1. } DO {
-            IF xferSeq[i]:TOUPPER = current {
-                IF i + 1 < xferSeq:LENGTH { RETURN xferSeq[i + 1]:TOUPPER. }
-                RETURN "".
-            }
+    LOCAL current IS stateGet("phase", "").
+    FROM { LOCAL i IS 0. } UNTIL i >= xferSeq:LENGTH STEP { SET i TO i + 1. } DO {
+        IF xferSeq[i] = current {
+            IF i + 1 < xferSeq:LENGTH { RETURN xferSeq[i + 1]. }
+            RETURN "".
         }
     }
     RETURN "".
@@ -415,7 +413,7 @@ LOCAL FUNCTION _payloadClearDisposedStage {
     }
 
     LOCAL dirName IS "NORMAL".
-    IF CFG:HASKEY("PAYLOAD_CLEARANCE_DIR") { SET dirName TO CFG["PAYLOAD_CLEARANCE_DIR"]:TOUPPER. }
+    IF CFG:HASKEY("PAYLOAD_CLEARANCE_DIR") { SET dirName TO CFG["PAYLOAD_CLEARANCE_DIR"]. }
     LOCAL dirVec IS VCRS(SHIP:POSITION, SHIP:VELOCITY:ORBIT):NORMALIZED.
     IF dirName = "ANTINORMAL" {
         SET dirVec TO -dirVec.
@@ -730,7 +728,7 @@ LOCAL FUNCTION _scanSatClearDisposedStage {
 
     LOCAL dirName IS "NORMAL".
     IF CFG:HASKEY("SCANSAT_CLEARANCE_DIR") {
-        SET dirName TO CFG["SCANSAT_CLEARANCE_DIR"]:TOUPPER.
+        SET dirName TO CFG["SCANSAT_CLEARANCE_DIR"].
     }
     LOCAL dirVec IS VCRS(SHIP:POSITION, SHIP:VELOCITY:ORBIT):NORMALIZED.
     IF dirName = "ANTINORMAL" {

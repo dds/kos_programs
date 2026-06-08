@@ -255,7 +255,7 @@ GLOBAL FUNCTION planTransfer {
     LOCAL captureInc IS -1.
     LOCAL normalBias IS 0.
     IF CFG:HASKEY("CAPTURE_DIR") {
-        LOCAL dir IS CFG["CAPTURE_DIR"]:TOUPPER.
+        LOCAL dir IS CFG["CAPTURE_DIR"].
         IF dir = "PROGRADE"   { SET captureInc TO 0. }
         IF dir = "POLAR"      { SET captureInc TO 90.  SET normalBias TO 1. }
         IF dir = "RETROPOLAR" { SET captureInc TO 90.  SET normalBias TO -1. }
@@ -736,7 +736,7 @@ GLOBAL FUNCTION phaseMidCourse {
 
     // Resolve CAPTURE_DIR to inclination
     IF CFG:HASKEY("CAPTURE_DIR") {
-        LOCAL dir IS CFG["CAPTURE_DIR"]:TOUPPER.
+        LOCAL dir IS CFG["CAPTURE_DIR"].
         IF dir = "PROGRADE"   { SET targetInc TO 0. }
         IF dir = "POLAR"      { SET targetInc TO 90. }
         IF dir = "RETROPOLAR" { SET targetInc TO 90. }

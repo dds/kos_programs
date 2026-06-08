@@ -65,7 +65,7 @@ mLogWarn("STATS ksc-splash setup target="
     + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
     + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
 
-IF SHIP:BODY:NAME:TOUPPER <> "KERBIN" {
+IF SHIP:BODY:NAME <> "KERBIN" {
     PRINT "Not in Kerbin SOI yet.".
     mLogError("KSC splash aborted: current body is " + SHIP:BODY:NAME + ".").
     RETURN.

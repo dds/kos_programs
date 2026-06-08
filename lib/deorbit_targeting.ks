@@ -138,7 +138,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL coarseStopDist IS 1000.
     IF SHIP:BODY:ATM:EXISTS {
         SET coarseStopDist TO tolerance.
-    } ELSE IF SHIP:BODY:NAME:TOUPPER = "MUN" {
+    } ELSE IF SHIP:BODY:NAME = "MUN" {
         SET coarseStopDist TO 8000.
     }
     IF CFG:HASKEY("TARGET_DEORBIT_COARSE_STOP_DIST") {
@@ -313,11 +313,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL realNode IS _planDeorbitNode(bestUT, bestPe, bestRad, bestNor).
     mLog("Executing deorbit burn at T+" + ROUND(bestUT - TIME:SECONDS,0) + "s.").
-    IF DEFINED archivePlannedManeuverLog {
-        archivePlannedManeuverLog("targeted-deorbit").
-    } ELSE IF HOMECONNECTION:ISCONNECTED AND DEFINED archiveLog {
-        archiveLog().
-    }
+    archiveLog().
     HUDTEXT("Deorbit burn in " + ROUND(bestUT - TIME:SECONDS,0) + "s", 3, 2, 13, CYAN, FALSE).
 
     // Use lightweight burn executor from payload_landing (no maneuver.ks needed)

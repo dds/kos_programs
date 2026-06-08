@@ -23,7 +23,7 @@ LOCAL FUNCTION _loadLogs {
     } ELSE IF EXISTS("0:/lib/logs.ks") {
         RUNONCEPATH("0:/lib/logs.ks").
     }
-    IF DEFINED initLog { initLog(). }
+    initLog().
 }
 
 LOCAL FUNCTION _cfg {
@@ -125,10 +125,8 @@ PRINT "SIM LANDING TARGET".
 PRINT "  " + source.
 PRINT "  lat=" + ROUND(lat,4) + " lng=" + ROUND(lng,4).
 PRINT "  Phase -> LAND_DEORBIT".
-IF DEFINED mLogWarn {
-    mLogWarn("STATS sim-landing-target source=" + source
-        + " lat=" + ROUND(lat,4)
-        + " lng=" + ROUND(lng,4)).
-}
+mLogWarn("STATS sim-landing-target source=" + source
+    + " lat=" + ROUND(lat,4)
+    + " lng=" + ROUND(lng,4)).
 WAIT 1.
 REBOOT.

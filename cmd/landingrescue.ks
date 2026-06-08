@@ -7,14 +7,13 @@ PARAMETER phaseName IS "LAND_DEORBIT".
 LOCAL beforeFree IS CORE:VOLUME:FREESPACE.
 PRINT "Landing rescue: free before " + beforeFree + " bytes.".
 
-LOCAL phaseUpper IS phaseName:TOUPPER.
 LOCAL keepLibs IS LIST(
     "STATE", "LOGS", "FILES", "BOOT_LIB", "RESUME", "RECOVERY",
     "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE"
 ).
-IF phaseUpper = "LAND_ASSIST" {
+IF phaseName = "LAND_ASSIST" {
     keepLibs:ADD("LANDING_CARRIER").
-} ELSE IF phaseUpper = "LAND_DEORBIT" {
+} ELSE IF phaseName = "LAND_DEORBIT" {
     keepLibs:ADD("PAYLOAD_LANDING").
     keepLibs:ADD("LANDING_ASSIST").
     keepLibs:ADD("TARGETING").
@@ -33,9 +32,8 @@ LOCAL FUNCTION _deleteIfExists {
 
 LOCAL FUNCTION _baseName {
     PARAMETER fileName.
-    LOCAL upper IS fileName:TOUPPER.
-    IF upper:CONTAINS(".KSM") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
-    IF upper:CONTAINS(".KS") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
+    IF fileName:CONTAINS(".KSM") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    IF fileName:CONTAINS(".KS") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
     RETURN fileName.
 }
 
@@ -53,7 +51,7 @@ LOCAL FUNCTION _pruneDir {
     FOR item IN items {
         LOCAL path_ IS dirPath + "/" + item:NAME.
         IF item:ISFILE {
-            LOCAL base IS _baseName(item:NAME):TOUPPER.
+            LOCAL base IS _baseName(item:NAME).
             IF NOT keepNames:CONTAINS(base) {
                 IF _deleteIfExists(path_) { SET removed TO removed + 1. }
             }
@@ -95,19 +93,18 @@ IF EXISTS("1:/lib/state.ksm") {
 } ELSE IF EXISTS("1:/lib/state.ks") {
     RUNONCEPATH("1:/lib/state.ks").
 }
-IF DEFINED stateSet {
-    stateSet("phase", phaseUpper).
-    stateSet("reload_required", "false").
-    IF phaseUpper = "LAND_DEORBIT" {
-        stateSet("lib_band", "LAND_DEORBIT").
-    } ELSE IF phaseUpper = "LAND_ASSIST" {
-        stateSet("lib_band", "LAND_ASSIST").
-    } ELSE {
-        stateSet("lib_band", "LAND_ASSIST").
-    }
+stateInit().
+stateSet("phase", phaseName).
+stateSet("reload_required", "false").
+IF phaseName = "LAND_DEORBIT" {
+    stateSet("lib_band", "LAND_DEORBIT").
+} ELSE IF phaseName = "LAND_ASSIST" {
+    stateSet("lib_band", "LAND_ASSIST").
+} ELSE {
+    stateSet("lib_band", "LAND_ASSIST").
 }
 
 PRINT "Landing rescue: removed " + removed + " files.".
-PRINT "Landing rescue: phase -> " + phaseUpper + ".".
+PRINT "Landing rescue: phase -> " + phaseName + ".".
 PRINT "Landing rescue: free after  " + CORE:VOLUME:FREESPACE + " bytes.".
 PRINT "Run: REBOOT.".

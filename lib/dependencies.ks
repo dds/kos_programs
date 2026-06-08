@@ -1,7 +1,7 @@
 GLOBAL FUNCTION dependencyBindPhase {
     PARAMETER phaseMap.
     PARAMETER phaseName.
-    LOCAL phaseKey IS phaseName:TOUPPER.
+    LOCAL phaseKey IS phaseName.
     IF phaseKey = "PREFLIGHT" { phaseMapSet(phaseMap, "PREFLIGHT", phasePreflight@). }
     ELSE IF phaseKey = "FLIGHT" { phaseMapSet(phaseMap, "FLIGHT", phaseFlight@). }
     ELSE IF phaseKey = "POST_FLIGHT" { phaseMapSet(phaseMap, "POST_FLIGHT", phasePostFlight@). }
@@ -35,12 +35,7 @@ GLOBAL FUNCTION dependencyBindPhase {
 
 GLOBAL FUNCTION dependencyPhaseHandlers {
     LOCAL phaseMap IS LEXICON().
-    LOCAL phases IS LIST().
-    IF DEFINED bootLibBandPhases {
-        SET phases TO bootLibBandPhases(stateGet("lib_band", "")).
-    } ELSE {
-        phases:ADD(stateGet("phase", "")).
-    }
+    LOCAL phases IS bootLibBandPhases(stateGet("lib_band", "")).
     FOR phaseName IN phases {
         dependencyBindPhase(phaseMap, phaseName).
     }

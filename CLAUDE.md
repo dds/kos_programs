@@ -13,7 +13,7 @@ KerbalScript (.ks files) — a scripting language for the kOS mod. Not Python, n
 - `LOCK` binds a variable to a live expression (re-evaluated every tick)
 - `WHEN ... THEN { }` = async trigger (runs once when condition is true, use `PRESERVE.` to keep it armed)
 - `LEXICON()` = dictionary, `LIST()` = array
-- String methods: `:SPLIT()`, `:TOUPPER()`, `:TRIM()`, `:CONTAINS()`
+- String methods: `:SPLIT()`, `:TRIM()`, `:CONTAINS()`
 - All identifiers are case-insensitive
 
 ## Architecture
@@ -75,6 +75,7 @@ Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add cra
 - Liberal comments encouraged in `.ks` source files — they are compiled to KSM bytecode before upload, so comments have zero storage cost. Keep copied text files such as `dependencies.txt` compact.
 - Private functions: `LOCAL FUNCTION _name { }` (underscore prefix)
 - Public functions: `GLOBAL FUNCTION name { }` (camelCase)
+- kOS string comparisons are case-insensitive; do not add `TOUPPER`/`TOLOWER` just to compare strings.
 - Config: `GLOBAL CFG IS LEXICON(...)` at top of vehicle scripts
 - Logging: `mLog()`, `mLogWarn()`, `mLogError()`, `mLogPhase()`
 - State: `stateGet()` / `stateSet()` — never raw file I/O for mission state

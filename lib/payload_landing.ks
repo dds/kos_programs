@@ -4,8 +4,7 @@
 // ============================================================
 
 GLOBAL FUNCTION phaseLandDeorbit {
-    IF DEFINED fr3ApplyMissionProfile { fr3ApplyMissionProfile(). }
-    ELSE IF DEFINED landingApplyMissionConfig { landingApplyMissionConfig(). }
+    landingApplyMissionConfig().
     mLogWarn("STATS land-deorbit phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
@@ -166,13 +165,7 @@ GLOBAL FUNCTION executeDeorbitNode {
 }
 
 LOCAL FUNCTION _landingDeorbitPe {
-    IF DEFINED LANDING_CFG {
-        RETURN LANDING_CFG["DEORBIT_PE"].
-    }
-    IF CFG:HASKEY("LANDING_DEORBIT_PE") {
-        RETURN CFG["LANDING_DEORBIT_PE"].
-    }
-    RETURN -3000.
+    RETURN LANDING_CFG["DEORBIT_PE"].
 }
 
 LOCAL FUNCTION _confirmLandingTarget {
@@ -216,11 +209,9 @@ LOCAL FUNCTION _autoLandingTarget {
     SET LANDING_CFG["TARGET_LAT"] TO geo:LAT.
     SET LANDING_CFG["TARGET_LNG"] TO geo:LNG.
     SET LANDING_CFG["TARGET_LOCK"] TO TRUE.
-    IF DEFINED stateSet {
-        stateSet("mission_cfg_LANDING_TARGET_LAT", geo:LAT).
-        stateSet("mission_cfg_LANDING_TARGET_LNG", geo:LNG).
-        stateSet("mission_cfg_LANDING_TARGET_LOCK", "1").
-    }
+    stateSet("mission_cfg_LANDING_TARGET_LAT", geo:LAT).
+    stateSet("mission_cfg_LANDING_TARGET_LNG", geo:LNG).
+    stateSet("mission_cfg_LANDING_TARGET_LOCK", "1").
     mLogWarn("STATS landing target auto source=ground-track minutes="
         + ROUND(minutes,1)
         + " lat=" + ROUND(geo:LAT,4)
@@ -229,8 +220,7 @@ LOCAL FUNCTION _autoLandingTarget {
 }
 
 GLOBAL FUNCTION phaseLandAssist {
-    IF DEFINED fr3ApplyMissionProfile { fr3ApplyMissionProfile(). }
-    ELSE IF DEFINED landingApplyMissionConfig { landingApplyMissionConfig(). }
+    landingApplyMissionConfig().
     mLogWarn("STATS land-assist phase setup alt=" + ROUND(ALT:RADAR,1)
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)).
     IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
@@ -265,8 +255,7 @@ GLOBAL FUNCTION phaseLandAssist {
 }
 
 GLOBAL FUNCTION phaseLand {
-    IF DEFINED fr3ApplyMissionProfile { fr3ApplyMissionProfile(). }
-    ELSE IF DEFINED landingApplyMissionConfig { landingApplyMissionConfig(). }
+    landingApplyMissionConfig().
     mLogWarn("STATS land phase setup alt=" + ROUND(ALT:RADAR,1)
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " v=" + ROUND(SHIP:VERTICALSPEED,1)

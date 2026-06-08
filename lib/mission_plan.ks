@@ -36,7 +36,7 @@ GLOBAL FUNCTION missionPayloadsFromState {
 
 GLOBAL FUNCTION missionNormalizePayloadType {
     PARAMETER payloadName.
-    LOCAL result IS payloadName:TOUPPER.
+    LOCAL result IS payloadName.
     UNTIL result:LENGTH = 0 {
         LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
         IF last:MATCHESPATTERN("[0-9]") OR last = "-" {
@@ -50,9 +50,8 @@ GLOBAL FUNCTION missionNormalizePayloadType {
 
 GLOBAL FUNCTION missionHasPayload {
     PARAMETER payloadName.
-    LOCAL targetName IS payloadName:TOUPPER.
     FOR raw IN missionPayloadsFromState() {
-        IF missionNormalizePayloadType(raw) = targetName { RETURN TRUE. }
+        IF missionNormalizePayloadType(raw) = payloadName { RETURN TRUE. }
     }
     RETURN FALSE.
 }

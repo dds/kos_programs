@@ -20,9 +20,9 @@ LOCAL FUNCTION _loadState {
 
 _loadState().
 stateSet("mission_cfg_LANDING_ASSIST_DECOUPLER_TAG", tagName).
-stateSet("phase", phaseName:TOUPPER).
+stateSet("phase", phaseName).
 stateSet("reload_required", "false").
 stateSet("lib_band", "LAND_DEORBIT").
 
 PRINT "Landing decoupler tag -> " + tagName.
-PRINT "Phase -> " + phaseName:TOUPPER.
+PRINT "Phase -> " + phaseName.

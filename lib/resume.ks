@@ -21,13 +21,13 @@ GLOBAL FUNCTION missionPayloads {
 GLOBAL FUNCTION missionHas {
     PARAMETER typeStr.
     FOR p IN missionPayloads() {
-        IF p:TOUPPER = typeStr:TOUPPER { RETURN TRUE. }
+        IF p = typeStr { RETURN TRUE. }
     }
     RETURN FALSE.
 }
 
 GLOBAL FUNCTION missionTargetBody {
-    LOCAL t IS MISSION["target"]:TOUPPER.
+    LOCAL t IS MISSION["target"].
     IF t = "MUN"    { RETURN MUN.    }
     IF t = "MINMUS" { RETURN MINMUS. }
     IF t = "KERBIN" { RETURN KERBIN. }
@@ -57,7 +57,7 @@ GLOBAL FUNCTION resetBootCount {
 
 GLOBAL FUNCTION normalizePayloadType {
     PARAMETER raw.
-    LOCAL result IS raw:TOUPPER.
+    LOCAL result IS raw.
     UNTIL result:LENGTH = 0 {
         LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
         IF last:MATCHESPATTERN("[0-9]") OR last = "-" {
@@ -77,7 +77,7 @@ GLOBAL FUNCTION buildRocketSequence {
     IF CFG:HASKEY("RENDEZVOUS_TARGET") { SET needsRdv TO TRUE. }
     IF CFG:HASKEY("ASTEROID_TARGET") { SET needsRdv TO TRUE. }
     IF needsRdv { seq:ADD("RDV"). }
-    IF MISSION["target"]:TOUPPER <> "KERBIN" {
+    IF MISSION["target"] <> "KERBIN" {
         seq:ADD("XING").
         seq:ADD("MCC").
         seq:ADD("COAST").

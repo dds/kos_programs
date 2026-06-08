@@ -7,10 +7,9 @@ LOCAL removed IS 0.
 
 LOCAL FUNCTION _base {
     PARAMETER fileName.
-    LOCAL upper IS fileName:TOUPPER.
-    IF upper:CONTAINS(".KSM") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
-    IF upper:CONTAINS(".KS") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
-    IF upper:CONTAINS(".CFG") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    IF fileName:CONTAINS(".KSM") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    IF fileName:CONTAINS(".KS") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
+    IF fileName:CONTAINS(".CFG") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
     RETURN fileName.
 }
 
@@ -35,7 +34,7 @@ LOCAL FUNCTION _pruneDir {
 
     FOR item IN items {
         IF item:ISFILE {
-            LOCAL baseName IS _base(item:NAME):TOUPPER.
+            LOCAL baseName IS _base(item:NAME).
             IF NOT keepNames:CONTAINS(baseName) {
                 _deleteIfExists(dirPath + "/" + item:NAME).
             }

@@ -52,7 +52,7 @@ def main():
         "GLOBAL FUNCTION dependencyBindPhase {",
         "    PARAMETER phaseMap.",
         "    PARAMETER phaseName.",
-        "    LOCAL phaseKey IS phaseName:TOUPPER.",
+        "    LOCAL phaseKey IS phaseName.",
     ]
     for index, phase in enumerate(phases):
         fn = phase_function_name(phase)
@@ -63,12 +63,7 @@ def main():
         "",
         "GLOBAL FUNCTION dependencyPhaseHandlers {",
         "    LOCAL phaseMap IS LEXICON().",
-        "    LOCAL phases IS LIST().",
-        "    IF DEFINED bootLibBandPhases {",
-        '        SET phases TO bootLibBandPhases(stateGet("lib_band", "")).',
-        "    } ELSE {",
-        '        phases:ADD(stateGet("phase", "")).',
-        "    }",
+        '    LOCAL phases IS bootLibBandPhases(stateGet("lib_band", "")).',
         "    FOR phaseName IN phases {",
         "        dependencyBindPhase(phaseMap, phaseName).",
         "    }",

@@ -19,15 +19,8 @@ GLOBAL FUNCTION phaseMapSet {
 }
 
 GLOBAL FUNCTION phaseHandlerMap {
-    IF DEFINED bootLibRunFresh {
-        bootLibRunFresh("dependencies").
-    } ELSE IF DEFINED bootLibRun {
-        bootLibRun("dependencies").
-    }
-    IF DEFINED dependencyPhaseHandlers {
-        RETURN dependencyPhaseHandlers().
-    }
-    RETURN LEXICON().
+    bootLibRun("dependencies").
+    RETURN dependencyPhaseHandlers().
 }
 
 GLOBAL FUNCTION runPhases {
@@ -46,10 +39,7 @@ GLOBAL FUNCTION runPhases {
             RETURN.
         } ELSE {
             LOCAL loadedBand IS stateGet("lib_band", "").
-            LOCAL requiredBand IS "UNKNOWN".
-            IF DEFINED bootLibBandForPhase {
-                SET requiredBand TO bootLibBandForPhase(phase, "UNKNOWN").
-            }
+            LOCAL requiredBand IS bootLibBandForPhase(phase, "UNKNOWN").
             IF requiredBand = loadedBand {
                 mLogError("Phase " + phase + " handler missing in loaded band " + loadedBand + ".").
                 PRINT " ".

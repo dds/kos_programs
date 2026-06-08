@@ -45,11 +45,9 @@ LOCAL FUNCTION _cleanupShouldDeleteSource {
     PARAMETER path_.
     PARAMETER name_.
 
-    LOCAL upperName IS name_:TOUPPER.
-    LOCAL upperPath IS path_:TOUPPER.
-    IF NOT upperName:CONTAINS(".KS") { RETURN FALSE. }
-    IF upperName:CONTAINS(".KSM") { RETURN FALSE. }
-    IF upperPath = "1:/BOOT/BOOT.KS" { RETURN FALSE. }
+    IF NOT name_:CONTAINS(".KS") { RETURN FALSE. }
+    IF name_:CONTAINS(".KSM") { RETURN FALSE. }
+    IF path_ = "1:/BOOT/BOOT.KS" { RETURN FALSE. }
     RETURN TRUE.
 }
 

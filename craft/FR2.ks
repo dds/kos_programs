@@ -102,7 +102,7 @@ LOCAL FUNCTION _printConfig {
     IF CFG["LAUNCH_STAGE_LIMIT"] > 0 {
         flightPlanRow("MJ LIMIT", "stage " + CFG["LAUNCH_STAGE_LIMIT"]).
     }
-    IF MISSION["target"]:TOUPPER <> "KERBIN" {
+    IF MISSION["target"] <> "KERBIN" {
         flightPlanSection("TRANSFER").
         flightPlanRow("CAPTURE PE", ROUND(CFG["CAPTURE_PE"]/1000,0) + " km").
         IF CFG:HASKEY("CAPTURE_LAN") {

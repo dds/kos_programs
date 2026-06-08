@@ -266,7 +266,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     PRINT "  Mission: " + stateGet("mission_name", missionId).
     PRINT "  Target:  " + stateGet("target", "KERBIN").
     PRINT "  Payload: " + stateGet("payloads", "").
-    IF DEFINED printStorageStatus { printStorageStatus(). }
+    printStorageStatus().
     RETURN TRUE.
 }
 
@@ -287,7 +287,7 @@ GLOBAL FUNCTION bootMissionConfig {
 
 GLOBAL FUNCTION bootNormalizePhaseName {
     PARAMETER phaseName.
-    RETURN phaseName:TOUPPER.
+    RETURN phaseName.
 }
 
 GLOBAL FUNCTION bootIsLaunchStartPhase {
@@ -628,27 +628,6 @@ GLOBAL FUNCTION bootLibRun {
     }
 }
 
-GLOBAL FUNCTION bootLibRunFresh {
-    PARAMETER libName.
-    bootLibSync(libName).
-    LOCAL compiled IS "1:/lib/" + libName + ".ksm".
-    LOCAL cached IS "1:/lib/" + libName + ".ks".
-    LOCAL archive_ IS "0:/lib/" + libName + ".ks".
-    IF EXISTS(compiled) OR EXISTS(cached) {
-        RUNPATH("1:/lib/" + libName).
-        IF BOOT_LIB_RAN:CONTAINS(libName) = FALSE {
-            BOOT_LIB_RAN:ADD(libName).
-        }
-    } ELSE IF EXISTS(archive_) {
-        RUNPATH("0:/lib/" + libName).
-        IF BOOT_LIB_RAN:CONTAINS(libName) = FALSE {
-            BOOT_LIB_RAN:ADD(libName).
-        }
-    } ELSE {
-        PRINT "  WARN: " + libName + " unavailable".
-    }
-}
-
 GLOBAL FUNCTION bootLibSync {
     PARAMETER libName.
     IF NOT HOMECONNECTION:ISCONNECTED { RETURN. }
@@ -691,7 +670,7 @@ GLOBAL FUNCTION bootLibBandRoots {
     bootLibLoadSpec().
     LOCAL roots IS LIST().
     FOR libName IN BOOT_LIB_PREAMBLE { bootLibAddUnique(roots, libName). }
-    LOCAL bandKey IS band:TOUPPER.
+    LOCAL bandKey IS band.
     IF BOOT_LIB_BANDS:HASKEY(bandKey) {
         FOR phaseName IN BOOT_LIB_BANDS[bandKey] {
             FOR libName IN bootLibPhaseRoots(phaseName) { bootLibAddUnique(roots, libName). }
@@ -711,7 +690,7 @@ GLOBAL FUNCTION bootLibBandPhases {
     PARAMETER band.
     bootLibLoadSpec().
     LOCAL phases IS LIST().
-    LOCAL bandKey IS band:TOUPPER.
+    LOCAL bandKey IS band.
     IF BOOT_LIB_BANDS:HASKEY(bandKey) {
         FOR phaseName IN BOOT_LIB_BANDS[bandKey] {
             phases:ADD(phaseName).
@@ -730,7 +709,7 @@ GLOBAL FUNCTION bootLibBandForPhase {
     IF phaseKey = "" { RETURN defaultBand. }
     FOR bandKey IN BOOT_LIB_BANDS:KEYS {
         FOR bandPhase IN BOOT_LIB_BANDS[bandKey] {
-            IF bandPhase:TOUPPER = phaseKey { RETURN bandKey. }
+            IF bandPhase = phaseKey { RETURN bandKey. }
         }
     }
     IF defaultBand <> "" { RETURN defaultBand. }

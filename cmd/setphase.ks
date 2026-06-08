@@ -14,7 +14,7 @@ IF EXISTS("1:/lib/state.ksm") {
 
 stateInit().
 
-LOCAL phase_ IS phaseName:TRIM:TOUPPER.
+LOCAL phase_ IS phaseName:TRIM.
 LOCAL mission_ IS missionId:TRIM.
 IF mission_ = "" {
     SET mission_ TO stateGet("mission_id", "").

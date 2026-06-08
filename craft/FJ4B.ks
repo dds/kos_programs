@@ -18,7 +18,7 @@ LOCAL FUNCTION _hasSciencePayload {
     LOCAL rawPayloads IS stateGet("payloads", "").
     IF rawPayloads = "" { RETURN FALSE. }
     FOR ptype IN rawPayloads:SPLIT(",") {
-        IF ptype:TOUPPER = "SCIENCE" { RETURN TRUE. }
+        IF ptype = "SCIENCE" { RETURN TRUE. }
     }
     RETURN FALSE.
 }
@@ -49,7 +49,7 @@ GLOBAL FUNCTION main {
     SET launchSeq TO seq.
 
     FOR ptype IN missionPayloads() {
-        IF ptype:TOUPPER = "SCIENCE" { SET hasSciencePayload TO TRUE. }
+        IF ptype = "SCIENCE" { SET hasSciencePayload TO TRUE. }
     }
 
     mLogPhase("FJ4B MAIN").

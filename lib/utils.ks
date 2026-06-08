@@ -72,10 +72,9 @@ GLOBAL FUNCTION geoDistance {
 GLOBAL FUNCTION waypointNamed {
     PARAMETER waypointName.
     LOCAL allWps IS ALLWAYPOINTS().
-    LOCAL targetName IS waypointName:TOUPPER.
     FOR wp IN allWps {
         IF wp:BODY:NAME = SHIP:BODY:NAME {
-            IF wp:NAME:TOUPPER = targetName { RETURN wp. }
+            IF wp:NAME = waypointName { RETURN wp. }
         }
     }
     RETURN 0.

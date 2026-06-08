@@ -11,7 +11,7 @@ GLOBAL FUNCTION main {
     LOCAL trait IS "GENERIC".
     LOCAL kName IS SHIP:NAME.
     IF crew:LENGTH > 0 {
-        SET trait TO crew[0]:TRAIT:TOUPPER.
+        SET trait TO crew[0]:TRAIT.
         SET kName TO crew[0]:NAME.
     }
 
