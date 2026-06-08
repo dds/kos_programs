@@ -261,11 +261,12 @@ LOCAL FUNCTION _payloadImpactHalt {
 
 LOCAL FUNCTION _payloadNextPhase {
     LOCAL current IS stateGet("phase", ""):TOUPPER.
-    IF NOT DEFINED xferSeq { RETURN "". }
-    FROM { LOCAL i IS 0. } UNTIL i >= xferSeq:LENGTH STEP { SET i TO i + 1. } DO {
-        IF xferSeq[i]:TOUPPER = current {
-            IF i + 1 < xferSeq:LENGTH { RETURN xferSeq[i + 1]:TOUPPER. }
-            RETURN "".
+    IF DEFINED xferSeq {
+        FROM { LOCAL i IS 0. } UNTIL i >= xferSeq:LENGTH STEP { SET i TO i + 1. } DO {
+            IF xferSeq[i]:TOUPPER = current {
+                IF i + 1 < xferSeq:LENGTH { RETURN xferSeq[i + 1]:TOUPPER. }
+                RETURN "".
+            }
         }
     }
     RETURN "".
