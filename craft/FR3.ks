@@ -46,18 +46,6 @@ GLOBAL FUNCTION fr3SaveReloadState {
     stateSet("reload_next_band", fr3BandForPhase(nextPhaseName)).
 }
 
-GLOBAL FUNCTION fr3ApplyMissionProfile {
-    IF MISSION["target"] = "MUN" AND missionHasLandingPayload() {
-        IF DEFINED LAND_CFG {
-            SET LAND_CFG["DEORBIT_PE"] TO 5000.
-            SET LAND_CFG["TARGET_TOLERANCE"] TO 2500.
-            SET LAND_CFG["GUIDANCE_ALT"] TO 5000.
-        }
-    }
-
-    IF DEFINED landingApplyMissionConfig { landingApplyMissionConfig(). }
-}
-
 LOCAL FUNCTION _fr3PhaseParkingReload {
     phaseParking().
     fr3SaveReloadState("PARKING_ORBIT", stateGet("phase", "")).
@@ -155,7 +143,6 @@ GLOBAL BOOT_CLEANUP IS LEXICON(
 ).
 
 GLOBAL FUNCTION main {
-    fr3ApplyMissionProfile().
     LOCAL seq IS fr3BuildPhaseSequence().
     SET fr3Seq TO seq.
     SET launchSeq TO seq.
