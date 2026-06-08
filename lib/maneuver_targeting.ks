@@ -208,6 +208,7 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
 
     LOCAL minStep IS 0.02.
     LOCAL maxIter IS 80.
+    LOCAL minIter IS 0.
     LOCAL dvCap IS -1.
     LOCAL minTime IS TIME:SECONDS + 30.
 
@@ -217,6 +218,7 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
     IF opts:HASKEY("STEP_TIME")    { SET steps["TIME"]      TO opts["STEP_TIME"]. }
     IF opts:HASKEY("MIN_STEP")     { SET minStep            TO opts["MIN_STEP"]. }
     IF opts:HASKEY("MAX_ITER")     { SET maxIter            TO opts["MAX_ITER"]. }
+    IF opts:HASKEY("MIN_ITER")     { SET minIter            TO opts["MIN_ITER"]. }
     IF opts:HASKEY("DV_CAP")       { SET dvCap              TO opts["DV_CAP"]. }
     IF opts:HASKEY("MIN_TIME")     { SET minTime            TO opts["MIN_TIME"]. }
 
@@ -232,7 +234,7 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
         + " dvCap=" + ROUND(dvCap,1)).
 
     FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
-        IF _elementsConverged(best, targets) {
+        IF i >= minIter AND _elementsConverged(best, targets) {
             SET solved TO TRUE.
             mLog("  ELEMENTS[" + i + "] converged" + _elementStateSummary(best)).
             BREAK.
@@ -430,6 +432,15 @@ GLOBAL FUNCTION _patchElementsCostFromPatch {
     IF targets:HASKEY("AOP") {
         SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, targets["AOP"]).
         SET cost TO cost + (aopErr / 1.0)^2.
+    } ELSE IF targets:HASKEY("SOFT_AOP") {
+        LOCAL softAopTol IS 35.
+        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET softAopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+        LOCAL softAopScale IS MAX(5, softAopTol / 3).
+        SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, targets["SOFT_AOP"]).
+        SET cost TO cost + (aopErr / softAopScale)^2.
+        IF ABS(aopErr) > softAopTol {
+            SET cost TO cost + ((ABS(aopErr) - softAopTol) / softAopScale)^2 * 4.
+        }
     }
 
     LOCAL result IS LEXICON().
@@ -481,6 +492,7 @@ GLOBAL FUNCTION _elementTargetSummary {
     IF targets:HASKEY("INC") { SET msg TO msg + " INC=" + ROUND(targets["INC"], 1) + "°". }
     IF targets:HASKEY("LAN") { SET msg TO msg + " LAN=" + ROUND(targets["LAN"], 1) + "°". }
     IF targets:HASKEY("AOP") { SET msg TO msg + " AoP=" + ROUND(targets["AOP"], 1) + "°". }
+    IF targets:HASKEY("SOFT_AOP") { SET msg TO msg + " softAoP=" + ROUND(targets["SOFT_AOP"], 1) + "°". }
     RETURN msg.
 }
 
@@ -501,6 +513,7 @@ GLOBAL FUNCTION _elementErrorSummary {
     IF targets:HASKEY("INC") { SET msg TO msg + " IncErr=" + ROUND(eval["INC_ERR"], 2) + "°". }
     IF targets:HASKEY("LAN") { SET msg TO msg + " LanErr=" + ROUND(eval["LAN_ERR"], 2) + "°". }
     IF targets:HASKEY("AOP") { SET msg TO msg + " AopErr=" + ROUND(eval["AOP_ERR"], 2) + "°". }
+    IF targets:HASKEY("SOFT_AOP") { SET msg TO msg + " SoftAopErr=" + ROUND(eval["AOP_ERR"], 2) + "°". }
     RETURN msg.
 }
 

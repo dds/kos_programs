@@ -304,6 +304,7 @@ GLOBAL FUNCTION planTransfer {
         planeTargets:ADD("PE", targetPe).
         planeTargets:ADD("PE_FLOOR", -25000).
         IF captureInc >= 0 { planeTargets:ADD("INC", captureInc). }
+        IF aopTarget >= 0 { planeTargets:ADD("SOFT_AOP", aopTarget). }
 
         LOCAL planeOpts IS LEXICON().
         planeOpts:ADD("STEP_NORMAL", 40.0).
@@ -312,6 +313,7 @@ GLOBAL FUNCTION planTransfer {
         planeOpts:ADD("STEP_TIME", 60.0).
         planeOpts:ADD("MIN_STEP", 0.05).
         planeOpts:ADD("MAX_ITER", 120).
+        IF aopTarget >= 0 { planeOpts:ADD("MIN_ITER", 40). }
         mLogWarn("STATS elements stage=plane-pe-inc before angular targeting.").
         LOCAL planeResult IS _targetPatchElementsCoupled(nd, targetBody, planeTargets, planeOpts).
         IF planeResult:HASKEY("SOLVED") AND NOT planeResult["SOLVED"] {
@@ -329,6 +331,7 @@ GLOBAL FUNCTION planTransfer {
             lanTargets:ADD("PE_FLOOR", -25000).
             IF captureInc >= 0 { lanTargets:ADD("INC", captureInc). }
             lanTargets:ADD("LAN", lanTarget).
+            IF aopTarget >= 0 { lanTargets:ADD("SOFT_AOP", aopTarget). }
 
             LOCAL lanOpts IS LEXICON().
             lanOpts:ADD("STEP_NORMAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
@@ -337,6 +340,7 @@ GLOBAL FUNCTION planTransfer {
             lanOpts:ADD("STEP_TIME", 60.0).
             lanOpts:ADD("MIN_STEP", 0.05).
             lanOpts:ADD("MAX_ITER", 100).
+            IF aopTarget >= 0 { lanOpts:ADD("MIN_ITER", 30). }
             mLogWarn("STATS elements stage=lan after plane-pe-inc.").
             LOCAL lanResult IS _targetPatchElementsCoupled(nd, targetBody, lanTargets, lanOpts).
             IF lanResult:HASKEY("SOLVED") AND NOT lanResult["SOLVED"] {
