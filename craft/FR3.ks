@@ -273,6 +273,7 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("maneuver_orbit").
         libs:ADD("maneuver").
         libs:ADD("maneuver_targeting").
+        libs:ADD("countdown").
         libs:ADD("inclination").
         libs:ADD("orbit").
     } ELSE IF band = "PAYLOAD_OPS" {
