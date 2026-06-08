@@ -85,13 +85,13 @@ GLOBAL FUNCTION phaseTransfer {
         LOCAL transferNode IS planTransfer(target, CFG["CAPTURE_PE"], xLan, xAoP).
         IF transferNode = 0 OR NOT transferNode:ISTYPE("Node") {
             SET retries TO retries + 1.
-            mLogError("Transfer planning failed (attempt " + retries + ").").
+            mLogError("Transfer planning failed; yielding for manual control.").
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-            IF retries >= MAX_RETRIES {
-                mLogError("Transfer failed after " + retries + " planning attempts — halting.").
-                RETURN.
-            }
-            WAIT 10.
+            PRINT " ".
+            PRINT "  TRANSFER PLANNING FAILED".
+            PRINT "  No maneuver was executed. Manual control is available.".
+            yieldToPrompt().
+            RETURN.
         } ELSE {
             mLog("Transfer planned.").
             SET success TO executeManeuver().
