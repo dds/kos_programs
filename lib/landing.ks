@@ -97,6 +97,21 @@ LOCAL FUNCTION _timeToImpact {
     RETURN (SQRT(disc) + vs) / g.
 }
 
+// Target descent speed (positive, m/s) based on radar altitude.
+// Schedule: >1000m = 20, 100-1000 = lerp 20->8, 10-100 = lerp 8->3, <10 = touchdown
+LOCAL FUNCTION _descentSpeed {
+    PARAMETER alt_.
+    IF alt_ > 1000 { RETURN 20. }
+    IF alt_ > 100 {
+        RETURN 8 + (alt_ - 100) / 900 * 12.
+    }
+    IF alt_ > LAND_CFG["UPRIGHT_ALT"] {
+        RETURN LAND_CFG["TOUCHDOWN_SPEED"] + (alt_ - LAND_CFG["UPRIGHT_ALT"])
+            / (100 - LAND_CFG["UPRIGHT_ALT"]) * (8 - LAND_CFG["TOUCHDOWN_SPEED"]).
+    }
+    RETURN LAND_CFG["TOUCHDOWN_SPEED"].
+}
+
 // Horizontal surface velocity vector (surface velocity minus vertical component)
 LOCAL FUNCTION _hVel {
     LOCAL upVec IS SHIP:UP:VECTOR.
@@ -274,21 +289,32 @@ GLOBAL FUNCTION landExecute {
     }
     IF landingAbortFlag { _landCleanup(). RETURN. }
 
-    mLog("Hover transition. Alt=" + ROUND(ALT:RADAR,0)
+    mLog("Hover descent. Alt=" + ROUND(ALT:RADAR,0)
         + "m  vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s.").
 
-    // Phase 4: Hover transition — constant-decel throttle to UPRIGHT_ALT
-    UNTIL ALT:RADAR <= LAND_CFG["UPRIGHT_ALT"] OR landingAbortFlag {
-        LOCK STEERING TO _hoverSteering().
+    // Phase 4: Controlled descent to touchdown
+    // Target vspeed schedule based on altitude:
+    //   > 1000m  ->  -20 m/s   (fast descent)
+    //   100-1000 ->  lerp -20 to -8 m/s
+    //   10-100   ->  lerp -8 to -3 m/s
+    //   < 10m    ->  -TOUCHDOWN_SPEED (final creep)
+    UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" OR landingAbortFlag {
+        LOCAL alt_ IS ALT:RADAR.
+        LOCAL targetVs IS -_descentSpeed(alt_).
+
+        // Below 10m go pure vertical; above that lean to kill hvel
+        IF alt_ <= LAND_CFG["UPRIGHT_ALT"] {
+            LOCK STEERING TO SHIP:UP.
+        } ELSE {
+            LOCK STEERING TO _hoverSteering().
+        }
+
         LOCAL acc IS _maxAcc().
+        LOCAL g IS _grav().
         IF acc > 0 {
-            LOCAL alt_ IS ALT:RADAR - LAND_CFG["UPRIGHT_ALT"].
-            LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
-            LOCAL g IS _grav().
-            // Desired decel to reach TOUCHDOWN_SPEED at UPRIGHT_ALT
-            LOCAL desiredDecel IS (spd^2 - LAND_CFG["TOUCHDOWN_SPEED"]^2) / (2 * MAX(1, alt_)).
-            LOCAL thrott IS (desiredDecel + g) / acc.
-            LOCK THROTTLE TO MAX(0.05, MIN(1.0, thrott)).
+            LOCAL vs IS SHIP:VERTICALSPEED.
+            LOCAL err IS targetVs - vs.
+            LOCK THROTTLE TO MAX(0, MIN(1.0, (g / acc) + (err * 0.3))).
         }
 
         IF _needsStage() {
@@ -298,28 +324,8 @@ GLOBAL FUNCTION landExecute {
             WAIT 0.5.
         }
 
-        HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
-            + ROUND(SHIP:VERTICALSPEED,1) + "m/s",
-            1, 2, 13, GREEN, FALSE).
-        WAIT 0.05.
-    }
-    IF landingAbortFlag { _landCleanup(). RETURN. }
-
-    // Phase 5: Upright — point UP, hover at grav/maxAcc until touchdown
-    mLog("Final descent. Alt=" + ROUND(ALT:RADAR,0) + "m.").
-    LOCK STEERING TO SHIP:UP.
-    UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" OR landingAbortFlag {
-        LOCAL acc IS _maxAcc().
-        LOCAL g IS _grav().
-        IF acc > 0 {
-            // Target descent at TOUCHDOWN_SPEED
-            LOCAL vs IS SHIP:VERTICALSPEED.
-            LOCAL err IS (-LAND_CFG["TOUCHDOWN_SPEED"]) - vs.
-            LOCAL thrott IS (g / acc) + (err * 0.15).
-            LOCK THROTTLE TO MAX(0, MIN(1.0, thrott)).
-        }
-        HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
-            + ROUND(SHIP:VERTICALSPEED,1) + "m/s",
+        HUDTEXT("Alt:" + ROUND(alt_,0) + "m  Vspd:"
+            + ROUND(SHIP:VERTICALSPEED,1) + "/" + ROUND(targetVs,1) + "m/s",
             1, 2, 13, GREEN, FALSE).
         WAIT 0.05.
     }
