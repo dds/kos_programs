@@ -338,6 +338,57 @@ GLOBAL FUNCTION _patchElementsCost {
     RETURN _patchElementsCostFromPatch(p, targets).
 }
 
+GLOBAL FUNCTION _transferSeedScore {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    PARAMETER captureInc.
+    PARAMETER lanTarget.
+    PARAMETER aopTarget.
+    PARAMETER caDist IS 0.
+    PARAMETER dvMag IS 0.
+
+    LOCAL p IS _getTargetPatch(nd, targetBody).
+    LOCAL score IS (caDist / 100000)^2 + dvMag * 0.01.
+    LOCAL peErr IS 9999999.
+    LOCAL incErr IS 999.
+    LOCAL lanErr IS 999.
+    LOCAL aopErr IS 999.
+    LOCAL hasPatch IS FALSE.
+
+    IF p = 0 {
+        SET score TO score + 1000000.
+    } ELSE {
+        SET hasPatch TO TRUE.
+        SET peErr TO p:PERIAPSIS - targetPe.
+        SET score TO score + (peErr / 50000)^2.
+
+        IF captureInc >= 0 {
+            SET incErr TO _angleError(p:INCLINATION, captureInc).
+            SET score TO score + (incErr / 2.0)^2.
+        }
+        IF lanTarget >= 0 {
+            SET lanErr TO _angleError(p:LAN, lanTarget).
+            SET score TO score + (lanErr / 2.0)^2.
+        }
+        IF aopTarget >= 0 {
+            SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, aopTarget).
+            SET score TO score + (aopErr / 2.0)^2.
+        }
+    }
+
+    RETURN LEXICON(
+        "SCORE", score,
+        "PATCH", hasPatch,
+        "CA", caDist,
+        "DV", dvMag,
+        "PE_ERR", peErr,
+        "INC_ERR", incErr,
+        "LAN_ERR", lanErr,
+        "AOP_ERR", aopErr
+    ).
+}
+
 GLOBAL FUNCTION _patchElementsCostFromPatch {
     PARAMETER p.
     PARAMETER targets.

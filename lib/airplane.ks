@@ -1,5 +1,5 @@
 // ============================================================
-// plane.ks  —  Aircraft autopilot library  (0:/lib/plane.ks)
+// airplane.ks - Aircraft autopilot library (0:/lib/airplane.ks)
 // ============================================================
 
 GLOBAL PLANE_CFG IS LEXICON(

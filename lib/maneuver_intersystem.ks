@@ -6,7 +6,9 @@
 GLOBAL FUNCTION planInterplanetaryTransfer {
     PARAMETER targetBody.
     PARAMETER targetPe.
+    PARAMETER captureInc.
     PARAMETER lanTarget.
+    PARAMETER aopTarget.
     PARAMETER centralBody.
     PARAMETER mu.
 
@@ -19,9 +21,10 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL bestDv IS 9999999.
     LOCAL bestDepart IS -1.
     LOCAL bestArrive IS -1.
+    LOCAL bestScore IS 999999999.
+    LOCAL bestIncErr IS 999.
     LOCAL bestLanErr IS 999.
-    LOCAL lanTol IS 0.5.
-    IF CFG:HASKEY("LAN_ERR_TOL") { SET lanTol TO CFG["LAN_ERR_TOL"]. }
+    LOCAL bestAopErr IS 999.
 
     mLog("Lambert scan: " + nDepart + " departures x " + nTof
         + " TOFs, hohmannTof=" + ROUND(hohmannTof,0) + "s").
@@ -29,7 +32,9 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + " departSamples=" + nDepart
         + " tofSamples=" + nTof
         + " hohmannTof=" + ROUND(hohmannTof,0)
-        + " lanTarget=" + ROUND(lanTarget,1)).
+        + " incTarget=" + ROUND(captureInc,1)
+        + " lanTarget=" + ROUND(lanTarget,1)
+        + " aopTarget=" + ROUND(aopTarget,1)).
 
     FROM { LOCAL di IS 0. } UNTIL di >= nDepart STEP { SET di TO di + 1. } DO {
         LOCAL departUt IS TIME:SECONDS + 60 + di * shipPeriod.
@@ -47,41 +52,33 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
             LOCAL dvVec IS v1Lambert - v1Ship.
             LOCAL dvMag IS dvVec:MAG.
 
-            IF dvMag < bestDv * 1.05 {
-                LOCAL lanErr IS 999.
-                IF lanTarget >= 0 {
-                    LOCAL v2Lambert IS result["v2"].
-                    LOCAL captureNormal IS VCRS(r2, v2Lambert):NORMALIZED.
-                    LOCAL northPole IS V(0, 1, 0).
-                    LOCAL nodeVec IS VCRS(northPole, captureNormal):NORMALIZED.
-                    LOCAL estimatedLan IS ARCTAN2(nodeVec:Y, nodeVec:X).
-                    IF estimatedLan < 0 { SET estimatedLan TO estimatedLan + 360. }
-                    SET lanErr TO lanTarget - estimatedLan.
-                    IF lanErr > 180 { SET lanErr TO lanErr - 360. }
-                    IF lanErr < -180 { SET lanErr TO lanErr + 360. }
-                }
+            LOCAL progradeHat_ IS v1Ship:NORMALIZED.
+            LOCAL normalHat_ IS VCRS(r1, progradeHat_):NORMALIZED.
+            LOCAL radialHat_ IS VCRS(normalHat_, progradeHat_):NORMALIZED.
+            LOCAL dvPro_ IS VDOT(dvVec, progradeHat_).
+            LOCAL dvNor_ IS VDOT(dvVec, normalHat_).
+            LOCAL dvRad_ IS VDOT(dvVec, radialHat_).
+            LOCAL candNode IS NODE(departUt, dvRad_, dvNor_, dvPro_).
+            ADD candNode.
+            WAIT 0.01.
+            LOCAL seedEval IS _transferSeedScore(candNode, targetBody, targetPe, captureInc, lanTarget, aopTarget, 0, dvMag).
+            REMOVE candNode.
 
-                LOCAL betterSolution IS FALSE.
-                IF lanTarget < 0 {
-                    IF dvMag < bestDv { SET betterSolution TO TRUE. }
-                } ELSE {
-                    IF ABS(lanErr) < ABS(bestLanErr) AND dvMag < bestDv * 1.10 {
-                        SET betterSolution TO TRUE.
-                    }
-                    IF ABS(lanErr) <= lanTol AND dvMag < bestDv {
-                        SET betterSolution TO TRUE.
-                    }
-                }
-
-                IF betterSolution {
-                    SET bestDv TO dvMag.
-                    SET bestDepart TO departUt.
-                    SET bestArrive TO arriveUt.
-                    SET bestLanErr TO lanErr.
-                    mLog("Lambert[d=" + di + ",t=" + ti + "] dV="
-                        + ROUND(dvMag,1) + " LAN err=" + ROUND(lanErr,1)
-                        + " depart T+" + ROUND(departUt - TIME:SECONDS,0) + "s").
-                }
+            IF seedEval["SCORE"] < bestScore {
+                SET bestDv TO dvMag.
+                SET bestDepart TO departUt.
+                SET bestArrive TO arriveUt.
+                SET bestScore TO seedEval["SCORE"].
+                SET bestIncErr TO seedEval["INC_ERR"].
+                SET bestLanErr TO seedEval["LAN_ERR"].
+                SET bestAopErr TO seedEval["AOP_ERR"].
+                mLog("Lambert[d=" + di + ",t=" + ti + "] dV="
+                    + ROUND(dvMag,1)
+                    + " score=" + ROUND(bestScore,2)
+                    + " incErr=" + ROUND(bestIncErr,1)
+                    + " LAN err=" + ROUND(bestLanErr,1)
+                    + " AoP err=" + ROUND(bestAopErr,1)
+                    + " depart T+" + ROUND(departUt - TIME:SECONDS,0) + "s").
             }
         }
     }
@@ -95,12 +92,18 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     mLog("Lambert best: depart T+" + ROUND(bestDepart - TIME:SECONDS,0)
         + "s  tof=" + ROUND(bestArrive - bestDepart,0)
         + "s  dV=" + ROUND(bestDv,1)
-        + "  LAN err=" + ROUND(bestLanErr,1)).
+        + "  score=" + ROUND(bestScore,2)
+        + "  INC err=" + ROUND(bestIncErr,1)
+        + "  LAN err=" + ROUND(bestLanErr,1)
+        + "  AoP err=" + ROUND(bestAopErr,1)).
     mLogWarn("STATS lambert result target=" + targetBody:NAME
         + " status=grid-best departT=" + ROUND(bestDepart - TIME:SECONDS,0)
         + " tof=" + ROUND(bestArrive - bestDepart,0)
         + " dv=" + ROUND(bestDv,1)
-        + " lanErr=" + ROUND(bestLanErr,1)).
+        + " score=" + ROUND(bestScore,2)
+        + " incErr=" + ROUND(bestIncErr,1)
+        + " lanErr=" + ROUND(bestLanErr,1)
+        + " aopErr=" + ROUND(bestAopErr,1)).
 
     LOCAL r1Best IS POSITIONAT(SHIP, bestDepart) - centralBody:POSITION.
     LOCAL r2Best IS POSITIONAT(targetBody, bestArrive) - centralBody:POSITION.
@@ -134,7 +137,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         mLog("Encounter confirmed. Pe=" + ROUND(patch:PERIAPSIS/1000, 1) + "km").
     }
 
-    IF lanTarget >= 0 {
+    IF lanTarget >= 0 AND aopTarget < 0 {
         SET nd TO _scanForLan(nd, targetBody, lanTarget, SHIP:ORBIT:PERIOD).
     }
 

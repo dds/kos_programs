@@ -5,6 +5,7 @@
 
 GLOBAL FUNCTION phaseLandDeorbit {
     IF DEFINED fr3ApplyMissionProfile { fr3ApplyMissionProfile(). }
+    ELSE IF DEFINED landingApplyMissionConfig { landingApplyMissionConfig(). }
     mLogWarn("STATS land-deorbit phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
@@ -229,6 +230,7 @@ LOCAL FUNCTION _autoLandingTarget {
 
 GLOBAL FUNCTION phaseLandAssist {
     IF DEFINED fr3ApplyMissionProfile { fr3ApplyMissionProfile(). }
+    ELSE IF DEFINED landingApplyMissionConfig { landingApplyMissionConfig(). }
     mLogWarn("STATS land-assist phase setup alt=" + ROUND(ALT:RADAR,1)
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)).
     IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
@@ -263,6 +265,8 @@ GLOBAL FUNCTION phaseLandAssist {
 }
 
 GLOBAL FUNCTION phaseLand {
+    IF DEFINED fr3ApplyMissionProfile { fr3ApplyMissionProfile(). }
+    ELSE IF DEFINED landingApplyMissionConfig { landingApplyMissionConfig(). }
     mLogWarn("STATS land phase setup alt=" + ROUND(ALT:RADAR,1)
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " v=" + ROUND(SHIP:VERTICALSPEED,1)

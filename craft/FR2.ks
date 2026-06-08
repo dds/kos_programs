@@ -63,7 +63,7 @@ LOCAL FUNCTION _buildSequence {
     orbitPhases:ADD("INCLINE").
     IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
             AND CFG["SCANSAT_RELEASE_AFTER_CAPTURE"] > 0 {
-        SET orbitPhases TO LIST("SCANSAT_IMPACT_RELEASE").
+        SET orbitPhases TO LIST("DROP_FOR_IMPACT_AND_RAISE_PE").
     }
 
     LOCAL payloadPhases IS LEXICON(
@@ -159,31 +159,10 @@ LOCAL FUNCTION _phaseDeploySat {
 }
 
 LOCAL FUNCTION _buildPhaseMap {
-    RETURN LEXICON(
-        "LUNCH",            phaseLaunch@,
-        "FAIR",             phaseFairing@,
-        "ANTS",             phaseExtendAnts@,
-        "PARK",             phaseParking@,
-        "RDV",              phaseRendezvous@,
-        "XING",             phaseTransfer@,
-        "MCC",              phaseMidCourse@,
-        "COAST",            phaseCoast@,
-        "CAPTURE",          phaseCapture@,
-        "CIRC",             phaseCirc@,
-        "RAISE",            phaseRaiseAlt@,
-        "INCLINE",          phaseInclCorrect@,
-        "ELLIPTICAL",       phaseElliptical@,
-        "TARGETED_DEORBIT", phaseTargetedDeorbit@,
-        "RELEASE_PROBE",    phaseReleaseProbe@,
-        "RECIRC",           _phaseRecirc@,
-        "RELAY_OPS",        phaseRelayOps@,
-        "SCANSAT_IMPACT_RELEASE", phaseScanSatImpactRelease@,
-        "SCANSAT_OPS",      phaseScanSatOps@,
-        "DEPLOY_SAT",       _phaseDeploySat@,
-        "LAND_DEORBIT",     phaseLandDeorbit@,
-        "LAND_ASSIST",      phaseLandAssist@,
-        "LAND",             phaseLand@
-    ).
+    LOCAL phaseMap IS phaseHandlerMap().
+    phaseMapSet(phaseMap, "RECIRC", _phaseRecirc@).
+    phaseMapSet(phaseMap, "DEPLOY_SAT", _phaseDeploySat@).
+    RETURN phaseMap.
 }
 
 GLOBAL FUNCTION main {

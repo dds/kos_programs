@@ -1,5 +1,5 @@
 GLOBAL FUNCTION bootEnsureDirs {
-    FOR p IN LIST("1:/lib","1:/boot","1:/logs","1:/state","1:/cmd","1:/craft","1:/roles","1:/missions") {
+    FOR p IN LIST("1:/lib","1:/boot","1:/logs","1:/state","1:/cmd","1:/craft","1:/roles") {
         IF NOT EXISTS(p) { CREATEDIR(p). }
     }
 }
@@ -133,13 +133,15 @@ GLOBAL FUNCTION bootBaseName {
     IF upper:CONTAINS(".KSM") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
     IF upper:CONTAINS(".KS") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
     IF upper:CONTAINS(".CFG") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    IF upper:CONTAINS(".TXT") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
     RETURN fileName.
 }
 
 GLOBAL FUNCTION bootPruneLibs {
     PARAMETER wantedLibs.
     LOCAL keep IS LIST(
-        "STATE", "LOGS", "FILES", "BOOT_CORE", "MISSION_PLAN",
+        "STATE", "LOGS", "FILES", "BOOT_CORE", "MISSION_PLAN", "BOOT_LIB",
+        "DEPENDENCIES",
         "CONFIG", "RESUME"
     ).
     FOR lib IN wantedLibs {
@@ -165,13 +167,11 @@ GLOBAL FUNCTION bootMissionConfigIds {
     PARAMETER craftName.
     PARAMETER hasLink.
     LOCAL ids IS LIST().
-    LOCAL cfgDir IS "1:/missions/" + craftName.
     LOCAL archiveDir IS "0:/missions/" + craftName.
-    IF hasLink AND EXISTS(archiveDir) { SET cfgDir TO archiveDir. }
-    IF NOT EXISTS(cfgDir) { RETURN ids. }
+    IF NOT hasLink OR NOT EXISTS(archiveDir) { RETURN ids. }
     LOCAL startPath IS PATH().
     LOCAL items IS LIST().
-    CD(cfgDir).
+    CD(archiveDir).
     LIST FILES IN items.
     CD(startPath).
     FOR item IN items {
@@ -228,8 +228,7 @@ GLOBAL FUNCTION bootMissionConfigPath {
     PARAMETER missionId.
     PARAMETER hasLink.
     LOCAL archivePath IS "0:/missions/" + craftName + "/" + missionId + ".cfg".
-    IF hasLink AND EXISTS(archivePath) { RETURN archivePath. }
-    RETURN "1:/missions/" + craftName + "/" + missionId + ".cfg".
+    RETURN archivePath.
 }
 
 GLOBAL FUNCTION bootApplyMissionConfig {
@@ -279,20 +278,6 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     PRINT "  Target:  " + stateGet("target", "KERBIN").
     PRINT "  Payload: " + stateGet("payloads", "").
     RETURN TRUE.
-}
-
-GLOBAL FUNCTION bootPruneMissionConfigs {
-    PARAMETER craftName.
-    LOCAL cfgDir IS "1:/missions/" + craftName.
-    IF NOT EXISTS(cfgDir) { RETURN. }
-    LOCAL startPath IS PATH().
-    LOCAL items IS LIST().
-    CD(cfgDir).
-    LIST FILES IN items.
-    CD(startPath).
-    FOR item IN items {
-        IF item:ISFILE { DELETEPATH(cfgDir + "/" + item:NAME). }
-    }
 }
 
 GLOBAL FUNCTION bootMissionConfig {

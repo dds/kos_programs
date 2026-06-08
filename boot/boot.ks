@@ -38,6 +38,16 @@ LOCAL FUNCTION _syncLib {
     }
 }
 
+LOCAL FUNCTION _syncLibText {
+    PARAMETER fileName.
+    IF NOT HAS_LINK { RETURN. }
+    LOCAL src IS "0:/lib/" + fileName.
+    LOCAL dst IS "1:/lib/" + fileName.
+    IF EXISTS(src) {
+        COPYPATH(src, dst).
+    }
+}
+
 LOCAL FUNCTION _loadLib {
     PARAMETER libName.
     IF EXISTS("1:/lib/" + libName + ".ksm") {
@@ -54,7 +64,8 @@ _ensureDir("1:/state").
 _ensureDir("1:/logs").
 IF HAS_LINK {
     PRINT "  SYNC core ......... ".
-    FOR lib IN LIST("state", "logs", "files", "config", "boot_core", "mission_plan") { _syncLib(lib). }
+    FOR lib IN LIST("state", "logs", "files", "config", "boot_core", "mission_plan", "boot_lib") { _syncLib(lib). }
+    _syncLibText("dependencies.txt").
     IF EXISTS("0:/VERSION") {
         COPYPATH("0:/VERSION", "1:/state/code_version.state").
     }
@@ -71,6 +82,7 @@ _loadLib("files").
 _loadLib("config").
 _loadLib("boot_core").
 _loadLib("mission_plan").
+_loadLib("boot_lib").
 
 bootEnsureDirs().
 LOCAL vehicleInfo IS bootVehicleInfo().
@@ -124,7 +136,6 @@ IF HAS_LINK {
         PRINT "  SYNC " + vehicleScript + " ....... ".
         bootSyncScript(vehicleScript, HAS_LINK).
         bootMissionConfig(vehicleName, HAS_LINK).
-        bootPruneMissionConfigs(vehicleName).
     }
 }
 

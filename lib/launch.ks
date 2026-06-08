@@ -16,6 +16,13 @@ LOCAL FUNCTION _ascentTwr {
     RETURN SHIP:AVAILABLETHRUST / (SHIP:MASS * 9.81).
 }
 
+LOCAL FUNCTION _launchCfgNum {
+    PARAMETER key.
+    PARAMETER defaultValue.
+    IF CFG:HASKEY(key) { RETURN CFG[key]. }
+    RETURN defaultValue.
+}
+
 LOCAL FUNCTION _logAscentTelemetry {
     PARAMETER reason.
     mLogWarn("STATS launch telemetry reason=" + reason
@@ -58,20 +65,24 @@ GLOBAL FUNCTION phaseLaunch {
     LOCAL mjCore IS ADDONS:MJ:CORE.
     mLog("MechJeb core running: " + mjCore:RUNNING).
 
+    LOCAL parkingAlt IS _launchCfgNum("PARKING_ALT", 80000).
+    LOCAL launchInc IS _launchCfgNum("LAUNCH_INCLINATION", 0).
+    LOCAL launchAzimuth IS _launchCfgNum("LAUNCH_AZIMUTH", 0).
+
     LOCAL asc IS ADDONS:MJ:ASCENT.
     SET asc:ENABLED               TO TRUE.
-    SET asc:DESIREDALTITUDE       TO CFG["PARKING_ALT"].
-    SET asc:DESIREDINCLINATION    TO CFG["LAUNCH_INCLINATION"].
+    SET asc:DESIREDALTITUDE       TO parkingAlt.
+    SET asc:DESIREDINCLINATION    TO launchInc.
     SET asc:AUTOSTAGE             TO FALSE.
-    SET asc:AUTOSTAGELIMIT        TO CFG["LAUNCH_STAGE_LIMIT"].
+    SET asc:AUTOSTAGELIMIT        TO 0.
     SET asc:AUTODEPLOYANTENNAS    TO FALSE.
     SET asc:AUTODEPLOYSOLARPANELS TO FALSE.
     SET asc:AUTOWARP              TO FALSE.
     SET asc:SKIPCIRCULARIZATION   TO FALSE.
 
-    mLog("MechJeb ascent armed. Alt=" + ROUND(CFG["PARKING_ALT"]/1000,0)
-        + "km  inc=" + CFG["LAUNCH_INCLINATION"]
-        + "°  az=" + CFG["LAUNCH_AZIMUTH"] + "°").
+    mLog("MechJeb ascent armed. Alt=" + ROUND(parkingAlt/1000,0)
+        + "km  inc=" + launchInc
+        + "°  az=" + launchAzimuth + "°").
 
     WHEN stateGet("phase","") = "LUNCH" OR stateGet("phase","") = "PARK" THEN {
         LOCAL abortTriggered IS FALSE.
@@ -143,10 +154,10 @@ GLOBAL FUNCTION phaseFairing {
         nextPhase(launchSeq).
         RETURN.
     }
-    LOCAL fairingAlt IS CFG["FAIRING_ALT"].
+    LOCAL fairingAlt IS _launchCfgNum("FAIRING_ALT", 71500).
     IF fairingAlt < 10000 {
-        mLogWarn("Unsafe FAIRING_ALT=" + fairingAlt + "m; using 70000m.").
-        SET fairingAlt TO 70000.
+        mLogWarn("Unsafe FAIRING_ALT=" + fairingAlt + "m; using 71500m.").
+        SET fairingAlt TO 71500.
     }
     IF SHIP:ALTITUDE < fairingAlt {
         mLog("Waiting for fairing alt " + ROUND(fairingAlt/1000,0) + "km...").
@@ -157,10 +168,10 @@ GLOBAL FUNCTION phaseFairing {
 }
 
 GLOBAL FUNCTION phaseExtendAnts {
-    LOCAL extendAlt IS CFG["EXTEND_ALT"].
+    LOCAL extendAlt IS _launchCfgNum("EXTEND_ALT", 73000).
     IF extendAlt < 10000 {
-        mLogWarn("Unsafe EXTEND_ALT=" + extendAlt + "m; using 72000m.").
-        SET extendAlt TO 72000.
+        mLogWarn("Unsafe EXTEND_ALT=" + extendAlt + "m; using 73000m.").
+        SET extendAlt TO 73000.
     }
     IF SHIP:ALTITUDE < extendAlt {
         mLog("Waiting for deploy alt " + ROUND(extendAlt/1000,0) + "km...").
@@ -223,7 +234,7 @@ GLOBAL FUNCTION armAscentStaging {
             mLog("Ascent complete post-staging, raising Pe now.").
             LOCK STEERING TO SHIP:PROGRADE.
             LOCK THROTTLE TO 1.
-            WAIT UNTIL SHIP:PERIAPSIS >= CFG["PARKING_ALT"] * 0.95.
+            WAIT UNTIL SHIP:PERIAPSIS >= _launchCfgNum("PARKING_ALT", 80000) * 0.95.
             LOCK THROTTLE TO 0.
             UNLOCK THROTTLE.
             UNLOCK STEERING.
@@ -294,7 +305,7 @@ GLOBAL FUNCTION ascentNeedsStage {
 }
 
 LOCAL FUNCTION _isParkingOrbitStable {
-    LOCAL target IS CFG["PARKING_ALT"].
+    LOCAL target IS _launchCfgNum("PARKING_ALT", 80000).
     LOCAL tol IS target * 0.10.
     RETURN SHIP:PERIAPSIS > (target - tol)
         AND SHIP:APOAPSIS < (target + tol)

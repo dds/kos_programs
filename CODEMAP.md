@@ -2,9 +2,9 @@
 
 ## Boot And Mission Selection
 
-- `boot/boot.ks` is the small VAB-installed loader. It syncs core libraries, loads `lib/boot_core.ks` and `lib/mission_plan.ks`, resolves the craft/role script, and dispatches resume/manual mode.
+- `boot/boot.ks` is the small VAB-installed loader. It syncs core libraries and `lib/dependencies.txt`, loads `lib/boot_core.ks`, `lib/mission_plan.ks`, and `lib/boot_lib.ks`, resolves the craft/role script, and dispatches resume/manual mode.
 - `lib/boot_core.ks` parses the vessel name, stores `vessel_name`, `vehicle`, `target`, and `payloads` in state, reads mission profiles from the archive when connected, and prunes stale local `1:/missions` files after persisting config into state.
-- `lib/mission_plan.ks` owns mission `SEQUENCE` parsing and the phase-to-library dependency map. Craft scripts use it to derive `LIBS` from the selected profile while keeping `boot_core.ks` focused on boot mechanics.
+- `lib/mission_plan.ks` owns mission `SEQUENCE` parsing and payload helpers. `lib/boot_lib.ks` expands library dependencies from `lib/dependencies.txt`, where agents can edit `PREAMBLE`, `LIB`, `PHASE`, and `BAND` roots one line at a time.
 - Dash-separated vessel names still act as legacy `vehicle-target-payload` hints; space-separated friendly names use the first word as the vehicle id and rely on mission profiles/state for mission details.
 - `lib/boot_core.ks` prunes stale local `1:/lib` files before syncing the selected `LIBS`, so progressive reloads actually free storage.
 - `cmd/cleanup.ks` / `lib/cleanup.ks` can be run manually to delete local source `.ks` files except `1:/boot/boot.ks` and clear local logs when an older flight computer is out of space.
@@ -26,16 +26,14 @@ Base FR3 libraries:
 - `orbit` - orbit summaries and SOI waits.
 - `deorbit_targeting` - Trajectories-powered targeted deorbit.
 - `payload_landing` - minimal landing phase wrappers for landing-only missions.
+- `core` - dependency marker for state, phases, config, mission planning, utils, and ui.
+- `mission_plan` - sequence parsing and generic payload classification helpers.
 - `utils` - small shared helpers.
 - `ui` - small terminal formatting helpers.
-- `fr3_payload` - FR3 payload classification helpers.
-- `fr3_profile` - FR3 mission profile tweaks.
-- `fr3_sequence` - FR3 sequence construction and phase map.
 
 Profile-only FR3 libraries:
 
-- `flightplan` - shared flight-plan/checklist renderer, loaded by FR3 only for launch confirmation.
-- `fr3_ui` - launch confirmation display, loaded only in the launch band.
+- `flightplan` - shared flight-plan/checklist renderer.
 - `lib_term` - KSLib terminal drawing helpers, available in the archive for future positioned terminal widgets but not loaded by FR3 yet.
 - `payload_ops` - loaded for probe, relay, SCANsat, or SCISAT payloads. SCANsat can either deploy first or ride the carrier onto an impact Pe, release, stage, and recover itself.
 - `science` - loaded only for `SCANSAT`/`SCISAT` payloads.
@@ -47,21 +45,20 @@ Profile-only FR3 libraries:
 
 FR3 progressive library bands:
 
-- `LAUNCH`: `fr3_payload`, `fr3_profile`, `fr3_sequence`, `fr3_ui`, `launch`, `countdown`, `orbit`, and landing support for landing payloads. Stops after `PARK` when `RELOAD_AFTER_PARK=1`.
-- `TRANSFER`: `fr3_payload`, `fr3_profile`, `fr3_sequence`, `xfer`, `countdown`, `maneuver`, `inclination`, `orbit`, and optional Lambert/rendezvous libraries.
-- `PAYLOAD_OPS`: FR3 mission runtime plus probe, relay, or SCANsat operation libraries only.
-- `LAND_ASSIST`: FR3 mission runtime, targeted deorbit, and assist-stage release, including maneuver countdown support.
-- `LAND`: FR3 mission runtime plus full powered landing, including maneuver countdown support.
-- `ROVER`: FR3 mission runtime plus rover driving/co-pilot code.
-- SCANsat profiles can insert `SCANSAT_IMPACT_RELEASE` after capture while still in the transfer band, lowering the attached carrier's Pe before releasing and recovering the mapper.
+- `LAUNCH`: roots are declared in `lib/dependencies.txt` and expand through `bootLibResolve`. FR3 always stops after `PARK` to reload the transfer band.
+- `TRANSFER`: roots are declared in `lib/dependencies.txt`; FR3 conditionally adds intersystem or rendezvous roots.
+- `PAYLOAD_OPS`: core mission preconditions plus probe, relay, or SCANsat operation libraries only.
+- `LAND_ASSIST`: core mission preconditions, targeted deorbit, and assist-stage release, including maneuver countdown support.
+- `LAND`: core mission preconditions plus full powered landing, including maneuver countdown support.
+- `ROVER`: core mission preconditions plus rover driving/co-pilot code.
+- SCANsat profiles can insert `DROP_FOR_IMPACT_AND_RAISE_PE` after capture while still in the transfer band, lowering the attached carrier's Pe before releasing and recovering the mapper.
 - Band/reload state is saved via `state.ks` as `lib_band`, `lib_band_phase`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, and `reload_next_band`.
 
 Mission profile files:
 
 - `missions/FR3/*.cfg` - data-only FR3 mission profiles. Plain `FR3` can select one on the launch pad; legacy `FR3-MUN-...` names still work as fallback.
 - `missions/FR3/mun_rover_emergency_surface.cfg` - emergency mode that soft-lands the second stage and releases the rover on the surface.
-- `craft/FR3.ks` - slim vehicle entry point. It keeps default CFG, ascent sanity checks, boot-time phase-band/library selection, cleanup metadata, and `main()`.
-- `lib/fr3_*.ks` - compiled FR3 mission runtime modules. Profile, sequence, payload classification, and launch UI are separate so bands can load only what they need.
+- `craft/FR3.ks` - FR3 vehicle entry point. It keeps default CFG, ascent sanity checks, mission profile tweaks, sequence construction, phase map, boot-time phase-band/library selection, cleanup metadata, and `main()`.
 
 ## Biggest Files
 

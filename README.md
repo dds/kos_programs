@@ -27,13 +27,16 @@ missions/
     FR3/*.cfg            Data-only mission profiles selectable by plain FR3
 lib/
     boot_core.ks         Boot helpers: mission selection, pruning, resume
+    boot_lib.ks          Dependency resolver for libs, phases, and bands
+    dependencies.txt     Text dependency roots for PREAMBLE, LIB, PHASE, BAND
+    core.ks              Marker root for state + phases + config
     phases.ks            Generic phase machine (runPhases, nextPhase)
     launch.ks            Reusable ascent phases (launch, fairing, parking)
     xfer.ks              Transfer/arrival phases (transfer, coast, capture, circ)
     state.ks             Persistent JSON key-value store (survives reboots)
     logs.ks              Flight logging with fault persistence
     files.ks             Storage status and directory listing
-    mission_plan.ks      Mission SEQUENCE parsing and phase-to-library planning
+    mission_plan.ks      Mission SEQUENCE parsing and payload helpers
     resume.ks            MISSION lexicon, auto-resume logic, operator helpers
     maneuver.ks          Maneuver execution + transfer/capture/circ planning
     maneuver_targeting.ks  Shared targeting helpers for transfer/MCC planners
@@ -125,12 +128,12 @@ Mission profiles own the phase sequence. A profile says what mission steps happe
 Boot derives the required libraries from `SEQUENCE` for simple craft. Profiles can still override or extend boot-time library choices when needed:
 
 ```
-SEQUENCE = LUNCH,FAIR,ANTS,PARK,XING,MCC,COAST,CAPTURE,SCANSAT_IMPACT_RELEASE,SCANSAT_OPS,DONE
+SEQUENCE = LUNCH,FAIR,ANTS,PARK,XING,MCC,COAST,CAPTURE,DROP_FOR_IMPACT_AND_RAISE_PE,SCANSAT_OPS,DONE
 LIBS = phases,flightplan,launch,xfer,maneuver,orbit,payload_ops,science
 LIBS_EXTRA = observe
 ```
 
-`LIBS` is an escape hatch that replaces the craft fallback or sequence-derived library list for simple craft such as FR2. `LIBS_EXTRA` appends mission-specific libraries to the computed list. FR3 uses a more advanced banded loader instead of a single static `LIBS` line; its selected profile still controls the loaded code through payloads, `SEQUENCE`, phase state, reload flags, and optional `LIBS_EXTRA`.
+`LIBS` is an escape hatch that replaces the craft fallback or sequence-derived library list for simple craft such as FR2. `LIBS_EXTRA` appends mission-specific libraries to the computed list. FR3 uses a more advanced banded loader instead of a single static `LIBS` line; its selected profile still controls the loaded code through payloads, `SEQUENCE`, phase state, reload flags, and optional `LIBS_EXTRA`. The boot-time dependency resolver in `lib/boot_lib.ks` reads `lib/dependencies.txt`, where `PREAMBLE` declares roots loaded for every phase/band, `LIB` rows declare library dependencies, `PHASE` rows declare sequence roots, and `BAND` rows declare minimum band roots.
 
 On boot, `lib/boot_core.ks` reads mission profiles from `0:/missions/<craft>` when a KSC link is available, falling back to cached `1:/missions/<craft>` files only when offline. After a profile is selected, the key/value config is persisted into state and stale local mission config files are pruned so they do not occupy flight-computer storage.
 
@@ -138,9 +141,9 @@ Vessel names can be friendly. Dash-separated names such as `FR3-MUN-SCANSAT-01` 
 
 While the vessel is still prelaunch, `lib/boot_core.ks` clears any saved mission profile and profile config before selecting a mission. This lets you reboot on the pad after choosing the wrong profile and get the mission picker again. Once launched, in-flight reboots keep the saved mission and phase state.
 
-FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only launch/countdown/orbit plus landing support when needed; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Rover landing missions then reload again after assist-stage release for full `landing.ks`, and after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
+FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only the launch band roots and their declared dependencies; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Rover landing missions then reload again after assist-stage release for full `landing.ks`, and after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
 
-`craft/FR3.ks` is intentionally kept small enough to fit comfortably on the primary kOS volume. Boot compiles the selected craft script to `1:/craft/*.ksm` and deletes the local source copy when connected. Mission profile tweaks, sequence construction, phase mapping, payload classification, and launch confirmation display live in small `lib/fr3_*.ks` modules. FR3 keeps its boot-time band/library planning in the craft script because it must run before the selected band libraries load.
+`craft/FR3.ks` keeps FR3-specific mission profile tweaks, sequence construction, phase mapping, and boot-time band selection together because they are preconditions for every FR3 band. Payload classification is generic in `lib/mission_plan.ks`, and dependency expansion is delegated to `lib/boot_lib.ks`. FR3 launch UI is intentionally deferred for a later redesign.
 
 Important in-flight constraint: `boot/boot.ks` itself is installed on the kOS processor in the VAB/SPH and cannot be updated remotely during a mission. Remote reboots can load updated mission configs, craft scripts, commands, and libraries from the archive, including `lib/boot_core.ks` and `lib/mission_plan.ks` after the installed boot has synced them once. Any fix that changes the installed boot stub must be applied before launch or by another VAB-side update path.
 
@@ -330,8 +333,8 @@ These are ready-made phases you can drop into your phase map:
 
 **From `launch.ks`** (needs: `maneuver`, `countdown`, `orbit`):
 - `phaseLaunch@` — MechJeb ascent, staging, abort monitoring
-- `phaseFairing@` — jettison tagged `main_fairing` at `CFG["FAIRING_ALT"]`
-- `phaseExtendAnts@` — deploy panels/antennas at `CFG["EXTEND_ALT"]`
+- `phaseFairing@` — jettison tagged `main_fairing` at `FAIRING_ALT`, default 71.5 km
+- `phaseExtendAnts@` — deploy panels/antennas at `EXTEND_ALT`, default 73 km
 - `phaseParking@` — wait for stable parking orbit
 
 All call `nextPhase(launchSeq)` — set `launchSeq` to your sequence before calling `runPhases()`.
@@ -399,15 +402,11 @@ Ship name: `LANDER-MUN`
 // LANDER.ks — Mun/Minmus lander
 GLOBAL CFG IS LEXICON(
     "PARKING_ALT",       80000,
-    "FAIRING_ALT",       60000,
-    "EXTEND_ALT",        65000,
     "CAPTURE_PE",        15000,
     "RELAY_ALT",         20000,
     "TARGET_INCLINATION", 0,
-    "CIRC_ECC_TOL",      0.01,
     "LAUNCH_INCLINATION", 0,
-    "LAUNCH_AZIMUTH",     0,
-    "LAUNCH_STAGE_LIMIT", 0
+    "LAUNCH_AZIMUTH",     0
 ).
 
 LOCAL DEFAULT_SEQ IS LIST(
@@ -502,10 +501,7 @@ Ship name: `TUG-MUN` (starts in orbit, no ascent phases)
 GLOBAL CFG IS LEXICON(
     "CAPTURE_PE",        20000,
     "RELAY_ALT",         50000,
-    "TARGET_INCLINATION", 0,
-    "CIRC_ECC_TOL",      0.005,
-    "INCL_TOLERANCE",    0.01,
-    "MAX_INCL_CHANGE_DV", 200
+    "TARGET_INCLINATION", 0
 ).
 
 LOCAL DEFAULT_SEQ IS LIST(

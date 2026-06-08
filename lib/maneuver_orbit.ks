@@ -6,17 +6,27 @@
 // phaseRaiseAlt              — raise Pe/Ap to target ellipse or relay alt
 // phaseInclCorrect           — correct orbital inclination
 // phaseElliptical            — unified PE/INC/LAN/AoP hill-climb solver
-// phaseScanSatImpactRelease  — SCANsat disposal + release + recovery
+// phaseDropForImpactAndRaisePe — lower payload Pe, release, then recover carrier Pe
 // ============================================================
 
 LOCAL MAX_RETRIES IS 5.
+LOCAL DEFAULT_CIRC_ECC_TOL IS 0.005.
+LOCAL DEFAULT_INCL_TOLERANCE IS 0.01.
+LOCAL DEFAULT_MAX_INCL_CHANGE_DV IS 300.
+
+LOCAL FUNCTION _orbitCfgNum {
+    PARAMETER key.
+    PARAMETER defaultValue.
+    IF CFG:HASKEY(key) { RETURN CFG[key]. }
+    RETURN defaultValue.
+}
 
 GLOBAL FUNCTION phaseCirc {
     IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
             AND CFG["SCANSAT_RELEASE_AFTER_CAPTURE"] > 0 {
-        mLog("CIRC redirected to SCANsat impact/release profile.").
-        stateSet("phase", "SCANSAT_IMPACT_RELEASE").
-        phaseScanSatImpactRelease().
+        mLog("CIRC redirected to drop-for-impact recovery profile.").
+        stateSet("phase", "DROP_FOR_IMPACT_AND_RAISE_PE").
+        phaseDropForImpactAndRaisePe().
         RETURN.
     }
 
@@ -25,7 +35,7 @@ GLOBAL FUNCTION phaseCirc {
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
     IF _impactThreat() {
-        LOCAL safePe IS CFG["PARKING_ALT"].
+        LOCAL safePe IS _orbitCfgNum("PARKING_ALT", 80000).
         IF CFG:HASKEY("CAPTURE_PE") AND CFG["CAPTURE_PE"] > safePe {
             SET safePe TO CFG["CAPTURE_PE"].
         }
@@ -47,7 +57,7 @@ GLOBAL FUNCTION phaseCirc {
                 WAIT 10.
             }
         }
-    } ELSE IF SHIP:ORBIT:ECCENTRICITY < CFG["CIRC_ECC_TOL"] {
+    } ELSE IF SHIP:ORBIT:ECCENTRICITY < _orbitCfgNum("CIRC_ECC_TOL", DEFAULT_CIRC_ECC_TOL) {
         mLog("Already circular (ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4) + ").").
         SET circStatus TO "skipped".
     } ELSE {
@@ -74,6 +84,15 @@ GLOBAL FUNCTION phaseCirc {
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
     nextPhase(xferSeq).
+}
+
+GLOBAL FUNCTION phaseDropForImpactAndRaisePe {
+    IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
+            AND CFG["SCANSAT_RELEASE_AFTER_CAPTURE"] > 0 {
+        phaseScanSatImpactRelease().
+        RETURN.
+    }
+    phasePayloadImpactRelease().
 }
 
 GLOBAL FUNCTION phaseScanSatImpactRelease {
@@ -178,7 +197,7 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
 LOCAL FUNCTION _scanSatImpactHalt {
     PARAMETER reason.
     mLogError("SCANsat impact/release halted: " + reason + ".").
-    stateSet("phase", "SCANSAT_IMPACT_RELEASE").
+    stateSet("phase", "DROP_FOR_IMPACT_AND_RAISE_PE").
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     PRINT " ".
@@ -248,7 +267,7 @@ GLOBAL FUNCTION phasePayloadImpactRelease {
 LOCAL FUNCTION _payloadImpactHalt {
     PARAMETER reason.
     mLogError("Payload impact/release halted: " + reason + ".").
-    stateSet("phase", "PAYLOAD_IMPACT_RELEASE").
+    stateSet("phase", "DROP_FOR_IMPACT_AND_RAISE_PE").
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     PRINT " ".
@@ -898,9 +917,11 @@ LOCAL FUNCTION _releaseTaggedPayloadXfer {
 GLOBAL FUNCTION phaseInclCorrect {
     LOCAL targetInc IS resolveTargetInclination().
     LOCAL currentInc IS SHIP:ORBIT:INCLINATION.
+    LOCAL inclTol IS _orbitCfgNum("INCL_TOLERANCE", DEFAULT_INCL_TOLERANCE).
+    LOCAL maxInclDv IS _orbitCfgNum("MAX_INCL_CHANGE_DV", DEFAULT_MAX_INCL_CHANGE_DV).
     mLogWarn("STATS incline phase setup current=" + ROUND(currentInc,2)
         + " target=" + ROUND(targetInc,2)
-        + " tol=" + CFG["INCL_TOLERANCE"]).
+        + " tol=" + inclTol).
 
     IF currentInc > 90 AND targetInc < 90 {
         mLogWarn("Retrograde orbit detected (inc=" + ROUND(currentInc,1)
@@ -916,7 +937,7 @@ GLOBAL FUNCTION phaseInclCorrect {
     }
 
     LOCAL deltaInc IS ABS(currentInc - targetInc).
-    IF deltaInc <= CFG["INCL_TOLERANCE"] {
+    IF deltaInc <= inclTol {
         mLog("Inclination within tolerance — skipping.").
         mLogWarn("STATS incline phase result status=skipped current="
             + ROUND(currentInc,2)
@@ -931,7 +952,7 @@ GLOBAL FUNCTION phaseInclCorrect {
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     planInclinationChange(targetInc).
 
-    IF NEXTNODE:DELTAV:MAG > CFG["MAX_INCL_CHANGE_DV"] {
+    IF NEXTNODE:DELTAV:MAG > maxInclDv {
         mLogWarn("Inclination correction would cost " + ROUND(NEXTNODE:DELTAV:MAG,0)
             + "m/s — exceeds MAX_INCL_CHANGE_DV. Skipping.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }

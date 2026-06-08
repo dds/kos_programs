@@ -19,7 +19,7 @@ KerbalScript (.ks files) — a scripting language for the kOS mod. Not Python, n
 ## Architecture
 
 ### Boot chain
-`boot/boot.ks` → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → syncs core libs (`state`, `logs`, `files`, `boot_core`, `mission_plan`) → loads core libs → `_resolveScript()` checks `roles/` and `craft/` dirs (then root fallback) for CORE:TAG or vehicle script → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
+`boot/boot.ks` → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → syncs core libs (`state`, `logs`, `files`, `config`, `boot_core`, `mission_plan`, `boot_lib`) plus `dependencies.txt` → loads core libs → resolves `roles/` and `craft/` scripts for CORE:TAG or vehicle script → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
 
 ### CORE:TAG routing (multi-CPU ships)
 If `CORE:TAG` is non-empty, boot resolves the tag via `_resolveScript()` checking `roles/` then `craft/` then root. Each processor has its own `1:/` volume so state is naturally isolated. Untagged CPUs always load the vehicle script from `craft/`.
@@ -50,9 +50,9 @@ On first boot (or when phase is LAUNCH), FR2 shows a flight plan summary listing
 - Files must be copied from archive to local before use in flight
 
 ### Mission sequence and LIBS convention
-Mission profiles own `SEQUENCE`: the ordered mission steps. Craft scripts own the phase map: how this craft executes those named steps with its hardware. `lib/mission_plan.ks` translates a selected `SEQUENCE` into the libraries boot should sync and load.
+Mission profiles own `SEQUENCE`: the ordered mission steps. Craft scripts own the phase map: how this craft executes those named steps with its hardware. `lib/mission_plan.ks` handles sequence parsing and payload helpers. `lib/boot_lib.ks` reads `lib/dependencies.txt` to expand library dependencies and band roots.
 
-For simple craft, declare `GLOBAL LIBS IS missionSequenceLibs(...)` with a legacy fallback list. Use profile `LIBS = ...` only as an escape hatch; otherwise derive libraries from `SEQUENCE` and append extras with `LIBS_EXTRA`.
+For simple craft, declare `GLOBAL LIBS IS missionSequenceLibs(...)` with a legacy fallback list. Use profile `LIBS = ...` only as an escape hatch; otherwise derive libraries from `SEQUENCE` and append extras with `LIBS_EXTRA`. Edit `lib/dependencies.txt` one line at a time for shared dependency updates.
 
 ### State persistence
 JSON file at `1:/state/state.json` via `lib/state.ks`. Survives reboots. Use `stateGet(key, default)` / `stateSet(key, value)`.
@@ -95,7 +95,8 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 | `state.ks` | Persistent JSON key-value store |
 | `logs.ks` | Flight logging with fault persistence |
 | `files.ks` | Storage status and directory listing |
-| `mission_plan.ks` | Mission `SEQUENCE` parsing and phase-to-library planning |
+| `boot_lib.ks` / `dependencies.txt` | Text-driven preamble, library dependency, phase root, and band root expansion |
+| `mission_plan.ks` | Mission `SEQUENCE` parsing and payload helpers |
 | `resume.ks` | MISSION lexicon, operator helpers, resumeMission(), buildRocketSequence() |
 | `maneuver.ks` | Maneuver node execution with dynamic throttle. planTransfer (LAN via multi-orbit scan, PE via Newton on dV), planCapture, planCircularize, planAoPChange, phaseMidCourse |
 | `lambert.ks` | Lambert solver (RSVP port, GPL-3.0). lambertSolve(r1,r2,tof,mu,flip), orbitalStateVectors. For future interplanetary use |
