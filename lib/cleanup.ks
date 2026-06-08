@@ -54,23 +54,23 @@ LOCAL FUNCTION _cleanupShouldDeleteSource {
 LOCAL FUNCTION _cleanupClearLogs {
     LOCAL removed IS 0.
 
-    IF EXISTS("1:/state/log_path.state") {
-        LOCAL logPath IS OPEN("1:/state/log_path.state"):READALL:STRING:TRIM.
+    IF EXISTS("1:/run/log_path.state") {
+        LOCAL logPath IS OPEN("1:/run/log_path.state"):READALL:STRING:TRIM.
         IF logPath <> "" AND EXISTS(logPath) {
             DELETEPATH(logPath).
             SET removed TO removed + 1.
         }
-        DELETEPATH("1:/state/log_path.state").
+        DELETEPATH("1:/run/log_path.state").
         SET removed TO removed + 1.
     }
 
-    IF EXISTS("1:/logs") {
-        SET removed TO removed + _cleanupRemoveAllFiles("1:/logs/").
+    IF EXISTS("1:/run") {
+        SET removed TO removed + _cleanupRemoveLogFiles("1:/run/").
     }
     RETURN removed.
 }
 
-LOCAL FUNCTION _cleanupRemoveAllFiles {
+LOCAL FUNCTION _cleanupRemoveLogFiles {
     PARAMETER path_.
 
     LOCAL removed IS 0.
@@ -85,10 +85,12 @@ LOCAL FUNCTION _cleanupRemoveAllFiles {
     FOR item IN items {
         LOCAL itemPath IS path_ + item:NAME.
         IF item:ISFILE {
-            DELETEPATH(itemPath).
-            SET removed TO removed + 1.
+            IF item:NAME:CONTAINS(".LOG") OR item:NAME:CONTAINS(".log") {
+                DELETEPATH(itemPath).
+                SET removed TO removed + 1.
+            }
         } ELSE {
-            SET removed TO removed + _cleanupRemoveAllFiles(itemPath + "/").
+            SET removed TO removed + _cleanupRemoveLogFiles(itemPath + "/").
         }
     }
     RETURN removed.

@@ -2,10 +2,11 @@
 // state.ks  —  Persistent mission state  (0:/lib/state.ks)
 // ============================================================
 
-LOCAL STATE_PATH  IS "1:/state/state.json".
+LOCAL STATE_PATH  IS "1:/run/state.json".
 LOCAL _cache      IS LEXICON().
 
 GLOBAL FUNCTION stateInit {
+    IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
     IF EXISTS(STATE_PATH) {
         LOCAL raw IS OPEN(STATE_PATH):READALL:STRING:TRIM.
         IF raw <> "" {

@@ -5,7 +5,7 @@
 GLOBAL OBS_CFG IS LEXICON(
     "INTERVAL",   120,
     "MIN_FREE",  2000,
-    "STOP_FILE", "1:/state/obs_off"
+    "STOP_FILE", "1:/run/obs_off"
 ).
 
 GLOBAL obsActive IS FALSE.
@@ -16,7 +16,7 @@ GLOBAL FUNCTION observeStart {
     IF EXISTS(OBS_CFG["STOP_FILE"]) { DELETEPATH(OBS_CFG["STOP_FILE"]). }
     LOCAL ts IS ROUND(TIME:SECONDS).
     LOCAL safeName IS SHIP:NAME:REPLACE(" ","_").
-    SET obsLogPath TO "1:/logs/obs_" + safeName + "_" + ts + ".log".
+    SET obsLogPath TO "1:/run/obs_" + safeName + "_" + ts + ".log".
     SET obsActive TO TRUE.
     SET obsNextTime TO TIME:SECONDS.
     _observeLog().

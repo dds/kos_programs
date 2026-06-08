@@ -29,6 +29,6 @@ _del("1:/lib/payload_ops.ksm").
 _del("1:/lib/science.ksm").
 _del("1:/lib/landing.ksm").
 _del("1:/lib/rover.ksm").
-_del("1:/state/log_path.state").
+_del("1:/run/log_path.state").
 
 REBOOT.

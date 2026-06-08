@@ -54,10 +54,10 @@ Mission profiles own `SEQUENCE`: the ordered mission steps. `lib/boot_lib.ks` re
 
 For craft and roles, define `GLOBAL FUNCTION bootVehicleLibs { RETURN ... . }`. Use profile `LIBS = ...` only as an escape hatch; otherwise derive libraries from `SEQUENCE` and append extras with `LIBS_EXTRA`. Edit `lib/dependencies.txt` one line at a time for shared dependency updates. Keep it comment-free and compact because it is copied as text to the probe core.
 
-Mission profile `.cfg` files are not copied to the probe core. Boot reads them from `0:/missions/<craft>/` when connected, parses the selected profile once, and persists the values into `1:/state/state.json`.
+Mission profile `.cfg` files are not copied to the probe core. Boot reads them from `0:/missions/<craft>/` when connected, parses the selected profile once, and persists the values into `1:/run/state.json`.
 
 ### State persistence
-JSON file at `1:/state/state.json` via `lib/state.ks`. Survives reboots. Use `stateGet(key, default)` / `stateSet(key, value)`.
+JSON file at `1:/run/state.json` via `lib/state.ks`. Survives reboots. Use `stateGet(key, default)` / `stateSet(key, value)`.
 
 ### Phase machine (`lib/phases.ks`)
 - `runPhases(phaseMap)` — main loop. Takes a LEXICON mapping phase names to delegates. Reads current phase from state, calls the matching delegate, loops until DONE.
@@ -131,10 +131,10 @@ Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add cra
 
 Periodic telemetry logging to a separate file from the flight/fault log. Designed for long flight tests (3+ hours).
 
-- **Log file**: `1:/logs/obs_<shipname>_<time>.log` — one compact ~100-byte line per entry
+- **Log file**: `1:/run/obs_<shipname>_<time>.log` — one compact ~100-byte line per entry
 - **Fields**: `T spd gspd alt vs hdg pit rol thr free` + plane-specific (`auth wbrk wstr wlev ahld hhld`) when `planeActive`
-- **Config**: `OBS_CFG` lexicon — `INTERVAL` (default 120s), `MIN_FREE` (default 2000 bytes), `STOP_FILE` (`1:/state/obs_off`)
-- **Sentinel file** (`1:/state/obs_off`): checked at log time, not every tick. Auto-created on abort, low storage, or `observeStop()`. Deleted by `observeStart()` to re-enable.
+- **Config**: `OBS_CFG` lexicon — `INTERVAL` (default 120s), `MIN_FREE` (default 2000 bytes), `STOP_FILE` (`1:/run/obs_off`)
+- **Sentinel file** (`1:/run/obs_off`): checked at log time, not every tick. Auto-created on abort, low storage, or `observeStop()`. Deleted by `observeStart()` to re-enable.
 - **Integration**: craft scripts add `"observe"` from `bootVehicleLibs()` and call `observeStart()` in preflight. `_launchAbort()` creates the sentinel to halt logging on abort.
 - **Budget**: 120s interval over 3 hours = ~90 entries = ~9KB
 

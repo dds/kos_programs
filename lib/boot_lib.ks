@@ -3,7 +3,7 @@
 // ============================================================
 
 GLOBAL FUNCTION bootEnsureDirs {
-    FOR p IN LIST("1:/lib","1:/boot","1:/logs","1:/state","1:/cmd","1:/craft","1:/roles") {
+    FOR p IN LIST("1:/lib","1:/boot","1:/run","1:/cmd","1:/craft","1:/roles") {
         IF NOT EXISTS(p) { CREATEDIR(p). }
     }
 }
@@ -403,21 +403,21 @@ GLOBAL FUNCTION bootPruneLogs {
         archiveLog().
     }
     LOCAL removed IS 0.
-    IF EXISTS("1:/logs") {
+    IF EXISTS("1:/run") {
         LOCAL startPath IS PATH().
         LOCAL items IS LIST().
-        CD("1:/logs").
+        CD("1:/run").
         LIST FILES IN items.
         CD(startPath).
         FOR item IN items {
-            IF item:ISFILE {
-                DELETEPATH("1:/logs/" + item:NAME).
+            IF item:ISFILE AND (item:NAME:CONTAINS(".LOG") OR item:NAME:CONTAINS(".log")) {
+                DELETEPATH("1:/run/" + item:NAME).
                 SET removed TO removed + 1.
             }
         }
     }
-    IF EXISTS("1:/state/log_path.state") {
-        DELETEPATH("1:/state/log_path.state").
+    IF EXISTS("1:/run/log_path.state") {
+        DELETEPATH("1:/run/log_path.state").
         SET removed TO removed + 1.
     }
     RETURN removed.

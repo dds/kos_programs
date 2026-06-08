@@ -60,14 +60,13 @@ LOCAL FUNCTION _loadLib {
 }
 
 _ensureDir("1:/lib").
-_ensureDir("1:/state").
-_ensureDir("1:/logs").
+_ensureDir("1:/run").
 IF HAS_LINK {
     PRINT "  SYNC boot lib ..... ".
     _syncLib("boot_lib").
     _syncLibText("dependencies.txt").
     IF EXISTS("0:/VERSION") {
-        COPYPATH("0:/VERSION", "1:/state/code_version.state").
+        COPYPATH("0:/VERSION", "1:/run/code_version.state").
     }
 } ELSE {
     PRINT "  LOAD core (cached) . ".

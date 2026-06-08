@@ -2,11 +2,13 @@
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
 LOCAL FUNCTION _logPath {
-    RETURN "1:/logs/" + logId() + ".log".
+    IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
+    RETURN "1:/run/" + logId() + ".log".
 }
 
 GLOBAL FUNCTION flightLogPath {
-    LOCAL logPathFile IS "1:/state/log_path.state".
+    IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
+    LOCAL logPathFile IS "1:/run/log_path.state".
     LOCAL _flightLogPath IS "".
     IF EXISTS(logPathFile) {
         SET _flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
@@ -20,7 +22,8 @@ GLOBAL FUNCTION flightLogPath {
 }
 
 GLOBAL FUNCTION codeVersion {
-    LOCAL versionPath IS "1:/state/code_version.state".
+    IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
+    LOCAL versionPath IS "1:/run/code_version.state".
     IF EXISTS(versionPath) {
         RETURN OPEN(versionPath):READALL:STRING:TRIM.
     }

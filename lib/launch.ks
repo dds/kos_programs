@@ -292,7 +292,7 @@ LOCAL FUNCTION _launchAbort {
         IF NOT EXISTS("0:/logs") { CREATEDIR("0:/logs"). }
         LOCAL logPath IS flightLogPath().
         IF logPath <> "" AND EXISTS(logPath) {
-            LOCAL archivePath IS "0:/logs/" + logPath:REPLACE("1:/logs/","").
+            LOCAL archivePath IS "0:/logs/" + logPath:REPLACE("1:/run/","").
             COPYPATH(logPath, archivePath).
             mLog("Abort log archived to " + archivePath).
         }
@@ -300,7 +300,7 @@ LOCAL FUNCTION _launchAbort {
         mLogWarn("No KSC link — log NOT archived (will retry in recovery).").
     }
 
-    LOG "" TO "1:/state/obs_off".
+    LOG "" TO "1:/run/obs_off".
     mLog("Abort complete. Awaiting landing.").
 }
 
