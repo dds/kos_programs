@@ -1,7 +1,8 @@
-// cmd/setphase.ks - Force mission profile and phase together.
-// Usage: RUNPATH("0:/cmd/setphase.ks", "mun_sat_delivery_2", "PAYLOAD_IMPACT_RELEASE").
-PARAMETER missionId.
+// cmd/setphase.ks - Force phase, optionally switching mission profile too.
+// Usage: RUNPATH("0:/cmd/setphase.ks", "PAYLOAD_IMPACT_RELEASE").
+//        RUNPATH("0:/cmd/setphase.ks", "PAYLOAD_IMPACT_RELEASE", "mun_sat_delivery_2").
 PARAMETER phaseName.
+PARAMETER missionId IS "".
 
 IF EXISTS("1:/lib/state.ksm") {
     RUNONCEPATH("1:/lib/state.ksm").
@@ -13,16 +14,25 @@ IF EXISTS("1:/lib/state.ksm") {
 
 stateInit().
 
-LOCAL mission_ IS missionId:TRIM.
 LOCAL phase_ IS phaseName:TRIM:TOUPPER.
+LOCAL mission_ IS missionId:TRIM.
+IF mission_ = "" {
+    SET mission_ TO stateGet("mission_id", "").
+}
 
-stateSet("mission_id", mission_).
+IF mission_ <> "" {
+    stateSet("mission_id", mission_).
+}
 stateSet("phase", phase_).
 stateSet("reload_required", "false").
 stateSet("reload_reason", "").
 stateSet("reload_next_phase", "").
 stateSet("reload_next_band", "").
 
-PRINT "Mission -> " + mission_.
+IF mission_ = "" {
+    PRINT "Mission -> unchanged (none in state)".
+} ELSE {
+    PRINT "Mission -> " + mission_.
+}
 PRINT "Phase   -> " + phase_.
 PRINT "Reboot to resume.".
