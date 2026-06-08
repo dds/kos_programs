@@ -137,7 +137,12 @@ IF HAS_LINK {
         FOR lib IN LIBS { _syncLib(lib). }
     }
     _syncLib("resume").
-    _syncLib("recovery").
+    // Recovery is synced post-mission (lines 157-159). Skip during
+    // active flight to save storage for logs.
+    LOCAL phase_ IS stateGet("phase", "").
+    IF phase_ = "" OR phase_ = "ABORT" {
+        _syncLib("recovery").
+    }
 } ELSE {
     PRINT "  NO LINK: Bypassing library sync.".
 }

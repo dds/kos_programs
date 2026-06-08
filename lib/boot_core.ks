@@ -134,7 +134,7 @@ GLOBAL FUNCTION bootPruneLibs {
     PARAMETER wantedLibs.
     LOCAL keep IS LIST(
         "STATE", "LOGS", "FILES", "BOOT_CORE", "MISSION_PLAN",
-        "RESUME", "RECOVERY"
+        "RESUME"
     ).
     FOR lib IN wantedLibs {
         LOCAL libKey IS lib:TOUPPER.

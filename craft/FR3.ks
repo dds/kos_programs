@@ -247,7 +247,7 @@ LOCAL FUNCTION _fr3EmergencyCleanup {
     PARAMETER wantedLibs.
     LOCAL keepLibs IS LIST(
         "STATE", "LOGS", "FILES", "BOOT_CORE", "MISSION_PLAN",
-        "RESUME", "RECOVERY",
+        "RESUME",
         "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE",
         "CONFIG"
     ).
