@@ -576,6 +576,7 @@ GLOBAL FUNCTION bootLibAddUnique {
 GLOBAL FUNCTION bootLibAppendResolved {
     PARAMETER libs.
     PARAMETER libName.
+    SET libName TO libName:TRIM.
     bootLibLoadSpec().
     IF BOOT_LIB_DEPS:HASKEY(libName) {
         FOR dep IN BOOT_LIB_DEPS[libName] {
@@ -654,12 +655,13 @@ GLOBAL FUNCTION bootLibBandRoots {
     bootLibLoadSpec().
     LOCAL roots IS LIST().
     FOR libName IN BOOT_LIB_PREAMBLE { bootLibAddUnique(roots, libName). }
-    IF BOOT_LIB_BANDS:HASKEY(band) {
-        FOR phaseName IN BOOT_LIB_BANDS[band] {
+    LOCAL bandKey IS band:TOUPPER.
+    IF BOOT_LIB_BANDS:HASKEY(bandKey) {
+        FOR phaseName IN BOOT_LIB_BANDS[bandKey] {
             FOR libName IN bootLibPhaseRoots(phaseName) { bootLibAddUnique(roots, libName). }
         }
     } ELSE {
-        FOR libName IN bootLibPhaseRoots(band) { bootLibAddUnique(roots, libName). }
+        FOR libName IN bootLibPhaseRoots(bandKey) { bootLibAddUnique(roots, libName). }
     }
     RETURN roots.
 }
@@ -673,14 +675,15 @@ GLOBAL FUNCTION bootLibBandForPhase {
     PARAMETER phaseName.
     PARAMETER defaultBand IS "".
     bootLibLoadSpec().
-    IF phaseName = "" { RETURN defaultBand. }
+    LOCAL phaseKey IS phaseName:TOUPPER.
+    IF phaseKey = "" { RETURN defaultBand. }
     FOR bandKey IN BOOT_LIB_BANDS:KEYS {
         FOR bandPhase IN BOOT_LIB_BANDS[bandKey] {
-            IF bandPhase = phaseName { RETURN bandKey. }
+            IF bandPhase:TOUPPER = phaseKey { RETURN bandKey. }
         }
     }
     IF defaultBand <> "" { RETURN defaultBand. }
-    RETURN phaseName.
+    RETURN phaseKey.
 }
 
 GLOBAL FUNCTION bootLibPhaseRoots {
@@ -688,8 +691,9 @@ GLOBAL FUNCTION bootLibPhaseRoots {
     bootLibLoadSpec().
     LOCAL roots IS LIST().
     FOR libName IN BOOT_LIB_PREAMBLE { bootLibAddUnique(roots, libName). }
-    IF BOOT_LIB_PHASES:HASKEY(phaseName) {
-        FOR libName IN BOOT_LIB_PHASES[phaseName] { bootLibAddUnique(roots, libName). }
+    LOCAL phaseKey IS phaseName:TOUPPER.
+    IF BOOT_LIB_PHASES:HASKEY(phaseKey) {
+        FOR libName IN BOOT_LIB_PHASES[phaseKey] { bootLibAddUnique(roots, libName). }
     }
     RETURN roots.
 }

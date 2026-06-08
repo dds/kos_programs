@@ -25,11 +25,12 @@ LOCAL FUNCTION _fr3PrintConfig {
 
 GLOBAL FUNCTION fr3BandForPhase {
     PARAMETER phaseName.
+    LOCAL phase IS phaseName:TOUPPER.
     LOCAL defaultBand IS "".
-    IF phaseName = "" OR phaseName:CONTAINS("MAIN") {
+    IF phase = "" OR phase:CONTAINS("MAIN") {
         SET defaultBand TO "LAUNCH".
     }
-    RETURN bootLibBandForPhase(phaseName, defaultBand).
+    RETURN bootLibBandForPhase(phase, defaultBand).
 }
 
 GLOBAL FUNCTION fr3PhaseBand {
@@ -103,17 +104,18 @@ GLOBAL FUNCTION fr3BuildPhaseMap {
 
 LOCAL FUNCTION _fr3ConditionalRoots {
     PARAMETER band.
+    LOCAL bandKey IS band:TOUPPER.
     LOCAL roots IS LIST().
-    IF band = "XFER_PLAN" AND stateGet("target", "KERBIN") <> "MUN" {
+    IF bandKey = "XFER_PLAN" AND stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
         roots:ADD("maneuver_intersystem").
     }
-    IF band = "XFER_PLAN" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
+    IF bandKey = "XFER_PLAN" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
         roots:ADD("maneuver_rendezvous").
     }
-    IF band = "PAYLOAD_OPS" AND contains(stateGet("phase", ""), LIST("TARGETED_DEORBIT")) {
+    IF bandKey = "PAYLOAD_OPS" AND contains(stateGet("phase", ""):TOUPPER, LIST("TARGETED_DEORBIT")) {
         roots:ADD("deorbit_targeting").
     }
-    IF band = "PAYLOAD_OPS"
+    IF bandKey = "PAYLOAD_OPS"
             AND (missionHasPayload("SCANSAT") OR missionHasPayload("SCISAT")) {
         roots:ADD("science").
     }
@@ -129,8 +131,13 @@ LOCAL FUNCTION _fr3LibsForBand {
 }
 
 LOCAL FUNCTION _fr3Libs {
+    LOCAL phase IS stateGet("phase", ""):TOUPPER.
+    IF phase = "" OR phase:CONTAINS("MAIN") {
+        LOCAL seq IS fr3BuildPhaseSequence().
+        stateSet("phase", seq[0]).
+    }
     LOCAL band IS fr3PhaseBand().
-    LOCAL phase IS stateGet("phase", "").
+    SET phase TO stateGet("phase", ""):TOUPPER.
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
@@ -162,7 +169,7 @@ GLOBAL FUNCTION main {
     mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
     mLog("Sequence: " + seq:JOIN(" -> ")).
     LOCAL currentPhase IS stateGet("phase","").
-    IF currentPhase = "" OR currentPhase:CONTAINS("MAIN") { stateSet("phase", seq[0]). }
+    IF currentPhase = "" OR currentPhase:TOUPPER:CONTAINS("MAIN") { stateSet("phase", seq[0]). }
 
     IF fr3PhaseBand() = "LAUNCH" {
         IF NOT confirmLaunch(_fr3PrintConfig@) { RETURN. }
