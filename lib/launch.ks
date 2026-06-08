@@ -330,21 +330,22 @@ GLOBAL FUNCTION confirmLaunch {
     PARAMETER printFn.
     LOCAL phase IS stateGet("phase", "").
     IF phase <> "" AND phase <> "LUNCH" {
-        RETURN.
+        RETURN TRUE.
     }
 
     printFn:CALL().
     IF DEFINED uiPrompt {
-        uiPrompt("SPACE to launch / 30s auto-launch").
+        uiPrompt("SPACE to launch / ESC to abort / 30s auto-launch").
         uiPrompt("Edit CFG in terminal to override").
     } ELSE {
-        PRINT "  >> SPACE to launch / 30s auto-launch".
+        PRINT "  >> SPACE to launch / ESC to abort / 30s auto-launch".
         PRINT "  >> Edit CFG in terminal to override".
     }
     PRINT " ".
     LOCAL deadline IS TIME:SECONDS + 30.
     LOCAL confirmed IS FALSE.
-    UNTIL TIME:SECONDS >= deadline OR confirmed {
+    LOCAL aborted IS FALSE.
+    UNTIL TIME:SECONDS >= deadline OR confirmed OR aborted {
         LOCAL remaining IS ROUND(deadline - TIME:SECONDS, 0).
         LOCAL bar IS "".
         LOCAL filled IS ROUND(30 - remaining, 0).
@@ -357,13 +358,21 @@ GLOBAL FUNCTION confirmLaunch {
         PRINT "  [" + bar + "] T-" + ("" + remaining):PADLEFT(2) + "s   " AT (0, TERMINAL:HEIGHT - 1).
         IF TERMINAL:INPUT:HASCHAR {
             LOCAL ch IS TERMINAL:INPUT:GETCHAR().
-            IF UNCHAR(ch) = 32 OR UNCHAR(ch) = 0 {
+            IF UNCHAR(ch) = 27 {
+                SET aborted TO TRUE.
+            } ELSE IF UNCHAR(ch) = 32 OR UNCHAR(ch) = 0 {
                 SET confirmed TO TRUE.
             }
         }
         WAIT 0.2.
     }
+    IF aborted {
+        PRINT "  [==============================] ABORT    " AT (0, TERMINAL:HEIGHT - 1).
+        mLog("Launch aborted by operator.").
+        RETURN FALSE.
+    }
     PRINT "  [==============================] GO       " AT (0, TERMINAL:HEIGHT - 1).
+    RETURN TRUE.
 }
 
 // ── Rocket main skeleton ──────────────────────────────────────
@@ -403,7 +412,7 @@ GLOBAL FUNCTION rocketMain {
         SET skipConfirm TO options["skipConfirmCheck"]:CALL().
     }
     IF NOT skipConfirm {
-        confirmLaunch(configPrinter).
+        IF NOT confirmLaunch(configPrinter) { RETURN. }
     }
 
     runPhases(phaseMapBuilder:CALL()).

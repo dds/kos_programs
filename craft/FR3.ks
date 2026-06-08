@@ -421,7 +421,7 @@ GLOBAL FUNCTION main {
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
 
     IF fr3PhaseBand() = "LAUNCH" {
-        confirmLaunch(fr3PrintConfig@).
+        IF NOT confirmLaunch(fr3PrintConfig@) { RETURN. }
     }
 
     runPhases(fr3BuildPhaseMap()).
