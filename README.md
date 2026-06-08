@@ -64,7 +64,8 @@ cmd/
     logs.ks              Archive flight log to KSC
     zombie.ks            Reboot all other CPUs on the vessel
     molniya.ks           Molniya orbit calculator (interactive)
-    crash.ks             Put current craft on an impact trajectory
+    kerbinreturn.ks      Return from a moon to Kerbin aerobrake
+    kscsplash.ks         Target water splashdown offshore of KSC
     science.ks           Manual science collection
     sciencestatus.ks     Science status report
     scanstart.ks         Start SCANsat scanners
@@ -216,8 +217,13 @@ RUNPATH("1:/cmd/files.ks").               // storage/file listing
 RUNPATH("1:/cmd/logs.ks").                // archive flight log to KSC
 RUNPATH("1:/cmd/zombie.ks").              // reboot all other CPUs
 RUNPATH("1:/cmd/molniya.ks").             // Molniya orbit calculator
-RUNPATH("0:/cmd/crash.ks").               // lower Pe to -1 km and impact
+RUNPATH("0:/cmd/kerbinreturn.ks").        // return to Kerbin Pe ~55 km
+RUNPATH("0:/cmd/kscsplash.ks").           // target offshore KSC splashdown
 ```
+
+For FR3 Mun sat recovery, run `kerbinreturn.ks` after the contract orbit is satisfied
+and the stack is ready to leave Mun. After Kerbin aerobrake/capture and once the craft
+is in Kerbin SOI, run `kscsplash.ks` to target the water east of KSC.
 
 After launch, to force a specific mission profile on the next reboot:
 
