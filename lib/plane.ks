@@ -489,8 +489,8 @@ LOCAL FUNCTION _geoProject {
     PARAMETER lng0.
     PARAMETER dist.
     PARAMETER brng.
-    LOCAL r IS SHIP:ORBIT:BODY:RADIUS.
-    LOCAL dlat IS dist * COS(brng) / r * (180 / 3.14159265).
-    LOCAL dlng IS dist * SIN(brng) / (r * COS(lat0)) * (180 / 3.14159265).
+    LOCAL r_ IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL dlat IS dist * COS(brng) / r_ * (180 / 3.14159265).
+    LOCAL dlng IS dist * SIN(brng) / (r_ * COS(lat0)) * (180 / 3.14159265).
     RETURN LEXICON("lat", lat0 + dlat, "lng", lng0 + dlng).
 }
