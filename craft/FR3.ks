@@ -32,42 +32,19 @@ GLOBAL CFG IS LEXICON(
 
 GLOBAL fr3Seq IS LIST().
 
-// Load-time config application (runs before LIBS are loaded,
-// so boot loads config.ks as part of its core library set).
-LOCAL FUNCTION _cfgSet {
-    PARAMETER key.
-    PARAMETER value.
-    IF CFG:HASKEY(key) { CFG:REMOVE(key). }
-    CFG:ADD(key, value).
-}
-
-LOCAL FUNCTION _cfgFromState {
-    PARAMETER key.
-    PARAMETER asNumber IS TRUE.
-    LOCAL raw IS stateGet("mission_cfg_" + key, "").
-    IF raw = "" { RETURN. }
-    IF asNumber {
-        IF raw:ISTYPE("Scalar") { _cfgSet(key, raw). }
-        ELSE { _cfgSet(key, raw:TONUMBER(0)). }
-    } ELSE {
-        _cfgSet(key, raw).
-    }
-}
-
 LOCAL FUNCTION _sanitizeAscentConfig {
     IF CFG["FAIRING_ALT"] < 10000 {
-        _cfgSet("FAIRING_ALT", 71500).
+        cfgSet("FAIRING_ALT", 71500).
     }
     IF CFG["EXTEND_ALT"] < 10000 {
-        _cfgSet("EXTEND_ALT", 73000).
+        cfgSet("EXTEND_ALT", 73000).
     }
     IF CFG["EXTEND_ALT"] < CFG["FAIRING_ALT"] {
-        _cfgSet("EXTEND_ALT", CFG["FAIRING_ALT"] + 1500).
+        cfgSet("EXTEND_ALT", CFG["FAIRING_ALT"] + 1500).
     }
 }
 
-FOR key IN missionNumericConfigKeys() { _cfgFromState(key, TRUE). }
-FOR key IN missionStringConfigKeys() { _cfgFromState(key, FALSE). }
+applyKnownMissionState().
 _sanitizeAscentConfig().
 
 // --- Example: rendezvous + Duna rover lander ---
@@ -92,59 +69,20 @@ _sanitizeAscentConfig().
 // The RDV phase runs planRendezvous() + executeManeuver() when
 // RENDEZVOUS_TARGET or ASTEROID_TARGET is configured.
 
-LOCAL FUNCTION _bootPayloads {
-    LOCAL raw IS stateGet("payloads", "").
-    IF raw = "" { RETURN LIST(). }
-    RETURN raw:SPLIT(",").
-}
-
-LOCAL FUNCTION _bootHasPayload {
-    PARAMETER payloadName.
-    LOCAL targetName IS payloadName:TOUPPER.
-    FOR raw IN _bootPayloads() {
-        LOCAL result IS raw:TOUPPER.
-        UNTIL result:LENGTH = 0 {
-            LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
-            IF last:MATCHESPATTERN("[0-9]") OR last = "-" {
-                SET result TO result:SUBSTRING(0, result:LENGTH - 1).
-            } ELSE {
-                BREAK.
-            }
-        }
-        IF result = targetName { RETURN TRUE. }
-    }
-    RETURN FALSE.
-}
-
-LOCAL FUNCTION _phaseIn {
-    PARAMETER phase.
-    PARAMETER phaseList.
-    FOR p IN phaseList {
-        IF phase = p { RETURN TRUE. }
-    }
-    RETURN FALSE.
-}
-
-LOCAL FUNCTION _bandForPhase {
+GLOBAL FUNCTION fr3BandForPhase {
     PARAMETER phaseName.
     LOCAL phase IS phaseName:TOUPPER.
-    IF phase = "" OR _phaseIn(phase, LIST("LUNCH", "FAIR", "ANTS", "PARK")) {
+    IF phase = "" OR phaseIn(phase, LIST("LUNCH", "FAIR", "ANTS", "PARK")) {
         RETURN "LAUNCH".
     }
-    IF _phaseIn(phase, LIST("RDV", "XING")) {
-        RETURN "XFER_PLAN".
-    }
-    IF phase = "MCC" {
-        RETURN "XFER_MCC".
-    }
-    IF _phaseIn(phase, LIST("COAST", "CAPTURE")) {
-        RETURN "XFER_ARRIVE".
-    }
-    IF _phaseIn(phase, LIST("CIRC", "RAISE", "INCLINE",
+    IF phaseIn(phase, LIST("RDV", "XING")) { RETURN "XFER_PLAN". }
+    IF phase = "MCC" { RETURN "XFER_MCC". }
+    IF phaseIn(phase, LIST("COAST", "CAPTURE")) { RETURN "XFER_ARRIVE". }
+    IF phaseIn(phase, LIST("CIRC", "RAISE", "INCLINE",
             "SCANSAT_IMPACT_RELEASE", "PAYLOAD_IMPACT_RELEASE", "ELLIPTICAL")) {
         RETURN "XFER_ORBIT".
     }
-    IF _phaseIn(phase, LIST("TARGETED_DEORBIT", "RELEASE_PROBE",
+    IF phaseIn(phase, LIST("TARGETED_DEORBIT", "RELEASE_PROBE",
             "RELAY_OPS", "SCANSAT_OPS")) {
         RETURN "PAYLOAD_OPS".
     }
@@ -156,12 +94,7 @@ LOCAL FUNCTION _bandForPhase {
 }
 
 GLOBAL FUNCTION fr3PhaseBand {
-    RETURN _bandForPhase(stateGet("phase", "")).
-}
-
-GLOBAL FUNCTION fr3BandForPhase {
-    PARAMETER phaseName.
-    RETURN _bandForPhase(phaseName).
+    RETURN fr3BandForPhase(stateGet("phase", "")).
 }
 
 GLOBAL FUNCTION fr3SaveReloadState {
@@ -195,13 +128,16 @@ LOCAL FUNCTION _fr3AddLibWithDeps {
     }
 }
 
-LOCAL FUNCTION _fr3Libs {
-    LOCAL band IS fr3PhaseBand().
-    LOCAL phase IS stateGet("phase", ""):TOUPPER.
-    stateSet("lib_band", band).
-    stateSet("lib_band_phase", phase).
-    stateSet("reload_required", "false").
-    LOCAL libs IS LIST("phases", "utils", "ui", "config", "fr3_payload", "fr3_profile", "fr3_sequence").
+LOCAL FUNCTION _fr3BaseLibs {
+    RETURN LIST(
+        "phases", "utils", "ui", "config",
+        "fr3_payload", "fr3_profile", "fr3_sequence"
+    ).
+}
+
+LOCAL FUNCTION _fr3LibsForBand {
+    PARAMETER band.
+    LOCAL libs IS _fr3BaseLibs().
 
     IF band = "LAUNCH" {
         libs:ADD("flightplan").
@@ -209,8 +145,8 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("launch").
         libs:ADD("countdown").
         libs:ADD("orbit").
-        IF _bootHasPayload("LANDER") OR _bootHasPayload("ASSISTLANDER")
-                OR _bootHasPayload("ROVER") OR _bootHasPayload("ASSISTROVER") {
+        IF missionHasPayload("LANDER") OR missionHasPayload("ASSISTLANDER")
+                OR missionHasPayload("ROVER") OR missionHasPayload("ASSISTROVER") {
             libs:ADD("landing").
         }
     } ELSE IF band = "XFER_PLAN" {
@@ -236,16 +172,16 @@ LOCAL FUNCTION _fr3Libs {
     } ELSE IF band = "PAYLOAD_OPS" {
         libs:ADD("payload_ops").
         libs:ADD("orbit").
-        IF _phaseIn(stateGet("phase", ""):TOUPPER, LIST("TARGETED_DEORBIT")) {
+        IF phaseIn(stateGet("phase", ""):TOUPPER, LIST("TARGETED_DEORBIT")) {
             libs:ADD("deorbit_targeting").
             libs:ADD("countdown").
             libs:ADD("maneuver_targeting").
             libs:ADD("maneuver").
         }
-        IF _bootHasPayload("SCANSAT") {
-            IF NOT libs:CONTAINS("countdown") { libs:ADD("countdown"). }
-            IF NOT libs:CONTAINS("maneuver_targeting") { libs:ADD("maneuver_targeting"). }
-            IF NOT libs:CONTAINS("maneuver") { libs:ADD("maneuver"). }
+        IF missionHasPayload("SCANSAT") {
+            _fr3AddLib(libs, "countdown").
+            _fr3AddLib(libs, "maneuver_targeting").
+            _fr3AddLib(libs, "maneuver").
         }
     } ELSE IF band = "LAND_DEORBIT" {
         libs:ADD("payload_landing").
@@ -273,25 +209,30 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("orbit").
     }
 
-    IF band = "LAUNCH" {
-        // Launch-only reboots should stay small. Payload operation libraries
-        // are pulled in after parking orbit if the sequence actually needs them.
-    }
     IF band = "XFER_PLAN" AND stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
         libs:ADD("lambert").
         libs:ADD("maneuver_intersystem").
     }
     IF band = "XFER_PLAN" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
-        IF NOT libs:CONTAINS("lambert") { libs:ADD("lambert"). }
+        _fr3AddLib(libs, "lambert").
         libs:ADD("maneuver_rendezvous").
     }
     IF band = "PAYLOAD_OPS"
-            AND (_bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT")) {
+            AND (missionHasPayload("SCANSAT") OR missionHasPayload("SCISAT")) {
         libs:ADD("science").
     }
-    IF DEFINED missionAppendUnique {
-        missionAppendUnique(libs, missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", ""))).
-    }
+
+    missionAppendUnique(libs, missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", ""))).
+    RETURN libs.
+}
+
+LOCAL FUNCTION _fr3Libs {
+    LOCAL band IS fr3PhaseBand().
+    LOCAL phase IS stateGet("phase", ""):TOUPPER.
+    stateSet("lib_band", band).
+    stateSet("lib_band_phase", phase).
+    stateSet("reload_required", "false").
+    LOCAL libs IS _fr3LibsForBand(band).
     stateSet("lib_band_libs", libs:JOIN(",")).
     RETURN libs.
 }

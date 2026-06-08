@@ -60,7 +60,7 @@ Mission profile files:
 
 - `missions/FR3/*.cfg` - data-only FR3 mission profiles. Plain `FR3` can select one on the launch pad; legacy `FR3-MUN-...` names still work as fallback.
 - `missions/FR3/mun_rover_emergency_surface.cfg` - emergency mode that soft-lands the second stage and releases the rover on the surface.
-- `craft/FR3.ks` - slim vehicle entry point. It keeps default CFG, mission-state intake, and library-band selection.
+- `craft/FR3.ks` - slim vehicle entry point. It keeps default CFG, ascent sanity checks, boot-time phase-band/library selection, cleanup metadata, and `main()`.
 - `lib/fr3_*.ks` - compiled FR3 mission runtime modules. Profile, sequence, payload classification, and launch UI are separate so bands can load only what they need.
 
 ## Biggest Files

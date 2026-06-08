@@ -28,6 +28,35 @@ GLOBAL FUNCTION missionAppendUnique {
     }
 }
 
+GLOBAL FUNCTION missionPayloadsFromState {
+    LOCAL raw IS stateGet("payloads", "").
+    IF raw = "" { RETURN LIST(). }
+    RETURN raw:SPLIT(",").
+}
+
+GLOBAL FUNCTION missionNormalizePayloadType {
+    PARAMETER payloadName.
+    LOCAL result IS payloadName:TOUPPER.
+    UNTIL result:LENGTH = 0 {
+        LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
+        IF last:MATCHESPATTERN("[0-9]") OR last = "-" {
+            SET result TO result:SUBSTRING(0, result:LENGTH - 1).
+        } ELSE {
+            BREAK.
+        }
+    }
+    RETURN result.
+}
+
+GLOBAL FUNCTION missionHasPayload {
+    PARAMETER payloadName.
+    LOCAL targetName IS payloadName:TOUPPER.
+    FOR raw IN missionPayloadsFromState() {
+        IF missionNormalizePayloadType(raw) = targetName { RETURN TRUE. }
+    }
+    RETURN FALSE.
+}
+
 GLOBAL FUNCTION missionLibs {
     PARAMETER fallbackLibs IS LIST().
     PARAMETER baseLibs IS LIST().

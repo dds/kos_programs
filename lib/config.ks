@@ -136,6 +136,10 @@ GLOBAL FUNCTION applyMissionState {
     }
 }
 
+GLOBAL FUNCTION applyKnownMissionState {
+    applyMissionState(missionNumericConfigKeys(), missionStringConfigKeys()).
+}
+
 // --- Phase sequence utilities ---
 
 // Parse a comma-separated phase string into a LIST of uppercase
@@ -149,4 +153,13 @@ GLOBAL FUNCTION phaseListFromString {
     }
     IF seq:LENGTH = 0 { seq:ADD("DONE"). }
     RETURN seq.
+}
+
+GLOBAL FUNCTION phaseIn {
+    PARAMETER phase.
+    PARAMETER phaseList.
+    FOR p IN phaseList {
+        IF phase = p { RETURN TRUE. }
+    }
+    RETURN FALSE.
 }

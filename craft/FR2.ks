@@ -38,30 +38,7 @@ GLOBAL CFG IS LEXICON(
     "RECOVERY_PE",            27500
 ).
 
-// Load-time config application (runs before LIBS are loaded,
-// so boot loads config.ks as part of its core library set).
-LOCAL FUNCTION _cfgSet {
-    PARAMETER key.
-    PARAMETER value.
-    IF CFG:HASKEY(key) { CFG:REMOVE(key). }
-    CFG:ADD(key, value).
-}
-
-LOCAL FUNCTION _cfgFromState {
-    PARAMETER key.
-    PARAMETER asNumber IS TRUE.
-    LOCAL raw IS stateGet("mission_cfg_" + key, "").
-    IF raw = "" { RETURN. }
-    IF asNumber {
-        IF raw:ISTYPE("Scalar") { _cfgSet(key, raw). }
-        ELSE { _cfgSet(key, raw:TONUMBER(0)). }
-    } ELSE {
-        _cfgSet(key, raw).
-    }
-}
-
-FOR key IN missionNumericConfigKeys() { _cfgFromState(key, TRUE). }
-FOR key IN missionStringConfigKeys() { _cfgFromState(key, FALSE). }
+applyKnownMissionState().
 
 LOCAL FUNCTION _fallbackLibs {
     RETURN LIST(
