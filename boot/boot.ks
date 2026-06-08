@@ -130,6 +130,15 @@ IF vehicleScript <> "" {
     bootRunScript(vehicleScript).
 }
 
+IF DEFINED BOOT_CLEANUP {
+    LOCAL cleanupVehicle IS BOOT_CLEANUP["vehicle"].
+    LOCAL cleanupLibs IS LIST().
+    IF DEFINED LIBS { SET cleanupLibs TO LIBS. }
+    LOCAL cleanupCmds IS LIST().
+    IF BOOT_CLEANUP:HASKEY("keepCmds") { SET cleanupCmds TO BOOT_CLEANUP["keepCmds"]. }
+    bootCleanup(cleanupVehicle, cleanupLibs, cleanupCmds).
+}
+
 IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
     IF DEFINED LIBS {

@@ -51,16 +51,23 @@ GLOBAL FUNCTION fr3BuildPhaseMap {
         phaseMap:ADD("PARK", _phaseParkingReload@).
     }
 
-    IF band = "TRANSFER" {
+    IF band = "XFER_PLAN" {
         phaseMap:ADD("RDV", phaseRendezvous@).
         phaseMap:ADD("XING", phaseTransfer@).
+    }
+    IF band = "XFER_MCC" {
         phaseMap:ADD("MCC", phaseMidCourse@).
+    }
+    IF band = "XFER_ARRIVE" {
         phaseMap:ADD("COAST", phaseCoast@).
         phaseMap:ADD("CAPTURE", phaseCapture@).
+    }
+    IF band = "XFER_ORBIT" {
         phaseMap:ADD("CIRC", phaseCirc@).
         phaseMap:ADD("RAISE", phaseRaiseAlt@).
         phaseMap:ADD("INCLINE", phaseInclCorrect@).
         phaseMap:ADD("SCANSAT_IMPACT_RELEASE", phaseScanSatImpactRelease@).
+        phaseMap:ADD("ELLIPTICAL", phaseElliptical@).
     }
 
     IF band = "PAYLOAD_OPS" AND (fr3HasPayload("PROBE") OR fr3HasPayload("CRASHPROBE")) {

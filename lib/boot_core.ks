@@ -124,9 +124,15 @@ GLOBAL FUNCTION bootRunScript {
 
 GLOBAL FUNCTION bootLibBaseName {
     PARAMETER fileName.
+    RETURN bootBaseName(fileName).
+}
+
+GLOBAL FUNCTION bootBaseName {
+    PARAMETER fileName.
     LOCAL upper IS fileName:TOUPPER.
     IF upper:CONTAINS(".KSM") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
     IF upper:CONTAINS(".KS") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
+    IF upper:CONTAINS(".CFG") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
     RETURN fileName.
 }
 
@@ -368,5 +374,101 @@ GLOBAL FUNCTION bootResumeOrManual {
     }
     IF hasLink {
         archiveLog().
+    }
+}
+
+// ── Generalized cleanup ──────────────────────────────────────
+// These functions replace craft-specific cleanup (e.g. FR3's
+// _fr3EmergencyCleanup) with reusable boot-level utilities.
+// Called from boot.ks when a craft script sets BOOT_CLEANUP.
+
+GLOBAL FUNCTION bootDeleteIfExists {
+    PARAMETER path_.
+    IF EXISTS(path_) {
+        DELETEPATH(path_).
+        RETURN TRUE.
+    }
+    RETURN FALSE.
+}
+
+GLOBAL FUNCTION bootPruneDir {
+    PARAMETER dirPath.
+    PARAMETER keepNames.
+    LOCAL removed IS 0.
+    IF NOT EXISTS(dirPath) { RETURN removed. }
+    LOCAL startPath IS PATH().
+    LOCAL items IS LIST().
+    CD(dirPath).
+    LIST FILES IN items.
+    CD(startPath).
+    FOR item IN items {
+        IF item:ISFILE {
+            LOCAL base IS bootBaseName(item:NAME):TOUPPER.
+            IF NOT keepNames:CONTAINS(base) {
+                IF bootDeleteIfExists(dirPath + "/" + item:NAME) {
+                    SET removed TO removed + 1.
+                }
+            }
+        }
+    }
+    RETURN removed.
+}
+
+GLOBAL FUNCTION bootPruneLogs {
+    IF HOMECONNECTION:ISCONNECTED {
+        archiveLog().
+    }
+    LOCAL removed IS 0.
+    IF EXISTS("1:/logs") {
+        LOCAL startPath IS PATH().
+        LOCAL items IS LIST().
+        CD("1:/logs").
+        LIST FILES IN items.
+        CD(startPath).
+        FOR item IN items {
+            IF item:ISFILE {
+                IF bootDeleteIfExists("1:/logs/" + item:NAME) {
+                    SET removed TO removed + 1.
+                }
+            }
+        }
+    }
+    IF bootDeleteIfExists("1:/state/log_path.state") {
+        SET removed TO removed + 1.
+    }
+    RETURN removed.
+}
+
+GLOBAL FUNCTION bootCleanup {
+    PARAMETER vehicleName.
+    PARAMETER wantedLibs.
+    PARAMETER keepCmds IS LIST().
+    LOCAL keepLibs IS LIST(
+        "STATE", "LOGS", "FILES", "BOOT_CORE", "MISSION_PLAN",
+        "RESUME",
+        "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE",
+        "CONFIG"
+    ).
+    FOR lib IN wantedLibs {
+        LOCAL key IS lib:TOUPPER.
+        IF NOT keepLibs:CONTAINS(key) { keepLibs:ADD(key). }
+    }
+
+    LOCAL keepRoles IS LIST().
+    IF CORE:TAG <> "" { keepRoles:ADD(CORE:TAG:TOUPPER). }
+
+    LOCAL beforeFree IS CORE:VOLUME:FREESPACE.
+    LOCAL removed IS 0.
+    SET removed TO removed + bootPruneDir("1:/lib", keepLibs).
+    SET removed TO removed + bootPruneDir("1:/craft", LIST(vehicleName:TOUPPER)).
+    SET removed TO removed + bootPruneDir("1:/roles", keepRoles).
+    SET removed TO removed + bootPruneDir("1:/cmd", keepCmds).
+    SET removed TO removed + bootPruneDir("1:/missions/" + vehicleName, LIST()).
+    IF bootDeleteIfExists("1:/zombie") { SET removed TO removed + 1. }
+    SET removed TO removed + bootPruneLogs().
+
+    IF removed > 0 {
+        mLog("Cleanup removed " + removed + " files; free "
+            + beforeFree + " -> " + CORE:VOLUME:FREESPACE + ".").
     }
 }

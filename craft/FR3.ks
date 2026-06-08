@@ -180,114 +180,24 @@ LOCAL FUNCTION _phaseIn {
     RETURN FALSE.
 }
 
-LOCAL FUNCTION _fr3BaseName {
-    PARAMETER fileName.
-    LOCAL upper IS fileName:TOUPPER.
-    IF upper:CONTAINS(".KSM") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
-    IF upper:CONTAINS(".KS") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
-    IF upper:CONTAINS(".CFG") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
-    RETURN fileName.
-}
-
-LOCAL FUNCTION _fr3DeleteIfExists {
-    PARAMETER path_.
-    IF EXISTS(path_) {
-        DELETEPATH(path_).
-        RETURN TRUE.
-    }
-    RETURN FALSE.
-}
-
-LOCAL FUNCTION _fr3PruneDir {
-    PARAMETER dirPath.
-    PARAMETER keepNames.
-    LOCAL removed IS 0.
-    IF NOT EXISTS(dirPath) { RETURN removed. }
-    LOCAL startPath IS PATH().
-    LOCAL items IS LIST().
-    CD(dirPath).
-    LIST FILES IN items.
-    CD(startPath).
-    FOR item IN items {
-        IF item:ISFILE {
-            LOCAL base IS _fr3BaseName(item:NAME):TOUPPER.
-            IF NOT keepNames:CONTAINS(base) {
-                IF _fr3DeleteIfExists(dirPath + "/" + item:NAME) {
-                    SET removed TO removed + 1.
-                }
-            }
-        }
-    }
-    RETURN removed.
-}
-
-LOCAL FUNCTION _fr3PruneLogs {
-    LOCAL removed IS 0.
-    IF EXISTS("1:/logs") {
-        LOCAL startPath IS PATH().
-        LOCAL items IS LIST().
-        CD("1:/logs").
-        LIST FILES IN items.
-        CD(startPath).
-        FOR item IN items {
-            IF item:ISFILE {
-                IF _fr3DeleteIfExists("1:/logs/" + item:NAME) {
-                    SET removed TO removed + 1.
-                }
-            }
-        }
-    }
-    IF _fr3DeleteIfExists("1:/state/log_path.state") {
-        SET removed TO removed + 1.
-    }
-    RETURN removed.
-}
-
-LOCAL FUNCTION _fr3EmergencyCleanup {
-    PARAMETER wantedLibs.
-    LOCAL keepLibs IS LIST(
-        "STATE", "LOGS", "FILES", "BOOT_CORE", "MISSION_PLAN",
-        "RESUME",
-        "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE",
-        "CONFIG"
-    ).
-    FOR lib IN wantedLibs {
-        LOCAL key IS lib:TOUPPER.
-        IF NOT keepLibs:CONTAINS(key) { keepLibs:ADD(key). }
-    }
-
-    LOCAL keepCmds IS LIST(
-        "CLEANUP", "DUMP", "FILES", "LANDASSIST", "LANDINGCHECK",
-        "LANDINGRESCUE", "LANDMIN", "SETLANDASSIST", "SETLANDINGDEORBIT",
-        "SETLANDINGTAG", "SETSTATE", "SETUP_MUN_ROVER_LANDING_REAL",
-        "SETUP_MUN_ROVER_LANDING_SIM", "SIMLANDHERE"
-    ).
-
-    LOCAL beforeFree IS CORE:VOLUME:FREESPACE.
-    LOCAL removed IS 0.
-    SET removed TO removed + _fr3PruneDir("1:/lib", keepLibs).
-    SET removed TO removed + _fr3PruneDir("1:/craft", LIST("FR3")).
-    SET removed TO removed + _fr3PruneDir("1:/roles", LIST()).
-    SET removed TO removed + _fr3PruneDir("1:/cmd", keepCmds).
-    SET removed TO removed + _fr3PruneDir("1:/missions/FR3", LIST()).
-    IF _fr3DeleteIfExists("1:/zombie") { SET removed TO removed + 1. }
-    SET removed TO removed + _fr3PruneLogs().
-
-    IF removed > 0 {
-        PRINT "  FR3 cleanup removed " + removed + " files; free "
-            + beforeFree + " -> " + CORE:VOLUME:FREESPACE + ".".
-    }
-}
-
 LOCAL FUNCTION _bandForPhase {
     PARAMETER phaseName.
     LOCAL phase IS phaseName:TOUPPER.
     IF phase = "" OR _phaseIn(phase, LIST("LUNCH", "FAIR", "ANTS", "PARK")) {
         RETURN "LAUNCH".
     }
-    IF _phaseIn(phase, LIST("RDV", "XING", "MCC", "COAST", "CAPTURE",
-            "CIRC", "RAISE", "INCLINE", "SCANSAT_IMPACT_RELEASE")) {
-        RETURN "TRANSFER".
+    IF _phaseIn(phase, LIST("RDV", "XING")) {
+        RETURN "XFER_PLAN".
+    }
+    IF phase = "MCC" {
+        RETURN "XFER_MCC".
+    }
+    IF _phaseIn(phase, LIST("COAST", "CAPTURE")) {
+        RETURN "XFER_ARRIVE".
+    }
+    IF _phaseIn(phase, LIST("CIRC", "RAISE", "INCLINE",
+            "SCANSAT_IMPACT_RELEASE", "ELLIPTICAL")) {
+        RETURN "XFER_ORBIT".
     }
     IF _phaseIn(phase, LIST("TARGETED_DEORBIT", "RELEASE_PROBE",
             "RELAY_OPS", "SCANSAT_OPS")) {
@@ -336,12 +246,28 @@ LOCAL FUNCTION _fr3Libs {
                 OR _bootHasPayload("ROVER") OR _bootHasPayload("ASSISTROVER") {
             libs:ADD("landing").
         }
-    } ELSE IF band = "TRANSFER" {
-        libs:ADD("xfer").
-        libs:ADD("lib_navigation").
-        libs:ADD("countdown").
-        libs:ADD("maneuver_targeting").
+    } ELSE IF band = "XFER_PLAN" {
+        libs:ADD("xfer_plan").
         libs:ADD("maneuver").
+        libs:ADD("maneuver_targeting").
+        libs:ADD("lib_navigation").
+        libs:ADD("inclination").
+        libs:ADD("countdown").
+        libs:ADD("orbit").
+    } ELSE IF band = "XFER_MCC" {
+        libs:ADD("maneuver").
+        libs:ADD("maneuver_targeting").
+        libs:ADD("countdown").
+    } ELSE IF band = "XFER_ARRIVE" {
+        libs:ADD("capture").
+        libs:ADD("maneuver").
+        libs:ADD("maneuver_targeting").
+        libs:ADD("countdown").
+        libs:ADD("orbit").
+    } ELSE IF band = "XFER_ORBIT" {
+        libs:ADD("maneuver_orbit").
+        libs:ADD("maneuver").
+        libs:ADD("maneuver_targeting").
         libs:ADD("inclination").
         libs:ADD("orbit").
     } ELSE IF band = "PAYLOAD_OPS" {
@@ -388,11 +314,11 @@ LOCAL FUNCTION _fr3Libs {
         // Launch-only reboots should stay small. Payload operation libraries
         // are pulled in after parking orbit if the sequence actually needs them.
     }
-    IF band = "TRANSFER" AND stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
+    IF band = "XFER_PLAN" AND stateGet("target", "KERBIN"):TOUPPER <> "MUN" {
         libs:ADD("lambert").
         libs:ADD("maneuver_intersystem").
     }
-    IF band = "TRANSFER" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
+    IF band = "XFER_PLAN" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
         IF NOT libs:CONTAINS("lambert") { libs:ADD("lambert"). }
         libs:ADD("maneuver_rendezvous").
     }
@@ -401,12 +327,21 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("science").
     }
     missionAppendUnique(libs, missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", ""))).
-    _fr3EmergencyCleanup(libs).
     stateSet("lib_band_libs", libs:JOIN(",")).
     RETURN libs.
 }
 
 GLOBAL LIBS IS _fr3Libs().
+
+GLOBAL BOOT_CLEANUP IS LEXICON(
+    "vehicle", "FR3",
+    "keepCmds", LIST(
+        "CLEANUP", "DUMP", "FILES", "LANDASSIST", "LANDINGCHECK",
+        "LANDINGRESCUE", "LANDMIN", "SETLANDASSIST", "SETLANDINGDEORBIT",
+        "SETLANDINGTAG", "SETSTATE", "SETUP_MUN_ROVER_LANDING_REAL",
+        "SETUP_MUN_ROVER_LANDING_SIM", "SIMLANDHERE"
+    )
+).
 
 GLOBAL FUNCTION main {
     fr3ApplyMissionProfile().

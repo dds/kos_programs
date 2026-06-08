@@ -3,6 +3,8 @@
 // ============================================================
 
 GLOBAL phaseShouldYield IS FALSE.
+GLOBAL launchSeq IS LIST().
+GLOBAL xferSeq IS LIST().
 
 GLOBAL FUNCTION yieldToPrompt {
     SET phaseShouldYield TO TRUE.

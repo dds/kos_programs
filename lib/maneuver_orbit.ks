@@ -1,195 +1,15 @@
 // ============================================================
-// xfer.ks  —  Transfer & arrival phases  (0:/lib/xfer.ks)
+// maneuver_orbit.ks  —  Post-capture orbit adjustment phases
+// (0:/lib/maneuver_orbit.ks)
+//
+// phaseCirc                  — circularize or handle impact threat
+// phaseRaiseAlt              — raise Pe/Ap to target ellipse or relay alt
+// phaseInclCorrect           — correct orbital inclination
+// phaseElliptical            — unified PE/INC/LAN/AoP hill-climb solver
+// phaseScanSatImpactRelease  — SCANsat disposal + release + recovery
 // ============================================================
 
-GLOBAL xferSeq IS LIST().
-
 LOCAL MAX_RETRIES IS 5.
-
-GLOBAL FUNCTION phaseRendezvous {
-    LOCAL targetName IS "".
-    IF CFG:HASKEY("RENDEZVOUS_TARGET") { SET targetName TO CFG["RENDEZVOUS_TARGET"]. }
-    IF CFG:HASKEY("ASTEROID_TARGET")   { SET targetName TO CFG["ASTEROID_TARGET"]. }
-
-    IF targetName = "" {
-        mLogWarn("RDV phase requested but no RENDEZVOUS_TARGET or ASTEROID_TARGET configured.").
-        nextPhase(xferSeq).
-        RETURN.
-    }
-
-    LOCAL targetVessel IS VESSEL(targetName).
-    LOCAL opts IS _rendezvousOptions().
-    LOCAL success IS FALSE.
-    LOCAL retries IS 0.
-
-    orbitSummary().
-    UNTIL success {
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-        LOCAL nd IS planRendezvous(targetVessel, opts).
-        IF nd = 0 {
-            mLogError("Rendezvous planner failed for " + targetName + ".").
-            RETURN.
-        }
-        mLog("Rendezvous planned with " + targetName + ".").
-        SET success TO executeManeuver().
-        IF NOT success {
-            SET retries TO retries + 1.
-            mLog("Rendezvous burn missed (attempt " + retries + ") — waiting 10s.").
-            IF retries >= MAX_RETRIES {
-                mLogError("Rendezvous failed after " + retries + " attempts.").
-                RETURN.
-            }
-            WAIT 10.
-        }
-    }
-
-    orbitSummary().
-    nextPhase(xferSeq).
-}
-
-GLOBAL FUNCTION phaseTransfer {
-    LOCAL target IS missionTargetBody().
-    orbitSummary().
-    LOCAL success IS FALSE.
-    LOCAL retries IS 0.
-
-    IF HASNODE {
-        LOCAL existing IS NEXTNODE.
-        LOCAL pending IS stateGet("burn_pending", "false").
-        mLogWarn("STATS transfer resume existing-node pending=" + pending
-            + " burnPhase=" + stateGet("burn_phase", "")
-            + " dv="
-            + ROUND(existing:DELTAV:MAG,1)
-            + " eta=" + ROUND(existing:ETA,1)
-            + " body=" + SHIP:BODY:NAME).
-        SET success TO executeManeuver().
-        IF success {
-            orbitSummary().
-            nextPhase(xferSeq).
-            RETURN.
-        }
-        mLogWarn("Existing transfer node was not usable; replanning.").
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    } ELSE IF stateGet("burn_pending", "false") = "true" {
-        mLogWarn("STATS transfer resume missing-node pending=true burnPhase="
-            + stateGet("burn_phase", "")
-            + " burnDv=" + ROUND(stateGetNum("burn_dv", 0),1)
-            + " — replanning.").
-    }
-
-    UNTIL success {
-        LOCAL xLan IS -1.
-        LOCAL xAoP IS -1.
-        IF CFG:HASKEY("CAPTURE_LAN") { SET xLan TO CFG["CAPTURE_LAN"]. }
-        IF CFG:HASKEY("CAPTURE_AOP") { SET xAoP TO CFG["CAPTURE_AOP"]. }
-        LOCAL transferNode IS planTransfer(target, CFG["CAPTURE_PE"], xLan, xAoP).
-        IF transferNode = 0 OR NOT transferNode:ISTYPE("Node") {
-            SET retries TO retries + 1.
-            mLogError("Transfer planning failed; yielding for manual control.").
-            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-            PRINT " ".
-            PRINT "  TRANSFER PLANNING FAILED".
-            PRINT "  No maneuver was executed. Manual control is available.".
-            yieldToPrompt().
-            RETURN.
-        } ELSE {
-            mLog("Transfer planned.").
-            SET success TO executeManeuver().
-            IF NOT success {
-                SET retries TO retries + 1.
-                mLog("Transfer missed (attempt " + retries + ") — waiting 10s and replanning.").
-                UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-                IF retries >= MAX_RETRIES {
-                    mLogError("Transfer failed after " + retries + " attempts — halting.").
-                    RETURN.
-                }
-                WAIT 10.
-            }
-        }
-    }
-    nextPhase(xferSeq).
-}
-
-LOCAL FUNCTION _rendezvousOptions {
-    LOCAL opts IS LEXICON().
-    IF CFG:HASKEY("ASTEROID_MAX_DEPART_ORBITS") {
-        opts:ADD("MAX_DEPART_ORBITS", CFG["ASTEROID_MAX_DEPART_ORBITS"]).
-    }
-    IF CFG:HASKEY("ASTEROID_DEPART_SAMPLES") {
-        opts:ADD("DEPART_SAMPLES", CFG["ASTEROID_DEPART_SAMPLES"]).
-    }
-    IF CFG:HASKEY("ASTEROID_TOF_SAMPLES") {
-        opts:ADD("TOF_SAMPLES", CFG["ASTEROID_TOF_SAMPLES"]).
-    }
-    IF CFG:HASKEY("ASTEROID_MIN_TOF") {
-        opts:ADD("MIN_TOF", CFG["ASTEROID_MIN_TOF"]).
-    }
-    IF CFG:HASKEY("ASTEROID_MAX_TOF") {
-        opts:ADD("MAX_TOF", CFG["ASTEROID_MAX_TOF"]).
-    }
-    IF CFG:HASKEY("ASTEROID_ARRIVAL_WEIGHT") {
-        opts:ADD("ARRIVAL_WEIGHT", CFG["ASTEROID_ARRIVAL_WEIGHT"]).
-    }
-    IF CFG:HASKEY("ASTEROID_REFINE_ITERS") {
-        opts:ADD("REFINE_ITERS", CFG["ASTEROID_REFINE_ITERS"]).
-    }
-    RETURN opts.
-}
-
-GLOBAL FUNCTION phaseCoast {
-    LOCAL target IS missionTargetBody().
-    SET SAS TO TRUE.
-    UNLOCK STEERING.
-    mLog("Coasting to " + target:NAME + " SOI.").
-    waitForSOI(target).
-    orbitSummary().
-    nextPhase(xferSeq).
-}
-
-GLOBAL FUNCTION phaseCapture {
-    LOCAL target IS missionTargetBody().
-    WAIT 2.
-    mLog("Planning capture into elliptical orbit at " + target:NAME + ".").
-    mLogWarn("STATS capture phase setup target=" + target:NAME
-        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
-    
-    LOCAL success IS FALSE.
-    LOCAL retries IS 0.
-
-    UNTIL success {
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-        
-        // 1. Resolve target altitude from config
-        LOCAL captureAlt IS CFG["TARGET_PE"].
-        IF CFG:HASKEY("TARGET_AP") { SET captureAlt TO CFG["TARGET_AP"]. }
-
-        // 2. Delegate math to your existing library function
-        planCapture(target, captureAlt).
-
-        // 3. Execute with standard retry logic
-        SET success TO executeManeuver().
-        
-        IF NOT success {
-            SET retries TO retries + 1.
-            mLog("Capture missed (attempt " + retries + ") — waiting 10s.").
-            IF retries >= MAX_RETRIES {
-                mLogError("Capture failed after " + retries + " attempts — halting.").
-                RETURN.
-            }
-            WAIT 10.
-        }
-    }
-    
-    orbitSummary().
-    mLogWarn("STATS capture phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
-        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
-    mLog("Capture complete. Moving to finalization phase.").
-    nextPhase(xferSeq).
-}
 
 GLOBAL FUNCTION phaseCirc {
     IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
@@ -918,7 +738,7 @@ GLOBAL FUNCTION phaseElliptical {
     }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    
+
     // Plant the base node exactly at Apoapsis
     LOCAL burnTime IS TIME:SECONDS + ETA:APOAPSIS.
     LOCAL nd IS NODE(burnTime, 0, 0, 0).
@@ -927,8 +747,8 @@ GLOBAL FUNCTION phaseElliptical {
 
     // --- FITNESS FUNCTION ---
     LOCAL FUNCTION getFinalScore {
-        LOCAL p IS nd:ORBIT. 
-        
+        LOCAL p IS nd:ORBIT.
+
         IF p:PERIAPSIS < 0 { RETURN 9999999. } // Impact safety catch
 
         LOCAL peErr  IS 0.
@@ -938,32 +758,32 @@ GLOBAL FUNCTION phaseElliptical {
 
         IF targetPe >= 0 { SET peErr TO ABS(p:PERIAPSIS - targetPe) / 1000. }
         IF targetInc >= 0 { SET incErr TO ABS(p:INCLINATION - targetInc). }
-        
+
         IF targetAoP >= 0 {
             LOCAL rawAoP IS ABS(p:ARGUMENTOFPERIAPSIS - targetAoP).
             IF rawAoP > 180 { SET rawAoP TO 360 - rawAoP. }
             SET aopErr TO rawAoP.
         }
-        
+
         IF targetLan >= 0 {
             LOCAL rawLan IS ABS(p:LAN - targetLan).
             IF rawLan > 180 { SET rawLan TO 360 - rawLan. }
             SET lanErr TO rawLan.
         }
 
-        // Weighting: 
-        // PE keeps us alive (highest priority). 
+        // Weighting:
+        // PE keeps us alive (highest priority).
         // INC is likely already close, but heavily weighted to prevent the solver from breaking it.
         // LAN and AOP are dialed in using the remaining Normal/Radial flexibility.
         RETURN (peErr * 10) + (incErr * 50) + (lanErr * 25) + (aopErr * 20).
     }
-    
+
 
     // --- 4-AXIS HILL CLIMB (Prograde, Radial, Normal, TIME) ---
     LOCAL currentScore IS getFinalScore().
-    
+
     // We now step both Delta-V and Time
-    LOCAL stepDv IS 10.0. 
+    LOCAL stepDv IS 10.0.
     LOCAL stepTime IS 120.0. // Start by shifting the node in 2-minute increments
     LOCAL minStepDv IS 0.01.
     LOCAL iter IS 0.
@@ -1007,7 +827,7 @@ GLOBAL FUNCTION phaseElliptical {
                 SET bestTime TO nd:TIME.
                 SET improved TO TRUE.
             }
-            
+
             // Reset for the next probe in the loop
             SET nd:PROGRADE TO basePro.
             SET nd:RADIALOUT TO baseRad.
@@ -1025,13 +845,13 @@ GLOBAL FUNCTION phaseElliptical {
         } ELSE {
             // Shrink both search spaces to refine the exact node
             SET stepDv TO stepDv * 0.5.
-            SET stepTime TO stepTime * 0.5. 
+            SET stepTime TO stepTime * 0.5.
         }
     }
     // 3. Evaluate and execute the resulting maneuver
     LOCAL totalDv IS nd:DELTAV:MAG.
     mLog("Finalization Converged: dV=" + ROUND(totalDv, 1) + " m/s").
-    
+
     LOCAL resultMsg IS "Result ->".
     IF targetPe >= 0  { SET resultMsg TO resultMsg + " Pe: " + ROUND(nd:ORBIT:PERIAPSIS/1000, 1) + "km". }
     IF targetInc >= 0 { SET resultMsg TO resultMsg + " Inc: " + ROUND(nd:ORBIT:INCLINATION, 1) + "°". }

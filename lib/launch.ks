@@ -2,8 +2,6 @@
 // launch.ks  —  Reusable ascent phases  (0:/lib/launch.ks)
 // ============================================================
 
-GLOBAL launchSeq IS LIST().
-
 LOCAL FUNCTION _launchAge {
     RETURN TIME:SECONDS - stateGetNum("launch_time", 0).
 }

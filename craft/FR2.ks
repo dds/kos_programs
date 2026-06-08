@@ -94,7 +94,7 @@ FOR key IN _stringMissionKeys() { _cfgFromState(key, FALSE). }
 
 LOCAL FUNCTION _fallbackLibs {
     RETURN LIST(
-        "phases", "flightplan", "launch", "xfer",
+        "phases", "flightplan", "launch", "xfer_plan", "capture", "maneuver_orbit",
         "lib_navigation", "countdown", "maneuver_targeting", "maneuver", "inclination",
         "orbit", "deorbit_targeting", "landing",
         "lambert", "maneuver_intersystem", "maneuver_rendezvous",

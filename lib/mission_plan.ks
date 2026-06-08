@@ -94,15 +94,23 @@ LOCAL FUNCTION _missionPhaseDeps {
         { RETURN LIST("launch", "countdown", "flightplan"). }
     IF p = "PARK"
         { RETURN LIST("launch", "orbit"). }
-    // Transfer
-    IF p = "XING" OR p = "MCC" OR p = "COAST" OR p = "CAPTURE"
-        { RETURN LIST("xfer", "maneuver", "maneuver_targeting",
+    // Transfer departure
+    IF p = "XING"
+        { RETURN LIST("xfer_plan", "maneuver", "maneuver_targeting",
                        "lib_navigation", "inclination", "countdown"). }
+    // Mid-course correction (uses maneuver.ks phaseMidCourse)
+    IF p = "MCC"
+        { RETURN LIST("maneuver", "maneuver_targeting", "countdown"). }
+    // Coast + capture
+    IF p = "COAST" OR p = "CAPTURE"
+        { RETURN LIST("capture", "maneuver", "maneuver_targeting",
+                       "countdown", "orbit"). }
+    // Post-capture orbit adjustment
     IF p = "CIRC" OR p = "RAISE"
-        { RETURN LIST("maneuver", "maneuver_targeting",
+        { RETURN LIST("maneuver_orbit", "maneuver", "maneuver_targeting",
                        "inclination", "orbit"). }
     IF p = "INCLINE" OR p = "ELLIPTICAL"
-        { RETURN LIST("maneuver", "maneuver_targeting",
+        { RETURN LIST("maneuver_orbit", "maneuver", "maneuver_targeting",
                        "inclination", "orbit"). }
     // Deorbit / probes
     IF p = "TARGETED_DEORBIT" OR p = "RELEASE_PROBE"
@@ -121,7 +129,7 @@ LOCAL FUNCTION _missionPhaseDeps {
     IF p = "ROVER" { RETURN LIST("rover"). }
     // Rendezvous
     IF p = "RDV"
-        { RETURN LIST("maneuver", "maneuver_targeting",
+        { RETURN LIST("xfer_plan", "maneuver", "maneuver_targeting",
                        "maneuver_rendezvous", "lambert",
                        "lib_navigation", "inclination"). }
     // Molniya
@@ -133,7 +141,7 @@ LOCAL FUNCTION _missionPhaseDeps {
                        "inclination"). }
     // ScanSat
     IF p = "SCANSAT_IMPACT_RELEASE"
-        { RETURN LIST("xfer", "orbit", "maneuver", "maneuver_targeting",
+        { RETURN LIST("maneuver_orbit", "orbit", "maneuver", "maneuver_targeting",
                        "inclination", "countdown"). }
     RETURN LIST().
 }
