@@ -86,8 +86,9 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 
 | Lib | Purpose |
 |---|---|
+| `config.ks` | Shared config utilities (cfgSet, cfgFromState, applyMissionState, phaseListFromString) |
 | `phases.ks` | Generic phase machine (runPhases, nextPhase, phaseDone) |
-| `launch.ks` | Reusable ascent phases (launch, fairing, extend, parking) |
+| `launch.ks` | Reusable ascent phases (launch, fairing, extend, parking) + rocketMain() skeleton |
 | `xfer.ks` | Transfer/arrival phases (transfer, coast, capture, circ, raise, incl). Capture supports optional orbit targeting via CAPTURE_INC/LAN/AOP |
 | `mcc.ks` | Mid-course correction — Newton's method on PE (prograde), AoP (radial), LAN (normal). 50 m/s dV cap |
 | `state.ks` | Persistent JSON key-value store |
