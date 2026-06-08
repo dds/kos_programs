@@ -175,6 +175,15 @@ LOCAL FUNCTION _deploySolarPanels {
     }
 }
 
+LOCAL FUNCTION _setReactionWheelAuthority {
+    PARAMETER pct.  // 0-100
+    FOR m IN SHIP:MODULESNAMED("ModuleReactionWheel") {
+        IF m:HASFIELD("Authority Limiter") {
+            m:SETFIELD("Authority Limiter", MAX(0, MIN(100, pct))).
+        }
+    }
+}
+
 LOCAL FUNCTION _taggedDecoupler {
     PARAMETER tagName.
     FOR p IN SHIP:PARTS {
@@ -331,11 +340,12 @@ GLOBAL FUNCTION landExecute {
     }
     IF landingAbortFlag { _landCleanup(). RETURN. }
 
-    // Phase 6: Touchdown
+    // Phase 6: Touchdown — max reaction wheels to stay upright
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
     SET SAS TO TRUE.
+    _setReactionWheelAuthority(100).
     mLog("TOUCHDOWN. vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s"
         + "  lat=" + ROUND(SHIP:LATITUDE,4)
         + "  lng=" + ROUND(SHIP:LONGITUDE,4)).
@@ -436,9 +446,13 @@ LOCAL FUNCTION _carrierHandoff {
     UNTIL TIME:SECONDS >= orientEnd {
         LOCAL topErr IS VANG(SHIP:FACING:TOPVECTOR, SHIP:UP:VECTOR).
         LOCAL onGround IS SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+        LOCAL onGroundStr IS "".
+        IF onGround {
+            SET onGroundStr TO " LANDED".
+        }
         HUDTEXT("Rover orient: alt=" + ROUND(ALT:RADAR,1)
             + "m  topErr=" + ROUND(topErr,1)
-            + "deg" + CHOOSE " LANDED" IF onGround ELSE "",
+            + "deg" + onGroundStr,
             0.5, 2, 13, CYAN, FALSE).
         // Done when upright and on the ground
         IF onGround AND topErr < 15 { BREAK. }
@@ -450,10 +464,11 @@ LOCAL FUNCTION _carrierHandoff {
         + " alt=" + ROUND(ALT:RADAR,1)
         + " status=" + SHIP:STATUS).
 
-    // Step 6: Engage brakes and finalize
+    // Step 6: Engage brakes, lower reaction wheel authority for light rover
     SET BRAKES TO TRUE.
     SET SAS TO TRUE.
-    mLog("Brakes engaged.").
+    _setReactionWheelAuthority(25).
+    mLog("Brakes engaged, reaction wheels at 25%.").
 
     _deployAntennas().
     _deploySolarPanels().
