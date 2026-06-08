@@ -154,6 +154,39 @@ GLOBAL FUNCTION bootLibResolve {
     RETURN libs.
 }
 
+GLOBAL FUNCTION bootLibRun {
+    PARAMETER libName.
+    LOCAL compiled IS "1:/lib/" + libName + ".ksm".
+    LOCAL cached IS "1:/lib/" + libName + ".ks".
+    LOCAL archive IS "0:/lib/" + libName + ".ks".
+    IF EXISTS(compiled) {
+        RUNONCEPATH(compiled).
+    } ELSE IF EXISTS(cached) {
+        RUNONCEPATH(cached).
+    } ELSE IF EXISTS(archive) {
+        RUNONCEPATH(archive).
+    } ELSE {
+        PRINT "  WARN: " + libName + " unavailable".
+    }
+}
+
+GLOBAL FUNCTION bootLibLoadList {
+    PARAMETER roots.
+    FOR libName IN bootLibResolve(roots) {
+        bootLibRun(libName).
+    }
+}
+
+GLOBAL FUNCTION bootLibLoad {
+    PARAMETER libName.
+    bootLibLoadList(LIST(libName)).
+}
+
+GLOBAL FUNCTION bootPreamble {
+    bootLibLoadSpec().
+    bootLibLoadList(BOOT_LIB_PREAMBLE).
+}
+
 GLOBAL FUNCTION bootLibBandRoots {
     PARAMETER band.
     bootLibLoadSpec().

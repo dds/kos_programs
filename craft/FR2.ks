@@ -142,6 +142,7 @@ LOCAL FUNCTION _printConfig {
     }
     flightPlanSection("SEQUENCE").
     flightPlanSequence(seq).
+    flightPlanStorage().
     flightPlanLine().
 }
 

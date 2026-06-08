@@ -43,6 +43,7 @@ LOCAL FUNCTION _printConfig {
     flightPlanRow("SPLASH SPD", CFG["SPLASHDOWN_SPEED"] + " m/s").
     flightPlanSection("SEQUENCE").
     flightPlanSequence(seq).
+    flightPlanStorage().
     flightPlanLine().
 }
 

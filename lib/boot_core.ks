@@ -277,6 +277,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     PRINT "  Mission: " + stateGet("mission_name", missionId).
     PRINT "  Target:  " + stateGet("target", "KERBIN").
     PRINT "  Payload: " + stateGet("payloads", "").
+    IF DEFINED printStorageStatus { printStorageStatus(). }
     RETURN TRUE.
 }
 
