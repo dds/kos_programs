@@ -248,7 +248,7 @@ LOCAL FUNCTION _fr3EmergencyCleanup {
     LOCAL keepLibs IS LIST(
         "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY",
         "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE",
-        "ROCKET"
+        "CONFIG"
     ).
     FOR lib IN wantedLibs {
         LOCAL key IS lib:TOUPPER.
@@ -323,7 +323,7 @@ LOCAL FUNCTION _fr3Libs {
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
-    LOCAL libs IS LIST("phases", "utils", "ui", "rocket", "fr3_payload", "fr3_profile", "fr3_sequence").
+    LOCAL libs IS LIST("phases", "utils", "ui", "config", "fr3_payload", "fr3_profile", "fr3_sequence").
 
     IF band = "LAUNCH" {
         libs:ADD("flightplan").

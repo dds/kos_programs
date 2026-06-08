@@ -366,6 +366,49 @@ GLOBAL FUNCTION confirmLaunch {
     PRINT "  [==============================] GO       " AT (0, TERMINAL:HEIGHT - 1).
 }
 
+// ── Rocket main skeleton ──────────────────────────────────────
+
+// Shared main() boilerplate for rocket craft scripts. Handles
+// both fresh launches and mid-mission resume (confirmLaunch is
+// a no-op when phase is past LUNCH).
+//   vehicleName   - string for logging (e.g. "FR2")
+//   seqBuilder    - delegate that returns the phase sequence LIST
+//   configPrinter - delegate for flight plan display (passed to confirmLaunch)
+//   phaseMapBuilder - delegate that returns the phase LEXICON
+//   options       - optional LEXICON:
+//     "skipConfirmCheck" - delegate returning TRUE to skip confirmLaunch
+//     "preRun"          - delegate called after seq setup, before runPhases
+GLOBAL FUNCTION rocketMain {
+    PARAMETER vehicleName.
+    PARAMETER seqBuilder.
+    PARAMETER configPrinter.
+    PARAMETER phaseMapBuilder.
+    PARAMETER options IS LEXICON().
+
+    LOCAL seq IS seqBuilder:CALL().
+    SET launchSeq TO seq.
+    SET xferSeq TO seq.
+
+    mLogPhase(vehicleName + " MAIN").
+    mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
+    mLog("Sequence: " + seq:JOIN(" -> ")).
+    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
+
+    IF options:HASKEY("preRun") {
+        options["preRun"]:CALL().
+    }
+
+    LOCAL skipConfirm IS FALSE.
+    IF options:HASKEY("skipConfirmCheck") {
+        SET skipConfirm TO options["skipConfirmCheck"]:CALL().
+    }
+    IF NOT skipConfirm {
+        confirmLaunch(configPrinter).
+    }
+
+    runPhases(phaseMapBuilder:CALL()).
+}
+
 // ── Reboot recovery ─────────────────────────────────────────
 IF ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED
         AND stateGetNum("boot_count", 0) > 1 {

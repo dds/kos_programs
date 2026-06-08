@@ -1,10 +1,9 @@
 // ============================================================
-// rocket.ks  —  Shared rocket config and sequence utilities
-// (0:/lib/rocket.ks)
+// config.ks  —  Shared config and phase sequence utilities
+// (0:/lib/config.ks)
 //
-// Provides common infrastructure used by FR2, FR3, and other
-// rocket craft scripts: config management, phase sequence
-// parsing, and the main() boilerplate skeleton.
+// Generic utilities for any craft using persistent CFG state
+// and comma-separated phase sequences.
 // ============================================================
 
 // --- Config management ---
@@ -64,45 +63,4 @@ GLOBAL FUNCTION phaseListFromString {
     }
     IF seq:LENGTH = 0 { seq:ADD("DONE"). }
     RETURN seq.
-}
-
-// --- Main skeleton ---
-
-// Shared main() boilerplate for rocket craft scripts.
-//   vehicleName   - string for logging (e.g. "FR2")
-//   seqBuilder    - delegate that returns the phase sequence LIST
-//   configPrinter - delegate for flight plan display (passed to confirmLaunch)
-//   phaseMapBuilder - delegate that returns the phase LEXICON
-//   options       - optional LEXICON:
-//     "skipConfirmCheck" - delegate returning TRUE to skip confirmLaunch
-//     "preRun"          - delegate called after seq setup, before runPhases
-GLOBAL FUNCTION rocketMain {
-    PARAMETER vehicleName.
-    PARAMETER seqBuilder.
-    PARAMETER configPrinter.
-    PARAMETER phaseMapBuilder.
-    PARAMETER options IS LEXICON().
-
-    LOCAL seq IS seqBuilder:CALL().
-    SET launchSeq TO seq.
-    SET xferSeq TO seq.
-
-    mLogPhase(vehicleName + " MAIN").
-    mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
-    mLog("Sequence: " + seq:JOIN(" -> ")).
-    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
-
-    IF options:HASKEY("preRun") {
-        options["preRun"]:CALL().
-    }
-
-    LOCAL skipConfirm IS FALSE.
-    IF options:HASKEY("skipConfirmCheck") {
-        SET skipConfirm TO options["skipConfirmCheck"]:CALL().
-    }
-    IF NOT skipConfirm {
-        confirmLaunch(configPrinter).
-    }
-
-    runPhases(phaseMapBuilder:CALL()).
 }

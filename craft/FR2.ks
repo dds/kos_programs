@@ -97,7 +97,7 @@ GLOBAL LIBS IS LIST(
     "lib_navigation", "countdown", "maneuver", "inclination",
     "orbit", "targeting", "landing",
     "lambert", "maneuver_intersystem", "maneuver_rendezvous",
-    "molniya", "payload_ops", "science", "observe", "utils", "rocket"
+    "molniya", "payload_ops", "science", "observe", "utils", "config"
 ).
 
 LOCAL FUNCTION _buildSequence {
