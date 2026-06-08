@@ -233,6 +233,28 @@ GLOBAL FUNCTION fr3SaveReloadState {
     stateSet("reload_next_band", fr3BandForPhase(nextPhaseName)).
 }
 
+LOCAL FUNCTION _fr3AddLib {
+    PARAMETER libs.
+    PARAMETER libName.
+    IF NOT libs:CONTAINS(libName) {
+        libs:ADD(libName).
+    }
+}
+
+LOCAL FUNCTION _fr3AddLibWithDeps {
+    PARAMETER libs.
+    PARAMETER libName.
+    _fr3AddLib(libs, libName).
+
+    IF libName = "maneuver_orbit" {
+        _fr3AddLib(libs, "maneuver").
+        _fr3AddLib(libs, "maneuver_targeting").
+        _fr3AddLib(libs, "countdown").
+        _fr3AddLib(libs, "inclination").
+        _fr3AddLib(libs, "orbit").
+    }
+}
+
 LOCAL FUNCTION _fr3Libs {
     LOCAL band IS fr3PhaseBand().
     LOCAL phase IS stateGet("phase", ""):TOUPPER.
@@ -270,12 +292,7 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("countdown").
         libs:ADD("orbit").
     } ELSE IF band = "XFER_ORBIT" {
-        libs:ADD("maneuver_orbit").
-        libs:ADD("maneuver").
-        libs:ADD("maneuver_targeting").
-        libs:ADD("countdown").
-        libs:ADD("inclination").
-        libs:ADD("orbit").
+        _fr3AddLibWithDeps(libs, "maneuver_orbit").
     } ELSE IF band = "PAYLOAD_OPS" {
         libs:ADD("payload_ops").
         libs:ADD("orbit").
