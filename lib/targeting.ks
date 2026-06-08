@@ -633,6 +633,20 @@ LOCAL FUNCTION _planDeorbitNode {
     LOCAL vNew IS SQRT(mu * (2/oRad - 1/tSMA)).
     LOCAL dv   IS vNew - vNow.
 
+    // Clamp retrograde dV to configurable min/max bounds.
+    // From low orbits the Hohmann dV is tiny; the floor ensures a
+    // steep ballistic trajectory that overshoots the target so the
+    // suicide burn can steer onto it during descent.
+    IF DEFINED CFG {
+        LOCAL minDV IS 0.
+        LOCAL maxDV IS 99999.
+        IF CFG:HASKEY("LANDING_DEORBIT_MIN_DV") { SET minDV TO CFG["LANDING_DEORBIT_MIN_DV"]. }
+        IF CFG:HASKEY("LANDING_DEORBIT_MAX_DV") { SET maxDV TO CFG["LANDING_DEORBIT_MAX_DV"]. }
+        IF minDV > 0 OR maxDV < 99999 {
+            SET dv TO MIN(-minDV, MAX(-maxDV, dv)).
+        }
+    }
+
     LOCAL nd IS NODE(burnUT, radialDv, normalDv, dv).
     ADD nd.
     RETURN nd.
