@@ -716,166 +716,148 @@ LOCAL FUNCTION _impactThreat {
 }
 
 GLOBAL FUNCTION phaseElliptical {
-    LOCAL targetBody IS missionTargetBody().
     WAIT 2.
-    mLog("Planning unified PE, INC, LAN, and AoP alignment at Apoapsis...").
+    mLog("Planning bounded elliptical orbit finalization.").
 
-    // 1. Safely extract all 4 target parameters
     LOCAL targetPe  IS -1.
+    LOCAL targetAp  IS -1.
     LOCAL targetInc IS -1.
     LOCAL targetAoP IS -1.
-    LOCAL targetLan IS -1.
 
     IF CFG:HASKEY("TARGET_PE")   { SET targetPe TO CFG["TARGET_PE"]. }
+    IF CFG:HASKEY("TARGET_AP")   { SET targetAp TO CFG["TARGET_AP"]. }
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
-    IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
 
-    IF targetPe < 0 AND targetInc < 0 AND targetAoP < 0 AND targetLan < 0 {
-        mLog("No finalization targets specified. Skipping phase.").
+    IF targetPe < 0 AND targetAp < 0 AND targetAoP < 0 {
+        mLog("No elliptical finalization targets specified. Skipping phase.").
         nextPhase(xferSeq).
         RETURN.
     }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    LOCAL mu IS SHIP:ORBIT:BODY:MU.
+    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL maxDv IS 300.
+    IF CFG:HASKEY("ELLIPTICAL_MAX_NODE_DV") { SET maxDv TO CFG["ELLIPTICAL_MAX_NODE_DV"]. }
 
-    // Plant the base node exactly at Apoapsis
-    LOCAL burnTime IS TIME:SECONDS + ETA:APOAPSIS.
-    LOCAL nd IS NODE(burnTime, 0, 0, 0).
-    ADD nd.
-    WAIT 0.1.
-
-    // --- FITNESS FUNCTION ---
-    LOCAL FUNCTION getFinalScore {
-        LOCAL p IS nd:ORBIT.
-
-        IF p:PERIAPSIS < 0 { RETURN 9999999. } // Impact safety catch
-
-        LOCAL peErr  IS 0.
-        LOCAL incErr IS 0.
-        LOCAL aopErr IS 0.
-        LOCAL lanErr IS 0.
-
-        IF targetPe >= 0 { SET peErr TO ABS(p:PERIAPSIS - targetPe) / 1000. }
-        IF targetInc >= 0 { SET incErr TO ABS(p:INCLINATION - targetInc). }
-
-        IF targetAoP >= 0 {
-            LOCAL rawAoP IS ABS(p:ARGUMENTOFPERIAPSIS - targetAoP).
-            IF rawAoP > 180 { SET rawAoP TO 360 - rawAoP. }
-            SET aopErr TO rawAoP.
+    IF targetPe >= 0 AND ABS(SHIP:PERIAPSIS - targetPe) > MAX(5000, targetPe * 0.01) {
+        LOCAL burnTime IS TIME:SECONDS + ETA:APOAPSIS.
+        LOCAL rAp IS bodyR + SHIP:APOAPSIS.
+        LOCAL rPe IS bodyR + targetPe.
+        LOCAL tSMA IS (rAp + rPe) / 2.
+        LOCAL vNow IS VELOCITYAT(SHIP, burnTime):ORBIT:MAG.
+        LOCAL vNew IS SQRT(mu * (2/rAp - 1/tSMA)).
+        LOCAL nd IS NODE(burnTime, 0, 0, vNew - vNow).
+        ADD nd.
+        WAIT 0.2.
+        IF _ellipticalNodeBad(nd, targetPe, targetAp, targetInc, maxDv, "raise-pe") {
+            REMOVE nd.
+            yieldToPrompt().
+            RETURN.
         }
-
-        IF targetLan >= 0 {
-            LOCAL rawLan IS ABS(p:LAN - targetLan).
-            IF rawLan > 180 { SET rawLan TO 360 - rawLan. }
-            SET lanErr TO rawLan.
-        }
-
-        // Weighting:
-        // PE keeps us alive (highest priority).
-        // INC is likely already close, but heavily weighted to prevent the solver from breaking it.
-        // LAN and AOP are dialed in using the remaining Normal/Radial flexibility.
-        RETURN (peErr * 10) + (incErr * 50) + (lanErr * 25) + (aopErr * 20).
+        mLog("Elliptical raise Pe: dV=" + ROUND(nd:DELTAV:MAG,1)
+            + " m/s  Pe=" + ROUND(nd:ORBIT:PERIAPSIS/1000,1)
+            + "km Ap=" + ROUND(nd:ORBIT:APOAPSIS/1000,1) + "km").
+        archivePlannedManeuverLog("elliptical-raise-pe").
+        IF NOT _executeEllipticalStep("Elliptical raise Pe") { RETURN. }
+    } ELSE {
+        mLog("Elliptical Pe already within tolerance.").
     }
 
-
-    // --- 4-AXIS HILL CLIMB (Prograde, Radial, Normal, TIME) ---
-    LOCAL currentScore IS getFinalScore().
-
-    // We now step both Delta-V and Time
-    LOCAL stepDv IS 10.0.
-    LOCAL stepTime IS 120.0. // Start by shifting the node in 2-minute increments
-    LOCAL minStepDv IS 0.01.
-    LOCAL iter IS 0.
-
-    UNTIL stepDv < minStepDv OR iter > 300 {
-        SET iter TO iter + 1.
-        LOCAL improved IS FALSE.
-
-        LOCAL basePro  IS nd:PROGRADE.
-        LOCAL baseRad  IS nd:RADIALOUT.
-        LOCAL baseNor  IS nd:NORMAL.
-        LOCAL baseTime IS nd:TIME.
-
-        // The 8 directions to probe (6 spatial, 2 temporal)
-        LOCAL probes IS LIST(
-            LIST(stepDv, 0, 0, 0), LIST(-stepDv, 0, 0, 0),
-            LIST(0, stepDv, 0, 0), LIST(0, -stepDv, 0, 0),
-            LIST(0, 0, stepDv, 0), LIST(0, 0, -stepDv, 0),
-            LIST(0, 0, 0, stepTime), LIST(0, 0, 0, -stepTime)
-        ).
-
-        LOCAL bestProbeScore IS currentScore.
-        LOCAL bestPro  IS basePro.
-        LOCAL bestRad  IS baseRad.
-        LOCAL bestNor  IS baseNor.
-        LOCAL bestTime IS baseTime.
-
-        FOR p IN probes {
-            SET nd:PROGRADE TO basePro + p[0].
-            SET nd:RADIALOUT TO baseRad + p[1].
-            SET nd:NORMAL TO baseNor + p[2].
-            SET nd:TIME TO baseTime + p[3].
-            WAIT 0.01. // Allow KSP conics to update
-
-            LOCAL probeScore IS getFinalScore().
-            IF probeScore < bestProbeScore {
-                SET bestProbeScore TO probeScore.
-                SET bestPro  TO nd:PROGRADE.
-                SET bestRad  TO nd:RADIALOUT.
-                SET bestNor  TO nd:NORMAL.
-                SET bestTime TO nd:TIME.
-                SET improved TO TRUE.
+    IF targetAoP >= 0 {
+        LOCAL aopErr IS _angleDiff(SHIP:ORBIT:ARGUMENTOFPERIAPSIS, targetAoP).
+        IF ABS(aopErr) > 3 {
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            LOCAL aopNode IS planAoPChange(targetAoP).
+            IF aopNode <> 0 AND aopNode:ISTYPE("Node") {
+                WAIT 0.2.
+                IF _ellipticalNodeBad(aopNode, targetPe, targetAp, targetInc, maxDv, "aop") {
+                    REMOVE aopNode.
+                    yieldToPrompt().
+                    RETURN.
+                }
+                IF NOT _executeEllipticalStep("Elliptical AoP trim") { RETURN. }
             }
-
-            // Reset for the next probe in the loop
-            SET nd:PROGRADE TO basePro.
-            SET nd:RADIALOUT TO baseRad.
-            SET nd:NORMAL TO baseNor.
-            SET nd:TIME TO baseTime.
-        }
-
-        IF improved {
-            // Step in the winning direction
-            SET nd:PROGRADE TO bestPro.
-            SET nd:RADIALOUT TO bestRad.
-            SET nd:NORMAL TO bestNor.
-            SET nd:TIME TO bestTime.
-            SET currentScore TO bestProbeScore.
         } ELSE {
-            // Shrink both search spaces to refine the exact node
-            SET stepDv TO stepDv * 0.5.
-            SET stepTime TO stepTime * 0.5.
-        }
-    }
-    // 3. Evaluate and execute the resulting maneuver
-    LOCAL totalDv IS nd:DELTAV:MAG.
-    mLog("Finalization Converged: dV=" + ROUND(totalDv, 1) + " m/s").
-
-    LOCAL resultMsg IS "Result ->".
-    IF targetPe >= 0  { SET resultMsg TO resultMsg + " Pe: " + ROUND(nd:ORBIT:PERIAPSIS/1000, 1) + "km". }
-    IF targetInc >= 0 { SET resultMsg TO resultMsg + " Inc: " + ROUND(nd:ORBIT:INCLINATION, 1) + "°". }
-    IF targetAoP >= 0 { SET resultMsg TO resultMsg + " AoP: " + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1) + "°". }
-    mLog(resultMsg).
-    archivePlannedManeuverLog("elliptical-finalization").
-
-    // Execution loop integrating your retry architecture
-    LOCAL success IS FALSE.
-    LOCAL retries IS 0.
-    UNTIL success {
-        SET success TO executeManeuver().
-        IF NOT success {
-            SET retries TO retries + 1.
-            mLog("Finalization burn missed (attempt " + retries + ") — waiting 10s.").
-            IF retries >= MAX_RETRIES {
-                mLogError("Finalization failed after " + retries + " attempts. Halting.").
-                RETURN.
-            }
-            WAIT 10.
+            mLog("Elliptical AoP already within tolerance.").
         }
     }
 
     orbitSummary().
     mLog("Orbit finalization complete!").
     nextPhase(xferSeq).
+}
+
+LOCAL FUNCTION _angleDiff {
+    PARAMETER current.
+    PARAMETER target.
+    LOCAL err IS current - target.
+    IF err > 180 { SET err TO err - 360. }
+    IF err < -180 { SET err TO err + 360. }
+    RETURN err.
+}
+
+LOCAL FUNCTION _ellipticalNodeBad {
+    PARAMETER nd.
+    PARAMETER targetPe.
+    PARAMETER targetAp.
+    PARAMETER targetInc.
+    PARAMETER maxDv.
+    PARAMETER label.
+
+    LOCAL p IS nd:ORBIT.
+    LOCAL bad IS FALSE.
+    LOCAL reason IS "".
+    IF nd:DELTAV:MAG > maxDv {
+        SET bad TO TRUE.
+        SET reason TO "dv-cap".
+    } ELSE IF p:HASNEXTPATCH {
+        SET bad TO TRUE.
+        SET reason TO "escape".
+    } ELSE IF targetPe >= 0 AND ABS(p:PERIAPSIS - targetPe) > MAX(25000, targetPe * 0.15) {
+        SET bad TO TRUE.
+        SET reason TO "pe-error".
+    } ELSE IF targetAp >= 0 AND ABS(p:APOAPSIS - targetAp) > MAX(50000, targetAp * 0.15) {
+        SET bad TO TRUE.
+        SET reason TO "ap-error".
+    } ELSE IF targetInc >= 0 AND ABS(_angleDiff(p:INCLINATION, targetInc)) > 5 {
+        SET bad TO TRUE.
+        SET reason TO "inc-error".
+    }
+
+    IF bad {
+        mLogError("Elliptical " + label + " node rejected: " + reason + ".").
+        mLogWarn("STATS elliptical rejected label=" + label
+            + " reason=" + reason
+            + " dv=" + ROUND(nd:DELTAV:MAG,1)
+            + " PeKm=" + ROUND(p:PERIAPSIS/1000,1)
+            + " ApKm=" + ROUND(p:APOAPSIS/1000,1)
+            + " inc=" + ROUND(p:INCLINATION,1)
+            + " AoP=" + ROUND(p:ARGUMENTOFPERIAPSIS,1)).
+        PRINT " ".
+        PRINT "  ELLIPTICAL NODE REJECTED".
+        PRINT "  " + reason + ". Manual control is available.".
+    }
+    RETURN bad.
+}
+
+LOCAL FUNCTION _executeEllipticalStep {
+    PARAMETER label.
+    LOCAL success IS FALSE.
+    LOCAL retries IS 0.
+    UNTIL success {
+        SET success TO executeManeuver().
+        IF NOT success {
+            SET retries TO retries + 1.
+            mLog(label + " missed (attempt " + retries + ") — waiting 10s.").
+            IF retries >= MAX_RETRIES {
+                mLogError(label + " failed after " + retries + " attempts.").
+                yieldToPrompt().
+                RETURN FALSE.
+            }
+            WAIT 10.
+        }
+    }
+    RETURN TRUE.
 }
