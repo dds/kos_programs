@@ -4,6 +4,7 @@
 // ============================================================
 
 GLOBAL FUNCTION phaseLandDeorbit {
+    IF DEFINED fr3ApplyMissionProfile { fr3ApplyMissionProfile(). }
     mLogWarn("STATS land-deorbit phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
