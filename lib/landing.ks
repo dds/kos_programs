@@ -39,8 +39,11 @@ GLOBAL LAND_CFG IS LEXICON(
     // Carrier handoff (empty tag = no handoff)
     "CARRIER_TAG",       "",      // decoupler tag for carrier release
     "CARRIER_TIP",     TRUE,      // tip carrier sideways before release
-    "CARRIER_TIP_TIME",  1.5,    // seconds to hold tip
-    "CARRIER_SETTLE",    2.0     // seconds to wait after touchdown before handoff
+    "CARRIER_TIP_TIME",  1.5,     // seconds to hold tip
+    "CARRIER_SETTLE",    2.0,     // seconds to wait after touchdown before handoff
+    "ROVER_ORIENT",    TRUE,      // orient rover upright after release
+    "ROVER_ORIENT_TIME", 3.0,    // seconds to hold upright orientation
+    "ROVER_BRAKE",     TRUE       // engage brakes after rover lands on wheels
 ).
 
 // Backward-compat alias: code that checks DEFINED LANDING_CFG still works
@@ -353,69 +356,100 @@ LOCAL FUNCTION _carrierHandoff {
         RETURN.
     }
 
+    // Step 1: Settle on the bell after touchdown
     mLog("Carrier handoff: settling " + ROUND(LAND_CFG["CARRIER_SETTLE"],1) + "s.").
     WAIT LAND_CFG["CARRIER_SETTLE"].
+    mLogWarn("STATS carrier settled status=" + SHIP:STATUS
+        + " alt=" + ROUND(ALT:RADAR,1)
+        + " v=" + ROUND(SHIP:VERTICALSPEED,1)).
 
+    // Step 2: Tip carrier sideways so rover clears the stack
     IF LAND_CFG["CARRIER_TIP"] {
         mLog("Tipping carrier for release.").
         SET SAS TO FALSE.
         LOCK STEERING TO SHIP:FACING:RIGHTVECTOR.
         WAIT LAND_CFG["CARRIER_TIP_TIME"].
-        UNLOCK STEERING.
+        mLogWarn("STATS carrier tipped pitch=" + ROUND(SHIP:FACING:PITCH,1)
+            + " roll=" + ROUND(SHIP:FACING:ROLL,1)).
     }
 
-    mLog("Decoupling carrier.").
+    // Step 3: Decouple — after this, kOS CPU is on the rover
+    mLog("Decoupling rover from carrier.").
     _decouplePart(decoupler).
     WAIT 0.5.
+    UNLOCK STEERING.
+    mLogWarn("STATS rover released alt=" + ROUND(ALT:RADAR,1)
+        + " v=" + ROUND(SHIP:VERTICALSPEED,1)
+        + " status=" + SHIP:STATUS).
+
+    // Step 4: Orient rover wheels-down — keep current heading but roll
+    // so TOPVECTOR faces away from ground (wheels toward surface)
+    IF LAND_CFG["ROVER_ORIENT"] {
+        mLog("Orienting rover wheels-down.").
+        SET SAS TO FALSE.
+        // LOOKDIRUP(fore, top): keep nose roughly forward, roll wheels toward ground
+        LOCK STEERING TO LOOKDIRUP(VXCL(SHIP:UP:VECTOR, SHIP:FACING:FOREVECTOR):NORMALIZED,
+            SHIP:UP:VECTOR).
+        LOCAL orientEnd IS TIME:SECONDS + LAND_CFG["ROVER_ORIENT_TIME"].
+
+        // Hold orientation until timeout or we land on wheels
+        UNTIL TIME:SECONDS >= orientEnd
+                OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+            LOCAL topErr IS VANG(SHIP:FACING:TOPVECTOR, SHIP:UP:VECTOR).
+            HUDTEXT("Rover orient: alt=" + ROUND(ALT:RADAR,1)
+                + "m  topErr=" + ROUND(topErr,1)
+                + "deg", 0.5, 2, 13, CYAN, FALSE).
+            WAIT 0.05.
+        }
+        UNLOCK STEERING.
+        mLogWarn("STATS rover oriented topErr="
+            + ROUND(VANG(SHIP:FACING:TOPVECTOR, SHIP:UP:VECTOR),1)
+            + " alt=" + ROUND(ALT:RADAR,1)
+            + " status=" + SHIP:STATUS).
+    }
+
+    // Step 5: Wait for rover to settle on its wheels
+    IF NOT (SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED") {
+        mLog("Waiting for rover to touch down on wheels.").
+        LOCAL wheelWait IS TIME:SECONDS + 15.
+        UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED"
+                OR TIME:SECONDS >= wheelWait {
+            WAIT 0.1.
+        }
+    }
+
+    // Step 6: Engage brakes
+    IF LAND_CFG["ROVER_BRAKE"] {
+        SET BRAKES TO TRUE.
+        mLog("Brakes engaged.").
+    }
+
     SET SAS TO TRUE.
-    mLog("Carrier handoff complete.").
+    mLogWarn("STATS carrier handoff complete status=" + SHIP:STATUS
+        + " lat=" + ROUND(SHIP:LATITUDE,4)
+        + " lng=" + ROUND(SHIP:LONGITUDE,4)
+        + " alt=" + ROUND(ALT:RADAR,1)).
+    mLog("Carrier handoff complete. Rover on surface.").
 }
 
-// Assist stage descent: land the whole stack, then optionally decouple.
+// Assist stage descent: land the whole stack, then decouple + rover release.
 // This replaces the old landingAssistStage() — identical contract.
 GLOBAL FUNCTION landingAssistStage {
     mLogPhase("LANDING ASSIST").
     SET landingAbortFlag TO FALSE.
 
-    // If a carrier tag is configured, use it; otherwise fall back to old tag
-    LOCAL tagName IS LAND_CFG["CARRIER_TAG"].
-    IF tagName = "" {
-        SET tagName TO "landing_assist_decoupler".
-    }
-    LOCAL decoupler IS _taggedDecoupler(tagName).
-    IF decoupler = 0 {
-        mLogWarn("No assist decoupler tagged '" + tagName + "' — landing without release.").
+    // Ensure carrier tag is set so landExecute triggers _carrierHandoff
+    IF LAND_CFG["CARRIER_TAG"] = "" {
+        SET LAND_CFG["CARRIER_TAG"] TO "landing_assist_decoupler".
     }
 
-    // Execute the suicide burn landing
+    // Execute the suicide burn landing (includes carrier handoff at the end)
     landExecute().
 
-    // If landExecute already did carrier handoff, we're done
-    IF LAND_CFG["CARRIER_TAG"] <> "" { RETURN TRUE. }
-
-    // Otherwise do the handoff here with the assist decoupler
-    IF decoupler = 0 { RETURN TRUE. }
     IF NOT (SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED") {
-        mLogWarn("Not landed after descent — skipping decoupler release.").
+        mLogWarn("Not on surface after assist descent.").
         RETURN FALSE.
     }
-
-    mLog("Assist settle: " + ROUND(LAND_CFG["CARRIER_SETTLE"],1) + "s.").
-    WAIT LAND_CFG["CARRIER_SETTLE"].
-
-    IF LAND_CFG["CARRIER_TIP"] {
-        mLog("Tipping for rover release.").
-        SET SAS TO FALSE.
-        LOCK STEERING TO SHIP:FACING:RIGHTVECTOR.
-        WAIT LAND_CFG["CARRIER_TIP_TIME"].
-        UNLOCK STEERING.
-    }
-
-    mLog("Releasing payload.").
-    _decouplePart(decoupler).
-    WAIT 0.5.
-    SET SAS TO TRUE.
-    mLog("Assist handoff complete.").
     RETURN TRUE.
 }
 
