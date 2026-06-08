@@ -131,13 +131,9 @@ LOCAL FUNCTION _fr3LibsForBand {
 }
 
 LOCAL FUNCTION _fr3Libs {
-    LOCAL phase IS stateGet("phase", ""):TOUPPER.
-    IF phase = "" OR phase:CONTAINS("MAIN") {
-        LOCAL seq IS fr3BuildPhaseSequence().
-        stateSet("phase", seq[0]).
-    }
+    bootEnsureInitialPhase(fr3BuildPhaseSequence()).
     LOCAL band IS fr3PhaseBand().
-    SET phase TO stateGet("phase", ""):TOUPPER.
+    LOCAL phase IS stateGet("phase", ""):TOUPPER.
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
@@ -168,8 +164,7 @@ GLOBAL FUNCTION main {
     mLogPhase("FR3 MAIN").
     mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
     mLog("Sequence: " + seq:JOIN(" -> ")).
-    LOCAL currentPhase IS stateGet("phase","").
-    IF currentPhase = "" OR currentPhase:TOUPPER:CONTAINS("MAIN") { stateSet("phase", seq[0]). }
+    bootEnsureInitialPhase(seq).
 
     IF fr3PhaseBand() = "LAUNCH" {
         IF NOT confirmLaunch(_fr3PrintConfig@) { RETURN. }

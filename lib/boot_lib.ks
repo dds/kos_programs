@@ -287,7 +287,17 @@ GLOBAL FUNCTION bootMissionConfig {
 
 GLOBAL FUNCTION bootIsLaunchStartPhase {
     PARAMETER phaseName.
-    RETURN phaseName = "" OR phaseName = "LUNCH" OR phaseName = "FAIR" OR phaseName = "ANTS".
+    LOCAL phase IS phaseName:TOUPPER.
+    RETURN phase = "" OR phase = "LUNCH" OR phase = "FAIR" OR phase = "ANTS".
+}
+
+GLOBAL FUNCTION bootEnsureInitialPhase {
+    PARAMETER seq.
+    LOCAL phase IS stateGet("phase", ""):TOUPPER.
+    IF (phase = "" OR phase:CONTAINS("MAIN")) AND seq:LENGTH > 0 {
+        stateSet("phase", seq[0]).
+    }
+    RETURN stateGet("phase", "").
 }
 
 GLOBAL FUNCTION bootShouldResetMissionOnBoot {
