@@ -67,6 +67,7 @@ GLOBAL FUNCTION fr3BuildPhaseMap {
         phaseMap:ADD("RAISE", phaseRaiseAlt@).
         phaseMap:ADD("INCLINE", phaseInclCorrect@).
         phaseMap:ADD("SCANSAT_IMPACT_RELEASE", phaseScanSatImpactRelease@).
+        phaseMap:ADD("PAYLOAD_IMPACT_RELEASE", phasePayloadImpactRelease@).
         phaseMap:ADD("ELLIPTICAL", phaseElliptical@).
     }
 

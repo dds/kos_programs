@@ -188,6 +188,202 @@ LOCAL FUNCTION _scanSatImpactHalt {
     RETURN FALSE.
 }
 
+GLOBAL FUNCTION phasePayloadImpactRelease {
+    LOCAL impactPe IS 2000.
+    LOCAL tag IS "probe_decoupler".
+    LOCAL label IS "payload".
+    IF CFG:HASKEY("PAYLOAD_DISPOSE_PE") { SET impactPe TO CFG["PAYLOAD_DISPOSE_PE"]. }
+    ELSE IF CFG:HASKEY("SCANSAT_DISPOSE_PE") { SET impactPe TO CFG["SCANSAT_DISPOSE_PE"]. }
+    IF CFG:HASKEY("PAYLOAD_DECOUPLER_TAG") { SET tag TO CFG["PAYLOAD_DECOUPLER_TAG"]. }
+    IF CFG:HASKEY("PAYLOAD_LABEL") { SET label TO CFG["PAYLOAD_LABEL"]. }
+
+    mLogWarn("STATS payload-impact-release setup label=" + label
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " impactPeKm=" + ROUND(impactPe/1000,1)
+        + " tag=" + tag).
+
+    LOCAL stateKey IS "payload_" + label:TOLOWER + "_released_time".
+    LOCAL alreadyReleased IS stateGet(stateKey, "") <> "".
+
+    IF NOT alreadyReleased {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        IF NOT _payloadDisposeAttached(impactPe) {
+            _payloadImpactHalt("disposal burn failed before release").
+            RETURN.
+        }
+
+        IF tag <> "" {
+            IF NOT _releaseTaggedPayloadXfer(tag, label) {
+                mLogError(label + " release failed after impact setup — tag '" + tag
+                    + "' missing or not decouplable.").
+                HUDTEXT("ERROR: payload not released", 8, 2, 16, RED, FALSE).
+                _payloadImpactHalt("release failed").
+                RETURN.
+            }
+        } ELSE {
+            mLogWarn("PAYLOAD_DECOUPLER_TAG blank — payload still attached after disposal burn.").
+        }
+
+        stateSet(stateKey, TIME:SECONDS).
+        mLogWarn("STATS payload-release result label=" + label
+            + " mass=" + ROUND(SHIP:MASS,3)
+            + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+            + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+        WAIT 0.5.
+        _payloadClearDisposedStage().
+    } ELSE {
+        mLogWarn(label + " release already recorded; skipping decoupler search.").
+    }
+
+    orbitSummary().
+    nextPhase(xferSeq).
+}
+
+LOCAL FUNCTION _payloadImpactHalt {
+    PARAMETER reason.
+    mLogError("Payload impact/release halted: " + reason + ".").
+    stateSet("phase", "PAYLOAD_IMPACT_RELEASE").
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    PRINT " ".
+    PRINT "  PAYLOAD RELEASE HOLD".
+    PRINT "  " + reason.
+    PRINT "  Manual mode remains available; reboot/resume after review.".
+    yieldToPrompt().
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _payloadDisposeAttached {
+    PARAMETER targetPe.
+
+    LOCAL maxTime IS 600.
+    IF CFG:HASKEY("PAYLOAD_DISPOSE_MAX_TIME") { SET maxTime TO CFG["PAYLOAD_DISPOSE_MAX_TIME"]. }
+    ELSE IF CFG:HASKEY("SCANSAT_DISPOSE_MAX_TIME") { SET maxTime TO CFG["SCANSAT_DISPOSE_MAX_TIME"]. }
+
+    mLogWarn("STATS payload-dispose setup PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " maxTime=" + ROUND(maxTime,0)
+        + " thrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
+
+    IF SHIP:PERIAPSIS <= targetPe {
+        mLog("Payload carrier already on disposal Pe.").
+        RETURN TRUE.
+    }
+    IF SHIP:AVAILABLETHRUST <= 0 {
+        mLogWarn("Payload carrier disposal skipped: no available thrust.").
+        RETURN FALSE.
+    }
+
+    SET SAS TO FALSE.
+    LOCK STEERING TO SHIP:RETROGRADE.
+    LOCAL startT IS TIME:SECONDS.
+    LOCAL aligned IS FALSE.
+    UNTIL aligned OR TIME:SECONDS - startT > 45 {
+        IF VANG(SHIP:FACING:FOREVECTOR, SHIP:RETROGRADE:FOREVECTOR) < 5 {
+            SET aligned TO TRUE.
+        }
+        WAIT 0.1.
+    }
+    IF NOT aligned {
+        mLogWarn("Payload carrier disposal starting with poor retrograde alignment.").
+    }
+
+    LOCK THROTTLE TO 1.
+    UNTIL SHIP:PERIAPSIS <= targetPe
+            OR SHIP:AVAILABLETHRUST <= 0
+            OR TIME:SECONDS - startT > maxTime {
+        LOCK STEERING TO SHIP:RETROGRADE.
+        WAIT 0.1.
+    }
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+
+    LOCAL status_ IS "complete".
+    IF SHIP:PERIAPSIS > targetPe AND SHIP:AVAILABLETHRUST <= 0 {
+        SET status_ TO "out-of-thrust".
+    } ELSE IF SHIP:PERIAPSIS > targetPe {
+        SET status_ TO "timeout".
+    }
+    mLogWarn("STATS payload-dispose result status=" + status_
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " duration=" + ROUND(TIME:SECONDS - startT,1)).
+
+    IF status_ = "complete" { RETURN TRUE. }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _payloadClearDisposedStage {
+    LOCAL clearDv IS 2.
+    IF CFG:HASKEY("PAYLOAD_CLEARANCE_DV") { SET clearDv TO CFG["PAYLOAD_CLEARANCE_DV"]. }
+    IF clearDv <= 0 {
+        mLogWarn("STATS payload-clearance result status=disabled").
+        RETURN TRUE.
+    }
+
+    LOCAL settleTime IS 3.
+    IF CFG:HASKEY("PAYLOAD_CLEARANCE_SETTLE") { SET settleTime TO CFG["PAYLOAD_CLEARANCE_SETTLE"]. }
+    LOCAL throttle_ IS 0.25.
+    IF CFG:HASKEY("PAYLOAD_CLEARANCE_THROTTLE") { SET throttle_ TO CFG["PAYLOAD_CLEARANCE_THROTTLE"]. }
+    SET throttle_ TO MAX(0.05, MIN(1, throttle_)).
+
+    IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {
+        mLogWarn("STATS payload-clearance result status=no-thrust").
+        WAIT settleTime.
+        RETURN FALSE.
+    }
+
+    LOCAL dirName IS "NORMAL".
+    IF CFG:HASKEY("PAYLOAD_CLEARANCE_DIR") { SET dirName TO CFG["PAYLOAD_CLEARANCE_DIR"]:TOUPPER. }
+    LOCAL dirVec IS VCRS(SHIP:POSITION, SHIP:VELOCITY:ORBIT):NORMALIZED.
+    IF dirName = "ANTINORMAL" {
+        SET dirVec TO -dirVec.
+    } ELSE IF dirName = "RADIALOUT" {
+        SET dirVec TO SHIP:UP:VECTOR.
+    } ELSE IF dirName = "RADIALIN" {
+        SET dirVec TO -SHIP:UP:VECTOR.
+    } ELSE IF dirName = "RIGHT" {
+        SET dirVec TO SHIP:FACING:RIGHTVECTOR.
+    }
+
+    LOCAL burnTime IS clearDv / ((SHIP:AVAILABLETHRUST / SHIP:MASS) * throttle_).
+    SET burnTime TO MAX(0.2, MIN(8, burnTime)).
+    mLogWarn("STATS payload-clearance setup dv=" + ROUND(clearDv,1)
+        + " dir=" + dirName
+        + " throttle=" + ROUND(throttle_,2)
+        + " burnTime=" + ROUND(burnTime,1)
+        + " settle=" + ROUND(settleTime,1)).
+
+    SET SAS TO FALSE.
+    LOCK STEERING TO dirVec.
+    LOCAL startT IS TIME:SECONDS.
+    LOCAL aligned IS FALSE.
+    UNTIL aligned OR TIME:SECONDS - startT > 10 {
+        IF VANG(SHIP:FACING:FOREVECTOR, dirVec) < 8 { SET aligned TO TRUE. }
+        WAIT 0.1.
+    }
+    IF NOT aligned {
+        mLogWarn("Payload clearance nudge starting with poor alignment.").
+    }
+
+    LOCK THROTTLE TO throttle_.
+    WAIT burnTime.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    WAIT settleTime.
+    mLogWarn("STATS payload-clearance result status=complete PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
+    RETURN TRUE.
+}
+
 GLOBAL FUNCTION phaseRaiseAlt {
     LOCAL elliptical IS CFG:HASKEY("TARGET_PE") AND CFG:HASKEY("TARGET_AP").
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
