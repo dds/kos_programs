@@ -188,7 +188,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
             SET invalidSamples TO invalidSamples + 1.
         }
         SET scanUT TO scanUT + scanStep.
-        WAIT 0.01.
+        WAIT 0.
     }
     mLog("Coarse best: T+" + ROUND(bestUT - TIME:SECONDS,0)
         + "s  dist=" + ROUND(bestDist/1000,1) + "km").
@@ -204,7 +204,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     IF validSamples = 0 {
         mLogWarn("STATS deorbit abort reason=no-valid-coarse-samples").
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
 
@@ -213,7 +213,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
             + ROUND(bestUT - TIME:SECONDS,0)
             + " minLead=" + ROUND(minLead,0)
             + " distKm=" + ROUND(bestDist/1000,1)).
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
 
@@ -222,7 +222,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
             + ROUND(bestDist/1000,1)
             + " refineStartLimitKm=" + ROUND(refineStartLimit/1000,1)
             + " toleranceKm=" + ROUND(tolerance/1000,1)).
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
 
@@ -243,7 +243,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 SET passBestPe TO bestPe.
             }
             SET passUT TO passUT + step.
-            WAIT 0.05.
+            WAIT 0.
         }
 
         SET bestDist TO passBest.
@@ -295,13 +295,13 @@ GLOBAL FUNCTION targetedDeorbitAt {
             mLogWarn("STATS deorbit abort reason=miss-exceeds-tolerance distKm="
                 + ROUND(bestDist/1000,1)
                 + " toleranceKm=" + ROUND(tolerance/1000,1)).
-            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
             RETURN FALSE.
         }
         mLogWarn("Proceeding anyway — check orbital inclination vs target latitude.").
     }
 
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
 
     IF bestUT <= TIME:SECONDS + minLead {
         mLogWarn("STATS deorbit abort reason=burn-too-soon-after-refine burnT="
@@ -432,7 +432,7 @@ LOCAL FUNCTION _selectScanSatLandingSite {
                 }
             }
         }
-        WAIT 0.01.
+        WAIT 0.
     }
 
     IF out["FOUND"] {
@@ -480,9 +480,9 @@ LOCAL FUNCTION _evalDeorbitNode {
 
     IF burnUT <= TIME:SECONDS + _targetDeorbitMinLead() { RETURN result. }
 
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.05. }
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
     LOCAL nd IS _planDeorbitNode(burnUT, entryPe, radialDv, normalDv).
-    WAIT 0.35.
+    WAIT 0.2.
 
     IF NOT ADDONS:TR:HASIMPACT {
         REMOVE nd.
