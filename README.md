@@ -26,13 +26,13 @@ missions/
     FR2/*.cfg            Data-only mission profiles for FR2
     FR3/*.cfg            Data-only mission profiles selectable by plain FR3
 lib/
-    boot_core.ks         Boot helpers: mission selection, pruning, resume
+    boot_core.ks         Boot helpers: mission selection, profile parsing, resume
     boot_lib.ks          Dependency resolver for libs, phases, and bands
     dependencies.txt     Text dependency roots for PREAMBLE, LIB, PHASE, BAND
-    core.ks              Marker root for state + phases + config
-    phases.ks            Generic phase machine (runPhases, nextPhase)
+    core.ks              Always-loaded helpers; dependency root for core libs
+    phases.ks            Generic phase machine + central phase handler registry
     launch.ks            Reusable ascent phases (launch, fairing, parking)
-    xfer.ks              Transfer/arrival phases (transfer, coast, capture, circ)
+    xfer_plan.ks         Transfer/rendezvous planning phases
     state.ks             Persistent JSON key-value store (survives reboots)
     logs.ks              Flight logging with fault persistence
     files.ks             Storage status and directory listing
@@ -45,13 +45,13 @@ lib/
     orbit.ks             Orbit monitoring and stability checks
     countdown.ks         Launch countdown with audio
     payload_ops.ks       Shared payload phase implementations (deploy, deorbit, relay)
-    payload_landing.ks   Minimal landing/rover payload phase wrappers
+    payload_landing.ks   Landing/rover payload phase wrappers
     science.ks           Experiment automation and SCANsat integration
     deorbit_targeting.ks Precision deorbit via Trajectories addon
     landing.ks           Powered descent / suicide burn
     recovery.ks          Post-abort recovery (antenna deploy, log archive)
     relay_constellation.ks  Multi-relay deployment
-    plane.ks             Aircraft autopilot (roll/alt/heading hold)
+    airplane.ks          Aircraft autopilot (roll/alt/heading hold)
     rover.ks             Ground vehicle control
     observe.ks           Periodic telemetry logger with sentinel-file control
     utils.ks             General-purpose utilities (fmtDuration, printOrbitRef)
@@ -133,19 +133,19 @@ LIBS = phases,flightplan,launch,xfer,maneuver,orbit,payload_ops,science
 LIBS_EXTRA = observe
 ```
 
-`LIBS` is an escape hatch that replaces the craft fallback or sequence-derived library list for simple craft such as FR2. `LIBS_EXTRA` appends mission-specific libraries to the computed list. FR3 uses a more advanced banded loader instead of a single static `LIBS` line; its selected profile still controls the loaded code through payloads, `SEQUENCE`, phase state, reload flags, and optional `LIBS_EXTRA`. The boot-time dependency resolver in `lib/boot_lib.ks` reads `lib/dependencies.txt`, where `PREAMBLE` declares roots loaded for every phase/band, `LIB` rows declare library dependencies, `PHASE` rows declare sequence roots, and `BAND` rows declare minimum band roots.
+`LIBS` is an escape hatch that replaces the craft fallback or sequence-derived library list for simple craft such as FR2. `LIBS_EXTRA` appends mission-specific libraries to the computed list. FR3 uses a banded loader instead of a single static `LIBS` line; its selected profile still controls the loaded code through payloads, `SEQUENCE`, phase state, reload flags, and optional `LIBS_EXTRA`. The boot-time dependency resolver in `lib/boot_lib.ks` reads compact `lib/dependencies.txt`, where `PREAMBLE` declares roots loaded for every band/phase, `LIB` rows declare library dependencies, `PHASE` rows declare sequence roots, and `BAND` rows declare multi-phase groups that should load together. Single phases intentionally do not have `BAND` rows; their phase name is the fallback band.
 
-On boot, `lib/boot_core.ks` reads mission profiles from `0:/missions/<craft>` when a KSC link is available, falling back to cached `1:/missions/<craft>` files only when offline. After a profile is selected, the key/value config is persisted into state and stale local mission config files are pruned so they do not occupy flight-computer storage.
+On boot, `lib/boot_core.ks` reads mission profiles from `0:/missions/<craft>` when a KSC link is available. After a profile is selected, the key/value config is persisted into `1:/state/state.json` as `mission_cfg_*`. Mission `.cfg` files are not copied to the probe core; in-flight reboots use persisted state.
 
 Vessel names can be friendly. Dash-separated names such as `FR3-MUN-SCANSAT-01` still provide legacy `vehicle-target-payload` hints. Space-separated names such as `FR3 Mun Mini SCANSat 1` are treated as display names: boot uses the first word as the craft script (`FR3`) and lets the selected mission profile provide target/payload details. Boot stores the display name in `state["vessel_name"]` and prefers persisted `vehicle`, `target`, and `payloads` after launch so later vessel renames do not break in-flight reboots.
 
 While the vessel is still prelaunch, `lib/boot_core.ks` clears any saved mission profile and profile config before selecting a mission. This lets you reboot on the pad after choosing the wrong profile and get the mission picker again. Once launched, in-flight reboots keep the saved mission and phase state.
 
-FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only the launch band roots and their declared dependencies; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Rover landing missions then reload again after assist-stage release for full `landing.ks`, and after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
+FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only the launch band roots and their declared dependencies; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Landing missions use a single `LANDING` band for `LAND_DEORBIT`, `LAND_ASSIST`, and `LAND` so descent does not reboot between adjacent landing phases. Rover missions reload after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
 
-`craft/FR3.ks` keeps FR3-specific mission profile tweaks, sequence construction, phase mapping, and boot-time band selection together because they are preconditions for every FR3 band. Payload classification is generic in `lib/mission_plan.ks`, and dependency expansion is delegated to `lib/boot_lib.ks`. FR3 launch UI is intentionally deferred for a later redesign.
+`craft/FR3.ks` keeps FR3-specific mission profile tweaks, sequence construction, PARK reload behavior, and boot-time band selection together because they are preconditions for every FR3 band. Shared phase-name bindings live in `lib/phases.ks` via `phaseHandlerMap()`. Payload classification is generic in `lib/mission_plan.ks`, and dependency expansion is delegated to `lib/boot_lib.ks`. FR3 launch UI is intentionally deferred for a later redesign.
 
-Important in-flight constraint: `boot/boot.ks` itself is installed on the kOS processor in the VAB/SPH and cannot be updated remotely during a mission. Remote reboots can load updated mission configs, craft scripts, commands, and libraries from the archive, including `lib/boot_core.ks` and `lib/mission_plan.ks` after the installed boot has synced them once. Any fix that changes the installed boot stub must be applied before launch or by another VAB-side update path.
+Important in-flight constraint: `boot/boot.ks` itself is installed on the kOS processor in the VAB/SPH and cannot be updated remotely during a mission. Linked reboots can load updated craft scripts, commands, libraries, and archive mission configs, including `lib/boot_core.ks` and `lib/mission_plan.ks` after the installed boot has synced them once. Away from archive access, mission config comes from persisted state. Any fix that changes the installed boot stub must be applied before launch or by another VAB-side update path.
 
 The current band and pending reload are saved in mission state (`lib_band`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, `reload_next_band`) so a reboot or state dump shows why the computer is waiting.
 
@@ -175,7 +175,7 @@ Juno-powered trainer jet. Low speed (cruise ~80 m/s), broad wings. Same phase st
 
 ### FJ4B
 
-Supersonic jet with autopilot assists. Manually-flown with `plane.ks` integration. Phases: PREFLIGHT -> FLIGHT -> POST_FLIGHT. Auto-collects science on biome changes when SCIENCE payload is present.
+Supersonic jet with autopilot assists. Manually-flown with `airplane.ks` integration. Phases: PREFLIGHT -> FLIGHT -> POST_FLIGHT. Auto-collects science on biome changes when SCIENCE payload is present.
 
 ### FSP1
 
@@ -325,7 +325,7 @@ GLOBAL LIBS IS missionSequenceLibs(
 ).
 ```
 
-Inside `main()`, resolve the active phase sequence from `CFG["SEQUENCE"]` when present, build a phase map LEXICON mapping names to function delegates, and call `runPhases(phaseMap)`. Each phase function calls `nextPhase(seq)` when done.
+Inside `main()`, resolve the active phase sequence from `CFG["SEQUENCE"]` when present, call `phaseHandlerMap()` for the shared phase-name bindings, add any craft-local handlers with `phaseMapSet(...)`, and call `runPhases(phaseMap)`. Each phase function calls `nextPhase(seq)` when done.
 
 ### Available lib phases
 
@@ -339,13 +339,15 @@ These are ready-made phases you can drop into your phase map:
 
 All call `nextPhase(launchSeq)` — set `launchSeq` to your sequence before calling `runPhases()`.
 
-**From `xfer.ks`** (needs: `maneuver`, `orbit`, `inclination`):
+**From `xfer_plan.ks`, `capture.ks`, and `maneuver_orbit.ks`** (dependencies come from `lib/dependencies.txt`):
 - `phaseTransfer@` — plan + execute transfer burn to `missionTargetBody()`
 - `phaseCoast@` — coast to target SOI
 - `phaseCapture@` — capture burn, target Ap = `CFG["RELAY_ALT"]`
 - `phaseCirc@` — circularize (handles impact threats)
 - `phaseRaiseAlt@` — raise orbit to `CFG["RELAY_ALT"]` + circularize
 - `phaseInclCorrect@` — plane change to `CFG["TARGET_INCLINATION"]`
+- `phaseDropForImpactAndRaisePe@` — lower attached payload Pe for impact, release, then raise/recover carrier Pe
+- `phaseElliptical@` — coupled elliptical orbit targeting
 
 All call `nextPhase(xferSeq)` — set `xferSeq` to your sequence.
 
@@ -354,14 +356,18 @@ All call `nextPhase(xferSeq)` — set `xferSeq` to your sequence.
 
 Calls `nextPhase(xferSeq)`.
 
-**From `payload_ops.ks`** (needs: `deorbit_targeting`, `landing`, `orbit`, `science` as appropriate):
+**From `payload_ops.ks`** (needs: `deorbit_targeting`, `orbit`, `science` as appropriate):
 - `phaseTargetedDeorbit@` — precision deorbit for crash probes
 - `phaseReleaseProbe@` — arm chutes, decouple, orient for solar panels
 - `phaseRelayOps@` — relay on-station (orbit summary, periodic monitoring)
-- `phaseLandDeorbit@` — lander deorbit burn
-- `phaseLand@` — powered descent via `landingExecute()`
 
-All call `nextPhase(launchSeq)`.
+**From `payload_landing.ks` / `landing.ks`**:
+- `phaseLandDeorbit@` — lander deorbit burn
+- `phaseLandAssist@` — landing-assist descent and carrier handoff
+- `phaseLand@` — powered descent via `landingExecute()`
+- `phaseRover@` — rover startup
+
+Payload phases call the active mission sequence (`launchSeq`, `xferSeq`, or `fr3Seq`, depending on craft context).
 
 **From `molniya.ks`** (needs: `maneuver`, `orbit`, `inclination`):
 - `phaseMolniyaInsert@` — prograde burn to achieve target period/AoP from circular orbit. Reads `CFG["MOLNIYA_PERIOD"]` and `CFG["MOLNIYA_AOP"]`
@@ -427,18 +433,9 @@ GLOBAL FUNCTION main {
     SET xferSeq TO seq.
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
 
-    LOCAL phaseMap IS LEXICON(
-        "LUNCH",       phaseLaunch@,
-        "FAIR",        phaseFairing@,
-        "ANTS",        phaseExtendAnts@,
-        "PARK",        phaseParking@,
-        "XING",        phaseTransfer@,
-        "COAST",       phaseCoast@,
-        "CAPTURE",     phaseCapture@,
-        "CIRC",        phaseCirc@,
-        "LAND",        _phaseLand@,
-        "SCIENCE",     _phaseScience@
-    ).
+    LOCAL phaseMap IS phaseHandlerMap().
+    phaseMapSet(phaseMap, "LAND", _phaseLand@).
+    phaseMapSet(phaseMap, "SCIENCE", _phaseScience@).
     runPhases(phaseMap).
 }
 
@@ -475,9 +472,8 @@ GLOBAL FUNCTION main {
     SET launchSeq TO seq.
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
 
-    LOCAL phaseMap IS LEXICON(
-        "DRIVE", _phaseDrive@
-    ).
+    LOCAL phaseMap IS phaseHandlerMap().
+    phaseMapSet(phaseMap, "DRIVE", _phaseDrive@).
     runPhases(phaseMap).
 }
 
@@ -522,15 +518,8 @@ GLOBAL FUNCTION main {
     SET launchSeq TO seq.
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
 
-    LOCAL phaseMap IS LEXICON(
-        "XING",    phaseTransfer@,
-        "COAST",       phaseCoast@,
-        "CAPTURE",     phaseCapture@,
-        "CIRC",        phaseCirc@,
-        "RAISE",   phaseRaiseAlt@,
-        "INCLINE", phaseInclCorrect@,
-        "STATION",     _phaseStation@
-    ).
+    LOCAL phaseMap IS phaseHandlerMap().
+    phaseMapSet(phaseMap, "STATION", _phaseStation@).
     runPhases(phaseMap).
 }
 
@@ -547,7 +536,7 @@ LOCAL FUNCTION _phaseStation {
 
 - **Storage-constrained probes**: Put mission order in `SEQUENCE` and let boot derive the libs. A rover sequence with only rover/science phases uses far less than the full FR2 stack.
 - **No ascent?** Skip `launch.ks` entirely. Start your sequence at `TRANSFER` or whatever your first phase is.
-- **Custom phases**: Write `LOCAL FUNCTION _phaseName { ... nextPhase(launchSeq). }` and add to the map. Mix freely with lib phases.
+- **Custom phases**: Write `LOCAL FUNCTION _phaseName { ... nextPhase(launchSeq). }` and add it with `phaseMapSet(phaseMap, "PHASE_NAME", _phaseName@)`. Mix freely with lib phases.
 - **Reboot safety**: The phase machine persists to state. On reboot, boot reloads everything and `main()` re-enters at the saved phase.
 - **CFG keys**: Lib phases read from `CFG` — check which keys each lib phase expects (documented above). Only define the keys your phases actually use.
 

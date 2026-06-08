@@ -2,7 +2,7 @@
 
 ## What this is
 
-KerbalScript (kOS) mission automation for Kerbal Space Program. The main vehicle is FR2, a multi-payload launcher. Scripts run on in-game kOS processors with tight storage limits (OCTO probe = 10,000 bytes).
+KerbalScript (kOS) mission automation for Kerbal Space Program. The main vehicles are FR2 and FR3 multi-payload launchers, plus aircraft, rover, EVA, and role scripts. Scripts run on in-game kOS processors with tight storage limits (OCTO probe = 10,000 bytes).
 
 ## Language
 
@@ -19,7 +19,7 @@ KerbalScript (.ks files) — a scripting language for the kOS mod. Not Python, n
 ## Architecture
 
 ### Boot chain
-`boot/boot.ks` → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → syncs core libs (`state`, `logs`, `files`, `config`, `boot_core`, `mission_plan`, `boot_lib`) plus `dependencies.txt` → loads core libs → resolves `roles/` and `craft/` scripts for CORE:TAG or vehicle script → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
+`boot/boot.ks` → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → syncs core libs (`state`, `logs`, `files`, `config`, `boot_core`, `mission_plan`, `boot_lib`) plus `dependencies.txt` → loads core libs → resolves `roles/` and `craft/` scripts for CORE:TAG or vehicle script → reads the selected mission config from archive and stores `mission_cfg_*` keys in `state.json` → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → syncs + loads LIBS → loads resume.ks → manual override window → auto-resume or manual
 
 ### CORE:TAG routing (multi-CPU ships)
 If `CORE:TAG` is non-empty, boot resolves the tag via `_resolveScript()` checking `roles/` then `craft/` then root. Each processor has its own `1:/` volume so state is naturally isolated. Untagged CPUs always load the vehicle script from `craft/`.
@@ -49,26 +49,30 @@ On first boot (or when phase is LAUNCH), FR2 shows a flight plan summary listing
 - `1:/` = local volume on the processor (limited — OCTO has 10,000 bytes)
 - Files must be copied from archive to local before use in flight
 
-### Mission sequence and LIBS convention
-Mission profiles own `SEQUENCE`: the ordered mission steps. Craft scripts own the phase map: how this craft executes those named steps with its hardware. `lib/mission_plan.ks` handles sequence parsing and payload helpers. `lib/boot_lib.ks` reads `lib/dependencies.txt` to expand library dependencies and band roots.
+### Mission sequence, phases, and LIBS convention
+Mission profiles own `SEQUENCE`: the ordered mission steps. `lib/phases.ks` owns the central phase-handler registry (`phaseHandlerMap`) for shared phase names. Craft scripts only add/override craft-specific handlers. `lib/mission_plan.ks` handles sequence parsing and payload helpers. `lib/boot_lib.ks` reads `lib/dependencies.txt` to expand preamble roots, library dependencies, phase roots, and multi-phase bands.
 
-For simple craft, declare `GLOBAL LIBS IS missionSequenceLibs(...)` with a legacy fallback list. Use profile `LIBS = ...` only as an escape hatch; otherwise derive libraries from `SEQUENCE` and append extras with `LIBS_EXTRA`. Edit `lib/dependencies.txt` one line at a time for shared dependency updates.
+For simple craft, declare `GLOBAL LIBS IS missionSequenceLibs(...)` with a legacy fallback list. Use profile `LIBS = ...` only as an escape hatch; otherwise derive libraries from `SEQUENCE` and append extras with `LIBS_EXTRA`. Edit `lib/dependencies.txt` one line at a time for shared dependency updates. Keep it comment-free and compact because it is copied as text to the probe core.
+
+Mission profile `.cfg` files are not copied to the probe core. Boot reads them from `0:/missions/<craft>/` when connected, parses the selected profile once, and persists the values into `1:/state/state.json`.
 
 ### State persistence
 JSON file at `1:/state/state.json` via `lib/state.ks`. Survives reboots. Use `stateGet(key, default)` / `stateSet(key, value)`.
 
 ### Phase machine (`lib/phases.ks`)
 - `runPhases(phaseMap)` — main loop. Takes a LEXICON mapping phase names to delegates. Reads current phase from state, calls the matching delegate, loops until DONE.
+- `phaseHandlerMap()` — central shared phase-name to handler delegate registry, with `DEFINED` guards so only loaded libraries bind handlers.
+- `phaseMapSet(map, phase, delegate)` — add or override a handler.
 - `nextPhase(seq)` — advance to next phase in a given sequence LIST. Persists to state.
 - `phaseDone()` — generic mission-complete cleanup.
 
-Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runPhases()`.
+Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add craft-specific handlers, then call `runPhases()`.
 
 ## Code conventions
 
 - 4-space indentation, no tabs
 - File headers: `// ============` block with filename, description, path
-- Liberal comments encouraged — source files are compiled to KSM bytecode before upload, so comments have zero storage cost. Explain the "why", link to references, describe algorithms and orbital mechanics concepts
+- Liberal comments encouraged in `.ks` source files — they are compiled to KSM bytecode before upload, so comments have zero storage cost. Keep copied text files such as `dependencies.txt` compact.
 - Private functions: `LOCAL FUNCTION _name { }` (underscore prefix)
 - Public functions: `GLOBAL FUNCTION name { }` (camelCase)
 - Config: `GLOBAL CFG IS LEXICON(...)` at top of vehicle scripts
@@ -88,14 +92,17 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 
 | Lib | Purpose |
 |---|---|
+| `core.ks` | Always-loaded helpers (`contains`, `phaseIn` compatibility wrapper) |
 | `config.ks` | Shared config utilities (cfgSet, cfgFromState, applyMissionState, phaseListFromString) |
-| `phases.ks` | Generic phase machine (runPhases, nextPhase, phaseDone) |
+| `phases.ks` | Generic phase machine and central phase handler registry |
 | `launch.ks` | Reusable ascent phases (launch, fairing, extend, parking) + rocketMain() skeleton |
-| `xfer.ks` | Transfer/arrival phases (transfer, coast, capture, circ, raise, incl). Capture supports optional orbit targeting via CAPTURE_INC/LAN/AOP |
+| `xfer_plan.ks` | Transfer/rendezvous planning phases (RDV, XING) |
+| `capture.ks` | Coast and capture phases |
+| `maneuver_orbit.ks` | Orbit cleanup phases (CIRC, RAISE, INCLINE, ELLIPTICAL, DROP_FOR_IMPACT_AND_RAISE_PE) |
 | `state.ks` | Persistent JSON key-value store |
 | `logs.ks` | Flight logging with fault persistence |
 | `files.ks` | Storage status and directory listing |
-| `boot_lib.ks` / `dependencies.txt` | Text-driven preamble, library dependency, phase root, and band root expansion |
+| `boot_lib.ks` / `dependencies.txt` | Text-driven preamble, library dependency, phase root, and multi-phase band expansion |
 | `mission_plan.ks` | Mission `SEQUENCE` parsing and payload helpers |
 | `resume.ks` | MISSION lexicon, operator helpers, resumeMission(), buildRocketSequence() |
 | `maneuver.ks` | Maneuver node execution with dynamic throttle. planTransfer (LAN via multi-orbit scan, PE via Newton on dV), planCapture, planCircularize, planAoPChange, phaseMidCourse |
@@ -104,13 +111,14 @@ Vehicle scripts build their own sequence LIST and phase LEXICON, then call `runP
 | `molniya.ks` | Molniya orbit insertion (molniyaParams, printMolniyaSummary, planMolniyaInsert, phaseMolniyaInsert) |
 | `orbit.ks` | Orbit monitoring and stability checks |
 | `countdown.ks` | Launch countdown with audio |
-| `payload_ops.ks` | Shared payload phases — phaseTargetedDeorbit, phaseReleaseProbe (chute arm, sunward orient, decouple), phaseRelayOps, phaseLandDeorbit, phaseLand |
+| `payload_ops.ks` | Shared payload phases — phaseTargetedDeorbit, phaseReleaseProbe (chute arm, sunward orient, decouple), phaseRelayOps |
+| `payload_landing.ks` | Landing/rover payload phase wrappers |
 | `deorbit_targeting.ks` | Precision deorbit via Trajectories addon |
 | `science.ks` | Experiment automation and SCANsat integration |
 | `landing.ks` | Powered descent / suicide burn |
 | `recovery.ks` | Post-abort recovery — safe antenna deploy, flight log archive, operator prompt |
 | `relay_constellation.ks` | Multi-relay deployment |
-| `plane.ks` | Aircraft autopilot |
+| `airplane.ks` | Aircraft autopilot |
 | `rover.ks` | Ground vehicle control |
 | `observe.ks` | Periodic telemetry logger with sentinel-file control |
 | `utils.ks` | General-purpose utilities (fmtDuration, printOrbitRef) |
@@ -131,7 +139,7 @@ Periodic telemetry logging to a separate file from the flight/fault log. Designe
 
 ### Manual mode
 
-At boot, pressing any key within 5s enters manual mode. The terminal displays environment data (body, status, altitude, airspeed/position for atmospheric or orbit params for orbital), mission state (vehicle, target, phase, boot count), storage, and contextual info for loaded libs (plane config, observation status). No commands are offered — the kOS console cannot call loaded functions directly without a helper script. The `cmd/` directory contains scripts that can be run via `RUNPATH()` but these are not synced at boot and require archive access.
+At boot, pressing any key within 5s enters manual mode. The terminal displays environment data (body, status, altitude, airspeed/position for atmospheric or orbit params for orbital), mission state (vehicle, target, phase, boot count), storage, and contextual info for loaded libs (airplane config, observation status). No commands are offered — the kOS console cannot call loaded functions directly without a helper script. The `cmd/` directory contains scripts that can be run via `RUNPATH()` but these are not synced at boot and require archive access.
 
 ### Rover power steering (`lib/rover.ks`)
 
