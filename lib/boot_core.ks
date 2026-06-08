@@ -140,7 +140,7 @@ GLOBAL FUNCTION bootPruneLibs {
     PARAMETER wantedLibs.
     LOCAL keep IS LIST(
         "STATE", "LOGS", "FILES", "BOOT_CORE", "MISSION_PLAN",
-        "RESUME"
+        "CONFIG", "RESUME"
     ).
     FOR lib IN wantedLibs {
         LOCAL libKey IS lib:TOUPPER.
@@ -255,6 +255,11 @@ GLOBAL FUNCTION bootApplyMissionConfig {
                 IF parts:LENGTH >= 2 {
                     LOCAL key IS parts[0]:TRIM:TOUPPER.
                     LOCAL value IS parts[1]:TRIM.
+                    IF NOT missionConfigIsKnownKey(key) {
+                        LOCAL warn IS "Unknown mission config key: " + key + " in " + path_.
+                        PRINT "  WARN: " + warn.
+                        mLogWarn(warn).
+                    }
                     stateSet("mission_cfg_" + key, value).
                     IF key = "MISSION_ID" {
                         stateSet("mission_id", value).

@@ -62,9 +62,7 @@ GLOBAL FUNCTION missionNumericConfigKeys {
 
 GLOBAL FUNCTION missionStringConfigKeys {
     RETURN LIST(
-        "MISSION_ID", "MISSION_NAME", "TARGET", "PAYLOADS",
-        "SEQUENCE", "LIBS", "LIBS_EXTRA",
-        "CAPTURE_DIR", "RENDEZVOUS_TARGET", "ASTEROID_TARGET",
+        "SEQUENCE", "CAPTURE_DIR", "RENDEZVOUS_TARGET", "ASTEROID_TARGET",
         "INCL_MATCH_TARGET", "SCANSAT_DECOUPLER_TAG", "SCANSAT_CLEARANCE_DIR",
         "PAYLOAD_DECOUPLER_TAG", "PAYLOAD_LABEL", "PAYLOAD_CLEARANCE_DIR",
         "PROBE_TARGET_WAYPOINT", "LANDING_TARGET_WAYPOINT",
@@ -72,18 +70,28 @@ GLOBAL FUNCTION missionStringConfigKeys {
     ).
 }
 
+GLOBAL FUNCTION missionProfileConfigKeys {
+    RETURN LIST(
+        "MISSION_ID", "MISSION_NAME", "TARGET", "PAYLOADS",
+        "LIBS", "LIBS_EXTRA"
+    ).
+}
+
 GLOBAL FUNCTION missionConfigKeyTypes {
     RETURN LEXICON(
         "NUMERIC", missionNumericConfigKeys(),
-        "STRING", missionStringConfigKeys()
+        "STRING", missionStringConfigKeys(),
+        "PROFILE", missionProfileConfigKeys()
     ).
 }
 
 GLOBAL FUNCTION missionConfigIsKnownKey {
     PARAMETER key.
     LOCAL upperKey IS key:TOUPPER.
-    RETURN missionNumericConfigKeys():CONTAINS(upperKey)
-        OR missionStringConfigKeys():CONTAINS(upperKey).
+    IF missionNumericConfigKeys():CONTAINS(upperKey) { RETURN TRUE. }
+    IF missionStringConfigKeys():CONTAINS(upperKey) { RETURN TRUE. }
+    IF missionProfileConfigKeys():CONTAINS(upperKey) { RETURN TRUE. }
+    RETURN FALSE.
 }
 
 // Set or overwrite a CFG key. Remove-then-add pattern required
