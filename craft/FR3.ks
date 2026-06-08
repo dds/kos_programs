@@ -251,13 +251,13 @@ LOCAL FUNCTION _fr3Libs {
         libs:ADD("maneuver").
         libs:ADD("maneuver_targeting").
         libs:ADD("lib_navigation").
-        libs:ADD("inclination").
         libs:ADD("countdown").
         libs:ADD("orbit").
     } ELSE IF band = "XFER_MCC" {
         libs:ADD("maneuver").
         libs:ADD("maneuver_targeting").
         libs:ADD("countdown").
+        libs:ADD("orbit").
     } ELSE IF band = "XFER_ARRIVE" {
         libs:ADD("capture").
         libs:ADD("maneuver").
@@ -326,7 +326,9 @@ LOCAL FUNCTION _fr3Libs {
             AND (_bootHasPayload("SCANSAT") OR _bootHasPayload("SCISAT")) {
         libs:ADD("science").
     }
-    missionAppendUnique(libs, missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", ""))).
+    IF DEFINED missionAppendUnique {
+        missionAppendUnique(libs, missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", ""))).
+    }
     stateSet("lib_band_libs", libs:JOIN(",")).
     RETURN libs.
 }

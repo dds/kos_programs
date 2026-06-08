@@ -42,8 +42,10 @@ LOCAL FUNCTION _loadLib {
     PARAMETER libName.
     IF EXISTS("1:/lib/" + libName + ".ksm") {
         RUNONCEPATH("1:/lib/" + libName + ".ksm").
-    } ELSE {
+    } ELSE IF EXISTS("1:/lib/" + libName + ".ks") {
         RUNONCEPATH("1:/lib/" + libName + ".ks").
+    } ELSE {
+        PRINT "  WARN: " + libName + " unavailable".
     }
 }
 
@@ -163,7 +165,7 @@ _loadLib("resume").
 
 PRINT " ".
 PRINT "  BOOT #" + bootCount + " OK".
-printStorageStatus().
+IF DEFINED printStorageStatus { printStorageStatus(). }
 IF HAS_LINK { archiveLog(). }
 IF stateGet("phase", "") = "ABORT" { _loadLib("recovery"). }
 
