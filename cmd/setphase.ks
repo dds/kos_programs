@@ -1,5 +1,5 @@
-// cmd/setmissionphase.ks - Force mission profile and phase together.
-// Usage: RUNPATH("0:/cmd/setmissionphase.ks", "mun_sat_delivery_2", "PAYLOAD_IMPACT_RELEASE").
+// cmd/setphase.ks - Force mission profile and phase together.
+// Usage: RUNPATH("0:/cmd/setphase.ks", "mun_sat_delivery_2", "PAYLOAD_IMPACT_RELEASE").
 PARAMETER missionId.
 PARAMETER phaseName.
 
