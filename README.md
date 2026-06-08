@@ -64,6 +64,7 @@ cmd/
     logs.ks              Archive flight log to KSC
     zombie.ks            Reboot all other CPUs on the vessel
     molniya.ks           Molniya orbit calculator (interactive)
+    crash.ks             Put current craft on an impact trajectory
     science.ks           Manual science collection
     sciencestatus.ks     Science status report
     scanstart.ks         Start SCANsat scanners
@@ -215,6 +216,7 @@ RUNPATH("1:/cmd/files.ks").               // storage/file listing
 RUNPATH("1:/cmd/logs.ks").                // archive flight log to KSC
 RUNPATH("1:/cmd/zombie.ks").              // reboot all other CPUs
 RUNPATH("1:/cmd/molniya.ks").             // Molniya orbit calculator
+RUNPATH("0:/cmd/crash.ks").               // lower Pe to -1 km and impact
 ```
 
 After launch, to force a specific mission profile on the next reboot:
