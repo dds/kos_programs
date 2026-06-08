@@ -139,7 +139,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF SHIP:BODY:ATM:EXISTS {
         SET coarseStopDist TO tolerance.
     } ELSE IF SHIP:BODY:NAME:TOUPPER = "MUN" {
-        SET coarseStopDist TO 4000.
+        SET coarseStopDist TO 8000.
     }
     IF CFG:HASKEY("TARGET_DEORBIT_COARSE_STOP_DIST") {
         SET coarseStopDist TO CFG["TARGET_DEORBIT_COARSE_STOP_DIST"].
