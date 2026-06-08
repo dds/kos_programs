@@ -513,15 +513,36 @@ LOCAL FUNCTION _refineDeorbitImpact {
     LOCAL refineTarget IS _targetDeorbitRefineTolerance(tolerance).
     LOCAL minLead IS _targetDeorbitMinLead().
     LOCAL timeStep IS MAX(0.5, coarseStep / 4).
-    LOCAL peStep IS 5000.
     LOCAL radialStep IS 2.
     LOCAL normalStep IS 2.
+
+    // When dV is clamped, PE has no effect on the trajectory — the
+    // burn magnitude is fixed. Skip PE axis and allow larger radial/
+    // normal budgets since they're the only way to steer the impact.
+    LOCAL dvClamped IS FALSE.
+    IF DEFINED CFG AND CFG:HASKEY("LANDING_DEORBIT_MIN_DV") {
+        IF CFG["LANDING_DEORBIT_MIN_DV"] > 0 { SET dvClamped TO TRUE. }
+    }
+
+    LOCAL peStep IS 5000.
     LOCAL maxRadial IS 12.
     LOCAL maxNormal IS 12.
     LOCAL minPe IS MAX(-50000, -SHIP:BODY:RADIUS * 0.2).
     LOCAL maxPe IS MIN(SHIP:PERIAPSIS - 100, MAX(startPe + 60000, 10000)).
     LOCAL axes IS LIST("TIME", "PE", "RADIAL", "NORMAL",
         "TIME_RADIAL", "TIME_NORMAL", "PE_RADIAL", "PE_NORMAL", "BOTH").
+
+    IF dvClamped {
+        // PE changes don't affect the clamped burn — drop PE axes,
+        // widen radial/normal range to compensate
+        SET axes TO LIST("TIME", "RADIAL", "NORMAL",
+            "TIME_RADIAL", "TIME_NORMAL").
+        SET maxRadial TO 50.
+        SET maxNormal TO 50.
+        SET radialStep TO 5.
+        SET normalStep TO 5.
+    }
+
     LOCAL signs IS LIST(1, -1).
 
     mLog("Refining deorbit: start dist=" + ROUND(best["DIST"]/1000,1)
