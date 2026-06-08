@@ -14,7 +14,6 @@ GLOBAL FUNCTION flightPlanTitle {
     PARAMETER title.
     PARAMETER subtitle IS "".
 
-    CLEARSCREEN.
     flightPlanLine().
     PRINT "  " + title.
     IF subtitle <> "" {
@@ -62,7 +61,6 @@ GLOBAL FUNCTION flightPlanSequence {
         SET i TO j.
     }
     PRINT " ".
-    printStorageStatus().
     flightPlanLine().
 }
 
