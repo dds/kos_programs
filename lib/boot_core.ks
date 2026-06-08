@@ -301,6 +301,18 @@ GLOBAL FUNCTION bootIsLaunchStartPhase {
     RETURN phase = "" OR phase = "LUNCH" OR phase = "FAIR" OR phase = "ANTS".
 }
 
+GLOBAL FUNCTION bootDefaultBandForVehicle {
+    PARAMETER vehicleName.
+    LOCAL vehicle IS vehicleName:TOUPPER.
+    IF vehicle = "ROVER" { RETURN "ROVER". }
+    IF vehicle = "FJ1A" OR vehicle = "FJ4B" OR vehicle = "FSP1"
+            OR vehicle:CONTAINS("AIR") OR vehicle:CONTAINS("PLANE")
+            OR vehicle:CONTAINS("SEA") {
+        RETURN "PREFLIGHT".
+    }
+    RETURN "LAUNCH".
+}
+
 GLOBAL FUNCTION bootShouldResetMissionOnBoot {
     PARAMETER isEVA.
     IF isEVA { RETURN FALSE. }

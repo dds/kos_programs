@@ -16,9 +16,15 @@ LOCAL FUNCTION _fr3PrintConfig {
 
 GLOBAL FUNCTION fr3BandForPhase {
     PARAMETER phaseName.
+    LOCAL phase IS phaseName:TOUPPER.
     LOCAL defaultBand IS "".
-    IF phaseName:TOUPPER = "" { SET defaultBand TO "LAUNCH". }
-    RETURN bootLibBandForPhase(phaseName, defaultBand).
+    IF phase = "" OR phase:CONTAINS("MAIN") {
+        SET defaultBand TO "LAUNCH".
+        IF DEFINED bootDefaultBandForVehicle {
+            SET defaultBand TO bootDefaultBandForVehicle(stateGet("vehicle", "FR3")).
+        }
+    }
+    RETURN bootLibBandForPhase(phase, defaultBand).
 }
 
 GLOBAL FUNCTION fr3PhaseBand {
@@ -150,7 +156,8 @@ GLOBAL FUNCTION main {
     mLogPhase("FR3 MAIN").
     mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
     mLog("Sequence: " + seq:JOIN(" -> ")).
-    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
+    LOCAL currentPhase IS stateGet("phase",""):TOUPPER.
+    IF currentPhase = "" OR currentPhase:CONTAINS("MAIN") { stateSet("phase", seq[0]). }
 
     IF fr3PhaseBand() = "LAUNCH" {
         IF NOT confirmLaunch(_fr3PrintConfig@) { RETURN. }
