@@ -108,12 +108,15 @@ LOCAL FUNCTION _hVel {
 // ------------------------------------------------------------
 
 // Steering vector that is mostly retrograde but leans up to MAX_TILT
-// toward killing horizontal velocity
+// toward killing horizontal velocity. Transitions smoothly to
+// UP-biased steering as speed drops to avoid retrograde jitter.
 LOCAL FUNCTION _burnSteering {
     LOCAL sVel IS SHIP:VELOCITY:SURFACE.
-    IF sVel:MAG < 0.5 { RETURN SHIP:UP:VECTOR. }
+    LOCAL spd IS sVel:MAG.
+    // Below 15 m/s the retrograde vector is too unstable on a
+    // high-TWR vessel — switch to hover steering which is UP-biased
+    IF spd < 15 { RETURN _hoverSteering(). }
     LOCAL retro IS (-sVel):NORMALIZED.
-    // Lean toward vertical to preferentially kill horizontal speed
     LOCAL hv IS _hVel().
     IF hv:MAG < 0.5 { RETURN retro. }
     LOCAL maxLean IS SIN(LAND_CFG["MAX_TILT"]).
@@ -247,9 +250,12 @@ GLOBAL FUNCTION landExecute {
         + "m  spd=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1) + "m/s.").
     HUDTEXT("SUICIDE BURN", 3, 2, 16, YELLOW, FALSE).
 
-    // Phase 3: Suicide burn — full throttle, steer retrograde with tilt
+    // Phase 3: Suicide burn — full throttle until altitude OR speed is low
+    // enough to transition to controlled hover descent
     LOCK THROTTLE TO 1.0.
-    UNTIL ALT:RADAR <= LAND_CFG["HOVER_ALT"] OR landingAbortFlag {
+    UNTIL ALT:RADAR <= LAND_CFG["HOVER_ALT"]
+            OR SHIP:VELOCITY:SURFACE:MAG < 15
+            OR landingAbortFlag {
         LOCK STEERING TO _burnSteering().
 
         IF _needsStage() {
@@ -260,8 +266,9 @@ GLOBAL FUNCTION landExecute {
             LOCK THROTTLE TO 1.0.
         }
 
-        HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Vspd:"
-            + ROUND(SHIP:VERTICALSPEED,1) + "m/s",
+        HUDTEXT("Alt:" + ROUND(ALT:RADAR,0) + "m  Spd:"
+            + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
+            + "  Vspd:" + ROUND(SHIP:VERTICALSPEED,1) + "m/s",
             1, 2, 13, YELLOW, FALSE).
         WAIT 0.05.
     }
