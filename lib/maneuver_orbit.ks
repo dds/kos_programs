@@ -273,8 +273,8 @@ LOCAL FUNCTION _payloadNextPhase {
 }
 
 LOCAL FUNCTION _bodyImpactFloor {
-    LOCAL body IS SHIP:ORBIT:BODY.
-    IF body:ATM:EXISTS { RETURN body:ATM:HEIGHT + 1000. }
+    LOCAL body_ IS SHIP:ORBIT:BODY.
+    IF body_:ATM:EXISTS { RETURN body_:ATM:HEIGHT + 1000. }
     RETURN 5000.
 }
 
