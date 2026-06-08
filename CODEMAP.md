@@ -7,7 +7,7 @@
 - `lib/mission_plan.ks` owns mission `SEQUENCE` parsing and payload helpers. `lib/boot_lib.ks` expands `PREAMBLE`, `LIB`, `PHASE`, and multi-phase `BAND` rows from compact `lib/dependencies.txt`.
 - `lib/dependencies.ks` is generated from `dependencies.txt` and provides the tiny phase-name to convention-delegate map used by `lib/phases.ks`.
 - Dash-separated vessel names still act as legacy `vehicle-target-payload` hints; space-separated friendly names use the first word as the vehicle id and rely on mission profiles/state for mission details.
-- `lib/boot_lib.ks` prunes stale local `1:/lib` files before syncing the selected `LIBS`, so progressive reloads actually free storage.
+- `lib/boot_lib.ks` prunes stale local `1:/lib` files before syncing the libraries returned by `bootVehicleLibs()`, so progressive reloads actually free storage.
 - `cmd/cleanup.ks` / `lib/cleanup.ks` can be run manually to delete local source `.ks` files except `1:/boot/boot.ks` and clear local logs when an older flight computer is out of space.
 - `lib/resume.ks` builds `MISSION`, normalizes payload tokens, and builds common rocket sequences.
 - `lib/flightplan.ks` renders shared flight-plan and checklist screens for rockets and planes.

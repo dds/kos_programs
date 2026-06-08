@@ -32,12 +32,3 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "MOLNIYA_INSERT" { phaseMapSet(phaseMap, "MOLNIYA_INSERT", phaseMolniyaInsert@). }
     ELSE IF phaseKey = "DROP_FOR_IMPACT_AND_RAISE_PE" { phaseMapSet(phaseMap, "DROP_FOR_IMPACT_AND_RAISE_PE", phaseDropForImpactAndRaisePe@). }
 }
-
-GLOBAL FUNCTION dependencyPhaseHandlers {
-    LOCAL phaseMap IS LEXICON().
-    LOCAL phases IS bootLibBandPhases(stateGet("lib_band", "")).
-    FOR phaseName IN phases {
-        dependencyBindPhase(phaseMap, phaseName).
-    }
-    RETURN phaseMap.
-}

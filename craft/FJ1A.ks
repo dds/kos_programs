@@ -29,7 +29,9 @@ LOCAL FUNCTION _flightLibs {
     RETURN libs.
 }
 
-GLOBAL LIBS IS missionSequenceLibs(_flightLibs(), LIST("orbit")).
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN missionSequenceLibs(_flightLibs(), LIST("orbit")).
+}
 
 LOCAL hasSciencePayload IS FALSE.
 

@@ -19,7 +19,7 @@ KerbalScript (.ks files) — a scripting language for the kOS mod. Not Python, n
 ## Architecture
 
 ### Boot chain
-`boot/boot.ks` → syncs only `boot_lib` plus `dependencies.txt` → loads `boot_lib` → calls `bootPreamble()` to load core/preamble libs → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → resolves `roles/` and `craft/` scripts for CORE:TAG or vehicle script → reads the selected mission config from archive and stores `mission_cfg_*` keys in `state.json` → syncs + runs vehicle/role script (defines CFG, LIBS, main()) → loads LIBS through `bootLibLoadList()` → loads resume/recovery through `bootLibLoad()` → manual override window → auto-resume or manual
+`boot/boot.ks` → syncs only `boot_lib` plus `dependencies.txt` → loads `boot_lib` → calls `bootPreamble()` to load core/preamble libs → detects EVA kerbals via `kerbalEVA` root part → parses ship name (or auto-sets vehicle=EVA, target=body) → resolves `roles/` and `craft/` scripts for CORE:TAG or vehicle script → reads the selected mission config from archive and stores `mission_cfg_*` keys in `state.json` → syncs + runs vehicle/role script (defines CFG, bootVehicleLibs(), main()) → loads `bootVehicleLibs()` through `bootLibLoadList()` → loads resume/recovery through `bootLibLoad()` → manual override window → auto-resume or manual
 
 ### CORE:TAG routing (multi-CPU ships)
 If `CORE:TAG` is non-empty, boot resolves the tag via `_resolveScript()` checking `roles/` then `craft/` then root. Each processor has its own `1:/` volume so state is naturally isolated. Untagged CPUs always load the vehicle script from `craft/`.
@@ -49,10 +49,10 @@ On first boot (or when phase is LAUNCH), FR2 shows a flight plan summary listing
 - `1:/` = local volume on the processor (limited — OCTO has 10,000 bytes)
 - Files must be copied from archive to local before use in flight
 
-### Mission sequence, phases, and LIBS convention
+### Mission sequence, phases, and boot libraries
 Mission profiles own `SEQUENCE`: the ordered mission steps. `lib/boot_lib.ks` reads compact `lib/dependencies.txt` to expand preamble roots, library dependencies, phase roots, and multi-phase bands. `lib/dependencies.ks` is generated from the `PHASE` rows and only binds phase names to convention delegates such as `LAUNCH -> phaseLaunch@`.
 
-For simple craft, declare `GLOBAL LIBS IS missionSequenceLibs(...)` with a legacy fallback list. Use profile `LIBS = ...` only as an escape hatch; otherwise derive libraries from `SEQUENCE` and append extras with `LIBS_EXTRA`. Edit `lib/dependencies.txt` one line at a time for shared dependency updates. Keep it comment-free and compact because it is copied as text to the probe core.
+For craft and roles, define `GLOBAL FUNCTION bootVehicleLibs { RETURN ... . }`. Use profile `LIBS = ...` only as an escape hatch; otherwise derive libraries from `SEQUENCE` and append extras with `LIBS_EXTRA`. Edit `lib/dependencies.txt` one line at a time for shared dependency updates. Keep it comment-free and compact because it is copied as text to the probe core.
 
 Mission profile `.cfg` files are not copied to the probe core. Boot reads them from `0:/missions/<craft>/` when connected, parses the selected profile once, and persists the values into `1:/state/state.json`.
 
@@ -61,7 +61,7 @@ JSON file at `1:/state/state.json` via `lib/state.ks`. Survives reboots. Use `st
 
 ### Phase machine (`lib/phases.ks`)
 - `runPhases(phaseMap)` — main loop. Takes a LEXICON mapping phase names to delegates. Reads current phase from state, calls the matching delegate, loops until DONE.
-- `phaseHandlerMap()` — loads `lib/dependencies.ks` on demand, then returns the generated `dependencyPhaseHandlers()` map.
+- `phaseHandlerMap()` — loads `lib/dependencies.ks` on demand, then builds the loaded-band phase handler map.
 - `phaseMapSet(map, phase, delegate)` — add or override a handler.
 - `nextPhase(seq)` — advance to next phase in a given sequence LIST. Persists to state.
 - `phaseDone()` — generic mission-complete cleanup.
@@ -135,7 +135,7 @@ Periodic telemetry logging to a separate file from the flight/fault log. Designe
 - **Fields**: `T spd gspd alt vs hdg pit rol thr free` + plane-specific (`auth wbrk wstr wlev ahld hhld`) when `planeActive`
 - **Config**: `OBS_CFG` lexicon — `INTERVAL` (default 120s), `MIN_FREE` (default 2000 bytes), `STOP_FILE` (`1:/state/obs_off`)
 - **Sentinel file** (`1:/state/obs_off`): checked at log time, not every tick. Auto-created on abort, low storage, or `observeStop()`. Deleted by `observeStart()` to re-enable.
-- **Integration**: craft scripts add `"observe"` to LIBS and call `observeStart()` in preflight. `_launchAbort()` creates the sentinel to halt logging on abort.
+- **Integration**: craft scripts add `"observe"` from `bootVehicleLibs()` and call `observeStart()` in preflight. `_launchAbort()` creates the sentinel to halt logging on abort.
 - **Budget**: 120s interval over 3 hours = ~90 entries = ~9KB
 
 ### Manual mode
@@ -171,7 +171,7 @@ Corrections run in order: AoP first (in-plane), then INC (out-of-plane). All are
 
 ## Key constraints
 
-- **Storage is scarce at runtime.** OCTO probes have 10,000 bytes; the primary FR2 probe core has ~100KB. Source files are compiled to KSM bytecode before upload, so comments and whitespace are free — only the compiled size matters. Use LIBS to load only what you need.
+- **Storage is scarce at runtime.** OCTO probes have 10,000 bytes; the primary FR2 probe core has ~100KB. Source files are compiled to KSM bytecode before upload, so comments and whitespace are free — only the compiled size matters. Use `bootVehicleLibs()` to load only what you need.
 - **No archive access in flight.** Once out of KSC physics range, you can't pull new files from 0:/.
 - **Reboots happen.** Power loss, quickload, scene changes all trigger reboot. Everything must be resumable via the state file.
 - **Periods end statements.** Forgetting the `.` at the end of a statement is the #1 syntax error.

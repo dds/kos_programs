@@ -61,15 +61,6 @@ def main():
     lines.extend([
         "}",
         "",
-        "GLOBAL FUNCTION dependencyPhaseHandlers {",
-        "    LOCAL phaseMap IS LEXICON().",
-        '    LOCAL phases IS bootLibBandPhases(stateGet("lib_band", "")).',
-        "    FOR phaseName IN phases {",
-        "        dependencyBindPhase(phaseMap, phaseName).",
-        "    }",
-        "    RETURN phaseMap.",
-        "}",
-        "",
     ])
 
     OUTPUT.write_text("\n".join(lines))

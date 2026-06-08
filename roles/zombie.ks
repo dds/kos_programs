@@ -3,7 +3,9 @@
 // ============================================================
 
 GLOBAL CFG IS LEXICON().
-GLOBAL LIBS IS LIST ("logs").
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN LIST("logs").
+}
 
 GLOBAL FUNCTION main {
     CORE:DOACTION("Close Terminal", TRUE). // lurk in the shadows.

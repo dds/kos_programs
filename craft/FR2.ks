@@ -50,7 +50,9 @@ LOCAL FUNCTION _fallbackLibs {
     ).
 }
 
-GLOBAL LIBS IS missionSequenceLibs(_fallbackLibs(), LIST("utils", "config")).
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN missionSequenceLibs(_fallbackLibs(), LIST("utils", "config")).
+}
 
 LOCAL FUNCTION _buildSequence {
     IF CFG:HASKEY("SEQUENCE") {

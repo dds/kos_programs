@@ -8,10 +8,12 @@ GLOBAL CFG IS LEXICON(
 ).
 
 LOCAL _seq IS LIST("TARGETED_DEORBIT", "LAND", "ROVER", "DONE").
-GLOBAL LIBS IS missionSequenceLibs(
-    missionLibsForPhases(_seq, LIST("utils")),
-    LIST("utils")
-).
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN missionSequenceLibs(
+        missionLibsForPhases(_seq, LIST("utils")),
+        LIST("utils")
+    ).
+}
 
 LOCAL FUNCTION buildPhaseSequence {
     LOCAL seq IS missionListFromCsv(stateGet("mission_cfg_SEQUENCE", "")).

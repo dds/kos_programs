@@ -55,7 +55,7 @@ GLOBAL FUNCTION fr3ApplyMissionProfile {
         }
     }
 
-    landingApplyMissionConfig().
+    IF DEFINED landingApplyMissionConfig { landingApplyMissionConfig(). }
 }
 
 LOCAL FUNCTION _fr3PhaseParkingReload {
@@ -140,7 +140,9 @@ LOCAL FUNCTION _fr3Libs {
     RETURN libs.
 }
 
-GLOBAL LIBS IS _fr3Libs().
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN _fr3Libs().
+}
 
 GLOBAL BOOT_CLEANUP IS LEXICON(
     "vehicle", "FR3",

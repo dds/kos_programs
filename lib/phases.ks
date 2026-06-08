@@ -20,7 +20,11 @@ GLOBAL FUNCTION phaseMapSet {
 
 GLOBAL FUNCTION phaseHandlerMap {
     bootLibRun("dependencies").
-    RETURN dependencyPhaseHandlers().
+    LOCAL phaseMap IS LEXICON().
+    FOR phaseName IN bootLibBandPhases(stateGet("lib_band", "")) {
+        dependencyBindPhase(phaseMap, phaseName).
+    }
+    RETURN phaseMap.
 }
 
 GLOBAL FUNCTION runPhases {

@@ -3,7 +3,7 @@
 // (0:/lib/mission_plan.ks)
 //
 // Boot loads this before craft/role scripts so they can inspect
-// payload state and derive LIBS without coupling that logic to craft scripts.
+// payload state and derive boot library roots without coupling that logic to craft scripts.
 // ============================================================
 
 GLOBAL FUNCTION missionListFromCsv {

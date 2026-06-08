@@ -139,21 +139,22 @@ IF vehicleScript <> "" {
     bootRunScript(vehicleScript).
 }
 
+LOCAL vehicleLibs IS LIST().
+IF vehicleScript <> "" {
+    SET vehicleLibs TO bootVehicleLibs().
+}
+
 IF DEFINED BOOT_CLEANUP {
     LOCAL cleanupVehicle IS BOOT_CLEANUP["vehicle"].
-    LOCAL cleanupLibs IS LIST().
-    IF DEFINED LIBS { SET cleanupLibs TO LIBS. }
     LOCAL cleanupCmds IS LIST().
     IF BOOT_CLEANUP:HASKEY("keepCmds") { SET cleanupCmds TO BOOT_CLEANUP["keepCmds"]. }
-    bootCleanup(cleanupVehicle, cleanupLibs, cleanupCmds).
+    bootCleanup(cleanupVehicle, vehicleLibs, cleanupCmds).
 }
 
 IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
-    IF DEFINED LIBS {
-        bootPruneLibs(LIBS).
-        bootLibLoadList(LIBS).
-    }
+    bootPruneLibs(vehicleLibs).
+    bootLibLoadList(vehicleLibs).
     bootLibLoad("resume").
     // Recovery is loaded only at startup/abort or after manual mode.
     LOCAL phase_ IS stateGet("phase", "").
@@ -162,7 +163,7 @@ IF HAS_LINK {
     }
 } ELSE {
     PRINT "  NO LINK: Bypassing library sync.".
-    IF DEFINED LIBS { bootLibLoadList(LIBS). }
+    bootLibLoadList(vehicleLibs).
     bootLibLoad("resume").
 }
 

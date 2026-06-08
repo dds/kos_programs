@@ -96,7 +96,7 @@ Examples:
 
 **Molniya sequence:** ...same... -> CIRC -> MOLNIYA_INSERT -> INCLINE -> [relay/sat ops] -> DONE
 
-FR2 keeps a full `LIBS` fallback for legacy name-driven flights. Profile-driven FR2 missions should set `SEQUENCE = ...` in `missions/FR2/*.cfg`, so the selected mission decides the phase order and boot derives the libraries to sync.
+FR2 keeps a full boot-library fallback for legacy name-driven flights. Profile-driven FR2 missions should set `SEQUENCE = ...` in `missions/FR2/*.cfg`, so the selected mission decides the phase order and boot derives the libraries to sync.
 
 ### FR3
 
@@ -132,7 +132,7 @@ LIBS = phases,flightplan,launch,xfer,maneuver,orbit,payload_ops,science
 LIBS_EXTRA = observe
 ```
 
-`LIBS` is an escape hatch that replaces the craft fallback or sequence-derived library list for simple craft such as FR2. `LIBS_EXTRA` appends mission-specific libraries to the computed list. FR3 uses a banded loader instead of a single static `LIBS` line; its selected profile still controls the loaded code through payloads, `SEQUENCE`, phase state, reload flags, and optional `LIBS_EXTRA`. The boot-time dependency resolver in `lib/boot_lib.ks` refreshes compact `lib/dependencies.txt` from archive to local storage when linked, then reads the local copy. `PREAMBLE` declares roots loaded for every band/phase, `LIB` rows declare library dependencies, `PHASE` rows declare sequence roots, and `BAND` rows declare multi-phase groups that should load together. Single phases intentionally do not have `BAND` rows; their phase name is the fallback band.
+Profile `LIBS` is an escape hatch that replaces the craft fallback or sequence-derived library list for simple craft such as FR2. `LIBS_EXTRA` appends mission-specific libraries to the computed list. FR3 uses a banded loader instead of a single static list; its selected profile still controls the loaded code through payloads, `SEQUENCE`, phase state, reload flags, and optional `LIBS_EXTRA`. The boot-time dependency resolver in `lib/boot_lib.ks` refreshes compact `lib/dependencies.txt` from archive to local storage when linked, then reads the local copy. `PREAMBLE` declares roots loaded for every band/phase, `LIB` rows declare library dependencies, `PHASE` rows declare sequence roots, and `BAND` rows declare multi-phase groups that should load together. Single phases intentionally do not have `BAND` rows; their phase name is the fallback band.
 
 On boot, `boot/boot.ks` syncs only `lib/boot_lib.ks` and `lib/dependencies.txt`, then `boot_lib` loads the preamble/core libraries declared by dependencies. `lib/boot_lib.ks` reads mission profiles from `0:/missions/<craft>` when a KSC link is available. After a profile is selected, the key/value config is persisted into `1:/state/state.json` as `mission_cfg_*`. Mission `.cfg` files are not copied to the probe core; in-flight reboots use persisted state.
 
@@ -197,7 +197,7 @@ Simple sounding rocket script. Launches, hibernates probe core, collects thermom
 
 1. Set boot file to `boot/boot.ks` on the kOS processor
 2. Name the vessel with either `VEHICLE-TARGET-TYPE...` or a friendly name beginning with the vehicle id
-3. Boot selects a mission profile when available, loads the craft/role script, then syncs the mission-selected or craft-computed `LIBS`
+3. Boot selects a mission profile when available, loads the craft/role script, then syncs the libraries returned by `bootVehicleLibs()`
 4. Press any key within 5s of boot to enter manual mode, or wait to auto-resume
 5. On first boot, FR2 shows a flight plan summary with all config values and a 30s countdown — press ENTER to launch immediately or wait for auto-launch
 
@@ -298,9 +298,9 @@ Set boot file to `boot/boot.ks` on a kOS-EVA processor. Boot auto-detects EVA ke
 
 ### Writing a role script
 
-Role scripts live in `roles/` and follow the same contract as vehicle scripts — define `CFG`, `LIBS`, and `main()`. They have access to `SHIP:NAME` parsing results via state (`vehicle`, `target`, `payloads`) set by boot on first boot of any CPU.
+Role scripts live in `roles/` and follow the same contract as vehicle scripts — define `CFG`, `bootVehicleLibs()`, and `main()`. They have access to `SHIP:NAME` parsing results via state (`vehicle`, `target`, `payloads`) set by boot on first boot of any CPU.
 
-Keep role scripts lightweight (minimal LIBS) since secondary CPUs are often on storage-constrained probe cores.
+Keep role scripts lightweight since secondary CPUs are often on storage-constrained probe cores.
 
 ## Creating a New Vehicle
 
@@ -310,7 +310,9 @@ A vehicle script must define three things:
 
 ```
 GLOBAL CFG IS LEXICON(...).                  // vehicle config defaults
-GLOBAL LIBS IS missionSequenceLibs(...).      // sequence-derived libs plus fallback
+GLOBAL FUNCTION bootVehicleLibs {            // sequence-derived libs plus fallback
+    RETURN missionSequenceLibs(...).
+}
 GLOBAL FUNCTION main { ... }                 // entry point
 ```
 
@@ -318,10 +320,12 @@ For simple phase-driven craft, prefer a fallback sequence and `missionSequenceLi
 
 ```
 LOCAL DEFAULT_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "DONE").
-GLOBAL LIBS IS missionSequenceLibs(
-    missionLibsForPhases(DEFAULT_SEQ, LIST("orbit")),
-    LIST("orbit")
-).
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN missionSequenceLibs(
+        missionLibsForPhases(DEFAULT_SEQ, LIST("orbit")),
+        LIST("orbit")
+    ).
+}
 ```
 
 Inside `main()`, resolve the active phase sequence from `CFG["SEQUENCE"]` when present, call `phaseHandlerMap()` for generated shared phase-name bindings, add any craft-local handlers with `phaseMapSet(...)`, and call `runPhases(phaseMap)`. Shared library phases follow the convention `PHASE_NAME -> phasePhaseName`, for example `DROP_FOR_IMPACT_AND_RAISE_PE -> phaseDropForImpactAndRaisePe`. Each phase function calls `nextPhase(seq)` when done.
@@ -420,10 +424,12 @@ LOCAL DEFAULT_SEQ IS LIST(
     "LAND", "SCIENCE", "DONE"
 ).
 
-GLOBAL LIBS IS missionSequenceLibs(
-    missionLibsForPhases(DEFAULT_SEQ, LIST("science", "config")),
-    LIST("science", "config")
-).
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN missionSequenceLibs(
+        missionLibsForPhases(DEFAULT_SEQ, LIST("science", "config")),
+        LIST("science", "config")
+    ).
+}
 
 GLOBAL FUNCTION main {
     LOCAL seq IS DEFAULT_SEQ.
@@ -460,10 +466,12 @@ Ship name: `ROVER-KERBIN` (already landed, no ascent phases)
 GLOBAL CFG IS LEXICON().
 
 LOCAL DEFAULT_SEQ IS LIST("DRIVE", "DONE").
-GLOBAL LIBS IS missionSequenceLibs(
-    missionLibsForPhases(DEFAULT_SEQ, LIST("rover", "science", "orbit", "config")),
-    LIST("rover", "science", "orbit", "config")
-).
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN missionSequenceLibs(
+        missionLibsForPhases(DEFAULT_SEQ, LIST("rover", "science", "orbit", "config")),
+        LIST("rover", "science", "orbit", "config")
+    ).
+}
 
 GLOBAL FUNCTION main {
     LOCAL seq IS DEFAULT_SEQ.
@@ -505,10 +513,12 @@ LOCAL DEFAULT_SEQ IS LIST(
     "STATION", "DONE"
 ).
 
-GLOBAL LIBS IS missionSequenceLibs(
-    missionLibsForPhases(DEFAULT_SEQ, LIST("config")),
-    LIST("config")
-).
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN missionSequenceLibs(
+        missionLibsForPhases(DEFAULT_SEQ, LIST("config")),
+        LIST("config")
+    ).
+}
 
 GLOBAL FUNCTION main {
     LOCAL seq IS DEFAULT_SEQ.

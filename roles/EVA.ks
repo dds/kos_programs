@@ -4,7 +4,9 @@
 
 GLOBAL CFG IS LEXICON().
 
-GLOBAL LIBS IS missionLibs(LIST("science", "orbit")).
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN missionLibs(LIST("science", "orbit")).
+}
 
 GLOBAL FUNCTION main {
     LOCAL crew IS SHIP:CREWMEMBERS.

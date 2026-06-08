@@ -5,7 +5,9 @@
 GLOBAL CFG IS LEXICON().
 
 LOCAL roleSeq IS LIST("DESCEND", "LANDED", "DONE").
-GLOBAL LIBS IS missionLibs(missionLibsForPhases(roleSeq)).
+GLOBAL FUNCTION bootVehicleLibs {
+    RETURN missionLibs(missionLibsForPhases(roleSeq)).
+}
 
 GLOBAL FUNCTION main {
     LOCAL seq IS roleSeq.
