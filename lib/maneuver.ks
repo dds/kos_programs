@@ -10,6 +10,9 @@ LOCAL ALIGN_TOLERANCE      IS 2.0.
 LOCAL HIBERNATE_THRESHOLD  IS 300.
 LOCAL HIBERNATE_WAKE_LEAD  IS 180.
 LOCAL MCC_DV_CAP           IS 50.
+LOCAL MCC_MIN_DV           IS 2.0.
+LOCAL MCC_LATE_MIN_DV      IS 3.0.
+LOCAL MCC_LATE_ETA         IS 7200.
 
 GLOBAL FUNCTION executeManeuver {
     WAIT 0.1.
@@ -796,6 +799,12 @@ GLOBAL FUNCTION phaseMidCourse {
 
     LOCAL totalDv IS nd:DELTAV:MAG.
     LOCAL finalPatch IS _getTargetPatch(nd, target).
+    LOCAL minMccDv IS MCC_MIN_DV.
+    IF CFG:HASKEY("MCC_MIN_DV") { SET minMccDv TO CFG["MCC_MIN_DV"]. }
+    IF ETA:TRANSITION < MCC_LATE_ETA {
+        SET minMccDv TO MAX(minMccDv, MCC_LATE_MIN_DV).
+        IF CFG:HASKEY("MCC_LATE_MIN_DV") { SET minMccDv TO CFG["MCC_LATE_MIN_DV"]. }
+    }
 
     LOCAL worsened IS FALSE.
     IF (useElementSolver OR targetInc >= 0) AND finalPatch <> 0 {
@@ -805,13 +814,16 @@ GLOBAL FUNCTION phaseMidCourse {
         IF ABS(finalElemEval["PE_ERR"]) > 100000 { SET worsened TO TRUE. }
     }
 
-    IF totalDv < 0.1 OR finalPatch = 0 OR worsened {
+    IF totalDv < minMccDv OR finalPatch = 0 OR worsened {
         IF worsened {
             mLogWarn("MCC made approach worse; skipping correction node.").
+        } ELSE IF totalDv < minMccDv {
+            mLogWarn("MCC correction below threshold; skipping correction node.").
         }
         mLog("Encounter on target. Skipping MCC burn.").
         mLogWarn("STATS mcc result target=" + target:NAME
             + " status=skipped dv=" + ROUND(totalDv,1)
+            + " minDv=" + ROUND(minMccDv,1)
             + " worsened=" + worsened).
         REMOVE nd.
     } ELSE {
