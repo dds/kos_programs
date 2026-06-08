@@ -2,17 +2,6 @@
 // fr3_sequence.ks - FR3 sequence construction and phase map
 // ============================================================
 
-LOCAL FUNCTION _phaseListFromString {
-    PARAMETER raw.
-    LOCAL seq IS LIST().
-    FOR phaseRaw IN raw:SPLIT(",") {
-        LOCAL phaseName IS phaseRaw:TRIM:TOUPPER.
-        IF phaseName <> "" { seq:ADD(phaseName). }
-    }
-    IF seq:LENGTH = 0 { seq:ADD("DONE"). }
-    RETURN seq.
-}
-
 LOCAL FUNCTION _phaseParkingReload {
     phaseParking().
     IF CFG:HASKEY("RELOAD_AFTER_PARK") AND CFG["RELOAD_AFTER_PARK"] > 0 {
@@ -28,7 +17,7 @@ LOCAL FUNCTION _phaseParkingReload {
 
 GLOBAL FUNCTION fr3BuildPhaseSequence {
     IF CFG:HASKEY("SEQUENCE") {
-        RETURN _phaseListFromString(CFG["SEQUENCE"]).
+        RETURN phaseListFromString(CFG["SEQUENCE"]).
     }
 
     LOCAL orbitPhases IS LIST("CIRC", "RAISE", "INCLINE").

@@ -32,29 +32,6 @@ GLOBAL CFG IS LEXICON(
 
 GLOBAL fr3Seq IS LIST().
 
-GLOBAL FUNCTION cfgSet {
-    PARAMETER key.
-    PARAMETER value.
-    IF CFG:HASKEY(key) { CFG:REMOVE(key). }
-    CFG:ADD(key, value).
-}
-
-LOCAL FUNCTION _cfgFromState {
-    PARAMETER key.
-    PARAMETER asNumber IS TRUE.
-    LOCAL raw IS stateGet("mission_cfg_" + key, "").
-    IF raw = "" { RETURN. }
-    IF asNumber {
-        IF raw:ISTYPE("Scalar") {
-            cfgSet(key, raw).
-        } ELSE {
-            cfgSet(key, raw:TONUMBER(0)).
-        }
-    } ELSE {
-        cfgSet(key, raw).
-    }
-}
-
 LOCAL FUNCTION _numericMissionKeys {
     RETURN LIST(
         "PARKING_ALT", "LAUNCH_INCLINATION", "LAUNCH_AZIMUTH",
@@ -110,29 +87,42 @@ LOCAL FUNCTION _stringMissionKeys {
     ).
 }
 
-LOCAL FUNCTION _applyMissionState {
-    FOR key IN _numericMissionKeys() {
-        _cfgFromState(key, TRUE).
-    }
+// Load-time config application (runs before LIBS are loaded,
+// so we use local helpers instead of rocket.ks globals).
+LOCAL FUNCTION _cfgSet {
+    PARAMETER key.
+    PARAMETER value.
+    IF CFG:HASKEY(key) { CFG:REMOVE(key). }
+    CFG:ADD(key, value).
+}
 
-    FOR key IN _stringMissionKeys() {
-        _cfgFromState(key, FALSE).
+LOCAL FUNCTION _cfgFromState {
+    PARAMETER key.
+    PARAMETER asNumber IS TRUE.
+    LOCAL raw IS stateGet("mission_cfg_" + key, "").
+    IF raw = "" { RETURN. }
+    IF asNumber {
+        IF raw:ISTYPE("Scalar") { _cfgSet(key, raw). }
+        ELSE { _cfgSet(key, raw:TONUMBER(0)). }
+    } ELSE {
+        _cfgSet(key, raw).
     }
 }
 
 LOCAL FUNCTION _sanitizeAscentConfig {
     IF CFG["FAIRING_ALT"] < 10000 {
-        cfgSet("FAIRING_ALT", 71500).
+        _cfgSet("FAIRING_ALT", 71500).
     }
     IF CFG["EXTEND_ALT"] < 10000 {
-        cfgSet("EXTEND_ALT", 73000).
+        _cfgSet("EXTEND_ALT", 73000).
     }
     IF CFG["EXTEND_ALT"] < CFG["FAIRING_ALT"] {
-        cfgSet("EXTEND_ALT", CFG["FAIRING_ALT"] + 1500).
+        _cfgSet("EXTEND_ALT", CFG["FAIRING_ALT"] + 1500).
     }
 }
 
-_applyMissionState().
+FOR key IN _numericMissionKeys() { _cfgFromState(key, TRUE). }
+FOR key IN _stringMissionKeys() { _cfgFromState(key, FALSE). }
 _sanitizeAscentConfig().
 
 // --- Example: rendezvous + Duna rover lander ---
@@ -150,9 +140,9 @@ _sanitizeAscentConfig().
 //   SET CFG["TARGET_INCLINATION"] TO 90.
 //   SET CFG["RENDEZVOUS_TARGET"] TO "Jeb's Wreck".
 //
-// Sequence: LUNCH → FAIR → ANTS → PARK → RDV → XING → MCC →
-//           COAST → CAPTURE → CIRC → RAISE → INCLINE →
-//           LAND_DEORBIT → LAND → DONE
+// Sequence: LUNCH -> FAIR -> ANTS -> PARK -> RDV -> XING -> MCC ->
+//           COAST -> CAPTURE -> CIRC -> RAISE -> INCLINE ->
+//           LAND_DEORBIT -> LAND -> DONE
 //
 // The RDV phase runs planRendezvous() + executeManeuver() when
 // RENDEZVOUS_TARGET or ASTEROID_TARGET is configured.
@@ -257,7 +247,8 @@ LOCAL FUNCTION _fr3EmergencyCleanup {
     PARAMETER wantedLibs.
     LOCAL keepLibs IS LIST(
         "STATE", "LOGS", "FILES", "BOOT_CORE", "RESUME", "RECOVERY",
-        "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE"
+        "PHASES", "UTILS", "UI", "FR3_PAYLOAD", "FR3_PROFILE", "FR3_SEQUENCE",
+        "ROCKET"
     ).
     FOR lib IN wantedLibs {
         LOCAL key IS lib:TOUPPER.
@@ -332,7 +323,7 @@ LOCAL FUNCTION _fr3Libs {
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
-    LOCAL libs IS LIST("phases", "utils", "ui", "fr3_payload", "fr3_profile", "fr3_sequence").
+    LOCAL libs IS LIST("phases", "utils", "ui", "rocket", "fr3_payload", "fr3_profile", "fr3_sequence").
 
     IF band = "LAUNCH" {
         libs:ADD("flightplan").

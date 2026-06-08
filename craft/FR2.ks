@@ -38,27 +38,8 @@ GLOBAL CFG IS LEXICON(
     "RECOVERY_PE",            27500
 ).
 
-LOCAL FUNCTION _cfgSet {
-    PARAMETER key.
-    PARAMETER value.
-    IF CFG:HASKEY(key) { CFG:REMOVE(key). }
-    CFG:ADD(key, value).
-}
-
-LOCAL FUNCTION _cfgFromState {
-    PARAMETER key.
-    PARAMETER asNumber IS TRUE.
-    LOCAL raw IS stateGet("mission_cfg_" + key, "").
-    IF raw = "" { RETURN. }
-    IF asNumber {
-        _cfgSet(key, raw:TONUMBER(0)).
-    } ELSE {
-        _cfgSet(key, raw).
-    }
-}
-
-LOCAL FUNCTION _applyMissionState {
-    FOR key IN LIST(
+LOCAL FUNCTION _numericMissionKeys {
+    RETURN LIST(
         "PARKING_ALT", "LAUNCH_INCLINATION", "LAUNCH_AZIMUTH",
         "LAUNCH_STAGE_LIMIT", "FAIRING_ALT", "EXTEND_ALT",
         "RELAY_ALT", "CAPTURE_PE", "CAPTURE_INC", "CAPTURE_LAN",
@@ -75,48 +56,56 @@ LOCAL FUNCTION _applyMissionState {
         "SCANSAT_MAX_NODE_DV", "SCANSAT_RECOVER_SAFE_PE",
         "SCANSAT_RECOVER_MAX_TIME", "SCANSAT_CLEARANCE_DV",
         "SCANSAT_CLEARANCE_THROTTLE", "SCANSAT_CLEARANCE_SETTLE"
-    ) {
-        _cfgFromState(key, TRUE).
-    }
+    ).
+}
 
-    FOR key IN LIST(
+LOCAL FUNCTION _stringMissionKeys {
+    RETURN LIST(
         "SEQUENCE", "CAPTURE_DIR", "INCL_MATCH_TARGET",
         "SCANSAT_DECOUPLER_TAG", "SCANSAT_CLEARANCE_DIR", "PROBE_TARGET_WAYPOINT",
         "LANDING_TARGET_WAYPOINT"
-    ) {
-        _cfgFromState(key, FALSE).
+    ).
+}
+
+// Load-time config application (runs before LIBS are loaded,
+// so we use local helpers instead of rocket.ks globals).
+LOCAL FUNCTION _cfgSet {
+    PARAMETER key.
+    PARAMETER value.
+    IF CFG:HASKEY(key) { CFG:REMOVE(key). }
+    CFG:ADD(key, value).
+}
+
+LOCAL FUNCTION _cfgFromState {
+    PARAMETER key.
+    PARAMETER asNumber IS TRUE.
+    LOCAL raw IS stateGet("mission_cfg_" + key, "").
+    IF raw = "" { RETURN. }
+    IF asNumber {
+        IF raw:ISTYPE("Scalar") { _cfgSet(key, raw). }
+        ELSE { _cfgSet(key, raw:TONUMBER(0)). }
+    } ELSE {
+        _cfgSet(key, raw).
     }
 }
 
-_applyMissionState().
+FOR key IN _numericMissionKeys() { _cfgFromState(key, TRUE). }
+FOR key IN _stringMissionKeys() { _cfgFromState(key, FALSE). }
 
 GLOBAL LIBS IS LIST(
     "phases", "flightplan", "launch", "xfer",
     "lib_navigation", "countdown", "maneuver", "inclination",
     "orbit", "targeting", "landing",
     "lambert", "maneuver_intersystem", "maneuver_rendezvous",
-    "molniya", "payload_ops", "science", "observe", "utils"
+    "molniya", "payload_ops", "science", "observe", "utils", "rocket"
 ).
 
-LOCAL FUNCTION buildPhaseSequence {
+LOCAL FUNCTION _buildSequence {
     IF CFG:HASKEY("SEQUENCE") {
-        RETURN _phaseListFromString(CFG["SEQUENCE"]).
-    }
-
-    LOCAL hasMolniya IS FALSE.
-    FOR ptype IN missionPayloads() {
-        IF normalizePayloadType(ptype) = "MOLNIYA" { SET hasMolniya TO TRUE. }
+        RETURN phaseListFromString(CFG["SEQUENCE"]).
     }
 
     LOCAL orbitPhases IS LIST().
-    // IF hasMolniya {
-    //     orbitPhases:ADD("CIRC").
-    //     orbitPhases:ADD("MOLNIYA_INSERT").
-    // } ELSE {
-    //     orbitPhases:ADD("RAISE").
-    // }
-    // orbitPhases:ADD("INCLINE").
-
     orbitPhases:ADD("CIRC").
     orbitPhases:ADD("RAISE").
     orbitPhases:ADD("INCLINE").
@@ -138,19 +127,8 @@ LOCAL FUNCTION buildPhaseSequence {
     RETURN buildRocketSequence(orbitPhases, payloadPhases).
 }
 
-LOCAL FUNCTION _phaseListFromString {
-    PARAMETER raw.
-    LOCAL seq IS LIST().
-    FOR phaseRaw IN raw:SPLIT(",") {
-        LOCAL phaseName IS phaseRaw:TRIM:TOUPPER.
-        IF phaseName <> "" { seq:ADD(phaseName). }
-    }
-    IF seq:LENGTH = 0 { seq:ADD("DONE"). }
-    RETURN seq.
-}
-
 LOCAL FUNCTION _printConfig {
-    LOCAL seq IS buildPhaseSequence().
+    LOCAL seq IS _buildSequence().
     LOCAL hasProbe IS FALSE.
     LOCAL hasLander IS FALSE.
     LOCAL hasMolniya IS FALSE.
@@ -228,19 +206,8 @@ LOCAL FUNCTION _phaseDeploySat {
     nextPhase(launchSeq).
 }
 
-GLOBAL FUNCTION main {
-    LOCAL seq IS buildPhaseSequence().
-    SET launchSeq TO seq.
-    SET xferSeq TO seq.
-
-    mLogPhase("FR2 MAIN").
-    mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
-    mLog("Sequence: " + seq:JOIN(" -> ")).
-    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
-
-    confirmLaunch(_printConfig@).
-
-    LOCAL phaseMap IS LEXICON(
+LOCAL FUNCTION _buildPhaseMap {
+    RETURN LEXICON(
         "LUNCH",            phaseLaunch@,
         "FAIR",             phaseFairing@,
         "ANTS",             phaseExtendAnts@,
@@ -254,7 +221,6 @@ GLOBAL FUNCTION main {
         "RAISE",            phaseRaiseAlt@,
         "INCLINE",          phaseInclCorrect@,
         "ELLIPTICAL",       phaseElliptical@,
-        // "MOLNIYA_INSERT",   phaseMolniyaInsert@,
         "TARGETED_DEORBIT", phaseTargetedDeorbit@,
         "RELEASE_PROBE",    phaseReleaseProbe@,
         "RECIRC",           _phaseRecirc@,
@@ -266,6 +232,8 @@ GLOBAL FUNCTION main {
         "LAND_ASSIST",      phaseLandAssist@,
         "LAND",             phaseLand@
     ).
+}
 
-    runPhases(phaseMap).
+GLOBAL FUNCTION main {
+    rocketMain("FR2", _buildSequence@, _printConfig@, _buildPhaseMap@).
 }
