@@ -376,50 +376,74 @@ LOCAL FUNCTION _carrierHandoff {
         + " alt=" + ROUND(ALT:RADAR,1)
         + " v=" + ROUND(SHIP:VERTICALSPEED,1)).
 
-    // Step 2: Tip carrier sideways so rover clears the stack
+    // Step 2: Survey terrain in 8 directions and pick the flattest
+    LOCAL tipDir IS _bestTipDirection().
+    mLogWarn("STATS tip direction heading=" + ROUND(tipDir,1)).
+
+    // Step 3: Tip gently toward the chosen direction and decouple mid-tip
     IF LAND_CFG["CARRIER_TIP"] {
-        mLog("Tipping carrier for release.").
+        mLog("Tipping carrier heading " + ROUND(tipDir,0) + " deg.").
         SET SAS TO FALSE.
-        LOCK STEERING TO SHIP:FACING:RIGHTVECTOR.
-        WAIT LAND_CFG["CARRIER_TIP_TIME"].
-        mLogWarn("STATS carrier tipped pitch=" + ROUND(SHIP:FACING:PITCH,1)
-            + " roll=" + ROUND(SHIP:FACING:ROLL,1)).
-    }
+        // Build a direction: lean the nose toward the chosen compass heading
+        LOCAL tipVec IS HEADING(tipDir, 0):VECTOR.
+        LOCK STEERING TO tipVec.
 
-    // Step 3: Decouple — after this, kOS CPU is on the rover
-    mLog("Decoupling rover from carrier.").
-    _decouplePart(decoupler).
-    WAIT 0.5.
-    UNLOCK STEERING.
-    mLogWarn("STATS rover released alt=" + ROUND(ALT:RADAR,1)
-        + " v=" + ROUND(SHIP:VERTICALSPEED,1)
-        + " status=" + SHIP:STATUS).
-
-    // Step 4: Orient rover wheels-down — keep current heading but roll
-    // so TOPVECTOR faces away from ground (wheels toward surface)
-    IF LAND_CFG["ROVER_ORIENT"] {
-        mLog("Orienting rover wheels-down.").
-        SET SAS TO FALSE.
-        // LOOKDIRUP(fore, top): keep nose roughly forward, roll wheels toward ground
-        LOCK STEERING TO LOOKDIRUP(VXCL(SHIP:UP:VECTOR, SHIP:FACING:FOREVECTOR):NORMALIZED,
-            SHIP:UP:VECTOR).
-        LOCAL orientEnd IS TIME:SECONDS + LAND_CFG["ROVER_ORIENT_TIME"].
-
-        // Hold orientation until timeout or we land on wheels
-        UNTIL TIME:SECONDS >= orientEnd
-                OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
-            LOCAL topErr IS VANG(SHIP:FACING:TOPVECTOR, SHIP:UP:VECTOR).
-            HUDTEXT("Rover orient: alt=" + ROUND(ALT:RADAR,1)
-                + "m  topErr=" + ROUND(topErr,1)
-                + "deg", 0.5, 2, 13, CYAN, FALSE).
+        // Wait for the carrier to start leaning, then decouple while falling
+        LOCAL tipEnd IS TIME:SECONDS + LAND_CFG["CARRIER_TIP_TIME"].
+        LOCAL decoupled IS FALSE.
+        UNTIL TIME:SECONDS >= tipEnd {
+            LOCAL tilt IS VANG(SHIP:FACING:FOREVECTOR, SHIP:UP:VECTOR).
+            HUDTEXT("Tipping: " + ROUND(tilt,1) + " deg from vertical",
+                0.5, 2, 13, YELLOW, FALSE).
+            // Decouple once we're leaning past 30 degrees
+            IF NOT decoupled AND tilt > 30 {
+                mLog("Decoupling rover at tilt=" + ROUND(tilt,1) + " deg.").
+                _decouplePart(decoupler).
+                SET decoupled TO TRUE.
+                WAIT 0.1.
+                UNLOCK STEERING.
+                // Now control is on the rover — immediately orient flat
+                BREAK.
+            }
             WAIT 0.05.
         }
-        UNLOCK STEERING.
-        mLogWarn("STATS rover oriented topErr="
-            + ROUND(VANG(SHIP:FACING:TOPVECTOR, SHIP:UP:VECTOR),1)
-            + " alt=" + ROUND(ALT:RADAR,1)
-            + " status=" + SHIP:STATUS).
+        // If we timed out without reaching 30 deg, decouple anyway
+        IF NOT decoupled {
+            LOCAL tilt IS VANG(SHIP:FACING:FOREVECTOR, SHIP:UP:VECTOR).
+            mLog("Tip timeout — decoupling at tilt=" + ROUND(tilt,1) + " deg.").
+            _decouplePart(decoupler).
+            WAIT 0.1.
+            UNLOCK STEERING.
+        }
+        mLogWarn("STATS carrier tipped and decoupled").
+    } ELSE {
+        // No tip — just decouple
+        mLog("Decoupling rover from carrier.").
+        _decouplePart(decoupler).
+        WAIT 0.5.
     }
+
+    // Step 4: Rover is now the active vessel — orient flat (wheels down)
+    mLog("Orienting rover wheels-down.").
+    SET SAS TO FALSE.
+    LOCK STEERING TO LOOKDIRUP(
+        VXCL(SHIP:UP:VECTOR, SHIP:FACING:FOREVECTOR):NORMALIZED,
+        SHIP:UP:VECTOR).
+    LOCAL orientEnd IS TIME:SECONDS + LAND_CFG["ROVER_ORIENT_TIME"].
+
+    UNTIL TIME:SECONDS >= orientEnd
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+        LOCAL topErr IS VANG(SHIP:FACING:TOPVECTOR, SHIP:UP:VECTOR).
+        HUDTEXT("Rover orient: alt=" + ROUND(ALT:RADAR,1)
+            + "m  topErr=" + ROUND(topErr,1)
+            + "deg", 0.5, 2, 13, CYAN, FALSE).
+        WAIT 0.05.
+    }
+    UNLOCK STEERING.
+    mLogWarn("STATS rover oriented topErr="
+        + ROUND(VANG(SHIP:FACING:TOPVECTOR, SHIP:UP:VECTOR),1)
+        + " alt=" + ROUND(ALT:RADAR,1)
+        + " status=" + SHIP:STATUS).
 
     // Step 5: Wait for rover to settle on its wheels
     IF NOT (SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED") {
@@ -431,18 +455,59 @@ LOCAL FUNCTION _carrierHandoff {
         }
     }
 
-    // Step 6: Engage brakes
-    IF LAND_CFG["ROVER_BRAKE"] {
-        SET BRAKES TO TRUE.
-        mLog("Brakes engaged.").
-    }
-
+    // Step 6: Engage brakes and finalize
+    SET BRAKES TO TRUE.
     SET SAS TO TRUE.
+    mLog("Brakes engaged.").
+
+    _deployAntennas().
+    _deploySolarPanels().
+
     mLogWarn("STATS carrier handoff complete status=" + SHIP:STATUS
         + " lat=" + ROUND(SHIP:LATITUDE,4)
         + " lng=" + ROUND(SHIP:LONGITUDE,4)
         + " alt=" + ROUND(ALT:RADAR,1)).
-    mLog("Carrier handoff complete. Rover on surface.").
+    mLog("Carrier handoff complete. Rover on surface, ready for operations.").
+}
+
+// Survey terrain in 8 compass directions at one ship-height distance.
+// Returns the compass heading (0-360) of the flattest direction —
+// the direction with the smallest absolute terrain height difference
+// from the landing site.
+LOCAL FUNCTION _bestTipDirection {
+    LOCAL hereTerrain IS SHIP:GEOPOSITION:TERRAINHEIGHT.
+    LOCAL herePos IS SHIP:GEOPOSITION.
+    // Sample distance: approximate ship height (conservative)
+    LOCAL sampleDist IS MAX(5, ALT:RADAR + 2).
+    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
+    LOCAL lonScale IS MAX(0.01, COS(herePos:LAT)).
+
+    LOCAL bestHeading IS 0.
+    LOCAL bestDiff IS 999999.
+
+    LOCAL hdg IS 0.
+    UNTIL hdg >= 360 {
+        LOCAL northM IS COS(hdg) * sampleDist.
+        LOCAL eastM IS SIN(hdg) * sampleDist.
+        LOCAL sampleLat IS herePos:LAT + northM * degPerM.
+        LOCAL sampleLng IS herePos:LNG + eastM * degPerM / lonScale.
+        LOCAL sampleTerrain IS LATLNG(sampleLat, sampleLng):TERRAINHEIGHT.
+        LOCAL diff IS ABS(sampleTerrain - hereTerrain).
+
+        mLogWarn("STATS terrain hdg=" + ROUND(hdg,0)
+            + " elev=" + ROUND(sampleTerrain,1)
+            + " diff=" + ROUND(diff,1)).
+
+        IF diff < bestDiff {
+            SET bestDiff TO diff.
+            SET bestHeading TO hdg.
+        }
+        SET hdg TO hdg + 45.
+    }
+
+    mLog("Best tip direction: heading " + ROUND(bestHeading,0)
+        + " deg, terrain diff=" + ROUND(bestDiff,1) + "m.").
+    RETURN bestHeading.
 }
 
 // Assist stage descent: land the whole stack, then decouple + rover release.
