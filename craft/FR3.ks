@@ -12,6 +12,17 @@ applyKnownMissionState().
 GLOBAL fr3Seq IS LIST().
 
 LOCAL FUNCTION _fr3PrintConfig {
+    LOCAL seq IS fr3BuildPhaseSequence().
+    flightPlanTitle("FR3 FLIGHT PLAN", SHIP:NAME).
+    flightPlanIdentity().
+    flightPlanSection("MISSION").
+    flightPlanRow("BAND", fr3PhaseBand()).
+    flightPlanRow("TARGET", MISSION["target"]).
+    flightPlanRow("PAYLOADS", MISSION["payloads"]).
+    flightPlanSection("SEQUENCE").
+    flightPlanSequence(seq).
+    flightPlanStorage().
+    flightPlanLine().
 }
 
 GLOBAL FUNCTION fr3BandForPhase {
