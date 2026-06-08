@@ -640,13 +640,13 @@ GLOBAL FUNCTION bootLibRun {
     bootLibSync(libName).
     LOCAL compiled IS "1:/lib/" + libName + ".ksm".
     LOCAL cached IS "1:/lib/" + libName + ".ks".
-    LOCAL archive IS "0:/lib/" + libName + ".ks".
+    LOCAL archive_ IS "0:/lib/" + libName + ".ks".
     IF EXISTS(compiled) {
         RUNONCEPATH(compiled).
     } ELSE IF EXISTS(cached) {
         RUNONCEPATH(cached).
-    } ELSE IF EXISTS(archive) {
-        RUNONCEPATH(archive).
+    } ELSE IF EXISTS(archive_) {
+        RUNONCEPATH(archive_).
     } ELSE {
         PRINT "  WARN: " + libName + " unavailable".
     }
