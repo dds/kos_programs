@@ -628,6 +628,23 @@ GLOBAL FUNCTION bootLibRun {
     }
 }
 
+GLOBAL FUNCTION bootLibRunFresh {
+    PARAMETER libName.
+    bootLibSync(libName).
+    LOCAL compiled IS "1:/lib/" + libName + ".ksm".
+    LOCAL cached IS "1:/lib/" + libName + ".ks".
+    LOCAL archive_ IS "0:/lib/" + libName + ".ks".
+    IF EXISTS(compiled) OR EXISTS(cached) {
+        RUNPATH("1:/lib/" + libName).
+        IF NOT BOOT_LIB_RAN:CONTAINS(libName) { BOOT_LIB_RAN:ADD(libName). }
+    } ELSE IF EXISTS(archive_) {
+        RUNPATH("0:/lib/" + libName).
+        IF NOT BOOT_LIB_RAN:CONTAINS(libName) { BOOT_LIB_RAN:ADD(libName). }
+    } ELSE {
+        PRINT "  WARN: " + libName + " unavailable".
+    }
+}
+
 GLOBAL FUNCTION bootLibSync {
     PARAMETER libName.
     IF NOT HOMECONNECTION:ISCONNECTED { RETURN. }
