@@ -76,7 +76,14 @@ LOCAL FUNCTION _phasePreflight {
 LOCAL FUNCTION _phaseFlight {
     mLogPhase("FLIGHT").
     IF hasSciencePayload { scienceInit(). }
+
+    // Wait until actually airborne before monitoring for landing.
+    // SHIP:STATUS stays "LANDED" on the runway until liftoff.
+    mLog("Waiting for liftoff...").
+    WAIT UNTIL SHIP:STATUS = "FLYING" OR SHIP:STATUS = "SUB_ORBITAL"
+        OR SHIP:STATUS = "ORBITING".
     mLog("Flight active. Monitoring until landing.").
+
     UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
         planeUpdate().
         IF hasSciencePayload { scienceRunAll(). }

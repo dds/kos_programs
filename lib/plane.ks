@@ -372,24 +372,13 @@ GLOBAL FUNCTION waypointClear {
 }
 
 GLOBAL FUNCTION planeLandingAssist {
-    LOCAL refSpd IS PLANE_CFG["BRAKE_REF_SPEED"].
     LOCAL stopSpd IS PLANE_CFG["BRAKE_STOP_SPEED"].
     LOCAL revDelay IS PLANE_CFG["REVERSE_THRUST_DELAY"].
     LOCAL revAG IS PLANE_CFG["REVERSE_AG"].
 
-    mLog("Landing assist: brake attenuation armed, throttle zero.").
+    mLog("Landing assist: brakes on, throttle zero.").
     LOCK THROTTLE TO 0.
-
-    WHEN TRUE THEN {
-        LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
-        IF spd > stopSpd {
-            SET SHIP:CONTROL:WHEELBRAKES TO MAX(0.15, 1.0 - spd / refSpd).
-            PRESERVE.
-        } ELSE {
-            SET SHIP:CONTROL:WHEELBRAKES TO 0.
-            mLog("Brake attenuation complete — stopped.").
-        }
-    }
+    SET BRAKES TO TRUE.
 
     mLog("Waiting " + revDelay + "s for reverse thrust.").
     WAIT revDelay.
@@ -406,6 +395,7 @@ GLOBAL FUNCTION planeLandingAssist {
 
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
+    SET BRAKES TO TRUE.
     IF revAG = 2 { AG2 OFF. }
     ELSE IF revAG = 3 { AG3 OFF. }
     ELSE IF revAG = 4 { AG4 OFF. }
