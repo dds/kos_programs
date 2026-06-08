@@ -48,17 +48,6 @@ GLOBAL FUNCTION flightPlanIdentity {
     }
 }
 
-GLOBAL FUNCTION flightPlanStorage {
-    PRINT " ".
-    IF DEFINED printStorageStatus {
-        printStorageStatus().
-    } ELSE {
-        flightPlanSection("STORAGE").
-        flightPlanRow("FREE", ROUND(CORE:VOLUME:FREESPACE,0) + " bytes").
-        flightPlanRow("CAPACITY", ROUND(CORE:VOLUME:CAPACITY,0) + " bytes").
-    }
-}
-
 GLOBAL FUNCTION flightPlanSequence {
     PARAMETER seq.
 
@@ -74,6 +63,15 @@ GLOBAL FUNCTION flightPlanSequence {
         PRINT line.
         SET i TO j.
     }
+    PRINT " ".
+    IF DEFINED printStorageStatus {
+        printStorageStatus().
+    } ELSE {
+        flightPlanSection("STORAGE").
+        flightPlanRow("FREE", ROUND(CORE:VOLUME:FREESPACE,0) + " bytes").
+        flightPlanRow("CAPACITY", ROUND(CORE:VOLUME:CAPACITY,0) + " bytes").
+    }
+    flightPlanLine().
 }
 
 GLOBAL FUNCTION flightPlanChecklist {

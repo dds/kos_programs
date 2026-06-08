@@ -21,8 +21,6 @@ LOCAL FUNCTION _fr3PrintConfig {
     flightPlanRow("PAYLOADS", MISSION["payloads"]).
     flightPlanSection("SEQUENCE").
     flightPlanSequence(seq).
-    flightPlanStorage().
-    flightPlanLine().
 }
 
 GLOBAL FUNCTION fr3BandForPhase {
