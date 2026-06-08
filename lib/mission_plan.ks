@@ -140,7 +140,7 @@ LOCAL FUNCTION _missionPhaseDeps {
         { RETURN LIST("molniya", "maneuver", "maneuver_targeting",
                        "inclination"). }
     // ScanSat
-    IF p = "SCANSAT_IMPACT_RELEASE"
+    IF p = "SCANSAT_IMPACT_RELEASE" OR p = "PAYLOAD_IMPACT_RELEASE"
         { RETURN LIST("maneuver_orbit", "orbit", "maneuver", "maneuver_targeting",
                        "inclination", "countdown"). }
     RETURN LIST().

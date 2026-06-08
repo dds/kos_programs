@@ -206,6 +206,11 @@ GLOBAL FUNCTION phasePayloadImpactRelease {
     LOCAL stateKey IS "payload_" + label:TOLOWER + "_released_time".
     LOCAL alreadyReleased IS stateGet(stateKey, "") <> "".
 
+    IF NOT _payloadRecoveryWindowSafe(impactPe, label) {
+        _payloadImpactHalt("recovery burn window is after impact").
+        RETURN.
+    }
+
     IF NOT alreadyReleased {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         IF NOT _payloadDisposeAttached(impactPe) {
@@ -252,6 +257,57 @@ LOCAL FUNCTION _payloadImpactHalt {
     PRINT "  Manual mode remains available; reboot/resume after review.".
     yieldToPrompt().
     RETURN FALSE.
+}
+
+LOCAL FUNCTION _payloadNextPhase {
+    LOCAL current IS stateGet("phase", ""):TOUPPER.
+    IF NOT DEFINED xferSeq { RETURN "". }
+    FROM { LOCAL i IS 0. } UNTIL i >= xferSeq:LENGTH STEP { SET i TO i + 1. } DO {
+        IF xferSeq[i]:TOUPPER = current {
+            IF i + 1 < xferSeq:LENGTH { RETURN xferSeq[i + 1]:TOUPPER. }
+            RETURN "".
+        }
+    }
+    RETURN "".
+}
+
+LOCAL FUNCTION _bodyImpactFloor {
+    LOCAL body IS SHIP:ORBIT:BODY.
+    IF body:ATM:EXISTS { RETURN body:ATM:HEIGHT + 1000. }
+    RETURN 5000.
+}
+
+LOCAL FUNCTION _payloadRecoveryWindowSafe {
+    PARAMETER targetPe.
+    PARAMETER label.
+
+    LOCAL nextPhase IS _payloadNextPhase().
+    LOCAL floorPe IS _bodyImpactFloor().
+    LOCAL margin IS 60.
+    IF CFG:HASKEY("PAYLOAD_RECOVERY_MARGIN") { SET margin TO CFG["PAYLOAD_RECOVERY_MARGIN"]. }
+
+    IF targetPe >= floorPe AND SHIP:PERIAPSIS >= floorPe {
+        RETURN TRUE.
+    }
+    IF nextPhase <> "ELLIPTICAL" {
+        RETURN TRUE.
+    }
+
+    LOCAL etaAp IS ETA:APOAPSIS.
+    LOCAL etaPe IS ETA:PERIAPSIS.
+    LOCAL safe IS etaAp + margin < etaPe.
+    LOCAL statusText IS CHOOSE "ok" IF safe ELSE "blocked".
+    mLogWarn("STATS payload-impact-release precheck label=" + label
+        + " status=" + statusText
+        + " reason=recovery-window"
+        + " next=" + nextPhase
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " floorPeKm=" + ROUND(floorPe/1000,1)
+        + " etaAp=" + ROUND(etaAp,1)
+        + " etaPe=" + ROUND(etaPe,1)
+        + " margin=" + ROUND(margin,1)).
+
+    RETURN safe.
 }
 
 LOCAL FUNCTION _payloadDisposeAttached {
@@ -931,6 +987,21 @@ GLOBAL FUNCTION phaseElliptical {
         RETURN.
     }
 
+    IF targetPe >= 0 AND NOT _ellipticalRecoveryWindowSafe(targetPe) {
+        mLogError("Elliptical recovery halted: apoapsis burn occurs after impact.").
+        mLogWarn("STATS elliptical precheck status=blocked reason=recovery-window"
+            + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+            + " targetPeKm=" + ROUND(targetPe/1000,1)
+            + " floorPeKm=" + ROUND(_bodyImpactFloor()/1000,1)
+            + " etaAp=" + ROUND(ETA:APOAPSIS,1)
+            + " etaPe=" + ROUND(ETA:PERIAPSIS,1)).
+        PRINT " ".
+        PRINT "  ELLIPTICAL RECOVERY HOLD".
+        PRINT "  Apoapsis burn is after impact. Manual control is available.".
+        yieldToPrompt().
+        RETURN.
+    }
+
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
@@ -983,6 +1054,14 @@ GLOBAL FUNCTION phaseElliptical {
     orbitSummary().
     mLog("Orbit finalization complete!").
     nextPhase(xferSeq).
+}
+
+LOCAL FUNCTION _ellipticalRecoveryWindowSafe {
+    PARAMETER targetPe.
+    IF SHIP:PERIAPSIS >= _bodyImpactFloor() { RETURN TRUE. }
+    LOCAL margin IS 60.
+    IF CFG:HASKEY("ELLIPTICAL_RECOVERY_MARGIN") { SET margin TO CFG["ELLIPTICAL_RECOVERY_MARGIN"]. }
+    RETURN ETA:APOAPSIS + margin < ETA:PERIAPSIS.
 }
 
 LOCAL FUNCTION _angleDiff {
