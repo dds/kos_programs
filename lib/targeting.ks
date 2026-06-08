@@ -313,10 +313,15 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL realNode IS _planDeorbitNode(bestUT, bestPe, bestRad, bestNor).
     mLog("Executing deorbit burn at T+" + ROUND(bestUT - TIME:SECONDS,0) + "s.").
-    archivePlannedManeuverLog("targeted-deorbit").
+    IF DEFINED archivePlannedManeuverLog {
+        archivePlannedManeuverLog("targeted-deorbit").
+    } ELSE IF HOMECONNECTION:ISCONNECTED AND DEFINED archiveLog {
+        archiveLog().
+    }
     HUDTEXT("Deorbit burn in " + ROUND(bestUT - TIME:SECONDS,0) + "s", 3, 2, 13, CYAN, FALSE).
 
-    executeManeuver().
+    // Use lightweight burn executor from payload_landing (no maneuver.ks needed)
+    executeDeorbitNode(realNode).
 
     WAIT 2.
     IF ADDONS:TR:HASIMPACT {

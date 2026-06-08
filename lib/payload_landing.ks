@@ -81,7 +81,7 @@ LOCAL FUNCTION _timedLandingDeorbit {
         archiveLog().
         mLog("Planned maneuver log archived: timed-landing-deorbit.").
     }
-    LOCAL ok IS _executeTimedDeorbitNode(nd).
+    LOCAL ok IS executeDeorbitNode(nd).
     mLogWarn("STATS land-deorbit timed result ok=" + ok
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
@@ -97,7 +97,10 @@ LOCAL FUNCTION _timedLandingDeorbit {
     RETURN TRUE.
 }
 
-LOCAL FUNCTION _executeTimedDeorbitNode {
+// Execute a maneuver node with align, staged throttle, and cleanup.
+// Self-contained — no dependency on maneuver.ks. Used by both the
+// timed deorbit path and targeted deorbit (via targeting.ks).
+GLOBAL FUNCTION executeDeorbitNode {
     PARAMETER nd.
     LOCAL burnDV IS nd:DELTAV:MAG.
     IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {

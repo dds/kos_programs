@@ -367,8 +367,6 @@ LOCAL FUNCTION _fr3Libs {
                 AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0 {
             libs:ADD("landing").
         } ELSE {
-            libs:ADD("countdown").
-            libs:ADD("maneuver").
             libs:ADD("targeting").
             libs:ADD("landing").
         }
