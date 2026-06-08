@@ -17,7 +17,7 @@
 
 `lib/dependencies.txt` is the source of truth for FR3 dependency roots:
 
-- `PREAMBLE = core` means every band/phase gets `core`, which expands to `state`, `logs`, `files`, `dependencies`, `phases`, `config`, `mission_plan`, `countdown`, and `zombie`.
+- `PREAMBLE = core` means every band/phase gets `core`, which expands to `state`, `logs`, `files`, `phases`, `config`, `mission_plan`, `countdown`, and `zombie`.
 - `LIB` rows declare library dependencies.
 - `PHASE` rows declare root libraries for phase names.
 - `BAND` rows declare phase collections that should load together. Single phases intentionally do not have `BAND` rows; the phase name itself is the fallback band.
@@ -25,7 +25,7 @@
 Base/shared FR3 libraries:
 
 - `core` - always-loaded helper root.
-- `dependencies` - generated phase-name to handler delegate map.
+- `dependencies` - generated phase-name to handler delegate map, loaded on demand by `phaseHandlerMap()` after band libraries are present.
 - `phases` - phase machine.
 - `launch` - launch, fairing, panels/antennas, parking orbit.
 - `xfer_plan` - rendezvous/transfer planning phases.

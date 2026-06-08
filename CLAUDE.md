@@ -61,7 +61,7 @@ JSON file at `1:/state/state.json` via `lib/state.ks`. Survives reboots. Use `st
 
 ### Phase machine (`lib/phases.ks`)
 - `runPhases(phaseMap)` — main loop. Takes a LEXICON mapping phase names to delegates. Reads current phase from state, calls the matching delegate, loops until DONE.
-- `phaseHandlerMap()` — returns the generated `dependencyPhaseHandlers()` map when `lib/dependencies.ks` is loaded.
+- `phaseHandlerMap()` — loads `lib/dependencies.ks` on demand, then returns the generated `dependencyPhaseHandlers()` map.
 - `phaseMapSet(map, phase, delegate)` — add or override a handler.
 - `nextPhase(seq)` — advance to next phase in a given sequence LIST. Persists to state.
 - `phaseDone()` — generic mission-complete cleanup.

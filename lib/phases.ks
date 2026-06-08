@@ -19,6 +19,9 @@ GLOBAL FUNCTION phaseMapSet {
 }
 
 GLOBAL FUNCTION phaseHandlerMap {
+    IF NOT DEFINED dependencyPhaseHandlers AND DEFINED bootLibRun {
+        bootLibRun("dependencies").
+    }
     IF DEFINED dependencyPhaseHandlers {
         RETURN dependencyPhaseHandlers().
     }

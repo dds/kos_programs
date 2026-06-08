@@ -428,7 +428,7 @@ GLOBAL FUNCTION bootCleanup {
     PARAMETER wantedLibs.
     PARAMETER keepCmds IS LIST().
     LOCAL keepLibs IS LIST(
-        "state", "logs", "boot_lib", "resume",
+        "state", "logs", "boot_lib", "resume", "dependencies",
         "phases", "utils", "ui", "config"
     ).
     FOR lib IN wantedLibs {
