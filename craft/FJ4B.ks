@@ -96,7 +96,6 @@ LOCAL FUNCTION _phaseFlight {
 LOCAL FUNCTION _phasePostFlight {
     mLogPhase("POST_FLIGHT").
     IF hasSciencePayload { scienceTransmitAll(). }
-    planeLandingAssist().
     planeShutdown().
     mLog("Post-flight complete.").
     nextPhase(launchSeq).

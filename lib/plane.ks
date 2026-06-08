@@ -63,23 +63,19 @@ LOCAL _spdPid            IS 0.
 
 GLOBAL FUNCTION planeInit {
     SET planeActive TO TRUE.
-
-    // Disable MechJeb ascent guidance — its throttle/Q/accel limits
-    // interfere with manual flying even when not actively ascending.
-    IF ADDONS:MJ:AVAILABLE {
-        SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
-        mLog("MechJeb ascent disabled for flight.").
-    }
-
     mLog("Plane autopilot ready. Modes: off. Stall speed="
         + PLANE_CFG["STALL_SPEED"] + "m/s").
     HUDTEXT("Plane autopilot ready", 3, 2, 13, GREEN, FALSE).
 
+    LOCAL _stallLogTime IS 0.
     WHEN planeActive AND ALT:RADAR > 2
             AND SHIP:AIRSPEED < PLANE_CFG["STALL_SPEED"]
             AND SHIP:ALTITUDE < 70000 THEN {
         HUDTEXT("STALL WARNING — " + ROUND(SHIP:AIRSPEED,0) + "m/s", 2, 2, 16, RED, FALSE).
-        mLog("Stall warning: airspeed=" + ROUND(SHIP:AIRSPEED,0) + "m/s").
+        IF TIME:SECONDS - _stallLogTime > 10 {
+            mLog("Stall warning: airspeed=" + ROUND(SHIP:AIRSPEED,0) + "m/s").
+            SET _stallLogTime TO TIME:SECONDS.
+        }
         PRESERVE.
     }
 
