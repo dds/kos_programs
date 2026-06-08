@@ -636,10 +636,14 @@ GLOBAL FUNCTION bootLibRunFresh {
     LOCAL archive_ IS "0:/lib/" + libName + ".ks".
     IF EXISTS(compiled) OR EXISTS(cached) {
         RUNPATH("1:/lib/" + libName).
-        IF NOT BOOT_LIB_RAN:CONTAINS(libName) { BOOT_LIB_RAN:ADD(libName). }
+        IF BOOT_LIB_RAN:CONTAINS(libName) = FALSE {
+            BOOT_LIB_RAN:ADD(libName).
+        }
     } ELSE IF EXISTS(archive_) {
         RUNPATH("0:/lib/" + libName).
-        IF NOT BOOT_LIB_RAN:CONTAINS(libName) { BOOT_LIB_RAN:ADD(libName). }
+        IF BOOT_LIB_RAN:CONTAINS(libName) = FALSE {
+            BOOT_LIB_RAN:ADD(libName).
+        }
     } ELSE {
         PRINT "  WARN: " + libName + " unavailable".
     }
@@ -701,6 +705,21 @@ GLOBAL FUNCTION bootLibBandRoots {
 GLOBAL FUNCTION bootLibBand {
     PARAMETER band.
     RETURN bootLibResolve(bootLibBandRoots(band)).
+}
+
+GLOBAL FUNCTION bootLibBandPhases {
+    PARAMETER band.
+    bootLibLoadSpec().
+    LOCAL phases IS LIST().
+    LOCAL bandKey IS band:TOUPPER.
+    IF BOOT_LIB_BANDS:HASKEY(bandKey) {
+        FOR phaseName IN BOOT_LIB_BANDS[bandKey] {
+            phases:ADD(phaseName).
+        }
+    } ELSE IF bandKey <> "" {
+        phases:ADD(bandKey).
+    }
+    RETURN phases.
 }
 
 GLOBAL FUNCTION bootLibBandForPhase {

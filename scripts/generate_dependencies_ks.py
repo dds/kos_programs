@@ -49,13 +49,29 @@ def parse_phases(raw):
 def main():
     phases = parse_phases(INPUT.read_text())
     lines = [
+        "GLOBAL FUNCTION dependencyBindPhase {",
+        "    PARAMETER phaseMap.",
+        "    PARAMETER phaseName.",
+        "    LOCAL phaseKey IS phaseName:TOUPPER.",
+    ]
+    for index, phase in enumerate(phases):
+        fn = phase_function_name(phase)
+        prefix = "    IF" if index == 0 else "    ELSE IF"
+        lines.append(f'{prefix} phaseKey = "{phase}" {{ phaseMapSet(phaseMap, "{phase}", {fn}@). }}')
+    lines.extend([
+        "}",
+        "",
         "GLOBAL FUNCTION dependencyPhaseHandlers {",
         "    LOCAL phaseMap IS LEXICON().",
-    ]
-    for phase in phases:
-        fn = phase_function_name(phase)
-        lines.append(f'    IF DEFINED {fn} {{ phaseMap:ADD("{phase}", {fn}@). }}')
-    lines.extend([
+        "    LOCAL phases IS LIST().",
+        "    IF DEFINED bootLibBandPhases {",
+        '        SET phases TO bootLibBandPhases(stateGet("lib_band", "")).',
+        "    } ELSE {",
+        '        phases:ADD(stateGet("phase", "")).',
+        "    }",
+        "    FOR phaseName IN phases {",
+        "        dependencyBindPhase(phaseMap, phaseName).",
+        "    }",
         "    RETURN phaseMap.",
         "}",
         "",

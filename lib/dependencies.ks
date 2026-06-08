@@ -1,33 +1,48 @@
+GLOBAL FUNCTION dependencyBindPhase {
+    PARAMETER phaseMap.
+    PARAMETER phaseName.
+    LOCAL phaseKey IS phaseName:TOUPPER.
+    IF phaseKey = "PREFLIGHT" { phaseMapSet(phaseMap, "PREFLIGHT", phasePreflight@). }
+    ELSE IF phaseKey = "FLIGHT" { phaseMapSet(phaseMap, "FLIGHT", phaseFlight@). }
+    ELSE IF phaseKey = "POST_FLIGHT" { phaseMapSet(phaseMap, "POST_FLIGHT", phasePostFlight@). }
+    ELSE IF phaseKey = "POSTFLIGHT" { phaseMapSet(phaseMap, "POSTFLIGHT", phasePostflight@). }
+    ELSE IF phaseKey = "EVA_SCIENCE" { phaseMapSet(phaseMap, "EVA_SCIENCE", phaseEvaScience@). }
+    ELSE IF phaseKey = "LAUNCH" { phaseMapSet(phaseMap, "LAUNCH", phaseLaunch@). }
+    ELSE IF phaseKey = "FAIR" { phaseMapSet(phaseMap, "FAIR", phaseFair@). }
+    ELSE IF phaseKey = "ANTS" { phaseMapSet(phaseMap, "ANTS", phaseAnts@). }
+    ELSE IF phaseKey = "PARK" { phaseMapSet(phaseMap, "PARK", phasePark@). }
+    ELSE IF phaseKey = "RDV" { phaseMapSet(phaseMap, "RDV", phaseRdv@). }
+    ELSE IF phaseKey = "XING" { phaseMapSet(phaseMap, "XING", phaseXing@). }
+    ELSE IF phaseKey = "MCC" { phaseMapSet(phaseMap, "MCC", phaseMcc@). }
+    ELSE IF phaseKey = "COAST" { phaseMapSet(phaseMap, "COAST", phaseCoast@). }
+    ELSE IF phaseKey = "CAPTURE" { phaseMapSet(phaseMap, "CAPTURE", phaseCapture@). }
+    ELSE IF phaseKey = "CIRC" { phaseMapSet(phaseMap, "CIRC", phaseCirc@). }
+    ELSE IF phaseKey = "RAISE" { phaseMapSet(phaseMap, "RAISE", phaseRaise@). }
+    ELSE IF phaseKey = "INCLINE" { phaseMapSet(phaseMap, "INCLINE", phaseIncline@). }
+    ELSE IF phaseKey = "ELLIPTICAL" { phaseMapSet(phaseMap, "ELLIPTICAL", phaseElliptical@). }
+    ELSE IF phaseKey = "TARGETED_DEORBIT" { phaseMapSet(phaseMap, "TARGETED_DEORBIT", phaseTargetedDeorbit@). }
+    ELSE IF phaseKey = "RELEASE_PROBE" { phaseMapSet(phaseMap, "RELEASE_PROBE", phaseReleaseProbe@). }
+    ELSE IF phaseKey = "RELAY_OPS" { phaseMapSet(phaseMap, "RELAY_OPS", phaseRelayOps@). }
+    ELSE IF phaseKey = "SCANSAT_OPS" { phaseMapSet(phaseMap, "SCANSAT_OPS", phaseScansatOps@). }
+    ELSE IF phaseKey = "LAND_DEORBIT" { phaseMapSet(phaseMap, "LAND_DEORBIT", phaseLandDeorbit@). }
+    ELSE IF phaseKey = "LAND" { phaseMapSet(phaseMap, "LAND", phaseLand@). }
+    ELSE IF phaseKey = "LAND_ASSIST" { phaseMapSet(phaseMap, "LAND_ASSIST", phaseLandAssist@). }
+    ELSE IF phaseKey = "ROVER" { phaseMapSet(phaseMap, "ROVER", phaseRover@). }
+    ELSE IF phaseKey = "MOLNIYA" { phaseMapSet(phaseMap, "MOLNIYA", phaseMolniya@). }
+    ELSE IF phaseKey = "MOLNIYA_INSERT" { phaseMapSet(phaseMap, "MOLNIYA_INSERT", phaseMolniyaInsert@). }
+    ELSE IF phaseKey = "DROP_FOR_IMPACT_AND_RAISE_PE" { phaseMapSet(phaseMap, "DROP_FOR_IMPACT_AND_RAISE_PE", phaseDropForImpactAndRaisePe@). }
+}
+
 GLOBAL FUNCTION dependencyPhaseHandlers {
     LOCAL phaseMap IS LEXICON().
-    IF DEFINED phasePreflight { phaseMap:ADD("PREFLIGHT", phasePreflight@). }
-    IF DEFINED phaseFlight { phaseMap:ADD("FLIGHT", phaseFlight@). }
-    IF DEFINED phasePostFlight { phaseMap:ADD("POST_FLIGHT", phasePostFlight@). }
-    IF DEFINED phasePostflight { phaseMap:ADD("POSTFLIGHT", phasePostflight@). }
-    IF DEFINED phaseEvaScience { phaseMap:ADD("EVA_SCIENCE", phaseEvaScience@). }
-    IF DEFINED phaseLaunch { phaseMap:ADD("LAUNCH", phaseLaunch@). }
-    IF DEFINED phaseFair { phaseMap:ADD("FAIR", phaseFair@). }
-    IF DEFINED phaseAnts { phaseMap:ADD("ANTS", phaseAnts@). }
-    IF DEFINED phasePark { phaseMap:ADD("PARK", phasePark@). }
-    IF DEFINED phaseRdv { phaseMap:ADD("RDV", phaseRdv@). }
-    IF DEFINED phaseXing { phaseMap:ADD("XING", phaseXing@). }
-    IF DEFINED phaseMcc { phaseMap:ADD("MCC", phaseMcc@). }
-    IF DEFINED phaseCoast { phaseMap:ADD("COAST", phaseCoast@). }
-    IF DEFINED phaseCapture { phaseMap:ADD("CAPTURE", phaseCapture@). }
-    IF DEFINED phaseCirc { phaseMap:ADD("CIRC", phaseCirc@). }
-    IF DEFINED phaseRaise { phaseMap:ADD("RAISE", phaseRaise@). }
-    IF DEFINED phaseIncline { phaseMap:ADD("INCLINE", phaseIncline@). }
-    IF DEFINED phaseElliptical { phaseMap:ADD("ELLIPTICAL", phaseElliptical@). }
-    IF DEFINED phaseTargetedDeorbit { phaseMap:ADD("TARGETED_DEORBIT", phaseTargetedDeorbit@). }
-    IF DEFINED phaseReleaseProbe { phaseMap:ADD("RELEASE_PROBE", phaseReleaseProbe@). }
-    IF DEFINED phaseRelayOps { phaseMap:ADD("RELAY_OPS", phaseRelayOps@). }
-    IF DEFINED phaseScansatOps { phaseMap:ADD("SCANSAT_OPS", phaseScansatOps@). }
-    IF DEFINED phaseLandDeorbit { phaseMap:ADD("LAND_DEORBIT", phaseLandDeorbit@). }
-    IF DEFINED phaseLand { phaseMap:ADD("LAND", phaseLand@). }
-    IF DEFINED phaseLandAssist { phaseMap:ADD("LAND_ASSIST", phaseLandAssist@). }
-    IF DEFINED phaseRover { phaseMap:ADD("ROVER", phaseRover@). }
-    IF DEFINED phaseMolniya { phaseMap:ADD("MOLNIYA", phaseMolniya@). }
-    IF DEFINED phaseMolniyaInsert { phaseMap:ADD("MOLNIYA_INSERT", phaseMolniyaInsert@). }
-    IF DEFINED phaseDropForImpactAndRaisePe { phaseMap:ADD("DROP_FOR_IMPACT_AND_RAISE_PE", phaseDropForImpactAndRaisePe@). }
+    LOCAL phases IS LIST().
+    IF DEFINED bootLibBandPhases {
+        SET phases TO bootLibBandPhases(stateGet("lib_band", "")).
+    } ELSE {
+        phases:ADD(stateGet("phase", "")).
+    }
+    FOR phaseName IN phases {
+        dependencyBindPhase(phaseMap, phaseName).
+    }
     RETURN phaseMap.
 }

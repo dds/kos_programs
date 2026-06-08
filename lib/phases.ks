@@ -45,14 +45,24 @@ GLOBAL FUNCTION runPhases {
             phaseDone().
             RETURN.
         } ELSE {
+            LOCAL loadedBand IS stateGet("lib_band", "").
+            LOCAL requiredBand IS "UNKNOWN".
+            IF DEFINED bootLibBandForPhase {
+                SET requiredBand TO bootLibBandForPhase(phase, "UNKNOWN").
+            }
+            IF requiredBand = loadedBand {
+                mLogError("Phase " + phase + " handler missing in loaded band " + loadedBand + ".").
+                PRINT " ".
+                PRINT "  PHASE HANDLER MISSING: " + phase.
+                PRINT "  Loaded band: " + loadedBand + ".".
+                PRINT "  Check generated dependencies.ks and loaded libraries.".
+                yieldToPrompt().
+                RETURN.
+            }
             stateSet("reload_required", "true").
             stateSet("reload_reason", "PHASE_BAND_CHANGE").
             stateSet("reload_next_phase", phase).
-            IF DEFINED bootLibBandForPhase {
-                stateSet("reload_next_band", bootLibBandForPhase(phase, "UNKNOWN")).
-            } ELSE {
-                stateSet("reload_next_band", "UNKNOWN").
-            }
+            stateSet("reload_next_band", requiredBand).
             mLog("Phase " + phase + " requires a different library band. Reboot to continue.").
             PRINT " ".
             PRINT "  PHASE READY: " + phase.
