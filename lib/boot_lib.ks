@@ -1,10 +1,9 @@
 // ============================================================
 // boot_lib.ks - boot-time library dependency expansion
 //
-// This stays deliberately small: dependencies.txt is parsed once per
-// boot with OPEN(...):READALL:STRING, then cached in lexicons/lists.
-// boot_core.ks owns boot mechanics; core.ks is only a dependency
-// marker root for state/phases/config.
+// This stays deliberately small: dependencies.txt is refreshed when
+// available, parsed with OPEN(...):READALL:STRING, then cached in
+// lexicons/lists for the rest of the boot.
 // ============================================================
 
 GLOBAL BOOT_LIB_DEPS IS LEXICON().
@@ -14,8 +13,13 @@ GLOBAL BOOT_LIB_PREAMBLE IS LIST().
 GLOBAL BOOT_LIB_LOADED IS FALSE.
 
 GLOBAL FUNCTION bootLibSpecPath {
-    IF EXISTS("1:/lib/dependencies.txt") { RETURN "1:/lib/dependencies.txt". }
-    RETURN "0:/lib/dependencies.txt".
+    LOCAL archivePath IS "0:/lib/dependencies.txt".
+    LOCAL localPath IS "1:/lib/dependencies.txt".
+    IF HOMECONNECTION:ISCONNECTED AND EXISTS(archivePath) {
+        IF NOT EXISTS("1:/lib") { CREATEDIR("1:/lib"). }
+        COPYPATH(archivePath, localPath).
+    }
+    RETURN localPath.
 }
 
 LOCAL FUNCTION _bootLibApplyValues {

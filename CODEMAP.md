@@ -4,7 +4,7 @@
 
 - `boot/boot.ks` is the small VAB-installed loader. It syncs core libraries and `lib/dependencies.txt`, loads `lib/boot_core.ks`, `lib/mission_plan.ks`, and `lib/boot_lib.ks`, resolves the craft/role script, and dispatches resume/manual mode.
 - `lib/boot_core.ks` parses the vessel name, stores `vessel_name`, `vehicle`, `target`, and `payloads` in state, and reads mission profiles from the archive when connected. Selected profile values are persisted as `mission_cfg_*` keys in state; mission `.cfg` files are not copied to `1:/`.
-- `lib/mission_plan.ks` owns mission `SEQUENCE` parsing and payload helpers. `lib/boot_lib.ks` expands library dependencies from compact `lib/dependencies.txt`, where agents can edit `PREAMBLE`, `LIB`, `PHASE`, and multi-phase `BAND` rows one line at a time.
+- `lib/mission_plan.ks` owns mission `SEQUENCE` parsing and payload helpers. `lib/boot_lib.ks` refreshes compact `lib/dependencies.txt` from archive to local storage when linked, then expands `PREAMBLE`, `LIB`, `PHASE`, and multi-phase `BAND` rows.
 - `lib/phases.ks` owns the central phase-handler registry. Vehicle scripts call `phaseHandlerMap()` and only add or override craft-local handlers.
 - Dash-separated vessel names still act as legacy `vehicle-target-payload` hints; space-separated friendly names use the first word as the vehicle id and rely on mission profiles/state for mission details.
 - `lib/boot_core.ks` prunes stale local `1:/lib` files before syncing the selected `LIBS`, so progressive reloads actually free storage.
