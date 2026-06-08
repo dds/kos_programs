@@ -71,8 +71,8 @@ GLOBAL FUNCTION planeInit {
     WHEN planeActive AND ALT:RADAR > 2
             AND SHIP:AIRSPEED < PLANE_CFG["STALL_SPEED"]
             AND SHIP:ALTITUDE < 70000 THEN {
-        HUDTEXT("STALL WARNING — " + ROUND(SHIP:AIRSPEED,0) + "m/s", 2, 2, 16, RED, FALSE).
-        IF TIME:SECONDS - _stallLogTime > 10 {
+        IF TIME:SECONDS - _stallLogTime > 3 {
+            HUDTEXT("STALL — " + ROUND(SHIP:AIRSPEED,0) + "m/s", 3, 2, 16, RED, FALSE).
             mLog("Stall warning: airspeed=" + ROUND(SHIP:AIRSPEED,0) + "m/s").
             SET _stallLogTime TO TIME:SECONDS.
         }
