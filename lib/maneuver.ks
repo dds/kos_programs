@@ -236,6 +236,7 @@ GLOBAL FUNCTION planCircularize {
 //   CAPTURE_INC  — explicit inclination (overrides CAPTURE_DIR)
 //   LAN_ERR_TOL  — LAN tolerance for scan (default 0.5°)
 //   TRANSFER_AOP_ERR_TOL — max accepted transfer AoP error (default 35°)
+//   TRANSFER_INC_ERR_TOL — max accepted transfer INC error (default 1°)
 // ============================================================
 GLOBAL FUNCTION planTransfer {
     PARAMETER targetBody.
@@ -317,12 +318,29 @@ GLOBAL FUNCTION planTransfer {
         mLogWarn("STATS elements stage=plane-pe-inc before angular targeting.").
         LOCAL planeResult IS _targetPatchElementsCoupled(nd, targetBody, planeTargets, planeOpts).
         IF planeResult:HASKEY("SOLVED") AND NOT planeResult["SOLVED"] {
-            mLogError("planTransfer: PE/INC targeting failed; refusing bad transfer node.").
-            mLogWarn("STATS transfer result target=" + targetBody:NAME
-                + " status=plane-elements-failed"
-                + _elementErrorSummary(planeResult, planeTargets)).
-            IF HASNODE { REMOVE nd. }
-            RETURN.
+            LOCAL planeOk IS FALSE.
+            LOCAL incTol IS 1.
+            LOCAL aopTol IS 35.
+            IF CFG:HASKEY("TRANSFER_INC_ERR_TOL") { SET incTol TO CFG["TRANSFER_INC_ERR_TOL"]. }
+            IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+            IF ABS(planeResult["PE_ERR"]) <= 1000 {
+                SET planeOk TO TRUE.
+                IF captureInc >= 0 AND ABS(planeResult["INC_ERR"]) > incTol { SET planeOk TO FALSE. }
+                IF aopTarget >= 0 AND ABS(planeResult["AOP_ERR"]) > aopTol { SET planeOk TO FALSE. }
+            }
+            IF planeOk {
+                mLogWarn("planTransfer: accepting transfer plane within tolerance"
+                    + _elementErrorSummary(planeResult, planeTargets)
+                    + " IncTol=" + ROUND(incTol,2)
+                    + " AopTol=" + ROUND(aopTol,1)).
+            } ELSE {
+                mLogError("planTransfer: PE/INC targeting failed; refusing bad transfer node.").
+                mLogWarn("STATS transfer result target=" + targetBody:NAME
+                    + " status=plane-elements-failed"
+                    + _elementErrorSummary(planeResult, planeTargets)).
+                IF HASNODE { REMOVE nd. }
+                RETURN.
+            }
         }
 
         IF lanTarget >= 0 {
