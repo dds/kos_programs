@@ -30,6 +30,7 @@ GLOBAL FUNCTION planInclinationChange {
     LOCAL dnApDiff IS ABS(etaDN - etaAp).
     IF dnApDiff < anApDiff {
         SET burnETA TO etaDN.
+        SET burnNormal TO -1.
     }
 
     LOCAL usePe IS ABS(deltaInc) > 45.
