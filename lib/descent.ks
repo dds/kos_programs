@@ -329,16 +329,32 @@ LOCAL FUNCTION _descentArmChutes {
 
     LOCAL armed IS 0.
     FOR p IN parts {
-        IF p:HASMODULE("ModuleParachute") {
-            LOCAL m IS p:GETMODULE("ModuleParachute").
+        LOCAL moduleName IS "".
+        IF p:HASMODULE("ModuleParachute") { SET moduleName TO "ModuleParachute". }
+        ELSE IF p:HASMODULE("RealChuteModule") { SET moduleName TO "RealChuteModule". }
+
+        IF moduleName <> "" {
+            LOCAL m IS p:GETMODULE(moduleName).
             IF m:HASEVENT("arm parachute") {
                 m:DOEVENT("arm parachute").
                 SET armed TO armed + 1.
+            } ELSE IF m:HASEVENT("deploy chute") {
+                m:DOEVENT("deploy chute").
+                SET armed TO armed + 1.
+            } ELSE IF m:HASEVENT("deploy") {
+                m:DOEVENT("deploy").
+                SET armed TO armed + 1.
+            } ELSE {
+                mLogWarn("Chute '" + p:TITLE + "' (" + moduleName + ") has no arm/deploy event."
+                    + " Events: " + m:ALLEVENTNAMES:JOIN(", ")).
             }
+        } ELSE {
+            mLogWarn("Tagged part '" + p:TITLE + "' has no parachute module."
+                + " Modules: " + p:MODULES:JOIN(", ")).
         }
     }
     IF armed > 0 {
-        mLog("Armed " + armed + " parachute(s).").
+        mLog("Armed/deployed " + armed + " parachute(s).").
     } ELSE {
         mLogWarn("No parachutes found to arm (parts=" + parts:LENGTH + ").").
     }
