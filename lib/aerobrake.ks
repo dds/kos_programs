@@ -45,7 +45,7 @@ GLOBAL FUNCTION phaseAerobrake {
     // --- Step 2: Vessel prep (pre-coast) ---
     _aerobrakeRetractAntennas().
     _aerobrakeDecouple().
-    _aerobrakeArmChutes().
+    // Chutes are armed in descent phase after atmosphere entry.
 
     // --- Step 3: KAC alarm for atmosphere entry ---
     _aerobrakeSetEntryAlarm().
