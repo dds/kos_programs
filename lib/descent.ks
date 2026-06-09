@@ -257,15 +257,17 @@ LOCAL FUNCTION _descentRetractAntennas {
     }
 }
 
-// Arm chutes by tag (DESCENT_CHUTES_TAG) or all chutes if no tag.
+// Arm chutes by tag (DESCENT_CHUTES_TAG, default "descent_chutes")
+// or all chutes if tag yields nothing.
 LOCAL FUNCTION _descentArmChutes {
-    LOCAL parts IS LIST().
+    LOCAL tag IS "descent_chutes".
     IF DEFINED CFG AND CFG:HASKEY("DESCENT_CHUTES_TAG") {
-        SET parts TO SHIP:PARTSTAGGED(CFG["DESCENT_CHUTES_TAG"]).
-        IF parts:LENGTH = 0 {
-            mLogWarn("Descent chutes tag '" + CFG["DESCENT_CHUTES_TAG"] + "' not found.").
-        }
-    } ELSE {
+        SET tag TO CFG["DESCENT_CHUTES_TAG"].
+    }
+
+    LOCAL parts IS SHIP:PARTSTAGGED(tag).
+    IF parts:LENGTH = 0 {
+        mLog("No parts with tag '" + tag + "'; scanning all parts for chutes.").
         FOR p IN SHIP:PARTS {
             IF p:HASMODULE("ModuleParachute") { parts:ADD(p). }
         }
@@ -284,7 +286,7 @@ LOCAL FUNCTION _descentArmChutes {
     IF armed > 0 {
         mLog("Armed " + armed + " parachute(s).").
     } ELSE {
-        mLog("No parachutes to arm (already armed or none present).").
+        mLogWarn("No parachutes found to arm (parts=" + parts:LENGTH + ").").
     }
 }
 
