@@ -2,6 +2,13 @@
 // boot_lib.ks - boot helpers and dependency expansion
 // ============================================================
 
+GLOBAL FUNCTION main {
+    mLogWarn("Default empty main() called; no vehicle main loaded.").
+    PRINT " ".
+    PRINT "  DEFAULT MAIN".
+    PRINT "  No vehicle main() was loaded.".
+}
+
 GLOBAL FUNCTION bootEnsureDirs {
     FOR p IN LIST("1:/lib","1:/boot","1:/run","1:/cmd","1:/craft","1:/roles") {
         IF NOT EXISTS(p) { CREATEDIR(p). }

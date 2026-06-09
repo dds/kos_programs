@@ -73,8 +73,6 @@ GLOBAL FUNCTION main {
     runPhases(phaseMap).
 }
 
-GLOBAL vehicleMain IS main@.
-
 LOCAL FUNCTION _phasePreflight {
     mLogPhase("PREFLIGHT").
     planeInit().
