@@ -50,8 +50,10 @@ GLOBAL FUNCTION phaseDescent {
     // Arm chutes early so they auto-deploy at safe altitude
     _descentArmChutes().
 
-    // Burn remaining fuel to slow down if we have thrust
-    _descentBrakingBurn().
+    // TODO: Braking burn disabled — remaining dV is better spent on
+    // MCC targeting KSC. Revisit when we have a proper aerobrake
+    // altitude + precision landing plan.
+    // _descentBrakingBurn().
 
     // Deploy fairing once slow enough (< 60 m/s)
     _descentDeployFairing().
