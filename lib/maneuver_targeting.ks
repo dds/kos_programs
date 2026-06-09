@@ -232,6 +232,8 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
     LOCAL bestAopGuideErr IS 999.
     LOCAL aopGuideStallCount IS 0.
     IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+    SET aopGuideTol TO MAX(5, aopGuideTol * 0.67).
+    IF CFG:HASKEY("TRANSFER_AOP_SCAN_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_SCAN_TOL"]. }
     IF targets:HASKEY("AOP_GUIDE") { SET bestAopGuideErr TO ABS(best["AOP_ERR"]). }
     mLog("ELEMENTS: coupled target"
         + _elementTargetSummary(targets)
@@ -388,10 +390,13 @@ GLOBAL FUNCTION _transferSeedScore {
     LOCAL aopErr IS 999.
     LOCAL lanTol IS 5.
     LOCAL aopTol IS 35.
+    LOCAL aopScanTol IS 25.
     LOCAL hasPatch IS FALSE.
 
     IF CFG:HASKEY("LAN_ERR_TOL") { SET lanTol TO MAX(1, CFG["LAN_ERR_TOL"] * 5). }
     IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+    SET aopScanTol TO MAX(5, aopTol * 0.67).
+    IF CFG:HASKEY("TRANSFER_AOP_SCAN_TOL") { SET aopScanTol TO CFG["TRANSFER_AOP_SCAN_TOL"]. }
 
     IF p = 0 {
         SET score TO score + 1000000.
@@ -413,9 +418,9 @@ GLOBAL FUNCTION _transferSeedScore {
         }
         IF aopTarget >= 0 {
             SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, aopTarget).
-            SET score TO score + (aopErr / MAX(aopTol, 1))^2.
-            IF ABS(aopErr) > aopTol {
-                SET score TO score + ((ABS(aopErr) - aopTol) / 1.0)^2 * 50.
+            SET score TO score + (aopErr / MAX(aopScanTol, 1))^2.
+            IF ABS(aopErr) > aopScanTol {
+                SET score TO score + ((ABS(aopErr) - aopScanTol) / 1.0)^2 * 50.
             }
         }
     }
@@ -465,6 +470,8 @@ GLOBAL FUNCTION _patchElementsCostFromPatch {
     } ELSE IF targets:HASKEY("AOP_GUIDE") {
         LOCAL aopGuideTol IS 35.
         IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+        SET aopGuideTol TO MAX(5, aopGuideTol * 0.67).
+        IF CFG:HASKEY("TRANSFER_AOP_SCAN_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_SCAN_TOL"]. }
         LOCAL aopGuideScale IS MAX(5, aopGuideTol / 3).
         SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, targets["AOP_GUIDE"]).
         SET cost TO cost + (aopErr / aopGuideScale)^2.
