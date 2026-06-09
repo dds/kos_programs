@@ -77,7 +77,7 @@ IF NOT err {
     stateSet("payloads", "RETURN").
 
     // Set up the return mission sequence and config
-    LOCAL returnSeq IS "ESCAPE,MCC,COAST,AEROBRAKE,DESCENT,DONE".
+    LOCAL returnSeq IS "ESCAPE,COAST,MCC,AEROBRAKE,DESCENT,DONE".
     stateSet("mission_cfg_SEQUENCE", returnSeq).
     stateSetNum("mission_cfg_ESCAPE_PE", targetPe).
     stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
