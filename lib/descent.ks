@@ -169,7 +169,7 @@ LOCAL FUNCTION _descentBrakingBurn {
 // Deploy descent fairing once airspeed is below 60 m/s.
 // Reads tag from DESCENT_FAIRING_TAG config key.
 LOCAL FUNCTION _descentDeployFairing {
-    LOCAL tag IS "".
+    LOCAL tag IS "descent_fairing".
     IF DEFINED CFG AND CFG:HASKEY("DESCENT_FAIRING_TAG") {
         SET tag TO CFG["DESCENT_FAIRING_TAG"].
     }
@@ -201,7 +201,7 @@ LOCAL FUNCTION _descentDeployFairing {
 // Uses body-specific altitude threshold from DECOUPLE_ALTS table.
 // Reads tag from DESCENT_DECOUPLER_TAG config key.
 LOCAL FUNCTION _descentDecouple {
-    LOCAL tag IS "".
+    LOCAL tag IS "descent_decoupler".
     IF DEFINED CFG AND CFG:HASKEY("DESCENT_DECOUPLER_TAG") {
         SET tag TO CFG["DESCENT_DECOUPLER_TAG"].
     }
