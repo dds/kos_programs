@@ -92,10 +92,14 @@ LOCAL FUNCTION _fr3ConditionalRoots {
     PARAMETER band.
     LOCAL bandKey IS band.
     LOCAL roots IS LIST().
-    IF bandKey = "XFER_PLAN"
-            AND stateGet("target", "KERBIN") <> "MUN"
-            AND stateGet("target", "KERBIN") <> "KERBIN" {
-        roots:ADD("maneuver_intersystem").
+    // Load interplanetary code only when the sequence includes
+    // outbound transfer phases (XING). Escape/return sequences
+    // don't need Lambert/intersystem solvers.
+    IF bandKey = "XFER_PLAN" AND stateGet("target", "KERBIN") <> "MUN" {
+        LOCAL seq IS stateGet("mission_cfg_SEQUENCE", "").
+        IF seq:CONTAINS("XING") {
+            roots:ADD("maneuver_intersystem").
+        }
     }
     IF bandKey = "XFER_PLAN" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
         roots:ADD("maneuver_rendezvous").
