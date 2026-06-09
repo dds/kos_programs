@@ -38,6 +38,7 @@ LOCAL reentryDir IS "RETROGRADE".
 LOCAL decoupleTag IS "".
 LOCAL armChutes IS 0.
 LOCAL kscTarget IS TRUE.
+LOCAL err IS FALSE.
 
 IF opts:HASKEY("pe")           { SET targetPe TO opts["pe"]. }
 IF opts:HASKEY("reentry_dir")  { SET reentryDir TO opts["reentry_dir"]:TOUPPER. }
@@ -49,66 +50,66 @@ IF opts:HASKEY("ksc_target")   { SET kscTarget TO opts["ksc_target"]. }
 IF BODY:NAME <> "Mun" AND BODY:NAME <> "Minmus" {
     PRINT "ERROR: Must be orbiting Mun or Minmus.".
     PRINT "Current body: " + BODY:NAME.
-    RETURN.
+    SET err TO TRUE.
 }
 IF SHIP:STATUS <> "ORBITING" {
     PRINT "ERROR: Must be in stable orbit.".
     PRINT "Current status: " + SHIP:STATUS.
-    RETURN.
+    SET err TO TRUE.
 }
 
-// Archive the current flight log before starting the return mission
-archiveLog().
-PRINT "Flight log archived.".
+IF NOT err {
+    // Archive the current flight log before starting the return mission
+    archiveLog().
+    PRINT "Flight log archived.".
 
-// Set up the return mission identity
-stateSet("target", "KERBIN").
+    // Set up the return mission identity
+    stateSet("target", "KERBIN").
 
-// Set up the return mission sequence and config
-LOCAL returnSeq IS "ESCAPE,MCC,COAST,AEROBRAKE,DESCENT,DONE".
-stateSet("mission_cfg_SEQUENCE", returnSeq).
-stateSetNum("mission_cfg_ESCAPE_PE", targetPe).
-stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
+    // Set up the return mission sequence and config
+    LOCAL returnSeq IS "ESCAPE,MCC,COAST,AEROBRAKE,DESCENT,DONE".
+    stateSet("mission_cfg_SEQUENCE", returnSeq).
+    stateSetNum("mission_cfg_ESCAPE_PE", targetPe).
+    stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
 
-IF kscTarget {
-    stateSet("mission_cfg_ESCAPE_KSC_TARGET", "true").
-} ELSE {
-    stateRemove("mission_cfg_ESCAPE_KSC_TARGET").
+    IF kscTarget {
+        stateSet("mission_cfg_ESCAPE_KSC_TARGET", "true").
+    } ELSE {
+        stateRemove("mission_cfg_ESCAPE_KSC_TARGET").
+    }
+
+    IF decoupleTag <> "" {
+        stateSet("mission_cfg_AEROBRAKE_DECOUPLE_TAG", decoupleTag).
+    } ELSE {
+        stateRemove("mission_cfg_AEROBRAKE_DECOUPLE_TAG").
+    }
+
+    IF armChutes > 0 {
+        stateSetNum("mission_cfg_AEROBRAKE_ARM_CHUTES", armChutes).
+    } ELSE {
+        stateRemove("mission_cfg_AEROBRAKE_ARM_CHUTES").
+    }
+
+    // Clear outbound capture config so it doesn't interfere
+    FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_INC", "CAPTURE_DIR") {
+        stateRemove("mission_cfg_" + key).
+    }
+
+    // Reset phase to start of return sequence
+    stateSet("phase", "ESCAPE").
+
+    // Bump launch_time so the new flight log gets a fresh timestamp
+    stateSetNum("launch_time", ROUND(TIME:SECONDS)).
+
+    PRINT " ".
+    PRINT "Return to Kerbin configured:".
+    PRINT "  Sequence:    " + returnSeq.
+    PRINT "  Target PE:   " + targetPe + "m (" + ROUND(targetPe/1000,1) + "km)".
+    PRINT "  Reentry dir: " + reentryDir.
+    PRINT "  KSC target:  " + kscTarget.
+    IF decoupleTag <> "" { PRINT "  Decouple:    " + decoupleTag. }
+    IF armChutes > 0     { PRINT "  Arm chutes:  yes". }
+    PRINT "  From:        " + BODY:NAME.
+    PRINT " ".
+    PRINT "Reboot to start return mission...".
 }
-
-IF decoupleTag <> "" {
-    stateSet("mission_cfg_AEROBRAKE_DECOUPLE_TAG", decoupleTag).
-} ELSE {
-    stateRemove("mission_cfg_AEROBRAKE_DECOUPLE_TAG").
-}
-
-IF armChutes > 0 {
-    stateSetNum("mission_cfg_AEROBRAKE_ARM_CHUTES", armChutes).
-} ELSE {
-    stateRemove("mission_cfg_AEROBRAKE_ARM_CHUTES").
-}
-
-// Clear outbound capture config so it doesn't interfere
-FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_INC", "CAPTURE_DIR") {
-    stateRemove("mission_cfg_" + key).
-}
-
-// Reset phase to start of return sequence
-stateSet("phase", "ESCAPE").
-
-// Bump launch_time so the new flight log gets a fresh timestamp
-stateSetNum("launch_time", ROUND(TIME:SECONDS)).
-
-PRINT " ".
-PRINT "Return to Kerbin configured:".
-PRINT "  Sequence:    " + returnSeq.
-PRINT "  Target PE:   " + targetPe + "m (" + ROUND(targetPe/1000,1) + "km)".
-PRINT "  Reentry dir: " + reentryDir.
-PRINT "  KSC target:  " + kscTarget.
-IF decoupleTag <> "" { PRINT "  Decouple:    " + decoupleTag. }
-IF armChutes > 0     { PRINT "  Arm chutes:  yes". }
-PRINT "  From:        " + BODY:NAME.
-PRINT " ".
-PRINT "Rebooting to start return mission...".
-WAIT 2.
-REBOOT.
