@@ -15,6 +15,19 @@
 GLOBAL FUNCTION phaseDescent {
     mLogPhase("DESCENT").
 
+    // Hold reentry orientation through descent
+    LOCAL dir IS "RETROGRADE".
+    IF DEFINED CFG AND CFG:HASKEY("AEROBRAKE_REENTRY_DIR") {
+        SET dir TO CFG["AEROBRAKE_REENTRY_DIR"].
+    }
+    SAS OFF.
+    IF dir = "PROGRADE" {
+        LOCK STEERING TO PROGRADE.
+    } ELSE {
+        LOCK STEERING TO RETROGRADE.
+    }
+    mLog("Holding " + dir + " through descent.").
+
     // Wait for atmosphere entry
     IF SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE > SHIP:BODY:ATM:HEIGHT {
         mLog("Waiting for atmospheric entry...").
@@ -22,6 +35,9 @@ GLOBAL FUNCTION phaseDescent {
             OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
         mLog("Entered atmosphere at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
     }
+
+    // Arm parachutes for deployment
+    _descentArmChutes().
 
     // Wait for chutes to deploy or vessel to land/splash
     mLog("Waiting for chute deployment or landing...").
@@ -84,6 +100,24 @@ LOCAL FUNCTION _chutesDeployed {
         }
     }
     RETURN FALSE.
+}
+
+LOCAL FUNCTION _descentArmChutes {
+    LOCAL armed IS 0.
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleParachute") {
+            LOCAL m IS p:GETMODULE("ModuleParachute").
+            IF m:HASEVENT("arm parachute") {
+                m:DOEVENT("arm parachute").
+                SET armed TO armed + 1.
+            }
+        }
+    }
+    IF armed > 0 {
+        mLog("Armed " + armed + " parachute(s).").
+    } ELSE {
+        mLog("No parachutes to arm (already armed or none present).").
+    }
 }
 
 LOCAL FUNCTION _descentExtendAntennas {
