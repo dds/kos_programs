@@ -10,7 +10,16 @@
 //   - Return-to-Kerbin after AEROBRAKE
 //   - Post-abort descent recovery
 //   - Any mission ending with atmospheric entry
-// ============================================================
+// Altitude thresholds for decoupling by body (meters).
+// Below this altitude, it's safe to shed the transfer stage
+// before deploying chutes.
+LOCAL DECOUPLE_ALTS IS LEXICON(
+    "KERBIN", 10000,
+    "DUNA",   8000,
+    "EVE",    12000,
+    "LAYTHE", 10000,
+    "TEKTO",  10000
+).
 
 GLOBAL FUNCTION phaseDescent {
     mLogPhase("DESCENT").
@@ -45,8 +54,11 @@ GLOBAL FUNCTION phaseDescent {
     // Burn remaining fuel to slow down if we have thrust
     _descentBrakingBurn().
 
-    // Arm parachutes for deployment
-    _descentArmChutes().
+    // Deploy fairing once slow enough (< 60 m/s)
+    _descentDeployFairing().
+
+    // Decouple transfer stage at safe altitude, then arm chutes
+    _descentDecoupleAndArmChutes().
 
     // Wait for chutes to deploy or vessel to land/splash
     mLog("Waiting for chute deployment or landing...").
@@ -156,6 +168,89 @@ LOCAL FUNCTION _descentBrakingBurn {
     } ELSE {
         SET SASMODE TO "RETROGRADE".
     }
+}
+
+// Deploy descent fairing once airspeed is below 60 m/s.
+// Reads tag from DESCENT_FAIRING_TAG config key.
+LOCAL FUNCTION _descentDeployFairing {
+    LOCAL tag IS "".
+    IF DEFINED CFG AND CFG:HASKEY("DESCENT_FAIRING_TAG") {
+        SET tag TO CFG["DESCENT_FAIRING_TAG"].
+    }
+    IF tag = "" { RETURN. }
+
+    LOCAL fairings IS SHIP:PARTSTAGGED(tag).
+    IF fairings:LENGTH = 0 {
+        mLogWarn("Descent fairing tag '" + tag + "' not found.").
+        RETURN.
+    }
+
+    LOCAL deploySpeed IS 60.
+    IF SHIP:AIRSPEED > deploySpeed {
+        mLog("Waiting for < " + deploySpeed + " m/s to deploy fairing...").
+        WAIT UNTIL SHIP:AIRSPEED < deploySpeed
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    }
+
+    FOR f IN fairings {
+        IF f:HASMODULE("ModuleProceduralFairing") {
+            f:GETMODULE("ModuleProceduralFairing"):DOEVENT("deploy").
+            mLog("Deployed fairing: " + f:TITLE + " (tag=" + tag + ")").
+        }
+    }
+    WAIT 2.
+}
+
+// Decouple transfer stage at safe altitude, then arm chutes.
+// Uses body-specific altitude threshold from DECOUPLE_ALTS table.
+// Reads tag from DESCENT_DECOUPLER_TAG config key.
+LOCAL FUNCTION _descentDecoupleAndArmChutes {
+    LOCAL tag IS "".
+    IF DEFINED CFG AND CFG:HASKEY("DESCENT_DECOUPLER_TAG") {
+        SET tag TO CFG["DESCENT_DECOUPLER_TAG"].
+    }
+
+    IF tag = "" {
+        // No decoupler configured — just arm chutes now
+        _descentArmChutes().
+        RETURN.
+    }
+
+    LOCAL decouplers IS SHIP:PARTSTAGGED(tag).
+    IF decouplers:LENGTH = 0 {
+        mLogWarn("Descent decoupler tag '" + tag + "' not found — arming chutes now.").
+        _descentArmChutes().
+        RETURN.
+    }
+
+    // Wait for safe decouple altitude
+    LOCAL decoupleAlt IS 10000.
+    IF DECOUPLE_ALTS:HASKEY(SHIP:BODY:NAME) {
+        SET decoupleAlt TO DECOUPLE_ALTS[SHIP:BODY:NAME].
+    }
+
+    IF SHIP:ALTITUDE > decoupleAlt {
+        mLog("Waiting for " + ROUND(decoupleAlt/1000, 0) + "km altitude to decouple...").
+        WAIT UNTIL SHIP:ALTITUDE < decoupleAlt
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    }
+
+    // Decouple
+    FOR dc IN decouplers {
+        IF dc:HASMODULE("ModuleDecouple") {
+            dc:GETMODULE("ModuleDecouple"):DOEVENT("decouple").
+            mLog("Decoupled: " + dc:TITLE + " (tag=" + tag + ")").
+        } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
+            dc:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("decouple").
+            mLog("Decoupled: " + dc:TITLE + " (tag=" + tag + ")").
+        }
+    }
+    WAIT 2.
+    mLogWarn("STATS descent decouple alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
+        + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
+
+    // Now arm chutes
+    _descentArmChutes().
 }
 
 LOCAL FUNCTION _descentRetractAntennas {

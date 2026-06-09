@@ -41,13 +41,17 @@ LOCAL reentryDir IS "RETROGRADE".
 LOCAL decoupleTag IS "".
 LOCAL armChutes IS 0.
 LOCAL kscTarget IS TRUE.
+LOCAL descentFairingTag IS "".
+LOCAL descentDecouplerTag IS "".
 LOCAL err IS FALSE.
 
-IF opts:HASKEY("pe")           { SET targetPe TO opts["pe"]. }
-IF opts:HASKEY("reentry_dir")  { SET reentryDir TO opts["reentry_dir"]:TOUPPER. }
-IF opts:HASKEY("decouple_tag") { SET decoupleTag TO opts["decouple_tag"]. }
-IF opts:HASKEY("arm_chutes")   { SET armChutes TO opts["arm_chutes"]. }
-IF opts:HASKEY("ksc_target")   { SET kscTarget TO opts["ksc_target"]. }
+IF opts:HASKEY("pe")                 { SET targetPe TO opts["pe"]. }
+IF opts:HASKEY("reentry_dir")        { SET reentryDir TO opts["reentry_dir"]:TOUPPER. }
+IF opts:HASKEY("decouple_tag")       { SET decoupleTag TO opts["decouple_tag"]. }
+IF opts:HASKEY("arm_chutes")         { SET armChutes TO opts["arm_chutes"]. }
+IF opts:HASKEY("ksc_target")         { SET kscTarget TO opts["ksc_target"]. }
+IF opts:HASKEY("descent_fairing")    { SET descentFairingTag TO opts["descent_fairing"]. }
+IF opts:HASKEY("descent_decoupler")  { SET descentDecouplerTag TO opts["descent_decoupler"]. }
 
 // Validate we're orbiting Mun or Minmus
 IF BODY:NAME <> "Mun" AND BODY:NAME <> "Minmus" {
@@ -98,6 +102,18 @@ IF NOT err {
         stateSetNum("mission_cfg_AEROBRAKE_ARM_CHUTES", armChutes).
     } ELSE {
         stateRemove("mission_cfg_AEROBRAKE_ARM_CHUTES").
+    }
+
+    IF descentFairingTag <> "" {
+        stateSet("mission_cfg_DESCENT_FAIRING_TAG", descentFairingTag).
+    } ELSE {
+        stateRemove("mission_cfg_DESCENT_FAIRING_TAG").
+    }
+
+    IF descentDecouplerTag <> "" {
+        stateSet("mission_cfg_DESCENT_DECOUPLER_TAG", descentDecouplerTag).
+    } ELSE {
+        stateRemove("mission_cfg_DESCENT_DECOUPLER_TAG").
     }
 
     // Clear outbound capture config so it doesn't interfere
