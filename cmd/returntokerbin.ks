@@ -44,9 +44,9 @@ LOCAL reentryDir IS "RETROGRADE".
 LOCAL decoupleTag IS "".
 LOCAL armChutes IS 0.
 LOCAL kscTarget IS TRUE.
-LOCAL descentFairingTag IS "".
-LOCAL descentDecouplerTag IS "".
-LOCAL descentChutesTag IS "".
+LOCAL descentFairingTag IS "descent_fairing".
+LOCAL descentDecouplerTag IS "descent_decoupler".
+LOCAL descentChutesTag IS "descent_chutes".
 LOCAL err IS FALSE.
 
 IF opts:HASKEY("pe")                 { SET targetPe TO opts["pe"]. }
