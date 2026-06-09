@@ -4,6 +4,7 @@ LIB core = state, logs, files, phases, config, mission_plan, countdown, zombie
 LIB capture = maneuver, orbit
 LIB deorbit_targeting = maneuver_targeting, orbit, utils
 LIB flightplan = ui
+LIB inclination = lib_navigation
 LIB landing = deorbit_targeting, maneuver, utils
 LIB launch = flightplan, orbit
 LIB maneuver =
