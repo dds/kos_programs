@@ -11,7 +11,7 @@
 //   RUNPATH("0:/cmd/returntokerbin.ks").
 //   RUNPATH("0:/cmd/returntokerbin.ks", LEX("pe", 52000)).
 //   RUNPATH("0:/cmd/returntokerbin.ks", LEX(
-//       "pe", 49000,
+//       "pe", 43000,
 //       "reentry_dir", "retrograde",
 //       "decouple_tag", "aero_decouple",
 //       "arm_chutes", 1,
@@ -19,7 +19,7 @@
 //   )).
 //
 // Options (all optional, with defaults):
-//   pe            — Kerbin PE in meters (default 49000)
+//   pe            — Kerbin PE in meters (default 43000)
 //   reentry_dir   — "retrograde" or "prograde" (default "retrograde")
 //   decouple_tag       — part tag for aerobrake phase decoupler (default: none)
 //   arm_chutes         — 1 to arm parachutes in aerobrake phase (default 0)
@@ -39,7 +39,7 @@ RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
 // --- Read options with defaults ---
-LOCAL targetPe IS 49000.
+LOCAL targetPe IS 43000.
 LOCAL reentryDir IS "RETROGRADE".
 LOCAL decoupleTag IS "".
 LOCAL armChutes IS 0.
