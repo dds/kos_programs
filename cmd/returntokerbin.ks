@@ -135,6 +135,8 @@ IF NOT err {
     PRINT "  KSC target:  " + kscTarget.
     IF decoupleTag <> "" { PRINT "  Decouple:    " + decoupleTag. }
     IF armChutes > 0     { PRINT "  Arm chutes:  yes". }
+    IF descentFairingTag <> "" { PRINT "  Fairing:     " + descentFairingTag. }
+    IF descentDecouplerTag <> "" { PRINT "  Decoupler:   " + descentDecouplerTag. }
     PRINT "  From:        " + BODY:NAME.
     PRINT " ".
     PRINT "Reboot to start return mission...".
