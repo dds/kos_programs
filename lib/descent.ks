@@ -34,6 +34,8 @@ GLOBAL FUNCTION phaseDescent {
         WAIT UNTIL SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT
             OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
         mLog("Entered atmosphere at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
+        WAIT 5.
+        _descentRetractAntennas().
     }
 
     // Arm parachutes for deployment
@@ -100,6 +102,23 @@ LOCAL FUNCTION _chutesDeployed {
         }
     }
     RETURN FALSE.
+}
+
+LOCAL FUNCTION _descentRetractAntennas {
+    LOCAL retracted IS 0.
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleDeployableAntenna") {
+            LOCAL m IS p:GETMODULE("ModuleDeployableAntenna").
+            IF m:HASEVENT("retract antenna") {
+                m:DOEVENT("retract antenna").
+                SET retracted TO retracted + 1.
+            }
+        }
+    }
+    IF retracted > 0 {
+        mLog("Retracted " + retracted + " antenna(s) for entry.").
+        WAIT 3.
+    }
 }
 
 LOCAL FUNCTION _descentArmChutes {
