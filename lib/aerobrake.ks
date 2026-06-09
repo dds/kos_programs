@@ -53,6 +53,29 @@ GLOBAL FUNCTION phaseAerobrake {
 
     mLog("Aerobrake prep complete.").
     mLogWarn("STATS aerobrake status=complete body=" + SHIP:BODY:NAME).
+
+    // --- Step 4: Wait for atmosphere entry ---
+    // LOCK STEERING tracks retrograde actively during coast.
+    // At atmosphere interface, hand off to SAS STABILITYASSIST
+    // which persists through reentry blackout.
+    IF SHIP:BODY:ATM:EXISTS {
+        LOCAL atmHeight IS SHIP:BODY:ATM:HEIGHT.
+        IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
+            SET atmHeight TO ATM_HEIGHTS[SHIP:BODY:NAME].
+        }
+        IF SHIP:ALTITUDE > atmHeight {
+            mLog("Waiting for atmosphere (" + ROUND(atmHeight/1000, 0) + "km)...").
+            WAIT UNTIL SHIP:ALTITUDE < atmHeight.
+            mLog("Atmosphere entry at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
+        }
+        UNLOCK STEERING.
+        WAIT 0.1.
+        SET SAS TO TRUE.
+        WAIT 0.1.
+        SET SASMODE TO "STABILITYASSIST".
+        mLog("SAS stability hold for blackout.").
+    }
+
     nextPhase(xferSeq).
 }
 
@@ -319,23 +342,9 @@ LOCAL FUNCTION _aerobrakeOrient {
         mLogWarn(dir + " alignment timed out.").
     }
 
-    // Keep LOCK STEERING active until near PE, then hand off to
-    // SAS STABILITYASSIST which persists through reentry blackout
-    // when kOS loses probe control authority.
-    LOCAL atmHeight IS SHIP:BODY:ATM:HEIGHT.
-    IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
-        SET atmHeight TO ATM_HEIGHTS[SHIP:BODY:NAME].
-    }
-    IF SHIP:ALTITUDE > atmHeight {
-        mLog("Holding " + dir + " until atmosphere (" + ROUND(atmHeight/1000, 0) + "km)...").
-        WAIT UNTIL SHIP:ALTITUDE < atmHeight.
-    }
-    UNLOCK STEERING.
-    WAIT 0.1.
-    SET SAS TO TRUE.
-    WAIT 0.1.
-    SET SASMODE TO "STABILITYASSIST".
-    mLog("SAS stability hold active for blackout.").
+    // LOCK STEERING stays active — phaseAerobrake will wait for
+    // atmosphere entry and hand off to SAS before advancing.
+    mLog(dir + " steering lock active.").
 }
 
 LOCAL FUNCTION _aerobrakeArmChutes {
