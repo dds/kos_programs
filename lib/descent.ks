@@ -160,10 +160,13 @@ LOCAL FUNCTION _chutesDeployed {
     RETURN FALSE.
 }
 
-// Burn any remaining fuel retrograde to help slow down during
-// upper atmosphere descent. The transfer stage doubles as a
-// heat shield when oriented retrograde, so we keep it attached
-// and burn through it before entry heating peaks.
+// Burn retrograde until we're guaranteed captured, then stop.
+//
+// Stop conditions (checked every tick):
+//   1. Impact predicted  — Trajectories says we'll hit the ground
+//   2. Captured in orbit — eccentricity < 1 (closed orbit)
+//   3. Fuel exhausted    — nothing left to burn
+//   4. Landed/splashed   — already on the surface
 LOCAL FUNCTION _descentBrakingBurn {
     IF SHIP:AVAILABLETHRUST <= 0 { RETURN. }
 
@@ -173,23 +176,48 @@ LOCAL FUNCTION _descentBrakingBurn {
         RETURN.
     }
 
+    LOCAL atmHeight IS 0.
+    IF SHIP:BODY:ATM:EXISTS { SET atmHeight TO SHIP:BODY:ATM:HEIGHT. }
+
     mLog("Braking burn: thrust=" + ROUND(SHIP:AVAILABLETHRUST, 1)
-        + "kN  fuel=" + ROUND(fuel, 1)).
+        + "kN  fuel=" + ROUND(fuel, 1)
+        + "  ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
+        + "  ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)).
 
     LOCK THROTTLE TO 1.
     LOCK STEERING TO RETROGRADE.
 
-    // Burn until fuel is exhausted or we've slowed enough
-    WAIT UNTIL (STAGE:LIQUIDFUEL + STAGE:OXIDIZER) <= 0.1
-        OR SHIP:AVAILABLETHRUST <= 0
-        OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    LOCAL reason IS "".
+    UNTIL reason <> "" {
+        IF (STAGE:LIQUIDFUEL + STAGE:OXIDIZER) <= 0.1
+                OR SHIP:AVAILABLETHRUST <= 0 {
+            SET reason TO "fuel-exhausted".
+        } ELSE IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+            SET reason TO "landed".
+        } ELSE IF ADDONS:TR:AVAILABLE AND ADDONS:TR:HASIMPACT {
+            SET reason TO "impact-predicted".
+        } ELSE IF SHIP:ORBIT:ECCENTRICITY < 1
+                AND SHIP:ORBIT:APOAPSIS > atmHeight
+                AND SHIP:ORBIT:PERIAPSIS > atmHeight {
+            SET reason TO "orbit-captured".
+        }
+        WAIT 0.
+    }
 
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
 
-    mLog("Braking burn complete. Speed=" + ROUND(SHIP:AIRSPEED, 1) + " m/s.").
-    mLogWarn("STATS descent braking speed=" + ROUND(SHIP:AIRSPEED, 1)
-        + " alt=" + ROUND(SHIP:ALTITUDE/1000, 1)).
+    mLog("Braking burn complete: " + reason
+        + "  speed=" + ROUND(SHIP:AIRSPEED, 1) + " m/s"
+        + "  ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
+        + "  ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
+        + "  PeKm=" + ROUND(SHIP:PERIAPSIS/1000, 1)).
+    mLogWarn("STATS descent braking reason=" + reason
+        + " speed=" + ROUND(SHIP:AIRSPEED, 1)
+        + " alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000, 1)).
 }
 
 // Deploy descent fairing once airspeed is below 60 m/s.
