@@ -916,8 +916,20 @@ GLOBAL FUNCTION phaseMidCourse {
         SET waitTime TO ETA:TRANSITION + 3600.
         mLog("MCC: Interplanetary — coast " + ROUND(waitTime) + "s past SOI.").
     } ELSE {
-        SET waitTime TO ETA:TRANSITION / 2.
-        mLog("MCC: Local — coast to halfway (" + ROUND(waitTime) + "s).").
+        // Fire at ~50% of distance to SOI, not 50% of time. On the
+        // outbound transfer leg the ship decelerates, so half-time
+        // overshoots half-distance. Earlier corrections are cheaper.
+        LOCAL soiPos IS POSITIONAT(SHIP, TIME:SECONDS + ETA:TRANSITION).
+        LOCAL halfDist IS (soiPos - SHIP:POSITION):MAG / 2.
+        LOCAL tLo IS 60.
+        LOCAL tHi IS ETA:TRANSITION.
+        FROM { LOCAL bi IS 0. } UNTIL bi >= 12 STEP { SET bi TO bi + 1. } DO {
+            LOCAL tMid IS (tLo + tHi) / 2.
+            LOCAL d IS (POSITIONAT(SHIP, TIME:SECONDS + tMid) - SHIP:POSITION):MAG.
+            IF d < halfDist { SET tLo TO tMid. } ELSE { SET tHi TO tMid. }
+        }
+        SET waitTime TO (tLo + tHi) / 2.
+        mLog("MCC: Local — coast to half-distance (" + ROUND(waitTime) + "s, transition=" + ROUND(ETA:TRANSITION) + "s).").
     }
 
     mLog("MCC: Pre-correction  Pe=" + ROUND(patch:PERIAPSIS/1000,1) + "km"
