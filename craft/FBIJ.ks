@@ -54,6 +54,10 @@ GLOBAL FUNCTION bootVehicleLibs {
 
 LOCAL hasSciencePayload IS FALSE.
 
+LOCAL FUNCTION _fbijConfigurePlane {
+    SET PLANE_CFG["PID_CTRL"] TO FALSE.
+}
+
 LOCAL FUNCTION _fbijCfgNum {
     PARAMETER key.
     PARAMETER defaultValue.
@@ -83,6 +87,7 @@ LOCAL FUNCTION _printConfig {
     flightPlanRow("ALT", CFG["CRUISE_ALT"] + " m").
     flightPlanRow("SPEED", CFG["CRUISE_SPEED"] + " m/s").
     flightPlanRow("FINAL STOP", CFG["FINAL_LANDING_SPEED"] + " m/s").
+    flightPlanRow("PID CTRL", "OFF").
     flightPlanRow("NAV", "Select waypoint, AG8 to fly").
     flightPlanSection("SEQUENCE").
     flightPlanSequence(seq).
@@ -113,6 +118,7 @@ GLOBAL FUNCTION main {
 
 LOCAL FUNCTION _phasePreflight {
     mLogPhase("PREFLIGHT").
+    _fbijConfigurePlane().
     planeInit().
     observeStart().
 
@@ -137,6 +143,8 @@ LOCAL FUNCTION _phasePreflight {
 
 LOCAL FUNCTION _phaseFlight {
     mLogPhase("FLIGHT").
+    _fbijConfigurePlane().
+    IF NOT planeActive { planeInit(). }
     IF hasSciencePayload { scienceInit(). }
 
     mLog("Flight active. Select a waypoint and press AG8 for business jet nav.").
@@ -155,6 +163,7 @@ LOCAL FUNCTION _phaseFlight {
 
 LOCAL FUNCTION _phasePostFlight {
     mLogPhase("POSTFLIGHT").
+    _fbijConfigurePlane().
     IF hasSciencePayload { scienceTransmitAll(). }
     planeLandingAssist().
     planeShutdown().

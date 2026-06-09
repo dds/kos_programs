@@ -39,7 +39,8 @@ GLOBAL PLANE_CFG IS LEXICON(
     "REVERSE_AG",          2,
     "STEER_MAX_SPEED",    30,
     "STEER_TAG",         "steering_gear",
-    "SURFACE_CTRL",      FALSE
+    "SURFACE_CTRL",      FALSE,
+    "PID_CTRL",          TRUE
 ).
 
 GLOBAL planeActive       IS FALSE.
@@ -87,9 +88,15 @@ LOCAL _spdPid            IS 0.
 
 GLOBAL FUNCTION planeInit {
     SET planeActive TO TRUE.
-    mLog("Plane autopilot ready. Modes: off. Stall speed="
-        + PLANE_CFG["STALL_SPEED"] + "m/s").
-    HUDTEXT("Plane autopilot ready", 3, 2, 13, GREEN, FALSE).
+    IF PLANE_CFG["PID_CTRL"] {
+        mLog("Plane autopilot ready. Modes: off. Stall speed="
+            + PLANE_CFG["STALL_SPEED"] + "m/s").
+        HUDTEXT("Plane autopilot ready", 3, 2, 13, GREEN, FALSE).
+    } ELSE {
+        mLog("Plane monitor ready. PID controls disabled. Stall speed="
+            + PLANE_CFG["STALL_SPEED"] + "m/s").
+        HUDTEXT("Plane monitor ready", 3, 2, 13, GREEN, FALSE).
+    }
 
     LOCAL _stallLogTime IS 0.
     WHEN planeActive AND ALT:RADAR > 2
@@ -114,18 +121,22 @@ GLOBAL FUNCTION planeInit {
         mLog("Control surfaces: " + _ctrlSurfaces:LENGTH + " found.").
     }
 
-    SET _rollPid  TO PIDLOOP(PLANE_CFG["ROLL_KP"],  PLANE_CFG["ROLL_KI"],
-        PLANE_CFG["ROLL_KD"],  -1, 1).
-    SET _altPid   TO PIDLOOP(PLANE_CFG["ALT_KP"],   PLANE_CFG["ALT_KI"],
-        PLANE_CFG["ALT_KD"],   PLANE_CFG["ALT_MIN_PITCH"], PLANE_CFG["ALT_MAX_PITCH"]).
-    SET _pitchPid TO PIDLOOP(PLANE_CFG["PITCH_KP"], PLANE_CFG["PITCH_KI"],
-        PLANE_CFG["PITCH_KD"], -1, 1).
-    SET _hdgPid   TO PIDLOOP(PLANE_CFG["HDG_KP"],   PLANE_CFG["HDG_KI"],
-        PLANE_CFG["HDG_KD"],   -1, 1).
-    SET _spdPid   TO PIDLOOP(PLANE_CFG["SPD_KP"],   PLANE_CFG["SPD_KI"],
-        PLANE_CFG["SPD_KD"],
-        PLANE_CFG["SPD_MIN_THROTTLE"], PLANE_CFG["SPD_MAX_THROTTLE"]).
-    mLog("PID controllers initialized (roll/alt/pitch/hdg/spd).").
+    IF PLANE_CFG["PID_CTRL"] {
+        SET _rollPid  TO PIDLOOP(PLANE_CFG["ROLL_KP"],  PLANE_CFG["ROLL_KI"],
+            PLANE_CFG["ROLL_KD"],  -1, 1).
+        SET _altPid   TO PIDLOOP(PLANE_CFG["ALT_KP"],   PLANE_CFG["ALT_KI"],
+            PLANE_CFG["ALT_KD"],   PLANE_CFG["ALT_MIN_PITCH"], PLANE_CFG["ALT_MAX_PITCH"]).
+        SET _pitchPid TO PIDLOOP(PLANE_CFG["PITCH_KP"], PLANE_CFG["PITCH_KI"],
+            PLANE_CFG["PITCH_KD"], -1, 1).
+        SET _hdgPid   TO PIDLOOP(PLANE_CFG["HDG_KP"],   PLANE_CFG["HDG_KI"],
+            PLANE_CFG["HDG_KD"],   -1, 1).
+        SET _spdPid   TO PIDLOOP(PLANE_CFG["SPD_KP"],   PLANE_CFG["SPD_KI"],
+            PLANE_CFG["SPD_KD"],
+            PLANE_CFG["SPD_MIN_THROTTLE"], PLANE_CFG["SPD_MAX_THROTTLE"]).
+        mLog("PID controllers initialized (roll/alt/pitch/hdg/spd).").
+    } ELSE {
+        mLog("PID controllers skipped.").
+    }
 
     LOCAL _prevAG7 IS AG7.
     LOCAL _prevAG8 IS AG8.
@@ -177,6 +188,11 @@ GLOBAL FUNCTION planeShutdown {
 }
 
 GLOBAL FUNCTION wingLevelerOn {
+    IF NOT PLANE_CFG["PID_CTRL"] {
+        mLog("Wing leveler unavailable: PID controls disabled.").
+        HUDTEXT("PID controls disabled", 2, 2, 13, YELLOW, FALSE).
+        RETURN.
+    }
     _rollPid:RESET().
     SET _rollPid:SETPOINT TO 0.
     SET wingLevelerActive TO TRUE.
@@ -193,6 +209,11 @@ GLOBAL FUNCTION wingLevelerOff {
 
 GLOBAL FUNCTION altHoldOn {
     PARAMETER tAlt IS SHIP:ALTITUDE.
+    IF NOT PLANE_CFG["PID_CTRL"] {
+        mLog("Altitude hold unavailable: PID controls disabled.").
+        HUDTEXT("PID controls disabled", 2, 2, 13, YELLOW, FALSE).
+        RETURN.
+    }
     SET targetAlt TO tAlt.
     _altPid:RESET().
     _pitchPid:RESET().
@@ -210,6 +231,11 @@ GLOBAL FUNCTION altHoldOff {
 
 GLOBAL FUNCTION hdgHoldOn {
     PARAMETER hdg IS SHIP:FACING:YAW.
+    IF NOT PLANE_CFG["PID_CTRL"] {
+        mLog("Heading hold unavailable: PID controls disabled.").
+        HUDTEXT("PID controls disabled", 2, 2, 13, YELLOW, FALSE).
+        RETURN.
+    }
     SET targetHdg TO hdg.
     _hdgPid:RESET().
     SET hdgHoldActive TO TRUE.
@@ -226,6 +252,11 @@ GLOBAL FUNCTION hdgHoldOff {
 
 GLOBAL FUNCTION spdHoldOn {
     PARAMETER tSpd IS SHIP:AIRSPEED.
+    IF NOT PLANE_CFG["PID_CTRL"] {
+        mLog("Speed hold unavailable: PID controls disabled.").
+        HUDTEXT("PID controls disabled", 2, 2, 13, YELLOW, FALSE).
+        RETURN.
+    }
     SET targetSpd TO tSpd.
     _spdPid:RESET().
     SET spdHoldActive TO TRUE.
@@ -334,6 +365,12 @@ GLOBAL FUNCTION planeUpdate {
 }
 
 GLOBAL FUNCTION apOn {
+    IF NOT PLANE_CFG["PID_CTRL"] {
+        SET apActive TO FALSE.
+        mLog("Autopilot unavailable: PID controls disabled.").
+        HUDTEXT("PID controls disabled", 3, 2, 14, YELLOW, FALSE).
+        RETURN.
+    }
     wingLevelerOn().
     altHoldOn().
     hdgHoldOn().
@@ -361,13 +398,20 @@ GLOBAL FUNCTION wptNavOn {
             RETURN.
         }
     }
-    IF NOT apActive { apOn(). }
+    IF PLANE_CFG["PID_CTRL"] AND NOT apActive { apOn(). }
     SET wptIndex TO 0.
     SET wptNavActive TO TRUE.
     LOCAL wp IS wptList[0].
-    mLog("Waypoint nav ON: " + wptList:LENGTH + " waypoints. First="
-        + ROUND(wp["lat"],2) + "," + ROUND(wp["lng"],2) + ".").
-    HUDTEXT("WPT NAV ON (" + wptList:LENGTH + " wpts)", 3, 2, 14, GREEN, FALSE).
+    IF PLANE_CFG["PID_CTRL"] {
+        mLog("Waypoint nav ON: " + wptList:LENGTH + " waypoints. First="
+            + ROUND(wp["lat"],2) + "," + ROUND(wp["lng"],2) + ".").
+        HUDTEXT("WPT NAV ON (" + wptList:LENGTH + " wpts)", 3, 2, 14, GREEN, FALSE).
+    } ELSE {
+        mLog("Waypoint monitor ON: " + wptList:LENGTH + " waypoints. First="
+            + ROUND(wp["lat"],2) + "," + ROUND(wp["lng"],2)
+            + ". PID steering disabled.").
+        HUDTEXT("WPT MONITOR (" + wptList:LENGTH + " wpts)", 3, 2, 14, CYAN, FALSE).
+    }
 }
 
 GLOBAL FUNCTION wptNavOff {
