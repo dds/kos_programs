@@ -8,27 +8,14 @@ IF EXISTS("0:/cmd/landingrescue.ks") {
     RUNPATH("1:/cmd/landingrescue.ks", "LAND_ASSIST").
 }
 
-LOCAL FUNCTION _loadState {
-    IF EXISTS("1:/lib/state.ksm") {
-        RUNONCEPATH("1:/lib/state.ksm").
-    } ELSE IF EXISTS("1:/lib/state.ks") {
-        RUNONCEPATH("1:/lib/state.ks").
-    } ELSE IF EXISTS("0:/lib/state.ks") {
-        RUNONCEPATH("0:/lib/state.ks").
-    } ELSE {
-        PRINT "No state library found.".
-        WAIT UNTIL FALSE.
-    }
-    stateInit().
-}
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
 
 LOCAL FUNCTION _cfg {
     PARAMETER key.
     PARAMETER value.
     stateSet("mission_cfg_" + key, value).
 }
-
-_loadState().
 
 LOCAL targetUT IS TIME:SECONDS + 300.
 LOCAL targetGeo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, targetUT)).

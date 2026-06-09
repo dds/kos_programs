@@ -4,15 +4,8 @@
 PARAMETER phaseName.
 PARAMETER missionId IS "".
 
-IF EXISTS("1:/lib/state.ksm") {
-    RUNONCEPATH("1:/lib/state.ksm").
-} ELSE IF EXISTS("1:/lib/state.ks") {
-    RUNONCEPATH("1:/lib/state.ks").
-} ELSE {
-    RUNONCEPATH("0:/lib/state.ks").
-}
-
-stateInit().
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
 
 LOCAL phase_ IS phaseName:TRIM.
 LOCAL mission_ IS missionId:TRIM.

@@ -7,7 +7,10 @@ PARAMETER targetLng IS -74.25.
 PARAMETER entryPeKm IS 30.
 PARAMETER toleranceKm IS 15.
 
-LOCAL HAS_LINK IS HOMECONNECTION:ISCONNECTED.
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
+bootLibLoadList(LIST("deorbit_targeting", "maneuver")).
+
 LOCAL entryPe IS entryPeKm * 1000.
 LOCAL tolerance IS toleranceKm * 1000.
 
@@ -24,35 +27,6 @@ IF DEFINED CFG {
     SET CFG TO splashCfg.
 } ELSE {
     GLOBAL CFG IS splashCfg.
-}
-
-LOCAL FUNCTION _syncLib {
-    PARAMETER libName.
-    IF NOT HAS_LINK { RETURN. }
-    LOCAL src IS "0:/lib/" + libName + ".ks".
-    LOCAL dstKsm IS "1:/lib/" + libName + ".ksm".
-    IF EXISTS(dstKsm) { RETURN. }
-    IF EXISTS(src) { COMPILE src TO dstKsm. }
-}
-
-LOCAL FUNCTION _loadLib {
-    PARAMETER libName.
-    IF EXISTS("1:/lib/" + libName + ".ksm") {
-        RUNONCEPATH("1:/lib/" + libName + ".ksm").
-    } ELSE {
-        RUNONCEPATH("1:/lib/" + libName + ".ks").
-    }
-}
-
-LOCAL libs IS LIST(
-    "state", "logs", "utils", "countdown",
-    "maneuver_targeting", "maneuver", "deorbit_targeting"
-).
-FOR libName IN libs {
-    _syncLib(libName).
-    _loadLib(libName).
-    IF libName = "state" { stateInit(). }
-    IF libName = "logs" { initLog(). }
 }
 
 PRINT "KSC SPLASH: " + ROUND(targetLat,4) + ", " + ROUND(targetLng,4).

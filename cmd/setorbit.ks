@@ -3,38 +3,12 @@
 
 PARAMETER targetKm IS 72.
 
-LOCAL HAS_LINK IS HOMECONNECTION:ISCONNECTED.
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
+bootLibLoad("maneuver").
+
 LOCAL targetAlt IS targetKm * 1000.
 IF targetKm > 1000 { SET targetAlt TO targetKm. }
-
-LOCAL FUNCTION _syncLib {
-    PARAMETER libName.
-    IF NOT HAS_LINK { RETURN. }
-    LOCAL src IS "0:/lib/" + libName + ".ks".
-    LOCAL dstKsm IS "1:/lib/" + libName + ".ksm".
-    IF EXISTS(dstKsm) { RETURN. }
-    IF EXISTS(src) { COMPILE src TO dstKsm. }
-}
-
-LOCAL FUNCTION _loadLib {
-    PARAMETER libName.
-    IF EXISTS("1:/lib/" + libName + ".ksm") {
-        RUNONCEPATH("1:/lib/" + libName + ".ksm").
-    } ELSE {
-        RUNONCEPATH("1:/lib/" + libName + ".ks").
-    }
-}
-
-_syncLib("state").
-_loadLib("state").
-stateInit().
-_syncLib("logs").
-_loadLib("logs").
-initLog().
-_syncLib("countdown").
-_loadLib("countdown").
-_syncLib("maneuver").
-_loadLib("maneuver").
 
 LOCAL FUNCTION _planSetApAtPe {
     PARAMETER alt_.

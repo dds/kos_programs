@@ -5,40 +5,12 @@
 PARAMETER targetPeKm IS 55.
 PARAMETER maxDv IS 1225.
 
-LOCAL HAS_LINK IS HOMECONNECTION:ISCONNECTED.
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
+bootLibLoadList(LIST("maneuver", "maneuver_targeting")).
+
 LOCAL targetPe IS targetPeKm * 1000.
 IF ABS(targetPeKm) > 1000 { SET targetPe TO targetPeKm. }
-
-LOCAL FUNCTION _syncLib {
-    PARAMETER libName.
-    IF NOT HAS_LINK { RETURN. }
-    LOCAL src IS "0:/lib/" + libName + ".ks".
-    LOCAL dstKsm IS "1:/lib/" + libName + ".ksm".
-    IF EXISTS(dstKsm) { RETURN. }
-    IF EXISTS(src) { COMPILE src TO dstKsm. }
-}
-
-LOCAL FUNCTION _loadLib {
-    PARAMETER libName.
-    IF EXISTS("1:/lib/" + libName + ".ksm") {
-        RUNONCEPATH("1:/lib/" + libName + ".ksm").
-    } ELSE {
-        RUNONCEPATH("1:/lib/" + libName + ".ks").
-    }
-}
-
-_syncLib("state").
-_loadLib("state").
-stateInit().
-_syncLib("logs").
-_loadLib("logs").
-initLog().
-_syncLib("countdown").
-_loadLib("countdown").
-_syncLib("maneuver").
-_loadLib("maneuver").
-_syncLib("maneuver_targeting").
-_loadLib("maneuver_targeting").
 
 LOCAL targetBody IS KERBIN.
 LOCAL parentBody IS SHIP:ORBIT:BODY:BODY.

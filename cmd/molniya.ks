@@ -10,10 +10,8 @@
 PARAMETER inputPeriod IS 0.
 PARAMETER inputAp IS 0.
 
-IF NOT EXISTS("1:/lib/utils.ks") {
-    COPYPATH("0:/lib/utils.ks", "1:/lib/utils.ks").
-}
-RUNONCEPATH("1:/lib/utils.ks").
+RUNPATH("1:/lib/boot_lib").
+bootLibLoad("utils").
 
 LOCAL mu IS SHIP:ORBIT:BODY:MU.
 LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.

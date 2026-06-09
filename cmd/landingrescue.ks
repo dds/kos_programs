@@ -88,12 +88,8 @@ IF _deleteIfExists("1:/run/log_path.state") {
     SET removed TO removed + 1.
 }
 
-IF EXISTS("1:/lib/state.ksm") {
-    RUNONCEPATH("1:/lib/state.ksm").
-} ELSE IF EXISTS("1:/lib/state.ks") {
-    RUNONCEPATH("1:/lib/state.ks").
-}
-stateInit().
+RUNPATH("1:/lib/boot_lib").
+bootLibLoad("state").
 stateSet("phase", phaseName).
 stateSet("reload_required", "false").
 IF phaseName = "LAND_DEORBIT" {

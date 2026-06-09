@@ -1,6 +1,9 @@
 // cmd/landingcheck.ks - Print landing readiness from the active vessel.
 // Usage: RUNPATH("0:/cmd/landingcheck.ks").
 
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
+
 LOCAL grav IS SHIP:BODY:MU / (SHIP:BODY:RADIUS + SHIP:ALTITUDE)^2.
 LOCAL maxAcc IS 0.
 IF SHIP:MASS > 0 {
@@ -45,12 +48,8 @@ IF selected <> 0 {
 
 LOCAL decouplers IS SHIP:PARTSTAGGED("landing_assist_decoupler").
 LOCAL assistTag IS "landing_assist_decoupler".
-IF EXISTS("1:/lib/state.ksm") {
-    RUNONCEPATH("1:/lib/state.ksm").
-    stateInit().
-    LOCAL configuredTag IS stateGet("mission_cfg_LANDING_ASSIST_DECOUPLER_TAG", "").
-    IF configuredTag <> "" { SET assistTag TO configuredTag. }
-}
+LOCAL configuredTag IS stateGet("mission_cfg_LANDING_ASSIST_DECOUPLER_TAG", "").
+IF configuredTag <> "" { SET assistTag TO configuredTag. }
 SET decouplers TO SHIP:PARTSTAGGED(assistTag).
 PRINT "  Assist   decouplers tagged " + assistTag + "=" + decouplers:LENGTH.
 PRINT "  Addons   TR=" + ADDONS:TR:AVAILABLE

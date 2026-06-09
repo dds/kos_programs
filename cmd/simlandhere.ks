@@ -4,27 +4,8 @@
 
 PARAMETER aheadMinutes IS 5.
 
-LOCAL FUNCTION _loadState {
-    IF EXISTS("1:/lib/state.ksm") {
-        RUNONCEPATH("1:/lib/state.ksm").
-    } ELSE IF EXISTS("1:/lib/state.ks") {
-        RUNONCEPATH("1:/lib/state.ks").
-    } ELSE {
-        RUNONCEPATH("0:/lib/state.ks").
-    }
-    stateInit().
-}
-
-LOCAL FUNCTION _loadLogs {
-    IF EXISTS("1:/lib/logs.ksm") {
-        RUNONCEPATH("1:/lib/logs.ksm").
-    } ELSE IF EXISTS("1:/lib/logs.ks") {
-        RUNONCEPATH("1:/lib/logs.ks").
-    } ELSE IF EXISTS("0:/lib/logs.ks") {
-        RUNONCEPATH("0:/lib/logs.ks").
-    }
-    initLog().
-}
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
 
 LOCAL FUNCTION _cfg {
     PARAMETER key.
@@ -86,8 +67,6 @@ LOCAL FUNCTION _bestScanSatSite {
     RETURN out.
 }
 
-_loadState().
-_loadLogs().
 
 LOCAL targetUT IS TIME:SECONDS + aheadMinutes * 60.
 LOCAL geo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, targetUT)).

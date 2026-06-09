@@ -1,15 +1,8 @@
 // cmd/scansatops.ks - Force released SCANsat mapper into ops/recovery phase.
 // Usage: RUNPATH("0:/cmd/scansatops.ks").
 
-IF EXISTS("1:/lib/state.ksm") {
-    RUNONCEPATH("1:/lib/state.ksm").
-} ELSE IF EXISTS("1:/lib/state.ks") {
-    RUNONCEPATH("1:/lib/state.ks").
-} ELSE {
-    RUNONCEPATH("0:/lib/state.ks").
-}
-
-stateInit().
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
 
 LOCK THROTTLE TO 0.
 UNLOCK THROTTLE.
