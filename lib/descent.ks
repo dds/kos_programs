@@ -15,18 +15,22 @@
 GLOBAL FUNCTION phaseDescent {
     mLogPhase("DESCENT").
 
-    // Hold reentry orientation through descent
+    // Hold reentry orientation through descent via SAS.
+    // SAS mode persists through reentry blackout when kOS
+    // loses probe control authority due to CommNet signal loss.
     LOCAL dir IS "RETROGRADE".
     IF DEFINED CFG AND CFG:HASKEY("AEROBRAKE_REENTRY_DIR") {
         SET dir TO CFG["AEROBRAKE_REENTRY_DIR"].
     }
-    SAS OFF.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    WAIT 0.1.
     IF dir = "PROGRADE" {
-        LOCK STEERING TO PROGRADE.
+        SET SASMODE TO "PROGRADE".
     } ELSE {
-        LOCK STEERING TO RETROGRADE.
+        SET SASMODE TO "RETROGRADE".
     }
-    mLog("Holding " + dir + " through descent.").
+    mLog("SAS " + dir + " hold for descent.").
 
     // Wait for atmosphere entry
     IF SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE > SHIP:BODY:ATM:HEIGHT {
@@ -37,6 +41,9 @@ GLOBAL FUNCTION phaseDescent {
         WAIT 5.
         _descentRetractAntennas().
     }
+
+    // Burn remaining fuel to slow down if we have thrust
+    _descentBrakingBurn().
 
     // Arm parachutes for deployment
     _descentArmChutes().
@@ -102,6 +109,53 @@ LOCAL FUNCTION _chutesDeployed {
         }
     }
     RETURN FALSE.
+}
+
+// Burn any remaining fuel retrograde to help slow down during
+// upper atmosphere descent. The transfer stage doubles as a
+// heat shield when oriented retrograde, so we keep it attached
+// and burn through it before entry heating peaks.
+LOCAL FUNCTION _descentBrakingBurn {
+    IF SHIP:AVAILABLETHRUST <= 0 { RETURN. }
+
+    LOCAL fuel IS STAGE:LIQUIDFUEL + STAGE:OXIDIZER.
+    IF fuel <= 0.1 {
+        mLog("No fuel remaining — skipping braking burn.").
+        RETURN.
+    }
+
+    mLog("Braking burn: thrust=" + ROUND(SHIP:AVAILABLETHRUST, 1)
+        + "kN  fuel=" + ROUND(fuel, 1)).
+
+    LOCK THROTTLE TO 1.
+    LOCK STEERING TO RETROGRADE.
+
+    // Burn until fuel is exhausted or we've slowed enough
+    WAIT UNTIL (STAGE:LIQUIDFUEL + STAGE:OXIDIZER) <= 0.1
+        OR SHIP:AVAILABLETHRUST <= 0
+        OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+
+    mLog("Braking burn complete. Speed=" + ROUND(SHIP:AIRSPEED, 1) + " m/s.").
+    mLogWarn("STATS descent braking speed=" + ROUND(SHIP:AIRSPEED, 1)
+        + " alt=" + ROUND(SHIP:ALTITUDE/1000, 1)).
+
+    // Restore SAS retrograde hold
+    UNLOCK STEERING.
+    WAIT 0.1.
+    SET SAS TO TRUE.
+    WAIT 0.1.
+    LOCAL dir IS "RETROGRADE".
+    IF DEFINED CFG AND CFG:HASKEY("AEROBRAKE_REENTRY_DIR") {
+        SET dir TO CFG["AEROBRAKE_REENTRY_DIR"].
+    }
+    IF dir = "PROGRADE" {
+        SET SASMODE TO "PROGRADE".
+    } ELSE {
+        SET SASMODE TO "RETROGRADE".
+    }
 }
 
 LOCAL FUNCTION _descentRetractAntennas {
