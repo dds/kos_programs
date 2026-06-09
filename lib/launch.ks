@@ -301,7 +301,7 @@ GLOBAL FUNCTION phaseFairing {
         nextPhase(launchSeq).
         RETURN.
     }
-    LOCAL fairingAlt IS _launchCfgNum("FAIRING_ALT", 71500).
+    LOCAL fairingAlt IS _launchCfgNum("FAIRING_ALT", 72000).
     IF fairingAlt < 10000 {
         mLogWarn("Unsafe FAIRING_ALT=" + fairingAlt + "m; using 71500m.").
         SET fairingAlt TO 71500.
@@ -319,7 +319,7 @@ GLOBAL FUNCTION phaseFair {
 }
 
 GLOBAL FUNCTION phaseExtendAnts {
-    LOCAL extendAlt IS _launchCfgNum("EXTEND_ALT", 73000).
+    LOCAL extendAlt IS _launchCfgNum("EXTEND_ALT", 73500).
     IF extendAlt < 10000 {
         mLogWarn("Unsafe EXTEND_ALT=" + extendAlt + "m; using 73000m.").
         SET extendAlt TO 73000.
