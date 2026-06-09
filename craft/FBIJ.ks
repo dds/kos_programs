@@ -28,13 +28,17 @@ LOCAL FUNCTION _hasSciencePayload {
 }
 
 LOCAL FUNCTION _flightLibs {
-    LOCAL libs IS missionLibsForPhases(FBIJ_SEQ, LIST("orbit")).
+    LOCAL libs IS missionLibsForPhases(FBIJ_SEQ, LIST("orbit", "airplane")).
     IF _hasSciencePayload() { libs:ADD("science"). }
     RETURN libs.
 }
 
 GLOBAL FUNCTION bootVehicleLibs {
-    RETURN missionSequenceLibs(_flightLibs(), LIST("orbit")).
+    LOCAL libs IS missionSequenceLibs(_flightLibs(), LIST("orbit", "airplane")).
+    stateSet("lib_band", "PREFLIGHT").
+    stateSet("lib_band_phase", stateGet("phase", "PREFLIGHT")).
+    stateSet("lib_band_libs", libs:JOIN(",")).
+    RETURN libs.
 }
 
 LOCAL hasSciencePayload IS FALSE.
