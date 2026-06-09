@@ -326,7 +326,7 @@ LOCAL FUNCTION _planLocalTransfer {
 
     LOCAL bestTime IS departUt.
     LOCAL bestCA IS _findClosestApproach(targetBody, departUt + hohmannTof * 0.5, departUt + hohmannTof * 1.5, 40).
-    LOCAL bestSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+    LOCAL bestSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
 
     mLog("Element-aware transfer scan: " + scanSteps
         + " steps over ±" + nScanOrbits
@@ -338,7 +338,7 @@ LOCAL FUNCTION _planLocalTransfer {
             SET nd:TIME TO tryTime.
             WAIT 0.02.
             LOCAL tryCa IS _findClosestApproach(targetBody, tryTime + hohmannTof * 0.5, tryTime + hohmannTof * 1.5, 40).
-            LOCAL trySeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
+            LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
             IF trySeed["SCORE"] < bestSeed["SCORE"] {
                 SET bestCA TO tryCa.
                 SET bestSeed TO trySeed.
@@ -354,6 +354,36 @@ LOCAL FUNCTION _planLocalTransfer {
         + " at T+" + ROUND(bestCA["time"] - TIME:SECONDS, 0) + "s"
         + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
 
+    IF captureInc >= 0 OR lanTarget >= 0 OR aopTarget >= 0 {
+        mLog("Previewing constrained transfer shortlist around raw best time.").
+        LOCAL previewBestTime IS bestTime.
+        LOCAL previewBestCA IS bestCA.
+        LOCAL previewBestSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+        FROM { LOCAL pi IS -2. } UNTIL pi > 2 STEP { SET pi TO pi + 1. } DO {
+            LOCAL previewTime IS bestTime + pi * scanDt * 0.5.
+            IF pi <> 0 AND previewTime > TIME:SECONDS + 30 {
+                SET nd:TIME TO previewTime.
+                WAIT 0.02.
+                LOCAL previewCA IS _findClosestApproach(targetBody, previewTime + hohmannTof * 0.4, previewTime + hohmannTof * 1.6, 30).
+                LOCAL previewSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, previewCA["distance"], nd:DELTAV:MAG).
+                IF previewSeed["SCORE"] < previewBestSeed["SCORE"] {
+                    SET previewBestTime TO previewTime.
+                    SET previewBestCA TO previewCA.
+                    SET previewBestSeed TO previewSeed.
+                }
+            }
+        }
+        SET bestTime TO previewBestTime.
+        SET bestCA TO previewBestCA.
+        SET bestSeed TO previewBestSeed.
+        SET nd:TIME TO bestTime.
+        WAIT 0.1.
+        mLog("Preview scan: best CA=" + ROUND(bestCA["distance"]/1000, 1) + "km"
+            + " score=" + ROUND(bestSeed["SCORE"], 2)
+            + " AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)
+            + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
+    }
+
     // --- Golden section refine departure time ---
     LOCAL tA IS MAX(TIME:SECONDS + 30, bestTime - scanDt).
     LOCAL tB IS bestTime + scanDt.
@@ -365,10 +395,10 @@ LOCAL FUNCTION _planLocalTransfer {
 
         SET nd:TIME TO tC. WAIT 0.02.
         LOCAL caC IS _findClosestApproach(targetBody, tC + hohmannTof * 0.4, tC + hohmannTof * 1.6, 30).
-        LOCAL seedC IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
+        LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
         SET nd:TIME TO tD. WAIT 0.02.
         LOCAL caD IS _findClosestApproach(targetBody, tD + hohmannTof * 0.4, tD + hohmannTof * 1.6, 30).
-        LOCAL seedD IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
+        LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
 
         IF seedC["SCORE"] < seedD["SCORE"] {
             SET tB TO tD.
@@ -386,14 +416,14 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL dvStep IS dvRange * 2 / dvSteps.
     LOCAL bestDv IS hohmannDv.
     SET bestCA TO _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-    SET bestSeed TO _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+    SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
 
     FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
         LOCAL tryDv IS hohmannDv - dvRange + di * dvStep.
         SET nd:PROGRADE TO tryDv.
         WAIT 0.02.
         LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-        LOCAL trySeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
+        LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
         IF trySeed["SCORE"] < bestSeed["SCORE"] {
             SET bestCA TO tryCa.
             SET bestSeed TO trySeed.
@@ -413,10 +443,10 @@ LOCAL FUNCTION _planLocalTransfer {
 
         SET nd:PROGRADE TO dvC. WAIT 0.02.
         LOCAL caC IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-        LOCAL seedC IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
+        LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
         SET nd:PROGRADE TO dvD. WAIT 0.02.
         LOCAL caD IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-        LOCAL seedD IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
+        LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
 
         IF seedC["SCORE"] < seedD["SCORE"] {
             SET dvB TO dvD.
