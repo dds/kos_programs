@@ -47,9 +47,6 @@ GLOBAL FUNCTION phaseDescent {
         _descentRetractAntennas().
     }
 
-    // Burn remaining fuel to slow down if we have thrust
-    _descentBrakingBurn().
-
     // Deploy fairing once slow enough (< 60 m/s)
     _descentDeployFairing().
 
@@ -117,40 +114,6 @@ LOCAL FUNCTION _chutesDeployed {
         }
     }
     RETURN FALSE.
-}
-
-// Burn any remaining fuel retrograde to help slow down during
-// upper atmosphere descent. The transfer stage doubles as a
-// heat shield when oriented retrograde, so we keep it attached
-// and burn through it before entry heating peaks.
-LOCAL FUNCTION _descentBrakingBurn {
-    IF SHIP:AVAILABLETHRUST <= 0 { RETURN. }
-
-    LOCAL fuel IS STAGE:LIQUIDFUEL + STAGE:OXIDIZER.
-    IF fuel <= 0.1 {
-        mLog("No fuel remaining — skipping braking burn.").
-        RETURN.
-    }
-
-    mLog("Braking burn: thrust=" + ROUND(SHIP:AVAILABLETHRUST, 1)
-        + "kN  fuel=" + ROUND(fuel, 1)).
-
-    LOCK THROTTLE TO 1.
-    LOCK STEERING TO RETROGRADE.
-
-    // Burn until fuel is exhausted or we've slowed enough
-    WAIT UNTIL (STAGE:LIQUIDFUEL + STAGE:OXIDIZER) <= 0.1
-        OR SHIP:AVAILABLETHRUST <= 0
-        OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
-
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
-
-    mLog("Braking burn complete. Speed=" + ROUND(SHIP:AIRSPEED, 1) + " m/s.").
-    mLogWarn("STATS descent braking speed=" + ROUND(SHIP:AIRSPEED, 1)
-        + " alt=" + ROUND(SHIP:ALTITUDE/1000, 1)).
-
-    // LOCK STEERING remains active from phaseDescent.
 }
 
 // Deploy descent fairing once airspeed is below 60 m/s.
