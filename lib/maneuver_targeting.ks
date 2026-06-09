@@ -652,6 +652,8 @@ GLOBAL FUNCTION newtonTarget {
 
     LOCAL lastGood  IS _ntGetAxis(nd, param).
     LOCAL stepScale IS 1.0.
+    LOCAL prevCorr IS 0.
+    LOCAL oscCount IS 0.
 
     FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
         LOCAL p IS _getTargetPatch(nd, targetBody).
@@ -720,6 +722,20 @@ GLOBAL FUNCTION newtonTarget {
                 mLog("  " + label + "[" + i + "]: low sensitivity, skipping.").
             } ELSE {
                 LOCAL correction IS (err / sens) * damp.
+
+                // Detect alternating-sign oscillation (limit cycle)
+                IF prevCorr <> 0 AND correction * prevCorr < 0 {
+                    SET oscCount TO oscCount + 1.
+                } ELSE {
+                    SET oscCount TO 0.
+                }
+                SET prevCorr TO correction.
+                IF oscCount >= 3 {
+                    SET stepScale TO stepScale * 0.5.
+                    SET oscCount TO 0.
+                    mLog("  " + label + "[" + i + "]: oscillation detected, halving step.").
+                }
+
                 LOCAL maxStep IS CHOOSE MAX(5.0, ABS(err) / 3) IF isAngle ELSE MIN(20, MAX(3.0, ABS(err) / 10000)).
                 SET maxStep TO maxStep * stepScale.
                 IF correction >  maxStep { SET correction TO  maxStep. }

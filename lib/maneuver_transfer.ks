@@ -137,7 +137,7 @@ GLOBAL FUNCTION planTransfer {
         planeOpts:ADD("MIN_STEP", 0.05).
         planeOpts:ADD("MAX_ITER", 120).
         IF aopTarget >= 0 { planeOpts:ADD("MIN_ITER", 40). }
-        IF aopTarget >= 0 { planeOpts:ADD("AOP_GUIDE_STALL_ITER", 5). }
+        IF aopTarget >= 0 { planeOpts:ADD("AOP_GUIDE_STALL_ITER", 15). }
         IF aopTarget >= 0 { planeOpts:ADD("AOP_GUIDE_STALL_MIN_IMPROVE", 2.0). }
         mLogWarn("STATS elements stage=plane-pe-inc before angular targeting.").
         LOCAL planeResult IS _targetPatchElementsCoupled(nd, targetBody, planeTargets, planeOpts).
@@ -186,7 +186,7 @@ GLOBAL FUNCTION planTransfer {
             lanOpts:ADD("MIN_STEP", 0.05).
             lanOpts:ADD("MAX_ITER", 100).
             IF aopTarget >= 0 { lanOpts:ADD("MIN_ITER", 30). }
-            IF aopTarget >= 0 { lanOpts:ADD("AOP_GUIDE_STALL_ITER", 5). }
+            IF aopTarget >= 0 { lanOpts:ADD("AOP_GUIDE_STALL_ITER", 15). }
             IF aopTarget >= 0 { lanOpts:ADD("AOP_GUIDE_STALL_MIN_IMPROVE", 2.0). }
             mLogWarn("STATS elements stage=lan after plane-pe-inc.").
             LOCAL lanResult IS _targetPatchElementsCoupled(nd, targetBody, lanTargets, lanOpts).
@@ -511,7 +511,32 @@ LOCAL FUNCTION _planLocalTransfer {
         SET nd:PROGRADE TO (dvA + dvB) / 2.
         WAIT 0.1.
     } ELSE {
-        mLog("Skipping golden section (AoP constrained): preserving raw scan basin.").
+        // AoP-constrained: skip golden section (drifts out of basin) but
+        // still scan prograde dV to close the closest-approach gap. The
+        // seed score already penalizes AoP misalignment heavily, so
+        // candidates that leave the basin will score poorly.
+        mLog("AoP-constrained dV scan: preserving scan basin.").
+        LOCAL dvRange IS MAX(10, ABS(hohmannDv) * 0.2).
+        LOCAL dvSteps IS 20.
+        LOCAL dvStep IS dvRange * 2 / dvSteps.
+        LOCAL bestDv IS hohmannDv.
+        SET bestCA TO _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+        SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+
+        FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
+            LOCAL tryDv IS hohmannDv - dvRange + di * dvStep.
+            SET nd:PROGRADE TO tryDv.
+            WAIT 0.02.
+            LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+            LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
+            IF trySeed["SCORE"] < bestSeed["SCORE"] {
+                SET bestCA TO tryCa.
+                SET bestSeed TO trySeed.
+                SET bestDv TO tryDv.
+            }
+        }
+        SET nd:PROGRADE TO bestDv.
+        WAIT 0.1.
     }
 
     LOCAL finalCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
