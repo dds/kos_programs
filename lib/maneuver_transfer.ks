@@ -125,7 +125,7 @@ GLOBAL FUNCTION planTransfer {
         planeOpts:ADD("STEP_NORMAL", 40.0).
         planeOpts:ADD("STEP_PROGRADE", 20.0).
         planeOpts:ADD("STEP_RADIAL", 20.0).
-        planeOpts:ADD("STEP_TIME", 60.0).
+        planeOpts:ADD("STEP_TIME", CHOOSE 5.0 IF aopTarget >= 0 ELSE 60.0).
         planeOpts:ADD("MIN_STEP", 0.05).
         planeOpts:ADD("MAX_ITER", 120).
         IF aopTarget >= 0 { planeOpts:ADD("MIN_ITER", 40). }
@@ -171,7 +171,7 @@ GLOBAL FUNCTION planTransfer {
             lanOpts:ADD("STEP_NORMAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
             lanOpts:ADD("STEP_PROGRADE", CHOOSE 5.0 IF captureInc >= 0 ELSE 2.0).
             lanOpts:ADD("STEP_RADIAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
-            lanOpts:ADD("STEP_TIME", 60.0).
+            lanOpts:ADD("STEP_TIME", CHOOSE 5.0 IF aopTarget >= 0 ELSE 60.0).
             lanOpts:ADD("MIN_STEP", 0.05).
             lanOpts:ADD("MAX_ITER", 100).
             IF aopTarget >= 0 { lanOpts:ADD("MIN_ITER", 30). }
@@ -385,75 +385,39 @@ LOCAL FUNCTION _planLocalTransfer {
         + " at T+" + ROUND(bestCA["time"] - TIME:SECONDS, 0) + "s"
         + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
 
-    IF captureInc >= 0 OR lanTarget >= 0 OR aopTarget >= 0 {
-        mLog("Previewing constrained transfer shortlist: " + previewShortlist + " raw candidates.").
-        LOCAL previewBestTime IS bestTime.
-        LOCAL previewBestCA IS bestCA.
-        LOCAL previewBestSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
-        FROM { LOCAL pi IS 0. } UNTIL pi >= previewShortlist STEP { SET pi TO pi + 1. } DO {
-            IF scanSeeds[pi]["SCORE"] < 999999999 {
-                LOCAL previewTime IS scanTimes[pi].
-                SET nd:TIME TO previewTime.
-                WAIT 0.02.
-                LOCAL previewCA IS scanCAs[pi].
-                LOCAL previewSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, previewCA["distance"], nd:DELTAV:MAG).
-                IF previewSeed["SCORE"] < previewBestSeed["SCORE"] {
-                    SET previewBestTime TO previewTime.
-                    SET previewBestCA TO previewCA.
-                    SET previewBestSeed TO previewSeed.
+    // --- AoP hard-filter: pick best AoP-acceptable candidate ---
+    // AoP is a basin selection problem controlled by departure timing.
+    // If the best raw candidate exceeds the AoP tolerance, search the
+    // shortlist for the first acceptable one (already sorted by seed score).
+    IF aopTarget >= 0 {
+        LOCAL aopFilterTol IS 35.
+        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopFilterTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+        IF ABS(bestSeed["AOP_ERR"]) > aopFilterTol {
+            LOCAL found IS FALSE.
+            FROM { LOCAL fi IS 0. } UNTIL fi >= previewShortlist STEP { SET fi TO fi + 1. } DO {
+                IF scanSeeds[fi]["SCORE"] < 999999999
+                    AND ABS(scanSeeds[fi]["AOP_ERR"]) <= aopFilterTol {
+                    SET bestTime TO scanTimes[fi].
+                    SET bestCA TO scanCAs[fi].
+                    SET bestSeed TO scanSeeds[fi].
+                    SET found TO TRUE.
+                    BREAK.
                 }
             }
+            SET nd:TIME TO bestTime.
+            WAIT 0.1.
+            IF found {
+                mLog("AoP filter: replaced best with AoP-acceptable candidate"
+                    + " AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)
+                    + " score=" + ROUND(bestSeed["SCORE"], 2)
+                    + " depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
+            } ELSE {
+                mLogWarn("AoP filter: no candidate within AoP tolerance " + ROUND(aopFilterTol, 1)
+                    + "; proceeding with best raw seed AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)).
+            }
+        } ELSE {
+            mLog("AoP filter: best raw candidate acceptable AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)).
         }
-        SET bestTime TO previewBestTime.
-        SET bestCA TO previewBestCA.
-        SET bestSeed TO previewBestSeed.
-        SET nd:TIME TO bestTime.
-        WAIT 0.1.
-        mLog("Preview scan: best CA=" + ROUND(bestCA["distance"]/1000, 1) + "km"
-            + " score=" + ROUND(bestSeed["SCORE"], 2)
-            + " AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)
-            + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
-
-        LOCAL previewAopTol IS 35.
-        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET previewAopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
-        IF aopTarget >= 0 AND ABS(bestSeed["AOP_ERR"]) > previewAopTol {
-            mLogWarn("STATS transfer preview-miss target=" + targetBody:NAME
-                + " aopErr=" + ROUND(bestSeed["AOP_ERR"],1)
-                + " tol=" + ROUND(previewAopTol,1)).
-        }
-
-        _nodeAxisSet(nd, "TIME", bestSeed["NODE_TIME"]).
-        _nodeAxisSet(nd, "PROGRADE", bestSeed["NODE_PROGRADE"]).
-        _nodeAxisSet(nd, "NORMAL", bestSeed["NODE_NORMAL"]).
-        _nodeAxisSet(nd, "RADIALOUT", bestSeed["NODE_RADIAL"]).
-        WAIT 0.1.
-        LOCAL constrainedCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
-        LOCAL constrainedSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, constrainedCA["distance"], nd:DELTAV:MAG).
-        mLog("Applied constrained preview seed: N="
-            + ROUND(nd:NORMAL, 1)
-            + " R=" + ROUND(nd:RADIALOUT, 1)
-            + " dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s").
-        mLog("Optimized: CA=" + ROUND(constrainedCA["distance"]/1000, 1) + "km"
-            + " score=" + ROUND(constrainedSeed["SCORE"], 2)
-            + " AoPerr=" + ROUND(constrainedSeed["AOP_ERR"], 1)
-            + "  dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s"
-            + "  depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
-        mLogWarn("STATS local-transfer target=" + targetBody:NAME
-            + " caKm=" + ROUND(constrainedCA["distance"]/1000,1)
-            + " score=" + ROUND(constrainedSeed["SCORE"],2)
-            + " patch=" + constrainedSeed["PATCH"]
-            + " incErr=" + ROUND(constrainedSeed["INC_ERR"],1)
-            + " lanErr=" + ROUND(constrainedSeed["LAN_ERR"],1)
-            + " aopErr=" + ROUND(constrainedSeed["AOP_ERR"],1)
-            + " prograde=" + ROUND(nd:PROGRADE,1)
-            + " normal=" + ROUND(nd:NORMAL,1)
-            + " radial=" + ROUND(nd:RADIALOUT,1)
-            + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
-
-        IF lanTarget >= 0 AND aopTarget < 0 {
-            SET nd TO _scanForLan(nd, targetBody, lanTarget, shipPeriod).
-        }
-        RETURN nd.
     }
 
     // --- Golden section refine departure time ---
@@ -531,7 +495,7 @@ LOCAL FUNCTION _planLocalTransfer {
 
     LOCAL finalCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
     LOCAL finalSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, finalCA["distance"], nd:DELTAV:MAG).
-    IF captureInc >= 0 OR lanTarget >= 0 OR aopTarget >= 0 {
+    IF (captureInc >= 0 OR lanTarget >= 0) AND aopTarget < 0 {
         _nodeAxisSet(nd, "TIME", finalSeed["NODE_TIME"]).
         _nodeAxisSet(nd, "PROGRADE", finalSeed["NODE_PROGRADE"]).
         _nodeAxisSet(nd, "NORMAL", finalSeed["NODE_NORMAL"]).
