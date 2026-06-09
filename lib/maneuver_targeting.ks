@@ -328,7 +328,7 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
             } ELSE {
                 SET aopGuideStallCount TO aopGuideStallCount + 1.
             }
-            IF aopGuideStallCount >= aopGuideStallIter {
+            IF i >= minIter AND aopGuideStallCount >= aopGuideStallIter {
                 IF NOT quiet {
                     mLogWarn("  ELEMENTS: AoP guide stalled err="
                         + ROUND(guideErr,1)

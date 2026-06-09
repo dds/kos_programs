@@ -512,31 +512,43 @@ LOCAL FUNCTION _planLocalTransfer {
         WAIT 0.1.
     } ELSE {
         // AoP-constrained: skip golden section (drifts out of basin) but
-        // still scan prograde dV to close the closest-approach gap. The
-        // seed score already penalizes AoP misalignment heavily, so
-        // candidates that leave the basin will score poorly.
+        // still scan prograde dV to minimize closest approach. Score by
+        // CA distance only (not full seed score) so the scan doesn't
+        // trade encounter proximity for element alignment — downstream
+        // solvers handle elements. Reject candidates that leave the AoP
+        // tolerance band.
         mLog("AoP-constrained dV scan: preserving scan basin.").
         LOCAL dvRange IS MAX(10, ABS(hohmannDv) * 0.2).
         LOCAL dvSteps IS 20.
         LOCAL dvStep IS dvRange * 2 / dvSteps.
         LOCAL bestDv IS hohmannDv.
+        LOCAL aopFilterTol IS 35.
+        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopFilterTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
         SET bestCA TO _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-        SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+        LOCAL bestCaDist IS bestCA["distance"].
 
         FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
             LOCAL tryDv IS hohmannDv - dvRange + di * dvStep.
             SET nd:PROGRADE TO tryDv.
             WAIT 0.02.
             LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-            LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
-            IF trySeed["SCORE"] < bestSeed["SCORE"] {
-                SET bestCA TO tryCa.
-                SET bestSeed TO trySeed.
-                SET bestDv TO tryDv.
+            IF tryCa["distance"] < bestCaDist {
+                LOCAL tryPatch IS _getTargetPatch(nd, targetBody).
+                LOCAL aopOk IS TRUE.
+                IF tryPatch <> 0 {
+                    LOCAL tryAopErr IS ABS(_angleError(tryPatch:ARGUMENTOFPERIAPSIS, aopTarget)).
+                    IF tryAopErr > aopFilterTol { SET aopOk TO FALSE. }
+                }
+                IF aopOk {
+                    SET bestCA TO tryCa.
+                    SET bestCaDist TO tryCa["distance"].
+                    SET bestDv TO tryDv.
+                }
             }
         }
         SET nd:PROGRADE TO bestDv.
         WAIT 0.1.
+        SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
     }
 
     LOCAL finalCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
