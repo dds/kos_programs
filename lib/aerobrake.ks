@@ -42,10 +42,9 @@ GLOBAL FUNCTION phaseAerobrake {
         }
     }
 
-    // --- Step 2: Vessel prep ---
+    // --- Step 2: Vessel prep (pre-coast) ---
     _aerobrakeRetractAntennas().
     _aerobrakeDecouple().
-    _aerobrakeOrient().
     _aerobrakeArmChutes().
 
     // --- Step 3: KAC alarm for atmosphere entry ---
@@ -54,8 +53,7 @@ GLOBAL FUNCTION phaseAerobrake {
     mLog("Aerobrake prep complete.").
     mLogWarn("STATS aerobrake status=complete body=" + SHIP:BODY:NAME).
 
-    // --- Step 4: Wait for atmosphere entry ---
-    // LOCK STEERING tracks retrograde actively during coast.
+    // --- Step 4: Wait for atmosphere, then orient ---
     IF SHIP:BODY:ATM:EXISTS {
         LOCAL atmHeight IS SHIP:BODY:ATM:HEIGHT.
         IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
@@ -67,6 +65,7 @@ GLOBAL FUNCTION phaseAerobrake {
             mLog("Atmosphere entry at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
         }
     }
+    _aerobrakeOrient().
 
     nextPhase(xferSeq).
 }
