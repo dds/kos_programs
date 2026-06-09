@@ -92,7 +92,9 @@ LOCAL FUNCTION _fr3ConditionalRoots {
     PARAMETER band.
     LOCAL bandKey IS band.
     LOCAL roots IS LIST().
-    IF bandKey = "XFER_PLAN" AND stateGet("target", "KERBIN") <> "MUN" {
+    IF bandKey = "XFER_PLAN"
+            AND stateGet("target", "KERBIN") <> "MUN"
+            AND stateGet("target", "KERBIN") <> "KERBIN" {
         roots:ADD("maneuver_intersystem").
     }
     IF bandKey = "XFER_PLAN" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
