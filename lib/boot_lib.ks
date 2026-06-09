@@ -264,6 +264,8 @@ GLOBAL FUNCTION bootApplyMissionConfig {
                         stateSet("target", value).
                     } ELSE IF key = "PAYLOADS" {
                         stateSet("payloads", value).
+                    } ELSE IF key = "MISSION_TYPE" {
+                        stateSet("mission_type", value).
                     }
                 }
             }

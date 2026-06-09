@@ -81,6 +81,7 @@ IF NOT err {
     // so boot skips the mission selector AND bootApplyMissionConfig
     // finds nothing to overwrite our state with.
     stateSet("target", "KERBIN").
+    stateSet("mission_type", "kerbin_return").
     stateSet("mission_id", "kerbin_return").
     stateSet("mission_name", "Return to Kerbin").
     stateSet("payloads", "RETURN").

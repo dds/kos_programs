@@ -88,36 +88,10 @@ GLOBAL FUNCTION fr3BuildPhaseMap {
     RETURN phaseMap.
 }
 
-LOCAL FUNCTION _fr3ConditionalRoots {
-    PARAMETER band.
-    LOCAL bandKey IS band.
-    LOCAL roots IS LIST().
-    // Load interplanetary code only when the sequence includes
-    // outbound transfer phases (XING). Escape/return sequences
-    // don't need Lambert/intersystem solvers.
-    IF bandKey = "XFER_PLAN" AND stateGet("target", "KERBIN") <> "MUN" {
-        LOCAL seq IS stateGet("mission_cfg_SEQUENCE", "").
-        IF seq:CONTAINS("XING") {
-            roots:ADD("maneuver_intersystem").
-        }
-    }
-    IF bandKey = "XFER_PLAN" AND (CFG:HASKEY("RENDEZVOUS_TARGET") OR CFG:HASKEY("ASTEROID_TARGET")) {
-        roots:ADD("maneuver_rendezvous").
-    }
-    IF bandKey = "PAYLOAD_OPS" AND contains(stateGet("phase", ""), LIST("TARGETED_DEORBIT")) {
-        roots:ADD("deorbit_targeting").
-    }
-    IF bandKey = "PAYLOAD_OPS"
-            AND (missionHasPayload("SCANSAT") OR missionHasPayload("SCISAT")) {
-        roots:ADD("science").
-    }
-    RETURN roots.
-}
-
 LOCAL FUNCTION _fr3LibsForBand {
     PARAMETER band.
     LOCAL roots IS bootLibBandRoots(band).
-    missionAppendUnique(roots, _fr3ConditionalRoots(band)).
+    missionAppendUnique(roots, missionTypeConditionalRoots(band)).
     missionAppendUnique(roots, missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", ""))).
     RETURN bootLibResolve(roots).
 }
