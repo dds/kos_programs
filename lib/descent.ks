@@ -163,10 +163,15 @@ LOCAL FUNCTION _chutesDeployed {
 // Burn retrograde until we're guaranteed captured, then stop.
 //
 // Stop conditions (checked every tick):
-//   1. Impact predicted  — Trajectories says we'll hit the ground
-//   2. Captured in orbit — eccentricity < 1 (closed orbit)
+//   1. Landing this pass — apoapsis below atmosphere (won't exit)
+//   2. Captured in orbit — closed orbit, both apsides above atmosphere
 //   3. Fuel exhausted    — nothing left to burn
 //   4. Landed/splashed   — already on the surface
+//
+// Note: Trajectories HASIMPACT alone is insufficient — it models
+// multi-orbit drag decay and reports impact even when the apoapsis
+// is still above atmosphere. The vessel would orbit 2+ more times
+// before landing, which isn't survivable without solar panels.
 LOCAL FUNCTION _descentBrakingBurn {
     IF SHIP:AVAILABLETHRUST <= 0 { RETURN. }
 
@@ -182,7 +187,8 @@ LOCAL FUNCTION _descentBrakingBurn {
     mLog("Braking burn: thrust=" + ROUND(SHIP:AVAILABLETHRUST, 1)
         + "kN  fuel=" + ROUND(fuel, 1)
         + "  ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
-        + "  ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)).
+        + "  ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
+        + "  atmKm=" + ROUND(atmHeight/1000, 1)).
 
     LOCK THROTTLE TO 1.
     LOCK STEERING TO RETROGRADE.
@@ -194,11 +200,15 @@ LOCAL FUNCTION _descentBrakingBurn {
             SET reason TO "fuel-exhausted".
         } ELSE IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
             SET reason TO "landed".
-        } ELSE IF ADDONS:TR:AVAILABLE AND ADDONS:TR:HASIMPACT {
-            SET reason TO "impact-predicted".
+        } ELSE IF SHIP:ORBIT:ECCENTRICITY < 1
+                AND SHIP:ORBIT:APOAPSIS > 0
+                AND SHIP:ORBIT:APOAPSIS < atmHeight {
+            // Apoapsis below atmosphere — committed to landing this pass
+            SET reason TO "landing-this-pass".
         } ELSE IF SHIP:ORBIT:ECCENTRICITY < 1
                 AND SHIP:ORBIT:APOAPSIS > atmHeight
                 AND SHIP:ORBIT:PERIAPSIS > atmHeight {
+            // Stable orbit above atmosphere — captured, no reentry needed
             SET reason TO "orbit-captured".
         }
         WAIT 0.
