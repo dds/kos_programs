@@ -17,6 +17,19 @@ LOCAL KSC_LNG IS -74.25.
 LOCAL CORRECTION_TOLERANCE IS 50000.   // 50km default
 LOCAL MAX_CORRECTION_DV IS 20.         // cap total correction burn
 
+// Atmosphere heights by body (meters). Stock + OPM.
+LOCAL ATM_HEIGHTS IS LEXICON(
+    "KERBIN", 70000,
+    "DUNA",   50000,
+    "EVE",    90000,
+    "JOOL",   200000,
+    "LAYTHE", 50000,
+    "SARNUS", 580000,
+    "URLUM",  325000,
+    "NEIDON", 260000,
+    "TEKTO",  95000
+).
+
 GLOBAL FUNCTION phaseAerobrake {
     mLogPhase("AEROBRAKE").
 
@@ -35,9 +48,44 @@ GLOBAL FUNCTION phaseAerobrake {
     _aerobrakeOrient().
     _aerobrakeArmChutes().
 
+    // --- Step 3: KAC alarm for atmosphere entry ---
+    _aerobrakeSetEntryAlarm().
+
     mLog("Aerobrake prep complete.").
     mLogWarn("STATS aerobrake status=complete body=" + SHIP:BODY:NAME).
     nextPhase(xferSeq).
+}
+
+// Set a KAC alarm before atmospheric interface so time warp
+// stops automatically. Uses the ATM_HEIGHTS table; falls back
+// to the body's own ATM:HEIGHT if not in the table.
+LOCAL FUNCTION _aerobrakeSetEntryAlarm {
+    IF NOT ADDONS:KAC:AVAILABLE { RETURN. }
+    IF NOT SHIP:BODY:ATM:EXISTS { RETURN. }
+
+    LOCAL atmAlt IS SHIP:BODY:ATM:HEIGHT.
+    IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
+        SET atmAlt TO ATM_HEIGHTS[SHIP:BODY:NAME].
+    }
+
+    // Estimate time to atmosphere from current orbit
+    // Use periapsis ETA as a rough guide — atmosphere entry
+    // happens shortly before periapsis on a suborbital/aerobrake trajectory
+    LOCAL entryUt IS TIME:SECONDS + ETA:PERIAPSIS.
+    IF SHIP:ORBIT:PERIAPSIS < atmAlt {
+        // We'll hit atmosphere before periapsis. Estimate using
+        // current descent rate or just put the alarm 2 minutes before PE.
+        SET entryUt TO entryUt - 120.
+    }
+    SET entryUt TO MAX(entryUt, TIME:SECONDS + 30).
+
+    LOCAL alm IS ADDALARM("Raw", entryUt, "Atmo entry: " + SHIP:BODY:NAME,
+        "Atmosphere at " + ROUND(atmAlt/1000, 0) + "km").
+    IF alm <> 0 {
+        mLog("KAC alarm set for atmosphere entry in "
+            + ROUND(entryUt - TIME:SECONDS, 0) + "s"
+            + " (" + SHIP:BODY:NAME + " atmo=" + ROUND(atmAlt/1000, 0) + "km).").
+    }
 }
 
 // ============================================================
