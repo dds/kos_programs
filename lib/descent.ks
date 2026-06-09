@@ -24,22 +24,13 @@ LOCAL DECOUPLE_ALTS IS LEXICON(
 GLOBAL FUNCTION phaseDescent {
     mLogPhase("DESCENT").
 
-    // Hold reentry orientation through descent via SAS.
-    // SAS mode persists through reentry blackout when kOS
-    // loses probe control authority due to CommNet signal loss.
-    LOCAL dir IS "RETROGRADE".
-    IF DEFINED CFG AND CFG:HASKEY("AEROBRAKE_REENTRY_DIR") {
-        SET dir TO CFG["AEROBRAKE_REENTRY_DIR"].
-    }
+    // SAS STABILITYASSIST should already be active from aerobrake
+    // phase handoff. Ensure it's on in case we entered descent
+    // from a different path (e.g. abort).
     SET SAS TO TRUE.
     WAIT 0.1.
     SET SASMODE TO "STABILITYASSIST".
-    IF dir = "PROGRADE" {
-        LOCK STEERING TO PROGRADE.
-    } ELSE {
-        LOCK STEERING TO RETROGRADE.
-    }
-    mLog(dir + " steering lock + SAS stability hold for descent.").
+    mLog("SAS stability hold for descent.").
 
     // Wait for atmosphere entry
     IF SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE > SHIP:BODY:ATM:HEIGHT {
@@ -154,21 +145,12 @@ LOCAL FUNCTION _descentBrakingBurn {
     mLogWarn("STATS descent braking speed=" + ROUND(SHIP:AIRSPEED, 1)
         + " alt=" + ROUND(SHIP:ALTITUDE/1000, 1)).
 
-    // Restore stability hold + steering lock after braking burn
+    // Restore SAS stability hold after braking burn
     UNLOCK STEERING.
     WAIT 0.1.
     SET SAS TO TRUE.
     WAIT 0.1.
     SET SASMODE TO "STABILITYASSIST".
-    LOCAL dir IS "RETROGRADE".
-    IF DEFINED CFG AND CFG:HASKEY("AEROBRAKE_REENTRY_DIR") {
-        SET dir TO CFG["AEROBRAKE_REENTRY_DIR"].
-    }
-    IF dir = "PROGRADE" {
-        LOCK STEERING TO PROGRADE.
-    } ELSE {
-        LOCK STEERING TO RETROGRADE.
-    }
 }
 
 // Deploy descent fairing once airspeed is below 60 m/s.

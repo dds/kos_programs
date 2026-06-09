@@ -319,12 +319,23 @@ LOCAL FUNCTION _aerobrakeOrient {
         mLogWarn(dir + " alignment timed out.").
     }
 
-    // SAS STABILITYASSIST persists through reentry blackout when
-    // kOS loses probe control and LOCK STEERING stops working.
+    // Keep LOCK STEERING active until near PE, then hand off to
+    // SAS STABILITYASSIST which persists through reentry blackout
+    // when kOS loses probe control authority.
+    LOCAL atmHeight IS SHIP:BODY:ATM:HEIGHT.
+    IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
+        SET atmHeight TO ATM_HEIGHTS[SHIP:BODY:NAME].
+    }
+    IF SHIP:ALTITUDE > atmHeight {
+        mLog("Holding " + dir + " until atmosphere (" + ROUND(atmHeight/1000, 0) + "km)...").
+        WAIT UNTIL SHIP:ALTITUDE < atmHeight.
+    }
+    UNLOCK STEERING.
+    WAIT 0.1.
     SET SAS TO TRUE.
     WAIT 0.1.
     SET SASMODE TO "STABILITYASSIST".
-    mLog(dir + " steering lock + SAS stability hold for entry.").
+    mLog("SAS stability hold active for blackout.").
 }
 
 LOCAL FUNCTION _aerobrakeArmChutes {
