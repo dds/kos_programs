@@ -459,10 +459,23 @@ LOCAL FUNCTION _planLocalTransfer {
 
     LOCAL finalCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
     LOCAL finalSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, finalCA["distance"], nd:DELTAV:MAG).
+    IF captureInc >= 0 OR lanTarget >= 0 OR aopTarget >= 0 {
+        _nodeAxisSet(nd, "TIME", finalSeed["NODE_TIME"]).
+        _nodeAxisSet(nd, "PROGRADE", finalSeed["NODE_PROGRADE"]).
+        _nodeAxisSet(nd, "NORMAL", finalSeed["NODE_NORMAL"]).
+        _nodeAxisSet(nd, "RADIALOUT", finalSeed["NODE_RADIAL"]).
+        WAIT 0.1.
+        SET finalCA TO _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
+        SET finalSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, finalCA["distance"], nd:DELTAV:MAG).
+        mLog("Applied constrained preview seed: N="
+            + ROUND(nd:NORMAL, 1)
+            + " R=" + ROUND(nd:RADIALOUT, 1)
+            + " dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s").
+    }
     mLog("Optimized: CA=" + ROUND(finalCA["distance"]/1000, 1) + "km"
         + " score=" + ROUND(finalSeed["SCORE"], 2)
         + " AoPerr=" + ROUND(finalSeed["AOP_ERR"], 1)
-        + "  dV=" + ROUND(nd:PROGRADE, 1) + " m/s"
+        + "  dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s"
         + "  depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
     mLogWarn("STATS local-transfer target=" + targetBody:NAME
         + " caKm=" + ROUND(finalCA["distance"]/1000,1)
@@ -472,6 +485,8 @@ LOCAL FUNCTION _planLocalTransfer {
         + " lanErr=" + ROUND(finalSeed["LAN_ERR"],1)
         + " aopErr=" + ROUND(finalSeed["AOP_ERR"],1)
         + " prograde=" + ROUND(nd:PROGRADE,1)
+        + " normal=" + ROUND(nd:NORMAL,1)
+        + " radial=" + ROUND(nd:RADIALOUT,1)
         + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
 
     // --- Optional LAN scan ---
@@ -523,6 +538,10 @@ LOCAL FUNCTION _transferPreviewSeedScore {
 
     LOCAL preview IS _targetPatchElementsCoupled(nd, targetBody, targets, opts).
     LOCAL previewDv IS nd:DELTAV:MAG.
+    LOCAL previewTime IS nd:TIME.
+    LOCAL previewPrograde IS nd:PROGRADE.
+    LOCAL previewNormal IS nd:NORMAL.
+    LOCAL previewRadial IS nd:RADIALOUT.
     LOCAL score IS preview["COST"] + (caDist / 250000)^2 + previewDv * 0.01.
     IF preview["PATCH"] = 0 { SET score TO score + 10000000. }
 
@@ -540,7 +559,11 @@ LOCAL FUNCTION _transferPreviewSeedScore {
         "PE_ERR", preview["PE_ERR"],
         "INC_ERR", preview["INC_ERR"],
         "LAN_ERR", preview["LAN_ERR"],
-        "AOP_ERR", preview["AOP_ERR"]
+        "AOP_ERR", preview["AOP_ERR"],
+        "NODE_TIME", previewTime,
+        "NODE_PROGRADE", previewPrograde,
+        "NODE_NORMAL", previewNormal,
+        "NODE_RADIAL", previewRadial
     ).
 }
 
