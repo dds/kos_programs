@@ -413,6 +413,47 @@ LOCAL FUNCTION _planLocalTransfer {
             + " score=" + ROUND(bestSeed["SCORE"], 2)
             + " AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)
             + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
+
+        LOCAL previewAopTol IS 35.
+        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET previewAopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+        IF aopTarget >= 0 AND ABS(bestSeed["AOP_ERR"]) > previewAopTol {
+            mLogWarn("STATS transfer preview-miss target=" + targetBody:NAME
+                + " aopErr=" + ROUND(bestSeed["AOP_ERR"],1)
+                + " tol=" + ROUND(previewAopTol,1)).
+        }
+
+        _nodeAxisSet(nd, "TIME", bestSeed["NODE_TIME"]).
+        _nodeAxisSet(nd, "PROGRADE", bestSeed["NODE_PROGRADE"]).
+        _nodeAxisSet(nd, "NORMAL", bestSeed["NODE_NORMAL"]).
+        _nodeAxisSet(nd, "RADIALOUT", bestSeed["NODE_RADIAL"]).
+        WAIT 0.1.
+        LOCAL constrainedCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
+        LOCAL constrainedSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, constrainedCA["distance"], nd:DELTAV:MAG).
+        mLog("Applied constrained preview seed: N="
+            + ROUND(nd:NORMAL, 1)
+            + " R=" + ROUND(nd:RADIALOUT, 1)
+            + " dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s").
+        mLog("Optimized: CA=" + ROUND(constrainedCA["distance"]/1000, 1) + "km"
+            + " score=" + ROUND(constrainedSeed["SCORE"], 2)
+            + " AoPerr=" + ROUND(constrainedSeed["AOP_ERR"], 1)
+            + "  dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s"
+            + "  depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
+        mLogWarn("STATS local-transfer target=" + targetBody:NAME
+            + " caKm=" + ROUND(constrainedCA["distance"]/1000,1)
+            + " score=" + ROUND(constrainedSeed["SCORE"],2)
+            + " patch=" + constrainedSeed["PATCH"]
+            + " incErr=" + ROUND(constrainedSeed["INC_ERR"],1)
+            + " lanErr=" + ROUND(constrainedSeed["LAN_ERR"],1)
+            + " aopErr=" + ROUND(constrainedSeed["AOP_ERR"],1)
+            + " prograde=" + ROUND(nd:PROGRADE,1)
+            + " normal=" + ROUND(nd:NORMAL,1)
+            + " radial=" + ROUND(nd:RADIALOUT,1)
+            + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
+
+        IF lanTarget >= 0 AND aopTarget < 0 {
+            SET nd TO _scanForLan(nd, targetBody, lanTarget, shipPeriod).
+        }
+        RETURN nd.
     }
 
     // --- Golden section refine departure time ---
