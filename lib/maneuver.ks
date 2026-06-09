@@ -81,6 +81,9 @@ GLOBAL FUNCTION executeManeuver {
         HUDTEXT("Core awake — burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
     }
 
+    WAIT UNTIL TIME:SECONDS >= startTime - 60.
+    mLog("Burn in T-60").
+
     LOCAL alignDeadline IS startTime - 5.
     UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ALIGN_TOLERANCE
             OR TIME:SECONDS >= alignDeadline {
