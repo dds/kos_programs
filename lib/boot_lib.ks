@@ -366,7 +366,7 @@ GLOBAL FUNCTION bootResumeOrManual {
             resumeMission().
         }
     }
-    IF hasLink {
+    IF HOMECONNECTION:ISCONNECTED {
         archiveLog().
     }
 }
