@@ -53,6 +53,14 @@ GLOBAL FUNCTION planTransfer {
     LOCAL centralBody IS BODY.
     LOCAL mu          IS centralBody:MU.
 
+    // AoP is only meaningful when LAN is also specified — together
+    // they fully orient the orbit. Without LAN the ascending node
+    // is unconstrained, so AoP has no absolute meaning.
+    IF aopTarget >= 0 AND lanTarget < 0 {
+        mLog("Ignoring CAPTURE_AOP without CAPTURE_LAN (AoP alone is unconstrained).").
+        SET aopTarget TO -1.
+    }
+
     LOCAL isLocal IS (targetBody:BODY = BODY).
     LOCAL isEscape IS (targetBody = BODY:BODY).
     mLogWarn("STATS transfer setup target=" + targetBody:NAME
