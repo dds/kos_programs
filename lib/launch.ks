@@ -55,21 +55,21 @@ LOCAL FUNCTION _etaToLaunchPlane {
     PARAMETER targetLan.
     PARAMETER targetInc.
 
-    LOCAL eta IS -1.
-    LOCAL latitude IS SHIP:LATITUDE.
-    LOCAL longitude IS SHIP:LONGITUDE.
-    IF NOT _latIncOk(latitude, targetInc) { RETURN eta. }
+    LOCAL eta_ IS -1.
+    LOCAL latitude_ IS SHIP:LATITUDE.
+    LOCAL longitude_ IS SHIP:LONGITUDE.
+    IF NOT _latIncOk(latitude_, targetInc) { RETURN eta_. }
 
     LOCAL relLng IS 0.
     IF ABS(ABS(targetInc) - 90) > 0.001 {
-        SET relLng TO ARCSIN(TAN(latitude) / TAN(targetInc)).
+        SET relLng TO ARCSIN(TAN(latitude_) / TAN(targetInc)).
     }
     IF NOT ascendingNode { SET relLng TO 180 - relLng. }
 
     LOCAL geoLng IS _norm360(targetLan + relLng - SHIP:BODY:ROTATIONANGLE).
     LOCAL nodeAngle IS _norm360(geoLng - longitude).
-    SET eta TO (nodeAngle / 360) * SHIP:BODY:ROTATIONPERIOD.
-    RETURN eta.
+    SET eta_ TO (nodeAngle / 360) * SHIP:BODY:ROTATIONPERIOD.
+    RETURN eta_.
 }
 
 LOCAL FUNCTION _planeLaunchWait {
