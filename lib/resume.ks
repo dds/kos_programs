@@ -39,6 +39,14 @@ GLOBAL FUNCTION resumeMission {
     LOCAL phase IS stateGet("phase", "none").
     mLog("Resuming " + MISSION["vehicle"] + " from phase: " + phase).
     PRINT "Resuming " + MISSION["vehicle"] + " — phase: " + phase.
+    IF NOT DEFINED main {
+        mLogError("Cannot resume: vehicle main() is not loaded. Check craft name, CORE:TAG, and archive sync.").
+        PRINT " ".
+        PRINT "  RESUME HOLD".
+        PRINT "  Vehicle main() is not loaded.".
+        PRINT "  Check craft name, CORE:TAG, and archive sync.".
+        RETURN.
+    }
     main().
 }
 

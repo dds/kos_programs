@@ -13,7 +13,10 @@ GLOBAL CFG IS LEXICON(
     "FLAP_AG",          1
 ).
 
-LOCAL flightSeq IS LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "DONE").
+GLOBAL FBIJ_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "DONE").
+IF stateGet("phase", "") = "" {
+    stateSet("phase", FBIJ_SEQ[0]).
+}
 
 LOCAL FUNCTION _hasSciencePayload {
     LOCAL rawPayloads IS stateGet("payloads", "").
@@ -25,7 +28,7 @@ LOCAL FUNCTION _hasSciencePayload {
 }
 
 LOCAL FUNCTION _flightLibs {
-    LOCAL libs IS missionLibsForPhases(flightSeq, LIST("orbit")).
+    LOCAL libs IS missionLibsForPhases(FBIJ_SEQ, LIST("orbit")).
     IF _hasSciencePayload() { libs:ADD("science"). }
     RETURN libs.
 }
@@ -37,7 +40,7 @@ GLOBAL FUNCTION bootVehicleLibs {
 LOCAL hasSciencePayload IS FALSE.
 
 LOCAL FUNCTION _printConfig {
-    LOCAL seq IS flightSeq.
+    LOCAL seq IS FBIJ_SEQ.
     flightPlanTitle("FBIJ FLIGHT PLAN", SHIP:NAME).
     flightPlanIdentity().
     flightPlanSection("BUSINESS JET").
@@ -49,7 +52,7 @@ LOCAL FUNCTION _printConfig {
 }
 
 GLOBAL FUNCTION main {
-    LOCAL seq IS flightSeq.
+    LOCAL seq IS FBIJ_SEQ.
     SET launchSeq TO seq.
 
     FOR ptype IN missionPayloads() {
