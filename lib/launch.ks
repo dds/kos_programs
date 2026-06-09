@@ -43,11 +43,11 @@ LOCAL FUNCTION _targetLaunchPlaneInc {
 }
 
 LOCAL FUNCTION _latIncOk {
-    PARAMETER latitude.
-    PARAMETER inclination.
-    LOCAL maxLat IS inclination.
+    PARAMETER latitude_.
+    PARAMETER inclination_.
+    LOCAL maxLat IS inclination_.
     IF maxLat > 90 { SET maxLat TO 180 - maxLat. }
-    RETURN ABS(latitude) <= ABS(maxLat) AND ABS(latitude) < 90.
+    RETURN ABS(latitude_) <= ABS(maxLat) AND ABS(latitude_) < 90.
 }
 
 LOCAL FUNCTION _etaToLaunchPlane {
