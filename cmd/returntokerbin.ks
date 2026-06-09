@@ -32,6 +32,9 @@
 
 PARAMETER opts IS LEXICON().
 
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
+
 // --- Read options with defaults ---
 LOCAL targetPe IS 49000.
 LOCAL reentryDir IS "RETROGRADE".
@@ -59,6 +62,7 @@ IF SHIP:STATUS <> "ORBITING" {
 }
 
 IF NOT err {
+
     // Archive the current flight log before starting the return mission
     archiveLog().
     PRINT "Flight log archived.".
