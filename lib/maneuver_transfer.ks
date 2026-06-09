@@ -21,10 +21,10 @@ LOCAL MAX_RETRIES          IS 5.
 //      Interplanetary:  Lambert grid scan, full 3-axis node, conic validation
 //   2. Element-aware seed scoring — prefer departure windows that
 //      already produce the requested PE/INC/LAN/AoP geometry.
-//   3. Collision targeting (prograde) — for unconstrained transfers,
-//      converge PE to zero for the widest possible encounter margin.
-//      AoP-guided transfers skip this scalar pass because it can move
-//      the chosen patch onto the wrong apsidal branch.
+//   3. PE pretargeting (prograde) — unconstrained transfers first
+//      converge PE to zero for encounter margin. AoP-guided transfers
+//      target the requested capture Pe instead, preserving the selected
+//      apsidal branch while keeping the coupled solver near its target.
 //   4. Coupled PE/INC targeting — solve periapsis and capture plane
 //      together. PE and INC are tightly coupled on local moon transfers,
 //      so a scalar Newton pass can report false "low sensitivity" while
@@ -87,15 +87,16 @@ GLOBAL FUNCTION planTransfer {
 
     IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
 
-    // --- 2. Collision targeting ---
-    // Converge PE to zero (dead-center collision course) first. This
-    // gives the widest possible encounter margin — the trajectory
-    // passes through the middle of the SOI — so that subsequent INC
-    // targeting can add substantial normal dV without losing the
-    // encounter. Especially important for local transfers (Mun/Minmus)
-    // where the SOI is narrow relative to the trajectory deflection.
+    // --- 2. PE pretargeting ---
+    // For plain transfers, converge PE to zero (dead-center collision
+    // course) first. This gives the widest possible encounter margin
+    // before later normal dV. For AoP-guided transfers, target the real
+    // capture Pe instead: pushing all the way to collision can move the
+    // patch onto the wrong apsidal branch, while skipping PE leaves the
+    // coupled solver dominated by a huge periapsis error.
     IF aopTarget >= 0 {
-        mLogWarn("STATS transfer stage=collision-pe skipped reason=aop-guide").
+        mLogWarn("STATS transfer stage=guided-pe targetPeKm=" + ROUND(targetPe/1000,1)).
+        newtonTarget(nd, targetBody, "PE", targetPe).
     } ELSE {
         newtonTarget(nd, targetBody, "PE", 0).
     }
