@@ -68,12 +68,12 @@ IF NOT err {
     PRINT "Flight log archived.".
 
     // Set up the return mission identity.
-    // Clear mission_id so boot doesn't re-apply the old .cfg file.
-    // Set payloads non-empty so bootMissionConfig sees hasNameMission=true
-    // and skips both the mission selector and config file loading
-    // (target=KERBIN alone would make hasNameMission false).
+    // mission_id must be set to a name that has no matching .cfg file
+    // so boot skips the mission selector AND bootApplyMissionConfig
+    // finds nothing to overwrite our state with.
     stateSet("target", "KERBIN").
-    stateRemove("mission_id").
+    stateSet("mission_id", "kerbin_return").
+    stateSet("mission_name", "Return to Kerbin").
     stateSet("payloads", "RETURN").
 
     // Set up the return mission sequence and config
