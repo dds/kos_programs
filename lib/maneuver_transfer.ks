@@ -139,7 +139,10 @@ GLOBAL FUNCTION planTransfer {
             LOCAL aopTol IS 35.
             IF CFG:HASKEY("TRANSFER_INC_ERR_TOL") { SET incTol TO CFG["TRANSFER_INC_ERR_TOL"]. }
             IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
-            IF ABS(planeResult["PE_ERR"]) <= 1000 {
+            // AoP-constrained transfers couple PE and AoP — the solver
+            // trades PE accuracy for AoP convergence. MCC corrects PE.
+            LOCAL peTol IS CHOOSE 5000 IF aopTarget >= 0 ELSE 1000.
+            IF ABS(planeResult["PE_ERR"]) <= peTol {
                 SET planeOk TO TRUE.
                 IF captureInc >= 0 AND ABS(planeResult["INC_ERR"]) > incTol { SET planeOk TO FALSE. }
                 IF aopTarget >= 0 AND ABS(planeResult["AOP_ERR"]) > aopTol { SET planeOk TO FALSE. }
