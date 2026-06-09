@@ -31,15 +31,15 @@ GLOBAL FUNCTION phaseDescent {
     IF DEFINED CFG AND CFG:HASKEY("AEROBRAKE_REENTRY_DIR") {
         SET dir TO CFG["AEROBRAKE_REENTRY_DIR"].
     }
-    UNLOCK STEERING.
     SET SAS TO TRUE.
     WAIT 0.1.
+    SET SASMODE TO "STABILITYASSIST".
     IF dir = "PROGRADE" {
-        SET SASMODE TO "PROGRADE".
+        LOCK STEERING TO PROGRADE.
     } ELSE {
-        SET SASMODE TO "RETROGRADE".
+        LOCK STEERING TO RETROGRADE.
     }
-    mLog("SAS " + dir + " hold for descent.").
+    mLog(dir + " steering lock + SAS stability hold for descent.").
 
     // Wait for atmosphere entry
     IF SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE > SHIP:BODY:ATM:HEIGHT {
@@ -154,19 +154,20 @@ LOCAL FUNCTION _descentBrakingBurn {
     mLogWarn("STATS descent braking speed=" + ROUND(SHIP:AIRSPEED, 1)
         + " alt=" + ROUND(SHIP:ALTITUDE/1000, 1)).
 
-    // Restore SAS retrograde hold
+    // Restore stability hold + steering lock after braking burn
     UNLOCK STEERING.
     WAIT 0.1.
     SET SAS TO TRUE.
     WAIT 0.1.
+    SET SASMODE TO "STABILITYASSIST".
     LOCAL dir IS "RETROGRADE".
     IF DEFINED CFG AND CFG:HASKEY("AEROBRAKE_REENTRY_DIR") {
         SET dir TO CFG["AEROBRAKE_REENTRY_DIR"].
     }
     IF dir = "PROGRADE" {
-        SET SASMODE TO "PROGRADE".
+        LOCK STEERING TO PROGRADE.
     } ELSE {
-        SET SASMODE TO "RETROGRADE".
+        LOCK STEERING TO RETROGRADE.
     }
 }
 

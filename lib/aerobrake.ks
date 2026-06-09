@@ -319,18 +319,12 @@ LOCAL FUNCTION _aerobrakeOrient {
         mLogWarn(dir + " alignment timed out.").
     }
 
-    // Hand off to SAS so orientation persists through reentry
-    // blackout when kOS loses probe control authority.
-    UNLOCK STEERING.
-    WAIT 0.1.
+    // SAS STABILITYASSIST persists through reentry blackout when
+    // kOS loses probe control and LOCK STEERING stops working.
     SET SAS TO TRUE.
     WAIT 0.1.
-    IF dir = "RETROGRADE" {
-        SET SASMODE TO "RETROGRADE".
-    } ELSE {
-        SET SASMODE TO "PROGRADE".
-    }
-    mLog("SAS " + dir + " hold active for blackout.").
+    SET SASMODE TO "STABILITYASSIST".
+    mLog(dir + " steering lock + SAS stability hold for entry.").
 }
 
 LOCAL FUNCTION _aerobrakeArmChutes {
