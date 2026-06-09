@@ -13,9 +13,17 @@ GLOBAL CFG IS LEXICON(
     "FLAP_AG",          1
 ).
 
-GLOBAL FBIJ_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "DONE").
+GLOBAL FBIJ_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
+
+GLOBAL FUNCTION fbijSequence {
+    LOCAL rawSeq IS stateGet("mission_cfg_SEQUENCE", "").
+    IF rawSeq <> "" { RETURN phaseListFromString(rawSeq). }
+    RETURN FBIJ_SEQ.
+}
+
 IF stateGet("phase", "") = "" {
-    stateSet("phase", FBIJ_SEQ[0]).
+    LOCAL startupSeq IS fbijSequence().
+    stateSet("phase", startupSeq[0]).
 }
 
 LOCAL FUNCTION _hasSciencePayload {
@@ -28,7 +36,7 @@ LOCAL FUNCTION _hasSciencePayload {
 }
 
 LOCAL FUNCTION _flightLibs {
-    LOCAL libs IS missionLibsForPhases(FBIJ_SEQ, LIST("orbit", "airplane")).
+    LOCAL libs IS missionLibsForPhases(fbijSequence(), LIST("orbit", "airplane")).
     IF _hasSciencePayload() { libs:ADD("science"). }
     RETURN libs.
 }
@@ -44,7 +52,7 @@ GLOBAL FUNCTION bootVehicleLibs {
 LOCAL hasSciencePayload IS FALSE.
 
 LOCAL FUNCTION _printConfig {
-    LOCAL seq IS FBIJ_SEQ.
+    LOCAL seq IS fbijSequence().
     flightPlanTitle("FBIJ FLIGHT PLAN", SHIP:NAME).
     flightPlanIdentity().
     flightPlanSection("BUSINESS JET").
@@ -56,7 +64,7 @@ LOCAL FUNCTION _printConfig {
 }
 
 GLOBAL FUNCTION main {
-    LOCAL seq IS FBIJ_SEQ.
+    LOCAL seq IS fbijSequence().
     SET launchSeq TO seq.
 
     FOR ptype IN missionPayloads() {
@@ -72,6 +80,7 @@ GLOBAL FUNCTION main {
     LOCAL phaseMap IS LEXICON(
         "PREFLIGHT",   _phasePreflight@,
         "FLIGHT",      _phaseFlight@,
+        "POSTFLIGHT",  _phasePostFlight@,
         "POST_FLIGHT", _phasePostFlight@
     ).
     runPhases(phaseMap).
@@ -119,7 +128,7 @@ LOCAL FUNCTION _phaseFlight {
 }
 
 LOCAL FUNCTION _phasePostFlight {
-    mLogPhase("POST_FLIGHT").
+    mLogPhase("POSTFLIGHT").
     IF hasSciencePayload { scienceTransmitAll(). }
     planeLandingAssist().
     planeShutdown().

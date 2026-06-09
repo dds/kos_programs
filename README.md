@@ -181,7 +181,7 @@ Supersonic jet with autopilot assists. Manually-flown with `airplane.ks` integra
 
 ### FBIJ
 
-Fast business jet for GAP passenger and executive hops. Select the destination in Waypoint Manager, then press AG8 after takeoff to load the selected waypoint and start waypoint navigation. Known approaches currently brief runway headings, glideslope, and top-of-descent guidance for KSC Runway and Island Airfield.
+Fast business jet for GAP passenger and executive hops. Phases: PREFLIGHT -> FLIGHT -> POSTFLIGHT. Select the destination in Waypoint Manager, then press AG8 after takeoff to load the selected waypoint and start waypoint navigation. Known approaches currently brief runway headings, glideslope, and top-of-descent guidance for KSC Runway and Island Airfield.
 
 ### FSP1
 
