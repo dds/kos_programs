@@ -1,5 +1,3 @@
-CORE:DOEVENT("Open Terminal").
-CLEARSCREEN.
 PRINT " ".
 PRINT "  * kOS FLIGHT COMPUTER  v2.0".
 PRINT "  * " + SHIP:NAME.
