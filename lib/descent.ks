@@ -14,7 +14,7 @@
 // Below this altitude, it's safe to shed the transfer stage
 // before deploying chutes.
 LOCAL DECOUPLE_ALTS IS LEXICON(
-    "KERBIN", 10000,
+    "KERBIN", 6000,
     "DUNA",   8000,
     "EVE",    12000,
     "LAYTHE", 10000,
@@ -47,14 +47,17 @@ GLOBAL FUNCTION phaseDescent {
         _descentRetractAntennas().
     }
 
+    // Arm chutes early so they auto-deploy at safe altitude
+    _descentArmChutes().
+
     // Burn remaining fuel to slow down if we have thrust
     _descentBrakingBurn().
 
     // Deploy fairing once slow enough (< 60 m/s)
     _descentDeployFairing().
 
-    // Decouple transfer stage at safe altitude, then arm chutes
-    _descentDecoupleAndArmChutes().
+    // Decouple transfer stage at safe altitude
+    _descentDecouple().
 
     // Wait for chutes to deploy or vessel to land/splash
     mLog("Waiting for chute deployment or landing...").
@@ -65,9 +68,9 @@ GLOBAL FUNCTION phaseDescent {
         mLog("Chutes deployed.").
     }
 
-    // Wait for safe speed to extend antennas (< 15 m/s)
+    // Wait for safe speed to extend antennas (< 20 m/s)
     // Deployable antennas break at higher speeds in atmosphere
-    LOCAL safeSpeed IS 15.
+    LOCAL safeSpeed IS 20.
     IF SHIP:AIRSPEED > safeSpeed {
         mLog("Waiting for safe antenna speed (< " + safeSpeed + " m/s)...").
         WAIT UNTIL SHIP:AIRSPEED < safeSpeed
@@ -106,8 +109,18 @@ GLOBAL FUNCTION phaseDescent {
     nextPhase(xferSeq).
 }
 
+// Check if chutes have deployed. Uses DESCENT_CHUTES_TAG if
+// configured, otherwise checks all parachute parts.
 LOCAL FUNCTION _chutesDeployed {
-    FOR p IN SHIP:PARTS {
+    LOCAL parts IS LIST().
+    IF DEFINED CFG AND CFG:HASKEY("DESCENT_CHUTES_TAG") {
+        SET parts TO SHIP:PARTSTAGGED(CFG["DESCENT_CHUTES_TAG"]).
+    } ELSE {
+        FOR p IN SHIP:PARTS {
+            IF p:HASMODULE("ModuleParachute") { parts:ADD(p). }
+        }
+    }
+    FOR p IN parts {
         IF p:HASMODULE("ModuleParachute") {
             LOCAL m IS p:GETMODULE("ModuleParachute").
             // Once deployed, both "deploy chute" and "arm parachute" events disappear
@@ -182,36 +195,30 @@ LOCAL FUNCTION _descentDeployFairing {
     WAIT 2.
 }
 
-// Decouple transfer stage at safe altitude, then arm chutes.
+// Decouple transfer stage at safe altitude.
 // Uses body-specific altitude threshold from DECOUPLE_ALTS table.
 // Reads tag from DESCENT_DECOUPLER_TAG config key.
-LOCAL FUNCTION _descentDecoupleAndArmChutes {
+LOCAL FUNCTION _descentDecouple {
     LOCAL tag IS "".
     IF DEFINED CFG AND CFG:HASKEY("DESCENT_DECOUPLER_TAG") {
         SET tag TO CFG["DESCENT_DECOUPLER_TAG"].
     }
-
-    IF tag = "" {
-        // No decoupler configured — just arm chutes now
-        _descentArmChutes().
-        RETURN.
-    }
+    IF tag = "" { RETURN. }
 
     LOCAL decouplers IS SHIP:PARTSTAGGED(tag).
     IF decouplers:LENGTH = 0 {
-        mLogWarn("Descent decoupler tag '" + tag + "' not found — arming chutes now.").
-        _descentArmChutes().
+        mLogWarn("Descent decoupler tag '" + tag + "' not found.").
         RETURN.
     }
 
     // Wait for safe decouple altitude
-    LOCAL decoupleAlt IS 10000.
+    LOCAL decoupleAlt IS 6000.
     IF DECOUPLE_ALTS:HASKEY(SHIP:BODY:NAME) {
         SET decoupleAlt TO DECOUPLE_ALTS[SHIP:BODY:NAME].
     }
 
     IF SHIP:ALTITUDE > decoupleAlt {
-        mLog("Waiting for " + ROUND(decoupleAlt/1000, 0) + "km altitude to decouple...").
+        mLog("Waiting for " + ROUND(decoupleAlt/1000, 1) + "km altitude to decouple...").
         WAIT UNTIL SHIP:ALTITUDE < decoupleAlt
             OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
     }
@@ -229,9 +236,6 @@ LOCAL FUNCTION _descentDecoupleAndArmChutes {
     WAIT 2.
     mLogWarn("STATS descent decouple alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
         + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
-
-    // Now arm chutes
-    _descentArmChutes().
 }
 
 LOCAL FUNCTION _descentRetractAntennas {
@@ -251,9 +255,22 @@ LOCAL FUNCTION _descentRetractAntennas {
     }
 }
 
+// Arm chutes by tag (DESCENT_CHUTES_TAG) or all chutes if no tag.
 LOCAL FUNCTION _descentArmChutes {
+    LOCAL parts IS LIST().
+    IF DEFINED CFG AND CFG:HASKEY("DESCENT_CHUTES_TAG") {
+        SET parts TO SHIP:PARTSTAGGED(CFG["DESCENT_CHUTES_TAG"]).
+        IF parts:LENGTH = 0 {
+            mLogWarn("Descent chutes tag '" + CFG["DESCENT_CHUTES_TAG"] + "' not found.").
+        }
+    } ELSE {
+        FOR p IN SHIP:PARTS {
+            IF p:HASMODULE("ModuleParachute") { parts:ADD(p). }
+        }
+    }
+
     LOCAL armed IS 0.
-    FOR p IN SHIP:PARTS {
+    FOR p IN parts {
         IF p:HASMODULE("ModuleParachute") {
             LOCAL m IS p:GETMODULE("ModuleParachute").
             IF m:HASEVENT("arm parachute") {

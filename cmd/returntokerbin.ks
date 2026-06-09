@@ -21,9 +21,12 @@
 // Options (all optional, with defaults):
 //   pe            — Kerbin PE in meters (default 49000)
 //   reentry_dir   — "retrograde" or "prograde" (default "retrograde")
-//   decouple_tag  — part tag for transfer stage decoupler (default: none)
-//   arm_chutes    — 1 to arm parachutes before entry (default 0)
-//   ksc_target    — true to enable KSC targeting (default true)
+//   decouple_tag       — part tag for aerobrake phase decoupler (default: none)
+//   arm_chutes         — 1 to arm parachutes in aerobrake phase (default 0)
+//   ksc_target         — true to enable KSC targeting (default true)
+//   descent_fairing    — part tag for fairing to deploy at < 60 m/s (default: none)
+//   descent_decoupler  — part tag for decoupler to fire at ~6km (default: none)
+//   descent_chutes     — part tag for parachutes to arm on entry (default: all chutes)
 //
 // Requires archive access (KSC link or relay).
 // Compare with cmd/kerbinreturn.ks which does a single
@@ -43,6 +46,7 @@ LOCAL armChutes IS 0.
 LOCAL kscTarget IS TRUE.
 LOCAL descentFairingTag IS "".
 LOCAL descentDecouplerTag IS "".
+LOCAL descentChutesTag IS "".
 LOCAL err IS FALSE.
 
 IF opts:HASKEY("pe")                 { SET targetPe TO opts["pe"]. }
@@ -52,6 +56,7 @@ IF opts:HASKEY("arm_chutes")         { SET armChutes TO opts["arm_chutes"]. }
 IF opts:HASKEY("ksc_target")         { SET kscTarget TO opts["ksc_target"]. }
 IF opts:HASKEY("descent_fairing")    { SET descentFairingTag TO opts["descent_fairing"]. }
 IF opts:HASKEY("descent_decoupler")  { SET descentDecouplerTag TO opts["descent_decoupler"]. }
+IF opts:HASKEY("descent_chutes")    { SET descentChutesTag TO opts["descent_chutes"]. }
 
 // Validate we're orbiting Mun or Minmus
 IF BODY:NAME <> "Mun" AND BODY:NAME <> "Minmus" {
@@ -116,6 +121,12 @@ IF NOT err {
         stateRemove("mission_cfg_DESCENT_DECOUPLER_TAG").
     }
 
+    IF descentChutesTag <> "" {
+        stateSet("mission_cfg_DESCENT_CHUTES_TAG", descentChutesTag).
+    } ELSE {
+        stateRemove("mission_cfg_DESCENT_CHUTES_TAG").
+    }
+
     // Clear outbound capture config so it doesn't interfere
     FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_INC", "CAPTURE_DIR") {
         stateRemove("mission_cfg_" + key).
@@ -137,6 +148,7 @@ IF NOT err {
     IF armChutes > 0     { PRINT "  Arm chutes:  yes". }
     IF descentFairingTag <> "" { PRINT "  Fairing:     " + descentFairingTag. }
     IF descentDecouplerTag <> "" { PRINT "  Decoupler:   " + descentDecouplerTag. }
+    IF descentChutesTag <> "" { PRINT "  Chutes:      " + descentChutesTag. }
     PRINT "  From:        " + BODY:NAME.
     PRINT " ".
     PRINT "Reboot to start return mission...".
