@@ -327,6 +327,21 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL bestTime IS departUt.
     LOCAL bestCA IS _findClosestApproach(targetBody, departUt + hohmannTof * 0.5, departUt + hohmannTof * 1.5, 40).
     LOCAL bestSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+    LOCAL previewShortlist IS 5.
+    IF CFG:HASKEY("TRANSFER_PREVIEW_SHORTLIST") {
+        SET previewShortlist TO MAX(1, CFG["TRANSFER_PREVIEW_SHORTLIST"]).
+    }
+    LOCAL scanTimes IS LIST().
+    LOCAL scanCAs IS LIST().
+    LOCAL scanSeeds IS LIST().
+    FROM { LOCAL siInit IS 0. } UNTIL siInit >= previewShortlist STEP { SET siInit TO siInit + 1. } DO {
+        scanTimes:ADD(0).
+        scanCAs:ADD(0).
+        scanSeeds:ADD(LEXICON("SCORE", 999999999)).
+    }
+    SET scanTimes[0] TO bestTime.
+    SET scanCAs[0] TO bestCA.
+    SET scanSeeds[0] TO bestSeed.
 
     mLog("Element-aware transfer scan: " + scanSteps
         + " steps over ±" + nScanOrbits
@@ -339,6 +354,22 @@ LOCAL FUNCTION _planLocalTransfer {
             WAIT 0.02.
             LOCAL tryCa IS _findClosestApproach(targetBody, tryTime + hohmannTof * 0.5, tryTime + hohmannTof * 1.5, 40).
             LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
+            LOCAL insertAt IS -1.
+            FROM { LOCAL ti IS 0. } UNTIL ti >= previewShortlist STEP { SET ti TO ti + 1. } DO {
+                IF insertAt < 0 AND trySeed["SCORE"] < scanSeeds[ti]["SCORE"] {
+                    SET insertAt TO ti.
+                }
+            }
+            IF insertAt >= 0 {
+                FROM { LOCAL tj IS previewShortlist - 1. } UNTIL tj <= insertAt STEP { SET tj TO tj - 1. } DO {
+                    SET scanTimes[tj] TO scanTimes[tj - 1].
+                    SET scanCAs[tj] TO scanCAs[tj - 1].
+                    SET scanSeeds[tj] TO scanSeeds[tj - 1].
+                }
+                SET scanTimes[insertAt] TO tryTime.
+                SET scanCAs[insertAt] TO tryCa.
+                SET scanSeeds[insertAt] TO trySeed.
+            }
             IF trySeed["SCORE"] < bestSeed["SCORE"] {
                 SET bestCA TO tryCa.
                 SET bestSeed TO trySeed.
@@ -355,16 +386,16 @@ LOCAL FUNCTION _planLocalTransfer {
         + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
 
     IF captureInc >= 0 OR lanTarget >= 0 OR aopTarget >= 0 {
-        mLog("Previewing constrained transfer shortlist around raw best time.").
+        mLog("Previewing constrained transfer shortlist: " + previewShortlist + " raw candidates.").
         LOCAL previewBestTime IS bestTime.
         LOCAL previewBestCA IS bestCA.
         LOCAL previewBestSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
-        FROM { LOCAL pi IS -2. } UNTIL pi > 2 STEP { SET pi TO pi + 1. } DO {
-            LOCAL previewTime IS bestTime + pi * scanDt * 0.5.
-            IF pi <> 0 AND previewTime > TIME:SECONDS + 30 {
+        FROM { LOCAL pi IS 0. } UNTIL pi >= previewShortlist STEP { SET pi TO pi + 1. } DO {
+            IF scanSeeds[pi]["SCORE"] < 999999999 {
+                LOCAL previewTime IS scanTimes[pi].
                 SET nd:TIME TO previewTime.
                 WAIT 0.02.
-                LOCAL previewCA IS _findClosestApproach(targetBody, previewTime + hohmannTof * 0.4, previewTime + hohmannTof * 1.6, 30).
+                LOCAL previewCA IS scanCAs[pi].
                 LOCAL previewSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, previewCA["distance"], nd:DELTAV:MAG).
                 IF previewSeed["SCORE"] < previewBestSeed["SCORE"] {
                     SET previewBestTime TO previewTime.
@@ -543,7 +574,12 @@ LOCAL FUNCTION _transferPreviewSeedScore {
     LOCAL previewNormal IS nd:NORMAL.
     LOCAL previewRadial IS nd:RADIALOUT.
     LOCAL score IS preview["COST"] + (caDist / 250000)^2 + previewDv * 0.01.
+    LOCAL aopTol IS 35.
+    IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
     IF preview["PATCH"] = 0 { SET score TO score + 10000000. }
+    IF aopTarget >= 0 AND ABS(preview["AOP_ERR"]) > aopTol {
+        SET score TO score + 100000 + ((ABS(preview["AOP_ERR"]) - aopTol) / 1.0)^2 * 500.
+    }
 
     _nodeAxisSet(nd, "TIME", origTime).
     _nodeAxisSet(nd, "PROGRADE", origPrograde).
