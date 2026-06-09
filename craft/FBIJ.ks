@@ -10,7 +10,10 @@ GLOBAL CFG IS LEXICON(
     "CRUISE_ALT",    9000,
     "CRUISE_SPEED",   280,
     "TOP_SPEED",      360,
-    "FLAP_AG",          1
+    "FLAP_AG",          1,
+    "AIRBORNE_RADAR_ALT", 8,
+    "FINAL_LANDING_SPEED", 35,
+    "MIN_FLIGHT_TIME", 60
 ).
 
 GLOBAL FBIJ_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
@@ -51,6 +54,27 @@ GLOBAL FUNCTION bootVehicleLibs {
 
 LOCAL hasSciencePayload IS FALSE.
 
+LOCAL FUNCTION _fbijCfgNum {
+    PARAMETER key.
+    PARAMETER defaultValue.
+    IF CFG:HASKEY(key) { RETURN CFG[key]. }
+    RETURN defaultValue.
+}
+
+LOCAL FUNCTION _fbijAirborne {
+    IF SHIP:STATUS = "SUB_ORBITAL" OR SHIP:STATUS = "ORBITING" { RETURN TRUE. }
+    RETURN SHIP:STATUS = "FLYING"
+        AND ALT:RADAR > _fbijCfgNum("AIRBORNE_RADAR_ALT", 8).
+}
+
+LOCAL FUNCTION _fbijFinalLanding {
+    PARAMETER airborneTime.
+    LOCAL onGround IS SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    IF NOT onGround { RETURN FALSE. }
+    IF TIME:SECONDS - airborneTime < _fbijCfgNum("MIN_FLIGHT_TIME", 60) { RETURN FALSE. }
+    RETURN SHIP:AIRSPEED <= _fbijCfgNum("FINAL_LANDING_SPEED", 35).
+}
+
 LOCAL FUNCTION _printConfig {
     LOCAL seq IS fbijSequence().
     flightPlanTitle("FBIJ FLIGHT PLAN", SHIP:NAME).
@@ -58,6 +82,7 @@ LOCAL FUNCTION _printConfig {
     flightPlanSection("BUSINESS JET").
     flightPlanRow("ALT", CFG["CRUISE_ALT"] + " m").
     flightPlanRow("SPEED", CFG["CRUISE_SPEED"] + " m/s").
+    flightPlanRow("FINAL STOP", CFG["FINAL_LANDING_SPEED"] + " m/s").
     flightPlanRow("NAV", "Select waypoint, AG8 to fly").
     flightPlanSection("SEQUENCE").
     flightPlanSequence(seq).
@@ -105,7 +130,7 @@ LOCAL FUNCTION _phasePreflight {
         "Navigation - press AG8 after stable climb"
     )).
 
-    WAIT UNTIL SHIP:STATUS = "FLYING" OR SHIP:AIRSPEED > 50.
+    WAIT UNTIL _fbijAirborne().
     mLog("Airborne.").
     nextPhase(launchSeq).
 }
@@ -115,15 +140,16 @@ LOCAL FUNCTION _phaseFlight {
     IF hasSciencePayload { scienceInit(). }
 
     mLog("Flight active. Select a waypoint and press AG8 for business jet nav.").
-    WAIT UNTIL SHIP:STATUS = "FLYING" OR SHIP:STATUS = "SUB_ORBITAL"
-        OR SHIP:STATUS = "ORBITING".
+    WAIT UNTIL _fbijAirborne().
+    LOCAL airborneTime IS TIME:SECONDS.
+    mLog("Airborne confirmed; monitoring until final slow landing.").
 
-    UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+    UNTIL _fbijFinalLanding(airborneTime) {
         planeUpdate().
         IF hasSciencePayload { scienceRunAll(). }
         WAIT 0.1.
     }
-    mLog("Touchdown detected.").
+    mLog("Final landing detected.").
     nextPhase(launchSeq).
 }
 
