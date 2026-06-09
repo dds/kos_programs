@@ -56,8 +56,6 @@ GLOBAL FUNCTION phaseAerobrake {
 
     // --- Step 4: Wait for atmosphere entry ---
     // LOCK STEERING tracks retrograde actively during coast.
-    // At atmosphere interface, hand off to SAS STABILITYASSIST
-    // which persists through reentry blackout.
     IF SHIP:BODY:ATM:EXISTS {
         LOCAL atmHeight IS SHIP:BODY:ATM:HEIGHT.
         IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
@@ -68,12 +66,6 @@ GLOBAL FUNCTION phaseAerobrake {
             WAIT UNTIL SHIP:ALTITUDE < atmHeight.
             mLog("Atmosphere entry at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
         }
-        UNLOCK STEERING.
-        WAIT 0.1.
-        SET SAS TO TRUE.
-        WAIT 0.1.
-        SET SASMODE TO "STABILITYASSIST".
-        mLog("SAS stability hold for blackout.").
     }
 
     nextPhase(xferSeq).
