@@ -126,9 +126,9 @@ GLOBAL FUNCTION _scanForLan {
     PARAMETER targetBody.
     PARAMETER lanTarget.
     PARAMETER shipPeriod.
+    PARAMETER scanPeriod IS targetBody:ORBIT:PERIOD.
 
-    LOCAL targetPeriod IS targetBody:ORBIT:PERIOD.
-    LOCAL nScan IS MAX(6, CEILING(targetPeriod / shipPeriod)).
+    LOCAL nScan IS MAX(6, CEILING(scanPeriod / shipPeriod)).
     LOCAL centerTime IS nd:TIME.
     LOCAL bestLanErr IS 999.
     LOCAL bestTime IS centerTime.

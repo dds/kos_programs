@@ -54,8 +54,9 @@ GLOBAL FUNCTION planTransfer {
     LOCAL mu          IS centralBody:MU.
 
     LOCAL isLocal IS (targetBody:BODY = BODY).
+    LOCAL isEscape IS (targetBody = BODY:BODY).
     mLogWarn("STATS transfer setup target=" + targetBody:NAME
-        + " local=" + isLocal
+        + " local=" + isLocal + " escape=" + isEscape
         + " targetPeKm=" + ROUND(targetPe/1000,1)
         + " lan=" + ROUND(lanTarget,1)
         + " aop=" + ROUND(aopTarget,1)).
@@ -76,7 +77,9 @@ GLOBAL FUNCTION planTransfer {
 
     // --- 1. Build raw node ---
     LOCAL nd IS 0.
-    IF isLocal {
+    IF isEscape {
+        SET nd TO _planEscapeTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
+    } ELSE IF isLocal {
         SET nd TO _planLocalTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
     } ELSE {
         SET nd TO planInterplanetaryTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
@@ -441,6 +444,240 @@ LOCAL FUNCTION _planLocalTransfer {
     // that produces the closest LAN at the target body (read from KSP's conics).
     IF lanTarget >= 0 AND aopTarget < 0 {
         SET nd TO _scanForLan(nd, targetBody, lanTarget, shipPeriod).
+    }
+
+    RETURN nd.
+}
+
+// Estimate KSC longitude penalty for a candidate escape node.
+// Uses the Kerbin patch's orbital elements + Kerbin rotation to
+// estimate surface longitude of periapsis. Returns a penalty
+// score term (0 = perfect alignment).
+LOCAL FUNCTION _escapeKscPenalty {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER departTime.
+    PARAMETER transitA.
+    PARAMETER muParent.
+    PARAMETER kscLng.
+
+    LOCAL patch IS _getTargetPatch(nd, targetBody).
+    IF patch = 0 { RETURN 0. }
+
+    LOCAL peLngInertial IS patch:LAN + patch:ARGUMENTOFPERIAPSIS.
+    LOCAL transitTime IS CONSTANT:PI * SQRT(transitA^3 / muParent).
+    LOCAL arrivalUt IS departTime + transitTime.
+    LOCAL kerbinRotDeg IS (arrivalUt / targetBody:ROTATIONPERIOD) * 360.
+    LOCAL peLngSurface IS MOD(peLngInertial - kerbinRotDeg, 360).
+    IF peLngSurface > 180 { SET peLngSurface TO peLngSurface - 360. }
+    IF peLngSurface < -180 { SET peLngSurface TO peLngSurface + 360. }
+    LOCAL lngErr IS ABS(peLngSurface - kscLng).
+    IF lngErr > 180 { SET lngErr TO 360 - lngErr. }
+    RETURN (lngErr / 10)^2.
+}
+
+// ============================================================
+// Escape transfer (Mun/Minmus -> Kerbin) — two-level vis-viva seed
+// with departure scan, optional KSC longitude scoring.
+//
+// Pipeline:
+//   1. Two-level vis-viva seed for escape dV
+//   2. Departure time scan (one ship orbital period, KSC scoring)
+//   3. Golden section refine departure time
+//   4. dV scan ±20%
+//   5. Golden section refine dV
+//   6. Optional LAN scan
+// ============================================================
+LOCAL FUNCTION _planEscapeTransfer {
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    PARAMETER captureInc.
+    PARAMETER lanTarget.
+    PARAMETER aopTarget.
+    PARAMETER centralBody.
+    PARAMETER mu.
+
+    LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
+    LOCAL muParent IS targetBody:MU.
+    LOCAL muMoon IS mu.
+
+    // --- Two-level vis-viva seed ---
+    // Outer level (parent frame): velocity at moon's orbit for desired PE
+    LOCAL rMoon IS BODY:ORBIT:SEMIMAJORAXIS.
+    LOCAL vMoon IS SQRT(muParent / rMoon).
+    LOCAL rTarget IS targetBody:RADIUS + targetPe.
+    LOCAL aTransfer IS (rMoon + rTarget) / 2.
+    LOCAL vNeeded IS SQRT(muParent * (2/rMoon - 1/aTransfer)).
+    LOCAL vInf IS ABS(vMoon - vNeeded).
+
+    // Inner level (moon frame): prograde burn at periapsis
+    LOCAL rShipPe IS BODY:RADIUS + SHIP:PERIAPSIS.
+    LOCAL aShip IS SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL vEscape IS SQRT(2 * muMoon / rShipPe).
+    LOCAL vBurn IS SQRT(vInf^2 + vEscape^2).
+    LOCAL vAtPe IS SQRT(muMoon * (2/rShipPe - 1/aShip)).
+    LOCAL escapeDv IS vBurn - vAtPe.
+
+    mLog("Escape transfer to " + targetBody:NAME
+        + ": vis-viva dV=" + ROUND(escapeDv, 1) + " m/s"
+        + "  vInf=" + ROUND(vInf, 1) + " m/s"
+        + "  shipPe=" + ROUND(SHIP:PERIAPSIS/1000, 1) + "km").
+
+    // --- Place initial node at next periapsis ---
+    LOCAL departUt IS TIME:SECONDS + ETA:PERIAPSIS.
+    IF departUt < TIME:SECONDS + 30 { SET departUt TO departUt + shipPeriod. }
+    LOCAL nd IS NODE(departUt, 0, 0, escapeDv).
+    ADD nd.
+    WAIT 0.1.
+
+    // --- KSC targeting setup ---
+    LOCAL kscTarget IS CFG:HASKEY("ESCAPE_KSC_TARGET").
+    LOCAL KSC_LNG IS -74.6.
+    LOCAL kscTransitA IS (rMoon + targetBody:RADIUS + targetPe) / 2.
+
+    // --- Departure time scan ---
+    // Scan departure times to find best ejection angle.
+    // If KSC targeting, scan enough orbits for Kerbin to rotate once.
+    LOCAL nScanOrbits IS 1.
+    IF kscTarget {
+        SET nScanOrbits TO MAX(6, CEILING(targetBody:ROTATIONPERIOD / shipPeriod)).
+    }
+    IF lanTarget >= 0 OR aopTarget >= 0 {
+        SET nScanOrbits TO MAX(nScanOrbits, CEILING(BODY:ORBIT:PERIOD / shipPeriod)).
+    }
+    SET nScanOrbits TO MAX(nScanOrbits, 1).
+
+    LOCAL samplesPerOrbit IS 12.
+    LOCAL scanSteps IS nScanOrbits * samplesPerOrbit.
+    LOCAL scanDt IS shipPeriod / samplesPerOrbit.
+
+    LOCAL bestTime IS departUt.
+    LOCAL bestScore IS 999999999.
+
+    mLog("Escape departure scan: " + (2 * scanSteps + 1) + " steps"
+        + " over ±" + nScanOrbits + " orbits"
+        + "  KSC=" + kscTarget).
+
+    FROM { LOCAL si IS -scanSteps. } UNTIL si > scanSteps STEP { SET si TO si + 1. } DO {
+        LOCAL tryTime IS departUt + si * scanDt.
+        IF tryTime > TIME:SECONDS + 30 {
+            SET nd:TIME TO tryTime.
+            WAIT 0.02.
+            LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
+            LOCAL score IS trySeed["SCORE"].
+
+            // KSC longitude scoring
+            IF kscTarget AND trySeed["PATCH"] {
+                SET score TO score + _escapeKscPenalty(nd, targetBody, tryTime, kscTransitA, muParent, KSC_LNG).
+            }
+
+            IF score < bestScore {
+                SET bestScore TO score.
+                SET bestTime TO tryTime.
+            }
+        }
+    }
+
+    SET nd:TIME TO bestTime.
+    WAIT 0.1.
+
+    mLog("Time scan: best score=" + ROUND(bestScore, 2)
+        + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
+
+    // --- Golden section refine departure time ---
+    LOCAL tA IS MAX(TIME:SECONDS + 30, bestTime - scanDt).
+    LOCAL tB IS bestTime + scanDt.
+    LOCAL gr IS (SQRT(5) + 1) / 2.
+
+    FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
+        LOCAL tC IS tB - (tB - tA) / gr.
+        LOCAL tD IS tA + (tB - tA) / gr.
+
+        SET nd:TIME TO tC. WAIT 0.02.
+        LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
+        LOCAL scoreC IS seedC["SCORE"].
+        IF kscTarget AND seedC["PATCH"] {
+            SET scoreC TO scoreC + _escapeKscPenalty(nd, targetBody, tC, kscTransitA, muParent, KSC_LNG).
+        }
+
+        SET nd:TIME TO tD. WAIT 0.02.
+        LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
+        LOCAL scoreD IS seedD["SCORE"].
+        IF kscTarget AND seedD["PATCH"] {
+            SET scoreD TO scoreD + _escapeKscPenalty(nd, targetBody, tD, kscTransitA, muParent, KSC_LNG).
+        }
+
+        IF scoreC < scoreD {
+            SET tB TO tD.
+        } ELSE {
+            SET tA TO tC.
+        }
+    }
+    SET nd:TIME TO (tA + tB) / 2.
+    WAIT 0.1.
+
+    // --- dV scan ±20% ---
+    LOCAL dvRange IS MAX(10, ABS(escapeDv) * 0.2).
+    LOCAL dvSteps IS 20.
+    LOCAL dvStep IS dvRange * 2 / dvSteps.
+    LOCAL bestDv IS escapeDv.
+    LOCAL bestDvSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
+    LOCAL bestDvScore IS bestDvSeed["SCORE"].
+
+    FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
+        LOCAL tryDv IS escapeDv - dvRange + di * dvStep.
+        SET nd:PROGRADE TO tryDv.
+        WAIT 0.02.
+        LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
+        IF trySeed["SCORE"] < bestDvScore {
+            SET bestDvScore TO trySeed["SCORE"].
+            SET bestDv TO tryDv.
+        }
+    }
+    SET nd:PROGRADE TO bestDv.
+    WAIT 0.1.
+
+    // Golden section refine dV
+    LOCAL dvA IS MAX(bestDv - dvStep, escapeDv - dvRange).
+    LOCAL dvB IS MIN(bestDv + dvStep, escapeDv + dvRange).
+
+    FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
+        LOCAL dvC IS dvB - (dvB - dvA) / gr.
+        LOCAL dvD IS dvA + (dvB - dvA) / gr.
+
+        SET nd:PROGRADE TO dvC. WAIT 0.02.
+        LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
+        SET nd:PROGRADE TO dvD. WAIT 0.02.
+        LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
+
+        IF seedC["SCORE"] < seedD["SCORE"] {
+            SET dvB TO dvD.
+        } ELSE {
+            SET dvA TO dvC.
+        }
+    }
+    SET nd:PROGRADE TO (dvA + dvB) / 2.
+    WAIT 0.1.
+
+    LOCAL finalSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
+    mLog("Escape optimized: dV=" + ROUND(nd:PROGRADE, 1) + " m/s"
+        + " score=" + ROUND(finalSeed["SCORE"], 2)
+        + " patch=" + finalSeed["PATCH"]
+        + " PeErr=" + ROUND(finalSeed["PE_ERR"]/1000, 1) + "km"
+        + " depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
+    mLogWarn("STATS escape-transfer target=" + targetBody:NAME
+        + " dv=" + ROUND(nd:PROGRADE,1)
+        + " score=" + ROUND(finalSeed["SCORE"],2)
+        + " patch=" + finalSeed["PATCH"]
+        + " peErr=" + ROUND(finalSeed["PE_ERR"],0)
+        + " incErr=" + ROUND(finalSeed["INC_ERR"],1)
+        + " lanErr=" + ROUND(finalSeed["LAN_ERR"],1)
+        + " aopErr=" + ROUND(finalSeed["AOP_ERR"],1)
+        + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
+
+    // --- Optional LAN scan ---
+    IF lanTarget >= 0 AND NOT kscTarget {
+        SET nd TO _scanForLan(nd, targetBody, lanTarget, shipPeriod, BODY:ORBIT:PERIOD).
     }
 
     RETURN nd.

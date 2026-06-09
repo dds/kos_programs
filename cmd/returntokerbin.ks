@@ -1,0 +1,114 @@
+// ============================================================
+// cmd/returntokerbin.ks  —  Configure return-to-Kerbin mission
+// (0:/cmd/returntokerbin.ks)
+//
+// Sets up a full automated return mission sequence
+// (ESCAPE, MCC, COAST, AEROBRAKE, DONE) and reboots.
+// The phase machine handles escape burn, mid-course correction,
+// coast to Kerbin SOI, and aerobrake entry with KSC targeting.
+//
+// Usage:
+//   RUNPATH("0:/cmd/returntokerbin.ks").
+//   RUNPATH("0:/cmd/returntokerbin.ks", LEX("pe", 52000)).
+//   RUNPATH("0:/cmd/returntokerbin.ks", LEX(
+//       "pe", 49000,
+//       "reentry_dir", "retrograde",
+//       "decouple_tag", "aero_decouple",
+//       "arm_chutes", 1,
+//       "ksc_target", true
+//   )).
+//
+// Options (all optional, with defaults):
+//   pe            — Kerbin PE in meters (default 49000)
+//   reentry_dir   — "retrograde" or "prograde" (default "retrograde")
+//   decouple_tag  — part tag for transfer stage decoupler (default: none)
+//   arm_chutes    — 1 to arm parachutes before entry (default 0)
+//   ksc_target    — true to enable KSC targeting (default true)
+//
+// Requires archive access (KSC link or relay).
+// Compare with cmd/kerbinreturn.ks which does a single
+// one-shot escape burn without MCC/coast/aerobrake phases.
+// ============================================================
+
+PARAMETER opts IS LEXICON().
+
+// --- Read options with defaults ---
+LOCAL targetPe IS 49000.
+LOCAL reentryDir IS "RETROGRADE".
+LOCAL decoupleTag IS "".
+LOCAL armChutes IS 0.
+LOCAL kscTarget IS TRUE.
+
+IF opts:HASKEY("pe")           { SET targetPe TO opts["pe"]. }
+IF opts:HASKEY("reentry_dir")  { SET reentryDir TO opts["reentry_dir"]:TOUPPER. }
+IF opts:HASKEY("decouple_tag") { SET decoupleTag TO opts["decouple_tag"]. }
+IF opts:HASKEY("arm_chutes")   { SET armChutes TO opts["arm_chutes"]. }
+IF opts:HASKEY("ksc_target")   { SET kscTarget TO opts["ksc_target"]. }
+
+// Validate we're orbiting Mun or Minmus
+IF BODY:NAME <> "Mun" AND BODY:NAME <> "Minmus" {
+    PRINT "ERROR: Must be orbiting Mun or Minmus.".
+    PRINT "Current body: " + BODY:NAME.
+    RETURN.
+}
+IF SHIP:STATUS <> "ORBITING" {
+    PRINT "ERROR: Must be in stable orbit.".
+    PRINT "Current status: " + SHIP:STATUS.
+    RETURN.
+}
+
+// Archive the current flight log before starting the return mission
+archiveLog().
+PRINT "Flight log archived.".
+
+// Set up the return mission identity
+stateSet("target", "KERBIN").
+
+// Set up the return mission sequence and config
+LOCAL returnSeq IS "ESCAPE,MCC,COAST,AEROBRAKE,DESCENT,DONE".
+stateSet("mission_cfg_SEQUENCE", returnSeq).
+stateSetNum("mission_cfg_ESCAPE_PE", targetPe).
+stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
+
+IF kscTarget {
+    stateSet("mission_cfg_ESCAPE_KSC_TARGET", "true").
+} ELSE {
+    stateRemove("mission_cfg_ESCAPE_KSC_TARGET").
+}
+
+IF decoupleTag <> "" {
+    stateSet("mission_cfg_AEROBRAKE_DECOUPLE_TAG", decoupleTag).
+} ELSE {
+    stateRemove("mission_cfg_AEROBRAKE_DECOUPLE_TAG").
+}
+
+IF armChutes > 0 {
+    stateSetNum("mission_cfg_AEROBRAKE_ARM_CHUTES", armChutes).
+} ELSE {
+    stateRemove("mission_cfg_AEROBRAKE_ARM_CHUTES").
+}
+
+// Clear outbound capture config so it doesn't interfere
+FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_INC", "CAPTURE_DIR") {
+    stateRemove("mission_cfg_" + key).
+}
+
+// Reset phase to start of return sequence
+stateSet("phase", "ESCAPE").
+
+// Bump launch_time so the new flight log gets a fresh timestamp
+stateSetNum("launch_time", ROUND(TIME:SECONDS)).
+
+PRINT " ".
+PRINT "Return to Kerbin configured:".
+PRINT "  Sequence:    " + returnSeq.
+PRINT "  Target PE:   " + targetPe + "m (" + ROUND(targetPe/1000,1) + "km)".
+PRINT "  Reentry dir: " + reentryDir.
+PRINT "  KSC target:  " + kscTarget.
+IF decoupleTag <> "" { PRINT "  Decouple:    " + decoupleTag. }
+IF armChutes > 0     { PRINT "  Arm chutes:  yes". }
+PRINT "  From:        " + BODY:NAME.
+PRINT " ".
+PRINT "Rebooting to start return mission...".
+WAIT 2.
+REBOOT.

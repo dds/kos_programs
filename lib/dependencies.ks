@@ -13,7 +13,10 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "PARK" { phaseMapSet(phaseMap, "PARK", phasePark@). }
     ELSE IF phaseKey = "RDV" { phaseMapSet(phaseMap, "RDV", phaseRdv@). }
     ELSE IF phaseKey = "XING" { phaseMapSet(phaseMap, "XING", phaseXing@). }
+    ELSE IF phaseKey = "ESCAPE" { phaseMapSet(phaseMap, "ESCAPE", phaseEscape@). }
     ELSE IF phaseKey = "MCC" { phaseMapSet(phaseMap, "MCC", phaseMcc@). }
+    ELSE IF phaseKey = "AEROBRAKE" { phaseMapSet(phaseMap, "AEROBRAKE", phaseAerobrake@). }
+    ELSE IF phaseKey = "DESCENT" { phaseMapSet(phaseMap, "DESCENT", phaseDescent@). }
     ELSE IF phaseKey = "COAST" { phaseMapSet(phaseMap, "COAST", phaseCoast@). }
     ELSE IF phaseKey = "CAPTURE" { phaseMapSet(phaseMap, "CAPTURE", phaseCapture@). }
     ELSE IF phaseKey = "CIRC" { phaseMapSet(phaseMap, "CIRC", phaseCirc@). }
