@@ -21,19 +21,23 @@ LOCAL DECOUPLE_ALTS IS LEXICON(
     "TEKTO",  10000
 ).
 
-LOCAL KSC_LAT IS -0.10.
-LOCAL KSC_LNG IS -74.25.
-LOCAL KSC_CATCH_DIST IS 200000.  // 200km — close enough to attempt recovery
-
-// Check if Trajectories predicts impact within catch distance of KSC.
-LOCAL FUNCTION _isKscCatchable {
-    IF NOT ADDONS:TR:AVAILABLE { RETURN FALSE. }
-    IF NOT ADDONS:TR:HASIMPACT { RETURN FALSE. }
-    LOCAL impact IS ADDONS:TR:IMPACTPOS.
-    LOCAL dist IS geoDistance(impact:LAT, impact:LNG, KSC_LAT, KSC_LNG).
-    mLog("Trajectories impact: " + ROUND(impact:LAT, 2) + "," + ROUND(impact:LNG, 2)
-        + "  dist=" + ROUND(dist/1000, 1) + "km from KSC.").
-    RETURN dist < KSC_CATCH_DIST.
+// Check if we need to burn remaining fuel to ensure capture.
+// If Trajectories predicts an impact, we're committed to landing
+// and don't need extra braking. If there's no impact (skip-out,
+// still orbital), we must decelerate to guarantee reentry.
+LOCAL FUNCTION _mustDecelerate {
+    IF NOT ADDONS:TR:AVAILABLE {
+        mLog("Trajectories not available — braking to be safe.").
+        RETURN TRUE.
+    }
+    IF ADDONS:TR:HASIMPACT {
+        LOCAL impact IS ADDONS:TR:IMPACTPOS.
+        mLog("Trajectories predicts impact at " + ROUND(impact:LAT, 2) + "," + ROUND(impact:LNG, 2)
+            + " — no braking needed.").
+        RETURN FALSE.
+    }
+    mLog("No impact predicted — braking to ensure capture.").
+    RETURN TRUE.
 }
 
 GLOBAL FUNCTION phaseDescent {
@@ -65,12 +69,10 @@ GLOBAL FUNCTION phaseDescent {
     // Arm chutes early so they auto-deploy at safe altitude
     _descentArmChutes().
 
-    // Only burn remaining fuel if we're not on a KSC recovery trajectory.
-    // If Trajectories shows impact near KSC, preserve the approach;
-    // otherwise dump dV retrograde to slow down for a safe splashdown.
-    IF _isKscCatchable() {
-        mLog("On KSC recovery trajectory — skipping braking burn.").
-    } ELSE {
+    // Burn remaining fuel only if we're not committed to landing.
+    // If Trajectories predicts an impact, we're captured and don't
+    // need to waste dV. If no impact, brake to ensure reentry.
+    IF _mustDecelerate() {
         _descentBrakingBurn().
     }
 
