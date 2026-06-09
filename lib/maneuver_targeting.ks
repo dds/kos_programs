@@ -213,6 +213,7 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
     LOCAL minTime IS TIME:SECONDS + 30.
     LOCAL aopGuideStallIter IS 0.
     LOCAL aopGuideStallMinImprove IS 1.
+    LOCAL quiet IS FALSE.
 
     IF opts:HASKEY("STEP_PROGRADE"){ SET steps["PROGRADE"]  TO opts["STEP_PROGRADE"]. }
     IF opts:HASKEY("STEP_NORMAL")  { SET steps["NORMAL"]    TO opts["STEP_NORMAL"]. }
@@ -225,6 +226,7 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
     IF opts:HASKEY("MIN_TIME")     { SET minTime            TO opts["MIN_TIME"]. }
     IF opts:HASKEY("AOP_GUIDE_STALL_ITER") { SET aopGuideStallIter TO opts["AOP_GUIDE_STALL_ITER"]. }
     IF opts:HASKEY("AOP_GUIDE_STALL_MIN_IMPROVE") { SET aopGuideStallMinImprove TO opts["AOP_GUIDE_STALL_MIN_IMPROVE"]. }
+    IF opts:HASKEY("QUIET")        { SET quiet              TO opts["QUIET"]. }
 
     LOCAL best IS _patchElementsCost(nd, targetBody, targets).
     LOCAL solved IS FALSE.
@@ -235,19 +237,21 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
     SET aopGuideTol TO MAX(5, aopGuideTol * 0.67).
     IF CFG:HASKEY("TRANSFER_AOP_SCAN_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_SCAN_TOL"]. }
     IF targets:HASKEY("AOP_GUIDE") { SET bestAopGuideErr TO ABS(best["AOP_ERR"]). }
-    mLog("ELEMENTS: coupled target"
-        + _elementTargetSummary(targets)
-        + " start" + _elementStateSummary(best)).
-    mLogWarn("STATS elements setup target=" + targetBody:NAME
-        + _elementTargetSummary(targets)
-        + " start" + _elementStateSummary(best)
-        + " maxIter=" + maxIter
-        + " dvCap=" + ROUND(dvCap,1)).
+    IF NOT quiet {
+        mLog("ELEMENTS: coupled target"
+            + _elementTargetSummary(targets)
+            + " start" + _elementStateSummary(best)).
+        mLogWarn("STATS elements setup target=" + targetBody:NAME
+            + _elementTargetSummary(targets)
+            + " start" + _elementStateSummary(best)
+            + " maxIter=" + maxIter
+            + " dvCap=" + ROUND(dvCap,1)).
+    }
 
     FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
         IF i >= minIter AND _elementsConverged(best, targets) {
             SET solved TO TRUE.
-            mLog("  ELEMENTS[" + i + "] converged" + _elementStateSummary(best)).
+            IF NOT quiet { mLog("  ELEMENTS[" + i + "] converged" + _elementStateSummary(best)). }
             BREAK.
         }
 
@@ -283,19 +287,23 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
             _nodeAxisSet(nd, bestAxis, bestValue).
             WAIT 0.02.
             SET best TO _patchElementsCost(nd, targetBody, targets).
-            mLog("  ELEMENTS[" + i + "] " + bestAxis
-                + "=" + ROUND(bestValue, 2)
-                + _elementStateSummary(best)
-                + " cost=" + ROUND(best["COST"], 2)).
+            IF NOT quiet {
+                mLog("  ELEMENTS[" + i + "] " + bestAxis
+                    + "=" + ROUND(bestValue, 2)
+                    + _elementStateSummary(best)
+                    + " cost=" + ROUND(best["COST"], 2)).
+            }
         } ELSE {
             FOR axis IN axes {
                 SET steps[axis] TO steps[axis] / 2.
             }
-            mLog("  ELEMENTS[" + i + "] refining steps: P="
-                + ROUND(steps["PROGRADE"], 2)
-                + " N=" + ROUND(steps["NORMAL"], 2)
-                + " R=" + ROUND(steps["RADIALOUT"], 2)
-                + " T=" + ROUND(steps["TIME"], 1)).
+            IF NOT quiet {
+                mLog("  ELEMENTS[" + i + "] refining steps: P="
+                    + ROUND(steps["PROGRADE"], 2)
+                    + " N=" + ROUND(steps["NORMAL"], 2)
+                    + " R=" + ROUND(steps["RADIALOUT"], 2)
+                    + " T=" + ROUND(steps["TIME"], 1)).
+            }
 
             LOCAL stepsSmall IS FALSE.
             IF steps["PROGRADE"] < minStep AND steps["NORMAL"] < minStep {
@@ -304,7 +312,7 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
                 }
             }
             IF stepsSmall {
-                mLogWarn("  ELEMENTS: stopped" + _elementStateSummary(best)).
+                IF NOT quiet { mLogWarn("  ELEMENTS: stopped" + _elementStateSummary(best)). }
                 BREAK.
             }
         }
@@ -321,11 +329,13 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
                 SET aopGuideStallCount TO aopGuideStallCount + 1.
             }
             IF aopGuideStallCount >= aopGuideStallIter {
-                mLogWarn("  ELEMENTS: AoP guide stalled err="
-                    + ROUND(guideErr,1)
-                    + " best=" + ROUND(bestAopGuideErr,1)
-                    + " tol=" + ROUND(aopGuideTol,1)
-                    + " count=" + aopGuideStallCount).
+                IF NOT quiet {
+                    mLogWarn("  ELEMENTS: AoP guide stalled err="
+                        + ROUND(guideErr,1)
+                        + " best=" + ROUND(bestAopGuideErr,1)
+                        + " tol=" + ROUND(aopGuideTol,1)
+                        + " count=" + aopGuideStallCount).
+                }
                 BREAK.
             }
         }
@@ -333,17 +343,19 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
 
     IF NOT solved {
         SET best TO _patchElementsCost(nd, targetBody, targets).
-        mLogWarn("ELEMENTS final error" + _elementErrorSummary(best, targets)).
+        IF NOT quiet { mLogWarn("ELEMENTS final error" + _elementErrorSummary(best, targets)). }
     }
 
     SET best TO _patchElementsCost(nd, targetBody, targets).
     best:ADD("SOLVED", solved).
-    mLogWarn("STATS elements result target=" + targetBody:NAME
-        + " solved=" + solved
-        + _elementStateSummary(best)
-        + _elementErrorSummary(best, targets)
-        + " cost=" + ROUND(best["COST"],2)
-        + " dv=" + ROUND(nd:DELTAV:MAG,1)).
+    IF NOT quiet {
+        mLogWarn("STATS elements result target=" + targetBody:NAME
+            + " solved=" + solved
+            + _elementStateSummary(best)
+            + _elementErrorSummary(best, targets)
+            + " cost=" + ROUND(best["COST"],2)
+            + " dv=" + ROUND(nd:DELTAV:MAG,1)).
+    }
 
     RETURN best.
 }
