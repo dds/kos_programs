@@ -21,10 +21,10 @@ LOCAL MAX_RETRIES          IS 5.
 //      Interplanetary:  Lambert grid scan, full 3-axis node, conic validation
 //   2. Element-aware seed scoring — prefer departure windows that
 //      already produce the requested PE/INC/LAN/AoP geometry.
-//   3. Collision targeting (prograde) — converge PE to zero for the
-//      widest possible encounter margin. A dead-center trajectory
-//      survives large normal dV perturbations during INC targeting,
-//      especially for local transfers where the SOI is narrow.
+//   3. Collision targeting (prograde) — for unconstrained transfers,
+//      converge PE to zero for the widest possible encounter margin.
+//      AoP-guided transfers skip this scalar pass because it can move
+//      the chosen patch onto the wrong apsidal branch.
 //   4. Coupled PE/INC targeting — solve periapsis and capture plane
 //      together. PE and INC are tightly coupled on local moon transfers,
 //      so a scalar Newton pass can report false "low sensitivity" while
@@ -94,14 +94,18 @@ GLOBAL FUNCTION planTransfer {
     // targeting can add substantial normal dV without losing the
     // encounter. Especially important for local transfers (Mun/Minmus)
     // where the SOI is narrow relative to the trajectory deflection.
-    newtonTarget(nd, targetBody, "PE", 0).
+    IF aopTarget >= 0 {
+        mLogWarn("STATS transfer stage=collision-pe skipped reason=aop-guide").
+    } ELSE {
+        newtonTarget(nd, targetBody, "PE", 0).
+    }
 
     // --- 3. Safe injection targeting waterfall ---
     // Scan-time objectives may include AoP and LAN. Injection-time
     // targets are narrower: always PE, optionally INC, optionally LAN.
     // AoP is intentionally not included here; it selects the departure
     // basin and is then accepted/rejected by the final angular gate.
-    IF captureInc < 0 AND lanTarget < 0 {
+    IF captureInc < 0 AND lanTarget < 0 AND aopTarget < 0 {
         newtonTarget(nd, targetBody, "PE", targetPe).
     } ELSE {
         // Seed normal bias for polar/retropolar before the solver starts
