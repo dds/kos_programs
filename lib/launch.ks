@@ -23,6 +23,153 @@ LOCAL FUNCTION _launchCfgNum {
     RETURN defaultValue.
 }
 
+LOCAL FUNCTION _norm360 {
+    PARAMETER angle.
+    LOCAL result IS angle.
+    UNTIL result >= 0 { SET result TO result + 360. }
+    UNTIL result < 360 { SET result TO result - 360. }
+    RETURN result.
+}
+
+LOCAL FUNCTION _targetLaunchPlaneInc {
+    LOCAL inc IS _launchCfgNum("LAUNCH_INCLINATION", 0).
+    IF CFG:HASKEY("TARGET_INCLINATION") AND CFG["TARGET_INCLINATION"] >= 0 {
+        SET inc TO CFG["TARGET_INCLINATION"].
+    }
+    IF CFG:HASKEY("CAPTURE_INC") {
+        SET inc TO CFG["CAPTURE_INC"].
+    }
+    RETURN inc.
+}
+
+LOCAL FUNCTION _latIncOk {
+    PARAMETER latitude.
+    PARAMETER inclination.
+    LOCAL maxLat IS inclination.
+    IF maxLat > 90 { SET maxLat TO 180 - maxLat. }
+    RETURN ABS(latitude) <= ABS(maxLat) AND ABS(latitude) < 90.
+}
+
+LOCAL FUNCTION _etaToLaunchPlane {
+    PARAMETER ascendingNode.
+    PARAMETER targetLan.
+    PARAMETER targetInc.
+
+    LOCAL eta IS -1.
+    LOCAL latitude IS SHIP:LATITUDE.
+    LOCAL longitude IS SHIP:LONGITUDE.
+    IF NOT _latIncOk(latitude, targetInc) { RETURN eta. }
+
+    LOCAL relLng IS 0.
+    IF ABS(ABS(targetInc) - 90) > 0.001 {
+        SET relLng TO ARCSIN(TAN(latitude) / TAN(targetInc)).
+    }
+    IF NOT ascendingNode { SET relLng TO 180 - relLng. }
+
+    LOCAL geoLng IS _norm360(targetLan + relLng - SHIP:BODY:ROTATIONANGLE).
+    LOCAL nodeAngle IS _norm360(geoLng - longitude).
+    SET eta TO (nodeAngle / 360) * SHIP:BODY:ROTATIONPERIOD.
+    RETURN eta.
+}
+
+LOCAL FUNCTION _planeLaunchWait {
+    PARAMETER targetLan.
+    PARAMETER targetInc.
+    PARAMETER leadTime.
+
+    LOCAL period IS SHIP:BODY:ROTATIONPERIOD.
+    LOCAL best IS -1.
+    LOCAL etaAn IS _etaToLaunchPlane(TRUE, targetLan, targetInc).
+    LOCAL etaDn IS _etaToLaunchPlane(FALSE, targetLan, targetInc).
+    FOR eta IN LIST(etaAn, etaDn) {
+        IF eta >= 0 {
+            LOCAL waitTime IS eta - leadTime.
+            UNTIL waitTime >= 0 { SET waitTime TO waitTime + period. }
+            IF best < 0 OR waitTime < best { SET best TO waitTime. }
+        }
+    }
+    RETURN best.
+}
+
+LOCAL FUNCTION _waitForPrelaunchUt {
+    PARAMETER targetUt.
+
+    LOCAL kacAlarmId IS "".
+    IF ADDONS:KAC:AVAILABLE {
+        LOCAL alarmUt IS targetUt - 30.
+        IF alarmUt > TIME:SECONDS {
+            LOCAL alm IS ADDALARM("Raw", alarmUt, "FR3 prelaunch window", "Auto-created by PRELAUNCH").
+            SET alm:ACTION TO "KillWarp".
+            SET kacAlarmId TO alm:ID.
+        }
+    }
+
+    IF targetUt - TIME:SECONDS > 60 { SET WARP TO 4. }
+    UNTIL TIME:SECONDS >= targetUt OR ABORT OR AG10 {
+        LOCAL remaining IS MAX(0, targetUt - TIME:SECONDS).
+        HUDTEXT("Prelaunch window in " + ROUND(remaining, 0) + "s", 5, 2, 13, CYAN, FALSE).
+        WAIT MIN(30, MAX(0.5, remaining)).
+    }
+    SET WARP TO 0.
+
+    IF kacAlarmId <> "" {
+        DELETEALARM(kacAlarmId).
+    }
+}
+
+GLOBAL FUNCTION phasePrelaunch {
+    IF NOT CFG:HASKEY("CAPTURE_LAN") {
+        mLog("PRELAUNCH: no CAPTURE_LAN configured; launching immediately.").
+        nextPhase(launchSeq).
+        RETURN.
+    }
+
+    LOCAL targetLan IS CFG["CAPTURE_LAN"].
+    LOCAL targetInc IS _targetLaunchPlaneInc().
+    LOCAL leadTime IS _launchCfgNum("PRELAUNCH_PLANE_LEAD", 145).
+    IF leadTime < 0 { SET leadTime TO 0. }
+
+    IF targetInc <= 0 OR targetInc >= 180 {
+        mLog("PRELAUNCH: equatorial target; LAN is undefined, launching immediately.").
+        nextPhase(launchSeq).
+        RETURN.
+    }
+
+    IF NOT _latIncOk(SHIP:LATITUDE, targetInc) {
+        mLogError("PRELAUNCH: target plane never passes over launch latitude.").
+        PRINT " ".
+        PRINT "  PRELAUNCH HOLD".
+        PRINT "  Target inc " + ROUND(targetInc, 2) + " deg cannot pass over lat "
+            + ROUND(SHIP:LATITUDE, 3) + " deg.".
+        yieldToPrompt().
+        RETURN.
+    }
+
+    LOCAL waitTime IS _planeLaunchWait(targetLan, targetInc, leadTime).
+    IF waitTime < 0 {
+        mLogError("PRELAUNCH: could not calculate launch-plane timing.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    LOCAL targetUt IS TIME:SECONDS + waitTime.
+    stateSetNum("prelaunch_plane_ut", targetUt).
+    mLog("PRELAUNCH: target LAN=" + ROUND(targetLan, 1)
+        + " deg inc=" + ROUND(targetInc, 2)
+        + " deg lead=" + ROUND(leadTime, 0)
+        + "s wait=" + ROUND(waitTime, 0) + "s.").
+
+    _waitForPrelaunchUt(targetUt).
+    IF ABORT OR AG10 {
+        mLog("PRELAUNCH hold — operator abort.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    mLog("PRELAUNCH complete; launch plane window open.").
+    nextPhase(launchSeq).
+}
+
 LOCAL FUNCTION _logAscentTelemetry {
     PARAMETER reason.
     mLogWarn("STATS launch telemetry reason=" + reason
@@ -350,7 +497,7 @@ GLOBAL FUNCTION phasePark {
 GLOBAL FUNCTION confirmLaunch {
     PARAMETER printFn.
     LOCAL phase IS stateGet("phase", "").
-    IF phase <> "" AND phase <> "LAUNCH" {
+    IF phase <> "" AND phase <> "PRELAUNCH" AND phase <> "LAUNCH" {
         RETURN TRUE.
     }
 

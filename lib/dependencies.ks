@@ -7,6 +7,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "POST_FLIGHT" { phaseMapSet(phaseMap, "POST_FLIGHT", phasePostFlight@). }
     ELSE IF phaseKey = "POSTFLIGHT" { phaseMapSet(phaseMap, "POSTFLIGHT", phasePostflight@). }
     ELSE IF phaseKey = "EVA_SCIENCE" { phaseMapSet(phaseMap, "EVA_SCIENCE", phaseEvaScience@). }
+    ELSE IF phaseKey = "PRELAUNCH" { phaseMapSet(phaseMap, "PRELAUNCH", phasePrelaunch@). }
     ELSE IF phaseKey = "LAUNCH" { phaseMapSet(phaseMap, "LAUNCH", phaseLaunch@). }
     ELSE IF phaseKey = "FAIR" { phaseMapSet(phaseMap, "FAIR", phaseFair@). }
     ELSE IF phaseKey = "ANTS" { phaseMapSet(phaseMap, "ANTS", phaseAnts@). }
