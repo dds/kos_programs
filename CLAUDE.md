@@ -86,7 +86,7 @@ Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add cra
 - `boot/` — bootstrap only, keep minimal for easy reloading
 - `lib/` — reusable libraries, loaded via `RUNPATH()`
 - `cmd/` — operator commands, run manually from terminal (NOT synced at boot)
-- `craft/` — vehicle flight computers (FR2.ks, FR3.ks, FJ1A.ks, FJ4B.ks, FSP1.ks, X_SHOT.ks)
+- `craft/` — vehicle flight computers (FR2.ks, FR3.ks, FJ1A.ks, FJ4B.ks, FBIJ.ks, FSP1.ks, X_SHOT.ks)
 - `roles/` — role scripts for CORE:TAG routing (lander_cpu.ks, zombie.ks, EVA.ks)
 
 ### Key libs

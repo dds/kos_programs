@@ -64,6 +64,7 @@ FR3 progressive library bands:
 - `LANDING`: `LAND_DEORBIT`, `LAND_ASSIST`, `LAND`, so landing does not reboot between adjacent descent phases.
 - Single-phase steps such as `MCC` and `ROVER` fall back to their phase name as the band.
 - Empty or legacy `MAIN` startup phase state is treated as no real phase yet. FR3 asks `bootDefaultBandForVehicle()` for the first band: rockets start in `LAUNCH`, aircraft/sea/spaceplanes start in `PREFLIGHT`, and rovers start in `ROVER`.
+- Aircraft waypoint nav lives in `lib/airplane.ks`. AG8 toggles waypoint navigation; if no route is loaded it tries the currently selected Waypoint Manager waypoint, then briefs known KSC/Island runway approach data when available.
 - SCANsat profiles can insert `DROP_FOR_IMPACT_AND_RAISE_PE` after capture while still in the transfer band, lowering the attached carrier's Pe before releasing and recovering the mapper.
 - Band/reload state is saved via `state.ks` as `lib_band`, `lib_band_phase`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, and `reload_next_band`.
 

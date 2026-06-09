@@ -54,6 +54,30 @@ GLOBAL apActive          IS FALSE.
 GLOBAL wptNavActive      IS FALSE.
 GLOBAL wptList           IS LIST().
 GLOBAL wptIndex          IS 0.
+GLOBAL PLANE_APPROACHES  IS LIST(
+    LEXICON(
+        "name", "KSC Runway",
+        "match", "KSC",
+        "lat", -0.0500,
+        "lng", -74.6000,
+        "elev", 70,
+        "hdg1", 90,
+        "hdg2", 270,
+        "gs", 3.0,
+        "radius", 25000
+    ),
+    LEXICON(
+        "name", "Island Airfield",
+        "match", "ISLAND",
+        "lat", -1.5200,
+        "lng", -71.9600,
+        "elev", 140,
+        "hdg1", 90,
+        "hdg2", 270,
+        "gs", 3.0,
+        "radius", 25000
+    )
+).
 LOCAL _ctrlSurfaces      IS LIST().
 LOCAL _rollPid           IS 0.
 LOCAL _altPid            IS 0.
@@ -331,9 +355,11 @@ GLOBAL FUNCTION apOff {
 
 GLOBAL FUNCTION wptNavOn {
     IF wptList:LENGTH = 0 {
-        mLog("No waypoints loaded.").
-        HUDTEXT("No waypoints!", 3, 2, 14, RED, FALSE).
-        RETURN.
+        IF NOT waypointUseSelected(CFG["CRUISE_ALT"]) {
+            mLog("No waypoints loaded and no selected waypoint found.").
+            HUDTEXT("Select waypoint first", 3, 2, 14, RED, FALSE).
+            RETURN.
+        }
     }
     IF NOT apActive { apOn(). }
     SET wptIndex TO 0.
@@ -361,8 +387,10 @@ GLOBAL FUNCTION waypointAdd {
     PARAMETER lat_.
     PARAMETER lng_.
     PARAMETER alt_ IS -1.
+    PARAMETER name_ IS "".
     LOCAL wp IS LEXICON("lat", lat_, "lng", lng_).
     IF alt_ >= 0 { wp:ADD("alt", alt_). }
+    IF name_ <> "" { wp:ADD("name", name_). }
     wptList:ADD(wp).
     mLog("Waypoint added: " + ROUND(lat_,2) + "," + ROUND(lng_,2)
         + " (total " + wptList:LENGTH + ").").
@@ -373,6 +401,75 @@ GLOBAL FUNCTION waypointClear {
     SET wptList TO LIST().
     SET wptIndex TO 0.
     mLog("Waypoints cleared.").
+}
+
+GLOBAL FUNCTION waypointUseSelected {
+    PARAMETER alt_ IS CFG["CRUISE_ALT"].
+    LOCAL wp IS selectedWaypoint().
+    IF wp = 0 {
+        mLog("No selected waypoint on " + SHIP:BODY:NAME + ".").
+        RETURN FALSE.
+    }
+
+    waypointClear().
+    waypointAdd(wp:GEOPOSITION:LAT, wp:GEOPOSITION:LNG, alt_, wp:NAME).
+    mLog("Selected waypoint loaded: " + wp:NAME
+        + " dist=" + ROUND(wp:GEOPOSITION:DISTANCE / 1000, 1) + "km"
+        + " brg=" + ROUND(wp:GEOPOSITION:HEADING, 0) + "deg"
+        + " cruiseAlt=" + ROUND(alt_, 0) + "m.").
+    HUDTEXT("WPT: " + wp:NAME, 4, 2, 14, CYAN, FALSE).
+    planeApproachBrief(wp:GEOPOSITION:LAT, wp:GEOPOSITION:LNG, wp:NAME).
+    RETURN TRUE.
+}
+
+GLOBAL FUNCTION planeApproachBriefSelected {
+    LOCAL wp IS selectedWaypoint().
+    IF wp = 0 {
+        mLog("Approach brief: no selected waypoint on " + SHIP:BODY:NAME + ".").
+        HUDTEXT("No selected waypoint", 3, 2, 14, YELLOW, FALSE).
+        RETURN FALSE.
+    }
+    planeApproachBrief(wp:GEOPOSITION:LAT, wp:GEOPOSITION:LNG, wp:NAME).
+    RETURN TRUE.
+}
+
+GLOBAL FUNCTION planeApproachBrief {
+    PARAMETER lat_.
+    PARAMETER lng_.
+    PARAMETER name_ IS "".
+
+    LOCAL ap IS _nearestApproach(lat_, lng_, name_).
+    IF ap = 0 {
+        mLog("Approach brief: no known runway data near " + name_ + ".").
+        RETURN FALSE.
+    }
+
+    LOCAL gs IS ap["gs"].
+    LOCAL elev IS ap["elev"].
+    LOCAL distM IS geoDistance(SHIP:LATITUDE, SHIP:LONGITUDE, lat_, lng_).
+    LOCAL altAgl IS MAX(0, SHIP:ALTITUDE - elev).
+    LOCAL todM IS 0.
+    IF gs > 0 {
+        SET todM TO altAgl / TAN(gs).
+    }
+
+    LOCAL inbound IS LATLNG(lat_, lng_):HEADING.
+    LOCAL rwyHdg IS _bestRunwayHeading(ap, inbound).
+    LOCAL fieldRange IS geoDistance(lat_, lng_, ap["lat"], ap["lng"]).
+
+    mLog("Approach " + ap["name"]
+        + " via " + name_
+        + ": rwys " + ROUND(ap["hdg1"],0) + "/" + ROUND(ap["hdg2"],0)
+        + " use " + ROUND(rwyHdg,0)
+        + " gs=" + ROUND(gs,1)
+        + " elev=" + ROUND(elev,0) + "m"
+        + " fieldErr=" + ROUND(fieldRange,0) + "m.").
+    mLog("Approach TOD: range=" + ROUND(distM / 1000,1) + "km"
+        + " altAgl=" + ROUND(altAgl,0) + "m"
+        + " descendAt~" + ROUND(todM / 1000,1) + "km.").
+    HUDTEXT(ap["name"] + " APP " + ROUND(rwyHdg,0)
+        + " TOD " + ROUND(todM / 1000,1) + "km", 5, 2, 13, CYAN, FALSE).
+    RETURN TRUE.
 }
 
 GLOBAL FUNCTION planeLandingAssist {
@@ -487,4 +584,51 @@ LOCAL FUNCTION _geoProject {
     LOCAL dlat IS dist * COS(brng) / r_ * (180 / 3.14159265).
     LOCAL dlng IS dist * SIN(brng) / (r_ * COS(lat0)) * (180 / 3.14159265).
     RETURN LEXICON("lat", lat0 + dlat, "lng", lng0 + dlng).
+}
+
+LOCAL FUNCTION _angleDiff {
+    PARAMETER a.
+    PARAMETER b.
+    LOCAL d IS a - b.
+    IF d > 180 { SET d TO d - 360. }
+    IF d < -180 { SET d TO d + 360. }
+    RETURN ABS(d).
+}
+
+LOCAL FUNCTION _approachNameMatches {
+    PARAMETER ap.
+    PARAMETER name_.
+    IF name_ = "" { RETURN FALSE. }
+    LOCAL nm IS name_:TOUPPER.
+    LOCAL apName IS ap["name"]:TOUPPER.
+    IF nm:CONTAINS(ap["match"]) { RETURN TRUE. }
+    IF nm:CONTAINS(apName) { RETURN TRUE. }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _nearestApproach {
+    PARAMETER lat_.
+    PARAMETER lng_.
+    PARAMETER name_ IS "".
+    LOCAL best IS 0.
+    LOCAL bestDist IS 999999999.
+    FOR ap IN PLANE_APPROACHES {
+        LOCAL d IS geoDistance(lat_, lng_, ap["lat"], ap["lng"]).
+        IF _approachNameMatches(ap, name_) { RETURN ap. }
+        IF d < bestDist {
+            SET best TO ap.
+            SET bestDist TO d.
+        }
+    }
+    IF best <> 0 AND bestDist <= best["radius"] { RETURN best. }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _bestRunwayHeading {
+    PARAMETER ap.
+    PARAMETER inbound.
+    IF _angleDiff(ap["hdg1"], inbound) <= _angleDiff(ap["hdg2"], inbound) {
+        RETURN ap["hdg1"].
+    }
+    RETURN ap["hdg2"].
 }

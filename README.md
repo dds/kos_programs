@@ -16,6 +16,7 @@ craft/
     FR3.ks               FR3 next-gen rocket (leaner FR2)
     FJ1A.ks              Juno trainer jet
     FJ4B.ks              Supersonic jet with autopilot assists
+    FBIJ.ks              Fast business jet for GAP hops
     FSP1.ks              Seaplane/submersible
     X_SHOT.ks            SHRIMP sounding rocket
 roles/
@@ -67,6 +68,7 @@ cmd/
     logs.ks              Archive flight log to KSC
     zombie.ks            Reboot all other CPUs on the vessel
     molniya.ks           Molniya orbit calculator (interactive)
+    airnav.ks            Load selected aircraft waypoint and start nav
     kerbinreturn.ks      Return from a moon to Kerbin aerobrake
     kscsplash.ks         Target water splashdown offshore of KSC
     science.ks           Manual science collection
@@ -176,6 +178,10 @@ Juno-powered trainer jet. Low speed (cruise ~80 m/s), broad wings. Same phase st
 ### FJ4B
 
 Supersonic jet with autopilot assists. Manually-flown with `airplane.ks` integration. Phases: PREFLIGHT -> FLIGHT -> POST_FLIGHT. Auto-collects science on biome changes when SCIENCE payload is present.
+
+### FBIJ
+
+Fast business jet for GAP passenger and executive hops. Select the destination in Waypoint Manager, then press AG8 after takeoff to load the selected waypoint and start waypoint navigation. Known approaches currently brief runway headings, glideslope, and top-of-descent guidance for KSC Runway and Island Airfield.
 
 ### FSP1
 
@@ -400,6 +406,9 @@ These are building blocks you can call inside your own phase functions:
 | `scienceRunAll()` | science | Run all experiments |
 | `scienceTransmitAll()` | science | Transmit all science data |
 | `recoveryMode()` | recovery | Post-abort recovery (antennas, log archive, operator prompt) |
+| `waypointUseSelected(alt)` | airplane | Load selected map waypoint for aircraft nav |
+| `wptNavOn()` | airplane | Start waypoint navigation, auto-loading selected waypoint if needed |
+| `planeApproachBriefSelected()` | airplane | Log approach info for selected waypoint |
 | `roverInit()` | rover | Start rover steering loop |
 | `roverSetWaypoint(lat,lng)` | rover | Drive to coordinates |
 | `constellationDeploy(count,alt)` | relay_constellation | Deploy relay constellation |
