@@ -25,6 +25,11 @@ LOCAL DECOUPLE_ALTS IS LEXICON(
 // If Trajectories predicts an impact, we're committed to landing
 // and don't need extra braking. If there's no impact (skip-out,
 // still orbital), we must decelerate to guarantee reentry.
+//
+// TODO: This doesn't cover aerobrake-assist scenarios (e.g. Laythe
+// atmosphere bend into Jool capture). HASIMPACT could be true on
+// Laythe but the post-aerobrake orbit still escapes Jool. Needs
+// post-atmospheric-pass orbit prediction to handle correctly.
 LOCAL FUNCTION _mustDecelerate {
     IF NOT ADDONS:TR:AVAILABLE {
         mLog("Trajectories not available — braking to be safe.").
