@@ -899,6 +899,10 @@ GLOBAL FUNCTION phaseMidCourse {
     IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
     IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
     IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
+    IF targetAoP >= 0 AND targetLan < 0 {
+        mLog("MCC: Ignoring CAPTURE_AOP without CAPTURE_LAN.").
+        SET targetAoP TO -1.
+    }
 
     LOCAL patch IS _getTargetPatch(SHIP, target).
     IF patch = 0 {
