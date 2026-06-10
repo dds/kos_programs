@@ -84,11 +84,41 @@ GLOBAL FUNCTION planTransfer {
     IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
 
     // --- 1. Build raw node ---
+    // Local transfers (Mun, Minmus, etc.) use planLocalXfer — a 2D porkchop
+    // search over departure_time × TOF that handles all five capture orbit
+    // elements (PE, INC, LAN, AOP) and returns a fully polished node.
+    // The post-processing waterfall below is only needed for escape and
+    // interplanetary paths, which still use the old pipeline.
+    IF isLocal {
+        LOCAL xopts IS LEXICON(
+            "CAPTURE_PE", targetPe
+        ).
+        IF captureInc >= 0 { xopts:ADD("CAPTURE_INC", captureInc). }
+        IF lanTarget  >= 0 { xopts:ADD("CAPTURE_LAN", lanTarget). }
+        IF aopTarget  >= 0 { xopts:ADD("CAPTURE_AOP", aopTarget). }
+        LOCAL xnd IS planLocalXfer(targetBody, xopts).
+        IF xnd = 0 OR NOT xnd:ISTYPE("Node") {
+            mLogError("planTransfer: local xfer planner failed.").
+            RETURN.
+        }
+        // Report final state
+        LOCAL xPatch IS _getTargetPatch(xnd, targetBody).
+        IF xPatch <> 0 {
+            mLog("Transfer -> " + targetBody:NAME
+                + " dV=" + ROUND(xnd:DELTAV:MAG,1) + " m/s"
+                + " Pe=" + ROUND(xPatch:PERIAPSIS/1000,1) + "km"
+                + " INC=" + ROUND(xPatch:INCLINATION,1) + "°"
+                + " LAN=" + ROUND(xPatch:LAN,1) + "°"
+                + " AOP=" + ROUND(xPatch:ARGUMENTOFPERIAPSIS,1) + "°"
+                + " ETA=" + ROUND(xnd:TIME - TIME:SECONDS,0) + "s").
+        }
+        archivePlannedManeuverLog("transfer").
+        RETURN xnd.
+    }
+
     LOCAL nd IS 0.
     IF isEscape {
         SET nd TO _planEscapeTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
-    } ELSE IF isLocal {
-        SET nd TO _planLocalTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
     } ELSE {
         SET nd TO planInterplanetaryTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
     }
