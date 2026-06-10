@@ -4,9 +4,18 @@
 
 LOCAL STATE_PATH  IS "1:/run/state.json".
 LOCAL _cache      IS LEXICON().
+LOCAL _loaded     IS FALSE.
 
-GLOBAL FUNCTION stateInit {
-    IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
+// Lazy load: the cache fills from disk on FIRST access, not at
+// stateInit. Critical safety property: cmd scripts re-run this
+// file via bootPreamble(), resetting _cache — before this guard,
+// the first stateSet in any cmd script flushed a nearly-empty
+// lexicon over the whole mission state (flight-found: setphase
+// wiped a live Mun mission). Never touch _cache directly; go
+// through _ensureLoaded().
+LOCAL FUNCTION _ensureLoaded {
+    IF _loaded { RETURN. }
+    SET _loaded TO TRUE.
     IF EXISTS(STATE_PATH) {
         LOCAL raw IS OPEN(STATE_PATH):READALL:STRING:TRIM.
         IF raw <> "" {
@@ -15,12 +24,19 @@ GLOBAL FUNCTION stateInit {
         }
     }
     SET _cache TO LEXICON().
-    _flush().
+}
+
+GLOBAL FUNCTION stateInit {
+    IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
+    SET _loaded TO FALSE.
+    _ensureLoaded().
+    IF NOT EXISTS(STATE_PATH) { _flush(). }
 }
 
 GLOBAL FUNCTION stateGet {
     PARAMETER key.
     PARAMETER dflt IS "".
+    _ensureLoaded().
     IF _cache:HASKEY(key) { RETURN _cache[key]. }
     RETURN dflt.
 }
@@ -28,6 +44,7 @@ GLOBAL FUNCTION stateGet {
 GLOBAL FUNCTION stateGetNum {
     PARAMETER key.
     PARAMETER dflt IS 0.
+    _ensureLoaded().
     IF _cache:HASKEY(key) {
         LOCAL val IS _cache[key].
         IF val:ISTYPE("Scalar") { RETURN val. }
@@ -39,6 +56,7 @@ GLOBAL FUNCTION stateGetNum {
 GLOBAL FUNCTION stateSet {
     PARAMETER key.
     PARAMETER value.
+    _ensureLoaded().
     IF _cache:HASKEY(key) { _cache:REMOVE(key). }
     _cache:ADD(key, value).
     _flush().
@@ -52,6 +70,7 @@ GLOBAL FUNCTION stateSetNum {
 
 GLOBAL FUNCTION stateRemove {
     PARAMETER key.
+    _ensureLoaded().
     IF _cache:HASKEY(key) {
         _cache:REMOVE(key).
         _flush().
@@ -61,6 +80,7 @@ GLOBAL FUNCTION stateRemove {
 }
 
 GLOBAL FUNCTION stateKeys {
+    _ensureLoaded().
     LOCAL keys IS LIST().
     FOR k IN _cache:KEYS { keys:ADD(k). }
     RETURN keys.
@@ -68,6 +88,7 @@ GLOBAL FUNCTION stateKeys {
 
 GLOBAL FUNCTION stateRemovePrefix {
     PARAMETER prefix.
+    _ensureLoaded().
     LOCAL keys IS LIST().
     LOCAL removed IS 0.
     FOR k IN _cache:KEYS {
@@ -87,6 +108,7 @@ GLOBAL FUNCTION stateRemovePrefix {
 }
 
 GLOBAL FUNCTION stateDump {
+    _ensureLoaded().
     PRINT "=== STATE DUMP ===".
     FOR k IN _cache:KEYS { PRINT "  " + k + " = " + _cache[k]. }
     PRINT "==================".
