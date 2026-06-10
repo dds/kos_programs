@@ -38,4 +38,9 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "SHAPE" { phaseMapSet(phaseMap, "SHAPE", phaseShape@). }
     ELSE IF phaseKey = "BPLANE" { phaseMapSet(phaseMap, "BPLANE", phaseBplane@). }
     ELSE IF phaseKey = "GOTO" { phaseMapSet(phaseMap, "GOTO", phaseGoto@). }
+    ELSE IF phaseKey = "AIRCLIMB" { phaseMapSet(phaseMap, "AIRCLIMB", phaseAirclimb@). }
+    ELSE IF phaseKey = "ROCKETCLIMB" { phaseMapSet(phaseMap, "ROCKETCLIMB", phaseRocketclimb@). }
+    ELSE IF phaseKey = "SSTO_DEORBIT" { phaseMapSet(phaseMap, "SSTO_DEORBIT", phaseSstoDeorbit@). }
+    ELSE IF phaseKey = "REENTRY" { phaseMapSet(phaseMap, "REENTRY", phaseReentry@). }
+    ELSE IF phaseKey = "APPROACH" { phaseMapSet(phaseMap, "APPROACH", phaseApproach@). }
 }

@@ -738,6 +738,18 @@ LOCAL FUNCTION _angleDiff {
     RETURN ABS(d).
 }
 
+// Public accessors over the approach table (used by lib/ssto.ks).
+GLOBAL FUNCTION planeApproachFor {
+    PARAMETER name_ IS "".
+    RETURN _nearestApproach(SHIP:LATITUDE, SHIP:LONGITUDE, name_).
+}
+
+GLOBAL FUNCTION planeRunwayHeading {
+    PARAMETER ap.
+    PARAMETER inbound.
+    RETURN _bestRunwayHeading(ap, inbound).
+}
+
 LOCAL FUNCTION _approachNameMatches {
     PARAMETER ap.
     PARAMETER name_.
