@@ -425,7 +425,7 @@ LOCAL FUNCTION _refinePlaneNode {
         "TIME", 120, "NORMAL", 16, "PROGRADE", 8, "RADIALOUT", 8).
     LOCAL minTime IS TIME:SECONDS + 60.
 
-    LOCAL best IS _cost().
+    LOCAL best IS _stableEval(_cost@).
     FROM { LOCAL i IS 0. } UNTIL i >= 60 STEP { SET i TO i + 1. } DO {
         IF _planeErrOf(nd:ORBIT, nTgt) < 0.15 { BREAK. }
         LOCAL improved IS FALSE.
@@ -435,9 +435,8 @@ LOCAL FUNCTION _refinePlaneNode {
                 LOCAL trial IS oldVal + sgn * steps[axis].
                 IF axis <> "TIME" OR trial > minTime {
                     _setNodeAxis(nd, axis, trial).
-                    WAIT 0.02.
-                    LOCAL c IS _cost().
-                    IF c < best - 0.001 {
+                    LOCAL c IS _stableEval(_cost@).
+                    IF c < best - 0.05 {
                         SET best TO c.
                         SET oldVal TO trial.
                         SET improved TO TRUE.
@@ -453,6 +452,7 @@ LOCAL FUNCTION _refinePlaneNode {
             IF steps["NORMAL"] < 0.1 AND steps["TIME"] < 1 { BREAK. }
         }
     }
+    WAIT 0.05.
     RETURN _planeErrOf(nd:ORBIT, nTgt).
 }
 
@@ -532,6 +532,27 @@ LOCAL FUNCTION _peFloor {
     RETURN 10000.
 }
 
+// Evaluate a cost delegate until two consecutive reads agree.
+// Flight-found: nd:ORBIT readouts immediately after a node tweak
+// can be stale/noisy — a descent steering on phantom values
+// "accepted" its way to Pe -106km when every such state priced
+// at 9999. Double-reading makes acceptance decisions honest.
+LOCAL FUNCTION _stableEval {
+    PARAMETER costFn.
+    WAIT 0.02.
+    LOCAL c1 IS costFn:CALL().
+    WAIT 0.02.
+    LOCAL c2 IS costFn:CALL().
+    LOCAL tries IS 0.
+    UNTIL ABS(c1 - c2) < 0.02 OR tries >= 5 {
+        SET c1 TO c2.
+        WAIT 0.02.
+        SET c2 TO costFn:CALL().
+        SET tries TO tries + 1.
+    }
+    RETURN c2.
+}
+
 // Trust-region cost for refining ONE burn: the burn's own
 // objective plus HEAVY penalties for touching anything else.
 // Flight-found: a composite all-contract cost let a 64deg AoP
@@ -585,8 +606,12 @@ LOCAL FUNCTION _refineBurnNode {
         "PROGRADE", MAX(2, seedDv / 16)).
     LOCAL minTime IS TIME:SECONDS + 60.
 
-    LOCAL best IS _burnCostOf(nd:ORBIT, label, targets,
-        nd:DELTAV:MAG, seedDv, peNow, apNow, nNow).
+    LOCAL FUNCTION _cost {
+        RETURN _burnCostOf(nd:ORBIT, label, targets,
+            nd:DELTAV:MAG, seedDv, peNow, apNow, nNow).
+    }
+
+    LOCAL best IS _stableEval(_cost@).
     FROM { LOCAL i IS 0. } UNTIL i >= 60 STEP { SET i TO i + 1. } DO {
         LOCAL improved IS FALSE.
         FOR axis IN axes {
@@ -595,10 +620,8 @@ LOCAL FUNCTION _refineBurnNode {
                 LOCAL trial IS oldVal + sgn * steps[axis].
                 IF axis <> "TIME" OR trial > minTime {
                     _setNodeAxis(nd, axis, trial).
-                    WAIT 0.02.
-                    LOCAL c IS _burnCostOf(nd:ORBIT, label, targets,
-                        nd:DELTAV:MAG, seedDv, peNow, apNow, nNow).
-                    IF c < best - 0.001 {
+                    LOCAL c IS _stableEval(_cost@).
+                    IF c < best - 0.05 {
                         SET best TO c.
                         SET oldVal TO trial.
                         SET improved TO TRUE.
@@ -614,24 +637,57 @@ LOCAL FUNCTION _refineBurnNode {
             IF steps["RADIALOUT"] < 0.1 AND steps["TIME"] < 1 { BREAK. }
         }
     }
-    RETURN best.
+    RETURN _stableEval(_cost@).
 }
 
-// Refine a planned non-plane burn within its trust region and
-// hard-discard anything unsafe. Returns the burn LEX or 0.
+LOCAL FUNCTION _nodeUnsafe {
+    PARAMETER nd.
+    RETURN nd:ORBIT:ECCENTRICITY >= 1 OR nd:ORBIT:PERIAPSIS < _peFloor().
+}
+
+// Refine a planned non-plane burn within its trust region.
+// If refinement misbehaves, REVERT TO THE ANALYTIC SEED — the
+// tangent/rotation seeds are exact math and deserve to fly even
+// when the optimizer cannot be trusted. Only discard when the
+// seed itself is unsafe. Returns the burn LEX or 0.
 LOCAL FUNCTION _finishShapeNode {
     PARAMETER nd, label, targets.
     IF nd = 0 { RETURN 0. }
+
+    // Snapshot the analytic seed, and log what the game thinks
+    // of it (diagnostic for the nd:ORBIT staleness question).
+    LOCAL seedTime IS nd:TIME.
+    LOCAL seedRad IS nd:RADIALOUT.
+    LOCAL seedNorm IS nd:NORMAL.
+    LOCAL seedPro IS nd:PROGRADE.
+    WAIT 0.1.
+    mLogWarn("STATS shape-seed label=" + label
+        + " dv=" + ROUND(nd:DELTAV:MAG, 1)
+        + " predictPeKm=" + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1)
+        + " predictApKm=" + ROUND(nd:ORBIT:APOAPSIS / 1000, 1)
+        + " predictAoP=" + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1)).
+
     LOCAL cost IS _refineBurnNode(nd, label, targets).
-    WAIT 0.02.
-    IF nd:ORBIT:ECCENTRICITY >= 1 OR nd:ORBIT:PERIAPSIS < _peFloor() {
-        mLogError("SHAPE: " + label + " node unsafe after refine (Pe "
-            + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + "km ecc "
-            + ROUND(nd:ORBIT:ECCENTRICITY, 2) + ") — discarding.").
-        REMOVE nd.
-        RETURN 0.
+    WAIT 0.05.
+    IF _nodeUnsafe(nd) {
+        mLogWarn("SHAPE: " + label + " refine went unsafe (Pe "
+            + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1)
+            + "km) — reverting to the analytic seed.").
+        SET nd:TIME TO seedTime.
+        SET nd:RADIALOUT TO seedRad.
+        SET nd:NORMAL TO seedNorm.
+        SET nd:PROGRADE TO seedPro.
+        WAIT 0.1.
+        IF _nodeUnsafe(nd) {
+            mLogError("SHAPE: " + label + " seed itself unsafe (Pe "
+                + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + "km ecc "
+                + ROUND(nd:ORBIT:ECCENTRICITY, 2) + ") — discarding.").
+            REMOVE nd.
+            RETURN 0.
+        }
+        SET cost TO -1.
     }
-    mLog("SHAPE " + label + " refined: dV=" + ROUND(nd:DELTAV:MAG, 1)
+    mLog("SHAPE " + label + ": dV=" + ROUND(nd:DELTAV:MAG, 1)
         + " m/s -> " + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + " x "
         + ROUND(nd:ORBIT:APOAPSIS / 1000, 1) + " km  AoP "
         + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1)
