@@ -34,6 +34,14 @@ Looks like Python/JS; is neither.
   sense probe in `planPlaneMatch`, `HDG_BANK_SIGN` in `lib/airplane.ks`), or
   use cross-product-free identities and numeric differentiation of
   `POSITIONAT` (see `lib/arrival_bplane.ks`).
+- **Never use `VELOCITYAT` to plan a future burn.** Its frame is offset
+  by the body's own motion between now and t — flight-proven ~62 m/s at
+  the Mun over a 2148s ETA, enough to flip a planned apoapsis burn
+  retrograde. Use the numeric `POSITIONAT` derivative (`_velAt` /
+  `_velMagAt` in orbit_shape/maneuver). The error hides at periapsis
+  (drift ⊥ fast velocity) and bites at slow, far-future burn points.
+  Corollary: `nd:ORBIT` (the game's own node propagation) is
+  trustworthy — refine against it rather than against predictions.
 
 ## Hard constraints
 
