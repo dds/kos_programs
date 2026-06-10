@@ -166,8 +166,8 @@ LOCAL FUNCTION _measureArrival {
     LOCAL bMag IS h / SQRT(vinf2).
 
     // B-plane axes from the body's polar axis.
-    LOCAL north IS targetBody:ANGULARVEL:NORMALIZED.
-    LOCAL tHat IS VCRS(sHat, north).
+    LOCAL north_ IS targetBody:ANGULARVEL:NORMALIZED.
+    LOCAL tHat IS VCRS(sHat, north_).
     IF tHat:MAG < 1e-6 { SET tHat TO VCRS(sHat, V(1, 0, 0)). }
     SET tHat TO tHat:NORMALIZED.
     LOCAL rAxisHat IS VCRS(sHat, tHat):NORMALIZED.
