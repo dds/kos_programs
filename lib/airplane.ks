@@ -23,7 +23,7 @@ GLOBAL PLANE_CFG IS LEXICON(
     "SPD_MIN_THROTTLE",  0.0,
     "SPD_MAX_THROTTLE",  1.0,
     "WPT_RADIUS",        500,
-    "STALL_SPEED",        60,
+    "STALL_SPEED",        50,
     "STALL_AOA",          20,
     "AOA_LIMIT",          15,
     "SURVEY_ALT",       2000,
