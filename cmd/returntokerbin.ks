@@ -29,8 +29,8 @@
 //   descent_chutes     — part tag for parachutes to arm on entry (default: all chutes)
 //
 // Requires archive access (KSC link or relay).
-// Compare with cmd/kerbinreturn.ks which does a single
-// one-shot escape burn without MCC/coast/aerobrake phases.
+// For a return to Kerbin ORBIT (no aerobrake/descent), use
+// cmd/goto.ks instead: RUNPATH("0:/cmd/goto.ks", "Kerbin").
 // ============================================================
 
 PARAMETER opts IS LEXICON().

@@ -7,10 +7,10 @@ IF EXISTS("0:/cmd/landingrescue.ks") {
     RUNPATH("1:/cmd/landingrescue.ks", "LAND_ASSIST").
 }
 
-IF EXISTS("0:/cmd/setlandassist.ks") {
-    RUNPATH("0:/cmd/setlandassist.ks").
-} ELSE IF EXISTS("1:/cmd/setlandassist.ks") {
-    RUNPATH("1:/cmd/setlandassist.ks").
+IF EXISTS("0:/cmd/setlanding.ks") {
+    RUNPATH("0:/cmd/setlanding.ks", "assist").
+} ELSE IF EXISTS("1:/cmd/setlanding.ks") {
+    RUNPATH("1:/cmd/setlanding.ks", "assist").
 }
 
 LOCAL FUNCTION _del {
