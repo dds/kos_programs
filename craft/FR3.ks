@@ -115,11 +115,13 @@ GLOBAL FUNCTION bootVehicleLibs {
 
 GLOBAL BOOT_CLEANUP IS LEXICON(
     "vehicle", "FR3",
+    // Lean keep-list: every kept cmd costs core bytes a mission
+    // band might need (flight-found: the return mission's lib sync
+    // boot-looped out of space). Anything else re-syncs from the
+    // archive when linked.
     "keepCmds", LIST(
-        "CLEANUP", "DUMP", "EXNODE", "FILES", "LANDASSIST", "LANDINGCHECK",
-        "LANDINGRESCUE", "LANDMIN", "SETLANDING", "SCAN",
-        "SETINCL", "SETSTATE", "SETUP_MUN_ROVER_LANDING_REAL",
-        "SETUP_MUN_ROVER_LANDING_SIM", "SIMLANDHERE"
+        "DUMP", "LANDASSIST", "LANDINGRESCUE", "LANDMIN",
+        "SETLANDING", "SETPHASE"
     )
 ).
 
