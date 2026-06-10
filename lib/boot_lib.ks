@@ -194,17 +194,17 @@ LOCAL FUNCTION _bootSortStrings {
     // Insertion sort — profile lists are small and kOS string
     // comparison is lexicographic (and case-insensitive).
     FROM { LOCAL i IS 1. } UNTIL i >= l:LENGTH STEP { SET i TO i + 1. } DO {
-        LOCAL v IS l[i].
+        LOCAL v_ IS l[i].
         LOCAL j IS i - 1.
         UNTIL j < 0 {
-            IF l[j] > v {
+            IF l[j] > v_ {
                 SET l[j + 1] TO l[j].
                 SET j TO j - 1.
             } ELSE {
                 BREAK.
             }
         }
-        SET l[j + 1] TO v.
+        SET l[j + 1] TO v_.
     }
 }
 
