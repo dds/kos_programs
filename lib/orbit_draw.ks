@@ -88,7 +88,7 @@ LOCAL FUNCTION _odOrbitLine {
 LOCAL FUNCTION _odGrid {
     PARAMETER w, h.
     LOCAL grid IS LIST().
-    FROM { LOCAL r IS 0. } UNTIL r >= h STEP { SET r TO r + 1. } DO {
+    FROM { LOCAL r_ IS 0. } UNTIL r_ >= h STEP { SET r_ TO r_ + 1. } DO {
         LOCAL row IS LIST().
         FROM { LOCAL c IS 0. } UNTIL c >= w STEP { SET c TO c + 1. } DO {
             row:ADD(" ").
