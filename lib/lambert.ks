@@ -1,7 +1,7 @@
 // ============================================================
 // lambert.ks  —  Lambert solver  (0:/lib/lambert.ks)
 //
-// Port of the RSVP Lambert solver by maneatingape:
+// Derived from the RSVP Lambert solver by maneatingape:
 //   https://github.com/maneatingape/rsvp/blob/main/src/lambert.ks
 // Licensed under GNU GPL 3.0 as a derivative work.
 //
@@ -27,7 +27,28 @@
 // (a 3rd-order root-finding method — Newton's method is 1st order,
 // Halley's method is 2nd order). The initial guess is so accurate
 // that typically only 2-3 iterations are needed to converge.
+//
+// Hardening over the original port (2026-06 review):
+//   - ARCCOS arguments clamped to [-1, 1] — numeric drift in the
+//     conic geometry could previously hand ARCCOS a value like
+//     1.0000000001 and poison the whole solve with NaN.
+//   - chord/semiPerimeter clamped so lambda stays real for
+//     degenerate (nearly straight-line) transfer triangles.
+//   - Near-180° transfers: r1 x r2 vanishes, so the transfer
+//     plane is ambiguous. We now fall back to a reference plane
+//     instead of normalizing a zero vector.
+//   - Householder denominator guarded against division by zero.
+//   - orbitalStateVectors takes an explicit frame center instead
+//     of silently using the ship's current body.
 // ============================================================
+
+@LAZYGLOBAL OFF.
+
+// Clamp helper for trig arguments that must stay in [-1, 1].
+LOCAL FUNCTION _clamp1 {
+    PARAMETER v.
+    RETURN MAX(-1, MIN(1, v)).
+}
 
 // lambertSolve — solve Lambert's problem for a single-revolution transfer.
 //
@@ -62,7 +83,9 @@ GLOBAL FUNCTION lambertSolve {
     // Lambda (λ) is a geometry parameter that encodes the transfer angle.
     // It ranges from -1 to 1; λ=0 means a 180° transfer.
     // See Izzo (2014), equation (1).
-    LOCAL lambda IS SQRT(1 - chord / semiPerimeter).
+    // chord/semiPerimeter is mathematically <= 1 but can drift just past
+    // it for degenerate triangles, which would make the SQRT throw.
+    LOCAL lambda IS SQRT(MAX(0, 1 - chord / semiPerimeter)).
 
     // Normalize the time of flight into the dimensionless form used by
     // the algorithm. This "t" is not seconds — it's scaled by the
@@ -77,7 +100,21 @@ GLOBAL FUNCTION lambertSolve {
     // it1, it2 = transverse unit vectors (perpendicular to r, in the orbital plane)
     LOCAL ir1 IS r1:NORMALIZED.
     LOCAL ir2 IS r2:NORMALIZED.
-    LOCAL ih IS VCRS(ir1, ir2):NORMALIZED.
+    LOCAL ihRaw IS VCRS(ir1, ir2).
+
+    // Near-180° transfer: r1 and r2 are (anti)parallel, the cross product
+    // vanishes, and the transfer plane is genuinely ambiguous. Pick the
+    // plane through r1 closest to the ecliptic (universe Y-up) rather
+    // than normalizing a zero vector into NaN. Callers scanning transfer
+    // windows will sail through the singular point instead of crashing.
+    IF ihRaw:MAG < 1e-6 {
+        SET ihRaw TO VCRS(ir1, VCRS(V(0, 1, 0), ir1)).
+        IF ihRaw:MAG < 1e-6 {
+            // r1 is itself polar — any perpendicular plane works.
+            SET ihRaw TO VCRS(ir1, V(1, 0, 0)).
+        }
+    }
+    LOCAL ih IS ihRaw:NORMALIZED.
     LOCAL it1 IS VCRS(ih, ir1):NORMALIZED.
     LOCAL it2 IS VCRS(ih, ir2):NORMALIZED.
 
@@ -102,14 +139,14 @@ GLOBAL FUNCTION lambertSolve {
     // y, rho, gamma are intermediate variables from Izzo (2014), section 3.
     // vr1/vr2 = radial velocity components at departure/arrival
     // vt = transverse velocity component (same formula at both ends)
-    LOCAL y IS SQRT(1 - lambda ^ 2 * (1 - x ^ 2)).
+    LOCAL y IS SQRT(MAX(0, 1 - lambda ^ 2 * (1 - x ^ 2))).
     LOCAL lambdaTimesY IS lambda * y.
     LOCAL rho IS (m1 - m2) / chord.
     LOCAL gamma IS SQRT(mu * semiPerimeter / 2).
 
     LOCAL vr1 IS (lambdaTimesY - x) - rho * (x + lambdaTimesY).
     LOCAL vr2 IS (x - lambdaTimesY) - rho * (x + lambdaTimesY).
-    LOCAL vt IS SQRT(1 - rho ^ 2) * (y + lambda * x).
+    LOCAL vt IS SQRT(MAX(0, 1 - rho ^ 2)) * (y + lambda * x).
 
     // Combine radial and transverse components into 3D velocity vectors.
     // Each velocity = (gamma / distance) * (radial * r_hat + transverse * t_hat)
@@ -121,18 +158,23 @@ GLOBAL FUNCTION lambertSolve {
 
 // orbitalStateVectors — get position and velocity of any orbitable at a given time.
 //
-// Returns position relative to the CURRENT body's center (not the orbitable's
-// parent body), and orbital velocity. Useful for computing Lambert inputs.
+// Returns position relative to the given frame center (default: the ship's
+// current body — the historical behavior) and orbital velocity.
+// Pass the central body explicitly when computing Lambert inputs for a
+// transfer that is not centered on the ship's current SOI — e.g. planning
+// an interplanetary leg from low Kerbin orbit needs center=Sun.
 //
 // Parameters:
 //   obt       [Orbitable] — any vessel, body, or target with an orbit
 //   epochTime [Scalar]    — universal time (seconds) to evaluate at
+//   center    [Body]      — frame center for the returned position
 //
 // Returns: LEX("position", pos_vector, "velocity", vel_vector)
 GLOBAL FUNCTION orbitalStateVectors {
     PARAMETER obt_, epochTime.
+    PARAMETER center IS BODY.
     RETURN LEX(
-        "position", POSITIONAT(obt_, epochTime) - BODY:POSITION,
+        "position", POSITIONAT(obt_, epochTime) - center:POSITION,
         "velocity", VELOCITYAT(obt_, epochTime):ORBIT
     ).
 }
@@ -172,8 +214,8 @@ LOCAL FUNCTION _lambertInitialGuess {
 
     // t0 = normalized TOF for the minimum-energy (parabolic) transfer
     // t1 = normalized TOF for the minimum-x boundary
-    LOCAL t0 IS CONSTANT:DEGTORAD * ARCCOS(lambda)
-        + lambda * SQRT(1 - lambda ^ 2).
+    LOCAL t0 IS CONSTANT:DEGTORAD * ARCCOS(_clamp1(lambda))
+        + lambda * SQRT(MAX(0, 1 - lambda ^ 2)).
     LOCAL t1 IS (2 / 3) * (1 - lambda ^ 3).
 
     IF normalizedTOF >= t0 {
@@ -203,7 +245,7 @@ LOCAL FUNCTION _lambertHouseholder {
     PARAMETER lambda, normalizedTOF, x.
 
     LOCAL a IS 1 - x ^ 2.
-    LOCAL y IS SQRT(1 - lambda ^ 2 * a).
+    LOCAL y IS SQRT(MAX(0, 1 - lambda ^ 2 * a)).
     LOCAL tau IS _lambertTOF(lambda, a, x, y).
     LOCAL delta IS tau - normalizedTOF.
 
@@ -216,9 +258,15 @@ LOCAL FUNCTION _lambertHouseholder {
     LOCAL dddt IS (7 * x * ddt + 8 * dt
         - 6 * (1 - lambda ^ 2) * (lambda ^ 5) * x / (y ^ 5)) / a.
 
-    // Householder update step (returns the correction to subtract from x)
-    RETURN delta * (dt ^ 2 - delta * ddt / 2)
-        / (dt * (dt ^ 2 - delta * ddt) + (dddt * delta ^ 2) / 6).
+    // Householder update step (returns the correction to subtract from x).
+    // Guard the denominator: at pathological points (e.g. x crossing 1.0
+    // exactly) it can vanish; fall back to a plain Newton step.
+    LOCAL denom IS dt * (dt ^ 2 - delta * ddt) + (dddt * delta ^ 2) / 6.
+    IF ABS(denom) < 1e-12 {
+        IF ABS(dt) < 1e-12 { RETURN 0. }
+        RETURN delta / dt.
+    }
+    RETURN delta * (dt ^ 2 - delta * ddt / 2) / denom.
 }
 
 // _lambertTOF — compute the normalized time of flight using Lancaster's formula.
@@ -240,8 +288,8 @@ LOCAL FUNCTION _lambertTOF {
     // psi is the "universal anomaly" — arccos for elliptic, log for hyperbolic
     LOCAL psi IS 0.
     IF a > 0 {
-        // Elliptical case
-        SET psi TO CONSTANT:DEGTORAD * ARCCOS(g).
+        // Elliptical case — clamp against numeric drift past ±1
+        SET psi TO CONSTANT:DEGTORAD * ARCCOS(_clamp1(g)).
     } ELSE {
         // Hyperbolic case — guard against negative argument from numeric noise
         SET psi TO LN(MAX(1e-300, f + g)).
