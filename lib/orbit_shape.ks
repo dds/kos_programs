@@ -527,14 +527,123 @@ LOCAL FUNCTION _placedApsisEta {
     RETURN etaToTrueAnomaly(SHIP:ORBIT:TRUEANOMALY + ang).
 }
 
+LOCAL FUNCTION _peFloor {
+    IF SHIP:BODY:ATM:EXISTS { RETURN SHIP:BODY:ATM:HEIGHT + 10000. }
+    RETURN 10000.
+}
+
+// Composite contract-error cost of a candidate post-burn orbit:
+// plane error (deg) + 0.5/deg AoP + 0.02/km apsides + a light dV
+// penalty, with unsafe orbits priced out entirely.
+LOCAL FUNCTION _elementsCostOf {
+    PARAMETER o, targets, dvMag.
+    IF o:ECCENTRICITY >= 1 OR o:PERIAPSIS < _peFloor() { RETURN 9999. }
+    LOCAL cost IS dvMag * 0.002.
+    IF targets:HASKEY("INC") OR targets:HASKEY("LAN") {
+        LOCAL tInc IS SHIP:ORBIT:INCLINATION.
+        LOCAL tLan IS SHIP:ORBIT:LAN.
+        IF targets:HASKEY("INC") { SET tInc TO targets["INC"]. }
+        IF targets:HASKEY("LAN") { SET tLan TO targets["LAN"]. }
+        SET cost TO cost + VANG(
+            planeNormalFromIncLan(o:INCLINATION, o:LAN),
+            planeNormalFromIncLan(tInc, tLan)).
+    }
+    IF targets:HASKEY("AOP") AND _targetEcc(targets) >= MIN_AOP_TARGET_ECC
+            AND o:ECCENTRICITY > NEAR_CIRC_ECC {
+        SET cost TO cost
+            + ABS(_angDiff(o:ARGUMENTOFPERIAPSIS, targets["AOP"])) * 0.5.
+    }
+    IF targets:HASKEY("AP") {
+        SET cost TO cost + ABS(o:APOAPSIS - targets["AP"]) * 0.00002.
+    }
+    IF targets:HASKEY("PE") {
+        SET cost TO cost + ABS(o:PERIAPSIS - targets["PE"]) * 0.00002.
+    }
+    RETURN cost.
+}
+
+// Generic game-truth refinement: coordinate descent on the node's
+// TIME/RADIALOUT/NORMAL/PROGRADE against nd:ORBIT, minimizing the
+// full contract cost. The analytic planners are SEEDS only —
+// flight-found twice that open-loop constructions land at the
+// wrong orbital phase (plane match left 27-29deg residuals; the
+// AoP impulse landed at an apsis and pumped the orbit toward
+// Kerbin escape). The big TIME step matters: a misplaced seed can
+// be a sizeable fraction of the period away from the right point.
+LOCAL FUNCTION _refineElementsNode {
+    PARAMETER nd, targets.
+    LOCAL axes IS LIST("TIME", "RADIALOUT", "NORMAL", "PROGRADE").
+    LOCAL steps IS LEXICON(
+        "TIME", MAX(120, SHIP:ORBIT:PERIOD / 10),
+        "RADIALOUT", 16, "NORMAL", 16, "PROGRADE", 8).
+    LOCAL minTime IS TIME:SECONDS + 60.
+    WAIT 0.02.
+    LOCAL best IS _elementsCostOf(nd:ORBIT, targets, nd:DELTAV:MAG).
+    FROM { LOCAL i IS 0. } UNTIL i >= 80 STEP { SET i TO i + 1. } DO {
+        LOCAL improved IS FALSE.
+        FOR axis IN axes {
+            LOCAL oldVal IS _nodeAxis(nd, axis).
+            FOR sgn IN LIST(1, -1) {
+                LOCAL trial IS oldVal + sgn * steps[axis].
+                IF axis <> "TIME" OR trial > minTime {
+                    _setNodeAxis(nd, axis, trial).
+                    WAIT 0.02.
+                    LOCAL c IS _elementsCostOf(nd:ORBIT, targets, nd:DELTAV:MAG).
+                    IF c < best - 0.001 {
+                        SET best TO c.
+                        SET oldVal TO trial.
+                        SET improved TO TRUE.
+                    } ELSE {
+                        _setNodeAxis(nd, axis, oldVal).
+                        WAIT 0.02.
+                    }
+                }
+            }
+        }
+        IF NOT improved {
+            FOR axis IN axes { SET steps[axis] TO steps[axis] / 2. }
+            IF steps["RADIALOUT"] < 0.1 AND steps["TIME"] < 1 { BREAK. }
+        }
+    }
+    RETURN best.
+}
+
+// Refine a planned non-plane burn against the full contract and
+// hard-discard anything unsafe. Returns the burn LEX or 0.
+LOCAL FUNCTION _finishShapeNode {
+    PARAMETER nd, label, targets.
+    IF nd = 0 { RETURN 0. }
+    LOCAL cost IS _refineElementsNode(nd, targets).
+    WAIT 0.02.
+    IF nd:ORBIT:ECCENTRICITY >= 1 OR nd:ORBIT:PERIAPSIS < _peFloor() {
+        mLogError("SHAPE: " + label + " node unsafe after refine (Pe "
+            + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + "km ecc "
+            + ROUND(nd:ORBIT:ECCENTRICITY, 2) + ") — discarding.").
+        REMOVE nd.
+        RETURN 0.
+    }
+    mLog("SHAPE " + label + " refined: dV=" + ROUND(nd:DELTAV:MAG, 1)
+        + " m/s -> " + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + " x "
+        + ROUND(nd:ORBIT:APOAPSIS / 1000, 1) + " km  AoP "
+        + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1)
+        + "  cost=" + ROUND(cost, 2)).
+    mLogWarn("STATS shape-refine label=" + label
+        + " dv=" + ROUND(nd:DELTAV:MAG, 1)
+        + " cost=" + ROUND(cost, 2)).
+    RETURN LEX("node", nd, "label", label).
+}
+
 // ============================================================
 // shapeNextBurn — plan the single most-needed correction burn.
 // Returns LEX("node", nd, "label", text) or 0 when converged
 // (or nothing useful can be planned).
 //
-// Priority: PLANE -> placed apsis (circular start) -> AOP ->
-// AP -> PE. Each call re-reads the live orbit, so the sequence
-// self-heals across execution errors.
+// Priority: PLANE -> placed apsis (circular start) -> AP -> PE
+// -> AOP. Apsides come BEFORE the AoP rotation: tangential apsis
+// burns never move the apsidal line, and rotating AoP at the
+// (usually lower) target eccentricity is cheaper. Every non-plane
+// burn is refined against nd:ORBIT before being returned. Each
+// call re-reads the live orbit, so the sequence self-heals.
 // ============================================================
 GLOBAL FUNCTION shapeNextBurn {
     PARAMETER targets.
@@ -570,56 +679,59 @@ GLOBAL FUNCTION shapeNextBurn {
                 // the opposite side to AP — the burn point becomes Pe.
                 LOCAL eta1 IS _placedApsisEta(targets["AOP"]).
                 IF eta1 < 60 { SET eta1 TO eta1 + SHIP:ORBIT:PERIOD. }
-                RETURN LEX(
-                    "node", _planTangentBurnAt(eta1, targets["AP"], "placed-pe"),
-                    "label", "placed-pe").
+                RETURN _finishShapeNode(
+                    _planTangentBurnAt(eta1, targets["AP"], "placed-pe"),
+                    "placed-pe", targets).
             }
             IF targets:HASKEY("PE") {
                 // Shrinking orbit: burn retrograde at the desired AP
                 // location (AoP+180), lowering the opposite side to PE.
                 LOCAL eta2 IS _placedApsisEta(targets["AOP"] + 180).
                 IF eta2 < 60 { SET eta2 TO eta2 + SHIP:ORBIT:PERIOD. }
-                RETURN LEX(
-                    "node", _planTangentBurnAt(eta2, targets["PE"], "placed-ap"),
-                    "label", "placed-ap").
+                RETURN _finishShapeNode(
+                    _planTangentBurnAt(eta2, targets["PE"], "placed-ap"),
+                    "placed-ap", targets).
             }
         }
     }
 
-    // --- 3. Argument of periapsis (in-plane apsidal rotation) ---
-    IF errs:HASKEY("AOP") AND ABS(errs["AOP"]) > aopTol
-            AND SHIP:ORBIT:ECCENTRICITY >= NEAR_CIRC_ECC {
-        LOCAL nd2 IS planAoPChange(targets["AOP"]).
-        IF nd2 <> 0 { RETURN LEX("node", nd2, "label", "aop"). }
-    }
-
-    // --- 4 & 5. Apsides. Order by feasibility: an Ap target below
-    // the current Pe cannot be set from Pe, so fix Pe first then. ---
+    // --- 3 & 4. Apsides BEFORE the AoP rotation: tangential apsis
+    // burns never move the apsidal line, and the rotation is
+    // cheaper at the (usually lower) target eccentricity. Order by
+    // feasibility: an Ap target below the current Pe cannot be set
+    // from Pe, so fix Pe first then. ---
     LOCAL needAp2 IS errs:HASKEY("AP") AND ABS(errs["AP"]) > altTol.
     LOCAL needPe2 IS errs:HASKEY("PE") AND ABS(errs["PE"]) > altTol.
 
     IF needAp2 AND targets["AP"] >= SHIP:PERIAPSIS {
         LOCAL etaPe IS ETA:PERIAPSIS.
         IF etaPe < 60 { SET etaPe TO etaPe + SHIP:ORBIT:PERIOD. }
-        RETURN LEX(
-            "node", _planTangentBurnAt(etaPe, targets["AP"], "set-ap"),
-            "label", "set-ap").
+        RETURN _finishShapeNode(
+            _planTangentBurnAt(etaPe, targets["AP"], "set-ap"),
+            "set-ap", targets).
     }
     IF needPe2 {
         LOCAL etaAp IS ETA:APOAPSIS.
         IF etaAp < 60 { SET etaAp TO etaAp + SHIP:ORBIT:PERIOD. }
-        RETURN LEX(
-            "node", _planTangentBurnAt(etaAp, targets["PE"], "set-pe"),
-            "label", "set-pe").
+        RETURN _finishShapeNode(
+            _planTangentBurnAt(etaAp, targets["PE"], "set-pe"),
+            "set-pe", targets).
+    }
+
+    // --- 5. Argument of periapsis (in-plane apsidal rotation) ---
+    IF errs:HASKEY("AOP") AND ABS(errs["AOP"]) > aopTol
+            AND SHIP:ORBIT:ECCENTRICITY >= NEAR_CIRC_ECC {
+        RETURN _finishShapeNode(
+            planAoPChange(targets["AOP"]), "aop", targets).
     }
     IF needAp2 {
         // AP target below current Pe and PE already in tolerance:
         // dip via the Ap burn anyway; next round restores PE.
         LOCAL etaAp2 IS ETA:APOAPSIS.
         IF etaAp2 < 60 { SET etaAp2 TO etaAp2 + SHIP:ORBIT:PERIOD. }
-        RETURN LEX(
-            "node", _planTangentBurnAt(etaAp2, targets["AP"], "set-pe-for-ap"),
-            "label", "set-pe-for-ap").
+        RETURN _finishShapeNode(
+            _planTangentBurnAt(etaAp2, targets["AP"], "set-pe-for-ap"),
+            "set-pe-for-ap", targets).
     }
 
     RETURN 0.
