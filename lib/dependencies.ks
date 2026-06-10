@@ -35,4 +35,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "MOLNIYA" { phaseMapSet(phaseMap, "MOLNIYA", phaseMolniya@). }
     ELSE IF phaseKey = "MOLNIYA_INSERT" { phaseMapSet(phaseMap, "MOLNIYA_INSERT", phaseMolniyaInsert@). }
     ELSE IF phaseKey = "DROP_FOR_IMPACT_AND_RAISE_PE" { phaseMapSet(phaseMap, "DROP_FOR_IMPACT_AND_RAISE_PE", phaseDropForImpactAndRaisePe@). }
+    ELSE IF phaseKey = "SHAPE" { phaseMapSet(phaseMap, "SHAPE", phaseShape@). }
+    ELSE IF phaseKey = "BPLANE" { phaseMapSet(phaseMap, "BPLANE", phaseBplane@). }
+    ELSE IF phaseKey = "GOTO" { phaseMapSet(phaseMap, "GOTO", phaseGoto@). }
 }
