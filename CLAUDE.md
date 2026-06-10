@@ -54,6 +54,10 @@ Mission profiles own `SEQUENCE`: the ordered mission steps. `lib/boot_lib.ks` re
 
 For craft and roles, define `GLOBAL FUNCTION bootVehicleLibs { RETURN ... . }`. Use profile `LIBS = ...` only as an escape hatch; otherwise derive libraries from `SEQUENCE` and append extras with `LIBS_EXTRA`. Edit `lib/dependencies.txt` one line at a time for shared dependency updates. Keep it comment-free and compact because it is copied as text to the probe core.
 
+`CMD <phase>[, <phase>...] = <cmd>[, ...]` rows declare operator commands a phase may need OFFLINE (no KSC link — e.g. the Island Airfield has no radio). At every connected boot, `bootCmdSync()` compiles them to `1:/cmd/<name>.ksm` and `bootCleanup` never prunes them. Run with `RUNPATH("1:/cmd/<name>").`
+
+Note the band machinery loads libraries for ALL phases of a band, not just the mission's — code used by only some missions belongs in its own phase/band (one extra reboot for those missions, zero bytes for everyone else).
+
 Mission profile `.cfg` files are not copied to the probe core. Boot reads them from `0:/missions/<craft>/` when connected, parses the selected profile once, and persists the values into `1:/run/state.json`.
 
 ### State persistence
@@ -99,7 +103,11 @@ Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add cra
 | `launch.ks` | Reusable ascent phases (launch, fairing, extend, parking) + rocketMain() skeleton |
 | `xfer_plan.ks` | Transfer/rendezvous planning phases (RDV, XING) |
 | `capture.ks` | Coast and capture phases |
-| `maneuver_orbit.ks` | Orbit cleanup phases (CIRC, RAISE, INCLINE, ELLIPTICAL, DROP_FOR_IMPACT_AND_RAISE_PE) |
+| `maneuver_orbit.ks` | Orbit cleanup phases (CIRC, RAISE, INCLINE, ELLIPTICAL) |
+| `payload_release.ks` | Payload/ScanSat impact-disposal (DROP_FOR_IMPACT_AND_RAISE_PE — its own band, loaded only when used) |
+| `orbit_shape.ks` | Closed-form orbit shaping to target AP/PE/INC/LAN/AOP (phase SHAPE, `SHAPE_*` CFG keys) |
+| `arrival_bplane.ks` | B-plane arrival corridor MCC (phase BPLANE, uses `CAPTURE_PE/INC/LAN`) |
+| `goto_plan.ks` | Universal hop-based destination routing (phase GOTO replans per SOI; used by cmd/goto.ks and config missions) |
 | `state.ks` | Persistent JSON key-value store |
 | `logs.ks` | Flight logging with fault persistence |
 | `files.ks` | Storage status and directory listing |
@@ -108,7 +116,7 @@ Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add cra
 | `resume.ks` | MISSION lexicon, operator helpers, resumeMission(), buildRocketSequence() |
 | `maneuver.ks` | Maneuver node execution with dynamic throttle, planCapture, planCircularize, planAoPChange |
 | `maneuver_transfer.ks` | planTransfer (LAN via multi-orbit scan, PE via Newton on dV) and phaseMidCourse |
-| `lambert.ks` | Lambert solver (RSVP port, GPL-3.0). lambertSolve(r1,r2,tof,mu,flip), orbitalStateVectors. For future interplanetary use |
+| `lambert.ks` | Lambert solver (Izzo 2014 via RSVP port, GPL-3.0, hardened with clamps + 180° guard). lambertSolve(r1,r2,tof,mu,flip), orbitalStateVectors |
 | `inclination.ks` | Orbital plane change planning + etaToTrueAnomaly() |
 | `molniya.ks` | Molniya orbit insertion (molniyaParams, printMolniyaSummary, planMolniyaInsert, phaseMolniyaInsert) |
 | `orbit.ks` | Orbit monitoring and stability checks |
@@ -120,7 +128,7 @@ Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add cra
 | `landing.ks` | Powered descent / suicide burn |
 | `recovery.ks` | Post-abort recovery — safe antenna deploy, flight log archive, operator prompt |
 | `relay_constellation.ks` | Multi-relay deployment |
-| `airplane.ks` | Aircraft autopilot |
+| `airplane.ks` | Aircraft autopilot + `airplaneMain()` flight-computer skeleton (craft files are CFG + options). Bank-to-turn heading hold, VS-based altitude hold, Q-scheduled control authority, auto thrust reversers (brakes-at-touchdown discriminator) |
 | `rover.ks` | Ground vehicle control |
 | `observe.ks` | Periodic telemetry logger with sentinel-file control |
 | `utils.ks` | General-purpose utilities (fmtDuration, printOrbitRef) |
@@ -169,6 +177,10 @@ Optional CFG keys for precise orbital plane control at the target body:
 - `CAPTURE_AOP` — target argument of periapsis. Corrected post-capture via `planAoPChange()`, a pure radial burn at the orbit intersection point. Also refined mid-transfer by MCC.
 
 Corrections run in order: AoP first (in-plane), then INC (out-of-plane). All are optional and skipped when the corresponding CFG key is absent.
+
+### Universal goto routing (`lib/goto_plan.ks`, `cmd/goto.ks`)
+
+`RUNPATH("0:/cmd/goto.ks", LEX("dest","Mun","pe",30e3,"ap",100e3,"inc",90,"lan",78,"aop",270)).` (or just a body/vessel name string) routes to anything: parent, child, sibling, cross-system, or a vessel. The planner emits one hop's SEQUENCE + `mission_cfg_*` state per SOI transition; multi-hop routes end in the `GOTO` phase, which replans from the current SOI and requests a reboot (progressive loading via the normal band machinery). Hop shapes: at goal → `SHAPE,DONE` (or `RDV,DONE` for vessels); down/lateral → `XING,BPLANE,COAST,CAPTURE,…`; up → `ESCAPE,COAST,…`. Config-driven missions use the same phases and `SHAPE_*`/`CAPTURE_*` keys directly in their `.cfg`. Final-orbit precision: BPLANE puts the arrival hyperbola on the right plane/PE, CAPTURE burns at Pe (preserving plane/PE/AoP), SHAPE trims the rest in closed form.
 
 ## Key constraints
 
