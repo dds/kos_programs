@@ -127,6 +127,60 @@ GLOBAL FUNCTION flightPlanSequence {
     flightPlanLine().
 }
 
+// Generic CFG dump, grouped by key prefix: keys sharing a prefix
+// before the first underscore (CAPTURE_*, SHAPE_*, ...) become a
+// section with the prefix stripped from each row; loners gather
+// under CONFIG. Sequence/lib plumbing keys are skipped. Lets any
+// craft show its full effective mission config without curating
+// rows by hand.
+GLOBAL FUNCTION flightPlanConfig {
+    IF NOT (DEFINED CFG) { RETURN. }
+    LOCAL skipKeys IS LIST("SEQUENCE", "LIBS", "LIBS_EXTRA",
+        "MISSION_ID", "MISSION_NAME", "TARGET", "PAYLOADS").
+
+    LOCAL groups IS LEXICON().
+    LOCAL order IS LIST().
+    FOR key IN CFG:KEYS {
+        IF NOT skipKeys:CONTAINS(key) {
+            LOCAL us IS key:FIND("_").
+            LOCAL grp IS "CONFIG".
+            IF us > 0 AND us < key:LENGTH - 1 {
+                SET grp TO key:SUBSTRING(0, us).
+            }
+            IF NOT groups:HASKEY(grp) {
+                groups:ADD(grp, LIST()).
+                order:ADD(grp).
+            }
+            groups[grp]:ADD(key).
+        }
+    }
+
+    // Singleton groups fold into CONFIG to avoid one-row sections.
+    LOCAL loose IS LIST().
+    LOCAL sections IS LIST().
+    FOR grp IN order {
+        IF grp <> "CONFIG" AND groups[grp]:LENGTH >= 2 {
+            sections:ADD(grp).
+        } ELSE {
+            FOR key IN groups[grp] { loose:ADD(key). }
+        }
+    }
+
+    FOR grp IN sections {
+        flightPlanSection(grp).
+        FOR key IN groups[grp] {
+            flightPlanRow(key:SUBSTRING(grp:LENGTH + 1,
+                key:LENGTH - grp:LENGTH - 1), CFG[key]).
+        }
+    }
+    IF loose:LENGTH > 0 {
+        flightPlanSection("CONFIG").
+        FOR key IN loose {
+            flightPlanRow(key, CFG[key]).
+        }
+    }
+}
+
 GLOBAL FUNCTION flightPlanChecklist {
     PARAMETER title.
     PARAMETER items.

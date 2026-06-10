@@ -36,6 +36,11 @@ GLOBAL FUNCTION executeManeuver {
         RETURN FALSE.
     }
 
+    // Pre-burn brief card + orbit diagram (lib/orbit_draw.ks).
+    IF DEFINED ORBIT_DRAW_READY {
+        maneuverBrief(nd, stateGet("phase", "MANEUVER")).
+    }
+
     mLog("Maneuver: dV=" + ROUND(burnDV,1) + " m/s  ETA=" + ROUND(startTime - TIME:SECONDS,1) + "s").
     mLogWarn("STATS burn setup dv=" + ROUND(burnDV,1)
         + " eta=" + ROUND(startTime - TIME:SECONDS,1)
