@@ -43,4 +43,6 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "SSTO_DEORBIT" { phaseMapSet(phaseMap, "SSTO_DEORBIT", phaseSstoDeorbit@). }
     ELSE IF phaseKey = "REENTRY" { phaseMapSet(phaseMap, "REENTRY", phaseReentry@). }
     ELSE IF phaseKey = "APPROACH" { phaseMapSet(phaseMap, "APPROACH", phaseApproach@). }
+    ELSE IF phaseKey = "ARM" { phaseMapSet(phaseMap, "ARM", phaseArm@). }
+    ELSE IF phaseKey = "FLY" { phaseMapSet(phaseMap, "FLY", phaseFly@). }
 }

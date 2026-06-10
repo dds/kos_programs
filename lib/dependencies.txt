@@ -27,6 +27,7 @@ LIB arrival_bplane = maneuver
 LIB goto_plan =
 LIB payload_release = maneuver, orbit
 LIB ssto = airplane, maneuver, orbit
+LIB drone = observe, flightplan
 
 PHASE PREFLIGHT, FLIGHT, POST_FLIGHT, POSTFLIGHT = airplane
 PHASE EVA_SCIENCE = science, orbit
@@ -50,9 +51,11 @@ PHASE SHAPE = orbit_shape
 PHASE BPLANE = arrival_bplane
 PHASE GOTO = goto_plan
 PHASE AIRCLIMB, ROCKETCLIMB, SSTO_DEORBIT, REENTRY, APPROACH = ssto
+PHASE ARM, FLY = drone
 
 CMD PREFLIGHT, FLIGHT, POSTFLIGHT, POST_FLIGHT = restartflightplan
 CMD APPROACH = restartflightplan
+CMD ARM, FLY = restartflightplan
 
 BAND AIR = PREFLIGHT, FLIGHT, POSTFLIGHT, POST_FLIGHT
 BAND SSTO_ASCENT = AIRCLIMB, ROCKETCLIMB

@@ -129,6 +129,8 @@ Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add cra
 | `recovery.ks` | Post-abort recovery — safe antenna deploy, flight log archive, operator prompt |
 | `relay_constellation.ks` | Multi-relay deployment |
 | `airplane.ks` | Aircraft autopilot + `airplaneMain()` flight-computer skeleton (craft files are CFG + options). Bank-to-turn heading hold, VS-based altitude hold, Q-scheduled control authority, auto thrust reversers (brakes-at-touchdown discriminator) |
+| `ssto.ks` | Spaceplane phases bridging AIR and orbital bands (AIRCLIMB, ROCKETCLIMB, SSTO_DEORBIT, REENTRY, APPROACH) |
+| `drone.ks` | Hover drone guidance (phases ARM, FLY) for Kerbin and airless bodies — TILT (lift engines) and RCS (level translation) styles, AG7/8/9/10 modes, Waypoint Manager targets. Guidance ported from the ozin370 quadcopter |
 | `rover.ks` | Ground vehicle control |
 | `observe.ks` | Periodic telemetry logger with sentinel-file control |
 | `utils.ks` | General-purpose utilities (fmtDuration, printOrbitRef) |
