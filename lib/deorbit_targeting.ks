@@ -680,3 +680,57 @@ GLOBAL FUNCTION targetReachable {
     IF inc > 90 { SET inc TO 180 - inc. }
     RETURN ABS(targetLat) <= inc + 0.5.
 }
+
+// ============================================================
+// phaseKscDeorbit — KSC_DEORBIT phase: Trajectories-targeted
+// deorbit from Kerbin orbit toward the splashdown point just
+// offshore of KSC (or wherever LANDING_TARGET_LAT/LNG says).
+// Pairs with the DESCENT phase for fully automatic landings:
+//   SEQUENCE = KSC_DEORBIT,DESCENT,DONE   (cmd/landatksc.ks)
+//
+// CFG keys (defaults): LANDING_TARGET_LAT (-0.10),
+//   LANDING_TARGET_LNG (-74.25), REENTRY_PE (30000),
+//   LANDING_TARGET_TOLERANCE (15000), plus the TARGET_DEORBIT_*
+//   scan settings shared with the landing flows.
+// ============================================================
+GLOBAL FUNCTION phaseKscDeorbit {
+    LOCAL lat IS -0.10.
+    LOCAL lng IS -74.25.
+    LOCAL entryPe IS 30000.
+    LOCAL tol IS 15000.
+    IF CFG:HASKEY("LANDING_TARGET_LAT") { SET lat TO CFG["LANDING_TARGET_LAT"]. }
+    IF CFG:HASKEY("LANDING_TARGET_LNG") { SET lng TO CFG["LANDING_TARGET_LNG"]. }
+    IF CFG:HASKEY("REENTRY_PE") { SET entryPe TO CFG["REENTRY_PE"]. }
+    IF CFG:HASKEY("LANDING_TARGET_TOLERANCE") { SET tol TO CFG["LANDING_TARGET_TOLERANCE"]. }
+
+    IF SHIP:BODY:NAME <> "Kerbin" {
+        mLogError("KSC_DEORBIT: not in Kerbin SOI (body="
+            + SHIP:BODY:NAME + ") — holding.").
+        yieldToPrompt().
+        RETURN.
+    }
+    // Resume safety: a reboot after the burn lands here with the
+    // periapsis already in the atmosphere — nothing left to do.
+    IF SHIP:PERIAPSIS < SHIP:BODY:ATM:HEIGHT {
+        mLog("KSC_DEORBIT: Pe already in atmosphere ("
+            + ROUND(SHIP:PERIAPSIS / 1000, 1) + "km) — proceeding to descent.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
+    mLog("KSC deorbit: target " + ROUND(lat, 4) + ", " + ROUND(lng, 4)
+        + "  entryPe=" + ROUND(entryPe / 1000, 1) + "km"
+        + "  tol=" + ROUND(tol / 1000, 1) + "km.").
+    LOCAL ok IS targetedDeorbitAt(lat, lng, entryPe, tol).
+    IF NOT ok {
+        mLogError("KSC_DEORBIT: targeting failed — holding for review.").
+        yieldToPrompt().
+        RETURN.
+    }
+    IF ADDONS:TR:AVAILABLE AND ADDONS:TR:HASIMPACT {
+        LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
+        mLogWarn("STATS ksc-deorbit result impact="
+            + ROUND(impactPos:LAT, 4) + "," + ROUND(impactPos:LNG, 4)).
+    }
+    nextPhase(xferSeq).
+}

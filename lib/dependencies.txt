@@ -38,6 +38,7 @@ PHASE ESCAPE = xfer_plan
 PHASE MCC = maneuver_mcc
 PHASE AEROBRAKE = aerobrake
 PHASE DESCENT = descent
+PHASE KSC_DEORBIT = deorbit_targeting, maneuver
 PHASE COAST, CAPTURE = capture
 PHASE CIRC, RAISE, INCLINE, ELLIPTICAL = maneuver_orbit
 PHASE TARGETED_DEORBIT = payload_ops, deorbit_targeting

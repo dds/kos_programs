@@ -18,6 +18,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "MCC" { phaseMapSet(phaseMap, "MCC", phaseMcc@). }
     ELSE IF phaseKey = "AEROBRAKE" { phaseMapSet(phaseMap, "AEROBRAKE", phaseAerobrake@). }
     ELSE IF phaseKey = "DESCENT" { phaseMapSet(phaseMap, "DESCENT", phaseDescent@). }
+    ELSE IF phaseKey = "KSC_DEORBIT" { phaseMapSet(phaseMap, "KSC_DEORBIT", phaseKscDeorbit@). }
     ELSE IF phaseKey = "COAST" { phaseMapSet(phaseMap, "COAST", phaseCoast@). }
     ELSE IF phaseKey = "CAPTURE" { phaseMapSet(phaseMap, "CAPTURE", phaseCapture@). }
     ELSE IF phaseKey = "CIRC" { phaseMapSet(phaseMap, "CIRC", phaseCirc@). }
