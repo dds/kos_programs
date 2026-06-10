@@ -115,10 +115,10 @@ LOCAL FUNCTION _odPlotOrbit {
     FROM { LOCAL ta IS 0. } UNTIL ta >= 360 STEP { SET ta TO ta + 3. } DO {
         LOCAL denom IS 1 + ecc * COS(ta).
         IF denom > 0.05 {
-            LOCAL r IS p / denom.
+            LOCAL r_ IS p / denom.
             _odPlot(grid, w, h,
-                r * scale * COS(ta + rotDeg),
-                r * scale * SIN(ta + rotDeg), ch).
+                r_ * scale * COS(ta + rotDeg),
+                r_ * scale * SIN(ta + rotDeg), ch).
         }
     }
 }
