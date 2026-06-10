@@ -405,8 +405,16 @@ LOCAL FUNCTION _refinePlaneNode {
 
     LOCAL pe0 IS SHIP:PERIAPSIS.
     LOCAL ap0 IS SHIP:APOAPSIS.
+    // Hard floor: the apsis penalty is light by design (later
+    // SHAPE steps restore the apsides cheaply), but the refiner
+    // must never trade periapsis into terrain or atmosphere.
+    LOCAL peFloor IS 10000.
+    IF SHIP:BODY:ATM:EXISTS {
+        SET peFloor TO SHIP:BODY:ATM:HEIGHT + 10000.
+    }
 
     LOCAL FUNCTION _cost {
+        IF nd:ORBIT:PERIAPSIS < peFloor { RETURN 9999. }
         RETURN _planeErrOf(nd:ORBIT, nTgt)
             + 0.01 * (ABS(nd:ORBIT:PERIAPSIS - pe0)
                     + ABS(nd:ORBIT:APOAPSIS - ap0)) / 1000.
