@@ -187,24 +187,23 @@ LOCAL FUNCTION _setThrustLimit {
     }
 }
 
-// Frame-proof orbital speed at a future time: numeric derivative
-// of body-relative POSITIONAT. VELOCITYAT's frame is offset by
-// the body's own motion between now and t — negligible for short
-// ETAs around Kerbin, but ~60 m/s at the Mun over a 2000s ETA,
-// which flipped a planned apoapsis burn retrograde (flight-found).
-LOCAL FUNCTION _velMagAt {
-    PARAMETER t.
-    LOCAL dt IS 0.5.
-    RETURN (((POSITIONAT(SHIP, t + dt) - POSITIONAT(SHIP:BODY, t + dt))
-           - (POSITIONAT(SHIP, t - dt) - POSITIONAT(SHIP:BODY, t - dt)))
-        / (2 * dt)):MAG.
+// Speed at a given radius ON THE SHIP'S CURRENT ORBIT — pure
+// vis-viva from the live elements, zero future-state prediction.
+// Flight-found (twice): both VELOCITYAT and POSITIONAT-difference
+// predictions are contaminated by the parent body's own motion in
+// this kOS build (~60-500 m/s at the Mun), which flipped planned
+// burns retrograde. Orbit elements cannot lie.
+LOCAL FUNCTION _speedAtRadius {
+    PARAMETER rBurn.
+    RETURN SQRT(SHIP:BODY:MU
+        * (2 / rBurn - 1 / SHIP:ORBIT:SEMIMAJORAXIS)).
 }
 
 GLOBAL FUNCTION planCircularize {
     LOCAL etaApo IS ETA:APOAPSIS.
     LOCAL mu  IS SHIP:ORBIT:BODY:MU.
     LOCAL vCirc IS SQRT(mu / (SHIP:ORBIT:BODY:RADIUS + SHIP:APOAPSIS)).
-    LOCAL vNow  IS _velMagAt(TIME:SECONDS + etaApo).
+    LOCAL vNow  IS _speedAtRadius(SHIP:ORBIT:BODY:RADIUS + SHIP:APOAPSIS).
     LOCAL dv    IS vCirc - vNow.
 
     LOCAL nd IS NODE(TIME:SECONDS + etaApo, 0, 0, dv).
@@ -226,7 +225,7 @@ GLOBAL FUNCTION planCapture {
     LOCAL rAp   IS targetBody:RADIUS + targetAlt.
     LOCAL tSMA  IS (rPe + rAp) / 2.
     LOCAL vCapture IS SQRT(mu * (2/rPe - 1/tSMA)).
-    LOCAL vAtPe    IS _velMagAt(TIME:SECONDS + ETA:PERIAPSIS).
+    LOCAL vAtPe    IS _speedAtRadius(rPe).
     LOCAL dv       IS vCapture - vAtPe.
     LOCAL nd IS NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, dv).
     ADD nd.
@@ -274,7 +273,7 @@ GLOBAL FUNCTION planLowerPe {
     LOCAL rBurn IS bodyR + SHIP:APOAPSIS.
     LOCAL rTarget IS bodyR + targetPe.
     LOCAL tSMA IS (rBurn + rTarget) / 2.
-    LOCAL vNow IS _velMagAt(burnTime).
+    LOCAL vNow IS _speedAtRadius(rBurn).
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
     LOCAL nd IS NODE(burnTime, 0, 0, vNew - vNow).
     ADD nd.

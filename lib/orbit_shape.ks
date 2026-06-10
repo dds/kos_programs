@@ -99,36 +99,24 @@ LOCAL FUNCTION _orbitableNormal {
         obt_:ORBIT:VELOCITY:ORBIT:NORMALIZED):NORMALIZED.
 }
 
-// Frame-proof orbital velocity at a future time: numeric
-// derivative of the body-relative position, exactly like
-// arrival_bplane. VELOCITYAT's reference frame is unreliable for
-// burns planned far ahead around a moving body (flight-found:
-// the plane-match "rotation" was distorting the orbit shape).
-LOCAL FUNCTION _velAt {
-    PARAMETER t.
-    LOCAL dt IS 0.5.
-    RETURN ((POSITIONAT(SHIP, t + dt) - POSITIONAT(SHIP:BODY, t + dt))
-          - (POSITIONAT(SHIP, t - dt) - POSITIONAT(SHIP:BODY, t - dt)))
-        / (2 * dt).
+// Speed at a true anomaly ON THE SHIP'S CURRENT ORBIT — pure
+// conic math from the live elements. NO future-state prediction:
+// flight-found (three times) that VELOCITYAT and POSITIONAT
+// differences are contaminated by the parent body's own motion
+// in this kOS build (~60-500 m/s at the Mun), poisoning every
+// seed built from them. Elements cannot lie; Kepler does the
+// timing; the nd:ORBIT refiners do the precision.
+LOCAL FUNCTION _radiusAtTa {
+    PARAMETER ta.
+    LOCAL ecc IS SHIP:ORBIT:ECCENTRICITY.
+    RETURN SHIP:ORBIT:SEMIMAJORAXIS * (1 - ecc ^ 2)
+        / (1 + ecc * COS(ta)).
 }
 
-// ============================================================
-// nodeFromDvVector — convert a raw dV vector at a future time
-// into a maneuver node. Same frame recipe as the proven
-// maneuver_rendezvous implementation, but with the frame-proof
-// velocity so the basis matches the dV vectors built from it.
-// ============================================================
-GLOBAL FUNCTION nodeFromDvVector {
-    PARAMETER burnUt.
-    PARAMETER dvVec.
-    LOCAL r1 IS POSITIONAT(SHIP, burnUt) - POSITIONAT(SHIP:BODY, burnUt).
-    LOCAL progradeHat IS _velAt(burnUt):NORMALIZED.
-    LOCAL normalHat IS VCRS(r1, progradeHat):NORMALIZED.
-    LOCAL radialHat IS VCRS(normalHat, progradeHat):NORMALIZED.
-    RETURN NODE(burnUt,
-        VDOT(dvVec, radialHat),
-        VDOT(dvVec, normalHat),
-        VDOT(dvVec, progradeHat)).
+LOCAL FUNCTION _speedAtTa {
+    PARAMETER ta.
+    RETURN SQRT(SHIP:BODY:MU
+        * (2 / _radiusAtTa(ta) - 1 / SHIP:ORBIT:SEMIMAJORAXIS)).
 }
 
 // ============================================================
@@ -325,31 +313,22 @@ GLOBAL FUNCTION planPlaneMatch {
     LOCAL rDN IS p / (1 + ecc * COS(taNow + angDN)).
 
     LOCAL burnEta IS etaAN.
-    IF rDN > rAN { SET burnEta TO etaDN. }
+    LOCAL burnTa IS taNow + angAN.
+    IF rDN > rAN {
+        SET burnEta TO etaDN.
+        SET burnTa TO taNow + angDN.
+    }
 
     // Never plan a burn we cannot align for.
     IF burnEta < 60 { SET burnEta TO burnEta + SHIP:ORBIT:PERIOD. }
     LOCAL burnUt IS TIME:SECONDS + burnEta.
 
-    LOCAL rVec IS POSITIONAT(SHIP, burnUt) - POSITIONAT(SHIP:BODY, burnUt).
-    LOCAL rHat IS rVec:NORMALIZED.
-    LOCAL vel IS _velAt(burnUt).
-
-    // Try both rotation senses; keep the one whose post-burn plane
-    // normal is closest to the target normal. Immune to handedness.
-    LOCAL vPlus IS ANGLEAXIS(theta, rHat) * vel.
-    LOCAL vMinus IS ANGLEAXIS(-theta, rHat) * vel.
-    LOCAL nPlus IS VCRS(rHat, vPlus:NORMALIZED):NORMALIZED.
-    LOCAL nMinus IS VCRS(rHat, vMinus:NORMALIZED):NORMALIZED.
-    LOCAL vNew IS vPlus.
-    LOCAL residual IS VANG(nPlus, nTgt).
-    IF VANG(nMinus, nTgt) < residual {
-        SET vNew TO vMinus.
-        SET residual TO VANG(nMinus, nTgt).
-    }
-
-    LOCAL dvVec IS vNew - vel.
-    LOCAL nd IS nodeFromDvVector(burnUt, dvVec).
+    // Pure-normal seed from elements: a plane rotation by theta
+    // costs 2 v sin(theta/2) at the node. Sign and exactness are
+    // the refiner's job (it owns the NORMAL axis and walks through
+    // zero if the sense is wrong) — no frames, no predictions.
+    LOCAL dvSeed IS 2 * _speedAtTa(burnTa) * SIN(theta / 2).
+    LOCAL nd IS NODE(burnUt, 0, dvSeed, 0).
     ADD nd.
     WAIT 0.02.
 
@@ -369,7 +348,7 @@ GLOBAL FUNCTION planPlaneMatch {
         + " theta=" + ROUND(theta, 2)
         + " targetInc=" + ROUND(targetInc, 2)
         + " targetLan=" + ROUND(targetLan, 2)
-        + " seedResidual=" + ROUND(residual, 2)
+        + " seedDv=" + ROUND(dvSeed, 1)
         + " seedErr=" + ROUND(seedErr, 2)
         + " finalErr=" + ROUND(finalErr, 2)
         + " eta=" + ROUND(nd:ETA, 0)).
@@ -480,20 +459,20 @@ LOCAL FUNCTION _setNodeAxis {
 // ============================================================
 LOCAL FUNCTION _planTangentBurnAt {
     PARAMETER burnEta.
+    PARAMETER burnTa.
     PARAMETER targetAlt.
     PARAMETER label.
     LOCAL mu IS SHIP:BODY:MU.
-    LOCAL burnUt IS TIME:SECONDS + burnEta.
-    LOCAL rBurn IS (POSITIONAT(SHIP, burnUt) - POSITIONAT(SHIP:BODY, burnUt)):MAG.
+    // Radius and speed from the live elements at the burn's true
+    // anomaly — no future-state prediction of any kind (both
+    // VELOCITYAT and POSITIONAT differences proved contaminated
+    // by the parent body's own motion in this kOS build).
+    LOCAL rBurn IS _radiusAtTa(burnTa).
     LOCAL rTarget IS SHIP:BODY:RADIUS + targetAlt.
     LOCAL tSMA IS (rBurn + rTarget) / 2.
-    // Frame-proof speed: VELOCITYAT:MAG is offset by the body's
-    // own frame drift between now and the burn (flight-found:
-    // ~62 m/s at the Mun over a 2148s ETA flipped a Pe-raise
-    // seed RETROGRADE — dv = 156-201 instead of 156-139).
-    LOCAL vNow IS _velAt(burnUt):MAG.
+    LOCAL vNow IS _speedAtTa(burnTa).
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
-    LOCAL nd IS NODE(burnUt, 0, 0, vNew - vNow).
+    LOCAL nd IS NODE(TIME:SECONDS + burnEta, 0, 0, vNew - vNow).
     ADD nd.
     mLog(label + " node: dV=" + ROUND(nd:DELTAV:MAG, 1)
         + " m/s  targetAlt=" + ROUND(targetAlt / 1000, 1)
@@ -503,12 +482,12 @@ LOCAL FUNCTION _planTangentBurnAt {
 }
 
 // ============================================================
-// _placedApsisEta — ETA to the point of the (near-circular)
-// orbit where the target periapsis should sit: argument of
-// latitude = target AoP, measured from the ascending node in
-// the direction of motion. Sense resolved empirically.
+// _placedApsisTa — TRUE ANOMALY of the point of the
+// (near-circular) orbit where the target periapsis should sit:
+// argument of latitude = target AoP, measured from the ascending
+// node in the direction of motion. Sense resolved empirically.
 // ============================================================
-LOCAL FUNCTION _placedApsisEta {
+LOCAL FUNCTION _placedApsisTa {
     PARAMETER aop.
     LOCAL b IS _shipNormal().
     LOCAL nodeVec IS (ANGLEAXIS(SHIP:ORBIT:LAN, _bodyNorth()) * SOLARPRIMEVECTOR):NORMALIZED.
@@ -528,7 +507,7 @@ LOCAL FUNCTION _placedApsisEta {
     IF VDOT(ANGLEAXIS(sense * ang, b) * rHat, peDir) < 0.999 {
         SET ang TO 360 - ang.
     }
-    RETURN etaToTrueAnomaly(SHIP:ORBIT:TRUEANOMALY + ang).
+    RETURN SHIP:ORBIT:TRUEANOMALY + ang.
 }
 
 LOCAL FUNCTION _peFloor {
@@ -649,6 +628,16 @@ LOCAL FUNCTION _nodeUnsafe {
     RETURN nd:ORBIT:ECCENTRICITY >= 1 OR nd:ORBIT:PERIAPSIS < _peFloor().
 }
 
+// A non-plane burn must never trash the plane we already paid
+// for (flight-found: a refined "set-pe" was accepted at inc 41
+// from a 138.9 plane because it was merely SAFE).
+LOCAL FUNCTION _nodeWrecksPlane {
+    PARAMETER nd.
+    RETURN VANG(
+        planeNormalFromIncLan(nd:ORBIT:INCLINATION, nd:ORBIT:LAN),
+        planeNormalFromIncLan(SHIP:ORBIT:INCLINATION, SHIP:ORBIT:LAN)) > 5.
+}
+
 // Refine a planned non-plane burn within its trust region.
 // If refinement misbehaves, REVERT TO THE ANALYTIC SEED — the
 // tangent/rotation seeds are exact math and deserve to fly even
@@ -673,21 +662,22 @@ LOCAL FUNCTION _finishShapeNode {
 
     LOCAL cost IS _refineBurnNode(nd, label, targets).
     WAIT 0.05.
-    IF _nodeUnsafe(nd) {
-        mLogWarn("SHAPE: " + label + " refine went unsafe (Pe "
+    IF _nodeUnsafe(nd) OR _nodeWrecksPlane(nd) {
+        mLogWarn("SHAPE: " + label + " refine went bad (Pe "
             + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1)
-            + "km) — reverting to the analytic seed.").
+            + "km, inc " + ROUND(nd:ORBIT:INCLINATION, 1)
+            + ") — reverting to the analytic seed.").
         SET nd:TIME TO seedTime.
         SET nd:RADIALOUT TO seedRad.
         SET nd:NORMAL TO seedNorm.
         SET nd:PROGRADE TO seedPro.
         WAIT 0.1.
-        IF _nodeUnsafe(nd) AND ABS(seedRad) > 1 {
+        IF (_nodeUnsafe(nd) OR _nodeWrecksPlane(nd)) AND ABS(seedRad) > 1 {
             // Suspected radial sign error in the analytic seed
             // (the AoP impulse family) — try the mirror.
             SET nd:RADIALOUT TO -seedRad.
             WAIT 0.1.
-            IF _nodeUnsafe(nd) {
+            IF _nodeUnsafe(nd) OR _nodeWrecksPlane(nd) {
                 SET nd:RADIALOUT TO seedRad.
                 WAIT 0.05.
             } ELSE {
@@ -697,10 +687,12 @@ LOCAL FUNCTION _finishShapeNode {
                 WAIT 0.05.
             }
         }
-        IF _nodeUnsafe(nd) {
-            mLogError("SHAPE: " + label + " seed itself unsafe (Pe "
+        IF _nodeUnsafe(nd) OR _nodeWrecksPlane(nd) {
+            mLogError("SHAPE: " + label + " seed itself bad (Pe "
                 + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + "km ecc "
-                + ROUND(nd:ORBIT:ECCENTRICITY, 2) + ") — discarding.").
+                + ROUND(nd:ORBIT:ECCENTRICITY, 2)
+                + " inc " + ROUND(nd:ORBIT:INCLINATION, 1)
+                + ") — discarding.").
             REMOVE nd.
             RETURN 0.
         }
@@ -761,19 +753,21 @@ GLOBAL FUNCTION shapeNextBurn {
             IF targets:HASKEY("AP") AND targets["AP"] > rNowAlt {
                 // Burn prograde at the desired Pe location, raising
                 // the opposite side to AP — the burn point becomes Pe.
-                LOCAL eta1 IS _placedApsisEta(targets["AOP"]).
+                LOCAL ta1 IS _placedApsisTa(targets["AOP"]).
+                LOCAL eta1 IS etaToTrueAnomaly(ta1).
                 IF eta1 < 60 { SET eta1 TO eta1 + SHIP:ORBIT:PERIOD. }
                 RETURN _finishShapeNode(
-                    _planTangentBurnAt(eta1, targets["AP"], "placed-pe"),
+                    _planTangentBurnAt(eta1, ta1, targets["AP"], "placed-pe"),
                     "placed-pe", targets).
             }
             IF targets:HASKEY("PE") {
                 // Shrinking orbit: burn retrograde at the desired AP
                 // location (AoP+180), lowering the opposite side to PE.
-                LOCAL eta2 IS _placedApsisEta(targets["AOP"] + 180).
+                LOCAL ta2 IS _placedApsisTa(targets["AOP"] + 180).
+                LOCAL eta2 IS etaToTrueAnomaly(ta2).
                 IF eta2 < 60 { SET eta2 TO eta2 + SHIP:ORBIT:PERIOD. }
                 RETURN _finishShapeNode(
-                    _planTangentBurnAt(eta2, targets["PE"], "placed-ap"),
+                    _planTangentBurnAt(eta2, ta2, targets["PE"], "placed-ap"),
                     "placed-ap", targets).
             }
         }
@@ -791,14 +785,14 @@ GLOBAL FUNCTION shapeNextBurn {
         LOCAL etaPe IS ETA:PERIAPSIS.
         IF etaPe < 60 { SET etaPe TO etaPe + SHIP:ORBIT:PERIOD. }
         RETURN _finishShapeNode(
-            _planTangentBurnAt(etaPe, targets["AP"], "set-ap"),
+            _planTangentBurnAt(etaPe, 0, targets["AP"], "set-ap"),
             "set-ap", targets).
     }
     IF needPe2 {
         LOCAL etaAp IS ETA:APOAPSIS.
         IF etaAp < 60 { SET etaAp TO etaAp + SHIP:ORBIT:PERIOD. }
         RETURN _finishShapeNode(
-            _planTangentBurnAt(etaAp, targets["PE"], "set-pe"),
+            _planTangentBurnAt(etaAp, 180, targets["PE"], "set-pe"),
             "set-pe", targets).
     }
 
@@ -814,7 +808,7 @@ GLOBAL FUNCTION shapeNextBurn {
         LOCAL etaAp2 IS ETA:APOAPSIS.
         IF etaAp2 < 60 { SET etaAp2 TO etaAp2 + SHIP:ORBIT:PERIOD. }
         RETURN _finishShapeNode(
-            _planTangentBurnAt(etaAp2, targets["AP"], "set-pe-for-ap"),
+            _planTangentBurnAt(etaAp2, 180, targets["AP"], "set-pe-for-ap"),
             "set-pe-for-ap", targets).
     }
 
