@@ -88,7 +88,7 @@ LOCAL FUNCTION _odOrbitLine {
 LOCAL FUNCTION _odGrid {
     PARAMETER w, h.
     LOCAL grid IS LIST().
-    FROM { LOCAL r_ IS 0. } UNTIL r_ >= h STEP { SET r_ TO r_ + 1. } DO {
+    FROM { LOCAL t IS 0. } UNTIL t >= h STEP { SET t TO t + 1. } DO {
         LOCAL row IS LIST().
         FROM { LOCAL c IS 0. } UNTIL c >= w STEP { SET c TO c + 1. } DO {
             row:ADD(" ").
@@ -115,10 +115,10 @@ LOCAL FUNCTION _odPlotOrbit {
     FROM { LOCAL ta IS 0. } UNTIL ta >= 360 STEP { SET ta TO ta + 3. } DO {
         LOCAL denom IS 1 + ecc * COS(ta).
         IF denom > 0.05 {
-            LOCAL r_ IS p / denom.
+            LOCAL t IS p / denom.
             _odPlot(grid, w, h,
-                r_ * scale * COS(ta + rotDeg),
-                r_ * scale * SIN(ta + rotDeg), ch).
+                t * scale * COS(ta + rotDeg),
+                t * scale * SIN(ta + rotDeg), ch).
         }
     }
 }
@@ -188,8 +188,8 @@ GLOBAL FUNCTION orbitDrawBurn {
     }
     _odPlot(grid, w, h, 0, 0, "@").
 
-    FROM { LOCAL r IS 0. } UNTIL r >= h STEP { SET r TO r + 1. } DO {
-        _odText(grid[r]:JOIN("")).
+    FROM { LOCAL t IS 0. } UNTIL t >= h STEP { SET t TO t + 1. } DO {
+        _odText(grid[t]:JOIN("")).
     }
     _odText(". now   o after   * burn   P/A new Pe/Ap").
 }
