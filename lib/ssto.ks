@@ -59,10 +59,10 @@ LOCAL FUNCTION _wrap360 {
 // Compass heading and pitch of the surface velocity vector,
 // using kOS's own HEADING frame to dodge handedness questions.
 LOCAL FUNCTION _velHeading {
-    LOCAL v IS SHIP:VELOCITY:SURFACE.
+    LOCAL vel IS SHIP:VELOCITY:SURFACE.
     RETURN _wrap360(ARCTAN2(
-        VDOT(v, HEADING(90, 0):VECTOR),
-        VDOT(v, HEADING(0, 0):VECTOR))).
+        VDOT(vel, HEADING(90, 0):VECTOR),
+        VDOT(vel, HEADING(0, 0):VECTOR))).
 }
 
 LOCAL FUNCTION _velPitch {

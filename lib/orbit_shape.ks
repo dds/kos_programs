@@ -128,16 +128,16 @@ GLOBAL FUNCTION nodeFromDvVector {
 // ============================================================
 GLOBAL FUNCTION planeNormalFromIncLan {
     PARAMETER inc, lan.
-    LOCAL up IS _bodyNorth().
-    LOCAL sign IS _normalMirrorSign().
-    RETURN _normalCandidate(inc, lan, up, sign).
+    LOCAL bodyUp IS _bodyNorth().
+    LOCAL mirror IS _normalMirrorSign().
+    RETURN _normalCandidate(inc, lan, bodyUp, mirror).
 }
 
 LOCAL FUNCTION _normalCandidate {
-    PARAMETER inc, lan, up, sign.
-    LOCAL nodeVec IS (ANGLEAXIS(lan, up) * SOLARPRIMEVECTOR):NORMALIZED.
-    LOCAL w IS VCRS(up, nodeVec):NORMALIZED.
-    RETURN (COS(inc) * up + sign * SIN(inc) * w):NORMALIZED.
+    PARAMETER inc, lan, bodyUp, mirror.
+    LOCAL nodeVec IS (ANGLEAXIS(lan, bodyUp) * SOLARPRIMEVECTOR):NORMALIZED.
+    LOCAL w IS VCRS(bodyUp, nodeVec):NORMALIZED.
+    RETURN (COS(inc) * bodyUp + mirror * SIN(inc) * w):NORMALIZED.
 }
 
 // Determine which mirror candidate matches KSP's element
@@ -147,7 +147,7 @@ LOCAL FUNCTION _normalCandidate {
 LOCAL _mirrorSignCache IS 0.
 LOCAL FUNCTION _normalMirrorSign {
     IF _mirrorSignCache <> 0 { RETURN _mirrorSignCache. }
-    LOCAL up IS _bodyNorth().
+    LOCAL bodyUp IS _bodyNorth().
 
     LOCAL refInc IS SHIP:ORBIT:INCLINATION.
     LOCAL refLan IS SHIP:ORBIT:LAN.
@@ -175,7 +175,7 @@ LOCAL FUNCTION _normalMirrorSign {
         RETURN 1.
     }
 
-    LOCAL plus IS _normalCandidate(refInc, refLan, up, 1).
+    LOCAL plus IS _normalCandidate(refInc, refLan, bodyUp, 1).
     IF VANG(plus, refNormal) < 90 {
         SET _mirrorSignCache TO 1.
     } ELSE {
@@ -252,11 +252,11 @@ LOCAL FUNCTION _errorSummary {
     PARAMETER errs.
     LOCAL s IS "".
     FOR key IN errs:KEYS {
-        LOCAL v IS errs[key].
+        LOCAL val IS errs[key].
         IF key = "AP" OR key = "PE" {
-            SET s TO s + " " + key + "Err=" + ROUND(v / 1000, 2) + "km".
+            SET s TO s + " " + key + "Err=" + ROUND(val / 1000, 2) + "km".
         } ELSE {
-            SET s TO s + " " + key + "Err=" + ROUND(v, 3).
+            SET s TO s + " " + key + "Err=" + ROUND(val, 3).
         }
     }
     RETURN s.
@@ -319,12 +319,12 @@ GLOBAL FUNCTION planPlaneMatch {
 
     LOCAL rVec IS POSITIONAT(SHIP, burnUt) - POSITIONAT(SHIP:BODY, burnUt).
     LOCAL rHat IS rVec:NORMALIZED.
-    LOCAL v IS VELOCITYAT(SHIP, burnUt):ORBIT.
+    LOCAL vel IS VELOCITYAT(SHIP, burnUt):ORBIT.
 
     // Try both rotation senses; keep the one whose post-burn plane
     // normal is closest to the target normal. Immune to handedness.
-    LOCAL vPlus IS ANGLEAXIS(theta, rHat) * v.
-    LOCAL vMinus IS ANGLEAXIS(-theta, rHat) * v.
+    LOCAL vPlus IS ANGLEAXIS(theta, rHat) * vel.
+    LOCAL vMinus IS ANGLEAXIS(-theta, rHat) * vel.
     LOCAL nPlus IS VCRS(rHat, vPlus:NORMALIZED):NORMALIZED.
     LOCAL nMinus IS VCRS(rHat, vMinus:NORMALIZED):NORMALIZED.
     LOCAL vNew IS vPlus.
@@ -334,7 +334,7 @@ GLOBAL FUNCTION planPlaneMatch {
         SET residual TO VANG(nMinus, nTgt).
     }
 
-    LOCAL dvVec IS vNew - v.
+    LOCAL dvVec IS vNew - vel.
     LOCAL nd IS nodeFromDvVector(burnUt, dvVec).
     ADD nd.
 

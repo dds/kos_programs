@@ -46,8 +46,8 @@
 
 // Clamp helper for trig arguments that must stay in [-1, 1].
 LOCAL FUNCTION _clamp1 {
-    PARAMETER v.
-    RETURN MAX(-1, MIN(1, v)).
+    PARAMETER val.
+    RETURN MAX(-1, MIN(1, val)).
 }
 
 // lambertSolve — solve Lambert's problem for a single-revolution transfer.

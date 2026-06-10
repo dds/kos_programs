@@ -53,8 +53,8 @@ LOCAL FUNCTION _gotoFindVessel {
     PARAMETER name.
     LOCAL all IS LIST().
     LIST TARGETS IN all.
-    FOR v IN all {
-        IF v:NAME = name { RETURN v. }
+    FOR ves IN all {
+        IF ves:NAME = name { RETURN ves. }
     }
     RETURN 0.
 }

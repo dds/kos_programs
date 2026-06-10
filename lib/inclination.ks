@@ -91,9 +91,9 @@ GLOBAL FUNCTION resolveTargetInclination {
         RETURN 0.
     }
 
-    FOR v IN ALLVESSELS() {
-        IF v:NAME = targetName {
-            LOCAL inc IS v:ORBIT:INCLINATION.
+    FOR ves IN ALLVESSELS() {
+        IF ves:NAME = targetName {
+            LOCAL inc IS ves:ORBIT:INCLINATION.
             mLog("Matching inclination to " + targetName + ": " + ROUND(inc,2) + "deg").
             RETURN inc.
         }
