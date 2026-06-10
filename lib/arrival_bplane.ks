@@ -189,13 +189,13 @@ LOCAL FUNCTION _measureArrival {
 // ============================================================
 LOCAL FUNCTION _arrivalPlaneNormal {
     PARAMETER targetBody, inc, lan, meas.
-    LOCAL up IS targetBody:ANGULARVEL:NORMALIZED.
+    LOCAL up_ IS targetBody:ANGULARVEL:NORMALIZED.
 
     LOCAL FUNCTION _candidate {
         PARAMETER i_, l_, sign_.
-        LOCAL nodeVec IS (ANGLEAXIS(l_, up) * SOLARPRIMEVECTOR):NORMALIZED.
-        LOCAL w IS VCRS(up, nodeVec):NORMALIZED.
-        RETURN (COS(i_) * up + sign_ * SIN(i_) * w):NORMALIZED.
+        LOCAL nodeVec IS (ANGLEAXIS(l_, up_) * SOLARPRIMEVECTOR):NORMALIZED.
+        LOCAL w IS VCRS(up_, nodeVec):NORMALIZED.
+        RETURN (COS(i_) * up_ + sign_ * SIN(i_) * w):NORMALIZED.
     }
 
     LOCAL sign IS 1.
