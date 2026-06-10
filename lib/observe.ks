@@ -74,11 +74,8 @@ LOCAL FUNCTION _observeLog {
         + " thr=" + ROUND(SHIP:CONTROL:PILOTMAINTHROTTLE,2)
         + " free=" + CORE:VOLUME:FREESPACE.
     IF planeActive {
-        LOCAL auth IS MAX(PLANE_CFG["FBW_MIN_AUTH"],
-            MIN(PLANE_CFG["FBW_MAX_AUTH"],
-                PLANE_CFG["FBW_REF_SPEED"] / MAX(SHIP:AIRSPEED, 1))).
         SET line TO line
-            + " auth=" + ROUND(auth,2)
+            + " auth=" + ROUND(planeCtrlAuthority(),2)
             + " wlev=" + wingLevelerActive
             + " ahld=" + altHoldActive
             + " hhld=" + hdgHoldActive.

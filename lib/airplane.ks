@@ -3,20 +3,31 @@
 // ============================================================
 
 GLOBAL PLANE_CFG IS LEXICON(
+    // Roll PID tracks a bank-angle target (0 for wing leveler,
+    // computed from heading error for heading hold).
     "ROLL_KP",           0.02,
     "ROLL_KI",           0.001,
     "ROLL_KD",           0.01,
-    "ALT_KP",            0.003,
-    "ALT_KI",            0.0005,
-    "ALT_KD",            0.002,
+    // Altitude hold flies vertical speed like a real autopilot:
+    // alt error -> VS target (proportional) -> pitch target (PID)
+    // -> elevator (pitch PID). Direct alt->pitch invited phugoid.
+    "ALT_VS_PER_M",      0.15,
+    "ALT_MAX_VS",          20,
+    "ALT_VS_KP",         0.40,
+    "ALT_VS_KI",         0.05,
+    "ALT_VS_KD",         0.05,
     "ALT_MAX_PITCH",       8,
     "ALT_MIN_PITCH",      -6,
     "PITCH_KP",          0.05,
     "PITCH_KI",          0.005,
     "PITCH_KD",          0.02,
-    "HDG_KP",            0.03,
-    "HDG_KI",            0.002,
-    "HDG_KD",            0.015,
+    // Heading hold turns by BANKING (like a real airplane), not by
+    // yawing: heading error -> bank target -> roll channel.
+    // HDG_BANK_SIGN is an airframe escape hatch if a cockpit's
+    // FACING:ROLL convention is inverted.
+    "HDG_BANK_PER_DEG",  2.0,
+    "HDG_MAX_BANK",       25,
+    "HDG_BANK_SIGN",       1,
     "SPD_KP",            0.01,
     "SPD_KI",            0.002,
     "SPD_KD",            0.005,
@@ -30,16 +41,23 @@ GLOBAL PLANE_CFG IS LEXICON(
     "SURVEY_SPACING",    500,
     "SURVEY_SPEED",      150,
     "SURVEY_LANE_LENGTH", 10000,
-    "FBW_REF_SPEED",     100,
+    // Control authority gain-schedules with dynamic pressure (real
+    // FBW practice): full deflection at/below FBW_REF_Q, scaled
+    // down as Q grows. Q accounts for altitude where speed alone
+    // does not (thin air needs MORE deflection, not less).
+    "FBW_REF_Q",         0.06,
     "FBW_MIN_AUTH",      0.15,
     "FBW_MAX_AUTH",      1.0,
     "BRAKE_REF_SPEED",    80,
     "BRAKE_STOP_SPEED",    3,
     "REVERSE_THRUST_DELAY", 1.5,
     "REVERSE_AG",          2,
+    "REVERSE_AUTO",       TRUE,
+    "REVERSE_MIN_SPEED",   50,
+    "REVERSE_CONFIRM_TIME", 0.4,
+    "REVERSE_THROTTLE",   0.7,
     "STEER_MAX_SPEED",    30,
     "STEER_TAG",         "steering_gear",
-    "SURFACE_CTRL",      FALSE,
     "PID_CTRL",          TRUE
 ).
 
@@ -79,12 +97,24 @@ GLOBAL PLANE_APPROACHES  IS LIST(
         "radius", 25000
     )
 ).
-LOCAL _ctrlSurfaces      IS LIST().
 LOCAL _rollPid           IS 0.
 LOCAL _altPid            IS 0.
 LOCAL _pitchPid          IS 0.
-LOCAL _hdgPid            IS 0.
 LOCAL _spdPid            IS 0.
+
+// Wrap an angle into (-180, 180].
+LOCAL FUNCTION _wrap180 {
+    PARAMETER a.
+    UNTIL a <= 180  { SET a TO a - 360. }
+    UNTIL a > -180  { SET a TO a + 360. }
+    RETURN a.
+}
+
+// Bank angle with wrap protection — FACING:ROLL can report 358
+// for a 2-degree left bank, which would slam a raw PID.
+LOCAL FUNCTION _bankAngle {
+    RETURN _wrap180(SHIP:FACING:ROLL).
+}
 
 GLOBAL FUNCTION planeInit {
     SET planeActive TO TRUE.
@@ -111,29 +141,20 @@ GLOBAL FUNCTION planeInit {
     }
 
     mLog("Plane init: cruise=" + CFG["CRUISE_SPEED"] + " top=" + CFG["TOP_SPEED"] + "m/s").
-    IF PLANE_CFG["SURFACE_CTRL"] {
-        SET _ctrlSurfaces TO LIST().
-        FOR p IN SHIP:PARTS {
-            IF p:HASMODULE("ModuleControlSurface") {
-                _ctrlSurfaces:ADD(p:GETMODULE("ModuleControlSurface")).
-            }
-        }
-        mLog("Control surfaces: " + _ctrlSurfaces:LENGTH + " found.").
-    }
 
     IF PLANE_CFG["PID_CTRL"] {
         SET _rollPid  TO PIDLOOP(PLANE_CFG["ROLL_KP"],  PLANE_CFG["ROLL_KI"],
             PLANE_CFG["ROLL_KD"],  -1, 1).
-        SET _altPid   TO PIDLOOP(PLANE_CFG["ALT_KP"],   PLANE_CFG["ALT_KI"],
-            PLANE_CFG["ALT_KD"],   PLANE_CFG["ALT_MIN_PITCH"], PLANE_CFG["ALT_MAX_PITCH"]).
+        // _altPid: vertical-speed error -> pitch target.
+        SET _altPid   TO PIDLOOP(PLANE_CFG["ALT_VS_KP"], PLANE_CFG["ALT_VS_KI"],
+            PLANE_CFG["ALT_VS_KD"],
+            PLANE_CFG["ALT_MIN_PITCH"], PLANE_CFG["ALT_MAX_PITCH"]).
         SET _pitchPid TO PIDLOOP(PLANE_CFG["PITCH_KP"], PLANE_CFG["PITCH_KI"],
             PLANE_CFG["PITCH_KD"], -1, 1).
-        SET _hdgPid   TO PIDLOOP(PLANE_CFG["HDG_KP"],   PLANE_CFG["HDG_KI"],
-            PLANE_CFG["HDG_KD"],   -1, 1).
         SET _spdPid   TO PIDLOOP(PLANE_CFG["SPD_KP"],   PLANE_CFG["SPD_KI"],
             PLANE_CFG["SPD_KD"],
             PLANE_CFG["SPD_MIN_THROTTLE"], PLANE_CFG["SPD_MAX_THROTTLE"]).
-        mLog("PID controllers initialized (roll/alt/pitch/hdg/spd).").
+        mLog("PID controllers initialized (roll/vs/pitch/spd).").
     } ELSE {
         mLog("PID controllers skipped.").
     }
@@ -177,11 +198,6 @@ GLOBAL FUNCTION planeShutdown {
     altHoldOff().
     hdgHoldOff().
     spdHoldOff().
-    IF PLANE_CFG["SURFACE_CTRL"] {
-        FOR sm IN _ctrlSurfaces {
-            sm:SETFIELD("Authority Limiter", 100).
-        }
-    }
     UNLOCK STEERING.
     SET planeActive TO FALSE.
     mLog("Plane autopilot shutdown.").
@@ -237,15 +253,15 @@ GLOBAL FUNCTION hdgHoldOn {
         RETURN.
     }
     SET targetHdg TO hdg.
-    _hdgPid:RESET().
+    _rollPid:RESET().
     SET hdgHoldActive TO TRUE.
-    mLog("Heading hold ON at " + ROUND(hdg,0) + "deg.").
+    mLog("Heading hold ON at " + ROUND(hdg,0) + "deg (bank-to-turn).").
     HUDTEXT("Hdg hold ON: " + ROUND(hdg,0) + "deg", 2, 2, 13, CYAN, FALSE).
 }
 
 GLOBAL FUNCTION hdgHoldOff {
     SET hdgHoldActive TO FALSE.
-    SET SHIP:CONTROL:YAW TO 0.
+    SET SHIP:CONTROL:ROLL TO 0.
     mLog("Heading hold OFF.").
     HUDTEXT("Hdg hold OFF", 2, 2, 13, YELLOW, FALSE).
 }
@@ -271,37 +287,93 @@ GLOBAL FUNCTION spdHoldOff {
     HUDTEXT("Spd hold OFF", 2, 2, 13, YELLOW, FALSE).
 }
 
-LOCAL FUNCTION _fbwAuthority {
+// planeCtrlAuthority — single gain schedule for all control output,
+// proportional to reference/current dynamic pressure. Replaces both
+// the old airspeed-based FBW clamp and the SURFACE_CTRL path that
+// poked every surface's "Authority Limiter" part field per tick
+// (slow, invisible in logs, and redundant with the clamp).
+// Exported so observe.ks logs the same number the loops use.
+GLOBAL FUNCTION planeCtrlAuthority {
+    LOCAL q IS MAX(SHIP:Q, 0.0001).
     RETURN MAX(PLANE_CFG["FBW_MIN_AUTH"],
            MIN(PLANE_CFG["FBW_MAX_AUTH"],
-               PLANE_CFG["FBW_REF_SPEED"] / MAX(SHIP:AIRSPEED, 1))).
+               PLANE_CFG["FBW_REF_Q"] / q)).
 }
 
-LOCAL FUNCTION _surfaceAuthority {
-    LOCAL topSpd    IS CFG["TOP_SPEED"].
-    LOCAL cruiseSpd IS CFG["CRUISE_SPEED"].
-    LOCAL minAuth   IS 0.5.
-    IF topSpd > 700      { SET minAuth TO 0.2. }
-    ELSE IF topSpd > 400 { SET minAuth TO 0.3. }
-    LOCAL spd IS SHIP:AIRSPEED.
-    IF spd <= cruiseSpd { RETURN 1.0. }
-    IF spd >= topSpd    { RETURN minAuth. }
-    LOCAL frac IS (spd - cruiseSpd) / (topSpd - cruiseSpd).
-    RETURN 1.0 - (1.0 - minAuth) * frac^1.3.
+// ============================================================
+// Automatic thrust reversers
+//
+// Engages at touchdown instead of waiting for the POSTFLIGHT
+// landing assist (by which point the jet is already slow). The
+// "really landing" discriminator is BRAKES: a full-stop landing
+// holds brakes from touchdown, a touch-and-go never brakes — so
+// the old blanket REVERSE_THRUST_DELAY false-positive guard
+// shrinks to a short REVERSE_CONFIRM_TIME contact check, and a
+// bounce cancels the reversers instantly.
+// ============================================================
+
+LOCAL _revState IS "idle".
+LOCAL _revConfirmT IS 0.
+
+LOCAL FUNCTION _reverseSet {
+    PARAMETER on.
+    LOCAL revAG IS PLANE_CFG["REVERSE_AG"].
+    IF on {
+        IF revAG = 2 { AG2 ON. }
+        ELSE IF revAG = 3 { AG3 ON. }
+        ELSE IF revAG = 4 { AG4 ON. }
+        LOCK THROTTLE TO PLANE_CFG["REVERSE_THROTTLE"].
+    } ELSE {
+        IF revAG = 2 { AG2 OFF. }
+        ELSE IF revAG = 3 { AG3 OFF. }
+        ELSE IF revAG = 4 { AG4 OFF. }
+        LOCK THROTTLE TO 0.
+        UNLOCK THROTTLE.
+    }
+}
+
+LOCAL FUNCTION _reverseThrustUpdate {
+    IF NOT PLANE_CFG["REVERSE_AUTO"] { RETURN. }
+    LOCAL onGround IS SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    LOCAL gspd IS SHIP:GROUNDSPEED.
+
+    IF _revState = "idle" {
+        IF onGround AND BRAKES AND gspd > PLANE_CFG["REVERSE_MIN_SPEED"] {
+            SET _revState TO "confirming".
+            SET _revConfirmT TO TIME:SECONDS.
+        }
+    } ELSE IF _revState = "confirming" {
+        IF NOT onGround OR NOT BRAKES {
+            SET _revState TO "idle".
+        } ELSE IF TIME:SECONDS - _revConfirmT >= PLANE_CFG["REVERSE_CONFIRM_TIME"] {
+            _reverseSet(TRUE).
+            SET _revState TO "active".
+            mLog("Reverse thrust engaged at " + ROUND(gspd, 0)
+                + " m/s (AG" + PLANE_CFG["REVERSE_AG"]
+                + " thr=" + PLANE_CFG["REVERSE_THROTTLE"] + ").").
+            HUDTEXT("REVERSE THRUST", 3, 2, 15, YELLOW, FALSE).
+        }
+    } ELSE IF _revState = "active" {
+        LOCAL reason IS "".
+        IF NOT onGround { SET reason TO "airborne again". }
+        ELSE IF NOT BRAKES { SET reason TO "brakes released". }
+        ELSE IF gspd < PLANE_CFG["BRAKE_STOP_SPEED"] { SET reason TO "stopped". }
+        IF reason <> "" {
+            _reverseSet(FALSE).
+            SET _revState TO "idle".
+            mLog("Reverse thrust stowed (" + reason + ") at "
+                + ROUND(gspd, 0) + " m/s.").
+        }
+    }
 }
 
 GLOBAL FUNCTION planeUpdate {
     IF NOT planeActive { RETURN. }
 
-    LOCAL auth IS _fbwAuthority().
-    LOCAL clamp IS 0.3 * auth.
+    _reverseThrustUpdate().
 
-    IF PLANE_CFG["SURFACE_CTRL"] {
-        LOCAL surfPct IS ROUND(_surfaceAuthority() * 100, 0).
-        FOR sm IN _ctrlSurfaces {
-            sm:SETFIELD("Authority Limiter", surfPct).
-        }
-    }
+    LOCAL auth IS planeCtrlAuthority().
+    LOCAL clamp IS 0.3 * auth.
 
     IF wptNavActive AND wptIndex < wptList:LENGTH {
         LOCAL wp IS wptList[wptIndex].
@@ -327,15 +399,31 @@ GLOBAL FUNCTION planeUpdate {
         }
     }
 
-    IF wingLevelerActive {
+    // Roll channel: heading hold owns it (bank-to-turn); the wing
+    // leveler is the fallback when no heading is commanded.
+    IF hdgHoldActive {
+        LOCAL hdgError IS _wrap180(targetHdg - SHIP:FACING:YAW).
+        LOCAL maxBank IS PLANE_CFG["HDG_MAX_BANK"].
+        LOCAL bankTgt IS PLANE_CFG["HDG_BANK_SIGN"]
+            * MAX(-maxBank, MIN(maxBank,
+                PLANE_CFG["HDG_BANK_PER_DEG"] * hdgError)).
+        SET _rollPid:SETPOINT TO bankTgt.
+        LOCAL correction IS _rollPid:UPDATE(TIME:SECONDS, _bankAngle()).
+        SET SHIP:CONTROL:ROLL TO MAX(-clamp, MIN(clamp, correction)).
+    } ELSE IF wingLevelerActive {
         SET _rollPid:SETPOINT TO 0.
-        LOCAL correction IS _rollPid:UPDATE(TIME:SECONDS, SHIP:FACING:ROLL).
+        LOCAL correction IS _rollPid:UPDATE(TIME:SECONDS, _bankAngle()).
         SET SHIP:CONTROL:ROLL TO MAX(-clamp, MIN(clamp, correction)).
     }
 
     IF altHoldActive {
-        SET _altPid:SETPOINT TO targetAlt.
-        LOCAL tgtPitch IS _altPid:UPDATE(TIME:SECONDS, SHIP:ALTITUDE).
+        // alt error -> VS target (proportional, capped) -> pitch
+        // target (PID on vertical speed) -> elevator (pitch PID).
+        LOCAL vsTarget IS MAX(-PLANE_CFG["ALT_MAX_VS"],
+            MIN(PLANE_CFG["ALT_MAX_VS"],
+                PLANE_CFG["ALT_VS_PER_M"] * (targetAlt - SHIP:ALTITUDE))).
+        SET _altPid:SETPOINT TO vsTarget.
+        LOCAL tgtPitch IS _altPid:UPDATE(TIME:SECONDS, SHIP:VERTICALSPEED).
         LOCAL aoa IS VANG(SHIP:VELOCITY:SURFACE, SHIP:FACING:FOREVECTOR).
         IF aoa > PLANE_CFG["AOA_LIMIT"] AND tgtPitch > 0 {
             LOCAL aoaMargin IS PLANE_CFG["STALL_AOA"] - aoa.
@@ -346,15 +434,6 @@ GLOBAL FUNCTION planeUpdate {
         SET _pitchPid:SETPOINT TO tgtPitch.
         LOCAL pitchOut IS _pitchPid:UPDATE(TIME:SECONDS, SHIP:FACING:PITCH).
         SET SHIP:CONTROL:PITCH TO MAX(-clamp, MIN(clamp, pitchOut)).
-    }
-
-    IF hdgHoldActive {
-        LOCAL hdgError IS targetHdg - SHIP:FACING:YAW.
-        IF hdgError > 180  { SET hdgError TO hdgError - 360. }
-        IF hdgError < -180 { SET hdgError TO hdgError + 360. }
-        SET _hdgPid:SETPOINT TO 0.
-        LOCAL correction IS _hdgPid:UPDATE(TIME:SECONDS, -hdgError).
-        SET SHIP:CONTROL:YAW TO MAX(-clamp, MIN(clamp, correction)).
     }
 
     IF spdHoldActive {
@@ -518,32 +597,34 @@ GLOBAL FUNCTION planeApproachBrief {
 
 GLOBAL FUNCTION planeLandingAssist {
     LOCAL stopSpd IS PLANE_CFG["BRAKE_STOP_SPEED"].
-    LOCAL revDelay IS PLANE_CFG["REVERSE_THRUST_DELAY"].
-    LOCAL revAG IS PLANE_CFG["REVERSE_AG"].
 
     mLog("Landing assist: brakes on, throttle zero.").
     LOCK THROTTLE TO 0.
     SET BRAKES TO TRUE.
 
-    mLog("Waiting " + revDelay + "s for reverse thrust.").
-    WAIT revDelay.
+    IF PLANE_CFG["REVERSE_AUTO"] {
+        // Drive the touchdown reverser state machine until stopped —
+        // it engages immediately (brakes are on) and stows itself.
+        UNTIL SHIP:VELOCITY:SURFACE:MAG < stopSpd {
+            _reverseThrustUpdate().
+            WAIT 0.05.
+        }
+        _reverseThrustUpdate().
+        _reverseSet(FALSE).
+        SET _revState TO "idle".
+    } ELSE {
+        // Legacy fixed-delay path for craft with REVERSE_AUTO off.
+        LOCAL revDelay IS PLANE_CFG["REVERSE_THRUST_DELAY"].
+        mLog("Waiting " + revDelay + "s for reverse thrust.").
+        WAIT revDelay.
+        _reverseSet(TRUE).
+        mLog("Reverse thrust AG" + PLANE_CFG["REVERSE_AG"] + " engaged.").
+        WAIT UNTIL SHIP:VELOCITY:SURFACE:MAG < stopSpd.
+        _reverseSet(FALSE).
+    }
 
-    IF revAG = 2 { AG2 ON. }
-    ELSE IF revAG = 3 { AG3 ON. }
-    ELSE IF revAG = 4 { AG4 ON. }
-    mLog("Reverse thrust AG" + revAG + " engaged.").
-    LOCK THROTTLE TO 0.5.
-    mLog("Partial reverse throttle (0.5).").
-
-    WAIT UNTIL SHIP:VELOCITY:SURFACE:MAG < stopSpd.
     mLog("Below stop speed — shutting down.").
-
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
     SET BRAKES TO TRUE.
-    IF revAG = 2 { AG2 OFF. }
-    ELSE IF revAG = 3 { AG3 OFF. }
-    ELSE IF revAG = 4 { AG4 OFF. }
     mLog("Landing assist complete.").
 }
 
@@ -584,9 +665,27 @@ GLOBAL FUNCTION surveyStart {
     wptNavOn().
 }
 
+// planePreflightReset — put the airframe back into takeoff trim.
+// Run every leg (multi-leg airline flights land with landing trim,
+// stowed-but-armed reversers, and stale control inputs).
+GLOBAL FUNCTION planePreflightReset {
+    SET SHIP:CONTROL:PILOTPITCHTRIM TO 0.
+    SET SHIP:CONTROL:PILOTYAWTRIM TO 0.
+    SET SHIP:CONTROL:PILOTROLLTRIM TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    SET SHIP:CONTROL:NEUTRALIZE TO TRUE.
+    _reverseSet(FALSE).
+    SET _revState TO "idle".
+    SET BRAKES TO TRUE.
+    mLog("Preflight reset: trims zeroed, reversers stowed, "
+        + "throttle idle, brakes hold.").
+}
+
 GLOBAL FUNCTION planePreflightChecklist {
     PARAMETER craftName.
     PARAMETER items.
+
+    planePreflightReset().
 
     LOCAL envRows IS LIST(
         "Airspeed .... " + ROUND(SHIP:AIRSPEED,1) + " m/s",
@@ -675,4 +774,162 @@ LOCAL FUNCTION _bestRunwayHeading {
         RETURN ap["hdg1"].
     }
     RETURN ap["hdg2"].
+}
+
+// ============================================================
+// airplaneMain — shared flight-computer skeleton
+//
+// Every aircraft was carrying the same ~120 lines of sequence
+// plumbing, science-payload checks, and PREFLIGHT/FLIGHT/
+// POSTFLIGHT handlers. Craft scripts now reduce to CFG + a call:
+//
+//   GLOBAL FUNCTION main {
+//       airplaneMain("FJ1A", LEXICON("checklist", LIST(...))).
+//   }
+//
+// opts (all optional):
+//   "defaultSeq"    LIST     — fallback when no mission SEQUENCE
+//   "checklist"     LIST     — preflight checklist items
+//   "configure"     delegate — PLANE_CFG hook, runs at each phase
+//   "configRows"    delegate — extra flightPlan rows for the brief
+//   "phases"        LEXICON  — extra/override phase handlers
+//   "landingAssist" bool     — run planeLandingAssist (default TRUE)
+//
+// Per-craft behavior comes from CFG instead of bespoke handlers:
+//   AIRBORNE_SPEED       — preflight ends past this speed (50)
+//   AIRBORNE_RADAR_ALT   — min radar alt to count as flying (0)
+//   MIN_FLIGHT_TIME      — seconds aloft before a touchdown can
+//                          end FLIGHT (0; FBIJ uses 60 for T&G)
+//   FINAL_LANDING_SPEED  — max speed for a final landing (off;
+//                          lets touch-and-goes roll through)
+// ============================================================
+
+LOCAL _amName IS "".
+LOCAL _amOpts IS LEXICON().
+LOCAL _amSeq IS LIST().
+LOCAL _amHasScience IS FALSE.
+
+LOCAL FUNCTION _amCfgNum {
+    PARAMETER key, defaultValue.
+    IF CFG:HASKEY(key) { RETURN CFG[key]. }
+    RETURN defaultValue.
+}
+
+LOCAL FUNCTION _amConfigure {
+    IF _amOpts:HASKEY("configure") { _amOpts["configure"]:CALL(). }
+}
+
+LOCAL FUNCTION _amOnGround {
+    RETURN SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+}
+
+LOCAL FUNCTION _amFlying {
+    IF SHIP:STATUS = "SUB_ORBITAL" OR SHIP:STATUS = "ORBITING" { RETURN TRUE. }
+    RETURN SHIP:STATUS = "FLYING"
+        AND ALT:RADAR > _amCfgNum("AIRBORNE_RADAR_ALT", 0).
+}
+
+LOCAL FUNCTION _amFinalLanding {
+    PARAMETER airborneTime.
+    IF NOT _amOnGround() { RETURN FALSE. }
+    IF TIME:SECONDS - airborneTime < _amCfgNum("MIN_FLIGHT_TIME", 0) {
+        RETURN FALSE.
+    }
+    RETURN SHIP:AIRSPEED <= _amCfgNum("FINAL_LANDING_SPEED", 9999).
+}
+
+LOCAL FUNCTION _amPrintConfig {
+    flightPlanTitle(_amName + " FLIGHT PLAN", SHIP:NAME).
+    flightPlanIdentity().
+    flightPlanSection("CRUISE").
+    flightPlanRow("ALT", CFG["CRUISE_ALT"] + " m").
+    flightPlanRow("SPEED", CFG["CRUISE_SPEED"] + " m/s").
+    IF _amOpts:HASKEY("configRows") { _amOpts["configRows"]:CALL(). }
+    flightPlanSection("SEQUENCE").
+    flightPlanSequence(_amSeq).
+}
+
+LOCAL FUNCTION _amPhasePreflight {
+    mLogPhase("PREFLIGHT").
+    _amConfigure().
+    planeInit().
+    observeStart().
+
+    LOCAL items IS LIST("Brakes - HOLD until ready",
+        "Stage - start engines", "Throttle - FULL").
+    IF _amOpts:HASKEY("checklist") { SET items TO _amOpts["checklist"]. }
+    planePreflightChecklist(_amName, items).
+
+    WAIT UNTIL _amFlying() OR SHIP:AIRSPEED > _amCfgNum("AIRBORNE_SPEED", 50).
+    mLog("Airborne.").
+    nextPhase(launchSeq).
+}
+
+LOCAL FUNCTION _amPhaseFlight {
+    mLogPhase("FLIGHT").
+    _amConfigure().
+    IF NOT planeActive { planeInit(). }
+    IF _amHasScience { scienceInit(). }
+
+    // SHIP:STATUS stays LANDED through the takeoff roll — wait for
+    // real liftoff before watching for a landing.
+    mLog("Waiting for liftoff...").
+    WAIT UNTIL _amFlying().
+    LOCAL airborneTime IS TIME:SECONDS.
+    mLog("Flight active. Monitoring until final landing.").
+
+    UNTIL _amFinalLanding(airborneTime) {
+        planeUpdate().
+        IF _amHasScience { scienceRunAll(). }
+        WAIT 0.1.
+    }
+    mLog("Final landing detected.").
+    nextPhase(launchSeq).
+}
+
+LOCAL FUNCTION _amPhasePostFlight {
+    mLogPhase("POSTFLIGHT").
+    _amConfigure().
+    IF _amHasScience { scienceTransmitAll(). }
+    LOCAL assist IS TRUE.
+    IF _amOpts:HASKEY("landingAssist") { SET assist TO _amOpts["landingAssist"]. }
+    IF assist { planeLandingAssist(). }
+    planeShutdown().
+    mLog(_amName + " flight complete.").
+    nextPhase(launchSeq).
+}
+
+GLOBAL FUNCTION airplaneMain {
+    PARAMETER craftName.
+    PARAMETER opts IS LEXICON().
+
+    SET _amName TO craftName.
+    SET _amOpts TO opts.
+
+    LOCAL defaultSeq IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
+    IF opts:HASKEY("defaultSeq") { SET defaultSeq TO opts["defaultSeq"]. }
+    SET _amSeq TO airplaneSequenceFromState(defaultSeq).
+    SET launchSeq TO _amSeq.
+    SET xferSeq TO _amSeq.
+
+    SET _amHasScience TO missionHasPayload("SCIENCE").
+
+    mLogPhase(craftName + " MAIN").
+    mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
+    IF stateGet("phase", "") = "" { stateSet("phase", _amSeq[0]). }
+
+    _amPrintConfig().
+
+    LOCAL phaseMap IS LEXICON(
+        "PREFLIGHT",   _amPhasePreflight@,
+        "FLIGHT",      _amPhaseFlight@,
+        "POSTFLIGHT",  _amPhasePostFlight@,
+        "POST_FLIGHT", _amPhasePostFlight@
+    ).
+    IF opts:HASKEY("phases") {
+        FOR key IN opts["phases"]:KEYS {
+            phaseMapSet(phaseMap, key, opts["phases"][key]).
+        }
+    }
+    runPhases(phaseMap).
 }

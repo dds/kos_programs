@@ -96,6 +96,34 @@ GLOBAL FUNCTION missionSequenceLibs {
 }
 
 // ============================================================
+// Aircraft boot helpers — shared by all airplane craft scripts.
+// These live here (preamble) because bootVehicleLibs() runs
+// before the airplane library itself is loaded.
+// ============================================================
+
+GLOBAL FUNCTION airplaneSequenceFromState {
+    PARAMETER defaultSeq.
+    LOCAL raw IS stateGet("mission_cfg_SEQUENCE", "").
+    IF raw <> "" { RETURN phaseListFromString(raw). }
+    RETURN defaultSeq.
+}
+
+GLOBAL FUNCTION airplaneVehicleLibs {
+    PARAMETER defaultSeq.
+    PARAMETER baseLibs IS LIST("orbit", "airplane").
+    LOCAL seq IS airplaneSequenceFromState(defaultSeq).
+    LOCAL libs IS missionLibsForPhases(seq, baseLibs).
+    IF missionHasPayload("SCIENCE") AND NOT libs:CONTAINS("science") {
+        libs:ADD("science").
+    }
+    SET libs TO missionSequenceLibs(libs, baseLibs).
+    stateSet("lib_band", "AIR").
+    stateSet("lib_band_phase", stateGet("phase", seq[0])).
+    stateSet("lib_band_libs", libs:JOIN(",")).
+    RETURN libs.
+}
+
+// ============================================================
 // missionLibsForPhases — compute libraries from phase sequence.
 //
 // Mission profiles own phase order. Craft scripts map phase names
