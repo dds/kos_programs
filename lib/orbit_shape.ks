@@ -99,16 +99,30 @@ LOCAL FUNCTION _orbitableNormal {
         obt_:ORBIT:VELOCITY:ORBIT:NORMALIZED):NORMALIZED.
 }
 
+// Frame-proof orbital velocity at a future time: numeric
+// derivative of the body-relative position, exactly like
+// arrival_bplane. VELOCITYAT's reference frame is unreliable for
+// burns planned far ahead around a moving body (flight-found:
+// the plane-match "rotation" was distorting the orbit shape).
+LOCAL FUNCTION _velAt {
+    PARAMETER t.
+    LOCAL dt IS 0.5.
+    RETURN ((POSITIONAT(SHIP, t + dt) - POSITIONAT(SHIP:BODY, t + dt))
+          - (POSITIONAT(SHIP, t - dt) - POSITIONAT(SHIP:BODY, t - dt)))
+        / (2 * dt).
+}
+
 // ============================================================
 // nodeFromDvVector — convert a raw dV vector at a future time
-// into a maneuver node. Shared frame recipe (matches the proven
-// implementation in maneuver_rendezvous.ks).
+// into a maneuver node. Same frame recipe as the proven
+// maneuver_rendezvous implementation, but with the frame-proof
+// velocity so the basis matches the dV vectors built from it.
 // ============================================================
 GLOBAL FUNCTION nodeFromDvVector {
     PARAMETER burnUt.
     PARAMETER dvVec.
     LOCAL r1 IS POSITIONAT(SHIP, burnUt) - POSITIONAT(SHIP:BODY, burnUt).
-    LOCAL progradeHat IS VELOCITYAT(SHIP, burnUt):ORBIT:NORMALIZED.
+    LOCAL progradeHat IS _velAt(burnUt):NORMALIZED.
     LOCAL normalHat IS VCRS(r1, progradeHat):NORMALIZED.
     LOCAL radialHat IS VCRS(normalHat, progradeHat):NORMALIZED.
     RETURN NODE(burnUt,
@@ -319,7 +333,7 @@ GLOBAL FUNCTION planPlaneMatch {
 
     LOCAL rVec IS POSITIONAT(SHIP, burnUt) - POSITIONAT(SHIP:BODY, burnUt).
     LOCAL rHat IS rVec:NORMALIZED.
-    LOCAL vel IS VELOCITYAT(SHIP, burnUt):ORBIT.
+    LOCAL vel IS _velAt(burnUt).
 
     // Try both rotation senses; keep the one whose post-burn plane
     // normal is closest to the target normal. Immune to handedness.

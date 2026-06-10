@@ -103,16 +103,42 @@ GLOBAL FUNCTION resolveTargetInclination {
     RETURN SHIP:ORBIT:INCLINATION.
 }
 
+// Seconds until the ship reaches the given true anomaly.
+// Kepler-exact: converts both anomalies to MEAN anomaly (which
+// does advance linearly in time). The old linear-TA version was
+// only correct for circular orbits — flight-found on an ecc 0.58
+// Mun ellipse, where it missed the plane-match node by tens of
+// degrees and left a 27 deg residual after the burn.
 GLOBAL FUNCTION etaToTrueAnomaly {
     PARAMETER targetTA.
 
     UNTIL targetTA >= 0   { SET targetTA TO targetTA + 360. }
     UNTIL targetTA < 360  { SET targetTA TO targetTA - 360. }
 
-    LOCAL currentTA IS SHIP:ORBIT:TRUEANOMALY.
-    LOCAL taToGo IS targetTA - currentTA.
-    IF taToGo < 0 { SET taToGo TO taToGo + 360. }
-
+    LOCAL obtEcc IS SHIP:ORBIT:ECCENTRICITY.
     LOCAL period IS SHIP:ORBIT:PERIOD.
-    RETURN (taToGo / 360) * period.
+
+    // Hyperbolic/parabolic: no meaningful period; legacy estimate.
+    IF obtEcc >= 1 {
+        LOCAL taToGo IS targetTA - SHIP:ORBIT:TRUEANOMALY.
+        IF taToGo < 0 { SET taToGo TO taToGo + 360. }
+        RETURN (taToGo / 360) * period.
+    }
+
+    LOCAL mNow IS _meanAnomalyDeg(SHIP:ORBIT:TRUEANOMALY, obtEcc).
+    LOCAL mTgt IS _meanAnomalyDeg(targetTA, obtEcc).
+    LOCAL dM IS mTgt - mNow.
+    UNTIL dM >= 0   { SET dM TO dM + 360. }
+    UNTIL dM < 360  { SET dM TO dM - 360. }
+    RETURN (dM / 360) * period.
+}
+
+// True anomaly -> mean anomaly, degrees, ellipse only.
+// tan(E/2) = sqrt((1-e)/(1+e)) tan(ta/2);  M = E - e sinE.
+LOCAL FUNCTION _meanAnomalyDeg {
+    PARAMETER ta, obtEcc.
+    LOCAL eAnom IS 2 * ARCTAN2(
+        SQRT(1 - obtEcc) * SIN(ta / 2),
+        SQRT(1 + obtEcc) * COS(ta / 2)).
+    RETURN eAnom - obtEcc * SIN(eAnom) * CONSTANT:RADTODEG.
 }
