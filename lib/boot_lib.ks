@@ -629,7 +629,7 @@ GLOBAL FUNCTION bootLibRun {
     IF EXISTS(compiled) OR EXISTS(cached) {
         RUNPATH("1:/lib/" + libName).
         BOOT_LIB_RAN:ADD(libName).
-    } ELSE IF EXISTS(archive_) {
+    } ELSE IF HOMECONNECTION:ISCONNECTED AND EXISTS(archive_) {
         RUNPATH("0:/lib/" + libName).
         BOOT_LIB_RAN:ADD(libName).
     } ELSE {
