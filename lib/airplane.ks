@@ -116,9 +116,10 @@ LOCAL FUNCTION _bankAngle {
     RETURN _wrap180(SHIP:FACING:ROLL).
 }
 
-// Merge the persistent runway database (built up in the field by
-// cmd/markrunway.ks) into PLANE_APPROACHES. Synced to the local
-// volume when connected so remote-field approaches work offline.
+// Merge the optional runway database (0:/data/approaches.json,
+// hand-maintained — same fields as PLANE_APPROACHES entries) into
+// the approach table. Synced to the local volume when connected
+// so remote-field approaches work offline. No file, no effect.
 LOCAL FUNCTION _loadCustomApproaches {
     LOCAL archiveDb IS "0:/data/approaches.json".
     LOCAL localDb IS "1:/data/approaches.json".
