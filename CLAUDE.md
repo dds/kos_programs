@@ -138,14 +138,14 @@ Vehicle scripts build their own sequence LIST, call `phaseHandlerMap()`, add cra
 
 ### Observation mode (`lib/observe.ks`)
 
-Periodic telemetry logging to a separate file from the flight/fault log. Designed for long flight tests (3+ hours).
+Periodic telemetry logging to a separate file from the flight/fault log. Designed for long flight tests and PID tuning.
 
-- **Log file**: `1:/run/obs_<shipname>_<time>.log` — one compact ~100-byte line per entry
-- **Fields**: `T spd gspd alt vs hdg pit rol thr free` + plane-specific (`auth wbrk wstr wlev ahld hhld`) when `planeActive`
-- **Config**: `OBS_CFG` lexicon — `INTERVAL` (default 120s), `MIN_FREE` (default 2000 bytes), `STOP_FILE` (`1:/run/obs_off`)
-- **Sentinel file** (`1:/run/obs_off`): checked at log time, not every tick. Auto-created on abort, low storage, or `observeStop()`. Deleted by `observeStart()` to re-enable.
-- **Integration**: craft scripts add `"observe"` from `bootVehicleLibs()` and call `observeStart()` in preflight. `_launchAbort()` creates the sentinel to halt logging on abort.
-- **Budget**: 120s interval over 3 hours = ~90 entries = ~9KB
+- **Archive-first**: with a KSC link, lines append straight to `0:/logs/obs/<ship>_<launchtime>.log` (so data survives instead of dying unread on `1:/`). Offline, lines buffer in `1:/run/obs_*.log` and flush to the archive at the next connected entry; `MIN_FREE` (default 2000 bytes) only gates the offline buffer.
+- **Fields**: `T spd gspd alt vs hdg pit rol thr` + plane-specific (`auth wlev ahld hhld shld cp cr tAlt tHdg tSpd`) when `planeActive`
+- **Config**: `OBS_CFG` lexicon — `INTERVAL` (default 120s; cmd/airtest.ks drops it to 1s), `MIN_FREE`, `STOP_FILE` (`1:/run/obs_off`)
+- **Sentinel file** (`1:/run/obs_off`): checked at log time, not every tick. Auto-created on abort, low offline storage, or `observeStop()`. Deleted by `observeStart()` to re-enable.
+- **Integration**: `airplaneMain()` calls `observeStart()` in preflight. `_launchAbort()` creates the sentinel to halt logging on abort.
+- **Shakeout**: `cmd/airtest.ks` (from manual mode, airborne) runs a scripted assist test card — wing leveler, +400m alt step, +90° heading step with automatic `HDG_BANK_SIGN` detection, +30 m/s speed step — logging STATS metrics and 1s telemetry.
 
 ### Manual mode
 
