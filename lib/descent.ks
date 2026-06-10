@@ -14,7 +14,7 @@
 // Below this altitude, it's safe to shed the transfer stage
 // before deploying chutes.
 LOCAL DECOUPLE_ALTS IS LEXICON(
-    "KERBIN", 250,
+    "KERBIN", 100,
     "DUNA",   8000,
     "EVE",    12000,
     "LAYTHE", 10000,
@@ -245,7 +245,7 @@ LOCAL FUNCTION _descentDeployFairing {
         RETURN.
     }
 
-    LOCAL deploySpeed IS 30.
+    LOCAL deploySpeed IS 10.
     IF SHIP:AIRSPEED > deploySpeed {
         mLog("Waiting for < " + deploySpeed + " m/s to deploy fairing...").
         WAIT UNTIL SHIP:AIRSPEED < deploySpeed
