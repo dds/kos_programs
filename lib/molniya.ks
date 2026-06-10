@@ -201,7 +201,8 @@ GLOBAL FUNCTION planMolniyaInsert {
     // Using the vis-viva equation: v = √(μ(2/r - 1/a))
     LOCAL intermediarySMA IS (burnRadius + targetApR) / 2.
     LOCAL velocityNeeded1 IS SQRT(mu * (2/burnRadius - 1/intermediarySMA)).
-    LOCAL velocityCurrent1 IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
+    // Vis-viva from elements (VELOCITYAT frame drift, flight-found).
+    LOCAL velocityCurrent1 IS SQRT(mu * (2 / burnRadius - 1 / SHIP:ORBIT:SEMIMAJORAXIS)).
     LOCAL deltaV1 IS velocityNeeded1 - velocityCurrent1.
     LOCAL node1 IS NODE(burnUT, 0, 0, deltaV1).
     ADD node1.

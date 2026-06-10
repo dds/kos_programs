@@ -316,7 +316,7 @@ GLOBAL FUNCTION phaseElliptical {
         LOCAL rAp IS bodyR + SHIP:APOAPSIS.
         LOCAL rPe IS bodyR + targetPe.
         LOCAL tSMA IS (rAp + rPe) / 2.
-        LOCAL vNow IS VELOCITYAT(SHIP, burnTime):ORBIT:MAG.
+        LOCAL vNow IS SQRT(mu * (2 / rAp - 1 / SHIP:ORBIT:SEMIMAJORAXIS)).
         LOCAL vNew IS SQRT(mu * (2/rAp - 1/tSMA)).
         LOCAL nd IS NODE(burnTime, 0, 0, vNew - vNow).
         ADD nd.
