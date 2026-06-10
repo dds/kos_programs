@@ -116,8 +116,38 @@ LOCAL FUNCTION _bankAngle {
     RETURN _wrap180(SHIP:FACING:ROLL).
 }
 
+// Merge the persistent runway database (built up in the field by
+// cmd/markrunway.ks) into PLANE_APPROACHES. Synced to the local
+// volume when connected so remote-field approaches work offline.
+LOCAL FUNCTION _loadCustomApproaches {
+    LOCAL archiveDb IS "0:/data/approaches.json".
+    LOCAL localDb IS "1:/data/approaches.json".
+    IF HOMECONNECTION:ISCONNECTED AND EXISTS(archiveDb) {
+        IF NOT EXISTS("1:/data") { CREATEDIR("1:/data"). }
+        COPYPATH(archiveDb, localDb).
+    }
+    IF NOT EXISTS(localDb) { RETURN. }
+    LOCAL db IS ADDONS:JSON:PARSEORELSE(OPEN(localDb):READALL:STRING, LEXICON()).
+    LOCAL merged IS 0.
+    FOR key IN db:KEYS {
+        LOCAL entry IS db[key].
+        LOCAL kept IS LIST().
+        FOR ap IN PLANE_APPROACHES {
+            IF ap["name"] <> entry["name"] { kept:ADD(ap). }
+        }
+        kept:ADD(entry).
+        SET PLANE_APPROACHES TO kept.
+        SET merged TO merged + 1.
+    }
+    IF merged > 0 {
+        mLog("Runway database: " + merged + " field(s) merged ("
+            + PLANE_APPROACHES:LENGTH + " approaches known).").
+    }
+}
+
 GLOBAL FUNCTION planeInit {
     SET planeActive TO TRUE.
+    _loadCustomApproaches().
     IF PLANE_CFG["PID_CTRL"] {
         mLog("Plane autopilot ready. Modes: off. Stall speed="
             + PLANE_CFG["STALL_SPEED"] + "m/s").
