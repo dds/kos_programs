@@ -351,19 +351,117 @@ GLOBAL FUNCTION planPlaneMatch {
     LOCAL dvVec IS vNew - vel.
     LOCAL nd IS nodeFromDvVector(burnUt, dvVec).
     ADD nd.
+    WAIT 0.02.
+
+    // The analytic node is only a SEED. Refine it against the
+    // game's own propagation (nd:ORBIT) in pure element space —
+    // immune to every POSITIONAT/VELOCITYAT frame and timing
+    // subtlety (flight-found: two analytic attempts left 27-29
+    // deg residuals; the game knows where the ship will be).
+    LOCAL seedErr IS _planeErrOf(nd:ORBIT, nTgt).
+    LOCAL finalErr IS _refinePlaneNode(nd, nTgt).
 
     mLog("Plane match node: dV=" + ROUND(nd:DELTAV:MAG, 1)
         + " m/s  theta=" + ROUND(theta, 2)
-        + "deg  residual=" + ROUND(residual, 3)
-        + "deg  ETA=" + ROUND(burnEta, 0) + "s").
+        + "deg  planeErr=" + ROUND(finalErr, 2)
+        + "deg  ETA=" + ROUND(nd:ETA, 0) + "s").
     mLogWarn("STATS plane-match plan dv=" + ROUND(nd:DELTAV:MAG, 1)
         + " theta=" + ROUND(theta, 2)
         + " targetInc=" + ROUND(targetInc, 2)
         + " targetLan=" + ROUND(targetLan, 2)
-        + " residual=" + ROUND(residual, 3)
-        + " eta=" + ROUND(burnEta, 0)).
+        + " seedResidual=" + ROUND(residual, 2)
+        + " seedErr=" + ROUND(seedErr, 2)
+        + " finalErr=" + ROUND(finalErr, 2)
+        + " eta=" + ROUND(nd:ETA, 0)).
+
+    IF finalErr > 5 {
+        mLogError("Plane match: refinement stuck at "
+            + ROUND(finalErr, 1) + "deg — discarding node.").
+        REMOVE nd.
+        RETURN 0.
+    }
     archivePlannedManeuverLog("plane-match").
     RETURN nd.
+}
+
+// Plane error of an orbit (by its elements) against a target
+// normal, both built by the same calibrated constructor — pure
+// element space, no frames involved.
+LOCAL FUNCTION _planeErrOf {
+    PARAMETER o, nTgt.
+    RETURN VANG(planeNormalFromIncLan(o:INCLINATION, o:LAN), nTgt).
+}
+
+// ============================================================
+// _refinePlaneNode — coordinate descent on the node's TIME /
+// NORMAL / PROGRADE / RADIALOUT against nd:ORBIT, minimizing
+// plane error plus a light penalty for disturbing the apsides
+// (those belong to later SHAPE steps). Bound orbit elements vary
+// smoothly with node tweaks, so this converges fast from the
+// analytic seed. Returns the final plane error in degrees.
+// ============================================================
+LOCAL FUNCTION _refinePlaneNode {
+    PARAMETER nd, nTgt.
+
+    LOCAL pe0 IS SHIP:PERIAPSIS.
+    LOCAL ap0 IS SHIP:APOAPSIS.
+
+    LOCAL FUNCTION _cost {
+        RETURN _planeErrOf(nd:ORBIT, nTgt)
+            + 0.01 * (ABS(nd:ORBIT:PERIAPSIS - pe0)
+                    + ABS(nd:ORBIT:APOAPSIS - ap0)) / 1000.
+    }
+
+    LOCAL axes IS LIST("TIME", "NORMAL", "PROGRADE", "RADIALOUT").
+    LOCAL steps IS LEXICON(
+        "TIME", 120, "NORMAL", 16, "PROGRADE", 8, "RADIALOUT", 8).
+    LOCAL minTime IS TIME:SECONDS + 60.
+
+    LOCAL best IS _cost().
+    FROM { LOCAL i IS 0. } UNTIL i >= 60 STEP { SET i TO i + 1. } DO {
+        IF _planeErrOf(nd:ORBIT, nTgt) < 0.15 { BREAK. }
+        LOCAL improved IS FALSE.
+        FOR axis IN axes {
+            LOCAL oldVal IS _nodeAxis(nd, axis).
+            FOR sgn IN LIST(1, -1) {
+                LOCAL trial IS oldVal + sgn * steps[axis].
+                IF axis <> "TIME" OR trial > minTime {
+                    _setNodeAxis(nd, axis, trial).
+                    WAIT 0.02.
+                    LOCAL c IS _cost().
+                    IF c < best - 0.001 {
+                        SET best TO c.
+                        SET oldVal TO trial.
+                        SET improved TO TRUE.
+                    } ELSE {
+                        _setNodeAxis(nd, axis, oldVal).
+                        WAIT 0.02.
+                    }
+                }
+            }
+        }
+        IF NOT improved {
+            FOR axis IN axes { SET steps[axis] TO steps[axis] / 2. }
+            IF steps["NORMAL"] < 0.1 AND steps["TIME"] < 1 { BREAK. }
+        }
+    }
+    RETURN _planeErrOf(nd:ORBIT, nTgt).
+}
+
+LOCAL FUNCTION _nodeAxis {
+    PARAMETER nd, axis.
+    IF axis = "TIME" { RETURN nd:TIME. }
+    IF axis = "NORMAL" { RETURN nd:NORMAL. }
+    IF axis = "PROGRADE" { RETURN nd:PROGRADE. }
+    RETURN nd:RADIALOUT.
+}
+
+LOCAL FUNCTION _setNodeAxis {
+    PARAMETER nd, axis, val.
+    IF axis = "TIME" { SET nd:TIME TO val. }
+    ELSE IF axis = "NORMAL" { SET nd:NORMAL TO val. }
+    ELSE IF axis = "PROGRADE" { SET nd:PROGRADE TO val. }
+    ELSE { SET nd:RADIALOUT TO val. }
 }
 
 // ============================================================
