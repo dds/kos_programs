@@ -49,7 +49,7 @@ LOCAL descentDecouplerTag IS "descent_decoupler".
 LOCAL descentChutesTag IS "descent_chutes".
 LOCAL err IS FALSE.
 
-IF opts:HASKEY("pe")                 { SET targetPe TO opts["pe"]. }
+IF opts:HASKEY("pe")                 { SET targetPe TO opts["reentry_pe"]. }
 IF opts:HASKEY("reentry_dir")        { SET reentryDir TO opts["reentry_dir"]:TOUPPER. }
 IF opts:HASKEY("decouple_tag")       { SET decoupleTag TO opts["decouple_tag"]. }
 IF opts:HASKEY("arm_chutes")         { SET armChutes TO opts["arm_chutes"]. }
