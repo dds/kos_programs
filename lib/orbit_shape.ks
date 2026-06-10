@@ -487,7 +487,11 @@ LOCAL FUNCTION _planTangentBurnAt {
     LOCAL rBurn IS (POSITIONAT(SHIP, burnUt) - POSITIONAT(SHIP:BODY, burnUt)):MAG.
     LOCAL rTarget IS SHIP:BODY:RADIUS + targetAlt.
     LOCAL tSMA IS (rBurn + rTarget) / 2.
-    LOCAL vNow IS VELOCITYAT(SHIP, burnUt):ORBIT:MAG.
+    // Frame-proof speed: VELOCITYAT:MAG is offset by the body's
+    // own frame drift between now and the burn (flight-found:
+    // ~62 m/s at the Mun over a 2148s ETA flipped a Pe-raise
+    // seed RETROGRADE — dv = 156-201 instead of 156-139).
+    LOCAL vNow IS _velAt(burnUt):MAG.
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
     LOCAL nd IS NODE(burnUt, 0, 0, vNew - vNow).
     ADD nd.
@@ -678,6 +682,21 @@ LOCAL FUNCTION _finishShapeNode {
         SET nd:NORMAL TO seedNorm.
         SET nd:PROGRADE TO seedPro.
         WAIT 0.1.
+        IF _nodeUnsafe(nd) AND ABS(seedRad) > 1 {
+            // Suspected radial sign error in the analytic seed
+            // (the AoP impulse family) — try the mirror.
+            SET nd:RADIALOUT TO -seedRad.
+            WAIT 0.1.
+            IF _nodeUnsafe(nd) {
+                SET nd:RADIALOUT TO seedRad.
+                WAIT 0.05.
+            } ELSE {
+                mLogWarn("SHAPE: " + label
+                    + " seed radial sign flipped — refining from mirror.").
+                SET cost TO _refineBurnNode(nd, label, targets).
+                WAIT 0.05.
+            }
+        }
         IF _nodeUnsafe(nd) {
             mLogError("SHAPE: " + label + " seed itself unsafe (Pe "
                 + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + "km ecc "
@@ -685,7 +704,7 @@ LOCAL FUNCTION _finishShapeNode {
             REMOVE nd.
             RETURN 0.
         }
-        SET cost TO -1.
+        IF cost > 9000 OR cost = -1 { SET cost TO -1. }
     }
     mLog("SHAPE " + label + ": dV=" + ROUND(nd:DELTAV:MAG, 1)
         + " m/s -> " + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + " x "
