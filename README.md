@@ -1,574 +1,388 @@
 # kos_programs
 
-KerbalScript (kOS) mission automation framework for Kerbal Space Program.
+KerbalScript (kOS) mission automation for Kerbal Space Program. Autonomous,
+reboot-safe flight computers for rockets, airplanes, spaceplanes, hover
+drones, rovers, and EVA kerbals — driven by data-only mission profiles, with
+progressive code loading to fit tiny in-game processors.
 
-## Overview
+- **Operating a flight?** Start at [Quick start](#quick-start) and
+  [Operations](#operations).
+- **Building a mission?** See [Mission profiles](#mission-profiles) and the
+  vehicle sections.
+- **Writing code?** See [Architecture](#architecture),
+  [Extending](#extending-the-system), and `CLAUDE.md` for conventions.
 
-An autonomous flight computer system for Kerbal craft control. Handles full mission profiles from launch through orbital insertion, interplanetary transfer, payload deployment, and station-keeping. Ships can carry multiple kOS processors, each running a different role — a primary mission computer, a lander CPU, a zombie watchdog — all booting from the same `boot.ks` and routing by `CORE:TAG`.
+## Quick start
 
-## Structure
+1. In the VAB/SPH, set the kOS processor's boot file to `boot/boot.ks`.
+2. Name the vessel either `VEHICLE-TARGET-PAYLOADS...` (legacy hints, e.g.
+   `FR3-MUN-SCANSAT-01`) or a friendly name whose first word is the vehicle
+   id (`FR3 Mun Mapper 1`).
+3. Launch to the pad/runway. Boot syncs code from the archive, shows the
+   mission profile picker (when profiles exist under `missions/<vehicle>/`),
+   and runs the vehicle script.
+4. Press any key within 5 s of any boot for **manual mode**; otherwise the
+   mission auto-resumes from saved state.
+
+## Operations
+
+### Breaking into a running mission
+
+Action group **0** toggles power on the kOS processor and its terminal.
+Pressing `0` a few times power-cycles the CPU, forcing a reboot — then the
+5-second manual-mode window gives you a console. On multi-CPU ships the
+dormant **zombie** core can reboot every other CPU remotely
+(`RUNPATH("1:/cmd/zombie.ks").` from its terminal).
+
+### Operator commands
+
+Run from a manual-mode terminal. `0:/cmd/...` needs a KSC link; commands
+listed in `CMD` rows of `lib/dependencies.txt` are pre-installed at
+`1:/cmd/<name>` so they work at fields with **no radio** (Island Airfield).
+
+| Command | What it does |
+|---|---|
+| `RUNPATH("0:/cmd/goto.ks", "Minmus").` | Route to any body/vessel (see [goto](#universal-routing-goto)) |
+| `RUNPATH("1:/cmd/restartflightplan").` | Rewind the phase machine for the next sortie/leg (offline-safe) |
+| `RUNPATH("0:/cmd/returntokerbin.ks").` | Full automated moon→Kerbin return (escape/MCC/aerobrake/descent) |
+| `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
+| `RUNPATH("1:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
+| `RUNPATH("1:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
+| `RUNPATH("1:/cmd/dump.ks").` | Print persistent state |
+| `RUNPATH("1:/cmd/logs.ks").` | Archive the flight log to KSC |
+| `RUNPATH("1:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
+| `RUNPATH("0:/cmd/setlanding.ks", "tag", "probe_decoupler").` | Landing overrides: `tag` / `deorbit` / `assist` |
+| `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
+| `RUNPATH("0:/cmd/kscsplash.ks").` | Target water splashdown offshore of KSC |
+| `RUNPATH("1:/cmd/zombie.ks").` | Power-cycle every *other* CPU on the vessel |
+
+Emergency landing rescue: `landassist.ks` / `landmin.ks` / `landingrescue.ks`
+force the LAND_ASSIST recovery flow on a live lander.
+
+Only `CMD`-row commands are *guaranteed* on `1:/cmd`; others are local when a
+craft's cleanup keep-list retained them or you copied them while linked
+(`COPYPATH("0:/cmd/x.ks", "1:/cmd/x.ks").`). When in KSC range, `0:/cmd/...`
+always works.
+
+### Multi-leg flights
+
+Airline-style missions (land, swap passengers, fly on) and drone sorties end
+each leg normally, then `RUNPATH("1:/cmd/restartflightplan").` archives the
+leg's log, rewinds `phase` to the start of the sequence, stamps a fresh
+`launch_time`, and reboots. Mission config is untouched. Works offline.
+
+## Architecture
+
+### Boot chain
+
+`boot/boot.ks` (installed in the VAB, **not remotely updatable**) syncs only
+`lib/boot_lib.ks` + `lib/dependencies.txt`, then delegates: preamble/core
+libs load, EVA kerbals are auto-detected (root part `kerbalEVA`), `CORE:TAG`
+routes tagged CPUs to `roles/`, untagged CPUs load `craft/<vehicle>.ks`.
+The selected mission profile is read from `0:/missions/<vehicle>/` once,
+persisted into state as `mission_cfg_*`, and never needed in flight again.
+The craft script's `bootVehicleLibs()` returns the library roots to sync;
+boot compiles them to KSM (comments cost nothing), prunes stale files, runs
+them, then auto-resumes or drops to manual mode.
+
+### Phase machine and sequences
+
+Mission profiles own `SEQUENCE` — the ordered phase names. Craft scripts map
+phase names to handlers and call `runPhases(phaseMap)`; each handler calls
+`nextPhase(seq)` when done. The current phase persists to state, so any
+reboot resumes exactly where it left off. Shared phases follow the naming
+convention `PHASE_NAME → phasePhaseName` (e.g. `DROP_FOR_IMPACT_AND_RAISE_PE
+→ phaseDropForImpactAndRaisePe`); the bindings are generated into
+`lib/dependencies.ks` by `make dependencies`.
+
+### Progressive loading (bands)
+
+Storage is the scarce resource (OCTO = 10 KB, big cores ≈ 100 KB), so code
+loads in **bands**: groups of phases whose libraries load together. When the
+sequence reaches a phase outside the loaded band, the machine saves
+`reload_*` state and asks for a reboot; the next boot loads only the new
+band. **A band loads the libraries of every phase in it**, regardless of the
+mission — so per-mission code (e.g. ScanSat disposal) lives in its own
+phase/band rather than inside a shared band.
+
+### dependencies.txt
+
+`lib/dependencies.txt` is the compact, comment-free source of truth, copied
+as text to the probe core:
 
 ```
-boot/
-    boot.ks              Small VAB-installed loader
-craft/
-    FR2.ks               FR2 multi-payload launcher
-    FR3.ks               FR3 next-gen rocket (leaner FR2)
-    FJ1A.ks              Juno trainer jet
-    FJ4B.ks              Supersonic jet with autopilot assists
-    FBIJ.ks              Fast business jet for GAP hops
-    FSP1.ks              Seaplane/submersible
-    X_SHOT.ks            SHRIMP sounding rocket
-roles/
-    lander_cpu.ks        Secondary CPU: deploy + science
-    zombie.ks            Dormant watchdog — reboots other CPUs on command
-    EVA.ks               EVA kerbal controller (trait-based roles)
-missions/
-    FR2/*.cfg            Data-only mission profiles for FR2
-    FR3/*.cfg            Data-only mission profiles selectable by plain FR3
-lib/
-    boot_lib.ks          Boot helpers, mission profile parsing, dependency resolver
-    dependencies.txt     Text dependency roots for PREAMBLE, LIB, PHASE, BAND
-    core.ks              Always-loaded helpers; dependency root for core libs
-    phases.ks            Generic phase machine + central phase handler registry
-    launch.ks            Reusable ascent phases (launch, fairing, parking)
-    xfer_plan.ks         Transfer/rendezvous planning phases
-    state.ks             Persistent JSON key-value store (survives reboots)
-    logs.ks              Flight logging with fault persistence
-    files.ks             Storage status and directory listing
-    mission_plan.ks      Mission SEQUENCE parsing and payload helpers
-    resume.ks            MISSION lexicon, auto-resume logic, operator helpers
-    maneuver.ks          Maneuver execution + simple capture/circ planning
-    maneuver_transfer.ks Transfer planning + mid-course correction
-    maneuver_targeting.ks  Shared targeting helpers for transfer/MCC planners
-    inclination.ks       Orbital plane change planning
-    molniya.ks           Molniya orbit insertion
-    orbit.ks             Orbit monitoring and stability checks
-    countdown.ks         Launch countdown with audio
-    payload_ops.ks       Shared payload phase implementations (deploy, deorbit, relay)
-    payload_landing.ks   Landing/rover payload phase wrappers
-    science.ks           Experiment automation and SCANsat integration
-    deorbit_targeting.ks Precision deorbit via Trajectories addon
-    landing.ks           Powered descent / suicide burn
-    recovery.ks          Post-abort recovery (antenna deploy, log archive)
-    relay_constellation.ks  Multi-relay deployment
-    airplane.ks          Aircraft autopilot (roll/alt/heading hold)
-    rover.ks             Ground vehicle control
-    observe.ks           Periodic telemetry logger with sentinel-file control
-    utils.ks             General-purpose utilities (fmtDuration, printOrbitRef)
-    lib_navigation.ks    KSLib — phase angle, AN/DN calculations
-    lib_circle_nav.ks    KSLib — great circle navigation
-    lib_enum.ks          KSLib — list/queue/stack functional helpers
-cmd/
-    resume.ks            Resume mission from saved phase
-    setphase.ks          Force phase, optionally changing mission profile
-    dump.ks              Print state to console
-    resetboot.ks         Reset boot counter
-    files.ks             Print storage/file listing
-    logs.ks              Archive flight log to KSC
-    zombie.ks            Reboot all other CPUs on the vessel
-    molniya.ks           Molniya orbit calculator (interactive)
-    airnav.ks            Load selected aircraft waypoint and start nav
-    kerbinreturn.ks      Return from a moon to Kerbin aerobrake
-    kscsplash.ks         Target water splashdown offshore of KSC
-    science.ks           Manual science collection
-    sciencestatus.ks     Science status report
-    scanstart.ks         Start SCANsat scanners
-    scanstatus.ks        SCANsat coverage report
-    scantransmit.ks      Transmit SCANsat data
+PREAMBLE = core                  roots loaded always
+LIB <name> = <deps...>           library dependency edges
+PHASE <P1>[, P2...] = <roots>    libraries a phase needs
+BAND <name> = <phases...>        phases that load together
+CMD <phase...> = <cmds...>       operator cmds installed to 1:/cmd at boot
 ```
+
+After editing it, run `make dependencies` (also a pre-commit hook) to
+regenerate `lib/dependencies.ks`.
+
+### State, logs, telemetry
+
+- **State**: JSON at `1:/run/state.json` via `stateGet`/`stateSet` — never
+  raw file I/O for mission state. Survives reboots, quickloads, power loss.
+- **Flight log**: `mLog`/`mLogWarn`/`mLogError`; WARN-level `STATS ...` lines
+  summarize every plan/burn/phase for post-flight analysis. Archived to
+  `0:/logs/archive/` append-and-rotate at phase transitions and after every
+  planned maneuver when linked.
+- **Observation telemetry** (`lib/observe.ks`): periodic one-line samples
+  streamed straight to `0:/logs/obs/` when linked (offline lines buffer
+  locally and flush on reconnect). `cmd/airtest.ks` drops the interval to 1 s
+  for PID tuning.
+
+### Storage model
+
+`0:/` is the archive (unlimited, KSC link required); `1:/` is the local
+volume. Source compiles to KSM before upload, so comment liberally in `.ks`
+files. Once out of link range nothing new can be fetched — everything a
+mission might need must be loaded (or `CMD`-installed) while connected.
 
 ## Vehicles
 
-### FR2
-
-Multi-payload launch vehicle. Ship name encodes the mission profile:
-
-```
-FR2-TARGET-TYPE1-TYPE2-...
-```
-
-Examples:
-- `FR2-MUN-CRASHPROBE1-RELAY1` — Mun mission: deploy crash probe, then relay
-- `FR2-MINMUS-RELAY1` — Minmus relay deployment
-- `FR2-KERBIN-RELAY-MOLNIYA-03` — Kerbin Molniya relay (63.4 incl, ~3h period, northern dwell)
-
-**Payload types:** `RELAY`, `CRASHPROBE`/`PROBE`, `SCANSAT`, `SCISAT`, `STKSAT` (stub), `LANDER`, `MOLNIYA`
-
-**Phase sequence:** LAUNCH -> FAIR -> ANTS -> PARK -> XING -> MCC -> COAST -> CAPTURE -> [probe phases] -> CIRC -> RAISE -> INCLINE -> [relay/sat ops] -> [LAND_DEORBIT -> LAND] -> DONE
-
-**Molniya sequence:** ...same... -> CIRC -> MOLNIYA_INSERT -> INCLINE -> [relay/sat ops] -> DONE
-
-FR2 keeps a full boot-library fallback for legacy name-driven flights. Profile-driven FR2 missions should set `SEQUENCE = ...` in `missions/FR2/*.cfg`, so the selected mission decides the phase order and boot derives the libraries to sync.
-
-### FR3
-
-Next-gen rocket. Standard ascent + transfer + orbit phases, plus combined mapper/rover Mun missions. FR3 can still read target/payload tokens from a ship name such as `FR3-MUN-ASSISTROVER-01`, but the preferred path is a plain `FR3` craft with a mission profile selected on the pad.
-
-**Payload types:** `RELAY`, `SCANSAT`, `SCISAT`, `LANDER`, `ASSISTLANDER`, `ROVER`, `ASSISTROVER`, `PROBE`, `CRASHPROBE`
-
-For a Mun mapper + rover run, put `SCANSAT` before the landing payload in the ship name. Example: `FR3-MUN-SCANSAT-ASSISTROVER-01`. This deploys the SCANsat in a 250 km polar orbit, then continues to targeted rover landing using explicit landing coordinates, a named waypoint, or the selected map waypoint.
-
-Mission profiles live under `missions/FR3/` and use simple `KEY = VALUE` lines:
-
-```
-MISSION_ID = mun_rover
-MISSION_NAME = Mun Rover Lander
-TARGET = MUN
-PAYLOADS = ASSISTROVER
-SEQUENCE = LAUNCH,FAIR,ANTS,PARK,XING,MCC,COAST,CAPTURE,CIRC,RAISE,INCLINE,LAND_DEORBIT,LAND_ASSIST,LAND,ROVER,DONE
-CAPTURE_PE = 15000
-CAPTURE_INC = 90
-LANDING_ASSIST_DECOUPLER_TAG = probe_decoupler
-LANDING_ASSIST_MAX_TILT = 15
-```
-
-Keep mission profiles in this key/value format for the current boot flow. `lib/state.ks` uses the simplejson addon for persistent state, but mission profile parsing happens through the boot path before the vehicle script is running. Most of that boot logic now lives in compiled `lib/boot_lib.ks`; switching profiles to JSON would still require a VAB-side boot compatibility check before flight.
-
-Mission profiles own the phase sequence. A profile says what mission steps happen and in what order; the craft script maps those phase names to hardware-specific implementations. This lets a mission such as `mun_scansat_polar` use the same high-level steps for FR2 and FR3 while each craft executes staging, fairings, payload release, and recovery with its own code.
-
-Boot derives the required libraries from `SEQUENCE` for simple craft. Profiles can still override or extend boot-time library choices when needed:
-
-```
-SEQUENCE = LAUNCH,FAIR,ANTS,PARK,XING,MCC,COAST,CAPTURE,DROP_FOR_IMPACT_AND_RAISE_PE,SCANSAT_OPS,DONE
-LIBS = phases,flightplan,launch,xfer,maneuver,orbit,payload_ops,science
-LIBS_EXTRA = observe
-```
-
-Profile `LIBS` is an escape hatch that replaces the craft fallback or sequence-derived library list for simple craft such as FR2. `LIBS_EXTRA` appends mission-specific libraries to the computed list. FR3 uses a banded loader instead of a single static list; its selected profile still controls the loaded code through payloads, `SEQUENCE`, phase state, reload flags, and optional `LIBS_EXTRA`. The boot-time dependency resolver in `lib/boot_lib.ks` refreshes compact `lib/dependencies.txt` from archive to local storage when linked, then reads the local copy. `PREAMBLE` declares roots loaded for every band/phase, `LIB` rows declare library dependencies, `PHASE` rows declare sequence roots, and `BAND` rows declare multi-phase groups that should load together. Single phases intentionally do not have `BAND` rows; their phase name is the fallback band.
-
-On boot, `boot/boot.ks` syncs only `lib/boot_lib.ks` and `lib/dependencies.txt`, then `boot_lib` loads the preamble/core libraries declared by dependencies. `lib/boot_lib.ks` reads mission profiles from `0:/missions/<craft>` when a KSC link is available. After a profile is selected, the key/value config is persisted into `1:/run/state.json` as `mission_cfg_*`. Mission `.cfg` files are not copied to the probe core; in-flight reboots use persisted state.
-
-Vessel names can be friendly. Dash-separated names such as `FR3-MUN-SCANSAT-01` still provide legacy `vehicle-target-payload` hints. Space-separated names such as `FR3 Mun Mini SCANSat 1` are treated as display names: boot uses the first word as the craft script (`FR3`) and lets the selected mission profile provide target/payload details. Boot stores the display name in `state["vessel_name"]` and prefers persisted `vehicle`, `target`, and `payloads` after launch so later vessel renames do not break in-flight reboots.
-
-While the vessel is still prelaunch, `lib/boot_lib.ks` clears any saved mission profile and profile config before selecting a mission. This lets you reboot on the pad after choosing the wrong profile and get the mission picker again. Once launched, in-flight reboots keep the saved mission and phase state.
-
-FR3 uses progressive reload points to stay under kOS storage limits. Launch loads only the launch band roots and their declared dependencies; after parking it advances to the next phase and halts so a reboot can load transfer libraries without `launch.ks`. Landing missions use a single `LANDING` band for `LAND_DEORBIT`, `LAND_ASSIST`, and `LAND` so descent does not reboot between adjacent landing phases. Rover missions reload after touchdown for `rover.ks`. Boot prunes stale files from `1:/lib` before syncing each band.
-
-`craft/FR3.ks` keeps FR3-specific mission profile tweaks, sequence construction, PARK reload behavior, and boot-time band selection together because they are preconditions for every FR3 band. Shared phase-name bindings are generated into `lib/dependencies.ks` from `lib/dependencies.txt`; `lib/phases.ks` loads that map on demand via `phaseHandlerMap()` after band libraries are present. Payload classification is generic in `lib/mission_plan.ks`, and dependency expansion is delegated to `lib/boot_lib.ks`. FR3 launch UI is intentionally deferred for a later redesign.
-
-Important in-flight constraint: `boot/boot.ks` itself is installed on the kOS processor in the VAB/SPH and cannot be updated remotely during a mission. Linked reboots can load updated craft scripts, commands, libraries, and archive mission configs, including `lib/boot_lib.ks` and `lib/mission_plan.ks` after the installed boot has synced them once. Away from archive access, mission config comes from persisted state. Any fix that changes the installed boot stub must be applied before launch or by another VAB-side update path.
-
-The current band and pending reload are saved in mission state (`lib_band`, `lib_band_libs`, `reload_required`, `reload_reason`, `reload_next_phase`, `reload_next_band`) so a reboot or state dump shows why the computer is waiting.
-
-The archive-root `VERSION` file contains the code tag printed by `logs.ks` at boot as `CODE version=...`. Boot copies it into `1:/run/code_version.state` when connected, so archived logs can be matched back to a Git tag even after later code changes. Use `make release-version TAG=kos-YYYYMMDD-N` to stamp `VERSION`, commit it, create the matching Git tag, and push branch plus tag.
-
-For live sim iteration, use `make watch-sync` instead of a raw `while true; do git pull origin main; sleep 2; done` loop. The helper fetches first, fast-forwards only when safe, skips updates when the worktree is dirty, and uses a lock so overlapping sync ticks do not race with each other.
-
-Phase transitions archive the current flight log when a KSC link is available. Archive is append-and-rotate: new local log lines are appended to the remote archive, then the local log spool is truncated to a short marker so storage is recovered during flight. If no link is available, the transition still proceeds and the log is archived later by boot/recovery or an operator `RUNPATH("1:/cmd/logs.ks").`
-
-Successful maneuver planners also archive the current flight log when a KSC link is available, immediately after the final planned-node summary and before execution/coast. WARN-level `STATS` lines summarize phase entry orbit state, maneuver setup/alignment/result, transfer/MCC solver results, capture/circularization/raise/inclination cleanup, landing deorbit, assist descent handoff, powered landing, rendezvous, and asteroid-intercept plan details. Each `STATS` line also triggers an immediate archive when connected, so the archive captures breadcrumbs even if the next phase fails.
-
-Emergency rover surface-release mode is available via `missions/FR3/mun_rover_emergency_surface.cfg`. It changes the sequence to skip the separate rover powered landing phase: the second stage lands the whole stack, releases the rover on the surface, then reboots into rover recovery. On an active mission, set `stateSet("mission_id", "mun_rover_emergency_surface").` and reboot so boot reloads the emergency config.
-
-FR3 no longer carries default placeholder surface coordinates. Targeted deorbit and landing use a named mission waypoint first, then the currently selected map waypoint, then explicit numeric lat/lng only when a mission profile or saved state provides them.
-
-Mun rover landing profiles use an extended targeted-deorbit scan window and set `TARGET_DEORBIT_PROCEED_ON_MISS = 0`, so a landing run stops and logs the miss instead of committing to a wrong deorbit burn.
-
-When `LANDING_SITE_SCAN_ENABLE = 1`, targeted deorbit samples SCANsat `ELEVATION` and `SLOPE` around the selected/named waypoint, then retargets Trajectories to the lowest-score nearby site with known altimetry and acceptable slope. If SCANsat is unavailable or no scanned candidate passes the slope limit, it keeps the original waypoint and logs `STATS site-scan`.
-
-For a fast-follow Mun mapper, use `mission_id = mun_scansat_polar` on either FR2 or FR3. The matching profile under `missions/FR2/` or `missions/FR3/` targets a 70 km polar Mun orbit and deploys the payload tagged `scansat_decoupler`.
-
-The Mun mapper profiles use an attached-stack disposal flow: the carrier locks retrograde and burns to a low/impact periapsis before SCANsat release, then the mapper stages and recovers itself to mapping orbit. SCANsat recovery nodes are capped by `SCANSAT_MAX_NODE_DV` so a bad planner result is rejected instead of executing an absurd burn.
-
-### FJ1A
-
-Juno-powered trainer jet. Low speed (cruise ~80 m/s), broad wings. Same phase structure as FJ4B but with lower airspeed thresholds appropriate for the Juno engine. Supports optional SCIENCE payload for biome collection flights.
-
-### FJ4B
-
-Supersonic jet with autopilot assists. Manually-flown with `airplane.ks` integration. Phases: PREFLIGHT -> FLIGHT -> POST_FLIGHT. Auto-collects science on biome changes when SCIENCE payload is present.
-
-### FBIJ
-
-Fast business jet for GAP passenger and executive hops. Phases: PREFLIGHT -> FLIGHT -> POSTFLIGHT. Select the destination in Waypoint Manager, then press AG8 after takeoff to load the selected waypoint and start waypoint navigation. Known approaches currently brief runway headings, glideslope, and top-of-descent guidance for KSC Runway and Island Airfield.
-
-### FSP1
-
-Seaplane/submersible. Similar to FJ4B with water landing support. Phases: PREFLIGHT -> FLIGHT -> SPLASHDOWN -> SURFACE_OPS. Dive operations stub (future `marine.ks`).
-
-### X_SHOT (SHRIMP)
-
-Simple sounding rocket script. Launches, hibernates probe core, collects thermometer and barometer data on descent and landing.
-
-## Dependencies
-
-- **kOS** — Kerbal Operating System mod
-- **MechJeb** — Ascent guidance (launch phase)
-- **Trajectories** — Impact prediction (probe targeting)
-- **SCANsat** — Orbital scanning (optional)
-- **KerbalEngineer** — Burn time calculations
-- **simplejson** — JSON serialization for state persistence
-
-## Usage
-
-1. Set boot file to `boot/boot.ks` on the kOS processor
-2. Name the vessel with either `VEHICLE-TARGET-TYPE...` or a friendly name beginning with the vehicle id
-3. Boot selects a mission profile when available, loads the craft/role script, then syncs the libraries returned by `bootVehicleLibs()`
-4. Press any key within 5s of boot to enter manual mode, or wait to auto-resume
-5. On first boot, FR2 shows a flight plan summary with all config values and a 30s countdown — press ENTER to launch immediately or wait for auto-launch
-
-### Action groups
-
-Action group 0 toggles power on the kOS processor and opens/closes its terminal. In KSP, pressing `0` a few times will power-cycle the CPU, interrupting whatever it's doing and forcing a reboot. This is the primary way to break into a running mission and get a console — the kOS terminal opens on reboot, and boot's 5-second manual mode window gives you a chance to intervene before auto-resume kicks in.
-
-### Manual mode commands
-
-All commands are run via `RUNPATH(...)` in the kOS terminal:
-
-```
-RUNPATH("1:/cmd/resume.ks").              // resume from saved phase
-RUNPATH("1:/cmd/setphase.ks", "PHASE").   // force phase, keep saved mission
-RUNPATH("1:/cmd/dump.ks").                // print state to console
-RUNPATH("1:/cmd/resetmission.ks").        // clear selected mission profile
-RUNPATH("1:/cmd/resetboot.ks").           // reset boot counter
-RUNPATH("1:/cmd/files.ks").               // storage/file listing
-RUNPATH("1:/cmd/logs.ks").                // archive flight log to KSC
-RUNPATH("1:/cmd/zombie.ks").              // reboot all other CPUs
-RUNPATH("1:/cmd/molniya.ks").             // Molniya orbit calculator
-RUNPATH("0:/cmd/kerbinreturn.ks").        // return to Kerbin Pe ~55 km
-RUNPATH("0:/cmd/kscsplash.ks").           // target offshore KSC splashdown
-```
-
-For FR3 Mun sat recovery, run `kerbinreturn.ks` after the contract orbit is satisfied
-and the stack is ready to leave Mun. After Kerbin aerobrake/capture and once the craft
-is in Kerbin SOI, run `kscsplash.ks` to target the water east of KSC.
-
-After launch, to force a specific mission profile on the next reboot:
-
-```
-RUNPATH("1:/cmd/resetmission.ks", "mun_scansat_polar").
-```
-
-### Hot-reloading a lib
-
-```
-COPYPATH("0:/lib/maneuver.ks", "1:/lib/maneuver.ks").
-RUNPATH("1:/lib/maneuver.ks").
-```
-
-### Pulling a cmd script mid-flight
-
-```
-COPYPATH("0:/cmd/dump.ks", "1:/cmd/dump.ks").
-RUNPATH("1:/cmd/dump.ks").
-```
-
-## Multi-CPU Ships (CORE:TAG Routing)
-
-Ships with multiple kOS processors use **CORE:TAG** to route each CPU to a different script. All processors share the same `boot/boot.ks`, but tagged CPUs load a role-specific script instead of the vehicle script.
-
-**How it works:**
-1. Boot parses the ship name as usual (vehicle, target, payloads)
-2. If `CORE:TAG` is non-empty, boot resolves the tag by checking `roles/`, then `craft/`, then root
-3. If the tag has no matching script, the CPU falls through to the normal vehicle script (with a warning)
-4. Untagged CPUs always load the vehicle script from `craft/`
-
-Each processor has its own `1:/` volume, so state files are naturally isolated — no conflicts between CPUs.
-
-### Typical multi-CPU layout
-
-A typical interplanetary mission (Mun, Minmus, Duna, or remote Kerbin) uses three CPUs:
-
-| CPU | CORE:TAG | Script | Role |
-|---|---|---|---|
-| Primary (main probe core) | *(empty)* | `craft/FR2.ks` | Mission computer — ascent, transfer, capture, orbit ops |
-| Lander (OCTO on lander) | `lander_cpu` | `roles/lander_cpu.ks` | Post-separation deploy + science collection |
-| Zombie (OCTO on upper stage) | `zombie` | `roles/zombie.ks` | Dormant watchdog — remote reboot capability |
-
-### Available role scripts
-
-| Script | Tag | Purpose |
+| Craft | Type | Notes |
 |---|---|---|
-| `roles/lander_cpu.ks` | `lander_cpu` | Post-landing deploy (antennas, solar) + science collection |
-| `roles/zombie.ks` | `zombie` | Dormant watchdog — closes terminal and waits for operator |
-| `roles/EVA.ks` | `EVA` | Trait-based EVA kerbal controller (scientist/engineer/generic) |
+| `FR2` | Multi-payload launcher | Legacy name-driven flights + profiles |
+| `FR3` | Multi-payload launcher | Banded loading, profile-first, rover/mapper missions |
+| `FJ1A` | Juno trainer jet | `airplaneMain()` configuration |
+| `FJ4B` | Supersonic jet | No landing assist — pilot owns the rollout |
+| `FBIJ` | Business jet | GAP airline missions, multi-leg, touch-and-go aware |
+| `FSP1` | Seaplane | SPLASHDOWN/SURFACE_OPS water phases |
+| `FSS1` | SSTO spaceplane | Template for the Whiplash/RAPIER era |
+| `FDR1` | Hover drone | Kerbin (lift engines) and Mun/Minmus (RCS) |
+| `ROVER` | Surface rover | Waypoint driving + science |
+| `X_SHOT` | Sounding rocket | SHRIMP thermometer/barometer drops |
 
-### Zombie: remote reboot
+### Rockets (FR2 / FR3)
 
-The zombie is a secondary kOS CPU (usually a tiny OCTO probe core on the upper stage or service module) that boots, closes its own terminal, and goes silent. Its purpose: if the primary mission computer gets stuck — infinite loop, bad state, unresponsive — the operator can regain control remotely.
+Standard sequence: `LAUNCH, FAIR, ANTS, PARK, XING, MCC|BPLANE, COAST,
+CAPTURE, <orbit/payload phases>, DONE`. Payload tokens (`RELAY`, `SCANSAT`,
+`SCISAT`, `PROBE`, `CRASHPROBE`, `LANDER`, `ASSISTLANDER`, `ROVER`,
+`ASSISTROVER`) come from the profile or the legacy ship name and append
+their phases automatically. MechJeb flies the ascent. FR3 adds targeted rover
+landings (Trajectories deorbit + named/selected waypoints, optional SCANsat
+site scan), Mun mapper impact-disposal flows, and the emergency
+`mun_rover_emergency_surface` profile.
 
-**To use the zombie:**
-1. In KSP, right-click the zombie's probe core and open its kOS terminal
-2. The zombie's boot.ks has already loaded; it printed a hint and went idle
-3. Run: `RUNPATH("1:/cmd/zombie.ks").`
-4. This power-cycles every *other* kOS CPU on the vessel, forcing them to reboot
-5. The primary mission computer reboots fresh, hits the 5s manual mode window, and the operator can intervene
+### Aircraft
 
-The zombie itself is unaffected by the reboot command since `cmd/zombie.ks` skips the CPU that's running it. This gives you a reliable backdoor to recover a stuck mission computer without needing physical access (action groups, EVA, etc.).
+All planes are thin configurations over `airplaneMain()` (`lib/airplane.ks`):
+PREFLIGHT (checklist + trim/reverser reset) → FLIGHT → POSTFLIGHT, with
+touch-and-go awareness via `MIN_FLIGHT_TIME`/`FINAL_LANDING_SPEED`.
 
-The `cmd/zombie.ks` script can also be run from any CPU's terminal — it's not exclusive to the zombie role. The role just ensures there's always a clean, idle CPU available to run it from.
+Assists (PID, gains in `PLANE_CFG`): **AG7** toggles the autopilot (wing
+leveler + altitude hold + heading hold), **AG8** flies to the Waypoint
+Manager selection. Heading hold turns by **banking** (`HDG_BANK_SIGN` is the
+per-airframe escape hatch); altitude hold flies vertical speed; control
+authority gain-schedules with dynamic pressure. Thrust reversers engage
+automatically at touchdown when **brakes are held** (a touch-and-go never
+brakes) and stow on bounce, brake release, or full stop.
 
-### EVA
+Shakeout: from manual mode, airborne, run `RUNPATH("0:/cmd/airtest.ks").` —
+scripted step inputs for each assist with metrics logged; it detects and
+flips a wrong `HDG_BANK_SIGN` automatically.
 
-Set boot file to `boot/boot.ks` on a kOS-EVA processor. Boot auto-detects EVA kerbals by checking if the root part is `kerbalEVA` — no special naming or CORE:TAG needed. It sets vehicle=EVA and target=current body, then resolves `roles/EVA.ks`. The EVA script auto-detects the kerbal's trait (Scientist, Engineer, Pilot) to run role-specific logic. Scientists auto-collect and transmit science; engineers and generics get interactive stubs.
+Approach data (runway position/headings/glideslope) lives in
+`PLANE_APPROACHES` (KSC, Island Airfield) plus optional hand-maintained
+entries in `0:/data/approaches.json`.
 
-### Writing a role script
+### SSTO spaceplane (FSS1)
 
-Role scripts live in `roles/` and follow the same contract as vehicle scripts — define `CFG`, `bootVehicleLibs()`, and `main()`. They have access to `SHIP:NAME` parsing results via state (`vehicle`, `target`, `payloads`) set by boot on first boot of any CPU.
+`lib/ssto.ks` bridges the air and orbital worlds:
+`PREFLIGHT, AIRCLIMB, ROCKETCLIMB, <any orbital work>, SSTO_DEORBIT,
+REENTRY, APPROACH, DONE`. AIRCLIMB holds the airbreathing sweet spot until
+thrust decay; ROCKETCLIMB toggles `SSTO_MODE_AG` (bind engine-mode/rocket
+ignition there in the editor), flies a pitch program, and circularizes —
+after that the spaceplane is a normal orbital vessel (goto works). Return is
+a ground-track-lead deorbit, an AoA reentry hold, then glideslope+localizer
+to a known runway with decision-height callouts. Engine-agnostic by config:
+a Whiplash+rocket build just lowers `SSTO_SWITCH_SPEED`.
 
-Keep role scripts lightweight since secondary CPUs are often on storage-constrained probe cores.
+### Hover drone (FDR1)
 
-## Creating a New Vehicle
+`lib/drone.ks` — guidance ported from the ozin370 quadcopter. Two styles via
+`DRONE_STYLE`: **TILT** (throttleable lift engines + reaction wheels, Kerbin)
+and **RCS** (level-attitude translation for Mun/Minmus kerbal transport —
+no tilting). Modes: **AG7** hover, **AG8** fly to the selected waypoint,
+**AG9** land (radar-scheduled flare), **AG10** return to launch point.
+Terrain-lookahead altitude floor, low-fuel/EC autoland, sorties chained with
+`restartflightplan`. Sequence: `ARM, FLY, DONE`.
 
-Boot is generic — any vehicle works. Create `craft/MYVEHICLE.ks`, then either name the ship `MYVEHICLE-TARGET[-stuff]` for legacy name hints or use a friendly name beginning with `MYVEHICLE` and select a mission profile. Boot checks `craft/` first, then falls back to root for backwards compatibility.
+## Mission profiles
 
-A vehicle script must define three things:
+Data-only `KEY = VALUE` files under `missions/<vehicle>/`, selected from the
+pad picker or forced via `stateSet("mission_id", "<id>").` + reboot. The
+profile owns the phase order; the craft script owns the hardware. Values land
+in `CFG` at boot.
+
+```ini
+MISSION_ID = mun_sat_delivery_3
+MISSION_NAME = Mun Satellite Delivery Contract 3
+TARGET = MUN
+PAYLOADS = SCISAT
+SEQUENCE = LAUNCH,FAIR,ANTS,PARK,XING,BPLANE,COAST,CAPTURE,SHAPE,RELAY_OPS,DONE
+CAPTURE_PE = 95789
+CAPTURE_INC = 138.9
+CAPTURE_LAN = 51.5
+SHAPE_AP = 903586
+SHAPE_PE = 95789
+SHAPE_INC = 138.9
+SHAPE_LAN = 51.5
+SHAPE_AOP = 269
+```
+
+Boot derives the libraries to load from `SEQUENCE`. `LIBS = ...` replaces the
+computed list (escape hatch); `LIBS_EXTRA = ...` appends. While prelaunch,
+boot clears any saved profile so a pad reboot re-opens the picker; after
+launch, reboots keep mission and phase.
+
+## Orbital maneuvering
+
+### Universal routing (goto)
+
+`RUNPATH("0:/cmd/goto.ks", LEX("dest","Mun","pe",30000,"ap",100000,"inc",90,
+"lan",78,"aop",270)).` — or just a name string — routes to **any body or
+vessel**: parent, child, sibling moon, another planet, or a rendezvous
+target. The planner (`lib/goto_plan.ks`) emits one hop's `SEQUENCE` +
+config per SOI transition; multi-hop routes end each leg with the `GOTO`
+phase, which replans from wherever the ship is and reboots into the next
+band. Config-driven missions use the same phases and keys directly.
+
+### The precision pipeline
+
+- **XING** — departure planning; picks the transfer window (multi-orbit LAN
+  scan when `CAPTURE_LAN` is set).
+- **BPLANE** (`lib/arrival_bplane.ks`) — mid-coast B-plane correction: a 2×2
+  Newton iteration on (B·T, B·R) steers the arrival hyperbola onto the
+  requested plane (`CAPTURE_INC`/`CAPTURE_LAN`) and periapsis (`CAPTURE_PE`).
+  Smooth where raw patch elements are discontinuous.
+- **CAPTURE** — tangential burn at Pe (preserves plane, Pe, and apsis line);
+  `TARGET_AP` puts the apoapsis where the final orbit wants it.
+- **SHAPE** (`lib/orbit_shape.ks`) — closed-form trim to any specified
+  `SHAPE_AP/PE/INC/LAN/AOP`: one combined plane burn at the relative node,
+  apsidal rotation, apsis burns. No numeric search; re-measures between
+  burns so execution errors self-correct.
+
+The older element-targeting pipeline (`MCC`, `CIRC`, `RAISE`, `INCLINE`,
+`ELLIPTICAL`) remains for legacy profiles until BPLANE/SHAPE are
+flight-proven (test mission: `missions/FR3/mun_sat_delivery_3.cfg`).
+`cmd/returntokerbin.ks` runs the full moon-return + aerobrake + descent flow.
+
+## Multi-CPU ships and roles
+
+Each kOS processor boots the same `boot/boot.ks`; `CORE:TAG` routes tagged
+CPUs to `roles/<tag>.ks`, untagged CPUs run the vehicle script. Each CPU has
+its own `1:/` volume, so state is naturally isolated.
+
+| CPU | Tag | Script | Role |
+|---|---|---|---|
+| Primary | *(empty)* | `craft/<vehicle>.ks` | Full mission |
+| Lander | `lander_cpu` | `roles/lander_cpu.ks` | Post-separation deploy + science |
+| Zombie | `zombie` | `roles/zombie.ks` | Dormant; remote-reboot backdoor |
+
+EVA kerbals are auto-detected (no tag needed) and run `roles/EVA.ks`, which
+branches on the kerbal's trait. Role scripts follow the same contract as
+vehicle scripts (`CFG`, `bootVehicleLibs()`, `main()`); keep them small —
+they usually live on OCTO-class cores.
+
+## Extending the system
+
+A vehicle script defines three things:
 
 ```
-GLOBAL CFG IS LEXICON(...).                  // vehicle config defaults
-GLOBAL FUNCTION bootVehicleLibs {            // sequence-derived libs plus fallback
-    RETURN missionSequenceLibs(...).
-}
-GLOBAL FUNCTION main { ... }                 // entry point
+GLOBAL CFG IS LEXICON(...).            // config defaults (profile overrides)
+GLOBAL FUNCTION bootVehicleLibs { ... } // library roots for boot to sync
+GLOBAL FUNCTION main { ... }            // build seq + phase map, runPhases()
 ```
 
-For simple phase-driven craft, prefer a fallback sequence and `missionSequenceLibs(...)`. This keeps the craft usable with legacy vessel-name missions while allowing a selected profile `SEQUENCE` to drive library sync at boot:
+Minimal pattern (see `craft/FDR1.ks` for a real one):
 
 ```
-LOCAL DEFAULT_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "DONE").
+LOCAL DEFAULT_SEQ IS LIST("XING", "COAST", "CAPTURE", "SHAPE", "DONE").
+
 GLOBAL FUNCTION bootVehicleLibs {
     RETURN missionSequenceLibs(
-        missionLibsForPhases(DEFAULT_SEQ, LIST("orbit")),
-        LIST("orbit")
-    ).
+        missionLibsForPhases(DEFAULT_SEQ, LIST()), LIST()).
+}
+
+GLOBAL FUNCTION main {
+    LOCAL seq IS airplaneSequenceFromState(DEFAULT_SEQ).
+    SET launchSeq TO seq. SET xferSeq TO seq.
+    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
+    LOCAL phaseMap IS phaseHandlerMap().      // generated shared bindings
+    phaseMapSet(phaseMap, "MYPHASE", _myPhase@).
+    runPhases(phaseMap).
 }
 ```
 
-Inside `main()`, resolve the active phase sequence from `CFG["SEQUENCE"]` when present, call `phaseHandlerMap()` for generated shared phase-name bindings, add any craft-local handlers with `phaseMapSet(...)`, and call `runPhases(phaseMap)`. Shared library phases follow the convention `PHASE_NAME -> phasePhaseName`, for example `DROP_FOR_IMPACT_AND_RAISE_PE -> phaseDropForImpactAndRaisePe`. Each phase function calls `nextPhase(seq)` when done.
+Aircraft instead call `airplaneMain(name, opts)` and pass checklist /
+configure-hook / extra-phase options.
 
-### Available lib phases
+### Ready-made phases
 
-These are ready-made phases you can drop into your phase map:
+| Phase(s) | Lib | Purpose |
+|---|---|---|
+| LAUNCH, FAIR, ANTS, PARK | launch | MechJeb ascent → parking orbit |
+| XING, ESCAPE, RDV | xfer_plan (+rendezvous) | Transfers, escapes, vessel rendezvous |
+| MCC | maneuver_transfer | Legacy element-based mid-course correction |
+| BPLANE | arrival_bplane | B-plane arrival corridor |
+| COAST, CAPTURE | capture | SOI coast + capture burn |
+| SHAPE | orbit_shape | Closed-form orbit shaping to SHAPE_* |
+| GOTO | goto_plan | Replan next hop toward `goto_dest` |
+| CIRC, RAISE, INCLINE, ELLIPTICAL | maneuver_orbit | Legacy orbit cleanup |
+| DROP_FOR_IMPACT_AND_RAISE_PE | payload_release | Payload impact disposal + recovery |
+| TARGETED_DEORBIT, RELEASE_PROBE, RELAY_OPS, SCANSAT_OPS | payload_ops (+science) | Payload operations |
+| LAND_DEORBIT, LAND_ASSIST, LAND, ROVER | payload_landing | Targeted landings, rovers |
+| MOLNIYA_INSERT | molniya | Molniya insertion |
+| AEROBRAKE, DESCENT | aerobrake, descent | Kerbin return entry + descent |
+| PREFLIGHT, FLIGHT, POSTFLIGHT | airplane | Aircraft lifecycle |
+| AIRCLIMB, ROCKETCLIMB, SSTO_DEORBIT, REENTRY, APPROACH | ssto | Spaceplane lifecycle |
+| ARM, FLY | drone | Drone sorties |
 
-**From `launch.ks`** (needs: `maneuver`, `countdown`, `orbit`):
-- `phaseLaunch@` — MechJeb ascent, staging, abort monitoring
-- `phaseFairing@` — jettison tagged `main_fairing` at `FAIRING_ALT`, default 71.5 km
-- `phaseExtendAnts@` — deploy panels/antennas at `EXTEND_ALT`, default 73 km
-- `phaseParking@` — wait for stable parking orbit
-
-All call `nextPhase(launchSeq)` — set `launchSeq` to your sequence before calling `runPhases()`.
-
-**From `xfer_plan.ks`, `capture.ks`, and `maneuver_orbit.ks`** (dependencies come from `lib/dependencies.txt`):
-- `phaseTransfer@` — plan + execute transfer burn to `missionTargetBody()`
-- `phaseCoast@` — coast to target SOI
-- `phaseCapture@` — capture burn, target Ap = `CFG["RELAY_ALT"]`
-- `phaseCirc@` — circularize (handles impact threats)
-- `phaseRaiseAlt@` — raise orbit to `CFG["RELAY_ALT"]` + circularize
-- `phaseInclCorrect@` — plane change to `CFG["TARGET_INCLINATION"]`
-- `phaseDropForImpactAndRaisePe@` — lower attached payload Pe for impact, release, then raise/recover carrier Pe
-- `phaseElliptical@` — coupled elliptical orbit targeting
-
-All call `nextPhase(xferSeq)` — set `xferSeq` to your sequence.
-
-**From `maneuver_transfer.ks`** (needs: `maneuver_transfer`):
-- `phaseMidCourse@` — mid-course correction using Newton's method. Corrects PE (prograde), AoP (radial), and LAN (normal) independently. Capped at 50 m/s total dV. Skips if encounter is already on target.
-
-Calls `nextPhase(xferSeq)`.
-
-**From `payload_ops.ks`** (needs: `deorbit_targeting`, `orbit`, `science` as appropriate):
-- `phaseTargetedDeorbit@` — precision deorbit for crash probes
-- `phaseReleaseProbe@` — arm chutes, decouple, orient for solar panels
-- `phaseRelayOps@` — relay on-station (orbit summary, periodic monitoring)
-
-**From `payload_landing.ks` / `landing.ks`**:
-- `phaseLandDeorbit@` — lander deorbit burn
-- `phaseLandAssist@` — landing-assist descent and carrier handoff
-- `phaseLand@` — powered descent via `landingExecute()`
-- `phaseRover@` — rover startup
-
-Payload phases call the active mission sequence (`launchSeq`, `xferSeq`, or `fr3Seq`, depending on craft context).
-
-**From `molniya.ks`** (needs: `maneuver`, `orbit`, `inclination`):
-- `phaseMolniyaInsert@` — prograde burn to achieve target period/AoP from circular orbit. Reads `CFG["MOLNIYA_PERIOD"]` and `CFG["MOLNIYA_AOP"]`
-
-Calls `nextPhase(xferSeq)`.
-
-**From `phases.ks`**:
-- `phaseDone@` — unlock controls, SAS on, log complete
-
-### Available lib functions
-
-These are building blocks you can call inside your own phase functions:
+### Key planner/executor functions
 
 | Function | Lib | What it does |
 |---|---|---|
-| `planTransfer(body, pe, lan, aop)` | maneuver_transfer | Plan transfer with optional LAN/AoP targeting |
-| `planCapture(body, alt)` | maneuver | Plan capture burn at Pe |
-| `planCircularize()` | maneuver | Add circ node at next Ap |
-| `planRaisePeNow(alt)` | maneuver | Emergency Pe raise at current position |
-| `planAoPChange(targetAoP)` | maneuver | Radial burn to rotate argument of periapsis |
-| `executeManeuver()` | maneuver | Execute next node, returns TRUE/FALSE |
-| `landingExecute()` | landing | Full powered descent sequence |
-| `targetedDeorbit()` | deorbit_targeting | Precision deorbit using Trajectories |
-| `planMolniyaInsert(period, aop)` | molniya | Plan Molniya insertion burn from circular orbit |
-| `orbitSummary()` | orbit | Log current orbit parameters |
-| `scienceRunAll()` | science | Run all experiments |
-| `scienceTransmitAll()` | science | Transmit all science data |
-| `recoveryMode()` | recovery | Post-abort recovery (antennas, log archive, operator prompt) |
-| `waypointUseSelected(alt)` | airplane | Load selected map waypoint for aircraft nav |
-| `wptNavOn()` | airplane | Start waypoint navigation, auto-loading selected waypoint if needed |
-| `planeApproachBriefSelected()` | airplane | Log approach info for selected waypoint |
-| `roverInit()` | rover | Start rover steering loop |
-| `roverSetWaypoint(lat,lng)` | rover | Drive to coordinates |
-| `constellationDeploy(count,alt)` | relay_constellation | Deploy relay constellation |
+| `executeManeuver()` | maneuver | Fly the next node (alarms, staging, throttle taper) |
+| `planTransfer(body, pe, lan, aop)` | maneuver_transfer | Departure window + transfer node |
+| `planBplaneCorrection(body, pe, inc, lan)` | arrival_bplane | Converged arrival-corridor node |
+| `shapeNextBurn(targets)` / `shapeConverged(targets)` | orbit_shape | Next closed-form shaping burn |
+| `gotoBuildPlan(dest)` / `gotoCommitPlan(plan)` | goto_plan | Hop routing |
+| `planCapture / planCircularize / planAoPChange / planInclinationChange` | maneuver, inclination | Single-burn planners |
+| `lambertSolve(r1, r2, tof, mu, flip)` | lambert | Izzo Lambert solver |
+| `landingExecute()` / `targetedDeorbit()` | landing, deorbit_targeting | Powered descent / precision deorbit |
+| `droneGoto(geo, agl)` etc. | drone | Drone mode commands |
 
-### Example: Lander
-
-Ship name: `LANDER-MUN`
-
-```
-// LANDER.ks — Mun/Minmus lander
-GLOBAL CFG IS LEXICON(
-    "PARKING_ALT",       80000,
-    "CAPTURE_PE",        15000,
-    "RELAY_ALT",         20000,
-    "TARGET_INCLINATION", 0,
-    "LAUNCH_INCLINATION", 0,
-    "LAUNCH_AZIMUTH",     0
-).
-
-LOCAL DEFAULT_SEQ IS LIST(
-    "LAUNCH", "FAIR", "ANTS", "PARK",
-    "XING", "COAST", "CAPTURE", "CIRC",
-    "LAND", "SCIENCE", "DONE"
-).
-
-GLOBAL FUNCTION bootVehicleLibs {
-    RETURN missionSequenceLibs(
-        missionLibsForPhases(DEFAULT_SEQ, LIST("science", "config")),
-        LIST("science", "config")
-    ).
-}
-
-GLOBAL FUNCTION main {
-    LOCAL seq IS DEFAULT_SEQ.
-    IF CFG:HASKEY("SEQUENCE") { SET seq TO phaseListFromString(CFG["SEQUENCE"]). }
-    SET launchSeq TO seq.
-    SET xferSeq TO seq.
-    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
-
-    LOCAL phaseMap IS phaseHandlerMap().
-    phaseMapSet(phaseMap, "LAND", _phaseLand@).
-    phaseMapSet(phaseMap, "SCIENCE", _phaseScience@).
-    runPhases(phaseMap).
-}
-
-LOCAL FUNCTION _phaseLand {
-    landingExecute().
-    nextPhase(launchSeq).
-}
-
-LOCAL FUNCTION _phaseScience {
-    scienceRunAll().
-    scienceTransmitAll().
-    mLog("Science complete.").
-    nextPhase(launchSeq).
-}
-```
-
-### Example: Rover
-
-Ship name: `ROVER-KERBIN` (already landed, no ascent phases)
-
-```
-// ROVER.ks — Surface rover
-GLOBAL CFG IS LEXICON().
-
-LOCAL DEFAULT_SEQ IS LIST("DRIVE", "DONE").
-GLOBAL FUNCTION bootVehicleLibs {
-    RETURN missionSequenceLibs(
-        missionLibsForPhases(DEFAULT_SEQ, LIST("rover", "science", "orbit", "config")),
-        LIST("rover", "science", "orbit", "config")
-    ).
-}
-
-GLOBAL FUNCTION main {
-    LOCAL seq IS DEFAULT_SEQ.
-    IF CFG:HASKEY("SEQUENCE") { SET seq TO phaseListFromString(CFG["SEQUENCE"]). }
-    SET launchSeq TO seq.
-    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
-
-    LOCAL phaseMap IS phaseHandlerMap().
-    phaseMapSet(phaseMap, "DRIVE", _phaseDrive@).
-    runPhases(phaseMap).
-}
-
-LOCAL FUNCTION _phaseDrive {
-    roverInit().
-    roverSetWaypoint(-0.0972, -74.5577).
-    WAIT UNTIL roverStatus() = "ARRIVED".
-    scienceRunAll().
-    scienceTransmitAll().
-    roverShutdown().
-    nextPhase(launchSeq).
-}
-```
-
-### Example: Moon Tug
-
-Ship name: `TUG-MUN` (starts in orbit, no ascent phases)
-
-```
-// TUG.ks — Orbital tug / transfer stage
-GLOBAL CFG IS LEXICON(
-    "CAPTURE_PE",        20000,
-    "RELAY_ALT",         50000,
-    "TARGET_INCLINATION", 0
-).
-
-LOCAL DEFAULT_SEQ IS LIST(
-    "XING", "COAST", "CAPTURE",
-    "CIRC", "RAISE", "INCLINE",
-    "STATION", "DONE"
-).
-
-GLOBAL FUNCTION bootVehicleLibs {
-    RETURN missionSequenceLibs(
-        missionLibsForPhases(DEFAULT_SEQ, LIST("config")),
-        LIST("config")
-    ).
-}
-
-GLOBAL FUNCTION main {
-    LOCAL seq IS DEFAULT_SEQ.
-    IF CFG:HASKEY("SEQUENCE") { SET seq TO phaseListFromString(CFG["SEQUENCE"]). }
-    SET xferSeq TO seq.
-    SET launchSeq TO seq.
-    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
-
-    LOCAL phaseMap IS phaseHandlerMap().
-    phaseMapSet(phaseMap, "STATION", _phaseStation@).
-    runPhases(phaseMap).
-}
-
-LOCAL FUNCTION _phaseStation {
-    UNLOCK STEERING.
-    SET SAS TO TRUE.
-    orbitSummary().
-    mLog("Tug on station. Awaiting commands.").
-    nextPhase(launchSeq).
-}
-```
-
-### Tips
-
-- **Storage-constrained probes**: Put mission order in `SEQUENCE` and let boot derive the libs. A rover sequence with only rover/science phases uses far less than the full FR2 stack.
-- **No ascent?** Skip `launch.ks` entirely. Start your sequence at `TRANSFER` or whatever your first phase is.
-- **Custom phases**: Write `LOCAL FUNCTION _phaseName { ... nextPhase(launchSeq). }` and add it with `phaseMapSet(phaseMap, "PHASE_NAME", _phaseName@)`. Mix freely with lib phases.
-- **Reboot safety**: The phase machine persists to state. On reboot, boot reloads everything and `main()` re-enters at the saved phase.
-- **CFG keys**: Lib phases read from `CFG` — check which keys each lib phase expects (documented above). Only define the keys your phases actually use.
-
-## Tagged Parts (VAB)
-
-The flight computer finds parts by tag name, not by index:
+## Tagged parts (VAB)
 
 | Tag | Purpose |
 |---|---|
-| `main_fairing` | Procedural fairing to jettison |
-| `probe_decoupler` | Decoupler between relay and impactor |
-| `probe_chute` | Parachute on probe payload |
-| `scansat_decoupler` | Decoupler between carrier/lander and SCANsat mapper |
-| `landing_assist_decoupler` | Decoupler between lander and expendable landing-assist stage |
-| `chute_main` | Abort parachute |
+| `main_fairing` | Fairing jettisoned by FAIR |
+| `probe_decoupler`, `probe_chute` | Probe payload release |
+| `scansat_decoupler` | Mapper release |
+| `landing_assist_decoupler` | Expendable descent-assist stage |
 | `relay_1`, `relay_2`, ... | Individual relay decouplers |
+| `chute_main` | Abort parachute |
+| `steering_gear` | Aircraft/drone nosewheel power steering |
+| `descent_fairing`, `descent_decoupler`, `descent_chutes` | Kerbin-return descent hardware |
+
+## Mod dependencies
+
+**kOS** (with `ADDONS:JSON` simplejson), **MechJeb** (ascent), **Trajectories**
+(impact prediction), **KerbalEngineer** (burn times), **Kerbal Alarm Clock**
+(warp-stop alarms), **SCANsat** (optional mapping), **Waypoint Manager**
+(target selection for planes/drones/landings).
+
+## Development
+
+- `make dependencies` — regenerate `lib/dependencies.ks` (pre-commit hook:
+  `pre-commit install`).
+- `make watch-sync` — safe auto-pull loop for live sim iteration (ff-only,
+  dirty-tree aware).
+- `make release-version TAG=kos-YYYYMMDD-N` — stamp `VERSION` (printed in
+  logs as `CODE version=...`), commit, tag, push.
+- Code reaches the game only through this repo (the archive folder syncs
+  from it), so **commit and push when a change is ready to fly**.
