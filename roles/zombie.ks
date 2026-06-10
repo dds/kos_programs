@@ -4,7 +4,10 @@
 
 GLOBAL CFG IS LEXICON().
 GLOBAL FUNCTION bootVehicleLibs {
-    RETURN LIST("logs").
+    // The zombie lib loads ONLY here — backup cores must be able
+    // to reboot the others offline; main cores get it on demand
+    // from the archive (cmd/zombie.ks bootLibLoads it).
+    RETURN LIST("logs", "zombie").
 }
 
 GLOBAL FUNCTION main {
