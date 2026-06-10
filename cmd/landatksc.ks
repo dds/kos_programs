@@ -25,6 +25,13 @@
 //   lat / lng        — impact target (default offshore KSC)
 //   entry_pe / pe    — atmosphere-entry Pe in m (default 30000)
 //   tolerance        — impact tolerance in m (default 15000)
+//   max_orbits       — deorbit window scan limit (default 16)
+//   strict           — TRUE = hold unless a pass inside tolerance
+//       exists in the window. Default FALSE: fly the BEST pass
+//       found — essential from polar orbits, where the ground
+//       track shifts ~40 deg/pass and sub-15km KSC overflights
+//       can be many hours apart (flight-found: 18h of scanning
+//       with the best pass still 96km out).
 //   descent_fairing / descent_decoupler / descent_chutes — part
 //       tags for the DESCENT phase (defaults match returntokerbin)
 //
@@ -40,6 +47,8 @@ LOCAL targetLat IS -0.10.
 LOCAL targetLng IS -74.25.
 LOCAL entryPe IS 30000.
 LOCAL tolerance IS 15000.
+LOCAL maxOrbits IS 16.
+LOCAL strict IS FALSE.
 LOCAL descentFairingTag IS "descent_fairing".
 LOCAL descentDecouplerTag IS "descent_decoupler".
 LOCAL descentChutesTag IS "descent_chutes".
@@ -50,6 +59,8 @@ IF opts:HASKEY("lng")               { SET targetLng TO opts["lng"]. }
 IF opts:HASKEY("pe")                { SET entryPe TO opts["pe"]. }
 IF opts:HASKEY("entry_pe")          { SET entryPe TO opts["entry_pe"]. }
 IF opts:HASKEY("tolerance")         { SET tolerance TO opts["tolerance"]. }
+IF opts:HASKEY("max_orbits")        { SET maxOrbits TO opts["max_orbits"]. }
+IF opts:HASKEY("strict")            { SET strict TO opts["strict"]. }
 IF opts:HASKEY("descent_fairing")   { SET descentFairingTag TO opts["descent_fairing"]. }
 IF opts:HASKEY("descent_decoupler") { SET descentDecouplerTag TO opts["descent_decoupler"]. }
 IF opts:HASKEY("descent_chutes")    { SET descentChutesTag TO opts["descent_chutes"]. }
@@ -81,12 +92,15 @@ IF NOT err {
     stateSetNum("mission_cfg_REENTRY_PE", entryPe).
     stateSetNum("mission_cfg_LANDING_TARGET_TOLERANCE", tolerance).
 
-    // Targeted-deorbit scan settings (same recipe as kscsplash).
-    stateSetNum("mission_cfg_TARGET_DEORBIT_SCAN_ORBITS", 32).
+    // Targeted-deorbit scan settings (kscsplash recipe, but a
+    // tighter window: 32 orbits could schedule the burn most of
+    // a day out and doubled the scan's compute time).
+    stateSetNum("mission_cfg_TARGET_DEORBIT_SCAN_ORBITS", maxOrbits).
     stateSetNum("mission_cfg_TARGET_DEORBIT_SCAN_SAMPLES", 2048).
     stateSetNum("mission_cfg_TARGET_DEORBIT_COARSE_STOP_DIST", tolerance).
     stateSetNum("mission_cfg_TARGET_DEORBIT_REFINE_TOLERANCE", 1000).
-    stateSetNum("mission_cfg_TARGET_DEORBIT_PROCEED_ON_MISS", 0).
+    stateSetNum("mission_cfg_TARGET_DEORBIT_PROCEED_ON_MISS",
+        CHOOSE 0 IF strict ELSE 1).
     stateSetNum("mission_cfg_TARGET_DEORBIT_MIN_LEAD", 90).
 
     stateSet("mission_cfg_DESCENT_FAIRING_TAG", descentFairingTag).
@@ -101,6 +115,9 @@ IF NOT err {
     PRINT "  Sequence:  KSC_DEORBIT,DESCENT,DONE".
     PRINT "  Target:    " + ROUND(targetLat, 4) + ", " + ROUND(targetLng, 4)
         + "  (tol " + ROUND(tolerance / 1000, 0) + "km)".
+    PRINT "  Window:    next " + maxOrbits + " orbits  ("
+        + (CHOOSE "strict: hold on miss" IF strict
+           ELSE "best pass flies") + ")".
     PRINT "  Entry PE:  " + entryPe + "m (" + ROUND(entryPe / 1000, 1) + "km)".
     PRINT "  Descent:   fairing=" + descentFairingTag
         + " decoupler=" + descentDecouplerTag
