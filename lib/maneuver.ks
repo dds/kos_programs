@@ -63,6 +63,15 @@ GLOBAL FUNCTION executeManeuver {
         }
     }
 
+    // Imminent burn: the KAC alarm above is only created when the
+    // burn is >60s out and only AFTER planning finished — a player
+    // already warping (e.g. right after the previous burn while
+    // BPLANE iterates) could sail through the window. Kill warp
+    // outright when the burn is near.
+    IF startTime - TIME:SECONDS < HIBERNATE_THRESHOLD {
+        SET WARP TO 0.
+    }
+
     SET SAS TO FALSE.
     WAIT 0.1.
     LOCK STEERING TO nd:BURNVECTOR.

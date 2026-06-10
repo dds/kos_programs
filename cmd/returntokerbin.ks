@@ -39,7 +39,8 @@ RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
 // --- Read options with defaults ---
-LOCAL targetPe IS 43000.
+// Default honors the mission profile's REENTRY_PE when set.
+LOCAL targetPe IS stateGetNum("mission_cfg_REENTRY_PE", 43000).
 LOCAL reentryDir IS "RETROGRADE".
 LOCAL decoupleTag IS "".
 LOCAL armChutes IS 0.
@@ -49,7 +50,8 @@ LOCAL descentDecouplerTag IS "descent_decoupler".
 LOCAL descentChutesTag IS "descent_chutes".
 LOCAL err IS FALSE.
 
-IF opts:HASKEY("pe")                 { SET targetPe TO opts["reentry_pe"]. }
+IF opts:HASKEY("pe")                 { SET targetPe TO opts["pe"]. }
+IF opts:HASKEY("reentry_pe")         { SET targetPe TO opts["reentry_pe"]. }
 IF opts:HASKEY("reentry_dir")        { SET reentryDir TO opts["reentry_dir"]:TOUPPER. }
 IF opts:HASKEY("decouple_tag")       { SET decoupleTag TO opts["decouple_tag"]. }
 IF opts:HASKEY("arm_chutes")         { SET armChutes TO opts["arm_chutes"]. }
