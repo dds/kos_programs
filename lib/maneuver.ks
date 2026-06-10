@@ -352,6 +352,25 @@ LOCAL FUNCTION _burnBrief {
     PRINT "  after  " + _orbitLine(nd:ORBIT).
     mLog("Plan: " + _orbitLine(SHIP:ORBIT) + " -> " + _orbitLine(nd:ORBIT)).
 
+    // The now/after lines describe the orbit around the CURRENT
+    // body. When the post-burn trajectory enters another SOI, show
+    // what actually matters: the arrival patch elements there.
+    LOCAL p IS nd:ORBIT.
+    LOCAL hops IS 0.
+    UNTIL NOT p:HASNEXTPATCH OR hops >= 4 {
+        SET p TO p:NEXTPATCH.
+        SET hops TO hops + 1.
+        IF p:BODY <> SHIP:BODY {
+            LOCAL arr IS p:BODY:NAME + " arrival: Pe "
+                + ROUND(p:PERIAPSIS/1000,1) + "km  inc "
+                + ROUND(p:INCLINATION,1) + "  lan "
+                + ROUND(p:LAN,1).
+            PRINT "  " + arr.
+            mLog(arr).
+            BREAK.
+        }
+    }
+
     // Orbit diagram is ARCHIVE-ONLY display code: zero bytes on the
     // core, runs straight from 0:/ when linked. BURN_ART=0 disables.
     LOCAL wantArt IS TRUE.

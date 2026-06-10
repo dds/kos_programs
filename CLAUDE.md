@@ -18,6 +18,10 @@ Looks like Python/JS; is neither.
   `:CALL()` invokes one.
 - Identifiers AND string comparisons are case-insensitive — never add
   `TOUPPER`/`TOLOWER` just to compare.
+- **Never use bare `r`, `v`, or `q` as variable names** — they shadow the
+  `R()`/`V()`/`Q()` rotation/vector/quaternion constructors. Use `rMag`,
+  `rVec`, `vel`, `res`, etc. Be equally careful shadowing bound names
+  (`up`, `north`, `body`, `target`, `alt`, `eta`).
 - `LOCAL FUNCTION` is file-private; `GLOBAL FUNCTION` is exported to the
   whole CPU. Use `@LAZYGLOBAL OFF.` in new libs.
 - No exceptions; errors crash the program. Guard division, `ARCCOS`/`SQRT`

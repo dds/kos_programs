@@ -265,10 +265,10 @@ LOCAL FUNCTION _roverSlope {
 LOCAL FUNCTION _roverBattery {
     LOCAL stored IS 0.
     LOCAL cap    IS 0.
-    FOR r IN SHIP:RESOURCES {
-        IF r:NAME = "ElectricCharge" {
-            SET stored TO r:AMOUNT.
-            SET cap    TO r:CAPACITY.
+    FOR res IN SHIP:RESOURCES {
+        IF res:NAME = "ElectricCharge" {
+            SET stored TO res:AMOUNT.
+            SET cap    TO res:CAPACITY.
         }
     }
     IF cap = 0 { RETURN 0. }

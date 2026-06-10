@@ -128,19 +128,21 @@ LOCAL FUNCTION _measureArrival {
     LOCAL rMinus IS POSITIONAT(SHIP, t - dt) - POSITIONAT(targetBody, t - dt).
     LOCAL vVec IS (rPlus - rMinus) / (2 * dt).
 
-    LOCAL t IS rVec:MAG.
+    // (named rMag: bare "r" shadows kOS's R() constructor, and "t"
+    // is already this scope's sample time)
+    LOCAL rMag IS rVec:MAG.
     LOCAL v2 IS vVec:SQRMAGNITUDE.
     LOCAL rHatV IS rVec:NORMALIZED.
 
     // Orbit constants from the sample (vis-viva, handedness-free e).
-    LOCAL sma IS 1 / (2 / t - v2 / mu).
+    LOCAL sma IS 1 / (2 / rMag - v2 / mu).
     IF sma >= 0 {
         // Not hyperbolic at the sample — bail; element-based phases
         // can handle an (unusual) arriving ellipse.
         RETURN 0.
     }
     LOCAL vinf2 IS -mu / sma.
-    LOCAL eVec IS ((v2 - mu / t) * rVec - VDOT(rVec, vVec) * vVec) / mu.
+    LOCAL eVec IS ((v2 - mu / rMag) * rVec - VDOT(rVec, vVec) * vVec) / mu.
     LOCAL ecc IS eVec:MAG.
     LOCAL eHat IS eVec:NORMALIZED.
     LOCAL hHat IS VCRS(rHatV, vVec:NORMALIZED):NORMALIZED.
