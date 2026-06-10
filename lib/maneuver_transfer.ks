@@ -4,6 +4,14 @@
 
 @LAZYGLOBAL OFF.
 
+// TRUE when the mission sequence carries BPLANE (arrival corridor)
+// or SHAPE (closed-form final orbit) — the phases that own exact
+// plane/AoP work in the new pipeline.
+LOCAL FUNCTION _angularWorkDeferred {
+    LOCAL seqRaw IS stateGet("mission_cfg_SEQUENCE", "").
+    RETURN seqRaw:CONTAINS("BPLANE") OR seqRaw:CONTAINS("SHAPE").
+}
+
 LOCAL MCC_DV_CAP           IS 50.
 LOCAL MCC_MIN_DV           IS 2.0.
 LOCAL MCC_LATE_MIN_DV      IS 3.0.
@@ -170,7 +178,14 @@ GLOBAL FUNCTION planTransfer {
             }
         }
 
-        IF lanTarget >= 0 {
+        // With BPLANE/SHAPE downstream, exact LAN/AoP are THEIR job:
+        // LAN at the target is set by the departure window (already
+        // preferred by the seed scan), not by node tweaks — the hard
+        // solve below can burn minutes failing to move LAN at all.
+        IF lanTarget >= 0 AND _angularWorkDeferred() {
+            mLogWarn("planTransfer: LAN/AoP exactness deferred to"
+                + " BPLANE/SHAPE downstream — skipping hard LAN solve.").
+        } ELSE IF lanTarget >= 0 {
             LOCAL lanTargets IS LEXICON().
             lanTargets:ADD("PE", targetPe).
             lanTargets:ADD("PE_FLOOR", -25000).
@@ -226,15 +241,20 @@ GLOBAL FUNCTION planTransfer {
         LOCAL aopTol IS 35.
         IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
         IF aopErr > aopTol {
-            mLogError("planTransfer: AoP misaligned; refusing transfer node.").
-            mLogWarn("STATS transfer result target=" + targetBody:NAME
-                + " status=aop-misaligned"
-                + " AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1)
-                + " targetAoP=" + ROUND(aopTarget,1)
-                + " AopErr=" + ROUND(aopErr,1)
-                + " tol=" + ROUND(aopTol,1)).
-            IF HASNODE { REMOVE nd. }
-            RETURN.
+            IF _angularWorkDeferred() {
+                mLogWarn("planTransfer: AoP off by " + ROUND(aopErr,1)
+                    + " — accepted, SHAPE corrects it post-capture.").
+            } ELSE {
+                mLogError("planTransfer: AoP misaligned; refusing transfer node.").
+                mLogWarn("STATS transfer result target=" + targetBody:NAME
+                    + " status=aop-misaligned"
+                    + " AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1)
+                    + " targetAoP=" + ROUND(aopTarget,1)
+                    + " AopErr=" + ROUND(aopErr,1)
+                    + " tol=" + ROUND(aopTol,1)).
+                IF HASNODE { REMOVE nd. }
+                RETURN.
+            }
         }
     }
     mLog(logMsg).

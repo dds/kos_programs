@@ -36,10 +36,7 @@ GLOBAL FUNCTION executeManeuver {
         RETURN FALSE.
     }
 
-    // Pre-burn brief card + orbit diagram (lib/orbit_draw.ks).
-    IF DEFINED ORBIT_DRAW_READY {
-        maneuverBrief(nd, stateGet("phase", "MANEUVER")).
-    }
+    _burnBrief(nd).
 
     mLog("Maneuver: dV=" + ROUND(burnDV,1) + " m/s  ETA=" + ROUND(startTime - TIME:SECONDS,1) + "s").
     mLogWarn("STATS burn setup dv=" + ROUND(burnDV,1)
@@ -310,6 +307,37 @@ GLOBAL FUNCTION planAoPChange {
         + " ETA=" + ROUND(burnETA,0) + "s").
     archivePlannedManeuverLog("aop").
     RETURN nd.
+}
+
+LOCAL FUNCTION _orbitLine {
+    PARAMETER o.
+    IF o:ECCENTRICITY >= 1 {
+        RETURN "ESCAPE (Pe " + ROUND(o:PERIAPSIS/1000,1)
+            + "km, inc " + ROUND(o:INCLINATION,1) + ")".
+    }
+    RETURN ROUND(o:PERIAPSIS/1000,1) + " x " + ROUND(o:APOAPSIS/1000,1)
+        + " km  inc " + ROUND(o:INCLINATION,1).
+}
+
+// Compact pre-burn brief: dV breakdown, timing, and the orbit this
+// node turns into. Set CFG BURN_BRIEF=0 for quiet missions. (The
+// ASCII orbit diagram moved out pending a GUI module — storage.)
+LOCAL FUNCTION _burnBrief {
+    PARAMETER nd.
+    IF DEFINED CFG AND CFG:HASKEY("BURN_BRIEF") AND CFG["BURN_BRIEF"] = 0 {
+        RETURN.
+    }
+    PRINT " ".
+    PRINT "  -- " + stateGet("phase", "MANEUVER") + " BURN --".
+    PRINT "  dV " + ROUND(nd:DELTAV:MAG,1)
+        + " m/s (p " + ROUND(nd:PROGRADE,1)
+        + " n " + ROUND(nd:NORMAL,1)
+        + " r " + ROUND(nd:RADIALOUT,1)
+        + ")  ETA " + ROUND(nd:ETA,0)
+        + "s  burn ~" + ROUND(nd:BURNTIME,0) + "s".
+    PRINT "  now    " + _orbitLine(SHIP:ORBIT).
+    PRINT "  after  " + _orbitLine(nd:ORBIT).
+    mLog("Plan: " + _orbitLine(SHIP:ORBIT) + " -> " + _orbitLine(nd:ORBIT)).
 }
 
 LOCAL FUNCTION _calcStartTime {
