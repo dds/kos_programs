@@ -364,6 +364,7 @@ GLOBAL FUNCTION phaseArm {
     flightPlanRow("CRUISE", _dnCfg("DRONE_CRUISE_AGL", 60) + "m AGL / "
         + _dnCfg("DRONE_CRUISE_SPEED", 25) + " m/s").
     flightPlanRow("MODES", "AG7 hover AG8 wpt AG9 land AG10 home").
+    flightPlanLine().
 
     flightPlanChecklist("DRONE PREFLIGHT", LIST(
         "Payload/kerbal - secured",

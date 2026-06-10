@@ -1,6 +1,5 @@
 // SHRIMP booster surface temp and barometric reading script.
 
-CLEARSCREEN.
 IF EXISTS("0:/lib/files.ks") {
     COPYPATH("0:/lib/files.ks", "1:/lib/files.ks").
     RUNONCEPATH("1:/lib/files.ks").

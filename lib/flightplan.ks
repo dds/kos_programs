@@ -1,13 +1,63 @@
 // ============================================================
 // flightplan.ks - Shared flight-plan and checklist displays
+// (0:/lib/flightplan.ks)
+//
+// Renders a bordered mission-plan card in the kOS terminal.
+// Deliberately NEVER clears the screen: the card scrolls inline
+// so boot messages and prior output stay in the scrollback.
+//
+// The card is composed by the craft scripts from these pieces,
+// in any order (each piece draws its own borders):
+//   flightPlanTitle(title, sub)   top edge + heading
+//   flightPlanIdentity()          code/core/mission rows
+//   flightPlanSection(name)       divider with embedded label
+//   flightPlanRow(label, value)   aligned key : value row
+//   flightPlanSequence(seq)       numbered phases with progress
+//                                 markers ([x] done, [>] current)
+//                                 + closing edge
+//   flightPlanChecklist(...)      boxed checklist, waits for key
+//
+// Width adapts to the terminal (clamped 36..56 columns of
+// content) and every row truncates rather than wrap-breaking
+// the border.
 // ============================================================
 
+@LAZYGLOBAL OFF.
+
+// Inner content width (between the "| " and " |").
+LOCAL FUNCTION _fpInner {
+    RETURN MAX(36, MIN(TERMINAL:WIDTH - 6, 56)).
+}
+
+// A run of `ch` of length n (kOS has no string repeat).
+LOCAL FUNCTION _fpRun {
+    PARAMETER ch, n.
+    RETURN "":PADLEFT(MAX(0, n)):REPLACE(" ", ch).
+}
+
+// Bordered text row, truncated to fit.
+LOCAL FUNCTION _fpText {
+    PARAMETER s.
+    LOCAL w IS _fpInner().
+    IF s:LENGTH > w { SET s TO s:SUBSTRING(0, w - 1) + "~". }
+    PRINT "  | " + s:PADRIGHT(w) + " |".
+}
+
+LOCAL FUNCTION _fpEdge {
+    PARAMETER ch.
+    PRINT "  +" + _fpRun(ch, _fpInner() + 2) + "+".
+}
+
+// ------------------------------------------------------------
+// Public pieces
+// ------------------------------------------------------------
+
 GLOBAL FUNCTION flightPlanLine {
-    PRINT "  ==========================================".
+    _fpEdge("=").
 }
 
 GLOBAL FUNCTION flightPlanRule {
-    PRINT "  ------------------------------------------".
+    _fpEdge("-").
 }
 
 GLOBAL FUNCTION flightPlanTitle {
@@ -15,52 +65,65 @@ GLOBAL FUNCTION flightPlanTitle {
     PARAMETER subtitle IS "".
 
     flightPlanLine().
-    PRINT "  " + title.
+    _fpText(title).
     IF subtitle <> "" {
-        PRINT "  " + subtitle.
+        _fpText(subtitle).
     }
-    flightPlanLine().
+    flightPlanRule().
 }
 
 GLOBAL FUNCTION flightPlanSection {
     PARAMETER title.
-    PRINT " ".
-    PRINT "  [" + title + "]".
-    flightPlanRule().
+    LOCAL w IS _fpInner().
+    LOCAL label IS "-[ " + title + " ]".
+    IF label:LENGTH > w { SET label TO label:SUBSTRING(0, w). }
+    PRINT "  +" + label + _fpRun("-", w + 2 - label:LENGTH) + "+".
 }
 
 GLOBAL FUNCTION flightPlanRow {
     PARAMETER label.
     PARAMETER value.
-    PRINT "  " + label:PADRIGHT(13) + " : " + value.
+    _fpText(label:PADRIGHT(13) + ": " + value).
 }
 
 GLOBAL FUNCTION flightPlanIdentity {
+    LOCAL missionName IS stateGet("mission_name", "").
+    IF missionName <> "" { flightPlanRow("MISSION", missionName). }
     flightPlanRow("CODE", codeVersion()).
-    flightPlanRow("CORE", CORE:TAG).
-    flightPlanRow("FREE", ROUND(CORE:VOLUME:FREESPACE,0) + " bytes").
+    IF CORE:TAG <> "" { flightPlanRow("CORE", CORE:TAG). }
+    flightPlanRow("FREE", ROUND(CORE:VOLUME:FREESPACE, 0) + " bytes").
     IF DEFINED MISSION {
         flightPlanRow("TARGET", MISSION["target"]).
-        flightPlanRow("PAYLOADS", MISSION["payloads"]).
+        IF MISSION["payloads"] <> "" {
+            flightPlanRow("PAYLOADS", MISSION["payloads"]).
+        }
     }
 }
 
+// Numbered phase list with live progress markers:
+//   [x] flown   [>] current (resume point)   [ ] ahead
+// Closes the card with the bottom edge.
 GLOBAL FUNCTION flightPlanSequence {
     PARAMETER seq.
 
-    LOCAL i IS 0.
-    UNTIL i >= seq:LENGTH {
-        LOCAL line IS "  ".
-        LOCAL j IS i.
-        UNTIL j >= seq:LENGTH OR line:LENGTH > 42 {
-            IF j > i { SET line TO line + " > ". }
-            SET line TO line + seq[j].
-            SET j TO j + 1.
-        }
-        PRINT line.
-        SET i TO j.
+    LOCAL cur IS stateGet("phase", "").
+    LOCAL curIdx IS -1.
+    FROM { LOCAL i IS 0. } UNTIL i >= seq:LENGTH STEP { SET i TO i + 1. } DO {
+        IF curIdx < 0 AND seq[i] = cur { SET curIdx TO i. }
     }
-    PRINT " ".
+
+    FROM { LOCAL i IS 0. } UNTIL i >= seq:LENGTH STEP { SET i TO i + 1. } DO {
+        LOCAL mark IS "[ ]".
+        IF curIdx >= 0 {
+            IF i < curIdx { SET mark TO "[x]". }
+            ELSE IF i = curIdx { SET mark TO "[>]". }
+        }
+        _fpText(mark + " " + ("" + (i + 1)):PADLEFT(2) + ". " + seq[i]).
+    }
+    IF curIdx > 0 {
+        flightPlanRule().
+        _fpText("RESUME at " + cur + " (" + (curIdx + 1) + "/" + seq:LENGTH + ")").
+    }
     flightPlanLine().
 }
 
@@ -71,20 +134,19 @@ GLOBAL FUNCTION flightPlanChecklist {
     PARAMETER promptText IS "Press any key when ready".
 
     flightPlanTitle(title, SHIP:NAME).
-    PRINT " ".
     FOR item IN items {
-        PRINT "  [ ] " + item.
+        _fpText("[ ] " + item).
     }
     IF envRows:LENGTH > 0 {
         flightPlanSection("ENVIRONMENT").
         FOR row IN envRows {
-            PRINT "  " + row.
+            _fpText(row).
         }
     }
-    PRINT " ".
-    PRINT "  >> " + promptText.
+    flightPlanRule().
+    _fpText(">> " + promptText).
+    flightPlanLine().
 
     TERMINAL:INPUT:GETCHAR().
-    PRINT " ".
     PRINT "  Clearance given.".
 }
