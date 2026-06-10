@@ -532,54 +532,62 @@ LOCAL FUNCTION _peFloor {
     RETURN 10000.
 }
 
-// Composite contract-error cost of a candidate post-burn orbit:
-// plane error (deg) + 0.5/deg AoP + 0.02/km apsides + a light dV
-// penalty, with unsafe orbits priced out entirely.
-LOCAL FUNCTION _elementsCostOf {
-    PARAMETER o, targets, dvMag.
+// Trust-region cost for refining ONE burn: the burn's own
+// objective plus HEAVY penalties for touching anything else.
+// Flight-found: a composite all-contract cost let a 64deg AoP
+// error bully a clean 49 m/s Pe-raise into an orbit-wrecking AoP
+// chase. Each burn now minds its own business:
+//   aop      — |AoP err| + 0.1/km drift of the apsides from NOW
+//   apsis    — 0.5/km errors of BOTH apsides vs their targets
+// All burns: 5/deg plane drift from NOW, dV capped at 2x the
+// analytic seed + 15, unsafe orbits priced out.
+LOCAL FUNCTION _burnCostOf {
+    PARAMETER o, label, targets, dvMag, seedDv, peNow, apNow, nNow.
     IF o:ECCENTRICITY >= 1 OR o:PERIAPSIS < _peFloor() { RETURN 9999. }
-    LOCAL cost IS dvMag * 0.002.
-    IF targets:HASKEY("INC") OR targets:HASKEY("LAN") {
-        LOCAL tInc IS SHIP:ORBIT:INCLINATION.
-        LOCAL tLan IS SHIP:ORBIT:LAN.
-        IF targets:HASKEY("INC") { SET tInc TO targets["INC"]. }
-        IF targets:HASKEY("LAN") { SET tLan TO targets["LAN"]. }
-        SET cost TO cost + VANG(
-            planeNormalFromIncLan(o:INCLINATION, o:LAN),
-            planeNormalFromIncLan(tInc, tLan)).
-    }
-    IF targets:HASKEY("AOP") AND _targetEcc(targets) >= MIN_AOP_TARGET_ECC
-            AND o:ECCENTRICITY > NEAR_CIRC_ECC {
+    IF dvMag > seedDv * 2 + 15 { RETURN 9999. }
+
+    LOCAL cost IS dvMag * 0.01
+        + VANG(planeNormalFromIncLan(o:INCLINATION, o:LAN), nNow) * 5.
+
+    IF label = "aop" {
         SET cost TO cost
-            + ABS(_angDiff(o:ARGUMENTOFPERIAPSIS, targets["AOP"])) * 0.5.
-    }
-    IF targets:HASKEY("AP") {
-        SET cost TO cost + ABS(o:APOAPSIS - targets["AP"]) * 0.00002.
-    }
-    IF targets:HASKEY("PE") {
-        SET cost TO cost + ABS(o:PERIAPSIS - targets["PE"]) * 0.00002.
+            + ABS(_angDiff(o:ARGUMENTOFPERIAPSIS, targets["AOP"]))
+            + (ABS(o:APOAPSIS - apNow) + ABS(o:PERIAPSIS - peNow)) * 0.0001.
+    } ELSE {
+        LOCAL apTgt IS apNow.
+        LOCAL peTgt IS peNow.
+        IF targets:HASKEY("AP") { SET apTgt TO targets["AP"]. }
+        IF targets:HASKEY("PE") { SET peTgt TO targets["PE"]. }
+        SET cost TO cost
+            + (ABS(o:APOAPSIS - apTgt) + ABS(o:PERIAPSIS - peTgt)) * 0.0005.
     }
     RETURN cost.
 }
 
-// Generic game-truth refinement: coordinate descent on the node's
-// TIME/RADIALOUT/NORMAL/PROGRADE against nd:ORBIT, minimizing the
-// full contract cost. The analytic planners are SEEDS only —
-// flight-found twice that open-loop constructions land at the
-// wrong orbital phase (plane match left 27-29deg residuals; the
-// AoP impulse landed at an apsis and pumped the orbit toward
-// Kerbin escape). The big TIME step matters: a misplaced seed can
-// be a sizeable fraction of the period away from the right point.
-LOCAL FUNCTION _refineElementsNode {
-    PARAMETER nd, targets.
-    LOCAL axes IS LIST("TIME", "RADIALOUT", "NORMAL", "PROGRADE").
-    LOCAL steps IS LEXICON(
-        "TIME", MAX(120, SHIP:ORBIT:PERIOD / 10),
-        "RADIALOUT", 16, "NORMAL", 16, "PROGRADE", 8).
-    LOCAL minTime IS TIME:SECONDS + 60.
+// Game-truth refinement of a single burn within its trust region.
+// Axes: TIME (a misplaced seed can be a sizeable fraction of the
+// period off), RADIALOUT, PROGRADE. NORMAL is excluded — plane
+// work belongs to the plane burn, and the plane-drift penalty
+// guards the rest.
+LOCAL FUNCTION _refineBurnNode {
+    PARAMETER nd, label, targets.
+    LOCAL peNow IS SHIP:PERIAPSIS.
+    LOCAL apNow IS SHIP:APOAPSIS.
+    LOCAL nNow IS planeNormalFromIncLan(
+        SHIP:ORBIT:INCLINATION, SHIP:ORBIT:LAN).
     WAIT 0.02.
-    LOCAL best IS _elementsCostOf(nd:ORBIT, targets, nd:DELTAV:MAG).
-    FROM { LOCAL i IS 0. } UNTIL i >= 80 STEP { SET i TO i + 1. } DO {
+    LOCAL seedDv IS MAX(5, nd:DELTAV:MAG).
+
+    LOCAL axes IS LIST("TIME", "RADIALOUT", "PROGRADE").
+    LOCAL steps IS LEXICON(
+        "TIME", MAX(60, SHIP:ORBIT:PERIOD / 16),
+        "RADIALOUT", MAX(4, seedDv / 8),
+        "PROGRADE", MAX(2, seedDv / 16)).
+    LOCAL minTime IS TIME:SECONDS + 60.
+
+    LOCAL best IS _burnCostOf(nd:ORBIT, label, targets,
+        nd:DELTAV:MAG, seedDv, peNow, apNow, nNow).
+    FROM { LOCAL i IS 0. } UNTIL i >= 60 STEP { SET i TO i + 1. } DO {
         LOCAL improved IS FALSE.
         FOR axis IN axes {
             LOCAL oldVal IS _nodeAxis(nd, axis).
@@ -588,7 +596,8 @@ LOCAL FUNCTION _refineElementsNode {
                 IF axis <> "TIME" OR trial > minTime {
                     _setNodeAxis(nd, axis, trial).
                     WAIT 0.02.
-                    LOCAL c IS _elementsCostOf(nd:ORBIT, targets, nd:DELTAV:MAG).
+                    LOCAL c IS _burnCostOf(nd:ORBIT, label, targets,
+                        nd:DELTAV:MAG, seedDv, peNow, apNow, nNow).
                     IF c < best - 0.001 {
                         SET best TO c.
                         SET oldVal TO trial.
@@ -608,12 +617,12 @@ LOCAL FUNCTION _refineElementsNode {
     RETURN best.
 }
 
-// Refine a planned non-plane burn against the full contract and
+// Refine a planned non-plane burn within its trust region and
 // hard-discard anything unsafe. Returns the burn LEX or 0.
 LOCAL FUNCTION _finishShapeNode {
     PARAMETER nd, label, targets.
     IF nd = 0 { RETURN 0. }
-    LOCAL cost IS _refineElementsNode(nd, targets).
+    LOCAL cost IS _refineBurnNode(nd, label, targets).
     WAIT 0.02.
     IF nd:ORBIT:ECCENTRICITY >= 1 OR nd:ORBIT:PERIAPSIS < _peFloor() {
         mLogError("SHAPE: " + label + " node unsafe after refine (Pe "
@@ -789,16 +798,25 @@ GLOBAL FUNCTION phaseShape {
     LOCAL finalErrs IS shapeErrors(targets).
     LOCAL ok IS shapeConverged(targets).
     orbitSummary().
-    IF ok {
-        mLog("SHAPE complete in " + burns + " burns" + _errorSummary(finalErrs)).
-    } ELSE {
-        mLogWarn("SHAPE finished UNCONVERGED after " + burns
-            + " burns" + _errorSummary(finalErrs)).
-    }
     mLogWarn("STATS shape result solved=" + ok
         + " burns=" + burns
         + _errorSummary(finalErrs)).
-    nextPhase(xferSeq).
+    IF ok {
+        mLog("SHAPE complete in " + burns + " burns" + _errorSummary(finalErrs)).
+        nextPhase(xferSeq).
+        RETURN.
+    }
+    // Unconverged is an OPERATOR decision, never a silent advance
+    // (flight-found: a discarded burn marched the mission on to
+    // RELAY_OPS with a 68km Pe error still on the books).
+    mLogError("SHAPE unconverged after " + burns + " burns"
+        + _errorSummary(finalErrs)).
+    PRINT " ".
+    PRINT "  SHAPE UNCONVERGED — holding this phase.".
+    PRINT "  Reboot to replan, or setphase to skip:".
+    PRINT "  RUNPATH(" + CHAR(34) + "1:/cmd/setphase.ks" + CHAR(34)
+        + ", " + CHAR(34) + "RELAY_OPS" + CHAR(34) + ").".
+    yieldToPrompt().
 }
 
 LOCAL FUNCTION _targetSummary {
