@@ -60,8 +60,31 @@ GLOBAL FUNCTION missionNumericConfigKeys {
         "PAYLOAD_CLEARANCE_SETTLE", "PAYLOAD_RECOVERY_MARGIN",
         "MOLNIYA_PERIOD", "MOLNIYA_AOP", "MOLNIYA_ECC", "RECOVERY_PE",
         "ESCAPE_PE", "ESCAPE_INC", "ESCAPE_LAN", "ESCAPE_AOP",
-        "AEROBRAKE_ARM_CHUTES"
+        "AEROBRAKE_ARM_CHUTES",
+        "CRUISE_ALT", "CRUISE_SPEED", "TOP_SPEED", "FLAP_AG",
+        "AIRBORNE_RADAR_ALT", "AIRBORNE_SPEED",
+        "FINAL_LANDING_SPEED", "MIN_FLIGHT_TIME"
     ).
+}
+
+// Key families where every key is numeric unless it appears in
+// missionStringConfigKeys (e.g. DRONE_STYLE, SSTO_RUNWAY). New
+// keys in these families need NO whitelist update — but a new
+// STRING key in a family MUST be added to the string list or it
+// will be TONUMBERed into garbage.
+GLOBAL FUNCTION missionNumericConfigPrefixes {
+    RETURN LIST("SHAPE_", "BPLANE_", "SSTO_", "DRONE_", "BURN_").
+}
+
+LOCAL FUNCTION _matchesNumericPrefix {
+    PARAMETER key.
+    FOR prefix IN missionNumericConfigPrefixes() {
+        IF key:LENGTH > prefix:LENGTH
+                AND key:SUBSTRING(0, prefix:LENGTH) = prefix {
+            RETURN TRUE.
+        }
+    }
+    RETURN FALSE.
 }
 
 GLOBAL FUNCTION missionStringConfigKeys {
@@ -73,7 +96,8 @@ GLOBAL FUNCTION missionStringConfigKeys {
         "LANDING_ASSIST_DECOUPLER_TAG",
         "ESCAPE_KSC_TARGET", "AEROBRAKE_DECOUPLE_TAG",
         "AEROBRAKE_REENTRY_DIR",
-        "DESCENT_FAIRING_TAG", "DESCENT_DECOUPLER_TAG", "DESCENT_CHUTES_TAG"
+        "DESCENT_FAIRING_TAG", "DESCENT_DECOUPLER_TAG", "DESCENT_CHUTES_TAG",
+        "DRONE_STYLE", "SSTO_RUNWAY"
     ).
 }
 
@@ -97,6 +121,7 @@ GLOBAL FUNCTION missionConfigIsKnownKey {
     IF missionNumericConfigKeys():CONTAINS(key) { RETURN TRUE. }
     IF missionStringConfigKeys():CONTAINS(key) { RETURN TRUE. }
     IF missionProfileConfigKeys():CONTAINS(key) { RETURN TRUE. }
+    IF _matchesNumericPrefix(key) { RETURN TRUE. }
     RETURN FALSE.
 }
 
@@ -144,6 +169,20 @@ GLOBAL FUNCTION applyMissionState {
 
 GLOBAL FUNCTION applyKnownMissionState {
     applyMissionState(missionNumericConfigKeys(), missionStringConfigKeys()).
+
+    // Prefix families (SHAPE_*, BPLANE_*, ...): apply every key the
+    // mission actually set, numeric unless it is in the string list.
+    // This is what carries new-pipeline config into CFG — SHAPE was
+    // skipping its targets because they never left the state file.
+    LOCAL stringKeys IS missionStringConfigKeys().
+    FOR sk IN stateKeys() {
+        IF sk:LENGTH > 12 AND sk:SUBSTRING(0, 12) = "mission_cfg_" {
+            LOCAL bare IS sk:SUBSTRING(12, sk:LENGTH - 12).
+            IF _matchesNumericPrefix(bare) AND NOT stringKeys:CONTAINS(bare) {
+                cfgFromState(bare, TRUE).
+            }
+        }
+    }
 }
 
 // --- Phase sequence utilities ---

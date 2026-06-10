@@ -60,6 +60,12 @@ GLOBAL FUNCTION stateRemove {
     RETURN FALSE.
 }
 
+GLOBAL FUNCTION stateKeys {
+    LOCAL keys IS LIST().
+    FOR k IN _cache:KEYS { keys:ADD(k). }
+    RETURN keys.
+}
+
 GLOBAL FUNCTION stateRemovePrefix {
     PARAMETER prefix.
     LOCAL keys IS LIST().

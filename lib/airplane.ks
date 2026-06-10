@@ -949,6 +949,10 @@ GLOBAL FUNCTION airplaneMain {
     SET _amName TO craftName.
     SET _amOpts TO opts.
 
+    // Mission profile values override the craft's CFG defaults
+    // (rocket craft do this at script load; planes do it here).
+    applyKnownMissionState().
+
     LOCAL defaultSeq IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
     IF opts:HASKEY("defaultSeq") { SET defaultSeq TO opts["defaultSeq"]. }
     SET _amSeq TO airplaneSequenceFromState(defaultSeq).
