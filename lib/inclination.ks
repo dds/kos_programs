@@ -2,6 +2,16 @@
 // inclination.ks  —  Orbital plane change  (0:/lib/inclination.ks)
 // ============================================================
 
+// Speed at a true anomaly on the ship's current orbit (vis-viva).
+LOCAL FUNCTION _incSpeedAtTa {
+    PARAMETER ta.
+    LOCAL ecc IS SHIP:ORBIT:ECCENTRICITY.
+    LOCAL rTa IS SHIP:ORBIT:SEMIMAJORAXIS * (1 - ecc ^ 2)
+        / (1 + ecc * COS(ta)).
+    RETURN SQRT(SHIP:BODY:MU
+        * (2 / rTa - 1 / SHIP:ORBIT:SEMIMAJORAXIS)).
+}
+
 GLOBAL FUNCTION planInclinationChange {
     PARAMETER targetInc.
 
@@ -15,32 +25,42 @@ GLOBAL FUNCTION planInclinationChange {
         + "deg  target=" + ROUND(targetInc,2)
         + "deg  delta=" + ROUND(deltaInc,2) + "deg").
 
+    // Node timing via Kepler (the angle helpers return CENTRAL
+    // angles = delta true anomaly) and burn speed via vis-viva
+    // from the live elements — no VELOCITYAT, no linear-TA time
+    // (the flight-found frame/timing bugs from the Mun campaign).
+    LOCAL taNow IS SHIP:ORBIT:TRUEANOMALY.
     LOCAL angAN IS angleToBodyAscendingNode().
     IF angAN < 0 { SET angAN TO angAN + 360. }
-    LOCAL etaAN IS (angAN / 360) * SHIP:ORBIT:PERIOD.
+    LOCAL taAN IS taNow + angAN.
+    LOCAL etaAN IS etaToTrueAnomaly(taAN).
     LOCAL angDN IS angleToBodyDescendingNode().
     IF angDN < 0 { SET angDN TO angDN + 360. }
-    LOCAL etaDN IS (angDN / 360) * SHIP:ORBIT:PERIOD.
+    LOCAL taDN IS taNow + angDN.
+    LOCAL etaDN IS etaToTrueAnomaly(taDN).
     LOCAL etaAp IS ETA:APOAPSIS.
 
     LOCAL burnETA IS etaAN.
+    LOCAL burnTa IS taAN.
     LOCAL burnNormal IS 1.
 
     LOCAL anApDiff IS ABS(etaAN - etaAp).
     LOCAL dnApDiff IS ABS(etaDN - etaAp).
     IF dnApDiff < anApDiff {
         SET burnETA TO etaDN.
+        SET burnTa TO taDN.
         SET burnNormal TO -1.
     }
 
     LOCAL usePe IS ABS(deltaInc) > 45.
     IF usePe {
         SET burnETA TO ETA:PERIAPSIS.
+        SET burnTa TO 0.
         mLog("Large inclination change — using Pe for combined burn.").
     }
 
     LOCAL burnUT IS TIME:SECONDS + burnETA.
-    LOCAL vAtBurn IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
+    LOCAL vAtBurn IS _incSpeedAtTa(burnTa).
 
     LOCAL dv IS 2 * vAtBurn * SIN(ABS(deltaInc) / 2).
 
@@ -50,7 +70,7 @@ GLOBAL FUNCTION planInclinationChange {
     LOCAL dvNormal   IS dv * burnNormal.
 
     IF usePe {
-        LOCAL vPe IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:PERIAPSIS):ORBIT:MAG.
+        LOCAL vPe IS _incSpeedAtTa(0).
         SET dvPrograde TO vPe * (COS(deltaInc) - 1).
         SET dvNormal   TO vPe * SIN(deltaInc).
     }

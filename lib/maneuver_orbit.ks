@@ -114,7 +114,7 @@ GLOBAL FUNCTION phaseRaiseAlt {
         IF ABS(SHIP:PERIAPSIS - targetPe) > targetPe * 0.05 {
             mLog("Raising Pe to " + ROUND(targetPe/1000,0) + "km at Ap.").
             _burnWithRetry(
-                { LOCAL rAp IS bodyR + SHIP:APOAPSIS. LOCAL rPe IS bodyR + targetPe. LOCAL tSMA IS (rAp + rPe) / 2. LOCAL vNow IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:APOAPSIS):ORBIT:MAG. LOCAL vNew IS SQRT(mu * (2/rAp - 1/tSMA)). RETURN NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, vNew - vNow). },
+                { LOCAL rAp IS bodyR + SHIP:APOAPSIS. LOCAL rPe IS bodyR + targetPe. LOCAL tSMA IS (rAp + rPe) / 2. LOCAL vNow IS SQRT(mu * (2 / rAp - 1 / SHIP:ORBIT:SEMIMAJORAXIS)). LOCAL vNew IS SQRT(mu * (2/rAp - 1/tSMA)). RETURN NODE(TIME:SECONDS + ETA:APOAPSIS, 0, 0, vNew - vNow). },
                 "Raise Pe").
         } ELSE {
             mLog("Pe already within tolerance.").
@@ -132,7 +132,7 @@ GLOBAL FUNCTION phaseRaiseAlt {
                 mLog("Raising Ap to " + ROUND(targetAp/1000,0) + "km at Pe.").
             }
             _burnWithRetry(
-                { LOCAL eta_ IS etaToTrueAnomaly(burnTA). LOCAL burnTime IS TIME:SECONDS + eta_. LOCAL rBurn IS bodyR + _altAtTA(burnTA). LOCAL rTarget IS bodyR + targetAp. LOCAL tSMA IS (rBurn + rTarget) / 2. LOCAL vNow IS VELOCITYAT(SHIP, burnTime):ORBIT:MAG. LOCAL vNew IS SQRT(mu * (2/rBurn - 1/tSMA)). RETURN NODE(burnTime, 0, 0, vNew - vNow). },
+                { LOCAL eta_ IS etaToTrueAnomaly(burnTA). LOCAL burnTime IS TIME:SECONDS + eta_. LOCAL rBurn IS bodyR + _altAtTA(burnTA). LOCAL rTarget IS bodyR + targetAp. LOCAL tSMA IS (rBurn + rTarget) / 2. LOCAL vNow IS SQRT(mu * (2 / rBurn - 1 / SHIP:ORBIT:SEMIMAJORAXIS)). LOCAL vNew IS SQRT(mu * (2/rBurn - 1/tSMA)). RETURN NODE(burnTime, 0, 0, vNew - vNow). },
                 "Raise Ap").
         } ELSE {
             mLog("Ap already within tolerance.").
@@ -149,7 +149,7 @@ GLOBAL FUNCTION phaseRaiseAlt {
         }
         mLog("Raising Ap to " + ROUND(targetAp/1000,0) + "km.").
         _burnWithRetry(
-            { LOCAL rBurn IS bodyR + SHIP:PERIAPSIS. LOCAL rTarget IS bodyR + targetAp. LOCAL tSMA IS (rBurn + rTarget) / 2. LOCAL vNow IS VELOCITYAT(SHIP, TIME:SECONDS + ETA:PERIAPSIS):ORBIT:MAG. LOCAL vNew IS SQRT(mu * (2/rBurn - 1/tSMA)). RETURN NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, vNew - vNow). },
+            { LOCAL rBurn IS bodyR + SHIP:PERIAPSIS. LOCAL rTarget IS bodyR + targetAp. LOCAL tSMA IS (rBurn + rTarget) / 2. LOCAL vNow IS SQRT(mu * (2 / rBurn - 1 / SHIP:ORBIT:SEMIMAJORAXIS)). LOCAL vNew IS SQRT(mu * (2/rBurn - 1/tSMA)). RETURN NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, vNew - vNow). },
             "Raise Ap").
     }
 
