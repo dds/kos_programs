@@ -299,18 +299,23 @@ GLOBAL FUNCTION planAoPChange {
     LOCAL a  IS SHIP:ORBIT:SEMIMAJORAXIS.
     LOCAL e  IS SHIP:ORBIT:ECCENTRICITY.
     LOCAL h  IS SQRT(mu * a * (1 - e^2)).
-    LOCAL dvMag IS 2 * (mu / h) * e * SIN(ABS(deltaAoP) / 2).
+    // Exact apsidal rotation: orbits with equal a,e rotated by
+    // deltaAoP intersect at ta = deltaAoP/2 (+180). The required
+    // radial-out impulse there is -2(mu/h) e sin(deltaAoP/2) —
+    // SIGNED by deltaAoP (flight-found: the old hardcoded sign
+    // was correct for positive rotations only; a -64 deg rotation
+    // burned the wrong way and sent AoP to 17 instead of 269).
+    LOCAL dvAtTa1 IS -2 * (mu / h) * e * SIN(deltaAoP / 2).
     LOCAL ta1 IS deltaAoP / 2.
     LOCAL ta2 IS ta1 + 180.
     LOCAL eta1 IS etaToTrueAnomaly(ta1).
     LOCAL eta2 IS etaToTrueAnomaly(ta2).
     LOCAL burnETA IS eta1.
-    LOCAL dvSign IS -1.
+    LOCAL dvRadial IS dvAtTa1.
     IF eta2 < eta1 {
         SET burnETA TO eta2.
-        SET dvSign TO 1.
+        SET dvRadial TO -dvAtTa1.
     }
-    LOCAL dvRadial IS dvSign * dvMag.
     LOCAL burnUT IS TIME:SECONDS + burnETA.
     LOCAL nd IS NODE(burnUT, dvRadial, 0, 0).
     ADD nd.

@@ -638,11 +638,28 @@ LOCAL FUNCTION _nodeWrecksPlane {
         planeNormalFromIncLan(SHIP:ORBIT:INCLINATION, SHIP:ORBIT:LAN)) > 5.
 }
 
+// One-shot stable cost of a node as it stands (no refinement).
+LOCAL FUNCTION _burnCostNow {
+    PARAMETER nd, label, targets.
+    LOCAL peNow IS SHIP:PERIAPSIS.
+    LOCAL apNow IS SHIP:APOAPSIS.
+    LOCAL nNow IS planeNormalFromIncLan(
+        SHIP:ORBIT:INCLINATION, SHIP:ORBIT:LAN).
+    LOCAL FUNCTION _c {
+        RETURN _burnCostOf(nd:ORBIT, label, targets,
+            nd:DELTAV:MAG, MAX(5, nd:DELTAV:MAG), peNow, apNow, nNow).
+    }
+    RETURN _stableEval(_c@).
+}
+
 // Refine a planned non-plane burn within its trust region.
 // If refinement misbehaves, REVERT TO THE ANALYTIC SEED — the
 // tangent/rotation seeds are exact math and deserve to fly even
 // when the optimizer cannot be trusted. Only discard when the
-// seed itself is unsafe. Returns the burn LEX or 0.
+// seed itself is unsafe, plane-wrecking, or simply does not
+// accomplish its objective (cost gate — flight-found: a stuck
+// refine delivered AoP 17 for a target of 269 at cost 117 and
+// was accepted because it was merely SAFE). Returns LEX or 0.
 LOCAL FUNCTION _finishShapeNode {
     PARAMETER nd, label, targets.
     IF nd = 0 { RETURN 0. }
@@ -696,8 +713,19 @@ LOCAL FUNCTION _finishShapeNode {
             REMOVE nd.
             RETURN 0.
         }
-        IF cost > 9000 OR cost = -1 { SET cost TO -1. }
+        SET cost TO _burnCostNow(nd, label, targets).
     }
+
+    // Quality gate: safe is not enough — the burn must actually
+    // accomplish its objective. A good burn costs single digits.
+    IF cost > 30 {
+        mLogError("SHAPE: " + label
+            + " burn cannot reach its objective (cost "
+            + ROUND(cost, 1) + ") — discarding.").
+        REMOVE nd.
+        RETURN 0.
+    }
+
     mLog("SHAPE " + label + ": dV=" + ROUND(nd:DELTAV:MAG, 1)
         + " m/s -> " + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + " x "
         + ROUND(nd:ORBIT:APOAPSIS / 1000, 1) + " km  AoP "
