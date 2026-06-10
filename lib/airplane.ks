@@ -294,10 +294,10 @@ GLOBAL FUNCTION spdHoldOff {
 // (slow, invisible in logs, and redundant with the clamp).
 // Exported so observe.ks logs the same number the loops use.
 GLOBAL FUNCTION planeCtrlAuthority {
-    LOCAL q IS MAX(SHIP:Q, 0.0001).
+    LOCAL q_ IS MAX(SHIP:Q, 0.0001).
     RETURN MAX(PLANE_CFG["FBW_MIN_AUTH"],
            MIN(PLANE_CFG["FBW_MAX_AUTH"],
-               PLANE_CFG["FBW_REF_Q"] / q)).
+               PLANE_CFG["FBW_REF_Q"] / q_)).
 }
 
 // ============================================================
