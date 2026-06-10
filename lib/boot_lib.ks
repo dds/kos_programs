@@ -432,6 +432,54 @@ GLOBAL FUNCTION bootPruneLogs {
     RETURN removed.
 }
 
+// ============================================================
+// Offline operator commands (CMD rows in dependencies.txt)
+// ============================================================
+
+// bootCmdsForSequence — union of the offline commands declared
+// for every phase of the current mission sequence. Falls back to
+// the current phase when no sequence is configured.
+GLOBAL FUNCTION bootCmdsForSequence {
+    bootLibLoadSpec().
+    LOCAL cmds IS LIST().
+    LOCAL seqRaw IS stateGet("mission_cfg_SEQUENCE", "").
+    LOCAL phases IS LIST().
+    IF seqRaw <> "" {
+        FOR p IN seqRaw:SPLIT(",") {
+            IF p:TRIM <> "" { phases:ADD(p:TRIM). }
+        }
+    } ELSE {
+        phases:ADD(stateGet("phase", "")).
+    }
+    FOR phaseName IN phases {
+        IF BOOT_LIB_CMDS:HASKEY(phaseName) {
+            FOR cmdName IN BOOT_LIB_CMDS[phaseName] {
+                IF NOT cmds:CONTAINS(cmdName) { cmds:ADD(cmdName). }
+            }
+        }
+    }
+    RETURN cmds.
+}
+
+// bootCmdSync — install the mission's offline commands on the
+// local volume (compiled, so PARAMETER blocks still work). Run
+// with: RUNPATH("1:/cmd/<name>").  No-op without a KSC link.
+GLOBAL FUNCTION bootCmdSync {
+    IF NOT HOMECONNECTION:ISCONNECTED { RETURN. }
+    LOCAL cmds IS bootCmdsForSequence().
+    IF cmds:LENGTH = 0 { RETURN. }
+    IF NOT EXISTS("1:/cmd") { CREATEDIR("1:/cmd"). }
+    FOR cmdName IN cmds {
+        LOCAL src IS "0:/cmd/" + cmdName + ".ks".
+        IF EXISTS(src) {
+            COMPILE src TO "1:/cmd/" + cmdName + ".ksm".
+        } ELSE {
+            PRINT "  WARN: offline cmd " + cmdName + " missing in 0:/cmd".
+        }
+    }
+    PRINT "  CMDS local: " + cmds:JOIN(", ") + " (RUNPATH 1:/cmd/<name>)".
+}
+
 GLOBAL FUNCTION bootCleanup {
     PARAMETER vehicleName.
     PARAMETER wantedLibs.
@@ -442,6 +490,12 @@ GLOBAL FUNCTION bootCleanup {
     ).
     FOR lib IN wantedLibs {
         IF NOT keepLibs:CONTAINS(lib) { keepLibs:ADD(lib). }
+    }
+
+    // Never prune the mission's offline commands — at a field
+    // strip with no radio they are the only way to retask.
+    FOR cmdName IN bootCmdsForSequence() {
+        IF NOT keepCmds:CONTAINS(cmdName) { keepCmds:ADD(cmdName). }
     }
 
     LOCAL keepRoles IS LIST().
@@ -477,6 +531,7 @@ GLOBAL FUNCTION bootCleanup {
 GLOBAL BOOT_LIB_DEPS IS LEXICON().
 GLOBAL BOOT_LIB_BANDS IS LEXICON().
 GLOBAL BOOT_LIB_PHASES IS LEXICON().
+GLOBAL BOOT_LIB_CMDS IS LEXICON().
 GLOBAL BOOT_LIB_PREAMBLE IS LIST().
 GLOBAL BOOT_LIB_LOADED IS FALSE.
 GLOBAL BOOT_LIB_RAN IS LIST().
@@ -568,6 +623,16 @@ LOCAL FUNCTION _bootLibParseLines {
                             LOCAL phaseName IS keys[phaseIx].
                             _bootLibApplyValues(BOOT_LIB_PHASES, phaseName, _bootLibLineValues(rhs), op).
                             SET phaseIx TO phaseIx + 1.
+                        }
+                    } ELSE IF keys:LENGTH >= 2 AND keys[0] = "CMD" {
+                        // CMD <phase>[, <phase>...] = <cmd>[, <cmd>...]
+                        // Operator commands a phase may need OFFLINE (no
+                        // KSC link), installed to 1:/cmd at boot.
+                        LOCAL cmdIx IS 1.
+                        UNTIL cmdIx >= keys:LENGTH {
+                            LOCAL cmdPhase IS keys[cmdIx].
+                            _bootLibApplyValues(BOOT_LIB_CMDS, cmdPhase, _bootLibLineValues(rhs), op).
+                            SET cmdIx TO cmdIx + 1.
                         }
                     }
                 }

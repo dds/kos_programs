@@ -152,6 +152,7 @@ IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
     bootPruneLibs(vehicleLibs).
     bootLibLoadList(vehicleLibs).
+    bootCmdSync().
     bootLibLoad("resume").
     // Recovery is loaded only at startup/abort or after manual mode.
     LOCAL phase_ IS stateGet("phase", "").
