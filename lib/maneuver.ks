@@ -309,6 +309,19 @@ GLOBAL FUNCTION planAoPChange {
     RETURN nd.
 }
 
+// Estimated total burn duration. NODE:BURNTIME does not exist in
+// this kOS build (flight-found) — use KerbalEngineer when present,
+// else constant-mass dv/acc.
+LOCAL FUNCTION _burnTimeEstimate {
+    PARAMETER nd.
+    IF ADDONS:KE:AVAILABLE {
+        RETURN ADDONS:KE:NODEHALFBURNTIME * 2.
+    }
+    LOCAL acc IS _safeMaxAcc().
+    IF acc <= 0 { RETURN 0. }
+    RETURN nd:DELTAV:MAG / acc.
+}
+
 LOCAL FUNCTION _orbitLine {
     PARAMETER o.
     IF o:ECCENTRICITY >= 1 {
@@ -334,20 +347,28 @@ LOCAL FUNCTION _burnBrief {
         + " n " + ROUND(nd:NORMAL,1)
         + " r " + ROUND(nd:RADIALOUT,1)
         + ")  ETA " + ROUND(nd:ETA,0)
-        + "s  burn ~" + ROUND(nd:BURNTIME,0) + "s".
+        + "s  burn ~" + ROUND(_burnTimeEstimate(nd),0) + "s".
     PRINT "  now    " + _orbitLine(SHIP:ORBIT).
     PRINT "  after  " + _orbitLine(nd:ORBIT).
     mLog("Plan: " + _orbitLine(SHIP:ORBIT) + " -> " + _orbitLine(nd:ORBIT)).
+
+    // Orbit diagram is ARCHIVE-ONLY display code: zero bytes on the
+    // core, runs straight from 0:/ when linked. BURN_ART=0 disables.
+    LOCAL wantArt IS TRUE.
+    IF DEFINED CFG AND CFG:HASKEY("BURN_ART") AND CFG["BURN_ART"] = 0 {
+        SET wantArt TO FALSE.
+    }
+    IF wantArt AND HOMECONNECTION:ISCONNECTED
+            AND TERMINAL:HEIGHT >= 28
+            AND EXISTS("0:/lib/orbit_draw.ks") {
+        RUNONCEPATH("0:/lib/orbit_draw.ks").
+        orbitDrawBurn(nd).
+    }
 }
 
 LOCAL FUNCTION _calcStartTime {
     PARAMETER nd.
-    LOCAL halfBurn IS 0.
-    IF ADDONS:KE:AVAILABLE {
-        SET halfBurn TO ADDONS:KE:NODEHALFBURNTIME.
-    } ELSE {
-        SET halfBurn TO nd:BURNTIME / 2.
-    }
+    LOCAL halfBurn IS _burnTimeEstimate(nd) / 2.
     LOCAL lead IS MIN(2.0, halfBurn * 0.02).
     RETURN nd:TIME - halfBurn - lead.
 }
