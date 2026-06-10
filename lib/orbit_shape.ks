@@ -558,12 +558,24 @@ LOCAL FUNCTION _burnCostOf {
             + ABS(_angDiff(o:ARGUMENTOFPERIAPSIS, targets["AOP"]))
             + (ABS(o:APOAPSIS - apNow) + ABS(o:PERIAPSIS - peNow)) * 0.0001.
     } ELSE {
-        LOCAL apTgt IS apNow.
-        LOCAL peTgt IS peNow.
-        IF targets:HASKEY("AP") { SET apTgt TO targets["AP"]. }
-        IF targets:HASKEY("PE") { SET peTgt TO targets["PE"]. }
-        SET cost TO cost
-            + (ABS(o:APOAPSIS - apTgt) + ABS(o:PERIAPSIS - peTgt)) * 0.0005.
+        // Tangent apsis burns: the objective is THIS burn's apsis
+        // ONLY — the other apsis is the next burn's job, preserved
+        // (vs now) rather than chased (flight-found: a perfect
+        // 1.8 m/s set-ap seed was discarded at cost 68.9 because
+        // it was charged for a 137km Pe error it cannot touch).
+        LOCAL apexObjective IS label = "set-ap" OR label = "placed-pe"
+            OR label = "set-pe-for-ap".
+        IF apexObjective {
+            LOCAL apTgt IS apNow.
+            IF targets:HASKEY("AP") { SET apTgt TO targets["AP"]. }
+            SET cost TO cost + ABS(o:APOAPSIS - apTgt) * 0.0005
+                + ABS(o:PERIAPSIS - peNow) * 0.0001.
+        } ELSE {
+            LOCAL peTgt IS peNow.
+            IF targets:HASKEY("PE") { SET peTgt TO targets["PE"]. }
+            SET cost TO cost + ABS(o:PERIAPSIS - peTgt) * 0.0005
+                + ABS(o:APOAPSIS - apNow) * 0.0001.
+        }
     }
     RETURN cost.
 }
