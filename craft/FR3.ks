@@ -122,13 +122,12 @@ GLOBAL FUNCTION bootVehicleLibs {
 GLOBAL BOOT_CLEANUP IS LEXICON(
     "vehicle", "FR3",
     // Lean keep-list: every kept cmd costs core bytes a mission
-    // band might need (flight-found: the return mission's lib sync
-    // boot-looped out of space). Anything else re-syncs from the
-    // archive when linked.
-    "keepCmds", LIST(
-        "DUMP", "LANDASSIST", "LANDINGRESCUE", "LANDMIN",
-        "SETLANDING", "SETPHASE"
-    )
+    // band might need (flight-found twice: the return mission's
+    // lib sync boot-looped out of space, and the suborbital hop
+    // failed a reboot with ~13K free). The landing tools ride as
+    // CMD rows on the LAND phases now — missions that fly them
+    // keep them automatically; everyone else sheds ~them.
+    "keepCmds", LIST("DUMP", "SETPHASE")
 ).
 
 GLOBAL FUNCTION main {
