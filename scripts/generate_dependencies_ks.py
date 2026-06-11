@@ -21,6 +21,7 @@ def phase_function_name(phase_name):
 
 
 def parse_phases(raw):
+    """Return [(phase, roots)] from PHASE rows, in file order."""
     phases = []
     seen = set()
 
@@ -30,34 +31,63 @@ def parse_phases(raw):
             continue
         if "=" not in line:
             continue
-        lhs = line.split("=", 1)[0].strip()
+        lhs, rhs = line.split("=", 1)
+        lhs = lhs.strip()
         if lhs.endswith("+") or lhs.endswith("-"):
             lhs = lhs[:-1].strip()
         keys = values(lhs.replace(" ", ","))
         if not keys:
             continue
         if keys[0].upper() == "PHASE":
+            roots = values(rhs)
             for phase in keys[1:]:
                 key = phase.upper()
                 if key not in seen:
                     seen.add(key)
-                    phases.append(key)
+                    phases.append((key, roots))
 
     return phases
 
 
 def main():
     phases = parse_phases(INPUT.read_text())
+    # Each binding is guarded on the phase's root libs being present
+    # on the local disk: referencing the handler delegate of a lib
+    # that never loaded is a hard crash (flight-found: a no-link
+    # reboot into the AEROBRAKE band could not sync aerobrake.ks,
+    # and binding phaseAerobrake@ killed the boot). An unbound phase
+    # degrades to runPhases' missing-handler path instead.
     lines = [
+        "LOCAL FUNCTION _depLoaded {",
+        "    PARAMETER libsCsv.",
+        '    FOR libName IN libsCsv:SPLIT(",") {',
+        '        IF libName <> "" {',
+        '            IF NOT EXISTS("1:/lib/" + libName + ".ksm")',
+        '                    AND NOT EXISTS("1:/lib/" + libName + ".ks") {',
+        "                RETURN FALSE.",
+        "            }",
+        "        }",
+        "    }",
+        "    RETURN TRUE.",
+        "}",
+        "",
         "GLOBAL FUNCTION dependencyBindPhase {",
         "    PARAMETER phaseMap.",
         "    PARAMETER phaseName.",
         "    LOCAL phaseKey IS phaseName.",
     ]
-    for index, phase in enumerate(phases):
+    for index, (phase, roots) in enumerate(phases):
         fn = phase_function_name(phase)
         prefix = "    IF" if index == 0 else "    ELSE IF"
-        lines.append(f'{prefix} phaseKey = "{phase}" {{ phaseMapSet(phaseMap, "{phase}", {fn}@). }}')
+        bind = f'phaseMapSet(phaseMap, "{phase}", {fn}@).'
+        if roots:
+            guard = ",".join(roots)
+            lines.append(
+                f'{prefix} phaseKey = "{phase}" '
+                f'{{ IF _depLoaded("{guard}") {{ {bind} }} }}'
+            )
+        else:
+            lines.append(f'{prefix} phaseKey = "{phase}" {{ {bind} }}')
     lines.extend([
         "}",
         "",
