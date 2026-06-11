@@ -765,6 +765,36 @@ GLOBAL FUNCTION phaseKscDeorbit {
         RETURN.
     }
 
+    // ORBIT_STAY_TIME: stay in orbit this many seconds (from orbit
+    // insertion, or launch as fallback) before the return leg —
+    // tourist/experience contracts. KAC-alarmed, reboot-safe.
+    LOCAL stayTime IS 0.
+    IF CFG:HASKEY("ORBIT_STAY_TIME") { SET stayTime TO CFG["ORBIT_STAY_TIME"]. }
+    IF stayTime > 0 {
+        LOCAL baseUt IS stateGetNum("orbit_start_time",
+            stateGetNum("launch_time", TIME:SECONDS)).
+        LOCAL resumeUt IS baseUt + stayTime.
+        IF resumeUt > TIME:SECONDS + 30 {
+            mLog("KSC_DEORBIT: holding in orbit "
+                + ROUND(resumeUt - TIME:SECONDS, 0)
+                + "s more (ORBIT_STAY_TIME=" + ROUND(stayTime, 0) + ").").
+            LOCAL alarmId IS "".
+            IF ADDONS:KAC:AVAILABLE {
+                LOCAL alm IS ADDALARM("Raw", resumeUt - 60,
+                    "Return window: " + SHIP:NAME,
+                    "Auto-created by KSC_DEORBIT").
+                SET alm:ACTION TO "KillWarp".
+                SET alarmId TO alm:ID.
+            }
+            UNLOCK STEERING.
+            SET SAS TO TRUE.
+            WAIT UNTIL TIME:SECONDS >= resumeUt.
+            SET WARP TO 0.
+            IF alarmId <> "" { DELETEALARM(alarmId). }
+            mLog("KSC_DEORBIT: stay complete — planning the return.").
+        }
+    }
+
     mLog("KSC deorbit: target " + ROUND(lat, 4) + ", " + ROUND(lng, 4)
         + "  entryPe=" + ROUND(entryPe / 1000, 1) + "km"
         + "  tol=" + ROUND(tol / 1000, 1) + "km.").

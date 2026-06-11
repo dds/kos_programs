@@ -63,6 +63,7 @@ GLOBAL FUNCTION missionNumericConfigKeys {
         "MOLNIYA_PERIOD", "MOLNIYA_AOP", "MOLNIYA_ECC", "RECOVERY_PE",
         "ESCAPE_PE", "ESCAPE_INC", "ESCAPE_LAN", "ESCAPE_AOP",
         "AEROBRAKE_ARM_CHUTES", "REENTRY_PE", "DESCENT_DECOUPLE_ALT",
+        "ORBIT_STAY_TIME",
         "CRUISE_ALT", "CRUISE_SPEED", "TOP_SPEED", "FLAP_AG",
         "AIRBORNE_RADAR_ALT", "AIRBORNE_SPEED",
         "FINAL_LANDING_SPEED", "MIN_FLIGHT_TIME"
@@ -75,7 +76,7 @@ GLOBAL FUNCTION missionNumericConfigKeys {
 // STRING key in a family MUST be added to the string list or it
 // will be TONUMBERed into garbage.
 GLOBAL FUNCTION missionNumericConfigPrefixes {
-    RETURN LIST("SHAPE_", "BPLANE_", "SSTO_", "DRONE_", "BURN_").
+    RETURN LIST("SHAPE_", "BPLANE_", "SSTO_", "DRONE_", "BURN_", "SUBORBIT_").
 }
 
 LOCAL FUNCTION _matchesNumericPrefix {

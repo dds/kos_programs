@@ -476,6 +476,8 @@ GLOBAL FUNCTION phaseLaunch {
     }
 
     stateSetNum("launch_time", TIME:SECONDS).
+    stateSetNum("launch_site_lat", SHIP:GEOPOSITION:LAT).
+    stateSetNum("launch_site_lng", SHIP:GEOPOSITION:LNG).
     stateSet("launch_vs_nonpos_logged", "false").
 
     mLog("Press ABORT or AG10 within 5s to hold launch.").
@@ -560,6 +562,10 @@ GLOBAL FUNCTION phaseParking {
     mLog("Waiting for stable parking orbit...").
     WAIT UNTIL _isParkingOrbitStable() OR ABORT.
     IF ABORT { RETURN. }
+    // Orbit-insertion timestamp for ORBIT_STAY_TIME holds.
+    IF stateGetNum("orbit_start_time", 0) = 0 {
+        stateSetNum("orbit_start_time", ROUND(TIME:SECONDS)).
+    }
     orbitSummary().
     mLog("Stable parking orbit confirmed.").
     nextPhase(launchSeq).
@@ -812,13 +818,189 @@ GLOBAL FUNCTION phasePark {
     phaseParking().
 }
 
+// ── Suborbital return arc (SUBORBIT_RETURN = 1) ──────────────
+// "Very long arc in space, land where we started": fly JUST
+// below orbital speed. After the MechJeb boost, keep burning
+// prograde while the Trajectories impact prediction sweeps east
+// around the globe; cut the engine when the predicted impact
+// arrives back at the launch site, then trim the arc with small
+// prograde/retrograde burns above the atmosphere. Knobs:
+// SUBORBIT_RETURN_TOL (40km). NOT YET FLIGHT-PROVEN.
+
+LOCAL FUNCTION _suborbitSiteGeo {
+    LOCAL siteLat IS stateGetNum("launch_site_lat", 9999).
+    LOCAL siteLng IS stateGetNum("launch_site_lng", 9999).
+    IF siteLat <> 9999 { RETURN LATLNG(siteLat, siteLng). }
+    IF CFG:HASKEY("LANDING_TARGET_LAT") AND CFG:HASKEY("LANDING_TARGET_LNG") {
+        RETURN LATLNG(CFG["LANDING_TARGET_LAT"], CFG["LANDING_TARGET_LNG"]).
+    }
+    RETURN LATLNG(-0.0972, -74.5577).   // KSC pad
+}
+
+// Chord distance from the predicted impact to the site (same-time
+// positions, so the chord is frame-safe). -1 = no impact.
+LOCAL FUNCTION _suborbitImpactDist {
+    PARAMETER siteGeo.
+    IF NOT (ADDONS:TR:AVAILABLE AND ADDONS:TR:HASIMPACT) { RETURN -1. }
+    LOCAL impactGeo IS ADDONS:TR:IMPACTPOS.
+    RETURN (LATLNG(impactGeo:LAT, impactGeo:LNG):POSITION
+        - LATLNG(siteGeo:LAT, siteGeo:LNG):POSITION):MAG.
+}
+
+// Deliver a small dv on orbit prograde/retrograde, gently.
+LOCAL FUNCTION _suborbitTrimBurn {
+    PARAMETER dvMag.
+    PARAMETER pro.
+    LOCAL startVel IS SHIP:VELOCITY:ORBIT.
+    IF pro { LOCK STEERING TO SHIP:PROGRADE. }
+    ELSE { LOCK STEERING TO SHIP:RETROGRADE. }
+    LOCAL alignDeadline IS TIME:SECONDS + 45.
+    UNTIL VANG(SHIP:FACING:FOREVECTOR,
+            (CHOOSE 1 IF pro ELSE -1) * SHIP:VELOCITY:ORBIT) < 5
+            OR TIME:SECONDS > alignDeadline {
+        WAIT 0.1.
+    }
+    LOCAL throttleCmd IS 0.
+    LOCK THROTTLE TO throttleCmd.
+    LOCAL burnDeadline IS TIME:SECONDS + 60.
+    UNTIL (SHIP:VELOCITY:ORBIT - startVel):MAG >= dvMag
+            OR TIME:SECONDS > burnDeadline {
+        LOCAL acc IS MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS).
+        LOCAL remaining IS dvMag - (SHIP:VELOCITY:ORBIT - startVel):MAG.
+        SET throttleCmd TO MIN(1, MAX(0.02, remaining / acc / 0.6)).
+        WAIT 0.05.
+    }
+    SET throttleCmd TO 0.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+}
+
+// Closed-loop trim: measure impact-to-site distance, burn a small
+// step, re-measure, learn the sensitivity (m of impact motion per
+// m/s), repeat. Self-correcting against Trajectories.
+LOCAL FUNCTION _suborbitTrimArc {
+    PARAMETER siteGeo.
+    PARAMETER tol.
+    LOCAL sens IS 30000.
+    LOCAL iter IS 0.
+    UNTIL iter >= 8 {
+        SET iter TO iter + 1.
+        WAIT 2.
+        LOCAL d0 IS _suborbitImpactDist(siteGeo).
+        LOCAL pro IS TRUE.
+        LOCAL step IS 2.
+        IF d0 < 0 {
+            // No impact at all: we ended up orbital — pull Pe down.
+            SET pro TO FALSE.
+            SET step TO 5.
+            mLog("Trim " + iter + ": no impact (orbital) — retro 5 m/s.").
+        } ELSE {
+            IF d0 <= tol {
+                mLog("Trim done: impact " + ROUND(d0 / 1000, 0)
+                    + "km from site (tol " + ROUND(tol / 1000, 0) + "km).").
+                BREAK.
+            }
+            // Short (site east of impact) → prograde extends the arc.
+            LOCAL alongErr IS _norm180(siteGeo:LNG - ADDONS:TR:IMPACTPOS:LNG).
+            SET pro TO alongErr > 0.
+            SET step TO MIN(10, MAX(0.5, d0 / sens)).
+            mLog("Trim " + iter + ": impact " + ROUND(d0 / 1000, 0)
+                + "km " + (CHOOSE "short" IF pro ELSE "long")
+                + " — " + (CHOOSE "prograde " IF pro ELSE "retrograde ")
+                + ROUND(step, 1) + " m/s.").
+        }
+        _suborbitTrimBurn(step, pro).
+        WAIT 2.
+        LOCAL d1 IS _suborbitImpactDist(siteGeo).
+        IF d0 > 0 AND d1 > 0 AND ABS(d0 - d1) > 1000 {
+            SET sens TO MAX(5000, ABS(d0 - d1) / step).
+        }
+    }
+    UNLOCK STEERING.
+    mLogWarn("STATS suborbit-return trim result dist="
+        + ROUND(_suborbitImpactDist(siteGeo) / 1000, 1)
+        + "km PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)).
+}
+
+LOCAL FUNCTION _suborbitReturnArc {
+    IF NOT ADDONS:TR:AVAILABLE {
+        mLogError("SUBORBIT return mode needs Trajectories — holding.").
+        yieldToPrompt().
+        RETURN.
+    }
+    LOCAL siteGeo IS _suborbitSiteGeo().
+    LOCAL tol IS _launchCfgNum("SUBORBIT_RETURN_TOL", 40000).
+    LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
+    // MechJeb must NOT circularize — the sweep burn is ours.
+    IF ADDONS:MJ:AVAILABLE {
+        SET ADDONS:MJ:ASCENT:SKIPCIRCULARIZATION TO TRUE.
+    }
+    mLog("Return arc: target site " + ROUND(siteGeo:LAT, 3) + ","
+        + ROUND(siteGeo:LNG, 3) + " tol " + ROUND(tol / 1000, 0) + "km.").
+
+    // Ride the MechJeb boost, then take over above the atmosphere.
+    WAIT UNTIL SHIP:ALTITUDE >= atmTop
+        OR NOT (ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED)
+        OR ABORT OR AG10.
+    IF ABORT OR AG10 { _launchAbort(). RETURN. }
+    IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
+
+    // Sweep burn: prograde until the predicted impact comes back
+    // around to the site. Throttle steps down as it closes — the
+    // sweep accelerates wildly near orbital speed.
+    LOCK STEERING TO SHIP:PROGRADE.
+    WAIT 3.
+    LOCAL throttleCmd IS 0.
+    LOCK THROTTLE TO throttleCmd.
+    LOCAL dMin IS 1e12.
+    LOCAL cutReason IS "".
+    UNTIL cutReason <> "" {
+        IF ABORT OR AG10 { _launchAbort(). RETURN. }
+        LOCAL d IS _suborbitImpactDist(siteGeo).
+        IF d >= 0 {
+            IF d < dMin { SET dMin TO d. }
+            IF d < tol * 1.5 { SET cutReason TO "impact-at-site". }
+            ELSE IF dMin < 800000 AND d > dMin + 150000 {
+                SET cutReason TO "past-closest".
+            }
+            SET throttleCmd TO
+                CHOOSE 0.05 IF d < 500000
+                ELSE CHOOSE 0.2 IF d < 2000000 ELSE 1.
+        } ELSE {
+            SET cutReason TO "impact-lost-orbital".
+        }
+        IF SHIP:PERIAPSIS > 45000 { SET cutReason TO "pe-too-high". }
+        WAIT 0.1.
+    }
+    SET throttleCmd TO 0.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    mLogWarn("STATS suborbit-return cutoff reason=" + cutReason
+        + " dist=" + ROUND(MAX(-1, _suborbitImpactDist(siteGeo)) / 1000, 0)
+        + "km ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)).
+
+    _suborbitTrimArc(siteGeo, tol).
+    SET SAS TO TRUE.
+    mLog("Return arc set — riding it back to "
+        + ROUND(siteGeo:LAT, 2) + "," + ROUND(siteGeo:LNG, 2) + ".").
+    nextPhase(launchSeq).
+}
+
 // ── Suborbital cutoff ────────────────────────────────────────
 // For crewed suborbital hops (SEQUENCE LAUNCH,SUBORBIT,DESCENT,
 // DONE): lets the MechJeb ascent boost until apoapsis reaches
 // PARKING_ALT, then kills the autopilot and coasts ballistic —
 // no circularization, the ship falls back for a chute landing
-// downrange. Resume-safe: re-running just re-disables MechJeb.
+// downrange. With SUBORBIT_RETURN = 1 it instead flies the
+// round-the-world arc back to the launch site (above).
+// Resume-safe: re-running just re-disables MechJeb.
 GLOBAL FUNCTION phaseSuborbit {
+    IF _launchCfgNum("SUBORBIT_RETURN", 0) > 0 {
+        _suborbitReturnArc().
+        RETURN.
+    }
     LOCAL targetAp IS _launchCfgNum("PARKING_ALT", 80000).
     mLog("Suborbital: boosting to Ap " + ROUND(targetAp/1000, 0)
         + "km, then engine cutoff (no circularization).").
