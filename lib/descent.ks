@@ -112,6 +112,26 @@ GLOBAL FUNCTION phaseDescent {
     }
     mLog(dir + " steering lock for descent.").
 
+    // Release attitude control once past the worst of entry
+    // (DESCENT_RELEASE_ALT, default 20km): below that the chutes
+    // stabilize the craft, and holding the steering lock / SAS
+    // just drains the battery when it is needed most. The
+    // throttle guard keeps it from releasing mid-braking-burn.
+    LOCAL releaseAlt IS 20000.
+    IF DEFINED CFG AND CFG:HASKEY("DESCENT_RELEASE_ALT") {
+        SET releaseAlt TO CFG["DESCENT_RELEASE_ALT"].
+    }
+    IF SHIP:BODY:ATM:EXISTS AND releaseAlt > 0 {
+        WHEN SHIP:ALTITUDE < releaseAlt AND SHIP:VERTICALSPEED < 0
+                AND THROTTLE < 0.01 THEN {
+            UNLOCK STEERING.
+            SAS OFF.
+            mLog("Attitude control released at "
+                + ROUND(SHIP:ALTITUDE / 1000, 1)
+                + "km — conserving battery.").
+        }
+    }
+
     // Wait for atmosphere entry (alarmed); on airless bodies, for
     // the 30km action point instead.
     IF SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE > SHIP:BODY:ATM:HEIGHT {
