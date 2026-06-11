@@ -76,7 +76,8 @@ GLOBAL FUNCTION missionNumericConfigKeys {
 // STRING key in a family MUST be added to the string list or it
 // will be TONUMBERed into garbage.
 GLOBAL FUNCTION missionNumericConfigPrefixes {
-    RETURN LIST("SHAPE_", "BPLANE_", "SSTO_", "DRONE_", "BURN_", "SUBORBIT_").
+    RETURN LIST("SHAPE_", "BPLANE_", "SSTO_", "DRONE_", "BURN_",
+        "SUBORBIT_", "SCANSAT_").
 }
 
 LOCAL FUNCTION _matchesNumericPrefix {
