@@ -158,6 +158,9 @@ IF NOT err {
     stateSet("payloads", "RETURN").
 
     stateSet("mission_cfg_SEQUENCE", "KSC_DEORBIT,DESCENT,DONE").
+    // DESCENT is its own (lean) band; preloading descent lets it
+    // bind during KSC_DEORBIT with no band-change reboot.
+    stateSet("mission_cfg_LIBS_EXTRA", "descent").
     stateSetNum("mission_cfg_LANDING_TARGET_LAT", targetLat).
     stateSetNum("mission_cfg_LANDING_TARGET_LNG", targetLng).
     stateSetNum("mission_cfg_REENTRY_PE", entryPe).

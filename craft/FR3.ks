@@ -99,7 +99,7 @@ LOCAL FUNCTION _fr3LibsForBand {
     PARAMETER band.
     LOCAL roots IS bootLibBandRoots(band).
     missionAppendUnique(roots, missionTypeConditionalRoots(band)).
-    missionAppendUnique(roots, missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", ""))).
+    missionAppendUnique(roots, missionExtraLibs()).
     RETURN bootLibResolve(roots).
 }
 

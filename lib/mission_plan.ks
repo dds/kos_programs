@@ -67,6 +67,43 @@ GLOBAL FUNCTION missionHasLandingPayload {
     RETURN FALSE.
 }
 
+// LIBS_EXTRA entries may be phase-scoped with lib@PHASE: the lib
+// loads only while the mission has NOT yet passed PHASE in the
+// sequence. A suborbital hop carries suborbit@SUBORBIT and sheds
+// it (and its whole dependency chain) on any reboot after the
+// arc — flight-found: unscoped extras made a DESCENT-phase boot
+// load the union of every band at once, 433 bytes free, compile
+// failed. Unknown phases keep the lib (safe).
+GLOBAL FUNCTION missionExtraLibs {
+    LOCAL out IS LIST().
+    LOCAL seq IS missionListFromCsv(stateGet("mission_cfg_SEQUENCE", "")).
+    LOCAL cur IS stateGet("phase", "").
+    FOR entryRaw IN missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", "")) {
+        IF entryRaw:CONTAINS("@") {
+            LOCAL parts IS entryRaw:SPLIT("@").
+            LOCAL libName IS parts[0]:TRIM.
+            LOCAL untilPhase IS parts[1]:TRIM.
+            LOCAL curIdx IS -1.
+            LOCAL phIdx IS -1.
+            LOCAL i IS 0.
+            UNTIL i >= seq:LENGTH {
+                IF seq[i] = cur { SET curIdx TO i. }
+                IF seq[i] = untilPhase { SET phIdx TO i. }
+                SET i TO i + 1.
+            }
+            IF curIdx >= 0 AND phIdx >= 0 AND curIdx > phIdx {
+                mLog("Extra lib " + libName + " dropped (past "
+                    + untilPhase + ").").
+            } ELSE {
+                out:ADD(libName).
+            }
+        } ELSE {
+            out:ADD(entryRaw).
+        }
+    }
+    RETURN out.
+}
+
 GLOBAL FUNCTION missionLibs {
     PARAMETER fallbackLibs IS LIST().
     PARAMETER baseLibs IS LIST().
@@ -80,7 +117,7 @@ GLOBAL FUNCTION missionLibs {
         missionAppendUnique(libs, bootLibResolve(fallbackLibs)).
     }
 
-    missionAppendUnique(libs, bootLibResolve(missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", "")))).
+    missionAppendUnique(libs, bootLibResolve(missionExtraLibs())).
     RETURN libs.
 }
 
