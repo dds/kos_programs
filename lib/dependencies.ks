@@ -9,7 +9,7 @@ LOCAL FUNCTION _depLoaded {
 }
 
 GLOBAL FUNCTION dependencyAllPhases {
-    RETURN LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "POSTFLIGHT", "EVA_SCIENCE", "LAUNCH", "FAIR", "ANTS", "PARK", "ABORT", "PRELAUNCH", "SUBORBIT", "RDV", "MATCH", "CREW_XFER", "XING", "ESCAPE", "MCC", "AEROBRAKE", "DESCENT", "KSC_DEORBIT", "COAST", "CAPTURE", "CIRC", "RAISE", "INCLINE", "ELLIPTICAL", "TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "SCANSAT_OPS", "LAND_DEORBIT", "LAND", "LAND_ASSIST", "ROVER", "MOLNIYA", "MOLNIYA_INSERT", "DROP_FOR_IMPACT_AND_RAISE_PE", "SHAPE", "BPLANE", "GOTO", "AIRCLIMB", "ROCKETCLIMB", "SSTO_DEORBIT", "REENTRY", "APPROACH", "ARM", "FLY").
+    RETURN LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "POSTFLIGHT", "LAUNCH", "FAIR", "ANTS", "PARK", "ABORT", "PRELAUNCH", "SUBORBIT", "RDV", "MATCH", "CREW_XFER", "XING", "ESCAPE", "MCC", "AEROBRAKE", "DESCENT", "KSC_DEORBIT", "COAST", "CAPTURE", "CIRC", "RAISE", "INCLINE", "ELLIPTICAL", "TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "SCANSAT_OPS", "LAND_DEORBIT", "LAND", "LAND_ASSIST", "ROVER", "MOLNIYA", "MOLNIYA_INSERT", "DROP_FOR_IMPACT_AND_RAISE_PE", "SHAPE", "BPLANE", "GOTO", "AIRCLIMB", "ROCKETCLIMB", "SSTO_DEORBIT", "REENTRY", "APPROACH", "ARM", "FLY").
 }
 
 GLOBAL FUNCTION dependencyBindPhase {
@@ -20,7 +20,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "FLIGHT" { IF _depLoaded("airplane") { phaseMapSet(phaseMap, "FLIGHT", phaseFlight@). } }
     ELSE IF phaseKey = "POST_FLIGHT" { IF _depLoaded("airplane") { phaseMapSet(phaseMap, "POST_FLIGHT", phasePostFlight@). } }
     ELSE IF phaseKey = "POSTFLIGHT" { IF _depLoaded("airplane") { phaseMapSet(phaseMap, "POSTFLIGHT", phasePostflight@). } }
-    ELSE IF phaseKey = "EVA_SCIENCE" { IF _depLoaded("science,orbit") { phaseMapSet(phaseMap, "EVA_SCIENCE", phaseEvaScience@). } }
+    // ELSE IF phaseKey = "EVA_SCIENCE" { IF _depLoaded("science,orbit") { phaseMapSet(phaseMap, "EVA_SCIENCE", phaseEvaScience@). } }
     ELSE IF phaseKey = "LAUNCH" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "LAUNCH", phaseLaunch@). } }
     ELSE IF phaseKey = "FAIR" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "FAIR", phaseFair@). } }
     ELSE IF phaseKey = "ANTS" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "ANTS", phaseAnts@). } }
