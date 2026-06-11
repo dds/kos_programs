@@ -25,7 +25,7 @@
 //   lat / lng        — impact target (default offshore KSC)
 //   entry_pe / pe    — atmosphere-entry Pe in m (default 30000)
 //   tolerance        — impact tolerance in m (default 15000)
-//   max_orbits       — deorbit window scan limit (default 6)
+//   max_orbits       — deorbit window scan limit (default 4)
 //   strict           — TRUE = hold unless a pass inside tolerance
 //       exists in the window. Default FALSE: fly the BEST pass
 //       found — essential from polar orbits, where the ground
@@ -47,7 +47,7 @@ LOCAL targetLat IS -0.10.
 LOCAL targetLng IS -74.25.
 LOCAL entryPe IS 30000.
 LOCAL tolerance IS 15000.
-LOCAL maxOrbits IS 6.
+LOCAL maxOrbits IS 4.
 LOCAL strict IS FALSE.
 LOCAL descentFairingTag IS "descent_fairing".
 LOCAL descentDecouplerTag IS "descent_decoupler".
