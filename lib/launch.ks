@@ -895,7 +895,9 @@ LOCAL FUNCTION _suborbitTrimArc {
     PARAMETER tol.
     LOCAL sens IS 30000.
     LOCAL iter IS 0.
-    UNTIL iter >= 8 {
+    // 12 passes: the sweep now hands off ~20 deg (~200km) early
+    // and this loop owns the whole final approach.
+    UNTIL iter >= 12 {
         SET iter TO iter + 1.
         IF ABORT OR AG10 { _launchAbort(). RETURN. }
         IF NOT _suborbitCanBurn() {
@@ -1084,17 +1086,23 @@ LOCAL FUNCTION _suborbitReturnArc {
             }
         } ELSE {
             SET noImpactSince TO -1.
-            // The return arc LIVES at Pe 45-60km (drag-grazing) —
+            // The return arc LIVES at Pe 45-55km (drag-grazing) —
             // flight-found: a 45km ceiling cut the sweep at 235
-            // deg to go. Only an above-atmosphere Pe is truly
-            // orbital and wrong.
+            // deg to go, but past ~58km the prediction is a
+            // multi-pass decay and goes mushy (flight-found: a
+            // Pe 62km cut left the landing point unknowable).
+            // Stop EARLY (20 deg short) on purpose: the trim loop
+            // with its measured sensitivity is the precision
+            // instrument; the sweep is just the bulk burn.
             IF SHIP:PERIAPSIS > atmTop {
                 SET cutReason TO "pe-too-high".
+            } ELSE IF SHIP:PERIAPSIS > 58000 {
+                SET cutReason TO "pe-soft-ceiling".
             } ELSE {
                 LOCAL remainingEast IS
                     _norm360(siteGeo:LNG - ADDONS:TR:IMPACTPOS:LNG).
-                IF remainingEast < 6 {
-                    SET cutReason TO "impact-at-site".
+                IF remainingEast < 20 {
+                    SET cutReason TO "handoff-to-trim".
                 } ELSE IF prevRemaining < 90
                         AND remainingEast > prevRemaining + 180 {
                     // Jumped past the site between ticks.
@@ -1102,7 +1110,7 @@ LOCAL FUNCTION _suborbitReturnArc {
                 }
                 SET prevRemaining TO remainingEast.
                 SET throttleCmd TO
-                    CHOOSE 0.05 IF remainingEast < 25
+                    CHOOSE 0.05 IF remainingEast < 45
                     ELSE CHOOSE 0.3 IF remainingEast < 90 ELSE 1.
                 IF TIME:SECONDS > nextProgressLog {
                     SET nextProgressLog TO TIME:SECONDS + 12.
