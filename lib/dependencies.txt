@@ -1,12 +1,13 @@
 PREAMBLE = core
 
-LIB core = state, logs, files, phases, config, mission_plan, mission_type, countdown
+LIB core = state, logs, files, phases, config, mission_plan, mission_type
 LIB capture = maneuver, orbit
 LIB deorbit_targeting = orbit, utils
 LIB flightplan = ui
 LIB inclination = lib_navigation
 LIB landing = deorbit_targeting, maneuver, utils
-LIB launch = flightplan, orbit
+LIB launch = flightplan, orbit, countdown
+LIB maneuver = countdown
 LIB prelaunch =
 LIB suborbit = launch
 LIB mission_type =

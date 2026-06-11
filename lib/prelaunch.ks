@@ -7,13 +7,6 @@
 // LAUNCH band doesn't carry it for every rocket.
 // ============================================================
 
-LOCAL FUNCTION _launchCfgNum {
-    PARAMETER key.
-    PARAMETER defaultValue.
-    IF CFG:HASKEY(key) { RETURN CFG[key]. }
-    RETURN defaultValue.
-}
-
 LOCAL FUNCTION _norm360 {
     PARAMETER angle.
     LOCAL result IS angle.
@@ -23,7 +16,7 @@ LOCAL FUNCTION _norm360 {
 }
 
 LOCAL FUNCTION _targetLaunchPlaneInc {
-    LOCAL inc IS _launchCfgNum("LAUNCH_INCLINATION", 0).
+    LOCAL inc IS cfgNum("LAUNCH_INCLINATION", 0).
     IF CFG:HASKEY("TARGET_INCLINATION") AND CFG["TARGET_INCLINATION"] >= 0 {
         SET inc TO CFG["TARGET_INCLINATION"].
     }
@@ -219,10 +212,10 @@ LOCAL FUNCTION _prelaunchToVessel {
 
     LOCAL tgtInc IS ves:ORBIT:INCLINATION.
     LOCAL tgtLan IS ves:ORBIT:LAN.
-    LOCAL ascentTime IS _launchCfgNum("LAUNCH_RDV_ASCENT_TIME", 300).
-    LOCAL desiredLead IS _launchCfgNum("LAUNCH_RDV_LEAD", 30).
-    LOCAL maxWindows IS _launchCfgNum("LAUNCH_RDV_MAX_WINDOWS", 16).
-    LOCAL leadTime IS _launchCfgNum("PRELAUNCH_PLANE_LEAD", 145).
+    LOCAL ascentTime IS cfgNum("LAUNCH_RDV_ASCENT_TIME", 300).
+    LOCAL desiredLead IS cfgNum("LAUNCH_RDV_LEAD", 30).
+    LOCAL maxWindows IS cfgNum("LAUNCH_RDV_MAX_WINDOWS", 16).
+    LOCAL leadTime IS cfgNum("PRELAUNCH_PLANE_LEAD", 145).
     LOCAL rotPeriod IS SHIP:BODY:ROTATIONPERIOD.
 
     mLog("PRELAUNCH: rendezvous with " + ves:NAME
@@ -320,7 +313,7 @@ GLOBAL FUNCTION phasePrelaunch {
 
     LOCAL targetLan IS CFG["CAPTURE_LAN"].
     LOCAL targetInc IS _targetLaunchPlaneInc().
-    LOCAL leadTime IS _launchCfgNum("PRELAUNCH_PLANE_LEAD", 145).
+    LOCAL leadTime IS cfgNum("PRELAUNCH_PLANE_LEAD", 145).
     IF leadTime < 0 { SET leadTime TO 0. }
 
     IF targetInc <= 0 OR targetInc >= 180 {

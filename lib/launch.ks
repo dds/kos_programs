@@ -16,13 +16,6 @@ LOCAL FUNCTION _ascentTwr {
     RETURN SHIP:AVAILABLETHRUST / (SHIP:MASS * 9.81).
 }
 
-LOCAL FUNCTION _launchCfgNum {
-    PARAMETER key.
-    PARAMETER defaultValue.
-    IF CFG:HASKEY(key) { RETURN CFG[key]. }
-    RETURN defaultValue.
-}
-
 LOCAL FUNCTION _logAscentTelemetry {
     PARAMETER reason.
     mLogWarn("STATS launch telemetry reason=" + reason
@@ -65,9 +58,9 @@ GLOBAL FUNCTION phaseLaunch {
     LOCAL mjCore IS ADDONS:MJ:CORE.
     mLog("MechJeb core running: " + mjCore:RUNNING).
 
-    LOCAL parkingAlt IS _launchCfgNum("PARKING_ALT", 80000).
-    LOCAL launchInc IS _launchCfgNum("LAUNCH_INCLINATION", 0).
-    LOCAL launchAzimuth IS _launchCfgNum("LAUNCH_AZIMUTH", 0).
+    LOCAL parkingAlt IS cfgNum("PARKING_ALT", 80000).
+    LOCAL launchInc IS cfgNum("LAUNCH_INCLINATION", 0).
+    LOCAL launchAzimuth IS cfgNum("LAUNCH_AZIMUTH", 0).
 
     LOCAL asc IS ADDONS:MJ:ASCENT.
     SET asc:ENABLED               TO TRUE.
@@ -158,7 +151,7 @@ GLOBAL FUNCTION phaseFairing {
         nextPhase(launchSeq).
         RETURN.
     }
-    LOCAL fairingAlt IS _launchCfgNum("FAIRING_ALT", 72000).
+    LOCAL fairingAlt IS cfgNum("FAIRING_ALT", 72000).
     IF fairingAlt < 10000 {
         mLogWarn("Unsafe FAIRING_ALT=" + fairingAlt + "m; using 71500m.").
         SET fairingAlt TO 71500.
@@ -177,7 +170,7 @@ GLOBAL FUNCTION phaseFair {
 }
 
 GLOBAL FUNCTION phaseExtendAnts {
-    LOCAL extendAlt IS _launchCfgNum("EXTEND_ALT", 73500).
+    LOCAL extendAlt IS cfgNum("EXTEND_ALT", 73500).
     IF extendAlt < 10000 {
         mLogWarn("Unsafe EXTEND_ALT=" + extendAlt + "m; using 73000m.").
         SET extendAlt TO 73000.
@@ -253,7 +246,7 @@ GLOBAL FUNCTION armAscentStaging {
             mLog("Ascent complete post-staging, raising Pe now.").
             LOCK STEERING TO SHIP:PROGRADE.
             LOCK THROTTLE TO 1.
-            WAIT UNTIL SHIP:PERIAPSIS >= _launchCfgNum("PARKING_ALT", 80000) * 0.95.
+            WAIT UNTIL SHIP:PERIAPSIS >= cfgNum("PARKING_ALT", 80000) * 0.95.
             LOCK THROTTLE TO 0.
             UNLOCK THROTTLE.
             UNLOCK STEERING.
@@ -437,7 +430,7 @@ GLOBAL FUNCTION ascentNeedsStage {
 }
 
 LOCAL FUNCTION _isParkingOrbitStable {
-    LOCAL target IS _launchCfgNum("PARKING_ALT", 80000).
+    LOCAL target IS cfgNum("PARKING_ALT", 80000).
     LOCAL tol IS target * 0.10.
     RETURN SHIP:PERIAPSIS > (target - tol)
         AND SHIP:APOAPSIS < (target + tol)

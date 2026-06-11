@@ -25,13 +25,6 @@
 //      concept, minus the orbit).
 // ============================================================
 
-LOCAL FUNCTION _launchCfgNum {
-    PARAMETER key.
-    PARAMETER defaultValue.
-    IF CFG:HASKEY(key) { RETURN CFG[key]. }
-    RETURN defaultValue.
-}
-
 LOCAL FUNCTION _norm360 {
     PARAMETER angle.
     LOCAL result IS angle.
@@ -117,7 +110,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     PARAMETER siteGeo.
     PARAMETER tol.
     PARAMETER arcPe.
-    LOCAL lead IS _launchCfgNum("SUBORBIT_DEORBIT_LEAD", 60).
+    LOCAL lead IS cfgNum("SUBORBIT_DEORBIT_LEAD", 60).
     LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
     UNLOCK STEERING.
     SET SAS TO TRUE.
@@ -257,8 +250,8 @@ LOCAL FUNCTION _suborbitReturnArc {
         RETURN.
     }
     LOCAL siteGeo IS _suborbitSiteGeo().
-    LOCAL tol IS _launchCfgNum("SUBORBIT_RETURN_TOL", 40000).
-    LOCAL arcPe IS _launchCfgNum("SUBORBIT_ARC_PE", 68000).
+    LOCAL tol IS cfgNum("SUBORBIT_RETURN_TOL", 40000).
+    LOCAL arcPe IS cfgNum("SUBORBIT_ARC_PE", 68000).
     LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
     // MechJeb must NOT circularize — the arc burn is ours.
     IF ADDONS:MJ:AVAILABLE {
@@ -426,11 +419,11 @@ LOCAL FUNCTION _armDescentWatchdog {
 // Resume-safe: re-running just re-disables MechJeb.
 GLOBAL FUNCTION phaseSuborbit {
     _armDescentWatchdog().
-    IF _launchCfgNum("SUBORBIT_RETURN", 0) > 0 {
+    IF cfgNum("SUBORBIT_RETURN", 0) > 0 {
         _suborbitReturnArc().
         RETURN.
     }
-    LOCAL targetAp IS _launchCfgNum("PARKING_ALT", 80000).
+    LOCAL targetAp IS cfgNum("PARKING_ALT", 80000).
     mLog("Suborbital: boosting to Ap " + ROUND(targetAp/1000, 0)
         + "km, then engine cutoff (no circularization).").
 
