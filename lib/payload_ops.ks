@@ -93,6 +93,7 @@ GLOBAL FUNCTION phaseRelayOps {
     UNLOCK THROTTLE.
     SET SAS TO TRUE.
     orbitSummary().
+    orientForSolar().
     mLog("Relay on station at " + MISSION["target"] + ".").
     HUDTEXT("Relay deployed: " + MISSION["target"], 8, 2, 18, GREEN, FALSE).
     LOCAL n IS 0.
@@ -204,15 +205,10 @@ GLOBAL FUNCTION phaseScanSatOps {
     nextPhase(_payloadSeq()).
 }
 
-// On-station hold: best measured solar attitude, then — when
-// SCANSAT_POWER_GUARD is set — the power watch loop (pause scans
-// on low battery, HUD warnings, AMP reserve prompt; AG10 exits).
+// On-station: hold the best measured solar attitude. Electrical
+// management is AmpYear's job (3-level emergency power-down).
 LOCAL FUNCTION _scanSatOnStation {
     orientForSolar().
-    IF CFG:HASKEY("SCANSAT_POWER_GUARD")
-            AND CFG["SCANSAT_POWER_GUARD"] > 0 {
-        scansatPowerWatch().
-    }
 }
 
 GLOBAL FUNCTION phaseLandDeorbit {
