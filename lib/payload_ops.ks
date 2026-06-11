@@ -205,10 +205,15 @@ GLOBAL FUNCTION phaseScanSatOps {
     nextPhase(_payloadSeq()).
 }
 
-// On-station: hold the best measured solar attitude. Electrical
-// management is AmpYear's job (3-level emergency power-down).
+// On-station: hold the best measured solar attitude, then — when
+// SCANSAT_POWER_GUARD is set — duty-cycle the scanners on
+// battery state (AmpYear's tiers proved too blunt for this).
 LOCAL FUNCTION _scanSatOnStation {
     orientForSolar().
+    IF CFG:HASKEY("SCANSAT_POWER_GUARD")
+            AND CFG["SCANSAT_POWER_GUARD"] > 0 {
+        scansatDutyCycle().
+    }
 }
 
 GLOBAL FUNCTION phaseLandDeorbit {

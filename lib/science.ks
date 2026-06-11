@@ -276,3 +276,51 @@ GLOBAL FUNCTION phaseEvaScience {
     mLog("Advance with: RUNPATH('1:/cmd/setphase', '<next>').").
     yieldToPrompt().
 }
+
+// ============================================================
+// scansatDutyCycle — duty-cycle the scanners on battery state:
+// OFF below SCANSAT_POWER_LOW (30%), ON above
+// SCANSAT_POWER_RESUME (60%). Charge on the held solar attitude,
+// scan in bursts, repeat until the map is done. Survives time
+// warp (game-time waits, no warp-killing alarms) so 5-10x grinds
+// out full coverage. AG10 ends the cycle and continues the
+// sequence with the scanners left ON.
+// ============================================================
+GLOBAL FUNCTION scansatDutyCycle {
+    LOCAL lowFrac IS 0.30.
+    LOCAL resumeFrac IS 0.60.
+    IF CFG:HASKEY("SCANSAT_POWER_LOW") { SET lowFrac TO CFG["SCANSAT_POWER_LOW"]. }
+    IF CFG:HASKEY("SCANSAT_POWER_RESUME") { SET resumeFrac TO CFG["SCANSAT_POWER_RESUME"]. }
+    mLog("Scan duty cycle: OFF below " + ROUND(lowFrac * 100, 0)
+        + "%, ON above " + ROUND(resumeFrac * 100, 0)
+        + "%. AG10 ends the cycle. Warp away.").
+
+    LOCAL scansOn IS TRUE.
+    LOCAL nextStatus IS TIME:SECONDS + 600.
+    UNTIL AG10 {
+        LOCAL frac IS shipPowerFraction().
+        IF scansOn AND frac < lowFrac {
+            scienceStopScanners().
+            SET scansOn TO FALSE.
+            mLog("Scans OFF at " + ROUND(frac * 100, 0) + "% — charging.").
+            HUDTEXT("Scans off — charging ("
+                + ROUND(frac * 100, 0) + "%)", 8, 2, 15, YELLOW, FALSE).
+        } ELSE IF NOT scansOn AND frac > resumeFrac {
+            scienceStartScanners().
+            SET scansOn TO TRUE.
+            mLog("Scans ON at " + ROUND(frac * 100, 0) + "%.").
+            HUDTEXT("Scans on ("
+                + ROUND(frac * 100, 0) + "%)", 8, 2, 15, GREEN, FALSE).
+        }
+        IF TIME:SECONDS > nextStatus {
+            SET nextStatus TO TIME:SECONDS + 600.
+            mLogWarn("STATS scansat duty charge=" + ROUND(frac * 100, 1)
+                + "pct scans=" + scansOn
+                + " flow=" + ROUND(shipSolarFlow(), 2)).
+            scienceScanStatus().
+        }
+        WAIT 2.
+    }
+    scienceStartScanners().
+    mLog("Duty cycle ended (AG10) — scanners left ON, continuing.").
+}
