@@ -162,21 +162,29 @@ GLOBAL FUNCTION scienceStartScanners {
         RETURN.
     }
     LOCAL started IS 0.
+    LOCAL found IS 0.
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("SCANsat") {
+            SET found TO found + 1.
             LOCAL modu IS p:GETMODULE("SCANsat").
             IF modu:HASEVENT("Start RADAR Scan")    { modu:DOEVENT("Start RADAR Scan").    SET started TO started + 1. }
             IF modu:HASEVENT("Start SAR Scan")      { modu:DOEVENT("Start SAR Scan").      SET started TO started + 1. }
             IF modu:HASEVENT("Start Altimetry Scan"){ modu:DOEVENT("Start Altimetry Scan").SET started TO started + 1. }
             IF modu:HASEVENT("Start Biome Scan")    { modu:DOEVENT("Start Biome Scan").    SET started TO started + 1. }
             IF modu:HASEVENT("Start Anomaly Scan")  { modu:DOEVENT("Start Anomaly Scan").  SET started TO started + 1. }
-        }
-        IF p:HASMODULE("SCANsat") {
-            LOCAL modu IS p:GETMODULE("SCANsat").
-            IF modu:HASEVENT("Start Scan") { modu:DOEVENT("Start Scan"). SET started TO started + 1. }
+            IF modu:HASEVENT("Start Scan")          { modu:DOEVENT("Start Scan").          SET started TO started + 1. }
         }
     }
-    mLog("SCANsat: " + started + " scanners started.").
+    // started=0 with modules found usually means already scanning
+    // (their events read Stop, not Start).
+    mLog("SCANsat: " + found + " scanner module(s), " + started
+        + " start event(s) fired"
+        + (CHOOSE " (already running)." IF found > 0 AND started = 0
+           ELSE ".")).
+    IF found = 0 {
+        mLogWarn("No SCANsat modules on this vessel — is the CPU on"
+            + " the carrier instead of the mapper?").
+    }
     HUDTEXT("SCANsat scanning started", 3, 2, 13, CYAN, FALSE).
 }
 

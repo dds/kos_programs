@@ -7,7 +7,7 @@ PARAMETER missionId IS "".
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
-LOCAL phase_ IS phaseName:TRIM.
+LOCAL phase_ IS phaseName:TRIM:TOUPPER.
 LOCAL mission_ IS missionId:TRIM.
 IF mission_ = "" {
     SET mission_ TO stateGet("mission_id", "").
