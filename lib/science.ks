@@ -262,3 +262,17 @@ LOCAL FUNCTION _experimentAvailable {
     }
     RETURN FALSE.
 }
+
+// ============================================================
+// phaseEvaScience — placeholder handler. The EVA science mission
+// flow isn't built yet (kOS there is expected to do little more
+// than boot and log); this exists so the phase binds instead of
+// crashing the binder wherever science+orbit happen to be loaded
+// (flight-found via the scansat band). Logs and yields to the
+// operator; advance manually with setphase when done.
+// ============================================================
+GLOBAL FUNCTION phaseEvaScience {
+    mLog("EVA_SCIENCE: no automated flow yet — manual ops.").
+    mLog("Advance with: RUNPATH('1:/cmd/setphase', '<next>').").
+    yieldToPrompt().
+}
