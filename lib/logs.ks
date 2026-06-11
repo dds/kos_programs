@@ -43,19 +43,19 @@ GLOBAL FUNCTION slug {
     LOCAL safeCoreTag IS _sanitizeName(CORE:TAG).
     IF safeCoreTag <> "" {
         RETURN "{0}_{1}":FORMAT(safeName, safeCoreTag).
-    } 
+    }
     RETURN safeName.
 }
 
 GLOBAL FUNCTION logId {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
-    IF launchT = 0 { 
-        SET launchT TO ROUND(TIME:SECONDS / 10, 0) * 10. 
+    IF launchT = 0 {
+        SET launchT TO ROUND(TIME:SECONDS / 10, 0) * 10.
         stateSetNum("launch_time", launchT).
     }
 
     LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
-    
+
     LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
     IF isEVA {
         // TODO: support multiple EVAs.
@@ -70,7 +70,7 @@ GLOBAL FUNCTION archiveLog {
         RETURN FALSE.
     }
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
-    IF launchT = 0 { 
+    IF launchT = 0 {
         PRINT "archiveLog: launch time is 0.".
         RETURN FALSE.
     }
@@ -120,7 +120,8 @@ LOCAL FUNCTION _fmtTime {
 GLOBAL FUNCTION mLog {
     PARAMETER message.
     PARAMETER level IS "INFO".
-    LOCAL line IS "[" + _fmtTime() + "][" + level + "] " + message.
+    LOCAL l IS level:SUBSTRING(0,1).
+    LOCAL line IS l + _fmtTime() + " " + message.
     PRINT line.
 
     LOCAL wroteLocal IS FALSE.
