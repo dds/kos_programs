@@ -45,6 +45,57 @@ LOCAL FUNCTION _mustDecelerate {
     RETURN TRUE.
 }
 
+// Kepler ETA until the orbit descends through the given radius,
+// or -1 when it never does (self-contained — descent has no lib
+// dependencies). Mean anomaly advances linearly in time.
+LOCAL FUNCTION _descentEtaToRadius {
+    PARAMETER rTarget.
+    LOCAL obtEcc IS SHIP:ORBIT:ECCENTRICITY.
+    LOCAL sma IS SHIP:ORBIT:SEMIMAJORAXIS.
+    IF obtEcc >= 1 OR sma <= 0 { RETURN -1. }
+    IF rTarget <= sma * (1 - obtEcc) OR rTarget >= sma * (1 + obtEcc) {
+        RETURN -1.
+    }
+    LOCAL cosTa IS MAX(-1, MIN(1,
+        (sma * (1 - obtEcc ^ 2) / rTarget - 1) / obtEcc)).
+    // Descending branch: true anomaly approaching periapsis.
+    LOCAL taCross IS 360 - ARCCOS(cosTa).
+
+    LOCAL FUNCTION _meanAnom {
+        PARAMETER ta.
+        LOCAL eAnom IS 2 * ARCTAN2(
+            SQRT(1 - obtEcc) * SIN(ta / 2),
+            SQRT(1 + obtEcc) * COS(ta / 2)).
+        RETURN eAnom - obtEcc * SIN(eAnom) * CONSTANT:RADTODEG.
+    }
+    LOCAL dM IS _meanAnom(taCross) - _meanAnom(SHIP:ORBIT:TRUEANOMALY).
+    UNTIL dM >= 0  { SET dM TO dM + 360. }
+    UNTIL dM < 360 { SET dM TO dM - 360. }
+    RETURN (dM / 360) * SHIP:ORBIT:PERIOD.
+}
+
+// KAC alarm + warp-friendly wait until the ship descends through
+// targetRadius (flight-found: DESCENT blind-waited for reentry —
+// warping from the tracking station sailed past the alignment).
+LOCAL FUNCTION _descentWaitForRadius {
+    PARAMETER rTarget, label.
+    LOCAL alarmId IS "".
+    LOCAL eta IS _descentEtaToRadius(rTarget).
+    IF ADDONS:KAC:AVAILABLE AND eta > 180 {
+        LOCAL alm IS ADDALARM("Raw", TIME:SECONDS + eta - 120,
+            label + ": " + SHIP:NAME, "Auto-created by phaseDescent").
+        SET alm:ACTION TO "KillWarp".
+        SET alarmId TO alm:ID.
+        mLog("KAC alarm set for " + label + " in "
+            + ROUND(eta - 120, 0) + "s.").
+    }
+    LOCAL targetAlt IS rTarget - SHIP:BODY:RADIUS.
+    WAIT UNTIL SHIP:ALTITUDE < targetAlt
+        OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    SET WARP TO 0.
+    IF alarmId <> "" { DELETEALARM(alarmId). }
+}
+
 GLOBAL FUNCTION phaseDescent {
     mLogPhase("DESCENT").
 
@@ -61,14 +112,19 @@ GLOBAL FUNCTION phaseDescent {
     }
     mLog(dir + " steering lock for descent.").
 
-    // Wait for atmosphere entry
+    // Wait for atmosphere entry (alarmed); on airless bodies, for
+    // the 30km action point instead.
     IF SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE > SHIP:BODY:ATM:HEIGHT {
         mLog("Waiting for atmospheric entry...").
-        WAIT UNTIL SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT
-            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+        _descentWaitForRadius(
+            SHIP:BODY:RADIUS + SHIP:BODY:ATM:HEIGHT, "Reentry").
         mLog("Entered atmosphere at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
         WAIT 5.
         _descentRetractAntennas().
+    } ELSE IF NOT SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE > 30000 {
+        mLog("Airless body — waiting for the 30km action point...").
+        _descentWaitForRadius(SHIP:BODY:RADIUS + 30000, "Descent action").
+        mLog("30km action point reached.").
     }
 
     // Arm chutes early so they auto-deploy at safe altitude
