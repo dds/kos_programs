@@ -131,13 +131,13 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     mLog("Coasting the arc: " + ROUND(remaining, 0)
         + " deg of ground track to the site; deorbit burn in ~"
         + ROUND(waitSecs, 0) + "s. Warp away.").
+    // The deorbit ETA is re-estimated every 10s and the alarm
+    // moved when it drifts — flight-found: drag decay brought
+    // reentry early while a one-shot alarm still claimed the
+    // burn was 2 minutes away at 35km altitude.
     LOCAL alarmId IS "".
-    IF ADDONS:KAC:AVAILABLE AND waitSecs > 70 {
-        LOCAL alm IS ADDALARM("Raw", TIME:SECONDS + waitSecs - 60,
-            "Deorbit burn: " + SHIP:NAME, "Auto-created by SUBORBIT").
-        SET alm:ACTION TO "KillWarp".
-        SET alarmId TO alm:ID.
-    }
+    LOCAL alarmUt IS 0.
+    LOCAL nextEtaCheck IS 0.
     // The arc dips below the atmosphere line around Pe BY DESIGN —
     // flight-found: an altitude < atmTop exit ended a 1531s coast
     // at 612s on the routine descent toward Pe 66km. Only well
@@ -146,6 +146,25 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
             OR (SHIP:VERTICALSPEED < 0
                 AND SHIP:ALTITUDE < arcPe - 8000)
             OR ABORT OR AG10 {
+        IF TIME:SECONDS > nextEtaCheck {
+            SET nextEtaCheck TO TIME:SECONDS + 10.
+            LOCAL liveRate IS 360 / SHIP:ORBIT:PERIOD
+                - 360 / SHIP:BODY:ROTATIONPERIOD.
+            LOCAL liveEta IS MAX(0,
+                (_suborbitGroundRemaining(siteGeo) - lead)
+                / MAX(0.01, liveRate)).
+            LOCAL newUt IS TIME:SECONDS + liveEta - 60.
+            IF ADDONS:KAC:AVAILABLE AND liveEta > 70
+                    AND ABS(newUt - alarmUt) > 45 {
+                IF alarmId <> "" { DELETEALARM(alarmId). }
+                LOCAL alm IS ADDALARM("Raw", newUt,
+                    "Deorbit burn: " + SHIP:NAME,
+                    "Auto-created by SUBORBIT").
+                SET alm:ACTION TO "KillWarp".
+                SET alarmId TO alm:ID.
+                SET alarmUt TO newUt.
+            }
+        }
         WAIT 1.
     }
     SET WARP TO 0.
@@ -254,6 +273,16 @@ LOCAL FUNCTION _suborbitReturnArc {
     WAIT UNTIL SHIP:ALTITUDE >= atmTop OR ABORT OR AG10.
     IF ABORT OR AG10 { launchAbort(). RETURN. }
     IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
+
+    // The arc must CLEAR the atmosphere except for the Pe dip —
+    // flight-found: a 74km Ap arc skimmed drag the entire
+    // revolution and decayed down at the Desert Airfield.
+    IF SHIP:APOAPSIS < atmTop + 10000 {
+        mLogWarn("Ap " + ROUND(SHIP:APOAPSIS / 1000, 1)
+            + "km barely clears the atmosphere — the whole arc"
+            + " will skim and decay early. PARKING_ALT >= "
+            + ROUND((atmTop + 15000) / 1000, 0) + "km recommended.").
+    }
 
     // Budget check (elements are fixed while coasting). Reserve
     // ~80 m/s on top for the targeted deorbit burn.
