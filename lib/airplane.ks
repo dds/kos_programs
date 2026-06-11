@@ -980,3 +980,25 @@ GLOBAL FUNCTION airplaneMain {
     }
     runPhases(phaseMap).
 }
+
+// ============================================================
+// Binder stubs: PREFLIGHT/FLIGHT/POSTFLIGHT are dispatched by
+// airplaneMain's internal phase map, not runPhases — these exist
+// so dependencyBindPhase can reference the handler names wherever
+// the airplane lib is loaded (e.g. SSTO craft, whose lib depends
+// on airplane) without an undefined-name crash. POST_FLIGHT and
+// POSTFLIGHT camelCase to the same case-insensitive identifier,
+// so one definition serves both.
+// ============================================================
+GLOBAL FUNCTION phasePreflight {
+    mLogWarn("PREFLIGHT is handled by airplaneMain — manual ops.").
+    yieldToPrompt().
+}
+GLOBAL FUNCTION phaseFlight {
+    mLogWarn("FLIGHT is handled by airplaneMain — manual ops.").
+    yieldToPrompt().
+}
+GLOBAL FUNCTION phasePostFlight {
+    mLogWarn("POSTFLIGHT is handled by airplaneMain — manual ops.").
+    yieldToPrompt().
+}
