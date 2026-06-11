@@ -354,6 +354,16 @@ GLOBAL FUNCTION scansatDutyCycle {
     // with a healthy battery).
     scienceStopScanners().
     LOCAL scansOn IS FALSE.
+    // The sun walks ~0.85 deg/day around Kerbin while SAS holds an
+    // inertial attitude: re-aim the cached solar axis at scanner
+    // transitions (when not on warp rails — ships cannot rotate
+    // in time warp) and every SOLAR_REORIENT_PERIOD (2 Kerbin
+    // days) regardless, briefly dropping and restoring the warp.
+    LOCAL reorientPeriod IS 43200.
+    IF CFG:HASKEY("SOLAR_REORIENT_PERIOD") {
+        SET reorientPeriod TO CFG["SOLAR_REORIENT_PERIOD"].
+    }
+    LOCAL lastOrient IS TIME:SECONDS.
     LOCAL nextStatus IS TIME:SECONDS + 600.
     UNTIL AG10 OR mapDone {
         LOCAL frac IS shipPowerFraction().
@@ -363,12 +373,28 @@ GLOBAL FUNCTION scansatDutyCycle {
             mLog("Scans OFF at " + ROUND(frac * 100, 0) + "% — charging.").
             HUDTEXT("Scans off — charging ("
                 + ROUND(frac * 100, 0) + "%)", 8, 2, 15, YELLOW, FALSE).
+            IF WARP = 0 AND TIME:SECONDS - lastOrient > 1800 {
+                orientForSolar().
+                SET lastOrient TO TIME:SECONDS.
+            }
         } ELSE IF NOT scansOn AND frac > resumeFrac {
             scienceStartScanners().
             SET scansOn TO TRUE.
             mLog("Scans ON at " + ROUND(frac * 100, 0) + "%.").
             HUDTEXT("Scans on ("
                 + ROUND(frac * 100, 0) + "%)", 8, 2, 15, GREEN, FALSE).
+            IF WARP = 0 AND TIME:SECONDS - lastOrient > 1800 {
+                orientForSolar().
+                SET lastOrient TO TIME:SECONDS.
+            }
+        }
+        IF TIME:SECONDS - lastOrient > reorientPeriod {
+            LOCAL savedWarp IS WARP.
+            SET WARP TO 0.
+            WAIT 2.
+            orientForSolar().
+            SET lastOrient TO TIME:SECONDS.
+            SET WARP TO savedWarp.
         }
         IF TIME:SECONDS > nextStatus {
             SET nextStatus TO TIME:SECONDS + 600.
