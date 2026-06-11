@@ -214,18 +214,34 @@ GLOBAL FUNCTION scienceStopScanners {
     mLog("SCANsat: " + stopped + " stop event(s) fired.").
 }
 
+// Coverage per scan type from the Kos-Scansat addon:
+// GETCOVERAGE(body, type) returns 0-100. -1 list = unavailable.
+GLOBAL FUNCTION scienceScanCoverage {
+    LOCAL cov IS LEXICON().
+    IF NOT ADDONS:SCANSAT:AVAILABLE { RETURN cov. }
+    LOCAL typesRaw IS ADDONS:SCANSAT:ALLSCANTYPES.
+    IF typesRaw:ISTYPE("List") {
+        FOR t IN typesRaw {
+            cov:ADD(t, ADDONS:SCANSAT:GETCOVERAGE(SHIP:BODY, t)).
+        }
+    }
+    RETURN cov.
+}
+
 GLOBAL FUNCTION scienceScanStatus {
     IF NOT ADDONS:SCANSAT:AVAILABLE {
         mLogWarn("SCANsat not available.").
         RETURN.
     }
-    LOCAL lBody IS SHIP:ORBIT:BODY.
-    mLogWarn("STATS scansat status available=True body=" + lBody:NAME
-        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)
-        + " note=coverage-api-unavailable").
-    HUDTEXT("SCANsat active over " + lBody:NAME, 3, 2, 13, CYAN, FALSE).
+    LOCAL line IS "".
+    LOCAL cov IS scienceScanCoverage().
+    FOR t IN cov:KEYS {
+        IF cov[t] > 0 { SET line TO line + t + "=" + ROUND(cov[t], 1) + "% ". }
+    }
+    IF line = "" { SET line TO "none yet". }
+    mLog("Scan coverage @ " + SHIP:BODY:NAME + ": " + line:TRIM).
+    mLogWarn("STATS scansat coverage body=" + SHIP:BODY:NAME
+        + " " + line:TRIM).
 }
 
 GLOBAL FUNCTION scienceScanLoop {
@@ -318,9 +334,22 @@ GLOBAL FUNCTION scansatDutyCycle {
         + "%, ON above " + ROUND(resumeFrac * 100, 0)
         + "%. AG10 ends the cycle. Warp away.").
 
+    // Active scan types are detected empirically: whichever
+    // types' coverage RISES after the cycle starts is what our
+    // scanners collect. When every active type reaches
+    // SCANSAT_TARGET_COVERAGE (95%), the map is done — scanners
+    // off, cycle ends itself.
+    LOCAL targetCov IS 95.
+    IF CFG:HASKEY("SCANSAT_TARGET_COVERAGE") {
+        SET targetCov TO CFG["SCANSAT_TARGET_COVERAGE"].
+    }
+    LOCAL baseline IS scienceScanCoverage().
+    LOCAL active IS LIST().
+    LOCAL mapDone IS FALSE.
+
     LOCAL scansOn IS TRUE.
     LOCAL nextStatus IS TIME:SECONDS + 600.
-    UNTIL AG10 {
+    UNTIL AG10 OR mapDone {
         LOCAL frac IS shipPowerFraction().
         IF scansOn AND frac < lowFrac {
             scienceStopScanners().
@@ -341,9 +370,33 @@ GLOBAL FUNCTION scansatDutyCycle {
                 + "pct scans=" + scansOn
                 + " flow=" + ROUND(shipSolarFlow(), 2)).
             scienceScanStatus().
+
+            LOCAL cov IS scienceScanCoverage().
+            FOR t IN cov:KEYS {
+                IF baseline:HASKEY(t) AND cov[t] > baseline[t] + 0.05
+                        AND NOT active:CONTAINS(t) {
+                    active:ADD(t).
+                    mLog("Active scan type detected: " + t + ".").
+                }
+            }
+            IF active:LENGTH > 0 {
+                SET mapDone TO TRUE.
+                FOR t IN active {
+                    IF cov[t] < targetCov { SET mapDone TO FALSE. }
+                }
+            }
         }
         WAIT 2.
     }
-    scienceStartScanners().
-    mLog("Duty cycle ended (AG10) — scanners left ON, continuing.").
+    IF mapDone {
+        scienceStopScanners().
+        mLog("Mapping COMPLETE: all active scan types >= "
+            + ROUND(targetCov, 0) + "% — scanners off, continuing.").
+        mLogWarn("STATS scansat duty result=complete types="
+            + active:JOIN(",")).
+        HUDTEXT("Mapping complete", 10, 2, 18, GREEN, FALSE).
+    } ELSE {
+        scienceStartScanners().
+        mLog("Duty cycle ended (AG10) — scanners left ON, continuing.").
+    }
 }
