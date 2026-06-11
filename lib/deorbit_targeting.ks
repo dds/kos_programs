@@ -218,12 +218,25 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     IF bestDist > refineStartLimit {
-        mLogWarn("STATS deorbit abort reason=coarse-miss-too-large distKm="
-            + ROUND(bestDist/1000,1)
-            + " refineStartLimitKm=" + ROUND(refineStartLimit/1000,1)
-            + " toleranceKm=" + ROUND(tolerance/1000,1)).
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-        RETURN FALSE.
+        // Best-effort missions (TARGET_DEORBIT_PROCEED_ON_MISS)
+        // fly the best pass found no matter how far — this gate
+        // was vetoing them before the proceed logic had a say
+        // (flight-found: a 98deg polar splashdown held at 224km).
+        LOCAL proceedOnMiss IS CFG:HASKEY("TARGET_DEORBIT_PROCEED_ON_MISS")
+            AND CFG["TARGET_DEORBIT_PROCEED_ON_MISS"] > 0.
+        IF proceedOnMiss {
+            mLogWarn("Coarse best " + ROUND(bestDist/1000,1)
+                + "km exceeds refine-start limit "
+                + ROUND(refineStartLimit/1000,1)
+                + "km — proceeding anyway (best-effort mode).").
+        } ELSE {
+            mLogWarn("STATS deorbit abort reason=coarse-miss-too-large distKm="
+                + ROUND(bestDist/1000,1)
+                + " refineStartLimitKm=" + ROUND(refineStartLimit/1000,1)
+                + " toleranceKm=" + ROUND(tolerance/1000,1)).
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
+            RETURN FALSE.
+        }
     }
 
     FOR mult IN passes:SUBLIST(1, passes:LENGTH - 1) {
