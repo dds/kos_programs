@@ -262,3 +262,69 @@ LOCAL FUNCTION _experimentAvailable {
     }
     RETURN FALSE.
 }
+
+// ============================================================
+// scansatPowerWatch — on-station power management loop. Pauses
+// the scanners when charge drops below SCANSAT_POWER_LOW (15%),
+// resumes above SCANSAT_POWER_RESUME (50%), and flashes the HUD
+// red when critical — pointing at the AMP reserve bank when one
+// is aboard (we can't transfer it ourselves; the operator can).
+// Re-runs the solar attitude every 30 min. AG10 exits the watch
+// and lets the sequence continue. Requires utils (orientForSolar,
+// shipPowerFraction) — SCANSAT_OPS loads it via payload_ops.
+// ============================================================
+GLOBAL FUNCTION scansatPowerWatch {
+    LOCAL lowFrac IS 0.15.
+    LOCAL resumeFrac IS 0.5.
+    IF CFG:HASKEY("SCANSAT_POWER_LOW") { SET lowFrac TO CFG["SCANSAT_POWER_LOW"]. }
+    IF CFG:HASKEY("SCANSAT_POWER_RESUME") { SET resumeFrac TO CFG["SCANSAT_POWER_RESUME"]. }
+
+    mLog("Power watch: scans pause below " + ROUND(lowFrac * 100, 0)
+        + "%, resume above " + ROUND(resumeFrac * 100, 0)
+        + "%. AG10 ends the watch.").
+    LOCAL scansOn IS TRUE.
+    LOCAL nextOrient IS TIME:SECONDS + 1800.
+    LOCAL nextHud IS 0.
+    LOCAL nextStats IS 0.
+    UNTIL AG10 {
+        LOCAL frac IS shipPowerFraction().
+
+        IF scansOn AND frac < lowFrac {
+            scienceStopScanners().
+            SET scansOn TO FALSE.
+            mLogWarn("STATS scansat power pause charge="
+                + ROUND(frac * 100, 1) + "pct").
+            HUDTEXT("Scans PAUSED — battery "
+                + ROUND(frac * 100, 0) + "%", 10, 2, 18, YELLOW, FALSE).
+        } ELSE IF NOT scansOn AND frac > resumeFrac {
+            scienceStartScanners().
+            SET scansOn TO TRUE.
+            mLog("Power recovered (" + ROUND(frac * 100, 0)
+                + "%) — scans resumed.").
+        }
+
+        IF frac < lowFrac * 0.67 AND TIME:SECONDS > nextHud {
+            SET nextHud TO TIME:SECONDS + 20.
+            HUDTEXT("POWER CRITICAL " + ROUND(frac * 100, 0) + "%"
+                + (CHOOSE " — TRANSFER RESERVE POWER (AMP)"
+                   IF shipReservePower() > 0
+                   ELSE " — systems powering down"),
+                15, 2, 20, RED, FALSE).
+        }
+
+        IF TIME:SECONDS > nextOrient {
+            SET nextOrient TO TIME:SECONDS + 1800.
+            orientForSolar().
+        }
+        IF TIME:SECONDS > nextStats {
+            SET nextStats TO TIME:SECONDS + 600.
+            mLogWarn("STATS scansat power charge="
+                + ROUND(frac * 100, 1) + "pct flow="
+                + ROUND(shipSolarFlow(), 2)
+                + " scans=" + scansOn
+                + " reserve=" + ROUND(shipReservePower(), 0)).
+        }
+        WAIT 5.
+    }
+    mLog("Power watch ended (AG10) — continuing the sequence.").
+}

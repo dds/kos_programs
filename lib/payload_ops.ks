@@ -116,6 +116,7 @@ GLOBAL FUNCTION phaseScanSatOps {
         scienceStartScanners().
         WAIT 1.
         scienceScanStatus().
+        _scanSatOnStation().
         nextPhase(_payloadSeq()).
         RETURN.
     }
@@ -137,6 +138,7 @@ GLOBAL FUNCTION phaseScanSatOps {
         scienceStartScanners().
         WAIT 1.
         scienceScanStatus().
+        _scanSatOnStation().
         nextPhase(_payloadSeq()).
         RETURN.
     }
@@ -144,6 +146,9 @@ GLOBAL FUNCTION phaseScanSatOps {
     scienceStartScanners().
     WAIT 1.
     scienceScanStatus().
+    // Sun-point before any release so the mapper separates with
+    // its best measured solar attitude already set.
+    orientForSolar().
 
     IF tag <> "" AND SHIP:PARTSTAGGED(tag):LENGTH = 0 {
         mLogWarn("SCANsat decoupler tag '" + tag
@@ -160,6 +165,7 @@ GLOBAL FUNCTION phaseScanSatOps {
         scienceStartScanners().
         WAIT 1.
         scienceScanStatus().
+        _scanSatOnStation().
         nextPhase(_payloadSeq()).
         RETURN.
     }
@@ -190,9 +196,23 @@ GLOBAL FUNCTION phaseScanSatOps {
     IF CFG:HASKEY("SCANSAT_DISPOSE_CARRIER")
             AND CFG["SCANSAT_DISPOSE_CARRIER"] > 0 {
         _disposeScanSatCarrier().
+    } ELSE {
+        // The CPU stays with the mapper: hold station.
+        _scanSatOnStation().
     }
 
     nextPhase(_payloadSeq()).
+}
+
+// On-station hold: best measured solar attitude, then — when
+// SCANSAT_POWER_GUARD is set — the power watch loop (pause scans
+// on low battery, HUD warnings, AMP reserve prompt; AG10 exits).
+LOCAL FUNCTION _scanSatOnStation {
+    orientForSolar().
+    IF CFG:HASKEY("SCANSAT_POWER_GUARD")
+            AND CFG["SCANSAT_POWER_GUARD"] > 0 {
+        scansatPowerWatch().
+    }
 }
 
 GLOBAL FUNCTION phaseLandDeorbit {
