@@ -802,6 +802,31 @@ GLOBAL FUNCTION executeDeorbitNode {
         + " eta=" + ROUND(startTime - TIME:SECONDS,1)
         + " nodeEta=" + ROUND(nd:ETA,1)
         + " maxAcc=" + ROUND(maxAcc,2)).
+
+    // Warp/wait discipline — parity with executeManeuver
+    // (flight-found: a 3.4h coast to the deorbit burn held a
+    // steering lock with no KAC alarm; warping would sail
+    // through the window).
+    LOCAL kacAlarmId IS "".
+    IF ADDONS:KAC:AVAILABLE AND startTime - 60 > TIME:SECONDS {
+        LOCAL alm IS ADDALARM("Raw", startTime - 60,
+            "Deorbit burn: " + ROUND(burnDV,1) + "m/s",
+            "Auto-created by executeDeorbitNode").
+        SET alm:ACTION TO "KillWarp".
+        SET kacAlarmId TO alm:ID.
+        mLog("KAC alarm set for deorbit burn in "
+            + ROUND(startTime - 60 - TIME:SECONDS, 0) + "s.").
+    }
+    IF startTime - TIME:SECONDS > 300 {
+        SET SAS TO TRUE.
+        mLog("Long coast to deorbit burn ("
+            + ROUND(startTime - TIME:SECONDS, 0) + "s). Warp at will.").
+        WAIT UNTIL TIME:SECONDS >= startTime - 120.
+        SET WARP TO 0.
+        mLog("Awake — " + ROUND(startTime - TIME:SECONDS, 0)
+            + "s to deorbit burn.").
+    }
+
     SET SAS TO FALSE.
     LOCK STEERING TO nd:BURNVECTOR.
     LOCAL alignDeadline IS MIN(startTime - 2, TIME:SECONDS + 45).
@@ -841,6 +866,7 @@ GLOBAL FUNCTION executeDeorbitNode {
     UNLOCK STEERING.
     REMOVE nd.
     SET SAS TO TRUE.
+    IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
     mLog("Timed deorbit burn complete. Residual=" + ROUND(residual,2) + " m/s.").
     mLogWarn("STATS timed-burn result dv=" + ROUND(burnDV,1)
         + " residual=" + ROUND(residual,2)
