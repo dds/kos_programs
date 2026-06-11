@@ -949,12 +949,13 @@ LOCAL FUNCTION _suborbitTrimArc {
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)).
 }
 
-// dv needed at apoapsis to stretch the arc to a Pe of ~30km —
-// vis-viva on elements only, no position predictions.
+// dv needed at apoapsis to stretch the arc to a Pe of ~50km (the
+// flight regime of a full-circle drag-grazing return) — vis-viva
+// on elements only, no position predictions.
 LOCAL FUNCTION _suborbitArcDvRequired {
     LOCAL mu IS SHIP:BODY:MU.
     LOCAL rAp IS SHIP:BODY:RADIUS + SHIP:APOAPSIS.
-    LOCAL rPeTarget IS SHIP:BODY:RADIUS + 30000.
+    LOCAL rPeTarget IS SHIP:BODY:RADIUS + 50000.
     LOCAL vNeed IS SQRT(mu * (2 / rAp - 2 / (rAp + rPeTarget))).
     LOCAL vAp IS SQRT(MAX(0, mu * (2 / rAp - 1 / SHIP:ORBIT:SEMIMAJORAXIS))).
     RETURN MAX(0, vNeed - vAp).
@@ -998,23 +999,17 @@ LOCAL FUNCTION _suborbitReturnArc {
     IF ABORT OR AG10 { _launchAbort(). RETURN. }
     IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
 
-    // Coast to apoapsis first. The arc burn is a partial
-    // circularization and belongs AT Ap, horizontal — flight-
-    // found: burning prograde on the way up poured the whole
-    // stage into raising Ap to 259km with Pe still at 4.9km.
-    LOCK STEERING TO SHIP:PROGRADE.
-    WAIT UNTIL ETA:APOAPSIS < 15 OR SHIP:VERTICALSPEED < 0
-        OR ABORT OR AG10.
-    IF ABORT OR AG10 { _launchAbort(). RETURN. }
-
-    // Budget check before committing: vis-viva dv from here to an
-    // arc with Pe ~30km vs the rocket-equation estimate for the
-    // stage. Not enough → fly the plain hop, don't waste fuel on
-    // half an arc.
+    // Budget check first (elements are fixed while coasting):
+    // vis-viva dv to the drag-grazing return arc vs the
+    // rocket-equation estimate for the stage. Not enough → fly
+    // the plain hop, don't waste fuel on half an arc.
     LOCAL needDv IS _suborbitArcDvRequired().
     LOCAL haveDv IS _suborbitArcDvBudget().
-    mLog("Return arc burn: need ~" + ROUND(needDv, 0)
-        + " m/s, stage holds ~" + ROUND(haveDv, 0) + " m/s.").
+    LOCAL burnAcc IS MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS).
+    LOCAL burnTime IS needDv / burnAcc.
+    mLog("Return arc burn: need ~" + ROUND(needDv, 0) + " m/s (~"
+        + ROUND(burnTime, 0) + "s); stage holds ~"
+        + ROUND(haveDv, 0) + " m/s.").
     IF haveDv > 0 AND haveDv < needDv * 1.05 + 20 {
         mLogError("Insufficient dV for the return arc — flying the"
             + " plain hop to descent instead.").
@@ -1027,6 +1022,29 @@ LOCAL FUNCTION _suborbitReturnArc {
         RETURN.
     }
 
+    // Start the burn HALF ITS DURATION before apoapsis, like a
+    // MechJeb circularization — flight-found: starting at Ap puts
+    // half the dv in while already descending, too late.
+    LOCAL burnStartUt IS TIME:SECONDS + ETA:APOAPSIS - burnTime / 2.
+    IF SHIP:VERTICALSPEED < 0 OR ETA:APOAPSIS > 600 {
+        SET burnStartUt TO TIME:SECONDS.
+    }
+    LOCAL alarmId IS "".
+    IF ADDONS:KAC:AVAILABLE AND burnStartUt - TIME:SECONDS > 90 {
+        LOCAL alm IS ADDALARM("Raw", burnStartUt - 30,
+            "Arc burn: " + SHIP:NAME, "Auto-created by SUBORBIT").
+        SET alm:ACTION TO "KillWarp".
+        SET alarmId TO alm:ID.
+    }
+    mLog("Arc burn starts in " + ROUND(burnStartUt - TIME:SECONDS, 0)
+        + "s (Ap in " + ROUND(ETA:APOAPSIS, 0) + "s, burn ~"
+        + ROUND(burnTime, 0) + "s).").
+    LOCK STEERING TO VXCL(UP:VECTOR, SHIP:VELOCITY:ORBIT).
+    WAIT UNTIL TIME:SECONDS >= burnStartUt OR ABORT OR AG10.
+    SET WARP TO 0.
+    IF alarmId <> "" { DELETEALARM(alarmId). }
+    IF ABORT OR AG10 { _launchAbort(). RETURN. }
+
     // Sweep burn: HORIZONTAL, until the predicted impact point
     // has swept east AROUND THE GLOBE back to the site. Tracked
     // as remaining eastward longitude (starts ~357 deg, decreases
@@ -1034,12 +1052,11 @@ LOCAL FUNCTION _suborbitReturnArc {
     // initial impact is just downrange, a few hundred km from the
     // site by chord, and a distance trigger cut the burn at
     // 1350 m/s then 'fixed' the hop retrograde into the ground.
-    LOCK STEERING TO VXCL(UP:VECTOR, SHIP:VELOCITY:ORBIT).
-    WAIT 2.
     LOCAL throttleCmd IS 0.
     LOCK THROTTLE TO throttleCmd.
     LOCAL prevRemaining IS 999.
     LOCAL noImpactSince IS -1.
+    LOCAL nextProgressLog IS 0.
     LOCAL sweepDeadline IS TIME:SECONDS + 600.
     LOCAL cutReason IS "".
     UNTIL cutReason <> "" {
@@ -1067,7 +1084,11 @@ LOCAL FUNCTION _suborbitReturnArc {
             }
         } ELSE {
             SET noImpactSince TO -1.
-            IF SHIP:PERIAPSIS > 45000 {
+            // The return arc LIVES at Pe 45-60km (drag-grazing) —
+            // flight-found: a 45km ceiling cut the sweep at 235
+            // deg to go. Only an above-atmosphere Pe is truly
+            // orbital and wrong.
+            IF SHIP:PERIAPSIS > atmTop {
                 SET cutReason TO "pe-too-high".
             } ELSE {
                 LOCAL remainingEast IS
@@ -1083,6 +1104,14 @@ LOCAL FUNCTION _suborbitReturnArc {
                 SET throttleCmd TO
                     CHOOSE 0.05 IF remainingEast < 25
                     ELSE CHOOSE 0.3 IF remainingEast < 90 ELSE 1.
+                IF TIME:SECONDS > nextProgressLog {
+                    SET nextProgressLog TO TIME:SECONDS + 12.
+                    mLog("Sweep: " + ROUND(remainingEast, 0)
+                        + " deg to go  Pe="
+                        + ROUND(SHIP:PERIAPSIS / 1000, 1)
+                        + "km  vSurf="
+                        + ROUND(SHIP:VELOCITY:SURFACE:MAG, 0) + ".").
+                }
             }
         }
         WAIT 0.05.
@@ -1114,8 +1143,17 @@ LOCAL FUNCTION _suborbitReturnArc {
     _suborbitTrimArc(siteGeo, tol).
     IF ABORT { RETURN. }
     SET SAS TO TRUE.
-    mLog("Return arc set — riding it back to "
-        + ROUND(siteGeo:LAT, 2) + "," + ROUND(siteGeo:LNG, 2) + ".").
+    LOCAL finalDist IS _suborbitImpactDist(siteGeo).
+    IF finalDist >= 0 AND finalDist <= tol {
+        mLog("ON TARGET: predicted impact "
+            + ROUND(finalDist / 1000, 0) + "km from the site.").
+    } ELSE IF finalDist >= 0 {
+        mLogWarn("OFF TARGET: predicted impact "
+            + ROUND(finalDist / 1000, 0) + "km from the site (tol "
+            + ROUND(tol / 1000, 0) + "km) — descent flies it anyway.").
+    } ELSE {
+        mLogWarn("No impact prediction — descent will manage entry.").
+    }
     nextPhase(launchSeq).
 }
 
