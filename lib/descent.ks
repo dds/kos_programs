@@ -294,6 +294,10 @@ LOCAL FUNCTION _descentDeployFairing {
         SET tag TO CFG["DESCENT_FAIRING_TAG"].
     }
     IF tag = "" { RETURN. }
+    IF tag = "none" {
+        mLog("Descent fairing disabled (tag=none).").
+        RETURN.
+    }
 
     LOCAL fairings IS SHIP:PARTSTAGGED(tag).
     IF fairings:LENGTH = 0 {
@@ -319,13 +323,19 @@ LOCAL FUNCTION _descentDeployFairing {
 
 // Decouple transfer stage at safe altitude.
 // Uses body-specific altitude threshold from DECOUPLE_ALTS table.
-// Reads tag from DESCENT_DECOUPLER_TAG config key.
+// Reads tag from DESCENT_DECOUPLER_TAG config key. Tag "none"
+// disables the decouple entirely (flight-found on FR3: the shed
+// transfer stage exploded next to the lander at touchdown).
 LOCAL FUNCTION _descentDecouple {
     LOCAL tag IS "descent_decoupler".
     IF DEFINED CFG AND CFG:HASKEY("DESCENT_DECOUPLER_TAG") {
         SET tag TO CFG["DESCENT_DECOUPLER_TAG"].
     }
     IF tag = "" { RETURN. }
+    IF tag = "none" {
+        mLog("Descent decouple disabled (tag=none).").
+        RETURN.
+    }
 
     LOCAL decouplers IS SHIP:PARTSTAGGED(tag).
     IF decouplers:LENGTH = 0 {

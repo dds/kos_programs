@@ -6,7 +6,13 @@
 //                 ROVER, ASSISTROVER, PROBE, CRASHPROBE
 // ============================================================
 
-GLOBAL CFG IS LEXICON().
+GLOBAL CFG IS LEXICON(
+    // Flight-found: decoupling the leftover transfer stage during
+    // DESCENT exploded it next to the lander at touchdown. FR3
+    // rides its stack all the way down; missions/cmd opts can
+    // still override with a real tag.
+    "DESCENT_DECOUPLER_TAG", "none"
+).
 
 applyKnownMissionState().
 GLOBAL fr3Seq IS LIST().

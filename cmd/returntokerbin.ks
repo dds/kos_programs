@@ -24,9 +24,13 @@
 //   decouple_tag       — part tag for aerobrake phase decoupler (default: none)
 //   arm_chutes         — 1 to arm parachutes in aerobrake phase (default 0)
 //   ksc_target         — true to enable KSC targeting (default true)
-//   descent_fairing    — part tag for fairing to deploy at < 60 m/s (default: none)
-//   descent_decoupler  — part tag for decoupler to fire at ~6km (default: none)
-//   descent_chutes     — part tag for parachutes to arm on entry (default: all chutes)
+//   descent_fairing    — part tag for fairing to deploy at < 60 m/s
+//   descent_decoupler  — part tag for decoupler to fire at ~6km
+//   descent_chutes     — part tag for parachutes to arm on entry
+//       Descent tags default to the craft's CFG values (then the
+//       descent lib defaults); pass "none" to disable a step
+//       (FR3 disables the decoupler — shed stage exploded next
+//       to the lander at touchdown).
 //
 // Requires archive access (KSC link or relay).
 // For a return to Kerbin ORBIT (no aerobrake/descent), use
@@ -45,9 +49,11 @@ LOCAL reentryDir IS "RETROGRADE".
 LOCAL decoupleTag IS "".
 LOCAL armChutes IS 0.
 LOCAL kscTarget IS TRUE.
-LOCAL descentFairingTag IS "descent_fairing".
-LOCAL descentDecouplerTag IS "descent_decoupler".
-LOCAL descentChutesTag IS "descent_chutes".
+// Empty = leave mission state untouched so craft CFG defaults
+// (then lib defaults) decide; "none" = explicitly disabled.
+LOCAL descentFairingTag IS "".
+LOCAL descentDecouplerTag IS "".
+LOCAL descentChutesTag IS "".
 LOCAL err IS FALSE.
 
 IF opts:HASKEY("pe")                 { SET targetPe TO opts["pe"]. }

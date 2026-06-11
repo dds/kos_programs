@@ -38,7 +38,11 @@
 //       can be many hours apart (flight-found: 18h of scanning
 //       with the best pass still 96km out).
 //   descent_fairing / descent_decoupler / descent_chutes — part
-//       tags for the DESCENT phase (defaults match returntokerbin)
+//       tags for the DESCENT phase. Unset, the craft's CFG
+//       defaults (then the descent lib defaults) apply; pass
+//       "none" to disable a step outright (FR3 sets decoupler
+//       "none" by default — shedding the transfer stage at
+//       touchdown exploded it next to the lander).
 //
 // Requires Kerbin orbit and archive access.
 // ============================================================
@@ -56,9 +60,11 @@ LOCAL maxOrbits IS 4.
 LOCAL scanSamples IS 0.
 LOCAL strict IS FALSE.
 LOCAL doRefine IS FALSE.
-LOCAL descentFairingTag IS "descent_fairing".
-LOCAL descentDecouplerTag IS "descent_decoupler".
-LOCAL descentChutesTag IS "descent_chutes".
+// Empty = leave mission state untouched so craft CFG defaults
+// (then lib defaults) decide; "none" = explicitly disabled.
+LOCAL descentFairingTag IS "".
+LOCAL descentDecouplerTag IS "".
+LOCAL descentChutesTag IS "".
 LOCAL err IS FALSE.
 
 IF opts:HASKEY("lat")               { SET targetLat TO opts["lat"]. }
@@ -120,9 +126,21 @@ IF NOT err {
         CHOOSE 0 IF strict ELSE 1).
     stateSetNum("mission_cfg_TARGET_DEORBIT_MIN_LEAD", 90).
 
-    stateSet("mission_cfg_DESCENT_FAIRING_TAG", descentFairingTag).
-    stateSet("mission_cfg_DESCENT_DECOUPLER_TAG", descentDecouplerTag).
-    stateSet("mission_cfg_DESCENT_CHUTES_TAG", descentChutesTag).
+    IF descentFairingTag <> "" {
+        stateSet("mission_cfg_DESCENT_FAIRING_TAG", descentFairingTag).
+    } ELSE {
+        stateRemove("mission_cfg_DESCENT_FAIRING_TAG").
+    }
+    IF descentDecouplerTag <> "" {
+        stateSet("mission_cfg_DESCENT_DECOUPLER_TAG", descentDecouplerTag).
+    } ELSE {
+        stateRemove("mission_cfg_DESCENT_DECOUPLER_TAG").
+    }
+    IF descentChutesTag <> "" {
+        stateSet("mission_cfg_DESCENT_CHUTES_TAG", descentChutesTag).
+    } ELSE {
+        stateRemove("mission_cfg_DESCENT_CHUTES_TAG").
+    }
 
     stateSet("phase", "KSC_DEORBIT").
     stateSetNum("launch_time", ROUND(TIME:SECONDS)).
@@ -136,9 +154,9 @@ IF NOT err {
         + (CHOOSE "strict: hold on miss" IF strict
            ELSE "best pass flies") + ")".
     PRINT "  Entry PE:  " + entryPe + "m (" + ROUND(entryPe / 1000, 1) + "km)".
-    PRINT "  Descent:   fairing=" + descentFairingTag
-        + " decoupler=" + descentDecouplerTag
-        + " chutes=" + descentChutesTag.
+    PRINT "  Descent:   fairing=" + (CHOOSE descentFairingTag IF descentFairingTag <> "" ELSE "(craft default)")
+        + " decoupler=" + (CHOOSE descentDecouplerTag IF descentDecouplerTag <> "" ELSE "(craft default)")
+        + " chutes=" + (CHOOSE descentChutesTag IF descentChutesTag <> "" ELSE "(craft default)").
     PRINT " ".
     PRINT "Reboot to begin the landing.".
 }
