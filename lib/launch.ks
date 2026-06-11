@@ -864,7 +864,8 @@ LOCAL FUNCTION _suborbitTrimBurn {
     LOCK THROTTLE TO throttleCmd.
     LOCAL burnDeadline IS TIME:SECONDS + 60.
     UNTIL (SHIP:VELOCITY:ORBIT - startVel):MAG >= dvMag
-            OR TIME:SECONDS > burnDeadline {
+            OR TIME:SECONDS > burnDeadline
+            OR ABORT OR AG10 {
         LOCAL acc IS MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS).
         LOCAL remaining IS dvMag - (SHIP:VELOCITY:ORBIT - startVel):MAG.
         SET throttleCmd TO MIN(1, MAX(0.02, remaining / acc / 0.6)).
@@ -875,9 +876,20 @@ LOCAL FUNCTION _suborbitTrimBurn {
     UNLOCK THROTTLE.
 }
 
+// Safe-to-burn check for the return arc: above the atmosphere
+// and not falling back into it (flight-found: the first attempt
+// kept trimming retrograde all the way down to 45km).
+LOCAL FUNCTION _suborbitCanBurn {
+    IF SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT + 1000 {
+        RETURN SHIP:VERTICALSPEED > 0.
+    }
+    RETURN TRUE.
+}
+
 // Closed-loop trim: measure impact-to-site distance, burn a small
 // step, re-measure, learn the sensitivity (m of impact motion per
-// m/s), repeat. Self-correcting against Trajectories.
+// m/s), repeat. Only touches SMALL residuals — a grossly wrong
+// arc is ridden down as-is, never "fixed" with blind burns.
 LOCAL FUNCTION _suborbitTrimArc {
     PARAMETER siteGeo.
     PARAMETER tol.
@@ -885,6 +897,11 @@ LOCAL FUNCTION _suborbitTrimArc {
     LOCAL iter IS 0.
     UNTIL iter >= 8 {
         SET iter TO iter + 1.
+        IF ABORT OR AG10 { _launchAbort(). RETURN. }
+        IF NOT _suborbitCanBurn() {
+            mLogWarn("Trim stopped: descending into the atmosphere.").
+            BREAK.
+        }
         WAIT 2.
         LOCAL d0 IS _suborbitImpactDist(siteGeo).
         LOCAL pro IS TRUE.
@@ -900,8 +917,13 @@ LOCAL FUNCTION _suborbitTrimArc {
                     + "km from site (tol " + ROUND(tol / 1000, 0) + "km).").
                 BREAK.
             }
-            // Short (site east of impact) → prograde extends the arc.
             LOCAL alongErr IS _norm180(siteGeo:LNG - ADDONS:TR:IMPACTPOS:LNG).
+            IF ABS(alongErr) > 45 {
+                mLogError("Trim refused: impact " + ROUND(alongErr, 0)
+                    + " deg off — arc badly wrong, riding it down.").
+                BREAK.
+            }
+            // Short (site east of impact) → prograde extends the arc.
             SET pro TO alongErr > 0.
             SET step TO MIN(10, MAX(0.5, d0 / sens)).
             mLog("Trim " + iter + ": impact " + ROUND(d0 / 1000, 0)
@@ -946,42 +968,68 @@ LOCAL FUNCTION _suborbitReturnArc {
     IF ABORT OR AG10 { _launchAbort(). RETURN. }
     IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
 
-    // Sweep burn: prograde until the predicted impact comes back
-    // around to the site. Throttle steps down as it closes — the
-    // sweep accelerates wildly near orbital speed.
+    // Sweep burn: prograde until the predicted impact point has
+    // swept east AROUND THE GLOBE back to the site. Tracked as
+    // remaining eastward longitude (starts ~357 deg, decreases
+    // monotonically to 0), NOT distance — flight-found: the
+    // initial impact is just downrange, a few hundred km from the
+    // site by chord, and a distance trigger cut the burn at
+    // 1350 m/s then 'fixed' the hop retrograde into the ground.
     LOCK STEERING TO SHIP:PROGRADE.
     WAIT 3.
     LOCAL throttleCmd IS 0.
     LOCK THROTTLE TO throttleCmd.
-    LOCAL dMin IS 1e12.
+    LOCAL prevRemaining IS 999.
     LOCAL cutReason IS "".
     UNTIL cutReason <> "" {
         IF ABORT OR AG10 { _launchAbort(). RETURN. }
-        LOCAL d IS _suborbitImpactDist(siteGeo).
-        IF d >= 0 {
-            IF d < dMin { SET dMin TO d. }
-            IF d < tol * 1.5 { SET cutReason TO "impact-at-site". }
-            ELSE IF dMin < 800000 AND d > dMin + 150000 {
-                SET cutReason TO "past-closest".
-            }
-            SET throttleCmd TO
-                CHOOSE 0.05 IF d < 500000
-                ELSE CHOOSE 0.2 IF d < 2000000 ELSE 1.
-        } ELSE {
+        IF NOT _suborbitCanBurn() {
+            SET cutReason TO "fell-into-atmosphere".
+        } ELSE IF NOT ADDONS:TR:HASIMPACT {
             SET cutReason TO "impact-lost-orbital".
+        } ELSE IF SHIP:PERIAPSIS > 45000 {
+            SET cutReason TO "pe-too-high".
+        } ELSE {
+            LOCAL remainingEast IS
+                _norm360(siteGeo:LNG - ADDONS:TR:IMPACTPOS:LNG).
+            IF remainingEast < 6 {
+                SET cutReason TO "impact-at-site".
+            } ELSE IF prevRemaining < 90
+                    AND remainingEast > prevRemaining + 180 {
+                // Jumped past the site between ticks.
+                SET cutReason TO "overshot-crossing".
+            }
+            SET prevRemaining TO remainingEast.
+            SET throttleCmd TO
+                CHOOSE 0.05 IF remainingEast < 25
+                ELSE CHOOSE 0.3 IF remainingEast < 90 ELSE 1.
         }
-        IF SHIP:PERIAPSIS > 45000 { SET cutReason TO "pe-too-high". }
-        WAIT 0.1.
+        WAIT 0.05.
     }
     SET throttleCmd TO 0.
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     mLogWarn("STATS suborbit-return cutoff reason=" + cutReason
+        + " remaining=" + ROUND(prevRemaining, 1)
         + " dist=" + ROUND(MAX(-1, _suborbitImpactDist(siteGeo)) / 1000, 0)
         + "km ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
-        + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)).
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
+        + " vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 0)).
+
+    IF cutReason = "fell-into-atmosphere" {
+        // Auto-bailout: the arc cannot be completed. Stop flying
+        // it and hand straight off to DESCENT, which arms the
+        // chutes — never try to burn a bad trajectory better.
+        mLogError("Return arc abandoned (" + cutReason
+            + ") — proceeding directly to descent.").
+        UNLOCK STEERING.
+        SET SAS TO TRUE.
+        nextPhase(launchSeq).
+        RETURN.
+    }
 
     _suborbitTrimArc(siteGeo, tol).
+    IF ABORT { RETURN. }
     SET SAS TO TRUE.
     mLog("Return arc set — riding it back to "
         + ROUND(siteGeo:LAT, 2) + "," + ROUND(siteGeo:LNG, 2) + ".").
