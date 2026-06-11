@@ -902,6 +902,10 @@ LOCAL FUNCTION _suborbitTrimArc {
             mLogWarn("Trim stopped: descending into the atmosphere.").
             BREAK.
         }
+        IF SHIP:AVAILABLETHRUST <= 0 {
+            mLogWarn("Trim stopped: no thrust (stage spent).").
+            BREAK.
+        }
         WAIT 2.
         LOCAL d0 IS _suborbitImpactDist(siteGeo).
         LOCAL pro IS TRUE.
@@ -945,6 +949,33 @@ LOCAL FUNCTION _suborbitTrimArc {
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)).
 }
 
+// dv needed at apoapsis to stretch the arc to a Pe of ~30km —
+// vis-viva on elements only, no position predictions.
+LOCAL FUNCTION _suborbitArcDvRequired {
+    LOCAL mu IS SHIP:BODY:MU.
+    LOCAL rAp IS SHIP:BODY:RADIUS + SHIP:APOAPSIS.
+    LOCAL rPeTarget IS SHIP:BODY:RADIUS + 30000.
+    LOCAL vNeed IS SQRT(mu * (2 / rAp - 2 / (rAp + rPeTarget))).
+    LOCAL vAp IS SQRT(MAX(0, mu * (2 / rAp - 1 / SHIP:ORBIT:SEMIMAJORAXIS))).
+    RETURN MAX(0, vNeed - vAp).
+}
+
+// Stage dv estimate from the rocket equation. Stock LF+Ox mass
+// 5 kg/unit; ISP from the best active engine. 0 = unknown.
+LOCAL FUNCTION _suborbitArcDvBudget {
+    LOCAL fuelMass IS (STAGE:LIQUIDFUEL + STAGE:OXIDIZER) * 0.005.
+    LOCAL bestIsp IS 0.
+    FOR eng IN SHIP:ENGINES {
+        IF eng:IGNITION AND NOT eng:FLAMEOUT {
+            SET bestIsp TO MAX(bestIsp, eng:VISP).
+        }
+    }
+    IF bestIsp <= 0 OR fuelMass <= 0 OR fuelMass >= SHIP:MASS {
+        RETURN 0.
+    }
+    RETURN bestIsp * 9.81 * LN(SHIP:MASS / (SHIP:MASS - fuelMass)).
+}
+
 LOCAL FUNCTION _suborbitReturnArc {
     IF NOT ADDONS:TR:AVAILABLE {
         mLogError("SUBORBIT return mode needs Trajectories — holding.").
@@ -963,46 +994,96 @@ LOCAL FUNCTION _suborbitReturnArc {
 
     // Ride the MechJeb boost, then take over above the atmosphere.
     WAIT UNTIL SHIP:ALTITUDE >= atmTop
-        // OR NOT (ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED)
         OR ABORT OR AG10.
     IF ABORT OR AG10 { _launchAbort(). RETURN. }
     IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
 
-    // Sweep burn: prograde until the predicted impact point has
-    // swept east AROUND THE GLOBE back to the site. Tracked as
-    // remaining eastward longitude (starts ~357 deg, decreases
+    // Coast to apoapsis first. The arc burn is a partial
+    // circularization and belongs AT Ap, horizontal — flight-
+    // found: burning prograde on the way up poured the whole
+    // stage into raising Ap to 259km with Pe still at 4.9km.
+    LOCK STEERING TO SHIP:PROGRADE.
+    WAIT UNTIL ETA:APOAPSIS < 15 OR SHIP:VERTICALSPEED < 0
+        OR ABORT OR AG10.
+    IF ABORT OR AG10 { _launchAbort(). RETURN. }
+
+    // Budget check before committing: vis-viva dv from here to an
+    // arc with Pe ~30km vs the rocket-equation estimate for the
+    // stage. Not enough → fly the plain hop, don't waste fuel on
+    // half an arc.
+    LOCAL needDv IS _suborbitArcDvRequired().
+    LOCAL haveDv IS _suborbitArcDvBudget().
+    mLog("Return arc burn: need ~" + ROUND(needDv, 0)
+        + " m/s, stage holds ~" + ROUND(haveDv, 0) + " m/s.").
+    IF haveDv > 0 AND haveDv < needDv * 1.05 + 20 {
+        mLogError("Insufficient dV for the return arc — flying the"
+            + " plain hop to descent instead.").
+        mLogWarn("STATS suborbit-return abort reason=insufficient-dv"
+            + " need=" + ROUND(needDv, 0)
+            + " have=" + ROUND(haveDv, 0)).
+        UNLOCK STEERING.
+        SET SAS TO TRUE.
+        nextPhase(launchSeq).
+        RETURN.
+    }
+
+    // Sweep burn: HORIZONTAL, until the predicted impact point
+    // has swept east AROUND THE GLOBE back to the site. Tracked
+    // as remaining eastward longitude (starts ~357 deg, decreases
     // monotonically to 0), NOT distance — flight-found: the
     // initial impact is just downrange, a few hundred km from the
     // site by chord, and a distance trigger cut the burn at
     // 1350 m/s then 'fixed' the hop retrograde into the ground.
-    LOCK STEERING TO SHIP:PROGRADE.
-    WAIT 3.
+    LOCK STEERING TO VXCL(UP:VECTOR, SHIP:VELOCITY:ORBIT).
+    WAIT 2.
     LOCAL throttleCmd IS 0.
     LOCK THROTTLE TO throttleCmd.
     LOCAL prevRemaining IS 999.
+    LOCAL noImpactSince IS -1.
+    LOCAL sweepDeadline IS TIME:SECONDS + 600.
     LOCAL cutReason IS "".
     UNTIL cutReason <> "" {
         IF ABORT OR AG10 { _launchAbort(). RETURN. }
         IF NOT _suborbitCanBurn() {
             SET cutReason TO "fell-into-atmosphere".
+        } ELSE IF SHIP:AVAILABLETHRUST <= 0 {
+            // Flameout / spent stage — flight-found: the first
+            // attempts never noticed and kept 'burning' nothing.
+            SET cutReason TO "out-of-fuel".
+        } ELSE IF TIME:SECONDS > sweepDeadline {
+            SET cutReason TO "timeout".
         } ELSE IF NOT ADDONS:TR:HASIMPACT {
-            SET cutReason TO "impact-lost-orbital".
-        } ELSE IF SHIP:PERIAPSIS > 45000 {
-            SET cutReason TO "pe-too-high".
-        } ELSE {
-            LOCAL remainingEast IS
-                _norm360(siteGeo:LNG - ADDONS:TR:IMPACTPOS:LNG).
-            IF remainingEast < 6 {
-                SET cutReason TO "impact-at-site".
-            } ELSE IF prevRemaining < 90
-                    AND remainingEast > prevRemaining + 180 {
-                // Jumped past the site between ticks.
-                SET cutReason TO "overshot-crossing".
+            // No impact + Pe above the atmosphere = genuinely
+            // orbital. Below that it's a transient Trajectories
+            // gap — keep going briefly, don't cut on it.
+            IF SHIP:PERIAPSIS > atmTop {
+                SET cutReason TO "impact-lost-orbital".
+            } ELSE {
+                IF noImpactSince < 0 { SET noImpactSince TO TIME:SECONDS. }
+                IF TIME:SECONDS - noImpactSince > 15 {
+                    SET cutReason TO "impact-lost".
+                }
+                SET throttleCmd TO 0.
             }
-            SET prevRemaining TO remainingEast.
-            SET throttleCmd TO
-                CHOOSE 0.05 IF remainingEast < 25
-                ELSE CHOOSE 0.3 IF remainingEast < 90 ELSE 1.
+        } ELSE {
+            SET noImpactSince TO -1.
+            IF SHIP:PERIAPSIS > 45000 {
+                SET cutReason TO "pe-too-high".
+            } ELSE {
+                LOCAL remainingEast IS
+                    _norm360(siteGeo:LNG - ADDONS:TR:IMPACTPOS:LNG).
+                IF remainingEast < 6 {
+                    SET cutReason TO "impact-at-site".
+                } ELSE IF prevRemaining < 90
+                        AND remainingEast > prevRemaining + 180 {
+                    // Jumped past the site between ticks.
+                    SET cutReason TO "overshot-crossing".
+                }
+                SET prevRemaining TO remainingEast.
+                SET throttleCmd TO
+                    CHOOSE 0.05 IF remainingEast < 25
+                    ELSE CHOOSE 0.3 IF remainingEast < 90 ELSE 1.
+            }
         }
         WAIT 0.05.
     }
@@ -1016,10 +1097,12 @@ LOCAL FUNCTION _suborbitReturnArc {
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
         + " vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 0)).
 
-    IF cutReason = "fell-into-atmosphere" {
-        // Auto-bailout: the arc cannot be completed. Stop flying
-        // it and hand straight off to DESCENT, which arms the
-        // chutes — never try to burn a bad trajectory better.
+    IF cutReason = "fell-into-atmosphere" OR cutReason = "out-of-fuel"
+            OR cutReason = "timeout" OR cutReason = "impact-lost" {
+        // Auto-bailout: the arc cannot be completed (or fixed).
+        // Stop flying it and hand straight off to DESCENT, which
+        // arms the chutes — never try to burn a bad trajectory
+        // better, and never assume there is fuel left to do it.
         mLogError("Return arc abandoned (" + cutReason
             + ") — proceeding directly to descent.").
         UNLOCK STEERING.
