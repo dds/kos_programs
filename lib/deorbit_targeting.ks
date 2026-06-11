@@ -882,8 +882,11 @@ GLOBAL FUNCTION executeDeorbitNode {
     }
 
     SET SAS TO FALSE.
+    // Use the ENTIRE remaining coast for alignment — flight-found:
+    // a 45s cap left a weak-wheel (SAS-less) craft pointing the
+    // wrong way with the burn 36s out.
     LOCK STEERING TO nd:BURNVECTOR.
-    LOCAL alignDeadline IS MIN(startTime - 2, TIME:SECONDS + 45).
+    LOCAL alignDeadline IS startTime - 2.
     UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < 5
             OR TIME:SECONDS >= alignDeadline {
         LOCK STEERING TO nd:BURNVECTOR.
@@ -894,6 +897,18 @@ GLOBAL FUNCTION executeDeorbitNode {
         + " timeToBurn=" + ROUND(startTime - TIME:SECONDS,1)).
 
     WAIT UNTIL TIME:SECONDS >= startTime.
+    // Never light the engine badly off-axis: a misaligned deorbit
+    // burn can RAISE or skew the orbit. Refusing costs one pass;
+    // the caller replans.
+    IF VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) > 15 {
+        mLogError("Refusing burn: "
+            + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
+            + " deg off the burn vector at ignition.").
+        LOCK THROTTLE TO 0.
+        UNLOCK THROTTLE.
+        UNLOCK STEERING.
+        RETURN FALSE.
+    }
     LOCAL burnStart IS TIME:SECONDS.
     LOCAL origBurnVec IS nd:BURNVECTOR.
     mLog("Timed deorbit burn start. dV=" + ROUND(burnDV,1) + " m/s.").

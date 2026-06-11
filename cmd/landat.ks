@@ -181,7 +181,10 @@ IF NOT err {
         CHOOSE 0 IF doRefine ELSE 1).
     stateSetNum("mission_cfg_TARGET_DEORBIT_PROCEED_ON_MISS",
         CHOOSE 0 IF strict ELSE 1).
-    stateSetNum("mission_cfg_TARGET_DEORBIT_MIN_LEAD", 90).
+    // 300s, not 90: a small reaction wheel (no SAS core) needs
+    // real time to despin and align — flight-found: a 36s-out
+    // node arrived with the craft pointing the wrong way.
+    stateSetNum("mission_cfg_TARGET_DEORBIT_MIN_LEAD", 300).
 
     IF descentFairingTag <> "" {
         stateSet("mission_cfg_DESCENT_FAIRING_TAG", descentFairingTag).
