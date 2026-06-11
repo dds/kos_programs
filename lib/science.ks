@@ -325,6 +325,20 @@ GLOBAL FUNCTION phaseEvaScience {
 // out full coverage. AG10 ends the cycle and continues the
 // sequence with the scanners left ON.
 // ============================================================
+// Area check: TRUE when the terrain below still needs scanning —
+// any active scan type missing from COMPLETEDSCANS at the current
+// position. Unknown active set or unreadable API = keep scanning.
+LOCAL FUNCTION _scanAreaUnscanned {
+    PARAMETER activeTypes.
+    IF activeTypes:LENGTH = 0 { RETURN TRUE. }
+    LOCAL doneHere IS ADDONS:SCANSAT:COMPLETEDSCANS(SHIP:BODY, SHIP:GEOPOSITION).
+    IF NOT doneHere:ISTYPE("List") { RETURN TRUE. }
+    FOR t IN activeTypes {
+        IF NOT doneHere:CONTAINS(t) { RETURN TRUE. }
+    }
+    RETURN FALSE.
+}
+
 GLOBAL FUNCTION scansatDutyCycle {
     LOCAL lowFrac IS 0.30.
     LOCAL resumeFrac IS 0.60.
@@ -332,7 +346,7 @@ GLOBAL FUNCTION scansatDutyCycle {
     IF CFG:HASKEY("SCANSAT_POWER_RESUME") { SET resumeFrac TO CFG["SCANSAT_POWER_RESUME"]. }
     mLog("Scan duty cycle: OFF below " + ROUND(lowFrac * 100, 0)
         + "%, ON above " + ROUND(resumeFrac * 100, 0)
-        + "%. AG10 ends the cycle. Warp away.").
+        + "%, and only over unmapped terrain. AG10 ends. Warp away.").
 
     // Active scan types are detected empirically: whichever
     // types' coverage RISES after the cycle starts is what our
@@ -347,13 +361,24 @@ GLOBAL FUNCTION scansatDutyCycle {
     LOCAL active IS LIST().
     LOCAL mapDone IS FALSE.
 
-    // Deterministic start: the scanners may be on OR off when the
-    // phase begins — force them OFF so the bookkeeping matches
-    // reality, then the loop brings them up the moment the charge
-    // is above the resume threshold (immediately, when entering
-    // with a healthy battery).
+    // Deterministic start: scanners may be on OR off on entry —
+    // force OFF so the bookkeeping matches reality; the loop
+    // brings them up when both gates pass.
     scienceStopScanners().
     LOCAL scansOn IS FALSE.
+    LOCAL powerOk IS FALSE.
+
+    // Terrain gate: re-check every SCANSAT_AREA_CHECK (300s game
+    // time) whether the ground below still needs our scan types —
+    // late in a mapping campaign most passes re-cross mapped
+    // ground, and the scanners can sleep through it.
+    LOCAL areaCheckPeriod IS 300.
+    IF CFG:HASKEY("SCANSAT_AREA_CHECK") {
+        SET areaCheckPeriod TO CFG["SCANSAT_AREA_CHECK"].
+    }
+    LOCAL areaNew IS TRUE.
+    LOCAL nextAreaCheck IS 0.
+
     // The sun walks ~0.85 deg/day around Kerbin while SAS holds an
     // inertial attitude: re-aim the cached solar axis at scanner
     // transitions (when not on warp rails — ships cannot rotate
@@ -365,28 +390,43 @@ GLOBAL FUNCTION scansatDutyCycle {
     }
     LOCAL lastOrient IS TIME:SECONDS.
     LOCAL nextStatus IS TIME:SECONDS + 600.
+
     UNTIL AG10 OR mapDone {
         LOCAL frac IS shipPowerFraction().
-        IF scansOn AND frac < lowFrac {
-            scienceStopScanners().
-            SET scansOn TO FALSE.
-            mLog("Scans OFF at " + ROUND(frac * 100, 0) + "% — charging.").
-            HUDTEXT("Scans off — charging ("
-                + ROUND(frac * 100, 0) + "%)", 8, 2, 15, YELLOW, FALSE).
-            IF WARP = 0 AND TIME:SECONDS - lastOrient > 1800 {
-                orientForSolar().
-                SET lastOrient TO TIME:SECONDS.
-            }
-        } ELSE IF NOT scansOn AND frac > resumeFrac {
+        IF powerOk AND frac < lowFrac { SET powerOk TO FALSE. }
+        ELSE IF NOT powerOk AND frac > resumeFrac { SET powerOk TO TRUE. }
+
+        IF TIME:SECONDS > nextAreaCheck {
+            SET nextAreaCheck TO TIME:SECONDS + areaCheckPeriod.
+            SET areaNew TO _scanAreaUnscanned(active).
+        }
+
+        LOCAL want IS powerOk AND areaNew.
+        LOCAL flipped IS FALSE.
+        IF want AND NOT scansOn {
             scienceStartScanners().
             SET scansOn TO TRUE.
-            mLog("Scans ON at " + ROUND(frac * 100, 0) + "%.").
-            HUDTEXT("Scans on ("
-                + ROUND(frac * 100, 0) + "%)", 8, 2, 15, GREEN, FALSE).
-            IF WARP = 0 AND TIME:SECONDS - lastOrient > 1800 {
-                orientForSolar().
-                SET lastOrient TO TIME:SECONDS.
-            }
+            SET flipped TO TRUE.
+            mLog("Scans ON at " + ROUND(frac * 100, 0)
+                + "% — unmapped terrain below.").
+            HUDTEXT("Scans on (" + ROUND(frac * 100, 0) + "%)",
+                8, 2, 15, GREEN, FALSE).
+        } ELSE IF NOT want AND scansOn {
+            scienceStopScanners().
+            SET scansOn TO FALSE.
+            SET flipped TO TRUE.
+            LOCAL why IS CHOOSE "charging" IF NOT powerOk
+                ELSE "area below already mapped".
+            mLog("Scans OFF at " + ROUND(frac * 100, 0)
+                + "% — " + why + ".").
+            HUDTEXT("Scans off — " + why
+                + " (" + ROUND(frac * 100, 0) + "%)",
+                8, 2, 15, YELLOW, FALSE).
+        }
+        IF flipped AND WARP = 0
+                AND TIME:SECONDS - lastOrient > 1800 {
+            orientForSolar().
+            SET lastOrient TO TIME:SECONDS.
         }
         IF TIME:SECONDS - lastOrient > reorientPeriod {
             LOCAL savedWarp IS WARP.
@@ -396,10 +436,12 @@ GLOBAL FUNCTION scansatDutyCycle {
             SET lastOrient TO TIME:SECONDS.
             SET WARP TO savedWarp.
         }
+
         IF TIME:SECONDS > nextStatus {
             SET nextStatus TO TIME:SECONDS + 600.
             mLogWarn("STATS scansat duty charge=" + ROUND(frac * 100, 1)
                 + "pct scans=" + scansOn
+                + " areaNew=" + areaNew
                 + " flow=" + ROUND(shipSolarFlow(), 2)).
             scienceScanStatus().
 
