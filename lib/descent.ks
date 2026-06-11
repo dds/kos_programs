@@ -343,10 +343,16 @@ LOCAL FUNCTION _descentDecouple {
         RETURN.
     }
 
-    // Wait for safe decouple altitude
+    // Wait for safe decouple altitude. DESCENT_DECOUPLE_ALT
+    // overrides the body table — crew capsules shed their booster
+    // high on descent, not at the body default (Kerbin's 100m
+    // drops the stage right next to the lander).
     LOCAL decoupleAlt IS 6000.
     IF DECOUPLE_ALTS:HASKEY(SHIP:BODY:NAME) {
         SET decoupleAlt TO DECOUPLE_ALTS[SHIP:BODY:NAME].
+    }
+    IF DEFINED CFG AND CFG:HASKEY("DESCENT_DECOUPLE_ALT") {
+        SET decoupleAlt TO CFG["DESCENT_DECOUPLE_ALT"].
     }
 
     IF SHIP:ALTITUDE > decoupleAlt {

@@ -492,6 +492,49 @@ GLOBAL FUNCTION phasePark {
     phaseParking().
 }
 
+// ── Suborbital cutoff ────────────────────────────────────────
+// For crewed suborbital hops (SEQUENCE LAUNCH,SUBORBIT,DESCENT,
+// DONE): lets the MechJeb ascent boost until apoapsis reaches
+// PARKING_ALT, then kills the autopilot and coasts ballistic —
+// no circularization, the ship falls back for a chute landing
+// downrange. Resume-safe: re-running just re-disables MechJeb.
+GLOBAL FUNCTION phaseSuborbit {
+    LOCAL targetAp IS _launchCfgNum("PARKING_ALT", 80000).
+    mLog("Suborbital: boosting to Ap " + ROUND(targetAp/1000, 0)
+        + "km, then engine cutoff (no circularization).").
+
+    IF SHIP:APOAPSIS < targetAp * 0.95 {
+        WAIT UNTIL SHIP:APOAPSIS >= targetAp * 0.95
+            OR NOT (ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED)
+            OR ABORT OR AG10.
+    }
+    IF ABORT OR AG10 {
+        _launchAbort().
+        RETURN.
+    }
+
+    IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    mLogWarn("STATS suborbit cutoff ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
+        + " altKm=" + ROUND(SHIP:ALTITUDE/1000, 1)
+        + " vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 1)).
+
+    // Hold surface prograde for the rest of the climb out of the
+    // atmosphere so the stack stays stable after cutoff.
+    IF SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT
+            AND SHIP:VERTICALSPEED > 0 {
+        LOCK STEERING TO SHIP:SRFPROGRADE.
+        WAIT UNTIL SHIP:ALTITUDE >= SHIP:BODY:ATM:HEIGHT
+            OR SHIP:VERTICALSPEED < 0.
+        UNLOCK STEERING.
+    }
+    SET SAS TO TRUE.
+    mLog("Suborbital cutoff complete: Ap=" + ROUND(SHIP:APOAPSIS/1000, 1)
+        + "km. Falling back for descent.").
+    nextPhase(launchSeq).
+}
+
 // ── Pre-launch config screen ────────────────────────────────
 
 GLOBAL FUNCTION confirmLaunch {
