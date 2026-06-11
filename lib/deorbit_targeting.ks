@@ -711,10 +711,12 @@ GLOBAL FUNCTION targetReachable {
 // Pairs with the DESCENT phase for fully automatic landings:
 //   SEQUENCE = KSC_DEORBIT,DESCENT,DONE   (cmd/landatksc.ks)
 //
-// CFG keys (defaults): LANDING_TARGET_LAT (-0.10),
-//   LANDING_TARGET_LNG (-74.25), REENTRY_PE (30000),
-//   LANDING_TARGET_TOLERANCE (15000), plus the TARGET_DEORBIT_*
-//   scan settings shared with the landing flows.
+// CFG keys (defaults): LANDING_TARGET_WAYPOINT (wins when set —
+//   a Waypoint Manager waypoint name on the current body),
+//   LANDING_TARGET_LAT (-0.10), LANDING_TARGET_LNG (-74.25),
+//   REENTRY_PE (30000), LANDING_TARGET_TOLERANCE (15000), plus
+//   the TARGET_DEORBIT_* scan settings shared with the landing
+//   flows.
 // ============================================================
 GLOBAL FUNCTION phaseKscDeorbit {
     LOCAL lat IS -0.10.
@@ -725,10 +727,32 @@ GLOBAL FUNCTION phaseKscDeorbit {
     IF CFG:HASKEY("LANDING_TARGET_LNG") { SET lng TO CFG["LANDING_TARGET_LNG"]. }
     IF CFG:HASKEY("REENTRY_PE") { SET entryPe TO CFG["REENTRY_PE"]. }
     IF CFG:HASKEY("LANDING_TARGET_TOLERANCE") { SET tol TO CFG["LANDING_TARGET_TOLERANCE"]. }
+    IF CFG:HASKEY("LANDING_TARGET_WAYPOINT")
+            AND CFG["LANDING_TARGET_WAYPOINT"] <> "" {
+        LOCAL namedWp IS waypointNamed(CFG["LANDING_TARGET_WAYPOINT"]).
+        IF namedWp:ISTYPE("Waypoint") {
+            SET lat TO namedWp:GEOPOSITION:LAT.
+            SET lng TO namedWp:GEOPOSITION:LNG.
+            mLog("Deorbit target from waypoint '" + namedWp:NAME + "'.").
+        } ELSE {
+            mLogError("KSC_DEORBIT: waypoint '"
+                + CFG["LANDING_TARGET_WAYPOINT"] + "' not found on "
+                + SHIP:BODY:NAME + " — holding.").
+            yieldToPrompt().
+            RETURN.
+        }
+    }
 
     IF SHIP:BODY:NAME <> "Kerbin" {
         mLogError("KSC_DEORBIT: not in Kerbin SOI (body="
             + SHIP:BODY:NAME + ") — holding.").
+        yieldToPrompt().
+        RETURN.
+    }
+    IF NOT targetReachable(lat) {
+        mLogError("KSC_DEORBIT: target lat " + ROUND(lat, 2)
+            + " unreachable from inc "
+            + ROUND(SHIP:ORBIT:INCLINATION, 2) + " — holding.").
         yieldToPrompt().
         RETURN.
     }
