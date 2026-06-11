@@ -117,7 +117,210 @@ LOCAL FUNCTION _waitForPrelaunchUt {
     }
 }
 
+// ── Launch-to-rendezvous window ──────────────────────────────
+// For rescue/rendezvous missions: derive the launch window from
+// the target vessel itself — wait until the launch site rotates
+// into the target's orbital plane AND the target's along-track
+// position is right, so the ascent ends with the target slightly
+// ahead. Knobs (CFG): LAUNCH_RDV_ASCENT_TIME (300s pad-to-orbit
+// estimate), LAUNCH_RDV_LEAD (30 deg ahead of the launch-site
+// direction at insertion), LAUNCH_RDV_MAX_WINDOWS (16 plane
+// crossings ~ 2 Kerbin days).
+
+LOCAL FUNCTION _vesselNamed {
+    PARAMETER nm.
+    LOCAL vs IS LIST().
+    LIST TARGETS IN vs.
+    FOR tv IN vs {
+        IF tv:NAME = nm { RETURN tv. }
+    }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _norm180 {
+    PARAMETER angle.
+    RETURN _norm360(angle + 180) - 180.
+}
+
+// Body-centered inertial direction of the launch site at a future
+// time: the site then equals the CURRENT direction of the surface
+// point rotated forward in longitude — uses the game's own LATLNG
+// mapping, no spin-axis sign gymnastics.
+LOCAL FUNCTION _siteDirAt {
+    PARAMETER ut.
+    LOCAL siteGeo IS SHIP:GEOPOSITION.
+    LOCAL lngThen IS siteGeo:LNG
+        + 360 * (ut - TIME:SECONDS) / SHIP:BODY:ROTATIONPERIOD.
+    RETURN (LATLNG(siteGeo:LAT, lngThen):POSITION
+        - SHIP:BODY:POSITION):NORMALIZED.
+}
+
+LOCAL FUNCTION _tgtDirAt {
+    PARAMETER ves.
+    PARAMETER ut.
+    RETURN (POSITIONAT(ves, ut) - POSITIONAT(SHIP:BODY, ut)):NORMALIZED.
+}
+
+// Signed along-track lead of the target relative to the launch
+// site direction at insertion time: positive = the target passed
+// overhead BEFORE insertion (it is ahead of us). Found by scanning
+// for the moment the target crosses the site direction —
+// sign-robust, no cross products in a left-handed frame.
+LOCAL FUNCTION _rdvLeadAngle {
+    PARAMETER ves.
+    PARAMETER tIns.
+    LOCAL period IS ves:ORBIT:PERIOD.
+    LOCAL siteDir IS _siteDirAt(tIns).
+
+    LOCAL bestT IS tIns.
+    LOCAL bestAng IS VANG(_tgtDirAt(ves, tIns), siteDir).
+    LOCAL step IS period / 36.
+    LOCAL scanT IS tIns - period / 2.
+    UNTIL scanT > tIns + period / 2 {
+        LOCAL ang IS VANG(_tgtDirAt(ves, scanT), siteDir).
+        IF ang < bestAng { SET bestAng TO ang. SET bestT TO scanT. }
+        SET scanT TO scanT + step.
+    }
+    LOCAL coarseT IS bestT.
+    SET scanT TO coarseT - step.
+    UNTIL scanT > coarseT + step {
+        LOCAL ang IS VANG(_tgtDirAt(ves, scanT), siteDir).
+        IF ang < bestAng { SET bestAng TO ang. SET bestT TO scanT. }
+        SET scanT TO scanT + step / 12.
+    }
+    RETURN (tIns - bestT) * 360 / period.
+}
+
+// Rendezvous target name: explicit config first; otherwise — for
+// missions without a CAPTURE_LAN plane target — the vessel the
+// operator has targeted in the game, persisted to mission state
+// so reboots keep it.
+LOCAL FUNCTION _prelaunchRdvTarget {
+    IF CFG:HASKEY("RENDEZVOUS_TARGET") AND CFG["RENDEZVOUS_TARGET"] <> "" {
+        RETURN CFG["RENDEZVOUS_TARGET"].
+    }
+    IF NOT CFG:HASKEY("CAPTURE_LAN") AND HASTARGET
+            AND TARGET:ISTYPE("Vessel") {
+        LOCAL nm IS TARGET:NAME.
+        cfgSet("RENDEZVOUS_TARGET", nm).
+        stateSet("mission_cfg_RENDEZVOUS_TARGET", nm).
+        mLog("PRELAUNCH: rendezvous target from game target: " + nm).
+        RETURN nm.
+    }
+    RETURN "".
+}
+
+LOCAL FUNCTION _prelaunchToVessel {
+    PARAMETER rdvName.
+    LOCAL ves IS _vesselNamed(rdvName).
+    IF NOT ves:ISTYPE("Vessel") {
+        mLogError("PRELAUNCH: rendezvous target '" + rdvName
+            + "' not found — holding.").
+        yieldToPrompt().
+        RETURN.
+    }
+    IF ves:BODY:NAME <> SHIP:BODY:NAME {
+        mLogError("PRELAUNCH: target orbits " + ves:BODY:NAME
+            + ", not " + SHIP:BODY:NAME + " — holding.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    LOCAL tgtInc IS ves:ORBIT:INCLINATION.
+    LOCAL tgtLan IS ves:ORBIT:LAN.
+    LOCAL ascentTime IS _launchCfgNum("LAUNCH_RDV_ASCENT_TIME", 300).
+    LOCAL desiredLead IS _launchCfgNum("LAUNCH_RDV_LEAD", 30).
+    LOCAL maxWindows IS _launchCfgNum("LAUNCH_RDV_MAX_WINDOWS", 16).
+    LOCAL leadTime IS _launchCfgNum("PRELAUNCH_PLANE_LEAD", 145).
+    LOCAL rotPeriod IS SHIP:BODY:ROTATIONPERIOD.
+
+    mLog("PRELAUNCH: rendezvous with " + ves:NAME
+        + "  inc=" + ROUND(tgtInc, 2) + "  LAN=" + ROUND(tgtLan, 1)
+        + "  alt=" + ROUND(ves:ORBIT:APOAPSIS / 1000, 0) + "km.").
+
+    // Candidate launch times: each pass of the site through the
+    // target plane (ascending and descending flavors — the DN
+    // flavor launches with negative MJ inclination), or a plain
+    // time grid for near-equatorial targets where the site is
+    // always in plane.
+    LOCAL candidates IS LIST().
+    LOCAL etaAn IS _etaToLaunchPlane(TRUE, tgtLan, tgtInc).
+    LOCAL etaDn IS _etaToLaunchPlane(FALSE, tgtLan, tgtInc).
+    IF etaAn < 0 AND etaDn < 0 {
+        LOCAL j IS 1.
+        UNTIL j > maxWindows {
+            candidates:ADD(LEXICON(
+                "ut", TIME:SECONDS + 120 + j * ves:ORBIT:PERIOD / 6,
+                "inc", tgtInc)).
+            SET j TO j + 1.
+        }
+    } ELSE {
+        FOR flavor IN LIST(LEXICON("eta", etaAn, "inc", tgtInc),
+                           LEXICON("eta", etaDn, "inc", -tgtInc)) {
+            IF flavor["eta"] >= 0 {
+                LOCAL k IS 0.
+                UNTIL k >= CEILING(maxWindows / 2) {
+                    LOCAL windowUt IS TIME:SECONDS + flavor["eta"]
+                        + k * rotPeriod - leadTime.
+                    IF windowUt > TIME:SECONDS + 60 {
+                        candidates:ADD(LEXICON(
+                            "ut", windowUt, "inc", flavor["inc"])).
+                    }
+                    SET k TO k + 1.
+                }
+            }
+        }
+    }
+    IF candidates:LENGTH = 0 {
+        mLogError("PRELAUNCH: no launch windows — target plane never"
+            + " passes over the launch site.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    // Score: along-track lead error at insertion, plus 2 deg/hour
+    // so a marginally better window days away doesn't win.
+    LOCAL best IS candidates[0].
+    LOCAL bestScore IS 999999.
+    FOR cand IN candidates {
+        LOCAL lead IS _rdvLeadAngle(ves, cand["ut"] + ascentTime).
+        LOCAL leadErr IS ABS(_norm180(lead - desiredLead)).
+        LOCAL score IS leadErr + 2 * (cand["ut"] - TIME:SECONDS) / 3600.
+        cand:ADD("lead", lead).
+        IF score < bestScore { SET bestScore TO score. SET best TO cand. }
+    }
+
+    LOCAL launchUt IS best["ut"].
+    cfgSet("LAUNCH_INCLINATION", best["inc"]).
+    stateSetNum("mission_cfg_LAUNCH_INCLINATION", best["inc"]).
+    stateSetNum("prelaunch_plane_ut", launchUt).
+    mLog("PRELAUNCH: window in " + ROUND(launchUt - TIME:SECONDS, 0)
+        + "s  launch inc=" + ROUND(best["inc"], 2)
+        + "  target lead at insertion=" + ROUND(best["lead"], 1)
+        + " deg (want " + ROUND(desiredLead, 1) + ").").
+    mLogWarn("STATS prelaunch rdv setup target=" + ves:NAME
+        + " inc=" + ROUND(best["inc"], 2)
+        + " wait=" + ROUND(launchUt - TIME:SECONDS, 0)
+        + " lead=" + ROUND(best["lead"], 1)).
+
+    _waitForPrelaunchUt(launchUt).
+    IF ABORT OR AG10 {
+        mLog("PRELAUNCH hold — operator abort.").
+        yieldToPrompt().
+        RETURN.
+    }
+    mLog("PRELAUNCH complete; rendezvous window open.").
+    nextPhase(launchSeq).
+}
+
 GLOBAL FUNCTION phasePrelaunch {
+    // Rendezvous missions: the window comes from the target vessel.
+    LOCAL rdvName IS _prelaunchRdvTarget().
+    IF rdvName <> "" {
+        _prelaunchToVessel(rdvName).
+        RETURN.
+    }
+
     IF NOT CFG:HASKEY("CAPTURE_LAN") {
         mLog("PRELAUNCH: no CAPTURE_LAN configured; launching immediately.").
         nextPhase(launchSeq).
