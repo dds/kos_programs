@@ -1157,6 +1157,36 @@ LOCAL FUNCTION _suborbitReturnArc {
     nextPhase(launchSeq).
 }
 
+// ── Descent watchdog ─────────────────────────────────────────
+// The SUBORBIT -> DESCENT handoff must NEVER be missed. This is
+// the backstop for the backstops: if the ship is falling inside
+// the atmosphere and the phase is still SUBORBIT — whatever loop
+// or wait the main code is wedged in — force the transition and
+// reboot into the descent band. kOS WHEN triggers run every
+// tick, even while the main thread sits in a WAIT.
+LOCAL _descentWatchdogArmed IS FALSE.
+LOCAL FUNCTION _armDescentWatchdog {
+    IF _descentWatchdogArmed { RETURN. }
+    SET _descentWatchdogArmed TO TRUE.
+    WHEN SHIP:VERTICALSPEED < -50
+            AND SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT - 5000
+            AND stateGet("phase", "") = "SUBORBIT" THEN {
+        mLogError("DESCENT WATCHDOG: falling in atmosphere with"
+            + " phase=SUBORBIT — forcing descent and rebooting.").
+        LOCK THROTTLE TO 0.
+        UNLOCK THROTTLE.
+        UNLOCK STEERING.
+        stateSet("phase", "DESCENT").
+        stateSet("reload_required", "true").
+        stateSet("reload_reason", "DESCENT_WATCHDOG").
+        stateSet("reload_next_phase", "DESCENT").
+        stateSet("reload_next_band",
+            bootLibBandForPhase("DESCENT", "AEROBRAKE")).
+        WAIT 0.5.
+        REBOOT.
+    }
+}
+
 // ── Suborbital cutoff ────────────────────────────────────────
 // For crewed suborbital hops (SEQUENCE LAUNCH,SUBORBIT,DESCENT,
 // DONE): lets the MechJeb ascent boost until apoapsis reaches
@@ -1166,6 +1196,7 @@ LOCAL FUNCTION _suborbitReturnArc {
 // round-the-world arc back to the launch site (above).
 // Resume-safe: re-running just re-disables MechJeb.
 GLOBAL FUNCTION phaseSuborbit {
+    _armDescentWatchdog().
     IF _launchCfgNum("SUBORBIT_RETURN", 0) > 0 {
         _suborbitReturnArc().
         RETURN.
