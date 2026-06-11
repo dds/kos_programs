@@ -134,4 +134,12 @@ GLOBAL FUNCTION phaseDone {
     SET SAS TO TRUE.
     mLog("Mission complete: " + SHIP:NAME).
     HUDTEXT("Mission Complete", 10, 2, 20, GREEN, FALSE).
+    // On-station ships hold their best solar attitude through
+    // DONE (cached axis makes this a quick aim, not a search).
+    // PHASE DONE = solar brings the lib along at DONE boots.
+    IF SHIP:STATUS = "ORBITING" AND DEFINED BOOT_LIB_RAN
+            AND BOOT_LIB_RAN:CONTAINS("solar") {
+        orientForSolar().
+    }
+    yieldToPrompt().
 }

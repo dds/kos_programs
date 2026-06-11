@@ -404,6 +404,12 @@ GLOBAL FUNCTION bootResumeOrManual {
             PRINT " ".
             PRINT "  MISSION COMPLETE. MANUAL MODE.".
             mLog("Reboot after DONE - manual mode.").
+            // Returning to a parked ship from the tracking
+            // station: re-acquire the solar attitude and hold
+            // (cached axis — quick aim, no search).
+            IF SHIP:STATUS = "ORBITING" AND BOOT_LIB_RAN:CONTAINS("solar") {
+                orientForSolar().
+            }
         } ELSE IF phase = "ABORT" {
             IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
                 PRINT "  ABORT DETECTED - entering recovery mode.".

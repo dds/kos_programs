@@ -54,6 +54,7 @@ PHASE LAND_DEORBIT, LAND, LAND_ASSIST = payload_landing
 PHASE ROVER = rover
 PHASE MOLNIYA, MOLNIYA_INSERT = molniya
 PHASE DROP_FOR_IMPACT_AND_RAISE_PE = payload_release
+PHASE DONE = solar
 PHASE SHAPE = orbit_shape
 PHASE BPLANE = arrival_bplane
 PHASE GOTO = goto_plan
