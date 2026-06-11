@@ -255,14 +255,24 @@ GLOBAL FUNCTION targetedDeorbitAt {
         IF bestDist < refineTarget { BREAK. }
     }
 
-    LOCAL refined IS _refineDeorbitImpact(
-        bestUT, bestPe, targetLat, targetLng, tolerance, scanStep).
-    IF refined["VALID"] AND refined["DIST"] < bestDist {
-        SET bestUT TO refined["UT"].
-        SET bestPe TO refined["PE"].
-        SET bestRad TO refined["RAD"].
-        SET bestNor TO refined["NOR"].
-        SET bestDist TO refined["DIST"].
+    // TARGET_DEORBIT_SKIP_REFINE=1 flies the coarse+pass result
+    // as-is — the iterative impact refinement can fail to converge
+    // and burn minutes of real time for accuracy that chute
+    // landings don't need (flight-found via landatksc).
+    LOCAL skipRefine IS CFG:HASKEY("TARGET_DEORBIT_SKIP_REFINE")
+        AND CFG["TARGET_DEORBIT_SKIP_REFINE"] > 0.
+    IF skipRefine {
+        mLog("Impact refine skipped (TARGET_DEORBIT_SKIP_REFINE).").
+    } ELSE {
+        LOCAL refined IS _refineDeorbitImpact(
+            bestUT, bestPe, targetLat, targetLng, tolerance, scanStep).
+        IF refined["VALID"] AND refined["DIST"] < bestDist {
+            SET bestUT TO refined["UT"].
+            SET bestPe TO refined["PE"].
+            SET bestRad TO refined["RAD"].
+            SET bestNor TO refined["NOR"].
+            SET bestDist TO refined["DIST"].
+        }
     }
 
     mLog("Fine best: T+" + ROUND(bestUT - TIME:SECONDS,0)
