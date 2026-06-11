@@ -21,7 +21,10 @@ GLOBAL FUNCTION phaseMapSet {
 GLOBAL FUNCTION phaseHandlerMap {
     bootLibRun("dependencies").
     LOCAL phaseMap IS LEXICON().
-    FOR phaseName IN bootLibBandPhases(stateGet("lib_band", "")) {
+    // Try every known phase: each binding is guarded on its libs
+    // having run this boot, so phases brought in via LIBS_EXTRA
+    // bind too and the mission avoids band-change reboots.
+    FOR phaseName IN dependencyAllPhases() {
         dependencyBindPhase(phaseMap, phaseName).
     }
     RETURN phaseMap.

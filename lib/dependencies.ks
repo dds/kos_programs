@@ -1,14 +1,15 @@
 LOCAL FUNCTION _depLoaded {
     PARAMETER libsCsv.
     FOR libName IN libsCsv:SPLIT(",") {
-        IF libName <> "" {
-            IF NOT EXISTS("1:/lib/" + libName + ".ksm")
-                    AND NOT EXISTS("1:/lib/" + libName + ".ks") {
-                RETURN FALSE.
-            }
+        IF libName <> "" AND NOT BOOT_LIB_RAN:CONTAINS(libName) {
+            RETURN FALSE.
         }
     }
     RETURN TRUE.
+}
+
+GLOBAL FUNCTION dependencyAllPhases {
+    RETURN LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "POSTFLIGHT", "EVA_SCIENCE", "LAUNCH", "FAIR", "ANTS", "PARK", "ABORT", "PRELAUNCH", "SUBORBIT", "RDV", "MATCH", "CREW_XFER", "XING", "ESCAPE", "MCC", "AEROBRAKE", "DESCENT", "KSC_DEORBIT", "COAST", "CAPTURE", "CIRC", "RAISE", "INCLINE", "ELLIPTICAL", "TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "SCANSAT_OPS", "LAND_DEORBIT", "LAND", "LAND_ASSIST", "ROVER", "MOLNIYA", "MOLNIYA_INSERT", "DROP_FOR_IMPACT_AND_RAISE_PE", "SHAPE", "BPLANE", "GOTO", "AIRCLIMB", "ROCKETCLIMB", "SSTO_DEORBIT", "REENTRY", "APPROACH", "ARM", "FLY").
 }
 
 GLOBAL FUNCTION dependencyBindPhase {
@@ -20,13 +21,13 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "POST_FLIGHT" { IF _depLoaded("airplane") { phaseMapSet(phaseMap, "POST_FLIGHT", phasePostFlight@). } }
     ELSE IF phaseKey = "POSTFLIGHT" { IF _depLoaded("airplane") { phaseMapSet(phaseMap, "POSTFLIGHT", phasePostflight@). } }
     ELSE IF phaseKey = "EVA_SCIENCE" { IF _depLoaded("science,orbit") { phaseMapSet(phaseMap, "EVA_SCIENCE", phaseEvaScience@). } }
-    ELSE IF phaseKey = "PRELAUNCH" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "PRELAUNCH", phasePrelaunch@). } }
     ELSE IF phaseKey = "LAUNCH" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "LAUNCH", phaseLaunch@). } }
     ELSE IF phaseKey = "FAIR" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "FAIR", phaseFair@). } }
     ELSE IF phaseKey = "ANTS" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "ANTS", phaseAnts@). } }
     ELSE IF phaseKey = "PARK" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "PARK", phasePark@). } }
-    ELSE IF phaseKey = "SUBORBIT" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "SUBORBIT", phaseSuborbit@). } }
     ELSE IF phaseKey = "ABORT" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "ABORT", phaseAbort@). } }
+    ELSE IF phaseKey = "PRELAUNCH" { IF _depLoaded("prelaunch") { phaseMapSet(phaseMap, "PRELAUNCH", phasePrelaunch@). } }
+    ELSE IF phaseKey = "SUBORBIT" { IF _depLoaded("suborbit") { phaseMapSet(phaseMap, "SUBORBIT", phaseSuborbit@). } }
     ELSE IF phaseKey = "RDV" { IF _depLoaded("xfer_plan,maneuver_rendezvous") { phaseMapSet(phaseMap, "RDV", phaseRdv@). } }
     ELSE IF phaseKey = "MATCH" { IF _depLoaded("maneuver_rendezvous") { phaseMapSet(phaseMap, "MATCH", phaseMatch@). } }
     ELSE IF phaseKey = "CREW_XFER" { IF _depLoaded("maneuver_rendezvous") { phaseMapSet(phaseMap, "CREW_XFER", phaseCrewXfer@). } }

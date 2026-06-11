@@ -51,24 +51,30 @@ def parse_phases(raw):
 
 def main():
     phases = parse_phases(INPUT.read_text())
-    # Each binding is guarded on the phase's root libs being present
-    # on the local disk: referencing the handler delegate of a lib
-    # that never loaded is a hard crash (flight-found: a no-link
-    # reboot into the AEROBRAKE band could not sync aerobrake.ks,
-    # and binding phaseAerobrake@ killed the boot). An unbound phase
-    # degrades to runPhases' missing-handler path instead.
+    # Each binding is guarded on the phase's root libs having RUN
+    # this boot (BOOT_LIB_RAN): referencing the handler delegate of
+    # a lib that never loaded is a hard crash (flight-found: a
+    # no-link reboot into the AEROBRAKE band could not sync
+    # aerobrake.ks, and binding phaseAerobrake@ killed the boot).
+    # An unbound phase degrades to runPhases' missing-handler path.
+    # Because the guard is exact, phaseHandlerMap can safely try
+    # EVERY phase (dependencyAllPhases) — phases whose libs arrived
+    # via LIBS_EXTRA bind too, so a mission can avoid band-change
+    # reboots entirely by pre-loading its libs.
+    all_phases = ", ".join(f'"{phase}"' for phase, _ in phases)
     lines = [
         "LOCAL FUNCTION _depLoaded {",
         "    PARAMETER libsCsv.",
         '    FOR libName IN libsCsv:SPLIT(",") {',
-        '        IF libName <> "" {',
-        '            IF NOT EXISTS("1:/lib/" + libName + ".ksm")',
-        '                    AND NOT EXISTS("1:/lib/" + libName + ".ks") {',
-        "                RETURN FALSE.",
-        "            }",
+        '        IF libName <> "" AND NOT BOOT_LIB_RAN:CONTAINS(libName) {',
+        "            RETURN FALSE.",
         "        }",
         "    }",
         "    RETURN TRUE.",
+        "}",
+        "",
+        "GLOBAL FUNCTION dependencyAllPhases {",
+        f"    RETURN LIST({all_phases}).",
         "}",
         "",
         "GLOBAL FUNCTION dependencyBindPhase {",
