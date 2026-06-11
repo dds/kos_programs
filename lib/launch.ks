@@ -963,7 +963,7 @@ LOCAL FUNCTION _suborbitReturnArc {
 
     // Ride the MechJeb boost, then take over above the atmosphere.
     WAIT UNTIL SHIP:ALTITUDE >= atmTop
-        OR NOT (ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED)
+        // OR NOT (ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED)
         OR ABORT OR AG10.
     IF ABORT OR AG10 { _launchAbort(). RETURN. }
     IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
