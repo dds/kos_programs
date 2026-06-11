@@ -751,14 +751,25 @@ GLOBAL FUNCTION phaseKscDeorbit {
 GLOBAL FUNCTION executeDeorbitNode {
     PARAMETER nd.
     LOCAL burnDV IS nd:DELTAV:MAG.
-    // No thrust usually means a spent stage still attached or an
-    // engine awaiting activation — stage like executeManeuver does
-    // fleet-wide before giving up (flight-found: a KSC deorbit
-    // aborted at the burn with the next engine one stage away).
+    // No thrust usually means a deactivated engine or a spent
+    // stage still attached. Try ACTIVATING dormant engines first —
+    // it cannot pop chutes or decouplers (flight-found: a KSC
+    // deorbit aborted at the burn over a right-click-deactivated
+    // engine) — then stage like executeManeuver does fleet-wide.
+    IF SHIP:AVAILABLETHRUST <= 0 {
+        FOR eng IN SHIP:ENGINES {
+            IF NOT eng:IGNITION {
+                mLogWarn("Deorbit burn has no thrust — activating "
+                    + eng:NAME + ".").
+                eng:ACTIVATE.
+            }
+        }
+        WAIT 0.5.
+    }
     LOCAL stageTries IS 0.
     UNTIL SHIP:AVAILABLETHRUST > 0 OR stageTries >= 2 {
         SET stageTries TO stageTries + 1.
-        mLogWarn("Deorbit burn has no thrust — staging (attempt "
+        mLogWarn("Deorbit burn still has no thrust — staging (attempt "
             + stageTries + ").").
         STAGE.
         WAIT 1.
