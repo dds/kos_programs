@@ -405,9 +405,18 @@ GLOBAL FUNCTION bootResumeOrManual {
             PRINT "  MISSION COMPLETE. MANUAL MODE.".
             mLog("Reboot after DONE - manual mode.").
         } ELSE IF phase = "ABORT" {
-            PRINT "  ABORT DETECTED - entering recovery mode.".
-            mLog("Abort detected at reboot - loading recovery.").
-            recoveryMode().
+            IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+                PRINT "  ABORT DETECTED - entering recovery mode.".
+                mLog("Abort detected at reboot - loading recovery.").
+                recoveryMode().
+            } ELSE {
+                // Still falling: resume the phase machine so the
+                // ABORT phase re-verifies chutes and monitors the
+                // descent (recoveryMode is the landed/idle half).
+                PRINT "  ABORT IN PROGRESS - resuming abort descent.".
+                mLog("Abort in progress at reboot - resuming ABORT phase.").
+                resumeMission().
+            }
         } ELSE {
             PRINT "  RESUMING >> " + phase.
             mLog("Resuming mission from phase: " + phase).

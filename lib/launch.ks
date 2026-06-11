@@ -231,7 +231,9 @@ GLOBAL FUNCTION phaseLaunch {
         + "km  inc=" + launchInc
         + "°  az=" + launchAzimuth + "°").
 
-    WHEN stateGet("phase","") = "LAUNCH" OR stateGet("phase","") = "PARK" THEN {
+    WHEN stateGet("phase","") = "LAUNCH" OR stateGet("phase","") = "FAIR"
+            OR stateGet("phase","") = "ANTS" OR stateGet("phase","") = "PARK"
+            OR stateGet("phase","") = "SUBORBIT" THEN {
         LOCAL abortTriggered IS FALSE.
 
         IF stateGet("launch_vs_nonpos_logged", "false") <> "true"
@@ -308,8 +310,9 @@ GLOBAL FUNCTION phaseFairing {
     }
     IF SHIP:ALTITUDE < fairingAlt {
         mLog("Waiting for fairing alt " + ROUND(fairingAlt/1000,0) + "km...").
-        WAIT UNTIL SHIP:ALTITUDE >= fairingAlt.
+        WAIT UNTIL SHIP:ALTITUDE >= fairingAlt OR ABORT.
     }
+    IF ABORT { RETURN. }
     _deployFairing().
     nextPhase(launchSeq).
 }
@@ -326,8 +329,9 @@ GLOBAL FUNCTION phaseExtendAnts {
     }
     IF SHIP:ALTITUDE < extendAlt {
         mLog("Waiting for deploy alt " + ROUND(extendAlt/1000,0) + "km...").
-        WAIT UNTIL SHIP:ALTITUDE >= extendAlt.
+        WAIT UNTIL SHIP:ALTITUDE >= extendAlt OR ABORT.
     }
+    IF ABORT { RETURN. }
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleDeployableSolarPanel") {
             LOCAL sm IS p:GETMODULE("ModuleDeployableSolarPanel").
@@ -351,7 +355,8 @@ GLOBAL FUNCTION phaseAnts {
 
 GLOBAL FUNCTION phaseParking {
     mLog("Waiting for stable parking orbit...").
-    WAIT UNTIL _isParkingOrbitStable().
+    WAIT UNTIL _isParkingOrbitStable() OR ABORT.
+    IF ABORT { RETURN. }
     orbitSummary().
     mLog("Stable parking orbit confirmed.").
     nextPhase(launchSeq).
@@ -404,51 +409,163 @@ GLOBAL FUNCTION armAscentStaging {
 
 // ── Private helpers ──────────────────────────────────────────
 
+// ── Abort mode ───────────────────────────────────────────────
+// _launchAbort is the trigger: cut propulsion, fire the vessel's
+// VAB Abort action group (escape motor / separation), and route
+// the phase machine into ABORT. The ABORT phase below does the
+// real work — chute verification, descent monitoring, archiving,
+// operator card — and is reboot-safe (PHASE ABORT = launch, so a
+// power cycle mid-descent resumes there).
+//
+// Setting ABORT ON also flips the condition every ascent-phase
+// wait watches, so the main thread breaks out of its altitude
+// wait even when the abort fired from the WHEN watcher.
 LOCAL FUNCTION _launchAbort {
     mLogError("LAUNCH ABORT TRIGGERED.").
-    HUDTEXT("ABORT — CUT ENGINES", 5, 2, 20, RED, FALSE).
+    HUDTEXT("ABORT", 5, 2, 20, RED, FALSE).
 
-    SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
+    IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
+    FOR eng IN SHIP:ENGINES {
+        IF eng:IGNITION AND eng:ALLOWSHUTDOWN { eng:SHUTDOWN. }
+    }
+
+    ABORT ON.
     SET SAS TO TRUE.
 
-    LOCAL chutes IS SHIP:PARTSTAGGED("chute_main").
-    IF chutes:LENGTH > 0 {
-        FOR c IN chutes {
-            IF c:HASMODULE("ModuleParachute") {
-                LOCAL modu IS c:GETMODULE("ModuleParachute").
-                IF modu:HASEVENT("Deploy Chute") {
-                    modu:DOEVENT("Deploy Chute").
-                } ELSE IF modu:HASEVENT("Arm Parachute") {
-                    modu:DOEVENT("Arm Parachute").
-                }
+    LOG "" TO "1:/run/obs_off".
+    stateSet("phase", "ABORT").
+}
+
+LOCAL FUNCTION _abortChuteParts {
+    LOCAL parts IS SHIP:PARTSTAGGED("chute_main").
+    IF parts:LENGTH > 0 { RETURN parts. }
+    SET parts TO LIST().
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleParachute") OR p:HASMODULE("RealChuteModule") {
+            parts:ADD(p).
+        }
+    }
+    RETURN parts.
+}
+
+// Arm every chute (deploy-when-safe), then VERIFY the arm took:
+// once armed/deployed the arm event disappears. Returns
+// LIST(found, armed).
+LOCAL FUNCTION _abortArmChutes {
+    LOCAL found IS 0.
+    FOR p IN _abortChuteParts() {
+        LOCAL moduleName IS "".
+        IF p:HASMODULE("ModuleParachute") { SET moduleName TO "ModuleParachute". }
+        ELSE IF p:HASMODULE("RealChuteModule") { SET moduleName TO "RealChuteModule". }
+        IF moduleName <> "" {
+            SET found TO found + 1.
+            LOCAL m IS p:GETMODULE(moduleName).
+            IF m:HASEVENT("arm parachute") { m:DOEVENT("arm parachute"). }
+            ELSE IF m:HASEVENT("deploy chute") { m:DOEVENT("deploy chute"). }
+            ELSE IF m:HASEVENT("deploy") { m:DOEVENT("deploy"). }
+        }
+    }
+    IF found = 0 { RETURN LIST(0, 0). }
+    WAIT 0.5.
+
+    LOCAL armed IS 0.
+    FOR p IN _abortChuteParts() {
+        LOCAL moduleName IS "".
+        IF p:HASMODULE("ModuleParachute") { SET moduleName TO "ModuleParachute". }
+        ELSE IF p:HASMODULE("RealChuteModule") { SET moduleName TO "RealChuteModule". }
+        IF moduleName <> "" {
+            LOCAL m IS p:GETMODULE(moduleName).
+            IF NOT m:HASEVENT("arm parachute") AND NOT m:HASEVENT("deploy") {
+                SET armed TO armed + 1.
+            } ELSE {
+                mLogWarn("Chute NOT armed: " + p:TITLE
+                    + " events: " + m:ALLEVENTNAMES:JOIN(", ")).
             }
         }
-        mLog("Parachutes deployed.").
-    } ELSE {
-        AG6 ON.
-        mLogWarn("No tagged chutes found — fired AG6.").
     }
+    RETURN LIST(found, armed).
+}
 
-    HUDTEXT("ABORT — CHUTES DEPLOYED", 8, 2, 18, RED, FALSE).
-    stateSet("phase", "ABORT").
+// ABORT phase: post-abort descent to touchdown.
+GLOBAL FUNCTION phaseAbort {
+    IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
+    UNLOCK ALL.
+    SET SAS TO TRUE.
 
-    IF HOMECONNECTION:ISCONNECTED {
-        IF NOT EXISTS("0:/logs") { CREATEDIR("0:/logs"). }
-        LOCAL logPath IS flightLogPath().
-        IF logPath <> "" AND EXISTS(logPath) {
-            LOCAL archivePath IS "0:/logs/" + logPath:REPLACE("1:/run/","").
-            COPYPATH(logPath, archivePath).
-            mLog("Abort log archived to " + archivePath).
+    mLogWarn("STATS abort entry alt=" + ROUND(SHIP:ALTITUDE, 0)
+        + " vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 1)
+        + " vs=" + ROUND(SHIP:VERTICALSPEED, 1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)).
+    IF HOMECONNECTION:ISCONNECTED { archiveLog(). }
+
+    IF SHIP:STATUS <> "LANDED" AND SHIP:STATUS <> "SPLASHED" {
+        // Give the escape motor / separation a beat before chutes.
+        WAIT 1.5.
+        LOCAL chuteState IS _abortArmChutes().
+        IF chuteState[0] = 0 {
+            mLogError("NO PARACHUTES FOUND — firing AG6 backup.").
+            HUDTEXT("ABORT: NO CHUTES — AG6 FIRED", 8, 2, 18, RED, FALSE).
+            AG6 ON.
+        } ELSE {
+            IF chuteState[1] < chuteState[0] {
+                mLogWarn("CHUTES: only " + chuteState[1] + "/" + chuteState[0]
+                    + " armed — re-arming during descent.").
+            } ELSE {
+                mLog("CHUTES: " + chuteState[1] + "/" + chuteState[0]
+                    + " armed and ready.").
+            }
+            HUDTEXT("ABORT: chutes " + chuteState[1] + "/" + chuteState[0]
+                + " armed", 8, 2, 16, YELLOW, FALSE).
         }
-    } ELSE {
-        mLogWarn("No KSC link — log NOT archived (will retry in recovery).").
+
+        LOCAL nextCheck IS TIME:SECONDS + 20.
+        UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+            IF TIME:SECONDS >= nextCheck {
+                SET nextCheck TO TIME:SECONDS + 20.
+                IF chuteState[0] > 0 AND chuteState[1] < chuteState[0] {
+                    SET chuteState TO _abortArmChutes().
+                    mLog("Chute re-arm: " + chuteState[1] + "/"
+                        + chuteState[0] + " armed.").
+                }
+                mLog("Abort descent: alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
+                    + "km vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 0)
+                    + "m/s vs=" + ROUND(SHIP:VERTICALSPEED, 0) + "m/s.").
+            }
+            WAIT 1.
+        }
     }
 
-    LOG "" TO "1:/run/obs_off".
-    mLog("Abort complete. Awaiting landing.").
+    mLogWarn("STATS abort landed status=" + SHIP:STATUS
+        + " lat=" + ROUND(SHIP:GEOPOSITION:LAT, 4)
+        + " lng=" + ROUND(SHIP:GEOPOSITION:LNG, 4)).
+
+    // Antennas back out so the log archive has a link.
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleDeployableAntenna") {
+            LOCAL am IS p:GETMODULE("ModuleDeployableAntenna").
+            IF am:HASEVENT("Extend Antenna") { am:DOEVENT("Extend Antenna"). }
+        }
+    }
+    WAIT 3.
+    IF HOMECONNECTION:ISCONNECTED {
+        archiveLog().
+        mLog("Abort log archived.").
+    } ELSE {
+        mLogWarn("No KSC link — log NOT archived; reboot when linked.").
+    }
+
+    PRINT " ".
+    PRINT "  ABORT COMPLETE — " + SHIP:STATUS.
+    PRINT "  ─────────────────────────────────────────────".
+    PRINT "  Clear abort:    SET ABORT TO FALSE.".
+    PRINT "  Refly:          RUNPATH(\"1:/cmd/setphase\", \"LAUNCH\"). + reboot".
+    PRINT "  Other mission:  RUNPATH(\"1:/cmd/setphase\", \"LAUNCH\", \"<id>\").".
+    PRINT "  State dump:     RUNPATH(\"1:/cmd/dump\").".
+    PRINT "  Backup chutes:  AG6 ON.".
+    yieldToPrompt().
 }
 
 GLOBAL FUNCTION ascentNeedsStage {
@@ -526,9 +643,10 @@ GLOBAL FUNCTION phaseSuborbit {
             AND SHIP:VERTICALSPEED > 0 {
         LOCK STEERING TO SHIP:SRFPROGRADE.
         WAIT UNTIL SHIP:ALTITUDE >= SHIP:BODY:ATM:HEIGHT
-            OR SHIP:VERTICALSPEED < 0.
+            OR SHIP:VERTICALSPEED < 0 OR ABORT.
         UNLOCK STEERING.
     }
+    IF ABORT { RETURN. }
     SET SAS TO TRUE.
     mLog("Suborbital cutoff complete: Ap=" + ROUND(SHIP:APOAPSIS/1000, 1)
         + "km. Falling back for descent.").
