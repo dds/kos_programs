@@ -28,6 +28,9 @@
 //   max_orbits       — deorbit window scan limit (default 4)
 //   samples          — coarse scan samples across the window
 //       (default 32 per orbit — each costs a Trajectories sim)
+//   refine           — TRUE re-enables the iterative impact
+//       refinement (off by default: slow, sometimes
+//       non-converging, and chute landings don't need ~1km)
 //   strict           — TRUE = hold unless a pass inside tolerance
 //       exists in the window. Default FALSE: fly the BEST pass
 //       found — essential from polar orbits, where the ground
@@ -52,6 +55,7 @@ LOCAL tolerance IS 15000.
 LOCAL maxOrbits IS 4.
 LOCAL scanSamples IS 0.
 LOCAL strict IS FALSE.
+LOCAL doRefine IS FALSE.
 LOCAL descentFairingTag IS "descent_fairing".
 LOCAL descentDecouplerTag IS "descent_decoupler".
 LOCAL descentChutesTag IS "descent_chutes".
@@ -65,6 +69,7 @@ IF opts:HASKEY("tolerance")         { SET tolerance TO opts["tolerance"]. }
 IF opts:HASKEY("max_orbits")        { SET maxOrbits TO opts["max_orbits"]. }
 IF opts:HASKEY("strict")            { SET strict TO opts["strict"]. }
 IF opts:HASKEY("samples")           { SET scanSamples TO opts["samples"]. }
+IF opts:HASKEY("refine")            { SET doRefine TO opts["refine"]. }
 IF scanSamples <= 0 { SET scanSamples TO maxOrbits * 32. }
 IF opts:HASKEY("descent_fairing")   { SET descentFairingTag TO opts["descent_fairing"]. }
 IF opts:HASKEY("descent_decoupler") { SET descentDecouplerTag TO opts["descent_decoupler"]. }
@@ -107,6 +112,10 @@ IF NOT err {
     stateSetNum("mission_cfg_TARGET_DEORBIT_SCAN_SAMPLES", scanSamples).
     stateSetNum("mission_cfg_TARGET_DEORBIT_COARSE_STOP_DIST", tolerance).
     stateSetNum("mission_cfg_TARGET_DEORBIT_REFINE_TOLERANCE", 1000).
+    // Fast by default: fly the coarse+pass result without the
+    // iterative impact refinement (LEX("refine", TRUE) re-enables).
+    stateSetNum("mission_cfg_TARGET_DEORBIT_SKIP_REFINE",
+        CHOOSE 0 IF doRefine ELSE 1).
     stateSetNum("mission_cfg_TARGET_DEORBIT_PROCEED_ON_MISS",
         CHOOSE 0 IF strict ELSE 1).
     stateSetNum("mission_cfg_TARGET_DEORBIT_MIN_LEAD", 90).
