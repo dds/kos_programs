@@ -125,7 +125,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
         + " deg of ground track to the site; deorbit burn in ~"
         + ROUND(waitSecs, 0) + "s. Warp away.").
     LOCAL alarmId IS "".
-    IF ADDONS:KAC:AVAILABLE AND waitSecs > 120 {
+    IF ADDONS:KAC:AVAILABLE AND waitSecs > 70 {
         LOCAL alm IS ADDALARM("Raw", TIME:SECONDS + waitSecs - 60,
             "Deorbit burn: " + SHIP:NAME, "Auto-created by SUBORBIT").
         SET alm:ACTION TO "KillWarp".
@@ -258,7 +258,10 @@ LOCAL FUNCTION _suborbitReturnArc {
         SET burnStartUt TO TIME:SECONDS.
     }
     LOCAL alarmId IS "".
-    IF ADDONS:KAC:AVAILABLE AND burnStartUt - TIME:SECONDS > 90 {
+    // Even a short wait gets the alarm — flight-found: a 57s wait
+    // fell under the old 90s threshold, so the burn arrived with
+    // no warning at all.
+    IF ADDONS:KAC:AVAILABLE AND burnStartUt - TIME:SECONDS > 35 {
         LOCAL alm IS ADDALARM("Raw", burnStartUt - 30,
             "Arc burn: " + SHIP:NAME, "Auto-created by SUBORBIT").
         SET alm:ACTION TO "KillWarp".
