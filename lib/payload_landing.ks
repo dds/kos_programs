@@ -98,72 +98,8 @@ LOCAL FUNCTION _timedLandingDeorbit {
     RETURN TRUE.
 }
 
-// Execute a maneuver node with align, staged throttle, and cleanup.
-// Self-contained — no dependency on maneuver.ks. Used by both the
-// timed deorbit path and targeted deorbit (via deorbit_targeting.ks).
-GLOBAL FUNCTION executeDeorbitNode {
-    PARAMETER nd.
-    LOCAL burnDV IS nd:DELTAV:MAG.
-    IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {
-        mLogError("Timed deorbit cannot burn: no available thrust.").
-        REMOVE nd.
-        RETURN FALSE.
-    }
-    LOCAL maxAcc IS SHIP:AVAILABLETHRUST / SHIP:MASS.
-    LOCAL burnTime IS burnDV / MAX(0.1, maxAcc).
-    LOCAL startTime IS nd:TIME - burnTime / 2.
-    IF startTime < TIME:SECONDS + 5 { SET startTime TO TIME:SECONDS + 5. }
-
-    mLogWarn("STATS timed-burn setup dv=" + ROUND(burnDV,1)
-        + " eta=" + ROUND(startTime - TIME:SECONDS,1)
-        + " nodeEta=" + ROUND(nd:ETA,1)
-        + " maxAcc=" + ROUND(maxAcc,2)).
-    SET SAS TO FALSE.
-    LOCK STEERING TO nd:BURNVECTOR.
-    LOCAL alignDeadline IS MIN(startTime - 2, TIME:SECONDS + 45).
-    UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < 5
-            OR TIME:SECONDS >= alignDeadline {
-        LOCK STEERING TO nd:BURNVECTOR.
-        WAIT 0.1.
-    }
-    mLogWarn("STATS timed-burn align angle="
-        + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR),1)
-        + " timeToBurn=" + ROUND(startTime - TIME:SECONDS,1)).
-
-    WAIT UNTIL TIME:SECONDS >= startTime.
-    LOCAL burnStart IS TIME:SECONDS.
-    LOCAL origBurnVec IS nd:BURNVECTOR.
-    mLog("Timed deorbit burn start. dV=" + ROUND(burnDV,1) + " m/s.").
-    UNTIL nd:DELTAV:MAG < MAX(0.08, burnDV * 0.01)
-            OR TIME:SECONDS - burnStart > burnTime * 2 + 8 {
-        LOCK STEERING TO nd:BURNVECTOR.
-        IF nd:DELTAV:MAG > 0.1
-                AND VDOT(origBurnVec:NORMALIZED, nd:BURNVECTOR:NORMALIZED) < 0 {
-            BREAK.
-        }
-        IF nd:DELTAV:MAG > 3 {
-            LOCK THROTTLE TO 1.
-        } ELSE IF nd:DELTAV:MAG > 0.4 {
-            LOCK THROTTLE TO 0.25.
-        } ELSE {
-            LOCK THROTTLE TO 0.05.
-        }
-        WAIT 0.02.
-    }
-
-    LOCAL residual IS nd:DELTAV:MAG.
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
-    UNLOCK STEERING.
-    REMOVE nd.
-    SET SAS TO TRUE.
-    mLog("Timed deorbit burn complete. Residual=" + ROUND(residual,2) + " m/s.").
-    mLogWarn("STATS timed-burn result dv=" + ROUND(burnDV,1)
-        + " residual=" + ROUND(residual,2)
-        + " duration=" + ROUND(TIME:SECONDS - burnStart,1)).
-    RETURN TRUE.
-}
-
+// executeDeorbitNode moved to deorbit_targeting.ks (its primary
+// caller) — flight-found missing from the KSC_DEORBIT band.
 LOCAL FUNCTION _landingDeorbitPe {
     RETURN LANDING_CFG["DEORBIT_PE"].
 }
