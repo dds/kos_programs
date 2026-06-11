@@ -18,6 +18,10 @@ Looks like Python/JS; is neither.
   `:CALL()` invokes one.
 - Identifiers AND string comparisons are case-insensitive — never add
   `TOUPPER`/`TOLOWER` just to compare.
+- **No escape sequences in strings.** `"\""` is a syntax error (flight-found)
+  and there is no way to embed a double quote in a string literal. When
+  printed text needs quotes, use single quotes (`PRINT "RUNPATH('0:/cmd/x')."`)
+  — or `CHAR(34)` concatenation if it must be exact.
 - **Never use bare `r`, `v`, or `q` as variable names** — they shadow the
   `R()`/`V()`/`Q()` rotation/vector/quaternion constructors. Use `rMag`,
   `rVec`, `vel`, `res`, etc. Be equally careful shadowing bound names

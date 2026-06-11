@@ -36,7 +36,7 @@ IF which_ < 0 {
         SET which_ TO 0.
     } ELSE {
         PRINT "Multiple decouplers; rerun with index, e.g.:".
-        PRINT "RUNPATH(\"0:/cmd/tagassistdecoupler.ks\", 0).".
+        PRINT "RUNPATH('0:/cmd/tagassistdecoupler.ks', 0).".
         RETURN.
     }
 }
