@@ -347,7 +347,13 @@ GLOBAL FUNCTION scansatDutyCycle {
     LOCAL active IS LIST().
     LOCAL mapDone IS FALSE.
 
-    LOCAL scansOn IS TRUE.
+    // Deterministic start: the scanners may be on OR off when the
+    // phase begins — force them OFF so the bookkeeping matches
+    // reality, then the loop brings them up the moment the charge
+    // is above the resume threshold (immediately, when entering
+    // with a healthy battery).
+    scienceStopScanners().
+    LOCAL scansOn IS FALSE.
     LOCAL nextStatus IS TIME:SECONDS + 600.
     UNTIL AG10 OR mapDone {
         LOCAL frac IS shipPowerFraction().
