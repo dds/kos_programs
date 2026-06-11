@@ -10,7 +10,7 @@
 //
 // Return-arc strategy (v3 — first two were flight-failures):
 //   1. Arc burn BY ELEMENTS ONLY: horizontal at apoapsis until
-//      Pe reaches SUBORBIT_ARC_PE (~66km). A clean Kepler arc,
+//      Pe reaches SUBORBIT_ARC_PE (~68km). A clean Kepler arc,
 //      barely suborbital, negligible drag. No Trajectories in
 //      the loop — flight-found twice that the impact prediction
 //      in the drag-decay regime (Pe 45-65km) is multi-pass mush:
@@ -107,11 +107,18 @@ LOCAL FUNCTION _suborbitGroundRemaining {
     RETURN _norm360(siteGeo:LNG - SHIP:GEOPOSITION:LNG).
 }
 
-// Step 3: coast the arc, then the targeted retro burn.
+LOCAL FUNCTION _norm180 {
+    PARAMETER angle.
+    RETURN _norm360(angle + 180) - 180.
+}
+
+// Step 3: coast the arc, then the targeted deorbit burn.
 LOCAL FUNCTION _suborbitCoastAndDeorbit {
     PARAMETER siteGeo.
     PARAMETER tol.
+    PARAMETER arcPe.
     LOCAL lead IS _launchCfgNum("SUBORBIT_DEORBIT_LEAD", 60).
+    LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
     UNLOCK STEERING.
     SET SAS TO TRUE.
 
@@ -131,39 +138,58 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
         SET alm:ACTION TO "KillWarp".
         SET alarmId TO alm:ID.
     }
+    // The arc dips below the atmosphere line around Pe BY DESIGN —
+    // flight-found: an altitude < atmTop exit ended a 1531s coast
+    // at 612s on the routine descent toward Pe 66km. Only well
+    // below the planned Pe is the arc genuinely decaying.
     UNTIL _suborbitGroundRemaining(siteGeo) <= lead
             OR (SHIP:VERTICALSPEED < 0
-                AND SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT)
+                AND SHIP:ALTITUDE < arcPe - 8000)
             OR ABORT OR AG10 {
         WAIT 1.
     }
     SET WARP TO 0.
     IF alarmId <> "" { DELETEALARM(alarmId). }
     IF ABORT OR AG10 { launchAbort(). RETURN. }
-    IF NOT _suborbitCanBurn() {
-        mLogWarn("Arc came down early — straight to descent.").
+    IF SHIP:ALTITUDE < arcPe - 8000 AND SHIP:VERTICALSPEED < 0 {
+        mLogWarn("Arc decayed early — straight to descent.").
         nextPhase(launchSeq).
         RETURN.
     }
 
-    // Slow retro burn: the predicted impact marches west from
-    // beyond the site toward it as Pe drops. Cut on target or at
-    // closest approach. Self-correcting against live Trajectories.
-    mLog("Deorbit burn: walking the predicted impact onto the site.").
-    LOCK STEERING TO SHIP:RETROGRADE.
+    // Direction: drag on the Pe dip may have already pulled the
+    // unpowered impact SHORT of the site — then the burn must
+    // EXTEND the arc (prograde), not shorten it (retrograde).
+    WAIT 2.
+    LOCAL goPro IS FALSE.
+    IF ADDONS:TR:HASIMPACT {
+        LOCAL alongErr IS _norm180(siteGeo:LNG - ADDONS:TR:IMPACTPOS:LNG).
+        SET goPro TO alongErr > 0.
+    }
+    mLog("Deorbit burn ("
+        + (CHOOSE "prograde: extending a short arc" IF goPro
+           ELSE "retrograde: pulling the impact back")
+        + ") — walking the predicted impact onto the site.").
+    IF goPro { LOCK STEERING TO SHIP:PROGRADE. }
+    ELSE { LOCK STEERING TO SHIP:RETROGRADE. }
     WAIT 5.
     LOCAL throttleCmd IS 0.
     LOCK THROTTLE TO throttleCmd.
     LOCAL dMin IS 1e12.
     LOCAL nextLog IS 0.
+    LOCAL walkDeadline IS TIME:SECONDS + 240.
     LOCAL reason IS "".
     UNTIL reason <> "" {
         IF ABORT OR AG10 { launchAbort(). RETURN. }
         LOCAL d IS _suborbitImpactDist(siteGeo).
         IF SHIP:AVAILABLETHRUST <= 0 {
             SET reason TO "out-of-fuel".
-        } ELSE IF SHIP:PERIAPSIS < 10000 {
+        } ELSE IF TIME:SECONDS > walkDeadline {
+            SET reason TO "timeout".
+        } ELSE IF NOT goPro AND SHIP:PERIAPSIS < 10000 {
             SET reason TO "pe-floor".
+        } ELSE IF goPro AND SHIP:PERIAPSIS > atmTop - 1000 {
+            SET reason TO "pe-ceiling".
         } ELSE IF d >= 0 {
             IF d < dMin { SET dMin TO d. }
             IF d <= tol {
@@ -213,7 +239,7 @@ LOCAL FUNCTION _suborbitReturnArc {
     }
     LOCAL siteGeo IS _suborbitSiteGeo().
     LOCAL tol IS _launchCfgNum("SUBORBIT_RETURN_TOL", 40000).
-    LOCAL arcPe IS _launchCfgNum("SUBORBIT_ARC_PE", 66000).
+    LOCAL arcPe IS _launchCfgNum("SUBORBIT_ARC_PE", 68000).
     LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
     // MechJeb must NOT circularize — the arc burn is ours.
     IF ADDONS:MJ:AVAILABLE {
@@ -328,7 +354,7 @@ LOCAL FUNCTION _suborbitReturnArc {
         RETURN.
     }
 
-    _suborbitCoastAndDeorbit(siteGeo, tol).
+    _suborbitCoastAndDeorbit(siteGeo, tol, arcPe).
 }
 
 // ── Descent watchdog ─────────────────────────────────────────
