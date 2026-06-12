@@ -199,6 +199,20 @@ GLOBAL FUNCTION trySolarOrient {
     }
 }
 
+// Guarded solar-hold tick for long coasts: maintains the solar
+// attitude (warp-aware re-aims when panel flow sags) wherever
+// the solar lib is aboard; a no-op pass-through otherwise.
+GLOBAL FUNCTION trySolarHoldTick {
+    PARAMETER refFlow.
+    IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
+            OR SHIP:STATUS = "SUB_ORBITAL")
+            AND DEFINED BOOT_LIB_RAN
+            AND BOOT_LIB_RAN:CONTAINS("solar") {
+        RETURN solarHoldTick(refFlow).
+    }
+    RETURN refFlow.
+}
+
 GLOBAL FUNCTION phaseDone {
     UNLOCK ALL.
     SET SAS TO TRUE.

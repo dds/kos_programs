@@ -132,6 +132,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     LOCAL alarmId IS "".
     LOCAL alarmUt IS 0.
     LOCAL nextEtaCheck IS 0.
+    LOCAL solarRef IS -1.
     // The arc dips below the atmosphere line around Pe BY DESIGN —
     // flight-found: an altitude < atmTop exit ended a 1531s coast
     // at 612s on the routine descent toward Pe 66km. Only well
@@ -140,6 +141,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
             OR (SHIP:VERTICALSPEED < 0
                 AND SHIP:ALTITUDE < arcPe - 8000)
             OR ABORT OR AG10 {
+        SET solarRef TO trySolarHoldTick(solarRef).
         IF TIME:SECONDS > nextEtaCheck {
             SET nextEtaCheck TO TIME:SECONDS + 10.
             LOCAL liveRate IS 360 / SHIP:ORBIT:PERIOD

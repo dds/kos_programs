@@ -49,9 +49,9 @@ GLOBAL FUNCTION isOrbitStable {
 // catches the transition faster but wastes more CPU. For most transfers this
 // doesn't matter since the transition is instantaneous from the game's perspective.
 GLOBAL FUNCTION waitForSOI {
-    trySolarOrient().
     PARAMETER targetBody.
     PARAMETER pollInterval IS 5.
+    trySolarOrient().
     mLog("Waiting for SOI: " + targetBody:NAME).
 
     // Set a KAC alarm at the SOI transition so time warp stops automatically.
@@ -79,7 +79,9 @@ GLOBAL FUNCTION waitForSOI {
         }
     }
 
+    LOCAL solarRef IS -1.
     UNTIL SHIP:ORBIT:BODY:NAME = targetBody:NAME {
+        SET solarRef TO trySolarHoldTick(solarRef).
         WAIT pollInterval.
     }
     mLog("SOI entered: " + targetBody:NAME).

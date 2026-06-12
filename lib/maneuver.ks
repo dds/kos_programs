@@ -83,7 +83,11 @@ GLOBAL FUNCTION executeManeuver {
         trySolarOrient().
         mLog("Long coast wait (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
         HUDTEXT("Coasting. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
-        WAIT MAX(0, wakeTime - TIME:SECONDS).
+        LOCAL solarRef IS -1.
+        UNTIL TIME:SECONDS >= wakeTime {
+            SET solarRef TO trySolarHoldTick(solarRef).
+            WAIT MIN(10, MAX(0.5, wakeTime - TIME:SECONDS)).
+        }
         _wakeCmd().
         SET WARP TO 0.
         SET SAS TO FALSE.

@@ -1117,7 +1117,11 @@ GLOBAL FUNCTION executeDeorbitNode {
         SET SAS TO TRUE.
         mLog("Long coast to deorbit burn ("
             + ROUND(startTime - TIME:SECONDS, 0) + "s). Warp at will.").
-        WAIT UNTIL TIME:SECONDS >= startTime - 120.
+        LOCAL solarRef IS -1.
+        UNTIL TIME:SECONDS >= startTime - 120 {
+            SET solarRef TO trySolarHoldTick(solarRef).
+            WAIT MIN(10, MAX(0.5, startTime - 120 - TIME:SECONDS)).
+        }
         SET WARP TO 0.
         mLog("Awake — " + ROUND(startTime - TIME:SECONDS, 0)
             + "s to deorbit burn.").
