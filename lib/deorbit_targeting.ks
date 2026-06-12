@@ -912,9 +912,15 @@ GLOBAL FUNCTION phaseKscDeorbit {
                 if 0 = MOD(i, 250) {
                     LOCAL savedWarp IS WARP.
                     SET WARP TO 0.
-                    WAIT 1.
-                    WAIT 1.
-                    WAIT 60.
+                    WAIT 2.
+                    WAIT 2.
+                    WAIT 2.
+                    WAIT 2.
+                    WAIT 2.
+                    WAIT 2.
+                    WAIT 2.
+                    WAIT 2.
+                    WAIT 2.
                     UNLOCK STEERING.
                     orientForSolar(FALSE, TRUE).
                     SET WARP TO savedWarp.
