@@ -96,7 +96,7 @@ LOCAL FUNCTION _aerobrakeSetEntryAlarm {
     LOCAL alm IS ADDALARM("Raw", entryUt, "Atmo entry: " + SHIP:BODY:NAME,
         "Atmosphere at " + ROUND(atmAlt/1000, 0) + "km").
     IF alm <> 0 {
-        SET alm:ACTION TO warpKillAction().
+        SET alm:ACTION TO "KillWarp".
         mLog("KAC alarm set for atmosphere entry in "
             + ROUND(entryUt - TIME:SECONDS, 0) + "s"
             + " (" + SHIP:BODY:NAME + " atmo=" + ROUND(atmAlt/1000, 0) + "km).").

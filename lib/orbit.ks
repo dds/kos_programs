@@ -70,7 +70,7 @@ GLOBAL FUNCTION waitForSOI {
         } ELSE {
             IF oldId <> "" { DELETEALARM(oldId). }
             LOCAL alm IS ADDALARM("Raw", soiUt, "SOI: " + targetBody:NAME, "Auto-created by waitForSOI").
-            SET alm:ACTION TO warpKillAction().
+            SET alm:ACTION TO "KillWarp".
             SET kacAlarmId TO alm:ID.
             stateSet("soi_alarm_id", kacAlarmId).
             stateSet("soi_alarm_target", targetBody:NAME).

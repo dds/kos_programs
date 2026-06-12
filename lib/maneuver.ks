@@ -57,7 +57,7 @@ GLOBAL FUNCTION executeManeuver {
         LOCAL alarmUt IS startTime - 60.
         IF alarmUt > TIME:SECONDS {
             LOCAL alm IS ADDALARM("Raw", alarmUt, "Burn: " + ROUND(burnDV,1) + "m/s", "Auto-created by executeManeuver").
-            SET alm:ACTION TO warpKillAction().
+            SET alm:ACTION TO "KillWarp".
             SET kacAlarmId TO alm:ID.
             mLog("KAC alarm set for burn in " + ROUND(alarmUt - TIME:SECONDS, 0) + "s.").
         }
@@ -69,7 +69,7 @@ GLOBAL FUNCTION executeManeuver {
     // BPLANE iterates) could sail through the window. Kill warp
     // outright when the burn is near.
     IF startTime - TIME:SECONDS < HIBERNATE_THRESHOLD {
-        killWarp().
+        SET WARP TO 0.
     }
 
     SET SAS TO FALSE.
@@ -85,7 +85,7 @@ GLOBAL FUNCTION executeManeuver {
         HUDTEXT("Coasting. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
         WAIT MAX(0, wakeTime - TIME:SECONDS).
         _wakeCmd().
-        killWarp().
+        SET WARP TO 0.
         SET SAS TO FALSE.
         WAIT 0.1.
         LOCK STEERING TO nd:BURNVECTOR.

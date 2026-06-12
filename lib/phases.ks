@@ -159,23 +159,15 @@ GLOBAL FUNCTION archivePhaseLog {
 // Guarded solar orient for coasts: a no-op unless the solar lib
 // loaded this boot and the ship is on a stable trajectory in
 // space. Safe to call from anywhere in the preamble's reach.
-// KEEP_WARP = 1 (testing): never yank the player out of warp —
-// KAC alarms become MessageOnly and event warp-stops are no-ops.
-// Burns warped past are missed; the executors' replan/resume
-// paths pick up the pieces.
+// KEEP_WARP = 1: do not drop out of warp for BIOME crossings
+// during orbit stays (EVA_BIOMES announcements become HUD-only).
+// Mission-critical warp stops — burn windows, alarms, reentry —
+// are always unconditional.
 GLOBAL FUNCTION warpHoldEnabled {
     IF DEFINED CFG AND CFG:HASKEY("KEEP_WARP") {
         RETURN CFG["KEEP_WARP"] > 0.
     }
     RETURN stateGetNum("mission_cfg_KEEP_WARP", 0) > 0.
-}
-
-GLOBAL FUNCTION warpKillAction {
-    RETURN CHOOSE "MessageOnly" IF warpHoldEnabled() ELSE "KillWarp".
-}
-
-GLOBAL FUNCTION killWarp {
-    IF NOT warpHoldEnabled() { SET WARP TO 0. }
 }
 
 GLOBAL FUNCTION trySolarOrient {

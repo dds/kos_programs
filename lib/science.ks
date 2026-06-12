@@ -428,8 +428,7 @@ GLOBAL FUNCTION scansatDutyCycle {
             orientForSolar().
             SET lastOrient TO TIME:SECONDS.
         }
-        IF TIME:SECONDS - lastOrient > reorientPeriod
-                AND NOT warpHoldEnabled() {
+        IF TIME:SECONDS - lastOrient > reorientPeriod {
             LOCAL savedWarp IS WARP.
             SET WARP TO 0.
             WAIT 2.
