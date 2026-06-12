@@ -105,6 +105,7 @@ LOCAL FUNCTION _deorbitImpactWalk {
     FOR mode IN LIST("along", "cross", "along") {
         IF TIME:SECONDS > walkDeadline OR dvSpent >= dvCap { BREAK. }
         IF SHIP:AVAILABLETHRUST <= 0 { BREAK. }
+        WAIT 2.   // let Trajectories settle before judging the leg
         LOCAL d0 IS _walkDist(targetLat, targetLng).
         IF d0 >= 0 AND d0 <= bullseye { BREAK. }
 
@@ -127,6 +128,7 @@ LOCAL FUNCTION _deorbitImpactWalk {
                 SHIP:POSITION - SHIP:BODY:POSITION).
         }
         LOCAL legPe0 IS SHIP:PERIAPSIS.
+        LOCAL legDv0 IS dvSpent.
         mLog("Walk leg (" + mode
             + (CHOOSE "/prograde" IF mode = "along" AND goPro
                ELSE CHOOSE "/retrograde" IF mode = "along" ELSE "")
@@ -147,7 +149,7 @@ LOCAL FUNCTION _deorbitImpactWalk {
             // Measured sign: 1.5 m/s test pulse, flip if it hurt.
             LOCAL v0 IS SHIP:VELOCITY:ORBIT.
             LOCAL pulseDeadline IS TIME:SECONDS + 30.
-            UNTIL (SHIP:VELOCITY:ORBIT - v0):MAG >= 1.5
+            UNTIL (SHIP:VELOCITY:ORBIT - v0):MAG >= 0.8
                     OR TIME:SECONDS > pulseDeadline {
                 IF VANG(SHIP:FACING:FOREVECTOR,
                         sgnN * VCRS(SHIP:VELOCITY:ORBIT,
@@ -177,6 +179,7 @@ LOCAL FUNCTION _deorbitImpactWalk {
 
         LOCAL dMin IS 1e12.
         LOCAL nextLog IS 0.
+        LOCAL nextPulse IS 0.
         LOCAL reason IS "".
         UNTIL reason <> "" {
             LOCAL aimVec IS V(0, 0, 0).
@@ -195,6 +198,12 @@ LOCAL FUNCTION _deorbitImpactWalk {
                 SET reason TO "timeout".
             } ELSE IF dvSpent >= dvCap {
                 SET reason TO "dv-cap".
+            } ELSE IF dvSpent - legDv0 > 6 AND dMin > d0 - 300 {
+                // 6 m/s in and the minimum hasn't improved: this
+                // leg is fighting the wrong axis (flight-found:
+                // a cross leg monotonically worsening an
+                // along-track residual). Stop wasting the budget.
+                SET reason TO "ineffective".
             } ELSE IF SHIP:PERIAPSIS < 9000 {
                 SET reason TO "pe-floor".
             } ELSE IF mode = "along"
@@ -222,10 +231,22 @@ LOCAL FUNCTION _deorbitImpactWalk {
             IF NOT aligned {
                 SET throttleCmd TO 0.
             } ELSE IF mode = "along" {
-                // Post-deorbit timing sensitivity: ~1 m/s moves
-                // the impact tens of km. Creep only.
-                SET throttleCmd TO
-                    CHOOSE 0.02 IF d >= 0 AND d < 30000 ELSE 0.05.
+                // Post-deorbit sensitivity: ~1 m/s moves the
+                // impact tens of km AND Trajectories needs a beat
+                // to settle. Below 15km: single-tick micro-pulses
+                // (~0.6km each) with a settle gap — measurement-
+                // paced (flight-found: continuous creep overshot
+                // a 0.3km minimum out to 10km between readings).
+                IF d >= 0 AND d < 15000 {
+                    IF TIME:SECONDS > nextPulse {
+                        SET throttleCmd TO 0.012.
+                        SET nextPulse TO TIME:SECONDS + 1.2.
+                    } ELSE {
+                        SET throttleCmd TO 0.
+                    }
+                } ELSE {
+                    SET throttleCmd TO 0.02.
+                }
             } ELSE {
                 SET throttleCmd TO
                     CHOOSE 0.02 IF d >= 0 AND d < tolerance * 3
