@@ -142,7 +142,8 @@ Looks like Python/JS; is neither.
   (`lib/suborbit.ks` v3: elements-only arc + coast + targeted walk) is
   flight-proven — single-boot KRBCAP1 round-the-world hop, landed exactly
   on its predicted impact. The landatksc/KSC_DEORBIT recipe and the
-  scansat duty cycle flew real missions. Still **not flight-proven**:
+  scansat duty cycle flew real missions; the discover+focus deorbit
+  scan found a 0.9km pass quickly on a 28-orbit polar hunt. Still **not flight-proven**:
   goto, the rescue PRELAUNCH/MATCH/CREW_XFER chain, the reworked airplane
   control loops, SSTO phases, the drone. The legacy coupled solver
   (`_targetPatchElementsCoupled` and friends) is retired-in-place: the
