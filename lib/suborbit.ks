@@ -201,7 +201,17 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
         + ") — walking the predicted impact onto the site.").
     IF goPro { LOCK STEERING TO SHIP:PROGRADE. }
     ELSE { LOCK STEERING TO SHIP:RETROGRADE. }
-    WAIT 5.
+    // Align before any thrust, and gate the throttle on alignment
+    // per tick — flight-found on a SAS-less craft: off-axis light
+    // burns while tumbling fed the spin and ate the fuel budget.
+    LOCAL alignDeadline IS TIME:SECONDS + 120.
+    UNTIL VANG(SHIP:FACING:FOREVECTOR,
+            CHOOSE SHIP:PROGRADE:VECTOR IF goPro
+            ELSE SHIP:RETROGRADE:VECTOR) < 5
+            OR TIME:SECONDS > alignDeadline OR ABORT OR AG10 {
+        WAIT 0.2.
+    }
+    IF ABORT OR AG10 { launchAbort(). RETURN. }
     LOCAL throttleCmd IS 0.
     LOCK THROTTLE TO throttleCmd.
     LOCAL dMin IS 1e12.
@@ -210,6 +220,9 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     LOCAL reason IS "".
     UNTIL reason <> "" {
         IF ABORT OR AG10 { launchAbort(). RETURN. }
+        LOCAL aligned IS VANG(SHIP:FACING:FOREVECTOR,
+            CHOOSE SHIP:PROGRADE:VECTOR IF goPro
+            ELSE SHIP:RETROGRADE:VECTOR) < 10.
         LOCAL d IS _suborbitImpactDist(siteGeo).
         IF SHIP:AVAILABLETHRUST <= 0 {
             SET reason TO "out-of-fuel".
@@ -231,9 +244,13 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
                 SET reason TO "past-closest".
             }
         }
-        SET throttleCmd TO
-            CHOOSE 0.02 IF d >= 0 AND d < tol * 1.5
-            ELSE CHOOSE 0.05 IF d >= 0 AND d < tol * 5 ELSE 0.2.
+        IF NOT aligned {
+            SET throttleCmd TO 0.
+        } ELSE {
+            SET throttleCmd TO
+                CHOOSE 0.02 IF d >= 0 AND d < tol * 1.5
+                ELSE CHOOSE 0.05 IF d >= 0 AND d < tol * 5 ELSE 0.2.
+        }
         IF TIME:SECONDS > nextLog {
             SET nextLog TO TIME:SECONDS + 8.
             mLog("Deorbit: impact "
@@ -364,6 +381,9 @@ LOCAL FUNCTION _suborbitReturnArc {
             SET cutReason TO "timeout".
         } ELSE IF SHIP:PERIAPSIS >= arcPe {
             SET cutReason TO "arc-set".
+        } ELSE IF VANG(SHIP:FACING:FOREVECTOR,
+                VXCL(UP:VECTOR, SHIP:VELOCITY:ORBIT)) > 15 {
+            SET throttleCmd TO 0.
         } ELSE {
             SET throttleCmd TO
                 CHOOSE 0.05 IF SHIP:PERIAPSIS > arcPe - 1500
