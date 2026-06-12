@@ -905,26 +905,12 @@ GLOBAL FUNCTION phaseKscDeorbit {
                 }
             }
             LOCAL lastBiome IS "".
-            LOCAL i IS 0.
+            // Flow-triggered, warp-aware solar maintenance (the
+            // timer-based block this replaces re-aimed blind on a
+            // schedule; this one only acts when the panels sag).
+            LOCAL solarRef IS shipSolarFlow().
             UNTIL TIME:SECONDS >= resumeUt {
-                SET i TO i + 1.
-                // Each iteration of this loop is 5 seconds.
-                if 0 = MOD(i, 250) {
-                    LOCAL savedWarp IS WARP.
-                    SET WARP TO 0.
-                    WAIT 2.
-                    WAIT 2.
-                    WAIT 2.
-                    WAIT 2.
-                    WAIT 2.
-                    WAIT 2.
-                    WAIT 2.
-                    WAIT 2.
-                    WAIT 2.
-                    UNLOCK STEERING.
-                    orientForSolar(FALSE, TRUE).
-                    SET WARP TO savedWarp.
-                }
+                SET solarRef TO solarHoldTick(solarRef).
 
                 IF ADDONS:SCANSAT:AVAILABLE AND SHIP:CREW():LENGTH > 0 {
                     LOCAL nowBiome IS ADDONS:SCANSAT:CURRENTBIOME.

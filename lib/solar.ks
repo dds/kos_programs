@@ -92,8 +92,10 @@ GLOBAL FUNCTION orientForSolar {
             parts[2]:TONUMBER(0)).
         IF aShip:MAG > 0.5 {
             _solarAimSettle(aShip).
-            UNLOCK STEERING.
-            SET SAS TO TRUE.
+            IF NOT lockSteering {
+                UNLOCK STEERING.
+                SET SAS TO TRUE.
+            }
             mLog("Solar attitude restored (flow="
                 + ROUND(shipSolarFlow(), 2) + ").").
             RETURN.
@@ -166,4 +168,62 @@ GLOBAL FUNCTION orientForSolar {
         + " (best of search " + ROUND(bestFlow, 2) + ").").
     mLogWarn("STATS solar orient flow=" + ROUND(shipSolarFlow(), 2)
         + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
+}
+
+// ============================================================
+// Warp-aware solar hold (for craft with no SAS source aboard).
+//
+// solarHoldTick: call every few seconds with the last reference
+// flow. When the measured flow sags below SOLAR_HOLD_RATIO
+// (0.92) of the reference, drop out of warp PROPERLY — wait for
+// KUNIVERSE:TIMEWARP:ISSETTLED, the real release signal
+// (flight-found at 125x: fixed waits returned while still on
+// rails and the re-aim was a no-op) — re-aim the cached axis
+// with the steering KEPT LOCKED, and restore the previous warp.
+// Eclipse-aware: near-zero flow is shadow, not drift. Returns
+// the updated reference flow.
+// ============================================================
+GLOBAL FUNCTION solarHoldTick {
+    PARAMETER refFlow.
+    LOCAL ratio IS 0.92.
+    IF DEFINED CFG { SET ratio TO cfgNum("SOLAR_HOLD_RATIO", 0.92). }
+    LOCAL flow IS shipSolarFlow().
+    IF flow < 0 { RETURN refFlow. }
+    IF refFlow <= 0 { RETURN flow. }
+    IF flow < refFlow * 0.15 { RETURN refFlow. }   // eclipse: wait it out
+    IF flow > refFlow { RETURN flow. }              // ratchet the reference
+    IF flow >= refFlow * ratio { RETURN refFlow. }
+
+    LOCAL savedWarp IS WARP.
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    WAIT 1.
+    UNLOCK STEERING.
+    orientForSolar(FALSE, TRUE).
+    WAIT 1.
+    LOCAL newRef IS shipSolarFlow().
+    mLog("Solar hold: re-aimed at "
+        + ROUND(100 * flow / refFlow, 0) + "% — flow "
+        + ROUND(newRef, 2) + ". Restoring warp " + savedWarp + ".").
+    IF savedWarp > 0 { SET WARP TO savedWarp. }
+    RETURN MAX(newRef, 0).
+}
+
+// Blocking hold: maintain the solar attitude until endUt (0 =
+// until AG10). The steering lock lives as long as this runs —
+// on SAS-less craft that IS the hold.
+GLOBAL FUNCTION solarMaintainHold {
+    PARAMETER endUt IS 0.
+    LOCAL refFlow IS shipSolarFlow().
+    mLog("Solar hold engaged"
+        + (CHOOSE " for " + ROUND(endUt - TIME:SECONDS, 0) + "s"
+           IF endUt > 0 ELSE " (AG10 ends)")
+        + ". Warp at will.").
+    UNTIL (endUt > 0 AND TIME:SECONDS >= endUt) OR AG10 {
+        SET refFlow TO solarHoldTick(refFlow).
+        WAIT 5.
+    }
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    mLog("Solar hold ended.").
 }
