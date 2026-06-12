@@ -249,10 +249,14 @@ GLOBAL FUNCTION bootMissionConfig {
     LOCAL hasNameMission IS targetFromName <> "KERBIN" OR payloadsFromName <> "".
     LOCAL missionId IS stateGet("mission_id", "").
     IF missionId = "" AND NOT hasNameMission AND hasLink {
-        // The picker is its own lib — only fresh pad boots pay
-        // for it (no link means no profiles to list anyway).
-        bootLibRun("boot_picker").
-        SET missionId TO bootSelectMissionId(craftName, hasLink).
+        IF bootCheckManualKey() {
+            PRINT "  Mission selection skipped (manual mode).".
+        } ELSE {
+            // The picker is its own lib — only fresh pad boots
+            // pay for it (no link = no profiles to list anyway).
+            bootLibRun("boot_picker").
+            SET missionId TO bootSelectMissionId(craftName, hasLink).
+        }
     }
     IF missionId <> "" {
         bootApplyMissionConfig(craftName, missionId, hasLink).
@@ -315,14 +319,16 @@ GLOBAL FUNCTION bootResetMissionSelection {
 
 GLOBAL FUNCTION bootResumeOrManual {
     PARAMETER hasLink.
-    PRINT " ".
-    PRINT "  >> Press any key for MANUAL mode (5s)".
-    LOCAL overrideStart IS TIME:SECONDS.
-    LOCAL manualMode IS FALSE.
-    WAIT UNTIL TIME:SECONDS > overrideStart + 5 OR TERMINAL:INPUT:HASCHAR.
-    IF TERMINAL:INPUT:HASCHAR {
-        TERMINAL:INPUT:GETCHAR().
-        SET manualMode TO TRUE.
+    LOCAL manualMode IS bootCheckManualKey().
+    IF NOT manualMode {
+        PRINT " ".
+        PRINT "  >> Press any key for MANUAL mode (2s)".
+        LOCAL overrideStart IS TIME:SECONDS.
+        WAIT UNTIL TIME:SECONDS > overrideStart + 2 OR TERMINAL:INPUT:HASCHAR.
+        IF TERMINAL:INPUT:HASCHAR {
+            TERMINAL:INPUT:GETCHAR().
+            SET manualMode TO TRUE.
+        }
     }
     IF NOT manualMode {
         LOCAL phase IS stateGet("phase", "").
@@ -515,6 +521,21 @@ GLOBAL BOOT_LIB_CMDS IS LEXICON().
 GLOBAL BOOT_LIB_PREAMBLE IS LIST().
 GLOBAL BOOT_LIB_LOADED IS FALSE.
 GLOBAL BOOT_LIB_RAN IS LIST().
+
+// Manual-mode request: any keypress noticed at ANY boot stage
+// (usually queued before boot even starts) flags manual mode —
+// checked before the mission picker so the menu never draws,
+// and again at the resume gate.
+GLOBAL BOOT_MANUAL_REQUESTED IS FALSE.
+
+GLOBAL FUNCTION bootCheckManualKey {
+    IF NOT BOOT_MANUAL_REQUESTED AND TERMINAL:INPUT:HASCHAR {
+        TERMINAL:INPUT:GETCHAR().
+        SET BOOT_MANUAL_REQUESTED TO TRUE.
+        PRINT "  MANUAL MODE queued (keypress).".
+    }
+    RETURN BOOT_MANUAL_REQUESTED.
+}
 
 GLOBAL FUNCTION bootLibSpecPath {
     LOCAL archivePath IS "0:/lib/dependencies.txt".
