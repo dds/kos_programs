@@ -789,7 +789,22 @@ GLOBAL FUNCTION phaseKscDeorbit {
             UNLOCK STEERING.
             trySolarOrient().
             SET SAS TO TRUE.
-            WAIT UNTIL TIME:SECONDS >= resumeUt.
+            // Biome announcer for crewed stays: call out biome
+            // crossings so EVA reports can be timed (SCANsat's
+            // CURRENTBIOME needs a crewed pod or KerbNet).
+            LOCAL lastBiome IS "".
+            UNTIL TIME:SECONDS >= resumeUt {
+                IF ADDONS:SCANSAT:AVAILABLE AND SHIP:CREW():LENGTH > 0 {
+                    LOCAL nowBiome IS ADDONS:SCANSAT:CURRENTBIOME.
+                    IF nowBiome <> lastBiome AND nowBiome <> "" {
+                        SET lastBiome TO nowBiome.
+                        mLog("Now over: " + nowBiome + ".").
+                        HUDTEXT("Now over: " + nowBiome
+                            + " — EVA report?", 8, 2, 15, CYAN, FALSE).
+                    }
+                }
+                WAIT 5.
+            }
             SET WARP TO 0.
             IF alarmId <> "" { DELETEALARM(alarmId). }
             mLog("KSC_DEORBIT: stay complete — planning the return.").
