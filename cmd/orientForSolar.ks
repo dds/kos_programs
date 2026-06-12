@@ -1,5 +1,7 @@
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 bootLibLoad("solar").
-orientForSolar(TRUE, TRUE).
+PARAMETER forceSearch IS FALSE.
+PARAMETER lockSteering IS TRUE.
+orientForSolar(forceSearch, lockSteering).
 
