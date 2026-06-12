@@ -154,14 +154,14 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
                 LOCAL alm IS ADDALARM("Raw", newUt,
                     "Deorbit burn: " + SHIP:NAME,
                     "Auto-created by SUBORBIT").
-                SET alm:ACTION TO "KillWarp".
+                SET alm:ACTION TO warpKillAction().
                 SET alarmId TO alm:ID.
                 SET alarmUt TO newUt.
             }
         }
         WAIT 1.
     }
-    SET WARP TO 0.
+    killWarp().
     IF alarmId <> "" { DELETEALARM(alarmId). }
     IF ABORT OR AG10 { launchAbort(). RETURN. }
     IF SHIP:ALTITUDE < arcPe - 8000 AND SHIP:VERTICALSPEED < 0 {
@@ -352,7 +352,7 @@ LOCAL FUNCTION _suborbitReturnArc {
     IF ADDONS:KAC:AVAILABLE AND burnStartUt - TIME:SECONDS > 35 {
         LOCAL alm IS ADDALARM("Raw", burnStartUt - 30,
             "Arc burn: " + SHIP:NAME, "Auto-created by SUBORBIT").
-        SET alm:ACTION TO "KillWarp".
+        SET alm:ACTION TO warpKillAction().
         SET alarmId TO alm:ID.
     }
     mLog("Arc burn starts in " + ROUND(burnStartUt - TIME:SECONDS, 0)
@@ -360,7 +360,7 @@ LOCAL FUNCTION _suborbitReturnArc {
         + ROUND(burnTime, 0) + "s).").
     LOCK STEERING TO VXCL(UP:VECTOR, SHIP:VELOCITY:ORBIT).
     WAIT UNTIL TIME:SECONDS >= burnStartUt OR ABORT OR AG10.
-    SET WARP TO 0.
+    killWarp().
     IF alarmId <> "" { DELETEALARM(alarmId). }
     IF ABORT OR AG10 { launchAbort(). RETURN. }
 

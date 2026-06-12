@@ -83,7 +83,7 @@ LOCAL FUNCTION _waitForPrelaunchUt {
         LOCAL alarmUt IS targetUt - 30.
         IF alarmUt > TIME:SECONDS {
             LOCAL alm IS ADDALARM("Raw", alarmUt, "FR3 prelaunch window", "Auto-created by PRELAUNCH").
-            SET alm:ACTION TO "KillWarp".
+            SET alm:ACTION TO warpKillAction().
             SET kacAlarmId TO alm:ID.
         }
     }
@@ -94,7 +94,7 @@ LOCAL FUNCTION _waitForPrelaunchUt {
         HUDTEXT("Prelaunch window in " + ROUND(remaining, 0) + "s", 5, 2, 13, CYAN, FALSE).
         WAIT MIN(30, MAX(0.5, remaining)).
     }
-    SET WARP TO 0.
+    killWarp().
 
     IF kacAlarmId <> "" {
         DELETEALARM(kacAlarmId).

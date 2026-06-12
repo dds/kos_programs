@@ -962,7 +962,7 @@ GLOBAL FUNCTION phaseKscDeorbit {
                 LOCAL alm IS ADDALARM("Raw", resumeUt - 60,
                     "Return window: " + SHIP:NAME,
                     "Auto-created by KSC_DEORBIT").
-                SET alm:ACTION TO "KillWarp".
+                SET alm:ACTION TO warpKillAction().
                 SET alarmId TO alm:ID.
             }
             UNLOCK STEERING.
@@ -993,7 +993,7 @@ GLOBAL FUNCTION phaseKscDeorbit {
                         mLog("Now over: " + nowBiome
                             + (CHOOSE " — EVA WINDOW." IF wanted ELSE ".")).
                         IF wanted {
-                            SET WARP TO 0.
+                            killWarp().
                             HUDTEXT("EVA WINDOW: " + nowBiome
                                 + " below!", 12, 2, 18, GREEN, FALSE).
                         } ELSE {
@@ -1004,7 +1004,7 @@ GLOBAL FUNCTION phaseKscDeorbit {
                 }
                 WAIT 5.
             }
-            SET WARP TO 0.
+            killWarp().
             IF alarmId <> "" { DELETEALARM(alarmId). }
             mLog("KSC_DEORBIT: stay complete — planning the return.").
         }
@@ -1081,7 +1081,7 @@ GLOBAL FUNCTION executeDeorbitNode {
         LOCAL alm IS ADDALARM("Raw", startTime - 60,
             "Deorbit burn: " + ROUND(burnDV,1) + "m/s",
             "Auto-created by executeDeorbitNode").
-        SET alm:ACTION TO "KillWarp".
+        SET alm:ACTION TO warpKillAction().
         SET kacAlarmId TO alm:ID.
         mLog("KAC alarm set for deorbit burn in "
             + ROUND(startTime - 60 - TIME:SECONDS, 0) + "s.").
@@ -1092,7 +1092,7 @@ GLOBAL FUNCTION executeDeorbitNode {
         mLog("Long coast to deorbit burn ("
             + ROUND(startTime - TIME:SECONDS, 0) + "s). Warp at will.").
         WAIT UNTIL TIME:SECONDS >= startTime - 120.
-        SET WARP TO 0.
+        killWarp().
         mLog("Awake — " + ROUND(startTime - TIME:SECONDS, 0)
             + "s to deorbit burn.").
     }

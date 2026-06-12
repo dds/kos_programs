@@ -84,7 +84,7 @@ LOCAL FUNCTION _descentWaitForRadius {
     IF ADDONS:KAC:AVAILABLE AND eta_ > 180 {
         LOCAL alm IS ADDALARM("Raw", TIME:SECONDS + eta_ - 120,
             label + ": " + SHIP:NAME, "Auto-created by phaseDescent").
-        SET alm:ACTION TO "KillWarp".
+        SET alm:ACTION TO warpKillAction().
         SET alarmId TO alm:ID.
         mLog("KAC alarm set for " + label + " in "
             + ROUND(eta_ - 120, 0) + "s.").
@@ -92,7 +92,7 @@ LOCAL FUNCTION _descentWaitForRadius {
     LOCAL targetAlt IS rTarget - SHIP:BODY:RADIUS.
     WAIT UNTIL SHIP:ALTITUDE < targetAlt
         OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
-    SET WARP TO 0.
+    killWarp().
     IF alarmId <> "" { DELETEALARM(alarmId). }
 }
 
