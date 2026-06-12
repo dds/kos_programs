@@ -55,13 +55,19 @@ GLOBAL FUNCTION fr3SaveReloadState {
 
 LOCAL FUNCTION _fr3PhaseParkingReload {
     phaseParking().
-    fr3SaveReloadState("PARKING_ORBIT", stateGet("phase", "")).
-    mLog("Reload point after parking orbit. Reboot to load transfer libraries.").
-    PRINT " ".
-    PRINT "  PARKING ORBIT READY".
-    PRINT "  Reboot this CPU to load transfer code.".
-    yieldToPrompt().
-    RETURN.
+    LOCAL nxt IS stateGet("phase", "").
+    // Next phase already bound (libs aboard via LIBS_EXTRA or the
+    // same band): keep flying — no checkpoint needed.
+    IF phaseHandlerMap():HASKEY(nxt) {
+        mLog("Parking checkpoint: " + nxt + " already loaded — continuing.").
+        RETURN.
+    }
+    fr3SaveReloadState("PARKING_ORBIT", nxt).
+    mLog("Parking orbit reload point — auto-rebooting for " + nxt + ".").
+    HUDTEXT("Parking orbit: rebooting for " + nxt + "...",
+        5, 2, 15, CYAN, FALSE).
+    WAIT 5.
+    REBOOT.
 }
 
 GLOBAL FUNCTION fr3BuildPhaseSequence {

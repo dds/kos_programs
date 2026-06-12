@@ -61,21 +61,17 @@ GLOBAL FUNCTION runPhases {
             stateSet("reload_next_phase", phase).
             stateSet("reload_next_band", requiredBand).
             mLog("Phase " + phase + " requires a different library band. Reboot to continue.").
-            // In-atmosphere or on a suborbital arc there is no
-            // time for an operator — flight-found: a returning
-            // hop sat at this prompt all the way down. Reboot
-            // ourselves; state is saved and boot resumes here.
-            IF SHIP:STATUS = "FLYING" OR SHIP:STATUS = "SUB_ORBITAL" {
-                mLogWarn("Time-critical flight state (" + SHIP:STATUS
-                    + ") — auto-rebooting into band " + requiredBand + ".").
-                WAIT 1.
-                REBOOT.
-            }
-            PRINT " ".
-            PRINT "  PHASE READY: " + phase.
-            PRINT "  Reboot this CPU to load the next mission library band.".
-            yieldToPrompt().
-            RETURN.
+            // Band changes auto-reboot: reboots are the system's
+            // resumable primitive, and waiting on an operator was
+            // flight-found fatal in atmosphere and merely annoying
+            // everywhere else. The 5s notice gives a watching
+            // operator time to react.
+            HUDTEXT("Band change: rebooting for " + phase + "...",
+                5, 2, 15, CYAN, FALSE).
+            mLogWarn("Auto-rebooting into band " + requiredBand
+                + " for phase " + phase + ".").
+            WAIT 5.
+            REBOOT.
         }
     }
 }
