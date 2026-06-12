@@ -93,7 +93,17 @@ LOCAL FUNCTION _deorbitImpactWalk {
         + "): sliding " + ROUND(d0 / 1000, 1) + "km onto the target.").
     IF goPro { LOCK STEERING TO SHIP:PROGRADE. }
     ELSE { LOCK STEERING TO SHIP:RETROGRADE. }
-    WAIT 5.
+    // Despin/align BEFORE any thrust — flight-found: throttling
+    // while tumbling (no SAS, small wheel) turned every light
+    // burn into a randomly-aimed impulse that fed the spin and
+    // ate the fuel budget.
+    LOCAL alignDeadline IS TIME:SECONDS + 120.
+    UNTIL VANG(SHIP:FACING:FOREVECTOR,
+            CHOOSE SHIP:PROGRADE:VECTOR IF goPro
+            ELSE SHIP:RETROGRADE:VECTOR) < 5
+            OR TIME:SECONDS > alignDeadline {
+        WAIT 0.2.
+    }
     LOCAL throttleCmd IS 0.
     LOCK THROTTLE TO throttleCmd.
     LOCAL dMin IS d0.
@@ -101,6 +111,9 @@ LOCAL FUNCTION _deorbitImpactWalk {
     LOCAL walkDeadline IS TIME:SECONDS + 180.
     LOCAL reason IS "".
     UNTIL reason <> "" {
+        LOCAL aimVec IS CHOOSE SHIP:PROGRADE:VECTOR IF goPro
+            ELSE SHIP:RETROGRADE:VECTOR.
+        LOCAL aligned IS VANG(SHIP:FACING:FOREVECTOR, aimVec) < 10.
         LOCAL d IS -1.
         IF ADDONS:TR:HASIMPACT {
             LOCAL imp IS ADDONS:TR:IMPACTPOS.
@@ -122,9 +135,13 @@ LOCAL FUNCTION _deorbitImpactWalk {
                 SET reason TO "past-closest".
             }
         }
-        SET throttleCmd TO
-            CHOOSE 0.02 IF d >= 0 AND d < tolerance * 2
-            ELSE CHOOSE 0.05 IF d >= 0 AND d < tolerance * 6 ELSE 0.15.
+        IF NOT aligned {
+            SET throttleCmd TO 0.
+        } ELSE {
+            SET throttleCmd TO
+                CHOOSE 0.02 IF d >= 0 AND d < tolerance * 2
+                ELSE CHOOSE 0.05 IF d >= 0 AND d < tolerance * 6 ELSE 0.15.
+        }
         IF TIME:SECONDS > nextLog {
             SET nextLog TO TIME:SECONDS + 8.
             mLog("Walk: impact "
