@@ -10,7 +10,7 @@
 //
 // Return-arc strategy (v3 — first two were flight-failures):
 //   1. Arc burn BY ELEMENTS ONLY: horizontal at apoapsis until
-//      Pe reaches SUBORBIT_ARC_PE (~68km). A clean Kepler arc,
+//      Pe reaches SUBORBIT_ARC_PE (~69km). A clean Kepler arc,
 //      barely suborbital, negligible drag. No Trajectories in
 //      the loop — flight-found twice that the impact prediction
 //      in the drag-decay regime (Pe 45-65km) is multi-pass mush:
@@ -165,9 +165,25 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     IF alarmId <> "" { DELETEALARM(alarmId). }
     IF ABORT OR AG10 { launchAbort(). RETURN. }
     IF SHIP:ALTITUDE < arcPe - 8000 AND SHIP:VERTICALSPEED < 0 {
-        mLogWarn("Arc decayed early — straight to descent.").
-        nextPhase(launchSeq).
-        RETURN.
+        // Drag beat the schedule. If we're on final approach with
+        // thrust and altitude in hand, the targeted walk can still
+        // fix it (a short arc means impact west of the site — the
+        // prograde branch stretches it back on). Otherwise ride it
+        // down — flight-found: giving up here landed 150km off
+        // with the precision burn never fired.
+        LOCAL remNow IS _suborbitGroundRemaining(siteGeo).
+        IF remNow <= 120 AND SHIP:ALTITUDE > 55000
+                AND SHIP:AVAILABLETHRUST > 0 {
+            mLogWarn("Arc decaying early with " + ROUND(remNow, 0)
+                + " deg to go — running the targeted burn NOW.").
+        } ELSE {
+            mLogWarn("Arc decayed early ("
+                + ROUND(remNow, 0) + " deg to go, alt "
+                + ROUND(SHIP:ALTITUDE / 1000, 1)
+                + "km) — straight to descent.").
+            nextPhase(launchSeq).
+            RETURN.
+        }
     }
 
     // Direction: drag on the Pe dip may have already pulled the
@@ -252,7 +268,7 @@ LOCAL FUNCTION _suborbitReturnArc {
     }
     LOCAL siteGeo IS _suborbitSiteGeo().
     LOCAL tol IS cfgNum("SUBORBIT_RETURN_TOL", 40000).
-    LOCAL arcPe IS cfgNum("SUBORBIT_ARC_PE", 68000).
+    LOCAL arcPe IS cfgNum("SUBORBIT_ARC_PE", 69000).
     LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
     // MechJeb must NOT circularize — the arc burn is ours.
     IF ADDONS:MJ:AVAILABLE {
