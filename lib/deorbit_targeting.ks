@@ -949,6 +949,15 @@ GLOBAL FUNCTION phaseKscDeorbit {
     IF SHIP:PERIAPSIS < SHIP:BODY:ATM:HEIGHT {
         mLog("KSC_DEORBIT: Pe already in atmosphere ("
             + ROUND(SHIP:PERIAPSIS / 1000, 1) + "km) — proceeding to descent.").
+        // A reboot right after the burn lands here with the walk
+        // never having run (flight-found: post-burn crash before
+        // the finesse pass) — run it now; it exits immediately
+        // when already on the bullseye.
+        IF ADDONS:TR:AVAILABLE {
+            ADDONS:TR:SETTARGET(LATLNG(lat, lng)).
+            WAIT 1.
+            _deorbitImpactWalk(lat, lng, tol).
+        }
         nextPhase(xferSeq).
         RETURN.
     }
