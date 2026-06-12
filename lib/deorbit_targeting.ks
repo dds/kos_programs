@@ -399,8 +399,14 @@ GLOBAL FUNCTION targetedDeorbitAt {
             + " endT=" + ROUND(scanEnd - TIME:SECONDS,0)
             + " samples=" + scanSamples).
     }
-    LOCAL scanStep IS (scanEnd - scanStart) / scanSamples.
-    LOCAL passes    IS LIST(1.0, 0.1, 0.01, 0.001, 0.0001).
+    // Per-orbit sample density: the scan discovers the pass
+    // windows in the first two orbits, then only checks those
+    // windows on later orbits (with per-window narrowing).
+    LOCAL perOrbit IS MAX(16, ROUND(scanSamples / MAX(1, scanOrbits))).
+    LOCAL stepA IS period / perOrbit.
+    IF scanMode = "minutes" {
+        SET stepA TO (scanEnd - scanStart) / MAX(16, scanSamples).
+    }
     LOCAL coarseStopDist IS 1000.
     IF SHIP:BODY:ATM:EXISTS {
         SET coarseStopDist TO tolerance.
@@ -410,7 +416,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF CFG:HASKEY("TARGET_DEORBIT_COARSE_STOP_DIST") {
         SET coarseStopDist TO CFG["TARGET_DEORBIT_COARSE_STOP_DIST"].
     }
-    LOCAL refineTarget IS _targetDeorbitRefineTolerance(tolerance).
     LOCAL minLead IS _targetDeorbitMinLead().
     LOCAL refineStartLimit IS MAX(tolerance * 10, coarseStopDist * 6).
     IF CFG:HASKEY("TARGET_DEORBIT_REFINE_MAX_START_DIST") {
@@ -425,36 +430,135 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL validSamples IS 0.
     LOCAL invalidSamples IS 0.
 
-    LOCAL scanUT  IS scanStart.
-    mLog("Coarse target scan: " + scanSamples + " samples mode=" + scanMode
-        + " start=T+" + ROUND(scanStart - TIME:SECONDS,0)
-        + " end=T+" + ROUND(scanEnd - TIME:SECONDS,0)
-        + " step=" + ROUND(scanStep,1) + "s.").
-    UNTIL scanUT > scanEnd {
+    LOCAL earlyStop IS FALSE.
+    LOCAL floorUt IS TIME:SECONDS + minLead.
+
+    // ── Discovery: uniform scan of the FIRST TWO ORBITS only —
+    // enough to learn the per-orbit pass phases (latitude
+    // crossings recur at fixed orbital phase; only the longitude
+    // under them drifts). Minutes mode scans its whole window.
+    LOCAL discoverEnd IS MIN(scanEnd, scanStart + period * 2).
+    IF scanMode = "minutes" { SET discoverEnd TO scanEnd. }
+    LOCAL dTimes IS LIST().
+    LOCAL dDists IS LIST().
+    LOCAL scanUT IS scanStart.
+    mLog("Discovery scan to T+" + ROUND(discoverEnd - TIME:SECONDS, 0)
+        + "s step=" + ROUND(stepA, 1) + "s mode=" + scanMode + ".").
+    UNTIL scanUT > discoverEnd OR earlyStop {
         LOCAL trial IS _evalDeorbitNode(scanUT, entryPe, targetLat, targetLng).
         IF trial["VALID"] {
             SET validSamples TO validSamples + 1.
+            dTimes:ADD(scanUT).
+            dDists:ADD(trial["DIST"]).
             IF trial["DIST"] < bestDist {
                 SET bestDist TO trial["DIST"].
                 SET bestUT   TO scanUT.
                 SET bestPe   TO entryPe.
                 mLog("DEBUG coarse: T+" + ROUND(scanUT - TIME:SECONDS,0)
-                    + "s  dist=" + ROUND(bestDist/1000,1) + "km"
-                    + " impact=" + ROUND(trial["LAT"],4)
-                    + "," + ROUND(trial["LNG"],4)).
+                    + "s  dist=" + ROUND(bestDist/1000,1) + "km").
                 IF bestDist <= coarseStopDist {
                     mLogWarn("STATS deorbit coarse early-stop distKm="
                         + ROUND(bestDist/1000,2)
-                        + " stopKm=" + ROUND(coarseStopDist/1000,2)
                         + " burnT=" + ROUND(scanUT - TIME:SECONDS,0)).
-                    SET scanUT TO scanEnd + scanStep.
+                    SET earlyStop TO TRUE.
                 }
             }
         } ELSE {
             SET invalidSamples TO invalidSamples + 1.
+            dTimes:ADD(scanUT).
+            dDists:ADD(8.99e15).
         }
-        SET scanUT TO scanUT + scanStep.
+        SET scanUT TO scanUT + stepA.
         WAIT 0.
+    }
+
+    // Pass phases = local minima of the discovery curve.
+    LOCAL phases IS LIST().
+    LOCAL di IS 1.
+    UNTIL di >= dTimes:LENGTH - 1 {
+        IF dDists[di] < dDists[di-1] AND dDists[di] <= dDists[di+1]
+                AND dDists[di] < 8e15 {
+            LOCAL ph IS MOD(dTimes[di] - scanStart, period).
+            LOCAL dup IS FALSE.
+            FOR existing IN phases {
+                IF ABS(existing - ph) < stepA * 2
+                        OR ABS(ABS(existing - ph) - period) < stepA * 2 {
+                    SET dup TO TRUE.
+                }
+            }
+            IF NOT dup { phases:ADD(ph). }
+        }
+        SET di TO di + 1.
+    }
+
+    // ── Focus: on every remaining orbit, sample only around each
+    // discovered window and NARROW it with halving steps — fixes
+    // both costs of the old uniform scan: time wasted far from
+    // the target, and good passes straddled by an unlucky step.
+    IF NOT earlyStop AND phases:LENGTH > 0 AND scanMode = "orbits" {
+        mLog("Focusing " + phases:LENGTH + " pass window(s)/orbit over "
+            + scanOrbits + " orbits.").
+        LOCAL orbitIdx IS 0.
+        UNTIL orbitIdx >= scanOrbits OR earlyStop {
+            FOR ph IN phases {
+                LOCAL center IS scanStart + ph + orbitIdx * period.
+                IF NOT earlyStop AND center > floorUt
+                        AND center <= scanEnd + stepA {
+                    LOCAL wBest IS 8.99e15.
+                    LOCAL wBestT IS center.
+                    FOR off IN LIST(-2, -1, 0, 1, 2) {
+                        LOCAL tt IS center + off * stepA * 0.66.
+                        IF tt > floorUt {
+                            LOCAL tr IS _evalDeorbitNode(tt, entryPe,
+                                targetLat, targetLng).
+                            IF tr["VALID"] {
+                                SET validSamples TO validSamples + 1.
+                                IF tr["DIST"] < wBest {
+                                    SET wBest TO tr["DIST"].
+                                    SET wBestT TO tt.
+                                }
+                            } ELSE {
+                                SET invalidSamples TO invalidSamples + 1.
+                            }
+                        }
+                    }
+                    // Narrow promising windows to their true minimum.
+                    IF wBest < MAX(bestDist * 1.6, coarseStopDist * 6) {
+                        LOCAL hstep IS stepA * 0.5.
+                        UNTIL hstep < 0.8 {
+                            FOR cand IN LIST(wBestT - hstep, wBestT + hstep) {
+                                IF cand > floorUt {
+                                    LOCAL tr2 IS _evalDeorbitNode(cand,
+                                        entryPe, targetLat, targetLng).
+                                    IF tr2["VALID"]
+                                            AND tr2["DIST"] < wBest {
+                                        SET wBest TO tr2["DIST"].
+                                        SET wBestT TO cand.
+                                    }
+                                }
+                            }
+                            SET hstep TO hstep / 2.
+                            WAIT 0.
+                        }
+                    }
+                    IF wBest < bestDist {
+                        SET bestDist TO wBest.
+                        SET bestUT TO wBestT.
+                        SET bestPe TO entryPe.
+                        mLog("DEBUG window: orbit " + orbitIdx
+                            + "  T+" + ROUND(wBestT - TIME:SECONDS, 0)
+                            + "s  dist=" + ROUND(wBest / 1000, 1) + "km").
+                        IF bestDist <= coarseStopDist {
+                            mLogWarn("STATS deorbit window early-stop distKm="
+                                + ROUND(bestDist/1000, 2)
+                                + " burnT=" + ROUND(bestUT - TIME:SECONDS, 0)).
+                            SET earlyStop TO TRUE.
+                        }
+                    }
+                }
+            }
+            SET orbitIdx TO orbitIdx + 1.
+        }
     }
     mLog("Coarse best: T+" + ROUND(bestUT - TIME:SECONDS,0)
         + "s  dist=" + ROUND(bestDist/1000,1) + "km").
@@ -505,34 +609,25 @@ GLOBAL FUNCTION targetedDeorbitAt {
         }
     }
 
-    FOR mult IN passes:SUBLIST(1, passes:LENGTH - 1) {
-        LOCAL step    IS scanStep * mult.
-        LOCAL winStart IS MAX(TIME:SECONDS + minLead, bestUT - (scanStep * (mult * 10))).
-        LOCAL winEnd   IS bestUT + (scanStep * (mult * 10)).
-        LOCAL passUT   IS winStart.
-        LOCAL passBest IS bestDist.
-        LOCAL passBestUT IS bestUT.
-        LOCAL passBestPe IS bestPe.
-
-        UNTIL passUT > winEnd {
-            LOCAL trial IS _evalDeorbitNode(passUT, bestPe, targetLat, targetLng).
-            IF trial["VALID"] AND trial["DIST"] < passBest {
-                SET passBest   TO trial["DIST"].
-                SET passBestUT TO passUT.
-                SET passBestPe TO bestPe.
+    // Final polish: halving steps around the winner down to
+    // sub-second burn timing (replaces the old multi-pass sweep).
+    LOCAL fstep IS stepA * 0.5.
+    UNTIL fstep < 0.05 {
+        FOR cand IN LIST(bestUT - fstep, bestUT + fstep) {
+            IF cand > floorUt {
+                LOCAL tr3 IS _evalDeorbitNode(cand, entryPe,
+                    targetLat, targetLng).
+                IF tr3["VALID"] AND tr3["DIST"] < bestDist {
+                    SET bestDist TO tr3["DIST"].
+                    SET bestUT TO cand.
+                }
             }
-            SET passUT TO passUT + step.
-            WAIT 0.
         }
-
-        SET bestDist TO passBest.
-        SET bestUT   TO passBestUT.
-        SET bestPe   TO passBestPe.
-        mLog("Pass step=" + ROUND(step,2) + "s  best dist=" + ROUND(bestDist,0) + "m"
-            + "  T+" + ROUND(bestUT - TIME:SECONDS,0) + "s").
-
-        IF bestDist < refineTarget { BREAK. }
+        SET fstep TO fstep / 2.
+        WAIT 0.
     }
+    mLog("Polished best: T+" + ROUND(bestUT - TIME:SECONDS, 0)
+        + "s  dist=" + ROUND(bestDist, 0) + "m.").
 
     // The old iterative impact refinement is RETIRED: it never
     // converged reliably (every recipe set SKIP_REFINE=1) and the
@@ -679,17 +774,6 @@ LOCAL FUNCTION _evalDeorbitNode {
 }
 
 
-LOCAL FUNCTION _targetDeorbitRefineTolerance {
-    PARAMETER tolerance.
-    LOCAL refineTarget IS tolerance.
-    IF NOT SHIP:BODY:ATM:EXISTS {
-        SET refineTarget TO MIN(tolerance, 250).
-    }
-    IF CFG:HASKEY("TARGET_DEORBIT_REFINE_TOLERANCE") {
-        SET refineTarget TO CFG["TARGET_DEORBIT_REFINE_TOLERANCE"].
-    }
-    RETURN refineTarget.
-}
 
 LOCAL FUNCTION _targetDeorbitMinLead {
     LOCAL minLead IS 60.
