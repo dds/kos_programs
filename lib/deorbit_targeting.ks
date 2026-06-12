@@ -145,6 +145,10 @@ LOCAL FUNCTION _deorbitImpactWalk {
         }
         LOCK THROTTLE TO throttleCmd.
 
+        LOCAL dMin IS 1e12.
+        LOCAL nextLog IS 0.
+        LOCAL nextPulse IS 0.
+        LOCAL reason IS "".
         IF mode = "cross" {
             // Measured sign: 1.5 m/s test pulse, flip if it hurt.
             LOCAL v0 IS SHIP:VELOCITY:ORBIT.
@@ -164,7 +168,16 @@ LOCAL FUNCTION _deorbitImpactWalk {
             SET dvSpent TO dvSpent + (SHIP:VELOCITY:ORBIT - v0):MAG.
             WAIT 3.
             LOCAL d1 IS _walkDist(targetLat, targetLng).
-            IF d1 >= 0 AND d0 >= 0 AND d1 > d0 {
+            IF d1 >= 0 AND d0 >= 0 AND ABS(d1 - d0) < 300 {
+                // The pulse barely moved the miss: the error is
+                // along-track, which lateral burns only worsen
+                // (in quadrature, EITHER direction — flight-found
+                // masquerading as a sign flip). Nothing to do here.
+                SET reason TO "cross-unobservable".
+                mLog("Cross test pulse moved the impact only "
+                    + ROUND(ABS(d1 - d0), 0)
+                    + "m — miss is not lateral; skipping leg.").
+            } ELSE IF d1 >= 0 AND d0 >= 0 AND d1 > d0 {
                 SET sgnN TO -sgnN.
                 mLog("Cross-track: measured flip to the other side.").
                 LOCAL flipDeadline IS TIME:SECONDS + 90.
@@ -177,10 +190,6 @@ LOCAL FUNCTION _deorbitImpactWalk {
             }
         }
 
-        LOCAL dMin IS 1e12.
-        LOCAL nextLog IS 0.
-        LOCAL nextPulse IS 0.
-        LOCAL reason IS "".
         UNTIL reason <> "" {
             LOCAL aimVec IS V(0, 0, 0).
             IF mode = "along" {
