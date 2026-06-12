@@ -66,6 +66,19 @@ GLOBAL FUNCTION runPhases {
             LOCAL loadedBand IS stateGet("lib_band", "").
             LOCAL requiredBand IS bootLibBandForPhase(phase, "").
             IF requiredBand = loadedBand {
+                // Offline, the libs simply could not sync: keep
+                // retrying on a 60s pace until the link returns —
+                // the operator-blessed self-healing loop. Linked,
+                // a missing handler is a real error: hold.
+                IF NOT HOMECONNECTION:ISCONNECTED {
+                    mLogWarn("Phase " + phase + " libs unavailable"
+                        + " offline — reboot retry in 60s"
+                        + " (waiting for a link).").
+                    HUDTEXT("No link: retrying " + phase
+                        + " in 60s", 10, 2, 15, YELLOW, FALSE).
+                    WAIT 60.
+                    REBOOT.
+                }
                 mLogError("Phase " + phase + " handler missing in loaded band " + loadedBand + ".").
                 PRINT " ".
                 PRINT "  PHASE HANDLER MISSING: " + phase.
