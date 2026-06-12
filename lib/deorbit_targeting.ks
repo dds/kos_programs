@@ -828,6 +828,71 @@ GLOBAL FUNCTION targetReachable {
 //   the TARGET_DEORBIT_* scan settings shared with the landing
 //   flows.
 // ============================================================
+// Landing-site biome check against the SCANsat map. TRUE when
+// the mapped biome at lat/lng substring-matches any token.
+LOCAL FUNCTION _biomeMatchesAt {
+    PARAMETER chkLat.
+    PARAMETER chkLng.
+    PARAMETER tokens.
+    LOCAL nm IS ADDONS:SCANSAT:GETBIOME(SHIP:BODY, LATLNG(chkLat, chkLng)).
+    IF nm = "" OR nm = "unknown" { RETURN FALSE. }
+    LOCAL lower IS nm:TOLOWER.
+    FOR tok IN tokens {
+        IF lower:CONTAINS(tok) { RETURN TRUE. }
+    }
+    RETURN FALSE.
+}
+
+// When LANDING_TARGET_BIOMES is set (CSV, e.g. "ice, tundra"),
+// verify the target sits in one of them on the SCANsat biome map
+// — the mapping mission's data becomes the crewed mission's site
+// survey. On a mismatch, grid-search reachable latitudes near
+// the target longitude for the closest-to-pole match.
+LOCAL FUNCTION _resolveBiomeTarget {
+    PARAMETER lat0.
+    PARAMETER lng0.
+    LOCAL out IS LEXICON("LAT", lat0, "LNG", lng0).
+    IF NOT CFG:HASKEY("LANDING_TARGET_BIOMES") { RETURN out. }
+    IF NOT ADDONS:SCANSAT:AVAILABLE { RETURN out. }
+    LOCAL tokens IS LIST().
+    FOR tok IN CFG["LANDING_TARGET_BIOMES"]:SPLIT(",") {
+        IF tok:TRIM <> "" { tokens:ADD(tok:TRIM:TOLOWER). }
+    }
+    IF tokens:LENGTH = 0 { RETURN out. }
+    IF _biomeMatchesAt(lat0, lng0, tokens) {
+        mLog("Landing target biome confirmed on the SCANsat map.").
+        RETURN out.
+    }
+
+    LOCAL maxLat IS SHIP:ORBIT:INCLINATION - 1.
+    IF maxLat > 89 { SET maxLat TO 89. }
+    LOCAL latStep IS 1.5.
+    LOCAL tryLat IS maxLat.
+    UNTIL tryLat < maxLat - 18 {
+        LOCAL lngOff IS 0.
+        UNTIL lngOff > 60 {
+            FOR sgn IN LIST(1, -1) {
+                LOCAL tryLng IS lng0 + sgn * lngOff.
+                IF _biomeMatchesAt(tryLat, tryLng, tokens) {
+                    mLog("Biome site found: " + ROUND(tryLat, 2) + ","
+                        + ROUND(tryLng, 2) + " ("
+                        + ADDONS:SCANSAT:GETBIOME(SHIP:BODY,
+                            LATLNG(tryLat, tryLng)) + ").").
+                    SET out["LAT"] TO tryLat.
+                    SET out["LNG"] TO tryLng.
+                    RETURN out.
+                }
+            }
+            SET lngOff TO lngOff + 10.
+        }
+        SET tryLat TO tryLat - latStep.
+    }
+    mLogWarn("No mapped " + CFG["LANDING_TARGET_BIOMES"]
+        + " site found near the target — is the biome map scanned"
+        + " there? Keeping the configured target.").
+    RETURN out.
+}
+
 GLOBAL FUNCTION phaseKscDeorbit {
     LOCAL lat IS -0.10.
     LOCAL lng IS -74.25.
@@ -859,6 +924,10 @@ GLOBAL FUNCTION phaseKscDeorbit {
         yieldToPrompt().
         RETURN.
     }
+    LOCAL biomeSite IS _resolveBiomeTarget(lat, lng).
+    SET lat TO biomeSite["LAT"].
+    SET lng TO biomeSite["LNG"].
+
     IF NOT targetReachable(lat) {
         mLogError("KSC_DEORBIT: target lat " + ROUND(lat, 2)
             + " unreachable from inc "
@@ -902,15 +971,35 @@ GLOBAL FUNCTION phaseKscDeorbit {
             // Biome announcer for crewed stays: call out biome
             // crossings so EVA reports can be timed (SCANsat's
             // CURRENTBIOME needs a crewed pod or KerbNet).
+            // EVA_BIOMES (CSV, substring match): crossings into
+            // these drop out of warp so the crew can get outside.
+            LOCAL evaBiomes IS LIST().
+            IF CFG:HASKEY("EVA_BIOMES") {
+                FOR tok IN CFG["EVA_BIOMES"]:SPLIT(",") {
+                    IF tok:TRIM <> "" { evaBiomes:ADD(tok:TRIM:TOLOWER). }
+                }
+            }
             LOCAL lastBiome IS "".
             UNTIL TIME:SECONDS >= resumeUt {
                 IF ADDONS:SCANSAT:AVAILABLE AND SHIP:CREW():LENGTH > 0 {
                     LOCAL nowBiome IS ADDONS:SCANSAT:CURRENTBIOME.
                     IF nowBiome <> lastBiome AND nowBiome <> "" {
                         SET lastBiome TO nowBiome.
-                        mLog("Now over: " + nowBiome + ".").
-                        HUDTEXT("Now over: " + nowBiome
-                            + " — EVA report?", 8, 2, 15, CYAN, FALSE).
+                        LOCAL wanted IS FALSE.
+                        LOCAL biomeLower IS nowBiome:TOLOWER.
+                        FOR tok IN evaBiomes {
+                            IF biomeLower:CONTAINS(tok) { SET wanted TO TRUE. }
+                        }
+                        mLog("Now over: " + nowBiome
+                            + (CHOOSE " — EVA WINDOW." IF wanted ELSE ".")).
+                        IF wanted {
+                            SET WARP TO 0.
+                            HUDTEXT("EVA WINDOW: " + nowBiome
+                                + " below!", 12, 2, 18, GREEN, FALSE).
+                        } ELSE {
+                            HUDTEXT("Now over: " + nowBiome,
+                                8, 2, 15, CYAN, FALSE).
+                        }
                     }
                 }
                 WAIT 5.
