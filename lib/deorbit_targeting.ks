@@ -67,97 +67,174 @@ LOCAL FUNCTION _deorbitNorm180 {
     RETURN result.
 }
 
-// Post-burn finesse: creep prograde/retrograde to slide the
-// predicted impact along the ground track onto the target — the
-// suborbital walk's measure-and-creep, ported (flight-found: the
-// coarse-scan burn alone left a 30-deg-inclined entry 67km off,
-// "aggressive, without the finesse we're used to"). Cuts at the
-// bullseye, past-closest, Pe floor/ceiling, fuel, or timeout.
+// Post-burn finesse, three measured legs: along-track creep
+// (prograde/retrograde slides the impact along the ground
+// track), then CROSS-TRACK (normal-direction burns shift the
+// track laterally — the only fix for pass-selection error, and
+// the difference between 6km and 2km tolerances), then a final
+// along-track touch-up. The normal direction's sign is MEASURED
+// with a 1.5 m/s test pulse — never trust a cross product's sign
+// in this left-handed frame; VCRS here only builds the axis.
+// Budget-capped at 45 m/s; every leg is alignment-gated.
+LOCAL FUNCTION _walkDist {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    IF NOT ADDONS:TR:HASIMPACT { RETURN -1. }
+    LOCAL imp IS ADDONS:TR:IMPACTPOS.
+    RETURN geoDistance(imp:LAT, imp:LNG, targetLat, targetLng).
+}
+
 LOCAL FUNCTION _deorbitImpactWalk {
     PARAMETER targetLat.
     PARAMETER targetLng.
     PARAMETER tolerance.
     IF NOT (ADDONS:TR:AVAILABLE AND ADDONS:TR:HASIMPACT) { RETURN. }
-    LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
-    LOCAL bullseye IS MAX(2000, tolerance * 0.15).
-    LOCAL impact0 IS ADDONS:TR:IMPACTPOS.
-    LOCAL d0 IS geoDistance(impact0:LAT, impact0:LNG, targetLat, targetLng).
-    IF d0 <= bullseye { RETURN. }
     IF SHIP:AVAILABLETHRUST <= 0 { RETURN. }
+    LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
+    LOCAL bullseye IS MAX(500, tolerance * 0.15).
+    LOCAL dvCap IS 45.
+    LOCAL dvSpent IS 0.
+    LOCAL sgnN IS 1.
+    LOCAL walkDeadline IS TIME:SECONDS + 420.
+    LOCAL startDist IS _walkDist(targetLat, targetLng).
+    IF startDist >= 0 AND startDist <= bullseye { RETURN. }
+    mLog("Impact walk: " + ROUND(startDist / 1000, 1)
+        + "km to close (bullseye " + ROUND(bullseye, 0) + "m).").
 
-    // Site east of impact (along the mostly-eastward track) =
-    // short = extend with prograde; west = retrograde.
-    LOCAL goPro IS _deorbitNorm180(targetLng - impact0:LNG) > 0.
-    mLog("Impact walk ("
-        + (CHOOSE "prograde" IF goPro ELSE "retrograde")
-        + "): sliding " + ROUND(d0 / 1000, 1) + "km onto the target.").
-    IF goPro { LOCK STEERING TO SHIP:PROGRADE. }
-    ELSE { LOCK STEERING TO SHIP:RETROGRADE. }
-    // Despin/align BEFORE any thrust — flight-found: throttling
-    // while tumbling (no SAS, small wheel) turned every light
-    // burn into a randomly-aimed impulse that fed the spin and
-    // ate the fuel budget.
-    LOCAL alignDeadline IS TIME:SECONDS + 120.
-    UNTIL VANG(SHIP:FACING:FOREVECTOR,
-            CHOOSE SHIP:PROGRADE:VECTOR IF goPro
-            ELSE SHIP:RETROGRADE:VECTOR) < 5
-            OR TIME:SECONDS > alignDeadline {
-        WAIT 0.2.
-    }
     LOCAL throttleCmd IS 0.
-    LOCK THROTTLE TO throttleCmd.
-    LOCAL dMin IS d0.
-    LOCAL nextLog IS 0.
-    LOCAL walkDeadline IS TIME:SECONDS + 180.
-    LOCAL reason IS "".
-    UNTIL reason <> "" {
-        LOCAL aimVec IS CHOOSE SHIP:PROGRADE:VECTOR IF goPro
-            ELSE SHIP:RETROGRADE:VECTOR.
-        LOCAL aligned IS VANG(SHIP:FACING:FOREVECTOR, aimVec) < 10.
-        LOCAL d IS -1.
-        IF ADDONS:TR:HASIMPACT {
-            LOCAL imp IS ADDONS:TR:IMPACTPOS.
-            SET d TO geoDistance(imp:LAT, imp:LNG, targetLat, targetLng).
+    FOR mode IN LIST("along", "cross", "along") {
+        IF TIME:SECONDS > walkDeadline OR dvSpent >= dvCap { BREAK. }
+        IF SHIP:AVAILABLETHRUST <= 0 { BREAK. }
+        LOCAL d0 IS _walkDist(targetLat, targetLng).
+        IF d0 >= 0 AND d0 <= bullseye { BREAK. }
+
+        LOCAL goPro IS TRUE.
+        IF mode = "along" {
+            SET goPro TO
+                _deorbitNorm180(targetLng - ADDONS:TR:IMPACTPOS:LNG) > 0.
+            IF goPro { LOCK STEERING TO SHIP:PROGRADE. }
+            ELSE { LOCK STEERING TO SHIP:RETROGRADE. }
+        } ELSE {
+            LOCK STEERING TO sgnN * VCRS(SHIP:VELOCITY:ORBIT,
+                SHIP:POSITION - SHIP:BODY:POSITION).
         }
-        IF SHIP:AVAILABLETHRUST <= 0 {
-            SET reason TO "out-of-fuel".
-        } ELSE IF TIME:SECONDS > walkDeadline {
-            SET reason TO "timeout".
-        } ELSE IF NOT goPro AND SHIP:PERIAPSIS < 12000 {
-            SET reason TO "pe-floor".
-        } ELSE IF goPro AND SHIP:PERIAPSIS > atmTop - 5000 {
-            SET reason TO "pe-ceiling".
-        } ELSE IF d >= 0 {
-            IF d < dMin { SET dMin TO d. }
-            IF d <= bullseye {
-                SET reason TO "on-target".
-            } ELSE IF d > dMin * 1.3 AND dMin < tolerance * 6 {
-                SET reason TO "past-closest".
+        mLog("Walk leg (" + mode
+            + (CHOOSE "/prograde" IF mode = "along" AND goPro
+               ELSE CHOOSE "/retrograde" IF mode = "along" ELSE "")
+            + "): " + ROUND(d0 / 1000, 1) + "km off.").
+
+        LOCAL alignDeadline IS TIME:SECONDS + 90.
+        UNTIL VANG(SHIP:FACING:FOREVECTOR,
+                CHOOSE ((CHOOSE 1 IF goPro ELSE -1) * SHIP:VELOCITY:ORBIT)
+                    IF mode = "along"
+                ELSE (sgnN * VCRS(SHIP:VELOCITY:ORBIT,
+                    SHIP:POSITION - SHIP:BODY:POSITION))) < 5
+                OR TIME:SECONDS > alignDeadline {
+            WAIT 0.2.
+        }
+        LOCK THROTTLE TO throttleCmd.
+
+        IF mode = "cross" {
+            // Measured sign: 1.5 m/s test pulse, flip if it hurt.
+            LOCAL v0 IS SHIP:VELOCITY:ORBIT.
+            LOCAL pulseDeadline IS TIME:SECONDS + 30.
+            UNTIL (SHIP:VELOCITY:ORBIT - v0):MAG >= 1.5
+                    OR TIME:SECONDS > pulseDeadline {
+                IF VANG(SHIP:FACING:FOREVECTOR,
+                        sgnN * VCRS(SHIP:VELOCITY:ORBIT,
+                            SHIP:POSITION - SHIP:BODY:POSITION)) < 10 {
+                    SET throttleCmd TO 0.05.
+                } ELSE {
+                    SET throttleCmd TO 0.
+                }
+                WAIT 0.05.
+            }
+            SET throttleCmd TO 0.
+            SET dvSpent TO dvSpent + (SHIP:VELOCITY:ORBIT - v0):MAG.
+            WAIT 3.
+            LOCAL d1 IS _walkDist(targetLat, targetLng).
+            IF d1 >= 0 AND d0 >= 0 AND d1 > d0 {
+                SET sgnN TO -sgnN.
+                mLog("Cross-track: measured flip to the other side.").
+                LOCAL flipDeadline IS TIME:SECONDS + 90.
+                UNTIL VANG(SHIP:FACING:FOREVECTOR,
+                        sgnN * VCRS(SHIP:VELOCITY:ORBIT,
+                            SHIP:POSITION - SHIP:BODY:POSITION)) < 5
+                        OR TIME:SECONDS > flipDeadline {
+                    WAIT 0.2.
+                }
             }
         }
-        IF NOT aligned {
-            SET throttleCmd TO 0.
-        } ELSE {
-            SET throttleCmd TO
-                CHOOSE 0.02 IF d >= 0 AND d < tolerance * 2
-                ELSE CHOOSE 0.05 IF d >= 0 AND d < tolerance * 6 ELSE 0.15.
+
+        LOCAL dMin IS 1e12.
+        LOCAL nextLog IS 0.
+        LOCAL reason IS "".
+        UNTIL reason <> "" {
+            LOCAL aimVec IS V(0, 0, 0).
+            IF mode = "along" {
+                SET aimVec TO (CHOOSE 1 IF goPro ELSE -1)
+                    * SHIP:VELOCITY:ORBIT.
+            } ELSE {
+                SET aimVec TO sgnN * VCRS(SHIP:VELOCITY:ORBIT,
+                    SHIP:POSITION - SHIP:BODY:POSITION).
+            }
+            LOCAL aligned IS VANG(SHIP:FACING:FOREVECTOR, aimVec) < 10.
+            LOCAL d IS _walkDist(targetLat, targetLng).
+            IF SHIP:AVAILABLETHRUST <= 0 {
+                SET reason TO "out-of-fuel".
+            } ELSE IF TIME:SECONDS > walkDeadline {
+                SET reason TO "timeout".
+            } ELSE IF dvSpent >= dvCap {
+                SET reason TO "dv-cap".
+            } ELSE IF mode = "along" AND NOT goPro
+                    AND SHIP:PERIAPSIS < 12000 {
+                SET reason TO "pe-floor".
+            } ELSE IF mode = "along" AND goPro
+                    AND SHIP:PERIAPSIS > atmTop - 5000 {
+                SET reason TO "pe-ceiling".
+            } ELSE IF d >= 0 {
+                IF d < dMin { SET dMin TO d. }
+                IF d <= bullseye {
+                    SET reason TO "on-target".
+                } ELSE IF d > dMin * 1.3 + 300
+                        AND dMin < tolerance * 8 {
+                    SET reason TO "past-closest".
+                }
+            }
+            IF NOT aligned {
+                SET throttleCmd TO 0.
+            } ELSE {
+                SET throttleCmd TO
+                    CHOOSE 0.02 IF d >= 0 AND d < tolerance * 3
+                    ELSE CHOOSE 0.05 IF d >= 0 AND d < tolerance * 10
+                    ELSE 0.15.
+            }
+            SET dvSpent TO dvSpent
+                + (SHIP:AVAILABLETHRUST / MAX(0.1, SHIP:MASS))
+                  * throttleCmd * 0.05.
+            IF TIME:SECONDS > nextLog {
+                SET nextLog TO TIME:SECONDS + 8.
+                mLog("Walk[" + mode + "]: "
+                    + (CHOOSE ROUND(d / 1000, 2) + "km off" IF d >= 0
+                       ELSE "(no prediction)")
+                    + "  dv=" + ROUND(dvSpent, 1)
+                    + "  Pe=" + ROUND(SHIP:PERIAPSIS / 1000, 1) + "km.").
+            }
+            WAIT 0.05.
         }
-        IF TIME:SECONDS > nextLog {
-            SET nextLog TO TIME:SECONDS + 8.
-            mLog("Walk: impact "
-                + (CHOOSE ROUND(d / 1000, 1) + "km off" IF d >= 0
-                   ELSE "(no prediction)")
-                + "  Pe=" + ROUND(SHIP:PERIAPSIS / 1000, 1) + "km.").
-        }
-        WAIT 0.05.
+        SET throttleCmd TO 0.
+        mLog("Walk leg (" + mode + ") done: " + reason + ".").
+        IF reason = "on-target" OR reason = "out-of-fuel"
+                OR reason = "timeout" OR reason = "dv-cap" { BREAK. }
     }
     SET throttleCmd TO 0.
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
     SET SAS TO TRUE.
-    mLogWarn("STATS deorbit walk reason=" + reason
-        + " distKm=" + ROUND(dMin / 1000, 1)
+    mLogWarn("STATS deorbit walk distKm="
+        + ROUND(MAX(-1, _walkDist(targetLat, targetLng)) / 1000, 2)
+        + " dvSpent=" + ROUND(dvSpent, 1)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)).
 }
 
