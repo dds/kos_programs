@@ -129,6 +129,18 @@ GLOBAL FUNCTION archivePhaseLog {
     }
 }
 
+// Guarded solar orient for coasts: a no-op unless the solar lib
+// loaded this boot and the ship is on a stable trajectory in
+// space. Safe to call from anywhere in the preamble's reach.
+GLOBAL FUNCTION trySolarOrient {
+    IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
+            OR SHIP:STATUS = "SUB_ORBITAL")
+            AND DEFINED BOOT_LIB_RAN
+            AND BOOT_LIB_RAN:CONTAINS("solar") {
+        orientForSolar().
+    }
+}
+
 GLOBAL FUNCTION phaseDone {
     UNLOCK ALL.
     SET SAS TO TRUE.
@@ -137,9 +149,6 @@ GLOBAL FUNCTION phaseDone {
     // On-station ships hold their best solar attitude through
     // DONE (cached axis makes this a quick aim, not a search).
     // PHASE DONE = solar brings the lib along at DONE boots.
-    IF SHIP:STATUS = "ORBITING" AND DEFINED BOOT_LIB_RAN
-            AND BOOT_LIB_RAN:CONTAINS("solar") {
-        orientForSolar().
-    }
+    trySolarOrient().
     yieldToPrompt().
 }

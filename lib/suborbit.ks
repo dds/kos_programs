@@ -113,6 +113,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     LOCAL lead IS cfgNum("SUBORBIT_DEORBIT_LEAD", 60).
     LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
     UNLOCK STEERING.
+    trySolarOrient().
     SET SAS TO TRUE.
 
     // Ground-relative track rate: orbital motion minus the planet

@@ -74,11 +74,13 @@ GLOBAL FUNCTION executeManeuver {
 
     SET SAS TO FALSE.
     WAIT 0.1.
-    LOCK STEERING TO nd:BURNVECTOR.
-    mLog("Aligning to burn vector...").
 
     LOCAL wakeTime IS startTime - HIBERNATE_WAKE_LEAD.
     IF TIME:SECONDS < wakeTime - HIBERNATE_THRESHOLD {
+        // Spend the long coast sun-pointed, not holding the burn
+        // vector (battery drain pointing somewhere useless) —
+        // re-alignment happens at the T-180 wake below.
+        trySolarOrient().
         mLog("Long coast wait (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
         HUDTEXT("Coasting. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
         WAIT MAX(0, wakeTime - TIME:SECONDS).
@@ -90,6 +92,9 @@ GLOBAL FUNCTION executeManeuver {
         mLog("Awake — " + ROUND(startTime - TIME:SECONDS, 0) + "s to burn.").
         mLog("Re-aligning to burn vector after hibernation.").
         HUDTEXT("Core awake — burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
+    } ELSE {
+        LOCK STEERING TO nd:BURNVECTOR.
+        mLog("Aligning to burn vector...").
     }
 
     WAIT UNTIL TIME:SECONDS >= startTime - 60.

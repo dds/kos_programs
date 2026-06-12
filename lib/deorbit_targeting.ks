@@ -787,6 +787,7 @@ GLOBAL FUNCTION phaseKscDeorbit {
                 SET alarmId TO alm:ID.
             }
             UNLOCK STEERING.
+            trySolarOrient().
             SET SAS TO TRUE.
             WAIT UNTIL TIME:SECONDS >= resumeUt.
             SET WARP TO 0.
@@ -872,6 +873,7 @@ GLOBAL FUNCTION executeDeorbitNode {
             + ROUND(startTime - 60 - TIME:SECONDS, 0) + "s.").
     }
     IF startTime - TIME:SECONDS > 300 {
+        trySolarOrient().
         SET SAS TO TRUE.
         mLog("Long coast to deorbit burn ("
             + ROUND(startTime - TIME:SECONDS, 0) + "s). Warp at will.").

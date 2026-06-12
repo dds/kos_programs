@@ -49,6 +49,7 @@ GLOBAL FUNCTION isOrbitStable {
 // catches the transition faster but wastes more CPU. For most transfers this
 // doesn't matter since the transition is instantaneous from the game's perspective.
 GLOBAL FUNCTION waitForSOI {
+    trySolarOrient().
     PARAMETER targetBody.
     PARAMETER pollInterval IS 5.
     mLog("Waiting for SOI: " + targetBody:NAME).
