@@ -161,6 +161,11 @@ GLOBAL FUNCTION phaseFairing {
         nextPhase(launchSeq).
         RETURN.
     }
+    IF SHIP:PARTSTAGGED("main_fairing"):LENGTH = 0 {
+        mLog("FAIR: no main_fairing part — skipping.").
+        nextPhase(launchSeq).
+        RETURN.
+    }
     LOCAL fairingAlt IS cfgNum("FAIRING_ALT", 72000).
     IF fairingAlt < 10000 {
         mLogWarn("Unsafe FAIRING_ALT=" + fairingAlt + "m; using 71500m.").
@@ -186,6 +191,22 @@ GLOBAL FUNCTION phaseFair {
 }
 
 GLOBAL FUNCTION phaseExtendAnts {
+    // Nothing deployable -> nothing to wait for. Fixed antennas
+    // and fixed panels need no altitude gate (flight-found: a
+    // craft with only fixed antennas stalled here twice).
+    LOCAL deployables IS FALSE.
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleDeployableAntenna")
+                OR p:HASMODULE("ModuleDeployableSolarPanel") {
+            SET deployables TO TRUE.
+        }
+    }
+    IF NOT deployables {
+        mLog("ANTS: nothing deployable aboard — skipping.").
+        nextPhase(launchSeq).
+        RETURN.
+    }
+
     LOCAL extendAlt IS cfgNum("EXTEND_ALT", 73500).
     IF extendAlt < 10000 {
         mLogWarn("Unsafe EXTEND_ALT=" + extendAlt + "m; using 73000m.").
@@ -193,9 +214,22 @@ GLOBAL FUNCTION phaseExtendAnts {
     }
     IF SHIP:ALTITUDE < extendAlt {
         mLog("Waiting for deploy alt " + ROUND(extendAlt/1000,0) + "km...").
-        WAIT UNTIL SHIP:ALTITUDE >= extendAlt OR ABORT
-            OR (SHIP:STATUS = "ORBITING"
-                AND SHIP:PERIAPSIS > SHIP:BODY:ATM:HEIGHT).
+        // Narrated wait: if this ever stalls again, the log says
+        // exactly what state it was stuck looking at.
+        LOCAL nextNote IS TIME:SECONDS + 60.
+        UNTIL SHIP:ALTITUDE >= extendAlt OR ABORT
+                OR (SHIP:STATUS = "ORBITING"
+                    AND SHIP:PERIAPSIS > SHIP:BODY:ATM:HEIGHT) {
+            IF TIME:SECONDS > nextNote {
+                SET nextNote TO TIME:SECONDS + 60.
+                mLog("ANTS hold: alt="
+                    + ROUND(SHIP:ALTITUDE / 1000, 1) + "km of "
+                    + ROUND(extendAlt / 1000, 1) + "km  status="
+                    + SHIP:STATUS + "  Pe="
+                    + ROUND(SHIP:PERIAPSIS / 1000, 1) + "km.").
+            }
+            WAIT 1.
+        }
     }
     IF ABORT { RETURN. }
     FOR p IN SHIP:PARTS {
