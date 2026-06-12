@@ -4,4 +4,7 @@ bootLibLoad("solar").
 PARAMETER forceSearch IS FALSE.
 PARAMETER lockSteering IS TRUE.
 orientForSolar(forceSearch, lockSteering).
+if lockSteering {
+    LOCK STEERING TO LOOKDIRUP(SHIP:FACING:FOREVECTOR, SHIP:FACING:TOPVECTOR).
+}
 
