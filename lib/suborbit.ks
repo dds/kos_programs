@@ -221,13 +221,19 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
             SET reason TO "pe-ceiling".
         } ELSE IF d >= 0 {
             IF d < dMin { SET dMin TO d. }
-            IF d <= tol {
+            // Aim for the BULLSEYE, not the tolerance edge —
+            // flight-found: cutting at d <= tol landed exactly
+            // tol away, every time, with authority to spare. The
+            // tolerance stays the acceptance test for the verdict.
+            IF d <= MAX(2000, tol * 0.15) {
                 SET reason TO "on-target".
             } ELSE IF dMin < tol * 4 AND d > dMin * 1.3 {
                 SET reason TO "past-closest".
             }
         }
-        SET throttleCmd TO CHOOSE 0.05 IF d >= 0 AND d < tol * 5 ELSE 0.2.
+        SET throttleCmd TO
+            CHOOSE 0.02 IF d >= 0 AND d < tol * 1.5
+            ELSE CHOOSE 0.05 IF d >= 0 AND d < tol * 5 ELSE 0.2.
         IF TIME:SECONDS > nextLog {
             SET nextLog TO TIME:SECONDS + 8.
             mLog("Deorbit: impact "
