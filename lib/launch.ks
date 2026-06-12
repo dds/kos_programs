@@ -158,7 +158,13 @@ GLOBAL FUNCTION phaseFairing {
     }
     IF SHIP:ALTITUDE < fairingAlt {
         mLog("Waiting for fairing alt " + ROUND(fairingAlt/1000,0) + "km...").
-        WAIT UNTIL SHIP:ALTITUDE >= fairingAlt OR ABORT.
+        // A stable orbit above the atmosphere is deploy-safe even
+        // below the altitude line (flight-found: a 74km parking
+        // target can leave Ap under the default threshold and the
+        // wait never completes).
+        WAIT UNTIL SHIP:ALTITUDE >= fairingAlt OR ABORT
+            OR (SHIP:STATUS = "ORBITING"
+                AND SHIP:PERIAPSIS > SHIP:BODY:ATM:HEIGHT).
     }
     IF ABORT { RETURN. }
     _deployFairing().
@@ -177,7 +183,9 @@ GLOBAL FUNCTION phaseExtendAnts {
     }
     IF SHIP:ALTITUDE < extendAlt {
         mLog("Waiting for deploy alt " + ROUND(extendAlt/1000,0) + "km...").
-        WAIT UNTIL SHIP:ALTITUDE >= extendAlt OR ABORT.
+        WAIT UNTIL SHIP:ALTITUDE >= extendAlt OR ABORT
+            OR (SHIP:STATUS = "ORBITING"
+                AND SHIP:PERIAPSIS > SHIP:BODY:ATM:HEIGHT).
     }
     IF ABORT { RETURN. }
     FOR p IN SHIP:PARTS {

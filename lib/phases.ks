@@ -33,9 +33,27 @@ GLOBAL FUNCTION phaseHandlerMap {
 GLOBAL FUNCTION runPhases {
     PARAMETER phaseMap.
     SET phaseShouldYield TO FALSE.
+    LOCAL lastPhase IS "".
+    LOCAL repeats IS 0.
 
     UNTIL FALSE {
         LOCAL phase IS stateGet("phase", "DONE").
+        // A handler returning without advancing, yielding, or
+        // rebooting would spin here silently (e.g. a sticky ABORT
+        // flag making early-returns). Three strikes -> hold.
+        IF phase = lastPhase {
+            SET repeats TO repeats + 1.
+            IF repeats >= 3 {
+                mLogError("Phase " + phase + " returned " + repeats
+                    + "x without progress — holding. (Sticky ABORT?"
+                    + " Clear with SET ABORT TO FALSE.)").
+                yieldToPrompt().
+                RETURN.
+            }
+        } ELSE {
+            SET lastPhase TO phase.
+            SET repeats TO 0.
+        }
         mLogPhase(phase).
         _logPhaseStats(phase).
         IF phaseMap:HASKEY(phase) {
