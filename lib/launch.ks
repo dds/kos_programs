@@ -16,6 +16,15 @@ LOCAL FUNCTION _ascentTwr {
     RETURN SHIP:AVAILABLETHRUST / (SHIP:MASS * 9.81).
 }
 
+// One cheap state read per tick for the ascent watcher's WHEN
+// condition (was five) — also a mitigation candidate for the
+// mainline starvation seen during MJ's coast (ANTS stall).
+GLOBAL FUNCTION bootLibAscentWatchPhase {
+    LOCAL ph IS stateGet("phase", "").
+    RETURN ph = "LAUNCH" OR ph = "FAIR" OR ph = "ANTS"
+        OR ph = "PARK" OR ph = "SUBORBIT".
+}
+
 LOCAL FUNCTION _logAscentTelemetry {
     PARAMETER reason.
     mLogWarn("STATS launch telemetry reason=" + reason
@@ -77,9 +86,7 @@ GLOBAL FUNCTION phaseLaunch {
         + "km  inc=" + launchInc
         + "°  az=" + launchAzimuth + "°").
 
-    WHEN stateGet("phase","") = "LAUNCH" OR stateGet("phase","") = "FAIR"
-            OR stateGet("phase","") = "ANTS" OR stateGet("phase","") = "PARK"
-            OR stateGet("phase","") = "SUBORBIT" THEN {
+    WHEN bootLibAscentWatchPhase() THEN {
         LOCAL abortTriggered IS FALSE.
 
         IF stateGet("launch_vs_nonpos_logged", "false") <> "true"
@@ -246,7 +253,14 @@ GLOBAL FUNCTION phaseExtendAnts {
         }
     }
     mLog("Antennas deployed.").
+    // Stall instrumentation — flight-found twice: the mainline
+    // froze between the line above and nextPhase for ~40s during
+    // MJ's coast to Ap (triggers kept running; a staging event
+    // unfroze it). These brackets pin which side of nextPhase the
+    // next occurrence sits on.
+    mLog("ANTS complete — advancing.").
     nextPhase(launchSeq).
+    mLog("ANTS handler done.").
 }
 
 GLOBAL FUNCTION phaseAnts {
