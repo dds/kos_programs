@@ -1179,7 +1179,11 @@ GLOBAL FUNCTION executeDeorbitNode {
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
-    REMOVE nd.
+    // Guarded: the node can already be gone post-burn (flight-
+    // found: REMOVE threw after a flip-guard exit at 1.7 m/s
+    // residual — likely MechJeb's remove-after-execution eating
+    // the depleted node first).
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     SET SAS TO TRUE.
     IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
     mLog("Timed deorbit burn complete. Residual=" + ROUND(residual,2) + " m/s.").

@@ -167,7 +167,9 @@ GLOBAL FUNCTION executeManeuver {
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
-    REMOVE nd.
+    // Guarded: post-burn the node may already be gone (see
+    // executeDeorbitNode — flight-found crash on a bare REMOVE).
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     SET SAS TO TRUE.
     _setThrustLimit(1.0).
     _clearPendingBurn("complete").
