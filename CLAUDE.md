@@ -137,10 +137,16 @@ Looks like Python/JS; is neither.
 - Career context matters: this is a hard-mode career save. Don't assume
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via CFG gates.
-- Flight-test ledger (update as things prove out): BPLANE/SHAPE/goto, the
-  reworked airplane control loops, SSTO phases, and the drone are **not yet
-  flight-proven**. `missions/FR3/mun_sat_delivery_3.cfg` is the maneuver
-  pipeline's test flight; retire the legacy coupled solver
-  (`_targetPatchElementsCoupled` and friends) only after it succeeds.
+- Flight-test ledger (update as things prove out): BPLANE/SHAPE flew the
+  Mun contract end-to-end (2026-06); the suborbital return arc
+  (`lib/suborbit.ks` v3: elements-only arc + coast + targeted walk) is
+  flight-proven — single-boot KRBCAP1 round-the-world hop, landed exactly
+  on its predicted impact. The landatksc/KSC_DEORBIT recipe and the
+  scansat duty cycle flew real missions. Still **not flight-proven**:
+  goto, the rescue PRELAUNCH/MATCH/CREW_XFER chain, the reworked airplane
+  control loops, SSTO phases, the drone. The legacy coupled solver
+  (`_targetPatchElementsCoupled` and friends) is retired-in-place: the
+  stale `deorbit_targeting -> maneuver_targeting` dep is already severed;
+  delete the lib once the rendezvous/intersystem flows stop importing it.
 - Useful sandbox: quick brace-balance check over edited `.ks` files (strip
   `//` comments and strings, count `{`/`}`) catches most structural slips.
