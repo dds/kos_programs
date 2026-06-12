@@ -115,9 +115,18 @@ LOCAL FUNCTION _deorbitImpactWalk {
             IF goPro { LOCK STEERING TO SHIP:PROGRADE. }
             ELSE { LOCK STEERING TO SHIP:RETROGRADE. }
         } ELSE {
+            // Cross burns fix pass-selection residue (2-15km);
+            // a large miss is along-track damage they cannot
+            // touch (flight-found: 45 m/s chased 189km for ~2km).
+            IF d0 > 30000 {
+                mLogWarn("Walk: skipping cross leg — "
+                    + ROUND(d0 / 1000, 0) + "km is along-track scale.").
+                BREAK.
+            }
             LOCK STEERING TO sgnN * VCRS(SHIP:VELOCITY:ORBIT,
                 SHIP:POSITION - SHIP:BODY:POSITION).
         }
+        LOCAL legPe0 IS SHIP:PERIAPSIS.
         mLog("Walk leg (" + mode
             + (CHOOSE "/prograde" IF mode = "along" AND goPro
                ELSE CHOOSE "/retrograde" IF mode = "along" ELSE "")
@@ -186,9 +195,14 @@ LOCAL FUNCTION _deorbitImpactWalk {
                 SET reason TO "timeout".
             } ELSE IF dvSpent >= dvCap {
                 SET reason TO "dv-cap".
-            } ELSE IF mode = "along" AND NOT goPro
-                    AND SHIP:PERIAPSIS < 12000 {
+            } ELSE IF SHIP:PERIAPSIS < 9000 {
                 SET reason TO "pe-floor".
+            } ELSE IF mode = "along"
+                    AND ABS(SHIP:PERIAPSIS - legPe0) > 6000 {
+                // A post-deorbit along fix needs <1 m/s; moving Pe
+                // 6km means the leg is out of control (flight-
+                // found: 18km of Pe damage before the old floor).
+                SET reason TO "pe-excursion".
             } ELSE IF mode = "along" AND goPro
                     AND SHIP:PERIAPSIS > atmTop - 5000 {
                 SET reason TO "pe-ceiling".
@@ -196,13 +210,22 @@ LOCAL FUNCTION _deorbitImpactWalk {
                 IF d < dMin { SET dMin TO d. }
                 IF d <= bullseye {
                     SET reason TO "on-target".
-                } ELSE IF d > dMin * 1.3 + 300
-                        AND dMin < tolerance * 8 {
+                } ELSE IF dMin < d0 - 200
+                        AND d > dMin * 1.3 + 300 {
+                    // Armed as soon as the leg has IMPROVED —
+                    // scale-free (flight-found: a tolerance-scaled
+                    // gate disarmed this at 2km tolerance and the
+                    // leg blew through its minimum unbraked).
                     SET reason TO "past-closest".
                 }
             }
             IF NOT aligned {
                 SET throttleCmd TO 0.
+            } ELSE IF mode = "along" {
+                // Post-deorbit timing sensitivity: ~1 m/s moves
+                // the impact tens of km. Creep only.
+                SET throttleCmd TO
+                    CHOOSE 0.02 IF d >= 0 AND d < 30000 ELSE 0.05.
             } ELSE {
                 SET throttleCmd TO
                     CHOOSE 0.02 IF d >= 0 AND d < tolerance * 3
