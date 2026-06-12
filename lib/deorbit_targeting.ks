@@ -257,7 +257,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
         RETURN FALSE.
     }
 
-    LOCAL site IS _selectScanSatLandingSite(targetLat, targetLng).
+    LOCAL site IS LEXICON("FOUND", FALSE).
+    IF DEFINED BOOT_LIB_RAN AND BOOT_LIB_RAN:CONTAINS("landing_site") {
+        SET site TO selectScanSatLandingSite(targetLat, targetLng).
+    }
     IF site["FOUND"] {
         SET targetLat TO site["LAT"].
         SET targetLng TO site["LNG"].
@@ -447,25 +450,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
         IF bestDist < refineTarget { BREAK. }
     }
 
-    // TARGET_DEORBIT_SKIP_REFINE=1 flies the coarse+pass result
-    // as-is — the iterative impact refinement can fail to converge
-    // and burn minutes of real time for accuracy that chute
-    // landings don't need (flight-found via landatksc).
-    LOCAL skipRefine IS CFG:HASKEY("TARGET_DEORBIT_SKIP_REFINE")
-        AND CFG["TARGET_DEORBIT_SKIP_REFINE"] > 0.
-    IF skipRefine {
-        mLog("Impact refine skipped (TARGET_DEORBIT_SKIP_REFINE).").
-    } ELSE {
-        LOCAL refined IS _refineDeorbitImpact(
-            bestUT, bestPe, targetLat, targetLng, tolerance, scanStep).
-        IF refined["VALID"] AND refined["DIST"] < bestDist {
-            SET bestUT TO refined["UT"].
-            SET bestPe TO refined["PE"].
-            SET bestRad TO refined["RAD"].
-            SET bestNor TO refined["NOR"].
-            SET bestDist TO refined["DIST"].
-        }
-    }
+    // The old iterative impact refinement is RETIRED: it never
+    // converged reliably (every recipe set SKIP_REFINE=1) and the
+    // post-burn three-leg impact walk does its job better, with
+    // measurement instead of prediction. Coarse + pass + walk.
 
     mLog("Fine best: T+" + ROUND(bestUT - TIME:SECONDS,0)
         + "s  Pe=" + ROUND(bestPe/1000,1) + "km"
@@ -565,105 +553,6 @@ LOCAL FUNCTION _testDeorbitNode {
     RETURN result["DIST"].
 }
 
-LOCAL FUNCTION _selectScanSatLandingSite {
-    PARAMETER targetLat.
-    PARAMETER targetLng.
-
-    LOCAL out IS LEXICON(
-        "FOUND", FALSE,
-        "LAT", targetLat,
-        "LNG", targetLng,
-        "SLOPE", -1,
-        "ELEV", -1,
-        "DIST", 0
-    ).
-
-    LOCAL enabled IS 0.
-    IF CFG:HASKEY("LANDING_SITE_SCAN_ENABLE") {
-        SET enabled TO CFG["LANDING_SITE_SCAN_ENABLE"].
-    }
-    IF enabled <= 0 { RETURN out. }
-
-    IF NOT ADDONS:SCANSAT:AVAILABLE {
-        mLogWarn("STATS site-scan status=no-scansat target="
-            + ROUND(targetLat,4) + "," + ROUND(targetLng,4)).
-        RETURN out.
-    }
-
-    LOCAL radius IS 1000.
-    IF CFG:HASKEY("LANDING_SITE_SCAN_RADIUS") {
-        SET radius TO CFG["LANDING_SITE_SCAN_RADIUS"].
-    }
-    LOCAL step IS 250.
-    IF CFG:HASKEY("LANDING_SITE_SCAN_STEP") {
-        SET step TO CFG["LANDING_SITE_SCAN_STEP"].
-    }
-    LOCAL maxSlope IS 12.
-    IF CFG:HASKEY("LANDING_SITE_MAX_SLOPE") {
-        SET maxSlope TO CFG["LANDING_SITE_MAX_SLOPE"].
-    }
-
-    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
-    LOCAL lonScale IS MAX(0.01, COS(targetLat)).
-    LOCAL bestScore IS 999999999.
-    LOCAL samples IS 0.
-    LOCAL known IS 0.
-    LOCAL rejectedSlope IS 0.
-
-    FROM { LOCAL north_ IS -radius. } UNTIL north_ > radius STEP { SET north_ TO north_ + step. } DO {
-        FROM { LOCAL east_ IS -radius. } UNTIL east_ > radius STEP { SET east_ TO east_ + step. } DO {
-            LOCAL candLat IS targetLat + north_ * degPerM.
-            LOCAL candLng IS targetLng + east_ * degPerM / lonScale.
-            LOCAL candGeo IS LATLNG(candLat, candLng).
-            SET samples TO samples + 1.
-
-            LOCAL elev IS ADDONS:SCANSAT:ELEVATION(SHIP:BODY, candGeo).
-            IF elev >= 0 {
-                SET known TO known + 1.
-                LOCAL slope IS ADDONS:SCANSAT:SLOPE(SHIP:BODY, candGeo).
-                IF slope >= 0 AND slope <= maxSlope {
-                    LOCAL dist IS SQRT(north_^2 + east_^2).
-                    LOCAL score IS dist / 100 + slope * 25.
-                    IF score < bestScore {
-                        SET bestScore TO score.
-                        SET out["FOUND"] TO TRUE.
-                        SET out["LAT"] TO candLat.
-                        SET out["LNG"] TO candLng.
-                        SET out["SLOPE"] TO slope.
-                        SET out["ELEV"] TO elev.
-                        SET out["DIST"] TO dist.
-                    }
-                } ELSE {
-                    SET rejectedSlope TO rejectedSlope + 1.
-                }
-            }
-        }
-        WAIT 0.
-    }
-
-    IF out["FOUND"] {
-        mLogWarn("STATS site-scan result status=selected target="
-            + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
-            + " selected=" + ROUND(out["LAT"],4) + "," + ROUND(out["LNG"],4)
-            + " distM=" + ROUND(out["DIST"],0)
-            + " slope=" + ROUND(out["SLOPE"],1)
-            + " elev=" + ROUND(out["ELEV"],0)
-            + " samples=" + samples
-            + " known=" + known
-            + " rejectedSlope=" + rejectedSlope).
-    } ELSE {
-        mLogWarn("STATS site-scan result status=no-site target="
-            + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
-            + " radiusM=" + ROUND(radius,0)
-            + " stepM=" + ROUND(step,0)
-            + " maxSlope=" + ROUND(maxSlope,1)
-            + " samples=" + samples
-            + " known=" + known
-            + " rejectedSlope=" + rejectedSlope).
-    }
-
-    RETURN out.
-}
 
 LOCAL FUNCTION _evalDeorbitNode {
     PARAMETER burnUT.
@@ -705,131 +594,6 @@ LOCAL FUNCTION _evalDeorbitNode {
     RETURN result.
 }
 
-LOCAL FUNCTION _refineDeorbitImpact {
-    PARAMETER startUT.
-    PARAMETER startPe.
-    PARAMETER targetLat.
-    PARAMETER targetLng.
-    PARAMETER tolerance.
-    PARAMETER coarseStep.
-
-    LOCAL best IS _evalDeorbitNode(startUT, startPe, targetLat, targetLng).
-    IF NOT best["VALID"] { RETURN best. }
-
-    LOCAL refineTarget IS _targetDeorbitRefineTolerance(tolerance).
-    LOCAL minLead IS _targetDeorbitMinLead().
-    LOCAL timeStep IS MAX(0.5, coarseStep / 4).
-    LOCAL radialStep IS 2.
-    LOCAL normalStep IS 2.
-
-    // When dV is clamped, PE has no effect on the trajectory — the
-    // burn magnitude is fixed. Skip PE axis and allow larger radial/
-    // normal budgets since they're the only way to steer the impact.
-    LOCAL dvClamped IS FALSE.
-    IF DEFINED CFG AND CFG:HASKEY("LANDING_DEORBIT_MIN_DV") {
-        IF CFG["LANDING_DEORBIT_MIN_DV"] > 0 { SET dvClamped TO TRUE. }
-    }
-
-    LOCAL peStep IS 5000.
-    LOCAL maxRadial IS 12.
-    LOCAL maxNormal IS 12.
-    LOCAL minPe IS MAX(-50000, -SHIP:BODY:RADIUS * 0.2).
-    LOCAL maxPe IS MIN(SHIP:PERIAPSIS - 100, MAX(startPe + 60000, 10000)).
-    LOCAL axes IS LIST("TIME", "PE", "RADIAL", "NORMAL",
-        "TIME_RADIAL", "TIME_NORMAL", "PE_RADIAL", "PE_NORMAL", "BOTH").
-
-    IF dvClamped {
-        // PE changes don't affect the clamped burn — drop PE axes,
-        // widen radial/normal range to compensate
-        SET axes TO LIST("TIME", "RADIAL", "NORMAL",
-            "TIME_RADIAL", "TIME_NORMAL").
-        SET maxRadial TO 50.
-        SET maxNormal TO 50.
-        SET radialStep TO 5.
-        SET normalStep TO 5.
-    }
-
-    LOCAL signs IS LIST(1, -1).
-
-    mLog("Refining deorbit: start dist=" + ROUND(best["DIST"]/1000,1)
-        + "km  timeStep=" + ROUND(timeStep,1) + "s"
-        + "  peStep=" + ROUND(peStep/1000,1) + "km"
-        + "  radialStep=" + ROUND(radialStep,1) + "m/s"
-        + "  normalStep=" + ROUND(normalStep,1) + "m/s"
-        + "  target=" + ROUND(refineTarget,0) + "m.").
-
-    FROM { LOCAL iter IS 0. } UNTIL iter >= 60 STEP { SET iter TO iter + 1. } DO {
-        LOCAL improved IS FALSE.
-        LOCAL bestTrial IS best.
-
-        FOR axis IN axes {
-            FOR sign IN signs {
-                LOCAL tryUT IS best["UT"].
-                LOCAL tryPe IS best["PE"].
-                LOCAL tryRad IS best["RAD"].
-                LOCAL tryNor IS best["NOR"].
-
-                IF axis = "TIME" OR axis = "BOTH" {
-                    SET tryUT TO tryUT + sign * timeStep.
-                }
-                IF axis = "PE" OR axis = "BOTH" {
-                    SET tryPe TO tryPe + sign * peStep.
-                }
-                IF axis = "RADIAL" OR axis = "TIME_RADIAL" OR axis = "PE_RADIAL" {
-                    SET tryRad TO tryRad + sign * radialStep.
-                }
-                IF axis = "NORMAL" OR axis = "TIME_NORMAL" OR axis = "PE_NORMAL" {
-                    SET tryNor TO tryNor + sign * normalStep.
-                }
-                IF axis = "TIME_RADIAL" {
-                    SET tryUT TO tryUT + sign * timeStep.
-                }
-                IF axis = "TIME_NORMAL" {
-                    SET tryUT TO tryUT + sign * timeStep.
-                }
-                IF axis = "PE_RADIAL" {
-                    SET tryPe TO tryPe + sign * peStep.
-                }
-                IF axis = "PE_NORMAL" {
-                    SET tryPe TO tryPe + sign * peStep.
-                }
-
-                IF tryPe >= minPe AND tryPe <= maxPe
-                        AND ABS(tryRad) <= maxRadial
-                        AND ABS(tryNor) <= maxNormal
-                        AND tryUT > TIME:SECONDS + minLead {
-                    LOCAL trial IS _evalDeorbitNode(tryUT, tryPe, targetLat, targetLng, tryRad, tryNor).
-                    IF trial["VALID"] AND trial["DIST"] < bestTrial["DIST"] {
-                        SET bestTrial TO trial.
-                    }
-                }
-            }
-        }
-
-        IF bestTrial["DIST"] < best["DIST"] {
-            SET best TO bestTrial.
-            SET improved TO TRUE.
-            mLog("  refine[" + iter + "] T+" + ROUND(best["UT"] - TIME:SECONDS,0)
-                + "s Pe=" + ROUND(best["PE"]/1000,1) + "km"
-                + " Rad=" + ROUND(best["RAD"],2)
-                + " Nor=" + ROUND(best["NOR"],2)
-                + " dist=" + ROUND(best["DIST"]/1000,2) + "km.").
-        }
-
-        IF best["DIST"] < refineTarget { BREAK. }
-
-        IF NOT improved {
-            SET timeStep TO timeStep / 2.
-            SET peStep TO peStep / 2.
-            SET radialStep TO radialStep / 2.
-            SET normalStep TO normalStep / 2.
-            IF timeStep < 0.05 AND peStep < 25
-                    AND radialStep < 0.05 AND normalStep < 0.05 { BREAK. }
-        }
-    }
-
-    RETURN best.
-}
 
 LOCAL FUNCTION _targetDeorbitRefineTolerance {
     PARAMETER tolerance.

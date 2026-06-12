@@ -36,14 +36,14 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "MCC" { IF _depLoaded("maneuver_mcc") { phaseMapSet(phaseMap, "MCC", phaseMcc@). } }
     ELSE IF phaseKey = "AEROBRAKE" { IF _depLoaded("aerobrake") { phaseMapSet(phaseMap, "AEROBRAKE", phaseAerobrake@). } }
     ELSE IF phaseKey = "DESCENT" { IF _depLoaded("descent") { phaseMapSet(phaseMap, "DESCENT", phaseDescent@). } }
-    ELSE IF phaseKey = "KSC_DEORBIT" { IF _depLoaded("deorbit_targeting,maneuver") { phaseMapSet(phaseMap, "KSC_DEORBIT", phaseKscDeorbit@). } }
+    ELSE IF phaseKey = "KSC_DEORBIT" { IF _depLoaded("deorbit_targeting,solar") { phaseMapSet(phaseMap, "KSC_DEORBIT", phaseKscDeorbit@). } }
     ELSE IF phaseKey = "COAST" { IF _depLoaded("capture") { phaseMapSet(phaseMap, "COAST", phaseCoast@). } }
     ELSE IF phaseKey = "CAPTURE" { IF _depLoaded("capture") { phaseMapSet(phaseMap, "CAPTURE", phaseCapture@). } }
     ELSE IF phaseKey = "CIRC" { IF _depLoaded("maneuver_orbit") { phaseMapSet(phaseMap, "CIRC", phaseCirc@). } }
     ELSE IF phaseKey = "RAISE" { IF _depLoaded("maneuver_orbit") { phaseMapSet(phaseMap, "RAISE", phaseRaise@). } }
     ELSE IF phaseKey = "INCLINE" { IF _depLoaded("maneuver_orbit") { phaseMapSet(phaseMap, "INCLINE", phaseIncline@). } }
     ELSE IF phaseKey = "ELLIPTICAL" { IF _depLoaded("maneuver_orbit") { phaseMapSet(phaseMap, "ELLIPTICAL", phaseElliptical@). } }
-    ELSE IF phaseKey = "TARGETED_DEORBIT" { IF _depLoaded("payload_ops,deorbit_targeting") { phaseMapSet(phaseMap, "TARGETED_DEORBIT", phaseTargetedDeorbit@). } }
+    ELSE IF phaseKey = "TARGETED_DEORBIT" { IF _depLoaded("payload_ops,deorbit_targeting,landing_site") { phaseMapSet(phaseMap, "TARGETED_DEORBIT", phaseTargetedDeorbit@). } }
     ELSE IF phaseKey = "RELEASE_PROBE" { IF _depLoaded("payload_ops") { phaseMapSet(phaseMap, "RELEASE_PROBE", phaseReleaseProbe@). } }
     ELSE IF phaseKey = "RELAY_OPS" { IF _depLoaded("payload_ops") { phaseMapSet(phaseMap, "RELAY_OPS", phaseRelayOps@). } }
     ELSE IF phaseKey = "SCANSAT_OPS" { IF _depLoaded("payload_ops,science") { phaseMapSet(phaseMap, "SCANSAT_OPS", phaseScansatOps@). } }
