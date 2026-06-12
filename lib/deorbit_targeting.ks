@@ -944,6 +944,7 @@ GLOBAL FUNCTION phaseKscDeorbit {
                     }
                 }
                 WAIT 5.
+                trySolarOrient().
             }
             SET WARP TO 0.
             IF alarmId <> "" { DELETEALARM(alarmId). }
