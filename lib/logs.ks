@@ -85,7 +85,7 @@ GLOBAL FUNCTION archiveLog {
     LOCAL raw IS OPEN(localPath):READALL:STRING.
     IF raw:TRIM = "" { RETURN FALSE. }
 
-    IF NOT EXISTS(archivePath) {
+    IF NOT HOMECONNECTION:ISCONNECTED AND EXISTS(archivePath) {
         LOG "=== ARCHIVE LOG START: " + logId() + " ===" TO archivePath.
     }
     FOR line IN raw:SPLIT(CHAR(10)) {
