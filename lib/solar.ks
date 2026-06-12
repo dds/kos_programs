@@ -194,6 +194,18 @@ GLOBAL FUNCTION solarHoldTick {
     IF flow > refFlow { RETURN flow. }              // ratchet the reference
     IF flow >= refFlow * ratio { RETURN refFlow. }
 
+    // EC-aware deferral: while the battery is comfortable (above
+    // SOLAR_HOLD_EC, default 75%) and the panels still make SOME
+    // power, let the sag ride — interplanetary legs at 100000x
+    // should not drop warp to fix a cosmetic 10% loss. The re-aim
+    // happens when charge actually needs it; the flow ratio is
+    // the quality floor once it does.
+    LOCAL ecTrigger IS 0.75.
+    IF DEFINED CFG { SET ecTrigger TO cfgNum("SOLAR_HOLD_EC", 0.75). }
+    IF shipPowerFraction() >= ecTrigger AND flow > refFlow * 0.25 {
+        RETURN refFlow.
+    }
+
     LOCAL savedWarp IS WARP.
     SET WARP TO 0.
     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
