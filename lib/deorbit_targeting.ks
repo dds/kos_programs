@@ -909,11 +909,12 @@ GLOBAL FUNCTION phaseKscDeorbit {
             UNTIL TIME:SECONDS >= resumeUt {
                 SET i TO i + 1.
                 // Each iteration of this loop is 5 seconds.
-                if 0 = MOD(i, 60) {
+                if 0 = MOD(i, 150) {
                     LOCAL savedWarp IS WARP.
                     SET WARP TO 0.
                     WAIT 2.
                     trySolarOrient().
+                    WAIT 3.
                     SET WARP TO savedWarp.
                 }
 
