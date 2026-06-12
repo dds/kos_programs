@@ -122,6 +122,36 @@ GLOBAL FUNCTION orientForSolar {
         SET i TO i + 1.
     }
 
+    // Refine around the winner: the panel normal need not lie on
+    // a part axis (angled mounts, offset cells), so the coarse
+    // best can sit on a cosine shoulder. Hill-climb the aim with
+    // shrinking angular steps, keeping only candidates that
+    // MEASURE better. (VCRS here only generates trial directions
+    // — every decision is by measured flow, so the left-handed
+    // frame can't bite.)
+    LOCAL i2 IS 0.
+    FOR step IN LIST(15, 5) {
+        LOCAL refAxis IS V(1, 0, 0).
+        IF ABS(bestAxis:X) > 0.9 { SET refAxis TO V(0, 1, 0). }
+        LOCAL perpU IS VCRS(bestAxis, refAxis):NORMALIZED.
+        LOCAL perpW IS VCRS(bestAxis, perpU):NORMALIZED.
+        FOR rotAxis IN LIST(perpU, perpW) {
+            FOR sgn IN LIST(1, -1) {
+                LOCAL cand IS
+                    (ANGLEAXIS(step * sgn, rotAxis) * bestAxis):NORMALIZED.
+                _solarAimSettle(cand).
+                LOCAL flow IS shipSolarFlow().
+                SET i2 TO i2 + 1.
+                IF flow > bestFlow + 0.005 {
+                    mLog("  refine " + step + "deg: flow "
+                        + ROUND(bestFlow, 3) + " -> " + ROUND(flow, 3) + ".").
+                    SET bestFlow TO flow.
+                    SET bestAxis TO cand.
+                }
+            }
+        }
+    }
+
     _solarAimSettle(bestAxis).
     stateSet("solar_axis", ROUND(bestAxis:X, 4) + ","
         + ROUND(bestAxis:Y, 4) + "," + ROUND(bestAxis:Z, 4)).
