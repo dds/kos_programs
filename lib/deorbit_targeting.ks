@@ -59,6 +59,91 @@ GLOBAL FUNCTION targetResolveDeorbitTarget {
     RETURN result.
 }
 
+LOCAL FUNCTION _deorbitNorm180 {
+    PARAMETER angle.
+    LOCAL result IS angle.
+    UNTIL result >= -180 { SET result TO result + 360. }
+    UNTIL result < 180 { SET result TO result - 360. }
+    RETURN result.
+}
+
+// Post-burn finesse: creep prograde/retrograde to slide the
+// predicted impact along the ground track onto the target — the
+// suborbital walk's measure-and-creep, ported (flight-found: the
+// coarse-scan burn alone left a 30-deg-inclined entry 67km off,
+// "aggressive, without the finesse we're used to"). Cuts at the
+// bullseye, past-closest, Pe floor/ceiling, fuel, or timeout.
+LOCAL FUNCTION _deorbitImpactWalk {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER tolerance.
+    IF NOT (ADDONS:TR:AVAILABLE AND ADDONS:TR:HASIMPACT) { RETURN. }
+    LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
+    LOCAL bullseye IS MAX(2000, tolerance * 0.15).
+    LOCAL impact0 IS ADDONS:TR:IMPACTPOS.
+    LOCAL d0 IS geoDistance(impact0:LAT, impact0:LNG, targetLat, targetLng).
+    IF d0 <= bullseye { RETURN. }
+    IF SHIP:AVAILABLETHRUST <= 0 { RETURN. }
+
+    // Site east of impact (along the mostly-eastward track) =
+    // short = extend with prograde; west = retrograde.
+    LOCAL goPro IS _deorbitNorm180(targetLng - impact0:LNG) > 0.
+    mLog("Impact walk ("
+        + (CHOOSE "prograde" IF goPro ELSE "retrograde")
+        + "): sliding " + ROUND(d0 / 1000, 1) + "km onto the target.").
+    IF goPro { LOCK STEERING TO SHIP:PROGRADE. }
+    ELSE { LOCK STEERING TO SHIP:RETROGRADE. }
+    WAIT 5.
+    LOCAL throttleCmd IS 0.
+    LOCK THROTTLE TO throttleCmd.
+    LOCAL dMin IS d0.
+    LOCAL nextLog IS 0.
+    LOCAL walkDeadline IS TIME:SECONDS + 180.
+    LOCAL reason IS "".
+    UNTIL reason <> "" {
+        LOCAL d IS -1.
+        IF ADDONS:TR:HASIMPACT {
+            LOCAL imp IS ADDONS:TR:IMPACTPOS.
+            SET d TO geoDistance(imp:LAT, imp:LNG, targetLat, targetLng).
+        }
+        IF SHIP:AVAILABLETHRUST <= 0 {
+            SET reason TO "out-of-fuel".
+        } ELSE IF TIME:SECONDS > walkDeadline {
+            SET reason TO "timeout".
+        } ELSE IF NOT goPro AND SHIP:PERIAPSIS < 12000 {
+            SET reason TO "pe-floor".
+        } ELSE IF goPro AND SHIP:PERIAPSIS > atmTop - 5000 {
+            SET reason TO "pe-ceiling".
+        } ELSE IF d >= 0 {
+            IF d < dMin { SET dMin TO d. }
+            IF d <= bullseye {
+                SET reason TO "on-target".
+            } ELSE IF d > dMin * 1.3 AND dMin < tolerance * 6 {
+                SET reason TO "past-closest".
+            }
+        }
+        SET throttleCmd TO
+            CHOOSE 0.02 IF d >= 0 AND d < tolerance * 2
+            ELSE CHOOSE 0.05 IF d >= 0 AND d < tolerance * 6 ELSE 0.15.
+        IF TIME:SECONDS > nextLog {
+            SET nextLog TO TIME:SECONDS + 8.
+            mLog("Walk: impact "
+                + (CHOOSE ROUND(d / 1000, 1) + "km off" IF d >= 0
+                   ELSE "(no prediction)")
+                + "  Pe=" + ROUND(SHIP:PERIAPSIS / 1000, 1) + "km.").
+        }
+        WAIT 0.05.
+    }
+    SET throttleCmd TO 0.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    mLogWarn("STATS deorbit walk reason=" + reason
+        + " distKm=" + ROUND(dMin / 1000, 1)
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)).
+}
+
 GLOBAL FUNCTION targetedDeorbitAt {
     PARAMETER targetLat.
     PARAMETER targetLng.
@@ -343,6 +428,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
     executeDeorbitNode(realNode).
 
     WAIT 2.
+    // Finesse pass: slide the impact the rest of the way.
+    _deorbitImpactWalk(targetLat, targetLng, tolerance).
+
     IF ADDONS:TR:HASIMPACT {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
         LOCAL finalDist IS geoDistance(impactPos:LAT, impactPos:LNG, targetLat, targetLng).
@@ -358,13 +446,18 @@ GLOBAL FUNCTION targetedDeorbitAt {
             mLogWarn("STATS deorbit postburn status=miss distKm="
                 + ROUND(finalDist/1000,1)
                 + " toleranceKm=" + ROUND(tolerance/1000,1)).
-            RETURN FALSE.
         }
     } ELSE {
         mLogWarn("Trajectories has no impact prediction post-burn.").
-        RETURN FALSE.
     }
-    RETURN TRUE.
+    // The burn FIRED: with Pe in the atmosphere the ship is
+    // committed to entry, and the only forward path is DESCENT —
+    // flight-found: returning FALSE here held the phase while the
+    // crew fell toward 30km with no chutes armed.
+    IF SHIP:PERIAPSIS < SHIP:BODY:ATM:HEIGHT {
+        RETURN TRUE.
+    }
+    RETURN FALSE.
 }
 
 LOCAL FUNCTION _testDeorbitNode {

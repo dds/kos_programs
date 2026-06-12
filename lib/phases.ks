@@ -46,7 +46,7 @@ GLOBAL FUNCTION runPhases {
             RETURN.
         } ELSE {
             LOCAL loadedBand IS stateGet("lib_band", "").
-            LOCAL requiredBand IS bootLibBandForPhase(phase, "UNKNOWN").
+            LOCAL requiredBand IS bootLibBandForPhase(phase, "").
             IF requiredBand = loadedBand {
                 mLogError("Phase " + phase + " handler missing in loaded band " + loadedBand + ".").
                 PRINT " ".
