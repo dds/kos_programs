@@ -149,6 +149,35 @@ LOCAL FUNCTION _deorbitImpactWalk {
         LOCAL nextLog IS 0.
         LOCAL nextPulse IS 0.
         LOCAL reason IS "".
+        IF mode = "along" {
+            // The lng-difference direction guess INVERTS on
+            // descending polar passes (flight-found: a retrograde
+            // leg grew an 18.7km miss to 69km — target ahead
+            // along-track but west in longitude). Verify with a
+            // single-tick micro-pulse and flip if it hurt.
+            LOCK THROTTLE TO 0.012.
+            WAIT 0.05.
+            LOCK THROTTLE TO 0.
+            SET dvSpent TO dvSpent
+                + (SHIP:AVAILABLETHRUST / MAX(0.1, SHIP:MASS))
+                  * 0.012 * 0.05.
+            WAIT 2.
+            LOCAL dProbe IS _walkDist(targetLat, targetLng).
+            IF dProbe >= 0 AND d0 >= 0 AND dProbe > d0 + 200 {
+                SET goPro TO NOT goPro.
+                mLog("Along leg: measured flip — lng heuristic"
+                    + " wrong for this pass geometry.").
+                IF goPro { LOCK STEERING TO SHIP:PROGRADE. }
+                ELSE { LOCK STEERING TO SHIP:RETROGRADE. }
+                LOCAL flipDeadline IS TIME:SECONDS + 90.
+                UNTIL VANG(SHIP:FACING:FOREVECTOR,
+                        (CHOOSE 1 IF goPro ELSE -1)
+                        * SHIP:VELOCITY:ORBIT) < 5
+                        OR TIME:SECONDS > flipDeadline {
+                    WAIT 0.2.
+                }
+            }
+        }
         IF mode = "cross" {
             // Measured sign: 1.5 m/s test pulse, flip if it hurt.
             LOCAL v0 IS SHIP:VELOCITY:ORBIT.
@@ -207,7 +236,9 @@ LOCAL FUNCTION _deorbitImpactWalk {
                 SET reason TO "timeout".
             } ELSE IF dvSpent >= dvCap {
                 SET reason TO "dv-cap".
-            } ELSE IF dvSpent - legDv0 > 6 AND dMin > d0 - 300 {
+            } ELSE IF dvSpent - legDv0
+                    > (CHOOSE 1.0 IF mode = "along" ELSE 6)
+                    AND dMin > d0 - 300 {
                 // 6 m/s in and the minimum hasn't improved: this
                 // leg is fighting the wrong axis (flight-found:
                 // a cross leg monotonically worsening an
