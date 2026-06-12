@@ -909,7 +909,7 @@ GLOBAL FUNCTION phaseKscDeorbit {
             UNTIL TIME:SECONDS >= resumeUt {
                 SET i TO i + 1.
                 // Each iteration of this loop is 5 seconds.
-                if MOD(i, 12) {
+                if MOD(i, 36) {
                     trySolarOrient().
                 }
 
