@@ -73,6 +73,8 @@ LOCAL FUNCTION _solarAimSettle {
 // ============================================================
 GLOBAL FUNCTION orientForSolar {
     PARAMETER forceSearch IS FALSE.
+    PARAMETER lockSteering IS FALSE.
+
     LOCAL panels IS LIST().
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleDeployableSolarPanel") { panels:ADD(p). }
@@ -155,8 +157,11 @@ GLOBAL FUNCTION orientForSolar {
     _solarAimSettle(bestAxis).
     stateSet("solar_axis", ROUND(bestAxis:X, 4) + ","
         + ROUND(bestAxis:Y, 4) + "," + ROUND(bestAxis:Z, 4)).
-    UNLOCK STEERING.
-    SET SAS TO TRUE.
+    if lockSteering {
+    } else {
+        UNLOCK STEERING.
+        SET SAS TO TRUE.
+    }
     mLog("Solar attitude set: flow=" + ROUND(shipSolarFlow(), 2)
         + " (best of search " + ROUND(bestFlow, 2) + ").").
     mLogWarn("STATS solar orient flow=" + ROUND(shipSolarFlow(), 2)
