@@ -906,6 +906,10 @@ GLOBAL FUNCTION phaseKscDeorbit {
             }
             LOCAL lastBiome IS "".
             UNTIL TIME:SECONDS >= resumeUt {
+                if MOD(TIME:SECONDS, 29) {
+                    trySolarOrient().
+                }
+
                 IF ADDONS:SCANSAT:AVAILABLE AND SHIP:CREW():LENGTH > 0 {
                     LOCAL nowBiome IS ADDONS:SCANSAT:CURRENTBIOME.
                     IF nowBiome <> lastBiome AND nowBiome <> "" {
@@ -944,7 +948,6 @@ GLOBAL FUNCTION phaseKscDeorbit {
                     }
                 }
                 WAIT 5.
-                trySolarOrient().
             }
             SET WARP TO 0.
             IF alarmId <> "" { DELETEALARM(alarmId). }
