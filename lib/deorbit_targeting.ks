@@ -90,6 +90,17 @@ LOCAL FUNCTION _deorbitImpactWalk {
     PARAMETER tolerance.
     IF NOT (ADDONS:TR:AVAILABLE AND ADDONS:TR:HASIMPACT) { RETURN. }
     IF SHIP:AVAILABLETHRUST <= 0 { RETURN. }
+    // NEVER walk inside the atmosphere: the impact prediction
+    // shifts continuously from drag (measured flips become drag
+    // noise) and Pe decays on its own — flight-found: an in-atmo
+    // walk turned a 10km miss into 20km while drag drove Pe from
+    // 18km to below ground. Entry targeting ended at entry.
+    IF SHIP:BODY:ATM:EXISTS
+            AND SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT + 2000 {
+        mLogWarn("Impact walk skipped: inside the atmosphere —"
+            + " descent rides what it has.").
+        RETURN.
+    }
     LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
     LOCAL bullseye IS MAX(500, tolerance * 0.15).
     LOCAL dvCap IS 45.
