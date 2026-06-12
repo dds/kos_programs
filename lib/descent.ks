@@ -82,10 +82,8 @@ LOCAL FUNCTION _descentWaitForRadius {
     LOCAL alarmId IS "".
     LOCAL eta_ IS _descentEtaToRadius(rTarget).
     IF ADDONS:KAC:AVAILABLE AND eta_ > 180 {
-        LOCAL alm IS ADDALARM("Raw", TIME:SECONDS + eta_ - 120,
-            label + ": " + SHIP:NAME, "Auto-created by phaseDescent").
-        SET alm:ACTION TO "KillWarp".
-        SET alarmId TO alm:ID.
+        SET alarmId TO kacEnsureAlarm(label + ": " + SHIP:NAME,
+            TIME:SECONDS + eta_ - 120, "Auto-created by phaseDescent").
         mLog("KAC alarm set for " + label + " in "
             + ROUND(eta_ - 120, 0) + "s.").
     }

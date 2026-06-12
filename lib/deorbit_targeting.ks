@@ -882,14 +882,9 @@ GLOBAL FUNCTION phaseKscDeorbit {
             mLog("KSC_DEORBIT: holding in orbit "
                 + ROUND(resumeUt - TIME:SECONDS, 0)
                 + "s more (ORBIT_STAY_TIME=" + ROUND(stayTime, 0) + ").").
-            LOCAL alarmId IS "".
-            IF ADDONS:KAC:AVAILABLE {
-                LOCAL alm IS ADDALARM("Raw", resumeUt - 60,
-                    "Return window: " + SHIP:NAME,
-                    "Auto-created by KSC_DEORBIT").
-                SET alm:ACTION TO "KillWarp".
-                SET alarmId TO alm:ID.
-            }
+            LOCAL alarmId IS kacEnsureAlarm(
+                "Return window: " + SHIP:NAME, resumeUt - 60,
+                "Auto-created by KSC_DEORBIT").
             UNLOCK STEERING.
             trySolarOrient().
             SET SAS TO TRUE.

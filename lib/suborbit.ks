@@ -150,12 +150,9 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
             LOCAL newUt IS TIME:SECONDS + liveEta - 60.
             IF ADDONS:KAC:AVAILABLE AND liveEta > 70
                     AND ABS(newUt - alarmUt) > 45 {
-                IF alarmId <> "" { DELETEALARM(alarmId). }
-                LOCAL alm IS ADDALARM("Raw", newUt,
-                    "Deorbit burn: " + SHIP:NAME,
+                SET alarmId TO kacEnsureAlarm(
+                    "Deorbit burn: " + SHIP:NAME, newUt,
                     "Auto-created by SUBORBIT").
-                SET alm:ACTION TO "KillWarp".
-                SET alarmId TO alm:ID.
                 SET alarmUt TO newUt.
             }
         }

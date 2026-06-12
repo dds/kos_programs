@@ -163,6 +163,26 @@ GLOBAL FUNCTION archivePhaseLog {
 // during orbit stays (EVA_BIOMES announcements become HUD-only).
 // Mission-critical warp stops — burn windows, alarms, reentry —
 // are always unconditional.
+// Reboot-safe KAC alarm: reuse a same-name alarm if its time is
+// already right, replace it if stale, create it otherwise —
+// phase re-entry after a reboot must not mint duplicates
+// (flight-found: a stack of 'Return window' alarms).
+GLOBAL FUNCTION kacEnsureAlarm {
+    PARAMETER almName.
+    PARAMETER almUt.
+    PARAMETER almNote.
+    IF NOT ADDONS:KAC:AVAILABLE { RETURN "". }
+    FOR a IN LISTALARMS("All") {
+        IF a:NAME = almName {
+            IF ABS(a:TIME - almUt) < 60 { RETURN a:ID. }
+            DELETEALARM(a:ID).
+        }
+    }
+    LOCAL alm IS ADDALARM("Raw", almUt, almName, almNote).
+    SET alm:ACTION TO "KillWarp".
+    RETURN alm:ID.
+}
+
 GLOBAL FUNCTION warpHoldEnabled {
     IF DEFINED CFG AND CFG:HASKEY("KEEP_WARP") {
         RETURN CFG["KEEP_WARP"] > 0.
