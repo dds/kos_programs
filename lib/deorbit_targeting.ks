@@ -884,14 +884,30 @@ GLOBAL FUNCTION phaseKscDeorbit {
                         FOR tok IN evaBiomes {
                             IF biomeLower:CONTAINS(tok) { SET wanted TO TRUE. }
                         }
-                        mLog("Now over: " + nowBiome
-                            + (CHOOSE " — EVA WINDOW." IF wanted ELSE ".")).
-                        IF wanted {
+                        // Science ledger: only the FIRST crossing
+                        // of each wanted biome stops the warp —
+                        // once its science is collected, later
+                        // passes are HUD-only. Clear a state key
+                        // (evaSci_<body>_<biome>) to re-arm one.
+                        LOCAL ledgerKey IS "evaSci_" + SHIP:BODY:NAME
+                            + "_" + nowBiome:REPLACE(" ", "_").
+                        IF wanted AND stateGet(ledgerKey, "") = "" {
+                            stateSet(ledgerKey, "done").
                             IF NOT warpHoldEnabled() { SET WARP TO 0. }
-                            HUDTEXT("EVA WINDOW: " + nowBiome
-                                + " below!", 12, 2, 18, GREEN, FALSE).
+                            mLog("Science stop: first " + nowBiome
+                                + " crossing — EVA/crew report time.").
+                            HUDTEXT("NEW BIOME: " + nowBiome
+                                + " — EVA + crew report!",
+                                12, 2, 18, GREEN, FALSE).
+                            IF DEFINED BOOT_LIB_RAN
+                                    AND BOOT_LIB_RAN:CONTAINS("science") {
+                                scienceRunAll().
+                            }
                         } ELSE {
-                            HUDTEXT("Now over: " + nowBiome,
+                            mLog("Now over: " + nowBiome
+                                + (CHOOSE " (collected)." IF wanted ELSE ".")).
+                            HUDTEXT("Now over: " + nowBiome
+                                + (CHOOSE " (collected)" IF wanted ELSE ""),
                                 8, 2, 15, CYAN, FALSE).
                         }
                     }
