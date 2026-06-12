@@ -175,9 +175,13 @@ LOCAL FUNCTION _deorbitImpactWalk {
             WAIT 2.
             LOCAL dProbe IS _walkDist(targetLat, targetLng).
             IF dProbe >= 0 AND d0 >= 0 AND dProbe > d0 + 200 {
+                // Confirm before trusting: a jitter spike during
+                // the settle can fake a worsening (operator-
+                // flagged). Flip, pulse the NEW direction, and
+                // require a measured IMPROVEMENT; if both
+                // directions read worse, the axis is unobservable
+                // right now — skip the leg.
                 SET goPro TO NOT goPro.
-                mLog("Along leg: measured flip — lng heuristic"
-                    + " wrong for this pass geometry.").
                 IF goPro { LOCK STEERING TO SHIP:PROGRADE. }
                 ELSE { LOCK STEERING TO SHIP:RETROGRADE. }
                 LOCAL flipDeadline IS TIME:SECONDS + 90.
@@ -186,6 +190,22 @@ LOCAL FUNCTION _deorbitImpactWalk {
                         * SHIP:VELOCITY:ORBIT) < 5
                         OR TIME:SECONDS > flipDeadline {
                     WAIT 0.2.
+                }
+                LOCK THROTTLE TO 0.012.
+                WAIT 0.05.
+                LOCK THROTTLE TO 0.
+                SET dvSpent TO dvSpent
+                    + (SHIP:AVAILABLETHRUST / MAX(0.1, SHIP:MASS))
+                      * 0.012 * 0.05.
+                WAIT 2.
+                LOCAL dConfirm IS _walkDist(targetLat, targetLng).
+                IF dConfirm >= 0 AND dConfirm > dProbe + 200 {
+                    SET reason TO "along-unobservable".
+                    mLog("Along leg: BOTH directions measured worse"
+                        + " — axis unobservable; skipping leg.").
+                } ELSE {
+                    mLog("Along leg: measured flip confirmed —"
+                        + " lng heuristic wrong for this geometry.").
                 }
             }
         }
