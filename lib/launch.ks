@@ -108,6 +108,16 @@ GLOBAL FUNCTION phaseLaunch {
             _logAscentTelemetry("abort-attitude-divergence").
         }
 
+        IF stateGet("phase","") <> "SUBORBIT"
+                AND SHIP:MAXTHRUST = 0 AND _launchAge() > 60
+                AND SHIP:STATUS = "SUB_ORBITAL"
+                AND SHIP:PERIAPSIS < SHIP:BODY:ATM:HEIGHT {
+            SET abortTriggered TO TRUE.
+            mLogError("Abort: thrust exhausted before orbit (Pe "
+                + ROUND(SHIP:PERIAPSIS/1000,1) + "km).").
+            _logAscentTelemetry("abort-thrust-exhausted").
+        }
+
         IF ABORT OR AG10 { SET abortTriggered TO TRUE. mLogError("Abort: manual trigger."). }
 
         IF abortTriggered {
@@ -225,6 +235,7 @@ GLOBAL FUNCTION phaseParking {
 // ── Staging ──────────────────────────────────────────────────
 
 LOCAL _stagingArmed IS FALSE.
+LOCAL _noThrustStages IS 0.
 
 GLOBAL FUNCTION armAscentStaging {
     IF _stagingArmed { RETURN. }
@@ -233,11 +244,26 @@ GLOBAL FUNCTION armAscentStaging {
     WHEN ascentNeedsStage() THEN {
         LOCAL ph IS stateGet("phase","").
         IF ph = "DONE" OR ph = "ABORT" { RETURN. }
+        // Null-safety order matters — flight-found: an
+        // out-of-fuel final staging during PARK was followed by
+        // 'object reference not set' (MJ suffixes can throw once
+        // the unit's stage is gone) and, with no engines left,
+        // needs-stage stays true forever and would machine-gun
+        // STAGE through chute/decoupler stages.
+        IF STAGE:NUMBER <= 0 { RETURN. }
+        IF NOT ADDONS:MJ:AVAILABLE { RETURN. }
         IF NOT ADDONS:MJ:ASCENT:ENABLED { RETURN. }
+        IF _noThrustStages >= 2 {
+            mLogError("Two stagings without thrust — no engines"
+                + " left; disarming ascent staging.").
+            RETURN.
+        }
         mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
         HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
         STAGE.
         WAIT 0.5.
+        IF SHIP:MAXTHRUST > 0 { SET _noThrustStages TO 0. }
+        ELSE { SET _noThrustStages TO _noThrustStages + 1. }
         PRESERVE.
     }
 
