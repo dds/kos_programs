@@ -905,8 +905,11 @@ GLOBAL FUNCTION phaseKscDeorbit {
                 }
             }
             LOCAL lastBiome IS "".
+            LOCAL i IS 0.
             UNTIL TIME:SECONDS >= resumeUt {
-                if MOD(TIME:SECONDS, 29) {
+                SET i TO i + 1.
+                // Each iteration of this loop is 5 seconds.
+                if MOD(i, 12) {
                     trySolarOrient().
                 }
 
