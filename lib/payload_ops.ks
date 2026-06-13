@@ -243,7 +243,7 @@ LOCAL FUNCTION _scanSatTypeMatches {
     LOCAL t IS scanType:TOLOWER.
     LOCAL _r IS requiredType:TOLOWER.
     IF t = _r { RETURN TRUE. }
-    IF r:CONTAINS("alt") {
+    IF _r:CONTAINS("alt") {
         RETURN t:CONTAINS("alt")
             AND (t:CONTAINS("low") OR t:CONTAINS("lo")).
     }
