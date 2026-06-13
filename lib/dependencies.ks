@@ -9,7 +9,7 @@ LOCAL FUNCTION _depLoaded {
 }
 
 GLOBAL FUNCTION dependencyAllPhases {
-    RETURN LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "POSTFLIGHT", "EVA_SCIENCE", "LAUNCH", "FAIR", "ANTS", "PARK", "ABORT", "PRELAUNCH", "SUBORBIT", "RDV", "MATCH", "CREW_XFER", "XING", "ESCAPE", "MCC", "AEROBRAKE", "DESCENT", "KSC_DEORBIT", "COAST", "CAPTURE", "FLYBY", "CIRC", "RAISE", "INCLINE", "ELLIPTICAL", "TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "SCANSAT_OPS", "LAND_DEORBIT", "LAND", "LAND_ASSIST", "ROVER", "MOLNIYA", "MOLNIYA_INSERT", "DROP_FOR_IMPACT_AND_RAISE_PE", "DONE", "SHAPE", "BPLANE", "GOTO", "AIRCLIMB", "ROCKETCLIMB", "SSTO_DEORBIT", "REENTRY", "APPROACH", "ARM", "FLY").
+    RETURN LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "POSTFLIGHT", "EVA_SCIENCE", "LAUNCH", "FAIR", "ANTS", "PARK", "ABORT", "PRELAUNCH", "SUBORBIT", "RDV", "MATCH", "CREW_XFER", "XING", "ESCAPE", "MCC", "AEROBRAKE", "DESCENT", "KSC_DEORBIT", "COAST", "CAPTURE", "FLYBY", "CIRC", "RAISE", "INCLINE", "ELLIPTICAL", "TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION", "SCANSAT_OPS", "LAND_DEORBIT", "LAND", "LAND_ASSIST", "ROVER", "MOLNIYA", "MOLNIYA_INSERT", "DROP_FOR_IMPACT_AND_RAISE_PE", "DONE", "SHAPE", "BPLANE", "GOTO", "AIRCLIMB", "ROCKETCLIMB", "SSTO_DEORBIT", "REENTRY", "APPROACH", "ARM", "FLY").
 }
 
 GLOBAL FUNCTION dependencyBindPhase {
@@ -47,6 +47,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "TARGETED_DEORBIT" { IF _depLoaded("payload_ops,deorbit_targeting,landing_site") { phaseMapSet(phaseMap, "TARGETED_DEORBIT", phaseTargetedDeorbit@). } }
     ELSE IF phaseKey = "RELEASE_PROBE" { IF _depLoaded("payload_ops") { phaseMapSet(phaseMap, "RELEASE_PROBE", phaseReleaseProbe@). } }
     ELSE IF phaseKey = "RELAY_OPS" { IF _depLoaded("payload_ops") { phaseMapSet(phaseMap, "RELAY_OPS", phaseRelayOps@). } }
+    ELSE IF phaseKey = "RELAY_CONSTELLATION" { IF _depLoaded("relay_constellation") { phaseMapSet(phaseMap, "RELAY_CONSTELLATION", phaseRelayConstellation@). } }
     ELSE IF phaseKey = "SCANSAT_OPS" { IF _depLoaded("scansat_ops,science") { phaseMapSet(phaseMap, "SCANSAT_OPS", phaseScansatOps@). } }
     ELSE IF phaseKey = "LAND_DEORBIT" { IF _depLoaded("payload_landing") { phaseMapSet(phaseMap, "LAND_DEORBIT", phaseLandDeorbit@). } }
     ELSE IF phaseKey = "LAND" { IF _depLoaded("payload_landing") { phaseMapSet(phaseMap, "LAND", phaseLand@). } }

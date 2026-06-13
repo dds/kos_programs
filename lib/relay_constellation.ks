@@ -29,6 +29,17 @@ GLOBAL FUNCTION constellationDeploy {
     HUDTEXT("Constellation deployed!", 8, 2, 18, GREEN, FALSE).
 }
 
+GLOBAL FUNCTION phaseRelayConstellation {
+    LOCAL relayCount IS 3.
+    LOCAL targetAlt IS 500000.
+    IF CFG:HASKEY("RELAY_COUNT") { SET relayCount TO CFG["RELAY_COUNT"]. }
+    IF CFG:HASKEY("RELAY_ALT") { SET targetAlt TO CFG["RELAY_ALT"]. }
+    ELSE IF CFG:HASKEY("TARGET_AP") { SET targetAlt TO CFG["TARGET_AP"]. }
+
+    constellationDeploy(relayCount, targetAlt).
+    nextPhase(xferSeq).
+}
+
 LOCAL FUNCTION _deployOneRelay {
     PARAMETER relayIdx.
     PARAMETER targetAlt.
