@@ -117,6 +117,10 @@ GLOBAL FUNCTION phaseScanSatOps {
         scienceStartScanners().
         WAIT 1.
         scienceScanStatus().
+        IF _scanSatAutoDeorbitEnabled() {
+            _scanSatMapThenDeorbit().
+            RETURN.
+        }
         _scanSatOnStation().
         nextPhase(_payloadSeq()).
         RETURN.
@@ -134,6 +138,10 @@ GLOBAL FUNCTION phaseScanSatOps {
         scienceStartScanners().
         WAIT 1.
         scienceScanStatus().
+        IF _scanSatAutoDeorbitEnabled() {
+            _scanSatMapThenDeorbit().
+            RETURN.
+        }
         _scanSatOnStation().
         nextPhase(_payloadSeq()).
         RETURN.
@@ -154,6 +162,10 @@ GLOBAL FUNCTION phaseScanSatOps {
         scienceStartScanners().
         WAIT 1.
         scienceScanStatus().
+        IF _scanSatAutoDeorbitEnabled() {
+            _scanSatMapThenDeorbit().
+            RETURN.
+        }
         _scanSatOnStation().
         nextPhase(_payloadSeq()).
         RETURN.
@@ -185,6 +197,9 @@ GLOBAL FUNCTION phaseScanSatOps {
     IF CFG:HASKEY("SCANSAT_DISPOSE_CARRIER")
             AND CFG["SCANSAT_DISPOSE_CARRIER"] > 0 {
         _disposeScanSatCarrier().
+    } ELSE IF _scanSatAutoDeorbitEnabled() {
+        _scanSatMapThenDeorbit().
+        RETURN.
     } ELSE {
         // The CPU stays with the mapper: hold station.
         _scanSatOnStation().
@@ -201,6 +216,224 @@ LOCAL FUNCTION _scanSatOnStation {
     IF CFG:HASKEY("SCANSAT_POWER_GUARD")
             AND CFG["SCANSAT_POWER_GUARD"] > 0 {
         scansatDutyCycle().
+    }
+}
+
+LOCAL FUNCTION _scanSatAutoDeorbitEnabled {
+    RETURN CFG:HASKEY("SCANSAT_AUTO_DEORBIT")
+        AND CFG["SCANSAT_AUTO_DEORBIT"] > 0.
+}
+
+LOCAL FUNCTION _scanSatRequiredTypes {
+    LOCAL raw IS "LOW_RES_ALTIMETRY,LOW_RES_RESOURCES,BIOME".
+    IF CFG:HASKEY("SCANSAT_REQUIRED_TYPES") {
+        SET raw TO CFG["SCANSAT_REQUIRED_TYPES"].
+    }
+    LOCAL out IS LIST().
+    FOR item IN raw:SPLIT(",") {
+        LOCAL trimmed IS item:TRIM.
+        IF trimmed <> "" { out:ADD(trimmed). }
+    }
+    RETURN out.
+}
+
+LOCAL FUNCTION _scanSatTypeMatches {
+    PARAMETER scanType.
+    PARAMETER requiredType.
+    LOCAL t IS scanType:TOLOWER.
+    LOCAL r IS requiredType:TOLOWER.
+    IF t = r { RETURN TRUE. }
+    IF r:CONTAINS("alt") {
+        RETURN t:CONTAINS("alt")
+            AND (t:CONTAINS("low") OR t:CONTAINS("lo")).
+    }
+    IF r:CONTAINS("resource") {
+        RETURN t:CONTAINS("resource")
+            AND (t:CONTAINS("low") OR t:CONTAINS("lo")).
+    }
+    IF r:CONTAINS("biome") {
+        RETURN t:CONTAINS("biome").
+    }
+    RETURN t:CONTAINS(r).
+}
+
+LOCAL FUNCTION _scanSatCoverageFor {
+    PARAMETER coverage.
+    PARAMETER requiredType.
+    LOCAL best IS -1.
+    FOR scanType IN coverage:KEYS {
+        IF _scanSatTypeMatches(scanType, requiredType) {
+            SET best TO MAX(best, coverage[scanType]).
+        }
+    }
+    RETURN best.
+}
+
+LOCAL FUNCTION _scanSatMapDone {
+    PARAMETER requiredTypes.
+    PARAMETER targetCoverage.
+    LOCAL coverage IS scienceScanCoverage().
+    LOCAL done IS TRUE.
+    LOCAL line IS "".
+    FOR requiredType IN requiredTypes {
+        LOCAL pct IS _scanSatCoverageFor(coverage, requiredType).
+        SET line TO line + requiredType + "=".
+        IF pct < 0 {
+            SET line TO line + "missing ".
+            SET done TO FALSE.
+        } ELSE {
+            SET line TO line + ROUND(pct, 1) + "% ".
+            IF pct < targetCoverage { SET done TO FALSE. }
+        }
+    }
+    mLogWarn("STATS scansat required-coverage target="
+        + ROUND(targetCoverage, 1) + " " + line:TRIM).
+    RETURN done.
+}
+
+LOCAL FUNCTION _scanSatWaitForRequiredCoverage {
+    LOCAL targetCoverage IS 99.
+    IF CFG:HASKEY("SCANSAT_TARGET_COVERAGE") {
+        SET targetCoverage TO CFG["SCANSAT_TARGET_COVERAGE"].
+    }
+    LOCAL requiredTypes IS _scanSatRequiredTypes().
+
+    mLog("SCANsat mapping until required coverage >= "
+        + ROUND(targetCoverage, 1) + "% for "
+        + requiredTypes:JOIN(", ") + ".").
+    HUDTEXT("SCANsat mapping to " + ROUND(targetCoverage, 1) + "%",
+        8, 2, 15, GREEN, FALSE).
+
+    LOCAL lowFrac IS 0.30.
+    LOCAL resumeFrac IS 0.60.
+    IF CFG:HASKEY("SCANSAT_POWER_LOW") { SET lowFrac TO CFG["SCANSAT_POWER_LOW"]. }
+    IF CFG:HASKEY("SCANSAT_POWER_RESUME") { SET resumeFrac TO CFG["SCANSAT_POWER_RESUME"]. }
+
+    scienceStartScanners().
+    LOCAL scansOn IS TRUE.
+    orientForSolar().
+    LOCAL lastOrient IS TIME:SECONDS.
+    LOCAL reorientPeriod IS 43200.
+    IF CFG:HASKEY("SOLAR_REORIENT_PERIOD") {
+        SET reorientPeriod TO CFG["SOLAR_REORIENT_PERIOD"].
+    }
+    LOCAL nextStatus IS 0.
+    LOCAL done IS FALSE.
+
+    UNTIL done OR AG10
+            OR stateGet("scansat_deorbit_requested", "false") = "true" {
+        LOCAL frac IS shipPowerFraction().
+        IF scansOn AND frac < lowFrac {
+            scienceStopScanners().
+            SET scansOn TO FALSE.
+            mLog("SCANsat scans off for charging at "
+                + ROUND(frac * 100, 0) + "% EC.").
+        } ELSE IF NOT scansOn AND frac > resumeFrac {
+            orientForSolar().
+            SET lastOrient TO TIME:SECONDS.
+            scienceStartScanners().
+            SET scansOn TO TRUE.
+            mLog("SCANsat scans resumed at "
+                + ROUND(frac * 100, 0) + "% EC.").
+        }
+
+        IF TIME:SECONDS - lastOrient > reorientPeriod {
+            orientForSolar().
+            SET lastOrient TO TIME:SECONDS.
+        }
+
+        IF TIME:SECONDS >= nextStatus {
+            SET nextStatus TO TIME:SECONDS + 600.
+            scienceScanStatus().
+            SET done TO _scanSatMapDone(requiredTypes, targetCoverage).
+        }
+        WAIT 30.
+    }
+
+    IF AG10 {
+        mLogWarn("SCANsat mapping wait paused by AG10 before required coverage.").
+        scienceStartScanners().
+        yieldToPrompt().
+        RETURN FALSE.
+    }
+    IF stateGet("scansat_deorbit_requested", "false") = "true" {
+        mLogWarn("SCANsat deorbit override requested before required coverage.").
+        scienceStopScanners().
+        RETURN TRUE.
+    }
+    mLog("SCANsat required coverage complete.").
+    scienceStopScanners().
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _scanSatSelfDeorbit {
+    LOCAL targetPe IS 30000.
+    IF CFG:HASKEY("SCANSAT_DEORBIT_PE") {
+        SET targetPe TO CFG["SCANSAT_DEORBIT_PE"].
+    }
+    IF SHIP:PERIAPSIS < targetPe {
+        mLog("SCANsat already on impact trajectory; Pe="
+            + ROUND(SHIP:PERIAPSIS / 1000, 1) + "km.").
+        stateSet("scansat_deorbit_complete", "true").
+        WAIT UNTIL FALSE.
+        RETURN.
+    }
+
+    mLogWarn("STATS scansat-self-deorbit setup PeKm="
+        + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " targetPeKm=" + ROUND(targetPe/1000,1)
+        + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
+
+    IF SHIP:AVAILABLETHRUST <= 0 {
+        mLogError("SCANsat cannot self-deorbit: no available thrust.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    SET SAS TO FALSE.
+    LOCK STEERING TO RETROGRADE.
+    LOCAL startT IS TIME:SECONDS.
+    UNTIL VANG(SHIP:FACING:FOREVECTOR, SHIP:RETROGRADE:FOREVECTOR) < 5
+            OR TIME:SECONDS - startT > 60 {
+        WAIT 0.1.
+    }
+
+    LOCK THROTTLE TO 1.
+    LOCAL maxTime IS 600.
+    IF CFG:HASKEY("SCANSAT_DEORBIT_MAX_TIME") {
+        SET maxTime TO CFG["SCANSAT_DEORBIT_MAX_TIME"].
+    }
+    UNTIL SHIP:PERIAPSIS < targetPe
+            OR SHIP:AVAILABLETHRUST <= 0
+            OR TIME:SECONDS - startT > maxTime {
+        LOCK STEERING TO RETROGRADE.
+        WAIT 0.1.
+    }
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+
+    LOCAL status_ IS "complete".
+    IF SHIP:PERIAPSIS >= targetPe AND SHIP:AVAILABLETHRUST <= 0 {
+        SET status_ TO "out-of-thrust".
+    } ELSE IF SHIP:PERIAPSIS >= targetPe {
+        SET status_ TO "timeout".
+    }
+    mLogWarn("STATS scansat-self-deorbit result status=" + status_
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " durationS=" + ROUND(TIME:SECONDS - startT,1)).
+
+    stateSet("scansat_deorbit_complete", "true").
+    mLog("SCANsat self-deorbit complete. Idling until impact/reentry.").
+    WAIT UNTIL FALSE.
+}
+
+LOCAL FUNCTION _scanSatMapThenDeorbit {
+    IF _scanSatWaitForRequiredCoverage() {
+        _scanSatSelfDeorbit().
     }
 }
 
@@ -371,4 +604,3 @@ LOCAL FUNCTION _scanSatImpactThenRecover {
     mLogWarn("SCANsat released. Orbit correction not available in this band.").
     RETURN TRUE.
 }
-

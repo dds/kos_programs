@@ -1,11 +1,12 @@
-// cmd/scansatdeorbit.ks — Signal the SCANsat CPU to begin its deorbit.
-// Run on the SCANsat vessel when scanning is complete.
+// cmd/scansatdeorbit.ks - Request immediate SCANsat self-deorbit.
+// Run on the SCANsat vessel only as a manual override; normal
+// SCANSAT_OPS waits for required map coverage first.
 // Usage: RUNPATH("0:/cmd/scansatdeorbit.ks").
 //
-// The roles/scansat.ks role polls this state every 5 minutes; the
-// deorbit burn fires on the next poll after this cmd runs.
+// The SCANSAT_OPS mapping loop polls this state and starts the
+// deorbit burn on the next loop tick.
 
 stateSet("scansat_deorbit_requested", "true").
 mLog("scansatdeorbit: scansat_deorbit_requested set.").
-PRINT "SCANsat deorbit requested. Burn fires on next 5-min poll.".
-PRINT "Pe target: 40 km.".
+PRINT "SCANsat deorbit override requested.".
+PRINT "Burn starts on the next SCANSAT_OPS loop tick.".
