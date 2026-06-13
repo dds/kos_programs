@@ -4,7 +4,6 @@
 // ============================================================
 
 LOCAL FUNCTION _payloadSeq {
-    IF DEFINED fr3Seq { RETURN fr3Seq. }
     RETURN launchSeq.
 }
 

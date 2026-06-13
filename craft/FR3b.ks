@@ -2,9 +2,8 @@
 // FR3b.ks  —  FR3b vehicle flight computer  (0:/craft/FR3b.ks)
 //
 // Two-seat variant of the FR3: same lifter family, double-mass
-// crew pod. Same contract and phase plumbing as FR3 (the fr3*
-// globals are shared names — only one craft script loads per
-// vessel). Ship name:  FR3b-TARGET-TYPE1-...-NN
+// crew pod. Same contract and phase plumbing as FR3.
+// Ship name:  FR3b-TARGET-TYPE1-...-NN
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
@@ -16,7 +15,6 @@ GLOBAL CFG IS LEXICON(
 ).
 
 applyKnownMissionState().
-GLOBAL fr3Seq IS LIST().
 
 LOCAL FUNCTION _fr3PrintConfig {
     LOCAL seq IS fr3BuildPhaseSequence().
@@ -139,7 +137,6 @@ GLOBAL BOOT_CLEANUP IS LEXICON(
 
 GLOBAL FUNCTION main {
     LOCAL seq IS fr3BuildPhaseSequence().
-    SET fr3Seq TO seq.
     SET launchSeq TO seq.
     SET xferSeq TO seq.
 

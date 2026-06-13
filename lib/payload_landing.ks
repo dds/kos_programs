@@ -13,17 +13,17 @@ GLOBAL FUNCTION phaseLandDeorbit {
             AND (CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH")
                 AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0) {
         mLogWarn("STATS land-deorbit phase skip status=already-suborbital mode=sim").
-        nextPhase(fr3Seq).
+        nextPhase(launchSeq).
         RETURN.
     }
     IF SHIP:STATUS = "SUB_ORBITAL" AND landingImpactAcceptableForAssist() {
         mLogWarn("STATS land-deorbit phase skip status=already-suborbital").
-        nextPhase(fr3Seq).
+        nextPhase(launchSeq).
         RETURN.
     }
     IF CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH") AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0 {
         IF _timedLandingDeorbit() {
-            nextPhase(fr3Seq).
+            nextPhase(launchSeq).
         }
         RETURN.
     }
@@ -42,7 +42,7 @@ GLOBAL FUNCTION phaseLandDeorbit {
         yieldToPrompt().
         RETURN.
     }
-    nextPhase(fr3Seq).
+    nextPhase(launchSeq).
 }
 
 LOCAL FUNCTION _timedLandingDeorbit {
@@ -187,7 +187,7 @@ GLOBAL FUNCTION phaseLandAssist {
         yieldToPrompt().
         RETURN.
     }
-    nextPhase(fr3Seq).
+    nextPhase(launchSeq).
 }
 
 GLOBAL FUNCTION phaseLand {
@@ -204,7 +204,7 @@ GLOBAL FUNCTION phaseLand {
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " v=" + ROUND(SHIP:VERTICALSPEED,1)
         + " status=" + SHIP:STATUS).
-    nextPhase(fr3Seq).
+    nextPhase(launchSeq).
 }
 
 LOCAL FUNCTION _redirectOrbitalLandingPhase {

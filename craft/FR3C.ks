@@ -2,7 +2,7 @@
 // FR3C.ks  —  FR3C vehicle flight computer  (0:/craft/FR3C.ks)
 //
 // Methane-engine successor to FR3b: same stage-and-payload
-// plumbing and fr3* phase infrastructure, fewer parts, lighter.
+// plumbing, fewer parts, lighter.
 // Probe-core layout on SCANsat missions:
 //   - SCANsat CPU (CORE:TAG = "scansat") routes to roles/scansat.ks
 //     and acts as the primary mission computer.
@@ -17,7 +17,6 @@ GLOBAL CFG IS LEXICON(
 ).
 
 applyKnownMissionState().
-GLOBAL fr3Seq IS LIST().
 
 LOCAL FUNCTION _fr3PrintConfig {
     LOCAL seq IS fr3BuildPhaseSequence().
@@ -132,7 +131,6 @@ GLOBAL BOOT_CLEANUP IS LEXICON(
 
 GLOBAL FUNCTION main {
     LOCAL seq IS fr3BuildPhaseSequence().
-    SET fr3Seq TO seq.
     SET launchSeq TO seq.
     SET xferSeq TO seq.
 

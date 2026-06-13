@@ -15,7 +15,6 @@ GLOBAL CFG IS LEXICON(
 ).
 
 applyKnownMissionState().
-GLOBAL fr3Seq IS LIST().
 
 LOCAL FUNCTION _fr3PrintConfig {
     LOCAL seq IS fr3BuildPhaseSequence().
@@ -122,7 +121,6 @@ GLOBAL BOOT_CLEANUP IS LEXICON(
 
 GLOBAL FUNCTION main {
     LOCAL seq IS fr3BuildPhaseSequence().
-    SET fr3Seq TO seq.
     SET launchSeq TO seq.
     SET xferSeq TO seq.
 
