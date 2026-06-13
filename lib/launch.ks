@@ -16,6 +16,9 @@ LOCAL FUNCTION _ascentTwr {
     RETURN SHIP:AVAILABLETHRUST / (SHIP:MASS * 9.81).
 }
 
+LOCAL _stagingArmed IS FALSE.
+LOCAL _noThrustStages IS 0.
+
 // One cheap state read per tick for the ascent watcher's WHEN
 // condition (was five) — also a mitigation candidate for the
 // mainline starvation seen during MJ's coast (ANTS stall).
@@ -23,6 +26,16 @@ GLOBAL FUNCTION bootLibAscentWatchPhase {
     LOCAL ph IS stateGet("phase", "").
     RETURN ph = "LAUNCH" OR ph = "FAIR" OR ph = "ANTS"
         OR ph = "PARK" OR ph = "SUBORBIT".
+}
+
+LOCAL FUNCTION _ascentStageAttemptPending {
+    IF NOT _stagingArmed { RETURN FALSE. }
+    IF STAGE:NUMBER <= 0 { RETURN FALSE. }
+    IF _noThrustStages >= 2 { RETURN FALSE. }
+    IF NOT ADDONS:MJ:AVAILABLE { RETURN FALSE. }
+    IF NOT ADDONS:MJ:ASCENT:ENABLED
+            AND NOT bootLibAscentWatchPhase() { RETURN FALSE. }
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _logAscentTelemetry {
@@ -118,6 +131,7 @@ GLOBAL FUNCTION phaseLaunch {
         IF stateGet("phase","") <> "SUBORBIT"
                 AND SHIP:MAXTHRUST = 0 AND _launchAge() > 60
                 AND SHIP:STATUS = "SUB_ORBITAL"
+                AND NOT _ascentStageAttemptPending()
                 AND SHIP:PERIAPSIS < SHIP:BODY:ATM:HEIGHT {
             SET abortTriggered TO TRUE.
             mLogError("Abort: thrust exhausted before orbit (Pe "
@@ -281,9 +295,6 @@ GLOBAL FUNCTION phaseParking {
 }
 
 // ── Staging ──────────────────────────────────────────────────
-
-LOCAL _stagingArmed IS FALSE.
-LOCAL _noThrustStages IS 0.
 
 GLOBAL FUNCTION armAscentStaging {
     IF _stagingArmed { RETURN. }
