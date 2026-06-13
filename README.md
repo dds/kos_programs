@@ -207,7 +207,7 @@ a Whiplash+rocket build just lowers `SSTO_SWITCH_SPEED`.
 `DRONE_STYLE`: **TILT** (throttleable lift engines + reaction wheels, Kerbin)
 and **RCS** (level-attitude translation for Mun/Minmus kerbal transport —
 no tilting). Modes: **AG7** hover, **AG8** fly to the selected waypoint,
-**AG9** land (radar-scheduled flare), **AG10** return to launch point.
+**AG9** land (radar-scheduled flare).
 Terrain-lookahead altitude floor, low-fuel/EC autoland, sorties chained with
 `restartflightplan`. Sequence: `ARM, FLY, DONE`.
 

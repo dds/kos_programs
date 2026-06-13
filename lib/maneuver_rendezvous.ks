@@ -502,7 +502,7 @@ GLOBAL FUNCTION phaseMatch {
 // CREW_XFER phase — hold position until the rescued kerbal is
 // aboard (crew count rises), then continue the sequence. The
 // starting count persists in state so a reboot mid-EVA doesn't
-// re-baseline with the rescuee already aboard. AG10 skips.
+// re-baseline with the rescuee already aboard.
 // ============================================================
 GLOBAL FUNCTION phaseCrewXfer {
     LOCAL startCount IS stateGetNum("crew_xfer_start", -1).
@@ -516,10 +516,9 @@ GLOBAL FUNCTION phaseCrewXfer {
         PRINT " ".
         PRINT "  CREW TRANSFER".
         PRINT "  EVA the rescued kerbal to this ship.".
-        PRINT "  (AG10 to continue without a crew change.)".
         mLog("CREW_XFER: waiting for crew count > " + startCount + ".").
         LOCAL nextHud IS 0.
-        UNTIL SHIP:CREW():LENGTH > startCount OR AG10 {
+        UNTIL SHIP:CREW():LENGTH > startCount {
             IF TIME:SECONDS > nextHud {
                 HUDTEXT("Awaiting crew transfer ("
                     + SHIP:CREW():LENGTH + "/" + (startCount + 1) + ")",
@@ -527,9 +526,6 @@ GLOBAL FUNCTION phaseCrewXfer {
                 SET nextHud TO TIME:SECONDS + 15.
             }
             WAIT 1.
-        }
-        IF AG10 AND SHIP:CREW():LENGTH <= startCount {
-            mLogWarn("CREW_XFER: skipped by operator (AG10).").
         }
     }
     LOCAL roster IS "".

@@ -17,8 +17,7 @@
 //     enough RCS for >1 local-g of up-thrust.
 //
 // In flight: AG7 hover, AG8 fly to the selected waypoint,
-// AG9 land here, AG10 return to launch point. A commanded
-// landing that sits for 8s ends the sortie;
+// AG9 land here. A commanded landing that sits for 8s ends the sortie;
 // RUNPATH("1:/cmd/restartflightplan") re-arms for the next one.
 // ============================================================
 

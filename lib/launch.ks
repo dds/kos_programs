@@ -139,7 +139,7 @@ GLOBAL FUNCTION phaseLaunch {
             _logAscentTelemetry("abort-thrust-exhausted").
         }
 
-        IF ABORT OR AG10 { SET abortTriggered TO TRUE. mLogError("Abort: manual trigger."). }
+        IF ABORT { SET abortTriggered TO TRUE. mLogError("Abort: manual trigger."). }
 
         IF abortTriggered {
             launchAbort().
@@ -154,12 +154,12 @@ GLOBAL FUNCTION phaseLaunch {
     stateSetNum("launch_site_lng", SHIP:GEOPOSITION:LNG).
     stateSet("launch_vs_nonpos_logged", "false").
 
-    mLog("Press ABORT or AG10 within 5s to hold launch.").
-    HUDTEXT("T-5: ABORT/AG10 to hold", 5, 2, 16, YELLOW, FALSE).
+    mLog("Press ABORT within 5s to hold launch.").
+    HUDTEXT("T-5: ABORT to hold", 5, 2, 16, YELLOW, FALSE).
     LOCAL aborted IS FALSE.
     LOCAL tEnd IS TIME:SECONDS + 5.
-    WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT OR AG10.
-    IF ABORT OR AG10 { SET aborted TO TRUE. }
+    WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT.
+    IF ABORT { SET aborted TO TRUE. }
     IF aborted {
         mLog("Launch hold — operator abort.").
         SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.

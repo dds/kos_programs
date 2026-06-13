@@ -89,7 +89,7 @@ LOCAL FUNCTION _waitForPrelaunchUt {
     }
 
     IF targetUt - TIME:SECONDS > 60 { SET WARP TO 4. }
-    UNTIL TIME:SECONDS >= targetUt OR ABORT OR AG10 {
+    UNTIL TIME:SECONDS >= targetUt OR ABORT {
         LOCAL remaining IS MAX(0, targetUt - TIME:SECONDS).
         HUDTEXT("Prelaunch window in " + ROUND(remaining, 0) + "s", 5, 2, 13, CYAN, FALSE).
         WAIT MIN(30, MAX(0.5, remaining)).
@@ -288,7 +288,7 @@ LOCAL FUNCTION _prelaunchToVessel {
         + " lead=" + ROUND(best["lead"], 1)).
 
     _waitForPrelaunchUt(launchUt).
-    IF ABORT OR AG10 {
+    IF ABORT {
         mLog("PRELAUNCH hold — operator abort.").
         yieldToPrompt().
         RETURN.
@@ -347,7 +347,7 @@ GLOBAL FUNCTION phasePrelaunch {
         + "s wait=" + ROUND(waitTime, 0) + "s.").
 
     _waitForPrelaunchUt(targetUt).
-    IF ABORT OR AG10 {
+    IF ABORT {
         mLog("PRELAUNCH hold — operator abort.").
         yieldToPrompt().
         RETURN.

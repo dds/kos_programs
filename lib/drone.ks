@@ -25,7 +25,6 @@
 // Modes (driven by action groups, like the airplane assists):
 //   AG7 — hover-hold here          AG9  — land here
 //   AG8 — fly to the waypoint selected in Waypoint Manager
-//   AG10 — return to the launch point and hover
 //
 // Phase: FLY — auto-takeoff to hover, then obey AGs; the phase
 // ends after a commanded landing. restartflightplan flies the
@@ -54,7 +53,6 @@ LOCAL _dnLowResWarned IS FALSE.
 LOCAL _dnPrevAg7 IS FALSE.
 LOCAL _dnPrevAg8 IS FALSE.
 LOCAL _dnPrevAg9 IS FALSE.
-LOCAL _dnPrevAg10 IS FALSE.
 
 LOCAL FUNCTION _dnCfg {
     PARAMETER key, defaultValue.
@@ -93,7 +91,6 @@ GLOBAL FUNCTION droneInit {
     SET _dnPrevAg7 TO AG7.
     SET _dnPrevAg8 TO AG8.
     SET _dnPrevAg9 TO AG9.
-    SET _dnPrevAg10 TO AG10.
     SET droneMode TO "IDLE".
     SET droneActive TO TRUE.
     IF _dnCfg("DRONE_STYLE", "TILT") = "RCS" { RCS ON. }
@@ -101,7 +98,7 @@ GLOBAL FUNCTION droneInit {
         + " g=" + ROUND(_dnGravity(), 2)
         + " maxAcc=" + ROUND(_dnMaxAcc(), 1)
         + " home=" + ROUND(_dnHomeGeo:LAT, 4) + "," + ROUND(_dnHomeGeo:LNG, 4)).
-    HUDTEXT("Drone ready — AG7 hover  AG8 waypoint  AG9 land  AG10 home",
+    HUDTEXT("Drone ready — AG7 hover  AG8 waypoint  AG9 land",
         8, 2, 14, GREEN, FALSE).
 }
 
@@ -316,7 +313,6 @@ LOCAL FUNCTION _dnCheckAgs {
     IF AG7 <> _dnPrevAg7 { SET _dnPrevAg7 TO AG7. droneHoverHere(). }
     IF AG8 <> _dnPrevAg8 { SET _dnPrevAg8 TO AG8. droneGotoWaypoint(). }
     IF AG9 <> _dnPrevAg9 { SET _dnPrevAg9 TO AG9. droneLandHere(). }
-    IF AG10 <> _dnPrevAg10 { SET _dnPrevAg10 TO AG10. droneReturnHome(). }
 }
 
 // Legacy autoland: force a landing while there is still margin.
@@ -363,7 +359,7 @@ GLOBAL FUNCTION phaseArm {
     flightPlanRow("STYLE", _dnCfg("DRONE_STYLE", "TILT")).
     flightPlanRow("CRUISE", _dnCfg("DRONE_CRUISE_AGL", 60) + "m AGL / "
         + _dnCfg("DRONE_CRUISE_SPEED", 25) + " m/s").
-    flightPlanRow("MODES", "AG7 hover AG8 wpt AG9 land AG10 home").
+    flightPlanRow("MODES", "AG7 hover AG8 wpt AG9 land").
     flightPlanLine().
 
     flightPlanChecklist("DRONE PREFLIGHT", LIST(

@@ -11,7 +11,7 @@
 // settle), re-aims, and restores your warp factor.
 //
 // Usage:
-//   RUNPATH("1:/cmd/solarhold.ks").           // hold until AG10
+//   RUNPATH("1:/cmd/solarhold.ks").           // hold indefinitely
 //   RUNPATH("1:/cmd/solarhold.ks", 86400).    // hold N seconds
 //   RUNPATH("1:/cmd/solarhold.ks", 0, FALSE). // skip the search,
 //                                             // quick cached aim

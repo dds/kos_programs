@@ -221,17 +221,17 @@ GLOBAL FUNCTION solarHoldTick {
     RETURN MAX(newRef, 0).
 }
 
-// Blocking hold: maintain the solar attitude until endUt (0 =
-// until AG10). The steering lock lives as long as this runs —
+// Blocking hold: maintain the solar attitude until endUt. If endUt
+// is 0, hold indefinitely. The steering lock lives as long as this runs —
 // on SAS-less craft that IS the hold.
 GLOBAL FUNCTION solarMaintainHold {
     PARAMETER endUt IS 0.
     LOCAL refFlow IS shipSolarFlow().
     mLog("Solar hold engaged"
         + (CHOOSE " for " + ROUND(endUt - TIME:SECONDS, 0) + "s"
-           IF endUt > 0 ELSE " (AG10 ends)")
+           IF endUt > 0 ELSE " indefinitely")
         + ". Warp at will.").
-    UNTIL (endUt > 0 AND TIME:SECONDS >= endUt) OR AG10 {
+    UNTIL (endUt > 0 AND TIME:SECONDS >= endUt) {
         SET refFlow TO solarHoldTick(refFlow).
         WAIT 5.
     }

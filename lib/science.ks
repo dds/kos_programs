@@ -322,8 +322,7 @@ GLOBAL FUNCTION phaseEvaScience {
 // SCANSAT_POWER_RESUME (60%). Charge on the held solar attitude,
 // scan in bursts, repeat until the map is done. Survives time
 // warp (game-time waits, no warp-killing alarms) so 5-10x grinds
-// out full coverage. AG10 ends the cycle and continues the
-// sequence with the scanners left ON.
+// out full coverage.
 // ============================================================
 // Area check: TRUE when the terrain below still needs scanning —
 // any active scan type missing from COMPLETEDSCANS at the current
@@ -346,7 +345,7 @@ GLOBAL FUNCTION scansatDutyCycle {
     IF CFG:HASKEY("SCANSAT_POWER_RESUME") { SET resumeFrac TO CFG["SCANSAT_POWER_RESUME"]. }
     mLog("Scan duty cycle: OFF below " + ROUND(lowFrac * 100, 0)
         + "%, ON above " + ROUND(resumeFrac * 100, 0)
-        + "%, and only over unmapped terrain. AG10 ends. Warp away.").
+        + "%, and only over unmapped terrain. Warp away.").
 
     // Active scan types are detected empirically: whichever
     // types' coverage RISES after the cycle starts is what our
@@ -391,7 +390,7 @@ GLOBAL FUNCTION scansatDutyCycle {
     LOCAL lastOrient IS TIME:SECONDS.
     LOCAL nextStatus IS TIME:SECONDS + 600.
 
-    UNTIL AG10 OR mapDone {
+    UNTIL mapDone {
         LOCAL frac IS shipPowerFraction().
         IF powerOk AND frac < lowFrac { SET powerOk TO FALSE. }
         ELSE IF NOT powerOk AND frac > resumeFrac { SET powerOk TO TRUE. }
@@ -462,15 +461,10 @@ GLOBAL FUNCTION scansatDutyCycle {
         }
         WAIT 2.
     }
-    IF mapDone {
-        scienceStopScanners().
-        mLog("Mapping COMPLETE: all active scan types >= "
-            + ROUND(targetCov, 0) + "% — scanners off, continuing.").
-        mLogWarn("STATS scansat duty result=complete types="
-            + active:JOIN(",")).
-        HUDTEXT("Mapping complete", 10, 2, 18, GREEN, FALSE).
-    } ELSE {
-        scienceStartScanners().
-        mLog("Duty cycle ended (AG10) — scanners left ON, continuing.").
-    }
+    scienceStopScanners().
+    mLog("Mapping COMPLETE: all active scan types >= "
+        + ROUND(targetCov, 0) + "% — scanners off, continuing.").
+    mLogWarn("STATS scansat duty result=complete types="
+        + active:JOIN(",")).
+    HUDTEXT("Mapping complete", 10, 2, 18, GREEN, FALSE).
 }

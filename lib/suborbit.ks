@@ -140,7 +140,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     UNTIL _suborbitGroundRemaining(siteGeo) <= lead
             OR (SHIP:VERTICALSPEED < 0
                 AND SHIP:ALTITUDE < arcPe - 8000)
-            OR ABORT OR AG10 {
+            OR ABORT {
         SET solarRef TO trySolarHoldTick(solarRef).
         IF TIME:SECONDS > nextEtaCheck {
             SET nextEtaCheck TO TIME:SECONDS + 10.
@@ -162,7 +162,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     }
     SET WARP TO 0.
     IF alarmId <> "" { DELETEALARM(alarmId). }
-    IF ABORT OR AG10 { launchAbort(). RETURN. }
+    IF ABORT { launchAbort(). RETURN. }
     IF SHIP:ALTITUDE < arcPe - 8000 AND SHIP:VERTICALSPEED < 0 {
         // Drag beat the schedule. If we're on final approach with
         // thrust and altitude in hand, the targeted walk can still
@@ -207,10 +207,10 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     UNTIL VANG(SHIP:FACING:FOREVECTOR,
             CHOOSE SHIP:PROGRADE:VECTOR IF goPro
             ELSE SHIP:RETROGRADE:VECTOR) < 5
-            OR TIME:SECONDS > alignDeadline OR ABORT OR AG10 {
+            OR TIME:SECONDS > alignDeadline OR ABORT {
         WAIT 0.2.
     }
-    IF ABORT OR AG10 { launchAbort(). RETURN. }
+    IF ABORT { launchAbort(). RETURN. }
     LOCAL throttleCmd IS 0.
     LOCK THROTTLE TO throttleCmd.
     LOCAL dMin IS 1e12.
@@ -218,7 +218,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     LOCAL walkDeadline IS TIME:SECONDS + 240.
     LOCAL reason IS "".
     UNTIL reason <> "" {
-        IF ABORT OR AG10 { launchAbort(). RETURN. }
+        IF ABORT { launchAbort(). RETURN. }
         LOCAL aligned IS VANG(SHIP:FACING:FOREVECTOR,
             CHOOSE SHIP:PROGRADE:VECTOR IF goPro
             ELSE SHIP:RETROGRADE:VECTOR) < 10.
@@ -302,8 +302,8 @@ LOCAL FUNCTION _suborbitReturnArc {
         + ROUND(tol / 1000, 0) + "km.").
 
     // Ride the MechJeb boost, then take over above the atmosphere.
-    WAIT UNTIL SHIP:ALTITUDE >= atmTop OR ABORT OR AG10.
-    IF ABORT OR AG10 { launchAbort(). RETURN. }
+    WAIT UNTIL SHIP:ALTITUDE >= atmTop OR ABORT.
+    IF ABORT { launchAbort(). RETURN. }
     IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
 
     // The arc must CLEAR the atmosphere except for the Pe dip —
@@ -358,10 +358,10 @@ LOCAL FUNCTION _suborbitReturnArc {
         + "s (Ap in " + ROUND(ETA:APOAPSIS, 0) + "s, burn ~"
         + ROUND(burnTime, 0) + "s).").
     LOCK STEERING TO VXCL(UP:VECTOR, SHIP:VELOCITY:ORBIT).
-    WAIT UNTIL TIME:SECONDS >= burnStartUt OR ABORT OR AG10.
+    WAIT UNTIL TIME:SECONDS >= burnStartUt OR ABORT.
     SET WARP TO 0.
     IF alarmId <> "" { DELETEALARM(alarmId). }
-    IF ABORT OR AG10 { launchAbort(). RETURN. }
+    IF ABORT { launchAbort(). RETURN. }
 
     // Arc burn: horizontal until Pe reaches the target. Elements
     // only — Trajectories has no business here.
@@ -371,7 +371,7 @@ LOCAL FUNCTION _suborbitReturnArc {
     LOCAL sweepDeadline IS TIME:SECONDS + 600.
     LOCAL cutReason IS "".
     UNTIL cutReason <> "" {
-        IF ABORT OR AG10 { launchAbort(). RETURN. }
+        IF ABORT { launchAbort(). RETURN. }
         IF NOT _suborbitCanBurn() {
             SET cutReason TO "fell-into-atmosphere".
         } ELSE IF SHIP:AVAILABLETHRUST <= 0 {
@@ -472,9 +472,9 @@ GLOBAL FUNCTION phaseSuborbit {
     IF SHIP:APOAPSIS < targetAp * 0.95 {
         WAIT UNTIL SHIP:APOAPSIS >= targetAp * 0.95
             OR NOT (ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED)
-            OR ABORT OR AG10.
+            OR ABORT.
     }
-    IF ABORT OR AG10 {
+    IF ABORT {
         launchAbort().
         RETURN.
     }
