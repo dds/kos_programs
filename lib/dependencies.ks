@@ -46,7 +46,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "TARGETED_DEORBIT" { IF _depLoaded("payload_ops,deorbit_targeting,landing_site") { phaseMapSet(phaseMap, "TARGETED_DEORBIT", phaseTargetedDeorbit@). } }
     ELSE IF phaseKey = "RELEASE_PROBE" { IF _depLoaded("payload_ops") { phaseMapSet(phaseMap, "RELEASE_PROBE", phaseReleaseProbe@). } }
     ELSE IF phaseKey = "RELAY_OPS" { IF _depLoaded("payload_ops") { phaseMapSet(phaseMap, "RELAY_OPS", phaseRelayOps@). } }
-    ELSE IF phaseKey = "SCANSAT_OPS" { IF _depLoaded("payload_ops,science") { phaseMapSet(phaseMap, "SCANSAT_OPS", phaseScansatOps@). } }
+    ELSE IF phaseKey = "SCANSAT_OPS" { IF _depLoaded("scansat_ops,science") { phaseMapSet(phaseMap, "SCANSAT_OPS", phaseScansatOps@). } }
     ELSE IF phaseKey = "LAND_DEORBIT" { IF _depLoaded("payload_landing") { phaseMapSet(phaseMap, "LAND_DEORBIT", phaseLandDeorbit@). } }
     ELSE IF phaseKey = "LAND" { IF _depLoaded("payload_landing") { phaseMapSet(phaseMap, "LAND", phaseLand@). } }
     ELSE IF phaseKey = "LAND_ASSIST" { IF _depLoaded("payload_landing") { phaseMapSet(phaseMap, "LAND_ASSIST", phaseLandAssist@). } }
