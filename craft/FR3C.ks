@@ -4,11 +4,11 @@
 // Methane-engine successor to FR3b: same stage-and-payload
 // plumbing and fr3* phase infrastructure, fewer parts, lighter.
 // Two probe cores on SCANsat missions:
-//   - Main CPU (CORE:TAG = "") lives on the SCANsat; flies the
-//     mission and manages the mapper on station after release.
-//   - Stage CPU (CORE:TAG = "stage2_deorbit") stays dormant
-//     during flight, then deorbits the stage autonomously after
-//     the main CPU releases the payload.
+//   - Stage CPU (CORE:TAG = "stage2") — no roles/stage2.ks exists,
+//     so boot falls through to this script via vehicle-name routing.
+//     Flies the full mission and returns to KSC after payload release.
+//   - SCANsat CPU (CORE:TAG = "scansat") — routes to roles/scansat.ks,
+//     stays dormant during flight, manages the scanner after separation.
 // Ship name:  FR3C-TARGET-TYPE1-...-NN
 // ============================================================
 
