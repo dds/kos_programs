@@ -241,20 +241,20 @@ LOCAL FUNCTION _scanSatTypeMatches {
     PARAMETER scanType.
     PARAMETER requiredType.
     LOCAL t IS scanType:TOLOWER.
-    LOCAL r IS requiredType:TOLOWER.
-    IF t = r { RETURN TRUE. }
+    LOCAL _r IS requiredType:TOLOWER.
+    IF t = _r { RETURN TRUE. }
     IF r:CONTAINS("alt") {
         RETURN t:CONTAINS("alt")
             AND (t:CONTAINS("low") OR t:CONTAINS("lo")).
     }
-    IF r:CONTAINS("resource") {
+    IF _r:CONTAINS("resource") {
         RETURN t:CONTAINS("resource")
             AND (t:CONTAINS("low") OR t:CONTAINS("lo")).
     }
-    IF r:CONTAINS("biome") {
+    IF _r:CONTAINS("biome") {
         RETURN t:CONTAINS("biome").
     }
-    RETURN t:CONTAINS(r).
+    RETURN t:CONTAINS(_r).
 }
 
 LOCAL FUNCTION _scanSatCoverageFor {
@@ -320,8 +320,7 @@ LOCAL FUNCTION _scanSatWaitForRequiredCoverage {
     LOCAL nextStatus IS 0.
     LOCAL done IS FALSE.
 
-    UNTIL done OR AG10
-            OR stateGet("scansat_deorbit_requested", "false") = "true" {
+    UNTIL done OR stateGet("scansat_deorbit_requested", "false") = "true" {
         LOCAL frac IS shipPowerFraction().
         IF scansOn AND frac < lowFrac {
             scienceStopScanners().
@@ -350,12 +349,6 @@ LOCAL FUNCTION _scanSatWaitForRequiredCoverage {
         WAIT 30.
     }
 
-    IF AG10 {
-        mLogWarn("SCANsat mapping wait paused by AG10 before required coverage.").
-        scienceStartScanners().
-        yieldToPrompt().
-        RETURN FALSE.
-    }
     IF stateGet("scansat_deorbit_requested", "false") = "true" {
         mLogWarn("SCANsat deorbit override requested before required coverage.").
         scienceStopScanners().
