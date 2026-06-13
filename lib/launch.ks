@@ -300,7 +300,13 @@ GLOBAL FUNCTION armAscentStaging {
         // STAGE through chute/decoupler stages.
         IF STAGE:NUMBER <= 0 { RETURN. }
         IF NOT ADDONS:MJ:AVAILABLE { RETURN. }
-        IF NOT ADDONS:MJ:ASCENT:ENABLED { RETURN. }
+        // Allow staging during any ascent phase even if MJ2 dropped
+        // out mid-circularization (e.g. methane booster may burn past
+        // the gravity turn all the way to near-orbit; MJ2 disables
+        // itself when it detects no thrust, but we still need to
+        // separate the spent stage and ignite the upper stage).
+        IF NOT ADDONS:MJ:ASCENT:ENABLED
+                AND NOT bootLibAscentWatchPhase() { RETURN. }
         IF _noThrustStages >= 2 {
             mLogError("Two stagings without thrust — no engines"
                 + " left; disarming ascent staging.").
@@ -310,8 +316,18 @@ GLOBAL FUNCTION armAscentStaging {
         HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
         STAGE.
         WAIT 0.5.
-        IF SHIP:MAXTHRUST > 0 { SET _noThrustStages TO 0. }
-        ELSE { SET _noThrustStages TO _noThrustStages + 1. }
+        IF SHIP:MAXTHRUST > 0 {
+            SET _noThrustStages TO 0.
+            // MJ2 may have disabled itself when the booster flamed
+            // out — re-enable so it finishes the circularization with
+            // the freshly-ignited upper stage.
+            IF NOT ADDONS:MJ:ASCENT:ENABLED AND bootLibAscentWatchPhase() {
+                SET ADDONS:MJ:ASCENT:ENABLED TO TRUE.
+                mLog("MJ2 ascent re-enabled after mid-circ staging.").
+            }
+        } ELSE {
+            SET _noThrustStages TO _noThrustStages + 1.
+        }
         PRESERVE.
     }
 
