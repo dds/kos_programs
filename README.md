@@ -251,6 +251,16 @@ config per SOI transition; multi-hop routes end each leg with the `GOTO`
 phase, which replans from wherever the ship is and reboots into the next
 band. Config-driven missions use the same phases and keys directly.
 
+Orbiting telescope presets:
+
+```ks
+RUNPATH("0:/cmd/gotoduna.ks").  // 85 x 250 km Duna orbit
+RUNPATH("0:/cmd/gotojool.ks").  // 250 x 15000 km Jool orbit
+```
+
+Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
+`ap`, `inc`, `lan`, `aop`, or `reboot`.
+
 ### The precision pipeline
 
 - **XING** — departure planning; picks the transfer window (multi-orbit LAN
