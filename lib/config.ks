@@ -78,7 +78,7 @@ GLOBAL FUNCTION missionNumericConfigKeys {
 // will be TONUMBERed into garbage.
 GLOBAL FUNCTION missionNumericConfigPrefixes {
     RETURN LIST("SHAPE_", "BPLANE_", "SSTO_", "DRONE_", "BURN_",
-        "SUBORBIT_", "SCANSAT_").
+        "SUBORBIT_", "SCANSAT_", "FLYBY_").
 }
 
 LOCAL FUNCTION _matchesNumericPrefix {
