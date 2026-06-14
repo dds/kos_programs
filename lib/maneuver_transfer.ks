@@ -158,6 +158,22 @@ GLOBAL FUNCTION planTransfer {
             // AoP-constrained transfers couple PE and AoP — the solver
             // trades PE accuracy for AoP convergence. MCC corrects PE.
             LOCAL peTol IS CHOOSE 5000 IF aopTarget >= 0 ELSE 1000.
+            // With BPLANE/SHAPE downstream the capture plane is THEIR job
+            // (like LAN). For an inclined target (Minmus) the cheap, natural
+            // encounter sits in the target's own ~6deg plane, and the coupled
+            // solver — coordinate descent with step halving — stalls a few
+            // degrees short of INC=0 (out of step resolution, not dV: the
+            // inclination fix here is ~free but needs more iterations than the
+            // node solve affords). Rather than refuse a perfectly good
+            // near-plane encounter, accept it and let the mid-course /
+            // shaping phases set the final inclination and Pe. We still keep
+            // INC in the solver targets above, so the node is driven toward
+            // the plane and a genuinely wild basin (it couldn't unwind) is
+            // still rejected by the relaxed-but-bounded gate.
+            IF _angularWorkDeferred() {
+                SET peTol  TO MAX(peTol, 5000).
+                SET incTol TO MAX(incTol, 20).
+            }
             IF ABS(planeResult["PE_ERR"]) <= peTol {
                 SET planeOk TO TRUE.
                 IF captureInc >= 0 AND ABS(planeResult["INC_ERR"]) > incTol { SET planeOk TO FALSE. }
@@ -338,8 +354,11 @@ LOCAL FUNCTION _planLocalTransfer {
     // angle math can be significantly off, so we search ±N orbits
     // where N covers at least one synodic period.
     LOCAL nScanOrbits IS MAX(6, CEILING(synodicPeriod / shipPeriod)).
-    LOCAL samplesPerOrbit IS 4.
-    IF lanTarget >= 0 OR aopTarget >= 0 { SET samplesPerOrbit TO 12. }
+    // Each sample tries one ejection point in the parking orbit. For an
+    // inclined target the ejection longitude is the dominant lever (it
+    // orients the transfer ellipse and its apoapsis), so 4/orbit (every
+    // 90deg) steps right over good windows. 12/orbit = every 30deg.
+    LOCAL samplesPerOrbit IS 12.
     IF CFG:HASKEY("TRANSFER_SCAN_SAMPLES_PER_ORBIT") {
         SET samplesPerOrbit TO MAX(4, CFG["TRANSFER_SCAN_SAMPLES_PER_ORBIT"]).
     }
