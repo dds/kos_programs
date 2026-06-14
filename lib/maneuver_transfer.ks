@@ -521,6 +521,103 @@ LOCAL FUNCTION _planLocalTransfer {
         }
         SET nd:PROGRADE TO (dvA + dvB) / 2.
         WAIT 0.1.
+
+        // --- Scan normal dV to close out-of-plane miss ---
+        // A prograde-only transfer stays in the parking-orbit plane, but
+        // Minmus is inclined ~6deg to Kerbin's equator: from a near-equatorial
+        // parking orbit the closest approach is bounded by the target's
+        // out-of-plane position at arrival, which can fall *outside* the SOI.
+        // No patch then forms and the downstream coupled elements solver has
+        // no gradient to follow (the "no-patch" PeErr=10000km failure). The
+        // departure-time scan can't fix this: its +-N orbit window is hours
+        // long, far too short to reach a Minmus node crossing (~6 day cadence).
+        // So when the encounter is not comfortably inside the SOI, give the
+        // smooth CA objective a normal degree of freedom to pull it in. For
+        // coplanar targets (the Mun) the encounter is already inside, so the
+        // gate skips this and costs nothing.
+        LOCAL gateCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+        IF gateCA["distance"] > targetBody:SOIRADIUS * 0.7 {
+            LOCAL vInj IS SQRT(mu / rShip) + ABS(nd:PROGRADE).
+            LOCAL relIncEst IS ABS(targetBody:ORBIT:INCLINATION) + ABS(SHIP:ORBIT:INCLINATION).
+            LOCAL nrmRange IS MAX(50, 2 * vInj * SIN(relIncEst / 2)).
+            LOCAL nrmSteps IS 20.
+            LOCAL nrmStep IS nrmRange * 2 / nrmSteps.
+            LOCAL bestNrm IS nd:NORMAL.
+            SET bestCA TO gateCA.
+            SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+
+            FROM { LOCAL ni IS 0. } UNTIL ni > nrmSteps STEP { SET ni TO ni + 1. } DO {
+                LOCAL tryNrm IS bestNrm - nrmRange + ni * nrmStep.
+                SET nd:NORMAL TO tryNrm.
+                WAIT 0.02.
+                LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+                LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
+                IF trySeed["SCORE"] < bestSeed["SCORE"] {
+                    SET bestCA TO tryCa.
+                    SET bestSeed TO trySeed.
+                    SET bestNrm TO tryNrm.
+                }
+            }
+            SET nd:NORMAL TO bestNrm.
+            WAIT 0.1.
+
+            // Golden section refine normal
+            LOCAL nrmA IS bestNrm - nrmStep.
+            LOCAL nrmB IS bestNrm + nrmStep.
+            FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
+                LOCAL nrmC IS nrmB - (nrmB - nrmA) / gr.
+                LOCAL nrmD IS nrmA + (nrmB - nrmA) / gr.
+
+                SET nd:NORMAL TO nrmC. WAIT 0.02.
+                LOCAL caC IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
+                LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
+                SET nd:NORMAL TO nrmD. WAIT 0.02.
+                LOCAL caD IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
+                LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
+
+                IF seedC["SCORE"] < seedD["SCORE"] {
+                    SET nrmB TO nrmD.
+                } ELSE {
+                    SET nrmA TO nrmC.
+                }
+            }
+            SET nd:NORMAL TO (nrmA + nrmB) / 2.
+            WAIT 0.1.
+
+            // Re-refine prograde to recouple the in-plane solution: once the
+            // transfer plane is tilted, the best prograde (arrival distance)
+            // shifts slightly. Cheap golden pass around the current value.
+            LOCAL reDvSpan IS MAX(10, ABS(hohmannDv) * 0.05).
+            LOCAL reDvA IS nd:PROGRADE - reDvSpan.
+            LOCAL reDvB IS nd:PROGRADE + reDvSpan.
+            FROM { LOCAL gj IS 0. } UNTIL gj >= 12 STEP { SET gj TO gj + 1. } DO {
+                LOCAL dvE IS reDvB - (reDvB - reDvA) / gr.
+                LOCAL dvF IS reDvA + (reDvB - reDvA) / gr.
+
+                SET nd:PROGRADE TO dvE. WAIT 0.02.
+                LOCAL caE IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
+                LOCAL seedE IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caE["distance"], nd:DELTAV:MAG).
+                SET nd:PROGRADE TO dvF. WAIT 0.02.
+                LOCAL caF IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
+                LOCAL seedF IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caF["distance"], nd:DELTAV:MAG).
+
+                IF seedE["SCORE"] < seedF["SCORE"] {
+                    SET reDvB TO dvF.
+                } ELSE {
+                    SET reDvA TO dvE.
+                }
+            }
+            SET nd:PROGRADE TO (reDvA + reDvB) / 2.
+            WAIT 0.1.
+
+            LOCAL postNrmCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+            mLog("Normal scan: CA " + ROUND(gateCA["distance"]/1000, 1) + "km -> "
+                + ROUND(postNrmCA["distance"]/1000, 1) + "km"
+                + "  normal=" + ROUND(nd:NORMAL, 1) + " m/s"
+                + "  prograde=" + ROUND(nd:PROGRADE, 1)
+                + "  (range +-" + ROUND(nrmRange, 0)
+                + ", SOI=" + ROUND(targetBody:SOIRADIUS/1000, 0) + "km)").
+        }
     } ELSE {
         // AoP-constrained: skip golden section (drifts out of basin) but
         // still scan prograde dV to minimize closest approach. Score by
