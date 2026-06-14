@@ -163,6 +163,24 @@ GLOBAL FUNCTION bootBaseName {
     RETURN fileName.
 }
 
+GLOBAL FUNCTION bootArchiveOnlyLibs {
+    LOCAL out IS LIST().
+    IF DEFINED BOOT_ARCHIVE_ONLY {
+        FOR libName IN BOOT_ARCHIVE_ONLY {
+            IF libName <> "" AND NOT out:CONTAINS(libName) {
+                out:ADD(libName).
+            }
+        }
+    }
+    RETURN out.
+}
+
+GLOBAL FUNCTION bootLibArchiveOnly {
+    PARAMETER libName.
+    LOCAL archiveOnly IS bootArchiveOnlyLibs().
+    RETURN archiveOnly:CONTAINS(libName).
+}
+
 GLOBAL FUNCTION bootPruneLibs {
     PARAMETER wantedLibs.
     LOCAL keep IS LIST(
@@ -171,7 +189,8 @@ GLOBAL FUNCTION bootPruneLibs {
         "CONFIG", "RESUME"
     ).
     FOR lib IN wantedLibs {
-        IF NOT keep:CONTAINS(lib) { keep:ADD(lib). }
+        IF NOT bootLibArchiveOnly(lib)
+                AND NOT keep:CONTAINS(lib) { keep:ADD(lib). }
     }
     LOCAL startPath IS PATH().
     LOCAL items IS LIST().
@@ -504,7 +523,8 @@ GLOBAL FUNCTION bootCleanup {
         "phases", "utils", "ui", "config"
     ).
     FOR lib IN wantedLibs {
-        IF NOT keepLibs:CONTAINS(lib) { keepLibs:ADD(lib). }
+        IF NOT bootLibArchiveOnly(lib)
+                AND NOT keepLibs:CONTAINS(lib) { keepLibs:ADD(lib). }
     }
 
     // Never prune the mission's offline commands — at a field
@@ -739,6 +759,11 @@ GLOBAL FUNCTION bootLibSync {
     LOCAL dst IS "1:/lib/" + libName + ".ks".
     LOCAL dstKsm IS "1:/lib/" + libName + ".ksm".
     IF EXISTS(src) {
+        IF bootLibArchiveOnly(libName) {
+            IF EXISTS(dstKsm) { DELETEPATH(dstKsm). }
+            IF EXISTS(dst) { DELETEPATH(dst). }
+            RETURN.
+        }
         LOCAL skipKsm IS FALSE.
         IF DEFINED KSM_SKIP {
             IF KSM_SKIP:CONTAINS(libName) { SET skipKsm TO TRUE. }

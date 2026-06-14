@@ -26,6 +26,12 @@ GLOBAL CFG IS LEXICON(
     "SHAPE_INC", 0
 ).
 
+GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
+    "xfer_plan",
+    "maneuver_transfer",
+    "maneuver_targeting"
+).
+
 applyKnownMissionState().
 IF stateGet("mission_cfg_LIBS_EXTRA", "") = "" AND CFG:HASKEY("LIBS_EXTRA") {
     stateSet("mission_cfg_LIBS_EXTRA", CFG["LIBS_EXTRA"]).
