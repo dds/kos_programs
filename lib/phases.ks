@@ -215,9 +215,17 @@ GLOBAL FUNCTION trySolarHoldTick {
 
 GLOBAL FUNCTION phaseDone {
     UNLOCK ALL.
-    SET SAS TO TRUE.
     mLog("Mission complete: " + SHIP:NAME).
     HUDTEXT("Mission Complete", 10, 2, 20, GREEN, FALSE).
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+        SAS OFF.
+        mLog("DONE: surface state detected (" + SHIP:STATUS
+            + ") — leaving attitude control idle.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    SET SAS TO TRUE.
     // On-station ships hold their best solar attitude through
     // DONE (cached axis makes this a quick aim, not a search).
     // PHASE DONE = solar brings the lib along at DONE boots.

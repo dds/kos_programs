@@ -8,30 +8,15 @@
 // roles without changing the boot script.
 //
 // Ship names:
-//   Falcon-X                 boots this craft and uses the default
-//                            Falcon-X LKO shakedown sequence.
 //   Falcon                   opens normal Kerbin mission selection.
+//   Falcon-X                 experimental single-seat pathfinder.
 //   Falcon-KERBIN-TOURIST-01 later mission naming pattern.
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
-    "SEQUENCE", "LAUNCH,ANTS,PARK,KSC_DEORBIT,DESCENT,DONE",
+    "SEQUENCE", "LAUNCH,ANTS,PARK,DONE",
     "PARKING_ALT", 74000,
-    "LAUNCH_INCLINATION", 28,
-    "ORBIT_STAY_TIME", 1800,
-    "LANDING_TARGET_LAT", -0.10,
-    "LANDING_TARGET_LNG", -74.25,
-    "LANDING_TARGET_TOLERANCE", 15000,
-    "REENTRY_PE", 30000,
-    "TARGET_DEORBIT_SCAN_ORBITS", 6,
-    "TARGET_DEORBIT_SCAN_SAMPLES", 128,
-    "TARGET_DEORBIT_COARSE_STOP_DIST", 15000,
-    "TARGET_DEORBIT_SKIP_REFINE", 1,
-    "TARGET_DEORBIT_PROCEED_ON_MISS", 1,
-    "TARGET_DEORBIT_MIN_LEAD", 300,
-    "DESCENT_DECOUPLER_TAG", "none",
-    "DESCENT_RELEASE_ALT", 38000,
-    "LIBS_EXTRA", "descent"
+    "LAUNCH_INCLINATION", 28
 ).
 
 applyKnownMissionState().
