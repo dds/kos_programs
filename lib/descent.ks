@@ -173,6 +173,7 @@ GLOBAL FUNCTION phaseDescent {
 
     IF _chutesDeployed() {
         mLog("Chutes deployed.").
+        _descentCutDrogues().
     }
 
     // Wait for safe speed to extend antennas (< 20 m/s)
@@ -239,6 +240,65 @@ LOCAL FUNCTION _chutesDeployed {
         }
     }
     RETURN FALSE.
+}
+
+LOCAL FUNCTION _descentPartLooksDrogue {
+    PARAMETER p.
+    LOCAL marker IS " " + p:TITLE:TOLOWER + " " + p:NAME:TOLOWER + " ".
+    RETURN marker:CONTAINS("drogue").
+}
+
+LOCAL FUNCTION _descentCutChutePart {
+    PARAMETER p.
+    LOCAL moduleName IS "".
+    IF p:HASMODULE("ModuleParachute") { SET moduleName TO "ModuleParachute". }
+    ELSE IF p:HASMODULE("RealChuteModule") { SET moduleName TO "RealChuteModule". }
+    IF moduleName = "" { RETURN FALSE. }
+
+    LOCAL m IS p:GETMODULE(moduleName).
+    FOR evName IN m:ALLEVENTNAMES {
+        LOCAL evLower IS evName:TOLOWER.
+        IF evLower:CONTAINS("cut") {
+            m:DOEVENT(evName).
+            mLog("Cut drogue chute: " + p:TITLE + " via '" + evName + "'.").
+            RETURN TRUE.
+        }
+    }
+    mLogWarn("Drogue chute '" + p:TITLE + "' has no cut event. Events: "
+        + m:ALLEVENTNAMES:JOIN(", ")).
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _descentCutDrogues {
+    LOCAL cutAlt IS 4900.
+    IF DEFINED CFG AND CFG:HASKEY("DESCENT_DROGUE_CUT_ALT") {
+        SET cutAlt TO CFG["DESCENT_DROGUE_CUT_ALT"].
+    }
+    IF cutAlt <= 0 { RETURN. }
+
+    IF SHIP:ALTITUDE > cutAlt {
+        mLog("Waiting to cut drogue chutes below "
+            + ROUND(cutAlt, 0) + "m.").
+        WAIT UNTIL SHIP:ALTITUDE < cutAlt
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    }
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN. }
+
+    LOCAL cut IS 0.
+    LOCAL found IS 0.
+    FOR p IN SHIP:PARTS {
+        IF _descentPartLooksDrogue(p)
+                AND (p:HASMODULE("ModuleParachute")
+                    OR p:HASMODULE("RealChuteModule")) {
+            SET found TO found + 1.
+            IF _descentCutChutePart(p) { SET cut TO cut + 1. }
+        }
+    }
+    IF found > 0 {
+        mLogWarn("STATS descent drogues cut=" + cut
+            + " found=" + found
+            + " alt=" + ROUND(SHIP:ALTITUDE, 0)).
+    }
 }
 
 // Burn retrograde until we're guaranteed captured, then stop.
