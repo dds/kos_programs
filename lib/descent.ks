@@ -182,6 +182,7 @@ GLOBAL FUNCTION phaseDescent {
     }
 
     mLog("Safe to redeploy antennas (airspeed=" + ROUND(SHIP:AIRSPEED, 1) + " m/s).").
+    _descentReopenExtendBays().
     _descentExtendAntennas().
 
     // Archive flight log now that comms may be restored
@@ -454,6 +455,37 @@ LOCAL FUNCTION _descentCloseExtendBays {
     }
     IF closed > 0 OR missing > 0 {
         mLog("Extend bays closed: " + closed + "  unavailable: " + missing + ".").
+        WAIT 1.
+    }
+}
+
+LOCAL FUNCTION _descentReopenExtendBays {
+    LOCAL opened IS 0.
+    LOCAL missing IS 0.
+    FOR p IN SHIP:PARTSTAGGED("extend_bay") {
+        IF p:HASMODULE("ModuleAnimateGeneric") {
+            LOCAL bm IS p:GETMODULE("ModuleAnimateGeneric").
+            IF bm:HASEVENT("Open") {
+                bm:DOEVENT("Open").
+                SET opened TO opened + 1.
+            } ELSE IF bm:HASEVENT("Open Doors") {
+                bm:DOEVENT("Open Doors").
+                SET opened TO opened + 1.
+            } ELSE IF bm:HASEVENT("Extend") {
+                bm:DOEVENT("Extend").
+                SET opened TO opened + 1.
+            } ELSE IF bm:HASEVENT("Deploy") {
+                bm:DOEVENT("Deploy").
+                SET opened TO opened + 1.
+            } ELSE {
+                SET missing TO missing + 1.
+            }
+        } ELSE {
+            SET missing TO missing + 1.
+        }
+    }
+    IF opened > 0 OR missing > 0 {
+        mLog("Extend bays reopened: " + opened + "  unavailable: " + missing + ".").
         WAIT 1.
     }
 }

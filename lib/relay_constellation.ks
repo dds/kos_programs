@@ -111,7 +111,10 @@ LOCAL FUNCTION _deployOneRelay {
     WAIT 0.5.
 
     LOCAL dc IS parts[0].
-    _activateRelayHardware(relayIdx).
+    LOCAL activatedCount IS _activateRelayHardware(relayIdx).
+    stateSet("relay_" + relayIdx + "_activation_count", activatedCount).
+    mLog("Relay " + relayIdx + " activation before release: "
+        + activatedCount + " deployable(s).").
     WAIT 1.0.
 
     IF dc:HASMODULE("ModuleDecouple") {
@@ -320,9 +323,11 @@ LOCAL FUNCTION _activateRelayHardware {
     PARAMETER relayIdx.
 
     LOCAL antCount IS _activateTaggedParts("relay_" + relayIdx + "_ant",
-        "ModuleDeployableAntenna", LIST("Extend Antenna", "Extend", "Deploy")).
+        "ModuleDeployableAntenna",
+        LIST("extend antenna", "Extend Antenna", "Extend", "Deploy")).
     LOCAL solCount IS _activateTaggedParts("relay_" + relayIdx + "_sol",
-        "ModuleDeployableSolarPanel", LIST("Extend Solar Panel", "Extend", "Deploy")).
+        "ModuleDeployableSolarPanel",
+        LIST("Extend Solar Panel", "extend solar panel", "Extend", "Deploy")).
 
     IF antCount = 0 {
         mLogWarn("Relay " + relayIdx + ": no tagged deployable antenna "
@@ -332,6 +337,7 @@ LOCAL FUNCTION _activateRelayHardware {
         mLogWarn("Relay " + relayIdx + ": no tagged deployable solar panel "
             + "'relay_" + relayIdx + "_sol' found.").
     }
+    RETURN antCount + solCount.
 }
 
 LOCAL FUNCTION _activateTaggedParts {
