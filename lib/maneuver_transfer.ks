@@ -301,40 +301,31 @@ LOCAL FUNCTION _planLocalTransfer {
     // --- Hohmann estimate (seed) ---
     LOCAL rShip   IS SHIP:ORBIT:SEMIMAJORAXIS.
     LOCAL rTarget IS targetBody:ORBIT:SEMIMAJORAXIS.
-    LOCAL hohmannA IS (rShip + rTarget) / 2.
-    LOCAL hohmannTof IS CONSTANT:PI * SQRT(hohmannA^3 / mu).
-    LOCAL vShip   IS SQRT(mu / rShip).
-    LOCAL vDepart IS SQRT(mu * (2/rShip - 1/hohmannA)).
-    LOCAL hohmannDv IS vDepart - vShip.
+    LOCAL seed IS _hohmannSeed(rShip, rTarget, mu, targetPeriod).
+    LOCAL hohmannTof IS seed["TOF"].
+    LOCAL hohmannDv IS seed["DV"].
 
     mLog("Local transfer to " + targetBody:NAME
         + ": Hohmann dV=" + ROUND(hohmannDv, 1) + " m/s"
         + "  TOF=" + ROUND(hohmannTof, 0) + "s").
 
     // --- Phase angle estimate for initial departure time ---
-    LOCAL targetMeanMotion IS 360 / targetPeriod.
-    LOCAL targetSweep IS targetMeanMotion * hohmannTof.
-    LOCAL idealPhaseAngle IS 180 - targetSweep.
+    LOCAL idealPhaseAngle IS seed["IDEAL_PHASE"].
 
     SET TARGET TO targetBody.
     WAIT 0.1.
     LOCAL currentPhase IS phaseAngle().
 
-    LOCAL synodicPeriod IS ABS(shipPeriod * targetPeriod / (shipPeriod - targetPeriod)).
-
-    LOCAL phaseDiff IS idealPhaseAngle - currentPhase.
-    IF phaseDiff < 0 { SET phaseDiff TO phaseDiff + 360. }
-    LOCAL shipAngRate IS 360 / shipPeriod.
-    LOCAL targetAngRate IS 360 / targetPeriod.
-    LOCAL relativeRate IS shipAngRate - targetAngRate.
-    LOCAL waitTime IS phaseDiff / ABS(relativeRate).
-
-    IF waitTime < 60 { SET waitTime TO waitTime + synodicPeriod. }
+    LOCAL phasePlan IS _hohmannPhaseWait(currentPhase, idealPhaseAngle,
+        shipPeriod, targetPeriod, 60).
+    LOCAL synodicPeriod IS phasePlan["SYNODIC"].
+    LOCAL waitTime IS phasePlan["WAIT"].
 
     LOCAL departUt IS TIME:SECONDS + waitTime.
 
     mLog("Phase: current=" + ROUND(currentPhase, 1)
         + "  ideal=" + ROUND(idealPhaseAngle, 1)
+        + "  diff=" + ROUND(phasePlan["DIFF"], 1)
         + "  wait=" + ROUND(waitTime, 0) + "s").
 
     // --- Place prograde-only node ---
