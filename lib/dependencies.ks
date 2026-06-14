@@ -28,7 +28,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "ABORT" { IF _depLoaded("launch") { phaseMapSet(phaseMap, "ABORT", phaseAbort@). } }
     ELSE IF phaseKey = "PRELAUNCH" { IF _depLoaded("prelaunch") { phaseMapSet(phaseMap, "PRELAUNCH", phasePrelaunch@). } }
     ELSE IF phaseKey = "SUBORBIT" { IF _depLoaded("suborbit") { phaseMapSet(phaseMap, "SUBORBIT", phaseSuborbit@). } }
-    ELSE IF phaseKey = "RDV" { IF _depLoaded("xfer_plan,maneuver_rendezvous") { phaseMapSet(phaseMap, "RDV", phaseRdv@). } }
+    ELSE IF phaseKey = "RDV" { IF _depLoaded("maneuver_rendezvous") { phaseMapSet(phaseMap, "RDV", phaseRdv@). } }
     ELSE IF phaseKey = "MATCH" { IF _depLoaded("maneuver_rendezvous") { phaseMapSet(phaseMap, "MATCH", phaseMatch@). } }
     ELSE IF phaseKey = "CREW_XFER" { IF _depLoaded("maneuver_rendezvous") { phaseMapSet(phaseMap, "CREW_XFER", phaseCrewXfer@). } }
     ELSE IF phaseKey = "XING" { IF _depLoaded("xfer_plan") { phaseMapSet(phaseMap, "XING", phaseXing@). } }

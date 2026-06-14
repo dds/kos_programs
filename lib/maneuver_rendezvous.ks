@@ -3,6 +3,53 @@
 // (0:/lib/maneuver_rendezvous.ks)
 // ============================================================
 
+LOCAL RDV_MAX_RETRIES IS 5.
+
+GLOBAL FUNCTION phaseRendezvous {
+    LOCAL targetName IS "".
+    IF CFG:HASKEY("RENDEZVOUS_TARGET") { SET targetName TO CFG["RENDEZVOUS_TARGET"]. }
+    IF CFG:HASKEY("ASTEROID_TARGET")   { SET targetName TO CFG["ASTEROID_TARGET"]. }
+
+    IF targetName = "" {
+        mLogWarn("RDV phase requested but no RENDEZVOUS_TARGET or ASTEROID_TARGET configured.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
+    LOCAL targetVessel IS VESSEL(targetName).
+    LOCAL opts IS _rendezvousOptions().
+    LOCAL success IS FALSE.
+    LOCAL retries IS 0.
+
+    orbitSummary().
+    UNTIL success {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        LOCAL nd IS planRendezvous(targetVessel, opts).
+        IF nd = 0 {
+            mLogError("Rendezvous planner failed for " + targetName + ".").
+            RETURN.
+        }
+        mLog("Rendezvous planned with " + targetName + ".").
+        SET success TO executeManeuver().
+        IF NOT success {
+            SET retries TO retries + 1.
+            mLog("Rendezvous burn missed (attempt " + retries + ") - waiting 10s.").
+            IF retries >= RDV_MAX_RETRIES {
+                mLogError("Rendezvous failed after " + retries + " attempts.").
+                RETURN.
+            }
+            WAIT 10.
+        }
+    }
+
+    orbitSummary().
+    nextPhase(xferSeq).
+}
+
+GLOBAL FUNCTION phaseRdv {
+    phaseRendezvous().
+}
+
 GLOBAL FUNCTION planRendezvous {
     PARAMETER targetVessel.
     PARAMETER opts IS LEXICON().
@@ -363,6 +410,32 @@ LOCAL FUNCTION _shouldUseLambertVesselIntercept {
     IF targetVessel:ORBIT:ECCENTRICITY > 0.1 { RETURN TRUE. }
     IF ABS(targetVessel:ORBIT:INCLINATION - SHIP:ORBIT:INCLINATION) > 5 { RETURN TRUE. }
     RETURN FALSE.
+}
+
+LOCAL FUNCTION _rendezvousOptions {
+    LOCAL opts IS LEXICON().
+    IF CFG:HASKEY("ASTEROID_MAX_DEPART_ORBITS") {
+        opts:ADD("MAX_DEPART_ORBITS", CFG["ASTEROID_MAX_DEPART_ORBITS"]).
+    }
+    IF CFG:HASKEY("ASTEROID_DEPART_SAMPLES") {
+        opts:ADD("DEPART_SAMPLES", CFG["ASTEROID_DEPART_SAMPLES"]).
+    }
+    IF CFG:HASKEY("ASTEROID_TOF_SAMPLES") {
+        opts:ADD("TOF_SAMPLES", CFG["ASTEROID_TOF_SAMPLES"]).
+    }
+    IF CFG:HASKEY("ASTEROID_MIN_TOF") {
+        opts:ADD("MIN_TOF", CFG["ASTEROID_MIN_TOF"]).
+    }
+    IF CFG:HASKEY("ASTEROID_MAX_TOF") {
+        opts:ADD("MAX_TOF", CFG["ASTEROID_MAX_TOF"]).
+    }
+    IF CFG:HASKEY("ASTEROID_ARRIVAL_WEIGHT") {
+        opts:ADD("ARRIVAL_WEIGHT", CFG["ASTEROID_ARRIVAL_WEIGHT"]).
+    }
+    IF CFG:HASKEY("ASTEROID_REFINE_ITERS") {
+        opts:ADD("REFINE_ITERS", CFG["ASTEROID_REFINE_ITERS"]).
+    }
+    RETURN opts.
 }
 
 LOCAL FUNCTION _nodeFromDvVector {

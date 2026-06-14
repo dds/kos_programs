@@ -347,7 +347,8 @@ configure-hook / extra-phase options.
 | Phase(s) | Lib | Purpose |
 |---|---|---|
 | LAUNCH, FAIR, ANTS, PARK | launch | MechJeb ascent → parking orbit |
-| XING, ESCAPE, RDV | xfer_plan (+rendezvous) | Transfers, escapes, vessel rendezvous |
+| XING, ESCAPE | xfer_plan | Transfers and escapes |
+| RDV, MATCH, CREW_XFER | maneuver_rendezvous | Vessel rendezvous and close approach |
 | MCC | maneuver_transfer | Legacy element-based mid-course correction |
 | BPLANE | arrival_bplane | B-plane arrival corridor |
 | COAST, CAPTURE | capture | SOI coast + capture burn |
