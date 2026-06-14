@@ -138,12 +138,14 @@ GLOBAL FUNCTION phaseDescent {
             SHIP:BODY:RADIUS + SHIP:BODY:ATM:HEIGHT, "Reentry").
         mLog("Entered atmosphere at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
         WAIT 5.
-        _descentRetractAntennas().
     } ELSE IF NOT SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE > 30000 {
         mLog("Airless body — waiting for the 30km action point...").
         _descentWaitForRadius(SHIP:BODY:RADIUS + 30000, "Descent action").
         mLog("30km action point reached.").
     }
+    _descentRetractSolarPanels().
+    _descentRetractAntennas().
+    _descentCloseExtendBays().
 
     // Arm chutes early so they auto-deploy at safe altitude
     _descentArmChutes().
@@ -408,6 +410,51 @@ LOCAL FUNCTION _descentRetractAntennas {
     IF retracted > 0 {
         mLog("Retracted " + retracted + " antenna(s) for entry.").
         WAIT 3.
+    }
+}
+
+LOCAL FUNCTION _descentRetractSolarPanels {
+    LOCAL retracted IS 0.
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleDeployableSolarPanel") {
+            LOCAL m IS p:GETMODULE("ModuleDeployableSolarPanel").
+            IF m:HASEVENT("Retract Solar Panel") {
+                m:DOEVENT("Retract Solar Panel").
+                SET retracted TO retracted + 1.
+            }
+        }
+    }
+    IF retracted > 0 {
+        mLog("Retracted " + retracted + " solar panel(s) for entry.").
+        WAIT 3.
+    }
+}
+
+LOCAL FUNCTION _descentCloseExtendBays {
+    LOCAL closed IS 0.
+    LOCAL missing IS 0.
+    FOR p IN SHIP:PARTSTAGGED("extend_bay") {
+        IF p:HASMODULE("ModuleAnimateGeneric") {
+            LOCAL bm IS p:GETMODULE("ModuleAnimateGeneric").
+            IF bm:HASEVENT("Close") {
+                bm:DOEVENT("Close").
+                SET closed TO closed + 1.
+            } ELSE IF bm:HASEVENT("Close Doors") {
+                bm:DOEVENT("Close Doors").
+                SET closed TO closed + 1.
+            } ELSE IF bm:HASEVENT("Retract") {
+                bm:DOEVENT("Retract").
+                SET closed TO closed + 1.
+            } ELSE {
+                SET missing TO missing + 1.
+            }
+        } ELSE {
+            SET missing TO missing + 1.
+        }
+    }
+    IF closed > 0 OR missing > 0 {
+        mLog("Extend bays closed: " + closed + "  unavailable: " + missing + ".").
+        WAIT 1.
     }
 }
 

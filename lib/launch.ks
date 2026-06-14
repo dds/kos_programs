@@ -216,6 +216,9 @@ GLOBAL FUNCTION phaseExtendAnts {
     // and fixed panels need no altitude gate (flight-found: a
     // craft with only fixed antennas stalled here twice).
     LOCAL deployables IS FALSE.
+    IF SHIP:PARTSTAGGED("extend_bay"):LENGTH > 0 {
+        SET deployables TO TRUE.
+    }
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleDeployableAntenna")
                 OR p:HASMODULE("ModuleDeployableSolarPanel") {
@@ -253,6 +256,7 @@ GLOBAL FUNCTION phaseExtendAnts {
         }
     }
     IF ABORT { RETURN. }
+    _openExtendBays().
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleDeployableSolarPanel") {
             LOCAL sm IS p:GETMODULE("ModuleDeployableSolarPanel").
@@ -275,6 +279,34 @@ GLOBAL FUNCTION phaseExtendAnts {
     mLog("ANTS complete — advancing.").
     nextPhase(launchSeq).
     mLog("ANTS handler done.").
+}
+
+LOCAL FUNCTION _openExtendBays {
+    LOCAL opened IS 0.
+    LOCAL missing IS 0.
+    FOR p IN SHIP:PARTSTAGGED("extend_bay") {
+        IF p:HASMODULE("ModuleAnimateGeneric") {
+            LOCAL bm IS p:GETMODULE("ModuleAnimateGeneric").
+            IF bm:HASEVENT("Open") {
+                bm:DOEVENT("Open").
+                SET opened TO opened + 1.
+            } ELSE IF bm:HASEVENT("Open Doors") {
+                bm:DOEVENT("Open Doors").
+                SET opened TO opened + 1.
+            } ELSE IF bm:HASEVENT("Deploy") {
+                bm:DOEVENT("Deploy").
+                SET opened TO opened + 1.
+            } ELSE {
+                SET missing TO missing + 1.
+            }
+        } ELSE {
+            SET missing TO missing + 1.
+        }
+    }
+    IF opened > 0 OR missing > 0 {
+        mLog("Extend bays opened: " + opened + "  unavailable: " + missing + ".").
+        WAIT 1.
+    }
 }
 
 GLOBAL FUNCTION phaseAnts {
