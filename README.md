@@ -301,6 +301,7 @@ its own `1:/` volume, so state is naturally isolated.
 |---|---|---|---|
 | Primary | *(empty)* | `craft/<vehicle>.ks` | Full mission |
 | Lander | `lander_cpu` | `roles/lander_cpu.ks` | Post-separation deploy + science |
+| Descent service | `descent_service` | `roles/descent_service.ks` | Passive until descent separation, then retrograde + chutes |
 | Zombie | `zombie` | `roles/zombie.ks` | Dormant; remote-reboot backdoor |
 
 EVA kerbals are auto-detected (no tag needed) and run `roles/EVA.ks`, which
