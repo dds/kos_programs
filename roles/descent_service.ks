@@ -31,6 +31,16 @@ GLOBAL FUNCTION main {
     mLog("Arming below " + ROUND(armAlt/1000, 1) + "km on descent; mass drop trigger "
         + ROUND(massDrop, 2) + "t.").
 
+    IF SHIP:STATUS = "PRELAUNCH"
+            OR SHIP:STATUS = "LANDED"
+            OR SHIP:STATUS = "SPLASHED" {
+        mLog("Descent service CPU waiting for launch/surface departure.").
+        WAIT UNTIL SHIP:STATUS <> "PRELAUNCH"
+            AND SHIP:STATUS <> "LANDED"
+            AND SHIP:STATUS <> "SPLASHED".
+        mLog("Descent service CPU airborne; continuing standby.").
+    }
+
     WAIT UNTIL (SHIP:BODY:ATM:EXISTS
             AND SHIP:ALTITUDE < armAlt
             AND SHIP:VERTICALSPEED < 0)
