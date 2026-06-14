@@ -34,7 +34,6 @@ GLOBAL FUNCTION bootSelectMissionId {
     IF configured <> "" { RETURN configured. }
     LOCAL ids IS bootMissionConfigIds(craftName, hasLink).
     IF ids:LENGTH = 0 { RETURN "". }
-    IF ids:LENGTH = 1 { RETURN ids[0]. }
     _bootSortStrings(ids).
 
     LOCAL pageSize IS 9.
@@ -54,8 +53,9 @@ GLOBAL FUNCTION bootSelectMissionId {
         FROM { LOCAL i IS 0. } UNTIL i >= count STEP { SET i TO i + 1. } DO {
             PRINT "  [" + (i + 1) + "] " + ids[start + i].
         }
+        PRINT "  [0] no profile (use vessel name/default)".
         PRINT "  ----------------------------------------".
-        LOCAL hint IS "1-" + count + " choose | ENTER " + ids[0].
+        LOCAL hint IS "0 skip | 1-" + count + " choose | ENTER " + ids[0].
         IF pages > 1 { SET hint TO hint + " | N/P page". }
         PRINT "  " + hint.
 
@@ -65,6 +65,8 @@ GLOBAL FUNCTION bootSelectMissionId {
             LOCAL ch IS TERMINAL:INPUT:GETCHAR().
             IF ch = CHAR(13) OR ch = CHAR(10) {
                 RETURN ids[0].
+            } ELSE IF ch = "0" {
+                RETURN "".
             } ELSE IF pages > 1 AND (ch = "N" OR ch = " ") {
                 SET page TO MOD(page + 1, pages).
                 SET flip TO TRUE.

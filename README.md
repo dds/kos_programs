@@ -243,7 +243,7 @@ launch, reboots keep mission and phase.
 
 Suggested order after Minmus unlock:
 
-1. `FR3C/minmus_equatorial_science_return` — easy equatorial capture,
+1. `Falcon/minmus_equatorial_science_return` — easy equatorial capture,
    first Minmus science, then `returntokerbin`.
 2. `FR3C/minmus_relay_tripack` — three-relay constellation at 500 km.
 3. `FR3C/minmus_scansat_polar` — polar map of altimetry, resources, biomes.

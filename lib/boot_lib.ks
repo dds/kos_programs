@@ -15,6 +15,22 @@ GLOBAL FUNCTION bootEnsureDirs {
     }
 }
 
+LOCAL FUNCTION _bootNormalizeTargetToken {
+    PARAMETER raw.
+    LOCAL t IS raw:TOUPPER.
+    IF t = "MINIMUS" { RETURN "MINMUS". }
+    RETURN t.
+}
+
+LOCAL FUNCTION _bootLooksLikeTargetToken {
+    PARAMETER raw.
+    LOCAL t IS _bootNormalizeTargetToken(raw).
+    LOCAL knownTargets IS LIST("KERBIN", "MUN", "MINMUS", "MOHO", "EVE", "GILLY",
+        "DUNA", "IKE", "DRES", "JOOL", "LAYTHE", "VALL", "TYLO",
+        "BOP", "POL", "EELOO", "KERBOL").
+    RETURN knownTargets:CONTAINS(t).
+}
+
 GLOBAL FUNCTION bootVehicleInfo {
     LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
     LOCAL vehicleName IS "".
@@ -57,9 +73,14 @@ GLOBAL FUNCTION bootVehicleInfo {
             SET vehicleName TO "UNKNOWN".
         }
         IF structuredName AND tokens:LENGTH >= 2 {
-            SET targetName TO tokens[1].
+            SET targetName TO _bootNormalizeTargetToken(tokens[1]).
             FROM { LOCAL i IS 2. } UNTIL i >= tokens:LENGTH STEP { SET i TO i + 1. } DO {
-                payloadTypes:ADD(tokens[i]).
+                payloadTypes:ADD(tokens[i]:TOUPPER).
+            }
+        } ELSE IF tokens:LENGTH >= 2 AND _bootLooksLikeTargetToken(tokens[1]) {
+            SET targetName TO _bootNormalizeTargetToken(tokens[1]).
+            FROM { LOCAL i IS 2. } UNTIL i >= tokens:LENGTH STEP { SET i TO i + 1. } DO {
+                payloadTypes:ADD(tokens[i]:TOUPPER).
             }
         } ELSE {
             SET targetName TO "KERBIN".
@@ -244,18 +265,26 @@ GLOBAL FUNCTION bootApplyMissionConfig {
 GLOBAL FUNCTION bootMissionConfig {
     PARAMETER craftName.
     PARAMETER hasLink.
-    LOCAL targetFromName IS stateGet("target", "KERBIN").
-    LOCAL payloadsFromName IS stateGet("payloads", "").
-    LOCAL hasNameMission IS targetFromName <> "KERBIN" OR payloadsFromName <> "".
     LOCAL missionId IS stateGet("mission_id", "").
-    IF missionId = "" AND NOT hasNameMission AND hasLink {
-        IF bootCheckManualKey() {
-            PRINT "  Mission selection skipped (manual mode).".
-        } ELSE {
-            // The picker is its own lib — only fresh pad boots
-            // pay for it (no link = no profiles to list anyway).
-            bootLibRun("boot_picker").
-            SET missionId TO bootSelectMissionId(craftName, hasLink).
+    IF missionId = "" AND hasLink {
+        LOCAL ids IS bootMissionConfigIds(craftName, hasLink).
+        IF ids:LENGTH > 0 {
+            IF NOT bootCheckManualKey() {
+                PRINT " ".
+                PRINT "  >> Press any key for MANUAL mode (2s)".
+                LOCAL manualStart IS TIME:SECONDS.
+                WAIT UNTIL TIME:SECONDS > manualStart + 2
+                    OR TERMINAL:INPUT:HASCHAR.
+                bootCheckManualKey().
+            }
+            IF bootCheckManualKey() {
+                PRINT "  Mission selection skipped (manual mode).".
+            } ELSE {
+                // The picker is its own lib — only fresh pad boots
+                // pay for it (no link = no profiles to list anyway).
+                bootLibRun("boot_picker").
+                SET missionId TO bootSelectMissionId(craftName, hasLink).
+            }
         }
     }
     IF missionId <> "" {

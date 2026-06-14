@@ -10,13 +10,20 @@
 // Ship names:
 //   Falcon                   opens normal Kerbin mission selection.
 //   Falcon-X                 experimental single-seat pathfinder.
-//   Falcon-KERBIN-TOURIST-01 later mission naming pattern.
+//   Falcon-MINMUS-SCISAT-01 parsed-name fallback when no profile is picked.
+//   Falcon Minmus SciSAT 1   space-delimited fallback also parses.
 // ============================================================
 
 GLOBAL CFG IS LEXICON(
     "SEQUENCE", "LAUNCH,ANTS,PARK,DONE",
     "PARKING_ALT", 74000,
-    "LAUNCH_INCLINATION", 28
+    "LAUNCH_INCLINATION", 28,
+    "CAPTURE_PE", 20000,
+    "CAPTURE_INC", 0,
+    "CAPTURE_DIR", "PROGRADE",
+    "SHAPE_PE", 30000,
+    "SHAPE_AP", 30000,
+    "SHAPE_INC", 0
 ).
 
 applyKnownMissionState().
@@ -76,16 +83,43 @@ LOCAL FUNCTION _falconPhaseParkingReload {
 }
 
 GLOBAL FUNCTION falconBuildPhaseSequence {
-    IF CFG:HASKEY("SEQUENCE") {
+    IF stateGet("mission_cfg_SEQUENCE", "") <> "" AND CFG:HASKEY("SEQUENCE") {
+        RETURN phaseListFromString(CFG["SEQUENCE"]).
+    }
+
+    LOCAL targetFromState IS stateGet("target", "KERBIN").
+    LOCAL payloadsFromState IS stateGet("payloads", "").
+    LOCAL nameHasMission IS targetFromState <> "KERBIN"
+        OR payloadsFromState <> "".
+    IF NOT nameHasMission AND CFG:HASKEY("SEQUENCE") {
         RETURN phaseListFromString(CFG["SEQUENCE"]).
     }
 
     LOCAL payloadPhases IS LEXICON(
+        "SCISAT", LIST("SCIENCE_OPS"),
+        "SCANSAT", LIST("SCANSAT_OPS"),
+        "RELAY", LIST("RELAY_OPS"),
         "CREW", LIST("RELAY_OPS"),
         "TOURIST", LIST("RELAY_OPS"),
         "PASSENGER", LIST("RELAY_OPS")
     ).
-    RETURN buildRocketSequence(LIST("CIRC", "RAISE", "INCLINE"), payloadPhases).
+
+    LOCAL seq IS LIST("LAUNCH", "FAIR", "ANTS", "PARK").
+    IF targetFromState <> "KERBIN" {
+        seq:ADD("XING").
+        seq:ADD("BPLANE").
+        seq:ADD("COAST").
+        seq:ADD("CAPTURE").
+        seq:ADD("SHAPE").
+    }
+    FOR ptype IN missionPayloadsFromState() {
+        LOCAL t IS missionNormalizePayloadType(ptype).
+        IF payloadPhases:HASKEY(t) {
+            FOR phaseName IN payloadPhases[t] { seq:ADD(phaseName). }
+        }
+    }
+    seq:ADD("DONE").
+    RETURN seq.
 }
 
 GLOBAL FUNCTION falconBuildPhaseMap {
