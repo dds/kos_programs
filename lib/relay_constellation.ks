@@ -3,6 +3,10 @@
 // (0:/lib/relay_constellation.ks)
 // ============================================================
 
+@LAZYGLOBAL OFF.
+
+LOCAL CIRCULAR_ECC_LIMIT IS 0.01.
+
 GLOBAL FUNCTION constellationDeploy {
     PARAMETER relayCount.
     PARAMETER targetAlt.
@@ -10,6 +14,11 @@ GLOBAL FUNCTION constellationDeploy {
 
     LOCAL targetBody IS SHIP:ORBIT:BODY.
     IF bodyOverride <> "" { SET targetBody TO BODY(bodyOverride). }
+
+    IF relayCount < 2 {
+        mLogError("Constellation deploy requires at least two relays.").
+        RETURN FALSE.
+    }
 
     mLogPhase("CONSTELLATION DEPLOY").
     mLog("Deploying " + relayCount + " resonant relays at "
@@ -20,32 +29,60 @@ GLOBAL FUNCTION constellationDeploy {
     mLog("Angular spacing: " + ROUND(spacing,1)
         + "deg  phasing period ratio=" + ROUND(phaseRatio,3)).
 
-    IF relayCount < 2 {
-        mLogError("Constellation deploy requires at least two relays.").
-        RETURN.
+    LOCAL releasedCount IS _syncRelayDeployedCount(relayCount).
+    LOCAL pendingPhaseIdx IS _firstPendingPhase(relayCount).
+    mLogWarn("STATS constellation setup count=" + relayCount
+        + " released=" + releasedCount
+        + " pendingPhase=" + pendingPhaseIdx
+        + " targetAltKm=" + ROUND(targetAlt/1000,1)
+        + " body=" + targetBody:NAME
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
+
+    IF pendingPhaseIdx = 0 AND NOT _ensureCircularBeforeDeploy(targetAlt) {
+        mLogWarn("STATS constellation result status=circularize-failed"
+            + " released=" + stateGetNum("relay_deployed_count", 0)).
+        RETURN FALSE.
     }
 
     LOCAL idx IS 1.
     UNTIL idx > relayCount {
-        mLog("Deploying relay " + idx + " of " + relayCount).
-        IF NOT _deployOneRelay(idx) {
-            mLogError("Relay " + idx + " was not deployed; holding.").
-            yieldToPrompt().
-            RETURN.
+        IF _relayReleased(idx) {
+            mLog("Relay " + idx + " already released; resuming ledger.").
+        } ELSE {
+            mLog("Deploying relay " + idx + " of " + relayCount).
+            IF NOT _deployOneRelay(idx) {
+                mLogError("Relay " + idx + " was not deployed; holding.").
+                mLogWarn("STATS constellation result status=deploy-failed"
+                    + " relay=" + idx
+                    + " released=" + stateGetNum("relay_deployed_count", 0)).
+                yieldToPrompt().
+                RETURN FALSE.
+            }
         }
-        IF idx < relayCount {
-            IF NOT _phaseCarrierOneSlot(relayCount, targetAlt, targetBody) {
+
+        IF idx < relayCount AND NOT _relayPhaseComplete(idx) {
+            IF NOT _phaseCarrierOneSlot(relayCount, targetAlt, targetBody, idx) {
                 mLogError("Relay phasing failed after relay " + idx
                     + "; holding for operator review.").
+                mLogWarn("STATS constellation result status=phase-failed"
+                    + " relay=" + idx
+                    + " released=" + stateGetNum("relay_deployed_count", 0)).
                 yieldToPrompt().
-                RETURN.
+                RETURN FALSE.
             }
         }
         SET idx TO idx + 1.
     }
 
+    stateSet("relay_deployed_count", relayCount).
     mLog("Constellation deployment complete.").
+    mLogWarn("STATS constellation result status=complete"
+        + " released=" + relayCount
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
     HUDTEXT("Constellation deployed!", 8, 2, 18, GREEN, FALSE).
+    RETURN TRUE.
 }
 
 GLOBAL FUNCTION phaseRelayConstellation {
@@ -55,8 +92,9 @@ GLOBAL FUNCTION phaseRelayConstellation {
     IF CFG:HASKEY("RELAY_ALT") { SET targetAlt TO CFG["RELAY_ALT"]. }
     ELSE IF CFG:HASKEY("TARGET_AP") { SET targetAlt TO CFG["TARGET_AP"]. }
 
-    constellationDeploy(relayCount, targetAlt).
-    nextPhase(xferSeq).
+    IF constellationDeploy(relayCount, targetAlt) {
+        nextPhase(xferSeq).
+    }
 }
 
 LOCAL FUNCTION _deployOneRelay {
@@ -73,6 +111,9 @@ LOCAL FUNCTION _deployOneRelay {
     WAIT 0.5.
 
     LOCAL dc IS parts[0].
+    _activateRelayHardware(relayIdx).
+    WAIT 1.0.
+
     IF dc:HASMODULE("ModuleDecouple") {
         dc:GETMODULE("ModuleDecouple"):DOEVENT("Decouple").
     } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
@@ -87,6 +128,7 @@ LOCAL FUNCTION _deployOneRelay {
         + ROUND(SHIP:ORBIT:TRUEANOMALY,1) + "deg"
         + "  alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km").
     stateSet("relay_" + relayIdx + "_released", TIME:SECONDS).
+    stateSet("relay_deployed_count", _countReleasedRelays(relayIdx)).
     RETURN TRUE.
 }
 
@@ -94,6 +136,7 @@ LOCAL FUNCTION _phaseCarrierOneSlot {
     PARAMETER relayCount.
     PARAMETER targetAlt.
     PARAMETER targetBody.
+    PARAMETER afterRelayIdx.
 
     LOCAL bodyR IS targetBody:RADIUS.
     LOCAL mu IS targetBody:MU.
@@ -117,10 +160,29 @@ LOCAL FUNCTION _phaseCarrierOneSlot {
     mLogWarn("STATS relay-phase setup targetAltKm=" + ROUND(targetAlt/1000,1)
         + " phasePeKm=" + ROUND(phasePeAlt/1000,1)
         + " targetPeriod=" + ROUND(targetPeriod,0)
-        + " phasePeriod=" + ROUND(phasePeriod,0)).
+        + " phasePeriod=" + ROUND(phasePeriod,0)
+        + " afterRelay=" + afterRelayIdx).
 
-    IF NOT _burnToPhasingOrbit(targetR, phaseSma, targetBody) {
-        RETURN FALSE.
+    IF NOT _relayPhaseInserted(afterRelayIdx) {
+        IF _looksLikePhasingOrbit(targetAlt, phasePeAlt) {
+            mLog("Carrier is already in relay " + afterRelayIdx
+                + " phasing orbit; marking insertion complete.").
+            stateSet("relay_" + afterRelayIdx + "_phase_inserted", TIME:SECONDS).
+        } ELSE {
+            IF NOT _burnToPhasingOrbit(targetR, phaseSma, targetBody) {
+                RETURN FALSE.
+            }
+            stateSet("relay_" + afterRelayIdx + "_phase_inserted", TIME:SECONDS).
+        }
+    } ELSE {
+        mLog("Resuming relay " + afterRelayIdx + " phasing orbit.").
+    }
+
+    IF SHIP:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT {
+        mLog("Carrier already circular after relay " + afterRelayIdx
+            + "; marking phasing complete.").
+        stateSet("relay_" + afterRelayIdx + "_phase_complete", TIME:SECONDS).
+        RETURN TRUE.
     }
 
     LOCAL coastEnd IS TIME:SECONDS + MAX(0, ETA:APOAPSIS - 120).
@@ -137,9 +199,11 @@ LOCAL FUNCTION _phaseCarrierOneSlot {
         RETURN FALSE.
     }
 
+    stateSet("relay_" + afterRelayIdx + "_phase_complete", TIME:SECONDS).
     mLogWarn("STATS relay-phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
+        + " afterRelay=" + afterRelayIdx).
     RETURN TRUE.
 }
 
@@ -170,6 +234,139 @@ LOCAL FUNCTION _circularizeCarrier {
     RETURN executeManeuver().
 }
 
+LOCAL FUNCTION _relayReleased {
+    PARAMETER relayIdx.
+    RETURN stateGet("relay_" + relayIdx + "_released", "") <> "".
+}
+
+LOCAL FUNCTION _relayPhaseInserted {
+    PARAMETER relayIdx.
+    RETURN stateGet("relay_" + relayIdx + "_phase_inserted", "") <> "".
+}
+
+LOCAL FUNCTION _relayPhaseComplete {
+    PARAMETER relayIdx.
+    RETURN stateGet("relay_" + relayIdx + "_phase_complete", "") <> "".
+}
+
+LOCAL FUNCTION _countReleasedRelays {
+    PARAMETER relayCount.
+    LOCAL count IS 0.
+    LOCAL idx IS 1.
+    UNTIL idx > relayCount {
+        IF _relayReleased(idx) { SET count TO count + 1. }
+        SET idx TO idx + 1.
+    }
+    RETURN count.
+}
+
+LOCAL FUNCTION _syncRelayDeployedCount {
+    PARAMETER relayCount.
+    LOCAL count IS _countReleasedRelays(relayCount).
+    LOCAL oldCount IS stateGetNum("relay_deployed_count", 0).
+    IF count <> oldCount { stateSet("relay_deployed_count", count). }
+    RETURN count.
+}
+
+LOCAL FUNCTION _firstPendingPhase {
+    PARAMETER relayCount.
+    LOCAL idx IS 1.
+    UNTIL idx >= relayCount {
+        IF _relayReleased(idx) AND NOT _relayPhaseComplete(idx) { RETURN idx. }
+        SET idx TO idx + 1.
+    }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _ensureCircularBeforeDeploy {
+    PARAMETER targetAlt.
+
+    IF SHIP:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT { RETURN TRUE. }
+
+    mLogWarn("Relay deploy entry orbit is eccentric (e="
+        + ROUND(SHIP:ORBIT:ECCENTRICITY,4)
+        + "); circularizing before release.").
+    IF NOT _circularizeCarrier() { RETURN FALSE. }
+
+    IF SHIP:ORBIT:ECCENTRICITY > CIRCULAR_ECC_LIMIT {
+        mLogWarn("Circularization still eccentric: e="
+            + ROUND(SHIP:ORBIT:ECCENTRICITY,4) + ".").
+        RETURN FALSE.
+    }
+
+    LOCAL altErr IS ABS(SHIP:APOAPSIS - targetAlt).
+    LOCAL altTol IS MAX(5000, targetAlt * 0.05).
+    IF altErr > altTol {
+        mLogWarn("Relay deploy circularized at ApKm="
+            + ROUND(SHIP:APOAPSIS/1000,1)
+            + " targetKm=" + ROUND(targetAlt/1000,1)
+            + "; continuing from live orbit.").
+    }
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _looksLikePhasingOrbit {
+    PARAMETER targetAlt.
+    PARAMETER phasePeAlt.
+
+    IF SHIP:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT { RETURN FALSE. }
+    LOCAL apTol IS MAX(5000, targetAlt * 0.03).
+    LOCAL peTol IS MAX(5000, MAX(ABS(phasePeAlt), targetAlt) * 0.05).
+    RETURN ABS(SHIP:APOAPSIS - targetAlt) <= apTol
+        AND ABS(SHIP:PERIAPSIS - phasePeAlt) <= peTol.
+}
+
+LOCAL FUNCTION _activateRelayHardware {
+    PARAMETER relayIdx.
+
+    LOCAL antCount IS _activateTaggedParts("relay_" + relayIdx + "_ant",
+        "ModuleDeployableAntenna", LIST("Extend Antenna", "Extend", "Deploy")).
+    LOCAL solCount IS _activateTaggedParts("relay_" + relayIdx + "_sol",
+        "ModuleDeployableSolarPanel", LIST("Extend Solar Panel", "Extend", "Deploy")).
+
+    IF antCount = 0 {
+        mLogWarn("Relay " + relayIdx + ": no tagged deployable antenna "
+            + "'relay_" + relayIdx + "_ant' found.").
+    }
+    IF solCount = 0 {
+        mLogWarn("Relay " + relayIdx + ": no tagged deployable solar panel "
+            + "'relay_" + relayIdx + "_sol' found.").
+    }
+}
+
+LOCAL FUNCTION _activateTaggedParts {
+    PARAMETER tagName.
+    PARAMETER moduleName.
+    PARAMETER events.
+
+    LOCAL parts IS SHIP:PARTSTAGGED(tagName).
+    LOCAL activated IS 0.
+    LOCAL unavailable IS 0.
+
+    FOR partRef IN parts {
+        IF partRef:HASMODULE(moduleName) {
+            LOCAL modu IS partRef:GETMODULE(moduleName).
+            LOCAL didEvent IS FALSE.
+            FOR eventName IN events {
+                IF NOT didEvent AND modu:HASEVENT(eventName) {
+                    modu:DOEVENT(eventName).
+                    SET didEvent TO TRUE.
+                    SET activated TO activated + 1.
+                }
+            }
+            IF NOT didEvent { SET unavailable TO unavailable + 1. }
+        } ELSE {
+            SET unavailable TO unavailable + 1.
+        }
+    }
+
+    IF parts:LENGTH > 0 {
+        mLog("Relay hardware tag '" + tagName + "': activated="
+            + activated + " unavailable=" + unavailable + ".").
+    }
+    RETURN activated.
+}
+
 GLOBAL FUNCTION constellationStatus {
     PARAMETER relayCount.
     mLog("Constellation status:").
@@ -177,7 +374,10 @@ GLOBAL FUNCTION constellationStatus {
     UNTIL idx > relayCount {
         LOCAL releaseTime IS stateGet("relay_" + idx + "_released", "").
         IF releaseTime <> "" {
-            mLog("  Relay " + idx + ": released at T+" + ROUND(releaseTime:TONUMBER(0),0) + "s").
+            LOCAL phaseText IS " phase-pending".
+            IF _relayPhaseComplete(idx) { SET phaseText TO " phase-complete". }
+            IF idx = relayCount { SET phaseText TO " final-slot". }
+            mLog("  Relay " + idx + ": released at T+" + ROUND(releaseTime:TONUMBER(0),0) + "s" + phaseText).
         } ELSE {
             mLog("  Relay " + idx + ": not yet released").
         }
