@@ -353,6 +353,82 @@ LOCAL FUNCTION _deorbitImpactWalk {
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)).
 }
 
+// ── Entry-Pe as a deorbit-targeting degree of freedom ─────────
+// The scan's only natural lever is burn TIME (which pass). For a
+// near-equatorial target from an inclined orbit, the binding miss
+// is along-track: a pass whose ground-track crossing overshoots
+// the target by tens-to-hundreds of km. A STEEPER deorbit (deeper
+// Pe = harder retrograde burn) shortens the descent's downrange
+// arc and pulls the impact back toward (west of) the deorbit
+// point — trading the mission's spare dV to hit the target on a
+// SOONER pass instead of waiting orbits for one that lands short
+// on its own. Pe only pulls the impact shorter, never longer (Pe
+// can't rise above the atmosphere), so the burn-time sweep still
+// owns "deorbit earlier"; together they cover both signs of miss.
+//
+// vNow cancels in a same-time dV difference, so the budget bound
+// needs no VELOCITYAT (which CLAUDE.md forbids for planning): the
+// extra dV of a deeper Pe is just vNew(defaultPe) - vNew(deepPe).
+LOCAL FUNCTION _deorbitVNew {
+    PARAMETER entryPe.
+    LOCAL mu   IS SHIP:ORBIT:BODY:MU.
+    LOCAL oRad IS SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL rPe  IS SHIP:ORBIT:BODY:RADIUS + entryPe.
+    LOCAL tSMA IS (oRad + rPe) / 2.
+    LOCAL radicand IS 2 / oRad - 1 / tSMA.
+    IF radicand <= 0 { RETURN 0. }
+    RETURN SQRT(mu * radicand).
+}
+
+// Candidate entry-Pe values: the shallow default, plus deeper
+// rungs spanning the spare-dV budget (LANDING_DEORBIT_BUDGET_DV).
+// budget<=0 returns just the default — exact legacy behavior.
+LOCAL FUNCTION _deorbitPeCandidates {
+    PARAMETER defaultPe.
+    PARAMETER budgetDv.
+    LOCAL out IS LIST(defaultPe).
+    IF budgetDv <= 0 { RETURN out. }
+    LOCAL vBase IS _deorbitVNew(defaultPe).
+    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    // Deepest Pe still inside budget (5 km probe steps; rPe must
+    // stay well positive or the vis-viva radicand goes negative).
+    LOCAL peFloor IS defaultPe.
+    LOCAL probe IS defaultPe - 5000.
+    UNTIL probe <= -bodyR * 0.5 {
+        IF vBase - _deorbitVNew(probe) > budgetDv { BREAK. }
+        SET peFloor TO probe.
+        SET probe TO probe - 5000.
+    }
+    IF peFloor < defaultPe {
+        LOCAL span IS defaultPe - peFloor.
+        LOCAL i IS 1.
+        UNTIL i > 6 {
+            out:ADD(defaultPe - span * i / 6).
+            SET i TO i + 1.
+        }
+    }
+    RETURN out.
+}
+
+// Best (distance, Pe) at a fixed burn time across the Pe rungs.
+// A single-rung peList (no budget) reduces to one legacy eval.
+LOCAL FUNCTION _deorbitEvalBestPe {
+    PARAMETER burnT.
+    PARAMETER peList.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    LOCAL best IS LEXICON("VALID", FALSE, "DIST", 8.99e15, "PE", peList[0]).
+    FOR candPe IN peList {
+        LOCAL tr IS _evalDeorbitNode(burnT, candPe, targetLat, targetLng).
+        IF tr["VALID"] AND tr["DIST"] < best["DIST"] {
+            SET best["VALID"] TO TRUE.
+            SET best["DIST"] TO tr["DIST"].
+            SET best["PE"] TO candPe.
+        }
+    }
+    RETURN best.
+}
+
 GLOBAL FUNCTION targetedDeorbitAt {
     PARAMETER targetLat.
     PARAMETER targetLng.
@@ -453,6 +529,25 @@ GLOBAL FUNCTION targetedDeorbitAt {
         SET refineStartLimit TO CFG["TARGET_DEORBIT_REFINE_MAX_START_DIST"].
     }
 
+    // Spare-dV budget for a steeper (harder) deorbit: when set,
+    // the focus/polish search also varies entry Pe to drag the
+    // impact onto the target on a SOONER pass instead of waiting.
+    LOCAL budgetDv IS 0.
+    IF CFG:HASKEY("LANDING_DEORBIT_BUDGET_DV") {
+        SET budgetDv TO CFG["LANDING_DEORBIT_BUDGET_DV"].
+    }
+    LOCAL peList IS _deorbitPeCandidates(entryPe, budgetDv).
+    IF peList:LENGTH > 1 {
+        mLog("Deorbit Pe search: " + peList:LENGTH + " rungs "
+            + ROUND(entryPe / 1000, 0) + "km .. "
+            + ROUND(peList[peList:LENGTH - 1] / 1000, 0) + "km"
+            + " (budget " + ROUND(budgetDv, 0) + " m/s).").
+        mLogWarn("STATS deorbit pe-search rungs=" + peList:LENGTH
+            + " defaultPeKm=" + ROUND(entryPe / 1000, 1)
+            + " floorPeKm=" + ROUND(peList[peList:LENGTH - 1] / 1000, 1)
+            + " budgetDv=" + ROUND(budgetDv, 0)).
+    }
+
     LOCAL bestUT   IS TIME:SECONDS + 30.
     LOCAL bestPe   IS entryPe.
     LOCAL bestRad  IS 0.
@@ -537,6 +632,11 @@ GLOBAL FUNCTION targetedDeorbitAt {
                         AND center <= scanEnd + stepA {
                     LOCAL wBest IS 8.99e15.
                     LOCAL wBestT IS center.
+                    LOCAL wBestPe IS entryPe.
+                    // Locate the window's time-optimum at the shallow
+                    // default Pe (cheap); the pass geometry — which
+                    // crossing — is what time selects, independent of
+                    // how hard we later choose to burn.
                     FOR off IN LIST(-2, -1, 0, 1, 2) {
                         LOCAL tt IS center + off * stepA * 0.66.
                         IF tt > floorUt {
@@ -553,14 +653,27 @@ GLOBAL FUNCTION targetedDeorbitAt {
                             }
                         }
                     }
-                    // Narrow promising windows to their true minimum.
+                    // Then spend the dV budget: a deeper Pe at this
+                    // window's time can pull an overshoot back onto
+                    // target. No-budget peList is a single eval.
+                    IF peList:LENGTH > 1 AND wBest < 8e15 {
+                        LOCAL pb IS _deorbitEvalBestPe(wBestT, peList,
+                            targetLat, targetLng).
+                        SET validSamples TO validSamples + peList:LENGTH.
+                        IF pb["VALID"] AND pb["DIST"] < wBest {
+                            SET wBest TO pb["DIST"].
+                            SET wBestPe TO pb["PE"].
+                        }
+                    }
+                    // Narrow promising windows to their true minimum
+                    // (at the Pe chosen above).
                     IF wBest < MAX(bestDist * 1.6, coarseStopDist * 6) {
                         LOCAL hstep IS stepA * 0.5.
                         UNTIL hstep < 0.8 {
                             FOR cand IN LIST(wBestT - hstep, wBestT + hstep) {
                                 IF cand > floorUt {
                                     LOCAL tr2 IS _evalDeorbitNode(cand,
-                                        entryPe, targetLat, targetLng).
+                                        wBestPe, targetLat, targetLng).
                                     IF tr2["VALID"]
                                             AND tr2["DIST"] < wBest {
                                         SET wBest TO tr2["DIST"].
@@ -575,7 +688,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     IF wBest < bestDist {
                         SET bestDist TO wBest.
                         SET bestUT TO wBestT.
-                        SET bestPe TO entryPe.
+                        SET bestPe TO wBestPe.
                         mLog("DEBUG window: orbit " + orbitIdx
                             + "  T+" + ROUND(wBestT - TIME:SECONDS, 0)
                             + "s  dist=" + ROUND(wBest / 1000, 1) + "km").
@@ -646,7 +759,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     UNTIL fstep < 0.05 {
         FOR cand IN LIST(bestUT - fstep, bestUT + fstep) {
             IF cand > floorUt {
-                LOCAL tr3 IS _evalDeorbitNode(cand, entryPe,
+                LOCAL tr3 IS _evalDeorbitNode(cand, bestPe,
                     targetLat, targetLng).
                 IF tr3["VALID"] AND tr3["DIST"] < bestDist {
                     SET bestDist TO tr3["DIST"].
@@ -656,6 +769,17 @@ GLOBAL FUNCTION targetedDeorbitAt {
         }
         SET fstep TO fstep / 2.
         WAIT 0.
+    }
+    // Final Pe polish at the pinned burn time — also covers the
+    // minutes-mode and discovery-early-stop paths that skip focus.
+    IF peList:LENGTH > 1 {
+        LOCAL pf IS _deorbitEvalBestPe(bestUT, peList, targetLat, targetLng).
+        IF pf["VALID"] AND pf["DIST"] < bestDist {
+            SET bestDist TO pf["DIST"].
+            SET bestPe TO pf["PE"].
+            mLog("Pe polish: entry Pe -> " + ROUND(bestPe / 1000, 1)
+                + "km (closest rung at the pinned time).").
+        }
     }
     mLog("Polished best: T+" + ROUND(bestUT - TIME:SECONDS, 0)
         + "s  dist=" + ROUND(bestDist, 0) + "m.").
@@ -669,6 +793,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + "s  Pe=" + ROUND(bestPe/1000,1) + "km"
         + "  Rad=" + ROUND(bestRad,2)
         + "  Nor=" + ROUND(bestNor,2)
+        + "  extraDv=" + ROUND(_deorbitVNew(entryPe) - _deorbitVNew(bestPe), 0)
+        + "m/s"
         + "  dist=" + ROUND(bestDist/1000,1) + "km").
     LOCAL deorbitStatus IS "ok".
     IF bestDist > tolerance { SET deorbitStatus TO "miss". }
@@ -864,9 +990,11 @@ GLOBAL FUNCTION targetReachable {
 // CFG keys (defaults): LANDING_TARGET_WAYPOINT (wins when set —
 //   a Waypoint Manager waypoint name on the current body),
 //   LANDING_TARGET_LAT (-0.10), LANDING_TARGET_LNG (-74.25),
-//   REENTRY_PE (30000), LANDING_TARGET_TOLERANCE (15000), plus
-//   the TARGET_DEORBIT_* scan settings shared with the landing
-//   flows.
+//   REENTRY_PE (30000), LANDING_TARGET_TOLERANCE (15000),
+//   LANDING_DEORBIT_BUDGET_DV (0 — spare dV the search may spend
+//   on a steeper deorbit to hit the target on a sooner pass),
+//   plus the TARGET_DEORBIT_* scan settings shared with the
+//   landing flows.
 // ============================================================
 // Landing-site biome check against the SCANsat map. TRUE when
 // the mapped biome at lat/lng substring-matches any token.
