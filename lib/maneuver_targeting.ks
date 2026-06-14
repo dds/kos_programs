@@ -9,7 +9,6 @@
 // Provides:
 //   _getTargetPatch          — walk patched conics to find target SOI
 //   _findEncounter           — binary time search for encounter
-//   _findClosestApproach     — min separation via coarse scan + golden section
 //   _scanForLan              — LAN optimization across departure orbits
 //   _targetPatchElementsCoupled — coordinate search for PE/INC/LAN/AOP
 //   _patchElementsCost       — cost function for element targeting
@@ -64,56 +63,6 @@ GLOBAL FUNCTION _findEncounter {
         SET offset TO offset + step.
     }
     RETURN -1.
-}
-
-// ============================================================
-// _findClosestApproach — find minimum separation between ship
-// and a target vessel over a time window.
-//
-// Uses coarse scan + golden section refinement. POSITIONAT on
-// both ship and target reflects any maneuver nodes on the flight
-// plan, so this works for evaluating planned burns.
-//
-// Returns: LEXICON("time", ut, "distance", meters)
-// ============================================================
-GLOBAL FUNCTION _findClosestApproach {
-    PARAMETER tgt, tStart, tEnd, steps.
-
-    // Coarse scan
-    LOCAL dt IS (tEnd - tStart) / steps.
-    LOCAL bestT IS tStart.
-    LOCAL bestD IS 9e15.
-
-    LOCAL t IS tStart.
-    UNTIL t > tEnd {
-        LOCAL sep IS (POSITIONAT(SHIP, t) - POSITIONAT(tgt, t)):MAG.
-        IF sep < bestD {
-            SET bestD TO sep.
-            SET bestT TO t.
-        }
-        SET t TO t + dt.
-    }
-
-    // Golden section refine around the best point
-    LOCAL a IS MAX(tStart, bestT - dt * 2).
-    LOCAL b IS MIN(tEnd, bestT + dt * 2).
-    LOCAL gr IS (SQRT(5) + 1) / 2.
-
-    FROM { LOCAL i IS 0. } UNTIL i >= 15 STEP { SET i TO i + 1. } DO {
-        LOCAL c IS b - (b - a) / gr.
-        LOCAL d IS a + (b - a) / gr.
-        LOCAL fc IS (POSITIONAT(SHIP, c) - POSITIONAT(tgt, c)):MAG.
-        LOCAL fd IS (POSITIONAT(SHIP, d) - POSITIONAT(tgt, d)):MAG.
-        IF fc < fd {
-            SET b TO d.
-        } ELSE {
-            SET a TO c.
-        }
-    }
-
-    LOCAL midT IS (a + b) / 2.
-    LOCAL midD IS (POSITIONAT(SHIP, midT) - POSITIONAT(tgt, midT)):MAG.
-    RETURN LEXICON("time", midT, "distance", midD).
 }
 
 // ============================================================
