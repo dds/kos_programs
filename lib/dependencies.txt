@@ -40,6 +40,7 @@ LIB drone = observe, flightplan
 
 PHASE PREFLIGHT, FLIGHT, POST_FLIGHT, POSTFLIGHT = airplane
 PHASE EVA_SCIENCE = science, orbit
+PHASE SCIENCE_OPS, SCIENCE_OPS_LOW = science, orbit, solar
 PHASE LAUNCH, FAIR, ANTS, PARK, ABORT = launch
 PHASE PRELAUNCH = prelaunch
 PHASE SUBORBIT = suborbit

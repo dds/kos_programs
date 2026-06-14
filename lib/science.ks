@@ -156,6 +156,28 @@ GLOBAL FUNCTION scienceCollectAll {
     mLog("All experiments collected/reset.").
 }
 
+GLOBAL FUNCTION phaseScienceOps {
+    UNLOCK STEERING.
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    SET SAS TO TRUE.
+    orbitSummary().
+    scienceStatus().
+    LOCAL ran IS scienceRunAll().
+    WAIT 10.
+    scienceStatus().
+    mLogWarn("STATS science-ops body=" + SHIP:BODY:NAME
+        + " status=" + SHIP:STATUS
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
+        + " ran=" + ran).
+    nextPhase(xferSeq).
+}
+
+GLOBAL FUNCTION phaseScienceOpsLow {
+    phaseScienceOps().
+}
+
 GLOBAL FUNCTION scienceStartScanners {
     IF NOT ADDONS:SCANSAT:AVAILABLE {
         mLogWarn("SCANsat not available.").

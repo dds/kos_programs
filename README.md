@@ -243,11 +243,13 @@ launch, reboots keep mission and phase.
 
 Suggested order after Minmus unlock:
 
-1. `FR3C/minmus_relay_tripack` — three-relay constellation at 500 km.
-2. `FR3C/minmus_scansat_polar` — polar map of altimetry, resources, biomes.
-3. `FR3C/minmus_rover` — rover landing after comms and map coverage.
-4. `FR3b/minmus_crew_orbit` — crewed orbital science, then `returntokerbin`.
-5. `FR3C/minmus_science_orbiter` and `FDR1/minmus_hops` — follow-on science.
+1. `FR3C/minmus_equatorial_science_return` — easy equatorial capture,
+   first Minmus science, then `returntokerbin`.
+2. `FR3C/minmus_relay_tripack` — three-relay constellation at 500 km.
+3. `FR3C/minmus_scansat_polar` — polar map of altimetry, resources, biomes.
+4. `FR3C/minmus_rover` — rover landing after comms and map coverage.
+5. `FR3b/minmus_crew_orbit` — crewed orbital science, then `returntokerbin`.
+6. `FR3C/minmus_science_orbiter` and `FDR1/minmus_hops` — follow-on science.
 
 ## Orbital maneuvering
 
