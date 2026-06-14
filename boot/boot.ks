@@ -96,6 +96,7 @@ IF bootCount = 1 {
 }
 
 LOCAL vehicleScript IS "".
+LOCAL isRoleScript IS FALSE.
 IF isEVA {
     SET vehicleScript TO bootResolveScript("EVA", LIST("roles"), HAS_LINK).
 } ELSE IF CORE:TAG <> "" {
@@ -108,6 +109,10 @@ IF isEVA {
 }
 IF vehicleScript = "" {
     SET vehicleScript TO bootResolveScript(vehicleName, LIST("craft"), HAS_LINK).
+}
+IF vehicleScript:CONTAINS("/") {
+    LOCAL scriptParts IS vehicleScript:SPLIT("/").
+    IF scriptParts[0] = "roles" { SET isRoleScript TO TRUE. }
 }
 
 mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
@@ -175,7 +180,14 @@ printStorageStatus().
 IF HAS_LINK { archiveLog(). }
 IF stateGet("phase", "") = "ABORT" { bootLibLoad("recovery"). }
 
-bootResumeOrManual(HAS_LINK).
+IF isRoleScript {
+    PRINT "  ROLE MAIN >> " + vehicleScript.
+    mLog("Starting role main: " + vehicleScript).
+    main().
+    IF HOMECONNECTION:ISCONNECTED { archiveLog(). }
+} ELSE {
+    bootResumeOrManual(HAS_LINK).
+}
 IF HAS_LINK {
     bootLibLoad("recovery").
 }
