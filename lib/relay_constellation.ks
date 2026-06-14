@@ -12,16 +12,35 @@ GLOBAL FUNCTION constellationDeploy {
     IF bodyOverride <> "" { SET targetBody TO BODY(bodyOverride). }
 
     mLogPhase("CONSTELLATION DEPLOY").
-    mLog("Deploying " + relayCount + " relays at " + ROUND(targetAlt/1000,0)
-        + "km around " + targetBody:NAME).
+    mLog("Deploying " + relayCount + " resonant relays at "
+        + ROUND(targetAlt/1000,0) + "km around " + targetBody:NAME).
 
     LOCAL spacing IS 360 / relayCount.
-    mLog("Angular spacing: " + ROUND(spacing,1) + "deg").
+    LOCAL phaseRatio IS (relayCount - 1) / relayCount.
+    mLog("Angular spacing: " + ROUND(spacing,1)
+        + "deg  phasing period ratio=" + ROUND(phaseRatio,3)).
+
+    IF relayCount < 2 {
+        mLogError("Constellation deploy requires at least two relays.").
+        RETURN.
+    }
 
     LOCAL idx IS 1.
     UNTIL idx > relayCount {
         mLog("Deploying relay " + idx + " of " + relayCount).
-        _deployOneRelay(idx, targetAlt, spacing, targetBody).
+        IF NOT _deployOneRelay(idx) {
+            mLogError("Relay " + idx + " was not deployed; holding.").
+            yieldToPrompt().
+            RETURN.
+        }
+        IF idx < relayCount {
+            IF NOT _phaseCarrierOneSlot(relayCount, targetAlt, targetBody) {
+                mLogError("Relay phasing failed after relay " + idx
+                    + "; holding for operator review.").
+                yieldToPrompt().
+                RETURN.
+            }
+        }
         SET idx TO idx + 1.
     }
 
@@ -42,23 +61,12 @@ GLOBAL FUNCTION phaseRelayConstellation {
 
 LOCAL FUNCTION _deployOneRelay {
     PARAMETER relayIdx.
-    PARAMETER targetAlt.
-    PARAMETER spacing.
-    PARAMETER targetBody.
-
-    LOCAL targetTA IS (relayIdx - 1) * spacing.
-
-    IF relayIdx > 1 {
-        mLog("Waiting for TA=" + ROUND(targetTA,1) + "deg for relay " + relayIdx).
-        HUDTEXT("Waiting for deploy position " + relayIdx, 3, 2, 13, WHITE, FALSE).
-        WAIT UNTIL _trueAnomalyDiff(targetTA) < 1.0.
-    }
 
     LOCAL tag IS "relay_" + relayIdx.
     LOCAL parts IS SHIP:PARTSTAGGED(tag).
     IF parts:LENGTH = 0 {
         mLogError("No part tagged '" + tag + "' — skipping relay " + relayIdx + ".").
-        RETURN.
+        RETURN FALSE.
     }
 
     SET SAS TO TRUE.
@@ -71,21 +79,95 @@ LOCAL FUNCTION _deployOneRelay {
         dc:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
     } ELSE {
         mLogError("relay_" + relayIdx + " has no decouple module.").
-        RETURN.
+        RETURN FALSE.
     }
 
     WAIT 1.0.
-    mLog("Relay " + relayIdx + " released at TA=" + ROUND(SHIP:ORBIT:TRUEANOMALY,1) + "deg"
+    mLog("Relay " + relayIdx + " released at TA="
+        + ROUND(SHIP:ORBIT:TRUEANOMALY,1) + "deg"
         + "  alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km").
     stateSet("relay_" + relayIdx + "_released", TIME:SECONDS).
+    RETURN TRUE.
 }
 
-LOCAL FUNCTION _trueAnomalyDiff {
-    PARAMETER targetTA.
-    LOCAL currentTA IS SHIP:ORBIT:TRUEANOMALY.
-    LOCAL diff IS targetTA - currentTA.
-    IF diff < 0 { SET diff TO diff + 360. }
-    RETURN diff.
+LOCAL FUNCTION _phaseCarrierOneSlot {
+    PARAMETER relayCount.
+    PARAMETER targetAlt.
+    PARAMETER targetBody.
+
+    LOCAL bodyR IS targetBody:RADIUS.
+    LOCAL mu IS targetBody:MU.
+    LOCAL targetR IS bodyR + targetAlt.
+    LOCAL targetPeriod IS 2 * CONSTANT:PI * SQRT(targetR^3 / mu).
+    LOCAL phaseRatio IS (relayCount - 1) / relayCount.
+    LOCAL phasePeriod IS targetPeriod * phaseRatio.
+    LOCAL phaseSma IS (mu * (phasePeriod / (2 * CONSTANT:PI))^2)^(1/3).
+    LOCAL phasePeR IS 2 * phaseSma - targetR.
+    LOCAL phasePeAlt IS phasePeR - bodyR.
+
+    LOCAL floorAlt IS 5000.
+    IF targetBody:ATM:EXISTS { SET floorAlt TO targetBody:ATM:HEIGHT + 5000. }
+    IF phasePeAlt < floorAlt {
+        mLogError("Resonant phasing Pe would be unsafe: "
+            + ROUND(phasePeAlt/1000,1) + "km < floor "
+            + ROUND(floorAlt/1000,1) + "km.").
+        RETURN FALSE.
+    }
+
+    mLogWarn("STATS relay-phase setup targetAltKm=" + ROUND(targetAlt/1000,1)
+        + " phasePeKm=" + ROUND(phasePeAlt/1000,1)
+        + " targetPeriod=" + ROUND(targetPeriod,0)
+        + " phasePeriod=" + ROUND(phasePeriod,0)).
+
+    IF NOT _burnToPhasingOrbit(targetR, phaseSma, targetBody) {
+        RETURN FALSE.
+    }
+
+    LOCAL coastEnd IS TIME:SECONDS + MAX(0, ETA:APOAPSIS - 120).
+    mLog("Coasting one phasing orbit; next circularize in "
+        + ROUND(ETA:APOAPSIS,0) + "s.").
+    trySolarOrient().
+    LOCAL solarRef IS -1.
+    UNTIL TIME:SECONDS >= coastEnd {
+        SET solarRef TO trySolarHoldTick(solarRef).
+        WAIT MIN(60, MAX(1, coastEnd - TIME:SECONDS)).
+    }
+
+    IF NOT _circularizeCarrier() {
+        RETURN FALSE.
+    }
+
+    mLogWarn("STATS relay-phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _burnToPhasingOrbit {
+    PARAMETER targetR.
+    PARAMETER phaseSma.
+    PARAMETER targetBody.
+
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    LOCAL mu IS targetBody:MU.
+    LOCAL vNow IS SQRT(mu / targetR).
+    LOCAL vPhase IS SQRT(mu * (2 / targetR - 1 / phaseSma)).
+    LOCAL dv IS vPhase - vNow.
+    LOCAL nd IS NODE(TIME:SECONDS + 60, 0, 0, dv).
+    ADD nd.
+    mLog("Relay phasing insertion: dV=" + ROUND(dv,1)
+        + "m/s  targetPe=" + ROUND((2 * phaseSma - targetR
+            - targetBody:RADIUS)/1000,1) + "km.").
+    archivePlannedManeuverLog("relay-phase-insert").
+    WAIT 1.
+    RETURN executeManeuver().
+}
+
+LOCAL FUNCTION _circularizeCarrier {
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    planCircularize().
+    WAIT 1.
+    RETURN executeManeuver().
 }
 
 GLOBAL FUNCTION constellationStatus {
