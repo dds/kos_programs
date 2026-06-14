@@ -160,6 +160,9 @@ GLOBAL FUNCTION phaseDescent {
     // Deploy fairing once slow enough (< 60 m/s)
     _descentDeployFairing().
 
+    // Optional drag test: reopen tagged service bays before descent decouple.
+    _descentReopenExtendBaysForDrag().
+
     // Decouple transfer stage at safe altitude
     _descentDecouple().
 
@@ -184,6 +187,7 @@ GLOBAL FUNCTION phaseDescent {
     mLog("Safe to redeploy antennas (airspeed=" + ROUND(SHIP:AIRSPEED, 1) + " m/s).").
     _descentReopenExtendBays().
     _descentExtendAntennas().
+    _descentDropHeatShield().
 
     // Archive flight log now that comms may be restored
     WAIT 1.
@@ -382,18 +386,128 @@ LOCAL FUNCTION _descentDecouple {
             OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
     }
 
-    // Decouple
     FOR dc IN decouplers {
-        IF dc:HASMODULE("ModuleDecouple") {
-            dc:GETMODULE("ModuleDecouple"):DOEVENT("decouple").
-            mLog("Decoupled: " + dc:TITLE + " (tag=" + tag + ")").
-        } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
-            dc:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("decouple").
-            mLog("Decoupled: " + dc:TITLE + " (tag=" + tag + ")").
-        }
+        _descentDecouplePart(dc, "tag=" + tag).
     }
     WAIT 2.
     mLogWarn("STATS descent decouple alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
+        + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
+}
+
+LOCAL FUNCTION _descentDecouplePart {
+    PARAMETER p.
+    PARAMETER label.
+    IF p:HASMODULE("ModuleDecouple") {
+        IF _descentDoFirstEvent(p:GETMODULE("ModuleDecouple"),
+                LIST("decouple", "Decouple", "jettison", "Jettison",
+                    "Jettison Heat Shield")) {
+            mLog("Decoupled: " + p:TITLE + " (" + label + ")").
+            RETURN TRUE.
+        }
+    }
+    IF p:HASMODULE("ModuleAnchoredDecoupler") {
+        IF _descentDoFirstEvent(p:GETMODULE("ModuleAnchoredDecoupler"),
+                LIST("decouple", "Decouple")) {
+            mLog("Decoupled: " + p:TITLE + " (" + label + ")").
+            RETURN TRUE.
+        }
+    }
+    IF p:HASMODULE("ModuleJettison") {
+        IF _descentDoFirstEvent(p:GETMODULE("ModuleJettison"),
+                LIST("jettison", "Jettison", "Jettison Heat Shield")) {
+            mLog("Jettisoned: " + p:TITLE + " (" + label + ")").
+            RETURN TRUE.
+        }
+    }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _descentDoFirstEvent {
+    PARAMETER module_.
+    PARAMETER events.
+    FOR eventName IN events {
+        IF module_:HASEVENT(eventName) {
+            module_:DOEVENT(eventName).
+            RETURN TRUE.
+        }
+    }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _descentDropHeatShield {
+    IF DEFINED CFG {
+        IF NOT CFG:HASKEY("DESCENT_HEAT_SHIELD_DROP_ALT") { RETURN. }
+    } ELSE {
+        RETURN.
+    }
+
+    LOCAL dropAlt IS CFG["DESCENT_HEAT_SHIELD_DROP_ALT"].
+    IF dropAlt <= 0 { RETURN. }
+
+    LOCAL candidates IS LIST().
+    FOR p IN SHIP:PARTS {
+        LOCAL title IS p:TITLE:TOUPPER.
+        LOCAL looksLikeHeatShield IS p:HASMODULE("ModuleAblator")
+            OR title:CONTAINS("HEAT SHIELD")
+            OR title:CONTAINS("HEATSHIELD").
+        IF looksLikeHeatShield
+                AND (p:HASMODULE("ModuleDecouple")
+                    OR p:HASMODULE("ModuleAnchoredDecoupler")
+                    OR p:HASMODULE("ModuleJettison")) {
+            candidates:ADD(p).
+        }
+    }
+
+    IF candidates:LENGTH = 0 {
+        mLogWarn("Heat shield drop requested, but no decouplable heat shield found.").
+        RETURN.
+    }
+    IF candidates:LENGTH > 1 {
+        mLogWarn("Heat shield drop found " + candidates:LENGTH
+            + " candidates; using " + candidates[0]:TITLE + ".").
+    }
+
+    IF ALT:RADAR > dropAlt {
+        mLog("Waiting for " + ROUND(dropAlt, 0)
+            + "m AGL to drop heat shield...").
+        WAIT UNTIL ALT:RADAR < dropAlt
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    }
+
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN. }
+
+    IF _descentDecouplePart(candidates[0], "heat shield drop") {
+        WAIT 1.
+        mLogWarn("STATS heat-shield-drop radarAlt="
+            + ROUND(ALT:RADAR, 1)
+            + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
+    } ELSE {
+        mLogWarn("Heat shield candidate has no recognized decouple module: "
+            + candidates[0]:TITLE + ".").
+    }
+}
+
+LOCAL FUNCTION _descentReopenExtendBaysForDrag {
+    IF DEFINED CFG {
+        IF NOT CFG:HASKEY("DESCENT_BAY_REOPEN_ALT") { RETURN. }
+    } ELSE {
+        RETURN.
+    }
+
+    LOCAL reopenAlt IS CFG["DESCENT_BAY_REOPEN_ALT"].
+    IF reopenAlt <= 0 { RETURN. }
+
+    IF SHIP:ALTITUDE > reopenAlt {
+        mLog("Waiting for " + ROUND(reopenAlt/1000, 1)
+            + "km to reopen extend bays for drag...").
+        WAIT UNTIL SHIP:ALTITUDE < reopenAlt
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    }
+
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN. }
+
+    _descentReopenExtendBays().
+    mLogWarn("STATS descent-bay-reopen alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
         + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
 }
 
