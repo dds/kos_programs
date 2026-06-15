@@ -319,7 +319,8 @@ GLOBAL FUNCTION bootNormalizePhaseName {
 GLOBAL FUNCTION bootIsLaunchStartPhase {
     PARAMETER phaseName.
     LOCAL phase IS bootNormalizePhaseName(phaseName).
-    RETURN phase = "" OR phase = "LAUNCH" OR phase = "FAIR" OR phase = "ANTS".
+    RETURN phase = "" OR phase = "PRELAUNCH" OR phase = "LAUNCH"
+        OR phase = "FAIR" OR phase = "ANTS".
 }
 
 GLOBAL FUNCTION bootEnsureInitialPhase {
