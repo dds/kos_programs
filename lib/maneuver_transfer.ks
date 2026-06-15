@@ -76,6 +76,24 @@ GLOBAL FUNCTION planTransfer {
     // Dumb Departure, Smart Coast: force a dead-center collision course
     // to maximize SOI-intercept margin. BPLANE owns precision targeting
     // during the mid-course correction.
+    LOCAL firstPatch IS _firstPatchBodyName(nd).
+    LOCAL firstPatchOk IS firstPatch = "none" OR firstPatch = targetBody:NAME.
+    IF firstPatch <> "none" AND BODY:BODY <> 0 AND firstPatch = BODY:BODY:NAME {
+        SET firstPatchOk TO TRUE.
+    }
+    IF firstPatch <> "none" AND targetBody:BODY <> 0 AND firstPatch = targetBody:BODY:NAME {
+        SET firstPatchOk TO TRUE.
+    }
+    IF NOT firstPatchOk {
+        mLogError("planTransfer: Node intercepts " + firstPatch
+            + " instead of " + targetBody:NAME + ". Transfer blocked.").
+        mLogWarn("STATS transfer result target=" + targetBody:NAME
+            + " status=blocked-by-obstacle"
+            + " obstacle=" + firstPatch
+            + " dv=" + ROUND(nd:DELTAV:MAG,1)).
+        IF HASNODE { REMOVE nd. }
+        RETURN.
+    }
     newtonTarget(nd, targetBody, "PE", 0).
 
     // --- Final report ---
@@ -144,6 +162,10 @@ LOCAL FUNCTION _localInterceptEval {
         45).
     LOCAL patch IS _getTargetPatch(nd, targetBody).
     LOCAL score IS ca["distance"] + nd:DELTAV:MAG * 100.
+    LOCAL obstacleName IS _firstPatchBodyName(nd).
+    IF obstacleName <> "none" AND obstacleName <> targetBody:NAME {
+        SET score TO score + 50000000.
+    }
     IF patch <> 0 {
         // Any real SOI patch is better than a near miss. BPLANE can
         // move a rough patch; it cannot correct a non-encounter.
@@ -152,7 +174,8 @@ LOCAL FUNCTION _localInterceptEval {
     RETURN LEXICON(
         "SCORE", score,
         "CA", ca,
-        "PATCH", patch <> 0
+        "PATCH", patch <> 0,
+        "OBSTACLE", obstacleName
     ).
 }
 
@@ -315,7 +338,7 @@ LOCAL FUNCTION _planLocalTransfer {
     IF CFG:HASKEY("TRANSFER_SCAN_SAMPLES_PER_ORBIT") {
         SET samplesPerOrbit TO MAX(4, CFG["TRANSFER_SCAN_SAMPLES_PER_ORBIT"]).
     }
-    LOCAL scanHours IS 6.
+    LOCAL scanHours IS 24.
     IF CFG:HASKEY("TRANSFER_SCAN_LOOKAHEAD_HOURS") {
         SET scanHours TO MAX(0.25, CFG["TRANSFER_SCAN_LOOKAHEAD_HOURS"]).
     }
@@ -332,8 +355,9 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL bestTime IS MAX(scanStart, MIN(scanEnd, departUt)).
     SET nd:TIME TO bestTime.
     WAIT 0.1.
-    LOCAL bestCA IS _findClosestApproach(targetBody, bestTime + hohmannTof * 0.5, bestTime + hohmannTof * 1.5, 40).
-    LOCAL bestSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+    LOCAL bestEval IS _localInterceptEval(nd, targetBody, hohmannTof).
+    LOCAL bestCA IS bestEval["CA"].
+    LOCAL bestSeed IS bestEval.
     LOCAL previewShortlist IS 5.
     IF CFG:HASKEY("TRANSFER_PREVIEW_SHORTLIST") {
         SET previewShortlist TO MAX(1, CFG["TRANSFER_PREVIEW_SHORTLIST"]).
@@ -361,8 +385,9 @@ LOCAL FUNCTION _planLocalTransfer {
         IF tryTime <= scanEnd {
             SET nd:TIME TO tryTime.
             WAIT 0.02.
-            LOCAL tryCa IS _findClosestApproach(targetBody, tryTime + hohmannTof * 0.5, tryTime + hohmannTof * 1.5, 40).
-            LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
+            LOCAL tryEval IS _localInterceptEval(nd, targetBody, hohmannTof).
+            LOCAL tryCa IS tryEval["CA"].
+            LOCAL trySeed IS tryEval.
             LOCAL insertAt IS -1.
             FROM { LOCAL ti IS 0. } UNTIL ti >= previewShortlist STEP { SET ti TO ti + 1. } DO {
                 IF insertAt < 0 AND trySeed["SCORE"] < scanSeeds[ti]["SCORE"] {
@@ -404,11 +429,9 @@ LOCAL FUNCTION _planLocalTransfer {
         LOCAL tD IS tA + (tB - tA) / gr.
 
         SET nd:TIME TO tC. WAIT 0.02.
-        LOCAL caC IS _findClosestApproach(targetBody, tC + hohmannTof * 0.4, tC + hohmannTof * 1.6, 30).
-        LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
+        LOCAL seedC IS _localInterceptEval(nd, targetBody, hohmannTof).
         SET nd:TIME TO tD. WAIT 0.02.
-        LOCAL caD IS _findClosestApproach(targetBody, tD + hohmannTof * 0.4, tD + hohmannTof * 1.6, 30).
-        LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
+        LOCAL seedD IS _localInterceptEval(nd, targetBody, hohmannTof).
 
         IF seedC["SCORE"] < seedD["SCORE"] {
             SET tB TO tD.
@@ -423,15 +446,16 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL dvSteps IS 20.
     LOCAL dvStep IS dvRange * 2 / dvSteps.
     LOCAL bestDv IS hohmannDv.
-    SET bestCA TO _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-    SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+    SET bestEval TO _localInterceptEval(nd, targetBody, hohmannTof).
+    SET bestCA TO bestEval["CA"].
+    SET bestSeed TO bestEval.
 
     FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
         LOCAL tryDv IS hohmannDv - dvRange + di * dvStep.
         SET nd:PROGRADE TO tryDv.
         WAIT 0.02.
-        LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-        LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
+        LOCAL trySeed IS _localInterceptEval(nd, targetBody, hohmannTof).
+        LOCAL tryCa IS trySeed["CA"].
         IF trySeed["SCORE"] < bestSeed["SCORE"] {
             SET bestCA TO tryCa.
             SET bestSeed TO trySeed.
@@ -449,11 +473,9 @@ LOCAL FUNCTION _planLocalTransfer {
         LOCAL dvD IS dvA + (dvB - dvA) / gr.
 
         SET nd:PROGRADE TO dvC. WAIT 0.02.
-        LOCAL caC IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-        LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
+        LOCAL seedC IS _localInterceptEval(nd, targetBody, hohmannTof).
         SET nd:PROGRADE TO dvD. WAIT 0.02.
-        LOCAL caD IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-        LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
+        LOCAL seedD IS _localInterceptEval(nd, targetBody, hohmannTof).
 
         IF seedC["SCORE"] < seedD["SCORE"] {
             SET dvB TO dvD.
@@ -474,14 +496,15 @@ LOCAL FUNCTION _planLocalTransfer {
         LOCAL bestNrm IS nd:NORMAL.
         LOCAL nrmGoodEnough IS FALSE.
         SET bestCA TO gateCA.
-        SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+        SET bestEval TO _localInterceptEval(nd, targetBody, hohmannTof).
+        SET bestSeed TO bestEval.
 
         FROM { LOCAL ni IS 0. } UNTIL ni > nrmSteps STEP { SET ni TO ni + 1. } DO {
             LOCAL tryNrm IS bestNrm - nrmRange + ni * nrmStep.
             SET nd:NORMAL TO tryNrm.
             WAIT 0.02.
-            LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-            LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
+            LOCAL trySeed IS _localInterceptEval(nd, targetBody, hohmannTof).
+            LOCAL tryCa IS trySeed["CA"].
             IF trySeed["SCORE"] < bestSeed["SCORE"] {
                 SET bestCA TO tryCa.
                 SET bestSeed TO trySeed.
@@ -506,11 +529,9 @@ LOCAL FUNCTION _planLocalTransfer {
                 LOCAL nrmD IS nrmA + (nrmB - nrmA) / gr.
 
                 SET nd:NORMAL TO nrmC. WAIT 0.02.
-                LOCAL caC IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-                LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
+                LOCAL seedC IS _localInterceptEval(nd, targetBody, hohmannTof).
                 SET nd:NORMAL TO nrmD. WAIT 0.02.
-                LOCAL caD IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-                LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
+                LOCAL seedD IS _localInterceptEval(nd, targetBody, hohmannTof).
 
                 IF seedC["SCORE"] < seedD["SCORE"] {
                     SET nrmB TO nrmD.
@@ -537,8 +558,8 @@ LOCAL FUNCTION _planLocalTransfer {
         SET interceptCheck TO _refineLocalSoiIntercept(nd, targetBody, hohmannTof).
     }
 
-    LOCAL finalCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
-    LOCAL finalSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, finalCA["distance"], nd:DELTAV:MAG).
+    LOCAL finalSeed IS _localInterceptEval(nd, targetBody, hohmannTof).
+    LOCAL finalCA IS finalSeed["CA"].
     mLog("Optimized: CA=" + ROUND(finalCA["distance"]/1000, 1) + "km"
         + " score=" + ROUND(finalSeed["SCORE"], 2)
         + "  dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s"
@@ -548,6 +569,7 @@ LOCAL FUNCTION _planLocalTransfer {
         + " score=" + ROUND(finalSeed["SCORE"],2)
         + " patch=" + finalSeed["PATCH"]
         + " firstPatch=" + _firstPatchBodyName(nd)
+        + " obstacle=" + finalSeed["OBSTACLE"]
         + " prograde=" + ROUND(nd:PROGRADE,1)
         + " normal=" + ROUND(nd:NORMAL,1)
         + " radial=" + ROUND(nd:RADIALOUT,1)
@@ -574,6 +596,7 @@ LOCAL FUNCTION _logLocalTransferShortlist {
                 + " closestT=" + ROUND(ca["time"] - TIME:SECONDS, 0)
                 + " score=" + ROUND(seed["SCORE"], 2)
                 + " patch=" + seed["PATCH"]
+                + " obstacle=" + seed["OBSTACLE"]
                 + " dv=" + ROUND(seed["DV"], 1)).
         }
     }
