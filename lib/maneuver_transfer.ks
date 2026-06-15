@@ -302,6 +302,129 @@ GLOBAL FUNCTION planTransfer {
 //   5. Golden section refine dV
 //   6. Optional LAN scan
 // ============================================================
+LOCAL FUNCTION _localInterceptEval {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER hohmannTof.
+
+    LOCAL ca IS _findClosestApproach(targetBody,
+        nd:TIME + hohmannTof * 0.3,
+        nd:TIME + hohmannTof * 2.0,
+        45).
+    LOCAL patch IS _getTargetPatch(nd, targetBody).
+    LOCAL score IS ca["distance"] + nd:DELTAV:MAG * 100.
+    IF patch <> 0 {
+        // Any real SOI patch is better than a near miss. BPLANE can
+        // move a rough patch; it cannot correct a non-encounter.
+        SET score TO score - targetBody:SOIRADIUS * 2.
+    }
+    RETURN LEXICON(
+        "SCORE", score,
+        "CA", ca,
+        "PATCH", patch <> 0
+    ).
+}
+
+LOCAL FUNCTION _refineLocalSoiIntercept {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER hohmannTof.
+
+    LOCAL best IS _localInterceptEval(nd, targetBody, hohmannTof).
+    IF best["PATCH"] AND best["CA"]["distance"] < targetBody:SOIRADIUS * 0.85 {
+        RETURN best.
+    }
+
+    LOCAL axes IS LIST("PROGRADE", "NORMAL", "RADIALOUT", "TIME").
+    LOCAL steps IS LEXICON(
+        "PROGRADE", 8.0,
+        "NORMAL", 30.0,
+        "RADIALOUT", 12.0,
+        "TIME", 240.0
+    ).
+    LOCAL mins IS LEXICON(
+        "PROGRADE", 0.25,
+        "NORMAL", 0.25,
+        "RADIALOUT", 0.25,
+        "TIME", 5.0
+    ).
+    LOCAL signs IS LIST(1, -1).
+
+    LOCAL startCA IS best["CA"]["distance"].
+    LOCAL startPatch IS best["PATCH"].
+    mLog("SOI intercept refine: start CA=" + ROUND(startCA / 1000, 1)
+        + "km patch=" + startPatch
+        + " SOI=" + ROUND(targetBody:SOIRADIUS / 1000, 0) + "km").
+
+    FROM { LOCAL iter IS 0. } UNTIL iter >= 32 STEP { SET iter TO iter + 1. } DO {
+        LOCAL bestAxis IS "".
+        LOCAL bestValue IS 0.
+        LOCAL bestTrial IS best.
+
+        FOR axis IN axes {
+            LOCAL oldVal IS _nodeAxisGet(nd, axis).
+            FOR sgn IN signs {
+                LOCAL trialVal IS oldVal + sgn * steps[axis].
+                LOCAL timeOk IS TRUE.
+                IF axis = "TIME" AND trialVal <= TIME:SECONDS + 30 { SET timeOk TO FALSE. }
+                IF timeOk {
+                    _nodeAxisSet(nd, axis, trialVal).
+                    WAIT 0.02.
+                    LOCAL trial IS _localInterceptEval(nd, targetBody, hohmannTof).
+                    IF trial["SCORE"] < bestTrial["SCORE"] {
+                        SET bestTrial TO trial.
+                        SET bestAxis TO axis.
+                        SET bestValue TO trialVal.
+                    }
+                }
+            }
+            _nodeAxisSet(nd, axis, oldVal).
+            WAIT 0.01.
+        }
+
+        IF bestAxis <> "" {
+            _nodeAxisSet(nd, bestAxis, bestValue).
+            WAIT 0.02.
+            SET best TO _localInterceptEval(nd, targetBody, hohmannTof).
+            mLog("  SOI[" + iter + "] " + bestAxis + "="
+                + ROUND(bestValue, 2)
+                + " CA=" + ROUND(best["CA"]["distance"] / 1000, 1)
+                + "km patch=" + best["PATCH"]
+                + " dV=" + ROUND(nd:DELTAV:MAG, 1)).
+            IF best["PATCH"] AND best["CA"]["distance"] < targetBody:SOIRADIUS * 0.6 {
+                BREAK.
+            }
+        } ELSE {
+            FOR axis IN axes {
+                SET steps[axis] TO steps[axis] / 2.
+            }
+            mLog("  SOI[" + iter + "] refining steps: P="
+                + ROUND(steps["PROGRADE"], 2)
+                + " N=" + ROUND(steps["NORMAL"], 2)
+                + " R=" + ROUND(steps["RADIALOUT"], 2)
+                + " T=" + ROUND(steps["TIME"], 1)).
+
+            LOCAL small IS TRUE.
+            FOR axis IN axes {
+                IF steps[axis] >= mins[axis] { SET small TO FALSE. }
+            }
+            IF small { BREAK. }
+        }
+    }
+
+    LOCAL final IS _localInterceptEval(nd, targetBody, hohmannTof).
+    mLogWarn("STATS soi-refine target=" + targetBody:NAME
+        + " startCaKm=" + ROUND(startCA / 1000, 1)
+        + " finalCaKm=" + ROUND(final["CA"]["distance"] / 1000, 1)
+        + " startPatch=" + startPatch
+        + " finalPatch=" + final["PATCH"]
+        + " prograde=" + ROUND(nd:PROGRADE, 1)
+        + " normal=" + ROUND(nd:NORMAL, 1)
+        + " radial=" + ROUND(nd:RADIALOUT, 1)
+        + " departT=" + ROUND(nd:TIME - TIME:SECONDS, 0)).
+    RETURN final.
+}
+
 LOCAL FUNCTION _planLocalTransfer {
     PARAMETER targetBody.
     PARAMETER targetPe.
@@ -678,9 +801,14 @@ LOCAL FUNCTION _planLocalTransfer {
         SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
     }
 
+    LOCAL interceptCheck IS _localInterceptEval(nd, targetBody, hohmannTof).
+    IF (NOT interceptCheck["PATCH"]) OR interceptCheck["CA"]["distance"] > targetBody:SOIRADIUS * 0.85 {
+        SET interceptCheck TO _refineLocalSoiIntercept(nd, targetBody, hohmannTof).
+    }
+
     LOCAL finalCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
     LOCAL finalSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, finalCA["distance"], nd:DELTAV:MAG).
-    IF (captureInc >= 0 OR lanTarget >= 0) AND aopTarget < 0 {
+    IF (captureInc >= 0 OR lanTarget >= 0) AND aopTarget < 0 AND NOT _angularWorkDeferred() {
         _nodeAxisSet(nd, "TIME", finalSeed["NODE_TIME"]).
         _nodeAxisSet(nd, "PROGRADE", finalSeed["NODE_PROGRADE"]).
         _nodeAxisSet(nd, "NORMAL", finalSeed["NODE_NORMAL"]).
@@ -692,6 +820,9 @@ LOCAL FUNCTION _planLocalTransfer {
             + ROUND(nd:NORMAL, 1)
             + " R=" + ROUND(nd:RADIALOUT, 1)
             + " dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s").
+    } ELSE IF (captureInc >= 0 OR lanTarget >= 0) AND aopTarget < 0 {
+        SET finalSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, finalCA["distance"], nd:DELTAV:MAG).
+        mLog("Skipping constrained preview seed: BPLANE/SHAPE owns exact arrival elements.").
     }
     mLog("Optimized: CA=" + ROUND(finalCA["distance"]/1000, 1) + "km"
         + " score=" + ROUND(finalSeed["SCORE"], 2)

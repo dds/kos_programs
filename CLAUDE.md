@@ -130,6 +130,15 @@ Looks like Python/JS; is neither.
 
 - **After editing `lib/dependencies.txt`, run `make dependencies`.**
   (Pre-commit hook does it too: `pre-commit install`.)
+- Transfer-planning mental model: for `XING,BPLANE,COAST,CAPTURE,SHAPE`,
+  `XING` must produce a real target SOI patch, but it should not be treated
+  as the owner of exact arrival plane/AoP. `BPLANE` can correct a rough
+  hyperbolic encounter using smooth B-plane coordinates; it cannot repair
+  a non-encounter. When debugging local Minmus transfers, first check
+  `STATS local-transfer ... patch=` and `STATS soi-refine ... finalPatch=`.
+  If `patch=False`, element targeting will report `no-patch`/`PeErr=10000km`
+  because it has no target-body orbit to measure, not because the requested
+  final orbit is impossible.
 - **Commit and push when a chunk of work is done, without being asked.** The
   game's archive folder syncs from the pushed repo; unpushed code is
   untestable. Logical, bisectable commits in short-imperative style. Leave
