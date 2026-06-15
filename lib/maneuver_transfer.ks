@@ -158,30 +158,34 @@ GLOBAL FUNCTION planTransfer {
             // AoP-constrained transfers couple PE and AoP — the solver
             // trades PE accuracy for AoP convergence. MCC corrects PE.
             LOCAL peTol IS CHOOSE 5000 IF aopTarget >= 0 ELSE 1000.
-            // With BPLANE/SHAPE downstream the capture plane is THEIR job
-            // (like LAN). For an inclined target (Minmus) the cheap, natural
-            // encounter sits in the target's own ~6deg plane, and the coupled
-            // solver — coordinate descent with step halving — stalls a few
-            // degrees short of INC=0 (out of step resolution, not dV: the
-            // inclination fix here is ~free but needs more iterations than the
-            // node solve affords). Rather than refuse a perfectly good
-            // near-plane encounter, accept it and let the mid-course /
-            // shaping phases set the final inclination and Pe. We still keep
-            // INC in the solver targets above, so the node is driven toward
-            // the plane and a genuinely wild basin (it couldn't unwind) is
-            // still rejected by the relaxed-but-bounded gate.
-            IF _angularWorkDeferred() {
-                SET peTol  TO MAX(peTol, 5000).
-                SET incTol TO MAX(incTol, 20).
+            // With BPLANE/SHAPE downstream the capture plane and exact
+            // periapsis are THEIR job. This is especially important for
+            // missed-burn rescue: XING may find a cheap near-term patch
+            // whose PE/INC are rough, but BPLANE can move that smooth
+            // hyperbolic aim point. Keep the element solver in the loop
+            // because it improves the handoff, then accept a real patch
+            // inside a broad BPLANE correction envelope.
+            LOCAL deferred IS _angularWorkDeferred().
+            IF deferred {
+                SET peTol  TO MAX(peTol, 50000).
+                SET incTol TO MAX(incTol, 45).
+                IF CFG:HASKEY("TRANSFER_DEFERRED_PE_ERR_TOL") {
+                    SET peTol TO CFG["TRANSFER_DEFERRED_PE_ERR_TOL"].
+                }
+                IF CFG:HASKEY("TRANSFER_DEFERRED_INC_ERR_TOL") {
+                    SET incTol TO CFG["TRANSFER_DEFERRED_INC_ERR_TOL"].
+                }
             }
             IF ABS(planeResult["PE_ERR"]) <= peTol {
                 SET planeOk TO TRUE.
                 IF captureInc >= 0 AND ABS(planeResult["INC_ERR"]) > incTol { SET planeOk TO FALSE. }
-                IF aopTarget >= 0 AND ABS(planeResult["AOP_ERR"]) > aopTol { SET planeOk TO FALSE. }
+                IF aopTarget >= 0 AND NOT deferred
+                        AND ABS(planeResult["AOP_ERR"]) > aopTol { SET planeOk TO FALSE. }
             }
             IF planeOk {
                 mLogWarn("planTransfer: accepting transfer plane within tolerance"
                     + _elementErrorSummary(planeResult, planeTargets)
+                    + " PeTolKm=" + ROUND(peTol/1000,1)
                     + " IncTol=" + ROUND(incTol,2)
                     + " AopTol=" + ROUND(aopTol,1)).
             } ELSE {

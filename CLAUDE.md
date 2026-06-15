@@ -142,6 +142,9 @@ Looks like Python/JS; is neither.
   Local `XING` scans `TRANSFER_SCAN_LOOKAHEAD_HOURS` from now (default 6h),
   capped by `TRANSFER_SCAN_STEP_MINUTES`, so missed-burn rescue replans do
   not search whole high-orbit periods before trying a correction.
+  When BPLANE/SHAPE are downstream, XING's element gate is a handoff gate:
+  it accepts rough real patches within `TRANSFER_DEFERRED_PE_ERR_TOL`
+  (default 50 km) and `TRANSFER_DEFERRED_INC_ERR_TOL` (default 45 deg).
 - **Commit and push when a chunk of work is done, without being asked.** The
   game's archive folder syncs from the pushed repo; unpushed code is
   untestable. Logical, bisectable commits in short-imperative style. Leave
