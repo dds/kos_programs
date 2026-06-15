@@ -80,7 +80,11 @@ GLOBAL FUNCTION phaseCoast1Half {
 
     mLog("Coasting to mid-course refinement at T+"
         + ROUND(tMidpoint - TIME:SECONDS, 0) + "s.").
+    LOCAL alarmId IS kacEnsureAlarm("Midcourse refine: " + target:NAME,
+        tMidpoint,
+        "Auto-created by COAST_1HALF").
     _waitUntilOrSOI(target, tMidpoint, 10).
+    IF alarmId <> "" { DELETEALARM(alarmId). }
 
     IF SHIP:BODY = target {
         mLog("COAST_1HALF: entered " + target:NAME
