@@ -71,11 +71,29 @@ LOCAL FUNCTION _cfgHas {
     RETURN DEFINED CFG AND CFG:HASKEY(key).
 }
 
+LOCAL FUNCTION _allowGravityAssist {
+    IF _cfgHas("ALLOW_GRAVITY_ASSIST") {
+        RETURN CFG["ALLOW_GRAVITY_ASSIST"] <> 0.
+    }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _arrivalTransitAllowed {
+    PARAMETER fromBody.
+    PARAMETER nextBody.
+    PARAMETER targetBody.
+
+    IF nextBody:NAME = targetBody:NAME { RETURN TRUE. }
+    IF nextBody = fromBody:BODY AND targetBody:BODY <> fromBody { RETURN TRUE. }
+    IF nextBody = targetBody:BODY AND targetBody:BODY <> fromBody { RETURN TRUE. }
+    RETURN FALSE.
+}
+
 // ============================================================
 // Patch discovery — walk the conic chain (after the given node
 // if one is supplied, else from the ship's current orbit) and
 // return LEX("patch", p, "entryUt", t) for the target body,
-// or 0 when there is no encounter.
+// or 0 when there is no direct encounter.
 // NEXTPATCHETA is always relative to current universal time, so
 // a patch's entry time is the PREVIOUS patch's transition ETA.
 // ============================================================
@@ -85,12 +103,17 @@ LOCAL FUNCTION _findArrivalPatch {
 
     LOCAL p IS SHIP:ORBIT.
     IF fromNode <> 0 { SET p TO fromNode:ORBIT. }
+    LOCAL allowAssist IS _allowGravityAssist().
 
     UNTIL NOT p:HASNEXTPATCH {
         LOCAL entryUt IS TIME:SECONDS + p:NEXTPATCHETA.
+        LOCAL fromBody IS p:BODY.
         SET p TO p:NEXTPATCH.
         IF p:BODY = targetBody {
             RETURN LEX("patch", p, "entryUt", entryUt).
+        }
+        IF NOT allowAssist AND NOT _arrivalTransitAllowed(fromBody, p:BODY, targetBody) {
+            RETURN 0.
         }
     }
     RETURN 0.

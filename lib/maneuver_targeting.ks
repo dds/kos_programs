@@ -7,7 +7,7 @@
 // external callers (maneuver_intersystem, maneuver_rendezvous).
 //
 // Provides:
-//   _getTargetPatch          — walk patched conics to find target SOI
+//   _getTargetPatch          — walk patched conics to find direct target SOI
 //   _findEncounter           — binary time search for encounter
 //   _scanForLan              — LAN optimization across departure orbits
 //   _targetPatchElementsCoupled — coordinate search for PE/INC/LAN/AOP
@@ -21,16 +21,53 @@
 @LAZYGLOBAL OFF.
 
 // ============================================================
+// _patchTransitAllowed — direct-transfer patch-chain guard.
+//
+// Without gravity-assist planning, an encounter with a wrong peer body
+// before the target is not a valid "eventual target" solution. We still
+// allow ordinary parent-SOI transits:
+//   Kerbin -> Sun -> Duna
+//   Sun -> Jool -> Laythe
+// but reject paths like Kerbin -> Mun -> Minmus unless gravity assists
+// are explicitly enabled.
+// ============================================================
+GLOBAL FUNCTION _patchTransitAllowed {
+    PARAMETER fromBody.
+    PARAMETER nextBody.
+    PARAMETER targetBody.
+
+    IF nextBody:NAME = targetBody:NAME { RETURN TRUE. }
+    IF nextBody = fromBody:BODY AND targetBody:BODY <> fromBody { RETURN TRUE. }
+    IF nextBody = targetBody:BODY AND targetBody:BODY <> fromBody { RETURN TRUE. }
+    RETURN FALSE.
+}
+
+GLOBAL FUNCTION _patchAllowGravityAssist {
+    IF DEFINED CFG AND CFG:HASKEY("ALLOW_GRAVITY_ASSIST") {
+        RETURN CFG["ALLOW_GRAVITY_ASSIST"] <> 0.
+    }
+    RETURN FALSE.
+}
+
+// ============================================================
 // _getTargetPatch — walk patched conics to find the orbit patch
-// around the target body.
+// around the target body. By default this only accepts a direct
+// transfer chain; set CFG ALLOW_GRAVITY_ASSIST=1 to permit
+// wrong-body intermediate encounters.
 // ============================================================
 GLOBAL FUNCTION _getTargetPatch {
     PARAMETER originTarget.
     PARAMETER targetBody.
+    PARAMETER allowGravityAssist IS _patchAllowGravityAssist().
+
     LOCAL p IS originTarget:ORBIT.
     UNTIL NOT p:HASNEXTPATCH {
+        LOCAL fromBody IS p:BODY.
         SET p TO p:NEXTPATCH.
         IF p:BODY:NAME = targetBody:NAME { RETURN p. }
+        IF NOT allowGravityAssist AND NOT _patchTransitAllowed(fromBody, p:BODY, targetBody) {
+            RETURN 0.
+        }
     }
     RETURN 0.
 }

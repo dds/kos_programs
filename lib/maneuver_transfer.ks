@@ -329,6 +329,17 @@ LOCAL FUNCTION _localInterceptEval {
     ).
 }
 
+LOCAL FUNCTION _firstPatchBodyName {
+    PARAMETER nd.
+
+    LOCAL p IS nd:ORBIT.
+    IF p:HASNEXTPATCH {
+        SET p TO p:NEXTPATCH.
+        RETURN p:BODY:NAME.
+    }
+    RETURN "none".
+}
+
 LOCAL FUNCTION _refineLocalSoiIntercept {
     PARAMETER nd.
     PARAMETER targetBody.
@@ -854,6 +865,7 @@ LOCAL FUNCTION _planLocalTransfer {
         + " caKm=" + ROUND(finalCA["distance"]/1000,1)
         + " score=" + ROUND(finalSeed["SCORE"],2)
         + " patch=" + finalSeed["PATCH"]
+        + " firstPatch=" + _firstPatchBodyName(nd)
         + " incErr=" + ROUND(finalSeed["INC_ERR"],1)
         + " lanErr=" + ROUND(finalSeed["LAN_ERR"],1)
         + " aopErr=" + ROUND(finalSeed["AOP_ERR"],1)

@@ -138,7 +138,10 @@ Looks like Python/JS; is neither.
   `STATS local-transfer ... patch=` and `STATS soi-refine ... finalPatch=`.
   If `patch=False`, element targeting will report `no-patch`/`PeErr=10000km`
   because it has no target-body orbit to measure, not because the requested
-  final orbit is impossible.
+  final orbit is impossible. Patch-chain searches are direct-transfer by
+  default: a wrong-body intermediate encounter (for example Mun before a
+  Minmus target) is rejected unless `ALLOW_GRAVITY_ASSIST=1` is explicitly
+  configured for future assist planning.
   Local `XING` scans `TRANSFER_SCAN_LOOKAHEAD_HOURS` from now (default 6h),
   capped by `TRANSFER_SCAN_STEP_MINUTES`, so missed-burn rescue replans do
   not search whole high-orbit periods before trying a correction.
