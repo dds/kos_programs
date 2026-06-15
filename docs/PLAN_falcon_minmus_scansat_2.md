@@ -117,12 +117,13 @@ SHAPE_PE = 70000
 SHAPE_AP = 70000
 SHAPE_INC = 75
 
-SECONDARY_SEQUENCE = RAISE,CIRC,INCLINE,SCANSAT_OPS,DONE
+SECONDARY_SEQUENCE = SHAPE,SCANSAT_OPS,DONE
 SECONDARY_RELEASE_TAG = relay_scan_1_decoupler
 SECONDARY_RELEASE_ANTENNA_TAG = relay_scan_1_ant
 SECONDARY_RELEASE_SOLAR_TAG = relay_scan_1_sol
-SECONDARY_RELAY_ALT = 300000
-SECONDARY_TARGET_INCLINATION = 90
+SECONDARY_SHAPE_PE = 300000
+SECONDARY_SHAPE_AP = 300000
+SECONDARY_SHAPE_INC = 90
 
 SCANSAT_TARGET_COVERAGE = 99.1
 SCANSAT_REQUIRED_TYPES = MULTISPECTRAL
@@ -138,7 +139,7 @@ RUNPATH("1:/cmd/secondarytarget.ks").
 ```
 
 That command releases Sat 1, marks the secondary target active, and reboots.
-Falcon then resumes through the existing `RAISE,CIRC,INCLINE,SCANSAT_OPS,DONE`
+Falcon then resumes through the existing `SHAPE,SCANSAT_OPS,DONE`
 phases with normal band-change reboots.
 
 After switching to Sat 1, run:

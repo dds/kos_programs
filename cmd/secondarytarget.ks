@@ -87,7 +87,7 @@ IF doRelease AND stateGet("secondary_release_done", "false") <> "true" {
     PRINT "Secondary payload released.".
 }
 
-LOCAL seqRaw IS _cfgStr("SECONDARY_SEQUENCE", "RAISE,CIRC,INCLINE,SCANSAT_OPS,DONE").
+LOCAL seqRaw IS _cfgStr("SECONDARY_SEQUENCE", "SHAPE,SCANSAT_OPS,DONE").
 LOCAL seq IS phaseListFromString(seqRaw).
 SET launchSeq TO seq.
 SET xferSeq TO seq.

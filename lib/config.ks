@@ -74,7 +74,6 @@ GLOBAL FUNCTION missionNumericConfigKeys {
         "DESCENT_SERVICE_ARM_ALT", "DESCENT_SERVICE_SEPARATION_DROP",
         "DESCENT_SERVICE_RELEASE_ALT",
         "ORBIT_STAY_TIME", "SOLAR_REORIENT_PERIOD", "KEEP_WARP",
-        "SECONDARY_RELAY_ALT", "SECONDARY_TARGET_INCLINATION",
         "SOLAR_HOLD_RATIO", "SOLAR_HOLD_EC",
         "CRUISE_ALT", "CRUISE_SPEED", "TOP_SPEED", "FLAP_AG",
         "AIRBORNE_RADAR_ALT", "AIRBORNE_SPEED",
@@ -89,7 +88,8 @@ GLOBAL FUNCTION missionNumericConfigKeys {
 // will be TONUMBERed into garbage.
 GLOBAL FUNCTION missionNumericConfigPrefixes {
     RETURN LIST("SHAPE_", "BPLANE_", "SSTO_", "DRONE_", "BURN_",
-        "SUBORBIT_", "SCANSAT_", "FLYBY_", "DEPART_").
+        "SUBORBIT_", "SCANSAT_", "FLYBY_", "DEPART_",
+        "SECONDARY_SHAPE_").
 }
 
 LOCAL FUNCTION _matchesNumericPrefix {
