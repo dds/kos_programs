@@ -4,20 +4,6 @@
 
 @LAZYGLOBAL OFF.
 
-// TRUE when the mission sequence carries BPLANE (arrival corridor)
-// or SHAPE (closed-form final orbit) — the phases that own exact
-// plane/AoP work in the new pipeline.
-LOCAL FUNCTION _angularWorkDeferred {
-    LOCAL seqRaw IS stateGet("mission_cfg_SEQUENCE", "").
-    RETURN seqRaw:CONTAINS("BPLANE") OR seqRaw:CONTAINS("SHAPE").
-}
-
-LOCAL MCC_DV_CAP           IS 50.
-LOCAL MCC_MIN_DV           IS 2.0.
-LOCAL MCC_LATE_MIN_DV      IS 3.0.
-LOCAL MCC_LATE_ETA         IS 7200.
-LOCAL MAX_RETRIES          IS 5.
-
 // ============================================================
 // planTransfer — plan a transfer burn to targetBody.
 //
@@ -27,33 +13,14 @@ LOCAL MAX_RETRIES          IS 5.
 //              departure time + prograde dV to minimize distance to target.
 //              Smooth POSITIONAT objective, no binary encounter search.
 //      Interplanetary:  Lambert grid scan, full 3-axis node, conic validation
-//   2. Element-aware seed scoring — prefer departure windows that
-//      already produce the requested PE/INC/LAN/AoP geometry.
-//   3. PE pretargeting (prograde) — unconstrained transfers first
-//      converge PE to zero for encounter margin. AoP-guided transfers
-//      target the requested capture Pe instead, preserving the selected
-//      apsidal branch while keeping the coupled solver near its target.
-//   4. Coupled PE/INC targeting — solve periapsis and capture plane
-//      together. PE and INC are tightly coupled on local moon transfers,
-//      so a scalar Newton pass can report false "low sensitivity" while
-//      a larger normal/radial/prograde coordinate search still converges.
-//   5. Angular gate — LAN is hard-solved when requested; AoP is only
-//      accepted/rejected here because it is best selected by departure
-//      timing and refined later by MCC/ELLIPTICAL.
-//
-// MCC (phaseMidCourse) fires mid-coast to fine-tune any drift
-// from burn execution errors. It runs the same INC/PE/AoP/LAN
-// passes but with a per-axis dV cap since it's corrective only.
+//   2. PE pretargeting — force a dead-center collision course
+//      (PE=0) to maximize the target SOI intercept margin.
 //
 // CFG keys consumed:
 //   CAPTURE_DIR  — "PROGRADE" / "POLAR" / "RETROPOLAR" / "RETROGRADE"
 //   CAPTURE_INC  — explicit inclination (overrides CAPTURE_DIR)
-//   LAN_ERR_TOL  — LAN tolerance for scan (default 0.5°)
-//   TRANSFER_AOP_ERR_TOL — max accepted transfer AoP error (default 35°)
-//   TRANSFER_INC_ERR_TOL — max accepted transfer INC error (default 1°)
 // ============================================================
 GLOBAL FUNCTION planTransfer {
-    GLOBAL FUNCTION planTransfer {
     PARAMETER targetBody.
     PARAMETER targetPe.
     PARAMETER lanTarget IS -1.
@@ -164,7 +131,7 @@ GLOBAL FUNCTION planTransfer {
 //   3. Golden section refine departure time
 //   4. Coarse scan of prograde dV (±20% of Hohmann)
 //   5. Golden section refine dV
-//   6. Optional LAN scan
+//   6. Optional normal dV scan for inclined target SOI intercepts
 // ============================================================
 LOCAL FUNCTION _localInterceptEval {
     PARAMETER nd.
@@ -312,7 +279,6 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
     LOCAL targetPeriod IS targetBody:ORBIT:PERIOD.
 
-    // --- Hohmann estimate (seed) ---
     LOCAL rShip   IS SHIP:ORBIT:SEMIMAJORAXIS.
     LOCAL rTarget IS targetBody:ORBIT:SEMIMAJORAXIS.
     LOCAL seed IS _hohmannSeed(rShip, rTarget, mu, targetPeriod).
@@ -323,7 +289,6 @@ LOCAL FUNCTION _planLocalTransfer {
         + ": Hohmann dV=" + ROUND(hohmannDv, 1) + " m/s"
         + "  TOF=" + ROUND(hohmannTof, 0) + "s").
 
-    // --- Phase angle estimate for initial departure time ---
     LOCAL idealPhaseAngle IS seed["IDEAL_PHASE"].
 
     SET TARGET TO targetBody.
@@ -342,21 +307,10 @@ LOCAL FUNCTION _planLocalTransfer {
         + "  diff=" + ROUND(phasePlan["DIFF"], 1)
         + "  wait=" + ROUND(waitTime, 0) + "s").
 
-    // --- Place prograde-only node ---
     LOCAL nd IS NODE(departUt, 0, 0, hohmannDv).
     ADD nd.
     WAIT 0.1.
 
-    // --- Scan departure time to minimize closest approach ---
-    // Search a near-term lookahead window from NOW, not ±N full ship
-    // orbits around the phase seed. This matters after a missed burn:
-    // the current orbit may be a long transfer ellipse, and "a few
-    // orbits" can mean days. XING as a rescue/reacquire phase should
-    // look for a correction in the next few hours.
-    // Each sample tries one ejection point in the parking orbit. For an
-    // inclined target the ejection longitude is the dominant lever (it
-    // orients the transfer ellipse and its apoapsis), so 4/orbit (every
-    // 90deg) steps right over good windows. 12/orbit = every 30deg.
     LOCAL samplesPerOrbit IS 12.
     IF CFG:HASKEY("TRANSFER_SCAN_SAMPLES_PER_ORBIT") {
         SET samplesPerOrbit TO MAX(4, CFG["TRANSFER_SCAN_SAMPLES_PER_ORBIT"]).
@@ -396,7 +350,7 @@ LOCAL FUNCTION _planLocalTransfer {
     SET scanCAs[0] TO bestCA.
     SET scanSeeds[0] TO bestSeed.
 
-    mLog("Element-aware transfer scan: " + scanSteps
+    mLog("Raw transfer scan: " + scanSteps
         + " steps over next " + ROUND(scanHours, 2) + "h"
         + "  step=" + ROUND(scanDt, 0) + "s"
         + "  phaseSeed T+" + ROUND(departUt - TIME:SECONDS, 0) + "s"
@@ -436,166 +390,115 @@ LOCAL FUNCTION _planLocalTransfer {
     WAIT 0.1.
     mLog("Time scan: best CA=" + ROUND(bestCA["distance"]/1000, 1) + "km"
         + " score=" + ROUND(bestSeed["SCORE"], 2)
-        + " AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)
         + " at T+" + ROUND(bestCA["time"] - TIME:SECONDS, 0) + "s"
         + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
     _logLocalTransferShortlist(scanTimes, scanCAs, scanSeeds, previewShortlist).
 
-    // --- AoP hard-filter: pick best AoP-acceptable candidate ---
-    // AoP is a basin selection problem controlled by departure timing.
-    // If the best raw candidate exceeds the AoP tolerance, search the
-    // shortlist for the first acceptable one (already sorted by seed score).
-    IF aopTarget >= 0 {
-        LOCAL aopFilterTol IS 35.
-        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopFilterTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
-        IF ABS(bestSeed["AOP_ERR"]) > aopFilterTol {
-            LOCAL found IS FALSE.
-            FROM { LOCAL fi IS 0. } UNTIL fi >= previewShortlist STEP { SET fi TO fi + 1. } DO {
-                IF scanSeeds[fi]["SCORE"] < 999999999
-                    AND ABS(scanSeeds[fi]["AOP_ERR"]) <= aopFilterTol {
-                    SET bestTime TO scanTimes[fi].
-                    SET bestCA TO scanCAs[fi].
-                    SET bestSeed TO scanSeeds[fi].
-                    SET found TO TRUE.
-                    BREAK.
-                }
-            }
-            SET nd:TIME TO bestTime.
-            WAIT 0.1.
-            IF found {
-                mLog("AoP filter: replaced best with AoP-acceptable candidate"
-                    + " AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)
-                    + " score=" + ROUND(bestSeed["SCORE"], 2)
-                    + " depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
-            } ELSE {
-                mLogWarn("AoP filter: no candidate within AoP tolerance " + ROUND(aopFilterTol, 1)
-                    + "; proceeding with best raw seed AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)).
-            }
+    // --- Golden section refine departure time + dV ---
+    LOCAL tA IS MAX(scanStart, bestTime - scanDt).
+    LOCAL tB IS MIN(scanEnd, bestTime + scanDt).
+    LOCAL gr IS (SQRT(5) + 1) / 2.
+
+    FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
+        LOCAL tC IS tB - (tB - tA) / gr.
+        LOCAL tD IS tA + (tB - tA) / gr.
+
+        SET nd:TIME TO tC. WAIT 0.02.
+        LOCAL caC IS _findClosestApproach(targetBody, tC + hohmannTof * 0.4, tC + hohmannTof * 1.6, 30).
+        LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
+        SET nd:TIME TO tD. WAIT 0.02.
+        LOCAL caD IS _findClosestApproach(targetBody, tD + hohmannTof * 0.4, tD + hohmannTof * 1.6, 30).
+        LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
+
+        IF seedC["SCORE"] < seedD["SCORE"] {
+            SET tB TO tD.
         } ELSE {
-            mLog("AoP filter: best raw candidate acceptable AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)).
+            SET tA TO tC.
         }
     }
+    SET nd:TIME TO (tA + tB) / 2.
+    WAIT 0.1.
 
-    // --- Golden section refine departure time + dV ---
-    // Skip when AoP is constrained: the raw scan found the correct
-    // retrograde/prograde basin and golden section assumes unimodal
-    // landscape. For retrograde targets (INC=180) the good geometry
-    // is a narrow feature in time; golden section drifts into the
-    // dominant prograde basin. The downstream coupled solver handles
-    // PE/INC fine-tuning from the raw scan's departure time.
-    IF aopTarget < 0 {
-        LOCAL tA IS MAX(scanStart, bestTime - scanDt).
-        LOCAL tB IS MIN(scanEnd, bestTime + scanDt).
-        LOCAL gr IS (SQRT(5) + 1) / 2.
+    LOCAL dvRange IS MAX(10, ABS(hohmannDv) * 0.2).
+    LOCAL dvSteps IS 20.
+    LOCAL dvStep IS dvRange * 2 / dvSteps.
+    LOCAL bestDv IS hohmannDv.
+    SET bestCA TO _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+    SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
 
-        FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
-            LOCAL tC IS tB - (tB - tA) / gr.
-            LOCAL tD IS tA + (tB - tA) / gr.
-
-            SET nd:TIME TO tC. WAIT 0.02.
-            LOCAL caC IS _findClosestApproach(targetBody, tC + hohmannTof * 0.4, tC + hohmannTof * 1.6, 30).
-            LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
-            SET nd:TIME TO tD. WAIT 0.02.
-            LOCAL caD IS _findClosestApproach(targetBody, tD + hohmannTof * 0.4, tD + hohmannTof * 1.6, 30).
-            LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
-
-            IF seedC["SCORE"] < seedD["SCORE"] {
-                SET tB TO tD.
-            } ELSE {
-                SET tA TO tC.
-            }
+    FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
+        LOCAL tryDv IS hohmannDv - dvRange + di * dvStep.
+        SET nd:PROGRADE TO tryDv.
+        WAIT 0.02.
+        LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+        LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
+        IF trySeed["SCORE"] < bestSeed["SCORE"] {
+            SET bestCA TO tryCa.
+            SET bestSeed TO trySeed.
+            SET bestDv TO tryDv.
         }
-        SET nd:TIME TO (tA + tB) / 2.
-        WAIT 0.1.
+    }
+    SET nd:PROGRADE TO bestDv.
+    WAIT 0.1.
 
-        // --- Scan prograde dV to refine transfer shape ---
-        // ±20% of Hohmann dV (or ±10 m/s minimum)
-        LOCAL dvRange IS MAX(10, ABS(hohmannDv) * 0.2).
-        LOCAL dvSteps IS 20.
-        LOCAL dvStep IS dvRange * 2 / dvSteps.
-        LOCAL bestDv IS hohmannDv.
-        SET bestCA TO _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+    LOCAL dvA IS MAX(bestDv - dvStep, hohmannDv - dvRange).
+    LOCAL dvB IS MIN(bestDv + dvStep, hohmannDv + dvRange).
+
+    FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
+        LOCAL dvC IS dvB - (dvB - dvA) / gr.
+        LOCAL dvD IS dvA + (dvB - dvA) / gr.
+
+        SET nd:PROGRADE TO dvC. WAIT 0.02.
+        LOCAL caC IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
+        LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
+        SET nd:PROGRADE TO dvD. WAIT 0.02.
+        LOCAL caD IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
+        LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
+
+        IF seedC["SCORE"] < seedD["SCORE"] {
+            SET dvB TO dvD.
+        } ELSE {
+            SET dvA TO dvC.
+        }
+    }
+    SET nd:PROGRADE TO (dvA + dvB) / 2.
+    WAIT 0.1.
+
+    LOCAL gateCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+    IF gateCA["distance"] > targetBody:SOIRADIUS * 0.7 {
+        LOCAL vInj IS SQRT(mu / rShip) + ABS(nd:PROGRADE).
+        LOCAL relIncEst IS ABS(targetBody:ORBIT:INCLINATION) + ABS(SHIP:ORBIT:INCLINATION).
+        LOCAL nrmRange IS MAX(50, 2 * vInj * SIN(relIncEst / 2)).
+        LOCAL nrmSteps IS 20.
+        LOCAL nrmStep IS nrmRange * 2 / nrmSteps.
+        LOCAL bestNrm IS nd:NORMAL.
+        LOCAL nrmGoodEnough IS FALSE.
+        SET bestCA TO gateCA.
         SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
 
-        FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
-            LOCAL tryDv IS hohmannDv - dvRange + di * dvStep.
-            SET nd:PROGRADE TO tryDv.
+        FROM { LOCAL ni IS 0. } UNTIL ni > nrmSteps STEP { SET ni TO ni + 1. } DO {
+            LOCAL tryNrm IS bestNrm - nrmRange + ni * nrmStep.
+            SET nd:NORMAL TO tryNrm.
             WAIT 0.02.
             LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
             LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
             IF trySeed["SCORE"] < bestSeed["SCORE"] {
                 SET bestCA TO tryCa.
                 SET bestSeed TO trySeed.
-                SET bestDv TO tryDv.
+                SET bestNrm TO tryNrm.
+            }
+            IF tryCa["distance"] < targetBody:SOIRADIUS * 0.7 {
+                SET bestCA TO tryCa.
+                SET bestSeed TO trySeed.
+                SET bestNrm TO tryNrm.
+                SET nrmGoodEnough TO TRUE.
+                BREAK.
             }
         }
-        SET nd:PROGRADE TO bestDv.
+        SET nd:NORMAL TO bestNrm.
         WAIT 0.1.
 
-        // Golden section refine prograde
-        LOCAL dvA IS MAX(bestDv - dvStep, hohmannDv - dvRange).
-        LOCAL dvB IS MIN(bestDv + dvStep, hohmannDv + dvRange).
-
-        FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
-            LOCAL dvC IS dvB - (dvB - dvA) / gr.
-            LOCAL dvD IS dvA + (dvB - dvA) / gr.
-
-            SET nd:PROGRADE TO dvC. WAIT 0.02.
-            LOCAL caC IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-            LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caC["distance"], nd:DELTAV:MAG).
-            SET nd:PROGRADE TO dvD. WAIT 0.02.
-            LOCAL caD IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-            LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caD["distance"], nd:DELTAV:MAG).
-
-            IF seedC["SCORE"] < seedD["SCORE"] {
-                SET dvB TO dvD.
-            } ELSE {
-                SET dvA TO dvC.
-            }
-        }
-        SET nd:PROGRADE TO (dvA + dvB) / 2.
-        WAIT 0.1.
-
-        // --- Scan normal dV to close out-of-plane miss ---
-        // A prograde-only transfer stays in the parking-orbit plane, but
-        // Minmus is inclined ~6deg to Kerbin's equator: from a near-equatorial
-        // parking orbit the closest approach is bounded by the target's
-        // out-of-plane position at arrival, which can fall *outside* the SOI.
-        // No patch then forms and the downstream coupled elements solver has
-        // no gradient to follow (the "no-patch" PeErr=10000km failure). The
-        // departure-time scan can't fix this: its +-N orbit window is hours
-        // long, far too short to reach a Minmus node crossing (~6 day cadence).
-        // So when the encounter is not comfortably inside the SOI, give the
-        // smooth CA objective a normal degree of freedom to pull it in. For
-        // coplanar targets (the Mun) the encounter is already inside, so the
-        // gate skips this and costs nothing.
-        LOCAL gateCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-        IF gateCA["distance"] > targetBody:SOIRADIUS * 0.7 {
-            LOCAL vInj IS SQRT(mu / rShip) + ABS(nd:PROGRADE).
-            LOCAL relIncEst IS ABS(targetBody:ORBIT:INCLINATION) + ABS(SHIP:ORBIT:INCLINATION).
-            LOCAL nrmRange IS MAX(50, 2 * vInj * SIN(relIncEst / 2)).
-            LOCAL nrmSteps IS 20.
-            LOCAL nrmStep IS nrmRange * 2 / nrmSteps.
-            LOCAL bestNrm IS nd:NORMAL.
-            SET bestCA TO gateCA.
-            SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
-
-            FROM { LOCAL ni IS 0. } UNTIL ni > nrmSteps STEP { SET ni TO ni + 1. } DO {
-                LOCAL tryNrm IS bestNrm - nrmRange + ni * nrmStep.
-                SET nd:NORMAL TO tryNrm.
-                WAIT 0.02.
-                LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-                LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, tryCa["distance"], nd:DELTAV:MAG).
-                IF trySeed["SCORE"] < bestSeed["SCORE"] {
-                    SET bestCA TO tryCa.
-                    SET bestSeed TO trySeed.
-                    SET bestNrm TO tryNrm.
-                }
-            }
-            SET nd:NORMAL TO bestNrm.
-            WAIT 0.1.
-
-            // Golden section refine normal
+        IF NOT nrmGoodEnough {
             LOCAL nrmA IS bestNrm - nrmStep.
             LOCAL nrmB IS bestNrm + nrmStep.
             FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
@@ -617,80 +520,16 @@ LOCAL FUNCTION _planLocalTransfer {
             }
             SET nd:NORMAL TO (nrmA + nrmB) / 2.
             WAIT 0.1.
-
-            // Re-refine prograde to recouple the in-plane solution: once the
-            // transfer plane is tilted, the best prograde (arrival distance)
-            // shifts slightly. Cheap golden pass around the current value.
-            LOCAL reDvSpan IS MAX(10, ABS(hohmannDv) * 0.05).
-            LOCAL reDvA IS nd:PROGRADE - reDvSpan.
-            LOCAL reDvB IS nd:PROGRADE + reDvSpan.
-            FROM { LOCAL gj IS 0. } UNTIL gj >= 12 STEP { SET gj TO gj + 1. } DO {
-                LOCAL dvE IS reDvB - (reDvB - reDvA) / gr.
-                LOCAL dvF IS reDvA + (reDvB - reDvA) / gr.
-
-                SET nd:PROGRADE TO dvE. WAIT 0.02.
-                LOCAL caE IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-                LOCAL seedE IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caE["distance"], nd:DELTAV:MAG).
-                SET nd:PROGRADE TO dvF. WAIT 0.02.
-                LOCAL caF IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-                LOCAL seedF IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caF["distance"], nd:DELTAV:MAG).
-
-                IF seedE["SCORE"] < seedF["SCORE"] {
-                    SET reDvB TO dvF.
-                } ELSE {
-                    SET reDvA TO dvE.
-                }
-            }
-            SET nd:PROGRADE TO (reDvA + reDvB) / 2.
-            WAIT 0.1.
-
-            LOCAL postNrmCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-            mLog("Normal scan: CA " + ROUND(gateCA["distance"]/1000, 1) + "km -> "
-                + ROUND(postNrmCA["distance"]/1000, 1) + "km"
-                + "  normal=" + ROUND(nd:NORMAL, 1) + " m/s"
-                + "  prograde=" + ROUND(nd:PROGRADE, 1)
-                + "  (range +-" + ROUND(nrmRange, 0)
-                + ", SOI=" + ROUND(targetBody:SOIRADIUS/1000, 0) + "km)").
         }
-    } ELSE {
-        // AoP-constrained: skip golden section (drifts out of basin) but
-        // still scan prograde dV to minimize closest approach. Score by
-        // CA distance only (not full seed score) so the scan doesn't
-        // trade encounter proximity for element alignment — downstream
-        // solvers handle elements. Reject candidates that leave the AoP
-        // tolerance band.
-        mLog("AoP-constrained dV scan: preserving scan basin.").
-        LOCAL dvRange IS MAX(10, ABS(hohmannDv) * 0.2).
-        LOCAL dvSteps IS 20.
-        LOCAL dvStep IS dvRange * 2 / dvSteps.
-        LOCAL bestDv IS hohmannDv.
-        LOCAL aopFilterTol IS 35.
-        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopFilterTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
-        SET bestCA TO _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-        LOCAL bestCaDist IS bestCA["distance"].
 
-        FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
-            LOCAL tryDv IS hohmannDv - dvRange + di * dvStep.
-            SET nd:PROGRADE TO tryDv.
-            WAIT 0.02.
-            LOCAL tryCa IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-            IF tryCa["distance"] < bestCaDist {
-                LOCAL tryPatch IS _getTargetPatch(nd, targetBody).
-                LOCAL aopOk IS TRUE.
-                IF tryPatch <> 0 {
-                    LOCAL tryAopErr IS ABS(_angleError(tryPatch:ARGUMENTOFPERIAPSIS, aopTarget)).
-                    IF tryAopErr > aopFilterTol { SET aopOk TO FALSE. }
-                }
-                IF aopOk {
-                    SET bestCA TO tryCa.
-                    SET bestCaDist TO tryCa["distance"].
-                    SET bestDv TO tryDv.
-                }
-            }
-        }
-        SET nd:PROGRADE TO bestDv.
-        WAIT 0.1.
-        SET bestSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
+        LOCAL postNrmCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
+        mLog("Normal scan: CA " + ROUND(gateCA["distance"]/1000, 1) + "km -> "
+            + ROUND(postNrmCA["distance"]/1000, 1) + "km"
+            + "  normal=" + ROUND(nd:NORMAL, 1) + " m/s"
+            + "  prograde=" + ROUND(nd:PROGRADE, 1)
+            + "  goodEnough=" + nrmGoodEnough
+            + "  (range +-" + ROUND(nrmRange, 0)
+            + ", SOI=" + ROUND(targetBody:SOIRADIUS/1000, 0) + "km)").
     }
 
     LOCAL interceptCheck IS _localInterceptEval(nd, targetBody, hohmannTof).
@@ -699,26 +538,9 @@ LOCAL FUNCTION _planLocalTransfer {
     }
 
     LOCAL finalCA IS _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
-    LOCAL finalSeed IS _transferPreviewSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, finalCA["distance"], nd:DELTAV:MAG).
-    IF (captureInc >= 0 OR lanTarget >= 0) AND aopTarget < 0 AND NOT _angularWorkDeferred() {
-        _nodeAxisSet(nd, "TIME", finalSeed["NODE_TIME"]).
-        _nodeAxisSet(nd, "PROGRADE", finalSeed["NODE_PROGRADE"]).
-        _nodeAxisSet(nd, "NORMAL", finalSeed["NODE_NORMAL"]).
-        _nodeAxisSet(nd, "RADIALOUT", finalSeed["NODE_RADIAL"]).
-        WAIT 0.1.
-        SET finalCA TO _findClosestApproach(targetBody, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
-        SET finalSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, finalCA["distance"], nd:DELTAV:MAG).
-        mLog("Applied constrained preview seed: N="
-            + ROUND(nd:NORMAL, 1)
-            + " R=" + ROUND(nd:RADIALOUT, 1)
-            + " dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s").
-    } ELSE IF (captureInc >= 0 OR lanTarget >= 0) AND aopTarget < 0 {
-        SET finalSeed TO _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, finalCA["distance"], nd:DELTAV:MAG).
-        mLog("Skipping constrained preview seed: BPLANE/SHAPE owns exact arrival elements.").
-    }
+    LOCAL finalSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, finalCA["distance"], nd:DELTAV:MAG).
     mLog("Optimized: CA=" + ROUND(finalCA["distance"]/1000, 1) + "km"
         + " score=" + ROUND(finalSeed["SCORE"], 2)
-        + " AoPerr=" + ROUND(finalSeed["AOP_ERR"], 1)
         + "  dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s"
         + "  depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
     mLogWarn("STATS local-transfer target=" + targetBody:NAME
@@ -726,20 +548,10 @@ LOCAL FUNCTION _planLocalTransfer {
         + " score=" + ROUND(finalSeed["SCORE"],2)
         + " patch=" + finalSeed["PATCH"]
         + " firstPatch=" + _firstPatchBodyName(nd)
-        + " incErr=" + ROUND(finalSeed["INC_ERR"],1)
-        + " lanErr=" + ROUND(finalSeed["LAN_ERR"],1)
-        + " aopErr=" + ROUND(finalSeed["AOP_ERR"],1)
         + " prograde=" + ROUND(nd:PROGRADE,1)
         + " normal=" + ROUND(nd:NORMAL,1)
         + " radial=" + ROUND(nd:RADIALOUT,1)
         + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
-
-    // --- Optional LAN scan ---
-    // If lanTarget is specified, scan across multiple orbits to find the departure
-    // that produces the closest LAN at the target body (read from KSP's conics).
-    IF lanTarget >= 0 AND aopTarget < 0 {
-        SET nd TO _scanForLan(nd, targetBody, lanTarget, shipPeriod).
-    }
 
     RETURN nd.
 }
@@ -762,86 +574,9 @@ LOCAL FUNCTION _logLocalTransferShortlist {
                 + " closestT=" + ROUND(ca["time"] - TIME:SECONDS, 0)
                 + " score=" + ROUND(seed["SCORE"], 2)
                 + " patch=" + seed["PATCH"]
-                + " dv=" + ROUND(seed["DV"], 1)
-                + " peErrKm=" + ROUND(seed["PE_ERR"] / 1000, 1)
-                + " incErr=" + ROUND(seed["INC_ERR"], 1)
-                + " lanErr=" + ROUND(seed["LAN_ERR"], 1)
-                + " aopErr=" + ROUND(seed["AOP_ERR"], 1)).
+                + " dv=" + ROUND(seed["DV"], 1)).
         }
     }
-}
-
-LOCAL FUNCTION _transferPreviewSeedScore {
-    PARAMETER nd.
-    PARAMETER targetBody.
-    PARAMETER targetPe.
-    PARAMETER captureInc.
-    PARAMETER lanTarget.
-    PARAMETER aopTarget.
-    PARAMETER caDist IS 0.
-    PARAMETER dvMag IS 0.
-
-    IF captureInc < 0 AND lanTarget < 0 AND aopTarget < 0 {
-        RETURN _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, caDist, dvMag).
-    }
-
-    LOCAL origTime IS nd:TIME.
-    LOCAL origPrograde IS nd:PROGRADE.
-    LOCAL origNormal IS nd:NORMAL.
-    LOCAL origRadial IS nd:RADIALOUT.
-
-    LOCAL targets IS LEXICON().
-    targets:ADD("PE", targetPe).
-    targets:ADD("PE_FLOOR", -25000).
-    IF captureInc >= 0 { targets:ADD("INC", captureInc). }
-    IF lanTarget >= 0 { targets:ADD("LAN", lanTarget). }
-    IF aopTarget >= 0 { targets:ADD("AOP_GUIDE", aopTarget). }
-
-    LOCAL opts IS LEXICON().
-    opts:ADD("STEP_NORMAL", 25.0).
-    opts:ADD("STEP_PROGRADE", 12.0).
-    opts:ADD("STEP_RADIAL", 12.0).
-    opts:ADD("STEP_TIME", 45.0).
-    opts:ADD("MIN_STEP", 1.0).
-    opts:ADD("MAX_ITER", 18).
-    opts:ADD("QUIET", TRUE).
-    IF aopTarget >= 0 { opts:ADD("AOP_GUIDE_STALL_ITER", 5). }
-    IF aopTarget >= 0 { opts:ADD("AOP_GUIDE_STALL_MIN_IMPROVE", 2.0). }
-
-    LOCAL preview IS _targetPatchElementsCoupled(nd, targetBody, targets, opts).
-    LOCAL previewDv IS nd:DELTAV:MAG.
-    LOCAL previewTime IS nd:TIME.
-    LOCAL previewPrograde IS nd:PROGRADE.
-    LOCAL previewNormal IS nd:NORMAL.
-    LOCAL previewRadial IS nd:RADIALOUT.
-    LOCAL score IS preview["COST"] + (caDist / 250000)^2 + previewDv * 0.01.
-    LOCAL aopTol IS 35.
-    IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
-    IF preview["PATCH"] = 0 { SET score TO score + 10000000. }
-    IF aopTarget >= 0 AND ABS(preview["AOP_ERR"]) > aopTol {
-        SET score TO score + 100000 + ((ABS(preview["AOP_ERR"]) - aopTol) / 1.0)^2 * 500.
-    }
-
-    _nodeAxisSet(nd, "TIME", origTime).
-    _nodeAxisSet(nd, "PROGRADE", origPrograde).
-    _nodeAxisSet(nd, "NORMAL", origNormal).
-    _nodeAxisSet(nd, "RADIALOUT", origRadial).
-    WAIT 0.02.
-
-    RETURN LEXICON(
-        "SCORE", score,
-        "PATCH", preview["PATCH"] = 1,
-        "CA", caDist,
-        "DV", previewDv,
-        "PE_ERR", preview["PE_ERR"],
-        "INC_ERR", preview["INC_ERR"],
-        "LAN_ERR", preview["LAN_ERR"],
-        "AOP_ERR", preview["AOP_ERR"],
-        "NODE_TIME", previewTime,
-        "NODE_PROGRADE", previewPrograde,
-        "NODE_NORMAL", previewNormal,
-        "NODE_RADIAL", previewRadial
-    ).
 }
 
 // Estimate KSC longitude penalty for a candidate escape node.
@@ -937,9 +672,6 @@ LOCAL FUNCTION _planEscapeTransfer {
     IF kscTarget {
         SET nScanOrbits TO MAX(6, CEILING(targetBody:ROTATIONPERIOD / shipPeriod)).
     }
-    IF lanTarget >= 0 OR aopTarget >= 0 {
-        SET nScanOrbits TO MAX(nScanOrbits, CEILING(BODY:ORBIT:PERIOD / shipPeriod)).
-    }
     SET nScanOrbits TO MAX(nScanOrbits, 1).
 
     LOCAL samplesPerOrbit IS 12.
@@ -1018,14 +750,21 @@ LOCAL FUNCTION _planEscapeTransfer {
     LOCAL bestDv IS escapeDv.
     LOCAL bestDvSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
     LOCAL bestDvScore IS bestDvSeed["SCORE"].
+    IF kscTarget AND bestDvSeed["PATCH"] {
+        SET bestDvScore TO bestDvScore + _escapeKscPenalty(nd, targetBody, nd:TIME, kscTransitA, muParent, KSC_LNG).
+    }
 
     FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
         LOCAL tryDv IS escapeDv - dvRange + di * dvStep.
         SET nd:PROGRADE TO tryDv.
         WAIT 0.02.
         LOCAL trySeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
-        IF trySeed["SCORE"] < bestDvScore {
-            SET bestDvScore TO trySeed["SCORE"].
+        LOCAL tryScore IS trySeed["SCORE"].
+        IF kscTarget AND trySeed["PATCH"] {
+            SET tryScore TO tryScore + _escapeKscPenalty(nd, targetBody, nd:TIME, kscTransitA, muParent, KSC_LNG).
+        }
+        IF tryScore < bestDvScore {
+            SET bestDvScore TO tryScore.
             SET bestDv TO tryDv.
         }
     }
@@ -1042,10 +781,18 @@ LOCAL FUNCTION _planEscapeTransfer {
 
         SET nd:PROGRADE TO dvC. WAIT 0.02.
         LOCAL seedC IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
+        LOCAL scoreC IS seedC["SCORE"].
+        IF kscTarget AND seedC["PATCH"] {
+            SET scoreC TO scoreC + _escapeKscPenalty(nd, targetBody, nd:TIME, kscTransitA, muParent, KSC_LNG).
+        }
         SET nd:PROGRADE TO dvD. WAIT 0.02.
         LOCAL seedD IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget).
+        LOCAL scoreD IS seedD["SCORE"].
+        IF kscTarget AND seedD["PATCH"] {
+            SET scoreD TO scoreD + _escapeKscPenalty(nd, targetBody, nd:TIME, kscTransitA, muParent, KSC_LNG).
+        }
 
-        IF seedC["SCORE"] < seedD["SCORE"] {
+        IF scoreC < scoreD {
             SET dvB TO dvD.
         } ELSE {
             SET dvA TO dvC.
@@ -1058,33 +805,12 @@ LOCAL FUNCTION _planEscapeTransfer {
     mLog("Escape optimized: dV=" + ROUND(nd:PROGRADE, 1) + " m/s"
         + " score=" + ROUND(finalSeed["SCORE"], 2)
         + " patch=" + finalSeed["PATCH"]
-        + " PeErr=" + ROUND(finalSeed["PE_ERR"]/1000, 1) + "km"
         + " depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
     mLogWarn("STATS escape-transfer target=" + targetBody:NAME
         + " dv=" + ROUND(nd:PROGRADE,1)
         + " score=" + ROUND(finalSeed["SCORE"],2)
         + " patch=" + finalSeed["PATCH"]
-        + " peErr=" + ROUND(finalSeed["PE_ERR"],0)
-        + " incErr=" + ROUND(finalSeed["INC_ERR"],1)
-        + " lanErr=" + ROUND(finalSeed["LAN_ERR"],1)
-        + " aopErr=" + ROUND(finalSeed["AOP_ERR"],1)
         + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
-
-    // --- Optional LAN scan ---
-    IF lanTarget >= 0 AND NOT kscTarget {
-        SET nd TO _scanForLan(nd, targetBody, lanTarget, shipPeriod, BODY:ORBIT:PERIOD).
-    }
 
     RETURN nd.
 }
-
-// ============================================================
-// phaseMidCourse — mid-course correction during transfer coast.
-//
-// Fires at coast midpoint (local) or 1h past SOI (interplanetary).
-// This is a fine-tune pass — planTransfer handles the primary INC
-// targeting at departure where normal dV is cheapest. MCC corrects
-// drift from burn execution errors and refines the approach.
-//
-// Uses phased Newton: INC → AoP → PE → LAN → PE cleanup.
-// Per-axis dV cap (MCC_DV_CAP) so axes don't compete for budget.

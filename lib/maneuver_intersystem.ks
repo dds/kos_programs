@@ -22,9 +22,6 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL bestDepart IS -1.
     LOCAL bestArrive IS -1.
     LOCAL bestScore IS 999999999.
-    LOCAL bestIncErr IS 999.
-    LOCAL bestLanErr IS 999.
-    LOCAL bestAopErr IS 999.
 
     mLog("Lambert scan: " + nDepart + " departures x " + nTof
         + " TOFs, hohmannTof=" + ROUND(hohmannTof,0) + "s").
@@ -69,15 +66,9 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
                 SET bestDepart TO departUt.
                 SET bestArrive TO arriveUt.
                 SET bestScore TO seedEval["SCORE"].
-                SET bestIncErr TO seedEval["INC_ERR"].
-                SET bestLanErr TO seedEval["LAN_ERR"].
-                SET bestAopErr TO seedEval["AOP_ERR"].
                 mLog("Lambert[d=" + di + ",t=" + ti + "] dV="
                     + ROUND(dvMag,1)
                     + " score=" + ROUND(bestScore,2)
-                    + " incErr=" + ROUND(bestIncErr,1)
-                    + " LAN err=" + ROUND(bestLanErr,1)
-                    + " AoP err=" + ROUND(bestAopErr,1)
                     + " depart T+" + ROUND(departUt - TIME:SECONDS,0) + "s").
             }
         }
@@ -92,18 +83,12 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     mLog("Lambert best: depart T+" + ROUND(bestDepart - TIME:SECONDS,0)
         + "s  tof=" + ROUND(bestArrive - bestDepart,0)
         + "s  dV=" + ROUND(bestDv,1)
-        + "  score=" + ROUND(bestScore,2)
-        + "  INC err=" + ROUND(bestIncErr,1)
-        + "  LAN err=" + ROUND(bestLanErr,1)
-        + "  AoP err=" + ROUND(bestAopErr,1)).
+        + "  score=" + ROUND(bestScore,2)).
     mLogWarn("STATS lambert result target=" + targetBody:NAME
         + " status=grid-best departT=" + ROUND(bestDepart - TIME:SECONDS,0)
         + " tof=" + ROUND(bestArrive - bestDepart,0)
         + " dv=" + ROUND(bestDv,1)
-        + " score=" + ROUND(bestScore,2)
-        + " incErr=" + ROUND(bestIncErr,1)
-        + " lanErr=" + ROUND(bestLanErr,1)
-        + " aopErr=" + ROUND(bestAopErr,1)).
+        + " score=" + ROUND(bestScore,2)).
 
     LOCAL r1Best IS POSITIONAT(SHIP, bestDepart) - centralBody:POSITION.
     LOCAL r2Best IS POSITIONAT(targetBody, bestArrive) - centralBody:POSITION.
@@ -135,10 +120,6 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         }
     } ELSE {
         mLog("Encounter confirmed. Pe=" + ROUND(patch:PERIAPSIS/1000, 1) + "km").
-    }
-
-    IF lanTarget >= 0 AND aopTarget < 0 {
-        SET nd TO _scanForLan(nd, targetBody, lanTarget, SHIP:ORBIT:PERIOD).
     }
 
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).

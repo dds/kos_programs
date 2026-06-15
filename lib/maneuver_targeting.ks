@@ -3,13 +3,12 @@
 //     and optimization  (0:/lib/maneuver_targeting.ks)
 //
 // Split from maneuver.ks — contains the targeting/search
-// algorithms used by planTransfer, phaseMidCourse, and
+// algorithms used by transfer, MCC, and
 // external callers (maneuver_intersystem, maneuver_rendezvous).
 //
 // Provides:
 //   _getTargetPatch          — walk patched conics to find direct target SOI
 //   _findEncounter           — binary time search for encounter
-//   _scanForLan              — LAN optimization across departure orbits
 //   _targetPatchElementsCoupled — coordinate search for PE/INC/LAN/AOP
 //   _patchElementsCost       — cost function for element targeting
 //   _patchElementsCostFromPatch — cost from an orbit patch directly
@@ -100,73 +99,6 @@ GLOBAL FUNCTION _findEncounter {
         SET offset TO offset + step.
     }
     RETURN -1.
-}
-
-// ============================================================
-// LAN scan — shared by local and interplanetary paths
-// Slides departure time across orbits, reads actual LAN from
-// KSP's patched conics, picks the orbit with lowest LAN error.
-// ============================================================
-GLOBAL FUNCTION _scanForLan {
-    PARAMETER nd.
-    PARAMETER targetBody.
-    PARAMETER lanTarget.
-    PARAMETER shipPeriod.
-    PARAMETER scanPeriod IS targetBody:ORBIT:PERIOD.
-
-    LOCAL nScan IS MAX(6, CEILING(scanPeriod / shipPeriod)).
-    LOCAL centerTime IS nd:TIME.
-    LOCAL bestLanErr IS 999.
-    LOCAL bestTime IS centerTime.
-    LOCAL baseDv IS nd:PROGRADE.
-
-    LOCAL lanTol IS 0.5.
-    IF CFG:HASKEY("LAN_ERR_TOL") { SET lanTol TO CFG["LAN_ERR_TOL"]. }
-
-    mLog("LAN scan: " + (2 * nScan + 1) + " orbits around departure, target LAN=" + ROUND(lanTarget, 1)).
-
-    FROM { LOCAL oi IS -nScan. } UNTIL oi > nScan STEP { SET oi TO oi + 1. } DO {
-        LOCAL tryTime IS centerTime + oi * shipPeriod.
-        IF tryTime > TIME:SECONDS + 30 {
-            SET nd:TIME TO tryTime.
-            SET nd:PROGRADE TO baseDv.
-            WAIT 0.02.
-            LOCAL patch IS _getTargetPatch(nd, targetBody).
-            IF patch <> 0 AND patch:PERIAPSIS > 0 {
-                LOCAL lanErr IS ABS(patch:LAN - lanTarget).
-                IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
-                IF lanErr < bestLanErr {
-                    SET bestLanErr TO lanErr.
-                    SET bestTime TO tryTime.
-                    mLog("LAN[" + oi + "] LAN=" + ROUND(patch:LAN, 1)
-                        + " err=" + ROUND(lanErr, 1)
-                        + " Pe=" + ROUND(patch:PERIAPSIS/1000, 1) + "km").
-                }
-            }
-        }
-    }
-
-    SET nd:TIME TO bestTime.
-    SET nd:PROGRADE TO baseDv.
-    WAIT 0.1.
-
-    // Verify the chosen orbit still has an encounter
-    LOCAL verifyPatch IS _getTargetPatch(nd, targetBody).
-    IF verifyPatch = 0 OR verifyPatch:PERIAPSIS < 0 {
-        mLogWarn("LAN scan: chosen orbit lost encounter, searching nearby...").
-        LOCAL foundTime IS _findEncounter(nd, targetBody, bestTime, shipPeriod / 2, shipPeriod / 16).
-        IF foundTime >= 0 {
-            SET nd:TIME TO foundTime.
-            WAIT 0.1.
-        }
-    }
-
-    mLog("LAN scan: best err=" + ROUND(bestLanErr, 1) + "°  depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
-    mLogWarn("STATS lan-scan target=" + targetBody:NAME
-        + " target=" + ROUND(lanTarget,1)
-        + " err=" + ROUND(bestLanErr,1)
-        + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
-    RETURN nd.
 }
 
 // ============================================================
@@ -382,56 +314,19 @@ GLOBAL FUNCTION _transferSeedScore {
 
     LOCAL p IS _getTargetPatch(nd, targetBody).
     LOCAL score IS (caDist / 100000)^2 + dvMag * 0.01.
-    LOCAL peErr IS 9999999.
-    LOCAL incErr IS 999.
-    LOCAL lanErr IS 999.
-    LOCAL aopErr IS 999.
-    LOCAL lanTol IS 5.
-    LOCAL aopTol IS 35.
-    LOCAL aopScanTol IS 25.
     LOCAL hasPatch IS FALSE.
-
-    IF CFG:HASKEY("LAN_ERR_TOL") { SET lanTol TO MAX(1, CFG["LAN_ERR_TOL"] * 5). }
-    IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
-    SET aopScanTol TO MAX(5, aopTol * 0.67).
-    IF CFG:HASKEY("TRANSFER_AOP_SCAN_TOL") { SET aopScanTol TO CFG["TRANSFER_AOP_SCAN_TOL"]. }
 
     IF p = 0 {
         SET score TO score + 1000000.
     } ELSE {
         SET hasPatch TO TRUE.
-        SET peErr TO p:PERIAPSIS - targetPe.
-        SET score TO score + (peErr / 50000)^2.
-
-        IF captureInc >= 0 {
-            SET incErr TO _angleError(p:INCLINATION, captureInc).
-            SET score TO score + (incErr / 2.0)^2.
-        }
-        IF lanTarget >= 0 {
-            SET lanErr TO _angleError(p:LAN, lanTarget).
-            SET score TO score + (lanErr / MAX(lanTol, 1))^2.
-            IF ABS(lanErr) > lanTol {
-                SET score TO score + ((ABS(lanErr) - lanTol) / 1.0)^2 * 50.
-            }
-        }
-        IF aopTarget >= 0 {
-            SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, aopTarget).
-            SET score TO score + (aopErr / MAX(aopScanTol, 1))^2.
-            IF ABS(aopErr) > aopScanTol {
-                SET score TO score + ((ABS(aopErr) - aopScanTol) / 1.0)^2 * 50.
-            }
-        }
     }
 
     RETURN LEXICON(
         "SCORE", score,
         "PATCH", hasPatch,
         "CA", caDist,
-        "DV", dvMag,
-        "PE_ERR", peErr,
-        "INC_ERR", incErr,
-        "LAN_ERR", lanErr,
-        "AOP_ERR", aopErr
+        "DV", dvMag
     ).
 }
 
