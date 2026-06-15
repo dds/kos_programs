@@ -113,7 +113,9 @@ GLOBAL FUNCTION falconBuildPhaseSequence {
     IF targetFromState <> "KERBIN" {
         seq:ADD("XING").
         seq:ADD("BPLANE").
-        seq:ADD("COAST").
+        seq:ADD("COAST_1HALF").
+        seq:ADD("REFINE_BPLANE").
+        seq:ADD("COAST_2HALF").
         seq:ADD("CAPTURE").
         seq:ADD("SHAPE").
     }

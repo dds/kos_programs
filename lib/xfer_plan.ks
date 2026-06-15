@@ -6,6 +6,25 @@
 
 LOCAL MAX_RETRIES IS 5.
 
+LOCAL FUNCTION _recordXingArrivalUt {
+    PARAMETER targetBody.
+
+    IF NOT SHIP:ORBIT:HASNEXTPATCH { RETURN. }
+    LOCAL p IS SHIP:ORBIT.
+    UNTIL NOT p:HASNEXTPATCH {
+        LOCAL transitionEta IS p:NEXTPATCHETA.
+        SET p TO p:NEXTPATCH.
+        IF p:BODY = targetBody {
+            LOCAL arrivalUt IS TIME:SECONDS + transitionEta.
+            stateSet("xing_arrival_ut", arrivalUt).
+            stateSet("xing_arrival_target", targetBody:NAME).
+            mLog("XING arrival checkpoint: T+"
+                + ROUND(arrivalUt - TIME:SECONDS, 0) + "s.").
+            RETURN.
+        }
+    }
+}
+
 GLOBAL FUNCTION phaseTransfer {
     LOCAL target IS missionTargetBody().
     orbitSummary().
@@ -23,6 +42,7 @@ GLOBAL FUNCTION phaseTransfer {
             + " body=" + SHIP:BODY:NAME).
         SET success TO executeManeuver().
         IF success {
+            _recordXingArrivalUt(target).
             orbitSummary().
             nextPhase(xferSeq).
             RETURN.
@@ -66,6 +86,7 @@ GLOBAL FUNCTION phaseTransfer {
             }
         }
     }
+    _recordXingArrivalUt(target).
     nextPhase(xferSeq).
 }
 

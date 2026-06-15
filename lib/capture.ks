@@ -7,6 +7,49 @@
 // ============================================================
 
 LOCAL MAX_RETRIES IS 5.
+LOCAL SOI_BUFFER_TIME_DEFAULT IS 300.
+
+LOCAL FUNCTION _cfgNum {
+    PARAMETER key, defaultValue.
+    IF DEFINED CFG AND CFG:HASKEY(key) { RETURN CFG[key]. }
+    RETURN defaultValue.
+}
+
+LOCAL FUNCTION _transferArrivalUt {
+    PARAMETER targetBody.
+
+    LOCAL arrivalUt IS stateGetNum("xing_arrival_ut", 0).
+    LOCAL arrivalTarget IS stateGet("xing_arrival_target", "").
+    IF arrivalUt > TIME:SECONDS AND arrivalTarget = targetBody:NAME {
+        RETURN arrivalUt.
+    }
+
+    IF SHIP:BODY = targetBody { RETURN TIME:SECONDS. }
+    LOCAL p IS SHIP:ORBIT.
+    UNTIL NOT p:HASNEXTPATCH {
+        LOCAL transitionEta IS p:NEXTPATCHETA.
+        SET p TO p:NEXTPATCH.
+        IF p:BODY = targetBody {
+            SET arrivalUt TO TIME:SECONDS + transitionEta.
+            stateSet("xing_arrival_ut", arrivalUt).
+            stateSet("xing_arrival_target", targetBody:NAME).
+            RETURN arrivalUt.
+        }
+    }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _waitUntilOrSOI {
+    PARAMETER targetBody.
+    PARAMETER targetUt.
+    PARAMETER pollInterval IS 10.
+
+    LOCAL solarRef IS -1.
+    UNTIL TIME:SECONDS >= targetUt OR SHIP:BODY = targetBody {
+        SET solarRef TO trySolarHoldTick(solarRef).
+        WAIT MIN(pollInterval, MAX(1, targetUt - TIME:SECONDS)).
+    }
+}
 
 GLOBAL FUNCTION phaseCoast {
     LOCAL target IS missionTargetBody().
@@ -14,6 +57,73 @@ GLOBAL FUNCTION phaseCoast {
     UNLOCK STEERING.
     mLog("Coasting to " + target:NAME + " SOI.").
     waitForSOI(target).
+    orbitSummary().
+    nextPhase(xferSeq).
+}
+
+GLOBAL FUNCTION phaseCoast1Half {
+    LOCAL target IS missionTargetBody().
+    SET SAS TO TRUE.
+    UNLOCK STEERING.
+    trySolarOrient().
+
+    LOCAL tArrival IS _transferArrivalUt(target).
+    IF tArrival <= TIME:SECONDS {
+        mLogWarn("COAST_1HALF: no future arrival timestamp; continuing to refinement.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
+    LOCAL tStart IS TIME:SECONDS.
+    LOCAL tMidpoint IS tStart + 0.5 * (tArrival - tStart).
+    stateSet("midcourse_refine_ut", tMidpoint).
+
+    mLog("Coasting to mid-course refinement at T+"
+        + ROUND(tMidpoint - TIME:SECONDS, 0) + "s.").
+    _waitUntilOrSOI(target, tMidpoint, 10).
+
+    IF SHIP:BODY = target {
+        mLog("COAST_1HALF: entered " + target:NAME
+            + " SOI before midpoint; handing forward.").
+    }
+    nextPhase(xferSeq).
+}
+
+GLOBAL FUNCTION phaseCoast2Half {
+    LOCAL target IS missionTargetBody().
+    SET SAS TO TRUE.
+    UNLOCK STEERING.
+    trySolarOrient().
+
+    IF SHIP:BODY = target {
+        mLog("COAST_2HALF: already inside " + target:NAME + " SOI.").
+        orbitSummary().
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
+    LOCAL tArrival IS _transferArrivalUt(target).
+    IF tArrival <= TIME:SECONDS {
+        mLog("COAST_2HALF: arrival time is due; waiting for "
+            + target:NAME + " SOI.").
+        waitForSOI(target).
+        orbitSummary().
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
+    LOCAL soiBuffer IS _cfgNum("SOI_BUFFER_TIME", SOI_BUFFER_TIME_DEFAULT).
+    LOCAL coastUntil IS MAX(TIME:SECONDS, tArrival - soiBuffer).
+    mLog("Coasting toward " + target:NAME + " SOI boundary; buffer="
+        + ROUND(soiBuffer, 0) + "s.").
+    _waitUntilOrSOI(target, coastUntil, 10).
+
+    IF SHIP:BODY <> target {
+        mLog("COAST_2HALF: reached SOI buffer; waiting for "
+            + target:NAME + " SOI.").
+        waitForSOI(target).
+    }
+
     orbitSummary().
     nextPhase(xferSeq).
 }

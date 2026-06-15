@@ -169,7 +169,8 @@ GLOBAL FUNCTION gotoBuildPlan {
         cfg:ADD("TARGET_PE", capPe).
         cfg:ADD("TARGET_AP", capAp).
 
-        SET seq TO LIST("XING", "BPLANE", "COAST", "CAPTURE").
+        SET seq TO LIST("XING", "BPLANE", "COAST_1HALF",
+            "REFINE_BPLANE", "COAST_2HALF", "CAPTURE").
         IF final AND isVessel {
             seq:ADD("RDV"). seq:ADD("DONE").
         } ELSE IF final {

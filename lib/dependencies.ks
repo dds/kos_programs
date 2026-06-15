@@ -9,7 +9,7 @@ LOCAL FUNCTION _depLoaded {
 }
 
 GLOBAL FUNCTION dependencyAllPhases {
-    RETURN LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "POSTFLIGHT", "EVA_SCIENCE", "SCIENCE_OPS", "SCIENCE_OPS_LOW", "LAUNCH", "FAIR", "ANTS", "PARK", "ABORT", "PRELAUNCH", "SUBORBIT", "RDV", "MATCH", "CREW_XFER", "XING", "ESCAPE", "MCC", "AEROBRAKE", "DESCENT", "KSC_DEORBIT", "COAST", "CAPTURE", "FLYBY", "CIRC", "RAISE", "INCLINE", "ELLIPTICAL", "TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION", "SCANSAT_OPS", "LAND_DEORBIT", "LAND", "LAND_ASSIST", "ROVER", "MOLNIYA", "MOLNIYA_INSERT", "DROP_FOR_IMPACT_AND_RAISE_PE", "DONE", "SHAPE", "DEPARTURE_SHAPE", "BPLANE", "GOTO", "AIRCLIMB", "ROCKETCLIMB", "SSTO_DEORBIT", "REENTRY", "APPROACH", "ARM", "FLY").
+    RETURN LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "POSTFLIGHT", "EVA_SCIENCE", "SCIENCE_OPS", "SCIENCE_OPS_LOW", "LAUNCH", "FAIR", "ANTS", "PARK", "ABORT", "PRELAUNCH", "SUBORBIT", "RDV", "MATCH", "CREW_XFER", "XING", "ESCAPE", "MCC", "AEROBRAKE", "DESCENT", "KSC_DEORBIT", "COAST", "COAST_1HALF", "COAST_2HALF", "CAPTURE", "FLYBY", "CIRC", "RAISE", "INCLINE", "ELLIPTICAL", "TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION", "SCANSAT_OPS", "LAND_DEORBIT", "LAND", "LAND_ASSIST", "ROVER", "MOLNIYA", "MOLNIYA_INSERT", "DROP_FOR_IMPACT_AND_RAISE_PE", "DONE", "SHAPE", "DEPARTURE_SHAPE", "BPLANE", "REFINE_BPLANE", "GOTO", "AIRCLIMB", "ROCKETCLIMB", "SSTO_DEORBIT", "REENTRY", "APPROACH", "ARM", "FLY").
 }
 
 GLOBAL FUNCTION dependencyBindPhase {
@@ -40,6 +40,8 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "DESCENT" { IF _depLoaded("descent") { phaseMapSet(phaseMap, "DESCENT", phaseDescent@). } }
     ELSE IF phaseKey = "KSC_DEORBIT" { IF _depLoaded("deorbit_targeting,solar") { phaseMapSet(phaseMap, "KSC_DEORBIT", phaseKscDeorbit@). } }
     ELSE IF phaseKey = "COAST" { IF _depLoaded("capture") { phaseMapSet(phaseMap, "COAST", phaseCoast@). } }
+    ELSE IF phaseKey = "COAST_1HALF" { IF _depLoaded("capture") { phaseMapSet(phaseMap, "COAST_1HALF", phaseCoast1half@). } }
+    ELSE IF phaseKey = "COAST_2HALF" { IF _depLoaded("capture") { phaseMapSet(phaseMap, "COAST_2HALF", phaseCoast2half@). } }
     ELSE IF phaseKey = "CAPTURE" { IF _depLoaded("capture") { phaseMapSet(phaseMap, "CAPTURE", phaseCapture@). } }
     ELSE IF phaseKey = "FLYBY" { IF _depLoaded("capture") { phaseMapSet(phaseMap, "FLYBY", phaseFlyby@). } }
     ELSE IF phaseKey = "CIRC" { IF _depLoaded("maneuver_orbit") { phaseMapSet(phaseMap, "CIRC", phaseCirc@). } }
@@ -62,6 +64,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "SHAPE" { IF _depLoaded("orbit_shape") { phaseMapSet(phaseMap, "SHAPE", phaseShape@). } }
     ELSE IF phaseKey = "DEPARTURE_SHAPE" { IF _depLoaded("orbit_shape") { phaseMapSet(phaseMap, "DEPARTURE_SHAPE", phaseDepartureShape@). } }
     ELSE IF phaseKey = "BPLANE" { IF _depLoaded("arrival_bplane") { phaseMapSet(phaseMap, "BPLANE", phaseBplane@). } }
+    ELSE IF phaseKey = "REFINE_BPLANE" { IF _depLoaded("arrival_bplane") { phaseMapSet(phaseMap, "REFINE_BPLANE", phaseRefineBplane@). } }
     ELSE IF phaseKey = "GOTO" { IF _depLoaded("goto_plan") { phaseMapSet(phaseMap, "GOTO", phaseGoto@). } }
     ELSE IF phaseKey = "AIRCLIMB" { IF _depLoaded("ssto") { phaseMapSet(phaseMap, "AIRCLIMB", phaseAirclimb@). } }
     ELSE IF phaseKey = "ROCKETCLIMB" { IF _depLoaded("ssto") { phaseMapSet(phaseMap, "ROCKETCLIMB", phaseRocketclimb@). } }

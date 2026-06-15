@@ -55,6 +55,7 @@ LOCAL DEFAULT_PE_TOL   IS 2000.
 LOCAL DEFAULT_ANG_TOL  IS 0.5.
 LOCAL DEFAULT_LEAD     IS 300.
 LOCAL MIN_EXEC_DV      IS 0.1.
+LOCAL REFINE_DV_CAP    IS 10.
 LOCAL MAX_NEWTON_ITER  IS 8.
 LOCAL NEWTON_DAMP      IS 0.7.
 LOCAL FD_STEP          IS 0.5.
@@ -404,8 +405,11 @@ GLOBAL FUNCTION planBplaneCorrection {
     PARAMETER wantPe.
     PARAMETER wantInc IS -1.
     PARAMETER wantLan IS -1.
+    PARAMETER dvCapOverride IS -1.
+    PARAMETER pristineLog IS "".
 
     LOCAL dvCap IS _cfgNum("BPLANE_DV_CAP", DEFAULT_DV_CAP).
+    IF dvCapOverride >= 0 { SET dvCap TO dvCapOverride. }
     LOCAL peTol IS _cfgNum("BPLANE_PE_TOL", DEFAULT_PE_TOL).
     LOCAL angTol IS _cfgNum("BPLANE_ANG_TOL", DEFAULT_ANG_TOL).
     LOCAL lead IS _cfgNum("BPLANE_LEAD", DEFAULT_LEAD).
@@ -439,9 +443,13 @@ GLOBAL FUNCTION planBplaneCorrection {
     LOCAL planeErr0 IS VANG(meas0["hHat"], tgt0["normal"]).
     IF ABS(meas0["pe"] - wantPe) <= peTol
             AND (wantInc < 0 OR planeErr0 <= angTol) {
-        mLog("BPLANE: arrival already in corridor (PeErr="
-            + ROUND((meas0["pe"] - wantPe) / 1000, 1) + "km planeErr="
-            + ROUND(planeErr0, 2) + "deg).").
+        IF pristineLog <> "" {
+            mLog(pristineLog).
+        } ELSE {
+            mLog("BPLANE: arrival already in corridor (PeErr="
+                + ROUND((meas0["pe"] - wantPe) / 1000, 1) + "km planeErr="
+                + ROUND(planeErr0, 2) + "deg).").
+        }
         REMOVE nd.
         RETURN 0.
     }
@@ -543,7 +551,11 @@ GLOBAL FUNCTION planBplaneCorrection {
         + " wantPeKm=" + ROUND(wantPe / 1000, 1)).
 
     IF nd:DELTAV:MAG < MIN_EXEC_DV {
-        mLog("BPLANE: correction below " + MIN_EXEC_DV + " m/s — skipping burn.").
+        IF pristineLog <> "" {
+            mLog(pristineLog).
+        } ELSE {
+            mLog("BPLANE: correction below " + MIN_EXEC_DV + " m/s — skipping burn.").
+        }
         REMOVE nd.
         RETURN 0.
     }
@@ -556,13 +568,7 @@ GLOBAL FUNCTION planBplaneCorrection {
     RETURN nd.
 }
 
-// ============================================================
-// phaseBplane — phase handler. Resolves the arrival body and
-// requested capture elements from CFG/state, then runs up to
-// MAX_BURNS correction burns. Advances even when unconverged
-// (post-capture SHAPE is the safety net) but logs loudly.
-// ============================================================
-GLOBAL FUNCTION phaseBplane {
+LOCAL FUNCTION _bplaneTargetBody {
     LOCAL targetName IS "".
     IF _cfgHas("BPLANE_TARGET") { SET targetName TO CFG["BPLANE_TARGET"]. }
     IF targetName = "" { SET targetName TO stateGet("target", ""). }
@@ -573,8 +579,32 @@ GLOBAL FUNCTION phaseBplane {
     FOR bod IN allBodies {
         IF bod:NAME = targetName { SET targetBody TO bod. }
     }
+    RETURN targetBody.
+}
+
+LOCAL FUNCTION _bplaneWantInc {
+    LOCAL wantInc IS -1.
+    IF _cfgHas("CAPTURE_DIR") {
+        LOCAL dir IS CFG["CAPTURE_DIR"].
+        IF dir = "PROGRADE"   { SET wantInc TO 0. }
+        IF dir = "POLAR"      { SET wantInc TO 90. }
+        IF dir = "RETROPOLAR" { SET wantInc TO 90. }
+        IF dir = "RETROGRADE" { SET wantInc TO 180. }
+    }
+    IF _cfgHas("CAPTURE_INC") { SET wantInc TO CFG["CAPTURE_INC"]. }
+    RETURN wantInc.
+}
+
+// ============================================================
+// phaseBplane — phase handler. Resolves the arrival body and
+// requested capture elements from CFG/state, then runs up to
+// MAX_BURNS correction burns. Advances even when unconverged
+// (post-capture SHAPE is the safety net) but logs loudly.
+// ============================================================
+GLOBAL FUNCTION phaseBplane {
+    LOCAL targetBody IS _bplaneTargetBody().
     IF targetBody = 0 {
-        mLogWarn("BPLANE: target '" + targetName
+        mLogWarn("BPLANE: target '" + stateGet("target", "")
             + "' is not a body — nothing to do.").
         nextPhase(xferSeq).
         RETURN.
@@ -594,15 +624,7 @@ GLOBAL FUNCTION phaseBplane {
         nextPhase(xferSeq).
         RETURN.
     }
-    LOCAL wantInc IS -1.
-    IF _cfgHas("CAPTURE_DIR") {
-        LOCAL dir IS CFG["CAPTURE_DIR"].
-        IF dir = "PROGRADE"   { SET wantInc TO 0. }
-        IF dir = "POLAR"      { SET wantInc TO 90. }
-        IF dir = "RETROPOLAR" { SET wantInc TO 90. }
-        IF dir = "RETROGRADE" { SET wantInc TO 180. }
-    }
-    IF _cfgHas("CAPTURE_INC") { SET wantInc TO CFG["CAPTURE_INC"]. }
+    LOCAL wantInc IS _bplaneWantInc().
 
     LOCAL wantLan IS _cfgNum("CAPTURE_LAN", -1).
 
@@ -632,5 +654,59 @@ GLOBAL FUNCTION phaseBplane {
         + " inc=" + ROUND(meas["inc"], 2)
         + " lan=" + ROUND(meas["lan"], 2)
         + " burns=" + burns).
+    nextPhase(xferSeq).
+}
+
+GLOBAL FUNCTION phaseRefineBplane {
+    LOCAL targetBody IS _bplaneTargetBody().
+    IF targetBody = 0 {
+        mLogWarn("REFINE_BPLANE: target '" + stateGet("target", "")
+            + "' is not a body — nothing to do.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
+    IF SHIP:BODY = targetBody {
+        mLog("REFINE_BPLANE: already inside " + targetBody:NAME + " SOI; skipping.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
+    LOCAL wantPe IS _cfgNum("CAPTURE_PE", -1).
+    IF wantPe < 0 {
+        mLogWarn("REFINE_BPLANE: CAPTURE_PE not set — skipping phase.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
+    LOCAL wantInc IS _bplaneWantInc().
+    LOCAL wantLan IS _cfgNum("CAPTURE_LAN", -1).
+
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    mLog("REFINE_BPLANE: refining arrival with dV cap "
+        + REFINE_DV_CAP + " m/s.").
+    LOCAL nd IS planBplaneCorrection(
+        targetBody,
+        wantPe,
+        wantInc,
+        wantLan,
+        REFINE_DV_CAP,
+        "Trajectory pristine, skipping refinement burn.").
+
+    IF nd <> 0 {
+        IF NOT executeManeuver() {
+            mLogWarn("REFINE_BPLANE: burn execution failed; continuing to coast.").
+        }
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        WAIT 2.
+    }
+
+    LOCAL meas IS _measureArrival(0, targetBody).
+    IF meas <> 0 {
+        mLog("REFINE_BPLANE done: Pe=" + ROUND(meas["pe"] / 1000, 1)
+            + "km inc=" + ROUND(meas["inc"], 2)
+            + " lan=" + ROUND(meas["lan"], 2) + ".").
+    } ELSE {
+        mLogWarn("REFINE_BPLANE: no encounter measurement after refinement.").
+    }
     nextPhase(xferSeq).
 }
