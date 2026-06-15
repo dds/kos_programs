@@ -56,7 +56,7 @@ GLOBAL FUNCTION executeManeuver {
     IF ADDONS:KAC:AVAILABLE {
         LOCAL alarmUt IS startTime - 60.
         IF alarmUt > TIME:SECONDS {
-            LOCAL alm IS ADDALARM("Raw", alarmUt, "Burn: " + ROUND(burnDV,1) + "m/s", "Auto-created by executeManeuver").
+            LOCAL alm IS ADDALARM("Raw", alarmUt, "Burn: " + ROUND(burnDV,1) + "m/s", "Auto-created by executeManeuver. Fly safe.").
             SET alm:ACTION TO "KillWarp".
             SET kacAlarmId TO alm:ID.
             mLog("KAC alarm set for burn in " + ROUND(alarmUt - TIME:SECONDS, 0) + "s.").
