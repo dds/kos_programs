@@ -1,5 +1,5 @@
 // ============================================================
-// maneuver_transfer.ks — transfer planning and mid-course correction
+// maneuver_transfer.ks — raw transfer planning
 // ============================================================
 
 @LAZYGLOBAL OFF.
@@ -616,7 +616,6 @@ LOCAL FUNCTION _escapeKscPenalty {
 //   3. Golden section refine departure time
 //   4. dV scan ±20%
 //   5. Golden section refine dV
-//   6. Optional LAN scan
 // ============================================================
 LOCAL FUNCTION _planEscapeTransfer {
     PARAMETER targetBody.
