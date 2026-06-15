@@ -359,6 +359,8 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL bestEval IS _localInterceptEval(nd, targetBody, hohmannTof).
     LOCAL bestCA IS bestEval["CA"].
     LOCAL bestSeed IS bestEval.
+    LOCAL encounterCount IS 0.
+    IF bestSeed["PATCH"] { SET encounterCount TO 1. }
     LOCAL previewShortlist IS 5.
     IF CFG:HASKEY("TRANSFER_PREVIEW_SHORTLIST") {
         SET previewShortlist TO MAX(1, CFG["TRANSFER_PREVIEW_SHORTLIST"]).
@@ -410,12 +412,21 @@ LOCAL FUNCTION _planLocalTransfer {
                 SET bestSeed TO trySeed.
                 SET bestTime TO tryTime.
             }
+            IF trySeed["PATCH"] {
+                SET encounterCount TO encounterCount + 1.
+                IF encounterCount >= 6 {
+                    mLog("Raw transfer scan: found " + encounterCount
+                        + " target encounters; ending scan early.").
+                    BREAK.
+                }
+            }
         }
     }
     SET nd:TIME TO bestTime.
     WAIT 0.1.
     mLog("Time scan: best CA=" + ROUND(bestCA["distance"]/1000, 1) + "km"
         + " score=" + ROUND(bestSeed["SCORE"], 2)
+        + " encounters=" + encounterCount
         + " at T+" + ROUND(bestCA["time"] - TIME:SECONDS, 0) + "s"
         + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
     _logLocalTransferShortlist(scanTimes, scanCAs, scanSeeds, previewShortlist).
