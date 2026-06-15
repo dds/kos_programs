@@ -14,17 +14,7 @@
 //   Falcon Minmus SciSAT 1   space-delimited fallback also parses.
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "SEQUENCE", "LAUNCH,ANTS,PARK,DONE",
-    "PARKING_ALT", 74000,
-    "LAUNCH_INCLINATION", 28,
-    "CAPTURE_PE", 20000,
-    "CAPTURE_INC", 0,
-    "CAPTURE_DIR", "PROGRADE",
-    "SHAPE_PE", 30000,
-    "SHAPE_AP", 30000,
-    "SHAPE_INC", 0
-).
+GLOBAL CFG IS LEXICON().
 
 GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
     "xfer_plan",
