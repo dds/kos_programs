@@ -244,7 +244,7 @@ GLOBAL FUNCTION planRendezvous {
         IF HASNODE { REMOVE nd. }
         RETURN 0.
     }
-    archivePlannedManeuverLog("rendezvous").
+    maneuverUiArchiveLog("rendezvous").
 
     RETURN nd.
 }

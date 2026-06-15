@@ -175,7 +175,7 @@ LOCAL FUNCTION _burnWithRetry {
         LOCAL nd IS planFn:CALL().
         ADD nd.
         mLog(label + ": dV=" + ROUND(nd:DELTAV:MAG,1) + " m/s").
-        archivePlannedManeuverLog(label).
+        maneuverUiArchiveLog(label).
         WAIT 2.
         SET success TO executeManeuver().
         IF NOT success {
@@ -329,7 +329,7 @@ GLOBAL FUNCTION phaseElliptical {
         mLog("Elliptical raise Pe: dV=" + ROUND(nd:DELTAV:MAG,1)
             + " m/s  Pe=" + ROUND(nd:ORBIT:PERIAPSIS/1000,1)
             + "km Ap=" + ROUND(nd:ORBIT:APOAPSIS/1000,1) + "km").
-        archivePlannedManeuverLog("elliptical-raise-pe").
+        maneuverUiArchiveLog("elliptical-raise-pe").
         IF NOT _executeEllipticalStep("Elliptical raise Pe") { RETURN. }
     } ELSE {
         mLog("Elliptical Pe already within tolerance.").

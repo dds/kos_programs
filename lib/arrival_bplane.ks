@@ -552,7 +552,7 @@ GLOBAL FUNCTION planBplaneCorrection {
         REMOVE nd.
         RETURN 0.
     }
-    archivePlannedManeuverLog("bplane").
+    maneuverUiArchiveLog("bplane").
     RETURN nd.
 }
 

@@ -97,7 +97,7 @@ GLOBAL FUNCTION planInclinationChange {
         + " prograde=" + ROUND(dvPrograde,1)
         + " eta=" + ROUND(burnETA,0)
         + " at=" + whichAt).
-    archivePlannedManeuverLog("inclination").
+    maneuverUiArchiveLog("inclination").
     RETURN nd.
 }
 

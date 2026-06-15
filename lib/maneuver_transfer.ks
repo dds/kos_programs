@@ -129,7 +129,7 @@ GLOBAL FUNCTION planTransfer {
         + " PeKm=" + ROUND(finalPatch:PERIAPSIS/1000,1)
         + " arrivalEta=" + ROUND(arrivalEta,0)).
 
-    archivePlannedManeuverLog("transfer").
+    maneuverUiArchiveLog("transfer").
     RETURN nd.
 }
 

@@ -260,7 +260,7 @@ GLOBAL FUNCTION phaseSstoDeorbit {
     mLogWarn("STATS ssto-deorbit plan dv=" + ROUND(nd:DELTAV:MAG, 1)
         + " lead=" + lead
         + " reentryPeKm=" + ROUND(reentryPe / 1000, 1)).
-    archivePlannedManeuverLog("ssto-deorbit").
+    maneuverUiArchiveLog("ssto-deorbit").
 
     IF NOT executeManeuver() {
         mLogError("SSTO_DEORBIT: burn failed — yielding for operator.").

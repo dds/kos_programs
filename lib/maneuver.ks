@@ -36,7 +36,7 @@ GLOBAL FUNCTION executeManeuver {
         RETURN FALSE.
     }
 
-    _burnBrief(nd).
+    _runManeuverBrief(nd).
 
     mLog("Maneuver: dV=" + ROUND(burnDV,1) + " m/s  ETA=" + ROUND(startTime - TIME:SECONDS,1) + "s").
     mLogWarn("STATS burn setup dv=" + ROUND(burnDV,1)
@@ -246,13 +246,26 @@ GLOBAL FUNCTION executeManeuver {
     RETURN TRUE.
 }
 
-GLOBAL FUNCTION archivePlannedManeuverLog {
+LOCAL FUNCTION _runManeuverBrief {
+    PARAMETER nd.
+    LOCAL wantBrief IS TRUE.
+    IF DEFINED CFG AND CFG:HASKEY("BURN_BRIEF") AND CFG["BURN_BRIEF"] = 0 {
+        SET wantBrief TO FALSE.
+    }
+
+    IF wantBrief AND HOMECONNECTION:ISCONNECTED {
+        IF EXISTS("0:/lib/maneuver_ui.ks") {
+            RUNPATH("0:/lib/maneuver_ui.ks", nd).
+        }
+    }
+}
+
+GLOBAL FUNCTION maneuverUiArchiveLog {
     PARAMETER label IS "maneuver".
     IF HOMECONNECTION:ISCONNECTED {
-        archiveLog().
-        mLog("Planned maneuver log archived: " + label + ".").
-    } ELSE {
-        mLog("Planned maneuver log archive skipped: no KSC link (" + label + ").").
+        IF EXISTS("0:/lib/maneuver_ui.ks") {
+            RUNPATH("0:/lib/maneuver_ui.ks", 0, label).
+        }
     }
 }
 
@@ -289,7 +302,7 @@ GLOBAL FUNCTION planCircularize {
         + " eta=" + ROUND(etaApo,0)
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
-    archivePlannedManeuverLog("circularize").
+    maneuverUiArchiveLog("circularize").
     RETURN nd.
 }
 
@@ -313,7 +326,7 @@ GLOBAL FUNCTION planCapture {
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " targetApKm=" + ROUND(targetAlt/1000,1)
         + " etaPe=" + ROUND(ETA:PERIAPSIS,0)).
-    archivePlannedManeuverLog("capture").
+    maneuverUiArchiveLog("capture").
     RETURN nd.
 }
 
@@ -337,7 +350,7 @@ GLOBAL FUNCTION planRaisePeNow {
         + " targetPeKm=" + ROUND(targetPe/1000,1)
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
-    archivePlannedManeuverLog("raise-pe").
+    maneuverUiArchiveLog("raise-pe").
     RETURN nd.
 }
 
@@ -360,7 +373,7 @@ GLOBAL FUNCTION planLowerPe {
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " etaAp=" + ROUND(ETA:APOAPSIS,0)).
-    archivePlannedManeuverLog("lower-pe").
+    maneuverUiArchiveLog("lower-pe").
     RETURN nd.
 }
 
@@ -398,7 +411,7 @@ GLOBAL FUNCTION planAoPChange {
     mLog("AoP node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " m/s  targetAoP=" + ROUND(targetAoP,1)
         + " ETA=" + ROUND(burnETA,0) + "s").
-    archivePlannedManeuverLog("aop").
+    maneuverUiArchiveLog("aop").
     RETURN nd.
 }
 
@@ -413,69 +426,6 @@ LOCAL FUNCTION _burnTimeEstimate {
     LOCAL acc IS _safeMaxAcc().
     IF acc <= 0 { RETURN 0. }
     RETURN nd:DELTAV:MAG / acc.
-}
-
-LOCAL FUNCTION _orbitLine {
-    PARAMETER o.
-    IF o:ECCENTRICITY >= 1 {
-        RETURN "ESCAPE (Pe " + ROUND(o:PERIAPSIS/1000,1)
-            + "km, inc " + ROUND(o:INCLINATION,1) + ")".
-    }
-    RETURN ROUND(o:PERIAPSIS/1000,1) + " x " + ROUND(o:APOAPSIS/1000,1)
-        + " km  inc " + ROUND(o:INCLINATION,1).
-}
-
-// Compact pre-burn brief: dV breakdown, timing, and the orbit this
-// node turns into. Set CFG BURN_BRIEF=0 for quiet missions. (The
-// ASCII orbit diagram moved out pending a GUI module — storage.)
-LOCAL FUNCTION _burnBrief {
-    PARAMETER nd.
-    IF DEFINED CFG AND CFG:HASKEY("BURN_BRIEF") AND CFG["BURN_BRIEF"] = 0 {
-        RETURN.
-    }
-    PRINT " ".
-    PRINT "  -- " + stateGet("phase", "MANEUVER") + " BURN --".
-    PRINT "  dV " + ROUND(nd:DELTAV:MAG,1)
-        + " m/s (p " + ROUND(nd:PROGRADE,1)
-        + " n " + ROUND(nd:NORMAL,1)
-        + " r " + ROUND(nd:RADIALOUT,1)
-        + ")  ETA " + ROUND(nd:ETA,0)
-        + "s  burn ~" + ROUND(_burnTimeEstimate(nd),0) + "s".
-    PRINT "  now    " + _orbitLine(SHIP:ORBIT).
-    PRINT "  after  " + _orbitLine(nd:ORBIT).
-    mLog("Plan: " + _orbitLine(SHIP:ORBIT) + " -> " + _orbitLine(nd:ORBIT)).
-
-    // The now/after lines describe the orbit around the CURRENT
-    // body. When the post-burn trajectory enters another SOI, show
-    // what actually matters: the arrival patch elements there.
-    LOCAL p IS nd:ORBIT.
-    LOCAL hops IS 0.
-    UNTIL NOT p:HASNEXTPATCH OR hops >= 4 {
-        SET p TO p:NEXTPATCH.
-        SET hops TO hops + 1.
-        IF p:BODY <> SHIP:BODY {
-            LOCAL arr IS p:BODY:NAME + " arrival: Pe "
-                + ROUND(p:PERIAPSIS/1000,1) + "km  inc "
-                + ROUND(p:INCLINATION,1) + "  lan "
-                + ROUND(p:LAN,1).
-            PRINT "  " + arr.
-            mLog(arr).
-            BREAK.
-        }
-    }
-
-    // Orbit diagram is ARCHIVE-ONLY display code: zero bytes on the
-    // core, runs straight from 0:/ when linked. BURN_ART=0 disables.
-    LOCAL wantArt IS TRUE.
-    IF DEFINED CFG AND CFG:HASKEY("BURN_ART") AND CFG["BURN_ART"] = 0 {
-        SET wantArt TO FALSE.
-    }
-    IF wantArt AND HOMECONNECTION:ISCONNECTED
-            AND TERMINAL:HEIGHT >= 28
-            AND EXISTS("0:/lib/orbit_draw.ks") {
-        RUNONCEPATH("0:/lib/orbit_draw.ks").
-        orbitDrawBurn(nd).
-    }
 }
 
 LOCAL FUNCTION _calcStartTime {

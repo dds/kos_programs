@@ -176,7 +176,7 @@ GLOBAL FUNCTION phaseMidCourse {
             + " inc=" + ROUND(finalPatch:INCLINATION,1)
             + " LAN=" + ROUND(finalPatch:LAN,1)
             + " AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1)).
-        archivePlannedManeuverLog("mcc").
+        maneuverUiArchiveLog("mcc").
         LOCAL success IS FALSE.
         LOCAL retries IS 0.
         UNTIL success {

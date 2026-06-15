@@ -4,7 +4,7 @@
 //
 // *** This file is NEVER synced to a probe core. ***
 // It has no row in dependencies.txt and costs zero local bytes.
-// maneuver.ks runs it straight from the archive
+// maneuver_ui.ks runs it straight from the archive
 // (RUNONCEPATH("0:/lib/orbit_draw.ks")) when a KSC link is up,
 // then calls orbitDrawBurn(nd). No link, no art — the numeric
 // burn brief still prints. A kOS GUI module may replace this

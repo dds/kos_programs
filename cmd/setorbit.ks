@@ -24,7 +24,7 @@ LOCAL FUNCTION _planSetApAtPe {
     ADD nd.
     mLog("Set Ap node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " targetAp=" + ROUND(alt_/1000,1) + "km").
-    archivePlannedManeuverLog("set-orbit-ap").
+    maneuverUiArchiveLog("set-orbit-ap").
 }
 
 LOCAL FUNCTION _planSetPeAtAp {
@@ -41,7 +41,7 @@ LOCAL FUNCTION _planSetPeAtAp {
     ADD nd.
     mLog("Set Pe node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " targetPe=" + ROUND(alt_/1000,1) + "km").
-    archivePlannedManeuverLog("set-orbit-pe").
+    maneuverUiArchiveLog("set-orbit-pe").
 }
 
 LOCAL tol IS 500.

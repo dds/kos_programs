@@ -225,7 +225,7 @@ LOCAL FUNCTION _burnToPhasingOrbit {
     mLog("Relay phasing insertion: dV=" + ROUND(dv,1)
         + "m/s  targetPe=" + ROUND((2 * phaseSma - targetR
             - targetBody:RADIUS)/1000,1) + "km.").
-    archivePlannedManeuverLog("relay-phase-insert").
+    maneuverUiArchiveLog("relay-phase-insert").
     WAIT 1.
     RETURN executeManeuver().
 }

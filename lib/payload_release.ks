@@ -691,7 +691,7 @@ LOCAL FUNCTION _scanSatPlanPeAtAp {
     ADD nd.
     mLog(label + " node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " targetPe=" + ROUND(targetPe/1000,1) + "km").
-    archivePlannedManeuverLog(label).
+    maneuverUiArchiveLog(label).
     RETURN nd.
 }
 
@@ -716,7 +716,7 @@ LOCAL FUNCTION _scanSatPlanRaiseAp {
         + " targetApKm=" + ROUND(targetAp/1000,1)
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
-    archivePlannedManeuverLog("scansat-raise-ap").
+    maneuverUiArchiveLog("scansat-raise-ap").
     RETURN nd.
 }
 

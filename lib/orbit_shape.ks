@@ -366,7 +366,7 @@ GLOBAL FUNCTION planPlaneMatch {
         REMOVE nd.
         RETURN 0.
     }
-    archivePlannedManeuverLog("plane-match").
+    maneuverUiArchiveLog("plane-match").
     RETURN nd.
 }
 
@@ -484,7 +484,7 @@ LOCAL FUNCTION _planTangentBurnAt {
     mLog(label + " node: dV=" + ROUND(nd:DELTAV:MAG, 1)
         + " m/s  targetAlt=" + ROUND(targetAlt / 1000, 1)
         + "km  ETA=" + ROUND(burnEta, 0) + "s").
-    archivePlannedManeuverLog(label).
+    maneuverUiArchiveLog(label).
     RETURN nd.
 }
 
