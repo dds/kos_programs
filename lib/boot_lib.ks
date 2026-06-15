@@ -335,6 +335,7 @@ GLOBAL FUNCTION bootEnsureInitialPhase {
 GLOBAL FUNCTION bootShouldResetMissionOnBoot {
     PARAMETER isEVA.
     IF isEVA { RETURN FALSE. }
+    IF stateGet("reload_required", "false") = "true" { RETURN FALSE. }
     IF SHIP:STATUS = "PRELAUNCH" { RETURN TRUE. }
     LOCAL phase IS stateGet("phase", "").
     IF SHIP:BODY:NAME = "Kerbin"
