@@ -73,6 +73,7 @@ CMD PREFLIGHT, FLIGHT, POSTFLIGHT, POST_FLIGHT = restartflightplan
 CMD APPROACH = restartflightplan
 CMD ARM, FLY = restartflightplan
 CMD LAND_DEORBIT, LAND, LAND_ASSIST = landassist, landingrescue, landmin, setlanding
+CMD DONE = secondarytarget, scansatops
 
 BAND AIR = PREFLIGHT, FLIGHT, POSTFLIGHT, POST_FLIGHT
 BAND SSTO_ASCENT = AIRCLIMB, ROCKETCLIMB

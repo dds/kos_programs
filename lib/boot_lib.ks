@@ -355,7 +355,8 @@ GLOBAL FUNCTION bootResetMissionSelection {
         "mission_id", "mission_name", "phase", "fairing_deployed",
         "lib_band", "lib_band_phase", "lib_band_libs",
         "reload_required", "reload_reason", "reload_next_phase",
-        "reload_next_band"
+        "reload_next_band", "secondary_active", "secondary_release_done",
+        "zombie_scansat_active", "zombie_scansat_required_types"
     ) {
         stateRemove(key).
     }
