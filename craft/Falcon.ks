@@ -14,7 +14,8 @@
 //   Falcon Minmus SciSAT 1   space-delimited fallback also parses.
 // ============================================================
 
-GLOBAL CFG IS LEXICON().
+GLOBAL CFG IS LEXICON(
+    "DESCENT_DROGUE_CUT_ALT", 4800).
 
 GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
     "xfer_plan",
