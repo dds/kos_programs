@@ -79,17 +79,19 @@ GLOBAL FUNCTION executeManeuver {
 
     LOCAL wakeTime IS startTime - HIBERNATE_WAKE_LEAD.
     IF TIME:SECONDS < wakeTime - HIBERNATE_THRESHOLD {
-        // Hold the burn vector throughout long maneuver coasts.
-        // Capture burns can happen behind an occluding body; waiting
-        // until T-180 to point may be too late for probe control.
+        // Spend the long coast sun-pointed for power; the wake and
+        // checkpoint re-locks below reacquire the burn vector before
+        // ignition.
+        trySolarOrient().
         mLog("Long coast wait (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
         HUDTEXT("Coasting. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
+        LOCAL solarRef IS -1.
         LOCAL nextAlignLog IS TIME:SECONDS + 300.
         UNTIL TIME:SECONDS >= wakeTime {
-            LOCK STEERING TO nd:BURNVECTOR.
+            SET solarRef TO trySolarHoldTick(solarRef).
             IF TIME:SECONDS >= nextAlignLog {
                 SET nextAlignLog TO TIME:SECONDS + 300.
-                mLog("Long coast burn-vector hold: angle="
+                mLog("Long coast solar hold; burn-vector angle="
                     + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
                     + " deg  T-" + ROUND(startTime - TIME:SECONDS, 0) + "s.").
             }
@@ -160,6 +162,9 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL burnStartClock IS TIME:SECONDS.
 
     LOCAL origBurnVec IS nd:BURNVECTOR.
+    LOCAL dippedBelowTwo IS FALSE.
+    LOCAL dvReboundAbort IS FALSE.
+    LOCAL reboundDv IS 0.
 
     UNTIL _isComplete(nd, burnDV) {
         LOCK STEERING TO nd:BURNVECTOR.
@@ -176,6 +181,16 @@ GLOBAL FUNCTION executeManeuver {
         LOCAL remaining IS nd:DELTAV:MAG.
         LOCAL maxAcc    IS _safeMaxAcc().
         LOCAL dotCheck IS VDOT(nd:BURNVECTOR:NORMALIZED, nd:DELTAV:NORMALIZED).
+        IF remaining < 2 {
+            SET dippedBelowTwo TO TRUE.
+        } ELSE IF dippedBelowTwo AND remaining > 2 {
+            SET dvReboundAbort TO TRUE.
+            SET reboundDv TO remaining.
+            mLogError("Burn dV rebounded after trim phase: remaining="
+                + ROUND(remaining, 2) + " m/s — stopping maneuver.").
+            LOCK THROTTLE TO 0.
+            BREAK.
+        }
 
         IF dotCheck < 0 { LOCK THROTTLE TO 0. BREAK. }
 
@@ -202,11 +217,26 @@ GLOBAL FUNCTION executeManeuver {
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     SET SAS TO TRUE.
     _setThrustLimit(1.0).
-    _clearPendingBurn("complete").
+    IF dvReboundAbort {
+        _clearPendingBurn("dv-rebound").
+    } ELSE {
+        _clearPendingBurn("complete").
+    }
 
     // Clean up the KAC alarm now that the burn is done.
     IF kacAlarmId <> "" {
         DELETEALARM(kacAlarmId).
+    }
+
+    IF dvReboundAbort {
+        mLogWarn("STATS burn abort reason=dv-rebound"
+            + " dv=" + ROUND(burnDV,1)
+            + " reboundDv=" + ROUND(reboundDv,2)
+            + " duration=" + ROUND(TIME:SECONDS - burnStartClock,1)
+            + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+            + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+            + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)).
+        RETURN FALSE.
     }
 
     mLog("Burn complete. Residual dV ~" + ROUND(residual, 2) + " m/s.").
