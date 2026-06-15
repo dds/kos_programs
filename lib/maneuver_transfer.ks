@@ -175,7 +175,8 @@ LOCAL FUNCTION _localInterceptEval {
         "SCORE", score,
         "CA", ca,
         "PATCH", patch <> 0,
-        "OBSTACLE", obstacleName
+        "OBSTACLE", obstacleName,
+        "DV", nd:DELTAV:MAG
     ).
 }
 
