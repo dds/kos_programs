@@ -568,6 +568,7 @@ LOCAL FUNCTION _planLocalTransfer {
         + " AoPerr=" + ROUND(bestSeed["AOP_ERR"], 1)
         + " at T+" + ROUND(bestCA["time"] - TIME:SECONDS, 0) + "s"
         + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
+    _logLocalTransferShortlist(scanTimes, scanCAs, scanSeeds, previewShortlist).
 
     // --- AoP hard-filter: pick best AoP-acceptable candidate ---
     // AoP is a basin selection problem controlled by departure timing.
@@ -869,6 +870,33 @@ LOCAL FUNCTION _planLocalTransfer {
     }
 
     RETURN nd.
+}
+
+LOCAL FUNCTION _logLocalTransferShortlist {
+    PARAMETER scanTimes.
+    PARAMETER scanCAs.
+    PARAMETER scanSeeds.
+    PARAMETER count.
+
+    LOCAL shown IS 0.
+    FROM { LOCAL qi IS 0. } UNTIL qi >= count STEP { SET qi TO qi + 1. } DO {
+        IF scanSeeds[qi]["SCORE"] < 999999999 {
+            SET shown TO shown + 1.
+            LOCAL ca IS scanCAs[qi].
+            LOCAL seed IS scanSeeds[qi].
+            mLogWarn("STATS local-candidate rank=" + shown
+                + " departT=" + ROUND(scanTimes[qi] - TIME:SECONDS, 0)
+                + " caKm=" + ROUND(ca["distance"] / 1000, 1)
+                + " closestT=" + ROUND(ca["time"] - TIME:SECONDS, 0)
+                + " score=" + ROUND(seed["SCORE"], 2)
+                + " patch=" + seed["PATCH"]
+                + " dv=" + ROUND(seed["DV"], 1)
+                + " peErrKm=" + ROUND(seed["PE_ERR"] / 1000, 1)
+                + " incErr=" + ROUND(seed["INC_ERR"], 1)
+                + " lanErr=" + ROUND(seed["LAN_ERR"], 1)
+                + " aopErr=" + ROUND(seed["AOP_ERR"], 1)).
+        }
+    }
 }
 
 LOCAL FUNCTION _transferPreviewSeedScore {
