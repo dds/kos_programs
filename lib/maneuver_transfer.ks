@@ -473,10 +473,11 @@ LOCAL FUNCTION _planLocalTransfer {
     WAIT 0.1.
 
     // --- Scan departure time to minimize closest approach ---
-    // Scan multiple orbits around the phase angle estimate. The phase
-    // angle math can be significantly off, so we search ±N orbits
-    // where N covers at least one synodic period.
-    LOCAL nScanOrbits IS MAX(6, CEILING(synodicPeriod / shipPeriod)).
+    // Search a near-term lookahead window from NOW, not ±N full ship
+    // orbits around the phase seed. This matters after a missed burn:
+    // the current orbit may be a long transfer ellipse, and "a few
+    // orbits" can mean days. XING as a rescue/reacquire phase should
+    // look for a correction in the next few hours.
     // Each sample tries one ejection point in the parking orbit. For an
     // inclined target the ejection longitude is the dominant lever (it
     // orients the transfer ellipse and its apoapsis), so 4/orbit (every
@@ -485,11 +486,24 @@ LOCAL FUNCTION _planLocalTransfer {
     IF CFG:HASKEY("TRANSFER_SCAN_SAMPLES_PER_ORBIT") {
         SET samplesPerOrbit TO MAX(4, CFG["TRANSFER_SCAN_SAMPLES_PER_ORBIT"]).
     }
-    LOCAL scanSteps IS nScanOrbits * samplesPerOrbit.
-    LOCAL scanDt IS shipPeriod / samplesPerOrbit.
+    LOCAL scanHours IS 6.
+    IF CFG:HASKEY("TRANSFER_SCAN_LOOKAHEAD_HOURS") {
+        SET scanHours TO MAX(0.25, CFG["TRANSFER_SCAN_LOOKAHEAD_HOURS"]).
+    }
+    LOCAL maxScanStep IS 600.
+    IF CFG:HASKEY("TRANSFER_SCAN_STEP_MINUTES") {
+        SET maxScanStep TO MAX(60, CFG["TRANSFER_SCAN_STEP_MINUTES"] * 60).
+    }
+    LOCAL scanStart IS TIME:SECONDS + 30.
+    LOCAL scanEnd IS TIME:SECONDS + scanHours * 3600.
+    LOCAL scanDt IS MIN(shipPeriod / samplesPerOrbit, maxScanStep).
+    SET scanDt TO MAX(30, scanDt).
+    LOCAL scanSteps IS MAX(1, CEILING((scanEnd - scanStart) / scanDt)).
 
-    LOCAL bestTime IS departUt.
-    LOCAL bestCA IS _findClosestApproach(targetBody, departUt + hohmannTof * 0.5, departUt + hohmannTof * 1.5, 40).
+    LOCAL bestTime IS MAX(scanStart, MIN(scanEnd, departUt)).
+    SET nd:TIME TO bestTime.
+    WAIT 0.1.
+    LOCAL bestCA IS _findClosestApproach(targetBody, bestTime + hohmannTof * 0.5, bestTime + hohmannTof * 1.5, 40).
     LOCAL bestSeed IS _transferSeedScore(nd, targetBody, targetPe, captureInc, lanTarget, aopTarget, bestCA["distance"], nd:DELTAV:MAG).
     LOCAL previewShortlist IS 5.
     IF CFG:HASKEY("TRANSFER_PREVIEW_SHORTLIST") {
@@ -508,12 +522,14 @@ LOCAL FUNCTION _planLocalTransfer {
     SET scanSeeds[0] TO bestSeed.
 
     mLog("Element-aware transfer scan: " + scanSteps
-        + " steps over ±" + nScanOrbits
-        + " orbits  samples/orbit=" + samplesPerOrbit).
+        + " steps over next " + ROUND(scanHours, 2) + "h"
+        + "  step=" + ROUND(scanDt, 0) + "s"
+        + "  phaseSeed T+" + ROUND(departUt - TIME:SECONDS, 0) + "s"
+        + "  samples/orbit=" + samplesPerOrbit).
 
-    FROM { LOCAL si IS -scanSteps. } UNTIL si > scanSteps STEP { SET si TO si + 1. } DO {
-        LOCAL tryTime IS departUt + si * scanDt.
-        IF tryTime > TIME:SECONDS + 30 {
+    FROM { LOCAL si IS 0. } UNTIL si > scanSteps STEP { SET si TO si + 1. } DO {
+        LOCAL tryTime IS scanStart + si * scanDt.
+        IF tryTime <= scanEnd {
             SET nd:TIME TO tryTime.
             WAIT 0.02.
             LOCAL tryCa IS _findClosestApproach(targetBody, tryTime + hohmannTof * 0.5, tryTime + hohmannTof * 1.5, 40).
@@ -592,8 +608,8 @@ LOCAL FUNCTION _planLocalTransfer {
     // dominant prograde basin. The downstream coupled solver handles
     // PE/INC fine-tuning from the raw scan's departure time.
     IF aopTarget < 0 {
-        LOCAL tA IS MAX(TIME:SECONDS + 30, bestTime - scanDt).
-        LOCAL tB IS bestTime + scanDt.
+        LOCAL tA IS MAX(scanStart, bestTime - scanDt).
+        LOCAL tB IS MIN(scanEnd, bestTime + scanDt).
         LOCAL gr IS (SQRT(5) + 1) / 2.
 
         FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {

@@ -139,6 +139,9 @@ Looks like Python/JS; is neither.
   If `patch=False`, element targeting will report `no-patch`/`PeErr=10000km`
   because it has no target-body orbit to measure, not because the requested
   final orbit is impossible.
+  Local `XING` scans `TRANSFER_SCAN_LOOKAHEAD_HOURS` from now (default 6h),
+  capped by `TRANSFER_SCAN_STEP_MINUTES`, so missed-burn rescue replans do
+  not search whole high-orbit periods before trying a correction.
 - **Commit and push when a chunk of work is done, without being asked.** The
   game's archive folder syncs from the pushed repo; unpushed code is
   untestable. Logical, bisectable commits in short-imperative style. Leave

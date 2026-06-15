@@ -276,7 +276,10 @@ Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
 ### The precision pipeline
 
 - **XING** — departure planning; picks the transfer window (multi-orbit LAN
-  scan when `CAPTURE_LAN` is set).
+  scan when `CAPTURE_LAN` is set). Local moon transfers scan the next
+  `TRANSFER_SCAN_LOOKAHEAD_HOURS` from the current time, default 6h, so
+  a missed-burn rescue can reacquire promptly instead of searching whole
+  high-transfer orbits.
 - **BPLANE** (`lib/arrival_bplane.ks`) — mid-coast B-plane correction: a 2×2
   Newton iteration on (B·T, B·R) steers the arrival hyperbola onto the
   requested plane (`CAPTURE_INC`/`CAPTURE_LAN`) and periapsis (`CAPTURE_PE`).
