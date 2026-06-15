@@ -74,18 +74,25 @@ GLOBAL FUNCTION executeManeuver {
 
     SET SAS TO FALSE.
     WAIT 0.1.
+    LOCK STEERING TO nd:BURNVECTOR.
+    mLog("Aligning to burn vector...").
 
     LOCAL wakeTime IS startTime - HIBERNATE_WAKE_LEAD.
     IF TIME:SECONDS < wakeTime - HIBERNATE_THRESHOLD {
-        // Spend the long coast sun-pointed, not holding the burn
-        // vector (battery drain pointing somewhere useless) —
-        // re-alignment happens at the T-180 wake below.
-        trySolarOrient().
+        // Hold the burn vector throughout long maneuver coasts.
+        // Capture burns can happen behind an occluding body; waiting
+        // until T-180 to point may be too late for probe control.
         mLog("Long coast wait (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
         HUDTEXT("Coasting. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
-        LOCAL solarRef IS -1.
+        LOCAL nextAlignLog IS TIME:SECONDS + 300.
         UNTIL TIME:SECONDS >= wakeTime {
-            SET solarRef TO trySolarHoldTick(solarRef).
+            LOCK STEERING TO nd:BURNVECTOR.
+            IF TIME:SECONDS >= nextAlignLog {
+                SET nextAlignLog TO TIME:SECONDS + 300.
+                mLog("Long coast burn-vector hold: angle="
+                    + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
+                    + " deg  T-" + ROUND(startTime - TIME:SECONDS, 0) + "s.").
+            }
             WAIT MIN(10, MAX(0.5, wakeTime - TIME:SECONDS)).
         }
         _wakeCmd().
@@ -96,15 +103,28 @@ GLOBAL FUNCTION executeManeuver {
         mLog("Awake — " + ROUND(startTime - TIME:SECONDS, 0) + "s to burn.").
         mLog("Re-aligning to burn vector after hibernation.").
         HUDTEXT("Core awake — burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
-    } ELSE {
-        LOCK STEERING TO nd:BURNVECTOR.
-        mLog("Aligning to burn vector...").
     }
 
     WAIT UNTIL TIME:SECONDS >= startTime - 60.
     mLog("Burn in T-60").
+    LOCK STEERING TO nd:BURNVECTOR.
+    mLogWarn("STATS burn relock checkpoint=T-60 angle="
+        + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
+        + " timeToBurn=" + ROUND(startTime - TIME:SECONDS, 1)).
 
     LOCAL alignDeadline IS startTime - 5.
+    LOCAL t10 IS startTime - 10.
+    UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ALIGN_TOLERANCE
+            OR TIME:SECONDS >= t10 {
+        LOCK STEERING TO nd:BURNVECTOR.
+        WAIT 0.1.
+    }
+    IF TIME:SECONDS < t10 { WAIT UNTIL TIME:SECONDS >= t10. }
+    LOCK STEERING TO nd:BURNVECTOR.
+    mLogWarn("STATS burn relock checkpoint=T-10 angle="
+        + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
+        + " timeToBurn=" + ROUND(startTime - TIME:SECONDS, 1)).
+
     UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ALIGN_TOLERANCE
             OR TIME:SECONDS >= alignDeadline {
         LOCK STEERING TO nd:BURNVECTOR.
@@ -122,6 +142,16 @@ GLOBAL FUNCTION executeManeuver {
     }
 
     WAIT UNTIL TIME:SECONDS >= alignDeadline.
+    LOCAL ignitionErr IS VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR).
+    IF ignitionErr > 15 {
+        mLogError("Refusing burn: " + ROUND(ignitionErr, 1)
+            + " deg off the burn vector at ignition.").
+        LOCK THROTTLE TO 0.
+        UNLOCK THROTTLE.
+        UNLOCK STEERING.
+        SET SAS TO FALSE.
+        RETURN FALSE.
+    }
     HUDTEXT("Burn in T-4", 3, 2, 15, WHITE, FALSE).
     countdown(4).
 
