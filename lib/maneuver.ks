@@ -86,15 +86,8 @@ GLOBAL FUNCTION executeManeuver {
         mLog("Long coast wait (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
         HUDTEXT("Coasting. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
         LOCAL solarRef IS -1.
-        LOCAL nextAlignLog IS TIME:SECONDS + 300.
         UNTIL TIME:SECONDS >= wakeTime {
             SET solarRef TO trySolarHoldTick(solarRef).
-            IF TIME:SECONDS >= nextAlignLog {
-                SET nextAlignLog TO TIME:SECONDS + 300.
-                mLog("Long coast solar hold; burn-vector angle="
-                    + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
-                    + " deg  T-" + ROUND(startTime - TIME:SECONDS, 0) + "s.").
-            }
             WAIT MIN(10, MAX(0.5, wakeTime - TIME:SECONDS)).
         }
         _wakeCmd().
