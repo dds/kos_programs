@@ -34,7 +34,8 @@ GLOBAL FUNCTION phaseCapture {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
 
         // 1. Resolve target altitude from config
-        LOCAL captureAlt IS CFG["TARGET_PE"].
+        LOCAL captureAlt 35000.
+        // IF CFG:HASKEY("TARGET_PE") { SET .
         IF CFG:HASKEY("TARGET_AP") { SET captureAlt TO CFG["TARGET_AP"]. }
 
         // 2. Delegate math to your existing library function
