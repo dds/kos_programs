@@ -1,6 +1,6 @@
 PREAMBLE = core
 
-LIB core = state, logs, files, phases, config, mission_plan, mission_type
+LIB core = state, logs, files, phases, config, mission_type
 LIB capture = maneuver, orbit
 LIB deorbit_targeting = orbit, utils
 LIB flightplan = ui
@@ -73,7 +73,8 @@ CMD PREFLIGHT, FLIGHT, POSTFLIGHT, POST_FLIGHT = restartflightplan
 CMD APPROACH = restartflightplan
 CMD ARM, FLY = restartflightplan
 CMD LAND_DEORBIT, LAND, LAND_ASSIST = landassist, landingrescue, landmin, setlanding
-CMD DONE = secondarytarget, scansatops
+CMD SCANSAT_OPS = scansatops
+CMD DONE = secondarytarget
 
 BAND AIR = PREFLIGHT, FLIGHT, POSTFLIGHT, POST_FLIGHT
 BAND SSTO_ASCENT = AIRCLIMB, ROCKETCLIMB

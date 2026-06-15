@@ -472,26 +472,16 @@ GLOBAL FUNCTION bootPruneLogs {
 // Offline operator commands (CMD rows in dependencies.txt)
 // ============================================================
 
-// bootCmdsForSequence — union of the offline commands declared
-// for every phase of the current mission sequence. Falls back to
-// the current phase when no sequence is configured.
+// bootCmdsForSequence — commands declared for the current phase.
+// Storage is tight; do not carry commands for future sequence
+// phases into maneuver-planning boots.
 GLOBAL FUNCTION bootCmdsForSequence {
     bootLibLoadSpec().
     LOCAL cmds IS LIST().
-    LOCAL seqRaw IS stateGet("mission_cfg_SEQUENCE", "").
-    LOCAL phases IS LIST().
-    IF seqRaw <> "" {
-        FOR p IN seqRaw:SPLIT(",") {
-            IF p:TRIM <> "" { phases:ADD(p:TRIM). }
-        }
-    } ELSE {
-        phases:ADD(stateGet("phase", "")).
-    }
-    FOR phaseName IN phases {
-        IF BOOT_LIB_CMDS:HASKEY(phaseName) {
-            FOR cmdName IN BOOT_LIB_CMDS[phaseName] {
-                IF NOT cmds:CONTAINS(cmdName) { cmds:ADD(cmdName). }
-            }
+    LOCAL phaseName IS stateGet("phase", "").
+    IF BOOT_LIB_CMDS:HASKEY(phaseName) {
+        FOR cmdName IN BOOT_LIB_CMDS[phaseName] {
+            IF NOT cmds:CONTAINS(cmdName) { cmds:ADD(cmdName). }
         }
     }
     RETURN cmds.
@@ -529,8 +519,8 @@ GLOBAL FUNCTION bootCleanup {
                 AND NOT keepLibs:CONTAINS(lib) { keepLibs:ADD(lib). }
     }
 
-    // Never prune the mission's offline commands — at a field
-    // strip with no radio they are the only way to retask.
+    // Keep only the current phase's offline commands. Future
+    // phase commands are synced after the next phase/band boot.
     FOR cmdName IN bootCmdsForSequence() {
         IF NOT keepCmds:CONTAINS(cmdName) { keepCmds:ADD(cmdName). }
     }
@@ -857,4 +847,166 @@ GLOBAL FUNCTION bootLibPhaseRoots {
         FOR libName IN BOOT_LIB_PHASES[phaseKey] { bootLibAddUnique(roots, libName). }
     }
     RETURN roots.
+}
+
+// ============================================================
+// Mission planning helpers
+//
+// These used to live in mission_plan.ks, but craft scripts need
+// them before selecting a band. Keeping the small runtime subset
+// in boot_lib lets post-parking boots drop mission_plan.ksm.
+// ============================================================
+
+GLOBAL FUNCTION missionListFromCsv {
+    PARAMETER raw.
+    LOCAL values IS LIST().
+    IF raw = "" { RETURN values. }
+    FOR itemRaw IN raw:SPLIT(",") {
+        LOCAL item IS itemRaw:TRIM.
+        IF item <> "" { values:ADD(item). }
+    }
+    RETURN values.
+}
+
+GLOBAL FUNCTION missionAppendUnique {
+    PARAMETER dest.
+    PARAMETER src.
+    FOR itemRaw IN src {
+        LOCAL item IS itemRaw:TRIM.
+        IF item <> "" AND NOT dest:CONTAINS(item) {
+            dest:ADD(item).
+        }
+    }
+}
+
+GLOBAL FUNCTION missionPayloadsFromState {
+    LOCAL raw IS stateGet("payloads", "").
+    IF raw = "" { RETURN LIST(). }
+    RETURN raw:SPLIT(",").
+}
+
+GLOBAL FUNCTION missionNormalizePayloadType {
+    PARAMETER payloadName.
+    LOCAL result IS payloadName.
+    UNTIL result:LENGTH = 0 {
+        LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
+        IF last:MATCHESPATTERN("[0-9]") OR last = "-" {
+            SET result TO result:SUBSTRING(0, result:LENGTH - 1).
+        } ELSE {
+            BREAK.
+        }
+    }
+    RETURN result.
+}
+
+GLOBAL FUNCTION missionHasPayload {
+    PARAMETER payloadName.
+    FOR raw IN missionPayloadsFromState() {
+        IF missionNormalizePayloadType(raw) = payloadName { RETURN TRUE. }
+    }
+    RETURN FALSE.
+}
+
+GLOBAL FUNCTION missionHasLandingPayload {
+    FOR raw IN missionPayloadsFromState() {
+        LOCAL payloadType IS missionNormalizePayloadType(raw).
+        IF payloadType = "LANDER" OR payloadType = "ASSISTLANDER"
+                OR payloadType = "ROVER" OR payloadType = "ASSISTROVER" {
+            RETURN TRUE.
+        }
+    }
+    RETURN FALSE.
+}
+
+GLOBAL FUNCTION missionExtraLibs {
+    LOCAL out IS LIST().
+    LOCAL seq IS missionListFromCsv(stateGet("mission_cfg_SEQUENCE", "")).
+    LOCAL cur IS stateGet("phase", "").
+    FOR entryRaw IN missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", "")) {
+        IF entryRaw:CONTAINS("@") {
+            LOCAL parts IS entryRaw:SPLIT("@").
+            LOCAL libName IS parts[0]:TRIM.
+            LOCAL untilPhase IS parts[1]:TRIM.
+            LOCAL curIdx IS -1.
+            LOCAL phIdx IS -1.
+            LOCAL i IS 0.
+            UNTIL i >= seq:LENGTH {
+                IF seq[i] = cur { SET curIdx TO i. }
+                IF seq[i] = untilPhase { SET phIdx TO i. }
+                SET i TO i + 1.
+            }
+            IF curIdx >= 0 AND phIdx >= 0 AND curIdx > phIdx {
+                mLog("Extra lib " + libName + " dropped (past "
+                    + untilPhase + ").").
+            } ELSE {
+                out:ADD(libName).
+            }
+        } ELSE {
+            out:ADD(entryRaw).
+        }
+    }
+    RETURN out.
+}
+
+GLOBAL FUNCTION missionLibs {
+    PARAMETER fallbackLibs IS LIST().
+    PARAMETER baseLibs IS LIST().
+    LOCAL libs IS LIST().
+    missionAppendUnique(libs, baseLibs).
+
+    LOCAL configured IS missionListFromCsv(stateGet("mission_cfg_LIBS", "")).
+    IF configured:LENGTH > 0 {
+        missionAppendUnique(libs, bootLibResolve(configured)).
+    } ELSE {
+        missionAppendUnique(libs, bootLibResolve(fallbackLibs)).
+    }
+
+    missionAppendUnique(libs, bootLibResolve(missionExtraLibs())).
+    RETURN libs.
+}
+
+GLOBAL FUNCTION missionSequenceLibs {
+    PARAMETER fallbackLibs IS LIST().
+    PARAMETER baseDeps IS LIST().
+    LOCAL sequenceLibs IS fallbackLibs.
+    LOCAL sequence IS missionListFromCsv(stateGet("mission_cfg_SEQUENCE", "")).
+    IF sequence:LENGTH > 0 {
+        SET sequenceLibs TO missionLibsForPhases(sequence, baseDeps).
+    }
+    RETURN missionLibs(sequenceLibs).
+}
+
+GLOBAL FUNCTION airplaneSequenceFromState {
+    PARAMETER defaultSeq.
+    LOCAL raw IS stateGet("mission_cfg_SEQUENCE", "").
+    IF raw <> "" { RETURN phaseListFromString(raw). }
+    RETURN defaultSeq.
+}
+
+GLOBAL FUNCTION airplaneVehicleLibs {
+    PARAMETER defaultSeq.
+    PARAMETER baseLibs IS LIST("orbit", "airplane").
+    LOCAL seq IS airplaneSequenceFromState(defaultSeq).
+    LOCAL libs IS missionLibsForPhases(seq, baseLibs).
+    IF missionHasPayload("SCIENCE") AND NOT libs:CONTAINS("science") {
+        libs:ADD("science").
+    }
+    SET libs TO missionSequenceLibs(libs, baseLibs).
+    stateSet("lib_band", "AIR").
+    stateSet("lib_band_phase", stateGet("phase", seq[0])).
+    stateSet("lib_band_libs", libs:JOIN(",")).
+    RETURN libs.
+}
+
+GLOBAL FUNCTION missionLibsForPhases {
+    PARAMETER phases.
+    PARAMETER baseDeps IS LIST().
+    LOCAL roots IS LIST("phases").
+    FOR lib IN baseDeps {
+        missionAppendUnique(roots, LIST(lib)).
+    }
+    FOR phase IN phases {
+        missionAppendUnique(roots, bootLibPhaseRoots(phase)).
+    }
+    RETURN bootLibResolve(roots).
 }
