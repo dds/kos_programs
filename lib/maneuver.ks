@@ -212,7 +212,6 @@ GLOBAL FUNCTION executeManeuver {
     // Guarded: post-burn the node may already be gone (see
     // executeDeorbitNode — flight-found crash on a bare REMOVE).
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    SET SAS TO TRUE.
     _setThrustLimit(1.0).
     IF dvReboundAbort {
         _clearPendingBurn("dv-rebound").
