@@ -53,6 +53,7 @@ LOCAL MAX_RETRIES          IS 5.
 //   TRANSFER_INC_ERR_TOL — max accepted transfer INC error (default 1°)
 // ============================================================
 GLOBAL FUNCTION planTransfer {
+    GLOBAL FUNCTION planTransfer {
     PARAMETER targetBody.
     PARAMETER targetPe.
     PARAMETER lanTarget IS -1.
@@ -63,7 +64,9 @@ GLOBAL FUNCTION planTransfer {
 
     // AoP is only meaningful when LAN is also specified — together
     // they fully orient the orbit. Without LAN the ascending node
-    // is unconstrained, so AoP has no absolute meaning.
+    // is unconstrained, so AoP has no absolute meaning. The departure
+    // planner no longer targets these angles, but preserving this setup
+    // keeps the raw-node builders' existing inputs stable.
     IF aopTarget >= 0 AND lanTarget < 0 {
         mLog("Ignoring CAPTURE_AOP without CAPTURE_LAN (AoP alone is unconstrained).").
         SET aopTarget TO -1.
@@ -73,20 +76,19 @@ GLOBAL FUNCTION planTransfer {
     LOCAL isEscape IS (targetBody = BODY:BODY).
     mLogWarn("STATS transfer setup target=" + targetBody:NAME
         + " local=" + isLocal + " escape=" + isEscape
-        + " targetPeKm=" + ROUND(targetPe/1000,1)
-        + " lan=" + ROUND(lanTarget,1)
-        + " aop=" + ROUND(aopTarget,1)).
+        + " mode=dumb-departure"
+        + " targetPeKm=0"
+        + " requestedCapturePeKm=" + ROUND(targetPe/1000,1)).
 
     // Resolve capture orbit direction before seeding the raw transfer
-    // so the coarse departure scans can prefer windows that already
-    // arrive near the requested capture plane.
+    // so the raw planners can keep their existing scoring inputs. Exact
+    // capture geometry belongs to BPLANE/SHAPE, not this departure phase.
     LOCAL captureInc IS -1.
-    LOCAL normalBias IS 0.
     IF CFG:HASKEY("CAPTURE_DIR") {
         LOCAL dir IS CFG["CAPTURE_DIR"].
         IF dir = "PROGRADE"   { SET captureInc TO 0. }
-        IF dir = "POLAR"      { SET captureInc TO 90.  SET normalBias TO 1. }
-        IF dir = "RETROPOLAR" { SET captureInc TO 90.  SET normalBias TO -1. }
+        IF dir = "POLAR"      { SET captureInc TO 90. }
+        IF dir = "RETROPOLAR" { SET captureInc TO 90. }
         IF dir = "RETROGRADE" { SET captureInc TO 180. }
     }
     IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
@@ -104,186 +106,44 @@ GLOBAL FUNCTION planTransfer {
     IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
 
     // --- 2. PE pretargeting ---
-    // For plain transfers, converge PE to zero (dead-center collision
-    // course) first. This gives the widest possible encounter margin
-    // before later normal dV. For AoP-guided transfers, target the real
-    // capture Pe instead: pushing all the way to collision can move the
-    // patch onto the wrong apsidal branch, while skipping PE leaves the
-    // coupled solver dominated by a huge periapsis error.
-    IF aopTarget >= 0 {
-        mLogWarn("STATS transfer stage=guided-pe targetPeKm=" + ROUND(targetPe/1000,1)).
-        newtonTarget(nd, targetBody, "PE", targetPe).
-    } ELSE {
-        newtonTarget(nd, targetBody, "PE", 0).
-    }
-
-    // --- 3. Safe injection targeting waterfall ---
-    // Scan-time objectives may include AoP and LAN. Injection-time
-    // targets are narrower: always PE, optionally INC, optionally LAN.
-    // AoP is intentionally not included here; it selects the departure
-    // basin and is then accepted/rejected by the final angular gate.
-    IF captureInc < 0 AND lanTarget < 0 AND aopTarget < 0 {
-        newtonTarget(nd, targetBody, "PE", targetPe).
-    } ELSE {
-        // Seed normal bias for polar/retropolar before the solver starts
-        IF normalBias <> 0 AND nd:NORMAL = 0 {
-            SET nd:NORMAL TO normalBias * 5.
-            WAIT 0.02.
-        }
-
-        LOCAL planeTargets IS LEXICON().
-        planeTargets:ADD("PE", targetPe).
-        planeTargets:ADD("PE_FLOOR", -25000).
-        IF captureInc >= 0 { planeTargets:ADD("INC", captureInc). }
-        IF aopTarget >= 0 { planeTargets:ADD("AOP_GUIDE", aopTarget). }
-
-        LOCAL planeOpts IS LEXICON().
-        planeOpts:ADD("STEP_NORMAL", 40.0).
-        planeOpts:ADD("STEP_PROGRADE", 20.0).
-        planeOpts:ADD("STEP_RADIAL", 20.0).
-        planeOpts:ADD("STEP_TIME", CHOOSE 5.0 IF aopTarget >= 0 ELSE 60.0).
-        planeOpts:ADD("MIN_STEP", 0.05).
-        planeOpts:ADD("MAX_ITER", 120).
-        IF aopTarget >= 0 { planeOpts:ADD("MIN_ITER", 40). }
-        IF aopTarget >= 0 { planeOpts:ADD("AOP_GUIDE_STALL_ITER", 15). }
-        IF aopTarget >= 0 { planeOpts:ADD("AOP_GUIDE_STALL_MIN_IMPROVE", 2.0). }
-        mLogWarn("STATS elements stage=plane-pe-inc before angular targeting.").
-        LOCAL planeResult IS _targetPatchElementsCoupled(nd, targetBody, planeTargets, planeOpts).
-        IF planeResult:HASKEY("SOLVED") AND NOT planeResult["SOLVED"] {
-            LOCAL planeOk IS FALSE.
-            LOCAL incTol IS 1.
-            LOCAL aopTol IS 35.
-            IF CFG:HASKEY("TRANSFER_INC_ERR_TOL") { SET incTol TO CFG["TRANSFER_INC_ERR_TOL"]. }
-            IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
-            // AoP-constrained transfers couple PE and AoP — the solver
-            // trades PE accuracy for AoP convergence. MCC corrects PE.
-            LOCAL peTol IS CHOOSE 5000 IF aopTarget >= 0 ELSE 1000.
-            // With BPLANE/SHAPE downstream the capture plane and exact
-            // periapsis are THEIR job. This is especially important for
-            // missed-burn rescue: XING may find a cheap near-term patch
-            // whose PE/INC are rough, but BPLANE can move that smooth
-            // hyperbolic aim point. Keep the element solver in the loop
-            // because it improves the handoff, then accept a real patch
-            // inside a broad BPLANE correction envelope.
-            LOCAL deferred IS _angularWorkDeferred().
-            IF deferred {
-                SET peTol  TO MAX(peTol, 50000).
-                SET incTol TO MAX(incTol, 45).
-                IF CFG:HASKEY("TRANSFER_DEFERRED_PE_ERR_TOL") {
-                    SET peTol TO CFG["TRANSFER_DEFERRED_PE_ERR_TOL"].
-                }
-                IF CFG:HASKEY("TRANSFER_DEFERRED_INC_ERR_TOL") {
-                    SET incTol TO CFG["TRANSFER_DEFERRED_INC_ERR_TOL"].
-                }
-            }
-            IF ABS(planeResult["PE_ERR"]) <= peTol {
-                SET planeOk TO TRUE.
-                IF captureInc >= 0 AND ABS(planeResult["INC_ERR"]) > incTol { SET planeOk TO FALSE. }
-                IF aopTarget >= 0 AND NOT deferred
-                        AND ABS(planeResult["AOP_ERR"]) > aopTol { SET planeOk TO FALSE. }
-            }
-            IF planeOk {
-                mLogWarn("planTransfer: accepting transfer plane within tolerance"
-                    + _elementErrorSummary(planeResult, planeTargets)
-                    + " PeTolKm=" + ROUND(peTol/1000,1)
-                    + " IncTol=" + ROUND(incTol,2)
-                    + " AopTol=" + ROUND(aopTol,1)).
-            } ELSE {
-                mLogError("planTransfer: PE/INC targeting failed; refusing bad transfer node.").
-                mLogWarn("STATS transfer result target=" + targetBody:NAME
-                    + " status=plane-elements-failed"
-                    + _elementErrorSummary(planeResult, planeTargets)).
-                IF HASNODE { REMOVE nd. }
-                RETURN.
-            }
-        }
-
-        // With BPLANE/SHAPE downstream, exact LAN/AoP are THEIR job:
-        // LAN at the target is set by the departure window (already
-        // preferred by the seed scan), not by node tweaks — the hard
-        // solve below can burn minutes failing to move LAN at all.
-        IF lanTarget >= 0 AND _angularWorkDeferred() {
-            mLogWarn("planTransfer: LAN/AoP exactness deferred to"
-                + " BPLANE/SHAPE downstream — skipping hard LAN solve.").
-        } ELSE IF lanTarget >= 0 {
-            LOCAL lanTargets IS LEXICON().
-            lanTargets:ADD("PE", targetPe).
-            lanTargets:ADD("PE_FLOOR", -25000).
-            IF captureInc >= 0 { lanTargets:ADD("INC", captureInc). }
-            lanTargets:ADD("LAN", lanTarget).
-            IF aopTarget >= 0 { lanTargets:ADD("AOP_GUIDE", aopTarget). }
-
-            LOCAL lanOpts IS LEXICON().
-            lanOpts:ADD("STEP_NORMAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
-            lanOpts:ADD("STEP_PROGRADE", CHOOSE 5.0 IF captureInc >= 0 ELSE 2.0).
-            lanOpts:ADD("STEP_RADIAL", CHOOSE 10.0 IF captureInc >= 0 ELSE 5.0).
-            lanOpts:ADD("STEP_TIME", CHOOSE 5.0 IF aopTarget >= 0 ELSE 60.0).
-            lanOpts:ADD("MIN_STEP", 0.05).
-            lanOpts:ADD("MAX_ITER", 100).
-            IF aopTarget >= 0 { lanOpts:ADD("MIN_ITER", 30). }
-            IF aopTarget >= 0 { lanOpts:ADD("AOP_GUIDE_STALL_ITER", 15). }
-            IF aopTarget >= 0 { lanOpts:ADD("AOP_GUIDE_STALL_MIN_IMPROVE", 2.0). }
-            mLogWarn("STATS elements stage=lan after plane-pe-inc.").
-            LOCAL lanResult IS _targetPatchElementsCoupled(nd, targetBody, lanTargets, lanOpts).
-            IF lanResult:HASKEY("SOLVED") AND NOT lanResult["SOLVED"] {
-                mLogError("planTransfer: LAN targeting failed; refusing bad transfer node.").
-                mLogWarn("STATS transfer result target=" + targetBody:NAME
-                    + " status=lan-elements-failed"
-                    + _elementErrorSummary(lanResult, lanTargets)).
-                IF HASNODE { REMOVE nd. }
-                RETURN.
-            }
-        }
-    }
+    // Dumb Departure, Smart Coast: force a dead-center collision course
+    // to maximize SOI-intercept margin. BPLANE owns precision targeting
+    // during the mid-course correction.
+    newtonTarget(nd, targetBody, "PE", 0).
 
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
     IF finalPatch = 0 {
-        mLogError("planTransfer: no encounter after targeting.").
-        mLogWarn("STATS transfer result target=" + targetBody:NAME + " status=no-encounter").
+        mLogError("planTransfer: no direct encounter after collision targeting.").
+        mLogWarn("STATS transfer result target=" + targetBody:NAME
+            + " status=no-direct-encounter"
+            + " dv=" + ROUND(nd:DELTAV:MAG,1)).
         RETURN.
     }
 
-    LOCAL logMsg IS "Transfer -> " + targetBody:NAME
-        + ": dV=" + ROUND(nd:DELTAV:MAG,1)
-        + " m/s  Pe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km"
-        + "  inc=" + ROUND(finalPatch:INCLINATION,1) + "°"
-        + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS,0) + "s".
-    IF lanTarget >= 0 {
-        LOCAL lanErr IS ABS(finalPatch:LAN - lanTarget).
-        IF lanErr > 180 { SET lanErr TO 360 - lanErr. }
-        SET logMsg TO logMsg + "  LAN=" + ROUND(finalPatch:LAN,1) + "(err " + ROUND(lanErr,1) + ")".
-    }
-    IF aopTarget >= 0 {
-        LOCAL aopErr IS ABS(finalPatch:ARGUMENTOFPERIAPSIS - aopTarget).
-        IF aopErr > 180 { SET aopErr TO 360 - aopErr. }
-        SET logMsg TO logMsg + "  AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1) + "(err " + ROUND(aopErr,1) + ")".
-        LOCAL aopTol IS 35.
-        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
-        IF aopErr > aopTol {
-            IF _angularWorkDeferred() {
-                mLogWarn("planTransfer: AoP off by " + ROUND(aopErr,1)
-                    + " — accepted, SHAPE corrects it post-capture.").
-            } ELSE {
-                mLogError("planTransfer: AoP misaligned; refusing transfer node.").
-                mLogWarn("STATS transfer result target=" + targetBody:NAME
-                    + " status=aop-misaligned"
-                    + " AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1)
-                    + " targetAoP=" + ROUND(aopTarget,1)
-                    + " AopErr=" + ROUND(aopErr,1)
-                    + " tol=" + ROUND(aopTol,1)).
-                IF HASNODE { REMOVE nd. }
-                RETURN.
-            }
+    LOCAL arrivalEta IS -1.
+    LOCAL p IS nd:ORBIT.
+    UNTIL NOT p:HASNEXTPATCH {
+        LOCAL transitionEta IS p:NEXTPATCHETA.
+        SET p TO p:NEXTPATCH.
+        IF p:BODY:NAME = targetBody:NAME {
+            SET arrivalEta TO transitionEta.
+            BREAK.
         }
     }
-    mLog(logMsg).
+
+    mLog("Transfer -> " + targetBody:NAME
+        + ": dV=" + ROUND(nd:DELTAV:MAG,1)
+        + " m/s  rawPe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km"
+        + "  arrivalETA=" + ROUND(arrivalEta,0) + "s").
+
     mLogWarn("STATS transfer result target=" + targetBody:NAME
-        + " status=planned dv=" + ROUND(nd:DELTAV:MAG,1)
+        + " status=planned"
+        + " mode=dumb-departure"
+        + " dv=" + ROUND(nd:DELTAV:MAG,1)
         + " PeKm=" + ROUND(finalPatch:PERIAPSIS/1000,1)
-        + " inc=" + ROUND(finalPatch:INCLINATION,1)
-        + " LAN=" + ROUND(finalPatch:LAN,1)
-        + " AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1)).
+        + " arrivalEta=" + ROUND(arrivalEta,0)).
+
     archivePlannedManeuverLog("transfer").
     RETURN nd.
 }
