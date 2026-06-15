@@ -25,6 +25,13 @@ GLOBAL FUNCTION shipSolarFlow {
     RETURN total.
 }
 
+GLOBAL FUNCTION shipHasSolarPanels {
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleDeployableSolarPanel") { RETURN TRUE. }
+    }
+    RETURN FALSE.
+}
+
 GLOBAL FUNCTION shipPowerFraction {
     FOR res IN SHIP:RESOURCES {
         IF res:NAME = "ELECTRICCHARGE" AND res:CAPACITY > 0 {
@@ -86,6 +93,12 @@ GLOBAL FUNCTION orientForSolar {
     SAS OFF.
 
     LOCAL cached IS stateGet("solar_axis", "").
+    LOCAL retryUt IS stateGetNum("solar_retry_ut", 0).
+    IF retryUt > TIME:SECONDS AND (forceSearch OR cached = "") {
+        mLog("Solar search deferred for "
+            + ROUND(retryUt - TIME:SECONDS, 0) + "s.").
+        RETURN.
+    }
     IF NOT forceSearch AND cached <> "" {
         LOCAL parts IS cached:SPLIT(",").
         LOCAL aShip IS V(parts[0]:TONUMBER(0), parts[1]:TONUMBER(0),
@@ -126,6 +139,23 @@ GLOBAL FUNCTION orientForSolar {
         SET i TO i + 1.
     }
 
+    IF bestFlow < 0 {
+        mLogWarn("Solar search: panels found but no readable flow/exposure fields — skipping.").
+        UNLOCK STEERING.
+        SET SAS TO TRUE.
+        RETURN.
+    }
+    IF bestFlow <= 0 {
+        LOCAL retryAt IS TIME:SECONDS + 300.
+        stateSetNum("solar_retry_ut", retryAt).
+        mLogWarn("Solar search: all axes have zero flow — likely night; retry later.").
+        mLogWarn("STATS solar orient status=night retryIn=300"
+            + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
+        UNLOCK STEERING.
+        SET SAS TO TRUE.
+        RETURN.
+    }
+
     // Refine around the winner: the panel normal need not lie on
     // a part axis (angled mounts, offset cells), so the coarse
     // best can sit on a cosine shoulder. Hill-climb the aim with
@@ -157,6 +187,7 @@ GLOBAL FUNCTION orientForSolar {
     }
 
     _solarAimSettle(bestAxis).
+    stateSetNum("solar_retry_ut", 0).
     stateSet("solar_axis", ROUND(bestAxis:X, 4) + ","
         + ROUND(bestAxis:Y, 4) + "," + ROUND(bestAxis:Z, 4)).
     if lockSteering {
@@ -185,11 +216,21 @@ GLOBAL FUNCTION orientForSolar {
 // ============================================================
 GLOBAL FUNCTION solarHoldTick {
     PARAMETER refFlow.
+    IF NOT shipHasSolarPanels() { RETURN refFlow. }
     LOCAL ratio IS 0.92.
     IF DEFINED CFG { SET ratio TO cfgNum("SOLAR_HOLD_RATIO", 0.92). }
     LOCAL flow IS shipSolarFlow().
     IF flow < 0 { RETURN refFlow. }
-    IF refFlow <= 0 { RETURN flow. }
+    IF refFlow <= 0 {
+        IF flow <= 0 {
+            LOCAL retryUt IS stateGetNum("solar_retry_ut", 0).
+            IF retryUt <= TIME:SECONDS {
+                orientForSolar(TRUE, TRUE).
+            }
+            RETURN flow.
+        }
+        RETURN flow.
+    }
     IF flow < refFlow * 0.15 { RETURN refFlow. }   // eclipse: wait it out
     IF flow > refFlow { RETURN flow. }              // ratchet the reference
     IF flow >= refFlow * ratio { RETURN refFlow. }

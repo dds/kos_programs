@@ -144,6 +144,14 @@ GLOBAL FUNCTION executeManeuver {
     }
 
     WAIT UNTIL TIME:SECONDS >= alignDeadline.
+    HUDTEXT("Burn in T-4", 3, 2, 15, WHITE, FALSE).
+    countdown(4).
+
+    WAIT UNTIL TIME:SECONDS >= startTime.
+    LOCK STEERING TO nd:BURNVECTOR.
+    mLogWarn("STATS burn relock checkpoint=T-0 angle="
+        + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
+        + " timeToBurn=" + ROUND(startTime - TIME:SECONDS, 1)).
     LOCAL ignitionErr IS VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR).
     IF ignitionErr > 15 {
         mLogError("Refusing burn: " + ROUND(ignitionErr, 1)
@@ -154,10 +162,6 @@ GLOBAL FUNCTION executeManeuver {
         SET SAS TO FALSE.
         RETURN FALSE.
     }
-    HUDTEXT("Burn in T-4", 3, 2, 15, WHITE, FALSE).
-    countdown(4).
-
-    WAIT UNTIL TIME:SECONDS >= startTime.
     mLog("Burn start. dV=" + ROUND(burnDV,1) + " m/s").
     LOCAL burnStartClock IS TIME:SECONDS.
 
