@@ -9,7 +9,7 @@ LOCAL FUNCTION _depLoaded {
 }
 
 GLOBAL FUNCTION dependencyAllPhases {
-    RETURN LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "POSTFLIGHT", "EVA_SCIENCE", "SCIENCE_OPS", "SCIENCE_OPS_LOW", "LAUNCH", "FAIR", "ANTS", "PARK", "ABORT", "PRELAUNCH", "SUBORBIT", "RDV", "MATCH", "CREW_XFER", "XING", "ESCAPE", "MCC", "AEROBRAKE", "DESCENT", "KSC_DEORBIT", "COAST", "CAPTURE", "FLYBY", "CIRC", "RAISE", "INCLINE", "ELLIPTICAL", "TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION", "SCANSAT_OPS", "LAND_DEORBIT", "LAND", "LAND_ASSIST", "ROVER", "MOLNIYA", "MOLNIYA_INSERT", "DROP_FOR_IMPACT_AND_RAISE_PE", "DONE", "SHAPE", "BPLANE", "GOTO", "AIRCLIMB", "ROCKETCLIMB", "SSTO_DEORBIT", "REENTRY", "APPROACH", "ARM", "FLY").
+    RETURN LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "POSTFLIGHT", "EVA_SCIENCE", "SCIENCE_OPS", "SCIENCE_OPS_LOW", "LAUNCH", "FAIR", "ANTS", "PARK", "ABORT", "PRELAUNCH", "SUBORBIT", "RDV", "MATCH", "CREW_XFER", "XING", "ESCAPE", "MCC", "AEROBRAKE", "DESCENT", "KSC_DEORBIT", "COAST", "CAPTURE", "FLYBY", "CIRC", "RAISE", "INCLINE", "ELLIPTICAL", "TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION", "SCANSAT_OPS", "LAND_DEORBIT", "LAND", "LAND_ASSIST", "ROVER", "MOLNIYA", "MOLNIYA_INSERT", "DROP_FOR_IMPACT_AND_RAISE_PE", "DONE", "SHAPE", "DEPARTURE_SHAPE", "BPLANE", "GOTO", "AIRCLIMB", "ROCKETCLIMB", "SSTO_DEORBIT", "REENTRY", "APPROACH", "ARM", "FLY").
 }
 
 GLOBAL FUNCTION dependencyBindPhase {
@@ -60,6 +60,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "DROP_FOR_IMPACT_AND_RAISE_PE" { IF _depLoaded("payload_release") { phaseMapSet(phaseMap, "DROP_FOR_IMPACT_AND_RAISE_PE", phaseDropForImpactAndRaisePe@). } }
     ELSE IF phaseKey = "DONE" { IF _depLoaded("solar") { phaseMapSet(phaseMap, "DONE", phaseDone@). } }
     ELSE IF phaseKey = "SHAPE" { IF _depLoaded("orbit_shape") { phaseMapSet(phaseMap, "SHAPE", phaseShape@). } }
+    ELSE IF phaseKey = "DEPARTURE_SHAPE" { IF _depLoaded("orbit_shape") { phaseMapSet(phaseMap, "DEPARTURE_SHAPE", phaseDepartureShape@). } }
     ELSE IF phaseKey = "BPLANE" { IF _depLoaded("arrival_bplane") { phaseMapSet(phaseMap, "BPLANE", phaseBplane@). } }
     ELSE IF phaseKey = "GOTO" { IF _depLoaded("goto_plan") { phaseMapSet(phaseMap, "GOTO", phaseGoto@). } }
     ELSE IF phaseKey = "AIRCLIMB" { IF _depLoaded("ssto") { phaseMapSet(phaseMap, "AIRCLIMB", phaseAirclimb@). } }

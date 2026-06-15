@@ -190,22 +190,28 @@ LOCAL FUNCTION _normalMirrorSign {
 // Target lexicon and error measurement
 // ============================================================
 
-// shapeTargets — read SHAPE_* CFG keys into a targets lexicon.
-GLOBAL FUNCTION shapeTargets {
+// shapeTargetsWithPrefix — read prefixed CFG keys into a targets lexicon.
+GLOBAL FUNCTION shapeTargetsWithPrefix {
+    PARAMETER prefix.
     LOCAL t IS LEXICON().
     FOR key IN LIST("AP", "PE", "INC", "LAN", "AOP") {
-        IF DEFINED CFG AND CFG:HASKEY("SHAPE_" + key) {
-            t:ADD(key, CFG["SHAPE_" + key]).
+        IF DEFINED CFG AND CFG:HASKEY(prefix + key) {
+            t:ADD(key, CFG[prefix + key]).
         }
     }
     // AP below PE is always operator error — fix and warn.
     IF t:HASKEY("AP") AND t:HASKEY("PE") AND t["AP"] < t["PE"] {
-        mLogWarn("SHAPE: target AP < PE — swapping.").
+        mLogWarn(prefix + " target AP < PE — swapping.").
         LOCAL tmp IS t["AP"].
         SET t["AP"] TO t["PE"].
         SET t["PE"] TO tmp.
     }
     RETURN t.
+}
+
+// shapeTargets — read SHAPE_* CFG keys into a targets lexicon.
+GLOBAL FUNCTION shapeTargets {
+    RETURN shapeTargetsWithPrefix("SHAPE_").
 }
 
 // Eccentricity the target orbit will have (used to decide if AoP
@@ -855,21 +861,19 @@ GLOBAL FUNCTION shapeNextBurn {
     RETURN 0.
 }
 
-// ============================================================
-// phaseShape — phase handler. Plans and executes one burn at a
-// time, re-measuring the live orbit between burns, until every
-// requested element is in tolerance or the burn budget runs out.
-// ============================================================
-GLOBAL FUNCTION phaseShape {
-    LOCAL targets IS shapeTargets().
+LOCAL FUNCTION _runShapePhase {
+    PARAMETER phaseLabel.
+    PARAMETER prefix.
+
+    LOCAL targets IS shapeTargetsWithPrefix(prefix).
     IF targets:LENGTH = 0 {
-        mLog("SHAPE: no SHAPE_* targets configured — skipping.").
+        mLog(phaseLabel + ": no " + prefix + "* targets configured — skipping.").
         nextPhase(xferSeq).
         RETURN.
     }
 
-    mLog("SHAPE targets: " + _targetSummary(targets)).
-    mLogWarn("STATS shape setup" + _targetSummary(targets)
+    mLog(phaseLabel + " targets: " + _targetSummary(targets)).
+    mLogWarn("STATS " + phaseLabel:TOLOWER + " setup" + _targetSummary(targets)
         + _errorSummary(shapeErrors(targets))).
 
     LOCAL burns IS 0.
@@ -877,12 +881,12 @@ GLOBAL FUNCTION phaseShape {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         LOCAL planned IS shapeNextBurn(targets).
         IF planned = 0 {
-            mLogWarn("SHAPE: no further burn plannable"
+            mLogWarn(phaseLabel + ": no further burn plannable"
                 + _errorSummary(shapeErrors(targets))).
             BREAK.
         }
         SET burns TO burns + 1.
-        mLog("SHAPE burn " + burns + ": " + planned["label"]).
+        mLog(phaseLabel + " burn " + burns + ": " + planned["label"]).
         LOCAL success IS FALSE.
         LOCAL retries IS 0.
         UNTIL success {
@@ -890,11 +894,11 @@ GLOBAL FUNCTION phaseShape {
             IF NOT success {
                 SET retries TO retries + 1.
                 IF retries >= MAX_RETRIES {
-                    mLogError("SHAPE: burn " + planned["label"]
+                    mLogError(phaseLabel + ": burn " + planned["label"]
                         + " failed after " + retries + " attempts — halting.").
                     RETURN.
                 }
-                mLog("SHAPE: burn missed (attempt " + retries + ") — replanning.").
+                mLog(phaseLabel + ": burn missed (attempt " + retries + ") — replanning.").
                 WAIT 10.
                 UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
                 LOCAL replanned IS shapeNextBurn(targets).
@@ -907,25 +911,41 @@ GLOBAL FUNCTION phaseShape {
     LOCAL finalErrs IS shapeErrors(targets).
     LOCAL ok IS shapeConverged(targets).
     orbitSummary().
-    mLogWarn("STATS shape result solved=" + ok
+    mLogWarn("STATS " + phaseLabel:TOLOWER + " result solved=" + ok
         + " burns=" + burns
         + _errorSummary(finalErrs)).
     IF ok {
-        mLog("SHAPE complete in " + burns + " burns" + _errorSummary(finalErrs)).
+        mLog(phaseLabel + " complete in " + burns + " burns" + _errorSummary(finalErrs)).
         nextPhase(xferSeq).
         RETURN.
     }
     // Unconverged is an OPERATOR decision, never a silent advance
     // (flight-found: a discarded burn marched the mission on to
     // RELAY_OPS with a 68km Pe error still on the books).
-    mLogError("SHAPE unconverged after " + burns + " burns"
+    mLogError(phaseLabel + " unconverged after " + burns + " burns"
         + _errorSummary(finalErrs)).
     PRINT " ".
-    PRINT "  SHAPE UNCONVERGED — holding this phase.".
+    PRINT "  " + phaseLabel + " UNCONVERGED — holding this phase.".
     PRINT "  Reboot to replan, or setphase to skip:".
     PRINT "  RUNPATH(" + CHAR(34) + "1:/cmd/setphase.ks" + CHAR(34)
-        + ", " + CHAR(34) + "RELAY_OPS" + CHAR(34) + ").".
+        + ", " + CHAR(34) + "<NEXT_PHASE>" + CHAR(34) + ").".
     yieldToPrompt().
+}
+
+// ============================================================
+// phaseShape — phase handler. Plans and executes one burn at a
+// time, re-measuring the live orbit between burns, until every
+// requested element is in tolerance or the burn budget runs out.
+// ============================================================
+GLOBAL FUNCTION phaseShape {
+    _runShapePhase("SHAPE", "SHAPE_").
+}
+
+// DEPARTURE_SHAPE uses the same burn planner as SHAPE, but reads
+// DEPART_* targets so departure-plane corrections cannot pollute
+// final arrival-orbit shaping.
+GLOBAL FUNCTION phaseDepartureShape {
+    _runShapePhase("DEPARTURE_SHAPE", "DEPART_").
 }
 
 LOCAL FUNCTION _targetSummary {

@@ -313,6 +313,34 @@ GLOBAL FUNCTION phaseAnts {
     phaseExtendAnts().
 }
 
+LOCAL FUNCTION _launchAngDiff {
+    PARAMETER a.
+    PARAMETER b.
+    LOCAL d IS a - b.
+    UNTIL d <= 180 { SET d TO d - 360. }
+    UNTIL d > -180 { SET d TO d + 360. }
+    RETURN d.
+}
+
+LOCAL FUNCTION _logParkingPlaneResult {
+    LOCAL planeTarget IS stateGet("prelaunch_plane_target", "").
+    IF planeTarget = "" { RETURN. }
+    LOCAL tgtInc IS stateGetNum("prelaunch_plane_inc", SHIP:ORBIT:INCLINATION).
+    LOCAL tgtLan IS stateGetNum("prelaunch_plane_lan", SHIP:ORBIT:LAN).
+    LOCAL incErr IS _launchAngDiff(SHIP:ORBIT:INCLINATION, tgtInc).
+    LOCAL lanErr IS _launchAngDiff(SHIP:ORBIT:LAN, tgtLan).
+    mLog("Parking plane vs " + planeTarget
+        + ": incErr=" + ROUND(incErr, 2)
+        + " LANErr=" + ROUND(lanErr, 2) + " deg.").
+    mLogWarn("STATS launch-plane result target=" + planeTarget
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION, 3)
+        + " lan=" + ROUND(SHIP:ORBIT:LAN, 3)
+        + " targetInc=" + ROUND(tgtInc, 3)
+        + " targetLan=" + ROUND(tgtLan, 3)
+        + " incErr=" + ROUND(incErr, 3)
+        + " lanErr=" + ROUND(lanErr, 3)).
+}
+
 GLOBAL FUNCTION phaseParking {
     mLog("Waiting for stable parking orbit...").
     WAIT UNTIL _isParkingOrbitStable() OR ABORT.
@@ -322,6 +350,7 @@ GLOBAL FUNCTION phaseParking {
         stateSetNum("orbit_start_time", ROUND(TIME:SECONDS)).
     }
     orbitSummary().
+    _logParkingPlaneResult().
     mLog("Stable parking orbit confirmed.").
     nextPhase(launchSeq).
 }

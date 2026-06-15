@@ -75,6 +75,162 @@ LOCAL FUNCTION _planeLaunchWait {
     RETURN best.
 }
 
+LOCAL FUNCTION _planeLaunchWindow {
+    PARAMETER targetLan.
+    PARAMETER targetInc.
+    PARAMETER leadTime.
+
+    LOCAL best IS 0.
+    LOCAL bestWait IS -1.
+    LOCAL period IS SHIP:BODY:ROTATIONPERIOD.
+    LOCAL etaAn IS _etaToLaunchPlane(TRUE, targetLan, targetInc).
+    LOCAL etaDn IS _etaToLaunchPlane(FALSE, targetLan, targetInc).
+
+    FOR flavor IN LIST(
+            LEXICON("eta", etaAn, "inc", targetInc, "node", "AN"),
+            LEXICON("eta", etaDn, "inc", -targetInc, "node", "DN")) {
+        IF flavor["eta"] >= 0 {
+            LOCAL waitTime IS flavor["eta"] - leadTime.
+            UNTIL waitTime >= 0 { SET waitTime TO waitTime + period. }
+            IF bestWait < 0 OR waitTime < bestWait {
+                SET bestWait TO waitTime.
+                SET best TO LEXICON(
+                    "wait", waitTime,
+                    "ut", TIME:SECONDS + waitTime,
+                    "inc", flavor["inc"],
+                    "node", flavor["node"],
+                    "eta", flavor["eta"]).
+            }
+        }
+    }
+    RETURN best.
+}
+
+LOCAL FUNCTION _bodyNamed {
+    PARAMETER nm.
+    LOCAL want IS nm:TOUPPER.
+    LOCAL allBodies IS LIST().
+    LIST BODIES IN allBodies.
+    FOR bod_ IN allBodies {
+        IF bod_:NAME:TOUPPER = want { RETURN bod_. }
+    }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _launchPlaneTargetName {
+    LOCAL nm IS "".
+    IF CFG:HASKEY("LAUNCH_PLANE_TARGET")
+            AND CFG["LAUNCH_PLANE_TARGET"] <> "" {
+        SET nm TO CFG["LAUNCH_PLANE_TARGET"].
+    } ELSE IF stateGet("target", "") <> "" {
+        SET nm TO stateGet("target", "").
+    } ELSE IF HASTARGET AND (TARGET:ISTYPE("Body") OR TARGET:ISTYPE("Vessel")) {
+        SET nm TO TARGET:NAME.
+    }
+    RETURN nm.
+}
+
+LOCAL FUNCTION _prelaunchToBodyOrbit {
+    PARAMETER allowFallback.
+
+    LOCAL tgtName IS _launchPlaneTargetName().
+    IF tgtName = "" {
+        mLogError("PRELAUNCH: LAUNCH_PLANE_MODE requested but no target found.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    LOCAL bod_ IS _bodyNamed(tgtName).
+    IF NOT bod_:ISTYPE("Body") {
+        mLogError("PRELAUNCH: launch-plane body '" + tgtName + "' not found.").
+        yieldToPrompt().
+        RETURN.
+    }
+    IF NOT bod_:HASBODY OR bod_:BODY:NAME <> SHIP:BODY:NAME {
+        mLogError("PRELAUNCH: " + bod_:NAME + " does not orbit "
+            + SHIP:BODY:NAME + "; cannot use its body-orbit plane from here.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    LOCAL targetInc IS bod_:ORBIT:INCLINATION.
+    LOCAL targetLan IS bod_:ORBIT:LAN.
+    LOCAL leadTime IS cfgNum("PRELAUNCH_PLANE_LEAD", 145).
+    IF CFG:HASKEY("LAUNCH_PLANE_LEAD") {
+        SET leadTime TO CFG["LAUNCH_PLANE_LEAD"].
+    }
+    IF leadTime < 0 { SET leadTime TO 0. }
+
+    IF targetInc <= 0 OR targetInc >= 180 {
+        cfgSet("LAUNCH_INCLINATION", targetInc).
+        stateSetNum("mission_cfg_LAUNCH_INCLINATION", targetInc).
+        mLog("PRELAUNCH: " + bod_:NAME
+            + " plane is equatorial; launching immediately.").
+        nextPhase(launchSeq).
+        RETURN.
+    }
+
+    IF NOT _latIncOk(SHIP:LATITUDE, targetInc) {
+        IF allowFallback {
+            cfgSet("LAUNCH_INCLINATION", 0).
+            stateSetNum("mission_cfg_LAUNCH_INCLINATION", 0).
+            mLogWarn("PRELAUNCH: " + bod_:NAME + " plane inc="
+                + ROUND(targetInc, 2) + " cannot pass over lat "
+                + ROUND(SHIP:LATITUDE, 3)
+                + "; AUTO falling back to equatorial launch.").
+            mLogWarn("STATS prelaunch body-plane fallback target=" + bod_:NAME
+                + " inc=" + ROUND(targetInc, 2)
+                + " lat=" + ROUND(SHIP:LATITUDE, 3)).
+            nextPhase(launchSeq).
+            RETURN.
+        }
+        mLogError("PRELAUNCH: target plane never passes over launch latitude.").
+        PRINT " ".
+        PRINT "  PRELAUNCH HOLD".
+        PRINT "  " + bod_:NAME + " inc " + ROUND(targetInc, 2)
+            + " deg cannot pass over lat " + ROUND(SHIP:LATITUDE, 3) + " deg.".
+        yieldToPrompt().
+        RETURN.
+    }
+
+    LOCAL win IS _planeLaunchWindow(targetLan, targetInc, leadTime).
+    IF win = 0 {
+        mLogError("PRELAUNCH: could not calculate body-plane timing.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    cfgSet("LAUNCH_INCLINATION", win["inc"]).
+    stateSetNum("mission_cfg_LAUNCH_INCLINATION", win["inc"]).
+    stateSetNum("prelaunch_plane_ut", win["ut"]).
+    stateSet("prelaunch_plane_target", bod_:NAME).
+    stateSetNum("prelaunch_plane_inc", targetInc).
+    stateSetNum("prelaunch_plane_lan", targetLan).
+
+    mLog("PRELAUNCH: " + bod_:NAME + " body plane "
+        + win["node"] + " window in " + ROUND(win["wait"], 0)
+        + "s  inc=" + ROUND(targetInc, 2)
+        + " LAN=" + ROUND(targetLan, 1)
+        + " launchInc=" + ROUND(win["inc"], 2)
+        + " lead=" + ROUND(leadTime, 0) + "s.").
+    mLogWarn("STATS prelaunch body-plane setup target=" + bod_:NAME
+        + " node=" + win["node"]
+        + " inc=" + ROUND(targetInc, 2)
+        + " lan=" + ROUND(targetLan, 2)
+        + " launchInc=" + ROUND(win["inc"], 2)
+        + " wait=" + ROUND(win["wait"], 0)
+        + " lead=" + ROUND(leadTime, 0)).
+
+    _waitForPrelaunchUt(win["ut"]).
+    IF ABORT {
+        mLog("PRELAUNCH hold — operator abort.").
+        yieldToPrompt().
+        RETURN.
+    }
+    mLog("PRELAUNCH complete; body-plane launch window open.").
+    nextPhase(launchSeq).
+}
+
 LOCAL FUNCTION _waitForPrelaunchUt {
     PARAMETER targetUt.
 
@@ -298,6 +454,15 @@ LOCAL FUNCTION _prelaunchToVessel {
 }
 
 GLOBAL FUNCTION phasePrelaunch {
+    LOCAL planeMode IS "".
+    IF CFG:HASKEY("LAUNCH_PLANE_MODE") {
+        SET planeMode TO CFG["LAUNCH_PLANE_MODE"]:TOUPPER.
+    }
+    IF planeMode = "BODY_ORBIT" OR planeMode = "AUTO" {
+        _prelaunchToBodyOrbit(planeMode = "AUTO").
+        RETURN.
+    }
+
     // Rendezvous missions: the window comes from the target vessel.
     LOCAL rdvName IS _prelaunchRdvTarget().
     IF rdvName <> "" {
