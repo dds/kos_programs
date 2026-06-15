@@ -594,7 +594,16 @@ GLOBAL FUNCTION phaseBplane {
         nextPhase(xferSeq).
         RETURN.
     }
-    LOCAL wantInc IS _cfgNum("CAPTURE_INC", -1).
+    LOCAL wantInc IS -1.
+    IF _cfgHas("CAPTURE_DIR") {
+        LOCAL dir IS CFG["CAPTURE_DIR"].
+        IF dir = "PROGRADE"   { SET wantInc TO 0. }
+        IF dir = "POLAR"      { SET wantInc TO 90. }
+        IF dir = "RETROPOLAR" { SET wantInc TO 90. }
+        IF dir = "RETROGRADE" { SET wantInc TO 180. }
+    }
+    IF _cfgHas("CAPTURE_INC") { SET wantInc TO CFG["CAPTURE_INC"]. }
+
     LOCAL wantLan IS _cfgNum("CAPTURE_LAN", -1).
 
     LOCAL burns IS 0.
