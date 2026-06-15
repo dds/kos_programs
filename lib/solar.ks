@@ -142,7 +142,11 @@ GLOBAL FUNCTION orientForSolar {
     IF bestFlow < 0 {
         mLogWarn("Solar search: panels found but no readable flow/exposure fields — skipping.").
         UNLOCK STEERING.
-        SET SAS TO TRUE.
+        IF lockSteering {
+            SET SAS TO FALSE.
+        } ELSE {
+            SET SAS TO TRUE.
+        }
         RETURN.
     }
     IF bestFlow <= 0 {
@@ -152,7 +156,11 @@ GLOBAL FUNCTION orientForSolar {
         mLogWarn("STATS solar orient status=night retryIn=300"
             + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
         UNLOCK STEERING.
-        SET SAS TO TRUE.
+        IF lockSteering {
+            SET SAS TO FALSE.
+        } ELSE {
+            SET SAS TO TRUE.
+        }
         RETURN.
     }
 

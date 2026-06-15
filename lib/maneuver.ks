@@ -82,7 +82,7 @@ GLOBAL FUNCTION executeManeuver {
         // Spend the long coast sun-pointed for power; the wake and
         // checkpoint re-locks below reacquire the burn vector before
         // ignition.
-        trySolarOrient().
+        orientForSolar(FALSE, TRUE).
         mLog("Long coast wait (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
         HUDTEXT("Coasting. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
         LOCAL solarRef IS -1.
