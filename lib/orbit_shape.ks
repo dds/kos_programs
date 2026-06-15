@@ -174,7 +174,8 @@ LOCAL FUNCTION _normalMirrorSign {
     IF NOT found {
         mLogWarn("SHAPE: no inclined reference orbit — normal mirror "
             + "sign unverified; first plane burn may need a second round.").
-        RETURN 1.
+        SET _mirrorSignCache TO 1.
+        RETURN _mirrorSignCache.
     }
 
     LOCAL plus IS _normalCandidate(refInc, refLan, bodyUp, 1).
