@@ -58,6 +58,8 @@ LOCAL MIN_EXEC_DV      IS 0.1.
 LOCAL MAX_NEWTON_ITER  IS 8.
 LOCAL NEWTON_DAMP      IS 0.7.
 LOCAL FD_STEP          IS 0.5.
+LOCAL ACQUIRE_STEP     IS 0.5.
+LOCAL MAX_ACQUIRE_ITER IS 50.
 LOCAL MAX_BURNS        IS 2.
 
 LOCAL FUNCTION _cfgNum {
@@ -280,6 +282,116 @@ LOCAL FUNCTION _targetB {
 }
 
 // ============================================================
+// _acquireEncounter — if the raw flight plan is just outside the
+// target SOI, hill-climb a tiny MCC node until KSP generates the
+// target patch. Precision still belongs to the Newton B-plane
+// solver below; this phase only reacquires the encounter.
+// ============================================================
+LOCAL FUNCTION _acquireEncounter {
+    PARAMETER nd.
+    PARAMETER targetBody.
+
+    LOCAL searchStart IS nd:TIME.
+    LOCAL searchEnd IS nd:TIME + targetBody:ORBIT:PERIOD.
+    LOCAL bestCA IS _findClosestApproach(targetBody, searchStart, searchEnd, 60).
+    LOCAL bestD IS bestCA["distance"].
+
+    mLogWarn("BPLANE: encounter lost; acquiring nearest "
+        + targetBody:NAME + " approach at T+"
+        + ROUND(bestCA["time"] - TIME:SECONDS, 0)
+        + "s CA=" + ROUND(bestD / 1000, 1) + "km.").
+
+    FROM { LOCAL iter IS 0. } UNTIL iter >= MAX_ACQUIRE_ITER STEP { SET iter TO iter + 1. } DO {
+        IF _measureArrival(nd, targetBody) <> 0 {
+            mLog("BPLANE acquire: patch acquired in " + iter
+                + " iter(s), dv=" + ROUND(nd:DELTAV:MAG, 2)
+                + " m/s.").
+            RETURN TRUE.
+        }
+
+        LOCAL improved IS FALSE.
+
+        LOCAL p0 IS nd:PROGRADE.
+        SET nd:PROGRADE TO p0 + ACQUIRE_STEP. WAIT 0.02.
+        LOCAL caPlus IS _findClosestApproach(targetBody, searchStart, searchEnd, 60).
+        SET nd:PROGRADE TO p0 - ACQUIRE_STEP. WAIT 0.02.
+        LOCAL caMinus IS _findClosestApproach(targetBody, searchStart, searchEnd, 60).
+        IF caPlus["distance"] < bestD AND caPlus["distance"] <= caMinus["distance"] {
+            SET nd:PROGRADE TO p0 + ACQUIRE_STEP.
+            SET bestCA TO caPlus.
+            SET bestD TO caPlus["distance"].
+            SET improved TO TRUE.
+        } ELSE IF caMinus["distance"] < bestD {
+            SET nd:PROGRADE TO p0 - ACQUIRE_STEP.
+            SET bestCA TO caMinus.
+            SET bestD TO caMinus["distance"].
+            SET improved TO TRUE.
+        } ELSE {
+            SET nd:PROGRADE TO p0.
+        }
+        WAIT 0.02.
+
+        LOCAL r0 IS nd:RADIALOUT.
+        SET nd:RADIALOUT TO r0 + ACQUIRE_STEP. WAIT 0.02.
+        SET caPlus TO _findClosestApproach(targetBody, searchStart, searchEnd, 60).
+        SET nd:RADIALOUT TO r0 - ACQUIRE_STEP. WAIT 0.02.
+        SET caMinus TO _findClosestApproach(targetBody, searchStart, searchEnd, 60).
+        IF caPlus["distance"] < bestD AND caPlus["distance"] <= caMinus["distance"] {
+            SET nd:RADIALOUT TO r0 + ACQUIRE_STEP.
+            SET bestCA TO caPlus.
+            SET bestD TO caPlus["distance"].
+            SET improved TO TRUE.
+        } ELSE IF caMinus["distance"] < bestD {
+            SET nd:RADIALOUT TO r0 - ACQUIRE_STEP.
+            SET bestCA TO caMinus.
+            SET bestD TO caMinus["distance"].
+            SET improved TO TRUE.
+        } ELSE {
+            SET nd:RADIALOUT TO r0.
+        }
+        WAIT 0.02.
+
+        LOCAL n0 IS nd:NORMAL.
+        SET nd:NORMAL TO n0 + ACQUIRE_STEP. WAIT 0.02.
+        SET caPlus TO _findClosestApproach(targetBody, searchStart, searchEnd, 60).
+        SET nd:NORMAL TO n0 - ACQUIRE_STEP. WAIT 0.02.
+        SET caMinus TO _findClosestApproach(targetBody, searchStart, searchEnd, 60).
+        IF caPlus["distance"] < bestD AND caPlus["distance"] <= caMinus["distance"] {
+            SET nd:NORMAL TO n0 + ACQUIRE_STEP.
+            SET bestCA TO caPlus.
+            SET bestD TO caPlus["distance"].
+            SET improved TO TRUE.
+        } ELSE IF caMinus["distance"] < bestD {
+            SET nd:NORMAL TO n0 - ACQUIRE_STEP.
+            SET bestCA TO caMinus.
+            SET bestD TO caMinus["distance"].
+            SET improved TO TRUE.
+        } ELSE {
+            SET nd:NORMAL TO n0.
+        }
+        WAIT 0.02.
+
+        IF _measureArrival(nd, targetBody) <> 0 {
+            mLog("BPLANE acquire: patch acquired in " + (iter + 1)
+                + " iter(s), dv=" + ROUND(nd:DELTAV:MAG, 2)
+                + " m/s.").
+            RETURN TRUE.
+        }
+
+        IF NOT improved {
+            mLogWarn("BPLANE acquire: no improving 0.5 m/s nudge found; "
+                + "best CA=" + ROUND(bestD / 1000, 1) + "km.").
+            RETURN FALSE.
+        }
+    }
+
+    mLogWarn("BPLANE acquire: hit iteration cap; best CA="
+        + ROUND(bestD / 1000, 1) + "km dv="
+        + ROUND(nd:DELTAV:MAG, 2) + " m/s.").
+    RETURN _measureArrival(nd, targetBody) <> 0.
+}
+
+// ============================================================
 // planBplaneCorrection — build and converge a correction node.
 // Newton iteration: controls (radialout, normal) -> targets
 // (B.T, B.R), Jacobian by finite differences against KSP's own
@@ -298,11 +410,28 @@ GLOBAL FUNCTION planBplaneCorrection {
     LOCAL angTol IS _cfgNum("BPLANE_ANG_TOL", DEFAULT_ANG_TOL).
     LOCAL lead IS _cfgNum("BPLANE_LEAD", DEFAULT_LEAD).
 
-    LOCAL meas0 IS _measureArrival(0, targetBody).
+    LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, 0).
+    ADD nd.
+    WAIT 0.02.
+
+    LOCAL meas0 IS _measureArrival(nd, targetBody).
     IF meas0 = 0 {
         mLogWarn("BPLANE: no hyperbolic encounter with "
-            + targetBody:NAME + " on the flight plan.").
-        RETURN 0.
+            + targetBody:NAME + " on the current correction node; "
+            + "starting acquisition.").
+        IF NOT _acquireEncounter(nd, targetBody) {
+            mLogError("BPLANE: acquisition failed for "
+                + targetBody:NAME + " — removing correction node.").
+            REMOVE nd.
+            RETURN 0.
+        }
+        SET meas0 TO _measureArrival(nd, targetBody).
+        IF meas0 = 0 {
+            mLogError("BPLANE: acquisition reported success but no "
+                + targetBody:NAME + " patch is measurable.").
+            REMOVE nd.
+            RETURN 0.
+        }
     }
 
     // Already in the corridor?
@@ -313,6 +442,7 @@ GLOBAL FUNCTION planBplaneCorrection {
         mLog("BPLANE: arrival already in corridor (PeErr="
             + ROUND((meas0["pe"] - wantPe) / 1000, 1) + "km planeErr="
             + ROUND(planeErr0, 2) + "deg).").
+        REMOVE nd.
         RETURN 0.
     }
 
@@ -321,15 +451,12 @@ GLOBAL FUNCTION planBplaneCorrection {
         + ROUND(wantPe / 1000, 1) + "km  planeErr="
         + ROUND(planeErr0, 2) + "deg").
 
-    LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, 0).
-    ADD nd.
-    WAIT 0.02.
-
     LOCAL converged IS FALSE.
     FROM { LOCAL i IS 0. } UNTIL i >= MAX_NEWTON_ITER STEP { SET i TO i + 1. } DO {
         LOCAL meas IS _measureArrival(nd, targetBody).
         IF meas = 0 {
             mLogWarn("BPLANE[" + i + "]: lost the encounter — backing off.").
+            SET nd:PROGRADE TO nd:PROGRADE * 0.5.
             SET nd:RADIALOUT TO nd:RADIALOUT * 0.5.
             SET nd:NORMAL TO nd:NORMAL * 0.5.
             WAIT 0.02.
@@ -398,6 +525,7 @@ GLOBAL FUNCTION planBplaneCorrection {
                     + " m/s exceeded (" + ROUND(nd:DELTAV:MAG, 1)
                     + ") — clamping.").
                 LOCAL scale IS dvCap / nd:DELTAV:MAG.
+                SET nd:PROGRADE TO nd:PROGRADE * scale.
                 SET nd:RADIALOUT TO nd:RADIALOUT * scale.
                 SET nd:NORMAL TO nd:NORMAL * scale.
                 WAIT 0.02.
