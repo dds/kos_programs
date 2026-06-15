@@ -107,7 +107,6 @@ GLOBAL FUNCTION orientForSolar {
             _solarAimSettle(aShip).
             IF NOT lockSteering {
                 UNLOCK STEERING.
-                SET SAS TO TRUE.
             }
             mLog("Solar attitude restored (flow="
                 + ROUND(shipSolarFlow(), 2) + ").").
@@ -144,8 +143,6 @@ GLOBAL FUNCTION orientForSolar {
         UNLOCK STEERING.
         IF lockSteering {
             SET SAS TO FALSE.
-        } ELSE {
-            SET SAS TO TRUE.
         }
         RETURN.
     }
@@ -158,8 +155,6 @@ GLOBAL FUNCTION orientForSolar {
         UNLOCK STEERING.
         IF lockSteering {
             SET SAS TO FALSE.
-        } ELSE {
-            SET SAS TO TRUE.
         }
         RETURN.
     }
@@ -201,7 +196,6 @@ GLOBAL FUNCTION orientForSolar {
     if lockSteering {
     } else {
         UNLOCK STEERING.
-        SET SAS TO TRUE.
     }
     mLog("Solar attitude set: flow=" + ROUND(shipSolarFlow(), 2)
         + " (best of search " + ROUND(bestFlow, 2) + ").").
@@ -285,6 +279,5 @@ GLOBAL FUNCTION solarMaintainHold {
         WAIT 5.
     }
     UNLOCK STEERING.
-    SET SAS TO TRUE.
     mLog("Solar hold ended.").
 }
