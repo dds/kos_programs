@@ -15,21 +15,6 @@ GLOBAL FUNCTION bootEnsureDirs {
     }
 }
 
-LOCAL FUNCTION _bootNormalizeTargetToken {
-    PARAMETER raw.
-    LOCAL t IS raw:TOUPPER.
-    IF t = "MINIMUS" { RETURN "MINMUS". }
-    RETURN t.
-}
-
-LOCAL FUNCTION _bootLooksLikeTargetToken {
-    PARAMETER raw.
-    LOCAL t IS _bootNormalizeTargetToken(raw).
-    LOCAL knownTargets IS LIST("KERBIN", "MUN", "MINMUS", "MOHO", "EVE", "GILLY",
-        "DUNA", "IKE", "DRES", "JOOL", "LAYTHE", "VALL", "TYLO",
-        "BOP", "POL", "EELOO", "KERBOL").
-    RETURN knownTargets:CONTAINS(t).
-}
 
 GLOBAL FUNCTION bootVehicleInfo {
     LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
@@ -73,12 +58,12 @@ GLOBAL FUNCTION bootVehicleInfo {
             SET vehicleName TO "UNKNOWN".
         }
         IF structuredName AND tokens:LENGTH >= 2 {
-            SET targetName TO _bootNormalizeTargetToken(tokens[1]).
+            SET targetName TO tokens[1].
             FROM { LOCAL i IS 2. } UNTIL i >= tokens:LENGTH STEP { SET i TO i + 1. } DO {
                 payloadTypes:ADD(tokens[i]:TOUPPER).
             }
-        } ELSE IF tokens:LENGTH >= 2 AND _bootLooksLikeTargetToken(tokens[1]) {
-            SET targetName TO _bootNormalizeTargetToken(tokens[1]).
+        } ELSE IF tokens:LENGTH >= 2 AND BODYEXISTS(tokens[1]) {
+            SET targetName TO tokens[1].
             FROM { LOCAL i IS 2. } UNTIL i >= tokens:LENGTH STEP { SET i TO i + 1. } DO {
                 payloadTypes:ADD(tokens[i]:TOUPPER).
             }
