@@ -38,7 +38,7 @@ def main():
     for index, (phase, _roots) in enumerate(phases):
         fn = phase_function_name(phase)
         prefix = "    IF" if index == 0 else "    ELSE IF"
-        bind = f'phaseMapSet(phaseMap, "{phase}", {fn}@).'
+        bind = f"phaseMapSet(phaseMap, phaseKey, {fn}@)."
         lines.append(f'{prefix} phaseKey = "{phase}" {{ {bind} }}')
     lines.extend([
         "}",
