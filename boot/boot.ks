@@ -72,9 +72,6 @@ IF HAS_LINK {
 
 _loadLib("boot_lib").
 bootPreamble().
-IF SHIP:STATUS = "PRELAUNCH" {
-    bootLibLoad("preflight_planner").
-}
 stateInit().
 initLog().
 WAIT 0.001.
