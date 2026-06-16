@@ -30,7 +30,7 @@ stateSet("reload_required", "false").
 stateSet("reload_reason", "").
 stateSet("reload_next_phase", "").
 stateSet("reload_next_band", "").
-stateSet("lib_band", "LAND_ASSIST").
+stateSet("lib_band", "LANDING").
 
 _cfg("MISSION_ID", "mun_rover_emergency_surface").
 _cfg("MISSION_NAME", "Mun Rover Emergency Surface Release SIM").

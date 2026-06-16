@@ -95,9 +95,9 @@ stateSet("reload_required", "false").
 IF phaseName = "LAND_DEORBIT" {
     stateSet("lib_band", "LAND_DEORBIT").
 } ELSE IF phaseName = "LAND_ASSIST" {
-    stateSet("lib_band", "LAND_ASSIST").
+    stateSet("lib_band", "LANDING").
 } ELSE {
-    stateSet("lib_band", "LAND_ASSIST").
+    stateSet("lib_band", "LANDING").
 }
 
 PRINT "Landing rescue: removed " + removed + " files.".

@@ -53,9 +53,9 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "RELAY_OPS" { IF _depLoaded("payload_ops") { phaseMapSet(phaseMap, "RELAY_OPS", phaseRelayOps@). } }
     ELSE IF phaseKey = "RELAY_CONSTELLATION" { IF _depLoaded("relay_constellation") { phaseMapSet(phaseMap, "RELAY_CONSTELLATION", phaseRelayConstellation@). } }
     ELSE IF phaseKey = "SCANSAT_OPS" { IF _depLoaded("scansat_ops,science") { phaseMapSet(phaseMap, "SCANSAT_OPS", phaseScansatOps@). } }
-    ELSE IF phaseKey = "LAND_DEORBIT" { IF _depLoaded("payload_landing") { phaseMapSet(phaseMap, "LAND_DEORBIT", phaseLandDeorbit@). } }
-    ELSE IF phaseKey = "LAND" { IF _depLoaded("payload_landing") { phaseMapSet(phaseMap, "LAND", phaseLand@). } }
-    ELSE IF phaseKey = "LAND_ASSIST" { IF _depLoaded("payload_landing") { phaseMapSet(phaseMap, "LAND_ASSIST", phaseLandAssist@). } }
+    ELSE IF phaseKey = "LAND_DEORBIT" { IF _depLoaded("landing_deorbit,deorbit_targeting,deorbit_burn") { phaseMapSet(phaseMap, "LAND_DEORBIT", phaseLandDeorbit@). } }
+    ELSE IF phaseKey = "LAND" { IF _depLoaded("payload_landing,landing") { phaseMapSet(phaseMap, "LAND", phaseLand@). } }
+    ELSE IF phaseKey = "LAND_ASSIST" { IF _depLoaded("payload_landing,landing") { phaseMapSet(phaseMap, "LAND_ASSIST", phaseLandAssist@). } }
     ELSE IF phaseKey = "ROVER" { IF _depLoaded("rover") { phaseMapSet(phaseMap, "ROVER", phaseRover@). } }
     ELSE IF phaseKey = "MOLNIYA" { IF _depLoaded("molniya") { phaseMapSet(phaseMap, "MOLNIYA", phaseMolniya@). } }
     ELSE IF phaseKey = "MOLNIYA_INSERT" { IF _depLoaded("molniya") { phaseMapSet(phaseMap, "MOLNIYA_INSERT", phaseMolniyaInsert@). } }

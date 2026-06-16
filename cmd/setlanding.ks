@@ -24,13 +24,19 @@ LOCAL FUNCTION _cfg {
     stateSet("mission_cfg_" + key, value).
 }
 
+LOCAL FUNCTION _landingBandForPhase {
+    PARAMETER phaseName.
+    IF phaseName = "LAND_DEORBIT" { RETURN "LAND_DEORBIT". }
+    RETURN "LANDING".
+}
+
 IF mode = "assist" {
     LOCAL tagName IS "probe_decoupler".
     IF arg1 <> "" { SET tagName TO arg1. }
 
     stateSet("phase", "LAND_ASSIST").
     stateSet("reload_required", "false").
-    stateSet("lib_band", "LAND_DEORBIT").
+    stateSet("lib_band", "LANDING").
     _cfg("SEQUENCE", "LAND_DEORBIT,LAND_ASSIST,DONE").
     _cfg("LANDING_ASSIST_DECOUPLER_TAG", tagName).
     _cfg("LANDING_ASSIST_MAX_TILT", "12").
@@ -74,7 +80,7 @@ IF mode = "assist" {
     _cfg("LANDING_ASSIST_DECOUPLER_TAG", tagName).
     stateSet("phase", phaseName).
     stateSet("reload_required", "false").
-    stateSet("lib_band", "LAND_DEORBIT").
+    stateSet("lib_band", _landingBandForPhase(phaseName)).
 
     PRINT "Landing decoupler tag -> " + tagName + ".".
     PRINT "Phase -> " + phaseName + ".".
