@@ -94,13 +94,14 @@ LOCAL FUNCTION _landingTerrainCheck {
 // ------------------------------------------------------------
 
 LOCAL FUNCTION _landingStateLog {
+    PARAMETER ctx.
     PARAMETER fromState.
     PARAMETER toState.
     PARAMETER reason.
     mLog("Landing state " + fromState + " -> " + toState + ": " + reason
         + " alt=" + ROUND(ALT:RADAR,0)
-        + "m hs=" + ROUND(landingMathHorizontalVelocity():MAG,1)
-        + " vs=" + ROUND(SHIP:VERTICALSPEED,1) + ".").
+        + "m hs=" + ROUND(ctx["H_SPEED"],1)
+        + " vs=" + ROUND(ctx["V_SPEED"],1) + ".").
 }
 
 LOCAL FUNCTION _landingBoolText {
@@ -157,6 +158,22 @@ LOCAL FUNCTION _landingBurnHeight {
     RETURN _landingTargetHeight(ctx).
 }
 
+LOCAL FUNCTION _landingCacheTick {
+    PARAMETER ctx.
+    LOCAL surfaceVel IS SHIP:VELOCITY:SURFACE.
+    LOCAL upVec IS SHIP:UP:VECTOR.
+    LOCAL hVel IS surfaceVel - (VDOT(surfaceVel, upVec) * upVec).
+    SET ctx["SURFACE_VEL"] TO surfaceVel.
+    SET ctx["UP_VEC"] TO upVec.
+    SET ctx["POSITION"] TO SHIP:POSITION.
+    SET ctx["H_VEL"] TO hVel.
+    SET ctx["H_SPEED"] TO hVel:MAG.
+    SET ctx["MAX_ACC"] TO lmMaxAcc().
+    SET ctx["GRAV"] TO lmGravity().
+    SET ctx["V_SPEED"] TO SHIP:VERTICALSPEED.
+    SET ctx["DOWN_SPEED"] TO MAX(0, -ctx["V_SPEED"]).
+}
+
 LOCAL FUNCTION _landingTrajError {
     PARAMETER ctx.
     LOCAL impactInfo IS _landingTrajImpactInfo(ctx).
@@ -166,21 +183,21 @@ LOCAL FUNCTION _landingTrajError {
             "CROSS_CORR", SHIP:UP:VECTOR).
     }
 
-    LOCAL horizontalVel IS landingMathHorizontalVelocity().
+    LOCAL horizontalVel IS ctx["H_VEL"].
     IF horizontalVel:MAG < 0.1 {
         RETURN LEXICON("FOUND", TRUE, "DIST", impactInfo["DIST"],
             "ALONG", 0, "CROSS", impactInfo["DIST"],
             "CROSS_CORR", SHIP:UP:VECTOR).
     }
 
-    LOCAL upVec IS SHIP:UP:VECTOR.
+    LOCAL upVec IS ctx["UP_VEC"].
     LOCAL travelDir IS VXCL(upVec, horizontalVel):NORMALIZED.
     LOCAL targetGeo IS LATLNG(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     LOCAL impactGeo IS LATLNG(impactInfo["LAT"], impactInfo["LNG"]).
     LOCAL targetToImpact IS VXCL(upVec, impactGeo:POSITION - targetGeo:POSITION).
     LOCAL alongM IS VDOT(targetToImpact, travelDir).
     LOCAL crossVec IS targetToImpact - travelDir * alongM.
-    LOCAL crossCorr IS SHIP:UP:VECTOR.
+    LOCAL crossCorr IS upVec.
     IF crossVec:MAG > 0.01 { SET crossCorr TO (-crossVec):NORMALIZED. }
 
     RETURN LEXICON(
@@ -199,7 +216,7 @@ LOCAL FUNCTION _landingSetState {
 
     LOCAL prevState IS ctx["STATE"].
     IF prevState = nextState { RETURN. }
-    _landingStateLog(prevState, nextState, reason).
+    _landingStateLog(ctx, prevState, nextState, reason).
     SET ctx["STATE"] TO nextState.
     SET ctx["STATE_ENTERED"] TO TIME:SECONDS.
     stateSet("landing_state", nextState).
@@ -221,21 +238,22 @@ LOCAL FUNCTION _landingCoastTick {
     PARAMETER ctx.
 
     _landingSetThrottle(ctx, 0).
-    _landingSetSteering(ctx, landingMathRetroSteering()).
+    _landingSetSteering(ctx, lmRetroSteering(
+        ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"])).
 
-    LOCAL maxAcc IS landingMathMaxAcc().
-    LOCAL gravAcc IS landingMathGravity().
-    LOCAL downSpeed IS landingMathDownSpeed().
-    LOCAL horizontalSpeed IS landingMathHorizontalVelocity():MAG.
+    LOCAL maxAcc IS ctx["MAX_ACC"].
+    LOCAL gravAcc IS ctx["GRAV"].
+    LOCAL downSpeed IS ctx["DOWN_SPEED"].
+    LOCAL horizontalSpeed IS ctx["H_SPEED"].
     LOCAL horizontalAcc IS MAX(0.1, maxAcc * LAND_CFG_BRAKE_ACCEL_FRACTION).
-    LOCAL brakeDist IS landingMathHorizontalBrakeDistance(
+    LOCAL brakeDist IS lmHorizontalBrakeDistance(
         horizontalSpeed, horizontalAcc).
-    LOCAL burnDist IS landingMathVerticalBurnDistance(
+    LOCAL burnDist IS lmVerticalBurnDistance(
         downSpeed, maxAcc, gravAcc).
     LOCAL burnHeight IS _landingBurnHeight(ctx).
     LOCAL distToTarget IS 999999.
     IF ctx["HAS_TARGET"] {
-        SET distToTarget TO landingMathDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+        SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     }
     LOCAL trajErr IS _landingTrajError(ctx).
     LOCAL impactErr IS trajErr["DIST"].
@@ -271,7 +289,17 @@ LOCAL FUNCTION _landingCoastTick {
             AND distToTarget <= brakeDist + LAND_CFG_BRAKE_MARGIN {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
     } ELSE IF NOT ctx["HAS_TARGET"] {
-        LOCAL tti IS landingMathTimeToImpact().
+        LOCAL tti IS 999999.
+        LOCAL radarAlt IS ALT:RADAR.
+        IF radarAlt <= 0 {
+            SET tti TO 0.
+        } ELSE {
+            LOCAL disc IS ctx["V_SPEED"] * ctx["V_SPEED"]
+                + 2 * radarAlt * gravAcc.
+            IF disc >= 0 AND gravAcc > 0 {
+                SET tti TO (SQRT(disc) + ctx["V_SPEED"]) / gravAcc.
+            }
+        }
         LOCAL burnTime IS downSpeed / MAX(0.1, maxAcc - gravAcc).
         IF tti <= burnTime * LAND_CFG_BURN_MARGIN {
             _landingSetState(ctx, "BRAKING_BURN", "blind suicide burn gate").
@@ -284,19 +312,20 @@ LOCAL FUNCTION _landingBrakingTick {
 
     _landingSetThrottle(ctx, 1).
 
-    LOCAL maxAcc IS landingMathMaxAcc().
-    LOCAL gravAcc IS landingMathGravity().
-    LOCAL downSpeed IS landingMathDownSpeed().
-    LOCAL horizontalSpeed IS landingMathHorizontalVelocity():MAG.
-    LOCAL burnDist IS landingMathVerticalBurnDistance(
+    LOCAL maxAcc IS ctx["MAX_ACC"].
+    LOCAL gravAcc IS ctx["GRAV"].
+    LOCAL downSpeed IS ctx["DOWN_SPEED"].
+    LOCAL horizontalSpeed IS ctx["H_SPEED"].
+    LOCAL burnDist IS lmVerticalBurnDistance(
         downSpeed, maxAcc, gravAcc).
     LOCAL burnHeight IS _landingBurnHeight(ctx).
     LOCAL distToTarget IS 999999.
     IF ctx["HAS_TARGET"] {
-        SET distToTarget TO landingMathDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+        SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     }
 
-    LOCAL retroSteering IS landingMathRetroSteering().
+    LOCAL retroSteering IS lmRetroSteering(
+        ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"]).
     LOCAL trajErr IS _landingTrajError(ctx).
     LOCAL impactErr IS trajErr["DIST"].
     LOCAL crossErr IS trajErr["CROSS"].
@@ -316,7 +345,7 @@ LOCAL FUNCTION _landingBrakingTick {
         + " trErr=" + ROUND(impactErr,0)
         + " x=" + ROUND(crossErr,0)
         + " hs=" + ROUND(horizontalSpeed,1)
-        + " vs=" + ROUND(SHIP:VERTICALSPEED,1),
+        + " vs=" + ROUND(ctx["V_SPEED"],1),
         1, 2, 13, YELLOW, FALSE).
 
     IF ctx["HAS_TARGET"]
@@ -338,25 +367,27 @@ LOCAL FUNCTION _landingBrakingTick {
 LOCAL FUNCTION _landingApproachTick {
     PARAMETER ctx.
 
-    LOCAL distToTarget IS landingMathDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
-    LOCAL horizontalSpeed IS landingMathHorizontalVelocity():MAG.
+    LOCAL distToTarget IS lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+    LOCAL horizontalSpeed IS ctx["H_SPEED"].
     LOCAL approachHeight IS _landingTargetHeight(ctx).
-    LOCAL maxAcc IS landingMathMaxAcc().
+    LOCAL maxAcc IS ctx["MAX_ACC"].
     LOCAL horizontalAcc IS MAX(0.1, maxAcc * LAND_CFG_BRAKE_ACCEL_FRACTION).
     LOCAL desiredSpeed IS MIN(LAND_CFG_MAX_APPROACH_SPEED,
         SQRT(MAX(0, 2 * horizontalAcc * MAX(0, distToTarget - LAND_CFG_VERTICAL_RADIUS)))).
-    _landingSetSteering(ctx, landingMathApproachSteering(
-        ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed)).
+    _landingSetSteering(ctx, lmApproachSteering(
+        ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
+        ctx["UP_VEC"], ctx["POSITION"])).
 
-    LOCAL targetVs IS -landingMathDescentSpeed(
+    LOCAL targetVs IS -lmDescentSpeed(
         approachHeight, LAND_CFG_TOUCHDOWN_SPEED, LAND_CFG_UPRIGHT_ALT).
-    _landingSetThrottle(ctx, landingMathVerticalThrottle(targetVs)).
+    _landingSetThrottle(ctx, lmVerticalThrottle(
+        targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
     HUDTEXT("APPROACH d=" + ROUND(distToTarget,0)
         + " hT=" + ROUND(approachHeight,0)
         + " hs=" + ROUND(horizontalSpeed,1)
         + "/" + ROUND(desiredSpeed,1)
-        + " vs=" + ROUND(SHIP:VERTICALSPEED,1),
+        + " vs=" + ROUND(ctx["V_SPEED"],1),
         1, 2, 13, CYAN, FALSE).
 
     IF distToTarget <= LAND_CFG_VERTICAL_RADIUS
@@ -371,23 +402,26 @@ LOCAL FUNCTION _landingApproachTick {
 LOCAL FUNCTION _landingVerticalTick {
     PARAMETER ctx.
     LOCAL bottomAlt IS _landingBottomRadar().
-    LOCAL horizontalSpeed IS landingMathHorizontalVelocity():MAG.
+    LOCAL horizontalSpeed IS ctx["H_SPEED"].
 
     IF bottomAlt <= LAND_CFG_UPRIGHT_ALT {
         _landingSetSteering(ctx, SHIP:UP:VECTOR).
     } ELSE IF ctx["HAS_TARGET"] {
-        _landingSetSteering(ctx, landingMathApproachSteering(
-            ctx["TARGET_LAT"], ctx["TARGET_LNG"], 0)).
+        _landingSetSteering(ctx, lmApproachSteering(
+            ctx["TARGET_LAT"], ctx["TARGET_LNG"], 0, ctx["H_VEL"],
+            ctx["UP_VEC"], ctx["POSITION"])).
     } ELSE {
-        _landingSetSteering(ctx, landingMathHoverSteering()).
+        _landingSetSteering(ctx, lmHoverSteering(
+            ctx["H_VEL"], ctx["UP_VEC"])).
     }
 
-    LOCAL targetVs IS -landingMathDescentSpeed(
+    LOCAL targetVs IS -lmDescentSpeed(
         bottomAlt, LAND_CFG_TOUCHDOWN_SPEED, LAND_CFG_UPRIGHT_ALT).
-    _landingSetThrottle(ctx, landingMathVerticalThrottle(targetVs)).
+    _landingSetThrottle(ctx, lmVerticalThrottle(
+        targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
     HUDTEXT("VERT bottom=" + ROUND(bottomAlt,0)
-        + " vs=" + ROUND(SHIP:VERTICALSPEED,1)
+        + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)
         + " hs=" + ROUND(horizontalSpeed,1),
         1, 2, 13, GREEN, FALSE).
@@ -457,7 +491,7 @@ GLOBAL FUNCTION landExecute {
         "TARGET_ELEVATION", targetElevation,
         "CROSS_PID", crossPid,
         "TERRAIN_DONE", FALSE,
-        "TARGET_STEERING", landingMathRetroSteering(),
+        "TARGET_STEERING", SHIP:UP:VECTOR,
         "TARGET_THROTTLE", 0
     ).
     stateSet("landing_state", "COAST").
@@ -477,6 +511,8 @@ GLOBAL FUNCTION landExecute {
     UNTIL landingAbortFlag
             OR SHIP:STATUS = "LANDED"
             OR SHIP:STATUS = "SPLASHED" {
+        _landingCacheTick(ctx).
+
         IF vesselNeedsStage() {
             LOCAL oldState IS ctx["STATE"].
             _landingSetThrottle(ctx, 0).

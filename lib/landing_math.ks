@@ -12,7 +12,7 @@
 // For descent trigger math we subtract centripetal acceleration from
 // horizontal ground speed, so a fast near-surface pass does not overstate
 // the burn needed to arrest vertical fall.
-GLOBAL FUNCTION landingMathGravity {
+GLOBAL FUNCTION lmGravity {
     LOCAL radiusMag IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
     IF radiusMag <= 0 { RETURN 0.01. }
     LOCAL gRaw IS SHIP:BODY:MU / (radiusMag * radiusMag).
@@ -23,17 +23,17 @@ GLOBAL FUNCTION landingMathGravity {
     RETURN MAX(0.01, gRaw).
 }
 
-GLOBAL FUNCTION landingMathMaxAcc {
+GLOBAL FUNCTION lmMaxAcc {
     IF SHIP:MASS <= 0 { RETURN 0. }
     RETURN SHIP:AVAILABLETHRUST / SHIP:MASS.
 }
 
-GLOBAL FUNCTION landingMathHorizontalVelocity {
+GLOBAL FUNCTION lmHorizontalVelocity {
     LOCAL upVec IS SHIP:UP:VECTOR.
     RETURN SHIP:VELOCITY:SURFACE - (VDOT(SHIP:VELOCITY:SURFACE, upVec) * upVec).
 }
 
-GLOBAL FUNCTION landingMathDownSpeed {
+GLOBAL FUNCTION lmDownSpeed {
     RETURN MAX(0, -SHIP:VERTICALSPEED).
 }
 
@@ -47,7 +47,7 @@ GLOBAL FUNCTION landingMathDownSpeed {
 //
 // ah is a conservative reserved horizontal acceleration. It is deliberately
 // supplied by the caller so policy remains outside the physics helper.
-GLOBAL FUNCTION landingMathHorizontalBrakeDistance {
+GLOBAL FUNCTION lmHorizontalBrakeDistance {
     PARAMETER horizontalSpeed.
     PARAMETER horizontalAcc.
     IF horizontalAcc <= 0 { RETURN 999999. }
@@ -64,7 +64,7 @@ GLOBAL FUNCTION landingMathHorizontalBrakeDistance {
 //   h = squared vv / (2(aMax - g))
 //
 // Recomputing every tick naturally accounts for fuel mass changing aMax.
-GLOBAL FUNCTION landingMathVerticalBurnDistance {
+GLOBAL FUNCTION lmVerticalBurnDistance {
     PARAMETER downSpeed.
     PARAMETER maxAcc.
     PARAMETER gravAcc.
@@ -75,8 +75,8 @@ GLOBAL FUNCTION landingMathVerticalBurnDistance {
 
 // Constant-gravity vertical time to terrain. Positive roots only; returns
 // a large sentinel if the quadratic is not meaningful for the current state.
-GLOBAL FUNCTION landingMathTimeToImpact {
-    LOCAL gravAcc IS landingMathGravity().
+GLOBAL FUNCTION lmTimeToImpact {
+    LOCAL gravAcc IS lmGravity().
     LOCAL verticalSpeed IS SHIP:VERTICALSPEED.
     LOCAL radarAlt IS ALT:RADAR.
     IF radarAlt <= 0 { RETURN 0. }
@@ -85,7 +85,7 @@ GLOBAL FUNCTION landingMathTimeToImpact {
     RETURN (SQRT(disc) + verticalSpeed) / gravAcc.
 }
 
-GLOBAL FUNCTION landingMathDescentSpeed {
+GLOBAL FUNCTION lmDescentSpeed {
     PARAMETER radarAlt.
     PARAMETER touchdownSpeed.
     PARAMETER uprightAlt.
@@ -100,49 +100,54 @@ GLOBAL FUNCTION landingMathDescentSpeed {
     RETURN touchdownSpeed.
 }
 
-GLOBAL FUNCTION landingMathDistanceToTarget {
+GLOBAL FUNCTION lmDistanceToTarget {
     PARAMETER targetLat.
     PARAMETER targetLng.
     RETURN geoDistance(SHIP:LATITUDE, SHIP:LONGITUDE, targetLat, targetLng).
 }
 
-GLOBAL FUNCTION landingMathDirectionToTarget {
+GLOBAL FUNCTION lmDirectionToTarget {
     PARAMETER targetLat.
     PARAMETER targetLng.
-    LOCAL upVec IS SHIP:UP:VECTOR.
-    LOCAL rawVec IS LATLNG(targetLat, targetLng):POSITION - SHIP:POSITION.
+    PARAMETER upVec.
+    PARAMETER shipPos.
+    LOCAL rawVec IS LATLNG(targetLat, targetLng):POSITION - shipPos.
     LOCAL surfaceVec IS VXCL(upVec, rawVec).
     IF surfaceVec:MAG < 0.01 { RETURN V(0,0,0). }
     RETURN surfaceVec:NORMALIZED.
 }
 
-GLOBAL FUNCTION landingMathRetroSteering {
-    LOCAL surfaceVel IS SHIP:VELOCITY:SURFACE.
-    IF surfaceVel:MAG < 1 { RETURN SHIP:UP:VECTOR. }
+GLOBAL FUNCTION lmRetroSteering {
+    PARAMETER horizontalVel.
+    PARAMETER surfaceVel.
+    PARAMETER upVec.
+    IF surfaceVel:MAG < 1 { RETURN upVec. }
     LOCAL retroVec IS (-surfaceVel):NORMALIZED.
-    LOCAL horizontalVel IS landingMathHorizontalVelocity().
     IF horizontalVel:MAG < 0.5 { RETURN retroVec. }
     LOCAL maxLean IS SIN(LAND_CFG_MAX_TILT).
     LOCAL leanMag IS MIN(maxLean, horizontalVel:MAG / 25).
-    RETURN (retroVec + SHIP:UP:VECTOR * leanMag):NORMALIZED.
+    RETURN (retroVec + upVec * leanMag):NORMALIZED.
 }
 
-GLOBAL FUNCTION landingMathHoverSteering {
-    LOCAL horizontalVel IS landingMathHorizontalVelocity().
-    IF horizontalVel:MAG < 0.3 { RETURN SHIP:UP:VECTOR. }
+GLOBAL FUNCTION lmHoverSteering {
+    PARAMETER horizontalVel.
+    PARAMETER upVec.
+    IF horizontalVel:MAG < 0.3 { RETURN upVec. }
     LOCAL maxLean IS SIN(LAND_CFG_MAX_TILT).
     LOCAL leanMag IS MIN(maxLean, horizontalVel:MAG / 10).
-    RETURN (SHIP:UP:VECTOR + (-horizontalVel):NORMALIZED * leanMag):NORMALIZED.
+    RETURN (upVec + (-horizontalVel):NORMALIZED * leanMag):NORMALIZED.
 }
 
-GLOBAL FUNCTION landingMathApproachSteering {
+GLOBAL FUNCTION lmApproachSteering {
     PARAMETER targetLat.
     PARAMETER targetLng.
     PARAMETER targetHorizontalSpeed.
+    PARAMETER horizontalVel.
+    PARAMETER upVec.
+    PARAMETER shipPos.
 
-    LOCAL upVec IS SHIP:UP:VECTOR.
-    LOCAL horizontalVel IS landingMathHorizontalVelocity().
-    LOCAL targetDir IS landingMathDirectionToTarget(targetLat, targetLng).
+    LOCAL targetDir IS lmDirectionToTarget(targetLat, targetLng,
+        upVec, shipPos).
     LOCAL maxLean IS SIN(LAND_CFG_MAX_TILT).
     LOCAL desiredVel IS targetDir * targetHorizontalSpeed.
     LOCAL correctionVec IS desiredVel - horizontalVel.
@@ -152,11 +157,12 @@ GLOBAL FUNCTION landingMathApproachSteering {
     RETURN (upVec + leanVec):NORMALIZED.
 }
 
-GLOBAL FUNCTION landingMathVerticalThrottle {
+GLOBAL FUNCTION lmVerticalThrottle {
     PARAMETER targetVerticalSpeed.
-    LOCAL maxAcc IS landingMathMaxAcc().
+    PARAMETER maxAcc.
+    PARAMETER gravAcc.
+    PARAMETER verticalSpeed.
     IF maxAcc <= 0 { RETURN 0. }
-    LOCAL gravAcc IS landingMathGravity().
-    LOCAL speedErr IS targetVerticalSpeed - SHIP:VERTICALSPEED.
+    LOCAL speedErr IS targetVerticalSpeed - verticalSpeed.
     RETURN MAX(0, MIN(1, (gravAcc / maxAcc) + speedErr * 0.3)).
 }

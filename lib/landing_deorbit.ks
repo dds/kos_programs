@@ -158,7 +158,7 @@ LOCAL FUNCTION _landingOvershootTarget {
     LOCAL overshoot IS LAND_CFG_DEORBIT_OVERSHOOT.
     IF overshoot <= 0 { RETURN out. }
 
-    LOCAL hv IS landingMathHorizontalVelocity().
+    LOCAL hv IS lmHorizontalVelocity().
     IF hv:MAG < 0.1 { RETURN out. }
     LOCAL upVec IS SHIP:UP:VECTOR.
     LOCAL northVec IS VXCL(upVec,
