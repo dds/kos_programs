@@ -267,7 +267,11 @@ GLOBAL FUNCTION targetedDeorbitAt {
         SET coarseStopDist TO 8000.
     }
     IF CFG:HASKEY("TARGET_DEORBIT_COARSE_STOP_DIST") {
-        SET coarseStopDist TO CFG["TARGET_DEORBIT_COARSE_STOP_DIST"].
+        IF (CFG["TARGET_DEORBIT_COARSE_STOP_DIST"]:TYPENAME = "STRING") {
+            SET coarseStopDist TO CFG["TARGET_DEORBIT_COARSE_STOP_DIST"]:TONUMBER.
+        } ELSE {
+            SET coarseStopDist TO CFG["TARGET_DEORBIT_COARSE_STOP_DIST"].
+        }
     }
     LOCAL minLead IS _targetDeorbitMinLead().
     LOCAL refineStartLimit IS MAX(tolerance * 10, coarseStopDist * 6).
