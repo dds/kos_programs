@@ -92,7 +92,6 @@ _cfg("TARGET_DEORBIT_SCAN_ORBITS", "2").
 _cfg("TARGET_DEORBIT_SCAN_SAMPLES", "256").
 _cfg("TARGET_DEORBIT_SCAN_CENTER_MINUTES", aheadMinutes).
 _cfg("TARGET_DEORBIT_SCAN_WINDOW_MINUTES", "4").
-_cfg("TARGET_DEORBIT_COARSE_STOP_DIST", "12000").
 stateSet("phase", "LAND_DEORBIT").
 stateSet("reload_required", "false").
 stateSet("reload_reason", "").

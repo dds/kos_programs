@@ -25,12 +25,9 @@
 //   waypoint         — Waypoint Manager waypoint name
 //   name             — mission display name (default from target)
 //   entry_pe / pe    — atmosphere-entry Pe in m (default 30000)
-//   tolerance        — impact tolerance in m (default 15000)
+//   tolerance        — descent target tolerance in m (default 15000)
 //   max_orbits       — deorbit window scan limit (default 4)
 //   samples          — coarse scan samples (default 32 per orbit)
-//   refine           — TRUE re-enables iterative impact refinement
-//   strict           — TRUE = hold unless a pass inside tolerance
-//                      exists; default FALSE = fly the best pass
 //   descent_fairing / descent_decoupler / descent_chutes — part
 //       tags for DESCENT. Unset, craft CFG defaults (then lib
 //       defaults) apply; 'none' disables a step outright.
@@ -69,8 +66,6 @@ LOCAL entryPe IS 30000.
 LOCAL tolerance IS 15000.
 LOCAL maxOrbits IS 4.
 LOCAL scanSamples IS 0.
-LOCAL strict IS FALSE.
-LOCAL doRefine IS FALSE.
 // Empty = leave mission state untouched so craft CFG defaults
 // (then lib defaults) decide; "none" = explicitly disabled.
 LOCAL descentFairingTag IS "".
@@ -117,9 +112,7 @@ IF opts:HASKEY("pe")                { SET entryPe TO opts["pe"]. }
 IF opts:HASKEY("entry_pe")          { SET entryPe TO opts["entry_pe"]. }
 IF opts:HASKEY("tolerance")         { SET tolerance TO opts["tolerance"]. }
 IF opts:HASKEY("max_orbits")        { SET maxOrbits TO opts["max_orbits"]. }
-IF opts:HASKEY("strict")            { SET strict TO opts["strict"]. }
 IF opts:HASKEY("samples")           { SET scanSamples TO opts["samples"]. }
-IF opts:HASKEY("refine")            { SET doRefine TO opts["refine"]. }
 IF scanSamples <= 0 { SET scanSamples TO maxOrbits * 32. }
 IF opts:HASKEY("descent_fairing")   { SET descentFairingTag TO opts["descent_fairing"]. }
 IF opts:HASKEY("descent_decoupler") { SET descentDecouplerTag TO opts["descent_decoupler"]. }
@@ -175,12 +168,6 @@ IF NOT err {
     // Targeted-deorbit scan settings (the proven landatksc recipe).
     stateSet("mission_cfg_TARGET_DEORBIT_SCAN_ORBITS", maxOrbits).
     stateSet("mission_cfg_TARGET_DEORBIT_SCAN_SAMPLES", scanSamples).
-    stateSet("mission_cfg_TARGET_DEORBIT_COARSE_STOP_DIST", tolerance).
-    stateSet("mission_cfg_TARGET_DEORBIT_REFINE_TOLERANCE", 1000).
-    stateSet("mission_cfg_TARGET_DEORBIT_SKIP_REFINE",
-        CHOOSE 0 IF doRefine ELSE 1).
-    stateSet("mission_cfg_TARGET_DEORBIT_PROCEED_ON_MISS",
-        CHOOSE 0 IF strict ELSE 1).
     // 300s, not 90: a small reaction wheel (no SAS core) needs
     // real time to despin and align — flight-found: a 36s-out
     // node arrived with the craft pointing the wrong way.
@@ -211,9 +198,7 @@ IF NOT err {
     PRINT "  Sequence:  KSC_DEORBIT,DESCENT,DONE".
     PRINT "  Target:    " + ROUND(targetLat, 4) + ", " + ROUND(targetLng, 4)
         + "  (tol " + ROUND(tolerance / 1000, 0) + "km)".
-    PRINT "  Window:    next " + maxOrbits + " orbits  ("
-        + (CHOOSE "strict: hold on miss" IF strict
-           ELSE "best pass flies") + ")".
+    PRINT "  Window:    next " + maxOrbits + " orbits".
     PRINT "  Entry PE:  " + entryPe + "m (" + ROUND(entryPe / 1000, 1) + "km)".
     PRINT "  Descent:   fairing=" + (CHOOSE descentFairingTag IF descentFairingTag <> "" ELSE "(craft default)")
         + " decoupler=" + (CHOOSE descentDecouplerTag IF descentDecouplerTag <> "" ELSE "(craft default)")

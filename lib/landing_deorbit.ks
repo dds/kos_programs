@@ -64,13 +64,7 @@ LOCAL FUNCTION _timedLandingDeorbit {
     LOCAL vNow IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
     LOCAL rawDV IS vNew - vNow.
-
-    LOCAL minDV IS 350.
-    LOCAL maxDV IS 600.
-    IF CFG:HASKEY("LANDING_DEORBIT_MIN_DV") { SET minDV TO CFG["LANDING_DEORBIT_MIN_DV"]. }
-    IF CFG:HASKEY("LANDING_DEORBIT_MAX_DV") { SET maxDV TO CFG["LANDING_DEORBIT_MAX_DV"]. }
-    LOCAL clampedDV IS MIN(-minDV, MAX(-maxDV, rawDV)).
-    LOCAL nd IS NODE(burnUT, 0, 0, clampedDV).
+    LOCAL nd IS NODE(burnUT, 0, 0, rawDV).
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     ADD nd.
@@ -93,7 +87,7 @@ LOCAL FUNCTION _timedLandingDeorbit {
 }
 
 LOCAL FUNCTION _landingDeorbitPe {
-    RETURN LAND_CFG_DEORBIT_PE.
+    RETURN 0.
 }
 
 LOCAL FUNCTION _confirmLandingTarget {
@@ -152,13 +146,7 @@ LOCAL FUNCTION _landingTargetedDeorbit {
         + "," + ROUND(landingTarget["LNG"],4)
         + " from " + landingTarget["SOURCE"] + ".").
 
-    IF (LAND_CFG_DEORBIT_PE:TYPENAME = "STRING") {
-        SET LAND_CFG_DEORBIT_PE TO LAND_CFG_DEORBIT_PE:TONUMBER.
-    }
     RETURN targetedDeorbitAt(
         landingTarget["LAT"],
-        landingTarget["LNG"],
-        LAND_CFG_DEORBIT_PE,
-        LAND_CFG_TARGET_TOLERANCE,
-        LAND_CFG_DEORBIT_OVERSHOOT).
+        landingTarget["LNG"]).
 }
