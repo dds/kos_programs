@@ -171,6 +171,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL currentDv IS seedRetroDv.
     LOCAL dvStep IS 4.
     LOCAL prevDir IS 0.
+    LOCAL prevAngle IS -1.
+    LOCAL prevAngleDv IS currentDv.
     LOCAL didAngleShift IS FALSE.
     LOCAL iter IS 0.
     UNTIL iter >= 12 {
@@ -181,7 +183,14 @@ GLOBAL FUNCTION targetedDeorbitAt {
             targetLat, targetLng, minLead, minAngle, targetAngle,
             angleTol).
         IF candidate["VALID"] {
+            LOCAL sampledDv IS currentDv.
             LOCAL angleErr IS candidate["ANGLE"] - targetAngle.
+            LOCAL angleRate IS 999999999.
+            IF prevAngle >= 0 AND candidate["ANGLE"] >= 0
+                    AND ABS(sampledDv - prevAngleDv) > 0.0001 {
+                SET angleRate TO (candidate["ANGLE"] - prevAngle)
+                    / (sampledDv - prevAngleDv).
+            }
             mLog("DEBUG angle: T+" + ROUND(currentUT - nowUt,0)
                 + "s dv=" + ROUND(currentDv,2)
                 + " angle=" + ROUND(candidate["ANGLE"],1)
@@ -222,6 +231,11 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 SET didAngleShift TO TRUE.
             }
             IF NOT shiftedThisIter {
+                IF ABS(angleRate) < 0.001 {
+                    SET currentDv TO MAX(minRetroDv, MIN(maxRetroDv,
+                        currentDv + (RANDOM() - 0.5) * 0.002)).
+                    SET prevDir TO 0.
+                }
                 LOCAL dir IS 1.
                 IF candidate["ANGLE"] >= targetAngle { SET dir TO -1. }
                 IF candidate["ANGLE"] < 0 { SET dir TO 1. }
@@ -236,6 +250,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 LOCAL nextDv IS MAX(minRetroDv, MIN(maxRetroDv,
                     currentDv + dir * dvStep)).
                 IF nextDv = currentDv { BREAK. }
+                SET prevAngle TO candidate["ANGLE"].
+                SET prevAngleDv TO sampledDv.
                 SET currentDv TO nextDv.
             }
         } ELSE {
@@ -464,12 +480,15 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
         LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
             targetLat, targetLng).
-        LOCAL angle IS _nodeImpactAngle(nd).
+        LOCAL angle IS _nodeImpactAngle().
         LOCAL distCost IS (dist / 500) * (dist / 500).
-        LOCAL angleCost IS 999999999.
-        IF angle >= 0 {
-            SET angleCost TO ((angle - targetAngle) / angleTol)
-                * ((angle - targetAngle) / angleTol).
+        LOCAL angleCost IS 0.
+        IF dist < 20000 {
+            SET angleCost TO 5000.
+            IF angle >= 0 {
+                SET angleCost TO MIN(5000, ((angle - targetAngle) / angleTol)
+                    * ((angle - targetAngle) / angleTol)).
+            }
         }
         SET result["VALID"] TO TRUE.
         SET result["LAT"] TO impactPos:LAT.
@@ -486,10 +505,8 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
 }
 
 LOCAL FUNCTION _nodeImpactAngle {
-    PARAMETER nd.
-
-    LOCAL postBurnSurfVel IS SHIP:VELOCITY:SURFACE + nd:DELTAV.
-    RETURN VANG(SHIP:UP:VECTOR, postBurnSurfVel) - 90.
+    RETURN VANG(ADDONS:TR:IMPACTUP:VECTOR,
+        ADDONS:TR:IMPACTVELOCITY:VECTOR) - 90.
 }
 
 LOCAL FUNCTION _planRetroNode {
