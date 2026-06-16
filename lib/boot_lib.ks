@@ -437,7 +437,6 @@ GLOBAL FUNCTION bootPruneLogs {
 GLOBAL FUNCTION bootCleanup {
     PARAMETER vehicleName.
     PARAMETER wantedLibs.
-    PARAMETER _cleanupCmds.
     LOCAL keepLibs IS LIST(
         "state", "logs", "boot_lib", "resume", "dependencies",
         "phases", "utils", "ui", "config"
