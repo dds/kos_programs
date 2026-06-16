@@ -148,7 +148,7 @@ GLOBAL FUNCTION orientForSolar {
     }
     IF bestFlow <= 0 {
         LOCAL retryAt IS TIME:SECONDS + 300.
-        stateSetNum("solar_retry_ut", retryAt).
+        stateSet("solar_retry_ut", retryAt).
         mLogWarn("Solar search: all axes have zero flow — likely night; retry later.").
         mLogWarn("STATS solar orient status=night retryIn=300"
             + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
@@ -190,7 +190,7 @@ GLOBAL FUNCTION orientForSolar {
     }
 
     _solarAimSettle(bestAxis).
-    stateSetNum("solar_retry_ut", 0).
+    stateSet("solar_retry_ut", 0).
     stateSet("solar_axis", ROUND(bestAxis:X, 4) + ","
         + ROUND(bestAxis:Y, 4) + "," + ROUND(bestAxis:Z, 4)).
     if lockSteering {

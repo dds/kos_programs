@@ -50,7 +50,7 @@ GLOBAL FUNCTION setState {
 }
 
 GLOBAL FUNCTION resetBootCount {
-    stateSetNum("boot_count", 0).
+    stateSet("boot_count", 0).
     PRINT "Boot count reset. Reboot to re-arm auto.".
     mLog("Boot count reset.").
 }
