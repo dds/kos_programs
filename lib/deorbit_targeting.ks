@@ -169,20 +169,12 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL currentDv IS seedRetroDv.
     LOCAL dvStep IS 4.
     LOCAL prevDir IS 0.
+    LOCAL didAngleShift IS FALSE.
     LOCAL iter IS 0.
     UNTIL iter >= 12 {
-        LOCAL oldUT IS currentUT.
-        LOCAL polished IS _reacquireRetroTime(currentUT, currentDv,
-            targetLat, targetLng, minLead, stepA * 2, period * 0.20,
-            period * 0.45).
-        IF polished["VALID"] {
-            SET currentUT TO polished["UT"].
-            IF ABS(currentUT - oldUT) > stepA {
-                mLog("DEBUG time: dv=" + ROUND(currentDv,2)
-                    + " moved node " + ROUND(currentUT - oldUT,0)
-                    + "s to T+" + ROUND(currentUT - nowUt,0) + "s.").
-            }
-        }
+        LOCAL polished IS _polishRetroTime(currentUT, currentDv,
+            targetLat, targetLng, minLead, stepA * 0.5).
+        IF polished["VALID"] { SET currentUT TO polished["UT"]. }
         LOCAL candidate IS _evalRetroDeorbitNode(currentUT, currentDv,
             targetLat, targetLng, minLead, minAngle, targetAngle,
             angleTol).
@@ -209,21 +201,41 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     AND candidate["ANGLE_OK"] {
                 BREAK.
             }
-            LOCAL dir IS 1.
-            IF candidate["ANGLE"] >= targetAngle { SET dir TO -1. }
-            IF candidate["ANGLE"] < 0 { SET dir TO 1. }
-            IF prevDir <> 0 {
-                IF dir <> prevDir {
-                    SET dvStep TO MAX(0.25, dvStep / 2).
-                } ELSE {
-                    SET dvStep TO MIN(25, dvStep * 1.5).
+            LOCAL shiftedThisIter IS FALSE.
+            IF NOT didAngleShift AND candidate["ANGLE"] > 0
+                    AND ABS(angleErr) > angleTol {
+                LOCAL shiftSec IS _estimateAngleTimeShift(currentUT,
+                    targetLat, targetLng, candidate["ANGLE"], targetAngle).
+                LOCAL shiftedUT IS MAX(TIME:SECONDS + minLead,
+                    MIN(scanEnd, currentUT + shiftSec)).
+                IF ABS(shiftedUT - currentUT) > stepA * 0.5 {
+                    mLog("DEBUG time-est: angle=" + ROUND(candidate["ANGLE"],1)
+                        + " target=" + ROUND(targetAngle,1)
+                        + " shift=" + ROUND(shiftedUT - currentUT,0)
+                        + "s to T+" + ROUND(shiftedUT - nowUt,0) + "s.").
+                    SET currentUT TO shiftedUT.
+                    SET didAngleShift TO TRUE.
+                    SET shiftedThisIter TO TRUE.
                 }
+                SET didAngleShift TO TRUE.
             }
-            SET prevDir TO dir.
-            LOCAL nextDv IS MAX(minRetroDv, MIN(maxRetroDv,
-                currentDv + dir * dvStep)).
-            IF nextDv = currentDv { BREAK. }
-            SET currentDv TO nextDv.
+            IF NOT shiftedThisIter {
+                LOCAL dir IS 1.
+                IF candidate["ANGLE"] >= targetAngle { SET dir TO -1. }
+                IF candidate["ANGLE"] < 0 { SET dir TO 1. }
+                IF prevDir <> 0 {
+                    IF dir <> prevDir {
+                        SET dvStep TO MAX(0.25, dvStep / 2).
+                    } ELSE {
+                        SET dvStep TO MIN(25, dvStep * 1.5).
+                    }
+                }
+                SET prevDir TO dir.
+                LOCAL nextDv IS MAX(minRetroDv, MIN(maxRetroDv,
+                    currentDv + dir * dvStep)).
+                IF nextDv = currentDv { BREAK. }
+                SET currentDv TO nextDv.
+            }
         } ELSE {
             SET currentDv TO MIN(maxRetroDv, currentDv + dvStep).
             IF currentDv >= maxRetroDv { BREAK. }
@@ -367,41 +379,28 @@ LOCAL FUNCTION _polishRetroTime {
     RETURN best.
 }
 
-LOCAL FUNCTION _reacquireRetroTime {
-    PARAMETER seedUT.
-    PARAMETER retroDv.
+LOCAL FUNCTION _estimateAngleTimeShift {
+    PARAMETER burnUT.
     PARAMETER targetLat.
     PARAMETER targetLng.
-    PARAMETER minLead.
-    PARAMETER stepSec.
-    PARAMETER backWindow.
-    PARAMETER forwardWindow.
+    PARAMETER actualAngle.
+    PARAMETER targetAngle.
 
-    LOCAL result IS LEXICON(
-        "VALID", FALSE,
-        "UT", seedUT,
-        "DIST", 999999999,
-        "LAT", 0,
-        "LNG", 0
-    ).
-    LOCAL startUT IS MAX(TIME:SECONDS + minLead, seedUT - backWindow).
-    LOCAL endUT IS seedUT + forwardWindow.
-    LOCAL scanUT IS startUT.
+    LOCAL body IS SHIP:BODY.
+    LOCAL burnGeo IS body:GEOPOSITIONOF(POSITIONAT(SHIP, burnUT)).
+    LOCAL rangeNow IS geoDistance(burnGeo:LAT, burnGeo:LNG,
+        targetLat, targetLng).
+    LOCAL groundAhead IS body:GEOPOSITIONOF(POSITIONAT(SHIP, burnUT + 10)).
+    LOCAL groundSpeed IS geoDistance(burnGeo:LAT, burnGeo:LNG,
+        groundAhead:LAT, groundAhead:LNG) / 10.
+    IF groundSpeed < 0.1 { RETURN 0. }
 
-    UNTIL scanUT > endUT {
-        LOCAL trial IS _evalRetroImpactNode(scanUT, retroDv,
-            targetLat, targetLng, minLead).
-        IF trial["VALID"] AND trial["DIST"] < result["DIST"] {
-            SET result TO trial.
-        }
-        SET scanUT TO scanUT + stepSec.
-        WAIT 0.
-    }
-    IF result["VALID"] {
-        RETURN _polishRetroTime(result["UT"], retroDv,
-            targetLat, targetLng, minLead, stepSec * 0.5).
-    }
-    RETURN result.
+    LOCAL desiredRange IS rangeNow * TAN(actualAngle)
+        / MAX(0.01, TAN(targetAngle)).
+    LOCAL shiftSec IS (rangeNow - desiredRange) / groundSpeed.
+    IF shiftSec > 1800 { RETURN 1800. }
+    IF shiftSec < -1800 { RETURN -1800. }
+    RETURN shiftSec.
 }
 
 LOCAL FUNCTION _evalRetroImpactNode {
