@@ -371,11 +371,21 @@ LOCAL FUNCTION _deorbitImpactWalk {
 // extra dV of a deeper Pe is just vNew(defaultPe) - vNew(deepPe).
 LOCAL FUNCTION _deorbitVNew {
     PARAMETER entryPe.
-    LOCAL mu   IS SHIP:ORBIT:BODY:MU.
-    LOCAL oRad IS SHIP:ORBIT:SEMIMAJORAXIS.
-    LOCAL rPe  IS SHIP:ORBIT:BODY:RADIUS + entryPe.
-    LOCAL tSMA IS (oRad + rPe) / 2.
-    LOCAL radicand IS 2 / oRad - 1 / tSMA.
+    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL mu IS SHIP:ORBIT:BODY:MU.
+    LOCAL orbitSma IS SHIP:ORBIT:SEMIMAJORAXIS.
+    RETURN _deorbitVNewFast(entryPe, bodyR, mu, orbitSma, 2 / orbitSma).
+}
+
+LOCAL FUNCTION _deorbitVNewFast {
+    PARAMETER entryPe.
+    PARAMETER bodyR.
+    PARAMETER mu.
+    PARAMETER orbitSma.
+    PARAMETER twoOverOrbitSma.
+    LOCAL rPe IS bodyR + entryPe.
+    LOCAL tSMA IS (orbitSma + rPe) / 2.
+    LOCAL radicand IS twoOverOrbitSma - 1 / tSMA.
     IF radicand <= 0 { RETURN 0. }
     RETURN SQRT(mu * radicand).
 }
@@ -386,16 +396,25 @@ LOCAL FUNCTION _deorbitVNew {
 LOCAL FUNCTION _deorbitPeCandidates {
     PARAMETER defaultPe.
     PARAMETER budgetDv.
+    PARAMETER bodyR IS -1.
+    PARAMETER mu IS -1.
+    PARAMETER orbitSma IS -1.
+    PARAMETER twoOverOrbitSma IS -1.
+    IF bodyR < 0 { SET bodyR TO SHIP:ORBIT:BODY:RADIUS. }
+    IF mu < 0 { SET mu TO SHIP:ORBIT:BODY:MU. }
+    IF orbitSma < 0 { SET orbitSma TO SHIP:ORBIT:SEMIMAJORAXIS. }
+    IF twoOverOrbitSma < 0 { SET twoOverOrbitSma TO 2 / orbitSma. }
     LOCAL out IS LIST(defaultPe).
     IF budgetDv <= 0 { RETURN out. }
-    LOCAL vBase IS _deorbitVNew(defaultPe).
-    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL vBase IS _deorbitVNewFast(defaultPe, bodyR, mu, orbitSma,
+        twoOverOrbitSma).
     // Deepest Pe still inside budget (5 km probe steps; rPe must
     // stay well positive or the vis-viva radicand goes negative).
     LOCAL peFloor IS defaultPe.
     LOCAL probe IS defaultPe - 5000.
     UNTIL probe <= -bodyR * 0.5 {
-        IF vBase - _deorbitVNew(probe) > budgetDv { BREAK. }
+        IF vBase - _deorbitVNewFast(probe, bodyR, mu, orbitSma,
+                twoOverOrbitSma) > budgetDv { BREAK. }
         SET peFloor TO probe.
         SET probe TO probe - 5000.
     }
@@ -417,16 +436,27 @@ LOCAL FUNCTION _deorbitEvalBestPe {
     PARAMETER peList.
     PARAMETER targetLat.
     PARAMETER targetLng.
-    LOCAL best IS LEXICON("VALID", FALSE, "DIST", 8.99e15, "PE", peList[0]).
+    PARAMETER bodyR.
+    PARAMETER mu.
+    PARAMETER orbitSma.
+    PARAMETER twoOverOrbitSma.
+    PARAMETER minLead.
+    PARAMETER minDV.
+    PARAMETER maxDV.
+    LOCAL bestValid IS FALSE.
+    LOCAL bestDist IS 8.99e15.
+    LOCAL bestPe IS peList[0].
     FOR candPe IN peList {
-        LOCAL tr IS _evalDeorbitNode(burnT, candPe, targetLat, targetLng).
-        IF tr["VALID"] AND tr["DIST"] < best["DIST"] {
-            SET best["VALID"] TO TRUE.
-            SET best["DIST"] TO tr["DIST"].
-            SET best["PE"] TO candPe.
+        LOCAL dist IS _evalDeorbitDist(burnT, candPe, targetLat, targetLng,
+            0, 0, bodyR, mu, orbitSma, twoOverOrbitSma,
+            minLead, minDV, maxDV).
+        IF dist >= 0 AND dist < bestDist {
+            SET bestValid TO TRUE.
+            SET bestDist TO dist.
+            SET bestPe TO candPe.
         }
     }
-    RETURN best.
+    RETURN LIST(bestValid, bestDist, bestPe).
 }
 
 GLOBAL FUNCTION targetedDeorbitAt {
@@ -469,7 +499,22 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + " toleranceKm=" + ROUND(tolerance/1000,1)).
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
+    LOCAL nowUt IS TIME:SECONDS.
+    LOCAL bodyName IS SHIP:BODY:NAME.
+    LOCAL bodyHasAtm IS SHIP:BODY:ATM:EXISTS.
     LOCAL period IS SHIP:ORBIT:PERIOD.
+    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
+    LOCAL mu IS SHIP:ORBIT:BODY:MU.
+    LOCAL orbitSma IS SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL twoOverOrbitSma IS 2 / orbitSma.
+    LOCAL minDV IS 0.
+    LOCAL maxDV IS 99999.
+    IF CFG:HASKEY("LANDING_DEORBIT_MIN_DV") {
+        SET minDV TO CFG["LANDING_DEORBIT_MIN_DV"].
+    }
+    IF CFG:HASKEY("LANDING_DEORBIT_MAX_DV") {
+        SET maxDV TO CFG["LANDING_DEORBIT_MAX_DV"].
+    }
     LOCAL scanOrbits IS 32.
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_ORBITS") {
         SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_ORBITS"].
@@ -484,8 +529,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
         mLogWarn("STATS deorbit scan mode=sim scanOrbits="
             + scanOrbits + " samples=" + scanSamples).
     }
-    LOCAL scanStart IS TIME:SECONDS + 30.
-    LOCAL scanEnd IS TIME:SECONDS + period * scanOrbits + 30.
+    LOCAL scanStart IS nowUt + 30.
+    LOCAL scanEnd IS nowUt + period * scanOrbits + 30.
     LOCAL scanMode IS "orbits".
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_CENTER_MINUTES") {
         LOCAL centerMin IS CFG["TARGET_DEORBIT_SCAN_CENTER_MINUTES"].
@@ -493,17 +538,17 @@ GLOBAL FUNCTION targetedDeorbitAt {
         IF CFG:HASKEY("TARGET_DEORBIT_SCAN_WINDOW_MINUTES") {
             SET windowMin TO CFG["TARGET_DEORBIT_SCAN_WINDOW_MINUTES"].
         }
-        LOCAL centerUT IS TIME:SECONDS + centerMin * 60.
+        LOCAL centerUT IS nowUt + centerMin * 60.
         LOCAL halfWin IS MAX(30, windowMin * 30).
-        SET scanStart TO MAX(TIME:SECONDS + 30, centerUT - halfWin).
+        SET scanStart TO MAX(nowUt + 30, centerUT - halfWin).
         SET scanEnd TO centerUT + halfWin.
         SET scanMode TO "minutes".
         IF scanSamples > 256 { SET scanSamples TO 256. }
         mLogWarn("STATS deorbit scan window centerMin="
             + ROUND(centerMin,1)
             + " windowMin=" + ROUND(windowMin,1)
-            + " startT=" + ROUND(scanStart - TIME:SECONDS,0)
-            + " endT=" + ROUND(scanEnd - TIME:SECONDS,0)
+            + " startT=" + ROUND(scanStart - nowUt,0)
+            + " endT=" + ROUND(scanEnd - nowUt,0)
             + " samples=" + scanSamples).
     }
     // Per-orbit sample density: the scan discovers the pass
@@ -515,9 +560,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
         SET stepA TO (scanEnd - scanStart) / MAX(16, scanSamples).
     }
     LOCAL coarseStopDist IS 1000.
-    IF SHIP:BODY:ATM:EXISTS {
+    IF bodyHasAtm {
         SET coarseStopDist TO tolerance.
-    } ELSE IF SHIP:BODY:NAME = "MUN" {
+    } ELSE IF bodyName = "MUN" {
         SET coarseStopDist TO 8000.
     }
     IF CFG:HASKEY("TARGET_DEORBIT_COARSE_STOP_DIST") {
@@ -536,7 +581,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF CFG:HASKEY("LANDING_DEORBIT_BUDGET_DV") {
         SET budgetDv TO CFG["LANDING_DEORBIT_BUDGET_DV"].
     }
-    LOCAL peList IS _deorbitPeCandidates(entryPe, budgetDv).
+    LOCAL peList IS _deorbitPeCandidates(entryPe, budgetDv, bodyR, mu,
+        orbitSma, twoOverOrbitSma).
     IF peList:LENGTH > 1 {
         mLog("Deorbit Pe search: " + peList:LENGTH + " rungs "
             + ROUND(entryPe / 1000, 0) + "km .. "
@@ -548,7 +594,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
             + " budgetDv=" + ROUND(budgetDv, 0)).
     }
 
-    LOCAL bestUT   IS TIME:SECONDS + 30.
+    LOCAL bestUT   IS nowUt + 30.
     LOCAL bestPe   IS entryPe.
     LOCAL bestRad  IS 0.
     LOCAL bestNor  IS 0.
@@ -557,7 +603,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL invalidSamples IS 0.
 
     LOCAL earlyStop IS FALSE.
-    LOCAL floorUt IS TIME:SECONDS + minLead.
+    LOCAL floorUt IS nowUt + minLead.
 
     // ── Discovery: uniform scan of the FIRST TWO ORBITS only —
     // enough to learn the per-orbit pass phases (latitude
@@ -567,25 +613,28 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF scanMode = "minutes" { SET discoverEnd TO scanEnd. }
     LOCAL dTimes IS LIST().
     LOCAL dDists IS LIST().
+    LOCAL focusOffsets IS LIST(-2, -1, 0, 1, 2).
     LOCAL scanUT IS scanStart.
-    mLog("Discovery scan to T+" + ROUND(discoverEnd - TIME:SECONDS, 0)
+    mLog("Discovery scan to T+" + ROUND(discoverEnd - nowUt, 0)
         + "s step=" + ROUND(stepA, 1) + "s mode=" + scanMode + ".").
     UNTIL scanUT > discoverEnd OR earlyStop {
-        LOCAL trial IS _evalDeorbitNode(scanUT, entryPe, targetLat, targetLng).
-        IF trial["VALID"] {
+        LOCAL trialDist IS _evalDeorbitDist(scanUT, entryPe, targetLat, targetLng,
+            0, 0, bodyR, mu, orbitSma, twoOverOrbitSma,
+            minLead, minDV, maxDV).
+        IF trialDist >= 0 {
             SET validSamples TO validSamples + 1.
             dTimes:ADD(scanUT).
-            dDists:ADD(trial["DIST"]).
-            IF trial["DIST"] < bestDist {
-                SET bestDist TO trial["DIST"].
+            dDists:ADD(trialDist).
+            IF trialDist < bestDist {
+                SET bestDist TO trialDist.
                 SET bestUT   TO scanUT.
                 SET bestPe   TO entryPe.
-                mLog("DEBUG coarse: T+" + ROUND(scanUT - TIME:SECONDS,0)
+                mLog("DEBUG coarse: T+" + ROUND(scanUT - nowUt,0)
                     + "s  dist=" + ROUND(bestDist/1000,1) + "km").
                 IF bestDist <= coarseStopDist {
                     mLogWarn("STATS deorbit coarse early-stop distKm="
                         + ROUND(bestDist/1000,2)
-                        + " burnT=" + ROUND(scanUT - TIME:SECONDS,0)).
+                        + " burnT=" + ROUND(scanUT - nowUt,0)).
                     SET earlyStop TO TRUE.
                 }
             }
@@ -637,15 +686,17 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     // default Pe (cheap); the pass geometry — which
                     // crossing — is what time selects, independent of
                     // how hard we later choose to burn.
-                    FOR off IN LIST(-2, -1, 0, 1, 2) {
+                    FOR off IN focusOffsets {
                         LOCAL tt IS center + off * stepA * 0.66.
                         IF tt > floorUt {
-                            LOCAL tr IS _evalDeorbitNode(tt, entryPe,
-                                targetLat, targetLng).
-                            IF tr["VALID"] {
+                            LOCAL trDist IS _evalDeorbitDist(tt, entryPe,
+                                targetLat, targetLng, 0, 0,
+                                bodyR, mu, orbitSma, twoOverOrbitSma,
+                                minLead, minDV, maxDV).
+                            IF trDist >= 0 {
                                 SET validSamples TO validSamples + 1.
-                                IF tr["DIST"] < wBest {
-                                    SET wBest TO tr["DIST"].
+                                IF trDist < wBest {
+                                    SET wBest TO trDist.
                                     SET wBestT TO tt.
                                 }
                             } ELSE {
@@ -658,11 +709,12 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     // target. No-budget peList is a single eval.
                     IF peList:LENGTH > 1 AND wBest < 8e15 {
                         LOCAL pb IS _deorbitEvalBestPe(wBestT, peList,
-                            targetLat, targetLng).
+                            targetLat, targetLng, bodyR, mu, orbitSma,
+                            twoOverOrbitSma, minLead, minDV, maxDV).
                         SET validSamples TO validSamples + peList:LENGTH.
-                        IF pb["VALID"] AND pb["DIST"] < wBest {
-                            SET wBest TO pb["DIST"].
-                            SET wBestPe TO pb["PE"].
+                        IF pb[0] AND pb[1] < wBest {
+                            SET wBest TO pb[1].
+                            SET wBestPe TO pb[2].
                         }
                     }
                     // Narrow promising windows to their true minimum
@@ -672,11 +724,13 @@ GLOBAL FUNCTION targetedDeorbitAt {
                         UNTIL hstep < 0.8 {
                             FOR cand IN LIST(wBestT - hstep, wBestT + hstep) {
                                 IF cand > floorUt {
-                                    LOCAL tr2 IS _evalDeorbitNode(cand,
-                                        wBestPe, targetLat, targetLng).
-                                    IF tr2["VALID"]
-                                            AND tr2["DIST"] < wBest {
-                                        SET wBest TO tr2["DIST"].
+                                    LOCAL tr2Dist IS _evalDeorbitDist(cand,
+                                        wBestPe, targetLat, targetLng, 0, 0,
+                                        bodyR, mu, orbitSma, twoOverOrbitSma,
+                                        minLead, minDV, maxDV).
+                                    IF tr2Dist >= 0
+                                            AND tr2Dist < wBest {
+                                        SET wBest TO tr2Dist.
                                         SET wBestT TO cand.
                                     }
                                 }
@@ -690,12 +744,12 @@ GLOBAL FUNCTION targetedDeorbitAt {
                         SET bestUT TO wBestT.
                         SET bestPe TO wBestPe.
                         mLog("DEBUG window: orbit " + orbitIdx
-                            + "  T+" + ROUND(wBestT - TIME:SECONDS, 0)
+                            + "  T+" + ROUND(wBestT - nowUt, 0)
                             + "s  dist=" + ROUND(wBest / 1000, 1) + "km").
                         IF bestDist <= coarseStopDist {
                             mLogWarn("STATS deorbit window early-stop distKm="
                                 + ROUND(bestDist/1000, 2)
-                                + " burnT=" + ROUND(bestUT - TIME:SECONDS, 0)).
+                                + " burnT=" + ROUND(bestUT - nowUt, 0)).
                             SET earlyStop TO TRUE.
                         }
                     }
@@ -704,11 +758,13 @@ GLOBAL FUNCTION targetedDeorbitAt {
             SET orbitIdx TO orbitIdx + 1.
         }
     }
-    mLog("Coarse best: T+" + ROUND(bestUT - TIME:SECONDS,0)
+    mLog("Coarse best: T+" + ROUND(bestUT - nowUt,0)
         + "s  dist=" + ROUND(bestDist/1000,1) + "km").
-    LOCAL coarseBest IS _evalDeorbitNode(bestUT, bestPe, targetLat, targetLng).
+    LOCAL coarseBest IS _evalDeorbitNode(bestUT, bestPe, targetLat, targetLng,
+        0, 0, bodyR, mu, orbitSma, twoOverOrbitSma,
+        minLead, minDV, maxDV).
     mLogWarn("STATS deorbit coarse distKm=" + ROUND(bestDist/1000,1)
-        + " burnT=" + ROUND(bestUT - TIME:SECONDS,0)
+        + " burnT=" + ROUND(bestUT - nowUt,0)
         + " scanOrbits=" + scanOrbits
         + " samples=" + scanSamples
         + " valid=" + validSamples
@@ -724,7 +780,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     IF bestUT <= TIME:SECONDS + minLead {
         mLogWarn("STATS deorbit abort reason=window-expired burnT="
-            + ROUND(bestUT - TIME:SECONDS,0)
+            + ROUND(bestUT - nowUt,0)
             + " minLead=" + ROUND(minLead,0)
             + " distKm=" + ROUND(bestDist/1000,1)).
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
@@ -759,10 +815,12 @@ GLOBAL FUNCTION targetedDeorbitAt {
     UNTIL fstep < 0.05 {
         FOR cand IN LIST(bestUT - fstep, bestUT + fstep) {
             IF cand > floorUt {
-                LOCAL tr3 IS _evalDeorbitNode(cand, bestPe,
-                    targetLat, targetLng).
-                IF tr3["VALID"] AND tr3["DIST"] < bestDist {
-                    SET bestDist TO tr3["DIST"].
+                LOCAL tr3Dist IS _evalDeorbitDist(cand, bestPe,
+                    targetLat, targetLng, 0, 0,
+                    bodyR, mu, orbitSma, twoOverOrbitSma,
+                    minLead, minDV, maxDV).
+                IF tr3Dist >= 0 AND tr3Dist < bestDist {
+                    SET bestDist TO tr3Dist.
                     SET bestUT TO cand.
                 }
             }
@@ -773,15 +831,16 @@ GLOBAL FUNCTION targetedDeorbitAt {
     // Final Pe polish at the pinned burn time — also covers the
     // minutes-mode and discovery-early-stop paths that skip focus.
     IF peList:LENGTH > 1 {
-        LOCAL pf IS _deorbitEvalBestPe(bestUT, peList, targetLat, targetLng).
-        IF pf["VALID"] AND pf["DIST"] < bestDist {
-            SET bestDist TO pf["DIST"].
-            SET bestPe TO pf["PE"].
+        LOCAL pf IS _deorbitEvalBestPe(bestUT, peList, targetLat, targetLng,
+            bodyR, mu, orbitSma, twoOverOrbitSma, minLead, minDV, maxDV).
+        IF pf[0] AND pf[1] < bestDist {
+            SET bestDist TO pf[1].
+            SET bestPe TO pf[2].
             mLog("Pe polish: entry Pe -> " + ROUND(bestPe / 1000, 1)
                 + "km (closest rung at the pinned time).").
         }
     }
-    mLog("Polished best: T+" + ROUND(bestUT - TIME:SECONDS, 0)
+    mLog("Polished best: T+" + ROUND(bestUT - nowUt, 0)
         + "s  dist=" + ROUND(bestDist, 0) + "m.").
 
     // The old iterative impact refinement is RETIRED: it never
@@ -789,20 +848,25 @@ GLOBAL FUNCTION targetedDeorbitAt {
     // post-burn three-leg impact walk does its job better, with
     // measurement instead of prediction. Coarse + pass + walk.
 
-    mLog("Fine best: T+" + ROUND(bestUT - TIME:SECONDS,0)
+    LOCAL extraDv IS _deorbitVNewFast(entryPe, bodyR, mu, orbitSma,
+        twoOverOrbitSma) - _deorbitVNewFast(bestPe, bodyR, mu, orbitSma,
+        twoOverOrbitSma).
+    mLog("Fine best: T+" + ROUND(bestUT - nowUt,0)
         + "s  Pe=" + ROUND(bestPe/1000,1) + "km"
         + "  Rad=" + ROUND(bestRad,2)
         + "  Nor=" + ROUND(bestNor,2)
-        + "  extraDv=" + ROUND(_deorbitVNew(entryPe) - _deorbitVNew(bestPe), 0)
+        + "  extraDv=" + ROUND(extraDv, 0)
         + "m/s"
         + "  dist=" + ROUND(bestDist/1000,1) + "km").
     LOCAL deorbitStatus IS "ok".
     IF bestDist > tolerance { SET deorbitStatus TO "miss". }
-    LOCAL finalEval IS _evalDeorbitNode(bestUT, bestPe, targetLat, targetLng, bestRad, bestNor).
+    LOCAL finalEval IS _evalDeorbitNode(bestUT, bestPe, targetLat, targetLng,
+        bestRad, bestNor, bodyR, mu, orbitSma, twoOverOrbitSma,
+        minLead, minDV, maxDV).
     mLogWarn("STATS deorbit final status=" + deorbitStatus
         + " distKm=" + ROUND(bestDist/1000,1)
         + " toleranceKm=" + ROUND(tolerance/1000,1)
-        + " burnT=" + ROUND(bestUT - TIME:SECONDS,0)
+        + " burnT=" + ROUND(bestUT - nowUt,0)
         + " PeKm=" + ROUND(bestPe/1000,1)
         + " radial=" + ROUND(bestRad,2)
         + " normal=" + ROUND(bestNor,2)
@@ -837,7 +901,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
         RETURN FALSE.
     }
 
-    LOCAL realNode IS _planDeorbitNode(bestUT, bestPe, bestRad, bestNor).
+    LOCAL realNode IS _planDeorbitNode(bestUT, bestPe, bestRad, bestNor,
+        bodyR, mu, orbitSma, twoOverOrbitSma, minDV, maxDV).
     mLog("Executing deorbit burn at T+" + ROUND(bestUT - TIME:SECONDS,0) + "s.").
     archiveLog().
     HUDTEXT("Deorbit burn in " + ROUND(bestUT - TIME:SECONDS,0) + "s", 3, 2, 13, CYAN, FALSE).
@@ -890,6 +955,41 @@ LOCAL FUNCTION _testDeorbitNode {
 }
 
 
+LOCAL FUNCTION _evalDeorbitDist {
+    PARAMETER burnUT.
+    PARAMETER entryPe.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER radialDv.
+    PARAMETER normalDv.
+    PARAMETER bodyR.
+    PARAMETER mu.
+    PARAMETER orbitSma.
+    PARAMETER twoOverOrbitSma.
+    PARAMETER minLead.
+    PARAMETER minDV.
+    PARAMETER maxDV.
+
+    IF burnUT <= TIME:SECONDS + minLead { RETURN -1. }
+
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
+    LOCAL nd IS _planDeorbitNode(burnUT, entryPe, radialDv, normalDv,
+        bodyR, mu, orbitSma, twoOverOrbitSma, minDV, maxDV).
+    WAIT 0.2.
+
+    IF NOT ADDONS:TR:HASIMPACT {
+        REMOVE nd.
+        RETURN -1.
+    }
+
+    LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
+    LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
+        targetLat, targetLng).
+    REMOVE nd.
+    RETURN dist.
+}
+
+
 LOCAL FUNCTION _evalDeorbitNode {
     PARAMETER burnUT.
     PARAMETER entryPe.
@@ -897,6 +997,13 @@ LOCAL FUNCTION _evalDeorbitNode {
     PARAMETER targetLng.
     PARAMETER radialDv IS 0.
     PARAMETER normalDv IS 0.
+    PARAMETER bodyR IS -1.
+    PARAMETER mu IS -1.
+    PARAMETER orbitSma IS -1.
+    PARAMETER twoOverOrbitSma IS -1.
+    PARAMETER minLead IS -1.
+    PARAMETER minDV IS -1.
+    PARAMETER maxDV IS -1.
 
     LOCAL result IS LEXICON(
         "VALID", FALSE,
@@ -909,10 +1016,12 @@ LOCAL FUNCTION _evalDeorbitNode {
         "LNG", 0
     ).
 
-    IF burnUT <= TIME:SECONDS + _targetDeorbitMinLead() { RETURN result. }
+    IF minLead < 0 { SET minLead TO _targetDeorbitMinLead(). }
+    IF burnUT <= TIME:SECONDS + minLead { RETURN result. }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-    LOCAL nd IS _planDeorbitNode(burnUT, entryPe, radialDv, normalDv).
+    LOCAL nd IS _planDeorbitNode(burnUT, entryPe, radialDv, normalDv,
+        bodyR, mu, orbitSma, twoOverOrbitSma, minDV, maxDV).
     WAIT 0.2.
 
     IF NOT ADDONS:TR:HASIMPACT {
@@ -945,27 +1054,40 @@ LOCAL FUNCTION _planDeorbitNode {
     PARAMETER entryPe.
     PARAMETER radialDv IS 0.
     PARAMETER normalDv IS 0.
+    PARAMETER bodyR IS -1.
+    PARAMETER mu IS -1.
+    PARAMETER orbitSma IS -1.
+    PARAMETER twoOverOrbitSma IS -1.
+    PARAMETER minDV IS -1.
+    PARAMETER maxDV IS -1.
 
-    LOCAL mu   IS SHIP:ORBIT:BODY:MU.
-    LOCAL oRad IS SHIP:ORBIT:SEMIMAJORAXIS.
-    LOCAL rPe  IS SHIP:ORBIT:BODY:RADIUS + entryPe.
-    LOCAL tSMA IS (oRad + rPe) / 2.
+    IF bodyR < 0 { SET bodyR TO SHIP:ORBIT:BODY:RADIUS. }
+    IF mu < 0 { SET mu TO SHIP:ORBIT:BODY:MU. }
+    IF orbitSma < 0 { SET orbitSma TO SHIP:ORBIT:SEMIMAJORAXIS. }
+    IF twoOverOrbitSma < 0 { SET twoOverOrbitSma TO 2 / orbitSma. }
+    IF minDV < 0 {
+        SET minDV TO 0.
+        IF DEFINED CFG AND CFG:HASKEY("LANDING_DEORBIT_MIN_DV") {
+            SET minDV TO CFG["LANDING_DEORBIT_MIN_DV"].
+        }
+    }
+    IF maxDV < 0 {
+        SET maxDV TO 99999.
+        IF DEFINED CFG AND CFG:HASKEY("LANDING_DEORBIT_MAX_DV") {
+            SET maxDV TO CFG["LANDING_DEORBIT_MAX_DV"].
+        }
+    }
     LOCAL vNow IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
-    LOCAL vNew IS SQRT(mu * (2/oRad - 1/tSMA)).
+    LOCAL vNew IS _deorbitVNewFast(entryPe, bodyR, mu, orbitSma,
+        twoOverOrbitSma).
     LOCAL dv   IS vNew - vNow.
 
     // Clamp retrograde dV to configurable min/max bounds.
     // From low orbits the Hohmann dV is tiny; the floor ensures a
     // steep ballistic trajectory that overshoots the target so the
     // suicide burn can steer onto it during descent.
-    IF DEFINED CFG {
-        LOCAL minDV IS 0.
-        LOCAL maxDV IS 99999.
-        IF CFG:HASKEY("LANDING_DEORBIT_MIN_DV") { SET minDV TO CFG["LANDING_DEORBIT_MIN_DV"]. }
-        IF CFG:HASKEY("LANDING_DEORBIT_MAX_DV") { SET maxDV TO CFG["LANDING_DEORBIT_MAX_DV"]. }
-        IF minDV > 0 OR maxDV < 99999 {
-            SET dv TO MIN(-minDV, MAX(-maxDV, dv)).
-        }
+    IF minDV > 0 OR maxDV < 99999 {
+        SET dv TO MIN(-minDV, MAX(-maxDV, dv)).
     }
 
     LOCAL nd IS NODE(burnUT, radialDv, normalDv, dv).
@@ -978,385 +1100,4 @@ GLOBAL FUNCTION targetReachable {
     LOCAL inc IS SHIP:ORBIT:INCLINATION.
     IF inc > 90 { SET inc TO 180 - inc. }
     RETURN ABS(targetLat) <= inc + 0.5.
-}
-
-// ============================================================
-// phaseKscDeorbit — KSC_DEORBIT phase: Trajectories-targeted
-// deorbit from Kerbin orbit toward the splashdown point just
-// offshore of KSC (or wherever LANDING_TARGET_LAT/LNG says).
-// Pairs with the DESCENT phase for fully automatic landings:
-//   SEQUENCE = KSC_DEORBIT,DESCENT,DONE   (cmd/landatksc.ks)
-//
-// CFG keys (defaults): LANDING_TARGET_WAYPOINT (wins when set —
-//   a Waypoint Manager waypoint name on the current body),
-//   LANDING_TARGET_LAT (-0.10), LANDING_TARGET_LNG (-74.25),
-//   REENTRY_PE (30000), LANDING_TARGET_TOLERANCE (15000),
-//   LANDING_DEORBIT_BUDGET_DV (0 — spare dV the search may spend
-//   on a steeper deorbit to hit the target on a sooner pass),
-//   plus the TARGET_DEORBIT_* scan settings shared with the
-//   landing flows.
-// ============================================================
-// Landing-site biome check against the SCANsat map. TRUE when
-// the mapped biome at lat/lng substring-matches any token.
-LOCAL FUNCTION _biomeMatchesAt {
-    PARAMETER chkLat.
-    PARAMETER chkLng.
-    PARAMETER tokens.
-    LOCAL nm IS ADDONS:SCANSAT:GETBIOME(SHIP:BODY, LATLNG(chkLat, chkLng)).
-    IF nm = "" OR nm = "unknown" { RETURN FALSE. }
-    LOCAL lower IS nm:TOLOWER.
-    FOR tok IN tokens {
-        IF lower:CONTAINS(tok) { RETURN TRUE. }
-    }
-    RETURN FALSE.
-}
-
-// When LANDING_TARGET_BIOMES is set (CSV, e.g. "ice, tundra"),
-// verify the target sits in one of them on the SCANsat biome map
-// — the mapping mission's data becomes the crewed mission's site
-// survey. On a mismatch, grid-search reachable latitudes near
-// the target longitude for the closest-to-pole match.
-LOCAL FUNCTION _resolveBiomeTarget {
-    PARAMETER lat0.
-    PARAMETER lng0.
-    LOCAL out IS LEXICON("LAT", lat0, "LNG", lng0).
-    IF NOT CFG:HASKEY("LANDING_TARGET_BIOMES") { RETURN out. }
-    IF NOT ADDONS:SCANSAT:AVAILABLE { RETURN out. }
-    LOCAL tokens IS LIST().
-    FOR tok IN CFG["LANDING_TARGET_BIOMES"]:SPLIT(",") {
-        IF tok:TRIM <> "" { tokens:ADD(tok:TRIM:TOLOWER). }
-    }
-    IF tokens:LENGTH = 0 { RETURN out. }
-    IF _biomeMatchesAt(lat0, lng0, tokens) {
-        mLog("Landing target biome confirmed on the SCANsat map.").
-        RETURN out.
-    }
-
-    LOCAL maxLat IS SHIP:ORBIT:INCLINATION - 1.
-    IF maxLat > 89 { SET maxLat TO 89. }
-    LOCAL latStep IS 1.5.
-    LOCAL tryLat IS maxLat.
-    UNTIL tryLat < maxLat - 18 {
-        LOCAL lngOff IS 0.
-        UNTIL lngOff > 60 {
-            FOR sgn IN LIST(1, -1) {
-                LOCAL tryLng IS lng0 + sgn * lngOff.
-                IF _biomeMatchesAt(tryLat, tryLng, tokens) {
-                    mLog("Biome site found: " + ROUND(tryLat, 2) + ","
-                        + ROUND(tryLng, 2) + " ("
-                        + ADDONS:SCANSAT:GETBIOME(SHIP:BODY,
-                            LATLNG(tryLat, tryLng)) + ").").
-                    SET out["LAT"] TO tryLat.
-                    SET out["LNG"] TO tryLng.
-                    RETURN out.
-                }
-            }
-            SET lngOff TO lngOff + 10.
-        }
-        SET tryLat TO tryLat - latStep.
-    }
-    mLogWarn("No mapped " + CFG["LANDING_TARGET_BIOMES"]
-        + " site found near the target — is the biome map scanned"
-        + " there? Keeping the configured target.").
-    RETURN out.
-}
-
-GLOBAL FUNCTION phaseKscDeorbit {
-    LOCAL lat IS -0.10.
-    LOCAL lng IS -74.25.
-    LOCAL entryPe IS 30000.
-    LOCAL tol IS 15000.
-    IF CFG:HASKEY("LANDING_TARGET_LAT") { SET lat TO CFG["LANDING_TARGET_LAT"]. }
-    IF CFG:HASKEY("LANDING_TARGET_LNG") { SET lng TO CFG["LANDING_TARGET_LNG"]. }
-    IF CFG:HASKEY("REENTRY_PE") { SET entryPe TO CFG["REENTRY_PE"]. }
-    IF CFG:HASKEY("LANDING_TARGET_TOLERANCE") { SET tol TO CFG["LANDING_TARGET_TOLERANCE"]. }
-    IF CFG:HASKEY("LANDING_TARGET_WAYPOINT")
-            AND CFG["LANDING_TARGET_WAYPOINT"] <> "" {
-        LOCAL namedWp IS waypointNamed(CFG["LANDING_TARGET_WAYPOINT"]).
-        IF namedWp:ISTYPE("Waypoint") {
-            SET lat TO namedWp:GEOPOSITION:LAT.
-            SET lng TO namedWp:GEOPOSITION:LNG.
-            mLog("Deorbit target from waypoint '" + namedWp:NAME + "'.").
-        } ELSE {
-            mLogError("KSC_DEORBIT: waypoint '"
-                + CFG["LANDING_TARGET_WAYPOINT"] + "' not found on "
-                + SHIP:BODY:NAME + " — holding.").
-            yieldToPrompt().
-            RETURN.
-        }
-    }
-
-    IF SHIP:BODY:NAME <> "Kerbin" {
-        mLogError("KSC_DEORBIT: not in Kerbin SOI (body="
-            + SHIP:BODY:NAME + ") — holding.").
-        yieldToPrompt().
-        RETURN.
-    }
-    LOCAL biomeSite IS _resolveBiomeTarget(lat, lng).
-    SET lat TO biomeSite["LAT"].
-    SET lng TO biomeSite["LNG"].
-
-    IF NOT targetReachable(lat) {
-        mLogError("KSC_DEORBIT: target lat " + ROUND(lat, 2)
-            + " unreachable from inc "
-            + ROUND(SHIP:ORBIT:INCLINATION, 2) + " — holding.").
-        yieldToPrompt().
-        RETURN.
-    }
-    // Resume safety: a reboot after the burn lands here with the
-    // periapsis already in the atmosphere — nothing left to do.
-    IF SHIP:PERIAPSIS < SHIP:BODY:ATM:HEIGHT {
-        mLog("KSC_DEORBIT: Pe already in atmosphere ("
-            + ROUND(SHIP:PERIAPSIS / 1000, 1) + "km) — proceeding to descent.").
-        // A reboot right after the burn lands here with the walk
-        // never having run (flight-found: post-burn crash before
-        // the finesse pass) — run it now; it exits immediately
-        // when already on the bullseye.
-        IF ADDONS:TR:AVAILABLE {
-            ADDONS:TR:SETTARGET(LATLNG(lat, lng)).
-            WAIT 1.
-            _deorbitImpactWalk(lat, lng, tol).
-        }
-        nextPhase(xferSeq).
-        RETURN.
-    }
-
-    // ORBIT_STAY_TIME: stay in orbit this many seconds (from orbit
-    // insertion, or launch as fallback) before the return leg —
-    // tourist/experience contracts. KAC-alarmed, reboot-safe.
-    LOCAL stayTime IS 0.
-    IF CFG:HASKEY("ORBIT_STAY_TIME") { SET stayTime TO CFG["ORBIT_STAY_TIME"]. }
-    IF stayTime > 0 {
-        LOCAL baseUt IS stateGetNum("orbit_start_time",
-            stateGetNum("launch_time", TIME:SECONDS)).
-        LOCAL resumeUt IS baseUt + stayTime.
-        IF resumeUt > TIME:SECONDS + 30 {
-            mLog("KSC_DEORBIT: holding in orbit "
-                + ROUND(resumeUt - TIME:SECONDS, 0)
-                + "s more (ORBIT_STAY_TIME=" + ROUND(stayTime, 0) + ").").
-            LOCAL alarmId IS kacEnsureAlarm(
-                "Return window: " + SHIP:NAME, resumeUt - 60,
-                "Auto-created by KSC_DEORBIT").
-            UNLOCK STEERING.
-            trySolarOrient().
-            SET SAS TO TRUE.
-            // Biome announcer for crewed stays: call out biome
-            // crossings so EVA reports can be timed (SCANsat's
-            // CURRENTBIOME needs a crewed pod or KerbNet).
-            // EVA_BIOMES (CSV, substring match): crossings into
-            // these drop out of warp so the crew can get outside.
-            LOCAL evaBiomes IS LIST().
-            IF CFG:HASKEY("EVA_BIOMES") {
-                FOR tok IN CFG["EVA_BIOMES"]:SPLIT(",") {
-                    IF tok:TRIM <> "" { evaBiomes:ADD(tok:TRIM:TOLOWER). }
-                }
-            }
-            LOCAL lastBiome IS "".
-            // Flow-triggered, warp-aware solar maintenance (the
-            // timer-based block this replaces re-aimed blind on a
-            // schedule; this one only acts when the panels sag).
-            LOCAL solarRef IS shipSolarFlow().
-            UNTIL TIME:SECONDS >= resumeUt {
-                SET solarRef TO solarHoldTick(solarRef).
-
-                IF ADDONS:SCANSAT:AVAILABLE AND SHIP:CREW():LENGTH > 0 {
-                    LOCAL nowBiome IS ADDONS:SCANSAT:CURRENTBIOME.
-                    IF nowBiome <> lastBiome AND nowBiome <> "" {
-                        SET lastBiome TO nowBiome.
-                        LOCAL wanted IS FALSE.
-                        LOCAL biomeLower IS nowBiome:TOLOWER.
-                        FOR tok IN evaBiomes {
-                            IF biomeLower:CONTAINS(tok) { SET wanted TO TRUE. }
-                        }
-                        // Science ledger: only the FIRST crossing
-                        // of each wanted biome stops the warp —
-                        // once its science is collected, later
-                        // passes are HUD-only. Clear a state key
-                        // (evaSci_<body>_<biome>) to re-arm one.
-                        LOCAL ledgerKey IS "evaSci_" + SHIP:BODY:NAME
-                            + "_" + nowBiome:REPLACE(" ", "_").
-                        IF wanted AND stateGet(ledgerKey, "") = "" {
-                            stateSet(ledgerKey, "done").
-                            IF NOT warpHoldEnabled() { SET WARP TO 0. }
-                            mLog("Science stop: first " + nowBiome
-                                + " crossing — EVA/crew report time.").
-                            HUDTEXT("NEW BIOME: " + nowBiome
-                                + " — EVA + crew report!",
-                                12, 2, 18, GREEN, FALSE).
-                            IF DEFINED BOOT_LIB_RAN
-                                    AND BOOT_LIB_RAN:CONTAINS("science") {
-                                scienceRunAll().
-                            }
-                        } ELSE {
-                            mLog("Now over: " + nowBiome
-                                + (CHOOSE " (collected)." IF wanted ELSE ".")).
-                            HUDTEXT("Now over: " + nowBiome
-                                + (CHOOSE " (collected)" IF wanted ELSE ""),
-                                8, 2, 15, CYAN, FALSE).
-                        }
-                    }
-                }
-                WAIT 5.
-            }
-            SET WARP TO 0.
-            IF alarmId <> "" { DELETEALARM(alarmId). }
-            mLog("KSC_DEORBIT: stay complete — planning the return.").
-        }
-    }
-
-    mLog("KSC deorbit: target " + ROUND(lat, 4) + ", " + ROUND(lng, 4)
-        + "  entryPe=" + ROUND(entryPe / 1000, 1) + "km"
-        + "  tol=" + ROUND(tol / 1000, 1) + "km.").
-    LOCAL ok IS targetedDeorbitAt(lat, lng, entryPe, tol).
-    IF NOT ok {
-        mLogError("KSC_DEORBIT: targeting failed — holding for review.").
-        yieldToPrompt().
-        RETURN.
-    }
-    IF ADDONS:TR:AVAILABLE AND ADDONS:TR:HASIMPACT {
-        LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-        mLogWarn("STATS ksc-deorbit result impact="
-            + ROUND(impactPos:LAT, 4) + "," + ROUND(impactPos:LNG, 4)).
-    }
-    nextPhase(xferSeq).
-}
-
-// Execute a maneuver node with align, staged throttle, and cleanup.
-// Self-contained — no dependency on maneuver.ks. Used by both the
-// timed deorbit path and targeted deorbit (via deorbit_targeting.ks).
-GLOBAL FUNCTION executeDeorbitNode {
-    PARAMETER nd.
-    LOCAL burnDV IS nd:DELTAV:MAG.
-    // No thrust usually means a deactivated engine or a spent
-    // stage still attached. Try ACTIVATING dormant engines first —
-    // it cannot pop chutes or decouplers (flight-found: a KSC
-    // deorbit aborted at the burn over a right-click-deactivated
-    // engine) — then stage like executeManeuver does fleet-wide.
-    IF SHIP:AVAILABLETHRUST <= 0 {
-        FOR eng IN SHIP:ENGINES {
-            IF NOT eng:IGNITION {
-                mLogWarn("Deorbit burn has no thrust — activating "
-                    + eng:NAME + ".").
-                eng:ACTIVATE.
-            }
-        }
-        WAIT 0.5.
-    }
-    LOCAL stageTries IS 0.
-    UNTIL SHIP:AVAILABLETHRUST > 0 OR stageTries >= 2 {
-        SET stageTries TO stageTries + 1.
-        mLogWarn("Deorbit burn still has no thrust — staging (attempt "
-            + stageTries + ").").
-        STAGE.
-        WAIT 1.
-    }
-    IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {
-        mLogError("Timed deorbit cannot burn: no available thrust"
-            + " (engines dry, disabled, or absent).").
-        REMOVE nd.
-        RETURN FALSE.
-    }
-    LOCAL maxAcc IS SHIP:AVAILABLETHRUST / SHIP:MASS.
-    LOCAL burnTime IS burnDV / MAX(0.1, maxAcc).
-    LOCAL startTime IS nd:TIME - burnTime / 2.
-    IF startTime < TIME:SECONDS + 5 { SET startTime TO TIME:SECONDS + 5. }
-
-    mLogWarn("STATS timed-burn setup dv=" + ROUND(burnDV,1)
-        + " eta=" + ROUND(startTime - TIME:SECONDS,1)
-        + " nodeEta=" + ROUND(nd:ETA,1)
-        + " maxAcc=" + ROUND(maxAcc,2)).
-
-    // Warp/wait discipline — parity with executeManeuver
-    // (flight-found: a 3.4h coast to the deorbit burn held a
-    // steering lock with no KAC alarm; warping would sail
-    // through the window).
-    LOCAL kacAlarmId IS "".
-    IF ADDONS:KAC:AVAILABLE AND startTime - 60 > TIME:SECONDS {
-        LOCAL alm IS ADDALARM("Raw", startTime - 60,
-            "Deorbit burn: " + ROUND(burnDV,1) + "m/s",
-            "Auto-created by executeDeorbitNode").
-        SET alm:ACTION TO "KillWarp".
-        SET kacAlarmId TO alm:ID.
-        mLog("KAC alarm set for deorbit burn in "
-            + ROUND(startTime - 60 - TIME:SECONDS, 0) + "s.").
-    }
-    IF startTime - TIME:SECONDS > 300 {
-        trySolarOrient().
-        SET SAS TO TRUE.
-        mLog("Long coast to deorbit burn ("
-            + ROUND(startTime - TIME:SECONDS, 0) + "s). Warp at will.").
-        LOCAL solarRef IS -1.
-        UNTIL TIME:SECONDS >= startTime - 120 {
-            SET solarRef TO trySolarHoldTick(solarRef).
-            WAIT MIN(10, MAX(0.5, startTime - 120 - TIME:SECONDS)).
-        }
-        SET WARP TO 0.
-        mLog("Awake — " + ROUND(startTime - TIME:SECONDS, 0)
-            + "s to deorbit burn.").
-    }
-
-    SET SAS TO FALSE.
-    // Use the ENTIRE remaining coast for alignment — flight-found:
-    // a 45s cap left a weak-wheel (SAS-less) craft pointing the
-    // wrong way with the burn 36s out.
-    LOCK STEERING TO nd:BURNVECTOR.
-    LOCAL alignDeadline IS startTime - 2.
-    UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < 5
-            OR TIME:SECONDS >= alignDeadline {
-        LOCK STEERING TO nd:BURNVECTOR.
-        WAIT 0.1.
-    }
-    mLogWarn("STATS timed-burn align angle="
-        + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR),1)
-        + " timeToBurn=" + ROUND(startTime - TIME:SECONDS,1)).
-
-    WAIT UNTIL TIME:SECONDS >= startTime.
-    // Never light the engine badly off-axis: a misaligned deorbit
-    // burn can RAISE or skew the orbit. Refusing costs one pass;
-    // the caller replans.
-    IF VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) > 15 {
-        mLogError("Refusing burn: "
-            + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
-            + " deg off the burn vector at ignition.").
-        LOCK THROTTLE TO 0.
-        UNLOCK THROTTLE.
-        UNLOCK STEERING.
-        RETURN FALSE.
-    }
-    LOCAL burnStart IS TIME:SECONDS.
-    LOCAL origBurnVec IS nd:BURNVECTOR.
-    mLog("Timed deorbit burn start. dV=" + ROUND(burnDV,1) + " m/s.").
-    UNTIL nd:DELTAV:MAG < MAX(0.08, burnDV * 0.01)
-            OR TIME:SECONDS - burnStart > burnTime * 2 + 8 {
-        LOCK STEERING TO nd:BURNVECTOR.
-        IF nd:DELTAV:MAG > 0.1
-                AND VDOT(origBurnVec:NORMALIZED, nd:BURNVECTOR:NORMALIZED) < 0 {
-            BREAK.
-        }
-        IF nd:DELTAV:MAG > 3 {
-            LOCK THROTTLE TO 1.
-        } ELSE IF nd:DELTAV:MAG > 0.4 {
-            LOCK THROTTLE TO 0.25.
-        } ELSE {
-            LOCK THROTTLE TO 0.05.
-        }
-        WAIT 0.02.
-    }
-
-    LOCAL residual IS nd:DELTAV:MAG.
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
-    UNLOCK STEERING.
-    // Guarded: the node can already be gone post-burn (flight-
-    // found: REMOVE threw after a flip-guard exit at 1.7 m/s
-    // residual — likely MechJeb's remove-after-execution eating
-    // the depleted node first).
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    SET SAS TO TRUE.
-    IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
-    mLog("Timed deorbit burn complete. Residual=" + ROUND(residual,2) + " m/s.").
-    mLogWarn("STATS timed-burn result dv=" + ROUND(burnDV,1)
-        + " residual=" + ROUND(residual,2)
-        + " duration=" + ROUND(TIME:SECONDS - burnStart,1)).
-    RETURN TRUE.
 }
