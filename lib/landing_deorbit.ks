@@ -1,6 +1,6 @@
 // Landing deorbit phase: target, create, and execute the deorbit node.
 
-GLOBAL FUNCTION phaseLand_Deorbit {
+GLOBAL FUNCTION phaseLandDeorbit {
     landingApplyMissionConfig().
     IF SHIP:STATUS = "SUB_ORBITAL"
             AND (CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH")
