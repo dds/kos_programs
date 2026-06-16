@@ -51,7 +51,7 @@ GLOBAL FUNCTION isOrbitStable {
 GLOBAL FUNCTION ensureSoiAlarm {
     PARAMETER targetBody.
     PARAMETER soiUt.
-    PARAMETER note IS "Auto-created by waitForSOI".
+    PARAMETER msg IS "Auto-created by waitForSOI. Fly safe.".
 
     IF NOT ADDONS:KAC:AVAILABLE { RETURN "". }
     IF soiUt <= TIME:SECONDS { RETURN "". }
@@ -68,7 +68,7 @@ GLOBAL FUNCTION ensureSoiAlarm {
     }
 
     IF oldId <> "" { DELETEALARM(oldId). }
-    LOCAL alm IS ADDALARM("Raw", soiUt, "SOI: " + targetBody:NAME, note).
+    LOCAL alm IS ADDALARM("Raw", soiUt, "SOI: " + targetBody:NAME, msg).
     SET alm:ACTION TO "KillWarp".
     stateSet("soi_alarm_id", alm:ID).
     stateSet("soi_alarm_target", targetBody:NAME).
