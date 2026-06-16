@@ -19,6 +19,8 @@ _del("1:/lib/inclination.ksm").
 _del("1:/lib/payload_ops.ksm").
 _del("1:/lib/science.ksm").
 _del("1:/lib/landing.ksm").
+_del("1:/lib/landing_math.ksm").
+_del("1:/lib/vessel_hardware.ksm").
 _del("1:/lib/rover.ksm").
 _del("1:/run/log_path.state").
 
