@@ -25,15 +25,15 @@ GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
 
 applyKnownMissionState().
 IF stateGet("secondary_active", "false") = "true" {
-    IF CFG:HASKEY("SECONDARY_SEQUENCE") { cfgSet("SEQUENCE", CFG["SECONDARY_SEQUENCE"]). }
+    IF CFG:HASKEY("SECONDARY_SEQUENCE") {
+        cfgSet("SEQUENCE", CFG["SECONDARY_SEQUENCE"]).
+        stateSet("mission_cfg_SEQUENCE", CFG["SEQUENCE"]).
+    }
     IF CFG:HASKEY("SECONDARY_SHAPE_PE") { cfgSet("SHAPE_PE", CFG["SECONDARY_SHAPE_PE"]). }
     IF CFG:HASKEY("SECONDARY_SHAPE_AP") { cfgSet("SHAPE_AP", CFG["SECONDARY_SHAPE_AP"]). }
     IF CFG:HASKEY("SECONDARY_SHAPE_INC") { cfgSet("SHAPE_INC", CFG["SECONDARY_SHAPE_INC"]). }
     IF CFG:HASKEY("SECONDARY_SHAPE_LAN") { cfgSet("SHAPE_LAN", CFG["SECONDARY_SHAPE_LAN"]). }
     IF CFG:HASKEY("SECONDARY_SHAPE_AOP") { cfgSet("SHAPE_AOP", CFG["SECONDARY_SHAPE_AOP"]). }
-}
-IF stateGet("mission_cfg_LIBS_EXTRA", "") = "" AND CFG:HASKEY("LIBS_EXTRA") {
-    stateSet("mission_cfg_LIBS_EXTRA", CFG["LIBS_EXTRA"]).
 }
 
 LOCAL FUNCTION _falconPrintConfig {
@@ -139,7 +139,19 @@ LOCAL FUNCTION _falconLibsForBand {
     PARAMETER band.
     LOCAL roots IS bootLibBandRoots(band).
     missionAppendUnique(roots, missionTypeConditionalRoots(band)).
-    missionAppendUnique(roots, missionExtraLibs()).
+    LOCAL extras IS missionExtraLibs().
+    IF band <> "LAUNCH" {
+        LOCAL filtered IS LIST().
+        FOR libName IN extras {
+            IF libName = "launch" {
+                mLog("Falcon extra lib launch skipped outside LAUNCH band.").
+            } ELSE {
+                filtered:ADD(libName).
+            }
+        }
+        SET extras TO filtered.
+    }
+    missionAppendUnique(roots, extras).
     RETURN bootLibResolve(roots).
 }
 
