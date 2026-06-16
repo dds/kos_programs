@@ -493,12 +493,7 @@ GLOBAL FUNCTION bootCheckManualKey {
 }
 
 GLOBAL FUNCTION bootLibSpec {
-    LOCAL path_ IS "1:/lib/dependencies.json".
-    IF NOT EXISTS(path_) {
-        PRINT "  WARN: dependencies.json unavailable".
-        RETURN LEXICON().
-    }
-    RETURN READJSON(path_).
+    RETURN ADDONS:JSON:PARSEORELSE("1:/lib/dependencies.json", LEXICON()).
 }
 
 GLOBAL FUNCTION bootLibAddUnique {
