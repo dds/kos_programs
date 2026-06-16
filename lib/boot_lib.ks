@@ -115,34 +115,6 @@ GLOBAL FUNCTION bootCompiledPath {
     RETURN "1:/" + scriptPath_ + ".ksm".
 }
 
-GLOBAL FUNCTION bootSourcePath {
-    PARAMETER scriptPath_.
-    RETURN "1:/" + scriptPath_ + ".ks".
-}
-
-GLOBAL FUNCTION bootSyncScript {
-    PARAMETER scriptPath_.
-    PARAMETER hasLink.
-    IF NOT hasLink { RETURN. }
-    LOCAL src IS "0:/" + scriptPath_ + ".ks".
-    LOCAL dst IS bootSourcePath(scriptPath_).
-    LOCAL dstKsm IS bootCompiledPath(scriptPath_).
-    IF EXISTS(src) {
-        COMPILE src TO dstKsm.
-        IF EXISTS(dst) { DELETEPATH(dst). }
-    }
-}
-
-GLOBAL FUNCTION bootRunScript {
-    PARAMETER scriptPath_.
-    LOCAL compiled IS bootCompiledPath(scriptPath_).
-    IF EXISTS(compiled) {
-        RUNPATH(compiled).
-    } ELSE {
-        RUNPATH(bootSourcePath(scriptPath_)).
-    }
-}
-
 GLOBAL FUNCTION bootBaseName {
     PARAMETER fileName.
     IF fileName:CONTAINS(".ksm") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
@@ -272,7 +244,7 @@ GLOBAL FUNCTION bootMissionConfig {
             } ELSE {
                 // The picker is its own lib — only fresh pad boots
                 // pay for it (no link = no profiles to list anyway).
-                bootLibRun("boot_picker").
+                RUNPATHONCE("1:/lib/boot_picker").
                 SET missionId TO bootSelectMissionId(craftName, hasLink).
             }
         }
@@ -521,44 +493,18 @@ GLOBAL FUNCTION bootLibResolve {
     RETURN libs.
 }
 
-GLOBAL FUNCTION bootLibRun {
-    PARAMETER libName.
-    IF BOOT_LIB_RAN:CONTAINS(libName) { RETURN. }
-    bootLibSync(libName).
-    RUNPATH("1:/lib/" + libName).
-    BOOT_LIB_RAN:ADD(libName).
-    PRINT("Loaded " + libName + "...").
-}
-
 GLOBAL FUNCTION bootLibSync {
     PARAMETER libName.
-    IF NOT HOMECONNECTION:ISCONNECTED { RETURN. }
     LOCAL src IS "0:/lib/" + libName + ".ks".
-    LOCAL dst IS "1:/lib/" + libName + ".ks".
-    LOCAL dstKsm IS "1:/lib/" + libName + ".ksm".
-    IF EXISTS(src) {
-        IF bootLibArchiveOnly(libName) {
-            IF EXISTS(dstKsm) { DELETEPATH(dstKsm). }
-            IF EXISTS(dst) { DELETEPATH(dst). }
-            RETURN.
-        }
-        LOCAL skipKsm IS FALSE.
-        IF DEFINED KSM_SKIP {
-            IF KSM_SKIP:CONTAINS(libName) { SET skipKsm TO TRUE. }
-        }
-        IF skipKsm {
-            COPYPATH(src, dst).
-        } ELSE {
-            COMPILE src TO dstKsm.
-            IF EXISTS(dst) { DELETEPATH(dst). }
-        }
-    }
+    IF NOT HOMECONNECTION:ISCONNECTED { RETURN. }
+    COMPILE src TO "1:/lib/" + libName + ".ksm".
 }
 
 GLOBAL FUNCTION bootLibLoadList {
     PARAMETER roots.
     FOR libName IN bootLibResolve(roots) {
-        bootLibRun(libName).
+        botoLibSync(libName).
+        RUNPATHONCE("1:/lib/" + libName).
     }
 }
 

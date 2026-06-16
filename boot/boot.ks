@@ -119,22 +119,16 @@ IF vehicleScript:CONTAINS("/") {
 }
 
 IF HAS_LINK {
-    // The 1:/zombie reboot trigger lives only on zombie-tagged
-    // backup cores; main cores run 0:/cmd/zombie.ks when linked.
-    IF CORE:TAG = "zombie" AND EXISTS("0:/cmd/zombie.ks") {
-        PRINT "  SYNC Zombie ........".
-        COPYPATH("0:/cmd/zombie.ks", "1:/zombie").
-    }
     IF vehicleScript <> "" {
         PRINT "  SYNC " + vehicleScript + " ....... ".
-        bootSyncScript(vehicleScript, HAS_LINK).
+        IF _syncLib(vehicleScript).
         bootMissionConfig(vehicleName, HAS_LINK).
     }
 }
 
 
 IF vehicleScript <> "" {
-    bootRunScript(vehicleScript).
+    RUNPATH(vehicleScript).
 }
 
 LOCAL vehicleLibs IS LIST().
