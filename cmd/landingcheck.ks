@@ -4,7 +4,8 @@
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
-LOCAL grav IS SHIP:BODY:MU / (SHIP:BODY:RADIUS + SHIP:ALTITUDE)^2.
+LOCAL radiusMag IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
+LOCAL grav IS SHIP:BODY:MU / (radiusMag * radiusMag).
 LOCAL maxAcc IS 0.
 IF SHIP:MASS > 0 {
     SET maxAcc TO SHIP:AVAILABLETHRUST / SHIP:MASS.

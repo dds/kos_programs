@@ -49,7 +49,7 @@ LOCAL FUNCTION _bestScanSatSite {
                 SET known TO known + 1.
                 LOCAL slope IS ADDONS:SCANSAT:SLOPE(SHIP:BODY, geo).
                 IF slope >= 0 AND slope <= maxSlope {
-                    LOCAL dist IS SQRT(north_^2 + east_^2).
+                    LOCAL dist IS SQRT(north_ * north_ + east_ * east_).
                     LOCAL score IS slope * 100 + dist / 20.
                     IF score < bestScore {
                         SET bestScore TO score.

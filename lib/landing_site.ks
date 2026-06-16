@@ -29,8 +29,7 @@ GLOBAL FUNCTION selectScanSatLandingSite {
     IF enabled <= 0 { RETURN out. }
 
     IF NOT ADDONS:SCANSAT:AVAILABLE {
-        mLogWarn("STATS site-scan status=no-scansat target="
-            + ROUND(targetLat,4) + "," + ROUND(targetLng,4)).
+        mLogWarn("Site scan: SCANsat unavailable.").
         RETURN out.
     }
 
@@ -66,7 +65,7 @@ GLOBAL FUNCTION selectScanSatLandingSite {
                 SET known TO known + 1.
                 LOCAL slope IS ADDONS:SCANSAT:SLOPE(SHIP:BODY, candGeo).
                 IF slope >= 0 AND slope <= maxSlope {
-                    LOCAL dist IS SQRT(north_^2 + east_^2).
+                    LOCAL dist IS SQRT(north_ * north_ + east_ * east_).
                     LOCAL score IS dist / 100 + slope * 25.
                     IF score < bestScore {
                         SET bestScore TO score.
@@ -86,24 +85,10 @@ GLOBAL FUNCTION selectScanSatLandingSite {
     }
 
     IF out["FOUND"] {
-        mLogWarn("STATS site-scan result status=selected target="
-            + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
-            + " selected=" + ROUND(out["LAT"],4) + "," + ROUND(out["LNG"],4)
-            + " distM=" + ROUND(out["DIST"],0)
-            + " slope=" + ROUND(out["SLOPE"],1)
-            + " elev=" + ROUND(out["ELEV"],0)
-            + " samples=" + samples
-            + " known=" + known
-            + " rejectedSlope=" + rejectedSlope).
+        mLog("Site scan selected: d=" + ROUND(out["DIST"],0)
+            + "m slope=" + ROUND(out["SLOPE"],1) + ".").
     } ELSE {
-        mLogWarn("STATS site-scan result status=no-site target="
-            + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
-            + " radiusM=" + ROUND(radius,0)
-            + " stepM=" + ROUND(step,0)
-            + " maxSlope=" + ROUND(maxSlope,1)
-            + " samples=" + samples
-            + " known=" + known
-            + " rejectedSlope=" + rejectedSlope).
+        mLogWarn("Site scan found no safe site.").
     }
 
     RETURN out.

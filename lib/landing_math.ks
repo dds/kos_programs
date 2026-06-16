@@ -7,17 +7,17 @@
 
 @LAZYGLOBAL OFF.
 
-// Effective local gravity in m/s^2. The raw two-body term is mu / r^2.
+// Effective local gravity in meters per second squared.
 // For descent trigger math we subtract centripetal acceleration from
 // horizontal ground speed, so a fast near-surface pass does not overstate
 // the burn needed to arrest vertical fall.
 GLOBAL FUNCTION landingMathGravity {
     LOCAL radiusMag IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
     IF radiusMag <= 0 { RETURN 0.01. }
-    LOCAL gRaw IS SHIP:BODY:MU / (radiusMag ^ 2).
+    LOCAL gRaw IS SHIP:BODY:MU / (radiusMag * radiusMag).
     LOCAL groundSpeed IS SHIP:GROUNDSPEED.
     IF groundSpeed > 1 {
-        SET gRaw TO gRaw - (groundSpeed ^ 2) / radiusMag.
+        SET gRaw TO gRaw - (groundSpeed * groundSpeed) / radiusMag.
     }
     RETURN MAX(0.01, gRaw).
 }
@@ -38,11 +38,11 @@ GLOBAL FUNCTION landingMathDownSpeed {
 
 // Horizontal stopping distance:
 //
-//   vf^2 = vi^2 + 2 a d
+//   squared vf = squared vi + 2 a d
 //
 // To stop horizontal motion, vf = 0 and acceleration opposes motion, so
-//   0 = vh^2 - 2 ah d
-//   d = vh^2 / (2 ah)
+//   0 = squared vh - 2 ah d
+//   d = squared vh / (2 ah)
 //
 // ah is a conservative reserved horizontal acceleration. It is deliberately
 // supplied by the caller so policy remains outside the physics helper.
@@ -50,17 +50,17 @@ GLOBAL FUNCTION landingMathHorizontalBrakeDistance {
     PARAMETER horizontalSpeed.
     PARAMETER horizontalAcc.
     IF horizontalAcc <= 0 { RETURN 999999. }
-    RETURN (horizontalSpeed ^ 2) / (2 * horizontalAcc).
+    RETURN (horizontalSpeed * horizontalSpeed) / (2 * horizontalAcc).
 }
 
 // Vertical suicide-burn height:
 //
-//   vf^2 = vi^2 + 2 a h
+//   squared vf = squared vi + 2 a h
 //
 // Let downward speed vv be positive and net upward acceleration be
 // aNet = aMax - g. Touchdown burn condition uses vf = 0:
-//   0 = vv^2 - 2(aMax - g)h
-//   h = vv^2 / (2(aMax - g))
+//   0 = squared vv - 2(aMax - g)h
+//   h = squared vv / (2(aMax - g))
 //
 // Recomputing every tick naturally accounts for fuel mass changing aMax.
 GLOBAL FUNCTION landingMathVerticalBurnDistance {
@@ -69,7 +69,7 @@ GLOBAL FUNCTION landingMathVerticalBurnDistance {
     PARAMETER gravAcc.
     LOCAL netAcc IS maxAcc - gravAcc.
     IF netAcc <= 0 { RETURN 999999. }
-    RETURN (downSpeed ^ 2) / (2 * netAcc).
+    RETURN (downSpeed * downSpeed) / (2 * netAcc).
 }
 
 // Constant-gravity vertical time to terrain. Positive roots only; returns
@@ -79,7 +79,7 @@ GLOBAL FUNCTION landingMathTimeToImpact {
     LOCAL verticalSpeed IS SHIP:VERTICALSPEED.
     LOCAL radarAlt IS ALT:RADAR.
     IF radarAlt <= 0 { RETURN 0. }
-    LOCAL disc IS verticalSpeed ^ 2 + 2 * radarAlt * gravAcc.
+    LOCAL disc IS verticalSpeed * verticalSpeed + 2 * radarAlt * gravAcc.
     IF disc < 0 OR gravAcc <= 0 { RETURN 999999. }
     RETURN (SQRT(disc) + verticalSpeed) / gravAcc.
 }
@@ -121,7 +121,7 @@ GLOBAL FUNCTION landingMathRetroSteering {
     LOCAL retroVec IS (-surfaceVel):NORMALIZED.
     LOCAL horizontalVel IS landingMathHorizontalVelocity().
     IF horizontalVel:MAG < 0.5 { RETURN retroVec. }
-    LOCAL maxLean IS SIN(LAND_CFG["MAX_TILT"]).
+    LOCAL maxLean IS SIN(LAND_CFG_MAX_TILT).
     LOCAL leanMag IS MIN(maxLean, horizontalVel:MAG / 25).
     RETURN (retroVec + SHIP:UP:VECTOR * leanMag):NORMALIZED.
 }
@@ -129,7 +129,7 @@ GLOBAL FUNCTION landingMathRetroSteering {
 GLOBAL FUNCTION landingMathHoverSteering {
     LOCAL horizontalVel IS landingMathHorizontalVelocity().
     IF horizontalVel:MAG < 0.3 { RETURN SHIP:UP:VECTOR. }
-    LOCAL maxLean IS SIN(LAND_CFG["MAX_TILT"]).
+    LOCAL maxLean IS SIN(LAND_CFG_MAX_TILT).
     LOCAL leanMag IS MIN(maxLean, horizontalVel:MAG / 10).
     RETURN (SHIP:UP:VECTOR + (-horizontalVel):NORMALIZED * leanMag):NORMALIZED.
 }
@@ -142,7 +142,7 @@ GLOBAL FUNCTION landingMathApproachSteering {
     LOCAL upVec IS SHIP:UP:VECTOR.
     LOCAL horizontalVel IS landingMathHorizontalVelocity().
     LOCAL targetDir IS landingMathDirectionToTarget(targetLat, targetLng).
-    LOCAL maxLean IS SIN(LAND_CFG["MAX_TILT"]).
+    LOCAL maxLean IS SIN(LAND_CFG_MAX_TILT).
     LOCAL desiredVel IS targetDir * targetHorizontalSpeed.
     LOCAL correctionVec IS desiredVel - horizontalVel.
     IF correctionVec:MAG <= 0.1 { RETURN upVec. }

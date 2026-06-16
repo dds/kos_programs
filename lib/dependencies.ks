@@ -11,7 +11,7 @@ GLOBAL FUNCTION dependencyLibs {
         "flightplan", LIST("ui"),
         "inclination", LIST("lib_navigation"),
         "landing_config", LIST("utils"),
-        "landing_deorbit", LIST("landing_config"),
+        "landing_deorbit", LIST("landing_config", "landing_math"),
         "landing_math", LIST("utils"),
         "vessel_hardware", LIST(),
         "landing", LIST("landing_config", "landing_math", "vessel_hardware"),

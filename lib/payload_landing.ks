@@ -40,7 +40,7 @@ GLOBAL FUNCTION phaseLand {
 LOCAL FUNCTION _redirectOrbitalLandingPhase {
     PARAMETER phaseName.
     IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "SUB_ORBITAL")
-            AND SHIP:PERIAPSIS > LANDING_CFG["DEORBIT_PE"] {
+            AND SHIP:PERIAPSIS > LAND_CFG_DEORBIT_PE {
         mLogWarn(phaseName + " requested while still in orbit; returning to LAND_DEORBIT.").
         stateSet("phase", "LAND_DEORBIT").
         PRINT " ".

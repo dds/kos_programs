@@ -93,7 +93,7 @@ LOCAL FUNCTION _timedLandingDeorbit {
 }
 
 LOCAL FUNCTION _landingDeorbitPe {
-    RETURN LANDING_CFG["DEORBIT_PE"].
+    RETURN LAND_CFG_DEORBIT_PE.
 }
 
 LOCAL FUNCTION _confirmLandingTarget {
@@ -130,18 +130,13 @@ LOCAL FUNCTION _autoLandingTarget {
         SET minutes TO CFG["LANDING_AUTO_TARGET_MINUTES"].
     }
     LOCAL geo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, TIME:SECONDS + minutes * 60)).
-    SET LANDING_CFG["TARGET_LAT"] TO geo:LAT.
-    SET LANDING_CFG["TARGET_LNG"] TO geo:LNG.
-    SET LANDING_CFG["TARGET_LOCK"] TO TRUE.
+    SET LAND_CFG_TARGET_LAT TO geo:LAT.
+    SET LAND_CFG_TARGET_LNG TO geo:LNG.
+    SET LAND_CFG_TARGET_LOCK TO TRUE.
     stateSet("mission_cfg_TARGET_LAT", geo:LAT).
     stateSet("mission_cfg_TARGET_LNG", geo:LNG).
     stateSet("mission_cfg_TARGET_LOCK", "1").
     RETURN TRUE.
-}
-
-LOCAL FUNCTION _landingHVel {
-    LOCAL upVec IS SHIP:UP:VECTOR.
-    RETURN SHIP:VELOCITY:SURFACE - (VDOT(SHIP:VELOCITY:SURFACE, upVec) * upVec).
 }
 
 LOCAL FUNCTION _landingOffsetLatLng {
@@ -160,10 +155,10 @@ LOCAL FUNCTION _landingOffsetLatLng {
 LOCAL FUNCTION _landingOvershootTarget {
     PARAMETER landingTarget.
     LOCAL out IS LEXICON("LAT", landingTarget["LAT"], "LNG", landingTarget["LNG"]).
-    LOCAL overshoot IS LANDING_CFG["DEORBIT_OVERSHOOT"].
+    LOCAL overshoot IS LAND_CFG_DEORBIT_OVERSHOOT.
     IF overshoot <= 0 { RETURN out. }
 
-    LOCAL hv IS _landingHVel().
+    LOCAL hv IS landingMathHorizontalVelocity().
     IF hv:MAG < 0.1 { RETURN out. }
     LOCAL upVec IS SHIP:UP:VECTOR.
     LOCAL northVec IS VXCL(upVec,
@@ -188,19 +183,19 @@ LOCAL FUNCTION _landingTargetedDeorbit {
         RETURN FALSE.
     }
 
-    SET LANDING_CFG["TARGET_LAT"] TO landingTarget["LAT"].
-    SET LANDING_CFG["TARGET_LNG"] TO landingTarget["LNG"].
+    SET LAND_CFG_TARGET_LAT TO landingTarget["LAT"].
+    SET LAND_CFG_TARGET_LNG TO landingTarget["LNG"].
     mLog("Landing deorbit target: " + ROUND(landingTarget["LAT"],4)
         + "," + ROUND(landingTarget["LNG"],4)
         + " from " + landingTarget["SOURCE"] + ".").
 
-    IF (LANDING_CFG["DEORBIT_PE"]:TYPENAME = "STRING") {
-        SET LANDING_CFG["DEORBIT_PE"] TO LANDING_CFG["DEORBIT_PE"]:TONUMBER.
+    IF (LAND_CFG_DEORBIT_PE:TYPENAME = "STRING") {
+        SET LAND_CFG_DEORBIT_PE TO LAND_CFG_DEORBIT_PE:TONUMBER.
     }
     LOCAL aimTarget IS _landingOvershootTarget(landingTarget).
     RETURN targetedDeorbitAt(
         aimTarget["LAT"],
         aimTarget["LNG"],
-        LANDING_CFG["DEORBIT_PE"],
-        LANDING_CFG["TARGET_TOLERANCE"]).
+        LAND_CFG_DEORBIT_PE,
+        LAND_CFG_TARGET_TOLERANCE).
 }
