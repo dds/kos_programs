@@ -480,7 +480,7 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
         LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
             targetLat, targetLng).
-        LOCAL angle IS _nodeImpactAngle().
+        LOCAL angle IS _nodeImpactAngle(impactPos).
         LOCAL distCost IS (dist / 500) * (dist / 500).
         LOCAL angleCost IS 0.
         IF dist < 20000 {
@@ -505,8 +505,21 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
 }
 
 LOCAL FUNCTION _nodeImpactAngle {
-    RETURN VANG(ADDONS:TR:IMPACTUP:VECTOR,
-        ADDONS:TR:IMPACTVELOCITY:VECTOR) - 90.
+    PARAMETER impactPos.
+
+    IF NOT ADDONS:TR:ISVERTWOTWO { RETURN -1. }
+
+    LOCAL impactUT IS TIME:SECONDS + ADDONS:TR:TIMETILLIMPACT.
+    LOCAL dt IS 1.
+    LOCAL body IS SHIP:BODY.
+    LOCAL rPlus IS POSITIONAT(SHIP, impactUT)
+        - POSITIONAT(body, impactUT).
+    LOCAL rMinus IS POSITIONAT(SHIP, impactUT - dt)
+        - POSITIONAT(body, impactUT - dt).
+    LOCAL impactVel IS ((rPlus - rMinus) / dt) - impactPos:VELOCITY:ORBIT.
+    LOCAL impactUp IS (impactPos:POSITION - body:POSITION):NORMALIZED.
+
+    RETURN VANG(impactUp, impactVel) - 90.
 }
 
 LOCAL FUNCTION _planRetroNode {
