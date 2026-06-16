@@ -347,6 +347,17 @@ GLOBAL FUNCTION planPlaneMatch {
     LOCAL seedErr IS _planeErrOf(nd:ORBIT, nTgt).
     LOCAL finalErr IS _refinePlaneNode(nd, nTgt).
 
+    LOCAL peFloor IS 10000.
+    IF SHIP:BODY:ATM:EXISTS { SET peFloor TO SHIP:BODY:ATM:HEIGHT + 10000. }
+    IF nd:ORBIT:ECCENTRICITY >= 1 OR nd:ORBIT:PERIAPSIS < peFloor {
+        mLogError("Plane match: planned node is unsafe (Pe "
+            + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + "km ecc "
+            + ROUND(nd:ORBIT:ECCENTRICITY, 2)
+            + ") — discarding node.").
+        REMOVE nd.
+        RETURN 0.
+    }
+
     mLog("Plane match node: dV=" + ROUND(nd:DELTAV:MAG, 1)
         + " m/s  theta=" + ROUND(theta, 2)
         + "deg  planeErr=" + ROUND(finalErr, 2)
@@ -400,6 +411,7 @@ LOCAL FUNCTION _refinePlaneNode {
     }
 
     LOCAL FUNCTION _cost {
+        IF nd:ORBIT:ECCENTRICITY >= 1 { RETURN 9999. }
         IF nd:ORBIT:PERIAPSIS < peFloor { RETURN 9999. }
         RETURN _planeErrOf(nd:ORBIT, nTgt)
             + 0.01 * (ABS(nd:ORBIT:PERIAPSIS - pe0)
@@ -775,8 +787,26 @@ GLOBAL FUNCTION shapeNextBurn {
     LOCAL altTol IS _cfgNum("SHAPE_ALT_TOL", DEFAULT_ALT_TOL).
     LOCAL angTol IS _cfgNum("SHAPE_ANG_TOL", DEFAULT_ANG_TOL).
     LOCAL aopTol IS _cfgNum("SHAPE_AOP_TOL", DEFAULT_AOP_TOL).
+    LOCAL needAp2 IS errs:HASKEY("AP") AND ABS(errs["AP"]) > altTol.
+    LOCAL needPe2 IS errs:HASKEY("PE") AND ABS(errs["PE"]) > altTol.
 
-    // --- 1. Orbit plane (INC + LAN in one burn) ---
+    // --- 1. If a high AP target is requested, get to the slow
+    // side before paying for a big plane/LAN correction. A low
+    // capture orbit can make a 90deg plane burn look like an
+    // escape burn; raising AP first makes the later plane match
+    // cheaper and safer.
+    IF errs:HASKEY("PLANE") AND errs["PLANE"] > angTol
+            AND needAp2
+            AND targets["AP"] > SHIP:APOAPSIS + altTol
+            AND targets["AP"] >= SHIP:PERIAPSIS {
+        LOCAL etaPe0 IS ETA:PERIAPSIS.
+        IF etaPe0 < 60 { SET etaPe0 TO etaPe0 + SHIP:ORBIT:PERIOD. }
+        RETURN _finishShapeNode(
+            _planTangentBurnAt(etaPe0, 0, targets["AP"], "set-ap"),
+            "set-ap", targets).
+    }
+
+    // --- 2. Orbit plane (INC + LAN in one burn) ---
     IF errs:HASKEY("PLANE") AND errs["PLANE"] > angTol {
         LOCAL tInc IS SHIP:ORBIT:INCLINATION.
         LOCAL tLan IS SHIP:ORBIT:LAN.
@@ -786,7 +816,7 @@ GLOBAL FUNCTION shapeNextBurn {
         IF nd <> 0 { RETURN LEX("node", nd, "label", "plane"). }
     }
 
-    // --- 2. Near-circular start with a requested AoP: establish
+    // --- 3. Near-circular start with a requested AoP: establish
     // eccentricity at the right place instead of fighting an
     // undefined apsidal line. Burn where the periapsis belongs. ---
     IF SHIP:ORBIT:ECCENTRICITY < NEAR_CIRC_ECC
@@ -820,14 +850,11 @@ GLOBAL FUNCTION shapeNextBurn {
         }
     }
 
-    // --- 3 & 4. Apsides BEFORE the AoP rotation: tangential apsis
+    // --- 4 & 5. Apsides BEFORE the AoP rotation: tangential apsis
     // burns never move the apsidal line, and the rotation is
     // cheaper at the (usually lower) target eccentricity. Order by
     // feasibility: an Ap target below the current Pe cannot be set
     // from Pe, so fix Pe first then. ---
-    LOCAL needAp2 IS errs:HASKEY("AP") AND ABS(errs["AP"]) > altTol.
-    LOCAL needPe2 IS errs:HASKEY("PE") AND ABS(errs["PE"]) > altTol.
-
     IF needAp2 AND targets["AP"] >= SHIP:PERIAPSIS {
         LOCAL etaPe IS ETA:PERIAPSIS.
         IF etaPe < 60 { SET etaPe TO etaPe + SHIP:ORBIT:PERIOD. }
