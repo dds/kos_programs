@@ -75,7 +75,7 @@ GLOBAL FUNCTION falconSaveReloadState {
 LOCAL FUNCTION _falconPhaseParkingReload {
     phaseParking().
     LOCAL nxt IS stateGet("phase", "").
-    IF phaseHandlerMap():HASKEY(nxt) {
+    IF phaseInLoadedBand(nxt) {
         mLog("Parking checkpoint: " + nxt + " already loaded — continuing.").
         RETURN.
     }
@@ -130,7 +130,7 @@ GLOBAL FUNCTION falconBuildPhaseSequence {
 }
 
 GLOBAL FUNCTION falconBuildPhaseMap {
-    LOCAL phaseMap IS phaseHandlerMap().
+    LOCAL phaseMap IS LEXICON().
     phaseMapSet(phaseMap, "PARK", _falconPhaseParkingReload@).
     RETURN phaseMap.
 }

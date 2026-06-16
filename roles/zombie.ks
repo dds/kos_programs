@@ -33,7 +33,7 @@ GLOBAL FUNCTION main {
             stateSet("phase", "SCANSAT_OPS").
         }
         mLog("Zombie core promoted to SCANsat ops.").
-        runPhases(phaseHandlerMap()).
+        runPhases(LEXICON()).
         WAIT UNTIL FALSE.
         RETURN.
     }

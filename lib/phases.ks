@@ -18,16 +18,10 @@ GLOBAL FUNCTION phaseMapSet {
     phaseMap:ADD(phaseName, handler).
 }
 
-GLOBAL FUNCTION phaseHandlerMap {
-    bootLibRun("dependencies").
-    LOCAL phaseMap IS LEXICON().
-    // Try every known phase: each binding is guarded on its libs
-    // having run this boot, so phases brought in via LIBS_EXTRA
-    // bind too and the mission avoids band-change reboots.
-    FOR phaseName IN dependencyAllPhases() {
-        dependencyBindPhase(phaseMap, phaseName).
-    }
-    RETURN phaseMap.
+GLOBAL FUNCTION phaseInLoadedBand {
+    PARAMETER phaseName.
+    LOCAL requiredBand IS bootLibBandForPhase(phaseName, "").
+    RETURN requiredBand <> "" AND requiredBand = stateGet("lib_band", "").
 }
 
 GLOBAL FUNCTION runPhases {
@@ -66,43 +60,26 @@ GLOBAL FUNCTION runPhases {
             LOCAL loadedBand IS stateGet("lib_band", "").
             LOCAL requiredBand IS bootLibBandForPhase(phase, "").
             IF requiredBand = loadedBand {
-                // Offline, the libs simply could not sync: keep
-                // retrying on a 60s pace until the link returns —
-                // the operator-blessed self-healing loop. Linked,
-                // a missing handler is a real error: hold.
-                IF NOT HOMECONNECTION:ISCONNECTED {
-                    mLogWarn("Phase " + phase + " libs unavailable"
-                        + " offline — reboot retry in 60s"
-                        + " (waiting for a link).").
-                    HUDTEXT("No link: retrying " + phase
-                        + " in 60s", 10, 2, 15, YELLOW, FALSE).
-                    WAIT 60.
-                    REBOOT.
-                }
-                mLogError("Phase " + phase + " handler missing in loaded band " + loadedBand + ".").
-                PRINT " ".
-                PRINT "  PHASE HANDLER MISSING: " + phase.
-                PRINT "  Loaded band: " + loadedBand + ".".
-                PRINT "  Check generated dependencies.ks and loaded libraries.".
-                yieldToPrompt().
-                RETURN.
+                evaluate_function("phase" + phase, LIST()).
+                IF phaseShouldYield { RETURN. }
+            } ELSE {
+                stateSet("reload_required", "true").
+                stateSet("reload_reason", "PHASE_BAND_CHANGE").
+                stateSet("reload_next_phase", phase).
+                stateSet("reload_next_band", requiredBand).
+                mLog("Phase " + phase + " requires a different library band. Reboot to continue.").
+                // Band changes auto-reboot: reboots are the system's
+                // resumable primitive, and waiting on an operator was
+                // flight-found fatal in atmosphere and merely annoying
+                // everywhere else. The 5s notice gives a watching
+                // operator time to react.
+                HUDTEXT("Band change: rebooting for " + phase + "...",
+                    5, 2, 15, CYAN, FALSE).
+                mLogWarn("Auto-rebooting into band " + requiredBand
+                    + " for phase " + phase + ".").
+                WAIT 5.
+                REBOOT.
             }
-            stateSet("reload_required", "true").
-            stateSet("reload_reason", "PHASE_BAND_CHANGE").
-            stateSet("reload_next_phase", phase).
-            stateSet("reload_next_band", requiredBand).
-            mLog("Phase " + phase + " requires a different library band. Reboot to continue.").
-            // Band changes auto-reboot: reboots are the system's
-            // resumable primitive, and waiting on an operator was
-            // flight-found fatal in atmosphere and merely annoying
-            // everywhere else. The 5s notice gives a watching
-            // operator time to react.
-            HUDTEXT("Band change: rebooting for " + phase + "...",
-                5, 2, 15, CYAN, FALSE).
-            mLogWarn("Auto-rebooting into band " + requiredBand
-                + " for phase " + phase + ".").
-            WAIT 5.
-            REBOOT.
         }
     }
 }

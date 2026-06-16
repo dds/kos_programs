@@ -162,7 +162,7 @@ LOCAL FUNCTION _phaseDeploySat {
 }
 
 LOCAL FUNCTION _buildPhaseMap {
-    LOCAL phaseMap IS phaseHandlerMap().
+    LOCAL phaseMap IS LEXICON().
     phaseMapSet(phaseMap, "RECIRC", _phaseRecirc@).
     phaseMapSet(phaseMap, "DEPLOY_SAT", _phaseDeploySat@).
     RETURN phaseMap.

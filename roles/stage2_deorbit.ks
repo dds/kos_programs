@@ -74,7 +74,7 @@ LOCAL FUNCTION _doReturn {
         stateSet("phase", "KSC_DEORBIT").
     }
     mLog("Stage2: starting KSC return sequence.").
-    runPhases(phaseHandlerMap()).
+    runPhases(LEXICON()).
     IF stateGet("phase", "") = "DONE" {
         stateSet("stage2_deorbit_complete", "true").
         mLog("Stage2: KSC return sequence complete. Idling.").

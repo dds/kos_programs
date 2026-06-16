@@ -57,7 +57,7 @@ LOCAL FUNCTION _fr3PhaseParkingReload {
     LOCAL nxt IS stateGet("phase", "").
     // Next phase already bound (libs aboard via LIBS_EXTRA or the
     // same band): keep flying — no checkpoint needed.
-    IF phaseHandlerMap():HASKEY(nxt) {
+    IF phaseInLoadedBand(nxt) {
         mLog("Parking checkpoint: " + nxt + " already loaded — continuing.").
         RETURN.
     }
@@ -95,7 +95,7 @@ GLOBAL FUNCTION fr3BuildPhaseSequence {
 }
 
 GLOBAL FUNCTION fr3BuildPhaseMap {
-    LOCAL phaseMap IS phaseHandlerMap().
+    LOCAL phaseMap IS LEXICON().
     phaseMapSet(phaseMap, "PARK", _fr3PhaseParkingReload@).
     RETURN phaseMap.
 }

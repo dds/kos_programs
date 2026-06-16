@@ -55,7 +55,7 @@ GLOBAL FUNCTION fr3SaveReloadState {
 LOCAL FUNCTION _fr3PhaseParkingReload {
     phaseParking().
     LOCAL nxt IS stateGet("phase", "").
-    IF phaseHandlerMap():HASKEY(nxt) {
+    IF phaseInLoadedBand(nxt) {
         mLog("Parking checkpoint: " + nxt + " already loaded - continuing.").
         RETURN.
     }
@@ -85,7 +85,7 @@ GLOBAL FUNCTION fr3BuildPhaseSequence {
 }
 
 GLOBAL FUNCTION fr3BuildPhaseMap {
-    LOCAL phaseMap IS phaseHandlerMap().
+    LOCAL phaseMap IS LEXICON().
     phaseMapSet(phaseMap, "PARK", _fr3PhaseParkingReload@).
     RETURN phaseMap.
 }

@@ -88,9 +88,8 @@ Mission profiles own `SEQUENCE` — the ordered phase names. Craft scripts map
 phase names to handlers and call `runPhases(phaseMap)`; each handler calls
 `nextPhase(seq)` when done. The current phase persists to state, so any
 reboot resumes exactly where it left off. Shared phases follow the naming
-convention `PHASE_NAME → phasePhaseName` (e.g. `DROP_FOR_IMPACT_AND_RAISE_PE
-→ phaseDropForImpactAndRaisePe`); the bindings are generated into
-`lib/dependencies.ks` by `make dependencies`.
+convention `PHASE_NAME -> phasePHASE_NAME`; `runPhases` evaluates that name
+directly when the phase's band is loaded.
 
 ### Progressive loading (bands)
 
@@ -114,8 +113,8 @@ probe core and parsed with kOS JSON support:
 "bands": { name: [phases...] }   phases that load together
 ```
 
-After editing it, run `make dependencies` (also a pre-commit hook) to
-regenerate `lib/dependencies.ks`.
+The phase table is read directly at boot; there is no generated dependency
+source file.
 
 ### State, logs, telemetry
 
@@ -340,7 +339,7 @@ GLOBAL FUNCTION main {
     }
     SET launchSeq TO seq. SET xferSeq TO seq.
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
-    LOCAL phaseMap IS phaseHandlerMap().      // generated shared bindings
+    LOCAL phaseMap IS LEXICON().             // optional local overrides
     phaseMapSet(phaseMap, "MYPHASE", _myPhase@).
     runPhases(phaseMap).
 }
@@ -408,8 +407,7 @@ configure-hook / extra-phase options.
 
 ## Development
 
-- `make dependencies` — regenerate `lib/dependencies.ks` (pre-commit hook:
-  `pre-commit install`).
+- `make pre-commit` — lightweight local sanity target.
 - `make watch-sync` — safe auto-pull loop for live sim iteration (ff-only,
   dirty-tree aware).
 - `make release-version TAG=kos-YYYYMMDD-N` — stamp `VERSION` (printed in

@@ -173,7 +173,6 @@ GLOBAL FUNCTION bootPruneLibs {
     PARAMETER wantedLibs.
     LOCAL keep IS LIST(
         "STATE", "LOGS", "FILES", "BOOT_LIB",
-        "DEPENDENCIES",
         "CONFIG", "RESUME"
     ).
     FOR lib IN wantedLibs {
@@ -438,7 +437,7 @@ GLOBAL FUNCTION bootCleanup {
     PARAMETER vehicleName.
     PARAMETER wantedLibs.
     LOCAL keepLibs IS LIST(
-        "state", "logs", "boot_lib", "resume", "dependencies",
+        "state", "logs", "boot_lib", "resume",
         "phases", "utils", "ui", "config"
     ).
     FOR lib IN wantedLibs {
@@ -736,4 +735,37 @@ GLOBAL FUNCTION missionHasLandingPayload {
         }
     }
     RETURN FALSE.
+}
+
+
+GLOBAL FUNCTION evaluate {
+    PARAMETER expression.
+
+    EXECUTE("global _evaluate_result is " + expression + ".").
+    LOCAL result IS _evaluate_result.
+    IF DEFINED _evaluate_result {
+        UNSET _evaluate_result.
+    }
+    RETURN result.
+}
+
+GLOBAL FUNCTION evaluate_function {
+    PARAMETER function_name.
+    PARAMETER parameter_list.
+
+    GLOBAL _exec__param_list IS parameter_list.
+    LOCAL expression IS "".
+    LOCAL separator IS "".
+    LOCAL index IS 0.
+    UNTIL index = parameter_list:LENGTH {
+        SET expression TO expression + separator + "_exec__param_list[" + index + "]".
+        SET separator TO ", ".
+        SET index TO index + 1.
+    }
+    SET expression TO function_name + "(" + expression + ")".
+    LOCAL result IS evaluate(expression).
+    IF DEFINED _exec__param_list {
+        UNSET _exec__param_list.
+    }
+    RETURN result.
 }
