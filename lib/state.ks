@@ -62,12 +62,6 @@ GLOBAL FUNCTION stateSet {
     _flush().
 }
 
-GLOBAL FUNCTION stateSetNum {
-    PARAMETER key.
-    PARAMETER value.
-    stateSet(key, value).
-}
-
 GLOBAL FUNCTION stateRemove {
     PARAMETER key.
     _ensureLoaded().
