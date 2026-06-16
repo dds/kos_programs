@@ -244,6 +244,7 @@ GLOBAL FUNCTION bootMissionConfig {
             } ELSE {
                 // The picker is its own lib — only fresh pad boots
                 // pay for it (no link = no profiles to list anyway).
+                bootLibSync("boot_picker").
                 RUNONCEPATH("1:/lib/boot_picker").
                 SET missionId TO bootSelectMissionId(craftName, hasLink).
             }
