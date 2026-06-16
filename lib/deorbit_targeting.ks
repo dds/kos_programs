@@ -171,9 +171,18 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL prevDir IS 0.
     LOCAL iter IS 0.
     UNTIL iter >= 12 {
-        LOCAL polished IS _polishRetroTime(currentUT, currentDv,
-            targetLat, targetLng, minLead, stepA * 0.5).
-        IF polished["VALID"] { SET currentUT TO polished["UT"]. }
+        LOCAL oldUT IS currentUT.
+        LOCAL polished IS _reacquireRetroTime(currentUT, currentDv,
+            targetLat, targetLng, minLead, stepA * 2, period * 0.20,
+            period * 0.45).
+        IF polished["VALID"] {
+            SET currentUT TO polished["UT"].
+            IF ABS(currentUT - oldUT) > stepA {
+                mLog("DEBUG time: dv=" + ROUND(currentDv,2)
+                    + " moved node " + ROUND(currentUT - oldUT,0)
+                    + "s to T+" + ROUND(currentUT - nowUt,0) + "s.").
+            }
+        }
         LOCAL candidate IS _evalRetroDeorbitNode(currentUT, currentDv,
             targetLat, targetLng, minLead, minAngle, targetAngle,
             angleTol).
@@ -356,6 +365,43 @@ LOCAL FUNCTION _polishRetroTime {
         WAIT 0.
     }
     RETURN best.
+}
+
+LOCAL FUNCTION _reacquireRetroTime {
+    PARAMETER seedUT.
+    PARAMETER retroDv.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER minLead.
+    PARAMETER stepSec.
+    PARAMETER backWindow.
+    PARAMETER forwardWindow.
+
+    LOCAL result IS LEXICON(
+        "VALID", FALSE,
+        "UT", seedUT,
+        "DIST", 999999999,
+        "LAT", 0,
+        "LNG", 0
+    ).
+    LOCAL startUT IS MAX(TIME:SECONDS + minLead, seedUT - backWindow).
+    LOCAL endUT IS seedUT + forwardWindow.
+    LOCAL scanUT IS startUT.
+
+    UNTIL scanUT > endUT {
+        LOCAL trial IS _evalRetroImpactNode(scanUT, retroDv,
+            targetLat, targetLng, minLead).
+        IF trial["VALID"] AND trial["DIST"] < result["DIST"] {
+            SET result TO trial.
+        }
+        SET scanUT TO scanUT + stepSec.
+        WAIT 0.
+    }
+    IF result["VALID"] {
+        RETURN _polishRetroTime(result["UT"], retroDv,
+            targetLat, targetLng, minLead, stepSec * 0.5).
+    }
+    RETURN result.
 }
 
 LOCAL FUNCTION _evalRetroImpactNode {
