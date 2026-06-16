@@ -18,6 +18,8 @@ GLOBAL CFG IS LEXICON(
 GLOBAL FSP1_SEQ IS LIST("PREFLIGHT", "FLIGHT", "SPLASHDOWN", "SURFACE_OPS", "DONE").
 
 GLOBAL FUNCTION bootVehicleLibs {
+    LOCAL cachedLibs IS bootCachedVehicleLibs("AIR").
+    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     RETURN airplaneVehicleLibs(FSP1_SEQ).
 }
 

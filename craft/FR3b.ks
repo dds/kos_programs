@@ -112,6 +112,12 @@ LOCAL FUNCTION _fr3Libs {
     bootEnsureInitialPhase(fr3BuildPhaseSequence()).
     LOCAL band IS fr3PhaseBand().
     LOCAL phase IS stateGet("phase", "").
+    LOCAL cachedLibs IS bootCachedVehicleLibs(band).
+    IF cachedLibs:LENGTH > 0 {
+        stateSet("lib_band_phase", phase).
+        stateSet("reload_required", "false").
+        RETURN cachedLibs.
+    }
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
@@ -129,9 +135,7 @@ GLOBAL BOOT_CLEANUP IS LEXICON(
     // Lean keep-list: every kept cmd costs core bytes a mission
     // band might need (flight-found twice: the return mission's
     // lib sync boot-looped out of space, and the suborbital hop
-    // failed a reboot with ~13K free). The landing tools ride as
-    // CMD rows on the LAND phases now — missions that fly them
-    // keep them automatically; everyone else sheds ~them.
+    // failed a reboot with ~13K free).
     "keepCmds", LIST("DUMP", "SETPHASE")
 ).
 

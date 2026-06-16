@@ -9,6 +9,8 @@ GLOBAL CFG IS LEXICON(
 
 LOCAL _seq IS LIST("TARGETED_DEORBIT", "LAND", "ROVER", "DONE").
 GLOBAL FUNCTION bootVehicleLibs {
+    LOCAL cachedLibs IS bootCachedVehicleLibs().
+    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     RETURN missionSequenceLibs(
         missionLibsForPhases(_seq, LIST("utils")),
         LIST("utils")

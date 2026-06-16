@@ -34,6 +34,8 @@ GLOBAL CFG IS LEXICON(
 GLOBAL FDR1_SEQ IS LIST("ARM", "FLY", "DONE").
 
 GLOBAL FUNCTION bootVehicleLibs {
+    LOCAL cachedLibs IS bootCachedVehicleLibs("FLY").
+    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     LOCAL seq IS airplaneSequenceFromState(FDR1_SEQ).
     LOCAL libs IS missionSequenceLibs(missionLibsForPhases(seq, LIST()), LIST()).
     stateSet("lib_band", "FLY").
@@ -43,7 +45,10 @@ GLOBAL FUNCTION bootVehicleLibs {
 }
 
 GLOBAL FUNCTION main {
-    LOCAL seq IS airplaneSequenceFromState(FDR1_SEQ).
+    LOCAL seq IS FDR1_SEQ.
+    IF stateGet("mission_cfg_SEQUENCE", "") <> "" {
+        SET seq TO phaseListFromString(stateGet("mission_cfg_SEQUENCE", "")).
+    }
     SET launchSeq TO seq.
     SET xferSeq TO seq.
 

@@ -37,7 +37,7 @@ dormant **zombie** core can reboot every other CPU remotely
 ### Operator commands
 
 Run from a manual-mode terminal. `0:/cmd/...` needs a KSC link; commands
-listed in `CMD` rows of `lib/dependencies.txt` are pre-installed at
+listed in `CMD` rows of `lib/dependencies.json` are pre-installed at
 `1:/cmd/<name>` so they work at fields with **no radio** (Island Airfield).
 
 | Command | What it does |
@@ -51,13 +51,13 @@ listed in `CMD` rows of `lib/dependencies.txt` are pre-installed at
 | `RUNPATH("1:/cmd/dump.ks").` | Print persistent state |
 | `RUNPATH("1:/cmd/logs.ks").` | Archive the flight log to KSC |
 | `RUNPATH("1:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
-| `RUNPATH("0:/cmd/setlanding.ks", "tag", "probe_decoupler").` | Landing overrides: `tag` / `deorbit` / `assist` |
+| `RUNPATH("0:/cmd/setlanding.ks", "tag", "probe_decoupler").` | Landing overrides from archive: `tag` / `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
 | `RUNPATH("0:/cmd/kscsplash.ks").` | Target water splashdown offshore of KSC |
 | `RUNPATH("1:/cmd/zombie.ks").` | Power-cycle every *other* CPU on the vessel |
 
-Emergency landing rescue: `landassist.ks` / `landmin.ks` / `landingrescue.ks`
-force the LAND_ASSIST recovery flow on a live lander.
+Emergency landing rescue is archive-only: run `0:/cmd/landassist.ks`,
+`0:/cmd/landmin.ks`, or `0:/cmd/landingrescue.ks` while linked.
 
 Only `CMD`-row commands are *guaranteed* on `1:/cmd`; others are local when a
 craft's cleanup keep-list retained them or you copied them while linked
@@ -76,7 +76,7 @@ leg's log, rewinds `phase` to the start of the sequence, stamps a fresh
 ### Boot chain
 
 `boot/boot.ks` (installed in the VAB, **not remotely updatable**) syncs only
-`lib/boot_lib.ks` + `lib/dependencies.txt`, then delegates: preamble/core
+`lib/boot_lib.ks` + `lib/dependencies.json`, then delegates: preamble/core
 libs load, EVA kerbals are auto-detected (root part `kerbalEVA`), `CORE:TAG`
 routes tagged CPUs to `roles/`, untagged CPUs load `craft/<vehicle>.ks`.
 The selected mission profile is read from `0:/missions/<vehicle>/` once,
@@ -105,17 +105,17 @@ band. **A band loads the libraries of every phase in it**, regardless of the
 mission — so per-mission code (e.g. ScanSat disposal) lives in its own
 phase/band rather than inside a shared band.
 
-### dependencies.txt
+### dependencies.json
 
-`lib/dependencies.txt` is the compact, comment-free source of truth, copied
-as text to the probe core:
+`lib/dependencies.json` is the compact source of truth, copied as text to the
+probe core and parsed with kOS JSON support:
 
 ```
-PREAMBLE = core                  roots loaded always
-LIB <name> = <deps...>           library dependency edges
-PHASE <P1>[, P2...] = <roots>    libraries a phase needs
-BAND <name> = <phases...>        phases that load together
-CMD <phase...> = <cmds...>       operator cmds installed to 1:/cmd at boot
+"preamble": ["core"]             roots loaded always
+"libs": { name: [deps...] }      library dependency edges
+"phases": { phase: [roots...] }  libraries a phase needs
+"bands": { name: [phases...] }   phases that load together
+"cmds": { phase: [cmds...] }     operator cmds installed to 1:/cmd at boot
 ```
 
 After editing it, run `make dependencies` (also a pre-commit hook) to
@@ -295,7 +295,7 @@ Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
 
 The older element-targeting pipeline (`MCC`, `CIRC`, `RAISE`, `INCLINE`,
 `ELLIPTICAL`) remains for legacy profiles until BPLANE/SHAPE are
-flight-proven (test mission: `missions/FR3/mun_sat_delivery_3.cfg`).
+flight-proven (test mission: `missions/FR3/mun_sat_delivery_3.json`).
 `cmd/returntokerbin.ks` runs the full moon-return + aerobrake + descent flow.
 
 ## Multi-CPU ships and roles
@@ -332,12 +332,16 @@ Minimal pattern (see `craft/FDR1.ks` for a real one):
 LOCAL DEFAULT_SEQ IS LIST("XING", "COAST", "CAPTURE", "SHAPE", "DONE").
 
 GLOBAL FUNCTION bootVehicleLibs {
-    RETURN missionSequenceLibs(
-        missionLibsForPhases(DEFAULT_SEQ, LIST()), LIST()).
+    LOCAL cachedLibs IS bootCachedVehicleLibs().
+    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
+    RETURN bootLibBand("XFER").
 }
 
 GLOBAL FUNCTION main {
-    LOCAL seq IS airplaneSequenceFromState(DEFAULT_SEQ).
+    LOCAL seq IS DEFAULT_SEQ.
+    IF stateGet("mission_cfg_SEQUENCE", "") <> "" {
+        SET seq TO phaseListFromString(stateGet("mission_cfg_SEQUENCE", "")).
+    }
     SET launchSeq TO seq. SET xferSeq TO seq.
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
     LOCAL phaseMap IS phaseHandlerMap().      // generated shared bindings

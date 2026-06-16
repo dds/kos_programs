@@ -102,6 +102,12 @@ LOCAL FUNCTION _fr3Libs {
     bootEnsureInitialPhase(fr3BuildPhaseSequence()).
     LOCAL band IS fr3PhaseBand().
     LOCAL phase IS stateGet("phase", "").
+    LOCAL cachedLibs IS bootCachedVehicleLibs(band).
+    IF cachedLibs:LENGTH > 0 {
+        stateSet("lib_band_phase", phase).
+        stateSet("reload_required", "false").
+        RETURN cachedLibs.
+    }
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").

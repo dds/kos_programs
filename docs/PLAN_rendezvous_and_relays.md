@@ -24,21 +24,21 @@ PRELAUNCH/MATCH/CREW_XFER chain and the relay deploy are marked unproven in
 - `lib/relay_constellation.ks` `constellationDeploy` — resonant deploy: release
   a relay, drop carrier to a `(n-1)/n`-period phasing orbit, coast one orbit,
   re-circularize, repeat. Orbital mechanics are sound.
-- `missions/FR3C/minmus_relay_tripack.cfg` — full sequence to 500 km
+- `missions/FR3C/minmus_relay_tripack.json` — full sequence to 500 km
   equatorial, 3 relays.
 
 **Gaps this plan closes:**
 1. Vessel name collision — parked pod and Jeb's ship both default to "Falcon";
    `VESSEL("Falcon")` / MATCH target lookup are ambiguous with two same-named
    vessels.
-2. No Falcon rescue profile for the Ellory leg (only `rescue_lko.cfg` on
+2. No Falcon rescue profile for the Ellory leg (only `rescue_lko.json` on
    FR3/FR3b exists).
 3. Relay deploy never activates antennas/solar (critical) and isn't resumable
    mid-deploy (violates hard-constraint #3).
 
 Pre-staged in this handoff (already committed):
-- `missions/Falcon/launch_to_rendezvous.cfg` → `RENDEZVOUS_TARGET = Grumpy Bear`.
-- `missions/Falcon/rescue_ellory.cfg` — descent tags wired for the real
+- `missions/Falcon/launch_to_rendezvous.json` → `RENDEZVOUS_TARGET = Grumpy Bear`.
+- `missions/Falcon/rescue_ellory.json` — descent tags wired for the real
   three-stage craft (`descent_decoupler` / `descent_chutes`, decouple at 45 km).
 
 ## Resolved craft facts (operator-confirmed)
@@ -100,15 +100,15 @@ recipe.
 - Done when: both splash within tolerance of KSC (lat −0.10, lng −74.25); crew
   recovered.
 
-### A4 — Rescue Ellory from "Ellory's Wreckage" (`rescue_ellory.cfg`, new)
-- Profile mirrors `missions/FR3b/rescue_lko.cfg`, Falcon-flavored:
+### A4 — Rescue Ellory from "Ellory's Wreckage" (`rescue_ellory.json`, new)
+- Profile mirrors `missions/FR3b/rescue_lko.json`, Falcon-flavored:
   - `SEQUENCE = PRELAUNCH,LAUNCH,ANTS,PARK,RDV,MATCH,CREW_XFER,KSC_DEORBIT,DESCENT,DONE`
   - `PAYLOADS = CREW` (Falcon Mk1 launches EMPTY → one free seat for Ellory)
   - `LIBS_EXTRA = launch@PARK, descent`
   - `RENDEZVOUS_TARGET` left commented — the wreck name has an apostrophe/space;
     **target "Ellory's Wreckage" in map view before launch** (PRELAUNCH grabs
     and persists the game target).
-  - Landing keys block copied from `rescue_lko.cfg`.
+  - Landing keys block copied from `rescue_lko.json`.
   - Descent (three-stage Falcon): `DESCENT_DECOUPLER_TAG = descent_decoupler`,
     `DESCENT_DECOUPLE_ALT = 45000` (separate just before reentry),
     `DESCENT_CHUTES_TAG = descent_chutes` (done).
@@ -201,11 +201,11 @@ closed for entry at descent.ks:148 by `_descentCloseExtendBays`).
 2. Statement terminators: every new/edited statement ends in `.`.
 3. Reserved names: no bare `r`/`v`/`q`; no shadowing `up`/`north`/`body`/
    `target`/`alt`/`eta`.
-4. After editing `lib/dependencies.txt`: run `make dependencies`; confirm
+4. After editing `lib/dependencies.json`: run `make dependencies`; confirm
    `lib/dependencies.ks` regenerated and committed.
 5. Phase wiring: every `SEQUENCE` phase exists in the `dependencies.ks` phase
    list AND belongs to a band; every new cfg key is read by some lib (grep it).
-6. New cfg sanity: `rescue_ellory.cfg` keys match keys consumed by
+6. New JSON sanity: `rescue_ellory.json` keys match keys consumed by
    prelaunch / maneuver_rendezvous / descent libs.
 7. No archive-dependence in offline flight paths (descent libs preloaded via
    `LIBS_EXTRA`, hard-constraint #2).
@@ -221,12 +221,12 @@ closed for entry at descent.ks:148 by `_descentCloseExtendBays`).
 | B relays | each relay released (`relay_N_released` in state); after release each relay's antenna confirmed **deployed** and link live; `STATS relay-phase result` Pe>floor; 3 relays ≈120° apart at 500 km |
 
 ### C3 — Reviewer checklist after implementer finishes
-- Diff vs. this plan: A2 cfg points at renamed target; `rescue_ellory.cfg`
-  mirrors `rescue_lko.cfg` with Falcon-correct decoupler/landing keys.
+- Diff vs. this plan: A2 JSON points at renamed target; `rescue_ellory.json`
+  mirrors `rescue_lko.json` with Falcon-correct decoupler/landing keys.
 - B1 fix present and tolerant of missing tags; B2 resume logic skips released
   slots and is reboot-safe; B3 circular guard present.
 - Re-run C1 independently.
-- Confirm `make dependencies` ran if `dependencies.txt` changed; work committed
+- Confirm `make dependencies` ran if `dependencies.json` changed; work committed
   AND pushed (archive sync needs the push).
 
 ---

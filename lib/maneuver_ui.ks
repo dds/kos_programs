@@ -2,7 +2,7 @@
 // maneuver_ui.ks  -  Archive-only maneuver diagnostics
 // (0:/lib/maneuver_ui.ks)
 //
-// This file is intentionally absent from dependencies.txt. It runs
+// This file is intentionally absent from dependencies.json. It runs
 // straight from 0:/ when a KSC link is available.
 // ============================================================
 

@@ -25,11 +25,16 @@ GLOBAL CFG IS LEXICON(
 GLOBAL FBIJ_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
 
 IF stateGet("phase", "") = "" {
-    LOCAL startupSeq IS airplaneSequenceFromState(FBIJ_SEQ).
+    LOCAL startupSeq IS FBIJ_SEQ.
+    IF stateGet("mission_cfg_SEQUENCE", "") <> "" {
+        SET startupSeq TO phaseListFromString(stateGet("mission_cfg_SEQUENCE", "")).
+    }
     stateSet("phase", startupSeq[0]).
 }
 
 GLOBAL FUNCTION bootVehicleLibs {
+    LOCAL cachedLibs IS bootCachedVehicleLibs("AIR").
+    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     RETURN airplaneVehicleLibs(FBIJ_SEQ).
 }
 

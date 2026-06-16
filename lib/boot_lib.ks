@@ -158,8 +158,7 @@ GLOBAL FUNCTION bootBaseName {
     PARAMETER fileName.
     IF fileName:CONTAINS(".ksm") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
     IF fileName:CONTAINS(".ks") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
-    IF fileName:CONTAINS(".cfg") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
-    IF fileName:CONTAINS(".txt") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
+    IF fileName:CONTAINS(".json") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 5). }
     RETURN fileName.
 }
 
@@ -184,7 +183,7 @@ GLOBAL FUNCTION bootLibArchiveOnly {
 GLOBAL FUNCTION bootPruneLibs {
     PARAMETER wantedLibs.
     LOCAL keep IS LIST(
-        "STATE", "LOGS", "FILES", "MISSION_PLAN", "BOOT_LIB",
+        "STATE", "LOGS", "FILES", "BOOT_LIB",
         "DEPENDENCIES",
         "CONFIG", "RESUME"
     ).
@@ -221,8 +220,8 @@ GLOBAL FUNCTION bootMissionConfigIds {
     FOR item IN items {
         IF item:ISFILE {
             LOCAL nm IS item:NAME.
-            IF nm:CONTAINS(".cfg") {
-                ids:ADD(nm:SUBSTRING(0, nm:LENGTH - 4)).
+            IF nm:CONTAINS(".json") {
+                ids:ADD(nm:SUBSTRING(0, nm:LENGTH - 5)).
             }
         }
     }
@@ -234,38 +233,25 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     PARAMETER missionId.
     PARAMETER hasLink.
     IF missionId = "" { RETURN FALSE. }
-    LOCAL path_ IS "0:/missions/" + craftName + "/" + missionId + ".cfg".
+    LOCAL path_ IS "0:/missions/" + craftName + "/" + missionId + ".json".
     IF NOT EXISTS(path_) {
         PRINT "  Mission config not found: " + path_.
         RETURN FALSE.
     }
-    LOCAL raw IS OPEN(path_):READALL:STRING.
-    LOCAL lines IS raw:SPLIT(CHAR(10)).
-    FOR lineRaw IN lines {
-        LOCAL line IS lineRaw:REPLACE(CHAR(13), ""):TRIM.
-        IF line <> "" {
-            LOCAL skipLine IS FALSE.
-            IF line:SUBSTRING(0, 1) = "#" { SET skipLine TO TRUE. }
-            IF line:LENGTH >= 2 AND line:SUBSTRING(0, 2) = "//" { SET skipLine TO TRUE. }
-            IF NOT skipLine {
-                LOCAL parts IS line:SPLIT("=").
-                IF parts:LENGTH >= 2 {
-                    LOCAL key IS parts[0]:TRIM.
-                    LOCAL value IS parts[1]:TRIM.
-                    stateSet("mission_cfg_" + key, value).
-                    IF key = "MISSION_ID" {
-                        stateSet("mission_id", value).
-                    } ELSE IF key = "MISSION_NAME" {
-                        stateSet("mission_name", value).
-                    } ELSE IF key = "TARGET" {
-                        stateSet("target", value).
-                    } ELSE IF key = "PAYLOADS" {
-                        stateSet("payloads", value).
-                    } ELSE IF key = "MISSION_TYPE" {
-                        stateSet("mission_type", value).
-                    }
-                }
-            }
+    LOCAL config IS READJSON(path_).
+    FOR key IN config:KEYS {
+        LOCAL value IS config[key].
+        stateSet("mission_cfg_" + key, value).
+        IF key = "MISSION_ID" {
+            stateSet("mission_id", value).
+        } ELSE IF key = "MISSION_NAME" {
+            stateSet("mission_name", value).
+        } ELSE IF key = "TARGET" {
+            stateSet("target", value).
+        } ELSE IF key = "PAYLOADS" {
+            stateSet("payloads", value).
+        } ELSE IF key = "MISSION_TYPE" {
+            stateSet("mission_type", value).
         }
     }
     IF stateGet("mission_id", "") = "" { stateSet("mission_id", missionId). }
@@ -306,23 +292,18 @@ GLOBAL FUNCTION bootMissionConfig {
     }
 }
 
-GLOBAL FUNCTION bootNormalizePhaseName {
-    PARAMETER phaseName.
-    RETURN phaseName.
-}
-
 GLOBAL FUNCTION bootIsLaunchStartPhase {
     PARAMETER phaseName.
-    LOCAL phase IS bootNormalizePhaseName(phaseName).
+    LOCAL phase IS phaseName.
     RETURN phase = "" OR phase = "PRELAUNCH" OR phase = "LAUNCH"
         OR phase = "FAIR" OR phase = "ANTS".
 }
 
 GLOBAL FUNCTION bootEnsureInitialPhase {
     PARAMETER seq.
-    LOCAL phase IS bootNormalizePhaseName(stateGet("phase", "")).
+    LOCAL phase IS stateGet("phase", "").
     IF (phase = "" OR phase:CONTAINS("MAIN")) AND seq:LENGTH > 0 {
-        stateSet("phase", bootNormalizePhaseName(seq[0])).
+        stateSet("phase", seq[0]).
     }
     RETURN stateGet("phase", "").
 }
@@ -465,7 +446,7 @@ GLOBAL FUNCTION bootPruneLogs {
 }
 
 // ============================================================
-// Offline operator commands (CMD rows in dependencies.txt)
+// Offline operator commands (CMD rows in dependencies.json)
 // ============================================================
 
 // bootCmdsForSequence — commands declared for the current phase.
@@ -546,9 +527,8 @@ GLOBAL FUNCTION bootCleanup {
 // ============================================================
 // boot_lib.ks - boot-time library dependency expansion
 //
-// This stays deliberately small: dependencies.txt is refreshed when
-// available, parsed with OPEN(...):READALL:STRING, then cached in
-// lexicons/lists for the rest of the boot.
+// This stays deliberately small: dependencies.json is refreshed when
+// available, then READJSON'd into lexicons/lists for the rest of the boot.
 // ============================================================
 
 GLOBAL BOOT_LIB_DEPS IS LEXICON().
@@ -575,8 +555,8 @@ GLOBAL FUNCTION bootCheckManualKey {
 }
 
 GLOBAL FUNCTION bootLibSpecPath {
-    LOCAL archivePath IS "0:/lib/dependencies.txt".
-    LOCAL localPath IS "1:/lib/dependencies.txt".
+    LOCAL archivePath IS "0:/lib/dependencies.json".
+    LOCAL localPath IS "1:/lib/dependencies.json".
     IF HOMECONNECTION:ISCONNECTED AND EXISTS(archivePath) {
         IF NOT EXISTS("1:/lib") { CREATEDIR("1:/lib"). }
         COPYPATH(archivePath, localPath).
@@ -584,111 +564,21 @@ GLOBAL FUNCTION bootLibSpecPath {
     RETURN localPath.
 }
 
-LOCAL FUNCTION _bootLibApplyValues {
-    PARAMETER table.
-    PARAMETER key.
-    PARAMETER values.
-    PARAMETER op.
-    LOCAL current IS LIST().
-    IF table:HASKEY(key) {
-        FOR item IN table[key] { current:ADD(item). }
-        table:REMOVE(key).
-    }
-    IF op = "=" {
-        SET current TO LIST().
-    }
-    IF op = "-" {
-        LOCAL kept IS LIST().
-        FOR item IN current {
-            IF NOT values:CONTAINS(item) { kept:ADD(item). }
-        }
-        SET current TO kept.
-    } ELSE {
-        FOR item IN values {
-            IF NOT current:CONTAINS(item) { current:ADD(item). }
-        }
-    }
-    table:ADD(key, current).
-}
-
-LOCAL FUNCTION _bootLibLineValues {
-    PARAMETER raw.
-    LOCAL values IS LIST().
-    IF raw = "" { RETURN values. }
-    FOR itemRaw IN raw:SPLIT(",") {
-        LOCAL item IS itemRaw:TRIM.
-        IF item <> "" { values:ADD(item). }
-    }
-    RETURN values.
-}
-
-LOCAL FUNCTION _bootLibParseLines {
-    PARAMETER raw.
-    LOCAL lines IS raw:SPLIT(CHAR(10)).
-    FOR lineRaw IN lines {
-        LOCAL line IS lineRaw:REPLACE(CHAR(13), ""):TRIM.
-        IF line <> "" {
-            LOCAL skipLine IS FALSE.
-            IF line:SUBSTRING(0, 1) = "#" { SET skipLine TO TRUE. }
-            IF line:LENGTH >= 2 AND line:SUBSTRING(0, 2) = "//" { SET skipLine TO TRUE. }
-            IF NOT skipLine {
-                LOCAL parts IS line:SPLIT("=").
-                IF parts:LENGTH >= 2 {
-                    LOCAL lhs IS parts[0]:TRIM.
-                    LOCAL rhs IS parts[1]:TRIM.
-                    LOCAL op IS "=".
-                    IF lhs:LENGTH > 0 {
-                        LOCAL opChar IS lhs:SUBSTRING(lhs:LENGTH - 1, 1).
-                        IF opChar = "+" OR opChar = "-" {
-                            SET op TO opChar.
-                            SET lhs TO lhs:SUBSTRING(0, lhs:LENGTH - 1):TRIM.
-                        }
-                    }
-                    LOCAL keys IS _bootLibLineValues(lhs:REPLACE(" ", ",")).
-                    IF keys:LENGTH >= 2 AND keys[0] = "LIB" {
-                        LOCAL libName IS keys[1]:TRIM.
-                        _bootLibApplyValues(BOOT_LIB_DEPS, libName, _bootLibLineValues(rhs), op).
-                    } ELSE IF keys:LENGTH >= 1 AND keys[0] = "PREAMBLE" {
-                        LOCAL preambleTable IS LEXICON("PREAMBLE", BOOT_LIB_PREAMBLE).
-                        _bootLibApplyValues(preambleTable, "PREAMBLE", _bootLibLineValues(rhs), op).
-                        SET BOOT_LIB_PREAMBLE TO preambleTable["PREAMBLE"].
-                    } ELSE IF keys:LENGTH >= 2 AND keys[0] = "BAND" {
-                        LOCAL bandKey IS keys[1].
-                        _bootLibApplyValues(BOOT_LIB_BANDS, bandKey, _bootLibLineValues(rhs), op).
-                    } ELSE IF keys:LENGTH >= 2 AND keys[0] = "PHASE" {
-                        LOCAL phaseIx IS 1.
-                        UNTIL phaseIx >= keys:LENGTH {
-                            LOCAL phaseName IS keys[phaseIx].
-                            _bootLibApplyValues(BOOT_LIB_PHASES, phaseName, _bootLibLineValues(rhs), op).
-                            SET phaseIx TO phaseIx + 1.
-                        }
-                    } ELSE IF keys:LENGTH >= 2 AND keys[0] = "CMD" {
-                        // CMD <phase>[, <phase>...] = <cmd>[, <cmd>...]
-                        // Operator commands a phase may need OFFLINE (no
-                        // KSC link), installed to 1:/cmd at boot.
-                        LOCAL cmdIx IS 1.
-                        UNTIL cmdIx >= keys:LENGTH {
-                            LOCAL cmdPhase IS keys[cmdIx].
-                            _bootLibApplyValues(BOOT_LIB_CMDS, cmdPhase, _bootLibLineValues(rhs), op).
-                            SET cmdIx TO cmdIx + 1.
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 GLOBAL FUNCTION bootLibLoadSpec {
     IF BOOT_LIB_LOADED { RETURN. }
     LOCAL path_ IS bootLibSpecPath().
     IF NOT EXISTS(path_) {
-        PRINT "  WARN: dependencies.txt unavailable".
+        PRINT "  WARN: dependencies.json unavailable".
         SET BOOT_LIB_LOADED TO TRUE.
         RETURN.
     }
 
-    _bootLibParseLines(OPEN(path_):READALL:STRING).
+    LOCAL spec IS READJSON(path_).
+    IF spec:HASKEY("libs") { SET BOOT_LIB_DEPS TO spec["libs"]. }
+    IF spec:HASKEY("bands") { SET BOOT_LIB_BANDS TO spec["bands"]. }
+    IF spec:HASKEY("phases") { SET BOOT_LIB_PHASES TO spec["phases"]. }
+    IF spec:HASKEY("cmds") { SET BOOT_LIB_CMDS TO spec["cmds"]. }
+    IF spec:HASKEY("preamble") { SET BOOT_LIB_PREAMBLE TO spec["preamble"]. }
     SET BOOT_LIB_LOADED TO TRUE.
 }
 
@@ -822,7 +712,7 @@ GLOBAL FUNCTION bootLibBandForPhase {
     PARAMETER phaseName.
     PARAMETER defaultBand IS "".
     bootLibLoadSpec().
-    LOCAL phaseKey IS bootNormalizePhaseName(phaseName).
+    LOCAL phaseKey IS phaseName.
     IF phaseKey = "" { RETURN defaultBand. }
     FOR bandKey IN BOOT_LIB_BANDS:KEYS {
         FOR bandPhase IN BOOT_LIB_BANDS[bandKey] {
@@ -838,7 +728,7 @@ GLOBAL FUNCTION bootLibPhaseRoots {
     bootLibLoadSpec().
     LOCAL roots IS LIST().
     FOR libName IN BOOT_LIB_PREAMBLE { bootLibAddUnique(roots, libName). }
-    LOCAL phaseKey IS bootNormalizePhaseName(phaseName).
+    LOCAL phaseKey IS phaseName.
     IF BOOT_LIB_PHASES:HASKEY(phaseKey) {
         FOR libName IN BOOT_LIB_PHASES[phaseKey] { bootLibAddUnique(roots, libName). }
     }
@@ -848,9 +738,8 @@ GLOBAL FUNCTION bootLibPhaseRoots {
 // ============================================================
 // Mission planning helpers
 //
-// These used to live in mission_plan.ks, but craft scripts need
-// them before selecting a band. Keeping the small runtime subset
-// in boot_lib lets post-parking boots drop mission_plan.ksm.
+// The bulky sequence-to-library planner lives in preflight_planner.ks.
+// Keep only tiny runtime helpers here.
 // ============================================================
 
 GLOBAL FUNCTION missionListFromCsv {
@@ -862,6 +751,13 @@ GLOBAL FUNCTION missionListFromCsv {
         IF item <> "" { values:ADD(item). }
     }
     RETURN values.
+}
+
+GLOBAL FUNCTION bootCachedVehicleLibs {
+    PARAMETER band IS "".
+    IF SHIP:STATUS = "PRELAUNCH" { RETURN LIST(). }
+    IF band <> "" AND stateGet("lib_band", "") <> band { RETURN LIST(). }
+    RETURN missionListFromCsv(stateGet("lib_band_libs", "")).
 }
 
 GLOBAL FUNCTION missionAppendUnique {
@@ -912,97 +808,4 @@ GLOBAL FUNCTION missionHasLandingPayload {
         }
     }
     RETURN FALSE.
-}
-
-GLOBAL FUNCTION missionExtraLibs {
-    LOCAL out IS LIST().
-    LOCAL seq IS missionListFromCsv(stateGet("mission_cfg_SEQUENCE", "")).
-    LOCAL cur IS stateGet("phase", "").
-    FOR entryRaw IN missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", "")) {
-        IF entryRaw:CONTAINS("@") {
-            LOCAL parts IS entryRaw:SPLIT("@").
-            LOCAL libName IS parts[0]:TRIM.
-            LOCAL untilPhase IS parts[1]:TRIM.
-            LOCAL curIdx IS -1.
-            LOCAL phIdx IS -1.
-            LOCAL i IS 0.
-            UNTIL i >= seq:LENGTH {
-                IF seq[i] = cur { SET curIdx TO i. }
-                IF seq[i] = untilPhase { SET phIdx TO i. }
-                SET i TO i + 1.
-            }
-            IF curIdx >= 0 AND phIdx >= 0 AND curIdx > phIdx {
-                mLog("Extra lib " + libName + " dropped (past "
-                    + untilPhase + ").").
-            } ELSE {
-                out:ADD(libName).
-            }
-        } ELSE {
-            out:ADD(entryRaw).
-        }
-    }
-    RETURN out.
-}
-
-GLOBAL FUNCTION missionLibs {
-    PARAMETER fallbackLibs IS LIST().
-    PARAMETER baseLibs IS LIST().
-    LOCAL libs IS LIST().
-    missionAppendUnique(libs, baseLibs).
-
-    LOCAL configured IS missionListFromCsv(stateGet("mission_cfg_LIBS", "")).
-    IF configured:LENGTH > 0 {
-        missionAppendUnique(libs, bootLibResolve(configured)).
-    } ELSE {
-        missionAppendUnique(libs, bootLibResolve(fallbackLibs)).
-    }
-
-    missionAppendUnique(libs, bootLibResolve(missionExtraLibs())).
-    RETURN libs.
-}
-
-GLOBAL FUNCTION missionSequenceLibs {
-    PARAMETER fallbackLibs IS LIST().
-    PARAMETER baseDeps IS LIST().
-    LOCAL sequenceLibs IS fallbackLibs.
-    LOCAL sequence IS missionListFromCsv(stateGet("mission_cfg_SEQUENCE", "")).
-    IF sequence:LENGTH > 0 {
-        SET sequenceLibs TO missionLibsForPhases(sequence, baseDeps).
-    }
-    RETURN missionLibs(sequenceLibs).
-}
-
-GLOBAL FUNCTION airplaneSequenceFromState {
-    PARAMETER defaultSeq.
-    LOCAL raw IS stateGet("mission_cfg_SEQUENCE", "").
-    IF raw <> "" { RETURN phaseListFromString(raw). }
-    RETURN defaultSeq.
-}
-
-GLOBAL FUNCTION airplaneVehicleLibs {
-    PARAMETER defaultSeq.
-    PARAMETER baseLibs IS LIST("orbit", "airplane").
-    LOCAL seq IS airplaneSequenceFromState(defaultSeq).
-    LOCAL libs IS missionLibsForPhases(seq, baseLibs).
-    IF missionHasPayload("SCIENCE") AND NOT libs:CONTAINS("science") {
-        libs:ADD("science").
-    }
-    SET libs TO missionSequenceLibs(libs, baseLibs).
-    stateSet("lib_band", "AIR").
-    stateSet("lib_band_phase", stateGet("phase", seq[0])).
-    stateSet("lib_band_libs", libs:JOIN(",")).
-    RETURN libs.
-}
-
-GLOBAL FUNCTION missionLibsForPhases {
-    PARAMETER phases.
-    PARAMETER baseDeps IS LIST().
-    LOCAL roots IS LIST("phases").
-    FOR lib IN baseDeps {
-        missionAppendUnique(roots, LIST(lib)).
-    }
-    FOR phase IN phases {
-        missionAppendUnique(roots, bootLibPhaseRoots(phase)).
-    }
-    RETURN bootLibResolve(roots).
 }

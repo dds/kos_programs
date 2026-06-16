@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
+import json
 
 
 REPO = Path(__file__).resolve().parent.parent
-INPUT = REPO / "lib" / "dependencies.txt"
+INPUT = REPO / "lib" / "dependencies.json"
 OUTPUT = REPO / "lib" / "dependencies.ks"
 
 
-def values(raw):
-    return [item.strip() for item in raw.split(",") if item.strip()]
+def parse_phases(raw):
+    """Return [(phase, roots)] from JSON PHASE rows, in file order."""
+    spec = json.loads(raw)
+    return [(phase.upper(), roots) for phase, roots in spec.get("phases", {}).items()]
 
 
 def phase_function_name(phase_name):
@@ -18,35 +21,6 @@ def phase_function_name(phase_name):
         for part in phase_name.lower().split("_")
         if part
     )
-
-
-def parse_phases(raw):
-    """Return [(phase, roots)] from PHASE rows, in file order."""
-    phases = []
-    seen = set()
-
-    for raw_line in raw.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or line.startswith("//"):
-            continue
-        if "=" not in line:
-            continue
-        lhs, rhs = line.split("=", 1)
-        lhs = lhs.strip()
-        if lhs.endswith("+") or lhs.endswith("-"):
-            lhs = lhs[:-1].strip()
-        keys = values(lhs.replace(" ", ","))
-        if not keys:
-            continue
-        if keys[0].upper() == "PHASE":
-            roots = values(rhs)
-            for phase in keys[1:]:
-                key = phase.upper()
-                if key not in seen:
-                    seen.add(key)
-                    phases.append((key, roots))
-
-    return phases
 
 
 def main():

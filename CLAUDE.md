@@ -51,7 +51,7 @@ Looks like Python/JS; is neither.
 
 1. **Storage**: OCTO cores have 10,000 bytes; large cores ~100 KB. Source is
    compiled to KSM before upload, so comments/whitespace in `.ks` are free —
-   only compiled size matters. `lib/dependencies.txt` is copied as **text**:
+   only compiled size matters. `lib/dependencies.json` is copied as **text**:
    keep it compact and comment-free.
 2. **No archive in flight**: outside KSC link range nothing can be fetched
    from `0:/`. Anything a mission may need offline must be loaded at boot or
@@ -73,7 +73,7 @@ Looks like Python/JS; is neither.
 
 ## Architecture in one screen
 
-- **Boot**: `boot/boot.ks` → syncs `boot_lib` + `dependencies.txt` → preamble
+- **Boot**: `boot/boot.ks` → syncs `boot_lib` + `dependencies.json` → preamble
   libs → EVA/`CORE:TAG` routing (`roles/`) or vehicle script (`craft/`) →
   mission profile from `0:/missions/<vehicle>/` persisted as `mission_cfg_*`
   state → `bootVehicleLibs()` roots synced/compiled/run → 5 s manual-mode
@@ -84,9 +84,9 @@ Looks like Python/JS; is neither.
   continuation phase instead. Shared handler naming convention:
   `PHASE_NAME → phasePhaseName` (underscores → camelCase), bound by the
   generated `lib/dependencies.ks`.
-- **dependencies.txt rows**: `PREAMBLE` (always-loaded roots), `LIB`
-  (dependency edges), `PHASE` (phase → roots), `BAND` (phases that load
-  together; a phase without a band is its own band), `CMD` (phase → operator
+- **dependencies.json sections**: `preamble` (always-loaded roots), `libs`
+  (dependency edges), `phases` (phase → roots), `bands` (phases that load
+  together; a phase without a band is its own band), `cmds` (phase → operator
   commands installed offline).
 - **Missing handler** in `runPhases` ⇒ band-change request (`reload_*` state
   + reboot), not an error — that's the progressive-loading mechanism.
@@ -98,7 +98,7 @@ Looks like Python/JS; is neither.
 
 | Area | Files |
 |---|---|
-| Boot/loading | `boot/boot.ks`, `lib/boot_lib.ks`, `lib/dependencies.txt` (+generated `.ks`), `lib/mission_plan.ks` |
+| Boot/loading | `boot/boot.ks`, `lib/boot_lib.ks`, `lib/dependencies.json` (+generated `.ks`), `lib/preflight_planner.ks` |
 | Phase machine | `lib/phases.ks`, `lib/resume.ks`, `lib/state.ks`, `lib/logs.ks` |
 | Ascent | `lib/launch.ks` (MechJeb), `lib/countdown.ks` |
 | New maneuver pipeline | `lib/goto_plan.ks` (routing), `lib/arrival_bplane.ks` (B-plane MCC), `lib/orbit_shape.ks` (closed-form shaping), `lib/maneuver.ks` (node execution + single-burn planners) |
@@ -128,7 +128,7 @@ Looks like Python/JS; is neither.
 
 ## Working in this repo
 
-- **After editing `lib/dependencies.txt`, run `make dependencies`.**
+- **After editing `lib/dependencies.json`, run `make dependencies`.**
   (Pre-commit hook does it too: `pre-commit install`.)
 - Transfer-planning mental model: for `XING,BPLANE,COAST,CAPTURE,SHAPE`,
   `XING` must produce a real target SOI patch, but it should not be treated

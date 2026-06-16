@@ -13,7 +13,7 @@
 // fresh launch_time so the next leg logs to its own file.
 //
 // This command is installed on the local volume at boot (CMD row
-// in dependencies.txt), so it works at field strips with NO KSC
+// in dependencies.json), so it works at field strips with NO KSC
 // link — e.g. the Island Airfield. The flight log archive is
 // skipped offline and catches up at the next connected boot.
 //

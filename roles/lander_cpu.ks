@@ -6,6 +6,8 @@ GLOBAL CFG IS LEXICON().
 
 LOCAL roleSeq IS LIST("DESCEND", "LANDED", "DONE").
 GLOBAL FUNCTION bootVehicleLibs {
+    LOCAL cachedLibs IS bootCachedVehicleLibs().
+    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     RETURN missionLibs(missionLibsForPhases(roleSeq)).
 }
 

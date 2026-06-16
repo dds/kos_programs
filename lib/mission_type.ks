@@ -21,7 +21,7 @@ GLOBAL FUNCTION missionTypeDetect {
 
 // Return extra library roots needed for a given band key,
 // based on mission type, sequence, and payload state.
-// These are additive on top of the band roots from dependencies.txt.
+// These are additive on top of the band roots from dependencies.json.
 GLOBAL FUNCTION missionTypeConditionalRoots {
     PARAMETER bandKey.
     LOCAL roots IS LIST().

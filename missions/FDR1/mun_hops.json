@@ -1,0 +1,12 @@
+{
+  "MISSION_ID": "mun_hops",
+  "MISSION_NAME": "FDR1 Vacuum Hops",
+  "TARGET": "MUN",
+  "PAYLOADS": "",
+  "SEQUENCE": "ARM,FLY,DONE",
+  "DRONE_STYLE": "RCS",
+  "DRONE_CRUISE_AGL": 40,
+  "DRONE_CRUISE_SPEED": 15,
+  "DRONE_RCS_ACC": 1.5,
+  "DRONE_VS_CAP": 5
+}

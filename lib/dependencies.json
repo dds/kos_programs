@@ -1,0 +1,432 @@
+{
+  "preamble": [
+    "core"
+  ],
+  "libs": {
+    "core": [
+      "state",
+      "logs",
+      "files",
+      "phases",
+      "config",
+      "mission_type"
+    ],
+    "capture": [
+      "maneuver",
+      "orbit"
+    ],
+    "deorbit_burn": [],
+    "deorbit_targeting": [
+      "orbit",
+      "utils"
+    ],
+    "flightplan": [
+      "ui"
+    ],
+    "inclination": [
+      "lib_navigation"
+    ],
+    "landing_config": [
+      "utils"
+    ],
+    "landing_deorbit": [
+      "landing_config"
+    ],
+    "landing": [
+      "landing_config"
+    ],
+    "landing_site": [],
+    "launch": [
+      "flightplan",
+      "orbit",
+      "countdown"
+    ],
+    "maneuver": [
+      "countdown",
+      "solar"
+    ],
+    "prelaunch": [],
+    "suborbit": [
+      "launch"
+    ],
+    "mission_type": [],
+    "hohmann_transfer": [],
+    "maneuver_intersystem": [
+      "lambert",
+      "maneuver",
+      "maneuver_targeting",
+      "lib_navigation",
+      "inclination"
+    ],
+    "maneuver_orbit": [
+      "maneuver",
+      "inclination",
+      "orbit"
+    ],
+    "rdv_plan": [
+      "hohmann_transfer",
+      "maneuver",
+      "lib_navigation",
+      "orbit"
+    ],
+    "maneuver_rendezvous": [
+      "hohmann_transfer",
+      "maneuver"
+    ],
+    "maneuver_transfer": [
+      "hohmann_transfer",
+      "maneuver",
+      "maneuver_targeting",
+      "lib_navigation",
+      "orbit"
+    ],
+    "maneuver_mcc": [
+      "maneuver",
+      "maneuver_targeting",
+      "lib_navigation",
+      "orbit"
+    ],
+    "molniya": [
+      "maneuver",
+      "inclination"
+    ],
+    "payload_landing": [
+      "landing_config"
+    ],
+    "payload_ops": [
+      "orbit",
+      "utils",
+      "solar"
+    ],
+    "relay_constellation": [
+      "maneuver",
+      "orbit"
+    ],
+    "scansat_ops": [
+      "orbit",
+      "solar"
+    ],
+    "solar": [],
+    "airplane": [
+      "observe",
+      "flightplan",
+      "utils"
+    ],
+    "rover": [
+      "payload_landing"
+    ],
+    "science": [],
+    "aerobrake": [
+      "maneuver",
+      "utils"
+    ],
+    "descent": [],
+    "xfer_plan": [
+      "maneuver_transfer",
+      "orbit"
+    ],
+    "orbit_shape": [
+      "maneuver",
+      "inclination",
+      "orbit"
+    ],
+    "arrival_bplane": [
+      "hohmann_transfer",
+      "maneuver"
+    ],
+    "goto_plan": [],
+    "payload_release": [
+      "maneuver",
+      "orbit"
+    ],
+    "ssto": [
+      "airplane",
+      "maneuver",
+      "orbit"
+    ],
+    "drone": [
+      "observe",
+      "flightplan"
+    ]
+  },
+  "phases": {
+    "PREFLIGHT": [
+      "airplane"
+    ],
+    "FLIGHT": [
+      "airplane"
+    ],
+    "POST_FLIGHT": [
+      "airplane"
+    ],
+    "POSTFLIGHT": [
+      "airplane"
+    ],
+    "EVA_SCIENCE": [
+      "science",
+      "orbit"
+    ],
+    "SCIENCE_OPS": [
+      "science",
+      "orbit",
+      "solar"
+    ],
+    "SCIENCE_OPS_LOW": [
+      "science",
+      "orbit",
+      "solar"
+    ],
+    "LAUNCH": [
+      "launch"
+    ],
+    "FAIR": [
+      "launch"
+    ],
+    "ANTS": [
+      "launch"
+    ],
+    "PARK": [
+      "launch"
+    ],
+    "ABORT": [
+      "launch"
+    ],
+    "PRELAUNCH": [
+      "prelaunch"
+    ],
+    "SUBORBIT": [
+      "suborbit"
+    ],
+    "RDV": [
+      "rdv_plan"
+    ],
+    "MATCH": [
+      "maneuver_rendezvous"
+    ],
+    "CREW_XFER": [
+      "maneuver_rendezvous"
+    ],
+    "XING": [
+      "xfer_plan"
+    ],
+    "ESCAPE": [
+      "xfer_plan"
+    ],
+    "MCC": [
+      "maneuver_mcc"
+    ],
+    "AEROBRAKE": [
+      "aerobrake"
+    ],
+    "DESCENT": [
+      "descent"
+    ],
+    "KSC_DEORBIT": [
+      "deorbit_targeting",
+      "solar"
+    ],
+    "COAST": [
+      "capture"
+    ],
+    "COAST_1HALF": [
+      "capture"
+    ],
+    "COAST_2HALF": [
+      "capture"
+    ],
+    "CAPTURE": [
+      "capture"
+    ],
+    "FLYBY": [
+      "capture"
+    ],
+    "CIRC": [
+      "maneuver_orbit"
+    ],
+    "RAISE": [
+      "maneuver_orbit"
+    ],
+    "INCLINE": [
+      "maneuver_orbit"
+    ],
+    "ELLIPTICAL": [
+      "maneuver_orbit"
+    ],
+    "TARGETED_DEORBIT": [
+      "payload_ops",
+      "deorbit_targeting",
+      "landing_site"
+    ],
+    "RELEASE_PROBE": [
+      "payload_ops"
+    ],
+    "RELAY_OPS": [
+      "payload_ops"
+    ],
+    "RELAY_CONSTELLATION": [
+      "relay_constellation"
+    ],
+    "SCANSAT_OPS": [
+      "scansat_ops",
+      "science"
+    ],
+    "LAND_DEORBIT": [
+      "landing_deorbit",
+      "deorbit_targeting",
+      "deorbit_burn"
+    ],
+    "LAND": [
+      "payload_landing",
+      "landing"
+    ],
+    "LAND_ASSIST": [
+      "payload_landing",
+      "landing"
+    ],
+    "ROVER": [
+      "rover"
+    ],
+    "MOLNIYA": [
+      "molniya"
+    ],
+    "MOLNIYA_INSERT": [
+      "molniya"
+    ],
+    "DROP_FOR_IMPACT_AND_RAISE_PE": [
+      "payload_release"
+    ],
+    "DONE": [
+      "solar"
+    ],
+    "SHAPE": [
+      "orbit_shape"
+    ],
+    "DEPARTURE_SHAPE": [
+      "orbit_shape"
+    ],
+    "BPLANE": [
+      "arrival_bplane"
+    ],
+    "REFINE_BPLANE": [
+      "arrival_bplane"
+    ],
+    "GOTO": [
+      "goto_plan"
+    ],
+    "AIRCLIMB": [
+      "ssto"
+    ],
+    "ROCKETCLIMB": [
+      "ssto"
+    ],
+    "SSTO_DEORBIT": [
+      "ssto"
+    ],
+    "REENTRY": [
+      "ssto"
+    ],
+    "APPROACH": [
+      "ssto"
+    ],
+    "ARM": [
+      "drone"
+    ],
+    "FLY": [
+      "drone"
+    ]
+  },
+  "cmds": {
+    "PREFLIGHT": [
+      "restartflightplan"
+    ],
+    "FLIGHT": [
+      "restartflightplan"
+    ],
+    "POSTFLIGHT": [
+      "restartflightplan"
+    ],
+    "POST_FLIGHT": [
+      "restartflightplan"
+    ],
+    "APPROACH": [
+      "restartflightplan"
+    ],
+    "ARM": [
+      "restartflightplan"
+    ],
+    "FLY": [
+      "restartflightplan"
+    ],
+    "SCANSAT_OPS": [
+      "scansatops"
+    ],
+    "DONE": [
+      "secondarytarget"
+    ]
+  },
+  "bands": {
+    "AIR": [
+      "PREFLIGHT",
+      "FLIGHT",
+      "POSTFLIGHT",
+      "POST_FLIGHT"
+    ],
+    "SSTO_ASCENT": [
+      "AIRCLIMB",
+      "ROCKETCLIMB"
+    ],
+    "SSTO_RETURN": [
+      "SSTO_DEORBIT",
+      "REENTRY",
+      "APPROACH"
+    ],
+    "LAUNCH": [
+      "PRELAUNCH",
+      "LAUNCH",
+      "FAIR",
+      "ANTS",
+      "PARK",
+      "ABORT"
+    ],
+    "XFER_PLAN": [
+      "DEPARTURE_SHAPE",
+      "XING",
+      "ESCAPE"
+    ],
+    "RENDEZVOUS": [
+      "MATCH",
+      "CREW_XFER"
+    ],
+    "XFER_ARRIVE": [
+      "BPLANE",
+      "COAST",
+      "COAST_1HALF",
+      "REFINE_BPLANE",
+      "COAST_2HALF",
+      "CAPTURE",
+      "FLYBY"
+    ],
+    "XFER_ORBIT": [
+      "CIRC",
+      "RAISE",
+      "INCLINE",
+      "ELLIPTICAL"
+    ],
+    "PAYLOAD_OPS": [
+      "TARGETED_DEORBIT",
+      "RELEASE_PROBE",
+      "RELAY_OPS",
+      "RELAY_CONSTELLATION"
+    ],
+    "AEROBRAKE": [
+      "AEROBRAKE"
+    ],
+    "LAND_DEORBIT": [
+      "LAND_DEORBIT"
+    ],
+    "LANDING": [
+      "LAND_ASSIST",
+      "LAND"
+    ]
+  }
+}

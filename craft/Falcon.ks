@@ -147,6 +147,12 @@ LOCAL FUNCTION _falconLibs {
     bootEnsureInitialPhase(falconBuildPhaseSequence()).
     LOCAL band IS falconPhaseBand().
     LOCAL phase IS stateGet("phase", "").
+    LOCAL cachedLibs IS bootCachedVehicleLibs(band).
+    IF cachedLibs:LENGTH > 0 {
+        stateSet("lib_band_phase", phase).
+        stateSet("reload_required", "false").
+        RETURN cachedLibs.
+    }
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
