@@ -486,7 +486,8 @@ GLOBAL FUNCTION bootLibAppendResolved {
 GLOBAL FUNCTION bootLibResolve {
     PARAMETER roots.
     LOCAL libs IS LIST().
-    bootLibLoad("dependencies").
+    bootLibSync("dependencies").
+    RUNPATHONCE("1:/lib/dependencies").
     LOCAL deps IS dependencyLibs().
     FOR libName IN roots {
         bootLibAppendResolved(libs, libName, deps).
