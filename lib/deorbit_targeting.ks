@@ -81,25 +81,24 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
-    LOCAL entryPe IS targetGeo:TERRAINHEIGHT - 1000.
-    IF ignoredPe <> 0 { SET entryPe TO ignoredPe. }
     LOCAL tolerance IS LAND_CFG_TARGET_TOLERANCE.
     IF ignoredTolerance > 0 { SET tolerance TO ignoredTolerance. }
-    LOCAL coarseStopDist IS MAX(10000, tolerance).
+    LOCAL minAngle IS 45.
+    LOCAL targetAngle IS 50.
+    LOCAL angleTol IS 5.
+    LOCAL retroDvs IS LIST(8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30,
+        35, 40, 50, 60, 75, 90, 110, 130, 150).
     ADDONS:TR:SETTARGET(targetGeo).
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + ","
         + ROUND(targetLng,4)
-        + "  entryPe=" + ROUND(entryPe/1000,1) + "km"
-        + "  tolerance=" + ROUND(tolerance/1000,1) + "km").
+        + "  tolerance=" + ROUND(tolerance/1000,1) + "km"
+        + "  angle=" + ROUND(minAngle,0) + "-"
+        + ROUND(targetAngle,0) + "deg.").
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL nowUt IS TIME:SECONDS.
     LOCAL period IS SHIP:ORBIT:PERIOD.
-    LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
-    LOCAL mu IS SHIP:ORBIT:BODY:MU.
-    LOCAL orbitSma IS SHIP:ORBIT:SEMIMAJORAXIS.
-    LOCAL twoOverOrbitSma IS 2 / orbitSma.
     LOCAL minLead IS _targetDeorbitMinLead().
     LOCAL scanOrbits IS 8.
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_ORBITS") {
@@ -117,25 +116,42 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL scanEnd IS nowUt + period * scanOrbits + 30.
     LOCAL stepA IS period / 64.
     LOCAL bestUT IS scanStart.
+    LOCAL bestRetroDv IS 0.
     LOCAL bestDist IS 999999999.
+    LOCAL bestAngle IS -1.
+    LOCAL bestScore IS 999999999.
     LOCAL validSamples IS 0.
+    LOCAL angleSamples IS 0.
     LOCAL scanUT IS scanStart.
 
     mLog("Node scan: T+" + ROUND(scanEnd - nowUt,0)
         + "s step=" + ROUND(stepA,1)
-        + "s TR target=true-site.").
-    UNTIL scanUT > scanEnd OR bestDist <= coarseStopDist {
-        LOCAL trial IS _evalDeorbitNode(scanUT, entryPe, targetLat, targetLng,
-            bodyR, mu, orbitSma, twoOverOrbitSma, minLead).
-        IF trial["VALID"] {
-            SET validSamples TO validSamples + 1.
-            IF trial["DIST"] < bestDist {
-                SET bestDist TO trial["DIST"].
-                SET bestUT TO scanUT.
-                mLog("DEBUG node: T+" + ROUND(scanUT - nowUt,0)
-                    + "s impact=" + ROUND(trial["LAT"],4)
-                    + "," + ROUND(trial["LNG"],4)
-                    + " dist=" + ROUND(bestDist/1000,1) + "km").
+        + "s dV=8..150 angle>=45 TR target=true-site.").
+    UNTIL scanUT > scanEnd
+            OR (bestDist <= tolerance AND ABS(bestAngle - targetAngle) <= angleTol) {
+        FOR retroDv IN retroDvs {
+            LOCAL trial IS _evalRetroDeorbitNode(scanUT, retroDv,
+                targetLat, targetLng, minLead, minAngle, targetAngle,
+                angleTol).
+            IF trial["VALID"] {
+                SET validSamples TO validSamples + 1.
+                IF trial["ANGLE_OK"] {
+                    SET angleSamples TO angleSamples + 1.
+                    IF trial["SCORE"] < bestScore {
+                        SET bestScore TO trial["SCORE"].
+                        SET bestDist TO trial["DIST"].
+                        SET bestAngle TO trial["ANGLE"].
+                        SET bestRetroDv TO retroDv.
+                        SET bestUT TO scanUT.
+                        mLog("DEBUG node: T+" + ROUND(scanUT - nowUt,0)
+                            + "s dv=" + ROUND(retroDv,1)
+                            + " angle=" + ROUND(bestAngle,1)
+                            + " impact=" + ROUND(trial["LAT"],4)
+                            + "," + ROUND(trial["LNG"],4)
+                            + " dist=" + ROUND(bestDist/1000,1) + "km"
+                            + " score=" + ROUND(bestScore,1)).
+                    }
+                }
             }
         }
         SET scanUT TO scanUT + stepA.
@@ -147,34 +163,55 @@ GLOBAL FUNCTION targetedDeorbitAt {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
+    IF angleSamples = 0 {
+        mLogError("No deorbit node met minimum descent angle "
+            + ROUND(minAngle,0) + "deg.").
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
+        RETURN FALSE.
+    }
 
     mLog("Coarse best: T+" + ROUND(bestUT - nowUt,0)
-        + "s dist=" + ROUND(bestDist/1000,1)
-        + "km samples=" + validSamples + ".").
+        + "s dv=" + ROUND(bestRetroDv,1)
+        + " angle=" + ROUND(bestAngle,1)
+        + " dist=" + ROUND(bestDist/1000,1)
+        + "km samples=" + validSamples
+        + " angleSamples=" + angleSamples + ".").
 
     LOCAL fstep IS stepA * 0.5.
-    UNTIL fstep < 0.5 {
+    LOCAL dvStep IS 1.
+    UNTIL fstep < 0.5 AND dvStep < 0.2 {
         FOR cand IN LIST(bestUT - fstep, bestUT + fstep) {
             IF cand > nowUt + minLead {
-                LOCAL refined IS _evalDeorbitNode(cand, entryPe,
-                    targetLat, targetLng, bodyR, mu, orbitSma,
-                    twoOverOrbitSma, minLead).
-                IF refined["VALID"] AND refined["DIST"] < bestDist {
-                    SET bestDist TO refined["DIST"].
-                    SET bestUT TO cand.
+                FOR candDv IN LIST(MAX(0.1, bestRetroDv - dvStep),
+                        bestRetroDv, bestRetroDv + dvStep) {
+                    LOCAL refined IS _evalRetroDeorbitNode(cand, candDv,
+                        targetLat, targetLng, minLead, minAngle,
+                        targetAngle, angleTol).
+                    IF refined["VALID"] AND refined["ANGLE_OK"]
+                            AND refined["SCORE"] < bestScore {
+                        SET bestScore TO refined["SCORE"].
+                        SET bestDist TO refined["DIST"].
+                        SET bestAngle TO refined["ANGLE"].
+                        SET bestRetroDv TO candDv.
+                        SET bestUT TO cand.
+                    }
                 }
             }
         }
         SET fstep TO fstep / 2.
+        SET dvStep TO dvStep / 2.
         WAIT 0.
     }
 
-    LOCAL finalCheck IS _evalDeorbitNode(bestUT, entryPe, targetLat, targetLng,
-        bodyR, mu, orbitSma, twoOverOrbitSma, minLead).
+    LOCAL finalCheck IS _evalRetroDeorbitNode(bestUT, bestRetroDv,
+        targetLat, targetLng, minLead, minAngle, targetAngle, angleTol).
     IF finalCheck["VALID"] {
         SET bestDist TO finalCheck["DIST"].
+        SET bestAngle TO finalCheck["ANGLE"].
         mLog("Polished best: T+" + ROUND(bestUT - nowUt,0)
-            + "s impact=" + ROUND(finalCheck["LAT"],4)
+            + "s dv=" + ROUND(bestRetroDv,2)
+            + " angle=" + ROUND(bestAngle,1)
+            + " impact=" + ROUND(finalCheck["LAT"],4)
             + "," + ROUND(finalCheck["LNG"],4)
             + " dist=" + ROUND(bestDist,0) + "m.").
     }
@@ -189,8 +226,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-    LOCAL realNode IS _planDeorbitNode(bestUT, entryPe, bodyR, mu,
-        orbitSma, twoOverOrbitSma).
+    LOCAL realNode IS _planRetroNode(bestUT, bestRetroDv).
+    _logDeorbitNode("Selected deorbit node", realNode).
     WAIT 0.5.
     IF ADDONS:TR:HASIMPACT {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
@@ -240,69 +277,79 @@ GLOBAL FUNCTION targetedDeorbitAt {
     RETURN TRUE.
 }
 
-LOCAL FUNCTION _evalDeorbitNode {
+LOCAL FUNCTION _evalRetroDeorbitNode {
     PARAMETER burnUT.
-    PARAMETER entryPe.
+    PARAMETER retroDv.
     PARAMETER targetLat.
     PARAMETER targetLng.
-    PARAMETER bodyR.
-    PARAMETER mu.
-    PARAMETER orbitSma.
-    PARAMETER twoOverOrbitSma.
     PARAMETER minLead.
+    PARAMETER minAngle.
+    PARAMETER targetAngle.
+    PARAMETER angleTol.
 
     LOCAL result IS LEXICON(
         "VALID", FALSE,
+        "ANGLE_OK", FALSE,
+        "SCORE", 999999999,
         "DIST", 999999999,
+        "ANGLE", -1,
         "LAT", 0,
         "LNG", 0
     ).
 
     IF burnUT <= TIME:SECONDS + minLead { RETURN result. }
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-    LOCAL nd IS _planDeorbitNode(burnUT, entryPe, bodyR, mu,
-        orbitSma, twoOverOrbitSma).
+    LOCAL nd IS _planRetroNode(burnUT, retroDv).
     WAIT 0.2.
     IF ADDONS:TR:HASIMPACT {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
+        LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
+            targetLat, targetLng).
+        LOCAL angle IS lmTerrainImpactAngle(
+            burnUT + 30, burnUT + 1800,
+            5,
+            LAND_CFG_TERRAIN_MIN_CLEARANCE,
+            LAND_CFG_TERRAIN_SAFE_ALT).
+        LOCAL distCost IS (dist / 500) * (dist / 500).
+        LOCAL angleCost IS 999999999.
+        IF angle >= 0 {
+            SET angleCost TO ((angle - targetAngle) / angleTol)
+                * ((angle - targetAngle) / angleTol).
+        }
         SET result["VALID"] TO TRUE.
         SET result["LAT"] TO impactPos:LAT.
         SET result["LNG"] TO impactPos:LNG.
-        SET result["DIST"] TO geoDistance(impactPos:LAT, impactPos:LNG,
-            targetLat, targetLng).
+        SET result["DIST"] TO dist.
+        SET result["ANGLE"] TO angle.
+        SET result["SCORE"] TO distCost + angleCost.
+        IF angle >= minAngle {
+            SET result["ANGLE_OK"] TO TRUE.
+        }
     }
     REMOVE nd.
     RETURN result.
 }
 
-LOCAL FUNCTION _deorbitVNewFast {
-    PARAMETER entryPe.
-    PARAMETER bodyR.
-    PARAMETER mu.
-    PARAMETER orbitSma.
-    PARAMETER twoOverOrbitSma.
-
-    LOCAL rPe IS bodyR + entryPe.
-    LOCAL tSMA IS (orbitSma + rPe) / 2.
-    LOCAL radicand IS twoOverOrbitSma - 1 / tSMA.
-    IF radicand <= 0 { RETURN 0. }
-    RETURN SQRT(mu * radicand).
-}
-
-LOCAL FUNCTION _planDeorbitNode {
+LOCAL FUNCTION _planRetroNode {
     PARAMETER burnUT.
-    PARAMETER entryPe.
-    PARAMETER bodyR.
-    PARAMETER mu.
-    PARAMETER orbitSma.
-    PARAMETER twoOverOrbitSma.
+    PARAMETER retroDv.
 
-    LOCAL vNow IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
-    LOCAL vNew IS _deorbitVNewFast(entryPe, bodyR, mu, orbitSma,
-        twoOverOrbitSma).
-    LOCAL nd IS NODE(burnUT, 0, 0, vNew - vNow).
+    LOCAL nd IS NODE(burnUT, 0, 0, -ABS(retroDv)).
     ADD nd.
     RETURN nd.
+}
+
+LOCAL FUNCTION _logDeorbitNode {
+    PARAMETER label.
+    PARAMETER nd.
+
+    mLog(label + ": N("
+        + ROUND(nd:PROGRADE,3) + " pro, "
+        + ROUND(nd:NORMAL,3) + " norm, "
+        + ROUND(nd:RADIALOUT,3) + " rad, "
+        + ROUND(nd:TIME,3) + " UT)"
+        + " dv=" + ROUND(nd:DELTAV:MAG,2)
+        + " eta=" + ROUND(nd:ETA,1) + "s.").
 }
 
 LOCAL FUNCTION _targetDeorbitMinLead {
