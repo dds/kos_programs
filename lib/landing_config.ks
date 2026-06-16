@@ -119,9 +119,6 @@ GLOBAL FUNCTION landingImpactWithinTolerance {
     LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
         landingTarget["LAT"], landingTarget["LNG"]).
     LOCAL ok IS dist <= LAND_CFG["TARGET_TOLERANCE"].
-    mLogWarn("STATS landing-impact status=" + ok
-        + " distKm=" + ROUND(dist/1000,2)
-        + " toleranceKm=" + ROUND(LAND_CFG["TARGET_TOLERANCE"]/1000,2)).
     RETURN ok.
 }
 
@@ -139,8 +136,5 @@ GLOBAL FUNCTION landingImpactAcceptableForAssist {
     LOCAL maxDist IS LAND_CFG["DEORBIT_OVERSHOOT"]
         + LAND_CFG["DEORBIT_OVERSHOOT_TOLERANCE"].
     LOCAL ok IS dist <= maxDist.
-    mLogWarn("STATS landing-impact-assist status=" + ok
-        + " distKm=" + ROUND(dist/1000,2)
-        + " allowedKm=" + ROUND(maxDist/1000,2)).
     RETURN ok.
 }

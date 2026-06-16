@@ -177,9 +177,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     IF NOT targetReachable(targetLat) {
-        mLogWarn("STATS deorbit abort reason=target-lat-unreachable targetLat="
-            + ROUND(targetLat,4)
-            + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)).
         mLogError("Target latitude is not reachable from this orbit inclination.").
         RETURN FALSE.
     }
@@ -199,10 +196,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
         + "  entryPe=" + ROUND(entryPe/1000,1) + "km"
         + "  tolerance=" + ROUND(tolerance/1000,1) + "km").
-    mLogWarn("STATS deorbit setup target=" + ROUND(targetLat,4)
-        + "," + ROUND(targetLng,4)
-        + " entryPeKm=" + ROUND(entryPe/1000,1)
-        + " toleranceKm=" + ROUND(tolerance/1000,1)).
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL nowUt IS TIME:SECONDS.
@@ -232,8 +225,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF CFG:HASKEY("LANDING_SIM_MODE") AND CFG["LANDING_SIM_MODE"] > 0 {
         IF scanOrbits > 2 { SET scanOrbits TO 2. }
         IF scanSamples > 256 { SET scanSamples TO 256. }
-        mLogWarn("STATS deorbit scan mode=sim scanOrbits="
-            + scanOrbits + " samples=" + scanSamples).
     }
     LOCAL scanStart IS nowUt + 30.
     LOCAL scanEnd IS nowUt + period * scanOrbits + 30.
@@ -250,12 +241,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
         SET scanEnd TO centerUT + halfWin.
         SET scanMode TO "minutes".
         IF scanSamples > 256 { SET scanSamples TO 256. }
-        mLogWarn("STATS deorbit scan window centerMin="
-            + ROUND(centerMin,1)
-            + " windowMin=" + ROUND(windowMin,1)
-            + " startT=" + ROUND(scanStart - nowUt,0)
-            + " endT=" + ROUND(scanEnd - nowUt,0)
-            + " samples=" + scanSamples).
     }
     // Per-orbit sample density: the scan discovers the pass
     // windows in the first two orbits, then only checks those
@@ -294,10 +279,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
             + ROUND(entryPe / 1000, 0) + "km .. "
             + ROUND(peList[peList:LENGTH - 1] / 1000, 0) + "km"
             + " (budget " + ROUND(budgetDv, 0) + " m/s).").
-        mLogWarn("STATS deorbit pe-search rungs=" + peList:LENGTH
-            + " defaultPeKm=" + ROUND(entryPe / 1000, 1)
-            + " floorPeKm=" + ROUND(peList[peList:LENGTH - 1] / 1000, 1)
-            + " budgetDv=" + ROUND(budgetDv, 0)).
     }
 
     LOCAL bestUT   IS nowUt + 30.
@@ -306,7 +287,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL bestNor  IS 0.
     LOCAL bestDist IS 999999999.
     LOCAL validSamples IS 0.
-    LOCAL invalidSamples IS 0.
 
     LOCAL earlyStop IS FALSE.
     LOCAL floorUt IS nowUt + minLead.
@@ -338,14 +318,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 mLog("DEBUG coarse: T+" + ROUND(scanUT - nowUt,0)
                     + "s  dist=" + ROUND(bestDist/1000,1) + "km").
                 IF bestDist <= coarseStopDist {
-                    mLogWarn("STATS deorbit coarse early-stop distKm="
-                        + ROUND(bestDist/1000,2)
-                        + " burnT=" + ROUND(scanUT - nowUt,0)).
                     SET earlyStop TO TRUE.
                 }
             }
         } ELSE {
-            SET invalidSamples TO invalidSamples + 1.
             dTimes:ADD(scanUT).
             dDists:ADD(8.99e15).
         }
@@ -405,8 +381,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
                                     SET wBest TO trDist.
                                     SET wBestT TO tt.
                                 }
-                            } ELSE {
-                                SET invalidSamples TO invalidSamples + 1.
                             }
                         }
                     }
@@ -453,9 +427,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
                             + "  T+" + ROUND(wBestT - nowUt, 0)
                             + "s  dist=" + ROUND(wBest / 1000, 1) + "km").
                         IF bestDist <= coarseStopDist {
-                            mLogWarn("STATS deorbit window early-stop distKm="
-                                + ROUND(bestDist/1000, 2)
-                                + " burnT=" + ROUND(bestUT - nowUt, 0)).
                             SET earlyStop TO TRUE.
                         }
                     }
@@ -466,29 +437,13 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
     mLog("Coarse best: T+" + ROUND(bestUT - nowUt,0)
         + "s  dist=" + ROUND(bestDist/1000,1) + "km").
-    LOCAL coarseBest IS _evalDeorbitNode(bestUT, bestPe, targetLat, targetLng,
-        0, 0, bodyR, mu, orbitSma, twoOverOrbitSma,
-        minLead, minDV, maxDV).
-    mLogWarn("STATS deorbit coarse distKm=" + ROUND(bestDist/1000,1)
-        + " burnT=" + ROUND(bestUT - nowUt,0)
-        + " scanOrbits=" + scanOrbits
-        + " samples=" + scanSamples
-        + " valid=" + validSamples
-        + " invalid=" + invalidSamples
-        + " impact=" + ROUND(coarseBest["LAT"],4)
-        + "," + ROUND(coarseBest["LNG"],4)).
 
     IF validSamples = 0 {
-        mLogWarn("STATS deorbit abort reason=no-valid-coarse-samples").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
 
     IF bestUT <= TIME:SECONDS + minLead {
-        mLogWarn("STATS deorbit abort reason=window-expired burnT="
-            + ROUND(bestUT - nowUt,0)
-            + " minLead=" + ROUND(minLead,0)
-            + " distKm=" + ROUND(bestDist/1000,1)).
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
@@ -506,10 +461,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 + ROUND(refineStartLimit/1000,1)
                 + "km — proceeding anyway (best-effort mode).").
         } ELSE {
-            mLogWarn("STATS deorbit abort reason=coarse-miss-too-large distKm="
-                + ROUND(bestDist/1000,1)
-                + " refineStartLimitKm=" + ROUND(refineStartLimit/1000,1)
-                + " toleranceKm=" + ROUND(tolerance/1000,1)).
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
             RETURN FALSE.
         }
@@ -564,20 +515,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + "  extraDv=" + ROUND(extraDv, 0)
         + "m/s"
         + "  dist=" + ROUND(bestDist/1000,1) + "km").
-    LOCAL deorbitStatus IS "ok".
-    IF bestDist > tolerance { SET deorbitStatus TO "miss". }
-    LOCAL finalEval IS _evalDeorbitNode(bestUT, bestPe, targetLat, targetLng,
-        bestRad, bestNor, bodyR, mu, orbitSma, twoOverOrbitSma,
-        minLead, minDV, maxDV).
-    mLogWarn("STATS deorbit final status=" + deorbitStatus
-        + " distKm=" + ROUND(bestDist/1000,1)
-        + " toleranceKm=" + ROUND(tolerance/1000,1)
-        + " burnT=" + ROUND(bestUT - nowUt,0)
-        + " PeKm=" + ROUND(bestPe/1000,1)
-        + " radial=" + ROUND(bestRad,2)
-        + " normal=" + ROUND(bestNor,2)
-        + " impact=" + ROUND(finalEval["LAT"],4)
-        + "," + ROUND(finalEval["LNG"],4)).
 
     IF bestDist > tolerance {
         mLogWarn("Best solution misses target by " + ROUND(bestDist/1000,1)
@@ -588,9 +525,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
             SET proceedOnMiss TO CFG["TARGET_DEORBIT_PROCEED_ON_MISS"].
         }
         IF proceedOnMiss <= 0 {
-            mLogWarn("STATS deorbit abort reason=miss-exceeds-tolerance distKm="
-                + ROUND(bestDist/1000,1)
-                + " toleranceKm=" + ROUND(tolerance/1000,1)).
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
             RETURN FALSE.
         }
@@ -600,10 +534,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
 
     IF bestUT <= TIME:SECONDS + minLead {
-        mLogWarn("STATS deorbit abort reason=burn-too-soon-after-refine burnT="
-            + ROUND(bestUT - TIME:SECONDS,0)
-            + " minLead=" + ROUND(minLead,0)
-            + " distKm=" + ROUND(bestDist/1000,1)).
         RETURN FALSE.
     }
 
@@ -623,16 +553,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
         mLog("Post-burn impact prediction: "
             + ROUND(impactPos:LAT,4) + "," + ROUND(impactPos:LNG,4)
             + "  dist=" + ROUND(finalDist/1000,1) + "km from target").
-        mLogWarn("STATS deorbit postburn distKm=" + ROUND(finalDist/1000,1)
-            + " impact=" + ROUND(impactPos:LAT,4)
-            + "," + ROUND(impactPos:LNG,4)).
         HUDTEXT("Impact predicted " + ROUND(finalDist/1000,1) + "km from target",
             5, 2, 14, GREEN, FALSE).
-        IF finalDist > tolerance {
-            mLogWarn("STATS deorbit postburn status=miss distKm="
-                + ROUND(finalDist/1000,1)
-                + " toleranceKm=" + ROUND(tolerance/1000,1)).
-        }
     } ELSE {
         mLogWarn("Trajectories has no impact prediction post-burn.").
     }

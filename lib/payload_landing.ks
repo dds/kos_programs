@@ -2,12 +2,9 @@
 
 GLOBAL FUNCTION phaseLandAssist {
     landingApplyMissionConfig().
-    mLogWarn("STATS land-assist phase setup alt=" + ROUND(ALT:RADAR,1)
-        + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)).
     IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
-    IF CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH") AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0 {
-        mLogWarn("STATS landing-impact skipped reason=sim-no-target-search").
-    } ELSE IF NOT landingImpactAcceptableForAssist() {
+    IF NOT (CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH") AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0)
+            AND NOT landingImpactAcceptableForAssist() {
         mLogError("Predicted landing impact is not within target tolerance; holding LAND_ASSIST.").
         stateSet("phase", "LAND_ASSIST").
         LOCK THROTTLE TO 0.
@@ -18,10 +15,6 @@ GLOBAL FUNCTION phaseLandAssist {
         RETURN.
     }
     LOCAL assistOk IS landingAssistStage().
-    mLogWarn("STATS land-assist phase result ok=" + assistOk
-        + " alt=" + ROUND(ALT:RADAR,1)
-        + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
-        + " status=" + SHIP:STATUS).
     IF NOT assistOk {
         mLogError("Landing assist failed; holding current phase for manual review.").
         stateSet("phase", "LAND_ASSIST").
@@ -37,18 +30,10 @@ GLOBAL FUNCTION phaseLandAssist {
 
 GLOBAL FUNCTION phaseLand {
     landingApplyMissionConfig().
-    mLogWarn("STATS land phase setup alt=" + ROUND(ALT:RADAR,1)
-        + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
-        + " v=" + ROUND(SHIP:VERTICALSPEED,1)
-        + " status=" + SHIP:STATUS).
 
     IF _redirectOrbitalLandingPhase("LAND") { RETURN. }
 
     landExecute().
-    mLogWarn("STATS land phase result alt=" + ROUND(ALT:RADAR,1)
-        + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
-        + " v=" + ROUND(SHIP:VERTICALSPEED,1)
-        + " status=" + SHIP:STATUS).
     nextPhase(launchSeq).
 }
 

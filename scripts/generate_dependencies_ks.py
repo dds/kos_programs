@@ -58,10 +58,9 @@ def main():
     # aerobrake.ks, and binding phaseAerobrake@ killed the boot).
     # An unbound phase degrades to runPhases' missing-handler path.
     # Because the guard is exact, phaseHandlerMap can safely try
-    # EVERY phase (dependencyAllPhases) — phases whose libs arrived
-    # via LIBS_EXTRA bind too, so a mission can avoid band-change
-    # reboots entirely by pre-loading its libs.
-    all_phases = ", ".join(f'"{phase}"' for phase, _ in phases)
+    # every parsed phase — phases whose libs arrived via LIBS_EXTRA
+    # bind too, so a mission can avoid band-change reboots entirely
+    # by pre-loading its libs.
     lines = [
         "LOCAL FUNCTION _depLoaded {",
         "    PARAMETER libsCsv.",
@@ -74,7 +73,8 @@ def main():
         "}",
         "",
         "GLOBAL FUNCTION dependencyAllPhases {",
-        f"    RETURN LIST({all_phases}).",
+        "    bootLibLoadSpec().",
+        "    RETURN BOOT_LIB_PHASES:KEYS.",
         "}",
         "",
         "GLOBAL FUNCTION dependencyBindPhase {",

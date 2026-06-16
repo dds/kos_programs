@@ -252,11 +252,6 @@ GLOBAL FUNCTION bootApplyMissionConfig {
                 IF parts:LENGTH >= 2 {
                     LOCAL key IS parts[0]:TRIM.
                     LOCAL value IS parts[1]:TRIM.
-                    IF NOT missionConfigIsKnownKey(key) {
-                        LOCAL warn IS "Unknown mission config key: " + key + " in " + path_.
-                        PRINT "  WARN: " + warn.
-                        mLogWarn(warn).
-                    }
                     stateSet("mission_cfg_" + key, value).
                     IF key = "MISSION_ID" {
                         stateSet("mission_id", value).

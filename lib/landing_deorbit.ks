@@ -2,19 +2,13 @@
 
 GLOBAL FUNCTION phaseLandDeorbit {
     landingApplyMissionConfig().
-    mLogWarn("STATS land-deorbit phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
-        + " targetPeKm=" + ROUND(_landingDeorbitPe()/1000,1)).
     IF SHIP:STATUS = "SUB_ORBITAL"
             AND (CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH")
                 AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0) {
-        mLogWarn("STATS land-deorbit phase skip status=already-suborbital mode=sim").
         _advanceAfterLandDeorbit().
         RETURN.
     }
     IF SHIP:STATUS = "SUB_ORBITAL" AND landingImpactAcceptableForAssist() {
-        mLogWarn("STATS land-deorbit phase skip status=already-suborbital").
         _advanceAfterLandDeorbit().
         RETURN.
     }
@@ -26,10 +20,6 @@ GLOBAL FUNCTION phaseLandDeorbit {
     }
     IF NOT _confirmLandingTarget() { RETURN. }
     LOCAL deorbitOk IS _landingTargetedDeorbit().
-    mLogWarn("STATS land-deorbit phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " status=" + SHIP:STATUS
-        + " ok=" + deorbitOk).
     IF NOT deorbitOk {
         mLogError("Landing deorbit did not meet target tolerance; holding for manual review.").
         stateSet("phase", "LAND_DEORBIT").
@@ -84,11 +74,6 @@ LOCAL FUNCTION _timedLandingDeorbit {
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     ADD nd.
-    mLogWarn("STATS land-deorbit timed setup leadMin=" + ROUND(leadMin,1)
-        + " burnT=" + ROUND(burnUT - TIME:SECONDS,0)
-        + " targetPeKm=" + ROUND(deorbitPe/1000,1)
-        + " rawDV=" + ROUND(rawDV,1)
-        + " dv=" + ROUND(clampedDV,1)).
     mLog("Timed sim deorbit node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " m/s at T+" + ROUND(nd:ETA,0) + "s.").
     IF HOMECONNECTION:ISCONNECTED {
@@ -96,10 +81,6 @@ LOCAL FUNCTION _timedLandingDeorbit {
         mLog("Planned maneuver log archived: timed-landing-deorbit.").
     }
     LOCAL ok IS executeDeorbitNode(nd).
-    mLogWarn("STATS land-deorbit timed result ok=" + ok
-        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " status=" + SHIP:STATUS).
     IF NOT ok {
         stateSet("phase", "LAND_DEORBIT").
         PRINT " ".
@@ -128,13 +109,9 @@ LOCAL FUNCTION _confirmLandingTarget {
         PRINT "  Source: " + targetInfo["SOURCE"].
         PRINT "  Lat/Lng: " + ROUND(targetInfo["LAT"],4)
             + ", " + ROUND(targetInfo["LNG"],4).
-        mLogWarn("STATS landing target confirm source=" + targetInfo["SOURCE"]
-            + " lat=" + ROUND(targetInfo["LAT"],4)
-            + " lng=" + ROUND(targetInfo["LNG"],4)).
     } ELSE {
         PRINT "  No landing target found.".
         PRINT "  Select a waypoint, run simlandhere, or set LANDING_TARGET_LAT/LNG.".
-        mLogWarn("STATS landing target confirm status=missing").
         yieldToPrompt().
         RETURN FALSE.
     }
@@ -159,10 +136,6 @@ LOCAL FUNCTION _autoLandingTarget {
     stateSet("mission_cfg_LANDING_TARGET_LAT", geo:LAT).
     stateSet("mission_cfg_LANDING_TARGET_LNG", geo:LNG).
     stateSet("mission_cfg_LANDING_TARGET_LOCK", "1").
-    mLogWarn("STATS landing target auto source=ground-track minutes="
-        + ROUND(minutes,1)
-        + " lat=" + ROUND(geo:LAT,4)
-        + " lng=" + ROUND(geo:LNG,4)).
     RETURN TRUE.
 }
 
@@ -205,9 +178,6 @@ LOCAL FUNCTION _landingOvershootTarget {
         landingTarget["LAT"], landingTarget["LNG"], northM, eastM).
     SET out["LAT"] TO shifted["LAT"].
     SET out["LNG"] TO shifted["LNG"].
-    mLogWarn("STATS deorbit overshoot aim="
-        + ROUND(out["LAT"],4) + "," + ROUND(out["LNG"],4)
-        + " overshootM=" + ROUND(overshoot,0)).
     RETURN out.
 }
 
@@ -218,9 +188,6 @@ LOCAL FUNCTION _landingTargetedDeorbit {
         RETURN FALSE.
     }
 
-    mLogWarn("STATS landing target source=" + landingTarget["SOURCE"]
-        + " lat=" + ROUND(landingTarget["LAT"],4)
-        + " lng=" + ROUND(landingTarget["LNG"],4)).
     SET LANDING_CFG["TARGET_LAT"] TO landingTarget["LAT"].
     SET LANDING_CFG["TARGET_LNG"] TO landingTarget["LNG"].
     mLog("Landing deorbit target: " + ROUND(landingTarget["LAT"],4)

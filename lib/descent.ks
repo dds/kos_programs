@@ -205,9 +205,6 @@ GLOBAL FUNCTION phaseDescent {
 
     mLog("Touchdown: " + SHIP:STATUS + " at " + ROUND(SHIP:GEOPOSITION:LAT, 4)
         + "," + ROUND(SHIP:GEOPOSITION:LNG, 4)).
-    mLogWarn("STATS descent status=landed type=" + SHIP:STATUS
-        + " lat=" + ROUND(SHIP:GEOPOSITION:LAT, 4)
-        + " lng=" + ROUND(SHIP:GEOPOSITION:LNG, 4)).
 
     // Final log archive after landing
     IF HOMECONNECTION:ISCONNECTED {
@@ -284,20 +281,12 @@ LOCAL FUNCTION _descentCutDrogues {
     }
     IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN. }
 
-    LOCAL cut IS 0.
-    LOCAL found IS 0.
     FOR p IN SHIP:PARTS {
         IF _descentPartLooksDrogue(p)
                 AND (p:HASMODULE("ModuleParachute")
                     OR p:HASMODULE("RealChuteModule")) {
-            SET found TO found + 1.
-            IF _descentCutChutePart(p) { SET cut TO cut + 1. }
+            _descentCutChutePart(p).
         }
-    }
-    IF found > 0 {
-        mLogWarn("STATS descent drogues cut=" + cut
-            + " found=" + found
-            + " alt=" + ROUND(SHIP:ALTITUDE, 0)).
     }
 }
 
@@ -363,12 +352,6 @@ LOCAL FUNCTION _descentBrakingBurn {
         + "  ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
         + "  ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
         + "  PeKm=" + ROUND(SHIP:PERIAPSIS/1000, 1)).
-    mLogWarn("STATS descent braking reason=" + reason
-        + " speed=" + ROUND(SHIP:AIRSPEED, 1)
-        + " alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
-        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
-        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000, 1)).
 }
 
 // Deploy descent fairing once airspeed is below 60 m/s.
@@ -450,8 +433,6 @@ LOCAL FUNCTION _descentDecouple {
         _descentDecouplePart(dc, "tag=" + tag).
     }
     WAIT 2.
-    mLogWarn("STATS descent decouple alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
-        + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
 }
 
 LOCAL FUNCTION _descentDecouplePart {
@@ -538,9 +519,6 @@ LOCAL FUNCTION _descentDropHeatShield {
 
     IF _descentDecouplePart(candidates[0], "heat shield drop") {
         WAIT 1.
-        mLogWarn("STATS heat-shield-drop radarAlt="
-            + ROUND(ALT:RADAR, 1)
-            + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
     } ELSE {
         mLogWarn("Heat shield candidate has no recognized decouple module: "
             + candidates[0]:TITLE + ".").
@@ -567,8 +545,6 @@ LOCAL FUNCTION _descentReopenExtendBaysForDrag {
     IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN. }
 
     _descentReopenExtendBays().
-    mLogWarn("STATS descent-bay-reopen alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
-        + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
 }
 
 LOCAL FUNCTION _descentRetractAntennas {

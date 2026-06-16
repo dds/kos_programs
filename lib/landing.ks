@@ -587,13 +587,9 @@ LOCAL FUNCTION _carrierHandoff {
     // Step 1: Settle on the bell after touchdown
     mLog("Carrier handoff: settling " + ROUND(LAND_CFG["CARRIER_SETTLE"],1) + "s.").
     WAIT LAND_CFG["CARRIER_SETTLE"].
-    mLogWarn("STATS carrier settled status=" + SHIP:STATUS
-        + " alt=" + ROUND(ALT:RADAR,1)
-        + " v=" + ROUND(SHIP:VERTICALSPEED,1)).
 
     // Step 2: Survey terrain in 8 directions and pick the flattest
     LOCAL tipDir IS _bestTipDirection().
-    mLogWarn("STATS tip direction heading=" + ROUND(tipDir,1)).
 
     // Step 3: Tip gently toward the chosen direction and decouple mid-tip
     IF LAND_CFG["CARRIER_TIP"] {
@@ -630,7 +626,6 @@ LOCAL FUNCTION _carrierHandoff {
             WAIT 0.1.
             UNLOCK STEERING.
         }
-        mLogWarn("STATS carrier tipped and decoupled").
     } ELSE {
         // No tip — just decouple
         mLog("Decoupling rover from carrier.").
@@ -664,10 +659,6 @@ LOCAL FUNCTION _carrierHandoff {
         WAIT 0.05.
     }
     UNLOCK STEERING.
-    mLogWarn("STATS rover oriented topErr="
-        + ROUND(VANG(SHIP:FACING:TOPVECTOR, SHIP:UP:VECTOR),1)
-        + " alt=" + ROUND(ALT:RADAR,1)
-        + " status=" + SHIP:STATUS).
 
     // Step 6: Engage brakes, lower reaction wheel authority for light rover
     SET BRAKES TO TRUE.
@@ -678,10 +669,6 @@ LOCAL FUNCTION _carrierHandoff {
     _deployAntennas().
     _deploySolarPanels().
 
-    mLogWarn("STATS carrier handoff complete status=" + SHIP:STATUS
-        + " lat=" + ROUND(SHIP:LATITUDE,4)
-        + " lng=" + ROUND(SHIP:LONGITUDE,4)
-        + " alt=" + ROUND(ALT:RADAR,1)).
     mLog("Carrier handoff complete. Rover on surface, ready for operations.").
 }
 
@@ -708,10 +695,6 @@ LOCAL FUNCTION _bestTipDirection {
         LOCAL sampleLng IS herePos:LNG + eastM * degPerM / lonScale.
         LOCAL sampleTerrain IS LATLNG(sampleLat, sampleLng):TERRAINHEIGHT.
         LOCAL diff IS ABS(sampleTerrain - hereTerrain).
-
-        mLogWarn("STATS terrain hdg=" + ROUND(hdg,0)
-            + " elev=" + ROUND(sampleTerrain,1)
-            + " diff=" + ROUND(diff,1)).
 
         IF diff < bestDiff {
             SET bestDiff TO diff.
