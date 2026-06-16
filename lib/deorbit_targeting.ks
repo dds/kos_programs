@@ -519,14 +519,21 @@ LOCAL FUNCTION _nodeImpactAngle {
     LOCAL impactVel IS ((rPlus - rMinus) / dt) - impactPos:VELOCITY:ORBIT.
     LOCAL impactUp IS (impactPos:POSITION - body:POSITION):NORMALIZED.
 
-    // Correct Flight Path Angle Calculation
     LOCAL velNorm IS impactVel:NORMALIZED.
     LOCAL upNorm IS impactUp:NORMALIZED.
-    // The sine of the flight path angle (angle from local horizontal) 
+
+    // The dot product of Velocity and Up gives us the Cosine of the angle between them.
+    // We want the angle between the Velocity and the Local Horizontal.
+    // Local Horizontal is 90 degrees away from the Up vector.
+    LOCAL fpa IS VANG(upNorm, velNorm).
+
+    RETURN 90 - fpa.
+
+    // The sine of the flight path angle (angle from local horizontal)
     // is the dot product of the velocity vector and the up vector.
-    LOCAL sinFpa IS VDOT(velNorm, upNorm).
-    LOCAL fpa IS ARCSIN(sinFpa). // This will return values between -90 and 90.
-    RETURN fpa.
+    // LOCAL sinFpa IS VDOT(velNorm, upNorm).
+    // LOCAL fpa IS ARCSIN(sinFpa). // This will return values between -90 and 90.
+    // RETURN fpa.
 }
 
 LOCAL FUNCTION _planRetroNode {
