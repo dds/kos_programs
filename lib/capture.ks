@@ -8,6 +8,9 @@
 
 LOCAL MAX_RETRIES IS 5.
 LOCAL SOI_BUFFER_TIME_DEFAULT IS 300.
+LOCAL MIDCOURSE_REFINE_FRACTION_DEFAULT IS 0.5.
+LOCAL MIDCOURSE_REFINE_MIN_LEAD_DEFAULT IS 300.
+LOCAL MIDCOURSE_REFINE_MARGIN_DEFAULT IS 60.
 
 LOCAL FUNCTION _cfgNum {
     PARAMETER key, defaultValue.
@@ -51,93 +54,49 @@ LOCAL FUNCTION _waitUntilOrSOI {
     }
 }
 
-LOCAL FUNCTION _shipTargetDistanceAt {
-    PARAMETER targetBody.
-    PARAMETER sampleUt.
-    RETURN (POSITIONAT(SHIP, sampleUt) - POSITIONAT(targetBody, sampleUt)):MAG.
-}
-
-LOCAL FUNCTION _distanceMidcourseUt {
-    PARAMETER targetBody.
+LOCAL FUNCTION _timeMidcourseUt {
     PARAMETER tStart.
     PARAMETER tArrival.
 
-    LOCAL midpointDist IS stateGetNum("midcourse_refine_distance", -1).
-    LOCAL storedTarget IS stateGet("midcourse_refine_target", "").
-    LOCAL storedMethod IS stateGet("midcourse_refine_method", "").
-    LOCAL storedArrival IS stateGetNum("midcourse_refine_arrival_ut", 0).
-    LOCAL startDist IS _shipTargetDistanceAt(targetBody, tStart).
-    LOCAL arrivalDist IS targetBody:SOIRADIUS.
+    LOCAL frac IS _cfgNum("MIDCOURSE_REFINE_FRACTION",
+        MIDCOURSE_REFINE_FRACTION_DEFAULT).
+    SET frac TO MAX(0.05, MIN(0.95, frac)).
 
-    IF storedMethod <> "DISTANCE_SCAN"
-            OR storedTarget <> targetBody:NAME
-            OR ABS(storedArrival - tArrival) > 60
-            OR midpointDist <= 0 {
-        SET midpointDist TO arrivalDist + 0.5 * (startDist - arrivalDist).
-        stateSet("midcourse_refine_distance", midpointDist).
-        stateSet("midcourse_refine_target", targetBody:NAME).
-        stateSet("midcourse_refine_start_ut", tStart).
-        stateSet("midcourse_refine_start_distance", startDist).
-        stateSet("midcourse_refine_arrival_ut", tArrival).
-        stateSet("midcourse_refine_method", "DISTANCE_SCAN").
-    }
+    LOCAL rawUt IS tStart + frac * (tArrival - tStart).
+    LOCAL minLead IS _cfgNum("MIDCOURSE_REFINE_MIN_LEAD",
+        MIDCOURSE_REFINE_MIN_LEAD_DEFAULT).
+    LOCAL margin IS _cfgNum("MIDCOURSE_REFINE_MARGIN",
+        MIDCOURSE_REFINE_MARGIN_DEFAULT).
+    LOCAL soiBuffer IS _cfgNum("SOI_BUFFER_TIME", SOI_BUFFER_TIME_DEFAULT).
+    LOCAL bplaneLead IS _cfgNum("BPLANE_LEAD", 300).
+    LOCAL latestUt IS tArrival - soiBuffer - bplaneLead - margin.
+    LOCAL refineUt IS rawUt.
 
-    mLog("COAST_1HALF: distance gate start="
-        + ROUND(startDist / 1000, 1) + "km midpoint="
-        + ROUND(midpointDist / 1000, 1) + "km soi="
-        + ROUND(arrivalDist / 1000, 1) + "km.").
-
-    IF startDist <= midpointDist {
+    IF latestUt <= tStart {
+        mLogWarn("COAST_1HALF: transfer too short for guarded midpoint; "
+            + "refining now.").
         RETURN tStart.
     }
 
-    LOCAL scanSteps IS 80.
-    LOCAL bestUt IS tStart.
-    LOCAL bestErr IS ABS(startDist - midpointDist).
-    LOCAL lastUt IS tStart.
-    LOCAL lastDist IS startDist.
-    LOCAL bracketed IS FALSE.
-    LOCAL lo IS tStart.
-    LOCAL hi IS tArrival.
-
-    FROM { LOCAL i IS 1. } UNTIL i > scanSteps STEP { SET i TO i + 1. } DO {
-        LOCAL sampleUt IS tStart + (tArrival - tStart) * i / scanSteps.
-        LOCAL sampleDist IS _shipTargetDistanceAt(targetBody, sampleUt).
-        LOCAL sampleErr IS ABS(sampleDist - midpointDist).
-        IF sampleErr < bestErr {
-            SET bestErr TO sampleErr.
-            SET bestUt TO sampleUt.
-        }
-        IF lastDist > midpointDist AND sampleDist <= midpointDist {
-            SET lo TO lastUt.
-            SET hi TO sampleUt.
-            SET bracketed TO TRUE.
-            BREAK.
-        }
-        SET lastUt TO sampleUt.
-        SET lastDist TO sampleDist.
+    IF refineUt < tStart + minLead AND tStart + minLead < latestUt {
+        SET refineUt TO tStart + minLead.
+    }
+    IF refineUt > latestUt {
+        SET refineUt TO latestUt.
     }
 
-    IF NOT bracketed {
-        mLogWarn("COAST_1HALF: distance midpoint crossing not bracketed; "
-            + "using closest scanned point at distance error "
-            + ROUND(bestErr / 1000, 1) + "km.").
-        RETURN bestUt.
+    stateSet("midcourse_refine_method", "TIME").
+    stateSet("midcourse_refine_fraction", frac).
+    stateSet("midcourse_refine_arrival_ut", tArrival).
+    FOR key IN LIST("midcourse_refine_distance",
+            "midcourse_refine_start_distance") {
+        stateRemove(key).
     }
 
-    FROM { LOCAL i IS 0. } UNTIL i >= 24 STEP { SET i TO i + 1. } DO {
-        LOCAL mid IS lo + 0.5 * (hi - lo).
-        IF _shipTargetDistanceAt(targetBody, mid) <= midpointDist {
-            SET hi TO mid.
-        } ELSE {
-            SET lo TO mid.
-        }
-    }
-
-    mLog("COAST_1HALF: distance midpoint "
-        + ROUND(midpointDist / 1000, 1) + "km from "
-        + targetBody:NAME + ".").
-    RETURN hi.
+    mLog("COAST_1HALF: time midpoint fraction=" + ROUND(frac, 2)
+        + " rawT+" + ROUND(rawUt - TIME:SECONDS, 0)
+        + "s scheduledT+" + ROUND(refineUt - TIME:SECONDS, 0) + "s.").
+    RETURN refineUt.
 }
 
 GLOBAL FUNCTION phaseCoast {
@@ -164,7 +123,7 @@ GLOBAL FUNCTION phaseCoast1Half {
     }
 
     LOCAL tStart IS TIME:SECONDS.
-    LOCAL tMidpoint IS _distanceMidcourseUt(target, tStart, tArrival).
+    LOCAL tMidpoint IS _timeMidcourseUt(tStart, tArrival).
     stateSet("midcourse_refine_ut", tMidpoint).
 
     mLog("Coasting to mid-course refinement at T+"
