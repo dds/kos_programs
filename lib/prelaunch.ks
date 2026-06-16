@@ -238,7 +238,7 @@ LOCAL FUNCTION _waitForPrelaunchUt {
     IF ADDONS:KAC:AVAILABLE {
         LOCAL alarmUt IS targetUt - 30.
         IF alarmUt > TIME:SECONDS {
-            LOCAL alm IS ADDALARM("Raw", alarmUt, "FR3 prelaunch window", "Auto-created by PRELAUNCH").
+            LOCAL alm IS ADDALARM("Raw", alarmUt, "Prelaunch window", "Auto-created by PRELAUNCH. Fly safe.").
             SET alm:ACTION TO "KillWarp".
             SET kacAlarmId TO alm:ID.
         }
