@@ -481,10 +481,10 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
         LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
             targetLat, targetLng).
         LOCAL angle IS _nodeImpactAngle(impactPos).
-        LOCAL distCost IS (dist / 500) * (dist / 500).
+        LOCAL distCost IS (dist / 1000) * (dist / 1000).
         LOCAL angleCost IS 0.
-        IF dist < 20000 {
-            SET angleCost TO 5000.
+        IF dist < 25000 {
+            SET angleCost TO (angle - (-1 * targetAngle)) / 5 ) * (angle - (-1 * targetAngle)) / 5 ) * 50.
             IF angle >= 0 {
                 SET angleCost TO MIN(5000, ((angle - targetAngle) / angleTol)
                     * ((angle - targetAngle) / angleTol)).
@@ -510,24 +510,41 @@ LOCAL FUNCTION _nodeImpactAngle {
     IF NOT ADDONS:TR:ISVERTWOTWO { RETURN -1. }
 
     LOCAL impactUT IS TIME:SECONDS + ADDONS:TR:TIMETILLIMPACT.
-    LOCAL dt IS 1.
+
+
+    LOCAL dt IS 0.5. // Use 0.5 for better precision
     LOCAL body IS SHIP:BODY.
-    LOCAL rPlus IS POSITIONAT(SHIP, impactUT)
-        - POSITIONAT(body, impactUT).
-    LOCAL rMinus IS POSITIONAT(SHIP, impactUT - dt)
-        - POSITIONAT(body, impactUT - dt).
+
+    // Get the velocity vector at impact (inertial frame)
+    LOCAL rPlus IS POSITIONAT(SHIP, impactUT) - POSITIONAT(body, impactUT).
+    LOCAL rMinus IS POSITIONAT(SHIP, impactUT - dt) - POSITIONAT(body, impactUT - dt).
     LOCAL impactVel IS ((rPlus - rMinus) / dt) - impactPos:VELOCITY:ORBIT.
     LOCAL impactUp IS (impactPos:POSITION - body:POSITION):NORMALIZED.
 
-    LOCAL velNorm IS impactVel:NORMALIZED.
-    LOCAL upNorm IS impactUp:NORMALIZED.
+    // Calculate FPA: sin(gamma) = VDOT(velocity, up)
+    // gamma = 0 is horizontal, gamma = -90 is vertical down
+    LOCAL sinFpa IS VDOT(impactVel:NORMALIZED, impactUp).
 
-    // The dot product of Velocity and Up gives us the Cosine of the angle between them.
-    // We want the angle between the Velocity and the Local Horizontal.
-    // Local Horizontal is 90 degrees away from the Up vector.
-    LOCAL fpa IS VANG(upNorm, velNorm).
+    // Clamp to avoid domain errors in ARCSIN
+    RETURN ARCSIN(MAX(-1, MIN(1, sinFpa))).
 
-    RETURN 90 - fpa.
+
+    // LOCAL dt IS 1.
+    // LOCAL body IS SHIP:BODY.
+    // LOCAL rPlus IS POSITIONAT(SHIP, impactUT) - POSITIONAT(body, impactUT).
+    // LOCAL rMinus IS POSITIONAT(SHIP, impactUT - dt) - POSITIONAT(body, impactUT - dt).
+    // LOCAL impactVel IS ((rPlus - rMinus) / dt) - impactPos:VELOCITY:ORBIT.
+    // LOCAL impactUp IS (impactPos:POSITION - body:POSITION):NORMALIZED.
+
+    // LOCAL velNorm IS impactVel:NORMALIZED.
+    // LOCAL upNorm IS impactUp:NORMALIZED.
+
+    // // The dot product of Velocity and Up gives us the Cosine of the angle between them.
+    // // We want the angle between the Velocity and the Local Horizontal.
+    // // Local Horizontal is 90 degrees away from the Up vector.
+    // LOCAL fpa IS VANG(upNorm, velNorm).
+
+    // RETURN 90 - fpa.
 
     // The sine of the flight path angle (angle from local horizontal)
     // is the dot product of the velocity vector and the up vector.
