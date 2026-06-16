@@ -159,22 +159,6 @@ LOCAL FUNCTION _deorbitEvalBestPe {
             0, 0, bodyR, mu, orbitSma, twoOverOrbitSma,
             minLead, minDV, maxDV).
         IF dist >= 0 {
-            LOCAL crashDist IS 0.
-            IF LAND_CFG_TERRAIN_VALIDATE {
-                LOCAL testNode IS _planDeorbitNode(burnT, candPe, 0, 0,
-                    bodyR, mu, orbitSma, twoOverOrbitSma, minDV, maxDV).
-                WAIT 0.1.
-                SET crashDist TO lmTerrainClearanceCheck(
-                    targetLat, targetLng,
-                    burnT + 30, burnT + 1800,
-                    2,
-                    LAND_CFG_TERRAIN_MIN_CLEARANCE,
-                    LAND_CFG_TERRAIN_SAFE_ALT).
-                REMOVE testNode.
-            }
-            IF crashDist > LAND_CFG_TERRAIN_MAX_CRASH_DIST {
-                SET dist TO 8.99e15.
-            }
             IF dist < bestDist {
                 SET bestValid TO TRUE.
                 SET bestDist TO dist.
@@ -278,11 +262,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF scanMode = "minutes" {
         SET stepA TO (scanEnd - scanStart) / MAX(16, scanSamples).
     }
-    LOCAL coarseStopDist IS 1000.
+    LOCAL coarseStopDist IS 10000.
     IF bodyHasAtm {
         SET coarseStopDist TO tolerance.
-    } ELSE IF bodyName = "MUN" {
-        SET coarseStopDist TO 8000.
     }
     IF CFG:HASKEY("TARGET_DEORBIT_COARSE_STOP_DIST") {
         IF (CFG["TARGET_DEORBIT_COARSE_STOP_DIST"]:TYPENAME = "STRING") {
@@ -588,6 +570,22 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL realNode IS _planDeorbitNode(bestUT, bestPe, bestRad, bestNor,
         bodyR, mu, orbitSma, twoOverOrbitSma, minDV, maxDV).
+    IF LAND_CFG_TERRAIN_VALIDATE {
+        WAIT 0.1.
+        LOCAL crashDist IS lmTerrainClearanceCheck(
+            targetLat, targetLng,
+            bestUT + 30, bestUT + 1800,
+            2,
+            LAND_CFG_TERRAIN_MIN_CLEARANCE,
+            LAND_CFG_TERRAIN_SAFE_ALT).
+        IF crashDist > LAND_CFG_TERRAIN_MAX_CRASH_DIST {
+            mLogError("TERRAIN CHECK FAILED: trajectory hits terrain "
+                + ROUND(crashDist,0) + "m from target.").
+            REMOVE realNode.
+            RETURN FALSE.
+        }
+        mLog("Terrain check passed. Trajectory is clear of mountains.").
+    }
     mLog("Executing deorbit burn at T+" + ROUND(bestUT - TIME:SECONDS,0) + "s.").
     archiveLog().
     HUDTEXT("Deorbit burn in " + ROUND(bestUT - TIME:SECONDS,0) + "s", 3, 2, 13, CYAN, FALSE).
