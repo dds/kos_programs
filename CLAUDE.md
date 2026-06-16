@@ -122,6 +122,9 @@ Looks like Python/JS; is neither.
 - Config flows CFG-ward: libs read `CFG` keys with per-lib `_cfg(key,
   default)` helpers; per-craft tuning goes in the craft's configure hook or
   the mission profile — never hardcoded in libs.
+- Avoid repeated `CFG:HASKEY` checks in flight loops or planners. Prefer
+  explicit `GLOBAL LAND_CFG_*`-style symbols with defaults, override them once
+  from `CFG` at phase/setup entry, then read the globals in hot code.
 - Parts are found by VAB tag (`SHIP:PARTSTAGGED`), never by index.
 - Retry pattern for burns: plan → `executeManeuver()` → on failure wait,
   replan, cap attempts at `MAX_RETRIES IS 5`.

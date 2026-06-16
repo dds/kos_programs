@@ -158,10 +158,28 @@ LOCAL FUNCTION _deorbitEvalBestPe {
         LOCAL dist IS _evalDeorbitDist(burnT, candPe, targetLat, targetLng,
             0, 0, bodyR, mu, orbitSma, twoOverOrbitSma,
             minLead, minDV, maxDV).
-        IF dist >= 0 AND dist < bestDist {
-            SET bestValid TO TRUE.
-            SET bestDist TO dist.
-            SET bestPe TO candPe.
+        IF dist >= 0 {
+            LOCAL crashDist IS 0.
+            IF LAND_CFG_TERRAIN_VALIDATE {
+                LOCAL testNode IS _planDeorbitNode(burnT, candPe, 0, 0,
+                    bodyR, mu, orbitSma, twoOverOrbitSma, minDV, maxDV).
+                WAIT 0.1.
+                SET crashDist TO lmTerrainClearanceCheck(
+                    targetLat, targetLng,
+                    burnT + 30, burnT + 1800,
+                    2,
+                    LAND_CFG_TERRAIN_MIN_CLEARANCE,
+                    LAND_CFG_TERRAIN_SAFE_ALT).
+                REMOVE testNode.
+            }
+            IF crashDist > LAND_CFG_TERRAIN_MAX_CRASH_DIST {
+                SET dist TO 8.99e15.
+            }
+            IF dist < bestDist {
+                SET bestValid TO TRUE.
+                SET bestDist TO dist.
+                SET bestPe TO candPe.
+            }
         }
     }
     RETURN LIST(bestValid, bestDist, bestPe).

@@ -166,3 +166,33 @@ GLOBAL FUNCTION lmVerticalThrottle {
     LOCAL speedErr IS targetVerticalSpeed - verticalSpeed.
     RETURN MAX(0, MIN(1, (gravAcc / maxAcc) + speedErr * 0.3)).
 }
+
+GLOBAL FUNCTION lmTerrainClearanceCheck {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER startUt.
+    PARAMETER endUt.
+    PARAMETER stepSec.
+    PARAMETER minClearance.
+    PARAMETER safeAlt.
+
+    LOCAL sampleUt IS startUt.
+    LOCAL bodyRad IS SHIP:BODY:RADIUS.
+    LOCAL bdy IS SHIP:BODY.
+
+    UNTIL sampleUt > endUt {
+        LOCAL pos IS POSITIONAT(SHIP, sampleUt).
+        LOCAL altRadius IS (pos - POSITIONAT(bdy, sampleUt)):MAG.
+        LOCAL altDatum IS altRadius - bodyRad.
+
+        IF altDatum < safeAlt {
+            LOCAL geo IS bdy:GEOPOSITIONOF(pos).
+            LOCAL terrain IS LATLNG(geo:LAT, geo:LNG):TERRAINHEIGHT.
+            IF (altDatum - terrain) <= minClearance {
+                RETURN geoDistance(geo:LAT, geo:LNG, targetLat, targetLng).
+            }
+        }
+        SET sampleUt TO sampleUt + stepSec.
+    }
+    RETURN 0.
+}

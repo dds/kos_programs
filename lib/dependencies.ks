@@ -7,7 +7,7 @@ GLOBAL FUNCTION dependencyLibs {
         "core", LIST("state", "logs", "files", "phases", "dependencies", "config", "mission_type"),
         "capture", LIST("maneuver", "orbit"),
         "deorbit_burn", LIST(),
-        "deorbit_targeting", LIST("orbit", "utils"),
+        "deorbit_targeting", LIST("orbit", "utils", "landing_config", "landing_math"),
         "flightplan", LIST("ui"),
         "inclination", LIST("lib_navigation"),
         "landing_config", LIST("utils"),
