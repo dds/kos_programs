@@ -464,11 +464,8 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
         LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
             targetLat, targetLng).
-        LOCAL angle IS lmTerrainImpactAngle(
-            burnUT + 30, burnUT + 1800,
-            5,
-            LAND_CFG_TERRAIN_MIN_CLEARANCE,
-            LAND_CFG_TERRAIN_SAFE_ALT).
+        LOCAL angle IS _nodeImpactAngle(nd, impactPos:LAT,
+            impactPos:LNG, burnUT).
         LOCAL distCost IS (dist / 500) * (dist / 500).
         LOCAL angleCost IS 999999999.
         IF angle >= 0 {
@@ -487,6 +484,58 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
     }
     REMOVE nd.
     RETURN result.
+}
+
+LOCAL FUNCTION _nodeImpactAngle {
+    PARAMETER nd.
+    PARAMETER impactLat.
+    PARAMETER impactLng.
+    PARAMETER burnUT.
+
+    LOCAL obt IS nd:ORBIT.
+    LOCAL bdy IS SHIP:BODY.
+    LOCAL bestUT IS burnUT + 10.
+    LOCAL bestDist IS 999999999.
+    LOCAL sampleUT IS burnUT + 10.
+    LOCAL endUT IS burnUT + 1800.
+
+    UNTIL sampleUT > endUT {
+        LOCAL pos IS POSITIONAT(obt, sampleUT).
+        LOCAL geo IS bdy:GEOPOSITIONOF(pos).
+        LOCAL dist IS geoDistance(geo:LAT, geo:LNG, impactLat, impactLng).
+        IF dist < bestDist {
+            SET bestDist TO dist.
+            SET bestUT TO sampleUT.
+        }
+        SET sampleUT TO sampleUT + 10.
+    }
+
+    LOCAL fineUT IS MAX(burnUT + 1, bestUT - 10).
+    LOCAL fineEnd IS bestUT + 10.
+    UNTIL fineUT > fineEnd {
+        LOCAL pos IS POSITIONAT(obt, fineUT).
+        LOCAL geo IS bdy:GEOPOSITIONOF(pos).
+        LOCAL dist IS geoDistance(geo:LAT, geo:LNG, impactLat, impactLng).
+        IF dist < bestDist {
+            SET bestDist TO dist.
+            SET bestUT TO fineUT.
+        }
+        SET fineUT TO fineUT + 1.
+    }
+
+    LOCAL relBefore IS POSITIONAT(obt, bestUT - 1)
+        - POSITIONAT(bdy, bestUT - 1).
+    LOCAL relNow IS POSITIONAT(obt, bestUT)
+        - POSITIONAT(bdy, bestUT).
+    LOCAL relAfter IS POSITIONAT(obt, bestUT + 1)
+        - POSITIONAT(bdy, bestUT + 1).
+    LOCAL velVec IS (relAfter - relBefore) / 2.
+    LOCAL upVec IS relNow:NORMALIZED.
+    LOCAL downRate IS -VDOT(velVec, upVec).
+    LOCAL sideRate IS VXCL(upVec, velVec):MAG.
+    IF downRate <= 0 { RETURN 0. }
+    IF sideRate < 0.01 { RETURN 90. }
+    RETURN ARCTAN2(downRate, sideRate).
 }
 
 LOCAL FUNCTION _planRetroNode {
