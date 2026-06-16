@@ -2,6 +2,8 @@
 // deorbit_targeting.ks  —  Precision deorbit targeting  (0:/lib/deorbit_targeting.ks)
 // ============================================================
 
+@CLOBBERBUILTINS ON.
+
 GLOBAL FUNCTION targetedDeorbit {
     LOCAL targetInfo IS targetResolveDeorbitTarget().
     IF NOT targetInfo["FOUND"] {
