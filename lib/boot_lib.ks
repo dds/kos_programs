@@ -438,7 +438,7 @@ GLOBAL FUNCTION bootCleanup {
     PARAMETER wantedLibs.
     LOCAL keepLibs IS LIST(
         "state", "logs", "boot_lib", "resume",
-        "phases", "utils", "ui", "config"
+        "phases", "utils", "ui", "config", "dependencies"
     ).
     FOR lib IN wantedLibs {
         IF NOT bootLibArchiveOnly(lib)
