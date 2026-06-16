@@ -271,11 +271,10 @@ LOCAL FUNCTION _descentGuidance {
                         // Return to retrograde hold and let Trajectories settle
                         LOCK STEERING TO _burnSteering().
                         WAIT 2.
+                    }
+                }
             }
         }
-    }
-    }
-}
     }
 
     mLog("Descent guidance complete. Total dV=" + ROUND(usedDv,1) + "m/s.").
