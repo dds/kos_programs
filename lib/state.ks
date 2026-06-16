@@ -120,6 +120,16 @@ GLOBAL FUNCTION stateRemoveMatchingPrefixed {
     RETURN removed.
 }
 
+GLOBAL FUNCTION stateSaveReloadState {
+    PARAMETER reason.
+    PARAMETER nextPhaseName.
+    PARAMETER nextBand.
+    stateSet("reload_required", "true").
+    stateSet("reload_reason", reason).
+    stateSet("reload_next_phase", nextPhaseName).
+    stateSet("reload_next_band", nextBand).
+}
+
 GLOBAL FUNCTION stateDump {
     _ensureLoaded().
     PRINT "=== STATE DUMP ===".

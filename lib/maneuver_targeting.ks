@@ -19,6 +19,12 @@
 
 @LAZYGLOBAL OFF.
 
+// --- Config defaults owned by this file ---
+GLOBAL ALLOW_GRAVITY_ASSIST IS 0.
+GLOBAL TRANSFER_AOP_ERR_TOL IS 30.
+GLOBAL TRANSFER_AOP_SCAN_TOL IS 20.
+
+
 // ============================================================
 // _patchTransitAllowed — direct-transfer patch-chain guard.
 //
@@ -42,8 +48,8 @@ GLOBAL FUNCTION _patchTransitAllowed {
 }
 
 GLOBAL FUNCTION _patchAllowGravityAssist {
-    IF DEFINED CFG AND CFG:HASKEY("ALLOW_GRAVITY_ASSIST") {
-        RETURN CFG["ALLOW_GRAVITY_ASSIST"] <> 0.
+    IF ALLOW_GRAVITY_ASSIST <> 0 {
+        RETURN ALLOW_GRAVITY_ASSIST <> 0.
     }
     RETURN FALSE.
 }
@@ -51,7 +57,7 @@ GLOBAL FUNCTION _patchAllowGravityAssist {
 // ============================================================
 // _getTargetPatch — walk patched conics to find the orbit patch
 // around the target body. By default this only accepts a direct
-// transfer chain; set CFG ALLOW_GRAVITY_ASSIST=1 to permit
+// transfer chain; set ALLOW_GRAVITY_ASSIST=1 to permit
 // wrong-body intermediate encounters.
 // ============================================================
 GLOBAL FUNCTION _getTargetPatch {
@@ -151,9 +157,9 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
     LOCAL aopGuideTol IS 35.
     LOCAL bestAopGuideErr IS 999.
     LOCAL aopGuideStallCount IS 0.
-    IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+    SET aopGuideTol TO TRANSFER_AOP_ERR_TOL.
     SET aopGuideTol TO MAX(5, aopGuideTol * 0.67).
-    IF CFG:HASKEY("TRANSFER_AOP_SCAN_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_SCAN_TOL"]. }
+    SET aopGuideTol TO TRANSFER_AOP_SCAN_TOL.
     IF targets:HASKEY("AOP_GUIDE") { SET bestAopGuideErr TO ABS(best["AOP_ERR"]). }
     IF NOT quiet {
         mLog("ELEMENTS: coupled target"
@@ -362,9 +368,9 @@ GLOBAL FUNCTION _patchElementsCostFromPatch {
         SET cost TO cost + (aopErr / 1.0)^2.
     } ELSE IF targets:HASKEY("AOP_GUIDE") {
         LOCAL aopGuideTol IS 35.
-        IF CFG:HASKEY("TRANSFER_AOP_ERR_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_ERR_TOL"]. }
+        SET aopGuideTol TO TRANSFER_AOP_ERR_TOL.
         SET aopGuideTol TO MAX(5, aopGuideTol * 0.67).
-        IF CFG:HASKEY("TRANSFER_AOP_SCAN_TOL") { SET aopGuideTol TO CFG["TRANSFER_AOP_SCAN_TOL"]. }
+        SET aopGuideTol TO TRANSFER_AOP_SCAN_TOL.
         LOCAL aopGuideScale IS MAX(5, aopGuideTol / 3).
         SET aopErr TO _angleError(p:ARGUMENTOFPERIAPSIS, targets["AOP_GUIDE"]).
         SET cost TO cost + (aopErr / aopGuideScale)^2.

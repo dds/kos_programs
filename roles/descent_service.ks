@@ -8,12 +8,16 @@
 // chutes down.
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "DESCENT_SERVICE_ARM_ALT", 60000,
-    "DESCENT_SERVICE_SEPARATION_DROP", 0.15,
-    "DESCENT_SERVICE_RELEASE_ALT", 500,
-    "DESCENT_CHUTES_TAG", "descent_chutes"
-).
+// --- Config defaults owned by this file ---
+GLOBAL DESCENT_SERVICE_ARM_ALT IS 60000.
+GLOBAL DESCENT_SERVICE_SEPARATION_DROP IS 0.15.
+GLOBAL DESCENT_SERVICE_RELEASE_ALT IS 500.
+GLOBAL DESCENT_CHUTES_TAG IS "".
+
+SET DESCENT_SERVICE_ARM_ALT TO 60000.
+SET DESCENT_SERVICE_SEPARATION_DROP TO 0.15.
+SET DESCENT_SERVICE_RELEASE_ALT TO 500.
+SET DESCENT_CHUTES_TAG TO "descent_chutes".
 
 applyKnownMissionState().
 
@@ -22,9 +26,9 @@ GLOBAL FUNCTION bootVehicleLibs {
 }
 
 GLOBAL FUNCTION main {
-    LOCAL armAlt IS cfgNum("DESCENT_SERVICE_ARM_ALT", 60000).
-    LOCAL massDrop IS cfgNum("DESCENT_SERVICE_SEPARATION_DROP", 0.15).
-    LOCAL releaseAlt IS cfgNum("DESCENT_SERVICE_RELEASE_ALT", 500).
+    LOCAL armAlt IS DESCENT_SERVICE_ARM_ALT.
+    LOCAL massDrop IS DESCENT_SERVICE_SEPARATION_DROP.
+    LOCAL releaseAlt IS DESCENT_SERVICE_RELEASE_ALT.
 
     LOCK THROTTLE TO 0.
     mLog("Descent service CPU: standby. No steering until separation.").
@@ -127,10 +131,7 @@ LOCAL FUNCTION _serviceOpenExtendBays {
 }
 
 LOCAL FUNCTION _serviceArmChutes {
-    LOCAL tag IS "descent_chutes".
-    IF DEFINED CFG AND CFG:HASKEY("DESCENT_CHUTES_TAG") {
-        SET tag TO CFG["DESCENT_CHUTES_TAG"].
-    }
+    LOCAL tag IS DESCENT_CHUTES_TAG.
 
     LOCAL parts IS SHIP:PARTSTAGGED(tag).
     IF parts:LENGTH = 0 {

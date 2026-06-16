@@ -1,8 +1,6 @@
 // KerboScript mission profile.
-SET MISSION_CFG TO LEXICON(
-    "MISSION_ID", "touch_and_go",
-    "MISSION_NAME", "FBIJ Touch And Go Practice",
-    "TARGET", "KERBIN",
-    "PAYLOADS", "",
-    "SEQUENCE", "PREFLIGHT,FLIGHT,POSTFLIGHT,DONE"
-).
+SET MISSION_ID TO "touch_and_go".
+SET MISSION_NAME TO "FBIJ Touch And Go Practice".
+SET TARGET_ TO "KERBIN".
+SET PAYLOADS TO "".
+SET SEQUENCE TO "PREFLIGHT,FLIGHT,POSTFLIGHT,DONE".

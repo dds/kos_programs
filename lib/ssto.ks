@@ -23,7 +23,7 @@
 //                  from PLANE_APPROACHES, callouts to decision
 //                  height; auto reversers handle the rollout
 //
-// CFG keys (defaults in parentheses):
+// Global config keys (defaults in lib/config.ks):
 //   SSTO_ASCENT_HDG (90)        SSTO_AIR_ALT (18000)
 //   SSTO_SWITCH_ACCEL (0.2)     SSTO_SWITCH_MIN_SPEED (350)
 //   SSTO_SWITCH_SPEED (1400)    SSTO_MODE_AG (3)
@@ -41,13 +41,26 @@
 
 @LAZYGLOBAL OFF.
 
-LOCAL MAX_RETRIES IS 5.
+// --- Config defaults owned by this file ---
+GLOBAL SSTO_TARGET_AP IS 80000.
+GLOBAL SSTO_REENTRY_PE IS 28000.
+GLOBAL SSTO_DEORBIT_LEAD_DEG IS 70.
+GLOBAL SSTO_RUNWAY IS "KSC".
+GLOBAL SSTO_AIR_ALT IS 18000.
+GLOBAL SSTO_SWITCH_SPEED IS 1200.
+GLOBAL SSTO_SWITCH_ACCEL IS 0.
+GLOBAL SSTO_MODE_AG IS 1.
+GLOBAL SSTO_ASCENT_HDG IS 90.
+GLOBAL SSTO_ROCKET_PITCH IS 12.
+GLOBAL SSTO_REENTRY_AOA IS 25.
+GLOBAL SSTO_DECISION_AGL IS 800.
+GLOBAL SSTO_CLOSE_INTAKES IS 1.
+GLOBAL SSTO_SWITCH_MIN_SPEED IS 350.
+GLOBAL SSTO_REENTRY_END_ALT IS 22000.
+GLOBAL SSTO_REENTRY_END_SPEED IS 1100.
 
-LOCAL FUNCTION _sstoCfg {
-    PARAMETER key, defaultValue.
-    IF CFG:HASKEY(key) { RETURN CFG[key]. }
-    RETURN defaultValue.
-}
+
+LOCAL MAX_RETRIES IS 5.
 
 LOCAL FUNCTION _wrap360 {
     PARAMETER a.
@@ -70,15 +83,15 @@ LOCAL FUNCTION _velPitch {
 }
 
 LOCAL FUNCTION _sstoModeSwitch {
-    LOCAL ag IS _sstoCfg("SSTO_MODE_AG", 3).
+    LOCAL ag IS SSTO_MODE_AG.
     IF ag = 1 { TOGGLE AG1. }
     ELSE IF ag = 2 { TOGGLE AG2. }
     ELSE IF ag = 3 { TOGGLE AG3. }
     ELSE IF ag = 4 { TOGGLE AG4. }
     ELSE IF ag = 5 { TOGGLE AG5. }
-    IF _sstoCfg("SSTO_CLOSE_INTAKES", 1) > 0 { INTAKES OFF. }
+    IF SSTO_CLOSE_INTAKES > 0 { INTAKES OFF. }
     mLog("Engine mode switch: AG" + ag + " toggled, intakes "
-        + (CHOOSE "closed" IF _sstoCfg("SSTO_CLOSE_INTAKES", 1) > 0 ELSE "open") + ".").
+        + (CHOOSE "closed" IF SSTO_CLOSE_INTAKES > 0 ELSE "open") + ".").
 }
 
 // ============================================================
@@ -88,11 +101,11 @@ GLOBAL FUNCTION phaseAirclimb {
     mLogPhase("AIRCLIMB").
     IF NOT planeActive { planeInit(). }
 
-    LOCAL airAlt IS _sstoCfg("SSTO_AIR_ALT", 18000).
-    LOCAL hdg IS _sstoCfg("SSTO_ASCENT_HDG", 90).
-    LOCAL switchAccel IS _sstoCfg("SSTO_SWITCH_ACCEL", 0.2).
-    LOCAL minSpeed IS _sstoCfg("SSTO_SWITCH_MIN_SPEED", 350).
-    LOCAL maxSpeed IS _sstoCfg("SSTO_SWITCH_SPEED", 1400).
+    LOCAL airAlt IS SSTO_AIR_ALT.
+    LOCAL hdg IS SSTO_ASCENT_HDG.
+    LOCAL switchAccel IS SSTO_SWITCH_ACCEL.
+    LOCAL minSpeed IS SSTO_SWITCH_MIN_SPEED.
+    LOCAL maxSpeed IS SSTO_SWITCH_SPEED.
 
     hdgHoldOn(hdg).
     altHoldOn(airAlt).
@@ -139,9 +152,9 @@ GLOBAL FUNCTION phaseAirclimb {
 // ============================================================
 GLOBAL FUNCTION phaseRocketclimb {
     mLogPhase("ROCKETCLIMB").
-    LOCAL hdg IS _sstoCfg("SSTO_ASCENT_HDG", 90).
-    LOCAL pitch IS _sstoCfg("SSTO_ROCKET_PITCH", 18).
-    LOCAL targetAp IS _sstoCfg("SSTO_TARGET_AP", 80000).
+    LOCAL hdg IS SSTO_ASCENT_HDG.
+    LOCAL pitch IS SSTO_ROCKET_PITCH.
+    LOCAL targetAp IS SSTO_TARGET_AP.
     LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
 
     _sstoModeSwitch().
@@ -213,16 +226,16 @@ GLOBAL FUNCTION phaseRocketclimb {
 // ============================================================
 GLOBAL FUNCTION phaseSstoDeorbit {
     mLogPhase("SSTO_DEORBIT").
-    LOCAL ap_ IS planeApproachFor(_sstoCfg("SSTO_RUNWAY", "KSC")).
+    LOCAL ap_ IS planeApproachFor(SSTO_RUNWAY).
     IF ap_ = 0 {
         mLogError("SSTO_DEORBIT: no runway data for '"
-            + _sstoCfg("SSTO_RUNWAY", "KSC") + "' — yielding.").
+            + SSTO_RUNWAY + "' — yielding.").
         yieldToPrompt().
         RETURN.
     }
     LOCAL rwLng IS ap_["lng"].
-    LOCAL lead IS _sstoCfg("SSTO_DEORBIT_LEAD_DEG", 70).
-    LOCAL reentryPe IS _sstoCfg("SSTO_REENTRY_PE", 28000).
+    LOCAL lead IS SSTO_DEORBIT_LEAD_DEG.
+    LOCAL reentryPe IS SSTO_REENTRY_PE.
     LOCAL rotRate IS 360 / SHIP:BODY:ROTATIONPERIOD.
 
     // Scan the next orbit and a half for the burn point.
@@ -275,9 +288,9 @@ GLOBAL FUNCTION phaseSstoDeorbit {
 // ============================================================
 GLOBAL FUNCTION phaseReentry {
     mLogPhase("REENTRY").
-    LOCAL aoa IS _sstoCfg("SSTO_REENTRY_AOA", 8).
-    LOCAL endAlt IS _sstoCfg("SSTO_REENTRY_END_ALT", 22000).
-    LOCAL endSpeed IS _sstoCfg("SSTO_REENTRY_END_SPEED", 1100).
+    LOCAL aoa IS SSTO_REENTRY_AOA.
+    LOCAL endAlt IS SSTO_REENTRY_END_ALT.
+    LOCAL endSpeed IS SSTO_REENTRY_END_SPEED.
     LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
 
     SET SAS TO TRUE.
@@ -311,7 +324,7 @@ GLOBAL FUNCTION phaseReentry {
 // ============================================================
 GLOBAL FUNCTION phaseApproach {
     mLogPhase("APPROACH").
-    LOCAL ap_ IS planeApproachFor(_sstoCfg("SSTO_RUNWAY", "KSC")).
+    LOCAL ap_ IS planeApproachFor(SSTO_RUNWAY).
     IF ap_ = 0 {
         mLogError("APPROACH: no runway data — yielding (land manually).").
         yieldToPrompt().
@@ -320,7 +333,7 @@ GLOBAL FUNCTION phaseApproach {
     LOCAL rwGeo IS LATLNG(ap_["lat"], ap_["lng"]).
     LOCAL gs IS ap_["gs"].
     LOCAL elev IS ap_["elev"].
-    LOCAL decisionAgl IS _sstoCfg("SSTO_DECISION_AGL", 150).
+    LOCAL decisionAgl IS SSTO_DECISION_AGL.
 
     IF NOT planeActive { planeInit(). }
     planeApproachBrief(ap_["lat"], ap_["lng"], ap_["name"]).
@@ -368,7 +381,7 @@ GLOBAL FUNCTION phaseApproach {
     SET BRAKES TO TRUE.
     altHoldOff().
     hdgHoldOff().
-    UNTIL SHIP:GROUNDSPEED < PLANE_CFG["BRAKE_STOP_SPEED"] {
+    UNTIL SHIP:GROUNDSPEED < PLANE_BRAKE_STOP_SPEED {
         planeUpdate().
         WAIT 0.1.
     }

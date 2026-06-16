@@ -2,7 +2,6 @@
 // ZOMBIE.ks — Silent backup control unit, power cycles main.
 // ============================================================
 
-GLOBAL CFG IS LEXICON().
 GLOBAL FUNCTION bootVehicleLibs {
     IF stateGet("zombie_scansat_active", "false") = "true" {
         LOCAL cachedLibs IS bootCachedVehicleLibs().
@@ -19,12 +18,12 @@ GLOBAL FUNCTION bootVehicleLibs {
 GLOBAL FUNCTION main {
     IF stateGet("zombie_scansat_active", "false") = "true" {
         applyKnownMissionState().
-        cfgSet("SCANSAT_DECOUPLER_TAG", "none").
-        cfgSet("SCANSAT_AUTO_DEORBIT", 0).
-        cfgSet("SCANSAT_POWER_GUARD", 1).
-        cfgSet("SCANSAT_TARGET_COVERAGE", 99.1).
-        cfgSet("SCANSAT_REQUIRED_TYPES",
-            stateGet("zombie_scansat_required_types", "LOW_RES_ALTIMETRY")).
+        SET SCANSAT_DECOUPLER_TAG TO "none".
+        SET SCANSAT_AUTO_DEORBIT TO 0.
+        SET SCANSAT_POWER_GUARD TO 1.
+        SET SCANSAT_TARGET_COVERAGE TO 99.1.
+        SET SCANSAT_REQUIRED_TYPES TO
+            stateGet("zombie_scansat_required_types", "LOW_RES_ALTIMETRY").
         LOCAL seq IS LIST("SCANSAT_OPS", "DONE").
         SET launchSeq TO seq.
         SET xferSeq TO seq.

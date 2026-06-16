@@ -12,22 +12,20 @@
 // keep touch-and-goes from ending the FLIGHT phase.
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "CRUISE_ALT",    9000,
-    "CRUISE_SPEED",   280,
-    "TOP_SPEED",      360,
-    "FLAP_AG",          1,
-    "AIRBORNE_RADAR_ALT", 8,
-    "FINAL_LANDING_SPEED", 35,
-    "MIN_FLIGHT_TIME", 60
-).
+SET CRUISE_ALT TO 9000.
+SET CRUISE_SPEED TO 280.
+SET TOP_SPEED TO 360.
+SET FLAP_AG TO 1.
+SET AIRBORNE_RADAR_ALT TO 8.
+SET FINAL_LANDING_SPEED TO 35.
+SET MIN_FLIGHT_TIME TO 60.
 
 GLOBAL FBIJ_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
 
 IF stateGet("phase", "") = "" {
     LOCAL startupSeq IS FBIJ_SEQ.
-    IF missionCfgGet("SEQUENCE", "") <> "" {
-        SET startupSeq TO phaseListFromString(missionCfgGet("SEQUENCE", "")).
+    IF SEQUENCE <> "" {
+        SET startupSeq TO phaseListFromString(SEQUENCE).
     }
     stateSet("phase", startupSeq[0]).
 }
@@ -41,16 +39,16 @@ GLOBAL FUNCTION bootVehicleLibs {
 LOCAL FUNCTION _fbijConfigurePlane {
     // Airframe certified for software assists after flight testing —
     // PID control re-enabled for the GAP airline missions.
-    SET PLANE_CFG["PID_CTRL"] TO TRUE.
+    SET PLANE_PID_CTRL TO TRUE.
     // Underpowered passenger jet on short island strips: full
     // reverse, and engage as soon as the wheels are down braking.
-    SET PLANE_CFG["REVERSE_THROTTLE"] TO 1.0.
-    SET PLANE_CFG["REVERSE_MIN_SPEED"] TO 40.
+    SET PLANE_REVERSE_THROTTLE TO 1.0.
+    SET PLANE_REVERSE_MIN_SPEED TO 40.
 }
 
 LOCAL FUNCTION _fbijConfigRows {
     flightPlanSection("BUSINESS JET").
-    flightPlanRow("FINAL STOP", CFG["FINAL_LANDING_SPEED"] + " m/s").
+    flightPlanRow("FINAL STOP", FINAL_LANDING_SPEED + " m/s").
     flightPlanRow("PID CTRL", "ON").
     flightPlanRow("NAV", "Select waypoint, AG8 to fly").
 }

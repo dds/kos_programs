@@ -4,8 +4,6 @@
 // Ship name:  ROVER-MUN
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-).
 
 LOCAL _seq IS LIST("TARGETED_DEORBIT", "LAND", "ROVER", "DONE").
 GLOBAL FUNCTION bootVehicleLibs {
@@ -18,7 +16,7 @@ GLOBAL FUNCTION bootVehicleLibs {
 }
 
 LOCAL FUNCTION buildPhaseSequence {
-    LOCAL seq IS missionListFromCsv(missionCfgGet("SEQUENCE", "")).
+    LOCAL seq IS missionListFromCsv(SEQUENCE).
     IF seq:LENGTH > 0 { RETURN seq. }
     RETURN _seq.
 }

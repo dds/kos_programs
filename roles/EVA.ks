@@ -2,8 +2,6 @@
 // EVA.ks  —  EVA kerbal controller  (0:/roles/EVA.ks)
 // ============================================================
 
-GLOBAL CFG IS LEXICON().
-
 GLOBAL FUNCTION bootVehicleLibs {
     RETURN missionLibs(LIST("science", "orbit")).
 }

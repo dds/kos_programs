@@ -1,59 +1,32 @@
 // ============================================================
-// config.ks  —  Shared config and phase sequence utilities
+// config.ks  —  Mission override and phase sequence utilities
 // (0:/lib/config.ks)
 //
-// Generic utilities for any craft using mission CFG and
-// comma-separated phase sequences.
+// Config is executable KerboScript: mission profiles and craft
+// scripts SET global variables, and libraries read those globals
+// directly. Defaults live in the files that own the behavior.
 // ============================================================
-
-// --- Config management ---
-
-// Read a CFG key with a default — the shared form of the per-lib
-// _cfg helpers (config is preamble, so it is always available).
-GLOBAL FUNCTION cfgNum {
-    PARAMETER key.
-    PARAMETER defaultValue.
-    IF CFG:HASKEY(key) { RETURN CFG[key]. }
-    RETURN defaultValue.
-}
-
-// Set or overwrite a CFG key. Remove-then-add pattern required
-// because kOS LEXICON:ADD throws on duplicate keys.
-GLOBAL FUNCTION cfgSet {
-    PARAMETER key.
-    PARAMETER value.
-    IF CFG:HASKEY(key) { CFG:REMOVE(key). }
-    CFG:ADD(key, value).
-}
-
-GLOBAL FUNCTION missionCfgGet {
-    PARAMETER key.
-    PARAMETER defaultValue IS "".
-    IF DEFINED MISSION_CFG {
-        IF MISSION_CFG:HASKEY(key) { RETURN MISSION_CFG[key]. }
-    }
-    RETURN defaultValue.
-}
-
 GLOBAL FUNCTION applyKnownMissionState {
-    IF DEFINED MISSION_CFG {
-        FOR key IN MISSION_CFG:KEYS {
-            cfgSet(key, MISSION_CFG[key]).
-        }
-    }
+    LOCAL overridePath IS "1:/run/mission_cfg_overrides.ks".
+    IF EXISTS(overridePath) { DELETEPATH(overridePath). }
+    LOCAL wrote IS FALSE.
     FOR sk IN stateKeys() {
         IF sk:LENGTH > 12 AND sk:SUBSTRING(0, 12) = "mission_cfg_" {
             LOCAL bare IS sk:SUBSTRING(12, sk:LENGTH - 12).
             LOCAL raw IS stateGet(sk, "").
-            IF raw <> "" { cfgSet(bare, raw). }
+            LOCAL line IS "".
+            IF raw:ISTYPE("Scalar") {
+                SET line TO "SET " + bare + " TO " + raw + ".".
+            } ELSE {
+                SET line TO "SET " + bare + " TO " + CHAR(34) + raw + CHAR(34) + ".".
+            }
+            LOG line TO overridePath.
+            SET wrote TO TRUE.
         }
     }
+    IF wrote { RUNPATH(overridePath). }
 }
 
-// --- Phase sequence utilities ---
-
-// Parse a comma-separated phase string into a LIST.
-// Returns LIST("DONE") if the input is empty.
 GLOBAL FUNCTION phaseListFromString {
     PARAMETER raw.
     LOCAL seq IS LIST().

@@ -4,6 +4,22 @@
 
 @LAZYGLOBAL OFF.
 
+// --- Config defaults owned by this file ---
+GLOBAL CAPTURE_PE IS -1.
+GLOBAL CAPTURE_INC IS -1.
+GLOBAL CAPTURE_LAN IS -1.
+GLOBAL CAPTURE_AOP IS -1.
+GLOBAL CAPTURE_DIR IS "".
+GLOBAL ESCAPE_PE IS -1.
+GLOBAL ESCAPE_LAN IS -1.
+GLOBAL ESCAPE_AOP IS -1.
+GLOBAL ESCAPE_KSC_TARGET IS 0.
+GLOBAL TRANSFER_SCAN_SAMPLES_PER_ORBIT IS 24.
+GLOBAL TRANSFER_SCAN_LOOKAHEAD_HOURS IS 6.
+GLOBAL TRANSFER_SCAN_STEP_MINUTES IS 20.
+GLOBAL TRANSFER_PREVIEW_SHORTLIST IS 6.
+
+
 // ============================================================
 // planTransfer — plan a transfer burn to targetBody.
 //
@@ -16,7 +32,7 @@
 //   2. PE pretargeting — force a dead-center collision course
 //      (PE=0) to maximize the target SOI intercept margin.
 //
-// CFG keys consumed:
+// Global config keys consumed:
 //   CAPTURE_DIR  — "PROGRADE" / "POLAR" / "RETROPOLAR" / "RETROGRADE"
 //   CAPTURE_INC  — explicit inclination (overrides CAPTURE_DIR)
 // ============================================================
@@ -51,14 +67,14 @@ GLOBAL FUNCTION planTransfer {
     // so the raw planners can keep their existing scoring inputs. Exact
     // capture geometry belongs to BPLANE/SHAPE, not this departure phase.
     LOCAL captureInc IS -1.
-    IF CFG:HASKEY("CAPTURE_DIR") {
-        LOCAL dir IS CFG["CAPTURE_DIR"].
+    IF CAPTURE_DIR <> "" {
+        LOCAL dir IS CAPTURE_DIR.
         IF dir = "PROGRADE"   { SET captureInc TO 0. }
         IF dir = "POLAR"      { SET captureInc TO 90. }
         IF dir = "RETROPOLAR" { SET captureInc TO 90. }
         IF dir = "RETROGRADE" { SET captureInc TO 180. }
     }
-    IF CFG:HASKEY("CAPTURE_INC") { SET captureInc TO CFG["CAPTURE_INC"]. }
+    SET captureInc TO CAPTURE_INC.
 
     // --- 1. Build raw node ---
     LOCAL nd IS 0.
@@ -335,18 +351,9 @@ LOCAL FUNCTION _planLocalTransfer {
     ADD nd.
     WAIT 0.1.
 
-    LOCAL samplesPerOrbit IS 12.
-    IF CFG:HASKEY("TRANSFER_SCAN_SAMPLES_PER_ORBIT") {
-        SET samplesPerOrbit TO MAX(4, CFG["TRANSFER_SCAN_SAMPLES_PER_ORBIT"]).
-    }
-    LOCAL scanHours IS 24.
-    IF CFG:HASKEY("TRANSFER_SCAN_LOOKAHEAD_HOURS") {
-        SET scanHours TO MAX(0.25, CFG["TRANSFER_SCAN_LOOKAHEAD_HOURS"]).
-    }
-    LOCAL maxScanStep IS 600.
-    IF CFG:HASKEY("TRANSFER_SCAN_STEP_MINUTES") {
-        SET maxScanStep TO MAX(60, CFG["TRANSFER_SCAN_STEP_MINUTES"] * 60).
-    }
+    LOCAL samplesPerOrbit IS MAX(4, TRANSFER_SCAN_SAMPLES_PER_ORBIT).
+    LOCAL scanHours IS MAX(0.25, TRANSFER_SCAN_LOOKAHEAD_HOURS).
+    LOCAL maxScanStep IS MAX(60, TRANSFER_SCAN_STEP_MINUTES * 60).
     LOCAL scanStart IS TIME:SECONDS + 30.
     LOCAL scanEnd IS TIME:SECONDS + scanHours * 3600.
     LOCAL scanDt IS MIN(shipPeriod / samplesPerOrbit, maxScanStep).
@@ -361,10 +368,7 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL bestSeed IS bestEval.
     LOCAL encounterCount IS 0.
     IF bestSeed["PATCH"] { SET encounterCount TO 1. }
-    LOCAL previewShortlist IS 5.
-    IF CFG:HASKEY("TRANSFER_PREVIEW_SHORTLIST") {
-        SET previewShortlist TO MAX(1, CFG["TRANSFER_PREVIEW_SHORTLIST"]).
-    }
+    LOCAL previewShortlist IS MAX(1, TRANSFER_PREVIEW_SHORTLIST).
     LOCAL scanTimes IS LIST().
     LOCAL scanCAs IS LIST().
     LOCAL scanSeeds IS LIST().
@@ -695,7 +699,7 @@ LOCAL FUNCTION _planEscapeTransfer {
     WAIT 0.1.
 
     // --- KSC targeting setup ---
-    LOCAL kscTarget IS CFG:HASKEY("ESCAPE_KSC_TARGET").
+    LOCAL kscTarget IS ESCAPE_KSC_TARGET <> 0.
     LOCAL KSC_LNG IS -74.6.
     LOCAL kscTransitA IS (rMoon + targetBody:RADIUS + targetPe) / 2.
 

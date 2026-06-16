@@ -37,7 +37,7 @@
 //
 // Phase: BPLANE  (PHASE BPLANE = arrival_bplane)
 //
-// CFG keys:
+// Global config keys:
 //   CAPTURE_PE   — required: target periapsis altitude (m)
 //   CAPTURE_INC  — optional: target inclination (deg)
 //   CAPTURE_LAN  — optional: target LAN (deg)
@@ -49,6 +49,20 @@
 // ============================================================
 
 @LAZYGLOBAL OFF.
+
+// --- Config defaults owned by this file ---
+GLOBAL CAPTURE_PE IS -1.
+GLOBAL CAPTURE_INC IS -1.
+GLOBAL CAPTURE_LAN IS -1.
+GLOBAL CAPTURE_AOP IS -1.
+GLOBAL CAPTURE_DIR IS "".
+GLOBAL ALLOW_GRAVITY_ASSIST IS 0.
+GLOBAL BPLANE_DV_CAP IS 60.
+GLOBAL BPLANE_PE_TOL IS 2000.
+GLOBAL BPLANE_ANG_TOL IS 0.2.
+GLOBAL BPLANE_LEAD IS 300.
+GLOBAL BPLANE_TARGET IS "".
+
 
 LOCAL DEFAULT_DV_CAP   IS 50.
 LOCAL DEFAULT_PE_TOL   IS 2000.
@@ -63,22 +77,8 @@ LOCAL ACQUIRE_STEP     IS 0.5.
 LOCAL MAX_ACQUIRE_ITER IS 50.
 LOCAL MAX_BURNS        IS 2.
 
-LOCAL FUNCTION _cfgNum {
-    PARAMETER key, defaultValue.
-    IF DEFINED CFG AND CFG:HASKEY(key) { RETURN CFG[key]. }
-    RETURN defaultValue.
-}
-
-LOCAL FUNCTION _cfgHas {
-    PARAMETER key.
-    RETURN DEFINED CFG AND CFG:HASKEY(key).
-}
-
 LOCAL FUNCTION _allowGravityAssist {
-    IF _cfgHas("ALLOW_GRAVITY_ASSIST") {
-        RETURN CFG["ALLOW_GRAVITY_ASSIST"] <> 0.
-    }
-    RETURN FALSE.
+    RETURN ALLOW_GRAVITY_ASSIST <> 0.
 }
 
 LOCAL FUNCTION _arrivalTransitAllowed {
@@ -408,11 +408,11 @@ GLOBAL FUNCTION planBplaneCorrection {
     PARAMETER dvCapOverride IS -1.
     PARAMETER pristineLog IS "".
 
-    LOCAL dvCap IS _cfgNum("BPLANE_DV_CAP", DEFAULT_DV_CAP).
+    LOCAL dvCap IS BPLANE_DV_CAP.
     IF dvCapOverride >= 0 { SET dvCap TO dvCapOverride. }
-    LOCAL peTol IS _cfgNum("BPLANE_PE_TOL", DEFAULT_PE_TOL).
-    LOCAL angTol IS _cfgNum("BPLANE_ANG_TOL", DEFAULT_ANG_TOL).
-    LOCAL lead IS _cfgNum("BPLANE_LEAD", DEFAULT_LEAD).
+    LOCAL peTol IS BPLANE_PE_TOL.
+    LOCAL angTol IS BPLANE_ANG_TOL.
+    LOCAL lead IS BPLANE_LEAD.
 
     LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, 0).
     ADD nd.
@@ -570,7 +570,7 @@ GLOBAL FUNCTION planBplaneCorrection {
 
 LOCAL FUNCTION _bplaneTargetBody {
     LOCAL targetName IS "".
-    IF _cfgHas("BPLANE_TARGET") { SET targetName TO CFG["BPLANE_TARGET"]. }
+    IF BPLANE_TARGET <> "" { SET targetName TO BPLANE_TARGET. }
     IF targetName = "" { SET targetName TO stateGet("target", ""). }
 
     LOCAL targetBody IS 0.
@@ -584,20 +584,20 @@ LOCAL FUNCTION _bplaneTargetBody {
 
 LOCAL FUNCTION _bplaneWantInc {
     LOCAL wantInc IS -1.
-    IF _cfgHas("CAPTURE_DIR") {
-        LOCAL dir IS CFG["CAPTURE_DIR"].
+    IF CAPTURE_DIR <> "" {
+        LOCAL dir IS CAPTURE_DIR.
         IF dir = "PROGRADE"   { SET wantInc TO 0. }
         IF dir = "POLAR"      { SET wantInc TO 90. }
         IF dir = "RETROPOLAR" { SET wantInc TO 90. }
         IF dir = "RETROGRADE" { SET wantInc TO 180. }
     }
-    IF _cfgHas("CAPTURE_INC") { SET wantInc TO CFG["CAPTURE_INC"]. }
+    IF CAPTURE_INC >= 0 { SET wantInc TO CAPTURE_INC. }
     RETURN wantInc.
 }
 
 // ============================================================
 // phaseBplane — phase handler. Resolves the arrival body and
-// requested capture elements from CFG/state, then runs up to
+// requested capture elements from globals/state, then runs up to
 // MAX_BURNS correction burns. Advances even when unconverged
 // (post-capture SHAPE is the safety net) but logs loudly.
 // ============================================================
@@ -618,7 +618,7 @@ GLOBAL FUNCTION phaseBplane {
         RETURN.
     }
 
-    LOCAL wantPe IS _cfgNum("CAPTURE_PE", -1).
+    LOCAL wantPe IS CAPTURE_PE.
     IF wantPe < 0 {
         mLogWarn("BPLANE: CAPTURE_PE not set — skipping phase.").
         nextPhase(xferSeq).
@@ -626,7 +626,7 @@ GLOBAL FUNCTION phaseBplane {
     }
     LOCAL wantInc IS _bplaneWantInc().
 
-    LOCAL wantLan IS _cfgNum("CAPTURE_LAN", -1).
+    LOCAL wantLan IS CAPTURE_LAN.
 
     LOCAL burns IS 0.
     UNTIL burns >= MAX_BURNS {
@@ -672,14 +672,14 @@ GLOBAL FUNCTION phaseRefineBplane {
         RETURN.
     }
 
-    LOCAL wantPe IS _cfgNum("CAPTURE_PE", -1).
+    LOCAL wantPe IS CAPTURE_PE.
     IF wantPe < 0 {
         mLogWarn("REFINE_BPLANE: CAPTURE_PE not set — skipping phase.").
         nextPhase(xferSeq).
         RETURN.
     }
     LOCAL wantInc IS _bplaneWantInc().
-    LOCAL wantLan IS _cfgNum("CAPTURE_LAN", -1).
+    LOCAL wantLan IS CAPTURE_LAN.
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     mLog("REFINE_BPLANE: refining arrival with dV cap "

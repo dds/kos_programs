@@ -12,7 +12,7 @@
 // future DRONE_STYLE for true 4-motor quads — needs an airframe
 // to tune against).
 //
-// Actuation styles (CFG DRONE_STYLE):
+// Actuation styles (DRONE_STYLE):
 //   "TILT" — throttleable lift engines pointing along the probe
 //            core's up axis (Juno/Wheesley pods on Kerbin, a
 //            Spark/Ant on the Mun). Attitude via LOCK STEERING
@@ -30,7 +30,7 @@
 // ends after a commanded landing. restartflightplan flies the
 // next sortie. Low fuel/EC forces a landing (legacy autoland).
 //
-// CFG keys (defaults):
+// Global config keys (defaults in lib/config.ks):
 //   DRONE_STYLE ("TILT")        DRONE_HOVER_AGL (15)
 //   DRONE_CRUISE_AGL (60)       DRONE_CRUISE_SPEED (25)
 //   DRONE_MAX_TILT (30)         DRONE_VS_CAP (8)
@@ -39,6 +39,19 @@
 // ============================================================
 
 @LAZYGLOBAL OFF.
+
+// --- Config defaults owned by this file ---
+GLOBAL DRONE_STYLE IS "TILT".
+GLOBAL DRONE_CRUISE_AGL IS 60.
+GLOBAL DRONE_CRUISE_SPEED IS 25.
+GLOBAL DRONE_HOVER_AGL IS 25.
+GLOBAL DRONE_RCS_ACC IS 1.
+GLOBAL DRONE_VS_CAP IS 4.
+GLOBAL DRONE_MAX_TILT IS 12.
+GLOBAL DRONE_LOW_RESOURCE IS 0.15.
+GLOBAL DRONE_ARRIVE_RADIUS IS 4.
+GLOBAL DRONE_KP_VEL IS 0.8.
+
 
 GLOBAL droneMode IS "IDLE".   // IDLE HOVER GOTO LAND RTB
 GLOBAL droneActive IS FALSE.
@@ -53,12 +66,6 @@ LOCAL _dnLowResWarned IS FALSE.
 LOCAL _dnPrevAg7 IS FALSE.
 LOCAL _dnPrevAg8 IS FALSE.
 LOCAL _dnPrevAg9 IS FALSE.
-
-LOCAL FUNCTION _dnCfg {
-    PARAMETER key, defaultValue.
-    IF CFG:HASKEY(key) { RETURN CFG[key]. }
-    RETURN defaultValue.
-}
 
 LOCAL FUNCTION _dnGravity {
     RETURN SHIP:BODY:MU / (SHIP:BODY:POSITION:MAG ^ 2).
@@ -93,8 +100,8 @@ GLOBAL FUNCTION droneInit {
     SET _dnPrevAg9 TO AG9.
     SET droneMode TO "IDLE".
     SET droneActive TO TRUE.
-    IF _dnCfg("DRONE_STYLE", "TILT") = "RCS" { RCS ON. }
-    mLog("Drone init: style=" + _dnCfg("DRONE_STYLE", "TILT")
+    IF DRONE_STYLE = "RCS" { RCS ON. }
+    mLog("Drone init: style=" + DRONE_STYLE
         + " g=" + ROUND(_dnGravity(), 2)
         + " maxAcc=" + ROUND(_dnMaxAcc(), 1)
         + " home=" + ROUND(_dnHomeGeo:LAT, 4) + "," + ROUND(_dnHomeGeo:LNG, 4)).
@@ -115,7 +122,7 @@ GLOBAL FUNCTION droneShutdown {
 // Mode commands
 // ============================================================
 GLOBAL FUNCTION droneHoverHere {
-    PARAMETER agl IS _dnCfg("DRONE_HOVER_AGL", 15).
+    PARAMETER agl IS DRONE_HOVER_AGL.
     SET _dnTargetGeo TO SHIP:GEOPOSITION.
     SET _dnTargetAgl TO agl.
     SET droneMode TO "HOVER".
@@ -126,7 +133,7 @@ GLOBAL FUNCTION droneHoverHere {
 
 GLOBAL FUNCTION droneGoto {
     PARAMETER geo.
-    PARAMETER agl IS _dnCfg("DRONE_CRUISE_AGL", 60).
+    PARAMETER agl IS DRONE_CRUISE_AGL.
     SET _dnTargetGeo TO geo.
     SET _dnTargetAgl TO agl.
     SET droneMode TO "GOTO".
@@ -159,7 +166,7 @@ GLOBAL FUNCTION droneLandHere {
 
 GLOBAL FUNCTION droneReturnHome {
     SET _dnTargetGeo TO _dnHomeGeo.
-    SET _dnTargetAgl TO _dnCfg("DRONE_CRUISE_AGL", 60).
+    SET _dnTargetAgl TO DRONE_CRUISE_AGL.
     SET droneMode TO "RTB".
     mLog("Drone RTB (" + ROUND(_dnHomeGeo:DISTANCE, 0) + "m).").
     HUDTEXT("RETURN TO BASE", 3, 2, 14, CYAN, FALSE).
@@ -180,7 +187,7 @@ GLOBAL FUNCTION droneUpdate {
 
     LOCAL g IS _dnGravity().
     LOCAL maxAcc IS _dnMaxAcc().
-    LOCAL style IS _dnCfg("DRONE_STYLE", "TILT").
+    LOCAL style IS DRONE_STYLE.
     LOCAL upV IS UP:VECTOR.
     LOCAL vSurf IS SHIP:VELOCITY:SURFACE.
     LOCAL vH IS VXCL(upV, vSurf).
@@ -190,11 +197,11 @@ GLOBAL FUNCTION droneUpdate {
     IF _dnTargetGeo <> 0 {
         SET posErr TO VXCL(upV, _dnTargetGeo:POSITION).
     }
-    LOCAL maxTilt IS _dnCfg("DRONE_MAX_TILT", 30).
+    LOCAL maxTilt IS DRONE_MAX_TILT.
     LOCAL maxHAcc IS maxAcc * SIN(maxTilt).
-    IF style = "RCS" { SET maxHAcc TO _dnCfg("DRONE_RCS_ACC", 2.0). }
+    IF style = "RCS" { SET maxHAcc TO DRONE_RCS_ACC. }
 
-    LOCAL cruise IS _dnCfg("DRONE_CRUISE_SPEED", 25).
+    LOCAL cruise IS DRONE_CRUISE_SPEED.
     IF droneMode = "HOVER" OR droneMode = "LAND" { SET cruise TO 8. }
     // sqrt braking law (legacy): never approach faster than you
     // can stop with ~60% of available horizontal acceleration.
@@ -202,7 +209,7 @@ GLOBAL FUNCTION droneUpdate {
     LOCAL vTarget IS posErr:NORMALIZED * MIN(vCap, posErr:MAG).
 
     // --- Vertical speed target ---
-    LOCAL vsCap IS _dnCfg("DRONE_VS_CAP", 8).
+    LOCAL vsCap IS DRONE_VS_CAP.
     LOCAL targetAltAbs IS 0.
     IF droneMode = "LAND" {
         // Radar-scheduled flare: -radar/4 down to a gentle touch.
@@ -212,7 +219,7 @@ GLOBAL FUNCTION droneUpdate {
         _dnCheckTouchdown().
         RETURN.
     }
-    LOCAL floorAlt IS _dnTerrainAhead() + _dnCfg("DRONE_HOVER_AGL", 15) * 0.6.
+    LOCAL floorAlt IS _dnTerrainAhead() + DRONE_HOVER_AGL * 0.6.
     IF _dnTargetGeo <> 0 {
         SET targetAltAbs TO MAX(
             _dnTargetGeo:TERRAINHEIGHT + _dnTargetAgl, floorAlt).
@@ -225,11 +232,11 @@ GLOBAL FUNCTION droneUpdate {
 
     // --- Arrival: GOTO/RTB become HOVER on station ---
     IF (droneMode = "GOTO" OR droneMode = "RTB")
-            AND posErr:MAG < _dnCfg("DRONE_ARRIVE_RADIUS", 4)
+            AND posErr:MAG < DRONE_ARRIVE_RADIUS
             AND vH:MAG < 1.5 {
         mLog("Drone on station (" + droneMode + " complete).").
         HUDTEXT("ON STATION", 3, 2, 14, GREEN, FALSE).
-        SET _dnTargetAgl TO _dnCfg("DRONE_HOVER_AGL", 15).
+        SET _dnTargetAgl TO DRONE_HOVER_AGL.
         SET droneMode TO "HOVER".
     }
 }
@@ -241,7 +248,7 @@ LOCAL FUNCTION _dnApplyControl {
     PARAMETER style, vTarget, vH, vsTarget, g, maxAcc, maxHAcc, upV.
 
     // Acceleration commands from velocity errors.
-    LOCAL kpV IS _dnCfg("DRONE_KP_VEL", 0.8).
+    LOCAL kpV IS DRONE_KP_VEL.
     LOCAL aH IS (vTarget - vH) * kpV.
     IF aH:MAG > maxHAcc { SET aH TO aH:NORMALIZED * maxHAcc. }
 
@@ -266,11 +273,11 @@ LOCAL FUNCTION _dnApplyControl {
             // Pure RCS lift: trim with the translation channel.
             UNLOCK THROTTLE.
             SET SHIP:CONTROL:TOP TO
-                MAX(-1, MIN(1, liftAcc / MAX(0.1, _dnCfg("DRONE_RCS_ACC", 2.0)))).
+                MAX(-1, MIN(1, liftAcc / MAX(0.1, DRONE_RCS_ACC))).
         }
         // Lateral RCS in the ship's level frame (fore = topvector
         // when the core points up).
-        LOCAL aRcs IS _dnCfg("DRONE_RCS_ACC", 2.0).
+        LOCAL aRcs IS DRONE_RCS_ACC.
         SET SHIP:CONTROL:FORE TO
             MAX(-1, MIN(1, VDOT(aH, SHIP:FACING:TOPVECTOR) / aRcs)).
         SET SHIP:CONTROL:STARBOARD TO
@@ -290,7 +297,7 @@ LOCAL FUNCTION _dnApplyControl {
         }
     }
     // Tilt cap keeps the airframe honest (and the kerbal calm).
-    LOCAL maxTilt IS _dnCfg("DRONE_MAX_TILT", 30).
+    LOCAL maxTilt IS DRONE_MAX_TILT.
     IF VANG(upV, accVec) > maxTilt {
         SET accVec TO ANGLEAXIS(maxTilt, -VCRS(accVec, upV)) * upV * accVec:MAG.
     }
@@ -327,7 +334,7 @@ LOCAL FUNCTION _dnCheckResources {
             IF pct < worst { SET worst TO pct. }
         }
     }
-    IF worst < _dnCfg("DRONE_LOW_RESOURCE", 15) {
+    IF worst < DRONE_LOW_RESOURCE {
         SET _dnLowResWarned TO TRUE.
         mLogWarn("Drone: low resources (" + ROUND(worst, 0) + "%) — landing.").
         HUDTEXT("LOW FUEL/EC — AUTOLAND", 8, 2, 16, RED, FALSE).
@@ -356,9 +363,9 @@ GLOBAL FUNCTION phaseArm {
     flightPlanTitle("DRONE FLIGHT PLAN", SHIP:NAME).
     flightPlanIdentity().
     flightPlanSection("DRONE").
-    flightPlanRow("STYLE", _dnCfg("DRONE_STYLE", "TILT")).
-    flightPlanRow("CRUISE", _dnCfg("DRONE_CRUISE_AGL", 60) + "m AGL / "
-        + _dnCfg("DRONE_CRUISE_SPEED", 25) + " m/s").
+    flightPlanRow("STYLE", DRONE_STYLE).
+    flightPlanRow("CRUISE", DRONE_CRUISE_AGL + "m AGL / "
+        + DRONE_CRUISE_SPEED + " m/s").
     flightPlanRow("MODES", "AG7 hover AG8 wpt AG9 land").
     flightPlanLine().
 
@@ -375,12 +382,12 @@ GLOBAL FUNCTION phaseArm {
         "Storage ..... " + CORE:VOLUME:FREESPACE + " bytes free"
     ), "Press any key to launch").
 
-    IF _dnCfg("DRONE_STYLE", "TILT") = "TILT" AND SHIP:AVAILABLETHRUST <= 0 {
+    IF DRONE_STYLE = "TILT" AND SHIP:AVAILABLETHRUST <= 0 {
         mLog("No thrust — staging lift engines.").
         STAGE.
         WAIT 1.
     }
-    IF _dnMaxAcc() <= _dnGravity() AND _dnCfg("DRONE_STYLE", "TILT") = "TILT" {
+    IF _dnMaxAcc() <= _dnGravity() AND DRONE_STYLE = "TILT" {
         mLogWarn("Drone TWR below 1 (" + ROUND(_dnMaxAcc() / _dnGravity(), 2)
             + ") — it will not hover. Check engines/mass.").
     }

@@ -8,14 +8,20 @@
 // logic in each vehicle.
 // ============================================================
 
-// Detect mission type from effective CFG plus runtime state.
+// --- Config defaults owned by this file ---
+GLOBAL MISSION_TYPE IS "".
+GLOBAL TARGET_ IS "".
+GLOBAL RENDEZVOUS_TARGET IS "".
+GLOBAL ASTEROID_TARGET IS "".
+
+// Detect mission type from effective globals plus runtime state.
 // Returns "kerbin_moon", "kerbin_return", or "interplanetary".
 GLOBAL FUNCTION missionTypeDetect {
     LOCAL explicit IS stateGet("mission_type", "").
-    IF DEFINED CFG AND CFG:HASKEY("MISSION_TYPE") { SET explicit TO CFG["MISSION_TYPE"]. }
+    SET explicit TO MISSION_TYPE.
     IF explicit <> "" { RETURN explicit. }
     LOCAL target IS stateGet("target", "KERBIN").
-    IF DEFINED CFG AND CFG:HASKEY("TARGET") { SET target TO CFG["TARGET"]. }
+    IF TARGET_ <> "" { SET target TO TARGET_. }
     IF target = "MUN" OR target = "MINMUS" { RETURN "kerbin_moon". }
     IF target = "KERBIN" { RETURN "kerbin_return". }
     RETURN "interplanetary".
@@ -30,20 +36,20 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
     IF bandKey = "XFER_PLAN" {
         LOCAL mType IS missionTypeDetect().
         LOCAL seq IS "".
-        IF DEFINED CFG AND CFG:HASKEY("SEQUENCE") { SET seq TO CFG["SEQUENCE"]. }
+        SET seq TO SEQUENCE.
         IF mType = "interplanetary" AND seq:CONTAINS("XING") {
             roots:ADD("maneuver_intersystem").
         }
         LOCAL needsRdv IS FALSE.
-        IF DEFINED CFG AND CFG:HASKEY("RENDEZVOUS_TARGET") { SET needsRdv TO TRUE. }
-        IF DEFINED CFG AND CFG:HASKEY("ASTEROID_TARGET") { SET needsRdv TO TRUE. }
+        IF RENDEZVOUS_TARGET <> "" { SET needsRdv TO TRUE. }
+        IF ASTEROID_TARGET <> "" { SET needsRdv TO TRUE. }
         IF needsRdv {
             roots:ADD("maneuver_rendezvous").
         }
     }
     IF bandKey = "PAYLOAD_OPS" {
         LOCAL seq IS "".
-        IF DEFINED CFG AND CFG:HASKEY("SEQUENCE") { SET seq TO CFG["SEQUENCE"]. }
+        SET seq TO SEQUENCE.
         IF seq:CONTAINS("TARGETED_DEORBIT") {
             roots:ADD("deorbit_targeting").
         }

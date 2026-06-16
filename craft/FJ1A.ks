@@ -6,12 +6,10 @@
 // Ship name:  FJ1A-TARGET-TYPE1-...-NN
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "CRUISE_ALT",    5000,
-    "CRUISE_SPEED",   140,
-    "TOP_SPEED",      230,
-    "FLAP_AG",          1
-).
+SET CRUISE_ALT TO 5000.
+SET CRUISE_SPEED TO 140.
+SET TOP_SPEED TO 230.
+SET FLAP_AG TO 1.
 
 GLOBAL FJ1A_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "DONE").
 

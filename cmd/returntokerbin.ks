@@ -27,7 +27,7 @@
 //   descent_fairing    — part tag for fairing to deploy at < 60 m/s
 //   descent_decoupler  — part tag for decoupler to fire at ~6km
 //   descent_chutes     — part tag for parachutes to arm on entry
-//       Descent tags default to the craft's CFG values (then the
+//       Descent tags default to craft/profile globals (then the
 //       descent lib defaults); pass "none" to disable a step
 //       (FR3 disables the decoupler — shed stage exploded next
 //       to the lander at touchdown).
@@ -37,6 +37,9 @@
 // cmd/goto.ks instead: RUNPATH("0:/cmd/goto.ks", "Kerbin").
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL REENTRY_PE IS 30000.
+
 PARAMETER opts IS LEXICON().
 
 RUNPATH("1:/lib/boot_lib").
@@ -44,13 +47,12 @@ bootPreamble().
 
 // --- Read options with defaults ---
 // Default honors the mission profile's REENTRY_PE when set.
-LOCAL targetPe IS missionCfgGet("REENTRY_PE", 43000).
-IF DEFINED CFG AND CFG:HASKEY("REENTRY_PE") { SET targetPe TO CFG["REENTRY_PE"]. }
+LOCAL targetPe IS REENTRY_PE.
 LOCAL reentryDir IS "RETROGRADE".
 LOCAL decoupleTag IS "".
 LOCAL armChutes IS 0.
 LOCAL kscTarget IS TRUE.
-// Empty = leave mission state untouched so craft CFG defaults
+// Empty = leave mission state untouched so craft/profile globals
 // (then lib defaults) decide; "none" = explicitly disabled.
 LOCAL descentFairingTag IS "".
 LOCAL descentDecouplerTag IS "".
@@ -105,7 +107,7 @@ IF NOT err {
     stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
 
     IF kscTarget {
-        stateSet("mission_cfg_ESCAPE_KSC_TARGET", "true").
+        stateSet("mission_cfg_ESCAPE_KSC_TARGET", 1).
     } ELSE {
         stateRemove("mission_cfg_ESCAPE_KSC_TARGET").
     }

@@ -6,17 +6,21 @@
 // phaseFlyby   — wait through target periapsis without capture
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL MIDCOURSE_REFINE_FRACTION IS 0.5.
+GLOBAL MIDCOURSE_REFINE_MIN_LEAD IS 600.
+GLOBAL MIDCOURSE_REFINE_MARGIN IS 60.
+GLOBAL SOI_BUFFER_TIME IS 120.
+GLOBAL BPLANE_LEAD IS 300.
+GLOBAL FLYBY_POST_PE_HOLD IS 0.
+GLOBAL FLYBY_EXIT_SOI IS 1.
+GLOBAL TARGET_AP IS -1.
+
 LOCAL MAX_RETRIES IS 5.
 LOCAL SOI_BUFFER_TIME_DEFAULT IS 300.
 LOCAL MIDCOURSE_REFINE_FRACTION_DEFAULT IS 0.5.
 LOCAL MIDCOURSE_REFINE_MIN_LEAD_DEFAULT IS 300.
 LOCAL MIDCOURSE_REFINE_MARGIN_DEFAULT IS 60.
-
-LOCAL FUNCTION _cfgNum {
-    PARAMETER key, defaultValue.
-    IF DEFINED CFG AND CFG:HASKEY(key) { RETURN CFG[key]. }
-    RETURN defaultValue.
-}
 
 LOCAL FUNCTION _transferArrivalUt {
     PARAMETER targetBody.
@@ -58,17 +62,14 @@ LOCAL FUNCTION _timeMidcourseUt {
     PARAMETER tStart.
     PARAMETER tArrival.
 
-    LOCAL frac IS _cfgNum("MIDCOURSE_REFINE_FRACTION",
-        MIDCOURSE_REFINE_FRACTION_DEFAULT).
+    LOCAL frac IS MIDCOURSE_REFINE_FRACTION.
     SET frac TO MAX(0.05, MIN(0.95, frac)).
 
     LOCAL rawUt IS tStart + frac * (tArrival - tStart).
-    LOCAL minLead IS _cfgNum("MIDCOURSE_REFINE_MIN_LEAD",
-        MIDCOURSE_REFINE_MIN_LEAD_DEFAULT).
-    LOCAL margin IS _cfgNum("MIDCOURSE_REFINE_MARGIN",
-        MIDCOURSE_REFINE_MARGIN_DEFAULT).
-    LOCAL soiBuffer IS _cfgNum("SOI_BUFFER_TIME", SOI_BUFFER_TIME_DEFAULT).
-    LOCAL bplaneLead IS _cfgNum("BPLANE_LEAD", 300).
+    LOCAL minLead IS MIDCOURSE_REFINE_MIN_LEAD.
+    LOCAL margin IS MIDCOURSE_REFINE_MARGIN.
+    LOCAL soiBuffer IS SOI_BUFFER_TIME.
+    LOCAL bplaneLead IS BPLANE_LEAD.
     LOCAL latestUt IS tArrival - soiBuffer - bplaneLead - margin.
     LOCAL refineUt IS rawUt.
 
@@ -164,7 +165,7 @@ GLOBAL FUNCTION phaseCoast2Half {
         RETURN.
     }
 
-    LOCAL soiBuffer IS _cfgNum("SOI_BUFFER_TIME", SOI_BUFFER_TIME_DEFAULT).
+    LOCAL soiBuffer IS SOI_BUFFER_TIME.
     LOCAL soiAlarmId IS ensureSoiAlarm(target, tArrival,
         "Auto-created by COAST_2HALF").
     LOCAL coastUntil IS MAX(TIME:SECONDS, tArrival - soiBuffer).
@@ -204,9 +205,7 @@ GLOBAL FUNCTION phaseCapture {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
 
         // 1. Resolve target altitude from config
-        LOCAL captureAlt IS 35000.
-        // IF CFG:HASKEY("TARGET_PE") { SET .
-        IF CFG:HASKEY("TARGET_AP") { SET captureAlt TO CFG["TARGET_AP"]. }
+        LOCAL captureAlt IS 35000.        SET captureAlt TO TARGET_AP.
 
         // 2. Delegate math to your existing library function
         planCapture(target, captureAlt).
@@ -248,8 +247,8 @@ GLOBAL FUNCTION phaseFlyby {
 
     LOCAL postPeHold IS 3600.
     LOCAL exitSoi IS 0.
-    IF CFG:HASKEY("FLYBY_POST_PE_HOLD") { SET postPeHold TO CFG["FLYBY_POST_PE_HOLD"]. }
-    IF CFG:HASKEY("FLYBY_EXIT_SOI") { SET exitSoi TO CFG["FLYBY_EXIT_SOI"]. }
+    SET postPeHold TO FLYBY_POST_PE_HOLD.
+    SET exitSoi TO FLYBY_EXIT_SOI.
 
     LOCAL peEta IS MAX(0, ETA:PERIAPSIS).
     LOCAL peUt IS TIME:SECONDS + peEta.

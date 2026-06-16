@@ -5,6 +5,12 @@
 
 @LAZYGLOBAL OFF.
 
+// --- Config defaults owned by this file ---
+GLOBAL RELAY_COUNT IS 3.
+GLOBAL RELAY_ALT IS -1.
+GLOBAL TARGET_AP IS -1.
+
+
 LOCAL CIRCULAR_ECC_LIMIT IS 0.01.
 
 GLOBAL FUNCTION constellationDeploy {
@@ -86,11 +92,10 @@ GLOBAL FUNCTION constellationDeploy {
 }
 
 GLOBAL FUNCTION phaseRelayConstellation {
-    LOCAL relayCount IS 3.
-    LOCAL targetAlt IS 500000.
-    IF CFG:HASKEY("RELAY_COUNT") { SET relayCount TO CFG["RELAY_COUNT"]. }
-    IF CFG:HASKEY("RELAY_ALT") { SET targetAlt TO CFG["RELAY_ALT"]. }
-    ELSE IF CFG:HASKEY("TARGET_AP") { SET targetAlt TO CFG["TARGET_AP"]. }
+    LOCAL relayCount IS RELAY_COUNT.
+    LOCAL targetAlt IS RELAY_ALT.
+    IF targetAlt < 0 { SET targetAlt TO TARGET_AP. }
+    IF targetAlt < 0 { SET targetAlt TO 500000. }
 
     IF constellationDeploy(relayCount, targetAlt) {
         nextPhase(xferSeq).

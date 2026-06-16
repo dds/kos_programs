@@ -8,6 +8,10 @@
 // for telemetry; electrical management itself belongs to AmpYear.
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL SOLAR_HOLD_RATIO IS 0.92.
+GLOBAL SOLAR_HOLD_EC IS 0.75.
+
 // Sum of "energy flow" over all solar panels (falls back to
 // "sun exposure"); -1 when no readable panel fields exist.
 GLOBAL FUNCTION shipSolarFlow {
@@ -220,7 +224,7 @@ GLOBAL FUNCTION solarHoldTick {
     PARAMETER refFlow.
     IF NOT shipHasSolarPanels() { RETURN refFlow. }
     LOCAL ratio IS 0.92.
-    IF DEFINED CFG { SET ratio TO cfgNum("SOLAR_HOLD_RATIO", 0.92). }
+    SET ratio TO SOLAR_HOLD_RATIO.
     LOCAL flow IS shipSolarFlow().
     IF flow < 0 { RETURN refFlow. }
     IF refFlow <= 0 {
@@ -244,7 +248,7 @@ GLOBAL FUNCTION solarHoldTick {
     // happens when charge actually needs it; the flow ratio is
     // the quality floor once it does.
     LOCAL ecTrigger IS 0.75.
-    IF DEFINED CFG { SET ecTrigger TO cfgNum("SOLAR_HOLD_EC", 0.75). }
+    SET ecTrigger TO SOLAR_HOLD_EC.
     IF shipPowerFraction() >= ecTrigger AND flow > refFlow * 0.25 {
         RETURN refFlow.
     }

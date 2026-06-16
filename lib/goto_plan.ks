@@ -39,6 +39,23 @@
 
 @LAZYGLOBAL OFF.
 
+// --- Config defaults owned by this file ---
+GLOBAL CAPTURE_PE IS -1.
+GLOBAL CAPTURE_INC IS -1.
+GLOBAL CAPTURE_LAN IS -1.
+GLOBAL CAPTURE_AOP IS -1.
+GLOBAL CAPTURE_DIR IS "".
+GLOBAL ESCAPE_PE IS -1.
+GLOBAL ESCAPE_LAN IS -1.
+GLOBAL ESCAPE_AOP IS -1.
+GLOBAL TARGET_PE IS -1.
+GLOBAL TARGET_AP IS -1.
+GLOBAL SHAPE_PE IS -1.
+GLOBAL SHAPE_AP IS -1.
+GLOBAL SHAPE_INC IS -1.
+GLOBAL SHAPE_LAN IS -1.
+
+
 LOCAL FUNCTION _gotoFindBody {
     PARAMETER name.
     LOCAL allBodies IS LIST().
@@ -88,13 +105,14 @@ LOCAL FUNCTION _gotoSafePe {
     RETURN 25000.
 }
 
-// Requested final orbit element from effective CFG, or fallback.
+// Requested final orbit element from effective globals, or fallback.
 LOCAL FUNCTION _gotoShapeNum {
     PARAMETER key, fallback.
-    LOCAL cfgKey IS "SHAPE_" + key.
-    IF NOT DEFINED CFG { RETURN fallback. }
-    IF NOT CFG:HASKEY(cfgKey) { RETURN fallback. }
-    RETURN CFG[cfgKey].
+    IF key = "PE" AND SHAPE_PE >= 0 { RETURN SHAPE_PE. }
+    IF key = "AP" AND SHAPE_AP >= 0 { RETURN SHAPE_AP. }
+    IF key = "INC" AND SHAPE_INC >= 0 { RETURN SHAPE_INC. }
+    IF key = "LAN" AND SHAPE_LAN >= 0 { RETURN SHAPE_LAN. }
+    RETURN fallback.
 }
 
 // ============================================================
@@ -160,10 +178,10 @@ GLOBAL FUNCTION gotoBuildPlan {
         } ELSE IF final {
             SET capPe TO _gotoShapeNum("PE", capPe).
             SET capAp TO _gotoShapeNum("AP", capAp).
-            IF DEFINED CFG AND CFG:HASKEY("SHAPE_INC") {
+            IF SHAPE_INC >= 0 {
                 cfg:ADD("CAPTURE_INC", _gotoShapeNum("INC", 0)).
             }
-            IF DEFINED CFG AND CFG:HASKEY("SHAPE_LAN") {
+            IF SHAPE_LAN >= 0 {
                 cfg:ADD("CAPTURE_LAN", _gotoShapeNum("LAN", 0)).
             }
         }

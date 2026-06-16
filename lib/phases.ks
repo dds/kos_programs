@@ -2,6 +2,10 @@
 // phases.ks  —  Generic phase machine  (0:/lib/phases.ks)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL KEEP_WARP IS 0.
+GLOBAL EVA_BIOMES IS "".
+
 GLOBAL phaseShouldYield IS FALSE.
 GLOBAL launchSeq IS LIST().
 GLOBAL xferSeq IS LIST().
@@ -22,10 +26,40 @@ GLOBAL FUNCTION phaseHandlerMap {
     RETURN LEXICON().
 }
 
+GLOBAL FUNCTION phaseBandForPhase {
+    PARAMETER phaseName.
+    LOCAL phase IS phaseName.
+    LOCAL defaultBand IS "".
+    IF phase = "" OR phase:CONTAINS("MAIN") {
+        SET defaultBand TO "LAUNCH".
+    }
+    RETURN bootLibBandForPhase(phase, defaultBand).
+}
+
+GLOBAL FUNCTION phaseBand {
+    RETURN phaseBandForPhase(stateGet("phase", "")).
+}
+
 GLOBAL FUNCTION phaseInLoadedBand {
     PARAMETER phaseName.
-    LOCAL requiredBand IS bootLibBandForPhase(phaseName, "").
+    LOCAL requiredBand IS phaseBandForPhase(phaseName).
     RETURN requiredBand <> "" AND requiredBand = stateGet("lib_band", "").
+}
+
+GLOBAL FUNCTION phaseParkingReload {
+    phaseParking().
+    LOCAL nxt IS stateGet("phase", "").
+    IF phaseInLoadedBand(nxt) {
+        mLog("Parking checkpoint: " + nxt + " already loaded - continuing.").
+        RETURN.
+    }
+    LOCAL requiredBand IS phaseBandForPhase(nxt).
+    stateSaveReloadState("PARKING_ORBIT", nxt, requiredBand).
+    mLog("Parking orbit reload point - auto-rebooting for " + nxt + ".").
+    HUDTEXT("Parking orbit: rebooting for " + nxt + "...",
+        5, 2, 15, CYAN, FALSE).
+    WAIT 5.
+    REBOOT.
 }
 
 GLOBAL FUNCTION runPhases {
@@ -78,10 +112,7 @@ GLOBAL FUNCTION runPhases {
                     RETURN.
                 }
             } ELSE {
-                stateSet("reload_required", "true").
-                stateSet("reload_reason", "PHASE_BAND_CHANGE").
-                stateSet("reload_next_phase", phase).
-                stateSet("reload_next_band", requiredBand).
+                stateSaveReloadState("PHASE_BAND_CHANGE", phase, requiredBand).
                 mLog("Phase " + phase + " requires a different library band. Reboot to continue.").
                 // Band changes auto-reboot: reboots are the system's
                 // resumable primitive, and waiting on an operator was
@@ -193,10 +224,7 @@ GLOBAL FUNCTION maneuverEnsureBurnAlarm {
 }
 
 GLOBAL FUNCTION warpHoldEnabled {
-    IF DEFINED CFG AND CFG:HASKEY("KEEP_WARP") {
-        RETURN CFG["KEEP_WARP"] > 0.
-    }
-    RETURN missionCfgGet("KEEP_WARP", 0) > 0.
+    RETURN KEEP_WARP > 0.
 }
 
 GLOBAL FUNCTION trySolarOrient {

@@ -4,6 +4,16 @@
 // phaseTransfer   — plan + execute the transfer burn
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL CAPTURE_PE IS -1.
+GLOBAL CAPTURE_INC IS -1.
+GLOBAL CAPTURE_LAN IS -1.
+GLOBAL CAPTURE_AOP IS -1.
+GLOBAL CAPTURE_DIR IS "".
+GLOBAL ESCAPE_PE IS -1.
+GLOBAL ESCAPE_LAN IS -1.
+GLOBAL ESCAPE_AOP IS -1.
+
 LOCAL MAX_RETRIES IS 5.
 
 LOCAL FUNCTION _recordXingArrivalUt {
@@ -59,9 +69,9 @@ GLOBAL FUNCTION phaseTransfer {
     UNTIL success {
         LOCAL xLan IS -1.
         LOCAL xAoP IS -1.
-        IF CFG:HASKEY("CAPTURE_LAN") { SET xLan TO CFG["CAPTURE_LAN"]. }
-        IF CFG:HASKEY("CAPTURE_AOP") { SET xAoP TO CFG["CAPTURE_AOP"]. }
-        LOCAL transferNode IS planTransfer(target, CFG["CAPTURE_PE"], xLan, xAoP).
+        SET xLan TO CAPTURE_LAN.
+        SET xAoP TO CAPTURE_AOP.
+        LOCAL transferNode IS planTransfer(target, CAPTURE_PE, xLan, xAoP).
         IF transferNode = 0 OR NOT transferNode:ISTYPE("Node") {
             SET retries TO retries + 1.
             mLogError("Transfer planning failed; yielding for manual control.").
@@ -95,12 +105,12 @@ GLOBAL FUNCTION phaseXing {
 }
 
 GLOBAL FUNCTION phaseEscape {
-    LOCAL escapePe IS CFG["ESCAPE_PE"].
+    LOCAL escapePe IS ESCAPE_PE.
     LOCAL escapeLan IS -1.
     LOCAL escapeAop IS -1.
 
-    IF CFG:HASKEY("ESCAPE_LAN") { SET escapeLan TO CFG["ESCAPE_LAN"]. }
-    IF CFG:HASKEY("ESCAPE_AOP") { SET escapeAop TO CFG["ESCAPE_AOP"]. }
+    SET escapeLan TO ESCAPE_LAN.
+    SET escapeAop TO ESCAPE_AOP.
 
     // Target is always the parent body
     LOCAL target IS BODY:BODY.
@@ -123,15 +133,15 @@ GLOBAL FUNCTION phaseEscape {
             RETURN.
         } ELSE {
             // Overwrite CAPTURE_* for downstream MCC reuse
-            cfgSet("CAPTURE_PE", escapePe).
-            IF CFG:HASKEY("ESCAPE_LAN") { cfgSet("CAPTURE_LAN", escapeLan). }
-            ELSE IF CFG:HASKEY("CAPTURE_LAN") { CFG:REMOVE("CAPTURE_LAN"). }
-            IF CFG:HASKEY("ESCAPE_AOP") { cfgSet("CAPTURE_AOP", escapeAop). }
-            ELSE IF CFG:HASKEY("CAPTURE_AOP") { CFG:REMOVE("CAPTURE_AOP"). }
+            SET CAPTURE_PE TO escapePe.
+            IF ESCAPE_LAN >= 0 { SET CAPTURE_LAN TO escapeLan. }
+            ELSE { SET CAPTURE_LAN TO -1. }
+            IF ESCAPE_AOP >= 0 { SET CAPTURE_AOP TO escapeAop. }
+            ELSE { SET CAPTURE_AOP TO -1. }
 
             // Clear outbound capture plane config
-            IF CFG:HASKEY("CAPTURE_INC") { CFG:REMOVE("CAPTURE_INC"). }
-            IF CFG:HASKEY("CAPTURE_DIR") { CFG:REMOVE("CAPTURE_DIR"). }
+            SET CAPTURE_INC TO -1.
+            SET CAPTURE_DIR TO "".
 
             mLog("Escape planned.").
             SET success TO executeManeuver().

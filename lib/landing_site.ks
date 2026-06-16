@@ -9,6 +9,12 @@
 // loaded this boot.
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL LANDING_SITE_SCAN_ENABLE IS 0.
+GLOBAL LANDING_SITE_SCAN_RADIUS IS 1500.
+GLOBAL LANDING_SITE_SCAN_STEP IS 250.
+GLOBAL LANDING_SITE_MAX_SLOPE IS 12.
+
 GLOBAL FUNCTION selectScanSatLandingSite {
     PARAMETER targetLat.
     PARAMETER targetLng.
@@ -23,8 +29,8 @@ GLOBAL FUNCTION selectScanSatLandingSite {
     ).
 
     LOCAL enabled IS 0.
-    IF CFG:HASKEY("LANDING_SITE_SCAN_ENABLE") {
-        SET enabled TO CFG["LANDING_SITE_SCAN_ENABLE"].
+    IF LANDING_SITE_SCAN_ENABLE > 0 {
+        SET enabled TO LANDING_SITE_SCAN_ENABLE.
     }
     IF enabled <= 0 { RETURN out. }
 
@@ -34,16 +40,16 @@ GLOBAL FUNCTION selectScanSatLandingSite {
     }
 
     LOCAL radius IS 1000.
-    IF CFG:HASKEY("LANDING_SITE_SCAN_RADIUS") {
-        SET radius TO CFG["LANDING_SITE_SCAN_RADIUS"].
+    IF LANDING_SITE_SCAN_RADIUS > 0 {
+        SET radius TO LANDING_SITE_SCAN_RADIUS.
     }
     LOCAL step IS 250.
-    IF CFG:HASKEY("LANDING_SITE_SCAN_STEP") {
-        SET step TO CFG["LANDING_SITE_SCAN_STEP"].
+    IF LANDING_SITE_SCAN_STEP > 0 {
+        SET step TO LANDING_SITE_SCAN_STEP.
     }
     LOCAL maxSlope IS 12.
-    IF CFG:HASKEY("LANDING_SITE_MAX_SLOPE") {
-        SET maxSlope TO CFG["LANDING_SITE_MAX_SLOPE"].
+    IF LANDING_SITE_MAX_SLOPE > 0 {
+        SET maxSlope TO LANDING_SITE_MAX_SLOPE.
     }
 
     LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).

@@ -12,6 +12,11 @@
 // Depends on: utils (geoDistance)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL AEROBRAKE_DECOUPLE_TAG IS "".
+GLOBAL AEROBRAKE_REENTRY_DIR IS "".
+GLOBAL AEROBRAKE_ARM_CHUTES IS 0.
+
 LOCAL KSC_LAT IS -0.10.
 LOCAL KSC_LNG IS -74.25.
 LOCAL CORRECTION_TOLERANCE IS 50000.   // 50km default
@@ -34,7 +39,7 @@ GLOBAL FUNCTION phaseAerobrake {
     mLogPhase("AEROBRAKE").
 
     // --- Step 1: Reentry targeting ---
-    IF CFG:HASKEY("ESCAPE_KSC_TARGET") AND ADDONS:TR:AVAILABLE {
+    IF ADDONS:TR:AVAILABLE {
         _aerobrakeReentryTargeting().
     } ELSE {
         IF NOT ADDONS:TR:AVAILABLE {
@@ -291,8 +296,8 @@ LOCAL FUNCTION _aerobrakeRetractAntennas {
 }
 
 LOCAL FUNCTION _aerobrakeDecouple {
-    IF NOT CFG:HASKEY("AEROBRAKE_DECOUPLE_TAG") { RETURN. }
-    LOCAL tag IS CFG["AEROBRAKE_DECOUPLE_TAG"].
+    IF AEROBRAKE_DECOUPLE_TAG = "" { RETURN. }
+    LOCAL tag IS AEROBRAKE_DECOUPLE_TAG.
     LOCAL decouplers IS SHIP:PARTSTAGGED(tag).
     IF decouplers:LENGTH = 0 {
         mLogWarn("Decouple tag '" + tag + "' not found — skipping decouple.").
@@ -312,7 +317,7 @@ LOCAL FUNCTION _aerobrakeDecouple {
 
 LOCAL FUNCTION _aerobrakeOrient {
     LOCAL dir IS "RETROGRADE".
-    IF CFG:HASKEY("AEROBRAKE_REENTRY_DIR") { SET dir TO CFG["AEROBRAKE_REENTRY_DIR"]. }
+    SET dir TO AEROBRAKE_REENTRY_DIR.
 
     LOCAL steerDir IS RETROGRADE.
     LOCAL refVec IS -SHIP:VELOCITY:ORBIT.
@@ -340,8 +345,7 @@ LOCAL FUNCTION _aerobrakeOrient {
 }
 
 LOCAL FUNCTION _aerobrakeArmChutes {
-    IF NOT CFG:HASKEY("AEROBRAKE_ARM_CHUTES") { RETURN. }
-    IF CFG["AEROBRAKE_ARM_CHUTES"] <= 0 { RETURN. }
+    IF AEROBRAKE_ARM_CHUTES <= 0 { RETURN. }
 
     LOCAL armed IS 0.
     FOR p IN SHIP:PARTS {

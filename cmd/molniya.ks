@@ -51,7 +51,7 @@ IF inputPeriod > 0 AND inputAp = 0 {
     PRINT "  SMA ........ " + ROUND(sma/1000,1) + " km".
     PRINT "  Ecc ........ " + ROUND(ecc,4).
     PRINT " ".
-    PRINT "  CFG value:   SET CFG[" + CHAR(34) + "MOLNIYA_PERIOD" + CHAR(34) + "] TO " + ROUND(period,0) + ".".
+    PRINT "  Profile:     SET MOLNIYA_PERIOD TO " + ROUND(period,0) + ".".
 } ELSE {
     PRINT "  CURRENT ORBIT:".
     PRINT "  Pe ......... " + ROUND(peAlt/1000,1) + " km".

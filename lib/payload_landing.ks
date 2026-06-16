@@ -1,9 +1,14 @@
+// --- Config defaults owned by this file ---
+GLOBAL LANDING_SKIP_TARGET_SEARCH IS 0.
+GLOBAL RELOAD_AFTER_LAND_ASSIST IS 1.
+GLOBAL RELOAD_AFTER_LAND IS 1.
+
 // Landing descent phase wrappers.
 
 GLOBAL FUNCTION phaseLandAssist {
     landingApplyMissionConfig().
     IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
-    IF NOT (CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH") AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0)
+    IF NOT (LANDING_SKIP_TARGET_SEARCH > 0)
             AND NOT landingImpactAcceptableForAssist() {
         mLogError("Predicted landing impact is not within target tolerance; holding LAND_ASSIST.").
         stateSet("phase", "LAND_ASSIST").

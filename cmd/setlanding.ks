@@ -1,3 +1,7 @@
+// --- Config defaults owned by this file ---
+GLOBAL RELOAD_AFTER_LAND_ASSIST IS 1.
+GLOBAL RELOAD_AFTER_LAND IS 1.
+
 // cmd/setlanding.ks — Landing phase/config overrides (0:/cmd/setlanding.ks)
 // Replaces setlandassist.ks / setlandingdeorbit.ks.
 //
@@ -20,14 +24,6 @@ LOCAL FUNCTION _cfg {
     PARAMETER key.
     PARAMETER value.
     stateSet("mission_cfg_" + key, value).
-}
-
-LOCAL FUNCTION _syncMissionCfg {
-    IF DEFINED CFG {
-        FOR key IN CFG:KEYS {
-            stateSet("mission_cfg_" + key, CFG[key]).
-        }
-    }
 }
 
 LOCAL FUNCTION _landingBandForPhase {
@@ -54,12 +50,11 @@ LOCAL FUNCTION _landingSequenceForPhase {
 }
 
 LOCAL FUNCTION _assistConfig {
-    _cfg("RELOAD_AFTER_LAND_ASSIST", "0").
-    _cfg("RELOAD_AFTER_LAND", "0").
+    _cfg("RELOAD_AFTER_LAND_ASSIST", 0).
+    _cfg("RELOAD_AFTER_LAND", 0).
 }
 
 IF mode = "assist" {
-    _syncMissionCfg().
     stateSet("phase", "LAND_ASSIST").
     stateSet("reload_required", "false").
     stateSet("lib_band", "LANDING").
@@ -71,7 +66,6 @@ IF mode = "assist" {
     PRINT "Phase -> LAND_ASSIST. Resume when ready.".
 
 } ELSE IF mode = "deorbit" {
-    _syncMissionCfg().
     LOCAL phaseName IS "LAND_DEORBIT".
     LOCAL assistPath IS FALSE.
     IF arg1 = "assist" OR arg1 = "LAND_ASSIST" {

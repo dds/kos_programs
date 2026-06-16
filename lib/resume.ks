@@ -3,10 +3,16 @@
 // (0:/lib/resume.ks)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL TARGET_ IS "".
+GLOBAL PAYLOADS IS "".
+GLOBAL RENDEZVOUS_TARGET IS "".
+GLOBAL ASTEROID_TARGET IS "".
+
 GLOBAL MISSION IS LEXICON(
     "vehicle",  stateGet("vehicle",  "UNKNOWN"),
-    "target",   missionCfgGet("TARGET", stateGet("target", "UNKNOWN")),
-    "payloads", missionCfgGet("PAYLOADS", stateGet("payloads", ""))
+    "target",   CHOOSE TARGET_ IF TARGET_ <> "" ELSE stateGet("target", "UNKNOWN"),
+    "payloads", CHOOSE PAYLOADS IF PAYLOADS <> "" ELSE stateGet("payloads", "")
 ).
 
 mLog("MISSION vehicle=" + MISSION["vehicle"]
@@ -74,8 +80,8 @@ GLOBAL FUNCTION buildRocketSequence {
     PARAMETER payloadPhases.
     LOCAL seq IS LIST("LAUNCH", "FAIR", "ANTS", "PARK").
     LOCAL needsRdv IS FALSE.
-    IF CFG:HASKEY("RENDEZVOUS_TARGET") { SET needsRdv TO TRUE. }
-    IF CFG:HASKEY("ASTEROID_TARGET") { SET needsRdv TO TRUE. }
+    IF RENDEZVOUS_TARGET <> "" { SET needsRdv TO TRUE. }
+    IF ASTEROID_TARGET <> "" { SET needsRdv TO TRUE. }
     IF needsRdv { seq:ADD("RDV"). }
     IF MISSION["target"] <> "KERBIN" {
         seq:ADD("XING").

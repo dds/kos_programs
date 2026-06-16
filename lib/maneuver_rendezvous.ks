@@ -3,6 +3,10 @@
 // (0:/lib/maneuver_rendezvous.ks)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL MATCH_FINAL_DIST IS 150.
+GLOBAL RENDEZVOUS_TARGET IS "".
+
 LOCAL FUNCTION _nodeFromDvVector {
     PARAMETER burnUt.
     PARAMETER dvVec.
@@ -18,7 +22,7 @@ LOCAL FUNCTION _nodeFromDvVector {
 
 LOCAL FUNCTION _matchTargetVessel {
     LOCAL nm IS "".
-    IF CFG:HASKEY("RENDEZVOUS_TARGET") { SET nm TO CFG["RENDEZVOUS_TARGET"]. }
+    SET nm TO RENDEZVOUS_TARGET.
     IF nm = "" AND HASTARGET AND TARGET:ISTYPE("Vessel") {
         SET nm TO TARGET:NAME.
     }
@@ -63,7 +67,7 @@ GLOBAL FUNCTION phaseMatch {
     }
     SET TARGET TO ves.
     LOCAL finalDist IS 150.
-    IF CFG:HASKEY("MATCH_FINAL_DIST") { SET finalDist TO CFG["MATCH_FINAL_DIST"]. }
+    SET finalDist TO MATCH_FINAL_DIST.
 
     LOCAL sep IS (ves:POSITION - SHIP:POSITION):MAG.
     LOCAL relSpd IS (SHIP:VELOCITY:ORBIT - ves:VELOCITY:ORBIT):MAG.

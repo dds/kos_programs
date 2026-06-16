@@ -11,17 +11,27 @@
 // (own band, loaded only when DROP_FOR_IMPACT_AND_RAISE_PE runs).
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL CAPTURE_PE IS -1.
+GLOBAL CAPTURE_INC IS -1.
+GLOBAL CAPTURE_LAN IS -1.
+GLOBAL CAPTURE_AOP IS -1.
+GLOBAL TARGET_PE IS -1.
+GLOBAL TARGET_AP IS -1.
+GLOBAL TARGET_INCLINATION IS -1.
+GLOBAL TARGET_LAN IS -1.
+GLOBAL CIRC_ECC_TOL IS 0.005.
+GLOBAL INCL_TOLERANCE IS 0.1.
+GLOBAL MAX_INCL_CHANGE_DV IS 800.
+GLOBAL ELLIPTICAL_MAX_NODE_DV IS 500.
+GLOBAL ELLIPTICAL_RECOVERY_MARGIN IS 1000.
+GLOBAL RELAY_ALT IS -1.
+GLOBAL SCANSAT_RELEASE_AFTER_CAPTURE IS 0.
+
 LOCAL MAX_RETRIES IS 5.
 LOCAL DEFAULT_CIRC_ECC_TOL IS 0.005.
 LOCAL DEFAULT_INCL_TOLERANCE IS 0.01.
 LOCAL DEFAULT_MAX_INCL_CHANGE_DV IS 300.
-
-LOCAL FUNCTION _orbitCfgNum {
-    PARAMETER key.
-    PARAMETER defaultValue.
-    IF CFG:HASKEY(key) { RETURN CFG[key]. }
-    RETURN defaultValue.
-}
 
 LOCAL FUNCTION _bodyImpactFloor {
     LOCAL body_ IS SHIP:ORBIT:BODY.
@@ -30,8 +40,7 @@ LOCAL FUNCTION _bodyImpactFloor {
 }
 
 GLOBAL FUNCTION phaseCirc {
-    IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
-            AND CFG["SCANSAT_RELEASE_AFTER_CAPTURE"] > 0 {
+    IF SCANSAT_RELEASE_AFTER_CAPTURE > 0 {
         // Hand off via the phase machine: the handler lives in the
         // payload_release band, so a direct call would crash here.
         // runPhases sees the missing handler and requests the reload.
@@ -45,9 +54,9 @@ GLOBAL FUNCTION phaseCirc {
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
     IF _impactThreat() {
-        LOCAL safePe IS _orbitCfgNum("PARKING_ALT", 80000).
-        IF CFG:HASKEY("CAPTURE_PE") AND CFG["CAPTURE_PE"] > safePe {
-            SET safePe TO CFG["CAPTURE_PE"].
+        LOCAL safePe IS PARKING_ALT.
+        IF CAPTURE_PE > safePe {
+            SET safePe TO CAPTURE_PE.
         }
         mLog("Impact threat — raising Pe to safe " + ROUND(safePe/1000,0) + "km.").
         LOCAL success IS FALSE.
@@ -67,7 +76,7 @@ GLOBAL FUNCTION phaseCirc {
                 WAIT 10.
             }
         }
-    } ELSE IF SHIP:ORBIT:ECCENTRICITY < _orbitCfgNum("CIRC_ECC_TOL", DEFAULT_CIRC_ECC_TOL) {
+    } ELSE IF SHIP:ORBIT:ECCENTRICITY < CIRC_ECC_TOL {
         mLog("Already circular (ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4) + ").").
         SET circStatus TO "skipped".
     } ELSE {
@@ -99,7 +108,7 @@ GLOBAL FUNCTION phaseCirc {
 
 
 GLOBAL FUNCTION phaseRaiseAlt {
-    LOCAL elliptical IS CFG:HASKEY("TARGET_PE") AND CFG:HASKEY("TARGET_AP").
+    LOCAL elliptical IS TARGET_PE >= 0 AND TARGET_AP >= 0.
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
     mLogWarn("STATS raise phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -107,8 +116,8 @@ GLOBAL FUNCTION phaseRaiseAlt {
         + " elliptical=" + elliptical).
 
     IF elliptical {
-        LOCAL targetPe IS CFG["TARGET_PE"].
-        LOCAL targetAp IS CFG["TARGET_AP"].
+        LOCAL targetPe IS TARGET_PE.
+        LOCAL targetAp IS TARGET_AP.
         mLog("Target ellipse: Pe=" + ROUND(targetPe/1000,0) + "km  Ap=" + ROUND(targetAp/1000,0) + "km.").
 
         IF ABS(SHIP:PERIAPSIS - targetPe) > targetPe * 0.05 {
@@ -122,8 +131,8 @@ GLOBAL FUNCTION phaseRaiseAlt {
 
         IF ABS(SHIP:APOAPSIS - targetAp) > targetAp * 0.02 {
             LOCAL burnTA IS 0.
-            IF CFG:HASKEY("CAPTURE_AOP") {
-                LOCAL targetAoP IS CFG["CAPTURE_AOP"].
+            IF CAPTURE_AOP >= 0 {
+                LOCAL targetAoP IS CAPTURE_AOP.
                 SET burnTA TO targetAoP - SHIP:ORBIT:ARGUMENTOFPERIAPSIS.
                 UNTIL burnTA >= 0 { SET burnTA TO burnTA + 360. }
                 UNTIL burnTA < 360 { SET burnTA TO burnTA - 360. }
@@ -138,7 +147,7 @@ GLOBAL FUNCTION phaseRaiseAlt {
             mLog("Ap already within tolerance.").
         }
     } ELSE {
-        LOCAL targetAp IS CFG["RELAY_ALT"].
+        LOCAL targetAp IS RELAY_ALT.
         IF SHIP:APOAPSIS > targetAp * 0.99 {
             mLog("Already at target Ap.").
             mLogWarn("STATS raise phase result status=skipped PeKm="
@@ -194,8 +203,8 @@ LOCAL FUNCTION _burnWithRetry {
 GLOBAL FUNCTION phaseInclCorrect {
     LOCAL targetInc IS resolveTargetInclination().
     LOCAL currentInc IS SHIP:ORBIT:INCLINATION.
-    LOCAL inclTol IS _orbitCfgNum("INCL_TOLERANCE", DEFAULT_INCL_TOLERANCE).
-    LOCAL maxInclDv IS _orbitCfgNum("MAX_INCL_CHANGE_DV", DEFAULT_MAX_INCL_CHANGE_DV).
+    LOCAL inclTol IS INCL_TOLERANCE.
+    LOCAL maxInclDv IS MAX_INCL_CHANGE_DV.
     mLogWarn("STATS incline phase setup current=" + ROUND(currentInc,2)
         + " target=" + ROUND(targetInc,2)
         + " tol=" + inclTol).
@@ -279,10 +288,10 @@ GLOBAL FUNCTION phaseElliptical {
     LOCAL targetInc IS -1.
     LOCAL targetAoP IS -1.
 
-    IF CFG:HASKEY("TARGET_PE")   { SET targetPe TO CFG["TARGET_PE"]. }
-    IF CFG:HASKEY("TARGET_AP")   { SET targetAp TO CFG["TARGET_AP"]. }
-    IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
-    IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
+    SET targetPe TO TARGET_PE.
+    SET targetAp TO TARGET_AP.
+    SET targetInc TO CAPTURE_INC.
+    SET targetAoP TO CAPTURE_AOP.
 
     IF targetPe < 0 AND targetAp < 0 AND targetAoP < 0 {
         mLog("No elliptical finalization targets specified. Skipping phase.").
@@ -309,7 +318,7 @@ GLOBAL FUNCTION phaseElliptical {
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
     LOCAL maxDv IS 300.
-    IF CFG:HASKEY("ELLIPTICAL_MAX_NODE_DV") { SET maxDv TO CFG["ELLIPTICAL_MAX_NODE_DV"]. }
+    SET maxDv TO ELLIPTICAL_MAX_NODE_DV.
 
     IF targetPe >= 0 AND ABS(SHIP:PERIAPSIS - targetPe) > MAX(5000, targetPe * 0.01) {
         LOCAL burnTime IS TIME:SECONDS + ETA:APOAPSIS.
@@ -363,7 +372,7 @@ LOCAL FUNCTION _ellipticalRecoveryWindowSafe {
     PARAMETER targetPe.
     IF SHIP:PERIAPSIS >= _bodyImpactFloor() { RETURN TRUE. }
     LOCAL margin IS 60.
-    IF CFG:HASKEY("ELLIPTICAL_RECOVERY_MARGIN") { SET margin TO CFG["ELLIPTICAL_RECOVERY_MARGIN"]. }
+    SET margin TO ELLIPTICAL_RECOVERY_MARGIN.
     RETURN ETA:APOAPSIS + margin < ETA:PERIAPSIS.
 }
 

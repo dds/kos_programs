@@ -21,15 +21,13 @@
 // RUNPATH("0:/cmd/restartflightplan.ks") re-arms for the next one.
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "DRONE_STYLE",       "TILT",
-    "DRONE_HOVER_AGL",      15,
-    "DRONE_CRUISE_AGL",     60,
-    "DRONE_CRUISE_SPEED",   25,
-    "DRONE_MAX_TILT",       30,
-    "DRONE_VS_CAP",          8,
-    "DRONE_LOW_RESOURCE",   15
-).
+SET DRONE_STYLE TO "TILT".
+SET DRONE_HOVER_AGL TO 15.
+SET DRONE_CRUISE_AGL TO 60.
+SET DRONE_CRUISE_SPEED TO 25.
+SET DRONE_MAX_TILT TO 30.
+SET DRONE_VS_CAP TO 8.
+SET DRONE_LOW_RESOURCE TO 15.
 
 GLOBAL FDR1_SEQ IS LIST("ARM", "FLY", "DONE").
 
@@ -46,8 +44,8 @@ GLOBAL FUNCTION bootVehicleLibs {
 
 GLOBAL FUNCTION main {
     LOCAL seq IS FDR1_SEQ.
-    IF missionCfgGet("SEQUENCE", "") <> "" {
-        SET seq TO phaseListFromString(missionCfgGet("SEQUENCE", "")).
+    IF SEQUENCE <> "" {
+        SET seq TO phaseListFromString(SEQUENCE).
     }
     SET launchSeq TO seq.
     SET xferSeq TO seq.

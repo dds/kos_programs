@@ -16,9 +16,7 @@
 //   RUNPATH("0:/cmd/stage2deorbit.ks").
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "DESCENT_DECOUPLER_TAG", "none"
-).
+SET DESCENT_DECOUPLER_TAG TO "none".
 
 applyKnownMissionState().
 

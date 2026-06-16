@@ -8,10 +8,6 @@ PARAMETER requiredTypes IS "LOW_RES_ALTIMETRY".
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
-IF NOT (DEFINED CFG) {
-    GLOBAL CFG IS LEXICON().
-}
-
 LOCK THROTTLE TO 0.
 UNLOCK THROTTLE.
 UNLOCK STEERING.
@@ -23,10 +19,10 @@ IF stateGet("scansat_released_time", "") = "" {
 }
 stateSet("scansat_staged", "true").
 stateSet("scansat_recovered", "true").
-stateSet("mission_cfg_TARGET_PE", "70000").
-stateSet("mission_cfg_TARGET_AP", "70000").
-stateSet("mission_cfg_SCANSAT_RECOVERY_PE", "70000").
-stateSet("mission_cfg_SCANSAT_RECOVERY_AP", "70000").
+stateSet("mission_cfg_TARGET_PE", 70000).
+stateSet("mission_cfg_TARGET_AP", 70000).
+stateSet("mission_cfg_SCANSAT_RECOVERY_PE", 70000).
+stateSet("mission_cfg_SCANSAT_RECOVERY_AP", 70000).
 stateSet("mission_cfg_SCANSAT_DECOUPLER_TAG", "none").
 stateSet("mission_cfg_SCANSAT_AUTO_DEORBIT", 0).
 stateSet("mission_cfg_SCANSAT_POWER_GUARD", 1).

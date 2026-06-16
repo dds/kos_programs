@@ -1,11 +1,9 @@
 // KerboScript mission profile.
-SET MISSION_CFG TO LEXICON(
-    "MISSION_ID", "rendezvous_around_parent",
-    "MISSION_NAME", "Rendezvous Around Parent",
-    "TARGET", "KERBIN",
-    "PAYLOADS", "CREW",
-    "SEQUENCE", "RDV,MATCH,DONE",
-    "RENDEZVOUS_TARGET", "Falcon",
-    "MATCH_FINAL_DIST", 150,
-    "LIBS_EXTRA", "solar"
-).
+SET MISSION_ID TO "rendezvous_around_parent".
+SET MISSION_NAME TO "Rendezvous Around Parent".
+SET TARGET_ TO "KERBIN".
+SET PAYLOADS TO "CREW".
+SET SEQUENCE TO "RDV,MATCH,DONE".
+SET RENDEZVOUS_TARGET TO "Falcon".
+SET MATCH_FINAL_DIST TO 150.
+SET LIBS_EXTRA TO "solar".

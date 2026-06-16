@@ -8,6 +8,11 @@
 
 @LAZYGLOBAL OFF.
 
+// --- Config defaults owned by this file ---
+GLOBAL BURN_BRIEF IS 1.
+GLOBAL BURN_ART IS 1.
+
+
 PARAMETER nd IS 0.
 PARAMETER label IS "".
 
@@ -37,10 +42,10 @@ LOCAL FUNCTION _burnTimeEstimate {
 }
 
 // Compact pre-burn brief: dV breakdown, timing, and the orbit this
-// node turns into. Set CFG BURN_BRIEF=0 for quiet missions.
+// node turns into. Set BURN_BRIEF=0 for quiet missions.
 LOCAL FUNCTION _burnBrief {
     PARAMETER nd_.
-    IF DEFINED CFG AND CFG:HASKEY("BURN_BRIEF") AND CFG["BURN_BRIEF"] = 0 {
+    IF BURN_BRIEF = 0 {
         RETURN.
     }
     PRINT " ".
@@ -76,7 +81,7 @@ LOCAL FUNCTION _burnBrief {
 
     // Orbit diagram is ARCHIVE-ONLY display code. BURN_ART=0 disables.
     LOCAL wantArt IS TRUE.
-    IF DEFINED CFG AND CFG:HASKEY("BURN_ART") AND CFG["BURN_ART"] = 0 {
+    IF BURN_ART = 0 {
         SET wantArt TO FALSE.
     }
     IF wantArt AND HOMECONNECTION:ISCONNECTED

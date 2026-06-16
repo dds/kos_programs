@@ -83,15 +83,15 @@ IF site["FOUND"] {
 
 _cfg("TARGET_LAT", lat).
 _cfg("TARGET_LNG", lng).
-_cfg("TARGET_LOCK", "1").
+_cfg("TARGET_LOCK", 1).
 _cfg("TARGET_WAYPOINT", "").
-_cfg("LANDING_SIM_MODE", "1").
-_cfg("LANDING_SKIP_TARGET_SEARCH", "1").
+_cfg("LANDING_SIM_MODE", 1).
+_cfg("LANDING_SKIP_TARGET_SEARCH", 1).
 _cfg("LANDING_DEORBIT_LEAD_MINUTES", aheadMinutes).
-_cfg("TARGET_DEORBIT_SCAN_ORBITS", "2").
-_cfg("TARGET_DEORBIT_SCAN_SAMPLES", "256").
+_cfg("TARGET_DEORBIT_SCAN_ORBITS", 2).
+_cfg("TARGET_DEORBIT_SCAN_SAMPLES", 256).
 _cfg("TARGET_DEORBIT_SCAN_CENTER_MINUTES", aheadMinutes).
-_cfg("TARGET_DEORBIT_SCAN_WINDOW_MINUTES", "4").
+_cfg("TARGET_DEORBIT_SCAN_WINDOW_MINUTES", 4).
 stateSet("phase", "LAND_DEORBIT").
 stateSet("reload_required", "false").
 stateSet("reload_reason", "").

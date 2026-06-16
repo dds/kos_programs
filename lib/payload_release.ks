@@ -13,6 +13,33 @@
 // phasePayloadImpactRelease    — lower Pe, release payload
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL SCANSAT_DECOUPLER_TAG IS "".
+GLOBAL SCANSAT_RELEASE_AFTER_CAPTURE IS 0.
+GLOBAL SCANSAT_STAGE_AFTER_RELEASE IS 0.
+GLOBAL SCANSAT_DISPOSE_PE IS -1.
+GLOBAL SCANSAT_DISPOSE_MAX_TIME IS 600.
+GLOBAL SCANSAT_RECOVERY_PE IS -1.
+GLOBAL SCANSAT_RECOVERY_AP IS -1.
+GLOBAL SCANSAT_MAX_NODE_DV IS 1000.
+GLOBAL SCANSAT_RECOVER_SAFE_PE IS -1.
+GLOBAL SCANSAT_RECOVER_MAX_TIME IS 600.
+GLOBAL SCANSAT_CLEARANCE_DV IS 0.
+GLOBAL SCANSAT_CLEARANCE_DIR IS "NORMAL".
+GLOBAL SCANSAT_CLEARANCE_THROTTLE IS 0.25.
+GLOBAL SCANSAT_CLEARANCE_SETTLE IS 3.
+GLOBAL PAYLOAD_DISPOSE_PE IS -1.
+GLOBAL PAYLOAD_DISPOSE_MAX_TIME IS 600.
+GLOBAL PAYLOAD_DECOUPLER_TAG IS "".
+GLOBAL PAYLOAD_LABEL IS "".
+GLOBAL PAYLOAD_RECOVERY_MARGIN IS 1000.
+GLOBAL PAYLOAD_CLEARANCE_DV IS 0.
+GLOBAL PAYLOAD_CLEARANCE_DIR IS "NORMAL".
+GLOBAL PAYLOAD_CLEARANCE_THROTTLE IS 0.25.
+GLOBAL PAYLOAD_CLEARANCE_SETTLE IS 3.
+GLOBAL TARGET_PE IS -1.
+GLOBAL TARGET_AP IS -1.
+
 LOCAL FUNCTION _bodyImpactFloor {
     LOCAL body_ IS SHIP:ORBIT:BODY.
     IF body_:ATM:EXISTS { RETURN body_:ATM:HEIGHT + 1000. }
@@ -20,8 +47,7 @@ LOCAL FUNCTION _bodyImpactFloor {
 }
 
 GLOBAL FUNCTION phaseDropForImpactAndRaisePe {
-    IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
-            AND CFG["SCANSAT_RELEASE_AFTER_CAPTURE"] > 0 {
+    IF SCANSAT_RELEASE_AFTER_CAPTURE > 0 {
         phaseScanSatImpactRelease().
         RETURN.
     }
@@ -29,17 +55,16 @@ GLOBAL FUNCTION phaseDropForImpactAndRaisePe {
 }
 
 GLOBAL FUNCTION phaseScanSatImpactRelease {
-    LOCAL impactPe IS 2000.
-    LOCAL recoveryPe IS 75000.
-    LOCAL recoveryAp IS 75000.
-    LOCAL tag IS "scansat_decoupler".
-
-    IF CFG:HASKEY("SCANSAT_DISPOSE_PE") { SET impactPe TO CFG["SCANSAT_DISPOSE_PE"]. }
-    IF CFG:HASKEY("SCANSAT_RECOVERY_PE") { SET recoveryPe TO CFG["SCANSAT_RECOVERY_PE"]. }
-    ELSE IF CFG:HASKEY("TARGET_PE") { SET recoveryPe TO CFG["TARGET_PE"]. }
-    IF CFG:HASKEY("SCANSAT_RECOVERY_AP") { SET recoveryAp TO CFG["SCANSAT_RECOVERY_AP"]. }
-    ELSE IF CFG:HASKEY("TARGET_AP") { SET recoveryAp TO CFG["TARGET_AP"]. }
-    IF CFG:HASKEY("SCANSAT_DECOUPLER_TAG") { SET tag TO CFG["SCANSAT_DECOUPLER_TAG"]. }
+    LOCAL impactPe IS SCANSAT_DISPOSE_PE.
+    LOCAL recoveryPe IS SCANSAT_RECOVERY_PE.
+    LOCAL recoveryAp IS SCANSAT_RECOVERY_AP.
+    LOCAL tag IS SCANSAT_DECOUPLER_TAG.
+    IF impactPe < 0 { SET impactPe TO 2000. }
+    IF recoveryPe < 0 { SET recoveryPe TO TARGET_PE. }
+    IF recoveryPe < 0 { SET recoveryPe TO 75000. }
+    IF recoveryAp < 0 { SET recoveryAp TO TARGET_AP. }
+    IF recoveryAp < 0 { SET recoveryAp TO 75000. }
+    IF tag = "" { SET tag TO "scansat_decoupler". }
 
     mLogWarn("STATS scansat-impact-release setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -78,9 +103,7 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
         mLogWarn("SCANsat release already recorded; skipping decoupler search.").
     }
 
-    IF NOT alreadyReleased
-            AND CFG:HASKEY("SCANSAT_STAGE_AFTER_RELEASE")
-            AND CFG["SCANSAT_STAGE_AFTER_RELEASE"] > 0 {
+    IF NOT alreadyReleased AND SCANSAT_STAGE_AFTER_RELEASE > 0 {
         STAGE.
         stateSet("scansat_staged", "true").
         mLog("SCANsat staged after release.").
@@ -141,13 +164,13 @@ LOCAL FUNCTION _scanSatImpactHalt {
 }
 
 GLOBAL FUNCTION phasePayloadImpactRelease {
-    LOCAL impactPe IS 2000.
-    LOCAL tag IS "probe_decoupler".
-    LOCAL label IS "payload".
-    IF CFG:HASKEY("PAYLOAD_DISPOSE_PE") { SET impactPe TO CFG["PAYLOAD_DISPOSE_PE"]. }
-    ELSE IF CFG:HASKEY("SCANSAT_DISPOSE_PE") { SET impactPe TO CFG["SCANSAT_DISPOSE_PE"]. }
-    IF CFG:HASKEY("PAYLOAD_DECOUPLER_TAG") { SET tag TO CFG["PAYLOAD_DECOUPLER_TAG"]. }
-    IF CFG:HASKEY("PAYLOAD_LABEL") { SET label TO CFG["PAYLOAD_LABEL"]. }
+    LOCAL impactPe IS PAYLOAD_DISPOSE_PE.
+    LOCAL tag IS PAYLOAD_DECOUPLER_TAG.
+    LOCAL label IS PAYLOAD_LABEL.
+    IF impactPe < 0 { SET impactPe TO SCANSAT_DISPOSE_PE. }
+    IF impactPe < 0 { SET impactPe TO 2000. }
+    IF tag = "" { SET tag TO "probe_decoupler". }
+    IF label = "" { SET label TO "payload". }
 
     mLogWarn("STATS payload-impact-release setup label=" + label
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -230,7 +253,7 @@ LOCAL FUNCTION _payloadRecoveryWindowSafe {
     LOCAL nextPhase IS _payloadNextPhase().
     LOCAL floorPe IS _bodyImpactFloor().
     LOCAL margin IS 60.
-    IF CFG:HASKEY("PAYLOAD_RECOVERY_MARGIN") { SET margin TO CFG["PAYLOAD_RECOVERY_MARGIN"]. }
+    SET margin TO PAYLOAD_RECOVERY_MARGIN.
 
     IF targetPe >= floorPe AND SHIP:PERIAPSIS >= floorPe {
         RETURN TRUE.
@@ -259,9 +282,9 @@ LOCAL FUNCTION _payloadRecoveryWindowSafe {
 LOCAL FUNCTION _payloadDisposeAttached {
     PARAMETER targetPe.
 
-    LOCAL maxTime IS 600.
-    IF CFG:HASKEY("PAYLOAD_DISPOSE_MAX_TIME") { SET maxTime TO CFG["PAYLOAD_DISPOSE_MAX_TIME"]. }
-    ELSE IF CFG:HASKEY("SCANSAT_DISPOSE_MAX_TIME") { SET maxTime TO CFG["SCANSAT_DISPOSE_MAX_TIME"]. }
+    LOCAL maxTime IS PAYLOAD_DISPOSE_MAX_TIME.
+    IF maxTime < 0 { SET maxTime TO SCANSAT_DISPOSE_MAX_TIME. }
+    IF maxTime < 0 { SET maxTime TO 600. }
 
     mLogWarn("STATS payload-dispose setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -322,16 +345,16 @@ LOCAL FUNCTION _payloadDisposeAttached {
 
 LOCAL FUNCTION _payloadClearDisposedStage {
     LOCAL clearDv IS 2.
-    IF CFG:HASKEY("PAYLOAD_CLEARANCE_DV") { SET clearDv TO CFG["PAYLOAD_CLEARANCE_DV"]. }
+    SET clearDv TO PAYLOAD_CLEARANCE_DV.
     IF clearDv <= 0 {
         mLogWarn("STATS payload-clearance result status=disabled").
         RETURN TRUE.
     }
 
     LOCAL settleTime IS 3.
-    IF CFG:HASKEY("PAYLOAD_CLEARANCE_SETTLE") { SET settleTime TO CFG["PAYLOAD_CLEARANCE_SETTLE"]. }
+    SET settleTime TO PAYLOAD_CLEARANCE_SETTLE.
     LOCAL throttle_ IS 0.25.
-    IF CFG:HASKEY("PAYLOAD_CLEARANCE_THROTTLE") { SET throttle_ TO CFG["PAYLOAD_CLEARANCE_THROTTLE"]. }
+    SET throttle_ TO PAYLOAD_CLEARANCE_THROTTLE.
     SET throttle_ TO MAX(0.05, MIN(1, throttle_)).
 
     IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {
@@ -341,7 +364,7 @@ LOCAL FUNCTION _payloadClearDisposedStage {
     }
 
     LOCAL dirName IS "NORMAL".
-    IF CFG:HASKEY("PAYLOAD_CLEARANCE_DIR") { SET dirName TO CFG["PAYLOAD_CLEARANCE_DIR"]. }
+    SET dirName TO PAYLOAD_CLEARANCE_DIR.
     LOCAL dirVec IS VCRS(SHIP:POSITION, SHIP:VELOCITY:ORBIT):NORMALIZED.
     IF dirName = "ANTINORMAL" {
         SET dirVec TO -dirVec.
@@ -398,7 +421,7 @@ LOCAL FUNCTION _executeScanSatStep {
         }
         WAIT 0.5.
         LOCAL maxDv IS 1000.
-        IF CFG:HASKEY("SCANSAT_MAX_NODE_DV") { SET maxDv TO CFG["SCANSAT_MAX_NODE_DV"]. }
+        SET maxDv TO SCANSAT_MAX_NODE_DV.
         IF NEXTNODE:DELTAV:MAG > maxDv {
             mLogError(label + " node rejected: dV="
                 + ROUND(NEXTNODE:DELTAV:MAG,1)
@@ -462,20 +485,15 @@ LOCAL FUNCTION _executeScanSatPlanStep {
 LOCAL FUNCTION _scanSatRecoverPeDirect {
     PARAMETER requestedPe.
 
-    LOCAL safePe IS 10000.
-    IF CFG:HASKEY("SCANSAT_RECOVER_SAFE_PE") {
-        SET safePe TO CFG["SCANSAT_RECOVER_SAFE_PE"].
-    }
+    LOCAL safePe IS SCANSAT_RECOVER_SAFE_PE.
+    IF safePe < 0 { SET safePe TO 10000. }
     LOCAL targetPe IS MIN(requestedPe, safePe).
     IF targetPe >= SHIP:APOAPSIS - 1000 {
         SET targetPe TO SHIP:APOAPSIS - 1000.
     }
     IF targetPe < 1000 { SET targetPe TO 1000. }
 
-    LOCAL maxTime IS 120.
-    IF CFG:HASKEY("SCANSAT_RECOVER_MAX_TIME") {
-        SET maxTime TO CFG["SCANSAT_RECOVER_MAX_TIME"].
-    }
+    LOCAL maxTime IS SCANSAT_RECOVER_MAX_TIME.
 
     mLogWarn("STATS scansat-recover-direct setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -544,16 +562,16 @@ LOCAL FUNCTION _scanSatPlanAndExecuteRaiseAp {
 
 LOCAL FUNCTION _scanSatClearDisposedStage {
     LOCAL clearDv IS 2.
-    IF CFG:HASKEY("SCANSAT_CLEARANCE_DV") { SET clearDv TO CFG["SCANSAT_CLEARANCE_DV"]. }
+    SET clearDv TO SCANSAT_CLEARANCE_DV.
     IF clearDv <= 0 {
         mLogWarn("STATS scansat-clearance result status=disabled").
         RETURN TRUE.
     }
 
     LOCAL settleTime IS 3.
-    IF CFG:HASKEY("SCANSAT_CLEARANCE_SETTLE") { SET settleTime TO CFG["SCANSAT_CLEARANCE_SETTLE"]. }
+    SET settleTime TO SCANSAT_CLEARANCE_SETTLE.
     LOCAL throttle_ IS 0.25.
-    IF CFG:HASKEY("SCANSAT_CLEARANCE_THROTTLE") { SET throttle_ TO CFG["SCANSAT_CLEARANCE_THROTTLE"]. }
+    SET throttle_ TO SCANSAT_CLEARANCE_THROTTLE.
     SET throttle_ TO MAX(0.05, MIN(1, throttle_)).
 
     IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {
@@ -562,10 +580,7 @@ LOCAL FUNCTION _scanSatClearDisposedStage {
         RETURN FALSE.
     }
 
-    LOCAL dirName IS "NORMAL".
-    IF CFG:HASKEY("SCANSAT_CLEARANCE_DIR") {
-        SET dirName TO CFG["SCANSAT_CLEARANCE_DIR"].
-    }
+    LOCAL dirName IS SCANSAT_CLEARANCE_DIR.
     LOCAL dirVec IS VCRS(SHIP:POSITION, SHIP:VELOCITY:ORBIT):NORMALIZED.
     IF dirName = "ANTINORMAL" {
         SET dirVec TO -dirVec.
@@ -613,10 +628,7 @@ LOCAL FUNCTION _scanSatClearDisposedStage {
 LOCAL FUNCTION _scanSatDisposeAttached {
     PARAMETER targetPe.
 
-    LOCAL maxTime IS 600.
-    IF CFG:HASKEY("SCANSAT_DISPOSE_MAX_TIME") {
-        SET maxTime TO CFG["SCANSAT_DISPOSE_MAX_TIME"].
-    }
+    LOCAL maxTime IS SCANSAT_DISPOSE_MAX_TIME.
 
     mLogWarn("STATS scansat-dispose setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)

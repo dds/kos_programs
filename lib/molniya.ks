@@ -32,6 +32,11 @@
 //   phaseMolniyaInsert()    — phase machine entry point
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL MOLNIYA_PERIOD IS 21549.
+GLOBAL MOLNIYA_AOP IS 90.
+GLOBAL MOLNIYA_ECC IS 0.
+
 // molniyaParams — compute the orbital elements of a Molniya orbit.
 //
 // Accepts up to three constraints; any two are sufficient to define the orbit:
@@ -110,14 +115,14 @@ GLOBAL FUNCTION molniyaParams {
 // printMolniyaSummary — display Molniya orbit parameters on the config screen.
 //
 // Called during the pre-launch countdown to show what the Molniya insertion
-// will target. Reads from CFG["MOLNIYA_PERIOD"], CFG["MOLNIYA_ECC"],
-// CFG["MOLNIYA_AOP"], and CFG["PARKING_ALT"].
+// will target. Reads from MOLNIYA_PERIOD, MOLNIYA_ECC,
+// MOLNIYA_AOP, and PARKING_ALT.
 GLOBAL FUNCTION printMolniyaSummary {
     LOCAL eccentricity IS -1.
-    IF CFG:HASKEY("MOLNIYA_ECC") AND CFG["MOLNIYA_ECC"] > 0 {
-        SET eccentricity TO CFG["MOLNIYA_ECC"].
+    IF MOLNIYA_ECC > 0 {
+        SET eccentricity TO MOLNIYA_ECC.
     }
-    LOCAL mp IS molniyaParams(CFG["MOLNIYA_PERIOD"], eccentricity, CFG["PARKING_ALT"]).
+    LOCAL mp IS molniyaParams(MOLNIYA_PERIOD, eccentricity, PARKING_ALT).
 
     // Format the period as hours:minutes:seconds for readability
     LOCAL totalSeconds IS mp["period"].
@@ -129,13 +134,13 @@ GLOBAL FUNCTION printMolniyaSummary {
     // AoP > 180° puts periapsis in the southern hemisphere, so apoapsis
     // (where the satellite lingers) is in the north, and vice versa.
     LOCAL dwellHemisphere IS "North".
-    IF CFG["MOLNIYA_AOP"] <= 180 { SET dwellHemisphere TO "South". }
+    IF MOLNIYA_AOP <= 180 { SET dwellHemisphere TO "South". }
 
     PRINT " ".
     PRINT "  -- MOLNIYA (" + mp["mode"] + ") --".
     PRINT "  PERIOD .... " + hours + "h" + ("" + minutes):PADLEFT(2) + "m"
         + ("" + seconds):PADLEFT(2) + "s".
-    PRINT "  AoP ....... " + CFG["MOLNIYA_AOP"] + " deg  (" + dwellHemisphere + " dwell)".
+    PRINT "  AoP ....... " + MOLNIYA_AOP + " deg  (" + dwellHemisphere + " dwell)".
     PRINT "  TARGET Pe . " + ROUND(mp["peAlt"]/1000,0) + " km".
     PRINT "  TARGET Ap . " + ROUND(mp["apAlt"]/1000,0) + " km".
     PRINT "  TARGET ecc  " + ROUND(mp["ecc"],4).
@@ -225,16 +230,16 @@ GLOBAL FUNCTION planMolniyaInsert {
 
 // phaseMolniyaInsert — phase machine entry point for Molniya orbit insertion.
 //
-// Reads configuration from the global CFG lexicon, plans the two-burn
+// Reads configuration from global mission variables, plans the two-burn
 // insertion, executes both burns, and advances to the next phase.
 // Retries up to 5 times if a burn window is missed (e.g., due to
 // misalignment or staging delays).
 GLOBAL FUNCTION phaseMolniyaInsert {
-    LOCAL targetPeriod IS CFG["MOLNIYA_PERIOD"].
-    LOCAL targetAoP IS CFG["MOLNIYA_AOP"].
+    LOCAL targetPeriod IS MOLNIYA_PERIOD.
+    LOCAL targetAoP IS MOLNIYA_AOP.
     LOCAL targetEcc IS -1.
-    IF CFG:HASKEY("MOLNIYA_ECC") AND CFG["MOLNIYA_ECC"] > 0 {
-        SET targetEcc TO CFG["MOLNIYA_ECC"].
+    IF MOLNIYA_ECC > 0 {
+        SET targetEcc TO MOLNIYA_ECC.
         mLog("Molniya mode: period=" + targetPeriod + "s  ecc=" + targetEcc).
     }
     orbitSummary().

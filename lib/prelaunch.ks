@@ -7,6 +7,17 @@
 // LAUNCH band doesn't carry it for every rocket.
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL LAUNCH_PLANE_TARGET IS "".
+GLOBAL LAUNCH_PLANE_MODE IS "".
+GLOBAL LAUNCH_PLANE_LEAD IS 0.
+GLOBAL PRELAUNCH_PLANE_LEAD IS 145.
+GLOBAL LAUNCH_RDV_ASCENT_TIME IS 300.
+GLOBAL LAUNCH_RDV_LEAD IS 30.
+GLOBAL LAUNCH_RDV_MAX_WINDOWS IS 16.
+GLOBAL RENDEZVOUS_TARGET IS "".
+GLOBAL TARGET_INCLINATION IS -1.
+
 LOCAL FUNCTION _norm360 {
     PARAMETER angle.
     LOCAL result IS angle.
@@ -16,12 +27,12 @@ LOCAL FUNCTION _norm360 {
 }
 
 LOCAL FUNCTION _targetLaunchPlaneInc {
-    LOCAL inc IS cfgNum("LAUNCH_INCLINATION", 0).
-    IF CFG:HASKEY("TARGET_INCLINATION") AND CFG["TARGET_INCLINATION"] >= 0 {
-        SET inc TO CFG["TARGET_INCLINATION"].
+    LOCAL inc IS LAUNCH_INCLINATION.
+    IF TARGET_INCLINATION >= 0 {
+        SET inc TO TARGET_INCLINATION.
     }
-    IF CFG:HASKEY("CAPTURE_INC") {
-        SET inc TO CFG["CAPTURE_INC"].
+    IF CAPTURE_INC >= 0 {
+        SET inc TO CAPTURE_INC.
     }
     RETURN inc.
 }
@@ -119,9 +130,8 @@ LOCAL FUNCTION _bodyNamed {
 
 LOCAL FUNCTION _launchPlaneTargetName {
     LOCAL nm IS "".
-    IF CFG:HASKEY("LAUNCH_PLANE_TARGET")
-            AND CFG["LAUNCH_PLANE_TARGET"] <> "" {
-        SET nm TO CFG["LAUNCH_PLANE_TARGET"].
+    IF LAUNCH_PLANE_TARGET <> "" {
+        SET nm TO LAUNCH_PLANE_TARGET.
     } ELSE IF stateGet("target", "") <> "" {
         SET nm TO stateGet("target", "").
     } ELSE IF HASTARGET AND (TARGET:ISTYPE("Body") OR TARGET:ISTYPE("Vessel")) {
@@ -155,14 +165,14 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
 
     LOCAL targetInc IS bod_:ORBIT:INCLINATION.
     LOCAL targetLan IS bod_:ORBIT:LAN.
-    LOCAL leadTime IS cfgNum("PRELAUNCH_PLANE_LEAD", 145).
-    IF CFG:HASKEY("LAUNCH_PLANE_LEAD") {
-        SET leadTime TO CFG["LAUNCH_PLANE_LEAD"].
+    LOCAL leadTime IS PRELAUNCH_PLANE_LEAD.
+    IF LAUNCH_PLANE_LEAD > 0 {
+        SET leadTime TO LAUNCH_PLANE_LEAD.
     }
     IF leadTime < 0 { SET leadTime TO 0. }
 
     IF targetInc <= 0 OR targetInc >= 180 {
-        cfgSet("LAUNCH_INCLINATION", targetInc).
+        SET LAUNCH_INCLINATION TO targetInc.
         stateSet("mission_cfg_LAUNCH_INCLINATION", targetInc).
         mLog("PRELAUNCH: " + bod_:NAME
             + " plane is equatorial; launching immediately.").
@@ -172,7 +182,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
 
     IF NOT _latIncOk(SHIP:LATITUDE, targetInc) {
         IF allowFallback {
-            cfgSet("LAUNCH_INCLINATION", 0).
+            SET LAUNCH_INCLINATION TO 0.
             stateSet("mission_cfg_LAUNCH_INCLINATION", 0).
             mLogWarn("PRELAUNCH: " + bod_:NAME + " plane inc="
                 + ROUND(targetInc, 2) + " cannot pass over lat "
@@ -200,7 +210,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
         RETURN.
     }
 
-    cfgSet("LAUNCH_INCLINATION", win["inc"]).
+    SET LAUNCH_INCLINATION TO win["inc"].
     stateSet("mission_cfg_LAUNCH_INCLINATION", win["inc"]).
     stateSet("prelaunch_plane_ut", win["ut"]).
     stateSet("prelaunch_plane_target", bod_:NAME).
@@ -262,7 +272,7 @@ LOCAL FUNCTION _waitForPrelaunchUt {
 // the target vessel itself — wait until the launch site rotates
 // into the target's orbital plane AND the target's along-track
 // position is right, so the ascent ends with the target slightly
-// ahead. Knobs (CFG): LAUNCH_RDV_ASCENT_TIME (300s pad-to-orbit
+// ahead. Knobs: LAUNCH_RDV_ASCENT_TIME (300s pad-to-orbit
 // estimate), LAUNCH_RDV_LEAD (30 deg ahead of the launch-site
 // direction at insertion), LAUNCH_RDV_MAX_WINDOWS (16 plane
 // crossings ~ 2 Kerbin days).
@@ -336,13 +346,13 @@ LOCAL FUNCTION _rdvLeadAngle {
 // operator has targeted in the game, persisted to mission state
 // so reboots keep it.
 LOCAL FUNCTION _prelaunchRdvTarget {
-    IF CFG:HASKEY("RENDEZVOUS_TARGET") AND CFG["RENDEZVOUS_TARGET"] <> "" {
-        RETURN CFG["RENDEZVOUS_TARGET"].
+    IF RENDEZVOUS_TARGET <> "" {
+        RETURN RENDEZVOUS_TARGET.
     }
-    IF NOT CFG:HASKEY("CAPTURE_LAN") AND HASTARGET
+    IF CAPTURE_LAN < 0 AND HASTARGET
             AND TARGET:ISTYPE("Vessel") {
         LOCAL nm IS TARGET:NAME.
-        cfgSet("RENDEZVOUS_TARGET", nm).
+        SET RENDEZVOUS_TARGET TO nm.
         stateSet("mission_cfg_RENDEZVOUS_TARGET", nm).
         mLog("PRELAUNCH: rendezvous target from game target: " + nm).
         RETURN nm.
@@ -368,10 +378,10 @@ LOCAL FUNCTION _prelaunchToVessel {
 
     LOCAL tgtInc IS ves:ORBIT:INCLINATION.
     LOCAL tgtLan IS ves:ORBIT:LAN.
-    LOCAL ascentTime IS cfgNum("LAUNCH_RDV_ASCENT_TIME", 300).
-    LOCAL desiredLead IS cfgNum("LAUNCH_RDV_LEAD", 30).
-    LOCAL maxWindows IS cfgNum("LAUNCH_RDV_MAX_WINDOWS", 16).
-    LOCAL leadTime IS cfgNum("PRELAUNCH_PLANE_LEAD", 145).
+    LOCAL ascentTime IS LAUNCH_RDV_ASCENT_TIME.
+    LOCAL desiredLead IS LAUNCH_RDV_LEAD.
+    LOCAL maxWindows IS LAUNCH_RDV_MAX_WINDOWS.
+    LOCAL leadTime IS PRELAUNCH_PLANE_LEAD.
     LOCAL rotPeriod IS SHIP:BODY:ROTATIONPERIOD.
 
     mLog("PRELAUNCH: rendezvous with " + ves:NAME
@@ -431,7 +441,7 @@ LOCAL FUNCTION _prelaunchToVessel {
     }
 
     LOCAL launchUt IS best["ut"].
-    cfgSet("LAUNCH_INCLINATION", best["inc"]).
+    SET LAUNCH_INCLINATION TO best["inc"].
     stateSet("mission_cfg_LAUNCH_INCLINATION", best["inc"]).
     stateSet("prelaunch_plane_ut", launchUt).
     mLog("PRELAUNCH: window in " + ROUND(launchUt - TIME:SECONDS, 0)
@@ -455,8 +465,8 @@ LOCAL FUNCTION _prelaunchToVessel {
 
 GLOBAL FUNCTION phasePrelaunch {
     LOCAL planeMode IS "".
-    IF CFG:HASKEY("LAUNCH_PLANE_MODE") {
-        SET planeMode TO CFG["LAUNCH_PLANE_MODE"]:TOUPPER.
+    IF LAUNCH_PLANE_MODE <> "" {
+        SET planeMode TO LAUNCH_PLANE_MODE:TOUPPER.
     }
     IF planeMode = "BODY_ORBIT" OR planeMode = "AUTO" {
         _prelaunchToBodyOrbit(planeMode = "AUTO").
@@ -470,15 +480,15 @@ GLOBAL FUNCTION phasePrelaunch {
         RETURN.
     }
 
-    IF NOT CFG:HASKEY("CAPTURE_LAN") {
+    IF CAPTURE_LAN < 0 {
         mLog("PRELAUNCH: no CAPTURE_LAN configured; launching immediately.").
         nextPhase(launchSeq).
         RETURN.
     }
 
-    LOCAL targetLan IS CFG["CAPTURE_LAN"].
+    LOCAL targetLan IS CAPTURE_LAN.
     LOCAL targetInc IS _targetLaunchPlaneInc().
-    LOCAL leadTime IS cfgNum("PRELAUNCH_PLANE_LEAD", 145).
+    LOCAL leadTime IS PRELAUNCH_PLANE_LEAD.
     IF leadTime < 0 { SET leadTime TO 0. }
 
     IF targetInc <= 0 OR targetInc >= 180 {

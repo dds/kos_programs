@@ -25,7 +25,7 @@ LOCAL  obsArchivePath IS "".
 LOCAL  obsNextTime IS 0.
 
 GLOBAL FUNCTION observeStart {
-    IF EXISTS(OBS_CFG["STOP_FILE"]) { DELETEPATH(OBS_CFG["STOP_FILE"]). }
+    IF EXISTS(OBS_STOP_FILE) { DELETEPATH(OBS_STOP_FILE). }
     LOCAL safeName IS SHIP:NAME:REPLACE(" ","_").
     LOCAL ts IS ROUND(stateGetNum("launch_time", 0)).
     IF ts = 0 { SET ts TO ROUND(TIME:SECONDS). }
@@ -34,13 +34,13 @@ GLOBAL FUNCTION observeStart {
     SET obsActive TO TRUE.
     SET obsNextTime TO TIME:SECONDS.
     _observeLog().
-    SET obsNextTime TO TIME:SECONDS + OBS_CFG["INTERVAL"].
+    SET obsNextTime TO TIME:SECONDS + OBS_INTERVAL.
     mLog("Observation started: " + obsArchivePath).
     PRINT " ".
     PRINT "  -- OBSERVATION ACTIVE --".
     PRINT "  Archive ... " + obsArchivePath.
     PRINT "  Offline ... buffers to " + obsBufferPath.
-    PRINT "  Interval .. every " + OBS_CFG["INTERVAL"] + "s".
+    PRINT "  Interval .. every " + OBS_INTERVAL + "s".
     PRINT "  Tracking .. spd gspd alt vs hdg pit rol thr".
     IF planeActive {
         PRINT "            + auth wlev/ahld/hhld/shld + ctrl/targets".
@@ -48,21 +48,21 @@ GLOBAL FUNCTION observeStart {
     PRINT "  Auto-stop . abort, low offline storage, sentinel file".
     PRINT " ".
     WHEN obsActive THEN {
-        IF EXISTS(OBS_CFG["STOP_FILE"]) {
+        IF EXISTS(OBS_STOP_FILE) {
             SET obsActive TO FALSE.
             mLog("Observation stopped (sentinel file).").
             RETURN.
         }
         IF TIME:SECONDS >= obsNextTime {
             _observeLog().
-            SET obsNextTime TO TIME:SECONDS + OBS_CFG["INTERVAL"].
+            SET obsNextTime TO TIME:SECONDS + OBS_INTERVAL.
         }
         PRESERVE.
     }
 }
 
 GLOBAL FUNCTION observeStop {
-    LOG "" TO OBS_CFG["STOP_FILE"].
+    LOG "" TO OBS_STOP_FILE.
     IF obsActive {
         _observeLog().
         SET obsActive TO FALSE.
@@ -92,8 +92,8 @@ LOCAL FUNCTION _observeWrite {
         RETURN.
     }
     // Offline: buffer locally, but never eat the volume.
-    IF CORE:VOLUME:FREESPACE < OBS_CFG["MIN_FREE"] {
-        LOG "" TO OBS_CFG["STOP_FILE"].
+    IF CORE:VOLUME:FREESPACE < OBS_MIN_FREE {
+        LOG "" TO OBS_STOP_FILE.
         SET obsActive TO FALSE.
         mLog("Observation stopped (low storage, offline).").
         RETURN.

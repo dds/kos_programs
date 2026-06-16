@@ -2,8 +2,6 @@
 // lander_cpu.ks  —  Secondary CPU role: deploy + science  (0:/roles/lander_cpu.ks)
 // ============================================================
 
-GLOBAL CFG IS LEXICON().
-
 LOCAL roleSeq IS LIST("DESCEND", "LANDED", "DONE").
 GLOBAL FUNCTION bootVehicleLibs {
     LOCAL cachedLibs IS bootCachedVehicleLibs().

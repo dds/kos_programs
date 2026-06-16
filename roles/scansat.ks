@@ -10,9 +10,7 @@
 // brings the sustainer stage home.
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "DESCENT_DECOUPLER_TAG", "none"
-).
+SET DESCENT_DECOUPLER_TAG TO "none".
 
 applyKnownMissionState().
 
@@ -21,7 +19,7 @@ LOCAL FUNCTION _fr3PrintConfig {
     flightPlanTitle("FR3C SCANSAT FLIGHT PLAN", SHIP:NAME).
     flightPlanIdentity().
     flightPlanSection("MISSION").
-    flightPlanRow("BAND", fr3PhaseBand()).
+    flightPlanRow("BAND", phaseBand()).
     flightPlanRow("TARGET", MISSION["target"]).
     flightPlanRow("PAYLOADS", MISSION["payloads"]).
     flightPlanConfig().
@@ -29,52 +27,13 @@ LOCAL FUNCTION _fr3PrintConfig {
     flightPlanSequence(seq).
 }
 
-GLOBAL FUNCTION fr3BandForPhase {
-    PARAMETER phaseName.
-    LOCAL phase IS phaseName.
-    LOCAL defaultBand IS "".
-    IF phase = "" OR phase:CONTAINS("MAIN") {
-        SET defaultBand TO "LAUNCH".
-    }
-    RETURN bootLibBandForPhase(phase, defaultBand).
-}
-
-GLOBAL FUNCTION fr3PhaseBand {
-    RETURN fr3BandForPhase(stateGet("phase", "")).
-}
-
-GLOBAL FUNCTION fr3SaveReloadState {
-    PARAMETER reason.
-    PARAMETER nextPhaseName.
-    stateSet("reload_required", "true").
-    stateSet("reload_reason", reason).
-    stateSet("reload_next_phase", nextPhaseName).
-    stateSet("reload_next_band", fr3BandForPhase(nextPhaseName)).
-}
-
-LOCAL FUNCTION _fr3PhaseParkingReload {
-    phaseParking().
-    LOCAL nxt IS stateGet("phase", "").
-    IF phaseInLoadedBand(nxt) {
-        mLog("Parking checkpoint: " + nxt + " already loaded - continuing.").
-        RETURN.
-    }
-    fr3SaveReloadState("PARKING_ORBIT", nxt).
-    mLog("Parking orbit reload point - auto-rebooting for " + nxt + ".").
-    HUDTEXT("Parking orbit: rebooting for " + nxt + "...",
-        5, 2, 15, CYAN, FALSE).
-    WAIT 5.
-    REBOOT.
-}
-
 GLOBAL FUNCTION fr3BuildPhaseSequence {
-    IF CFG:HASKEY("SEQUENCE") {
-        RETURN phaseListFromString(CFG["SEQUENCE"]).
+    IF SEQUENCE <> "" {
+        RETURN phaseListFromString(SEQUENCE).
     }
 
     LOCAL orbitPhases IS LIST("CIRC", "RAISE", "INCLINE").
-    IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
-            AND CFG["SCANSAT_RELEASE_AFTER_CAPTURE"] > 0 {
+    IF SCANSAT_RELEASE_AFTER_CAPTURE > 0 {
         SET orbitPhases TO LIST("DROP_FOR_IMPACT_AND_RAISE_PE").
     }
     LOCAL payloadPhases IS LEXICON(
@@ -86,7 +45,7 @@ GLOBAL FUNCTION fr3BuildPhaseSequence {
 
 GLOBAL FUNCTION fr3BuildPhaseMap {
     LOCAL phaseMap IS LEXICON().
-    phaseMapSet(phaseMap, "PARK", _fr3PhaseParkingReload@).
+    phaseMapSet(phaseMap, "PARK", phaseParkingReload@).
     RETURN phaseMap.
 }
 
@@ -100,7 +59,7 @@ LOCAL FUNCTION _fr3LibsForBand {
 
 LOCAL FUNCTION _fr3Libs {
     bootEnsureInitialPhase(fr3BuildPhaseSequence()).
-    LOCAL band IS fr3PhaseBand().
+    LOCAL band IS phaseBand().
     LOCAL phase IS stateGet("phase", "").
     LOCAL cachedLibs IS bootCachedVehicleLibs(band).
     IF cachedLibs:LENGTH > 0 {
@@ -134,7 +93,7 @@ GLOBAL FUNCTION main {
     mLog("Sequence: " + seq:JOIN(" -> ")).
     bootEnsureInitialPhase(seq).
 
-    IF fr3PhaseBand() = "LAUNCH" {
+    IF phaseBand() = "LAUNCH" {
         IF NOT confirmLaunch(_fr3PrintConfig@) { RETURN. }
     }
 

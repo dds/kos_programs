@@ -25,6 +25,15 @@
 //      concept, minus the orbit).
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL SUBORBIT_DEORBIT_LEAD IS 60.
+GLOBAL SUBORBIT_RETURN IS 0.
+GLOBAL SUBORBIT_RETURN_TOL IS 40000.
+GLOBAL SUBORBIT_ARC_PE IS 69000.
+GLOBAL PARKING_ALT IS 80000.
+GLOBAL TARGET_LAT IS 0.
+GLOBAL TARGET_LNG IS 0.
+
 LOCAL FUNCTION _norm360 {
     PARAMETER angle.
     LOCAL result IS angle.
@@ -37,8 +46,8 @@ LOCAL FUNCTION _suborbitSiteGeo {
     LOCAL siteLat IS stateGetNum("launch_site_lat", 9999).
     LOCAL siteLng IS stateGetNum("launch_site_lng", 9999).
     IF siteLat <> 9999 { RETURN LATLNG(siteLat, siteLng). }
-    IF CFG:HASKEY("TARGET_LAT") AND CFG:HASKEY("TARGET_LNG") {
-        RETURN LATLNG(CFG["TARGET_LAT"], CFG["TARGET_LNG"]).
+    IF TRUE {
+        RETURN LATLNG(TARGET_LAT, TARGET_LNG).
     }
     RETURN LATLNG(-0.0972, -74.5577).   // KSC pad
 }
@@ -110,7 +119,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     PARAMETER siteGeo.
     PARAMETER tol.
     PARAMETER arcPe.
-    LOCAL lead IS cfgNum("SUBORBIT_DEORBIT_LEAD", 60).
+    LOCAL lead IS SUBORBIT_DEORBIT_LEAD.
     LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
     UNLOCK STEERING.
     trySolarOrient().
@@ -289,8 +298,8 @@ LOCAL FUNCTION _suborbitReturnArc {
         RETURN.
     }
     LOCAL siteGeo IS _suborbitSiteGeo().
-    LOCAL tol IS cfgNum("SUBORBIT_RETURN_TOL", 40000).
-    LOCAL arcPe IS cfgNum("SUBORBIT_ARC_PE", 69000).
+    LOCAL tol IS SUBORBIT_RETURN_TOL.
+    LOCAL arcPe IS SUBORBIT_ARC_PE.
     LOCAL atmTop IS SHIP:BODY:ATM:HEIGHT.
     // MechJeb must NOT circularize — the arc burn is ours.
     IF ADDONS:MJ:AVAILABLE {
@@ -453,11 +462,11 @@ LOCAL FUNCTION _armDescentWatchdog {
 // Resume-safe: re-running just re-disables MechJeb.
 GLOBAL FUNCTION phaseSuborbit {
     _armDescentWatchdog().
-    IF cfgNum("SUBORBIT_RETURN", 0) > 0 {
+    IF SUBORBIT_RETURN > 0 {
         _suborbitReturnArc().
         RETURN.
     }
-    LOCAL targetAp IS cfgNum("PARKING_ALT", 80000).
+    LOCAL targetAp IS PARKING_ALT.
     mLog("Suborbital: boosting to Ap " + ROUND(targetAp/1000, 0)
         + "km, then engine cutoff (no circularization).").
 

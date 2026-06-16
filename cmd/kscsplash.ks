@@ -14,17 +14,9 @@ bootLibLoadList(LIST("deorbit_targeting", "maneuver")).
 LOCAL entryPe IS entryPeKm * 1000.
 LOCAL tolerance IS toleranceKm * 1000.
 
-LOCAL splashCfg IS LEXICON(
-    "TARGET_DEORBIT_SCAN_ORBITS", 32,
-    "TARGET_DEORBIT_SCAN_SAMPLES", 2048,
-    "TARGET_DEORBIT_MIN_LEAD", 90
-).
-
-IF DEFINED CFG {
-    SET CFG TO splashCfg.
-} ELSE {
-    GLOBAL CFG IS splashCfg.
-}
+SET TARGET_DEORBIT_SCAN_ORBITS TO 32.
+SET TARGET_DEORBIT_SCAN_SAMPLES TO 2048.
+SET TARGET_DEORBIT_MIN_LEAD TO 90.
 
 PRINT "KSC SPLASH: " + ROUND(targetLat,4) + ", " + ROUND(targetLng,4).
 mLogWarn("STATS ksc-splash setup target="

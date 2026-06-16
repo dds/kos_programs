@@ -9,34 +9,36 @@
 // Anything else (POLAR, 02, etc.) is ignored.
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "PARKING_ALT",         100000,
-    "LAUNCH_INCLINATION",       0,
-    "LAUNCH_AZIMUTH",           0,
-    "LAUNCH_STAGE_LIMIT",       0,
-    "FAIRING_ALT",          68000,
-    "EXTEND_ALT",           72000,
-    "RELAY_ALT",                0,
-    "CAPTURE_PE",            12500,
-    "CAPTURE_INC",              90,
-    "CAPTURE_LAN",              25,
-    "CAPTURE_AOP",            93.2,
-    "CIRC_ECC_TOL",          0.005,
-    "TARGET_INCLINATION",       90,
-    "TARGET_PE",              326391,
-    "TARGET_AP",             979623,
-    "INCL_MATCH_TARGET",       "",
-    "INCL_TOLERANCE",          0.1,
-    "MAX_INCL_CHANGE_DV",     800,
-    "PROBE_TARGET_LAT",       90.0,
-    "PROBE_TARGET_LNG",         0.0,
-    "PROBE_ENTRY_PE",         30000,
-    "PROBE_TARGET_TOL",        2500,
-    "MOLNIYA_PERIOD",         21549,
-    "MOLNIYA_AOP",               90,
-    "MOLNIYA_ECC",               0.3,
-    "RECOVERY_PE",            27500
-).
+// --- Config defaults owned by this file ---
+GLOBAL PROBE_ENTRY_PE IS 30000.
+GLOBAL PROBE_TARGET_TOL IS 2500.
+
+SET PARKING_ALT TO 100000.
+SET LAUNCH_INCLINATION TO 0.
+SET LAUNCH_AZIMUTH TO 0.
+SET LAUNCH_STAGE_LIMIT TO 0.
+SET FAIRING_ALT TO 68000.
+SET EXTEND_ALT TO 72000.
+SET RELAY_ALT TO 0.
+SET CAPTURE_PE TO 12500.
+SET CAPTURE_INC TO 90.
+SET CAPTURE_LAN TO 25.
+SET CAPTURE_AOP TO 93.2.
+SET CIRC_ECC_TOL TO 0.005.
+SET TARGET_INCLINATION TO 90.
+SET TARGET_PE TO 326391.
+SET TARGET_AP TO 979623.
+SET INCL_MATCH_TARGET TO "".
+SET INCL_TOLERANCE TO 0.1.
+SET MAX_INCL_CHANGE_DV TO 800.
+SET PROBE_TARGET_LAT TO 90.0.
+SET PROBE_TARGET_LNG TO 0.0.
+SET PROBE_ENTRY_PE TO 30000.
+SET PROBE_TARGET_TOL TO 2500.
+SET MOLNIYA_PERIOD TO 21549.
+SET MOLNIYA_AOP TO 90.
+SET MOLNIYA_ECC TO 0.3.
+SET RECOVERY_PE TO 27500.
 
 applyKnownMissionState().
 
@@ -57,16 +59,15 @@ GLOBAL FUNCTION bootVehicleLibs {
 }
 
 LOCAL FUNCTION _buildSequence {
-    IF CFG:HASKEY("SEQUENCE") {
-        RETURN phaseListFromString(CFG["SEQUENCE"]).
+    IF SEQUENCE <> "" {
+        RETURN phaseListFromString(SEQUENCE).
     }
 
     LOCAL orbitPhases IS LIST().
     orbitPhases:ADD("CIRC").
     orbitPhases:ADD("RAISE").
     orbitPhases:ADD("INCLINE").
-    IF CFG:HASKEY("SCANSAT_RELEASE_AFTER_CAPTURE")
-            AND CFG["SCANSAT_RELEASE_AFTER_CAPTURE"] > 0 {
+    IF SCANSAT_RELEASE_AFTER_CAPTURE > 0 {
         SET orbitPhases TO LIST("DROP_FOR_IMPACT_AND_RAISE_PE").
     }
 
@@ -98,46 +99,46 @@ LOCAL FUNCTION _printConfig {
     flightPlanTitle("FR2 FLIGHT PLAN", SHIP:NAME).
     flightPlanIdentity().
     flightPlanSection("ASCENT").
-    flightPlanRow("PARK ALT", ROUND(CFG["PARKING_ALT"]/1000,0) + " km").
-    LOCAL incStr IS CFG["LAUNCH_INCLINATION"] + " deg".
-    IF CFG["LAUNCH_INCLINATION"] = 0 { SET incStr TO "0 deg  (equatorial)". }
+    flightPlanRow("PARK ALT", ROUND(PARKING_ALT/1000,0) + " km").
+    LOCAL incStr IS LAUNCH_INCLINATION + " deg".
+    IF LAUNCH_INCLINATION = 0 { SET incStr TO "0 deg  (equatorial)". }
     flightPlanRow("INCL", incStr).
-    flightPlanRow("FAIRING", ROUND(CFG["FAIRING_ALT"]/1000,0) + " km").
-    IF CFG["LAUNCH_STAGE_LIMIT"] > 0 {
-        flightPlanRow("MJ LIMIT", "stage " + CFG["LAUNCH_STAGE_LIMIT"]).
+    flightPlanRow("FAIRING", ROUND(FAIRING_ALT/1000,0) + " km").
+    IF LAUNCH_STAGE_LIMIT > 0 {
+        flightPlanRow("MJ LIMIT", "stage " + LAUNCH_STAGE_LIMIT).
     }
     IF MISSION["target"] <> "KERBIN" {
         flightPlanSection("TRANSFER").
-        flightPlanRow("CAPTURE PE", ROUND(CFG["CAPTURE_PE"]/1000,0) + " km").
-        IF CFG:HASKEY("CAPTURE_LAN") {
-            flightPlanRow("CAPTURE LAN", ROUND(CFG["CAPTURE_LAN"],1) + " deg").
+        flightPlanRow("CAPTURE PE", ROUND(CAPTURE_PE/1000,0) + " km").
+        IF CAPTURE_LAN >= 0 {
+            flightPlanRow("CAPTURE LAN", ROUND(CAPTURE_LAN,1) + " deg").
         }
-        IF CFG:HASKEY("CAPTURE_AOP") {
-            flightPlanRow("CAPTURE AOP", ROUND(CFG["CAPTURE_AOP"],1) + " deg").
+        IF CAPTURE_AOP >= 0 {
+            flightPlanRow("CAPTURE AOP", ROUND(CAPTURE_AOP,1) + " deg").
         }
-        IF CFG:HASKEY("CAPTURE_INC") {
-            flightPlanRow("CAPTURE INC", ROUND(CFG["CAPTURE_INC"],1) + " deg").
+        IF CAPTURE_INC >= 0 {
+            flightPlanRow("CAPTURE INC", ROUND(CAPTURE_INC,1) + " deg").
         }
     }
     flightPlanSection("ORBIT").
-    IF CFG:HASKEY("TARGET_PE") AND CFG:HASKEY("TARGET_AP") {
-        flightPlanRow("FINAL PE", ROUND(CFG["TARGET_PE"]/1000,0) + " km").
-        flightPlanRow("FINAL AP", ROUND(CFG["TARGET_AP"]/1000,0) + " km").
+    IF TARGET_PE >= 0 AND TARGET_AP >= 0 {
+        flightPlanRow("FINAL PE", ROUND(TARGET_PE/1000,0) + " km").
+        flightPlanRow("FINAL AP", ROUND(TARGET_AP/1000,0) + " km").
     } ELSE {
-        flightPlanRow("FINAL ALT", ROUND(CFG["RELAY_ALT"]/1000,0) + " km").
+        flightPlanRow("FINAL ALT", ROUND(RELAY_ALT/1000,0) + " km").
     }
-    LOCAL tincStr IS CFG["TARGET_INCLINATION"] + " deg".
-    IF CFG["TARGET_INCLINATION"] = 0 { SET tincStr TO "0 deg  (equatorial)". }
+    LOCAL tincStr IS TARGET_INCLINATION + " deg".
+    IF TARGET_INCLINATION = 0 { SET tincStr TO "0 deg  (equatorial)". }
     flightPlanRow("FINAL INCL", tincStr).
-    flightPlanRow("CIRC TOL", "ecc < " + CFG["CIRC_ECC_TOL"]).
+    flightPlanRow("CIRC TOL", "ecc < " + CIRC_ECC_TOL).
     IF hasMolniya {
         printMolniyaSummary().
     }
     IF hasProbe {
         flightPlanSection("PROBE").
-        flightPlanRow("IMPACT", ROUND(CFG["PROBE_TARGET_LAT"],1) + " lat  " + ROUND(CFG["PROBE_TARGET_LNG"],1) + " lng").
-        flightPlanRow("ENTRY PE", ROUND(CFG["PROBE_ENTRY_PE"]/1000,0) + " km").
-        flightPlanRow("TOLERANCE", ROUND(CFG["PROBE_TARGET_TOL"]/1000,0) + " km").
+        flightPlanRow("IMPACT", ROUND(PROBE_TARGET_LAT,1) + " lat  " + ROUND(PROBE_TARGET_LNG,1) + " lng").
+        flightPlanRow("ENTRY PE", ROUND(PROBE_ENTRY_PE/1000,0) + " km").
+        flightPlanRow("TOLERANCE", ROUND(PROBE_TARGET_TOL/1000,0) + " km").
     }
     IF hasLander {
         flightPlanSection("LANDING").
@@ -149,8 +150,8 @@ LOCAL FUNCTION _printConfig {
 }
 
 LOCAL FUNCTION _phaseRecirc {
-    mLog("Re-circularizing relay at " + ROUND(CFG["RELAY_ALT"]/1000,0) + "km.").
-    planRecircularize(CFG["RELAY_ALT"]).
+    mLog("Re-circularizing relay at " + ROUND(RELAY_ALT/1000,0) + "km.").
+    planRecircularize(RELAY_ALT).
     executeManeuver().
     orbitSummary().
     nextPhase(launchSeq).

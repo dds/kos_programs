@@ -2,6 +2,17 @@
 // deorbit_targeting.ks  —  Precision deorbit targeting  (0:/lib/deorbit_targeting.ks)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL PROBE_TARGET_WAYPOINT IS "".
+GLOBAL PROBE_TARGET_LAT IS 90.
+GLOBAL PROBE_TARGET_LNG IS 0.
+GLOBAL TARGET_DEORBIT_SCAN_ORBITS IS 0.
+GLOBAL TARGET_DEORBIT_SCAN_SAMPLES IS 128.
+GLOBAL TARGET_DEORBIT_SCAN_CENTER_MINUTES IS 0.
+GLOBAL TARGET_DEORBIT_SCAN_WINDOW_MINUTES IS 0.
+GLOBAL TARGET_DEORBIT_MIN_LEAD IS 0.
+GLOBAL LANDING_SIM_MODE IS 0.
+
 @CLOBBERBUILTINS ON.
 
 GLOBAL FUNCTION targetedDeorbit {
@@ -23,8 +34,8 @@ GLOBAL FUNCTION targetResolveDeorbitTarget {
         "SOURCE", "none"
     ).
 
-    IF CFG:HASKEY("PROBE_TARGET_WAYPOINT") AND CFG["PROBE_TARGET_WAYPOINT"] <> "" {
-        LOCAL namedWp IS waypointNamed(CFG["PROBE_TARGET_WAYPOINT"]).
+    IF PROBE_TARGET_WAYPOINT <> "" {
+        LOCAL namedWp IS waypointNamed(PROBE_TARGET_WAYPOINT).
         IF namedWp <> 0 {
             SET result["FOUND"] TO TRUE.
             SET result["LAT"] TO namedWp:GEOPOSITION:LAT.
@@ -32,7 +43,7 @@ GLOBAL FUNCTION targetResolveDeorbitTarget {
             SET result["SOURCE"] TO "waypoint:" + namedWp:NAME.
             RETURN result.
         }
-        mLogWarn("Probe waypoint '" + CFG["PROBE_TARGET_WAYPOINT"]
+        mLogWarn("Probe waypoint '" + PROBE_TARGET_WAYPOINT
             + "' not found on " + SHIP:BODY:NAME + ".").
     }
 
@@ -45,11 +56,11 @@ GLOBAL FUNCTION targetResolveDeorbitTarget {
         RETURN result.
     }
 
-    IF CFG:HASKEY("PROBE_TARGET_LAT") AND CFG:HASKEY("PROBE_TARGET_LNG") {
+    IF TRUE {
         SET result["FOUND"] TO TRUE.
-        SET result["LAT"] TO CFG["PROBE_TARGET_LAT"].
-        SET result["LNG"] TO CFG["PROBE_TARGET_LNG"].
-        SET result["SOURCE"] TO "CFG PROBE_TARGET_LAT/LNG".
+        SET result["LAT"] TO PROBE_TARGET_LAT.
+        SET result["LNG"] TO PROBE_TARGET_LNG.
+        SET result["SOURCE"] TO "PROBE_TARGET_LAT/LNG".
         RETURN result.
     }
 
@@ -100,14 +111,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL period IS SHIP:ORBIT:PERIOD.
     LOCAL minLead IS _targetDeorbitMinLead().
     LOCAL scanOrbits IS 8.
-    IF CFG:HASKEY("TARGET_DEORBIT_SCAN_ORBITS") {
-        IF (CFG["TARGET_DEORBIT_SCAN_ORBITS"]:TYPENAME = "STRING") {
-            SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_ORBITS"]:TONUMBER.
-        } ELSE {
-            SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_ORBITS"].
-        }
+    IF TARGET_DEORBIT_SCAN_ORBITS > 0 {
+        SET scanOrbits TO TARGET_DEORBIT_SCAN_ORBITS.
     }
-    IF CFG:HASKEY("LANDING_SIM_MODE") AND CFG["LANDING_SIM_MODE"] > 0 {
+    IF LANDING_SIM_MODE > 0 {
         IF scanOrbits > 2 { SET scanOrbits TO 2. }
     }
 
@@ -426,8 +433,8 @@ LOCAL FUNCTION _logDeorbitNode {
 
 LOCAL FUNCTION _targetDeorbitMinLead {
     LOCAL minLead IS 60.
-    IF CFG:HASKEY("TARGET_DEORBIT_MIN_LEAD") {
-        SET minLead TO CFG["TARGET_DEORBIT_MIN_LEAD"].
+    IF TARGET_DEORBIT_MIN_LEAD > 0 {
+        SET minLead TO TARGET_DEORBIT_MIN_LEAD.
     }
     RETURN minLead.
 }

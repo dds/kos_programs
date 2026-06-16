@@ -4,6 +4,10 @@
 
 @LAZYGLOBAL OFF.
 
+// --- Config defaults owned by this file ---
+GLOBAL BURN_BRIEF IS 1.
+
+
 LOCAL COMPLETE_FRAC        IS 0.001.
 LOCAL ABS_CUTOFF           IS 0.0001.
 LOCAL ALIGN_TOLERANCE      IS 2.0.
@@ -238,7 +242,7 @@ GLOBAL FUNCTION executeManeuver {
 LOCAL FUNCTION _runManeuverBrief {
     PARAMETER nd.
     LOCAL wantBrief IS TRUE.
-    IF DEFINED CFG AND CFG:HASKEY("BURN_BRIEF") AND CFG["BURN_BRIEF"] = 0 {
+    IF BURN_BRIEF = 0 {
         SET wantBrief TO FALSE.
     }
 

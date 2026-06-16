@@ -16,26 +16,24 @@
 // vessel, including cmd/goto.ks retasking.
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "CRUISE_ALT",       18000,
-    "CRUISE_SPEED",      1300,
-    "TOP_SPEED",         1500,
-    "FLAP_AG",              1,
-    "AIRBORNE_RADAR_ALT",   8,
+SET CRUISE_ALT TO 18000.
+SET CRUISE_SPEED TO 1300.
+SET TOP_SPEED TO 1500.
+SET FLAP_AG TO 1.
+SET AIRBORNE_RADAR_ALT TO 8.
 
-    "SSTO_ASCENT_HDG",     90,
-    "SSTO_AIR_ALT",     18000,
-    "SSTO_SWITCH_ACCEL",  0.2,
-    "SSTO_SWITCH_SPEED", 1400,
-    "SSTO_MODE_AG",         3,
-    "SSTO_ROCKET_PITCH",   18,
-    "SSTO_TARGET_AP",   80000,
-    "SSTO_REENTRY_PE",  28000,
-    "SSTO_DEORBIT_LEAD_DEG", 70,
-    "SSTO_REENTRY_AOA",     8,
-    "SSTO_RUNWAY",      "KSC",
-    "SSTO_DECISION_AGL",  150
-).
+SET SSTO_ASCENT_HDG TO 90.
+SET SSTO_AIR_ALT TO 18000.
+SET SSTO_SWITCH_ACCEL TO 0.2.
+SET SSTO_SWITCH_SPEED TO 1400.
+SET SSTO_MODE_AG TO 3.
+SET SSTO_ROCKET_PITCH TO 18.
+SET SSTO_TARGET_AP TO 80000.
+SET SSTO_REENTRY_PE TO 28000.
+SET SSTO_DEORBIT_LEAD_DEG TO 70.
+SET SSTO_REENTRY_AOA TO 8.
+SET SSTO_RUNWAY TO "KSC".
+SET SSTO_DECISION_AGL TO 150.
 
 GLOBAL FSS1_SEQ IS LIST(
     "PREFLIGHT", "AIRCLIMB", "ROCKETCLIMB",
@@ -50,11 +48,11 @@ GLOBAL FUNCTION bootVehicleLibs {
 
 LOCAL FUNCTION _fss1ConfigRows {
     flightPlanSection("SSTO").
-    flightPlanRow("SPEEDRUN", CFG["SSTO_AIR_ALT"] + " m / switch "
-        + CFG["SSTO_SWITCH_SPEED"] + " m/s").
-    flightPlanRow("TARGET AP", CFG["SSTO_TARGET_AP"] + " m").
-    flightPlanRow("MODE AG", "AG" + CFG["SSTO_MODE_AG"]).
-    flightPlanRow("RUNWAY", CFG["SSTO_RUNWAY"]).
+    flightPlanRow("SPEEDRUN", SSTO_AIR_ALT + " m / switch "
+        + SSTO_SWITCH_SPEED + " m/s").
+    flightPlanRow("TARGET AP", SSTO_TARGET_AP + " m").
+    flightPlanRow("MODE AG", "AG" + SSTO_MODE_AG).
+    flightPlanRow("RUNWAY", SSTO_RUNWAY).
 }
 
 GLOBAL FUNCTION main {
@@ -69,7 +67,7 @@ GLOBAL FUNCTION main {
             "APPROACH",     phaseApproach@
         ),
         "checklist", LIST(
-            "Engine mode AG" + CFG["SSTO_MODE_AG"] + " - bound in editor",
+            "Engine mode AG" + SSTO_MODE_AG + " - bound in editor",
             "Control surfaces - check full deflection",
             "Flaps - takeoff setting",
             "Brakes - HOLD until ready",

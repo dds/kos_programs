@@ -22,7 +22,7 @@
 //
 // Phase: SHAPE  (bind via dependencies.ks: SHAPE -> orbit_shape)
 //
-// CFG keys (all optional — omitted elements are left alone):
+// Global config keys (all optional; omitted elements are left alone):
 //   SHAPE_AP   — target apoapsis altitude (m)
 //   SHAPE_PE   — target periapsis altitude (m)
 //   SHAPE_INC  — target inclination (deg)
@@ -50,6 +50,17 @@
 
 @LAZYGLOBAL OFF.
 
+// --- Config defaults owned by this file ---
+GLOBAL SHAPE_PE IS -1.
+GLOBAL SHAPE_AP IS -1.
+GLOBAL SHAPE_INC IS -1.
+GLOBAL SHAPE_LAN IS -1.
+GLOBAL SHAPE_AOP IS -1.
+GLOBAL SHAPE_ALT_TOL IS 5000.
+GLOBAL SHAPE_ANG_TOL IS 0.2.
+GLOBAL SHAPE_AOP_TOL IS 0.5.
+
+
 LOCAL MAX_RETRIES        IS 5.
 LOCAL MAX_SHAPE_BURNS    IS 12.
 LOCAL DEFAULT_ALT_TOL    IS 1000.
@@ -61,13 +72,6 @@ LOCAL MIN_AOP_TARGET_ECC IS 0.004.
 // ============================================================
 // Small helpers
 // ============================================================
-
-LOCAL FUNCTION _cfgNum {
-    PARAMETER key.
-    PARAMETER defaultValue.
-    IF DEFINED CFG AND CFG:HASKEY(key) { RETURN CFG[key]. }
-    RETURN defaultValue.
-}
 
 LOCAL FUNCTION _angDiff {
     PARAMETER a, b.
@@ -191,14 +195,16 @@ LOCAL FUNCTION _normalMirrorSign {
 // Target lexicon and error measurement
 // ============================================================
 
-// shapeTargetsWithPrefix — read prefixed CFG keys into a targets lexicon.
+// shapeTargetsWithPrefix — read prefixed globals into a targets lexicon.
 GLOBAL FUNCTION shapeTargetsWithPrefix {
     PARAMETER prefix.
     LOCAL t IS LEXICON().
-    FOR key IN LIST("AP", "PE", "INC", "LAN", "AOP") {
-        IF DEFINED CFG AND CFG:HASKEY(prefix + key) {
-            t:ADD(key, CFG[prefix + key]).
-        }
+    IF prefix = "SHAPE_" {
+        IF SHAPE_AP >= 0 { t:ADD("AP", SHAPE_AP). }
+        IF SHAPE_PE >= 0 { t:ADD("PE", SHAPE_PE). }
+        IF SHAPE_INC >= 0 { t:ADD("INC", SHAPE_INC). }
+        IF SHAPE_LAN >= 0 { t:ADD("LAN", SHAPE_LAN). }
+        IF SHAPE_AOP >= 0 { t:ADD("AOP", SHAPE_AOP). }
     }
     // AP below PE is always operator error — fix and warn.
     IF t:HASKEY("AP") AND t:HASKEY("PE") AND t["AP"] < t["PE"] {
@@ -210,7 +216,7 @@ GLOBAL FUNCTION shapeTargetsWithPrefix {
     RETURN t.
 }
 
-// shapeTargets — read SHAPE_* CFG keys into a targets lexicon.
+// shapeTargets — read SHAPE_* globals into a targets lexicon.
 GLOBAL FUNCTION shapeTargets {
     RETURN shapeTargetsWithPrefix("SHAPE_").
 }
@@ -275,9 +281,9 @@ LOCAL FUNCTION _errorSummary {
 GLOBAL FUNCTION shapeConverged {
     PARAMETER targets.
     LOCAL errs IS shapeErrors(targets).
-    LOCAL altTol IS _cfgNum("SHAPE_ALT_TOL", DEFAULT_ALT_TOL).
-    LOCAL angTol IS _cfgNum("SHAPE_ANG_TOL", DEFAULT_ANG_TOL).
-    LOCAL aopTol IS _cfgNum("SHAPE_AOP_TOL", DEFAULT_AOP_TOL).
+    LOCAL altTol IS SHAPE_ALT_TOL.
+    LOCAL angTol IS SHAPE_ANG_TOL.
+    LOCAL aopTol IS SHAPE_AOP_TOL.
     IF errs:HASKEY("AP")    AND ABS(errs["AP"]) > altTol    { RETURN FALSE. }
     IF errs:HASKEY("PE")    AND ABS(errs["PE"]) > altTol    { RETURN FALSE. }
     IF errs:HASKEY("PLANE") AND errs["PLANE"]   > angTol    { RETURN FALSE. }
@@ -784,9 +790,9 @@ GLOBAL FUNCTION shapeNextBurn {
     PARAMETER targets.
 
     LOCAL errs IS shapeErrors(targets).
-    LOCAL altTol IS _cfgNum("SHAPE_ALT_TOL", DEFAULT_ALT_TOL).
-    LOCAL angTol IS _cfgNum("SHAPE_ANG_TOL", DEFAULT_ANG_TOL).
-    LOCAL aopTol IS _cfgNum("SHAPE_AOP_TOL", DEFAULT_AOP_TOL).
+    LOCAL altTol IS SHAPE_ALT_TOL.
+    LOCAL angTol IS SHAPE_ANG_TOL.
+    LOCAL aopTol IS SHAPE_AOP_TOL.
     LOCAL needAp2 IS errs:HASKEY("AP") AND ABS(errs["AP"]) > altTol.
     LOCAL needPe2 IS errs:HASKEY("PE") AND ABS(errs["PE"]) > altTol.
 

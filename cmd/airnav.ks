@@ -4,7 +4,7 @@ RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 bootLibLoad("airplane").
 
-IF waypointUseSelected(CFG["CRUISE_ALT"]) {
+IF waypointUseSelected(CRUISE_ALT) {
     wptNavOn().
     planeStatus().
 } ELSE {

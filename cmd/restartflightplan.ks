@@ -42,8 +42,7 @@ IF opts:HASKEY("reboot") { SET doReboot TO opts["reboot"]. }
 IF opts:HASKEY("force")  { SET force TO opts["force"]. }
 
 // Default restart phase: first phase of the current mission sequence
-LOCAL rawSeq IS missionCfgGet("SEQUENCE", "").
-IF DEFINED CFG AND CFG:HASKEY("SEQUENCE") { SET rawSeq TO CFG["SEQUENCE"]. }
+LOCAL rawSeq IS SEQUENCE.
 IF restartPhase = "" {
     IF rawSeq <> "" {
         SET restartPhase TO phaseListFromString(rawSeq)[0].

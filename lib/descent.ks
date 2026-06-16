@@ -1,3 +1,14 @@
+// --- Config defaults owned by this file ---
+GLOBAL AEROBRAKE_REENTRY_DIR IS "".
+GLOBAL DESCENT_RELEASE_ALT IS -1.
+GLOBAL DESCENT_CHUTES_TAG IS "".
+GLOBAL DESCENT_DROGUE_CUT_ALT IS -1.
+GLOBAL DESCENT_FAIRING_TAG IS "".
+GLOBAL DESCENT_DECOUPLER_TAG IS "".
+GLOBAL DESCENT_DECOUPLE_ALT IS -999999.
+GLOBAL DESCENT_HEAT_SHIELD_DROP_ALT IS -999999.
+GLOBAL DESCENT_BAY_REOPEN_ALT IS -1.
+
 // ============================================================
 // descent.ks  —  Atmospheric descent phase  (0:/lib/descent.ks)
 //
@@ -99,8 +110,8 @@ GLOBAL FUNCTION phaseDescent {
 
     // LOCK STEERING retrograde for descent orientation.
     LOCAL dir IS "RETROGRADE".
-    IF DEFINED CFG AND CFG:HASKEY("AEROBRAKE_REENTRY_DIR") {
-        SET dir TO CFG["AEROBRAKE_REENTRY_DIR"].
+    IF AEROBRAKE_REENTRY_DIR <> "" {
+        SET dir TO AEROBRAKE_REENTRY_DIR.
     }
     SAS OFF.
     IF dir = "PROGRADE" {
@@ -116,8 +127,8 @@ GLOBAL FUNCTION phaseDescent {
     // just drains the battery when it is needed most. The
     // throttle guard keeps it from releasing mid-braking-burn.
     LOCAL releaseAlt IS 20000.
-    IF DEFINED CFG AND CFG:HASKEY("DESCENT_RELEASE_ALT") {
-        SET releaseAlt TO CFG["DESCENT_RELEASE_ALT"].
+    IF DESCENT_RELEASE_ALT >= 0 {
+        SET releaseAlt TO DESCENT_RELEASE_ALT.
     }
     IF SHIP:BODY:ATM:EXISTS AND releaseAlt > 0 {
         WHEN SHIP:ALTITUDE < releaseAlt AND SHIP:VERTICALSPEED < 0
@@ -220,8 +231,8 @@ GLOBAL FUNCTION phaseDescent {
 // configured, otherwise checks all parachute parts.
 LOCAL FUNCTION _chutesDeployed {
     LOCAL parts IS LIST().
-    IF DEFINED CFG AND CFG:HASKEY("DESCENT_CHUTES_TAG") {
-        SET parts TO SHIP:PARTSTAGGED(CFG["DESCENT_CHUTES_TAG"]).
+    IF DESCENT_CHUTES_TAG <> "" {
+        SET parts TO SHIP:PARTSTAGGED(DESCENT_CHUTES_TAG).
     } ELSE {
         FOR p IN SHIP:PARTS {
             IF p:HASMODULE("ModuleParachute") { parts:ADD(p). }
@@ -268,8 +279,8 @@ LOCAL FUNCTION _descentCutChutePart {
 
 LOCAL FUNCTION _descentCutDrogues {
     LOCAL cutAlt IS 4900.
-    IF DEFINED CFG AND CFG:HASKEY("DESCENT_DROGUE_CUT_ALT") {
-        SET cutAlt TO CFG["DESCENT_DROGUE_CUT_ALT"].
+    IF DESCENT_DROGUE_CUT_ALT >= 0 {
+        SET cutAlt TO DESCENT_DROGUE_CUT_ALT.
     }
     IF cutAlt <= 0 { RETURN. }
 
@@ -358,8 +369,8 @@ LOCAL FUNCTION _descentBrakingBurn {
 // Reads tag from DESCENT_FAIRING_TAG config key.
 LOCAL FUNCTION _descentDeployFairing {
     LOCAL tag IS "descent_fairing".
-    IF DEFINED CFG AND CFG:HASKEY("DESCENT_FAIRING_TAG") {
-        SET tag TO CFG["DESCENT_FAIRING_TAG"].
+    IF DESCENT_FAIRING_TAG <> "" {
+        SET tag TO DESCENT_FAIRING_TAG.
     }
     IF tag = "" { RETURN. }
     IF tag = "none" {
@@ -396,8 +407,8 @@ LOCAL FUNCTION _descentDeployFairing {
 // transfer stage exploded next to the lander at touchdown).
 LOCAL FUNCTION _descentDecouple {
     LOCAL tag IS "descent_decoupler".
-    IF DEFINED CFG AND CFG:HASKEY("DESCENT_DECOUPLER_TAG") {
-        SET tag TO CFG["DESCENT_DECOUPLER_TAG"].
+    IF DESCENT_DECOUPLER_TAG <> "" {
+        SET tag TO DESCENT_DECOUPLER_TAG.
     }
     IF tag = "" { RETURN. }
     IF tag = "none" {
@@ -419,8 +430,8 @@ LOCAL FUNCTION _descentDecouple {
     IF DECOUPLE_ALTS:HASKEY(SHIP:BODY:NAME) {
         SET decoupleAlt TO DECOUPLE_ALTS[SHIP:BODY:NAME].
     }
-    IF DEFINED CFG AND CFG:HASKEY("DESCENT_DECOUPLE_ALT") {
-        SET decoupleAlt TO CFG["DESCENT_DECOUPLE_ALT"].
+    IF DESCENT_DECOUPLE_ALT > -999999 {
+        SET decoupleAlt TO DESCENT_DECOUPLE_ALT.
     }
 
     IF SHIP:ALTITUDE > decoupleAlt {
@@ -476,13 +487,11 @@ LOCAL FUNCTION _descentDoFirstEvent {
 }
 
 LOCAL FUNCTION _descentDropHeatShield {
-    IF DEFINED CFG {
-        IF NOT CFG:HASKEY("DESCENT_HEAT_SHIELD_DROP_ALT") { RETURN. }
-    } ELSE {
+    IF DESCENT_HEAT_SHIELD_DROP_ALT <= -999999 { RETURN. } ELSE {
         RETURN.
     }
 
-    LOCAL dropAlt IS CFG["DESCENT_HEAT_SHIELD_DROP_ALT"].
+    LOCAL dropAlt IS DESCENT_HEAT_SHIELD_DROP_ALT.
     IF dropAlt <= 0 { RETURN. }
 
     LOCAL candidates IS LIST().
@@ -526,13 +535,11 @@ LOCAL FUNCTION _descentDropHeatShield {
 }
 
 LOCAL FUNCTION _descentReopenExtendBaysForDrag {
-    IF DEFINED CFG {
-        IF NOT CFG:HASKEY("DESCENT_BAY_REOPEN_ALT") { RETURN. }
-    } ELSE {
+    IF DESCENT_BAY_REOPEN_ALT < 0 { RETURN. } ELSE {
         RETURN.
     }
 
-    LOCAL reopenAlt IS CFG["DESCENT_BAY_REOPEN_ALT"].
+    LOCAL reopenAlt IS DESCENT_BAY_REOPEN_ALT.
     IF reopenAlt <= 0 { RETURN. }
 
     IF SHIP:ALTITUDE > reopenAlt {
@@ -644,8 +651,8 @@ LOCAL FUNCTION _descentReopenExtendBays {
 // or all chutes if tag yields nothing.
 LOCAL FUNCTION _descentArmChutes {
     LOCAL tag IS "descent_chutes".
-    IF DEFINED CFG AND CFG:HASKEY("DESCENT_CHUTES_TAG") {
-        SET tag TO CFG["DESCENT_CHUTES_TAG"].
+    IF DESCENT_CHUTES_TAG <> "" {
+        SET tag TO DESCENT_CHUTES_TAG.
     }
 
     LOCAL parts IS SHIP:PARTSTAGGED(tag).

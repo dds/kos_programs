@@ -3,6 +3,14 @@
 // (0:/lib/rdv_plan.ks)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL RDV_SCAN_ORBITS IS 3.
+GLOBAL RDV_SCAN_SAMPLES_PER_ORBIT IS 48.
+GLOBAL RDV_MAX_CA IS 5000.
+GLOBAL RDV_MAX_RADIUS_ERR IS 2000.
+GLOBAL RENDEZVOUS_TARGET IS "".
+GLOBAL ASTEROID_TARGET IS "".
+
 LOCAL RDV_MAX_RETRIES IS 5.
 
 LOCAL FUNCTION _rdvScoreCandidate {
@@ -33,8 +41,8 @@ LOCAL FUNCTION _rdvScoreCandidate {
 
 GLOBAL FUNCTION phaseRendezvous {
     LOCAL targetName IS "".
-    IF CFG:HASKEY("RENDEZVOUS_TARGET") { SET targetName TO CFG["RENDEZVOUS_TARGET"]. }
-    IF CFG:HASKEY("ASTEROID_TARGET")   { SET targetName TO CFG["ASTEROID_TARGET"]. }
+    SET targetName TO RENDEZVOUS_TARGET.
+    IF ASTEROID_TARGET <> "" { SET targetName TO ASTEROID_TARGET. }
 
     IF targetName = "" {
         mLogWarn("RDV phase requested but no RENDEZVOUS_TARGET or ASTEROID_TARGET configured.").
@@ -120,10 +128,10 @@ GLOBAL FUNCTION planRendezvous {
     WAIT 0.1.
 
     LOCAL scanOrbits IS 2.
-    IF CFG:HASKEY("RDV_SCAN_ORBITS") { SET scanOrbits TO MAX(1, CFG["RDV_SCAN_ORBITS"]). }
+    SET scanOrbits TO MAX(1, RDV_SCAN_ORBITS).
     LOCAL samplesPerOrbit IS 8.
-    IF CFG:HASKEY("RDV_SCAN_SAMPLES_PER_ORBIT") {
-        SET samplesPerOrbit TO MAX(4, CFG["RDV_SCAN_SAMPLES_PER_ORBIT"]).
+    IF RDV_SCAN_SAMPLES_PER_ORBIT > 0 {
+        SET samplesPerOrbit TO MAX(4, RDV_SCAN_SAMPLES_PER_ORBIT).
     }
     LOCAL scanSteps IS scanOrbits * samplesPerOrbit.
     LOCAL scanDt IS shipPeriod / samplesPerOrbit.
@@ -235,8 +243,8 @@ GLOBAL FUNCTION planRendezvous {
 
     LOCAL maxCa IS 50000.
     LOCAL maxRadiusErr IS 5000.
-    IF CFG:HASKEY("RDV_MAX_CA") { SET maxCa TO CFG["RDV_MAX_CA"]. }
-    IF CFG:HASKEY("RDV_MAX_RADIUS_ERR") { SET maxRadiusErr TO CFG["RDV_MAX_RADIUS_ERR"]. }
+    SET maxCa TO RDV_MAX_CA.
+    SET maxRadiusErr TO RDV_MAX_RADIUS_ERR.
     IF finalCa["distance"] > maxCa OR finalScore["RADIUS_ERR"] > maxRadiusErr {
         mLogError("Rendezvous planner refused weak intercept: CA="
             + ROUND(finalCa["distance"]/1000,1) + "km radiusErr="

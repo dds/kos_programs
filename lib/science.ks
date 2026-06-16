@@ -2,6 +2,18 @@
 // science.ks  —  Science collection library  (0:/lib/science.ks)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL AUTO_TRANSMIT IS 1.
+GLOBAL SCANSAT_POWER_GUARD IS 0.
+GLOBAL SCANSAT_POWER_LOW IS 0.2.
+GLOBAL SCANSAT_POWER_RESUME IS 0.5.
+GLOBAL SCANSAT_TARGET_COVERAGE IS -1.
+GLOBAL SCANSAT_REQUIRED_TYPES IS "".
+GLOBAL SCANSAT_AREA_CHECK IS 0.
+GLOBAL SOLAR_REORIENT_PERIOD IS 0.
+GLOBAL LOG_INTERVAL IS 1.
+GLOBAL EVA_BIOMES IS "".
+
 GLOBAL SCI_CFG IS LEXICON(
     "AUTO_COLLECT",       TRUE,
     "AUTO_TRANSMIT",      FALSE,
@@ -269,7 +281,7 @@ GLOBAL FUNCTION scienceScanStatus {
 GLOBAL FUNCTION scienceScanLoop {
     UNTIL NOT scienceActive {
         scienceScanStatus().
-        WAIT SCI_CFG["LOG_INTERVAL"].
+        WAIT SCI_LOG_INTERVAL.
     }
 }
 
@@ -300,7 +312,7 @@ LOCAL FUNCTION _runExperiment {
                 + "  biome=" + sciLastBiome
                 + "  situation=" + SHIP:STATUS).
 
-            IF SCI_CFG["AUTO_TRANSMIT"] {
+            IF SCI_AUTO_TRANSMIT {
                 WAIT 1.
                 IF modu:HASEVENT("Transmit Data") { modu:DOEVENT("Transmit Data"). }
             }
@@ -363,8 +375,8 @@ LOCAL FUNCTION _scanAreaUnscanned {
 GLOBAL FUNCTION scansatDutyCycle {
     LOCAL lowFrac IS 0.30.
     LOCAL resumeFrac IS 0.60.
-    IF CFG:HASKEY("SCANSAT_POWER_LOW") { SET lowFrac TO CFG["SCANSAT_POWER_LOW"]. }
-    IF CFG:HASKEY("SCANSAT_POWER_RESUME") { SET resumeFrac TO CFG["SCANSAT_POWER_RESUME"]. }
+    SET lowFrac TO SCANSAT_POWER_LOW.
+    SET resumeFrac TO SCANSAT_POWER_RESUME.
     mLog("Scan duty cycle: OFF below " + ROUND(lowFrac * 100, 0)
         + "%, ON above " + ROUND(resumeFrac * 100, 0)
         + "%, and only over unmapped terrain. Warp away.").
@@ -375,8 +387,8 @@ GLOBAL FUNCTION scansatDutyCycle {
     // SCANSAT_TARGET_COVERAGE (95%), the map is done — scanners
     // off, cycle ends itself.
     LOCAL targetCov IS 95.
-    IF CFG:HASKEY("SCANSAT_TARGET_COVERAGE") {
-        SET targetCov TO CFG["SCANSAT_TARGET_COVERAGE"].
+    IF SCANSAT_TARGET_COVERAGE >= 0 {
+        SET targetCov TO SCANSAT_TARGET_COVERAGE.
     }
     LOCAL baseline IS scienceScanCoverage().
     LOCAL active IS LIST().
@@ -394,8 +406,8 @@ GLOBAL FUNCTION scansatDutyCycle {
     // late in a mapping campaign most passes re-cross mapped
     // ground, and the scanners can sleep through it.
     LOCAL areaCheckPeriod IS 300.
-    IF CFG:HASKEY("SCANSAT_AREA_CHECK") {
-        SET areaCheckPeriod TO CFG["SCANSAT_AREA_CHECK"].
+    IF SCANSAT_AREA_CHECK > 0 {
+        SET areaCheckPeriod TO SCANSAT_AREA_CHECK.
     }
     LOCAL areaNew IS TRUE.
     LOCAL nextAreaCheck IS 0.
@@ -406,8 +418,8 @@ GLOBAL FUNCTION scansatDutyCycle {
     // in time warp) and every SOLAR_REORIENT_PERIOD (2 Kerbin
     // days) regardless, briefly dropping and restoring the warp.
     LOCAL reorientPeriod IS 43200.
-    IF CFG:HASKEY("SOLAR_REORIENT_PERIOD") {
-        SET reorientPeriod TO CFG["SOLAR_REORIENT_PERIOD"].
+    IF SOLAR_REORIENT_PERIOD > 0 {
+        SET reorientPeriod TO SOLAR_REORIENT_PERIOD.
     }
     LOCAL lastOrient IS TIME:SECONDS.
     LOCAL nextStatus IS TIME:SECONDS + 600.

@@ -1,10 +1,22 @@
+// --- Config defaults owned by this file ---
+GLOBAL LANDING_SKIP_TARGET_SEARCH IS 0.
+GLOBAL LANDING_DEORBIT_LEAD_MINUTES IS 0.
+GLOBAL LANDING_AUTO_TARGET IS 0.
+GLOBAL LANDING_AUTO_TARGET_MINUTES IS 5.
+GLOBAL TARGET_DEORBIT_SCAN_ORBITS IS 0.
+GLOBAL TARGET_DEORBIT_SCAN_SAMPLES IS 128.
+GLOBAL TARGET_DEORBIT_SCAN_CENTER_MINUTES IS 0.
+GLOBAL TARGET_DEORBIT_SCAN_WINDOW_MINUTES IS 0.
+GLOBAL TARGET_DEORBIT_MIN_LEAD IS 0.
+GLOBAL LANDING_SIM_MODE IS 0.
+GLOBAL REENTRY_PE IS 30000.
+
 // Landing deorbit phase: target, create, and execute the deorbit node.
 
 GLOBAL FUNCTION phaseLandDeorbit {
     landingApplyMissionConfig().
     IF SHIP:STATUS = "SUB_ORBITAL"
-            AND (CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH")
-                AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0) {
+            AND (LANDING_SKIP_TARGET_SEARCH > 0) {
         _advanceAfterLandDeorbit().
         RETURN.
     }
@@ -12,7 +24,7 @@ GLOBAL FUNCTION phaseLandDeorbit {
         _advanceAfterLandDeorbit().
         RETURN.
     }
-    IF CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH") AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0 {
+    IF LANDING_SKIP_TARGET_SEARCH > 0 {
         IF _timedLandingDeorbit() {
             _advanceAfterLandDeorbit().
         }
@@ -51,9 +63,7 @@ LOCAL FUNCTION _advanceAfterLandDeorbit {
 
 LOCAL FUNCTION _timedLandingDeorbit {
     LOCAL leadMin IS 0.5.
-    IF CFG:HASKEY("LANDING_DEORBIT_LEAD_MINUTES") {
-        SET leadMin TO CFG["LANDING_DEORBIT_LEAD_MINUTES"].
-    }
+    SET leadMin TO LANDING_DEORBIT_LEAD_MINUTES.
     LOCAL burnUT IS TIME:SECONDS + MAX(30, leadMin * 60).
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
@@ -112,20 +122,17 @@ LOCAL FUNCTION _confirmLandingTarget {
 }
 
 LOCAL FUNCTION _autoLandingTarget {
-    IF NOT CFG:HASKEY("LANDING_AUTO_TARGET") { RETURN FALSE. }
-    IF CFG["LANDING_AUTO_TARGET"] <= 0 { RETURN FALSE. }
+    IF LANDING_AUTO_TARGET <= 0 { RETURN FALSE. }
 
     LOCAL minutes IS 5.
-    IF CFG:HASKEY("LANDING_AUTO_TARGET_MINUTES") {
-        SET minutes TO CFG["LANDING_AUTO_TARGET_MINUTES"].
-    }
+    SET minutes TO LANDING_AUTO_TARGET_MINUTES.
     LOCAL geo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, TIME:SECONDS + minutes * 60)).
     SET LAND_CFG_TARGET_LAT TO geo:LAT.
     SET LAND_CFG_TARGET_LNG TO geo:LNG.
     SET LAND_CFG_TARGET_LOCK TO TRUE.
     stateSet("mission_cfg_TARGET_LAT", geo:LAT).
     stateSet("mission_cfg_TARGET_LNG", geo:LNG).
-    stateSet("mission_cfg_TARGET_LOCK", "1").
+    stateSet("mission_cfg_TARGET_LOCK", 1).
     RETURN TRUE.
 }
 

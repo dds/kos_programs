@@ -7,13 +7,11 @@
 // Ship name:  FSP1-TARGET-TYPE1-...-NN
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "CRUISE_ALT",       2000,
-    "CRUISE_SPEED",      120,
-    "TOP_SPEED",         180,
-    "FLAP_AG",             1,
-    "SPLASHDOWN_SPEED",   40
-).
+SET CRUISE_ALT TO 2000.
+SET CRUISE_SPEED TO 120.
+SET TOP_SPEED TO 180.
+SET FLAP_AG TO 1.
+SET SPLASHDOWN_SPEED TO 40.
 
 GLOBAL FSP1_SEQ IS LIST("PREFLIGHT", "FLIGHT", "SPLASHDOWN", "SURFACE_OPS", "DONE").
 
@@ -24,7 +22,7 @@ GLOBAL FUNCTION bootVehicleLibs {
 }
 
 LOCAL FUNCTION _fsp1ConfigRows {
-    flightPlanRow("SPLASH SPD", CFG["SPLASHDOWN_SPEED"] + " m/s").
+    flightPlanRow("SPLASH SPD", SPLASHDOWN_SPEED + " m/s").
 }
 
 LOCAL FUNCTION _phaseSplashdown {
@@ -63,7 +61,7 @@ GLOBAL FUNCTION main {
             "Brakes - RELEASE at full thrust",
             "Rotate - pull up at 80 m/s",
             "Gear - retract on positive climb",
-            "Splashdown target - " + CFG["SPLASHDOWN_SPEED"] + " m/s"
+            "Splashdown target - " + SPLASHDOWN_SPEED + " m/s"
         )
     )).
 }

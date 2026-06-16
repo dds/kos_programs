@@ -29,7 +29,7 @@
 //   max_orbits       — deorbit window scan limit (default 4)
 //   samples          — coarse scan samples (default 32 per orbit)
 //   descent_fairing / descent_decoupler / descent_chutes — part
-//       tags for DESCENT. Unset, craft CFG defaults (then lib
+//       tags for DESCENT. Unset, craft/profile globals (then lib
 //       defaults) apply; 'none' disables a step outright.
 //
 // Reachability: the current orbit must overfly the target
@@ -66,7 +66,7 @@ LOCAL entryPe IS 30000.
 LOCAL tolerance IS 15000.
 LOCAL maxOrbits IS 4.
 LOCAL scanSamples IS 0.
-// Empty = leave mission state untouched so craft CFG defaults
+// Empty = leave mission state untouched so craft/profile globals
 // (then lib defaults) decide; "none" = explicitly disabled.
 LOCAL descentFairingTag IS "".
 LOCAL descentDecouplerTag IS "".

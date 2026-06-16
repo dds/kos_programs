@@ -2,7 +2,7 @@
 
 KerbalScript (kOS) mission automation for Kerbal Space Program. Autonomous,
 reboot-safe flight computers for rockets, airplanes, spaceplanes, hover
-drones, rovers, and EVA kerbals — driven by data-only mission profiles, with
+drones, rovers, and EVA kerbals — driven by executable mission config profiles, with
 progressive code loading to fit tiny in-game processors.
 
 - **Operating a flight?** Start at [Quick start](#quick-start) and
@@ -78,8 +78,9 @@ leg's log, rewinds `phase` to the start of the sequence, stamps a fresh
 libs load, EVA kerbals are auto-detected (root part `kerbalEVA`), `CORE:TAG`
 routes tagged CPUs to `roles/`, untagged CPUs load `craft/<vehicle>.ks`.
 The selected mission id is persisted in state. The profile itself is copied
-to `1:/missions/<vehicle>/`, reloaded into `MISSION_CFG` on boot, and then
-applied to `CFG`; only runtime config overrides use `mission_cfg_*` state.
+to `1:/missions/<vehicle>/` and run on every boot; profiles are executable
+config scripts made of `SET NAME TO value.` lines. Runtime config overrides
+still use `mission_cfg_*` state, which boot turns back into `SET` overrides.
 The craft script's `bootVehicleLibs()` returns the library roots to sync;
 boot compiles them to KSM (comments cost nothing), prunes stale files, runs
 them, then auto-resumes or drops to manual mode.
@@ -208,25 +209,25 @@ Terrain-lookahead altitude floor, low-fuel/EC autoland, sorties chained with
 
 ## Mission profiles
 
-Data-only `KEY = VALUE` files under `missions/<vehicle>/`, selected from the
-pad picker or forced via `stateSet("mission_id", "<id>").` + reboot. The
-profile owns the phase order; the craft script owns the hardware. Values land
-in `CFG` at boot from the cached selected profile.
+Executable config files under `missions/<vehicle>/`, selected from the pad
+picker or forced via `stateSet("mission_id", "<id>").` + reboot. The profile
+owns the phase order; the craft script owns the hardware. Values are direct
+global assignments read by the libraries.
 
-```ini
-MISSION_ID = mun_sat_delivery_3
-MISSION_NAME = Mun Satellite Delivery Contract 3
-TARGET = MUN
-PAYLOADS = SCISAT
-SEQUENCE = LAUNCH,FAIR,ANTS,PARK,XING,BPLANE,COAST_1HALF,REFINE_BPLANE,COAST_2HALF,CAPTURE,SHAPE,RELAY_OPS,DONE
-CAPTURE_PE = 95789
-CAPTURE_INC = 138.9
-CAPTURE_LAN = 51.5
-SHAPE_AP = 903586
-SHAPE_PE = 95789
-SHAPE_INC = 138.9
-SHAPE_LAN = 51.5
-SHAPE_AOP = 269
+```ks
+SET MISSION_ID TO "mun_sat_delivery_3".
+SET MISSION_NAME TO "Mun Satellite Delivery Contract 3".
+SET TARGET_ TO "MUN".
+SET PAYLOADS TO "SCISAT".
+SET SEQUENCE TO "LAUNCH,FAIR,ANTS,PARK,XING,BPLANE,COAST_1HALF,REFINE_BPLANE,COAST_2HALF,CAPTURE,SHAPE,RELAY_OPS,DONE".
+SET CAPTURE_PE TO 95789.
+SET CAPTURE_INC TO 138.9.
+SET CAPTURE_LAN TO 51.5.
+SET SHAPE_AP TO 903586.
+SET SHAPE_PE TO 95789.
+SET SHAPE_INC TO 138.9.
+SET SHAPE_LAN TO 51.5.
+SET SHAPE_AOP TO 269.
 ```
 
 Boot derives the libraries to load from `SEQUENCE`. `LIBS = ...` replaces the
@@ -308,7 +309,7 @@ its own `1:/` volume, so state is naturally isolated.
 
 EVA kerbals are auto-detected (no tag needed) and run `roles/EVA.ks`, which
 branches on the kerbal's trait. Role scripts follow the same contract as
-vehicle scripts (`CFG`, `bootVehicleLibs()`, `main()`); keep them small —
+vehicle scripts (`SET` defaults, `bootVehicleLibs()`, `main()`); keep them small —
 they usually live on OCTO-class cores.
 
 ## Extending the system
@@ -316,7 +317,7 @@ they usually live on OCTO-class cores.
 A vehicle script defines three things:
 
 ```
-GLOBAL CFG IS LEXICON(...).            // config defaults (profile overrides)
+SET SOME_DEFAULT TO value.             // craft defaults (profile overrides)
 GLOBAL FUNCTION bootVehicleLibs { ... } // library roots for boot to sync
 GLOBAL FUNCTION main { ... }            // build seq + phase map, runPhases()
 ```
@@ -334,8 +335,8 @@ GLOBAL FUNCTION bootVehicleLibs {
 
 GLOBAL FUNCTION main {
     LOCAL seq IS DEFAULT_SEQ.
-    IF missionCfgGet("SEQUENCE", "") <> "" {
-        SET seq TO phaseListFromString(missionCfgGet("SEQUENCE", "")).
+    IF SEQUENCE <> "" {
+        SET seq TO phaseListFromString(SEQUENCE).
     }
     SET launchSeq TO seq. SET xferSeq TO seq.
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
@@ -347,6 +348,15 @@ GLOBAL FUNCTION main {
 
 Aircraft instead call `airplaneMain(name, opts)` and pass checklist /
 configure-hook / extra-phase options.
+
+Config code deliberately favors direct globals over defensive lookups. Do not
+add `CFG:HASKEY` or string-key config helpers; defaults belong as globals in
+the file that owns the behavior, and profiles/craft/commands override those
+globals. Boot runs the selected profile again after loading the required
+library band, so mission values win over owning-lib defaults. A bad symbol
+should fail loud during boot or flight-test, not disappear behind fallback
+logic. If a config name would collide with a kOS global, use a trailing
+underscore (`TARGET_`).
 
 ### Ready-made phases
 

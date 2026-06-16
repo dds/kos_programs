@@ -122,7 +122,6 @@ IF HAS_LINK {
     IF vehicleScript <> "" {
         PRINT "  SYNC " + vehicleScript + " ....... ".
         IF _syncLib(vehicleScript).
-        bootMissionConfig(vehicleName, HAS_LINK).
     }
 }
 
@@ -130,6 +129,8 @@ IF HAS_LINK {
 IF vehicleScript <> "" {
     RUNPATH(vehicleScript).
 }
+
+bootMissionConfig(vehicleName, HAS_LINK).
 
 LOCAL vehicleLibs IS LIST().
 IF vehicleScript <> "" {
@@ -145,6 +146,10 @@ IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
     bootPruneLibs(vehicleLibs).
     bootLibLoadList(vehicleLibs).
+    IF vehicleScript <> "" { RUNPATH(vehicleScript). }
+    IF stateGet("mission_id", "") <> "" {
+        bootApplyMissionConfig(vehicleName, stateGet("mission_id", ""), HAS_LINK).
+    }
     bootLibLoad("resume").
     // Recovery is loaded only at startup/abort or after manual mode.
     LOCAL phase_ IS stateGet("phase", "").
@@ -154,6 +159,10 @@ IF HAS_LINK {
 } ELSE {
     PRINT "  NO LINK: Bypassing library sync.".
     bootLibLoadList(vehicleLibs).
+    IF vehicleScript <> "" { RUNPATH(vehicleScript). }
+    IF stateGet("mission_id", "") <> "" {
+        bootApplyMissionConfig(vehicleName, stateGet("mission_id", ""), HAS_LINK).
+    }
     bootLibLoad("resume").
 }
 

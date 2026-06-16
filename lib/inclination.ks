@@ -2,6 +2,10 @@
 // inclination.ks  —  Orbital plane change  (0:/lib/inclination.ks)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL INCL_MATCH_TARGET IS "".
+GLOBAL TARGET_INCLINATION IS -1.
+
 // Speed at a true anomaly on the ship's current orbit (vis-viva).
 LOCAL FUNCTION _incSpeedAtTa {
     PARAMETER ta.
@@ -102,10 +106,10 @@ GLOBAL FUNCTION planInclinationChange {
 }
 
 GLOBAL FUNCTION resolveTargetInclination {
-    LOCAL target IS CFG["TARGET_INCLINATION"].
+    LOCAL target IS TARGET_INCLINATION.
     IF target >= 0 { RETURN target. }
 
-    LOCAL targetName IS CFG["INCL_MATCH_TARGET"].
+    LOCAL targetName IS INCL_MATCH_TARGET.
     IF targetName = "" {
         mLogWarn("TARGET_INCLINATION=-1 but INCL_MATCH_TARGET is empty — defaulting to 0.").
         RETURN 0.

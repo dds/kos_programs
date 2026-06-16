@@ -11,6 +11,14 @@
 
 @LAZYGLOBAL OFF.
 
+// --- Config defaults owned by this file ---
+GLOBAL CAPTURE_PE IS -1.
+GLOBAL CAPTURE_INC IS -1.
+GLOBAL CAPTURE_LAN IS -1.
+GLOBAL CAPTURE_AOP IS -1.
+GLOBAL CAPTURE_DIR IS "".
+
+
 LOCAL MCC_DV_CAP           IS 50.
 LOCAL MCC_MIN_DV           IS 2.0.
 LOCAL MCC_LATE_MIN_DV      IS 3.0.
@@ -21,28 +29,28 @@ LOCAL MAX_RETRIES          IS 5.
 GLOBAL FUNCTION phaseMidCourse {
     LOCAL target IS missionTargetBody().
 
-    IF NOT CFG:HASKEY("CAPTURE_PE") {
+    IF CAPTURE_PE < 0 {
         mLog("No CAPTURE_PE. Skipping MCC.").
         nextPhase(xferSeq).
         RETURN.
     }
 
-    LOCAL targetPe  IS CFG["CAPTURE_PE"].
+    LOCAL targetPe  IS CAPTURE_PE.
     LOCAL targetInc IS -1.
     LOCAL targetLan IS -1.
     LOCAL targetAoP IS -1.
 
     // Resolve CAPTURE_DIR to inclination
-    IF CFG:HASKEY("CAPTURE_DIR") {
-        LOCAL dir IS CFG["CAPTURE_DIR"].
+    IF CAPTURE_DIR <> "" {
+        LOCAL dir IS CAPTURE_DIR.
         IF dir = "PROGRADE"   { SET targetInc TO 0. }
         IF dir = "POLAR"      { SET targetInc TO 90. }
         IF dir = "RETROPOLAR" { SET targetInc TO 90. }
         IF dir = "RETROGRADE" { SET targetInc TO 180. }
     }
-    IF CFG:HASKEY("CAPTURE_INC") { SET targetInc TO CFG["CAPTURE_INC"]. }
-    IF CFG:HASKEY("CAPTURE_LAN") { SET targetLan TO CFG["CAPTURE_LAN"]. }
-    IF CFG:HASKEY("CAPTURE_AOP") { SET targetAoP TO CFG["CAPTURE_AOP"]. }
+    SET targetInc TO CAPTURE_INC.
+    SET targetLan TO CAPTURE_LAN.
+    SET targetAoP TO CAPTURE_AOP.
     IF targetAoP >= 0 AND targetLan < 0 {
         mLog("MCC: Ignoring CAPTURE_AOP without CAPTURE_LAN.").
         SET targetAoP TO -1.
@@ -131,10 +139,10 @@ GLOBAL FUNCTION phaseMidCourse {
     LOCAL totalDv IS nd:DELTAV:MAG.
     LOCAL finalPatch IS _getTargetPatch(nd, target).
     LOCAL minMccDv IS MCC_MIN_DV.
-    IF CFG:HASKEY("MCC_MIN_DV") { SET minMccDv TO CFG["MCC_MIN_DV"]. }
+    SET minMccDv TO MCC_MIN_DV.
     IF ETA:TRANSITION < MCC_LATE_ETA {
         SET minMccDv TO MAX(minMccDv, MCC_LATE_MIN_DV).
-        IF CFG:HASKEY("MCC_LATE_MIN_DV") { SET minMccDv TO CFG["MCC_LATE_MIN_DV"]. }
+        SET minMccDv TO MCC_LATE_MIN_DV.
     }
 
     LOCAL worsened IS FALSE.

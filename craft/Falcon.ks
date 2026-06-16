@@ -14,8 +14,7 @@
 //   Falcon Minmus SciSAT 1   space-delimited fallback also parses.
 // ============================================================
 
-GLOBAL CFG IS LEXICON(
-    "DESCENT_DROGUE_CUT_ALT", 4800).
+SET DESCENT_DROGUE_CUT_ALT TO 4800.
 
 GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
     "xfer_plan",
@@ -30,7 +29,7 @@ LOCAL FUNCTION _falconPrintConfig {
     flightPlanTitle("FALCON FLIGHT PLAN", SHIP:NAME).
     flightPlanIdentity().
     flightPlanSection("MISSION").
-    flightPlanRow("BAND", falconPhaseBand()).
+    flightPlanRow("BAND", phaseBand()).
     flightPlanRow("TARGET", MISSION["target"]).
     flightPlanRow("PAYLOADS", MISSION["payloads"]).
     flightPlanConfig().
@@ -38,57 +37,12 @@ LOCAL FUNCTION _falconPrintConfig {
     flightPlanSequence(seq).
 }
 
-GLOBAL FUNCTION falconBandForPhase {
-    PARAMETER phaseName.
-    LOCAL phase IS phaseName.
-    LOCAL defaultBand IS "".
-    IF phase = "" OR phase:CONTAINS("MAIN") {
-        SET defaultBand TO "LAUNCH".
-    }
-    RETURN bootLibBandForPhase(phase, defaultBand).
-}
-
-GLOBAL FUNCTION falconPhaseBand {
-    RETURN falconBandForPhase(stateGet("phase", "")).
-}
-
-GLOBAL FUNCTION falconSaveReloadState {
-    PARAMETER reason.
-    PARAMETER nextPhaseName.
-    stateSet("reload_required", "true").
-    stateSet("reload_reason", reason).
-    stateSet("reload_next_phase", nextPhaseName).
-    stateSet("reload_next_band", falconBandForPhase(nextPhaseName)).
-}
-
-LOCAL FUNCTION _falconPhaseParkingReload {
-    phaseParking().
-    LOCAL nxt IS stateGet("phase", "").
-    IF phaseInLoadedBand(nxt) {
-        mLog("Parking checkpoint: " + nxt + " already loaded — continuing.").
-        RETURN.
-    }
-    falconSaveReloadState("PARKING_ORBIT", nxt).
-    mLog("Parking orbit reload point — auto-rebooting for " + nxt + ".").
-    HUDTEXT("Parking orbit: rebooting for " + nxt + "...",
-        5, 2, 15, CYAN, FALSE).
-    WAIT 5.
-    REBOOT.
-}
-
 GLOBAL FUNCTION falconBuildPhaseSequence {
-    IF CFG:HASKEY("SEQUENCE") {
-        RETURN phaseListFromString(CFG["SEQUENCE"]).
+    IF SEQUENCE <> "" {
+        RETURN phaseListFromString(SEQUENCE).
     }
 
     LOCAL targetFromState IS stateGet("target", "KERBIN").
-    LOCAL payloadsFromState IS stateGet("payloads", "").
-    LOCAL nameHasMission IS targetFromState <> "KERBIN"
-        OR payloadsFromState <> "".
-    IF NOT nameHasMission AND CFG:HASKEY("SEQUENCE") {
-        RETURN phaseListFromString(CFG["SEQUENCE"]).
-    }
-
     LOCAL payloadPhases IS LEXICON(
         "SCISAT", LIST("SCIENCE_OPS"),
         "SCANSAT", LIST("SCANSAT_OPS"),
@@ -120,7 +74,7 @@ GLOBAL FUNCTION falconBuildPhaseSequence {
 
 GLOBAL FUNCTION falconBuildPhaseMap {
     LOCAL phaseMap IS LEXICON().
-    phaseMapSet(phaseMap, "PARK", _falconPhaseParkingReload@).
+    phaseMapSet(phaseMap, "PARK", phaseParkingReload@).
     RETURN phaseMap.
 }
 
@@ -146,7 +100,7 @@ LOCAL FUNCTION _falconLibsForBand {
 
 LOCAL FUNCTION _falconLibs {
     bootEnsureInitialPhase(falconBuildPhaseSequence()).
-    LOCAL band IS falconPhaseBand().
+    LOCAL band IS phaseBand().
     LOCAL phase IS stateGet("phase", "").
     LOCAL cachedLibs IS bootCachedVehicleLibs(band).
     IF cachedLibs:LENGTH > 0 {
@@ -180,7 +134,7 @@ GLOBAL FUNCTION main {
     mLog("Sequence: " + seq:JOIN(" -> ")).
     bootEnsureInitialPhase(seq).
 
-    IF falconPhaseBand() = "LAUNCH" {
+    IF phaseBand() = "LAUNCH" {
         IF NOT confirmLaunch(_falconPrintConfig@) { RETURN. }
     }
 

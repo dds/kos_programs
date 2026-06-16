@@ -2,6 +2,10 @@
 // rover.ks  —  Rover co-pilot library  (0:/lib/rover.ks)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL WAYPOINT_WARN_DIST IS 3000.
+GLOBAL HUD_INTERVAL IS 0.25.
+
 GLOBAL ROVER_CFG IS LEXICON(
     "MAX_SPEED_KERBIN",    20,
     "MAX_SPEED_MUN",        8,
@@ -38,20 +42,20 @@ LOCAL  _tractionParts       IS LIST().
 GLOBAL FUNCTION roverInit {
     mLog("Rover co-pilot active. Body=" + SHIP:ORBIT:BODY:NAME
         + "  maxSpeed=" + _roverMaxSpeed() + "m/s"
-        + "  maxSlope=" + ROVER_CFG["MAX_SLOPE_DEG"] + "deg").
+        + "  maxSlope=" + ROVER_MAX_SLOPE_DEG + "deg").
 
-    SET _steerPid TO PIDLOOP(ROVER_CFG["STEER_KP"], ROVER_CFG["STEER_KI"],
-        ROVER_CFG["STEER_KD"], -1, 1).
+    SET _steerPid TO PIDLOOP(ROVER_STEER_KP, ROVER_STEER_KI,
+        ROVER_STEER_KD, -1, 1).
 
-    SET _tractionParts TO SHIP:PARTSTAGGED(ROVER_CFG["TRACTION_TAG"]).
+    SET _tractionParts TO SHIP:PARTSTAGGED(ROVER_TRACTION_TAG).
     IF _tractionParts:LENGTH > 0 {
         mLog("Traction parts: " + _tractionParts:LENGTH + " tagged '"
-            + ROVER_CFG["TRACTION_TAG"] + "'.").
-    } ELSE IF ROVER_CFG["TRACTION_AG"] > 0 {
-        mLog("Traction assist: AG" + ROVER_CFG["TRACTION_AG"] + ".").
+            + ROVER_TRACTION_TAG + "'.").
+    } ELSE IF ROVER_TRACTION_AG > 0 {
+        mLog("Traction assist: AG" + ROVER_TRACTION_AG + ".").
     }
 
-    WHEN roverActive AND ABS(SHIP:FACING:ROLL) > ROVER_CFG["FLIP_ROLL_DEG"] THEN {
+    WHEN roverActive AND ABS(SHIP:FACING:ROLL) > ROVER_FLIP_ROLL_DEG THEN {
         HUDTEXT("FLIP WARNING — BRAKE!", 3, 2, 16, RED, FALSE).
         mLog("FLIP WARNING roll=" + ROUND(SHIP:FACING:ROLL,1) + "deg.").
         SET SHIP:CONTROL:WHEELTHROTTLE TO 0.
@@ -62,14 +66,14 @@ GLOBAL FUNCTION roverInit {
     WHEN roverActive AND roverGovernorOn THEN {
         LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
         LOCAL slope IS _roverSlope().
-        IF slope > ROVER_CFG["TRACTION_SLOPE_DEG"] {
+        IF slope > ROVER_TRACTION_SLOPE_DEG {
             _roverTractionOn().
         } ELSE {
             _roverTractionOff().
         }
         LOCAL maxSpd IS _roverEffectiveMaxSpeed().
         IF roverBraking {
-            IF spd < maxSpd * ROVER_CFG["GOV_RELEASE_PCT"] {
+            IF spd < maxSpd * ROVER_GOV_RELEASE_PCT {
                 SET roverBraking TO FALSE.
                 SET BRAKES TO FALSE.
             }
@@ -87,7 +91,7 @@ GLOBAL FUNCTION roverInit {
         IF roverAutoSteerActive AND roverWptIndex < roverWptList:LENGTH {
             LOCAL wp IS roverWptList[roverWptIndex].
             LOCAL geo IS LATLNG(wp["lat"], wp["lng"]).
-            IF geo:DISTANCE < ROVER_CFG["WAYPOINT_WARN_DIST"] {
+            IF geo:DISTANCE < ROVER_WAYPOINT_WARN_DIST {
                 SET roverWptIndex TO roverWptIndex + 1.
                 IF roverWptIndex >= roverWptList:LENGTH {
                     mLog("Final waypoint reached.").
@@ -107,8 +111,8 @@ GLOBAL FUNCTION roverInit {
                 IF hdgErr < -180 { SET hdgErr TO hdgErr + 360. }
                 LOCAL steerOut IS _steerPid:UPDATE(TIME:SECONDS, -hdgErr).
                 SET SHIP:CONTROL:WHEELSTEER TO MAX(-1, MIN(1, steerOut * _roverSteerFactor())).
-                IF NOT roverBraking AND ABS(SHIP:FACING:ROLL) < ROVER_CFG["FLIP_ROLL_DEG"] {
-                    SET SHIP:CONTROL:WHEELTHROTTLE TO ROVER_CFG["AUTO_THROTTLE"].
+                IF NOT roverBraking AND ABS(SHIP:FACING:ROLL) < ROVER_FLIP_ROLL_DEG {
+                    SET SHIP:CONTROL:WHEELTHROTTLE TO ROVER_AUTO_THROTTLE.
                 }
             }
         } ELSE {
@@ -202,12 +206,12 @@ GLOBAL FUNCTION roverHUD {
 
         IF roverTractionOn { SET hudLine TO hudLine + "  TRXN". }
 
-        IF slope > ROVER_CFG["MAX_SLOPE_DEG"] {
+        IF slope > ROVER_MAX_SLOPE_DEG {
             HUDTEXT("SLOPE WARNING: " + slope + "deg", 2, 2, 15, YELLOW, FALSE).
         }
 
         PRINT hudLine AT (0, 0).
-        WAIT ROVER_CFG["HUD_INTERVAL"].
+        WAIT ROVER_HUD_INTERVAL.
     }
 }
 
@@ -226,10 +230,10 @@ GLOBAL FUNCTION roverStatus {
 
 LOCAL FUNCTION _roverMaxSpeed {
     LOCAL bodyName IS SHIP:ORBIT:BODY:NAME.
-    IF bodyName = "KERBIN" { RETURN ROVER_CFG["MAX_SPEED_KERBIN"]. }
-    IF bodyName = "MUN"    { RETURN ROVER_CFG["MAX_SPEED_MUN"].    }
-    IF bodyName = "MINMUS" { RETURN ROVER_CFG["MAX_SPEED_MINMUS"]. }
-    RETURN ROVER_CFG["MAX_SPEED_DEFAULT"].
+    IF bodyName = "KERBIN" { RETURN ROVER_MAX_SPEED_KERBIN. }
+    IF bodyName = "MUN"    { RETURN ROVER_MAX_SPEED_MUN.    }
+    IF bodyName = "MINMUS" { RETURN ROVER_MAX_SPEED_MINMUS. }
+    RETURN ROVER_MAX_SPEED_DEFAULT.
 }
 
 LOCAL FUNCTION _roverEffectiveMaxSpeed {
@@ -237,15 +241,15 @@ LOCAL FUNCTION _roverEffectiveMaxSpeed {
     LOCAL slope IS _roverSlope().
     LOCAL roll IS ABS(SHIP:FACING:ROLL).
 
-    LOCAL slopeFactor IS MAX(ROVER_CFG["SLOPE_SPEED_FACTOR"],
-        1.0 - (slope / ROVER_CFG["MAX_SLOPE_DEG"])
-            * (1.0 - ROVER_CFG["SLOPE_SPEED_FACTOR"])).
+    LOCAL slopeFactor IS MAX(ROVER_SLOPE_SPEED_FACTOR,
+        1.0 - (slope / ROVER_MAX_SLOPE_DEG)
+            * (1.0 - ROVER_SLOPE_SPEED_FACTOR)).
 
     LOCAL rollFactor IS 1.0.
-    IF roll > ROVER_CFG["MAX_ROLL_DEG"] {
-        LOCAL rollRange IS ROVER_CFG["FLIP_ROLL_DEG"] - ROVER_CFG["MAX_ROLL_DEG"].
+    IF roll > ROVER_MAX_ROLL_DEG {
+        LOCAL rollRange IS ROVER_FLIP_ROLL_DEG - ROVER_MAX_ROLL_DEG.
         SET rollFactor TO MAX(0.3,
-            1.0 - (roll - ROVER_CFG["MAX_ROLL_DEG"]) / rollRange * 0.7).
+            1.0 - (roll - ROVER_MAX_ROLL_DEG) / rollRange * 0.7).
     }
 
     RETURN base * slopeFactor * rollFactor.
@@ -253,8 +257,8 @@ LOCAL FUNCTION _roverEffectiveMaxSpeed {
 
 LOCAL FUNCTION _roverSteerFactor {
     LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
-    LOCAL ref IS ROVER_CFG["STEER_REF_SPEED"].
-    LOCAL minF IS ROVER_CFG["STEER_MIN_FACTOR"].
+    LOCAL ref IS ROVER_STEER_REF_SPEED.
+    LOCAL minF IS ROVER_STEER_MIN_FACTOR.
     RETURN MAX(minF, MIN(1.0, ref / MAX(spd, 0.1))).
 }
 
@@ -278,8 +282,8 @@ LOCAL FUNCTION _roverBattery {
 LOCAL FUNCTION _roverTractionOn {
     IF roverTractionOn { RETURN. }
     SET roverTractionOn TO TRUE.
-    IF ROVER_CFG["TRACTION_AG"] > 0 {
-        _roverSetAG(ROVER_CFG["TRACTION_AG"], TRUE).
+    IF ROVER_TRACTION_AG > 0 {
+        _roverSetAG(ROVER_TRACTION_AG, TRUE).
     } ELSE {
         FOR p IN _tractionParts {
             IF p:HASMODULE("ModuleWheelMotor") {
@@ -294,8 +298,8 @@ LOCAL FUNCTION _roverTractionOn {
 LOCAL FUNCTION _roverTractionOff {
     IF NOT roverTractionOn { RETURN. }
     SET roverTractionOn TO FALSE.
-    IF ROVER_CFG["TRACTION_AG"] > 0 {
-        _roverSetAG(ROVER_CFG["TRACTION_AG"], FALSE).
+    IF ROVER_TRACTION_AG > 0 {
+        _roverSetAG(ROVER_TRACTION_AG, FALSE).
     } ELSE {
         FOR p IN _tractionParts {
             IF p:HASMODULE("ModuleWheelMotor") {

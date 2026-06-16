@@ -75,7 +75,7 @@ Looks like Python/JS; is neither.
 - **Boot**: `boot/boot.ks` → syncs `boot_lib` + `dependencies` → preamble
   libs → EVA/`CORE:TAG` routing (`roles/`) or vehicle script (`craft/`) →
   selected mission id persisted in state; profile copied to
-  `1:/missions/<vehicle>/` and reloaded into `MISSION_CFG` →
+  `1:/missions/<vehicle>/` and run as `SET` overrides →
   `bootVehicleLibs()` roots synced/compiled/run → 5 s manual-mode
   window → resume.
 - **Phases**: profiles own `SEQUENCE`; `runPhases(map)` dispatches by the
@@ -89,10 +89,10 @@ Looks like Python/JS; is neither.
   waterfall.
 - **Missing handler** in `runPhases` ⇒ band-change request (`reload_*` state
   + reboot), not an error — that's the progressive-loading mechanism.
-- **Vehicle contract**: `GLOBAL CFG IS LEXICON(...)`, `bootVehicleLibs()`,
-  `main()`. Aircraft delegate to `airplaneMain()`; profile values land in
-  `CFG` from `MISSION_CFG`, with `mission_cfg_*` state used only for runtime
-  overrides.
+- **Vehicle contract**: craft/profile scripts `SET` global config symbols,
+  then expose `bootVehicleLibs()` and `main()`. Aircraft delegate to
+  `airplaneMain()`. Runtime `mission_cfg_*` state is converted back into
+  `SET NAME TO value.` overrides during boot.
 
 ## Map of the important code
 
@@ -119,20 +119,26 @@ Looks like Python/JS; is neither.
 - Logging: `mLog` info, `mLogWarn("STATS ...")` machine-readable metrics,
   `mLogError` + `yieldToPrompt()` for operator-needed halts. Phases log a
   `STATS ... setup` and `... result` pair.
-- Config flows CFG-ward: libs read `CFG` keys with per-lib `_cfg(key,
-  default)` helpers; per-craft tuning goes in the craft's configure hook or
-  the mission profile — never hardcoded in libs.
-- Avoid repeated `CFG:HASKEY` checks in flight loops or planners. Prefer
-  explicit `GLOBAL LAND_CFG_*`-style symbols with defaults, override them once
-  from `CFG` at phase/setup entry, then read the globals in hot code.
+- **Config is globals, not a safety wrapper.** Defaults live as `GLOBAL X IS`
+  declarations in the file that owns the behavior, craft/profile scripts
+  override with `SET X TO value.`, and libraries read `X` directly. Boot may
+  run the selected profile once to discover `SEQUENCE` / `LIBS_EXTRA`, then
+  runs it again after the selected library band loads so profile values win.
+  Do not add
+  `CFG:HASKEY`, string-key config helpers, `TOUPPER`/`TOLOWER` comparison
+  wrappers, or defensive "optional config" layers. If a config symbol is
+  wrong or missing, crashing loudly is better than hiding a latent mission bug
+  behind bloated fallback code; git blame and flight logs are the debugger.
+  If a config name would collide with a kOS global, add a trailing underscore
+  (for example `TARGET_`) to mark it as ours.
 - Parts are found by VAB tag (`SHIP:PARTSTAGGED`), never by index.
 - Retry pattern for burns: plan → `executeManeuver()` → on failure wait,
   replan, cap attempts at `MAX_RETRIES IS 5`.
 
 ## Working in this repo
 
-- Mission profiles are KerboScript files in `missions/<vehicle>/`; each sets
-  `MISSION_CFG` to a `LEXICON(...)`.
+- Mission profiles are KerboScript files in `missions/<vehicle>/`; each is a
+  list of `SET NAME TO value.` statements.
 - Transfer-planning mental model: for `XING,BPLANE,COAST,CAPTURE,SHAPE`,
   `XING` must produce a real target SOI patch, but it should not be treated
   as the owner of exact arrival plane/AoP. `BPLANE` can correct a rough
@@ -157,7 +163,7 @@ Looks like Python/JS; is neither.
   unrelated untracked files (e.g. `package.json`) alone.
 - Career context matters: this is a hard-mode career save. Don't assume
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
-  RAPIERs yet). Keep new systems engine-agnostic via CFG gates.
+  RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out): BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06); the suborbital return arc
   (`lib/suborbit.ks` v3: elements-only arc + coast + targeted walk) is

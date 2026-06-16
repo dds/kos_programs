@@ -2,6 +2,16 @@
 // launch.ks  —  Reusable ascent phases  (0:/lib/launch.ks)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL PARKING_ALT IS 80000.
+GLOBAL LAUNCH_INCLINATION IS 0.
+GLOBAL LAUNCH_AZIMUTH IS 0.
+GLOBAL LAUNCH_STAGE_LIMIT IS 0.
+GLOBAL FAIRING_ALT IS 72000.
+GLOBAL EXTEND_ALT IS 73500.
+GLOBAL RECOVERY_PE IS -1.
+GLOBAL ORBIT_STAY_TIME IS 0.
+
 LOCAL FUNCTION _launchAge {
     RETURN TIME:SECONDS - stateGetNum("launch_time", 0).
 }
@@ -80,9 +90,9 @@ GLOBAL FUNCTION phaseLaunch {
     LOCAL mjCore IS ADDONS:MJ:CORE.
     mLog("MechJeb core running: " + mjCore:RUNNING).
 
-    LOCAL parkingAlt IS cfgNum("PARKING_ALT", 80000).
-    LOCAL launchInc IS cfgNum("LAUNCH_INCLINATION", 0).
-    LOCAL launchAzimuth IS cfgNum("LAUNCH_AZIMUTH", 0).
+    LOCAL parkingAlt IS PARKING_ALT.
+    LOCAL launchInc IS LAUNCH_INCLINATION.
+    LOCAL launchAzimuth IS LAUNCH_AZIMUTH.
 
     LOCAL asc IS ADDONS:MJ:ASCENT.
     SET asc:ENABLED               TO TRUE.
@@ -187,7 +197,7 @@ GLOBAL FUNCTION phaseFairing {
         nextPhase(launchSeq).
         RETURN.
     }
-    LOCAL fairingAlt IS cfgNum("FAIRING_ALT", 72000).
+    LOCAL fairingAlt IS FAIRING_ALT.
     IF fairingAlt < 10000 {
         mLogWarn("Unsafe FAIRING_ALT=" + fairingAlt + "m; using 71500m.").
         SET fairingAlt TO 71500.
@@ -231,7 +241,7 @@ GLOBAL FUNCTION phaseExtendAnts {
         RETURN.
     }
 
-    LOCAL extendAlt IS cfgNum("EXTEND_ALT", 73500).
+    LOCAL extendAlt IS EXTEND_ALT.
     IF extendAlt < 10000 {
         mLogWarn("Unsafe EXTEND_ALT=" + extendAlt + "m; using 73000m.").
         SET extendAlt TO 73000.
@@ -403,8 +413,8 @@ GLOBAL FUNCTION armAscentStaging {
         PRESERVE.
     }
 
-    IF CFG:HASKEY("RECOVERY_PE") {
-        WHEN SHIP:PERIAPSIS >= CFG["RECOVERY_PE"]
+    IF RECOVERY_PE >= 0 {
+        WHEN SHIP:PERIAPSIS >= RECOVERY_PE
                 AND ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED THEN {
             mLog("Recovery staging: Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km, ejecting stage.").
             HUDTEXT("Recovery staging!", 3, 2, 14, YELLOW, FALSE).
@@ -416,7 +426,7 @@ GLOBAL FUNCTION armAscentStaging {
             mLog("Ascent complete post-staging, raising Pe now.").
             LOCK STEERING TO SHIP:PROGRADE.
             LOCK THROTTLE TO 1.
-            WAIT UNTIL SHIP:PERIAPSIS >= cfgNum("PARKING_ALT", 80000) * 0.95.
+            WAIT UNTIL SHIP:PERIAPSIS >= PARKING_ALT * 0.95.
             LOCK THROTTLE TO 0.
             UNLOCK THROTTLE.
             UNLOCK STEERING.
@@ -600,7 +610,7 @@ GLOBAL FUNCTION ascentNeedsStage {
 }
 
 LOCAL FUNCTION _isParkingOrbitStable {
-    LOCAL target IS cfgNum("PARKING_ALT", 80000).
+    LOCAL target IS PARKING_ALT.
     LOCAL tol IS target * 0.10.
     RETURN SHIP:PERIAPSIS > (target - tol)
         AND SHIP:APOAPSIS < (target + tol)
@@ -643,7 +653,7 @@ GLOBAL FUNCTION confirmLaunch {
 
     printFn:CALL().
     uiPrompt("SPACE to launch / ESC to abort / 30s auto-launch").
-    uiPrompt("Edit CFG in terminal to override").
+    uiPrompt("Edit globals in terminal to override").
     PRINT " ".
     LOCAL deadline IS TIME:SECONDS + 30.
     LOCAL confirmed IS FALSE.

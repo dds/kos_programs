@@ -3,6 +3,25 @@
 // (0:/lib/scansat_ops.ks)
 // ============================================================
 
+// --- Config defaults owned by this file ---
+GLOBAL SCANSAT_DECOUPLER_TAG IS "".
+GLOBAL SCANSAT_DISPOSE_CARRIER IS 0.
+GLOBAL SCANSAT_DISPOSE_BEFORE_RELEASE IS 0.
+GLOBAL SCANSAT_STAGE_AFTER_RELEASE IS 0.
+GLOBAL SCANSAT_DISPOSE_PE IS -1.
+GLOBAL SCANSAT_DISPOSE_MAX_TIME IS 600.
+GLOBAL SCANSAT_RECOVERY_PE IS -1.
+GLOBAL SCANSAT_RECOVERY_AP IS -1.
+GLOBAL SCANSAT_AUTO_DEORBIT IS 0.
+GLOBAL SCANSAT_DEORBIT_PE IS -1.
+GLOBAL SCANSAT_DEORBIT_MAX_TIME IS 600.
+GLOBAL SCANSAT_POWER_GUARD IS 0.
+GLOBAL SCANSAT_POWER_LOW IS 0.2.
+GLOBAL SCANSAT_POWER_RESUME IS 0.5.
+GLOBAL SCANSAT_TARGET_COVERAGE IS -1.
+GLOBAL SCANSAT_REQUIRED_TYPES IS "".
+GLOBAL SOLAR_REORIENT_PERIOD IS 0.
+
 LOCAL FUNCTION _payloadSeq {
     RETURN launchSeq.
 }
@@ -17,7 +36,7 @@ GLOBAL FUNCTION phaseScanSatOps {
     mLog("SCANsat payload on station at " + MISSION["target"] + ".").
 
     LOCAL tag IS "scansat_decoupler".
-    IF CFG:HASKEY("SCANSAT_DECOUPLER_TAG") { SET tag TO CFG["SCANSAT_DECOUPLER_TAG"]. }
+    SET tag TO SCANSAT_DECOUPLER_TAG.
 
     IF stateGet("scansat_recovered", "false") = "true" {
         scienceStartScanners().
@@ -77,8 +96,7 @@ GLOBAL FUNCTION phaseScanSatOps {
         RETURN.
     }
 
-    IF CFG:HASKEY("SCANSAT_DISPOSE_BEFORE_RELEASE")
-            AND CFG["SCANSAT_DISPOSE_BEFORE_RELEASE"] > 0 {
+    IF SCANSAT_DISPOSE_BEFORE_RELEASE > 0 {
         IF NOT _scanSatImpactThenRecover(tag) { RETURN. }
         nextPhase(_payloadSeq()).
         RETURN.
@@ -100,8 +118,7 @@ GLOBAL FUNCTION phaseScanSatOps {
     mLog("SCANsat deployed. Continuing primary mission.").
     HUDTEXT("SCANsat deployed", 5, 2, 16, GREEN, FALSE).
 
-    IF CFG:HASKEY("SCANSAT_DISPOSE_CARRIER")
-            AND CFG["SCANSAT_DISPOSE_CARRIER"] > 0 {
+    IF SCANSAT_DISPOSE_CARRIER > 0 {
         _disposeScanSatCarrier().
     } ELSE IF _scanSatAutoDeorbitEnabled() {
         _scanSatMapThenDeorbit().
@@ -118,21 +135,20 @@ GLOBAL FUNCTION phaseScanSatOps {
 // SCANSAT_POWER_GUARD is set, duty-cycle the scanners on battery state.
 LOCAL FUNCTION _scanSatOnStation {
     orientForSolar().
-    IF CFG:HASKEY("SCANSAT_POWER_GUARD")
-            AND CFG["SCANSAT_POWER_GUARD"] > 0 {
+    IF SCANSAT_POWER_GUARD > 0 {
         scansatDutyCycle().
     }
 }
 
 LOCAL FUNCTION _scanSatAutoDeorbitEnabled {
-    RETURN CFG:HASKEY("SCANSAT_AUTO_DEORBIT")
-        AND CFG["SCANSAT_AUTO_DEORBIT"] > 0.
+    RETURN SCANSAT_AUTO_DEORBIT > 0
+        AND SCANSAT_AUTO_DEORBIT > 0.
 }
 
 LOCAL FUNCTION _scanSatRequiredTypes {
     LOCAL raw IS "LOW_RES_ALTIMETRY,LOW_RES_RESOURCES,BIOME".
-    IF CFG:HASKEY("SCANSAT_REQUIRED_TYPES") {
-        SET raw TO CFG["SCANSAT_REQUIRED_TYPES"].
+    IF SCANSAT_REQUIRED_TYPES <> "" {
+        SET raw TO SCANSAT_REQUIRED_TYPES.
     }
     LOCAL out IS LIST().
     FOR item IN raw:SPLIT(",") {
@@ -198,8 +214,8 @@ LOCAL FUNCTION _scanSatMapDone {
 
 LOCAL FUNCTION _scanSatWaitForRequiredCoverage {
     LOCAL targetCoverage IS 99.
-    IF CFG:HASKEY("SCANSAT_TARGET_COVERAGE") {
-        SET targetCoverage TO CFG["SCANSAT_TARGET_COVERAGE"].
+    IF SCANSAT_TARGET_COVERAGE >= 0 {
+        SET targetCoverage TO SCANSAT_TARGET_COVERAGE.
     }
     LOCAL requiredTypes IS _scanSatRequiredTypes().
 
@@ -211,16 +227,16 @@ LOCAL FUNCTION _scanSatWaitForRequiredCoverage {
 
     LOCAL lowFrac IS 0.30.
     LOCAL resumeFrac IS 0.60.
-    IF CFG:HASKEY("SCANSAT_POWER_LOW") { SET lowFrac TO CFG["SCANSAT_POWER_LOW"]. }
-    IF CFG:HASKEY("SCANSAT_POWER_RESUME") { SET resumeFrac TO CFG["SCANSAT_POWER_RESUME"]. }
+    SET lowFrac TO SCANSAT_POWER_LOW.
+    SET resumeFrac TO SCANSAT_POWER_RESUME.
 
     scienceStartScanners().
     LOCAL scansOn IS TRUE.
     orientForSolar().
     LOCAL lastOrient IS TIME:SECONDS.
     LOCAL reorientPeriod IS 43200.
-    IF CFG:HASKEY("SOLAR_REORIENT_PERIOD") {
-        SET reorientPeriod TO CFG["SOLAR_REORIENT_PERIOD"].
+    IF SOLAR_REORIENT_PERIOD > 0 {
+        SET reorientPeriod TO SOLAR_REORIENT_PERIOD.
     }
     LOCAL nextStatus IS 0.
     LOCAL done IS FALSE.
@@ -266,8 +282,8 @@ LOCAL FUNCTION _scanSatWaitForRequiredCoverage {
 
 LOCAL FUNCTION _scanSatSelfDeorbit {
     LOCAL targetPe IS 30000.
-    IF CFG:HASKEY("SCANSAT_DEORBIT_PE") {
-        SET targetPe TO CFG["SCANSAT_DEORBIT_PE"].
+    IF SCANSAT_DEORBIT_PE >= 0 {
+        SET targetPe TO SCANSAT_DEORBIT_PE.
     }
     IF SHIP:PERIAPSIS < targetPe {
         mLog("SCANsat already on impact trajectory; Pe="
@@ -299,8 +315,8 @@ LOCAL FUNCTION _scanSatSelfDeorbit {
 
     LOCK THROTTLE TO 1.
     LOCAL maxTime IS 600.
-    IF CFG:HASKEY("SCANSAT_DEORBIT_MAX_TIME") {
-        SET maxTime TO CFG["SCANSAT_DEORBIT_MAX_TIME"].
+    IF SCANSAT_DEORBIT_MAX_TIME > 0 {
+        SET maxTime TO SCANSAT_DEORBIT_MAX_TIME.
     }
     UNTIL SHIP:PERIAPSIS < targetPe
             OR SHIP:AVAILABLETHRUST <= 0
@@ -359,12 +375,12 @@ LOCAL FUNCTION _releaseTaggedPayload {
 
 LOCAL FUNCTION _disposeScanSatCarrier {
     LOCAL targetPe IS 0.
-    IF CFG:HASKEY("SCANSAT_DISPOSE_PE") {
-        SET targetPe TO CFG["SCANSAT_DISPOSE_PE"].
+    IF SCANSAT_DISPOSE_PE >= 0 {
+        SET targetPe TO SCANSAT_DISPOSE_PE.
     }
     LOCAL maxTime IS 600.
-    IF CFG:HASKEY("SCANSAT_DISPOSE_MAX_TIME") {
-        SET maxTime TO CFG["SCANSAT_DISPOSE_MAX_TIME"].
+    IF SCANSAT_DISPOSE_MAX_TIME > 0 {
+        SET maxTime TO SCANSAT_DISPOSE_MAX_TIME.
     }
 
     WAIT 1.
@@ -421,15 +437,15 @@ LOCAL FUNCTION _disposeScanSatCarrier {
 LOCAL FUNCTION _scanSatImpactThenRecover {
     PARAMETER tag.
 
-    LOCAL impactPe IS 2000.
-    IF CFG:HASKEY("SCANSAT_DISPOSE_PE") { SET impactPe TO CFG["SCANSAT_DISPOSE_PE"]. }
+    LOCAL impactPe IS SCANSAT_DISPOSE_PE.
+    IF impactPe < 0 { SET impactPe TO 2000. }
 
-    LOCAL recoveryPe IS 75000.
-    LOCAL recoveryAp IS 75000.
-    IF CFG:HASKEY("SCANSAT_RECOVERY_PE") { SET recoveryPe TO CFG["SCANSAT_RECOVERY_PE"]. }
-    ELSE IF CFG:HASKEY("TARGET_PE") { SET recoveryPe TO CFG["TARGET_PE"]. }
-    IF CFG:HASKEY("SCANSAT_RECOVERY_AP") { SET recoveryAp TO CFG["SCANSAT_RECOVERY_AP"]. }
-    ELSE IF CFG:HASKEY("TARGET_AP") { SET recoveryAp TO CFG["TARGET_AP"]. }
+    LOCAL recoveryPe IS SCANSAT_RECOVERY_PE.
+    LOCAL recoveryAp IS SCANSAT_RECOVERY_AP.
+    IF recoveryPe < 0 { SET recoveryPe TO TARGET_PE. }
+    IF recoveryPe < 0 { SET recoveryPe TO 75000. }
+    IF recoveryAp < 0 { SET recoveryAp TO TARGET_AP. }
+    IF recoveryAp < 0 { SET recoveryAp TO 75000. }
 
     mLogWarn("STATS scansat-impact-release setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -462,8 +478,7 @@ LOCAL FUNCTION _scanSatImpactThenRecover {
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     WAIT 0.5.
 
-    IF CFG:HASKEY("SCANSAT_STAGE_AFTER_RELEASE")
-            AND CFG["SCANSAT_STAGE_AFTER_RELEASE"] > 0 {
+    IF SCANSAT_STAGE_AFTER_RELEASE > 0 {
         STAGE.
         mLog("SCANsat staged after release.").
         WAIT 1.

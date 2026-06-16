@@ -24,6 +24,18 @@
 
 @LAZYGLOBAL OFF.
 
+// --- Config defaults owned by this file ---
+GLOBAL MISSION_NAME IS "".
+GLOBAL PAYLOADS IS "".
+GLOBAL PARKING_ALT IS 80000.
+GLOBAL LAUNCH_INCLINATION IS 0.
+GLOBAL CAPTURE_PE IS -1.
+GLOBAL TARGET_PE IS -1.
+GLOBAL TARGET_AP IS -1.
+GLOBAL SHAPE_PE IS -1.
+GLOBAL SHAPE_AP IS -1.
+
+
 // Inner content width (between the "| " and " |").
 LOCAL FUNCTION _fpInner {
     RETURN MAX(36, MIN(TERMINAL:WIDTH - 6, 56)).
@@ -87,7 +99,8 @@ GLOBAL FUNCTION flightPlanRow {
 }
 
 GLOBAL FUNCTION flightPlanIdentity {
-    LOCAL missionName IS missionCfgGet("MISSION_NAME", stateGet("mission_name", "")).
+    LOCAL missionName IS MISSION_NAME.
+    IF missionName = "" { SET missionName TO stateGet("mission_name", ""). }
     IF missionName <> "" { flightPlanRow("MISSION", missionName). }
     flightPlanRow("CODE", codeVersion()).
     IF CORE:TAG <> "" { flightPlanRow("CORE", CORE:TAG). }
@@ -127,58 +140,20 @@ GLOBAL FUNCTION flightPlanSequence {
     flightPlanLine().
 }
 
-// Generic CFG dump, grouped by key prefix: keys sharing a prefix
+// Generic config dump, grouped by key prefix: keys sharing a prefix
 // before the first underscore (CAPTURE_*, SHAPE_*, ...) become a
 // section with the prefix stripped from each row; loners gather
 // under CONFIG. Sequence/lib plumbing keys are skipped. Lets any
 // craft show its full effective mission config without curating
 // rows by hand.
 GLOBAL FUNCTION flightPlanConfig {
-    IF NOT (DEFINED CFG) { RETURN. }
-    LOCAL skipKeys IS LIST("SEQUENCE", "LIBS", "LIBS_EXTRA",
-        "MISSION_ID", "MISSION_NAME", "TARGET", "PAYLOADS").
-
-    LOCAL groups IS LEXICON().
-    LOCAL order IS LIST().
-    FOR key IN CFG:KEYS {
-        IF NOT skipKeys:CONTAINS(key) {
-            LOCAL us IS key:FIND("_").
-            LOCAL grp IS "CONFIG".
-            IF us > 0 AND us < key:LENGTH - 1 {
-                SET grp TO key:SUBSTRING(0, us).
-            }
-            IF NOT groups:HASKEY(grp) {
-                groups:ADD(grp, LIST()).
-                order:ADD(grp).
-            }
-            groups[grp]:ADD(key).
-        }
-    }
-
-    // Singleton groups fold into CONFIG to avoid one-row sections.
-    LOCAL loose IS LIST().
-    LOCAL sections IS LIST().
-    FOR grp IN order {
-        IF grp <> "CONFIG" AND groups[grp]:LENGTH >= 2 {
-            sections:ADD(grp).
-        } ELSE {
-            FOR key IN groups[grp] { loose:ADD(key). }
-        }
-    }
-
-    FOR grp IN sections {
-        flightPlanSection(grp).
-        FOR key IN groups[grp] {
-            flightPlanRow(key:SUBSTRING(grp:LENGTH + 1,
-                key:LENGTH - grp:LENGTH - 1), CFG[key]).
-        }
-    }
-    IF loose:LENGTH > 0 {
-        flightPlanSection("CONFIG").
-        FOR key IN loose {
-            flightPlanRow(key, CFG[key]).
-        }
-    }
+    IF PARKING_ALT > 0 { flightPlanRow("PARK ALT", ROUND(PARKING_ALT/1000,0) + " km"). }
+    IF LAUNCH_INCLINATION <> 0 { flightPlanRow("LAUNCH INC", LAUNCH_INCLINATION + " deg"). }
+    IF CAPTURE_PE >= 0 { flightPlanRow("CAPTURE PE", ROUND(CAPTURE_PE/1000,0) + " km"). }
+    IF TARGET_PE >= 0 { flightPlanRow("TARGET PE", ROUND(TARGET_PE/1000,0) + " km"). }
+    IF TARGET_AP >= 0 { flightPlanRow("TARGET AP", ROUND(TARGET_AP/1000,0) + " km"). }
+    IF SHAPE_PE >= 0 { flightPlanRow("SHAPE PE", ROUND(SHAPE_PE/1000,0) + " km"). }
+    IF SHAPE_AP >= 0 { flightPlanRow("SHAPE AP", ROUND(SHAPE_AP/1000,0) + " km"). }
 }
 
 GLOBAL FUNCTION flightPlanChecklist {
