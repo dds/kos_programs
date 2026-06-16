@@ -5,7 +5,7 @@
 // SHIP state, but do not stage, deploy hardware, or mutate mission state.
 // ============================================================
 
-@CLOBBERBUILTINS.
+@CLOBBERBUILTINS ON.
 @LAZYGLOBAL OFF.
 
 // Effective local gravity in meters per second squared.
