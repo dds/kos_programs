@@ -221,7 +221,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
         IF (CFG["TARGET_DEORBIT_SCAN_ORBITS"]:TYPE = "STRING") {
             SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_ORBITS"]:TONUMBER.
         } ELSE {
-            SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_ORBITS".
+            SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_ORBITS"].
         }
     }
     LOCAL scanSamples IS 2048.
