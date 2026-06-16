@@ -66,36 +66,65 @@ LOCAL FUNCTION _distanceMidcourseUt {
     LOCAL storedTarget IS stateGet("midcourse_refine_target", "").
     LOCAL storedMethod IS stateGet("midcourse_refine_method", "").
     LOCAL storedArrival IS stateGetNum("midcourse_refine_arrival_ut", 0).
+    LOCAL startDist IS _shipTargetDistanceAt(targetBody, tStart).
+    LOCAL arrivalDist IS targetBody:SOIRADIUS.
 
-    IF storedMethod <> "DISTANCE"
+    IF storedMethod <> "DISTANCE_SCAN"
             OR storedTarget <> targetBody:NAME
             OR ABS(storedArrival - tArrival) > 60
             OR midpointDist <= 0 {
-        LOCAL startDist IS _shipTargetDistanceAt(targetBody, tStart).
-        LOCAL arrivalDist IS targetBody:SOIRADIUS.
         SET midpointDist TO arrivalDist + 0.5 * (startDist - arrivalDist).
         stateSet("midcourse_refine_distance", midpointDist).
         stateSet("midcourse_refine_target", targetBody:NAME).
+        stateSet("midcourse_refine_start_ut", tStart).
+        stateSet("midcourse_refine_start_distance", startDist).
         stateSet("midcourse_refine_arrival_ut", tArrival).
-        stateSet("midcourse_refine_method", "DISTANCE").
-
-        IF startDist <= arrivalDist {
-            RETURN tStart.
-        }
+        stateSet("midcourse_refine_method", "DISTANCE_SCAN").
     }
 
-    IF _shipTargetDistanceAt(targetBody, tStart) <= midpointDist {
+    mLog("COAST_1HALF: distance gate start="
+        + ROUND(startDist / 1000, 1) + "km midpoint="
+        + ROUND(midpointDist / 1000, 1) + "km soi="
+        + ROUND(arrivalDist / 1000, 1) + "km.").
+
+    IF startDist <= midpointDist {
         RETURN tStart.
     }
 
-    IF _shipTargetDistanceAt(targetBody, tArrival) > midpointDist {
-        mLogWarn("COAST_1HALF: distance midpoint not bracketed; "
-            + "falling back to time midpoint.").
-        RETURN tStart + 0.5 * (tArrival - tStart).
-    }
-
+    LOCAL scanSteps IS 80.
+    LOCAL bestUt IS tStart.
+    LOCAL bestErr IS ABS(startDist - midpointDist).
+    LOCAL lastUt IS tStart.
+    LOCAL lastDist IS startDist.
+    LOCAL bracketed IS FALSE.
     LOCAL lo IS tStart.
     LOCAL hi IS tArrival.
+
+    FROM { LOCAL i IS 1. } UNTIL i > scanSteps STEP { SET i TO i + 1. } DO {
+        LOCAL sampleUt IS tStart + (tArrival - tStart) * i / scanSteps.
+        LOCAL sampleDist IS _shipTargetDistanceAt(targetBody, sampleUt).
+        LOCAL sampleErr IS ABS(sampleDist - midpointDist).
+        IF sampleErr < bestErr {
+            SET bestErr TO sampleErr.
+            SET bestUt TO sampleUt.
+        }
+        IF lastDist > midpointDist AND sampleDist <= midpointDist {
+            SET lo TO lastUt.
+            SET hi TO sampleUt.
+            SET bracketed TO TRUE.
+            BREAK.
+        }
+        SET lastUt TO sampleUt.
+        SET lastDist TO sampleDist.
+    }
+
+    IF NOT bracketed {
+        mLogWarn("COAST_1HALF: distance midpoint crossing not bracketed; "
+            + "using closest scanned point at distance error "
+            + ROUND(bestErr / 1000, 1) + "km.").
+        RETURN bestUt.
+    }
+
     FROM { LOCAL i IS 0. } UNTIL i >= 24 STEP { SET i TO i + 1. } DO {
         LOCAL mid IS lo + 0.5 * (hi - lo).
         IF _shipTargetDistanceAt(targetBody, mid) <= midpointDist {
