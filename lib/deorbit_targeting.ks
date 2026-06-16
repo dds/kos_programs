@@ -464,7 +464,7 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
         LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
             targetLat, targetLng).
-        LOCAL angle IS _nodeImpactAngle(nd, impactPos:LAT, impactPos:LNG).
+        LOCAL angle IS _nodeImpactAngle(nd).
         LOCAL distCost IS (dist / 500) * (dist / 500).
         LOCAL angleCost IS 999999999.
         IF angle >= 0 {
@@ -487,30 +487,9 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
 
 LOCAL FUNCTION _nodeImpactAngle {
     PARAMETER nd.
-    PARAMETER impactLat.
-    PARAMETER impactLng.
 
-    LOCAL obt IS nd:ORBIT.
-    LOCAL bdy IS SHIP:BODY.
-    LOCAL impactR IS bdy:RADIUS + LATLNG(impactLat, impactLng):TERRAINHEIGHT.
-    LOCAL sma IS obt:SEMIMAJORAXIS.
-    LOCAL ecc IS obt:ECCENTRICITY.
-    LOCAL p IS sma * (1 - ecc * ecc).
-    IF impactR <= 0 OR p <= 0 { RETURN -1. }
-
-    LOCAL v2 IS bdy:MU * (2 / impactR - 1 / sma).
-    IF v2 <= 0 { RETURN -1. }
-    LOCAL sideRate IS SQRT(bdy:MU * p) / impactR.
-    LOCAL downRate2 IS v2 - sideRate * sideRate.
-    IF downRate2 < 0 {
-        IF downRate2 > -0.0001 {
-            SET downRate2 TO 0.
-        } ELSE {
-            RETURN -1.
-        }
-    }
-    IF sideRate < 0.01 { RETURN 90. }
-    RETURN ARCTAN2(SQRT(downRate2), sideRate).
+    LOCAL postBurnSurfVel IS SHIP:VELOCITY:SURFACE + nd:DELTAV.
+    RETURN VANG(SHIP:UP:VECTOR, postBurnSurfVel) - 90.
 }
 
 LOCAL FUNCTION _planRetroNode {
