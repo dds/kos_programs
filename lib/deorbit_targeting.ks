@@ -219,6 +219,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL scanOrbits IS 32.
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_ORBITS") {
         SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_ORBITS"].
+        PRINT "scanOrbits=" + scanOrbits + " type=" + scanOrbits:TYPENAME.
     }
     LOCAL scanSamples IS 2048.
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_SAMPLES") {
