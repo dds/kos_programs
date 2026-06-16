@@ -54,52 +54,12 @@ GLOBAL FUNCTION targetResolveDeorbitTarget {
     RETURN result.
 }
 
-LOCAL FUNCTION _deorbitOffsetLatLng {
-    PARAMETER lat.
-    PARAMETER lng.
-    PARAMETER northM.
-    PARAMETER eastM.
-    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
-    LOCAL lonScale IS MAX(0.01, COS(lat)).
-    RETURN LEXICON(
-        "LAT", lat + northM * degPerM,
-        "LNG", lng + eastM * degPerM / lonScale
-    ).
-}
-
-LOCAL FUNCTION _deorbitGhostTarget {
-    PARAMETER targetLat.
-    PARAMETER targetLng.
-    LOCAL out IS LEXICON("LAT", targetLat, "LNG", targetLng).
-    LOCAL ghostDownrange IS 5000.
-    LOCAL hv IS lmHorizontalVelocity().
-    IF hv:MAG < 0.1 { RETURN out. }
-    LOCAL upVec IS SHIP:UP:VECTOR.
-    LOCAL northVec IS VXCL(upVec,
-        LATLNG(SHIP:LATITUDE + 0.01, SHIP:LONGITUDE):POSITION
-            - SHIP:GEOPOSITION:POSITION):NORMALIZED.
-    LOCAL eastVec IS VXCL(upVec,
-        LATLNG(SHIP:LATITUDE, SHIP:LONGITUDE + 0.01):POSITION
-            - SHIP:GEOPOSITION:POSITION):NORMALIZED.
-    LOCAL shifted IS _deorbitOffsetLatLng(targetLat, targetLng,
-        VDOT(hv:NORMALIZED, northVec) * ghostDownrange,
-        VDOT(hv:NORMALIZED, eastVec) * ghostDownrange).
-    SET out["LAT"] TO shifted["LAT"].
-    SET out["LNG"] TO shifted["LNG"].
-    RETURN out.
-}
-
 GLOBAL FUNCTION targetedDeorbitAt {
     PARAMETER targetLat.
     PARAMETER targetLng.
     PARAMETER ignoredPe IS 0.
     PARAMETER ignoredTolerance IS 0.
     PARAMETER ignoredOvershoot IS 0.
-
-    IF NOT ADDONS:TR:AVAILABLE {
-        mLogError("Trajectories not available — cannot guarantee targeted deorbit.").
-        RETURN FALSE.
-    }
 
     IF NOT targetReachable(targetLat) {
         mLogError("Target latitude is not reachable from this orbit inclination.").
@@ -115,18 +75,16 @@ GLOBAL FUNCTION targetedDeorbitAt {
         SET targetLng TO site["LNG"].
     }
 
-    LOCAL ghostTarget IS _deorbitGhostTarget(targetLat, targetLng).
-    LOCAL ghostLat IS ghostTarget["LAT"].
-    LOCAL ghostLng IS ghostTarget["LNG"].
-    LOCAL targetPe IS 0.
-    LOCAL targetTolerance IS 10000.
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
-    ADDONS:TR:SETTARGET(targetGeo).
+    LOCAL targetPe IS targetGeo:TERRAINHEIGHT + 8000.
+    LOCAL targetTolerance IS 10000.
+    IF ADDONS:TR:AVAILABLE {
+        ADDONS:TR:SETTARGET(targetGeo).
+    }
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
-        + "  ghost=" + ROUND(ghostLat,4) + "," + ROUND(ghostLng,4)
-        + "  Pe=0km  ghostTol=" + ROUND(targetTolerance/1000,1) + "km").
-    mLog("Deorbit ghost target: 5000m downrange; TR target remains true site.").
+        + "  flyoverPe=" + ROUND(targetPe/1000,1) + "km"
+        + "  flyoverTol=" + ROUND(targetTolerance/1000,1) + "km").
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL nowUt IS TIME:SECONDS.
@@ -205,7 +163,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     mLog("Discovery scan to T+" + ROUND(discoverEnd - nowUt, 0)
         + "s step=" + ROUND(stepA, 1) + "s mode=" + scanMode + ".").
     UNTIL scanUT > discoverEnd OR earlyStop {
-        LOCAL trialDist IS _evalDeorbitDist(scanUT, targetPe, ghostLat, ghostLng,
+        LOCAL trialDist IS _evalDeorbitDist(scanUT, targetPe, targetLat, targetLng,
             0, 0, bodyR, mu, orbitSma, twoOverOrbitSma,
             minLead).
         IF trialDist >= 0 {
@@ -263,12 +221,12 @@ GLOBAL FUNCTION targetedDeorbitAt {
                         AND center <= scanEnd + stepA {
                     LOCAL wBest IS 8.99e15.
                     LOCAL wBestT IS center.
-                    // Locate the window's time-optimum at surface Pe.
+                    // Locate the window's time-optimum at flyover Pe.
                     FOR off IN focusOffsets {
                         LOCAL tt IS center + off * stepA * 0.66.
                         IF tt > floorUt {
                             LOCAL trDist IS _evalDeorbitDist(tt, targetPe,
-                                ghostLat, ghostLng, 0, 0,
+                                targetLat, targetLng, 0, 0,
                                 bodyR, mu, orbitSma, twoOverOrbitSma,
                                 minLead).
                             IF trDist >= 0 {
@@ -281,14 +239,14 @@ GLOBAL FUNCTION targetedDeorbitAt {
                         }
                     }
                     // Narrow promising windows to their true minimum
-                    // against the ghost target.
+                    // against the target flyover point.
                     IF wBest < MAX(bestDist * 1.6, coarseStopDist * 6) {
                         LOCAL hstep IS stepA * 0.5.
                         UNTIL hstep < 0.8 {
                             FOR cand IN LIST(wBestT - hstep, wBestT + hstep) {
                                 IF cand > floorUt {
                                     LOCAL tr2Dist IS _evalDeorbitDist(cand,
-                                        targetPe, ghostLat, ghostLng, 0, 0,
+                                        targetPe, targetLat, targetLng, 0, 0,
                                         bodyR, mu, orbitSma, twoOverOrbitSma,
                                         minLead).
                                     IF tr2Dist >= 0
@@ -342,7 +300,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
         FOR cand IN LIST(bestUT - fstep, bestUT + fstep) {
             IF cand > floorUt {
                 LOCAL tr3Dist IS _evalDeorbitDist(cand, targetPe,
-                    ghostLat, ghostLng, 0, 0,
+                    targetLat, targetLng, 0, 0,
                     bodyR, mu, orbitSma, twoOverOrbitSma,
                     minLead).
                 IF tr3Dist >= 0 AND tr3Dist < bestDist {
@@ -366,12 +324,12 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + "s  Pe=" + ROUND(targetPe/1000,1) + "km"
         + "  Rad=" + ROUND(bestRad,2)
         + "  Nor=" + ROUND(bestNor,2)
-        + "  ghostDist=" + ROUND(bestDist/1000,1) + "km").
+        + "  flyoverDist=" + ROUND(bestDist/1000,1) + "km").
 
     IF bestDist > targetTolerance {
-        mLogWarn("Best solution misses ghost target by " + ROUND(bestDist/1000,1)
+        mLogWarn("Best solution misses target flyover by " + ROUND(bestDist/1000,1)
             + "km — exceeds tolerance of " + ROUND(targetTolerance/1000,1) + "km.").
-        HUDTEXT("Warning: " + ROUND(bestDist/1000,0) + "km from ghost target", 5, 2, 14, YELLOW, FALSE).
+        HUDTEXT("Warning: " + ROUND(bestDist/1000,0) + "km from target flyover", 5, 2, 14, YELLOW, FALSE).
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
@@ -387,14 +345,14 @@ GLOBAL FUNCTION targetedDeorbitAt {
     IF LAND_CFG_TERRAIN_VALIDATE {
         WAIT 0.1.
         LOCAL crashDist IS lmTerrainClearanceCheck(
-            ghostLat, ghostLng,
+            targetLat, targetLng,
             bestUT + 30, bestUT + 1800,
             2,
             LAND_CFG_TERRAIN_MIN_CLEARANCE,
             LAND_CFG_TERRAIN_SAFE_ALT).
         IF crashDist > LAND_CFG_TERRAIN_MAX_CRASH_DIST {
             mLogError("TERRAIN CHECK FAILED: trajectory hits terrain "
-                + ROUND(crashDist,0) + "m from ghost target.").
+                + ROUND(crashDist,0) + "m from target.").
             REMOVE realNode.
             RETURN FALSE.
         }
@@ -426,18 +384,15 @@ GLOBAL FUNCTION targetedDeorbitAt {
     executeDeorbitNode(realNode).
 
     WAIT 2.
-    IF ADDONS:TR:HASIMPACT {
-        LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-        LOCAL finalDist IS geoDistance(impactPos:LAT, impactPos:LNG, targetLat, targetLng).
-        LOCAL finalGhostDist IS geoDistance(impactPos:LAT, impactPos:LNG, ghostLat, ghostLng).
-        mLog("Post-burn impact prediction: "
-            + ROUND(impactPos:LAT,4) + "," + ROUND(impactPos:LNG,4)
-            + "  targetDist=" + ROUND(finalDist/1000,1) + "km"
-            + "  ghostDist=" + ROUND(finalGhostDist/1000,1) + "km").
-        HUDTEXT("Impact predicted " + ROUND(finalGhostDist/1000,1) + "km from ghost",
+    LOCAL flyInfo IS _deorbitFlyoverInfo(targetLat, targetLng,
+        TIME:SECONDS + 30, TIME:SECONDS + 1800, 10).
+    IF flyInfo["VALID"] {
+        mLog("Post-burn flyover prediction: "
+            + ROUND(flyInfo["LAT"],4) + "," + ROUND(flyInfo["LNG"],4)
+            + "  dist=" + ROUND(flyInfo["DIST"]/1000,1) + "km"
+            + "  PeKm=" + ROUND(flyInfo["ALT"]/1000,1)).
+        HUDTEXT("Flyover predicted " + ROUND(flyInfo["DIST"]/1000,1) + "km from target",
             5, 2, 14, GREEN, FALSE).
-    } ELSE {
-        mLogWarn("Trajectories has no impact prediction post-burn.").
     }
     // The burn fired; the next phase owns the powered descent.
     RETURN TRUE.
@@ -461,18 +416,71 @@ LOCAL FUNCTION _evalDeorbitDist {
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
     LOCAL nd IS _planDeorbitNode(burnUT, entryPe, radialDv, normalDv,
         bodyR, mu, orbitSma, twoOverOrbitSma).
-    WAIT 0.2.
+    WAIT 0.1.
 
-    IF NOT ADDONS:TR:HASIMPACT {
-        REMOVE nd.
-        RETURN -1.
+    LOCAL info IS _deorbitFlyoverInfo(targetLat, targetLng,
+        burnUT + 30, burnUT + 1800, 10).
+    REMOVE nd.
+    IF NOT info["VALID"] { RETURN -1. }
+    RETURN info["DIST"].
+}
+
+LOCAL FUNCTION _deorbitFlyoverInfo {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER startUt.
+    PARAMETER endUt.
+    PARAMETER stepSec.
+
+    LOCAL result IS LEXICON(
+        "VALID", FALSE,
+        "DIST", 999999999,
+        "LAT", 0,
+        "LNG", 0,
+        "UT", startUt,
+        "ALT", 0
+    ).
+    LOCAL bdy IS SHIP:BODY.
+    LOCAL bodyR IS bdy:RADIUS.
+    LOCAL bestUt IS startUt.
+    LOCAL bestRad IS 8.99e15.
+    LOCAL sampleUt IS startUt.
+
+    UNTIL sampleUt > endUt {
+        LOCAL pos IS POSITIONAT(SHIP, sampleUt).
+        LOCAL rad IS (pos - POSITIONAT(bdy, sampleUt)):MAG.
+        IF rad < bestRad {
+            SET bestRad TO rad.
+            SET bestUt TO sampleUt.
+        }
+        SET sampleUt TO sampleUt + stepSec.
+    }
+    IF bestRad >= 8e15 { RETURN result. }
+
+    LOCAL hstep IS stepSec / 2.
+    UNTIL hstep < 0.5 {
+        FOR cand IN LIST(bestUt - hstep, bestUt + hstep) {
+            IF cand >= startUt AND cand <= endUt {
+                LOCAL cPos IS POSITIONAT(SHIP, cand).
+                LOCAL cRad IS (cPos - POSITIONAT(bdy, cand)):MAG.
+                IF cRad < bestRad {
+                    SET bestRad TO cRad.
+                    SET bestUt TO cand.
+                }
+            }
+        }
+        SET hstep TO hstep / 2.
     }
 
-    LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-    LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
-        targetLat, targetLng).
-    REMOVE nd.
-    RETURN dist.
+    LOCAL bestPos IS POSITIONAT(SHIP, bestUt).
+    LOCAL geo IS bdy:GEOPOSITIONOF(bestPos).
+    SET result["VALID"] TO TRUE.
+    SET result["LAT"] TO geo:LAT.
+    SET result["LNG"] TO geo:LNG.
+    SET result["UT"] TO bestUt.
+    SET result["ALT"] TO bestRad - bodyR.
+    SET result["DIST"] TO geoDistance(geo:LAT, geo:LNG, targetLat, targetLng).
+    RETURN result.
 }
 
 

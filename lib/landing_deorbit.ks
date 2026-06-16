@@ -58,7 +58,7 @@ LOCAL FUNCTION _timedLandingDeorbit {
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL rBurn IS (POSITIONAT(SHIP, burnUT) - POSITIONAT(SHIP:BODY, burnUT)):MAG.
-    LOCAL deorbitPe IS _landingDeorbitPe().
+    LOCAL deorbitPe IS landingFlyoverPe().
     LOCAL rPe IS bodyR + deorbitPe.
     LOCAL tSMA IS (rBurn + rPe) / 2.
     LOCAL vNow IS VELOCITYAT(SHIP, burnUT):ORBIT:MAG.
@@ -84,10 +84,6 @@ LOCAL FUNCTION _timedLandingDeorbit {
         RETURN FALSE.
     }
     RETURN TRUE.
-}
-
-LOCAL FUNCTION _landingDeorbitPe {
-    RETURN 0.
 }
 
 LOCAL FUNCTION _confirmLandingTarget {

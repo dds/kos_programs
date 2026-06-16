@@ -140,11 +140,28 @@ LOCAL FUNCTION _getImpactDistance {
         landingTarget["LAT"], landingTarget["LNG"]).
 }
 
+GLOBAL FUNCTION landingFlyoverPe {
+    LOCAL landingTarget IS landingResolveTarget().
+    IF NOT landingTarget["FOUND"] { RETURN 8000. }
+    RETURN LATLNG(landingTarget["LAT"], landingTarget["LNG"]):TERRAINHEIGHT + 8000.
+}
+
+GLOBAL FUNCTION landingFlyoverDistance {
+    LOCAL landingTarget IS landingResolveTarget().
+    IF NOT landingTarget["FOUND"] { RETURN 999999. }
+    LOCAL flyUt IS TIME:SECONDS + ETA:PERIAPSIS.
+    LOCAL geo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, flyUt)).
+    RETURN geoDistance(geo:LAT, geo:LNG,
+        landingTarget["LAT"], landingTarget["LNG"]).
+}
+
 GLOBAL FUNCTION landingImpactWithinTolerance {
     IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN TRUE. }
     RETURN _getImpactDistance() <= LAND_CFG_TARGET_TOLERANCE.
 }
 
 GLOBAL FUNCTION landingImpactAcceptableForAssist {
-    RETURN _getImpactDistance() <= 10000.
+    IF _getImpactDistance() <= 10000 { RETURN TRUE. }
+    IF SHIP:PERIAPSIS > landingFlyoverPe() + 500 { RETURN FALSE. }
+    RETURN landingFlyoverDistance() <= 10000.
 }
