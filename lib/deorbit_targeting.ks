@@ -227,9 +227,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL scanSamples IS 2048.
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_SAMPLES") {
         IF (CFG["TARGET_DEORBIT_SCAN_SAMPLES"]:TYPENAME = "STRING") {
-            SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_SAMPLES"]:TONUMBER.
+            SET scanSamples TO CFG["TARGET_DEORBIT_SCAN_SAMPLES"]:TONUMBER.
         } ELSE {
-            SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_SAMPLES"].
+            SET scanSamples TO CFG["TARGET_DEORBIT_SCAN_SAMPLES"].
         }
     }
     IF CFG:HASKEY("LANDING_SIM_MODE") AND CFG["LANDING_SIM_MODE"] > 0 {
@@ -277,6 +277,14 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL refineStartLimit IS MAX(tolerance * 10, coarseStopDist * 6).
     IF CFG:HASKEY("TARGET_DEORBIT_REFINE_MAX_START_DIST") {
         SET refineStartLimit TO CFG["TARGET_DEORBIT_REFINE_MAX_START_DIST"].
+    }
+    LOCAL discoveryMaxDist IS 0.
+    IF CFG:HASKEY("TARGET_DEORBIT_DISCOVERY_MAX_DIST") {
+        IF (CFG["TARGET_DEORBIT_DISCOVERY_MAX_DIST"]:TYPENAME = "STRING") {
+            SET discoveryMaxDist TO CFG["TARGET_DEORBIT_DISCOVERY_MAX_DIST"]:TONUMBER.
+        } ELSE {
+            SET discoveryMaxDist TO CFG["TARGET_DEORBIT_DISCOVERY_MAX_DIST"].
+        }
     }
 
     // Spare-dV budget for a steeper (harder) deorbit: when set,
@@ -360,6 +368,15 @@ GLOBAL FUNCTION targetedDeorbitAt {
             IF NOT dup { phases:ADD(ph). }
         }
         SET di TO di + 1.
+    }
+
+    IF scanMode = "orbits" AND discoveryMaxDist > 0
+            AND bestDist > discoveryMaxDist {
+        mLogWarn("Discovery best miss " + ROUND(bestDist/1000,1)
+            + "km exceeds limit " + ROUND(discoveryMaxDist/1000,1)
+            + "km; skipping focus search.").
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
+        RETURN FALSE.
     }
 
     // ── Focus: on every remaining orbit, sample only around each
