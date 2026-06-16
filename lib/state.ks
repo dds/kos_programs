@@ -19,7 +19,7 @@ LOCAL FUNCTION _ensureLoaded {
     IF EXISTS(STATE_PATH) {
         LOCAL raw IS OPEN(STATE_PATH):READALL:STRING:TRIM.
         IF raw <> "" {
-            SET _cache TO ADDONS:JSON:PARSE(STATE_PATH)).
+            SET _cache TO ADDONS:JSON:PARSE(STATE_PATH).
             RETURN.
         }
     }
