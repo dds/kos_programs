@@ -51,6 +51,66 @@ LOCAL FUNCTION _waitUntilOrSOI {
     }
 }
 
+LOCAL FUNCTION _shipTargetDistanceAt {
+    PARAMETER targetBody.
+    PARAMETER sampleUt.
+    RETURN (POSITIONAT(SHIP, sampleUt) - POSITIONAT(targetBody, sampleUt)):MAG.
+}
+
+LOCAL FUNCTION _distanceMidcourseUt {
+    PARAMETER targetBody.
+    PARAMETER tStart.
+    PARAMETER tArrival.
+
+    LOCAL midpointDist IS stateGetNum("midcourse_refine_distance", -1).
+    LOCAL storedTarget IS stateGet("midcourse_refine_target", "").
+    LOCAL storedMethod IS stateGet("midcourse_refine_method", "").
+    LOCAL storedArrival IS stateGetNum("midcourse_refine_arrival_ut", 0).
+
+    IF storedMethod <> "DISTANCE"
+            OR storedTarget <> targetBody:NAME
+            OR ABS(storedArrival - tArrival) > 60
+            OR midpointDist <= 0 {
+        LOCAL startDist IS _shipTargetDistanceAt(targetBody, tStart).
+        LOCAL arrivalDist IS targetBody:SOIRADIUS.
+        SET midpointDist TO arrivalDist + 0.5 * (startDist - arrivalDist).
+        stateSet("midcourse_refine_distance", midpointDist).
+        stateSet("midcourse_refine_target", targetBody:NAME).
+        stateSet("midcourse_refine_arrival_ut", tArrival).
+        stateSet("midcourse_refine_method", "DISTANCE").
+
+        IF startDist <= arrivalDist {
+            RETURN tStart.
+        }
+    }
+
+    IF _shipTargetDistanceAt(targetBody, tStart) <= midpointDist {
+        RETURN tStart.
+    }
+
+    IF _shipTargetDistanceAt(targetBody, tArrival) > midpointDist {
+        mLogWarn("COAST_1HALF: distance midpoint not bracketed; "
+            + "falling back to time midpoint.").
+        RETURN tStart + 0.5 * (tArrival - tStart).
+    }
+
+    LOCAL lo IS tStart.
+    LOCAL hi IS tArrival.
+    FROM { LOCAL i IS 0. } UNTIL i >= 24 STEP { SET i TO i + 1. } DO {
+        LOCAL mid IS lo + 0.5 * (hi - lo).
+        IF _shipTargetDistanceAt(targetBody, mid) <= midpointDist {
+            SET hi TO mid.
+        } ELSE {
+            SET lo TO mid.
+        }
+    }
+
+    mLog("COAST_1HALF: distance midpoint "
+        + ROUND(midpointDist / 1000, 1) + "km from "
+        + targetBody:NAME + ".").
+    RETURN hi.
+}
+
 GLOBAL FUNCTION phaseCoast {
     LOCAL target IS missionTargetBody().
     SET SAS TO TRUE.
@@ -75,7 +135,7 @@ GLOBAL FUNCTION phaseCoast1Half {
     }
 
     LOCAL tStart IS TIME:SECONDS.
-    LOCAL tMidpoint IS tStart + 0.5 * (tArrival - tStart).
+    LOCAL tMidpoint IS _distanceMidcourseUt(target, tStart, tArrival).
     stateSet("midcourse_refine_ut", tMidpoint).
 
     mLog("Coasting to mid-course refinement at T+"
@@ -117,11 +177,19 @@ GLOBAL FUNCTION phaseCoast2Half {
     }
 
     LOCAL soiBuffer IS _cfgNum("SOI_BUFFER_TIME", SOI_BUFFER_TIME_DEFAULT).
+    LOCAL soiAlarmId IS ensureSoiAlarm(target, tArrival,
+        "Auto-created by COAST_2HALF").
     LOCAL coastUntil IS MAX(TIME:SECONDS, tArrival - soiBuffer).
     mLog("Coasting toward " + target:NAME + " SOI boundary; buffer="
         + ROUND(soiBuffer, 0) + "s.").
     _waitUntilOrSOI(target, coastUntil, 10).
 
+    IF SHIP:BODY = target AND soiAlarmId <> "" {
+        DELETEALARM(soiAlarmId).
+        FOR key IN LIST("soi_alarm_id", "soi_alarm_target", "soi_alarm_ut") {
+            stateRemove(key).
+        }
+    }
     IF SHIP:BODY <> target {
         mLog("COAST_2HALF: reached SOI buffer; waiting for "
             + target:NAME + " SOI.").
