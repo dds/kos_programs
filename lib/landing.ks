@@ -245,7 +245,7 @@ LOCAL FUNCTION _landingCoastTick {
     LOCAL gravAcc IS ctx["GRAV"].
     LOCAL downSpeed IS ctx["DOWN_SPEED"].
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
-    LOCAL horizontalAcc IS MAX(0.1, maxAcc * LAND_CFG_BRAKE_ACCEL_FRACTION).
+    LOCAL horizontalAcc IS MAX(0.1, maxAcc).
     LOCAL brakeDist IS lmHorizontalBrakeDistance(
         horizontalSpeed, horizontalAcc).
     LOCAL burnDist IS lmVerticalBurnDistance(
@@ -255,10 +255,6 @@ LOCAL FUNCTION _landingCoastTick {
     IF ctx["HAS_TARGET"] {
         SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     }
-    LOCAL trajErr IS _landingTrajError(ctx).
-    LOCAL impactErr IS trajErr["DIST"].
-    LOCAL alongErr IS trajErr["ALONG"].
-
     IF ctx["HAS_TARGET"] AND NOT ctx["TERRAIN_DONE"]
             AND ALT:RADAR <= LAND_CFG_GUIDANCE_ALT {
         LOCAL terrainResult IS _landingTerrainCheck(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
@@ -272,20 +268,12 @@ LOCAL FUNCTION _landingCoastTick {
 
     HUDTEXT("COAST d=" + ROUND(distToTarget,0)
         + " brake=" + ROUND(brakeDist,0)
-        + " trErr=" + ROUND(impactErr,0)
-        + " along=" + ROUND(alongErr,0)
         + " hs=" + ROUND(horizontalSpeed,1),
         1, 2, 13, WHITE, FALSE).
 
     IF burnHeight <= burnDist * LAND_CFG_BURN_MARGIN + LAND_CFG_BRAKE_MARGIN {
         _landingSetState(ctx, "VERTICAL_DESCENT", "vertical burn gate").
-    } ELSE IF trajErr["FOUND"]
-            AND (alongErr >= 0
-                OR ABS(alongErr) <= LAND_CFG_TR_BRAKE_WINDOW
-                OR impactErr <= LAND_CFG_TR_BRAKE_WINDOW) {
-        _landingSetState(ctx, "BRAKING_BURN", "TR impact reached target").
     } ELSE IF ctx["HAS_TARGET"]
-            AND NOT trajErr["FOUND"]
             AND distToTarget <= brakeDist + LAND_CFG_BRAKE_MARGIN {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
     } ELSE IF NOT ctx["HAS_TARGET"] {
