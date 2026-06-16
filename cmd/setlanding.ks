@@ -98,18 +98,18 @@ IF mode = "assist" {
     _cfg("SEQUENCE", _landingSequenceForPhase(phaseName, assistPath)).
     IF assistPath { _assistConfig(tagName). }
     _cfg("LANDING_TARGET_TOLERANCE", "2500").
-    _cfg("TARGET_DEORBIT_SCAN_ORBITS", "32").
-    _cfg("TARGET_DEORBIT_SCAN_SAMPLES", "2048").
+    _cfg("TARGET_DEORBIT_SCAN_ORBITS", "2").
+    _cfg("TARGET_DEORBIT_SCAN_SAMPLES", "32").
     _cfg("TARGET_DEORBIT_COARSE_STOP_DIST", "4000").
     _cfg("TARGET_DEORBIT_REFINE_TOLERANCE", "250").
     _cfg("TARGET_DEORBIT_PROCEED_ON_MISS", "0").
-    _cfg("LANDING_DEORBIT_PE", "-5000").
+    _cfg("LANDING_DEORBIT_PE", "-1000").
 
     PRINT "Landing deorbit settings forced.".
     PRINT "Sequence -> " + stateGet("mission_cfg_SEQUENCE", "") + ".".
     IF assistPath { PRINT "Tag -> " + tagName + ".". }
     PRINT "Phase -> " + phaseName + ".".
-    PRINT "Scan: 32 orbits / 2048 samples, refine<=250m, Pe=-5km.".
+    PRINT "Scan: 2 orbits / 32 samples, refine<=250m, Pe=-1km.".
 
 } ELSE IF mode = "tag" {
     LOCAL tagName IS "probe_decoupler".
