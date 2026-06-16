@@ -684,6 +684,7 @@ GLOBAL FUNCTION bootCachedVehicleLibs {
     PARAMETER band IS "".
     IF SHIP:STATUS = "PRELAUNCH" { RETURN LIST(). }
     IF band <> "" AND stateGet("lib_band", "") <> band { RETURN LIST(). }
+    IF stateGet("lib_band_phase", "") <> stateGet("phase", "") { RETURN LIST(). }
     RETURN missionListFromCsv(stateGet("lib_band_libs", "")).
 }
 

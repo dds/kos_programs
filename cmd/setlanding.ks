@@ -7,7 +7,12 @@
 //   RUNPATH("0:/cmd/setlanding.ks", "tag", "probe_decoupler", "LAND").
 //       Same, but enter the given phase.
 //   RUNPATH("0:/cmd/setlanding.ks", "deorbit").
-//       Force safe targeted-deorbit settings and enter LAND_DEORBIT.
+//       Force safe targeted-deorbit settings and enter LAND_DEORBIT,
+//       then LAND.
+//   RUNPATH("0:/cmd/setlanding.ks", "deorbit", "assist").
+//       Same, but continue into LAND_ASSIST after deorbit.
+//   RUNPATH("0:/cmd/setlanding.ks", "deorbit", "assist", "probe_decoupler").
+//       Same, with an explicit landing-assist decoupler tag.
 //   RUNPATH("0:/cmd/setlanding.ks", "assist", "probe_decoupler").
 //       Force the emergency LAND_ASSIST profile for a live rover.
 
@@ -30,14 +35,25 @@ LOCAL FUNCTION _landingBandForPhase {
     RETURN "LANDING".
 }
 
-IF mode = "assist" {
-    LOCAL tagName IS "probe_decoupler".
-    IF arg1 <> "" { SET tagName TO arg1. }
+LOCAL FUNCTION _clearLibCache {
+    stateRemove("lib_band_libs").
+    stateRemove("lib_band_phase").
+}
 
-    stateSet("phase", "LAND_ASSIST").
-    stateSet("reload_required", "false").
-    stateSet("lib_band", "LANDING").
-    _cfg("SEQUENCE", "LAND_DEORBIT,LAND_ASSIST,DONE").
+LOCAL FUNCTION _landingSequenceForPhase {
+    PARAMETER phaseName.
+    PARAMETER assistPath IS FALSE.
+    IF assistPath OR phaseName = "LAND_ASSIST" {
+        RETURN "LAND_DEORBIT,LAND_ASSIST,DONE".
+    }
+    IF phaseName = "LAND" {
+        RETURN "LAND,DONE".
+    }
+    RETURN "LAND_DEORBIT,LAND,DONE".
+}
+
+LOCAL FUNCTION _assistConfig {
+    PARAMETER tagName.
     _cfg("LANDING_ASSIST_DECOUPLER_TAG", tagName).
     _cfg("LANDING_ASSIST_MAX_TILT", "12").
     _cfg("LANDING_ASSIST_SURFACE_SETTLE_TIME", "2").
@@ -47,6 +63,18 @@ IF mode = "assist" {
     _cfg("LANDING_DEORBIT_OVERSHOOT_TOLERANCE", "1200").
     _cfg("RELOAD_AFTER_LAND_ASSIST", "0").
     _cfg("RELOAD_AFTER_LAND", "0").
+}
+
+IF mode = "assist" {
+    LOCAL tagName IS "probe_decoupler".
+    IF arg1 <> "" { SET tagName TO arg1. }
+
+    stateSet("phase", "LAND_ASSIST").
+    stateSet("reload_required", "false").
+    stateSet("lib_band", "LANDING").
+    _clearLibCache().
+    _cfg("SEQUENCE", "LAND_DEORBIT,LAND_ASSIST,DONE").
+    _assistConfig(tagName).
 
     PRINT "Emergency LAND_ASSIST config forced.".
     PRINT "Tag -> " + tagName.
@@ -54,11 +82,21 @@ IF mode = "assist" {
 
 } ELSE IF mode = "deorbit" {
     LOCAL phaseName IS "LAND_DEORBIT".
-    IF arg1 <> "" { SET phaseName TO arg1. }
+    LOCAL assistPath IS FALSE.
+    IF arg1 = "assist" OR arg1 = "LAND_ASSIST" {
+        SET assistPath TO TRUE.
+    } ELSE IF arg1 <> "" {
+        SET phaseName TO arg1.
+    }
+    LOCAL tagName IS "probe_decoupler".
+    IF assistPath AND arg2 <> "" { SET tagName TO arg2. }
 
     stateSet("phase", phaseName).
     stateSet("reload_required", "false").
-    stateSet("lib_band", "LAND_DEORBIT").
+    stateSet("lib_band", _landingBandForPhase(phaseName)).
+    _clearLibCache().
+    _cfg("SEQUENCE", _landingSequenceForPhase(phaseName, assistPath)).
+    IF assistPath { _assistConfig(tagName). }
     _cfg("LANDING_TARGET_TOLERANCE", "2500").
     _cfg("TARGET_DEORBIT_SCAN_ORBITS", "32").
     _cfg("TARGET_DEORBIT_SCAN_SAMPLES", "2048").
@@ -68,6 +106,8 @@ IF mode = "assist" {
     _cfg("LANDING_DEORBIT_PE", "-5000").
 
     PRINT "Landing deorbit settings forced.".
+    PRINT "Sequence -> " + stateGet("mission_cfg_SEQUENCE", "") + ".".
+    IF assistPath { PRINT "Tag -> " + tagName + ".". }
     PRINT "Phase -> " + phaseName + ".".
     PRINT "Scan: 32 orbits / 2048 samples, refine<=250m, Pe=-5km.".
 
@@ -77,10 +117,12 @@ IF mode = "assist" {
     LOCAL phaseName IS "LAND_DEORBIT".
     IF arg2 <> "" { SET phaseName TO arg2. }
 
-    _cfg("LANDING_ASSIST_DECOUPLER_TAG", tagName).
+    _assistConfig(tagName).
+    _cfg("SEQUENCE", _landingSequenceForPhase(phaseName, phaseName <> "LAND")).
     stateSet("phase", phaseName).
     stateSet("reload_required", "false").
     stateSet("lib_band", _landingBandForPhase(phaseName)).
+    _clearLibCache().
 
     PRINT "Landing decoupler tag -> " + tagName + ".".
     PRINT "Phase -> " + phaseName + ".".
