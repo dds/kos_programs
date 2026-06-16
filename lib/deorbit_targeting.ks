@@ -193,6 +193,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
     ADDONS:TR:SETTARGET(targetGeo).
 
+    PRINT("ENTRYPE: " + ENTRYPE + " TYPE: " + ENTRYPE:TYPENAME).
+    PRINT("TOLERANCE: " + TOLERANCE + " TYPE: " + TOLERANCE:TYPENAME).
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
         + "  entryPe=" + ROUND(entryPe:TONUMBER(0)/1000,1) + "km"
         + "  tolerance=" + ROUND(tolerance:TONUMBER(0)/1000,1) + "km").
