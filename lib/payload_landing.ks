@@ -1,6 +1,6 @@
 // Landing descent phase wrappers.
 
-GLOBAL FUNCTION phaseLandAssist {
+GLOBAL FUNCTION phaseLand_Assist {
     landingApplyMissionConfig().
     IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
     IF NOT (CFG:HASKEY("LANDING_SKIP_TARGET_SEARCH") AND CFG["LANDING_SKIP_TARGET_SEARCH"] > 0)

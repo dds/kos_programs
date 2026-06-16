@@ -100,7 +100,7 @@ GLOBAL FUNCTION phaseRelayOps {
     nextPhase(_payloadSeq()).
 }
 
-GLOBAL FUNCTION phaseLandDeorbit {
+GLOBAL FUNCTION phaseLand_Deorbit {
     LOCAL deorbitOk IS landingTargetedDeorbit().
     IF NOT deorbitOk {
         mLogError("Landing deorbit did not meet target tolerance; holding phase.").
@@ -110,7 +110,7 @@ GLOBAL FUNCTION phaseLandDeorbit {
     nextPhase(_payloadSeq()).
 }
 
-GLOBAL FUNCTION phaseLandAssist {
+GLOBAL FUNCTION phaseLand_Assist {
     landingAssistStage().
     nextPhase(_payloadSeq()).
 }
