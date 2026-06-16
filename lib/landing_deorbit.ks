@@ -139,43 +139,6 @@ LOCAL FUNCTION _autoLandingTarget {
     RETURN TRUE.
 }
 
-LOCAL FUNCTION _landingOffsetLatLng {
-    PARAMETER lat.
-    PARAMETER lng.
-    PARAMETER northM.
-    PARAMETER eastM.
-    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
-    LOCAL lonScale IS MAX(0.01, COS(lat)).
-    RETURN LEXICON(
-        "LAT", lat + northM * degPerM,
-        "LNG", lng + eastM * degPerM / lonScale
-    ).
-}
-
-LOCAL FUNCTION _landingOvershootTarget {
-    PARAMETER landingTarget.
-    LOCAL out IS LEXICON("LAT", landingTarget["LAT"], "LNG", landingTarget["LNG"]).
-    LOCAL overshoot IS LAND_CFG_DEORBIT_OVERSHOOT.
-    IF overshoot <= 0 { RETURN out. }
-
-    LOCAL hv IS lmHorizontalVelocity().
-    IF hv:MAG < 0.1 { RETURN out. }
-    LOCAL upVec IS SHIP:UP:VECTOR.
-    LOCAL northVec IS VXCL(upVec,
-        LATLNG(SHIP:LATITUDE + 0.01, SHIP:LONGITUDE):POSITION
-            - SHIP:GEOPOSITION:POSITION):NORMALIZED.
-    LOCAL eastVec IS VXCL(upVec,
-        LATLNG(SHIP:LATITUDE, SHIP:LONGITUDE + 0.01):POSITION
-            - SHIP:GEOPOSITION:POSITION):NORMALIZED.
-    LOCAL northM IS VDOT(hv:NORMALIZED, northVec) * overshoot.
-    LOCAL eastM IS VDOT(hv:NORMALIZED, eastVec) * overshoot.
-    LOCAL shifted IS _landingOffsetLatLng(
-        landingTarget["LAT"], landingTarget["LNG"], northM, eastM).
-    SET out["LAT"] TO shifted["LAT"].
-    SET out["LNG"] TO shifted["LNG"].
-    RETURN out.
-}
-
 LOCAL FUNCTION _landingTargetedDeorbit {
     LOCAL landingTarget IS landingResolveTarget().
     IF NOT landingTarget["FOUND"] {
@@ -192,10 +155,10 @@ LOCAL FUNCTION _landingTargetedDeorbit {
     IF (LAND_CFG_DEORBIT_PE:TYPENAME = "STRING") {
         SET LAND_CFG_DEORBIT_PE TO LAND_CFG_DEORBIT_PE:TONUMBER.
     }
-    LOCAL aimTarget IS _landingOvershootTarget(landingTarget).
     RETURN targetedDeorbitAt(
-        aimTarget["LAT"],
-        aimTarget["LNG"],
+        landingTarget["LAT"],
+        landingTarget["LNG"],
         LAND_CFG_DEORBIT_PE,
-        LAND_CFG_TARGET_TOLERANCE).
+        LAND_CFG_TARGET_TOLERANCE,
+        LAND_CFG_DEORBIT_OVERSHOOT).
 }

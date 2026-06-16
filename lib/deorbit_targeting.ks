@@ -169,11 +169,49 @@ LOCAL FUNCTION _deorbitEvalBestPe {
     RETURN LIST(bestValid, bestDist, bestPe).
 }
 
+LOCAL FUNCTION _deorbitOffsetLatLng {
+    PARAMETER lat.
+    PARAMETER lng.
+    PARAMETER northM.
+    PARAMETER eastM.
+    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
+    LOCAL lonScale IS MAX(0.01, COS(lat)).
+    RETURN LEXICON(
+        "LAT", lat + northM * degPerM,
+        "LNG", lng + eastM * degPerM / lonScale
+    ).
+}
+
+LOCAL FUNCTION _deorbitAimTarget {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER overshootM.
+    LOCAL out IS LEXICON("LAT", targetLat, "LNG", targetLng).
+    IF overshootM <= 0 { RETURN out. }
+
+    LOCAL hv IS lmHorizontalVelocity().
+    IF hv:MAG < 0.1 { RETURN out. }
+    LOCAL upVec IS SHIP:UP:VECTOR.
+    LOCAL northVec IS VXCL(upVec,
+        LATLNG(SHIP:LATITUDE + 0.01, SHIP:LONGITUDE):POSITION
+            - SHIP:GEOPOSITION:POSITION):NORMALIZED.
+    LOCAL eastVec IS VXCL(upVec,
+        LATLNG(SHIP:LATITUDE, SHIP:LONGITUDE + 0.01):POSITION
+            - SHIP:GEOPOSITION:POSITION):NORMALIZED.
+    LOCAL shifted IS _deorbitOffsetLatLng(targetLat, targetLng,
+        VDOT(hv:NORMALIZED, northVec) * overshootM,
+        VDOT(hv:NORMALIZED, eastVec) * overshootM).
+    SET out["LAT"] TO shifted["LAT"].
+    SET out["LNG"] TO shifted["LNG"].
+    RETURN out.
+}
+
 GLOBAL FUNCTION targetedDeorbitAt {
     PARAMETER targetLat.
     PARAMETER targetLng.
     PARAMETER entryPe IS 30000.
     PARAMETER tolerance IS 5000.
+    PARAMETER overshootM IS 0.
 
     IF NOT ADDONS:TR:AVAILABLE {
         mLogError("Trajectories not available — cannot guarantee targeted deorbit.").
@@ -194,12 +232,20 @@ GLOBAL FUNCTION targetedDeorbitAt {
         SET targetLng TO site["LNG"].
     }
 
+    LOCAL aimTarget IS _deorbitAimTarget(targetLat, targetLng, overshootM).
+    LOCAL aimLat IS aimTarget["LAT"].
+    LOCAL aimLng IS aimTarget["LNG"].
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
     ADDONS:TR:SETTARGET(targetGeo).
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
         + "  entryPe=" + ROUND(entryPe/1000,1) + "km"
         + "  tolerance=" + ROUND(tolerance/1000,1) + "km").
+    IF overshootM > 0 {
+        mLog("Deorbit aim bias: " + ROUND(overshootM,0) + "m downrange"
+            + "  aim=" + ROUND(aimLat,4) + "," + ROUND(aimLng,4)
+            + "  TR target remains true site.").
+    }
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL nowUt IS TIME:SECONDS.
@@ -326,7 +372,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     mLog("Discovery scan to T+" + ROUND(discoverEnd - nowUt, 0)
         + "s step=" + ROUND(stepA, 1) + "s mode=" + scanMode + ".").
     UNTIL scanUT > discoverEnd OR earlyStop {
-        LOCAL trialDist IS _evalDeorbitDist(scanUT, entryPe, targetLat, targetLng,
+        LOCAL trialDist IS _evalDeorbitDist(scanUT, entryPe, aimLat, aimLng,
             0, 0, bodyR, mu, orbitSma, twoOverOrbitSma,
             minLead, minDV, maxDV).
         IF trialDist >= 0 {
@@ -403,7 +449,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                         LOCAL tt IS center + off * stepA * 0.66.
                         IF tt > floorUt {
                             LOCAL trDist IS _evalDeorbitDist(tt, entryPe,
-                                targetLat, targetLng, 0, 0,
+                                aimLat, aimLng, 0, 0,
                                 bodyR, mu, orbitSma, twoOverOrbitSma,
                                 minLead, minDV, maxDV).
                             IF trDist >= 0 {
@@ -420,7 +466,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     // target. No-budget peList is a single eval.
                     IF peList:LENGTH > 1 AND wBest < 8e15 {
                         LOCAL pb IS _deorbitEvalBestPe(wBestT, peList,
-                            targetLat, targetLng, bodyR, mu, orbitSma,
+                            aimLat, aimLng, bodyR, mu, orbitSma,
                             twoOverOrbitSma, minLead, minDV, maxDV).
                         SET validSamples TO validSamples + peList:LENGTH.
                         IF pb[0] AND pb[1] < wBest {
@@ -436,7 +482,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                             FOR cand IN LIST(wBestT - hstep, wBestT + hstep) {
                                 IF cand > floorUt {
                                     LOCAL tr2Dist IS _evalDeorbitDist(cand,
-                                        wBestPe, targetLat, targetLng, 0, 0,
+                                        wBestPe, aimLat, aimLng, 0, 0,
                                         bodyR, mu, orbitSma, twoOverOrbitSma,
                                         minLead, minDV, maxDV).
                                     IF tr2Dist >= 0
@@ -504,7 +550,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
         FOR cand IN LIST(bestUT - fstep, bestUT + fstep) {
             IF cand > floorUt {
                 LOCAL tr3Dist IS _evalDeorbitDist(cand, bestPe,
-                    targetLat, targetLng, 0, 0,
+                    aimLat, aimLng, 0, 0,
                     bodyR, mu, orbitSma, twoOverOrbitSma,
                     minLead, minDV, maxDV).
                 IF tr3Dist >= 0 AND tr3Dist < bestDist {
@@ -519,7 +565,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     // Final Pe polish at the pinned burn time — also covers the
     // minutes-mode and discovery-early-stop paths that skip focus.
     IF peList:LENGTH > 1 {
-        LOCAL pf IS _deorbitEvalBestPe(bestUT, peList, targetLat, targetLng,
+        LOCAL pf IS _deorbitEvalBestPe(bestUT, peList, aimLat, aimLng,
             bodyR, mu, orbitSma, twoOverOrbitSma, minLead, minDV, maxDV).
         IF pf[0] AND pf[1] < bestDist {
             SET bestDist TO pf[1].
@@ -584,7 +630,25 @@ GLOBAL FUNCTION targetedDeorbitAt {
             REMOVE realNode.
             RETURN FALSE.
         }
-        mLog("Terrain check passed. Trajectory is clear of mountains.").
+        LOCAL impactAngle IS lmTerrainImpactAngle(
+            bestUT + 30, bestUT + 1800,
+            2,
+            LAND_CFG_TERRAIN_MIN_CLEARANCE,
+            LAND_CFG_TERRAIN_SAFE_ALT).
+        IF impactAngle >= 0
+                AND impactAngle < LAND_CFG_TERRAIN_MIN_DESCENT_ANGLE {
+            mLogError("TERRAIN CHECK FAILED: descent angle "
+                + ROUND(impactAngle,1) + "deg is below "
+                + ROUND(LAND_CFG_TERRAIN_MIN_DESCENT_ANGLE,1) + "deg.").
+            REMOVE realNode.
+            RETURN FALSE.
+        }
+        IF impactAngle >= 0 {
+            mLog("Terrain check passed. Descent angle="
+                + ROUND(impactAngle,1) + "deg.").
+        } ELSE {
+            mLog("Terrain check passed. No low-clearance angle sample.").
+        }
     }
     mLog("Executing deorbit burn at T+" + ROUND(bestUT - TIME:SECONDS,0) + "s.").
     archiveLog().

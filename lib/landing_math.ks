@@ -196,3 +196,38 @@ GLOBAL FUNCTION lmTerrainClearanceCheck {
     }
     RETURN 0.
 }
+
+GLOBAL FUNCTION lmTerrainImpactAngle {
+    PARAMETER startUt.
+    PARAMETER endUt.
+    PARAMETER stepSec.
+    PARAMETER minClearance.
+    PARAMETER safeAlt.
+
+    LOCAL sampleUt IS startUt.
+    LOCAL bodyRad IS SHIP:BODY:RADIUS.
+    LOCAL bdy IS SHIP:BODY.
+
+    UNTIL sampleUt > endUt {
+        LOCAL pos IS POSITIONAT(SHIP, sampleUt).
+        LOCAL altRadius IS (pos - POSITIONAT(bdy, sampleUt)):MAG.
+        LOCAL altDatum IS altRadius - bodyRad.
+
+        IF altDatum < safeAlt {
+            LOCAL geo IS bdy:GEOPOSITIONOF(pos).
+            LOCAL terrain IS LATLNG(geo:LAT, geo:LNG):TERRAINHEIGHT.
+            IF (altDatum - terrain) <= minClearance {
+                LOCAL prevPos IS POSITIONAT(SHIP, sampleUt - stepSec).
+                LOCAL velVec IS pos - prevPos.
+                LOCAL upVec IS (pos - POSITIONAT(bdy, sampleUt)):NORMALIZED.
+                LOCAL downRate IS -VDOT(velVec, upVec).
+                LOCAL sideRate IS VXCL(upVec, velVec):MAG.
+                IF downRate <= 0 { RETURN 0. }
+                IF sideRate < 0.01 { RETURN 90. }
+                RETURN ARCTAN2(downRate, sideRate).
+            }
+        }
+        SET sampleUt TO sampleUt + stepSec.
+    }
+    RETURN -1.
+}
