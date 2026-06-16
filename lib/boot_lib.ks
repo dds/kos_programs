@@ -173,7 +173,7 @@ GLOBAL FUNCTION bootPruneLibs {
     PARAMETER wantedLibs.
     LOCAL keep IS LIST(
         "STATE", "LOGS", "FILES", "BOOT_LIB",
-        "CONFIG", "RESUME"
+        "CONFIG", "RESUME", "DEPENDENCIES"
     ).
     FOR lib IN wantedLibs {
         IF NOT bootLibArchiveOnly(lib)
