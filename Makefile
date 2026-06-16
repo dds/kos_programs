@@ -1,6 +1,6 @@
 TAG ?=
 
-.PHONY: help pre-commit require-tag stamp-version commit-version tag-version push-version release-version watch-sync
+.PHONY: help dependencies pre-commit require-tag stamp-version commit-version tag-version push-version release-version watch-sync
 
 help:
 	@echo "Version/log tag workflow:"
@@ -9,11 +9,14 @@ help:
 	@echo "  make tag-version TAG=kos-YYYYMMDD-N"
 	@echo "  make push-version TAG=kos-YYYYMMDD-N"
 	@echo "  make release-version TAG=kos-YYYYMMDD-N"
+	@echo "  make dependencies"
 	@echo "  make pre-commit"
 	@echo "  make watch-sync"
 
-pre-commit:
-	@true
+dependencies:
+	python3 scripts/generate_dependencies_ks.py
+
+pre-commit: dependencies
 
 require-tag:
 	@test -n "$(TAG)" || (echo "Set TAG=kos-YYYYMMDD-N" && exit 1)

@@ -82,8 +82,8 @@ Looks like Python/JS; is neither.
   persisted `phase` key; handlers call `nextPhase(seq)`. Sequences cannot
   repeat a phase name (lookup is by value) — multi-hop routes use the `GOTO`
   continuation phase instead. Shared handler naming convention:
-  `PHASE_NAME → phasePHASE_NAME`; `runPhases` evaluates that function name
-  directly once the phase's band is loaded.
+  `PHASE_NAME → phasePhaseName`, bound by generated `lib/dependencies.ks`
+  after the phase's band is loaded.
 - **dependencies.json sections**: `preamble` (always-loaded roots), `libs`
   (dependency edges), `phases` (phase → roots), `bands` (phases that load
   together; a phase without a band is its own band).
@@ -127,7 +127,7 @@ Looks like Python/JS; is neither.
 
 ## Working in this repo
 
-- **After editing `lib/dependencies.json`, run `make pre-commit`.**
+- **After editing `lib/dependencies.json`, run `make dependencies`.**
 - Transfer-planning mental model: for `XING,BPLANE,COAST,CAPTURE,SHAPE`,
   `XING` must produce a real target SOI patch, but it should not be treated
   as the owner of exact arrival plane/AoP. `BPLANE` can correct a rough

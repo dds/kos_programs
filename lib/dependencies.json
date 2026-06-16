@@ -8,6 +8,7 @@
       "logs",
       "files",
       "phases",
+      "dependencies",
       "config",
       "mission_type"
     ],

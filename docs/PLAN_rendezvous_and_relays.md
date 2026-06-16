@@ -201,9 +201,10 @@ closed for entry at descent.ks:148 by `_descentCloseExtendBays`).
 2. Statement terminators: every new/edited statement ends in `.`.
 3. Reserved names: no bare `r`/`v`/`q`; no shadowing `up`/`north`/`body`/
    `target`/`alt`/`eta`.
-4. After editing `lib/dependencies.json`: run `make pre-commit`.
-5. Phase wiring: every `SEQUENCE` phase exists in `dependencies.json` and
-   belongs to a band; every new cfg key is read by some lib (grep it).
+4. After editing `lib/dependencies.json`: run `make dependencies`; confirm
+   `lib/dependencies.ks` regenerated and committed.
+5. Phase wiring: every `SEQUENCE` phase exists in the `dependencies.ks` phase
+   list AND belongs to a band; every new cfg key is read by some lib (grep it).
 6. New JSON sanity: `rescue_ellory.json` keys match keys consumed by
    prelaunch / maneuver_rendezvous / descent libs.
 7. No archive-dependence in offline flight paths (descent libs preloaded via
@@ -225,7 +226,7 @@ closed for entry at descent.ks:148 by `_descentCloseExtendBays`).
 - B1 fix present and tolerant of missing tags; B2 resume logic skips released
   slots and is reboot-safe; B3 circular guard present.
 - Re-run C1 independently.
-- Confirm `make pre-commit` ran if `dependencies.json` changed; work committed
+- Confirm `make dependencies` ran if `dependencies.json` changed; work committed
   AND pushed (archive sync needs the push).
 
 ---

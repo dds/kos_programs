@@ -985,7 +985,7 @@ GLOBAL FUNCTION airplaneMain {
 }
 
 // Airplane phases normally dispatch through airplaneMain's local map.
-// These fallbacks keep direct convention dispatch operator-friendly.
+// These fallbacks keep generated dependency binding operator-friendly.
 GLOBAL FUNCTION phasePreflight {
     mLogWarn("PREFLIGHT is handled by airplaneMain — manual ops.").
     yieldToPrompt().

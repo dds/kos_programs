@@ -18,6 +18,10 @@ GLOBAL FUNCTION phaseMapSet {
     phaseMap:ADD(phaseName, handler).
 }
 
+GLOBAL FUNCTION phaseHandlerMap {
+    RETURN LEXICON().
+}
+
 GLOBAL FUNCTION phaseInLoadedBand {
     PARAMETER phaseName.
     LOCAL requiredBand IS bootLibBandForPhase(phaseName, "").
@@ -60,8 +64,19 @@ GLOBAL FUNCTION runPhases {
             LOCAL loadedBand IS stateGet("lib_band", "").
             LOCAL requiredBand IS bootLibBandForPhase(phase, "").
             IF requiredBand = loadedBand {
-                evaluate_function("phase" + phase, LIST()).
-                IF phaseShouldYield { RETURN. }
+                dependencyBindPhase(phaseMap, phase).
+                IF phaseMap:HASKEY(phase) {
+                    phaseMap[phase]:CALL().
+                    IF phaseShouldYield { RETURN. }
+                } ELSE {
+                    mLogError("Phase " + phase + " handler missing in loaded band " + loadedBand + ".").
+                    PRINT " ".
+                    PRINT "  PHASE HANDLER MISSING: " + phase.
+                    PRINT "  Loaded band: " + loadedBand + ".".
+                    PRINT "  Check dependencies.json and loaded libraries.".
+                    yieldToPrompt().
+                    RETURN.
+                }
             } ELSE {
                 stateSet("reload_required", "true").
                 stateSet("reload_reason", "PHASE_BAND_CHANGE").
