@@ -1,0 +1,11 @@
+// KerboScript mission profile.
+SET MISSION_CFG TO LEXICON(
+    "MISSION_ID", "kerbin_survey",
+    "MISSION_NAME", "FDR1 Kerbin Survey",
+    "TARGET", "KERBIN",
+    "PAYLOADS", "",
+    "SEQUENCE", "ARM,FLY,DONE",
+    "DRONE_STYLE", "TILT",
+    "DRONE_CRUISE_AGL", 60,
+    "DRONE_CRUISE_SPEED", 25
+).

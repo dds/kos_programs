@@ -1,0 +1,13 @@
+// KerboScript mission profile.
+SET MISSION_CFG TO LEXICON(
+    "MISSION_ID", "kerbin_sunsync",
+    "MISSION_NAME", "Kerbin Sun-Sync Satellite",
+    "TARGET", "KERBIN",
+    "PAYLOADS", "SCISAT",
+    "SEQUENCE", "LAUNCH,FAIR,ANTS,PARK,RAISE,CIRC,INCLINE,RELAY_OPS,DONE",
+    "PARKING_ALT", 73500,
+    "LAUNCH_INCLINATION", 98,
+    "TARGET_PE", 700000,
+    "TARGET_AP", 700000,
+    "TARGET_INCLINATION", 98
+).

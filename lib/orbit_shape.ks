@@ -20,7 +20,7 @@
 //      and move neither the plane nor the apsidal line.
 // So PLANE -> AOP -> APSES converges in one round plus trims.
 //
-// Phase: SHAPE  (bind via dependencies.json: SHAPE -> orbit_shape)
+// Phase: SHAPE  (bind via dependencies.ks: SHAPE -> orbit_shape)
 //
 // CFG keys (all optional — omitted elements are left alone):
 //   SHAPE_AP   — target apoapsis altitude (m)

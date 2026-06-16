@@ -36,16 +36,6 @@ LOCAL FUNCTION _syncLib {
     }
 }
 
-LOCAL FUNCTION _syncLibText {
-    PARAMETER fileName.
-    IF NOT HAS_LINK { RETURN. }
-    LOCAL src IS "0:/lib/" + fileName.
-    LOCAL dst IS "1:/lib/" + fileName.
-    IF EXISTS(src) {
-        COPYPATH(src, dst).
-    }
-}
-
 LOCAL FUNCTION _loadLib {
     PARAMETER libName.
     IF EXISTS("1:/lib/" + libName + ".ksm") {
@@ -62,7 +52,7 @@ _ensureDir("1:/run").
 IF HAS_LINK {
     PRINT "  SYNC boot lib ..... ".
     _syncLib("boot_lib").
-    _syncLibText("dependencies.json").
+    _syncLib("dependencies").
     IF EXISTS("0:/VERSION") {
         COPYPATH("0:/VERSION", "1:/run/code_version.state").
     }
@@ -71,6 +61,8 @@ IF HAS_LINK {
 }
 
 _loadLib("boot_lib").
+_loadLib("dependencies").
+BOOT_LIB_RAN:ADD("dependencies").
 bootPreamble().
 stateInit().
 initLog().

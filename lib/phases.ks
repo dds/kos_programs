@@ -73,7 +73,7 @@ GLOBAL FUNCTION runPhases {
                     PRINT " ".
                     PRINT "  PHASE HANDLER MISSING: " + phase.
                     PRINT "  Loaded band: " + loadedBand + ".".
-                    PRINT "  Check dependencies.json and loaded libraries.".
+                    PRINT "  Check dependencies.ks and loaded libraries.".
                     yieldToPrompt().
                     RETURN.
                 }

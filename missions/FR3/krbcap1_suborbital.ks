@@ -1,0 +1,11 @@
+// KerboScript mission profile.
+SET MISSION_CFG TO LEXICON(
+    "MISSION_ID", "krbcap1_suborbital",
+    "MISSION_NAME", "KRBCAP1 Suborbital Hop",
+    "TARGET", "KERBIN",
+    "PAYLOADS", "KRBCAP1",
+    "SEQUENCE", "LAUNCH,SUBORBIT,DESCENT,DONE",
+    "PARKING_ALT", 72000,
+    "LAUNCH_INCLINATION", 0,
+    "LIBS_EXTRA", "suborbit@SUBORBIT, descent"
+).

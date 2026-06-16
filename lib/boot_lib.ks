@@ -147,7 +147,6 @@ GLOBAL FUNCTION bootBaseName {
     PARAMETER fileName.
     IF fileName:CONTAINS(".ksm") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
     IF fileName:CONTAINS(".ks") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
-    IF fileName:CONTAINS(".json") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 5). }
     RETURN fileName.
 }
 
@@ -208,27 +207,30 @@ GLOBAL FUNCTION bootMissionConfigIds {
     FOR item IN items {
         IF item:ISFILE {
             LOCAL nm IS item:NAME.
-            IF nm:CONTAINS(".json") {
-                ids:ADD(nm:SUBSTRING(0, nm:LENGTH - 5)).
+            IF nm:CONTAINS(".ks") {
+                ids:ADD(nm:SUBSTRING(0, nm:LENGTH - 3)).
             }
         }
     }
     RETURN ids.
 }
 
+GLOBAL MISSION_CFG IS LEXICON().
+
 GLOBAL FUNCTION bootApplyMissionConfig {
     PARAMETER craftName.
     PARAMETER missionId.
     PARAMETER hasLink.
     IF missionId = "" { RETURN FALSE. }
-    LOCAL path_ IS "0:/missions/" + craftName + "/" + missionId + ".json".
+    LOCAL path_ IS "0:/missions/" + craftName + "/" + missionId + ".ks".
     IF NOT EXISTS(path_) {
         PRINT "  Mission config not found: " + path_.
         RETURN FALSE.
     }
-    LOCAL _cfg IS ADDONS:JSON:PARSE(OPEN(path_):READALL:STRING).
-    FOR key IN _cfg:KEYS {
-        LOCAL value IS _cfg[key].
+    RUNPATH(path_).
+    LOCAL cfg IS MISSION_CFG.
+    FOR key IN cfg:KEYS {
+        LOCAL value IS cfg[key].
         stateSet("mission_cfg_" + key, value).
         IF key = "MISSION_ID" {
             stateSet("mission_id", value).
@@ -469,9 +471,6 @@ GLOBAL FUNCTION bootCleanup {
 
 // ============================================================
 // boot_lib.ks - boot-time library dependency expansion
-//
-// This stays deliberately small: dependencies.json is refreshed when
-// available, then READJSON'd into lexicons/lists for the rest of the boot.
 // ============================================================
 
 GLOBAL BOOT_LIB_RAN IS LIST().
@@ -489,10 +488,6 @@ GLOBAL FUNCTION bootCheckManualKey {
         PRINT "  MANUAL MODE queued (keypress).".
     }
     RETURN BOOT_MANUAL_REQUESTED.
-}
-
-GLOBAL FUNCTION bootLibSpec {
-    RETURN ADDONS:JSON:PARSE(OPEN("1:/lib/dependencies.json"):READALL:STRING).
 }
 
 GLOBAL FUNCTION bootLibAddUnique {
@@ -519,9 +514,7 @@ GLOBAL FUNCTION bootLibAppendResolved {
 GLOBAL FUNCTION bootLibResolve {
     PARAMETER roots.
     LOCAL libs IS LIST().
-    LOCAL spec IS bootLibSpec().
-    LOCAL deps IS LEXICON().
-    IF spec:HASKEY("libs") { SET deps TO spec["libs"]. }
+    LOCAL deps IS dependencyLibs().
     FOR libName IN roots {
         bootLibAppendResolved(libs, libName, deps).
     }
@@ -533,6 +526,7 @@ GLOBAL FUNCTION bootLibRun {
     IF BOOT_LIB_RAN:CONTAINS(libName) { RETURN. }
     bootLibSync(libName).
     RUNPATH("1:/lib/" + libName).
+    BOOT_LIB_RAN:ADD(libName).
     PRINT("Loaded " + libName + "...").
 }
 
@@ -574,26 +568,22 @@ GLOBAL FUNCTION bootLibLoad {
 }
 
 GLOBAL FUNCTION bootPreamble {
-    LOCAL spec IS bootLibSpec().
-    bootLibLoadList(spec["preamble"]).
+    bootLibLoadList(dependencyPreamble()).
 }
 
 GLOBAL FUNCTION bootLibBandRoots {
     PARAMETER band.
-    LOCAL spec IS bootLibSpec().
-    LOCAL preamble IS LIST().
-    LOCAL bands IS LEXICON().
-    IF spec:HASKEY("preamble") { SET preamble TO spec["preamble"]. }
-    IF spec:HASKEY("bands") { SET bands TO spec["bands"]. }
+    LOCAL preamble IS dependencyPreamble().
+    LOCAL bands IS dependencyBands().
     LOCAL roots IS LIST().
     FOR libName IN preamble { bootLibAddUnique(roots, libName). }
     LOCAL bandKey IS band.
     IF bands:HASKEY(bandKey) {
         FOR phaseName IN bands[bandKey] {
-            FOR libName IN bootLibPhaseRoots(phaseName, spec) { bootLibAddUnique(roots, libName). }
+            FOR libName IN bootLibPhaseRoots(phaseName) { bootLibAddUnique(roots, libName). }
         }
     } ELSE {
-        FOR libName IN bootLibPhaseRoots(bandKey, spec) { bootLibAddUnique(roots, libName). }
+        FOR libName IN bootLibPhaseRoots(bandKey) { bootLibAddUnique(roots, libName). }
     }
     RETURN roots.
 }
@@ -605,9 +595,7 @@ GLOBAL FUNCTION bootLibBand {
 
 GLOBAL FUNCTION bootLibBandPhases {
     PARAMETER band.
-    LOCAL spec IS bootLibSpec().
-    LOCAL bands IS LEXICON().
-    IF spec:HASKEY("bands") { SET bands TO spec["bands"]. }
+    LOCAL bands IS dependencyBands().
     LOCAL phases IS LIST().
     LOCAL bandKey IS band.
     IF bands:HASKEY(bandKey) {
@@ -623,9 +611,7 @@ GLOBAL FUNCTION bootLibBandPhases {
 GLOBAL FUNCTION bootLibBandForPhase {
     PARAMETER phaseName.
     PARAMETER defaultBand IS "".
-    LOCAL spec IS bootLibSpec().
-    LOCAL bands IS LEXICON().
-    IF spec:HASKEY("bands") { SET bands TO spec["bands"]. }
+    LOCAL bands IS dependencyBands().
     LOCAL phaseKey IS phaseName.
     IF phaseKey = "" { RETURN defaultBand. }
     FOR bandKey IN bands:KEYS {
@@ -639,14 +625,9 @@ GLOBAL FUNCTION bootLibBandForPhase {
 
 GLOBAL FUNCTION bootLibPhaseRoots {
     PARAMETER phaseName.
-    PARAMETER spec IS LEXICON().
-    IF NOT spec:HASKEY("phases") AND NOT spec:HASKEY("preamble") {
-        SET spec TO bootLibSpec().
-    }
-    LOCAL preamble IS LIST().
-    LOCAL phases IS LEXICON().
-    IF spec:HASKEY("preamble") { SET preamble TO spec["preamble"]. }
-    IF spec:HASKEY("phases") { SET phases TO spec["phases"]. }
+    PARAMETER ignoredSpec IS LEXICON().
+    LOCAL preamble IS dependencyPreamble().
+    LOCAL phases IS dependencyPhases().
     LOCAL roots IS LIST().
     FOR libName IN preamble { bootLibAddUnique(roots, libName). }
     LOCAL phaseKey IS phaseName.
@@ -657,9 +638,7 @@ GLOBAL FUNCTION bootLibPhaseRoots {
 }
 
 GLOBAL FUNCTION bootLibAllPhases {
-    LOCAL spec IS bootLibSpec().
-    IF spec:HASKEY("phases") { RETURN spec["phases"]:KEYS. }
-    RETURN LIST().
+    RETURN dependencyPhases():KEYS.
 }
 
 // ============================================================

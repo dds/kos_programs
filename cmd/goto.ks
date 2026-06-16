@@ -80,7 +80,7 @@ IF NOT err {
         // Archive the current leg's log, then take over the mission.
         archiveLog().
 
-        // mission_id with no matching .json file: boot skips the
+        // mission_id with no matching .ks file: boot skips the
         // selector and leaves our state untouched (same trick as
         // cmd/returntokerbin.ks).
         stateSet("mission_id", "goto").

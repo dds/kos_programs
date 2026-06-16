@@ -85,7 +85,7 @@ IF NOT err {
     PRINT "Flight log archived.".
 
     // Set up the return mission identity.
-    // mission_id must be set to a name that has no matching .json file
+    // mission_id must be set to a name that has no matching .ks file
     // so boot skips the mission selector AND bootApplyMissionConfig
     // finds nothing to overwrite our state with.
     stateSet("target", "KERBIN").

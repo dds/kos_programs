@@ -1,3 +1,135 @@
+// ============================================================
+// dependencies.ks - boot dependency data and phase bindings
+// ============================================================
+
+GLOBAL FUNCTION dependencyPreamble {
+    RETURN LIST("core").
+}
+
+GLOBAL FUNCTION dependencyLibs {
+    RETURN LEXICON(
+        "core", LIST("state", "logs", "files", "phases", "dependencies", "config", "mission_type"),
+        "capture", LIST("maneuver", "orbit"),
+        "deorbit_burn", LIST(),
+        "deorbit_targeting", LIST("orbit", "utils"),
+        "flightplan", LIST("ui"),
+        "inclination", LIST("lib_navigation"),
+        "landing_config", LIST("utils"),
+        "landing_deorbit", LIST("landing_config"),
+        "landing", LIST("landing_config"),
+        "landing_site", LIST(),
+        "launch", LIST("flightplan", "orbit", "countdown"),
+        "maneuver", LIST("countdown", "solar"),
+        "prelaunch", LIST(),
+        "suborbit", LIST("launch"),
+        "mission_type", LIST(),
+        "hohmann_transfer", LIST(),
+        "maneuver_intersystem", LIST("lambert", "maneuver", "maneuver_targeting", "lib_navigation", "inclination"),
+        "maneuver_orbit", LIST("maneuver", "inclination", "orbit"),
+        "rdv_plan", LIST("hohmann_transfer", "maneuver", "lib_navigation", "orbit"),
+        "maneuver_rendezvous", LIST("hohmann_transfer", "maneuver"),
+        "maneuver_transfer", LIST("hohmann_transfer", "maneuver", "maneuver_targeting", "lib_navigation", "orbit"),
+        "maneuver_mcc", LIST("maneuver", "maneuver_targeting", "lib_navigation", "orbit"),
+        "molniya", LIST("maneuver", "inclination"),
+        "payload_landing", LIST("landing_config"),
+        "payload_ops", LIST("orbit", "utils", "solar"),
+        "relay_constellation", LIST("maneuver", "orbit"),
+        "scansat_ops", LIST("orbit", "solar"),
+        "solar", LIST(),
+        "airplane", LIST("observe", "flightplan", "utils"),
+        "rover", LIST("payload_landing"),
+        "science", LIST(),
+        "aerobrake", LIST("maneuver", "utils"),
+        "descent", LIST(),
+        "xfer_plan", LIST("maneuver_transfer", "orbit"),
+        "orbit_shape", LIST("maneuver", "inclination", "orbit"),
+        "arrival_bplane", LIST("hohmann_transfer", "maneuver"),
+        "goto_plan", LIST(),
+        "payload_release", LIST("maneuver", "orbit"),
+        "ssto", LIST("airplane", "maneuver", "orbit"),
+        "drone", LIST("observe", "flightplan")
+    ).
+}
+
+GLOBAL FUNCTION dependencyPhases {
+    RETURN LEXICON(
+        "PREFLIGHT", LIST("airplane"),
+        "FLIGHT", LIST("airplane"),
+        "POST_FLIGHT", LIST("airplane"),
+        "POSTFLIGHT", LIST("airplane"),
+        "EVA_SCIENCE", LIST("science", "orbit"),
+        "SCIENCE_OPS", LIST("science", "orbit", "solar"),
+        "SCIENCE_OPS_LOW", LIST("science", "orbit", "solar"),
+        "LAUNCH", LIST("launch"),
+        "FAIR", LIST("launch"),
+        "ANTS", LIST("launch"),
+        "PARK", LIST("launch"),
+        "ABORT", LIST("launch"),
+        "PRELAUNCH", LIST("prelaunch"),
+        "SUBORBIT", LIST("suborbit"),
+        "RDV", LIST("rdv_plan"),
+        "MATCH", LIST("maneuver_rendezvous"),
+        "CREW_XFER", LIST("maneuver_rendezvous"),
+        "XING", LIST("xfer_plan"),
+        "ESCAPE", LIST("xfer_plan"),
+        "MCC", LIST("maneuver_mcc"),
+        "AEROBRAKE", LIST("aerobrake"),
+        "DESCENT", LIST("descent"),
+        "KSC_DEORBIT", LIST("deorbit_targeting", "solar"),
+        "COAST", LIST("capture"),
+        "COAST_1HALF", LIST("capture"),
+        "COAST_2HALF", LIST("capture"),
+        "CAPTURE", LIST("capture"),
+        "FLYBY", LIST("capture"),
+        "CIRC", LIST("maneuver_orbit"),
+        "RAISE", LIST("maneuver_orbit"),
+        "INCLINE", LIST("maneuver_orbit"),
+        "ELLIPTICAL", LIST("maneuver_orbit"),
+        "TARGETED_DEORBIT", LIST("payload_ops", "deorbit_targeting", "landing_site"),
+        "RELEASE_PROBE", LIST("payload_ops"),
+        "RELAY_OPS", LIST("payload_ops"),
+        "RELAY_CONSTELLATION", LIST("relay_constellation"),
+        "SCANSAT_OPS", LIST("scansat_ops", "science"),
+        "LAND_DEORBIT", LIST("landing_deorbit", "deorbit_targeting", "deorbit_burn"),
+        "LAND", LIST("payload_landing", "landing"),
+        "LAND_ASSIST", LIST("payload_landing", "landing"),
+        "ROVER", LIST("rover"),
+        "MOLNIYA", LIST("molniya"),
+        "MOLNIYA_INSERT", LIST("molniya"),
+        "DROP_FOR_IMPACT_AND_RAISE_PE", LIST("payload_release"),
+        "DONE", LIST("solar"),
+        "SHAPE", LIST("orbit_shape"),
+        "DEPARTURE_SHAPE", LIST("orbit_shape"),
+        "BPLANE", LIST("arrival_bplane"),
+        "REFINE_BPLANE", LIST("arrival_bplane"),
+        "GOTO", LIST("goto_plan"),
+        "AIRCLIMB", LIST("ssto"),
+        "ROCKETCLIMB", LIST("ssto"),
+        "SSTO_DEORBIT", LIST("ssto"),
+        "REENTRY", LIST("ssto"),
+        "APPROACH", LIST("ssto"),
+        "ARM", LIST("drone"),
+        "FLY", LIST("drone")
+    ).
+}
+
+GLOBAL FUNCTION dependencyBands {
+    RETURN LEXICON(
+        "AIR", LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "POST_FLIGHT"),
+        "SSTO_ASCENT", LIST("AIRCLIMB", "ROCKETCLIMB"),
+        "SSTO_RETURN", LIST("SSTO_DEORBIT", "REENTRY", "APPROACH"),
+        "LAUNCH", LIST("PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK", "ABORT"),
+        "XFER_PLAN", LIST("DEPARTURE_SHAPE", "XING", "ESCAPE"),
+        "RENDEZVOUS", LIST("MATCH", "CREW_XFER"),
+        "XFER_ARRIVE", LIST("BPLANE", "COAST", "COAST_1HALF", "REFINE_BPLANE", "COAST_2HALF", "CAPTURE", "FLYBY"),
+        "XFER_ORBIT", LIST("CIRC", "RAISE", "INCLINE", "ELLIPTICAL"),
+        "PAYLOAD_OPS", LIST("TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION"),
+        "AEROBRAKE", LIST("AEROBRAKE"),
+        "LAND_DEORBIT", LIST("LAND_DEORBIT"),
+        "LANDING", LIST("LAND_ASSIST", "LAND")
+    ).
+}
+
 GLOBAL FUNCTION dependencyBindPhase {
     PARAMETER phaseMap.
     PARAMETER phaseName.

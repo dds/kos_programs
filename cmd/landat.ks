@@ -149,13 +149,13 @@ IF NOT err {
 
     archiveLog().
 
-    // Mission identity with no matching .json so boot skips the
+    // Mission identity with no matching .ks so boot skips the
     // selector and leaves this state alone (returntokerbin trick).
     stateSet("target", "KERBIN").
     stateSet("mission_type", "kerbin_return").
-    // Must NOT match any missions/<craft>/*.json filename, or boot
+    // Must NOT match any missions/<craft>/*.ks filename, or boot
     // re-applies that cfg over this command's state (flight-found:
-    // 'point_landing' collided with point_landing.json).
+    // 'point_landing' collided with point_landing.ks).
     stateSet("mission_id", "land_at_target").
     stateSet("mission_name", missionName).
     stateSet("payloads", "RETURN").

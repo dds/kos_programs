@@ -73,7 +73,7 @@ leg's log, rewinds `phase` to the start of the sequence, stamps a fresh
 ### Boot chain
 
 `boot/boot.ks` (installed in the VAB, **not remotely updatable**) syncs only
-`lib/boot_lib.ks` + `lib/dependencies.json`, then delegates: preamble/core
+`lib/boot_lib.ks` + `lib/dependencies.ks`, then delegates: preamble/core
 libs load, EVA kerbals are auto-detected (root part `kerbalEVA`), `CORE:TAG`
 routes tagged CPUs to `roles/`, untagged CPUs load `craft/<vehicle>.ks`.
 The selected mission profile is read from `0:/missions/<vehicle>/` once,
@@ -101,20 +101,16 @@ band. **A band loads the libraries of every phase in it**, regardless of the
 mission — so per-mission code (e.g. ScanSat disposal) lives in its own
 phase/band rather than inside a shared band.
 
-### dependencies.json
+### dependencies.ks
 
-`lib/dependencies.json` is the compact source of truth, copied as text to the
-probe core and parsed with kOS JSON support:
+`lib/dependencies.ks` is the boot dependency source of truth:
 
 ```
-"preamble": ["core"]             roots loaded always
-"libs": { name: [deps...] }      library dependency edges
-"phases": { phase: [roots...] }  libraries a phase needs
-"bands": { name: [phases...] }   phases that load together
+dependencyPreamble()             roots loaded always
+dependencyLibs()                 library dependency edges
+dependencyPhases()               libraries a phase needs
+dependencyBands()                phases that load together
 ```
-
-After editing it, run `make dependencies` (also a pre-commit hook) to
-regenerate `lib/dependencies.ks`.
 
 ### State, logs, telemetry
 
@@ -290,7 +286,7 @@ Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
 
 The older element-targeting pipeline (`MCC`, `CIRC`, `RAISE`, `INCLINE`,
 `ELLIPTICAL`) remains for legacy profiles until BPLANE/SHAPE are
-flight-proven (test mission: `missions/FR3/mun_sat_delivery_3.json`).
+flight-proven (test mission: `missions/FR3/mun_sat_delivery_3.ks`).
 `cmd/returntokerbin.ks` runs the full moon-return + aerobrake + descent flow.
 
 ## Multi-CPU ships and roles
@@ -407,8 +403,6 @@ configure-hook / extra-phase options.
 
 ## Development
 
-- `make dependencies` — regenerate `lib/dependencies.ks` (pre-commit hook:
-  `pre-commit install`).
 - `make watch-sync` — safe auto-pull loop for live sim iteration (ff-only,
   dirty-tree aware).
 - `make release-version TAG=kos-YYYYMMDD-N` — stamp `VERSION` (printed in
