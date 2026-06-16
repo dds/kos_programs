@@ -18,7 +18,7 @@
 //
 // In flight: AG7 hover, AG8 fly to the selected waypoint,
 // AG9 land here. A commanded landing that sits for 8s ends the sortie;
-// RUNPATH("1:/cmd/restartflightplan") re-arms for the next one.
+// RUNPATH("0:/cmd/restartflightplan.ks") re-arms for the next one.
 // ============================================================
 
 GLOBAL CFG IS LEXICON(

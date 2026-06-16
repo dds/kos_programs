@@ -131,12 +131,7 @@ GLOBAL FUNCTION bootVehicleLibs {
 }
 
 GLOBAL BOOT_CLEANUP IS LEXICON(
-    "vehicle", "FR3",
-    // Lean keep-list: every kept cmd costs core bytes a mission
-    // band might need (flight-found twice: the return mission's
-    // lib sync boot-looped out of space, and the suborbital hop
-    // failed a reboot with ~13K free).
-    "keepCmds", LIST("DUMP", "SETPHASE")
+    "vehicle", "FR3"
 ).
 
 GLOBAL FUNCTION main {

@@ -1,6 +1,6 @@
 // cmd/landingrescue.ks - Free space for FR3 Mun landing resume.
 // Usage: RUNPATH("0:/cmd/landingrescue.ks").
-// Usage cached: RUNPATH("1:/cmd/landingrescue.ks").
+// Usage cached: RUNPATH("0:/cmd/landingrescue.ks").
 
 PARAMETER phaseName IS "LAND_DEORBIT".
 
@@ -65,7 +65,7 @@ LOCAL removed IS 0.
 SET removed TO removed + _pruneDir("1:/lib", keepLibs).
 SET removed TO removed + _pruneDir("1:/craft", LIST("FR3")).
 SET removed TO removed + _pruneDir("1:/roles", LIST()).
-SET removed TO removed + _pruneDir("1:/cmd", LIST("LANDASSIST", "LANDINGRESCUE", "SETLANDASSIST")).
+SET removed TO removed + _pruneDir("1:/cmd", LIST()).
 SET removed TO removed + _pruneDir("1:/missions/FR3", LIST()).
 IF _deleteIfExists("1:/zombie") { SET removed TO removed + 1. }
 

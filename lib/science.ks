@@ -334,7 +334,7 @@ LOCAL FUNCTION _experimentAvailable {
 // ============================================================
 GLOBAL FUNCTION phaseEvaScience {
     mLog("EVA_SCIENCE: no automated flow yet — manual ops.").
-    mLog("Advance with: RUNPATH('1:/cmd/setphase', '<next>').").
+    mLog("Advance with: RUNPATH('0:/cmd/setphase.ks', '<next>').").
     yieldToPrompt().
 }
 

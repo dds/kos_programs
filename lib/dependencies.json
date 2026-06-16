@@ -335,35 +335,6 @@
       "drone"
     ]
   },
-  "cmds": {
-    "PREFLIGHT": [
-      "restartflightplan"
-    ],
-    "FLIGHT": [
-      "restartflightplan"
-    ],
-    "POSTFLIGHT": [
-      "restartflightplan"
-    ],
-    "POST_FLIGHT": [
-      "restartflightplan"
-    ],
-    "APPROACH": [
-      "restartflightplan"
-    ],
-    "ARM": [
-      "restartflightplan"
-    ],
-    "FLY": [
-      "restartflightplan"
-    ],
-    "SCANSAT_OPS": [
-      "scansatops"
-    ],
-    "DONE": [
-      "secondarytarget"
-    ]
-  },
   "bands": {
     "AIR": [
       "PREFLIGHT",

@@ -1,17 +1,8 @@
 // cmd/landmin.ks - Minimal emergency LAND_ASSIST boot prep.
 // Usage: RUNPATH("0:/cmd/landmin.ks").
 
-IF EXISTS("0:/cmd/landingrescue.ks") {
-    RUNPATH("0:/cmd/landingrescue.ks", "LAND_ASSIST").
-} ELSE {
-    RUNPATH("1:/cmd/landingrescue.ks", "LAND_ASSIST").
-}
-
-IF EXISTS("0:/cmd/setlanding.ks") {
-    RUNPATH("0:/cmd/setlanding.ks", "assist").
-} ELSE IF EXISTS("1:/cmd/setlanding.ks") {
-    RUNPATH("1:/cmd/setlanding.ks", "assist").
-}
+RUNPATH("0:/cmd/landingrescue.ks", "LAND_ASSIST").
+RUNPATH("0:/cmd/setlanding.ks", "assist").
 
 LOCAL FUNCTION _del {
     PARAMETER path_.

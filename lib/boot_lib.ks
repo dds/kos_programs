@@ -10,7 +10,7 @@ GLOBAL FUNCTION main {
 }
 
 GLOBAL FUNCTION bootEnsureDirs {
-    FOR p IN LIST("1:/lib","1:/boot","1:/run","1:/cmd","1:/craft","1:/roles") {
+    FOR p IN LIST("1:/lib","1:/boot","1:/run","1:/craft","1:/roles") {
         IF NOT EXISTS(p) { CREATEDIR(p). }
     }
 }
@@ -434,50 +434,9 @@ GLOBAL FUNCTION bootPruneLogs {
     RETURN removed.
 }
 
-// ============================================================
-// Offline operator commands (CMD rows in dependencies.json)
-// ============================================================
-
-// bootCmdsForSequence — commands declared for the current phase.
-// Storage is tight; do not carry commands for future sequence
-// phases into maneuver-planning boots.
-GLOBAL FUNCTION bootCmdsForSequence {
-    LOCAL cmds IS LIST().
-    LOCAL spec IS bootLibSpec().
-    LOCAL cmdMap IS LEXICON().
-    IF spec:HASKEY("cmds") { SET cmdMap TO spec["cmds"]. }
-    LOCAL phaseName IS stateGet("phase", "").
-    IF cmdMap:HASKEY(phaseName) {
-        FOR cmdName IN cmdMap[phaseName] {
-            IF NOT cmds:CONTAINS(cmdName) { cmds:ADD(cmdName). }
-        }
-    }
-    RETURN cmds.
-}
-
-// bootCmdSync — install the mission's offline commands on the
-// local volume (compiled, so PARAMETER blocks still work). Run
-// with: RUNPATH("1:/cmd/<name>").  No-op without a KSC link.
-GLOBAL FUNCTION bootCmdSync {
-    IF NOT HOMECONNECTION:ISCONNECTED { RETURN. }
-    LOCAL cmds IS bootCmdsForSequence().
-    IF cmds:LENGTH = 0 { RETURN. }
-    IF NOT EXISTS("1:/cmd") { CREATEDIR("1:/cmd"). }
-    FOR cmdName IN cmds {
-        LOCAL src IS "0:/cmd/" + cmdName + ".ks".
-        IF EXISTS(src) {
-            COMPILE src TO "1:/cmd/" + cmdName + ".ksm".
-        } ELSE {
-            PRINT "  WARN: offline cmd " + cmdName + " missing in 0:/cmd".
-        }
-    }
-    PRINT "  CMDS local: " + cmds:JOIN(", ") + " (RUNPATH 1:/cmd/<name>)".
-}
-
 GLOBAL FUNCTION bootCleanup {
     PARAMETER vehicleName.
     PARAMETER wantedLibs.
-    PARAMETER keepCmds IS LIST().
     LOCAL keepLibs IS LIST(
         "state", "logs", "boot_lib", "resume", "dependencies",
         "phases", "utils", "ui", "config"
@@ -485,12 +444,6 @@ GLOBAL FUNCTION bootCleanup {
     FOR lib IN wantedLibs {
         IF NOT bootLibArchiveOnly(lib)
                 AND NOT keepLibs:CONTAINS(lib) { keepLibs:ADD(lib). }
-    }
-
-    // Keep only the current phase's offline commands. Future
-    // phase commands are synced after the next phase/band boot.
-    FOR cmdName IN bootCmdsForSequence() {
-        IF NOT keepCmds:CONTAINS(cmdName) { keepCmds:ADD(cmdName). }
     }
 
     LOCAL keepRoles IS LIST().
@@ -501,7 +454,7 @@ GLOBAL FUNCTION bootCleanup {
     SET removed TO removed + bootPruneDir("1:/lib", keepLibs).
     SET removed TO removed + bootPruneDir("1:/craft", LIST(vehicleName)).
     SET removed TO removed + bootPruneDir("1:/roles", keepRoles).
-    SET removed TO removed + bootPruneDir("1:/cmd", keepCmds).
+    SET removed TO removed + bootPruneDir("1:/cmd", LIST()).
     SET removed TO removed + bootPruneDir("1:/missions/" + vehicleName, LIST()).
     IF EXISTS("1:/zombie") {
         DELETEPATH("1:/zombie").

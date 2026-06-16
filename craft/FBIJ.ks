@@ -4,7 +4,7 @@
 // Citation-style executive jet flying the GAP airline contracts.
 // Select the contract waypoint in Waypoint Manager, then press
 // AG8 after takeoff to load and fly it. Multi-leg flights restart
-// via RUNPATH("1:/cmd/restartflightplan") after each landing.
+// via RUNPATH("0:/cmd/restartflightplan.ks") after each landing.
 // Ship name:  FBIJ-TARGET-TYPE1-...-NN
 //
 // Flight logic lives in airplaneMain() (lib/airplane.ks); this

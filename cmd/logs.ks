@@ -1,6 +1,6 @@
 // ============================================================
 // logs.ks  —  Archive flight log to KSC  (0:/cmd/logs.ks)
-// Usage: RUNPATH("1:/cmd/logs.ks").
+// Usage: RUNPATH("0:/cmd/logs.ks").
 // ============================================================
 
 IF NOT HOMECONNECTION:ISCONNECTED {

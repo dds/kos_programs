@@ -955,7 +955,7 @@ LOCAL FUNCTION _runShapePhase {
     PRINT " ".
     PRINT "  " + phaseLabel + " UNCONVERGED — holding this phase.".
     PRINT "  Reboot to replan, or setphase to skip:".
-    PRINT "  RUNPATH(" + CHAR(34) + "1:/cmd/setphase.ks" + CHAR(34)
+    PRINT "  RUNPATH(" + CHAR(34) + "0:/cmd/setphase.ks" + CHAR(34)
         + ", " + CHAR(34) + "<NEXT_PHASE>" + CHAR(34) + ").".
     yieldToPrompt().
 }

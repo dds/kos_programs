@@ -155,16 +155,13 @@ IF vehicleScript <> "" {
 
 IF DEFINED BOOT_CLEANUP {
     LOCAL cleanupVehicle IS BOOT_CLEANUP["vehicle"].
-    LOCAL cleanupCmds IS LIST().
-    IF BOOT_CLEANUP:HASKEY("keepCmds") { SET cleanupCmds TO BOOT_CLEANUP["keepCmds"]. }
-    bootCleanup(cleanupVehicle, vehicleLibs, cleanupCmds).
+    bootCleanup(cleanupVehicle, vehicleLibs).
 }
 
 IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
     bootPruneLibs(vehicleLibs).
     bootLibLoadList(vehicleLibs).
-    bootCmdSync().
     bootLibLoad("resume").
     // Recovery is loaded only at startup/abort or after manual mode.
     LOCAL phase_ IS stateGet("phase", "").

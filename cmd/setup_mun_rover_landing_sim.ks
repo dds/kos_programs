@@ -2,11 +2,7 @@
 // Prepare a simulation copy in low Mun orbit for emergency rover landing.
 // Usage: RUNPATH("0:/cmd/setup_mun_rover_landing_sim.ks").
 
-IF EXISTS("0:/cmd/landingrescue.ks") {
-    RUNPATH("0:/cmd/landingrescue.ks", "LAND_ASSIST").
-} ELSE IF EXISTS("1:/cmd/landingrescue.ks") {
-    RUNPATH("1:/cmd/landingrescue.ks", "LAND_ASSIST").
-}
+RUNPATH("0:/cmd/landingrescue.ks", "LAND_ASSIST").
 
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().

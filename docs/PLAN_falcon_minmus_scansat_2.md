@@ -135,7 +135,7 @@ SOLAR_REORIENT_PERIOD = 21600
 After the primary mission reaches `DONE`, run:
 
 ```ks
-RUNPATH("1:/cmd/secondarytarget.ks").
+RUNPATH("0:/cmd/secondarytarget.ks").
 ```
 
 That command releases Sat 1, marks the secondary target active, and reboots.
@@ -145,7 +145,7 @@ phases with normal band-change reboots.
 After switching to Sat 1, run:
 
 ```ks
-RUNPATH("1:/cmd/scansatops.ks", "LOW_RES_ALTIMETRY").
+RUNPATH("0:/cmd/scansatops.ks", "LOW_RES_ALTIMETRY").
 ```
 
 That marks the zombie core for SCANsat operations and reboots it into the

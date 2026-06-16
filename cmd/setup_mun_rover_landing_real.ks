@@ -1,13 +1,8 @@
 // cmd/setup_mun_rover_landing_real.ks
 // Rescue/setup the real FR3 Mun rover for emergency surface landing.
 // Usage: RUNPATH("0:/cmd/setup_mun_rover_landing_real.ks").
-// Cached: RUNPATH("1:/cmd/setup_mun_rover_landing_real.ks").
 
-IF EXISTS("0:/cmd/landingrescue.ks") {
-    RUNPATH("0:/cmd/landingrescue.ks", "LAND_ASSIST").
-} ELSE IF EXISTS("1:/cmd/landingrescue.ks") {
-    RUNPATH("1:/cmd/landingrescue.ks", "LAND_ASSIST").
-}
+RUNPATH("0:/cmd/landingrescue.ks", "LAND_ASSIST").
 
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().

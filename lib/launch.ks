@@ -584,9 +584,9 @@ GLOBAL FUNCTION phaseAbort {
     PRINT "  ABORT COMPLETE — " + SHIP:STATUS.
     PRINT "  ─────────────────────────────────────────────".
     PRINT "  Clear abort:    SET ABORT TO FALSE.".
-    PRINT "  Refly:          RUNPATH('1:/cmd/setphase', 'LAUNCH'). + reboot".
-    PRINT "  Other mission:  RUNPATH('1:/cmd/setphase', 'LAUNCH', '<id>').".
-    PRINT "  State dump:     RUNPATH('1:/cmd/dump').".
+    PRINT "  Refly:          RUNPATH('0:/cmd/setphase.ks', 'LAUNCH'). + reboot".
+    PRINT "  Other mission:  RUNPATH('0:/cmd/setphase.ks', 'LAUNCH', '<id>').".
+    PRINT "  State dump:     RUNPATH('0:/cmd/dump.ks').".
     PRINT "  Backup chutes:  AG6 ON.".
     yieldToPrompt().
 }

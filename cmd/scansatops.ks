@@ -1,7 +1,7 @@
 // cmd/scansatops.ks - Force released SCANsat mapper into ops phase.
 // Usage:
-//   RUNPATH("1:/cmd/scansatops.ks").
-//   RUNPATH("1:/cmd/scansatops.ks", "LOW_RES_ALTIMETRY").
+//   RUNPATH("0:/cmd/scansatops.ks").
+//   RUNPATH("0:/cmd/scansatops.ks", "LOW_RES_ALTIMETRY").
 
 PARAMETER requiredTypes IS "LOW_RES_ALTIMETRY".
 

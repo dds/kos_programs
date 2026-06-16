@@ -32,44 +32,41 @@ Action group **0** toggles power on the kOS processor and its terminal.
 Pressing `0` a few times power-cycles the CPU, forcing a reboot — then the
 5-second manual-mode window gives you a console. On multi-CPU ships the
 dormant **zombie** core can reboot every other CPU remotely
-(`RUNPATH("1:/cmd/zombie.ks").` from its terminal).
+(`RUNPATH("0:/cmd/zombie.ks").` from its terminal while linked).
 
 ### Operator commands
 
-Run from a manual-mode terminal. `0:/cmd/...` needs a KSC link; commands
-listed in `CMD` rows of `lib/dependencies.json` are pre-installed at
-`1:/cmd/<name>` so they work at fields with **no radio** (Island Airfield).
+Run from a manual-mode terminal while linked. Commands are archive tools:
+use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 
 | Command | What it does |
 |---|---|
 | `RUNPATH("0:/cmd/goto.ks", "Minmus").` | Route to any body/vessel (see [goto](#universal-routing-goto)) |
-| `RUNPATH("1:/cmd/restartflightplan").` | Rewind the phase machine for the next sortie/leg (offline-safe) |
+| `RUNPATH("0:/cmd/restartflightplan.ks").` | Rewind the phase machine for the next sortie/leg |
 | `RUNPATH("0:/cmd/returntokerbin.ks").` | Full automated moon→Kerbin return (escape/MCC/aerobrake/descent) |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
-| `RUNPATH("1:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
-| `RUNPATH("1:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
-| `RUNPATH("1:/cmd/dump.ks").` | Print persistent state |
-| `RUNPATH("1:/cmd/logs.ks").` | Archive the flight log to KSC |
-| `RUNPATH("1:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
+| `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
+| `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
+| `RUNPATH("0:/cmd/dump.ks").` | Print persistent state |
+| `RUNPATH("0:/cmd/logs.ks").` | Archive the flight log to KSC |
+| `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "tag", "probe_decoupler").` | Landing overrides from archive: `tag` / `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
 | `RUNPATH("0:/cmd/kscsplash.ks").` | Target water splashdown offshore of KSC |
-| `RUNPATH("1:/cmd/zombie.ks").` | Power-cycle every *other* CPU on the vessel |
+| `RUNPATH("0:/cmd/zombie.ks").` | Power-cycle every *other* CPU on the vessel |
 
 Emergency landing rescue is archive-only: run `0:/cmd/landassist.ks`,
 `0:/cmd/landmin.ks`, or `0:/cmd/landingrescue.ks` while linked.
 
-Only `CMD`-row commands are *guaranteed* on `1:/cmd`; others are local when a
-craft's cleanup keep-list retained them or you copied them while linked
-(`COPYPATH("0:/cmd/x.ks", "1:/cmd/x.ks").`). When in KSC range, `0:/cmd/...`
-always works.
+Commands require archive access. If you need one, get a link and run the
+archive copy directly.
 
 ### Multi-leg flights
 
 Airline-style missions (land, swap passengers, fly on) and drone sorties end
-each leg normally, then `RUNPATH("1:/cmd/restartflightplan").` archives the
+each leg normally, then `RUNPATH("0:/cmd/restartflightplan.ks").` archives the
 leg's log, rewinds `phase` to the start of the sequence, stamps a fresh
-`launch_time`, and reboots. Mission config is untouched. Works offline.
+`launch_time`, and reboots. Mission config is untouched.
 
 ## Architecture
 
@@ -115,7 +112,6 @@ probe core and parsed with kOS JSON support:
 "libs": { name: [deps...] }      library dependency edges
 "phases": { phase: [roots...] }  libraries a phase needs
 "bands": { name: [phases...] }   phases that load together
-"cmds": { phase: [cmds...] }     operator cmds installed to 1:/cmd at boot
 ```
 
 After editing it, run `make dependencies` (also a pre-commit hook) to
@@ -138,8 +134,8 @@ regenerate `lib/dependencies.ks`.
 
 `0:/` is the archive (unlimited, KSC link required); `1:/` is the local
 volume. Source compiles to KSM before upload, so comment liberally in `.ks`
-files. Once out of link range nothing new can be fetched — everything a
-mission might need must be loaded (or `CMD`-installed) while connected.
+files. Once out of link range nothing new can be fetched; everything a
+mission might need must be loaded while connected.
 
 ## Vehicles
 

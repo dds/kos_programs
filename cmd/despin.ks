@@ -9,9 +9,9 @@
 // catch a fast spin without oscillating.
 //
 // Usage:
-//   RUNPATH("1:/cmd/despin.ks").               // despin, hold here
-//   RUNPATH("1:/cmd/despin.ks", "node").       // then aim at next node
-//   RUNPATH("1:/cmd/despin.ks", "prograde").   // or retrograde
+//   RUNPATH("0:/cmd/despin.ks").               // despin, hold here
+//   RUNPATH("0:/cmd/despin.ks", "node").       // then aim at next node
+//   RUNPATH("0:/cmd/despin.ks", "prograde").   // or retrograde
 //
 // Holds until any key is pressed: a craft WITHOUT a SAS-capable
 // core cannot keep attitude after a program exits (the SAS flag

@@ -12,17 +12,10 @@
 // phase, archives the previous leg's flight log, and stamps a
 // fresh launch_time so the next leg logs to its own file.
 //
-// This command is installed on the local volume at boot (CMD row
-// in dependencies.json), so it works at field strips with NO KSC
-// link — e.g. the Island Airfield. The flight log archive is
-// skipped offline and catches up at the next connected boot.
-//
-// Usage (offline-safe local copy):
-//   RUNPATH("1:/cmd/restartflightplan").
-//   RUNPATH("1:/cmd/restartflightplan", LEX("reboot", FALSE)).
-//   RUNPATH("1:/cmd/restartflightplan", LEX("phase", "FLIGHT")).
-// Or from the archive when in KSC range:
+// Usage:
 //   RUNPATH("0:/cmd/restartflightplan.ks").
+//   RUNPATH("0:/cmd/restartflightplan.ks", LEX("reboot", FALSE)).
+//   RUNPATH("0:/cmd/restartflightplan.ks", LEX("phase", "FLIGHT")).
 //
 // Options (all optional, with defaults):
 //   phase   — phase to restart at (default: first phase of the

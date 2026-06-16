@@ -57,7 +57,7 @@ GLOBAL FUNCTION recoveryMode {
     PRINT "  Commands:".
     PRINT "  stateSet(" + dq + "phase" + dq + "," + dq + "DONE" + dq + ").".
     PRINT "  resumeMission().".
-    PRINT "  RUNPATH(" + dq + "1:/cmd/logs.ks" + dq + ").".
+    PRINT "  RUNPATH(" + dq + "0:/cmd/logs.ks" + dq + ").".
     PRINT " ".
 
     UNLOCK ALL.

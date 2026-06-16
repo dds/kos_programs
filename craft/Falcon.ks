@@ -166,8 +166,7 @@ GLOBAL FUNCTION bootVehicleLibs {
 }
 
 GLOBAL BOOT_CLEANUP IS LEXICON(
-    "vehicle", "Falcon",
-    "keepCmds", LIST("DUMP", "SETPHASE")
+    "vehicle", "Falcon"
 ).
 
 GLOBAL FUNCTION main {

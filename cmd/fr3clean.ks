@@ -1,6 +1,5 @@
 // cmd/fr3clean.ks - Standalone aggressive FR3 cache cleanup.
 // Usage: RUNPATH("0:/cmd/fr3clean.ks").
-// Cached: RUNPATH("1:/cmd/fr3clean.ks").
 
 LOCAL beforeFree IS CORE:VOLUME:FREESPACE.
 LOCAL removed IS 0.
@@ -45,14 +44,12 @@ LOCAL FUNCTION _pruneDir {
 LOCAL keepLibs IS LIST(
     "STATE", "LOGS", "FILES", "BOOT_LIB", "RESUME", "RECOVERY"
 ).
-LOCAL keepCmds IS LIST("FR3CLEAN").
-
 PRINT "FR3 clean: free before " + beforeFree + " bytes.".
 
 _pruneDir("1:/lib", keepLibs).
 _pruneDir("1:/craft", LIST()).
 _pruneDir("1:/roles", LIST()).
-_pruneDir("1:/cmd", keepCmds).
+_pruneDir("1:/cmd", LIST()).
 _pruneDir("1:/missions/FR3", LIST()).
 _pruneDir("1:/missions/FR2", LIST()).
 _pruneDir("1:/missions", LIST()).

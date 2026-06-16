@@ -1,10 +1,10 @@
 // cmd/secondarytarget.ks - Load a mission's secondary target.
 //
 // Usage after the primary target reaches DONE:
-//   RUNPATH("1:/cmd/secondarytarget.ks").
+//   RUNPATH("0:/cmd/secondarytarget.ks").
 //
 // Optional:
-//   RUNPATH("1:/cmd/secondarytarget.ks", FALSE).  // skip release
+//   RUNPATH("0:/cmd/secondarytarget.ks", FALSE).  // skip release
 
 PARAMETER doRelease IS TRUE.
 

@@ -2,9 +2,9 @@
 // molniya.ks  —  Molniya orbit calculator  (0:/cmd/molniya.ks)
 //
 // Usage from kOS terminal:
-//   RUNPATH("1:/cmd/molniya.ks").              // current body, current Pe
-//   RUNPATH("1:/cmd/molniya.ks", 21600).       // specific period (s)
-//   RUNPATH("1:/cmd/molniya.ks", 0, 2863334).  // specific Pe, Ap (m)
+//   RUNPATH("0:/cmd/molniya.ks").              // current body, current Pe
+//   RUNPATH("0:/cmd/molniya.ks", 21600).       // specific period (s)
+//   RUNPATH("0:/cmd/molniya.ks", 0, 2863334).  // specific Pe, Ap (m)
 // ============================================================
 
 PARAMETER inputPeriod IS 0.

@@ -54,8 +54,8 @@ Looks like Python/JS; is neither.
    only compiled size matters. `lib/dependencies.json` is copied as **text**:
    keep it compact and comment-free.
 2. **No archive in flight**: outside KSC link range nothing can be fetched
-   from `0:/`. Anything a mission may need offline must be loaded at boot or
-   declared in a `CMD` row (compiled to `1:/cmd/` while linked).
+   from `0:/`. Anything a mission may need offline must be loaded at boot;
+   operator commands are archive-only and require a link.
 3. **Reboots happen** (power, quickload, scene change, band reload). Every
    phase must be resumable from `1:/run/state.json` via `stateGet`/`stateSet`
    — never raw file I/O for mission state.
@@ -86,8 +86,7 @@ Looks like Python/JS; is neither.
   generated `lib/dependencies.ks`.
 - **dependencies.json sections**: `preamble` (always-loaded roots), `libs`
   (dependency edges), `phases` (phase → roots), `bands` (phases that load
-  together; a phase without a band is its own band), `cmds` (phase → operator
-  commands installed offline).
+  together; a phase without a band is its own band).
 - **Missing handler** in `runPhases` ⇒ band-change request (`reload_*` state
   + reboot), not an error — that's the progressive-loading mechanism.
 - **Vehicle contract**: `GLOBAL CFG IS LEXICON(...)`, `bootVehicleLibs()`,

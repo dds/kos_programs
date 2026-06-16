@@ -1,9 +1,9 @@
 // cmd/scan.ks — SCANsat/science operator actions (0:/cmd/scan.ks)
 // Replaces scanstart.ks / scanstatus.ks / scantransmit.ks.
 // Usage:
-//   RUNPATH("1:/cmd/scan.ks").              // status
-//   RUNPATH("1:/cmd/scan.ks", "start").     // start all scanners
-//   RUNPATH("1:/cmd/scan.ks", "transmit").  // transmit stored science
+//   RUNPATH("0:/cmd/scan.ks").              // status
+//   RUNPATH("0:/cmd/scan.ks", "start").     // start all scanners
+//   RUNPATH("0:/cmd/scan.ks", "transmit").  // transmit stored science
 
 PARAMETER action IS "status".
 
