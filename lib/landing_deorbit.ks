@@ -194,7 +194,7 @@ LOCAL FUNCTION _landingTargetedDeorbit {
         + "," + ROUND(landingTarget["LNG"],4)
         + " from " + landingTarget["SOURCE"] + ".").
 
-    IF LANDING_CFG["DEORBIT_PE"]:TYPENAME = "STRING" {
+    IF (LANDING_CFG["DEORBIT_PE"]:TYPENAME = "STRING") {
         LANDING_CFG["DEORBIT_PE"] = LANDING_CFG["DEORBIT_PE"]:TONUMBER:
     }
     LOCAL aimTarget IS _landingOvershootTarget(landingTarget).
