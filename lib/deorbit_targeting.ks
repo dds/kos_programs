@@ -226,7 +226,11 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
     LOCAL scanSamples IS 2048.
     IF CFG:HASKEY("TARGET_DEORBIT_SCAN_SAMPLES") {
-        SET scanSamples TO CFG["TARGET_DEORBIT_SCAN_SAMPLES"].
+        IF (CFG["TARGET_DEORBIT_SCAN_SAMPLES"]:TYPENAME = "STRING") {
+            SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_SAMPLES"]:TONUMBER.
+        } ELSE {
+            SET scanOrbits TO CFG["TARGET_DEORBIT_SCAN_SAMPLES"].
+        }
     }
     IF CFG:HASKEY("LANDING_SIM_MODE") AND CFG["LANDING_SIM_MODE"] > 0 {
         IF scanOrbits > 2 { SET scanOrbits TO 2. }
