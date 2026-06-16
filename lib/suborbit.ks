@@ -37,8 +37,8 @@ LOCAL FUNCTION _suborbitSiteGeo {
     LOCAL siteLat IS stateGetNum("launch_site_lat", 9999).
     LOCAL siteLng IS stateGetNum("launch_site_lng", 9999).
     IF siteLat <> 9999 { RETURN LATLNG(siteLat, siteLng). }
-    IF CFG:HASKEY("LANDING_TARGET_LAT") AND CFG:HASKEY("LANDING_TARGET_LNG") {
-        RETURN LATLNG(CFG["LANDING_TARGET_LAT"], CFG["LANDING_TARGET_LNG"]).
+    IF CFG:HASKEY("TARGET_LAT") AND CFG:HASKEY("TARGET_LNG") {
+        RETURN LATLNG(CFG["TARGET_LAT"], CFG["TARGET_LNG"]).
     }
     RETURN LATLNG(-0.0972, -74.5577).   // KSC pad
 }

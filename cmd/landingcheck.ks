@@ -46,11 +46,8 @@ IF selected <> 0 {
     PRINT "  Target   no selected waypoint on " + SHIP:BODY:NAME + ".".
 }
 
-LOCAL decouplers IS SHIP:PARTSTAGGED("landing_assist_decoupler").
 LOCAL assistTag IS "landing_assist_decoupler".
-LOCAL configuredTag IS stateGet("mission_cfg_LANDING_ASSIST_DECOUPLER_TAG", "").
-IF configuredTag <> "" { SET assistTag TO configuredTag. }
-SET decouplers TO SHIP:PARTSTAGGED(assistTag).
+LOCAL decouplers IS SHIP:PARTSTAGGED(assistTag).
 PRINT "  Assist   decouplers tagged " + assistTag + "=" + decouplers:LENGTH.
 PRINT "  Addons   TR=" + ADDONS:TR:AVAILABLE
     + " KE=" + ADDONS:KE:AVAILABLE

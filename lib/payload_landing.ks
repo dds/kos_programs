@@ -21,7 +21,7 @@ GLOBAL FUNCTION phaseLandAssist {
         LOCK THROTTLE TO 0.
         PRINT " ".
         PRINT "  LANDING ASSIST FAILED".
-        PRINT "  Review target, decoupler tag, attitude, fuel, and phase before resuming.".
+        PRINT "  Review target, attitude, fuel, and phase before resuming.".
         yieldToPrompt().
         RETURN.
     }

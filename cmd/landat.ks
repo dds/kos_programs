@@ -164,13 +164,13 @@ IF NOT err {
     // DESCENT is its own (lean) band; preloading descent lets it
     // bind during KSC_DEORBIT with no band-change reboot.
     stateSet("mission_cfg_LIBS_EXTRA", "descent").
-    stateSet("mission_cfg_LANDING_TARGET_LAT", targetLat).
-    stateSet("mission_cfg_LANDING_TARGET_LNG", targetLng).
+    stateSet("mission_cfg_TARGET_LAT", targetLat).
+    stateSet("mission_cfg_TARGET_LNG", targetLng).
     stateSet("mission_cfg_REENTRY_PE", entryPe).
-    stateSet("mission_cfg_LANDING_TARGET_TOLERANCE", tolerance).
+    stateSet("mission_cfg_TARGET_TOLERANCE", tolerance).
     // The waypoint is resolved to numbers above; clear any stale
     // name so the phase doesn't re-resolve something else.
-    stateRemove("mission_cfg_LANDING_TARGET_WAYPOINT").
+    stateRemove("mission_cfg_TARGET_WAYPOINT").
 
     // Targeted-deorbit scan settings (the proven landatksc recipe).
     stateSet("mission_cfg_TARGET_DEORBIT_SCAN_ORBITS", maxOrbits).

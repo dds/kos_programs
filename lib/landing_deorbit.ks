@@ -111,7 +111,7 @@ LOCAL FUNCTION _confirmLandingTarget {
             + ", " + ROUND(targetInfo["LNG"],4).
     } ELSE {
         PRINT "  No landing target found.".
-        PRINT "  Select a waypoint, run simlandhere, or set LANDING_TARGET_LAT/LNG.".
+        PRINT "  Select a waypoint, run simlandhere, or set TARGET_LAT/LNG.".
         yieldToPrompt().
         RETURN FALSE.
     }
@@ -133,9 +133,9 @@ LOCAL FUNCTION _autoLandingTarget {
     SET LANDING_CFG["TARGET_LAT"] TO geo:LAT.
     SET LANDING_CFG["TARGET_LNG"] TO geo:LNG.
     SET LANDING_CFG["TARGET_LOCK"] TO TRUE.
-    stateSet("mission_cfg_LANDING_TARGET_LAT", geo:LAT).
-    stateSet("mission_cfg_LANDING_TARGET_LNG", geo:LNG).
-    stateSet("mission_cfg_LANDING_TARGET_LOCK", "1").
+    stateSet("mission_cfg_TARGET_LAT", geo:LAT).
+    stateSet("mission_cfg_TARGET_LNG", geo:LNG).
+    stateSet("mission_cfg_TARGET_LOCK", "1").
     RETURN TRUE.
 }
 

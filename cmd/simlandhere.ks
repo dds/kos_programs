@@ -81,10 +81,10 @@ IF site["FOUND"] {
     SET source TO source + " SCANsat slope=" + ROUND(site["SLOPE"],1).
 }
 
-_cfg("LANDING_TARGET_LAT", lat).
-_cfg("LANDING_TARGET_LNG", lng).
-_cfg("LANDING_TARGET_LOCK", "1").
-_cfg("LANDING_TARGET_WAYPOINT", "").
+_cfg("TARGET_LAT", lat).
+_cfg("TARGET_LNG", lng).
+_cfg("TARGET_LOCK", "1").
+_cfg("TARGET_WAYPOINT", "").
 _cfg("LANDING_SIM_MODE", "1").
 _cfg("LANDING_SKIP_TARGET_SEARCH", "1").
 _cfg("LANDING_DEORBIT_LEAD_MINUTES", aheadMinutes).

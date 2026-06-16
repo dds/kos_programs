@@ -301,13 +301,11 @@ LOCAL FUNCTION _landingBrakingTick {
     LOCAL crossErr IS trajErr["CROSS"].
     LOCAL crossPid IS ctx["CROSS_PID"].
     IF trajErr["FOUND"] AND crossErr > LAND_CFG["GUIDANCE_CORRECTION_THRESHOLD"] {
-        SET crossPid:SETPOINT TO 0.
         LOCAL biasDeg IS ABS(crossPid:UPDATE(TIME:SECONDS, crossErr)).
         LOCAL biasMag IS MIN(LAND_CFG["TR_BRAKE_BIAS"], SIN(biasDeg)).
         _landingSetSteering(ctx,
             (retroSteering + trajErr["CROSS_CORR"] * biasMag):NORMALIZED).
     } ELSE {
-        SET crossPid:SETPOINT TO 0.
         LOCAL pidReset IS crossPid:UPDATE(TIME:SECONDS, 0).
         _landingSetSteering(ctx, retroSteering).
     }
@@ -402,12 +400,6 @@ LOCAL FUNCTION _landingFinish {
     mLog("TOUCHDOWN. vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s"
         + "  lat=" + ROUND(SHIP:LATITUDE,4)
         + "  lng=" + ROUND(SHIP:LONGITUDE,4)).
-    mLogWarn("STATS landing result state=touchdown"
-        + " lat=" + ROUND(SHIP:LATITUDE,5)
-        + " lng=" + ROUND(SHIP:LONGITUDE,5)
-        + " targetLat=" + ROUND(ctx["TARGET_LAT"],5)
-        + " targetLng=" + ROUND(ctx["TARGET_LNG"],5)
-        + " targetFound=" + _landingBoolText(ctx["HAS_TARGET"])).
     HUDTEXT("TOUCHDOWN!", 8, 2, 20, GREEN, FALSE).
     stateSet("landing_lat",  SHIP:LATITUDE).
     stateSet("landing_lng",  SHIP:LONGITUDE).
@@ -415,15 +407,6 @@ LOCAL FUNCTION _landingFinish {
     stateSet("landing_state", "TOUCHDOWN").
     vesselDeployAntennas().
     vesselDeploySolarPanels().
-
-    IF LAND_CFG["CARRIER_TAG"] <> "" {
-        vesselCarrierHandoff(
-            LAND_CFG["CARRIER_TAG"],
-            LAND_CFG["CARRIER_TIP"],
-            LAND_CFG["CARRIER_SETTLE"],
-            LAND_CFG["CARRIER_TIP_TIME"],
-            LAND_CFG["ROVER_ORIENT_TIME"]).
-    }
 }
 
 // ------------------------------------------------------------
@@ -528,10 +511,6 @@ GLOBAL FUNCTION landExecute {
 GLOBAL FUNCTION landingAssistStage {
     mLogPhase("LANDING ASSIST").
     SET landingAbortFlag TO FALSE.
-
-    IF LAND_CFG["CARRIER_TAG"] = "" {
-        SET LAND_CFG["CARRIER_TAG"] TO "landing_assist_decoupler".
-    }
 
     landExecute().
 
