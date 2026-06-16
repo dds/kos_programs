@@ -60,7 +60,7 @@ GLOBAL FUNCTION runPhases {
             LOCAL loadedBand IS stateGet("lib_band", "").
             LOCAL requiredBand IS bootLibBandForPhase(phase, "").
             IF requiredBand = loadedBand {
-                evaluate_function("phase" + phase:REGEXREPLACE("[\\W_]+", ""), LIST()).
+                evaluate_function("phase" + phase, LIST()).
                 IF phaseShouldYield { RETURN. }
             } ELSE {
                 stateSet("reload_required", "true").
