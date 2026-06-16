@@ -331,9 +331,10 @@ GLOBAL FUNCTION planPlaneMatch {
     LOCAL burnUt IS TIME:SECONDS + burnEta.
 
     // Pure-normal seed from elements: a plane rotation by theta
-    // costs 2 v sin(theta/2) at the node. Sign and exactness are
-    // the refiner's job (it owns the NORMAL axis and walks through
-    // zero if the sense is wrong) — no frames, no predictions.
+    // costs 2 v sin(theta/2) at the node. Try both normal senses:
+    // kOS/KSP node-normal handedness has proven frame-sensitive,
+    // and asking the refiner to walk a large burn through zero can
+    // accept the expensive mirror.
     LOCAL dvSeed IS 2 * _speedAtTa(burnTa) * SIN(theta / 2).
     LOCAL nd IS NODE(burnUt, 0, dvSeed, 0).
     ADD nd.
@@ -344,11 +345,56 @@ GLOBAL FUNCTION planPlaneMatch {
     // immune to every POSITIONAT/VELOCITYAT frame and timing
     // subtlety (flight-found: two analytic attempts left 27-29
     // deg residuals; the game knows where the ship will be).
-    LOCAL seedErr IS _planeErrOf(nd:ORBIT, nTgt).
-    LOCAL finalErr IS _refinePlaneNode(nd, nTgt).
-
     LOCAL peFloor IS 10000.
     IF SHIP:BODY:ATM:EXISTS { SET peFloor TO SHIP:BODY:ATM:HEIGHT + 10000. }
+    LOCAL seedErr IS 9999.
+    LOCAL finalErr IS 9999.
+    LOCAL bestCost IS 999999.
+    LOCAL bestTime IS burnUt.
+    LOCAL bestRad IS 0.
+    LOCAL bestNorm IS dvSeed.
+    LOCAL bestPro IS 0.
+    LOCAL bestSeedSign IS 1.
+
+    FOR seedSign IN LIST(1, -1) {
+        SET nd:TIME TO burnUt.
+        SET nd:RADIALOUT TO 0.
+        SET nd:NORMAL TO seedSign * dvSeed.
+        SET nd:PROGRADE TO 0.
+        WAIT 0.05.
+
+        LOCAL trialSeedErr IS _planeErrOf(nd:ORBIT, nTgt).
+        LOCAL trialFinalErr IS _refinePlaneNode(nd, nTgt).
+        LOCAL trialCost IS trialFinalErr
+            + 0.01 * nd:DELTAV:MAG
+            + 0.001 * ABS(nd:ORBIT:APOAPSIS - SHIP:APOAPSIS) / 1000
+            + 0.001 * ABS(nd:ORBIT:PERIAPSIS - SHIP:PERIAPSIS) / 1000.
+        IF nd:ORBIT:ECCENTRICITY >= 1 OR nd:ORBIT:PERIAPSIS < peFloor {
+            SET trialCost TO 999999.
+        }
+        mLogWarn("STATS plane-match sign seed=" + seedSign
+            + " seedErr=" + ROUND(trialSeedErr, 2)
+            + " finalErr=" + ROUND(trialFinalErr, 2)
+            + " dv=" + ROUND(nd:DELTAV:MAG, 1)
+            + " cost=" + ROUND(trialCost, 2)).
+        IF trialCost < bestCost {
+            SET bestCost TO trialCost.
+            SET bestTime TO nd:TIME.
+            SET bestRad TO nd:RADIALOUT.
+            SET bestNorm TO nd:NORMAL.
+            SET bestPro TO nd:PROGRADE.
+            SET bestSeedSign TO seedSign.
+            SET seedErr TO trialSeedErr.
+            SET finalErr TO trialFinalErr.
+        }
+    }
+
+    SET nd:TIME TO bestTime.
+    SET nd:RADIALOUT TO bestRad.
+    SET nd:NORMAL TO bestNorm.
+    SET nd:PROGRADE TO bestPro.
+    WAIT 0.05.
+
     IF nd:ORBIT:ECCENTRICITY >= 1 OR nd:ORBIT:PERIAPSIS < peFloor {
         mLogError("Plane match: planned node is unsafe (Pe "
             + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + "km ecc "
@@ -367,6 +413,7 @@ GLOBAL FUNCTION planPlaneMatch {
         + " targetInc=" + ROUND(targetInc, 2)
         + " targetLan=" + ROUND(targetLan, 2)
         + " seedDv=" + ROUND(dvSeed, 1)
+        + " seedSign=" + bestSeedSign
         + " seedErr=" + ROUND(seedErr, 2)
         + " finalErr=" + ROUND(finalErr, 2)
         + " eta=" + ROUND(nd:ETA, 0)).
