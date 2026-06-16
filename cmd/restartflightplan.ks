@@ -75,7 +75,7 @@ IF NOT err {
 
     // Count legs for the operator's benefit
     LOCAL leg IS stateGetNum("flight_leg", 1) + 1.
-    stateSetNum("flight_leg", leg).
+    stateSet("flight_leg", leg).
 
     // Rewind the phase machine to the start of the sequence.
     // Mission identity and mission_cfg_* values stay untouched,
@@ -90,7 +90,7 @@ IF NOT err {
 
     // Fresh launch_time so the next leg's log gets its own id
     // (also keeps boot's prelaunch mission-reset check satisfied)
-    stateSetNum("launch_time", ROUND(TIME:SECONDS)).
+    stateSet("launch_time", ROUND(TIME:SECONDS)).
 
     PRINT " ".
     PRINT "Flight plan restarted:".

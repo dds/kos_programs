@@ -163,7 +163,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
 
     IF targetInc <= 0 OR targetInc >= 180 {
         cfgSet("LAUNCH_INCLINATION", targetInc).
-        stateSetNum("mission_cfg_LAUNCH_INCLINATION", targetInc).
+        stateSet("mission_cfg_LAUNCH_INCLINATION", targetInc).
         mLog("PRELAUNCH: " + bod_:NAME
             + " plane is equatorial; launching immediately.").
         nextPhase(launchSeq).
@@ -173,7 +173,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
     IF NOT _latIncOk(SHIP:LATITUDE, targetInc) {
         IF allowFallback {
             cfgSet("LAUNCH_INCLINATION", 0).
-            stateSetNum("mission_cfg_LAUNCH_INCLINATION", 0).
+            stateSet("mission_cfg_LAUNCH_INCLINATION", 0).
             mLogWarn("PRELAUNCH: " + bod_:NAME + " plane inc="
                 + ROUND(targetInc, 2) + " cannot pass over lat "
                 + ROUND(SHIP:LATITUDE, 3)
@@ -201,11 +201,11 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
     }
 
     cfgSet("LAUNCH_INCLINATION", win["inc"]).
-    stateSetNum("mission_cfg_LAUNCH_INCLINATION", win["inc"]).
-    stateSetNum("prelaunch_plane_ut", win["ut"]).
+    stateSet("mission_cfg_LAUNCH_INCLINATION", win["inc"]).
+    stateSet("prelaunch_plane_ut", win["ut"]).
     stateSet("prelaunch_plane_target", bod_:NAME).
-    stateSetNum("prelaunch_plane_inc", targetInc).
-    stateSetNum("prelaunch_plane_lan", targetLan).
+    stateSet("prelaunch_plane_inc", targetInc).
+    stateSet("prelaunch_plane_lan", targetLan).
 
     mLog("PRELAUNCH: " + bod_:NAME + " body plane "
         + win["node"] + " window in " + ROUND(win["wait"], 0)
@@ -432,8 +432,8 @@ LOCAL FUNCTION _prelaunchToVessel {
 
     LOCAL launchUt IS best["ut"].
     cfgSet("LAUNCH_INCLINATION", best["inc"]).
-    stateSetNum("mission_cfg_LAUNCH_INCLINATION", best["inc"]).
-    stateSetNum("prelaunch_plane_ut", launchUt).
+    stateSet("mission_cfg_LAUNCH_INCLINATION", best["inc"]).
+    stateSet("prelaunch_plane_ut", launchUt).
     mLog("PRELAUNCH: window in " + ROUND(launchUt - TIME:SECONDS, 0)
         + "s  launch inc=" + ROUND(best["inc"], 2)
         + "  target lead at insertion=" + ROUND(best["lead"], 1)
@@ -505,7 +505,7 @@ GLOBAL FUNCTION phasePrelaunch {
     }
 
     LOCAL targetUt IS TIME:SECONDS + waitTime.
-    stateSetNum("prelaunch_plane_ut", targetUt).
+    stateSet("prelaunch_plane_ut", targetUt).
     mLog("PRELAUNCH: target LAN=" + ROUND(targetLan, 1)
         + " deg inc=" + ROUND(targetInc, 2)
         + " deg lead=" + ROUND(leadTime, 0)

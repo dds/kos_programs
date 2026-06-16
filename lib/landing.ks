@@ -647,10 +647,6 @@ GLOBAL FUNCTION landExecute {
     }
 }
 
-// Backward-compat wrapper — old code calls landingExecute()
-GLOBAL FUNCTION landingExecute {
-    landExecute().
-}
 
 // ------------------------------------------------------------
 // Carrier handoff

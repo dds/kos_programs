@@ -66,7 +66,7 @@ IF NOT err {
     }
     FOR key IN LIST("ap", "pe", "inc", "lan", "aop") {
         IF opts:HASKEY(key) {
-            stateSetNum("mission_cfg_SHAPE_" + key:TOUPPER, opts[key]).
+            stateSet("mission_cfg_SHAPE_" + key:TOUPPER, opts[key]).
         }
     }
 
@@ -87,7 +87,7 @@ IF NOT err {
         stateSet("mission_name", "GOTO " + dest).
         stateSet("mission_type", "").
         gotoCommitPlan(plan).
-        stateSetNum("launch_time", ROUND(TIME:SECONDS)).
+        stateSet("launch_time", ROUND(TIME:SECONDS)).
 
         PRINT " ".
         PRINT "GOTO configured: " + dest.

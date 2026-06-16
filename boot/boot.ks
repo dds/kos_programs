@@ -88,7 +88,7 @@ IF bootShouldResetMissionOnBoot(isEVA) {
 }
 
 LOCAL bootCount IS stateGetNum("boot_count", 0) + 1.
-stateSetNum("boot_count", bootCount).
+stateSet("boot_count", bootCount).
 IF bootCount = 1 {
     stateSet("vehicle",  vehicleName).
     stateSet("target",   targetName).

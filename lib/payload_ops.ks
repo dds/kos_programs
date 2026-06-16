@@ -116,6 +116,6 @@ GLOBAL FUNCTION phaseLandAssist {
 }
 
 GLOBAL FUNCTION phaseLand {
-    landingExecute().
+    landExecute().
     nextPhase(_payloadSeq()).
 }

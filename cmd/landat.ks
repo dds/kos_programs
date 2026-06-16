@@ -164,27 +164,27 @@ IF NOT err {
     // DESCENT is its own (lean) band; preloading descent lets it
     // bind during KSC_DEORBIT with no band-change reboot.
     stateSet("mission_cfg_LIBS_EXTRA", "descent").
-    stateSetNum("mission_cfg_LANDING_TARGET_LAT", targetLat).
-    stateSetNum("mission_cfg_LANDING_TARGET_LNG", targetLng).
-    stateSetNum("mission_cfg_REENTRY_PE", entryPe).
-    stateSetNum("mission_cfg_LANDING_TARGET_TOLERANCE", tolerance).
+    stateSet("mission_cfg_LANDING_TARGET_LAT", targetLat).
+    stateSet("mission_cfg_LANDING_TARGET_LNG", targetLng).
+    stateSet("mission_cfg_REENTRY_PE", entryPe).
+    stateSet("mission_cfg_LANDING_TARGET_TOLERANCE", tolerance).
     // The waypoint is resolved to numbers above; clear any stale
     // name so the phase doesn't re-resolve something else.
     stateRemove("mission_cfg_LANDING_TARGET_WAYPOINT").
 
     // Targeted-deorbit scan settings (the proven landatksc recipe).
-    stateSetNum("mission_cfg_TARGET_DEORBIT_SCAN_ORBITS", maxOrbits).
-    stateSetNum("mission_cfg_TARGET_DEORBIT_SCAN_SAMPLES", scanSamples).
-    stateSetNum("mission_cfg_TARGET_DEORBIT_COARSE_STOP_DIST", tolerance).
-    stateSetNum("mission_cfg_TARGET_DEORBIT_REFINE_TOLERANCE", 1000).
-    stateSetNum("mission_cfg_TARGET_DEORBIT_SKIP_REFINE",
+    stateSet("mission_cfg_TARGET_DEORBIT_SCAN_ORBITS", maxOrbits).
+    stateSet("mission_cfg_TARGET_DEORBIT_SCAN_SAMPLES", scanSamples).
+    stateSet("mission_cfg_TARGET_DEORBIT_COARSE_STOP_DIST", tolerance).
+    stateSet("mission_cfg_TARGET_DEORBIT_REFINE_TOLERANCE", 1000).
+    stateSet("mission_cfg_TARGET_DEORBIT_SKIP_REFINE",
         CHOOSE 0 IF doRefine ELSE 1).
-    stateSetNum("mission_cfg_TARGET_DEORBIT_PROCEED_ON_MISS",
+    stateSet("mission_cfg_TARGET_DEORBIT_PROCEED_ON_MISS",
         CHOOSE 0 IF strict ELSE 1).
     // 300s, not 90: a small reaction wheel (no SAS core) needs
     // real time to despin and align — flight-found: a 36s-out
     // node arrived with the craft pointing the wrong way.
-    stateSetNum("mission_cfg_TARGET_DEORBIT_MIN_LEAD", 300).
+    stateSet("mission_cfg_TARGET_DEORBIT_MIN_LEAD", 300).
 
     IF descentFairingTag <> "" {
         stateSet("mission_cfg_DESCENT_FAIRING_TAG", descentFairingTag).
@@ -203,7 +203,7 @@ IF NOT err {
     }
 
     stateSet("phase", "KSC_DEORBIT").
-    stateSetNum("launch_time", ROUND(TIME:SECONDS)).
+    stateSet("launch_time", ROUND(TIME:SECONDS)).
 
     PRINT " ".
     PRINT "Point landing configured:".

@@ -477,9 +477,9 @@ LOCAL FUNCTION _markPendingBurn {
     PARAMETER startTime.
     stateSet("burn_pending", "true").
     stateSet("burn_phase", stateGet("phase", "")).
-    stateSetNum("burn_node_time", nd:TIME).
-    stateSetNum("burn_start_time", startTime).
-    stateSetNum("burn_dv", burnDV).
+    stateSet("burn_node_time", nd:TIME).
+    stateSet("burn_start_time", startTime).
+    stateSet("burn_dv", burnDV).
 }
 
 LOCAL FUNCTION _clearPendingBurn {

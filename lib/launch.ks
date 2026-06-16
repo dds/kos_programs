@@ -149,9 +149,9 @@ GLOBAL FUNCTION phaseLaunch {
         PRESERVE.
     }
 
-    stateSetNum("launch_time", TIME:SECONDS).
-    stateSetNum("launch_site_lat", SHIP:GEOPOSITION:LAT).
-    stateSetNum("launch_site_lng", SHIP:GEOPOSITION:LNG).
+    stateSet("launch_time", TIME:SECONDS).
+    stateSet("launch_site_lat", SHIP:GEOPOSITION:LAT).
+    stateSet("launch_site_lng", SHIP:GEOPOSITION:LNG).
     stateSet("launch_vs_nonpos_logged", "false").
 
     mLog("Press ABORT within 5s to hold launch.").
@@ -347,7 +347,7 @@ GLOBAL FUNCTION phaseParking {
     IF ABORT { RETURN. }
     // Orbit-insertion timestamp for ORBIT_STAY_TIME holds.
     IF stateGetNum("orbit_start_time", 0) = 0 {
-        stateSetNum("orbit_start_time", ROUND(TIME:SECONDS)).
+        stateSet("orbit_start_time", ROUND(TIME:SECONDS)).
     }
     orbitSummary().
     _logParkingPlaneResult().

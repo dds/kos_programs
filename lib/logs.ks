@@ -51,7 +51,7 @@ GLOBAL FUNCTION logId {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
     IF launchT = 0 {
         SET launchT TO ROUND(TIME:SECONDS / 10, 0) * 10.
-        stateSetNum("launch_time", launchT).
+        stateSet("launch_time", launchT).
     }
 
     LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).

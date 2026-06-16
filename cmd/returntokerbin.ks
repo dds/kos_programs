@@ -100,7 +100,7 @@ IF NOT err {
     // DESCENT is its own (lean) band; preloading descent lets it
     // bind during AEROBRAKE with no band-change reboot mid-entry.
     stateSet("mission_cfg_LIBS_EXTRA", "descent").
-    stateSetNum("mission_cfg_ESCAPE_PE", targetPe).
+    stateSet("mission_cfg_ESCAPE_PE", targetPe).
     stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
 
     IF kscTarget {
@@ -116,7 +116,7 @@ IF NOT err {
     }
 
     IF armChutes > 0 {
-        stateSetNum("mission_cfg_AEROBRAKE_ARM_CHUTES", armChutes).
+        stateSet("mission_cfg_AEROBRAKE_ARM_CHUTES", armChutes).
     } ELSE {
         stateRemove("mission_cfg_AEROBRAKE_ARM_CHUTES").
     }
@@ -148,7 +148,7 @@ IF NOT err {
     stateSet("phase", "ESCAPE").
 
     // Bump launch_time so the new flight log gets a fresh timestamp
-    stateSetNum("launch_time", ROUND(TIME:SECONDS)).
+    stateSet("launch_time", ROUND(TIME:SECONDS)).
 
     PRINT " ".
     PRINT "Return to Kerbin configured:".

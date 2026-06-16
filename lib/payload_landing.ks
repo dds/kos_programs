@@ -199,7 +199,7 @@ GLOBAL FUNCTION phaseLand {
 
     IF _redirectOrbitalLandingPhase("LAND") { RETURN. }
 
-    landingExecute().
+    landExecute().
     mLogWarn("STATS land phase result alt=" + ROUND(ALT:RADAR,1)
         + " h=" + ROUND(SHIP:VELOCITY:SURFACE:MAG,1)
         + " v=" + ROUND(SHIP:VERTICALSPEED,1)

@@ -72,7 +72,7 @@ GLOBAL FUNCTION ensureSoiAlarm {
     SET alm:ACTION TO "KillWarp".
     stateSet("soi_alarm_id", alm:ID).
     stateSet("soi_alarm_target", targetBody:NAME).
-    stateSetNum("soi_alarm_ut", soiUt).
+    stateSet("soi_alarm_ut", soiUt).
     mLog("KAC alarm set for SOI transition in "
         + ROUND(soiUt - TIME:SECONDS, 0) + "s.").
     RETURN alm:ID.

@@ -123,7 +123,7 @@ GLOBAL FUNCTION phaseCrewXfer {
     LOCAL startCount IS stateGetNum("crew_xfer_start", -1).
     IF startCount < 0 {
         SET startCount TO SHIP:CREW():LENGTH.
-        stateSetNum("crew_xfer_start", startCount).
+        stateSet("crew_xfer_start", startCount).
     }
     IF SHIP:CREW():LENGTH > startCount {
         mLog("CREW_XFER: crew aboard (" + SHIP:CREW():LENGTH + ").").
