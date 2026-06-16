@@ -115,7 +115,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL searchEnd IS nowUt + period * scanOrbits + 30.
     LOCAL solution IS _deorbitSolveFlyover(
         targetLat, targetLng, targetPe,
-        searchStart, searchEnd, period, bodyR, mu).
+        searchStart, searchEnd, period, bodyR, mu, targetTolerance).
     IF NOT solution["VALID"] {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
@@ -235,20 +235,28 @@ LOCAL FUNCTION _deorbitSolveFlyover {
     PARAMETER period.
     PARAMETER bodyR.
     PARAMETER mu.
+    PARAMETER stopDist IS 10000.
 
     LOCAL best IS LEXICON("VALID", FALSE, "DIST", 999999999).
     LOCAL orbitIdx IS 0.
-    LOCAL seedOffsets IS LIST(0, period * 0.25, period * 0.5, period * 0.75).
+    LOCAL phaseOffsets IS LIST(0, period * 0.5).
 
     UNTIL startUt + orbitIdx * period > endUt {
-        FOR seedOffset IN seedOffsets {
-            LOCAL seedUt IS startUt + orbitIdx * period + seedOffset.
-            IF seedUt <= endUt {
+        LOCAL orbitStart IS startUt + orbitIdx * period.
+        FOR phaseOffset IN phaseOffsets {
+            LOCAL windowStart IS orbitStart + phaseOffset.
+            LOCAL windowEnd IS MIN(endUt, windowStart + period * 0.5).
+            IF windowStart <= endUt {
+                LOCAL seedUt IS _deorbitSeedFlyover(windowStart, windowEnd,
+                    targetLat, targetLng, targetPe, period, bodyR, mu).
                 LOCAL info IS _deorbitRefineFlyover(seedUt,
                     targetLat, targetLng, targetPe,
-                    startUt, endUt, period, bodyR, mu).
+                    windowStart, windowEnd, period, bodyR, mu).
                 IF info["VALID"] AND info["DIST"] < best["DIST"] {
                     SET best TO info.
+                    IF best["DIST"] <= stopDist {
+                        RETURN best.
+                    }
                 }
             }
         }
@@ -256,6 +264,41 @@ LOCAL FUNCTION _deorbitSolveFlyover {
         WAIT 0.
     }
     RETURN best.
+}
+
+LOCAL FUNCTION _deorbitSeedFlyover {
+    PARAMETER orbitStart.
+    PARAMETER orbitEnd.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER targetPe.
+    PARAMETER period.
+    PARAMETER bodyR.
+    PARAMETER mu.
+
+    LOCAL base IS _deorbitPredictFlyover(orbitStart, targetLat, targetLng,
+        targetPe, bodyR, mu).
+    IF NOT base["VALID"] { RETURN orbitStart. }
+    LOCAL probeStep IS MIN(300, MAX(20, period / 16)).
+    LOCAL probeUt IS MIN(orbitEnd, orbitStart + probeStep).
+    IF probeUt <= orbitStart { RETURN orbitStart. }
+    LOCAL probe IS _deorbitPredictFlyover(probeUt, targetLat, targetLng,
+        targetPe, bodyR, mu).
+    IF NOT probe["VALID"] { RETURN orbitStart. }
+
+    LOCAL lngRate IS _deorbitAngleErr(probe["LNG"], base["LNG"])
+        / (probeUt - orbitStart).
+    IF ABS(lngRate) < 0.0001 { RETURN orbitStart. }
+
+    LOCAL seedUt IS orbitStart
+        - _deorbitAngleErr(base["LNG"], targetLng) / lngRate.
+    UNTIL seedUt >= orbitStart {
+        SET seedUt TO seedUt + period.
+    }
+    UNTIL seedUt <= orbitEnd {
+        SET seedUt TO seedUt - period.
+    }
+    RETURN MAX(orbitStart, MIN(orbitEnd, seedUt)).
 }
 
 LOCAL FUNCTION _deorbitRefineFlyover {
@@ -275,7 +318,7 @@ LOCAL FUNCTION _deorbitRefineFlyover {
     LOCAL iter IS 0.
     LOCAL info IS _deorbitPredictFlyover(burnUT, targetLat, targetLng,
         targetPe, bodyR, mu).
-    UNTIL iter >= 8 {
+    UNTIL iter >= 5 {
         IF NOT info["VALID"] { RETURN info. }
         LOCAL lngErr IS _deorbitAngleErr(info["LNG"], targetLng).
         IF ABS(lngErr) < 0.01 { BREAK. }
