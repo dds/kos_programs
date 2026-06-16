@@ -227,7 +227,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
         PRINT "  Mission config not found: " + path_.
         RETURN FALSE.
     }
-    LOCAL _cfg IS ADDONS:JSON:PASRE(OPEN(path_):READALL:STRING).
+    LOCAL _cfg IS ADDONS:JSON:PARSE(OPEN(path_):READALL:STRING).
     FOR key IN _cfg:KEYS {
         LOCAL value IS _cfg[key].
         stateSet("mission_cfg_" + key, value).
