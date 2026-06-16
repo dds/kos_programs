@@ -9,8 +9,7 @@ LOCAL FUNCTION _depLoaded {
 }
 
 GLOBAL FUNCTION dependencyAllPhases {
-    bootLibLoadSpec().
-    RETURN BOOT_LIB_PHASES:KEYS.
+    RETURN bootLibAllPhases().
 }
 
 GLOBAL FUNCTION dependencyBindPhase {
