@@ -26,8 +26,8 @@ GLOBAL FBIJ_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
 
 IF stateGet("phase", "") = "" {
     LOCAL startupSeq IS FBIJ_SEQ.
-    IF stateGet("mission_cfg_SEQUENCE", "") <> "" {
-        SET startupSeq TO phaseListFromString(stateGet("mission_cfg_SEQUENCE", "")).
+    IF missionCfgGet("SEQUENCE", "") <> "" {
+        SET startupSeq TO phaseListFromString(missionCfgGet("SEQUENCE", "")).
     }
     stateSet("phase", startupSeq[0]).
 }

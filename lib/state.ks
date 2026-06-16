@@ -101,6 +101,25 @@ GLOBAL FUNCTION stateRemovePrefix {
     RETURN removed.
 }
 
+GLOBAL FUNCTION stateRemoveMatchingPrefixed {
+    PARAMETER prefix.
+    PARAMETER values.
+    _ensureLoaded().
+    LOCAL removed IS 0.
+    FOR key IN values:KEYS {
+        LOCAL stateKey IS prefix + key.
+        IF _cache:HASKEY(stateKey)
+                AND ("" + _cache[stateKey]) = ("" + values[key]) {
+            _cache:REMOVE(stateKey).
+            SET removed TO removed + 1.
+        }
+    }
+    IF removed > 0 {
+        _flush().
+    }
+    RETURN removed.
+}
+
 GLOBAL FUNCTION stateDump {
     _ensureLoaded().
     PRINT "=== STATE DUMP ===".

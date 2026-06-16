@@ -2,8 +2,8 @@
 // config.ks  —  Shared config and phase sequence utilities
 // (0:/lib/config.ks)
 //
-// Generic utilities for any craft using persistent CFG state
-// and comma-separated phase sequences.
+// Generic utilities for any craft using mission CFG and
+// comma-separated phase sequences.
 // ============================================================
 
 // --- Config management ---
@@ -26,7 +26,21 @@ GLOBAL FUNCTION cfgSet {
     CFG:ADD(key, value).
 }
 
+GLOBAL FUNCTION missionCfgGet {
+    PARAMETER key.
+    PARAMETER defaultValue IS "".
+    IF DEFINED MISSION_CFG {
+        IF MISSION_CFG:HASKEY(key) { RETURN MISSION_CFG[key]. }
+    }
+    RETURN defaultValue.
+}
+
 GLOBAL FUNCTION applyKnownMissionState {
+    IF DEFINED MISSION_CFG {
+        FOR key IN MISSION_CFG:KEYS {
+            cfgSet(key, MISSION_CFG[key]).
+        }
+    }
     FOR sk IN stateKeys() {
         IF sk:LENGTH > 12 AND sk:SUBSTRING(0, 12) = "mission_cfg_" {
             LOCAL bare IS sk:SUBSTRING(12, sk:LENGTH - 12).

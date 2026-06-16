@@ -87,7 +87,7 @@ GLOBAL FUNCTION flightPlanRow {
 }
 
 GLOBAL FUNCTION flightPlanIdentity {
-    LOCAL missionName IS stateGet("mission_name", "").
+    LOCAL missionName IS missionCfgGet("MISSION_NAME", stateGet("mission_name", "")).
     IF missionName <> "" { flightPlanRow("MISSION", missionName). }
     flightPlanRow("CODE", codeVersion()).
     IF CORE:TAG <> "" { flightPlanRow("CORE", CORE:TAG). }

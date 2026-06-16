@@ -10,7 +10,7 @@ GLOBAL FUNCTION main {
 }
 
 GLOBAL FUNCTION bootEnsureDirs {
-    FOR p IN LIST("1:/lib","1:/boot","1:/run","1:/craft","1:/roles") {
+    FOR p IN LIST("1:/lib","1:/boot","1:/run","1:/craft","1:/roles","1:/missions") {
         IF NOT EXISTS(p) { CREATEDIR(p). }
     }
 }
@@ -194,32 +194,44 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     PARAMETER missionId.
     PARAMETER hasLink.
     IF missionId = "" { RETURN FALSE. }
-    LOCAL path_ IS "0:/missions/" + craftName + "/" + missionId + ".ks".
-    IF NOT EXISTS(path_) {
-        PRINT "  Mission config not found: " + path_.
-        RETURN FALSE.
+    LOCAL archivePath IS "0:/missions/" + craftName + "/" + missionId + ".ks".
+    LOCAL cacheDir IS "1:/missions/" + craftName.
+    LOCAL cachePath IS cacheDir + "/" + missionId + ".ks".
+    IF hasLink AND EXISTS(archivePath) {
+        IF NOT EXISTS("1:/missions") { CREATEDIR("1:/missions"). }
+        IF NOT EXISTS(cacheDir) { CREATEDIR(cacheDir). }
+        IF EXISTS(cachePath) { DELETEPATH(cachePath). }
+        COPYPATH(archivePath, cachePath).
     }
-    RUNPATH(path_).
-    LOCAL cfg IS MISSION_CFG.
-    FOR key IN cfg:KEYS {
-        LOCAL value IS cfg[key].
-        stateSet("mission_cfg_" + key, value).
-        IF key = "MISSION_ID" {
-            stateSet("mission_id", value).
-        } ELSE IF key = "MISSION_NAME" {
-            stateSet("mission_name", value).
-        } ELSE IF key = "TARGET" {
-            stateSet("target", value).
-        } ELSE IF key = "PAYLOADS" {
-            stateSet("payloads", value).
-        } ELSE IF key = "MISSION_TYPE" {
-            stateSet("mission_type", value).
+    LOCAL path_ IS cachePath.
+    IF NOT EXISTS(path_) {
+        IF hasLink AND EXISTS(archivePath) {
+            SET path_ TO archivePath.
+        } ELSE {
+            PRINT "  Mission config not found: " + path_.
+            RETURN FALSE.
         }
     }
+    SET MISSION_CFG TO LEXICON().
+    RUNPATH(path_).
+    LOCAL cfg IS MISSION_CFG.
+    LOCAL pruned IS stateRemoveMatchingPrefixed("mission_cfg_", cfg).
+    IF pruned > 0 {
+        mLog("Pruned " + pruned + " duplicated mission config state keys.").
+    }
+    IF cfg:HASKEY("MISSION_ID") { stateSet("mission_id", cfg["MISSION_ID"]). }
     IF stateGet("mission_id", "") = "" { stateSet("mission_id", missionId). }
-    PRINT "  Mission: " + stateGet("mission_name", missionId).
-    PRINT "  Target:  " + stateGet("target", "KERBIN").
-    PRINT "  Payload: " + stateGet("payloads", "").
+    IF cfg:HASKEY("MISSION_NAME") { stateRemove("mission_name"). }
+    IF cfg:HASKEY("TARGET") { stateRemove("target"). }
+    IF cfg:HASKEY("PAYLOADS") { stateRemove("payloads"). }
+    IF cfg:HASKEY("MISSION_TYPE") { stateRemove("mission_type"). }
+    IF cfg:HASKEY("MISSION_NAME") {
+        PRINT "  Mission: " + cfg["MISSION_NAME"].
+    } ELSE {
+        PRINT "  Mission: " + stateGet("mission_id", missionId).
+    }
+    IF cfg:HASKEY("TARGET") { PRINT "  Target:  " + cfg["TARGET"]. }
+    IF cfg:HASKEY("PAYLOADS") { PRINT "  Payload: " + cfg["PAYLOADS"]. }
     printStorageStatus().
     RETURN TRUE.
 }
@@ -423,13 +435,17 @@ GLOBAL FUNCTION bootCleanup {
     LOCAL keepRoles IS LIST().
     IF CORE:TAG <> "" { keepRoles:ADD(CORE:TAG). }
 
+    LOCAL keepMissions IS LIST().
+    LOCAL selectedMission IS stateGet("mission_id", "").
+    IF selectedMission <> "" { keepMissions:ADD(selectedMission). }
+
     LOCAL beforeFree IS CORE:VOLUME:FREESPACE.
     LOCAL removed IS 0.
     SET removed TO removed + bootPruneDir("1:/lib", keepLibs).
     SET removed TO removed + bootPruneDir("1:/craft", LIST(vehicleName)).
     SET removed TO removed + bootPruneDir("1:/roles", keepRoles).
     SET removed TO removed + bootPruneDir("1:/cmd", LIST()).
-    SET removed TO removed + bootPruneDir("1:/missions/" + vehicleName, LIST()).
+    SET removed TO removed + bootPruneDir("1:/missions/" + vehicleName, keepMissions).
     IF EXISTS("1:/zombie") {
         DELETEPATH("1:/zombie").
         SET removed TO removed + 1.
@@ -628,7 +644,7 @@ GLOBAL FUNCTION missionAppendUnique {
 }
 
 GLOBAL FUNCTION missionPayloadsFromState {
-    LOCAL raw IS stateGet("payloads", "").
+    LOCAL raw IS missionCfgGet("PAYLOADS", stateGet("payloads", "")).
     IF raw = "" { RETURN LIST(). }
     RETURN raw:SPLIT(",").
 }
@@ -676,9 +692,13 @@ GLOBAL FUNCTION missionHasLandingPayload {
 // failed. Unknown phases keep the lib (safe).
 GLOBAL FUNCTION missionExtraLibs {
     LOCAL out IS LIST().
-    LOCAL seq IS missionListFromCsv(stateGet("mission_cfg_SEQUENCE", "")).
+    LOCAL rawSeq IS missionCfgGet("SEQUENCE", "").
+    IF DEFINED CFG AND CFG:HASKEY("SEQUENCE") { SET rawSeq TO CFG["SEQUENCE"]. }
+    LOCAL seq IS missionListFromCsv(rawSeq).
     LOCAL cur IS stateGet("phase", "").
-    FOR entryRaw IN missionListFromCsv(stateGet("mission_cfg_LIBS_EXTRA", "")) {
+    LOCAL rawExtra IS missionCfgGet("LIBS_EXTRA", "").
+    IF DEFINED CFG AND CFG:HASKEY("LIBS_EXTRA") { SET rawExtra TO CFG["LIBS_EXTRA"]. }
+    FOR entryRaw IN missionListFromCsv(rawExtra) {
         IF entryRaw:CONTAINS("@") {
             LOCAL parts IS entryRaw:SPLIT("@").
             LOCAL libName IS parts[0]:TRIM.
@@ -710,7 +730,9 @@ GLOBAL FUNCTION missionLibs {
     LOCAL libs IS LIST().
     missionAppendUnique(libs, baseLibs).
 
-    LOCAL configured IS missionListFromCsv(stateGet("mission_cfg_LIBS", "")).
+    LOCAL rawLibs IS missionCfgGet("LIBS", "").
+    IF DEFINED CFG AND CFG:HASKEY("LIBS") { SET rawLibs TO CFG["LIBS"]. }
+    LOCAL configured IS missionListFromCsv(rawLibs).
     IF configured:LENGTH > 0 {
         missionAppendUnique(libs, bootLibResolve(configured)).
     } ELSE {
@@ -725,7 +747,9 @@ GLOBAL FUNCTION missionSequenceLibs {
     PARAMETER fallbackLibs IS LIST().
     PARAMETER baseDeps IS LIST().
     LOCAL sequenceLibs IS fallbackLibs.
-    LOCAL sequence IS missionListFromCsv(stateGet("mission_cfg_SEQUENCE", "")).
+    LOCAL rawSeq IS missionCfgGet("SEQUENCE", "").
+    IF DEFINED CFG AND CFG:HASKEY("SEQUENCE") { SET rawSeq TO CFG["SEQUENCE"]. }
+    LOCAL sequence IS missionListFromCsv(rawSeq).
     IF sequence:LENGTH > 0 {
         SET sequenceLibs TO missionLibsForPhases(sequence, baseDeps).
     }
@@ -740,7 +764,8 @@ GLOBAL FUNCTION missionSequenceLibs {
 
 GLOBAL FUNCTION airplaneSequenceFromState {
     PARAMETER defaultSeq.
-    LOCAL raw IS stateGet("mission_cfg_SEQUENCE", "").
+    LOCAL raw IS missionCfgGet("SEQUENCE", "").
+    IF DEFINED CFG AND CFG:HASKEY("SEQUENCE") { SET raw TO CFG["SEQUENCE"]. }
     IF raw <> "" { RETURN phaseListFromString(raw). }
     RETURN defaultSeq.
 }

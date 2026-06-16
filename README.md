@@ -77,8 +77,9 @@ leg's log, rewinds `phase` to the start of the sequence, stamps a fresh
 `lib/boot_lib.ks` + `lib/dependencies.ks`, then delegates: preamble/core
 libs load, EVA kerbals are auto-detected (root part `kerbalEVA`), `CORE:TAG`
 routes tagged CPUs to `roles/`, untagged CPUs load `craft/<vehicle>.ks`.
-The selected mission profile is read from `0:/missions/<vehicle>/` once,
-persisted into state as `mission_cfg_*`, and never needed in flight again.
+The selected mission id is persisted in state. The profile itself is copied
+to `1:/missions/<vehicle>/`, reloaded into `MISSION_CFG` on boot, and then
+applied to `CFG`; only runtime config overrides use `mission_cfg_*` state.
 The craft script's `bootVehicleLibs()` returns the library roots to sync;
 boot compiles them to KSM (comments cost nothing), prunes stale files, runs
 them, then auto-resumes or drops to manual mode.
@@ -210,7 +211,7 @@ Terrain-lookahead altitude floor, low-fuel/EC autoland, sorties chained with
 Data-only `KEY = VALUE` files under `missions/<vehicle>/`, selected from the
 pad picker or forced via `stateSet("mission_id", "<id>").` + reboot. The
 profile owns the phase order; the craft script owns the hardware. Values land
-in `CFG` at boot.
+in `CFG` at boot from the cached selected profile.
 
 ```ini
 MISSION_ID = mun_sat_delivery_3
@@ -333,8 +334,8 @@ GLOBAL FUNCTION bootVehicleLibs {
 
 GLOBAL FUNCTION main {
     LOCAL seq IS DEFAULT_SEQ.
-    IF stateGet("mission_cfg_SEQUENCE", "") <> "" {
-        SET seq TO phaseListFromString(stateGet("mission_cfg_SEQUENCE", "")).
+    IF missionCfgGet("SEQUENCE", "") <> "" {
+        SET seq TO phaseListFromString(missionCfgGet("SEQUENCE", "")).
     }
     SET launchSeq TO seq. SET xferSeq TO seq.
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }

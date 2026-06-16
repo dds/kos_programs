@@ -8,7 +8,7 @@
 // you can taxi, take off, fly, and land the next leg.
 //
 // Unlike cmd/resetmission.ks this KEEPS the selected mission
-// profile and all mission_cfg_* values — it only rewinds the
+// profile and runtime mission_cfg_* overrides — it only rewinds the
 // phase, archives the previous leg's flight log, and stamps a
 // fresh launch_time so the next leg logs to its own file.
 //
@@ -42,7 +42,8 @@ IF opts:HASKEY("reboot") { SET doReboot TO opts["reboot"]. }
 IF opts:HASKEY("force")  { SET force TO opts["force"]. }
 
 // Default restart phase: first phase of the current mission sequence
-LOCAL rawSeq IS stateGet("mission_cfg_SEQUENCE", "").
+LOCAL rawSeq IS missionCfgGet("SEQUENCE", "").
+IF DEFINED CFG AND CFG:HASKEY("SEQUENCE") { SET rawSeq TO CFG["SEQUENCE"]. }
 IF restartPhase = "" {
     IF rawSeq <> "" {
         SET restartPhase TO phaseListFromString(rawSeq)[0].
@@ -71,7 +72,7 @@ IF NOT err {
     stateSet("flight_leg", leg).
 
     // Rewind the phase machine to the start of the sequence.
-    // Mission identity and mission_cfg_* values stay untouched,
+    // Mission identity and runtime config overrides stay untouched,
     // so boot skips the selector and reloads the same profile.
     stateSet("phase", restartPhase).
 

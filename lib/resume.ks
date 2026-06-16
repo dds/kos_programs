@@ -5,8 +5,8 @@
 
 GLOBAL MISSION IS LEXICON(
     "vehicle",  stateGet("vehicle",  "UNKNOWN"),
-    "target",   stateGet("target",   "UNKNOWN"),
-    "payloads", stateGet("payloads", "")
+    "target",   missionCfgGet("TARGET", stateGet("target", "UNKNOWN")),
+    "payloads", missionCfgGet("PAYLOADS", stateGet("payloads", ""))
 ).
 
 mLog("MISSION vehicle=" + MISSION["vehicle"]

@@ -46,8 +46,8 @@ GLOBAL FUNCTION bootVehicleLibs {
 
 GLOBAL FUNCTION main {
     LOCAL seq IS FDR1_SEQ.
-    IF stateGet("mission_cfg_SEQUENCE", "") <> "" {
-        SET seq TO phaseListFromString(stateGet("mission_cfg_SEQUENCE", "")).
+    IF missionCfgGet("SEQUENCE", "") <> "" {
+        SET seq TO phaseListFromString(missionCfgGet("SEQUENCE", "")).
     }
     SET launchSeq TO seq.
     SET xferSeq TO seq.

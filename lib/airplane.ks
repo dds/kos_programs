@@ -957,8 +957,8 @@ GLOBAL FUNCTION airplaneMain {
     LOCAL defaultSeq IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
     IF opts:HASKEY("defaultSeq") { SET defaultSeq TO opts["defaultSeq"]. }
     SET _amSeq TO defaultSeq.
-    IF stateGet("mission_cfg_SEQUENCE", "") <> "" {
-        SET _amSeq TO phaseListFromString(stateGet("mission_cfg_SEQUENCE", "")).
+    IF CFG:HASKEY("SEQUENCE") {
+        SET _amSeq TO phaseListFromString(CFG["SEQUENCE"]).
     }
     SET launchSeq TO _amSeq.
     SET xferSeq TO _amSeq.

@@ -179,7 +179,7 @@ GLOBAL FUNCTION warpHoldEnabled {
     IF DEFINED CFG AND CFG:HASKEY("KEEP_WARP") {
         RETURN CFG["KEEP_WARP"] > 0.
     }
-    RETURN stateGetNum("mission_cfg_KEEP_WARP", 0) > 0.
+    RETURN missionCfgGet("KEEP_WARP", 0) > 0.
 }
 
 GLOBAL FUNCTION trySolarOrient {

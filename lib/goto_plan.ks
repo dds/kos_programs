@@ -88,11 +88,13 @@ LOCAL FUNCTION _gotoSafePe {
     RETURN 25000.
 }
 
-// Requested final orbit element from mission state, or fallback.
+// Requested final orbit element from effective CFG, or fallback.
 LOCAL FUNCTION _gotoShapeNum {
     PARAMETER key, fallback.
-    IF stateGet("mission_cfg_SHAPE_" + key, "") = "" { RETURN fallback. }
-    RETURN stateGetNum("mission_cfg_SHAPE_" + key, fallback).
+    LOCAL cfgKey IS "SHAPE_" + key.
+    IF NOT DEFINED CFG { RETURN fallback. }
+    IF NOT CFG:HASKEY(cfgKey) { RETURN fallback. }
+    RETURN CFG[cfgKey].
 }
 
 // ============================================================
@@ -158,10 +160,10 @@ GLOBAL FUNCTION gotoBuildPlan {
         } ELSE IF final {
             SET capPe TO _gotoShapeNum("PE", capPe).
             SET capAp TO _gotoShapeNum("AP", capAp).
-            IF stateGet("mission_cfg_SHAPE_INC", "") <> "" {
+            IF DEFINED CFG AND CFG:HASKEY("SHAPE_INC") {
                 cfg:ADD("CAPTURE_INC", _gotoShapeNum("INC", 0)).
             }
-            IF stateGet("mission_cfg_SHAPE_LAN", "") <> "" {
+            IF DEFINED CFG AND CFG:HASKEY("SHAPE_LAN") {
                 cfg:ADD("CAPTURE_LAN", _gotoShapeNum("LAN", 0)).
             }
         }

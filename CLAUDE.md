@@ -74,8 +74,9 @@ Looks like Python/JS; is neither.
 
 - **Boot**: `boot/boot.ks` → syncs `boot_lib` + `dependencies` → preamble
   libs → EVA/`CORE:TAG` routing (`roles/`) or vehicle script (`craft/`) →
-  mission profile from `0:/missions/<vehicle>/` persisted as `mission_cfg_*`
-  state → `bootVehicleLibs()` roots synced/compiled/run → 5 s manual-mode
+  selected mission id persisted in state; profile copied to
+  `1:/missions/<vehicle>/` and reloaded into `MISSION_CFG` →
+  `bootVehicleLibs()` roots synced/compiled/run → 5 s manual-mode
   window → resume.
 - **Phases**: profiles own `SEQUENCE`; `runPhases(map)` dispatches by the
   persisted `phase` key; handlers call `nextPhase(seq)`. Sequences cannot
@@ -90,7 +91,8 @@ Looks like Python/JS; is neither.
   + reboot), not an error — that's the progressive-loading mechanism.
 - **Vehicle contract**: `GLOBAL CFG IS LEXICON(...)`, `bootVehicleLibs()`,
   `main()`. Aircraft delegate to `airplaneMain()`; profile values land in
-  `CFG` via `mission_cfg_*` state.
+  `CFG` from `MISSION_CFG`, with `mission_cfg_*` state used only for runtime
+  overrides.
 
 ## Map of the important code
 

@@ -27,7 +27,6 @@ applyKnownMissionState().
 IF stateGet("secondary_active", "false") = "true" {
     IF CFG:HASKEY("SECONDARY_SEQUENCE") {
         cfgSet("SEQUENCE", CFG["SECONDARY_SEQUENCE"]).
-        stateSet("mission_cfg_SEQUENCE", CFG["SEQUENCE"]).
     }
     IF CFG:HASKEY("SECONDARY_SHAPE_PE") { cfgSet("SHAPE_PE", CFG["SECONDARY_SHAPE_PE"]). }
     IF CFG:HASKEY("SECONDARY_SHAPE_AP") { cfgSet("SHAPE_AP", CFG["SECONDARY_SHAPE_AP"]). }
@@ -88,7 +87,7 @@ LOCAL FUNCTION _falconPhaseParkingReload {
 }
 
 GLOBAL FUNCTION falconBuildPhaseSequence {
-    IF stateGet("mission_cfg_SEQUENCE", "") <> "" AND CFG:HASKEY("SEQUENCE") {
+    IF CFG:HASKEY("SEQUENCE") {
         RETURN phaseListFromString(CFG["SEQUENCE"]).
     }
 

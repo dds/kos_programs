@@ -44,7 +44,8 @@ bootPreamble().
 
 // --- Read options with defaults ---
 // Default honors the mission profile's REENTRY_PE when set.
-LOCAL targetPe IS stateGetNum("mission_cfg_REENTRY_PE", 43000).
+LOCAL targetPe IS missionCfgGet("REENTRY_PE", 43000).
+IF DEFINED CFG AND CFG:HASKEY("REENTRY_PE") { SET targetPe TO CFG["REENTRY_PE"]. }
 LOCAL reentryDir IS "RETROGRADE".
 LOCAL decoupleTag IS "".
 LOCAL armChutes IS 0.
