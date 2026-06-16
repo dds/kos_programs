@@ -738,9 +738,6 @@ GLOBAL FUNCTION missionHasLandingPayload {
 }
 
 
-@LAZYGLOBAL OFF.
-@CLOBBERBUILTINS OFF.
-
 if not (defined _exec_idString) {
   global _exec_idString is char(127).//starts at char 127 to avoid reserved charters in windows file names
 }
