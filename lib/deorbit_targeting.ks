@@ -194,8 +194,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     ADDONS:TR:SETTARGET(targetGeo).
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
-        + "  entryPe=" + ROUND(entryPe/1000,1) + "km"
-        + "  tolerance=" + ROUND(tolerance/1000,1) + "km").
+        + "  entryPe=" + ROUND(entryPe:TONUMBER(0)/1000,1) + "km"
+        + "  tolerance=" + ROUND(tolerance:TONUMBER(0)/1000,1) + "km").
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL nowUt IS TIME:SECONDS.
