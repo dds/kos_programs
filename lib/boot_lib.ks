@@ -493,7 +493,7 @@ GLOBAL FUNCTION bootCheckManualKey {
 }
 
 GLOBAL FUNCTION bootLibSpec {
-    RETURN ADDONS:JSON:PARSEORELSE("1:/lib/dependencies.json", LEXICON()).
+    RETURN ADDONS:JSON:PARSE(OPEN("1:/lib/dependencies.json"):READALL:STRING).
 }
 
 GLOBAL FUNCTION bootLibAddUnique {
@@ -576,9 +576,7 @@ GLOBAL FUNCTION bootLibLoad {
 
 GLOBAL FUNCTION bootPreamble {
     LOCAL spec IS bootLibSpec().
-    IF spec:HASKEY("preamble") {
-        bootLibLoadList(spec["preamble"]).
-    }
+    bootLibLoadList(spec["preamble"]).
 }
 
 GLOBAL FUNCTION bootLibBandRoots {
