@@ -4,7 +4,9 @@
 
 GLOBAL FUNCTION targetedDeorbit {
     LOCAL entryPe   IS 30000.
-    IF CFG:HASKEY("PROBE_ENTRY_PE") { SET entryPe TO CFG["PROBE_ENTRY_PE"]. }
+    IF CFG:HASKEY("PROBE_ENTRY_PE") {
+      SET entryPe TO CFG["PROBE_ENTRY_PE"].
+    }
     LOCAL tolerance IS 5000.
     IF CFG:HASKEY("PROBE_TARGET_TOL") { SET tolerance TO CFG["PROBE_TARGET_TOL"]. }
 
@@ -193,11 +195,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
     ADDONS:TR:SETTARGET(targetGeo).
 
-    PRINT("ENTRYPE: " + ENTRYPE + " TYPE: " + ENTRYPE:TYPENAME).
-    PRINT("TOLERANCE: " + TOLERANCE + " TYPE: " + TOLERANCE:TYPENAME).
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
-        + "  entryPe=" + ROUND(entryPe:TONUMBER(0)/1000,1) + "km"
-        + "  tolerance=" + ROUND(tolerance:TONUMBER(0)/1000,1) + "km").
+        + "  entryPe=" + ROUND(entryPe/1000,1) + "km"
+        + "  tolerance=" + ROUND(tolerance/1000,1) + "km").
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL nowUt IS TIME:SECONDS.
