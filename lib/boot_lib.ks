@@ -738,6 +738,67 @@ GLOBAL FUNCTION missionHasLandingPayload {
 }
 
 
+@LAZYGLOBAL OFF.
+@CLOBBERBUILTINS OFF.
+
+if not (defined _exec_idString) {
+  global _exec_idString is char(127).//starts at char 127 to avoid reserved charters in windows file names
+}
+
+if not (defined _past_exec_strings) {
+  global _past_exec_strings is lexicon().//stores previously executed commands and the associated path, intended to prevent increment of _exec_idString if calling the same command repeatedly.
+  set _past_exec_strings:casesensitive to true.
+}
+
+GLOBAL function execute {
+  parameter command.
+
+  local filePath IS path().
+  if _past_exec_strings:haskey(command) {//if we have already run a command recall the path used the old path
+    set filePath to _past_exec_strings[command].
+  } else {
+    //start of string incrementing
+    local carry is false.
+    local strStart is _exec_idString:LENGTH - 1.
+    from { local i is strStart. } until i < 0 step { SET i to i - 1. } do {
+      local tmpNum is unchar(_exec_idString[i]).
+      //print tmpNum.
+      if carry or (i = strStart) {
+        set tmpNum to tmpNum + 1.
+        set carry to false.
+      }
+      if tmpNum > 255 {
+        set tmpNum to tmpNum - 128.
+        set carry to true.
+      }
+      local subStringHigh IS _exec_idString:substring(i,_exec_idString:LENGTH - i).
+      set subStringHigh to subStringHigh:remove(0,1).
+      local subStringLow is _exec_idString:substring(0,i).
+      set _exec_idString to subStringLow + char(tmpNum) + subStringHigh.
+
+    }
+    if carry { set _exec_idString to char(128) + _exec_idString. }
+    //end of string incrementing
+    set filePath to path("1:/_execute_" + _exec_idString + ".tmp").
+    _past_exec_strings:ADD(command,filePath).
+  }
+  log_run_del(command,filePath).
+}
+
+local function log_run_del {
+  parameter
+    log_string,//the string to be executed
+    file_path. //the path to where the string should be stored temporarily so it can be executed.
+
+  if exists(file_path) {
+    deletepath(file_path).
+  }
+  log log_string to file_path.
+  wait 0.
+  runpath(file_path).
+  deletepath(file_path).
+}
+
 GLOBAL FUNCTION evaluate {
     PARAMETER expression.
 
