@@ -484,7 +484,7 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
         LOCAL distCost IS (dist / 1000) * (dist / 1000).
         LOCAL angleCost IS 0.
         IF dist < 25000 {
-            SET angleCost TO (angle - (-1 * targetAngle)) / 5 ) * (angle - (-1 * targetAngle)) / 5 ) * 50.
+            SET angleCost TO (angle - (-1 * targetAngle)) / 5  * (angle - (-1 * targetAngle)) / 5 * 50.
             IF angle >= 0 {
                 SET angleCost TO MIN(5000, ((angle - targetAngle) / angleTol)
                     * ((angle - targetAngle) / angleTol)).
