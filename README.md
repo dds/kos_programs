@@ -48,6 +48,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
 | `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
 | `RUNPATH("0:/cmd/dump.ks").` | Print persistent state |
+| `RUNPATH("0:/cmd/convertstatejson.ks").` | Convert legacy SimpleJSON state to native kOS JSON |
 | `RUNPATH("0:/cmd/logs.ks").` | Archive the flight log to KSC |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
@@ -114,8 +115,10 @@ dependencyBands()                phases that load together
 
 ### State, logs, telemetry
 
-- **State**: JSON at `1:/run/state.json` via `stateGet`/`stateSet` — never
-  raw file I/O for mission state. Survives reboots, quickloads, power loss.
+- **State**: native kOS JSON at `1:/run/state.json` via
+  `stateGet`/`stateSet` — never raw file I/O for mission state. Survives
+  reboots, quickloads, power loss. Legacy SimpleJSON state can be converted
+  once with `RUNPATH("0:/cmd/convertstatejson.ks").`.
 - **Flight log**: `mLog`/`mLogWarn`/`mLogError`; WARN-level `STATS ...` lines
   summarize every plan/burn/phase for post-flight analysis. Archived to
   `0:/logs/archive/` append-and-rotate at phase transitions and after every
@@ -396,10 +399,11 @@ configure-hook / extra-phase options.
 
 ## Mod dependencies
 
-**kOS** (with `ADDONS:JSON` simplejson), **MechJeb** (ascent), **Trajectories**
-(impact prediction), **KerbalEngineer** (burn times), **Kerbal Alarm Clock**
-(warp-stop alarms), **SCANsat** (optional mapping), **Waypoint Manager**
-(target selection for planes/drones/landings).
+**kOS**, **MechJeb** (ascent), **Trajectories** (impact prediction),
+**KerbalEngineer** (burn times), **Kerbal Alarm Clock** (warp-stop alarms),
+**SCANsat** (optional mapping), **Waypoint Manager** (target selection for
+planes/drones/landings). SimpleJSON is only needed to run the one-time legacy
+state converter.
 
 ## Development
 

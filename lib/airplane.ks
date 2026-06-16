@@ -128,7 +128,8 @@ LOCAL FUNCTION _loadCustomApproaches {
         COPYPATH(archiveDb, localDb).
     }
     IF NOT EXISTS(localDb) { RETURN. }
-    LOCAL db IS ADDONS:JSON:PARSEORELSE(OPEN(localDb):READALL:STRING, LEXICON()).
+    IF OPEN(localDb):READALL:STRING:TRIM = "" { RETURN. }
+    LOCAL db IS READJSON(localDb).
     LOCAL merged IS 0.
     FOR key IN db:KEYS {
         LOCAL entry IS db[key].
