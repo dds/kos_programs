@@ -24,16 +24,6 @@ GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
 ).
 
 applyKnownMissionState().
-IF stateGet("secondary_active", "false") = "true" {
-    IF CFG:HASKEY("SECONDARY_SEQUENCE") {
-        cfgSet("SEQUENCE", CFG["SECONDARY_SEQUENCE"]).
-    }
-    IF CFG:HASKEY("SECONDARY_SHAPE_PE") { cfgSet("SHAPE_PE", CFG["SECONDARY_SHAPE_PE"]). }
-    IF CFG:HASKEY("SECONDARY_SHAPE_AP") { cfgSet("SHAPE_AP", CFG["SECONDARY_SHAPE_AP"]). }
-    IF CFG:HASKEY("SECONDARY_SHAPE_INC") { cfgSet("SHAPE_INC", CFG["SECONDARY_SHAPE_INC"]). }
-    IF CFG:HASKEY("SECONDARY_SHAPE_LAN") { cfgSet("SHAPE_LAN", CFG["SECONDARY_SHAPE_LAN"]). }
-    IF CFG:HASKEY("SECONDARY_SHAPE_AOP") { cfgSet("SHAPE_AOP", CFG["SECONDARY_SHAPE_AOP"]). }
-}
 
 LOCAL FUNCTION _falconPrintConfig {
     LOCAL seq IS falconBuildPhaseSequence().
