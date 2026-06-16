@@ -568,12 +568,12 @@ GLOBAL FUNCTION bootLibLoad {
 }
 
 GLOBAL FUNCTION bootPreamble {
-    bootLibLoadList(dependencyPreamble()).
+    bootLibLoad("core").
 }
 
 GLOBAL FUNCTION bootLibBandRoots {
     PARAMETER band.
-    LOCAL preamble IS dependencyPreamble().
+    LOCAL preamble IS LIST("core").
     LOCAL bands IS dependencyBands().
     LOCAL roots IS LIST().
     FOR libName IN preamble { bootLibAddUnique(roots, libName). }
@@ -626,7 +626,7 @@ GLOBAL FUNCTION bootLibBandForPhase {
 GLOBAL FUNCTION bootLibPhaseRoots {
     PARAMETER phaseName.
     PARAMETER ignoredSpec IS LEXICON().
-    LOCAL preamble IS dependencyPreamble().
+    LOCAL preamble IS LIST("core").
     LOCAL phases IS dependencyPhases().
     LOCAL roots IS LIST().
     FOR libName IN preamble { bootLibAddUnique(roots, libName). }
@@ -785,8 +785,8 @@ GLOBAL FUNCTION missionSequenceLibs {
 
 // ============================================================
 // Aircraft boot helpers — shared by all airplane craft scripts.
-// These live here (preamble) because bootVehicleLibs() runs
-// before the airplane library itself is loaded.
+// These live here because bootVehicleLibs() runs before the airplane library
+// itself is loaded.
 // ============================================================
 
 GLOBAL FUNCTION airplaneSequenceFromState {

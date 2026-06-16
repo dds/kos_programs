@@ -2,10 +2,6 @@
 // dependencies.ks - boot dependency data and phase bindings
 // ============================================================
 
-GLOBAL FUNCTION dependencyPreamble {
-    RETURN LIST("core").
-}
-
 GLOBAL FUNCTION dependencyLibs {
     RETURN LEXICON(
         "core", LIST("state", "logs", "files", "phases", "dependencies", "config", "mission_type"),
