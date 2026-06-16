@@ -142,8 +142,8 @@ LOCAL FUNCTION _getImpactDistance {
 
 GLOBAL FUNCTION landingFlyoverPe {
     LOCAL landingTarget IS landingResolveTarget().
-    IF NOT landingTarget["FOUND"] { RETURN 12000. }
-    RETURN LATLNG(landingTarget["LAT"], landingTarget["LNG"]):TERRAINHEIGHT + 12000.
+    IF NOT landingTarget["FOUND"] { RETURN 0. }
+    RETURN LATLNG(landingTarget["LAT"], landingTarget["LNG"]):TERRAINHEIGHT.
 }
 
 GLOBAL FUNCTION landingFlyoverDistance {

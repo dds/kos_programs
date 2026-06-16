@@ -83,10 +83,11 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
-    LOCAL targetPe IS targetGeo:TERRAINHEIGHT + 8000.
+    LOCAL targetPe IS targetGeo:TERRAINHEIGHT.
     LOCAL targetTolerance IS 10000.
     IF ADDONS:TR:AVAILABLE {
         ADDONS:TR:SETTARGET(targetGeo).
+        mLog("Trajectories target set to landing site.").
     }
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
@@ -129,6 +130,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + "deg  flyover=" + ROUND(solution["LAT"],4)
         + "," + ROUND(solution["LNG"],4)
         + "  dist=" + ROUND(bestDist/1000,1) + "km").
+    _deorbitLogTrajectoryDiagnostic(bestUT, targetPe, bestRad, bestNor,
+        bodyR, mu, targetLat, targetLng).
 
     IF bestDist > targetTolerance {
         mLogWarn("Best solution misses target flyover by " + ROUND(bestDist/1000,1)
@@ -244,10 +247,7 @@ LOCAL FUNCTION _deorbitRefineFlyover {
     PARAMETER bodyR.
     PARAMETER mu.
 
-    LOCAL burnUT IS seedUt.
-    UNTIL burnUT >= startUt { SET burnUT TO burnUT + period. }
-    UNTIL burnUT <= endUt { SET burnUT TO burnUT - period. }
-    IF burnUT < startUt { SET burnUT TO burnUT + period. }
+    LOCAL burnUT IS MAX(startUt, MIN(endUt, seedUt)).
     IF burnUT > endUt { RETURN LEXICON("VALID", FALSE, "DIST", 999999999). }
 
     LOCAL iter IS 0.
@@ -258,16 +258,18 @@ LOCAL FUNCTION _deorbitRefineFlyover {
         LOCAL lngErr IS _deorbitAngleErr(info["LNG"], targetLng).
         IF ABS(lngErr) < 0.01 { BREAK. }
         LOCAL rateStep IS 20.
-        LOCAL nextInfo IS _deorbitPredictFlyover(burnUT + rateStep,
+        LOCAL rateUT IS MIN(endUt, burnUT + rateStep).
+        IF rateUT = burnUT AND burnUT - rateStep >= startUt {
+            SET rateUT TO burnUT - rateStep.
+        }
+        IF rateUT = burnUT { BREAK. }
+        LOCAL nextInfo IS _deorbitPredictFlyover(rateUT,
             targetLat, targetLng, targetPe, bodyR, mu).
         IF NOT nextInfo["VALID"] { BREAK. }
         LOCAL lngRate IS _deorbitAngleErr(nextInfo["LNG"], info["LNG"])
-            / rateStep.
+            / (rateUT - burnUT).
         IF ABS(lngRate) < 0.0001 { BREAK. }
-        SET burnUT TO burnUT - lngErr / lngRate.
-        UNTIL burnUT >= startUt { SET burnUT TO burnUT + period. }
-        UNTIL burnUT <= endUt { SET burnUT TO burnUT - period. }
-        IF burnUT < startUt { SET burnUT TO burnUT + period. }
+        SET burnUT TO MAX(startUt, MIN(endUt, burnUT - lngErr / lngRate)).
         IF burnUT > endUt { BREAK. }
         SET info TO _deorbitPredictFlyover(burnUT, targetLat, targetLng,
             targetPe, bodyR, mu).
@@ -301,6 +303,9 @@ LOCAL FUNCTION _deorbitPredictFlyover {
     LOCAL bdy IS SHIP:BODY.
     LOCAL burnRel IS POSITIONAT(SHIP, burnUT) - POSITIONAT(bdy, burnUT).
     LOCAL burnRad IS burnRel:MAG.
+    IF burnRad > bdy:SOIRADIUS {
+        SET burnRad TO SHIP:ORBIT:SEMIMAJORAXIS.
+    }
     LOCAL peRad IS bodyR + targetPe.
     IF burnRad <= 0 OR peRad <= 0 { RETURN result. }
     LOCAL transferSma IS (burnRad + peRad) / 2.
@@ -323,6 +328,43 @@ LOCAL FUNCTION _deorbitPredictFlyover {
     SET result["ROT"] TO rotDeg.
     SET result["DIST"] TO geoDistance(geo:LAT, geo:LNG, targetLat, targetLng).
     RETURN result.
+}
+
+LOCAL FUNCTION _deorbitLogTrajectoryDiagnostic {
+    PARAMETER burnUT.
+    PARAMETER targetPe.
+    PARAMETER radialDv.
+    PARAMETER normalDv.
+    PARAMETER bodyR.
+    PARAMETER mu.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+
+    IF NOT ADDONS:TR:AVAILABLE {
+        mLogWarn("TR diag: Trajectories unavailable.").
+        RETURN.
+    }
+
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
+    LOCAL nd IS _planDeorbitNode(burnUT, targetPe, radialDv, normalDv,
+        bodyR, mu).
+    ADDONS:TR:SETTARGET(LATLNG(targetLat, targetLng)).
+    WAIT 0.5.
+
+    LOCAL nodePe IS nd:ORBIT:PERIAPSIS.
+    IF ADDONS:TR:HASIMPACT {
+        LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
+        LOCAL trDist IS geoDistance(impactPos:LAT, impactPos:LNG,
+            targetLat, targetLng).
+        mLog("TR diag: nodePe=" + ROUND(nodePe/1000,1)
+            + "km  impact=" + ROUND(impactPos:LAT,4)
+            + "," + ROUND(impactPos:LNG,4)
+            + "  dist=" + ROUND(trDist/1000,1) + "km.").
+    } ELSE {
+        mLog("TR diag: nodePe=" + ROUND(nodePe/1000,1)
+            + "km  no impact predicted.").
+    }
+    REMOVE nd.
 }
 
 
