@@ -158,6 +158,15 @@ LOCAL FUNCTION _landingBurnHeight {
     RETURN _landingTargetHeight(ctx).
 }
 
+LOCAL FUNCTION _landingDownrangeToTarget {
+    PARAMETER ctx.
+    LOCAL targetVec IS VXCL(ctx["UP_VEC"],
+        LATLNG(ctx["TARGET_LAT"], ctx["TARGET_LNG"]):POSITION
+            - ctx["POSITION"]).
+    IF ctx["H_SPEED"] < 0.1 { RETURN targetVec:MAG. }
+    RETURN VDOT(targetVec, ctx["H_VEL"]:NORMALIZED).
+}
+
 LOCAL FUNCTION _landingCacheTick {
     PARAMETER ctx.
     LOCAL surfaceVel IS SHIP:VELOCITY:SURFACE.
@@ -252,8 +261,10 @@ LOCAL FUNCTION _landingCoastTick {
         downSpeed, maxAcc, gravAcc).
     LOCAL burnHeight IS _landingBurnHeight(ctx).
     LOCAL distToTarget IS 999999.
+    LOCAL downrangeToTarget IS 999999.
     IF ctx["HAS_TARGET"] {
         SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+        SET downrangeToTarget TO _landingDownrangeToTarget(ctx).
     }
     IF ctx["HAS_TARGET"] AND NOT ctx["TERRAIN_DONE"]
             AND ALT:RADAR <= LAND_CFG_GUIDANCE_ALT {
@@ -267,14 +278,20 @@ LOCAL FUNCTION _landingCoastTick {
     }
 
     HUDTEXT("COAST d=" + ROUND(distToTarget,0)
+        + " dr=" + ROUND(downrangeToTarget,0)
         + " brake=" + ROUND(brakeDist,0)
         + " hs=" + ROUND(horizontalSpeed,1),
         1, 2, 13, WHITE, FALSE).
 
     IF burnHeight <= burnDist * LAND_CFG_BURN_MARGIN + LAND_CFG_BRAKE_MARGIN {
-        _landingSetState(ctx, "VERTICAL_DESCENT", "vertical burn gate").
+        IF ctx["HAS_TARGET"] {
+            _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
+        } ELSE {
+            _landingSetState(ctx, "VERTICAL_DESCENT", "vertical burn gate").
+        }
     } ELSE IF ctx["HAS_TARGET"]
-            AND distToTarget <= brakeDist + LAND_CFG_BRAKE_MARGIN {
+            AND downrangeToTarget > 0
+            AND downrangeToTarget <= brakeDist + LAND_CFG_BRAKE_MARGIN {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
     } ELSE IF NOT ctx["HAS_TARGET"] {
         LOCAL tti IS 999999.

@@ -175,6 +175,23 @@ GLOBAL FUNCTION kacEnsureAlarm {
     RETURN alm:ID.
 }
 
+GLOBAL FUNCTION maneuverEnsureBurnAlarm {
+    PARAMETER burnStartUt.
+    PARAMETER burnDv.
+    PARAMETER label.
+    PARAMETER leadSeconds IS 60.
+    LOCAL alarmUt IS burnStartUt - leadSeconds.
+    IF alarmUt <= TIME:SECONDS { RETURN "". }
+    LOCAL alarmId IS kacEnsureAlarm(label + ": " + SHIP:NAME,
+        alarmUt,
+        "dV " + ROUND(burnDv,1) + "m/s. Auto-created by maneuver planner.").
+    IF alarmId <> "" {
+        mLog("KAC alarm set for " + label + " in "
+            + ROUND(alarmUt - TIME:SECONDS, 0) + "s.").
+    }
+    RETURN alarmId.
+}
+
 GLOBAL FUNCTION warpHoldEnabled {
     IF DEFINED CFG AND CFG:HASKEY("KEEP_WARP") {
         RETURN CFG["KEEP_WARP"] > 0.

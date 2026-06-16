@@ -344,16 +344,8 @@ LOCAL FUNCTION _suborbitReturnArc {
     IF SHIP:VERTICALSPEED < 0 OR ETA:APOAPSIS > 600 {
         SET burnStartUt TO TIME:SECONDS.
     }
-    LOCAL alarmId IS "".
-    // Even a short wait gets the alarm — flight-found: a 57s wait
-    // fell under the old 90s threshold, so the burn arrived with
-    // no warning at all.
-    IF ADDONS:KAC:AVAILABLE AND burnStartUt - TIME:SECONDS > 35 {
-        LOCAL alm IS ADDALARM("Raw", burnStartUt - 30,
-            "Arc burn: " + SHIP:NAME, "Auto-created by SUBORBIT").
-        SET alm:ACTION TO "KillWarp".
-        SET alarmId TO alm:ID.
-    }
+    LOCAL alarmId IS maneuverEnsureBurnAlarm(burnStartUt, needDv,
+        "Arc burn", 30).
     mLog("Arc burn starts in " + ROUND(burnStartUt - TIME:SECONDS, 0)
         + "s (Ap in " + ROUND(ETA:APOAPSIS, 0) + "s, burn ~"
         + ROUND(burnTime, 0) + "s).").

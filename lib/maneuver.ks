@@ -50,18 +50,7 @@ GLOBAL FUNCTION executeManeuver {
             + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
     }
 
-    // Set a KAC alarm to kill warp before the burn starts.
-    // Alarm fires 60s before burn start to allow alignment time.
-    LOCAL kacAlarmId IS "".
-    IF ADDONS:KAC:AVAILABLE {
-        LOCAL alarmUt IS startTime - 60.
-        IF alarmUt > TIME:SECONDS {
-            LOCAL alm IS ADDALARM("Raw", alarmUt, "Burn: " + ROUND(burnDV,1) + "m/s", "Auto-created by executeManeuver. Fly safe.").
-            SET alm:ACTION TO "KillWarp".
-            SET kacAlarmId TO alm:ID.
-            mLog("KAC alarm set for burn in " + ROUND(alarmUt - TIME:SECONDS, 0) + "s.").
-        }
-    }
+    LOCAL kacAlarmId IS maneuverEnsureBurnAlarm(startTime, burnDV, "Burn").
 
     // Imminent burn: the KAC alarm above is only created when the
     // burn is >60s out and only AFTER planning finished — a player

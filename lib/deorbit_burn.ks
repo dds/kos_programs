@@ -23,6 +23,7 @@ GLOBAL FUNCTION executeDeorbitNode {
     LOCAL burnTime IS burnDV / MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS).
     LOCAL startTime IS nd:TIME - burnTime / 2.
     IF startTime < TIME:SECONDS + 5 { SET startTime TO TIME:SECONDS + 5. }
+    LOCAL kacAlarmId IS maneuverEnsureBurnAlarm(startTime, burnDV, "Deorbit burn").
     mLogWarn("STATS deorbit-burn setup dv=" + ROUND(burnDV,1)
         + " eta=" + ROUND(startTime - TIME:SECONDS,1)).
 
@@ -44,6 +45,7 @@ GLOBAL FUNCTION executeDeorbitNode {
         LOCK THROTTLE TO 0.
         UNLOCK THROTTLE.
         UNLOCK STEERING.
+        IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
         RETURN FALSE.
     }
 
@@ -71,6 +73,7 @@ GLOBAL FUNCTION executeDeorbitNode {
     UNLOCK THROTTLE.
     UNLOCK STEERING.
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
     SET SAS TO TRUE.
     mLogWarn("STATS deorbit-burn result dv=" + ROUND(burnDV,1)
         + " residual=" + ROUND(residual,2)).
