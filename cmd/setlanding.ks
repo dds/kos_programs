@@ -22,6 +22,14 @@ LOCAL FUNCTION _cfg {
     stateSet("mission_cfg_" + key, value).
 }
 
+LOCAL FUNCTION _syncMissionCfg {
+    IF DEFINED CFG {
+        FOR key IN CFG:KEYS {
+            stateSet("mission_cfg_" + key, CFG[key]).
+        }
+    }
+}
+
 LOCAL FUNCTION _landingBandForPhase {
     PARAMETER phaseName.
     IF phaseName = "LAND_DEORBIT" { RETURN "LAND_DEORBIT". }
@@ -46,14 +54,12 @@ LOCAL FUNCTION _landingSequenceForPhase {
 }
 
 LOCAL FUNCTION _assistConfig {
-    _cfg("MAX_TILT", "12").
-    _cfg("DEORBIT_OVERSHOOT", "1500").
-    _cfg("DEORBIT_OVERSHOOT_TOLERANCE", "1200").
     _cfg("RELOAD_AFTER_LAND_ASSIST", "0").
     _cfg("RELOAD_AFTER_LAND", "0").
 }
 
 IF mode = "assist" {
+    _syncMissionCfg().
     stateSet("phase", "LAND_ASSIST").
     stateSet("reload_required", "false").
     stateSet("lib_band", "LANDING").
@@ -65,6 +71,7 @@ IF mode = "assist" {
     PRINT "Phase -> LAND_ASSIST. Resume when ready.".
 
 } ELSE IF mode = "deorbit" {
+    _syncMissionCfg().
     LOCAL phaseName IS "LAND_DEORBIT".
     LOCAL assistPath IS FALSE.
     IF arg1 = "assist" OR arg1 = "LAND_ASSIST" {
@@ -79,18 +86,11 @@ IF mode = "assist" {
     _clearLibCache().
     _cfg("SEQUENCE", _landingSequenceForPhase(phaseName, assistPath)).
     IF assistPath { _assistConfig(). }
-    _cfg("TARGET_TOLERANCE", "2500").
-    _cfg("TARGET_DEORBIT_SCAN_ORBITS", "2").
-    _cfg("TARGET_DEORBIT_SCAN_SAMPLES", "32").
-    _cfg("TARGET_DEORBIT_COARSE_STOP_DIST", "4000").
-    _cfg("TARGET_DEORBIT_REFINE_TOLERANCE", "250").
-    _cfg("TARGET_DEORBIT_PROCEED_ON_MISS", "0").
-    _cfg("DEORBIT_PE", "-1000").
 
     PRINT "Landing deorbit settings forced.".
     PRINT "Sequence -> " + stateGet("mission_cfg_SEQUENCE", "") + ".".
     PRINT "Phase -> " + phaseName + ".".
-    PRINT "Scan: 2 orbits / 32 samples, refine<=250m, Pe=-1km.".
+    PRINT "Landing config synced from mission state.".
 
 } ELSE {
     PRINT "Unknown mode '" + mode + "'. Use: deorbit | assist.".
