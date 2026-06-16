@@ -533,8 +533,8 @@ GLOBAL FUNCTION bootLibRun {
     PARAMETER libName.
     IF BOOT_LIB_RAN:CONTAINS(libName) { RETURN. }
     bootLibSync(libName).
-    PRINT("Loading " + libName + "...").
     RUNPATH("1:/lib/" + libName).
+    PRINT("Loaded " + libName + "...").
 }
 
 GLOBAL FUNCTION bootLibSync {
