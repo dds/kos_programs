@@ -99,10 +99,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL nodeGroundAngle IS 50.
     LOCAL desiredDownfield IS 20000.
     IF ignoredOvershoot > 0 { SET desiredDownfield TO ignoredOvershoot. }
-    LOCAL downfieldTol IS 75000.
-    LOCAL desiredPe IS 2000.
-    IF ignoredPe > 0 { SET desiredPe TO ignoredPe. }
-    LOCAL peTol IS MAX(500, ABS(desiredPe) * 0.05).
+    LOCAL minDownfield IS 10000.
+    LOCAL maxDownfield IS 40000.
     LOCAL minRetroDv IS 2.
     LOCAL seedRetroDv IS 15.
     LOCAL maxRetroDv IS 50.
@@ -112,8 +110,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + ROUND(targetLng,4)
         + "  nodeAngle=" + ROUND(nodeGroundAngle,0) + "deg"
         + "  downfield=" + ROUND(desiredDownfield/1000,1) + "km"
-        + "+/-" + ROUND(downfieldTol/1000,1) + "km"
-        + "  PeRef=" + ROUND(desiredPe/1000,1) + "km.").
+        + " band=" + ROUND(minDownfield/1000,1)
+        + "-" + ROUND(maxDownfield/1000,1) + "km.").
     HUDTEXT("Solving geometric deorbit...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL nowUt IS TIME:SECONDS.
@@ -148,11 +146,12 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL solved IS _solveGeometricDeorbitDv(bestUT, targetLat, targetLng,
         minLead, minRetroDv, maxRetroDv, seedRetroDv,
-        desiredPe, desiredDownfield, peTol).
+        desiredDownfield, minDownfield, maxDownfield).
     IF NOT solved["VALID"] {
         mLogError("No retrograde dV in " + ROUND(minRetroDv,1)
-            + "-" + ROUND(maxRetroDv,1) + "m/s put Pe near "
-            + ROUND(desiredPe/1000,1) + "km.").
+            + "-" + ROUND(maxRetroDv,1) + "m/s put TR impact "
+            + ROUND(minDownfield/1000,1) + "-"
+            + ROUND(maxDownfield/1000,1) + "km downfield.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
@@ -175,26 +174,26 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + solvedImpactText
         + " Pe=" + ROUND(bestPe/1000,2) + "km"
         + " fpa=" + ROUND(bestAngle,1) + ".").
-    IF ABS(bestPe - desiredPe) > peTol {
-        mLogError("Solved Pe misses reference by "
-            + ROUND((bestPe - desiredPe)/1000,2) + "km.").
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-        RETURN FALSE.
-    }
     IF NOT solved["HAS_IMPACT"] {
-        mLogError("Pe-solved node has no Trajectories impact.").
+        mLogError("Solved node has no Trajectories impact.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
     IF bestDownfield < 0 {
-        mLogError("Pe-solved node impacts upfield of target: downfield="
+        mLogError("Solved node impacts upfield of target: downfield="
             + ROUND(bestDownfield/1000,2) + "km.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
-    IF ABS(bestDownfield - desiredDownfield) > downfieldTol {
-        mLogError("Pe-solved node misses downfield target by "
-            + ROUND((bestDownfield - desiredDownfield)/1000,2) + "km.").
+    IF bestDownfield < minDownfield OR bestDownfield > maxDownfield {
+        mLogError("Solved node impact is outside downfield band: "
+            + ROUND(bestDownfield/1000,2) + "km.").
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
+        RETURN FALSE.
+    }
+    IF bestDist < minDownfield OR bestDist > maxDownfield {
+        mLogError("Solved node impact is outside target-distance band: "
+            + ROUND(bestDist/1000,2) + "km.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
@@ -399,9 +398,9 @@ LOCAL FUNCTION _solveGeometricDeorbitDv {
     PARAMETER minDv.
     PARAMETER maxDv.
     PARAMETER seedDv.
-    PARAMETER desiredPe.
     PARAMETER desiredDownfield.
-    PARAMETER peTol.
+    PARAMETER minDownfield.
+    PARAMETER maxDownfield.
 
     LOCAL best IS LEXICON(
         "VALID", FALSE,
@@ -409,7 +408,6 @@ LOCAL FUNCTION _solveGeometricDeorbitDv {
         "DIST", 999999999,
         "DOWNFIELD", -999999999,
         "ERR", 999999999,
-        "DOWNFIELD_ERR", 999999999,
         "PE", 999999999,
         "ANGLE", -1,
         "HAS_IMPACT", FALSE,
@@ -427,7 +425,7 @@ LOCAL FUNCTION _solveGeometricDeorbitDv {
 
     UNTIL iter >= 18 {
         LOCAL trial IS _evalGeometricDeorbitNode(burnUT, currentDv,
-            targetLat, targetLng, minLead, desiredPe, desiredDownfield).
+            targetLat, targetLng, minLead, desiredDownfield).
         IF trial["VALID"] {
             LOCAL trialErr IS ABS(trial["ERR"]).
             IF trialErr < bestErr {
@@ -439,16 +437,21 @@ LOCAL FUNCTION _solveGeometricDeorbitDv {
                 SET impactText TO " impact=" + ROUND(trial["LAT"],4)
                     + "," + ROUND(trial["LNG"],4)
                     + " downfield=" + ROUND(trial["DOWNFIELD"]/1000,2)
-                    + "km downErr=" + ROUND(trial["DOWNFIELD_ERR"]/1000,2)
+                    + "km downErr=" + ROUND(trial["ERR"]/1000,2)
                     + "km dist=" + ROUND(trial["DIST"]/1000,2)
                     + "km".
             }
             mLog("DEBUG dv-solve: dv=" + ROUND(currentDv,2)
                 + " Pe=" + ROUND(trial["PE"]/1000,2)
-                + "km peErr=" + ROUND(trial["ERR"]/1000,2)
                 + "km" + impactText
                 + " fpa=" + ROUND(trial["ANGLE"],1)).
-            IF trialErr <= peTol { RETURN trial. }
+            IF trial["HAS_IMPACT"]
+                    AND trial["DOWNFIELD"] >= minDownfield
+                    AND trial["DOWNFIELD"] <= maxDownfield
+                    AND trial["DIST"] >= minDownfield
+                    AND trial["DIST"] <= maxDownfield {
+                RETURN trial.
+            }
 
             IF trial["ERR"] > 0 {
                 SET lowDv TO currentDv.
@@ -480,8 +483,8 @@ LOCAL FUNCTION _solveGeometricDeorbitDv {
         WAIT 0.
     }
 
-    IF best["VALID"] AND bestErr > peTol {
-        mLogWarn("Best deorbit dV misses Pe target by "
+    IF best["VALID"] {
+        mLogWarn("Best deorbit dV misses downfield target by "
             + ROUND(bestErr/1000,2) + "km.").
     }
     RETURN best.
@@ -493,7 +496,6 @@ LOCAL FUNCTION _evalGeometricDeorbitNode {
     PARAMETER targetLat.
     PARAMETER targetLng.
     PARAMETER minLead.
-    PARAMETER desiredPe.
     PARAMETER desiredDownfield.
 
     LOCAL result IS LEXICON(
@@ -502,7 +504,6 @@ LOCAL FUNCTION _evalGeometricDeorbitNode {
         "DIST", 999999999,
         "DOWNFIELD", -999999999,
         "ERR", 999999999,
-        "DOWNFIELD_ERR", 999999999,
         "PE", 999999999,
         "ANGLE", -1,
         "HAS_IMPACT", FALSE,
@@ -515,8 +516,6 @@ LOCAL FUNCTION _evalGeometricDeorbitNode {
     LOCAL nd IS _planRetroNode(burnUT, retroDv).
     WAIT 0.2.
     SET result["PE"] TO nd:ORBIT:PERIAPSIS.
-    SET result["ERR"] TO result["PE"] - desiredPe.
-    SET result["VALID"] TO TRUE.
     IF ADDONS:TR:HASIMPACT {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
         LOCAL dist IS _targetDeorbitDistance(impactPos:LAT, impactPos:LNG,
@@ -529,8 +528,9 @@ LOCAL FUNCTION _evalGeometricDeorbitNode {
         SET result["LNG"] TO impactPos:LNG.
         SET result["DIST"] TO dist.
         SET result["DOWNFIELD"] TO downfield.
-        SET result["DOWNFIELD_ERR"] TO downfield - desiredDownfield.
+        SET result["ERR"] TO downfield - desiredDownfield.
         SET result["ANGLE"] TO angle.
+        SET result["VALID"] TO TRUE.
     }
     REMOVE nd.
     RETURN result.
