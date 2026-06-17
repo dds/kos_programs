@@ -25,7 +25,7 @@ GLOBAL FUNCTION main {
 }
 
 GLOBAL FUNCTION bootEnsureDirs {
-    FOR p IN LIST("1:/lib","1:/boot","1:/run","1:/craft","1:/roles","1:/missions") {
+    FOR p IN LIST("1:/lib","1:/boot","1:/run","1:/craft","1:/roles","1:/missions","1:/configs") {
         IF NOT EXISTS(p) { CREATEDIR(p). }
     }
 }
@@ -121,13 +121,33 @@ GLOBAL FUNCTION bootResolveScript {
     RETURN "".
 }
 
-GLOBAL FUNCTION bootCompiledPath {
+GLOBAL FUNCTION bootArchivePath {
     PARAMETER scriptPath_.
     IF scriptPath_:CONTAINS("/") {
-        LOCAL parts IS scriptPath_:SPLIT("/").
-        RETURN "1:/" + parts[0] + "/" + parts[1] + ".ksm".
+        RETURN "0:/" + scriptPath_ + ".ks".
     }
-    RETURN "1:/" + scriptPath_ + ".ksm".
+    RETURN "0:/lib/" + scriptPath_ + ".ks".
+}
+
+GLOBAL FUNCTION bootCorePath {
+    PARAMETER scriptPath_.
+    IF scriptPath_:CONTAINS("/") {
+        RETURN "1:/" + scriptPath_.
+    }
+    RETURN "1:/lib/" + scriptPath_.
+}
+
+GLOBAL FUNCTION bootEnsureScriptDir {
+    PARAMETER scriptPath_.
+    IF NOT scriptPath_:CONTAINS("/") { RETURN. }
+    LOCAL parts IS scriptPath_:SPLIT("/").
+    LOCAL dirPath IS "1:/" + parts[0].
+    IF NOT EXISTS(dirPath) { CREATEDIR(dirPath). }
+}
+
+GLOBAL FUNCTION bootCompiledPath {
+    PARAMETER scriptPath_.
+    RETURN bootCorePath(scriptPath_) + ".ksm".
 }
 
 GLOBAL FUNCTION bootBaseName {
@@ -519,22 +539,24 @@ GLOBAL FUNCTION bootLibResolve {
 
 GLOBAL FUNCTION bootLibSync {
     PARAMETER libName.
-    LOCAL src IS "0:/lib/" + libName + ".ks".
     IF NOT HOMECONNECTION:ISCONNECTED { RETURN. }
-    COMPILE src TO "1:/lib/" + libName + ".ksm".
+    LOCAL src IS bootArchivePath(libName).
+    IF NOT EXISTS(src) { RETURN. }
+    bootEnsureScriptDir(libName).
+    COMPILE src TO bootCompiledPath(libName).
 }
 
 GLOBAL FUNCTION bootLibLoadList {
     PARAMETER roots.
     FOR libName IN bootLibResolve(roots) {
-        LOCAL archivePath IS "0:/lib/" + libName + ".ks".
+        LOCAL archivePath IS bootArchivePath(libName).
         IF bootLibArchiveOnly(libName)
                 AND HOMECONNECTION:ISCONNECTED
                 AND EXISTS(archivePath) {
             RUNONCEPATH(archivePath).
         } ELSE {
             bootLibSync(libName).
-            RUNONCEPATH("1:/lib/" + libName).
+            RUNONCEPATH(bootCorePath(libName)).
         }
     }
 }
