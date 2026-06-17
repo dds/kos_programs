@@ -3,7 +3,7 @@
 // ============================================================
 
 // --- Config defaults owned by this file ---
-GLOBAL RETURN_SEQUENCE IS "ESCAPE,COAST,MCC,AEROBRAKE,DESCENT,DONE".
+GLOBAL RETURN_SEQUENCE IS "ESCAPE,COAST_1HALF,REFINE_BPLANE,COAST_2HALF,AEROBRAKE,DESCENT,DONE".
 GLOBAL RETURN_PE IS -1.
 GLOBAL RETURN_REENTRY_DIR IS "RETROGRADE".
 GLOBAL RETURN_KSC_TARGET IS 0.
@@ -148,6 +148,7 @@ GLOBAL FUNCTION phaseReturnSetup {
     _returnSetupCfg("SEQUENCE", RETURN_SEQUENCE).
     _returnSetupCfg("ESCAPE_PE", targetPe).
     _returnSetupCfg("CAPTURE_PE", targetPe).
+    _returnSetupCfg("CAPTURE_INC", 0).
     _returnSetupCfg("AEROBRAKE_REENTRY_DIR", RETURN_REENTRY_DIR).
     _returnSetupRemoveCfg("LIBS_EXTRA").
 
@@ -167,7 +168,7 @@ GLOBAL FUNCTION phaseReturnSetup {
     _returnSetupOptionalTag("DESCENT_DECOUPLER_TAG", RETURN_DESCENT_DECOUPLER_TAG).
     _returnSetupOptionalTag("DESCENT_CHUTES_TAG", RETURN_DESCENT_CHUTES_TAG).
 
-    FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_INC", "CAPTURE_DIR") {
+    FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_DIR") {
         _returnSetupRemoveCfg(key).
     }
 
@@ -179,11 +180,13 @@ GLOBAL FUNCTION phaseReturnSetup {
 
     mLog("Return setup: sequence=" + RETURN_SEQUENCE
         + " Pe=" + ROUND(targetPe/1000, 1) + "km"
+        + " inc=0"
         + " KSC=" + RETURN_KSC_TARGET + ".").
     PRINT " ".
     PRINT "Return to Kerbin configured:".
     PRINT "  Sequence:  " + RETURN_SEQUENCE.
     PRINT "  Target PE: " + ROUND(targetPe/1000, 1) + "km".
+    PRINT "  Target Inc: 0 deg".
     PRINT "  From:      " + BODY:NAME + ".".
     PRINT "  Rebooting into ESCAPE.".
     WAIT 3.

@@ -114,6 +114,11 @@ GLOBAL FUNCTION phaseEscape {
 
     // Target is always the parent body
     LOCAL target IS BODY:BODY.
+    LOCAL targetKerbin IS target:NAME:TOUPPER = "KERBIN".
+    IF targetKerbin AND CAPTURE_INC < 0 AND CAPTURE_DIR = "" {
+        SET CAPTURE_INC TO 0.
+        mLog("Kerbin return: targeting 0 deg arrival inclination for KSC approach.").
+    }
 
     orbitSummary().
     LOCAL success IS FALSE.
@@ -139,8 +144,10 @@ GLOBAL FUNCTION phaseEscape {
             IF ESCAPE_AOP >= 0 { SET CAPTURE_AOP TO escapeAop. }
             ELSE { SET CAPTURE_AOP TO -1. }
 
-            // Clear outbound capture plane config
-            SET CAPTURE_INC TO -1.
+            // Clear outbound capture plane config unless this is a Kerbin
+            // return, where REFINE_BPLANE should keep the equatorial target.
+            IF targetKerbin { SET CAPTURE_INC TO 0. }
+            ELSE { SET CAPTURE_INC TO -1. }
             SET CAPTURE_DIR TO "".
 
             mLog("Escape planned.").

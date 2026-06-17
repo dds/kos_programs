@@ -295,6 +295,8 @@ The older element-targeting pipeline (`MCC`, `CIRC`, `RAISE`, `INCLINE`,
 `ELLIPTICAL`) remains for legacy profiles until BPLANE/SHAPE are
 flight-proven (test mission: `missions/FR3/mun_sat_delivery_3.ks`).
 `cmd/returntokerbin.ks` runs the full moon-return + aerobrake + descent flow.
+Kerbin returns use `REFINE_BPLANE` rather than `MCC`, targeting the configured
+reentry Pe and a 0 deg arrival inclination to improve KSC approach geometry.
 
 ## Multi-CPU ships and roles
 

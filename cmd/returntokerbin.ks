@@ -3,8 +3,9 @@
 // (0:/cmd/returntokerbin.ks)
 //
 // Sets up a full automated return mission sequence
-// (ESCAPE, MCC, COAST, AEROBRAKE, DONE) and reboots.
-// The phase machine handles escape burn, mid-course correction,
+// (ESCAPE, COAST_1HALF, REFINE_BPLANE, COAST_2HALF, AEROBRAKE, DESCENT, DONE)
+// and reboots.
+// The phase machine handles escape burn, B-plane refinement,
 // coast to Kerbin SOI, and aerobrake entry with KSC targeting.
 //
 // Usage:
@@ -107,12 +108,14 @@ IF NOT err {
     stateSet("payloads", "RETURN").
 
     // Set up the return mission sequence and config
-    LOCAL returnSeq IS "ESCAPE,COAST,MCC,AEROBRAKE,DESCENT,DONE".
+    LOCAL returnSeq IS "ESCAPE,COAST_1HALF,REFINE_BPLANE,COAST_2HALF,AEROBRAKE,DESCENT,DONE".
     stateSet("mission_cfg_SEQUENCE", returnSeq).
     // Keep the escape-planning boot lean; DESCENT loads later in
     // its own band instead of consuming storage during Minmus escape.
     stateRemove("mission_cfg_LIBS_EXTRA").
     stateSet("mission_cfg_ESCAPE_PE", targetPe).
+    stateSet("mission_cfg_CAPTURE_PE", targetPe).
+    stateSet("mission_cfg_CAPTURE_INC", 0).
     stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
 
     IF kscTarget {
@@ -151,8 +154,8 @@ IF NOT err {
         stateRemove("mission_cfg_DESCENT_CHUTES_TAG").
     }
 
-    // Clear outbound capture config so it doesn't interfere
-    FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_INC", "CAPTURE_DIR") {
+    // Clear angular capture config except the equatorial Kerbin return target.
+    FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_DIR") {
         stateRemove("mission_cfg_" + key).
     }
 
@@ -169,6 +172,7 @@ IF NOT err {
     PRINT "Return to Kerbin configured:".
     PRINT "  Sequence:    " + returnSeq.
     PRINT "  Target PE:   " + targetPe + "m (" + ROUND(targetPe/1000,1) + "km)".
+    PRINT "  Target Inc:  0 deg".
     PRINT "  Reentry dir: " + reentryDir.
     PRINT "  KSC target:  " + kscTarget.
     IF decoupleTag <> "" { PRINT "  Decouple:    " + decoupleTag. }
