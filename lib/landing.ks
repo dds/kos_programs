@@ -489,6 +489,26 @@ LOCAL FUNCTION _landingBrakeSteeringInfo {
     ).
 }
 
+LOCAL FUNCTION _landingCoastMccBurnVector {
+    PARAMETER ctx.
+    PARAMETER trajErr.
+
+    LOCAL upVec IS ctx["UP_VEC"].
+    LOCAL horizontalVel IS ctx["H_VEL"].
+    IF horizontalVel:MAG < 0.1 {
+        RETURN LEXICON("VALID", FALSE, "VEC", upVec, "MAG", 0).
+    }
+
+    LOCAL travelDir IS VXCL(upVec, horizontalVel):NORMALIZED.
+    LOCAL correctionVec IS ((0 - trajErr["ALONG"]) * travelDir)
+        + ((0 - trajErr["CROSS_SIGNED"]) * trajErr["CROSS_AXIS"]).
+    LOCAL burnVec IS VXCL(upVec, correctionVec).
+    IF burnVec:MAG < 1 {
+        RETURN LEXICON("VALID", FALSE, "VEC", upVec, "MAG", burnVec:MAG).
+    }
+    RETURN LEXICON("VALID", TRUE, "VEC", burnVec:NORMALIZED, "MAG", burnVec:MAG).
+}
+
 LOCAL FUNCTION _landingSetState {
     PARAMETER ctx.
     PARAMETER nextState.
@@ -519,6 +539,11 @@ LOCAL FUNCTION _landingSetState {
             + " hard=" + _landingBoolText(burnSteerInfo["HARD"]) + ".").
         _landingSetThrottle(ctx, 1).
         _landingHudNotice(ctx, "Performing braking burn.", YELLOW, TRUE).
+    } ELSE IF nextState = "COAST_MCC" {
+        _landingSetThrottle(ctx, 0).
+        SET ctx["MCC_PULSE_UNTIL"] TO 0.
+        SET ctx["MCC_SETTLE_UNTIL"] TO 0.
+        _landingHudNotice(ctx, "Correcting landing impact point.", CYAN, TRUE).
     } ELSE IF nextState = "APPROACH" {
         _landingHudNotice(ctx, "Performing approach.", CYAN, TRUE).
     } ELSE IF nextState = "TARGET_REFINE" {
@@ -577,6 +602,18 @@ LOCAL FUNCTION _landingCoastTick {
         _landingHudEtaNotice(ctx, "Braking burn", nextBrakeEta, YELLOW).
     }
 
+    IF ctx["HAS_TARGET"]
+            AND nextBrakeEta < 999999
+            AND nextBrakeEta > LANDING_COAST_MCC_MIN_BRAKE_ETA {
+        LOCAL trajErr IS _landingTrajError(ctx).
+        IF trajErr["FOUND"]
+                AND trajErr["DIST"] > LANDING_COAST_MCC_TRIGGER_DIST {
+            _landingSetState(ctx, "COAST_MCC",
+                "impact miss before brake gate").
+            RETURN.
+        }
+    }
+
     IF gate["V_NOW"] {
         IF ctx["HAS_TARGET"] {
             _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
@@ -608,6 +645,87 @@ LOCAL FUNCTION _landingCoastTick {
             _landingSetState(ctx, "BRAKING_BURN", "blind suicide burn gate").
         }
     }
+}
+
+LOCAL FUNCTION _landingCoastMccTick {
+    PARAMETER ctx.
+
+    IF NOT ctx:HASKEY("MCC_PULSE_UNTIL") {
+        SET ctx["MCC_PULSE_UNTIL"] TO 0.
+    }
+    IF NOT ctx:HASKEY("MCC_SETTLE_UNTIL") {
+        SET ctx["MCC_SETTLE_UNTIL"] TO 0.
+    }
+
+    LOCAL gate IS _landingBrakeGateInfo(ctx).
+    LOCAL nextBrakeEta IS MIN(gate["H_ETA"], gate["V_ETA"]).
+    IF gate["H_OVERSHOT"] OR gate["H_NOW"] OR gate["V_NOW"]
+            OR nextBrakeEta <= LANDING_BRAKE_ALIGN_LEAD {
+        _landingSetThrottle(ctx, 0).
+        _landingSetState(ctx, "COAST", "MCC complete before brake gate").
+        RETURN.
+    }
+    IF ctx["V_SPEED"] > LANDING_COAST_MCC_CLIMB_LIMIT {
+        _landingSetThrottle(ctx, 0).
+        _landingSetState(ctx, "COAST", "MCC climb guard").
+        RETURN.
+    }
+
+    LOCAL trajErr IS _landingTrajError(ctx).
+    IF NOT trajErr["FOUND"] {
+        _landingSetThrottle(ctx, 0).
+        _landingSetState(ctx, "COAST", "MCC lost trajectory prediction").
+        RETURN.
+    }
+    IF trajErr["DIST"] <= LANDING_COAST_MCC_ACCEPT_DIST {
+        _landingSetThrottle(ctx, 0).
+        _landingSetState(ctx, "COAST", "MCC impact corrected").
+        RETURN.
+    }
+
+    LOCAL burnInfo IS _landingCoastMccBurnVector(ctx, trajErr).
+    IF NOT burnInfo["VALID"] {
+        _landingSetThrottle(ctx, 0).
+        _landingSetState(ctx, "COAST", "MCC has no horizontal correction").
+        RETURN.
+    }
+
+    LOCAL burnVec IS burnInfo["VEC"].
+    LOCAL steeringTarget IS LOOKDIRUP(burnVec, ctx["UP_VEC"]).
+    _landingSetSteering(ctx, steeringTarget).
+
+    LOCAL alignErr IS VANG(SHIP:FACING:FOREVECTOR, burnVec).
+    LOCAL upDot IS ABS(VDOT(SHIP:FACING:FOREVECTOR, ctx["UP_VEC"])).
+    LOCAL canBurn IS alignErr <= LANDING_COAST_MCC_ALIGN_DEG
+        AND upDot <= LANDING_COAST_MCC_MAX_UP_DOT.
+
+    IF TIME:SECONDS < ctx["MCC_PULSE_UNTIL"] {
+        IF canBurn {
+            _landingSetThrottle(ctx, LANDING_COAST_MCC_THROTTLE).
+        } ELSE {
+            _landingSetThrottle(ctx, 0).
+            SET ctx["MCC_PULSE_UNTIL"] TO 0.
+        }
+    } ELSE IF TIME:SECONDS < ctx["MCC_SETTLE_UNTIL"] {
+        _landingSetThrottle(ctx, 0).
+    } ELSE IF canBurn {
+        SET ctx["MCC_PULSE_UNTIL"] TO TIME:SECONDS
+            + LANDING_COAST_MCC_PULSE_TIME.
+        SET ctx["MCC_SETTLE_UNTIL"] TO ctx["MCC_PULSE_UNTIL"]
+            + LANDING_COAST_MCC_SETTLE_TIME.
+        _landingSetThrottle(ctx, LANDING_COAST_MCC_THROTTLE).
+    } ELSE {
+        _landingSetThrottle(ctx, 0).
+    }
+
+    _landingHudText(ctx, "COAST MCC trErr=" + ROUND(trajErr["DIST"],0)
+        + " along=" + ROUND(trajErr["ALONG"],0)
+        + " cross=" + ROUND(trajErr["CROSS_SIGNED"],0)
+        + " eta=" + ROUND(nextBrakeEta,0)
+        + " aErr=" + ROUND(alignErr,1)
+        + " upDot=" + ROUND(upDot,3)
+        + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
+        1, 2, 13, CYAN, FALSE, nextBrakeEta).
 }
 
 LOCAL FUNCTION _landingBrakeAlignTick {
@@ -1041,6 +1159,8 @@ LOCAL FUNCTION _landingGuidanceTick {
 
     IF ctx["STATE"] = "COAST" {
         _landingCoastTick(ctx).
+    } ELSE IF ctx["STATE"] = "COAST_MCC" {
+        _landingCoastMccTick(ctx).
     } ELSE IF ctx["STATE"] = "BRAKE_ALIGN" {
         _landingBrakeAlignTick(ctx).
     } ELSE IF ctx["STATE"] = "BRAKING_BURN" {
@@ -1131,6 +1251,8 @@ GLOBAL FUNCTION landExecute {
         "HUD_NOTICE_TEXT", "",
         "TOUCHDOWN_TICKS", 0,
         "TOUCHDOWN_SETTLED", FALSE,
+        "MCC_PULSE_UNTIL", 0,
+        "MCC_SETTLE_UNTIL", 0,
         "TARGET_STEERING", SHIP:UP:VECTOR,
         "TARGET_THROTTLE", 0
     ).
