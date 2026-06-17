@@ -1,16 +1,18 @@
 // cmd/hop.ks - Configure a ballistic surface hop phase.
 // Usage:
 //   RUNPATH("0:/cmd/hop.ks", 0, -98.39).
-//   RUNPATH("0:/cmd/hop.ks", 0, -98.39, 750, 45, 90, 10).
+//   RUNPATH("0:/cmd/hop.ks", 0, -98.39, 750, 45, 90, 5, 1.15).
 //
-// Args: lat, lng, tolerance meters, pitch deg, max burn sec, max Ap km.
+// Args: lat, lng, tolerance meters, pitch deg, max burn sec, max Ap km,
+//       vertical-component TWR.
 
 PARAMETER targetLat.
 PARAMETER targetLng.
 PARAMETER toleranceM IS 750.
 PARAMETER pitchDeg IS 45.
 PARAMETER maxBurnSeconds IS 90.
-PARAMETER maxApKm IS 10.
+PARAMETER maxApKm IS 5.
+PARAMETER hopTwr IS 1.15.
 
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
@@ -55,6 +57,7 @@ _cfg("HOP_TOLERANCE", toleranceM).
 _cfg("HOP_PITCH", pitchDeg).
 _cfg("HOP_MAX_BURN_SECONDS", maxBurnSeconds).
 _cfg("HOP_MAX_AP_KM", maxApKm).
+_cfg("HOP_TWR", hopTwr).
 _cfg("RELOAD_AFTER_LAND_ASSIST", 0).
 
 stateSet("phase", "HOP").
@@ -68,7 +71,8 @@ PRINT "Hop phase armed.".
 PRINT "Sequence -> HOP,LAND_ASSIST,DONE.".
 PRINT "Target   -> " + ROUND(targetLat, 5) + ", " + ROUND(targetLng, 5) + ".".
 PRINT "Limits   -> Ap " + ROUND(maxApM / 1000, 1)
-    + " km, burn " + ROUND(maxBurnSeconds, 0) + " s.".
+    + " km, burn " + ROUND(maxBurnSeconds, 0)
+    + " s, vertical TWR " + ROUND(hopTwr, 2) + ".".
 IF clearedAbort { PRINT "Sticky ABORT cleared for hop ignition.". }
 PRINT "Rebooting to load HOP phase.".
 
@@ -78,6 +82,7 @@ mLog("Hop command armed: target=" + ROUND(targetLat, 5)
     + "m pitch=" + ROUND(pitchDeg, 1)
     + " maxBurn=" + ROUND(maxBurnSeconds, 0)
     + "s maxApKm=" + ROUND(maxApM / 1000, 1)
+    + " hopTwr=" + ROUND(hopTwr, 2)
     + " clearedAbort=" + clearedAbort + ".").
 
 REBOOT.
