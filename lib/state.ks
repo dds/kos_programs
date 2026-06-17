@@ -27,8 +27,6 @@ LOCAL FUNCTION _ensureLoaded {
 }
 
 GLOBAL FUNCTION stateInit {
-    // Clear sticky kOS ABORT as early as possible on every boot.
-    SET ABORT TO FALSE.
     IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
     SET _loaded TO FALSE.
     _ensureLoaded().
