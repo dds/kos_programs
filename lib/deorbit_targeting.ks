@@ -100,7 +100,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL desiredDownfield IS 15000.
     IF ignoredOvershoot > 0 { SET desiredDownfield TO ignoredOvershoot. }
     LOCAL minDownfield IS 10000.
-    LOCAL maxDownfield IS 40000.
+    LOCAL maxDownfield IS 20000.
     LOCAL minRetroDv IS 2.
     LOCAL seedRetroDv IS 15.
     LOCAL maxRetroDv IS 50.
