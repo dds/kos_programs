@@ -3,9 +3,8 @@
 // (0:/cmd/returntokerbin.ks)
 //
 // Sets up a full automated return mission sequence
-// (ESCAPE, COAST_1HALF, REFINE_BPLANE, COAST_2HALF, AEROBRAKE, DESCENT, DONE)
-// and reboots.
-// The phase machine handles escape burn, B-plane refinement,
+// (ESCAPE, COAST, MCC, AEROBRAKE, DESCENT, DONE) and reboots.
+// The phase machine handles escape burn, mid-course correction,
 // coast to Kerbin SOI, and aerobrake entry with KSC targeting.
 //
 // Usage:
@@ -108,7 +107,7 @@ IF NOT err {
     stateSet("payloads", "RETURN").
 
     // Set up the return mission sequence and config
-    LOCAL returnSeq IS "ESCAPE,COAST_1HALF,REFINE_BPLANE,COAST_2HALF,AEROBRAKE,DESCENT,DONE".
+    LOCAL returnSeq IS "ESCAPE,COAST,MCC,AEROBRAKE,DESCENT,DONE".
     stateSet("mission_cfg_SEQUENCE", returnSeq).
     // Keep the escape-planning boot lean; DESCENT loads later in
     // its own band instead of consuming storage during Minmus escape.
