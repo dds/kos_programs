@@ -319,13 +319,38 @@ LOCAL FUNCTION _landingCoastTick {
         }
     }
 
+    LOCAL hBrakeGate IS brakeDist + BRAKE_MARGIN.
+    LOCAL hBrakeEta IS 999999.
+    IF ctx["HAS_TARGET"] AND downrangeToTarget > 0 {
+        IF downrangeToTarget <= hBrakeGate {
+            SET hBrakeEta TO 0.
+        } ELSE IF horizontalSpeed > 0.1 {
+            SET hBrakeEta TO (downrangeToTarget - hBrakeGate)
+                / horizontalSpeed.
+        }
+    }
+
+    LOCAL vBurnGate IS burnDist * BURN_MARGIN + BRAKE_MARGIN.
+    LOCAL vBurnEta IS 999999.
+    IF burnHeight <= vBurnGate {
+        SET vBurnEta TO 0.
+    } ELSE IF gravAcc > 0 {
+        LOCAL vDelta IS burnHeight - vBurnGate.
+        LOCAL vDisc IS ctx["V_SPEED"] * ctx["V_SPEED"] + 2 * vDelta * gravAcc.
+        IF vDisc >= 0 {
+            SET vBurnEta TO MAX(0, (SQRT(vDisc) + ctx["V_SPEED"]) / gravAcc).
+        }
+    }
+
     _landingHudText(ctx, "COAST d=" + ROUND(distToTarget,0)
         + " dr=" + ROUND(downrangeToTarget,0)
-        + " brake=" + ROUND(brakeDist,0)
+        + " hBrake=" + ROUND(brakeDist,0)
+        + " hEta=" + ROUND(hBrakeEta,0)
+        + " vEta=" + ROUND(vBurnEta,0)
         + " hs=" + ROUND(horizontalSpeed,1),
         1, 2, 13, WHITE, FALSE).
 
-    IF burnHeight <= burnDist * BURN_MARGIN + BRAKE_MARGIN {
+    IF burnHeight <= vBurnGate {
         IF ctx["HAS_TARGET"] {
             _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
         } ELSE {
@@ -333,7 +358,7 @@ LOCAL FUNCTION _landingCoastTick {
         }
     } ELSE IF ctx["HAS_TARGET"]
             AND downrangeToTarget > 0
-            AND downrangeToTarget <= brakeDist + BRAKE_MARGIN {
+            AND downrangeToTarget <= hBrakeGate {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
     } ELSE IF NOT ctx["HAS_TARGET"] {
         LOCAL tti IS 999999.
