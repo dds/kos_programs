@@ -99,7 +99,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL nodeGroundAngle IS 50.
     LOCAL desiredDownfield IS 20000.
     IF ignoredOvershoot > 0 { SET desiredDownfield TO ignoredOvershoot. }
-    LOCAL downfieldTol IS MAX(1000, MIN(5000, tolerance * 0.5)).
+    LOCAL downfieldTol IS 75000.
     LOCAL desiredPe IS 2000.
     IF ignoredPe > 0 { SET desiredPe TO ignoredPe. }
     LOCAL peTol IS MAX(500, ABS(desiredPe) * 0.05).
@@ -112,6 +112,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + ROUND(targetLng,4)
         + "  nodeAngle=" + ROUND(nodeGroundAngle,0) + "deg"
         + "  downfield=" + ROUND(desiredDownfield/1000,1) + "km"
+        + "+/-" + ROUND(downfieldTol/1000,1) + "km"
         + "  PeRef=" + ROUND(desiredPe/1000,1) + "km.").
     HUDTEXT("Solving geometric deorbit...", 3, 2, 13, CYAN, FALSE).
 
