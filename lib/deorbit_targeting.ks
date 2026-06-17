@@ -163,17 +163,20 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL currentDv IS seedRetroDv.
     LOCAL dvStep IS 2.5.
-    LOCAL searchUT IS bestUT.
     UNTIL currentDv > maxRetroDv OR bestFound {
-        LOCAL polished IS _polishRetroTime(searchUT, currentDv,
+        LOCAL polished IS _polishRetroTime(bestUT, currentDv,
             targetLat, targetLng, minLead, stepA * 0.5).
         IF polished["VALID"] {
-            SET searchUT TO polished["UT"].
             IF polished["DIST"] <= tolerance {
                 LOCAL candidate IS _evalRetroDeorbitNode(polished["UT"],
                     currentDv, targetLat, targetLng, minLead, minAngle).
                 IF candidate["VALID"] {
                     mLog("DEBUG Check: dV=" + ROUND(currentDv,1)
+                        + " T+" + ROUND(polished["UT"] - nowUt,0)
+                        + " impact=" + ROUND(candidate["LAT"],4)
+                        + "," + ROUND(candidate["LNG"],4)
+                        + " target=" + ROUND(targetLat,4)
+                        + "," + ROUND(targetLng,4)
                         + " dist=" + ROUND(candidate["DIST"]/1000,1)
                         + "km angle=" + ROUND(candidate["ANGLE"],1)).
                     IF candidate["ANGLE_OK"] {
@@ -226,7 +229,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     WAIT 0.5.
     IF ADDONS:TR:HASIMPACT {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-        LOCAL trDist IS geoDistance(impactPos:LAT, impactPos:LNG,
+        LOCAL trDist IS _targetDeorbitDistance(impactPos:LAT, impactPos:LNG,
             targetLat, targetLng).
         mLog("TR final: impact=" + ROUND(impactPos:LAT,4)
             + "," + ROUND(impactPos:LNG,4)
@@ -261,8 +264,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     WAIT 2.
     IF ADDONS:TR:HASIMPACT {
         LOCAL postImpact IS ADDONS:TR:IMPACTPOS.
-        LOCAL postDist IS geoDistance(postImpact:LAT, postImpact:LNG,
-            targetLat, targetLng).
+        LOCAL postDist IS _targetDeorbitDistance(postImpact:LAT,
+            postImpact:LNG, targetLat, targetLng).
         mLog("Post-burn impact prediction: "
             + ROUND(postImpact:LAT,4) + "," + ROUND(postImpact:LNG,4)
             + " dist=" + ROUND(postDist/1000,1) + "km.").
@@ -324,11 +327,20 @@ LOCAL FUNCTION _evalRetroImpactNode {
         SET result["VALID"] TO TRUE.
         SET result["LAT"] TO impactPos:LAT.
         SET result["LNG"] TO impactPos:LNG.
-        SET result["DIST"] TO geoDistance(impactPos:LAT, impactPos:LNG,
-            targetLat, targetLng).
+        SET result["DIST"] TO _targetDeorbitDistance(impactPos:LAT,
+            impactPos:LNG, targetLat, targetLng).
     }
     REMOVE nd.
     RETURN result.
+}
+
+LOCAL FUNCTION _targetDeorbitDistance {
+    PARAMETER lat1.
+    PARAMETER lng1.
+    PARAMETER lat2.
+    PARAMETER lng2.
+
+    RETURN (LATLNG(lat1, lng1):POSITION - LATLNG(lat2, lng2):POSITION):MAG.
 }
 
 LOCAL FUNCTION _evalRetroDeorbitNode {
@@ -354,7 +366,7 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
     WAIT 0.2.
     IF ADDONS:TR:HASIMPACT {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-        LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
+        LOCAL dist IS _targetDeorbitDistance(impactPos:LAT, impactPos:LNG,
             targetLat, targetLng).
         LOCAL angle IS _nodeImpactAngle(impactPos).
         SET result["VALID"] TO TRUE.
@@ -384,10 +396,10 @@ LOCAL FUNCTION _nodeImpactAngle {
     LOCAL impactVel IS ((rPlus - rMinus) / dt) - impactPos:VELOCITY:ORBIT.
     LOCAL impactUp IS (impactPos:POSITION - body:POSITION):NORMALIZED.
 
-    // Positive descent FPA: 0 is horizontal, 90 is vertical down.
+    // Descent FPA magnitude: 0 is horizontal, 90 is vertical.
     LOCAL sinFpa IS VDOT(impactVel:NORMALIZED, impactUp).
 
-    RETURN -ARCSIN(MAX(-1, MIN(1, sinFpa))).
+    RETURN ABS(ARCSIN(MAX(-1, MIN(1, sinFpa)))).
 }
 
 LOCAL FUNCTION _planRetroNode {
