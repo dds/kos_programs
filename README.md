@@ -395,9 +395,9 @@ SET COAST_AUTO_WARP TO 1.   // Requires a future KAC alarm; otherwise skipped.
 SET COAST_HIBERNATE TO 1.   // Probe-core hibernation during long maneuver waits.
 ```
 
-`idealCoastWarpRate(waitSeconds)` maps wait time to warp indices: up to 5h
-uses 3, under 3 Kerbin days uses 4, under 10 days uses 5, and longer waits
-cap at 6.
+`idealCoastWarpRate(waitSeconds)` maps wait time to warp indices: 90s to
+under 5m uses 2, up to 5h uses 3, under 3 Kerbin days uses 4, under 10 days
+uses 5, and longer waits cap at 6.
 
 ### Key planner/executor functions
 
