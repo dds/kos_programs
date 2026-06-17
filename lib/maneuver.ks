@@ -57,11 +57,9 @@ GLOBAL FUNCTION executeManeuver {
 
     LOCAL kacAlarmId IS maneuverEnsureBurnAlarm(startTime, burnDV, "Burn").
 
-    // Imminent burn: the KAC alarm above is only created when the
-    // burn is >60s out and only AFTER planning finished — a player
-    // already warping (e.g. right after the previous burn while
-    // BPLANE iterates) could sail through the window. Kill warp
-    // outright when the burn is near.
+    // Imminent burn: clear any player warp first. If the burn is
+    // still far enough from the T-60 alarm, the guarded approach
+    // auto-warp below can restart at an appropriate low rate.
     IF startTime - TIME:SECONDS < HIBERNATE_THRESHOLD {
         SET WARP TO 0.
     }
@@ -101,7 +99,11 @@ GLOBAL FUNCTION executeManeuver {
         HUDTEXT("Core awake — burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
     }
 
-    WAIT UNTIL TIME:SECONDS >= startTime - 60.
+    LOCAL approachTime IS startTime - 60.
+    IF TIME:SECONDS < approachTime {
+        coastAutoWarp(approachTime, "Burn approach", kacAlarmId).
+    }
+    WAIT UNTIL TIME:SECONDS >= approachTime.
     mLog("Burn in T-60").
     LOCK STEERING TO nd:BURNVECTOR.
     mLogWarn("STATS burn relock checkpoint=T-60 angle="
