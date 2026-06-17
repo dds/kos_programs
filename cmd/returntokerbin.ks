@@ -45,6 +45,15 @@ PARAMETER opts IS LEXICON().
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
+LOCAL FUNCTION _clearLibCache {
+    FOR key IN LIST(
+        "lib_band_libs", "lib_band_phase", "reload_reason",
+        "reload_next_phase", "reload_next_band"
+    ) {
+        stateRemove(key).
+    }
+}
+
 // --- Read options with defaults ---
 // Default honors the mission profile's REENTRY_PE when set.
 LOCAL targetPe IS REENTRY_PE.
@@ -100,9 +109,9 @@ IF NOT err {
     // Set up the return mission sequence and config
     LOCAL returnSeq IS "ESCAPE,COAST,MCC,AEROBRAKE,DESCENT,DONE".
     stateSet("mission_cfg_SEQUENCE", returnSeq).
-    // DESCENT is its own (lean) band; preloading descent lets it
-    // bind during AEROBRAKE with no band-change reboot mid-entry.
-    stateSet("mission_cfg_LIBS_EXTRA", "descent").
+    // Keep the escape-planning boot lean; DESCENT loads later in
+    // its own band instead of consuming storage during Minmus escape.
+    stateRemove("mission_cfg_LIBS_EXTRA").
     stateSet("mission_cfg_ESCAPE_PE", targetPe).
     stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
 
@@ -149,6 +158,9 @@ IF NOT err {
 
     // Reset phase to start of return sequence
     stateSet("phase", "ESCAPE").
+    stateSet("lib_band", "ESCAPE").
+    stateSet("reload_required", "false").
+    _clearLibCache().
 
     // Bump launch_time so the new flight log gets a fresh timestamp
     stateSet("launch_time", ROUND(TIME:SECONDS)).
