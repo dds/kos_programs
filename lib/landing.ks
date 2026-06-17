@@ -719,6 +719,10 @@ LOCAL FUNCTION _landingBrakingTick {
         } ELSE IF burnHeight > APPROACH_SPEED_ALTITUDE_WINDOW {
             _landingSetState(ctx, "VERTICAL_DESCENT",
                 "high-altitude vertical and horizontal capture").
+        } ELSE IF distToTarget > APPROACH_RADIUS {
+            SET ctx["HOVER_REFINED"] TO TRUE.
+            _landingSetState(ctx, "VERTICAL_DESCENT",
+                "post-brake miss outside approach radius").
         } ELSE {
             _landingSetState(ctx, "TARGET_REFINE",
                 "post-brake lateral stabilization").
@@ -756,6 +760,21 @@ LOCAL FUNCTION _landingTargetRefineTick {
         SET impactErr TO impactInfo["DIST"].
         SET impactReady TO impactErr <= LANDING_TARGET_REFINE_IMPACT_TOLERANCE.
     }
+    LOCAL climbLimited IS ctx["V_SPEED"] > LANDING_TARGET_REFINE_CLIMB_LIMIT.
+    LOCAL timedOut IS refineAge >= LANDING_TARGET_REFINE_MAX_TIME.
+
+    IF climbLimited OR timedOut {
+        SET ctx["HOVER_REFINED"] TO TRUE.
+        _landingSetThrottle(ctx, 0).
+        IF climbLimited {
+            _landingSetState(ctx, "VERTICAL_DESCENT",
+                "target refine climb guard").
+        } ELSE {
+            _landingSetState(ctx, "VERTICAL_DESCENT",
+                "target refine timeout").
+        }
+        RETURN.
+    }
 
     _landingSetSteering(ctx, _landingTargetRefineSteering(
         ctx, impactInfo)).
@@ -774,10 +793,14 @@ LOCAL FUNCTION _landingTargetRefineTick {
                     horizontalSpeed / MAX(1, APPROACH_HSPEED))).
         }
     }
+    IF ctx["V_SPEED"] > targetVs + LANDING_TARGET_REFINE_CLIMB_LIMIT {
+        SET correctionThrottle TO 0.
+    }
     _landingSetThrottle(ctx, MAX(verticalThrottle, correctionThrottle)).
 
     LOCAL refineEta IS MAX(0,
-        LANDING_TARGET_REFINE_ACCEPT_TIME - refineAge).
+        MIN(LANDING_TARGET_REFINE_ACCEPT_TIME,
+            LANDING_TARGET_REFINE_MAX_TIME) - refineAge).
     _landingHudText(ctx, "TARGET REFINE hs=" + ROUND(horizontalSpeed,1)
         + "/" + ROUND(LANDING_TARGET_REFINE_HSPEED,1)
         + " trErr=" + ROUND(impactErr,0)
