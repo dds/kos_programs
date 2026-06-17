@@ -86,18 +86,14 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL tolerance IS LAND_CFG_TARGET_TOLERANCE.
     IF ignoredTolerance > 0 { SET tolerance TO ignoredTolerance. }
     LOCAL minAngle IS 45.
-    LOCAL targetAngle IS 50.
-    LOCAL angleTol IS 5.
     LOCAL seedRetroDv IS 10.
-    LOCAL minRetroDv IS 1.
     LOCAL maxRetroDv IS 150.
     ADDONS:TR:SETTARGET(targetGeo).
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + ","
         + ROUND(targetLng,4)
         + "  tolerance=" + ROUND(tolerance/1000,1) + "km"
-        + "  angle=" + ROUND(minAngle,0) + "-"
-        + ROUND(targetAngle,0) + "deg.").
+        + "  angle>=" + ROUND(minAngle,0) + "deg.").
     HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL nowUt IS TIME:SECONDS.
@@ -122,9 +118,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL bestRetroDv IS seedRetroDv.
     LOCAL bestDist IS 999999999.
     LOCAL bestAngle IS -1.
-    LOCAL bestScore IS 999999999.
     LOCAL validSamples IS 0.
-    LOCAL angleSamples IS 0.
     LOCAL bestFound IS FALSE.
     LOCAL scanUT IS scanStart.
 
@@ -167,136 +161,45 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + " dist=" + ROUND(bestDist/1000,1)
         + "km samples=" + validSamples + ".").
 
-    LOCAL currentUT IS bestUT.
     LOCAL currentDv IS seedRetroDv.
-    LOCAL dvStep IS 4.
-    LOCAL prevDir IS 0.
-    LOCAL prevAngle IS -1.
-    LOCAL prevAngleDv IS currentDv.
-    LOCAL didAngleShift IS FALSE.
-    LOCAL iter IS 0.
-    UNTIL iter >= 12 {
-        LOCAL polished IS _polishRetroTime(currentUT, currentDv,
+    LOCAL dvStep IS 2.5.
+    LOCAL searchUT IS bestUT.
+    UNTIL currentDv > maxRetroDv OR bestFound {
+        LOCAL polished IS _polishRetroTime(searchUT, currentDv,
             targetLat, targetLng, minLead, stepA * 0.5).
-        IF polished["VALID"] { SET currentUT TO polished["UT"]. }
-        LOCAL candidate IS _evalRetroDeorbitNode(currentUT, currentDv,
-            targetLat, targetLng, minLead, minAngle, targetAngle,
-            angleTol).
-        IF candidate["VALID"] {
-            LOCAL sampledDv IS currentDv.
-            LOCAL angleErr IS candidate["ANGLE"] - targetAngle.
-            LOCAL angleRate IS 999999999.
-            IF prevAngle >= 0 AND candidate["ANGLE"] >= 0
-                    AND ABS(sampledDv - prevAngleDv) > 0.0001 {
-                SET angleRate TO (candidate["ANGLE"] - prevAngle)
-                    / (sampledDv - prevAngleDv).
-            }
-            mLog("DEBUG angle: T+" + ROUND(currentUT - nowUt,0)
-                + "s dv=" + ROUND(currentDv,2)
-                + " angle=" + ROUND(candidate["ANGLE"],1)
-                + " dist=" + ROUND(candidate["DIST"]/1000,1) + "km"
-                + " score=" + ROUND(candidate["SCORE"],1)).
-            IF candidate["ANGLE_OK"] {
-                SET angleSamples TO angleSamples + 1.
-                IF candidate["SCORE"] < bestScore {
-                    SET bestFound TO TRUE.
-                    SET bestScore TO candidate["SCORE"].
-                    SET bestDist TO candidate["DIST"].
-                    SET bestAngle TO candidate["ANGLE"].
-                    SET bestRetroDv TO currentDv.
-                    SET bestUT TO currentUT.
-                }
-            }
-            IF candidate["DIST"] <= tolerance
-                    AND ABS(angleErr) <= angleTol
-                    AND candidate["ANGLE_OK"] {
-                BREAK.
-            }
-            LOCAL shiftedThisIter IS FALSE.
-            IF NOT didAngleShift AND candidate["ANGLE"] > 0
-                    AND ABS(angleErr) > angleTol {
-                LOCAL shiftSec IS _estimateAngleTimeShift(currentUT,
-                    targetLat, targetLng, candidate["ANGLE"], targetAngle).
-                LOCAL shiftedUT IS MAX(TIME:SECONDS + minLead,
-                    MIN(scanEnd, currentUT + shiftSec)).
-                IF ABS(shiftedUT - currentUT) > stepA * 0.5 {
-                    mLog("DEBUG time-est: angle=" + ROUND(candidate["ANGLE"],1)
-                        + " target=" + ROUND(targetAngle,1)
-                        + " shift=" + ROUND(shiftedUT - currentUT,0)
-                        + "s to T+" + ROUND(shiftedUT - nowUt,0) + "s.").
-                    SET currentUT TO shiftedUT.
-                    SET didAngleShift TO TRUE.
-                    SET shiftedThisIter TO TRUE.
-                }
-                SET didAngleShift TO TRUE.
-            }
-            IF NOT shiftedThisIter {
-                IF ABS(angleRate) < 0.001 {
-                    SET currentDv TO MAX(minRetroDv, MIN(maxRetroDv,
-                        currentDv + (RANDOM() - 0.5) * 0.002)).
-                    SET prevDir TO 0.
-                }
-                LOCAL dir IS 1.
-                IF candidate["ANGLE"] >= targetAngle { SET dir TO -1. }
-                IF candidate["ANGLE"] < 0 { SET dir TO 1. }
-                IF prevDir <> 0 {
-                    IF dir <> prevDir {
-                        SET dvStep TO MAX(0.25, dvStep / 2).
-                    } ELSE {
-                        SET dvStep TO MIN(25, dvStep * 1.5).
+        IF polished["VALID"] {
+            SET searchUT TO polished["UT"].
+            IF polished["DIST"] <= tolerance {
+                LOCAL candidate IS _evalRetroDeorbitNode(polished["UT"],
+                    currentDv, targetLat, targetLng, minLead, minAngle).
+                IF candidate["VALID"] {
+                    mLog("DEBUG Check: dV=" + ROUND(currentDv,1)
+                        + " dist=" + ROUND(candidate["DIST"]/1000,1)
+                        + "km angle=" + ROUND(candidate["ANGLE"],1)).
+                    IF candidate["ANGLE_OK"] {
+                        SET bestFound TO TRUE.
+                        SET bestDist TO candidate["DIST"].
+                        SET bestAngle TO candidate["ANGLE"].
+                        SET bestRetroDv TO currentDv.
+                        SET bestUT TO polished["UT"].
+                        BREAK.
                     }
                 }
-                SET prevDir TO dir.
-                LOCAL nextDv IS MAX(minRetroDv, MIN(maxRetroDv,
-                    currentDv + dir * dvStep)).
-                IF nextDv = currentDv { BREAK. }
-                SET prevAngle TO candidate["ANGLE"].
-                SET prevAngleDv TO sampledDv.
-                SET currentDv TO nextDv.
             }
-        } ELSE {
-            SET currentDv TO MIN(maxRetroDv, currentDv + dvStep).
-            IF currentDv >= maxRetroDv { BREAK. }
         }
-        SET iter TO iter + 1.
+        SET currentDv TO currentDv + dvStep.
         WAIT 0.
     }
 
     IF NOT bestFound {
-        mLogError("No deorbit node met minimum descent angle "
+        mLogError("No deorbit node met target tolerance and minimum descent angle "
             + ROUND(minAngle,0) + "deg.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
 
-    LOCAL fstep IS stepA * 0.5.
-    LOCAL dvFineStep IS 0.5.
-    UNTIL fstep < 0.5 AND dvFineStep < 0.1 {
-        FOR cand IN LIST(bestUT - fstep, bestUT + fstep) {
-            IF cand > nowUt + minLead {
-                FOR candDv IN LIST(MAX(minRetroDv, bestRetroDv - dvFineStep),
-                        bestRetroDv, MIN(maxRetroDv, bestRetroDv + dvFineStep)) {
-                    LOCAL refined IS _evalRetroDeorbitNode(cand, candDv,
-                        targetLat, targetLng, minLead, minAngle,
-                        targetAngle, angleTol).
-                    IF refined["VALID"] AND refined["ANGLE_OK"]
-                            AND refined["SCORE"] < bestScore {
-                        SET bestScore TO refined["SCORE"].
-                        SET bestDist TO refined["DIST"].
-                        SET bestAngle TO refined["ANGLE"].
-                        SET bestRetroDv TO candDv.
-                        SET bestUT TO cand.
-                    }
-                }
-            }
-        }
-        SET fstep TO fstep / 2.
-        SET dvFineStep TO dvFineStep / 2.
-        WAIT 0.
-    }
-
     LOCAL finalCheck IS _evalRetroDeorbitNode(bestUT, bestRetroDv,
-        targetLat, targetLng, minLead, minAngle, targetAngle, angleTol).
+        targetLat, targetLng, minLead, minAngle).
     IF finalCheck["VALID"] {
         SET bestDist TO finalCheck["DIST"].
         SET bestAngle TO finalCheck["ANGLE"].
@@ -397,30 +300,6 @@ LOCAL FUNCTION _polishRetroTime {
     RETURN best.
 }
 
-LOCAL FUNCTION _estimateAngleTimeShift {
-    PARAMETER burnUT.
-    PARAMETER targetLat.
-    PARAMETER targetLng.
-    PARAMETER actualAngle.
-    PARAMETER targetAngle.
-
-    LOCAL body IS SHIP:BODY.
-    LOCAL burnGeo IS body:GEOPOSITIONOF(POSITIONAT(SHIP, burnUT)).
-    LOCAL rangeNow IS geoDistance(burnGeo:LAT, burnGeo:LNG,
-        targetLat, targetLng).
-    LOCAL groundAhead IS body:GEOPOSITIONOF(POSITIONAT(SHIP, burnUT + 10)).
-    LOCAL groundSpeed IS geoDistance(burnGeo:LAT, burnGeo:LNG,
-        groundAhead:LAT, groundAhead:LNG) / 10.
-    IF groundSpeed < 0.1 { RETURN 0. }
-
-    LOCAL desiredRange IS rangeNow * TAN(actualAngle)
-        / MAX(0.01, TAN(targetAngle)).
-    LOCAL shiftSec IS (rangeNow - desiredRange) / groundSpeed.
-    IF shiftSec > 1800 { RETURN 1800. }
-    IF shiftSec < -1800 { RETURN -1800. }
-    RETURN shiftSec.
-}
-
 LOCAL FUNCTION _evalRetroImpactNode {
     PARAMETER burnUT.
     PARAMETER retroDv.
@@ -459,13 +338,10 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
     PARAMETER targetLng.
     PARAMETER minLead.
     PARAMETER minAngle.
-    PARAMETER targetAngle.
-    PARAMETER angleTol.
 
     LOCAL result IS LEXICON(
         "VALID", FALSE,
         "ANGLE_OK", FALSE,
-        "SCORE", 999999999,
         "DIST", 999999999,
         "ANGLE", -1,
         "LAT", 0,
@@ -481,21 +357,11 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
         LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
             targetLat, targetLng).
         LOCAL angle IS _nodeImpactAngle(impactPos).
-        LOCAL distCost IS (dist / 1000) * (dist / 1000).
-        LOCAL angleCost IS 0.
-        IF dist < 25000 {
-            SET angleCost TO (angle - (-1 * targetAngle)) / 5  * (angle - (-1 * targetAngle)) / 5 * 50.
-            IF angle >= 0 {
-                SET angleCost TO MIN(5000, ((angle - targetAngle) / angleTol)
-                    * ((angle - targetAngle) / angleTol)).
-            }
-        }
         SET result["VALID"] TO TRUE.
         SET result["LAT"] TO impactPos:LAT.
         SET result["LNG"] TO impactPos:LNG.
         SET result["DIST"] TO dist.
         SET result["ANGLE"] TO angle.
-        SET result["SCORE"] TO distCost + angleCost.
         IF angle >= minAngle {
             SET result["ANGLE_OK"] TO TRUE.
         }
@@ -510,47 +376,18 @@ LOCAL FUNCTION _nodeImpactAngle {
     IF NOT ADDONS:TR:ISVERTWOTWO { RETURN -1. }
 
     LOCAL impactUT IS TIME:SECONDS + ADDONS:TR:TIMETILLIMPACT.
-
-
-    LOCAL dt IS 0.5. // Use 0.5 for better precision
+    LOCAL dt IS 0.5.
     LOCAL body IS SHIP:BODY.
 
-    // Get the velocity vector at impact (inertial frame)
     LOCAL rPlus IS POSITIONAT(SHIP, impactUT) - POSITIONAT(body, impactUT).
     LOCAL rMinus IS POSITIONAT(SHIP, impactUT - dt) - POSITIONAT(body, impactUT - dt).
     LOCAL impactVel IS ((rPlus - rMinus) / dt) - impactPos:VELOCITY:ORBIT.
     LOCAL impactUp IS (impactPos:POSITION - body:POSITION):NORMALIZED.
 
-    // Calculate FPA: sin(gamma) = VDOT(velocity, up)
-    // gamma = 0 is horizontal, gamma = -90 is vertical down
+    // Positive descent FPA: 0 is horizontal, 90 is vertical down.
     LOCAL sinFpa IS VDOT(impactVel:NORMALIZED, impactUp).
 
-    // Clamp to avoid domain errors in ARCSIN
-    RETURN ARCSIN(MAX(-1, MIN(1, sinFpa))).
-
-
-    // LOCAL dt IS 1.
-    // LOCAL body IS SHIP:BODY.
-    // LOCAL rPlus IS POSITIONAT(SHIP, impactUT) - POSITIONAT(body, impactUT).
-    // LOCAL rMinus IS POSITIONAT(SHIP, impactUT - dt) - POSITIONAT(body, impactUT - dt).
-    // LOCAL impactVel IS ((rPlus - rMinus) / dt) - impactPos:VELOCITY:ORBIT.
-    // LOCAL impactUp IS (impactPos:POSITION - body:POSITION):NORMALIZED.
-
-    // LOCAL velNorm IS impactVel:NORMALIZED.
-    // LOCAL upNorm IS impactUp:NORMALIZED.
-
-    // // The dot product of Velocity and Up gives us the Cosine of the angle between them.
-    // // We want the angle between the Velocity and the Local Horizontal.
-    // // Local Horizontal is 90 degrees away from the Up vector.
-    // LOCAL fpa IS VANG(upNorm, velNorm).
-
-    // RETURN 90 - fpa.
-
-    // The sine of the flight path angle (angle from local horizontal)
-    // is the dot product of the velocity vector and the up vector.
-    // LOCAL sinFpa IS VDOT(velNorm, upNorm).
-    // LOCAL fpa IS ARCSIN(sinFpa). // This will return values between -90 and 90.
-    // RETURN fpa.
+    RETURN -ARCSIN(MAX(-1, MIN(1, sinFpa))).
 }
 
 LOCAL FUNCTION _planRetroNode {
