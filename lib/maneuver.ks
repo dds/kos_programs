@@ -517,3 +517,14 @@ LOCAL FUNCTION _hibernateCmd {
         mLogWarn("Long coast hibernation requested but no toggle found.").
     }
 }
+
+LOCAL FUNCTION _hibernateCmd {
+    LOCAL cm IS _findCmdModule().
+    IF cm = 0 { RETURN. }
+    IF cm:HASFIELD("hibernation") {
+        cm:SETFIELD("hibernation", TRUE).
+        mLog("Command module hibernating for long coast.").
+    } ELSE {
+        mLogWarn("Long coast hibernation requested but no toggle found.").
+    }
+}
