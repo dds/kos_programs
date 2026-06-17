@@ -17,6 +17,11 @@ bootPreamble().
 
 LOCAL maxApM IS maxApKm * 1000.
 IF maxApKm > 1000 { SET maxApM TO maxApKm. }
+LOCAL clearedAbort IS FALSE.
+IF ABORT {
+    SET ABORT TO FALSE.
+    SET clearedAbort TO TRUE.
+}
 
 LOCAL FUNCTION _cfg {
     PARAMETER key.
@@ -64,6 +69,7 @@ PRINT "Sequence -> HOP,LAND_ASSIST,DONE.".
 PRINT "Target   -> " + ROUND(targetLat, 5) + ", " + ROUND(targetLng, 5) + ".".
 PRINT "Limits   -> Ap " + ROUND(maxApM / 1000, 1)
     + " km, burn " + ROUND(maxBurnSeconds, 0) + " s.".
+IF clearedAbort { PRINT "Sticky ABORT cleared for hop ignition.". }
 PRINT "Rebooting to load HOP phase.".
 
 mLog("Hop command armed: target=" + ROUND(targetLat, 5)
@@ -71,6 +77,7 @@ mLog("Hop command armed: target=" + ROUND(targetLat, 5)
     + " tolerance=" + ROUND(toleranceM, 0)
     + "m pitch=" + ROUND(pitchDeg, 1)
     + " maxBurn=" + ROUND(maxBurnSeconds, 0)
-    + "s maxApKm=" + ROUND(maxApM / 1000, 1) + ".").
+    + "s maxApKm=" + ROUND(maxApM / 1000, 1)
+    + " clearedAbort=" + clearedAbort + ".").
 
 REBOOT.

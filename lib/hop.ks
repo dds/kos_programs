@@ -58,6 +58,13 @@ LOCAL FUNCTION _hopSteer {
         + downrange * COS(HOP_PITCH)):NORMALIZED.
 }
 
+LOCAL FUNCTION _hopClearStickyAbort {
+    IF NOT ABORT { RETURN FALSE. }
+    SET ABORT TO FALSE.
+    WAIT 0.1.
+    RETURN NOT ABORT.
+}
+
 GLOBAL FUNCTION phaseHop {
     applyKnownMissionState().
 
@@ -81,9 +88,14 @@ GLOBAL FUNCTION phaseHop {
     ADDONS:TR:SETTARGET(LATLNG(HOP_TARGET_LAT, HOP_TARGET_LNG)).
 
     IF ABORT {
-        mLogError("HOP held: ABORT is set before ignition; clear ABORT and resume HOP.").
-        PRINT "HOP held: clear ABORT before ignition.".
-        RETURN.
+        IF _hopClearStickyAbort() {
+            mLogWarn("HOP cleared sticky ABORT before ignition.").
+        } ELSE {
+            mLogError("HOP held: ABORT stayed set before ignition.").
+            PRINT "HOP held: ABORT stayed set before ignition.".
+            yieldToPrompt().
+            RETURN.
+        }
     }
 
     PRINT " ".
