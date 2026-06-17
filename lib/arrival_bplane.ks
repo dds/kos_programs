@@ -70,6 +70,7 @@ LOCAL DEFAULT_ANG_TOL  IS 0.5.
 LOCAL DEFAULT_LEAD     IS 300.
 LOCAL MIN_EXEC_DV      IS 0.1.
 LOCAL REFINE_DV_CAP    IS 10.
+LOCAL REFINE_MAX_BURNS IS 6.
 LOCAL MAX_NEWTON_ITER  IS 8.
 LOCAL NEWTON_DAMP      IS 0.7.
 LOCAL FD_STEP          IS 0.5.
@@ -725,20 +726,31 @@ GLOBAL FUNCTION phaseRefineBplane {
     LOCAL wantInc IS _bplaneWantInc().
     LOCAL wantLan IS CAPTURE_LAN.
 
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    mLog("REFINE_BPLANE: refining arrival with dV cap "
-        + REFINE_DV_CAP + " m/s.").
-    LOCAL nd IS planBplaneCorrection(
-        targetBody,
-        wantPe,
-        wantInc,
-        wantLan,
-        REFINE_DV_CAP,
-        "Trajectory pristine, skipping refinement burn.").
+    LOCAL burns IS 0.
+    UNTIL burns >= REFINE_MAX_BURNS {
+        LOCAL measLoop IS _measureArrival(0, targetBody).
+        IF measLoop = 0 { BREAK. }
+        LOCAL errLoop IS _bplaneCorridorError(targetBody, measLoop, wantPe, wantInc, wantLan).
+        IF _bplaneCorridorOk(errLoop, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) { BREAK. }
 
-    IF nd <> 0 {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        mLog("REFINE_BPLANE: refining arrival with dV cap "
+            + REFINE_DV_CAP + " m/s.").
+        LOCAL nd IS planBplaneCorrection(
+            targetBody,
+            wantPe,
+            wantInc,
+            wantLan,
+            REFINE_DV_CAP,
+            "Trajectory pristine, skipping refinement burn.").
+
+        IF nd = 0 { BREAK. }
+        SET burns TO burns + 1.
         IF NOT executeManeuver() {
-            mLogWarn("REFINE_BPLANE: burn execution failed; continuing to coast.").
+            mLogWarn("REFINE_BPLANE: burn execution failed; holding before capture.").
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            WAIT 2.
+            BREAK.
         }
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         WAIT 2.
@@ -752,13 +764,14 @@ GLOBAL FUNCTION phaseRefineBplane {
                 + "Pe=" + ROUND(meas["pe"] / 1000, 1)
                 + "km want=" + ROUND(wantPe / 1000, 1)
                 + "km planeErr=" + ROUND(err["planeErr"], 2)
-                + "deg.").
+                + "deg burns=" + burns + ".").
             WAIT 30.
             RETURN.
         }
         mLog("REFINE_BPLANE done: Pe=" + ROUND(meas["pe"] / 1000, 1)
             + "km inc=" + ROUND(meas["inc"], 2)
-            + " lan=" + ROUND(meas["lan"], 2) + ".").
+            + " lan=" + ROUND(meas["lan"], 2)
+            + " after " + burns + " burn(s).").
     } ELSE {
         mLogWarn("REFINE_BPLANE: no encounter measurement after refinement.").
         WAIT 30.
