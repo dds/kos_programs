@@ -115,10 +115,11 @@ GLOBAL FUNCTION phaseEscape {
     // Target is always the parent body
     LOCAL target IS BODY:BODY.
     LOCAL targetKerbin IS target:NAME:TOUPPER = "KERBIN".
-    IF targetKerbin AND CAPTURE_INC < 0 AND CAPTURE_DIR = "" {
-        SET CAPTURE_INC TO 0.
-        mLog("Kerbin return: targeting 0 deg arrival inclination for KSC approach.").
-    }
+
+    // Cache and mask the global capture inclination so the raw departure
+    // planner performs a purely efficient "dumb" prograde escape.
+    LOCAL cachedIncTarget IS CAPTURE_INC.
+    SET CAPTURE_INC TO -1.
 
     orbitSummary().
     LOCAL success IS FALSE.
@@ -137,17 +138,21 @@ GLOBAL FUNCTION phaseEscape {
             yieldToPrompt().
             RETURN.
         } ELSE {
-            // Overwrite CAPTURE_* for downstream MCC reuse
+            // Overwrite CAPTURE_* for downstream correction reuse
             SET CAPTURE_PE TO escapePe.
             IF ESCAPE_LAN >= 0 { SET CAPTURE_LAN TO escapeLan. }
             ELSE { SET CAPTURE_LAN TO -1. }
             IF ESCAPE_AOP >= 0 { SET CAPTURE_AOP TO escapeAop. }
             ELSE { SET CAPTURE_AOP TO -1. }
 
-            // Clear outbound capture plane config unless this is a Kerbin
-            // return, where REFINE_BPLANE should keep the equatorial target.
-            IF targetKerbin { SET CAPTURE_INC TO 0. }
-            ELSE { SET CAPTURE_INC TO -1. }
+            // Restore the target for downstream phases. If this is a Kerbin return,
+            // explicitly set the target to equatorial so REFINE_BPLANE picks it up.
+            IF targetKerbin {
+                SET CAPTURE_INC TO 0.
+                mLog("Escape planned. Handoff to REFINE_BPLANE: targeting 0 deg arrival inc.").
+            } ELSE {
+                SET CAPTURE_INC TO cachedIncTarget.
+            }
             SET CAPTURE_DIR TO "".
 
             mLog("Escape planned.").
