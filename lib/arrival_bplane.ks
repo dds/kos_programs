@@ -571,7 +571,7 @@ GLOBAL FUNCTION planBplaneCorrection {
 LOCAL FUNCTION _bplaneTargetBody {
     LOCAL targetName IS "".
     IF BPLANE_TARGET <> "" { SET targetName TO BPLANE_TARGET. }
-    IF targetName = "" { SET targetName TO stateGet("target", ""). }
+    IF targetName = "" { SET targetName TO TARGET_. }
 
     LOCAL targetBody IS 0.
     LOCAL allBodies IS LIST().
@@ -604,7 +604,7 @@ LOCAL FUNCTION _bplaneWantInc {
 GLOBAL FUNCTION phaseBplane {
     LOCAL targetBody IS _bplaneTargetBody().
     IF targetBody = 0 {
-        mLogWarn("BPLANE: target '" + stateGet("target", "")
+        mLogWarn("BPLANE: target '" + TARGET_ +
             + "' is not a body — nothing to do.").
         nextPhase(xferSeq).
         RETURN.
