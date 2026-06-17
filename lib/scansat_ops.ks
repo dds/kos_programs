@@ -33,7 +33,7 @@ GLOBAL FUNCTION phaseScanSatOps {
     SET SAS TO TRUE.
 
     orbitSummary().
-    mLog("SCANsat payload on station at " + MISSION["target"] + ".").
+    mLog("SCANsat payload on station at " + TARGET_ + ".").
 
     LOCAL tag IS "scansat_decoupler".
     SET tag TO SCANSAT_DECOUPLER_TAG.

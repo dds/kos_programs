@@ -20,8 +20,8 @@ LOCAL FUNCTION _fr3PrintConfig {
     flightPlanIdentity().
     flightPlanSection("MISSION").
     flightPlanRow("BAND", phaseBand()).
-    flightPlanRow("TARGET", MISSION["target"]).
-    flightPlanRow("PAYLOADS", MISSION["payloads"]).
+    flightPlanRow("TARGET", TARGET_).
+    flightPlanRow("PAYLOADS", PAYLOADS).
     flightPlanConfig().
     flightPlanSection("SEQUENCE").
     flightPlanSequence(seq).
@@ -89,7 +89,7 @@ GLOBAL FUNCTION main {
     SET xferSeq TO seq.
 
     mLogPhase("FR3C SCANSAT MAIN").
-    mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
+    mLog("Target: " + TARGET_ + "  Payloads: " + PAYLOADS).
     mLog("Sequence: " + seq:JOIN(" -> ")).
     bootEnsureInitialPhase(seq).
 

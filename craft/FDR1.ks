@@ -51,7 +51,6 @@ GLOBAL FUNCTION main {
     SET xferSeq TO seq.
 
     mLogPhase("FDR1 MAIN").
-    mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
     IF stateGet("phase", "") = "" { stateSet("phase", seq[0]). }
 
     LOCAL phaseMap IS LEXICON(

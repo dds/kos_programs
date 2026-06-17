@@ -978,7 +978,7 @@ GLOBAL FUNCTION airplaneMain {
     SET _amHasScience TO missionHasPayload("SCIENCE").
 
     mLogPhase(craftName + " MAIN").
-    mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
+    mLog("Target: " + TARGET_ + "  Payloads: " + PAYLOADS).
     IF stateGet("phase", "") = "" { stateSet("phase", _amSeq[0]). }
 
     _amPrintConfig().

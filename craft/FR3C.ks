@@ -22,8 +22,6 @@ LOCAL FUNCTION _fr3PrintConfig {
     flightPlanIdentity().
     flightPlanSection("MISSION").
     flightPlanRow("BAND", phaseBand()).
-    flightPlanRow("TARGET", MISSION["target"]).
-    flightPlanRow("PAYLOADS", MISSION["payloads"]).
     flightPlanConfig().
     flightPlanSection("SEQUENCE").
     flightPlanSequence(seq).
@@ -99,7 +97,6 @@ GLOBAL FUNCTION main {
     SET xferSeq TO seq.
 
     mLogPhase("FR3C MAIN").
-    mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
     mLog("Sequence: " + seq:JOIN(" -> ")).
     bootEnsureInitialPhase(seq).
 

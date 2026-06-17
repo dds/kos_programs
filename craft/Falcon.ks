@@ -31,7 +31,7 @@ LOCAL FUNCTION _falconPrintConfig {
     flightPlanSection("MISSION").
     flightPlanRow("BAND", phaseBand()).
     flightPlanRow("TARGET", TARGET_).
-    flightPlanRow("PAYLOADS", PAYLOAD).
+    flightPlanRow("PAYLOADS", PAYLOADS).
     flightPlanConfig().
     flightPlanSection("SEQUENCE").
     flightPlanSequence(seq).
@@ -130,7 +130,7 @@ GLOBAL FUNCTION main {
     SET xferSeq TO seq.
 
     mLogPhase("FALCON MAIN").
-    mLog("Target: " + MISSION["target"] + "  Payloads: " + MISSION["payloads"]).
+    mLog("Target: " + TARGET_ + "  Payloads: " + PAYLOADS).
     mLog("Sequence: " + seq:JOIN(" -> ")).
     bootEnsureInitialPhase(seq).
 
