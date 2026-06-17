@@ -292,12 +292,21 @@ LOCAL FUNCTION _descentCutDrogues {
     }
     IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN. }
 
+    LOCAL found IS 0.
+    LOCAL cutCount IS 0.
     FOR p IN SHIP:PARTS {
         IF _descentPartLooksDrogue(p)
                 AND (p:HASMODULE("ModuleParachute")
                     OR p:HASMODULE("RealChuteModule")) {
-            _descentCutChutePart(p).
+            SET found TO found + 1.
+            mLog("Drogue chute candidate: " + p:TITLE + ".").
+            IF _descentCutChutePart(p) { SET cutCount TO cutCount + 1. }
         }
+    }
+    IF found = 0 {
+        mLogWarn("No drogue chute candidates found to cut.").
+    } ELSE {
+        mLog("Drogue chute cut pass: found=" + found + " cut=" + cutCount + ".").
     }
 }
 
