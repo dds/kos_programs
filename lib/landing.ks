@@ -626,13 +626,7 @@ LOCAL FUNCTION _landingBrakingTick {
         + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
         1, 2, 13, YELLOW, FALSE).
 
-    IF ctx["HAS_TARGET"] {
-        IF burnHeight > APPROACH_SPEED_ALTITUDE_WINDOW {
-            _landingHudEtaNotice(ctx, "Hover refinement",
-                (burnHeight - APPROACH_SPEED_ALTITUDE_WINDOW)
-                    / MAX(1, downSpeed), CYAN).
-        }
-    } ELSE IF burnHeight > HOVER_ALT {
+    IF NOT ctx["HAS_TARGET"] AND burnHeight > HOVER_ALT {
         _landingHudEtaNotice(ctx, "Vertical descent",
             (burnHeight - HOVER_ALT) / MAX(1, downSpeed), GREEN).
     }
@@ -645,8 +639,7 @@ LOCAL FUNCTION _landingBrakingTick {
             "over-target vertical and horizontal capture").
     } ELSE IF ctx["HAS_TARGET"]
             AND verticalCaptured
-            AND horizontalSpeed <= TERMINAL_HSPEED
-            AND burnHeight <= APPROACH_SPEED_ALTITUDE_WINDOW {
+            AND horizontalSpeed <= TERMINAL_HSPEED {
         _landingSetState(ctx, "HOVER_REFINE",
             "post-brake hover refinement").
     } ELSE IF burnHeight <= burnDist * BURN_MARGIN
@@ -655,8 +648,7 @@ LOCAL FUNCTION _landingBrakingTick {
     } ELSE IF ctx["HAS_TARGET"]
             AND verticalCaptured
             AND horizontalSpeed <= APPROACH_HSPEED
-            AND distToTarget <= APPROACH_RADIUS
-            AND burnHeight <= APPROACH_SPEED_ALTITUDE_WINDOW {
+            AND distToTarget <= APPROACH_RADIUS {
         _landingSetState(ctx, "HOVER_REFINE",
             "approach corridor captured for hover refinement").
     } ELSE IF NOT ctx["HAS_TARGET"]
