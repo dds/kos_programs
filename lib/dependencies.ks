@@ -32,6 +32,7 @@ GLOBAL FUNCTION dependencyLibs {
         "molniya", LIST("maneuver", "inclination"),
         "payload_landing", LIST("landing_config"),
         "payload_ops", LIST("orbit", "utils", "solar"),
+        "return_setup", LIST(),
         "relay_constellation", LIST("maneuver", "orbit"),
         "scansat_ops", LIST("orbit", "solar"),
         "solar", LIST(),
@@ -90,6 +91,8 @@ GLOBAL FUNCTION dependencyPhases {
         "RELAY_OPS", LIST("payload_ops"),
         "RELAY_CONSTELLATION", LIST("relay_constellation"),
         "SCANSAT_OPS", LIST("scansat_ops", "science"),
+        "RETURN_SETUP", LIST("return_setup"),
+        "SURFACE_RETURN_SETUP", LIST("return_setup"),
         "LAND_DEORBIT", LIST("landing_deorbit", "deorbit_targeting", "deorbit_burn"),
         "LAND", LIST("payload_landing", "landing"),
         "LAND_ASSIST", LIST("payload_landing", "landing"),
@@ -125,6 +128,7 @@ GLOBAL FUNCTION dependencyBands {
         "XFER_ARRIVE", LIST("BPLANE", "COAST", "COAST_1HALF", "REFINE_BPLANE", "COAST_2HALF", "CAPTURE", "FLYBY"),
         "XFER_ORBIT", LIST("CIRC", "RAISE", "INCLINE", "ELLIPTICAL"),
         "PAYLOAD_OPS", LIST("TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION"),
+        "RETURN_SETUP", LIST("RETURN_SETUP", "SURFACE_RETURN_SETUP"),
         "AEROBRAKE", LIST("AEROBRAKE"),
         "LAND_DEORBIT", LIST("LAND_DEORBIT"),
         "LANDING", LIST("LAND_ASSIST", "LAND")
@@ -173,6 +177,8 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "RELAY_OPS" { phaseMapSet(phaseMap, phaseKey, phaseRelayOps@). }
     ELSE IF phaseKey = "RELAY_CONSTELLATION" { phaseMapSet(phaseMap, phaseKey, phaseRelayConstellation@). }
     ELSE IF phaseKey = "SCANSAT_OPS" { phaseMapSet(phaseMap, phaseKey, phaseScansatOps@). }
+    ELSE IF phaseKey = "RETURN_SETUP" { phaseMapSet(phaseMap, phaseKey, phaseReturnSetup@). }
+    ELSE IF phaseKey = "SURFACE_RETURN_SETUP" { phaseMapSet(phaseMap, phaseKey, phaseSurfaceReturnSetup@). }
     ELSE IF phaseKey = "LAND_DEORBIT" { phaseMapSet(phaseMap, phaseKey, phaseLandDeorbit@). }
     ELSE IF phaseKey = "LAND" { phaseMapSet(phaseMap, phaseKey, phaseLand@). }
     ELSE IF phaseKey = "LAND_ASSIST" { phaseMapSet(phaseMap, phaseKey, phaseLandAssist@). }

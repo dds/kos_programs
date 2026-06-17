@@ -3,6 +3,7 @@ GLOBAL LANDING_SKIP_TARGET_SEARCH IS 0.
 GLOBAL LANDING_DEORBIT_LEAD_MINUTES IS 0.
 GLOBAL LANDING_AUTO_TARGET IS 0.
 GLOBAL LANDING_AUTO_TARGET_MINUTES IS 5.
+GLOBAL LANDING_CONFIRM_TARGET IS 1.
 GLOBAL TARGET_DEORBIT_SCAN_ORBITS IS 0.
 GLOBAL TARGET_DEORBIT_SCAN_SAMPLES IS 128.
 GLOBAL TARGET_DEORBIT_SCAN_CENTER_MINUTES IS 0.
@@ -115,9 +116,14 @@ LOCAL FUNCTION _confirmLandingTarget {
         yieldToPrompt().
         RETURN FALSE.
     }
-    PRINT "  Press any key to plan targeted deorbit.".
-    WAIT UNTIL TERMINAL:INPUT:HASCHAR.
-    TERMINAL:INPUT:GETCHAR().
+    IF LANDING_CONFIRM_TARGET > 0 {
+        PRINT "  Press any key to plan targeted deorbit.".
+        WAIT UNTIL TERMINAL:INPUT:HASCHAR.
+        TERMINAL:INPUT:GETCHAR().
+    } ELSE {
+        PRINT "  Target auto-confirmed by mission profile.".
+        mLog("Landing target auto-confirmed.").
+    }
     RETURN TRUE.
 }
 
