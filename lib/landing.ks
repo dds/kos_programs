@@ -16,7 +16,6 @@ GLOBAL LANDING_HUD_NOTICE_INTERVAL IS 5.
 GLOBAL LANDING_HUD_NOTICE_HOLD_TIME IS 6.
 GLOBAL LANDING_HUD_NOTICE_LOOKAHEAD IS 90.
 GLOBAL LANDING_BRAKE_ALIGN_LEAD IS 20.
-GLOBAL LANDING_HARD_BRAKE_UP_BIAS IS 0.1.
 GLOBAL LANDING_TOUCHDOWN_ALT IS 3.
 GLOBAL LANDING_TOUCHDOWN_VSPEED IS 1.
 GLOBAL LANDING_TOUCHDOWN_HSPEED IS 0.3.
@@ -603,7 +602,8 @@ LOCAL FUNCTION _landingBrakingTick {
         AND burnHeight > HOVER_ALT * 2.
     LOCAL horizontalThrottle IS 0.
     IF forceHorizontalBrake {
-        SET horizontalThrottle TO MAX(0.25, MIN(1,
+        SET horizontalThrottle TO MAX(LANDING_HKILL_THROTTLE_MIN,
+            MIN(LANDING_HKILL_THROTTLE_MAX,
             (horizontalSpeed - APPROACH_HSPEED) / MAX(1, APPROACH_HSPEED))).
     }
     IF ctx["V_SPEED"] < targetVs - 5 {
@@ -748,11 +748,13 @@ LOCAL FUNCTION _landingHoverRefineTick {
     LOCAL distToTarget IS lmDistanceToTarget(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
-    LOCAL desiredSpeed IS MIN(5, distToTarget * 0.5).
+    LOCAL desiredSpeed IS MIN(LANDING_HOVER_REFINE_MAX_SPEED,
+        distToTarget * LANDING_HOVER_REFINE_SPEED_GAIN).
 
     _landingSetSteering(ctx, lmApproachSteering(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
-        ctx["UP_VEC"], ctx["POSITION"], 2.0)).
+        ctx["UP_VEC"], ctx["POSITION"],
+        LANDING_HOVER_REFINE_TARGET_WEIGHT)).
     _landingSetThrottle(ctx, lmVerticalThrottle(
         0, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
