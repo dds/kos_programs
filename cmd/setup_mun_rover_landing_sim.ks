@@ -18,7 +18,7 @@ LOCAL targetGeo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, targetUT)).
 
 stateSet("vehicle", "FR3").
 stateSet("target", "MUN").
-stateSet("payloads", "ASSISTROVER").
+stateSet("payloads", LIST("ASSISTROVER")).
 stateSet("mission_id", "mun_rover_emergency_surface").
 stateSet("mission_name", "Mun Rover Emergency Surface Release SIM").
 stateSet("phase", "LAND_ASSIST").
@@ -31,9 +31,9 @@ stateSet("lib_band", "LANDING").
 _cfg("MISSION_ID", "mun_rover_emergency_surface").
 _cfg("MISSION_NAME", "Mun Rover Emergency Surface Release SIM").
 _cfg("TARGET_", "MUN").
-_cfg("PAYLOADS", "ASSISTROVER").
+_cfg("PAYLOADS", LIST("ASSISTROVER")).
 _cfg("PROGRESSIVE_RELOAD", 1).
-_cfg("SEQUENCE", "LAND_DEORBIT,LAND_ASSIST,DONE").
+_cfg("SEQUENCE", LIST("LAND_DEORBIT", "LAND_ASSIST", "DONE")).
 _cfg("TARGET_PE", 15000).
 _cfg("TARGET_AP", 15000).
 _cfg("TARGET_INCLINATION", 90).

@@ -46,7 +46,7 @@ LOCAL FUNCTION _persistCoastAutomation {
     stateSet("mission_cfg_COAST_WARP_MAX_RATE", COAST_WARP_MAX_RATE).
 }
 
-LOCAL returnSeq IS "ESCAPE,COAST,MCC,AEROBRAKE,DESCENT,DONE".
+LOCAL returnSeq IS LIST("ESCAPE", "COAST", "MCC", "AEROBRAKE", "DESCENT", "DONE").
 LOCAL targetPe IS stateGetNum(
     "mission_cfg_CAPTURE_PE",
     stateGetNum("mission_cfg_ESCAPE_PE", REENTRY_PE)).
@@ -74,7 +74,7 @@ stateSet("target", "KERBIN").
 stateSet("mission_type", "kerbin_return").
 stateSet("mission_id", "kerbin_return").
 stateSet("mission_name", "Return to Kerbin Rescue").
-stateSet("payloads", "RETURN").
+stateSet("payloads", LIST("RETURN")).
 
 stateSet("mission_cfg_SEQUENCE", returnSeq).
 stateSet("mission_cfg_ESCAPE_PE", targetPe).

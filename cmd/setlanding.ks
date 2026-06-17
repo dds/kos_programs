@@ -41,12 +41,12 @@ LOCAL FUNCTION _landingSequenceForPhase {
     PARAMETER phaseName.
     PARAMETER assistPath IS TRUE.
     IF assistPath OR phaseName = "LAND_ASSIST" {
-        RETURN "LAND_DEORBIT,LAND_ASSIST,DONE".
+        RETURN LIST("LAND_DEORBIT", "LAND_ASSIST", "DONE").
     }
     IF phaseName = "LAND" {
-        RETURN "LAND,DONE".
+        RETURN LIST("LAND", "DONE").
     }
-    RETURN "LAND_DEORBIT,LAND,DONE".
+    RETURN LIST("LAND_DEORBIT", "LAND", "DONE").
 }
 
 LOCAL FUNCTION _assistConfig {
@@ -59,7 +59,7 @@ IF mode = "assist" {
     stateSet("reload_required", "false").
     stateSet("lib_band", "LANDING").
     _clearLibCache().
-    _cfg("SEQUENCE", "LAND_DEORBIT,LAND_ASSIST,DONE").
+    _cfg("SEQUENCE", LIST("LAND_DEORBIT", "LAND_ASSIST", "DONE")).
     _assistConfig().
 
     PRINT "Emergency LAND_ASSIST config forced.".
@@ -84,7 +84,7 @@ IF mode = "assist" {
     IF assistPath { _assistConfig(). }
 
     PRINT "Landing deorbit settings forced.".
-    PRINT "Sequence -> " + stateGet("mission_cfg_SEQUENCE", "") + ".".
+    PRINT "Sequence -> " + stateGet("mission_cfg_SEQUENCE", LIST()):JOIN(" -> ") + ".".
     PRINT "Phase -> " + phaseName + ".".
     PRINT "Landing config synced from mission state.".
 

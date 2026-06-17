@@ -59,8 +59,8 @@ GLOBAL FUNCTION bootVehicleLibs {
 }
 
 LOCAL FUNCTION _buildSequence {
-    IF SEQUENCE <> "" {
-        RETURN phaseListFromString(SEQUENCE).
+    IF SEQUENCE:LENGTH > 0 {
+        RETURN phaseList(SEQUENCE).
     }
 
     LOCAL orbitPhases IS LIST().

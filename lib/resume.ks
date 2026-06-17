@@ -5,13 +5,12 @@
 
 // --- Config defaults owned by this file ---
 GLOBAL TARGET_ IS "".
-GLOBAL PAYLOADS IS "".
+GLOBAL PAYLOADS IS LIST().
 GLOBAL RENDEZVOUS_TARGET IS "".
 GLOBAL ASTEROID_TARGET IS "".
 
 GLOBAL FUNCTION missionPayloads {
-    IF PAYLOADS = "" { RETURN LIST(). }
-    RETURN PAYLOADS:SPLIT(",").
+    RETURN PAYLOADS.
 }
 
 GLOBAL FUNCTION missionHas {

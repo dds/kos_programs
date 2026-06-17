@@ -969,8 +969,8 @@ GLOBAL FUNCTION airplaneMain {
     LOCAL defaultSeq IS LIST("PREFLIGHT", "FLIGHT", "POSTFLIGHT", "DONE").
     IF opts:HASKEY("defaultSeq") { SET defaultSeq TO opts["defaultSeq"]. }
     SET _amSeq TO defaultSeq.
-    IF SEQUENCE <> "" {
-        SET _amSeq TO phaseListFromString(SEQUENCE).
+    IF SEQUENCE:LENGTH > 0 {
+        SET _amSeq TO phaseList(SEQUENCE).
     }
     SET launchSeq TO _amSeq.
     SET xferSeq TO _amSeq.

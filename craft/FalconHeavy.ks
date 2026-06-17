@@ -16,8 +16,8 @@ GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
 applyKnownMissionState().
 
 GLOBAL FUNCTION fhBuildPhaseSequence {
-    IF SEQUENCE <> "" {
-        RETURN phaseListFromString(SEQUENCE).
+    IF SEQUENCE:LENGTH > 0 {
+        RETURN phaseList(SEQUENCE).
     }
 
     LOCAL payloadPhases IS LEXICON(
@@ -89,7 +89,7 @@ LOCAL FUNCTION _fhLibs {
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
     LOCAL libs IS _fhLibsForBand(band).
-    stateSet("lib_band_libs", libs:JOIN(",")).
+    stateSet("lib_band_libs", libs).
     RETURN libs.
 }
 

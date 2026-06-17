@@ -50,7 +50,7 @@ LOCAL FUNCTION _clearHopLegState {
     }
 }
 
-_cfg("SEQUENCE", "PRELAUNCH,HOP,LAND_ASSIST,DONE").
+_cfg("SEQUENCE", LIST("PRELAUNCH", "HOP", "LAND_ASSIST", "DONE")).
 _cfg("HOP_TARGET_LAT", targetLat).
 _cfg("HOP_TARGET_LNG", targetLng).
 _cfg("HOP_TOLERANCE", toleranceM).

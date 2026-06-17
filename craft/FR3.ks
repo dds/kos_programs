@@ -11,8 +11,8 @@ SET DESCENT_DECOUPLER_TAG TO "none".
 applyKnownMissionState().
 
 GLOBAL FUNCTION fr3BuildPhaseSequence {
-    IF SEQUENCE <> "" {
-        RETURN phaseListFromString(SEQUENCE).
+    IF SEQUENCE:LENGTH > 0 {
+        RETURN phaseList(SEQUENCE).
     }
 
     LOCAL orbitPhases IS LIST("CIRC", "RAISE", "INCLINE").
@@ -62,7 +62,7 @@ LOCAL FUNCTION _fr3Libs {
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
     LOCAL libs IS _fr3LibsForBand(band).
-    stateSet("lib_band_libs", libs:JOIN(",")).
+    stateSet("lib_band_libs", libs).
     RETURN libs.
 }
 

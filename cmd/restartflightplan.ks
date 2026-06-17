@@ -44,8 +44,8 @@ IF opts:HASKEY("force")  { SET force TO opts["force"]. }
 // Default restart phase: first phase of the current mission sequence
 LOCAL rawSeq IS SEQUENCE.
 IF restartPhase = "" {
-    IF rawSeq <> "" {
-        SET restartPhase TO phaseListFromString(rawSeq)[0].
+    IF rawSeq:LENGTH > 0 {
+        SET restartPhase TO phaseList(rawSeq)[0].
     } ELSE {
         SET restartPhase TO "PREFLIGHT".
     }

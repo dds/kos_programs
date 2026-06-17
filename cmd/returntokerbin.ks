@@ -119,10 +119,10 @@ IF NOT err {
     stateSet("mission_type", "kerbin_return").
     stateSet("mission_id", "kerbin_return").
     stateSet("mission_name", "Return to Kerbin").
-    stateSet("payloads", "RETURN").
+    stateSet("payloads", LIST("RETURN")).
 
     // Set up the return mission sequence and config
-    LOCAL returnSeq IS "ESCAPE,COAST,MCC,AEROBRAKE,DESCENT,DONE".
+    LOCAL returnSeq IS LIST("ESCAPE", "COAST", "MCC", "AEROBRAKE", "DESCENT", "DONE").
     stateSet("mission_cfg_SEQUENCE", returnSeq).
     // Keep the escape-planning boot lean; DESCENT loads later in
     // its own band instead of consuming storage during Minmus escape.

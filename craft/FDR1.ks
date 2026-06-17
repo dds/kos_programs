@@ -38,14 +38,14 @@ GLOBAL FUNCTION bootVehicleLibs {
     LOCAL libs IS missionSequenceLibs(missionLibsForPhases(seq, LIST()), LIST()).
     stateSet("lib_band", "FLY").
     stateSet("lib_band_phase", stateGet("phase", seq[0])).
-    stateSet("lib_band_libs", libs:JOIN(",")).
+    stateSet("lib_band_libs", libs).
     RETURN libs.
 }
 
 GLOBAL FUNCTION main {
     LOCAL seq IS FDR1_SEQ.
-    IF SEQUENCE <> "" {
-        SET seq TO phaseListFromString(SEQUENCE).
+    IF SEQUENCE:LENGTH > 0 {
+        SET seq TO phaseList(SEQUENCE).
     }
     SET launchSeq TO seq.
     SET xferSeq TO seq.

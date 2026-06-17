@@ -151,12 +151,12 @@ IF NOT err {
     // 'point_landing' collided with point_landing.ks).
     stateSet("mission_id", "land_at_target").
     stateSet("mission_name", missionName).
-    stateSet("payloads", "RETURN").
+    stateSet("payloads", LIST("RETURN")).
 
-    stateSet("mission_cfg_SEQUENCE", "KSC_DEORBIT,DESCENT,DONE").
+    stateSet("mission_cfg_SEQUENCE", LIST("KSC_DEORBIT", "DESCENT", "DONE")).
     // DESCENT is its own (lean) band; preloading descent lets it
     // bind during KSC_DEORBIT with no band-change reboot.
-    stateSet("mission_cfg_LIBS_EXTRA", "descent").
+    stateSet("mission_cfg_LIBS_EXTRA", LIST("descent")).
     stateSet("mission_cfg_TARGET_LAT", targetLat).
     stateSet("mission_cfg_TARGET_LNG", targetLng).
     stateSet("mission_cfg_REENTRY_PE", entryPe).

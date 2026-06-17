@@ -42,7 +42,7 @@ LOCAL FUNCTION _clearLaunchLegState {
     }
 }
 
-_cfg("SEQUENCE", "PRELAUNCH,LAUNCH,FAIR,ANTS,PARK,DONE").
+_cfg("SEQUENCE", LIST("PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK", "DONE")).
 _cfg("PARKING_ALT", parkingAlt).
 _cfg("LAUNCH_INCLINATION", launchInc).
 _cfg("LAUNCH_AZIMUTH", 0).

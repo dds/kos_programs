@@ -25,8 +25,8 @@ GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
 applyKnownMissionState().
 
 GLOBAL FUNCTION falconBuildPhaseSequence {
-    IF SEQUENCE <> "" {
-        RETURN phaseListFromString(SEQUENCE).
+    IF SEQUENCE:LENGTH > 0 {
+        RETURN phaseList(SEQUENCE).
     }
 
     LOCAL payloadPhases IS LEXICON(
@@ -98,7 +98,7 @@ LOCAL FUNCTION _falconLibs {
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
     LOCAL libs IS _falconLibsForBand(band).
-    stateSet("lib_band_libs", libs:JOIN(",")).
+    stateSet("lib_band_libs", libs).
     RETURN libs.
 }
 

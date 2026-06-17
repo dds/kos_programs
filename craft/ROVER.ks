@@ -16,7 +16,7 @@ GLOBAL FUNCTION bootVehicleLibs {
 }
 
 LOCAL FUNCTION buildPhaseSequence {
-    LOCAL seq IS missionListFromCsv(SEQUENCE).
+    LOCAL seq IS phaseList(SEQUENCE).
     IF seq:LENGTH > 0 { RETURN seq. }
     RETURN _seq.
 }

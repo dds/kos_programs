@@ -676,7 +676,7 @@ LOCAL FUNCTION _prelaunchPrintConfig {
     flightPlanSection("MISSION").
     flightPlanRow("BAND", phaseBand()).
     flightPlanRow("TARGET", getTarget()).
-    IF PAYLOADS <> "" {
+    IF PAYLOADS:LENGTH > 0 {
         flightPlanRow("PAYLOADS", PAYLOADS).
     }
     flightPlanConfig().

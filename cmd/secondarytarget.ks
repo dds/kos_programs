@@ -1,5 +1,5 @@
 // --- Config defaults owned by this file ---
-GLOBAL SECONDARY_SEQUENCE IS "".
+GLOBAL SECONDARY_SEQUENCE IS LIST().
 GLOBAL SECONDARY_RELEASE_TAG IS "".
 GLOBAL SECONDARY_RELEASE_ANTENNA_TAG IS "".
 GLOBAL SECONDARY_RELEASE_SOLAR_TAG IS "".
@@ -86,8 +86,8 @@ IF doRelease AND stateGet("secondary_release_done", "false") <> "true" {
 }
 
 LOCAL seqRaw IS SECONDARY_SEQUENCE.
-IF seqRaw = "" { SET seqRaw TO "SHAPE,SCANSAT_OPS,DONE". }
-LOCAL seq IS phaseListFromString(seqRaw).
+IF seqRaw:LENGTH = 0 { SET seqRaw TO LIST("SHAPE", "SCANSAT_OPS", "DONE"). }
+LOCAL seq IS phaseList(seqRaw).
 SET launchSeq TO seq.
 SET xferSeq TO seq.
 

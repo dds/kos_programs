@@ -1,9 +1,9 @@
 // cmd/scansatops.ks - Force released SCANsat mapper into ops phase.
 // Usage:
 //   RUNPATH("0:/cmd/scansatops.ks").
-//   RUNPATH("0:/cmd/scansatops.ks", "LOW_RES_ALTIMETRY").
+//   RUNPATH("0:/cmd/scansatops.ks", LIST("LOW_RES_ALTIMETRY")).
 
-PARAMETER requiredTypes IS "LOW_RES_ALTIMETRY".
+PARAMETER requiredTypes IS LIST("LOW_RES_ALTIMETRY").
 
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
@@ -33,7 +33,7 @@ stateSet("zombie_scansat_required_types", requiredTypes).
 stateSet("reload_required", "false").
 stateSet("phase", "SCANSAT_OPS").
 
-PRINT "SCANsat state forced to SCANSAT_OPS for " + requiredTypes + ".".
+PRINT "SCANsat state forced to SCANSAT_OPS for " + requiredTypes:JOIN(", ") + ".".
 PRINT "Throttle off, nodes cleared. Rebooting into zombie SCANsat mode.".
 WAIT 1.
 REBOOT.

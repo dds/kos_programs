@@ -7,10 +7,10 @@ GLOBAL MISSION_ID IS "".
 GLOBAL MISSION_NAME IS "".
 GLOBAL MISSION_TYPE IS "".
 GLOBAL TARGET_ IS "".
-GLOBAL PAYLOADS IS "".
-GLOBAL SEQUENCE IS "".
-GLOBAL LIBS IS "".
-GLOBAL LIBS_EXTRA IS "".
+GLOBAL PAYLOADS IS LIST().
+GLOBAL SEQUENCE IS LIST().
+GLOBAL LIBS IS LIST().
+GLOBAL LIBS_EXTRA IS LIST().
 GLOBAL PROGRESSIVE_RELOAD IS 0.
 GLOBAL RENDEZVOUS_TARGET IS "".
 GLOBAL ASTEROID_TARGET IS "".
@@ -50,9 +50,9 @@ GLOBAL FUNCTION bootVehicleInfo {
             AND SHIP:STATUS <> "PRELAUNCH" {
         SET vehicleName TO stateGet("vehicle", "").
         SET targetName TO getTarget().
-        LOCAL rawPayloads IS stateGet("payloads", "").
-        IF rawPayloads <> "" {
-            FOR p IN rawPayloads:SPLIT(",") {
+        LOCAL rawPayloads IS stateGet("payloads", LIST()).
+        IF rawPayloads:LENGTH > 0 {
+            FOR p IN rawPayloads {
                 LOCAL trimmedPayload IS p:TRIM.
                 IF trimmedPayload <> "" { payloadTypes:ADD(trimmedPayload). }
             }
@@ -260,7 +260,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
         stateRemove("target").
         getTarget().
     }
-    IF PAYLOADS <> "" { stateRemove("payloads"). }
+    IF PAYLOADS:LENGTH > 0 { stateRemove("payloads"). }
     IF MISSION_TYPE <> "" { stateRemove("mission_type"). }
     IF MISSION_NAME <> "" {
         PRINT "  Mission: " + MISSION_NAME.
@@ -268,7 +268,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
         PRINT "  Mission: " + stateGet("mission_id", missionId).
     }
     IF getTarget("") <> "" { PRINT "  Target:  " + getTarget(""). }
-    IF PAYLOADS <> "" { PRINT "  Payload: " + PAYLOADS. }
+    IF PAYLOADS:LENGTH > 0 { PRINT "  Payload: " + PAYLOADS. }
     printStorageStatus().
     RETURN TRUE.
 }
@@ -351,7 +351,7 @@ GLOBAL FUNCTION bootResetMissionSelection {
     }
     stateSet("vehicle", vehicleName).
     stateSet("target", targetName).
-    stateSet("payloads", payloadTypes:JOIN(",")).
+    stateSet("payloads", payloadTypes).
     PRINT "  Mission selection reset for prelaunch.".
     mLog("Mission selection reset before launch; cleared " + removed + " config keys.").
 }
@@ -657,17 +657,6 @@ GLOBAL FUNCTION bootLibAllPhases {
 // Keep only tiny runtime helpers here.
 // ============================================================
 
-GLOBAL FUNCTION missionListFromCsv {
-    PARAMETER raw.
-    LOCAL values IS LIST().
-    IF raw = "" { RETURN values. }
-    FOR itemRaw IN raw:SPLIT(",") {
-        LOCAL item IS itemRaw:TRIM.
-        IF item <> "" { values:ADD(item). }
-    }
-    RETURN values.
-}
-
 GLOBAL FUNCTION getTarget {
     PARAMETER fallback IS "KERBIN".
     LOCAL targetName IS stateGet("target", "").
@@ -683,12 +672,12 @@ GLOBAL FUNCTION bootCachedVehicleLibs {
     IF SHIP:STATUS = "PRELAUNCH" { RETURN LIST(). }
     IF band <> "" AND stateGet("lib_band", "") <> band { RETURN LIST(). }
     IF stateGet("lib_band_phase", "") <> stateGet("phase", "") { RETURN LIST(). }
-    RETURN missionListFromCsv(stateGet("lib_band_libs", "")).
+    RETURN stateGet("lib_band_libs", LIST()).
 }
 
 GLOBAL FUNCTION bootPlannedMissionLibs {
     PARAMETER defaultBand IS "LAUNCH".
-    LOCAL sequence IS phaseSequenceEnsurePrelaunch(missionListFromCsv(SEQUENCE)).
+    LOCAL sequence IS phaseSequenceEnsurePrelaunch(SEQUENCE).
     IF sequence:LENGTH > 0 {
         bootEnsureInitialPhase(sequence).
     }
@@ -712,8 +701,12 @@ GLOBAL FUNCTION bootPlannedMissionLibs {
 
     LOCAL roots IS bootLibBandRoots(band).
     missionAppendUnique(roots, missionTypeConditionalRoots(band)).
-    LOCAL libs IS missionLibs(roots).
-    stateSet("lib_band_libs", libs:JOIN(",")).
+    IF LIBS:LENGTH > 0 {
+        SET roots TO LIBS.
+    }
+    LOCAL libs IS bootLibResolve(roots).
+    missionAppendUnique(libs, bootLibResolve(missionExtraLibs())).
+    stateSet("lib_band_libs", libs).
     RETURN libs.
 }
 
@@ -730,9 +723,8 @@ GLOBAL FUNCTION missionAppendUnique {
 
 GLOBAL FUNCTION missionPayloadsFromState {
     LOCAL raw IS PAYLOADS.
-    IF raw = "" { SET raw TO stateGet("payloads", ""). }
-    IF raw = "" { RETURN LIST(). }
-    RETURN raw:SPLIT(",").
+    IF raw:LENGTH = 0 { SET raw TO stateGet("payloads", LIST()). }
+    RETURN raw.
 }
 
 GLOBAL FUNCTION missionNormalizePayloadType {
@@ -778,11 +770,9 @@ GLOBAL FUNCTION missionHasLandingPayload {
 // failed. Unknown phases keep the lib (safe).
 GLOBAL FUNCTION missionExtraLibs {
     LOCAL out IS LIST().
-    LOCAL rawSeq IS SEQUENCE.
-    LOCAL seq IS phaseSequenceEnsurePrelaunch(missionListFromCsv(rawSeq)).
+    LOCAL seq IS phaseSequenceEnsurePrelaunch(SEQUENCE).
     LOCAL cur IS stateGet("phase", "").
-    LOCAL rawExtra IS LIBS_EXTRA.
-    FOR entryRaw IN missionListFromCsv(rawExtra) {
+    FOR entryRaw IN LIBS_EXTRA {
         IF entryRaw:CONTAINS("@") {
             LOCAL parts IS entryRaw:SPLIT("@").
             LOCAL libName IS parts[0]:TRIM.
@@ -814,10 +804,8 @@ GLOBAL FUNCTION missionLibs {
     LOCAL libs IS LIST().
     missionAppendUnique(libs, baseLibs).
 
-    LOCAL rawLibs IS LIBS.
-    LOCAL configured IS missionListFromCsv(rawLibs).
-    IF configured:LENGTH > 0 {
-        missionAppendUnique(libs, bootLibResolve(configured)).
+    IF LIBS:LENGTH > 0 {
+        missionAppendUnique(libs, bootLibResolve(LIBS)).
     } ELSE {
         missionAppendUnique(libs, bootLibResolve(fallbackLibs)).
     }
@@ -830,8 +818,7 @@ GLOBAL FUNCTION missionSequenceLibs {
     PARAMETER fallbackLibs IS LIST().
     PARAMETER baseDeps IS LIST().
     LOCAL sequenceLibs IS fallbackLibs.
-    LOCAL rawSeq IS SEQUENCE.
-    LOCAL sequence IS phaseSequenceEnsurePrelaunch(missionListFromCsv(rawSeq)).
+    LOCAL sequence IS phaseSequenceEnsurePrelaunch(SEQUENCE).
     IF sequence:LENGTH > 0 {
         SET sequenceLibs TO missionLibsForPhases(sequence, baseDeps).
     }
@@ -845,8 +832,7 @@ GLOBAL FUNCTION missionSequenceLibs {
 
 GLOBAL FUNCTION airplaneSequenceFromState {
     PARAMETER defaultSeq.
-    LOCAL raw IS SEQUENCE.
-    IF raw <> "" { RETURN phaseListFromString(raw). }
+    IF SEQUENCE:LENGTH > 0 { RETURN phaseList(SEQUENCE). }
     RETURN defaultSeq.
 }
 
@@ -861,7 +847,7 @@ GLOBAL FUNCTION airplaneVehicleLibs {
     SET libs TO missionSequenceLibs(libs, baseLibs).
     stateSet("lib_band", "AIR").
     stateSet("lib_band_phase", stateGet("phase", seq[0])).
-    stateSet("lib_band_libs", libs:JOIN(",")).
+    stateSet("lib_band_libs", libs).
     RETURN libs.
 }
 

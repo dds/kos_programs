@@ -23,7 +23,7 @@ GLOBAL FUNCTION main {
         SET SCANSAT_POWER_GUARD TO 1.
         SET SCANSAT_TARGET_COVERAGE TO 99.1.
         SET SCANSAT_REQUIRED_TYPES TO
-            stateGet("zombie_scansat_required_types", "LOW_RES_ALTIMETRY").
+            stateGet("zombie_scansat_required_types", LIST("LOW_RES_ALTIMETRY")).
         LOCAL seq IS LIST("SCANSAT_OPS", "DONE").
         SET launchSeq TO seq.
         SET xferSeq TO seq.

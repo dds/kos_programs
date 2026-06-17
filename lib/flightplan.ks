@@ -26,7 +26,7 @@
 
 // --- Config defaults owned by this file ---
 GLOBAL MISSION_NAME IS "".
-GLOBAL PAYLOADS IS "".
+GLOBAL PAYLOADS IS LIST().
 GLOBAL PARKING_ALT IS 80000.
 GLOBAL LAUNCH_INCLINATION IS 0.
 GLOBAL CAPTURE_PE IS -1.
@@ -107,8 +107,8 @@ GLOBAL FUNCTION flightPlanIdentity {
     flightPlanRow("FREE", ROUND(CORE:VOLUME:FREESPACE, 0) + " bytes").
     IF DEFINED MISSION {
         flightPlanRow("TARGET", getTarget()).
-        IF PAYLOADS <> "" {
-            flightPlanRow("PAYLOADS", PAYLOADS).
+        IF PAYLOADS:LENGTH > 0 {
+            flightPlanRow("PAYLOADS", PAYLOADS:JOIN(", ")).
         }
     }
 }
