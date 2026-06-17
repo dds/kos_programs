@@ -83,6 +83,47 @@ LOCAL FUNCTION _badAscentTrajectory {
     RETURN SHIP:APOAPSIS < 10000.
 }
 
+LOCAL FUNCTION _launchDropSurfaceReturnTanks {
+    IF stateGet("mission_type", "") <> "surface_return" { RETURN. }
+    IF stateGet("surface_return_droptanks_jettisoned", "false") = "true" {
+        RETURN.
+    }
+
+    LOCAL parts IS SHIP:PARTSTAGGED("droptanks").
+    IF parts:LENGTH = 0 {
+        mLog("Surface return: no droptanks decouplers tagged.").
+        RETURN.
+    }
+
+    LOCAL fired IS 0.
+    FOR dc IN parts {
+        IF dc:HASMODULE("ModuleDecouple") {
+            LOCAL decoupleMod IS dc:GETMODULE("ModuleDecouple").
+            IF decoupleMod:HASEVENT("Decouple") {
+                decoupleMod:DOEVENT("Decouple").
+                SET fired TO fired + 1.
+            }
+        } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
+            LOCAL anchoredMod IS dc:GETMODULE("ModuleAnchoredDecoupler").
+            IF anchoredMod:HASEVENT("Decouple") {
+                anchoredMod:DOEVENT("Decouple").
+                SET fired TO fired + 1.
+            }
+        } ELSE {
+            mLogWarn("Tagged droptanks part has no decoupler module: "
+                + dc:TITLE + ".").
+        }
+    }
+
+    IF fired > 0 {
+        stateSet("surface_return_droptanks_jettisoned", "true").
+        mLog("Surface return: fired " + fired
+            + " droptanks decoupler(s).").
+    } ELSE {
+        mLogWarn("Surface return: no droptanks decouplers fired.").
+    }
+}
+
 GLOBAL FUNCTION phaseLaunch {
     mLog("Configuring MechJeb ascent...").
 
@@ -191,6 +232,8 @@ GLOBAL FUNCTION phaseLaunch {
     STAGE.
     mLog("Launch — STAGE fired.").
     HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
+    WAIT 0.5.
+    _launchDropSurfaceReturnTanks().
 
     armAscentStaging().
 
