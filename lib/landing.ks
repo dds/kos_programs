@@ -710,12 +710,22 @@ LOCAL FUNCTION _landingApproachTick {
         SET verticalEta TO (bottomAlt - TERMINAL_ALT)
             / MAX(1, ctx["DOWN_SPEED"]).
     }
-    _landingHudEtaNotice(ctx, "Vertical descent", verticalEta, GREEN).
+    IF ctx["HAS_TARGET"] AND NOT ctx["HOVER_REFINED"] {
+        _landingHudEtaNotice(ctx, "Hover refinement",
+            verticalEta - LANDING_HOVER_REFINE_LEAD_TIME, CYAN).
+    } ELSE {
+        _landingHudEtaNotice(ctx, "Vertical descent", verticalEta, GREEN).
+    }
 
     IF distToTarget <= VERTICAL_RADIUS
             AND horizontalSpeed <= VERTICAL_HSPEED {
         _landingSetState(ctx, "HOVER_REFINE",
             "over target, entering hover pause").
+    } ELSE IF ctx["HAS_TARGET"]
+            AND NOT ctx["HOVER_REFINED"]
+            AND verticalEta <= LANDING_HOVER_REFINE_LEAD_TIME {
+        _landingSetState(ctx, "HOVER_REFINE",
+            "hover refinement lead time").
     } ELSE IF bottomAlt <= TERMINAL_ALT {
         _landingSetState(ctx, "VERTICAL_DESCENT", "terminal altitude horizontal kill").
     }
