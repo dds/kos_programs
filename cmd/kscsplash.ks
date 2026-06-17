@@ -4,14 +4,12 @@
 
 PARAMETER targetLat IS -0.10.
 PARAMETER targetLng IS -74.25.
-PARAMETER entryPeKm IS 30.
 PARAMETER toleranceKm IS 15.
 
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 bootLibLoadList(LIST("deorbit_targeting", "maneuver")).
 
-LOCAL entryPe IS entryPeKm * 1000.
 LOCAL tolerance IS toleranceKm * 1000.
 
 SET TARGET_DEORBIT_SCAN_ORBITS TO 32.
@@ -21,7 +19,6 @@ SET TARGET_DEORBIT_MIN_LEAD TO 90.
 PRINT "KSC SPLASH: " + ROUND(targetLat,4) + ", " + ROUND(targetLng,4).
 mLogWarn("STATS ksc-splash setup target="
     + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
-    + " entryPeKm=" + ROUND(entryPe/1000,1)
     + " toleranceKm=" + ROUND(tolerance/1000,1)
     + " body=" + SHIP:BODY:NAME
     + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -33,7 +30,7 @@ IF SHIP:BODY:NAME <> "KERBIN" {
     mLogError("KSC splash aborted: current body is " + SHIP:BODY:NAME + ".").
 }
 
-LOCAL ok IS targetedDeorbitAt(targetLat, targetLng, entryPe, tolerance).
+LOCAL ok IS targetedDeorbitAt(targetLat, targetLng, tolerance).
 IF ok {
     PRINT "KSC splash deorbit complete.".
     LOCAL loggedImpact IS FALSE.
