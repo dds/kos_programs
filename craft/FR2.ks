@@ -170,5 +170,5 @@ LOCAL FUNCTION _buildPhaseMap {
 }
 
 GLOBAL FUNCTION main {
-    rocketMain("FR2", _buildSequence@, _printConfig@, _buildPhaseMap@).
+    rocketMain(_buildSequence@, _buildPhaseMap@).
 }

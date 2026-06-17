@@ -15,6 +15,8 @@ GLOBAL PRELAUNCH_PLANE_LEAD IS 145.
 GLOBAL LAUNCH_RDV_ASCENT_TIME IS 300.
 GLOBAL LAUNCH_RDV_LEAD IS 30.
 GLOBAL LAUNCH_RDV_MAX_WINDOWS IS 16.
+GLOBAL PRELAUNCH_TRANSFER_LEAD IS 900.
+GLOBAL PRELAUNCH_TRANSFER_PHASE_TOL IS 8.
 GLOBAL RENDEZVOUS_TARGET IS "".
 GLOBAL TARGET_INCLINATION IS -1.
 
@@ -296,6 +298,179 @@ LOCAL FUNCTION _norm180 {
     RETURN _norm360(angle + 180) - 180.
 }
 
+LOCAL FUNCTION _signedPhaseAngle {
+    PARAMETER fromVec.
+    PARAMETER toVec.
+    PARAMETER normalVec.
+    LOCAL angle IS VANG(fromVec, toVec).
+    IF VDOT(VCRS(fromVec, toVec), normalVec) < 0 {
+        SET angle TO -angle.
+    }
+    RETURN _norm360(angle).
+}
+
+LOCAL FUNCTION _interplanetaryTargetBody {
+    LOCAL tgtName IS _launchPlaneTargetName().
+    IF tgtName = "" { RETURN 0. }
+    RETURN _bodyNamed(tgtName).
+}
+
+LOCAL FUNCTION _isInterplanetaryBodyTarget {
+    PARAMETER bod_.
+    IF NOT bod_:ISTYPE("Body") { RETURN FALSE. }
+    IF NOT SHIP:BODY:HASBODY { RETURN FALSE. }
+    IF bod_ = SHIP:BODY:BODY { RETURN TRUE. }
+    IF NOT bod_:HASBODY { RETURN FALSE. }
+    RETURN bod_:BODY = SHIP:BODY:BODY
+        AND bod_ <> SHIP:BODY.
+}
+
+LOCAL FUNCTION _bodyPhaseAt {
+    PARAMETER targetBody.
+    PARAMETER ut.
+    LOCAL centralBody IS SHIP:BODY:BODY.
+    LOCAL originVec IS POSITIONAT(SHIP:BODY, ut)
+        - POSITIONAT(centralBody, ut).
+    LOCAL targetVec IS POSITIONAT(targetBody, ut)
+        - POSITIONAT(centralBody, ut).
+    LOCAL originNext IS POSITIONAT(SHIP:BODY, ut + 60)
+        - POSITIONAT(centralBody, ut + 60).
+    LOCAL normalVec IS VCRS(originVec, originNext - originVec):NORMALIZED.
+    RETURN _signedPhaseAngle(originVec, targetVec, normalVec).
+}
+
+LOCAL FUNCTION _hohmannPhaseFor {
+    PARAMETER targetBody.
+    LOCAL centralBody IS SHIP:BODY:BODY.
+    LOCAL originOrbit IS SHIP:BODY:ORBIT.
+    LOCAL targetOrbit IS targetBody:ORBIT.
+    LOCAL xferA IS (originOrbit:SEMIMAJORAXIS
+        + targetOrbit:SEMIMAJORAXIS) / 2.
+    LOCAL tof IS CONSTANT:PI * SQRT(xferA ^ 3 / centralBody:MU).
+    LOCAL targetMotion IS 360 * tof / targetOrbit:PERIOD.
+    RETURN _norm360(180 - targetMotion).
+}
+
+LOCAL FUNCTION _interplanetaryLaunchIncFor {
+    PARAMETER targetBody.
+    IF targetBody = SHIP:BODY:BODY { RETURN LAUNCH_INCLINATION. }
+    LOCAL inc IS targetBody:ORBIT:INCLINATION.
+    IF inc <= 0 OR inc >= 180 { RETURN 0. }
+    IF _latIncOk(SHIP:LATITUDE, inc) { RETURN inc. }
+    mLogWarn("PRELAUNCH: " + targetBody:NAME + " solar plane inc="
+        + ROUND(inc, 2) + " cannot pass over lat "
+        + ROUND(SHIP:LATITUDE, 3)
+        + "; using equatorial parking orbit.").
+    RETURN 0.
+}
+
+LOCAL FUNCTION _prelaunchToInterplanetary {
+    PARAMETER targetBody.
+
+    IF NOT _isInterplanetaryBodyTarget(targetBody) {
+        mLogError("PRELAUNCH: interplanetary mode needs a body around "
+            + SHIP:BODY:BODY:NAME + "; target is not supported.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    LOCAL launchInc IS _interplanetaryLaunchIncFor(targetBody).
+    SET LAUNCH_INCLINATION TO launchInc.
+    stateSet("mission_cfg_LAUNCH_INCLINATION", launchInc).
+
+    IF targetBody = SHIP:BODY:BODY {
+        mLog("PRELAUNCH: solar escape target; launching immediately"
+            + " inc=" + ROUND(launchInc, 2) + ".").
+        nextPhase(launchSeq).
+        RETURN.
+    }
+
+    LOCAL originOrbit IS SHIP:BODY:ORBIT.
+    LOCAL targetOrbit IS targetBody:ORBIT.
+    LOCAL desiredPhase IS _hohmannPhaseFor(targetBody).
+    LOCAL leadTime IS MAX(0, PRELAUNCH_TRANSFER_LEAD).
+    LOCAL phaseTol IS MAX(0.1, PRELAUNCH_TRANSFER_PHASE_TOL).
+    LOCAL immediateDepartUt IS TIME:SECONDS + leadTime.
+    LOCAL phaseAtImmediate IS _bodyPhaseAt(targetBody, immediateDepartUt).
+    LOCAL immediateErr IS ABS(_norm180(phaseAtImmediate - desiredPhase)).
+
+    IF immediateErr <= phaseTol {
+        stateSet("prelaunch_transfer_departure_ut", immediateDepartUt).
+        stateSet("prelaunch_transfer_target", targetBody:NAME).
+        stateSet("prelaunch_transfer_phase", desiredPhase).
+        mLog("PRELAUNCH: already in " + targetBody:NAME
+            + " transfer window; launch now. phase="
+            + ROUND(phaseAtImmediate, 1)
+            + "/" + ROUND(desiredPhase, 1)
+            + " err=" + ROUND(immediateErr, 1)
+            + " inc=" + ROUND(launchInc, 2) + ".").
+        mLogWarn("STATS prelaunch transfer target=" + targetBody:NAME
+            + " wait=0"
+            + " phase=" + ROUND(phaseAtImmediate, 2)
+            + " desired=" + ROUND(desiredPhase, 2)
+            + " err=" + ROUND(immediateErr, 2)
+            + " launchInc=" + ROUND(launchInc, 2)).
+        nextPhase(launchSeq).
+        RETURN.
+    }
+
+    LOCAL phaseNow IS _bodyPhaseAt(targetBody, TIME:SECONDS).
+    LOCAL originRate IS 360 / originOrbit:PERIOD.
+    LOCAL targetRate IS 360 / targetOrbit:PERIOD.
+    LOCAL relRate IS targetRate - originRate.
+    IF ABS(relRate) < 0.0000001 {
+        mLogError("PRELAUNCH: cannot compute transfer window; relative"
+            + " solar motion is too small.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    LOCAL phaseDelta IS 0.
+    IF relRate > 0 {
+        SET phaseDelta TO _norm360(desiredPhase - phaseNow).
+    } ELSE {
+        SET phaseDelta TO _norm360(phaseNow - desiredPhase).
+    }
+    LOCAL departWait IS phaseDelta / ABS(relRate).
+    LOCAL synodic IS 360 / ABS(relRate).
+    UNTIL TIME:SECONDS + departWait >= immediateDepartUt {
+        SET departWait TO departWait + synodic.
+    }
+
+    LOCAL departUt IS TIME:SECONDS + departWait.
+    LOCAL launchUt IS departUt - leadTime.
+    IF launchUt < TIME:SECONDS { SET launchUt TO TIME:SECONDS. }
+
+    stateSet("prelaunch_transfer_departure_ut", departUt).
+    stateSet("prelaunch_transfer_target", targetBody:NAME).
+    stateSet("prelaunch_transfer_phase", desiredPhase).
+    stateSet("prelaunch_plane_ut", launchUt).
+
+    mLog("PRELAUNCH: " + targetBody:NAME + " transfer window in "
+        + ROUND(launchUt - TIME:SECONDS, 0)
+        + "s  depart in " + ROUND(departUt - TIME:SECONDS, 0)
+        + "s phase=" + ROUND(phaseNow, 1)
+        + "/" + ROUND(desiredPhase, 1)
+        + " inc=" + ROUND(launchInc, 2)
+        + " lead=" + ROUND(leadTime, 0) + "s.").
+    mLogWarn("STATS prelaunch transfer target=" + targetBody:NAME
+        + " wait=" + ROUND(launchUt - TIME:SECONDS, 0)
+        + " departWait=" + ROUND(departUt - TIME:SECONDS, 0)
+        + " phase=" + ROUND(phaseNow, 2)
+        + " desired=" + ROUND(desiredPhase, 2)
+        + " launchInc=" + ROUND(launchInc, 2)
+        + " lead=" + ROUND(leadTime, 0)).
+
+    _waitForPrelaunchUt(launchUt).
+    IF ABORT {
+        mLog("PRELAUNCH hold — operator abort.").
+        yieldToPrompt().
+        RETURN.
+    }
+    mLog("PRELAUNCH complete; interplanetary transfer window open.").
+    nextPhase(launchSeq).
+}
+
 // Body-centered inertial direction of the launch site at a future
 // time: the site then equals the CURRENT direction of the surface
 // point rotated forward in longitude — uses the game's own LATLNG
@@ -467,12 +642,86 @@ LOCAL FUNCTION _prelaunchToVessel {
     nextPhase(launchSeq).
 }
 
+LOCAL FUNCTION _prelaunchPrintConfig {
+    flightPlanTitle("PRELAUNCH", SHIP:NAME).
+    flightPlanIdentity().
+    flightPlanSection("MISSION").
+    flightPlanRow("BAND", phaseBand()).
+    flightPlanRow("TARGET", getTarget()).
+    IF PAYLOADS <> "" {
+        flightPlanRow("PAYLOADS", PAYLOADS).
+    }
+    flightPlanConfig().
+    flightPlanSection("SEQUENCE").
+    flightPlanSequence(launchSeq).
+}
+
+GLOBAL FUNCTION confirmLaunch {
+    IF stateGet("phase", "") <> "PRELAUNCH" {
+        RETURN TRUE.
+    }
+
+    _prelaunchPrintConfig().
+    uiPrompt("SPACE to arm / ESC to hold / 30s auto-arm").
+    uiPrompt("Edit globals in terminal to override").
+    PRINT " ".
+    LOCAL deadline IS TIME:SECONDS + 30.
+    LOCAL confirmed IS FALSE.
+    LOCAL aborted IS FALSE.
+    UNTIL TIME:SECONDS >= deadline OR confirmed OR aborted {
+        LOCAL remaining IS ROUND(deadline - TIME:SECONDS, 0).
+        LOCAL bar IS "".
+        LOCAL filled IS ROUND(30 - remaining, 0).
+        LOCAL j IS 0.
+        UNTIL j >= 30 {
+            IF j < filled { SET bar TO bar + "=". }
+            ELSE { SET bar TO bar + ".". }
+            SET j TO j + 1.
+        }
+        PRINT "  [" + bar + "] T-" + ("" + remaining):PADLEFT(2) + "s   " AT (0, TERMINAL:HEIGHT - 1).
+        IF TERMINAL:INPUT:HASCHAR {
+            LOCAL ch IS TERMINAL:INPUT:GETCHAR().
+            IF UNCHAR(ch) = 27 {
+                SET aborted TO TRUE.
+            } ELSE IF UNCHAR(ch) = 32 OR UNCHAR(ch) = 0 {
+                SET confirmed TO TRUE.
+            }
+        }
+        WAIT 0.2.
+    }
+    IF aborted {
+        PRINT "  [==============================] HOLD     " AT (0, TERMINAL:HEIGHT - 1).
+        mLog("Prelaunch held by operator.").
+        RETURN FALSE.
+    }
+    PRINT "  [==============================] ARMED    " AT (0, TERMINAL:HEIGHT - 1).
+    RETURN TRUE.
+}
+
 GLOBAL FUNCTION phasePrelaunch {
+    IF NOT confirmLaunch() {
+        yieldToPrompt().
+        RETURN.
+    }
+
     LOCAL planeMode IS "".
     IF LAUNCH_PLANE_MODE <> "" {
         SET planeMode TO LAUNCH_PLANE_MODE:TOUPPER.
     }
-    IF planeMode = "BODY_ORBIT" OR planeMode = "AUTO" {
+    IF planeMode = "INTERPLANETARY" {
+        _prelaunchToInterplanetary(_interplanetaryTargetBody()).
+        RETURN.
+    }
+    IF planeMode = "AUTO" {
+        LOCAL autoBody IS _interplanetaryTargetBody().
+        IF _isInterplanetaryBodyTarget(autoBody) {
+            _prelaunchToInterplanetary(autoBody).
+        } ELSE {
+            _prelaunchToBodyOrbit(TRUE).
+        }
+        RETURN.
+    }
+    IF planeMode = "BODY_ORBIT" {
         _prelaunchToBodyOrbit(planeMode = "AUTO").
         RETURN.
     }

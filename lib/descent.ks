@@ -8,6 +8,14 @@ GLOBAL DESCENT_DECOUPLER_TAG IS "".
 GLOBAL DESCENT_DECOUPLE_ALT IS -999999.
 GLOBAL DESCENT_HEAT_SHIELD_DROP_ALT IS -999999.
 GLOBAL DESCENT_BAY_REOPEN_ALT IS -1.
+GLOBAL DESCENT_FAIRING_DEPLOY_SPEED IS 10.
+GLOBAL DESCENT_ENGINE_ASSIST IS 0.
+GLOBAL DESCENT_ENGINE_ASSIST_ALT IS 1000.
+GLOBAL DESCENT_ENGINE_ASSIST_TOUCHDOWN_VS IS 2.5.
+GLOBAL DESCENT_ENGINE_ASSIST_HIGH_VS IS 12.
+GLOBAL DESCENT_ENGINE_ASSIST_MAX_THROTTLE IS 0.85.
+GLOBAL DESCENT_ENGINE_ASSIST_GAIN IS 0.18.
+GLOBAL DESCENT_ENGINE_ASSIST_ALIGN_DEG IS 20.
 
 // ============================================================
 // descent.ks  —  Atmospheric descent phase  (0:/lib/descent.ks)
@@ -105,6 +113,96 @@ LOCAL FUNCTION _descentWaitForRadius {
     IF alarmId <> "" { DELETEALARM(alarmId). }
 }
 
+LOCAL FUNCTION _descentGravity {
+    LOCAL radiusMag IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
+    IF radiusMag <= 0 { RETURN 0.01. }
+    RETURN MAX(0.01, SHIP:BODY:MU / (radiusMag * radiusMag)).
+}
+
+LOCAL FUNCTION _descentMaxAcc {
+    IF SHIP:MASS <= 0 { RETURN 0. }
+    RETURN SHIP:AVAILABLETHRUST / SHIP:MASS.
+}
+
+LOCAL FUNCTION _descentBottomRadar {
+    RETURN MAX(0, SHIP:BOUNDS:BOTTOMALTRADAR).
+}
+
+LOCAL FUNCTION _descentEngineAssistTargetDown {
+    PARAMETER bottomAlt.
+    PARAMETER assistAlt.
+    LOCAL touchdownVs IS MAX(0.2, DESCENT_ENGINE_ASSIST_TOUCHDOWN_VS).
+    LOCAL highVs IS MAX(touchdownVs, DESCENT_ENGINE_ASSIST_HIGH_VS).
+    LOCAL altFrac IS MAX(0, MIN(1, bottomAlt / MAX(1, assistAlt))).
+    RETURN touchdownVs + altFrac * (highVs - touchdownVs).
+}
+
+LOCAL FUNCTION _descentEngineAssist {
+    IF DESCENT_ENGINE_ASSIST <= 0 { RETURN. }
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN. }
+    IF SHIP:AVAILABLETHRUST <= 0 {
+        mLogWarn("Descent engine assist requested, but no thrust is available.").
+        RETURN.
+    }
+
+    LOCAL assistAlt IS MAX(1, DESCENT_ENGINE_ASSIST_ALT).
+    IF _descentBottomRadar() > assistAlt {
+        mLog("Engine assist armed below " + ROUND(assistAlt, 0) + "m AGL.").
+        WAIT UNTIL _descentBottomRadar() < assistAlt
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    }
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN. }
+
+    GEAR ON.
+    LOCAL throttleCmd IS 0.
+    LOCK THROTTLE TO throttleCmd.
+    LOCK STEERING TO SHIP:UP:VECTOR.
+
+    LOCAL maxThrottle IS MAX(0, MIN(1, DESCENT_ENGINE_ASSIST_MAX_THROTTLE)).
+    LOCAL lastLog IS TIME:SECONDS - 999.
+    mLog("Engine assist active: alt=" + ROUND(_descentBottomRadar(), 0)
+        + "m vs=" + ROUND(SHIP:VERTICALSPEED, 1)
+        + " maxThrottle=" + ROUND(maxThrottle, 2) + ".").
+
+    UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+        LOCAL bottomAlt IS _descentBottomRadar().
+        LOCAL downSpeed IS MAX(0, -SHIP:VERTICALSPEED).
+        LOCAL targetDown IS _descentEngineAssistTargetDown(bottomAlt, assistAlt).
+        LOCAL maxAcc IS _descentMaxAcc().
+        LOCAL grav IS _descentGravity().
+        LOCAL alignErr IS VANG(SHIP:FACING:FOREVECTOR, SHIP:UP:VECTOR).
+
+        IF maxAcc <= 0 {
+            SET throttleCmd TO 0.
+        } ELSE IF alignErr > DESCENT_ENGINE_ASSIST_ALIGN_DEG {
+            SET throttleCmd TO 0.
+        } ELSE IF downSpeed > targetDown {
+            SET throttleCmd TO MIN(maxThrottle,
+                MAX(0, grav / maxAcc
+                    + (downSpeed - targetDown)
+                        * DESCENT_ENGINE_ASSIST_GAIN)).
+        } ELSE {
+            SET throttleCmd TO 0.
+        }
+
+        IF TIME:SECONDS - lastLog > 2 {
+            SET lastLog TO TIME:SECONDS.
+            mLog("ASSIST alt=" + ROUND(bottomAlt, 0)
+                + " vs=" + ROUND(SHIP:VERTICALSPEED, 1)
+                + "/" + ROUND(-targetDown, 1)
+                + " align=" + ROUND(alignErr, 1)
+                + " thr=" + ROUND(throttleCmd, 2) + ".").
+        }
+        WAIT 0.
+    }
+
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    mLog("Engine assist complete: " + SHIP:STATUS
+        + " vs=" + ROUND(SHIP:VERTICALSPEED, 1) + ".").
+}
+
 GLOBAL FUNCTION phaseDescent {
     mLogPhase("DESCENT").
 
@@ -168,7 +266,7 @@ GLOBAL FUNCTION phaseDescent {
         _descentBrakingBurn().
     }
 
-    // Deploy fairing once slow enough (< 60 m/s)
+    // Deploy fairing once slow enough for the active profile.
     _descentDeployFairing().
 
     // Optional drag test: reopen tagged service bays before descent decouple.
@@ -186,6 +284,8 @@ GLOBAL FUNCTION phaseDescent {
         mLog("Chutes deployed.").
         _descentCutDrogues().
     }
+
+    _descentEngineAssist().
 
     // Wait for safe speed to extend antennas (< 20 m/s)
     // Deployable antennas break at higher speeds in atmosphere
@@ -374,7 +474,7 @@ LOCAL FUNCTION _descentBrakingBurn {
         + "  PeKm=" + ROUND(SHIP:PERIAPSIS/1000, 1)).
 }
 
-// Deploy descent fairing once airspeed is below 60 m/s.
+// Deploy descent fairing once airspeed is below configured safe speed.
 // Reads tag from DESCENT_FAIRING_TAG config key.
 LOCAL FUNCTION _descentDeployFairing {
     LOCAL tag IS "descent_fairing".
@@ -393,7 +493,7 @@ LOCAL FUNCTION _descentDeployFairing {
         RETURN.
     }
 
-    LOCAL deploySpeed IS 10.
+    LOCAL deploySpeed IS MAX(0, DESCENT_FAIRING_DEPLOY_SPEED).
     IF SHIP:AIRSPEED > deploySpeed {
         mLog("Waiting for < " + deploySpeed + " m/s to deploy fairing...").
         WAIT UNTIL SHIP:AIRSPEED < deploySpeed

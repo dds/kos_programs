@@ -124,18 +124,5 @@ GLOBAL BOOT_CLEANUP IS LEXICON(
 ).
 
 GLOBAL FUNCTION main {
-    LOCAL seq IS falconBuildPhaseSequence().
-    SET launchSeq TO seq.
-    SET xferSeq TO seq.
-
-    mLogPhase("FALCON MAIN").
-    mLog("Target: " + getTarget() + "  Payloads: " + PAYLOADS).
-    mLog("Sequence: " + seq:JOIN(" -> ")).
-    bootEnsureInitialPhase(seq).
-
-    IF phaseBand() = "LAUNCH" {
-        IF NOT confirmLaunch(_falconPrintConfig@) { RETURN. }
-    }
-
-    runPhases(falconBuildPhaseMap()).
+    rocketMain(falconBuildPhaseSequence@, falconBuildPhaseMap@).
 }

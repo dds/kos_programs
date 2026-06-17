@@ -51,6 +51,17 @@ GLOBAL FUNCTION phaseBand {
     RETURN phaseBandForPhase(stateGet("phase", "")).
 }
 
+GLOBAL FUNCTION rocketMain {
+    PARAMETER seqBuilder.
+    PARAMETER phaseMapBuilder.
+
+    LOCAL seq IS seqBuilder:CALL().
+    SET launchSeq TO seq.
+    SET xferSeq TO seq.
+    bootEnsureInitialPhase(seq).
+    runPhases(phaseMapBuilder:CALL()).
+}
+
 GLOBAL FUNCTION phaseInLoadedBand {
     PARAMETER phaseName.
     LOCAL requiredBand IS phaseBandForPhase(phaseName).

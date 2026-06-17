@@ -18,6 +18,14 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL nDepart IS 12.
     LOCAL nTof IS 9.
     LOCAL tofSpread IS hohmannTof * 0.3.
+    LOCAL departStart IS TIME:SECONDS + 60.
+    LOCAL plannedDepart IS stateGetNum("prelaunch_transfer_departure_ut", -1).
+    IF plannedDepart > TIME:SECONDS + 60 {
+        SET departStart TO plannedDepart - 3 * shipPeriod.
+        UNTIL departStart >= TIME:SECONDS + 60 {
+            SET departStart TO departStart + shipPeriod.
+        }
+    }
     LOCAL bestDv IS 9999999.
     LOCAL bestDepart IS -1.
     LOCAL bestArrive IS -1.
@@ -30,7 +38,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + " hohmannTof=" + ROUND(hohmannTof,0)).
 
     FROM { LOCAL di IS 0. } UNTIL di >= nDepart STEP { SET di TO di + 1. } DO {
-        LOCAL departUt IS TIME:SECONDS + 60 + di * shipPeriod.
+        LOCAL departUt IS departStart + di * shipPeriod.
         LOCAL r1 IS POSITIONAT(SHIP, departUt) - POSITIONAT(centralBody, departUt).
         LOCAL v1Ship IS VELOCITYAT(SHIP, departUt):ORBIT.
 

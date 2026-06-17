@@ -86,17 +86,5 @@ GLOBAL BOOT_CLEANUP IS LEXICON(
 ).
 
 GLOBAL FUNCTION main {
-    LOCAL seq IS fr3BuildPhaseSequence().
-    SET launchSeq TO seq.
-    SET xferSeq TO seq.
-
-    mLogPhase("FR3B MAIN").
-    mLog("Sequence: " + seq:JOIN(" -> ")).
-    bootEnsureInitialPhase(seq).
-
-    IF phaseBand() = "LAUNCH" {
-        IF NOT confirmLaunch(_fr3PrintConfig@) { RETURN. }
-    }
-
-    runPhases(fr3BuildPhaseMap()).
+    rocketMain(fr3BuildPhaseSequence@, fr3BuildPhaseMap@).
 }

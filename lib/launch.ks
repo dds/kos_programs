@@ -521,11 +521,10 @@ GLOBAL FUNCTION armAscentStaging {
 // ── Abort mode ───────────────────────────────────────────────
 // launchAbort is the trigger: cut propulsion, fire the vessel's
 // VAB Abort action group (escape motor / separation), and route
-// the phase machine into ABORT. The ABORT phase below does the
-// real work — chute verification, descent monitoring, archiving,
-// operator card — and is reboot-safe (PHASE ABORT = launch, so a
-// power cycle mid-descent resumes there). GLOBAL: the
-// suborbit lib calls it too.
+// the phase machine into ABORT. The isolated ABORT lib does the
+// real work - chute verification, descent monitoring, archiving,
+// operator card - and is reboot-safe. GLOBAL: the suborbit lib
+// calls it too.
 //
 // Setting ABORT ON also flips the condition every ascent-phase
 // wait watches, so the main thread breaks out of its altitude
@@ -547,135 +546,6 @@ GLOBAL FUNCTION launchAbort {
 
     LOG "" TO "1:/run/obs_off".
     stateSet("phase", "ABORT").
-}
-
-LOCAL FUNCTION _abortChuteParts {
-    LOCAL parts IS SHIP:PARTSTAGGED("chute_main").
-    IF parts:LENGTH > 0 { RETURN parts. }
-    SET parts TO LIST().
-    FOR p IN SHIP:PARTS {
-        IF p:HASMODULE("ModuleParachute") OR p:HASMODULE("RealChuteModule") {
-            parts:ADD(p).
-        }
-    }
-    RETURN parts.
-}
-
-// Arm every chute (deploy-when-safe), then VERIFY the arm took:
-// once armed/deployed the arm event disappears. Returns
-// LIST(found, armed).
-LOCAL FUNCTION _abortArmChutes {
-    LOCAL found IS 0.
-    FOR p IN _abortChuteParts() {
-        LOCAL moduleName IS "".
-        IF p:HASMODULE("ModuleParachute") { SET moduleName TO "ModuleParachute". }
-        ELSE IF p:HASMODULE("RealChuteModule") { SET moduleName TO "RealChuteModule". }
-        IF moduleName <> "" {
-            SET found TO found + 1.
-            LOCAL m IS p:GETMODULE(moduleName).
-            IF m:HASEVENT("arm parachute") { m:DOEVENT("arm parachute"). }
-            ELSE IF m:HASEVENT("deploy chute") { m:DOEVENT("deploy chute"). }
-            ELSE IF m:HASEVENT("deploy") { m:DOEVENT("deploy"). }
-        }
-    }
-    IF found = 0 { RETURN LIST(0, 0). }
-    WAIT 0.5.
-
-    LOCAL armed IS 0.
-    FOR p IN _abortChuteParts() {
-        LOCAL moduleName IS "".
-        IF p:HASMODULE("ModuleParachute") { SET moduleName TO "ModuleParachute". }
-        ELSE IF p:HASMODULE("RealChuteModule") { SET moduleName TO "RealChuteModule". }
-        IF moduleName <> "" {
-            LOCAL m IS p:GETMODULE(moduleName).
-            IF NOT m:HASEVENT("arm parachute") AND NOT m:HASEVENT("deploy") {
-                SET armed TO armed + 1.
-            } ELSE {
-                mLogWarn("Chute NOT armed: " + p:TITLE
-                    + " events: " + m:ALLEVENTNAMES:JOIN(", ")).
-            }
-        }
-    }
-    RETURN LIST(found, armed).
-}
-
-// ABORT phase: post-abort descent to touchdown.
-GLOBAL FUNCTION phaseAbort {
-    IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
-    UNLOCK ALL.
-    SET SAS TO TRUE.
-
-    mLogWarn("STATS abort entry alt=" + ROUND(SHIP:ALTITUDE, 0)
-        + " vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 1)
-        + " vs=" + ROUND(SHIP:VERTICALSPEED, 1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)).
-    IF HOMECONNECTION:ISCONNECTED { archiveLog(). }
-
-    IF SHIP:STATUS <> "LANDED" AND SHIP:STATUS <> "SPLASHED" {
-        // Give the escape motor / separation a beat before chutes.
-        WAIT 1.5.
-        LOCAL chuteState IS _abortArmChutes().
-        IF chuteState[0] = 0 {
-            mLogError("NO PARACHUTES FOUND — firing AG6 backup.").
-            HUDTEXT("ABORT: NO CHUTES — AG6 FIRED", 8, 2, 18, RED, FALSE).
-            AG6 ON.
-        } ELSE {
-            IF chuteState[1] < chuteState[0] {
-                mLogWarn("CHUTES: only " + chuteState[1] + "/" + chuteState[0]
-                    + " armed — re-arming during descent.").
-            } ELSE {
-                mLog("CHUTES: " + chuteState[1] + "/" + chuteState[0]
-                    + " armed and ready.").
-            }
-            HUDTEXT("ABORT: chutes " + chuteState[1] + "/" + chuteState[0]
-                + " armed", 8, 2, 16, YELLOW, FALSE).
-        }
-
-        LOCAL nextCheck IS TIME:SECONDS + 20.
-        UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
-            IF TIME:SECONDS >= nextCheck {
-                SET nextCheck TO TIME:SECONDS + 20.
-                IF chuteState[0] > 0 AND chuteState[1] < chuteState[0] {
-                    SET chuteState TO _abortArmChutes().
-                    mLog("Chute re-arm: " + chuteState[1] + "/"
-                        + chuteState[0] + " armed.").
-                }
-                mLog("Abort descent: alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
-                    + "km vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 0)
-                    + "m/s vs=" + ROUND(SHIP:VERTICALSPEED, 0) + "m/s.").
-            }
-            WAIT 1.
-        }
-    }
-
-    mLogWarn("STATS abort landed status=" + SHIP:STATUS
-        + " lat=" + ROUND(SHIP:GEOPOSITION:LAT, 4)
-        + " lng=" + ROUND(SHIP:GEOPOSITION:LNG, 4)).
-
-    // Antennas back out so the log archive has a link.
-    FOR p IN SHIP:PARTS {
-        IF p:HASMODULE("ModuleDeployableAntenna") {
-            LOCAL am IS p:GETMODULE("ModuleDeployableAntenna").
-            IF am:HASEVENT("Extend Antenna") { am:DOEVENT("Extend Antenna"). }
-        }
-    }
-    WAIT 3.
-    IF HOMECONNECTION:ISCONNECTED {
-        archiveLog().
-        mLog("Abort log archived.").
-    } ELSE {
-        mLogWarn("No KSC link — log NOT archived; reboot when linked.").
-    }
-
-    PRINT " ".
-    PRINT "  ABORT COMPLETE — " + SHIP:STATUS.
-    PRINT "  ─────────────────────────────────────────────".
-    PRINT "  Clear abort:    SET ABORT TO FALSE.".
-    PRINT "  Refly:          RUNPATH('0:/cmd/setphase.ks', 'LAUNCH'). + reboot".
-    PRINT "  Other mission:  RUNPATH('0:/cmd/setphase.ks', 'LAUNCH', '<id>').".
-    PRINT "  State dump:     RUNPATH('0:/cmd/dump.ks').".
-    PRINT "  Backup chutes:  AG6 ON.".
-    yieldToPrompt().
 }
 
 GLOBAL FUNCTION ascentNeedsStage {
@@ -749,95 +619,6 @@ LOCAL FUNCTION _deployFairing {
 
 GLOBAL FUNCTION phasePark {
     phaseParking().
-}
-
-// ── Pre-launch config screen ────────────────────────────────
-
-GLOBAL FUNCTION confirmLaunch {
-    PARAMETER printFn.
-    LOCAL phase IS stateGet("phase", "").
-    IF phase <> "" AND phase <> "PRELAUNCH" AND phase <> "LAUNCH" {
-        RETURN TRUE.
-    }
-
-    printFn:CALL().
-    uiPrompt("SPACE to launch / ESC to abort / 30s auto-launch").
-    uiPrompt("Edit globals in terminal to override").
-    PRINT " ".
-    LOCAL deadline IS TIME:SECONDS + 30.
-    LOCAL confirmed IS FALSE.
-    LOCAL aborted IS FALSE.
-    UNTIL TIME:SECONDS >= deadline OR confirmed OR aborted {
-        LOCAL remaining IS ROUND(deadline - TIME:SECONDS, 0).
-        LOCAL bar IS "".
-        LOCAL filled IS ROUND(30 - remaining, 0).
-        LOCAL j IS 0.
-        UNTIL j >= 30 {
-            IF j < filled { SET bar TO bar + "=". }
-            ELSE { SET bar TO bar + ".". }
-            SET j TO j + 1.
-        }
-        PRINT "  [" + bar + "] T-" + ("" + remaining):PADLEFT(2) + "s   " AT (0, TERMINAL:HEIGHT - 1).
-        IF TERMINAL:INPUT:HASCHAR {
-            LOCAL ch IS TERMINAL:INPUT:GETCHAR().
-            IF UNCHAR(ch) = 27 {
-                SET aborted TO TRUE.
-            } ELSE IF UNCHAR(ch) = 32 OR UNCHAR(ch) = 0 {
-                SET confirmed TO TRUE.
-            }
-        }
-        WAIT 0.2.
-    }
-    IF aborted {
-        PRINT "  [==============================] ABORT    " AT (0, TERMINAL:HEIGHT - 1).
-        mLog("Launch aborted by operator.").
-        RETURN FALSE.
-    }
-    PRINT "  [==============================] GO       " AT (0, TERMINAL:HEIGHT - 1).
-    RETURN TRUE.
-}
-
-// ── Rocket main skeleton ──────────────────────────────────────
-
-// Shared main() boilerplate for rocket craft scripts. Handles
-// both fresh launches and mid-mission resume (confirmLaunch is
-// a no-op when phase is past LAUNCH).
-//   vehicleName   - string for logging (e.g. "FR2")
-//   seqBuilder    - delegate that returns the phase sequence LIST
-//   configPrinter - delegate for flight plan display (passed to confirmLaunch)
-//   phaseMapBuilder - delegate that returns the phase LEXICON
-//   options       - optional LEXICON:
-//     "skipConfirmCheck" - delegate returning TRUE to skip confirmLaunch
-//     "preRun"          - delegate called after seq setup, before runPhases
-GLOBAL FUNCTION rocketMain {
-    PARAMETER vehicleName.
-    PARAMETER seqBuilder.
-    PARAMETER configPrinter.
-    PARAMETER phaseMapBuilder.
-    PARAMETER options IS LEXICON().
-
-    LOCAL seq IS seqBuilder:CALL().
-    SET launchSeq TO seq.
-    SET xferSeq TO seq.
-
-    mLogPhase(vehicleName + " MAIN").
-    mLog("Target: " + getTarget() + "  Payloads: " + PAYLOADS).
-    mLog("Sequence: " + seq:JOIN(" -> ")).
-    IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
-
-    IF options:HASKEY("preRun") {
-        options["preRun"]:CALL().
-    }
-
-    LOCAL skipConfirm IS FALSE.
-    IF options:HASKEY("skipConfirmCheck") {
-        SET skipConfirm TO options["skipConfirmCheck"]:CALL().
-    }
-    IF NOT skipConfirm {
-        IF NOT confirmLaunch(configPrinter) { RETURN. }
-    }
-
-    runPhases(phaseMapBuilder:CALL()).
 }
 
 // ── Reboot recovery ─────────────────────────────────────────
