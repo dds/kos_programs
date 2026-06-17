@@ -130,8 +130,6 @@ IF vehicleScript <> "" {
     RUNPATH(vehicleScript).
 }
 
-bootMissionConfig(vehicleName, HAS_LINK).
-
 LOCAL vehicleLibs IS LIST().
 IF vehicleScript <> "" {
     SET vehicleLibs TO bootVehicleLibs().
@@ -165,6 +163,8 @@ IF HAS_LINK {
     }
     bootLibLoad("resume").
 }
+
+bootMissionConfig(vehicleName, HAS_LINK).
 
 PRINT " ".
 PRINT "  BOOT #" + bootCount + " OK".

@@ -39,6 +39,7 @@ GLOBAL GUIDANCE_CORRECTION_THRESHOLD IS 500.
 
 GLOBAL FUNCTION landingApplyMissionConfig {
     // Mission config is already applied directly to the globals above.
+    RETURN TRUE.
 }
 
 GLOBAL FUNCTION landingResolveTarget {
