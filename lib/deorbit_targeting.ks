@@ -66,7 +66,6 @@ GLOBAL FUNCTION targetResolveDeorbitTarget {
 GLOBAL FUNCTION targetedDeorbitAt {
     PARAMETER targetLat.
     PARAMETER targetLng.
-    PARAMETER ignoredPe IS 0.
     PARAMETER overrideTolerance IS 0.
     PARAMETER overrideOvershoot IS 0.
 
