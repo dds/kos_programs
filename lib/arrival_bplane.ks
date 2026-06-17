@@ -46,6 +46,8 @@
 //   BPLANE_PE_TOL  — PE tolerance in m (default 2000)
 //   BPLANE_ANG_TOL — plane tolerance in deg (default 0.5)
 //   BPLANE_LEAD    — seconds from now to the burn (default 300)
+//   REFINE_BPLANE_DV_CAP    — max dV per refinement burn (default 10)
+//   REFINE_BPLANE_MAX_BURNS — max refinement burns per phase call (default 6)
 // ============================================================
 
 @LAZYGLOBAL OFF.
@@ -62,6 +64,8 @@ GLOBAL BPLANE_PE_TOL IS 2000.
 GLOBAL BPLANE_ANG_TOL IS 0.2.
 GLOBAL BPLANE_LEAD IS 300.
 GLOBAL BPLANE_TARGET IS "".
+GLOBAL REFINE_BPLANE_DV_CAP IS 10.
+GLOBAL REFINE_BPLANE_MAX_BURNS IS 6.
 
 
 LOCAL DEFAULT_DV_CAP   IS 50.
@@ -69,8 +73,6 @@ LOCAL DEFAULT_PE_TOL   IS 2000.
 LOCAL DEFAULT_ANG_TOL  IS 0.5.
 LOCAL DEFAULT_LEAD     IS 300.
 LOCAL MIN_EXEC_DV      IS 0.1.
-LOCAL REFINE_DV_CAP    IS 10.
-LOCAL REFINE_MAX_BURNS IS 6.
 LOCAL MAX_NEWTON_ITER  IS 8.
 LOCAL NEWTON_DAMP      IS 0.7.
 LOCAL FD_STEP          IS 0.5.
@@ -726,8 +728,10 @@ GLOBAL FUNCTION phaseRefineBplane {
     LOCAL wantInc IS _bplaneWantInc().
     LOCAL wantLan IS CAPTURE_LAN.
 
+    LOCAL dvCap IS MAX(MIN_EXEC_DV, REFINE_BPLANE_DV_CAP).
+    LOCAL maxBurns IS MAX(1, REFINE_BPLANE_MAX_BURNS).
     LOCAL burns IS 0.
-    UNTIL burns >= REFINE_MAX_BURNS {
+    UNTIL burns >= maxBurns {
         LOCAL measLoop IS _measureArrival(0, targetBody).
         IF measLoop = 0 { BREAK. }
         LOCAL errLoop IS _bplaneCorridorError(targetBody, measLoop, wantPe, wantInc, wantLan).
@@ -735,13 +739,13 @@ GLOBAL FUNCTION phaseRefineBplane {
 
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         mLog("REFINE_BPLANE: refining arrival with dV cap "
-            + REFINE_DV_CAP + " m/s.").
+            + dvCap + " m/s.").
         LOCAL nd IS planBplaneCorrection(
             targetBody,
             wantPe,
             wantInc,
             wantLan,
-            REFINE_DV_CAP,
+            dvCap,
             "Trajectory pristine, skipping refinement burn.").
 
         IF nd = 0 { BREAK. }
@@ -764,7 +768,7 @@ GLOBAL FUNCTION phaseRefineBplane {
                 + "Pe=" + ROUND(meas["pe"] / 1000, 1)
                 + "km want=" + ROUND(wantPe / 1000, 1)
                 + "km planeErr=" + ROUND(err["planeErr"], 2)
-                + "deg burns=" + burns + ".").
+                + "deg burns=" + burns + "/" + maxBurns + ".").
             WAIT 30.
             RETURN.
         }
