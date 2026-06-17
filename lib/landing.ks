@@ -12,8 +12,8 @@
 GLOBAL landingAbortFlag IS FALSE.
 GLOBAL landingSteeringTarget IS V(0, 0, 0).
 GLOBAL LANDING_HUD_INTERVAL IS 5.
-GLOBAL LANDING_HUD_INTERVAL_MAX IS 30.
-GLOBAL LANDING_HUD_INTERVAL_ETA_SCALE IS 6.
+GLOBAL LANDING_HUD_INTERVAL_MAX IS 45.
+GLOBAL LANDING_HUD_INTERVAL_ETA_SCALE IS 3.
 GLOBAL LANDING_HUD_NOTICE_INTERVAL IS 5.
 GLOBAL LANDING_HUD_NOTICE_HOLD_TIME IS 6.
 GLOBAL LANDING_HUD_NOTICE_LOOKAHEAD IS 90.
@@ -200,7 +200,6 @@ LOCAL FUNCTION _landingHudNotice {
     }
     SET ctx["HUD_NOTICE_TEXT"] TO text.
     SET ctx["HUD_NOTICE_LAST"] TO TIME:SECONDS.
-    mLog("HUD: " + text).
     HUDTEXT(text, LANDING_HUD_NOTICE_HOLD_TIME,
         2, 16, color, FALSE).
 }
@@ -215,11 +214,8 @@ LOCAL FUNCTION _landingHudEtaNotice {
     IF etaSeconds > LANDING_HUD_NOTICE_LOOKAHEAD { RETURN. }
 
     LOCAL roundedEta IS ROUND(etaSeconds, 0).
-    LOCAL noticeText IS actionText + " next in "
+    LOCAL noticeText IS actionText + " in "
         + roundedEta + " seconds.".
-    IF roundedEta <= 30 {
-        SET noticeText TO actionText + " in T-" + roundedEta + ".".
-    }
     _landingHudNotice(ctx, noticeText, color, FALSE,
         _landingAdaptiveLogInterval(etaSeconds)).
 }
@@ -951,6 +947,7 @@ LOCAL FUNCTION _landingVerticalTick {
             ctx["H_VEL"], ctx["UP_VEC"]).
     } ELSE IF bottomAlt <= UPRIGHT_ALT {
         SET verticalSteering TO SHIP:UP:VECTOR.
+        SET solarRoll TO TRUE.
     } ELSE IF ctx["HAS_TARGET"] {
         SET verticalSteering TO lmApproachSteering(
             ctx["TARGET_LAT"], ctx["TARGET_LNG"], 0, ctx["H_VEL"],
