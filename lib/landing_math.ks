@@ -211,11 +211,10 @@ GLOBAL FUNCTION lmTerrainClearanceInfo {
     LOCAL bodyRad IS SHIP:BODY:RADIUS.
     LOCAL bdy IS SHIP:BODY.
     LOCAL bodyPos IS bdy:POSITION.
-    LOCAL burnGeo IS bdy:GEOPOSITIONOF(POSITIONAT(SHIP, burnUt)).
-    LOCAL burnVec IS LATLNG(burnGeo:LAT, burnGeo:LNG):POSITION.
     LOCAL targetVec IS LATLNG(targetLat, targetLng):POSITION.
     LOCAL upVec IS (targetVec - bodyPos):NORMALIZED.
-    LOCAL trackDir IS VXCL(upVec, targetVec - burnVec).
+    LOCAL trackDir IS VXCL(upVec,
+        POSITIONAT(SHIP, burnUt + 10) - POSITIONAT(SHIP, burnUt)).
 
     UNTIL sampleUt > endUt {
         LOCAL pos IS POSITIONAT(SHIP, sampleUt).
