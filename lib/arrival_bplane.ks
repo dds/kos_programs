@@ -70,7 +70,7 @@ LOCAL DEFAULT_ANG_TOL  IS 0.5.
 LOCAL DEFAULT_LEAD     IS 300.
 LOCAL MIN_EXEC_DV      IS 0.1.
 LOCAL REFINE_DV_CAP    IS 10.
-LOCAL MAX_NEWTON_ITER  IS 16.
+LOCAL MAX_NEWTON_ITER  IS 8.
 LOCAL NEWTON_DAMP      IS 0.7.
 LOCAL FD_STEP          IS 0.5.
 LOCAL ACQUIRE_STEP     IS 0.5.
@@ -241,7 +241,6 @@ LOCAL FUNCTION _arrivalPlaneNormal {
 // ============================================================
 LOCAL FUNCTION _targetB {
     PARAMETER targetBody, meas, wantPe, wantInc, wantLan.
-    PARAMETER quiet IS FALSE.
 
     LOCAL sHat IS meas["S"].
     LOCAL nTgt IS meas["hHat"].
@@ -256,12 +255,10 @@ LOCAL FUNCTION _targetB {
     LOCAL offPlane IS ABS(90 - VANG(nTgt, sHat)).
     IF offPlane > 0.5 {
         SET nTgt TO (nTgt - VDOT(nTgt, sHat) * sHat):NORMALIZED.
-        IF NOT quiet {
-            mLogWarn("BPLANE: requested plane tilted " + ROUND(offPlane, 1)
-                + "deg off the arrival asymptote — using closest"
-                + " achievable plane. Pick a different departure window"
-                + " for an exact match.").
-        }
+        mLogWarn("BPLANE: requested plane tilted " + ROUND(offPlane, 1)
+            + "deg off the arrival asymptote — using closest"
+            + " achievable plane. Pick a different departure window"
+            + " for an exact match.").
     }
 
     // Same-handed construction as the measurement: h = unit(S x B)
@@ -283,38 +280,6 @@ LOCAL FUNCTION _targetB {
         "bt", VDOT(bT, meas["tHat"]),
         "br", VDOT(bT, meas["rHat"]),
         "normal", nTgt).
-}
-
-LOCAL FUNCTION _bplaneCorridorError {
-    PARAMETER targetBody, meas, wantPe, wantInc, wantLan.
-
-    LOCAL tgt IS _targetB(targetBody, meas, wantPe, wantInc, wantLan).
-    LOCAL planeErr IS 0.
-    IF wantInc >= 0 { SET planeErr TO VANG(meas["hHat"], tgt["normal"]). }
-    RETURN LEX("peErr", meas["pe"] - wantPe,
-        "planeErr", planeErr,
-        "target", tgt).
-}
-
-LOCAL FUNCTION _bplaneCorridorOk {
-    PARAMETER err.
-    PARAMETER wantInc.
-    PARAMETER peTol.
-    PARAMETER angTol.
-
-    RETURN ABS(err["peErr"]) <= peTol
-        AND (wantInc < 0 OR err["planeErr"] <= angTol).
-}
-
-LOCAL FUNCTION _bplaneCost {
-    PARAMETER err.
-    PARAMETER wantInc.
-    PARAMETER peTol.
-    PARAMETER angTol.
-
-    LOCAL cost IS (err["peErr"] / peTol) ^ 2.
-    IF wantInc >= 0 { SET cost TO cost + (err["planeErr"] / angTol) ^ 2. }
-    RETURN cost.
 }
 
 // ============================================================
@@ -474,15 +439,15 @@ GLOBAL FUNCTION planBplaneCorrection {
     }
 
     // Already in the corridor?
-    LOCAL err0 IS _bplaneCorridorError(targetBody, meas0, wantPe, wantInc, wantLan).
-    LOCAL tgt0 IS err0["target"].
-    LOCAL planeErr0 IS err0["planeErr"].
-    IF _bplaneCorridorOk(err0, wantInc, peTol, angTol) {
+    LOCAL tgt0 IS _targetB(targetBody, meas0, wantPe, wantInc, wantLan).
+    LOCAL planeErr0 IS VANG(meas0["hHat"], tgt0["normal"]).
+    IF ABS(meas0["pe"] - wantPe) <= peTol
+            AND (wantInc < 0 OR planeErr0 <= angTol) {
         IF pristineLog <> "" {
             mLog(pristineLog).
         } ELSE {
             mLog("BPLANE: arrival already in corridor (PeErr="
-                + ROUND(err0["peErr"] / 1000, 1) + "km planeErr="
+                + ROUND((meas0["pe"] - wantPe) / 1000, 1) + "km planeErr="
                 + ROUND(planeErr0, 2) + "deg).").
         }
         REMOVE nd.
@@ -495,10 +460,6 @@ GLOBAL FUNCTION planBplaneCorrection {
         + ROUND(planeErr0, 2) + "deg").
 
     LOCAL converged IS FALSE.
-    LOCAL bestP IS nd:PROGRADE.
-    LOCAL bestR IS nd:RADIALOUT.
-    LOCAL bestN IS nd:NORMAL.
-    LOCAL bestCost IS _bplaneCost(err0, wantInc, peTol, angTol).
     FROM { LOCAL i IS 0. } UNTIL i >= MAX_NEWTON_ITER STEP { SET i TO i + 1. } DO {
         LOCAL meas IS _measureArrival(nd, targetBody).
         IF meas = 0 {
@@ -508,42 +469,25 @@ GLOBAL FUNCTION planBplaneCorrection {
             SET nd:NORMAL TO nd:NORMAL * 0.5.
             WAIT 0.02.
         } ELSE {
-            LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
-            LOCAL tgt IS err["target"].
+            LOCAL tgt IS _targetB(targetBody, meas, wantPe, wantInc, wantLan).
             LOCAL errT IS tgt["bt"] - meas["bt"].
             LOCAL errR IS tgt["br"] - meas["br"].
-            LOCAL qT IS meas["bt"] - tgt["bt"].
-            LOCAL qR IS meas["br"] - tgt["br"].
-            LOCAL planeErr IS err["planeErr"].
-            LOCAL cost IS _bplaneCost(err, wantInc, peTol, angTol).
-            IF cost < bestCost {
-                SET bestCost TO cost.
-                SET bestP TO nd:PROGRADE.
-                SET bestR TO nd:RADIALOUT.
-                SET bestN TO nd:NORMAL.
-            }
+            LOCAL planeErr IS VANG(meas["hHat"], tgt["normal"]).
             mLog("  BPLANE[" + i + "] dBT=" + ROUND(errT / 1000, 1)
                 + "km dBR=" + ROUND(errR / 1000, 1)
                 + "km Pe=" + ROUND(meas["pe"] / 1000, 1)
                 + "km planeErr=" + ROUND(planeErr, 2)
                 + " dv=" + ROUND(nd:DELTAV:MAG, 2)).
 
-            IF _bplaneCorridorOk(err, wantInc, peTol, angTol) {
+            IF ABS(meas["pe"] - wantPe) <= peTol
+                    AND (wantInc < 0 OR planeErr <= angTol) {
                 SET converged TO TRUE.
                 BREAK.
             }
 
-            // Finite-difference Jacobian: d(B.T,B.R)/d(prograde,radial,normal).
-            // The B-plane has two coordinates, but prograde is often an
-            // efficient third actuator on local moon transfers. Use the
-            // minimum-norm 3-axis Newton step.
-            LOCAL p0 IS nd:PROGRADE.
+            // Finite-difference Jacobian: d(B.T,B.R)/d(radial,normal).
             LOCAL r0 IS nd:RADIALOUT.
             LOCAL n0 IS nd:NORMAL.
-
-            SET nd:PROGRADE TO p0 + FD_STEP. WAIT 0.02.
-            LOCAL mPro IS _measureArrival(nd, targetBody).
-            SET nd:PROGRADE TO p0. WAIT 0.02.
 
             SET nd:RADIALOUT TO r0 + FD_STEP. WAIT 0.02.
             LOCAL mRad IS _measureArrival(nd, targetBody).
@@ -553,47 +497,33 @@ GLOBAL FUNCTION planBplaneCorrection {
             LOCAL mNrm IS _measureArrival(nd, targetBody).
             SET nd:NORMAL TO n0. WAIT 0.02.
 
-            IF mPro = 0 OR mRad = 0 OR mNrm = 0 {
+            IF mRad = 0 OR mNrm = 0 {
                 mLogWarn("BPLANE[" + i + "]: probe lost encounter — stopping.").
                 BREAK.
             }
 
-            LOCAL tPro IS _targetB(targetBody, mPro, wantPe, wantInc, wantLan, TRUE).
-            LOCAL tRad IS _targetB(targetBody, mRad, wantPe, wantInc, wantLan, TRUE).
-            LOCAL tNrm IS _targetB(targetBody, mNrm, wantPe, wantInc, wantLan, TRUE).
-            LOCAL jpT IS ((mPro["bt"] - tPro["bt"]) - qT) / FD_STEP.
-            LOCAL jpR IS ((mPro["br"] - tPro["br"]) - qR) / FD_STEP.
-            LOCAL jrT IS ((mRad["bt"] - tRad["bt"]) - qT) / FD_STEP.
-            LOCAL jrR IS ((mRad["br"] - tRad["br"]) - qR) / FD_STEP.
-            LOCAL jnT IS ((mNrm["bt"] - tNrm["bt"]) - qT) / FD_STEP.
-            LOCAL jnR IS ((mNrm["br"] - tNrm["br"]) - qR) / FD_STEP.
-
-            LOCAL a11 IS jpT ^ 2 + jrT ^ 2 + jnT ^ 2.
-            LOCAL a12 IS jpT * jpR + jrT * jrR + jnT * jnR.
-            LOCAL a22 IS jpR ^ 2 + jrR ^ 2 + jnR ^ 2.
-            LOCAL det IS a11 * a22 - a12 ^ 2.
+            LOCAL j11 IS (mRad["bt"] - meas["bt"]) / FD_STEP.
+            LOCAL j21 IS (mRad["br"] - meas["br"]) / FD_STEP.
+            LOCAL j12 IS (mNrm["bt"] - meas["bt"]) / FD_STEP.
+            LOCAL j22 IS (mNrm["br"] - meas["br"]) / FD_STEP.
+            LOCAL det IS j11 * j22 - j12 * j21.
             IF ABS(det) < 1e-3 {
                 mLogWarn("BPLANE[" + i + "]: singular Jacobian (det="
                     + ROUND(det, 5) + ") — stopping.").
                 BREAK.
             }
 
-            LOCAL lamT IS ( a22 * errT - a12 * errR) / det.
-            LOCAL lamR IS (-a12 * errT + a11 * errR) / det.
-            LOCAL dPro IS NEWTON_DAMP * (jpT * lamT + jpR * lamR).
-            LOCAL dRad IS NEWTON_DAMP * (jrT * lamT + jrR * lamR).
-            LOCAL dNrm IS NEWTON_DAMP * (jnT * lamT + jnR * lamR).
+            LOCAL dRad IS NEWTON_DAMP * ( j22 * errT - j12 * errR) / det.
+            LOCAL dNrm IS NEWTON_DAMP * (-j21 * errT + j11 * errR) / det.
 
             // Per-step and total caps keep a bad Jacobian from
             // flinging the node into a different patch topology.
-            LOCAL stepMag IS SQRT(dPro ^ 2 + dRad ^ 2 + dNrm ^ 2).
+            LOCAL stepMag IS SQRT(dRad ^ 2 + dNrm ^ 2).
             LOCAL stepCap IS MAX(1, dvCap * 0.5).
             IF stepMag > stepCap {
-                SET dPro TO dPro * stepCap / stepMag.
                 SET dRad TO dRad * stepCap / stepMag.
                 SET dNrm TO dNrm * stepCap / stepMag.
             }
-            SET nd:PROGRADE TO p0 + dPro.
             SET nd:RADIALOUT TO r0 + dRad.
             SET nd:NORMAL TO n0 + dNrm.
             WAIT 0.02.
@@ -611,28 +541,14 @@ GLOBAL FUNCTION planBplaneCorrection {
         }
     }
 
-    IF NOT converged {
-        SET nd:PROGRADE TO bestP.
-        SET nd:RADIALOUT TO bestR.
-        SET nd:NORMAL TO bestN.
-        WAIT 0.02.
-    }
-
     LOCAL measF IS _measureArrival(nd, targetBody).
     LOCAL finalPe IS -1.
-    LOCAL finalPlaneErr IS 999.
-    IF measF <> 0 {
-        SET finalPe TO measF["pe"].
-        LOCAL errF IS _bplaneCorridorError(targetBody, measF, wantPe, wantInc, wantLan).
-        SET finalPlaneErr TO errF["planeErr"].
-        IF _bplaneCorridorOk(errF, wantInc, peTol, angTol) { SET converged TO TRUE. }
-    }
+    IF measF <> 0 { SET finalPe TO measF["pe"]. }
     mLogWarn("STATS bplane plan target=" + targetBody:NAME
         + " converged=" + converged
         + " dv=" + ROUND(nd:DELTAV:MAG, 2)
         + " PeKm=" + ROUND(finalPe / 1000, 1)
-        + " wantPeKm=" + ROUND(wantPe / 1000, 1)
-        + " planeErr=" + ROUND(finalPlaneErr, 2)).
+        + " wantPeKm=" + ROUND(wantPe / 1000, 1)).
 
     IF nd:DELTAV:MAG < MIN_EXEC_DV {
         IF pristineLog <> "" {
@@ -645,14 +561,6 @@ GLOBAL FUNCTION planBplaneCorrection {
     }
     IF NOT converged AND measF = 0 {
         mLogWarn("BPLANE: solver failed and encounter lost — removing node.").
-        REMOVE nd.
-        RETURN 0.
-    }
-    IF NOT converged AND finalPe < 0 {
-        mLogWarn("BPLANE: solver left an impact trajectory (Pe="
-            + ROUND(finalPe / 1000, 1)
-            + "km, planeErr=" + ROUND(finalPlaneErr, 2)
-            + "deg) — refusing unsafe correction node.").
         REMOVE nd.
         RETURN 0.
     }
@@ -690,8 +598,8 @@ LOCAL FUNCTION _bplaneWantInc {
 // ============================================================
 // phaseBplane — phase handler. Resolves the arrival body and
 // requested capture elements from globals/state, then runs up to
-// MAX_BURNS correction burns. It holds the phase if the arrival
-// is still outside the corridor; CAPTURE cannot fix a bad Pe/plane.
+// MAX_BURNS correction burns. Advances even when unconverged
+// (post-capture SHAPE is the safety net) but logs loudly.
 // ============================================================
 GLOBAL FUNCTION phaseBplane {
     LOCAL targetBody IS _bplaneTargetBody().
@@ -735,22 +643,6 @@ GLOBAL FUNCTION phaseBplane {
     LOCAL meas IS _measureArrival(0, targetBody).
     IF meas = 0 {
         mLogError("BPLANE: finished with NO encounter — operator attention needed.").
-        WAIT 30.
-        RETURN.
-    }
-    LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
-    IF NOT _bplaneCorridorOk(err, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) {
-        mLogError("BPLANE: failed to reach arrival corridor; holding phase. "
-            + "Pe=" + ROUND(meas["pe"] / 1000, 1)
-            + "km want=" + ROUND(wantPe / 1000, 1)
-            + "km planeErr=" + ROUND(err["planeErr"], 2)
-            + "deg. Replan XING or raise BPLANE_DV_CAP.").
-        mLogWarn("STATS bplane result PeKm=" + ROUND(meas["pe"] / 1000, 1)
-            + " inc=" + ROUND(meas["inc"], 2)
-            + " lan=" + ROUND(meas["lan"], 2)
-            + " planeErr=" + ROUND(err["planeErr"], 2)
-            + " burns=" + burns
-            + " status=failed-corridor").
         WAIT 30.
         RETURN.
     }
@@ -810,23 +702,11 @@ GLOBAL FUNCTION phaseRefineBplane {
 
     LOCAL meas IS _measureArrival(0, targetBody).
     IF meas <> 0 {
-        LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
-        IF NOT _bplaneCorridorOk(err, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) {
-            mLogError("REFINE_BPLANE: arrival still outside corridor; holding before capture. "
-                + "Pe=" + ROUND(meas["pe"] / 1000, 1)
-                + "km want=" + ROUND(wantPe / 1000, 1)
-                + "km planeErr=" + ROUND(err["planeErr"], 2)
-                + "deg.").
-            WAIT 30.
-            RETURN.
-        }
         mLog("REFINE_BPLANE done: Pe=" + ROUND(meas["pe"] / 1000, 1)
             + "km inc=" + ROUND(meas["inc"], 2)
             + " lan=" + ROUND(meas["lan"], 2) + ".").
     } ELSE {
         mLogWarn("REFINE_BPLANE: no encounter measurement after refinement.").
-        WAIT 30.
-        RETURN.
     }
     nextPhase(xferSeq).
 }

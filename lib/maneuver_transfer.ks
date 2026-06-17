@@ -74,7 +74,7 @@ GLOBAL FUNCTION planTransfer {
         IF dir = "RETROPOLAR" { SET captureInc TO 90. }
         IF dir = "RETROGRADE" { SET captureInc TO 180. }
     }
-    IF CAPTURE_INC >= 0 { SET captureInc TO CAPTURE_INC. }
+    SET captureInc TO CAPTURE_INC.
 
     // --- 1. Build raw node ---
     LOCAL nd IS 0.
