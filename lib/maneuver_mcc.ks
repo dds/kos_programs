@@ -56,6 +56,7 @@ GLOBAL FUNCTION phaseMidCourse {
         SET targetAoP TO -1.
     }
 
+    LOCAL alreadyAtTarget IS SHIP:BODY:NAME = target:NAME.
     LOCAL patch IS _getTargetPatch(SHIP, target).
     IF patch = 0 {
         mLogWarn("No encounter with " + target:NAME + ". Skipping MCC.").
@@ -64,7 +65,12 @@ GLOBAL FUNCTION phaseMidCourse {
     }
 
     LOCAL waitTime IS 0.
-    IF SHIP:ORBIT:NEXTPATCH:BODY:NAME <> target:NAME {
+    IF alreadyAtTarget {
+        SET waitTime TO MAX(60, MIN(1800, ETA:PERIAPSIS * 0.25)).
+        mLog("MCC: Already inside " + target:NAME
+            + " SOI — correcting current approach in "
+            + ROUND(waitTime, 0) + "s.").
+    } ELSE IF SHIP:ORBIT:NEXTPATCH:BODY:NAME <> target:NAME {
         SET waitTime TO ETA:TRANSITION + 3600.
         mLog("MCC: Interplanetary — coast " + ROUND(waitTime) + "s past SOI.").
     } ELSE {
@@ -140,7 +146,9 @@ GLOBAL FUNCTION phaseMidCourse {
     LOCAL finalPatch IS _getTargetPatch(nd, target).
     LOCAL minMccDv IS MCC_MIN_DV.
     SET minMccDv TO MCC_MIN_DV.
-    IF ETA:TRANSITION < MCC_LATE_ETA {
+    LOCAL lateEta IS ETA:PERIAPSIS.
+    IF SHIP:ORBIT:HASNEXTPATCH { SET lateEta TO ETA:TRANSITION. }
+    IF lateEta < MCC_LATE_ETA {
         SET minMccDv TO MAX(minMccDv, MCC_LATE_MIN_DV).
         SET minMccDv TO MCC_LATE_MIN_DV.
     }

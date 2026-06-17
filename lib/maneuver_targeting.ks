@@ -67,6 +67,7 @@ GLOBAL FUNCTION _getTargetPatch {
     PARAMETER allowGravityAssist IS _patchAllowGravityAssist().
 
     LOCAL p IS originTarget:ORBIT.
+    IF p:BODY:NAME = targetBody:NAME { RETURN p. }
     UNTIL NOT p:HASNEXTPATCH {
         LOCAL fromBody IS p:BODY.
         SET p TO p:NEXTPATCH.
