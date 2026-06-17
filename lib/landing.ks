@@ -14,6 +14,7 @@ GLOBAL landingSteeringTarget IS V(0, 0, 0).
 GLOBAL LANDING_HUD_INTERVAL IS 5.
 GLOBAL LANDING_HUD_HOLD_TIME IS 30.
 GLOBAL LANDING_BRAKE_ALIGN_LEAD IS 20.
+GLOBAL LANDING_HARD_BRAKE_UP_BIAS IS 0.1.
 GLOBAL LANDING_TOUCHDOWN_ALT IS 3.
 GLOBAL LANDING_TOUCHDOWN_VSPEED IS 1.
 GLOBAL LANDING_TOUCHDOWN_HSPEED IS 1.
@@ -326,6 +327,12 @@ LOCAL FUNCTION _landingBrakeSteeringInfo {
 
     LOCAL retroSteering IS lmRetroSteering(
         ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"]).
+    LOCAL hardBrake IS ctx["H_SPEED"] > APPROACH_HSPEED
+        AND _landingBurnHeight(ctx) > HOVER_ALT * 2.
+    IF hardBrake AND ctx["H_VEL"]:MAG > 0.5 {
+        SET retroSteering TO ((-ctx["H_VEL"]):NORMALIZED
+            + ctx["UP_VEC"] * LANDING_HARD_BRAKE_UP_BIAS):NORMALIZED.
+    }
     LOCAL trajErr IS _landingTrajError(ctx).
     LOCAL impactErr IS trajErr["DIST"].
     LOCAL crossErr IS trajErr["CROSS_SIGNED"].
@@ -351,7 +358,8 @@ LOCAL FUNCTION _landingBrakeSteeringInfo {
         "CROSS_ABS", crossAbs,
         "ALIGN_ERR", VANG(SHIP:FACING:FOREVECTOR, steeringTarget),
         "RETRO_ERR", VANG(SHIP:FACING:FOREVECTOR, retroSteering),
-        "BIAS", biasMag
+        "BIAS", biasMag,
+        "HARD", hardBrake
     ).
 }
 
@@ -373,7 +381,8 @@ LOCAL FUNCTION _landingSetState {
         mLog("BRAKE ALIGN steering: err="
             + ROUND(alignSteerInfo["ALIGN_ERR"],1)
             + "deg retroErr=" + ROUND(alignSteerInfo["RETRO_ERR"],1)
-            + "deg bias=" + ROUND(alignSteerInfo["BIAS"],3) + ".").
+            + "deg bias=" + ROUND(alignSteerInfo["BIAS"],3)
+            + " hard=" + _landingBoolText(alignSteerInfo["HARD"]) + ".").
         SET ctx["HUD_LAST"] TO TIME:SECONDS.
         HUDTEXT("BRAKE ALIGN", LANDING_HUD_HOLD_TIME,
             2, 16, YELLOW, FALSE).
@@ -382,7 +391,8 @@ LOCAL FUNCTION _landingSetState {
         mLog("BRAKING BURN steering: err="
             + ROUND(burnSteerInfo["ALIGN_ERR"],1)
             + "deg retroErr=" + ROUND(burnSteerInfo["RETRO_ERR"],1)
-            + "deg bias=" + ROUND(burnSteerInfo["BIAS"],3) + ".").
+            + "deg bias=" + ROUND(burnSteerInfo["BIAS"],3)
+            + " hard=" + _landingBoolText(burnSteerInfo["HARD"]) + ".").
         _landingSetThrottle(ctx, 1).
         SET ctx["HUD_LAST"] TO TIME:SECONDS.
         HUDTEXT("BRAKING BURN", LANDING_HUD_HOLD_TIME,
@@ -472,7 +482,8 @@ LOCAL FUNCTION _landingBrakeAlignTick {
         + " vEta=" + ROUND(gate["V_ETA"],0)
         + " trErr=" + ROUND(steerInfo["IMPACT_ERR"],0)
         + " x=" + ROUND(steerInfo["CROSS_ERR"],0)
-        + " aErr=" + ROUND(steerInfo["ALIGN_ERR"],1),
+        + " aErr=" + ROUND(steerInfo["ALIGN_ERR"],1)
+        + " hard=" + _landingBoolText(steerInfo["HARD"]),
         1, 2, 13, YELLOW, FALSE).
 
     IF gate["V_NOW"] {
@@ -502,7 +513,9 @@ LOCAL FUNCTION _landingBrakingTick {
     }
 
     LOCAL steerInfo IS _landingBrakeSteeringInfo(ctx).
-    IF ctx["V_SPEED"] < targetVs - 5 {
+    LOCAL forceHorizontalBrake IS horizontalSpeed > APPROACH_HSPEED
+        AND ctx["V_SPEED"] < 0.
+    IF forceHorizontalBrake OR ctx["V_SPEED"] < targetVs - 5 {
         _landingSetThrottle(ctx, 1).
     } ELSE {
         _landingSetThrottle(ctx, lmVerticalThrottle(
@@ -514,9 +527,11 @@ LOCAL FUNCTION _landingBrakingTick {
         + " x=" + ROUND(steerInfo["CROSS_ERR"],0)
         + " xAbs=" + ROUND(steerInfo["CROSS_ABS"],0)
         + " aErr=" + ROUND(steerInfo["ALIGN_ERR"],1)
+        + " hard=" + _landingBoolText(steerInfo["HARD"])
         + " hs=" + ROUND(horizontalSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
-        + "/" + ROUND(targetVs,1),
+        + "/" + ROUND(targetVs,1)
+        + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
         1, 2, 13, YELLOW, FALSE).
 
     IF ctx["HAS_TARGET"]
