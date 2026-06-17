@@ -449,6 +449,17 @@ GLOBAL FUNCTION phaseBplane {
     LOCAL wantInc IS _bplaneWantInc().
 
     LOCAL wantLan IS CAPTURE_LAN.
+    LOCAL wakeMeas IS measureArrival(0, targetBody).
+    IF wakeMeas <> 0 {
+        LOCAL wakeErr IS _bplaneCorridorError(targetBody, wakeMeas, wantPe, wantInc, wantLan).
+        mLog("BPLANE wake: initial arrival Pe="
+            + ROUND(wakeMeas["pe"] / 1000, 1)
+            + "km planeErr=" + ROUND(wakeErr["planeErr"], 2)
+            + "deg inc=" + ROUND(wakeMeas["inc"], 2)
+            + " lan=" + ROUND(wakeMeas["lan"], 2) + ".").
+    } ELSE {
+        mLog("BPLANE wake: no measurable arrival patch yet; planner will acquire if possible.").
+    }
 
     LOCAL burns IS 0.
     UNTIL burns >= MAX_BURNS {
