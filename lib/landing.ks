@@ -304,14 +304,19 @@ LOCAL FUNCTION _landingBrakeGateInfo {
         }
     }
 
+    LOCAL hNow IS ctx["HAS_TARGET"] AND downrangeToTarget > 0
+        AND downrangeToTarget <= hBrakeGate.
+    IF hNow AND burnHeight > hBrakeGate * 2 AND vBurnEta > 60 {
+        SET hNow TO FALSE.
+    }
+
     RETURN LEXICON(
         "DIST", distToTarget,
         "DOWNRANGE", downrangeToTarget,
         "H_BRAKE", brakeDist,
         "H_GATE", hBrakeGate,
         "H_ETA", hBrakeEta,
-        "H_NOW", ctx["HAS_TARGET"] AND downrangeToTarget > 0
-            AND downrangeToTarget <= hBrakeGate,
+        "H_NOW", hNow,
         "V_GATE", vBurnGate,
         "V_ETA", vBurnEta,
         "V_NOW", burnHeight <= vBurnGate,
@@ -537,14 +542,21 @@ LOCAL FUNCTION _landingBrakingTick {
     IF ctx["HAS_TARGET"]
             AND verticalCaptured
             AND horizontalSpeed <= TERMINAL_HSPEED {
-        _landingSetState(ctx, "APPROACH", "vertical and horizontal capture").
+        IF burnHeight > APPROACH_SPEED_ALTITUDE_WINDOW {
+            _landingSetState(ctx, "VERTICAL_DESCENT",
+                "high-altitude vertical and horizontal capture").
+        } ELSE {
+            _landingSetState(ctx, "APPROACH",
+                "vertical and horizontal capture").
+        }
     } ELSE IF burnHeight <= burnDist * BURN_MARGIN
             AND burnHeight <= HOVER_ALT {
         _landingSetState(ctx, "VERTICAL_DESCENT", "low vertical gate").
     } ELSE IF ctx["HAS_TARGET"]
             AND verticalCaptured
             AND horizontalSpeed <= APPROACH_HSPEED
-            AND distToTarget <= APPROACH_RADIUS {
+            AND distToTarget <= APPROACH_RADIUS
+            AND burnHeight <= APPROACH_SPEED_ALTITUDE_WINDOW {
         _landingSetState(ctx, "APPROACH", "approach corridor captured").
     } ELSE IF NOT ctx["HAS_TARGET"]
             AND verticalCaptured
@@ -559,17 +571,24 @@ LOCAL FUNCTION _landingApproachTick {
     LOCAL distToTarget IS lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
     LOCAL approachHeight IS _landingTargetHeight(ctx).
+    LOCAL bottomAlt IS _landingBottomRadar().
+    LOCAL controlHeight IS MIN(approachHeight, bottomAlt).
     LOCAL maxAcc IS ctx["MAX_ACC"].
     LOCAL horizontalAcc IS MAX(0.1, maxAcc * BRAKE_ACCEL_FRACTION).
     LOCAL desiredSpeed IS MIN(MAX_APPROACH_SPEED,
         SQRT(MAX(0, 2 * horizontalAcc * MAX(0, distToTarget - VERTICAL_RADIUS)))).
     LOCAL descentSpeed IS lmDescentSpeed(
-        approachHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
-    LOCAL timeToHover IS MAX(1, (approachHeight - HOVER_ALT)
+        controlHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
+    LOCAL timeToHover IS MAX(1, (controlHeight - HOVER_ALT)
         / MAX(1, descentSpeed)).
+    SET timeToHover TO MIN(timeToHover, 30).
     LOCAL altitudeLimitedSpeed IS MAX(VERTICAL_HSPEED,
         MAX(0, distToTarget - VERTICAL_RADIUS) / timeToHover).
     SET desiredSpeed TO MIN(desiredSpeed, altitudeLimitedSpeed).
+    LOCAL altitudeCap IS MAX_APPROACH_SPEED
+        * MAX(0, MIN(1, (controlHeight - HOVER_ALT)
+            / APPROACH_SPEED_ALTITUDE_WINDOW)).
+    SET desiredSpeed TO MIN(desiredSpeed, altitudeCap).
     _landingSetSteering(ctx, lmApproachSteering(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
         ctx["UP_VEC"], ctx["POSITION"])).
@@ -580,17 +599,18 @@ LOCAL FUNCTION _landingApproachTick {
 
     _landingHudText(ctx, "APPROACH d=" + ROUND(distToTarget,0)
         + " hT=" + ROUND(approachHeight,0)
+        + " bottom=" + ROUND(bottomAlt,0)
         + " hs=" + ROUND(horizontalSpeed,1)
         + "/" + ROUND(desiredSpeed,1)
+        + " cap=" + ROUND(altitudeCap,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1),
         1, 2, 13, CYAN, FALSE).
 
     IF distToTarget <= VERTICAL_RADIUS
             AND horizontalSpeed <= VERTICAL_HSPEED {
         _landingSetState(ctx, "VERTICAL_DESCENT", "over target").
-    } ELSE IF approachHeight <= HOVER_ALT
-            AND horizontalSpeed <= VERTICAL_HSPEED {
-        _landingSetState(ctx, "VERTICAL_DESCENT", "hover altitude and horizontal velocity killed").
+    } ELSE IF bottomAlt <= TERMINAL_ALT {
+        _landingSetState(ctx, "VERTICAL_DESCENT", "terminal altitude horizontal kill").
     }
 }
 
