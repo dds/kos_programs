@@ -66,7 +66,7 @@ LOCAL FUNCTION _hopSteer {
         + downrange * COS(pitchDeg)):NORMALIZED.
 }
 
-GLOBAL FUNCTION main {
+GLOBAL FUNCTION HOP {
    IF NOT ADDONS:TR:AVAILABLE {
        PRINT "HOP requires Trajectories.".
        mLogError("HOP: Trajectories unavailable; refusing ballistic hop.").
@@ -201,4 +201,4 @@ GLOBAL FUNCTION main {
    REBOOT.
 }
 
-MAIN().
+HOP().
