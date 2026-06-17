@@ -324,6 +324,9 @@ LOCAL FUNCTION _landingBrakingTick {
     LOCAL burnDist IS lmVerticalBurnDistance(
         downSpeed, maxAcc, gravAcc).
     LOCAL burnHeight IS _landingBurnHeight(ctx).
+    LOCAL targetDescent IS lmDescentSpeed(
+        burnHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT).
+    LOCAL verticalCaptured IS downSpeed <= targetDescent + 5.
     LOCAL distToTarget IS 999999.
     IF ctx["HAS_TARGET"] {
         SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
@@ -350,21 +353,25 @@ LOCAL FUNCTION _landingBrakingTick {
         + " trErr=" + ROUND(impactErr,0)
         + " x=" + ROUND(crossErr,0)
         + " hs=" + ROUND(horizontalSpeed,1)
-        + " vs=" + ROUND(ctx["V_SPEED"],1),
+        + " vs=" + ROUND(ctx["V_SPEED"],1)
+        + "/" + ROUND(-targetDescent,1),
         1, 2, 13, YELLOW, FALSE).
 
     IF ctx["HAS_TARGET"]
-            AND (horizontalSpeed <= TERMINAL_HSPEED
-                OR ALT:RADAR <= TERMINAL_ALT) {
-        _landingSetState(ctx, "APPROACH", "terminal handoff").
+            AND verticalCaptured
+            AND horizontalSpeed <= TERMINAL_HSPEED {
+        _landingSetState(ctx, "APPROACH", "vertical and horizontal capture").
     } ELSE IF burnHeight <= burnDist * BURN_MARGIN
             AND burnHeight <= HOVER_ALT {
         _landingSetState(ctx, "VERTICAL_DESCENT", "low vertical gate").
     } ELSE IF ctx["HAS_TARGET"]
-            AND (horizontalSpeed <= APPROACH_HSPEED
-                OR distToTarget <= APPROACH_RADIUS) {
-        _landingSetState(ctx, "APPROACH", "horizontal speed/range captured").
-    } ELSE IF NOT ctx["HAS_TARGET"] AND horizontalSpeed < APPROACH_HSPEED {
+            AND verticalCaptured
+            AND horizontalSpeed <= APPROACH_HSPEED
+            AND distToTarget <= APPROACH_RADIUS {
+        _landingSetState(ctx, "APPROACH", "approach corridor captured").
+    } ELSE IF NOT ctx["HAS_TARGET"]
+            AND verticalCaptured
+            AND horizontalSpeed < APPROACH_HSPEED {
         _landingSetState(ctx, "VERTICAL_DESCENT", "blind horizontal velocity killed").
     }
 }
