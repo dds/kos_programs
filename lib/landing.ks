@@ -312,6 +312,9 @@ LOCAL FUNCTION _landingBrakeGateInfo {
         SET hBrakeEta TO 999999.
         SET hSuppressed TO TRUE.
     }
+    LOCAL hOvershot IS ctx["HAS_TARGET"] AND downrangeToTarget <= 0
+        AND ctx["V_SPEED"] < 0
+        AND burnHeight <= TERRAIN_SAFE_ALT.
 
     RETURN LEXICON(
         "DIST", distToTarget,
@@ -321,6 +324,7 @@ LOCAL FUNCTION _landingBrakeGateInfo {
         "H_ETA", hBrakeEta,
         "H_NOW", hNow,
         "H_SUPPRESSED", hSuppressed,
+        "H_OVERSHOT", hOvershot,
         "V_GATE", vBurnGate,
         "V_ETA", vBurnEta,
         "V_NOW", burnHeight <= vBurnGate,
@@ -446,6 +450,7 @@ LOCAL FUNCTION _landingCoastTick {
         + " hEta=" + ROUND(gate["H_ETA"],0)
         + " vEta=" + ROUND(gate["V_ETA"],0)
         + " hSupp=" + _landingBoolText(gate["H_SUPPRESSED"])
+        + " hOver=" + _landingBoolText(gate["H_OVERSHOT"])
         + " hs=" + ROUND(gate["H_SPEED"],1),
         1, 2, 13, WHITE, FALSE).
 
@@ -457,6 +462,8 @@ LOCAL FUNCTION _landingCoastTick {
         }
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
+    } ELSE IF ctx["HAS_TARGET"] AND gate["H_OVERSHOT"] {
+        _landingSetState(ctx, "BRAKING_BURN", "target passed below safe altitude").
     } ELSE IF ctx["HAS_TARGET"]
             AND MIN(gate["H_ETA"], gate["V_ETA"]) <= LANDING_BRAKE_ALIGN_LEAD {
         _landingSetState(ctx, "BRAKE_ALIGN", "brake alignment lead").
@@ -467,12 +474,13 @@ LOCAL FUNCTION _landingCoastTick {
             SET tti TO 0.
         } ELSE {
             LOCAL disc IS ctx["V_SPEED"] * ctx["V_SPEED"]
-                + 2 * radarAlt * gravAcc.
-            IF disc >= 0 AND gravAcc > 0 {
-                SET tti TO (SQRT(disc) + ctx["V_SPEED"]) / gravAcc.
+                + 2 * radarAlt * gate["GRAV"].
+            IF disc >= 0 AND gate["GRAV"] > 0 {
+                SET tti TO (SQRT(disc) + ctx["V_SPEED"]) / gate["GRAV"].
             }
         }
-        LOCAL burnTime IS downSpeed / MAX(0.1, maxAcc - gravAcc).
+        LOCAL burnTime IS gate["DOWN_SPEED"]
+            / MAX(0.1, gate["MAX_ACC"] - gate["GRAV"]).
         IF tti <= burnTime * BURN_MARGIN {
             _landingSetState(ctx, "BRAKING_BURN", "blind suicide burn gate").
         }
@@ -491,6 +499,7 @@ LOCAL FUNCTION _landingBrakeAlignTick {
         + " hEta=" + ROUND(gate["H_ETA"],0)
         + " vEta=" + ROUND(gate["V_ETA"],0)
         + " hSupp=" + _landingBoolText(gate["H_SUPPRESSED"])
+        + " hOver=" + _landingBoolText(gate["H_OVERSHOT"])
         + " trErr=" + ROUND(steerInfo["IMPACT_ERR"],0)
         + " x=" + ROUND(steerInfo["CROSS_ERR"],0)
         + " aErr=" + ROUND(steerInfo["ALIGN_ERR"],1)
@@ -501,6 +510,8 @@ LOCAL FUNCTION _landingBrakeAlignTick {
         _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
+    } ELSE IF ctx["HAS_TARGET"] AND gate["H_OVERSHOT"] {
+        _landingSetState(ctx, "BRAKING_BURN", "target passed below safe altitude").
     } ELSE IF MIN(gate["H_ETA"], gate["V_ETA"]) > LANDING_BRAKE_ALIGN_LEAD {
         _landingSetState(ctx, "COAST", "brake gate deferred").
     }
