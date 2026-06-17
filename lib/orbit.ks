@@ -92,11 +92,18 @@ GLOBAL FUNCTION waitForSOI {
         SET soiUt TO TIME:SECONDS + SHIP:ORBIT:NEXTPATCHETA.
         SET kacAlarmId TO ensureSoiAlarm(targetBody, soiUt).
     }
+    LOCAL solarRef IS trySolarHoldTick(-1).
     IF soiUt > TIME:SECONDS {
-        coastAutoWarp(soiUt, "SOI coast", kacAlarmId).
+        IF DEFINED BOOT_LIB_RAN
+                AND BOOT_LIB_RAN:CONTAINS("solar")
+                AND shipHasSolarPanels()
+                AND solarRef <= 0 {
+            mLogWarn("SOI coast: auto-warp skipped; no solar flow after orient.").
+        } ELSE {
+            coastAutoWarp(soiUt, "SOI coast", kacAlarmId).
+        }
     }
 
-    LOCAL solarRef IS -1.
     UNTIL SHIP:ORBIT:BODY:NAME = targetBody:NAME {
         SET solarRef TO trySolarHoldTick(solarRef).
         WAIT pollInterval.

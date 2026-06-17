@@ -26,13 +26,35 @@ LOCAL FUNCTION _enterSolarCoast {
     PARAMETER label IS "COAST".
     SET SAS TO TRUE.
     UNLOCK STEERING.
-    trySolarOrient().
+    IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
+            OR SHIP:STATUS = "SUB_ORBITAL")
+            AND DEFINED BOOT_LIB_RAN
+            AND BOOT_LIB_RAN:CONTAINS("solar") {
+        orientForSolar(TRUE, TRUE).
+    } ELSE {
+        trySolarOrient().
+    }
     tryCommandCoreHibernate(TRUE).
-    mLog(label + ": solar coast attitude requested.").
+    LOCAL solarRef IS trySolarHoldTick(-1).
+    mLog(label + ": solar coast attitude armed.").
+    RETURN solarRef.
 }
 
 LOCAL FUNCTION _exitSolarCoast {
     tryCommandCoreHibernate(FALSE).
+}
+
+LOCAL FUNCTION _solarCoastCanWarp {
+    PARAMETER refFlow.
+    PARAMETER label IS "COAST".
+    IF DEFINED BOOT_LIB_RAN
+            AND BOOT_LIB_RAN:CONTAINS("solar")
+            AND shipHasSolarPanels()
+            AND refFlow <= 0 {
+        mLogWarn(label + ": auto-warp skipped; no solar flow after orient.").
+        RETURN FALSE.
+    }
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _transferArrivalUt {
@@ -64,9 +86,12 @@ LOCAL FUNCTION _waitUntilOrSOI {
     PARAMETER targetUt.
     PARAMETER pollInterval IS 10.
     PARAMETER alarmId IS "".
+    PARAMETER solarRef IS -1.
 
-    coastAutoWarp(targetUt, "SOI coast", alarmId).
-    LOCAL solarRef IS -1.
+    SET solarRef TO trySolarHoldTick(solarRef).
+    IF _solarCoastCanWarp(solarRef, "SOI coast") {
+        coastAutoWarp(targetUt, "SOI coast", alarmId).
+    }
     UNTIL TIME:SECONDS >= targetUt OR SHIP:BODY = targetBody {
         SET solarRef TO trySolarHoldTick(solarRef).
         WAIT MIN(pollInterval, MAX(1, targetUt - TIME:SECONDS)).
@@ -127,7 +152,7 @@ GLOBAL FUNCTION phaseCoast {
 
 GLOBAL FUNCTION phaseCoast1Half {
     LOCAL target IS missionTargetBody().
-    _enterSolarCoast("COAST_1HALF").
+    LOCAL solarRef IS _enterSolarCoast("COAST_1HALF").
 
     LOCAL tArrival IS _transferArrivalUt(target).
     IF tArrival <= TIME:SECONDS {
@@ -146,7 +171,7 @@ GLOBAL FUNCTION phaseCoast1Half {
     LOCAL alarmId IS kacEnsureAlarm("Midcourse refine: " + target:NAME,
         tMidpoint,
         "Auto-created by COAST_1HALF").
-    _waitUntilOrSOI(target, tMidpoint, 10, alarmId).
+    _waitUntilOrSOI(target, tMidpoint, 10, alarmId, solarRef).
     IF alarmId <> "" { DELETEALARM(alarmId). }
 
     IF SHIP:BODY = target {
@@ -159,7 +184,7 @@ GLOBAL FUNCTION phaseCoast1Half {
 
 GLOBAL FUNCTION phaseCoast2Half {
     LOCAL target IS missionTargetBody().
-    _enterSolarCoast("COAST_2HALF").
+    LOCAL solarRef IS _enterSolarCoast("COAST_2HALF").
 
     IF SHIP:BODY = target {
         mLog("COAST_2HALF: already inside " + target:NAME + " SOI.").
@@ -186,7 +211,7 @@ GLOBAL FUNCTION phaseCoast2Half {
     LOCAL coastUntil IS MAX(TIME:SECONDS, tArrival - soiBuffer).
     mLog("Coasting toward " + target:NAME + " SOI boundary; buffer="
         + ROUND(soiBuffer, 0) + "s.").
-    _waitUntilOrSOI(target, coastUntil, 10, soiAlarmId).
+    _waitUntilOrSOI(target, coastUntil, 10, soiAlarmId, solarRef).
 
     IF SHIP:BODY = target AND soiAlarmId <> "" {
         DELETEALARM(soiAlarmId).
