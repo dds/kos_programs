@@ -12,7 +12,9 @@
 GLOBAL landingAbortFlag IS FALSE.
 GLOBAL landingSteeringTarget IS V(0, 0, 0).
 GLOBAL LANDING_HUD_INTERVAL IS 5.
-GLOBAL LANDING_HUD_HOLD_TIME IS 30.
+GLOBAL LANDING_HUD_NOTICE_INTERVAL IS 5.
+GLOBAL LANDING_HUD_NOTICE_HOLD_TIME IS 6.
+GLOBAL LANDING_HUD_NOTICE_LOOKAHEAD IS 90.
 GLOBAL LANDING_BRAKE_ALIGN_LEAD IS 20.
 GLOBAL LANDING_HARD_BRAKE_UP_BIAS IS 0.1.
 GLOBAL LANDING_TOUCHDOWN_ALT IS 3.
@@ -166,8 +168,44 @@ LOCAL FUNCTION _landingHudText {
     IF TIME:SECONDS - ctx["HUD_LAST"] < LANDING_HUD_INTERVAL { RETURN. }
     SET ctx["HUD_LAST"] TO TIME:SECONDS.
     mLog(text).
-    HUDTEXT(text, MAX(holdTime, LANDING_HUD_HOLD_TIME),
-        style, size, color, blink).
+}
+
+LOCAL FUNCTION _landingHudNotice {
+    PARAMETER ctx.
+    PARAMETER text.
+    PARAMETER color.
+    PARAMETER forceFlag IS FALSE.
+
+    IF NOT forceFlag
+            AND TIME:SECONDS - ctx["HUD_NOTICE_LAST"]
+                < LANDING_HUD_NOTICE_INTERVAL {
+        RETURN.
+    }
+    IF NOT forceFlag AND text = ctx["HUD_NOTICE_TEXT"] {
+        RETURN.
+    }
+    SET ctx["HUD_NOTICE_TEXT"] TO text.
+    SET ctx["HUD_NOTICE_LAST"] TO TIME:SECONDS.
+    HUDTEXT(text, LANDING_HUD_NOTICE_HOLD_TIME,
+        2, 16, color, FALSE).
+}
+
+LOCAL FUNCTION _landingHudEtaNotice {
+    PARAMETER ctx.
+    PARAMETER actionText.
+    PARAMETER etaSeconds.
+    PARAMETER color.
+
+    IF etaSeconds < 0 { SET etaSeconds TO 0. }
+    IF etaSeconds > LANDING_HUD_NOTICE_LOOKAHEAD { RETURN. }
+
+    LOCAL roundedEta IS ROUND(etaSeconds, 0).
+    LOCAL noticeText IS actionText + " next in "
+        + roundedEta + " seconds.".
+    IF roundedEta <= 30 {
+        SET noticeText TO actionText + " in T-" + roundedEta + ".".
+    }
+    _landingHudNotice(ctx, noticeText, color, FALSE).
 }
 
 LOCAL FUNCTION _landingBottomRadar {
@@ -403,9 +441,7 @@ LOCAL FUNCTION _landingSetState {
             + "deg retroErr=" + ROUND(alignSteerInfo["RETRO_ERR"],1)
             + "deg bias=" + ROUND(alignSteerInfo["BIAS"],3)
             + " hard=" + _landingBoolText(alignSteerInfo["HARD"]) + ".").
-        SET ctx["HUD_LAST"] TO TIME:SECONDS.
-        HUDTEXT("BRAKE ALIGN", LANDING_HUD_HOLD_TIME,
-            2, 16, YELLOW, FALSE).
+        _landingHudNotice(ctx, "Performing braking alignment.", YELLOW, TRUE).
     } ELSE IF nextState = "BRAKING_BURN" {
         LOCAL burnSteerInfo IS _landingBrakeSteeringInfo(ctx).
         mLog("BRAKING BURN steering: err="
@@ -414,20 +450,15 @@ LOCAL FUNCTION _landingSetState {
             + "deg bias=" + ROUND(burnSteerInfo["BIAS"],3)
             + " hard=" + _landingBoolText(burnSteerInfo["HARD"]) + ".").
         _landingSetThrottle(ctx, 1).
-        SET ctx["HUD_LAST"] TO TIME:SECONDS.
-        HUDTEXT("BRAKING BURN", LANDING_HUD_HOLD_TIME,
-            2, 16, YELLOW, FALSE).
+        _landingHudNotice(ctx, "Performing braking burn.", YELLOW, TRUE).
     } ELSE IF nextState = "APPROACH" {
-        SET ctx["HUD_LAST"] TO TIME:SECONDS.
-        HUDTEXT("APPROACH", LANDING_HUD_HOLD_TIME,
-            2, 16, CYAN, FALSE).
+        _landingHudNotice(ctx, "Performing approach.", CYAN, TRUE).
     } ELSE IF nextState = "VERTICAL_DESCENT" {
         vesselDeployGear().
-        SET ctx["HUD_LAST"] TO TIME:SECONDS.
-        HUDTEXT("VERTICAL DESCENT", LANDING_HUD_HOLD_TIME,
-            2, 16, GREEN, FALSE).
+        _landingHudNotice(ctx, "Performing vertical descent.", GREEN, TRUE).
     } ELSE IF nextState = "TOUCHDOWN" {
         _landingSetThrottle(ctx, 0).
+        _landingHudNotice(ctx, "Touchdown.", GREEN, TRUE).
     }
 }
 
@@ -460,6 +491,14 @@ LOCAL FUNCTION _landingCoastTick {
         + " hOver=" + _landingBoolText(gate["H_OVERSHOT"])
         + " hs=" + ROUND(gate["H_SPEED"],1),
         1, 2, 13, WHITE, FALSE).
+
+    LOCAL nextBrakeEta IS MIN(gate["H_ETA"], gate["V_ETA"]).
+    IF ctx["HAS_TARGET"] AND nextBrakeEta < 999999 {
+        _landingHudEtaNotice(ctx, "Braking alignment",
+            nextBrakeEta - LANDING_BRAKE_ALIGN_LEAD, YELLOW).
+    } ELSE IF nextBrakeEta < 999999 {
+        _landingHudEtaNotice(ctx, "Braking burn", nextBrakeEta, YELLOW).
+    }
 
     IF gate["V_NOW"] {
         IF ctx["HAS_TARGET"] {
@@ -512,6 +551,14 @@ LOCAL FUNCTION _landingBrakeAlignTick {
         + " aErr=" + ROUND(steerInfo["ALIGN_ERR"],1)
         + " hard=" + _landingBoolText(steerInfo["HARD"]),
         1, 2, 13, YELLOW, FALSE).
+
+    LOCAL nextBurnEta IS MIN(gate["H_ETA"], gate["V_ETA"]).
+    IF gate["H_OVERSHOT"] OR gate["H_NOW"] OR gate["V_NOW"] {
+        SET nextBurnEta TO 0.
+    }
+    IF nextBurnEta < 999999 {
+        _landingHudEtaNotice(ctx, "Braking burn", nextBurnEta, YELLOW).
+    }
 
     IF gate["V_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
@@ -574,6 +621,17 @@ LOCAL FUNCTION _landingBrakingTick {
         + "/" + ROUND(targetVs,1)
         + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
         1, 2, 13, YELLOW, FALSE).
+
+    IF ctx["HAS_TARGET"] {
+        IF burnHeight > APPROACH_SPEED_ALTITUDE_WINDOW {
+            _landingHudEtaNotice(ctx, "Approach",
+                (burnHeight - APPROACH_SPEED_ALTITUDE_WINDOW)
+                    / MAX(1, downSpeed), CYAN).
+        }
+    } ELSE IF burnHeight > HOVER_ALT {
+        _landingHudEtaNotice(ctx, "Vertical descent",
+            (burnHeight - HOVER_ALT) / MAX(1, downSpeed), GREEN).
+    }
 
     IF ctx["HAS_TARGET"]
             AND verticalCaptured
@@ -644,6 +702,13 @@ LOCAL FUNCTION _landingApproachTick {
         + " vs=" + ROUND(ctx["V_SPEED"],1),
         1, 2, 13, CYAN, FALSE).
 
+    LOCAL verticalEta IS 0.
+    IF bottomAlt > TERMINAL_ALT {
+        SET verticalEta TO (bottomAlt - TERMINAL_ALT)
+            / MAX(1, ctx["DOWN_SPEED"]).
+    }
+    _landingHudEtaNotice(ctx, "Vertical descent", verticalEta, GREEN).
+
     IF distToTarget <= VERTICAL_RADIUS
             AND horizontalSpeed <= VERTICAL_HSPEED {
         _landingSetState(ctx, "VERTICAL_DESCENT", "over target").
@@ -688,6 +753,12 @@ LOCAL FUNCTION _landingVerticalTick {
         + " hs=" + ROUND(horizontalSpeed,1)
         + " hover=" + _landingBoolText(finalHover),
         1, 2, 13, GREEN, FALSE).
+
+    IF bottomAlt > LANDING_TOUCHDOWN_ALT {
+        _landingHudEtaNotice(ctx, "Touchdown",
+            (bottomAlt - LANDING_TOUCHDOWN_ALT)
+                / MAX(0.1, ctx["DOWN_SPEED"]), GREEN).
+    }
 }
 
 LOCAL FUNCTION _landingSurfaceSettleTick {
@@ -732,7 +803,6 @@ LOCAL FUNCTION _landingFinish {
     mLog("TOUCHDOWN. vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s"
         + "  lat=" + ROUND(SHIP:LATITUDE,4)
         + "  lng=" + ROUND(SHIP:LONGITUDE,4)).
-    HUDTEXT("TOUCHDOWN!", LANDING_HUD_HOLD_TIME, 2, 20, GREEN, FALSE).
     stateSet("landing_lat",  SHIP:LATITUDE).
     stateSet("landing_lng",  SHIP:LONGITUDE).
     stateSet("landing_time", TIME:SECONDS).
@@ -793,6 +863,8 @@ GLOBAL FUNCTION landExecute {
         "CROSS_PID", crossPid,
         "TERRAIN_DONE", terrainDone,
         "HUD_LAST", TIME:SECONDS - LANDING_HUD_INTERVAL,
+        "HUD_NOTICE_LAST", TIME:SECONDS - LANDING_HUD_NOTICE_INTERVAL,
+        "HUD_NOTICE_TEXT", "",
         "TOUCHDOWN_TICKS", 0,
         "TOUCHDOWN_SETTLED", FALSE,
         "TARGET_STEERING", SHIP:UP:VECTOR,
