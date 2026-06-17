@@ -30,8 +30,8 @@ LOCAL FUNCTION _falconPrintConfig {
     flightPlanIdentity().
     flightPlanSection("MISSION").
     flightPlanRow("BAND", phaseBand()).
-    flightPlanRow("TARGET", MISSION["target"]).
-    flightPlanRow("PAYLOADS", MISSION["payloads"]).
+    flightPlanRow("TARGET", TARGET_).
+    flightPlanRow("PAYLOADS", PAYLOAD).
     flightPlanConfig().
     flightPlanSection("SEQUENCE").
     flightPlanSequence(seq).
