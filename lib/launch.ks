@@ -26,6 +26,10 @@ LOCAL FUNCTION _ascentTwr {
     RETURN SHIP:AVAILABLETHRUST / (SHIP:MASS * 9.81).
 }
 
+LOCAL FUNCTION _launchHasAtmosphere {
+    RETURN SHIP:BODY:ATM:HEIGHT > 0.
+}
+
 LOCAL _stagingArmed IS FALSE.
 LOCAL _noThrustStages IS 0.
 
@@ -71,6 +75,7 @@ LOCAL FUNCTION _logAscentTelemetry {
 }
 
 LOCAL FUNCTION _badAscentTrajectory {
+    IF NOT _launchHasAtmosphere() { RETURN FALSE. }
     IF _launchAge() < 45 { RETURN FALSE. }
     IF SHIP:ALTITUDE < 1000 { RETURN FALSE. }
     IF SHIP:VELOCITY:SURFACE:MAG < 50 { RETURN FALSE. }
@@ -129,7 +134,8 @@ GLOBAL FUNCTION phaseLaunch {
             _logAscentTelemetry("abort-anomalous-trajectory").
         }
 
-        IF SHIP:ALTITUDE < 40000
+        IF _launchHasAtmosphere()
+                AND SHIP:ALTITUDE < 40000
                 AND SHIP:VELOCITY:SURFACE:MAG > 10
                 AND VANG(SHIP:FACING:FOREVECTOR, SHIP:VELOCITY:SURFACE) > 45 {
             SET abortTriggered TO TRUE.
@@ -176,6 +182,11 @@ GLOBAL FUNCTION phaseLaunch {
         RETURN.
     }
     countdown(3).
+
+    IF ABORT OR stateGet("phase", "") = "ABORT" {
+        mLogWarn("Launch countdown interrupted by abort; holding ABORT phase.").
+        RETURN.
+    }
 
     STAGE.
     mLog("Launch — STAGE fired.").
