@@ -404,9 +404,10 @@ LOCAL FUNCTION _landingBrakeGateInfo {
 
     LOCAL vBurnGate IS burnDist * BURN_MARGIN + BRAKE_MARGIN.
     LOCAL vBurnEta IS 999999.
-    IF burnHeight <= vBurnGate {
+    LOCAL vNow IS ctx["DOWN_SPEED"] > 0.5 AND burnHeight <= vBurnGate.
+    IF vNow {
         SET vBurnEta TO 0.
-    } ELSE IF gravAcc > 0 {
+    } ELSE IF ctx["V_SPEED"] < 0 AND gravAcc > 0 {
         LOCAL vDelta IS burnHeight - vBurnGate.
         LOCAL vDisc IS ctx["V_SPEED"] * ctx["V_SPEED"] + 2 * vDelta * gravAcc.
         IF vDisc >= 0 {
@@ -439,7 +440,7 @@ LOCAL FUNCTION _landingBrakeGateInfo {
         "H_OVERSHOT", hOvershot,
         "V_GATE", vBurnGate,
         "V_ETA", vBurnEta,
-        "V_NOW", burnHeight <= vBurnGate,
+        "V_NOW", vNow,
         "MAX_ACC", maxAcc,
         "GRAV", gravAcc,
         "DOWN_SPEED", downSpeed,
@@ -723,7 +724,8 @@ LOCAL FUNCTION _landingBrakingTick {
                 "post-brake lateral stabilization").
         }
     } ELSE IF burnHeight <= burnDist * BURN_MARGIN
-            AND burnHeight <= HOVER_ALT {
+            AND burnHeight <= HOVER_ALT
+            AND (NOT ctx["HAS_TARGET"] OR horizontalSpeed <= APPROACH_HSPEED) {
         _landingSetState(ctx, "VERTICAL_DESCENT", "low vertical gate").
     } ELSE IF ctx["HAS_TARGET"]
             AND verticalCaptured
