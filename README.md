@@ -53,6 +53,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
+| `RUNPATH("0:/cmd/geodistance.ks", lat1, lng1, lat2, lng2).` | Surface distance between two lat/lng points on the current body |
 | `RUNPATH("0:/cmd/kscsplash.ks").` | Target water splashdown offshore of KSC |
 | `RUNPATH("0:/cmd/zombie.ks").` | Power-cycle every *other* CPU on the vessel |
 
