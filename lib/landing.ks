@@ -150,6 +150,7 @@ LOCAL FUNCTION _landingHudText {
 
     IF TIME:SECONDS - ctx["HUD_LAST"] < LANDING_HUD_INTERVAL { RETURN. }
     SET ctx["HUD_LAST"] TO TIME:SECONDS.
+    mLog(text).
     HUDTEXT(text, holdTime, style, size, color, blink).
 }
 
