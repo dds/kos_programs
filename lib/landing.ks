@@ -13,6 +13,7 @@ GLOBAL landingAbortFlag IS FALSE.
 GLOBAL landingSteeringTarget IS V(0, 0, 0).
 GLOBAL LANDING_HUD_INTERVAL IS 5.
 GLOBAL LANDING_HUD_HOLD_TIME IS 30.
+GLOBAL LANDING_BRAKE_ALIGN_LEAD IS 10.
 GLOBAL LANDING_TOUCHDOWN_ALT IS 3.
 GLOBAL LANDING_TOUCHDOWN_VSPEED IS 1.
 GLOBAL LANDING_TOUCHDOWN_HSPEED IS 5.
@@ -259,43 +260,8 @@ LOCAL FUNCTION _landingTouchdownSettled {
     RETURN ctx["TOUCHDOWN_TICKS"] >= LANDING_TOUCHDOWN_SETTLE_TICKS.
 }
 
-LOCAL FUNCTION _landingSetState {
+LOCAL FUNCTION _landingBrakeGateInfo {
     PARAMETER ctx.
-    PARAMETER nextState.
-    PARAMETER reason.
-
-    LOCAL prevState IS ctx["STATE"].
-    IF prevState = nextState { RETURN. }
-    _landingStateLog(ctx, prevState, nextState, reason).
-    SET ctx["STATE"] TO nextState.
-    SET ctx["STATE_ENTERED"] TO TIME:SECONDS.
-    stateSet("landing_state", nextState).
-
-    IF nextState = "BRAKING_BURN" {
-        _landingSetThrottle(ctx, 1).
-        SET ctx["HUD_LAST"] TO TIME:SECONDS.
-        HUDTEXT("BRAKING BURN", LANDING_HUD_HOLD_TIME,
-            2, 16, YELLOW, FALSE).
-    } ELSE IF nextState = "APPROACH" {
-        SET ctx["HUD_LAST"] TO TIME:SECONDS.
-        HUDTEXT("APPROACH", LANDING_HUD_HOLD_TIME,
-            2, 16, CYAN, FALSE).
-    } ELSE IF nextState = "VERTICAL_DESCENT" {
-        vesselDeployGear().
-        SET ctx["HUD_LAST"] TO TIME:SECONDS.
-        HUDTEXT("VERTICAL DESCENT", LANDING_HUD_HOLD_TIME,
-            2, 16, GREEN, FALSE).
-    } ELSE IF nextState = "TOUCHDOWN" {
-        _landingSetThrottle(ctx, 0).
-    }
-}
-
-LOCAL FUNCTION _landingCoastTick {
-    PARAMETER ctx.
-
-    _landingSetThrottle(ctx, 0).
-    _landingSetSteering(ctx, lmRetroSteering(
-        ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"])).
 
     LOCAL maxAcc IS ctx["MAX_ACC"].
     LOCAL gravAcc IS ctx["GRAV"].
@@ -312,16 +278,6 @@ LOCAL FUNCTION _landingCoastTick {
     IF ctx["HAS_TARGET"] {
         SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
         SET downrangeToTarget TO _landingDownrangeToTarget(ctx).
-    }
-    IF ctx["HAS_TARGET"] AND NOT ctx["TERRAIN_DONE"]
-            AND ALT:RADAR <= GUIDANCE_ALT {
-        LOCAL terrainResult IS _landingTerrainCheck(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
-        SET ctx["TERRAIN_DONE"] TO TRUE.
-        IF terrainResult["SHIFTED"] {
-            SET ctx["TARGET_LAT"] TO terrainResult["LAT"].
-            SET ctx["TARGET_LNG"] TO terrainResult["LNG"].
-            SET ctx["TARGET_ELEVATION"] TO terrainResult["ELEVATION"].
-        }
     }
 
     LOCAL hBrakeGate IS brakeDist + BRAKE_MARGIN.
@@ -347,24 +303,130 @@ LOCAL FUNCTION _landingCoastTick {
         }
     }
 
-    _landingHudText(ctx, "COAST d=" + ROUND(distToTarget,0)
-        + " dr=" + ROUND(downrangeToTarget,0)
-        + " hBrake=" + ROUND(brakeDist,0)
-        + " hEta=" + ROUND(hBrakeEta,0)
-        + " vEta=" + ROUND(vBurnEta,0)
-        + " hs=" + ROUND(horizontalSpeed,1),
+    RETURN LEXICON(
+        "DIST", distToTarget,
+        "DOWNRANGE", downrangeToTarget,
+        "H_BRAKE", brakeDist,
+        "H_GATE", hBrakeGate,
+        "H_ETA", hBrakeEta,
+        "H_NOW", ctx["HAS_TARGET"] AND downrangeToTarget > 0
+            AND downrangeToTarget <= hBrakeGate,
+        "V_GATE", vBurnGate,
+        "V_ETA", vBurnEta,
+        "V_NOW", burnHeight <= vBurnGate,
+        "MAX_ACC", maxAcc,
+        "GRAV", gravAcc,
+        "DOWN_SPEED", downSpeed,
+        "H_SPEED", horizontalSpeed
+    ).
+}
+
+LOCAL FUNCTION _landingBrakeSteeringInfo {
+    PARAMETER ctx.
+
+    LOCAL retroSteering IS lmRetroSteering(
+        ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"]).
+    LOCAL trajErr IS _landingTrajError(ctx).
+    LOCAL impactErr IS trajErr["DIST"].
+    LOCAL crossErr IS trajErr["CROSS_SIGNED"].
+    LOCAL crossAbs IS trajErr["CROSS"].
+    LOCAL crossPid IS ctx["CROSS_PID"].
+    IF trajErr["FOUND"] AND crossAbs > GUIDANCE_CORRECTION_THRESHOLD {
+        LOCAL biasDeg IS crossPid:UPDATE(TIME:SECONDS, crossErr).
+        LOCAL biasMag IS MAX(-TR_BRAKE_BIAS,
+            MIN(TR_BRAKE_BIAS, SIN(biasDeg))).
+        _landingSetSteering(ctx,
+            (retroSteering + trajErr["CROSS_AXIS"] * biasMag):NORMALIZED).
+    } ELSE {
+        crossPid:RESET().
+        _landingSetSteering(ctx, retroSteering).
+    }
+    SET ctx["CROSS_PID"] TO crossPid.
+
+    RETURN LEXICON(
+        "IMPACT_ERR", impactErr,
+        "CROSS_ERR", crossErr,
+        "CROSS_ABS", crossAbs
+    ).
+}
+
+LOCAL FUNCTION _landingSetState {
+    PARAMETER ctx.
+    PARAMETER nextState.
+    PARAMETER reason.
+
+    LOCAL prevState IS ctx["STATE"].
+    IF prevState = nextState { RETURN. }
+    _landingStateLog(ctx, prevState, nextState, reason).
+    SET ctx["STATE"] TO nextState.
+    SET ctx["STATE_ENTERED"] TO TIME:SECONDS.
+    stateSet("landing_state", nextState).
+
+    IF nextState = "BRAKE_ALIGN" {
+        _landingSetThrottle(ctx, 0).
+        _landingBrakeSteeringInfo(ctx).
+        SET ctx["HUD_LAST"] TO TIME:SECONDS.
+        HUDTEXT("BRAKE ALIGN", LANDING_HUD_HOLD_TIME,
+            2, 16, YELLOW, FALSE).
+    } ELSE IF nextState = "BRAKING_BURN" {
+        _landingBrakeSteeringInfo(ctx).
+        _landingSetThrottle(ctx, 1).
+        SET ctx["HUD_LAST"] TO TIME:SECONDS.
+        HUDTEXT("BRAKING BURN", LANDING_HUD_HOLD_TIME,
+            2, 16, YELLOW, FALSE).
+    } ELSE IF nextState = "APPROACH" {
+        SET ctx["HUD_LAST"] TO TIME:SECONDS.
+        HUDTEXT("APPROACH", LANDING_HUD_HOLD_TIME,
+            2, 16, CYAN, FALSE).
+    } ELSE IF nextState = "VERTICAL_DESCENT" {
+        vesselDeployGear().
+        SET ctx["HUD_LAST"] TO TIME:SECONDS.
+        HUDTEXT("VERTICAL DESCENT", LANDING_HUD_HOLD_TIME,
+            2, 16, GREEN, FALSE).
+    } ELSE IF nextState = "TOUCHDOWN" {
+        _landingSetThrottle(ctx, 0).
+    }
+}
+
+LOCAL FUNCTION _landingCoastTick {
+    PARAMETER ctx.
+
+    _landingSetThrottle(ctx, 0).
+    _landingSetSteering(ctx, lmRetroSteering(
+        ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"])).
+
+    IF ctx["HAS_TARGET"] AND NOT ctx["TERRAIN_DONE"]
+            AND ALT:RADAR <= GUIDANCE_ALT {
+        LOCAL terrainResult IS _landingTerrainCheck(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+        SET ctx["TERRAIN_DONE"] TO TRUE.
+        IF terrainResult["SHIFTED"] {
+            SET ctx["TARGET_LAT"] TO terrainResult["LAT"].
+            SET ctx["TARGET_LNG"] TO terrainResult["LNG"].
+            SET ctx["TARGET_ELEVATION"] TO terrainResult["ELEVATION"].
+        }
+    }
+
+    LOCAL gate IS _landingBrakeGateInfo(ctx).
+
+    _landingHudText(ctx, "COAST d=" + ROUND(gate["DIST"],0)
+        + " dr=" + ROUND(gate["DOWNRANGE"],0)
+        + " hBrake=" + ROUND(gate["H_BRAKE"],0)
+        + " hEta=" + ROUND(gate["H_ETA"],0)
+        + " vEta=" + ROUND(gate["V_ETA"],0)
+        + " hs=" + ROUND(gate["H_SPEED"],1),
         1, 2, 13, WHITE, FALSE).
 
-    IF burnHeight <= vBurnGate {
+    IF gate["V_NOW"] {
         IF ctx["HAS_TARGET"] {
             _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
         } ELSE {
             _landingSetState(ctx, "VERTICAL_DESCENT", "vertical burn gate").
         }
-    } ELSE IF ctx["HAS_TARGET"]
-            AND downrangeToTarget > 0
-            AND downrangeToTarget <= hBrakeGate {
+    } ELSE IF ctx["HAS_TARGET"] AND gate["H_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
+    } ELSE IF ctx["HAS_TARGET"]
+            AND MIN(gate["H_ETA"], gate["V_ETA"]) <= LANDING_BRAKE_ALIGN_LEAD {
+        _landingSetState(ctx, "BRAKE_ALIGN", "brake alignment lead").
     } ELSE IF NOT ctx["HAS_TARGET"] {
         LOCAL tti IS 999999.
         LOCAL radarAlt IS ALT:RADAR.
@@ -381,6 +443,28 @@ LOCAL FUNCTION _landingCoastTick {
         IF tti <= burnTime * BURN_MARGIN {
             _landingSetState(ctx, "BRAKING_BURN", "blind suicide burn gate").
         }
+    }
+}
+
+LOCAL FUNCTION _landingBrakeAlignTick {
+    PARAMETER ctx.
+
+    _landingSetThrottle(ctx, 0).
+    LOCAL steerInfo IS _landingBrakeSteeringInfo(ctx).
+    LOCAL gate IS _landingBrakeGateInfo(ctx).
+
+    _landingHudText(ctx, "ALIGN d=" + ROUND(gate["DIST"],0)
+        + " dr=" + ROUND(gate["DOWNRANGE"],0)
+        + " hEta=" + ROUND(gate["H_ETA"],0)
+        + " vEta=" + ROUND(gate["V_ETA"],0)
+        + " trErr=" + ROUND(steerInfo["IMPACT_ERR"],0)
+        + " x=" + ROUND(steerInfo["CROSS_ERR"],0),
+        1, 2, 13, YELLOW, FALSE).
+
+    IF gate["V_NOW"] {
+        _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
+    } ELSE IF ctx["HAS_TARGET"] AND gate["H_NOW"] {
+        _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
     }
 }
 
@@ -404,29 +488,12 @@ LOCAL FUNCTION _landingBrakingTick {
         SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     }
 
-    LOCAL retroSteering IS lmRetroSteering(
-        ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"]).
-    LOCAL trajErr IS _landingTrajError(ctx).
-    LOCAL impactErr IS trajErr["DIST"].
-    LOCAL crossErr IS trajErr["CROSS_SIGNED"].
-    LOCAL crossAbs IS trajErr["CROSS"].
-    LOCAL crossPid IS ctx["CROSS_PID"].
-    IF trajErr["FOUND"] AND crossAbs > GUIDANCE_CORRECTION_THRESHOLD {
-        LOCAL biasDeg IS crossPid:UPDATE(TIME:SECONDS, crossErr).
-        LOCAL biasMag IS MAX(-TR_BRAKE_BIAS,
-            MIN(TR_BRAKE_BIAS, SIN(biasDeg))).
-        _landingSetSteering(ctx,
-            (retroSteering + trajErr["CROSS_AXIS"] * biasMag):NORMALIZED).
-    } ELSE {
-        crossPid:RESET().
-        _landingSetSteering(ctx, retroSteering).
-    }
-    SET ctx["CROSS_PID"] TO crossPid.
+    LOCAL steerInfo IS _landingBrakeSteeringInfo(ctx).
 
     _landingHudText(ctx, "BRAKE d=" + ROUND(distToTarget,0)
-        + " trErr=" + ROUND(impactErr,0)
-        + " x=" + ROUND(crossErr,0)
-        + " xAbs=" + ROUND(crossAbs,0)
+        + " trErr=" + ROUND(steerInfo["IMPACT_ERR"],0)
+        + " x=" + ROUND(steerInfo["CROSS_ERR"],0)
+        + " xAbs=" + ROUND(steerInfo["CROSS_ABS"],0)
         + " hs=" + ROUND(horizontalSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(-targetDescent,1),
@@ -519,6 +586,8 @@ LOCAL FUNCTION _landingGuidanceTick {
 
     IF ctx["STATE"] = "COAST" {
         _landingCoastTick(ctx).
+    } ELSE IF ctx["STATE"] = "BRAKE_ALIGN" {
+        _landingBrakeAlignTick(ctx).
     } ELSE IF ctx["STATE"] = "BRAKING_BURN" {
         _landingBrakingTick(ctx).
     } ELSE IF ctx["STATE"] = "APPROACH" {
