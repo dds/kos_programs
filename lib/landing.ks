@@ -307,7 +307,9 @@ LOCAL FUNCTION _landingBrakeGateInfo {
     LOCAL hNow IS ctx["HAS_TARGET"] AND downrangeToTarget > 0
         AND downrangeToTarget <= hBrakeGate.
     LOCAL hSuppressed IS FALSE.
-    IF hNow AND burnHeight > hBrakeGate * 2 AND vBurnEta > 60 {
+    IF hNow AND burnHeight > TERRAIN_SAFE_ALT
+            AND burnHeight > hBrakeGate * 2
+            AND vBurnEta > 60 {
         SET hNow TO FALSE.
         SET hBrakeEta TO 999999.
         SET hSuppressed TO TRUE.
@@ -340,7 +342,7 @@ LOCAL FUNCTION _landingBrakeSteeringInfo {
 
     LOCAL retroSteering IS lmRetroSteering(
         ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"]).
-    LOCAL hardBrake IS ctx["H_SPEED"] > APPROACH_HSPEED
+    LOCAL hardBrake IS ctx["H_SPEED"] > TERMINAL_HSPEED
         AND _landingBurnHeight(ctx) > HOVER_ALT * 2.
     IF hardBrake AND ctx["H_VEL"]:MAG > 0.5 {
         SET retroSteering TO ((-ctx["H_VEL"]):NORMALIZED
@@ -512,7 +514,8 @@ LOCAL FUNCTION _landingBrakeAlignTick {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_OVERSHOT"] {
         _landingSetState(ctx, "BRAKING_BURN", "target passed below safe altitude").
-    } ELSE IF MIN(gate["H_ETA"], gate["V_ETA"]) > LANDING_BRAKE_ALIGN_LEAD {
+    } ELSE IF NOT gate["H_SUPPRESSED"]
+            AND MIN(gate["H_ETA"], gate["V_ETA"]) > LANDING_BRAKE_ALIGN_LEAD {
         _landingSetState(ctx, "COAST", "brake gate deferred").
     }
 }
@@ -537,8 +540,9 @@ LOCAL FUNCTION _landingBrakingTick {
     }
 
     LOCAL steerInfo IS _landingBrakeSteeringInfo(ctx).
-    LOCAL forceHorizontalBrake IS horizontalSpeed > APPROACH_HSPEED
-        AND ctx["V_SPEED"] < 0.
+    LOCAL forceHorizontalBrake IS ctx["HAS_TARGET"]
+        AND horizontalSpeed > TERMINAL_HSPEED
+        AND burnHeight > HOVER_ALT * 2.
     IF forceHorizontalBrake OR ctx["V_SPEED"] < targetVs - 5 {
         _landingSetThrottle(ctx, 1).
     } ELSE {
@@ -552,6 +556,7 @@ LOCAL FUNCTION _landingBrakingTick {
         + " xAbs=" + ROUND(steerInfo["CROSS_ABS"],0)
         + " aErr=" + ROUND(steerInfo["ALIGN_ERR"],1)
         + " hard=" + _landingBoolText(steerInfo["HARD"])
+        + " hKill=" + _landingBoolText(forceHorizontalBrake)
         + " hs=" + ROUND(horizontalSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)
