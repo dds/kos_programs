@@ -12,6 +12,10 @@
 GLOBAL landingAbortFlag IS FALSE.
 GLOBAL landingSteeringTarget IS V(0, 0, 0).
 GLOBAL LANDING_HUD_INTERVAL IS 5.
+GLOBAL LANDING_TOUCHDOWN_ALT IS 3.
+GLOBAL LANDING_TOUCHDOWN_VSPEED IS 1.
+GLOBAL LANDING_TOUCHDOWN_HSPEED IS 5.
+GLOBAL LANDING_TOUCHDOWN_SETTLE_TICKS IS 6.
 
 // ------------------------------------------------------------
 // Terrain survey - one-shot flat spot check near target
@@ -207,34 +211,50 @@ LOCAL FUNCTION _landingTrajError {
     LOCAL impactInfo IS _landingTrajImpactInfo(ctx).
     IF NOT impactInfo["FOUND"] {
         RETURN LEXICON("FOUND", FALSE, "DIST", 999999,
-            "ALONG", 999999, "CROSS", 999999,
-            "CROSS_CORR", SHIP:UP:VECTOR).
+            "ALONG", 999999, "CROSS", 999999, "CROSS_SIGNED", 999999,
+            "CROSS_AXIS", SHIP:UP:VECTOR).
     }
 
     LOCAL horizontalVel IS ctx["H_VEL"].
     IF horizontalVel:MAG < 0.1 {
         RETURN LEXICON("FOUND", TRUE, "DIST", impactInfo["DIST"],
-            "ALONG", 0, "CROSS", impactInfo["DIST"],
-            "CROSS_CORR", SHIP:UP:VECTOR).
+            "ALONG", 0, "CROSS", impactInfo["DIST"], "CROSS_SIGNED", 0,
+            "CROSS_AXIS", SHIP:UP:VECTOR).
     }
 
     LOCAL upVec IS ctx["UP_VEC"].
     LOCAL travelDir IS VXCL(upVec, horizontalVel):NORMALIZED.
+    LOCAL crossAxis IS VCRS(travelDir, upVec):NORMALIZED.
     LOCAL targetGeo IS LATLNG(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     LOCAL impactGeo IS LATLNG(impactInfo["LAT"], impactInfo["LNG"]).
     LOCAL targetToImpact IS VXCL(upVec, impactGeo:POSITION - targetGeo:POSITION).
     LOCAL alongM IS VDOT(targetToImpact, travelDir).
     LOCAL crossVec IS targetToImpact - travelDir * alongM.
-    LOCAL crossCorr IS upVec.
-    IF crossVec:MAG > 0.01 { SET crossCorr TO (-crossVec):NORMALIZED. }
+    LOCAL signedCross IS VDOT(crossVec, crossAxis).
 
     RETURN LEXICON(
         "FOUND", TRUE,
         "DIST", impactInfo["DIST"],
         "ALONG", alongM,
         "CROSS", crossVec:MAG,
-        "CROSS_CORR", crossCorr
+        "CROSS_SIGNED", signedCross,
+        "CROSS_AXIS", crossAxis
     ).
+}
+
+LOCAL FUNCTION _landingTouchdownSettled {
+    PARAMETER ctx.
+
+    LOCAL onSurface IS SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    LOCAL slowEnough IS ABS(ctx["V_SPEED"]) <= LANDING_TOUCHDOWN_VSPEED
+        AND ctx["H_SPEED"] <= LANDING_TOUCHDOWN_HSPEED.
+    IF onSurface AND _landingBottomRadar() <= LANDING_TOUCHDOWN_ALT
+            AND slowEnough {
+        SET ctx["TOUCHDOWN_TICKS"] TO ctx["TOUCHDOWN_TICKS"] + 1.
+    } ELSE {
+        SET ctx["TOUCHDOWN_TICKS"] TO 0.
+    }
+    RETURN ctx["TOUCHDOWN_TICKS"] >= LANDING_TOUCHDOWN_SETTLE_TICKS.
 }
 
 LOCAL FUNCTION _landingSetState {
@@ -358,15 +378,17 @@ LOCAL FUNCTION _landingBrakingTick {
         ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"]).
     LOCAL trajErr IS _landingTrajError(ctx).
     LOCAL impactErr IS trajErr["DIST"].
-    LOCAL crossErr IS trajErr["CROSS"].
+    LOCAL crossErr IS trajErr["CROSS_SIGNED"].
+    LOCAL crossAbs IS trajErr["CROSS"].
     LOCAL crossPid IS ctx["CROSS_PID"].
-    IF trajErr["FOUND"] AND crossErr > GUIDANCE_CORRECTION_THRESHOLD {
-        LOCAL biasDeg IS ABS(crossPid:UPDATE(TIME:SECONDS, crossErr)).
-        LOCAL biasMag IS MIN(TR_BRAKE_BIAS, SIN(biasDeg)).
+    IF trajErr["FOUND"] AND crossAbs > GUIDANCE_CORRECTION_THRESHOLD {
+        LOCAL biasDeg IS crossPid:UPDATE(TIME:SECONDS, crossErr).
+        LOCAL biasMag IS MAX(-TR_BRAKE_BIAS,
+            MIN(TR_BRAKE_BIAS, SIN(biasDeg))).
         _landingSetSteering(ctx,
-            (retroSteering + trajErr["CROSS_CORR"] * biasMag):NORMALIZED).
+            (retroSteering + trajErr["CROSS_AXIS"] * biasMag):NORMALIZED).
     } ELSE {
-        LOCAL pidReset IS crossPid:UPDATE(TIME:SECONDS, 0).
+        crossPid:RESET().
         _landingSetSteering(ctx, retroSteering).
     }
     SET ctx["CROSS_PID"] TO crossPid.
@@ -374,6 +396,7 @@ LOCAL FUNCTION _landingBrakingTick {
     _landingHudText(ctx, "BRAKE d=" + ROUND(distToTarget,0)
         + " trErr=" + ROUND(impactErr,0)
         + " x=" + ROUND(crossErr,0)
+        + " xAbs=" + ROUND(crossAbs,0)
         + " hs=" + ROUND(horizontalSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(-targetDescent,1),
@@ -461,6 +484,20 @@ LOCAL FUNCTION _landingVerticalTick {
         1, 2, 13, GREEN, FALSE).
 }
 
+LOCAL FUNCTION _landingGuidanceTick {
+    PARAMETER ctx.
+
+    IF ctx["STATE"] = "COAST" {
+        _landingCoastTick(ctx).
+    } ELSE IF ctx["STATE"] = "BRAKING_BURN" {
+        _landingBrakingTick(ctx).
+    } ELSE IF ctx["STATE"] = "APPROACH" {
+        _landingApproachTick(ctx).
+    } ELSE IF ctx["STATE"] = "VERTICAL_DESCENT" {
+        _landingVerticalTick(ctx).
+    }
+}
+
 LOCAL FUNCTION _landingFinish {
     PARAMETER ctx.
 
@@ -526,6 +563,8 @@ GLOBAL FUNCTION landExecute {
         "CROSS_PID", crossPid,
         "TERRAIN_DONE", FALSE,
         "HUD_LAST", TIME:SECONDS - LANDING_HUD_INTERVAL,
+        "TOUCHDOWN_TICKS", 0,
+        "TOUCHDOWN_SETTLED", FALSE,
         "TARGET_STEERING", SHIP:UP:VECTOR,
         "TARGET_THROTTLE", 0
     ).
@@ -543,26 +582,19 @@ GLOBAL FUNCTION landExecute {
     mLog("Landing setup target=" + _landingBoolText(_hasTarget)
         + " tr=" + _landingBoolText(ADDONS:TR:AVAILABLE) + ".").
 
-    UNTIL landingAbortFlag
-            OR SHIP:STATUS = "LANDED"
-            OR SHIP:STATUS = "SPLASHED" {
+    UNTIL landingAbortFlag OR ctx["TOUCHDOWN_SETTLED"] {
         _landingCacheTick(ctx).
 
-        IF vesselNeedsStage() {
-            LOCAL oldState IS ctx["STATE"].
-            _landingSetThrottle(ctx, 0).
-            vesselStageForLanding().
-            IF oldState = "BRAKING_BURN" { _landingSetThrottle(ctx, 1). }
-        }
-
-        IF ctx["STATE"] = "COAST" {
-            _landingCoastTick(ctx).
-        } ELSE IF ctx["STATE"] = "BRAKING_BURN" {
-            _landingBrakingTick(ctx).
-        } ELSE IF ctx["STATE"] = "APPROACH" {
-            _landingApproachTick(ctx).
-        } ELSE IF ctx["STATE"] = "VERTICAL_DESCENT" {
-            _landingVerticalTick(ctx).
+        IF _landingTouchdownSettled(ctx) {
+            SET ctx["TOUCHDOWN_SETTLED"] TO TRUE.
+        } ELSE IF NOT (SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED") {
+            IF vesselNeedsStage() {
+                LOCAL oldState IS ctx["STATE"].
+                _landingSetThrottle(ctx, 0).
+                vesselStageForLanding().
+                IF oldState = "BRAKING_BURN" { _landingSetThrottle(ctx, 1). }
+            }
+            _landingGuidanceTick(ctx).
         }
 
         WAIT 0.05.
