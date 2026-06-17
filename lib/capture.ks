@@ -22,6 +22,14 @@ LOCAL MIDCOURSE_REFINE_FRACTION_DEFAULT IS 0.5.
 LOCAL MIDCOURSE_REFINE_MIN_LEAD_DEFAULT IS 300.
 LOCAL MIDCOURSE_REFINE_MARGIN_DEFAULT IS 60.
 
+LOCAL FUNCTION _enterSolarCoast {
+    PARAMETER label IS "COAST".
+    SET SAS TO TRUE.
+    UNLOCK STEERING.
+    trySolarOrient().
+    mLog(label + ": solar coast attitude requested.").
+}
+
 LOCAL FUNCTION _transferArrivalUt {
     PARAMETER targetBody.
 
@@ -102,8 +110,7 @@ LOCAL FUNCTION _timeMidcourseUt {
 
 GLOBAL FUNCTION phaseCoast {
     LOCAL target IS missionTargetBody().
-    SET SAS TO TRUE.
-    UNLOCK STEERING.
+    _enterSolarCoast("COAST").
     mLog("Coasting to " + target:NAME + " SOI.").
     waitForSOI(target).
     orbitSummary().
@@ -112,9 +119,7 @@ GLOBAL FUNCTION phaseCoast {
 
 GLOBAL FUNCTION phaseCoast1Half {
     LOCAL target IS missionTargetBody().
-    SET SAS TO TRUE.
-    UNLOCK STEERING.
-    trySolarOrient().
+    _enterSolarCoast("COAST_1HALF").
 
     LOCAL tArrival IS _transferArrivalUt(target).
     IF tArrival <= TIME:SECONDS {
@@ -144,9 +149,7 @@ GLOBAL FUNCTION phaseCoast1Half {
 
 GLOBAL FUNCTION phaseCoast2Half {
     LOCAL target IS missionTargetBody().
-    SET SAS TO TRUE.
-    UNLOCK STEERING.
-    trySolarOrient().
+    _enterSolarCoast("COAST_2HALF").
 
     IF SHIP:BODY = target {
         mLog("COAST_2HALF: already inside " + target:NAME + " SOI.").
@@ -237,13 +240,12 @@ GLOBAL FUNCTION phaseFlyby {
     LOCAL target IS missionTargetBody().
     WAIT 2.
     IF SHIP:BODY:NAME <> target:NAME {
+        _enterSolarCoast("FLYBY").
         mLog("Flyby waiting for " + target:NAME + " SOI.").
         waitForSOI(target).
     }
 
-    SET SAS TO TRUE.
-    UNLOCK STEERING.
-    trySolarOrient().
+    _enterSolarCoast("FLYBY").
 
     LOCAL postPeHold IS 3600.
     LOCAL exitSoi IS 0.
