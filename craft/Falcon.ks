@@ -14,7 +14,7 @@
 //   Falcon Minmus SciSAT 1   space-delimited fallback also parses.
 // ============================================================
 
-SET DESCENT_DROGUE_CUT_ALT TO 4800.
+// SET DESCENT_DROGUE_CUT_ALT TO 4800.
 
 GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
     "xfer_plan",
