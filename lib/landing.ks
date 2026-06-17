@@ -306,8 +306,11 @@ LOCAL FUNCTION _landingBrakeGateInfo {
 
     LOCAL hNow IS ctx["HAS_TARGET"] AND downrangeToTarget > 0
         AND downrangeToTarget <= hBrakeGate.
+    LOCAL hSuppressed IS FALSE.
     IF hNow AND burnHeight > hBrakeGate * 2 AND vBurnEta > 60 {
         SET hNow TO FALSE.
+        SET hBrakeEta TO 999999.
+        SET hSuppressed TO TRUE.
     }
 
     RETURN LEXICON(
@@ -317,6 +320,7 @@ LOCAL FUNCTION _landingBrakeGateInfo {
         "H_GATE", hBrakeGate,
         "H_ETA", hBrakeEta,
         "H_NOW", hNow,
+        "H_SUPPRESSED", hSuppressed,
         "V_GATE", vBurnGate,
         "V_ETA", vBurnEta,
         "V_NOW", burnHeight <= vBurnGate,
@@ -441,6 +445,7 @@ LOCAL FUNCTION _landingCoastTick {
         + " hBrake=" + ROUND(gate["H_BRAKE"],0)
         + " hEta=" + ROUND(gate["H_ETA"],0)
         + " vEta=" + ROUND(gate["V_ETA"],0)
+        + " hSupp=" + _landingBoolText(gate["H_SUPPRESSED"])
         + " hs=" + ROUND(gate["H_SPEED"],1),
         1, 2, 13, WHITE, FALSE).
 
@@ -485,6 +490,7 @@ LOCAL FUNCTION _landingBrakeAlignTick {
         + " dr=" + ROUND(gate["DOWNRANGE"],0)
         + " hEta=" + ROUND(gate["H_ETA"],0)
         + " vEta=" + ROUND(gate["V_ETA"],0)
+        + " hSupp=" + _landingBoolText(gate["H_SUPPRESSED"])
         + " trErr=" + ROUND(steerInfo["IMPACT_ERR"],0)
         + " x=" + ROUND(steerInfo["CROSS_ERR"],0)
         + " aErr=" + ROUND(steerInfo["ALIGN_ERR"],1)
@@ -495,6 +501,8 @@ LOCAL FUNCTION _landingBrakeAlignTick {
         _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
+    } ELSE IF MIN(gate["H_ETA"], gate["V_ETA"]) > LANDING_BRAKE_ALIGN_LEAD {
+        _landingSetState(ctx, "COAST", "brake gate deferred").
     }
 }
 
