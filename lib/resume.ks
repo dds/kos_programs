@@ -9,19 +9,9 @@ GLOBAL PAYLOADS IS "".
 GLOBAL RENDEZVOUS_TARGET IS "".
 GLOBAL ASTEROID_TARGET IS "".
 
-GLOBAL MISSION IS LEXICON(
-    "vehicle",  stateGet("vehicle",  "UNKNOWN"),
-    "target",   CHOOSE TARGET_ IF TARGET_ <> "" ELSE stateGet("target", "UNKNOWN"),
-    "payloads", CHOOSE PAYLOADS IF PAYLOADS <> "" ELSE stateGet("payloads", "")
-).
-
-mLog("MISSION vehicle=" + MISSION["vehicle"]
-    + "  target=" + MISSION["target"]
-    + "  payloads=" + MISSION["payloads"]).
-
 GLOBAL FUNCTION missionPayloads {
-    IF MISSION["payloads"] = "" { RETURN LIST(). }
-    RETURN MISSION["payloads"]:SPLIT(",").
+    IF PAYLOADS = "" { RETURN LIST(). }
+    RETURN PAYLOADS:SPLIT(",").
 }
 
 GLOBAL FUNCTION missionHas {
@@ -33,18 +23,13 @@ GLOBAL FUNCTION missionHas {
 }
 
 GLOBAL FUNCTION missionTargetBody {
-    LOCAL t IS MISSION["target"].
-    IF t = "MUN"    { RETURN MUN.    }
-    IF t = "MINMUS" { RETURN MINMUS. }
-    IF t = "KERBIN" { RETURN KERBIN. }
-    IF t = "KERBOL" { RETURN SUN.    }
-    RETURN BODY(MISSION["target"]).
+    RETURN BODY(TARGET_).
 }
 
 GLOBAL FUNCTION resumeMission {
-    LOCAL phase IS stateGet("phase", "none").
-    mLog("Resuming " + MISSION["vehicle"] + " from phase: " + phase).
-    PRINT "Resuming " + MISSION["vehicle"] + " — phase: " + phase.
+    LOCAL phase IS stateGet("phase").
+    LOCAL vehicle IS stateGet("vehicle").
+    mLog("Resuming " + vehicle + " from phase: " + phase).
     main().
 }
 
@@ -83,7 +68,7 @@ GLOBAL FUNCTION buildRocketSequence {
     IF RENDEZVOUS_TARGET <> "" { SET needsRdv TO TRUE. }
     IF ASTEROID_TARGET <> "" { SET needsRdv TO TRUE. }
     IF needsRdv { seq:ADD("RDV"). }
-    IF MISSION["target"] <> "KERBIN" {
+    IF TARGET_ <> "KERBIN" {
         seq:ADD("XING").
         seq:ADD("MCC").
         seq:ADD("COAST").
