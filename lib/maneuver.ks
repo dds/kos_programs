@@ -23,6 +23,7 @@ GLOBAL FUNCTION executeManeuver {
     }
 
     LOCAL nd    IS NEXTNODE.
+    LOCAL nodeTime IS nd:TIME.
     LOCAL burnDV  IS nd:DELTAV:MAG.
     LOCAL startTime IS _calcStartTime(nd).
     _wakeCmd().
@@ -202,9 +203,7 @@ GLOBAL FUNCTION executeManeuver {
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
-    // Guarded: post-burn the node may already be gone (see
-    // executeDeorbitNode — flight-found crash on a bare REMOVE).
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    _removeExecutedNode(nodeTime).
     _setThrustLimit(1.0).
     IF dvReboundAbort {
         _clearPendingBurn("dv-rebound").
@@ -450,6 +449,20 @@ LOCAL FUNCTION _needsStage {
     FOR eng IN engs { IF eng:FLAMEOUT { RETURN TRUE. } }
     IF SHIP:MAXTHRUST = 0 { RETURN TRUE. }
     RETURN FALSE.
+}
+
+LOCAL FUNCTION _removeExecutedNode {
+    PARAMETER nodeTime.
+    IF NOT HASNODE { RETURN. }
+
+    LOCAL nextTime IS NEXTNODE:TIME.
+    IF ABS(nextTime - nodeTime) < 0.5 {
+        REMOVE NEXTNODE.
+        WAIT 0.1.
+    } ELSE {
+        mLog("Preserving remaining maneuver node at T+"
+            + ROUND(nextTime - TIME:SECONDS, 1) + "s.").
+    }
 }
 
 LOCAL FUNCTION _findCmdModule {
