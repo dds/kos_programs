@@ -837,8 +837,10 @@ LOCAL FUNCTION _planEscapeTransfer {
     LOCAL kscTransitA IS (rMoon + targetBody:RADIUS + targetPe) / 2.
 
     // --- Departure time scan ---
-    // Scan departure times to find best ejection angle.
-    // If KSC targeting, scan enough orbits for Kerbin to rotate once.
+    // Scan future departure times to find best ejection angle.
+    // If KSC targeting, scan enough forward orbits for Kerbin to
+    // rotate once. The old ± scan spent about half its nominal
+    // range in the past and could miss the actual return window.
     LOCAL nScanOrbits IS 1.
     IF kscTarget {
         SET nScanOrbits TO MAX(6, CEILING(targetBody:ROTATIONPERIOD / shipPeriod)).
@@ -848,15 +850,17 @@ LOCAL FUNCTION _planEscapeTransfer {
     LOCAL samplesPerOrbit IS 12.
     LOCAL scanSteps IS nScanOrbits * samplesPerOrbit.
     LOCAL scanDt IS shipPeriod / samplesPerOrbit.
+    LOCAL scanStart IS departUt.
+    LOCAL scanEnd IS departUt + nScanOrbits * shipPeriod.
 
     LOCAL bestTime IS departUt.
     LOCAL bestScore IS 999999999.
 
-    mLog("Escape departure scan: " + (2 * scanSteps + 1) + " steps"
-        + " over ±" + nScanOrbits + " orbits"
+    mLog("Escape departure scan: " + (scanSteps + 1) + " steps"
+        + " over next " + nScanOrbits + " orbits"
         + "  KSC=" + kscTarget).
 
-    FROM { LOCAL si IS -scanSteps. } UNTIL si > scanSteps STEP { SET si TO si + 1. } DO {
+    FROM { LOCAL si IS 0. } UNTIL si > scanSteps STEP { SET si TO si + 1. } DO {
         LOCAL tryTime IS departUt + si * scanDt.
         IF tryTime > TIME:SECONDS + 30 {
             SET nd:TIME TO tryTime.
@@ -883,8 +887,8 @@ LOCAL FUNCTION _planEscapeTransfer {
         + "  depart T+" + ROUND(bestTime - TIME:SECONDS, 0) + "s").
 
     // --- Golden section refine departure time ---
-    LOCAL tA IS MAX(TIME:SECONDS + 30, bestTime - scanDt).
-    LOCAL tB IS bestTime + scanDt.
+    LOCAL tA IS MAX(scanStart, bestTime - scanDt).
+    LOCAL tB IS MIN(scanEnd, bestTime + scanDt).
     LOCAL gr IS (SQRT(5) + 1) / 2.
 
     FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
