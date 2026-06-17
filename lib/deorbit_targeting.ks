@@ -97,7 +97,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL tolerance IS TARGET_TOLERANCE.
     IF ignoredTolerance > 0 { SET tolerance TO ignoredTolerance. }
     LOCAL nodeGroundAngle IS 50.
-    LOCAL desiredDownfield IS 20000.
+    LOCAL desiredDownfield IS 15000.
     IF ignoredOvershoot > 0 { SET desiredDownfield TO ignoredOvershoot. }
     LOCAL minDownfield IS 10000.
     LOCAL maxDownfield IS 40000.
