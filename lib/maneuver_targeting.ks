@@ -21,6 +21,7 @@
 
 // --- Config defaults owned by this file ---
 GLOBAL ALLOW_GRAVITY_ASSIST IS 0.
+GLOBAL TRANSFER_DEFERRED_INC_ERR_TOL IS 45.
 GLOBAL TRANSFER_AOP_ERR_TOL IS 30.
 GLOBAL TRANSFER_AOP_SCAN_TOL IS 20.
 
@@ -321,16 +322,25 @@ GLOBAL FUNCTION _transferSeedScore {
     LOCAL p IS _getTargetPatch(nd, targetBody).
     LOCAL score IS (caDist / 100000)^2 + dvMag * 0.01.
     LOCAL hasPatch IS FALSE.
+    LOCAL incErr IS 999.
 
     IF p = 0 {
         SET score TO score + 1000000.
     } ELSE {
         SET hasPatch TO TRUE.
+        IF captureInc >= 0 {
+            SET incErr TO ABS(_angleError(p:INCLINATION, captureInc)).
+            IF incErr > TRANSFER_DEFERRED_INC_ERR_TOL {
+                SET score TO score
+                    + ((incErr - TRANSFER_DEFERRED_INC_ERR_TOL) / 5) ^ 2.
+            }
+        }
     }
 
     RETURN LEXICON(
         "SCORE", score,
         "PATCH", hasPatch,
+        "INC_ERR", incErr,
         "CA", caDist,
         "DV", dvMag
     ).
