@@ -530,8 +530,15 @@ GLOBAL FUNCTION bootLibSync {
 GLOBAL FUNCTION bootLibLoadList {
     PARAMETER roots.
     FOR libName IN bootLibResolve(roots) {
-        bootLibSync(libName).
-        RUNONCEPATH("1:/lib/" + libName).
+        LOCAL archivePath IS "0:/lib/" + libName + ".ks".
+        IF bootLibArchiveOnly(libName)
+                AND HOMECONNECTION:ISCONNECTED
+                AND EXISTS(archivePath) {
+            RUNONCEPATH(archivePath).
+        } ELSE {
+            bootLibSync(libName).
+            RUNONCEPATH("1:/lib/" + libName).
+        }
     }
 }
 
