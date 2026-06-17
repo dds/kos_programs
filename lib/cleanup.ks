@@ -45,6 +45,8 @@ LOCAL FUNCTION _cleanupShouldDeleteSource {
     PARAMETER path_.
     PARAMETER name_.
 
+    LOCAL upPath IS path_:TOUPPER.
+    IF upPath:LENGTH >= 12 AND upPath:SUBSTRING(0, 12) = "1:/MISSIONS/" { RETURN FALSE. }
     IF NOT name_:CONTAINS(".KS") { RETURN FALSE. }
     IF name_:CONTAINS(".KSM") { RETURN FALSE. }
     IF path_ = "1:/BOOT/BOOT.KS" { RETURN FALSE. }

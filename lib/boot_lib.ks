@@ -213,7 +213,6 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     IF hasLink AND EXISTS(archivePath) {
         IF NOT EXISTS("1:/missions") { CREATEDIR("1:/missions"). }
         IF NOT EXISTS(cacheDir) { CREATEDIR(cacheDir). }
-        IF EXISTS(cachePath) { DELETEPATH(cachePath). }
         COPYPATH(archivePath, cachePath).
     }
     LOCAL path_ IS cachePath.
@@ -446,17 +445,12 @@ GLOBAL FUNCTION bootCleanup {
     LOCAL keepRoles IS LIST().
     IF CORE:TAG <> "" { keepRoles:ADD(CORE:TAG). }
 
-    LOCAL keepMissions IS LIST().
-    LOCAL selectedMission IS stateGet("mission_id", "").
-    IF selectedMission <> "" { keepMissions:ADD(selectedMission). }
-
     LOCAL beforeFree IS CORE:VOLUME:FREESPACE.
     LOCAL removed IS 0.
     SET removed TO removed + bootPruneDir("1:/lib", keepLibs).
     SET removed TO removed + bootPruneDir("1:/craft", LIST(vehicleName)).
     SET removed TO removed + bootPruneDir("1:/roles", keepRoles).
     SET removed TO removed + bootPruneDir("1:/cmd", LIST()).
-    SET removed TO removed + bootPruneDir("1:/missions/" + vehicleName, keepMissions).
     IF EXISTS("1:/zombie") {
         DELETEPATH("1:/zombie").
         SET removed TO removed + 1.

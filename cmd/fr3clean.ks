@@ -50,9 +50,6 @@ _pruneDir("1:/lib", keepLibs).
 _pruneDir("1:/craft", LIST()).
 _pruneDir("1:/roles", LIST()).
 _pruneDir("1:/cmd", LIST()).
-_pruneDir("1:/missions/FR3", LIST()).
-_pruneDir("1:/missions/FR2", LIST()).
-_pruneDir("1:/missions", LIST()).
 _deleteIfExists("1:/zombie").
 
 IF EXISTS("1:/run") {
