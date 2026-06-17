@@ -841,7 +841,8 @@ LOCAL FUNCTION _landingHoverRefineTick {
         + " vs=" + ROUND(ctx["V_SPEED"],1),
         1, 2, 13, GREEN, FALSE).
 
-    IF distToTarget <= 2 AND horizontalSpeed <= 0.5 {
+    IF distToTarget <= LANDING_HOVER_REFINE_ACCEPT_RADIUS
+            AND horizontalSpeed <= LANDING_HOVER_REFINE_ACCEPT_HSPEED {
         SET ctx["HOVER_REFINED"] TO TRUE.
         _landingSetState(ctx, "VERTICAL_DESCENT",
             "refinement complete, final drop").
