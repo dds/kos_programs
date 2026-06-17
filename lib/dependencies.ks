@@ -4,7 +4,7 @@
 
 GLOBAL FUNCTION dependencyLibs {
     RETURN LEXICON(
-        "core", LIST("state", "logs", "files", "phases", "dependencies", "config", "mission_type"),
+        "core", LIST("state", "logs", "files", "phases", "dependencies", "config", "mission_type", "recovery"),
         "capture", LIST("maneuver", "orbit"),
         "deorbit_burn", LIST(),
         "deorbit_targeting", LIST("orbit", "utils", "landing_config", "landing_math"),
