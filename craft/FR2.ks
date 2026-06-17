@@ -142,8 +142,8 @@ LOCAL FUNCTION _printConfig {
     }
     IF hasLander {
         flightPlanSection("LANDING").
-        flightPlanRow("TARGET", ROUND(LAND_CFG_TARGET_LAT,4) + " lat  " + ROUND(LAND_CFG_TARGET_LNG,4) + " lng").
-        flightPlanRow("DEORBIT PE", ROUND(LAND_CFG_DEORBIT_PE/1000,1) + " km").
+        flightPlanRow("TARGET", ROUND(TARGET_LAT,4) + " lat  " + ROUND(TARGET_LNG,4) + " lng").
+        flightPlanRow("DEORBIT PE", ROUND(DEORBIT_PE/1000,1) + " km").
     }
     flightPlanSection("SEQUENCE").
     flightPlanSequence(seq).

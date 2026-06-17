@@ -127,9 +127,9 @@ LOCAL FUNCTION _autoLandingTarget {
     LOCAL minutes IS 5.
     SET minutes TO LANDING_AUTO_TARGET_MINUTES.
     LOCAL geo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, TIME:SECONDS + minutes * 60)).
-    SET LAND_CFG_TARGET_LAT TO geo:LAT.
-    SET LAND_CFG_TARGET_LNG TO geo:LNG.
-    SET LAND_CFG_TARGET_LOCK TO TRUE.
+    SET TARGET_LAT TO geo:LAT.
+    SET TARGET_LNG TO geo:LNG.
+    SET TARGET_LOCK TO TRUE.
     stateSet("mission_cfg_TARGET_LAT", geo:LAT).
     stateSet("mission_cfg_TARGET_LNG", geo:LNG).
     stateSet("mission_cfg_TARGET_LOCK", 1).
@@ -143,8 +143,8 @@ LOCAL FUNCTION _landingTargetedDeorbit {
         RETURN FALSE.
     }
 
-    SET LAND_CFG_TARGET_LAT TO landingTarget["LAT"].
-    SET LAND_CFG_TARGET_LNG TO landingTarget["LNG"].
+    SET TARGET_LAT TO landingTarget["LAT"].
+    SET TARGET_LNG TO landingTarget["LNG"].
     mLog("Landing deorbit target: " + ROUND(landingTarget["LAT"],4)
         + "," + ROUND(landingTarget["LNG"],4)
         + " from " + landingTarget["SOURCE"] + ".").

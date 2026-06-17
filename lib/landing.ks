@@ -19,8 +19,8 @@ LOCAL FUNCTION _landingTerrainCheck {
     PARAMETER targetLat.
     PARAMETER targetLng.
 
-    LOCAL radiusM IS LAND_CFG_TERRAIN_CHECK_RADIUS.
-    LOCAL stepM IS LAND_CFG_TERRAIN_CHECK_STEP.
+    LOCAL radiusM IS TERRAIN_CHECK_RADIUS.
+    LOCAL stepM IS TERRAIN_CHECK_STEP.
     IF radiusM <= 0 OR stepM <= 0 {
         RETURN LEXICON("LAT", targetLat, "LNG", targetLng, "SHIFTED", FALSE).
     }
@@ -68,8 +68,8 @@ LOCAL FUNCTION _landingTerrainCheck {
     IF shiftDist > 50 {
         mLog("Shifting target by " + ROUND(shiftDist,0) + "m to flatter terrain"
             + " lat=" + ROUND(bestLat,4) + " lng=" + ROUND(bestLng,4) + ".").
-        SET LAND_CFG_TARGET_LAT TO bestLat.
-        SET LAND_CFG_TARGET_LNG TO bestLng.
+        SET TARGET_LAT TO bestLat.
+        SET TARGET_LNG TO bestLng.
         IF ADDONS:TR:AVAILABLE {
             ADDONS:TR:SETTARGET(LATLNG(bestLat, bestLng)).
         }
@@ -267,7 +267,7 @@ LOCAL FUNCTION _landingCoastTick {
         SET downrangeToTarget TO _landingDownrangeToTarget(ctx).
     }
     IF ctx["HAS_TARGET"] AND NOT ctx["TERRAIN_DONE"]
-            AND ALT:RADAR <= LAND_CFG_GUIDANCE_ALT {
+            AND ALT:RADAR <= GUIDANCE_ALT {
         LOCAL terrainResult IS _landingTerrainCheck(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
         SET ctx["TERRAIN_DONE"] TO TRUE.
         IF terrainResult["SHIFTED"] {
@@ -283,7 +283,7 @@ LOCAL FUNCTION _landingCoastTick {
         + " hs=" + ROUND(horizontalSpeed,1),
         1, 2, 13, WHITE, FALSE).
 
-    IF burnHeight <= burnDist * LAND_CFG_BURN_MARGIN + LAND_CFG_BRAKE_MARGIN {
+    IF burnHeight <= burnDist * BURN_MARGIN + BRAKE_MARGIN {
         IF ctx["HAS_TARGET"] {
             _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
         } ELSE {
@@ -291,7 +291,7 @@ LOCAL FUNCTION _landingCoastTick {
         }
     } ELSE IF ctx["HAS_TARGET"]
             AND downrangeToTarget > 0
-            AND downrangeToTarget <= brakeDist + LAND_CFG_BRAKE_MARGIN {
+            AND downrangeToTarget <= brakeDist + BRAKE_MARGIN {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
     } ELSE IF NOT ctx["HAS_TARGET"] {
         LOCAL tti IS 999999.
@@ -306,7 +306,7 @@ LOCAL FUNCTION _landingCoastTick {
             }
         }
         LOCAL burnTime IS downSpeed / MAX(0.1, maxAcc - gravAcc).
-        IF tti <= burnTime * LAND_CFG_BURN_MARGIN {
+        IF tti <= burnTime * BURN_MARGIN {
             _landingSetState(ctx, "BRAKING_BURN", "blind suicide burn gate").
         }
     }
@@ -335,9 +335,9 @@ LOCAL FUNCTION _landingBrakingTick {
     LOCAL impactErr IS trajErr["DIST"].
     LOCAL crossErr IS trajErr["CROSS"].
     LOCAL crossPid IS ctx["CROSS_PID"].
-    IF trajErr["FOUND"] AND crossErr > LAND_CFG_GUIDANCE_CORRECTION_THRESHOLD {
+    IF trajErr["FOUND"] AND crossErr > GUIDANCE_CORRECTION_THRESHOLD {
         LOCAL biasDeg IS ABS(crossPid:UPDATE(TIME:SECONDS, crossErr)).
-        LOCAL biasMag IS MIN(LAND_CFG_TR_BRAKE_BIAS, SIN(biasDeg)).
+        LOCAL biasMag IS MIN(TR_BRAKE_BIAS, SIN(biasDeg)).
         _landingSetSteering(ctx,
             (retroSteering + trajErr["CROSS_CORR"] * biasMag):NORMALIZED).
     } ELSE {
@@ -354,17 +354,17 @@ LOCAL FUNCTION _landingBrakingTick {
         1, 2, 13, YELLOW, FALSE).
 
     IF ctx["HAS_TARGET"]
-            AND (horizontalSpeed <= LAND_CFG_TERMINAL_HSPEED
-                OR ALT:RADAR <= LAND_CFG_TERMINAL_ALT) {
+            AND (horizontalSpeed <= TERMINAL_HSPEED
+                OR ALT:RADAR <= TERMINAL_ALT) {
         _landingSetState(ctx, "APPROACH", "terminal handoff").
-    } ELSE IF burnHeight <= burnDist * LAND_CFG_BURN_MARGIN
-            AND burnHeight <= LAND_CFG_HOVER_ALT {
+    } ELSE IF burnHeight <= burnDist * BURN_MARGIN
+            AND burnHeight <= HOVER_ALT {
         _landingSetState(ctx, "VERTICAL_DESCENT", "low vertical gate").
     } ELSE IF ctx["HAS_TARGET"]
-            AND (horizontalSpeed <= LAND_CFG_APPROACH_HSPEED
-                OR distToTarget <= LAND_CFG_APPROACH_RADIUS) {
+            AND (horizontalSpeed <= APPROACH_HSPEED
+                OR distToTarget <= APPROACH_RADIUS) {
         _landingSetState(ctx, "APPROACH", "horizontal speed/range captured").
-    } ELSE IF NOT ctx["HAS_TARGET"] AND horizontalSpeed < LAND_CFG_APPROACH_HSPEED {
+    } ELSE IF NOT ctx["HAS_TARGET"] AND horizontalSpeed < APPROACH_HSPEED {
         _landingSetState(ctx, "VERTICAL_DESCENT", "blind horizontal velocity killed").
     }
 }
@@ -376,15 +376,15 @@ LOCAL FUNCTION _landingApproachTick {
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
     LOCAL approachHeight IS _landingTargetHeight(ctx).
     LOCAL maxAcc IS ctx["MAX_ACC"].
-    LOCAL horizontalAcc IS MAX(0.1, maxAcc * LAND_CFG_BRAKE_ACCEL_FRACTION).
-    LOCAL desiredSpeed IS MIN(LAND_CFG_MAX_APPROACH_SPEED,
-        SQRT(MAX(0, 2 * horizontalAcc * MAX(0, distToTarget - LAND_CFG_VERTICAL_RADIUS)))).
+    LOCAL horizontalAcc IS MAX(0.1, maxAcc * BRAKE_ACCEL_FRACTION).
+    LOCAL desiredSpeed IS MIN(MAX_APPROACH_SPEED,
+        SQRT(MAX(0, 2 * horizontalAcc * MAX(0, distToTarget - VERTICAL_RADIUS)))).
     _landingSetSteering(ctx, lmApproachSteering(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
         ctx["UP_VEC"], ctx["POSITION"])).
 
     LOCAL targetVs IS -lmDescentSpeed(
-        approachHeight, LAND_CFG_TOUCHDOWN_SPEED, LAND_CFG_UPRIGHT_ALT).
+        approachHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT).
     _landingSetThrottle(ctx, lmVerticalThrottle(
         targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
@@ -395,11 +395,11 @@ LOCAL FUNCTION _landingApproachTick {
         + " vs=" + ROUND(ctx["V_SPEED"],1),
         1, 2, 13, CYAN, FALSE).
 
-    IF distToTarget <= LAND_CFG_VERTICAL_RADIUS
-            AND horizontalSpeed <= LAND_CFG_VERTICAL_HSPEED {
+    IF distToTarget <= VERTICAL_RADIUS
+            AND horizontalSpeed <= VERTICAL_HSPEED {
         _landingSetState(ctx, "VERTICAL_DESCENT", "over target").
-    } ELSE IF approachHeight <= LAND_CFG_HOVER_ALT
-            AND horizontalSpeed <= LAND_CFG_APPROACH_HSPEED {
+    } ELSE IF approachHeight <= HOVER_ALT
+            AND horizontalSpeed <= APPROACH_HSPEED {
         _landingSetState(ctx, "VERTICAL_DESCENT", "hover altitude").
     }
 }
@@ -409,7 +409,7 @@ LOCAL FUNCTION _landingVerticalTick {
     LOCAL bottomAlt IS _landingBottomRadar().
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
 
-    IF bottomAlt <= LAND_CFG_UPRIGHT_ALT {
+    IF bottomAlt <= UPRIGHT_ALT {
         _landingSetSteering(ctx, SHIP:UP:VECTOR).
     } ELSE IF ctx["HAS_TARGET"] {
         _landingSetSteering(ctx, lmApproachSteering(
@@ -421,7 +421,7 @@ LOCAL FUNCTION _landingVerticalTick {
     }
 
     LOCAL targetVs IS -lmDescentSpeed(
-        bottomAlt, LAND_CFG_TOUCHDOWN_SPEED, LAND_CFG_UPRIGHT_ALT).
+        bottomAlt, TOUCHDOWN_SPEED, UPRIGHT_ALT).
     _landingSetThrottle(ctx, lmVerticalThrottle(
         targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
@@ -466,8 +466,8 @@ GLOBAL FUNCTION landExecute {
     LOCAL landingTarget IS landingResolveTarget().
     LOCAL hasTarget IS landingTarget["FOUND"].
     IF hasTarget {
-        SET LAND_CFG_TARGET_LAT TO landingTarget["LAT"].
-        SET LAND_CFG_TARGET_LNG TO landingTarget["LNG"].
+        SET TARGET_LAT TO landingTarget["LAT"].
+        SET TARGET_LNG TO landingTarget["LNG"].
         mLog("Landing target: " + ROUND(landingTarget["LAT"],4)
             + "," + ROUND(landingTarget["LNG"],4)
             + " from " + landingTarget["SOURCE"] + ".").
@@ -477,22 +477,22 @@ GLOBAL FUNCTION landExecute {
 
     LOCAL targetElevation IS 0.
     IF hasTarget {
-        SET targetElevation TO LATLNG(LAND_CFG_TARGET_LAT, LAND_CFG_TARGET_LNG):TERRAINHEIGHT.
+        SET targetElevation TO LATLNG(TARGET_LAT, TARGET_LNG):TERRAINHEIGHT.
     }
     LOCAL crossPid IS PIDLOOP(
-        LAND_CFG_CROSS_PID_KP,
-        LAND_CFG_CROSS_PID_KI,
-        LAND_CFG_CROSS_PID_KD,
-        LAND_CFG_CROSS_PID_MIN,
-        LAND_CFG_CROSS_PID_MAX).
+        CROSS_PID_KP,
+        CROSS_PID_KI,
+        CROSS_PID_KD,
+        CROSS_PID_MIN,
+        CROSS_PID_MAX).
     SET crossPid:SETPOINT TO 0.
 
     LOCAL ctx IS LEXICON(
         "STATE", "COAST",
         "STATE_ENTERED", TIME:SECONDS,
         "HAS_TARGET", hasTarget,
-        "TARGET_LAT", LAND_CFG_TARGET_LAT,
-        "TARGET_LNG", LAND_CFG_TARGET_LNG,
+        "TARGET_LAT", TARGET_LAT,
+        "TARGET_LNG", TARGET_LNG,
         "TARGET_ELEVATION", targetElevation,
         "CROSS_PID", crossPid,
         "TERRAIN_DONE", FALSE,

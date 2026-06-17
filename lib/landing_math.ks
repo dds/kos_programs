@@ -124,7 +124,7 @@ GLOBAL FUNCTION lmRetroSteering {
     IF surfaceVel:MAG < 1 { RETURN upVec. }
     LOCAL retroVec IS (-surfaceVel):NORMALIZED.
     IF horizontalVel:MAG < 0.5 { RETURN retroVec. }
-    LOCAL maxLean IS SIN(LAND_CFG_MAX_TILT).
+    LOCAL maxLean IS SIN(MAX_TILT).
     LOCAL leanMag IS MIN(maxLean, horizontalVel:MAG / 25).
     RETURN (retroVec + upVec * leanMag):NORMALIZED.
 }
@@ -133,7 +133,7 @@ GLOBAL FUNCTION lmHoverSteering {
     PARAMETER horizontalVel.
     PARAMETER upVec.
     IF horizontalVel:MAG < 0.3 { RETURN upVec. }
-    LOCAL maxLean IS SIN(LAND_CFG_MAX_TILT).
+    LOCAL maxLean IS SIN(MAX_TILT).
     LOCAL leanMag IS MIN(maxLean, horizontalVel:MAG / 10).
     RETURN (upVec + (-horizontalVel):NORMALIZED * leanMag):NORMALIZED.
 }
@@ -148,7 +148,7 @@ GLOBAL FUNCTION lmApproachSteering {
 
     LOCAL targetDir IS lmDirectionToTarget(targetLat, targetLng,
         upVec, shipPos).
-    LOCAL maxLean IS SIN(LAND_CFG_MAX_TILT).
+    LOCAL maxLean IS SIN(MAX_TILT).
     LOCAL desiredVel IS targetDir * targetHorizontalSpeed.
     LOCAL correctionVec IS desiredVel - horizontalVel.
     IF correctionVec:MAG <= 0.1 { RETURN upVec. }

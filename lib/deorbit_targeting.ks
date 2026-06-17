@@ -94,7 +94,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
-    LOCAL tolerance IS LAND_CFG_TARGET_TOLERANCE.
+    LOCAL tolerance IS TARGET_TOLERANCE.
     IF ignoredTolerance > 0 { SET tolerance TO ignoredTolerance. }
     LOCAL nodeGroundAngle IS 50.
     LOCAL desiredDownfield IS 20000.
@@ -191,14 +191,14 @@ GLOBAL FUNCTION targetedDeorbitAt {
         mLogWarn("TR final: no impact predicted for selected node.").
     }
 
-    IF LAND_CFG_TERRAIN_VALIDATE {
+    IF TERRAIN_VALIDATE {
         LOCAL crashDist IS lmTerrainClearanceCheck(
             targetLat, targetLng,
             bestUT + 30, bestUT + 1800,
             2,
-            LAND_CFG_TERRAIN_MIN_CLEARANCE,
-            LAND_CFG_TERRAIN_SAFE_ALT).
-        LOCAL maxCrashDist IS MAX(LAND_CFG_TERRAIN_MAX_CRASH_DIST,
+            TERRAIN_MIN_CLEARANCE,
+            TERRAIN_SAFE_ALT).
+        LOCAL maxCrashDist IS MAX(TERRAIN_MAX_CRASH_DIST,
             desiredDownfield + downfieldTol).
         IF crashDist > maxCrashDist {
             mLogError("TERRAIN CHECK FAILED: trajectory hits terrain "
