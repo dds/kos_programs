@@ -46,6 +46,18 @@ GLOBAL FUNCTION hasFixedPanels {
     RETURN FALSE.
 }
 
+GLOBAL FUNCTION localGravity {
+    LOCAL radiusMag IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
+    IF radiusMag <= 0 { RETURN 0.01. }
+    RETURN MAX(0.01, SHIP:BODY:MU / (radiusMag * radiusMag)).
+}
+
+GLOBAL FUNCTION shipTwr {
+    LOCAL gravAcc IS localGravity().
+    IF SHIP:MASS <= 0 OR gravAcc <= 0 { RETURN 0. }
+    RETURN SHIP:AVAILABLETHRUST / (SHIP:MASS * gravAcc).
+}
+
 // ============================================================
 // Geo-distance (Haversine) — surface distance in meters between
 // two lat/lng pairs on SHIP:BODY.

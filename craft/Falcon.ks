@@ -24,19 +24,6 @@ GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
 
 applyKnownMissionState().
 
-LOCAL FUNCTION _falconPrintConfig {
-    LOCAL seq IS falconBuildPhaseSequence().
-    flightPlanTitle("FALCON FLIGHT PLAN", SHIP:NAME).
-    flightPlanIdentity().
-    flightPlanSection("MISSION").
-    flightPlanRow("BAND", phaseBand()).
-    flightPlanRow("TARGET", getTarget()).
-    flightPlanRow("PAYLOADS", PAYLOADS).
-    flightPlanConfig().
-    flightPlanSection("SEQUENCE").
-    flightPlanSequence(seq).
-}
-
 GLOBAL FUNCTION falconBuildPhaseSequence {
     IF SEQUENCE <> "" {
         RETURN phaseListFromString(SEQUENCE).

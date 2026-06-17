@@ -309,10 +309,20 @@ LOCAL FUNCTION _signedPhaseAngle {
     RETURN _norm360(angle).
 }
 
-LOCAL FUNCTION _interplanetaryTargetBody {
+LOCAL FUNCTION _interplanetaryTargetSpec {
     LOCAL tgtName IS _launchPlaneTargetName().
     IF tgtName = "" { RETURN 0. }
-    RETURN _bodyNamed(tgtName).
+    LOCAL bod_ IS _bodyNamed(tgtName).
+    IF bod_:ISTYPE("Body") {
+        RETURN LEXICON(
+            "FOUND", TRUE,
+            "KIND", "BODY",
+            "NAME", bod_:NAME,
+            "OBJECT", bod_,
+            "XING_BODY", bod_
+        ).
+    }
+    RETURN 0.
 }
 
 LOCAL FUNCTION _isInterplanetaryBodyTarget {
@@ -325,13 +335,13 @@ LOCAL FUNCTION _isInterplanetaryBodyTarget {
         AND bod_ <> SHIP:BODY.
 }
 
-LOCAL FUNCTION _bodyPhaseAt {
-    PARAMETER targetBody.
+LOCAL FUNCTION _objectPhaseAt {
+    PARAMETER targetObj.
+    PARAMETER centralBody.
     PARAMETER ut.
-    LOCAL centralBody IS SHIP:BODY:BODY.
     LOCAL originVec IS POSITIONAT(SHIP:BODY, ut)
         - POSITIONAT(centralBody, ut).
-    LOCAL targetVec IS POSITIONAT(targetBody, ut)
+    LOCAL targetVec IS POSITIONAT(targetObj, ut)
         - POSITIONAT(centralBody, ut).
     LOCAL originNext IS POSITIONAT(SHIP:BODY, ut + 60)
         - POSITIONAT(centralBody, ut + 60).
@@ -339,11 +349,10 @@ LOCAL FUNCTION _bodyPhaseAt {
     RETURN _signedPhaseAngle(originVec, targetVec, normalVec).
 }
 
-LOCAL FUNCTION _hohmannPhaseFor {
-    PARAMETER targetBody.
+LOCAL FUNCTION _hohmannPhaseForOrbit {
+    PARAMETER targetOrbit.
     LOCAL centralBody IS SHIP:BODY:BODY.
     LOCAL originOrbit IS SHIP:BODY:ORBIT.
-    LOCAL targetOrbit IS targetBody:ORBIT.
     LOCAL xferA IS (originOrbit:SEMIMAJORAXIS
         + targetOrbit:SEMIMAJORAXIS) / 2.
     LOCAL tof IS CONSTANT:PI * SQRT(xferA ^ 3 / centralBody:MU).
@@ -352,12 +361,12 @@ LOCAL FUNCTION _hohmannPhaseFor {
 }
 
 LOCAL FUNCTION _interplanetaryLaunchIncFor {
-    PARAMETER targetBody.
-    IF targetBody = SHIP:BODY:BODY { RETURN LAUNCH_INCLINATION. }
-    LOCAL inc IS targetBody:ORBIT:INCLINATION.
+    PARAMETER targetName.
+    PARAMETER targetOrbit.
+    LOCAL inc IS targetOrbit:INCLINATION.
     IF inc <= 0 OR inc >= 180 { RETURN 0. }
     IF _latIncOk(SHIP:LATITUDE, inc) { RETURN inc. }
-    mLogWarn("PRELAUNCH: " + targetBody:NAME + " solar plane inc="
+    mLogWarn("PRELAUNCH: " + targetName + " solar plane inc="
         + ROUND(inc, 2) + " cannot pass over lat "
         + ROUND(SHIP:LATITUDE, 3)
         + "; using equatorial parking orbit.").
@@ -365,20 +374,31 @@ LOCAL FUNCTION _interplanetaryLaunchIncFor {
 }
 
 LOCAL FUNCTION _prelaunchToInterplanetary {
-    PARAMETER targetBody.
+    PARAMETER targetSpec.
 
-    IF NOT _isInterplanetaryBodyTarget(targetBody) {
+    IF targetSpec = 0 OR NOT targetSpec:HASKEY("FOUND") {
+        mLogError("PRELAUNCH: interplanetary mode requested but no target found.").
+        yieldToPrompt().
+        RETURN.
+    }
+
+    LOCAL targetObj IS targetSpec["OBJECT"].
+    LOCAL targetName IS targetSpec["NAME"].
+    LOCAL xingBody IS targetSpec["XING_BODY"].
+
+    IF NOT _isInterplanetaryBodyTarget(xingBody) {
         mLogError("PRELAUNCH: interplanetary mode needs a body around "
             + SHIP:BODY:BODY:NAME + "; target is not supported.").
         yieldToPrompt().
         RETURN.
     }
 
-    LOCAL launchInc IS _interplanetaryLaunchIncFor(targetBody).
+    LOCAL launchInc IS _interplanetaryLaunchIncFor(
+        targetName, targetObj:ORBIT).
     SET LAUNCH_INCLINATION TO launchInc.
     stateSet("mission_cfg_LAUNCH_INCLINATION", launchInc).
 
-    IF targetBody = SHIP:BODY:BODY {
+    IF xingBody = SHIP:BODY:BODY {
         mLog("PRELAUNCH: solar escape target; launching immediately"
             + " inc=" + ROUND(launchInc, 2) + ".").
         nextPhase(launchSeq).
@@ -386,25 +406,28 @@ LOCAL FUNCTION _prelaunchToInterplanetary {
     }
 
     LOCAL originOrbit IS SHIP:BODY:ORBIT.
-    LOCAL targetOrbit IS targetBody:ORBIT.
-    LOCAL desiredPhase IS _hohmannPhaseFor(targetBody).
+    LOCAL targetOrbit IS targetObj:ORBIT.
+    LOCAL desiredPhase IS _hohmannPhaseForOrbit(targetOrbit).
     LOCAL leadTime IS MAX(0, PRELAUNCH_TRANSFER_LEAD).
     LOCAL phaseTol IS MAX(0.1, PRELAUNCH_TRANSFER_PHASE_TOL).
     LOCAL immediateDepartUt IS TIME:SECONDS + leadTime.
-    LOCAL phaseAtImmediate IS _bodyPhaseAt(targetBody, immediateDepartUt).
+    LOCAL phaseAtImmediate IS _objectPhaseAt(
+        targetObj, SHIP:BODY:BODY, immediateDepartUt).
     LOCAL immediateErr IS ABS(_norm180(phaseAtImmediate - desiredPhase)).
 
     IF immediateErr <= phaseTol {
         stateSet("prelaunch_transfer_departure_ut", immediateDepartUt).
-        stateSet("prelaunch_transfer_target", targetBody:NAME).
+        stateSet("prelaunch_transfer_target", targetName).
+        stateSet("prelaunch_transfer_xing_target", xingBody:NAME).
         stateSet("prelaunch_transfer_phase", desiredPhase).
-        mLog("PRELAUNCH: already in " + targetBody:NAME
+        mLog("PRELAUNCH: already in " + targetName
             + " transfer window; launch now. phase="
             + ROUND(phaseAtImmediate, 1)
             + "/" + ROUND(desiredPhase, 1)
             + " err=" + ROUND(immediateErr, 1)
             + " inc=" + ROUND(launchInc, 2) + ".").
-        mLogWarn("STATS prelaunch transfer target=" + targetBody:NAME
+        mLogWarn("STATS prelaunch transfer target=" + targetName
+            + " xingTarget=" + xingBody:NAME
             + " wait=0"
             + " phase=" + ROUND(phaseAtImmediate, 2)
             + " desired=" + ROUND(desiredPhase, 2)
@@ -414,7 +437,7 @@ LOCAL FUNCTION _prelaunchToInterplanetary {
         RETURN.
     }
 
-    LOCAL phaseNow IS _bodyPhaseAt(targetBody, TIME:SECONDS).
+    LOCAL phaseNow IS _objectPhaseAt(targetObj, SHIP:BODY:BODY, TIME:SECONDS).
     LOCAL originRate IS 360 / originOrbit:PERIOD.
     LOCAL targetRate IS 360 / targetOrbit:PERIOD.
     LOCAL relRate IS targetRate - originRate.
@@ -442,18 +465,21 @@ LOCAL FUNCTION _prelaunchToInterplanetary {
     IF launchUt < TIME:SECONDS { SET launchUt TO TIME:SECONDS. }
 
     stateSet("prelaunch_transfer_departure_ut", departUt).
-    stateSet("prelaunch_transfer_target", targetBody:NAME).
+    stateSet("prelaunch_transfer_target", targetName).
+    stateSet("prelaunch_transfer_xing_target", xingBody:NAME).
     stateSet("prelaunch_transfer_phase", desiredPhase).
     stateSet("prelaunch_plane_ut", launchUt).
 
-    mLog("PRELAUNCH: " + targetBody:NAME + " transfer window in "
+    mLog("PRELAUNCH: " + targetName + " transfer window in "
         + ROUND(launchUt - TIME:SECONDS, 0)
         + "s  depart in " + ROUND(departUt - TIME:SECONDS, 0)
         + "s phase=" + ROUND(phaseNow, 1)
         + "/" + ROUND(desiredPhase, 1)
         + " inc=" + ROUND(launchInc, 2)
+        + " xingTarget=" + xingBody:NAME
         + " lead=" + ROUND(leadTime, 0) + "s.").
-    mLogWarn("STATS prelaunch transfer target=" + targetBody:NAME
+    mLogWarn("STATS prelaunch transfer target=" + targetName
+        + " xingTarget=" + xingBody:NAME
         + " wait=" + ROUND(launchUt - TIME:SECONDS, 0)
         + " departWait=" + ROUND(departUt - TIME:SECONDS, 0)
         + " phase=" + ROUND(phaseNow, 2)
@@ -709,13 +735,14 @@ GLOBAL FUNCTION phasePrelaunch {
         SET planeMode TO LAUNCH_PLANE_MODE:TOUPPER.
     }
     IF planeMode = "INTERPLANETARY" {
-        _prelaunchToInterplanetary(_interplanetaryTargetBody()).
+        _prelaunchToInterplanetary(_interplanetaryTargetSpec()).
         RETURN.
     }
     IF planeMode = "AUTO" {
-        LOCAL autoBody IS _interplanetaryTargetBody().
-        IF _isInterplanetaryBodyTarget(autoBody) {
-            _prelaunchToInterplanetary(autoBody).
+        LOCAL autoSpec IS _interplanetaryTargetSpec().
+        IF autoSpec <> 0
+                AND _isInterplanetaryBodyTarget(autoSpec["XING_BODY"]) {
+            _prelaunchToInterplanetary(autoSpec).
         } ELSE {
             _prelaunchToBodyOrbit(TRUE).
         }

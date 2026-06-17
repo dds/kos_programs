@@ -18,15 +18,6 @@ LOCAL FUNCTION _hopCfg {
     stateSet("mission_cfg_" + key, value).
 }
 
-LOCAL FUNCTION _hopClearLibCache {
-    FOR key IN LIST(
-        "lib_band_libs", "lib_band_phase", "reload_reason",
-        "reload_next_phase", "reload_next_band"
-    ) {
-        stateRemove(key).
-    }
-}
-
 LOCAL FUNCTION _hopPrepLandingAssist {
     _hopCfg("TARGET_LAT", HOP_TARGET_LAT).
     _hopCfg("TARGET_LNG", HOP_TARGET_LNG).
@@ -34,10 +25,7 @@ LOCAL FUNCTION _hopPrepLandingAssist {
     _hopCfg("TARGET_WAYPOINT", "").
     _hopCfg("SEQUENCE", "HOP,LAND_ASSIST,DONE").
     _hopCfg("RELOAD_AFTER_LAND_ASSIST", 0).
-    stateSet("phase", "LAND_ASSIST").
-    stateSet("lib_band", "LANDING").
-    stateSet("reload_required", "false").
-    _hopClearLibCache().
+    stateSaveReloadState("HOP_COMPLETE", "LAND_ASSIST", "LANDING").
 }
 
 LOCAL FUNCTION _hopDirectionToTarget {
@@ -54,10 +42,8 @@ LOCAL FUNCTION _hopDirectionToTarget {
 }
 
 LOCAL FUNCTION _hopSteer {
-    LOCAL upVec IS SHIP:UP:VECTOR.
-    LOCAL downrange IS _hopDirectionToTarget().
-    RETURN (upVec * SIN(HOP_PITCH)
-        + downrange * COS(HOP_PITCH)):NORMALIZED.
+    RETURN (SHIP:UP:VECTOR * SIN(HOP_PITCH)
+        + _hopDirectionToTarget() * COS(HOP_PITCH)):NORMALIZED.
 }
 
 LOCAL FUNCTION _hopClearStickyAbort {
@@ -65,18 +51,6 @@ LOCAL FUNCTION _hopClearStickyAbort {
     SET ABORT TO FALSE.
     WAIT 0.1.
     RETURN NOT ABORT.
-}
-
-LOCAL FUNCTION _hopGravity {
-    LOCAL radiusMag IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
-    IF radiusMag <= 0 { RETURN 0.01. }
-    RETURN MAX(0.01, SHIP:BODY:MU / (radiusMag * radiusMag)).
-}
-
-LOCAL FUNCTION _hopTwr {
-    LOCAL gravAcc IS _hopGravity().
-    IF SHIP:MASS <= 0 OR gravAcc <= 0 { RETURN 0. }
-    RETURN SHIP:AVAILABLETHRUST / (SHIP:MASS * gravAcc).
 }
 
 LOCAL FUNCTION _hopCaptureThrustLimits {
@@ -107,17 +81,14 @@ LOCAL FUNCTION _hopAverageThrustLimit {
 }
 
 LOCAL FUNCTION _hopTuneThrustLimit {
-    LOCAL liftFrac IS MAX(0.2, SIN(HOP_PITCH)).
-    LOCAL targetTotalTwr IS HOP_TWR / liftFrac.
-    LOCAL currentTwr IS _hopTwr().
+    LOCAL targetTotalTwr IS HOP_TWR / MAX(0.2, SIN(HOP_PITCH)).
+    LOCAL currentTwr IS shipTwr().
     IF currentTwr <= 0 { RETURN targetTotalTwr. }
 
-    LOCAL ratio IS targetTotalTwr / currentTwr.
     FOR eng IN SHIP:ENGINES {
         IF eng:IGNITION {
-            LOCAL newLimit IS eng:THRUSTLIMIT * ratio.
-            SET newLimit TO MAX(HOP_MIN_THRUST_LIMIT, MIN(100, newLimit)).
-            SET eng:THRUSTLIMIT TO newLimit.
+            SET eng:THRUSTLIMIT TO MAX(HOP_MIN_THRUST_LIMIT,
+                MIN(100, eng:THRUSTLIMIT * targetTotalTwr / currentTwr)).
         }
     }
     RETURN targetTotalTwr.
@@ -143,8 +114,7 @@ GLOBAL FUNCTION phaseHop {
         HOP_TARGET_LAT, HOP_TARGET_LNG).
     LOCAL configMaxAp IS HOP_MAX_AP_KM * 1000.
     IF HOP_MAX_AP_KM > 1000 { SET configMaxAp TO HOP_MAX_AP_KM. }
-    LOCAL rangeMaxAp IS MAX(500, startDist * 0.25).
-    LOCAL maxAp IS MIN(configMaxAp, rangeMaxAp).
+    LOCAL maxAp IS MIN(configMaxAp, MAX(500, startDist * 0.25)).
     ADDONS:TR:SETTARGET(LATLNG(HOP_TARGET_LAT, HOP_TARGET_LNG)).
 
     IF ABORT {
@@ -177,7 +147,7 @@ GLOBAL FUNCTION phaseHop {
         + "m maxBurn=" + ROUND(HOP_MAX_BURN_SECONDS, 0)
         + "s maxApKm=" + ROUND(maxAp / 1000, 1)
         + " cfgMaxApKm=" + ROUND(configMaxAp / 1000, 1)
-        + " rangeMaxApKm=" + ROUND(rangeMaxAp / 1000, 1) + ".").
+        + " rangeMaxApKm=" + ROUND(MAX(500, startDist * 0.25) / 1000, 1) + ".").
 
     IF startDist <= HOP_TOLERANCE {
         PRINT "Already inside hop tolerance; rebooting into LAND_ASSIST.".
@@ -218,20 +188,19 @@ GLOBAL FUNCTION phaseHop {
     LOCAL reason IS "operator abort".
     LOCAL abortedHop IS FALSE.
     LOCAL done IS FALSE.
-    LOCAL divergeMargin IS MAX(250, HOP_TOLERANCE).
     LOCAL thrustLimits IS _hopCaptureThrustLimits().
     LOCAL targetTotalTwr IS _hopTuneThrustLimit().
 
     mLog("HOP thrust limiter: targetVerticalTwr=" + ROUND(HOP_TWR, 2)
         + " targetTotalTwr=" + ROUND(targetTotalTwr, 2)
         + " avgLimit=" + ROUND(_hopAverageThrustLimit(), 1)
-        + "% twr=" + ROUND(_hopTwr(), 2) + ".").
+        + "% twr=" + ROUND(shipTwr(), 2) + ".").
 
     LOCK THROTTLE TO 1.
 
     UNTIL done {
         SET steeringTarget TO _hopSteer().
-        SET targetTotalTwr TO _hopTuneThrustLimit().
+        _hopTuneThrustLimit().
 
         IF ABORT {
             SET reason TO "operator abort".
@@ -239,9 +208,8 @@ GLOBAL FUNCTION phaseHop {
             SET done TO TRUE.
         }
 
-        LOCAL hasImpact IS ADDONS:TR:HASIMPACT.
         LOCAL impactDist IS 999999.
-        IF hasImpact {
+        IF ADDONS:TR:HASIMPACT {
             LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
             SET impactDist TO geoDistance(impactPos:LAT, impactPos:LNG,
                 HOP_TARGET_LAT, HOP_TARGET_LNG).
@@ -256,7 +224,7 @@ GLOBAL FUNCTION phaseHop {
                 SET reason TO "impact within tolerance".
                 SET done TO TRUE.
             } ELSE IF bestDist < startDist
-                    AND impactDist > bestDist + divergeMargin
+                    AND impactDist > bestDist + MAX(250, HOP_TOLERANCE)
                     AND TIME:SECONDS - bestTime > 0.5
                     AND TIME:SECONDS - burnStart > 2 {
                 SET reason TO "impact diverging after best".
@@ -283,7 +251,7 @@ GLOBAL FUNCTION phaseHop {
                 + "s Ap=" + ROUND(SHIP:APOAPSIS / 1000, 1)
                 + "km impact=" + ROUND(impactDist, 0)
                 + "m best=" + ROUND(bestDist, 0)
-                + "m twr=" + ROUND(_hopTwr(), 2)
+                + "m twr=" + ROUND(shipTwr(), 2)
                 + " lim=" + ROUND(_hopAverageThrustLimit(), 1)
                 + "% align=" + ROUND(VANG(SHIP:FACING:FOREVECTOR,
                     steeringTarget), 1) + "deg.").

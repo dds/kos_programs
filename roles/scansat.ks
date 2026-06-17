@@ -14,19 +14,6 @@ SET DESCENT_DECOUPLER_TAG TO "none".
 
 applyKnownMissionState().
 
-LOCAL FUNCTION _fr3PrintConfig {
-    LOCAL seq IS fr3BuildPhaseSequence().
-    flightPlanTitle("FR3C SCANSAT FLIGHT PLAN", SHIP:NAME).
-    flightPlanIdentity().
-    flightPlanSection("MISSION").
-    flightPlanRow("BAND", phaseBand()).
-    flightPlanRow("TARGET", getTarget()).
-    flightPlanRow("PAYLOADS", PAYLOADS).
-    flightPlanConfig().
-    flightPlanSection("SEQUENCE").
-    flightPlanSequence(seq).
-}
-
 GLOBAL FUNCTION fr3BuildPhaseSequence {
     IF SEQUENCE <> "" {
         RETURN phaseListFromString(SEQUENCE).

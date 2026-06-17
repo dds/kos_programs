@@ -22,11 +22,6 @@ LOCAL FUNCTION _ascentAngleError {
     RETURN VANG(SHIP:FACING:FOREVECTOR, SHIP:VELOCITY:SURFACE).
 }
 
-LOCAL FUNCTION _ascentTwr {
-    IF SHIP:MASS <= 0 { RETURN 0. }
-    RETURN SHIP:AVAILABLETHRUST / (SHIP:MASS * 9.81).
-}
-
 LOCAL FUNCTION _launchHasAtmosphere {
     RETURN SHIP:BODY:ATM:HEIGHT > 0.
 }
@@ -69,7 +64,7 @@ LOCAL FUNCTION _logAscentTelemetry {
         + " age=" + ROUND(_launchAge(),1)
         + " status=" + SHIP:STATUS
         + " massT=" + ROUND(SHIP:MASS,2)
-        + " twr=" + ROUND(_ascentTwr(),2)
+        + " twr=" + ROUND(shipTwr(),2)
         + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)
         + " maxThrust=" + ROUND(SHIP:MAXTHRUST,1)
         + " altKm=" + ROUND(SHIP:ALTITUDE/1000,2)
@@ -94,47 +89,6 @@ LOCAL FUNCTION _badAscentTrajectory {
     RETURN SHIP:APOAPSIS < 10000.
 }
 
-LOCAL FUNCTION _launchDropSurfaceReturnTanks {
-    IF stateGet("mission_type", "") <> "surface_return" { RETURN. }
-    IF stateGet("surface_return_droptanks_jettisoned", "false") = "true" {
-        RETURN.
-    }
-
-    LOCAL parts IS SHIP:PARTSTAGGED("droptanks").
-    IF parts:LENGTH = 0 {
-        mLog("Surface return: no droptanks decouplers tagged.").
-        RETURN.
-    }
-
-    LOCAL fired IS 0.
-    FOR dc IN parts {
-        IF dc:HASMODULE("ModuleDecouple") {
-            LOCAL decoupleMod IS dc:GETMODULE("ModuleDecouple").
-            IF decoupleMod:HASEVENT("Decouple") {
-                decoupleMod:DOEVENT("Decouple").
-                SET fired TO fired + 1.
-            }
-        } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
-            LOCAL anchoredMod IS dc:GETMODULE("ModuleAnchoredDecoupler").
-            IF anchoredMod:HASEVENT("Decouple") {
-                anchoredMod:DOEVENT("Decouple").
-                SET fired TO fired + 1.
-            }
-        } ELSE {
-            mLogWarn("Tagged droptanks part has no decoupler module: "
-                + dc:TITLE + ".").
-        }
-    }
-
-    IF fired > 0 {
-        stateSet("surface_return_droptanks_jettisoned", "true").
-        mLog("Surface return: fired " + fired
-            + " droptanks decoupler(s).").
-    } ELSE {
-        mLogWarn("Surface return: no droptanks decouplers fired.").
-    }
-}
-
 GLOBAL FUNCTION phaseLaunch {
     mLog("Configuring MechJeb ascent...").
 
@@ -144,17 +98,12 @@ GLOBAL FUNCTION phaseLaunch {
         RETURN.
     }
 
-    LOCAL mjCore IS ADDONS:MJ:CORE.
-    mLog("MechJeb core running: " + mjCore:RUNNING).
-
-    LOCAL parkingAlt IS PARKING_ALT.
-    LOCAL launchInc IS LAUNCH_INCLINATION.
-    LOCAL launchAzimuth IS LAUNCH_AZIMUTH.
+    mLog("MechJeb core running: " + ADDONS:MJ:CORE:RUNNING).
 
     LOCAL asc IS ADDONS:MJ:ASCENT.
     SET asc:ENABLED               TO TRUE.
-    SET asc:DESIREDALTITUDE       TO parkingAlt.
-    SET asc:DESIREDINCLINATION    TO launchInc.
+    SET asc:DESIREDALTITUDE       TO PARKING_ALT.
+    SET asc:DESIREDINCLINATION    TO LAUNCH_INCLINATION.
     SET asc:AUTOSTAGE             TO FALSE.
     SET asc:AUTOSTAGELIMIT        TO 0.
     SET asc:AUTODEPLOYANTENNAS    TO FALSE.
@@ -162,9 +111,9 @@ GLOBAL FUNCTION phaseLaunch {
     SET asc:AUTOWARP              TO FALSE.
     SET asc:SKIPCIRCULARIZATION   TO FALSE.
 
-    mLog("MechJeb ascent armed. Alt=" + ROUND(parkingAlt/1000,0)
-        + "km  inc=" + launchInc
-        + "°  az=" + launchAzimuth + "°").
+    mLog("MechJeb ascent armed. Alt=" + ROUND(PARKING_ALT/1000,0)
+        + "km  inc=" + LAUNCH_INCLINATION
+        + "°  az=" + LAUNCH_AZIMUTH + "°").
 
     WHEN bootLibAscentWatchPhase() THEN {
         LOCAL abortTriggered IS FALSE.
@@ -224,11 +173,9 @@ GLOBAL FUNCTION phaseLaunch {
 
     mLog("Press ABORT within 5s to hold launch.").
     HUDTEXT("T-5: ABORT to hold", 5, 2, 16, YELLOW, FALSE).
-    LOCAL aborted IS FALSE.
     LOCAL tEnd IS TIME:SECONDS + 5.
     WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT.
-    IF ABORT { SET aborted TO TRUE. }
-    IF aborted {
+    IF ABORT {
         mLog("Launch hold — operator abort.").
         SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
         RETURN.
@@ -244,7 +191,15 @@ GLOBAL FUNCTION phaseLaunch {
     mLog("Launch — STAGE fired.").
     HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
     WAIT 0.5.
-    _launchDropSurfaceReturnTanks().
+    LOCAL postStageHook IS stateGet("post_stage_hook", ""):TRIM.
+    IF postStageHook <> "" {
+        IF EXISTS(postStageHook) {
+            mLog("Running post-stage hook: " + postStageHook + ".").
+            RUNPATH(postStageHook).
+        } ELSE {
+            mLogWarn("Post-stage hook not found: " + postStageHook + ".").
+        }
+    }
 
     armAscentStaging().
 
@@ -519,33 +474,18 @@ GLOBAL FUNCTION armAscentStaging {
 // ── Private helpers ──────────────────────────────────────────
 
 // ── Abort mode ───────────────────────────────────────────────
-// launchAbort is the trigger: cut propulsion, fire the vessel's
-// VAB Abort action group (escape motor / separation), and route
-// the phase machine into ABORT. The isolated ABORT lib does the
-// real work - chute verification, descent monitoring, archiving,
-// operator card - and is reboot-safe. GLOBAL: the suborbit lib
-// calls it too.
-//
-// Setting ABORT ON also flips the condition every ascent-phase
-// wait watches, so the main thread breaks out of its altitude
-// wait even when the abort fired from the WHEN watcher.
+// launchAbort is only the trigger: stop propulsion, fire the
+// vessel abort action group, mark the ABORT phase, and reboot
+// into the isolated abort library.
 GLOBAL FUNCTION launchAbort {
-    mLogError("LAUNCH ABORT TRIGGERED.").
-    HUDTEXT("ABORT", 5, 2, 20, RED, FALSE).
-
-    IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
     LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
-    UNLOCK STEERING.
     FOR eng IN SHIP:ENGINES {
         IF eng:IGNITION AND eng:ALLOWSHUTDOWN { eng:SHUTDOWN. }
     }
 
     ABORT ON.
-    SET SAS TO TRUE.
-
-    LOG "" TO "1:/run/obs_off".
     stateSet("phase", "ABORT").
+    REBOOT.
 }
 
 GLOBAL FUNCTION ascentNeedsStage {
@@ -589,11 +529,9 @@ GLOBAL FUNCTION ascentNeedsStage {
 }
 
 LOCAL FUNCTION _isParkingOrbitStable {
-    LOCAL target IS PARKING_ALT.
-    LOCAL tol IS target * 0.10.
-    RETURN SHIP:PERIAPSIS > (target - tol)
-        AND SHIP:APOAPSIS < (target + tol)
-        AND SHIP:APOAPSIS > (target - tol).
+    RETURN SHIP:PERIAPSIS > PARKING_ALT * 0.90
+        AND SHIP:APOAPSIS < PARKING_ALT * 1.10
+        AND SHIP:APOAPSIS > PARKING_ALT * 0.90.
 }
 
 LOCAL FUNCTION _deployFairing {
