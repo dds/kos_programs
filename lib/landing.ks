@@ -289,6 +289,45 @@ LOCAL FUNCTION _landingTrajError {
     ).
 }
 
+LOCAL FUNCTION _landingTargetRefineSteering {
+    PARAMETER ctx.
+    PARAMETER impactInfo.
+
+    LOCAL upVec IS ctx["UP_VEC"].
+    LOCAL horizontalVel IS ctx["H_VEL"].
+    LOCAL horizontalSpeed IS ctx["H_SPEED"].
+    LOCAL maxLean IS SIN(MAX_TILT).
+    LOCAL leanVec IS V(0,0,0).
+
+    IF horizontalSpeed > 0.1 {
+        SET leanVec TO leanVec
+            + (-horizontalVel):NORMALIZED
+                * MIN(maxLean,
+                    horizontalSpeed / LANDING_TARGET_REFINE_RETRO_RESPONSE).
+    }
+
+    IF impactInfo["FOUND"] {
+        LOCAL targetGeo IS LATLNG(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+        LOCAL impactGeo IS LATLNG(impactInfo["LAT"], impactInfo["LNG"]).
+        LOCAL impactToTarget IS VXCL(upVec,
+            targetGeo:POSITION - impactGeo:POSITION).
+        IF impactToTarget:MAG > 1 {
+            LOCAL impactLean IS MIN(
+                maxLean * LANDING_TARGET_REFINE_IMPACT_WEIGHT,
+                impactToTarget:MAG / LANDING_TARGET_REFINE_IMPACT_SCALE
+                    * maxLean).
+            SET leanVec TO leanVec
+                + impactToTarget:NORMALIZED * impactLean.
+        }
+    }
+
+    IF leanVec:MAG < 0.01 { RETURN upVec. }
+    IF leanVec:MAG > maxLean {
+        SET leanVec TO leanVec:NORMALIZED * maxLean.
+    }
+    RETURN (upVec + leanVec):NORMALIZED.
+}
+
 LOCAL FUNCTION _landingTouchdownSettled {
     PARAMETER ctx.
 
@@ -453,6 +492,8 @@ LOCAL FUNCTION _landingSetState {
         _landingHudNotice(ctx, "Performing braking burn.", YELLOW, TRUE).
     } ELSE IF nextState = "APPROACH" {
         _landingHudNotice(ctx, "Performing approach.", CYAN, TRUE).
+    } ELSE IF nextState = "TARGET_REFINE" {
+        _landingHudNotice(ctx, "Neutralizing lateral drift for approach.", CYAN, TRUE).
     } ELSE IF nextState = "HOVER_REFINE" {
         vesselDeployGear().
         _landingHudNotice(ctx, "Hovering to refine target coordinates.", CYAN, TRUE).
@@ -633,15 +674,17 @@ LOCAL FUNCTION _landingBrakingTick {
 
     IF ctx["HAS_TARGET"]
             AND verticalCaptured
-            AND horizontalSpeed <= TERMINAL_HSPEED
-            AND distToTarget <= VERTICAL_RADIUS {
-        _landingSetState(ctx, "HOVER_REFINE",
-            "over-target vertical and horizontal capture").
-    } ELSE IF ctx["HAS_TARGET"]
-            AND verticalCaptured
             AND horizontalSpeed <= TERMINAL_HSPEED {
-        _landingSetState(ctx, "HOVER_REFINE",
-            "post-brake hover refinement").
+        IF distToTarget <= VERTICAL_RADIUS {
+            _landingSetState(ctx, "VERTICAL_DESCENT",
+                "over-target vertical and horizontal capture").
+        } ELSE IF burnHeight > APPROACH_SPEED_ALTITUDE_WINDOW {
+            _landingSetState(ctx, "VERTICAL_DESCENT",
+                "high-altitude vertical and horizontal capture").
+        } ELSE {
+            _landingSetState(ctx, "TARGET_REFINE",
+                "post-brake lateral stabilization").
+        }
     } ELSE IF burnHeight <= burnDist * BURN_MARGIN
             AND burnHeight <= HOVER_ALT {
         _landingSetState(ctx, "VERTICAL_DESCENT", "low vertical gate").
@@ -649,12 +692,43 @@ LOCAL FUNCTION _landingBrakingTick {
             AND verticalCaptured
             AND horizontalSpeed <= APPROACH_HSPEED
             AND distToTarget <= APPROACH_RADIUS {
-        _landingSetState(ctx, "HOVER_REFINE",
-            "approach corridor captured for hover refinement").
+        _landingSetState(ctx, "TARGET_REFINE",
+            "approach corridor captured for target refinement").
     } ELSE IF NOT ctx["HAS_TARGET"]
             AND verticalCaptured
             AND horizontalSpeed < APPROACH_HSPEED {
         _landingSetState(ctx, "VERTICAL_DESCENT", "blind horizontal velocity killed").
+    }
+}
+
+LOCAL FUNCTION _landingTargetRefineTick {
+    PARAMETER ctx.
+
+    LOCAL horizontalSpeed IS ctx["H_SPEED"].
+    LOCAL impactInfo IS _landingTrajImpactInfo(ctx).
+    LOCAL impactErr IS 999999.
+    LOCAL impactReady IS TRUE.
+    IF impactInfo["FOUND"] {
+        SET impactErr TO impactInfo["DIST"].
+        SET impactReady TO impactErr <= LANDING_TARGET_REFINE_IMPACT_TOLERANCE.
+    }
+
+    _landingSetSteering(ctx, _landingTargetRefineSteering(
+        ctx, impactInfo)).
+    _landingSetThrottle(ctx, lmVerticalThrottle(
+        0, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
+
+    _landingHudText(ctx, "TARGET REFINE hs=" + ROUND(horizontalSpeed,1)
+        + "/" + ROUND(LANDING_TARGET_REFINE_HSPEED,1)
+        + " trErr=" + ROUND(impactErr,0)
+        + " trOk=" + _landingBoolText(impactReady)
+        + " vs=" + ROUND(ctx["V_SPEED"],1)
+        + "/0 thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
+        1, 2, 13, CYAN, FALSE).
+
+    IF horizontalSpeed <= LANDING_TARGET_REFINE_HSPEED
+            AND impactReady {
+        _landingSetState(ctx, "APPROACH", "lateral drift neutralized").
     }
 }
 
@@ -721,7 +795,7 @@ LOCAL FUNCTION _landingApproachTick {
         _landingSetState(ctx, "HOVER_REFINE",
             "hover refinement lead time").
     } ELSE IF bottomAlt <= TERMINAL_ALT {
-        _landingSetState(ctx, "VERTICAL_DESCENT", "terminal altitude horizontal kill").
+        _landingSetState(ctx, "HOVER_REFINE", "terminal altitude hover pause").
     }
 }
 
@@ -750,6 +824,8 @@ LOCAL FUNCTION _landingHoverRefineTick {
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
     LOCAL desiredSpeed IS MIN(LANDING_HOVER_REFINE_MAX_SPEED,
         distToTarget * LANDING_HOVER_REFINE_SPEED_GAIN).
+    LOCAL stopSpeed IS SQRT(MAX(0, 2 * ctx["MAX_ACC"] * 0.35 * distToTarget)).
+    SET desiredSpeed TO MIN(desiredSpeed, stopSpeed).
 
     _landingSetSteering(ctx, lmApproachSteering(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
@@ -761,6 +837,7 @@ LOCAL FUNCTION _landingHoverRefineTick {
     _landingHudText(ctx, "HOVER d=" + ROUND(distToTarget,1)
         + " hs=" + ROUND(horizontalSpeed,1)
         + "/" + ROUND(desiredSpeed,1)
+        + " stop=" + ROUND(stopSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1),
         1, 2, 13, GREEN, FALSE).
 
@@ -848,6 +925,8 @@ LOCAL FUNCTION _landingGuidanceTick {
         _landingBrakeAlignTick(ctx).
     } ELSE IF ctx["STATE"] = "BRAKING_BURN" {
         _landingBrakingTick(ctx).
+    } ELSE IF ctx["STATE"] = "TARGET_REFINE" {
+        _landingTargetRefineTick(ctx).
     } ELSE IF ctx["STATE"] = "APPROACH" {
         _landingApproachTick(ctx).
     } ELSE IF ctx["STATE"] = "HOVER_REFINE" {
