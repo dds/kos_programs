@@ -28,7 +28,7 @@ GLOBAL FUNCTION dependencyLibs {
         "maneuver_orbit", LIST("maneuver", "inclination", "orbit"),
         "rdv_plan", LIST("hohmann_transfer", "maneuver", "lib_navigation", "orbit"),
         "maneuver_rendezvous", LIST("hohmann_transfer", "maneuver"),
-        "maneuver_transfer", LIST("hohmann_transfer", "maneuver", "maneuver_targeting", "lib_navigation", "orbit"),
+        "maneuver_transfer", LIST("hohmann_transfer", "maneuver", "maneuver_targeting", "lib_navigation", "orbit", "lib_bplane_math"),
         "maneuver_mcc", LIST("maneuver", "maneuver_targeting", "lib_navigation", "orbit"),
         "molniya", LIST("maneuver", "inclination"),
         "payload_landing", LIST("landing_config"),

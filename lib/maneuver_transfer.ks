@@ -18,6 +18,7 @@ GLOBAL TRANSFER_SCAN_SAMPLES_PER_ORBIT IS 24.
 GLOBAL TRANSFER_SCAN_LOOKAHEAD_HOURS IS 6.
 GLOBAL TRANSFER_SCAN_STEP_MINUTES IS 20.
 GLOBAL TRANSFER_PREVIEW_SHORTLIST IS 6.
+GLOBAL TRANSFER_DEFERRED_INC_ERR_TOL IS 45.
 
 
 // ============================================================
@@ -29,8 +30,8 @@ GLOBAL TRANSFER_PREVIEW_SHORTLIST IS 6.
 //              departure time + prograde dV to minimize distance to target.
 //              Smooth POSITIONAT objective, no binary encounter search.
 //      Interplanetary:  Lambert grid scan, full 3-axis node, conic validation
-//   2. PE pretargeting — force a dead-center collision course
-//      (PE=0) to maximize the target SOI intercept margin.
+//   2. Arrival pretargeting — target the requested B-plane when
+//      a capture inclination is configured, otherwise center-mass.
 //
 // Global config keys consumed:
 //   CAPTURE_DIR  — "PROGRADE" / "POLAR" / "RETROPOLAR" / "RETROGRADE"
@@ -88,10 +89,10 @@ GLOBAL FUNCTION planTransfer {
 
     IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
 
-    // --- 2. PE pretargeting ---
-    // Dumb Departure, Smart Coast: force a dead-center collision course
-    // to maximize SOI-intercept margin. BPLANE owns precision targeting
-    // during the mid-course correction.
+    // --- 2. Arrival pretargeting ---
+    // If a capture plane is requested, shape the ejection node directly
+    // toward the target B-plane. Otherwise keep the old center-mass
+    // targeting to maximize SOI intercept margin.
     LOCAL firstPatch IS _firstPatchBodyName(nd).
     LOCAL firstPatchOk IS firstPatch = "none" OR firstPatch = targetBody:NAME.
     IF firstPatch <> "none" AND BODY:BODY <> 0 AND firstPatch = BODY:BODY:NAME {
@@ -110,12 +111,16 @@ GLOBAL FUNCTION planTransfer {
         IF HASNODE { REMOVE nd. }
         RETURN.
     }
-    newtonTarget(nd, targetBody, "PE", 0).
+    IF captureInc >= 0 {
+        _refineEjectionTarget(nd, targetBody, targetPe, captureInc, lanTarget).
+    } ELSE {
+        newtonTarget(nd, targetBody, "PE", 0).
+    }
 
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
     IF finalPatch = 0 {
-        mLogError("planTransfer: no direct encounter after collision targeting.").
+        mLogError("planTransfer: no direct encounter after arrival targeting.").
         mLogWarn("STATS transfer result target=" + targetBody:NAME
             + " status=no-direct-encounter"
             + " dv=" + ROUND(nd:DELTAV:MAG,1)).
@@ -138,15 +143,124 @@ GLOBAL FUNCTION planTransfer {
         + " m/s  rawPe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km"
         + "  arrivalETA=" + ROUND(arrivalEta,0) + "s").
 
+    LOCAL transferMode IS "dumb-departure".
+    IF captureInc >= 0 { SET transferMode TO "targeted-bplane". }
     mLogWarn("STATS transfer result target=" + targetBody:NAME
         + " status=planned"
-        + " mode=dumb-departure"
+        + " mode=" + transferMode
         + " dv=" + ROUND(nd:DELTAV:MAG,1)
         + " PeKm=" + ROUND(finalPatch:PERIAPSIS/1000,1)
         + " arrivalEta=" + ROUND(arrivalEta,0)).
 
     maneuverUiArchiveLog("transfer").
     RETURN nd.
+}
+
+LOCAL FUNCTION _refineEjectionTarget {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    PARAMETER captureInc.
+    PARAMETER captureLan.
+
+    LOCAL fdStep IS 0.5.
+    LOCAL stepCap IS 10.
+    LOCAL maxIter IS 8.
+    LOCAL tol IS 2000.
+    LOCAL converged IS FALSE.
+
+    mLog("Targeted TMI: refining ejection to B-plane Pe="
+        + ROUND(targetPe / 1000, 1)
+        + "km inc=" + ROUND(captureInc, 1)
+        + " lan=" + ROUND(captureLan, 1) + ".").
+
+    FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
+        LOCAL meas IS measureArrival(nd, targetBody).
+        IF meas = 0 {
+            mLogWarn("Targeted TMI[" + i + "]: no measurable "
+                + targetBody:NAME + " arrival patch.").
+            BREAK.
+        }
+
+        LOCAL tgt IS targetBplaneVector(
+            targetBody, meas, targetPe, captureInc, captureLan, TRUE).
+        LOCAL errT IS tgt["bt"] - meas["bt"].
+        LOCAL errR IS tgt["br"] - meas["br"].
+        LOCAL errMag IS SQRT(errT ^ 2 + errR ^ 2).
+        LOCAL qT IS meas["bt"] - tgt["bt"].
+        LOCAL qR IS meas["br"] - tgt["br"].
+
+        mLog("  Targeted TMI[" + i + "] dBT="
+            + ROUND(errT / 1000, 1)
+            + "km dBR=" + ROUND(errR / 1000, 1)
+            + "km Pe=" + ROUND(meas["pe"] / 1000, 1)
+            + "km inc=" + ROUND(meas["inc"], 1)
+            + " dv=" + ROUND(nd:DELTAV:MAG, 1)).
+
+        IF errMag <= tol {
+            SET converged TO TRUE.
+            BREAK.
+        }
+
+        LOCAL r0 IS nd:RADIALOUT.
+        LOCAL n0 IS nd:NORMAL.
+
+        SET nd:RADIALOUT TO r0 + fdStep. WAIT 0.02.
+        LOCAL mRad IS measureArrival(nd, targetBody).
+        SET nd:RADIALOUT TO r0. WAIT 0.02.
+
+        SET nd:NORMAL TO n0 + fdStep. WAIT 0.02.
+        LOCAL mNrm IS measureArrival(nd, targetBody).
+        SET nd:NORMAL TO n0. WAIT 0.02.
+
+        IF mRad = 0 OR mNrm = 0 {
+            mLogWarn("Targeted TMI[" + i + "]: probe lost encounter — stopping.").
+            BREAK.
+        }
+
+        LOCAL tRad IS targetBplaneVector(
+            targetBody, mRad, targetPe, captureInc, captureLan, TRUE).
+        LOCAL tNrm IS targetBplaneVector(
+            targetBody, mNrm, targetPe, captureInc, captureLan, TRUE).
+
+        LOCAL j11 IS ((mRad["bt"] - tRad["bt"]) - qT) / fdStep.
+        LOCAL j21 IS ((mRad["br"] - tRad["br"]) - qR) / fdStep.
+        LOCAL j12 IS ((mNrm["bt"] - tNrm["bt"]) - qT) / fdStep.
+        LOCAL j22 IS ((mNrm["br"] - tNrm["br"]) - qR) / fdStep.
+        LOCAL det IS j11 * j22 - j12 * j21.
+        IF ABS(det) < 1e-3 {
+            mLogWarn("Targeted TMI[" + i + "]: singular Jacobian det="
+                + ROUND(det, 5) + ".").
+            BREAK.
+        }
+
+        LOCAL dRad IS ( j22 * errT - j12 * errR) / det.
+        LOCAL dNrm IS (-j21 * errT + j11 * errR) / det.
+        LOCAL stepMag IS SQRT(dRad ^ 2 + dNrm ^ 2).
+        IF stepMag > stepCap {
+            SET dRad TO dRad * stepCap / stepMag.
+            SET dNrm TO dNrm * stepCap / stepMag.
+        }
+
+        SET nd:RADIALOUT TO r0 + dRad.
+        SET nd:NORMAL TO n0 + dNrm.
+        WAIT 0.02.
+    }
+
+    LOCAL finalMeas IS measureArrival(nd, targetBody).
+    LOCAL finalPe IS -1.
+    LOCAL finalInc IS -1.
+    IF finalMeas <> 0 {
+        SET finalPe TO finalMeas["pe"].
+        SET finalInc TO finalMeas["inc"].
+    }
+    mLogWarn("STATS targeted-tmi target=" + targetBody:NAME
+        + " converged=" + converged
+        + " dv=" + ROUND(nd:DELTAV:MAG, 1)
+        + " PeKm=" + ROUND(finalPe / 1000, 1)
+        + " inc=" + ROUND(finalInc, 1)).
+
+    RETURN converged.
 }
 
 // ============================================================
@@ -171,6 +285,7 @@ LOCAL FUNCTION _localInterceptEval {
     PARAMETER nd.
     PARAMETER targetBody.
     PARAMETER hohmannTof.
+    PARAMETER captureInc IS -1.
 
     LOCAL ca IS _findClosestApproach(targetBody,
         nd:TIME + hohmannTof * 0.3,
@@ -178,6 +293,7 @@ LOCAL FUNCTION _localInterceptEval {
         45).
     LOCAL patch IS _getTargetPatch(nd, targetBody).
     LOCAL score IS ca["distance"] + nd:DELTAV:MAG * 100.
+    LOCAL incErr IS 999.
     LOCAL obstacleName IS _firstPatchBodyName(nd).
     IF obstacleName <> "none" AND obstacleName <> targetBody:NAME {
         SET score TO score + 50000000.
@@ -186,11 +302,20 @@ LOCAL FUNCTION _localInterceptEval {
         // Any real SOI patch is better than a near miss. BPLANE can
         // move a rough patch; it cannot correct a non-encounter.
         SET score TO score - targetBody:SOIRADIUS * 2.
+        IF captureInc >= 0 {
+            SET incErr TO ABS(_angleError(patch:INCLINATION, captureInc)).
+            IF incErr > TRANSFER_DEFERRED_INC_ERR_TOL {
+                SET score TO score
+                    + ((incErr - TRANSFER_DEFERRED_INC_ERR_TOL) / 5) ^ 2
+                    * 20000.
+            }
+        }
     }
     RETURN LEXICON(
         "SCORE", score,
         "CA", ca,
         "PATCH", patch <> 0,
+        "INC_ERR", incErr,
         "OBSTACLE", obstacleName,
         "DV", nd:DELTAV:MAG
     ).
@@ -211,8 +336,9 @@ LOCAL FUNCTION _refineLocalSoiIntercept {
     PARAMETER nd.
     PARAMETER targetBody.
     PARAMETER hohmannTof.
+    PARAMETER captureInc IS -1.
 
-    LOCAL best IS _localInterceptEval(nd, targetBody, hohmannTof).
+    LOCAL best IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
     IF best["PATCH"] AND best["CA"]["distance"] < targetBody:SOIRADIUS * 0.85 {
         RETURN best.
     }
@@ -252,7 +378,7 @@ LOCAL FUNCTION _refineLocalSoiIntercept {
                 IF timeOk {
                     _nodeAxisSet(nd, axis, trialVal).
                     WAIT 0.02.
-                    LOCAL trial IS _localInterceptEval(nd, targetBody, hohmannTof).
+                    LOCAL trial IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
                     IF trial["SCORE"] < bestTrial["SCORE"] {
                         SET bestTrial TO trial.
                         SET bestAxis TO axis.
@@ -267,7 +393,7 @@ LOCAL FUNCTION _refineLocalSoiIntercept {
         IF bestAxis <> "" {
             _nodeAxisSet(nd, bestAxis, bestValue).
             WAIT 0.02.
-            SET best TO _localInterceptEval(nd, targetBody, hohmannTof).
+            SET best TO _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
             mLog("  SOI[" + iter + "] " + bestAxis + "="
                 + ROUND(bestValue, 2)
                 + " CA=" + ROUND(best["CA"]["distance"] / 1000, 1)
@@ -294,12 +420,13 @@ LOCAL FUNCTION _refineLocalSoiIntercept {
         }
     }
 
-    LOCAL final IS _localInterceptEval(nd, targetBody, hohmannTof).
+    LOCAL final IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
     mLogWarn("STATS soi-refine target=" + targetBody:NAME
         + " startCaKm=" + ROUND(startCA / 1000, 1)
         + " finalCaKm=" + ROUND(final["CA"]["distance"] / 1000, 1)
         + " startPatch=" + startPatch
         + " finalPatch=" + final["PATCH"]
+        + " incErr=" + ROUND(final["INC_ERR"], 1)
         + " prograde=" + ROUND(nd:PROGRADE, 1)
         + " normal=" + ROUND(nd:NORMAL, 1)
         + " radial=" + ROUND(nd:RADIALOUT, 1)
@@ -363,7 +490,7 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL bestTime IS MAX(scanStart, MIN(scanEnd, departUt)).
     SET nd:TIME TO bestTime.
     WAIT 0.1.
-    LOCAL bestEval IS _localInterceptEval(nd, targetBody, hohmannTof).
+    LOCAL bestEval IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
     LOCAL bestCA IS bestEval["CA"].
     LOCAL bestSeed IS bestEval.
     LOCAL encounterCount IS 0.
@@ -392,7 +519,7 @@ LOCAL FUNCTION _planLocalTransfer {
         IF tryTime <= scanEnd {
             SET nd:TIME TO tryTime.
             WAIT 0.02.
-            LOCAL tryEval IS _localInterceptEval(nd, targetBody, hohmannTof).
+            LOCAL tryEval IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
             LOCAL tryCa IS tryEval["CA"].
             LOCAL trySeed IS tryEval.
             LOCAL insertAt IS -1.
@@ -418,7 +545,9 @@ LOCAL FUNCTION _planLocalTransfer {
             }
             IF trySeed["PATCH"] {
                 SET encounterCount TO encounterCount + 1.
-                IF encounterCount >= 6 {
+                IF encounterCount >= 6
+                        AND (captureInc < 0
+                            OR bestSeed["INC_ERR"] <= TRANSFER_DEFERRED_INC_ERR_TOL) {
                     mLog("Raw transfer scan: found " + encounterCount
                         + " target encounters; ending scan early.").
                     BREAK.
@@ -445,9 +574,9 @@ LOCAL FUNCTION _planLocalTransfer {
         LOCAL tD IS tA + (tB - tA) / gr.
 
         SET nd:TIME TO tC. WAIT 0.02.
-        LOCAL seedC IS _localInterceptEval(nd, targetBody, hohmannTof).
+        LOCAL seedC IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
         SET nd:TIME TO tD. WAIT 0.02.
-        LOCAL seedD IS _localInterceptEval(nd, targetBody, hohmannTof).
+        LOCAL seedD IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
 
         IF seedC["SCORE"] < seedD["SCORE"] {
             SET tB TO tD.
@@ -462,7 +591,7 @@ LOCAL FUNCTION _planLocalTransfer {
     LOCAL dvSteps IS 20.
     LOCAL dvStep IS dvRange * 2 / dvSteps.
     LOCAL bestDv IS hohmannDv.
-    SET bestEval TO _localInterceptEval(nd, targetBody, hohmannTof).
+    SET bestEval TO _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
     SET bestCA TO bestEval["CA"].
     SET bestSeed TO bestEval.
 
@@ -470,7 +599,7 @@ LOCAL FUNCTION _planLocalTransfer {
         LOCAL tryDv IS hohmannDv - dvRange + di * dvStep.
         SET nd:PROGRADE TO tryDv.
         WAIT 0.02.
-        LOCAL trySeed IS _localInterceptEval(nd, targetBody, hohmannTof).
+        LOCAL trySeed IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
         LOCAL tryCa IS trySeed["CA"].
         IF trySeed["SCORE"] < bestSeed["SCORE"] {
             SET bestCA TO tryCa.
@@ -489,9 +618,9 @@ LOCAL FUNCTION _planLocalTransfer {
         LOCAL dvD IS dvA + (dvB - dvA) / gr.
 
         SET nd:PROGRADE TO dvC. WAIT 0.02.
-        LOCAL seedC IS _localInterceptEval(nd, targetBody, hohmannTof).
+        LOCAL seedC IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
         SET nd:PROGRADE TO dvD. WAIT 0.02.
-        LOCAL seedD IS _localInterceptEval(nd, targetBody, hohmannTof).
+        LOCAL seedD IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
 
         IF seedC["SCORE"] < seedD["SCORE"] {
             SET dvB TO dvD.
@@ -512,14 +641,14 @@ LOCAL FUNCTION _planLocalTransfer {
         LOCAL bestNrm IS nd:NORMAL.
         LOCAL nrmGoodEnough IS FALSE.
         SET bestCA TO gateCA.
-        SET bestEval TO _localInterceptEval(nd, targetBody, hohmannTof).
+        SET bestEval TO _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
         SET bestSeed TO bestEval.
 
         FROM { LOCAL ni IS 0. } UNTIL ni > nrmSteps STEP { SET ni TO ni + 1. } DO {
             LOCAL tryNrm IS bestNrm - nrmRange + ni * nrmStep.
             SET nd:NORMAL TO tryNrm.
             WAIT 0.02.
-            LOCAL trySeed IS _localInterceptEval(nd, targetBody, hohmannTof).
+            LOCAL trySeed IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
             LOCAL tryCa IS trySeed["CA"].
             IF trySeed["SCORE"] < bestSeed["SCORE"] {
                 SET bestCA TO tryCa.
@@ -545,9 +674,9 @@ LOCAL FUNCTION _planLocalTransfer {
                 LOCAL nrmD IS nrmA + (nrmB - nrmA) / gr.
 
                 SET nd:NORMAL TO nrmC. WAIT 0.02.
-                LOCAL seedC IS _localInterceptEval(nd, targetBody, hohmannTof).
+                LOCAL seedC IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
                 SET nd:NORMAL TO nrmD. WAIT 0.02.
-                LOCAL seedD IS _localInterceptEval(nd, targetBody, hohmannTof).
+                LOCAL seedD IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
 
                 IF seedC["SCORE"] < seedD["SCORE"] {
                     SET nrmB TO nrmD.
@@ -569,12 +698,12 @@ LOCAL FUNCTION _planLocalTransfer {
             + ", SOI=" + ROUND(targetBody:SOIRADIUS/1000, 0) + "km)").
     }
 
-    LOCAL interceptCheck IS _localInterceptEval(nd, targetBody, hohmannTof).
+    LOCAL interceptCheck IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
     IF (NOT interceptCheck["PATCH"]) OR interceptCheck["CA"]["distance"] > targetBody:SOIRADIUS * 0.85 {
-        SET interceptCheck TO _refineLocalSoiIntercept(nd, targetBody, hohmannTof).
+        SET interceptCheck TO _refineLocalSoiIntercept(nd, targetBody, hohmannTof, captureInc).
     }
 
-    LOCAL finalSeed IS _localInterceptEval(nd, targetBody, hohmannTof).
+    LOCAL finalSeed IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
     LOCAL finalCA IS finalSeed["CA"].
     mLog("Optimized: CA=" + ROUND(finalCA["distance"]/1000, 1) + "km"
         + " score=" + ROUND(finalSeed["SCORE"], 2)
@@ -584,6 +713,7 @@ LOCAL FUNCTION _planLocalTransfer {
         + " caKm=" + ROUND(finalCA["distance"]/1000,1)
         + " score=" + ROUND(finalSeed["SCORE"],2)
         + " patch=" + finalSeed["PATCH"]
+        + " incErr=" + ROUND(finalSeed["INC_ERR"],1)
         + " firstPatch=" + _firstPatchBodyName(nd)
         + " obstacle=" + finalSeed["OBSTACLE"]
         + " prograde=" + ROUND(nd:PROGRADE,1)
@@ -612,6 +742,7 @@ LOCAL FUNCTION _logLocalTransferShortlist {
                 + " closestT=" + ROUND(ca["time"] - TIME:SECONDS, 0)
                 + " score=" + ROUND(seed["SCORE"], 2)
                 + " patch=" + seed["PATCH"]
+                + " incErr=" + ROUND(seed["INC_ERR"], 1)
                 + " obstacle=" + seed["OBSTACLE"]
                 + " dv=" + ROUND(seed["DV"], 1)).
         }
