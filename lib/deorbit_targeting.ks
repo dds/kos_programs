@@ -99,7 +99,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL maxDownfield IS 20000.
     LOCAL minRetroDv IS 2.
     LOCAL seedRetroDv IS 15.
-    LOCAL maxRetroDv IS 80.
+    LOCAL maxRetroDv IS 120.
     ADDONS:TR:SETTARGET(targetGeo).
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + ","
