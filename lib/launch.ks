@@ -723,7 +723,7 @@ GLOBAL FUNCTION rocketMain {
     SET xferSeq TO seq.
 
     mLogPhase(vehicleName + " MAIN").
-    mLog("Target: " + TARGET_ + "  Payloads: " + PAYLOADS).
+    mLog("Target: " + getTarget() + "  Payloads: " + PAYLOADS).
     mLog("Sequence: " + seq:JOIN(" -> ")).
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
 

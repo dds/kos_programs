@@ -132,8 +132,8 @@ LOCAL FUNCTION _launchPlaneTargetName {
     LOCAL nm IS "".
     IF LAUNCH_PLANE_TARGET <> "" {
         SET nm TO LAUNCH_PLANE_TARGET.
-    } ELSE IF stateGet("target", "") <> "" {
-        SET nm TO stateGet("target", "").
+    } ELSE IF getTarget("") <> "" {
+        SET nm TO getTarget("").
     } ELSE IF HASTARGET AND (TARGET:ISTYPE("Body") OR TARGET:ISTYPE("Vessel")) {
         SET nm TO TARGET:NAME.
     }

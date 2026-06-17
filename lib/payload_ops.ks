@@ -93,8 +93,8 @@ GLOBAL FUNCTION phaseRelayOps {
     SET SAS TO TRUE.
     orbitSummary().
     orientForSolar().
-    mLog("Relay on station at " + TARGET_ + ".").
-    HUDTEXT("Relay deployed: " + TARGET_,, 8, 2, 18, GREEN, FALSE).
+    mLog("Relay on station at " + getTarget() + ".").
+    HUDTEXT("Relay deployed: " + getTarget(), 8, 2, 18, GREEN, FALSE).
     LOCAL n IS 0.
     UNTIL n >= 5 { WAIT 60. orbitSummary(). SET n TO n + 1. }
     nextPhase(_payloadSeq()).

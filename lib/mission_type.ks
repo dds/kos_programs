@@ -20,8 +20,7 @@ GLOBAL FUNCTION missionTypeDetect {
     LOCAL explicit IS stateGet("mission_type", "").
     SET explicit TO MISSION_TYPE.
     IF explicit <> "" { RETURN explicit. }
-    LOCAL target IS stateGet("target", "KERBIN").
-    IF TARGET_ <> "" { SET target TO TARGET_. }
+    LOCAL target IS getTarget().
     IF target = "MUN" OR target = "MINMUS" { RETURN "kerbin_moon". }
     IF target = "KERBIN" { RETURN "kerbin_return". }
     RETURN "interplanetary".

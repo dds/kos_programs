@@ -107,7 +107,7 @@ LOCAL FUNCTION _printConfig {
     IF LAUNCH_STAGE_LIMIT > 0 {
         flightPlanRow("MJ LIMIT", "stage " + LAUNCH_STAGE_LIMIT).
     }
-    IF TARGET_ <> "KERBIN" {
+    IF getTarget() <> "KERBIN" {
         flightPlanSection("TRANSFER").
         flightPlanRow("CAPTURE PE", ROUND(CAPTURE_PE/1000,0) + " km").
         IF CAPTURE_LAN >= 0 {

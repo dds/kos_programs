@@ -30,7 +30,7 @@ LOCAL FUNCTION _falconPrintConfig {
     flightPlanIdentity().
     flightPlanSection("MISSION").
     flightPlanRow("BAND", phaseBand()).
-    flightPlanRow("TARGET", TARGET_).
+    flightPlanRow("TARGET", getTarget()).
     flightPlanRow("PAYLOADS", PAYLOADS).
     flightPlanConfig().
     flightPlanSection("SEQUENCE").
@@ -42,7 +42,6 @@ GLOBAL FUNCTION falconBuildPhaseSequence {
         RETURN phaseListFromString(SEQUENCE).
     }
 
-    LOCAL targetFromState IS stateGet("target", "KERBIN").
     LOCAL payloadPhases IS LEXICON(
         "SCISAT", LIST("SCIENCE_OPS"),
         "SCANSAT", LIST("SCANSAT_OPS"),
@@ -53,7 +52,7 @@ GLOBAL FUNCTION falconBuildPhaseSequence {
     ).
 
     LOCAL seq IS LIST("LAUNCH", "FAIR", "ANTS", "PARK").
-    IF targetFromState <> "KERBIN" {
+    IF getTarget() <> "KERBIN" {
         seq:ADD("XING").
         seq:ADD("BPLANE").
         seq:ADD("COAST_1HALF").
@@ -130,7 +129,7 @@ GLOBAL FUNCTION main {
     SET xferSeq TO seq.
 
     mLogPhase("FALCON MAIN").
-    mLog("Target: " + TARGET_ + "  Payloads: " + PAYLOADS).
+    mLog("Target: " + getTarget() + "  Payloads: " + PAYLOADS).
     mLog("Sequence: " + seq:JOIN(" -> ")).
     bootEnsureInitialPhase(seq).
 

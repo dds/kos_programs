@@ -23,7 +23,7 @@ GLOBAL FUNCTION missionHas {
 }
 
 GLOBAL FUNCTION missionTargetBody {
-    RETURN BODY(TARGET_).
+    RETURN BODY(getTarget()).
 }
 
 GLOBAL FUNCTION resumeMission {
@@ -68,7 +68,7 @@ GLOBAL FUNCTION buildRocketSequence {
     IF RENDEZVOUS_TARGET <> "" { SET needsRdv TO TRUE. }
     IF ASTEROID_TARGET <> "" { SET needsRdv TO TRUE. }
     IF needsRdv { seq:ADD("RDV"). }
-    IF TARGET_ <> "KERBIN" {
+    IF getTarget() <> "KERBIN" {
         seq:ADD("XING").
         seq:ADD("MCC").
         seq:ADD("COAST").

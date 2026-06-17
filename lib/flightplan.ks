@@ -106,7 +106,7 @@ GLOBAL FUNCTION flightPlanIdentity {
     IF CORE:TAG <> "" { flightPlanRow("CORE", CORE:TAG). }
     flightPlanRow("FREE", ROUND(CORE:VOLUME:FREESPACE, 0) + " bytes").
     IF DEFINED MISSION {
-        flightPlanRow("TARGET", TARGET_).
+        flightPlanRow("TARGET", getTarget()).
         IF PAYLOADS <> "" {
             flightPlanRow("PAYLOADS", PAYLOADS).
         }

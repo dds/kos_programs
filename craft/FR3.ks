@@ -16,7 +16,7 @@ LOCAL FUNCTION _fr3PrintConfig {
     flightPlanIdentity().
     flightPlanSection("MISSION").
     flightPlanRow("BAND", phaseBand()).
-    flightPlanRow("TARGET", TARGET_).
+    flightPlanRow("TARGET", getTarget()).
     flightPlanRow("PAYLOADS", PAYLOADS).
     flightPlanConfig().
     flightPlanSection("SEQUENCE").

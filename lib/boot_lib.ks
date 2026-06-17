@@ -49,7 +49,7 @@ GLOBAL FUNCTION bootVehicleInfo {
             AND NOT stateGet("vehicle", ""):CONTAINS(" ")
             AND SHIP:STATUS <> "PRELAUNCH" {
         SET vehicleName TO stateGet("vehicle", "").
-        SET targetName TO stateGet("target", "KERBIN").
+        SET targetName TO getTarget().
         LOCAL rawPayloads IS stateGet("payloads", "").
         IF rawPayloads <> "" {
             FOR p IN rawPayloads:SPLIT(",") {
@@ -230,7 +230,10 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     IF MISSION_ID <> "" { stateSet("mission_id", MISSION_ID). }
     IF stateGet("mission_id", "") = "" { stateSet("mission_id", missionId). }
     IF MISSION_NAME <> "" { stateRemove("mission_name"). }
-    IF TARGET_ <> "" { stateRemove("target"). }
+    IF TARGET_ <> "" {
+        stateRemove("target").
+        getTarget().
+    }
     IF PAYLOADS <> "" { stateRemove("payloads"). }
     IF MISSION_TYPE <> "" { stateRemove("mission_type"). }
     IF MISSION_NAME <> "" {
@@ -238,7 +241,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     } ELSE {
         PRINT "  Mission: " + stateGet("mission_id", missionId).
     }
-    IF TARGET_ <> "" { PRINT "  Target:  " + TARGET_. }
+    IF getTarget("") <> "" { PRINT "  Target:  " + getTarget(""). }
     IF PAYLOADS <> "" { PRINT "  Payload: " + PAYLOADS. }
     printStorageStatus().
     RETURN TRUE.
@@ -637,6 +640,16 @@ GLOBAL FUNCTION missionListFromCsv {
         IF item <> "" { values:ADD(item). }
     }
     RETURN values.
+}
+
+GLOBAL FUNCTION getTarget {
+    PARAMETER fallback IS "KERBIN".
+    LOCAL targetName IS stateGet("target", "").
+    IF targetName <> "" { RETURN targetName. }
+    SET targetName TO TARGET_.
+    IF targetName = "" { SET targetName TO fallback. }
+    IF targetName <> "" { stateSet("target", targetName). }
+    RETURN targetName.
 }
 
 GLOBAL FUNCTION bootCachedVehicleLibs {
