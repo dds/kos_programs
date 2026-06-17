@@ -378,7 +378,7 @@ LOCAL FUNCTION _landingBrakeGateInfo {
     LOCAL gravAcc IS ctx["GRAV"].
     LOCAL downSpeed IS ctx["DOWN_SPEED"].
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
-    LOCAL horizontalAcc IS MAX(0.1, maxAcc).
+    LOCAL horizontalAcc IS MAX(0.1, maxAcc * BRAKE_ACCEL_FRACTION).
     LOCAL brakeDist IS lmHorizontalBrakeDistance(
         horizontalSpeed, horizontalAcc).
     LOCAL burnDist IS lmVerticalBurnDistance(
@@ -847,7 +847,8 @@ LOCAL FUNCTION _landingBrakingTick {
         }
     } ELSE IF burnHeight <= burnDist * BURN_MARGIN
             AND burnHeight <= HOVER_ALT
-            AND (NOT ctx["HAS_TARGET"] OR horizontalSpeed <= APPROACH_HSPEED) {
+            AND (NOT ctx["HAS_TARGET"]
+                OR horizontalSpeed <= LANDING_LOW_ALT_HSPEED) {
         _landingSetState(ctx, "VERTICAL_DESCENT", "low vertical gate").
     } ELSE IF ctx["HAS_TARGET"]
             AND verticalCaptured
