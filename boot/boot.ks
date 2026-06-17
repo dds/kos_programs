@@ -121,7 +121,7 @@ IF vehicleScript:CONTAINS("/") {
 IF HAS_LINK {
     IF vehicleScript <> "" {
         PRINT "  SYNC " + vehicleScript + " ....... ".
-        IF _syncLib(vehicleScript).
+        _syncLib(vehicleScript).
     }
 }
 
