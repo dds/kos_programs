@@ -342,7 +342,7 @@ LOCAL FUNCTION _landingBrakeSteeringInfo {
 
     LOCAL retroSteering IS lmRetroSteering(
         ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"]).
-    LOCAL hardBrake IS ctx["H_SPEED"] > TERMINAL_HSPEED
+    LOCAL hardBrake IS ctx["H_SPEED"] > APPROACH_HSPEED
         AND _landingBurnHeight(ctx) > HOVER_ALT * 2.
     IF hardBrake AND ctx["H_VEL"]:MAG > 0.5 {
         SET retroSteering TO ((-ctx["H_VEL"]):NORMALIZED
@@ -540,14 +540,20 @@ LOCAL FUNCTION _landingBrakingTick {
     }
 
     LOCAL steerInfo IS _landingBrakeSteeringInfo(ctx).
+    LOCAL verticalThrottle IS lmVerticalThrottle(
+        targetVs, maxAcc, gravAcc, ctx["V_SPEED"]).
     LOCAL forceHorizontalBrake IS ctx["HAS_TARGET"]
-        AND horizontalSpeed > TERMINAL_HSPEED
+        AND horizontalSpeed > APPROACH_HSPEED
         AND burnHeight > HOVER_ALT * 2.
-    IF forceHorizontalBrake OR ctx["V_SPEED"] < targetVs - 5 {
+    LOCAL horizontalThrottle IS 0.
+    IF forceHorizontalBrake {
+        SET horizontalThrottle TO MAX(0.25, MIN(1,
+            (horizontalSpeed - APPROACH_HSPEED) / MAX(1, APPROACH_HSPEED))).
+    }
+    IF ctx["V_SPEED"] < targetVs - 5 {
         _landingSetThrottle(ctx, 1).
     } ELSE {
-        _landingSetThrottle(ctx, lmVerticalThrottle(
-            targetVs, maxAcc, gravAcc, ctx["V_SPEED"])).
+        _landingSetThrottle(ctx, MAX(verticalThrottle, horizontalThrottle)).
     }
 
     _landingHudText(ctx, "BRAKE d=" + ROUND(distToTarget,0)
@@ -557,6 +563,7 @@ LOCAL FUNCTION _landingBrakingTick {
         + " aErr=" + ROUND(steerInfo["ALIGN_ERR"],1)
         + " hard=" + _landingBoolText(steerInfo["HARD"])
         + " hKill=" + _landingBoolText(forceHorizontalBrake)
+        + " hThr=" + ROUND(horizontalThrottle,2)
         + " hs=" + ROUND(horizontalSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)
@@ -565,14 +572,16 @@ LOCAL FUNCTION _landingBrakingTick {
 
     IF ctx["HAS_TARGET"]
             AND verticalCaptured
-            AND horizontalSpeed <= TERMINAL_HSPEED {
-        IF burnHeight > APPROACH_SPEED_ALTITUDE_WINDOW {
-            _landingSetState(ctx, "VERTICAL_DESCENT",
-                "high-altitude vertical and horizontal capture").
-        } ELSE {
-            _landingSetState(ctx, "APPROACH",
-                "vertical and horizontal capture").
-        }
+            AND horizontalSpeed <= TERMINAL_HSPEED
+            AND distToTarget <= VERTICAL_RADIUS {
+        _landingSetState(ctx, "VERTICAL_DESCENT",
+            "over-target vertical and horizontal capture").
+    } ELSE IF ctx["HAS_TARGET"]
+            AND verticalCaptured
+            AND horizontalSpeed <= TERMINAL_HSPEED
+            AND burnHeight <= APPROACH_SPEED_ALTITUDE_WINDOW {
+        _landingSetState(ctx, "APPROACH",
+            "vertical and horizontal capture").
     } ELSE IF burnHeight <= burnDist * BURN_MARGIN
             AND burnHeight <= HOVER_ALT {
         _landingSetState(ctx, "VERTICAL_DESCENT", "low vertical gate").
