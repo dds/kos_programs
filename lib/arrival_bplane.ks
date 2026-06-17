@@ -241,6 +241,7 @@ LOCAL FUNCTION _arrivalPlaneNormal {
 // ============================================================
 LOCAL FUNCTION _targetB {
     PARAMETER targetBody, meas, wantPe, wantInc, wantLan.
+    PARAMETER quiet IS FALSE.
 
     LOCAL sHat IS meas["S"].
     LOCAL nTgt IS meas["hHat"].
@@ -255,10 +256,12 @@ LOCAL FUNCTION _targetB {
     LOCAL offPlane IS ABS(90 - VANG(nTgt, sHat)).
     IF offPlane > 0.5 {
         SET nTgt TO (nTgt - VDOT(nTgt, sHat) * sHat):NORMALIZED.
-        mLogWarn("BPLANE: requested plane tilted " + ROUND(offPlane, 1)
-            + "deg off the arrival asymptote — using closest"
-            + " achievable plane. Pick a different departure window"
-            + " for an exact match.").
+        IF NOT quiet {
+            mLogWarn("BPLANE: requested plane tilted " + ROUND(offPlane, 1)
+                + "deg off the arrival asymptote — using closest"
+                + " achievable plane. Pick a different departure window"
+                + " for an exact match.").
+        }
     }
 
     // Same-handed construction as the measurement: h = unit(S x B)
@@ -280,6 +283,27 @@ LOCAL FUNCTION _targetB {
         "bt", VDOT(bT, meas["tHat"]),
         "br", VDOT(bT, meas["rHat"]),
         "normal", nTgt).
+}
+
+LOCAL FUNCTION _bplaneCorridorError {
+    PARAMETER targetBody, meas, wantPe, wantInc, wantLan.
+
+    LOCAL tgt IS _targetB(targetBody, meas, wantPe, wantInc, wantLan).
+    LOCAL planeErr IS 0.
+    IF wantInc >= 0 { SET planeErr TO VANG(meas["hHat"], tgt["normal"]). }
+    RETURN LEX("peErr", meas["pe"] - wantPe,
+        "planeErr", planeErr,
+        "target", tgt).
+}
+
+LOCAL FUNCTION _bplaneCorridorOk {
+    PARAMETER err.
+    PARAMETER wantInc.
+    PARAMETER peTol.
+    PARAMETER angTol.
+
+    RETURN ABS(err["peErr"]) <= peTol
+        AND (wantInc < 0 OR err["planeErr"] <= angTol).
 }
 
 // ============================================================
@@ -472,6 +496,8 @@ GLOBAL FUNCTION planBplaneCorrection {
             LOCAL tgt IS _targetB(targetBody, meas, wantPe, wantInc, wantLan).
             LOCAL errT IS tgt["bt"] - meas["bt"].
             LOCAL errR IS tgt["br"] - meas["br"].
+            LOCAL qT IS meas["bt"] - tgt["bt"].
+            LOCAL qR IS meas["br"] - tgt["br"].
             LOCAL planeErr IS VANG(meas["hHat"], tgt["normal"]).
             mLog("  BPLANE[" + i + "] dBT=" + ROUND(errT / 1000, 1)
                 + "km dBR=" + ROUND(errR / 1000, 1)
@@ -502,10 +528,12 @@ GLOBAL FUNCTION planBplaneCorrection {
                 BREAK.
             }
 
-            LOCAL j11 IS (mRad["bt"] - meas["bt"]) / FD_STEP.
-            LOCAL j21 IS (mRad["br"] - meas["br"]) / FD_STEP.
-            LOCAL j12 IS (mNrm["bt"] - meas["bt"]) / FD_STEP.
-            LOCAL j22 IS (mNrm["br"] - meas["br"]) / FD_STEP.
+            LOCAL tRad IS _targetB(targetBody, mRad, wantPe, wantInc, wantLan, TRUE).
+            LOCAL tNrm IS _targetB(targetBody, mNrm, wantPe, wantInc, wantLan, TRUE).
+            LOCAL j11 IS ((mRad["bt"] - tRad["bt"]) - qT) / FD_STEP.
+            LOCAL j21 IS ((mRad["br"] - tRad["br"]) - qR) / FD_STEP.
+            LOCAL j12 IS ((mNrm["bt"] - tNrm["bt"]) - qT) / FD_STEP.
+            LOCAL j22 IS ((mNrm["br"] - tNrm["br"]) - qR) / FD_STEP.
             LOCAL det IS j11 * j22 - j12 * j21.
             IF ABS(det) < 1e-3 {
                 mLogWarn("BPLANE[" + i + "]: singular Jacobian (det="
@@ -598,8 +626,8 @@ LOCAL FUNCTION _bplaneWantInc {
 // ============================================================
 // phaseBplane — phase handler. Resolves the arrival body and
 // requested capture elements from globals/state, then runs up to
-// MAX_BURNS correction burns. Advances even when unconverged
-// (post-capture SHAPE is the safety net) but logs loudly.
+// MAX_BURNS correction burns. It holds the phase if the arrival
+// is still outside the corridor; CAPTURE cannot fix a bad Pe/plane.
 // ============================================================
 GLOBAL FUNCTION phaseBplane {
     LOCAL targetBody IS _bplaneTargetBody().
@@ -643,6 +671,22 @@ GLOBAL FUNCTION phaseBplane {
     LOCAL meas IS _measureArrival(0, targetBody).
     IF meas = 0 {
         mLogError("BPLANE: finished with NO encounter — operator attention needed.").
+        WAIT 30.
+        RETURN.
+    }
+    LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
+    IF NOT _bplaneCorridorOk(err, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) {
+        mLogError("BPLANE: failed to reach arrival corridor; holding phase. "
+            + "Pe=" + ROUND(meas["pe"] / 1000, 1)
+            + "km want=" + ROUND(wantPe / 1000, 1)
+            + "km planeErr=" + ROUND(err["planeErr"], 2)
+            + "deg. Replan XING or raise BPLANE_DV_CAP.").
+        mLogWarn("STATS bplane result PeKm=" + ROUND(meas["pe"] / 1000, 1)
+            + " inc=" + ROUND(meas["inc"], 2)
+            + " lan=" + ROUND(meas["lan"], 2)
+            + " planeErr=" + ROUND(err["planeErr"], 2)
+            + " burns=" + burns
+            + " status=failed-corridor").
         WAIT 30.
         RETURN.
     }
@@ -702,11 +746,23 @@ GLOBAL FUNCTION phaseRefineBplane {
 
     LOCAL meas IS _measureArrival(0, targetBody).
     IF meas <> 0 {
+        LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
+        IF NOT _bplaneCorridorOk(err, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) {
+            mLogError("REFINE_BPLANE: arrival still outside corridor; holding before capture. "
+                + "Pe=" + ROUND(meas["pe"] / 1000, 1)
+                + "km want=" + ROUND(wantPe / 1000, 1)
+                + "km planeErr=" + ROUND(err["planeErr"], 2)
+                + "deg.").
+            WAIT 30.
+            RETURN.
+        }
         mLog("REFINE_BPLANE done: Pe=" + ROUND(meas["pe"] / 1000, 1)
             + "km inc=" + ROUND(meas["inc"], 2)
             + " lan=" + ROUND(meas["lan"], 2) + ".").
     } ELSE {
         mLogWarn("REFINE_BPLANE: no encounter measurement after refinement.").
+        WAIT 30.
+        RETURN.
     }
     nextPhase(xferSeq).
 }
