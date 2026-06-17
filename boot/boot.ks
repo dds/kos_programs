@@ -183,6 +183,9 @@ IF isRoleScript {
 IF HAS_LINK {
     bootLibLoad("recovery").
 }
+IF HOMECONNECTION:ISCONNECTED AND EXISTS("0:/cmd/orientForSolar.ks") {
+    RUNPATH("0:/cmd/orientForSolar.ks").
+}
 PRINT "END OF LINE. GODSPEED.".
 UNLOCK ALL.
 SET SAS TO TRUE.
