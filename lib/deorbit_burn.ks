@@ -23,12 +23,16 @@ GLOBAL FUNCTION executeDeorbitNode {
     LOCAL burnTime IS burnDV / MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS).
     LOCAL startTime IS nd:TIME - burnTime / 2.
     IF startTime < TIME:SECONDS + 5 { SET startTime TO TIME:SECONDS + 5. }
-    LOCAL kacAlarmId IS maneuverEnsureBurnAlarm(startTime, burnDV, "Deorbit burn").
+    LOCAL alignStartTime IS startTime - 90.
+    LOCAL kacAlarmId IS maneuverEnsureBurnAlarm(startTime, burnDV, "Deorbit burn", 90).
     mLogWarn("STATS deorbit-burn setup dv=" + ROUND(burnDV,1)
         + " eta=" + ROUND(startTime - TIME:SECONDS,1)).
 
-    UNTIL TIME:SECONDS >= startTime - 90 {
-        WAIT MIN(10, MAX(0.5, startTime - 90 - TIME:SECONDS)).
+    IF TIME:SECONDS < alignStartTime {
+        coastAutoWarp(alignStartTime, "Deorbit burn approach", kacAlarmId).
+    }
+    UNTIL TIME:SECONDS >= alignStartTime {
+        WAIT MIN(10, MAX(0.5, alignStartTime - TIME:SECONDS)).
     }
 
     SET SAS TO FALSE.
