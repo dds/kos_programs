@@ -104,7 +104,6 @@ GLOBAL FUNCTION HOP {
 
    SAS OFF.
    RCS OFF.
-   GEAR OFF.
 
    LOCAL steeringTarget IS _hopSteer().
    LOCK STEERING TO steeringTarget.
