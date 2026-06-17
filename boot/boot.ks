@@ -126,6 +126,11 @@ IF HAS_LINK {
 }
 
 
+LOCAL vehicleLibs IS LIST().
+IF vehicleScript <> "" {
+    SET vehicleLibs TO bootVehicleLibs().
+}
+
 IF DEFINED BOOT_CLEANUP {
     LOCAL cleanupVehicle IS BOOT_CLEANUP["vehicle"].
     bootCleanup(cleanupVehicle, vehicleLibs).
@@ -156,11 +161,6 @@ IF HAS_LINK {
 
 IF vehicleScript <> "" {
     RUNPATH(vehicleScript).
-}
-
-LOCAL vehicleLibs IS LIST().
-IF vehicleScript <> "" {
-    SET vehicleLibs TO bootVehicleLibs().
 }
 
 bootMissionConfig(vehicleName, HAS_LINK).
