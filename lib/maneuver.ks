@@ -83,9 +83,7 @@ GLOBAL FUNCTION executeManeuver {
                 AND wakeTime - TIME:SECONDS >= COAST_HIBERNATE_MIN {
             _hibernateCmd().
         }
-        LOCAL wakeAlarmId IS maneuverEnsureBurnAlarm(wakeTime, burnDV,
-            "Burn wake", 0).
-        coastAutoWarp(wakeTime, "Burn coast", wakeAlarmId).
+        coastAutoWarp(wakeTime, "Burn coast", kacAlarmId).
         LOCAL solarRef IS -1.
         UNTIL TIME:SECONDS >= wakeTime {
             SET solarRef TO trySolarHoldTick(solarRef).
