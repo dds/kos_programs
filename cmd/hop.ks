@@ -1,4 +1,4 @@
-// cmd/hop.ks - Configure and run a ballistic surface hop phase.
+// cmd/hop.ks - Configure a ballistic surface hop phase.
 // Usage:
 //   RUNPATH("0:/cmd/hop.ks", 0, -98.39).
 //   RUNPATH("0:/cmd/hop.ks", 0, -98.39, 750, 45, 90, 10).
@@ -33,6 +33,16 @@ LOCAL FUNCTION _clearLibCache {
     }
 }
 
+LOCAL FUNCTION _clearHopLegState {
+    FOR key IN LIST(
+        "landing_state", "landing_lat", "landing_lng", "landing_time",
+        "mission_cfg_TARGET_LAT", "mission_cfg_TARGET_LNG",
+        "mission_cfg_TARGET_LOCK", "mission_cfg_TARGET_WAYPOINT"
+    ) {
+        stateRemove(key).
+    }
+}
+
 _cfg("SEQUENCE", "HOP,LAND_ASSIST,DONE").
 _cfg("HOP_TARGET_LAT", targetLat).
 _cfg("HOP_TARGET_LNG", targetLng).
@@ -47,12 +57,14 @@ stateSet("lib_band", "LAUNCH").
 stateSet("reload_required", "false").
 stateSet("launch_time", ROUND(TIME:SECONDS)).
 _clearLibCache().
+_clearHopLegState().
 
 PRINT "Hop phase armed.".
 PRINT "Sequence -> HOP,LAND_ASSIST,DONE.".
 PRINT "Target   -> " + ROUND(targetLat, 5) + ", " + ROUND(targetLng, 5) + ".".
 PRINT "Limits   -> Ap " + ROUND(maxApM / 1000, 1)
     + " km, burn " + ROUND(maxBurnSeconds, 0) + " s.".
+PRINT "Rebooting to load HOP phase.".
 
 mLog("Hop command armed: target=" + ROUND(targetLat, 5)
     + "," + ROUND(targetLng, 5)
@@ -61,6 +73,4 @@ mLog("Hop command armed: target=" + ROUND(targetLat, 5)
     + " maxBurn=" + ROUND(maxBurnSeconds, 0)
     + "s maxApKm=" + ROUND(maxApM / 1000, 1) + ".").
 
-bootLibLoad("hop").
-applyKnownMissionState().
-phaseHop().
+REBOOT.

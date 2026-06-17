@@ -80,6 +80,12 @@ GLOBAL FUNCTION phaseHop {
         HOP_TARGET_LAT, HOP_TARGET_LNG).
     ADDONS:TR:SETTARGET(LATLNG(HOP_TARGET_LAT, HOP_TARGET_LNG)).
 
+    IF ABORT {
+        mLogError("HOP held: ABORT is set before ignition; clear ABORT and resume HOP.").
+        PRINT "HOP held: clear ABORT before ignition.".
+        RETURN.
+    }
+
     PRINT " ".
     PRINT "  BALLISTIC HOP".
     PRINT "  Target lat/lng: " + ROUND(HOP_TARGET_LAT, 5)
@@ -134,12 +140,19 @@ GLOBAL FUNCTION phaseHop {
     LOCAL bestLat IS 0.
     LOCAL bestLng IS 0.
     LOCAL reason IS "operator abort".
+    LOCAL abortedHop IS FALSE.
     LOCAL done IS FALSE.
 
     LOCK THROTTLE TO 1.
 
-    UNTIL done OR ABORT {
+    UNTIL done {
         SET steeringTarget TO _hopSteer().
+
+        IF ABORT {
+            SET reason TO "operator abort".
+            SET abortedHop TO TRUE.
+            SET done TO TRUE.
+        }
 
         LOCAL hasImpact IS ADDONS:TR:HASIMPACT.
         LOCAL impactDist IS 999999.
@@ -195,6 +208,15 @@ GLOBAL FUNCTION phaseHop {
         + " best=" + ROUND(bestLat, 5) + "," + ROUND(bestLng, 5)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)).
+
+    IF abortedHop {
+        stateSet("phase", "HOP").
+        stateSet("lib_band", "LAUNCH").
+        stateSet("reload_required", "false").
+        PRINT "HOP aborted; holding HOP phase.".
+        mLogError("HOP aborted by operator; holding HOP phase. Clear ABORT before resuming.").
+        RETURN.
+    }
 
     PRINT "HOP cutoff: " + reason + ".".
     PRINT "Best impact miss: " + ROUND(bestDist, 0) + " m.".
