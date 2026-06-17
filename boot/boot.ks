@@ -125,49 +125,44 @@ IF HAS_LINK {
     }
 }
 
-IF vehicleScript <> "" {
-    // Vehicle script exposes bootVehicleLibs() before phase-band libs load.
-    RUNPATH(vehicleScript).
-}
+bootMissionConfig(vehicleName, HAS_LINK).
 
 LOCAL vehicleLibs IS LIST().
-IF vehicleScript <> "" {
+IF isRoleScript AND vehicleScript <> "" {
+    // Roles may not have mission profiles; keep their explicit boot hook.
+    RUNPATH(vehicleScript).
     SET vehicleLibs TO bootVehicleLibs().
-}
-
-IF DEFINED BOOT_CLEANUP {
-    LOCAL cleanupVehicle IS BOOT_CLEANUP["vehicle"].
-    bootCleanup(cleanupVehicle, vehicleLibs).
+} ELSE {
+    SET vehicleLibs TO bootPlannedMissionLibs().
 }
 
 IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
-    bootPruneLibs(vehicleLibs).
+    LOCAL cleanupVehicle IS vehicleName.
+    IF vehicleScript:CONTAINS("/") {
+        LOCAL cleanupParts IS vehicleScript:SPLIT("/").
+        IF cleanupParts[0] = "craft" { SET cleanupVehicle TO cleanupParts[1]. }
+    }
+    bootCleanup(cleanupVehicle, vehicleLibs).
     bootLibLoadList(vehicleLibs).
-    IF stateGet("mission_id", "") <> "" {
-        bootApplyMissionConfig(vehicleName, stateGet("mission_id", ""), HAS_LINK).
-    }
-    bootLibLoad("resume").
-    // Recovery is loaded only at startup/abort or after manual mode.
-    LOCAL phase_ IS stateGet("phase", "").
-    IF phase_ = "" OR phase_ = "ABORT" {
-        bootLibLoad("recovery").
-    }
 } ELSE {
     PRINT "  NO LINK: Bypassing library sync.".
     bootLibLoadList(vehicleLibs).
-    IF vehicleScript <> "" { RUNPATH(vehicleScript). }
-    IF stateGet("mission_id", "") <> "" {
-        bootApplyMissionConfig(vehicleName, stateGet("mission_id", ""), HAS_LINK).
-    }
-    bootLibLoad("resume").
 }
 
 IF vehicleScript <> "" {
     RUNPATH(vehicleScript).
 }
 
-bootMissionConfig(vehicleName, HAS_LINK).
+IF stateGet("mission_id", "") <> "" {
+    bootApplyMissionConfig(vehicleName, stateGet("mission_id", ""), HAS_LINK).
+}
+bootLibLoad("resume").
+// Recovery is loaded only at startup/abort or after manual mode.
+LOCAL phase_ IS stateGet("phase", "").
+IF phase_ = "" OR phase_ = "ABORT" {
+    bootLibLoad("recovery").
+}
 
 PRINT " ".
 PRINT "  BOOT #" + bootCount + " OK".

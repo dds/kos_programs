@@ -159,6 +159,13 @@ GLOBAL FUNCTION bootBaseName {
 
 GLOBAL FUNCTION bootArchiveOnlyLibs {
     LOCAL out IS LIST().
+    FOR libName IN LIST(
+        "xfer_plan",
+        "maneuver_transfer",
+        "maneuver_targeting"
+    ) {
+        IF NOT out:CONTAINS(libName) { out:ADD(libName). }
+    }
     IF DEFINED BOOT_ARCHIVE_ONLY {
         FOR libName IN BOOT_ARCHIVE_ONLY {
             IF libName <> "" AND NOT out:CONTAINS(libName) {
@@ -550,7 +557,10 @@ GLOBAL FUNCTION bootLibLoadList {
     PARAMETER roots.
     FOR libName IN bootLibResolve(roots) {
         LOCAL archivePath IS bootArchivePath(libName).
-        IF bootLibArchiveOnly(libName)
+        IF libName:CONTAINS("/") {
+            bootLibSync(libName).
+            RUNPATH(bootCorePath(libName)).
+        } ELSE IF bootLibArchiveOnly(libName)
                 AND HOMECONNECTION:ISCONNECTED
                 AND EXISTS(archivePath) {
             RUNONCEPATH(archivePath).
@@ -676,6 +686,37 @@ GLOBAL FUNCTION bootCachedVehicleLibs {
     RETURN missionListFromCsv(stateGet("lib_band_libs", "")).
 }
 
+GLOBAL FUNCTION bootPlannedMissionLibs {
+    PARAMETER defaultBand IS "LAUNCH".
+    LOCAL sequence IS phaseSequenceEnsurePrelaunch(missionListFromCsv(SEQUENCE)).
+    IF sequence:LENGTH > 0 {
+        bootEnsureInitialPhase(sequence).
+    }
+
+    LOCAL phase IS stateGet("phase", "").
+    LOCAL fallbackBand IS defaultBand.
+    IF phase = "" AND SHIP:STATUS = "PRELAUNCH" {
+        SET fallbackBand TO "PRELAUNCH".
+    }
+    LOCAL band IS bootLibBandForPhase(phase, fallbackBand).
+    LOCAL cachedLibs IS bootCachedVehicleLibs(band).
+    IF cachedLibs:LENGTH > 0 {
+        stateSet("lib_band_phase", phase).
+        stateSet("reload_required", "false").
+        RETURN cachedLibs.
+    }
+
+    stateSet("lib_band", band).
+    stateSet("lib_band_phase", phase).
+    stateSet("reload_required", "false").
+
+    LOCAL roots IS bootLibBandRoots(band).
+    missionAppendUnique(roots, missionTypeConditionalRoots(band)).
+    LOCAL libs IS missionLibs(roots).
+    stateSet("lib_band_libs", libs:JOIN(",")).
+    RETURN libs.
+}
+
 GLOBAL FUNCTION missionAppendUnique {
     PARAMETER dest.
     PARAMETER src.
@@ -799,8 +840,7 @@ GLOBAL FUNCTION missionSequenceLibs {
 
 // ============================================================
 // Aircraft boot helpers — shared by all airplane craft scripts.
-// These live here because bootVehicleLibs() runs before the airplane library
-// itself is loaded.
+// Kept for legacy role/manual paths that still ask scripts for explicit libs.
 // ============================================================
 
 GLOBAL FUNCTION airplaneSequenceFromState {

@@ -83,9 +83,9 @@ The selected mission id is persisted in state. The profile itself is copied
 to `1:/missions/<vehicle>/` and run on every boot; profiles are executable
 config scripts made of `SET NAME TO value.` lines. Runtime config overrides
 still use `mission_cfg_*` state, which boot turns back into `SET` overrides.
-The craft script's `bootVehicleLibs()` returns the library roots to sync;
-boot compiles them to KSM (comments cost nothing), prunes stale files, runs
-them, then auto-resumes or drops to manual mode.
+Boot plans the library band from the selected mission/phase, compiles it to
+KSM (comments cost nothing), prunes stale files, runs the vehicle defaults,
+then re-runs the mission profile so mission/body overrides win before resume.
 
 ### Phase machine and sequences
 
@@ -315,30 +315,23 @@ its own `1:/` volume, so state is naturally isolated.
 | Zombie | `zombie` | `roles/zombie.ks` | Dormant; remote-reboot backdoor |
 
 EVA kerbals are auto-detected (no tag needed) and run `roles/EVA.ks`, which
-branches on the kerbal's trait. Role scripts follow the same contract as
-vehicle scripts (`SET` defaults, `bootVehicleLibs()`, `main()`); keep them small —
-they usually live on OCTO-class cores.
+branches on the kerbal's trait. Role scripts keep an explicit
+`bootVehicleLibs()` hook because some roles do not have mission profiles;
+keep them small — they usually live on OCTO-class cores.
 
 ## Extending the system
 
-A vehicle script defines three things:
+A vehicle script defines two things:
 
 ```
-SET SOME_DEFAULT TO value.             // craft defaults (profile overrides)
-GLOBAL FUNCTION bootVehicleLibs { ... } // library roots for boot to sync
-GLOBAL FUNCTION main { ... }            // build seq + phase map, runPhases()
+SET SOME_DEFAULT TO value.  // craft defaults; mission profiles override them
+GLOBAL FUNCTION main { ... } // build seq + phase map, runPhases()
 ```
 
 Minimal pattern (see `craft/FDR1.ks` for a real one):
 
 ```
 LOCAL DEFAULT_SEQ IS LIST("XING", "COAST", "CAPTURE", "SHAPE", "DONE").
-
-GLOBAL FUNCTION bootVehicleLibs {
-    LOCAL cachedLibs IS bootCachedVehicleLibs().
-    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
-    RETURN bootLibBand("XFER").
-}
 
 GLOBAL FUNCTION main {
     LOCAL seq IS DEFAULT_SEQ.

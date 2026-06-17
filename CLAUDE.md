@@ -75,9 +75,9 @@ Looks like Python/JS; is neither.
 - **Boot**: `boot/boot.ks` → syncs `boot_lib` + `dependencies` → preamble
   libs → EVA/`CORE:TAG` routing (`roles/`) or vehicle script (`craft/`) →
   selected mission id persisted in state; profile copied to
-  `1:/missions/<vehicle>/` and run as `SET` overrides →
-  `bootVehicleLibs()` roots synced/compiled/run → 5 s manual-mode
-  window → resume.
+  `1:/missions/<vehicle>/` and run as planning `SET` overrides → mission
+  phase band synced/compiled/run → vehicle defaults/main loaded → profile
+  re-run so mission/body overrides win → 5 s manual-mode window → resume.
 - **Phases**: profiles own `SEQUENCE`; `runPhases(map)` dispatches by the
   persisted `phase` key; handlers call `nextPhase(seq)`. Sequences cannot
   repeat a phase name (lookup is by value) — multi-hop routes use the `GOTO`
@@ -89,10 +89,11 @@ Looks like Python/JS; is neither.
   waterfall.
 - **Missing handler** in `runPhases` ⇒ band-change request (`reload_*` state
   + reboot), not an error — that's the progressive-loading mechanism.
-- **Vehicle contract**: craft/profile scripts `SET` global config symbols,
-  then expose `bootVehicleLibs()` and `main()`. Aircraft delegate to
-  `airplaneMain()`. Runtime `mission_cfg_*` state is converted back into
-  `SET NAME TO value.` overrides during boot.
+- **Vehicle contract**: craft scripts `SET` hardware defaults and expose
+  `main()`; profiles own phase/library planning and final mission overrides.
+  Role scripts may still expose `bootVehicleLibs()` for profile-less support.
+  Runtime `mission_cfg_*` state is converted back into `SET NAME TO value.`
+  overrides during boot.
 
 ## Map of the important code
 
