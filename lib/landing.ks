@@ -314,11 +314,16 @@ LOCAL FUNCTION _landingTargetRefineSteering {
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
     LOCAL maxLean IS SIN(MAX_TILT).
     LOCAL leanVec IS V(0,0,0).
+    LOCAL retroLeanLimit IS maxLean.
+    IF impactInfo["FOUND"]
+            AND impactInfo["DIST"] > LANDING_TARGET_REFINE_IMPACT_TOLERANCE {
+        SET retroLeanLimit TO maxLean * LANDING_TARGET_REFINE_RETRO_WEIGHT.
+    }
 
     IF horizontalSpeed > 0.1 {
         SET leanVec TO leanVec
             + (-horizontalVel):NORMALIZED
-                * MIN(maxLean,
+                * MIN(retroLeanLimit,
                     horizontalSpeed / LANDING_TARGET_REFINE_RETRO_RESPONSE).
     }
 
@@ -756,8 +761,22 @@ LOCAL FUNCTION _landingTargetRefineTick {
 
     _landingSetSteering(ctx, _landingTargetRefineSteering(
         ctx, impactInfo)).
-    _landingSetThrottle(ctx, lmVerticalThrottle(
-        targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
+    LOCAL verticalThrottle IS lmVerticalThrottle(
+        targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"]).
+    LOCAL correctionThrottle IS 0.
+    IF NOT impactReady OR horizontalSpeed > LANDING_TARGET_REFINE_ACCEPT_HSPEED {
+        SET correctionThrottle TO LANDING_TARGET_REFINE_THR_MIN.
+        IF impactInfo["FOUND"] {
+            SET correctionThrottle TO MIN(LANDING_TARGET_REFINE_THR_MAX,
+                MAX(correctionThrottle,
+                    impactErr / MAX(1, LANDING_TARGET_REFINE_IMPACT_SCALE))).
+        } ELSE {
+            SET correctionThrottle TO MIN(LANDING_TARGET_REFINE_THR_MAX,
+                MAX(correctionThrottle,
+                    horizontalSpeed / MAX(1, APPROACH_HSPEED))).
+        }
+    }
+    _landingSetThrottle(ctx, MAX(verticalThrottle, correctionThrottle)).
 
     LOCAL refineEta IS MAX(0,
         LANDING_TARGET_REFINE_ACCEPT_TIME - refineAge).
@@ -768,6 +787,7 @@ LOCAL FUNCTION _landingTargetRefineTick {
         + " age=" + ROUND(refineAge,0)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)
+        + " cThr=" + ROUND(correctionThrottle,2)
         + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
         1, 2, 13, CYAN, FALSE, refineEta).
 
