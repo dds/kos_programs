@@ -126,10 +126,6 @@ IF HAS_LINK {
 }
 
 
-IF vehicleScript <> "" {
-    RUNPATH(vehicleScript).
-}
-
 LOCAL vehicleLibs IS LIST().
 IF vehicleScript <> "" {
     SET vehicleLibs TO bootVehicleLibs().
@@ -144,7 +140,6 @@ IF HAS_LINK {
     PRINT "  SYNC libs ......... ".
     bootPruneLibs(vehicleLibs).
     bootLibLoadList(vehicleLibs).
-    IF vehicleScript <> "" { RUNPATH(vehicleScript). }
     IF stateGet("mission_id", "") <> "" {
         bootApplyMissionConfig(vehicleName, stateGet("mission_id", ""), HAS_LINK).
     }
@@ -162,6 +157,10 @@ IF HAS_LINK {
         bootApplyMissionConfig(vehicleName, stateGet("mission_id", ""), HAS_LINK).
     }
     bootLibLoad("resume").
+}
+
+IF vehicleScript <> "" {
+    RUNPATH(vehicleScript).
 }
 
 bootMissionConfig(vehicleName, HAS_LINK).

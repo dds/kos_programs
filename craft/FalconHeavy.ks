@@ -1,5 +1,8 @@
 // ============================================================
-// FalconHeavy.ks  —
+// FalconHeavy.ks  —  Falcon Heavy vehicle flight computer
+// (0:/craft/FalconHeavy.ks)
+//
+// Falcon plumbing with extra solid boosters for heavier moon payloads.
 // ============================================================
 
 SET LAUNCH_SOLID_STAGE_FRAC TO 0.02.
@@ -12,7 +15,7 @@ GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
 
 applyKnownMissionState().
 
-GLOBAL FUNCTION falconBuildPhaseSequence {
+GLOBAL FUNCTION fhBuildPhaseSequence {
     IF SEQUENCE <> "" {
         RETURN phaseListFromString(SEQUENCE).
     }
@@ -46,13 +49,13 @@ GLOBAL FUNCTION falconBuildPhaseSequence {
     RETURN phaseSequenceEnsurePrelaunch(seq).
 }
 
-GLOBAL FUNCTION falconBuildPhaseMap {
+GLOBAL FUNCTION fhBuildPhaseMap {
     LOCAL phaseMap IS LEXICON().
     phaseMapSet(phaseMap, "PARK", phaseParkingReload@).
     RETURN phaseMap.
 }
 
-LOCAL FUNCTION _falconLibsForBand {
+LOCAL FUNCTION _fhLibsForBand {
     PARAMETER band.
     LOCAL roots IS bootLibBandRoots(band).
     missionAppendUnique(roots, missionTypeConditionalRoots(band)).
@@ -61,7 +64,7 @@ LOCAL FUNCTION _falconLibsForBand {
         LOCAL filtered IS LIST().
         FOR libName IN extras {
             IF libName = "launch" {
-                mLog("Falcon extra lib launch skipped outside LAUNCH band.").
+                mLog("FalconHeavy extra lib launch skipped outside LAUNCH band.").
             } ELSE {
                 filtered:ADD(libName).
             }
@@ -72,8 +75,8 @@ LOCAL FUNCTION _falconLibsForBand {
     RETURN bootLibResolve(roots).
 }
 
-LOCAL FUNCTION _falconLibs {
-    bootEnsureInitialPhase(falconBuildPhaseSequence()).
+LOCAL FUNCTION _fhLibs {
+    bootEnsureInitialPhase(fhBuildPhaseSequence()).
     LOCAL band IS phaseBand().
     LOCAL phase IS stateGet("phase", "").
     LOCAL cachedLibs IS bootCachedVehicleLibs(band).
@@ -85,19 +88,19 @@ LOCAL FUNCTION _falconLibs {
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
-    LOCAL libs IS _falconLibsForBand(band).
+    LOCAL libs IS _fhLibsForBand(band).
     stateSet("lib_band_libs", libs:JOIN(",")).
     RETURN libs.
 }
 
 GLOBAL FUNCTION bootVehicleLibs {
-    RETURN _falconLibs().
+    RETURN _fhLibs().
 }
 
 GLOBAL BOOT_CLEANUP IS LEXICON(
-    "vehicle", "Falcon"
+    "vehicle", "FalconHeavy"
 ).
 
 GLOBAL FUNCTION main {
-    rocketMain(falconBuildPhaseSequence@, falconBuildPhaseMap@).
+    rocketMain(fhBuildPhaseSequence@, fhBuildPhaseMap@).
 }

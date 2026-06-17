@@ -145,6 +145,8 @@ mission might need must be loaded while connected.
 |---|---|---|
 | `FR2` | Multi-payload launcher | Legacy name-driven flights + profiles |
 | `FR3` | Multi-payload launcher | Banded loading, profile-first, rover/mapper missions |
+| `Falcon` | Crew/science launcher | Banded profile flights for crew, tourists, and science returns |
+| `FalconHeavy` | Heavy Falcon variant | Falcon plumbing with extra boosters for heavier moon payloads |
 | `FJ1A` | Juno trainer jet | `airplaneMain()` configuration |
 | `FJ4B` | Supersonic jet | No landing assist — pilot owns the rollout |
 | `FBIJ` | Business jet | GAP airline missions, multi-leg, touch-and-go aware |

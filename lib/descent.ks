@@ -644,9 +644,7 @@ LOCAL FUNCTION _descentDropHeatShield {
 }
 
 LOCAL FUNCTION _descentReopenExtendBaysForDrag {
-    IF DESCENT_BAY_REOPEN_ALT < 0 { RETURN. } ELSE {
-        RETURN.
-    }
+    IF DESCENT_BAY_REOPEN_ALT < 0 { RETURN. }
 
     LOCAL reopenAlt IS DESCENT_BAY_REOPEN_ALT.
     IF reopenAlt <= 0 { RETURN. }
