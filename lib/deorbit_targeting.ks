@@ -2,6 +2,8 @@
 // deorbit_targeting.ks  —  Precision deorbit targeting  (0:/lib/deorbit_targeting.ks)
 // ============================================================
 
+@CLOBBERBUILTINS ON.
+
 // --- Config defaults owned by this file ---
 GLOBAL PROBE_TARGET_WAYPOINT IS "".
 GLOBAL PROBE_TARGET_LAT IS 90.
@@ -12,8 +14,6 @@ GLOBAL TARGET_DEORBIT_SCAN_CENTER_MINUTES IS 0.
 GLOBAL TARGET_DEORBIT_SCAN_WINDOW_MINUTES IS 0.
 GLOBAL TARGET_DEORBIT_MIN_LEAD IS 0.
 GLOBAL LANDING_SIM_MODE IS 0.
-
-@CLOBBERBUILTINS ON.
 
 GLOBAL FUNCTION targetedDeorbit {
     LOCAL targetInfo IS targetResolveDeorbitTarget().
@@ -96,16 +96,21 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
     LOCAL tolerance IS LAND_CFG_TARGET_TOLERANCE.
     IF ignoredTolerance > 0 { SET tolerance TO ignoredTolerance. }
-    LOCAL minAngle IS 45.
-    LOCAL seedRetroDv IS 10.
-    LOCAL maxRetroDv IS 150.
+    LOCAL nodeGroundAngle IS 50.
+    LOCAL desiredDownfield IS 20000.
+    LOCAL downfieldTol IS MAX(1000, MIN(5000, tolerance * 0.5)).
+    LOCAL mountainPe IS 2000.
+    LOCAL minRetroDv IS 2.
+    LOCAL seedRetroDv IS 15.
+    LOCAL maxRetroDv IS 50.
     ADDONS:TR:SETTARGET(targetGeo).
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + ","
         + ROUND(targetLng,4)
-        + "  tolerance=" + ROUND(tolerance/1000,1) + "km"
-        + "  angle>=" + ROUND(minAngle,0) + "deg.").
-    HUDTEXT("Searching deorbit window...", 3, 2, 13, CYAN, FALSE).
+        + "  nodeAngle=" + ROUND(nodeGroundAngle,0) + "deg"
+        + "  downfield=" + ROUND(desiredDownfield/1000,1) + "km"
+        + "  PeRef=" + ROUND(mountainPe/1000,1) + "km.").
+    HUDTEXT("Solving geometric deorbit...", 3, 2, 13, CYAN, FALSE).
 
     LOCAL nowUt IS TIME:SECONDS.
     LOCAL period IS SHIP:ORBIT:PERIOD.
@@ -120,115 +125,48 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL scanStart IS nowUt + minLead.
     LOCAL scanEnd IS nowUt + period * scanOrbits + 30.
-    LOCAL stepA IS period / 64.
-    LOCAL bestUT IS scanStart.
-    LOCAL bestRetroDv IS seedRetroDv.
-    LOCAL bestDist IS 999999999.
-    LOCAL bestAngle IS -1.
-    LOCAL validSamples IS 0.
-    LOCAL bestFound IS FALSE.
-    LOCAL scanUT IS scanStart.
-
-    mLog("Node scan: T+" + ROUND(scanEnd - nowUt,0)
-        + "s step=" + ROUND(stepA,1)
-        + "s seedDv=" + ROUND(seedRetroDv,1)
-        + " angle>=45 TR target=true-site.").
-    UNTIL scanUT > scanEnd OR bestDist <= tolerance {
-        LOCAL trial IS _evalRetroImpactNode(scanUT, seedRetroDv,
-            targetLat, targetLng, minLead).
-        IF trial["VALID"] {
-            SET validSamples TO validSamples + 1.
-            IF trial["DIST"] < bestDist {
-                SET bestDist TO trial["DIST"].
-                SET bestUT TO scanUT.
-                mLog("DEBUG seed: T+" + ROUND(scanUT - nowUt,0)
-                    + "s impact=" + ROUND(trial["LAT"],4)
-                    + "," + ROUND(trial["LNG"],4)
-                    + " dist=" + ROUND(bestDist/1000,1) + "km").
-            }
-        }
-        SET scanUT TO scanUT + stepA.
-        WAIT 0.
-    }
-
-    IF validSamples = 0 {
-        mLogError("No deorbit node produced a Trajectories impact.").
+    LOCAL stepA IS period / 128.
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
+    LOCAL geometry IS _findDeorbitGeometryNode(targetLat, targetLng,
+        scanStart, scanEnd, stepA, nodeGroundAngle).
+    IF NOT geometry["VALID"] {
+        mLogError("No deorbit node found at ground angle "
+            + ROUND(nodeGroundAngle,0) + "deg from target.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
 
-    LOCAL seedPolish IS _polishRetroTime(bestUT, seedRetroDv,
-        targetLat, targetLng, minLead, stepA * 0.5).
-    IF seedPolish["VALID"] {
-        SET bestUT TO seedPolish["UT"].
-        SET bestDist TO seedPolish["DIST"].
-    }
-    mLog("Seed best: T+" + ROUND(bestUT - nowUt,0)
-        + "s dv=" + ROUND(seedRetroDv,1)
-        + " dist=" + ROUND(bestDist/1000,1)
-        + "km samples=" + validSamples + ".").
+    LOCAL bestUT IS geometry["UT"].
+    mLog("Geometry node: T+" + ROUND(bestUT - nowUt,0)
+        + "s angle=" + ROUND(geometry["ANGLE"],2)
+        + " subpoint=" + ROUND(geometry["LAT"],4)
+        + "," + ROUND(geometry["LNG"],4) + ".").
 
-    LOCAL currentDv IS seedRetroDv.
-    LOCAL dvStep IS 2.5.
-    UNTIL currentDv > maxRetroDv OR bestFound {
-        LOCAL polished IS _polishRetroTime(bestUT, currentDv,
-            targetLat, targetLng, minLead, stepA * 0.5).
-        IF polished["VALID"] {
-            IF polished["DIST"] <= tolerance {
-                LOCAL candidate IS _evalRetroDeorbitNode(polished["UT"],
-                    currentDv, targetLat, targetLng, minLead, minAngle).
-                IF candidate["VALID"] {
-                    mLog("DEBUG Check: dV=" + ROUND(currentDv,1)
-                        + " T+" + ROUND(polished["UT"] - nowUt,0)
-                        + " impact=" + ROUND(candidate["LAT"],4)
-                        + "," + ROUND(candidate["LNG"],4)
-                        + " target=" + ROUND(targetLat,4)
-                        + "," + ROUND(targetLng,4)
-                        + " dist=" + ROUND(candidate["DIST"]/1000,1)
-                        + "km angle=" + ROUND(candidate["ANGLE"],1)).
-                    IF candidate["ANGLE_OK"] {
-                        SET bestFound TO TRUE.
-                        SET bestDist TO candidate["DIST"].
-                        SET bestAngle TO candidate["ANGLE"].
-                        SET bestRetroDv TO currentDv.
-                        SET bestUT TO polished["UT"].
-                        BREAK.
-                    }
-                }
-            }
-        }
-        SET currentDv TO currentDv + dvStep.
-        WAIT 0.
-    }
-
-    IF NOT bestFound {
-        mLogError("No deorbit node met target tolerance and minimum descent angle "
-            + ROUND(minAngle,0) + "deg.").
+    LOCAL solved IS _solveGeometricDeorbitDv(bestUT, targetLat, targetLng,
+        minLead, minRetroDv, maxRetroDv, seedRetroDv,
+        desiredDownfield, downfieldTol).
+    IF NOT solved["VALID"] {
+        mLogError("No retrograde dV in " + ROUND(minRetroDv,1)
+            + "-" + ROUND(maxRetroDv,1) + "m/s put impact near "
+            + ROUND(desiredDownfield/1000,1) + "km downfield.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
 
-    LOCAL finalCheck IS _evalRetroDeorbitNode(bestUT, bestRetroDv,
-        targetLat, targetLng, minLead, minAngle).
-    IF finalCheck["VALID"] {
-        SET bestDist TO finalCheck["DIST"].
-        SET bestAngle TO finalCheck["ANGLE"].
-        mLog("Polished best: T+" + ROUND(bestUT - nowUt,0)
-            + "s dv=" + ROUND(bestRetroDv,2)
-            + " angle=" + ROUND(bestAngle,1)
-            + " impact=" + ROUND(finalCheck["LAT"],4)
-            + "," + ROUND(finalCheck["LNG"],4)
-            + " dist=" + ROUND(bestDist,0) + "m.").
-    }
+    LOCAL bestRetroDv IS solved["DV"].
+    LOCAL bestDist IS solved["DIST"].
+    LOCAL bestAngle IS solved["ANGLE"].
+    LOCAL bestDownfield IS solved["DOWNFIELD"].
+    LOCAL bestPe IS solved["PE"].
 
-    IF bestDist > tolerance {
-        mLogWarn("Best solution misses target by " + ROUND(bestDist/1000,1)
-            + "km; tolerance is " + ROUND(tolerance/1000,1) + "km.").
-        HUDTEXT("Landing deorbit miss " + ROUND(bestDist/1000,1) + "km",
-            5, 2, 14, YELLOW, FALSE).
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-        RETURN FALSE.
-    }
+    mLog("Solved deorbit: T+" + ROUND(bestUT - nowUt,0)
+        + "s dv=" + ROUND(bestRetroDv,2)
+        + " impact=" + ROUND(solved["LAT"],4)
+        + "," + ROUND(solved["LNG"],4)
+        + " dist=" + ROUND(bestDist/1000,2) + "km"
+        + " downfield=" + ROUND(bestDownfield/1000,2) + "km"
+        + " Pe=" + ROUND(bestPe/1000,2) + "km"
+        + " fpa=" + ROUND(bestAngle,1) + ".").
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
     LOCAL realNode IS _planRetroNode(bestUT, bestRetroDv).
