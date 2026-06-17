@@ -167,6 +167,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + " downfield=" + ROUND(bestDownfield/1000,2) + "km"
         + " Pe=" + ROUND(bestPe/1000,2) + "km"
         + " fpa=" + ROUND(bestAngle,1) + ".").
+    IF ABS(bestPe - mountainPe) > 5000 {
+        mLogWarn("Solved Pe differs from mountain-height reference by "
+            + ROUND((bestPe - mountainPe)/1000,2) + "km.").
+    }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
     LOCAL realNode IS _planRetroNode(bestUT, bestRetroDv).
@@ -176,9 +180,12 @@ GLOBAL FUNCTION targetedDeorbitAt {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
         LOCAL trDist IS _targetDeorbitDistance(impactPos:LAT, impactPos:LNG,
             targetLat, targetLng).
+        LOCAL trDownfield IS _targetDownfieldDistance(impactPos:LAT,
+            impactPos:LNG, targetLat, targetLng, bestUT).
         mLog("TR final: impact=" + ROUND(impactPos:LAT,4)
             + "," + ROUND(impactPos:LNG,4)
             + " dist=" + ROUND(trDist/1000,2) + "km"
+            + " downfield=" + ROUND(trDownfield/1000,2) + "km"
             + " Pe=" + ROUND(realNode:ORBIT:PERIAPSIS/1000,1) + "km.").
     } ELSE {
         mLogWarn("TR final: no impact predicted for selected node.").
@@ -191,7 +198,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
             2,
             LAND_CFG_TERRAIN_MIN_CLEARANCE,
             LAND_CFG_TERRAIN_SAFE_ALT).
-        IF crashDist > LAND_CFG_TERRAIN_MAX_CRASH_DIST {
+        LOCAL maxCrashDist IS MAX(LAND_CFG_TERRAIN_MAX_CRASH_DIST,
+            desiredDownfield + downfieldTol).
+        IF crashDist > maxCrashDist {
             mLogError("TERRAIN CHECK FAILED: trajectory hits terrain "
                 + ROUND(crashDist,0) + "m from target.").
             REMOVE realNode.
@@ -211,72 +220,112 @@ GLOBAL FUNCTION targetedDeorbitAt {
         LOCAL postImpact IS ADDONS:TR:IMPACTPOS.
         LOCAL postDist IS _targetDeorbitDistance(postImpact:LAT,
             postImpact:LNG, targetLat, targetLng).
+        LOCAL postDownfield IS _targetDownfieldDistance(postImpact:LAT,
+            postImpact:LNG, targetLat, targetLng, bestUT).
         mLog("Post-burn impact prediction: "
             + ROUND(postImpact:LAT,4) + "," + ROUND(postImpact:LNG,4)
-            + " dist=" + ROUND(postDist/1000,1) + "km.").
+            + " dist=" + ROUND(postDist/1000,1) + "km"
+            + " downfield=" + ROUND(postDownfield/1000,1) + "km.").
     } ELSE {
         mLogWarn("Post-burn: Trajectories has no impact prediction.").
     }
     RETURN TRUE.
 }
 
-LOCAL FUNCTION _polishRetroTime {
-    PARAMETER seedUT.
-    PARAMETER retroDv.
+LOCAL FUNCTION _findDeorbitGeometryNode {
     PARAMETER targetLat.
     PARAMETER targetLng.
-    PARAMETER minLead.
-    PARAMETER startStep.
-
-    LOCAL best IS _evalRetroImpactNode(seedUT, retroDv,
-        targetLat, targetLng, minLead).
-    IF NOT best["VALID"] { RETURN best. }
-    LOCAL fstep IS startStep.
-    UNTIL fstep < 0.5 {
-        FOR cand IN LIST(best["UT"] - fstep, best["UT"] + fstep) {
-            IF cand > TIME:SECONDS + minLead {
-                LOCAL trial IS _evalRetroImpactNode(cand, retroDv,
-                    targetLat, targetLng, minLead).
-                IF trial["VALID"] AND trial["DIST"] < best["DIST"] {
-                    SET best TO trial.
-                }
-            }
-        }
-        SET fstep TO fstep / 2.
-        WAIT 0.
-    }
-    RETURN best.
-}
-
-LOCAL FUNCTION _evalRetroImpactNode {
-    PARAMETER burnUT.
-    PARAMETER retroDv.
-    PARAMETER targetLat.
-    PARAMETER targetLng.
-    PARAMETER minLead.
+    PARAMETER scanStart.
+    PARAMETER scanEnd.
+    PARAMETER stepSec.
+    PARAMETER desiredAngle.
 
     LOCAL result IS LEXICON(
         "VALID", FALSE,
-        "UT", burnUT,
-        "DIST", 999999999,
+        "UT", scanStart,
+        "ANGLE", 999999999,
+        "ERR", 999999999,
         "LAT", 0,
         "LNG", 0
     ).
 
-    IF burnUT <= TIME:SECONDS + minLead { RETURN result. }
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-    LOCAL nd IS _planRetroNode(burnUT, retroDv).
-    WAIT 0.2.
-    IF ADDONS:TR:HASIMPACT {
-        LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-        SET result["VALID"] TO TRUE.
-        SET result["LAT"] TO impactPos:LAT.
-        SET result["LNG"] TO impactPos:LNG.
-        SET result["DIST"] TO _targetDeorbitDistance(impactPos:LAT,
-            impactPos:LNG, targetLat, targetLng).
+    LOCAL prevT IS scanStart.
+    LOCAL prevInfo IS _targetGroundAngleAt(prevT, targetLat, targetLng).
+    LOCAL bestInfo IS prevInfo.
+    LOCAL bestErr IS ABS(prevInfo["ANGLE"] - desiredAngle).
+    LOCAL scanT IS scanStart + stepSec.
+
+    UNTIL scanT > scanEnd {
+        LOCAL info IS _targetGroundAngleAt(scanT, targetLat, targetLng).
+        LOCAL err IS ABS(info["ANGLE"] - desiredAngle).
+        IF err < bestErr {
+            SET bestErr TO err.
+            SET bestInfo TO info.
+        }
+
+        IF prevInfo["ANGLE"] >= desiredAngle
+                AND info["ANGLE"] <= desiredAngle {
+            LOCAL lo IS prevT.
+            LOCAL hi IS scanT.
+            LOCAL iter IS 0.
+            UNTIL iter >= 24 {
+                LOCAL mid IS (lo + hi) / 2.
+                LOCAL midInfo IS _targetGroundAngleAt(mid,
+                    targetLat, targetLng).
+                IF midInfo["ANGLE"] > desiredAngle {
+                    SET lo TO mid.
+                } ELSE {
+                    SET hi TO mid.
+                }
+                SET iter TO iter + 1.
+            }
+
+            SET result TO _targetGroundAngleAt((lo + hi) / 2,
+                targetLat, targetLng).
+            SET result["VALID"] TO TRUE.
+            SET result["ERR"] TO ABS(result["ANGLE"] - desiredAngle).
+            RETURN result.
+        }
+
+        SET prevT TO scanT.
+        SET prevInfo TO info.
+        SET scanT TO scanT + stepSec.
+        WAIT 0.
     }
-    REMOVE nd.
+
+    IF bestErr < 1 {
+        SET result TO bestInfo.
+        SET result["VALID"] TO TRUE.
+        SET result["ERR"] TO bestErr.
+    }
     RETURN result.
+}
+
+LOCAL FUNCTION _targetGroundAngleAt {
+    PARAMETER ut.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+
+    LOCAL geo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, ut)).
+    RETURN LEXICON(
+        "VALID", TRUE,
+        "UT", ut,
+        "ANGLE", _targetCentralAngle(geo:LAT, geo:LNG,
+            targetLat, targetLng),
+        "LAT", geo:LAT,
+        "LNG", geo:LNG
+    ).
+}
+
+LOCAL FUNCTION _targetCentralAngle {
+    PARAMETER lat1.
+    PARAMETER lng1.
+    PARAMETER lat2.
+    PARAMETER lng2.
+
+    LOCAL bodyPos IS SHIP:BODY:POSITION.
+    RETURN VANG(LATLNG(lat1, lng1):POSITION - bodyPos,
+        LATLNG(lat2, lng2):POSITION - bodyPos).
 }
 
 LOCAL FUNCTION _targetDeorbitDistance {
@@ -288,18 +337,128 @@ LOCAL FUNCTION _targetDeorbitDistance {
     RETURN (LATLNG(lat1, lng1):POSITION - LATLNG(lat2, lng2):POSITION):MAG.
 }
 
-LOCAL FUNCTION _evalRetroDeorbitNode {
+LOCAL FUNCTION _targetDownfieldDistance {
+    PARAMETER impactLat.
+    PARAMETER impactLng.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER burnUT.
+
+    LOCAL bodyPos IS SHIP:BODY:POSITION.
+    LOCAL burnGeo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, burnUT)).
+    LOCAL burnVec IS LATLNG(burnGeo:LAT, burnGeo:LNG):POSITION.
+    LOCAL targetVec IS LATLNG(targetLat, targetLng):POSITION.
+    LOCAL impactVec IS LATLNG(impactLat, impactLng):POSITION.
+    LOCAL upVec IS (targetVec - bodyPos):NORMALIZED.
+    LOCAL trackDir IS VXCL(upVec, targetVec - burnVec).
+    LOCAL impactOffset IS VXCL(upVec, impactVec - targetVec).
+
+    IF trackDir:MAG < 0.01 { RETURN impactOffset:MAG. }
+    RETURN VDOT(impactOffset, trackDir:NORMALIZED).
+}
+
+LOCAL FUNCTION _solveGeometricDeorbitDv {
+    PARAMETER burnUT.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER minLead.
+    PARAMETER minDv.
+    PARAMETER maxDv.
+    PARAMETER seedDv.
+    PARAMETER desiredDownfield.
+    PARAMETER downfieldTol.
+
+    LOCAL best IS LEXICON(
+        "VALID", FALSE,
+        "DV", seedDv,
+        "DIST", 999999999,
+        "DOWNFIELD", -999999999,
+        "ERR", 999999999,
+        "PE", 999999999,
+        "ANGLE", -1,
+        "LAT", 0,
+        "LNG", 0
+    ).
+    LOCAL bestErr IS 999999999.
+
+    LOCAL lowDv IS 0.
+    LOCAL highDv IS 0.
+    LOCAL lowSet IS FALSE.
+    LOCAL highSet IS FALSE.
+    LOCAL currentDv IS seedDv.
+    LOCAL iter IS 0.
+
+    UNTIL iter >= 18 {
+        LOCAL trial IS _evalGeometricDeorbitNode(burnUT, currentDv,
+            targetLat, targetLng, minLead, desiredDownfield).
+        IF trial["VALID"] {
+            LOCAL trialErr IS ABS(trial["ERR"]).
+            IF trialErr < bestErr {
+                SET best TO trial.
+                SET bestErr TO trialErr.
+            }
+            mLog("DEBUG dv-solve: dv=" + ROUND(currentDv,2)
+                + " impact=" + ROUND(trial["LAT"],4)
+                + "," + ROUND(trial["LNG"],4)
+                + " downfield=" + ROUND(trial["DOWNFIELD"]/1000,2)
+                + "km err=" + ROUND(trial["ERR"]/1000,2)
+                + "km dist=" + ROUND(trial["DIST"]/1000,2)
+                + "km Pe=" + ROUND(trial["PE"]/1000,2)
+                + "km fpa=" + ROUND(trial["ANGLE"],1)).
+            IF trialErr <= downfieldTol { RETURN trial. }
+
+            IF trial["ERR"] > 0 {
+                SET lowDv TO currentDv.
+                SET lowSet TO TRUE.
+            } ELSE {
+                SET highDv TO currentDv.
+                SET highSet TO TRUE.
+            }
+        } ELSE {
+            mLog("DEBUG dv-solve: dv=" + ROUND(currentDv,2)
+                + " produced no TR impact.").
+            SET lowDv TO currentDv.
+            SET lowSet TO TRUE.
+        }
+
+        IF lowSet AND highSet {
+            IF ABS(highDv - lowDv) < 0.05 { BREAK. }
+            SET currentDv TO (lowDv + highDv) / 2.
+        } ELSE IF lowSet {
+            LOCAL nextHigh IS MIN(maxDv, currentDv * 1.5).
+            IF nextHigh = currentDv { BREAK. }
+            SET currentDv TO nextHigh.
+        } ELSE {
+            LOCAL nextLow IS MAX(minDv, currentDv * 0.75).
+            IF nextLow = currentDv { BREAK. }
+            SET currentDv TO nextLow.
+        }
+        SET iter TO iter + 1.
+        WAIT 0.
+    }
+
+    IF best["VALID"] AND bestErr > downfieldTol {
+        mLogWarn("Best deorbit dV misses downfield target by "
+            + ROUND(bestErr/1000,2) + "km.").
+    }
+    RETURN best.
+}
+
+LOCAL FUNCTION _evalGeometricDeorbitNode {
     PARAMETER burnUT.
     PARAMETER retroDv.
     PARAMETER targetLat.
     PARAMETER targetLng.
     PARAMETER minLead.
-    PARAMETER minAngle.
+    PARAMETER desiredDownfield.
 
     LOCAL result IS LEXICON(
         "VALID", FALSE,
-        "ANGLE_OK", FALSE,
+        "DV", retroDv,
         "DIST", 999999999,
+        "DOWNFIELD", -999999999,
+        "ERR", 999999999,
+        "PE", 999999999,
         "ANGLE", -1,
         "LAT", 0,
         "LNG", 0
@@ -309,19 +468,21 @@ LOCAL FUNCTION _evalRetroDeorbitNode {
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
     LOCAL nd IS _planRetroNode(burnUT, retroDv).
     WAIT 0.2.
+    SET result["PE"] TO nd:ORBIT:PERIAPSIS.
     IF ADDONS:TR:HASIMPACT {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
         LOCAL dist IS _targetDeorbitDistance(impactPos:LAT, impactPos:LNG,
             targetLat, targetLng).
+        LOCAL downfield IS _targetDownfieldDistance(impactPos:LAT,
+            impactPos:LNG, targetLat, targetLng, burnUT).
         LOCAL angle IS _nodeImpactAngle(impactPos).
         SET result["VALID"] TO TRUE.
         SET result["LAT"] TO impactPos:LAT.
         SET result["LNG"] TO impactPos:LNG.
         SET result["DIST"] TO dist.
+        SET result["DOWNFIELD"] TO downfield.
+        SET result["ERR"] TO downfield - desiredDownfield.
         SET result["ANGLE"] TO angle.
-        IF angle >= minAngle {
-            SET result["ANGLE_OK"] TO TRUE.
-        }
     }
     REMOVE nd.
     RETURN result.
