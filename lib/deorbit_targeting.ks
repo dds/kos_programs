@@ -56,14 +56,10 @@ GLOBAL FUNCTION targetResolveDeorbitTarget {
         RETURN result.
     }
 
-    IF TRUE {
-        SET result["FOUND"] TO TRUE.
-        SET result["LAT"] TO PROBE_TARGET_LAT.
-        SET result["LNG"] TO PROBE_TARGET_LNG.
-        SET result["SOURCE"] TO "PROBE_TARGET_LAT/LNG".
-        RETURN result.
-    }
-
+    SET result["FOUND"] TO TRUE.
+    SET result["LAT"] TO PROBE_TARGET_LAT.
+    SET result["LNG"] TO PROBE_TARGET_LNG.
+    SET result["SOURCE"] TO "PROBE_TARGET_LAT/LNG".
     RETURN result.
 }
 
@@ -71,8 +67,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     PARAMETER targetLat.
     PARAMETER targetLng.
     PARAMETER ignoredPe IS 0.
-    PARAMETER ignoredTolerance IS 0.
-    PARAMETER ignoredOvershoot IS 0.
+    PARAMETER overrideTolerance IS 0.
+    PARAMETER overrideOvershoot IS 0.
 
     IF NOT ADDONS:TR:AVAILABLE {
         mLogError("Trajectories not available; targeted landing deorbit requires TR.").
@@ -95,10 +91,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
     LOCAL tolerance IS TARGET_TOLERANCE.
-    IF ignoredTolerance > 0 { SET tolerance TO ignoredTolerance. }
+    IF overrideTolerance > 0 { SET tolerance TO overrideTolerance. }
     LOCAL nodeGroundAngle IS 50.
     LOCAL desiredDownfield IS 15000.
-    IF ignoredOvershoot > 0 { SET desiredDownfield TO ignoredOvershoot. }
+    IF overrideOvershoot > 0 { SET desiredDownfield TO overrideOvershoot. }
     LOCAL minDownfield IS 10000.
     LOCAL maxDownfield IS 20000.
     LOCAL minRetroDv IS 2.

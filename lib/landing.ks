@@ -10,6 +10,7 @@
 // ============================================================
 
 GLOBAL landingAbortFlag IS FALSE.
+GLOBAL LANDING_HUD_INTERVAL IS 5.
 
 // ------------------------------------------------------------
 // Terrain survey - one-shot flat spot check near target
@@ -138,6 +139,20 @@ LOCAL FUNCTION _landingSetThrottle {
     SET ctx["TARGET_THROTTLE"] TO MAX(0, MIN(1, throttleValue)).
 }
 
+LOCAL FUNCTION _landingHudText {
+    PARAMETER ctx.
+    PARAMETER text.
+    PARAMETER holdTime.
+    PARAMETER style.
+    PARAMETER size.
+    PARAMETER color.
+    PARAMETER blink.
+
+    IF TIME:SECONDS - ctx["HUD_LAST"] < LANDING_HUD_INTERVAL { RETURN. }
+    SET ctx["HUD_LAST"] TO TIME:SECONDS.
+    HUDTEXT(text, holdTime, style, size, color, blink).
+}
+
 LOCAL FUNCTION _landingBottomRadar {
     RETURN MAX(0, SHIP:BOUNDS:BOTTOMALTRADAR).
 }
@@ -232,11 +247,14 @@ LOCAL FUNCTION _landingSetState {
 
     IF nextState = "BRAKING_BURN" {
         _landingSetThrottle(ctx, 1).
+        SET ctx["HUD_LAST"] TO TIME:SECONDS.
         HUDTEXT("BRAKING BURN", 3, 2, 16, YELLOW, FALSE).
     } ELSE IF nextState = "APPROACH" {
+        SET ctx["HUD_LAST"] TO TIME:SECONDS.
         HUDTEXT("APPROACH", 3, 2, 16, CYAN, FALSE).
     } ELSE IF nextState = "VERTICAL_DESCENT" {
         vesselDeployGear().
+        SET ctx["HUD_LAST"] TO TIME:SECONDS.
         HUDTEXT("VERTICAL DESCENT", 3, 2, 16, GREEN, FALSE).
     } ELSE IF nextState = "TOUCHDOWN" {
         _landingSetThrottle(ctx, 0).
@@ -277,7 +295,7 @@ LOCAL FUNCTION _landingCoastTick {
         }
     }
 
-    HUDTEXT("COAST d=" + ROUND(distToTarget,0)
+    _landingHudText(ctx, "COAST d=" + ROUND(distToTarget,0)
         + " dr=" + ROUND(downrangeToTarget,0)
         + " brake=" + ROUND(brakeDist,0)
         + " hs=" + ROUND(horizontalSpeed,1),
@@ -349,7 +367,7 @@ LOCAL FUNCTION _landingBrakingTick {
     }
     SET ctx["CROSS_PID"] TO crossPid.
 
-    HUDTEXT("BRAKE d=" + ROUND(distToTarget,0)
+    _landingHudText(ctx, "BRAKE d=" + ROUND(distToTarget,0)
         + " trErr=" + ROUND(impactErr,0)
         + " x=" + ROUND(crossErr,0)
         + " hs=" + ROUND(horizontalSpeed,1)
@@ -395,7 +413,7 @@ LOCAL FUNCTION _landingApproachTick {
     _landingSetThrottle(ctx, lmVerticalThrottle(
         targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
-    HUDTEXT("APPROACH d=" + ROUND(distToTarget,0)
+    _landingHudText(ctx, "APPROACH d=" + ROUND(distToTarget,0)
         + " hT=" + ROUND(approachHeight,0)
         + " hs=" + ROUND(horizontalSpeed,1)
         + "/" + ROUND(desiredSpeed,1)
@@ -432,7 +450,7 @@ LOCAL FUNCTION _landingVerticalTick {
     _landingSetThrottle(ctx, lmVerticalThrottle(
         targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
-    HUDTEXT("VERT bottom=" + ROUND(bottomAlt,0)
+    _landingHudText(ctx, "VERT bottom=" + ROUND(bottomAlt,0)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)
         + " hs=" + ROUND(horizontalSpeed,1),
@@ -503,6 +521,7 @@ GLOBAL FUNCTION landExecute {
         "TARGET_ELEVATION", targetElevation,
         "CROSS_PID", crossPid,
         "TERRAIN_DONE", FALSE,
+        "HUD_LAST", TIME:SECONDS - LANDING_HUD_INTERVAL,
         "TARGET_STEERING", SHIP:UP:VECTOR,
         "TARGET_THROTTLE", 0
     ).
