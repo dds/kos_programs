@@ -328,6 +328,9 @@ GLOBAL FUNCTION _transferSeedScore {
         SET score TO score + 1000000.
     } ELSE {
         SET hasPatch TO TRUE.
+        IF targetPe >= 0 {
+            SET score TO score + (ABS(p:PERIAPSIS - targetPe) / 100000)^2.
+        }
         IF captureInc >= 0 {
             SET incErr TO ABS(_angleError(p:INCLINATION, captureInc)).
             IF incErr > TRANSFER_DEFERRED_INC_ERR_TOL {
