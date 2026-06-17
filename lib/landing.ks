@@ -10,6 +10,7 @@
 // ============================================================
 
 GLOBAL landingAbortFlag IS FALSE.
+GLOBAL landingSteeringTarget IS V(0, 0, 0).
 GLOBAL LANDING_HUD_INTERVAL IS 5.
 
 // ------------------------------------------------------------
@@ -131,6 +132,8 @@ LOCAL FUNCTION _landingSetSteering {
     PARAMETER ctx.
     PARAMETER steeringVec.
     SET ctx["TARGET_STEERING"] TO steeringVec.
+    SET landingSteeringTarget TO steeringVec.
+    LOCK STEERING TO landingSteeringTarget.
 }
 
 LOCAL FUNCTION _landingSetThrottle {
@@ -535,7 +538,7 @@ GLOBAL FUNCTION landExecute {
 
     SET SAS TO FALSE.
     vesselDeployGear().
-    LOCK STEERING TO ctx["TARGET_STEERING"].
+    _landingSetSteering(ctx, ctx["TARGET_STEERING"]).
     LOCK THROTTLE TO ctx["TARGET_THROTTLE"].
     mLog("Landing setup target=" + _landingBoolText(_hasTarget)
         + " tr=" + _landingBoolText(ADDONS:TR:AVAILABLE) + ".").
