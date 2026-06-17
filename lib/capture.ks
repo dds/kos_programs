@@ -27,7 +27,12 @@ LOCAL FUNCTION _enterSolarCoast {
     SET SAS TO TRUE.
     UNLOCK STEERING.
     trySolarOrient().
+    tryCommandCoreHibernate(TRUE).
     mLog(label + ": solar coast attitude requested.").
+}
+
+LOCAL FUNCTION _exitSolarCoast {
+    tryCommandCoreHibernate(FALSE).
 }
 
 LOCAL FUNCTION _transferArrivalUt {
@@ -113,6 +118,7 @@ GLOBAL FUNCTION phaseCoast {
     _enterSolarCoast("COAST").
     mLog("Coasting to " + target:NAME + " SOI.").
     waitForSOI(target).
+    _exitSolarCoast().
     orbitSummary().
     nextPhase(xferSeq).
 }
@@ -124,6 +130,7 @@ GLOBAL FUNCTION phaseCoast1Half {
     LOCAL tArrival IS _transferArrivalUt(target).
     IF tArrival <= TIME:SECONDS {
         mLogWarn("COAST_1HALF: no future arrival timestamp; continuing to refinement.").
+        _exitSolarCoast().
         nextPhase(xferSeq).
         RETURN.
     }
@@ -144,6 +151,7 @@ GLOBAL FUNCTION phaseCoast1Half {
         mLog("COAST_1HALF: entered " + target:NAME
             + " SOI before midpoint; handing forward.").
     }
+    _exitSolarCoast().
     nextPhase(xferSeq).
 }
 
@@ -153,6 +161,7 @@ GLOBAL FUNCTION phaseCoast2Half {
 
     IF SHIP:BODY = target {
         mLog("COAST_2HALF: already inside " + target:NAME + " SOI.").
+        _exitSolarCoast().
         orbitSummary().
         nextPhase(xferSeq).
         RETURN.
@@ -163,6 +172,7 @@ GLOBAL FUNCTION phaseCoast2Half {
         mLog("COAST_2HALF: arrival time is due; waiting for "
             + target:NAME + " SOI.").
         waitForSOI(target).
+        _exitSolarCoast().
         orbitSummary().
         nextPhase(xferSeq).
         RETURN.
@@ -188,6 +198,7 @@ GLOBAL FUNCTION phaseCoast2Half {
         waitForSOI(target).
     }
 
+    _exitSolarCoast().
     orbitSummary().
     nextPhase(xferSeq).
 }
@@ -294,5 +305,6 @@ GLOBAL FUNCTION phaseFlyby {
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
+    _exitSolarCoast().
     nextPhase(xferSeq).
 }

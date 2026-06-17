@@ -250,6 +250,16 @@ GLOBAL FUNCTION trySolarHoldTick {
     RETURN refFlow.
 }
 
+GLOBAL FUNCTION tryCommandCoreHibernate {
+    PARAMETER enabled.
+    IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
+            OR SHIP:STATUS = "SUB_ORBITAL")
+            AND DEFINED BOOT_LIB_RAN
+            AND BOOT_LIB_RAN:CONTAINS("solar") {
+        commandCoresHibernate(enabled).
+    }
+}
+
 GLOBAL FUNCTION phaseDone {
     UNLOCK ALL.
     mLog("Mission complete: " + SHIP:NAME).

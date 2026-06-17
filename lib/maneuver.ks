@@ -465,18 +465,6 @@ LOCAL FUNCTION _removeExecutedNode {
     }
 }
 
-LOCAL FUNCTION _findCmdModule {
-    IF CORE:PART:HASMODULE("ModuleCommand") {
-        RETURN CORE:PART:GETMODULE("ModuleCommand").
-    }
-    FOR p IN SHIP:PARTS {
-        IF p:HASMODULE("ModuleCommand") {
-            RETURN p:GETMODULE("ModuleCommand").
-        }
-    }
-    RETURN 0.
-}
-
 LOCAL FUNCTION _markPendingBurn {
     PARAMETER nd.
     PARAMETER burnDV.
@@ -502,7 +490,12 @@ LOCAL FUNCTION _clearPendingBurn {
 }
 
 LOCAL FUNCTION _wakeCmd {
-    LOCAL cm IS _findCmdModule().
-    IF cm = 0 { RETURN. }
-    IF cm:HASFIELD("hibernation") { cm:SETFIELD("hibernation", FALSE). }
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleCommand") {
+            LOCAL cm IS p:GETMODULE("ModuleCommand").
+            IF cm:HASFIELD("hibernation") {
+                cm:SETFIELD("hibernation", FALSE).
+            }
+        }
+    }
 }
