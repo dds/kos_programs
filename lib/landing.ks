@@ -186,6 +186,7 @@ LOCAL FUNCTION _landingHudNotice {
     }
     SET ctx["HUD_NOTICE_TEXT"] TO text.
     SET ctx["HUD_NOTICE_LAST"] TO TIME:SECONDS.
+    mLog("HUD: " + text).
     HUDTEXT(text, LANDING_HUD_NOTICE_HOLD_TIME,
         2, 16, color, FALSE).
 }
@@ -627,7 +628,7 @@ LOCAL FUNCTION _landingBrakingTick {
 
     IF ctx["HAS_TARGET"] {
         IF burnHeight > APPROACH_SPEED_ALTITUDE_WINDOW {
-            _landingHudEtaNotice(ctx, "Approach",
+            _landingHudEtaNotice(ctx, "Hover refinement",
                 (burnHeight - APPROACH_SPEED_ALTITUDE_WINDOW)
                     / MAX(1, downSpeed), CYAN).
         }
@@ -640,14 +641,14 @@ LOCAL FUNCTION _landingBrakingTick {
             AND verticalCaptured
             AND horizontalSpeed <= TERMINAL_HSPEED
             AND distToTarget <= VERTICAL_RADIUS {
-        _landingSetState(ctx, "VERTICAL_DESCENT",
+        _landingSetState(ctx, "HOVER_REFINE",
             "over-target vertical and horizontal capture").
     } ELSE IF ctx["HAS_TARGET"]
             AND verticalCaptured
             AND horizontalSpeed <= TERMINAL_HSPEED
             AND burnHeight <= APPROACH_SPEED_ALTITUDE_WINDOW {
-        _landingSetState(ctx, "APPROACH",
-            "vertical and horizontal capture").
+        _landingSetState(ctx, "HOVER_REFINE",
+            "post-brake hover refinement").
     } ELSE IF burnHeight <= burnDist * BURN_MARGIN
             AND burnHeight <= HOVER_ALT {
         _landingSetState(ctx, "VERTICAL_DESCENT", "low vertical gate").
@@ -656,7 +657,8 @@ LOCAL FUNCTION _landingBrakingTick {
             AND horizontalSpeed <= APPROACH_HSPEED
             AND distToTarget <= APPROACH_RADIUS
             AND burnHeight <= APPROACH_SPEED_ALTITUDE_WINDOW {
-        _landingSetState(ctx, "APPROACH", "approach corridor captured").
+        _landingSetState(ctx, "HOVER_REFINE",
+            "approach corridor captured for hover refinement").
     } ELSE IF NOT ctx["HAS_TARGET"]
             AND verticalCaptured
             AND horizontalSpeed < APPROACH_HSPEED {
