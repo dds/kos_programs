@@ -506,21 +506,17 @@ LOCAL FUNCTION _wakeCmd {
 }
 
 LOCAL FUNCTION _hibernateCmd {
-    LOCAL cm IS _findCmdModule().
-    IF cm = 0 { RETURN. }
-    IF cm:HASFIELD("hibernation") {
-        cm:SETFIELD("hibernation", TRUE).
-        mLog("Command module hibernating for long coast.").
-    } ELSE {
-        mLogWarn("Long coast hibernation requested but no toggle found.").
+    LOCAL found IS FALSE.
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleCommand") {
+            LOCAL cm IS p:GETMODULE("ModuleCommand").
+            IF cm:HASFIELD("hibernation") {
+                cm:SETFIELD("hibernation", TRUE).
+                SET found TO TRUE.
+            }
+        }
     }
-}
-
-LOCAL FUNCTION _hibernateCmd {
-    LOCAL cm IS _findCmdModule().
-    IF cm = 0 { RETURN. }
-    IF cm:HASFIELD("hibernation") {
-        cm:SETFIELD("hibernation", TRUE).
+    IF found {
         mLog("Command module hibernating for long coast.").
     } ELSE {
         mLogWarn("Long coast hibernation requested but no toggle found.").
