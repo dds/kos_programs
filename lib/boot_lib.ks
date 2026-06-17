@@ -687,6 +687,9 @@ GLOBAL FUNCTION bootPlannedMissionLibs {
     IF phase = "" AND SHIP:STATUS = "PRELAUNCH" {
         SET fallbackBand TO "PRELAUNCH".
     }
+    IF phase <> "" {
+        SET fallbackBand TO "".
+    }
     LOCAL band IS bootLibBandForPhase(phase, fallbackBand).
     LOCAL cachedLibs IS bootCachedVehicleLibs(band).
     IF cachedLibs:LENGTH > 0 {
