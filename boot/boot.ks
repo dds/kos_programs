@@ -125,6 +125,10 @@ IF HAS_LINK {
     }
 }
 
+IF vehicleScript <> "" {
+    // Vehicle script exposes bootVehicleLibs() before phase-band libs load.
+    RUNPATH(vehicleScript).
+}
 
 LOCAL vehicleLibs IS LIST().
 IF vehicleScript <> "" {
