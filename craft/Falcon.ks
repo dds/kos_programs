@@ -38,7 +38,7 @@ GLOBAL FUNCTION falconBuildPhaseSequence {
         "PASSENGER", LIST("RELAY_OPS")
     ).
 
-    LOCAL seq IS LIST("LAUNCH", "FAIR", "ANTS", "PARK").
+    LOCAL seq IS LIST("PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK").
     IF getTarget() <> "KERBIN" {
         seq:ADD("XING").
         seq:ADD("BPLANE").
@@ -55,7 +55,7 @@ GLOBAL FUNCTION falconBuildPhaseSequence {
         }
     }
     seq:ADD("DONE").
-    RETURN seq.
+    RETURN phaseSequenceEnsurePrelaunch(seq).
 }
 
 GLOBAL FUNCTION falconBuildPhaseMap {

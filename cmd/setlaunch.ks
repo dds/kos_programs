@@ -33,33 +33,35 @@ LOCAL FUNCTION _clearLaunchLegState {
         "fairing_deployed", "launch_vs_nonpos_logged",
         "orbit_start_time", "prelaunch_plane_ut",
         "prelaunch_plane_target", "prelaunch_plane_inc",
-        "prelaunch_plane_lan", "landing_state",
+        "prelaunch_plane_lan", "prelaunch_transfer_departure_ut",
+        "prelaunch_transfer_target", "prelaunch_transfer_xing_target",
+        "prelaunch_transfer_phase", "landing_state",
         "landing_lat", "landing_lng", "landing_time"
     ) {
         stateRemove(key).
     }
 }
 
-_cfg("SEQUENCE", "LAUNCH,FAIR,ANTS,PARK,DONE").
+_cfg("SEQUENCE", "PRELAUNCH,LAUNCH,FAIR,ANTS,PARK,DONE").
 _cfg("PARKING_ALT", parkingAlt).
 _cfg("LAUNCH_INCLINATION", launchInc).
 _cfg("LAUNCH_AZIMUTH", 0).
 _cfg("ORBIT_STAY_TIME", 0).
 
-stateSet("phase", "LAUNCH").
-stateSet("lib_band", "LAUNCH").
+stateSet("phase", "PRELAUNCH").
+stateSet("lib_band", "PRELAUNCH").
 stateSet("reload_required", "false").
 stateSet("launch_time", ROUND(TIME:SECONDS)).
 _clearLibCache().
 _clearLaunchLegState().
 
 PRINT "Launch reset for " + SHIP:BODY:NAME + ".".
-PRINT "Sequence -> LAUNCH,FAIR,ANTS,PARK,DONE.".
+PRINT "Sequence -> PRELAUNCH,LAUNCH,FAIR,ANTS,PARK,DONE.".
 PRINT "Orbit    -> " + ROUND(parkingAlt / 1000, 1)
     + " km, inc " + ROUND(launchInc, 2) + " deg.".
-PRINT "Reboot to load launch band, then resume.".
+PRINT "Reboot to load prelaunch band, then resume.".
 
 mLog("Launch reset: body=" + SHIP:BODY:NAME
     + " parkingKm=" + ROUND(parkingAlt / 1000, 1)
     + " inc=" + ROUND(launchInc, 2)
-    + " sequence=LAUNCH,FAIR,ANTS,PARK,DONE.").
+    + " sequence=PRELAUNCH,LAUNCH,FAIR,ANTS,PARK,DONE.").

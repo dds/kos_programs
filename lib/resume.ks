@@ -63,7 +63,7 @@ GLOBAL FUNCTION normalizePayloadType {
 GLOBAL FUNCTION buildRocketSequence {
     PARAMETER orbitPhases.
     PARAMETER payloadPhases.
-    LOCAL seq IS LIST("LAUNCH", "FAIR", "ANTS", "PARK").
+    LOCAL seq IS LIST("PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK").
     LOCAL needsRdv IS FALSE.
     IF RENDEZVOUS_TARGET <> "" { SET needsRdv TO TRUE. }
     IF ASTEROID_TARGET <> "" { SET needsRdv TO TRUE. }
@@ -82,7 +82,7 @@ GLOBAL FUNCTION buildRocketSequence {
         }
     }
     seq:ADD("DONE").
-    RETURN seq.
+    RETURN phaseSequenceEnsurePrelaunch(seq).
 }
 
 GLOBAL FUNCTION patchAndRun {

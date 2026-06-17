@@ -11,7 +11,7 @@ GLOBAL RETURN_ARM_CHUTES IS 0.
 GLOBAL RETURN_DESCENT_FAIRING_TAG IS "".
 GLOBAL RETURN_DESCENT_DECOUPLER_TAG IS "".
 GLOBAL RETURN_DESCENT_CHUTES_TAG IS "".
-GLOBAL SURFACE_RETURN_SEQUENCE IS "LAUNCH,PARK,RETURN_SETUP".
+GLOBAL SURFACE_RETURN_SEQUENCE IS "PRELAUNCH,LAUNCH,PARK,RETURN_SETUP".
 GLOBAL SURFACE_RETURN_PARKING_ALT IS 20000.
 GLOBAL SURFACE_RETURN_INCLINATION IS 0.
 GLOBAL REENTRY_PE IS 30000.
@@ -108,8 +108,8 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
         stateRemove(key).
     }
 
-    stateSet("phase", "LAUNCH").
-    stateSet("lib_band", "LAUNCH").
+    stateSet("phase", "PRELAUNCH").
+    stateSet("lib_band", "PRELAUNCH").
     stateSet("reload_required", "false").
     _returnSetupClearLibCache().
     stateSet("launch_time", ROUND(TIME:SECONDS)).
@@ -122,7 +122,7 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     PRINT "  Sequence: " + SURFACE_RETURN_SEQUENCE.
     PRINT "  Orbit:    " + ROUND(SURFACE_RETURN_PARKING_ALT/1000, 1)
         + "km x " + ROUND(SURFACE_RETURN_PARKING_ALT/1000, 1) + "km".
-    PRINT "  Rebooting into LAUNCH.".
+    PRINT "  Rebooting into PRELAUNCH.".
     WAIT 3.
     REBOOT.
 }

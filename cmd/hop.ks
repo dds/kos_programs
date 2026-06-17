@@ -50,7 +50,7 @@ LOCAL FUNCTION _clearHopLegState {
     }
 }
 
-_cfg("SEQUENCE", "HOP,LAND_ASSIST,DONE").
+_cfg("SEQUENCE", "PRELAUNCH,HOP,LAND_ASSIST,DONE").
 _cfg("HOP_TARGET_LAT", targetLat).
 _cfg("HOP_TARGET_LNG", targetLng).
 _cfg("HOP_TOLERANCE", toleranceM).
@@ -60,21 +60,21 @@ _cfg("HOP_MAX_AP_KM", maxApKm).
 _cfg("HOP_TWR", hopTwr).
 _cfg("RELOAD_AFTER_LAND_ASSIST", 0).
 
-stateSet("phase", "HOP").
-stateSet("lib_band", "LAUNCH").
+stateSet("phase", "PRELAUNCH").
+stateSet("lib_band", "PRELAUNCH").
 stateSet("reload_required", "false").
 stateSet("launch_time", ROUND(TIME:SECONDS)).
 _clearLibCache().
 _clearHopLegState().
 
 PRINT "Hop phase armed.".
-PRINT "Sequence -> HOP,LAND_ASSIST,DONE.".
+PRINT "Sequence -> PRELAUNCH,HOP,LAND_ASSIST,DONE.".
 PRINT "Target   -> " + ROUND(targetLat, 5) + ", " + ROUND(targetLng, 5) + ".".
 PRINT "Limits   -> Ap " + ROUND(maxApM / 1000, 1)
     + " km, burn " + ROUND(maxBurnSeconds, 0)
     + " s, vertical TWR " + ROUND(hopTwr, 2) + ".".
 IF clearedAbort { PRINT "Sticky ABORT cleared for hop ignition.". }
-PRINT "Rebooting to load HOP phase.".
+PRINT "Rebooting to load PRELAUNCH phase.".
 
 mLog("Hop command armed: target=" + ROUND(targetLat, 5)
     + "," + ROUND(targetLng, 5)

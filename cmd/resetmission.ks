@@ -16,7 +16,11 @@ FOR key IN LIST(
     "mission_id", "mission_name", "target", "payloads", "phase",
     "lib_band", "lib_band_phase", "lib_band_libs",
     "reload_required", "reload_reason", "reload_next_phase",
-    "reload_next_band", "fairing_deployed"
+    "reload_next_band", "fairing_deployed",
+    "prelaunch_plane_ut", "prelaunch_plane_target",
+    "prelaunch_plane_inc", "prelaunch_plane_lan",
+    "prelaunch_transfer_departure_ut", "prelaunch_transfer_target",
+    "prelaunch_transfer_xing_target", "prelaunch_transfer_phase"
 ) {
     stateRemove(key).
 }

@@ -367,6 +367,7 @@ underscore (`TARGET_`).
 
 | Phase(s) | Lib | Purpose |
 |---|---|---|
+| PRELAUNCH | prelaunch | Flight-plan card + launch-window setup |
 | LAUNCH, FAIR, ANTS, PARK | launch | MechJeb ascent → parking orbit |
 | XING, ESCAPE | xfer_plan | Transfers and escapes |
 | RDV | rdv_plan | Lightweight same-body Hohmann rendezvous |

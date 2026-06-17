@@ -55,7 +55,7 @@ GLOBAL FUNCTION rocketMain {
     PARAMETER seqBuilder.
     PARAMETER phaseMapBuilder.
 
-    LOCAL seq IS seqBuilder:CALL().
+    LOCAL seq IS phaseSequenceEnsurePrelaunch(seqBuilder:CALL()).
     SET launchSeq TO seq.
     SET xferSeq TO seq.
     bootEnsureInitialPhase(seq).

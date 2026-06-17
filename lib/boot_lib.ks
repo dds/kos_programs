@@ -716,7 +716,7 @@ GLOBAL FUNCTION missionHasLandingPayload {
 GLOBAL FUNCTION missionExtraLibs {
     LOCAL out IS LIST().
     LOCAL rawSeq IS SEQUENCE.
-    LOCAL seq IS missionListFromCsv(rawSeq).
+    LOCAL seq IS phaseSequenceEnsurePrelaunch(missionListFromCsv(rawSeq)).
     LOCAL cur IS stateGet("phase", "").
     LOCAL rawExtra IS LIBS_EXTRA.
     FOR entryRaw IN missionListFromCsv(rawExtra) {
@@ -768,7 +768,7 @@ GLOBAL FUNCTION missionSequenceLibs {
     PARAMETER baseDeps IS LIST().
     LOCAL sequenceLibs IS fallbackLibs.
     LOCAL rawSeq IS SEQUENCE.
-    LOCAL sequence IS missionListFromCsv(rawSeq).
+    LOCAL sequence IS phaseSequenceEnsurePrelaunch(missionListFromCsv(rawSeq)).
     IF sequence:LENGTH > 0 {
         SET sequenceLibs TO missionLibsForPhases(sequence, baseDeps).
     }
@@ -814,10 +814,11 @@ GLOBAL FUNCTION missionLibsForPhases {
     PARAMETER phases.
     PARAMETER baseDeps IS LIST().
     LOCAL roots IS LIST("phases").
+    LOCAL phaseList IS phaseSequenceEnsurePrelaunch(phases).
     FOR lib IN baseDeps {
         missionAppendUnique(roots, LIST(lib)).
     }
-    FOR phase IN phases {
+    FOR phase IN phaseList {
         missionAppendUnique(roots, bootLibPhaseRoots(phase)).
     }
     RETURN bootLibResolve(roots).

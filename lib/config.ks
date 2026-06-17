@@ -35,5 +35,24 @@ GLOBAL FUNCTION phaseListFromString {
         IF phaseName <> "" { seq:ADD(phaseName). }
     }
     IF seq:LENGTH = 0 { seq:ADD("DONE"). }
-    RETURN seq.
+    RETURN phaseSequenceEnsurePrelaunch(seq).
+}
+
+GLOBAL FUNCTION phaseNeedsPrelaunch {
+    PARAMETER phaseName.
+    RETURN phaseName = "LAUNCH" OR phaseName = "HOP".
+}
+
+GLOBAL FUNCTION phaseSequenceEnsurePrelaunch {
+    PARAMETER seq.
+    LOCAL out IS LIST().
+    FOR phaseName IN seq {
+        IF phaseNeedsPrelaunch(phaseName) {
+            LOCAL previous IS "".
+            IF out:LENGTH > 0 { SET previous TO out[out:LENGTH - 1]. }
+            IF previous <> "PRELAUNCH" { out:ADD("PRELAUNCH"). }
+        }
+        out:ADD(phaseName).
+    }
+    RETURN out.
 }

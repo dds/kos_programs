@@ -19,6 +19,8 @@ GLOBAL PRELAUNCH_TRANSFER_LEAD IS 900.
 GLOBAL PRELAUNCH_TRANSFER_PHASE_TOL IS 8.
 GLOBAL RENDEZVOUS_TARGET IS "".
 GLOBAL TARGET_INCLINATION IS -1.
+GLOBAL CAPTURE_INC IS -1.
+GLOBAL CAPTURE_LAN IS -1.
 
 LOCAL FUNCTION _norm360 {
     PARAMETER angle.
@@ -682,6 +684,19 @@ LOCAL FUNCTION _prelaunchPrintConfig {
     flightPlanSequence(launchSeq).
 }
 
+LOCAL FUNCTION _prelaunchClearPlanState {
+    FOR key IN LIST(
+        "prelaunch_plane_ut", "prelaunch_plane_target",
+        "prelaunch_plane_inc", "prelaunch_plane_lan",
+        "prelaunch_transfer_departure_ut",
+        "prelaunch_transfer_target",
+        "prelaunch_transfer_xing_target",
+        "prelaunch_transfer_phase"
+    ) {
+        stateRemove(key).
+    }
+}
+
 GLOBAL FUNCTION confirmLaunch {
     IF stateGet("phase", "") <> "PRELAUNCH" {
         RETURN TRUE.
@@ -729,6 +744,7 @@ GLOBAL FUNCTION phasePrelaunch {
         yieldToPrompt().
         RETURN.
     }
+    _prelaunchClearPlanState().
 
     LOCAL planeMode IS "".
     IF LAUNCH_PLANE_MODE <> "" {
