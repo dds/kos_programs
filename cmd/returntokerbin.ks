@@ -58,8 +58,6 @@ LOCAL FUNCTION _persistCoastAutomation {
     stateSet("mission_cfg_KEEP_WARP", KEEP_WARP).
     stateSet("mission_cfg_COAST_AUTO_WARP", COAST_AUTO_WARP).
     stateSet("mission_cfg_COAST_AUTO_WARP_MIN", COAST_AUTO_WARP_MIN).
-    stateSet("mission_cfg_COAST_HIBERNATE", COAST_HIBERNATE).
-    stateSet("mission_cfg_COAST_HIBERNATE_MIN", COAST_HIBERNATE_MIN).
     stateSet("mission_cfg_COAST_WARP_5M_LIMIT", COAST_WARP_5M_LIMIT).
     stateSet("mission_cfg_COAST_WARP_1H_LIMIT", COAST_WARP_1H_LIMIT).
     stateSet("mission_cfg_COAST_WARP_5H_LIMIT", COAST_WARP_5H_LIMIT).

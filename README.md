@@ -388,7 +388,6 @@ Mission profiles can opt into hands-off long coasts:
 
 ```ks
 SET COAST_AUTO_WARP TO 1.   // Requires a future KAC alarm; otherwise skipped.
-SET COAST_HIBERNATE TO 1.   // Probe-core hibernation during long maneuver waits.
 ```
 
 `idealCoastWarpRate(waitSeconds)` maps wait time to warp indices: 60s to

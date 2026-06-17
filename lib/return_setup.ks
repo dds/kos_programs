@@ -50,8 +50,6 @@ LOCAL FUNCTION _returnSetupCoastAutomationCfg {
     _returnSetupCfg("KEEP_WARP", KEEP_WARP).
     _returnSetupCfg("COAST_AUTO_WARP", COAST_AUTO_WARP).
     _returnSetupCfg("COAST_AUTO_WARP_MIN", COAST_AUTO_WARP_MIN).
-    _returnSetupCfg("COAST_HIBERNATE", COAST_HIBERNATE).
-    _returnSetupCfg("COAST_HIBERNATE_MIN", COAST_HIBERNATE_MIN).
     _returnSetupCfg("COAST_WARP_5M_LIMIT", COAST_WARP_5M_LIMIT).
     _returnSetupCfg("COAST_WARP_1H_LIMIT", COAST_WARP_1H_LIMIT).
     _returnSetupCfg("COAST_WARP_5H_LIMIT", COAST_WARP_5H_LIMIT).

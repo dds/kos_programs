@@ -89,7 +89,6 @@ LOCAL FUNCTION _bplaneSolarHandoff {
             AND BOOT_LIB_RAN:CONTAINS("solar") {
         orientForSolar(TRUE, TRUE).
         trySolarHoldTick(-1).
-        tryCommandCoreHibernate(TRUE).
         mLog(label + ": solar handoff armed.").
     } ELSE {
         trySolarOrient().

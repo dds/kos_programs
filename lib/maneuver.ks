@@ -11,8 +11,8 @@ GLOBAL BURN_BRIEF IS 1.
 LOCAL COMPLETE_FRAC        IS 0.001.
 LOCAL ABS_CUTOFF           IS 0.0001.
 LOCAL ALIGN_TOLERANCE      IS 2.0.
-LOCAL HIBERNATE_THRESHOLD  IS 300.
-LOCAL HIBERNATE_WAKE_LEAD  IS 180.
+LOCAL COAST_REALIGN_THRESHOLD IS 300.
+LOCAL COAST_REALIGN_LEAD  IS 180.
 
 GLOBAL FUNCTION executeManeuver {
     WAIT 0.1.
@@ -26,7 +26,6 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL nodeTime IS nd:TIME.
     LOCAL burnDV  IS nd:DELTAV:MAG.
     LOCAL startTime IS _calcStartTime(nd).
-    _wakeCmd().
     _markPendingBurn(nd, burnDV, startTime).
 
     IF burnDV < 10 { _setThrustLimit(0.25). }
@@ -60,7 +59,7 @@ GLOBAL FUNCTION executeManeuver {
     // Imminent burn: clear any player warp first. If the burn is
     // still far enough from the T-60 KAC alarm, the guarded approach
     // auto-warp below can restart at an appropriate low rate.
-    IF startTime - TIME:SECONDS < HIBERNATE_THRESHOLD {
+    IF startTime - TIME:SECONDS < COAST_REALIGN_THRESHOLD {
         SET WARP TO 0.
     }
 
@@ -69,32 +68,25 @@ GLOBAL FUNCTION executeManeuver {
     LOCK STEERING TO nd:BURNVECTOR.
     mLog("Aligning to burn vector...").
 
-    LOCAL wakeTime IS startTime - HIBERNATE_WAKE_LEAD.
-    IF TIME:SECONDS < wakeTime - HIBERNATE_THRESHOLD {
-        // Spend the long coast sun-pointed for power; the wake and
-        // checkpoint re-locks below reacquire the burn vector before
-        // ignition.
+    LOCAL realignTime IS startTime - COAST_REALIGN_LEAD.
+    IF TIME:SECONDS < realignTime - COAST_REALIGN_THRESHOLD {
+        // Spend the long coast sun-pointed for power; the checkpoint
+        // re-locks below reacquire the burn vector before ignition.
         orientForSolar(FALSE, TRUE).
-        mLog("Long coast wait (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
+        mLog("Long coast wait (" + ROUND(realignTime - TIME:SECONDS, 0) + "s).").
         HUDTEXT("Coasting. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
-        IF COAST_HIBERNATE > 0
-                AND wakeTime - TIME:SECONDS >= COAST_HIBERNATE_MIN {
-            _hibernateCmd().
-        }
-        coastAutoWarp(wakeTime, "Burn coast", kacAlarmId).
+        coastAutoWarp(realignTime, "Burn coast", kacAlarmId).
         LOCAL solarRef IS -1.
-        UNTIL TIME:SECONDS >= wakeTime {
+        UNTIL TIME:SECONDS >= realignTime {
             SET solarRef TO trySolarHoldTick(solarRef).
-            WAIT MIN(10, MAX(0.5, wakeTime - TIME:SECONDS)).
+            WAIT MIN(10, MAX(0.5, realignTime - TIME:SECONDS)).
         }
-        _wakeCmd().
         SET WARP TO 0.
         SET SAS TO FALSE.
         WAIT 0.1.
         LOCK STEERING TO nd:BURNVECTOR.
-        mLog("Awake — " + ROUND(startTime - TIME:SECONDS, 0) + "s to burn.").
-        mLog("Re-aligning to burn vector after hibernation.").
-        HUDTEXT("Core awake — burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
+        mLog("Re-aligning — " + ROUND(startTime - TIME:SECONDS, 0) + "s to burn.").
+        HUDTEXT("Re-aligning. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
     }
 
     LOCAL approachTime IS startTime - 60.
@@ -493,34 +485,5 @@ LOCAL FUNCTION _clearPendingBurn {
         "burn_start_time", "burn_dv"
     ) {
         stateRemove(key).
-    }
-}
-
-LOCAL FUNCTION _wakeCmd {
-    FOR p IN SHIP:PARTS {
-        IF p:HASMODULE("ModuleCommand") {
-            LOCAL cm IS p:GETMODULE("ModuleCommand").
-            IF cm:HASFIELD("hibernation") {
-                cm:SETFIELD("hibernation", FALSE).
-            }
-        }
-    }
-}
-
-LOCAL FUNCTION _hibernateCmd {
-    LOCAL found IS FALSE.
-    FOR p IN SHIP:PARTS {
-        IF p:HASMODULE("ModuleCommand") {
-            LOCAL cm IS p:GETMODULE("ModuleCommand").
-            IF cm:HASFIELD("hibernation") {
-                cm:SETFIELD("hibernation", TRUE).
-                SET found TO TRUE.
-            }
-        }
-    }
-    IF found {
-        mLog("Command module hibernating for long coast.").
-    } ELSE {
-        mLogWarn("Long coast hibernation requested but no toggle found.").
     }
 }
