@@ -113,7 +113,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL nowUt IS TIME:SECONDS.
     LOCAL period IS SHIP:ORBIT:PERIOD.
     LOCAL minLead IS _targetDeorbitMinLead().
-    LOCAL scanOrbits IS 8.
+    LOCAL scanOrbits IS 4.
     IF TARGET_DEORBIT_SCAN_ORBITS > 0 {
         SET scanOrbits TO TARGET_DEORBIT_SCAN_ORBITS.
     }
@@ -121,37 +121,96 @@ GLOBAL FUNCTION targetedDeorbitAt {
         IF scanOrbits > 2 { SET scanOrbits TO 2. }
     }
 
-    LOCAL scanStart IS nowUt + minLead.
-    LOCAL scanEnd IS nowUt + period * scanOrbits + 30.
     LOCAL stepA IS period / 128.
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-    LOCAL geometry IS _findDeorbitGeometryNode(targetLat, targetLng,
-        scanStart, scanEnd, stepA, nodeGroundAngle).
-    IF NOT geometry["VALID"] {
-        mLogError("No deorbit node found at ground angle "
-            + ROUND(nodeGroundAngle,0) + "deg from target.").
+    LOCAL geometry IS LEXICON(
+        "VALID", FALSE,
+        "UT", nowUt + minLead,
+        "ANGLE", 999999999,
+        "ERR", 999999999,
+        "LAT", 0,
+        "LNG", 0
+    ).
+    LOCAL solved IS LEXICON(
+        "VALID", FALSE,
+        "DV", seedRetroDv,
+        "DIST", 999999999,
+        "DOWNFIELD", -999999999,
+        "ERR", 999999999,
+        "PE", 999999999,
+        "ANGLE", -1,
+        "HAS_IMPACT", FALSE,
+        "LAT", 0,
+        "LNG", 0
+    ).
+    LOCAL foundGeometry IS FALSE.
+    LOCAL acceptedSolution IS FALSE.
+    LOCAL orbitScan IS 0.
+
+    UNTIL orbitScan >= scanOrbits OR acceptedSolution {
+        LOCAL scanStart IS nowUt + minLead + orbitScan * period.
+        LOCAL scanEnd IS scanStart + period + 30.
+        SET geometry TO _findDeorbitGeometryNode(targetLat, targetLng,
+            scanStart, scanEnd, stepA, nodeGroundAngle).
+
+        IF geometry["VALID"] {
+            SET foundGeometry TO TRUE.
+            LOCAL candidateUT IS geometry["UT"].
+            mLog("Geometry node orbit " + (orbitScan + 1)
+                + "/" + scanOrbits
+                + ": T+" + ROUND(candidateUT - nowUt,0)
+                + "s angle=" + ROUND(geometry["ANGLE"],2)
+                + " subpoint=" + ROUND(geometry["LAT"],4)
+                + "," + ROUND(geometry["LNG"],4) + ".").
+
+            SET solved TO _solveGeometricDeorbitDv(candidateUT,
+                targetLat, targetLng,
+                minLead, minRetroDv, maxRetroDv, seedRetroDv,
+                desiredDownfield, minDownfield, maxDownfield).
+            IF NOT solved["VALID"] {
+                mLogWarn("Orbit " + (orbitScan + 1)
+                    + " geometry did not solve a valid deorbit.").
+            } ELSE IF solved["HAS_IMPACT"]
+                    AND solved["DOWNFIELD"] >= minDownfield
+                    AND solved["DOWNFIELD"] <= maxDownfield
+                    AND solved["DIST"] >= minDownfield
+                    AND solved["DIST"] <= maxDownfield {
+                SET acceptedSolution TO TRUE.
+            } ELSE {
+                mLogWarn("Orbit " + (orbitScan + 1)
+                    + " solution outside deorbit band: dist="
+                    + ROUND(solved["DIST"]/1000,2)
+                    + "km downfield="
+                    + ROUND(solved["DOWNFIELD"]/1000,2) + "km.").
+            }
+        } ELSE {
+            mLogWarn("No deorbit node found at ground angle "
+                + ROUND(nodeGroundAngle,0) + "deg during orbit "
+                + (orbitScan + 1) + "/" + scanOrbits + ".").
+        }
+
+        SET orbitScan TO orbitScan + 1.
+        WAIT 0.
+    }
+
+    IF NOT acceptedSolution {
+        IF NOT foundGeometry {
+            mLogError("No deorbit node found at ground angle "
+                + ROUND(nodeGroundAngle,0) + "deg from target within "
+                + scanOrbits + " orbit(s).").
+        } ELSE {
+            mLogError("No retrograde dV in " + ROUND(minRetroDv,1)
+                + "-" + ROUND(maxRetroDv,1) + "m/s put TR impact "
+                + ROUND(minDownfield/1000,1) + "-"
+                + ROUND(maxDownfield/1000,1)
+                + "km downfield after scanning "
+                + scanOrbits + " orbit(s).").
+        }
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
     }
 
     LOCAL bestUT IS geometry["UT"].
-    mLog("Geometry node: T+" + ROUND(bestUT - nowUt,0)
-        + "s angle=" + ROUND(geometry["ANGLE"],2)
-        + " subpoint=" + ROUND(geometry["LAT"],4)
-        + "," + ROUND(geometry["LNG"],4) + ".").
-
-    LOCAL solved IS _solveGeometricDeorbitDv(bestUT, targetLat, targetLng,
-        minLead, minRetroDv, maxRetroDv, seedRetroDv,
-        desiredDownfield, minDownfield, maxDownfield).
-    IF NOT solved["VALID"] {
-        mLogError("No retrograde dV in " + ROUND(minRetroDv,1)
-            + "-" + ROUND(maxRetroDv,1) + "m/s put TR impact "
-            + ROUND(minDownfield/1000,1) + "-"
-            + ROUND(maxDownfield/1000,1) + "km downfield.").
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-        RETURN FALSE.
-    }
-
     LOCAL bestRetroDv IS solved["DV"].
     LOCAL bestDist IS solved["DIST"].
     LOCAL bestAngle IS solved["ANGLE"].
