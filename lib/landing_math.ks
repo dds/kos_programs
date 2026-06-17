@@ -89,7 +89,12 @@ GLOBAL FUNCTION lmDescentSpeed {
     PARAMETER radarAlt.
     PARAMETER touchdownSpeed.
     PARAMETER uprightAlt.
-    IF radarAlt > 1000 { RETURN 20. }
+    PARAMETER highSpeed IS 20.
+    LOCAL fastSpeed IS MAX(20, highSpeed).
+    IF radarAlt > 1500 { RETURN fastSpeed. }
+    IF radarAlt > 1000 {
+        RETURN 20 + (radarAlt - 1000) / 500 * (fastSpeed - 20).
+    }
     IF radarAlt > 100 {
         RETURN 8 + (radarAlt - 100) / 900 * 12.
     }

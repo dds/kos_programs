@@ -16,7 +16,7 @@ GLOBAL LANDING_HUD_HOLD_TIME IS 30.
 GLOBAL LANDING_BRAKE_ALIGN_LEAD IS 10.
 GLOBAL LANDING_TOUCHDOWN_ALT IS 3.
 GLOBAL LANDING_TOUCHDOWN_VSPEED IS 1.
-GLOBAL LANDING_TOUCHDOWN_HSPEED IS 5.
+GLOBAL LANDING_TOUCHDOWN_HSPEED IS 1.
 GLOBAL LANDING_TOUCHDOWN_SETTLE_TICKS IS 6.
 
 // ------------------------------------------------------------
@@ -471,8 +471,6 @@ LOCAL FUNCTION _landingBrakeAlignTick {
 LOCAL FUNCTION _landingBrakingTick {
     PARAMETER ctx.
 
-    _landingSetThrottle(ctx, 1).
-
     LOCAL maxAcc IS ctx["MAX_ACC"].
     LOCAL gravAcc IS ctx["GRAV"].
     LOCAL downSpeed IS ctx["DOWN_SPEED"].
@@ -481,14 +479,21 @@ LOCAL FUNCTION _landingBrakingTick {
         downSpeed, maxAcc, gravAcc).
     LOCAL burnHeight IS _landingBurnHeight(ctx).
     LOCAL targetDescent IS lmDescentSpeed(
-        burnHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT).
-    LOCAL verticalCaptured IS downSpeed <= targetDescent + 5.
+        burnHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
+    LOCAL targetVs IS -targetDescent.
+    LOCAL verticalCaptured IS ABS(ctx["V_SPEED"] - targetVs) <= 5.
     LOCAL distToTarget IS 999999.
     IF ctx["HAS_TARGET"] {
         SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     }
 
     LOCAL steerInfo IS _landingBrakeSteeringInfo(ctx).
+    IF ctx["V_SPEED"] < targetVs - 5 {
+        _landingSetThrottle(ctx, 1).
+    } ELSE {
+        _landingSetThrottle(ctx, lmVerticalThrottle(
+            targetVs, maxAcc, gravAcc, ctx["V_SPEED"])).
+    }
 
     _landingHudText(ctx, "BRAKE d=" + ROUND(distToTarget,0)
         + " trErr=" + ROUND(steerInfo["IMPACT_ERR"],0)
@@ -496,7 +501,7 @@ LOCAL FUNCTION _landingBrakingTick {
         + " xAbs=" + ROUND(steerInfo["CROSS_ABS"],0)
         + " hs=" + ROUND(horizontalSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
-        + "/" + ROUND(-targetDescent,1),
+        + "/" + ROUND(targetVs,1),
         1, 2, 13, YELLOW, FALSE).
 
     IF ctx["HAS_TARGET"]
@@ -528,12 +533,18 @@ LOCAL FUNCTION _landingApproachTick {
     LOCAL horizontalAcc IS MAX(0.1, maxAcc * BRAKE_ACCEL_FRACTION).
     LOCAL desiredSpeed IS MIN(MAX_APPROACH_SPEED,
         SQRT(MAX(0, 2 * horizontalAcc * MAX(0, distToTarget - VERTICAL_RADIUS)))).
+    LOCAL descentSpeed IS lmDescentSpeed(
+        approachHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
+    LOCAL timeToHover IS MAX(1, (approachHeight - HOVER_ALT)
+        / MAX(1, descentSpeed)).
+    LOCAL altitudeLimitedSpeed IS MAX(VERTICAL_HSPEED,
+        MAX(0, distToTarget - VERTICAL_RADIUS) / timeToHover).
+    SET desiredSpeed TO MIN(desiredSpeed, altitudeLimitedSpeed).
     _landingSetSteering(ctx, lmApproachSteering(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
         ctx["UP_VEC"], ctx["POSITION"])).
 
-    LOCAL targetVs IS -lmDescentSpeed(
-        approachHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT).
+    LOCAL targetVs IS -descentSpeed.
     _landingSetThrottle(ctx, lmVerticalThrottle(
         targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
@@ -548,8 +559,8 @@ LOCAL FUNCTION _landingApproachTick {
             AND horizontalSpeed <= VERTICAL_HSPEED {
         _landingSetState(ctx, "VERTICAL_DESCENT", "over target").
     } ELSE IF approachHeight <= HOVER_ALT
-            AND horizontalSpeed <= APPROACH_HSPEED {
-        _landingSetState(ctx, "VERTICAL_DESCENT", "hover altitude").
+            AND horizontalSpeed <= VERTICAL_HSPEED {
+        _landingSetState(ctx, "VERTICAL_DESCENT", "hover altitude and horizontal velocity killed").
     }
 }
 
@@ -570,7 +581,7 @@ LOCAL FUNCTION _landingVerticalTick {
     }
 
     LOCAL targetVs IS -lmDescentSpeed(
-        bottomAlt, TOUCHDOWN_SPEED, UPRIGHT_ALT).
+        bottomAlt, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
     _landingSetThrottle(ctx, lmVerticalThrottle(
         targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
