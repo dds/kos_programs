@@ -114,7 +114,7 @@ GLOBAL FUNCTION planTransfer {
     IF captureInc >= 0 {
         _refineEjectionTarget(nd, targetBody, targetPe, captureInc, lanTarget).
     } ELSE IF isEscape {
-        newtonTarget(nd, targetBody, "PE", 0, LEXICON("INVERT", TRUE)).
+        newtonTarget(nd, targetBody, "PE", 0).
     } ELSE {
         newtonTarget(nd, targetBody, "PE", 0).
     }
