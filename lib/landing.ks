@@ -725,8 +725,11 @@ LOCAL FUNCTION _landingHoverRefineTick {
     PARAMETER ctx.
 
     IF NOT ctx["HOVER_TERRAIN_DONE"] {
+        LOCAL originalTerrainRadius IS TERRAIN_CHECK_RADIUS.
+        SET TERRAIN_CHECK_RADIUS TO 20.
         LOCAL terrainResult IS _landingTerrainCheck(
             ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+        SET TERRAIN_CHECK_RADIUS TO originalTerrainRadius.
         SET ctx["HOVER_TERRAIN_DONE"] TO TRUE.
         SET ctx["TARGET_LAT"] TO terrainResult["LAT"].
         SET ctx["TARGET_LNG"] TO terrainResult["LNG"].
