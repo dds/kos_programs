@@ -197,6 +197,58 @@ GLOBAL FUNCTION lmTerrainClearanceCheck {
     RETURN 0.
 }
 
+GLOBAL FUNCTION lmTerrainClearanceInfo {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER burnUt.
+    PARAMETER startUt.
+    PARAMETER endUt.
+    PARAMETER stepSec.
+    PARAMETER minClearance.
+    PARAMETER safeAlt.
+
+    LOCAL sampleUt IS startUt.
+    LOCAL bodyRad IS SHIP:BODY:RADIUS.
+    LOCAL bdy IS SHIP:BODY.
+    LOCAL bodyPos IS bdy:POSITION.
+    LOCAL burnGeo IS bdy:GEOPOSITIONOF(POSITIONAT(SHIP, burnUt)).
+    LOCAL burnVec IS LATLNG(burnGeo:LAT, burnGeo:LNG):POSITION.
+    LOCAL targetVec IS LATLNG(targetLat, targetLng):POSITION.
+    LOCAL upVec IS (targetVec - bodyPos):NORMALIZED.
+    LOCAL trackDir IS VXCL(upVec, targetVec - burnVec).
+
+    UNTIL sampleUt > endUt {
+        LOCAL pos IS POSITIONAT(SHIP, sampleUt).
+        LOCAL altRadius IS (pos - POSITIONAT(bdy, sampleUt)):MAG.
+        LOCAL altDatum IS altRadius - bodyRad.
+
+        IF altDatum < safeAlt {
+            LOCAL geo IS bdy:GEOPOSITIONOF(pos).
+            LOCAL terrain IS LATLNG(geo:LAT, geo:LNG):TERRAINHEIGHT.
+            LOCAL clearance IS altDatum - terrain.
+            IF clearance <= minClearance {
+                LOCAL hitVec IS LATLNG(geo:LAT, geo:LNG):POSITION.
+                LOCAL hitOffset IS VXCL(upVec, hitVec - targetVec).
+                LOCAL downfield IS hitOffset:MAG.
+                IF trackDir:MAG >= 0.01 {
+                    SET downfield TO VDOT(hitOffset, trackDir:NORMALIZED).
+                }
+                RETURN LEXICON(
+                    "HIT", TRUE,
+                    "UT", sampleUt,
+                    "LAT", geo:LAT,
+                    "LNG", geo:LNG,
+                    "DIST", geoDistance(geo:LAT, geo:LNG, targetLat, targetLng),
+                    "DOWNFIELD", downfield,
+                    "CLEARANCE", clearance
+                ).
+            }
+        }
+        SET sampleUt TO sampleUt + stepSec.
+    }
+    RETURN LEXICON("HIT", FALSE).
+}
+
 GLOBAL FUNCTION lmTerrainImpactAngle {
     PARAMETER startUt.
     PARAMETER endUt.

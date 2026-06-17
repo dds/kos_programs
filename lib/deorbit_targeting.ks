@@ -192,21 +192,29 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     IF TERRAIN_VALIDATE {
-        LOCAL crashDist IS lmTerrainClearanceCheck(
+        LOCAL crashInfo IS lmTerrainClearanceInfo(
             targetLat, targetLng,
+            bestUT,
             bestUT + 30, bestUT + 1800,
             2,
             TERRAIN_MIN_CLEARANCE,
             TERRAIN_SAFE_ALT).
-        LOCAL maxCrashDist IS MAX(TERRAIN_MAX_CRASH_DIST,
-            desiredDownfield + downfieldTol).
-        IF crashDist > maxCrashDist {
-            mLogError("TERRAIN CHECK FAILED: trajectory hits terrain "
-                + ROUND(crashDist,0) + "m from target.").
+        IF crashInfo["HIT"] AND crashInfo["DOWNFIELD"] < 0 {
+            mLogError("TERRAIN CHECK FAILED: trajectory hits terrain before target pass "
+                + "downfield=" + ROUND(crashInfo["DOWNFIELD"],0)
+                + "m dist=" + ROUND(crashInfo["DIST"],0)
+                + "m clearance=" + ROUND(crashInfo["CLEARANCE"],1) + "m.").
             REMOVE realNode.
             RETURN FALSE.
         }
-        mLog("Terrain check passed.").
+        IF crashInfo["HIT"] {
+            mLogWarn("Terrain check ignored post-target impact: downfield="
+                + ROUND(crashInfo["DOWNFIELD"],0)
+                + "m dist=" + ROUND(crashInfo["DIST"],0)
+                + "m clearance=" + ROUND(crashInfo["CLEARANCE"],1) + "m.").
+        } ELSE {
+            mLog("Terrain check passed.").
+        }
     }
 
     mLog("Executing deorbit burn at T+" + ROUND(bestUT - TIME:SECONDS,0) + "s.").
