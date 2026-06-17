@@ -453,6 +453,9 @@ LOCAL FUNCTION _landingSetState {
         _landingHudNotice(ctx, "Performing braking burn.", YELLOW, TRUE).
     } ELSE IF nextState = "APPROACH" {
         _landingHudNotice(ctx, "Performing approach.", CYAN, TRUE).
+    } ELSE IF nextState = "HOVER_REFINE" {
+        vesselDeployGear().
+        _landingHudNotice(ctx, "Hovering to refine target coordinates.", CYAN, TRUE).
     } ELSE IF nextState = "VERTICAL_DESCENT" {
         vesselDeployGear().
         _landingHudNotice(ctx, "Performing vertical descent.", GREEN, TRUE).
@@ -711,9 +714,51 @@ LOCAL FUNCTION _landingApproachTick {
 
     IF distToTarget <= VERTICAL_RADIUS
             AND horizontalSpeed <= VERTICAL_HSPEED {
-        _landingSetState(ctx, "VERTICAL_DESCENT", "over target").
+        _landingSetState(ctx, "HOVER_REFINE",
+            "over target, entering hover pause").
     } ELSE IF bottomAlt <= TERMINAL_ALT {
         _landingSetState(ctx, "VERTICAL_DESCENT", "terminal altitude horizontal kill").
+    }
+}
+
+LOCAL FUNCTION _landingHoverRefineTick {
+    PARAMETER ctx.
+
+    IF NOT ctx["HOVER_TERRAIN_DONE"] {
+        LOCAL terrainResult IS _landingTerrainCheck(
+            ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+        SET ctx["HOVER_TERRAIN_DONE"] TO TRUE.
+        SET ctx["TARGET_LAT"] TO terrainResult["LAT"].
+        SET ctx["TARGET_LNG"] TO terrainResult["LNG"].
+        SET ctx["TARGET_ELEVATION"] TO terrainResult["ELEVATION"].
+        SET TARGET_LAT TO ctx["TARGET_LAT"].
+        SET TARGET_LNG TO ctx["TARGET_LNG"].
+        IF ADDONS:TR:AVAILABLE {
+            ADDONS:TR:SETTARGET(LATLNG(ctx["TARGET_LAT"], ctx["TARGET_LNG"])).
+        }
+    }
+
+    LOCAL distToTarget IS lmDistanceToTarget(
+        ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+    LOCAL horizontalSpeed IS ctx["H_SPEED"].
+    LOCAL desiredSpeed IS MIN(5, distToTarget * 0.5).
+
+    _landingSetSteering(ctx, lmApproachSteering(
+        ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
+        ctx["UP_VEC"], ctx["POSITION"])).
+    _landingSetThrottle(ctx, lmVerticalThrottle(
+        0, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
+
+    _landingHudText(ctx, "HOVER d=" + ROUND(distToTarget,1)
+        + " hs=" + ROUND(horizontalSpeed,1)
+        + "/" + ROUND(desiredSpeed,1)
+        + " vs=" + ROUND(ctx["V_SPEED"],1),
+        1, 2, 13, GREEN, FALSE).
+
+    IF distToTarget <= 2 AND horizontalSpeed <= 0.5 {
+        SET ctx["HOVER_REFINED"] TO TRUE.
+        _landingSetState(ctx, "VERTICAL_DESCENT",
+            "refinement complete, final drop").
     }
 }
 
@@ -723,6 +768,13 @@ LOCAL FUNCTION _landingVerticalTick {
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
     LOCAL finalHover IS bottomAlt <= LANDING_FINAL_HOVER_ALT
         AND horizontalSpeed > LANDING_FINAL_HOVER_HSPEED.
+
+    IF ctx["HAS_TARGET"]
+            AND NOT ctx["HOVER_REFINED"]
+            AND bottomAlt <= LANDING_FINAL_HOVER_ALT {
+        _landingSetState(ctx, "HOVER_REFINE", "final hover refinement").
+        RETURN.
+    }
 
     IF finalHover {
         _landingSetSteering(ctx, lmHoverSteering(
@@ -789,6 +841,8 @@ LOCAL FUNCTION _landingGuidanceTick {
         _landingBrakingTick(ctx).
     } ELSE IF ctx["STATE"] = "APPROACH" {
         _landingApproachTick(ctx).
+    } ELSE IF ctx["STATE"] = "HOVER_REFINE" {
+        _landingHoverRefineTick(ctx).
     } ELSE IF ctx["STATE"] = "VERTICAL_DESCENT" {
         _landingVerticalTick(ctx).
     }
@@ -862,6 +916,8 @@ GLOBAL FUNCTION landExecute {
         "TARGET_ELEVATION", targetElevation,
         "CROSS_PID", crossPid,
         "TERRAIN_DONE", terrainDone,
+        "HOVER_TERRAIN_DONE", FALSE,
+        "HOVER_REFINED", FALSE,
         "HUD_LAST", TIME:SECONDS - LANDING_HUD_INTERVAL,
         "HUD_NOTICE_LAST", TIME:SECONDS - LANDING_HUD_NOTICE_INTERVAL,
         "HUD_NOTICE_TEXT", "",
