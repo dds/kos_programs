@@ -705,6 +705,7 @@ LOCAL FUNCTION _landingTargetRefineTick {
     PARAMETER ctx.
 
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
+    LOCAL refineAge IS TIME:SECONDS - ctx["STATE_ENTERED"].
     LOCAL impactInfo IS _landingTrajImpactInfo(ctx).
     LOCAL impactErr IS 999999.
     LOCAL impactReady IS TRUE.
@@ -722,6 +723,7 @@ LOCAL FUNCTION _landingTargetRefineTick {
         + "/" + ROUND(LANDING_TARGET_REFINE_HSPEED,1)
         + " trErr=" + ROUND(impactErr,0)
         + " trOk=" + _landingBoolText(impactReady)
+        + " age=" + ROUND(refineAge,0)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/0 thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
         1, 2, 13, CYAN, FALSE).
@@ -729,6 +731,10 @@ LOCAL FUNCTION _landingTargetRefineTick {
     IF horizontalSpeed <= LANDING_TARGET_REFINE_HSPEED
             AND impactReady {
         _landingSetState(ctx, "APPROACH", "lateral drift neutralized").
+    } ELSE IF refineAge >= LANDING_TARGET_REFINE_ACCEPT_TIME
+            AND horizontalSpeed <= LANDING_TARGET_REFINE_ACCEPT_HSPEED
+            AND impactReady {
+        _landingSetState(ctx, "APPROACH", "target refine good enough").
     }
 }
 
