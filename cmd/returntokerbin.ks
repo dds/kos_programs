@@ -54,6 +54,21 @@ LOCAL FUNCTION _clearLibCache {
     }
 }
 
+LOCAL FUNCTION _persistCoastAutomation {
+    stateSet("mission_cfg_KEEP_WARP", KEEP_WARP).
+    stateSet("mission_cfg_COAST_AUTO_WARP", COAST_AUTO_WARP).
+    stateSet("mission_cfg_COAST_AUTO_WARP_MIN", COAST_AUTO_WARP_MIN).
+    stateSet("mission_cfg_COAST_HIBERNATE", COAST_HIBERNATE).
+    stateSet("mission_cfg_COAST_HIBERNATE_MIN", COAST_HIBERNATE_MIN).
+    stateSet("mission_cfg_COAST_WARP_5M_LIMIT", COAST_WARP_5M_LIMIT).
+    stateSet("mission_cfg_COAST_WARP_1H_LIMIT", COAST_WARP_1H_LIMIT).
+    stateSet("mission_cfg_COAST_WARP_5H_LIMIT", COAST_WARP_5H_LIMIT).
+    stateSet("mission_cfg_COAST_WARP_3D_LIMIT", COAST_WARP_3D_LIMIT).
+    stateSet("mission_cfg_COAST_WARP_10D_LIMIT", COAST_WARP_10D_LIMIT).
+    stateSet("mission_cfg_COAST_WARP_50D_LIMIT", COAST_WARP_50D_LIMIT).
+    stateSet("mission_cfg_COAST_WARP_MAX_RATE", COAST_WARP_MAX_RATE).
+}
+
 // --- Read options with defaults ---
 // Default honors the mission profile's REENTRY_PE when set.
 LOCAL targetPe IS REENTRY_PE.
@@ -116,6 +131,7 @@ IF NOT err {
     stateSet("mission_cfg_CAPTURE_PE", targetPe).
     stateSet("mission_cfg_CAPTURE_INC", 0).
     stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
+    _persistCoastAutomation().
 
     IF kscTarget {
         stateSet("mission_cfg_ESCAPE_KSC_TARGET", 1).

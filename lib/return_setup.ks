@@ -46,6 +46,21 @@ LOCAL FUNCTION _returnSetupOptionalTag {
     }
 }
 
+LOCAL FUNCTION _returnSetupCoastAutomationCfg {
+    _returnSetupCfg("KEEP_WARP", KEEP_WARP).
+    _returnSetupCfg("COAST_AUTO_WARP", COAST_AUTO_WARP).
+    _returnSetupCfg("COAST_AUTO_WARP_MIN", COAST_AUTO_WARP_MIN).
+    _returnSetupCfg("COAST_HIBERNATE", COAST_HIBERNATE).
+    _returnSetupCfg("COAST_HIBERNATE_MIN", COAST_HIBERNATE_MIN).
+    _returnSetupCfg("COAST_WARP_5M_LIMIT", COAST_WARP_5M_LIMIT).
+    _returnSetupCfg("COAST_WARP_1H_LIMIT", COAST_WARP_1H_LIMIT).
+    _returnSetupCfg("COAST_WARP_5H_LIMIT", COAST_WARP_5H_LIMIT).
+    _returnSetupCfg("COAST_WARP_3D_LIMIT", COAST_WARP_3D_LIMIT).
+    _returnSetupCfg("COAST_WARP_10D_LIMIT", COAST_WARP_10D_LIMIT).
+    _returnSetupCfg("COAST_WARP_50D_LIMIT", COAST_WARP_50D_LIMIT).
+    _returnSetupCfg("COAST_WARP_MAX_RATE", COAST_WARP_MAX_RATE).
+}
+
 GLOBAL FUNCTION phaseSurfaceReturnSetup {
     IF BODY:NAME <> "Mun" AND BODY:NAME <> "Minmus" {
         mLogError("SURFACE_RETURN_SETUP requires Mun or Minmus surface; current body="
@@ -87,6 +102,7 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     _returnSetupOptionalTag("RETURN_DESCENT_FAIRING_TAG", RETURN_DESCENT_FAIRING_TAG).
     _returnSetupOptionalTag("RETURN_DESCENT_DECOUPLER_TAG", RETURN_DESCENT_DECOUPLER_TAG).
     _returnSetupOptionalTag("RETURN_DESCENT_CHUTES_TAG", RETURN_DESCENT_CHUTES_TAG).
+    _returnSetupCoastAutomationCfg().
     _returnSetupRemoveCfg("LIBS_EXTRA").
     FOR key IN LIST("fairing_deployed", "orbit_start_time") {
         stateRemove(key).
@@ -151,6 +167,7 @@ GLOBAL FUNCTION phaseReturnSetup {
     _returnSetupCfg("CAPTURE_INC", 0).
     _returnSetupCfg("AEROBRAKE_REENTRY_DIR", RETURN_REENTRY_DIR).
     _returnSetupRemoveCfg("LIBS_EXTRA").
+    _returnSetupCoastAutomationCfg().
 
     IF RETURN_KSC_TARGET > 0 {
         _returnSetupCfg("ESCAPE_KSC_TARGET", 1).
