@@ -492,6 +492,8 @@ GLOBAL FUNCTION _nodeAxisSet {
 //   DV_CAP  — max total node dV; aborts if exceeded (used by MCC)
 //   TOL     — convergence tolerance (default: 500m for PE, 0.5° for angles)
 //   DAMP    — damping factor (default: 0.5 for PE, 0.7 for angles)
+//   INVERT  — flip correction direction for frame/axis cases where
+//             measured PE response is reversed by the patched-conic handoff
 //   HOLD    — LEXICON("PARAM", name, "VALUE", target) — after each
 //             primary correction, apply a compensating single Newton
 //             step on the held axis to maintain its target. Used to
@@ -517,12 +519,14 @@ GLOBAL FUNCTION newtonTarget {
     LOCAL maxIter IS 35.
     LOCAL dvCap   IS -1.
     LOCAL bias    IS 0.
+    LOCAL invert  IS FALSE.
 
     IF opts:HASKEY("DAMP")     { SET damp    TO opts["DAMP"]. }
     IF opts:HASKEY("TOL")      { SET tol     TO opts["TOL"]. }
     IF opts:HASKEY("MAX_ITER") { SET maxIter TO opts["MAX_ITER"]. }
     IF opts:HASKEY("DV_CAP")   { SET dvCap   TO opts["DV_CAP"]. }
     IF opts:HASKEY("BIAS")     { SET bias    TO opts["BIAS"]. }
+    IF opts:HASKEY("INVERT")   { SET invert  TO opts["INVERT"]. }
 
     // HOLD constraint: after each primary correction, compensate drift
     // on a secondary axis with a single Newton step.
@@ -543,6 +547,8 @@ GLOBAL FUNCTION newtonTarget {
     LOCAL fmtVal IS ROUND(targetVal, CHOOSE 1 IF isAngle ELSE 0).
     IF bias <> 0 {
         mLog(label + ": targeting " + fmtVal + " (bias=" + bias + ")").
+    } ELSE IF invert {
+        mLog(label + ": targeting " + fmtVal + " (inverted correction)").
     } ELSE {
         mLog(label + ": targeting " + fmtVal).
     }
@@ -619,6 +625,7 @@ GLOBAL FUNCTION newtonTarget {
                 mLog("  " + label + "[" + i + "]: low sensitivity, skipping.").
             } ELSE {
                 LOCAL correction IS (err / sens) * damp.
+                IF invert { SET correction TO -correction. }
 
                 // Detect alternating-sign oscillation (limit cycle)
                 IF prevCorr <> 0 AND correction * prevCorr < 0 {

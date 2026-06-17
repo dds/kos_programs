@@ -114,8 +114,7 @@ GLOBAL FUNCTION planTransfer {
     IF captureInc >= 0 {
         _refineEjectionTarget(nd, targetBody, targetPe, captureInc, lanTarget).
     } ELSE IF isEscape {
-        mLog("Escape dumb departure: skipping generic PE pretarget; "
-            + "downstream correction owns arrival geometry.").
+        newtonTarget(nd, targetBody, "PE", 0, LEXICON("INVERT", TRUE)).
     } ELSE {
         newtonTarget(nd, targetBody, "PE", 0).
     }
