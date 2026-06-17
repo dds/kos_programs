@@ -613,6 +613,8 @@ GLOBAL FUNCTION landExecute {
         + " tr=" + _landingBoolText(ADDONS:TR:AVAILABLE) + ".").
 
     UNTIL landingAbortFlag OR ctx["TOUCHDOWN_SETTLED"] {
+        LOCAL tickRate IS 0.33. // Slower tick for coasting.
+
         _landingCacheTick(ctx).
 
         IF _landingTouchdownSettled(ctx) {
@@ -627,7 +629,11 @@ GLOBAL FUNCTION landExecute {
             _landingGuidanceTick(ctx).
         }
 
-        WAIT 0.05.
+        IF ctx["STATE"] <> "COAST" {
+            SET tickRate TO 0.05.
+        }
+
+        WAIT tickRate.
     }
 
     IF landingAbortFlag {
