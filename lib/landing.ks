@@ -12,6 +12,7 @@
 GLOBAL landingAbortFlag IS FALSE.
 GLOBAL landingSteeringTarget IS V(0, 0, 0).
 GLOBAL LANDING_HUD_INTERVAL IS 5.
+GLOBAL LANDING_HUD_HOLD_TIME IS 30.
 GLOBAL LANDING_TOUCHDOWN_ALT IS 3.
 GLOBAL LANDING_TOUCHDOWN_VSPEED IS 1.
 GLOBAL LANDING_TOUCHDOWN_HSPEED IS 5.
@@ -158,7 +159,8 @@ LOCAL FUNCTION _landingHudText {
     IF TIME:SECONDS - ctx["HUD_LAST"] < LANDING_HUD_INTERVAL { RETURN. }
     SET ctx["HUD_LAST"] TO TIME:SECONDS.
     mLog(text).
-    HUDTEXT(text, holdTime, style, size, color, blink).
+    HUDTEXT(text, MAX(holdTime, LANDING_HUD_HOLD_TIME),
+        style, size, color, blink).
 }
 
 LOCAL FUNCTION _landingBottomRadar {
@@ -272,14 +274,17 @@ LOCAL FUNCTION _landingSetState {
     IF nextState = "BRAKING_BURN" {
         _landingSetThrottle(ctx, 1).
         SET ctx["HUD_LAST"] TO TIME:SECONDS.
-        HUDTEXT("BRAKING BURN", 3, 2, 16, YELLOW, FALSE).
+        HUDTEXT("BRAKING BURN", LANDING_HUD_HOLD_TIME,
+            2, 16, YELLOW, FALSE).
     } ELSE IF nextState = "APPROACH" {
         SET ctx["HUD_LAST"] TO TIME:SECONDS.
-        HUDTEXT("APPROACH", 3, 2, 16, CYAN, FALSE).
+        HUDTEXT("APPROACH", LANDING_HUD_HOLD_TIME,
+            2, 16, CYAN, FALSE).
     } ELSE IF nextState = "VERTICAL_DESCENT" {
         vesselDeployGear().
         SET ctx["HUD_LAST"] TO TIME:SECONDS.
-        HUDTEXT("VERTICAL DESCENT", 3, 2, 16, GREEN, FALSE).
+        HUDTEXT("VERTICAL DESCENT", LANDING_HUD_HOLD_TIME,
+            2, 16, GREEN, FALSE).
     } ELSE IF nextState = "TOUCHDOWN" {
         _landingSetThrottle(ctx, 0).
     }
@@ -532,7 +537,7 @@ LOCAL FUNCTION _landingFinish {
     mLog("TOUCHDOWN. vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s"
         + "  lat=" + ROUND(SHIP:LATITUDE,4)
         + "  lng=" + ROUND(SHIP:LONGITUDE,4)).
-    HUDTEXT("TOUCHDOWN!", 8, 2, 20, GREEN, FALSE).
+    HUDTEXT("TOUCHDOWN!", LANDING_HUD_HOLD_TIME, 2, 20, GREEN, FALSE).
     stateSet("landing_lat",  SHIP:LATITUDE).
     stateSet("landing_lng",  SHIP:LONGITUDE).
     stateSet("landing_time", TIME:SECONDS).
