@@ -471,8 +471,8 @@ GLOBAL FUNCTION landExecute {
     }
 
     LOCAL landingTarget IS landingResolveTarget().
-    LOCAL hasTarget IS landingTarget["FOUND"].
-    IF hasTarget {
+    LOCAL _hasTarget IS landingTarget["FOUND"].
+    IF _hasTarget {
         SET TARGET_LAT TO landingTarget["LAT"].
         SET TARGET_LNG TO landingTarget["LNG"].
         mLog("Landing target: " + ROUND(landingTarget["LAT"],4)
@@ -483,7 +483,7 @@ GLOBAL FUNCTION landExecute {
     }
 
     LOCAL targetElevation IS 0.
-    IF hasTarget {
+    IF _hasTarget {
         SET targetElevation TO LATLNG(TARGET_LAT, TARGET_LNG):TERRAINHEIGHT.
     }
     LOCAL crossPid IS PIDLOOP(
@@ -497,7 +497,7 @@ GLOBAL FUNCTION landExecute {
     LOCAL ctx IS LEXICON(
         "STATE", "COAST",
         "STATE_ENTERED", TIME:SECONDS,
-        "HAS_TARGET", hasTarget,
+        "HAS_TARGET", _hasTarget,
         "TARGET_LAT", TARGET_LAT,
         "TARGET_LNG", TARGET_LNG,
         "TARGET_ELEVATION", targetElevation,
@@ -508,7 +508,7 @@ GLOBAL FUNCTION landExecute {
     ).
     stateSet("landing_state", "COAST").
 
-    IF hasTarget AND ADDONS:TR:AVAILABLE {
+    IF _hasTarget AND ADDONS:TR:AVAILABLE {
         ADDONS:TR:SETTARGET(LATLNG(ctx["TARGET_LAT"], ctx["TARGET_LNG"])).
         mLog("Trajectories target set for powered descent guidance.").
     }
@@ -517,7 +517,7 @@ GLOBAL FUNCTION landExecute {
     vesselDeployGear().
     LOCK STEERING TO ctx["TARGET_STEERING"].
     LOCK THROTTLE TO ctx["TARGET_THROTTLE"].
-    mLog("Landing setup target=" + _landingBoolText(hasTarget)
+    mLog("Landing setup target=" + _landingBoolText(_hasTarget)
         + " tr=" + _landingBoolText(ADDONS:TR:AVAILABLE) + ".").
 
     UNTIL landingAbortFlag
