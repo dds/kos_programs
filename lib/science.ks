@@ -467,7 +467,9 @@ GLOBAL FUNCTION scansatDutyCycle {
             WAIT 2.
             orientForSolar().
             SET lastOrient TO TIME:SECONDS.
-            SET WARP TO savedWarp.
+            IF savedWarp > 0 {
+                setWarpWithKac(savedWarp, "SCANSAT solar reorient restore").
+            }
         }
 
         IF TIME:SECONDS > nextStatus {

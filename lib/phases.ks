@@ -5,6 +5,15 @@
 // --- Config defaults owned by this file ---
 GLOBAL KEEP_WARP IS 0.
 GLOBAL EVA_BIOMES IS "".
+GLOBAL COAST_AUTO_WARP IS 0.
+GLOBAL COAST_AUTO_WARP_MIN IS 300.
+GLOBAL COAST_HIBERNATE IS 0.
+GLOBAL COAST_HIBERNATE_MIN IS 600.
+GLOBAL COAST_WARP_5H_LIMIT IS 18000.
+GLOBAL COAST_WARP_3D_LIMIT IS 64800.
+GLOBAL COAST_WARP_10D_LIMIT IS 216000.
+GLOBAL COAST_WARP_50D_LIMIT IS 1080000.
+GLOBAL COAST_WARP_MAX_RATE IS 6.
 
 GLOBAL phaseShouldYield IS FALSE.
 GLOBAL launchSeq IS LIST().
@@ -225,6 +234,71 @@ GLOBAL FUNCTION maneuverEnsureBurnAlarm {
 
 GLOBAL FUNCTION warpHoldEnabled {
     RETURN KEEP_WARP > 0.
+}
+
+GLOBAL FUNCTION warpKacGuarded {
+    PARAMETER alarmId IS "".
+    PARAMETER label IS "warp".
+
+    IF NOT ADDONS:KAC:AVAILABLE {
+        mLogWarn(label + ": warp skipped; KAC unavailable.").
+        RETURN FALSE.
+    }
+    IF alarmId <> "" {
+        FOR a IN LISTALARMS("All") {
+            IF a:ID = alarmId { RETURN TRUE. }
+        }
+        mLogWarn(label + ": warp skipped; KAC alarm missing.").
+        RETURN FALSE.
+    }
+    FOR a IN LISTALARMS("All") {
+        IF a:TIME > TIME:SECONDS { RETURN TRUE. }
+    }
+    mLogWarn(label + ": warp skipped; no future KAC alarm set.").
+    RETURN FALSE.
+}
+
+GLOBAL FUNCTION setWarpWithKac {
+    PARAMETER warpRate.
+    PARAMETER label IS "warp".
+    PARAMETER alarmId IS "".
+
+    IF warpRate <= 0 {
+        SET WARP TO 0.
+        RETURN TRUE.
+    }
+    IF NOT warpKacGuarded(alarmId, label) { RETURN FALSE. }
+    SET WARP TO warpRate.
+    RETURN TRUE.
+}
+
+GLOBAL FUNCTION idealCoastWarpRate {
+    PARAMETER waitSeconds.
+    LOCAL remaining IS MAX(0, waitSeconds).
+    LOCAL maxRate IS MIN(6, MAX(0, COAST_WARP_MAX_RATE)).
+
+    IF remaining <= 0 { RETURN 0. }
+    IF remaining <= COAST_WARP_5H_LIMIT { RETURN MIN(maxRate, 3). }
+    IF remaining < COAST_WARP_3D_LIMIT { RETURN MIN(maxRate, 4). }
+    IF remaining < COAST_WARP_10D_LIMIT { RETURN MIN(maxRate, 5). }
+    IF remaining < COAST_WARP_50D_LIMIT { RETURN MIN(maxRate, 6). }
+    RETURN MIN(maxRate, 6).
+}
+
+GLOBAL FUNCTION coastAutoWarp {
+    PARAMETER endUt.
+    PARAMETER label IS "coast".
+    PARAMETER alarmId IS "".
+
+    LOCAL waitSeconds IS MAX(0, endUt - TIME:SECONDS).
+    IF COAST_AUTO_WARP > 0 AND waitSeconds >= COAST_AUTO_WARP_MIN {
+        LOCAL warpRate IS idealCoastWarpRate(waitSeconds).
+        IF warpRate > 0
+                AND setWarpWithKac(warpRate, label + " auto-warp", alarmId) {
+            mLog(label + ": auto-warp " + warpRate
+                + " for " + ROUND(waitSeconds, 0) + "s.").
+        }
+    }
 }
 
 GLOBAL FUNCTION trySolarOrient {

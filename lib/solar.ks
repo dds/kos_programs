@@ -296,7 +296,7 @@ GLOBAL FUNCTION solarHoldTick {
     mLog("Solar hold: re-aimed at "
         + ROUND(100 * flow / refFlow, 0) + "% — flow "
         + ROUND(newRef, 2) + ". Restoring warp " + savedWarp + ".").
-    IF savedWarp > 0 { SET WARP TO savedWarp. }
+    IF savedWarp > 0 { setWarpWithKac(savedWarp, "Solar hold restore"). }
     RETURN MAX(newRef, 0).
 }
 

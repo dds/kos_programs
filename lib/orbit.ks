@@ -87,9 +87,13 @@ GLOBAL FUNCTION waitForSOI {
     // Set a KAC alarm at the SOI transition so time warp stops automatically.
     // NEXTPATCHETA gives seconds until the next SOI boundary crossing.
     LOCAL kacAlarmId IS "".
+    LOCAL soiUt IS 0.
     IF ADDONS:KAC:AVAILABLE AND SHIP:ORBIT:HASNEXTPATCH {
-        LOCAL soiUt IS TIME:SECONDS + SHIP:ORBIT:NEXTPATCHETA.
+        SET soiUt TO TIME:SECONDS + SHIP:ORBIT:NEXTPATCHETA.
         SET kacAlarmId TO ensureSoiAlarm(targetBody, soiUt).
+    }
+    IF soiUt > TIME:SECONDS {
+        coastAutoWarp(soiUt, "SOI coast", kacAlarmId).
     }
 
     LOCAL solarRef IS -1.

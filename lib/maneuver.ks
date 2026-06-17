@@ -79,6 +79,13 @@ GLOBAL FUNCTION executeManeuver {
         orientForSolar(FALSE, TRUE).
         mLog("Long coast wait (" + ROUND(wakeTime - TIME:SECONDS, 0) + "s).").
         HUDTEXT("Coasting. Burn in " + ROUND(startTime - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
+        IF COAST_HIBERNATE > 0
+                AND wakeTime - TIME:SECONDS >= COAST_HIBERNATE_MIN {
+            _hibernateCmd().
+        }
+        LOCAL wakeAlarmId IS maneuverEnsureBurnAlarm(wakeTime, burnDV,
+            "Burn wake", 0).
+        coastAutoWarp(wakeTime, "Burn coast", wakeAlarmId).
         LOCAL solarRef IS -1.
         UNTIL TIME:SECONDS >= wakeTime {
             SET solarRef TO trySolarHoldTick(solarRef).
@@ -497,5 +504,16 @@ LOCAL FUNCTION _wakeCmd {
                 cm:SETFIELD("hibernation", FALSE).
             }
         }
+    }
+}
+
+LOCAL FUNCTION _hibernateCmd {
+    LOCAL cm IS _findCmdModule().
+    IF cm = 0 { RETURN. }
+    IF cm:HASFIELD("hibernation") {
+        cm:SETFIELD("hibernation", TRUE).
+        mLog("Command module hibernating for long coast.").
+    } ELSE {
+        mLogWarn("Long coast hibernation requested but no toggle found.").
     }
 }

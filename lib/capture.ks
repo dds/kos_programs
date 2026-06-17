@@ -63,7 +63,9 @@ LOCAL FUNCTION _waitUntilOrSOI {
     PARAMETER targetBody.
     PARAMETER targetUt.
     PARAMETER pollInterval IS 10.
+    PARAMETER alarmId IS "".
 
+    coastAutoWarp(targetUt, "SOI coast", alarmId).
     LOCAL solarRef IS -1.
     UNTIL TIME:SECONDS >= targetUt OR SHIP:BODY = targetBody {
         SET solarRef TO trySolarHoldTick(solarRef).
@@ -144,7 +146,7 @@ GLOBAL FUNCTION phaseCoast1Half {
     LOCAL alarmId IS kacEnsureAlarm("Midcourse refine: " + target:NAME,
         tMidpoint,
         "Auto-created by COAST_1HALF").
-    _waitUntilOrSOI(target, tMidpoint, 10).
+    _waitUntilOrSOI(target, tMidpoint, 10, alarmId).
     IF alarmId <> "" { DELETEALARM(alarmId). }
 
     IF SHIP:BODY = target {
@@ -184,7 +186,7 @@ GLOBAL FUNCTION phaseCoast2Half {
     LOCAL coastUntil IS MAX(TIME:SECONDS, tArrival - soiBuffer).
     mLog("Coasting toward " + target:NAME + " SOI boundary; buffer="
         + ROUND(soiBuffer, 0) + "s.").
-    _waitUntilOrSOI(target, coastUntil, 10).
+    _waitUntilOrSOI(target, coastUntil, 10, soiAlarmId).
 
     IF SHIP:BODY = target AND soiAlarmId <> "" {
         DELETEALARM(soiAlarmId).

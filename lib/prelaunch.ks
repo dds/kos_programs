@@ -254,7 +254,10 @@ LOCAL FUNCTION _waitForPrelaunchUt {
         }
     }
 
-    IF targetUt - TIME:SECONDS > 60 { SET WARP TO 4. }
+    IF targetUt - TIME:SECONDS > 60 {
+        setWarpWithKac(idealCoastWarpRate(targetUt - TIME:SECONDS),
+            "PRELAUNCH window", kacAlarmId).
+    }
     UNTIL TIME:SECONDS >= targetUt OR ABORT {
         LOCAL remaining IS MAX(0, targetUt - TIME:SECONDS).
         HUDTEXT("Prelaunch window in " + ROUND(remaining, 0) + "s", 5, 2, 13, CYAN, FALSE).
