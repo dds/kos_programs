@@ -748,7 +748,7 @@ LOCAL FUNCTION _landingHoverRefineTick {
 
     _landingSetSteering(ctx, lmApproachSteering(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
-        ctx["UP_VEC"], ctx["POSITION"])).
+        ctx["UP_VEC"], ctx["POSITION"], 2.0)).
     _landingSetThrottle(ctx, lmVerticalThrottle(
         0, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 

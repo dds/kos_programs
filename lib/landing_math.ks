@@ -150,11 +150,13 @@ GLOBAL FUNCTION lmApproachSteering {
     PARAMETER horizontalVel.
     PARAMETER upVec.
     PARAMETER shipPos.
+    PARAMETER targetWeight IS 1.25.
 
     LOCAL targetDir IS lmDirectionToTarget(targetLat, targetLng,
         upVec, shipPos).
     LOCAL maxLean IS SIN(MAX_TILT).
-    LOCAL desiredVel IS targetDir * targetHorizontalSpeed.
+    LOCAL desiredVel IS targetDir * targetHorizontalSpeed
+        * MAX(0, targetWeight).
     LOCAL correctionVec IS desiredVel - horizontalVel.
     IF correctionVec:MAG <= 0.1 { RETURN upVec. }
 
