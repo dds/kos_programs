@@ -18,7 +18,7 @@ GLOBAL LANDING_HARD_BRAKE_UP_BIAS IS 0.1.
 GLOBAL LANDING_TOUCHDOWN_ALT IS 3.
 GLOBAL LANDING_TOUCHDOWN_VSPEED IS 1.
 GLOBAL LANDING_TOUCHDOWN_HSPEED IS 1.
-GLOBAL LANDING_TOUCHDOWN_SETTLE_TICKS IS 6.
+GLOBAL LANDING_TOUCHDOWN_SETTLE_TICKS IS 120.
 
 // ------------------------------------------------------------
 // Terrain survey - one-shot flat spot check near target
@@ -675,6 +675,23 @@ LOCAL FUNCTION _landingVerticalTick {
         1, 2, 13, GREEN, FALSE).
 }
 
+LOCAL FUNCTION _landingSurfaceSettleTick {
+    PARAMETER ctx.
+
+    _landingSetThrottle(ctx, 0).
+    vesselDeployGear().
+    IF _landingBottomRadar() <= UPRIGHT_ALT * 2 {
+        _landingSetSteering(ctx, SHIP:UP:VECTOR).
+    }
+
+    _landingHudText(ctx, "SETTLE bottom=" + ROUND(_landingBottomRadar(),0)
+        + " ticks=" + ctx["TOUCHDOWN_TICKS"]
+        + "/" + LANDING_TOUCHDOWN_SETTLE_TICKS
+        + " vs=" + ROUND(ctx["V_SPEED"],1)
+        + " hs=" + ROUND(ctx["H_SPEED"],1),
+        1, 2, 13, GREEN, FALSE).
+}
+
 LOCAL FUNCTION _landingGuidanceTick {
     PARAMETER ctx.
 
@@ -780,9 +797,13 @@ GLOBAL FUNCTION landExecute {
 
         _landingCacheTick(ctx).
 
-        IF _landingTouchdownSettled(ctx) {
-            SET ctx["TOUCHDOWN_SETTLED"] TO TRUE.
-        } ELSE IF NOT (SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED") {
+        IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+            _landingSurfaceSettleTick(ctx).
+            IF _landingTouchdownSettled(ctx) {
+                SET ctx["TOUCHDOWN_SETTLED"] TO TRUE.
+            }
+        } ELSE {
+            SET ctx["TOUCHDOWN_TICKS"] TO 0.
             IF vesselNeedsStage() {
                 LOCAL oldState IS ctx["STATE"].
                 _landingSetThrottle(ctx, 0).
