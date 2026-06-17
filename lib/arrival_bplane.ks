@@ -58,7 +58,6 @@ GLOBAL CAPTURE_INC IS -1.
 GLOBAL CAPTURE_LAN IS -1.
 GLOBAL CAPTURE_AOP IS -1.
 GLOBAL CAPTURE_DIR IS "".
-GLOBAL ALLOW_GRAVITY_ASSIST IS 0.
 GLOBAL BPLANE_DV_CAP IS 60.
 GLOBAL BPLANE_PE_TOL IS 2000.
 GLOBAL BPLANE_ANG_TOL IS 0.2.
@@ -80,218 +79,10 @@ LOCAL ACQUIRE_STEP     IS 0.5.
 LOCAL MAX_ACQUIRE_ITER IS 50.
 LOCAL MAX_BURNS        IS 2.
 
-LOCAL FUNCTION _allowGravityAssist {
-    RETURN ALLOW_GRAVITY_ASSIST <> 0.
-}
-
-LOCAL FUNCTION _arrivalTransitAllowed {
-    PARAMETER fromBody.
-    PARAMETER nextBody.
-    PARAMETER targetBody.
-
-    IF nextBody:NAME = targetBody:NAME { RETURN TRUE. }
-    IF nextBody = fromBody:BODY AND targetBody:BODY <> fromBody { RETURN TRUE. }
-    IF nextBody = targetBody:BODY AND targetBody:BODY <> fromBody { RETURN TRUE. }
-    RETURN FALSE.
-}
-
-// ============================================================
-// Patch discovery — walk the conic chain (after the given node
-// if one is supplied, else from the ship's current orbit) and
-// return LEX("patch", p, "entryUt", t) for the target body,
-// or 0 when there is no direct encounter.
-// NEXTPATCHETA is always relative to current universal time, so
-// a patch's entry time is the PREVIOUS patch's transition ETA.
-// ============================================================
-LOCAL FUNCTION _findArrivalPatch {
-    PARAMETER fromNode.
-    PARAMETER targetBody.
-
-    LOCAL p IS SHIP:ORBIT.
-    IF fromNode <> 0 { SET p TO fromNode:ORBIT. }
-    LOCAL allowAssist IS _allowGravityAssist().
-
-    UNTIL NOT p:HASNEXTPATCH {
-        LOCAL entryUt IS TIME:SECONDS + p:NEXTPATCHETA.
-        LOCAL fromBody IS p:BODY.
-        SET p TO p:NEXTPATCH.
-        IF p:BODY = targetBody {
-            RETURN LEX("patch", p, "entryUt", entryUt).
-        }
-        IF NOT allowAssist AND NOT _arrivalTransitAllowed(fromBody, p:BODY, targetBody) {
-            RETURN 0.
-        }
-    }
-    RETURN 0.
-}
-
-// ============================================================
-// Arrival measurement — sample the hyperbolic patch shortly
-// after SOI entry and derive everything the solver needs.
-// Returns 0 on a missing encounter, else a LEX with:
-//   S (asymptote), B (aim vector), bt/br (B-plane coords),
-//   tHat/rHat (B-plane axes), hHat, vinf2, pe/inc/lan (elements)
-// ============================================================
-LOCAL FUNCTION _measureArrival {
-    PARAMETER fromNode.
-    PARAMETER targetBody.
-
-    LOCAL hit IS _findArrivalPatch(fromNode, targetBody).
-    IF hit = 0 { RETURN 0. }
-    LOCAL p IS hit["patch"].
-    LOCAL mu IS targetBody:MU.
-
-    // Sample point safely inside the patch.
-    LOCAL tEntry IS hit["entryUt"].
-    LOCAL sampleDt IS 120.
-    IF p:HASNEXTPATCH {
-        LOCAL tEnd IS TIME:SECONDS + p:NEXTPATCHETA.
-        SET sampleDt TO MIN(sampleDt, MAX(10, (tEnd - tEntry) * 0.25)).
-    }
-    LOCAL t IS tEntry + sampleDt.
-
-    LOCAL rVec IS POSITIONAT(SHIP, t) - POSITIONAT(targetBody, t).
-    // Frame-proof velocity: numeric derivative of relative position.
-    LOCAL dt IS 1.
-    LOCAL rPlus IS POSITIONAT(SHIP, t + dt) - POSITIONAT(targetBody, t + dt).
-    LOCAL rMinus IS POSITIONAT(SHIP, t - dt) - POSITIONAT(targetBody, t - dt).
-    LOCAL vVec IS (rPlus - rMinus) / (2 * dt).
-
-    // (named rMag: bare "r" shadows kOS's R() constructor, and "t"
-    // is already this scope's sample time)
-    LOCAL rMag IS rVec:MAG.
-    LOCAL v2 IS vVec:SQRMAGNITUDE.
-    LOCAL rHatV IS rVec:NORMALIZED.
-
-    // Orbit constants from the sample (vis-viva, handedness-free e).
-    LOCAL sma IS 1 / (2 / rMag - v2 / mu).
-    IF sma >= 0 {
-        // Not hyperbolic at the sample — bail; element-based phases
-        // can handle an (unusual) arriving ellipse.
-        RETURN 0.
-    }
-    LOCAL vinf2 IS -mu / sma.
-    LOCAL eVec IS ((v2 - mu / rMag) * rVec - VDOT(rVec, vVec) * vVec) / mu.
-    LOCAL ecc IS eVec:MAG.
-    LOCAL eHat IS eVec:NORMALIZED.
-    LOCAL hHat IS VCRS(rHatV, vVec:NORMALIZED):NORMALIZED.
-
-    // In-plane perpendicular to e, oriented toward increasing true
-    // anomaly — derived from the sample itself (no handedness bet):
-    // rHat = cos(TA) eHat + sin(TA) qHat, sign(sin TA) = sign(r·v).
-    LOCAL cosTa IS MAX(-1, MIN(1, VDOT(rHatV, eHat))).
-    LOCAL sinTa IS SQRT(MAX(1e-12, 1 - cosTa ^ 2)).
-    IF VDOT(rVec, vVec) < 0 { SET sinTa TO -sinTa. }
-    LOCAL qHat IS ((rHatV - cosTa * eHat) / sinTa):NORMALIZED.
-
-    // Incoming asymptote: position direction at TA -> -nu_inf,
-    // velocity points inward along it.
-    LOCAL cosNuInf IS -1 / ecc.
-    LOCAL sinNuInf IS SQRT(MAX(0, 1 - cosNuInf ^ 2)).
-    LOCAL sHat IS (-(cosNuInf * eHat - sinNuInf * qHat)):NORMALIZED.
-
-    // B vector: in-plane, perpendicular to S, on the periapsis side.
-    LOCAL bHat IS VCRS(sHat, hHat):NORMALIZED.
-    IF VDOT(bHat, eHat) < 0 { SET bHat TO -bHat. }
-    LOCAL h IS SQRT(rVec:SQRMAGNITUDE * v2 - VDOT(rVec, vVec) ^ 2).
-    LOCAL bMag IS h / SQRT(vinf2).
-
-    // B-plane axes from the body's polar axis.
-    LOCAL north_ IS targetBody:ANGULARVEL:NORMALIZED.
-    LOCAL tHat IS VCRS(sHat, north_).
-    IF tHat:MAG < 1e-6 { SET tHat TO VCRS(sHat, V(1, 0, 0)). }
-    SET tHat TO tHat:NORMALIZED.
-    LOCAL rAxisHat IS VCRS(sHat, tHat):NORMALIZED.
-
-    RETURN LEX(
-        "S", sHat, "hHat", hHat, "eHat", eHat,
-        "bHat", bHat, "bMag", bMag,
-        "bt", bMag * VDOT(bHat, tHat),
-        "br", bMag * VDOT(bHat, rAxisHat),
-        "tHat", tHat, "rHat", rAxisHat,
-        "vinf2", vinf2,
-        "pe", p:PERIAPSIS, "inc", p:INCLINATION, "lan", p:LAN).
-}
-
-// ============================================================
-// Target plane normal around the arrival body, mirror-calibrated
-// against the measured patch (whose elements AND normal vector
-// we both know), so KSP element conventions are never assumed.
-// ============================================================
-LOCAL FUNCTION _arrivalPlaneNormal {
-    PARAMETER targetBody, inc, lan, meas.
-    LOCAL up_ IS targetBody:ANGULARVEL:NORMALIZED.
-
-    LOCAL FUNCTION _candidate {
-        PARAMETER i_, l_, sign_.
-        LOCAL nodeVec IS (ANGLEAXIS(l_, up_) * SOLARPRIMEVECTOR):NORMALIZED.
-        LOCAL w IS VCRS(up_, nodeVec):NORMALIZED.
-        RETURN (COS(i_) * up_ + sign_ * SIN(i_) * w):NORMALIZED.
-    }
-
-    LOCAL sign IS 1.
-    IF meas["inc"] > 0.3 AND meas["inc"] < 179.7 {
-        IF VANG(_candidate(meas["inc"], meas["lan"], 1), meas["hHat"]) > 90 {
-            SET sign TO -1.
-        }
-    }
-    RETURN _candidate(inc, lan, sign).
-}
-
-// ============================================================
-// _targetB — desired (B.T, B.R) for the requested capture
-// elements, given the current arrival measurement.
-// ============================================================
-LOCAL FUNCTION _targetB {
-    PARAMETER targetBody, meas, wantPe, wantInc, wantLan.
-    PARAMETER quiet IS FALSE.
-
-    LOCAL sHat IS meas["S"].
-    LOCAL nTgt IS meas["hHat"].
-    IF wantInc >= 0 {
-        LOCAL lan IS meas["lan"].
-        IF wantLan >= 0 { SET lan TO wantLan. }
-        SET nTgt TO _arrivalPlaneNormal(targetBody, wantInc, lan, meas).
-    }
-
-    // The achievable plane must contain the asymptote. Project the
-    // requested normal perpendicular to S and report the compromise.
-    LOCAL offPlane IS ABS(90 - VANG(nTgt, sHat)).
-    IF offPlane > 0.5 {
-        SET nTgt TO (nTgt - VDOT(nTgt, sHat) * sHat):NORMALIZED.
-        IF NOT quiet {
-            mLogWarn("BPLANE: requested plane tilted " + ROUND(offPlane, 1)
-                + "deg off the arrival asymptote — using closest"
-                + " achievable plane. Pick a different departure window"
-                + " for an exact match.").
-        }
-    }
-
-    // Same-handed construction as the measurement: h = unit(S x B)
-    // up to calibration, so B_t = unit(n_t x S) with the sign that
-    // reproduces the measured geometry.
-    LOCAL sH IS 1.
-    IF VDOT(VCRS(sHat, meas["bHat"]), meas["hHat"]) < 0 { SET sH TO -1. }
-    LOCAL bHatT IS (sH * VCRS(nTgt, sHat)):NORMALIZED.
-    IF VDOT(VCRS(sHat, bHatT) * sH, nTgt) < 0 { SET bHatT TO -bHatT. }
-
-    // |B| from requested periapsis: b = h/v∞, h = r_p * v_p.
-    LOCAL mu IS targetBody:MU.
-    LOCAL rp IS targetBody:RADIUS + wantPe.
-    LOCAL vp IS SQRT(meas["vinf2"] + 2 * mu / rp).
-    LOCAL bMagT IS rp * vp / SQRT(meas["vinf2"]).
-
-    LOCAL bT IS bMagT * bHatT.
-    RETURN LEX(
-        "bt", VDOT(bT, meas["tHat"]),
-        "br", VDOT(bT, meas["rHat"]),
-        "normal", nTgt).
-}
-
 LOCAL FUNCTION _bplaneCorridorError {
     PARAMETER targetBody, meas, wantPe, wantInc, wantLan.
 
-    LOCAL tgt IS _targetB(targetBody, meas, wantPe, wantInc, wantLan).
+    LOCAL tgt IS targetBplaneVector(targetBody, meas, wantPe, wantInc, wantLan).
     LOCAL planeErr IS 0.
     IF wantInc >= 0 { SET planeErr TO VANG(meas["hHat"], tgt["normal"]). }
     RETURN LEX("peErr", meas["pe"] - wantPe,
@@ -330,7 +121,7 @@ LOCAL FUNCTION _acquireEncounter {
         + "s CA=" + ROUND(bestD / 1000, 1) + "km.").
 
     FROM { LOCAL iter IS 0. } UNTIL iter >= MAX_ACQUIRE_ITER STEP { SET iter TO iter + 1. } DO {
-        IF _measureArrival(nd, targetBody) <> 0 {
+        IF measureArrival(nd, targetBody) <> 0 {
             mLog("BPLANE acquire: patch acquired in " + iter
                 + " iter(s), dv=" + ROUND(nd:DELTAV:MAG, 2)
                 + " m/s.").
@@ -399,7 +190,7 @@ LOCAL FUNCTION _acquireEncounter {
         }
         WAIT 0.02.
 
-        IF _measureArrival(nd, targetBody) <> 0 {
+        IF measureArrival(nd, targetBody) <> 0 {
             mLog("BPLANE acquire: patch acquired in " + (iter + 1)
                 + " iter(s), dv=" + ROUND(nd:DELTAV:MAG, 2)
                 + " m/s.").
@@ -416,7 +207,7 @@ LOCAL FUNCTION _acquireEncounter {
     mLogWarn("BPLANE acquire: hit iteration cap; best CA="
         + ROUND(bestD / 1000, 1) + "km dv="
         + ROUND(nd:DELTAV:MAG, 2) + " m/s.").
-    RETURN _measureArrival(nd, targetBody) <> 0.
+    RETURN measureArrival(nd, targetBody) <> 0.
 }
 
 // ============================================================
@@ -445,7 +236,7 @@ GLOBAL FUNCTION planBplaneCorrection {
     ADD nd.
     WAIT 0.02.
 
-    LOCAL meas0 IS _measureArrival(nd, targetBody).
+    LOCAL meas0 IS measureArrival(nd, targetBody).
     IF meas0 = 0 {
         mLogWarn("BPLANE: no hyperbolic encounter with "
             + targetBody:NAME + " on the current correction node; "
@@ -456,7 +247,7 @@ GLOBAL FUNCTION planBplaneCorrection {
             REMOVE nd.
             RETURN 0.
         }
-        SET meas0 TO _measureArrival(nd, targetBody).
+        SET meas0 TO measureArrival(nd, targetBody).
         IF meas0 = 0 {
             mLogError("BPLANE: acquisition reported success but no "
                 + targetBody:NAME + " patch is measurable.").
@@ -466,7 +257,7 @@ GLOBAL FUNCTION planBplaneCorrection {
     }
 
     // Already in the corridor?
-    LOCAL tgt0 IS _targetB(targetBody, meas0, wantPe, wantInc, wantLan).
+    LOCAL tgt0 IS targetBplaneVector(targetBody, meas0, wantPe, wantInc, wantLan).
     LOCAL planeErr0 IS VANG(meas0["hHat"], tgt0["normal"]).
     IF ABS(meas0["pe"] - wantPe) <= peTol
             AND (wantInc < 0 OR planeErr0 <= angTol) {
@@ -488,7 +279,7 @@ GLOBAL FUNCTION planBplaneCorrection {
 
     LOCAL converged IS FALSE.
     FROM { LOCAL i IS 0. } UNTIL i >= MAX_NEWTON_ITER STEP { SET i TO i + 1. } DO {
-        LOCAL meas IS _measureArrival(nd, targetBody).
+        LOCAL meas IS measureArrival(nd, targetBody).
         IF meas = 0 {
             mLogWarn("BPLANE[" + i + "]: lost the encounter — backing off.").
             SET nd:PROGRADE TO nd:PROGRADE * 0.5.
@@ -496,7 +287,7 @@ GLOBAL FUNCTION planBplaneCorrection {
             SET nd:NORMAL TO nd:NORMAL * 0.5.
             WAIT 0.02.
         } ELSE {
-            LOCAL tgt IS _targetB(targetBody, meas, wantPe, wantInc, wantLan).
+            LOCAL tgt IS targetBplaneVector(targetBody, meas, wantPe, wantInc, wantLan).
             LOCAL errT IS tgt["bt"] - meas["bt"].
             LOCAL errR IS tgt["br"] - meas["br"].
             LOCAL qT IS meas["bt"] - tgt["bt"].
@@ -519,11 +310,11 @@ GLOBAL FUNCTION planBplaneCorrection {
             LOCAL n0 IS nd:NORMAL.
 
             SET nd:RADIALOUT TO r0 + FD_STEP. WAIT 0.02.
-            LOCAL mRad IS _measureArrival(nd, targetBody).
+            LOCAL mRad IS measureArrival(nd, targetBody).
             SET nd:RADIALOUT TO r0. WAIT 0.02.
 
             SET nd:NORMAL TO n0 + FD_STEP. WAIT 0.02.
-            LOCAL mNrm IS _measureArrival(nd, targetBody).
+            LOCAL mNrm IS measureArrival(nd, targetBody).
             SET nd:NORMAL TO n0. WAIT 0.02.
 
             IF mRad = 0 OR mNrm = 0 {
@@ -531,8 +322,8 @@ GLOBAL FUNCTION planBplaneCorrection {
                 BREAK.
             }
 
-            LOCAL tRad IS _targetB(targetBody, mRad, wantPe, wantInc, wantLan, TRUE).
-            LOCAL tNrm IS _targetB(targetBody, mNrm, wantPe, wantInc, wantLan, TRUE).
+            LOCAL tRad IS targetBplaneVector(targetBody, mRad, wantPe, wantInc, wantLan, TRUE).
+            LOCAL tNrm IS targetBplaneVector(targetBody, mNrm, wantPe, wantInc, wantLan, TRUE).
             LOCAL j11 IS ((mRad["bt"] - tRad["bt"]) - qT) / FD_STEP.
             LOCAL j21 IS ((mRad["br"] - tRad["br"]) - qR) / FD_STEP.
             LOCAL j12 IS ((mNrm["bt"] - tNrm["bt"]) - qT) / FD_STEP.
@@ -572,7 +363,7 @@ GLOBAL FUNCTION planBplaneCorrection {
         }
     }
 
-    LOCAL measF IS _measureArrival(nd, targetBody).
+    LOCAL measF IS measureArrival(nd, targetBody).
     LOCAL finalPe IS -1.
     IF measF <> 0 { SET finalPe TO measF["pe"]. }
     mLogWarn("STATS bplane plan target=" + targetBody:NAME
@@ -671,7 +462,7 @@ GLOBAL FUNCTION phaseBplane {
         WAIT 2.
     }
 
-    LOCAL meas IS _measureArrival(0, targetBody).
+    LOCAL meas IS measureArrival(0, targetBody).
     IF meas = 0 {
         mLogError("BPLANE: finished with NO encounter — operator attention needed.").
         WAIT 30.
@@ -732,7 +523,7 @@ GLOBAL FUNCTION phaseRefineBplane {
     LOCAL maxBurns IS MAX(1, REFINE_BPLANE_MAX_BURNS).
     LOCAL burns IS 0.
     UNTIL burns >= maxBurns {
-        LOCAL measLoop IS _measureArrival(0, targetBody).
+        LOCAL measLoop IS measureArrival(0, targetBody).
         IF measLoop = 0 { BREAK. }
         LOCAL errLoop IS _bplaneCorridorError(targetBody, measLoop, wantPe, wantInc, wantLan).
         IF _bplaneCorridorOk(errLoop, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) { BREAK. }
@@ -760,7 +551,7 @@ GLOBAL FUNCTION phaseRefineBplane {
         WAIT 2.
     }
 
-    LOCAL meas IS _measureArrival(0, targetBody).
+    LOCAL meas IS measureArrival(0, targetBody).
     IF meas <> 0 {
         LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
         IF NOT _bplaneCorridorOk(err, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) {
