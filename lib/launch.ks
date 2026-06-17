@@ -7,6 +7,7 @@ GLOBAL PARKING_ALT IS 80000.
 GLOBAL LAUNCH_INCLINATION IS 0.
 GLOBAL LAUNCH_AZIMUTH IS 0.
 GLOBAL LAUNCH_STAGE_LIMIT IS 0.
+GLOBAL LAUNCH_SOLID_STAGE_FRAC IS 0.
 GLOBAL FAIRING_ALT IS 72000.
 GLOBAL EXTEND_ALT IS 73500.
 GLOBAL RECOVERY_PE IS -1.
@@ -30,8 +31,18 @@ LOCAL FUNCTION _launchHasAtmosphere {
     RETURN SHIP:BODY:ATM:HEIGHT > 0.
 }
 
+LOCAL FUNCTION _launchSolidStageFrac {
+    LOCAL frac IS LAUNCH_SOLID_STAGE_FRAC.
+    IF frac > 1 { SET frac TO frac / 100. }
+    RETURN MAX(0, MIN(1, frac)).
+}
+
 LOCAL _stagingArmed IS FALSE.
 LOCAL _noThrustStages IS 0.
+LOCAL _solidStageNumber IS -1.
+LOCAL _solidStagePeak IS 0.
+LOCAL _ascentStageReason IS "".
+LOCAL _ascentStageSolidFrac IS -1.
 
 // One cheap state read per tick for the ascent watcher's WHEN
 // condition (was five) — also a mitigation candidate for the
@@ -448,9 +459,21 @@ GLOBAL FUNCTION armAscentStaging {
                 + " left; disarming ascent staging.").
             RETURN.
         }
-        mLog("Ascent auto-stage at alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
+        LOCAL reason IS _ascentStageReason.
+        IF reason = "" { SET reason TO "needs-stage". }
+        LOCAL solidDetail IS "".
+        IF _ascentStageSolidFrac >= 0 {
+            SET solidDetail TO " solid="
+                + ROUND(_ascentStageSolidFrac * 100, 1) + "%".
+        }
+        mLog("Ascent auto-stage (" + reason + solidDetail + ") at alt="
+            + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
         HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
         STAGE.
+        SET _solidStageNumber TO -1.
+        SET _solidStagePeak TO 0.
+        SET _ascentStageReason TO "".
+        SET _ascentStageSolidFrac TO -1.
         WAIT 0.5.
         IF SHIP:MAXTHRUST > 0 {
             SET _noThrustStages TO 0.
@@ -656,10 +679,42 @@ GLOBAL FUNCTION phaseAbort {
 }
 
 GLOBAL FUNCTION ascentNeedsStage {
+    SET _ascentStageReason TO "".
+    SET _ascentStageSolidFrac TO -1.
+
+    LOCAL stageNum IS STAGE:NUMBER.
+    IF stageNum <> _solidStageNumber {
+        SET _solidStageNumber TO stageNum.
+        SET _solidStagePeak TO 0.
+    }
+
+    LOCAL solidStageFrac IS _launchSolidStageFrac().
+    IF solidStageFrac > 0 {
+        LOCAL solidFuel IS STAGE:SOLIDFUEL.
+        IF solidFuel > _solidStagePeak {
+            SET _solidStagePeak TO solidFuel.
+        }
+        IF _solidStagePeak > 0 {
+            SET _ascentStageSolidFrac TO solidFuel / _solidStagePeak.
+            IF solidFuel <= _solidStagePeak * solidStageFrac {
+                SET _ascentStageReason TO "solid-fuel-low".
+                RETURN TRUE.
+            }
+        }
+    }
+
     LOCAL engs IS LIST().
     LIST ENGINES IN engs.
-    FOR eng IN engs { IF eng:FLAMEOUT { RETURN TRUE. } }
-    IF SHIP:MAXTHRUST = 0 { RETURN TRUE. }
+    FOR eng IN engs {
+        IF eng:FLAMEOUT {
+            SET _ascentStageReason TO "flameout".
+            RETURN TRUE.
+        }
+    }
+    IF SHIP:MAXTHRUST = 0 {
+        SET _ascentStageReason TO "no-max-thrust".
+        RETURN TRUE.
+    }
     RETURN FALSE.
 }
 

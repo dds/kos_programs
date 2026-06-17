@@ -149,6 +149,14 @@ GLOBAL FUNCTION flightPlanSequence {
 GLOBAL FUNCTION flightPlanConfig {
     IF PARKING_ALT > 0 { flightPlanRow("PARK ALT", ROUND(PARKING_ALT/1000,0) + " km"). }
     IF LAUNCH_INCLINATION <> 0 { flightPlanRow("LAUNCH INC", LAUNCH_INCLINATION + " deg"). }
+    IF DEFINED LAUNCH_SOLID_STAGE_FRAC {
+        LOCAL solidStageFrac IS LAUNCH_SOLID_STAGE_FRAC.
+        IF solidStageFrac > 1 { SET solidStageFrac TO solidStageFrac / 100. }
+        SET solidStageFrac TO MAX(0, MIN(1, solidStageFrac)).
+        IF solidStageFrac > 0 {
+            flightPlanRow("SRB STAGE", ROUND(solidStageFrac * 100, 1) + "% fuel").
+        }
+    }
     IF CAPTURE_PE >= 0 { flightPlanRow("CAPTURE PE", ROUND(CAPTURE_PE/1000,0) + " km"). }
     IF TARGET_PE >= 0 { flightPlanRow("TARGET PE", ROUND(TARGET_PE/1000,0) + " km"). }
     IF TARGET_AP >= 0 { flightPlanRow("TARGET AP", ROUND(TARGET_AP/1000,0) + " km"). }
