@@ -11,6 +11,35 @@
 // --- Config defaults owned by this file ---
 GLOBAL SOLAR_HOLD_RATIO IS 0.92.
 GLOBAL SOLAR_HOLD_EC IS 0.75.
+GLOBAL SOLAR_HIBERNATE_CORES IS 1.
+
+LOCAL _commandHibernateActive IS FALSE.
+
+GLOBAL FUNCTION commandCoresHibernate {
+    PARAMETER enabled IS TRUE.
+    IF NOT enabled { RETURN 0. }
+    IF SOLAR_HIBERNATE_CORES = 0 { RETURN 0. }
+    IF NOT (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
+            OR SHIP:STATUS = "SUB_ORBITAL") {
+        RETURN 0.
+    }
+
+    LOCAL count IS 0.
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleCommand") {
+            LOCAL m IS p:GETMODULE("ModuleCommand").
+            IF m:HASFIELD("hibernation") {
+                m:SETFIELD("hibernation", TRUE).
+                SET count TO count + 1.
+            }
+        }
+    }
+    IF count > 0 AND NOT _commandHibernateActive {
+        mLog("Command core hibernation enabled (" + count + ").").
+    }
+    IF count > 0 { SET _commandHibernateActive TO TRUE. }
+    RETURN count.
+}
 
 // Sum of "energy flow" over all solar panels (falls back to
 // "sun exposure"); -1 when no readable panel fields exist.
@@ -222,6 +251,7 @@ GLOBAL FUNCTION orientForSolar {
 // ============================================================
 GLOBAL FUNCTION solarHoldTick {
     PARAMETER refFlow.
+    commandCoresHibernate(TRUE).
     IF NOT shipHasSolarPanels() { RETURN refFlow. }
     LOCAL ratio IS 0.92.
     SET ratio TO SOLAR_HOLD_RATIO.
@@ -261,6 +291,7 @@ GLOBAL FUNCTION solarHoldTick {
     orientForSolar(FALSE, TRUE).
     WAIT 1.
     LOCAL newRef IS shipSolarFlow().
+    commandCoresHibernate(TRUE).
     mLog("Solar hold: re-aimed at "
         + ROUND(100 * flow / refFlow, 0) + "% — flow "
         + ROUND(newRef, 2) + ". Restoring warp " + savedWarp + ".").

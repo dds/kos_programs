@@ -388,7 +388,11 @@ Mission profiles can opt into hands-off long coasts:
 
 ```ks
 SET COAST_AUTO_WARP TO 1.   // Requires a future KAC alarm; otherwise skipped.
+SET COAST_HIBERNATE TO 1.   // Enter probe-core hibernation during long coasts.
 ```
+
+Coast automation only enters hibernation. It does not wake probe cores; clear
+hibernation manually when you want control back.
 
 `idealCoastWarpRate(waitSeconds)` maps wait time to warp indices: 60s to
 under 5m uses 2, up to 1h uses 3, under 3 Kerbin days uses 4, under 10 days

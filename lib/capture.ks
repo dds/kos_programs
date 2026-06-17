@@ -34,6 +34,7 @@ LOCAL FUNCTION _enterSolarCoast {
     } ELSE {
         trySolarOrient().
     }
+    tryCommandCoreHibernate(TRUE).
     LOCAL solarRef IS trySolarHoldTick(-1).
     mLog(label + ": solar coast attitude armed.").
     RETURN solarRef.

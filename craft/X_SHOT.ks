@@ -41,7 +41,18 @@ FUNCTION countdown {
 // 2. Execute countdown andlaunch.
 countdown(3).
 STAGE.
-WAIT 1.
+WAIT 1. // Small delay to let the rocket clear the pad before messing with the core
+
+// Hibernate the probe core.
+PRINT "Entering hibernation to save power...".
+SET probeCore TO SHIP:ROOTPART. // Assumes your core is the root part.
+SET probeModule TO probeCore:GETMODULE("ModuleCommand").
+
+IF probeModule:HASFIELD("hibernation") {
+    probeModule:SETFIELD("hibernation", TRUE).
+} else {
+    PRINT "Warning: Could not find hibernation toggle on root part.".
+}
 
 LOCAL targetApo IS 100000.
 
