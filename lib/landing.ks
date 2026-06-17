@@ -17,7 +17,7 @@ GLOBAL LANDING_BRAKE_ALIGN_LEAD IS 20.
 GLOBAL LANDING_HARD_BRAKE_UP_BIAS IS 0.1.
 GLOBAL LANDING_TOUCHDOWN_ALT IS 3.
 GLOBAL LANDING_TOUCHDOWN_VSPEED IS 1.
-GLOBAL LANDING_TOUCHDOWN_HSPEED IS 1.
+GLOBAL LANDING_TOUCHDOWN_HSPEED IS 0.3.
 GLOBAL LANDING_TOUCHDOWN_SETTLE_TICKS IS 120.
 
 // ------------------------------------------------------------
@@ -31,7 +31,12 @@ LOCAL FUNCTION _landingTerrainCheck {
     LOCAL radiusM IS TERRAIN_CHECK_RADIUS.
     LOCAL stepM IS TERRAIN_CHECK_STEP.
     IF radiusM <= 0 OR stepM <= 0 {
-        RETURN LEXICON("LAT", targetLat, "LNG", targetLng, "SHIFTED", FALSE).
+        RETURN LEXICON(
+            "LAT", targetLat,
+            "LNG", targetLng,
+            "ELEVATION", LATLNG(targetLat, targetLng):TERRAINHEIGHT,
+            "SHIFTED", FALSE
+        ).
     }
 
     LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
@@ -74,7 +79,7 @@ LOCAL FUNCTION _landingTerrainCheck {
         + "m  best score=" + ROUND(bestScore,1)
         + "  shift=" + ROUND(shiftDist,0) + "m.").
 
-    IF shiftDist > 50 {
+    IF shiftDist > 5 {
         mLog("Shifting target by " + ROUND(shiftDist,0) + "m to flatter terrain"
             + " lat=" + ROUND(bestLat,4) + " lng=" + ROUND(bestLng,4) + ".").
         SET TARGET_LAT TO bestLat.
@@ -651,8 +656,13 @@ LOCAL FUNCTION _landingVerticalTick {
     PARAMETER ctx.
     LOCAL bottomAlt IS _landingBottomRadar().
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
+    LOCAL finalHover IS bottomAlt <= LANDING_FINAL_HOVER_ALT
+        AND horizontalSpeed > LANDING_FINAL_HOVER_HSPEED.
 
-    IF bottomAlt <= UPRIGHT_ALT {
+    IF finalHover {
+        _landingSetSteering(ctx, lmHoverSteering(
+            ctx["H_VEL"], ctx["UP_VEC"])).
+    } ELSE IF bottomAlt <= UPRIGHT_ALT {
         _landingSetSteering(ctx, SHIP:UP:VECTOR).
     } ELSE IF ctx["HAS_TARGET"] {
         _landingSetSteering(ctx, lmApproachSteering(
@@ -663,15 +673,20 @@ LOCAL FUNCTION _landingVerticalTick {
             ctx["H_VEL"], ctx["UP_VEC"])).
     }
 
-    LOCAL targetVs IS -lmDescentSpeed(
+    LOCAL descentSpeed IS lmDescentSpeed(
         bottomAlt, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
+    IF finalHover {
+        SET descentSpeed TO LANDING_FINAL_HOVER_VSPEED.
+    }
+    LOCAL targetVs IS -descentSpeed.
     _landingSetThrottle(ctx, lmVerticalThrottle(
         targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
     _landingHudText(ctx, "VERT bottom=" + ROUND(bottomAlt,0)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)
-        + " hs=" + ROUND(horizontalSpeed,1),
+        + " hs=" + ROUND(horizontalSpeed,1)
+        + " hover=" + _landingBoolText(finalHover),
         1, 2, 13, GREEN, FALSE).
 }
 
@@ -752,8 +767,13 @@ GLOBAL FUNCTION landExecute {
     }
 
     LOCAL targetElevation IS 0.
+    LOCAL terrainDone IS FALSE.
     IF _hasTarget {
-        SET targetElevation TO LATLNG(TARGET_LAT, TARGET_LNG):TERRAINHEIGHT.
+        LOCAL terrainResult IS _landingTerrainCheck(TARGET_LAT, TARGET_LNG).
+        SET terrainDone TO TRUE.
+        SET TARGET_LAT TO terrainResult["LAT"].
+        SET TARGET_LNG TO terrainResult["LNG"].
+        SET targetElevation TO terrainResult["ELEVATION"].
     }
     LOCAL crossPid IS PIDLOOP(
         CROSS_PID_KP,
@@ -771,7 +791,7 @@ GLOBAL FUNCTION landExecute {
         "TARGET_LNG", TARGET_LNG,
         "TARGET_ELEVATION", targetElevation,
         "CROSS_PID", crossPid,
-        "TERRAIN_DONE", FALSE,
+        "TERRAIN_DONE", terrainDone,
         "HUD_LAST", TIME:SECONDS - LANDING_HUD_INTERVAL,
         "TOUCHDOWN_TICKS", 0,
         "TOUCHDOWN_SETTLED", FALSE,
