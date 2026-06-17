@@ -1000,14 +1000,16 @@ LOCAL FUNCTION _landingSurfaceSettleTick {
     _landingSetThrottle(ctx, 0).
     vesselDeployGear().
     IF _landingBottomRadar() <= UPRIGHT_ALT * 2 {
-        _landingSetSteering(ctx, SHIP:UP:VECTOR).
+        _landingSetSteering(ctx, _landingSolarRollSteering(
+            SHIP:UP:VECTOR, ctx["UP_VEC"])).
     }
 
     _landingHudText(ctx, "SETTLE bottom=" + ROUND(_landingBottomRadar(),0)
         + " ticks=" + ctx["TOUCHDOWN_TICKS"]
         + "/" + LANDING_TOUCHDOWN_SETTLE_TICKS
         + " vs=" + ROUND(ctx["V_SPEED"],1)
-        + " hs=" + ROUND(ctx["H_SPEED"],1),
+        + " hs=" + ROUND(ctx["H_SPEED"],1)
+        + " solar=true",
         1, 2, 13, GREEN, FALSE).
 }
 
