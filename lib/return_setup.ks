@@ -62,6 +62,18 @@ LOCAL FUNCTION _returnSetupCoastAutomationCfg {
     _returnSetupCfg("COAST_WARP_MAX_RATE", COAST_WARP_MAX_RATE).
 }
 
+LOCAL FUNCTION _returnSetupClearSurfaceCfg {
+    FOR key IN LIST(
+        "PARKING_ALT", "LAUNCH_INCLINATION", "LAUNCH_AZIMUTH",
+        "RETURN_SEQUENCE", "RETURN_PE", "RETURN_REENTRY_DIR",
+        "RETURN_KSC_TARGET", "RETURN_ARM_CHUTES",
+        "RETURN_DESCENT_FAIRING_TAG", "RETURN_DESCENT_DECOUPLER_TAG",
+        "RETURN_DESCENT_CHUTES_TAG"
+    ) {
+        _returnSetupRemoveCfg(key).
+    }
+}
+
 GLOBAL FUNCTION phaseSurfaceReturnSetup {
     IF BODY:NAME <> "Mun" AND BODY:NAME <> "Minmus" {
         mLogError("SURFACE_RETURN_SETUP requires Mun or Minmus surface; current body="
@@ -187,6 +199,7 @@ GLOBAL FUNCTION phaseReturnSetup {
     _returnSetupOptionalTag("DESCENT_FAIRING_TAG", RETURN_DESCENT_FAIRING_TAG).
     _returnSetupOptionalTag("DESCENT_DECOUPLER_TAG", RETURN_DESCENT_DECOUPLER_TAG).
     _returnSetupOptionalTag("DESCENT_CHUTES_TAG", RETURN_DESCENT_CHUTES_TAG).
+    _returnSetupClearSurfaceCfg().
 
     FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_DIR") {
         _returnSetupRemoveCfg(key).
