@@ -311,8 +311,8 @@ GLOBAL FUNCTION planPlaneMatch {
     IF theta < 0.01 { RETURN 0. }
 
     // Relative-node crossings, as exact true-anomaly offsets.
-    LOCAL angAN IS angleToRelativeAscendingNode(b, nTgt).
-    LOCAL angDN IS angleToRelativeDescendingNode(b, nTgt).
+    LOCAL angAN IS orbitNodeAngleToRelativeAscending(b, nTgt).
+    LOCAL angDN IS orbitNodeAngleToRelativeDescending(b, nTgt).
     IF angAN < 0 { SET angAN TO angAN + 360. }
     IF angDN < 0 { SET angDN TO angDN + 360. }
     LOCAL taNow IS SHIP:ORBIT:TRUEANOMALY.
