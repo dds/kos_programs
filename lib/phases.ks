@@ -16,6 +16,7 @@ GLOBAL COAST_WARP_3D_LIMIT IS 64800.
 GLOBAL COAST_WARP_10D_LIMIT IS 216000.
 GLOBAL COAST_WARP_50D_LIMIT IS 1080000.
 GLOBAL COAST_WARP_MAX_RATE IS 6.
+GLOBAL COAST_HEALTH_CHECK IS 1.
 
 GLOBAL phaseShouldYield IS FALSE.
 GLOBAL launchSeq IS LIST().
@@ -312,8 +313,51 @@ GLOBAL FUNCTION coastAutoWarp {
                 AND setWarpWithKac(warpRate, label + " auto-warp", alarmId) {
             mLog(label + ": auto-warp " + warpRate
                 + " for " + ROUND(waitSeconds, 0) + "s.").
+            RETURN TRUE.
         }
     }
+    RETURN FALSE.
+}
+
+GLOBAL FUNCTION coastHealthCheck {
+    PARAMETER label IS "coast".
+
+    IF COAST_HEALTH_CHECK <= 0 { RETURN TRUE. }
+    LOCAL haveBootLibRan IS FALSE.
+    IF DEFINED BOOT_LIB_RAN { SET haveBootLibRan TO TRUE. }
+    IF NOT haveBootLibRan { RETURN TRUE. }
+    IF NOT BOOT_LIB_RAN:CONTAINS("solar") { RETURN TRUE. }
+    IF NOT shipHasSolarPanels() { RETURN TRUE. }
+
+    LOCAL fullEc IS SOLAR_CHARGE_FULL_EC.
+    LOCAL dT IS SOLAR_CHARGE_CHECK_DT.
+    LOCAL minDelta IS SOLAR_CHARGE_CHECK_MIN_DELTA.
+    IF shipPowerFraction() >= fullEc {
+        WAIT dT.
+        IF shipPowerFraction() >= fullEc { RETURN TRUE. }
+    } ELSE IF shipBatteriesCharging(dT, minDelta) {
+        RETURN TRUE.
+    }
+
+    mLogWarn(label + ": batteries not charging at "
+        + ROUND(shipPowerFraction() * 100, 1)
+        + "%; forcing solar reorient.").
+    orientForSolar(TRUE, TRUE, TRUE).
+    WAIT 1.
+    IF shipPowerFraction() >= fullEc {
+        WAIT dT.
+        IF shipPowerFraction() >= fullEc { RETURN TRUE. }
+    } ELSE IF shipBatteriesCharging(dT, minDelta) {
+        RETURN TRUE.
+    }
+
+    mLogWarn(label + ": health check failed; batteries still not charging "
+        + "(charge=" + ROUND(shipPowerFraction() * 100, 1)
+        + "pct flow=" + ROUND(shipSolarFlow(), 2) + ").").
+    SET SAS TO TRUE.
+    HUDTEXT("Coast health: batteries not charging",
+        8, 2, 15, YELLOW, FALSE).
+    RETURN FALSE.
 }
 
 GLOBAL FUNCTION trySolarOrient {

@@ -85,8 +85,38 @@ LOCAL FUNCTION _waitUntilOrSOI {
     PARAMETER solarRef IS -1.
 
     SET solarRef TO trySolarHoldTick(solarRef).
-    IF _solarCoastCanWarp(solarRef, "SOI coast") {
-        coastAutoWarp(targetUt, "SOI coast", alarmId).
+    LOCAL waitSeconds IS MAX(0, targetUt - TIME:SECONDS).
+    IF COAST_AUTO_WARP > 0
+            AND waitSeconds >= COAST_AUTO_WARP_MIN
+            AND idealCoastWarpRate(waitSeconds) > 0
+            AND _solarCoastCanWarp(solarRef, "SOI coast")
+            AND coastHealthCheck("SOI coast pre-warp") {
+        SET waitSeconds TO MAX(0, targetUt - TIME:SECONDS).
+        IF COAST_HEALTH_CHECK > 0
+                AND waitSeconds >= COAST_AUTO_WARP_MIN * 2 {
+            LOCAL midUt IS TIME:SECONDS + waitSeconds / 2.
+            mLog("SOI coast: midpoint health check in T+"
+                + ROUND(midUt - TIME:SECONDS, 0) + "s.").
+            IF coastAutoWarp(midUt, "SOI coast midpoint", alarmId) {
+                UNTIL TIME:SECONDS >= midUt OR SHIP:BODY = targetBody {
+                    SET solarRef TO trySolarHoldTick(solarRef).
+                    WAIT MIN(pollInterval, MAX(1, midUt - TIME:SECONDS)).
+                }
+                IF WARP > 0 {
+                    SET WARP TO 0.
+                    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+                    WAIT 1.
+                }
+                SET solarRef TO trySolarHoldTick(solarRef).
+                IF SHIP:BODY <> targetBody
+                        AND _solarCoastCanWarp(solarRef, "SOI coast")
+                        AND coastHealthCheck("SOI coast midpoint") {
+                    coastAutoWarp(targetUt, "SOI coast", alarmId).
+                }
+            }
+        } ELSE {
+            coastAutoWarp(targetUt, "SOI coast", alarmId).
+        }
     }
     UNTIL TIME:SECONDS >= targetUt OR SHIP:BODY = targetBody {
         SET solarRef TO trySolarHoldTick(solarRef).

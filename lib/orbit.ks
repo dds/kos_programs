@@ -99,8 +99,33 @@ GLOBAL FUNCTION waitForSOI {
                 AND shipHasSolarPanels()
                 AND solarRef <= 0 {
             mLogWarn("SOI coast: auto-warp skipped; no solar flow after orient.").
-        } ELSE {
-            coastAutoWarp(soiUt, "SOI coast", kacAlarmId).
+        } ELSE IF coastHealthCheck("SOI coast pre-warp") {
+            LOCAL waitSeconds IS MAX(0, soiUt - TIME:SECONDS).
+            IF COAST_HEALTH_CHECK > 0
+                    AND waitSeconds >= COAST_AUTO_WARP_MIN * 2 {
+                LOCAL midUt IS TIME:SECONDS + waitSeconds / 2.
+                mLog("SOI coast: midpoint health check in T+"
+                    + ROUND(midUt - TIME:SECONDS, 0) + "s.").
+                IF coastAutoWarp(midUt, "SOI coast midpoint", kacAlarmId) {
+                    UNTIL TIME:SECONDS >= midUt
+                            OR SHIP:ORBIT:BODY:NAME = targetBody:NAME {
+                        SET solarRef TO trySolarHoldTick(solarRef).
+                        WAIT MIN(pollInterval, MAX(1, midUt - TIME:SECONDS)).
+                    }
+                    IF WARP > 0 {
+                        SET WARP TO 0.
+                        WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+                        WAIT 1.
+                    }
+                    SET solarRef TO trySolarHoldTick(solarRef).
+                    IF SHIP:ORBIT:BODY:NAME <> targetBody:NAME
+                            AND coastHealthCheck("SOI coast midpoint") {
+                        coastAutoWarp(soiUt, "SOI coast", kacAlarmId).
+                    }
+                }
+            } ELSE {
+                coastAutoWarp(soiUt, "SOI coast", kacAlarmId).
+            }
         }
     }
 
