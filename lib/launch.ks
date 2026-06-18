@@ -8,8 +8,7 @@ GLOBAL LAUNCH_INCLINATION IS 0.
 GLOBAL LAUNCH_AZIMUTH IS 0.
 GLOBAL LAUNCH_STAGE_LIMIT IS 0.
 GLOBAL LAUNCH_SOLID_STAGE_FRAC IS 0.
-GLOBAL LAUNCH_SRB_GIMBAL_LOCK_ON_SEP IS TRUE.
-GLOBAL LAUNCH_SRB_GIMBAL_TAGS IS LIST().
+GLOBAL LAUNCH_SEP_GIMBAL_LOCK_ALT IS 50000.
 GLOBAL FAIRING_ALT IS 72000.
 GLOBAL EXTEND_ALT IS 73500.
 GLOBAL RECOVERY_PE IS -1.
@@ -426,7 +425,7 @@ GLOBAL FUNCTION armAscentStaging {
         mLog("Ascent auto-stage (" + reason + solidDetail + ") at alt="
             + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
         HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
-        _launchPrepSrbGimbals(reason).
+        _launchPrepSeparatedEngineGimbals().
         STAGE.
         SET _solidStageNumber TO -1.
         SET _solidStagePeak TO 0.
@@ -476,32 +475,29 @@ GLOBAL FUNCTION armAscentStaging {
 
 // ── Private helpers ──────────────────────────────────────────
 
-LOCAL FUNCTION _launchPrepSrbGimbals {
-    PARAMETER reason.
-    IF NOT LAUNCH_SRB_GIMBAL_LOCK_ON_SEP { RETURN. }
-    IF LAUNCH_SRB_GIMBAL_TAGS:LENGTH = 0 { RETURN. }
+LOCAL FUNCTION _launchPrepSeparatedEngineGimbals {
+    IF LAUNCH_SEP_GIMBAL_LOCK_ALT <= 0 { RETURN. }
+    IF SHIP:ALTITUDE > LAUNCH_SEP_GIMBAL_LOCK_ALT { RETURN. }
 
-    LOCAL tagged IS 0.
+    LOCAL separating IS 0.
     LOCAL locked IS 0.
-    FOR tagName IN LAUNCH_SRB_GIMBAL_TAGS {
-        FOR eng IN SHIP:ENGINES {
-            IF eng:TAG = tagName {
-                SET tagged TO tagged + 1.
-                IF eng:HASGIMBAL
-                        AND (eng:THROTTLELOCK OR NOT eng:ALLOWSHUTDOWN) {
-                    SET eng:GIMBAL:LOCK TO TRUE.
-                    SET locked TO locked + 1.
-                }
+    LOCAL stageNum IS STAGE:NUMBER.
+    FOR eng IN SHIP:ENGINES {
+        IF eng:DECOUPLEDIN = stageNum {
+            SET separating TO separating + 1.
+            IF eng:HASGIMBAL {
+                SET eng:GIMBAL:LOCK TO TRUE.
+                SET locked TO locked + 1.
             }
         }
     }
 
     IF locked > 0 {
-        mLog("SRB separation gimbals neutral-locked: " + locked + ".").
-    } ELSE IF tagged > 0 {
-        mLogWarn("SRB separation found tagged engines, but no active solid gimbals to lock.").
-    } ELSE IF reason = "solid-fuel-low" {
-        mLogWarn("SRB separation gimbal tags not found on engine parts.").
+        mLog("Separated engine gimbals neutral-locked: " + locked + ".").
+    } ELSE IF separating > 0 {
+        mLogWarn("Stage separates engines below "
+            + ROUND(LAUNCH_SEP_GIMBAL_LOCK_ALT / 1000, 1)
+            + "km, but none have gimbals to lock.").
     }
 }
 
