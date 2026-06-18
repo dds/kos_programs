@@ -8,6 +8,8 @@ GLOBAL LAUNCH_INCLINATION IS 0.
 GLOBAL LAUNCH_AZIMUTH IS 0.
 GLOBAL LAUNCH_STAGE_LIMIT IS 0.
 GLOBAL LAUNCH_SOLID_STAGE_FRAC IS 0.
+GLOBAL LAUNCH_SRB_GIMBAL_LOCK_ON_SEP IS TRUE.
+GLOBAL LAUNCH_SRB_GIMBAL_TAGS IS LIST().
 GLOBAL FAIRING_ALT IS 72000.
 GLOBAL EXTEND_ALT IS 73500.
 GLOBAL RECOVERY_PE IS -1.
@@ -424,6 +426,7 @@ GLOBAL FUNCTION armAscentStaging {
         mLog("Ascent auto-stage (" + reason + solidDetail + ") at alt="
             + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
         HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
+        _launchPrepSrbGimbals(reason).
         STAGE.
         SET _solidStageNumber TO -1.
         SET _solidStagePeak TO 0.
@@ -472,6 +475,35 @@ GLOBAL FUNCTION armAscentStaging {
 }
 
 // ── Private helpers ──────────────────────────────────────────
+
+LOCAL FUNCTION _launchPrepSrbGimbals {
+    PARAMETER reason.
+    IF NOT LAUNCH_SRB_GIMBAL_LOCK_ON_SEP { RETURN. }
+    IF LAUNCH_SRB_GIMBAL_TAGS:LENGTH = 0 { RETURN. }
+
+    LOCAL tagged IS 0.
+    LOCAL locked IS 0.
+    FOR tagName IN LAUNCH_SRB_GIMBAL_TAGS {
+        FOR eng IN SHIP:ENGINES {
+            IF eng:TAG = tagName {
+                SET tagged TO tagged + 1.
+                IF eng:HASGIMBAL
+                        AND (eng:THROTTLELOCK OR NOT eng:ALLOWSHUTDOWN) {
+                    SET eng:GIMBAL:LOCK TO TRUE.
+                    SET locked TO locked + 1.
+                }
+            }
+        }
+    }
+
+    IF locked > 0 {
+        mLog("SRB separation gimbals neutral-locked: " + locked + ".").
+    } ELSE IF tagged > 0 {
+        mLogWarn("SRB separation found tagged engines, but no active solid gimbals to lock.").
+    } ELSE IF reason = "solid-fuel-low" {
+        mLogWarn("SRB separation gimbal tags not found on engine parts.").
+    }
+}
 
 // ── Abort mode ───────────────────────────────────────────────
 // launchAbort is only the trigger: stop propulsion, fire the
