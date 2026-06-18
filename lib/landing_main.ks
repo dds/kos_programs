@@ -343,7 +343,7 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
         SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
         SET downrangeToTarget TO _landingDownrangeToTarget(ctx).
         IF horizontalSpeed > 0.1 {
-            SET brakeLeadDist TO MAX(0, LANDING_COAST_MCC_LEAD_DIST).
+            SET brakeLeadDist TO MAX(0, LANDING_BRAKE_GATE_LEAD_DIST).
             SET downrangeToTarget TO downrangeToTarget + brakeLeadDist.
         }
     }

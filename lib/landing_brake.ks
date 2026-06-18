@@ -168,12 +168,8 @@ GLOBAL FUNCTION _landingBrakingTick {
         IF distToTarget <= VERTICAL_RADIUS {
             _landingSetState(ctx, "VERTICAL_DESCENT",
                 "over-target vertical and horizontal capture").
-        } ELSE IF burnHeight > APPROACH_SPEED_ALTITUDE_WINDOW {
-            _landingSetState(ctx, "VERTICAL_DESCENT",
-                "high-altitude vertical and horizontal capture").
         } ELSE IF distToTarget > APPROACH_RADIUS {
-            SET ctx["HOVER_REFINED"] TO TRUE.
-            _landingSetState(ctx, "VERTICAL_DESCENT",
+            _landingSetState(ctx, "APPROACH",
                 "post-brake miss outside approach radius").
         } ELSE {
             _landingSetState(ctx, "TARGET_REFINE",
