@@ -144,6 +144,26 @@ LOCAL FUNCTION _launchPlaneTargetName {
     RETURN nm.
 }
 
+LOCAL FUNCTION _prelaunchNextPhaseIs {
+    PARAMETER phaseName.
+
+    LOCAL current IS stateGet("phase", "PRELAUNCH").
+    LOCAL i IS 0.
+    UNTIL i >= launchSeq:LENGTH {
+        IF launchSeq[i] = current {
+            IF i + 1 >= launchSeq:LENGTH { RETURN FALSE. }
+            RETURN launchSeq[i + 1] = phaseName.
+        }
+        SET i TO i + 1.
+    }
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _prelaunchToSuborbital {
+    mLog("PRELAUNCH: suborbital hop; launch-plane timing skipped.").
+    nextPhase(launchSeq).
+}
+
 LOCAL FUNCTION _prelaunchToBodyOrbit {
     PARAMETER allowFallback.
 
@@ -749,6 +769,10 @@ GLOBAL FUNCTION phasePrelaunch {
     LOCAL planeMode IS "".
     IF LAUNCH_PLANE_MODE <> "" {
         SET planeMode TO LAUNCH_PLANE_MODE:TOUPPER.
+    }
+    IF planeMode = "SUBORBITAL" OR _prelaunchNextPhaseIs("HOP") {
+        _prelaunchToSuborbital().
+        RETURN.
     }
     IF planeMode = "INTERPLANETARY" {
         _prelaunchToInterplanetary(_interplanetaryTargetSpec()).
