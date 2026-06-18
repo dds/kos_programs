@@ -10,6 +10,11 @@ PRINT "Landing rescue: free before " + beforeFree + " bytes.".
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
+LOCAL vehicleInfo IS bootVehicleInfo().
+LOCAL keepCrafts IS LIST(vehicleInfo["VEHICLE"]).
+LOCAL keepRoles IS LIST().
+IF CORE:TAG <> "" { keepRoles:ADD(CORE:TAG). }
+
 LOCAL autoMode IS mode = "AUTO" OR mode = "auto" OR mode = "".
 LOCAL phaseName IS mode.
 LOCAL sequence IS LIST().
@@ -19,11 +24,6 @@ LOCAL FUNCTION _cfg {
     PARAMETER key.
     PARAMETER value.
     stateSet("mission_cfg_" + key, value).
-}
-
-LOCAL FUNCTION _cfgRemove {
-    PARAMETER key.
-    stateRemove("mission_cfg_" + key).
 }
 
 LOCAL FUNCTION _addUnique {
@@ -226,8 +226,8 @@ LOCAL FUNCTION _pruneDir {
 LOCAL removed IS 0.
 
 SET removed TO removed + _pruneDir("1:/lib", keepLibs).
-SET removed TO removed + _pruneDir("1:/craft", LIST("FR3")).
-SET removed TO removed + _pruneDir("1:/roles", LIST()).
+SET removed TO removed + _pruneDir("1:/craft", keepCrafts).
+SET removed TO removed + _pruneDir("1:/roles", keepRoles).
 SET removed TO removed + _pruneDir("1:/cmd", LIST()).
 IF _deleteIfExists("1:/zombie") { SET removed TO removed + 1. }
 
