@@ -39,7 +39,9 @@ GLOBAL FUNCTION initLog {
 }
 
 GLOBAL FUNCTION slug {
-    LOCAL safeName IS _sanitizeName(SHIP:NAME).
+    LOCAL logName IS stateGet("vessel_name", "").
+    IF logName = "" { SET logName TO SHIP:NAME. }
+    LOCAL safeName IS _sanitizeName(logName).
     LOCAL safeCoreTag IS _sanitizeName(CORE:TAG).
     IF safeCoreTag <> "" {
         RETURN "{0}_{1}":FORMAT(safeName, safeCoreTag).
@@ -51,7 +53,6 @@ GLOBAL FUNCTION logId {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
     IF launchT = 0 {
         SET launchT TO ROUND(TIME:SECONDS / 10, 0) * 10.
-        stateSet("launch_time", launchT).
     }
 
     LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
@@ -71,10 +72,10 @@ GLOBAL FUNCTION archiveLog {
     }
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
     IF launchT = 0 {
-        PRINT "archiveLog: launch time is 0.".
         RETURN FALSE.
     }
-    LOCAL shipDir IS "0:/logs/archive/" + SHIP:NAME + "_" + launchT.
+    LOCAL shipDir IS "0:/logs/archive/" + slug() + "_" + launchT.
+    IF NOT EXISTS("0:/logs") { CREATEDIR("0:/logs"). }
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
 
@@ -85,7 +86,7 @@ GLOBAL FUNCTION archiveLog {
     LOCAL raw IS OPEN(localPath):READALL:STRING.
     IF raw:TRIM = "" { RETURN FALSE. }
 
-    IF NOT HOMECONNECTION:ISCONNECTED AND EXISTS(archivePath) {
+    IF NOT EXISTS(archivePath) {
         LOG "=== ARCHIVE LOG START: " + logId() + " ===" TO archivePath.
     }
     FOR line IN raw:SPLIT(CHAR(10)) {
