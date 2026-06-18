@@ -230,30 +230,49 @@ GLOBAL FUNCTION _landingHoverRefineTick {
     LOCAL distToTarget IS lmDistanceToTarget(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
+    LOCAL settleRadius IS MIN(
+        LANDING_HOVER_REFINE_ACCEPT_RADIUS,
+        LANDING_HOVER_REFINE_SETTLE_RADIUS).
+    LOCAL settleHspeed IS MIN(
+        LANDING_HOVER_REFINE_ACCEPT_HSPEED,
+        LANDING_HOVER_REFINE_SETTLE_HSPEED).
+    LOCAL transitDist IS MAX(0, distToTarget - settleRadius).
     LOCAL desiredSpeed IS MIN(LANDING_HOVER_REFINE_MAX_SPEED,
-        distToTarget * LANDING_HOVER_REFINE_SPEED_GAIN).
-    LOCAL stopSpeed IS SQRT(MAX(0, 2 * ctx["MAX_ACC"] * 0.35 * distToTarget)).
+        transitDist * LANDING_HOVER_REFINE_SPEED_GAIN).
+    LOCAL stopSpeed IS SQRT(MAX(0, 2 * ctx["MAX_ACC"] * 0.35 * transitDist)).
     SET desiredSpeed TO MIN(desiredSpeed, stopSpeed).
 
     _landingSetSteering(ctx, lmApproachSteering(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
         ctx["UP_VEC"], ctx["POSITION"],
         LANDING_HOVER_REFINE_TARGET_WEIGHT)).
+    LOCAL bottomAlt IS _landingBottomRadar().
+    LOCAL holdBottom IS ctx["HOVER_HOLD_BOTTOM"].
+    IF holdBottom <= 0 {
+        SET holdBottom TO bottomAlt.
+        SET ctx["HOVER_HOLD_BOTTOM"] TO holdBottom.
+    }
+    LOCAL hoverTargetVs IS MAX(-LANDING_HOVER_REFINE_ALT_VSPEED,
+        MIN(LANDING_HOVER_REFINE_ALT_VSPEED,
+            (holdBottom - bottomAlt) * LANDING_HOVER_REFINE_ALT_GAIN)).
     _landingSetThrottle(ctx, lmVerticalThrottle(
-        0, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
+        hoverTargetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
     LOCAL hoverEta IS MAX(0,
-        (distToTarget - LANDING_HOVER_REFINE_ACCEPT_RADIUS)
+        (distToTarget - settleRadius)
             / MAX(0.1, horizontalSpeed)).
     _landingHudText(ctx, "HOVER d=" + ROUND(distToTarget,1)
         + " hs=" + ROUND(horizontalSpeed,1)
         + "/" + ROUND(desiredSpeed,1)
         + " stop=" + ROUND(stopSpeed,1)
-        + " vs=" + ROUND(ctx["V_SPEED"],1),
+        + " bottom=" + ROUND(bottomAlt,0)
+        + "/" + ROUND(holdBottom,0)
+        + " vs=" + ROUND(ctx["V_SPEED"],1)
+        + "/" + ROUND(hoverTargetVs,1),
         1, 2, 13, GREEN, FALSE, hoverEta).
 
-    IF distToTarget <= LANDING_HOVER_REFINE_ACCEPT_RADIUS
-            AND horizontalSpeed <= LANDING_HOVER_REFINE_ACCEPT_HSPEED {
+    IF distToTarget <= settleRadius
+            AND horizontalSpeed <= settleHspeed {
         SET ctx["HOVER_REFINED"] TO TRUE.
         _landingSetState(ctx, "VERTICAL_DESCENT",
             "refinement complete, final drop").

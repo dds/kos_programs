@@ -493,6 +493,7 @@ GLOBAL FUNCTION _landingSetState {
         _landingHudNotice(ctx, "Neutralizing lateral drift for approach.", CYAN, TRUE).
     } ELSE IF nextState = "HOVER_REFINE" {
         vesselDeployGear().
+        SET ctx["HOVER_HOLD_BOTTOM"] TO _landingBottomRadar().
         _landingHudNotice(ctx, "Hovering to refine target coordinates.", CYAN, TRUE).
     } ELSE IF nextState = "VERTICAL_DESCENT" {
         vesselDeployGear().
@@ -596,6 +597,7 @@ GLOBAL FUNCTION landExecute {
         "TERRAIN_DONE", terrainDone,
         "HOVER_TERRAIN_DONE", FALSE,
         "HOVER_REFINED", FALSE,
+        "HOVER_HOLD_BOTTOM", 0,
         "HUD_LAST", TIME:SECONDS - LANDING_HUD_INTERVAL,
         "HUD_NOTICE_LAST", TIME:SECONDS - LANDING_HUD_NOTICE_INTERVAL,
         "HUD_NOTICE_TEXT", "",
