@@ -299,7 +299,9 @@ The older element-targeting pipeline (`MCC`, `CIRC`, `RAISE`, `INCLINE`,
 flight-proven (test mission: `missions/FR3/mun_sat_delivery_3.ks`).
 `cmd/returntokerbin.ks` runs the full moon-return + aerobrake + descent flow.
 Kerbin returns use `MCC`, targeting the configured reentry Pe and a 0 deg
-arrival inclination to improve KSC approach geometry.
+arrival inclination to improve KSC approach geometry. If the current Kerbin
+approach is already inside the configured aerobrake Pe corridor, MCC skips
+that optional correction and saves the remaining fuel.
 
 ## Multi-CPU ships and roles
 

@@ -17,13 +17,56 @@ GLOBAL CAPTURE_INC IS -1.
 GLOBAL CAPTURE_LAN IS -1.
 GLOBAL CAPTURE_AOP IS -1.
 GLOBAL CAPTURE_DIR IS "".
+GLOBAL MCC_AEROBRAKE_SAFE_PE_MIN IS 20000.
+GLOBAL MCC_AEROBRAKE_SAFE_PE_MAX IS -1.
 
 
 LOCAL MCC_DV_CAP           IS 50.
 LOCAL MCC_MIN_DV           IS 2.0.
 LOCAL MCC_LATE_MIN_DV      IS 3.0.
 LOCAL MCC_LATE_ETA         IS 7200.
+LOCAL MCC_AEROBRAKE_ATMO_MARGIN IS 1000.
 LOCAL MAX_RETRIES          IS 5.
+
+LOCAL FUNCTION _mccIsAerobrakeReturn {
+    PARAMETER target.
+    IF target:NAME <> "Kerbin" { RETURN FALSE. }
+    IF stateGet("mission_type", "") = "kerbin_return" { RETURN TRUE. }
+    RETURN xferSeq:CONTAINS("AEROBRAKE").
+}
+
+LOCAL FUNCTION _mccAerobrakeSafePeMin {
+    PARAMETER target.
+    PARAMETER targetPe.
+    LOCAL minPe IS MCC_AEROBRAKE_SAFE_PE_MIN.
+    IF minPe < 0 { SET minPe TO targetPe - 15000. }
+    RETURN MAX(0, minPe).
+}
+
+LOCAL FUNCTION _mccAerobrakeSafePeMax {
+    PARAMETER target.
+    PARAMETER targetPe.
+    LOCAL maxPe IS MCC_AEROBRAKE_SAFE_PE_MAX.
+    IF maxPe < 0 {
+        IF target:ATM:EXISTS {
+            SET maxPe TO target:ATM:HEIGHT - MCC_AEROBRAKE_ATMO_MARGIN.
+        } ELSE {
+            SET maxPe TO targetPe + 15000.
+        }
+    }
+    RETURN MAX(_mccAerobrakeSafePeMin(target, targetPe), maxPe).
+}
+
+LOCAL FUNCTION _mccAerobrakePatchSafe {
+    PARAMETER patch.
+    PARAMETER target.
+    PARAMETER targetPe.
+    IF patch = 0 { RETURN FALSE. }
+    IF NOT target:ATM:EXISTS { RETURN FALSE. }
+    LOCAL pe IS patch:PERIAPSIS.
+    RETURN pe >= _mccAerobrakeSafePeMin(target, targetPe)
+        AND pe <= _mccAerobrakeSafePeMax(target, targetPe).
+}
 
 // ============================================================
 GLOBAL FUNCTION phaseMidCourse {
@@ -103,6 +146,24 @@ GLOBAL FUNCTION phaseMidCourse {
         + " startLAN=" + ROUND(patch:LAN,1)
         + " startAoP=" + ROUND(patch:ARGUMENTOFPERIAPSIS,1)).
 
+    LOCAL aerobrakeReturn IS _mccIsAerobrakeReturn(target).
+    IF aerobrakeReturn AND _mccAerobrakePatchSafe(patch, target, targetPe) {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        mLogWarn("MCC: current Kerbin aerobrake Pe is safe ("
+            + ROUND(patch:PERIAPSIS/1000, 1)
+            + "km); skipping optional correction.").
+        mLogWarn("STATS mcc result target=" + target:NAME
+            + " status=skipped reason=safe-aerobrake-corridor"
+            + " dv=0"
+            + " PeKm=" + ROUND(patch:PERIAPSIS/1000,1)
+            + " safeMinKm=" + ROUND(_mccAerobrakeSafePeMin(target, targetPe)/1000,1)
+            + " safeMaxKm=" + ROUND(_mccAerobrakeSafePeMax(target, targetPe)/1000,1)
+            + " targetPeKm=" + ROUND(targetPe/1000,1)).
+        orbitSummary().
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     LOCAL nd IS NODE(TIME:SECONDS + waitTime, 0, 0, 0).
     ADD nd.
@@ -144,6 +205,12 @@ GLOBAL FUNCTION phaseMidCourse {
 
     LOCAL totalDv IS nd:DELTAV:MAG.
     LOCAL finalPatch IS _getTargetPatch(nd, target).
+    LOCAL finalPeKm IS -9999.
+    IF finalPatch <> 0 { SET finalPeKm TO finalPatch:PERIAPSIS / 1000. }
+    LOCAL unsafeAerobrakeFinal IS FALSE.
+    IF aerobrakeReturn AND finalPatch <> 0 {
+        SET unsafeAerobrakeFinal TO NOT _mccAerobrakePatchSafe(finalPatch, target, targetPe).
+    }
     LOCAL minMccDv IS MCC_MIN_DV.
     SET minMccDv TO MCC_MIN_DV.
     LOCAL lateEta IS ETA:PERIAPSIS.
@@ -161,9 +228,11 @@ GLOBAL FUNCTION phaseMidCourse {
         IF ABS(finalElemEval["PE_ERR"]) > 100000 { SET worsened TO TRUE. }
     }
 
-    IF totalDv < minMccDv OR finalPatch = 0 OR worsened {
+    IF totalDv < minMccDv OR finalPatch = 0 OR worsened OR unsafeAerobrakeFinal {
         IF worsened {
             mLogWarn("MCC made approach worse; skipping correction node.").
+        } ELSE IF unsafeAerobrakeFinal {
+            mLogWarn("MCC final Pe outside safe aerobrake corridor; skipping correction node.").
         } ELSE IF totalDv < minMccDv {
             mLogWarn("MCC correction below threshold; skipping correction node.").
         }
@@ -171,7 +240,9 @@ GLOBAL FUNCTION phaseMidCourse {
         mLogWarn("STATS mcc result target=" + target:NAME
             + " status=skipped dv=" + ROUND(totalDv,1)
             + " minDv=" + ROUND(minMccDv,1)
-            + " worsened=" + worsened).
+            + " PeKm=" + ROUND(finalPeKm,1)
+            + " worsened=" + worsened
+            + " unsafeAerobrakeFinal=" + unsafeAerobrakeFinal).
         REMOVE nd.
     } ELSE {
         LOCAL logMsg IS "MCC planned: dV=" + ROUND(totalDv, 1)
