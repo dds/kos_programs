@@ -24,15 +24,30 @@ LOCAL MIDCOURSE_REFINE_MARGIN_DEFAULT IS 60.
 
 LOCAL FUNCTION _enterSolarCoast {
     PARAMETER label IS "COAST".
+    PARAMETER forceSearch IS FALSE.
+    PARAMETER checkEntryHealth IS TRUE.
     SET SAS TO TRUE.
     UNLOCK STEERING.
+    IF forceSearch
+            AND (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
+                OR SHIP:STATUS = "SUB_ORBITAL")
+            AND PHASES_HAS_SOLAR {
+        orientForSolar(TRUE, TRUE, TRUE).
+    }
     tryCommandCoreHibernate(TRUE).
-    LOCAL solarRef IS trySolarHoldTick(-1).
-    mLog(label + ": solar coast attitude armed.").
-    IF NOT coastHealthCheck(label + " entry") {
-        mLogWarn(label + ": entry health check failed; remaining at 1x.").
-    } ELSE {
+    LOCAL solarRef IS -1.
+    IF checkEntryHealth {
         SET solarRef TO trySolarHoldTick(-1).
+    } ELSE IF PHASES_HAS_SOLAR AND shipHasSolarPanels() {
+        SET solarRef TO MAX(shipSolarFlow(), 0).
+    }
+    mLog(label + ": solar coast attitude armed.").
+    IF checkEntryHealth {
+        IF NOT coastHealthCheck(label + " entry") {
+            mLogWarn(label + ": entry health check failed; remaining at 1x.").
+        } ELSE {
+            SET solarRef TO trySolarHoldTick(-1).
+        }
     }
     RETURN solarRef.
 }
@@ -79,14 +94,20 @@ LOCAL FUNCTION _waitUntilOrSOI {
     PARAMETER pollInterval IS 10.
     PARAMETER alarmId IS "".
     PARAMETER solarRef IS -1.
+    PARAMETER checkPreWarpHealth IS TRUE.
 
-    SET solarRef TO trySolarHoldTick(solarRef).
+    IF checkPreWarpHealth {
+        SET solarRef TO trySolarHoldTick(solarRef).
+    } ELSE IF PHASES_HAS_SOLAR AND shipHasSolarPanels() AND solarRef < 0 {
+        SET solarRef TO MAX(shipSolarFlow(), 0).
+    }
     LOCAL waitSeconds IS MAX(0, targetUt - TIME:SECONDS).
     IF COAST_AUTO_WARP > 0
             AND waitSeconds >= COAST_AUTO_WARP_MIN
             AND idealCoastWarpRate(waitSeconds) > 0
             AND _solarCoastCanWarp(solarRef, "SOI coast")
-            AND coastHealthCheck("SOI coast pre-warp") {
+            AND (NOT checkPreWarpHealth
+                OR coastHealthCheck("SOI coast pre-warp")) {
         SET waitSeconds TO MAX(0, targetUt - TIME:SECONDS).
         IF COAST_HEALTH_CHECK > 0
                 AND waitSeconds >= COAST_AUTO_WARP_MIN * 2 {
@@ -177,7 +198,7 @@ GLOBAL FUNCTION phaseCoast {
 
 GLOBAL FUNCTION phaseCoast1Half {
     LOCAL target IS missionTargetBody().
-    LOCAL solarRef IS _enterSolarCoast("COAST_1HALF").
+    LOCAL solarRef IS _enterSolarCoast("COAST_1HALF", TRUE, TRUE).
 
     LOCAL tArrival IS _transferArrivalUt(target).
     IF tArrival <= TIME:SECONDS {
@@ -207,7 +228,7 @@ GLOBAL FUNCTION phaseCoast1Half {
 
 GLOBAL FUNCTION phaseCoast2Half {
     LOCAL target IS missionTargetBody().
-    LOCAL solarRef IS _enterSolarCoast("COAST_2HALF").
+    LOCAL solarRef IS _enterSolarCoast("COAST_2HALF", FALSE, FALSE).
 
     IF SHIP:BODY = target {
         mLog("COAST_2HALF: already inside " + target:NAME + " SOI.").
@@ -232,7 +253,7 @@ GLOBAL FUNCTION phaseCoast2Half {
     LOCAL coastUntil IS MAX(TIME:SECONDS, tArrival - soiBuffer).
     mLog("Coasting toward " + target:NAME + " SOI boundary; buffer="
         + ROUND(soiBuffer, 0) + "s.").
-    _waitUntilOrSOI(target, coastUntil, 10, soiAlarmId, solarRef).
+    _waitUntilOrSOI(target, coastUntil, 10, soiAlarmId, solarRef, FALSE).
 
     IF SHIP:BODY = target AND soiAlarmId <> "" {
         DELETEALARM(soiAlarmId).
