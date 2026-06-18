@@ -576,43 +576,8 @@ LOCAL FUNCTION _landingCoastTick {
     PARAMETER ctx.
 
     _landingSetThrottle(ctx, 0).
-    LOCAL gate IS _landingBrakeGateInfo(ctx).
-    LOCAL nextBrakeEta IS MIN(gate["H_ETA"], gate["V_ETA"]).
-    LOCAL coastTransitionEta IS nextBrakeEta.
-    IF ctx["HAS_TARGET"] {
-        SET coastTransitionEta TO nextBrakeEta - LANDING_BRAKE_ALIGN_LEAD.
-    }
-
-    LOCAL solarCoast IS FALSE.
-    IF ctx["HAS_TARGET"]
-            AND NOT gate["H_OVERSHOT"]
-            AND NOT gate["H_NOW"]
-            AND NOT gate["V_NOW"]
-            AND nextBrakeEta > LANDING_COAST_SOLAR_MIN_BRAKE_ETA
-            AND DEFINED BOOT_LIB_RAN
-            AND BOOT_LIB_RAN:CONTAINS("solar")
-            AND shipHasSolarPanels() {
-        SET solarCoast TO TRUE.
-        IF NOT ctx["COAST_SOLAR_ARMED"] {
-            vesselDeploySolarPanels().
-            orientForSolar(FALSE, TRUE).
-            SET ctx["COAST_SOLAR_REF_FLOW"] TO trySolarHoldTick(-1).
-            SET ctx["COAST_SOLAR_ARMED"] TO TRUE.
-            mLog("Landing COAST: solar attitude armed; brake eta="
-                + ROUND(nextBrakeEta,0) + "s.").
-        } ELSE {
-            SET ctx["COAST_SOLAR_REF_FLOW"] TO trySolarHoldTick(
-                ctx["COAST_SOLAR_REF_FLOW"]).
-        }
-    } ELSE {
-        IF ctx["COAST_SOLAR_ARMED"] {
-            mLog("Landing COAST: leaving solar attitude for brake prep.").
-        }
-        SET ctx["COAST_SOLAR_ARMED"] TO FALSE.
-        SET ctx["COAST_SOLAR_REF_FLOW"] TO -1.
-        _landingSetSteering(ctx, lmRetroSteering(
-            ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"])).
-    }
+    _landingSetSteering(ctx, lmRetroSteering(
+        ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"])).
 
     IF ctx["HAS_TARGET"] AND NOT ctx["TERRAIN_DONE"]
             AND ALT:RADAR <= GUIDANCE_ALT {
@@ -625,6 +590,13 @@ LOCAL FUNCTION _landingCoastTick {
         }
     }
 
+    LOCAL gate IS _landingBrakeGateInfo(ctx).
+    LOCAL nextBrakeEta IS MIN(gate["H_ETA"], gate["V_ETA"]).
+    LOCAL coastTransitionEta IS nextBrakeEta.
+    IF ctx["HAS_TARGET"] {
+        SET coastTransitionEta TO nextBrakeEta - LANDING_BRAKE_ALIGN_LEAD.
+    }
+
     _landingHudText(ctx, "COAST d=" + ROUND(gate["DIST"],0)
         + " dr=" + ROUND(gate["DOWNRANGE"],0)
         + " hBrake=" + ROUND(gate["H_BRAKE"],0)
@@ -632,7 +604,6 @@ LOCAL FUNCTION _landingCoastTick {
         + " vEta=" + ROUND(gate["V_ETA"],0)
         + " hSupp=" + _landingBoolText(gate["H_SUPPRESSED"])
         + " hOver=" + _landingBoolText(gate["H_OVERSHOT"])
-        + " solar=" + _landingBoolText(solarCoast)
         + " hs=" + ROUND(gate["H_SPEED"],1),
         1, 2, 13, WHITE, FALSE, coastTransitionEta).
 
@@ -1299,8 +1270,6 @@ GLOBAL FUNCTION landExecute {
         "TOUCHDOWN_SETTLED", FALSE,
         "MCC_PULSE_UNTIL", 0,
         "MCC_SETTLE_UNTIL", 0,
-        "COAST_SOLAR_ARMED", FALSE,
-        "COAST_SOLAR_REF_FLOW", -1,
         "TARGET_STEERING", SHIP:UP:VECTOR,
         "TARGET_THROTTLE", 0
     ).
