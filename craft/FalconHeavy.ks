@@ -13,11 +13,6 @@ GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
 
 applyKnownMissionState().
 
-// kOS cannot directly set stock gimbal deflection; locking snaps
-// gimbals neutral. Do that just before SRB separation so any
-// burnout steering deflection does not carry into detached boosters.
-SET LAUNCH_SRB_GIMBAL_TAGS TO LIST("port_booster", "starboard_booster").
-
 GLOBAL FUNCTION fhBuildPhaseSequence {
     IF SEQUENCE:LENGTH > 0 {
         RETURN phaseList(SEQUENCE).
