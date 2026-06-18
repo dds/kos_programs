@@ -3,7 +3,6 @@
 // Mission profiles load this before their site/contract-specific landing
 // overrides. Keep terrain scan radii and target tolerances in the mission.
 
-SET BRAKE_ACCEL_FRACTION TO 0.85.
 SET BRAKE_MARGIN TO 500.
 SET BURN_MARGIN TO 1.1.
 

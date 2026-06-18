@@ -139,8 +139,7 @@ GLOBAL FUNCTION _landingApproachTick {
     LOCAL approachHeight IS _landingTargetHeight(ctx).
     LOCAL bottomAlt IS _landingBottomRadar().
     LOCAL controlHeight IS MIN(approachHeight, bottomAlt).
-    LOCAL maxAcc IS ctx["MAX_ACC"].
-    LOCAL horizontalAcc IS MAX(0.1, maxAcc * BRAKE_ACCEL_FRACTION).
+    LOCAL horizontalAcc IS _landingHorizontalBrakeAcc(ctx).
     LOCAL desiredSpeed IS MIN(MAX_APPROACH_SPEED,
         SQRT(MAX(0, 2 * horizontalAcc * MAX(0, distToTarget - VERTICAL_RADIUS)))).
     LOCAL descentSpeed IS lmDescentSpeed(
