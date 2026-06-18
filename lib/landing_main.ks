@@ -338,9 +338,14 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     LOCAL burnHeight IS _landingBurnHeight(ctx).
     LOCAL distToTarget IS 999999.
     LOCAL downrangeToTarget IS 999999.
+    LOCAL brakeLeadDist IS 0.
     IF ctx["HAS_TARGET"] {
         SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
         SET downrangeToTarget TO _landingDownrangeToTarget(ctx).
+        IF horizontalSpeed > 0.1 {
+            SET brakeLeadDist TO MAX(0, LANDING_COAST_MCC_LEAD_DIST).
+            SET downrangeToTarget TO downrangeToTarget + brakeLeadDist.
+        }
     }
 
     LOCAL hBrakeGate IS brakeDist + BRAKE_MARGIN.
@@ -384,6 +389,7 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     RETURN LEXICON(
         "DIST", distToTarget,
         "DOWNRANGE", downrangeToTarget,
+        "BRAKE_LEAD", brakeLeadDist,
         "H_BRAKE", brakeDist,
         "H_GATE", hBrakeGate,
         "H_ETA", hBrakeEta,
