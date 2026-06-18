@@ -319,6 +319,21 @@ GLOBAL FUNCTION coastAutoWarp {
     RETURN FALSE.
 }
 
+GLOBAL FUNCTION coastEnsureHealthAlarm {
+    PARAMETER label IS "Coast health".
+    PARAMETER healthUt.
+
+    IF healthUt <= TIME:SECONDS { RETURN "". }
+    LOCAL alarmId IS kacEnsureAlarm(label + ": " + SHIP:NAME,
+        healthUt,
+        "Auto-created by coast health check.").
+    IF alarmId <> "" {
+        mLog("KAC alarm set for " + label + " in "
+            + ROUND(healthUt - TIME:SECONDS, 0) + "s.").
+    }
+    RETURN alarmId.
+}
+
 GLOBAL FUNCTION coastHealthCheck {
     PARAMETER label IS "coast".
 
@@ -334,8 +349,18 @@ GLOBAL FUNCTION coastHealthCheck {
     LOCAL minDelta IS SOLAR_CHARGE_CHECK_MIN_DELTA.
     IF shipPowerFraction() >= fullEc {
         WAIT dT.
-        IF shipPowerFraction() >= fullEc { RETURN TRUE. }
+        IF shipPowerFraction() >= fullEc {
+            mLogWarn("STATS coast health label=" + label
+                + " status=full charge="
+                + ROUND(shipPowerFraction() * 100, 1)
+                + "pct flow=" + ROUND(shipSolarFlow(), 2)).
+            RETURN TRUE.
+        }
     } ELSE IF shipBatteriesCharging(dT, minDelta) {
+        mLogWarn("STATS coast health label=" + label
+            + " status=charging charge="
+            + ROUND(shipPowerFraction() * 100, 1)
+            + "pct flow=" + ROUND(shipSolarFlow(), 2)).
         RETURN TRUE.
     }
 
@@ -346,8 +371,18 @@ GLOBAL FUNCTION coastHealthCheck {
     WAIT 1.
     IF shipPowerFraction() >= fullEc {
         WAIT dT.
-        IF shipPowerFraction() >= fullEc { RETURN TRUE. }
+        IF shipPowerFraction() >= fullEc {
+            mLogWarn("STATS coast health label=" + label
+                + " status=reoriented-full charge="
+                + ROUND(shipPowerFraction() * 100, 1)
+                + "pct flow=" + ROUND(shipSolarFlow(), 2)).
+            RETURN TRUE.
+        }
     } ELSE IF shipBatteriesCharging(dT, minDelta) {
+        mLogWarn("STATS coast health label=" + label
+            + " status=reoriented-charging charge="
+            + ROUND(shipPowerFraction() * 100, 1)
+            + "pct flow=" + ROUND(shipSolarFlow(), 2)).
         RETURN TRUE.
     }
 

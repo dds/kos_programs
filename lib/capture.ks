@@ -98,13 +98,16 @@ LOCAL FUNCTION _waitUntilOrSOI {
         IF COAST_HEALTH_CHECK > 0
                 AND waitSeconds >= COAST_AUTO_WARP_MIN * 2 {
             LOCAL midUt IS TIME:SECONDS + waitSeconds / 2.
+            LOCAL healthAlarmId IS coastEnsureHealthAlarm(
+                "SOI coast health", midUt).
             mLog("SOI coast: midpoint health check in T+"
                 + ROUND(midUt - TIME:SECONDS, 0) + "s.").
-            IF coastAutoWarp(midUt, "SOI coast midpoint", alarmId) {
+            IF coastAutoWarp(midUt, "SOI coast midpoint", healthAlarmId) {
                 UNTIL TIME:SECONDS >= midUt OR SHIP:BODY = targetBody {
                     SET solarRef TO trySolarHoldTick(solarRef).
                     WAIT MIN(pollInterval, MAX(1, midUt - TIME:SECONDS)).
                 }
+                IF healthAlarmId <> "" { DELETEALARM(healthAlarmId). }
                 IF WARP > 0 {
                     SET WARP TO 0.
                     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
