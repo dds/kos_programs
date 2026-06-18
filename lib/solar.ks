@@ -207,12 +207,6 @@ GLOBAL FUNCTION orientForSolar {
     SAS OFF.
 
     LOCAL cached IS stateGet("solar_axis", "").
-    LOCAL retryUt IS stateGetNum("solar_retry_ut", 0).
-    IF retryUt > TIME:SECONDS AND (forceSearch OR cached = "") {
-        mLog("Solar search deferred for "
-            + ROUND(retryUt - TIME:SECONDS, 0) + "s.").
-        RETURN.
-    }
     IF NOT forceSearch AND cached <> "" {
         LOCAL parts IS cached:SPLIT(",").
         LOCAL aShip IS V(parts[0]:TONUMBER(0), parts[1]:TONUMBER(0),
@@ -261,10 +255,8 @@ GLOBAL FUNCTION orientForSolar {
         RETURN.
     }
     IF bestFlow <= 0 {
-        LOCAL retryAt IS TIME:SECONDS + 300.
-        stateSet("solar_retry_ut", retryAt).
-        mLogWarn("Solar search: all axes have zero flow — likely night; retry later.").
-        mLogWarn("STATS solar orient status=night retryIn=300"
+        mLogWarn("Solar search: all axes have zero flow — likely night.").
+        mLogWarn("STATS solar orient status=night"
             + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
         UNLOCK STEERING.
         IF lockSteering {
@@ -304,7 +296,6 @@ GLOBAL FUNCTION orientForSolar {
     }
 
     _solarAimSettle(bestAxis).
-    stateSet("solar_retry_ut", 0).
     stateSet("solar_axis", ROUND(bestAxis:X, 4) + ","
         + ROUND(bestAxis:Y, 4) + "," + ROUND(bestAxis:Z, 4)).
     if lockSteering {
@@ -340,10 +331,7 @@ GLOBAL FUNCTION solarHoldTick {
     IF flow < 0 { RETURN refFlow. }
     IF refFlow <= 0 {
         IF flow <= 0 {
-            LOCAL retryUt IS stateGetNum("solar_retry_ut", 0).
-            IF retryUt <= TIME:SECONDS {
-                orientForSolar(TRUE, TRUE).
-            }
+            orientForSolar(TRUE, TRUE).
             RETURN flow.
         }
         RETURN flow.

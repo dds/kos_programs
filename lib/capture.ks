@@ -30,7 +30,6 @@ LOCAL FUNCTION _refreshSolarCoast {
             OR SHIP:STATUS = "SUB_ORBITAL")
             AND DEFINED BOOT_LIB_RAN
             AND BOOT_LIB_RAN:CONTAINS("solar") {
-        stateSet("solar_retry_ut", 0).
         orientForSolar(TRUE, TRUE, TRUE).
     } ELSE {
         trySolarOrient().
