@@ -105,7 +105,7 @@ GLOBAL FUNCTION waitForSOI {
                     AND waitSeconds >= COAST_AUTO_WARP_MIN * 2 {
                 LOCAL midUt IS TIME:SECONDS + waitSeconds / 2.
                 LOCAL healthAlarmId IS coastEnsureHealthAlarm(
-                    "SOI coast health", midUt).
+                    midUt, "SOI coast health").
                 mLog("SOI coast: midpoint health check in T+"
                     + ROUND(midUt - TIME:SECONDS, 0) + "s.").
                 IF coastAutoWarp(midUt, "SOI coast midpoint", healthAlarmId) {

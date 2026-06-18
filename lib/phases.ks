@@ -320,8 +320,8 @@ GLOBAL FUNCTION coastAutoWarp {
 }
 
 GLOBAL FUNCTION coastEnsureHealthAlarm {
-    PARAMETER label IS "Coast health".
     PARAMETER healthUt.
+    PARAMETER label IS "Coast health".
 
     IF healthUt <= TIME:SECONDS { RETURN "". }
     LOCAL alarmId IS kacEnsureAlarm(label + ": " + SHIP:NAME,
