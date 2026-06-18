@@ -669,6 +669,7 @@ GLOBAL FUNCTION getTarget {
 
 GLOBAL FUNCTION bootCachedVehicleLibs {
     PARAMETER band IS "".
+    IF HOMECONNECTION:ISCONNECTED { RETURN LIST(). }
     IF SHIP:STATUS = "PRELAUNCH" { RETURN LIST(). }
     IF band <> "" AND stateGet("lib_band", "") <> band { RETURN LIST(). }
     IF stateGet("lib_band_phase", "") <> stateGet("phase", "") { RETURN LIST(). }
