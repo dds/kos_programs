@@ -388,7 +388,6 @@ Mission profiles can opt into hands-off long coasts:
 
 ```ks
 SET COAST_AUTO_WARP TO 1.   // Requires a future KAC alarm; otherwise skipped.
-SET COAST_HIBERNATE TO 1.   // Enter probe-core hibernation during long coasts.
 ```
 
 Coast automation only enters hibernation. It does not wake probe cores; clear
