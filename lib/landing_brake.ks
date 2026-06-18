@@ -15,9 +15,23 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
     LOCAL impactErr IS trajErr["DIST"].
     LOCAL crossErr IS trajErr["CROSS_SIGNED"].
     LOCAL crossAbs IS trajErr["CROSS"].
+    LOCAL brakeGuard IS 1.
+    IF ctx["HAS_TARGET"] AND trajErr["FOUND"] {
+        SET brakeGuard TO MAX(LANDING_BRAKE_SHORT_RETRO_BLEND,
+            MIN(1, trajErr["ALONG"]
+                / MAX(1, LANDING_BRAKE_IMPACT_GUARD_LEAD))).
+    }
     LOCAL crossPid IS ctx["CROSS_PID"].
     LOCAL steeringTarget IS retroSteering.
     LOCAL biasMag IS 0.
+    IF brakeGuard < 0.999 {
+        LOCAL lateralRetro IS VXCL(ctx["UP_VEC"], retroSteering).
+        IF lateralRetro:MAG > 0.001 {
+            SET retroSteering TO (ctx["UP_VEC"]
+                + lateralRetro * brakeGuard):NORMALIZED.
+            SET steeringTarget TO retroSteering.
+        }
+    }
     IF trajErr["FOUND"] AND crossAbs > GUIDANCE_CORRECTION_THRESHOLD {
         LOCAL biasDeg IS crossPid:UPDATE(TIME:SECONDS, crossErr).
         SET biasMag TO MAX(-TR_BRAKE_BIAS,
@@ -37,6 +51,7 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
         "ALIGN_ERR", VANG(SHIP:FACING:FOREVECTOR, steeringTarget),
         "RETRO_ERR", VANG(SHIP:FACING:FOREVECTOR, retroSteering),
         "BIAS", biasMag,
+        "GUARD", brakeGuard,
         "HARD", hardBrake
     ).
 }
@@ -110,6 +125,7 @@ GLOBAL FUNCTION _landingBrakingTick {
         SET horizontalThrottle TO MAX(LANDING_HKILL_THROTTLE_MIN,
             MIN(LANDING_HKILL_THROTTLE_MAX,
             (horizontalSpeed - APPROACH_HSPEED) / MAX(1, APPROACH_HSPEED))).
+        SET horizontalThrottle TO horizontalThrottle * steerInfo["GUARD"].
     }
     IF ctx["V_SPEED"] < targetVs - 5 {
         _landingSetThrottle(ctx, 1).
