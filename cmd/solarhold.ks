@@ -24,5 +24,5 @@ RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 bootLibLoad("solar").
 
-orientForSolar(research, TRUE).
+orientForSolar(research, TRUE, TRUE).
 solarMaintainHold(CHOOSE TIME:SECONDS + holdFor IF holdFor > 0 ELSE 0).

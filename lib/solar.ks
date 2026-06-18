@@ -12,6 +12,9 @@
 GLOBAL SOLAR_HOLD_RATIO IS 0.92.
 GLOBAL SOLAR_HOLD_EC IS 0.75.
 GLOBAL SOLAR_HIBERNATE_CORES IS 1.
+GLOBAL SOLAR_SEARCH_SKIP_FIRST_BOOT IS 1.
+GLOBAL SOLAR_SEARCH_LAUNCH_GUARD IS 300.
+GLOBAL SOLAR_SEARCH_KSC_RADIUS IS 10000.
 
 LOCAL _commandHibernateActive IS FALSE.
 
@@ -101,6 +104,44 @@ LOCAL FUNCTION _solarAimSettle {
     WAIT 2.   // let panel tracking and the flow readout update
 }
 
+LOCAL FUNCTION _solarSearchGuardReason {
+    PARAMETER overrideGuard IS FALSE.
+    IF overrideGuard { RETURN "". }
+
+    IF SOLAR_SEARCH_SKIP_FIRST_BOOT > 0
+            AND stateGetNum("boot_count", 0) <= 1 {
+        RETURN "first boot".
+    }
+
+    IF SHIP:BODY:NAME:TOUPPER <> "KERBIN" { RETURN "". }
+
+    LOCAL launchTime IS stateGetNum("launch_time", 0).
+    LOCAL launchAge IS TIME:SECONDS - launchTime.
+    IF launchTime > 0 AND launchAge >= 0
+            AND launchAge < SOLAR_SEARCH_LAUNCH_GUARD {
+        RETURN "Kerbin launch T+"
+            + ROUND(launchAge, 0) + "s".
+    }
+
+    IF SHIP:STATUS = "PRELAUNCH" OR SHIP:STATUS = "LANDED" {
+        LOCAL ksc IS LATLNG(-0.0972, -74.5577).
+        IF ksc:DISTANCE <= SOLAR_SEARCH_KSC_RADIUS {
+            RETURN "near KSC pad".
+        }
+    }
+
+    RETURN "".
+}
+
+LOCAL FUNCTION _logSolarSearchGuard {
+    PARAMETER reason.
+    LOCAL key IS "solar_search_guard_reason".
+    IF stateGet(key, "") <> reason {
+        stateSet(key, reason).
+        mLog("Solar search skipped: " + reason + ".").
+    }
+}
+
 // ============================================================
 // orientForSolar — find and hold the attitude that maximizes
 // MEASURED solar energy flow. Panel layouts differ (one panel
@@ -114,6 +155,14 @@ LOCAL FUNCTION _solarAimSettle {
 GLOBAL FUNCTION orientForSolar {
     PARAMETER forceSearch IS FALSE.
     PARAMETER lockSteering IS FALSE.
+    PARAMETER overrideLaunchGuard IS FALSE.
+
+    LOCAL guardReason IS _solarSearchGuardReason(overrideLaunchGuard).
+    IF guardReason <> "" {
+        _logSolarSearchGuard(guardReason).
+        RETURN.
+    }
+    stateRemove("solar_search_guard_reason").
 
     LOCAL panels IS LIST().
     FOR p IN SHIP:PARTS {
