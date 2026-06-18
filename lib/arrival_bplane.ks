@@ -79,23 +79,6 @@ LOCAL ACQUIRE_STEP     IS 0.5.
 LOCAL MAX_ACQUIRE_ITER IS 50.
 LOCAL MAX_BURNS        IS 2.
 
-LOCAL FUNCTION _bplaneSolarHandoff {
-    PARAMETER label IS "BPLANE".
-    SET SAS TO TRUE.
-    UNLOCK STEERING.
-    IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
-            OR SHIP:STATUS = "SUB_ORBITAL")
-            AND PHASES_HAS_SOLAR {
-        orientForSolar(TRUE, TRUE, TRUE).
-        trySolarHoldTick(-1).
-        tryCommandCoreHibernate(TRUE).
-        mLog(label + ": solar handoff armed.").
-    } ELSE {
-        trySolarOrient().
-        mLog(label + ": solar handoff requested.").
-    }
-}
-
 LOCAL FUNCTION _bplaneCorridorError {
     PARAMETER targetBody, meas, wantPe, wantInc, wantLan.
 
@@ -600,6 +583,5 @@ GLOBAL FUNCTION phaseRefineBplane {
         WAIT 30.
         RETURN.
     }
-    _bplaneSolarHandoff("REFINE_BPLANE").
     nextPhase(xferSeq).
 }
