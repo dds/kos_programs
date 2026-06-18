@@ -87,7 +87,7 @@ LOCAL FUNCTION _bplaneSolarHandoff {
             OR SHIP:STATUS = "SUB_ORBITAL")
             AND DEFINED BOOT_LIB_RAN
             AND BOOT_LIB_RAN:CONTAINS("solar") {
-        orientForSolar(TRUE, TRUE).
+        orientForSolar(TRUE, TRUE, TRUE).
         trySolarHoldTick(-1).
         tryCommandCoreHibernate(TRUE).
         mLog(label + ": solar handoff armed.").

@@ -30,13 +30,16 @@ LOCAL FUNCTION _enterSolarCoast {
             OR SHIP:STATUS = "SUB_ORBITAL")
             AND DEFINED BOOT_LIB_RAN
             AND BOOT_LIB_RAN:CONTAINS("solar") {
-        orientForSolar(TRUE, TRUE).
+        orientForSolar(TRUE, TRUE, TRUE).
     } ELSE {
         trySolarOrient().
     }
     tryCommandCoreHibernate(TRUE).
     LOCAL solarRef IS trySolarHoldTick(-1).
     mLog(label + ": solar coast attitude armed.").
+    IF NOT coastHealthCheck(label + " entry") {
+        mLogWarn(label + ": entry health check failed; remaining at 1x.").
+    }
     RETURN solarRef.
 }
 
