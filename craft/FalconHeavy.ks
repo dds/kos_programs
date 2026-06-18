@@ -5,8 +5,6 @@
 // Falcon plumbing with extra solid boosters for heavier moon payloads.
 // ============================================================
 
-SET LAUNCH_SOLID_STAGE_FRAC TO 0.01.
-
 GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
     "xfer_plan",
     "maneuver_transfer",
