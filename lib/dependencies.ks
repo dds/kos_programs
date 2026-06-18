@@ -35,6 +35,7 @@ GLOBAL FUNCTION dependencyLibs {
         "molniya", LIST("maneuver", "inclination"),
         "payload_landing", LIST("landing_config"),
         "payload_ops", LIST("orbit", "utils", "solar"),
+        "recovery", LIST(),
         "return_setup", LIST(),
         "return_escape", LIST("maneuver"),
         "relay_constellation", LIST("maneuver", "orbit"),
@@ -105,7 +106,7 @@ GLOBAL FUNCTION dependencyPhases {
         "MOLNIYA", LIST("molniya"),
         "MOLNIYA_INSERT", LIST("molniya"),
         "DROP_FOR_IMPACT_AND_RAISE_PE", LIST("payload_release"),
-        "DONE", LIST("solar"),
+        "DONE", LIST("solar", "recovery"),
         "SHAPE", LIST("orbit_shape"),
         "DEPARTURE_SHAPE", LIST("orbit_shape"),
         "BPLANE", LIST("arrival_bplane"),
@@ -143,7 +144,8 @@ GLOBAL FUNCTION dependencyBands {
         "RETURN_SETUP", LIST("RETURN_SETUP", "SURFACE_RETURN_SETUP"),
         "AEROBRAKE", LIST("AEROBRAKE"),
         "LAND_DEORBIT", LIST("LAND_DEORBIT"),
-        "LANDING", LIST("LAND_ASSIST", "LAND")
+        "LANDING", LIST("LAND_ASSIST", "LAND"),
+        "DONE", LIST("DONE")
     ).
 }
 
