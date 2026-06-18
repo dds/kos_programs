@@ -16,15 +16,18 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
     LOCAL crossErr IS trajErr["CROSS_SIGNED"].
     LOCAL crossAbs IS trajErr["CROSS"].
     LOCAL brakeGuard IS 1.
-    IF ctx["HAS_TARGET"] AND trajErr["FOUND"] {
-        SET brakeGuard TO MAX(LANDING_BRAKE_SHORT_RETRO_BLEND,
-            MIN(1, trajErr["ALONG"]
-                / MAX(1, LANDING_BRAKE_IMPACT_GUARD_LEAD))).
+    IF ctx["HAS_TARGET"] AND trajErr["FOUND"]
+            AND trajErr["ALONG"] <= 0 {
+        SET brakeGuard TO 0.
     }
     LOCAL crossPid IS ctx["CROSS_PID"].
     LOCAL steeringTarget IS retroSteering.
     LOCAL biasMag IS 0.
-    IF brakeGuard < 0.999 {
+    IF brakeGuard <= 0 {
+        SET retroSteering TO ctx["UP_VEC"].
+        SET steeringTarget TO retroSteering.
+        crossPid:RESET().
+    } ELSE IF brakeGuard < 0.999 {
         LOCAL lateralRetro IS VXCL(ctx["UP_VEC"], retroSteering).
         IF lateralRetro:MAG > 0.001 {
             SET retroSteering TO (ctx["UP_VEC"]
@@ -32,7 +35,9 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
             SET steeringTarget TO retroSteering.
         }
     }
-    IF trajErr["FOUND"] AND crossAbs > GUIDANCE_CORRECTION_THRESHOLD {
+    IF brakeGuard > 0
+            AND trajErr["FOUND"]
+            AND crossAbs > GUIDANCE_CORRECTION_THRESHOLD {
         LOCAL biasDeg IS crossPid:UPDATE(TIME:SECONDS, crossErr).
         SET biasMag TO MAX(-TR_BRAKE_BIAS,
             MIN(TR_BRAKE_BIAS, SIN(biasDeg))).
