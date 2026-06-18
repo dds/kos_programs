@@ -104,10 +104,14 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     stateSet("mission_id", "surface_return").
     stateSet("mission_name", "Surface Return").
 
+    SET PARKING_ALT TO SURFACE_RETURN_PARKING_ALT.
+    SET LAUNCH_INCLINATION TO SURFACE_RETURN_INCLINATION.
+    SET LAUNCH_AZIMUTH TO 90.
+
     _returnSetupCfg("SEQUENCE", SURFACE_RETURN_SEQUENCE).
-    _returnSetupCfg("PARKING_ALT", SURFACE_RETURN_PARKING_ALT).
-    _returnSetupCfg("LAUNCH_INCLINATION", SURFACE_RETURN_INCLINATION).
-    _returnSetupCfg("LAUNCH_AZIMUTH", SURFACE_RETURN_AZIMUTH).
+    _returnSetupCfg("PARKING_ALT", PARKING_ALT).
+    _returnSetupCfg("LAUNCH_INCLINATION", LAUNCH_INCLINATION).
+    _returnSetupCfg("LAUNCH_AZIMUTH", LAUNCH_AZIMUTH).
     _returnSetupCfg("RETURN_SEQUENCE", RETURN_SEQUENCE).
     _returnSetupCfg("RETURN_PE", RETURN_PE).
     _returnSetupCfg("RETURN_REENTRY_DIR", RETURN_REENTRY_DIR).
@@ -129,14 +133,16 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     stateSet("launch_time", ROUND(TIME:SECONDS)).
 
     mLog("Surface return setup: sequence=" + SURFACE_RETURN_SEQUENCE
-        + " parkingAlt=" + ROUND(SURFACE_RETURN_PARKING_ALT/1000, 1)
-        + "km inc=" + SURFACE_RETURN_INCLINATION
-        + " az=" + SURFACE_RETURN_AZIMUTH + ".").
+        + " parkingAlt=" + ROUND(PARKING_ALT/1000, 1)
+        + "km inc=" + LAUNCH_INCLINATION
+        + " az=" + LAUNCH_AZIMUTH + ".").
     PRINT " ".
     PRINT "Surface return configured:".
     PRINT "  Sequence: " + SURFACE_RETURN_SEQUENCE.
-    PRINT "  Orbit:    " + ROUND(SURFACE_RETURN_PARKING_ALT/1000, 1)
-        + "km x " + ROUND(SURFACE_RETURN_PARKING_ALT/1000, 1) + "km".
+    PRINT "  Orbit:    " + ROUND(PARKING_ALT/1000, 1)
+        + "km x " + ROUND(PARKING_ALT/1000, 1) + "km".
+    PRINT "  Launch:   inc " + LAUNCH_INCLINATION + " deg, az "
+        + LAUNCH_AZIMUTH + " deg.".
     PRINT "  Rebooting into PRELAUNCH.".
     WAIT 3.
     REBOOT.

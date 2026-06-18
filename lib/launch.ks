@@ -23,7 +23,7 @@ LOCAL FUNCTION _ascentAngleError {
 }
 
 LOCAL FUNCTION _launchHasAtmosphere {
-    RETURN SHIP:BODY:ATM:HEIGHT > 0.
+    RETURN SHIP:BODY:ATM:EXISTS.
 }
 
 LOCAL FUNCTION _launchOnSurface {
@@ -36,6 +36,26 @@ LOCAL FUNCTION _launchSolidStageFrac {
     LOCAL frac IS LAUNCH_SOLID_STAGE_FRAC.
     IF frac > 1 { SET frac TO frac / 100. }
     RETURN MAX(0, MIN(1, frac)).
+}
+
+LOCAL FUNCTION _launchSetPhase {
+    PARAMETER next.
+    LOCAL current IS stateGet("phase", "").
+    stateSet("phase", next).
+    mLog("Phase: " + current + " -> " + next).
+    archivePhaseLog().
+}
+
+LOCAL FUNCTION _vacuumLaunchCompletePhase {
+    IF launchSeq:CONTAINS("PARK") {
+        _launchSetPhase("PARK").
+        RETURN.
+    }
+    IF launchSeq:CONTAINS("RETURN_SETUP") {
+        _launchSetPhase("RETURN_SETUP").
+        RETURN.
+    }
+    nextPhase(launchSeq).
 }
 
 LOCAL _stagingArmed IS FALSE.
@@ -95,7 +115,156 @@ LOCAL FUNCTION _badAscentTrajectory {
     RETURN SHIP:APOAPSIS < 10000.
 }
 
+LOCAL FUNCTION _launchRunPostStageHook {
+    LOCAL postStageHook IS stateGet("post_stage_hook", ""):TRIM.
+    IF postStageHook <> "" {
+        IF EXISTS(postStageHook) {
+            mLog("Running post-stage hook: " + postStageHook + ".").
+            RUNPATH(postStageHook).
+        } ELSE {
+            mLogWarn("Post-stage hook not found: " + postStageHook + ".").
+        }
+    }
+}
+
+LOCAL FUNCTION _vacuumTargetOrbitalVelocity {
+    LOCAL targetRadius IS SHIP:BODY:RADIUS + PARKING_ALT.
+    RETURN SQRT(SHIP:BODY:MU / targetRadius).
+}
+
+LOCAL FUNCTION _vacuumAscentPitch {
+    PARAMETER targetVel.
+    LOCAL speedFrac IS SHIP:VELOCITY:ORBIT:MAG / MAX(1, targetVel).
+    SET speedFrac TO MAX(0, MIN(1, speedFrac)).
+
+    LOCAL pitch IS 90 * (1 - speedFrac).
+    IF SHIP:VERTICALSPEED < 10 AND SHIP:APOAPSIS < PARKING_ALT * 0.95 {
+        SET pitch TO MAX(pitch, 20).
+    }
+    IF SHIP:VERTICALSPEED < 0 AND SHIP:APOAPSIS < PARKING_ALT {
+        SET pitch TO MAX(pitch, 45).
+    }
+    RETURN MAX(0, MIN(90, pitch)).
+}
+
+LOCAL FUNCTION _logVacuumAscentTelemetry {
+    PARAMETER pitchAngle.
+    mLog("Vacuum ascent: radar="
+        + ROUND(ALT:RADAR, 0) + "m Ap="
+        + ROUND(SHIP:APOAPSIS / 1000, 2) + "km pitch="
+        + ROUND(pitchAngle, 1) + "deg vOrb="
+        + ROUND(SHIP:VELOCITY:ORBIT:MAG, 1) + "m/s.").
+}
+
+GLOBAL FUNCTION phaseVacuumLaunch {
+    IF _launchHasAtmosphere() {
+        mLogError("phaseVacuumLaunch called on an atmospheric body; refusing.").
+        RETURN.
+    }
+
+    LOCAL clearAlt IS 150.
+    LOCAL targetVel IS _vacuumTargetOrbitalVelocity().
+    LOCAL nextTelemetry IS TIME:SECONDS.
+
+    mLog("Vacuum ascent armed. Alt=" + ROUND(PARKING_ALT / 1000, 1)
+        + "km inc=" + LAUNCH_INCLINATION
+        + " deg az=" + LAUNCH_AZIMUTH
+        + " deg targetV=" + ROUND(targetVel, 1) + "m/s.").
+
+    IF NOT _launchOnSurface() {
+        mLogWarn("Vacuum LAUNCH entered while already " + SHIP:STATUS
+            + "; resuming ascent guidance.").
+        IF stateGetNum("launch_time", 0) = 0 {
+            stateSet("launch_time", TIME:SECONDS).
+        }
+        armAscentStaging().
+    } ELSE {
+        stateSet("launch_time", TIME:SECONDS).
+        stateSet("launch_site_lat", SHIP:GEOPOSITION:LAT).
+        stateSet("launch_site_lng", SHIP:GEOPOSITION:LNG).
+        stateSet("launch_vs_nonpos_logged", "false").
+
+        LOCK THROTTLE TO 0.
+        LOCK STEERING TO SHIP:UP:VECTOR.
+        mLog("Press ABORT within 5s to hold launch.").
+        HUDTEXT("T-5: ABORT to hold", 5, 2, 16, YELLOW, FALSE).
+        LOCAL tEnd IS TIME:SECONDS + 5.
+        WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT.
+        IF ABORT {
+            mLog("Launch hold — operator abort.").
+            LOCK THROTTLE TO 0.
+            UNLOCK THROTTLE.
+            UNLOCK STEERING.
+            RETURN.
+        }
+        countdown(3).
+
+        IF ABORT OR stateGet("phase", "") = "ABORT" {
+            mLogWarn("Vacuum launch countdown interrupted by abort.").
+            LOCK THROTTLE TO 0.
+            UNLOCK THROTTLE.
+            UNLOCK STEERING.
+            RETURN.
+        }
+
+        STAGE.
+        mLog("Vacuum launch — STAGE fired.").
+        HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
+        WAIT 0.5.
+        _launchRunPostStageHook().
+        armAscentStaging().
+    }
+
+    LOCK STEERING TO SHIP:UP:VECTOR.
+    LOCK THROTTLE TO 1.0.
+    mLog("Vacuum ascent clearing terrain to " + clearAlt + "m AGL.").
+    UNTIL ALT:RADAR > clearAlt OR SHIP:APOAPSIS >= PARKING_ALT OR ABORT {
+        IF TIME:SECONDS >= nextTelemetry {
+            _logVacuumAscentTelemetry(90).
+            SET nextTelemetry TO TIME:SECONDS + 5.
+        }
+        WAIT 0.1.
+    }
+
+    LOCAL currentPitch IS 90.
+    UNTIL SHIP:APOAPSIS >= PARKING_ALT OR ABORT {
+        SET currentPitch TO _vacuumAscentPitch(targetVel).
+        LOCK STEERING TO HEADING(LAUNCH_AZIMUTH, currentPitch).
+        IF TIME:SECONDS >= nextTelemetry {
+            _logVacuumAscentTelemetry(currentPitch).
+            SET nextTelemetry TO TIME:SECONDS + 5.
+        }
+        WAIT 0.1.
+    }
+
+    LOCK THROTTLE TO 0.
+    IF ABORT {
+        mLogWarn("Vacuum ascent aborted; holding launch phase.").
+        UNLOCK THROTTLE.
+        RETURN.
+    }
+
+    mLog("Vacuum ascent cutoff: Ap="
+        + ROUND(SHIP:APOAPSIS / 1000, 2) + "km, planning circularization.").
+    HUDTEXT("Vacuum ascent cutoff", 3, 2, 15, GREEN, FALSE).
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+
+    planCircularize().
+    LOCAL success IS executeManeuver().
+    IF NOT success {
+        mLogWarn("Vacuum circularization did not complete; remaining in LAUNCH.").
+        RETURN.
+    }
+    _vacuumLaunchCompletePhase().
+}
+
 GLOBAL FUNCTION phaseLaunch {
+    IF NOT _launchHasAtmosphere() {
+        phaseVacuumLaunch().
+        RETURN.
+    }
+
     mLog("Configuring MechJeb ascent...").
 
     IF NOT ADDONS:MJ:AVAILABLE {
@@ -218,15 +387,7 @@ GLOBAL FUNCTION phaseLaunch {
     mLog("Launch — STAGE fired.").
     HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
     WAIT 0.5.
-    LOCAL postStageHook IS stateGet("post_stage_hook", ""):TRIM.
-    IF postStageHook <> "" {
-        IF EXISTS(postStageHook) {
-            mLog("Running post-stage hook: " + postStageHook + ".").
-            RUNPATH(postStageHook).
-        } ELSE {
-            mLogWarn("Post-stage hook not found: " + postStageHook + ".").
-        }
-    }
+    _launchRunPostStageHook().
 
     armAscentStaging().
 
@@ -428,14 +589,12 @@ GLOBAL FUNCTION armAscentStaging {
         // needs-stage stays true forever and would machine-gun
         // STAGE through chute/decoupler stages.
         IF STAGE:NUMBER <= 0 { RETURN. }
-        IF NOT ADDONS:MJ:AVAILABLE { RETURN. }
         // Allow staging during any ascent phase even if MJ2 dropped
         // out mid-circularization (e.g. methane booster may burn past
         // the gravity turn all the way to near-orbit; MJ2 disables
         // itself when it detects no thrust, but we still need to
         // separate the spent stage and ignite the upper stage).
-        IF NOT ADDONS:MJ:ASCENT:ENABLED
-                AND NOT bootLibAscentWatchPhase() { RETURN. }
+        IF NOT bootLibAscentWatchPhase() { RETURN. }
         IF _noThrustStages >= 2 {
             mLogError("Two stagings without thrust — no engines"
                 + " left; disarming ascent staging.").
@@ -462,7 +621,10 @@ GLOBAL FUNCTION armAscentStaging {
             // MJ2 may have disabled itself when the booster flamed
             // out — re-enable so it finishes the circularization with
             // the freshly-ignited upper stage.
-            IF NOT ADDONS:MJ:ASCENT:ENABLED AND bootLibAscentWatchPhase() {
+            IF _launchHasAtmosphere()
+                    AND ADDONS:MJ:AVAILABLE
+                    AND NOT ADDONS:MJ:ASCENT:ENABLED
+                    AND bootLibAscentWatchPhase() {
                 SET ADDONS:MJ:ASCENT:ENABLED TO TRUE.
                 mLog("MJ2 ascent re-enabled after mid-circ staging.").
             }

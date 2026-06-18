@@ -18,7 +18,7 @@ GLOBAL FUNCTION dependencyLibs {
         "landing", LIST("landing_main"),
         "landing_site", LIST(),
         "abort", LIST(),
-        "launch", LIST("orbit", "countdown", "utils"),
+        "launch", LIST("orbit", "countdown", "utils", "maneuver"),
         "hop", LIST("utils"),
         "maneuver", LIST("countdown", "solar", "orbit_nodes"),
         "prelaunch", LIST("flightplan"),
