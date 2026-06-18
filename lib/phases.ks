@@ -356,10 +356,18 @@ LOCAL FUNCTION _coastHealthPoll {
         WAIT dT.
         SET charge TO shipPowerFraction().
         IF charge >= fullEc {
+            LOCAL flow IS shipSolarFlow().
+            IF flow = 0 {
+                mLogWarn("STATS coast health label=" + label
+                    + " status=full-no-flow charge="
+                    + ROUND(charge * 100, 1)
+                    + "pct flow=" + ROUND(flow, 2)).
+                RETURN FALSE.
+            }
             mLogWarn("STATS coast health label=" + label
                 + " status=" + statusFull
                 + " charge=" + ROUND(charge * 100, 1)
-                + "pct flow=" + ROUND(shipSolarFlow(), 2)).
+                + "pct flow=" + ROUND(flow, 2)).
             RETURN TRUE.
         }
     }
@@ -388,7 +396,7 @@ GLOBAL FUNCTION coastHealthCheck {
         RETURN TRUE.
     }
 
-    mLogWarn(label + ": batteries not charging at "
+    mLogWarn(label + ": solar flow/charging unhealthy at "
         + ROUND(shipPowerFraction() * 100, 1)
         + "%; forcing solar reorient.").
     orientForSolar(TRUE, TRUE, TRUE).

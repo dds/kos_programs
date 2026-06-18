@@ -22,27 +22,17 @@ LOCAL MIDCOURSE_REFINE_FRACTION_DEFAULT IS 0.5.
 LOCAL MIDCOURSE_REFINE_MIN_LEAD_DEFAULT IS 300.
 LOCAL MIDCOURSE_REFINE_MARGIN_DEFAULT IS 60.
 
-LOCAL FUNCTION _refreshSolarCoast {
+LOCAL FUNCTION _enterSolarCoast {
     PARAMETER label IS "COAST".
     SET SAS TO TRUE.
     UNLOCK STEERING.
-    IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
-            OR SHIP:STATUS = "SUB_ORBITAL")
-            AND PHASES_HAS_SOLAR {
-        orientForSolar(TRUE, TRUE, TRUE).
-    } ELSE {
-        trySolarOrient().
-    }
     tryCommandCoreHibernate(TRUE).
-    RETURN trySolarHoldTick(-1).
-}
-
-LOCAL FUNCTION _enterSolarCoast {
-    PARAMETER label IS "COAST".
-    LOCAL solarRef IS _refreshSolarCoast(label).
+    LOCAL solarRef IS trySolarHoldTick(-1).
     mLog(label + ": solar coast attitude armed.").
     IF NOT coastHealthCheck(label + " entry") {
         mLogWarn(label + ": entry health check failed; remaining at 1x.").
+    } ELSE {
+        SET solarRef TO trySolarHoldTick(-1).
     }
     RETURN solarRef.
 }
@@ -116,12 +106,12 @@ LOCAL FUNCTION _waitUntilOrSOI {
                     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
                     WAIT 1.
                 }
-                SET solarRef TO _refreshSolarCoast("SOI coast midpoint").
-                mLog("SOI coast: midpoint solar attitude refreshed.").
                 IF SHIP:BODY <> targetBody
-                        AND _solarCoastCanWarp(solarRef, "SOI coast")
                         AND coastHealthCheck("SOI coast midpoint") {
-                    coastAutoWarp(targetUt, "SOI coast", alarmId).
+                    SET solarRef TO trySolarHoldTick(-1).
+                    IF _solarCoastCanWarp(solarRef, "SOI coast") {
+                        coastAutoWarp(targetUt, "SOI coast", alarmId).
+                    }
                 }
             }
         } ELSE {
