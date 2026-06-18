@@ -24,6 +24,8 @@
 //   parking_alt         - moon parking orbit altitude in meters
 //   inclination         - moon launch inclination in degrees
 //   launch_inclination  - alias for inclination
+//   azimuth             - moon launch azimuth in degrees
+//   launch_azimuth      - alias for azimuth
 //   pe / reentry_pe     - Kerbin return periapsis in meters
 //   reentry_dir         - "retrograde" or "prograde"
 //   ksc_target          - true/1 to enable KSC targeting
@@ -50,6 +52,12 @@ IF opts:HASKEY("inclination") {
 }
 IF opts:HASKEY("launch_inclination") {
     SET SURFACE_RETURN_INCLINATION TO opts["launch_inclination"].
+}
+IF opts:HASKEY("azimuth") {
+    SET SURFACE_RETURN_AZIMUTH TO opts["azimuth"].
+}
+IF opts:HASKEY("launch_azimuth") {
+    SET SURFACE_RETURN_AZIMUTH TO opts["launch_azimuth"].
 }
 
 IF opts:HASKEY("pe") {

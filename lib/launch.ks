@@ -26,6 +26,12 @@ LOCAL FUNCTION _launchHasAtmosphere {
     RETURN SHIP:BODY:ATM:HEIGHT > 0.
 }
 
+LOCAL FUNCTION _launchOnSurface {
+    RETURN SHIP:STATUS = "PRELAUNCH"
+        OR SHIP:STATUS = "LANDED"
+        OR SHIP:STATUS = "SPLASHED".
+}
+
 LOCAL FUNCTION _launchSolidStageFrac {
     LOCAL frac IS LAUNCH_SOLID_STAGE_FRAC.
     IF frac > 1 { SET frac TO frac / 100. }
@@ -101,7 +107,7 @@ GLOBAL FUNCTION phaseLaunch {
     mLog("MechJeb core running: " + ADDONS:MJ:CORE:RUNNING).
 
     LOCAL asc IS ADDONS:MJ:ASCENT.
-    SET asc:ENABLED               TO TRUE.
+    SET asc:ENABLED               TO FALSE.
     SET asc:DESIREDALTITUDE       TO PARKING_ALT.
     SET asc:DESIREDINCLINATION    TO LAUNCH_INCLINATION.
     SET asc:AUTOSTAGE             TO FALSE.
@@ -166,27 +172,48 @@ GLOBAL FUNCTION phaseLaunch {
         PRESERVE.
     }
 
+    IF NOT _launchOnSurface() {
+        mLogWarn("LAUNCH entered while already " + SHIP:STATUS
+            + "; resuming ascent without countdown or staging.").
+        IF stateGetNum("launch_time", 0) = 0 {
+            stateSet("launch_time", TIME:SECONDS).
+        }
+        SET asc:ENABLED TO TRUE.
+        armAscentStaging().
+        nextPhase(launchSeq).
+        RETURN.
+    }
+
     stateSet("launch_time", TIME:SECONDS).
     stateSet("launch_site_lat", SHIP:GEOPOSITION:LAT).
     stateSet("launch_site_lng", SHIP:GEOPOSITION:LNG).
     stateSet("launch_vs_nonpos_logged", "false").
 
+    LOCK THROTTLE TO 0.
     mLog("Press ABORT within 5s to hold launch.").
     HUDTEXT("T-5: ABORT to hold", 5, 2, 16, YELLOW, FALSE).
     LOCAL tEnd IS TIME:SECONDS + 5.
     WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT.
     IF ABORT {
         mLog("Launch hold — operator abort.").
-        SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
+        SET asc:ENABLED TO FALSE.
+        LOCK THROTTLE TO 0.
+        UNLOCK THROTTLE.
         RETURN.
     }
     countdown(3).
 
     IF ABORT OR stateGet("phase", "") = "ABORT" {
         mLogWarn("Launch countdown interrupted by abort; holding ABORT phase.").
+        SET asc:ENABLED TO FALSE.
+        LOCK THROTTLE TO 0.
+        UNLOCK THROTTLE.
         RETURN.
     }
 
+    SET asc:ENABLED TO TRUE.
+    UNLOCK THROTTLE.
+    WAIT 0.1.
     STAGE.
     mLog("Launch — STAGE fired.").
     HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
