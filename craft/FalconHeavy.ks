@@ -56,6 +56,7 @@ GLOBAL FUNCTION fhBuildPhaseMap {
 LOCAL FUNCTION _fhLibsForBand {
     PARAMETER band.
     LOCAL roots IS bootLibBandRoots(band).
+    missionAppendUnique(roots, LIST("solar")).
     missionAppendUnique(roots, missionTypeConditionalRoots(band)).
     LOCAL extras IS missionExtraLibs().
     IF band <> "LAUNCH" {

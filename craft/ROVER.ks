@@ -10,8 +10,8 @@ GLOBAL FUNCTION bootVehicleLibs {
     LOCAL cachedLibs IS bootCachedVehicleLibs().
     IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     RETURN missionSequenceLibs(
-        missionLibsForPhases(_seq, LIST("utils")),
-        LIST("utils")
+        missionLibsForPhases(_seq, LIST("utils", "solar")),
+        LIST("utils", "solar")
     ).
 }
 

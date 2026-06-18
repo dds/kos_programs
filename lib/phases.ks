@@ -17,6 +17,7 @@ GLOBAL COAST_WARP_10D_LIMIT IS 216000.
 GLOBAL COAST_WARP_50D_LIMIT IS 1080000.
 GLOBAL COAST_WARP_MAX_RATE IS 6.
 GLOBAL COAST_HEALTH_CHECK IS 1.
+GLOBAL PHASES_HAS_SOLAR IS FALSE.
 
 GLOBAL phaseShouldYield IS FALSE.
 GLOBAL launchSeq IS LIST().
@@ -93,6 +94,7 @@ GLOBAL FUNCTION runPhases {
 
     UNTIL FALSE {
         LOCAL phase IS stateGet("phase", "DONE").
+        LOCAL handled IS FALSE.
         // A handler returning without advancing, yielding, or
         // rebooting would spin here silently (e.g. a sticky ABORT
         // flag making early-returns). Three strikes -> hold.
@@ -114,10 +116,13 @@ GLOBAL FUNCTION runPhases {
         IF phaseMap:HASKEY(phase) {
             phaseMap[phase]:CALL().
             IF phaseShouldYield { RETURN. }
-        } ELSE IF phase = "DONE" {
+            SET handled TO TRUE.
+        }
+        IF NOT handled AND phase = "DONE" {
             phaseDone().
             RETURN.
-        } ELSE {
+        }
+        IF NOT handled {
             LOCAL loadedBand IS stateGet("lib_band", "").
             LOCAL requiredBand IS bootLibBandForPhase(phase, "").
             IF requiredBand = loadedBand {
@@ -125,7 +130,9 @@ GLOBAL FUNCTION runPhases {
                 IF phaseMap:HASKEY(phase) {
                     phaseMap[phase]:CALL().
                     IF phaseShouldYield { RETURN. }
-                } ELSE {
+                    SET handled TO TRUE.
+                }
+                IF NOT handled {
                     mLogError("Phase " + phase + " handler missing in loaded band " + loadedBand + ".").
                     PRINT " ".
                     PRINT "  PHASE HANDLER MISSING: " + phase.
@@ -218,7 +225,8 @@ GLOBAL FUNCTION kacEnsureAlarm {
     PARAMETER almUt.
     PARAMETER almNote.
     IF NOT ADDONS:KAC:AVAILABLE { RETURN "". }
-    FOR a IN LISTALARMS("All") {
+    LOCAL alarms IS LISTALARMS("All").
+    FOR a IN alarms {
         IF a:NAME = almName {
             IF ABS(a:TIME - almUt) < 60 { RETURN a:ID. }
             DELETEALARM(a:ID).
@@ -258,14 +266,15 @@ GLOBAL FUNCTION warpKacGuarded {
         mLogWarn(label + ": warp skipped; KAC unavailable.").
         RETURN FALSE.
     }
+    LOCAL alarms IS LISTALARMS("All").
     IF alarmId <> "" {
-        FOR a IN LISTALARMS("All") {
+        FOR a IN alarms {
             IF a:ID = alarmId { RETURN TRUE. }
         }
         mLogWarn(label + ": warp skipped; KAC alarm missing.").
         RETURN FALSE.
     }
-    FOR a IN LISTALARMS("All") {
+    FOR a IN alarms {
         IF a:TIME > TIME:SECONDS { RETURN TRUE. }
     }
     mLogWarn(label + ": warp skipped; no future KAC alarm set.").
@@ -334,33 +343,48 @@ GLOBAL FUNCTION coastEnsureHealthAlarm {
     RETURN alarmId.
 }
 
+LOCAL FUNCTION _coastHealthPoll {
+    PARAMETER label.
+    PARAMETER statusFull.
+    PARAMETER statusCharging.
+    PARAMETER fullEc.
+    PARAMETER dT.
+    PARAMETER minDelta.
+
+    LOCAL charge IS shipPowerFraction().
+    IF charge >= fullEc {
+        WAIT dT.
+        SET charge TO shipPowerFraction().
+        IF charge >= fullEc {
+            mLogWarn("STATS coast health label=" + label
+                + " status=" + statusFull
+                + " charge=" + ROUND(charge * 100, 1)
+                + "pct flow=" + ROUND(shipSolarFlow(), 2)).
+            RETURN TRUE.
+        }
+    }
+    IF shipBatteriesCharging(dT, minDelta) {
+        SET charge TO shipPowerFraction().
+        mLogWarn("STATS coast health label=" + label
+            + " status=" + statusCharging
+            + " charge=" + ROUND(charge * 100, 1)
+            + "pct flow=" + ROUND(shipSolarFlow(), 2)).
+        RETURN TRUE.
+    }
+    RETURN FALSE.
+}
+
 GLOBAL FUNCTION coastHealthCheck {
     PARAMETER label IS "coast".
 
     IF COAST_HEALTH_CHECK <= 0 { RETURN TRUE. }
-    LOCAL haveBootLibRan IS FALSE.
-    IF DEFINED BOOT_LIB_RAN { SET haveBootLibRan TO TRUE. }
-    IF NOT haveBootLibRan { RETURN TRUE. }
-    IF NOT BOOT_LIB_RAN:CONTAINS("solar") { RETURN TRUE. }
+    IF NOT PHASES_HAS_SOLAR { RETURN TRUE. }
     IF NOT shipHasSolarPanels() { RETURN TRUE. }
 
     LOCAL fullEc IS SOLAR_CHARGE_FULL_EC.
     LOCAL dT IS SOLAR_CHARGE_CHECK_DT.
     LOCAL minDelta IS SOLAR_CHARGE_CHECK_MIN_DELTA.
-    IF shipPowerFraction() >= fullEc {
-        WAIT dT.
-        IF shipPowerFraction() >= fullEc {
-            mLogWarn("STATS coast health label=" + label
-                + " status=full charge="
-                + ROUND(shipPowerFraction() * 100, 1)
-                + "pct flow=" + ROUND(shipSolarFlow(), 2)).
-            RETURN TRUE.
-        }
-    } ELSE IF shipBatteriesCharging(dT, minDelta) {
-        mLogWarn("STATS coast health label=" + label
-            + " status=charging charge="
-            + ROUND(shipPowerFraction() * 100, 1)
-            + "pct flow=" + ROUND(shipSolarFlow(), 2)).
+    IF _coastHealthPoll(label, "full", "charging", fullEc, dT, minDelta) {
         RETURN TRUE.
     }
 
@@ -368,21 +392,8 @@ GLOBAL FUNCTION coastHealthCheck {
         + ROUND(shipPowerFraction() * 100, 1)
         + "%; forcing solar reorient.").
     orientForSolar(TRUE, TRUE, TRUE).
-    WAIT 1.
-    IF shipPowerFraction() >= fullEc {
-        WAIT dT.
-        IF shipPowerFraction() >= fullEc {
-            mLogWarn("STATS coast health label=" + label
-                + " status=reoriented-full charge="
-                + ROUND(shipPowerFraction() * 100, 1)
-                + "pct flow=" + ROUND(shipSolarFlow(), 2)).
-            RETURN TRUE.
-        }
-    } ELSE IF shipBatteriesCharging(dT, minDelta) {
-        mLogWarn("STATS coast health label=" + label
-            + " status=reoriented-charging charge="
-            + ROUND(shipPowerFraction() * 100, 1)
-            + "pct flow=" + ROUND(shipSolarFlow(), 2)).
+    IF _coastHealthPoll(label, "reoriented-full", "reoriented-charging",
+            fullEc, dT, minDelta) {
         RETURN TRUE.
     }
 
@@ -398,8 +409,7 @@ GLOBAL FUNCTION coastHealthCheck {
 GLOBAL FUNCTION trySolarOrient {
     IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
             OR SHIP:STATUS = "SUB_ORBITAL")
-            AND DEFINED BOOT_LIB_RAN
-            AND BOOT_LIB_RAN:CONTAINS("solar") {
+            AND PHASES_HAS_SOLAR {
         orientForSolar().
     }
 }
@@ -411,8 +421,7 @@ GLOBAL FUNCTION trySolarHoldTick {
     PARAMETER refFlow.
     IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
             OR SHIP:STATUS = "SUB_ORBITAL")
-            AND DEFINED BOOT_LIB_RAN
-            AND BOOT_LIB_RAN:CONTAINS("solar") {
+            AND PHASES_HAS_SOLAR {
         RETURN solarHoldTick(refFlow).
     }
     RETURN refFlow.
@@ -423,8 +432,7 @@ GLOBAL FUNCTION tryCommandCoreHibernate {
     IF NOT enabled { RETURN. }
     IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
             OR SHIP:STATUS = "SUB_ORBITAL")
-            AND DEFINED BOOT_LIB_RAN
-            AND BOOT_LIB_RAN:CONTAINS("solar") {
+            AND PHASES_HAS_SOLAR {
         commandCoresHibernate(TRUE).
     }
 }

@@ -390,7 +390,7 @@ GLOBAL FUNCTION bootResumeOrManual {
             // Returning to a parked ship from the tracking
             // station: re-acquire the solar attitude and hold
             // (cached axis — quick aim, no search).
-            IF SHIP:STATUS = "ORBITING" AND BOOT_LIB_RAN:CONTAINS("solar") {
+            IF SHIP:STATUS = "ORBITING" AND PHASES_HAS_SOLAR {
                 orientForSolar().
             }
         } ELSE IF phase = "ABORT" {
@@ -569,6 +569,9 @@ GLOBAL FUNCTION bootLibLoadList {
     PARAMETER roots.
     FOR libName IN bootLibResolve(roots) {
         LOCAL archivePath IS bootArchivePath(libName).
+        IF libName = "solar" AND DEFINED PHASES_HAS_SOLAR {
+            SET PHASES_HAS_SOLAR TO TRUE.
+        }
         IF libName:CONTAINS("/") {
             bootLibSync(libName).
             RUNPATH(bootCorePath(libName)).

@@ -48,7 +48,7 @@ LOCAL FUNCTION _fallbackLibs {
         "lib_navigation", "countdown", "maneuver", "maneuver_transfer", "inclination",
         "orbit", "deorbit_targeting", "landing",
         "lambert", "maneuver_intersystem", "maneuver_rendezvous",
-        "molniya", "payload_ops", "science", "observe", "utils", "config"
+        "molniya", "payload_ops", "science", "observe", "utils", "config", "solar"
     ).
 }
 

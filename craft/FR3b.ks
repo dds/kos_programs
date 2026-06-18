@@ -43,6 +43,7 @@ GLOBAL FUNCTION fr3BuildPhaseMap {
 LOCAL FUNCTION _fr3LibsForBand {
     PARAMETER band.
     LOCAL roots IS bootLibBandRoots(band).
+    missionAppendUnique(roots, LIST("solar")).
     missionAppendUnique(roots, missionTypeConditionalRoots(band)).
     missionAppendUnique(roots, missionExtraLibs()).
     RETURN bootLibResolve(roots).

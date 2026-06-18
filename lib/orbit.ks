@@ -94,8 +94,7 @@ GLOBAL FUNCTION waitForSOI {
     }
     LOCAL solarRef IS trySolarHoldTick(-1).
     IF soiUt > TIME:SECONDS {
-        IF DEFINED BOOT_LIB_RAN
-                AND BOOT_LIB_RAN:CONTAINS("solar")
+        IF PHASES_HAS_SOLAR
                 AND shipHasSolarPanels()
                 AND solarRef <= 0 {
             mLogWarn("SOI coast: auto-warp skipped; no solar flow after orient.").

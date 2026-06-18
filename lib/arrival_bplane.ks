@@ -85,8 +85,7 @@ LOCAL FUNCTION _bplaneSolarHandoff {
     UNLOCK STEERING.
     IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
             OR SHIP:STATUS = "SUB_ORBITAL")
-            AND DEFINED BOOT_LIB_RAN
-            AND BOOT_LIB_RAN:CONTAINS("solar") {
+            AND PHASES_HAS_SOLAR {
         orientForSolar(TRUE, TRUE, TRUE).
         trySolarHoldTick(-1).
         tryCommandCoreHibernate(TRUE).

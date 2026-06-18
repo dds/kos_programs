@@ -28,8 +28,7 @@ LOCAL FUNCTION _refreshSolarCoast {
     UNLOCK STEERING.
     IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
             OR SHIP:STATUS = "SUB_ORBITAL")
-            AND DEFINED BOOT_LIB_RAN
-            AND BOOT_LIB_RAN:CONTAINS("solar") {
+            AND PHASES_HAS_SOLAR {
         orientForSolar(TRUE, TRUE, TRUE).
     } ELSE {
         trySolarOrient().
@@ -51,8 +50,7 @@ LOCAL FUNCTION _enterSolarCoast {
 LOCAL FUNCTION _solarCoastCanWarp {
     PARAMETER refFlow.
     PARAMETER label IS "COAST".
-    IF DEFINED BOOT_LIB_RAN
-            AND BOOT_LIB_RAN:CONTAINS("solar")
+    IF PHASES_HAS_SOLAR
             AND shipHasSolarPanels()
             AND refFlow <= 0 {
         mLogWarn(label + ": auto-warp skipped; no solar flow after orient.").
