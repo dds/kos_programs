@@ -12,6 +12,9 @@
 // landing_brake.ks, and landing_terminal.ks.
 // ============================================================
 
+@CLOBBERBUILTINS ON.
+@LAZYGLOBAL OFF.
+
 GLOBAL landingAbortFlag IS FALSE.
 GLOBAL landingSteeringTarget IS V(0, 0, 0).
 GLOBAL landingActiveTrack IS "".
