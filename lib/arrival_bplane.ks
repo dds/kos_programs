@@ -520,7 +520,6 @@ GLOBAL FUNCTION phaseBplane {
         + " inc=" + ROUND(meas["inc"], 2)
         + " lan=" + ROUND(meas["lan"], 2)
         + " burns=" + burns).
-    _bplaneSolarHandoff("BPLANE").
     nextPhase(xferSeq).
 }
 
