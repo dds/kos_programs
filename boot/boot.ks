@@ -181,19 +181,10 @@ IF isRoleScript {
 IF HAS_LINK {
     bootLibLoad("recovery").
 }
-LOCAL skipTailSolar IS FALSE.
-LOCAL tailSolarPhase IS stateGet("phase", "").
-LOCAL tailSolarBand IS stateGet("lib_band", "").
-IF tailSolarPhase = "LAND" OR tailSolarPhase = "LAND_ASSIST"
-        OR tailSolarPhase = "LAND_DEORBIT"
-        OR tailSolarPhase = "AEROBRAKE"
-        OR tailSolarPhase = "DESCENT"
-        OR tailSolarBand = "LANDING"
-        OR tailSolarBand = "LAND_DEORBIT"
-        OR tailSolarBand = "AEROBRAKE" {
-    SET skipTailSolar TO TRUE.
-}
-IF HOMECONNECTION:ISCONNECTED AND NOT skipTailSolar
+LOCAL tailSolarInSpace IS SHIP:STATUS = "ORBITING"
+    OR SHIP:STATUS = "ESCAPING"
+    OR SHIP:STATUS = "SUB_ORBITAL".
+IF HOMECONNECTION:ISCONNECTED AND tailSolarInSpace
         AND EXISTS("0:/cmd/orientForSolar.ks") {
     RUNPATH("0:/cmd/orientForSolar.ks").
 }
