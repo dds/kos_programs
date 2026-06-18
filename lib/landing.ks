@@ -500,13 +500,25 @@ LOCAL FUNCTION _landingCoastMccBurnVector {
     }
 
     LOCAL travelDir IS VXCL(upVec, horizontalVel):NORMALIZED.
-    LOCAL correctionVec IS ((0 - trajErr["ALONG"]) * travelDir)
+    LOCAL desiredAlong IS LANDING_COAST_MCC_LEAD_DIST.
+    LOCAL correctionVec IS ((desiredAlong - trajErr["ALONG"]) * travelDir)
         + ((0 - trajErr["CROSS_SIGNED"]) * trajErr["CROSS_AXIS"]).
     LOCAL burnVec IS VXCL(upVec, correctionVec).
     IF burnVec:MAG < 1 {
         RETURN LEXICON("VALID", FALSE, "VEC", upVec, "MAG", burnVec:MAG).
     }
     RETURN LEXICON("VALID", TRUE, "VEC", burnVec:NORMALIZED, "MAG", burnVec:MAG).
+}
+
+LOCAL FUNCTION _landingCoastMccError {
+    PARAMETER trajErr.
+    LOCAL alongErr IS trajErr["ALONG"] - LANDING_COAST_MCC_LEAD_DIST.
+    LOCAL crossErr IS trajErr["CROSS_SIGNED"].
+    RETURN LEXICON(
+        "DIST", SQRT(alongErr * alongErr + crossErr * crossErr),
+        "ALONG_ERR", alongErr,
+        "CROSS_ERR", crossErr
+    ).
 }
 
 LOCAL FUNCTION _landingSetState {
@@ -606,8 +618,9 @@ LOCAL FUNCTION _landingCoastTick {
             AND nextBrakeEta < 999999
             AND nextBrakeEta > LANDING_COAST_MCC_MIN_BRAKE_ETA {
         LOCAL trajErr IS _landingTrajError(ctx).
+        LOCAL mccErr IS _landingCoastMccError(trajErr).
         IF trajErr["FOUND"]
-                AND trajErr["DIST"] > LANDING_COAST_MCC_TRIGGER_DIST {
+                AND mccErr["DIST"] > LANDING_COAST_MCC_TRIGGER_DIST {
             _landingSetState(ctx, "COAST_MCC",
                 "impact miss before brake gate").
             RETURN.
@@ -677,9 +690,10 @@ LOCAL FUNCTION _landingCoastMccTick {
         _landingSetState(ctx, "COAST", "MCC lost trajectory prediction").
         RETURN.
     }
-    IF trajErr["DIST"] <= LANDING_COAST_MCC_ACCEPT_DIST {
+    LOCAL mccErr IS _landingCoastMccError(trajErr).
+    IF mccErr["DIST"] <= LANDING_COAST_MCC_ACCEPT_DIST {
         _landingSetThrottle(ctx, 0).
-        _landingSetState(ctx, "COAST", "MCC impact corrected").
+        _landingSetState(ctx, "COAST", "MCC lead impact corrected").
         RETURN.
     }
 
@@ -720,7 +734,9 @@ LOCAL FUNCTION _landingCoastMccTick {
 
     _landingHudText(ctx, "COAST MCC trErr=" + ROUND(trajErr["DIST"],0)
         + " along=" + ROUND(trajErr["ALONG"],0)
+        + " leadErr=" + ROUND(mccErr["ALONG_ERR"],0)
         + " cross=" + ROUND(trajErr["CROSS_SIGNED"],0)
+        + " mccErr=" + ROUND(mccErr["DIST"],0)
         + " eta=" + ROUND(nextBrakeEta,0)
         + " aErr=" + ROUND(alignErr,1)
         + " upDot=" + ROUND(upDot,3)
