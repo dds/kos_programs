@@ -104,7 +104,7 @@ GLOBAL FUNCTION phaseHop {
     }
 
     stateSet("phase", "HOP").
-    stateSet("lib_band", "LAUNCH").
+    stateSet("lib_band", "HOP").
     stateSet("reload_required", "false").
     IF stateGetNum("launch_time", 0) = 0 {
         stateSet("launch_time", ROUND(TIME:SECONDS)).
@@ -274,7 +274,7 @@ GLOBAL FUNCTION phaseHop {
 
     IF abortedHop {
         stateSet("phase", "HOP").
-        stateSet("lib_band", "LAUNCH").
+        stateSet("lib_band", "HOP").
         stateSet("reload_required", "false").
         PRINT "HOP aborted; holding HOP phase.".
         mLogError("HOP aborted by operator; holding HOP phase. Clear ABORT before resuming.").
