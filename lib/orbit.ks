@@ -135,6 +135,9 @@ GLOBAL FUNCTION waitForSOI {
         SET solarRef TO trySolarHoldTick(solarRef).
         WAIT pollInterval.
     }
+
+    WAIT 2.  // Let physics catch up.
+
     mLog("SOI entered: " + targetBody:NAME).
 
     // Clean up the alarm now that we've arrived.
