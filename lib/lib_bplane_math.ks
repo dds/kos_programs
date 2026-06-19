@@ -10,6 +10,11 @@
 
 GLOBAL ALLOW_GRAVITY_ASSIST IS 0.
 LOCAL _BPLANE_MEASURE_LOGGED IS FALSE.
+LOCAL _BPLANE_OFFPLANE_WARNED IS FALSE.
+
+GLOBAL FUNCTION bplaneResetWarnings {
+    SET _BPLANE_OFFPLANE_WARNED TO FALSE.
+}
 
 LOCAL FUNCTION _bplaneAllowGravityAssist {
     RETURN ALLOW_GRAVITY_ASSIST <> 0.
@@ -217,7 +222,8 @@ GLOBAL FUNCTION targetBplaneVector {
     LOCAL offPlane IS ABS(90 - VANG(nTgt, sHat)).
     IF offPlane > 0.5 {
         SET nTgt TO (nTgt - VDOT(nTgt, sHat) * sHat):NORMALIZED.
-        IF NOT quiet {
+        IF NOT quiet AND NOT _BPLANE_OFFPLANE_WARNED {
+            SET _BPLANE_OFFPLANE_WARNED TO TRUE.
             mLogWarn("BPLANE: requested plane tilted " + ROUND(offPlane, 1)
                 + "deg off the arrival asymptote — using closest"
                 + " achievable plane. Pick a different departure window"
@@ -244,6 +250,7 @@ GLOBAL FUNCTION targetBplaneVector {
         "bt", VDOT(bT, meas["tHat"]),
         "br", VDOT(bT, meas["rHat"]),
         "normal", nTgt,
+        "offPlane", offPlane,
         "bMag", bMagT,
         "bHatMag", bHatT:MAG,
         "dotBT", VDOT(bHatT, meas["tHat"]),

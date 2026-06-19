@@ -46,6 +46,7 @@
 //   BPLANE_PE_TOL  — PE tolerance in m (default 2000)
 //   BPLANE_ANG_TOL — plane tolerance in deg (default 0.5)
 //   BPLANE_LEAD    — seconds from now to the burn (default 300)
+//   BPLANE_OFFPLANE_TOL — max feasible plane/asymptote tilt (default 10)
 //   REFINE_BPLANE_DV_CAP    — max dV per refinement burn (default 10)
 //   REFINE_BPLANE_MAX_BURNS — max refinement burns per phase call (default 6)
 // ============================================================
@@ -63,6 +64,7 @@ GLOBAL BPLANE_PE_TOL IS 2000.
 GLOBAL BPLANE_ANG_TOL IS 0.2.
 GLOBAL BPLANE_LEAD IS 300.
 GLOBAL BPLANE_TARGET IS "".
+GLOBAL BPLANE_OFFPLANE_TOL IS 10.
 GLOBAL REFINE_BPLANE_DV_CAP IS 10.
 GLOBAL REFINE_BPLANE_MAX_BURNS IS 6.
 
@@ -90,14 +92,21 @@ LOCAL FUNCTION _bplaneCorridorError {
         "target", tgt).
 }
 
+LOCAL FUNCTION _bplanePlaneFeasible {
+    PARAMETER err.
+    RETURN err["target"]["offPlane"] <= BPLANE_OFFPLANE_TOL.
+}
+
 LOCAL FUNCTION _bplaneCorridorOk {
     PARAMETER err.
     PARAMETER wantInc.
     PARAMETER peTol.
     PARAMETER angTol.
 
-    RETURN ABS(err["peErr"]) <= peTol
-        AND (wantInc < 0 OR err["planeErr"] <= angTol).
+    IF ABS(err["peErr"]) > peTol { RETURN FALSE. }
+    IF wantInc < 0 { RETURN TRUE. }
+    IF NOT _bplanePlaneFeasible(err) { RETURN TRUE. }
+    RETURN err["planeErr"] <= angTol.
 }
 
 LOCAL FUNCTION _bplanePlanScore {
@@ -106,7 +115,7 @@ LOCAL FUNCTION _bplanePlanScore {
     PARAMETER wantInc.
 
     LOCAL score IS ABS(err["peErr"]).
-    IF wantInc >= 0 {
+    IF wantInc >= 0 AND _bplanePlaneFeasible(err) {
         SET score TO score + err["planeErr"] * targetBody:SOIRADIUS / 90.
     }
     RETURN score.
@@ -141,8 +150,10 @@ LOCAL FUNCTION _bplaneFallbackSearch {
     PARAMETER dvCap.
     PARAMETER currentScore.
     PARAMETER iter.
+    PARAMETER peOnly IS FALSE.
 
     LOCAL axes IS LIST("PROGRADE", "RADIALOUT", "NORMAL").
+    IF peOnly { SET axes TO LIST("PROGRADE", "RADIALOUT"). }
     LOCAL signs IS LIST(1, -1).
     LOCAL steps IS LIST(10.0, 5.0, 2.0, 1.0, 0.5).
 
@@ -337,6 +348,7 @@ GLOBAL FUNCTION planBplaneCorrection {
 
     LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, 0).
     ADD nd.
+    bplaneResetWarnings().
     WAIT 0.02.
 
     LOCAL meas0 IS measureArrival(nd, targetBody).
@@ -359,11 +371,19 @@ GLOBAL FUNCTION planBplaneCorrection {
         }
     }
 
-    // Already in the corridor?
-    LOCAL tgt0 IS targetBplaneVector(targetBody, meas0, wantPe, wantInc, wantLan).
+    LOCAL err0 IS _bplaneCorridorError(targetBody, meas0, wantPe, wantInc, wantLan).
+    LOCAL tgt0 IS err0["target"].
     LOCAL planeErr0 IS VANG(meas0["hHat"], tgt0["normal"]).
-    IF ABS(meas0["pe"] - wantPe) <= peTol
-            AND (wantInc < 0 OR planeErr0 <= angTol) {
+    LOCAL planeMode IS "target-plane".
+    IF wantInc >= 0 AND NOT _bplanePlaneFeasible(err0) {
+        SET planeMode TO "pe-only".
+        mLogWarn("BPLANE: requested capture plane is "
+            + ROUND(tgt0["offPlane"], 1)
+            + "deg off the arrival asymptote; switching to Pe-only targeting.").
+    }
+
+    // Already in the corridor?
+    IF _bplaneCorridorOk(err0, wantInc, peTol, angTol) {
         IF pristineLog <> "" {
             mLog(pristineLog).
         } ELSE {
@@ -384,11 +404,11 @@ GLOBAL FUNCTION planBplaneCorrection {
     LOCAL bestPro IS nd:PROGRADE.
     LOCAL bestRad IS nd:RADIALOUT.
     LOCAL bestNrm IS nd:NORMAL.
-    LOCAL bestScore IS _bplanePlanScore(
-        _bplaneCorridorError(targetBody, meas0, wantPe, wantInc, wantLan),
-        targetBody, wantInc).
+    LOCAL bestScore IS _bplanePlanScore(err0, targetBody, wantInc).
     LOCAL bestPe IS meas0["pe"].
     LOCAL bestPlaneErr IS planeErr0.
+    LOCAL entryPeErr IS ABS(meas0["pe"] - wantPe).
+    LOCAL entryPlaneErr IS planeErr0.
 
     FROM { LOCAL i IS 0. } UNTIL i >= MAX_NEWTON_ITER STEP { SET i TO i + 1. } DO {
         LOCAL meas IS measureArrival(nd, targetBody).
@@ -421,6 +441,7 @@ GLOBAL FUNCTION planBplaneCorrection {
                 + "km Pe=" + ROUND(meas["pe"] / 1000, 1)
                 + "km planeErr=" + ROUND(planeErr, 2)
                 + " scoreKm=" + ROUND(score / 1000, 1)
+                + " mode=" + planeMode
                 + " dv=" + ROUND(nd:DELTAV:MAG, 2)).
             IF i = 0 {
                 mLogWarn("STATS bplane-bvec target=" + targetBody:NAME
@@ -440,16 +461,44 @@ GLOBAL FUNCTION planBplaneCorrection {
                     + " rHatMag=" + ROUND(meas["rHatMag"],5)).
             }
 
-            IF ABS(meas["pe"] - wantPe) <= peTol
-                    AND (wantInc < 0 OR planeErr <= angTol) {
+            IF _bplaneCorridorOk(corrErr, wantInc, peTol, angTol) {
                 SET converged TO TRUE.
                 BREAK.
             }
 
-            // Finite-difference Jacobian: d(B.T,B.R)/d(radial,normal).
             LOCAL p0 IS nd:PROGRADE.
             LOCAL r0 IS nd:RADIALOUT.
             LOCAL n0 IS nd:NORMAL.
+
+            IF planeMode = "pe-only" {
+                IF NOT _bplaneFallbackSearch(nd, targetBody,
+                        wantPe, wantInc, wantLan, dvCap, score, i, TRUE) {
+                    mLogWarn("BPLANE[" + i
+                        + "]: no Pe-only fallback step improved arrival; stopping.").
+                    BREAK.
+                }
+                LOCAL poMeas IS measureArrival(nd, targetBody).
+                IF poMeas <> 0 {
+                    LOCAL poErr IS _bplaneCorridorError(
+                        targetBody, poMeas, wantPe, wantInc, wantLan).
+                    LOCAL poScore IS _bplanePlanScore(
+                        poErr, targetBody, wantInc).
+                    IF poScore < bestScore {
+                        SET bestScore TO poScore.
+                        SET bestPe TO poMeas["pe"].
+                        SET bestPlaneErr TO poErr["planeErr"].
+                        SET bestPro TO nd:PROGRADE.
+                        SET bestRad TO nd:RADIALOUT.
+                        SET bestNrm TO nd:NORMAL.
+                    }
+                    IF _bplaneCorridorOk(poErr, wantInc, peTol, angTol) {
+                        SET converged TO TRUE.
+                        BREAK.
+                    }
+                }
+            } ELSE {
+
+            // Finite-difference Jacobian: d(B.T,B.R)/d(radial,normal).
 
             SET nd:RADIALOUT TO r0 + FD_STEP. WAIT 0.02.
             LOCAL mRad IS measureArrival(nd, targetBody).
@@ -537,7 +586,7 @@ GLOBAL FUNCTION planBplaneCorrection {
                 SET nd:NORMAL TO n0.
                 WAIT 0.02.
                 IF NOT _bplaneFallbackSearch(nd, targetBody,
-                        wantPe, wantInc, wantLan, dvCap, score, i) {
+                        wantPe, wantInc, wantLan, dvCap, score, i, FALSE) {
                     mLogWarn("BPLANE[" + i
                         + "]: no damped B-plane or fallback step improved Pe/plane score; stopping.").
                     BREAK.
@@ -563,6 +612,7 @@ GLOBAL FUNCTION planBplaneCorrection {
                     }
                 }
             }
+            }
         }
     }
 
@@ -574,20 +624,34 @@ GLOBAL FUNCTION planBplaneCorrection {
     LOCAL measF IS measureArrival(nd, targetBody).
     LOCAL finalPe IS -1.
     LOCAL finalPlaneErr IS -1.
+    LOCAL finalOffPlane IS -1.
     IF measF <> 0 {
         SET finalPe TO measF["pe"].
         LOCAL errF IS _bplaneCorridorError(
             targetBody, measF, wantPe, wantInc, wantLan).
         SET finalPlaneErr TO errF["planeErr"].
+        SET finalOffPlane TO errF["target"]["offPlane"].
         IF _bplaneCorridorOk(errF, wantInc, peTol, angTol) {
             SET converged TO TRUE.
         }
     }
+
+    IF measF <> 0 AND wantInc >= 0
+            AND ABS(finalPe - wantPe) > entryPeErr
+            AND finalPlaneErr > entryPlaneErr {
+        mLogWarn("BPLANE: planned correction worsened both Pe and plane "
+            + "relative to entry; removing node.").
+        REMOVE nd.
+        RETURN 0.
+    }
+
     mLogWarn("STATS bplane plan target=" + targetBody:NAME
+        + " mode=" + planeMode
         + " converged=" + converged
         + " dv=" + ROUND(nd:DELTAV:MAG, 2)
         + " PeKm=" + ROUND(finalPe / 1000, 1)
         + " planeErr=" + ROUND(finalPlaneErr, 2)
+        + " offPlane=" + ROUND(finalOffPlane, 2)
         + " bestPeKm=" + ROUND(bestPe / 1000, 1)
         + " bestPlaneErr=" + ROUND(bestPlaneErr, 2)
         + " wantPeKm=" + ROUND(wantPe / 1000, 1)).
