@@ -111,8 +111,10 @@ GLOBAL FUNCTION planTransfer {
         IF HASNODE { REMOVE nd. }
         RETURN.
     }
+    LOCAL bplaneConverged IS FALSE.
     IF captureInc >= 0 {
-        _refineEjectionTarget(nd, targetBody, targetPe, captureInc, lanTarget).
+        SET bplaneConverged TO _refineEjectionTarget(
+            nd, targetBody, targetPe, captureInc, lanTarget).
     } ELSE IF isEscape {
         newtonTarget(nd, targetBody, "PE", 0).
     } ELSE {
@@ -140,16 +142,29 @@ GLOBAL FUNCTION planTransfer {
         }
     }
 
+    LOCAL transferMode IS "dumb-departure".
+    IF captureInc >= 0 {
+        SET transferMode TO "targeted-bplane".
+        IF NOT bplaneConverged { SET transferMode TO "coarse-bplane". }
+    }
+    LOCAL status IS "planned".
+    IF transferMode = "coarse-bplane" { SET status TO "planned-coarse". }
+
+    LOCAL coarseNote IS "".
+    IF transferMode = "coarse-bplane" {
+        SET coarseNote TO "  coarse B-plane; MCC required".
+    }
+
     mLog("Transfer -> " + targetBody:NAME
         + ": dV=" + ROUND(nd:DELTAV:MAG,1)
         + " m/s  rawPe=" + ROUND(finalPatch:PERIAPSIS/1000,1) + "km"
-        + "  arrivalETA=" + ROUND(arrivalEta,0) + "s").
+        + "  arrivalETA=" + ROUND(arrivalEta,0) + "s"
+        + coarseNote).
 
-    LOCAL transferMode IS "dumb-departure".
-    IF captureInc >= 0 { SET transferMode TO "targeted-bplane". }
     mLogWarn("STATS transfer result target=" + targetBody:NAME
-        + " status=planned"
+        + " status=" + status
         + " mode=" + transferMode
+        + " bplaneConverged=" + bplaneConverged
         + " dv=" + ROUND(nd:DELTAV:MAG,1)
         + " PeKm=" + ROUND(finalPatch:PERIAPSIS/1000,1)
         + " arrivalEta=" + ROUND(arrivalEta,0)).
@@ -207,16 +222,29 @@ LOCAL FUNCTION _refineEjectionTarget {
         LOCAL r0 IS nd:RADIALOUT.
         LOCAL n0 IS nd:NORMAL.
 
+        LOCAL radSign IS 1.
         SET nd:RADIALOUT TO r0 + fdStep. WAIT 0.02.
         LOCAL mRad IS measureArrival(nd, targetBody).
+        IF mRad = 0 {
+            SET nd:RADIALOUT TO r0 - fdStep. WAIT 0.02.
+            SET mRad TO measureArrival(nd, targetBody).
+            SET radSign TO -1.
+        }
         SET nd:RADIALOUT TO r0. WAIT 0.02.
 
+        LOCAL nrmSign IS 1.
         SET nd:NORMAL TO n0 + fdStep. WAIT 0.02.
         LOCAL mNrm IS measureArrival(nd, targetBody).
+        IF mNrm = 0 {
+            SET nd:NORMAL TO n0 - fdStep. WAIT 0.02.
+            SET mNrm TO measureArrival(nd, targetBody).
+            SET nrmSign TO -1.
+        }
         SET nd:NORMAL TO n0. WAIT 0.02.
 
         IF mRad = 0 OR mNrm = 0 {
-            mLogWarn("Targeted TMI[" + i + "]: probe lost encounter — stopping.").
+            mLogWarn("Targeted TMI[" + i
+                + "]: probe lost encounter both finite-difference directions — stopping.").
             BREAK.
         }
 
@@ -225,10 +253,10 @@ LOCAL FUNCTION _refineEjectionTarget {
         LOCAL tNrm IS targetBplaneVector(
             targetBody, mNrm, targetPe, captureInc, captureLan, TRUE).
 
-        LOCAL j11 IS ((mRad["bt"] - tRad["bt"]) - qT) / fdStep.
-        LOCAL j21 IS ((mRad["br"] - tRad["br"]) - qR) / fdStep.
-        LOCAL j12 IS ((mNrm["bt"] - tNrm["bt"]) - qT) / fdStep.
-        LOCAL j22 IS ((mNrm["br"] - tNrm["br"]) - qR) / fdStep.
+        LOCAL j11 IS ((mRad["bt"] - tRad["bt"]) - qT) / (fdStep * radSign).
+        LOCAL j21 IS ((mRad["br"] - tRad["br"]) - qR) / (fdStep * radSign).
+        LOCAL j12 IS ((mNrm["bt"] - tNrm["bt"]) - qT) / (fdStep * nrmSign).
+        LOCAL j22 IS ((mNrm["br"] - tNrm["br"]) - qR) / (fdStep * nrmSign).
         LOCAL det IS j11 * j22 - j12 * j21.
         IF ABS(det) < 1e-3 {
             mLogWarn("Targeted TMI[" + i + "]: singular Jacobian det="
@@ -244,9 +272,40 @@ LOCAL FUNCTION _refineEjectionTarget {
             SET dNrm TO dNrm * stepCap / stepMag.
         }
 
-        SET nd:RADIALOUT TO r0 + dRad.
-        SET nd:NORMAL TO n0 + dNrm.
-        WAIT 0.02.
+        LOCAL accepted IS FALSE.
+        LOCAL bestTrialErr IS errMag.
+        FOR frac IN LIST(1.0, 0.5, 0.25, 0.125, 0.0625) {
+            SET nd:RADIALOUT TO r0 + dRad * frac.
+            SET nd:NORMAL TO n0 + dNrm * frac.
+            WAIT 0.02.
+            LOCAL trial IS measureArrival(nd, targetBody).
+            IF trial <> 0 {
+                LOCAL trialTgt IS targetBplaneVector(
+                    targetBody, trial, targetPe, captureInc, captureLan, TRUE).
+                LOCAL trialErrT IS trialTgt["bt"] - trial["bt"].
+                LOCAL trialErrR IS trialTgt["br"] - trial["br"].
+                LOCAL trialErr IS SQRT(trialErrT ^ 2 + trialErrR ^ 2).
+                IF trialErr < bestTrialErr {
+                    SET accepted TO TRUE.
+                    SET bestTrialErr TO trialErr.
+                    mLog("  Targeted TMI[" + i + "] accepted frac="
+                        + ROUND(frac,3)
+                        + " dRad=" + ROUND(dRad * frac,2)
+                        + " dNrm=" + ROUND(dNrm * frac,2)
+                        + " errKm=" + ROUND(bestTrialErr / 1000,1)
+                        + " PeKm=" + ROUND(trial["pe"] / 1000,1)).
+                    BREAK.
+                }
+            }
+        }
+        IF NOT accepted {
+            SET nd:RADIALOUT TO r0.
+            SET nd:NORMAL TO n0.
+            WAIT 0.02.
+            mLogWarn("Targeted TMI[" + i
+                + "]: no damped step preserved/improved encounter; keeping coarse seed.").
+            BREAK.
+        }
     }
 
     LOCAL finalMeas IS measureArrival(nd, targetBody).
