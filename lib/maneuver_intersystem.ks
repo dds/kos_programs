@@ -6,6 +6,7 @@
 GLOBAL TRANSFER_SCAN_LOOKAHEAD_HOURS IS 6.
 GLOBAL TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT IS 24.
 GLOBAL TRANSFER_INTERPLANETARY_TOF_SAMPLES IS 9.
+GLOBAL TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX IS 45.
 
 GLOBAL FUNCTION planInterplanetaryTransfer {
     PARAMETER targetBody.
@@ -34,6 +35,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     SET scanSpan TO MAX(shipPeriod, scanSpan).
     LOCAL departStep IS MAX(45, shipPeriod / MAX(8, TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT)).
     LOCAL nDepart IS MAX(12, CEILING(scanSpan / departStep) + 1).
+    SET nDepart TO MIN(nDepart, MAX(1, TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX) + 1).
     LOCAL nTof IS MAX(3, TRANSFER_INTERPLANETARY_TOF_SAMPLES).
     LOCAL tofSpread IS hohmannTof * 0.3.
     LOCAL departStart IS TIME:SECONDS + 60.
@@ -124,17 +126,43 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     }
 
     IF bestPatchDepart < 0 {
-        mLogError("planTransfer: Lambert scan found no " + targetBody:NAME
-            + " patch seed; "
-            + "not passing raw non-encounter to B-plane targeting.").
-        mLogWarn("STATS lambert result target=" + targetBody:NAME
-            + " status=no-patch-seed"
-            + " rawDepartT=" + ROUND(bestDepart - TIME:SECONDS,0)
-            + " rawTof=" + ROUND(bestArrive - bestDepart,0)
-            + " rawDv=" + ROUND(bestDv,1)
-            + " rawVinf=" + ROUND(bestVinf,1)
-            + " rawFlip=" + bestFlip).
-        RETURN 0.
+        mLogWarn("Lambert scan found no direct patch; refining raw best "
+            + "closest approach seed.").
+        LOCAL rawNode IS _lambertNodeFor(
+            bestDepart, bestArrive, bestFlip, targetBody, transferCenter).
+        ADD rawNode.
+        WAIT 0.1.
+        LOCAL refinedPatch IS _refineLambertPatchSeed(
+            rawNode, targetBody, bestArrive, bestDv).
+        IF refinedPatch <> 0 {
+            mLog("Lambert refined patch seed: dV="
+                + ROUND(rawNode:DELTAV:MAG,1)
+                + " Pe=" + ROUND(refinedPatch:PERIAPSIS/1000,1)
+                + "km depart T+"
+                + ROUND(rawNode:TIME - TIME:SECONDS,0) + "s").
+            mLogWarn("STATS lambert result target=" + targetBody:NAME
+                + " status=refined-patch-seed"
+                + " departT=" + ROUND(rawNode:TIME - TIME:SECONDS,0)
+                + " tof=" + ROUND(bestArrive - rawNode:TIME,0)
+                + " dv=" + ROUND(rawNode:DELTAV:MAG,1)
+                + " vinf=" + ROUND(bestVinf,1)
+                + " flip=" + bestFlip
+                + " PeKm=" + ROUND(refinedPatch:PERIAPSIS/1000,1)).
+            RETURN rawNode.
+        } ELSE {
+            mLogError("planTransfer: Lambert scan found no " + targetBody:NAME
+                + " patch seed after closest-approach refine.").
+            mLogWarn("STATS lambert result target=" + targetBody:NAME
+                + " status=no-patch-seed"
+                + " rawDepartT=" + ROUND(bestDepart - TIME:SECONDS,0)
+                + " rawTof=" + ROUND(bestArrive - bestDepart,0)
+                + " rawDv=" + ROUND(bestDv,1)
+                + " rawVinf=" + ROUND(bestVinf,1)
+                + " rawFlip=" + bestFlip
+                + " refinedDv=" + ROUND(rawNode:DELTAV:MAG,1)).
+            REMOVE rawNode.
+            RETURN 0.
+        }
     }
     SET bestDv TO bestPatchDv.
     SET bestDepart TO bestPatchDepart.
@@ -155,13 +183,8 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + " patch=" + (bestPatchDepart >= 0)
         + " PeKm=" + ROUND(bestPatchPe/1000,1)).
 
-    LOCAL r1Best IS POSITIONAT(BODY, bestDepart) - POSITIONAT(transferCenter, bestDepart).
-    LOCAL r2Best IS POSITIONAT(targetBody, bestArrive) - POSITIONAT(transferCenter, bestArrive).
-    LOCAL result IS lambertSolve(r1Best, r2Best, bestArrive - bestDepart, transferCenter:MU, bestFlip).
-    LOCAL vOriginBest IS _lambertFrameVelocity(BODY, transferCenter, bestDepart).
-    LOCAL vInfBest IS result["v1"] - vOriginBest.
-
-    LOCAL nd IS _lambertEscapeNode(bestDepart, vInfBest).
+    LOCAL nd IS _lambertNodeFor(
+        bestDepart, bestArrive, bestFlip, targetBody, transferCenter).
     ADD nd.
     WAIT 0.1.
 
@@ -171,6 +194,131 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     }
 
     RETURN nd.
+}
+
+LOCAL FUNCTION _lambertNodeFor {
+    PARAMETER departUt.
+    PARAMETER arriveUt.
+    PARAMETER flip.
+    PARAMETER targetBody.
+    PARAMETER transferCenter.
+
+    LOCAL r1 IS POSITIONAT(BODY, departUt)
+        - POSITIONAT(transferCenter, departUt).
+    LOCAL r2 IS POSITIONAT(targetBody, arriveUt)
+        - POSITIONAT(transferCenter, arriveUt).
+    LOCAL result IS lambertSolve(
+        r1, r2, arriveUt - departUt, transferCenter:MU, flip).
+    LOCAL vOrigin IS _lambertFrameVelocity(BODY, transferCenter, departUt).
+    LOCAL vInf IS result["v1"] - vOrigin.
+    RETURN _lambertEscapeNode(departUt, vInf).
+}
+
+LOCAL FUNCTION _lambertPatchEval {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER arriveUt.
+
+    LOCAL patch IS _getTargetPatch(nd, targetBody).
+    LOCAL tof IS MAX(3600, arriveUt - nd:TIME).
+    LOCAL pad IS MAX(21600, tof * 0.12).
+    LOCAL ca IS _findClosestApproach(
+        targetBody, arriveUt - pad, arriveUt + pad, 36).
+    LOCAL score IS ca["distance"] + nd:DELTAV:MAG * 1000.
+    IF patch <> 0 {
+        SET score TO score - targetBody:SOIRADIUS * 4.
+    }
+    RETURN LEXICON(
+        "SCORE", score,
+        "CA", ca,
+        "PATCH", patch
+    ).
+}
+
+LOCAL FUNCTION _refineLambertPatchSeed {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER arriveUt.
+    PARAMETER startDv.
+
+    LOCAL best IS _lambertPatchEval(nd, targetBody, arriveUt).
+    mLog("Lambert patch refine: start CA="
+        + ROUND(best["CA"]["distance"]/1000,1)
+        + "km patch=" + (best["PATCH"] <> 0)
+        + " SOI=" + ROUND(targetBody:SOIRADIUS/1000,0) + "km").
+    IF best["PATCH"] <> 0 { RETURN best["PATCH"]. }
+
+    LOCAL axes IS LIST("PROGRADE", "NORMAL", "RADIALOUT", "TIME").
+    LOCAL steps IS LEXICON(
+        "PROGRADE", 10.0,
+        "NORMAL", 20.0,
+        "RADIALOUT", 20.0,
+        "TIME", 180.0
+    ).
+    LOCAL mins IS LEXICON(
+        "PROGRADE", 0.5,
+        "NORMAL", 0.5,
+        "RADIALOUT", 0.5,
+        "TIME", 5.0
+    ).
+    LOCAL signs IS LIST(1, -1).
+    LOCAL dvCap IS startDv + 250.
+
+    FROM { LOCAL iter IS 0. } UNTIL iter >= 18 STEP { SET iter TO iter + 1. } DO {
+        LOCAL bestAxis IS "".
+        LOCAL bestValue IS 0.
+        LOCAL bestTrial IS best.
+
+        FOR axis IN axes {
+            LOCAL oldVal IS _nodeAxisGet(nd, axis).
+            FOR sgn IN signs {
+                LOCAL trialVal IS oldVal + sgn * steps[axis].
+                IF axis <> "TIME" OR trialVal > TIME:SECONDS + 30 {
+                    _nodeAxisSet(nd, axis, trialVal).
+                    WAIT 0.02.
+                    IF nd:DELTAV:MAG <= dvCap {
+                        LOCAL trial IS _lambertPatchEval(nd, targetBody, arriveUt).
+                        IF trial["SCORE"] < bestTrial["SCORE"] {
+                            SET bestTrial TO trial.
+                            SET bestAxis TO axis.
+                            SET bestValue TO trialVal.
+                        }
+                    }
+                }
+            }
+            _nodeAxisSet(nd, axis, oldVal).
+            WAIT 0.01.
+        }
+
+        IF bestAxis <> "" {
+            _nodeAxisSet(nd, bestAxis, bestValue).
+            WAIT 0.02.
+            SET best TO _lambertPatchEval(nd, targetBody, arriveUt).
+            mLog("  Lambert seed[" + iter + "] " + bestAxis + "="
+                + ROUND(bestValue,2)
+                + " CA=" + ROUND(best["CA"]["distance"]/1000,1)
+                + "km patch=" + (best["PATCH"] <> 0)
+                + " dV=" + ROUND(nd:DELTAV:MAG,1)).
+            IF best["PATCH"] <> 0 {
+                RETURN best["PATCH"].
+            }
+        } ELSE {
+            FOR axis IN axes {
+                SET steps[axis] TO steps[axis] / 2.
+            }
+            LOCAL small IS TRUE.
+            FOR axis IN axes {
+                IF steps[axis] >= mins[axis] { SET small TO FALSE. }
+            }
+            IF small { BREAK. }
+        }
+    }
+
+    mLogWarn("STATS lambert-patch-refine target=" + targetBody:NAME
+        + " finalCaKm=" + ROUND(best["CA"]["distance"]/1000,1)
+        + " patch=" + (best["PATCH"] <> 0)
+        + " dv=" + ROUND(nd:DELTAV:MAG,1)).
+    RETURN best["PATCH"].
 }
 
 LOCAL FUNCTION _lambertFrameVelocity {
