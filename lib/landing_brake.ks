@@ -1,5 +1,30 @@
 // landing_brake.ks - BRAKE_ALIGN and BRAKING_BURN guidance track.
 
+LOCAL FUNCTION _landingLogBrakeComplete {
+    PARAMETER ctx.
+    PARAMETER nextState.
+    PARAMETER steerInfo.
+
+    IF NOT ctx["HAS_TARGET"] { RETURN. }
+    LOCAL trajErr IS _landingTrajError(ctx).
+    IF NOT trajErr["FOUND"] {
+        mLogWarn("STATS brake-complete next=" + nextState
+            + " impact=none bias=" + ROUND(LANDING_BRAKE_UNDERSHOOT_BIAS,0)
+            + " hs=" + ROUND(ctx["H_SPEED"],1)
+            + " vs=" + ROUND(ctx["V_SPEED"],1)).
+        RETURN.
+    }
+
+    mLogWarn("STATS brake-complete next=" + nextState
+        + " impactLong=" + ROUND(trajErr["ALONG"],0)
+        + " cross=" + ROUND(trajErr["CROSS_SIGNED"],0)
+        + " dist=" + ROUND(trajErr["DIST"],0)
+        + " bias=" + ROUND(LANDING_BRAKE_UNDERSHOOT_BIAS,0)
+        + " guard=" + ROUND(steerInfo["GUARD"],2)
+        + " hs=" + ROUND(ctx["H_SPEED"],1)
+        + " vs=" + ROUND(ctx["V_SPEED"],1)).
+}
+
 GLOBAL FUNCTION _landingBrakeSteeringInfo {
     PARAMETER ctx.
 
@@ -166,12 +191,15 @@ GLOBAL FUNCTION _landingBrakingTick {
             AND verticalCaptured
             AND horizontalSpeed <= TERMINAL_HSPEED {
         IF distToTarget <= VERTICAL_RADIUS {
+            _landingLogBrakeComplete(ctx, "VERTICAL_DESCENT", steerInfo).
             _landingSetState(ctx, "VERTICAL_DESCENT",
                 "over-target vertical and horizontal capture").
         } ELSE IF distToTarget > APPROACH_RADIUS {
+            _landingLogBrakeComplete(ctx, "APPROACH", steerInfo).
             _landingSetState(ctx, "APPROACH",
                 "post-brake miss outside approach radius").
         } ELSE {
+            _landingLogBrakeComplete(ctx, "TARGET_REFINE", steerInfo).
             _landingSetState(ctx, "TARGET_REFINE",
                 "post-brake lateral stabilization").
         }
@@ -184,6 +212,7 @@ GLOBAL FUNCTION _landingBrakingTick {
             AND verticalCaptured
             AND horizontalSpeed <= APPROACH_HSPEED
             AND distToTarget <= APPROACH_RADIUS {
+        _landingLogBrakeComplete(ctx, "TARGET_REFINE", steerInfo).
         _landingSetState(ctx, "TARGET_REFINE",
             "approach corridor captured for target refinement").
     } ELSE IF NOT ctx["HAS_TARGET"]

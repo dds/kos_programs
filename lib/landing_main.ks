@@ -359,23 +359,29 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     LOCAL burnHeight IS _landingBurnHeight(ctx).
     LOCAL distToTarget IS 999999.
     LOCAL downrangeToTarget IS 999999.
+    LOCAL brakeDownrange IS 999999.
     LOCAL brakeLeadDist IS 0.
+    LOCAL brakeUndershootBias IS 0.
     IF ctx["HAS_TARGET"] {
         SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
         SET downrangeToTarget TO _landingDownrangeToTarget(ctx).
+        SET brakeDownrange TO downrangeToTarget.
         IF horizontalSpeed > 0.1 {
             SET brakeLeadDist TO MAX(0, LANDING_BRAKE_GATE_LEAD_DIST).
-            SET downrangeToTarget TO downrangeToTarget + brakeLeadDist.
+            SET brakeUndershootBias TO MAX(0, LANDING_BRAKE_UNDERSHOOT_BIAS).
+            SET brakeDownrange TO brakeDownrange
+                + brakeLeadDist
+                + brakeUndershootBias.
         }
     }
 
     LOCAL hBrakeGate IS brakeDist + BRAKE_MARGIN.
     LOCAL hBrakeEta IS 999999.
-    IF ctx["HAS_TARGET"] AND downrangeToTarget > 0 {
-        IF downrangeToTarget <= hBrakeGate {
+    IF ctx["HAS_TARGET"] AND brakeDownrange > 0 {
+        IF brakeDownrange <= hBrakeGate {
             SET hBrakeEta TO 0.
         } ELSE IF horizontalSpeed > 0.1 {
-            SET hBrakeEta TO (downrangeToTarget - hBrakeGate)
+            SET hBrakeEta TO (brakeDownrange - hBrakeGate)
                 / horizontalSpeed.
         }
     }
@@ -393,8 +399,8 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
         }
     }
 
-    LOCAL hNow IS ctx["HAS_TARGET"] AND downrangeToTarget > 0
-        AND downrangeToTarget <= hBrakeGate.
+    LOCAL hNow IS ctx["HAS_TARGET"] AND brakeDownrange > 0
+        AND brakeDownrange <= hBrakeGate.
     LOCAL hSuppressed IS FALSE.
     IF hNow AND burnHeight > TERRAIN_SAFE_ALT
             AND burnHeight > hBrakeGate * 2
@@ -410,7 +416,9 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     RETURN LEXICON(
         "DIST", distToTarget,
         "DOWNRANGE", downrangeToTarget,
+        "BRAKE_DOWNRANGE", brakeDownrange,
         "BRAKE_LEAD", brakeLeadDist,
+        "BRAKE_BIAS", brakeUndershootBias,
         "H_BRAKE", brakeDist,
         "H_GATE", hBrakeGate,
         "H_ETA", hBrakeEta,
