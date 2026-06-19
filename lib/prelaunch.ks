@@ -266,13 +266,10 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
         + " wait=" + ROUND(win["wait"], 0)
         + " lead=" + ROUND(leadTime, 0)).
 
-    _waitForPrelaunchUt(win["ut"]).
-    IF ABORT {
-        mLog("PRELAUNCH hold — operator abort.").
-        yieldToPrompt().
+    IF NOT _prelaunchWindowGate(win["ut"], bod_:NAME + " body-plane window") {
         RETURN.
     }
-    mLog("PRELAUNCH complete; body-plane launch window open.").
+    mLog("PRELAUNCH complete; body-plane launch released.").
     nextPhase(launchSeq).
 }
 
@@ -302,6 +299,82 @@ LOCAL FUNCTION _waitForPrelaunchUt {
     IF kacAlarmId <> "" {
         DELETEALARM(kacAlarmId).
     }
+}
+
+LOCAL FUNCTION _confirmPrelaunchWindow {
+    PARAMETER targetUt.
+    PARAMETER label IS "launch window".
+
+    LOCAL waitSeconds IS MAX(0, targetUt - TIME:SECONDS).
+    IF waitSeconds <= 1 {
+        RETURN "WAIT".
+    }
+
+    PRINT " ".
+    uiPrompt("SPACE wait / N launch now / ESC hold / 30s auto-wait").
+    PRINT "  " + label + " in " + ROUND(waitSeconds, 0) + "s.".
+    LOCAL deadline IS TIME:SECONDS + 30.
+    LOCAL choice IS "".
+    UNTIL TIME:SECONDS >= deadline OR choice <> "" {
+        LOCAL remaining IS ROUND(deadline - TIME:SECONDS, 0).
+        LOCAL bar IS "".
+        LOCAL filled IS ROUND(30 - remaining, 0).
+        LOCAL j IS 0.
+        UNTIL j >= 30 {
+            IF j < filled { SET bar TO bar + "=". }
+            ELSE { SET bar TO bar + ".". }
+            SET j TO j + 1.
+        }
+        LOCAL statusLine IS "  [" + bar + "] "
+            + ("" + remaining):PADLEFT(2)
+            + "s  wait / now?      ".
+        PRINT statusLine AT (0, TERMINAL:HEIGHT - 1).
+        IF TERMINAL:INPUT:HASCHAR {
+            LOCAL ch IS UNCHAR(TERMINAL:INPUT:GETCHAR()).
+            IF ch = 27 {
+                SET choice TO "HOLD".
+            } ELSE IF ch = 32 OR ch = 0 {
+                SET choice TO "WAIT".
+            } ELSE IF ch = 78 OR ch = 110 OR ch = 76 OR ch = 108 {
+                SET choice TO "NOW".
+            }
+        }
+        WAIT 0.2.
+    }
+    IF choice = "" { SET choice TO "WAIT". }
+
+    IF choice = "HOLD" {
+        PRINT "  [==============================] HOLD     " AT (0, TERMINAL:HEIGHT - 1).
+    } ELSE IF choice = "NOW" {
+        PRINT "  [==============================] LAUNCH   " AT (0, TERMINAL:HEIGHT - 1).
+    } ELSE {
+        PRINT "  [==============================] WAIT     " AT (0, TERMINAL:HEIGHT - 1).
+    }
+    RETURN choice.
+}
+
+LOCAL FUNCTION _prelaunchWindowGate {
+    PARAMETER targetUt.
+    PARAMETER label IS "launch window".
+
+    LOCAL choice IS _confirmPrelaunchWindow(targetUt, label).
+    IF choice = "HOLD" {
+        mLog("PRELAUNCH hold — operator held at window choice.").
+        yieldToPrompt().
+        RETURN FALSE.
+    }
+    IF choice = "NOW" {
+        mLogWarn("PRELAUNCH: operator skipped launch-window wait; launching now.").
+        RETURN TRUE.
+    }
+
+    _waitForPrelaunchUt(targetUt).
+    IF ABORT {
+        mLog("PRELAUNCH hold — operator abort.").
+        yieldToPrompt().
+        RETURN FALSE.
+    }
+    RETURN TRUE.
 }
 
 // ── Launch-to-rendezvous window ──────────────────────────────
@@ -510,13 +583,10 @@ LOCAL FUNCTION _prelaunchToInterplanetary {
         + " launchInc=" + ROUND(launchInc, 2)
         + " lead=" + ROUND(leadTime, 0)).
 
-    _waitForPrelaunchUt(launchUt).
-    IF ABORT {
-        mLog("PRELAUNCH hold — operator abort.").
-        yieldToPrompt().
+    IF NOT _prelaunchWindowGate(launchUt, targetName + " transfer window") {
         RETURN.
     }
-    mLog("PRELAUNCH complete; interplanetary transfer window open.").
+    mLog("PRELAUNCH complete; interplanetary launch released.").
     nextPhase(launchSeq).
 }
 
@@ -681,13 +751,10 @@ LOCAL FUNCTION _prelaunchToVessel {
         + " wait=" + ROUND(launchUt - TIME:SECONDS, 0)
         + " lead=" + ROUND(best["lead"], 1)).
 
-    _waitForPrelaunchUt(launchUt).
-    IF ABORT {
-        mLog("PRELAUNCH hold — operator abort.").
-        yieldToPrompt().
+    IF NOT _prelaunchWindowGate(launchUt, ves:NAME + " rendezvous window") {
         RETURN.
     }
-    mLog("PRELAUNCH complete; rendezvous window open.").
+    mLog("PRELAUNCH complete; rendezvous launch released.").
     nextPhase(launchSeq).
 }
 
@@ -838,13 +905,10 @@ GLOBAL FUNCTION phasePrelaunch {
         + " deg lead=" + ROUND(leadTime, 0)
         + "s wait=" + ROUND(waitTime, 0) + "s.").
 
-    _waitForPrelaunchUt(targetUt).
-    IF ABORT {
-        mLog("PRELAUNCH hold — operator abort.").
-        yieldToPrompt().
+    IF NOT _prelaunchWindowGate(targetUt, "launch-plane window") {
         RETURN.
     }
 
-    mLog("PRELAUNCH complete; launch plane window open.").
+    mLog("PRELAUNCH complete; launch-plane launch released.").
     nextPhase(launchSeq).
 }
