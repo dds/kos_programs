@@ -234,11 +234,35 @@ GLOBAL FUNCTION bootMissionConfigIds {
     RETURN ids.
 }
 
+GLOBAL FUNCTION bootCachedMissionConfigIds {
+    PARAMETER cn.
+    LOCAL ids IS LIST().
+    LOCAL cd_ IS "1:/missions/" + cn.
+    IF NOT EXISTS(cd_) { RETURN ids. }
+    LOCAL sp IS PATH().
+    LOCAL items IS LIST().
+    CD(cd_).
+    LIST FILES IN items.
+    CD(sp).
+    FOR item IN items {
+        IF item:ISFILE {
+            LOCAL nm IS item:NAME.
+            IF nm:CONTAINS(".ks") {
+                ids:ADD(nm:SUBSTRING(0, nm:LENGTH - 3)).
+            }
+        }
+    }
+    RETURN ids.
+}
+
 GLOBAL FUNCTION bootApplyMissionConfig {
     PARAMETER cn.
     PARAMETER mid.
     PARAMETER hl.
     IF mid = "" { RETURN FALSE. }
+    // Persist the selected profile before any bulky copy/profile work.
+    // If storage runs out later, the next boot can still recover intent.
+    stateSet("mission_id", mid).
     LOCAL ap IS "0:/missions/" + cn + "/" + mid + ".ks".
     LOCAL cd_ IS "1:/missions/" + cn.
     LOCAL cp IS cd_ + "/" + mid + ".ks".
@@ -282,7 +306,18 @@ GLOBAL FUNCTION bootMissionConfig {
     PARAMETER cn.
     PARAMETER hl.
     LOCAL mid IS stateGet("mission_id", "").
-    IF mid = "" AND hl {
+    IF mid = "" AND SHIP:STATUS <> "PRELAUNCH" {
+        LOCAL cachedIds IS bootCachedMissionConfigIds(cn).
+        IF cachedIds:LENGTH = 1 {
+            SET mid TO cachedIds[0].
+            stateSet("mission_id", mid).
+            PRINT "  Mission recovered from cache: " + mid + ".".
+        } ELSE IF cachedIds:LENGTH > 1 {
+            PRINT "  WARN: mission state missing; multiple cached profiles.".
+            PRINT "  Use cmd/setphase.ks to reattach manually.".
+        }
+    }
+    IF mid = "" AND hl AND SHIP:STATUS = "PRELAUNCH" {
         LOCAL ids IS bootMissionConfigIds(cn, hl).
         IF ids:LENGTH > 0 {
             IF NOT bootCheckManualKey() {
@@ -301,6 +336,7 @@ GLOBAL FUNCTION bootMissionConfig {
                 bootLibSync("boot_picker").
                 RUNONCEPATH("1:/lib/boot_picker").
                 SET mid TO bootSelectMissionId(cn, hl).
+                IF mid <> "" { stateSet("mission_id", mid). }
             }
         }
     }
@@ -320,7 +356,19 @@ GLOBAL FUNCTION bootEnsureInitialPhase {
     PARAMETER seq.
     LOCAL phase IS stateGet("phase", "").
     IF (phase = "" OR phase:CONTAINS("MAIN")) AND seq:LENGTH > 0 {
-        stateSet("phase", seq[0]).
+        LOCAL initialPhase IS seq[0].
+        IF phase = "" AND SHIP:STATUS = "ORBITING"
+                AND SHIP:BODY:NAME = "Kerbin" {
+            FROM { LOCAL i IS 0. } UNTIL i >= seq:LENGTH STEP { SET i TO i + 1. } DO {
+                IF seq[i] = "PARK" AND i + 1 < seq:LENGTH {
+                    SET initialPhase TO seq[i + 1].
+                    mLogWarn("Recovered blank phase in Kerbin orbit; starting at "
+                        + initialPhase + " after PARK.").
+                    BREAK.
+                }
+            }
+        }
+        stateSet("phase", initialPhase).
     }
     RETURN stateGet("phase", "").
 }
