@@ -33,10 +33,8 @@ LOCAL FUNCTION _clearLaunchLegState {
         "fairing_deployed", "launch_vs_nonpos_logged",
         "orbit_start_time", "prelaunch_plane_ut",
         "prelaunch_plane_target", "prelaunch_plane_inc",
-        "prelaunch_plane_lan", "prelaunch_transfer_departure_ut",
-        "prelaunch_transfer_target", "prelaunch_transfer_xing_target",
-        "prelaunch_transfer_phase", "landing_state",
-        "landing_lat", "landing_lng", "landing_time"
+        "prelaunch_plane_lan", "landing_state", "landing_lat",
+        "landing_lng", "landing_time"
     ) {
         stateRemove(key).
     }

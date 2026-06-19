@@ -7,6 +7,7 @@ GLOBAL FUNCTION dependencyLibs {
         "core", LIST("state", "logs", "files", "phases", "dependencies", "config", "mission_type"),
         "capture", LIST("maneuver", "orbit"),
         "deorbit_burn", LIST(),
+        "duna_ike_setup", LIST("maneuver", "orbit", "solar"),
         "deorbit_targeting", LIST("orbit", "utils", "landing_config", "landing_math"),
         "flightplan", LIST("ui"),
         "inclination", LIST("orbit_nodes"),
@@ -82,6 +83,10 @@ GLOBAL FUNCTION dependencyPhases {
         "MCC", LIST("maneuver_mcc"),
         "AEROBRAKE", LIST("aerobrake"),
         "DESCENT", LIST("descent"),
+        "DUNA_AEROCAPTURE", LIST("duna_ike_setup"),
+        "IKE_SETUP", LIST("duna_ike_setup"),
+        "DUNA_ENTRY_SETUP", LIST("duna_ike_setup"),
+        "DUNA_ENTRY_LOWER_PE", LIST("duna_ike_setup"),
         "KSC_DEORBIT", LIST("deorbit_targeting", "solar"),
         "COAST", LIST("capture"),
         "COAST_1HALF", LIST("capture"),
@@ -143,6 +148,7 @@ GLOBAL FUNCTION dependencyBands {
         "PAYLOAD_OPS", LIST("TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION"),
         "RETURN_SETUP", LIST("RETURN_SETUP", "SURFACE_RETURN_SETUP"),
         "AEROBRAKE", LIST("AEROBRAKE"),
+        "DUNA_IKE_SETUP", LIST("DUNA_AEROCAPTURE", "IKE_SETUP", "DUNA_ENTRY_SETUP", "DUNA_ENTRY_LOWER_PE"),
         "LAND_DEORBIT", LIST("LAND_DEORBIT"),
         "LANDING", LIST("LAND_ASSIST", "LAND"),
         "DONE", LIST("DONE")
@@ -176,6 +182,10 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "MCC" { phaseMapSet(phaseMap, phaseKey, phaseMcc@). }
     ELSE IF phaseKey = "AEROBRAKE" { phaseMapSet(phaseMap, phaseKey, phaseAerobrake@). }
     ELSE IF phaseKey = "DESCENT" { phaseMapSet(phaseMap, phaseKey, phaseDescent@). }
+    ELSE IF phaseKey = "DUNA_AEROCAPTURE" { phaseMapSet(phaseMap, phaseKey, phaseDunaAerocapture@). }
+    ELSE IF phaseKey = "IKE_SETUP" { phaseMapSet(phaseMap, phaseKey, phaseIkeSetup@). }
+    ELSE IF phaseKey = "DUNA_ENTRY_SETUP" { phaseMapSet(phaseMap, phaseKey, phaseDunaEntrySetup@). }
+    ELSE IF phaseKey = "DUNA_ENTRY_LOWER_PE" { phaseMapSet(phaseMap, phaseKey, phaseDunaEntryLowerPe@). }
     ELSE IF phaseKey = "KSC_DEORBIT" { phaseMapSet(phaseMap, phaseKey, phaseKscDeorbit@). }
     ELSE IF phaseKey = "COAST" { phaseMapSet(phaseMap, phaseKey, phaseCoast@). }
     ELSE IF phaseKey = "COAST_1HALF" { phaseMapSet(phaseMap, phaseKey, phaseCoast1half@). }

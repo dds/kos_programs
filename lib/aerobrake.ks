@@ -16,6 +16,7 @@
 GLOBAL AEROBRAKE_DECOUPLE_TAG IS "".
 GLOBAL AEROBRAKE_REENTRY_DIR IS "".
 GLOBAL AEROBRAKE_ARM_CHUTES IS 0.
+GLOBAL AEROBRAKE_TARGETING IS 1.
 
 LOCAL KSC_LAT IS -0.10.
 LOCAL KSC_LNG IS -74.25.
@@ -39,7 +40,9 @@ GLOBAL FUNCTION phaseAerobrake {
     mLogPhase("AEROBRAKE").
 
     // --- Step 1: Reentry targeting ---
-    IF ADDONS:TR:AVAILABLE {
+    IF AEROBRAKE_TARGETING <= 0 {
+        mLog("Aerobrake targeting disabled by config.").
+    } ELSE IF ADDONS:TR:AVAILABLE {
         _aerobrakeReentryTargeting().
     } ELSE {
         IF NOT ADDONS:TR:AVAILABLE {

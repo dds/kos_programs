@@ -436,10 +436,6 @@ LOCAL FUNCTION _prelaunchToInterplanetary {
     LOCAL immediateErr IS ABS(_norm180(phaseAtImmediate - desiredPhase)).
 
     IF immediateErr <= phaseTol {
-        stateSet("prelaunch_transfer_departure_ut", immediateDepartUt).
-        stateSet("prelaunch_transfer_target", targetName).
-        stateSet("prelaunch_transfer_xing_target", xingBody:NAME).
-        stateSet("prelaunch_transfer_phase", desiredPhase).
         mLog("PRELAUNCH: already in " + targetName
             + " transfer window; launch now. phase="
             + ROUND(phaseAtImmediate, 1)
@@ -484,10 +480,6 @@ LOCAL FUNCTION _prelaunchToInterplanetary {
     LOCAL launchUt IS departUt - leadTime.
     IF launchUt < TIME:SECONDS { SET launchUt TO TIME:SECONDS. }
 
-    stateSet("prelaunch_transfer_departure_ut", departUt).
-    stateSet("prelaunch_transfer_target", targetName).
-    stateSet("prelaunch_transfer_xing_target", xingBody:NAME).
-    stateSet("prelaunch_transfer_phase", desiredPhase).
     stateSet("prelaunch_plane_ut", launchUt).
 
     mLog("PRELAUNCH: " + targetName + " transfer window in "
@@ -705,11 +697,7 @@ LOCAL FUNCTION _prelaunchPrintConfig {
 LOCAL FUNCTION _prelaunchClearPlanState {
     FOR key IN LIST(
         "prelaunch_plane_ut", "prelaunch_plane_target",
-        "prelaunch_plane_inc", "prelaunch_plane_lan",
-        "prelaunch_transfer_departure_ut",
-        "prelaunch_transfer_target",
-        "prelaunch_transfer_xing_target",
-        "prelaunch_transfer_phase"
+        "prelaunch_plane_inc", "prelaunch_plane_lan"
     ) {
         stateRemove(key).
     }

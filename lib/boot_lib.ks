@@ -162,7 +162,10 @@ GLOBAL FUNCTION bootArchiveOnlyLibs {
     FOR libName IN LIST(
         "xfer_plan",
         "maneuver_transfer",
-        "maneuver_targeting"
+        "maneuver_targeting",
+        "maneuver_intersystem",
+        "lambert",
+        "lib_bplane_math"
     ) {
         IF NOT out:CONTAINS(libName) { out:ADD(libName). }
     }
