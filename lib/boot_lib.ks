@@ -2,6 +2,8 @@
 // boot_lib.ks - boot helpers and dependency expansion
 // ============================================================
 
+@CLOBBERBUILTINS ON.
+
 // --- Config defaults owned by this file ---
 GLOBAL MISSION_ID IS "".
 GLOBAL MISSION_NAME IS "".
