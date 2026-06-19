@@ -1,3 +1,10 @@
+// Discard terminal input left over from before this boot. Manual mode
+// should only arm from a key pressed after the boot script starts.
+UNTIL NOT TERMINAL:INPUT:HASCHAR {
+    TERMINAL:INPUT:GETCHAR().
+}
+GLOBAL BOOT_INPUT_DRAINED IS TRUE.
+
 PRINT " ".
 PRINT "  * kOS FLIGHT COMPUTER  v2.0".
 PRINT "  * " + SHIP:NAME.

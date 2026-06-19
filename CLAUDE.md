@@ -77,7 +77,8 @@ Looks like Python/JS; is neither.
   selected mission id persisted in state; profile copied to
   `1:/missions/<vehicle>/` and run as planning `SET` overrides → mission
   phase band synced/compiled/run → vehicle defaults/main loaded → profile
-  re-run so mission/body overrides win → 5 s manual-mode window → resume.
+  re-run so mission/body overrides win → stale terminal input drained,
+  post-boot manual-mode window → resume.
 - **Phases**: profiles own `SEQUENCE`; `runPhases(map)` dispatches by the
   persisted `phase` key; handlers call `nextPhase(seq)`. Sequences cannot
   repeat a phase name (lookup is by value) — multi-hop routes use the `GOTO`

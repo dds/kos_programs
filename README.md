@@ -21,8 +21,8 @@ progressive code loading to fit tiny in-game processors.
 3. Launch to the pad/runway. Boot syncs code from the archive, shows the
    mission profile picker (when profiles exist under `missions/<vehicle>/`),
    and runs the vehicle script.
-4. Press any key within 5 s of any boot for **manual mode**; otherwise the
-   mission auto-resumes from saved state.
+4. Press any key after boot starts, during the manual-mode window, for
+   **manual mode**; otherwise the mission auto-resumes from saved state.
 
 ## Operations
 
@@ -30,7 +30,7 @@ progressive code loading to fit tiny in-game processors.
 
 Action group **0** toggles power on the kOS processor and its terminal.
 Pressing `0` a few times power-cycles the CPU, forcing a reboot — then the
-5-second manual-mode window gives you a console. On multi-CPU ships the
+manual-mode window gives you a console. On multi-CPU ships the
 dormant **zombie** core can reboot every other CPU remotely
 (`RUNPATH("0:/cmd/zombie.ks").` from its terminal while linked).
 
