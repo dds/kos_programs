@@ -2,6 +2,7 @@
 // maneuver.ks  —  Maneuver execution  (0:/lib/maneuver.ks)
 // ============================================================
 
+@CLOBBERBUILTINS ON.
 @LAZYGLOBAL OFF.
 
 // --- Config defaults owned by this file ---
