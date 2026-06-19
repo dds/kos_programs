@@ -23,15 +23,15 @@ LOCAL FUNCTION _lambertShortlistAdd {
     }
 
     LOCAL worstI IS 0.
-    LOCAL worstVinf IS shortlist[0]["VINF"].
+    LOCAL worstDv IS shortlist[0]["DV"].
     FROM { LOCAL i IS 1. } UNTIL i >= shortlist:LENGTH STEP { SET i TO i + 1. } DO {
-        IF shortlist[i]["VINF"] > worstVinf {
+        IF shortlist[i]["DV"] > worstDv {
             SET worstI TO i.
-            SET worstVinf TO shortlist[i]["VINF"].
+            SET worstDv TO shortlist[i]["DV"].
         }
     }
 
-    IF cand["VINF"] < worstVinf {
+    IF cand["DV"] < worstDv {
         SET shortlist[worstI] TO cand.
     }
 }
@@ -76,6 +76,9 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL bestFlip IS FALSE.
     LOCAL bestAnalyticDv IS -1.
     LOCAL bestDvDelta IS -1.
+    LOCAL bestPro IS 0.
+    LOCAL bestNor IS 0.
+    LOCAL bestRad IS 0.
     LOCAL rawDepart IS -1.
     LOCAL rawArrive IS -1.
     LOCAL rawDv IS 9999999.
@@ -193,6 +196,9 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         SET pass2Evals TO pass2Evals + 1.
         LOCAL safeDeparture IS _lambertDepartureSafe(ndProbe).
         LOCAL nodeDv IS ndProbe:DELTAV:MAG.
+        LOCAL nodePro IS ndProbe:PROGRADE.
+        LOCAL nodeNor IS ndProbe:NORMAL.
+        LOCAL nodeRad IS ndProbe:RADIALOUT.
         LOCAL dvDelta IS ABS(nodeDv - cand["DV"]).
         LOCAL dvAgree IS dvDelta <= MAX(0.5, cand["DV"] * 0.005).
         LOCAL caKm IS -1.
@@ -211,6 +217,9 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
             + " nodeDv=" + ROUND(nodeDv,1)
             + " dvDelta=" + ROUND(dvDelta,2)
             + " vInf=" + ROUND(cand["VINF"],1)
+            + " prograde=" + ROUND(nodePro,1)
+            + " normal=" + ROUND(nodeNor,1)
+            + " radial=" + ROUND(nodeRad,1)
             + " CA=" + ROUND(caKm,1)
             + "km safe=" + safeDeparture
             + " dvAgree=" + dvAgree
@@ -222,6 +231,9 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
             SET bestDv TO nodeDv.
             SET bestAnalyticDv TO cand["DV"].
             SET bestDvDelta TO dvDelta.
+            SET bestPro TO nodePro.
+            SET bestNor TO nodeNor.
+            SET bestRad TO nodeRad.
             SET bestDepart TO cand["DEPART"].
             SET bestArrive TO cand["ARRIVE"].
             SET bestVinf TO cand["VINF"].
@@ -248,6 +260,9 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + " selectedDv=" + ROUND(bestDv,1)
         + " selectedDvDelta=" + ROUND(bestDvDelta,2)
         + " selectedVinf=" + ROUND(bestVinf,1)
+        + " selectedPrograde=" + ROUND(bestPro,1)
+        + " selectedNormal=" + ROUND(bestNor,1)
+        + " selectedRadial=" + ROUND(bestRad,1)
         + " selectedCaKm=" + ROUND(bestCaKm,1)
         + " scanWall=" + ROUND(TIME:SECONDS - scanStartClock,1)
         + " oldLiveEvals=" + pass1Cells).
