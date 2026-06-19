@@ -13,9 +13,11 @@ GLOBAL TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX IS 27.
 GLOBAL TRANSFER_INTERPLANETARY_DEPART_LEAD IS 300.
 GLOBAL TRANSFER_LAMBERT_MIN_NODE_DV IS 10.
 GLOBAL TRANSFER_INTERPLANETARY_TOF_SPREAD_FRAC IS 0.45.
-GLOBAL TRANSFER_LAMBERT_SHORTLIST IS 10.
-GLOBAL TRANSFER_LAMBERT_REFINE_MAX_ITER IS 36.
+GLOBAL TRANSFER_LAMBERT_SHORTLIST IS 24.
+GLOBAL TRANSFER_LAMBERT_REFINE_MAX_ITER IS 96.
 GLOBAL TRANSFER_LAMBERT_REFINE_STALL_LIMIT IS 3.
+GLOBAL TRANSFER_LAMBERT_REFINE_CA_EPS_KM IS 0.5.
+GLOBAL TRANSFER_LAMBERT_REFINE_STEP_GROW IS 1.5.
 
 LOCAL FUNCTION _finiteLocalPeriod {
     LOCAL p IS SHIP:ORBIT:PERIOD.
@@ -649,6 +651,12 @@ LOCAL FUNCTION _refineLambertPatchSeed {
         "RADIALOUT", 20.0,
         "TIME", 180.0
     ).
+    LOCAL maxes IS LEXICON(
+        "PROGRADE", 80.0,
+        "NORMAL", 160.0,
+        "RADIALOUT", 160.0,
+        "TIME", 1800.0
+    ).
     LOCAL mins IS LEXICON(
         "PROGRADE", 0.5,
         "NORMAL", 0.5,
@@ -661,11 +669,16 @@ LOCAL FUNCTION _refineLambertPatchSeed {
     LOCAL stallLimit IS MAX(1, TRANSFER_LAMBERT_REFINE_STALL_LIMIT).
     LOCAL stalls IS 0.
     LOCAL iterRan IS 0.
+    LOCAL lastAxis IS "".
+    LOCAL lastSign IS 0.
+    LOCAL epsKm IS MAX(0.01, TRANSFER_LAMBERT_REFINE_CA_EPS_KM).
+    LOCAL grow IS MAX(1.0, TRANSFER_LAMBERT_REFINE_STEP_GROW).
 
     FROM { LOCAL iter IS 0. } UNTIL iter >= maxIter STEP { SET iter TO iter + 1. } DO {
         SET iterRan TO iter + 1.
         LOCAL bestAxis IS "".
         LOCAL bestValue IS 0.
+        LOCAL bestSign IS 0.
         LOCAL bestTrial IS best.
 
         FOR axis IN axes {
@@ -689,6 +702,7 @@ LOCAL FUNCTION _refineLambertPatchSeed {
                             SET bestTrial TO trial.
                             SET bestAxis TO axis.
                             SET bestValue TO trialVal.
+                            SET bestSign TO sgn.
                         }
                     }
                 }
@@ -709,14 +723,21 @@ LOCAL FUNCTION _refineLambertPatchSeed {
                 + "->" + ROUND(newCaKm,1)
                 + "km patch=" + (best["PATCH"] <> 0)
                 + " safe=" + best["SAFE"]
+                + " step=" + ROUND(steps[bestAxis],2)
                 + " dV=" + ROUND(nd:DELTAV:MAG,1)).
             IF best["PATCH_OK"] {
                 RETURN best["PATCH"].
             }
-            IF prevCaKm - newCaKm < 1 {
+            IF prevCaKm - newCaKm < epsKm {
                 SET stalls TO stalls + 1.
             } ELSE {
                 SET stalls TO 0.
+                IF bestAxis = lastAxis AND bestSign = lastSign {
+                    SET steps[bestAxis] TO MIN(maxes[bestAxis],
+                        steps[bestAxis] * grow).
+                }
+                SET lastAxis TO bestAxis.
+                SET lastSign TO bestSign.
             }
             IF stalls >= stallLimit {
                 mLogWarn("Lambert patch refine: progress stalled after "
@@ -727,6 +748,8 @@ LOCAL FUNCTION _refineLambertPatchSeed {
             FOR axis IN axes {
                 SET steps[axis] TO steps[axis] / 2.
             }
+            SET lastAxis TO "".
+            SET lastSign TO 0.
             SET stalls TO stalls + 1.
             LOCAL small IS TRUE.
             FOR axis IN axes {
