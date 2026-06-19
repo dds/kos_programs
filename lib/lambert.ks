@@ -180,7 +180,7 @@ GLOBAL FUNCTION orbitalStateVectors {
     LOCAL vel IS VELOCITYAT(obt_, epochTime):ORBIT.
     LOCAL currentBody IS obt_:BODY.
 
-    UNTIL currentBody = 0 OR currentBody = center OR NOT currentBody:HASBODY {
+    UNTIL currentBody = center OR NOT currentBody:HASOBT {
         SET vel TO vel + VELOCITYAT(currentBody, epochTime):ORBIT.
         SET currentBody TO currentBody:BODY.
     }
