@@ -54,11 +54,11 @@ mission_cfg_SEQUENCE =
   ESCAPE, COAST, MCC, AEROBRAKE, DESCENT, DONE
 ```
 
-The cached band plan was:
+The derived band plan was:
 
 ```text
 lib_band_phase = ESCAPE
-lib_band_libs =
+required libs =
   state
   logs
   files
@@ -83,8 +83,8 @@ lib_band_libs =
   xfer_plan
 ```
 
-Important detail: the file listing did not include all libraries from
-`lib_band_libs`. In particular, `orbit.ksm`, `lib_bplane_math.ksm`,
+Important detail: the file listing did not include all derived band libraries.
+In particular, `orbit.ksm`, `lib_bplane_math.ksm`,
 `maneuver_transfer.ksm`, and `xfer_plan.ksm` were missing from the shown local
 `lib/` directory. That suggests boot had planned the band, began syncing and
 loading it, then ran out of storage before all required files were present.
@@ -557,7 +557,7 @@ A successful fix should produce a post-return-setup reboot where:
 
 1. `phase = ESCAPE`
 2. `lib_band = ESCAPE`
-3. all required `lib_band_libs` files are present locally
+3. all required files for the active `lib_band` are present locally
 4. free space is comfortably above emergency margin, ideally at least 10 KB
 5. `phaseEscape` can plan and execute a moon escape burn
 6. after the burn, the mission advances to `COAST`
@@ -574,4 +574,3 @@ A successful fix should produce a post-return-setup reboot where:
 
 This keeps the patch small, makes the storage win large, and leaves the
 existing generic transfer system intact for normal launch-to-target missions.
-

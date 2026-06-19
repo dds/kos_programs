@@ -53,8 +53,6 @@ LOCAL FUNCTION _fallbackLibs {
 }
 
 GLOBAL FUNCTION bootVehicleLibs {
-    LOCAL cachedLibs IS bootCachedVehicleLibs().
-    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     RETURN missionSequenceLibs(_fallbackLibs(), LIST("utils", "config")).
 }
 

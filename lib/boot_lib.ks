@@ -700,15 +700,6 @@ GLOBAL FUNCTION getTarget {
     RETURN tn.
 }
 
-GLOBAL FUNCTION bootCachedVehicleLibs {
-    PARAMETER band IS "".
-    IF HOMECONNECTION:ISCONNECTED { RETURN LIST(). }
-    IF SHIP:STATUS = "PRELAUNCH" { RETURN LIST(). }
-    IF band <> "" AND stateGet("lib_band", "") <> band { RETURN LIST(). }
-    IF stateGet("lib_band_phase", "") <> stateGet("phase", "") { RETURN LIST(). }
-    RETURN stateGet("lib_band_libs", LIST()).
-}
-
 GLOBAL FUNCTION bootPlannedMissionLibs {
     PARAMETER db IS "LAUNCH".
     LOCAL sq IS phaseSequenceEnsurePrelaunch(SEQUENCE).
@@ -725,13 +716,6 @@ GLOBAL FUNCTION bootPlannedMissionLibs {
         SET fb TO "".
     }
     LOCAL band IS bootLibBandForPhase(phase, fb).
-    LOCAL cl IS bootCachedVehicleLibs(band).
-    IF cl:LENGTH > 0 {
-        stateSet("lib_band_phase", phase).
-        stateSet("reload_required", "false").
-        RETURN cl.
-    }
-
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").
@@ -743,7 +727,6 @@ GLOBAL FUNCTION bootPlannedMissionLibs {
     }
     LOCAL libs IS bootLibResolve(roots).
     missionAppendUnique(libs, bootLibResolve(missionExtraLibs())).
-    stateSet("lib_band_libs", libs).
     RETURN libs.
 }
 
@@ -884,7 +867,6 @@ GLOBAL FUNCTION airplaneVehicleLibs {
     SET libs TO missionSequenceLibs(libs, bl).
     stateSet("lib_band", "AIR").
     stateSet("lib_band_phase", stateGet("phase", seq[0])).
-    stateSet("lib_band_libs", libs).
     RETURN libs.
 }
 

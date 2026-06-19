@@ -14,8 +14,6 @@ SET FLAP_AG TO 1.
 GLOBAL FJ1A_SEQ IS LIST("PREFLIGHT", "FLIGHT", "POST_FLIGHT", "DONE").
 
 GLOBAL FUNCTION bootVehicleLibs {
-    LOCAL cachedLibs IS bootCachedVehicleLibs("AIR").
-    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     RETURN airplaneVehicleLibs(FJ1A_SEQ).
 }
 

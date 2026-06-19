@@ -32,13 +32,10 @@ SET DRONE_LOW_RESOURCE TO 15.
 GLOBAL FDR1_SEQ IS LIST("ARM", "FLY", "DONE").
 
 GLOBAL FUNCTION bootVehicleLibs {
-    LOCAL cachedLibs IS bootCachedVehicleLibs("FLY").
-    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     LOCAL seq IS airplaneSequenceFromState(FDR1_SEQ).
     LOCAL libs IS missionSequenceLibs(missionLibsForPhases(seq, LIST()), LIST()).
     stateSet("lib_band", "FLY").
     stateSet("lib_band_phase", stateGet("phase", seq[0])).
-    stateSet("lib_band_libs", libs).
     RETURN libs.
 }
 

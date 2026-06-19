@@ -41,8 +41,6 @@ GLOBAL FSS1_SEQ IS LIST(
 ).
 
 GLOBAL FUNCTION bootVehicleLibs {
-    LOCAL cachedLibs IS bootCachedVehicleLibs("AIR").
-    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     RETURN airplaneVehicleLibs(FSS1_SEQ, LIST("orbit", "airplane", "solar")).
 }
 

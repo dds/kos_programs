@@ -100,6 +100,7 @@ _loadLib("dependencies").
 BOOT_LIB_RAN:ADD("dependencies").
 bootPreamble().
 stateInit().
+stateRemove("lib_band_libs").
 WAIT 0.001.
 
 bootEnsureDirs().

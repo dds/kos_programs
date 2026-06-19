@@ -31,8 +31,6 @@ IF stateGet("phase", "") = "" {
 }
 
 GLOBAL FUNCTION bootVehicleLibs {
-    LOCAL cachedLibs IS bootCachedVehicleLibs("AIR").
-    IF cachedLibs:LENGTH > 0 { RETURN cachedLibs. }
     RETURN airplaneVehicleLibs(FBIJ_SEQ).
 }
 
