@@ -15,8 +15,11 @@
 //
 // Lambert's problem: given two position vectors (r1, r2) and a
 // time of flight (tof), find the orbit that connects them.
-// The solution gives departure and arrival velocity vectors (v1, v2).
-// The ejection delta-v is then simply: dV = v1 - ship_velocity.
+// The solution gives departure and arrival velocity vectors (v1, v2)
+// in the chosen central-body frame. For a parking-orbit departure,
+// callers must convert v1 into a planet-relative v-infinity first,
+// then build a local escape burn. Directly subtracting the ship's
+// parking-orbit velocity mixes frames and greatly overstates dV.
 //
 // Simplifications vs. the full PyKep implementation:
 //   - Multi-revolution transfer orbits are not considered
@@ -67,7 +70,8 @@ LOCAL FUNCTION _clamp1 {
 //   LOCAL r1 IS POSITIONAT(Kerbin, departTime) - Sun:POSITION.
 //   LOCAL r2 IS POSITIONAT(Duna,   arriveTime) - Sun:POSITION.
 //   LOCAL result IS lambertSolve(r1, r2, arriveTime - departTime, Sun:MU, FALSE).
-//   LOCAL ejectionDV IS result["v1"] - VELOCITYAT(SHIP, departTime):ORBIT.
+//   LOCAL vInf IS result["v1"] - VELOCITYAT(Kerbin, departTime):ORBIT.
+//   // Convert vInf to a local Kerbin escape node before executing.
 GLOBAL FUNCTION lambertSolve {
     PARAMETER r1, r2, tof, mu, flip.
 

@@ -4,6 +4,8 @@
 // ============================================================
 
 GLOBAL TRANSFER_SCAN_LOOKAHEAD_HOURS IS 6.
+GLOBAL TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT IS 24.
+GLOBAL TRANSFER_INTERPLANETARY_TOF_SAMPLES IS 9.
 
 GLOBAL FUNCTION planInterplanetaryTransfer {
     PARAMETER targetBody.
@@ -27,8 +29,12 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL hohmannA IS (originSma + targetBody:ORBIT:SEMIMAJORAXIS) / 2.
     LOCAL hohmannTof IS CONSTANT:PI * SQRT(hohmannA^3 / transferCenter:MU).
     LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
-    LOCAL nDepart IS 12.
-    LOCAL nTof IS 9.
+    LOCAL scanHours IS MAX(0.25, TRANSFER_SCAN_LOOKAHEAD_HOURS).
+    LOCAL scanSpan IS MIN(scanHours * 3600, shipPeriod * 2).
+    SET scanSpan TO MAX(shipPeriod, scanSpan).
+    LOCAL departStep IS MAX(45, shipPeriod / MAX(8, TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT)).
+    LOCAL nDepart IS MAX(12, CEILING(scanSpan / departStep) + 1).
+    LOCAL nTof IS MAX(3, TRANSFER_INTERPLANETARY_TOF_SAMPLES).
     LOCAL tofSpread IS hohmannTof * 0.3.
     LOCAL departStart IS TIME:SECONDS + 60.
     LOCAL bestDv IS 9999999.
@@ -38,20 +44,24 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL bestPatchDepart IS -1.
     LOCAL bestPatchArrive IS -1.
     LOCAL bestPatchPe IS -1.
+    LOCAL bestVinf IS -1.
+    LOCAL bestPatchVinf IS -1.
 
     mLog("Lambert scan: " + nDepart + " departures x " + nTof
         + " TOFs, center=" + transferCenter:NAME
-        + " hohmannTof=" + ROUND(hohmannTof,0) + "s").
+        + " hohmannTof=" + ROUND(hohmannTof,0) + "s"
+        + " departSpan=" + ROUND(scanSpan,0) + "s").
     mLogWarn("STATS lambert setup target=" + targetBody:NAME
         + " center=" + transferCenter:NAME
         + " departSamples=" + nDepart
         + " tofSamples=" + nTof
-        + " hohmannTof=" + ROUND(hohmannTof,0)).
+        + " hohmannTof=" + ROUND(hohmannTof,0)
+        + " departSpan=" + ROUND(scanSpan,0)).
 
     FROM { LOCAL di IS 0. } UNTIL di >= nDepart STEP { SET di TO di + 1. } DO {
-        LOCAL departUt IS departStart + di * shipPeriod.
+        LOCAL departUt IS departStart + di * scanSpan / MAX(1, nDepart - 1).
         LOCAL r1 IS POSITIONAT(BODY, departUt) - POSITIONAT(transferCenter, departUt).
-        LOCAL v1Ship IS _lambertFrameVelocity(SHIP, transferCenter, departUt).
+        LOCAL vOrigin IS _lambertFrameVelocity(BODY, transferCenter, departUt).
 
         FROM { LOCAL ti IS 0. } UNTIL ti >= nTof STEP { SET ti TO ti + 1. } DO {
             LOCAL tofFrac IS (ti / (nTof - 1)) - 0.5.
@@ -61,18 +71,21 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
             LOCAL r2 IS POSITIONAT(targetBody, arriveUt) - POSITIONAT(transferCenter, arriveUt).
             LOCAL result IS lambertSolve(r1, r2, tof, transferCenter:MU, FALSE).
             LOCAL v1Lambert IS result["v1"].
-            LOCAL dvVec IS v1Lambert - v1Ship.
-            LOCAL dvMag IS dvVec:MAG.
+            LOCAL vInfVec IS v1Lambert - vOrigin.
+            LOCAL vInfMag IS vInfVec:MAG.
+            LOCAL ndProbe IS _lambertEscapeNode(departUt, vInfVec).
+            LOCAL dvMag IS ndProbe:DELTAV:MAG.
 
             IF dvMag < bestDv {
                 SET bestDv TO dvMag.
                 SET bestDepart TO departUt.
                 SET bestArrive TO arriveUt.
-                mLog("Lambert[d=" + di + ",t=" + ti + "] dV=" + ROUND(dvMag,1) + " depart T+" + ROUND(departUt - TIME:SECONDS,0) + "s").
+                SET bestVinf TO vInfMag.
+                mLog("Lambert[d=" + di + ",t=" + ti + "] dV="
+                    + ROUND(dvMag,1) + " vInf=" + ROUND(vInfMag,1)
+                    + " depart T+" + ROUND(departUt - TIME:SECONDS,0) + "s").
             }
 
-            LOCAL ndProbe IS _lambertNodeFromVector(
-                departUt, dvVec, transferCenter).
             ADD ndProbe.
             WAIT 0.02.
             LOCAL patch IS _getTargetPatch(ndProbe, targetBody).
@@ -81,8 +94,10 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
                 SET bestPatchDepart TO departUt.
                 SET bestPatchArrive TO arriveUt.
                 SET bestPatchPe TO patch:PERIAPSIS.
+                SET bestPatchVinf TO vInfMag.
                 mLog("Lambert patch[d=" + di + ",t=" + ti + "] dV="
-                    + ROUND(dvMag,1) + " Pe="
+                    + ROUND(dvMag,1) + " vInf=" + ROUND(vInfMag,1)
+                    + " Pe="
                     + ROUND(bestPatchPe/1000,1) + "km depart T+"
                     + ROUND(departUt - TIME:SECONDS,0) + "s").
             }
@@ -101,26 +116,30 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         SET bestDv TO bestPatchDv.
         SET bestDepart TO bestPatchDepart.
         SET bestArrive TO bestPatchArrive.
+        SET bestVinf TO bestPatchVinf.
     } ELSE {
         mLogWarn("Lambert scan found no patch-producing candidate; using raw lowest-dV solution.").
     }
 
     mLog("Lambert best: depart T+" + ROUND(bestDepart - TIME:SECONDS,0)
         + "s  tof=" + ROUND(bestArrive - bestDepart,0)
-        + "s  dV=" + ROUND(bestDv,1)).
+        + "s  dV=" + ROUND(bestDv,1)
+        + "  vInf=" + ROUND(bestVinf,1)).
     mLogWarn("STATS lambert result target=" + targetBody:NAME
         + " status=grid-best departT=" + ROUND(bestDepart - TIME:SECONDS,0)
         + " tof=" + ROUND(bestArrive - bestDepart,0)
         + " dv=" + ROUND(bestDv,1)
+        + " vinf=" + ROUND(bestVinf,1)
         + " patch=" + (bestPatchDepart >= 0)
         + " PeKm=" + ROUND(bestPatchPe/1000,1)).
 
     LOCAL r1Best IS POSITIONAT(BODY, bestDepart) - POSITIONAT(transferCenter, bestDepart).
     LOCAL r2Best IS POSITIONAT(targetBody, bestArrive) - POSITIONAT(transferCenter, bestArrive).
     LOCAL result IS lambertSolve(r1Best, r2Best, bestArrive - bestDepart, transferCenter:MU, FALSE).
-    LOCAL dvVec IS result["v1"] - _lambertFrameVelocity(SHIP, transferCenter, bestDepart).
+    LOCAL vOriginBest IS _lambertFrameVelocity(BODY, transferCenter, bestDepart).
+    LOCAL vInfBest IS result["v1"] - vOriginBest.
 
-    LOCAL nd IS _lambertNodeFromVector(bestDepart, dvVec, transferCenter).
+    LOCAL nd IS _lambertEscapeNode(bestDepart, vInfBest).
     ADD nd.
     WAIT 0.1.
 
@@ -142,15 +161,36 @@ LOCAL FUNCTION _lambertFrameVelocity {
         / (2 * dt).
 }
 
-LOCAL FUNCTION _lambertNodeFromVector {
+LOCAL FUNCTION _lambertEscapeNode {
+    PARAMETER burnUt.
+    PARAMETER vInfVec.
+
+    LOCAL localR IS POSITIONAT(SHIP, burnUt) - POSITIONAT(BODY, burnUt).
+    LOCAL rHat IS localR:NORMALIZED.
+    LOCAL localVel IS VELOCITYAT(SHIP, burnUt):ORBIT.
+    LOCAL vInfMag IS vInfVec:MAG.
+    LOCAL aim IS vInfVec:NORMALIZED.
+    LOCAL tangentAim IS aim - VDOT(aim, rHat) * rHat.
+    IF tangentAim:MAG < 1e-6 {
+        SET tangentAim TO localVel:NORMALIZED.
+    } ELSE {
+        SET tangentAim TO tangentAim:NORMALIZED.
+    }
+
+    LOCAL burnSpeed IS SQRT(vInfMag ^ 2 + 2 * BODY:MU / localR:MAG).
+    LOCAL desiredLocalVel IS tangentAim * burnSpeed.
+    LOCAL dvVec IS desiredLocalVel - localVel.
+
+    RETURN _nodeFromLocalVector(burnUt, dvVec).
+}
+
+LOCAL FUNCTION _nodeFromLocalVector {
     PARAMETER burnUt.
     PARAMETER dvVec.
-    PARAMETER frameCenter.
-
     LOCAL localR IS POSITIONAT(SHIP, burnUt) - POSITIONAT(BODY, burnUt).
     LOCAL progradeHat IS VELOCITYAT(SHIP, burnUt):ORBIT:NORMALIZED.
     LOCAL normalHat IS VCRS(localR:NORMALIZED, progradeHat):NORMALIZED.
-    LOCAL radialHat IS VCRS(normalHat, progradeHat):NORMALIZED.
+    LOCAL radialHat IS VCRS(progradeHat, normalHat):NORMALIZED.
     LOCAL dvPro IS VDOT(dvVec, progradeHat).
     LOCAL dvNor IS VDOT(dvVec, normalHat).
     LOCAL dvRad IS VDOT(dvVec, radialHat).
