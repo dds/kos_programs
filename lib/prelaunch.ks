@@ -53,6 +53,7 @@ LOCAL FUNCTION _etaToLaunchPlane {
     PARAMETER ascendingNode.
     PARAMETER targetLan.
     PARAMETER targetInc.
+    PARAMETER toleranceDeg IS 2.5. 
 
     LOCAL eta_ IS -1.
     LOCAL latitude_ IS SHIP:LATITUDE.
@@ -66,7 +67,17 @@ LOCAL FUNCTION _etaToLaunchPlane {
     IF NOT ascendingNode { SET relLng TO 180 - relLng. }
 
     LOCAL geoLng IS _norm360(targetLan + relLng - SHIP:BODY:ROTATIONANGLE).
-    LOCAL nodeAngle IS _norm360(geoLng - longitude).
+    
+    // Fixed missing underscore on longitude_
+    LOCAL nodeAngle IS _norm360(geoLng - longitude_).
+
+    // Handle the wraparound if we just passed the window
+    IF nodeAngle > (360 - toleranceDeg) {
+        // Shift it to a negative angle representing how far past the window we are
+        SET nodeAngle TO nodeAngle - 360.
+    }
+
+    // ETA will be negative if we are past the window but within tolerance
     SET eta_ TO (nodeAngle / 360) * SHIP:BODY:ROTATIONPERIOD.
     RETURN eta_.
 }
