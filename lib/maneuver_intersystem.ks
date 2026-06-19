@@ -73,8 +73,9 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
             LOCAL v1Lambert IS result["v1"].
             LOCAL vInfVec IS v1Lambert - vOrigin.
             LOCAL vInfMag IS vInfVec:MAG.
-            LOCAL ndProbe IS _lambertEscapeNode(departUt, vInfVec).
-            LOCAL dvMag IS ndProbe:DELTAV:MAG.
+            LOCAL burnVec IS _lambertEscapeBurnVector(departUt, vInfVec).
+            LOCAL dvMag IS burnVec:MAG.
+            LOCAL ndProbe IS _nodeFromLocalVector(departUt, burnVec).
 
             IF dvMag < bestDv {
                 SET bestDv TO dvMag.
@@ -112,14 +113,22 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         RETURN 0.
     }
 
-    IF bestPatchDepart >= 0 {
-        SET bestDv TO bestPatchDv.
-        SET bestDepart TO bestPatchDepart.
-        SET bestArrive TO bestPatchArrive.
-        SET bestVinf TO bestPatchVinf.
-    } ELSE {
-        mLogWarn("Lambert scan found no patch-producing candidate; using raw lowest-dV solution.").
+    IF bestPatchDepart < 0 {
+        mLogError("planTransfer: Lambert scan found no " + targetBody:NAME
+            + " patch seed; "
+            + "not passing raw non-encounter to B-plane targeting.").
+        mLogWarn("STATS lambert result target=" + targetBody:NAME
+            + " status=no-patch-seed"
+            + " rawDepartT=" + ROUND(bestDepart - TIME:SECONDS,0)
+            + " rawTof=" + ROUND(bestArrive - bestDepart,0)
+            + " rawDv=" + ROUND(bestDv,1)
+            + " rawVinf=" + ROUND(bestVinf,1)).
+        RETURN 0.
     }
+    SET bestDv TO bestPatchDv.
+    SET bestDepart TO bestPatchDepart.
+    SET bestArrive TO bestPatchArrive.
+    SET bestVinf TO bestPatchVinf.
 
     mLog("Lambert best: depart T+" + ROUND(bestDepart - TIME:SECONDS,0)
         + "s  tof=" + ROUND(bestArrive - bestDepart,0)
@@ -165,6 +174,14 @@ LOCAL FUNCTION _lambertEscapeNode {
     PARAMETER burnUt.
     PARAMETER vInfVec.
 
+    RETURN _nodeFromLocalVector(
+        burnUt, _lambertEscapeBurnVector(burnUt, vInfVec)).
+}
+
+LOCAL FUNCTION _lambertEscapeBurnVector {
+    PARAMETER burnUt.
+    PARAMETER vInfVec.
+
     LOCAL localR IS POSITIONAT(SHIP, burnUt) - POSITIONAT(BODY, burnUt).
     LOCAL rHat IS localR:NORMALIZED.
     LOCAL localVel IS VELOCITYAT(SHIP, burnUt):ORBIT.
@@ -179,9 +196,7 @@ LOCAL FUNCTION _lambertEscapeNode {
 
     LOCAL burnSpeed IS SQRT(vInfMag ^ 2 + 2 * BODY:MU / localR:MAG).
     LOCAL desiredLocalVel IS tangentAim * burnSpeed.
-    LOCAL dvVec IS desiredLocalVel - localVel.
-
-    RETURN _nodeFromLocalVector(burnUt, dvVec).
+    RETURN desiredLocalVel - localVel.
 }
 
 LOCAL FUNCTION _nodeFromLocalVector {

@@ -177,9 +177,17 @@ GLOBAL FUNCTION lambertSolve {
 GLOBAL FUNCTION orbitalStateVectors {
     PARAMETER obt_, epochTime.
     PARAMETER center IS BODY.
+    LOCAL vel IS VELOCITYAT(obt_, epochTime):ORBIT.
+    LOCAL currentBody IS obt_:BODY.
+
+    UNTIL currentBody = center OR NOT currentBody:HASBODY {
+        SET vel TO vel + VELOCITYAT(currentBody, epochTime):ORBIT.
+        SET currentBody TO currentBody:BODY.
+    }
+
     RETURN LEX(
         "position", POSITIONAT(obt_, epochTime) - center:POSITION,
-        "velocity", VELOCITYAT(obt_, epochTime):ORBIT
+        "velocity", vel
     ).
 }
 
