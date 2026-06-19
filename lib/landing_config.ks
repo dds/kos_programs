@@ -4,6 +4,7 @@ GLOBAL TARGET_LNG IS 0.
 GLOBAL TARGET_LOCK IS 0.
 GLOBAL TARGET_WAYPOINT IS "".
 GLOBAL LANDING_ASSIST_IMPACT_LIMIT IS 20000.
+GLOBAL LANDING_ASSIST_CROSSTRACK_LIMIT IS 100000.
 GLOBAL TOUCHDOWN_SPEED IS 2.
 GLOBAL HIGH_DESCENT_SPEED IS 30.
 GLOBAL HOVER_ALT IS 100.
@@ -132,16 +133,31 @@ GLOBAL FUNCTION landingResolveTarget {
     RETURN result.
 }
 
-LOCAL FUNCTION _getImpactDistance {
+LOCAL FUNCTION _getImpactAimInfo {
     LOCAL landingTarget IS landingResolveTarget().
-    IF NOT landingTarget["FOUND"] { RETURN 999999. }
-    IF NOT ADDONS:TR:AVAILABLE { RETURN 999999. }
+    IF NOT landingTarget["FOUND"] { RETURN LEXICON("FOUND", FALSE). }
+    IF NOT ADDONS:TR:AVAILABLE { RETURN LEXICON("FOUND", FALSE). }
     ADDONS:TR:SETTARGET(LATLNG(landingTarget["LAT"], landingTarget["LNG"])).
     WAIT 0.5.
-    IF NOT ADDONS:TR:HASIMPACT { RETURN 999999. }
+    IF NOT ADDONS:TR:HASIMPACT { RETURN LEXICON("FOUND", FALSE). }
     LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-    RETURN geoDistance(impactPos:LAT, impactPos:LNG,
+    LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG,
         landingTarget["LAT"], landingTarget["LNG"]).
+    LOCAL upVec IS SHIP:UP:VECTOR.
+    LOCAL hVel IS SHIP:VELOCITY:SURFACE
+        - VDOT(SHIP:VELOCITY:SURFACE, upVec) * upVec.
+    IF hVel:MAG < 0.1 {
+        RETURN LEXICON("FOUND", TRUE, "DIST", dist,
+            "ALONG", 0, "CROSS", dist).
+    }
+    LOCAL travelDir IS VXCL(upVec, hVel):NORMALIZED.
+    LOCAL targetVec IS LATLNG(landingTarget["LAT"], landingTarget["LNG"]):POSITION.
+    LOCAL impactVec IS LATLNG(impactPos:LAT, impactPos:LNG):POSITION.
+    LOCAL offset IS VXCL(upVec, impactVec - targetVec).
+    LOCAL alongM IS VDOT(offset, travelDir).
+    LOCAL crossVec IS offset - travelDir * alongM.
+    RETURN LEXICON("FOUND", TRUE, "DIST", dist,
+        "ALONG", alongM, "CROSS", crossVec:MAG).
 }
 
 GLOBAL FUNCTION landingFlyoverPe {
@@ -161,11 +177,27 @@ GLOBAL FUNCTION landingFlyoverDistance {
 
 GLOBAL FUNCTION landingImpactWithinTolerance {
     IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN TRUE. }
-    RETURN _getImpactDistance() <= TARGET_TOLERANCE.
+    LOCAL impactInfo IS _getImpactAimInfo().
+    RETURN impactInfo["FOUND"] AND impactInfo["DIST"] <= TARGET_TOLERANCE.
 }
 
 GLOBAL FUNCTION landingImpactAcceptableForAssist {
-    IF _getImpactDistance() <= LANDING_ASSIST_IMPACT_LIMIT { RETURN TRUE. }
+    LOCAL impactInfo IS _getImpactAimInfo().
+    IF impactInfo["FOUND"] {
+        mLogWarn("STATS land-assist-impact dist="
+            + ROUND(impactInfo["DIST"],0)
+            + " along=" + ROUND(impactInfo["ALONG"],0)
+            + " cross=" + ROUND(impactInfo["CROSS"],0)
+            + " limit=" + ROUND(LANDING_ASSIST_IMPACT_LIMIT,0)
+            + " crossLimit=" + ROUND(LANDING_ASSIST_CROSSTRACK_LIMIT,0)).
+        IF impactInfo["DIST"] <= LANDING_ASSIST_IMPACT_LIMIT { RETURN TRUE. }
+    }
     IF SHIP:PERIAPSIS > landingFlyoverPe() + 500 { RETURN FALSE. }
+    IF impactInfo["FOUND"]
+            AND impactInfo["ALONG"] > 0
+            AND impactInfo["ALONG"] <= LANDING_ASSIST_IMPACT_LIMIT
+            AND impactInfo["CROSS"] <= LANDING_ASSIST_CROSSTRACK_LIMIT {
+        RETURN TRUE.
+    }
     RETURN landingFlyoverDistance() <= LANDING_ASSIST_IMPACT_LIMIT.
 }
