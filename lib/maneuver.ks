@@ -10,6 +10,14 @@ GLOBAL BURN_BRIEF IS 1.
 GLOBAL BURN_REBOUND_ACCEPT_MIN_DV IS 100.
 GLOBAL BURN_REBOUND_ACCEPT_FRAC IS 0.005.
 GLOBAL BURN_REBOUND_ACCEPT_MIN IS 3.
+GLOBAL BURN_ALIGN_GUARD_DEG IS 20.
+GLOBAL BURN_ALIGN_REACQUIRE_DEG IS 5.
+GLOBAL BURN_ALIGN_DEBOUNCE IS 0.5.
+GLOBAL BURN_ALIGN_REACQUIRE_TIMEOUT IS 10.
+GLOBAL BURN_BV_SLEW_MAX_DEG_PER_S IS 60.
+GLOBAL BURN_BV_MIN_MAG IS 0.001.
+GLOBAL BURN_TICK_LOG_INTERVAL IS 1.0.
+GLOBAL BURN_ABORT_HOLD_VECTOR IS V(0, 0, 1).
 
 
 LOCAL CF        IS 0.001.
@@ -157,20 +165,161 @@ GLOBAL FUNCTION executeManeuver {
         RETURN FALSE.
     }
     mLog("Burn start. dV=" + ROUND(bdv,1) + " m/s").
+    stateSet("burn_status", "burning").
     LOCAL bsc IS TIME:SECONDS.
 
-    LOCAL obv IS nd:BURNVECTOR.
+    LOCAL steerVec IS nd:BURNVECTOR.
+    LOCAL prevBV IS steerVec.
+    LOCAL prevBVTime IS TIME:SECONDS.
+    LOCAL throttleCmd IS 0.
+    LOCK STEERING TO steerVec.
+    LOCK THROTTLE TO throttleCmd.
     LOCAL db2 IS FALSE.
     LOCAL dra IS FALSE.
     LOCAL rdv IS 0.
+    LOCAL burnAbort IS "".
+    LOCAL burnAbortDetail IS "".
+    LOCAL alignOverStart IS -1.
+    LOCAL nextTickLog IS TIME:SECONDS.
+    LOCAL pauseCount IS 0.
+    LOCAL totalPaused IS 0.
+    LOCAL burnDone IS FALSE.
 
-    UNTIL _ic(nd, bdv) {
-        LOCK STEERING TO nd:BURNVECTOR.
+    UNTIL burnDone OR burnAbort <> "" {
+        LOCAL now IS TIME:SECONDS.
+        LOCAL curBV IS nd:BURNVECTOR.
+        LOCAL bvOk IS _bvo(curBV).
+        LOCAL bvSlew IS 0.
+        IF bvOk AND _bvo(prevBV) {
+            SET bvSlew TO VANG(prevBV, curBV) / MAX(0.001, now - prevBVTime).
+        }
+        SET prevBV TO curBV.
+        SET prevBVTime TO now.
+
+        LOCAL pauseReason IS "".
+        IF NOT bvOk {
+            SET pauseReason TO "burnvector-invalid".
+        } ELSE IF bvSlew > BURN_BV_SLEW_MAX_DEG_PER_S {
+            SET pauseReason TO "burnvector-slew".
+        } ELSE {
+            SET steerVec TO curBV.
+        }
+        LOCK STEERING TO steerVec.
+
+        LOCAL ae IS VANG(SHIP:FACING:FOREVECTOR, steerVec).
+        IF pauseReason = "" {
+            IF ae > BURN_ALIGN_GUARD_DEG {
+                IF alignOverStart < 0 {
+                    SET alignOverStart TO now.
+                } ELSE IF now - alignOverStart > BURN_ALIGN_DEBOUNCE {
+                    SET pauseReason TO "attitude-divergence".
+                }
+            } ELSE {
+                SET alignOverStart TO -1.
+            }
+        }
+
+        IF now >= nextTickLog {
+            SET nextTickLog TO now + BURN_TICK_LOG_INTERVAL.
+            mLogWarn("BURN tick status="
+                + (CHOOSE "paused-recovering" IF pauseReason <> "" ELSE "burning")
+                + " rem=" + ROUND(nd:DELTAV:MAG,2)
+                + " burned=" + ROUND(MAX(0, bdv - nd:DELTAV:MAG),2)
+                + " ae=" + ROUND(ae,1)
+                + " av=" + ROUND(SHIP:ANGULARVEL:MAG,3)
+                + " bvSlew=" + ROUND(bvSlew,1)
+                + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4)
+                + " thr=" + ROUND(throttleCmd,2)).
+        }
+
+        IF pauseReason <> "" {
+            SET throttleCmd TO 0.
+            SET pauseCount TO pauseCount + 1.
+            LOCAL pauseStart IS TIME:SECONDS.
+            stateSet("burn_status", "paused-recovering").
+            stateSet("burn_pause_reason", pauseReason).
+            mLogWarn("Burn paused: " + pauseReason
+                + " ae=" + ROUND(ae,1)
+                + " bvSlew=" + ROUND(bvSlew,1)
+                + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4) + ".").
+            HUDTEXT("Burn paused: reacquiring attitude", 3, 2, 15, YELLOW, FALSE).
+
+            LOCAL reacquired IS FALSE.
+            UNTIL reacquired OR burnAbort <> "" {
+                SET now TO TIME:SECONDS.
+                SET curBV TO nd:BURNVECTOR.
+                SET bvOk TO _bvo(curBV).
+                SET bvSlew TO 0.
+                IF bvOk AND _bvo(prevBV) {
+                    SET bvSlew TO VANG(prevBV, curBV) / MAX(0.001, now - prevBVTime).
+                }
+                SET prevBV TO curBV.
+                SET prevBVTime TO now.
+                IF bvOk AND bvSlew <= BURN_BV_SLEW_MAX_DEG_PER_S {
+                    SET steerVec TO curBV.
+                }
+                LOCK STEERING TO steerVec.
+                SET ae TO VANG(SHIP:FACING:FOREVECTOR, steerVec).
+
+                IF now >= nextTickLog {
+                    SET nextTickLog TO now + BURN_TICK_LOG_INTERVAL.
+                    mLogWarn("BURN tick status=paused-recovering"
+                        + " reason=" + pauseReason
+                        + " rem=" + ROUND(nd:DELTAV:MAG,2)
+                        + " burned=" + ROUND(MAX(0, bdv - nd:DELTAV:MAG),2)
+                        + " ae=" + ROUND(ae,1)
+                        + " av=" + ROUND(SHIP:ANGULARVEL:MAG,3)
+                        + " bvSlew=" + ROUND(bvSlew,1)
+                        + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4)
+                        + " pausedFor=" + ROUND(now - pauseStart,1)
+                        + " thr=" + ROUND(throttleCmd,2)).
+                }
+
+                IF bvOk AND bvSlew <= BURN_BV_SLEW_MAX_DEG_PER_S
+                        AND ae <= BURN_ALIGN_REACQUIRE_DEG {
+                    SET reacquired TO TRUE.
+                } ELSE IF now - pauseStart > BURN_ALIGN_REACQUIRE_TIMEOUT {
+                    SET burnAbort TO pauseReason + "-timeout".
+                    SET burnAbortDetail TO "ae=" + ROUND(ae,1)
+                        + " av=" + ROUND(SHIP:ANGULARVEL:MAG,3)
+                        + " bvSlew=" + ROUND(bvSlew,1)
+                        + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4).
+                    SET throttleCmd TO 0.
+                    stateSet("burn_status", "aborted-tumbling").
+                    stateSet("burn_abort_reason", burnAbort).
+                    stateSet("burn_abort_detail", burnAbortDetail).
+                    mLogError("Burn abort: could not reacquire after "
+                        + ROUND(now - pauseStart,1) + "s (" + burnAbortDetail + ").").
+                    HUDTEXT("BURN ABORT: attitude not recovered", 8, 2, 18, RED, FALSE).
+                }
+                WAIT 0.05.
+            }
+
+            SET totalPaused TO totalPaused + (TIME:SECONDS - pauseStart).
+            SET alignOverStart TO -1.
+            IF burnAbort = "" {
+                stateSet("burn_status", "burning").
+                stateRemove("burn_pause_reason").
+                mLogWarn("STATS burn pause result status=reacquired"
+                    + " reason=" + pauseReason
+                    + " pauseCount=" + pauseCount
+                    + " pausedFor=" + ROUND(TIME:SECONDS - pauseStart,1)
+                    + " totalPaused=" + ROUND(totalPaused,1)
+                    + " ae=" + ROUND(VANG(SHIP:FACING:FOREVECTOR, steerVec),1)
+                    + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4)).
+            }
+        }
+
+        IF burnAbort <> "" { BREAK. }
+        IF _ic(nd, bdv) {
+            SET burnDone TO TRUE.
+            BREAK.
+        }
 
         IF _ns() {
             HUDTEXT("Staging!", 2, 2, 15, YELLOW, FALSE).
             mLog("Auto-stage triggered.").
-            LOCK THROTTLE TO 0.
+            SET throttleCmd TO 0.
             WAIT 0.3.
             STAGE.
             WAIT 0.7.
@@ -193,28 +342,52 @@ GLOBAL FUNCTION executeManeuver {
                 mLogError("Burn dV rebounded after trim phase: remaining="
                     + ROUND(rem, 2) + " m/s — stopping maneuver.").
             }
-            LOCK THROTTLE TO 0.
+            SET throttleCmd TO 0.
             BREAK.
         }
 
-        IF dc < 0 { LOCK THROTTLE TO 0. BREAK. }
+        IF dc < 0 { SET throttleCmd TO 0. BREAK. }
 
         IF rem > 5.0 {
-            LOCK THROTTLE TO 1.0.
+            SET throttleCmd TO 1.0.
         } ELSE IF rem > 0.5 {
             LOCAL tts IS rem / ma.
-            LOCK THROTTLE TO MAX(0.02, MIN(0.5, tts)).
+            SET throttleCmd TO MAX(0.02, MIN(0.5, tts)).
         } ELSE IF rem >= 0.04 {
-            LOCK THROTTLE TO 0.01.
+            SET throttleCmd TO 0.01.
         } ELSE {
-            LOCK THROTTLE TO 0.
+            SET throttleCmd TO 0.
             BREAK.
         }
         WAIT 0.01.
     }
 
     LOCAL res IS nd:DELTAV:MAG.
+    SET throttleCmd TO 0.
     LOCK THROTTLE TO 0.
+    IF burnAbort <> "" {
+        SET BURN_ABORT_HOLD_VECTOR TO steerVec.
+        LOCK STEERING TO BURN_ABORT_HOLD_VECTOR.
+        _stl(1.0).
+        stateSet("burn_abort_time", TIME:SECONDS).
+        stateSet("burn_abort_residual", res).
+        stateSet("burn_abort_paused", totalPaused).
+        mLogWarn("STATS burn abort reason=" + burnAbort
+            + " detail=" + burnAbortDetail
+            + " dv=" + ROUND(bdv,1)
+            + " residual=" + ROUND(res,2)
+            + " duration=" + ROUND(TIME:SECONDS - bsc,1)
+            + " paused=" + ROUND(totalPaused,1)
+            + " pauseCount=" + pauseCount
+            + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+            + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+            + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4)
+            + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)).
+        IF aid <> "" {
+            DELETEALARM(aid).
+        }
+        RETURN FALSE.
+    }
     UNLOCK THROTTLE.
     UNLOCK STEERING.
     _ren(ntm).
@@ -235,8 +408,11 @@ GLOBAL FUNCTION executeManeuver {
             + " dv=" + ROUND(bdv,1)
             + " reboundDv=" + ROUND(rdv,2)
             + " duration=" + ROUND(TIME:SECONDS - bsc,1)
+            + " paused=" + ROUND(totalPaused,1)
+            + " pauseCount=" + pauseCount
             + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
             + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+            + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4)
             + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)).
         RETURN FALSE.
     }
@@ -245,8 +421,11 @@ GLOBAL FUNCTION executeManeuver {
     mLogWarn("STATS burn result dv=" + ROUND(bdv,1)
         + " residual=" + ROUND(res,2)
         + " duration=" + ROUND(TIME:SECONDS - bsc,1)
+        + " paused=" + ROUND(totalPaused,1)
+        + " pauseCount=" + pauseCount
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
+        + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)).
     HUDTEXT("Burn complete", 3, 2, 15, GREEN, FALSE).
     RETURN TRUE.
@@ -446,6 +625,29 @@ LOCAL FUNCTION _sma {
     RETURN SHIP:AVAILABLETHRUST / SHIP:MASS.
 }
 
+LOCAL FUNCTION _nf {
+    PARAMETER val.
+    RETURN (val = val) AND ABS(val) < 1e30.
+}
+
+LOCAL FUNCTION _fs {
+    PARAMETER val.
+    PARAMETER places IS 1.
+    IF _nf(val) { RETURN ROUND(val, places). }
+    RETURN "bad".
+}
+
+LOCAL FUNCTION _bvo {
+    PARAMETER vec.
+    LOCAL mag IS vec:MAG.
+    IF NOT _nf(mag) { RETURN FALSE. }
+    IF mag < BURN_BV_MIN_MAG { RETURN FALSE. }
+    IF NOT _nf(vec:X) { RETURN FALSE. }
+    IF NOT _nf(vec:Y) { RETURN FALSE. }
+    IF NOT _nf(vec:Z) { RETURN FALSE. }
+    RETURN TRUE.
+}
+
 LOCAL FUNCTION _ic {
     PARAMETER nd, origDV.
     LOCAL rem IS nd:DELTAV:MAG.
@@ -497,7 +699,9 @@ LOCAL FUNCTION _cpb {
     }
     FOR key IN LIST(
         "burn_pending", "burn_phase", "burn_node_time",
-        "burn_start_time", "burn_dv"
+        "burn_start_time", "burn_dv", "burn_status",
+        "burn_pause_reason", "burn_abort_reason", "burn_abort_detail",
+        "burn_abort_time", "burn_abort_residual", "burn_abort_paused"
     ) {
         stateRemove(key).
     }
