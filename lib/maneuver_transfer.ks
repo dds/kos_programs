@@ -2,6 +2,7 @@
 // maneuver_transfer.ks — raw transfer planning
 // ============================================================
 
+@CLOBBERBUILTINS ON.
 @LAZYGLOBAL OFF.
 
 // --- Config defaults owned by this file ---
