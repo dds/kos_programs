@@ -86,15 +86,11 @@ GLOBAL FUNCTION measureArrival {
     }
     LOCAL t IS tEntry + sampleDt.
 
-    // Work in the arrival patch's own target-relative frame. Using
-    // POSITIONAT(SHIP, futureUt) while the active vessel is still
-    // pre-encounter can silently fall back to the wrong conic frame
-    // and inflate the B-vector by heliocentric distances.
-    LOCAL rVec IS p:POSITIONAT(t).
-    // Frame-proof velocity: numeric derivative of patch-local position.
+    LOCAL rVec IS POSITIONAT(SHIP, t) - POSITIONAT(targetBody, t).
+    // Frame-proof velocity: numeric derivative of relative position.
     LOCAL dt IS 1.
-    LOCAL rPlus IS p:POSITIONAT(t + dt).
-    LOCAL rMinus IS p:POSITIONAT(t - dt).
+    LOCAL rPlus IS POSITIONAT(SHIP, t + dt) - POSITIONAT(targetBody, t + dt).
+    LOCAL rMinus IS POSITIONAT(SHIP, t - dt) - POSITIONAT(targetBody, t - dt).
     LOCAL vVec IS (rPlus - rMinus) / (2 * dt).
 
     // (named rMag: bare "r" shadows kOS's R() constructor, and "t"
@@ -151,8 +147,17 @@ GLOBAL FUNCTION measureArrival {
             + " rKm=" + ROUND(rMag / 1000, 1)
             + " v=" + ROUND(SQRT(v2), 3)
             + " h=" + ROUND(h, 1)
+            + " hKm2s=" + ROUND(h / 1000000, 3)
+            + " smaKm=" + ROUND(sma / 1000, 1)
+            + " vinf2=" + ROUND(vinf2, 3)
             + " vinf=" + ROUND(SQRT(vinf2), 3)
             + " ecc=" + ROUND(ecc, 5)
+            + " sDotH=" + ROUND(VDOT(sHat, hHat), 6)
+            + " sDotB=" + ROUND(VDOT(sHat, bHat), 6)
+            + " hDotB=" + ROUND(VDOT(hHat, bHat), 6)
+            + " tDotR=" + ROUND(VDOT(tHat, rAxisHat), 6)
+            + " sDotT=" + ROUND(VDOT(sHat, tHat), 6)
+            + " sDotR=" + ROUND(VDOT(sHat, rAxisHat), 6)
             + " sMag=" + ROUND(sHat:MAG, 5)
             + " bHatMag=" + ROUND(bHat:MAG, 5)
             + " tHatMag=" + ROUND(tHat:MAG, 5)
@@ -250,6 +255,7 @@ GLOBAL FUNCTION targetBplaneVector {
     LOCAL bMagT IS rp * vp / SQRT(meas["vinf2"]).
 
     LOCAL bT IS bMagT * bHatT.
+    LOCAL measAng IS VANG(bHatT, meas["bHat"]).
     RETURN LEX(
         "bt", VDOT(bT, meas["tHat"]),
         "br", VDOT(bT, meas["rHat"]),
@@ -257,6 +263,9 @@ GLOBAL FUNCTION targetBplaneVector {
         "offPlane", offPlane,
         "bMag", bMagT,
         "bHatMag", bHatT:MAG,
+        "bHatAngle", measAng,
+        "sDotBH", VDOT(sHat, bHatT),
+        "hDotBH", VDOT(meas["hHat"], bHatT),
         "dotBT", VDOT(bHatT, meas["tHat"]),
         "dotBR", VDOT(bHatT, meas["rHat"])).
 }
