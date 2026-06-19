@@ -197,10 +197,13 @@ LOCAL FUNCTION _lambertEscapeBurnVector {
 
     LOCAL localR IS POSITIONAT(SHIP, burnUt) - POSITIONAT(BODY, burnUt).
     LOCAL rHat IS localR:NORMALIZED.
-    LOCAL localVel IS VELOCITYAT(SHIP, burnUt):ORBIT.
+    LOCAL localVel IS _lambertFrameVelocity(SHIP, BODY, burnUt).
     LOCAL vInfMag IS vInfVec:MAG.
     LOCAL aim IS vInfVec:NORMALIZED.
-    LOCAL tangentAim IS aim - VDOT(aim, rHat) * rHat.
+    LOCAL ecc IS 1 + localR:MAG * vInfMag ^ 2 / BODY:MU.
+    LOCAL sinNuInf IS SQRT(MAX(1e-6, 1 - (1 / ecc) ^ 2)).
+    LOCAL tangentAim IS (aim + (1 / ecc) * rHat) / sinNuInf.
+    SET tangentAim TO tangentAim - VDOT(tangentAim, rHat) * rHat.
     IF tangentAim:MAG < 1e-6 {
         SET tangentAim TO localVel:NORMALIZED.
     } ELSE {
@@ -216,7 +219,8 @@ LOCAL FUNCTION _nodeFromLocalVector {
     PARAMETER burnUt.
     PARAMETER dvVec.
     LOCAL localR IS POSITIONAT(SHIP, burnUt) - POSITIONAT(BODY, burnUt).
-    LOCAL progradeHat IS VELOCITYAT(SHIP, burnUt):ORBIT:NORMALIZED.
+    LOCAL localVel IS _lambertFrameVelocity(SHIP, BODY, burnUt).
+    LOCAL progradeHat IS localVel:NORMALIZED.
     LOCAL normalHat IS VCRS(localR:NORMALIZED, progradeHat):NORMALIZED.
     LOCAL radialHat IS VCRS(progradeHat, normalHat):NORMALIZED.
     LOCAL dvPro IS VDOT(dvVec, progradeHat).
