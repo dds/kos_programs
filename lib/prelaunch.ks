@@ -269,20 +269,18 @@ LOCAL FUNCTION _waitForPrelaunchUt {
     PARAMETER targetUt.
 
     LOCAL kacAlarmId IS "".
-    IF ADDONS:KAC:AVAILABLE {
-        LOCAL alarmUt IS targetUt - 30.
-        IF alarmUt > TIME:SECONDS {
-            LOCAL alm IS ADDALARM("Raw", alarmUt, "Prelaunch window", "Auto-created by PRELAUNCH. Fly safe.").
-            SET alm:ACTION TO "KillWarp".
-            SET kacAlarmId TO alm:ID.
+    LOCAL alarmUt IS targetUt - 30.
+    IF alarmUt > TIME:SECONDS {
+        SET kacAlarmId TO kacEnsureAlarm("Prelaunch window: " + SHIP:NAME,
+            alarmUt,
+            "Auto-created by PRELAUNCH. Fly safe.").
+        IF kacAlarmId <> "" {
+            mLog("KAC alarm set for prelaunch window in "
+                + ROUND(alarmUt - TIME:SECONDS, 0) + "s.").
         }
     }
 
-    LOCAL waitSeconds IS targetUt - TIME:SECONDS.
-    IF COAST_AUTO_WARP > 0 AND waitSeconds >= COAST_AUTO_WARP_MIN {
-        setWarpWithKac(idealCoastWarpRate(waitSeconds),
-            "PRELAUNCH window", kacAlarmId).
-    }
+    mLog("PRELAUNCH waiting for launch window. Operator may warp.").
     UNTIL TIME:SECONDS >= targetUt OR ABORT {
         LOCAL remaining IS MAX(0, targetUt - TIME:SECONDS).
         HUDTEXT("Prelaunch window in " + ROUND(remaining, 0) + "s", 5, 2, 13, CYAN, FALSE).
