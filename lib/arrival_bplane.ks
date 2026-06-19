@@ -100,6 +100,18 @@ LOCAL FUNCTION _bplaneCorridorOk {
         AND (wantInc < 0 OR err["planeErr"] <= angTol).
 }
 
+LOCAL FUNCTION _bplanePlanScore {
+    PARAMETER err.
+    PARAMETER targetBody.
+    PARAMETER wantInc.
+
+    LOCAL score IS ABS(err["peErr"]).
+    IF wantInc >= 0 {
+        SET score TO score + err["planeErr"] * targetBody:SOIRADIUS / 90.
+    }
+    RETURN score.
+}
+
 // ============================================================
 // _acquireEncounter — if the raw flight plan is just outside the
 // target SOI, hill-climb a tiny MCC node until KSP generates the
@@ -278,6 +290,15 @@ GLOBAL FUNCTION planBplaneCorrection {
         + ROUND(planeErr0, 2) + "deg").
 
     LOCAL converged IS FALSE.
+    LOCAL bestPro IS nd:PROGRADE.
+    LOCAL bestRad IS nd:RADIALOUT.
+    LOCAL bestNrm IS nd:NORMAL.
+    LOCAL bestScore IS _bplanePlanScore(
+        _bplaneCorridorError(targetBody, meas0, wantPe, wantInc, wantLan),
+        targetBody, wantInc).
+    LOCAL bestPe IS meas0["pe"].
+    LOCAL bestPlaneErr IS planeErr0.
+
     FROM { LOCAL i IS 0. } UNTIL i >= MAX_NEWTON_ITER STEP { SET i TO i + 1. } DO {
         LOCAL meas IS measureArrival(nd, targetBody).
         IF meas = 0 {
@@ -293,10 +314,22 @@ GLOBAL FUNCTION planBplaneCorrection {
             LOCAL qT IS meas["bt"] - tgt["bt"].
             LOCAL qR IS meas["br"] - tgt["br"].
             LOCAL planeErr IS VANG(meas["hHat"], tgt["normal"]).
+            LOCAL corrErr IS _bplaneCorridorError(
+                targetBody, meas, wantPe, wantInc, wantLan).
+            LOCAL score IS _bplanePlanScore(corrErr, targetBody, wantInc).
+            IF score < bestScore {
+                SET bestScore TO score.
+                SET bestPe TO meas["pe"].
+                SET bestPlaneErr TO planeErr.
+                SET bestPro TO nd:PROGRADE.
+                SET bestRad TO nd:RADIALOUT.
+                SET bestNrm TO nd:NORMAL.
+            }
             mLog("  BPLANE[" + i + "] dBT=" + ROUND(errT / 1000, 1)
                 + "km dBR=" + ROUND(errR / 1000, 1)
                 + "km Pe=" + ROUND(meas["pe"] / 1000, 1)
                 + "km planeErr=" + ROUND(planeErr, 2)
+                + " scoreKm=" + ROUND(score / 1000, 1)
                 + " dv=" + ROUND(nd:DELTAV:MAG, 2)).
 
             IF ABS(meas["pe"] - wantPe) <= peTol
@@ -306,6 +339,7 @@ GLOBAL FUNCTION planBplaneCorrection {
             }
 
             // Finite-difference Jacobian: d(B.T,B.R)/d(radial,normal).
+            LOCAL p0 IS nd:PROGRADE.
             LOCAL r0 IS nd:RADIALOUT.
             LOCAL n0 IS nd:NORMAL.
 
@@ -346,30 +380,85 @@ GLOBAL FUNCTION planBplaneCorrection {
                 SET dRad TO dRad * stepCap / stepMag.
                 SET dNrm TO dNrm * stepCap / stepMag.
             }
-            SET nd:RADIALOUT TO r0 + dRad.
-            SET nd:NORMAL TO n0 + dNrm.
-            WAIT 0.02.
-
-            IF nd:DELTAV:MAG > dvCap {
-                mLogWarn("BPLANE[" + i + "]: dv cap " + dvCap
-                    + " m/s exceeded (" + ROUND(nd:DELTAV:MAG, 1)
-                    + ") — clamping.").
-                LOCAL scale IS dvCap / nd:DELTAV:MAG.
-                SET nd:PROGRADE TO nd:PROGRADE * scale.
-                SET nd:RADIALOUT TO nd:RADIALOUT * scale.
-                SET nd:NORMAL TO nd:NORMAL * scale.
+            LOCAL accepted IS FALSE.
+            LOCAL bestTrialScore IS score.
+            FOR frac IN LIST(1.0, 0.5, 0.25, 0.125) {
+                SET nd:PROGRADE TO p0.
+                SET nd:RADIALOUT TO r0 + dRad * frac.
+                SET nd:NORMAL TO n0 + dNrm * frac.
                 WAIT 0.02.
+
+                IF nd:DELTAV:MAG > dvCap {
+                    LOCAL scale IS dvCap / nd:DELTAV:MAG.
+                    SET nd:PROGRADE TO nd:PROGRADE * scale.
+                    SET nd:RADIALOUT TO nd:RADIALOUT * scale.
+                    SET nd:NORMAL TO nd:NORMAL * scale.
+                    WAIT 0.02.
+                }
+
+                LOCAL trial IS measureArrival(nd, targetBody).
+                IF trial <> 0 {
+                    LOCAL trialErr IS _bplaneCorridorError(
+                        targetBody, trial, wantPe, wantInc, wantLan).
+                    LOCAL trialScore IS _bplanePlanScore(trialErr, targetBody, wantInc).
+                    IF trialScore < bestTrialScore {
+                        SET accepted TO TRUE.
+                        SET bestTrialScore TO trialScore.
+                        IF trialScore < bestScore {
+                            SET bestScore TO trialScore.
+                            SET bestPe TO trial["pe"].
+                            SET bestPlaneErr TO trialErr["planeErr"].
+                            SET bestPro TO nd:PROGRADE.
+                            SET bestRad TO nd:RADIALOUT.
+                            SET bestNrm TO nd:NORMAL.
+                        }
+                        mLog("  BPLANE[" + i + "] accepted frac="
+                            + ROUND(frac,3)
+                            + " PeKm=" + ROUND(trial["pe"] / 1000,1)
+                            + " planeErr=" + ROUND(trialErr["planeErr"],2)
+                            + " scoreKm=" + ROUND(trialScore / 1000,1)
+                            + " dv=" + ROUND(nd:DELTAV:MAG,2)).
+                        BREAK.
+                    }
+                }
+            }
+
+            IF NOT accepted {
+                SET nd:PROGRADE TO p0.
+                SET nd:RADIALOUT TO r0.
+                SET nd:NORMAL TO n0.
+                WAIT 0.02.
+                mLogWarn("BPLANE[" + i
+                    + "]: no damped B-plane step improved Pe/plane score; stopping.").
+                BREAK.
             }
         }
     }
 
+    SET nd:PROGRADE TO bestPro.
+    SET nd:RADIALOUT TO bestRad.
+    SET nd:NORMAL TO bestNrm.
+    WAIT 0.02.
+
     LOCAL measF IS measureArrival(nd, targetBody).
     LOCAL finalPe IS -1.
-    IF measF <> 0 { SET finalPe TO measF["pe"]. }
+    LOCAL finalPlaneErr IS -1.
+    IF measF <> 0 {
+        SET finalPe TO measF["pe"].
+        LOCAL errF IS _bplaneCorridorError(
+            targetBody, measF, wantPe, wantInc, wantLan).
+        SET finalPlaneErr TO errF["planeErr"].
+        IF _bplaneCorridorOk(errF, wantInc, peTol, angTol) {
+            SET converged TO TRUE.
+        }
+    }
     mLogWarn("STATS bplane plan target=" + targetBody:NAME
         + " converged=" + converged
         + " dv=" + ROUND(nd:DELTAV:MAG, 2)
         + " PeKm=" + ROUND(finalPe / 1000, 1)
+        + " planeErr=" + ROUND(finalPlaneErr, 2)
+        + " bestPeKm=" + ROUND(bestPe / 1000, 1)
+        + " bestPlaneErr=" + ROUND(bestPlaneErr, 2)
         + " wantPeKm=" + ROUND(wantPe / 1000, 1)).
 
     IF nd:DELTAV:MAG < MIN_EXEC_DV {
