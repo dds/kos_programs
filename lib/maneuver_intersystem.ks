@@ -197,7 +197,7 @@ LOCAL FUNCTION _lambertEscapeBurnVector {
 
     LOCAL localR IS POSITIONAT(SHIP, burnUt) - POSITIONAT(BODY, burnUt).
     LOCAL rHat IS localR:NORMALIZED.
-    LOCAL localVel IS _lambertFrameVelocity(SHIP, BODY, burnUt).
+    LOCAL localVel IS _localOrbitVelocityVector(burnUt).
     LOCAL vInfMag IS vInfVec:MAG.
     LOCAL aim IS vInfVec:NORMALIZED.
     LOCAL ecc IS 1 + localR:MAG * vInfMag ^ 2 / BODY:MU.
@@ -219,7 +219,7 @@ LOCAL FUNCTION _nodeFromLocalVector {
     PARAMETER burnUt.
     PARAMETER dvVec.
     LOCAL localR IS POSITIONAT(SHIP, burnUt) - POSITIONAT(BODY, burnUt).
-    LOCAL localVel IS _lambertFrameVelocity(SHIP, BODY, burnUt).
+    LOCAL localVel IS _localOrbitVelocityVector(burnUt).
     LOCAL progradeHat IS localVel:NORMALIZED.
     LOCAL normalHat IS VCRS(localR:NORMALIZED, progradeHat):NORMALIZED.
     LOCAL radialHat IS VCRS(progradeHat, normalHat):NORMALIZED.
@@ -228,4 +228,17 @@ LOCAL FUNCTION _nodeFromLocalVector {
     LOCAL dvRad IS VDOT(dvVec, radialHat).
 
     RETURN NODE(burnUt, dvRad, dvNor, dvPro).
+}
+
+LOCAL FUNCTION _localOrbitVelocityVector {
+    PARAMETER t.
+
+    LOCAL localR IS POSITIONAT(SHIP, t) - POSITIONAT(BODY, t).
+    LOCAL dirVec IS _lambertFrameVelocity(SHIP, BODY, t).
+    IF dirVec:MAG < 1e-6 {
+        SET dirVec TO VELOCITYAT(SHIP, t):ORBIT.
+    }
+    LOCAL speed IS SQRT(BODY:MU * (2 / localR:MAG
+        - 1 / SHIP:ORBIT:SEMIMAJORAXIS)).
+    RETURN dirVec:NORMALIZED * speed.
 }
