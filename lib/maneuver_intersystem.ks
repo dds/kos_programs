@@ -7,6 +7,7 @@ GLOBAL TRANSFER_SCAN_LOOKAHEAD_HOURS IS 6.
 GLOBAL TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT IS 24.
 GLOBAL TRANSFER_INTERPLANETARY_TOF_SAMPLES IS 9.
 GLOBAL TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX IS 35.
+GLOBAL TRANSFER_INTERPLANETARY_DEPART_LEAD IS 300.
 
 GLOBAL FUNCTION planInterplanetaryTransfer {
     PARAMETER targetBody.
@@ -38,7 +39,8 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     SET nDepart TO MIN(nDepart, MAX(1, TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX) + 1).
     LOCAL nTof IS MAX(3, TRANSFER_INTERPLANETARY_TOF_SAMPLES).
     LOCAL tofSpread IS hohmannTof * 0.3.
-    LOCAL departStart IS TIME:SECONDS + 60.
+    LOCAL minDepartLead IS MAX(120, TRANSFER_INTERPLANETARY_DEPART_LEAD).
+    LOCAL departStart IS TIME:SECONDS + minDepartLead.
     LOCAL bestDv IS 9999999.
     LOCAL bestDepart IS -1.
     LOCAL bestArrive IS -1.
@@ -54,13 +56,15 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     mLog("Lambert scan: " + nDepart + " departures x " + nTof
         + " TOFs, center=" + transferCenter:NAME
         + " hohmannTof=" + ROUND(hohmannTof,0) + "s"
-        + " departSpan=" + ROUND(scanSpan,0) + "s").
+        + " departSpan=" + ROUND(scanSpan,0) + "s"
+        + " departLead=" + ROUND(minDepartLead,0) + "s").
     mLogWarn("STATS lambert setup target=" + targetBody:NAME
         + " center=" + transferCenter:NAME
         + " departSamples=" + nDepart
         + " tofSamples=" + nTof
         + " hohmannTof=" + ROUND(hohmannTof,0)
-        + " departSpan=" + ROUND(scanSpan,0)).
+        + " departSpan=" + ROUND(scanSpan,0)
+        + " departLead=" + ROUND(minDepartLead,0)).
 
     FROM { LOCAL di IS 0. } UNTIL di >= nDepart STEP { SET di TO di + 1. } DO {
         LOCAL departUt IS departStart + di * scanSpan / MAX(1, nDepart - 1).
@@ -128,6 +132,18 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         RETURN 0.
     }
 
+    LOCAL staleLead IS 45.
+    IF bestDepart < TIME:SECONDS + staleLead {
+        mLogError("planTransfer: Lambert best departure went stale during scan.").
+        mLogWarn("STATS lambert result target=" + targetBody:NAME
+            + " status=stale-seed"
+            + " rawDepartT=" + ROUND(bestDepart - TIME:SECONDS,0)
+            + " minLead=" + staleLead
+            + " rawDv=" + ROUND(bestDv,1)
+            + " rawVinf=" + ROUND(bestVinf,1)).
+        RETURN 0.
+    }
+
     IF bestPatchDepart < 0 {
         mLogWarn("Lambert scan found no direct patch; refining raw best "
             + "closest approach seed.").
@@ -172,6 +188,17 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     SET bestArrive TO bestPatchArrive.
     SET bestVinf TO bestPatchVinf.
     SET bestFlip TO bestPatchFlip.
+
+    IF bestDepart < TIME:SECONDS + staleLead {
+        mLogError("planTransfer: Lambert patch departure went stale during scan.").
+        mLogWarn("STATS lambert result target=" + targetBody:NAME
+            + " status=stale-patch"
+            + " departT=" + ROUND(bestDepart - TIME:SECONDS,0)
+            + " minLead=" + staleLead
+            + " dv=" + ROUND(bestDv,1)
+            + " vinf=" + ROUND(bestVinf,1)).
+        RETURN 0.
+    }
 
     mLog("Lambert best: depart T+" + ROUND(bestDepart - TIME:SECONDS,0)
         + "s  tof=" + ROUND(bestArrive - bestDepart,0)
