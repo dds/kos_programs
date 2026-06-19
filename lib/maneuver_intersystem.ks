@@ -83,7 +83,11 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
                 LOCAL dvMag IS burnVec:MAG.
                 LOCAL ndProbe IS _nodeFromLocalVector(departUt, burnVec).
 
-                IF dvMag < bestDv {
+                ADD ndProbe.
+                WAIT 0.02.
+                LOCAL safeDeparture IS _lambertDepartureSafe(ndProbe).
+
+                IF safeDeparture AND dvMag < bestDv {
                     SET bestDv TO dvMag.
                     SET bestDepart TO departUt.
                     SET bestArrive TO arriveUt.
@@ -96,10 +100,9 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
                         + ROUND(departUt - TIME:SECONDS,0) + "s").
                 }
 
-                ADD ndProbe.
-                WAIT 0.02.
                 LOCAL patch IS _getTargetPatch(ndProbe, targetBody).
-                IF patch <> 0 AND patch:PERIAPSIS > 0 AND dvMag < bestPatchDv {
+                IF safeDeparture AND patch <> 0 AND patch:PERIAPSIS > 0
+                        AND dvMag < bestPatchDv {
                     SET bestPatchDv TO dvMag.
                     SET bestPatchDepart TO departUt.
                     SET bestPatchArrive TO arriveUt.
@@ -214,6 +217,20 @@ LOCAL FUNCTION _lambertNodeFor {
     RETURN _lambertEscapeNode(departUt, vInf).
 }
 
+LOCAL FUNCTION _lambertDepartureSafe {
+    PARAMETER nd.
+
+    LOCAL o IS nd:ORBIT.
+    IF o:BODY <> BODY { RETURN TRUE. }
+
+    LOCAL peFloor IS 10000.
+    IF BODY:ATM:EXISTS {
+        SET peFloor TO BODY:ATM:HEIGHT + 5000.
+    }
+
+    RETURN o:PERIAPSIS > peFloor.
+}
+
 LOCAL FUNCTION _lambertPatchEval {
     PARAMETER nd.
     PARAMETER targetBody.
@@ -224,14 +241,19 @@ LOCAL FUNCTION _lambertPatchEval {
     LOCAL pad IS MAX(21600, tof * 0.12).
     LOCAL ca IS _findClosestApproach(
         targetBody, arriveUt - pad, arriveUt + pad, 36).
+    LOCAL safeDeparture IS _lambertDepartureSafe(nd).
     LOCAL score IS ca["distance"] + nd:DELTAV:MAG * 1000.
+    IF NOT safeDeparture {
+        SET score TO score + 9e15.
+    }
     IF patch <> 0 {
         SET score TO score - targetBody:SOIRADIUS * 4.
     }
     RETURN LEXICON(
         "SCORE", score,
         "CA", ca,
-        "PATCH", patch
+        "PATCH", patch,
+        "SAFE", safeDeparture
     ).
 }
 
@@ -245,7 +267,13 @@ LOCAL FUNCTION _refineLambertPatchSeed {
     mLog("Lambert patch refine: start CA="
         + ROUND(best["CA"]["distance"]/1000,1)
         + "km patch=" + (best["PATCH"] <> 0)
+        + " safe=" + best["SAFE"]
         + " SOI=" + ROUND(targetBody:SOIRADIUS/1000,0) + "km").
+    IF NOT best["SAFE"] {
+        mLogWarn("Lambert patch refine: raw seed has unsafe Kerbin Pe; "
+            + "not refining an impact departure.").
+        RETURN 0.
+    }
     IF best["PATCH"] <> 0 { RETURN best["PATCH"]. }
 
     LOCAL axes IS LIST("PROGRADE", "NORMAL", "RADIALOUT", "TIME").
@@ -278,7 +306,7 @@ LOCAL FUNCTION _refineLambertPatchSeed {
                     WAIT 0.02.
                     IF nd:DELTAV:MAG <= dvCap {
                         LOCAL trial IS _lambertPatchEval(nd, targetBody, arriveUt).
-                        IF trial["SCORE"] < bestTrial["SCORE"] {
+                        IF trial["SAFE"] AND trial["SCORE"] < bestTrial["SCORE"] {
                             SET bestTrial TO trial.
                             SET bestAxis TO axis.
                             SET bestValue TO trialVal.
@@ -298,6 +326,7 @@ LOCAL FUNCTION _refineLambertPatchSeed {
                 + ROUND(bestValue,2)
                 + " CA=" + ROUND(best["CA"]["distance"]/1000,1)
                 + "km patch=" + (best["PATCH"] <> 0)
+                + " safe=" + best["SAFE"]
                 + " dV=" + ROUND(nd:DELTAV:MAG,1)).
             IF best["PATCH"] <> 0 {
                 RETURN best["PATCH"].
