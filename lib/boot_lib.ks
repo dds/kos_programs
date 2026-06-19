@@ -32,7 +32,7 @@ GLOBAL FUNCTION bootEnsureDirs {
     }
 }
 
-LOCAL FUNCTION _bootLooksLikeTargetToken {
+LOCAL FUNCTION _bltt {
     PARAMETER raw.
     RETURN BODYEXISTS(raw).
 }
@@ -83,7 +83,7 @@ GLOBAL FUNCTION bootVehicleInfo {
             FROM { LOCAL i IS 2. } UNTIL i >= tks:LENGTH STEP { SET i TO i + 1. } DO {
                 pts:ADD(tks[i]:TOUPPER).
             }
-        } ELSE IF tks:LENGTH >= 2 AND _bootLooksLikeTargetToken(tks[1]) {
+        } ELSE IF tks:LENGTH >= 2 AND _bltt(tks[1]) {
             SET tn TO tks[1].
             FROM { LOCAL i IS 2. } UNTIL i >= tks:LENGTH STEP { SET i TO i + 1. } DO {
                 pts:ADD(tks[i]:TOUPPER).
@@ -106,8 +106,8 @@ GLOBAL FUNCTION bootVehicleInfo {
 GLOBAL FUNCTION bootResolveScript {
     PARAMETER name.
     PARAMETER dirs.
-    PARAMETER hasLink.
-    IF hasLink {
+    PARAMETER hl.
+    IF hl {
         FOR d IN dirs {
             IF EXISTS("0:/" + d + "/" + name + ".ks") { RETURN d + "/" + name. }
         }
@@ -124,39 +124,39 @@ GLOBAL FUNCTION bootResolveScript {
 }
 
 GLOBAL FUNCTION bootArchivePath {
-    PARAMETER scriptPath_.
-    IF scriptPath_:CONTAINS("/") {
-        RETURN "0:/" + scriptPath_ + ".ks".
+    PARAMETER sp_.
+    IF sp_:CONTAINS("/") {
+        RETURN "0:/" + sp_ + ".ks".
     }
-    RETURN "0:/lib/" + scriptPath_ + ".ks".
+    RETURN "0:/lib/" + sp_ + ".ks".
 }
 
 GLOBAL FUNCTION bootCorePath {
-    PARAMETER scriptPath_.
-    IF scriptPath_:CONTAINS("/") {
-        RETURN "1:/" + scriptPath_.
+    PARAMETER sp_.
+    IF sp_:CONTAINS("/") {
+        RETURN "1:/" + sp_.
     }
-    RETURN "1:/lib/" + scriptPath_.
+    RETURN "1:/lib/" + sp_.
 }
 
 GLOBAL FUNCTION bootEnsureScriptDir {
-    PARAMETER scriptPath_.
-    IF NOT scriptPath_:CONTAINS("/") { RETURN. }
-    LOCAL parts IS scriptPath_:SPLIT("/").
-    LOCAL dirPath IS "1:/" + parts[0].
-    IF NOT EXISTS(dirPath) { CREATEDIR(dirPath). }
+    PARAMETER sp_.
+    IF NOT sp_:CONTAINS("/") { RETURN. }
+    LOCAL parts IS sp_:SPLIT("/").
+    LOCAL dp IS "1:/" + parts[0].
+    IF NOT EXISTS(dp) { CREATEDIR(dp). }
 }
 
 GLOBAL FUNCTION bootCompiledPath {
-    PARAMETER scriptPath_.
-    RETURN bootCorePath(scriptPath_) + ".ksm".
+    PARAMETER sp_.
+    RETURN bootCorePath(sp_) + ".ksm".
 }
 
 GLOBAL FUNCTION bootBaseName {
-    PARAMETER fileName.
-    IF fileName:CONTAINS(".ksm") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 4). }
-    IF fileName:CONTAINS(".ks") { RETURN fileName:SUBSTRING(0, fileName:LENGTH - 3). }
-    RETURN fileName.
+    PARAMETER fn.
+    IF fn:CONTAINS(".ksm") { RETURN fn:SUBSTRING(0, fn:LENGTH - 4). }
+    IF fn:CONTAINS(".ks") { RETURN fn:SUBSTRING(0, fn:LENGTH - 3). }
+    RETURN fn.
 }
 
 GLOBAL FUNCTION bootArchiveOnlyLibs {
@@ -197,11 +197,11 @@ GLOBAL FUNCTION bootPruneLibs {
         IF NOT bootLibArchiveOnly(lib)
                 AND NOT keep:CONTAINS(lib) { keep:ADD(lib). }
     }
-    LOCAL startPath IS PATH().
+    LOCAL sp IS PATH().
     LOCAL items IS LIST().
     CD("1:/lib").
     LIST FILES IN items.
-    CD(startPath).
+    CD(sp).
     FOR item IN items {
         IF item:ISFILE {
             LOCAL base IS bootBaseName(item:NAME).
@@ -213,16 +213,16 @@ GLOBAL FUNCTION bootPruneLibs {
 }
 
 GLOBAL FUNCTION bootMissionConfigIds {
-    PARAMETER craftName.
-    PARAMETER hasLink.
+    PARAMETER cn.
+    PARAMETER hl.
     LOCAL ids IS LIST().
-    LOCAL ad IS "0:/missions/" + craftName.
-    IF NOT hasLink OR NOT EXISTS(ad) { RETURN ids. }
-    LOCAL startPath IS PATH().
+    LOCAL ad IS "0:/missions/" + cn.
+    IF NOT hl OR NOT EXISTS(ad) { RETURN ids. }
+    LOCAL sp IS PATH().
     LOCAL items IS LIST().
     CD(ad).
     LIST FILES IN items.
-    CD(startPath).
+    CD(sp).
     FOR item IN items {
         IF item:ISFILE {
             LOCAL nm IS item:NAME.
@@ -235,21 +235,21 @@ GLOBAL FUNCTION bootMissionConfigIds {
 }
 
 GLOBAL FUNCTION bootApplyMissionConfig {
-    PARAMETER craftName.
-    PARAMETER missionId.
-    PARAMETER hasLink.
-    IF missionId = "" { RETURN FALSE. }
-    LOCAL ap IS "0:/missions/" + craftName + "/" + missionId + ".ks".
-    LOCAL cd_ IS "1:/missions/" + craftName.
-    LOCAL cp IS cd_ + "/" + missionId + ".ks".
-    IF hasLink AND EXISTS(ap) {
+    PARAMETER cn.
+    PARAMETER mid.
+    PARAMETER hl.
+    IF mid = "" { RETURN FALSE. }
+    LOCAL ap IS "0:/missions/" + cn + "/" + mid + ".ks".
+    LOCAL cd_ IS "1:/missions/" + cn.
+    LOCAL cp IS cd_ + "/" + mid + ".ks".
+    IF hl AND EXISTS(ap) {
         IF NOT EXISTS("1:/missions") { CREATEDIR("1:/missions"). }
         IF NOT EXISTS(cd_) { CREATEDIR(cd_). }
         COPYPATH(ap, cp).
     }
     LOCAL path_ IS cp.
     IF NOT EXISTS(path_) {
-        IF hasLink AND EXISTS(ap) {
+        IF hl AND EXISTS(ap) {
             SET path_ TO ap.
         } ELSE {
             PRINT "  Mission config not found: " + path_.
@@ -259,7 +259,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     RUNPATH(path_).
     applyKnownMissionState().
     IF MISSION_ID <> "" { stateSet("mission_id", MISSION_ID). }
-    IF stateGet("mission_id", "") = "" { stateSet("mission_id", missionId). }
+    IF stateGet("mission_id", "") = "" { stateSet("mission_id", mid). }
     IF MISSION_NAME <> "" { stateRemove("mission_name"). }
     IF TARGET_ <> "" {
         stateRemove("target").
@@ -270,7 +270,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     IF MISSION_NAME <> "" {
         PRINT "  Mission: " + MISSION_NAME.
     } ELSE {
-        PRINT "  Mission: " + stateGet("mission_id", missionId).
+        PRINT "  Mission: " + stateGet("mission_id", mid).
     }
     IF getTarget("") <> "" { PRINT "  Target:  " + getTarget(""). }
     IF PAYLOADS:LENGTH > 0 { PRINT "  Payload: " + PAYLOADS. }
@@ -279,11 +279,11 @@ GLOBAL FUNCTION bootApplyMissionConfig {
 }
 
 GLOBAL FUNCTION bootMissionConfig {
-    PARAMETER craftName.
-    PARAMETER hasLink.
-    LOCAL missionId IS stateGet("mission_id", "").
-    IF missionId = "" AND hasLink {
-        LOCAL ids IS bootMissionConfigIds(craftName, hasLink).
+    PARAMETER cn.
+    PARAMETER hl.
+    LOCAL mid IS stateGet("mission_id", "").
+    IF mid = "" AND hl {
+        LOCAL ids IS bootMissionConfigIds(cn, hl).
         IF ids:LENGTH > 0 {
             IF NOT bootCheckManualKey() {
                 PRINT " ".
@@ -300,12 +300,12 @@ GLOBAL FUNCTION bootMissionConfig {
                 // pay for it (no link = no profiles to list anyway).
                 bootLibSync("boot_picker").
                 RUNONCEPATH("1:/lib/boot_picker").
-                SET missionId TO bootSelectMissionId(craftName, hasLink).
+                SET mid TO bootSelectMissionId(cn, hl).
             }
         }
     }
-    IF missionId <> "" {
-        bootApplyMissionConfig(craftName, missionId, hasLink).
+    IF mid <> "" {
+        bootApplyMissionConfig(cn, mid, hl).
     }
 }
 
@@ -347,7 +347,7 @@ GLOBAL FUNCTION bootResetMissionSelection {
     PARAMETER vn.
     PARAMETER tn.
     PARAMETER pts.
-    LOCAL removed IS stateRemovePrefix("mission_cfg_").
+    LOCAL rm IS stateRemovePrefix("mission_cfg_").
     FOR key IN LIST(
         "mission_id", "mission_name", "phase", "fairing_deployed",
         "lib_band", "lib_band_phase", "lib_band_libs",
@@ -370,11 +370,11 @@ GLOBAL FUNCTION bootResetMissionSelection {
     stateSet("target", tn).
     stateSet("payloads", pts).
     PRINT "  Mission selection reset for prelaunch.".
-    mLog("Mission selection reset before launch; cleared " + removed + " config keys.").
+    mLog("Mission selection reset before launch; cleared " + rm + " config keys.").
 }
 
 GLOBAL FUNCTION bootResumeOrManual {
-    PARAMETER hasLink.
+    PARAMETER hl.
     LOCAL mm IS bootCheckManualKey().
     IF NOT mm {
         PRINT " ".
@@ -428,50 +428,50 @@ GLOBAL FUNCTION bootResumeOrManual {
 // Called from boot.ks when a craft script sets BOOT_CLEANUP.
 
 GLOBAL FUNCTION bootPruneDir {
-    PARAMETER dirPath.
+    PARAMETER dp.
     PARAMETER kn.
-    LOCAL removed IS 0.
-    IF NOT EXISTS(dirPath) { RETURN removed. }
-    LOCAL startPath IS PATH().
+    LOCAL rm IS 0.
+    IF NOT EXISTS(dp) { RETURN rm. }
+    LOCAL sp IS PATH().
     LOCAL items IS LIST().
-    CD(dirPath).
+    CD(dp).
     LIST FILES IN items.
-    CD(startPath).
+    CD(sp).
     FOR item IN items {
         IF item:ISFILE {
             LOCAL base IS bootBaseName(item:NAME).
             IF NOT kn:CONTAINS(base) {
-                DELETEPATH(dirPath + "/" + item:NAME).
-                SET removed TO removed + 1.
+                DELETEPATH(dp + "/" + item:NAME).
+                SET rm TO rm + 1.
             }
         }
     }
-    RETURN removed.
+    RETURN rm.
 }
 
 GLOBAL FUNCTION bootPruneLogs {
     IF HOMECONNECTION:ISCONNECTED {
         archiveLog().
     }
-    LOCAL removed IS 0.
+    LOCAL rm IS 0.
     IF EXISTS("1:/run") {
-        LOCAL startPath IS PATH().
+        LOCAL sp IS PATH().
         LOCAL items IS LIST().
         CD("1:/run").
         LIST FILES IN items.
-        CD(startPath).
+        CD(sp).
         FOR item IN items {
             IF item:ISFILE AND (item:NAME:CONTAINS(".LOG") OR item:NAME:CONTAINS(".log")) {
                 DELETEPATH("1:/run/" + item:NAME).
-                SET removed TO removed + 1.
+                SET rm TO rm + 1.
             }
         }
     }
     IF EXISTS("1:/run/log_path.state") {
         DELETEPATH("1:/run/log_path.state").
-        SET removed TO removed + 1.
+        SET rm TO rm + 1.
     }
-    RETURN removed.
+    RETURN rm.
 }
 
 GLOBAL FUNCTION bootCleanup {
@@ -490,19 +490,19 @@ GLOBAL FUNCTION bootCleanup {
     IF CORE:TAG <> "" { kr:ADD(CORE:TAG). }
 
     LOCAL bf IS CORE:VOLUME:FREESPACE.
-    LOCAL removed IS 0.
-    SET removed TO removed + bootPruneDir("1:/lib", kl).
-    SET removed TO removed + bootPruneDir("1:/craft", LIST(vn)).
-    SET removed TO removed + bootPruneDir("1:/roles", kr).
-    SET removed TO removed + bootPruneDir("1:/cmd", LIST()).
+    LOCAL rm IS 0.
+    SET rm TO rm + bootPruneDir("1:/lib", kl).
+    SET rm TO rm + bootPruneDir("1:/craft", LIST(vn)).
+    SET rm TO rm + bootPruneDir("1:/roles", kr).
+    SET rm TO rm + bootPruneDir("1:/cmd", LIST()).
     IF EXISTS("1:/zombie") {
         DELETEPATH("1:/zombie").
-        SET removed TO removed + 1.
+        SET rm TO rm + 1.
     }
-    SET removed TO removed + bootPruneLogs().
+    SET rm TO rm + bootPruneLogs().
 
-    IF removed > 0 {
-        mLog("Cleanup removed " + removed + " files; free "
+    IF rm > 0 {
+        mLog("Cleanup removed " + rm + " files; free "
             + bf + " -> " + CORE:VOLUME:FREESPACE + ".").
     }
 }
@@ -602,10 +602,10 @@ GLOBAL FUNCTION bootPreamble {
 
 GLOBAL FUNCTION bootLibBandRoots {
     PARAMETER band.
-    LOCAL preamble IS LIST("core").
+    LOCAL pr IS LIST("core").
     LOCAL bands IS dependencyBands().
     LOCAL roots IS LIST().
-    FOR ln IN preamble { bootLibAddUnique(roots, ln). }
+    FOR ln IN pr { bootLibAddUnique(roots, ln). }
     LOCAL bk IS band.
     IF bands:HASKEY(bk) {
         FOR pn IN bands[bk] {
@@ -625,16 +625,16 @@ GLOBAL FUNCTION bootLibBand {
 GLOBAL FUNCTION bootLibBandPhases {
     PARAMETER band.
     LOCAL bands IS dependencyBands().
-    LOCAL phases IS LIST().
+    LOCAL ps IS LIST().
     LOCAL bk IS band.
     IF bands:HASKEY(bk) {
         FOR pn IN bands[bk] {
-            phases:ADD(pn).
+            ps:ADD(pn).
         }
     } ELSE IF bk <> "" {
-        phases:ADD(bk).
+        ps:ADD(bk).
     }
-    RETURN phases.
+    RETURN ps.
 }
 
 GLOBAL FUNCTION bootLibBandForPhase {
@@ -655,13 +655,13 @@ GLOBAL FUNCTION bootLibBandForPhase {
 GLOBAL FUNCTION bootLibPhaseRoots {
     PARAMETER pn.
     PARAMETER ispec IS LEXICON().
-    LOCAL preamble IS LIST("core").
-    LOCAL phases IS dependencyPhases().
+    LOCAL pr IS LIST("core").
+    LOCAL ps IS dependencyPhases().
     LOCAL roots IS LIST().
-    FOR ln IN preamble { bootLibAddUnique(roots, ln). }
+    FOR ln IN pr { bootLibAddUnique(roots, ln). }
     LOCAL pk IS pn.
-    IF phases:HASKEY(pk) {
-        FOR ln IN phases[pk] { bootLibAddUnique(roots, ln). }
+    IF ps:HASKEY(pk) {
+        FOR ln IN ps[pk] { bootLibAddUnique(roots, ln). }
     }
     RETURN roots.
 }
@@ -678,11 +678,11 @@ GLOBAL FUNCTION bootLibAllPhases {
 // ============================================================
 
 GLOBAL FUNCTION getTarget {
-    PARAMETER fallback IS "KERBIN".
+    PARAMETER fb IS "KERBIN".
     LOCAL tn IS stateGet("target", "").
     IF tn <> "" { RETURN tn. }
     SET tn TO TARGET_.
-    IF tn = "" { SET tn TO fallback. }
+    IF tn = "" { SET tn TO fb. }
     IF tn <> "" { stateSet("target", tn). }
     RETURN tn.
 }
@@ -698,9 +698,9 @@ GLOBAL FUNCTION bootCachedVehicleLibs {
 
 GLOBAL FUNCTION bootPlannedMissionLibs {
     PARAMETER db IS "LAUNCH".
-    LOCAL sequence IS phaseSequenceEnsurePrelaunch(SEQUENCE).
-    IF sequence:LENGTH > 0 {
-        bootEnsureInitialPhase(sequence).
+    LOCAL sq IS phaseSequenceEnsurePrelaunch(SEQUENCE).
+    IF sq:LENGTH > 0 {
+        bootEnsureInitialPhase(sq).
     }
 
     LOCAL phase IS stateGet("phase", "").
@@ -753,16 +753,16 @@ GLOBAL FUNCTION missionPayloadsFromState {
 
 GLOBAL FUNCTION missionNormalizePayloadType {
     PARAMETER pln.
-    LOCAL result IS pln.
-    UNTIL result:LENGTH = 0 {
-        LOCAL last IS result:SUBSTRING(result:LENGTH - 1, 1).
+    LOCAL rs IS pln.
+    UNTIL rs:LENGTH = 0 {
+        LOCAL last IS rs:SUBSTRING(rs:LENGTH - 1, 1).
         IF last:MATCHESPATTERN("[0-9]") OR last = "-" {
-            SET result TO result:SUBSTRING(0, result:LENGTH - 1).
+            SET rs TO rs:SUBSTRING(0, rs:LENGTH - 1).
         } ELSE {
             BREAK.
         }
     }
-    RETURN result.
+    RETURN rs.
 }
 
 GLOBAL FUNCTION missionHasPayload {
@@ -801,15 +801,15 @@ GLOBAL FUNCTION missionExtraLibs {
             LOCAL parts IS er:SPLIT("@").
             LOCAL ln IS parts[0]:TRIM.
             LOCAL up IS parts[1]:TRIM.
-            LOCAL curIdx IS -1.
-            LOCAL phIdx IS -1.
+            LOCAL ci IS -1.
+            LOCAL pi IS -1.
             LOCAL i IS 0.
             UNTIL i >= seq:LENGTH {
-                IF seq[i] = cur { SET curIdx TO i. }
-                IF seq[i] = up { SET phIdx TO i. }
+                IF seq[i] = cur { SET ci TO i. }
+                IF seq[i] = up { SET pi TO i. }
                 SET i TO i + 1.
             }
-            IF curIdx >= 0 AND phIdx >= 0 AND curIdx > phIdx {
+            IF ci >= 0 AND pi >= 0 AND ci > pi {
                 mLog("Extra lib " + ln + " dropped (past "
                     + up + ").").
             } ELSE {
@@ -842,9 +842,9 @@ GLOBAL FUNCTION missionSequenceLibs {
     PARAMETER fl IS LIST().
     PARAMETER bd IS LIST().
     LOCAL sl IS fl.
-    LOCAL sequence IS phaseSequenceEnsurePrelaunch(SEQUENCE).
-    IF sequence:LENGTH > 0 {
-        SET sl TO missionLibsForPhases(sequence, bd).
+    LOCAL sq IS phaseSequenceEnsurePrelaunch(SEQUENCE).
+    IF sq:LENGTH > 0 {
+        SET sl TO missionLibsForPhases(sq, bd).
     }
     RETURN missionLibs(sl).
 }
@@ -883,10 +883,10 @@ GLOBAL FUNCTION airplaneVehicleLibs {
 // boot uses to load only the code needed for the selected sequence.
 // ============================================================
 GLOBAL FUNCTION missionLibsForPhases {
-    PARAMETER phases.
+    PARAMETER ps.
     PARAMETER bd IS LIST().
     LOCAL roots IS LIST("phases").
-    LOCAL pl IS phaseSequenceEnsurePrelaunch(phases).
+    LOCAL pl IS phaseSequenceEnsurePrelaunch(ps).
     FOR lib IN bd {
         missionAppendUnique(roots, LIST(lib)).
     }
