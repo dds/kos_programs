@@ -71,17 +71,47 @@ GLOBAL FUNCTION _landingTargetRefineTick {
         SET impactErr TO impactInfo["DIST"].
         SET impactReady TO impactErr <= LANDING_TARGET_REFINE_IMPACT_TOLERANCE.
     }
-    LOCAL climbLimited IS ctx["V_SPEED"]
+    IF NOT ctx["TARGET_REFINE_LOGGED"] {
+        SET ctx["TARGET_REFINE_LOGGED"] TO TRUE.
+        mLogWarn("STATS target-refine entry trErr=" + ROUND(impactErr,0)
+            + " hs=" + ROUND(horizontalSpeed,1)
+            + " vs=" + ROUND(ctx["V_SPEED"],1)
+            + "/" + ROUND(targetVs,1)).
+    }
+    LOCAL climbRaw IS ctx["V_SPEED"]
         > targetVs + LANDING_TARGET_REFINE_CLIMB_LIMIT.
+    LOCAL climbArmed IS refineAge >= LANDING_TARGET_REFINE_CLIMB_ARM_TIME.
+    IF climbRaw AND climbArmed {
+        IF ctx["TARGET_REFINE_CLIMB_SINCE"] = 0 {
+            SET ctx["TARGET_REFINE_CLIMB_SINCE"] TO TIME:SECONDS.
+        }
+    } ELSE {
+        SET ctx["TARGET_REFINE_CLIMB_SINCE"] TO 0.
+    }
+    LOCAL climbLimited IS ctx["TARGET_REFINE_CLIMB_SINCE"] > 0
+        AND TIME:SECONDS - ctx["TARGET_REFINE_CLIMB_SINCE"]
+            >= LANDING_TARGET_REFINE_CLIMB_TIME.
     LOCAL timedOut IS refineAge >= LANDING_TARGET_REFINE_MAX_TIME.
 
     IF climbLimited OR timedOut {
         SET ctx["HOVER_REFINED"] TO TRUE.
         _landingSetThrottle(ctx, 0).
         IF climbLimited {
+            mLogWarn("STATS target-refine exit reason=climb trErr="
+                + ROUND(impactErr,0)
+                + " age=" + ROUND(refineAge,1)
+                + " hs=" + ROUND(horizontalSpeed,1)
+                + " vs=" + ROUND(ctx["V_SPEED"],1)
+                + "/" + ROUND(targetVs,1)).
             _landingSetState(ctx, "VERTICAL_DESCENT",
                 "target refine climb guard triggered").
         } ELSE {
+            mLogWarn("STATS target-refine exit reason=timeout trErr="
+                + ROUND(impactErr,0)
+                + " age=" + ROUND(refineAge,1)
+                + " hs=" + ROUND(horizontalSpeed,1)
+                + " vs=" + ROUND(ctx["V_SPEED"],1)
+                + "/" + ROUND(targetVs,1)).
             _landingSetState(ctx, "VERTICAL_DESCENT",
                 "target refine timeout").
         }
@@ -123,10 +153,18 @@ GLOBAL FUNCTION _landingTargetRefineTick {
 
     IF horizontalSpeed <= LANDING_TARGET_REFINE_HSPEED
             AND impactReady {
+        mLogWarn("STATS target-refine exit reason=neutralized trErr="
+            + ROUND(impactErr,0)
+            + " age=" + ROUND(refineAge,1)
+            + " hs=" + ROUND(horizontalSpeed,1)).
         _landingSetState(ctx, "APPROACH", "lateral drift neutralized").
     } ELSE IF refineAge >= LANDING_TARGET_REFINE_ACCEPT_TIME
             AND horizontalSpeed <= LANDING_TARGET_REFINE_ACCEPT_HSPEED
             AND impactReady {
+        mLogWarn("STATS target-refine exit reason=good-enough trErr="
+            + ROUND(impactErr,0)
+            + " age=" + ROUND(refineAge,1)
+            + " hs=" + ROUND(horizontalSpeed,1)).
         _landingSetState(ctx, "APPROACH", "target refine good enough").
     }
 }

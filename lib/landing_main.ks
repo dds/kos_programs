@@ -521,6 +521,8 @@ GLOBAL FUNCTION _landingSetState {
     } ELSE IF nextState = "APPROACH" {
         _landingHudNotice(ctx, "Performing approach.", CYAN, TRUE).
     } ELSE IF nextState = "TARGET_REFINE" {
+        SET ctx["TARGET_REFINE_LOGGED"] TO FALSE.
+        SET ctx["TARGET_REFINE_CLIMB_SINCE"] TO 0.
         _landingHudNotice(ctx, "Neutralizing lateral drift for approach.", CYAN, TRUE).
     } ELSE IF nextState = "HOVER_REFINE" {
         vesselDeployGear().
@@ -634,6 +636,8 @@ GLOBAL FUNCTION landExecute {
         "HUD_NOTICE_TEXT", "",
         "TOUCHDOWN_TICKS", 0,
         "TOUCHDOWN_SETTLED", FALSE,
+        "TARGET_REFINE_LOGGED", FALSE,
+        "TARGET_REFINE_CLIMB_SINCE", 0,
         "MCC_PULSE_UNTIL", 0,
         "MCC_SETTLE_UNTIL", 0,
         "TARGET_STEERING", SHIP:UP:VECTOR,
