@@ -46,6 +46,7 @@
 // ============================================================
 
 @LAZYGLOBAL OFF.
+@CLOBBERBUILTINS ON.
 
 // Clamp helper for trig arguments that must stay in [-1, 1].
 LOCAL FUNCTION _clamp1 {
