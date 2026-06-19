@@ -304,6 +304,7 @@ GLOBAL FUNCTION shapeConverged {
 GLOBAL FUNCTION planPlaneMatch {
     PARAMETER targetInc.
     PARAMETER targetLan.
+    PARAMETER beforeUt IS -1.
 
     LOCAL b IS _shipNormal().
     LOCAL nTgt IS planeNormalFromIncLan(targetInc, targetLan).
@@ -327,7 +328,48 @@ GLOBAL FUNCTION planPlaneMatch {
 
     LOCAL burnEta IS etaAN.
     LOCAL burnTa IS taNow + angAN.
-    IF rDN > rAN {
+    IF beforeUt > 0 {
+        LOCAL beforeEta IS beforeUt - TIME:SECONDS - 60.
+        LOCAL bestEta IS -1.
+        LOCAL bestTa IS burnTa.
+        LOCAL candEta IS etaAN.
+        LOCAL candTa IS taNow + angAN.
+        UNTIL candEta >= 60 {
+            SET candEta TO candEta + SHIP:ORBIT:PERIOD.
+            SET candTa TO candTa + 360.
+        }
+        UNTIL candEta + SHIP:ORBIT:PERIOD <= beforeEta {
+            SET candEta TO candEta + SHIP:ORBIT:PERIOD.
+            SET candTa TO candTa + 360.
+        }
+        IF candEta <= beforeEta {
+            SET bestEta TO candEta.
+            SET bestTa TO candTa.
+        }
+
+        SET candEta TO etaDN.
+        SET candTa TO taNow + angDN.
+        UNTIL candEta >= 60 {
+            SET candEta TO candEta + SHIP:ORBIT:PERIOD.
+            SET candTa TO candTa + 360.
+        }
+        UNTIL candEta + SHIP:ORBIT:PERIOD <= beforeEta {
+            SET candEta TO candEta + SHIP:ORBIT:PERIOD.
+            SET candTa TO candTa + 360.
+        }
+        IF candEta <= beforeEta AND (bestEta < 0 OR candEta > bestEta) {
+            SET bestEta TO candEta.
+            SET bestTa TO candTa.
+        }
+
+        IF bestEta >= 0 {
+            SET burnEta TO bestEta.
+            SET burnTa TO bestTa.
+        } ELSE IF rDN > rAN {
+            SET burnEta TO etaDN.
+            SET burnTa TO taNow + angDN.
+        }
+    } ELSE IF rDN > rAN {
         SET burnEta TO etaDN.
         SET burnTa TO taNow + angDN.
     }

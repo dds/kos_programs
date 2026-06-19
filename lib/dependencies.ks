@@ -8,7 +8,7 @@ GLOBAL FUNCTION dependencyLibs {
         "capture", LIST("maneuver", "orbit"),
         "deorbit_burn", LIST(),
         "duna_ike_setup", LIST("maneuver", "orbit", "solar"),
-        "deorbit_targeting", LIST("orbit", "utils", "landing_config", "landing_math"),
+        "deorbit_targeting", LIST("orbit", "utils", "landing_config", "landing_math", "orbit_shape"),
         "flightplan", LIST("ui"),
         "inclination", LIST("orbit_nodes"),
         "landing_config", LIST("utils"),
