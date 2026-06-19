@@ -43,8 +43,19 @@ GLOBAL FUNCTION _patchTransitAllowed {
     PARAMETER targetBody.
 
     IF nextBody:NAME = targetBody:NAME { RETURN TRUE. }
-    IF nextBody = fromBody:BODY AND targetBody:BODY <> fromBody { RETURN TRUE. }
-    IF nextBody = targetBody:BODY AND targetBody:BODY <> fromBody { RETURN TRUE. }
+    LOCAL fromParent IS 0.
+    LOCAL targetParent IS 0.
+    IF fromBody:HASBODY { SET fromParent TO fromBody:BODY. }
+    IF targetBody:HASBODY { SET targetParent TO targetBody:BODY. }
+
+    IF fromParent <> 0 AND nextBody = fromParent
+            AND targetParent <> fromBody {
+        RETURN TRUE.
+    }
+    IF targetParent <> 0 AND nextBody = targetParent
+            AND targetParent <> fromBody {
+        RETURN TRUE.
+    }
     RETURN FALSE.
 }
 
