@@ -1,5 +1,9 @@
 // Discard terminal input left over from before this boot. Manual mode
 // should only arm from a key pressed after the boot script starts.
+
+@CLOBBERBUILTINS ON.
+@LAZYGLOBAL OFF.
+
 UNTIL NOT TERMINAL:INPUT:HASCHAR {
     TERMINAL:INPUT:GETCHAR().
 }
