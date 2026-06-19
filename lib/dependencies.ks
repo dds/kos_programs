@@ -50,7 +50,7 @@ GLOBAL FUNCTION dependencyLibs {
         "xfer_plan", LIST("maneuver_transfer", "orbit"),
         "orbit_nodes", LIST(),
         "orbit_shape", LIST("maneuver", "orbit_nodes", "orbit"),
-        "arrival_bplane", LIST("hohmann_transfer", "maneuver", "lib_bplane_math"),
+        "arrival_bplane", LIST("hohmann_transfer", "maneuver", "orbit", "lib_bplane_math"),
         "goto_plan", LIST(),
         "payload_release", LIST("maneuver", "orbit"),
         "ssto", LIST("airplane", "maneuver", "orbit"),

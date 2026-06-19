@@ -47,6 +47,7 @@
 //   BPLANE_ANG_TOL — plane tolerance in deg (default 0.5)
 //   BPLANE_LEAD    — seconds from now to the burn (default 300)
 //   BPLANE_OFFPLANE_TOL — max feasible plane/asymptote tilt (default 10)
+//   BPLANE_SAFE_HANDOFF_SOI_MULT — Pe/SOI accepted on no-correction handoff
 //   REFINE_BPLANE_DV_CAP    — max dV per refinement burn (default 10)
 //   REFINE_BPLANE_MAX_BURNS — max refinement burns per phase call (default 6)
 // ============================================================
@@ -65,6 +66,7 @@ GLOBAL BPLANE_ANG_TOL IS 0.2.
 GLOBAL BPLANE_LEAD IS 300.
 GLOBAL BPLANE_TARGET IS "".
 GLOBAL BPLANE_OFFPLANE_TOL IS 10.
+GLOBAL BPLANE_SAFE_HANDOFF_SOI_MULT IS 1.0.
 GLOBAL REFINE_BPLANE_DV_CAP IS 10.
 GLOBAL REFINE_BPLANE_MAX_BURNS IS 6.
 
@@ -80,6 +82,45 @@ LOCAL FD_STEP          IS 0.5.
 LOCAL ACQUIRE_STEP     IS 0.5.
 LOCAL MAX_ACQUIRE_ITER IS 50.
 LOCAL MAX_BURNS        IS 2.
+
+LOCAL FUNCTION _bplaneSafeEncounter {
+    PARAMETER targetBody.
+    PARAMETER meas.
+
+    IF meas = 0 { RETURN FALSE. }
+    IF meas["pe"] <= 0 { RETURN FALSE. }
+    RETURN meas["pe"] <= targetBody:SOIRADIUS * BPLANE_SAFE_HANDOFF_SOI_MULT.
+}
+
+LOCAL FUNCTION _bplaneNeedsDepartureSoiCoast {
+    PARAMETER targetBody.
+
+    IF SHIP:BODY = targetBody { RETURN FALSE. }
+    IF NOT SHIP:BODY:HASBODY { RETURN FALSE. }
+    IF NOT targetBody:HASBODY { RETURN FALSE. }
+    RETURN SHIP:BODY:BODY = targetBody:BODY AND SHIP:BODY <> targetBody:BODY.
+}
+
+LOCAL FUNCTION _bplaneCoastOutOfDepartureSoi {
+    PARAMETER targetBody.
+
+    IF NOT _bplaneNeedsDepartureSoiCoast(targetBody) { RETURN TRUE. }
+    LOCAL departureBody IS SHIP:BODY.
+    LOCAL transferCenter IS departureBody:BODY.
+    IF NOT SHIP:ORBIT:HASNEXTPATCH {
+        mLogError("BPLANE: still inside " + departureBody:NAME
+            + " SOI and no escape patch is available; holding before "
+            + "arrival targeting.").
+        WAIT 30.
+        RETURN FALSE.
+    }
+    mLogWarn("BPLANE: still inside " + departureBody:NAME
+        + " SOI; coasting to " + transferCenter:NAME
+        + " before arrival B-plane correction.").
+    waitForSOI(transferCenter, 10).
+    orbitSummary().
+    RETURN TRUE.
+}
 
 LOCAL FUNCTION _bplaneCorridorError {
     PARAMETER targetBody, meas, wantPe, wantInc, wantLan.
@@ -726,6 +767,13 @@ GLOBAL FUNCTION phaseBplane {
         nextPhase(xferSeq).
         RETURN.
     }
+    IF NOT _bplaneCoastOutOfDepartureSoi(targetBody) { RETURN. }
+    IF SHIP:BODY = targetBody {
+        mLog("BPLANE: entered " + targetBody:NAME
+            + " SOI during departure coast — skipping.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
 
     LOCAL wantPe IS CAPTURE_PE.
     IF wantPe < 0 {
@@ -769,6 +817,20 @@ GLOBAL FUNCTION phaseBplane {
     }
     LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
     IF NOT _bplaneCorridorOk(err, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) {
+        IF _bplaneSafeEncounter(targetBody, meas) {
+            mLogWarn("BPLANE: arrival outside requested corridor but inside "
+                + targetBody:NAME + " SOI; handing off to refinement/capture. "
+                + "Pe=" + ROUND(meas["pe"] / 1000, 1)
+                + "km planeErr=" + ROUND(err["planeErr"], 2) + "deg.").
+            mLogWarn("STATS bplane result PeKm=" + ROUND(meas["pe"] / 1000, 1)
+                + " inc=" + ROUND(meas["inc"], 2)
+                + " lan=" + ROUND(meas["lan"], 2)
+                + " planeErr=" + ROUND(err["planeErr"], 2)
+                + " burns=" + burns
+                + " status=safe-handoff").
+            nextPhase(xferSeq).
+            RETURN.
+        }
         mLogError("BPLANE: failed to reach arrival corridor; holding phase. "
             + "Pe=" + ROUND(meas["pe"] / 1000, 1)
             + "km want=" + ROUND(wantPe / 1000, 1)
@@ -854,6 +916,23 @@ GLOBAL FUNCTION phaseRefineBplane {
     IF meas <> 0 {
         LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
         IF NOT _bplaneCorridorOk(err, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) {
+            IF _bplaneSafeEncounter(targetBody, meas) {
+                mLogWarn("REFINE_BPLANE: arrival outside requested corridor "
+                    + "but inside " + targetBody:NAME
+                    + " SOI; handing off. Pe="
+                    + ROUND(meas["pe"] / 1000, 1)
+                    + "km planeErr=" + ROUND(err["planeErr"], 2)
+                    + "deg burns=" + burns + "/" + maxBurns + ".").
+                mLogWarn("STATS refine-bplane result PeKm="
+                    + ROUND(meas["pe"] / 1000, 1)
+                    + " inc=" + ROUND(meas["inc"], 2)
+                    + " lan=" + ROUND(meas["lan"], 2)
+                    + " planeErr=" + ROUND(err["planeErr"], 2)
+                    + " burns=" + burns
+                    + " status=safe-handoff").
+                nextPhase(xferSeq).
+                RETURN.
+            }
             mLogError("REFINE_BPLANE: arrival still outside corridor; holding before capture. "
                 + "Pe=" + ROUND(meas["pe"] / 1000, 1)
                 + "km want=" + ROUND(wantPe / 1000, 1)
