@@ -14,6 +14,18 @@ GLOBAL TRANSFER_LAMBERT_SHORTLIST IS 10.
 GLOBAL TRANSFER_LAMBERT_REFINE_MAX_ITER IS 36.
 GLOBAL TRANSFER_LAMBERT_REFINE_STALL_LIMIT IS 3.
 
+LOCAL FUNCTION _finiteLocalPeriod {
+    LOCAL p IS SHIP:ORBIT:PERIOD.
+    IF SHIP:ORBIT:ECCENTRICITY < 1 AND p > 0 AND p < 1e12 {
+        RETURN p.
+    }
+    LOCAL r IS MAX(BODY:RADIUS + MAX(0, SHIP:ALTITUDE),
+        (SHIP:POSITION - BODY:POSITION):MAG).
+    LOCAL v IS MAX(1, SHIP:VELOCITY:ORBIT:MAG).
+    LOCAL fallback IS 2 * CONSTANT:PI * r / v.
+    RETURN MAX(300, MIN(fallback, 21600)).
+}
+
 LOCAL FUNCTION _lambertShortlistAdd {
     PARAMETER shortlist.
     PARAMETER cand.
@@ -59,7 +71,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL originSma IS BODY:ORBIT:SEMIMAJORAXIS.
     LOCAL hohmannA IS (originSma + targetBody:ORBIT:SEMIMAJORAXIS) / 2.
     LOCAL hohmannTof IS CONSTANT:PI * SQRT(hohmannA^3 / transferCenter:MU).
-    LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
+    LOCAL shipPeriod IS _finiteLocalPeriod().
     LOCAL scanHours IS MAX(0.25, TRANSFER_SCAN_LOOKAHEAD_HOURS).
     LOCAL scanSpan IS scanHours * 3600.
     LOCAL departStep IS MAX(45, shipPeriod / MAX(8, TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT)).
@@ -93,6 +105,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     mLog("Lambert scan: " + nDepart + " departures x " + nTof
         + " TOFs, center=" + transferCenter:NAME
         + " hohmannTof=" + ROUND(hohmannTof,0) + "s"
+        + " shipPeriod=" + ROUND(shipPeriod,0) + "s"
         + " departSpan=" + ROUND(scanSpan,0) + "s"
         + " departLead=" + ROUND(minDepartLead,0) + "s"
         + " vInfH=" + ROUND(gates["VINF_HOHMANN"],1)
@@ -102,6 +115,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + " departSamples=" + nDepart
         + " tofSamples=" + nTof
         + " hohmannTof=" + ROUND(hohmannTof,0)
+        + " shipPeriod=" + ROUND(shipPeriod,0)
         + " departSpan=" + ROUND(scanSpan,0)
         + " departLead=" + ROUND(minDepartLead,0)
         + " vInfHohmann=" + ROUND(gates["VINF_HOHMANN"],1)
@@ -821,8 +835,9 @@ LOCAL FUNCTION _localOrbitState {
     SET hHat TO hHat:NORMALIZED.
 
     LOCAL phase IS 0.
-    IF SHIP:ORBIT:PERIOD > 0 {
-        SET phase TO 360 * (t - TIME:SECONDS) / SHIP:ORBIT:PERIOD.
+    LOCAL period IS _finiteLocalPeriod().
+    IF period > 0 {
+        SET phase TO 360 * (t - TIME:SECONDS) / period.
         UNTIL phase >= 0 { SET phase TO phase + 360. }
         UNTIL phase < 360 { SET phase TO phase - 360. }
     }
