@@ -25,6 +25,7 @@ GLOBAL FUNCTION phaseLandDeorbit {
         _advanceAfterLandDeorbit().
         RETURN.
     }
+    IF _resumeExistingLandingDeorbitNode() { RETURN. }
     IF LANDING_SKIP_TARGET_SEARCH > 0 {
         IF _timedLandingDeorbit() {
             _advanceAfterLandDeorbit().
@@ -43,6 +44,37 @@ GLOBAL FUNCTION phaseLandDeorbit {
         RETURN.
     }
     _advanceAfterLandDeorbit().
+}
+
+LOCAL FUNCTION _resumeExistingLandingDeorbitNode {
+    IF NOT HASNODE { RETURN FALSE. }
+
+    LOCAL nd IS NEXTNODE.
+    mLogWarn("STATS landing-deorbit resume existing-node dv="
+        + ROUND(nd:DELTAV:MAG,1)
+        + " eta=" + ROUND(nd:ETA,1)
+        + " body=" + SHIP:BODY:NAME).
+
+    IF nd:ETA <= 10 {
+        mLogWarn("Existing landing deorbit node is too close or past; leaving it for manual review.").
+        stateSet("phase", "LAND_DEORBIT").
+        PRINT " ".
+        PRINT "  LANDING DEORBIT NODE TOO CLOSE".
+        PRINT "  Existing maneuver node was preserved. Execute manually or resume after replanning.".
+        yieldToPrompt().
+        RETURN TRUE.
+    }
+
+    IF executeDeorbitNode(nd) {
+        _advanceAfterLandDeorbit().
+    } ELSE {
+        stateSet("phase", "LAND_DEORBIT").
+        PRINT " ".
+        PRINT "  LANDING DEORBIT EXISTING NODE FAILED".
+        PRINT "  Existing maneuver was not replaced. Review the node, then resume manually.".
+        yieldToPrompt().
+    }
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _advanceAfterLandDeorbit {
