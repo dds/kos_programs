@@ -20,6 +20,8 @@ GLOBAL TRANSFER_SCAN_LOOKAHEAD_HOURS IS 6.
 GLOBAL TRANSFER_SCAN_STEP_MINUTES IS 20.
 GLOBAL TRANSFER_PREVIEW_SHORTLIST IS 6.
 GLOBAL TRANSFER_DEFERRED_INC_ERR_TOL IS 45.
+GLOBAL TRANSFER_TMI_HANDOFF_SOI_MULT IS 1.0.
+GLOBAL TRANSFER_TMI_HANDOFF_MAX_STEPS IS 6.
 
 
 // ============================================================
@@ -90,10 +92,10 @@ GLOBAL FUNCTION planTransfer {
 
     IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
 
-    // --- 2. Arrival pretargeting ---
-    // If a capture plane is requested, shape the ejection node directly
-    // toward the target B-plane. Otherwise keep the old center-mass
-    // targeting to maximize SOI intercept margin.
+    // --- 2. Arrival handoff ---
+    // If a capture plane is requested, XING only validates that the
+    // departure has a real target patch inside BPLANE's correction
+    // corridor. Precision Pe/inc targeting belongs to BPLANE phases.
     LOCAL firstPatch IS _firstPatchBodyName(nd).
     LOCAL firstPatchOk IS firstPatch = "none" OR firstPatch = targetBody:NAME.
     IF firstPatch <> "none" AND BODY:BODY <> 0 AND firstPatch = BODY:BODY:NAME {
@@ -112,9 +114,9 @@ GLOBAL FUNCTION planTransfer {
         IF HASNODE { REMOVE nd. }
         RETURN.
     }
-    LOCAL bplaneConverged IS FALSE.
+    LOCAL bplaneHandoffOk IS FALSE.
     IF captureInc >= 0 {
-        SET bplaneConverged TO _refineEjectionTarget(
+        SET bplaneHandoffOk TO _refineEjectionTarget(
             nd, targetBody, targetPe, captureInc, lanTarget).
     } ELSE IF isEscape {
         newtonTarget(nd, targetBody, "PE", 0).
@@ -146,7 +148,7 @@ GLOBAL FUNCTION planTransfer {
     LOCAL transferMode IS "dumb-departure".
     IF captureInc >= 0 {
         SET transferMode TO "targeted-bplane".
-        IF NOT bplaneConverged { SET transferMode TO "coarse-bplane". }
+        IF NOT bplaneHandoffOk { SET transferMode TO "coarse-bplane". }
     }
     LOCAL status IS "planned".
     IF transferMode = "coarse-bplane" { SET status TO "planned-coarse". }
@@ -165,7 +167,7 @@ GLOBAL FUNCTION planTransfer {
     mLogWarn("STATS transfer result target=" + targetBody:NAME
         + " status=" + status
         + " mode=" + transferMode
-        + " bplaneConverged=" + bplaneConverged
+        + " bplaneHandoffOk=" + bplaneHandoffOk
         + " dv=" + ROUND(nd:DELTAV:MAG,1)
         + " PeKm=" + ROUND(finalPatch:PERIAPSIS/1000,1)
         + " arrivalEta=" + ROUND(arrivalEta,0)).
@@ -183,6 +185,23 @@ LOCAL FUNCTION _angleErrorDeg {
     RETURN ABS(e).
 }
 
+LOCAL FUNCTION _tmiHandoffOk {
+    PARAMETER meas.
+    PARAMETER peMax.
+
+    IF meas = 0 { RETURN FALSE. }
+    IF meas["pe"] <= 0 { RETURN FALSE. }
+    RETURN meas["pe"] <= peMax.
+}
+
+LOCAL FUNCTION _tmiHandoffScore {
+    PARAMETER meas.
+
+    IF meas = 0 { RETURN 9e15. }
+    IF meas["pe"] <= 0 { RETURN 9e15. }
+    RETURN meas["pe"].
+}
+
 LOCAL FUNCTION _refineEjectionTarget {
     PARAMETER nd.
     PARAMETER targetBody.
@@ -190,250 +209,174 @@ LOCAL FUNCTION _refineEjectionTarget {
     PARAMETER captureInc.
     PARAMETER captureLan.
 
-    LOCAL fdStep IS 0.5.
-    LOCAL stepCap IS 25.
-    LOCAL maxIter IS 8.
-    LOCAL tol IS 2000.
-    LOCAL incTol IS 0.25.
-    LOCAL converged IS FALSE.
-    LOCAL retainedBest IS FALSE.
+    LOCAL soiMult IS MAX(0.25, TRANSFER_TMI_HANDOFF_SOI_MULT).
+    LOCAL peMax IS targetBody:SOIRADIUS * soiMult.
+    LOCAL maxSteps IS MAX(0, TRANSFER_TMI_HANDOFF_MAX_STEPS).
+    LOCAL status IS "handoff-failed".
 
-    mLog("Targeted TMI: refining ejection to B-plane Pe="
+    mLog("Targeted TMI: validating handoff to BPLANE Pe="
         + ROUND(targetPe / 1000, 1)
         + "km inc=" + ROUND(captureInc, 1)
-        + " lan=" + ROUND(captureLan, 1) + ".").
+        + " lan=" + ROUND(captureLan, 1)
+        + " handoffPeMax=" + ROUND(peMax / 1000, 1) + "km.").
 
     LOCAL seedMeas IS measureArrival(nd, targetBody).
     IF seedMeas = 0 {
         mLogWarn("Targeted TMI: no seed " + targetBody:NAME
-            + " arrival patch; keeping coarse node.").
-        mLogWarn("STATS targeted-tmi target=" + targetBody:NAME
-            + " converged=False"
-            + " retained=seed-lost"
-            + " dv=" + ROUND(nd:DELTAV:MAG, 1)
-            + " PeKm=-1 inc=-1").
-        RETURN FALSE.
+            + " arrival patch; trying coarse handoff recovery.").
+    } ELSE {
+        LOCAL seedIncErr IS _angleErrorDeg(seedMeas["inc"], captureInc).
+        SET status TO "handoff-ok".
+        IF NOT _tmiHandoffOk(seedMeas, peMax) {
+            SET status TO "needs-coarse-refine".
+        }
+        mLogWarn("STATS targeted-tmi-seed target=" + targetBody:NAME
+            + " status=" + status
+            + " PeKm=" + ROUND(seedMeas["pe"] / 1000, 1)
+            + " soiMult=" + ROUND(seedMeas["pe"] / targetBody:SOIRADIUS, 3)
+            + " inc=" + ROUND(seedMeas["inc"], 1)
+            + " incErr=" + ROUND(seedIncErr, 2)
+            + " dv=" + ROUND(nd:DELTAV:MAG, 1)).
+        IF status = "handoff-ok" {
+            mLogWarn("STATS targeted-tmi target=" + targetBody:NAME
+                + " status=handoff-ok"
+                + " dv=" + ROUND(nd:DELTAV:MAG, 1)
+                + " PeKm=" + ROUND(seedMeas["pe"] / 1000, 1)
+                + " soiMult=" + ROUND(seedMeas["pe"] / targetBody:SOIRADIUS, 3)
+                + " inc=" + ROUND(seedMeas["inc"], 1)
+                + " incErr=" + ROUND(seedIncErr, 2)
+                + " handoffPeMaxKm=" + ROUND(peMax / 1000, 1)).
+            RETURN TRUE.
+        }
     }
 
-    LOCAL seedTgt IS targetBplaneVector(
-        targetBody, seedMeas, targetPe, captureInc, captureLan, TRUE).
-    LOCAL seedErrT IS seedTgt["bt"] - seedMeas["bt"].
-    LOCAL seedErrR IS seedTgt["br"] - seedMeas["br"].
-    LOCAL seedErr IS SQRT(seedErrT ^ 2 + seedErrR ^ 2).
-    LOCAL seedIncErr IS _angleErrorDeg(seedMeas["inc"], captureInc).
-    LOCAL seedScore IS seedErr + seedIncErr * targetBody:SOIRADIUS.
+    LOCAL axes IS LIST("PROGRADE", "NORMAL", "RADIALOUT", "TIME").
+    LOCAL steps IS LEXICON(
+        "PROGRADE", 10.0,
+        "NORMAL", 20.0,
+        "RADIALOUT", 20.0,
+        "TIME", 180.0
+    ).
+    LOCAL mins IS LEXICON(
+        "PROGRADE", 0.5,
+        "NORMAL", 0.5,
+        "RADIALOUT", 0.5,
+        "TIME", 5.0
+    ).
+    LOCAL signs IS LIST(1, -1).
     LOCAL bestRad IS nd:RADIALOUT.
     LOCAL bestNrm IS nd:NORMAL.
-    LOCAL bestErr IS seedErr.
-    LOCAL bestIncErr IS seedIncErr.
-    LOCAL bestScore IS seedScore.
-    LOCAL bestPe IS seedMeas["pe"].
-    LOCAL bestLabel IS "seed".
+    LOCAL bestPro IS nd:PROGRADE.
+    LOCAL bestTime IS nd:TIME.
+    LOCAL bestMeas IS seedMeas.
+    LOCAL bestScore IS _tmiHandoffScore(seedMeas).
 
-    mLogWarn("STATS targeted-tmi-seed target=" + targetBody:NAME
-        + " errKm=" + ROUND(seedErr / 1000, 1)
-        + " PeKm=" + ROUND(seedMeas["pe"] / 1000, 1)
-        + " inc=" + ROUND(seedMeas["inc"], 1)
-        + " incErr=" + ROUND(seedIncErr, 2)
-        + " dv=" + ROUND(nd:DELTAV:MAG, 1)).
+    FROM { LOCAL i IS 0. } UNTIL i >= maxSteps STEP { SET i TO i + 1. } DO {
+        LOCAL bestAxis IS "".
+        LOCAL bestValue IS 0.
+        LOCAL bestTrial IS bestMeas.
+        LOCAL bestTrialScore IS bestScore.
 
-    FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
-        LOCAL meas IS measureArrival(nd, targetBody).
-        IF meas = 0 {
-            mLogWarn("Targeted TMI[" + i + "]: no measurable "
-                + targetBody:NAME + " arrival patch.").
-            BREAK.
-        }
-
-        LOCAL tgt IS targetBplaneVector(
-            targetBody, meas, targetPe, captureInc, captureLan, TRUE).
-        LOCAL errT IS tgt["bt"] - meas["bt"].
-        LOCAL errR IS tgt["br"] - meas["br"].
-        LOCAL errMag IS SQRT(errT ^ 2 + errR ^ 2).
-        LOCAL qT IS meas["bt"] - tgt["bt"].
-        LOCAL qR IS meas["br"] - tgt["br"].
-        LOCAL incErr IS _angleErrorDeg(meas["inc"], captureInc).
-
-        mLog("  Targeted TMI[" + i + "] dBT="
-            + ROUND(errT / 1000, 1)
-            + "km dBR=" + ROUND(errR / 1000, 1)
-            + "km Pe=" + ROUND(meas["pe"] / 1000, 1)
-            + "km inc=" + ROUND(meas["inc"], 1)
-            + " incErr=" + ROUND(incErr, 2)
-            + " dv=" + ROUND(nd:DELTAV:MAG, 1)).
-
-        IF errMag <= tol {
-            SET converged TO TRUE.
-            BREAK.
-        }
-
-        LOCAL r0 IS nd:RADIALOUT.
-        LOCAL n0 IS nd:NORMAL.
-
-        LOCAL radSign IS 1.
-        SET nd:RADIALOUT TO r0 + fdStep. WAIT 0.02.
-        LOCAL mRad IS measureArrival(nd, targetBody).
-        IF mRad = 0 {
-            SET nd:RADIALOUT TO r0 - fdStep. WAIT 0.02.
-            SET mRad TO measureArrival(nd, targetBody).
-            SET radSign TO -1.
-        }
-        SET nd:RADIALOUT TO r0. WAIT 0.02.
-
-        LOCAL nrmSign IS 1.
-        SET nd:NORMAL TO n0 + fdStep. WAIT 0.02.
-        LOCAL mNrm IS measureArrival(nd, targetBody).
-        IF mNrm = 0 {
-            SET nd:NORMAL TO n0 - fdStep. WAIT 0.02.
-            SET mNrm TO measureArrival(nd, targetBody).
-            SET nrmSign TO -1.
-        }
-        SET nd:NORMAL TO n0. WAIT 0.02.
-
-        IF mRad = 0 OR mNrm = 0 {
-            mLogWarn("Targeted TMI[" + i
-                + "]: probe lost encounter both finite-difference directions — stopping.").
-            BREAK.
-        }
-
-        LOCAL tRad IS targetBplaneVector(
-            targetBody, mRad, targetPe, captureInc, captureLan, TRUE).
-        LOCAL tNrm IS targetBplaneVector(
-            targetBody, mNrm, targetPe, captureInc, captureLan, TRUE).
-
-        LOCAL j11 IS ((mRad["bt"] - tRad["bt"]) - qT) / (fdStep * radSign).
-        LOCAL j21 IS ((mRad["br"] - tRad["br"]) - qR) / (fdStep * radSign).
-        LOCAL j12 IS ((mNrm["bt"] - tNrm["bt"]) - qT) / (fdStep * nrmSign).
-        LOCAL j22 IS ((mNrm["br"] - tNrm["br"]) - qR) / (fdStep * nrmSign).
-        LOCAL det IS j11 * j22 - j12 * j21.
-        IF ABS(det) < 1e-3 {
-            mLogWarn("Targeted TMI[" + i + "]: singular Jacobian det="
-                + ROUND(det, 5) + ".").
-            BREAK.
-        }
-
-        LOCAL dRad IS ( j22 * errT - j12 * errR) / det.
-        LOCAL dNrm IS (-j21 * errT + j11 * errR) / det.
-        LOCAL stepMag IS SQRT(dRad ^ 2 + dNrm ^ 2).
-        LOCAL curStepCap IS errMag / targetBody:SOIRADIUS * 25.
-        IF curStepCap < stepCap { SET curStepCap TO stepCap. }
-        IF curStepCap > 50 { SET curStepCap TO 50. }
-        IF stepMag > curStepCap {
-            SET dRad TO dRad * curStepCap / stepMag.
-            SET dNrm TO dNrm * curStepCap / stepMag.
-        }
-
-        LOCAL accepted IS FALSE.
-        LOCAL bestTrialErr IS errMag.
-        FOR frac IN LIST(1.0, 0.5, 0.25, 0.125, 0.0625) {
-            SET nd:RADIALOUT TO r0 + dRad * frac.
-            SET nd:NORMAL TO n0 + dNrm * frac.
-            WAIT 0.02.
-            LOCAL trial IS measureArrival(nd, targetBody).
-            IF trial <> 0 {
-                LOCAL trialTgt IS targetBplaneVector(
-                    targetBody, trial, targetPe, captureInc, captureLan, TRUE).
-                LOCAL trialErrT IS trialTgt["bt"] - trial["bt"].
-                LOCAL trialErrR IS trialTgt["br"] - trial["br"].
-                LOCAL trialErr IS SQRT(trialErrT ^ 2 + trialErrR ^ 2).
-                LOCAL trialIncErr IS _angleErrorDeg(trial["inc"], captureInc).
-                LOCAL incOk IS trialIncErr <= incErr + incTol.
-                IF trialIncErr <= incTol { SET incOk TO TRUE. }
-                IF trialErr < bestTrialErr AND incOk {
-                    SET accepted TO TRUE.
-                    SET bestTrialErr TO trialErr.
-                    LOCAL trialScore IS trialErr + trialIncErr * targetBody:SOIRADIUS.
-                    LOCAL trialBetterThanSeed IS trialErr <= seedErr
-                        AND trialIncErr <= seedIncErr
-                        AND trialScore < bestScore.
-                    IF trialBetterThanSeed {
-                        SET bestRad TO nd:RADIALOUT.
-                        SET bestNrm TO nd:NORMAL.
-                        SET bestErr TO trialErr.
-                        SET bestIncErr TO trialIncErr.
-                        SET bestScore TO trialScore.
-                        SET bestPe TO trial["pe"].
-                        SET bestLabel TO "iter-" + i.
+        FOR axis IN axes {
+            LOCAL oldVal IS _nodeAxisGet(nd, axis).
+            FOR sgn IN signs {
+                LOCAL trialVal IS oldVal + sgn * steps[axis].
+                IF axis <> "TIME" OR trialVal > TIME:SECONDS + 30 {
+                    _nodeAxisSet(nd, axis, trialVal).
+                    WAIT 0.02.
+                    LOCAL trial IS measureArrival(nd, targetBody).
+                    LOCAL trialScore IS _tmiHandoffScore(trial).
+                    IF _tmiHandoffOk(trial, peMax) {
+                        LOCAL trialIncErr IS _angleErrorDeg(trial["inc"], captureInc).
+                        mLog("  Targeted TMI[" + i + "] handoff "
+                            + axis + "=" + ROUND(trialVal,2)
+                            + " PeKm=" + ROUND(trial["pe"] / 1000,1)
+                            + " inc=" + ROUND(trial["inc"],1)
+                            + " incErr=" + ROUND(trialIncErr,2)
+                            + " dv=" + ROUND(nd:DELTAV:MAG,1)).
+                        mLogWarn("STATS targeted-tmi target=" + targetBody:NAME
+                            + " status=handoff-ok"
+                            + " dv=" + ROUND(nd:DELTAV:MAG, 1)
+                            + " PeKm=" + ROUND(trial["pe"] / 1000, 1)
+                            + " soiMult=" + ROUND(trial["pe"] / targetBody:SOIRADIUS, 3)
+                            + " inc=" + ROUND(trial["inc"], 1)
+                            + " incErr=" + ROUND(trialIncErr, 2)
+                            + " handoffPeMaxKm=" + ROUND(peMax / 1000, 1)
+                            + " refined=True").
+                        RETURN TRUE.
                     }
-                    mLog("  Targeted TMI[" + i + "] accepted frac="
-                        + ROUND(frac,3)
-                        + " dRad=" + ROUND(dRad * frac,2)
-                        + " dNrm=" + ROUND(dNrm * frac,2)
-                        + " errKm=" + ROUND(bestTrialErr / 1000,1)
-                        + " PeKm=" + ROUND(trial["pe"] / 1000,1)
-                        + " incErr=" + ROUND(trialIncErr,2)).
-                    BREAK.
+                    IF trialScore < bestTrialScore {
+                        SET bestAxis TO axis.
+                        SET bestValue TO trialVal.
+                        SET bestTrial TO trial.
+                        SET bestTrialScore TO trialScore.
+                    }
                 }
             }
+            _nodeAxisSet(nd, axis, oldVal).
+            WAIT 0.01.
         }
-        IF NOT accepted {
-            SET nd:RADIALOUT TO r0.
-            SET nd:NORMAL TO n0.
+
+        IF bestAxis <> "" {
+            _nodeAxisSet(nd, bestAxis, bestValue).
             WAIT 0.02.
-            mLogWarn("Targeted TMI[" + i
-                + "]: no damped step preserved/improved encounter; stopping refine.").
-            BREAK.
+            SET bestScore TO bestTrialScore.
+            SET bestMeas TO bestTrial.
+            SET bestPro TO nd:PROGRADE.
+            SET bestNrm TO nd:NORMAL.
+            SET bestRad TO nd:RADIALOUT.
+            SET bestTime TO nd:TIME.
+            mLog("  Targeted TMI[" + i + "] coarse "
+                + bestAxis + "=" + ROUND(bestValue,2)
+                + " PeKm=" + ROUND(bestScore / 1000,1)
+                + " patch=" + (bestMeas <> 0)
+                + " dv=" + ROUND(nd:DELTAV:MAG,1)).
+        } ELSE {
+            FOR axis IN axes {
+                SET steps[axis] TO steps[axis] / 2.
+            }
+            LOCAL small IS TRUE.
+            FOR axis IN axes {
+                IF steps[axis] >= mins[axis] { SET small TO FALSE. }
+            }
+            IF small { BREAK. }
         }
     }
 
+    SET nd:PROGRADE TO bestPro.
+    SET nd:NORMAL TO bestNrm.
+    SET nd:RADIALOUT TO bestRad.
+    _nodeAxisSet(nd, "TIME", bestTime).
+    WAIT 0.02.
     LOCAL finalMeas IS measureArrival(nd, targetBody).
     LOCAL finalPe IS -1.
     LOCAL finalInc IS -1.
-    LOCAL finalErr IS seedErr + targetBody:SOIRADIUS.
-    LOCAL finalIncErr IS seedIncErr + 360.
-    LOCAL finalScore IS finalErr + finalIncErr * targetBody:SOIRADIUS.
+    LOCAL finalIncErr IS -1.
+    LOCAL finalSoiMult IS -1.
     IF finalMeas <> 0 {
         SET finalPe TO finalMeas["pe"].
         SET finalInc TO finalMeas["inc"].
-        LOCAL finalTgt IS targetBplaneVector(
-            targetBody, finalMeas, targetPe, captureInc, captureLan, TRUE).
-        LOCAL finalErrT IS finalTgt["bt"] - finalMeas["bt"].
-        LOCAL finalErrR IS finalTgt["br"] - finalMeas["br"].
-        SET finalErr TO SQRT(finalErrT ^ 2 + finalErrR ^ 2).
         SET finalIncErr TO _angleErrorDeg(finalMeas["inc"], captureInc).
-        SET finalScore TO finalErr + finalIncErr * targetBody:SOIRADIUS.
+        SET finalSoiMult TO finalMeas["pe"] / targetBody:SOIRADIUS.
     }
-
-    LOCAL restoreBest IS FALSE.
-    IF finalMeas = 0 { SET restoreBest TO TRUE. }
-    IF finalErr > seedErr { SET restoreBest TO TRUE. }
-    IF finalIncErr > seedIncErr { SET restoreBest TO TRUE. }
-    IF (NOT converged) AND bestScore < finalScore { SET restoreBest TO TRUE. }
-
-    IF restoreBest {
-        SET nd:RADIALOUT TO bestRad.
-        SET nd:NORMAL TO bestNrm.
-        WAIT 0.02.
-        SET converged TO FALSE.
-        SET retainedBest TO TRUE.
-
-        SET finalMeas TO measureArrival(nd, targetBody).
-        IF finalMeas <> 0 {
-            SET finalPe TO finalMeas["pe"].
-            SET finalInc TO finalMeas["inc"].
-            LOCAL keptTgt IS targetBplaneVector(
-                targetBody, finalMeas, targetPe, captureInc, captureLan, TRUE).
-            LOCAL keptErrT IS keptTgt["bt"] - finalMeas["bt"].
-            LOCAL keptErrR IS keptTgt["br"] - finalMeas["br"].
-            SET finalErr TO SQRT(keptErrT ^ 2 + keptErrR ^ 2).
-            SET finalIncErr TO _angleErrorDeg(finalMeas["inc"], captureInc).
-        }
-        mLogWarn("Targeted TMI retained " + bestLabel
-            + " node after non-converged refinement"
-            + " errKm=" + ROUND(bestErr / 1000, 1)
-            + " PeKm=" + ROUND(bestPe / 1000, 1)
-            + " incErr=" + ROUND(bestIncErr, 2) + ".").
+    IF _tmiHandoffOk(finalMeas, peMax) {
+        SET status TO "handoff-ok".
+    } ELSE IF finalMeas <> 0 {
+        SET status TO "handoff-outside-corridor".
+    } ELSE {
+        SET status TO "no-patch".
     }
     mLogWarn("STATS targeted-tmi target=" + targetBody:NAME
-        + " converged=" + converged
+        + " status=" + status
         + " dv=" + ROUND(nd:DELTAV:MAG, 1)
         + " PeKm=" + ROUND(finalPe / 1000, 1)
         + " inc=" + ROUND(finalInc, 1)
-        + " errKm=" + ROUND(finalErr / 1000, 1)
         + " incErr=" + ROUND(finalIncErr, 2)
-        + " retained=" + retainedBest).
+        + " soiMult=" + ROUND(finalSoiMult, 3)
+        + " handoffPeMaxKm=" + ROUND(peMax / 1000, 1)
+        + " refined=True").
 
-    RETURN converged.
+    RETURN status = "handoff-ok".
 }
 
 // ============================================================
