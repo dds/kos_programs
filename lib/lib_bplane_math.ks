@@ -9,6 +9,7 @@
 @LAZYGLOBAL OFF.
 
 GLOBAL ALLOW_GRAVITY_ASSIST IS 0.
+LOCAL _BPLANE_MEASURE_LOGGED IS FALSE.
 
 LOCAL FUNCTION _bplaneAllowGravityAssist {
     RETURN ALLOW_GRAVITY_ASSIST <> 0.
@@ -132,12 +133,34 @@ GLOBAL FUNCTION measureArrival {
     IF tHat:MAG < 1e-6 { SET tHat TO VCRS(sHat, V(1, 0, 0)). }
     SET tHat TO tHat:NORMALIZED.
     LOCAL rAxisHat IS VCRS(sHat, tHat):NORMALIZED.
+    LOCAL bt IS bMag * VDOT(bHat, tHat).
+    LOCAL br IS bMag * VDOT(bHat, rAxisHat).
+
+    IF NOT _BPLANE_MEASURE_LOGGED {
+        SET _BPLANE_MEASURE_LOGGED TO TRUE.
+        mLogWarn("STATS bplane-measure target=" + targetBody:NAME
+            + " rKm=" + ROUND(rMag / 1000, 1)
+            + " v=" + ROUND(SQRT(v2), 3)
+            + " h=" + ROUND(h, 1)
+            + " vinf=" + ROUND(SQRT(vinf2), 3)
+            + " ecc=" + ROUND(ecc, 5)
+            + " sMag=" + ROUND(sHat:MAG, 5)
+            + " bHatMag=" + ROUND(bHat:MAG, 5)
+            + " tHatMag=" + ROUND(tHat:MAG, 5)
+            + " rHatMag=" + ROUND(rAxisHat:MAG, 5)
+            + " dotBT=" + ROUND(VDOT(bHat, tHat), 6)
+            + " dotBR=" + ROUND(VDOT(bHat, rAxisHat), 6)
+            + " bMagKm=" + ROUND(bMag / 1000, 1)
+            + " btKm=" + ROUND(bt / 1000, 1)
+            + " brKm=" + ROUND(br / 1000, 1)
+            + " peKm=" + ROUND(p:PERIAPSIS / 1000, 1)).
+    }
 
     RETURN LEX(
         "S", sHat, "hHat", hHat, "eHat", eHat,
         "bHat", bHat, "bMag", bMag,
-        "bt", bMag * VDOT(bHat, tHat),
-        "br", bMag * VDOT(bHat, rAxisHat),
+        "bt", bt,
+        "br", br,
         "tHat", tHat, "rHat", rAxisHat,
         "vinf2", vinf2,
         "pe", p:PERIAPSIS, "inc", p:INCLINATION, "lan", p:LAN).
