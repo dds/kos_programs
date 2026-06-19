@@ -480,12 +480,26 @@ LOCAL FUNCTION _lambertPatchEval {
     PARAMETER arriveUt.
 
     LOCAL patch IS _getTargetPatch(nd, targetBody).
-    LOCAL tof IS MAX(3600, arriveUt - nd:TIME).
-    LOCAL pad IS MAX(21600, tof * 0.12).
-    LOCAL ca IS _findClosestApproach(
-        targetBody, arriveUt - pad, arriveUt + pad, 36).
+    LOCAL patchOk IS FALSE.
+    LOCAL patchPe IS -1.
+    LOCAL ca IS LEXICON("distance", 9e15, "time", arriveUt).
+    LOCAL score IS 9e15.
+    IF patch <> 0 {
+        SET patchPe TO patch:PERIAPSIS.
+        IF patchPe > 0 AND patchPe < targetBody:SOIRADIUS {
+            SET patchOk TO TRUE.
+            SET ca TO LEXICON("distance", patchPe, "time", arriveUt).
+            SET score TO -1e9 + patchPe.
+        }
+    }
+    IF NOT patchOk {
+        LOCAL tof IS MAX(3600, arriveUt - nd:TIME).
+        LOCAL pad IS MAX(21600, tof * 0.12).
+        SET ca TO _findClosestApproach(
+            targetBody, arriveUt - pad, arriveUt + pad, 36).
+        SET score TO ca["distance"].
+    }
     LOCAL safeDeparture IS _lambertDepartureSafe(nd).
-    LOCAL score IS ca["distance"].
     IF NOT safeDeparture {
         SET score TO score + 9e15.
     }
@@ -493,6 +507,8 @@ LOCAL FUNCTION _lambertPatchEval {
         "SCORE", score,
         "CA", ca,
         "PATCH", patch,
+        "PATCH_OK", patchOk,
+        "PATCH_PE", patchPe,
         "SAFE", safeDeparture
     ).
 }
@@ -514,7 +530,7 @@ LOCAL FUNCTION _refineLambertPatchSeed {
             + "not refining an impact departure.").
         RETURN 0.
     }
-    IF best["PATCH"] <> 0 { RETURN best["PATCH"]. }
+    IF best["PATCH_OK"] { RETURN best["PATCH"]. }
 
     LOCAL axes IS LIST("PROGRADE", "NORMAL", "RADIALOUT", "TIME").
     LOCAL steps IS LEXICON(
@@ -546,6 +562,14 @@ LOCAL FUNCTION _refineLambertPatchSeed {
                     WAIT 0.02.
                     IF nd:DELTAV:MAG <= dvCap {
                         LOCAL trial IS _lambertPatchEval(nd, targetBody, arriveUt).
+                        IF trial["SAFE"] AND trial["PATCH_OK"] {
+                            mLog("  Lambert seed[" + iter + "] "
+                                + axis + "=" + ROUND(trialVal,2)
+                                + " patch acquired Pe="
+                                + ROUND(trial["PATCH_PE"]/1000,1)
+                                + "km dV=" + ROUND(nd:DELTAV:MAG,1)).
+                            RETURN trial["PATCH"].
+                        }
                         IF trial["SAFE"] AND trial["SCORE"] < bestTrial["SCORE"] {
                             SET bestTrial TO trial.
                             SET bestAxis TO axis.
@@ -570,7 +594,7 @@ LOCAL FUNCTION _refineLambertPatchSeed {
                 + "km patch=" + (best["PATCH"] <> 0)
                 + " safe=" + best["SAFE"]
                 + " dV=" + ROUND(nd:DELTAV:MAG,1)).
-            IF best["PATCH"] <> 0 {
+            IF best["PATCH_OK"] {
                 RETURN best["PATCH"].
             }
         } ELSE {
@@ -588,8 +612,10 @@ LOCAL FUNCTION _refineLambertPatchSeed {
     mLogWarn("STATS lambert-patch-refine target=" + targetBody:NAME
         + " finalCaKm=" + ROUND(best["CA"]["distance"]/1000,1)
         + " patch=" + (best["PATCH"] <> 0)
+        + " patchOk=" + best["PATCH_OK"]
         + " dv=" + ROUND(nd:DELTAV:MAG,1)).
-    RETURN best["PATCH"].
+    IF best["PATCH_OK"] { RETURN best["PATCH"]. }
+    RETURN 0.
 }
 
 LOCAL FUNCTION _lambertEscapeNode {
