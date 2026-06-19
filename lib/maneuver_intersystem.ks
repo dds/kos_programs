@@ -46,6 +46,8 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL bestPatchPe IS -1.
     LOCAL bestVinf IS -1.
     LOCAL bestPatchVinf IS -1.
+    LOCAL bestFlip IS FALSE.
+    LOCAL bestPatchFlip IS FALSE.
 
     mLog("Lambert scan: " + nDepart + " departures x " + nTof
         + " TOFs, center=" + transferCenter:NAME
@@ -69,41 +71,49 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
             IF tof < 60 { SET tof TO 60. }
             LOCAL arriveUt IS departUt + tof.
             LOCAL r2 IS POSITIONAT(targetBody, arriveUt) - POSITIONAT(transferCenter, arriveUt).
-            LOCAL result IS lambertSolve(r1, r2, tof, transferCenter:MU, FALSE).
-            LOCAL v1Lambert IS result["v1"].
-            LOCAL vInfVec IS v1Lambert - vOrigin.
-            LOCAL vInfMag IS vInfVec:MAG.
-            LOCAL burnVec IS _lambertEscapeBurnVector(departUt, vInfVec).
-            LOCAL dvMag IS burnVec:MAG.
-            LOCAL ndProbe IS _nodeFromLocalVector(departUt, burnVec).
 
-            IF dvMag < bestDv {
-                SET bestDv TO dvMag.
-                SET bestDepart TO departUt.
-                SET bestArrive TO arriveUt.
-                SET bestVinf TO vInfMag.
-                mLog("Lambert[d=" + di + ",t=" + ti + "] dV="
-                    + ROUND(dvMag,1) + " vInf=" + ROUND(vInfMag,1)
-                    + " depart T+" + ROUND(departUt - TIME:SECONDS,0) + "s").
-            }
+            FOR flip IN LIST(FALSE, TRUE) {
+                LOCAL result IS lambertSolve(r1, r2, tof, transferCenter:MU, flip).
+                LOCAL v1Lambert IS result["v1"].
+                LOCAL vInfVec IS v1Lambert - vOrigin.
+                LOCAL vInfMag IS vInfVec:MAG.
+                LOCAL burnVec IS _lambertEscapeBurnVector(departUt, vInfVec).
+                LOCAL dvMag IS burnVec:MAG.
+                LOCAL ndProbe IS _nodeFromLocalVector(departUt, burnVec).
 
-            ADD ndProbe.
-            WAIT 0.02.
-            LOCAL patch IS _getTargetPatch(ndProbe, targetBody).
-            IF patch <> 0 AND patch:PERIAPSIS > 0 AND dvMag < bestPatchDv {
-                SET bestPatchDv TO dvMag.
-                SET bestPatchDepart TO departUt.
-                SET bestPatchArrive TO arriveUt.
-                SET bestPatchPe TO patch:PERIAPSIS.
-                SET bestPatchVinf TO vInfMag.
-                mLog("Lambert patch[d=" + di + ",t=" + ti + "] dV="
-                    + ROUND(dvMag,1) + " vInf=" + ROUND(vInfMag,1)
-                    + " Pe="
-                    + ROUND(bestPatchPe/1000,1) + "km depart T+"
-                    + ROUND(departUt - TIME:SECONDS,0) + "s").
+                IF dvMag < bestDv {
+                    SET bestDv TO dvMag.
+                    SET bestDepart TO departUt.
+                    SET bestArrive TO arriveUt.
+                    SET bestVinf TO vInfMag.
+                    SET bestFlip TO flip.
+                    mLog("Lambert[d=" + di + ",t=" + ti + ",f=" + flip
+                        + "] dV=" + ROUND(dvMag,1)
+                        + " vInf=" + ROUND(vInfMag,1)
+                        + " depart T+"
+                        + ROUND(departUt - TIME:SECONDS,0) + "s").
+                }
+
+                ADD ndProbe.
+                WAIT 0.02.
+                LOCAL patch IS _getTargetPatch(ndProbe, targetBody).
+                IF patch <> 0 AND patch:PERIAPSIS > 0 AND dvMag < bestPatchDv {
+                    SET bestPatchDv TO dvMag.
+                    SET bestPatchDepart TO departUt.
+                    SET bestPatchArrive TO arriveUt.
+                    SET bestPatchPe TO patch:PERIAPSIS.
+                    SET bestPatchVinf TO vInfMag.
+                    SET bestPatchFlip TO flip.
+                    mLog("Lambert patch[d=" + di + ",t=" + ti
+                        + ",f=" + flip + "] dV="
+                        + ROUND(dvMag,1) + " vInf=" + ROUND(vInfMag,1)
+                        + " Pe="
+                        + ROUND(bestPatchPe/1000,1) + "km depart T+"
+                        + ROUND(departUt - TIME:SECONDS,0) + "s").
+                }
+                REMOVE ndProbe.
+                WAIT 0.02.
             }
-            REMOVE ndProbe.
-            WAIT 0.02.
         }
     }
 
@@ -122,13 +132,15 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
             + " rawDepartT=" + ROUND(bestDepart - TIME:SECONDS,0)
             + " rawTof=" + ROUND(bestArrive - bestDepart,0)
             + " rawDv=" + ROUND(bestDv,1)
-            + " rawVinf=" + ROUND(bestVinf,1)).
+            + " rawVinf=" + ROUND(bestVinf,1)
+            + " rawFlip=" + bestFlip).
         RETURN 0.
     }
     SET bestDv TO bestPatchDv.
     SET bestDepart TO bestPatchDepart.
     SET bestArrive TO bestPatchArrive.
     SET bestVinf TO bestPatchVinf.
+    SET bestFlip TO bestPatchFlip.
 
     mLog("Lambert best: depart T+" + ROUND(bestDepart - TIME:SECONDS,0)
         + "s  tof=" + ROUND(bestArrive - bestDepart,0)
@@ -139,12 +151,13 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + " tof=" + ROUND(bestArrive - bestDepart,0)
         + " dv=" + ROUND(bestDv,1)
         + " vinf=" + ROUND(bestVinf,1)
+        + " flip=" + bestFlip
         + " patch=" + (bestPatchDepart >= 0)
         + " PeKm=" + ROUND(bestPatchPe/1000,1)).
 
     LOCAL r1Best IS POSITIONAT(BODY, bestDepart) - POSITIONAT(transferCenter, bestDepart).
     LOCAL r2Best IS POSITIONAT(targetBody, bestArrive) - POSITIONAT(transferCenter, bestArrive).
-    LOCAL result IS lambertSolve(r1Best, r2Best, bestArrive - bestDepart, transferCenter:MU, FALSE).
+    LOCAL result IS lambertSolve(r1Best, r2Best, bestArrive - bestDepart, transferCenter:MU, bestFlip).
     LOCAL vOriginBest IS _lambertFrameVelocity(BODY, transferCenter, bestDepart).
     LOCAL vInfBest IS result["v1"] - vOriginBest.
 
