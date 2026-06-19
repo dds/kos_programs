@@ -8,8 +8,6 @@ GLOBAL TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT IS 24.
 GLOBAL TRANSFER_INTERPLANETARY_TOF_SAMPLES IS 13.
 GLOBAL TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX IS 27.
 GLOBAL TRANSFER_INTERPLANETARY_DEPART_LEAD IS 300.
-GLOBAL TRANSFER_DUNA_SANITY_MAX_VINF IS 1200.
-GLOBAL TRANSFER_DUNA_SANITY_MAX_DV IS 1600.
 GLOBAL TRANSFER_LAMBERT_MIN_NODE_DV IS 10.
 GLOBAL TRANSFER_INTERPLANETARY_TOF_SPREAD_FRAC IS 0.45.
 
@@ -56,25 +54,28 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL rawDv IS 9999999.
     LOCAL rawVinf IS 9999999.
     LOCAL rawFlip IS FALSE.
-    LOCAL vinfGate IS 9e15.
-    LOCAL dvGate IS 9e15.
-    IF _lambertDunaSanityApplies(targetBody, transferCenter) {
-        SET vinfGate TO TRANSFER_DUNA_SANITY_MAX_VINF.
-        SET dvGate TO TRANSFER_DUNA_SANITY_MAX_DV.
-    }
+    LOCAL gates IS _lambertAnalyticGates(targetBody, transferCenter).
+    LOCAL vinfGate IS gates["VINF_GATE"].
+    LOCAL dvGate IS gates["DV_GATE"].
 
     mLog("Lambert scan: " + nDepart + " departures x " + nTof
         + " TOFs, center=" + transferCenter:NAME
         + " hohmannTof=" + ROUND(hohmannTof,0) + "s"
         + " departSpan=" + ROUND(scanSpan,0) + "s"
-        + " departLead=" + ROUND(minDepartLead,0) + "s").
+        + " departLead=" + ROUND(minDepartLead,0) + "s"
+        + " vInfH=" + ROUND(gates["VINF_HOHMANN"],1)
+        + " dvEject=" + ROUND(gates["DV_EJECT"],1)).
     mLogWarn("STATS lambert setup target=" + targetBody:NAME
         + " center=" + transferCenter:NAME
         + " departSamples=" + nDepart
         + " tofSamples=" + nTof
         + " hohmannTof=" + ROUND(hohmannTof,0)
         + " departSpan=" + ROUND(scanSpan,0)
-        + " departLead=" + ROUND(minDepartLead,0)).
+        + " departLead=" + ROUND(minDepartLead,0)
+        + " vInfHohmann=" + ROUND(gates["VINF_HOHMANN"],1)
+        + " dvEject=" + ROUND(gates["DV_EJECT"],1)
+        + " vinfGate=" + ROUND(vinfGate,1)
+        + " dvGate=" + ROUND(dvGate,1)).
     _lambertLogFrameSetup(targetBody, transferCenter).
 
     FROM { LOCAL di IS 0. } UNTIL di >= nDepart STEP { SET di TO di + 1. } DO {
@@ -185,8 +186,8 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
             + " rawDv=" + ROUND(rawDv,1)
             + " rawVinf=" + ROUND(rawVinf,1)
             + " rawFlip=" + rawFlip
-            + " maxVinf=" + ROUND(vinfGate,1)
-            + " maxDv=" + ROUND(dvGate,1)
+            + " vinfGate=" + ROUND(vinfGate,1)
+            + " dvGate=" + ROUND(dvGate,1)
             + " minDv=" + ROUND(TRANSFER_LAMBERT_MIN_NODE_DV,1)).
         RETURN 0.
     }
@@ -206,7 +207,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
 
     LOCAL seedInfo IS _lambertSelectionInfo(
         "refine-seed", bestDepart, bestArrive, bestFlip,
-        targetBody, transferCenter, hohmannTof).
+        targetBody, transferCenter, hohmannTof, gates).
     _lambertLogSelection(seedInfo, targetBody, transferCenter).
 
     mLog("Lambert best refine seed: depart T+"
@@ -293,19 +294,29 @@ LOCAL FUNCTION _lambertLogFrameSetup {
         + " originStateCenter=" + transferCenter:NAME
         + " targetStateCenter=" + transferCenter:NAME
         + " shipLocalStateCenter=" + BODY:NAME).
-    IF _lambertDunaSanityApplies(targetBody, transferCenter)
-            AND transferCenter:NAME <> "Sun" {
-        mLogWarn("STATS lambert-frame-warning target=" + targetBody:NAME
-            + " expectedCenter=Sun actualCenter=" + transferCenter:NAME).
-    }
 }
 
-LOCAL FUNCTION _lambertDunaSanityApplies {
+LOCAL FUNCTION _lambertAnalyticGates {
     PARAMETER targetBody.
     PARAMETER transferCenter.
 
-    RETURN BODY:NAME = "Kerbin"
-        AND targetBody:NAME = "Duna".
+    LOCAL rOrigin IS BODY:ORBIT:SEMIMAJORAXIS.
+    LOCAL rTarget IS targetBody:ORBIT:SEMIMAJORAXIS.
+    LOCAL aTransfer IS (rOrigin + rTarget) / 2.
+    LOCAL vTransfer IS SQRT(transferCenter:MU
+        * (2 / rOrigin - 1 / aTransfer)).
+    LOCAL vOriginCirc IS SQRT(transferCenter:MU / rOrigin).
+    LOCAL vInfHohmann IS ABS(vTransfer - vOriginCirc).
+    LOCAL rPark IS SHIP:ORBIT:SEMIMAJORAXIS.
+    IF rPark <= 0 { SET rPark TO BODY:RADIUS + MAX(0, SHIP:ALTITUDE). }
+    LOCAL dvEject IS SQRT(vInfHohmann ^ 2 + 2 * BODY:MU / rPark)
+        - SQRT(BODY:MU / rPark).
+    RETURN LEXICON(
+        "VINF_HOHMANN", vInfHohmann,
+        "DV_EJECT", dvEject,
+        "VINF_GATE", 1.3 * vInfHohmann,
+        "DV_GATE", 1.5 * dvEject
+    ).
 }
 
 LOCAL FUNCTION _lambertSelectionInfo {
@@ -316,6 +327,7 @@ LOCAL FUNCTION _lambertSelectionInfo {
     PARAMETER targetBody.
     PARAMETER transferCenter.
     PARAMETER hohmannTof.
+    PARAMETER gates.
 
     LOCAL originState IS orbitalStateVectors(BODY, departUt, transferCenter).
     LOCAL targetDepartState IS orbitalStateVectors(targetBody, departUt, transferCenter).
@@ -347,17 +359,14 @@ LOCAL FUNCTION _lambertSelectionInfo {
     LOCAL phaseAngle IS VANG(
         originState["p"], targetDepartState["p"]).
     LOCAL tofFrac IS tof / hohmannTof.
-    LOCAL vinfOk IS vInfVec:MAG < TRANSFER_DUNA_SANITY_MAX_VINF.
+    LOCAL vinfOk IS vInfVec:MAG < gates["VINF_GATE"].
     LOCAL dvOk IS nodeDv > TRANSFER_LAMBERT_MIN_NODE_DV.
-    LOCAL dvMaxOk IS TRUE.
-    IF _lambertDunaSanityApplies(targetBody, transferCenter) {
-        SET dvMaxOk TO nodeDv < TRANSFER_DUNA_SANITY_MAX_DV.
-    }
+    LOCAL dvMaxOk IS nodeDv < gates["DV_GATE"].
     LOCAL caOk IS ca["distance"] < targetBody:SOIRADIUS.
-    LOCAL frameOk IS transferCenter:NAME = "Sun".
+    LOCAL frameOk IS transferCenter = targetBody:BODY.
     LOCAL sanityOk IS vinfOk AND dvOk AND dvMaxOk AND caOk AND frameOk.
     LOCAL reason IS "PASS".
-    IF NOT frameOk { SET reason TO "frame-not-sun". }
+    IF NOT frameOk { SET reason TO "frame-not-target-parent". }
     IF frameOk AND NOT vinfOk { SET reason TO "vinf-high". }
     IF frameOk AND vinfOk AND NOT dvOk { SET reason TO "dv-zero". }
     IF frameOk AND vinfOk AND dvOk AND NOT dvMaxOk { SET reason TO "dv-high". }
@@ -387,6 +396,10 @@ LOCAL FUNCTION _lambertSelectionInfo {
         "DV_MAX_OK", dvMaxOk,
         "CA_OK", caOk,
         "CENTER", transferCenter:NAME,
+        "VINF_HOHMANN", gates["VINF_HOHMANN"],
+        "DV_EJECT", gates["DV_EJECT"],
+        "VINF_GATE", gates["VINF_GATE"],
+        "DV_GATE", gates["DV_GATE"],
         "SANITY_OK", sanityOk,
         "SANITY_REASON", reason
     ).
@@ -424,10 +437,12 @@ LOCAL FUNCTION _lambertLogSelection {
         + " verdict=" + verdict
         + " reason=" + info["SANITY_REASON"]
         + " center=" + info["CENTER"]
-        + " vinfMax=" + ROUND(TRANSFER_DUNA_SANITY_MAX_VINF,1)
+        + " vInfHohmann=" + ROUND(info["VINF_HOHMANN"],1)
+        + " dvEject=" + ROUND(info["DV_EJECT"],1)
+        + " vinfGate=" + ROUND(info["VINF_GATE"],1)
         + " vinf=" + ROUND(info["VINF_MAG"],1)
         + " minDv=" + ROUND(TRANSFER_LAMBERT_MIN_NODE_DV,1)
-        + " maxDv=" + ROUND(TRANSFER_DUNA_SANITY_MAX_DV,1)
+        + " dvGate=" + ROUND(info["DV_GATE"],1)
         + " dvOk=" + info["DV_OK"]
         + " dvMaxOk=" + info["DV_MAX_OK"]
         + " caOk=" + info["CA_OK"]
