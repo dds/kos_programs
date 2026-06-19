@@ -222,17 +222,23 @@ LOCAL FUNCTION _lambertDepartureSafe {
 
     LOCAL o IS nd:ORBIT.
     IF o:BODY <> BODY { RETURN TRUE. }
-    IF o:HASNEXTPATCH AND BODY:HASBODY
-            AND o:NEXTPATCH:BODY = BODY:BODY {
-        RETURN TRUE.
-    }
+    IF o:HASNEXTPATCH { RETURN TRUE. }
 
     LOCAL peFloor IS 10000.
     IF BODY:ATM:EXISTS {
         SET peFloor TO BODY:ATM:HEIGHT + 5000.
     }
 
-    RETURN o:PERIAPSIS > peFloor.
+    IF o:PERIAPSIS > peFloor { RETURN TRUE. }
+
+    LOCAL localR IS POSITIONAT(SHIP, nd:TIME) - POSITIONAT(BODY, nd:TIME).
+    LOCAL localVel IS _localOrbitVelocityVector(nd:TIME).
+    LOCAL postBurnVel IS localVel + _nodeLocalVector(nd).
+    LOCAL outbound IS VDOT(localR, postBurnVel) >= 0.
+
+    IF o:ECCENTRICITY >= 1 { RETURN outbound. }
+    IF o:APOAPSIS > BODY:SOIRADIUS { RETURN outbound. }
+    RETURN FALSE.
 }
 
 LOCAL FUNCTION _lambertPatchEval {
@@ -409,6 +415,19 @@ LOCAL FUNCTION _nodeFromLocalVector {
     LOCAL dvRad IS VDOT(dvVec, radialHat).
 
     RETURN NODE(burnUt, dvRad, dvNor, dvPro).
+}
+
+LOCAL FUNCTION _nodeLocalVector {
+    PARAMETER nd.
+    LOCAL localR IS POSITIONAT(SHIP, nd:TIME) - POSITIONAT(BODY, nd:TIME).
+    LOCAL localVel IS _localOrbitVelocityVector(nd:TIME).
+    LOCAL progradeHat IS localVel:NORMALIZED.
+    LOCAL normalHat IS VCRS(localR:NORMALIZED, progradeHat):NORMALIZED.
+    LOCAL radialHat IS VCRS(progradeHat, normalHat):NORMALIZED.
+
+    RETURN nd:PROGRADE * progradeHat
+        + nd:NORMAL * normalHat
+        + nd:RADIALOUT * radialHat.
 }
 
 LOCAL FUNCTION _localOrbitVelocityVector {
