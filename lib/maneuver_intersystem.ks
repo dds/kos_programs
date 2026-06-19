@@ -238,7 +238,11 @@ LOCAL FUNCTION _localOrbitVelocityVector {
     IF dirVec:MAG < 1e-6 {
         SET dirVec TO VELOCITYAT(SHIP, t):ORBIT.
     }
-    LOCAL speed IS SQRT(BODY:MU * (2 / localR:MAG
-        - 1 / SHIP:ORBIT:SEMIMAJORAXIS)).
+    LOCAL speed2 IS BODY:MU * (2 / localR:MAG
+        - 1 / SHIP:ORBIT:SEMIMAJORAXIS).
+    LOCAL speed IS SHIP:VELOCITY:ORBIT:MAG.
+    IF speed2 > 0 {
+        SET speed TO SQRT(speed2).
+    }
     RETURN dirVec:NORMALIZED * speed.
 }
