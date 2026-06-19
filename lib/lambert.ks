@@ -81,55 +81,55 @@ GLOBAL FUNCTION lambertSolve {
     // s = semi-perimeter of the triangle formed by r1, r2, and the chord
     LOCAL m1 IS r1:MAG.
     LOCAL m2 IS r2:MAG.
-    LOCAL chord IS (r1 - r2):MAG.
-    LOCAL semiPerimeter IS (m1 + m2 + chord) / 2.
+    LOCAL c IS (r1 - r2):MAG.
+    LOCAL sp IS (m1 + m2 + c) / 2.
 
     // Lambda (λ) is a geometry parameter that encodes the transfer angle.
     // It ranges from -1 to 1; λ=0 means a 180° transfer.
     // See Izzo (2014), equation (1).
     // chord/semiPerimeter is mathematically <= 1 but can drift just past
     // it for degenerate triangles, which would make the SQRT throw.
-    LOCAL lambda IS SQRT(MAX(0, 1 - chord / semiPerimeter)).
+    LOCAL l IS SQRT(MAX(0, 1 - c / sp)).
 
     // Normalize the time of flight into the dimensionless form used by
     // the algorithm. This "t" is not seconds — it's scaled by the
     // gravitational parameter and semi-perimeter so the root-finding
     // works in a well-conditioned parameter space.
     // See Izzo (2014), equation (2).
-    LOCAL normalizedTOF IS tof * SQRT(2 * mu / semiPerimeter ^ 3).
+    LOCAL nt IS tof * SQRT(2 * mu / sp ^ 3).
 
     // Build the reference frame from the two position vectors.
     // ir1, ir2 = unit vectors along each position
     // ih = unit vector normal to the transfer plane (angular momentum direction)
     // it1, it2 = transverse unit vectors (perpendicular to r, in the orbital plane)
-    LOCAL ir1 IS r1:NORMALIZED.
-    LOCAL ir2 IS r2:NORMALIZED.
-    LOCAL ihRaw IS VCRS(ir1, ir2).
+    LOCAL i1 IS r1:NORMALIZED.
+    LOCAL i2 IS r2:NORMALIZED.
+    LOCAL hr IS VCRS(i1, i2).
 
     // Near-180° transfer: r1 and r2 are (anti)parallel, the cross product
     // vanishes, and the transfer plane is genuinely ambiguous. Pick the
     // plane through r1 closest to the ecliptic (universe Y-up) rather
     // than normalizing a zero vector into NaN. Callers scanning transfer
     // windows will sail through the singular point instead of crashing.
-    IF ihRaw:MAG < 1e-6 {
-        SET ihRaw TO VCRS(ir1, VCRS(V(0, 1, 0), ir1)).
-        IF ihRaw:MAG < 1e-6 {
+    IF hr:MAG < 1e-6 {
+        SET hr TO VCRS(i1, VCRS(V(0, 1, 0), i1)).
+        IF hr:MAG < 1e-6 {
             // r1 is itself polar — any perpendicular plane works.
-            SET ihRaw TO VCRS(ir1, V(1, 0, 0)).
+            SET hr TO VCRS(i1, V(1, 0, 0)).
         }
     }
-    LOCAL ih IS ihRaw:NORMALIZED.
-    LOCAL it1 IS VCRS(ih, ir1):NORMALIZED.
-    LOCAL it2 IS VCRS(ih, ir2):NORMALIZED.
+    LOCAL h IS hr:NORMALIZED.
+    LOCAL t1 IS VCRS(h, i1):NORMALIZED.
+    LOCAL t2 IS VCRS(h, i2):NORMALIZED.
 
     // Determine prograde vs. retrograde transfer direction.
     // ih:Y < 0 means the angular momentum points "south" (retrograde in KSP's
     // coordinate system where Y is up). XOR with the flip parameter to allow
     // the caller to request the opposite arc.
-    IF (ih:Y < 0) <> flip {
-        SET it1 TO -it1.
-        SET it2 TO -it2.
-        SET lambda TO -lambda.
+    IF (h:Y < 0) <> flip {
+        SET t1 TO -t1.
+        SET t2 TO -t2.
+        SET l TO -l.
     }
 
     // Solve for x, the Lancaster-Blanchard variable, using iterative root-finding.
@@ -137,25 +137,26 @@ GLOBAL FUNCTION lambertSolve {
     //   x = 1  → minimum-energy (parabolic) transfer
     //   x > 1  → hyperbolic transfer
     //   x < 1  → elliptical transfer
-    LOCAL x IS _lambertRootFind(lambda, normalizedTOF).
+    LOCAL x IS _lambertRootFind(l, nt).
 
     // Reconstruct velocity vectors from x.
     // y, rho, gamma are intermediate variables from Izzo (2014), section 3.
     // vr1/vr2 = radial velocity components at departure/arrival
     // vt = transverse velocity component (same formula at both ends)
-    LOCAL y IS SQRT(MAX(0, 1 - lambda ^ 2 * (1 - x ^ 2))).
-    LOCAL lambdaTimesY IS lambda * y.
-    LOCAL rho IS (m1 - m2) / chord.
-    LOCAL gamma IS SQRT(mu * semiPerimeter / 2).
+    LOCAL l2 IS l ^ 2.
+    LOCAL y IS SQRT(MAX(0, 1 - l2 * (1 - x ^ 2))).
+    LOCAL ly IS l * y.
+    LOCAL rh IS (m1 - m2) / c.
+    LOCAL gm IS SQRT(mu * sp / 2).
 
-    LOCAL vr1 IS (lambdaTimesY - x) - rho * (x + lambdaTimesY).
-    LOCAL vr2 IS (x - lambdaTimesY) - rho * (x + lambdaTimesY).
-    LOCAL vt IS SQRT(MAX(0, 1 - rho ^ 2)) * (y + lambda * x).
+    LOCAL u1 IS (ly - x) - rh * (x + ly).
+    LOCAL u2 IS (x - ly) - rh * (x + ly).
+    LOCAL vt IS SQRT(MAX(0, 1 - rh ^ 2)) * (y + l * x).
 
     // Combine radial and transverse components into 3D velocity vectors.
     // Each velocity = (gamma / distance) * (radial * r_hat + transverse * t_hat)
-    LOCAL v1 IS (gamma / m1) * (vr1 * ir1 + vt * it1).
-    LOCAL v2 IS (gamma / m2) * (vr2 * ir2 + vt * it2).
+    LOCAL v1 IS (gm / m1) * (u1 * i1 + vt * t1).
+    LOCAL v2 IS (gm / m2) * (u2 * i2 + vt * t2).
 
     RETURN LEX("v1", v1, "v2", v2).
 }
@@ -177,17 +178,17 @@ GLOBAL FUNCTION lambertSolve {
 GLOBAL FUNCTION orbitalStateVectors {
     PARAMETER obt_, epochTime.
     PARAMETER center IS BODY.
-    LOCAL vel IS VELOCITYAT(obt_, epochTime):ORBIT.
-    LOCAL currentBody IS obt_:BODY.
+    LOCAL v IS VELOCITYAT(obt_, epochTime):ORBIT.
+    LOCAL b IS obt_:BODY.
 
-    UNTIL currentBody = center OR NOT currentBody:HASOBT {
-        SET vel TO vel + VELOCITYAT(currentBody, epochTime):ORBIT.
-        SET currentBody TO currentBody:BODY.
+    UNTIL b = center OR NOT b:HASOBT {
+        SET v TO v + VELOCITYAT(b, epochTime):ORBIT.
+        SET b TO b:BODY.
     }
 
     RETURN LEX(
-        "position", POSITIONAT(obt_, epochTime) - center:POSITION,
-        "velocity", vel
+        "p", POSITIONAT(obt_, epochTime) - center:POSITION,
+        "v", v
     ).
 }
 
@@ -197,16 +198,16 @@ GLOBAL FUNCTION orbitalStateVectors {
 // Convergence tolerance: 1e-5 (dimensionless x units).
 // Typically converges in 2-3 iterations; hard limit of 15.
 LOCAL FUNCTION _lambertRootFind {
-    PARAMETER lambda, normalizedTOF.
+    PARAMETER l, nt.
 
-    LOCAL x IS _lambertInitialGuess(lambda, normalizedTOF).
-    LOCAL delta IS 1.
-    LOCAL iter IS 0.
+    LOCAL x IS _lambertInitialGuess(l, nt).
+    LOCAL d IS 1.
+    LOCAL i IS 0.
 
-    UNTIL ABS(delta) < 0.00001 OR iter = 15 {
-        SET delta TO _lambertHouseholder(lambda, normalizedTOF, x).
-        SET x TO x - delta.
-        SET iter TO iter + 1.
+    UNTIL ABS(d) < 0.00001 OR i = 15 {
+        SET d TO _lambertHouseholder(l, nt, x).
+        SET x TO x - d.
+        SET i TO i + 1.
     }
 
     RETURN x.
@@ -222,24 +223,27 @@ LOCAL FUNCTION _lambertRootFind {
 // These formulas come from Izzo (2014), section 4. They are accurate enough
 // that only 2-3 Householder iterations are needed afterward.
 LOCAL FUNCTION _lambertInitialGuess {
-    PARAMETER lambda, normalizedTOF.
+    PARAMETER l, nt.
 
     // t0 = normalized TOF for the minimum-energy (parabolic) transfer
     // t1 = normalized TOF for the minimum-x boundary
-    LOCAL t0 IS CONSTANT:DEGTORAD * ARCCOS(_clamp1(lambda))
-        + lambda * SQRT(MAX(0, 1 - lambda ^ 2)).
-    LOCAL t1 IS (2 / 3) * (1 - lambda ^ 3).
+    LOCAL l2 IS l ^ 2.
+    LOCAL l3 IS l2 * l.
+    LOCAL l5 IS l3 * l2.
+    LOCAL t0 IS CONSTANT:DEGTORAD * ARCCOS(_clamp1(l))
+        + l * SQRT(MAX(0, 1 - l2)).
+    LOCAL t1 IS (2 / 3) * (1 - l3).
 
-    IF normalizedTOF >= t0 {
+    IF nt >= t0 {
         // Long TOF regime: elliptical orbit, x < 1
-        RETURN (t0 / normalizedTOF) ^ (2 / 3) - 1.
-    } ELSE IF normalizedTOF <= t1 {
+        RETURN (t0 / nt) ^ (2 / 3) - 1.
+    } ELSE IF nt <= t1 {
         // Short TOF regime: hyperbolic orbit, x > 1
-        RETURN (5 * t1 * (t1 - normalizedTOF))
-            / (2 * normalizedTOF * (1 - lambda ^ 5)) + 1.
+        RETURN (5 * t1 * (t1 - nt))
+            / (2 * nt * (1 - l5)) + 1.
     } ELSE {
         // Intermediate regime: log-interpolation
-        RETURN (t0 / normalizedTOF) ^ (LN(t1 / t0) / LN(2)) - 1.
+        RETURN (t0 / nt) ^ (LN(t1 / t0) / LN(2)) - 1.
     }
 }
 
@@ -254,31 +258,39 @@ LOCAL FUNCTION _lambertInitialGuess {
 //
 // See Izzo (2014), section 5 for the derivative formulas.
 LOCAL FUNCTION _lambertHouseholder {
-    PARAMETER lambda, normalizedTOF, x.
+    PARAMETER l, nt, x.
 
-    LOCAL a IS 1 - x ^ 2.
-    LOCAL y IS SQRT(MAX(0, 1 - lambda ^ 2 * a)).
-    LOCAL tau IS _lambertTOF(lambda, a, x, y).
-    LOCAL delta IS tau - normalizedTOF.
+    LOCAL l2 IS l ^ 2.
+    LOCAL l3 IS l2 * l.
+    LOCAL l5 IS l3 * l2.
+    LOCAL x2 IS x ^ 2.
+    LOCAL a IS 1 - x2.
+    LOCAL y IS SQRT(MAX(0, 1 - l2 * a)).
+    LOCAL y3 IS y ^ 3.
+    LOCAL y5 IS y3 * y ^ 2.
+    LOCAL ta IS _lambertTOF(l, a, x, y).
+    LOCAL d IS ta - nt.
 
     // First derivative of TOF w.r.t. x
-    LOCAL dt IS (3 * tau * x - 2 + 2 * (lambda ^ 3) * x / y) / a.
+    LOCAL dt IS (3 * ta * x - 2 + 2 * l3 * x / y) / a.
     // Second derivative
-    LOCAL ddt IS (3 * tau + 5 * x * dt
-        + 2 * (1 - lambda ^ 2) * (lambda ^ 3) / (y ^ 3)) / a.
+    LOCAL ddt IS (3 * ta + 5 * x * dt
+        + 2 * (1 - l2) * l3 / y3) / a.
     // Third derivative
     LOCAL dddt IS (7 * x * ddt + 8 * dt
-        - 6 * (1 - lambda ^ 2) * (lambda ^ 5) * x / (y ^ 5)) / a.
+        - 6 * (1 - l2) * l5 * x / y5) / a.
 
     // Householder update step (returns the correction to subtract from x).
     // Guard the denominator: at pathological points (e.g. x crossing 1.0
     // exactly) it can vanish; fall back to a plain Newton step.
-    LOCAL denom IS dt * (dt ^ 2 - delta * ddt) + (dddt * delta ^ 2) / 6.
-    IF ABS(denom) < 1e-12 {
+    LOCAL d2 IS d ^ 2.
+    LOCAL dt2 IS dt ^ 2.
+    LOCAL de IS dt * (dt2 - d * ddt) + (dddt * d2) / 6.
+    IF ABS(de) < 1e-12 {
         IF ABS(dt) < 1e-12 { RETURN 0. }
-        RETURN delta / dt.
+        RETURN d / dt.
     }
-    RETURN delta * (dt ^ 2 - delta * ddt / 2) / denom.
+    RETURN d * (dt2 - d * ddt / 2) / de.
 }
 
 // _lambertTOF — compute the normalized time of flight using Lancaster's formula.
@@ -291,11 +303,11 @@ LOCAL FUNCTION _lambertHouseholder {
 //
 // See Izzo (2014), equation (9) for Lancaster's TOF formula.
 LOCAL FUNCTION _lambertTOF {
-    PARAMETER lambda, a, x, y.
+    PARAMETER l, a, x, y.
 
     LOCAL b IS SQRT(ABS(a)).
-    LOCAL f IS b * (y - lambda * x).
-    LOCAL g IS lambda * a + x * y.
+    LOCAL f IS b * (y - l * x).
+    LOCAL g IS l * a + x * y.
 
     // psi is the "universal anomaly" — arccos for elliptic, log for hyperbolic
     LOCAL psi IS 0.
@@ -307,5 +319,5 @@ LOCAL FUNCTION _lambertTOF {
         SET psi TO LN(MAX(1e-300, f + g)).
     }
 
-    RETURN (psi / b - x + lambda * y) / a.
+    RETURN (psi / b - x + l * y) / a.
 }

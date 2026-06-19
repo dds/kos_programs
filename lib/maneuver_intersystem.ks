@@ -8,6 +8,7 @@ GLOBAL TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT IS 24.
 GLOBAL TRANSFER_INTERPLANETARY_TOF_SAMPLES IS 9.
 GLOBAL TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX IS 35.
 GLOBAL TRANSFER_INTERPLANETARY_DEPART_LEAD IS 300.
+GLOBAL TRANSFER_DUNA_SANITY_MAX_VINF IS 1200.
 
 GLOBAL FUNCTION planInterplanetaryTransfer {
     PARAMETER targetBody.
@@ -65,18 +66,21 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + " hohmannTof=" + ROUND(hohmannTof,0)
         + " departSpan=" + ROUND(scanSpan,0)
         + " departLead=" + ROUND(minDepartLead,0)).
+    _lambertLogFrameSetup(targetBody, transferCenter).
 
     FROM { LOCAL di IS 0. } UNTIL di >= nDepart STEP { SET di TO di + 1. } DO {
         LOCAL departUt IS departStart + di * scanSpan / MAX(1, nDepart - 1).
-        LOCAL r1 IS POSITIONAT(BODY, departUt) - POSITIONAT(transferCenter, departUt).
-        LOCAL vOrigin IS _lambertFrameVelocity(BODY, transferCenter, departUt).
+        LOCAL originState IS orbitalStateVectors(BODY, departUt, transferCenter).
+        LOCAL r1 IS originState["p"].
+        LOCAL vOrigin IS originState["v"].
 
         FROM { LOCAL ti IS 0. } UNTIL ti >= nTof STEP { SET ti TO ti + 1. } DO {
             LOCAL tofFrac IS (ti / (nTof - 1)) - 0.5.
             LOCAL tof IS hohmannTof + tofFrac * tofSpread * 2.
             IF tof < 60 { SET tof TO 60. }
             LOCAL arriveUt IS departUt + tof.
-            LOCAL r2 IS POSITIONAT(targetBody, arriveUt) - POSITIONAT(transferCenter, arriveUt).
+            LOCAL targetState IS orbitalStateVectors(targetBody, arriveUt, transferCenter).
+            LOCAL r2 IS targetState["p"].
 
             FOR flip IN LIST(FALSE, TRUE) {
                 LOCAL result IS lambertSolve(r1, r2, tof, transferCenter:MU, flip).
@@ -145,6 +149,22 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     }
 
     IF bestPatchDepart < 0 {
+        LOCAL rawInfo IS _lambertSelectionInfo(
+            "raw-best", bestDepart, bestArrive, bestFlip,
+            targetBody, transferCenter, hohmannTof).
+        _lambertLogSelection(rawInfo, targetBody, transferCenter).
+        IF _lambertDunaSanityApplies(targetBody, transferCenter)
+                AND NOT rawInfo["SANITY_OK"] {
+            mLogError("planTransfer: Duna Lambert sanity gate blocked bad seed.").
+            mLogWarn("STATS lambert result target=" + targetBody:NAME
+                + " status=sanity-blocked"
+                + " reason=" + rawInfo["SANITY_REASON"]
+                + " departT=" + ROUND(bestDepart - TIME:SECONDS,0)
+                + " vinf=" + ROUND(rawInfo["VINF_MAG"],1)
+                + " flip=" + bestFlip
+                + " caKm=" + ROUND(rawInfo["CA_KM"],1)).
+            RETURN 0.
+        }
         mLogWarn("Lambert scan found no direct patch; refining raw best "
             + "closest approach seed.").
         LOCAL rawNode IS _lambertNodeFor(
@@ -200,6 +220,23 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         RETURN 0.
     }
 
+    LOCAL patchInfo IS _lambertSelectionInfo(
+        "patch-best", bestDepart, bestArrive, bestFlip,
+        targetBody, transferCenter, hohmannTof).
+    _lambertLogSelection(patchInfo, targetBody, transferCenter).
+    IF _lambertDunaSanityApplies(targetBody, transferCenter)
+            AND NOT patchInfo["SANITY_OK"] {
+        mLogError("planTransfer: Duna Lambert sanity gate blocked bad patch seed.").
+        mLogWarn("STATS lambert result target=" + targetBody:NAME
+            + " status=sanity-blocked"
+            + " reason=" + patchInfo["SANITY_REASON"]
+            + " departT=" + ROUND(bestDepart - TIME:SECONDS,0)
+            + " vinf=" + ROUND(patchInfo["VINF_MAG"],1)
+            + " flip=" + bestFlip
+            + " caKm=" + ROUND(patchInfo["CA_KM"],1)).
+        RETURN 0.
+    }
+
     mLog("Lambert best: depart T+" + ROUND(bestDepart - TIME:SECONDS,0)
         + "s  tof=" + ROUND(bestArrive - bestDepart,0)
         + "s  dV=" + ROUND(bestDv,1)
@@ -233,15 +270,150 @@ LOCAL FUNCTION _lambertNodeFor {
     PARAMETER targetBody.
     PARAMETER transferCenter.
 
-    LOCAL r1 IS POSITIONAT(BODY, departUt)
-        - POSITIONAT(transferCenter, departUt).
-    LOCAL r2 IS POSITIONAT(targetBody, arriveUt)
-        - POSITIONAT(transferCenter, arriveUt).
+    LOCAL originState IS orbitalStateVectors(BODY, departUt, transferCenter).
+    LOCAL targetState IS orbitalStateVectors(targetBody, arriveUt, transferCenter).
+    LOCAL r1 IS originState["p"].
+    LOCAL r2 IS targetState["p"].
     LOCAL result IS lambertSolve(
         r1, r2, arriveUt - departUt, transferCenter:MU, flip).
-    LOCAL vOrigin IS _lambertFrameVelocity(BODY, transferCenter, departUt).
+    LOCAL vOrigin IS originState["v"].
     LOCAL vInf IS result["v1"] - vOrigin.
     RETURN _lambertEscapeNode(departUt, vInf).
+}
+
+LOCAL FUNCTION _lambertLogFrameSetup {
+    PARAMETER targetBody.
+    PARAMETER transferCenter.
+
+    mLogWarn("STATS lambert-frame target=" + targetBody:NAME
+        + " originStateCenter=" + transferCenter:NAME
+        + " targetStateCenter=" + transferCenter:NAME
+        + " shipLocalStateCenter=" + BODY:NAME).
+    IF _lambertDunaSanityApplies(targetBody, transferCenter)
+            AND transferCenter:NAME <> "Sun" {
+        mLogWarn("STATS lambert-frame-warning target=" + targetBody:NAME
+            + " expectedCenter=Sun actualCenter=" + transferCenter:NAME).
+    }
+}
+
+LOCAL FUNCTION _lambertDunaSanityApplies {
+    PARAMETER targetBody.
+    PARAMETER transferCenter.
+
+    RETURN BODY:NAME = "Kerbin"
+        AND targetBody:NAME = "Duna".
+}
+
+LOCAL FUNCTION _lambertSelectionInfo {
+    PARAMETER label.
+    PARAMETER departUt.
+    PARAMETER arriveUt.
+    PARAMETER flip.
+    PARAMETER targetBody.
+    PARAMETER transferCenter.
+    PARAMETER hohmannTof.
+
+    LOCAL originState IS orbitalStateVectors(BODY, departUt, transferCenter).
+    LOCAL targetDepartState IS orbitalStateVectors(targetBody, departUt, transferCenter).
+    LOCAL targetArriveState IS orbitalStateVectors(targetBody, arriveUt, transferCenter).
+    LOCAL result IS lambertSolve(
+        originState["p"], targetArriveState["p"],
+        arriveUt - departUt, transferCenter:MU, flip).
+    LOCAL v1Lambert IS result["v1"].
+    LOCAL vOrigin IS originState["v"].
+    LOCAL vInfVec IS v1Lambert - vOrigin.
+    LOCAL nd IS _lambertEscapeNode(departUt, vInfVec).
+
+    ADD nd.
+    WAIT 0.05.
+    LOCAL tof IS arriveUt - departUt.
+    LOCAL pad IS MAX(21600, tof * 0.12).
+    LOCAL ca IS _findClosestApproach(
+        targetBody, arriveUt - pad, arriveUt + pad, 36).
+    LOCAL patch IS _getTargetPatch(nd, targetBody).
+    LOCAL patchPeKm IS -1.
+    IF patch <> 0 { SET patchPeKm TO patch:PERIAPSIS / 1000. }
+    LOCAL pro IS nd:PROGRADE.
+    LOCAL nor IS nd:NORMAL.
+    LOCAL rad IS nd:RADIALOUT.
+    LOCAL nodeDv IS nd:DELTAV:MAG.
+    REMOVE nd.
+    WAIT 0.02.
+
+    LOCAL phaseAngle IS VANG(
+        originState["p"], targetDepartState["p"]).
+    LOCAL tofFrac IS tof / hohmannTof.
+    LOCAL vinfOk IS vInfVec:MAG < TRANSFER_DUNA_SANITY_MAX_VINF.
+    LOCAL flipOk IS NOT flip.
+    LOCAL frameOk IS transferCenter:NAME = "Sun".
+    LOCAL sanityOk IS vinfOk AND flipOk AND frameOk.
+    LOCAL reason IS "PASS".
+    IF NOT frameOk { SET reason TO "frame-not-sun". }
+    IF frameOk AND NOT vinfOk { SET reason TO "vinf-high". }
+    IF frameOk AND vinfOk AND NOT flipOk { SET reason TO "flip-true". }
+    IF frameOk AND NOT vinfOk AND NOT flipOk { SET reason TO "vinf-high+flip-true". }
+
+    RETURN LEXICON(
+        "LABEL", label,
+        "DEPART_UT", departUt,
+        "ARRIVE_UT", arriveUt,
+        "TOF", tof,
+        "TOF_FRAC", tofFrac,
+        "PHASE_ANGLE", phaseAngle,
+        "V1_MAG", v1Lambert:MAG,
+        "VORIGIN_MAG", vOrigin:MAG,
+        "VINF_MAG", vInfVec:MAG,
+        "PROGRADE", pro,
+        "NORMAL", nor,
+        "RADIALOUT", rad,
+        "NODE_DV", nodeDv,
+        "CA_KM", ca["distance"] / 1000,
+        "CA_UT", ca["time"],
+        "PATCH", patch <> 0,
+        "PATCH_PE_KM", patchPeKm,
+        "FLIP", flip,
+        "FRAME_OK", frameOk,
+        "CENTER", transferCenter:NAME,
+        "SANITY_OK", sanityOk,
+        "SANITY_REASON", reason
+    ).
+}
+
+LOCAL FUNCTION _lambertLogSelection {
+    PARAMETER info.
+    PARAMETER targetBody.
+    PARAMETER transferCenter.
+
+    LOCAL verdict IS "FAIL".
+    IF info["SANITY_OK"] { SET verdict TO "PASS". }
+    mLogWarn("STATS lambert-selection label=" + info["LABEL"]
+        + " target=" + targetBody:NAME
+        + " center=" + transferCenter:NAME
+        + " departUT=" + ROUND(info["DEPART_UT"],1)
+        + " arriveUT=" + ROUND(info["ARRIVE_UT"],1)
+        + " phaseDeg=" + ROUND(info["PHASE_ANGLE"],2)
+        + " tof=" + ROUND(info["TOF"],0)
+        + " tofHohmannFrac=" + ROUND(info["TOF_FRAC"],3)).
+    mLogWarn("STATS lambert-vectors label=" + info["LABEL"]
+        + " v1Helio=" + ROUND(info["V1_MAG"],1)
+        + " vSunDepart=" + ROUND(info["VORIGIN_MAG"],1)
+        + " vInf=" + ROUND(info["VINF_MAG"],1)).
+    mLogWarn("STATS lambert-node label=" + info["LABEL"]
+        + " prograde=" + ROUND(info["PROGRADE"],1)
+        + " normal=" + ROUND(info["NORMAL"],1)
+        + " radial=" + ROUND(info["RADIALOUT"],1)
+        + " dv=" + ROUND(info["NODE_DV"],1)
+        + " caKm=" + ROUND(info["CA_KM"],1)
+        + " caUT=" + ROUND(info["CA_UT"],1)
+        + " patch=" + info["PATCH"]
+        + " patchPeKm=" + ROUND(info["PATCH_PE_KM"],1)).
+    mLogWarn("STATS lambert-sanity label=" + info["LABEL"]
+        + " verdict=" + verdict
+        + " reason=" + info["SANITY_REASON"]
+        + " center=" + info["CENTER"]
+        + " vinfMax=" + ROUND(TRANSFER_DUNA_SANITY_MAX_VINF,1)
+        + " vinf=" + ROUND(info["VINF_MAG"],1)
+        + " flip=" + info["FLIP"]).
 }
 
 LOCAL FUNCTION _lambertDepartureSafe {
@@ -387,16 +559,6 @@ LOCAL FUNCTION _refineLambertPatchSeed {
     RETURN best["PATCH"].
 }
 
-LOCAL FUNCTION _lambertFrameVelocity {
-    PARAMETER obj.
-    PARAMETER frameCenter.
-    PARAMETER t.
-    LOCAL dt IS 1.
-    RETURN ((POSITIONAT(obj, t + dt) - POSITIONAT(frameCenter, t + dt))
-        - (POSITIONAT(obj, t - dt) - POSITIONAT(frameCenter, t - dt)))
-        / (2 * dt).
-}
-
 LOCAL FUNCTION _lambertEscapeNode {
     PARAMETER burnUt.
     PARAMETER vInfVec.
@@ -410,23 +572,11 @@ LOCAL FUNCTION _lambertEscapeBurnVector {
     PARAMETER vInfVec.
 
     LOCAL localR IS POSITIONAT(SHIP, burnUt) - POSITIONAT(BODY, burnUt).
-    LOCAL rHat IS localR:NORMALIZED.
     LOCAL localVel IS _localOrbitVelocityVector(burnUt).
     LOCAL vInfMag IS vInfVec:MAG.
-    LOCAL aim IS vInfVec:NORMALIZED.
-    LOCAL ecc IS 1 + localR:MAG * vInfMag ^ 2 / BODY:MU.
-    LOCAL sinNuInf IS SQRT(MAX(1e-6, 1 - (1 / ecc) ^ 2)).
-    LOCAL tangentAim IS (aim + (1 / ecc) * rHat) / sinNuInf.
-    SET tangentAim TO tangentAim - VDOT(tangentAim, rHat) * rHat.
-    IF tangentAim:MAG < 1e-6 {
-        SET tangentAim TO localVel:NORMALIZED.
-    } ELSE {
-        SET tangentAim TO tangentAim:NORMALIZED.
-    }
-
     LOCAL burnSpeed IS SQRT(vInfMag ^ 2 + 2 * BODY:MU / localR:MAG).
-    LOCAL desiredLocalVel IS tangentAim * burnSpeed.
-    RETURN desiredLocalVel - localVel.
+    LOCAL burnDv IS MAX(0, burnSpeed - localVel:MAG).
+    RETURN localVel:NORMALIZED * burnDv.
 }
 
 LOCAL FUNCTION _nodeFromLocalVector {
@@ -461,7 +611,8 @@ LOCAL FUNCTION _localOrbitVelocityVector {
     PARAMETER t.
 
     LOCAL localR IS POSITIONAT(SHIP, t) - POSITIONAT(BODY, t).
-    LOCAL dirVec IS _lambertFrameVelocity(SHIP, BODY, t).
+    LOCAL shipState IS orbitalStateVectors(SHIP, t, BODY).
+    LOCAL dirVec IS shipState["v"].
     IF dirVec:MAG < 1e-6 {
         SET dirVec TO VELOCITYAT(SHIP, t):ORBIT.
     }
