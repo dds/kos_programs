@@ -6,10 +6,10 @@
 GLOBAL TRANSFER_SCAN_LOOKAHEAD_HOURS IS 6.
 GLOBAL TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT IS 24.
 GLOBAL TRANSFER_INTERPLANETARY_TOF_SAMPLES IS 13.
-GLOBAL TRANSFER_INTERPLANETARY_TOF_REFINE_SAMPLES IS 9.
-GLOBAL TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX IS 35.
+GLOBAL TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX IS 27.
 GLOBAL TRANSFER_INTERPLANETARY_DEPART_LEAD IS 300.
 GLOBAL TRANSFER_DUNA_SANITY_MAX_VINF IS 1200.
+GLOBAL TRANSFER_DUNA_SANITY_MAX_DV IS 1600.
 GLOBAL TRANSFER_LAMBERT_MIN_NODE_DV IS 10.
 GLOBAL TRANSFER_INTERPLANETARY_TOF_SPREAD_FRAC IS 0.45.
 
@@ -42,7 +42,6 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     SET nDepart TO MIN(nDepart, MAX(1, TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX) + 1).
     LOCAL nTof IS MAX(3, TRANSFER_INTERPLANETARY_TOF_SAMPLES).
     LOCAL tofSpread IS hohmannTof * MAX(0.1, TRANSFER_INTERPLANETARY_TOF_SPREAD_FRAC).
-    LOCAL tofStep IS tofSpread * 2 / MAX(1, nTof - 1).
     LOCAL minDepartLead IS MAX(120, TRANSFER_INTERPLANETARY_DEPART_LEAD).
     LOCAL departStart IS TIME:SECONDS + minDepartLead.
     LOCAL bestDv IS 9999999.
@@ -58,8 +57,10 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL rawVinf IS 9999999.
     LOCAL rawFlip IS FALSE.
     LOCAL vinfGate IS 9e15.
+    LOCAL dvGate IS 9e15.
     IF _lambertDunaSanityApplies(targetBody, transferCenter) {
         SET vinfGate TO TRANSFER_DUNA_SANITY_MAX_VINF.
+        SET dvGate TO TRANSFER_DUNA_SANITY_MAX_DV.
     }
 
     mLog("Lambert scan: " + nDepart + " departures x " + nTof
@@ -104,7 +105,8 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
                 LOCAL safeDeparture IS _lambertDepartureSafe(ndProbe).
                 LOCAL canEncounter IS safeDeparture
                     AND vInfMag < vinfGate
-                    AND dvMag > TRANSFER_LAMBERT_MIN_NODE_DV.
+                    AND dvMag > TRANSFER_LAMBERT_MIN_NODE_DV
+                    AND dvMag < dvGate.
 
                 IF canEncounter AND vInfMag < rawVinf {
                     SET rawDepart TO departUt.
@@ -173,94 +175,6 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         }
     }
 
-    IF rawDepart >= 0 {
-        LOCAL fineSamples IS MAX(3, TRANSFER_INTERPLANETARY_TOF_REFINE_SAMPLES).
-        LOCAL rawTof IS rawArrive - rawDepart.
-        LOCAL fineSpan IS tofStep * 2.
-        mLog("Lambert TOF refine: depart T+"
-            + ROUND(rawDepart - TIME:SECONDS,0)
-            + "s centerTof=" + ROUND(rawTof,0)
-            + "s span=" + ROUND(fineSpan,0)
-            + "s samples=" + fineSamples
-            + " rawVinf=" + ROUND(rawVinf,1)).
-
-        FROM { LOCAL fi IS 0. } UNTIL fi >= fineSamples STEP { SET fi TO fi + 1. } DO {
-            LOCAL fFrac IS (fi / MAX(1, fineSamples - 1)) - 0.5.
-            LOCAL tof IS rawTof + fFrac * fineSpan.
-            IF tof < 60 { SET tof TO 60. }
-            LOCAL departUt IS rawDepart.
-            LOCAL arriveUt IS departUt + tof.
-            LOCAL originState IS orbitalStateVectors(BODY, departUt, transferCenter).
-            LOCAL targetState IS orbitalStateVectors(targetBody, arriveUt, transferCenter).
-            LOCAL r1 IS originState["p"].
-            LOCAL r2 IS targetState["p"].
-            LOCAL vOrigin IS originState["v"].
-
-            FOR flip IN LIST(FALSE, TRUE) {
-                LOCAL result IS lambertSolve(r1, r2, tof, transferCenter:MU, flip).
-                LOCAL v1Lambert IS result["v1"].
-                LOCAL vInfVec IS v1Lambert - vOrigin.
-                LOCAL vInfMag IS vInfVec:MAG.
-                LOCAL burnVec IS _lambertEscapeBurnVector(departUt, vInfVec).
-                LOCAL dvMag IS burnVec:MAG.
-                LOCAL ndProbe IS _nodeFromLocalVector(departUt, burnVec).
-
-                ADD ndProbe.
-                WAIT 0.02.
-                LOCAL safeDeparture IS _lambertDepartureSafe(ndProbe).
-                LOCAL canEncounter IS safeDeparture
-                    AND vInfMag < vinfGate
-                    AND dvMag > TRANSFER_LAMBERT_MIN_NODE_DV.
-
-                IF canEncounter AND vInfMag < rawVinf {
-                    SET rawArrive TO arriveUt.
-                    SET rawDv TO dvMag.
-                    SET rawVinf TO vInfMag.
-                    SET rawFlip TO flip.
-                    mLog("Lambert refine-vinf[i=" + fi + ",f=" + flip
-                        + "] dV=" + ROUND(dvMag,1)
-                        + " vInf=" + ROUND(vInfMag,1)
-                        + " tof=" + ROUND(tof,0) + "s").
-                }
-
-                IF canEncounter {
-                    LOCAL pad IS MAX(21600, tof * 0.12).
-                    LOCAL ca IS _findClosestApproach(
-                        targetBody, arriveUt - pad, arriveUt + pad, 36).
-                    LOCAL caKm IS ca["distance"] / 1000.
-                    LOCAL patch IS _getTargetPatch(ndProbe, targetBody).
-                    mLog("Lambert gated[refine=" + fi
-                        + ",f=" + flip + "] dV="
-                        + ROUND(dvMag,1)
-                        + " vInf=" + ROUND(vInfMag,1)
-                        + " CA=" + ROUND(caKm,1)
-                        + "km tof=" + ROUND(tof,0)
-                        + "s depart T+"
-                        + ROUND(departUt - TIME:SECONDS,0) + "s").
-
-                    IF caKm < bestCaKm {
-                        SET bestDv TO dvMag.
-                        SET bestDepart TO departUt.
-                        SET bestArrive TO arriveUt.
-                        SET bestVinf TO vInfMag.
-                        SET bestFlip TO flip.
-                        SET bestCaKm TO caKm.
-                        SET bestPatchPe TO -1.
-                        IF patch <> 0 { SET bestPatchPe TO patch:PERIAPSIS. }
-                        mLog("Lambert refine-seed[refine=" + fi
-                            + ",f=" + flip + "] dV="
-                            + ROUND(dvMag,1)
-                            + " vInf=" + ROUND(vInfMag,1)
-                            + " CA=" + ROUND(caKm,1)
-                            + "km tof=" + ROUND(tof,0) + "s").
-                    }
-                }
-                REMOVE ndProbe.
-                WAIT 0.02.
-            }
-        }
-    }
-
     IF bestDepart < 0 {
         mLogError("planTransfer: Lambert scan found no gated "
             + targetBody:NAME + " encounter seed.").
@@ -272,6 +186,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
             + " rawVinf=" + ROUND(rawVinf,1)
             + " rawFlip=" + rawFlip
             + " maxVinf=" + ROUND(vinfGate,1)
+            + " maxDv=" + ROUND(dvGate,1)
             + " minDv=" + ROUND(TRANSFER_LAMBERT_MIN_NODE_DV,1)).
         RETURN 0.
     }
@@ -434,14 +349,19 @@ LOCAL FUNCTION _lambertSelectionInfo {
     LOCAL tofFrac IS tof / hohmannTof.
     LOCAL vinfOk IS vInfVec:MAG < TRANSFER_DUNA_SANITY_MAX_VINF.
     LOCAL dvOk IS nodeDv > TRANSFER_LAMBERT_MIN_NODE_DV.
+    LOCAL dvMaxOk IS TRUE.
+    IF _lambertDunaSanityApplies(targetBody, transferCenter) {
+        SET dvMaxOk TO nodeDv < TRANSFER_DUNA_SANITY_MAX_DV.
+    }
     LOCAL caOk IS ca["distance"] < targetBody:SOIRADIUS.
     LOCAL frameOk IS transferCenter:NAME = "Sun".
-    LOCAL sanityOk IS vinfOk AND dvOk AND caOk AND frameOk.
+    LOCAL sanityOk IS vinfOk AND dvOk AND dvMaxOk AND caOk AND frameOk.
     LOCAL reason IS "PASS".
     IF NOT frameOk { SET reason TO "frame-not-sun". }
     IF frameOk AND NOT vinfOk { SET reason TO "vinf-high". }
     IF frameOk AND vinfOk AND NOT dvOk { SET reason TO "dv-zero". }
-    IF frameOk AND vinfOk AND dvOk AND NOT caOk { SET reason TO "ca-outside-soi". }
+    IF frameOk AND vinfOk AND dvOk AND NOT dvMaxOk { SET reason TO "dv-high". }
+    IF frameOk AND vinfOk AND dvOk AND dvMaxOk AND NOT caOk { SET reason TO "ca-outside-soi". }
 
     RETURN LEXICON(
         "LABEL", label,
@@ -464,6 +384,7 @@ LOCAL FUNCTION _lambertSelectionInfo {
         "FLIP", flip,
         "FRAME_OK", frameOk,
         "DV_OK", dvOk,
+        "DV_MAX_OK", dvMaxOk,
         "CA_OK", caOk,
         "CENTER", transferCenter:NAME,
         "SANITY_OK", sanityOk,
@@ -506,7 +427,9 @@ LOCAL FUNCTION _lambertLogSelection {
         + " vinfMax=" + ROUND(TRANSFER_DUNA_SANITY_MAX_VINF,1)
         + " vinf=" + ROUND(info["VINF_MAG"],1)
         + " minDv=" + ROUND(TRANSFER_LAMBERT_MIN_NODE_DV,1)
+        + " maxDv=" + ROUND(TRANSFER_DUNA_SANITY_MAX_DV,1)
         + " dvOk=" + info["DV_OK"]
+        + " dvMaxOk=" + info["DV_MAX_OK"]
         + " caOk=" + info["CA_OK"]
         + " flip=" + info["FLIP"]).
 }
