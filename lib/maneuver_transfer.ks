@@ -173,6 +173,15 @@ GLOBAL FUNCTION planTransfer {
     RETURN nd.
 }
 
+LOCAL FUNCTION _angleErrorDeg {
+    PARAMETER a.
+    PARAMETER b.
+
+    LOCAL e IS ABS(a - b).
+    IF e > 180 { SET e TO 360 - e. }
+    RETURN ABS(e).
+}
+
 LOCAL FUNCTION _refineEjectionTarget {
     PARAMETER nd.
     PARAMETER targetBody.
@@ -181,15 +190,51 @@ LOCAL FUNCTION _refineEjectionTarget {
     PARAMETER captureLan.
 
     LOCAL fdStep IS 0.5.
-    LOCAL stepCap IS 10.
+    LOCAL stepCap IS 25.
     LOCAL maxIter IS 8.
     LOCAL tol IS 2000.
+    LOCAL incTol IS 0.25.
     LOCAL converged IS FALSE.
+    LOCAL retainedBest IS FALSE.
 
     mLog("Targeted TMI: refining ejection to B-plane Pe="
         + ROUND(targetPe / 1000, 1)
         + "km inc=" + ROUND(captureInc, 1)
         + " lan=" + ROUND(captureLan, 1) + ".").
+
+    LOCAL seedMeas IS measureArrival(nd, targetBody).
+    IF seedMeas = 0 {
+        mLogWarn("Targeted TMI: no seed " + targetBody:NAME
+            + " arrival patch; keeping coarse node.").
+        mLogWarn("STATS targeted-tmi target=" + targetBody:NAME
+            + " converged=False"
+            + " retained=seed-lost"
+            + " dv=" + ROUND(nd:DELTAV:MAG, 1)
+            + " PeKm=-1 inc=-1").
+        RETURN FALSE.
+    }
+
+    LOCAL seedTgt IS targetBplaneVector(
+        targetBody, seedMeas, targetPe, captureInc, captureLan, TRUE).
+    LOCAL seedErrT IS seedTgt["bt"] - seedMeas["bt"].
+    LOCAL seedErrR IS seedTgt["br"] - seedMeas["br"].
+    LOCAL seedErr IS SQRT(seedErrT ^ 2 + seedErrR ^ 2).
+    LOCAL seedIncErr IS _angleErrorDeg(seedMeas["inc"], captureInc).
+    LOCAL seedScore IS seedErr + seedIncErr * targetBody:SOIRADIUS.
+    LOCAL bestRad IS nd:RADIALOUT.
+    LOCAL bestNrm IS nd:NORMAL.
+    LOCAL bestErr IS seedErr.
+    LOCAL bestIncErr IS seedIncErr.
+    LOCAL bestScore IS seedScore.
+    LOCAL bestPe IS seedMeas["pe"].
+    LOCAL bestLabel IS "seed".
+
+    mLogWarn("STATS targeted-tmi-seed target=" + targetBody:NAME
+        + " errKm=" + ROUND(seedErr / 1000, 1)
+        + " PeKm=" + ROUND(seedMeas["pe"] / 1000, 1)
+        + " inc=" + ROUND(seedMeas["inc"], 1)
+        + " incErr=" + ROUND(seedIncErr, 2)
+        + " dv=" + ROUND(nd:DELTAV:MAG, 1)).
 
     FROM { LOCAL i IS 0. } UNTIL i >= maxIter STEP { SET i TO i + 1. } DO {
         LOCAL meas IS measureArrival(nd, targetBody).
@@ -206,12 +251,14 @@ LOCAL FUNCTION _refineEjectionTarget {
         LOCAL errMag IS SQRT(errT ^ 2 + errR ^ 2).
         LOCAL qT IS meas["bt"] - tgt["bt"].
         LOCAL qR IS meas["br"] - tgt["br"].
+        LOCAL incErr IS _angleErrorDeg(meas["inc"], captureInc).
 
         mLog("  Targeted TMI[" + i + "] dBT="
             + ROUND(errT / 1000, 1)
             + "km dBR=" + ROUND(errR / 1000, 1)
             + "km Pe=" + ROUND(meas["pe"] / 1000, 1)
             + "km inc=" + ROUND(meas["inc"], 1)
+            + " incErr=" + ROUND(incErr, 2)
             + " dv=" + ROUND(nd:DELTAV:MAG, 1)).
 
         IF errMag <= tol {
@@ -267,9 +314,12 @@ LOCAL FUNCTION _refineEjectionTarget {
         LOCAL dRad IS ( j22 * errT - j12 * errR) / det.
         LOCAL dNrm IS (-j21 * errT + j11 * errR) / det.
         LOCAL stepMag IS SQRT(dRad ^ 2 + dNrm ^ 2).
-        IF stepMag > stepCap {
-            SET dRad TO dRad * stepCap / stepMag.
-            SET dNrm TO dNrm * stepCap / stepMag.
+        LOCAL curStepCap IS errMag / targetBody:SOIRADIUS * 25.
+        IF curStepCap < stepCap { SET curStepCap TO stepCap. }
+        IF curStepCap > 50 { SET curStepCap TO 50. }
+        IF stepMag > curStepCap {
+            SET dRad TO dRad * curStepCap / stepMag.
+            SET dNrm TO dNrm * curStepCap / stepMag.
         }
 
         LOCAL accepted IS FALSE.
@@ -285,15 +335,32 @@ LOCAL FUNCTION _refineEjectionTarget {
                 LOCAL trialErrT IS trialTgt["bt"] - trial["bt"].
                 LOCAL trialErrR IS trialTgt["br"] - trial["br"].
                 LOCAL trialErr IS SQRT(trialErrT ^ 2 + trialErrR ^ 2).
-                IF trialErr < bestTrialErr {
+                LOCAL trialIncErr IS _angleErrorDeg(trial["inc"], captureInc).
+                LOCAL incOk IS trialIncErr <= incErr + incTol.
+                IF trialIncErr <= incTol { SET incOk TO TRUE. }
+                IF trialErr < bestTrialErr AND incOk {
                     SET accepted TO TRUE.
                     SET bestTrialErr TO trialErr.
+                    LOCAL trialScore IS trialErr + trialIncErr * targetBody:SOIRADIUS.
+                    LOCAL trialBetterThanSeed IS trialErr <= seedErr
+                        AND trialIncErr <= seedIncErr
+                        AND trialScore < bestScore.
+                    IF trialBetterThanSeed {
+                        SET bestRad TO nd:RADIALOUT.
+                        SET bestNrm TO nd:NORMAL.
+                        SET bestErr TO trialErr.
+                        SET bestIncErr TO trialIncErr.
+                        SET bestScore TO trialScore.
+                        SET bestPe TO trial["pe"].
+                        SET bestLabel TO "iter-" + i.
+                    }
                     mLog("  Targeted TMI[" + i + "] accepted frac="
                         + ROUND(frac,3)
                         + " dRad=" + ROUND(dRad * frac,2)
                         + " dNrm=" + ROUND(dNrm * frac,2)
                         + " errKm=" + ROUND(bestTrialErr / 1000,1)
-                        + " PeKm=" + ROUND(trial["pe"] / 1000,1)).
+                        + " PeKm=" + ROUND(trial["pe"] / 1000,1)
+                        + " incErr=" + ROUND(trialIncErr,2)).
                     BREAK.
                 }
             }
@@ -303,7 +370,7 @@ LOCAL FUNCTION _refineEjectionTarget {
             SET nd:NORMAL TO n0.
             WAIT 0.02.
             mLogWarn("Targeted TMI[" + i
-                + "]: no damped step preserved/improved encounter; keeping coarse seed.").
+                + "]: no damped step preserved/improved encounter; stopping refine.").
             BREAK.
         }
     }
@@ -311,15 +378,59 @@ LOCAL FUNCTION _refineEjectionTarget {
     LOCAL finalMeas IS measureArrival(nd, targetBody).
     LOCAL finalPe IS -1.
     LOCAL finalInc IS -1.
+    LOCAL finalErr IS seedErr + targetBody:SOIRADIUS.
+    LOCAL finalIncErr IS seedIncErr + 360.
+    LOCAL finalScore IS finalErr + finalIncErr * targetBody:SOIRADIUS.
     IF finalMeas <> 0 {
         SET finalPe TO finalMeas["pe"].
         SET finalInc TO finalMeas["inc"].
+        LOCAL finalTgt IS targetBplaneVector(
+            targetBody, finalMeas, targetPe, captureInc, captureLan, TRUE).
+        LOCAL finalErrT IS finalTgt["bt"] - finalMeas["bt"].
+        LOCAL finalErrR IS finalTgt["br"] - finalMeas["br"].
+        SET finalErr TO SQRT(finalErrT ^ 2 + finalErrR ^ 2).
+        SET finalIncErr TO _angleErrorDeg(finalMeas["inc"], captureInc).
+        SET finalScore TO finalErr + finalIncErr * targetBody:SOIRADIUS.
+    }
+
+    LOCAL restoreBest IS FALSE.
+    IF finalMeas = 0 { SET restoreBest TO TRUE. }
+    IF finalErr > seedErr { SET restoreBest TO TRUE. }
+    IF finalIncErr > seedIncErr { SET restoreBest TO TRUE. }
+    IF (NOT converged) AND bestScore < finalScore { SET restoreBest TO TRUE. }
+
+    IF restoreBest {
+        SET nd:RADIALOUT TO bestRad.
+        SET nd:NORMAL TO bestNrm.
+        WAIT 0.02.
+        SET converged TO FALSE.
+        SET retainedBest TO TRUE.
+
+        SET finalMeas TO measureArrival(nd, targetBody).
+        IF finalMeas <> 0 {
+            SET finalPe TO finalMeas["pe"].
+            SET finalInc TO finalMeas["inc"].
+            LOCAL keptTgt IS targetBplaneVector(
+                targetBody, finalMeas, targetPe, captureInc, captureLan, TRUE).
+            LOCAL keptErrT IS keptTgt["bt"] - finalMeas["bt"].
+            LOCAL keptErrR IS keptTgt["br"] - finalMeas["br"].
+            SET finalErr TO SQRT(keptErrT ^ 2 + keptErrR ^ 2).
+            SET finalIncErr TO _angleErrorDeg(finalMeas["inc"], captureInc).
+        }
+        mLogWarn("Targeted TMI retained " + bestLabel
+            + " node after non-converged refinement"
+            + " errKm=" + ROUND(bestErr / 1000, 1)
+            + " PeKm=" + ROUND(bestPe / 1000, 1)
+            + " incErr=" + ROUND(bestIncErr, 2) + ".").
     }
     mLogWarn("STATS targeted-tmi target=" + targetBody:NAME
         + " converged=" + converged
         + " dv=" + ROUND(nd:DELTAV:MAG, 1)
         + " PeKm=" + ROUND(finalPe / 1000, 1)
-        + " inc=" + ROUND(finalInc, 1)).
+        + " inc=" + ROUND(finalInc, 1)
+        + " errKm=" + ROUND(finalErr / 1000, 1)
+        + " incErr=" + ROUND(finalIncErr, 2)
+        + " retained=" + retainedBest).
 
     RETURN converged.
 }
