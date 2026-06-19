@@ -10,6 +10,31 @@ GLOBAL TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX IS 27.
 GLOBAL TRANSFER_INTERPLANETARY_DEPART_LEAD IS 300.
 GLOBAL TRANSFER_LAMBERT_MIN_NODE_DV IS 10.
 GLOBAL TRANSFER_INTERPLANETARY_TOF_SPREAD_FRAC IS 0.45.
+GLOBAL TRANSFER_LAMBERT_SHORTLIST IS 5.
+
+LOCAL FUNCTION _lambertShortlistAdd {
+    PARAMETER shortlist.
+    PARAMETER cand.
+    PARAMETER maxLen.
+
+    IF shortlist:LENGTH < maxLen {
+        shortlist:ADD(cand).
+        RETURN.
+    }
+
+    LOCAL worstI IS 0.
+    LOCAL worstVinf IS shortlist[0]["VINF"].
+    FROM { LOCAL i IS 1. } UNTIL i >= shortlist:LENGTH STEP { SET i TO i + 1. } DO {
+        IF shortlist[i]["VINF"] > worstVinf {
+            SET worstI TO i.
+            SET worstVinf TO shortlist[i]["VINF"].
+        }
+    }
+
+    IF cand["VINF"] < worstVinf {
+        SET shortlist[worstI] TO cand.
+    }
+}
 
 GLOBAL FUNCTION planInterplanetaryTransfer {
     PARAMETER targetBody.
@@ -49,6 +74,8 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL bestCaKm IS 999999999.
     LOCAL bestVinf IS 9999999.
     LOCAL bestFlip IS FALSE.
+    LOCAL bestAnalyticDv IS -1.
+    LOCAL bestDvDelta IS -1.
     LOCAL rawDepart IS -1.
     LOCAL rawArrive IS -1.
     LOCAL rawDv IS 9999999.
@@ -78,6 +105,13 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + " dvGate=" + ROUND(dvGate,1)).
     _lambertLogFrameSetup(targetBody, transferCenter).
 
+    LOCAL scanStartClock IS TIME:SECONDS.
+    LOCAL pass1Cells IS 0.
+    LOCAL pass1Survivors IS 0.
+    LOCAL pass2Evals IS 0.
+    LOCAL shortlist IS LIST().
+    LOCAL shortlistMax IS MAX(1, TRANSFER_LAMBERT_SHORTLIST).
+
     FROM { LOCAL di IS 0. } UNTIL di >= nDepart STEP { SET di TO di + 1. } DO {
         LOCAL departUt IS departStart + di * scanSpan / MAX(1, nDepart - 1).
         LOCAL originState IS orbitalStateVectors(BODY, departUt, transferCenter).
@@ -93,19 +127,14 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
             LOCAL r2 IS targetState["p"].
 
             FOR flip IN LIST(FALSE, TRUE) {
+                SET pass1Cells TO pass1Cells + 1.
                 LOCAL result IS lambertSolve(r1, r2, tof, transferCenter:MU, flip).
                 LOCAL v1Lambert IS result["v1"].
                 LOCAL vInfVec IS v1Lambert - vOrigin.
                 LOCAL vInfMag IS vInfVec:MAG.
                 LOCAL burnVec IS _lambertEscapeBurnVector(departUt, vInfVec).
                 LOCAL dvMag IS burnVec:MAG.
-                LOCAL ndProbe IS _nodeFromLocalVector(departUt, burnVec).
-
-                ADD ndProbe.
-                WAIT 0.02.
-                LOCAL safeDeparture IS _lambertDepartureSafe(ndProbe).
-                LOCAL canEncounter IS safeDeparture
-                    AND vInfMag < vinfGate
+                LOCAL canEncounter IS vInfMag < vinfGate
                     AND dvMag > TRANSFER_LAMBERT_MIN_NODE_DV
                     AND dvMag < dvGate.
 
@@ -122,59 +151,106 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
                         + ROUND(departUt - TIME:SECONDS,0) + "s").
                 }
 
-                LOCAL caKm IS -1.
-                LOCAL patch IS 0.
-                LOCAL shouldCheckCa IS (di = 0 AND ti = 0 AND flip)
-                    OR canEncounter.
-                IF shouldCheckCa {
-                    LOCAL pad IS MAX(21600, tof * 0.12).
-                    LOCAL ca IS _findClosestApproach(
-                        targetBody, arriveUt - pad, arriveUt + pad, 36).
-                    SET caKm TO ca["distance"] / 1000.
-                    SET patch TO _getTargetPatch(ndProbe, targetBody).
-
-                    IF di = 0 AND ti = 0 AND flip {
-                        mLogWarn("STATS lambert-cell d=0 t=0 f=True"
-                            + " vInf=" + ROUND(vInfMag,1)
-                            + " dv=" + ROUND(dvMag,1)
-                            + " caKm=" + ROUND(caKm,1)
-                            + " soiKm=" + ROUND(targetBody:SOIRADIUS/1000,1)
-                            + " safe=" + safeDeparture).
-                    }
-                    IF canEncounter {
-                        mLog("Lambert gated[d=" + di + ",t=" + ti
-                            + ",f=" + flip + "] dV="
-                            + ROUND(dvMag,1)
-                            + " vInf=" + ROUND(vInfMag,1)
-                            + " CA=" + ROUND(caKm,1)
-                            + "km tof=" + ROUND(tof,0)
-                            + "s depart T+"
-                            + ROUND(departUt - TIME:SECONDS,0) + "s").
-                    }
+                IF di = 0 AND ti = 0 AND flip {
+                    mLogWarn("STATS lambert-cell d=0 t=0 f=True"
+                        + " pass=analytic"
+                        + " vInf=" + ROUND(vInfMag,1)
+                        + " dv=" + ROUND(dvMag,1)
+                        + " soiKm=" + ROUND(targetBody:SOIRADIUS/1000,1)
+                        + " gated=" + canEncounter).
                 }
 
-                IF canEncounter AND caKm >= 0
-                        AND caKm < bestCaKm {
-                    SET bestDv TO dvMag.
-                    SET bestDepart TO departUt.
-                    SET bestArrive TO arriveUt.
-                    SET bestVinf TO vInfMag.
-                    SET bestFlip TO flip.
-                    SET bestCaKm TO caKm.
-                    SET bestPatchPe TO -1.
-                    IF patch <> 0 { SET bestPatchPe TO patch:PERIAPSIS. }
-                    mLog("Lambert refine-seed[d=" + di + ",t=" + ti
-                        + ",f=" + flip + "] dV="
-                        + ROUND(dvMag,1) + " vInf=" + ROUND(vInfMag,1)
-                        + " CA=" + ROUND(caKm,1)
-                        + "km depart T+"
-                        + ROUND(departUt - TIME:SECONDS,0) + "s").
+                IF canEncounter {
+                    SET pass1Survivors TO pass1Survivors + 1.
+                    LOCAL cand IS LEXICON(
+                        "DEPART", departUt,
+                        "ARRIVE", arriveUt,
+                        "FLIP", flip,
+                        "DV", dvMag,
+                        "VINF", vInfMag,
+                        "DI", di,
+                        "TI", ti,
+                        "TOF", tof
+                    ).
+                    _lambertShortlistAdd(shortlist, cand, shortlistMax).
                 }
-                REMOVE ndProbe.
-                WAIT 0.02.
             }
         }
     }
+
+    mLogWarn("STATS lambert-pass1 target=" + targetBody:NAME
+        + " cells=" + pass1Cells
+        + " survivors=" + pass1Survivors
+        + " shortlist=" + shortlist:LENGTH
+        + " oldLiveEvals=" + pass1Cells).
+
+    FOR cand IN shortlist {
+        LOCAL ndProbe IS _lambertNodeFor(
+            cand["DEPART"], cand["ARRIVE"], cand["FLIP"],
+            targetBody, transferCenter).
+        ADD ndProbe.
+        WAIT 0.02.
+        SET pass2Evals TO pass2Evals + 1.
+        LOCAL safeDeparture IS _lambertDepartureSafe(ndProbe).
+        LOCAL nodeDv IS ndProbe:DELTAV:MAG.
+        LOCAL dvDelta IS ABS(nodeDv - cand["DV"]).
+        LOCAL dvAgree IS dvDelta <= MAX(0.5, cand["DV"] * 0.005).
+        LOCAL caKm IS -1.
+        LOCAL patch IS 0.
+        IF safeDeparture AND dvAgree {
+            LOCAL pad IS MAX(21600, cand["TOF"] * 0.12).
+            LOCAL ca IS _findClosestApproach(
+                targetBody, cand["ARRIVE"] - pad, cand["ARRIVE"] + pad, 36).
+            SET caKm TO ca["distance"] / 1000.
+            SET patch TO _getTargetPatch(ndProbe, targetBody).
+        }
+        mLog("Lambert confirm[d=" + cand["DI"]
+            + ",t=" + cand["TI"]
+            + ",f=" + cand["FLIP"] + "] analyticDv="
+            + ROUND(cand["DV"],1)
+            + " nodeDv=" + ROUND(nodeDv,1)
+            + " dvDelta=" + ROUND(dvDelta,2)
+            + " vInf=" + ROUND(cand["VINF"],1)
+            + " CA=" + ROUND(caKm,1)
+            + "km safe=" + safeDeparture
+            + " dvAgree=" + dvAgree
+            + " depart T+"
+            + ROUND(cand["DEPART"] - TIME:SECONDS,0) + "s").
+
+        IF safeDeparture AND dvAgree AND caKm >= 0
+                AND caKm < bestCaKm {
+            SET bestDv TO nodeDv.
+            SET bestAnalyticDv TO cand["DV"].
+            SET bestDvDelta TO dvDelta.
+            SET bestDepart TO cand["DEPART"].
+            SET bestArrive TO cand["ARRIVE"].
+            SET bestVinf TO cand["VINF"].
+            SET bestFlip TO cand["FLIP"].
+            SET bestCaKm TO caKm.
+            SET bestPatchPe TO -1.
+            IF patch <> 0 { SET bestPatchPe TO patch:PERIAPSIS. }
+            mLog("Lambert refine-seed[d=" + cand["DI"]
+                + ",t=" + cand["TI"]
+                + ",f=" + cand["FLIP"] + "] dV="
+                + ROUND(nodeDv,1) + " vInf=" + ROUND(cand["VINF"],1)
+                + " CA=" + ROUND(caKm,1)
+                + "km depart T+"
+                + ROUND(cand["DEPART"] - TIME:SECONDS,0) + "s").
+        }
+        REMOVE ndProbe.
+        WAIT 0.02.
+    }
+
+    mLogWarn("STATS lambert-pass2 target=" + targetBody:NAME
+        + " evals=" + pass2Evals
+        + " selectedDepartT=" + ROUND(bestDepart - TIME:SECONDS,0)
+        + " selectedAnalyticDv=" + ROUND(bestAnalyticDv,1)
+        + " selectedDv=" + ROUND(bestDv,1)
+        + " selectedDvDelta=" + ROUND(bestDvDelta,2)
+        + " selectedVinf=" + ROUND(bestVinf,1)
+        + " selectedCaKm=" + ROUND(bestCaKm,1)
+        + " scanWall=" + ROUND(TIME:SECONDS - scanStartClock,1)
+        + " oldLiveEvals=" + pass1Cells).
 
     IF bestDepart < 0 {
         mLogError("planTransfer: Lambert scan found no gated "
