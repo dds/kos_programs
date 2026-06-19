@@ -80,11 +80,11 @@ GLOBAL FUNCTION measureArrival {
     }
     LOCAL t IS tEntry + sampleDt.
 
-    LOCAL rVec IS POSITIONAT(p, t) - POSITIONAT(targetBody, t).
+    LOCAL rVec IS POSITIONAT(SHIP, t) - POSITIONAT(targetBody, t).
     // Frame-proof velocity: numeric derivative of relative position.
     LOCAL dt IS 1.
-    LOCAL rPlus IS POSITIONAT(p, t + dt) - POSITIONAT(targetBody, t + dt).
-    LOCAL rMinus IS POSITIONAT(p, t - dt) - POSITIONAT(targetBody, t - dt).
+    LOCAL rPlus IS POSITIONAT(SHIP, t + dt) - POSITIONAT(targetBody, t + dt).
+    LOCAL rMinus IS POSITIONAT(SHIP, t - dt) - POSITIONAT(targetBody, t - dt).
     LOCAL vVec IS (rPlus - rMinus) / (2 * dt).
 
     // (named rMag: bare "r" shadows kOS's R() constructor, and "t"
