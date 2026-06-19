@@ -162,6 +162,11 @@ GLOBAL FUNCTION measureArrival {
         "bt", bt,
         "br", br,
         "tHat", tHat, "rHat", rAxisHat,
+        "dotBT", VDOT(bHat, tHat),
+        "dotBR", VDOT(bHat, rAxisHat),
+        "tHatMag", tHat:MAG,
+        "rHatMag", rAxisHat:MAG,
+        "bHatMag", bHat:MAG,
         "vinf2", vinf2,
         "pe", p:PERIAPSIS, "inc", p:INCLINATION, "lan", p:LAN).
 }
@@ -238,5 +243,9 @@ GLOBAL FUNCTION targetBplaneVector {
     RETURN LEX(
         "bt", VDOT(bT, meas["tHat"]),
         "br", VDOT(bT, meas["rHat"]),
-        "normal", nTgt).
+        "normal", nTgt,
+        "bMag", bMagT,
+        "bHatMag", bHatT:MAG,
+        "dotBT", VDOT(bHatT, meas["tHat"]),
+        "dotBR", VDOT(bHatT, meas["rHat"])).
 }

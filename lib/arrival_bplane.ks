@@ -112,6 +112,97 @@ LOCAL FUNCTION _bplanePlanScore {
     RETURN score.
 }
 
+LOCAL FUNCTION _bplaneNodeAxisGet {
+    PARAMETER nd.
+    PARAMETER axis.
+
+    IF axis = "PROGRADE" { RETURN nd:PROGRADE. }
+    IF axis = "RADIALOUT" { RETURN nd:RADIALOUT. }
+    IF axis = "NORMAL" { RETURN nd:NORMAL. }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _bplaneNodeAxisSet {
+    PARAMETER nd.
+    PARAMETER axis.
+    PARAMETER val.
+
+    IF axis = "PROGRADE" { SET nd:PROGRADE TO val. }
+    IF axis = "RADIALOUT" { SET nd:RADIALOUT TO val. }
+    IF axis = "NORMAL" { SET nd:NORMAL TO val. }
+}
+
+LOCAL FUNCTION _bplaneFallbackSearch {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER wantPe.
+    PARAMETER wantInc.
+    PARAMETER wantLan.
+    PARAMETER dvCap.
+    PARAMETER currentScore.
+    PARAMETER iter.
+
+    LOCAL axes IS LIST("PROGRADE", "RADIALOUT", "NORMAL").
+    LOCAL signs IS LIST(1, -1).
+    LOCAL steps IS LIST(10.0, 5.0, 2.0, 1.0, 0.5).
+
+    LOCAL p0 IS nd:PROGRADE.
+    LOCAL r0 IS nd:RADIALOUT.
+    LOCAL n0 IS nd:NORMAL.
+    LOCAL bestAxis IS "".
+    LOCAL bestVal IS 0.
+    LOCAL bestScore IS currentScore.
+    LOCAL bestMeas IS 0.
+    LOCAL bestErr IS 0.
+
+    FOR step IN steps {
+        FOR axis IN axes {
+            LOCAL oldVal IS _bplaneNodeAxisGet(nd, axis).
+            FOR sgn IN signs {
+                SET nd:PROGRADE TO p0.
+                SET nd:RADIALOUT TO r0.
+                SET nd:NORMAL TO n0.
+                LOCAL trialVal IS oldVal + sgn * step.
+                _bplaneNodeAxisSet(nd, axis, trialVal).
+                WAIT 0.02.
+                IF nd:DELTAV:MAG <= dvCap {
+                    LOCAL trial IS measureArrival(nd, targetBody).
+                    IF trial <> 0 {
+                        LOCAL trialErr IS _bplaneCorridorError(
+                            targetBody, trial, wantPe, wantInc, wantLan).
+                        LOCAL trialScore IS _bplanePlanScore(
+                            trialErr, targetBody, wantInc).
+                        IF trialScore < bestScore {
+                            SET bestScore TO trialScore.
+                            SET bestAxis TO axis.
+                            SET bestVal TO trialVal.
+                            SET bestMeas TO trial.
+                            SET bestErr TO trialErr.
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    SET nd:PROGRADE TO p0.
+    SET nd:RADIALOUT TO r0.
+    SET nd:NORMAL TO n0.
+    WAIT 0.02.
+
+    IF bestAxis = "" { RETURN FALSE. }
+
+    _bplaneNodeAxisSet(nd, bestAxis, bestVal).
+    WAIT 0.02.
+    mLog("  BPLANE[" + iter + "] fallback "
+        + bestAxis + "=" + ROUND(bestVal,2)
+        + " PeKm=" + ROUND(bestMeas["pe"] / 1000,1)
+        + " planeErr=" + ROUND(bestErr["planeErr"],2)
+        + " scoreKm=" + ROUND(bestScore / 1000,1)
+        + " dv=" + ROUND(nd:DELTAV:MAG,2)).
+    RETURN TRUE.
+}
+
 // ============================================================
 // _acquireEncounter — if the raw flight plan is just outside the
 // target SOI, hill-climb a tiny MCC node until KSP generates the
@@ -331,6 +422,23 @@ GLOBAL FUNCTION planBplaneCorrection {
                 + "km planeErr=" + ROUND(planeErr, 2)
                 + " scoreKm=" + ROUND(score / 1000, 1)
                 + " dv=" + ROUND(nd:DELTAV:MAG, 2)).
+            IF i = 0 {
+                mLogWarn("STATS bplane-bvec target=" + targetBody:NAME
+                    + " measBtKm=" + ROUND(meas["bt"] / 1000,1)
+                    + " tgtBtKm=" + ROUND(tgt["bt"] / 1000,1)
+                    + " measBrKm=" + ROUND(meas["br"] / 1000,1)
+                    + " tgtBrKm=" + ROUND(tgt["br"] / 1000,1)
+                    + " measBMagKm=" + ROUND(meas["bMag"] / 1000,1)
+                    + " tgtBMagKm=" + ROUND(tgt["bMag"] / 1000,1)
+                    + " measDotBT=" + ROUND(meas["dotBT"],6)
+                    + " tgtDotBT=" + ROUND(tgt["dotBT"],6)
+                    + " measDotBR=" + ROUND(meas["dotBR"],6)
+                    + " tgtDotBR=" + ROUND(tgt["dotBR"],6)
+                    + " measBHatMag=" + ROUND(meas["bHatMag"],5)
+                    + " tgtBHatMag=" + ROUND(tgt["bHatMag"],5)
+                    + " tHatMag=" + ROUND(meas["tHatMag"],5)
+                    + " rHatMag=" + ROUND(meas["rHatMag"],5)).
+            }
 
             IF ABS(meas["pe"] - wantPe) <= peTol
                     AND (wantInc < 0 OR planeErr <= angTol) {
@@ -428,9 +536,32 @@ GLOBAL FUNCTION planBplaneCorrection {
                 SET nd:RADIALOUT TO r0.
                 SET nd:NORMAL TO n0.
                 WAIT 0.02.
-                mLogWarn("BPLANE[" + i
-                    + "]: no damped B-plane step improved Pe/plane score; stopping.").
-                BREAK.
+                IF NOT _bplaneFallbackSearch(nd, targetBody,
+                        wantPe, wantInc, wantLan, dvCap, score, i) {
+                    mLogWarn("BPLANE[" + i
+                        + "]: no damped B-plane or fallback step improved Pe/plane score; stopping.").
+                    BREAK.
+                } ELSE {
+                    LOCAL fbMeas IS measureArrival(nd, targetBody).
+                    IF fbMeas <> 0 {
+                        LOCAL fbErr IS _bplaneCorridorError(
+                            targetBody, fbMeas, wantPe, wantInc, wantLan).
+                        LOCAL fbScore IS _bplanePlanScore(
+                            fbErr, targetBody, wantInc).
+                        IF fbScore < bestScore {
+                            SET bestScore TO fbScore.
+                            SET bestPe TO fbMeas["pe"].
+                            SET bestPlaneErr TO fbErr["planeErr"].
+                            SET bestPro TO nd:PROGRADE.
+                            SET bestRad TO nd:RADIALOUT.
+                            SET bestNrm TO nd:NORMAL.
+                        }
+                        IF _bplaneCorridorOk(fbErr, wantInc, peTol, angTol) {
+                            SET converged TO TRUE.
+                            BREAK.
+                        }
+                    }
+                }
             }
         }
     }
