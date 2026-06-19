@@ -222,6 +222,10 @@ LOCAL FUNCTION _lambertDepartureSafe {
 
     LOCAL o IS nd:ORBIT.
     IF o:BODY <> BODY { RETURN TRUE. }
+    IF o:HASNEXTPATCH AND BODY:HASBODY
+            AND o:NEXTPATCH:BODY = BODY:BODY {
+        RETURN TRUE.
+    }
 
     LOCAL peFloor IS 10000.
     IF BODY:ATM:EXISTS {
