@@ -123,10 +123,10 @@ GLOBAL FUNCTION lambertSolve {
     LOCAL it2 IS VCRS(ih, ir2):NORMALIZED.
 
     // Determine prograde vs. retrograde transfer direction.
-    // ih:Y < 0 means the angular momentum points "south" (retrograde in KSP's
+    // ih:Y > 0 means the angular momentum points "south" (retrograde in KSP's
     // coordinate system where Y is up). XOR with the flip parameter to allow
     // the caller to request the opposite arc.
-    IF (ih:Y < 0) <> flip {
+    IF (ih:Y > 0) <> flip {
         SET it1 TO -it1.
         SET it2 TO -it2.
         SET lambda TO -lambda.
@@ -180,7 +180,7 @@ GLOBAL FUNCTION orbitalStateVectors {
     LOCAL vel IS VELOCITYAT(obt_, epochTime):ORBIT.
     LOCAL currentBody IS obt_:BODY.
 
-    UNTIL currentBody = center OR NOT currentBody:HASBODY {
+    UNTIL currentBody = 0 OR currentBody = center OR NOT currentBody:HASBODY {
         SET vel TO vel + VELOCITYAT(currentBody, epochTime):ORBIT.
         SET currentBody TO currentBody:BODY.
     }
