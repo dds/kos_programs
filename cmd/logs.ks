@@ -7,7 +7,7 @@ IF NOT HOMECONNECTION:ISCONNECTED {
     PRINT "  No KSC link — cannot archive.".
 } ELSE {
     IF archiveLog() {
-        PRINT "  Log archived and local spool rotated.".
+        PRINT "  Boot log archived.".
     } ELSE {
         PRINT "  No flight log archived.".
     }

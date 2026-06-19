@@ -355,9 +355,12 @@ GLOBAL FUNCTION bootResetMissionSelection {
         "reload_next_band", "secondary_active", "secondary_release_done",
         "zombie_scansat_active", "zombie_scansat_required_types",
         "launch_time", "launch_site_lat", "launch_site_lng",
-        "launch_vs_nonpos_logged"
+        "launch_vs_nonpos_logged", "log_flight_stamp", "boot_log_count"
     ) {
         stateRemove(key).
+    }
+    IF EXISTS("1:/run") {
+        bootDeleteLogFiles("1:/run").
     }
     IF EXISTS("1:/run/log_path.state") {
         LOCAL olp IS OPEN("1:/run/log_path.state"):READALL:STRING:TRIM.
@@ -449,27 +452,37 @@ GLOBAL FUNCTION bootPruneDir {
     RETURN rm.
 }
 
+GLOBAL FUNCTION bootDeleteLogFiles {
+    PARAMETER dp.
+    LOCAL rm IS 0.
+    IF NOT EXISTS(dp) { RETURN rm. }
+    LOCAL sp IS PATH().
+    LOCAL items IS LIST().
+    CD(dp).
+    LIST FILES IN items.
+    CD(sp).
+    FOR item IN items {
+        LOCAL itemPath IS dp + "/" + item:NAME.
+        IF item:ISFILE {
+            IF item:NAME:CONTAINS(".LOG") OR item:NAME:CONTAINS(".log")
+                    OR item:NAME = "log_path.state" {
+                DELETEPATH(itemPath).
+                SET rm TO rm + 1.
+            }
+        } ELSE {
+            SET rm TO rm + bootDeleteLogFiles(itemPath).
+        }
+    }
+    RETURN rm.
+}
+
 GLOBAL FUNCTION bootPruneLogs {
     IF HOMECONNECTION:ISCONNECTED {
         archiveLog().
     }
     LOCAL rm IS 0.
     IF EXISTS("1:/run") {
-        LOCAL sp IS PATH().
-        LOCAL items IS LIST().
-        CD("1:/run").
-        LIST FILES IN items.
-        CD(sp).
-        FOR item IN items {
-            IF item:ISFILE AND (item:NAME:CONTAINS(".LOG") OR item:NAME:CONTAINS(".log")) {
-                DELETEPATH("1:/run/" + item:NAME).
-                SET rm TO rm + 1.
-            }
-        }
-    }
-    IF EXISTS("1:/run/log_path.state") {
-        DELETEPATH("1:/run/log_path.state").
-        SET rm TO rm + 1.
+        SET rm TO rm + bootDeleteLogFiles("1:/run").
     }
     RETURN rm.
 }

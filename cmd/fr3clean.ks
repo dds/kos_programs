@@ -41,6 +41,32 @@ LOCAL FUNCTION _pruneDir {
     }
 }
 
+LOCAL FUNCTION _deleteLogFiles {
+    PARAMETER dirPath.
+    LOCAL count IS 0.
+    IF NOT EXISTS(dirPath) { RETURN count. }
+
+    LOCAL startPath IS PATH().
+    LOCAL items IS LIST().
+    CD(dirPath).
+    LIST FILES IN items.
+    CD(startPath).
+
+    FOR item IN items {
+        LOCAL itemPath IS dirPath + "/" + item:NAME.
+        IF item:ISFILE {
+            IF item:NAME:CONTAINS(".LOG") OR item:NAME:CONTAINS(".log")
+                    OR item:NAME = "log_path.state" {
+                _deleteIfExists(itemPath).
+                SET count TO count + 1.
+            }
+        } ELSE {
+            SET count TO count + _deleteLogFiles(itemPath).
+        }
+    }
+    RETURN count.
+}
+
 LOCAL keepLibs IS LIST(
     "STATE", "LOGS", "FILES", "BOOT_LIB", "RESUME", "RECOVERY"
 ).
@@ -53,16 +79,8 @@ _pruneDir("1:/cmd", LIST()).
 _deleteIfExists("1:/zombie").
 
 IF EXISTS("1:/run") {
-    LOCAL logItems IS LIST().
-    LOCAL startPath IS PATH().
-    CD("1:/run").
-    LIST FILES IN logItems.
-    CD(startPath).
-    FOR item IN logItems {
-        IF item:ISFILE AND (item:NAME:CONTAINS(".LOG") OR item:NAME:CONTAINS(".log")) { _deleteIfExists("1:/run/" + item:NAME). }
-    }
+    _deleteLogFiles("1:/run").
 }
-_deleteIfExists("1:/run/log_path.state").
 
 PRINT "FR3 clean: removed " + removed + " files.".
 PRINT "FR3 clean: free after  " + CORE:VOLUME:FREESPACE + " bytes.".

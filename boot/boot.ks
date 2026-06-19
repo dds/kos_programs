@@ -10,11 +10,35 @@ PRINT "  * kOS FLIGHT COMPUTER  v2.0".
 PRINT "  * " + SHIP:NAME.
 
 LOCAL HAS_LINK IS HOMECONNECTION:ISCONNECTED.
-IF HAS_LINK {
-    PRINT "  * KSC UPLINK ACTIVE".
-} ELSE {
-    PRINT "  * OFFLINE MODE (No KSC Link)".
+
+LOCAL FUNCTION _bootCue {
+    PARAMETER linked.
+    LOCAL v IS GETVOICE(0).
+    SET v:LOOP TO FALSE.
+    SET v:VOLUME TO 0.35.
+    SET v:ATTACK TO 0.005.
+    SET v:DECAY TO 0.015.
+    SET v:SUSTAIN TO 0.75.
+    SET v:RELEASE TO 0.03.
+    IF linked {
+        SET v:WAVE TO "triangle".
+        v:PLAY(LIST(
+            NOTE("c5", 0.06, 0.045),
+            NOTE("e5", 0.06, 0.045),
+            NOTE("g5", 0.09, 0.070)
+        )).
+    } ELSE {
+        SET v:WAVE TO "sine".
+        v:PLAY(LIST(
+            NOTE(220, 0.09, 0.070),
+            NOTE(146.83, 0.13, 0.105),
+            NOTE(196, 0.08, 0.060),
+            NOTE(130.81, 0.16, 0.135)
+        )).
+    }
 }
+
+_bootCue(HAS_LINK).
 PRINT " ".
 
 IF SHIP:STATUS = "PRELAUNCH" OR SHIP:STATUS = "LANDED" {
@@ -72,7 +96,6 @@ _loadLib("dependencies").
 BOOT_LIB_RAN:ADD("dependencies").
 bootPreamble().
 stateInit().
-initLog().
 WAIT 0.001.
 
 bootEnsureDirs().
@@ -82,17 +105,21 @@ LOCAL vehicleName IS vehicleInfo["VEHICLE"].
 LOCAL targetName IS vehicleInfo["TARGET"].
 LOCAL payloadTypes IS vehicleInfo["PAYLOADS"].
 
+LOCAL bootCount IS stateGetNum("boot_count", 0) + 1.
+stateSet("boot_log_count", bootCount).
+
 IF bootShouldResetMissionOnBoot(isEVA) {
     bootResetMissionSelection(vehicleName, targetName, payloadTypes).
+    stateSet("boot_log_count", bootCount).
 }
 
-LOCAL bootCount IS stateGetNum("boot_count", 0) + 1.
 stateSet("boot_count", bootCount).
 IF bootCount = 1 {
     stateSet("vehicle",  vehicleName).
     stateSet("target",   targetName).
     stateSet("payloads", payloadTypes:JOIN(",")).
 }
+initLog().
 
 LOCAL vehicleScript IS "".
 LOCAL isRoleScript IS FALSE.

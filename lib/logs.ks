@@ -2,23 +2,17 @@
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
 LOCAL FUNCTION _logPath {
-    IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
-    RETURN "1:/run/" + logId() + ".log".
+    LOCAL flightDir IS localFlightLogDir().
+    IF NOT EXISTS(flightDir) { CREATEDIR(flightDir). }
+    RETURN flightDir + "/" + bootLogName().
 }
 
 GLOBAL FUNCTION flightLogPath {
-    IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
-    LOCAL logPathFile IS "1:/run/log_path.state".
-    LOCAL _flightLogPath IS "".
-    IF EXISTS(logPathFile) {
-        SET _flightLogPath TO OPEN(logPathFile):READALL:STRING:TRIM.
+    LOCAL path_ IS _logPath().
+    IF NOT EXISTS(path_) {
+        LOG "=== BOOT LOG START: " + logId() + " ===" TO path_.
     }
-    IF _flightLogPath = "" {
-        SET _flightLogPath TO _logPath().
-        LOG "=== FAULT LOG START: " + logId() + " ===" TO _flightLogPath.
-        LOG _flightLogPath TO logPathFile.
-    }
-    RETURN _flightLogPath.
+    RETURN path_.
 }
 
 GLOBAL FUNCTION codeVersion {
@@ -34,47 +28,95 @@ GLOBAL FUNCTION codeVersion {
 }
 
 GLOBAL FUNCTION initLog {
-    mLog("Fault log: " + flightLogPath()).
+    mLog("Boot log: " + flightLogPath()).
     mLog("CODE version=" + codeVersion(), "CODE").
 }
 
-GLOBAL FUNCTION slug {
+GLOBAL FUNCTION flightSlug {
     LOCAL logName IS stateGet("vessel_name", "").
     IF logName = "" { SET logName TO SHIP:NAME. }
-    LOCAL safeName IS _sanitizeName(logName).
+    RETURN _sanitizeName(logName).
+}
+
+GLOBAL FUNCTION coreSlug {
     LOCAL safeCoreTag IS _sanitizeName(CORE:TAG).
     IF safeCoreTag <> "" {
+        RETURN safeCoreTag.
+    }
+    IF SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA") { RETURN "EVA". }
+    RETURN "core".
+}
+
+GLOBAL FUNCTION slug {
+    LOCAL safeName IS flightSlug().
+    LOCAL safeCoreTag IS coreSlug().
+    IF safeCoreTag <> "core" {
         RETURN "{0}_{1}":FORMAT(safeName, safeCoreTag).
     }
     RETURN safeName.
 }
 
-GLOBAL FUNCTION logId {
+GLOBAL FUNCTION flightStamp {
     LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
+    IF launchT <> 0 {
+        LOCAL launchStamp IS "" + launchT.
+        IF stateGet("log_flight_stamp", "") <> launchStamp {
+            stateSet("log_flight_stamp", launchStamp).
+        }
+        RETURN launchStamp.
+    }
+
+    LOCAL stored IS stateGet("log_flight_stamp", "").
+    IF stored <> "" { RETURN stored. }
+
     IF launchT = 0 {
         SET launchT TO ROUND(TIME:SECONDS / 10, 0) * 10.
     }
+    SET stored TO "" + launchT.
+    stateSet("log_flight_stamp", stored).
+    RETURN stored.
+}
 
-    LOCAL baseId IS "{0}_{1}":FORMAT(slug(), launchT).
+GLOBAL FUNCTION flightLogId {
+    RETURN "{0}_{1}":FORMAT(flightSlug(), flightStamp()).
+}
 
-    LOCAL isEVA IS SHIP:ROOTPART:NAME:CONTAINS("kerbalEVA").
-    IF isEVA {
-        // TODO: support multiple EVAs.
-        RETURN baseId + "_EVA".
+GLOBAL FUNCTION bootLogNumber {
+    LOCAL bootNum IS stateGetNum("boot_log_count", 0).
+    IF bootNum = 0 { SET bootNum TO stateGetNum("boot_count", 0). }
+    IF bootNum = 0 { SET bootNum TO 1. }
+    RETURN bootNum.
+}
+
+LOCAL FUNCTION _pad3 {
+    PARAMETER n.
+    LOCAL out IS "" + n.
+    UNTIL out:LENGTH >= 3 {
+        SET out TO "0" + out.
     }
+    RETURN out.
+}
 
-    RETURN baseId.
+GLOBAL FUNCTION bootLogName {
+    RETURN "boot_" + _pad3(bootLogNumber()) + "_" + coreSlug() + ".log".
+}
+
+GLOBAL FUNCTION localFlightLogDir {
+    IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
+    IF NOT EXISTS("1:/run/logs") { CREATEDIR("1:/run/logs"). }
+    RETURN "1:/run/logs/" + flightLogId().
+}
+
+GLOBAL FUNCTION logId {
+    LOCAL bootName IS bootLogName().
+    RETURN flightLogId() + "_" + bootName:SUBSTRING(0, bootName:LENGTH - 4).
 }
 
 GLOBAL FUNCTION archiveLog {
     IF NOT HOMECONNECTION:ISCONNECTED {
         RETURN FALSE.
     }
-    LOCAL launchT IS ROUND(stateGetNum("launch_time", 0)).
-    IF launchT = 0 {
-        RETURN FALSE.
-    }
-    LOCAL shipDir IS "0:/logs/archive/" + slug() + "_" + launchT.
+    LOCAL shipDir IS "0:/logs/archive/" + flightLogId().
     IF NOT EXISTS("0:/logs") { CREATEDIR("0:/logs"). }
     IF NOT EXISTS("0:/logs/archive") { CREATEDIR("0:/logs/archive"). }
     IF NOT EXISTS(shipDir) { CREATEDIR(shipDir). }
@@ -82,20 +124,14 @@ GLOBAL FUNCTION archiveLog {
     LOCAL localPath IS flightLogPath().
     IF localPath = "" OR NOT EXISTS(localPath) { RETURN FALSE. }
 
-    LOCAL archivePath IS shipDir + "/" + logId() + ".log".
+    LOCAL archivePath IS shipDir + "/" + bootLogName().
     LOCAL raw IS OPEN(localPath):READALL:STRING.
     IF raw:TRIM = "" { RETURN FALSE. }
 
-    IF NOT EXISTS(archivePath) {
-        LOG "=== ARCHIVE LOG START: " + logId() + " ===" TO archivePath.
+    IF EXISTS(archivePath) {
+        DELETEPATH(archivePath).
     }
-    FOR line IN raw:SPLIT(CHAR(10)) {
-        LOCAL clean IS line:REPLACE(CHAR(13), "").
-        IF clean <> "" { LOG clean TO archivePath. }
-    }
-
-    DELETEPATH(localPath).
-    LOG "=== LOCAL LOG ROTATED: " + ROUND(TIME:SECONDS,1) + " ===" TO localPath.
+    COPYPATH(localPath, archivePath).
     RETURN TRUE.
 }
 

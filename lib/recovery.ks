@@ -5,7 +5,7 @@
 GLOBAL FUNCTION archiveFlightLog {
     IF NOT HOMECONNECTION:ISCONNECTED { RETURN FALSE. }
     archiveLog().
-    mLog("Flight log archived and local spool rotated.").
+    mLog("Flight log archived.").
     RETURN TRUE.
 }
 

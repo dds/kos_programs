@@ -232,22 +232,7 @@ SET removed TO removed + _pruneDir("1:/cmd", LIST()).
 IF _deleteIfExists("1:/zombie") { SET removed TO removed + 1. }
 
 IF EXISTS("1:/run") {
-    LOCAL logItems IS LIST().
-    LOCAL startPath IS PATH().
-    CD("1:/run").
-    LIST FILES IN logItems.
-    CD(startPath).
-    FOR item IN logItems {
-        IF item:ISFILE AND (item:NAME:CONTAINS(".LOG") OR item:NAME:CONTAINS(".log")) {
-            IF _deleteIfExists("1:/run/" + item:NAME) {
-                SET removed TO removed + 1.
-            }
-        }
-    }
-}
-
-IF _deleteIfExists("1:/run/log_path.state") {
-    SET removed TO removed + 1.
+    SET removed TO removed + bootDeleteLogFiles("1:/run").
 }
 
 RUNPATH("1:/lib/boot_lib").
