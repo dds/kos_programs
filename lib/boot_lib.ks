@@ -514,19 +514,9 @@ GLOBAL FUNCTION bootCleanup {
 GLOBAL BOOT_LIB_RAN IS LIST().
 
 // Manual-mode request: boot/boot.ks drains stale terminal input before
-// loading this library. If an older installed boot stub did not do that,
-// drain once here as a linked-boot fallback. Any keypress noticed after
-// the drain flags manual mode — checked before the mission picker so the
-// menu never draws, and again at the resume gate.
-IF NOT DEFINED BOOT_INPUT_DRAINED {
-    GLOBAL BOOT_INPUT_DRAINED IS FALSE.
-}
-IF NOT BOOT_INPUT_DRAINED {
-    UNTIL NOT TERMINAL:INPUT:HASCHAR {
-        TERMINAL:INPUT:GETCHAR().
-    }
-    SET BOOT_INPUT_DRAINED TO TRUE.
-}
+// loading this library. Any keypress noticed after that flags manual
+// mode — checked before the mission picker so the menu never draws,
+// and again at the resume gate.
 GLOBAL BOOT_MANUAL_REQUESTED IS FALSE.
 
 GLOBAL FUNCTION bootCheckManualKey {
