@@ -9,6 +9,7 @@ GLOBAL FUNCTION phaseLandAssist {
     landingApplyMissionConfig().
     IF _redirectOrbitalLandingPhase("LAND_ASSIST") { RETURN. }
     IF NOT (LANDING_SKIP_TARGET_SEARCH > 0)
+            AND NOT _landAssistImpactCommitted()
             AND NOT landingImpactAcceptableForAssist() {
         mLogError("Predicted landing impact is not within target tolerance; holding LAND_ASSIST.").
         stateSet("phase", "LAND_ASSIST").
@@ -31,6 +32,18 @@ GLOBAL FUNCTION phaseLandAssist {
         RETURN.
     }
     nextPhase(launchSeq).
+}
+
+LOCAL FUNCTION _landAssistImpactCommitted {
+    IF SHIP:STATUS <> "SUB_ORBITAL" { RETURN FALSE. }
+    LOCAL flyoverPe IS landingFlyoverPe().
+    IF SHIP:PERIAPSIS <= flyoverPe + 500 {
+        mLogWarn("LAND_ASSIST impact tolerance skipped: sub-orbital impact trajectory Pe="
+            + ROUND(SHIP:PERIAPSIS/1000,1)
+            + "km flyoverPe=" + ROUND(flyoverPe/1000,1) + "km.").
+        RETURN TRUE.
+    }
+    RETURN FALSE.
 }
 
 GLOBAL FUNCTION phaseLand {
