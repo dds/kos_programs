@@ -5,11 +5,13 @@
 
 GLOBAL TRANSFER_SCAN_LOOKAHEAD_HOURS IS 6.
 GLOBAL TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT IS 24.
-GLOBAL TRANSFER_INTERPLANETARY_TOF_SAMPLES IS 9.
+GLOBAL TRANSFER_INTERPLANETARY_TOF_SAMPLES IS 13.
+GLOBAL TRANSFER_INTERPLANETARY_TOF_REFINE_SAMPLES IS 9.
 GLOBAL TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX IS 35.
 GLOBAL TRANSFER_INTERPLANETARY_DEPART_LEAD IS 300.
 GLOBAL TRANSFER_DUNA_SANITY_MAX_VINF IS 1200.
 GLOBAL TRANSFER_LAMBERT_MIN_NODE_DV IS 10.
+GLOBAL TRANSFER_INTERPLANETARY_TOF_SPREAD_FRAC IS 0.45.
 
 GLOBAL FUNCTION planInterplanetaryTransfer {
     PARAMETER targetBody.
@@ -34,13 +36,13 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL hohmannTof IS CONSTANT:PI * SQRT(hohmannA^3 / transferCenter:MU).
     LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
     LOCAL scanHours IS MAX(0.25, TRANSFER_SCAN_LOOKAHEAD_HOURS).
-    LOCAL scanSpan IS MIN(scanHours * 3600, shipPeriod * 2).
-    SET scanSpan TO MAX(shipPeriod, scanSpan).
+    LOCAL scanSpan IS scanHours * 3600.
     LOCAL departStep IS MAX(45, shipPeriod / MAX(8, TRANSFER_INTERPLANETARY_SAMPLES_PER_ORBIT)).
     LOCAL nDepart IS MAX(12, CEILING(scanSpan / departStep) + 1).
     SET nDepart TO MIN(nDepart, MAX(1, TRANSFER_INTERPLANETARY_MAX_DEPART_INDEX) + 1).
     LOCAL nTof IS MAX(3, TRANSFER_INTERPLANETARY_TOF_SAMPLES).
-    LOCAL tofSpread IS hohmannTof * 0.3.
+    LOCAL tofSpread IS hohmannTof * MAX(0.1, TRANSFER_INTERPLANETARY_TOF_SPREAD_FRAC).
+    LOCAL tofStep IS tofSpread * 2 / MAX(1, nTof - 1).
     LOCAL minDepartLead IS MAX(120, TRANSFER_INTERPLANETARY_DEPART_LEAD).
     LOCAL departStart IS TIME:SECONDS + minDepartLead.
     LOCAL bestDv IS 9999999.
@@ -120,7 +122,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
                 LOCAL caKm IS -1.
                 LOCAL patch IS 0.
                 LOCAL shouldCheckCa IS (di = 0 AND ti = 0 AND flip)
-                    OR (canEncounter AND vInfMag < bestVinf).
+                    OR canEncounter.
                 IF shouldCheckCa {
                     LOCAL pad IS MAX(21600, tof * 0.12).
                     LOCAL ca IS _findClosestApproach(
@@ -136,11 +138,20 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
                             + " soiKm=" + ROUND(targetBody:SOIRADIUS/1000,1)
                             + " safe=" + safeDeparture).
                     }
+                    IF canEncounter {
+                        mLog("Lambert gated[d=" + di + ",t=" + ti
+                            + ",f=" + flip + "] dV="
+                            + ROUND(dvMag,1)
+                            + " vInf=" + ROUND(vInfMag,1)
+                            + " CA=" + ROUND(caKm,1)
+                            + "km tof=" + ROUND(tof,0)
+                            + "s depart T+"
+                            + ROUND(departUt - TIME:SECONDS,0) + "s").
+                    }
                 }
 
                 IF canEncounter AND caKm >= 0
-                        AND caKm * 1000 < targetBody:SOIRADIUS
-                        AND vInfMag < bestVinf {
+                        AND caKm < bestCaKm {
                     SET bestDv TO dvMag.
                     SET bestDepart TO departUt.
                     SET bestArrive TO arriveUt.
@@ -149,12 +160,100 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
                     SET bestCaKm TO caKm.
                     SET bestPatchPe TO -1.
                     IF patch <> 0 { SET bestPatchPe TO patch:PERIAPSIS. }
-                    mLog("Lambert encounter[d=" + di + ",t=" + ti
+                    mLog("Lambert refine-seed[d=" + di + ",t=" + ti
                         + ",f=" + flip + "] dV="
                         + ROUND(dvMag,1) + " vInf=" + ROUND(vInfMag,1)
                         + " CA=" + ROUND(caKm,1)
                         + "km depart T+"
                         + ROUND(departUt - TIME:SECONDS,0) + "s").
+                }
+                REMOVE ndProbe.
+                WAIT 0.02.
+            }
+        }
+    }
+
+    IF rawDepart >= 0 {
+        LOCAL fineSamples IS MAX(3, TRANSFER_INTERPLANETARY_TOF_REFINE_SAMPLES).
+        LOCAL rawTof IS rawArrive - rawDepart.
+        LOCAL fineSpan IS tofStep * 2.
+        mLog("Lambert TOF refine: depart T+"
+            + ROUND(rawDepart - TIME:SECONDS,0)
+            + "s centerTof=" + ROUND(rawTof,0)
+            + "s span=" + ROUND(fineSpan,0)
+            + "s samples=" + fineSamples
+            + " rawVinf=" + ROUND(rawVinf,1)).
+
+        FROM { LOCAL fi IS 0. } UNTIL fi >= fineSamples STEP { SET fi TO fi + 1. } DO {
+            LOCAL fFrac IS (fi / MAX(1, fineSamples - 1)) - 0.5.
+            LOCAL tof IS rawTof + fFrac * fineSpan.
+            IF tof < 60 { SET tof TO 60. }
+            LOCAL departUt IS rawDepart.
+            LOCAL arriveUt IS departUt + tof.
+            LOCAL originState IS orbitalStateVectors(BODY, departUt, transferCenter).
+            LOCAL targetState IS orbitalStateVectors(targetBody, arriveUt, transferCenter).
+            LOCAL r1 IS originState["p"].
+            LOCAL r2 IS targetState["p"].
+            LOCAL vOrigin IS originState["v"].
+
+            FOR flip IN LIST(FALSE, TRUE) {
+                LOCAL result IS lambertSolve(r1, r2, tof, transferCenter:MU, flip).
+                LOCAL v1Lambert IS result["v1"].
+                LOCAL vInfVec IS v1Lambert - vOrigin.
+                LOCAL vInfMag IS vInfVec:MAG.
+                LOCAL burnVec IS _lambertEscapeBurnVector(departUt, vInfVec).
+                LOCAL dvMag IS burnVec:MAG.
+                LOCAL ndProbe IS _nodeFromLocalVector(departUt, burnVec).
+
+                ADD ndProbe.
+                WAIT 0.02.
+                LOCAL safeDeparture IS _lambertDepartureSafe(ndProbe).
+                LOCAL canEncounter IS safeDeparture
+                    AND vInfMag < vinfGate
+                    AND dvMag > TRANSFER_LAMBERT_MIN_NODE_DV.
+
+                IF canEncounter AND vInfMag < rawVinf {
+                    SET rawArrive TO arriveUt.
+                    SET rawDv TO dvMag.
+                    SET rawVinf TO vInfMag.
+                    SET rawFlip TO flip.
+                    mLog("Lambert refine-vinf[i=" + fi + ",f=" + flip
+                        + "] dV=" + ROUND(dvMag,1)
+                        + " vInf=" + ROUND(vInfMag,1)
+                        + " tof=" + ROUND(tof,0) + "s").
+                }
+
+                IF canEncounter {
+                    LOCAL pad IS MAX(21600, tof * 0.12).
+                    LOCAL ca IS _findClosestApproach(
+                        targetBody, arriveUt - pad, arriveUt + pad, 36).
+                    LOCAL caKm IS ca["distance"] / 1000.
+                    LOCAL patch IS _getTargetPatch(ndProbe, targetBody).
+                    mLog("Lambert gated[refine=" + fi
+                        + ",f=" + flip + "] dV="
+                        + ROUND(dvMag,1)
+                        + " vInf=" + ROUND(vInfMag,1)
+                        + " CA=" + ROUND(caKm,1)
+                        + "km tof=" + ROUND(tof,0)
+                        + "s depart T+"
+                        + ROUND(departUt - TIME:SECONDS,0) + "s").
+
+                    IF caKm < bestCaKm {
+                        SET bestDv TO dvMag.
+                        SET bestDepart TO departUt.
+                        SET bestArrive TO arriveUt.
+                        SET bestVinf TO vInfMag.
+                        SET bestFlip TO flip.
+                        SET bestCaKm TO caKm.
+                        SET bestPatchPe TO -1.
+                        IF patch <> 0 { SET bestPatchPe TO patch:PERIAPSIS. }
+                        mLog("Lambert refine-seed[refine=" + fi
+                            + ",f=" + flip + "] dV="
+                            + ROUND(dvMag,1)
+                            + " vInf=" + ROUND(vInfMag,1)
+                            + " CA=" + ROUND(caKm,1)
+                            + "km tof=" + ROUND(tof,0) + "s").
+                    }
                 }
                 REMOVE ndProbe.
                 WAIT 0.02.
@@ -190,30 +289,19 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         RETURN 0.
     }
 
-    LOCAL patchInfo IS _lambertSelectionInfo(
-        "encounter-best", bestDepart, bestArrive, bestFlip,
+    LOCAL seedInfo IS _lambertSelectionInfo(
+        "refine-seed", bestDepart, bestArrive, bestFlip,
         targetBody, transferCenter, hohmannTof).
-    _lambertLogSelection(patchInfo, targetBody, transferCenter).
-    IF _lambertDunaSanityApplies(targetBody, transferCenter)
-            AND NOT patchInfo["SANITY_OK"] {
-        mLogError("planTransfer: Duna Lambert sanity gate blocked bad patch seed.").
-        mLogWarn("STATS lambert result target=" + targetBody:NAME
-            + " status=sanity-blocked"
-            + " reason=" + patchInfo["SANITY_REASON"]
-            + " departT=" + ROUND(bestDepart - TIME:SECONDS,0)
-            + " vinf=" + ROUND(patchInfo["VINF_MAG"],1)
-            + " dv=" + ROUND(patchInfo["NODE_DV"],1)
-            + " caKm=" + ROUND(patchInfo["CA_KM"],1)
-            + " flip=" + bestFlip).
-        RETURN 0.
-    }
+    _lambertLogSelection(seedInfo, targetBody, transferCenter).
 
-    mLog("Lambert best: depart T+" + ROUND(bestDepart - TIME:SECONDS,0)
+    mLog("Lambert best refine seed: depart T+"
+        + ROUND(bestDepart - TIME:SECONDS,0)
         + "s  tof=" + ROUND(bestArrive - bestDepart,0)
         + "s  dV=" + ROUND(bestDv,1)
-        + "  vInf=" + ROUND(bestVinf,1)).
+        + "  vInf=" + ROUND(bestVinf,1)
+        + "  CA=" + ROUND(bestCaKm,1) + "km").
     mLogWarn("STATS lambert result target=" + targetBody:NAME
-        + " status=grid-best departT=" + ROUND(bestDepart - TIME:SECONDS,0)
+        + " status=refine-seed departT=" + ROUND(bestDepart - TIME:SECONDS,0)
         + " tof=" + ROUND(bestArrive - bestDepart,0)
         + " dv=" + ROUND(bestDv,1)
         + " vinf=" + ROUND(bestVinf,1)
@@ -226,12 +314,42 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     ADD nd.
     WAIT 0.1.
 
-    LOCAL patch IS _getTargetPatch(nd, targetBody).
-    IF NOT (patch = 0 OR patch:PERIAPSIS < 0) {
-        mLog("Encounter confirmed. Pe=" + ROUND(patch:PERIAPSIS/1000, 1) + "km").
+    LOCAL refinedPatch IS _refineLambertPatchSeed(
+        nd, targetBody, bestArrive, bestDv).
+    LOCAL finalEval IS _lambertPatchEval(nd, targetBody, bestArrive).
+    LOCAL finalCaKm IS finalEval["CA"]["distance"] / 1000.
+    LOCAL finalPatch IS finalEval["PATCH"].
+    IF finalPatch <> 0 AND finalCaKm * 1000 < targetBody:SOIRADIUS {
+        mLog("Encounter confirmed. Pe="
+            + ROUND(finalPatch:PERIAPSIS/1000, 1)
+            + "km CA=" + ROUND(finalCaKm,1) + "km").
+        mLogWarn("STATS lambert result target=" + targetBody:NAME
+            + " status=refined-patch-seed"
+            + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)
+            + " tof=" + ROUND(bestArrive - nd:TIME,0)
+            + " dv=" + ROUND(nd:DELTAV:MAG,1)
+            + " vinf=" + ROUND(bestVinf,1)
+            + " flip=" + bestFlip
+            + " startCaKm=" + ROUND(bestCaKm,1)
+            + " finalCaKm=" + ROUND(finalCaKm,1)
+            + " PeKm=" + ROUND(finalPatch:PERIAPSIS/1000,1)).
+        RETURN nd.
     }
 
-    RETURN nd.
+    mLogError("planTransfer: Lambert refinement did not reach "
+        + targetBody:NAME + " SOI.").
+    mLogWarn("STATS lambert result target=" + targetBody:NAME
+        + " status=refine-failed"
+        + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)
+        + " dv=" + ROUND(nd:DELTAV:MAG,1)
+        + " vinf=" + ROUND(bestVinf,1)
+        + " flip=" + bestFlip
+        + " startCaKm=" + ROUND(bestCaKm,1)
+        + " finalCaKm=" + ROUND(finalCaKm,1)
+        + " patch=" + (finalPatch <> 0)
+        + " refinedPatch=" + (refinedPatch <> 0)).
+    REMOVE nd.
+    RETURN 0.
 }
 
 LOCAL FUNCTION _lambertNodeFor {
@@ -429,12 +547,9 @@ LOCAL FUNCTION _lambertPatchEval {
     LOCAL ca IS _findClosestApproach(
         targetBody, arriveUt - pad, arriveUt + pad, 36).
     LOCAL safeDeparture IS _lambertDepartureSafe(nd).
-    LOCAL score IS ca["distance"] + nd:DELTAV:MAG * 1000.
+    LOCAL score IS ca["distance"].
     IF NOT safeDeparture {
         SET score TO score + 9e15.
-    }
-    IF patch <> 0 {
-        SET score TO score - targetBody:SOIRADIUS * 4.
     }
     RETURN LEXICON(
         "SCORE", score,
@@ -506,12 +621,14 @@ LOCAL FUNCTION _refineLambertPatchSeed {
         }
 
         IF bestAxis <> "" {
+            LOCAL prevCaKm IS best["CA"]["distance"] / 1000.
             _nodeAxisSet(nd, bestAxis, bestValue).
             WAIT 0.02.
             SET best TO _lambertPatchEval(nd, targetBody, arriveUt).
             mLog("  Lambert seed[" + iter + "] " + bestAxis + "="
                 + ROUND(bestValue,2)
-                + " CA=" + ROUND(best["CA"]["distance"]/1000,1)
+                + " CA " + ROUND(prevCaKm,1)
+                + "->" + ROUND(best["CA"]["distance"]/1000,1)
                 + "km patch=" + (best["PATCH"] <> 0)
                 + " safe=" + best["SAFE"]
                 + " dV=" + ROUND(nd:DELTAV:MAG,1)).
