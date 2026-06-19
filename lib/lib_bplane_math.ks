@@ -86,11 +86,15 @@ GLOBAL FUNCTION measureArrival {
     }
     LOCAL t IS tEntry + sampleDt.
 
-    LOCAL rVec IS POSITIONAT(SHIP, t) - POSITIONAT(targetBody, t).
-    // Frame-proof velocity: numeric derivative of relative position.
+    // Work in the arrival patch's own target-relative frame. Using
+    // POSITIONAT(SHIP, futureUt) while the active vessel is still
+    // pre-encounter can silently fall back to the wrong conic frame
+    // and inflate the B-vector by heliocentric distances.
+    LOCAL rVec IS p:POSITIONAT(t).
+    // Frame-proof velocity: numeric derivative of patch-local position.
     LOCAL dt IS 1.
-    LOCAL rPlus IS POSITIONAT(SHIP, t + dt) - POSITIONAT(targetBody, t + dt).
-    LOCAL rMinus IS POSITIONAT(SHIP, t - dt) - POSITIONAT(targetBody, t - dt).
+    LOCAL rPlus IS p:POSITIONAT(t + dt).
+    LOCAL rMinus IS p:POSITIONAT(t - dt).
     LOCAL vVec IS (rPlus - rMinus) / (2 * dt).
 
     // (named rMag: bare "r" shadows kOS's R() constructor, and "t"

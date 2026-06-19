@@ -733,6 +733,7 @@ GLOBAL FUNCTION phaseBplane {
     LOCAL wantInc IS _bplaneWantInc().
 
     LOCAL wantLan IS CAPTURE_LAN.
+    bplaneResetWarnings().
     LOCAL wakeMeas IS measureArrival(0, targetBody).
     IF wakeMeas <> 0 {
         LOCAL wakeErr IS _bplaneCorridorError(targetBody, wakeMeas, wantPe, wantInc, wantLan).
