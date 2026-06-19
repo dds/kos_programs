@@ -14,9 +14,9 @@ SET COAST_AUTO_WARP TO 1.
 SET COAST_HIBERNATE TO 1.
 SET KEEP_WARP TO 1.
 
-// Duna polar mapping orbit. Arrive with a tight, non-atmospheric
-// 85km Pe, then shape up to the final 300km polar mapping orbit.
-SET CAPTURE_PE TO 85000.
+// Duna polar mapping orbit. Arrive with a 50km Pe, then shape up
+// to the final 300km polar mapping orbit.
+SET CAPTURE_PE TO 50000.
 SET CAPTURE_INC TO 90.
 SET CAPTURE_DIR TO "POLAR".
 SET TARGET_PE TO 300000.
