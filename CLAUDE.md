@@ -1,8 +1,9 @@
 # CLAUDE.md
 
-kOS (KerbalScript) mission automation for Kerbal Space Program. `README.md`
-is the operator manual — architecture, vehicles, mission profiles, commands.
-This file is what you need to *work on the code* without breaking a mission.
+Komptroller is kOS (KerbalScript) mission automation for Kerbal Space Program.
+`README.md` is the operator manual — architecture, vehicles, mission profiles,
+commands. This file is what you need to *work on the code* without breaking a
+mission.
 
 ## The language (kerboscript, `.ks`)
 
@@ -63,7 +64,8 @@ Looks like Python/JS; is neither.
 5. **Bands load the libraries of EVERY phase in the band**, not just the
    mission's. Code used by only some missions goes in its own phase/band
    (costs those missions one reboot; costs everyone else nothing) —
-   `payload_release` is the worked example.
+   `payload_release`, `duna_ike_setup`, and the split landing tracks are
+   worked examples.
 6. **There is no compiler or test runner here.** Changes are validated by
    brace/syntax inspection and then flight-tested in the game. Be
    conservative in mission-critical paths, log generously (`STATS` lines),
@@ -78,7 +80,8 @@ Looks like Python/JS; is neither.
   `1:/missions/<vehicle>/` and run as planning `SET` overrides → mission
   phase band synced/compiled/run → vehicle defaults/main loaded → profile
   re-run so mission/body overrides win → stale terminal input drained,
-  post-boot manual-mode window → resume.
+  post-boot manual-mode window → resume. Boot replans band libs every time;
+  do not persist derived lib lists such as `lib_band_libs`.
 - **Phases**: profiles own `SEQUENCE`; `runPhases(map)` dispatches by the
   persisted `phase` key; handlers call `nextPhase(seq)`. Sequences cannot
   repeat a phase name (lookup is by value) — multi-hop routes use the `GOTO`
@@ -103,9 +106,11 @@ Looks like Python/JS; is neither.
 | Boot/loading | `boot/boot.ks`, `lib/boot_lib.ks`, `lib/dependencies.ks`, `lib/preflight_planner.ks` |
 | Phase machine | `lib/phases.ks`, `lib/resume.ks`, `lib/state.ks`, `lib/logs.ks` |
 | Ascent | `lib/launch.ks` (MechJeb), `lib/countdown.ks` |
-| New maneuver pipeline | `lib/goto_plan.ks` (routing), `lib/arrival_bplane.ks` (B-plane MCC), `lib/orbit_shape.ks` (closed-form shaping), `lib/maneuver.ks` (node execution + single-burn planners) |
-| Legacy maneuver pipeline | `lib/maneuver_transfer.ks`, `lib/maneuver_targeting.ks`, `lib/maneuver_orbit.ks`, `lib/maneuver_rendezvous.ks`, `lib/maneuver_intersystem.ks`, `lib/lambert.ks` |
-| Payloads/landing | `lib/payload_ops.ks`, `lib/payload_release.ks`, `lib/payload_landing.ks`, `lib/landing.ks`, `lib/deorbit_targeting.ks`, `lib/aerobrake.ks`, `lib/descent.ks` |
+| New maneuver pipeline | `lib/goto_plan.ks` (routing), `lib/arrival_bplane.ks` (B-plane MCC/refinement), `lib/orbit_shape.ks` (closed-form shaping), `lib/maneuver.ks` (node execution + single-burn planners) |
+| Transfer planners | `lib/xfer_plan.ks`, `lib/maneuver_transfer.ks`, `lib/maneuver_intersystem.ks`, `lib/lambert.ks`, `lib/lib_bplane_math.ks` |
+| Legacy/rescue maneuver libs | `lib/maneuver_targeting.ks`, `lib/maneuver_orbit.ks`, `lib/maneuver_rendezvous.ks`, `lib/maneuver_mcc.ks` |
+| Payloads/landing | `lib/payload_ops.ks`, `lib/payload_release.ks`, `lib/payload_landing.ks`, `lib/landing_main.ks`, `lib/landing_deorbit.ks`, `lib/deorbit_targeting.ks`, `lib/aerobrake.ks`, `lib/descent.ks` |
+| Duna/Ike | `lib/duna_ike_setup.ks`, `missions/FalconHeavy/duna_*` |
 | Atmosphere craft | `lib/airplane.ks` (assists + `airplaneMain`), `lib/ssto.ks`, `lib/drone.ks`, `lib/rover.ks` |
 | Telemetry | `lib/observe.ks` (archive-first), `STATS` lines in every planner |
 | Operator | `cmd/` (see README table); `cmd/airtest.ks` is the assist tuning card |
@@ -120,7 +125,9 @@ Looks like Python/JS; is neither.
   underscores — rename when that solver is retired, not before.)
 - Logging: `mLog` info, `mLogWarn("STATS ...")` machine-readable metrics,
   `mLogError` + `yieldToPrompt()` for operator-needed halts. Phases log a
-  `STATS ... setup` and `... result` pair.
+  `STATS ... setup` and `... result` pair. Logs are per-boot/per-core
+  (`boot_###_<core>.log`); WARN-level `STATS` lines auto-archive when linked,
+  so make diagnostics compact and searchable.
 - **Config is globals, not a safety wrapper.** Defaults live as `GLOBAL X IS`
   declarations in the file that owns the behavior, craft/profile scripts
   override with `SET X TO value.`, and libraries read `X` directly. Boot may
@@ -141,7 +148,13 @@ Looks like Python/JS; is neither.
 
 - Mission profiles are KerboScript files in `missions/<vehicle>/`; each is a
   list of `SET NAME TO value.` statements.
-- Transfer-planning mental model: for `XING,BPLANE,COAST,CAPTURE,SHAPE`,
+- Boot/storage mental model: state must preserve intent, not bulky derived
+  products. Persist `mission_id`, `phase`, target/config overrides, and
+  reload intent. Do not cache computed band libs. If an upgraded vessel is
+  wedged by old state, `RUNONCEPATH("0:/cmd/trimstate.ks").` removes the stale
+  `lib_band_libs` key without loading the full boot stack.
+- Transfer-planning mental model: for
+  `XING,BPLANE,COAST_1HALF,REFINE_BPLANE,COAST_2HALF,CAPTURE,SHAPE`,
   `XING` must produce a real target SOI patch, but it should not be treated
   as the owner of exact arrival plane/AoP. `BPLANE` can correct a rough
   hyperbolic encounter using smooth B-plane coordinates; it cannot repair
@@ -159,6 +172,20 @@ Looks like Python/JS; is neither.
   When BPLANE/SHAPE are downstream, XING's element gate is a handoff gate:
   it accepts rough real patches within `TRANSFER_DEFERRED_PE_ERR_TOL`
   (default 50 km) and `TRANSFER_DEFERRED_INC_ERR_TOL` (default 45 deg).
+  Interplanetary `XING` uses Lambert seeds; validate against KSP patch
+  creation, ejection dV, escape Pe, and departure/target body frames before
+  trusting any analytic score. If a Lambert burn is already near complete,
+  hand it forward instead of replanning against an escape trajectory.
+- Landing mental model: `LAND_DEORBIT` is its own band and only gets the
+  deorbit solver; powered descent lives in `landing_main` plus dynamically
+  loaded tracks (`landing_coast`, `landing_brake`, `landing_terminal`).
+  Keep it that way. The target is the real landing site, while the deorbit
+  solver deliberately aims a downfield phantom impact to preserve braking
+  authority. `docs/LANDING_TARGETING.md` is the current design note.
+- Duna/Ike mental model: `duna_ike_setup` is mission glue, not a generic
+  transfer dependency. It performs Duna aerocapture setup, rewrites the next
+  Ike/Duna-entry sequence through `mission_cfg_*`, and clears reload/band
+  cache state before rebooting into the next leg.
 - **Commit and push when a chunk of work is done, without being asked.** The
   game's archive folder syncs from the pushed repo; unpushed code is
   untestable. Logical, bisectable commits in short-imperative style. Leave
@@ -170,13 +197,16 @@ Looks like Python/JS; is neither.
   Mun contract end-to-end (2026-06); the suborbital return arc
   (`lib/suborbit.ks` v3: elements-only arc + coast + targeted walk) is
   flight-proven — single-boot KRBCAP1 round-the-world hop, landed exactly
-  on its predicted impact. The landatksc/KSC_DEORBIT recipe and the
-  scansat duty cycle flew real missions; the discover+focus deorbit
-  scan found a 0.9km pass quickly on a 28-orbit polar hunt. Still **not flight-proven**:
-  goto, the rescue PRELAUNCH/MATCH/CREW_XFER chain, the reworked airplane
-  control loops, SSTO phases, the drone. The legacy coupled solver
-  (`_targetPatchElementsCoupled` and friends) is retired-in-place: the
-  stale `deorbit_targeting -> maneuver_targeting` dep is already severed;
-  delete the lib once the rendezvous/intersystem flows stop importing it.
+  on its predicted impact. The landatksc/KSC_DEORBIT recipe, native JSON
+  state, and the scansat duty cycle flew real missions; the discover+focus
+  deorbit scan found a 0.9km pass quickly on a 28-orbit polar hunt. Recent
+  Duna/FalconHeavy Lambert, REFINE_BPLANE, Duna/Ike, high Molniya relay, and
+  split landing-storage work is current but still needs careful flight
+  confirmation. Still **not flight-proven**: goto, the rescue
+  PRELAUNCH/MATCH/CREW_XFER chain, the reworked airplane control loops, SSTO
+  phases, the drone. The legacy coupled solver (`_targetPatchElementsCoupled`
+  and friends) is retired-in-place: the stale `deorbit_targeting ->
+  maneuver_targeting` dep is already severed; delete the lib once the
+  rendezvous/intersystem flows stop importing it.
 - Useful sandbox: quick brace-balance check over edited `.ks` files (strip
   `//` comments and strings, count `{`/`}`) catches most structural slips.

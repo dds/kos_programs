@@ -1,9 +1,17 @@
-# kos_programs
+# Komptroller
 
-KerbalScript (kOS) mission automation for Kerbal Space Program. Autonomous,
-reboot-safe flight computers for rockets, airplanes, spaceplanes, hover
-drones, rovers, and EVA kerbals — driven by executable mission config profiles, with
-progressive code loading to fit tiny in-game processors.
+Open-source Kerbal mission governance for career mode: purposeful planes,
+useful rovers, efficient rockets, tidy relays, and shiny things with jobs. Do
+you like swarms of stuff? Built for fans of functional government, low part
+counts, wheels, reusable infrastructure, a pristine homeworld, and the *ahem*
+best technology available to a small green civilization with a fully
+open-source hive mind updated for the second quarter of the 21st century.
+
+Technically, Komptroller is KerbalScript (kOS) mission automation for Kerbal
+Space Program: autonomous, reboot-safe flight computers for rockets,
+airplanes, spaceplanes, hover drones, rovers, and EVA kerbals, driven by
+executable mission config profiles with progressive code loading to fit tiny
+in-game processors.
 
 - **Operating a flight?** Start at [Quick start](#quick-start) and
   [Operations](#operations).
@@ -49,6 +57,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
 | `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
 | `RUNPATH("0:/cmd/dump.ks").` | Print persistent state |
+| `RUNONCEPATH("0:/cmd/trimstate.ks").` | Remove bulky stale state keys after a tight-storage boot |
 | `RUNPATH("0:/cmd/convertstatejson.ks").` | Convert legacy SimpleJSON state to native kOS JSON |
 | `RUNPATH("0:/cmd/logs.ks").` | Archive the flight log to KSC |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
@@ -83,9 +92,12 @@ The selected mission id is persisted in state. The profile itself is copied
 to `1:/missions/<vehicle>/` and run on every boot; profiles are executable
 config scripts made of `SET NAME TO value.` lines. Runtime config overrides
 still use `mission_cfg_*` state, which boot turns back into `SET` overrides.
-Boot plans the library band from the selected mission/phase, compiles it to
-KSM (comments cost nothing), prunes stale files, runs the vehicle defaults,
-then re-runs the mission profile so mission/body overrides win before resume.
+Boot plans the library band from the selected mission/phase every boot,
+compiles it to KSM (comments cost nothing), prunes stale files, runs the
+vehicle defaults, then re-runs the mission profile so mission/body overrides
+win before resume. The planned library list is deliberately not cached in
+state; if storage runs out mid-boot, the next connected boot can recover the
+selected mission from `mission_id` or the cached profile copy.
 
 ### Phase machine and sequences
 
@@ -124,9 +136,10 @@ dependencyBands()                phases that load together
   reboots, quickloads, power loss. Legacy SimpleJSON state can be converted
   once with `RUNPATH("0:/cmd/convertstatejson.ks").`.
 - **Flight log**: `mLog`/`mLogWarn`/`mLogError`; WARN-level `STATS ...` lines
-  summarize every plan/burn/phase for post-flight analysis. Archived to
-  `0:/logs/archive/` append-and-rotate at phase transitions and after every
-  planned maneuver when linked.
+  summarize every plan/burn/phase for post-flight analysis. Each boot writes a
+  numbered per-core log under `1:/run/logs/<flight>/`; archive copies land in
+  `0:/logs/archive/<flight>/` at phase transitions and after WARN-level
+  `STATS` events when linked.
 - **Observation telemetry** (`lib/observe.ks`): periodic one-line samples
   streamed straight to `0:/logs/obs/` when linked (offline lines buffer
   locally and flush on reconnect). `cmd/airtest.ks` drops the interval to 1 s
@@ -137,7 +150,10 @@ dependencyBands()                phases that load together
 `0:/` is the archive (unlimited, KSC link required); `1:/` is the local
 volume. Source compiles to KSM before upload, so comment liberally in `.ks`
 files. Once out of link range nothing new can be fetched; everything a
-mission might need must be loaded while connected.
+mission might need must be loaded while connected. On storage-constrained
+cores, keep per-mission behavior in its own phase/band, avoid persistent
+derived state, and use `RUNONCEPATH("0:/cmd/trimstate.ks").` to clear the old
+`lib_band_libs` key if an upgraded vessel is stuck on a full local volume.
 
 ## Vehicles
 
@@ -146,7 +162,7 @@ mission might need must be loaded while connected.
 | `FR2` | Multi-payload launcher | Legacy name-driven flights + profiles |
 | `FR3` | Multi-payload launcher | Banded loading, profile-first, rover/mapper missions |
 | `Falcon` | Crew/science launcher | Banded profile flights for crew, tourists, and science returns |
-| `FalconHeavy` | Heavy Falcon variant | Falcon plumbing with extra boosters for heavier moon payloads |
+| `FalconHeavy` | Heavy Falcon variant | Falcon plumbing for heavier moon/interplanetary payloads |
 | `FJ1A` | Juno trainer jet | `airplaneMain()` configuration |
 | `FJ4B` | Supersonic jet | No landing assist — pilot owns the rollout |
 | `FBIJ` | Business jet | GAP airline missions, multi-leg, touch-and-go aware |
@@ -156,16 +172,19 @@ mission might need must be loaded while connected.
 | `ROVER` | Surface rover | Waypoint driving + science |
 | `X_SHOT` | Sounding rocket | SHRIMP thermometer/barometer drops |
 
-### Rockets (FR2 / FR3)
+### Rockets (FR2 / FR3 / Falcon / FalconHeavy)
 
-Standard sequence: `LAUNCH, FAIR, ANTS, PARK, XING, MCC|BPLANE, COAST,
-CAPTURE, <orbit/payload phases>, DONE`. Payload tokens (`RELAY`, `SCANSAT`,
-`SCISAT`, `PROBE`, `CRASHPROBE`, `LANDER`, `ASSISTLANDER`, `ROVER`,
-`ASSISTROVER`) come from the profile or the legacy ship name and append
-their phases automatically. MechJeb flies the ascent. FR3 adds targeted rover
-landings (Trajectories deorbit + named/selected waypoints, optional SCANsat
-site scan), Mun mapper impact-disposal flows, and the emergency
-`mun_rover_emergency_surface` profile.
+Modern profile sequence: `PRELAUNCH, LAUNCH, FAIR, ANTS, PARK, XING, BPLANE,
+COAST_1HALF, REFINE_BPLANE, COAST_2HALF, CAPTURE, SHAPE, <payload phases>,
+DONE`. Older profiles may still use `MCC` or a single `COAST`. Payload tokens
+(`RELAY`, `SCANSAT`, `SCISAT`, `PROBE`, `CRASHPROBE`, `LANDER`,
+`ASSISTLANDER`, `ROVER`, `ASSISTROVER`) come from the profile or the legacy
+ship name and append their phases automatically. MechJeb flies the ascent.
+FR3 adds targeted rover landings (Trajectories deorbit + named/selected
+waypoints, optional SCANsat site scan), Mun mapper impact-disposal flows, and
+the emergency `mun_rover_emergency_surface` profile. FalconHeavy carries the
+new Duna set: polar SCANsat, direct Duna lander, Duna/Ike SCISat lander, and
+paired high Molniya-style Duna relays.
 
 ### Aircraft
 
@@ -279,14 +298,21 @@ Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
   scan when `CAPTURE_LAN` is set). Local moon transfers scan the next
   `TRANSFER_SCAN_LOOKAHEAD_HOURS` from the current time, default 6h, so
   a missed-burn rescue can reacquire promptly instead of searching whole
-  high-transfer orbits. When `BPLANE`/`SHAPE` follow, XING accepts rough
-  real patches within the deferred handoff tolerances, biases local moon
-  scans toward the requested capture inclination, and leaves precise arrival
-  geometry to those phases.
+  high-transfer orbits. Interplanetary transfers use the Lambert planner:
+  analytic shortlist, patch refinement, ejection-dV ranking, and escape-path
+  safety checks. When `BPLANE`/`SHAPE` follow, XING is only a handoff gate: it
+  must create a real target patch, but it leaves exact arrival geometry to the
+  downstream phases.
 - **BPLANE** (`lib/arrival_bplane.ks`) — mid-coast B-plane correction: a 2×2
   Newton iteration on (B·T, B·R) steers the arrival hyperbola onto the
   requested plane (`CAPTURE_INC`/`CAPTURE_LAN`) and periapsis (`CAPTURE_PE`).
-  Smooth where raw patch elements are discontinuous.
+  Smooth where raw patch elements are discontinuous. If the departure burn
+  still leaves the ship inside the departure SOI, BPLANE first coasts out to
+  the transfer body's frame before measuring the arrival.
+- **COAST_1HALF / REFINE_BPLANE / COAST_2HALF** — long transfers split around
+  a timed midpoint. The first coast preserves solar attitude and can set a KAC
+  alarm, `REFINE_BPLANE` performs capped small correction burns until the
+  arrival corridor is met, and the second coast waits to the SOI buffer.
 - **CAPTURE** — tangential burn at Pe (preserves plane, Pe, and apsis line);
   `TARGET_AP` puts the apoapsis where the final orbit wants it.
 - **SHAPE** (`lib/orbit_shape.ks`) — closed-form trim to any specified
@@ -295,8 +321,7 @@ Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
   burns so execution errors self-correct.
 
 The older element-targeting pipeline (`MCC`, `CIRC`, `RAISE`, `INCLINE`,
-`ELLIPTICAL`) remains for legacy profiles until BPLANE/SHAPE are
-flight-proven (test mission: `missions/FR3/mun_sat_delivery_3.ks`).
+`ELLIPTICAL`) remains for legacy profiles and rescue flows.
 `cmd/returntokerbin.ks` runs the full moon-return + aerobrake + descent flow.
 Kerbin returns use `MCC`, targeting the configured reentry Pe and a 0 deg
 arrival inclination to improve KSC approach geometry. If the current Kerbin
@@ -366,18 +391,21 @@ underscore (`TARGET_`).
 |---|---|---|
 | PRELAUNCH | prelaunch | Flight-plan card + launch-window setup |
 | LAUNCH, FAIR, ANTS, PARK | launch | MechJeb ascent → parking orbit |
-| XING, ESCAPE | xfer_plan | Transfers and escapes |
+| XING, ESCAPE | xfer_plan, return_escape | Transfers and moon-return escapes |
 | RDV | rdv_plan | Lightweight same-body Hohmann rendezvous |
 | MATCH, CREW_XFER | maneuver_rendezvous | Close approach and crew transfer |
 | MCC | maneuver_transfer | Legacy element-based mid-course correction |
-| BPLANE | arrival_bplane | B-plane arrival corridor |
-| COAST, CAPTURE | capture | SOI coast + capture burn |
+| BPLANE, REFINE_BPLANE | arrival_bplane | Initial and midpoint B-plane corrections |
+| COAST, COAST_1HALF, COAST_2HALF, CAPTURE | capture | SOI/midpoint coast + capture burn |
 | SHAPE | orbit_shape | Closed-form orbit shaping to SHAPE_* |
+| DUNA_AEROCAPTURE, IKE_SETUP, DUNA_ENTRY_SETUP, DUNA_ENTRY_LOWER_PE | duna_ike_setup | Duna/Ike mission glue |
 | GOTO | goto_plan | Replan next hop toward `goto_dest` |
 | CIRC, RAISE, INCLINE, ELLIPTICAL | maneuver_orbit | Legacy orbit cleanup |
 | DROP_FOR_IMPACT_AND_RAISE_PE | payload_release | Payload impact disposal + recovery |
 | TARGETED_DEORBIT, RELEASE_PROBE, RELAY_OPS, SCANSAT_OPS | payload_ops (+science) | Payload operations |
-| LAND_DEORBIT, LAND_ASSIST, LAND, ROVER | payload_landing | Targeted landings, rovers |
+| LAND_DEORBIT | landing_deorbit (+deorbit_targeting) | Targeted landing deorbit |
+| LAND_ASSIST, LAND | payload_landing, landing_main | Powered descent and assist takeover |
+| ROVER | rover | Surface rover ops |
 | MOLNIYA_INSERT | molniya | Molniya insertion |
 | AEROBRAKE, DESCENT | aerobrake, descent | Kerbin return entry + descent |
 | PREFLIGHT, FLIGHT, POSTFLIGHT | airplane | Aircraft lifecycle |
@@ -393,7 +421,9 @@ SET COAST_AUTO_WARP TO 1.   // Requires a future KAC alarm; otherwise skipped.
 ```
 
 Coast automation only enters hibernation. It does not wake probe cores; clear
-hibernation manually when you want control back.
+hibernation manually when you want control back. Split coasts run solar/EC
+health checks before long warps and can create midpoint KAC alarms for B-plane
+refinement.
 
 `idealCoastWarpRate(waitSeconds)` maps wait time to warp indices: 60s to
 under 5m uses 2, up to 1h uses 3, under 3 Kerbin days uses 4, under 10 days
