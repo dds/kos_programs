@@ -15,6 +15,7 @@ GLOBAL ESCAPE_LAN IS -1.
 GLOBAL ESCAPE_AOP IS -1.
 
 LOCAL MAX_RETRIES IS 5.
+GLOBAL TRANSFER_POST_BURN_HANDOFF_SOI_MULT IS 1.0.
 
 LOCAL FUNCTION _recordXingArrivalUt {
     PARAMETER targetBody.
@@ -35,11 +36,84 @@ LOCAL FUNCTION _recordXingArrivalUt {
     }
 }
 
+LOCAL FUNCTION _handoffArrivalEstimate {
+    PARAMETER targetBody.
+
+    LOCAL arrivalUt IS stateGetNum("xing_arrival_ut", 0).
+    LOCAL arrivalTarget IS stateGet("xing_arrival_target", "").
+    IF arrivalUt > TIME:SECONDS AND arrivalTarget = targetBody:NAME {
+        RETURN arrivalUt.
+    }
+
+    IF SHIP:BODY:HASBODY AND targetBody:HASBODY
+            AND SHIP:BODY:BODY = targetBody:BODY {
+        LOCAL rOrigin IS SHIP:BODY:ORBIT:SEMIMAJORAXIS.
+        LOCAL rTarget IS targetBody:ORBIT:SEMIMAJORAXIS.
+        LOCAL aTransfer IS (rOrigin + rTarget) / 2.
+        LOCAL tof IS CONSTANT:PI * SQRT(aTransfer ^ 3 / targetBody:BODY:MU).
+        RETURN TIME:SECONDS + tof.
+    }
+    RETURN TIME:SECONDS + MAX(3600, targetBody:ORBIT:PERIOD / 2).
+}
+
+LOCAL FUNCTION _postBurnTransferHandoffOk {
+    PARAMETER targetBody.
+    PARAMETER label IS "post-burn".
+
+    LOCAL peMax IS targetBody:SOIRADIUS * TRANSFER_POST_BURN_HANDOFF_SOI_MULT.
+    LOCAL patch IS _getTargetPatch(SHIP, targetBody).
+    IF patch <> 0 AND patch:PERIAPSIS > 0 AND patch:PERIAPSIS <= peMax {
+        _recordXingArrivalUt(targetBody).
+        mLogWarn("STATS transfer handoff label=" + label
+            + " status=patch"
+            + " target=" + targetBody:NAME
+            + " PeKm=" + ROUND(patch:PERIAPSIS / 1000, 1)
+            + " soiKm=" + ROUND(targetBody:SOIRADIUS / 1000, 1)
+            + " body=" + SHIP:BODY:NAME
+            + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 4)).
+        RETURN TRUE.
+    }
+
+    IF SHIP:STATUS <> "ESCAPING" AND SHIP:ORBIT:ECCENTRICITY < 1 {
+        RETURN FALSE.
+    }
+
+    LOCAL arriveUt IS _handoffArrivalEstimate(targetBody).
+    LOCAL pad IS MAX(21600, (arriveUt - TIME:SECONDS) * 0.25).
+    LOCAL ca IS _findClosestApproach(
+        targetBody, arriveUt - pad, arriveUt + pad, 48).
+    IF ca["distance"] <= peMax {
+        stateSet("xing_arrival_ut", ca["time"]).
+        stateSet("xing_arrival_target", targetBody:NAME).
+        mLogWarn("STATS transfer handoff label=" + label
+            + " status=closest-approach"
+            + " target=" + targetBody:NAME
+            + " caKm=" + ROUND(ca["distance"] / 1000, 1)
+            + " soiKm=" + ROUND(targetBody:SOIRADIUS / 1000, 1)
+            + " arrivalT=" + ROUND(ca["time"] - TIME:SECONDS, 0)
+            + " body=" + SHIP:BODY:NAME
+            + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 4)).
+        RETURN TRUE.
+    }
+    mLogWarn("STATS transfer handoff label=" + label
+        + " status=no-handoff"
+        + " target=" + targetBody:NAME
+        + " caKm=" + ROUND(ca["distance"] / 1000, 1)
+        + " soiKm=" + ROUND(targetBody:SOIRADIUS / 1000, 1)).
+    RETURN FALSE.
+}
+
 GLOBAL FUNCTION phaseTransfer {
     LOCAL target IS missionTargetBody().
     orbitSummary().
     LOCAL success IS FALSE.
     LOCAL retries IS 0.
+
+    IF NOT HASNODE AND _postBurnTransferHandoffOk(target, "phase-entry") {
+        orbitSummary().
+        nextPhase(xferSeq).
+        RETURN.
+    }
 
     IF HASNODE {
         LOCAL existing IS NEXTNODE.
@@ -57,9 +131,19 @@ GLOBAL FUNCTION phaseTransfer {
             nextPhase(xferSeq).
             RETURN.
         }
+        IF _postBurnTransferHandoffOk(target, "existing-node-failed") {
+            orbitSummary().
+            nextPhase(xferSeq).
+            RETURN.
+        }
         mLogWarn("Existing transfer node was not usable; replanning.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     } ELSE IF stateGet("burn_pending", "false") = "true" {
+        IF _postBurnTransferHandoffOk(target, "missing-node-pending") {
+            orbitSummary().
+            nextPhase(xferSeq).
+            RETURN.
+        }
         mLogWarn("STATS transfer resume missing-node pending=true burnPhase="
             + stateGet("burn_phase", "")
             + " burnDv=" + ROUND(stateGetNum("burn_dv", 0),1)
@@ -85,6 +169,11 @@ GLOBAL FUNCTION phaseTransfer {
             mLog("Transfer planned.").
             SET success TO executeManeuver().
             IF NOT success {
+                IF _postBurnTransferHandoffOk(target, "planned-node-failed") {
+                    orbitSummary().
+                    nextPhase(xferSeq).
+                    RETURN.
+                }
                 SET retries TO retries + 1.
                 mLog("Transfer missed (attempt " + retries + ") — waiting 10s and replanning.").
                 UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }

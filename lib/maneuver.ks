@@ -6,6 +6,9 @@
 
 // --- Config defaults owned by this file ---
 GLOBAL BURN_BRIEF IS 1.
+GLOBAL BURN_REBOUND_ACCEPT_MIN_DV IS 100.
+GLOBAL BURN_REBOUND_ACCEPT_FRAC IS 0.005.
+GLOBAL BURN_REBOUND_ACCEPT_MIN IS 3.
 
 
 LOCAL CF        IS 0.001.
@@ -178,10 +181,17 @@ GLOBAL FUNCTION executeManeuver {
         IF rem < 2 {
             SET db2 TO TRUE.
         } ELSE IF db2 AND rem > 2 {
-            SET dra TO TRUE.
             SET rdv TO rem.
-            mLogError("Burn dV rebounded after trim phase: remaining="
-                + ROUND(rem, 2) + " m/s — stopping maneuver.").
+            IF bdv >= BURN_REBOUND_ACCEPT_MIN_DV
+                    AND rem <= MAX(BURN_REBOUND_ACCEPT_MIN,
+                        bdv * BURN_REBOUND_ACCEPT_FRAC) {
+                mLogWarn("Burn dV rebounded slightly after trim phase: remaining="
+                    + ROUND(rem, 2) + " m/s — accepting large burn.").
+            } ELSE {
+                SET dra TO TRUE.
+                mLogError("Burn dV rebounded after trim phase: remaining="
+                    + ROUND(rem, 2) + " m/s — stopping maneuver.").
+            }
             LOCK THROTTLE TO 0.
             BREAK.
         }
