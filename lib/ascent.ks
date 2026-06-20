@@ -219,9 +219,21 @@ LOCAL FUNCTION _logVacuumAscentTelemetry {
         + ROUND(SHIP:VELOCITY:ORBIT:MAG, 1) + "m/s.").
 }
 
-// Circularize at apoapsis with a direct prograde burn — no maneuver
-// node, no executeManeuver. Centers the burn on apoapsis using a
-// vis-viva dV estimate and burns until periapsis reaches PARKING_ALT.
+// Horizontal (circularization) burn direction at the current point:
+// orbital velocity with its radial component removed — perpendicular
+// to "up", in-plane, prograde. Burning THIS raises periapsis toward
+// apoapsis without the radial component that live SHIP:PROGRADE gains
+// once past apoapsis (which would pour dV into apoapsis instead).
+LOCAL FUNCTION _circBurnVec {
+    LOCAL horiz IS VXCL(SHIP:UP:VECTOR, SHIP:VELOCITY:ORBIT).
+    IF horiz:MAG < 1 { RETURN SHIP:VELOCITY:ORBIT. }
+    RETURN horiz.
+}
+
+// Circularize at apoapsis with a direct burn — no maneuver node, no
+// executeManeuver. Steers the horizontal circularization vector (NOT
+// live prograde) centered on apoapsis, and terminates when periapsis
+// reaches PARKING_ALT, with an integrated-dV cap as a runaway guard.
 // Auto-staging is handled by the armAscentStaging WHEN already armed.
 LOCAL FUNCTION _ascentCircularize {
     LOCAL mu IS SHIP:BODY:MU.
@@ -232,11 +244,12 @@ LOCAL FUNCTION _ascentCircularize {
     LOCAL vApCirc IS SQRT(mu / rAp).
     LOCAL vApNow IS SQRT(MAX(0, mu * (2 / rAp - 1 / SHIP:ORBIT:SEMIMAJORAXIS))).
     LOCAL dv IS MAX(0, vApCirc - vApNow).
-    LOCAL acc IS SHIP:AVAILABLETHRUST / MAX(0.01, SHIP:MASS).
+    LOCAL acc0 IS SHIP:AVAILABLETHRUST / MAX(0.01, SHIP:MASS).
     LOCAL burnTime IS 0.
-    IF acc > 0 { SET burnTime TO dv / acc. }
+    IF acc0 > 0 { SET burnTime TO dv / acc0. }
     LOCAL lead IS MIN(burnTime / 2, MAX(0, ETA:APOAPSIS)).
     LOCAL igniteUt IS TIME:SECONDS + MAX(0, ETA:APOAPSIS - lead).
+    LOCAL dvCap IS dv * 1.5 + 20.
 
     mLog("Circularize: dv=" + ROUND(dv, 1) + "m/s burnT="
         + ROUND(burnTime, 1) + "s lead=" + ROUND(lead, 1)
@@ -247,7 +260,7 @@ LOCAL FUNCTION _ascentCircularize {
         + " targetPeKm=" + ROUND(targetPe / 1000, 2)).
 
     SAS OFF.
-    LOCK STEERING TO SHIP:PROGRADE.
+    LOCK STEERING TO _circBurnVec().
     IF igniteUt > TIME:SECONDS + 5 {
         coastAutoWarp(igniteUt, "Circularize coast", "").
     }
@@ -261,12 +274,17 @@ LOCAL FUNCTION _ascentCircularize {
     }
 
     LOCK THROTTLE TO 1.
+    LOCAL appliedDv IS 0.
+    LOCAL lastT IS TIME:SECONDS.
     LOCAL nextLog IS TIME:SECONDS.
-    UNTIL SHIP:PERIAPSIS >= targetPe OR ABORT {
-        LOCK STEERING TO SHIP:PROGRADE.
-        IF targetPe - SHIP:PERIAPSIS < PARKING_ALT * 0.02 {
-            LOCK THROTTLE TO 0.1.
-        }
+    UNTIL SHIP:PERIAPSIS >= targetPe OR ABORT
+            OR SHIP:ORBIT:ECCENTRICITY < 0.004
+            OR appliedDv >= dvCap {
+        LOCK STEERING TO _circBurnVec().
+        LOCAL nowT IS TIME:SECONDS.
+        SET appliedDv TO appliedDv
+            + (SHIP:AVAILABLETHRUST / MAX(0.01, SHIP:MASS)) * (nowT - lastT).
+        SET lastT TO nowT.
         IF SHIP:MAXTHRUST <= 0 AND NOT ascentStageAttemptPending() {
             mLogWarn("Circularize: no thrust and no stage pending; stopping.").
             BREAK.
@@ -274,7 +292,9 @@ LOCAL FUNCTION _ascentCircularize {
         IF TIME:SECONDS >= nextLog {
             SET nextLog TO TIME:SECONDS + 3.
             mLog("Circularize: Pe=" + ROUND(SHIP:PERIAPSIS / 1000, 2)
-                + "km Ap=" + ROUND(SHIP:APOAPSIS / 1000, 2) + "km.").
+                + "km Ap=" + ROUND(SHIP:APOAPSIS / 1000, 2)
+                + "km appliedDv=" + ROUND(appliedDv, 1)
+                + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3) + ".").
         }
         WAIT 0.05.
     }
@@ -283,10 +303,15 @@ LOCAL FUNCTION _ascentCircularize {
     UNLOCK STEERING.
     SET SAS TO TRUE.
     orbitSummary().
+    IF appliedDv >= dvCap {
+        mLogWarn("Circularize: hit dV cap (" + ROUND(dvCap, 0)
+            + "m/s) before target — check ascent profile.").
+    }
     mLogWarn("STATS ascent circularize result PeKm="
         + ROUND(SHIP:PERIAPSIS / 1000, 2)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 2)
-        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 4)).
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 4)
+        + " appliedDv=" + ROUND(appliedDv, 1)).
     RETURN NOT ABORT AND SHIP:PERIAPSIS >= PARKING_ALT * 0.9.
 }
 
