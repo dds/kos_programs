@@ -230,6 +230,15 @@ LOCAL FUNCTION _circBurnVec {
     RETURN horiz.
 }
 
+// HUD countdown cadence: tighten as ignition nears (mirrors the
+// landing HUD notices).
+LOCAL FUNCTION _circHudInterval {
+    PARAMETER etaSeconds.
+    IF etaSeconds <= 10 { RETURN 1. }
+    IF etaSeconds <= 30 { RETURN 5. }
+    RETURN 10.
+}
+
 // Circularize at apoapsis with a direct burn — no maneuver node, no
 // executeManeuver. Steers the horizontal circularization vector (NOT
 // live prograde) centered on apoapsis, and terminates when periapsis
@@ -264,8 +273,16 @@ LOCAL FUNCTION _ascentCircularize {
     IF igniteUt > TIME:SECONDS + 5 {
         coastAutoWarp(igniteUt, "Circularize coast", "").
     }
-    WAIT UNTIL TIME:SECONDS >= igniteUt OR ABORT
-        OR SHIP:PERIAPSIS >= targetPe.
+    LOCAL nextHud IS 0.
+    UNTIL TIME:SECONDS >= igniteUt OR ABORT OR SHIP:PERIAPSIS >= targetPe {
+        IF TIME:SECONDS >= nextHud {
+            LOCAL etaIg IS MAX(0, igniteUt - TIME:SECONDS).
+            HUDTEXT("Circularize burn in " + ROUND(etaIg, 0) + "s",
+                2, 2, 16, YELLOW, FALSE).
+            SET nextHud TO TIME:SECONDS + _circHudInterval(etaIg).
+        }
+        WAIT 0.5.
+    }
     IF ABORT {
         LOCK THROTTLE TO 0.
         UNLOCK THROTTLE.
@@ -273,27 +290,40 @@ LOCAL FUNCTION _ascentCircularize {
         RETURN FALSE.
     }
 
-    LOCK THROTTLE TO 1.
+    HUDTEXT("Circularizing", 5, 2, 16, GREEN, FALSE).
+    // Drive toward the circular-velocity VECTOR at the current radius
+    // (horizontal at circular speed); steering the remaining-dV vector
+    // also nulls any residual vertical speed, and tapering throttle as
+    // it shrinks settles onto the circle instead of overshooting Ap.
     LOCAL appliedDv IS 0.
     LOCAL lastT IS TIME:SECONDS.
     LOCAL nextLog IS TIME:SECONDS.
-    UNTIL SHIP:PERIAPSIS >= targetPe OR ABORT
-            OR SHIP:ORBIT:ECCENTRICITY < 0.004
-            OR appliedDv >= dvCap {
-        LOCK STEERING TO _circBurnVec().
+    LOCAL throt IS 1.
+    LOCK THROTTLE TO throt.
+    UNTIL ABORT OR appliedDv >= dvCap {
+        LOCAL rMag IS bodyR + SHIP:ALTITUDE.
+        LOCAL vCircVec IS VXCL(SHIP:UP:VECTOR, SHIP:VELOCITY:ORBIT):NORMALIZED
+            * SQRT(mu / rMag).
+        LOCAL remVec IS vCircVec - SHIP:VELOCITY:ORBIT.
+        LOCAL remDv IS remVec:MAG.
+        IF remDv <= 0.3 { BREAK. }
+        IF remDv > 1 { LOCK STEERING TO remVec. }
+        SET throt TO MAX(0.05, MIN(1, remDv / 40)).
+        LOCK THROTTLE TO throt.
         LOCAL nowT IS TIME:SECONDS.
         SET appliedDv TO appliedDv
-            + (SHIP:AVAILABLETHRUST / MAX(0.01, SHIP:MASS)) * (nowT - lastT).
+            + (SHIP:AVAILABLETHRUST / MAX(0.01, SHIP:MASS)) * throt * (nowT - lastT).
         SET lastT TO nowT.
         IF SHIP:MAXTHRUST <= 0 AND NOT ascentStageAttemptPending() {
             mLogWarn("Circularize: no thrust and no stage pending; stopping.").
             BREAK.
         }
         IF TIME:SECONDS >= nextLog {
-            SET nextLog TO TIME:SECONDS + 3.
+            SET nextLog TO TIME:SECONDS + 2.
             mLog("Circularize: Pe=" + ROUND(SHIP:PERIAPSIS / 1000, 2)
                 + "km Ap=" + ROUND(SHIP:APOAPSIS / 1000, 2)
-                + "km appliedDv=" + ROUND(appliedDv, 1)
+                + "km remDv=" + ROUND(remDv, 1)
+                + " thr=" + ROUND(throt, 2)
                 + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3) + ".").
         }
         WAIT 0.05.
