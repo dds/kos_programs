@@ -24,6 +24,7 @@
 // Never clears the screen.
 // ============================================================
 
+@CLOBBERBUILTINS ON.
 @LAZYGLOBAL OFF.
 
 LOCAL GRID_H IS 17.
