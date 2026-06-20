@@ -219,6 +219,24 @@ LOCAL FUNCTION _logVacuumAscentTelemetry {
         + ROUND(SHIP:VELOCITY:ORBIT:MAG, 1) + "m/s.").
 }
 
+// Compass heading to reach LAUNCH_INCLINATION from the launch
+// latitude (standard launch-azimuth identity sin(az)=cos(i)/cos(lat),
+// az measured from north). Eastward/prograde solutions only — the
+// surface-return case wants a prograde orbit aligned with the Mun's
+// motion. A target inclination below the launch latitude is
+// unreachable by direct ascent, so fly due east (90) for the minimum
+// (inclination = latitude); a plane-change burn would be needed to go
+// lower. Body rotation is ignored (negligible on Mun/Minmus).
+LOCAL FUNCTION _ascentAzimuth {
+    LOCAL phi IS ABS(SHIP:LATITUDE).
+    LOCAL denom IS COS(phi).
+    IF denom < 0.0001 { RETURN 90. }
+    LOCAL ratio IS COS(ABS(LAUNCH_INCLINATION)) / denom.
+    IF ratio >= 1 { RETURN 90. }
+    IF ratio <= -1 { RETURN 90. }
+    RETURN ARCSIN(ratio).
+}
+
 // Horizontal (circularization) burn direction at the current point:
 // orbital velocity with its radial component removed — perpendicular
 // to "up", in-plane, prograde. Burning THIS raises periapsis toward
@@ -341,6 +359,7 @@ LOCAL FUNCTION _ascentCircularize {
         + ROUND(SHIP:PERIAPSIS / 1000, 2)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 2)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 4)
+        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION, 2)
         + " appliedDv=" + ROUND(appliedDv, 1)).
     RETURN NOT ABORT AND SHIP:PERIAPSIS >= PARKING_ALT * 0.9.
 }
@@ -357,11 +376,21 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
     LOCAL clearAlt IS 150.
     LOCAL targetVel IS _vacuumTargetOrbitalVelocity().
     LOCAL nextTelemetry IS TIME:SECONDS.
+    LOCAL ascentAz IS _ascentAzimuth().
+    LOCAL achInc IS MAX(ABS(LAUNCH_INCLINATION), ABS(SHIP:LATITUDE)).
 
     mLog("Vacuum ascent armed. Alt=" + ROUND(PARKING_ALT / 1000, 1)
-        + "km inc=" + LAUNCH_INCLINATION
-        + " deg az=" + LAUNCH_AZIMUTH
-        + " deg targetV=" + ROUND(targetVel, 1) + "m/s.").
+        + "km targetInc=" + LAUNCH_INCLINATION
+        + " lat=" + ROUND(SHIP:LATITUDE, 1)
+        + " -> az=" + ROUND(ascentAz, 1)
+        + " achInc=" + ROUND(achInc, 1)
+        + " targetV=" + ROUND(targetVel, 1) + "m/s.").
+    IF ABS(LAUNCH_INCLINATION) < ABS(SHIP:LATITUDE) - 0.5 {
+        mLogWarn("Ascent: target inc " + ROUND(ABS(LAUNCH_INCLINATION), 1)
+            + " below launch latitude " + ROUND(ABS(SHIP:LATITUDE), 1)
+            + " — unreachable by direct ascent; flying due east for "
+            + "minimum inclination (plane change needed to go lower).").
+    }
 
     IF NOT _ascentOnSurface() {
         mLogWarn("Vacuum LAUNCH entered while already " + SHIP:STATUS
@@ -421,7 +450,7 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
     LOCAL currentPitch IS 90.
     UNTIL SHIP:APOAPSIS >= PARKING_ALT OR ABORT {
         SET currentPitch TO _vacuumAscentPitch(targetVel).
-        LOCK STEERING TO HEADING(LAUNCH_AZIMUTH, currentPitch).
+        LOCK STEERING TO HEADING(ascentAz, currentPitch).
         IF TIME:SECONDS >= nextTelemetry {
             _logVacuumAscentTelemetry(currentPitch).
             SET nextTelemetry TO TIME:SECONDS + 5.
