@@ -410,13 +410,6 @@ GLOBAL FUNCTION bootResetMissionSelection {
     IF EXISTS("1:/run") {
         bootDeleteLogFiles("1:/run").
     }
-    IF EXISTS("1:/run/log_path.state") {
-        LOCAL olp IS OPEN("1:/run/log_path.state"):READALL:STRING:TRIM.
-        IF olp <> "" AND EXISTS(olp) {
-            DELETEPATH(olp).
-        }
-        DELETEPATH("1:/run/log_path.state").
-    }
     stateSet("vehicle", vn).
     stateSet("target", tn).
     stateSet("payloads", pts).
@@ -500,28 +493,78 @@ GLOBAL FUNCTION bootPruneDir {
     RETURN rm.
 }
 
-GLOBAL FUNCTION bootDeleteLogFiles {
-    PARAMETER dp.
+GLOBAL FUNCTION bootSweepLogs {
+    PARAMETER dirPath.
+    PARAMETER archiveDir.
+    PARAMETER linked.
     LOCAL rm IS 0.
-    IF NOT EXISTS(dp) { RETURN rm. }
+    LOCAL oldLogPath IS "".
+    IF NOT EXISTS(dirPath) { RETURN rm. }
+
+    IF linked AND archiveDir <> "" {
+        LOCAL archiveParts IS archiveDir:SPLIT("/").
+        LOCAL archiveBuildPath IS archiveParts[0].
+        FROM { LOCAL archiveIndex IS 1. }
+                UNTIL archiveIndex >= archiveParts:LENGTH
+                STEP { SET archiveIndex TO archiveIndex + 1. } DO {
+            IF archiveParts[archiveIndex] <> "" {
+                SET archiveBuildPath TO archiveBuildPath + "/" + archiveParts[archiveIndex].
+                IF NOT EXISTS(archiveBuildPath) {
+                    CREATEDIR(archiveBuildPath).
+                }
+            }
+        }
+    }
+
+    IF dirPath = "1:/run" AND EXISTS("1:/run/log_path.state") {
+        SET oldLogPath TO OPEN("1:/run/log_path.state"):READALL:STRING:TRIM.
+    }
+
     LOCAL sp IS PATH().
     LOCAL items IS LIST().
-    CD(dp).
+    CD(dirPath).
     LIST FILES IN items.
     CD(sp).
     FOR item IN items {
-        LOCAL itemPath IS dp + "/" + item:NAME.
+        LOCAL itemPath IS dirPath + "/" + item:NAME.
         IF item:ISFILE {
             IF item:NAME:CONTAINS(".LOG") OR item:NAME:CONTAINS(".log")
                     OR item:NAME = "log_path.state" {
+                IF linked AND archiveDir <> "" {
+                    LOCAL archivePath IS archiveDir + "/" + item:NAME.
+                    IF EXISTS(archivePath) { DELETEPATH(archivePath). }
+                    COPYPATH(itemPath, archivePath).
+                }
                 DELETEPATH(itemPath).
                 SET rm TO rm + 1.
             }
         } ELSE {
-            SET rm TO rm + bootDeleteLogFiles(itemPath).
+            LOCAL childArchive IS archiveDir + "/" + item:NAME.
+            IF linked AND archiveDir <> "" AND NOT EXISTS(childArchive) {
+                CREATEDIR(childArchive).
+            }
+            SET rm TO rm + bootSweepLogs(itemPath, childArchive, linked).
         }
     }
+
+    IF oldLogPath <> "" AND EXISTS(oldLogPath) {
+        IF linked AND archiveDir <> "" {
+            LOCAL oldParts IS oldLogPath:SPLIT("/").
+            LOCAL oldName IS oldParts[oldParts:LENGTH - 1].
+            LOCAL oldArchivePath IS archiveDir + "/" + oldName.
+            IF EXISTS(oldArchivePath) { DELETEPATH(oldArchivePath). }
+            COPYPATH(oldLogPath, oldArchivePath).
+        }
+        DELETEPATH(oldLogPath).
+        SET rm TO rm + 1.
+    }
+
     RETURN rm.
+}
+
+GLOBAL FUNCTION bootDeleteLogFiles {
+    PARAMETER dp.
+    RETURN bootSweepLogs(dp, "", FALSE).
 }
 
 GLOBAL FUNCTION bootPruneLogs {

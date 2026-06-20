@@ -84,6 +84,81 @@ LOCAL FUNCTION _loadLib {
 
 _ensureDir("1:/lib").
 _ensureDir("1:/run").
+LOCAL preSweptLogs IS 0.
+LOCAL preOldLogPath IS "".
+IF HAS_LINK {
+    _ensureDir("0:/logs").
+    _ensureDir("0:/logs/archive").
+}
+IF EXISTS("1:/run/log_path.state") {
+    SET preOldLogPath TO OPEN("1:/run/log_path.state"):READALL:STRING:TRIM.
+}
+IF EXISTS("1:/run/logs") {
+    LOCAL preSweepPath IS PATH().
+    LOCAL preLogDirs IS LIST().
+    CD("1:/run/logs").
+    LIST FILES IN preLogDirs.
+    CD(preSweepPath).
+    FOR preLogDir IN preLogDirs {
+        LOCAL preLogDirPath IS "1:/run/logs/" + preLogDir:NAME.
+        IF preLogDir:ISFILE {
+            IF preLogDir:NAME:CONTAINS(".LOG") OR preLogDir:NAME:CONTAINS(".log") {
+                IF HAS_LINK {
+                    LOCAL preArchivePath IS "0:/logs/archive/" + preLogDir:NAME.
+                    IF EXISTS(preArchivePath) { DELETEPATH(preArchivePath). }
+                    COPYPATH(preLogDirPath, preArchivePath).
+                }
+                DELETEPATH(preLogDirPath).
+                SET preSweptLogs TO preSweptLogs + 1.
+            }
+        } ELSE {
+            LOCAL preLogItems IS LIST().
+            CD(preLogDirPath).
+            LIST FILES IN preLogItems.
+            CD(preSweepPath).
+            LOCAL preArchiveDir IS "0:/logs/archive/" + preLogDir:NAME.
+            IF HAS_LINK { _ensureDir(preArchiveDir). }
+            FOR preLogItem IN preLogItems {
+                IF preLogItem:ISFILE {
+                    IF preLogItem:NAME:CONTAINS(".LOG") OR preLogItem:NAME:CONTAINS(".log") {
+                        LOCAL preLogPath IS preLogDirPath + "/" + preLogItem:NAME.
+                        IF HAS_LINK {
+                            LOCAL preArchiveItem IS preArchiveDir + "/" + preLogItem:NAME.
+                            IF EXISTS(preArchiveItem) { DELETEPATH(preArchiveItem). }
+                            COPYPATH(preLogPath, preArchiveItem).
+                        }
+                        DELETEPATH(preLogPath).
+                        SET preSweptLogs TO preSweptLogs + 1.
+                    }
+                }
+            }
+        }
+    }
+}
+IF preOldLogPath <> "" AND EXISTS(preOldLogPath) {
+    IF HAS_LINK {
+        _ensureDir("0:/logs/archive/_boot_sweep").
+        LOCAL preOldParts IS preOldLogPath:SPLIT("/").
+        LOCAL preOldName IS preOldParts[preOldParts:LENGTH - 1].
+        LOCAL preOldArchivePath IS "0:/logs/archive/_boot_sweep/" + preOldName.
+        IF EXISTS(preOldArchivePath) { DELETEPATH(preOldArchivePath). }
+        COPYPATH(preOldLogPath, preOldArchivePath).
+    }
+    DELETEPATH(preOldLogPath).
+    SET preSweptLogs TO preSweptLogs + 1.
+}
+IF EXISTS("1:/run/log_path.state") {
+    IF HAS_LINK {
+        _ensureDir("0:/logs/archive/_boot_sweep").
+        LOCAL preStateArchivePath IS "0:/logs/archive/_boot_sweep/log_path.state".
+        IF EXISTS(preStateArchivePath) {
+            DELETEPATH(preStateArchivePath).
+        }
+        COPYPATH("1:/run/log_path.state", preStateArchivePath).
+    }
+    DELETEPATH("1:/run/log_path.state").
+    SET preSweptLogs TO preSweptLogs + 1.
+}
 IF HAS_LINK {
     PRINT "  SYNC boot lib ..... ".
     _syncLib("boot_lib").
@@ -96,6 +171,14 @@ IF HAS_LINK {
 }
 
 _loadLib("boot_lib").
+LOCAL sweptLogs IS preSweptLogs.
+IF DEFINED bootSweepLogs {
+    SET sweptLogs TO sweptLogs + bootSweepLogs("1:/run/logs", "0:/logs/archive", HAS_LINK).
+    SET sweptLogs TO sweptLogs + bootSweepLogs("1:/run", "0:/logs/archive/_boot_sweep", HAS_LINK).
+}
+IF sweptLogs > 0 {
+    PRINT "  OLD LOGS swept: " + sweptLogs + ".".
+}
 _loadLib("dependencies").
 BOOT_LIB_RAN:ADD("dependencies").
 bootPreamble().
