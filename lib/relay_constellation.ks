@@ -196,7 +196,7 @@ LOCAL FUNCTION _phaseCarrierOneSlot {
     LOCAL coastEnd IS TIME:SECONDS + MAX(0, ETA:APOAPSIS - 120).
     mLog("Coasting one phasing orbit; next circularize in "
         + ROUND(ETA:APOAPSIS,0) + "s.").
-    trySolarOrient().
+    IF PHASES_HAS_SOLAR { orientForSolar(). }
     LOCAL solarRef IS -1.
     UNTIL TIME:SECONDS >= coastEnd {
         SET solarRef TO trySolarHoldTick(solarRef).

@@ -420,14 +420,6 @@ GLOBAL FUNCTION coastHealthCheck {
     RETURN FALSE.
 }
 
-GLOBAL FUNCTION trySolarOrient {
-    IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
-            OR SHIP:STATUS = "SUB_ORBITAL")
-            AND PHASES_HAS_SOLAR {
-        orientForSolar().
-    }
-}
-
 // Guarded solar-hold tick for long coasts: maintains the solar
 // attitude (warp-aware re-aims when panel flow sags) wherever
 // the solar lib is aboard; a no-op pass-through otherwise.
@@ -439,16 +431,6 @@ GLOBAL FUNCTION trySolarHoldTick {
         RETURN solarHoldTick(refFlow).
     }
     RETURN refFlow.
-}
-
-GLOBAL FUNCTION tryCommandCoreHibernate {
-    PARAMETER enabled.
-    IF NOT enabled { RETURN. }
-    IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
-            OR SHIP:STATUS = "SUB_ORBITAL")
-            AND PHASES_HAS_SOLAR {
-        commandCoresHibernate(TRUE).
-    }
 }
 
 GLOBAL FUNCTION phaseDone {
@@ -467,6 +449,6 @@ GLOBAL FUNCTION phaseDone {
     // On-station ships hold their best solar attitude through
     // DONE (cached axis makes this a quick aim, not a search).
     // PHASE DONE = solar brings the lib along at DONE boots.
-    trySolarOrient().
+    IF PHASES_HAS_SOLAR { orientForSolar(). }
     yieldToPrompt().
 }

@@ -91,7 +91,7 @@ GLOBAL FUNCTION ensureSoiAlarm {
 GLOBAL FUNCTION waitForSOI {
     PARAMETER targetBody.
     PARAMETER pollInterval IS 5.
-    trySolarOrient().
+    IF PHASES_HAS_SOLAR { orientForSolar(). }
     mLog("Waiting for SOI: " + targetBody:NAME).
 
     // Set a KAC alarm at the SOI transition so time warp stops automatically.

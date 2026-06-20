@@ -111,14 +111,6 @@ GLOBAL FUNCTION shipBatteriesCharging {
     RETURN _shipElectricChargeAmount() > startEc + minDelta.
 }
 
-// AMP reserve power aboard (0 when the mod/resource is absent).
-GLOBAL FUNCTION shipReservePower {
-    FOR res IN SHIP:RESOURCES {
-        IF res:NAME = "RESERVEPOWER" { RETURN res:AMOUNT. }
-    }
-    RETURN 0.
-}
-
 // Servo an arbitrary ship-frame axis onto the Sun. The LOCK is
 // self-referential, so it converges like a pointing servo.
 LOCAL FUNCTION _solarAim {
@@ -190,6 +182,14 @@ GLOBAL FUNCTION orientForSolar {
     PARAMETER forceSearch IS FALSE.
     PARAMETER lockSteering IS FALSE.
     PARAMETER overrideLaunchGuard IS FALSE.
+
+    // Surface/pad states have no useful attitude search — bail here
+    // so callers don't each repeat a status guard (this replaces the
+    // status check the old trySolarOrient wrapper carried).
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED"
+            OR SHIP:STATUS = "PRELAUNCH" {
+        RETURN.
+    }
 
     LOCAL guardReason IS _solarSearchGuardReason(overrideLaunchGuard).
     IF guardReason <> "" {
