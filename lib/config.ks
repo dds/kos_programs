@@ -49,6 +49,11 @@ GLOBAL FUNCTION missionProfileWrite {
     PARAMETER cn.
     PARAMETER mid.
     PARAMETER cfg.
+    IF cn = "" {
+        mLogError("missionProfileWrite: empty vehicle name — refusing to "
+            + "write " + mid + " profile to the missions root.").
+        RETURN "".
+    }
     IF NOT EXISTS("1:/missions") { CREATEDIR("1:/missions"). }
     LOCAL dir IS "1:/missions/" + cn.
     IF NOT EXISTS(dir) { CREATEDIR(dir). }

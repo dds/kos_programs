@@ -32,12 +32,6 @@ LOCAL FUNCTION _launchOnSurface {
         OR SHIP:STATUS = "SPLASHED".
 }
 
-LOCAL FUNCTION _launchSolidStageFrac {
-    LOCAL frac IS LAUNCH_SOLID_STAGE_FRAC.
-    IF frac > 1 { SET frac TO frac / 100. }
-    RETURN MAX(0, MIN(1, frac)).
-}
-
 LOCAL FUNCTION _launchSetPhase {
     PARAMETER next.
     LOCAL current IS stateGet("phase", "").
@@ -56,32 +50,6 @@ LOCAL FUNCTION _vacuumLaunchCompletePhase {
         RETURN.
     }
     nextPhase(launchSeq).
-}
-
-LOCAL _stagingArmed IS FALSE.
-LOCAL _noThrustStages IS 0.
-LOCAL _solidStageNumber IS -1.
-LOCAL _solidStagePeak IS 0.
-LOCAL _ascentStageReason IS "".
-LOCAL _ascentStageSolidFrac IS -1.
-
-// One cheap state read per tick for the ascent watcher's WHEN
-// condition (was five) — also a mitigation candidate for the
-// mainline starvation seen during MJ's coast (ANTS stall).
-GLOBAL FUNCTION bootLibAscentWatchPhase {
-    LOCAL ph IS stateGet("phase", "").
-    RETURN ph = "LAUNCH" OR ph = "FAIR" OR ph = "ANTS"
-        OR ph = "PARK" OR ph = "SUBORBIT".
-}
-
-LOCAL FUNCTION _ascentStageAttemptPending {
-    IF NOT _stagingArmed { RETURN FALSE. }
-    IF STAGE:NUMBER <= 0 { RETURN FALSE. }
-    IF _noThrustStages >= 2 { RETURN FALSE. }
-    IF NOT ADDONS:MJ:AVAILABLE { RETURN FALSE. }
-    IF NOT ADDONS:MJ:ASCENT:ENABLED
-            AND NOT bootLibAscentWatchPhase() { RETURN FALSE. }
-    RETURN TRUE.
 }
 
 LOCAL FUNCTION _logAscentTelemetry {
@@ -115,147 +83,12 @@ LOCAL FUNCTION _badAscentTrajectory {
     RETURN SHIP:APOAPSIS < 10000.
 }
 
-LOCAL FUNCTION _launchRunPostStageHook {
-    LOCAL postStageHook IS stateGet("post_stage_hook", ""):TRIM.
-    IF postStageHook <> "" {
-        IF EXISTS(postStageHook) {
-            mLog("Running post-stage hook: " + postStageHook + ".").
-            RUNPATH(postStageHook).
-        } ELSE {
-            mLogWarn("Post-stage hook not found: " + postStageHook + ".").
-        }
-    }
-}
-
-LOCAL FUNCTION _vacuumTargetOrbitalVelocity {
-    LOCAL targetRadius IS SHIP:BODY:RADIUS + PARKING_ALT.
-    RETURN SQRT(SHIP:BODY:MU / targetRadius).
-}
-
-LOCAL FUNCTION _vacuumAscentPitch {
-    PARAMETER targetVel.
-    LOCAL speedFrac IS SHIP:VELOCITY:ORBIT:MAG / MAX(1, targetVel).
-    SET speedFrac TO MAX(0, MIN(1, speedFrac)).
-
-    LOCAL pitch IS 90 * (1 - speedFrac).
-    IF SHIP:VERTICALSPEED < 10 AND SHIP:APOAPSIS < PARKING_ALT * 0.95 {
-        SET pitch TO MAX(pitch, 20).
-    }
-    IF SHIP:VERTICALSPEED < 0 AND SHIP:APOAPSIS < PARKING_ALT {
-        SET pitch TO MAX(pitch, 45).
-    }
-    RETURN MAX(0, MIN(90, pitch)).
-}
-
-LOCAL FUNCTION _logVacuumAscentTelemetry {
-    PARAMETER pitchAngle.
-    mLog("Vacuum ascent: radar="
-        + ROUND(ALT:RADAR, 0) + "m Ap="
-        + ROUND(SHIP:APOAPSIS / 1000, 2) + "km pitch="
-        + ROUND(pitchAngle, 1) + "deg vOrb="
-        + ROUND(SHIP:VELOCITY:ORBIT:MAG, 1) + "m/s.").
-}
-
+// Vacuum (airless) ascent + circularization now lives in ascent.ks
+// so the LAUNCH band does not load the maneuver-node executor. This
+// remains the LAUNCH-phase entry for airless bodies; it drives the
+// ascent then advances the phase.
 GLOBAL FUNCTION phaseVacuumLaunch {
-    IF _launchHasAtmosphere() {
-        mLogError("phaseVacuumLaunch called on an atmospheric body; refusing.").
-        RETURN.
-    }
-
-    LOCAL clearAlt IS 150.
-    LOCAL targetVel IS _vacuumTargetOrbitalVelocity().
-    LOCAL nextTelemetry IS TIME:SECONDS.
-
-    mLog("Vacuum ascent armed. Alt=" + ROUND(PARKING_ALT / 1000, 1)
-        + "km inc=" + LAUNCH_INCLINATION
-        + " deg az=" + LAUNCH_AZIMUTH
-        + " deg targetV=" + ROUND(targetVel, 1) + "m/s.").
-
-    IF NOT _launchOnSurface() {
-        mLogWarn("Vacuum LAUNCH entered while already " + SHIP:STATUS
-            + "; resuming ascent guidance.").
-        IF stateGetNum("launch_time", 0) = 0 {
-            stateSet("launch_time", TIME:SECONDS).
-        }
-        armAscentStaging().
-    } ELSE {
-        stateSet("launch_time", TIME:SECONDS).
-        stateSet("launch_site_lat", SHIP:GEOPOSITION:LAT).
-        stateSet("launch_site_lng", SHIP:GEOPOSITION:LNG).
-        stateSet("launch_vs_nonpos_logged", "false").
-
-        LOCK THROTTLE TO 0.
-        LOCK STEERING TO SHIP:UP:VECTOR.
-        mLog("Press ABORT within 5s to hold launch.").
-        HUDTEXT("T-5: ABORT to hold", 5, 2, 16, YELLOW, FALSE).
-        LOCAL tEnd IS TIME:SECONDS + 5.
-        WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT.
-        IF ABORT {
-            mLog("Launch hold — operator abort.").
-            LOCK THROTTLE TO 0.
-            UNLOCK THROTTLE.
-            UNLOCK STEERING.
-            RETURN.
-        }
-        countdown(3).
-
-        IF ABORT OR stateGet("phase", "") = "ABORT" {
-            mLogWarn("Vacuum launch countdown interrupted by abort.").
-            LOCK THROTTLE TO 0.
-            UNLOCK THROTTLE.
-            UNLOCK STEERING.
-            RETURN.
-        }
-
-        STAGE.
-        mLog("Vacuum launch — STAGE fired.").
-        HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
-        WAIT 0.5.
-        _launchRunPostStageHook().
-        armAscentStaging().
-    }
-
-    LOCK STEERING TO SHIP:UP:VECTOR.
-    LOCK THROTTLE TO 1.0.
-    mLog("Vacuum ascent clearing terrain to " + clearAlt + "m AGL.").
-    UNTIL ALT:RADAR > clearAlt OR SHIP:APOAPSIS >= PARKING_ALT OR ABORT {
-        IF TIME:SECONDS >= nextTelemetry {
-            _logVacuumAscentTelemetry(90).
-            SET nextTelemetry TO TIME:SECONDS + 5.
-        }
-        WAIT 0.1.
-    }
-
-    LOCAL currentPitch IS 90.
-    UNTIL SHIP:APOAPSIS >= PARKING_ALT OR ABORT {
-        SET currentPitch TO _vacuumAscentPitch(targetVel).
-        LOCK STEERING TO HEADING(LAUNCH_AZIMUTH, currentPitch).
-        IF TIME:SECONDS >= nextTelemetry {
-            _logVacuumAscentTelemetry(currentPitch).
-            SET nextTelemetry TO TIME:SECONDS + 5.
-        }
-        WAIT 0.1.
-    }
-
-    LOCK THROTTLE TO 0.
-    IF ABORT {
-        mLogWarn("Vacuum ascent aborted; holding launch phase.").
-        UNLOCK THROTTLE.
-        RETURN.
-    }
-
-    mLog("Vacuum ascent cutoff: Ap="
-        + ROUND(SHIP:APOAPSIS / 1000, 2) + "km, planning circularization.").
-    HUDTEXT("Vacuum ascent cutoff", 3, 2, 15, GREEN, FALSE).
-    UNLOCK THROTTLE.
-    UNLOCK STEERING.
-
-    planCircularize().
-    LOCAL success IS executeManeuver().
-    IF NOT success {
-        mLogWarn("Vacuum circularization did not complete; remaining in LAUNCH.").
-        RETURN.
-    }
+    IF NOT ascentAirlessToOrbit() { RETURN. }
     _vacuumLaunchCompletePhase().
 }
 
@@ -323,7 +156,7 @@ GLOBAL FUNCTION phaseLaunch {
         IF stateGet("phase","") <> "SUBORBIT"
                 AND SHIP:MAXTHRUST = 0 AND _launchAge() > 60
                 AND SHIP:STATUS = "SUB_ORBITAL"
-                AND NOT _ascentStageAttemptPending()
+                AND NOT ascentStageAttemptPending()
                 AND SHIP:PERIAPSIS < SHIP:BODY:ATM:HEIGHT {
             SET abortTriggered TO TRUE.
             mLogError("Abort: thrust exhausted before orbit (Pe "
@@ -387,7 +220,7 @@ GLOBAL FUNCTION phaseLaunch {
     mLog("Launch — STAGE fired.").
     HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
     WAIT 0.5.
-    _launchRunPostStageHook().
+    ascentRunPostStageHook().
 
     armAscentStaging().
 
@@ -575,91 +408,6 @@ GLOBAL FUNCTION phaseParking {
 
 // ── Staging ──────────────────────────────────────────────────
 
-GLOBAL FUNCTION armAscentStaging {
-    IF _stagingArmed { RETURN. }
-    SET _stagingArmed TO TRUE.
-
-    WHEN ascentNeedsStage() THEN {
-        LOCAL ph IS stateGet("phase","").
-        IF ph = "DONE" OR ph = "ABORT" { RETURN. }
-        // Null-safety order matters — flight-found: an
-        // out-of-fuel final staging during PARK was followed by
-        // 'object reference not set' (MJ suffixes can throw once
-        // the unit's stage is gone) and, with no engines left,
-        // needs-stage stays true forever and would machine-gun
-        // STAGE through chute/decoupler stages.
-        IF STAGE:NUMBER <= 0 { RETURN. }
-        // Allow staging during any ascent phase even if MJ2 dropped
-        // out mid-circularization (e.g. methane booster may burn past
-        // the gravity turn all the way to near-orbit; MJ2 disables
-        // itself when it detects no thrust, but we still need to
-        // separate the spent stage and ignite the upper stage).
-        IF NOT bootLibAscentWatchPhase() { RETURN. }
-        IF _noThrustStages >= 2 {
-            mLogError("Two stagings without thrust — no engines"
-                + " left; disarming ascent staging.").
-            RETURN.
-        }
-        LOCAL reason IS _ascentStageReason.
-        IF reason = "" { SET reason TO "needs-stage". }
-        LOCAL solidDetail IS "".
-        IF _ascentStageSolidFrac >= 0 {
-            SET solidDetail TO " solid="
-                + ROUND(_ascentStageSolidFrac * 100, 1) + "%".
-        }
-        mLog("Ascent auto-stage (" + reason + solidDetail + ") at alt="
-            + ROUND(SHIP:ALTITUDE/1000,1) + "km.").
-        HUDTEXT("Staging!", 2, 2, 14, YELLOW, FALSE).
-        STAGE.
-        SET _solidStageNumber TO -1.
-        SET _solidStagePeak TO 0.
-        SET _ascentStageReason TO "".
-        SET _ascentStageSolidFrac TO -1.
-        WAIT 0.5.
-        IF SHIP:MAXTHRUST > 0 {
-            SET _noThrustStages TO 0.
-            // MJ2 may have disabled itself when the booster flamed
-            // out — re-enable so it finishes the circularization with
-            // the freshly-ignited upper stage.
-            IF _launchHasAtmosphere()
-                    AND ADDONS:MJ:AVAILABLE
-                    AND NOT ADDONS:MJ:ASCENT:ENABLED
-                    AND bootLibAscentWatchPhase() {
-                SET ADDONS:MJ:ASCENT:ENABLED TO TRUE.
-                mLog("MJ2 ascent re-enabled after mid-circ staging.").
-            }
-        } ELSE {
-            SET _noThrustStages TO _noThrustStages + 1.
-        }
-        PRESERVE.
-    }
-
-    IF RECOVERY_PE >= 0 {
-        WHEN SHIP:PERIAPSIS >= RECOVERY_PE
-                AND ADDONS:MJ:AVAILABLE AND ADDONS:MJ:ASCENT:ENABLED THEN {
-            mLog("Recovery staging: Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + "km, ejecting stage.").
-            HUDTEXT("Recovery staging!", 3, 2, 14, YELLOW, FALSE).
-            SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
-            LOCK THROTTLE TO 0.
-            WAIT 0.3.
-            STAGE.
-            WAIT 0.5.
-            mLog("Ascent complete post-staging, raising Pe now.").
-            LOCK STEERING TO SHIP:PROGRADE.
-            LOCK THROTTLE TO 1.
-            WAIT UNTIL SHIP:PERIAPSIS >= PARKING_ALT * 0.95.
-            LOCK THROTTLE TO 0.
-            UNLOCK THROTTLE.
-            UNLOCK STEERING.
-            SET SAS TO TRUE.
-            orbitSummary().
-            stateSet("phase", "PARK").
-        }
-    }
-
-    mLog("Ascent staging armed.").
-}
-
 // ── Private helpers ──────────────────────────────────────────
 
 // ── Abort mode ───────────────────────────────────────────────
@@ -675,46 +423,6 @@ GLOBAL FUNCTION launchAbort {
     ABORT ON.
     stateSet("phase", "ABORT").
     REBOOT.
-}
-
-GLOBAL FUNCTION ascentNeedsStage {
-    SET _ascentStageReason TO "".
-    SET _ascentStageSolidFrac TO -1.
-
-    LOCAL stageNum IS STAGE:NUMBER.
-    IF stageNum <> _solidStageNumber {
-        SET _solidStageNumber TO stageNum.
-        SET _solidStagePeak TO 0.
-    }
-
-    LOCAL solidStageFrac IS _launchSolidStageFrac().
-    IF solidStageFrac > 0 {
-        LOCAL solidFuel IS STAGE:SOLIDFUEL.
-        IF solidFuel > _solidStagePeak {
-            SET _solidStagePeak TO solidFuel.
-        }
-        IF _solidStagePeak > 0 {
-            SET _ascentStageSolidFrac TO solidFuel / _solidStagePeak.
-            IF solidFuel <= _solidStagePeak * solidStageFrac {
-                SET _ascentStageReason TO "solid-fuel-low".
-                RETURN TRUE.
-            }
-        }
-    }
-
-    LOCAL engs IS LIST().
-    LIST ENGINES IN engs.
-    FOR eng IN engs {
-        IF eng:FLAMEOUT {
-            SET _ascentStageReason TO "flameout".
-            RETURN TRUE.
-        }
-    }
-    IF SHIP:MAXTHRUST = 0 {
-        SET _ascentStageReason TO "no-max-thrust".
-        RETURN TRUE.
-    }
-    RETURN FALSE.
 }
 
 LOCAL FUNCTION _isParkingOrbitStable {
