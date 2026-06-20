@@ -89,13 +89,34 @@ LOCAL FUNCTION _odPlotOrbit {
     }
 }
 
+LOCAL FUNCTION _odFinite {
+    PARAMETER v.
+    RETURN (v = v) AND ABS(v) < 1e30.
+}
+
+LOCAL FUNCTION _odSoiCap {
+    IF NOT SHIP:BODY:HASBODY { RETURN 0. }
+    LOCAL soi IS SHIP:BODY:SOIRADIUS.
+    IF _odFinite(soi) { RETURN soi. }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _odSemiLatus {
+    PARAMETER o.
+    IF o:ECCENTRICITY < 1 {
+        RETURN o:SEMIMAJORAXIS * (1 - o:ECCENTRICITY ^ 2).
+    }
+    RETURN MAX(1, SHIP:BODY:RADIUS + o:PERIAPSIS) * (1 + o:ECCENTRICITY).
+}
+
 // Largest radius an orbit reaches, capped at the SOI edge.
 LOCAL FUNCTION _odMaxR {
     PARAMETER o.
     IF o:ECCENTRICITY < 1 {
         RETURN o:SEMIMAJORAXIS * (1 + o:ECCENTRICITY).
     }
-    RETURN SHIP:BODY:SOIRADIUS.
+    LOCAL p IS _odSemiLatus(o).
+    RETURN MAX(SHIP:BODY:RADIUS * 10, p * 2).
 }
 
 GLOBAL FUNCTION orbitDrawBurn {
@@ -112,13 +133,14 @@ GLOBAL FUNCTION orbitDrawBurn {
         - (o1:LAN + o1:ARGUMENTOFPERIAPSIS).
 
     LOCAL rMax IS MAX(bodyR * 1.3, MAX(_odMaxR(o1), _odMaxR(o2))).
-    SET rMax TO MIN(rMax, SHIP:BODY:SOIRADIUS).
+    LOCAL soiCap IS _odSoiCap().
+    IF soiCap > 0 { SET rMax TO MIN(rMax, soiCap). }
     LOCAL scale IS MIN((w / 2 - 1) / rMax, (h - 2) / rMax).
 
     LOCAL grid IS _odGrid(w, h).
 
-    LOCAL p1 IS o1:SEMIMAJORAXIS * (1 - o1:ECCENTRICITY ^ 2).
-    LOCAL p2 IS o2:SEMIMAJORAXIS * (1 - o2:ECCENTRICITY ^ 2).
+    LOCAL p1 IS _odSemiLatus(o1).
+    LOCAL p2 IS _odSemiLatus(o2).
     _odPlotOrbit(grid, w, h, scale, p1, o1:ECCENTRICITY, 0, ".").
     _odPlotOrbit(grid, w, h, scale, p2, o2:ECCENTRICITY, rot2, "o").
 
