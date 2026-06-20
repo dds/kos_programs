@@ -205,21 +205,27 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL burnCompleteReason IS "normal".
     LOCAL appliedDv IS 0.
     LOCAL lastDvTime IS TIME:SECONDS.
+    LOCAL prevVel IS SHIP:VELOCITY:ORBIT.
     LOCAL lastNodeRem IS nd:DELTAV:MAG.
     LOCAL nodeUnstableLogged IS FALSE.
 
     UNTIL burnDone OR burnAbort <> "" {
         LOCAL now IS TIME:SECONDS.
-        LOCAL maNow IS _sma().
         LOCAL dt IS MAX(0, now - lastDvTime).
-        IF throttleCmd > 0 AND maNow > 0 AND dt > 0 {
-            SET appliedDv TO appliedDv + throttleCmd * maNow * dt.
+        LOCAL curVel IS SHIP:VELOCITY:ORBIT.
+        IF throttleCmd > 0 AND dt > 0 {
+            LOCAL thrustDvVec IS curVel - prevVel - (_gacc() * dt).
+            LOCAL stepDv IS VDOT(thrustDvVec, steerVec:NORMALIZED).
+            IF stepDv > 0 {
+                SET appliedDv TO appliedDv + stepDv.
+            }
         }
         SET lastDvTime TO now.
+        SET prevVel TO curVel.
         LOCAL remNow IS nd:DELTAV:MAG.
         LOCAL intRem IS MAX(0, bdv - appliedDv).
         LOCAL avNow IS SHIP:ANGULARVEL:MAG.
-        IF appliedDv >= bdv {
+        IF fixedBurnVector AND appliedDv >= bdv {
             SET burnCompleteReason TO "integrated-target".
             mLogWarn("Burn integrated target reached: applied="
                 + ROUND(appliedDv, 2)
@@ -227,10 +233,19 @@ GLOBAL FUNCTION executeManeuver {
             SET burnDone TO TRUE.
             BREAK.
         }
-        IF _tc(intRem, bdv) {
+        IF fixedBurnVector AND _tc(intRem, bdv) {
             SET burnCompleteReason TO "integrated-trim-low-residual".
             mLogWarn("Burn integrated trim complete: remaining="
                 + ROUND(intRem, 2)
+                + " m/s applied=" + ROUND(appliedDv, 2)
+                + " of " + ROUND(bdv, 1) + " m/s.").
+            SET burnDone TO TRUE.
+            BREAK.
+        }
+        IF NOT fixedBurnVector AND _tc(remNow, bdv) {
+            SET burnCompleteReason TO "node-trim-low-residual".
+            mLogWarn("Burn node trim complete: remaining="
+                + ROUND(remNow, 2)
                 + " m/s applied=" + ROUND(appliedDv, 2)
                 + " of " + ROUND(bdv, 1) + " m/s.").
             SET burnDone TO TRUE.
@@ -371,7 +386,7 @@ GLOBAL FUNCTION executeManeuver {
                         BREAK.
                     }
                 }
-                IF appliedDv >= bdv {
+                IF fixedBurnVector AND appliedDv >= bdv {
                     SET burnCompleteReason TO "integrated-target".
                     mLogWarn("Burn integrated target reached while paused: applied="
                         + ROUND(appliedDv, 2)
@@ -380,10 +395,20 @@ GLOBAL FUNCTION executeManeuver {
                     SET reacquired TO TRUE.
                     BREAK.
                 }
-                IF _tc(intRem, bdv) {
+                IF fixedBurnVector AND _tc(intRem, bdv) {
                     SET burnCompleteReason TO "integrated-trim-low-residual".
                     mLogWarn("Burn integrated trim complete while paused: remaining="
                         + ROUND(intRem, 2)
+                        + " m/s applied=" + ROUND(appliedDv, 2)
+                        + " of " + ROUND(bdv, 1) + " m/s.").
+                    SET burnDone TO TRUE.
+                    SET reacquired TO TRUE.
+                    BREAK.
+                }
+                IF NOT fixedBurnVector AND _tc(remNow, bdv) {
+                    SET burnCompleteReason TO "node-trim-low-residual".
+                    mLogWarn("Burn node trim complete while paused: remaining="
+                        + ROUND(remNow, 2)
                         + " m/s applied=" + ROUND(appliedDv, 2)
                         + " of " + ROUND(bdv, 1) + " m/s.").
                     SET burnDone TO TRUE.
@@ -492,6 +517,7 @@ GLOBAL FUNCTION executeManeuver {
 
             SET totalPaused TO totalPaused + (TIME:SECONDS - pauseStart).
             SET lastDvTime TO TIME:SECONDS.
+            SET prevVel TO SHIP:VELOCITY:ORBIT.
             SET alignOverStart TO -1.
             IF burnDone {
                 stateRemove("burn_pause_reason").
@@ -519,9 +545,13 @@ GLOBAL FUNCTION executeManeuver {
             STAGE.
             WAIT 0.7.
             SET lastDvTime TO TIME:SECONDS.
+            SET prevVel TO SHIP:VELOCITY:ORBIT.
         }
 
-        LOCAL rem IS MAX(0, bdv - appliedDv).
+        LOCAL rem IS remNow.
+        IF fixedBurnVector {
+            SET rem TO MAX(0, bdv - appliedDv).
+        }
         LOCAL ma    IS _sma().
         LOCAL dc IS 1.
         IF NOT fixedBurnVector {
@@ -693,6 +723,12 @@ LOCAL FUNCTION _cst {
 LOCAL FUNCTION _sma {
     IF SHIP:MASS <= 0 { RETURN 0. }
     RETURN SHIP:AVAILABLETHRUST / SHIP:MASS.
+}
+
+LOCAL FUNCTION _gacc {
+    LOCAL r IS SHIP:POSITION:MAG.
+    IF r <= 0 { RETURN V(0, 0, 0). }
+    RETURN -SHIP:POSITION:NORMALIZED * (SHIP:BODY:MU / (r * r)).
 }
 
 LOCAL FUNCTION _nf {
