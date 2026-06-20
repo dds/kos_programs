@@ -55,6 +55,8 @@ GLOBAL FUNCTION ensureSoiAlarm {
 
     IF NOT ADDONS:KAC:AVAILABLE { RETURN "". }
     IF soiUt <= TIME:SECONDS { RETURN "". }
+    LOCAL alarmName IS "SOI: " + targetBody:NAME.
+    LOCAL fullName IS kacShipAlarmName(alarmName).
 
     LOCAL oldTarget IS stateGet("soi_alarm_target", "").
     LOCAL oldUt IS stateGetNum("soi_alarm_ut", 0).
@@ -62,20 +64,28 @@ GLOBAL FUNCTION ensureSoiAlarm {
 
     IF oldTarget = targetBody:NAME AND oldId <> ""
             AND ABS(oldUt - soiUt) < 60 {
-        mLog("KAC SOI alarm already set for " + targetBody:NAME
-            + " in " + ROUND(soiUt - TIME:SECONDS, 0) + "s.").
-        RETURN oldId.
+        LOCAL alarms IS LISTALARMS("All").
+        FOR a IN alarms {
+            IF a:ID = oldId {
+                IF a:NAME = fullName {
+                    mLog("KAC SOI alarm already set for " + targetBody:NAME
+                        + " in " + ROUND(soiUt - TIME:SECONDS, 0) + "s.").
+                    RETURN oldId.
+                }
+                DELETEALARM(oldId).
+                SET oldId TO "".
+            }
+        }
     }
 
     IF oldId <> "" { DELETEALARM(oldId). }
-    LOCAL alm IS ADDALARM("Raw", soiUt, "SOI: " + targetBody:NAME, msg).
-    SET alm:ACTION TO "KillWarp".
-    stateSet("soi_alarm_id", alm:ID).
+    LOCAL alarmId IS kacEnsureAlarm(alarmName, soiUt, msg).
     stateSet("soi_alarm_target", targetBody:NAME).
     stateSet("soi_alarm_ut", soiUt).
+    stateSet("soi_alarm_id", alarmId).
     mLog("KAC alarm set for SOI transition in "
         + ROUND(soiUt - TIME:SECONDS, 0) + "s.").
-    RETURN alm:ID.
+    RETURN alarmId.
 }
 
 GLOBAL FUNCTION waitForSOI {

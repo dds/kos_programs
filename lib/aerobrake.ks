@@ -101,10 +101,10 @@ LOCAL FUNCTION _aerobrakeSetEntryAlarm {
     }
     SET entryUt TO MAX(entryUt, TIME:SECONDS + 30).
 
-    LOCAL alm IS ADDALARM("Raw", entryUt, "Atmo entry: " + SHIP:BODY:NAME,
+    LOCAL alarmId IS kacEnsureAlarm("Atmo entry: " + SHIP:BODY:NAME,
+        entryUt,
         "Atmosphere at " + ROUND(atmAlt/1000, 0) + "km").
-    IF alm <> 0 {
-        SET alm:ACTION TO "KillWarp".
+    IF alarmId <> "" {
         mLog("KAC alarm set for atmosphere entry in "
             + ROUND(entryUt - TIME:SECONDS, 0) + "s"
             + " (" + SHIP:BODY:NAME + " atmo=" + ROUND(atmAlt/1000, 0) + "km).").

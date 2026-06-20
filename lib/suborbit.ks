@@ -162,7 +162,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
             IF ADDONS:KAC:AVAILABLE AND liveEta > 70
                     AND ABS(newUt - alarmUt) > 45 {
                 SET alarmId TO kacEnsureAlarm(
-                    "Deorbit burn: " + SHIP:NAME, newUt,
+                    "Deorbit burn", newUt,
                     "Auto-created by SUBORBIT").
                 SET alarmUt TO newUt.
             }

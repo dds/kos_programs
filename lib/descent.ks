@@ -101,7 +101,7 @@ LOCAL FUNCTION _descentWaitForRadius {
     LOCAL alarmId IS "".
     LOCAL eta_ IS _descentEtaToRadius(rTarget).
     IF ADDONS:KAC:AVAILABLE AND eta_ > 180 {
-        SET alarmId TO kacEnsureAlarm(label + ": " + SHIP:NAME,
+        SET alarmId TO kacEnsureAlarm(label,
             TIME:SECONDS + eta_ - 120, "Auto-created by phaseDescent").
         mLog("KAC alarm set for " + label + " in "
             + ROUND(eta_ - 120, 0) + "s.").

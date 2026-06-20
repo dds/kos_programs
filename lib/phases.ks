@@ -216,6 +216,11 @@ GLOBAL FUNCTION archivePhaseLog {
 // during orbit stays (EVA_BIOMES announcements become HUD-only).
 // Mission-critical warp stops — burn windows, alarms, reentry —
 // are always unconditional.
+GLOBAL FUNCTION kacShipAlarmName {
+    PARAMETER almName.
+    RETURN SHIP:NAME + ": " + almName.
+}
+
 // Reboot-safe KAC alarm: reuse a same-name alarm if its time is
 // already right, replace it if stale, create it otherwise —
 // phase re-entry after a reboot must not mint duplicates
@@ -225,14 +230,15 @@ GLOBAL FUNCTION kacEnsureAlarm {
     PARAMETER almUt.
     PARAMETER almNote.
     IF NOT ADDONS:KAC:AVAILABLE { RETURN "". }
+    LOCAL fullName IS kacShipAlarmName(almName).
     LOCAL alarms IS LISTALARMS("All").
     FOR a IN alarms {
-        IF a:NAME = almName {
+        IF a:NAME = fullName {
             IF ABS(a:TIME - almUt) < 60 { RETURN a:ID. }
             DELETEALARM(a:ID).
         }
     }
-    LOCAL alm IS ADDALARM("Raw", almUt, almName, almNote).
+    LOCAL alm IS ADDALARM("Raw", almUt, fullName, almNote).
     SET alm:ACTION TO "KillWarp".
     RETURN alm:ID.
 }
@@ -244,7 +250,7 @@ GLOBAL FUNCTION maneuverEnsureBurnAlarm {
     PARAMETER leadSeconds IS 60.
     LOCAL alarmUt IS burnStartUt - leadSeconds.
     IF alarmUt <= TIME:SECONDS { RETURN "". }
-    LOCAL alarmId IS kacEnsureAlarm(label + ": " + SHIP:NAME,
+    LOCAL alarmId IS kacEnsureAlarm(label,
         alarmUt,
         "dV " + ROUND(burnDv,1) + "m/s. Auto-created by maneuver planner.").
     IF alarmId <> "" {
@@ -333,7 +339,7 @@ GLOBAL FUNCTION coastEnsureHealthAlarm {
     PARAMETER label IS "Coast health".
 
     IF healthUt <= TIME:SECONDS { RETURN "". }
-    LOCAL alarmId IS kacEnsureAlarm(label + ": " + SHIP:NAME,
+    LOCAL alarmId IS kacEnsureAlarm(label,
         healthUt,
         "Auto-created by coast health check.").
     IF alarmId <> "" {

@@ -279,7 +279,7 @@ LOCAL FUNCTION _waitForPrelaunchUt {
     LOCAL kacAlarmId IS "".
     LOCAL alarmUt IS targetUt - 30.
     IF alarmUt > TIME:SECONDS {
-        SET kacAlarmId TO kacEnsureAlarm("Prelaunch window: " + SHIP:NAME,
+        SET kacAlarmId TO kacEnsureAlarm("Prelaunch window",
             alarmUt,
             "Auto-created by PRELAUNCH. Fly safe.").
         IF kacAlarmId <> "" {
