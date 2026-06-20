@@ -46,6 +46,7 @@
 //   BPLANE_PE_TOL  — PE tolerance in m (default 2000)
 //   BPLANE_ANG_TOL — plane tolerance in deg (default 0.5)
 //   BPLANE_LEAD    — seconds from now to the burn (default 300)
+//   BPLANE_EXISTING_NODE_MIN_ETA — min ETA to reuse a B-plane node
 //   BPLANE_OFFPLANE_TOL — max feasible plane/asymptote tilt (default 10)
 //   BPLANE_SAFE_HANDOFF_SOI_MULT — Pe/SOI accepted on no-correction handoff
 //   REFINE_BPLANE_DV_CAP    — max dV per refinement burn (default 10)
@@ -64,6 +65,7 @@ GLOBAL BPLANE_DV_CAP IS 60.
 GLOBAL BPLANE_PE_TOL IS 2000.
 GLOBAL BPLANE_ANG_TOL IS 0.2.
 GLOBAL BPLANE_LEAD IS 300.
+GLOBAL BPLANE_EXISTING_NODE_MIN_ETA IS 60.
 GLOBAL BPLANE_TARGET IS "".
 GLOBAL BPLANE_OFFPLANE_TOL IS 10.
 GLOBAL BPLANE_SAFE_HANDOFF_SOI_MULT IS 1.0.
@@ -745,6 +747,58 @@ LOCAL FUNCTION _bplaneWantInc {
     RETURN wantInc.
 }
 
+LOCAL FUNCTION _bplaneExistingNodeAcceptable {
+    PARAMETER targetBody.
+    PARAMETER wantPe.
+    PARAMETER wantInc.
+    PARAMETER wantLan.
+
+    IF NOT HASNODE { RETURN FALSE. }
+
+    LOCAL nd IS NEXTNODE.
+    mLogWarn("STATS bplane resume existing-node dv="
+        + ROUND(nd:DELTAV:MAG, 2)
+        + " eta=" + ROUND(nd:ETA, 1)
+        + " body=" + SHIP:BODY:NAME).
+
+    IF nd:ETA < BPLANE_EXISTING_NODE_MIN_ETA {
+        mLogWarn("BPLANE: existing node is too close for automatic reuse (ETA="
+            + ROUND(nd:ETA, 1) + "s; min="
+            + ROUND(BPLANE_EXISTING_NODE_MIN_ETA, 1) + "s).").
+        RETURN FALSE.
+    }
+
+    IF nd:DELTAV:MAG < MIN_EXEC_DV {
+        mLogWarn("BPLANE: existing node dV is below execution threshold; replanning.").
+        RETURN FALSE.
+    }
+
+    bplaneResetWarnings().
+    LOCAL meas IS measureArrival(nd, targetBody).
+    IF meas = 0 {
+        mLogWarn("BPLANE: existing node does not produce a measurable "
+            + targetBody:NAME + " arrival; replanning.").
+        RETURN FALSE.
+    }
+
+    LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
+    mLogWarn("STATS bplane existing-node target=" + targetBody:NAME
+        + " dv=" + ROUND(nd:DELTAV:MAG, 2)
+        + " eta=" + ROUND(nd:ETA, 1)
+        + " PeKm=" + ROUND(meas["pe"] / 1000, 1)
+        + " planeErr=" + ROUND(err["planeErr"], 2)
+        + " wantPeKm=" + ROUND(wantPe / 1000, 1)).
+
+    IF _bplaneCorridorOk(err, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) {
+        mLog("BPLANE: reusing existing correction node; arrival is already "
+            + "inside corridor.").
+        RETURN TRUE.
+    }
+
+    mLogWarn("BPLANE: existing correction node misses requested corridor; replanning.").
+    RETURN FALSE.
+}
+
 // ============================================================
 // phaseBplane — phase handler. Resolves the arrival body and
 // requested capture elements from globals/state, then runs up to
@@ -799,8 +853,13 @@ GLOBAL FUNCTION phaseBplane {
 
     LOCAL burns IS 0.
     UNTIL burns >= MAX_BURNS {
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-        LOCAL nd IS planBplaneCorrection(targetBody, wantPe, wantInc, wantLan).
+        LOCAL nd IS 0.
+        IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan) {
+            SET nd TO NEXTNODE.
+        } ELSE {
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            SET nd TO planBplaneCorrection(targetBody, wantPe, wantInc, wantLan).
+        }
         IF nd = 0 { BREAK. }
         SET burns TO burns + 1.
         IF NOT executeManeuver() {
@@ -889,16 +948,21 @@ GLOBAL FUNCTION phaseRefineBplane {
         LOCAL errLoop IS _bplaneCorridorError(targetBody, measLoop, wantPe, wantInc, wantLan).
         IF _bplaneCorridorOk(errLoop, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) { BREAK. }
 
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-        mLog("REFINE_BPLANE: refining arrival with dV cap "
-            + dvCap + " m/s.").
-        LOCAL nd IS planBplaneCorrection(
-            targetBody,
-            wantPe,
-            wantInc,
-            wantLan,
-            dvCap,
-            "Trajectory pristine, skipping refinement burn.").
+        LOCAL nd IS 0.
+        IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan) {
+            SET nd TO NEXTNODE.
+        } ELSE {
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            mLog("REFINE_BPLANE: refining arrival with dV cap "
+                + dvCap + " m/s.").
+            SET nd TO planBplaneCorrection(
+                targetBody,
+                wantPe,
+                wantInc,
+                wantLan,
+                dvCap,
+                "Trajectory pristine, skipping refinement burn.").
+        }
 
         IF nd = 0 { BREAK. }
         SET burns TO burns + 1.
