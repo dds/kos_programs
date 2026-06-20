@@ -149,6 +149,24 @@ LOCAL FUNCTION _timeMidcourseUt {
     PARAMETER tStart.
     PARAMETER tArrival.
 
+    // Stable check-in: the trajectory-refinement waypoint must not
+    // drift on reboot / ship-switch. Once anchored for this arrival,
+    // reuse the persisted UT; only the first COAST_1HALF entry sets it
+    // (off tStart=now). If we rebooted past it, refine now rather than
+    // re-slipping the point even later. (Health-check ALARMS stay
+    // dynamic by design — only refinement timing is frozen here.)
+    LOCAL storedUt IS stateGetNum("midcourse_refine_ut", 0).
+    LOCAL storedArrival IS stateGetNum("midcourse_refine_arrival_ut", 0).
+    IF storedUt > 0 AND ABS(storedArrival - tArrival) < 1 {
+        IF storedUt > TIME:SECONDS {
+            mLog("COAST_1HALF: reusing persisted refine point T+"
+                + ROUND(storedUt - TIME:SECONDS, 0) + "s.").
+            RETURN storedUt.
+        }
+        mLog("COAST_1HALF: persisted refine point already passed; refining now.").
+        RETURN TIME:SECONDS.
+    }
+
     LOCAL frac IS MIDCOURSE_REFINE_FRACTION.
     SET frac TO MAX(0.05, MIN(0.95, frac)).
 
@@ -176,6 +194,7 @@ LOCAL FUNCTION _timeMidcourseUt {
     stateSet("midcourse_refine_method", "TIME").
     stateSet("midcourse_refine_fraction", frac).
     stateSet("midcourse_refine_arrival_ut", tArrival).
+    stateSet("midcourse_refine_ut", refineUt).
     FOR key IN LIST("midcourse_refine_distance",
             "midcourse_refine_start_distance") {
         stateRemove(key).
@@ -209,7 +228,6 @@ GLOBAL FUNCTION phaseCoast1Half {
 
     LOCAL tStart IS TIME:SECONDS.
     LOCAL tMidpoint IS _timeMidcourseUt(tStart, tArrival).
-    stateSet("midcourse_refine_ut", tMidpoint).
 
     mLog("Coasting to mid-course refinement at T+"
         + ROUND(tMidpoint - TIME:SECONDS, 0) + "s.").
