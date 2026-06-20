@@ -5,6 +5,10 @@
 // Config is executable KerboScript: mission profiles and craft
 // scripts SET global variables, and libraries read those globals
 // directly. Defaults live in the files that own the behavior.
+
+@CLOBBERBUILTINS ON.
+@LAZYGLOBAL OFF.
+
 // ============================================================
 GLOBAL FUNCTION configLiteral {
     PARAMETER raw.
