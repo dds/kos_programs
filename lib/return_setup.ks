@@ -26,52 +26,40 @@ LOCAL FUNCTION _returnSetupClearLibCache {
     }
 }
 
-LOCAL FUNCTION _returnSetupCfg {
+LOCAL FUNCTION _coastAutomationInto {
+    PARAMETER cfg.
+    SET cfg["KEEP_WARP"] TO KEEP_WARP.
+    SET cfg["COAST_AUTO_WARP"] TO COAST_AUTO_WARP.
+    SET cfg["COAST_AUTO_WARP_MIN"] TO COAST_AUTO_WARP_MIN.
+    SET cfg["COAST_HIBERNATE"] TO COAST_HIBERNATE.
+    SET cfg["COAST_HIBERNATE_MIN"] TO COAST_HIBERNATE_MIN.
+    SET cfg["COAST_WARP_5M_LIMIT"] TO COAST_WARP_5M_LIMIT.
+    SET cfg["COAST_WARP_1H_LIMIT"] TO COAST_WARP_1H_LIMIT.
+    SET cfg["COAST_WARP_5H_LIMIT"] TO COAST_WARP_5H_LIMIT.
+    SET cfg["COAST_WARP_3D_LIMIT"] TO COAST_WARP_3D_LIMIT.
+    SET cfg["COAST_WARP_10D_LIMIT"] TO COAST_WARP_10D_LIMIT.
+    SET cfg["COAST_WARP_50D_LIMIT"] TO COAST_WARP_50D_LIMIT.
+    SET cfg["COAST_WARP_MAX_RATE"] TO COAST_WARP_MAX_RATE.
+}
+
+LOCAL FUNCTION _optionalTagInto {
+    PARAMETER cfg.
     PARAMETER key.
     PARAMETER value.
-    stateSet("mission_cfg_" + key, value).
+    IF value <> "" { SET cfg[key] TO value. }
 }
 
-LOCAL FUNCTION _returnSetupRemoveCfg {
-    PARAMETER key.
-    stateRemove("mission_cfg_" + key).
-}
-
-LOCAL FUNCTION _returnSetupOptionalTag {
-    PARAMETER key.
-    PARAMETER value.
-    IF value <> "" {
-        _returnSetupCfg(key, value).
-    } ELSE {
-        _returnSetupRemoveCfg(key).
-    }
-}
-
-LOCAL FUNCTION _returnSetupCoastAutomationCfg {
-    _returnSetupCfg("KEEP_WARP", KEEP_WARP).
-    _returnSetupCfg("COAST_AUTO_WARP", COAST_AUTO_WARP).
-    _returnSetupCfg("COAST_AUTO_WARP_MIN", COAST_AUTO_WARP_MIN).
-    _returnSetupCfg("COAST_HIBERNATE", COAST_HIBERNATE).
-    _returnSetupCfg("COAST_HIBERNATE_MIN", COAST_HIBERNATE_MIN).
-    _returnSetupCfg("COAST_WARP_5M_LIMIT", COAST_WARP_5M_LIMIT).
-    _returnSetupCfg("COAST_WARP_1H_LIMIT", COAST_WARP_1H_LIMIT).
-    _returnSetupCfg("COAST_WARP_5H_LIMIT", COAST_WARP_5H_LIMIT).
-    _returnSetupCfg("COAST_WARP_3D_LIMIT", COAST_WARP_3D_LIMIT).
-    _returnSetupCfg("COAST_WARP_10D_LIMIT", COAST_WARP_10D_LIMIT).
-    _returnSetupCfg("COAST_WARP_50D_LIMIT", COAST_WARP_50D_LIMIT).
-    _returnSetupCfg("COAST_WARP_MAX_RATE", COAST_WARP_MAX_RATE).
-}
-
-LOCAL FUNCTION _returnSetupClearSurfaceCfg {
-    FOR key IN LIST(
-        "PARKING_ALT", "LAUNCH_INCLINATION", "LAUNCH_AZIMUTH",
-        "RETURN_SEQUENCE", "RETURN_PE", "RETURN_REENTRY_DIR",
-        "RETURN_KSC_TARGET", "RETURN_ARM_CHUTES",
-        "RETURN_DESCENT_FAIRING_TAG", "RETURN_DESCENT_DECOUPLER_TAG",
-        "RETURN_DESCENT_CHUTES_TAG"
-    ) {
-        _returnSetupRemoveCfg(key).
-    }
+// Persist the next leg as a compact local mission profile rather than
+// dozens of mission_cfg_* keys in state.json (which starved the LAUNCH
+// band). Wipe any mission_cfg_* the previous mission left behind first,
+// so the freshly written profile is the single source of truth — boot
+// RUNPATHs it, then layers only runtime mission_cfg_* (set mid-mission)
+// on top.
+LOCAL FUNCTION _writeLegProfile {
+    PARAMETER mid.
+    PARAMETER cfg.
+    stateRemovePrefix("mission_cfg_").
+    missionProfileWrite(stateGet("vehicle", ""), mid, cfg).
 }
 
 GLOBAL FUNCTION phaseSurfaceReturnSetup {
@@ -108,20 +96,21 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     SET LAUNCH_INCLINATION TO SURFACE_RETURN_INCLINATION.
     SET LAUNCH_AZIMUTH TO 90.
 
-    _returnSetupCfg("SEQUENCE", SURFACE_RETURN_SEQUENCE).
-    _returnSetupCfg("PARKING_ALT", PARKING_ALT).
-    _returnSetupCfg("LAUNCH_INCLINATION", LAUNCH_INCLINATION).
-    _returnSetupCfg("LAUNCH_AZIMUTH", LAUNCH_AZIMUTH).
-    _returnSetupCfg("RETURN_SEQUENCE", RETURN_SEQUENCE).
-    _returnSetupCfg("RETURN_PE", RETURN_PE).
-    _returnSetupCfg("RETURN_REENTRY_DIR", RETURN_REENTRY_DIR).
-    _returnSetupCfg("RETURN_KSC_TARGET", RETURN_KSC_TARGET).
-    _returnSetupCfg("RETURN_ARM_CHUTES", RETURN_ARM_CHUTES).
-    _returnSetupOptionalTag("RETURN_DESCENT_FAIRING_TAG", RETURN_DESCENT_FAIRING_TAG).
-    _returnSetupOptionalTag("RETURN_DESCENT_DECOUPLER_TAG", RETURN_DESCENT_DECOUPLER_TAG).
-    _returnSetupOptionalTag("RETURN_DESCENT_CHUTES_TAG", RETURN_DESCENT_CHUTES_TAG).
-    _returnSetupCoastAutomationCfg().
-    _returnSetupRemoveCfg("LIBS_EXTRA").
+    LOCAL cfg IS LEXICON().
+    SET cfg["SEQUENCE"] TO SURFACE_RETURN_SEQUENCE.
+    SET cfg["PARKING_ALT"] TO PARKING_ALT.
+    SET cfg["LAUNCH_INCLINATION"] TO LAUNCH_INCLINATION.
+    SET cfg["LAUNCH_AZIMUTH"] TO LAUNCH_AZIMUTH.
+    SET cfg["RETURN_SEQUENCE"] TO RETURN_SEQUENCE.
+    SET cfg["RETURN_PE"] TO RETURN_PE.
+    SET cfg["RETURN_REENTRY_DIR"] TO RETURN_REENTRY_DIR.
+    SET cfg["RETURN_KSC_TARGET"] TO RETURN_KSC_TARGET.
+    SET cfg["RETURN_ARM_CHUTES"] TO RETURN_ARM_CHUTES.
+    _optionalTagInto(cfg, "RETURN_DESCENT_FAIRING_TAG", RETURN_DESCENT_FAIRING_TAG).
+    _optionalTagInto(cfg, "RETURN_DESCENT_DECOUPLER_TAG", RETURN_DESCENT_DECOUPLER_TAG).
+    _optionalTagInto(cfg, "RETURN_DESCENT_CHUTES_TAG", RETURN_DESCENT_CHUTES_TAG).
+    _coastAutomationInto(cfg).
+    _writeLegProfile("surface_return", cfg).
     FOR key IN LIST("fairing_deployed", "orbit_start_time") {
         stateRemove(key).
     }
@@ -182,34 +171,19 @@ GLOBAL FUNCTION phaseReturnSetup {
     stateSet("mission_name", "Return to Kerbin").
     stateSet("payloads", LIST("RETURN")).
 
-    _returnSetupCfg("SEQUENCE", RETURN_SEQUENCE).
-    _returnSetupCfg("ESCAPE_PE", targetPe).
-    _returnSetupCfg("CAPTURE_PE", targetPe).
-    _returnSetupCfg("CAPTURE_INC", 0).
-    _returnSetupCfg("AEROBRAKE_REENTRY_DIR", RETURN_REENTRY_DIR).
-    _returnSetupRemoveCfg("LIBS_EXTRA").
-    _returnSetupCoastAutomationCfg().
-
-    IF RETURN_KSC_TARGET > 0 {
-        _returnSetupCfg("ESCAPE_KSC_TARGET", 1).
-    } ELSE {
-        _returnSetupRemoveCfg("ESCAPE_KSC_TARGET").
-    }
-
-    IF RETURN_ARM_CHUTES > 0 {
-        _returnSetupCfg("AEROBRAKE_ARM_CHUTES", RETURN_ARM_CHUTES).
-    } ELSE {
-        _returnSetupRemoveCfg("AEROBRAKE_ARM_CHUTES").
-    }
-
-    _returnSetupOptionalTag("DESCENT_FAIRING_TAG", RETURN_DESCENT_FAIRING_TAG).
-    _returnSetupOptionalTag("DESCENT_DECOUPLER_TAG", RETURN_DESCENT_DECOUPLER_TAG).
-    _returnSetupOptionalTag("DESCENT_CHUTES_TAG", RETURN_DESCENT_CHUTES_TAG).
-    _returnSetupClearSurfaceCfg().
-
-    FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_DIR") {
-        _returnSetupRemoveCfg(key).
-    }
+    LOCAL cfg IS LEXICON().
+    SET cfg["SEQUENCE"] TO RETURN_SEQUENCE.
+    SET cfg["ESCAPE_PE"] TO targetPe.
+    SET cfg["CAPTURE_PE"] TO targetPe.
+    SET cfg["CAPTURE_INC"] TO 0.
+    SET cfg["AEROBRAKE_REENTRY_DIR"] TO RETURN_REENTRY_DIR.
+    _coastAutomationInto(cfg).
+    IF RETURN_KSC_TARGET > 0 { SET cfg["ESCAPE_KSC_TARGET"] TO 1. }
+    IF RETURN_ARM_CHUTES > 0 { SET cfg["AEROBRAKE_ARM_CHUTES"] TO RETURN_ARM_CHUTES. }
+    _optionalTagInto(cfg, "DESCENT_FAIRING_TAG", RETURN_DESCENT_FAIRING_TAG).
+    _optionalTagInto(cfg, "DESCENT_DECOUPLER_TAG", RETURN_DESCENT_DECOUPLER_TAG).
+    _optionalTagInto(cfg, "DESCENT_CHUTES_TAG", RETURN_DESCENT_CHUTES_TAG).
+    _writeLegProfile("kerbin_return", cfg).
 
     stateSet("phase", "ESCAPE").
     stateSet("lib_band", "ESCAPE").

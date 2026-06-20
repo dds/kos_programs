@@ -152,7 +152,16 @@ Looks like Python/JS; is neither.
   products. Persist `mission_id`, `phase`, target/config overrides, and
   reload intent. Do not cache computed band libs. If an upgraded vessel is
   wedged by old state, `RUNONCEPATH("0:/cmd/trimstate.ks").` removes the stale
-  `lib_band_libs` key without loading the full boot stack.
+  `lib_band_libs` key without loading the full boot stack. In-flight leg
+  setup that defines a whole next mission (e.g. `return_setup`) must write a
+  compact local profile via `missionProfileWrite()` to
+  `1:/missions/<vehicle>/<id>.ks` — boot already RUNPATHs that for the
+  selected `mission_id`. Do NOT fan a static leg config out into dozens of
+  `mission_cfg_*` state keys: those serialize verbosely (lists become nested
+  lexicons) and bloat `state.json` enough to starve a band (flight-found: a
+  10 KB state.json blocked the LAUNCH band). `mission_cfg_*` is for runtime-
+  discovered values (computed inclination, locked target), layered on top of
+  the profile at boot.
 - Transfer-planning mental model: for
   `XING,BPLANE,COAST_1HALF,REFINE_BPLANE,COAST_2HALF,CAPTURE,SHAPE`,
   `XING` must produce a real target SOI patch, but it should not be treated

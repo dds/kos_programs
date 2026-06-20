@@ -35,6 +35,27 @@ GLOBAL FUNCTION applyKnownMissionState {
     IF wrote { RUNPATH(overridePath). }
 }
 
+// Write a mission profile (a LEXICON of NAME -> value) to the vessel's
+// local mission dir as compact `SET NAME TO value.` lines. In-flight
+// setup (surface/return) uses this instead of persisting dozens of
+// mission_cfg_* keys in state.json: boot already RUNPATHs
+// 1:/missions/<vehicle>/<id>.ks for the selected mission_id, then
+// layers runtime mission_cfg_* on top. Returns the path written.
+GLOBAL FUNCTION missionProfileWrite {
+    PARAMETER cn.
+    PARAMETER mid.
+    PARAMETER cfg.
+    IF NOT EXISTS("1:/missions") { CREATEDIR("1:/missions"). }
+    LOCAL dir IS "1:/missions/" + cn.
+    IF NOT EXISTS(dir) { CREATEDIR(dir). }
+    LOCAL path IS dir + "/" + mid + ".ks".
+    IF EXISTS(path) { DELETEPATH(path). }
+    FOR key IN cfg:KEYS {
+        LOG "SET " + key + " TO " + configLiteral(cfg[key]) + "." TO path.
+    }
+    RETURN path.
+}
+
 GLOBAL FUNCTION phaseList {
     PARAMETER seq.
     IF seq:LENGTH = 0 { RETURN LIST("DONE"). }
