@@ -294,8 +294,11 @@ The craft points horizontally along that correction vector using
 `LOOKDIRUP()`. It burns only when alignment is within
 `LANDING_COAST_MCC_ALIGN_DEG` and the nose is not too close to vertical
 (`LANDING_COAST_MCC_MAX_UP_DOT`). Burns are tiny pulses:
-`LANDING_COAST_MCC_THROTTLE` for `LANDING_COAST_MCC_PULSE_TIME`, followed by
-`LANDING_COAST_MCC_SETTLE_TIME`.
+between `LANDING_COAST_MCC_THROTTLE_MIN` and
+`LANDING_COAST_MCC_THROTTLE_MAX` for `LANDING_COAST_MCC_PULSE_TIME`,
+followed by `LANDING_COAST_MCC_SETTLE_TIME`. The throttle approaches the max
+when braking is still far away and rolls down toward the min near the brake
+gate for gentler refinement.
 
 It exits back to `COAST` if braking is near, if it starts climbing too fast,
 if Trajectories is lost, if the miss drops below
@@ -529,12 +532,13 @@ These values come from `landing_config.ks`, `landing_main.ks`, and
 | crossrange | `GUIDANCE_CORRECTION_THRESHOLD` | 500 m | Cross error before PID bias |
 | crossrange | `TR_BRAKE_BIAS` | 0.35 | Max crossrange steering bias |
 | MCC | `LANDING_COAST_MCC_LEAD_DIST` | 3000 m | Desired pre-brake impact lead |
-| MCC | `LANDING_COAST_MCC_TRIGGER_DIST` | 500 m | Error needed to enter MCC |
-| MCC | `LANDING_COAST_MCC_ACCEPT_DIST` | 250 m | Error small enough to exit MCC |
+| MCC | `LANDING_COAST_MCC_TRIGGER_DIST` | 30 m | Error needed to enter MCC |
+| MCC | `LANDING_COAST_MCC_ACCEPT_DIST` | 10 m | Error small enough to exit MCC |
 | MCC | `LANDING_COAST_MCC_MIN_BRAKE_ETA` | 60 s | Do not MCC too close to braking |
-| MCC | `LANDING_COAST_MCC_THROTTLE` | 0.05 | Pulse throttle |
-| MCC | `LANDING_COAST_MCC_PULSE_TIME` | 0.25 s | Pulse duration |
-| MCC | `LANDING_COAST_MCC_SETTLE_TIME` | 2 s | Wait after each pulse |
+| MCC | `LANDING_COAST_MCC_THROTTLE_MIN` | 0.02 | Late/refinement pulse throttle |
+| MCC | `LANDING_COAST_MCC_THROTTLE_MAX` | 0.07 | Early/large-error pulse throttle |
+| MCC | `LANDING_COAST_MCC_PULSE_TIME` | 10 s | Pulse duration |
+| MCC | `LANDING_COAST_MCC_SETTLE_TIME` | 3 s | Wait after each pulse |
 
 | Area | Setting | Default | Meaning |
 |---|---:|---:|---|

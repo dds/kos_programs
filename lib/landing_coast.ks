@@ -44,6 +44,18 @@ GLOBAL FUNCTION _landingCoastMccError {
     ).
 }
 
+LOCAL FUNCTION _landingCoastMccThrottle {
+    PARAMETER nextBrakeEta.
+
+    LOCAL minThrottle IS MAX(0, MIN(1, LANDING_COAST_MCC_THROTTLE_MIN)).
+    LOCAL maxThrottle IS MAX(minThrottle,
+        MIN(1, LANDING_COAST_MCC_THROTTLE_MAX)).
+    LOCAL earlyFrac IS MAX(0, MIN(1,
+        (nextBrakeEta - LANDING_COAST_MCC_MIN_BRAKE_ETA)
+            / MAX(1, LANDING_COAST_MCC_MIN_BRAKE_ETA))).
+    RETURN minThrottle + (maxThrottle - minThrottle) * earlyFrac.
+}
+
 GLOBAL FUNCTION _landingCoastTick {
     PARAMETER ctx.
 
@@ -184,10 +196,11 @@ GLOBAL FUNCTION _landingCoastMccTick {
     LOCAL upDot IS ABS(VDOT(SHIP:FACING:FOREVECTOR, ctx["UP_VEC"])).
     LOCAL canBurn IS alignErr <= LANDING_COAST_MCC_ALIGN_DEG
         AND upDot <= LANDING_COAST_MCC_MAX_UP_DOT.
+    LOCAL mccThrottle IS _landingCoastMccThrottle(nextBrakeEta).
 
     IF TIME:SECONDS < ctx["MCC_PULSE_UNTIL"] {
         IF canBurn {
-            _landingSetThrottle(ctx, LANDING_COAST_MCC_THROTTLE).
+            _landingSetThrottle(ctx, mccThrottle).
         } ELSE {
             _landingSetThrottle(ctx, 0).
             SET ctx["MCC_PULSE_UNTIL"] TO 0.
@@ -199,7 +212,7 @@ GLOBAL FUNCTION _landingCoastMccTick {
             + LANDING_COAST_MCC_PULSE_TIME.
         SET ctx["MCC_SETTLE_UNTIL"] TO ctx["MCC_PULSE_UNTIL"]
             + LANDING_COAST_MCC_SETTLE_TIME.
-        _landingSetThrottle(ctx, LANDING_COAST_MCC_THROTTLE).
+        _landingSetThrottle(ctx, mccThrottle).
     } ELSE {
         _landingSetThrottle(ctx, 0).
     }
@@ -212,6 +225,7 @@ GLOBAL FUNCTION _landingCoastMccTick {
         + " eta=" + ROUND(nextBrakeEta,0)
         + " aErr=" + ROUND(alignErr,1)
         + " upDot=" + ROUND(upDot,3)
+        + " mThr=" + ROUND(mccThrottle,2)
         + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
         1, 2, 13, CYAN, FALSE, nextBrakeEta).
 }

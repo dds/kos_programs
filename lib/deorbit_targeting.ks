@@ -389,7 +389,7 @@ LOCAL FUNCTION _targetDeorbitCrossAuthority {
     IF pulseCycle > 0 {
         SET duty TO LANDING_COAST_MCC_PULSE_TIME / pulseCycle.
     }
-    LOCAL mccAcc IS maxAcc * LANDING_COAST_MCC_THROTTLE * duty.
+    LOCAL mccAcc IS maxAcc * LANDING_COAST_MCC_THROTTLE_MAX * duty.
     LOCAL mccAuthority IS 0.5 * mccAcc * mccWindow ^ 2.
 
     LOCAL brakeWindow IS LANDING_COAST_MCC_MIN_BRAKE_ETA
