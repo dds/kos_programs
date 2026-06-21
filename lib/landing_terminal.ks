@@ -118,22 +118,52 @@ GLOBAL FUNCTION _landingTargetRefineTick {
         RETURN.
     }
 
-    _landingSetSteering(ctx, _landingTargetRefineSteering(
-        ctx, impactInfo)).
-    LOCAL verticalThrottle IS lmVerticalThrottle(
-        targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"]).
+    LOCAL steeringTarget IS _landingTargetRefineSteering(
+        ctx, impactInfo).
+    _landingSetSteering(ctx, steeringTarget).
+    LOCAL maxAcc IS ctx["MAX_ACC"].
+    LOCAL gravAcc IS ctx["GRAV"].
+    LOCAL hoverThr IS 0.
+    IF maxAcc > 0 {
+        SET hoverThr TO gravAcc / maxAcc.
+    }
+    LOCAL verticalThrottle IS 0.
+    IF maxAcc > 0 {
+        LOCAL verticalFrac IS MAX(0.1,
+            VDOT(steeringTarget:NORMALIZED, ctx["UP_VEC"]:NORMALIZED)).
+        LOCAL verticalAccDemand IS gravAcc + targetVs - ctx["V_SPEED"].
+        SET verticalThrottle TO MAX(0, MIN(1,
+            verticalAccDemand / (maxAcc * verticalFrac))).
+    }
     LOCAL correctionThrottle IS 0.
-    IF NOT impactReady OR horizontalSpeed > LANDING_TARGET_REFINE_ACCEPT_HSPEED {
-        SET correctionThrottle TO LANDING_TARGET_REFINE_THR_MIN.
+    IF maxAcc > 0
+            AND (NOT impactReady
+                OR horizontalSpeed > LANDING_TARGET_REFINE_ACCEPT_HSPEED) {
+        LOCAL correctionNeed IS 0.
         IF impactInfo["FOUND"] {
-            SET correctionThrottle TO MIN(LANDING_TARGET_REFINE_THR_MAX,
-                MAX(correctionThrottle,
-                    impactErr / MAX(1, LANDING_TARGET_REFINE_IMPACT_SCALE))).
+            SET correctionNeed TO impactErr
+                / MAX(1, LANDING_TARGET_REFINE_IMPACT_SCALE).
         } ELSE {
-            SET correctionThrottle TO MIN(LANDING_TARGET_REFINE_THR_MAX,
-                MAX(correctionThrottle,
-                    horizontalSpeed / MAX(1, APPROACH_HSPEED))).
+            SET correctionNeed TO horizontalSpeed / MAX(1, APPROACH_HSPEED).
         }
+        SET correctionNeed TO MAX(0, MIN(1, correctionNeed)).
+
+        LOCAL correctionWindow IS MAX(1,
+            MIN(LANDING_TARGET_REFINE_ACCEPT_TIME,
+                LANDING_TARGET_REFINE_MAX_TIME - refineAge)).
+        LOCAL requiredLateralAcc IS horizontalSpeed / correctionWindow.
+        IF impactInfo["FOUND"] {
+            SET requiredLateralAcc TO MAX(requiredLateralAcc,
+                2 * impactErr / (correctionWindow * correctionWindow)).
+        }
+        LOCAL correctionCeiling IS MIN(1,
+            MIN(hoverThr * 1.5,
+                hoverThr + requiredLateralAcc / maxAcc)).
+        LOCAL correctionFloor IS MIN(correctionCeiling, hoverThr * 0.5).
+        SET correctionThrottle TO MAX(correctionFloor,
+            MIN(correctionCeiling,
+                hoverThr
+                    + correctionNeed * (correctionCeiling - hoverThr))).
     }
     _landingSetThrottle(ctx, MAX(verticalThrottle, correctionThrottle)).
 
