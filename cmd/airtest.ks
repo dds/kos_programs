@@ -77,8 +77,8 @@ IF NOT err {
     IF NOT planeActive { planeInit(). }
 
     // High-rate telemetry straight to the archive for this run.
-    LOCAL oldInterval IS OBS_CFG["INTERVAL"].
-    SET OBS_CFG["INTERVAL"] TO 1.
+    LOCAL oldInterval IS OBS_INTERVAL.
+    SET OBS_INTERVAL TO 1.
     observeStart().
 
     PRINT " ".
@@ -193,7 +193,7 @@ IF NOT err {
     }
 
     apOff().
-    SET OBS_CFG["INTERVAL"] TO oldInterval.
+    SET OBS_INTERVAL TO oldInterval.
     observeStop().
 
     PRINT " ".

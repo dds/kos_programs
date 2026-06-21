@@ -13,11 +13,12 @@
 // intervals indefinitely (used by cmd/airtest.ks for PID work).
 // ============================================================
 
-GLOBAL OBS_CFG IS LEXICON(
-    "INTERVAL",   120,
-    "MIN_FREE",  2000,
-    "STOP_FILE", "1:/run/obs_off"
-).
+// Flat config globals (house style); craft/profile/cmd scripts SET to
+// override and the loop reads them directly. cmd/airtest.ks drops
+// OBS_INTERVAL to 1s for high-rate PID telemetry.
+GLOBAL OBS_INTERVAL IS 120.
+GLOBAL OBS_MIN_FREE IS 2000.
+GLOBAL OBS_STOP_FILE IS "1:/run/obs_off".
 
 GLOBAL obsActive IS FALSE.
 LOCAL  obsBufferPath IS "".
