@@ -42,7 +42,7 @@
 //   CAPTURE_INC  — optional: target inclination (deg)
 //   CAPTURE_LAN  — optional: target LAN (deg)
 //   BPLANE_TARGET  — optional body name (default: state "target")
-//   BPLANE_DV_CAP  — max correction dV in m/s (default 50)
+//   BPLANE_DV_CAP  — max correction dV in m/s (default 150)
 //   BPLANE_PE_TOL  — PE tolerance in m (default 2000)
 //   BPLANE_ANG_TOL — plane tolerance in deg (default 0.5)
 //   BPLANE_LEAD    — seconds from now to the burn (default 300)
@@ -61,7 +61,7 @@ GLOBAL CAPTURE_INC IS -1.
 GLOBAL CAPTURE_LAN IS -1.
 GLOBAL CAPTURE_AOP IS -1.
 GLOBAL CAPTURE_DIR IS "".
-GLOBAL BPLANE_DV_CAP IS 60.
+GLOBAL BPLANE_DV_CAP IS 150.
 GLOBAL BPLANE_PE_TOL IS 2000.
 GLOBAL BPLANE_ANG_TOL IS 0.2.
 GLOBAL BPLANE_LEAD IS 300.
@@ -73,7 +73,7 @@ GLOBAL REFINE_BPLANE_DV_CAP IS 10.
 GLOBAL REFINE_BPLANE_MAX_BURNS IS 6.
 
 
-LOCAL DEFAULT_DV_CAP   IS 50.
+LOCAL DEFAULT_DV_CAP   IS 150.
 LOCAL DEFAULT_PE_TOL   IS 2000.
 LOCAL DEFAULT_ANG_TOL  IS 0.5.
 LOCAL DEFAULT_LEAD     IS 300.
@@ -81,8 +81,10 @@ LOCAL MIN_EXEC_DV      IS 0.1.
 LOCAL MAX_NEWTON_ITER  IS 8.
 LOCAL NEWTON_DAMP      IS 0.7.
 LOCAL FD_STEP          IS 0.5.
-LOCAL ACQUIRE_STEP     IS 0.5.
-LOCAL MAX_ACQUIRE_ITER IS 50.
+LOCAL ACQUIRE_INITIAL_STEP IS 2.0.
+LOCAL ACQUIRE_MIN_STEP     IS 0.05.
+LOCAL ACQUIRE_STEP_GROWTH  IS 1.2.
+LOCAL MAX_ACQUIRE_ITER     IS 150.
 LOCAL MAX_BURNS        IS 2.
 
 LOCAL FUNCTION _bplaneSafeEncounter {
@@ -257,6 +259,49 @@ LOCAL FUNCTION _bplaneFallbackSearch {
     RETURN TRUE.
 }
 
+LOCAL FUNCTION _bplaneAcquireAxis {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER axis.
+    PARAMETER stepSize.
+    PARAMETER searchStart.
+    PARAMETER searchEnd.
+    PARAMETER bestD.
+    PARAMETER dvCap.
+
+    LOCAL oldVal IS _bplaneNodeAxisGet(nd, axis).
+    LOCAL bestVal IS oldVal.
+    LOCAL bestCA IS 0.
+    LOCAL trialBestD IS bestD.
+    LOCAL improved IS FALSE.
+    LOCAL budgetBlocked IS FALSE.
+
+    FOR sgn IN LIST(1, -1) {
+        _bplaneNodeAxisSet(nd, axis, oldVal + sgn * stepSize).
+        WAIT 0.02.
+        IF dvCap < 0 OR nd:DELTAV:MAG <= dvCap {
+            LOCAL ca IS _findClosestApproach(targetBody, searchStart, searchEnd, 60).
+            IF ca["distance"] < trialBestD {
+                SET trialBestD TO ca["distance"].
+                SET bestCA TO ca.
+                SET bestVal TO oldVal + sgn * stepSize.
+                SET improved TO TRUE.
+            }
+        } ELSE {
+            SET budgetBlocked TO TRUE.
+        }
+    }
+
+    _bplaneNodeAxisSet(nd, axis, oldVal).
+    WAIT 0.02.
+    RETURN LEXICON(
+        "improved", improved,
+        "budgetBlocked", budgetBlocked,
+        "value", bestVal,
+        "ca", bestCA,
+        "distance", trialBestD).
+}
+
 // ============================================================
 // _acquireEncounter — if the raw flight plan is just outside the
 // target SOI, hill-climb a tiny MCC node until KSP generates the
@@ -266,16 +311,20 @@ LOCAL FUNCTION _bplaneFallbackSearch {
 LOCAL FUNCTION _acquireEncounter {
     PARAMETER nd.
     PARAMETER targetBody.
+    PARAMETER dvCap.
 
     LOCAL searchStart IS nd:TIME.
     LOCAL searchEnd IS nd:TIME + targetBody:ORBIT:PERIOD.
     LOCAL bestCA IS _findClosestApproach(targetBody, searchStart, searchEnd, 60).
     LOCAL bestD IS bestCA["distance"].
+    LOCAL stepSize IS ACQUIRE_INITIAL_STEP.
+    LOCAL axes IS LIST("PROGRADE", "RADIALOUT", "NORMAL").
 
     mLogWarn("BPLANE: encounter lost; acquiring nearest "
         + targetBody:NAME + " approach at T+"
         + ROUND(bestCA["time"] - TIME:SECONDS, 0)
-        + "s CA=" + ROUND(bestD / 1000, 1) + "km.").
+        + "s CA=" + ROUND(bestD / 1000, 1) + "km"
+        + " cap=" + ROUND(dvCap, 1) + "m/s.").
 
     FROM { LOCAL iter IS 0. } UNTIL iter >= MAX_ACQUIRE_ITER STEP { SET iter TO iter + 1. } DO {
         IF measureArrival(nd, targetBody) <> 0 {
@@ -284,68 +333,32 @@ LOCAL FUNCTION _acquireEncounter {
                 + " m/s.").
             RETURN TRUE.
         }
+        IF dvCap >= 0 AND nd:DELTAV:MAG > dvCap {
+            mLogWarn("BPLANE acquire: dV budget exceeded while searching (dv="
+                + ROUND(nd:DELTAV:MAG, 2) + " cap="
+                + ROUND(dvCap, 2) + " m/s); best CA="
+                + ROUND(bestD / 1000, 1) + "km.").
+            RETURN FALSE.
+        }
 
         LOCAL improved IS FALSE.
+        LOCAL budgetBlocked IS FALSE.
+        LOCAL startD IS bestD.
 
-        LOCAL p0 IS nd:PROGRADE.
-        SET nd:PROGRADE TO p0 + ACQUIRE_STEP. WAIT 0.02.
-        LOCAL caPlus IS _findClosestApproach(targetBody, searchStart, searchEnd, 60).
-        SET nd:PROGRADE TO p0 - ACQUIRE_STEP. WAIT 0.02.
-        LOCAL caMinus IS _findClosestApproach(targetBody, searchStart, searchEnd, 60).
-        IF caPlus["distance"] < bestD AND caPlus["distance"] <= caMinus["distance"] {
-            SET nd:PROGRADE TO p0 + ACQUIRE_STEP.
-            SET bestCA TO caPlus.
-            SET bestD TO caPlus["distance"].
-            SET improved TO TRUE.
-        } ELSE IF caMinus["distance"] < bestD {
-            SET nd:PROGRADE TO p0 - ACQUIRE_STEP.
-            SET bestCA TO caMinus.
-            SET bestD TO caMinus["distance"].
-            SET improved TO TRUE.
-        } ELSE {
-            SET nd:PROGRADE TO p0.
+        FOR axis IN axes {
+            LOCAL trial IS _bplaneAcquireAxis(
+                nd, targetBody, axis, stepSize, searchStart, searchEnd, bestD, dvCap).
+            IF trial["budgetBlocked"] {
+                SET budgetBlocked TO TRUE.
+            }
+            IF trial["improved"] {
+                _bplaneNodeAxisSet(nd, axis, trial["value"]).
+                WAIT 0.02.
+                SET bestCA TO trial["ca"].
+                SET bestD TO trial["distance"].
+                SET improved TO TRUE.
+            }
         }
-        WAIT 0.02.
-
-        LOCAL r0 IS nd:RADIALOUT.
-        SET nd:RADIALOUT TO r0 + ACQUIRE_STEP. WAIT 0.02.
-        SET caPlus TO _findClosestApproach(targetBody, searchStart, searchEnd, 60).
-        SET nd:RADIALOUT TO r0 - ACQUIRE_STEP. WAIT 0.02.
-        SET caMinus TO _findClosestApproach(targetBody, searchStart, searchEnd, 60).
-        IF caPlus["distance"] < bestD AND caPlus["distance"] <= caMinus["distance"] {
-            SET nd:RADIALOUT TO r0 + ACQUIRE_STEP.
-            SET bestCA TO caPlus.
-            SET bestD TO caPlus["distance"].
-            SET improved TO TRUE.
-        } ELSE IF caMinus["distance"] < bestD {
-            SET nd:RADIALOUT TO r0 - ACQUIRE_STEP.
-            SET bestCA TO caMinus.
-            SET bestD TO caMinus["distance"].
-            SET improved TO TRUE.
-        } ELSE {
-            SET nd:RADIALOUT TO r0.
-        }
-        WAIT 0.02.
-
-        LOCAL n0 IS nd:NORMAL.
-        SET nd:NORMAL TO n0 + ACQUIRE_STEP. WAIT 0.02.
-        SET caPlus TO _findClosestApproach(targetBody, searchStart, searchEnd, 60).
-        SET nd:NORMAL TO n0 - ACQUIRE_STEP. WAIT 0.02.
-        SET caMinus TO _findClosestApproach(targetBody, searchStart, searchEnd, 60).
-        IF caPlus["distance"] < bestD AND caPlus["distance"] <= caMinus["distance"] {
-            SET nd:NORMAL TO n0 + ACQUIRE_STEP.
-            SET bestCA TO caPlus.
-            SET bestD TO caPlus["distance"].
-            SET improved TO TRUE.
-        } ELSE IF caMinus["distance"] < bestD {
-            SET nd:NORMAL TO n0 - ACQUIRE_STEP.
-            SET bestCA TO caMinus.
-            SET bestD TO caMinus["distance"].
-            SET improved TO TRUE.
-        } ELSE {
-            SET nd:NORMAL TO n0.
-        }
-        WAIT 0.02.
 
         IF measureArrival(nd, targetBody) <> 0 {
             mLog("BPLANE acquire: patch acquired in " + (iter + 1)
@@ -353,11 +366,49 @@ LOCAL FUNCTION _acquireEncounter {
                 + " m/s.").
             RETURN TRUE.
         }
-
-        IF NOT improved {
-            mLogWarn("BPLANE acquire: no improving 0.5 m/s nudge found; "
-                + "best CA=" + ROUND(bestD / 1000, 1) + "km.").
+        IF dvCap >= 0 AND nd:DELTAV:MAG > dvCap {
+            mLogWarn("BPLANE acquire: dV budget exceeded after improvement (dv="
+                + ROUND(nd:DELTAV:MAG, 2) + " cap="
+                + ROUND(dvCap, 2) + " m/s); best CA="
+                + ROUND(bestD / 1000, 1) + "km.").
             RETURN FALSE.
+        }
+
+        IF improved {
+            SET stepSize TO stepSize * ACQUIRE_STEP_GROWTH.
+            mLog("  BPLANE acquire[" + iter + "] CA "
+                + ROUND(startD / 1000, 1) + "->"
+                + ROUND(bestD / 1000, 1) + "km step="
+                + ROUND(stepSize, 2) + " dv="
+                + ROUND(nd:DELTAV:MAG, 2)).
+        } ELSE {
+            SET stepSize TO stepSize * 0.5.
+            IF budgetBlocked {
+                mLogWarn("  BPLANE acquire[" + iter
+                    + "] no in-budget improvement; step="
+                    + ROUND(stepSize, 2) + " best CA="
+                    + ROUND(bestD / 1000, 1) + "km dv="
+                    + ROUND(nd:DELTAV:MAG, 2) + " cap="
+                    + ROUND(dvCap, 2) + "m/s.").
+            } ELSE {
+                mLogWarn("  BPLANE acquire[" + iter + "] no improvement; step="
+                    + ROUND(stepSize, 2) + " best CA="
+                    + ROUND(bestD / 1000, 1) + "km.").
+            }
+            IF stepSize < ACQUIRE_MIN_STEP {
+                IF budgetBlocked {
+                    mLogWarn("BPLANE acquire: no improving step fits the dV budget "
+                        + "(cap=" + ROUND(dvCap, 2) + "m/s); best CA="
+                        + ROUND(bestD / 1000, 1) + "km dv="
+                        + ROUND(nd:DELTAV:MAG, 2) + " m/s.").
+                } ELSE {
+                    mLogWarn("BPLANE acquire: step fell below "
+                        + ACQUIRE_MIN_STEP + " m/s; best CA="
+                        + ROUND(bestD / 1000, 1) + "km dv="
+                        + ROUND(nd:DELTAV:MAG, 2) + " m/s.").
+                }
+                RETURN FALSE.
+            }
         }
     }
 
@@ -399,7 +450,7 @@ GLOBAL FUNCTION planBplaneCorrection {
         mLogWarn("BPLANE: no hyperbolic encounter with "
             + targetBody:NAME + " on the current correction node; "
             + "starting acquisition.").
-        IF NOT _acquireEncounter(nd, targetBody) {
+        IF NOT _acquireEncounter(nd, targetBody, dvCap) {
             mLogError("BPLANE: acquisition failed for "
                 + targetBody:NAME + " — removing correction node.").
             REMOVE nd.
