@@ -43,6 +43,14 @@ LOCAL FUNCTION _fbijConfigurePlane {
     SET PLANE_PID_CTRL TO TRUE.
     // Flaps down it flies nicely at 60 m/s, so warn just below that.
     SET PLANE_STALL_SPEED TO 55.
+    // Flight-director toggles within easy reach (AG1 is flaps):
+    //   AG2 = autopilot (wing-leveler + alt + heading hold)
+    //   AG3 = waypoint nav (also brings up the autopilot)
+    SET PLANE_AP_AG TO 2.
+    SET PLANE_WPTNAV_AG TO 3.
+    // Auto reverser moved off AG2 (now the autopilot) to AG4 — bind
+    // the reverse-thrust/airbrake parts to AG4 in the VAB.
+    SET PLANE_REVERSE_AG TO 4.
     // Underpowered passenger jet on short island strips: full
     // reverse, and engage as soon as the wheels are down braking.
     SET PLANE_REVERSE_THROTTLE TO 1.0.
@@ -53,7 +61,10 @@ LOCAL FUNCTION _fbijConfigRows {
     flightPlanSection("BUSINESS JET").
     flightPlanRow("FINAL STOP", FINAL_LANDING_SPEED + " m/s").
     flightPlanRow("PID CTRL", "ON").
-    flightPlanRow("NAV", "Select waypoint, AG8 to fly").
+    flightPlanRow("FLAPS", "AG1").
+    flightPlanRow("AUTOPILOT", "AG2 toggle").
+    flightPlanRow("NAV", "Select wpt, AG3 to fly").
+    flightPlanRow("REVERSE", "AG4 (auto on land)").
 }
 
 GLOBAL FUNCTION main {
@@ -72,7 +83,7 @@ GLOBAL FUNCTION main {
             "Brakes - RELEASE at full thrust",
             "Rotate - pull up at 75 m/s",
             "Gear - retract on positive climb",
-            "Navigation - press AG8 after stable climb"
+            "Navigation - press AG3 after stable climb (AG2 = AP only)"
         )
     )).
 }

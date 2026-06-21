@@ -76,6 +76,13 @@ GLOBAL PLANE_REVERSE_CONFIRM_TIME IS 0.4.
 GLOBAL PLANE_REVERSE_THROTTLE IS 0.7.
 GLOBAL PLANE_STEER_MAX_SPEED IS 30.
 GLOBAL PLANE_STEER_TAG IS "steering_gear".
+// Operator action-group toggles for the two flight-director modes
+// (kOS AG numbers): AP = wing-leveler+alt+hdg, NAV = waypoint nav.
+// Defaults 7/8; a craft can move them within reach but must keep them
+// clear of PLANE_REVERSE_AG (the auto reverser fires that group on
+// touchdown, which would otherwise read as a toggle press).
+GLOBAL PLANE_AP_AG IS 7.
+GLOBAL PLANE_WPTNAV_AG IS 8.
 // Assists are monitor-only until a craft opts in (SET PLANE_PID_CTRL).
 GLOBAL PLANE_PID_CTRL IS FALSE.
 
@@ -132,6 +139,23 @@ LOCAL FUNCTION _wrap180 {
 // for a 2-degree left bank, which would slam a raw PID.
 LOCAL FUNCTION _bankAngle {
     RETURN _wrap180(SHIP:FACING:ROLL).
+}
+
+// Read an action group's state by number — kOS exposes AG1..AG10 as
+// distinct bound names, so a numeric config needs this dispatch.
+LOCAL FUNCTION _agState {
+    PARAMETER n.
+    IF n = 1  { RETURN AG1.  }
+    IF n = 2  { RETURN AG2.  }
+    IF n = 3  { RETURN AG3.  }
+    IF n = 4  { RETURN AG4.  }
+    IF n = 5  { RETURN AG5.  }
+    IF n = 6  { RETURN AG6.  }
+    IF n = 7  { RETURN AG7.  }
+    IF n = 8  { RETURN AG8.  }
+    IF n = 9  { RETURN AG9.  }
+    IF n = 10 { RETURN AG10. }
+    RETURN FALSE.
 }
 
 // Merge the optional runway database (0:/data/approaches.json,
@@ -209,15 +233,19 @@ GLOBAL FUNCTION planeInit {
         mLog("PID controllers skipped.").
     }
 
-    LOCAL _prevAG7 IS AG7.
-    LOCAL _prevAG8 IS AG8.
+    LOCAL _prevApAg IS _agState(PLANE_AP_AG).
+    LOCAL _prevNavAg IS _agState(PLANE_WPTNAV_AG).
+    mLog("Toggles: autopilot=AG" + PLANE_AP_AG
+        + " waypoint-nav=AG" + PLANE_WPTNAV_AG + ".").
     WHEN planeActive THEN {
-        IF AG7 <> _prevAG7 {
-            SET _prevAG7 TO AG7.
+        LOCAL apAg IS _agState(PLANE_AP_AG).
+        LOCAL navAg IS _agState(PLANE_WPTNAV_AG).
+        IF apAg <> _prevApAg {
+            SET _prevApAg TO apAg.
             IF apActive { apOff(). } ELSE { apOn(). }
         }
-        IF AG8 <> _prevAG8 {
-            SET _prevAG8 TO AG8.
+        IF navAg <> _prevNavAg {
+            SET _prevNavAg TO navAg.
             IF wptNavActive { wptNavOff(). } ELSE { wptNavOn(). }
         }
         PRESERVE.
