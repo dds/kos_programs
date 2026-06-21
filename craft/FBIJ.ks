@@ -43,6 +43,11 @@ LOCAL FUNCTION _fbijConfigurePlane {
     SET PLANE_PID_CTRL TO TRUE.
     // Flaps down it flies nicely at 60 m/s, so warn just below that.
     SET PLANE_STALL_SPEED TO 55.
+    // Airframe is geometrically symmetric but carries a faint standing
+    // roll (stock-aero quirk on mirrored wings). The default roll
+    // integral (0.001) is too weak to trim it out, so the leveler
+    // holds a slight bank — raise ROLL_KI so it integrates to level.
+    SET PLANE_ROLL_KI TO 0.005.
     // Flight-director toggles within easy reach (AG1 is flaps):
     //   AG2 = autopilot (wing-leveler + alt + heading hold)
     //   AG3 = waypoint nav (also brings up the autopilot)
