@@ -13,7 +13,7 @@ PRINT " ".
 PRINT "  * kOS FLIGHT COMPUTER  v2.0".
 PRINT "  * " + SHIP:NAME.
 
-WAIT 0.1 # Slight wait for radio to come online.
+WAIT 0.1 // Slight wait for radio to come online.
 LOCAL HAS_LINK IS HOMECONNECTION:ISCONNECTED.
 
 LOCAL FUNCTION _bootCue {
