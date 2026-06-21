@@ -2,12 +2,9 @@
 // airplane.ks - Aircraft autopilot library (0:/lib/airplane.ks)
 // ============================================================
 
-// --- Config defaults owned by this file ---
+// --- Mission-facing config (craft/profile scripts override these) ---
 GLOBAL CRUISE_ALT IS 2500.
 GLOBAL CRUISE_SPEED IS 180.
-GLOBAL SURVEY_ALT IS 1200.
-GLOBAL SURVEY_SPACING IS 2000.
-GLOBAL SURVEY_LANE_LENGTH IS 10000.
 GLOBAL TOP_SPEED IS 250.
 GLOBAL SPLASHDOWN_SPEED IS 50.
 GLOBAL FINAL_LANDING_SPEED IS 25.
@@ -15,69 +12,72 @@ GLOBAL MIN_FLIGHT_TIME IS 30.
 GLOBAL FLAP_AG IS 1.
 GLOBAL AIRBORNE_RADAR_ALT IS 0.
 GLOBAL AIRBORNE_SPEED IS 50.
-GLOBAL WPT_RADIUS IS 500.
-GLOBAL PLANE_PID_CTRL IS FALSE.
-GLOBAL PLANE_REVERSE_THROTTLE IS 0.
-GLOBAL PLANE_REVERSE_MIN_SPEED IS 5.
 
-GLOBAL PLANE_CFG IS LEXICON(
-    // Roll PID tracks a bank-angle target (0 for wing leveler,
-    // computed from heading error for heading hold).
-    "ROLL_KP",           0.02,
-    "ROLL_KI",           0.001,
-    "ROLL_KD",           0.01,
-    // Altitude hold flies vertical speed like a real autopilot:
-    // alt error -> VS target (proportional) -> pitch target (PID)
-    // -> elevator (pitch PID). Direct alt->pitch invited phugoid.
-    "ALT_VS_PER_M",      0.15,
-    "ALT_MAX_VS",          20,
-    "ALT_VS_KP",         0.40,
-    "ALT_VS_KI",         0.05,
-    "ALT_VS_KD",         0.05,
-    "ALT_MAX_PITCH",       8,
-    "ALT_MIN_PITCH",      -6,
-    "PITCH_KP",          0.05,
-    "PITCH_KI",          0.005,
-    "PITCH_KD",          0.02,
-    // Heading hold turns by BANKING (like a real airplane), not by
-    // yawing: heading error -> bank target -> roll channel.
-    // HDG_BANK_SIGN is an airframe escape hatch if a cockpit's
-    // FACING:ROLL convention is inverted.
-    "HDG_BANK_PER_DEG",  2.0,
-    "HDG_MAX_BANK",       25,
-    "HDG_BANK_SIGN",       1,
-    "SPD_KP",            0.01,
-    "SPD_KI",            0.002,
-    "SPD_KD",            0.005,
-    "SPD_MIN_THROTTLE",  0.0,
-    "SPD_MAX_THROTTLE",  1.0,
-    "WPT_RADIUS",        500,
-    "STALL_SPEED",        50,
-    "STALL_AOA",          20,
-    "AOA_LIMIT",          15,
-    "SURVEY_ALT",       2000,
-    "SURVEY_SPACING",    500,
-    "SURVEY_SPEED",      150,
-    "SURVEY_LANE_LENGTH", 10000,
-    // Control authority gain-schedules with dynamic pressure (real
-    // FBW practice): full deflection at/below FBW_REF_Q, scaled
-    // down as Q grows. Q accounts for altitude where speed alone
-    // does not (thin air needs MORE deflection, not less).
-    "FBW_REF_Q",         0.06,
-    "FBW_MIN_AUTH",      0.15,
-    "FBW_MAX_AUTH",      1.0,
-    "BRAKE_REF_SPEED",    80,
-    "BRAKE_STOP_SPEED",    3,
-    "REVERSE_THRUST_DELAY", 1.5,
-    "REVERSE_AG",          2,
-    "REVERSE_AUTO",       TRUE,
-    "REVERSE_MIN_SPEED",   50,
-    "REVERSE_CONFIRM_TIME", 0.4,
-    "REVERSE_THROTTLE",   0.7,
-    "STEER_MAX_SPEED",    30,
-    "STEER_TAG",         "steering_gear",
-    "PID_CTRL",          TRUE
-).
+// --- Assist/PID config (flat globals; craft scripts SET to tune) ---
+// House style is flat globals read directly by the loops; airtest.ks
+// pokes PLANE_HDG_BANK_SIGN live and bakes the result into a craft.
+
+// Roll PID tracks a bank-angle target (0 for wing leveler, computed
+// from heading error for heading hold).
+GLOBAL PLANE_ROLL_KP IS 0.02.
+GLOBAL PLANE_ROLL_KI IS 0.001.
+GLOBAL PLANE_ROLL_KD IS 0.01.
+// Altitude hold flies vertical speed like a real autopilot: alt error
+// -> VS target (proportional) -> pitch target (PID) -> elevator (pitch
+// PID). Direct alt->pitch invited phugoid.
+GLOBAL PLANE_ALT_VS_PER_M IS 0.15.
+GLOBAL PLANE_ALT_MAX_VS IS 20.
+GLOBAL PLANE_ALT_VS_KP IS 0.40.
+GLOBAL PLANE_ALT_VS_KI IS 0.05.
+GLOBAL PLANE_ALT_VS_KD IS 0.05.
+GLOBAL PLANE_ALT_MAX_PITCH IS 8.
+GLOBAL PLANE_ALT_MIN_PITCH IS -6.
+GLOBAL PLANE_PITCH_KP IS 0.05.
+GLOBAL PLANE_PITCH_KI IS 0.005.
+GLOBAL PLANE_PITCH_KD IS 0.02.
+// Heading hold turns by BANKING (like a real airplane), not by yawing:
+// heading error -> bank target -> roll channel. HDG_BANK_SIGN is an
+// airframe escape hatch if a cockpit's FACING:ROLL convention is
+// inverted (airtest.ks flips it empirically).
+GLOBAL PLANE_HDG_BANK_PER_DEG IS 2.0.
+GLOBAL PLANE_HDG_MAX_BANK IS 25.
+GLOBAL PLANE_HDG_BANK_SIGN IS 1.
+GLOBAL PLANE_SPD_KP IS 0.01.
+GLOBAL PLANE_SPD_KI IS 0.002.
+GLOBAL PLANE_SPD_KD IS 0.005.
+GLOBAL PLANE_SPD_MIN_THROTTLE IS 0.0.
+GLOBAL PLANE_SPD_MAX_THROTTLE IS 1.0.
+GLOBAL PLANE_WPT_RADIUS IS 500.
+GLOBAL PLANE_STALL_SPEED IS 50.
+GLOBAL PLANE_STALL_AOA IS 20.
+GLOBAL PLANE_AOA_LIMIT IS 15.
+GLOBAL PLANE_SURVEY_ALT IS 2000.
+GLOBAL PLANE_SURVEY_SPACING IS 500.
+GLOBAL PLANE_SURVEY_SPEED IS 150.
+GLOBAL PLANE_SURVEY_LANE_LENGTH IS 10000.
+// Control authority gain-schedules with dynamic pressure (real FBW
+// practice): full deflection at/below FBW_REF_Q, scaled down as Q
+// grows. Q accounts for altitude where speed alone does not (thin air
+// needs MORE deflection, not less).
+GLOBAL PLANE_FBW_REF_Q IS 0.06.
+GLOBAL PLANE_FBW_MIN_AUTH IS 0.15.
+GLOBAL PLANE_FBW_MAX_AUTH IS 1.0.
+// Surface-deflection cap: the loops never command more than this
+// fraction of travel (times the Q authority schedule above) — soft,
+// stable inputs instead of bang-bang. Lower = gentler/laggier.
+GLOBAL PLANE_CTRL_DAMPING IS 0.3.
+GLOBAL PLANE_BRAKE_REF_SPEED IS 80.
+GLOBAL PLANE_BRAKE_STOP_SPEED IS 3.
+GLOBAL PLANE_REVERSE_THRUST_DELAY IS 1.5.
+GLOBAL PLANE_REVERSE_AG IS 2.
+GLOBAL PLANE_REVERSE_AUTO IS TRUE.
+GLOBAL PLANE_REVERSE_MIN_SPEED IS 50.
+GLOBAL PLANE_REVERSE_CONFIRM_TIME IS 0.4.
+GLOBAL PLANE_REVERSE_THROTTLE IS 0.7.
+GLOBAL PLANE_STEER_MAX_SPEED IS 30.
+GLOBAL PLANE_STEER_TAG IS "steering_gear".
+// Assists are monitor-only until a craft opts in (SET PLANE_PID_CTRL).
+GLOBAL PLANE_PID_CTRL IS FALSE.
 
 GLOBAL planeActive       IS FALSE.
 GLOBAL wingLevelerActive IS FALSE.
@@ -423,7 +423,7 @@ GLOBAL FUNCTION planeUpdate {
     _reverseThrustUpdate().
 
     LOCAL auth IS planeCtrlAuthority().
-    LOCAL clamp IS 0.3 * auth.
+    LOCAL clamp IS PLANE_CTRL_DAMPING * auth.
 
     IF wptNavActive AND wptIndex < wptList:LENGTH {
         LOCAL wp IS wptList[wptIndex].
@@ -774,8 +774,12 @@ LOCAL FUNCTION _geoProject {
     PARAMETER dist.
     PARAMETER brng.
     LOCAL r_ IS SHIP:ORBIT:BODY:RADIUS.
-    LOCAL dlat IS dist * COS(brng) / r_ * (180 / 3.14159265).
-    LOCAL dlng IS dist * SIN(brng) / (r_ * COS(lat0)) * (180 / 3.14159265).
+    // COS(lat0) -> 0 at the poles would blow up the longitude step;
+    // floor it (~89.4 deg) so a high-latitude lane projects sanely.
+    LOCAL cosLat IS MAX(COS(lat0), 0.01).
+    LOCAL degPerM IS CONSTANT:RADTODEG / r_.
+    LOCAL dlat IS dist * COS(brng) * degPerM.
+    LOCAL dlng IS dist * SIN(brng) * degPerM / cosLat.
     RETURN LEXICON("lat", lat0 + dlat, "lng", lng0 + dlng).
 }
 
@@ -852,7 +856,7 @@ LOCAL FUNCTION _bestRunwayHeading {
 // opts (all optional):
 //   "defaultSeq"    LIST     — fallback when no mission SEQUENCE
 //   "checklist"     LIST     — preflight checklist items
-//   "configure"     delegate — PLANE_CFG hook, runs at each phase
+//   "configure"     delegate — assist-tuning hook, runs at each phase
 //   "configRows"    delegate — extra flightPlan rows for the brief
 //   "phases"        LEXICON  — extra/override phase handlers
 //   "landingAssist" bool     — run planeLandingAssist (default TRUE)

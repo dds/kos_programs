@@ -12,9 +12,12 @@
 // keep touch-and-goes from ending the FLIGHT phase.
 // ============================================================
 
-SET CRUISE_ALT TO 9000.
-SET CRUISE_SPEED TO 280.
-SET TOP_SPEED TO 360.
+// Single Wheesley, Mk1 cockpit, 8 passenger seats — a clean business
+// jet. Flaps up it cruises 6000m at 280-320 m/s; flaps down it flies
+// nicely at 60 m/s, so the stall warning sits just below approach.
+SET CRUISE_ALT TO 6000.
+SET CRUISE_SPEED TO 300.
+SET TOP_SPEED TO 320.
 SET FLAP_AG TO 1.
 SET AIRBORNE_RADAR_ALT TO 8.
 SET FINAL_LANDING_SPEED TO 35.
@@ -38,6 +41,8 @@ LOCAL FUNCTION _fbijConfigurePlane {
     // Airframe certified for software assists after flight testing —
     // PID control re-enabled for the GAP airline missions.
     SET PLANE_PID_CTRL TO TRUE.
+    // Flaps down it flies nicely at 60 m/s, so warn just below that.
+    SET PLANE_STALL_SPEED TO 55.
     // Underpowered passenger jet on short island strips: full
     // reverse, and engage as soon as the wheels are down braking.
     SET PLANE_REVERSE_THROTTLE TO 1.0.
@@ -65,7 +70,7 @@ GLOBAL FUNCTION main {
             "Stage - start engines",
             "Throttle - FULL",
             "Brakes - RELEASE at full thrust",
-            "Rotate - pull up at 105 m/s",
+            "Rotate - pull up at 75 m/s",
             "Gear - retract on positive climb",
             "Navigation - press AG8 after stable climb"
         )

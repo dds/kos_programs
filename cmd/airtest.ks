@@ -62,7 +62,7 @@ LOCAL FUNCTION _fly {
 }
 
 LOCAL err IS FALSE.
-IF NOT PLANE_CFG["PID_CTRL"] {
+IF NOT PLANE_PID_CTRL {
     PRINT "ERROR: PID_CTRL is disabled for this craft.".
     SET err TO TRUE.
 }
@@ -158,16 +158,16 @@ IF NOT err {
                 WAIT 0.05.
             }
             IF signBad AND attempts < 2 {
-                SET PLANE_CFG["HDG_BANK_SIGN"] TO -PLANE_CFG["HDG_BANK_SIGN"].
+                SET PLANE_HDG_BANK_SIGN TO -PLANE_HDG_BANK_SIGN.
                 mLogWarn("AIRTEST: heading error grew — flipping HDG_BANK_SIGN to "
-                    + PLANE_CFG["HDG_BANK_SIGN"]
+                    + PLANE_HDG_BANK_SIGN
                     + ". Bake this into the craft configure hook!").
                 HUDTEXT("HDG_BANK_SIGN flipped: "
-                    + PLANE_CFG["HDG_BANK_SIGN"], 8, 2, 16, YELLOW, FALSE).
+                    + PLANE_HDG_BANK_SIGN, 8, 2, 16, YELLOW, FALSE).
             } ELSE {
                 mLogWarn("STATS airtest hdg step=90 captureT=" + capT
                     + " maxBank=" + ROUND(maxBank, 1)
-                    + " sign=" + PLANE_CFG["HDG_BANK_SIGN"]
+                    + " sign=" + PLANE_HDG_BANK_SIGN
                     + " finalErr=" + ROUND(_wrap180(hdgTgt - SHIP:FACING:YAW), 1)).
                 BREAK.
             }
@@ -199,5 +199,5 @@ IF NOT err {
     PRINT " ".
     PRINT "  AIRTEST COMPLETE — you have the airplane.".
     PRINT "  Results: STATS lines in flight log + 0:/logs/obs/.".
-    mLogWarn("STATS airtest done sign=" + PLANE_CFG["HDG_BANK_SIGN"]).
+    mLogWarn("STATS airtest done sign=" + PLANE_HDG_BANK_SIGN).
 }
