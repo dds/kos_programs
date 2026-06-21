@@ -428,8 +428,8 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
             RETURN FALSE.
         }
 
-        STAGE.
-        mLog("Vacuum launch — STAGE fired.").
+        //STAGE.
+        //mLog("Vacuum launch — STAGE fired.").
         HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
         WAIT 0.5.
         ascentRunPostStageHook().
