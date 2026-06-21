@@ -19,7 +19,8 @@
 // Hop shapes:
 //   at goal body            SHAPE, DONE
 //   vessel in this SOI      RDV, DONE
-//   down/lateral (XING ok)  XING, BPLANE, COAST, CAPTURE, then
+//   down/lateral (XING ok)  XING, BPLANE, COAST_1HALF,
+//                           REFINE_BPLANE, COAST_2HALF, CAPTURE, then
 //                           SHAPE|RDV, DONE (final) or GOTO
 //   up one level            ESCAPE, COAST, then
 //                           SHAPE|RDV, DONE (final) or GOTO
@@ -263,7 +264,7 @@ GLOBAL FUNCTION gotoCommitPlan {
         stateSet("mission_cfg_" + key, cfg[key]).
     }
     stateSet("target", plan["target"]).
-    stateSet("mission_cfg_SEQUENCE", plan["sequence"]:JOIN(",")).
+    stateSet("mission_cfg_SEQUENCE", plan["sequence"]).
     stateSet("phase", plan["sequence"][0]).
     mLog("GOTO plan committed: " + plan["summary"]).
 }
