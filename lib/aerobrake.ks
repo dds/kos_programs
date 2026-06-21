@@ -5,8 +5,9 @@
 //   1. Precision reentry targeting using Trajectories addon
 //      (coordinate search over radial/normal to steer impact
 //      point toward KSC)
-//   2. Vessel prep for atmospheric entry (retract antennas,
-//      decouple transfer stage, orient retrograde, arm chutes)
+//   2. Vessel prep for atmospheric entry (decouple transfer
+//      stage, retract antennas after entry, orient retrograde,
+//      arm chutes)
 //
 // Loaded as an implicit single-phase band (like MCC).
 // Depends on: utils (geoDistance)
@@ -51,17 +52,16 @@ GLOBAL FUNCTION phaseAerobrake {
     }
 
     // --- Step 2: Vessel prep (pre-coast) ---
-    _aerobrakeRetractAntennas().
     _aerobrakeDecouple().
     // Chutes are armed in descent phase after atmosphere entry.
 
     // --- Step 3: KAC alarm for atmosphere entry ---
     _aerobrakeSetEntryAlarm().
 
-    mLog("Aerobrake prep complete.").
+    mLog("Aerobrake pre-coast prep complete.").
     mLogWarn("STATS aerobrake status=complete body=" + SHIP:BODY:NAME).
 
-    // --- Step 4: Wait for atmosphere, then orient ---
+    // --- Step 4: Wait for atmosphere, retract antennas, then orient ---
     IF SHIP:BODY:ATM:EXISTS {
         LOCAL atmHeight IS SHIP:BODY:ATM:HEIGHT.
         IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
@@ -72,6 +72,7 @@ GLOBAL FUNCTION phaseAerobrake {
             WAIT UNTIL SHIP:ALTITUDE < atmHeight.
             mLog("Atmosphere entry at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
         }
+        _aerobrakeRetractAntennas().
     }
     _aerobrakeOrient().
 
