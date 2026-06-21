@@ -201,7 +201,12 @@ LOCAL FUNCTION _vacuumAscentPitch {
     LOCAL speedFrac IS SHIP:VELOCITY:ORBIT:MAG / MAX(1, targetVel).
     SET speedFrac TO MAX(0, MIN(1, speedFrac)).
 
-    LOCAL pitch IS 90 * (1 - speedFrac).
+    // Pitch toward the horizon faster than a linear program (squared
+    // falloff) so horizontal velocity — and periapsis — build during
+    // the climb, instead of cutting off steep with a deep-negative Pe
+    // and an expensive circularization. The floors below still
+    // guarantee we keep gaining altitude over terrain.
+    LOCAL pitch IS 90 * (1 - speedFrac)^2.
     IF SHIP:VERTICALSPEED < 10 AND SHIP:APOAPSIS < PARKING_ALT * 0.95 {
         SET pitch TO MAX(pitch, 20).
     }

@@ -47,7 +47,7 @@ GLOBAL FUNCTION dependencyLibs {
         "airplane", LIST("observe", "flightplan", "utils"),
         "rover", LIST("payload_landing"),
         "science", LIST(),
-        "aerobrake", LIST("maneuver", "utils"),
+        "aerobrake", LIST("maneuver", "utils", "landing_config"),
         "descent", LIST(),
         "xfer_plan", LIST("maneuver_transfer", "orbit"),
         "orbit_nodes", LIST(),

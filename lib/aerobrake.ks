@@ -118,7 +118,27 @@ LOCAL FUNCTION _aerobrakeSetEntryAlarm {
 // over TIME, RADIAL, NORMAL to minimize distance to KSC.
 // ============================================================
 LOCAL FUNCTION _aerobrakeReentryTargeting {
-    LOCAL targetGeo IS LATLNG(KSC_LAT, KSC_LNG).
+    // Resolve the landing target (waypoint / locked / config). On
+    // Kerbin with nothing set, default to KSC (preserves return-to-
+    // Kerbin behavior); on any other body refuse to target without an
+    // explicit site rather than blindly aiming at KSC's coordinates
+    // on, e.g., Duna.
+    LOCAL tgt IS landingResolveTarget().
+    LOCAL tgtLat IS KSC_LAT.
+    LOCAL tgtLng IS KSC_LNG.
+    IF tgt["FOUND"] {
+        SET tgtLat TO tgt["LAT"].
+        SET tgtLng TO tgt["LNG"].
+        mLog("Aerobrake target: " + tgt["SOURCE"] + " "
+            + ROUND(tgtLat, 3) + "," + ROUND(tgtLng, 3) + ".").
+    } ELSE IF SHIP:BODY:NAME = "Kerbin" {
+        mLog("Aerobrake target: KSC default.").
+    } ELSE {
+        mLogWarn("Aerobrake: no landing target on " + SHIP:BODY:NAME
+            + " — skipping reentry targeting (untargeted entry).").
+        RETURN.
+    }
+    LOCAL targetGeo IS LATLNG(tgtLat, tgtLng).
     ADDONS:TR:SETTARGET(targetGeo).
     WAIT 0.5.
 
@@ -128,9 +148,9 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
     }
 
     LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-    LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG, KSC_LAT, KSC_LNG).
+    LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG, tgtLat, tgtLng).
     mLog("Reentry: current impact " + ROUND(impactPos:LAT, 2) + "," + ROUND(impactPos:LNG, 2)
-        + "  dist=" + ROUND(dist/1000, 1) + "km from KSC.").
+        + "  dist=" + ROUND(dist/1000, 1) + "km from target.").
     mLogWarn("STATS aerobrake pre-correction distKm=" + ROUND(dist/1000, 1)
         + " impact=" + ROUND(impactPos:LAT, 4) + "," + ROUND(impactPos:LNG, 4)).
 
@@ -196,7 +216,7 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
 
                     IF ADDONS:TR:HASIMPACT {
                         LOCAL tryImpact IS ADDONS:TR:IMPACTPOS.
-                        LOCAL tryDist IS geoDistance(tryImpact:LAT, tryImpact:LNG, KSC_LAT, KSC_LNG).
+                        LOCAL tryDist IS geoDistance(tryImpact:LAT, tryImpact:LNG, tgtLat, tgtLng).
                         IF tryDist < trialBestDist {
                             SET trialBestDist TO tryDist.
                             SET trialBestTime TO tryTime.
@@ -266,9 +286,9 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
     WAIT 1.
     IF ADDONS:TR:HASIMPACT {
         LOCAL finalImpact IS ADDONS:TR:IMPACTPOS.
-        LOCAL finalDist IS geoDistance(finalImpact:LAT, finalImpact:LNG, KSC_LAT, KSC_LNG).
+        LOCAL finalDist IS geoDistance(finalImpact:LAT, finalImpact:LNG, tgtLat, tgtLng).
         mLog("Post-correction impact: " + ROUND(finalImpact:LAT, 2) + "," + ROUND(finalImpact:LNG, 2)
-            + "  dist=" + ROUND(finalDist/1000, 1) + "km from KSC.").
+            + "  dist=" + ROUND(finalDist/1000, 1) + "km from target.").
         mLogWarn("STATS aerobrake postburn distKm=" + ROUND(finalDist/1000, 1)
             + " impact=" + ROUND(finalImpact:LAT, 4) + "," + ROUND(finalImpact:LNG, 4)).
     }
