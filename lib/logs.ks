@@ -141,7 +141,7 @@ LOCAL FUNCTION _sanitizeName {
     LOCAL i IS 0.
     UNTIL i >= raw:LENGTH {
         LOCAL c IS raw:SUBSTRING(i,1).
-        IF c:MATCHESPATTERN("[a-zA-Z0-9_\\-]") { SET out TO out + c. }
+        IF c:MATCHESPATTERN("[a-zA-Z0-9_-]") { SET out TO out + c. }
         ELSE IF c = " "                         { SET out TO out + "_". }
         SET i TO i + 1.
     }
@@ -162,7 +162,9 @@ GLOBAL FUNCTION mLog {
     PRINT line.
 
     LOCAL wroteLocal IS FALSE.
-    IF LEVEL <> "INFO" AND flightLogPath() <> "" AND CORE:VOLUME:FREESPACE > 150 {
+    // flightLogPath() is called for its side effect too: it ensures the
+    // log file exists (with a header) before the LOG below writes to it.
+    IF level <> "INFO" AND CORE:VOLUME:FREESPACE > 150 {
         LOG line TO flightLogPath().
         SET wroteLocal TO TRUE.
     }
