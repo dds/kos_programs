@@ -99,6 +99,7 @@ GLOBAL FUNCTION phaseLaunch {
         RETURN.
     }
 
+    SET SAS TO FALSE.
     mLog("Configuring MechJeb ascent...").
 
     IF NOT ADDONS:MJ:AVAILABLE {

@@ -374,6 +374,7 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
         RETURN FALSE.
     }
 
+    SET SAS TO FALSE.
     LOCAL clearAlt IS 150.
     LOCAL targetVel IS _vacuumTargetOrbitalVelocity().
     LOCAL nextTelemetry IS TIME:SECONDS.
