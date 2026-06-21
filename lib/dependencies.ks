@@ -48,6 +48,7 @@ GLOBAL FUNCTION dependencyLibs {
         "rover", LIST("payload_landing"),
         "science", LIST(),
         "aerobrake", LIST("maneuver", "utils", "landing_config"),
+        "landing_atmo", LIST("landing_config", "utils", "orbit"),
         "descent", LIST(),
         "xfer_plan", LIST("maneuver_transfer", "orbit"),
         "orbit_nodes", LIST(),
@@ -84,6 +85,7 @@ GLOBAL FUNCTION dependencyPhases {
         "ESCAPE", LIST("return_escape"),
         "MCC", LIST("maneuver_mcc"),
         "AEROBRAKE", LIST("aerobrake"),
+        "ATMO_WALK", LIST("landing_atmo"),
         "DESCENT", LIST("descent"),
         "DUNA_AEROCAPTURE", LIST("duna_ike_setup"),
         "IKE_SETUP", LIST("duna_ike_setup"),
@@ -150,6 +152,7 @@ GLOBAL FUNCTION dependencyBands {
         "PAYLOAD_OPS", LIST("TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION"),
         "RETURN_SETUP", LIST("RETURN_SETUP", "SURFACE_RETURN_SETUP"),
         "AEROBRAKE", LIST("AEROBRAKE"),
+        "ATMO_WALK", LIST("ATMO_WALK"),
         "DUNA_IKE_SETUP", LIST("DUNA_AEROCAPTURE", "IKE_SETUP", "DUNA_ENTRY_SETUP", "DUNA_ENTRY_LOWER_PE"),
         "LAND_DEORBIT", LIST("LAND_DEORBIT"),
         "LANDING", LIST("LAND_ASSIST", "LAND"),
@@ -184,6 +187,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "ESCAPE" { phaseMapSet(phaseMap, phaseKey, phaseEscape@). }
     ELSE IF phaseKey = "MCC" { phaseMapSet(phaseMap, phaseKey, phaseMcc@). }
     ELSE IF phaseKey = "AEROBRAKE" { phaseMapSet(phaseMap, phaseKey, phaseAerobrake@). }
+    ELSE IF phaseKey = "ATMO_WALK" { phaseMapSet(phaseMap, phaseKey, phaseAtmoWalk@). }
     ELSE IF phaseKey = "DESCENT" { phaseMapSet(phaseMap, phaseKey, phaseDescent@). }
     ELSE IF phaseKey = "DUNA_AEROCAPTURE" { phaseMapSet(phaseMap, phaseKey, phaseDunaAerocapture@). }
     ELSE IF phaseKey = "IKE_SETUP" { phaseMapSet(phaseMap, phaseKey, phaseIkeSetup@). }
