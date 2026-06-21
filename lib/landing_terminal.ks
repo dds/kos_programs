@@ -2,46 +2,20 @@
 
 GLOBAL FUNCTION _landingTargetRefineSteering {
     PARAMETER ctx.
-    PARAMETER impactInfo.
 
-    LOCAL upVec IS ctx["UP_VEC"].
-    LOCAL horizontalVel IS ctx["H_VEL"].
-    LOCAL horizontalSpeed IS ctx["H_SPEED"].
+    LOCAL targetPos IS LATLNG(ctx["TARGET_LAT"], ctx["TARGET_LNG"]):POSITION.
+    LOCAL posErr IS VXCL(ctx["UP_VEC"], targetPos - ctx["POSITION"]).
+    LOCAL desiredVel IS posErr * LANDING_HOVER_REFINE_SPEED_GAIN.
+    IF desiredVel:MAG > LANDING_TARGET_REFINE_HSPEED {
+        SET desiredVel TO desiredVel:NORMALIZED * LANDING_TARGET_REFINE_HSPEED.
+    }
+    LOCAL velErr IS desiredVel - ctx["H_VEL"].
+    LOCAL leanVec IS velErr * 0.1.
     LOCAL maxLean IS SIN(MAX_TILT).
-    LOCAL leanVec IS V(0,0,0).
-    LOCAL retroLeanLimit IS maxLean.
-    IF impactInfo["FOUND"]
-            AND impactInfo["DIST"] > LANDING_TARGET_REFINE_IMPACT_TOLERANCE {
-        SET retroLeanLimit TO maxLean * LANDING_TARGET_REFINE_RETRO_WEIGHT.
-    }
-
-    IF horizontalSpeed > 0.1 {
-        SET leanVec TO leanVec
-            + (-horizontalVel):NORMALIZED
-                * MIN(retroLeanLimit,
-                    horizontalSpeed / LANDING_TARGET_REFINE_RETRO_RESPONSE).
-    }
-
-    IF impactInfo["FOUND"] {
-        LOCAL targetGeo IS LATLNG(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
-        LOCAL impactGeo IS LATLNG(impactInfo["LAT"], impactInfo["LNG"]).
-        LOCAL impactToTarget IS VXCL(upVec,
-            targetGeo:POSITION - impactGeo:POSITION).
-        IF impactToTarget:MAG > 1 {
-            LOCAL impactLean IS MIN(
-                maxLean * LANDING_TARGET_REFINE_IMPACT_WEIGHT,
-                impactToTarget:MAG / LANDING_TARGET_REFINE_IMPACT_SCALE
-                    * maxLean).
-            SET leanVec TO leanVec
-                + impactToTarget:NORMALIZED * impactLean.
-        }
-    }
-
-    IF leanVec:MAG < 0.01 { RETURN upVec. }
     IF leanVec:MAG > maxLean {
         SET leanVec TO leanVec:NORMALIZED * maxLean.
     }
-    RETURN (upVec + leanVec):NORMALIZED.
+    RETURN (ctx["UP_VEC"] + leanVec):NORMALIZED.
 }
 
 GLOBAL FUNCTION _landingSolarRollSteering {
@@ -64,16 +38,19 @@ GLOBAL FUNCTION _landingTargetRefineTick {
     LOCAL descentSpeed IS lmDescentSpeed(
         controlHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
     LOCAL targetVs IS -descentSpeed.
-    LOCAL impactInfo IS _landingTrajImpactInfo(ctx).
-    LOCAL impactErr IS 999999.
-    LOCAL impactReady IS TRUE.
-    IF impactInfo["FOUND"] {
-        SET impactErr TO impactInfo["DIST"].
-        SET impactReady TO impactErr <= LANDING_TARGET_REFINE_IMPACT_TOLERANCE.
+    LOCAL targetPos IS LATLNG(ctx["TARGET_LAT"], ctx["TARGET_LNG"]):POSITION.
+    LOCAL posErr IS VXCL(ctx["UP_VEC"], targetPos - ctx["POSITION"]).
+    LOCAL desiredVel IS posErr * LANDING_HOVER_REFINE_SPEED_GAIN.
+    IF desiredVel:MAG > LANDING_TARGET_REFINE_HSPEED {
+        SET desiredVel TO desiredVel:NORMALIZED * LANDING_TARGET_REFINE_HSPEED.
     }
+    LOCAL velErr IS desiredVel - ctx["H_VEL"].
+    LOCAL targetReady IS posErr:MAG < 5
+        AND horizontalSpeed <= LANDING_TARGET_REFINE_HSPEED.
     IF NOT ctx["TARGET_REFINE_LOGGED"] {
         SET ctx["TARGET_REFINE_LOGGED"] TO TRUE.
-        mLogWarn("STATS target-refine entry trErr=" + ROUND(impactErr,0)
+        mLogWarn("STATS target-refine entry dist="
+            + ROUND(posErr:MAG,1)
             + " hs=" + ROUND(horizontalSpeed,1)
             + " vs=" + ROUND(ctx["V_SPEED"],1)
             + "/" + ROUND(targetVs,1)).
@@ -97,8 +74,8 @@ GLOBAL FUNCTION _landingTargetRefineTick {
         SET ctx["HOVER_REFINED"] TO TRUE.
         _landingSetThrottle(ctx, 0).
         IF climbLimited {
-            mLogWarn("STATS target-refine exit reason=climb trErr="
-                + ROUND(impactErr,0)
+            mLogWarn("STATS target-refine exit reason=climb dist="
+                + ROUND(posErr:MAG,1)
                 + " age=" + ROUND(refineAge,1)
                 + " hs=" + ROUND(horizontalSpeed,1)
                 + " vs=" + ROUND(ctx["V_SPEED"],1)
@@ -106,8 +83,8 @@ GLOBAL FUNCTION _landingTargetRefineTick {
             _landingSetState(ctx, "VERTICAL_DESCENT",
                 "target refine climb guard triggered").
         } ELSE {
-            mLogWarn("STATS target-refine exit reason=timeout trErr="
-                + ROUND(impactErr,0)
+            mLogWarn("STATS target-refine exit reason=timeout dist="
+                + ROUND(posErr:MAG,1)
                 + " age=" + ROUND(refineAge,1)
                 + " hs=" + ROUND(horizontalSpeed,1)
                 + " vs=" + ROUND(ctx["V_SPEED"],1)
@@ -118,8 +95,7 @@ GLOBAL FUNCTION _landingTargetRefineTick {
         RETURN.
     }
 
-    LOCAL steeringTarget IS _landingTargetRefineSteering(
-        ctx, impactInfo).
+    LOCAL steeringTarget IS _landingTargetRefineSteering(ctx).
     _landingSetSteering(ctx, steeringTarget).
     LOCAL maxAcc IS ctx["MAX_ACC"].
     LOCAL gravAcc IS ctx["GRAV"].
@@ -136,34 +112,15 @@ GLOBAL FUNCTION _landingTargetRefineTick {
             verticalAccDemand / (maxAcc * verticalFrac))).
     }
     LOCAL correctionThrottle IS 0.
-    IF maxAcc > 0
-            AND (NOT impactReady
-                OR horizontalSpeed > LANDING_TARGET_REFINE_ACCEPT_HSPEED) {
-        LOCAL correctionNeed IS 0.
-        IF impactInfo["FOUND"] {
-            SET correctionNeed TO impactErr
-                / MAX(1, LANDING_TARGET_REFINE_IMPACT_SCALE).
-        } ELSE {
-            SET correctionNeed TO horizontalSpeed / MAX(1, APPROACH_HSPEED).
-        }
-        SET correctionNeed TO MAX(0, MIN(1, correctionNeed)).
-
-        LOCAL correctionWindow IS MAX(1,
-            MIN(LANDING_TARGET_REFINE_ACCEPT_TIME,
-                LANDING_TARGET_REFINE_MAX_TIME - refineAge)).
-        LOCAL requiredLateralAcc IS horizontalSpeed / correctionWindow.
-        IF impactInfo["FOUND"] {
-            SET requiredLateralAcc TO MAX(requiredLateralAcc,
-                2 * impactErr / (correctionWindow * correctionWindow)).
-        }
+    LOCAL requiredLateralAcc IS velErr:MAG * 0.1.
+    IF maxAcc > 0 AND NOT targetReady AND requiredLateralAcc > 0.01 {
         LOCAL correctionCeiling IS MIN(1,
             MIN(hoverThr * 1.5,
                 hoverThr + requiredLateralAcc / maxAcc)).
         LOCAL correctionFloor IS MIN(correctionCeiling, hoverThr * 0.5).
         SET correctionThrottle TO MAX(correctionFloor,
             MIN(correctionCeiling,
-                hoverThr
-                    + correctionNeed * (correctionCeiling - hoverThr))).
+                hoverThr + requiredLateralAcc / maxAcc)).
     }
     _landingSetThrottle(ctx, MAX(verticalThrottle, correctionThrottle)).
 
@@ -172,8 +129,8 @@ GLOBAL FUNCTION _landingTargetRefineTick {
             LANDING_TARGET_REFINE_MAX_TIME) - refineAge).
     _landingHudText(ctx, "TARGET REFINE hs=" + ROUND(horizontalSpeed,1)
         + "/" + ROUND(LANDING_TARGET_REFINE_HSPEED,1)
-        + " trErr=" + ROUND(impactErr,0)
-        + " trOk=" + _landingBoolText(impactReady)
+        + " d=" + ROUND(posErr:MAG,1)
+        + " vErr=" + ROUND(velErr:MAG,1)
         + " age=" + ROUND(refineAge,0)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)
@@ -181,21 +138,12 @@ GLOBAL FUNCTION _landingTargetRefineTick {
         + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
         1, 2, 13, CYAN, FALSE, refineEta).
 
-    IF horizontalSpeed <= LANDING_TARGET_REFINE_HSPEED
-            AND impactReady {
-        mLogWarn("STATS target-refine exit reason=neutralized trErr="
-            + ROUND(impactErr,0)
+    IF targetReady {
+        mLogWarn("STATS target-refine exit reason=position-captured dist="
+            + ROUND(posErr:MAG,1)
             + " age=" + ROUND(refineAge,1)
             + " hs=" + ROUND(horizontalSpeed,1)).
-        _landingSetState(ctx, "APPROACH", "lateral drift neutralized").
-    } ELSE IF refineAge >= LANDING_TARGET_REFINE_ACCEPT_TIME
-            AND horizontalSpeed <= LANDING_TARGET_REFINE_ACCEPT_HSPEED
-            AND impactReady {
-        mLogWarn("STATS target-refine exit reason=good-enough trErr="
-            + ROUND(impactErr,0)
-            + " age=" + ROUND(refineAge,1)
-            + " hs=" + ROUND(horizontalSpeed,1)).
-        _landingSetState(ctx, "APPROACH", "target refine good enough").
+        _landingSetState(ctx, "APPROACH", "target refine position captured").
     }
 }
 
