@@ -44,11 +44,11 @@ GLOBAL FUNCTION phaseAerobrake {
     mLogPhase("AEROBRAKE").
 
     // --- Step 1: Reentry Pe cleanup and optional impact targeting ---
-    IF AEROBRAKE_PE_TARGETING > 0 {
-        _aerobrakeTrimReentryPe().
-    } ELSE {
-        mLog("Aerobrake Pe targeting disabled by config.").
-    }
+    // IF AEROBRAKE_PE_TARGETING > 0 {
+    //     _aerobrakeTrimReentryPe().
+    // } ELSE {
+    //     mLog("Aerobrake Pe targeting disabled by config.").
+    // }
 
     IF AEROBRAKE_TARGETING <= 0 {
         mLog("Aerobrake impact-site targeting disabled by config.").
