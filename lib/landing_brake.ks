@@ -41,10 +41,7 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
     LOCAL crossErr IS trajErr["CROSS_SIGNED"].
     LOCAL crossAbs IS trajErr["CROSS"].
     LOCAL brakeGuard IS 1.
-    IF ctx["HAS_TARGET"] AND trajErr["FOUND"]
-            AND trajErr["ALONG"] <= 0 {
-        SET brakeGuard TO 0.
-    }
+    SET brakeGuard TO MAX(0, MIN(1, trajErr["ALONG"] / BRAKE_MARGIN)).
     LOCAL crossPid IS ctx["CROSS_PID"].
     LOCAL steeringTarget IS retroSteering.
     LOCAL biasMag IS 0.
@@ -154,7 +151,7 @@ GLOBAL FUNCTION _landingBrakingTick {
     IF forceHorizontalBrake AND maxAcc > 0 {
         LOCAL remHVel IS horizontalSpeed - APPROACH_HSPEED.
         LOCAL timeToTargetSpeed IS remHVel / maxAcc.
-        SET horizontalThrottle TO MAX(LANDING_HKILL_THROTTLE_MIN,
+        SET horizontalThrottle TO MAX(0.01,
             MIN(LANDING_HKILL_THROTTLE_MAX,
             timeToTargetSpeed)).
         SET horizontalThrottle TO horizontalThrottle * steerInfo["GUARD"].
