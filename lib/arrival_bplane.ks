@@ -752,6 +752,14 @@ GLOBAL FUNCTION planBplaneCorrection {
         + " bestPlaneErr=" + ROUND(bestPlaneErr, 2)
         + " wantPeKm=" + ROUND(wantPe / 1000, 1)).
 
+    LOCAL liveMeas IS measureArrival(0, targetBody).
+    IF pristineLog = "" AND liveMeas <> 0
+            AND _bplaneSafeEncounter(targetBody, liveMeas)
+            AND nd:DELTAV:MAG < 0.2 {
+        mLog("BPLANE: safe encounter; correction <0.2 m/s, handing off.").
+        REMOVE nd.
+        RETURN 0.
+    }
     IF nd:DELTAV:MAG < MIN_EXEC_DV {
         IF pristineLog <> "" {
             mLog(pristineLog).
