@@ -19,7 +19,6 @@ GLOBAL AEROBRAKE_REENTRY_DIR IS "".
 GLOBAL AEROBRAKE_ARM_CHUTES IS 0.
 GLOBAL AEROBRAKE_TARGETING IS 1.
 GLOBAL AEROBRAKE_PE_TARGETING IS 1.
-GLOBAL CAPTURE_PE IS -1.
 
 LOCAL KSC_LAT IS -0.10.
 LOCAL KSC_LNG IS -74.25.
@@ -131,7 +130,6 @@ LOCAL FUNCTION _aerobrakeSetEntryAlarm {
 // ============================================================
 LOCAL FUNCTION _aerobrakeTrimReentryPe {
     LOCAL targetPe IS REENTRY_PE.
-    IF CAPTURE_PE >= 0 { SET targetPe TO CAPTURE_PE. }
     IF targetPe < 0 {
         mLog("Aerobrake Pe trim disabled: target Pe < 0.").
         RETURN.
