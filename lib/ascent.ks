@@ -9,8 +9,9 @@
 // auto-staging machinery lives here because it is shared by both.
 //
 // Reads ascent config (PARKING_ALT, LAUNCH_INCLINATION,
-// LAUNCH_AZIMUTH, LAUNCH_SOLID_STAGE_FRAC, RECOVERY_PE) owned by
-// launch.ks — both libs are always co-loaded in the LAUNCH band.
+// LAUNCH_AZIMUTH, LAUNCH_SOLID_STAGE_FRAC, ASCENT_STAGED,
+// RECOVERY_PE) owned by launch.ks — both libs are always co-loaded
+// in the LAUNCH band.
 // ============================================================
 
 LOCAL _stagingArmed IS FALSE.
@@ -428,11 +429,13 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
             RETURN FALSE.
         }
 
-        //STAGE.
-        //mLog("Vacuum launch — STAGE fired.").
+        IF ASCENT_STAGED {
+            STAGE.
+            mLog("Vacuum launch — STAGE fired.").
+            WAIT 0.5.
+            ascentRunPostStageHook().
+        }
         HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
-        WAIT 0.5.
-        ascentRunPostStageHook().
         armAscentStaging().
     }
 
