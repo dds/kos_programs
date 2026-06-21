@@ -101,7 +101,11 @@ It scans up to four orbits by default, or `TARGET_DEORBIT_SCAN_ORBITS` when
 configured. In `LANDING_SIM_MODE`, this is capped at two orbits. The current
 implementation uses a fixed coarse step of `period / 128`; the
 `TARGET_DEORBIT_SCAN_SAMPLES` global exists, but is not currently used by this
-solver.
+solver. If `TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM` is set, an otherwise
+acceptable pass whose cross-track miss is wider than that threshold will not
+stop the scan immediately; the solver keeps looking through the configured
+scan orbits and chooses the first pass inside the preferred cross-track band,
+or the best acceptable wider pass if none are cleaner.
 
 For each candidate burn time, `_solveGeometricDeorbitDv()` searches retrograde
 dV from a 15 m/s seed inside a 2-120 m/s range. It places temporary nodes,
@@ -509,6 +513,7 @@ These values come from `landing_config.ks`, `landing_main.ks`, and
 | deorbit | node ground angle | 50 deg | Desired central angle before target |
 | deorbit | retro dV search | 2-120 m/s | Range searched for the deorbit node |
 | deorbit | seed retro dV | 15 m/s | Initial dV trial |
+| deorbit | `TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM` | 0 km | Preferred max cross-track before waiting for a later orbit; 0 disables |
 | terrain | `TERRAIN_CHECK_RADIUS` | 100 m | Initial flat-spot search radius |
 | terrain | `TERRAIN_CHECK_STEP` | 20 m | Initial flat-spot grid step |
 | terrain | hover radius override | 20 m | Final hover flat-spot search radius |

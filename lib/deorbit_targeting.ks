@@ -14,6 +14,7 @@ GLOBAL TARGET_DEORBIT_SCAN_CENTER_MINUTES IS 0.
 GLOBAL TARGET_DEORBIT_SCAN_WINDOW_MINUTES IS 0.
 GLOBAL TARGET_TOLERANCE IS 5000.
 GLOBAL TARGET_DEORBIT_MIN_LEAD IS 0.
+GLOBAL TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM IS 0.
 GLOBAL LANDING_SIM_MODE IS 0.
 GLOBAL DEORBIT_CROSSTRACK_AUTHORITY_KM IS 0.
 GLOBAL DEORBIT_MIN_FPA IS 0.
@@ -148,6 +149,13 @@ GLOBAL FUNCTION targetedDeorbitAt {
     ).
     LOCAL foundGeometry IS FALSE.
     LOCAL acceptedSolution IS FALSE.
+    LOCAL bestAccepted IS LEXICON("VALID", FALSE).
+    LOCAL bestAcceptedGeometry IS LEXICON("VALID", FALSE).
+    LOCAL bestAcceptedCross IS 999999999.
+    LOCAL preferredCrossTrack IS 0.
+    IF TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM > 0 {
+        SET preferredCrossTrack TO TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM * 1000.
+    }
     LOCAL orbitScan IS 0.
 
     UNTIL orbitScan >= scanOrbits OR acceptedSolution {
@@ -175,7 +183,24 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     + " geometry did not solve a valid deorbit.").
             } ELSE IF _targetDeorbitSolutionAccepted(solved,
                     minDownfield, maxDownfield) {
-                SET acceptedSolution TO TRUE.
+                LOCAL crossTrack IS _targetCrossTrackFromSolved(solved).
+                IF NOT bestAccepted["VALID"]
+                        OR crossTrack < bestAcceptedCross {
+                    SET bestAccepted TO solved.
+                    SET bestAcceptedGeometry TO geometry.
+                    SET bestAcceptedCross TO crossTrack.
+                }
+
+                IF preferredCrossTrack <= 0 OR crossTrack <= preferredCrossTrack {
+                    SET acceptedSolution TO TRUE.
+                } ELSE {
+                    mLogWarn("Orbit " + (orbitScan + 1)
+                        + " solution accepted but wide: cross="
+                        + ROUND(crossTrack/1000,2)
+                        + "km preferred<="
+                        + ROUND(preferredCrossTrack/1000,2)
+                        + "km; scanning later orbit(s).").
+                }
             } ELSE {
                 LOCAL crossTrack IS _targetCrossTrackFromSolved(solved).
                 LOCAL crossAuth IS _targetDeorbitCrossAuthority(solved).
@@ -197,6 +222,16 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
         SET orbitScan TO orbitScan + 1.
         WAIT 0.
+    }
+
+    IF NOT acceptedSolution AND bestAccepted["VALID"] {
+        SET solved TO bestAccepted.
+        SET geometry TO bestAcceptedGeometry.
+        SET acceptedSolution TO TRUE.
+        mLogWarn("No later pass met preferred cross-track <= "
+            + ROUND(preferredCrossTrack/1000,2)
+            + "km; using best acceptable cross="
+            + ROUND(bestAcceptedCross/1000,2) + "km.").
     }
 
     IF NOT acceptedSolution {
