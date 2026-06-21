@@ -26,6 +26,8 @@ LOCAL CORRECTION_TOLERANCE IS 50000.   // 50km default
 LOCAL MAX_CORRECTION_DV IS 20.         // cap total correction burn
 LOCAL PE_CORRECTION_TOLERANCE IS 1000. // 1km final reentry Pe cleanup
 LOCAL MAX_PE_CORRECTION_FRACTION IS 0.05.
+LOCAL MAX_TARGETING_SCANS IS 5.
+LOCAL TARGETING_ATMO_SKIP_MULT IS 1.1.
 
 // Atmosphere heights by body (meters). Stock + OPM.
 LOCAL ATM_HEIGHTS IS LEXICON(
@@ -121,6 +123,32 @@ LOCAL FUNCTION _aerobrakeSetEntryAlarm {
     }
 }
 
+LOCAL FUNCTION _aerobrakeAtmoHeight {
+    IF NOT SHIP:BODY:ATM:EXISTS { RETURN -1. }
+
+    LOCAL atmAlt IS SHIP:BODY:ATM:HEIGHT.
+    IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
+        SET atmAlt TO ATM_HEIGHTS[SHIP:BODY:NAME].
+    }
+    RETURN atmAlt.
+}
+
+LOCAL FUNCTION _aerobrakeTargetingWindowOk {
+    PARAMETER label.
+
+    LOCAL atmAlt IS _aerobrakeAtmoHeight().
+    IF atmAlt < 0 { RETURN TRUE. }
+
+    LOCAL skipAlt IS atmAlt * TARGETING_ATMO_SKIP_MULT.
+    IF SHIP:ALTITUDE <= skipAlt {
+        mLog(label + " skipped: already within 10% of atmosphere altitude "
+            + "(alt=" + ROUND(SHIP:ALTITUDE/1000, 1)
+            + "km atmo=" + ROUND(atmAlt/1000, 1) + "km).").
+        RETURN FALSE.
+    }
+    RETURN TRUE.
+}
+
 // ============================================================
 // Reentry targeting — small Pe cleanup plus Trajectories impact burn
 //
@@ -129,6 +157,8 @@ LOCAL FUNCTION _aerobrakeSetEntryAlarm {
 // TIME, RADIAL, NORMAL to minimize distance to KSC.
 // ============================================================
 LOCAL FUNCTION _aerobrakeTrimReentryPe {
+    IF NOT _aerobrakeTargetingWindowOk("Aerobrake Pe trim") { RETURN. }
+
     LOCAL targetPe IS REENTRY_PE.
     IF targetPe < 0 {
         mLog("Aerobrake Pe trim disabled: target Pe < 0.").
@@ -175,7 +205,7 @@ LOCAL FUNCTION _aerobrakeTrimReentryPe {
         + "km target=" + ROUND(targetPe/1000, 1)
         + "km.").
 
-    FROM { LOCAL iter IS 0. } UNTIL iter >= 40 STEP { SET iter TO iter + 1. } DO {
+    FROM { LOCAL iter IS 0. } UNTIL iter >= MAX_TARGETING_SCANS STEP { SET iter TO iter + 1. } DO {
         LOCAL improved IS FALSE.
         LOCAL trialBestPro IS bestPro.
         LOCAL trialBestPe IS bestPe.
@@ -256,6 +286,8 @@ LOCAL FUNCTION _aerobrakeTrimReentryPe {
 }
 
 LOCAL FUNCTION _aerobrakeReentryTargeting {
+    IF NOT _aerobrakeTargetingWindowOk("Aerobrake reentry targeting") { RETURN. }
+
     // Resolve the landing target (waypoint / locked / config). On
     // Kerbin with nothing set, default to KSC (preserves return-to-
     // Kerbin behavior); on any other body refuse to target without an
@@ -320,7 +352,7 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
 
     mLog("Reentry correction: coordinate search from dist=" + ROUND(bestDist/1000, 1) + "km.").
 
-    FROM { LOCAL iter IS 0. } UNTIL iter >= 50 STEP { SET iter TO iter + 1. } DO {
+    FROM { LOCAL iter IS 0. } UNTIL iter >= MAX_TARGETING_SCANS STEP { SET iter TO iter + 1. } DO {
         LOCAL improved IS FALSE.
         LOCAL trialBestDist IS bestDist.
         LOCAL trialBestTime IS bestTime.
