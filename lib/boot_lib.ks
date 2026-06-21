@@ -395,7 +395,7 @@ GLOBAL FUNCTION bootResetMissionSelection {
     PARAMETER vn.
     PARAMETER tn.
     PARAMETER pts.
-    LOCAL rm IS stateRemovePrefix("mission_cfg_").
+    missionOverrideClear().
     FOR key IN LIST(
         "mission_id", "mission_name", "phase", "fairing_deployed",
         "lib_band", "lib_band_phase", "lib_band_libs",
@@ -414,7 +414,7 @@ GLOBAL FUNCTION bootResetMissionSelection {
     stateSet("target", tn).
     stateSet("payloads", pts).
     PRINT "  Mission selection reset for prelaunch.".
-    mLog("Mission selection reset before launch; cleared " + rm + " config keys.").
+    mLog("Mission selection reset before launch.").
 }
 
 GLOBAL FUNCTION bootResumeOrManual {

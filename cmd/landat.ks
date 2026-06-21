@@ -142,52 +142,38 @@ IF NOT err {
 
     archiveLog().
 
-    // Mission identity with no matching .ks so boot skips the
-    // selector and leaves this state alone (returntokerbin trick).
-    stateSet("target", "KERBIN").
-    stateSet("mission_type", "kerbin_return").
-    // Must NOT match any missions/<craft>/*.ks filename, or boot
-    // re-applies that cfg over this command's state (flight-found:
-    // 'point_landing' collided with point_landing.ks).
-    stateSet("mission_id", "land_at_target").
-    stateSet("mission_name", missionName).
-    stateSet("payloads", LIST("RETURN")).
-
-    stateSet("mission_cfg_SEQUENCE", LIST("KSC_DEORBIT", "DESCENT", "DONE")).
+    LOCAL profilePath IS missionProfileBegin(stateGet("vehicle", ""), "land_at_target").
+    missionOverrideClear().
+    LOG "SET MISSION_ID TO " + configLiteral("land_at_target") + "." TO profilePath.
+    LOG "SET MISSION_NAME TO " + configLiteral(missionName) + "." TO profilePath.
+    LOG "SET MISSION_TYPE TO " + configLiteral("kerbin_return") + "." TO profilePath.
+    LOG "SET TARGET_ TO " + configLiteral("KERBIN") + "." TO profilePath.
+    LOG "SET PAYLOADS TO " + configLiteral(LIST("RETURN")) + "." TO profilePath.
+    LOG "SET SEQUENCE TO " + configLiteral(LIST("KSC_DEORBIT", "DESCENT", "DONE")) + "." TO profilePath.
     // DESCENT is its own (lean) band; preloading descent lets it
     // bind during KSC_DEORBIT with no band-change reboot.
-    stateSet("mission_cfg_LIBS_EXTRA", LIST("descent")).
-    stateSet("mission_cfg_TARGET_LAT", targetLat).
-    stateSet("mission_cfg_TARGET_LNG", targetLng).
-    stateSet("mission_cfg_REENTRY_PE", entryPe).
-    stateSet("mission_cfg_TARGET_TOLERANCE", tolerance).
-    // The waypoint is resolved to numbers above; clear any stale
-    // name so the phase doesn't re-resolve something else.
-    stateRemove("mission_cfg_TARGET_WAYPOINT").
-
-    // Targeted-deorbit scan settings (the proven landatksc recipe).
-    stateSet("mission_cfg_TARGET_DEORBIT_SCAN_ORBITS", maxOrbits).
-    stateSet("mission_cfg_TARGET_DEORBIT_SCAN_SAMPLES", scanSamples).
+    LOG "SET LIBS_EXTRA TO " + configLiteral(LIST("descent")) + "." TO profilePath.
+    LOG "SET TARGET_LAT TO " + configLiteral(targetLat) + "." TO profilePath.
+    LOG "SET TARGET_LNG TO " + configLiteral(targetLng) + "." TO profilePath.
+    LOG "SET REENTRY_PE TO " + configLiteral(entryPe) + "." TO profilePath.
+    LOG "SET TARGET_TOLERANCE TO " + configLiteral(tolerance) + "." TO profilePath.
+    LOG "SET TARGET_DEORBIT_SCAN_ORBITS TO " + configLiteral(maxOrbits) + "." TO profilePath.
+    LOG "SET TARGET_DEORBIT_SCAN_SAMPLES TO " + configLiteral(scanSamples) + "." TO profilePath.
     // 300s, not 90: a small reaction wheel (no SAS core) needs
     // real time to despin and align — flight-found: a 36s-out
     // node arrived with the craft pointing the wrong way.
-    stateSet("mission_cfg_TARGET_DEORBIT_MIN_LEAD", 300).
-
+    LOG "SET TARGET_DEORBIT_MIN_LEAD TO " + configLiteral(300) + "." TO profilePath.
     IF descentFairingTag <> "" {
-        stateSet("mission_cfg_DESCENT_FAIRING_TAG", descentFairingTag).
-    } ELSE {
-        stateRemove("mission_cfg_DESCENT_FAIRING_TAG").
+        LOG "SET DESCENT_FAIRING_TAG TO " + configLiteral(descentFairingTag) + "." TO profilePath.
     }
     IF descentDecouplerTag <> "" {
-        stateSet("mission_cfg_DESCENT_DECOUPLER_TAG", descentDecouplerTag).
-    } ELSE {
-        stateRemove("mission_cfg_DESCENT_DECOUPLER_TAG").
+        LOG "SET DESCENT_DECOUPLER_TAG TO " + configLiteral(descentDecouplerTag) + "." TO profilePath.
     }
     IF descentChutesTag <> "" {
-        stateSet("mission_cfg_DESCENT_CHUTES_TAG", descentChutesTag).
-    } ELSE {
-        stateRemove("mission_cfg_DESCENT_CHUTES_TAG").
+        LOG "SET DESCENT_CHUTES_TAG TO " + configLiteral(descentChutesTag) + "." TO profilePath.
     }
+
+    stateSet("mission_id", "land_at_target").
 
     stateSet("phase", "KSC_DEORBIT").
     stateSet("launch_time", ROUND(TIME:SECONDS)).

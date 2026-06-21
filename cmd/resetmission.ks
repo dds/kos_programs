@@ -11,7 +11,7 @@ PARAMETER newMission IS "".
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
-LOCAL removed IS stateRemovePrefix("mission_cfg_").
+missionOverrideClear().
 FOR key IN LIST(
     "mission_id", "mission_name", "target", "payloads", "phase",
     "lib_band", "lib_band_phase", "lib_band_libs",
@@ -26,8 +26,8 @@ FOR key IN LIST(
 IF newMission <> "" {
     stateSet("mission_id", newMission).
     PRINT "Mission reset. Next boot will load profile: " + newMission.
-    mLog("Mission reset to profile " + newMission + "; cleared " + removed + " config keys.").
+    mLog("Mission reset to profile " + newMission + ".").
 } ELSE {
     PRINT "Mission reset. Next boot will ask for a profile.".
-    mLog("Mission selection reset; cleared " + removed + " config keys.").
+    mLog("Mission selection reset.").
 }

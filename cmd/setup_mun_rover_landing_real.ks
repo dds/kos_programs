@@ -7,12 +7,6 @@ RUNPATH("0:/cmd/landingrescue.ks", "LAND_ASSIST").
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
-LOCAL FUNCTION _cfg {
-    PARAMETER key.
-    PARAMETER value.
-    stateSet("mission_cfg_" + key, value).
-}
-
 stateSet("vehicle", "FR3").
 stateSet("target", "MUN").
 stateSet("payloads", LIST("ASSISTROVER")).
@@ -25,27 +19,29 @@ stateSet("reload_next_phase", "").
 stateSet("reload_next_band", "").
 stateSet("lib_band", "LAND_DEORBIT").
 
-_cfg("MISSION_ID", "mun_rover_emergency_surface").
-_cfg("MISSION_NAME", "Mun Rover Emergency Surface Release").
-_cfg("TARGET_", "MUN").
-_cfg("PAYLOADS", LIST("ASSISTROVER")).
-_cfg("PROGRESSIVE_RELOAD", 1).
-_cfg("SEQUENCE", LIST("LAND_DEORBIT", "LAND_ASSIST", "DONE")).
-_cfg("TARGET_PE", 15000).
-_cfg("TARGET_AP", 15000).
-_cfg("TARGET_INCLINATION", 90).
-_cfg("TARGET_TOLERANCE", 2500).
-_cfg("GUIDANCE_ALT", 5000).
-_cfg("TARGET_DEORBIT_SCAN_ORBITS", 5).
-_cfg("TARGET_DEORBIT_SCAN_SAMPLES", 512).
-_cfg("LANDING_SITE_SCAN_ENABLE", 1).
-_cfg("LANDING_SITE_SCAN_RADIUS", 1500).
-_cfg("LANDING_SITE_SCAN_STEP", 250).
-_cfg("LANDING_SITE_MAX_SLOPE", 12).
-_cfg("MAX_TILT", 12).
-_cfg("GUIDANCE_CORRECTION_THRESHOLD", 500).
-_cfg("RELOAD_AFTER_LAND_ASSIST", 0).
-_cfg("RELOAD_AFTER_LAND", 0).
+LOCAL profilePath IS missionProfileBegin("FR3", "mun_rover_emergency_surface").
+missionOverrideClear().
+LOG "SET MISSION_ID TO " + configLiteral("mun_rover_emergency_surface") + "." TO profilePath.
+LOG "SET MISSION_NAME TO " + configLiteral("Mun Rover Emergency Surface Release") + "." TO profilePath.
+LOG "SET TARGET_ TO " + configLiteral("MUN") + "." TO profilePath.
+LOG "SET PAYLOADS TO " + configLiteral(LIST("ASSISTROVER")) + "." TO profilePath.
+LOG "SET PROGRESSIVE_RELOAD TO " + configLiteral(1) + "." TO profilePath.
+LOG "SET SEQUENCE TO " + configLiteral(LIST("LAND_DEORBIT", "LAND_ASSIST", "DONE")) + "." TO profilePath.
+LOG "SET TARGET_PE TO " + configLiteral(15000) + "." TO profilePath.
+LOG "SET TARGET_AP TO " + configLiteral(15000) + "." TO profilePath.
+LOG "SET TARGET_INCLINATION TO " + configLiteral(90) + "." TO profilePath.
+LOG "SET TARGET_TOLERANCE TO " + configLiteral(2500) + "." TO profilePath.
+LOG "SET GUIDANCE_ALT TO " + configLiteral(5000) + "." TO profilePath.
+LOG "SET TARGET_DEORBIT_SCAN_ORBITS TO " + configLiteral(5) + "." TO profilePath.
+LOG "SET TARGET_DEORBIT_SCAN_SAMPLES TO " + configLiteral(512) + "." TO profilePath.
+LOG "SET LANDING_SITE_SCAN_ENABLE TO " + configLiteral(1) + "." TO profilePath.
+LOG "SET LANDING_SITE_SCAN_RADIUS TO " + configLiteral(1500) + "." TO profilePath.
+LOG "SET LANDING_SITE_SCAN_STEP TO " + configLiteral(250) + "." TO profilePath.
+LOG "SET LANDING_SITE_MAX_SLOPE TO " + configLiteral(12) + "." TO profilePath.
+LOG "SET MAX_TILT TO " + configLiteral(12) + "." TO profilePath.
+LOG "SET GUIDANCE_CORRECTION_THRESHOLD TO " + configLiteral(500) + "." TO profilePath.
+LOG "SET RELOAD_AFTER_LAND_ASSIST TO " + configLiteral(0) + "." TO profilePath.
+LOG "SET RELOAD_AFTER_LAND TO " + configLiteral(0) + "." TO profilePath.
 
 PRINT "Rover landing setup complete.".
 PRINT "Phase: LAND_DEORBIT -> LAND_ASSIST -> DONE.".

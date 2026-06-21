@@ -23,45 +23,45 @@ GLOBAL FUNCTION configLiteral {
     RETURN CHAR(34) + raw + CHAR(34).
 }
 
-GLOBAL FUNCTION applyKnownMissionState {
-    LOCAL overridePath IS "1:/run/mission_cfg_overrides.ks".
-    IF EXISTS(overridePath) { DELETEPATH(overridePath). }
-    LOCAL wrote IS FALSE.
-    FOR sk IN stateKeys() {
-        IF sk:LENGTH > 12 AND sk:SUBSTRING(0, 12) = "mission_cfg_" {
-            LOCAL bare IS sk:SUBSTRING(12, sk:LENGTH - 12).
-            LOCAL raw IS stateGet(sk, "").
-            LOCAL line IS "SET " + bare + " TO " + configLiteral(raw) + ".".
-            LOG line TO overridePath.
-            SET wrote TO TRUE.
-        }
-    }
-    IF wrote { RUNPATH(overridePath). }
+GLOBAL FUNCTION missionOverridePath {
+    IF NOT EXISTS("1:/run") { CREATEDIR("1:/run"). }
+    RETURN "1:/run/mission_overrides.ks".
 }
 
-// Write a mission profile (a LEXICON of NAME -> value) to the vessel's
-// local mission dir as compact `SET NAME TO value.` lines. In-flight
-// setup (surface/return) uses this instead of persisting dozens of
-// mission_cfg_* keys in state.json: boot already RUNPATHs
-// 1:/missions/<vehicle>/<id>.ks for the selected mission_id, then
-// layers runtime mission_cfg_* on top. Returns the path written.
-GLOBAL FUNCTION missionProfileWrite {
+GLOBAL FUNCTION missionOverrideClear {
+    LOCAL overridePath IS "1:/run/mission_overrides.ks".
+    IF EXISTS(overridePath) { DELETEPATH(overridePath). }
+}
+
+GLOBAL FUNCTION applyMissionOverrides {
+    LOCAL overridePath IS missionOverridePath().
+    IF EXISTS(overridePath) { RUNPATH(overridePath). }
+}
+
+GLOBAL FUNCTION applyKnownMissionState {
+    applyMissionOverrides().
+}
+
+GLOBAL FUNCTION missionProfilePath {
     PARAMETER cn.
     PARAMETER mid.
-    PARAMETER cfg.
     IF cn = "" {
-        mLogError("missionProfileWrite: empty vehicle name — refusing to "
+        mLogError("missionProfilePath: empty vehicle name — refusing to "
             + "write " + mid + " profile to the missions root.").
         RETURN "".
     }
     IF NOT EXISTS("1:/missions") { CREATEDIR("1:/missions"). }
     LOCAL dir IS "1:/missions/" + cn.
     IF NOT EXISTS(dir) { CREATEDIR(dir). }
-    LOCAL path IS dir + "/" + mid + ".ks".
+    RETURN dir + "/" + mid + ".ks".
+}
+
+GLOBAL FUNCTION missionProfileBegin {
+    PARAMETER cn.
+    PARAMETER mid.
+    LOCAL path IS missionProfilePath(cn, mid).
+    IF path = "" { RETURN "". }
     IF EXISTS(path) { DELETEPATH(path). }
-    FOR key IN cfg:KEYS {
-        LOG "SET " + key + " TO " + configLiteral(cfg[key]) + "." TO path.
-    }
     RETURN path.
 }
 

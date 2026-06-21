@@ -25,12 +25,6 @@ IF ABORT {
     SET clearedAbort TO TRUE.
 }
 
-LOCAL FUNCTION _cfg {
-    PARAMETER key.
-    PARAMETER value.
-    stateSet("mission_cfg_" + key, value).
-}
-
 LOCAL FUNCTION _clearLibCache {
     FOR key IN LIST(
         "lib_band_libs", "lib_band_phase", "reload_reason",
@@ -43,24 +37,30 @@ LOCAL FUNCTION _clearLibCache {
 LOCAL FUNCTION _clearHopLegState {
     FOR key IN LIST(
         "landing_state", "landing_lat", "landing_lng", "landing_time",
-        "mission_cfg_TARGET_LAT", "mission_cfg_TARGET_LNG",
-        "mission_cfg_TARGET_LOCK", "mission_cfg_TARGET_WAYPOINT"
+        "prelaunch_plane_ut", "prelaunch_plane_target",
+        "prelaunch_plane_inc", "prelaunch_plane_lan"
     ) {
         stateRemove(key).
     }
 }
 
-_cfg("SEQUENCE", LIST("PRELAUNCH", "HOP", "LAND_ASSIST", "DONE")).
-_cfg("LAUNCH_PLANE_MODE", "SUBORBITAL").
-_cfg("HOP_TARGET_LAT", targetLat).
-_cfg("HOP_TARGET_LNG", targetLng).
-_cfg("HOP_TOLERANCE", toleranceM).
-_cfg("HOP_PITCH", pitchDeg).
-_cfg("HOP_MAX_BURN_SECONDS", maxBurnSeconds).
-_cfg("HOP_MAX_AP_KM", maxApKm).
-_cfg("HOP_TWR", hopTwr).
-_cfg("RELOAD_AFTER_LAND_ASSIST", 0).
+LOCAL profilePath IS missionProfileBegin(stateGet("vehicle", ""), "hop").
+missionOverrideClear().
+LOG "SET MISSION_ID TO " + configLiteral("hop") + "." TO profilePath.
+LOG "SET MISSION_NAME TO " + configLiteral("Hop") + "." TO profilePath.
+LOG "SET TARGET_ TO " + configLiteral(SHIP:BODY:NAME:TOUPPER) + "." TO profilePath.
+LOG "SET SEQUENCE TO " + configLiteral(LIST("PRELAUNCH", "HOP", "LAND_ASSIST", "DONE")) + "." TO profilePath.
+LOG "SET LAUNCH_PLANE_MODE TO " + configLiteral("SUBORBITAL") + "." TO profilePath.
+LOG "SET HOP_TARGET_LAT TO " + configLiteral(targetLat) + "." TO profilePath.
+LOG "SET HOP_TARGET_LNG TO " + configLiteral(targetLng) + "." TO profilePath.
+LOG "SET HOP_TOLERANCE TO " + configLiteral(toleranceM) + "." TO profilePath.
+LOG "SET HOP_PITCH TO " + configLiteral(pitchDeg) + "." TO profilePath.
+LOG "SET HOP_MAX_BURN_SECONDS TO " + configLiteral(maxBurnSeconds) + "." TO profilePath.
+LOG "SET HOP_MAX_AP_KM TO " + configLiteral(maxApKm) + "." TO profilePath.
+LOG "SET HOP_TWR TO " + configLiteral(hopTwr) + "." TO profilePath.
+LOG "SET RELOAD_AFTER_LAND_ASSIST TO " + configLiteral(0) + "." TO profilePath.
 
+stateSet("mission_id", "hop").
 stateSet("phase", "PRELAUNCH").
 stateSet("lib_band", "PRELAUNCH").
 stateSet("reload_required", "false").

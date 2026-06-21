@@ -20,12 +20,6 @@ PARAMETER arg1 IS "".
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
-LOCAL FUNCTION _cfg {
-    PARAMETER key.
-    PARAMETER value.
-    stateSet("mission_cfg_" + key, value).
-}
-
 LOCAL FUNCTION _landingBandForPhase {
     PARAMETER phaseName.
     IF phaseName = "LAND_DEORBIT" { RETURN "LAND_DEORBIT". }
@@ -50,22 +44,25 @@ LOCAL FUNCTION _landingSequenceForPhase {
 }
 
 LOCAL FUNCTION _assistConfig {
-    _cfg("RELOAD_AFTER_LAND_ASSIST", 0).
-    _cfg("RELOAD_AFTER_LAND", 0).
+    LOG "SET RELOAD_AFTER_LAND_ASSIST TO " + configLiteral(0) + "." TO missionOverridePath().
+    LOG "SET RELOAD_AFTER_LAND TO " + configLiteral(0) + "." TO missionOverridePath().
 }
 
 IF mode = "assist" {
+    missionOverrideClear().
     stateSet("phase", "LAND_ASSIST").
     stateSet("reload_required", "false").
     stateSet("lib_band", "LANDING").
     _clearLibCache().
-    _cfg("SEQUENCE", LIST("LAND_DEORBIT", "LAND_ASSIST", "DONE")).
+    LOG "SET SEQUENCE TO " + configLiteral(LIST("LAND_DEORBIT", "LAND_ASSIST", "DONE")) + "." TO missionOverridePath().
+    LOG "SET LANDING_SKIP_TARGET_SEARCH TO " + configLiteral(1) + "." TO missionOverridePath().
     _assistConfig().
 
     PRINT "Emergency LAND_ASSIST config forced.".
     PRINT "Phase -> LAND_ASSIST. Resume when ready.".
 
 } ELSE IF mode = "deorbit" {
+    missionOverrideClear().
     LOCAL phaseName IS "LAND_DEORBIT".
     LOCAL assistPath IS TRUE.
     IF arg1 = "assist" OR arg1 = "LAND_ASSIST" {
@@ -80,11 +77,11 @@ IF mode = "assist" {
     stateSet("reload_required", "false").
     stateSet("lib_band", _landingBandForPhase(phaseName)).
     _clearLibCache().
-    _cfg("SEQUENCE", _landingSequenceForPhase(phaseName, assistPath)).
+    LOG "SET SEQUENCE TO " + configLiteral(_landingSequenceForPhase(phaseName, assistPath)) + "." TO missionOverridePath().
     IF assistPath { _assistConfig(). }
 
     PRINT "Landing deorbit settings forced.".
-    PRINT "Sequence -> " + stateGet("mission_cfg_SEQUENCE", LIST()):JOIN(" -> ") + ".".
+    PRINT "Sequence -> " + _landingSequenceForPhase(phaseName, assistPath):JOIN(" -> ") + ".".
     PRINT "Phase -> " + phaseName + ".".
     PRINT "Landing config synced from mission state.".
 

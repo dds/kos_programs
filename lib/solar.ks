@@ -208,11 +208,9 @@ GLOBAL FUNCTION orientForSolar {
     }
     SAS OFF.
 
-    LOCAL cached IS stateGet("solar_axis", "").
-    IF NOT forceSearch AND cached <> "" {
-        LOCAL parts IS cached:SPLIT(",").
-        LOCAL aShip IS V(parts[0]:TONUMBER(0), parts[1]:TONUMBER(0),
-            parts[2]:TONUMBER(0)).
+    LOCAL cached IS stateGet("solar_axis", LIST()).
+    IF NOT forceSearch AND cached:ISTYPE("List") AND cached:LENGTH >= 3 {
+        LOCAL aShip IS V(cached[0], cached[1], cached[2]).
         IF aShip:MAG > 0.5 {
             _solarAimSettle(aShip).
             IF NOT lockSteering {
@@ -298,8 +296,10 @@ GLOBAL FUNCTION orientForSolar {
     }
 
     _solarAimSettle(bestAxis).
-    stateSet("solar_axis", ROUND(bestAxis:X, 4) + ","
-        + ROUND(bestAxis:Y, 4) + "," + ROUND(bestAxis:Z, 4)).
+    stateSet("solar_axis", LIST(
+        ROUND(bestAxis:X, 4),
+        ROUND(bestAxis:Y, 4),
+        ROUND(bestAxis:Z, 4))).
     if lockSteering {
     } else {
         UNLOCK STEERING.

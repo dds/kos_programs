@@ -205,7 +205,7 @@ stateSet("boot_count", bootCount).
 IF bootCount = 1 {
     stateSet("vehicle",  vehicleName).
     stateSet("target",   targetName).
-    stateSet("payloads", payloadTypes:JOIN(",")).
+    stateSet("payloads", payloadTypes).
 }
 initLog().
 

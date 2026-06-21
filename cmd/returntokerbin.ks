@@ -54,19 +54,20 @@ LOCAL FUNCTION _clearLibCache {
     }
 }
 
-LOCAL FUNCTION _persistCoastAutomation {
-    stateSet("mission_cfg_KEEP_WARP", KEEP_WARP).
-    stateSet("mission_cfg_COAST_AUTO_WARP", COAST_AUTO_WARP).
-    stateSet("mission_cfg_COAST_AUTO_WARP_MIN", COAST_AUTO_WARP_MIN).
-    stateSet("mission_cfg_COAST_HIBERNATE", COAST_HIBERNATE).
-    stateSet("mission_cfg_COAST_HIBERNATE_MIN", COAST_HIBERNATE_MIN).
-    stateSet("mission_cfg_COAST_WARP_5M_LIMIT", COAST_WARP_5M_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_1H_LIMIT", COAST_WARP_1H_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_5H_LIMIT", COAST_WARP_5H_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_3D_LIMIT", COAST_WARP_3D_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_10D_LIMIT", COAST_WARP_10D_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_50D_LIMIT", COAST_WARP_50D_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_MAX_RATE", COAST_WARP_MAX_RATE).
+LOCAL FUNCTION _writeCoastAutomation {
+    PARAMETER profilePath.
+    LOG "SET KEEP_WARP TO " + configLiteral(KEEP_WARP) + "." TO profilePath.
+    LOG "SET COAST_AUTO_WARP TO " + configLiteral(COAST_AUTO_WARP) + "." TO profilePath.
+    LOG "SET COAST_AUTO_WARP_MIN TO " + configLiteral(COAST_AUTO_WARP_MIN) + "." TO profilePath.
+    LOG "SET COAST_HIBERNATE TO " + configLiteral(COAST_HIBERNATE) + "." TO profilePath.
+    LOG "SET COAST_HIBERNATE_MIN TO " + configLiteral(COAST_HIBERNATE_MIN) + "." TO profilePath.
+    LOG "SET COAST_WARP_5M_LIMIT TO " + configLiteral(COAST_WARP_5M_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_1H_LIMIT TO " + configLiteral(COAST_WARP_1H_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_5H_LIMIT TO " + configLiteral(COAST_WARP_5H_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_3D_LIMIT TO " + configLiteral(COAST_WARP_3D_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_10D_LIMIT TO " + configLiteral(COAST_WARP_10D_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_50D_LIMIT TO " + configLiteral(COAST_WARP_50D_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_MAX_RATE TO " + configLiteral(COAST_WARP_MAX_RATE) + "." TO profilePath.
 }
 
 // --- Read options with defaults ---
@@ -111,67 +112,49 @@ IF NOT err {
     archiveLog().
     PRINT "Flight log archived.".
 
-    // Set up the return mission identity.
-    // mission_id must be set to a name that has no matching .ks file
-    // so boot skips the mission selector AND bootApplyMissionConfig
-    // finds nothing to overwrite our state with.
-    stateSet("target", "KERBIN").
-    stateSet("mission_type", "kerbin_return").
+    // Set up the return mission profile and identity.
+    LOCAL profilePath IS missionProfileBegin(stateGet("vehicle", ""), "kerbin_return").
+    missionOverrideClear().
+    LOG "SET MISSION_ID TO " + configLiteral("kerbin_return") + "." TO profilePath.
+    LOG "SET MISSION_NAME TO " + configLiteral("Return to Kerbin") + "." TO profilePath.
+    LOG "SET MISSION_TYPE TO " + configLiteral("kerbin_return") + "." TO profilePath.
+    LOG "SET TARGET_ TO " + configLiteral("KERBIN") + "." TO profilePath.
+    LOG "SET PAYLOADS TO " + configLiteral(LIST("RETURN")) + "." TO profilePath.
     stateSet("mission_id", "kerbin_return").
-    stateSet("mission_name", "Return to Kerbin").
-    stateSet("payloads", LIST("RETURN")).
 
     // Set up the return mission sequence and config
     LOCAL returnSeq IS LIST("ESCAPE", "COAST", "MCC", "AEROBRAKE", "DESCENT", "DONE").
-    stateSet("mission_cfg_SEQUENCE", returnSeq).
+    LOG "SET SEQUENCE TO " + configLiteral(returnSeq) + "." TO profilePath.
     // Keep the escape-planning boot lean; DESCENT loads later in
     // its own band instead of consuming storage during Minmus escape.
-    stateRemove("mission_cfg_LIBS_EXTRA").
-    stateSet("mission_cfg_ESCAPE_PE", targetPe).
-    stateSet("mission_cfg_CAPTURE_PE", targetPe).
-    stateSet("mission_cfg_CAPTURE_INC", 0).
-    stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
-    _persistCoastAutomation().
+    LOG "SET ESCAPE_PE TO " + configLiteral(targetPe) + "." TO profilePath.
+    LOG "SET CAPTURE_PE TO " + configLiteral(targetPe) + "." TO profilePath.
+    LOG "SET CAPTURE_INC TO " + configLiteral(0) + "." TO profilePath.
+    LOG "SET AEROBRAKE_REENTRY_DIR TO " + configLiteral(reentryDir) + "." TO profilePath.
+    _writeCoastAutomation(profilePath).
 
     IF kscTarget {
-        stateSet("mission_cfg_ESCAPE_KSC_TARGET", 1).
-    } ELSE {
-        stateRemove("mission_cfg_ESCAPE_KSC_TARGET").
+        LOG "SET ESCAPE_KSC_TARGET TO " + configLiteral(1) + "." TO profilePath.
     }
 
     IF decoupleTag <> "" {
-        stateSet("mission_cfg_AEROBRAKE_DECOUPLE_TAG", decoupleTag).
-    } ELSE {
-        stateRemove("mission_cfg_AEROBRAKE_DECOUPLE_TAG").
+        LOG "SET AEROBRAKE_DECOUPLE_TAG TO " + configLiteral(decoupleTag) + "." TO profilePath.
     }
 
     IF armChutes > 0 {
-        stateSet("mission_cfg_AEROBRAKE_ARM_CHUTES", armChutes).
-    } ELSE {
-        stateRemove("mission_cfg_AEROBRAKE_ARM_CHUTES").
+        LOG "SET AEROBRAKE_ARM_CHUTES TO " + configLiteral(armChutes) + "." TO profilePath.
     }
 
     IF descentFairingTag <> "" {
-        stateSet("mission_cfg_DESCENT_FAIRING_TAG", descentFairingTag).
-    } ELSE {
-        stateRemove("mission_cfg_DESCENT_FAIRING_TAG").
+        LOG "SET DESCENT_FAIRING_TAG TO " + configLiteral(descentFairingTag) + "." TO profilePath.
     }
 
     IF descentDecouplerTag <> "" {
-        stateSet("mission_cfg_DESCENT_DECOUPLER_TAG", descentDecouplerTag).
-    } ELSE {
-        stateRemove("mission_cfg_DESCENT_DECOUPLER_TAG").
+        LOG "SET DESCENT_DECOUPLER_TAG TO " + configLiteral(descentDecouplerTag) + "." TO profilePath.
     }
 
     IF descentChutesTag <> "" {
-        stateSet("mission_cfg_DESCENT_CHUTES_TAG", descentChutesTag).
-    } ELSE {
-        stateRemove("mission_cfg_DESCENT_CHUTES_TAG").
-    }
-
-    // Clear angular capture config except the equatorial Kerbin return target.
-    FOR key IN LIST("CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_DIR") {
-        stateRemove("mission_cfg_" + key).
+        LOG "SET DESCENT_CHUTES_TAG TO " + configLiteral(descentChutesTag) + "." TO profilePath.
     }
 
     // Reset phase to start of return sequence

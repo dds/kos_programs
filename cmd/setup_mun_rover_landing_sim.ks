@@ -7,12 +7,6 @@ RUNPATH("0:/cmd/landingrescue.ks", "LAND_ASSIST").
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
-LOCAL FUNCTION _cfg {
-    PARAMETER key.
-    PARAMETER value.
-    stateSet("mission_cfg_" + key, value).
-}
-
 LOCAL targetUT IS TIME:SECONDS + 300.
 LOCAL targetGeo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, targetUT)).
 
@@ -28,38 +22,40 @@ stateSet("reload_next_phase", "").
 stateSet("reload_next_band", "").
 stateSet("lib_band", "LANDING").
 
-_cfg("MISSION_ID", "mun_rover_emergency_surface").
-_cfg("MISSION_NAME", "Mun Rover Emergency Surface Release SIM").
-_cfg("TARGET_", "MUN").
-_cfg("PAYLOADS", LIST("ASSISTROVER")).
-_cfg("PROGRESSIVE_RELOAD", 1).
-_cfg("SEQUENCE", LIST("LAND_DEORBIT", "LAND_ASSIST", "DONE")).
-_cfg("TARGET_PE", 15000).
-_cfg("TARGET_AP", 15000).
-_cfg("TARGET_INCLINATION", 90).
-_cfg("TARGET_LAT", targetGeo:LAT).
-_cfg("TARGET_LNG", targetGeo:LNG).
-_cfg("TARGET_LOCK", 1).
-_cfg("TARGET_WAYPOINT", "").
-_cfg("LANDING_AUTO_TARGET", 1).
-_cfg("LANDING_AUTO_TARGET_MINUTES", 5).
-_cfg("LANDING_SIM_MODE", 1).
-_cfg("LANDING_SKIP_TARGET_SEARCH", 1).
-_cfg("LANDING_DEORBIT_LEAD_MINUTES", 0.5).
-_cfg("TARGET_TOLERANCE", 2500).
-_cfg("GUIDANCE_ALT", 5000).
-_cfg("TARGET_DEORBIT_SCAN_ORBITS", 2).
-_cfg("TARGET_DEORBIT_SCAN_SAMPLES", 256).
-_cfg("TARGET_DEORBIT_SCAN_CENTER_MINUTES", 5).
-_cfg("TARGET_DEORBIT_SCAN_WINDOW_MINUTES", 4).
-_cfg("TARGET_DEORBIT_MIN_LEAD", 60).
-_cfg("LANDING_SITE_SCAN_ENABLE", 1).
-_cfg("LANDING_SITE_SCAN_RADIUS", 1500).
-_cfg("LANDING_SITE_SCAN_STEP", 250).
-_cfg("LANDING_SITE_MAX_SLOPE", 12).
-_cfg("MAX_TILT", 12).
-_cfg("RELOAD_AFTER_LAND_ASSIST", 0).
-_cfg("RELOAD_AFTER_LAND", 0).
+LOCAL profilePath IS missionProfileBegin("FR3", "mun_rover_emergency_surface").
+missionOverrideClear().
+LOG "SET MISSION_ID TO " + configLiteral("mun_rover_emergency_surface") + "." TO profilePath.
+LOG "SET MISSION_NAME TO " + configLiteral("Mun Rover Emergency Surface Release SIM") + "." TO profilePath.
+LOG "SET TARGET_ TO " + configLiteral("MUN") + "." TO profilePath.
+LOG "SET PAYLOADS TO " + configLiteral(LIST("ASSISTROVER")) + "." TO profilePath.
+LOG "SET PROGRESSIVE_RELOAD TO " + configLiteral(1) + "." TO profilePath.
+LOG "SET SEQUENCE TO " + configLiteral(LIST("LAND_DEORBIT", "LAND_ASSIST", "DONE")) + "." TO profilePath.
+LOG "SET TARGET_PE TO " + configLiteral(15000) + "." TO profilePath.
+LOG "SET TARGET_AP TO " + configLiteral(15000) + "." TO profilePath.
+LOG "SET TARGET_INCLINATION TO " + configLiteral(90) + "." TO profilePath.
+LOG "SET TARGET_LAT TO " + configLiteral(targetGeo:LAT) + "." TO profilePath.
+LOG "SET TARGET_LNG TO " + configLiteral(targetGeo:LNG) + "." TO profilePath.
+LOG "SET TARGET_LOCK TO " + configLiteral(1) + "." TO profilePath.
+LOG "SET TARGET_WAYPOINT TO " + configLiteral("") + "." TO profilePath.
+LOG "SET LANDING_AUTO_TARGET TO " + configLiteral(1) + "." TO profilePath.
+LOG "SET LANDING_AUTO_TARGET_MINUTES TO " + configLiteral(5) + "." TO profilePath.
+LOG "SET LANDING_SIM_MODE TO " + configLiteral(1) + "." TO profilePath.
+LOG "SET LANDING_SKIP_TARGET_SEARCH TO " + configLiteral(1) + "." TO profilePath.
+LOG "SET LANDING_DEORBIT_LEAD_MINUTES TO " + configLiteral(0.5) + "." TO profilePath.
+LOG "SET TARGET_TOLERANCE TO " + configLiteral(2500) + "." TO profilePath.
+LOG "SET GUIDANCE_ALT TO " + configLiteral(5000) + "." TO profilePath.
+LOG "SET TARGET_DEORBIT_SCAN_ORBITS TO " + configLiteral(2) + "." TO profilePath.
+LOG "SET TARGET_DEORBIT_SCAN_SAMPLES TO " + configLiteral(256) + "." TO profilePath.
+LOG "SET TARGET_DEORBIT_SCAN_CENTER_MINUTES TO " + configLiteral(5) + "." TO profilePath.
+LOG "SET TARGET_DEORBIT_SCAN_WINDOW_MINUTES TO " + configLiteral(4) + "." TO profilePath.
+LOG "SET TARGET_DEORBIT_MIN_LEAD TO " + configLiteral(60) + "." TO profilePath.
+LOG "SET LANDING_SITE_SCAN_ENABLE TO " + configLiteral(1) + "." TO profilePath.
+LOG "SET LANDING_SITE_SCAN_RADIUS TO " + configLiteral(1500) + "." TO profilePath.
+LOG "SET LANDING_SITE_SCAN_STEP TO " + configLiteral(250) + "." TO profilePath.
+LOG "SET LANDING_SITE_MAX_SLOPE TO " + configLiteral(12) + "." TO profilePath.
+LOG "SET MAX_TILT TO " + configLiteral(12) + "." TO profilePath.
+LOG "SET RELOAD_AFTER_LAND_ASSIST TO " + configLiteral(0) + "." TO profilePath.
+LOG "SET RELOAD_AFTER_LAND TO " + configLiteral(0) + "." TO profilePath.
 
 PRINT "SIM rover landing setup complete.".
 PRINT "Emergency assist-only setup complete.".

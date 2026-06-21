@@ -111,6 +111,10 @@ GLOBAL FUNCTION runPhases {
             SET lastPhase TO phase.
             SET repeats TO 0.
         }
+        // Re-pin the active phase at entry. Phase handlers may wait,
+        // reboot, or yield before they reach nextPhase(); reboot must
+        // resume the phase that actually started running.
+        stateSet("phase", phase).
         mLogPhase(phase).
         _logPhaseStats(phase).
         IF phaseMap:HASKEY(phase) {
@@ -194,10 +198,10 @@ GLOBAL FUNCTION nextPhase {
         }
         SET i TO i + 1.
     }
-    mLogWarn("Phase " + current + " not in sequence — advancing to DONE.").
-    stateSet("phase", "DONE").
+    mLogError("Phase " + current + " not in sequence — holding current phase.").
+    stateSet("phase", current).
     archivePhaseLog().
-    RETURN "DONE".
+    RETURN current.
 }
 
 GLOBAL FUNCTION archivePhaseLog {

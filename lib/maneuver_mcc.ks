@@ -31,6 +31,7 @@ LOCAL MAX_RETRIES          IS 5.
 LOCAL FUNCTION _mccIsAerobrakeReturn {
     PARAMETER target.
     IF target:NAME <> "Kerbin" { RETURN FALSE. }
+    IF MISSION_TYPE = "kerbin_return" { RETURN TRUE. }
     IF stateGet("mission_type", "") = "kerbin_return" { RETURN TRUE. }
     RETURN xferSeq:CONTAINS("AEROBRAKE").
 }

@@ -16,6 +16,10 @@
 // ============================================================
 
 GLOBAL REENTRY_PE IS 30000.
+GLOBAL CAPTURE_PE IS -1.
+GLOBAL ESCAPE_PE IS -1.
+GLOBAL AEROBRAKE_REENTRY_DIR IS "RETROGRADE".
+GLOBAL AEROBRAKE_ARM_CHUTES IS 0.
 
 PARAMETER opts IS LEXICON().
 
@@ -31,28 +35,29 @@ LOCAL FUNCTION _clearLibCache {
     }
 }
 
-LOCAL FUNCTION _persistCoastAutomation {
-    stateSet("mission_cfg_KEEP_WARP", KEEP_WARP).
-    stateSet("mission_cfg_COAST_AUTO_WARP", COAST_AUTO_WARP).
-    stateSet("mission_cfg_COAST_AUTO_WARP_MIN", COAST_AUTO_WARP_MIN).
-    stateSet("mission_cfg_COAST_HIBERNATE", COAST_HIBERNATE).
-    stateSet("mission_cfg_COAST_HIBERNATE_MIN", COAST_HIBERNATE_MIN).
-    stateSet("mission_cfg_COAST_WARP_5M_LIMIT", COAST_WARP_5M_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_1H_LIMIT", COAST_WARP_1H_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_5H_LIMIT", COAST_WARP_5H_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_3D_LIMIT", COAST_WARP_3D_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_10D_LIMIT", COAST_WARP_10D_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_50D_LIMIT", COAST_WARP_50D_LIMIT).
-    stateSet("mission_cfg_COAST_WARP_MAX_RATE", COAST_WARP_MAX_RATE).
+LOCAL FUNCTION _writeCoastAutomation {
+    PARAMETER profilePath.
+    LOG "SET KEEP_WARP TO " + configLiteral(KEEP_WARP) + "." TO profilePath.
+    LOG "SET COAST_AUTO_WARP TO " + configLiteral(COAST_AUTO_WARP) + "." TO profilePath.
+    LOG "SET COAST_AUTO_WARP_MIN TO " + configLiteral(COAST_AUTO_WARP_MIN) + "." TO profilePath.
+    LOG "SET COAST_HIBERNATE TO " + configLiteral(COAST_HIBERNATE) + "." TO profilePath.
+    LOG "SET COAST_HIBERNATE_MIN TO " + configLiteral(COAST_HIBERNATE_MIN) + "." TO profilePath.
+    LOG "SET COAST_WARP_5M_LIMIT TO " + configLiteral(COAST_WARP_5M_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_1H_LIMIT TO " + configLiteral(COAST_WARP_1H_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_5H_LIMIT TO " + configLiteral(COAST_WARP_5H_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_3D_LIMIT TO " + configLiteral(COAST_WARP_3D_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_10D_LIMIT TO " + configLiteral(COAST_WARP_10D_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_50D_LIMIT TO " + configLiteral(COAST_WARP_50D_LIMIT) + "." TO profilePath.
+    LOG "SET COAST_WARP_MAX_RATE TO " + configLiteral(COAST_WARP_MAX_RATE) + "." TO profilePath.
 }
 
 LOCAL returnSeq IS LIST("ESCAPE", "COAST", "MCC", "AEROBRAKE", "DESCENT", "DONE").
-LOCAL targetPe IS stateGetNum(
-    "mission_cfg_CAPTURE_PE",
-    stateGetNum("mission_cfg_ESCAPE_PE", REENTRY_PE)).
+LOCAL targetPe IS REENTRY_PE.
+IF ESCAPE_PE >= 0 { SET targetPe TO ESCAPE_PE. }
+IF CAPTURE_PE >= 0 { SET targetPe TO CAPTURE_PE. }
 LOCAL phaseName IS "MCC".
-LOCAL reentryDir IS stateGet("mission_cfg_AEROBRAKE_REENTRY_DIR", "RETROGRADE").
-LOCAL armChutes IS stateGetNum("mission_cfg_AEROBRAKE_ARM_CHUTES", 0).
+LOCAL reentryDir IS AEROBRAKE_REENTRY_DIR.
+LOCAL armChutes IS AEROBRAKE_ARM_CHUTES.
 
 IF opts:HASKEY("phase")      { SET phaseName TO opts["phase"]:TOUPPER. }
 IF opts:HASKEY("pe")         { SET targetPe TO opts["pe"]. }
@@ -70,30 +75,23 @@ IF phaseName = "MCC" AND SHIP:BODY:NAME:TOUPPER = "KERBIN" {
 
 archiveLog().
 
-stateSet("target", "KERBIN").
-stateSet("mission_type", "kerbin_return").
+LOCAL profilePath IS missionProfileBegin(stateGet("vehicle", ""), "kerbin_return").
+missionOverrideClear().
+LOG "SET MISSION_ID TO " + configLiteral("kerbin_return") + "." TO profilePath.
+LOG "SET MISSION_NAME TO " + configLiteral("Return to Kerbin Rescue") + "." TO profilePath.
+LOG "SET MISSION_TYPE TO " + configLiteral("kerbin_return") + "." TO profilePath.
+LOG "SET TARGET_ TO " + configLiteral("KERBIN") + "." TO profilePath.
+LOG "SET PAYLOADS TO " + configLiteral(LIST("RETURN")) + "." TO profilePath.
+LOG "SET SEQUENCE TO " + configLiteral(returnSeq) + "." TO profilePath.
+LOG "SET ESCAPE_PE TO " + configLiteral(targetPe) + "." TO profilePath.
+LOG "SET CAPTURE_PE TO " + configLiteral(targetPe) + "." TO profilePath.
+LOG "SET CAPTURE_INC TO " + configLiteral(0) + "." TO profilePath.
+LOG "SET AEROBRAKE_REENTRY_DIR TO " + configLiteral(reentryDir) + "." TO profilePath.
+_writeCoastAutomation(profilePath).
 stateSet("mission_id", "kerbin_return").
-stateSet("mission_name", "Return to Kerbin Rescue").
-stateSet("payloads", LIST("RETURN")).
-
-stateSet("mission_cfg_SEQUENCE", returnSeq).
-stateSet("mission_cfg_ESCAPE_PE", targetPe).
-stateSet("mission_cfg_CAPTURE_PE", targetPe).
-stateSet("mission_cfg_CAPTURE_INC", 0).
-stateSet("mission_cfg_AEROBRAKE_REENTRY_DIR", reentryDir).
-_persistCoastAutomation().
 
 IF armChutes > 0 {
-    stateSet("mission_cfg_AEROBRAKE_ARM_CHUTES", armChutes).
-} ELSE {
-    stateRemove("mission_cfg_AEROBRAKE_ARM_CHUTES").
-}
-
-FOR key IN LIST(
-    "CAPTURE_LAN", "CAPTURE_AOP", "CAPTURE_DIR",
-    "LIBS_EXTRA"
-) {
-    stateRemove("mission_cfg_" + key).
+    LOG "SET AEROBRAKE_ARM_CHUTES TO " + configLiteral(armChutes) + "." TO profilePath.
 }
 
 stateSet("phase", phaseName).

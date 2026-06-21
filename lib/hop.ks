@@ -12,19 +12,19 @@ GLOBAL HOP_MAX_AP_KM IS 5.
 GLOBAL HOP_TWR IS 1.15.
 GLOBAL HOP_MIN_THRUST_LIMIT IS 1.
 
-LOCAL FUNCTION _hopCfg {
-    PARAMETER key.
-    PARAMETER value.
-    stateSet("mission_cfg_" + key, value).
-}
-
 LOCAL FUNCTION _hopPrepLandingAssist {
-    _hopCfg("TARGET_LAT", HOP_TARGET_LAT).
-    _hopCfg("TARGET_LNG", HOP_TARGET_LNG).
-    _hopCfg("TARGET_LOCK", 0).
-    _hopCfg("TARGET_WAYPOINT", "").
-    _hopCfg("SEQUENCE", "HOP,LAND_ASSIST,DONE").
-    _hopCfg("RELOAD_AFTER_LAND_ASSIST", 0).
+    SET TARGET_LAT TO HOP_TARGET_LAT.
+    SET TARGET_LNG TO HOP_TARGET_LNG.
+    SET TARGET_LOCK TO 0.
+    SET TARGET_WAYPOINT TO "".
+    SET RELOAD_AFTER_LAND_ASSIST TO 0.
+    missionOverrideClear().
+    LOG "SET TARGET_LAT TO " + configLiteral(TARGET_LAT) + "." TO missionOverridePath().
+    LOG "SET TARGET_LNG TO " + configLiteral(TARGET_LNG) + "." TO missionOverridePath().
+    LOG "SET TARGET_LOCK TO " + configLiteral(TARGET_LOCK) + "." TO missionOverridePath().
+    LOG "SET TARGET_WAYPOINT TO " + configLiteral(TARGET_WAYPOINT) + "." TO missionOverridePath().
+    LOG "SET SEQUENCE TO " + configLiteral(LIST("HOP", "LAND_ASSIST", "DONE")) + "." TO missionOverridePath().
+    LOG "SET RELOAD_AFTER_LAND_ASSIST TO " + configLiteral(RELOAD_AFTER_LAND_ASSIST) + "." TO missionOverridePath().
     stateSaveReloadState("HOP_COMPLETE", "LAND_ASSIST", "LANDING").
 }
 
@@ -95,8 +95,6 @@ LOCAL FUNCTION _hopTuneThrustLimit {
 }
 
 GLOBAL FUNCTION phaseHop {
-    applyKnownMissionState().
-
     IF NOT ADDONS:TR:AVAILABLE {
         PRINT "HOP requires Trajectories.".
         mLogError("HOP: Trajectories unavailable; refusing ballistic hop.").

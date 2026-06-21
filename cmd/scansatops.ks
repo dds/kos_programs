@@ -19,15 +19,25 @@ IF stateGet("scansat_released_time", "") = "" {
 }
 stateSet("scansat_staged", "true").
 stateSet("scansat_recovered", "true").
-stateSet("mission_cfg_TARGET_PE", 70000).
-stateSet("mission_cfg_TARGET_AP", 70000).
-stateSet("mission_cfg_SCANSAT_RECOVERY_PE", 70000).
-stateSet("mission_cfg_SCANSAT_RECOVERY_AP", 70000).
-stateSet("mission_cfg_SCANSAT_DECOUPLER_TAG", "none").
-stateSet("mission_cfg_SCANSAT_AUTO_DEORBIT", 0).
-stateSet("mission_cfg_SCANSAT_POWER_GUARD", 1).
-stateSet("mission_cfg_SCANSAT_TARGET_COVERAGE", 99.1).
-stateSet("mission_cfg_SCANSAT_REQUIRED_TYPES", requiredTypes).
+SET TARGET_PE TO 70000.
+SET TARGET_AP TO 70000.
+SET SCANSAT_RECOVERY_PE TO 70000.
+SET SCANSAT_RECOVERY_AP TO 70000.
+SET SCANSAT_DECOUPLER_TAG TO "none".
+SET SCANSAT_AUTO_DEORBIT TO 0.
+SET SCANSAT_POWER_GUARD TO 1.
+SET SCANSAT_TARGET_COVERAGE TO 99.1.
+SET SCANSAT_REQUIRED_TYPES TO requiredTypes.
+missionOverrideClear().
+LOG "SET TARGET_PE TO " + configLiteral(TARGET_PE) + "." TO missionOverridePath().
+LOG "SET TARGET_AP TO " + configLiteral(TARGET_AP) + "." TO missionOverridePath().
+LOG "SET SCANSAT_RECOVERY_PE TO " + configLiteral(SCANSAT_RECOVERY_PE) + "." TO missionOverridePath().
+LOG "SET SCANSAT_RECOVERY_AP TO " + configLiteral(SCANSAT_RECOVERY_AP) + "." TO missionOverridePath().
+LOG "SET SCANSAT_DECOUPLER_TAG TO " + configLiteral(SCANSAT_DECOUPLER_TAG) + "." TO missionOverridePath().
+LOG "SET SCANSAT_AUTO_DEORBIT TO " + configLiteral(SCANSAT_AUTO_DEORBIT) + "." TO missionOverridePath().
+LOG "SET SCANSAT_POWER_GUARD TO " + configLiteral(SCANSAT_POWER_GUARD) + "." TO missionOverridePath().
+LOG "SET SCANSAT_TARGET_COVERAGE TO " + configLiteral(SCANSAT_TARGET_COVERAGE) + "." TO missionOverridePath().
+LOG "SET SCANSAT_REQUIRED_TYPES TO " + configLiteral(SCANSAT_REQUIRED_TYPES) + "." TO missionOverridePath().
 stateSet("zombie_scansat_active", "true").
 stateSet("zombie_scansat_required_types", requiredTypes).
 stateSet("reload_required", "false").

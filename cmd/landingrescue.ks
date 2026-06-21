@@ -19,12 +19,7 @@ LOCAL autoMode IS mode = "AUTO" OR mode = "auto" OR mode = "".
 LOCAL phaseName IS mode.
 LOCAL sequence IS LIST().
 LOCAL rescuePlan IS "legacy".
-
-LOCAL FUNCTION _cfg {
-    PARAMETER key.
-    PARAMETER value.
-    stateSet("mission_cfg_" + key, value).
-}
+LOCAL profilePath IS "".
 
 LOCAL FUNCTION _addUnique {
     PARAMETER items.
@@ -113,10 +108,10 @@ LOCAL FUNCTION _lockRescueTarget {
         SET lat TO geo:LAT.
         SET lng TO geo:LNG.
     }
-    _cfg("TARGET_LAT", lat).
-    _cfg("TARGET_LNG", lng).
-    _cfg("TARGET_LOCK", 1).
-    _cfg("TARGET_WAYPOINT", "").
+    LOG "SET TARGET_LAT TO " + configLiteral(lat) + "." TO profilePath.
+    LOG "SET TARGET_LNG TO " + configLiteral(lng) + "." TO profilePath.
+    LOG "SET TARGET_LOCK TO " + configLiteral(1) + "." TO profilePath.
+    LOG "SET TARGET_WAYPOINT TO " + configLiteral("") + "." TO profilePath.
 }
 
 LOCAL FUNCTION _chooseAutoPlan {
@@ -156,30 +151,39 @@ IF autoMode {
     SET sequence TO picked["SEQUENCE"].
     SET rescuePlan TO picked["PLAN"].
 
+    SET profilePath TO missionProfileBegin(vehicleInfo["VEHICLE"], "landing_rescue_auto").
+    missionOverrideClear().
     stateSet("target", SHIP:BODY:NAME:TOUPPER).
     stateSet("mission_type", "landing_rescue").
     stateSet("mission_id", "landing_rescue_auto").
     stateSet("mission_name", "Landing Rescue").
     stateSet("payloads", LIST("RESCUE")).
 
-    _cfg("MISSION_ID", "landing_rescue_auto").
-    _cfg("MISSION_NAME", "Landing Rescue").
-    _cfg("TARGET_", SHIP:BODY:NAME:TOUPPER).
-    _cfg("PAYLOADS", LIST("RESCUE")).
-    _cfg("SEQUENCE", sequence).
-    _cfg("LANDING_SKIP_TARGET_SEARCH", 1).
-    _cfg("RELOAD_AFTER_LAND_ASSIST", 0).
-    _cfg("RELOAD_AFTER_LAND", 0).
-    _cfg("LANDING_DEORBIT_LEAD_MINUTES", MAX(0.5, ETA:APOAPSIS / 60)).
-    _cfg("LANDING_AUTO_TARGET", 0).
-    _cfg("LANDING_CONFIRM_TARGET", 0).
-    _cfg("AEROBRAKE_REENTRY_DIR", "RETROGRADE").
-    _cfg("AEROBRAKE_ARM_CHUTES", 0).
-    _cfg("DESCENT_ENGINE_ASSIST", 1).
+    LOG "SET MISSION_ID TO " + configLiteral("landing_rescue_auto") + "." TO profilePath.
+    LOG "SET MISSION_NAME TO " + configLiteral("Landing Rescue") + "." TO profilePath.
+    LOG "SET TARGET_ TO " + configLiteral(SHIP:BODY:NAME:TOUPPER) + "." TO profilePath.
+    LOG "SET PAYLOADS TO " + configLiteral(LIST("RESCUE")) + "." TO profilePath.
+    LOG "SET SEQUENCE TO " + configLiteral(sequence) + "." TO profilePath.
+    LOG "SET LANDING_SKIP_TARGET_SEARCH TO " + configLiteral(1) + "." TO profilePath.
+    LOG "SET RELOAD_AFTER_LAND_ASSIST TO " + configLiteral(0) + "." TO profilePath.
+    LOG "SET RELOAD_AFTER_LAND TO " + configLiteral(0) + "." TO profilePath.
+    LOG "SET LANDING_DEORBIT_LEAD_MINUTES TO " + configLiteral(MAX(0.5, ETA:APOAPSIS / 60)) + "." TO profilePath.
+    LOG "SET LANDING_AUTO_TARGET TO " + configLiteral(0) + "." TO profilePath.
+    LOG "SET LANDING_CONFIRM_TARGET TO " + configLiteral(0) + "." TO profilePath.
+    LOG "SET AEROBRAKE_REENTRY_DIR TO " + configLiteral("RETROGRADE") + "." TO profilePath.
+    LOG "SET AEROBRAKE_ARM_CHUTES TO " + configLiteral(0) + "." TO profilePath.
+    LOG "SET DESCENT_ENGINE_ASSIST TO " + configLiteral(1) + "." TO profilePath.
     _lockRescueTarget().
 } ELSE {
     SET phaseName TO mode.
     SET sequence TO LIST(phaseName, "DONE").
+    SET profilePath TO missionProfileBegin(vehicleInfo["VEHICLE"], "landing_rescue_manual").
+    missionOverrideClear().
+    stateSet("mission_id", "landing_rescue_manual").
+    LOG "SET MISSION_ID TO " + configLiteral("landing_rescue_manual") + "." TO profilePath.
+    LOG "SET MISSION_NAME TO " + configLiteral("Landing Rescue Manual") + "." TO profilePath.
+    LOG "SET TARGET_ TO " + configLiteral(SHIP:BODY:NAME:TOUPPER) + "." TO profilePath.
+    LOG "SET SEQUENCE TO " + configLiteral(sequence) + "." TO profilePath.
 }
 
 LOCAL keepLibs IS _keepLibsForSequence(sequence).

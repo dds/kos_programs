@@ -8,7 +8,7 @@
 // you can taxi, take off, fly, and land the next leg.
 //
 // Unlike cmd/resetmission.ks this KEEPS the selected mission
-// profile and runtime mission_cfg_* overrides — it only rewinds the
+// profile and runtime override file — it only rewinds the
 // phase, archives the previous leg's flight log, and stamps a
 // fresh launch_time so the next leg logs to its own file.
 //

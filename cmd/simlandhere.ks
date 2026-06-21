@@ -7,12 +7,6 @@ PARAMETER aheadMinutes IS 5.
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
 
-LOCAL FUNCTION _cfg {
-    PARAMETER key.
-    PARAMETER value.
-    stateSet("mission_cfg_" + key, value).
-}
-
 LOCAL FUNCTION _offsetLatLng {
     PARAMETER lat.
     PARAMETER lng.
@@ -81,17 +75,29 @@ IF site["FOUND"] {
     SET source TO source + " SCANsat slope=" + ROUND(site["SLOPE"],1).
 }
 
-_cfg("TARGET_LAT", lat).
-_cfg("TARGET_LNG", lng).
-_cfg("TARGET_LOCK", 1).
-_cfg("TARGET_WAYPOINT", "").
-_cfg("LANDING_SIM_MODE", 1).
-_cfg("LANDING_SKIP_TARGET_SEARCH", 1).
-_cfg("LANDING_DEORBIT_LEAD_MINUTES", aheadMinutes).
-_cfg("TARGET_DEORBIT_SCAN_ORBITS", 2).
-_cfg("TARGET_DEORBIT_SCAN_SAMPLES", 256).
-_cfg("TARGET_DEORBIT_SCAN_CENTER_MINUTES", aheadMinutes).
-_cfg("TARGET_DEORBIT_SCAN_WINDOW_MINUTES", 4).
+SET TARGET_LAT TO lat.
+SET TARGET_LNG TO lng.
+SET TARGET_LOCK TO 1.
+SET TARGET_WAYPOINT TO "".
+SET LANDING_SIM_MODE TO 1.
+SET LANDING_SKIP_TARGET_SEARCH TO 1.
+SET LANDING_DEORBIT_LEAD_MINUTES TO aheadMinutes.
+SET TARGET_DEORBIT_SCAN_ORBITS TO 2.
+SET TARGET_DEORBIT_SCAN_SAMPLES TO 256.
+SET TARGET_DEORBIT_SCAN_CENTER_MINUTES TO aheadMinutes.
+SET TARGET_DEORBIT_SCAN_WINDOW_MINUTES TO 4.
+missionOverrideClear().
+LOG "SET TARGET_LAT TO " + configLiteral(TARGET_LAT) + "." TO missionOverridePath().
+LOG "SET TARGET_LNG TO " + configLiteral(TARGET_LNG) + "." TO missionOverridePath().
+LOG "SET TARGET_LOCK TO " + configLiteral(TARGET_LOCK) + "." TO missionOverridePath().
+LOG "SET TARGET_WAYPOINT TO " + configLiteral(TARGET_WAYPOINT) + "." TO missionOverridePath().
+LOG "SET LANDING_SIM_MODE TO " + configLiteral(LANDING_SIM_MODE) + "." TO missionOverridePath().
+LOG "SET LANDING_SKIP_TARGET_SEARCH TO " + configLiteral(LANDING_SKIP_TARGET_SEARCH) + "." TO missionOverridePath().
+LOG "SET LANDING_DEORBIT_LEAD_MINUTES TO " + configLiteral(LANDING_DEORBIT_LEAD_MINUTES) + "." TO missionOverridePath().
+LOG "SET TARGET_DEORBIT_SCAN_ORBITS TO " + configLiteral(TARGET_DEORBIT_SCAN_ORBITS) + "." TO missionOverridePath().
+LOG "SET TARGET_DEORBIT_SCAN_SAMPLES TO " + configLiteral(TARGET_DEORBIT_SCAN_SAMPLES) + "." TO missionOverridePath().
+LOG "SET TARGET_DEORBIT_SCAN_CENTER_MINUTES TO " + configLiteral(TARGET_DEORBIT_SCAN_CENTER_MINUTES) + "." TO missionOverridePath().
+LOG "SET TARGET_DEORBIT_SCAN_WINDOW_MINUTES TO " + configLiteral(TARGET_DEORBIT_SCAN_WINDOW_MINUTES) + "." TO missionOverridePath().
 stateSet("phase", "LAND_DEORBIT").
 stateSet("reload_required", "false").
 stateSet("reload_reason", "").

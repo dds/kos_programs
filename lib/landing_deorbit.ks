@@ -11,6 +11,8 @@ GLOBAL TARGET_DEORBIT_SCAN_WINDOW_MINUTES IS 0.
 GLOBAL TARGET_DEORBIT_MIN_LEAD IS 0.
 GLOBAL LANDING_SIM_MODE IS 0.
 GLOBAL REENTRY_PE IS 30000.
+GLOBAL RELOAD_AFTER_LAND_ASSIST IS 1.
+GLOBAL RELOAD_AFTER_LAND IS 1.
 
 // Landing deorbit phase: target, create, and execute the deorbit node.
 
@@ -159,6 +161,24 @@ LOCAL FUNCTION _confirmLandingTarget {
     RETURN TRUE.
 }
 
+LOCAL FUNCTION _landingWriteTargetOverrides {
+    missionOverrideClear().
+    IF SEQUENCE:LENGTH > 0 { LOG "SET SEQUENCE TO " + configLiteral(SEQUENCE) + "." TO missionOverridePath(). }
+    LOG "SET TARGET_LAT TO " + configLiteral(TARGET_LAT) + "." TO missionOverridePath().
+    LOG "SET TARGET_LNG TO " + configLiteral(TARGET_LNG) + "." TO missionOverridePath().
+    LOG "SET TARGET_LOCK TO " + configLiteral(TARGET_LOCK) + "." TO missionOverridePath().
+    LOG "SET TARGET_WAYPOINT TO " + configLiteral(TARGET_WAYPOINT) + "." TO missionOverridePath().
+    LOG "SET LANDING_SIM_MODE TO " + configLiteral(LANDING_SIM_MODE) + "." TO missionOverridePath().
+    LOG "SET LANDING_SKIP_TARGET_SEARCH TO " + configLiteral(LANDING_SKIP_TARGET_SEARCH) + "." TO missionOverridePath().
+    LOG "SET LANDING_DEORBIT_LEAD_MINUTES TO " + configLiteral(LANDING_DEORBIT_LEAD_MINUTES) + "." TO missionOverridePath().
+    LOG "SET TARGET_DEORBIT_SCAN_ORBITS TO " + configLiteral(TARGET_DEORBIT_SCAN_ORBITS) + "." TO missionOverridePath().
+    LOG "SET TARGET_DEORBIT_SCAN_SAMPLES TO " + configLiteral(TARGET_DEORBIT_SCAN_SAMPLES) + "." TO missionOverridePath().
+    LOG "SET TARGET_DEORBIT_SCAN_CENTER_MINUTES TO " + configLiteral(TARGET_DEORBIT_SCAN_CENTER_MINUTES) + "." TO missionOverridePath().
+    LOG "SET TARGET_DEORBIT_SCAN_WINDOW_MINUTES TO " + configLiteral(TARGET_DEORBIT_SCAN_WINDOW_MINUTES) + "." TO missionOverridePath().
+    LOG "SET RELOAD_AFTER_LAND_ASSIST TO " + configLiteral(RELOAD_AFTER_LAND_ASSIST) + "." TO missionOverridePath().
+    LOG "SET RELOAD_AFTER_LAND TO " + configLiteral(RELOAD_AFTER_LAND) + "." TO missionOverridePath().
+}
+
 LOCAL FUNCTION _autoLandingTarget {
     IF LANDING_AUTO_TARGET <= 0 { RETURN FALSE. }
 
@@ -168,9 +188,11 @@ LOCAL FUNCTION _autoLandingTarget {
     SET TARGET_LAT TO geo:LAT.
     SET TARGET_LNG TO geo:LNG.
     SET TARGET_LOCK TO TRUE.
-    stateSet("mission_cfg_TARGET_LAT", geo:LAT).
-    stateSet("mission_cfg_TARGET_LNG", geo:LNG).
-    stateSet("mission_cfg_TARGET_LOCK", 1).
+    SET TARGET_LAT TO geo:LAT.
+    SET TARGET_LNG TO geo:LNG.
+    SET TARGET_LOCK TO 1.
+    SET TARGET_WAYPOINT TO "".
+    _landingWriteTargetOverrides().
     RETURN TRUE.
 }
 

@@ -57,9 +57,16 @@ GLOBAL FUNCTION stateSet {
     PARAMETER key.
     PARAMETER value.
     _ensureLoaded().
+    IF _cache:HASKEY(key) {
+        LOCAL old IS _cache[key].
+        IF old:TYPENAME = value:TYPENAME AND ("" + old) = ("" + value) {
+            RETURN FALSE.
+        }
+    }
     IF _cache:HASKEY(key) { _cache:REMOVE(key). }
     _cache:ADD(key, value).
     _flush().
+    RETURN TRUE.
 }
 
 GLOBAL FUNCTION stateRemove {

@@ -13,12 +13,6 @@ bootPreamble().
 LOCAL parkingAlt IS parkingKm * 1000.
 IF parkingKm > 1000 { SET parkingAlt TO parkingKm. }
 
-LOCAL FUNCTION _cfg {
-    PARAMETER key.
-    PARAMETER value.
-    stateSet("mission_cfg_" + key, value).
-}
-
 LOCAL FUNCTION _clearLibCache {
     FOR key IN LIST(
         "lib_band_libs", "lib_band_phase", "reload_reason",
@@ -40,12 +34,18 @@ LOCAL FUNCTION _clearLaunchLegState {
     }
 }
 
-_cfg("SEQUENCE", LIST("PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK", "DONE")).
-_cfg("PARKING_ALT", parkingAlt).
-_cfg("LAUNCH_INCLINATION", launchInc).
-_cfg("LAUNCH_AZIMUTH", 0).
-_cfg("ORBIT_STAY_TIME", 0).
+LOCAL profilePath IS missionProfileBegin(stateGet("vehicle", ""), "setlaunch").
+missionOverrideClear().
+LOG "SET MISSION_ID TO " + configLiteral("setlaunch") + "." TO profilePath.
+LOG "SET MISSION_NAME TO " + configLiteral("Launch Reset") + "." TO profilePath.
+LOG "SET TARGET_ TO " + configLiteral(SHIP:BODY:NAME:TOUPPER) + "." TO profilePath.
+LOG "SET SEQUENCE TO " + configLiteral(LIST("PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK", "DONE")) + "." TO profilePath.
+LOG "SET PARKING_ALT TO " + configLiteral(parkingAlt) + "." TO profilePath.
+LOG "SET LAUNCH_INCLINATION TO " + configLiteral(launchInc) + "." TO profilePath.
+LOG "SET LAUNCH_AZIMUTH TO " + configLiteral(0) + "." TO profilePath.
+LOG "SET ORBIT_STAY_TIME TO " + configLiteral(0) + "." TO profilePath.
 
+stateSet("mission_id", "setlaunch").
 stateSet("phase", "PRELAUNCH").
 stateSet("lib_band", "PRELAUNCH").
 stateSet("reload_required", "false").

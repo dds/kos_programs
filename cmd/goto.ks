@@ -61,37 +61,34 @@ IF NOT err {
 
     // Final orbit spec -> SHAPE_* mission config. Clear stale keys
     // first so an omitted element really means "don't care".
-    FOR key IN LIST("AP", "PE", "INC", "LAN", "AOP") {
-        stateRemove("mission_cfg_SHAPE_" + key).
-    }
+    SET SHAPE_AP TO -1.
+    SET SHAPE_PE TO -1.
+    SET SHAPE_INC TO -1.
+    SET SHAPE_LAN TO -1.
     FOR key IN LIST("ap", "pe", "inc", "lan", "aop") {
         IF opts:HASKEY(key) {
-            stateSet("mission_cfg_SHAPE_" + key:TOUPPER, opts[key]).
+            IF key = "ap" { SET SHAPE_AP TO opts[key]. }
+            IF key = "pe" { SET SHAPE_PE TO opts[key]. }
+            IF key = "inc" { SET SHAPE_INC TO opts[key]. }
+            IF key = "lan" { SET SHAPE_LAN TO opts[key]. }
         }
     }
 
-    stateSet("goto_dest", dest).
-    LOCAL plan IS gotoBuildPlan(dest).
+    SET GOTO_DEST TO dest.
+    LOCAL planned IS gotoBuildPlan(dest).
 
-    IF plan = 0 {
+    IF NOT planned {
         PRINT "ERROR: could not plan a route to '" + dest + "'.".
-        stateRemove("goto_dest").
     } ELSE {
         // Archive the current leg's log, then take over the mission.
         archiveLog().
 
-        // mission_id with no matching .ks file: boot skips the
-        // selector and leaves our state untouched (same trick as
-        // cmd/returntokerbin.ks).
-        stateSet("mission_id", "goto").
-        stateSet("mission_name", "GOTO " + dest).
-        stateSet("mission_type", "").
-        gotoCommitPlan(plan).
+        gotoCommitPlan().
         stateSet("launch_time", ROUND(TIME:SECONDS)).
 
         PRINT " ".
         PRINT "GOTO configured: " + dest.
-        PRINT "  Next leg:  " + plan["summary"].
+        PRINT "  Next leg:  " + GOTO_PLAN_SUMMARY.
         LOCAL specPrinted IS FALSE.
         FOR key IN LIST("ap", "pe", "inc", "lan", "aop") {
             IF opts:HASKEY(key) {

@@ -170,6 +170,17 @@ LOCAL FUNCTION _prelaunchNextPhaseIs {
     RETURN FALSE.
 }
 
+LOCAL FUNCTION _prelaunchWriteOverrides {
+    PARAMETER includeLaunchInc IS TRUE.
+    missionOverrideClear().
+    IF includeLaunchInc {
+        LOG "SET LAUNCH_INCLINATION TO " + configLiteral(LAUNCH_INCLINATION) + "." TO missionOverridePath().
+    }
+    IF RENDEZVOUS_TARGET <> "" {
+        LOG "SET RENDEZVOUS_TARGET TO " + configLiteral(RENDEZVOUS_TARGET) + "." TO missionOverridePath().
+    }
+}
+
 LOCAL FUNCTION _prelaunchToSuborbital {
     mLog("PRELAUNCH: suborbital hop; launch-plane timing skipped.").
     nextPhase(launchSeq).
@@ -208,7 +219,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
 
     IF targetInc <= 0 OR targetInc >= 180 {
         SET LAUNCH_INCLINATION TO targetInc.
-        stateSet("mission_cfg_LAUNCH_INCLINATION", targetInc).
+        _prelaunchWriteOverrides().
         mLog("PRELAUNCH: " + bod_:NAME
             + " plane is equatorial; launching immediately.").
         nextPhase(launchSeq).
@@ -218,7 +229,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
     IF NOT _latIncOk(SHIP:LATITUDE, targetInc) {
         IF allowFallback {
             SET LAUNCH_INCLINATION TO 0.
-            stateSet("mission_cfg_LAUNCH_INCLINATION", 0).
+            _prelaunchWriteOverrides().
             mLogWarn("PRELAUNCH: " + bod_:NAME + " plane inc="
                 + ROUND(targetInc, 2) + " cannot pass over lat "
                 + ROUND(SHIP:LATITUDE, 3)
@@ -246,7 +257,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
     }
 
     SET LAUNCH_INCLINATION TO win["inc"].
-    stateSet("mission_cfg_LAUNCH_INCLINATION", win["inc"]).
+    _prelaunchWriteOverrides().
     stateSet("prelaunch_plane_ut", win["ut"]).
     stateSet("prelaunch_plane_target", bod_:NAME).
     stateSet("prelaunch_plane_inc", targetInc).
@@ -500,7 +511,7 @@ LOCAL FUNCTION _prelaunchToInterplanetary {
     LOCAL launchInc IS _interplanetaryLaunchIncFor(
         targetName, targetObj:ORBIT).
     SET LAUNCH_INCLINATION TO launchInc.
-    stateSet("mission_cfg_LAUNCH_INCLINATION", launchInc).
+    _prelaunchWriteOverrides().
 
     IF xingBody = SHIP:BODY:BODY {
         mLog("PRELAUNCH: solar escape target; launching immediately"
@@ -651,7 +662,7 @@ LOCAL FUNCTION _prelaunchRdvTarget {
             AND TARGET:ISTYPE("Vessel") {
         LOCAL nm IS TARGET:NAME.
         SET RENDEZVOUS_TARGET TO nm.
-        stateSet("mission_cfg_RENDEZVOUS_TARGET", nm).
+        _prelaunchWriteOverrides(FALSE).
         mLog("PRELAUNCH: rendezvous target from game target: " + nm).
         RETURN nm.
     }
@@ -740,7 +751,7 @@ LOCAL FUNCTION _prelaunchToVessel {
 
     LOCAL launchUt IS best["ut"].
     SET LAUNCH_INCLINATION TO best["inc"].
-    stateSet("mission_cfg_LAUNCH_INCLINATION", best["inc"]).
+    _prelaunchWriteOverrides().
     stateSet("prelaunch_plane_ut", launchUt).
     mLog("PRELAUNCH: window in " + ROUND(launchUt - TIME:SECONDS, 0)
         + "s  launch inc=" + ROUND(best["inc"], 2)

@@ -91,7 +91,9 @@ routes tagged CPUs to `roles/`, untagged CPUs load `craft/<vehicle>.ks`.
 The selected mission id is persisted in state. The profile itself is copied
 to `1:/missions/<vehicle>/` and run on every boot; profiles are executable
 config scripts made of `SET NAME TO value.` lines. Runtime config overrides
-still use `mission_cfg_*` state, which boot turns back into `SET` overrides.
+live in `1:/run/mission_overrides.ks` as the same kind of `SET` lines;
+that file is overwritten by the command/phase that owns the current override
+set, never synthesized from state.
 Boot plans the library band from the selected mission/phase every boot,
 compiles it to KSM (comments cost nothing), prunes stale files, runs the
 vehicle defaults, then re-runs the mission profile so mission/body overrides

@@ -96,8 +96,8 @@ Looks like Python/JS; is neither.
 - **Vehicle contract**: craft scripts `SET` hardware defaults and expose
   `main()`; profiles own phase/library planning and final mission overrides.
   Role scripts may still expose `bootVehicleLibs()` for profile-less support.
-  Runtime `mission_cfg_*` state is converted back into `SET NAME TO value.`
-  overrides during boot.
+  Runtime config overrides live in `1:/run/mission_overrides.ks`, which is
+  an ordinary `SET NAME TO value.` script applied after the mission profile.
 
 ## Map of the important code
 
@@ -149,19 +149,16 @@ Looks like Python/JS; is neither.
 - Mission profiles are KerboScript files in `missions/<vehicle>/`; each is a
   list of `SET NAME TO value.` statements.
 - Boot/storage mental model: state must preserve intent, not bulky derived
-  products. Persist `mission_id`, `phase`, target/config overrides, and
+  products. Persist `mission_id`, `phase`, runtime progress markers, and
   reload intent. Do not cache computed band libs. If an upgraded vessel is
   wedged by old state, `RUNONCEPATH("0:/cmd/trimstate.ks").` removes the stale
   `lib_band_libs` key without loading the full boot stack. In-flight leg
-  setup that defines a whole next mission (e.g. `return_setup`) must write a
-  compact local profile via `missionProfileWrite()` to
-  `1:/missions/<vehicle>/<id>.ks` — boot already RUNPATHs that for the
-  selected `mission_id`. Do NOT fan a static leg config out into dozens of
-  `mission_cfg_*` state keys: those serialize verbosely (lists become nested
-  lexicons) and bloat `state.json` enough to starve a band (flight-found: a
-  10 KB state.json blocked the LAUNCH band). `mission_cfg_*` is for runtime-
-  discovered values (computed inclination, locked target), layered on top of
-  the profile at boot.
+  setup that defines a whole next mission (e.g. `return_setup`) must create or
+  copy a compact local profile at `1:/missions/<vehicle>/<id>.ks` using literal
+  `LOG "SET NAME TO ..."` lines for dynamic runpath/flight values — boot
+  already RUNPATHs that for the selected `mission_id`. Short-lived overrides go
+  in `1:/run/mission_overrides.ks`; the override file is rewritten as a full
+  current override set, not accumulated as state.
 - Transfer-planning mental model: for
   `XING,BPLANE,COAST_1HALF,REFINE_BPLANE,COAST_2HALF,CAPTURE,SHAPE`,
   `XING` must produce a real target SOI patch, but it should not be treated
@@ -192,9 +189,9 @@ Looks like Python/JS; is neither.
   solver deliberately aims a downfield phantom impact to preserve braking
   authority. `docs/LANDING_TARGETING.md` is the current design note.
 - Duna/Ike mental model: `duna_ike_setup` is mission glue, not a generic
-  transfer dependency. It performs Duna aerocapture setup, rewrites the next
-  Ike/Duna-entry sequence through `mission_cfg_*`, and clears reload/band
-  cache state before rebooting into the next leg.
+  transfer dependency. It performs Duna aerocapture setup, writes the next
+  Ike/Duna-entry leg as a local mission profile, and clears reload/band cache
+  state before rebooting into the next leg.
 - **Commit and push when a chunk of work is done, without being asked.** The
   game's archive folder syncs from the pushed repo; unpushed code is
   untestable. Logical, bisectable commits in short-imperative style. Leave

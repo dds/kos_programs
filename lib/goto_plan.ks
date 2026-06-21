@@ -4,7 +4,7 @@
 //
 // "goto(thing, options)": given any destination — body or vessel,
 // parent, sibling, child, or in another planetary system — build
-// the phase SEQUENCE and mission_cfg_* values for the next hop
+// the phase SEQUENCE and config globals for the next hop
 // toward it, reusing the standard mission machinery (bands,
 // reload-on-band-change, state resume) for progressive loading.
 //
@@ -30,12 +30,11 @@
 //   - target orbits the current body's parent (Lambert ejection)
 // Everything else climbs with ESCAPE until one of those applies.
 //
-// State consumed:
-//   goto_dest             — final destination name (set by cmd/goto)
-//   mission_cfg_SHAPE_*   — requested final orbit elements
-// State produced per hop:
-//   target, phase, mission_cfg_SEQUENCE, and hop-scoped
-//   CAPTURE_*/ESCAPE_*/TARGET_*/RENDEZVOUS_TARGET cfg keys.
+// Config consumed:
+//   GOTO_DEST             — final destination name (set by cmd/goto)
+//   SHAPE_*               — requested final orbit elements
+// Config produced per hop:
+//   target, phase, and hop-scoped globals in the active goto profile.
 // ============================================================
 
 @LAZYGLOBAL OFF.
@@ -55,6 +54,11 @@ GLOBAL SHAPE_PE IS -1.
 GLOBAL SHAPE_AP IS -1.
 GLOBAL SHAPE_INC IS -1.
 GLOBAL SHAPE_LAN IS -1.
+GLOBAL GOTO_DEST IS "".
+GLOBAL GOTO_PLAN_SEQUENCE IS LIST().
+GLOBAL GOTO_PLAN_TARGET IS "".
+GLOBAL GOTO_PLAN_FINAL IS FALSE.
+GLOBAL GOTO_PLAN_SUMMARY IS "".
 
 
 LOCAL FUNCTION _gotoFindBody {
@@ -118,9 +122,7 @@ LOCAL FUNCTION _gotoShapeNum {
 
 // ============================================================
 // gotoBuildPlan — plan the next hop toward destName.
-// Returns 0 on resolution failure, else:
-//   LEX("sequence" LIST, "target" name, "cfg" LEXICON,
-//       "final" bool, "summary" string)
+// Returns TRUE on success and populates GOTO_PLAN_* globals.
 // ============================================================
 GLOBAL FUNCTION gotoBuildPlan {
     PARAMETER destName.
@@ -140,9 +142,19 @@ GLOBAL FUNCTION gotoBuildPlan {
     LOCAL cur IS SHIP:BODY.
 
     LOCAL seq IS LIST().
-    LOCAL cfg IS LEXICON().
     LOCAL hopTarget IS "".
     LOCAL final IS FALSE.
+    SET CAPTURE_PE TO -1.
+    SET CAPTURE_INC TO -1.
+    SET CAPTURE_LAN TO -1.
+    SET CAPTURE_AOP TO -1.
+    SET CAPTURE_DIR TO "".
+    SET ESCAPE_PE TO -1.
+    SET ESCAPE_LAN TO -1.
+    SET ESCAPE_AOP TO -1.
+    SET TARGET_PE TO -1.
+    SET TARGET_AP TO -1.
+    SET RENDEZVOUS_TARGET TO "".
 
     // --- Already at the goal SOI: final operations only ---
     IF goalBody = cur {
@@ -150,7 +162,7 @@ GLOBAL FUNCTION gotoBuildPlan {
         SET hopTarget TO cur:NAME.
         IF isVessel {
             SET seq TO LIST("RDV", "DONE").
-            cfg:ADD("RENDEZVOUS_TARGET", destVessel:NAME).
+            SET RENDEZVOUS_TARGET TO destVessel:NAME.
         } ELSE {
             SET seq TO LIST("SHAPE", "DONE").
         }
@@ -173,22 +185,22 @@ GLOBAL FUNCTION gotoBuildPlan {
         IF final AND isVessel {
             SET capPe TO MAX(destVessel:ORBIT:PERIAPSIS, _gotoSafePe(hopBody) / 2).
             SET capAp TO destVessel:ORBIT:APOAPSIS.
-            cfg:ADD("CAPTURE_INC", destVessel:ORBIT:INCLINATION).
-            cfg:ADD("CAPTURE_LAN", destVessel:ORBIT:LAN).
-            cfg:ADD("RENDEZVOUS_TARGET", destVessel:NAME).
+            SET CAPTURE_INC TO destVessel:ORBIT:INCLINATION.
+            SET CAPTURE_LAN TO destVessel:ORBIT:LAN.
+            SET RENDEZVOUS_TARGET TO destVessel:NAME.
         } ELSE IF final {
             SET capPe TO _gotoShapeNum("PE", capPe).
             SET capAp TO _gotoShapeNum("AP", capAp).
             IF SHAPE_INC >= 0 {
-                cfg:ADD("CAPTURE_INC", _gotoShapeNum("INC", 0)).
+                SET CAPTURE_INC TO _gotoShapeNum("INC", 0).
             }
             IF SHAPE_LAN >= 0 {
-                cfg:ADD("CAPTURE_LAN", _gotoShapeNum("LAN", 0)).
+                SET CAPTURE_LAN TO _gotoShapeNum("LAN", 0).
             }
         }
-        cfg:ADD("CAPTURE_PE", capPe).
-        cfg:ADD("TARGET_PE", capPe).
-        cfg:ADD("TARGET_AP", capAp).
+        SET CAPTURE_PE TO capPe.
+        SET TARGET_PE TO capPe.
+        SET TARGET_AP TO capAp.
 
         SET seq TO LIST("XING", "BPLANE", "COAST_1HALF",
             "REFINE_BPLANE", "COAST_2HALF", "CAPTURE").
@@ -205,7 +217,7 @@ GLOBAL FUNCTION gotoBuildPlan {
         IF NOT cur:HASBODY {
             mLogError("GOTO: cannot route from " + cur:NAME
                 + " to " + destName + " (no common ancestor path).").
-            RETURN 0.
+            RETURN FALSE.
         }
         LOCAL parent IS cur:BODY.
         SET hopTarget TO parent:NAME.
@@ -215,11 +227,11 @@ GLOBAL FUNCTION gotoBuildPlan {
             cur:ORBIT:SEMIMAJORAXIS - parent:RADIUS).
         IF final AND isVessel {
             SET escPe TO destVessel:ORBIT:PERIAPSIS.
-            cfg:ADD("RENDEZVOUS_TARGET", destVessel:NAME).
+            SET RENDEZVOUS_TARGET TO destVessel:NAME.
         } ELSE IF final {
             SET escPe TO _gotoShapeNum("PE", _gotoSafePe(parent)).
         }
-        cfg:ADD("ESCAPE_PE", escPe).
+        SET ESCAPE_PE TO escPe.
 
         SET seq TO LIST("ESCAPE", "COAST").
         IF final AND isVessel {
@@ -237,36 +249,39 @@ GLOBAL FUNCTION gotoBuildPlan {
         + "  [" + seq:JOIN(",") + "]"
         + "  (destination: " + destName + ")".
 
-    RETURN LEX(
-        "sequence", seq,
-        "target", hopTarget,
-        "cfg", cfg,
-        "final", final,
-        "summary", summary).
+    SET GOTO_PLAN_SEQUENCE TO seq.
+    SET GOTO_PLAN_TARGET TO hopTarget.
+    SET GOTO_PLAN_FINAL TO final.
+    SET GOTO_PLAN_SUMMARY TO summary.
+    RETURN TRUE.
 }
 
 // ============================================================
-// gotoCommitPlan — persist a hop plan into mission state.
-// Clears hop-scoped keys from the previous leg first; never
-// touches the operator's SHAPE_* final-orbit spec or goto_dest.
+// gotoCommitPlan — persist a hop plan as a local mission profile.
 // ============================================================
 GLOBAL FUNCTION gotoCommitPlan {
-    PARAMETER plan.
-    FOR key IN LIST(
-        "CAPTURE_PE", "CAPTURE_INC", "CAPTURE_LAN", "CAPTURE_AOP",
-        "CAPTURE_DIR", "ESCAPE_PE", "ESCAPE_LAN", "ESCAPE_AOP",
-        "RENDEZVOUS_TARGET", "TARGET_PE", "TARGET_AP"
-    ) {
-        stateRemove("mission_cfg_" + key).
-    }
-    LOCAL cfg IS plan["cfg"].
-    FOR key IN cfg:KEYS {
-        stateSet("mission_cfg_" + key, cfg[key]).
-    }
-    stateSet("target", plan["target"]).
-    stateSet("mission_cfg_SEQUENCE", plan["sequence"]).
-    stateSet("phase", plan["sequence"][0]).
-    mLog("GOTO plan committed: " + plan["summary"]).
+    LOCAL profilePath IS missionProfileBegin(stateGet("vehicle", ""), "goto").
+    missionOverrideClear().
+    LOG "SET MISSION_ID TO " + configLiteral("goto") + "." TO profilePath.
+    LOG "SET MISSION_NAME TO " + configLiteral("GOTO " + GOTO_DEST) + "." TO profilePath.
+    LOG "SET TARGET_ TO " + configLiteral(GOTO_PLAN_TARGET) + "." TO profilePath.
+    LOG "SET GOTO_DEST TO " + configLiteral(GOTO_DEST) + "." TO profilePath.
+    LOG "SET SEQUENCE TO " + configLiteral(GOTO_PLAN_SEQUENCE) + "." TO profilePath.
+    IF SHAPE_PE >= 0 { LOG "SET SHAPE_PE TO " + configLiteral(SHAPE_PE) + "." TO profilePath. }
+    IF SHAPE_AP >= 0 { LOG "SET SHAPE_AP TO " + configLiteral(SHAPE_AP) + "." TO profilePath. }
+    IF SHAPE_INC >= 0 { LOG "SET SHAPE_INC TO " + configLiteral(SHAPE_INC) + "." TO profilePath. }
+    IF SHAPE_LAN >= 0 { LOG "SET SHAPE_LAN TO " + configLiteral(SHAPE_LAN) + "." TO profilePath. }
+    IF CAPTURE_PE >= 0 { LOG "SET CAPTURE_PE TO " + configLiteral(CAPTURE_PE) + "." TO profilePath. }
+    IF CAPTURE_INC >= 0 { LOG "SET CAPTURE_INC TO " + configLiteral(CAPTURE_INC) + "." TO profilePath. }
+    IF CAPTURE_LAN >= 0 { LOG "SET CAPTURE_LAN TO " + configLiteral(CAPTURE_LAN) + "." TO profilePath. }
+    IF ESCAPE_PE >= 0 { LOG "SET ESCAPE_PE TO " + configLiteral(ESCAPE_PE) + "." TO profilePath. }
+    IF TARGET_PE >= 0 { LOG "SET TARGET_PE TO " + configLiteral(TARGET_PE) + "." TO profilePath. }
+    IF TARGET_AP >= 0 { LOG "SET TARGET_AP TO " + configLiteral(TARGET_AP) + "." TO profilePath. }
+    IF RENDEZVOUS_TARGET <> "" { LOG "SET RENDEZVOUS_TARGET TO " + configLiteral(RENDEZVOUS_TARGET) + "." TO profilePath. }
+    stateSet("mission_id", "goto").
+    stateRemove("goto_dest").
+    stateSet("phase", GOTO_PLAN_SEQUENCE[0]).
+    mLog("GOTO plan committed: " + GOTO_PLAN_SUMMARY).
 }
 
 // ============================================================
@@ -275,29 +290,28 @@ GLOBAL FUNCTION gotoCommitPlan {
 // reboot so the next leg's band loads cleanly.
 // ============================================================
 GLOBAL FUNCTION phaseGoto {
-    LOCAL dest IS stateGet("goto_dest", "").
+    LOCAL dest IS GOTO_DEST.
     IF dest = "" {
-        mLogError("GOTO phase reached but goto_dest is not set — ending mission.").
+        mLogError("GOTO phase reached but GOTO_DEST is not set — ending mission.").
         stateSet("phase", "DONE").
         RETURN.
     }
 
-    LOCAL plan IS gotoBuildPlan(dest).
-    IF plan = 0 {
+    IF NOT gotoBuildPlan(dest) {
         mLogError("GOTO: replanning toward " + dest + " failed — operator needed.").
         yieldToPrompt().
         RETURN.
     }
 
-    gotoCommitPlan(plan).
-    LOCAL firstPhase IS plan["sequence"][0].
+    gotoCommitPlan().
+    LOCAL firstPhase IS GOTO_PLAN_SEQUENCE[0].
     stateSet("reload_required", "true").
     stateSet("reload_reason", "GOTO_HOP").
     stateSet("reload_next_phase", firstPhase).
     stateSet("reload_next_band", bootLibBandForPhase(firstPhase, firstPhase)).
 
     PRINT " ".
-    PRINT "  GOTO: " + plan["summary"].
+    PRINT "  GOTO: " + GOTO_PLAN_SUMMARY.
     PRINT "  Reboot this CPU to fly the next leg.".
     yieldToPrompt().
 }
