@@ -347,31 +347,24 @@ targeting is absent or horizontal speed is already low.
 ## TARGET_REFINE
 
 `TARGET_REFINE` is the post-brake stabilization state. Its job is to remove
-lateral drift and make the current Trajectories impact acceptable before the
+lateral drift and pull the vessel toward the landing target before the
 approach leg.
 
-The steering vector combines two lean requests:
+The steering is a kinematic position controller:
 
-- retro lean against horizontal velocity
-- impact-correction lean from the predicted impact point toward the real target
+- compute the flat position error from the vessel to the target
+- turn that into a desired horizontal velocity, capped by
+  `LANDING_TARGET_REFINE_HSPEED`
+- lean proportionally to the velocity error, capped by `MAX_TILT`
 
-If the Trajectories impact error is larger than
-`LANDING_TARGET_REFINE_IMPACT_TOLERANCE`, retro lean is reduced by
-`LANDING_TARGET_REFINE_RETRO_WEIGHT` so impact correction has more authority.
-Impact correction scales with error using
-`LANDING_TARGET_REFINE_IMPACT_SCALE` and
-`LANDING_TARGET_REFINE_IMPACT_WEIGHT`.
+Throttle tracks the scheduled descent speed and adds correction throttle from
+the requested lateral acceleration. The correction bounds are scaled around
+hover throttle so high-TWR landers do not use a fixed, overpowering throttle
+limit.
 
-Throttle continues to track the descent speed schedule. If impact error is not
-ready or horizontal speed is above
-`LANDING_TARGET_REFINE_ACCEPT_HSPEED`, the state adds correction throttle
-between `LANDING_TARGET_REFINE_THR_MIN` and
-`LANDING_TARGET_REFINE_THR_MAX`.
-
-It advances to `APPROACH` immediately when horizontal speed is below
-`LANDING_TARGET_REFINE_HSPEED` and impact error is within tolerance. After
-`LANDING_TARGET_REFINE_ACCEPT_TIME`, it also accepts the looser horizontal
-speed threshold. It gives up and drops to `VERTICAL_DESCENT` if it times out
+It advances to `APPROACH` when the flat position error is under 5 m and
+horizontal speed is below `LANDING_TARGET_REFINE_HSPEED`. It gives up and
+drops to `VERTICAL_DESCENT` if it times out
 at `LANDING_TARGET_REFINE_MAX_TIME` or if a climb guard trips.
 
 ## APPROACH
@@ -552,7 +545,6 @@ These values come from `landing_config.ks`, `landing_main.ks`, and
 | target refine | `LANDING_TARGET_REFINE_HSPEED` | 1 m/s | Immediate refine acceptance speed |
 | target refine | `LANDING_TARGET_REFINE_ACCEPT_TIME` | 10 s | Time before looser acceptance |
 | target refine | `LANDING_TARGET_REFINE_ACCEPT_HSPEED` | 5.5 m/s | Looser h-speed after accept time |
-| target refine | `LANDING_TARGET_REFINE_IMPACT_TOLERANCE` | 500 m | Required TR impact error |
 | target refine | `LANDING_TARGET_REFINE_MAX_TIME` | 20 s | Timeout to avoid lingering |
 | approach | `APPROACH_RADIUS` | 750 m | Radius where target refine is preferred |
 | approach | `VERTICAL_RADIUS` | 60 m | Close enough for final vertical descent |
