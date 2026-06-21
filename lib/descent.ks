@@ -203,6 +203,18 @@ LOCAL FUNCTION _descentEngineAssist {
         + " vs=" + ROUND(SHIP:VERTICALSPEED, 1) + ".").
 }
 
+LOCAL FUNCTION _descentAdvance {
+    LOCAL current IS stateGet("phase", "DESCENT").
+    IF xferSeq:CONTAINS(current) {
+        RETURN nextPhase(xferSeq).
+    }
+
+    mLogWarn("DESCENT phase is not in the active sequence; ending mission.").
+    archivePhaseLog().
+    stateSet("phase", "DONE").
+    RETURN "DONE".
+}
+
 GLOBAL FUNCTION phaseDescent {
     mLogPhase("DESCENT").
 
@@ -324,7 +336,7 @@ GLOBAL FUNCTION phaseDescent {
 
     UNLOCK STEERING.
     SET SAS TO TRUE.
-    nextPhase(xferSeq).
+    _descentAdvance().
 }
 
 // Check if chutes have deployed. Uses DESCENT_CHUTES_TAG if

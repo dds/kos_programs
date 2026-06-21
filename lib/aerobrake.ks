@@ -87,7 +87,7 @@ GLOBAL FUNCTION phaseAerobrake {
     }
     _aerobrakeOrient().
 
-    nextPhase(xferSeq).
+    _aerobrakeAdvance().
 }
 
 // Set a KAC alarm before atmospheric interface so time warp
@@ -147,6 +147,25 @@ LOCAL FUNCTION _aerobrakeTargetingWindowOk {
         RETURN FALSE.
     }
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _aerobrakeAdvance {
+    LOCAL current IS stateGet("phase", "AEROBRAKE").
+    IF xferSeq:CONTAINS(current) {
+        RETURN nextPhase(xferSeq).
+    }
+
+    LOCAL fallback IS "DESCENT".
+    LOCAL requiredBand IS bootLibBandForPhase(fallback, fallback).
+    mLogWarn("AEROBRAKE phase is not in the active sequence; "
+        + "falling through to " + fallback + ".").
+    archivePhaseLog().
+    stateSet("phase", fallback).
+    stateSaveReloadState("AEROBRAKE_FALLBACK", fallback, requiredBand).
+    mLogWarn("Aerobrake complete; rebooting into band " + requiredBand + ".").
+    WAIT 2.
+    REBOOT.
+    RETURN fallback.
 }
 
 // ============================================================
