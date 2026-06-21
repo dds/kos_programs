@@ -5,15 +5,27 @@ GLOBAL FUNCTION _landingCoastMccBurnVector {
     PARAMETER trajErr.
 
     LOCAL upVec IS ctx["UP_VEC"].
-    LOCAL horizontalVel IS ctx["H_VEL"].
-    IF horizontalVel:MAG < 0.1 {
+    LOCAL orbVel IS SHIP:VELOCITY:ORBIT.
+    LOCAL hOrbVel IS VXCL(upVec, orbVel).
+    IF hOrbVel:MAG < 0.1 {
         RETURN LEXICON("VALID", FALSE, "VEC", upVec, "MAG", 0).
     }
 
-    LOCAL travelDir IS VXCL(upVec, horizontalVel):NORMALIZED.
+    LOCAL travelDir IS hOrbVel:NORMALIZED.
+    LOCAL crossAxis IS VCRS(travelDir, upVec):NORMALIZED.
+    LOCAL impactInfo IS _landingTrajImpactInfo(ctx).
+    IF NOT impactInfo["FOUND"] {
+        RETURN LEXICON("VALID", FALSE, "VEC", upVec, "MAG", 0).
+    }
+    LOCAL targetGeo IS LATLNG(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+    LOCAL impactGeo IS LATLNG(impactInfo["LAT"], impactInfo["LNG"]).
+    LOCAL targetToImpact IS VXCL(upVec, impactGeo:POSITION - targetGeo:POSITION).
+    LOCAL alongM IS VDOT(targetToImpact, travelDir).
+    LOCAL crossVec IS targetToImpact - travelDir * alongM.
+    LOCAL signedCross IS VDOT(crossVec, crossAxis).
     LOCAL desiredAlong IS LANDING_COAST_MCC_LEAD_DIST.
-    LOCAL correctionVec IS ((desiredAlong - trajErr["ALONG"]) * travelDir)
-        + ((0 - trajErr["CROSS_SIGNED"]) * trajErr["CROSS_AXIS"]).
+    LOCAL correctionVec IS ((desiredAlong - alongM) * travelDir)
+        + ((0 - signedCross) * crossAxis).
     LOCAL burnVec IS VXCL(upVec, correctionVec).
     IF burnVec:MAG < 1 {
         RETURN LEXICON("VALID", FALSE, "VEC", upVec, "MAG", burnVec:MAG).
