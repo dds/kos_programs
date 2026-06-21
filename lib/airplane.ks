@@ -74,7 +74,13 @@ GLOBAL PLANE_REVERSE_AUTO IS TRUE.
 GLOBAL PLANE_REVERSE_MIN_SPEED IS 50.
 GLOBAL PLANE_REVERSE_CONFIRM_TIME IS 0.4.
 GLOBAL PLANE_REVERSE_THROTTLE IS 0.7.
-GLOBAL PLANE_STEER_MAX_SPEED IS 30.
+// Nosewheel steering fades with speed and hard-cuts for the takeoff
+// roll/landing rollout: authority is disabled above OFF_SPEED and
+// re-enabled (hysteresis gap) below ON_SPEED, so rudder at speed can't
+// twitch the nose. STEER_TAG optionally marks the steering wheels; if
+// nothing is tagged we auto-detect parts with a wheel-steering module.
+GLOBAL PLANE_STEER_OFF_SPEED IS 30.
+GLOBAL PLANE_STEER_ON_SPEED IS 15.
 GLOBAL PLANE_STEER_TAG IS "steering_gear".
 // Operator action-group toggles for the two flight-director modes
 // (kOS AG numbers): AP = wing-leveler+alt+hdg, NAV = waypoint nav.
@@ -251,15 +257,33 @@ GLOBAL FUNCTION planeInit {
         PRESERVE.
     }
 
+    // Prefer explicitly tagged steering wheels; otherwise auto-detect
+    // any wheel with a steering module (the gear is often left untagged).
     LOCAL steerParts IS SHIP:PARTSTAGGED(PLANE_STEER_TAG).
+    IF steerParts:LENGTH = 0 {
+        FOR p IN SHIP:PARTS {
+            IF p:MODULES:CONTAINS("ModuleWheelSteering") { steerParts:ADD(p). }
+        }
+    }
     IF steerParts:LENGTH > 0 {
-        mLog("Nosewheel steering: " + steerParts:LENGTH + " part(s) tagged '"
-            + PLANE_STEER_TAG + "'.").
+        mLog("Nosewheel steering: " + steerParts:LENGTH + " steerable wheel(s); "
+            + "off >" + PLANE_STEER_OFF_SPEED
+            + " on <" + PLANE_STEER_ON_SPEED + " m/s (ground).").
+        LOCAL _steerEnabled IS TRUE.
         WHEN planeActive THEN {
-            LOCAL spd IS SHIP:VELOCITY:SURFACE:MAG.
-            LOCAL maxSteer IS PLANE_STEER_MAX_SPEED.
-            IF spd < maxSteer {
-                LOCAL factor IS 1.0 - spd / maxSteer.
+            LOCAL gspd IS SHIP:GROUNDSPEED.
+            // Hysteresis: cut once fast, restore only well back down.
+            IF _steerEnabled AND gspd > PLANE_STEER_OFF_SPEED {
+                SET _steerEnabled TO FALSE.
+                SET SHIP:CONTROL:WHEELSTEER TO 0.
+                mLog("Nosewheel steering OFF at " + ROUND(gspd, 0) + " m/s.").
+            } ELSE IF (NOT _steerEnabled) AND gspd < PLANE_STEER_ON_SPEED {
+                SET _steerEnabled TO TRUE.
+                mLog("Nosewheel steering ON (taxi) at " + ROUND(gspd, 0) + " m/s.").
+            }
+            IF _steerEnabled {
+                // Taper authority toward zero as the cutoff nears.
+                LOCAL factor IS MAX(0, 1.0 - gspd / PLANE_STEER_OFF_SPEED).
                 SET SHIP:CONTROL:WHEELSTEER TO SHIP:CONTROL:PILOTWHEELSTEER * factor.
             } ELSE {
                 SET SHIP:CONTROL:WHEELSTEER TO 0.
