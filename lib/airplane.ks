@@ -746,16 +746,36 @@ GLOBAL FUNCTION surveyStart {
 // planePreflightReset — put the airframe back into takeoff trim.
 // Run every leg (multi-leg airline flights land with landing trim,
 // stowed-but-armed reversers, and stale control inputs).
+//
+// NOTE: kOS has two trim layers. The settable SHIP:CONTROL:*TRIM is
+// kOS's own; the SHIP:CONTROL:PILOT*TRIM layer (keyboard Mod+arrows,
+// joystick trim) is read-only — kOS can SEE it but cannot clear it.
+// The old code wrote to PILOT*TRIM, which silently did nothing. We
+// zero our own layer and, if a pilot trim is left standing (the usual
+// cause of post-reboot yaw/pitch drift), tell the operator to press
+// the in-game Reset Trim key (Mod+X) — only that clears it.
 GLOBAL FUNCTION planePreflightReset {
-    SET SHIP:CONTROL:PILOTPITCHTRIM TO 0.
-    SET SHIP:CONTROL:PILOTYAWTRIM TO 0.
-    SET SHIP:CONTROL:PILOTROLLTRIM TO 0.
-    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    SET SHIP:CONTROL:PITCHTRIM TO 0.
+    SET SHIP:CONTROL:YAWTRIM TO 0.
+    SET SHIP:CONTROL:ROLLTRIM TO 0.
     SET SHIP:CONTROL:NEUTRALIZE TO TRUE.
     _reverseSet(FALSE).
     SET _revState TO "idle".
     SET BRAKES TO TRUE.
-    mLog("Preflight reset: trims zeroed, reversers stowed, "
+
+    LOCAL pTrim IS ABS(SHIP:CONTROL:PILOTYAWTRIM)
+        + ABS(SHIP:CONTROL:PILOTPITCHTRIM)
+        + ABS(SHIP:CONTROL:PILOTROLLTRIM).
+    IF pTrim > 0.01 {
+        mLogWarn("STATS preflight pilotTrim yaw="
+            + ROUND(SHIP:CONTROL:PILOTYAWTRIM, 3)
+            + " pitch=" + ROUND(SHIP:CONTROL:PILOTPITCHTRIM, 3)
+            + " roll=" + ROUND(SHIP:CONTROL:PILOTROLLTRIM, 3)
+            + " — press Mod+X (kOS cannot clear pilot trim).").
+        HUDTEXT("PILOT TRIM SET — press Mod+X to reset",
+            6, 2, 16, YELLOW, FALSE).
+    }
+    mLog("Preflight reset: kOS trims zeroed, reversers stowed, "
         + "throttle idle, brakes hold.").
 }
 
