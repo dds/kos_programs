@@ -151,10 +151,12 @@ GLOBAL FUNCTION _landingBrakingTick {
         AND horizontalSpeed > APPROACH_HSPEED
         AND burnHeight > HOVER_ALT * 2.
     LOCAL horizontalThrottle IS 0.
-    IF forceHorizontalBrake {
+    IF forceHorizontalBrake AND maxAcc > 0 {
+        LOCAL remHVel IS horizontalSpeed - APPROACH_HSPEED.
+        LOCAL timeToTargetSpeed IS remHVel / maxAcc.
         SET horizontalThrottle TO MAX(LANDING_HKILL_THROTTLE_MIN,
             MIN(LANDING_HKILL_THROTTLE_MAX,
-            (horizontalSpeed - APPROACH_HSPEED) / MAX(1, APPROACH_HSPEED))).
+            timeToTargetSpeed)).
         SET horizontalThrottle TO horizontalThrottle * steerInfo["GUARD"].
     }
     IF ctx["V_SPEED"] < targetVs - 5 {
