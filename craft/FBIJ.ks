@@ -81,6 +81,7 @@ GLOBAL FUNCTION main {
             "Passengers - seated and emotionally prepared",
             "Waypoint Manager - select destination",
             "Control surfaces - check full deflection",
+            "Reset trims",
             "Flaps - takeoff setting",
             "Brakes - HOLD until ready",
             "Stage - start engines",
