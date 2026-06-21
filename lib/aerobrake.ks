@@ -18,11 +18,15 @@ GLOBAL AEROBRAKE_DECOUPLE_TAG IS "".
 GLOBAL AEROBRAKE_REENTRY_DIR IS "".
 GLOBAL AEROBRAKE_ARM_CHUTES IS 0.
 GLOBAL AEROBRAKE_TARGETING IS 1.
+GLOBAL AEROBRAKE_PE_TARGETING IS 1.
+GLOBAL CAPTURE_PE IS -1.
 
 LOCAL KSC_LAT IS -0.10.
 LOCAL KSC_LNG IS -74.25.
 LOCAL CORRECTION_TOLERANCE IS 50000.   // 50km default
 LOCAL MAX_CORRECTION_DV IS 20.         // cap total correction burn
+LOCAL PE_CORRECTION_TOLERANCE IS 1000. // 1km final reentry Pe cleanup
+LOCAL MAX_PE_CORRECTION_FRACTION IS 0.05.
 
 // Atmosphere heights by body (meters). Stock + OPM.
 LOCAL ATM_HEIGHTS IS LEXICON(
@@ -40,14 +44,20 @@ LOCAL ATM_HEIGHTS IS LEXICON(
 GLOBAL FUNCTION phaseAerobrake {
     mLogPhase("AEROBRAKE").
 
-    // --- Step 1: Reentry targeting ---
-    IF AEROBRAKE_TARGETING <= 0 {
-        mLog("Aerobrake targeting disabled by config.").
-    } ELSE IF ADDONS:TR:AVAILABLE {
-        _aerobrakeReentryTargeting().
+    // --- Step 1: Reentry Pe cleanup and optional impact targeting ---
+    IF AEROBRAKE_PE_TARGETING > 0 {
+        _aerobrakeTrimReentryPe().
     } ELSE {
-        IF NOT ADDONS:TR:AVAILABLE {
-            mLog("Trajectories not available — skipping reentry targeting.").
+        mLog("Aerobrake Pe targeting disabled by config.").
+    }
+
+    IF AEROBRAKE_TARGETING <= 0 {
+        mLog("Aerobrake impact-site targeting disabled by config.").
+    } ELSE {
+        IF ADDONS:TR:AVAILABLE {
+            _aerobrakeReentryTargeting().
+        } ELSE {
+            mLog("Trajectories not available — skipping impact-site targeting.").
         }
     }
 
@@ -113,11 +123,140 @@ LOCAL FUNCTION _aerobrakeSetEntryAlarm {
 }
 
 // ============================================================
-// Reentry targeting — Trajectories-based correction burn
+// Reentry targeting — small Pe cleanup plus Trajectories impact burn
 //
-// Creates a small correction node and uses coordinate search
-// over TIME, RADIAL, NORMAL to minimize distance to KSC.
+// Pe cleanup uses a tiny prograde-only node. Impact-site targeting
+// creates a small correction node and uses coordinate search over
+// TIME, RADIAL, NORMAL to minimize distance to KSC.
 // ============================================================
+LOCAL FUNCTION _aerobrakeTrimReentryPe {
+    LOCAL targetPe IS REENTRY_PE.
+    IF CAPTURE_PE >= 0 { SET targetPe TO CAPTURE_PE. }
+    IF targetPe < 0 {
+        mLog("Aerobrake Pe trim disabled: target Pe < 0.").
+        RETURN.
+    }
+
+    LOCAL currentPe IS SHIP:PERIAPSIS.
+    LOCAL peErr IS currentPe - targetPe.
+    IF ABS(peErr) <= PE_CORRECTION_TOLERANCE {
+        mLog("Reentry Pe already within tolerance: Pe="
+            + ROUND(currentPe/1000, 1) + "km target="
+            + ROUND(targetPe/1000, 1) + "km.").
+        RETURN.
+    }
+
+    LOCAL maxPeChange IS SHIP:BODY:RADIUS * MAX_PE_CORRECTION_FRACTION.
+    IF ABS(peErr) > maxPeChange {
+        mLogWarn("Aerobrake Pe trim skipped: requested Pe change "
+            + ROUND(ABS(peErr)/1000, 1) + "km exceeds "
+            + ROUND(maxPeChange/1000, 1) + "km cap ("
+            + ROUND(MAX_PE_CORRECTION_FRACTION * 100, 1)
+            + "% body radius).").
+        mLogWarn("STATS aerobrake pe-trim status=skipped reason=pe-change-cap"
+            + " startPeKm=" + ROUND(currentPe/1000, 1)
+            + " targetPeKm=" + ROUND(targetPe/1000, 1)
+            + " maxChangeKm=" + ROUND(maxPeChange/1000, 1)).
+        RETURN.
+    }
+
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    LOCAL nd IS NODE(TIME:SECONDS + 60, 0, 0, 0).
+    ADD nd.
+    WAIT 0.2.
+
+    LOCAL bestPro IS 0.
+    LOCAL bestPe IS nd:ORBIT:PERIAPSIS.
+    LOCAL bestErr IS ABS(bestPe - targetPe).
+    LOCAL startPe IS bestPe.
+    LOCAL startErr IS bestErr.
+    LOCAL proStep IS 2.
+    LOCAL signs IS LIST(1, -1).
+
+    mLog("Reentry Pe trim: current=" + ROUND(currentPe/1000, 1)
+        + "km target=" + ROUND(targetPe/1000, 1)
+        + "km.").
+
+    FROM { LOCAL iter IS 0. } UNTIL iter >= 40 STEP { SET iter TO iter + 1. } DO {
+        LOCAL improved IS FALSE.
+        LOCAL trialBestPro IS bestPro.
+        LOCAL trialBestPe IS bestPe.
+        LOCAL trialBestErr IS bestErr.
+
+        FOR sign IN signs {
+            LOCAL tryPro IS bestPro + sign * proStep.
+            IF ABS(tryPro) <= MAX_CORRECTION_DV {
+                SET nd:PROGRADE TO tryPro.
+                WAIT 0.1.
+                LOCAL tryPe IS nd:ORBIT:PERIAPSIS.
+                LOCAL tryErr IS ABS(tryPe - targetPe).
+                IF tryErr < trialBestErr {
+                    SET trialBestPro TO tryPro.
+                    SET trialBestPe TO tryPe.
+                    SET trialBestErr TO tryErr.
+                }
+            }
+        }
+
+        IF trialBestErr < bestErr {
+            SET bestPro TO trialBestPro.
+            SET bestPe TO trialBestPe.
+            SET bestErr TO trialBestErr.
+            SET improved TO TRUE.
+            mLog("  pe-trim[" + iter + "] Pe=" + ROUND(bestPe/1000, 2)
+                + "km err=" + ROUND(bestErr/1000, 2)
+                + "km P=" + ROUND(bestPro, 2)).
+        }
+
+        IF bestErr <= PE_CORRECTION_TOLERANCE { BREAK. }
+
+        IF NOT improved {
+            SET proStep TO proStep / 2.
+            IF proStep < 0.02 { BREAK. }
+        }
+    }
+
+    SET nd:PROGRADE TO bestPro.
+    WAIT 0.2.
+
+    LOCAL totalDv IS nd:DELTAV:MAG.
+    IF bestErr >= startErr OR totalDv < 0.2 {
+        mLog("Reentry Pe trim not useful — skipping burn.").
+        mLogWarn("STATS aerobrake pe-trim status=skipped reason=no-useful-node"
+            + " startPeKm=" + ROUND(startPe/1000, 1)
+            + " targetPeKm=" + ROUND(targetPe/1000, 1)
+            + " predictPeKm=" + ROUND(bestPe/1000, 1)
+            + " dv=" + ROUND(totalDv, 2)).
+        REMOVE nd.
+        RETURN.
+    }
+
+    mLog("Reentry Pe trim: predicted Pe=" + ROUND(bestPe/1000, 1)
+        + "km dV=" + ROUND(totalDv, 2) + " m/s.").
+    mLogWarn("STATS aerobrake pe-trim status=planned"
+        + " startPeKm=" + ROUND(currentPe/1000, 1)
+        + " targetPeKm=" + ROUND(targetPe/1000, 1)
+        + " predictPeKm=" + ROUND(bestPe/1000, 1)
+        + " errKm=" + ROUND(bestErr/1000, 2)
+        + " dv=" + ROUND(totalDv, 2)
+        + " prograde=" + ROUND(bestPro, 2)).
+
+    LOCAL success IS executeManeuver().
+    IF NOT success {
+        mLogWarn("Reentry Pe trim burn failed.").
+        IF HASNODE { REMOVE NEXTNODE. }
+        RETURN.
+    }
+
+    WAIT 1.
+    mLog("Post-trim Pe=" + ROUND(SHIP:PERIAPSIS/1000, 1)
+        + "km target=" + ROUND(targetPe/1000, 1) + "km.").
+    mLogWarn("STATS aerobrake pe-trim status=complete"
+        + " finalPeKm=" + ROUND(SHIP:PERIAPSIS/1000, 1)
+        + " targetPeKm=" + ROUND(targetPe/1000, 1)
+        + " dv=" + ROUND(totalDv, 2)).
+}
+
 LOCAL FUNCTION _aerobrakeReentryTargeting {
     // Resolve the landing target (waypoint / locked / config). On
     // Kerbin with nothing set, default to KSC (preserves return-to-
@@ -144,7 +283,7 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
     WAIT 0.5.
 
     IF NOT ADDONS:TR:HASIMPACT {
-        mLogWarn("Trajectories has no impact prediction — skipping reentry correction.").
+        mLogWarn("Trajectories has no impact prediction — skipping impact-site correction.").
         RETURN.
     }
 
