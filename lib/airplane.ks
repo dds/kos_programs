@@ -759,6 +759,12 @@ GLOBAL FUNCTION planePreflightReset {
     SET SHIP:CONTROL:YAWTRIM TO 0.
     SET SHIP:CONTROL:ROLLTRIM TO 0.
     SET SHIP:CONTROL:NEUTRALIZE TO TRUE.
+    // boot.ks forces SAS on — right for a rocket on the pad, wrong for
+    // a plane: the cockpit reaction wheel then holds heading and fights
+    // the rudder, "sticking" the yaw. Planes fly on aero controls + our
+    // PID assists, so start every leg SAS-off. boot.ks can't be patched
+    // remotely; this lib re-syncs, so the override lives here.
+    SET SAS TO FALSE.
     _reverseSet(FALSE).
     SET _revState TO "idle".
     SET BRAKES TO TRUE.
@@ -775,8 +781,8 @@ GLOBAL FUNCTION planePreflightReset {
         HUDTEXT("PILOT TRIM SET — press Mod+X to reset",
             6, 2, 16, YELLOW, FALSE).
     }
-    mLog("Preflight reset: kOS trims zeroed, reversers stowed, "
-        + "throttle idle, brakes hold.").
+    mLog("Preflight reset: kOS trims zeroed, SAS off, reversers "
+        + "stowed, throttle idle, brakes hold.").
 }
 
 GLOBAL FUNCTION planePreflightChecklist {
