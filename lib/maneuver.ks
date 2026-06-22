@@ -20,6 +20,8 @@ GLOBAL BURN_BV_MIN_MAG IS 0.001.
 GLOBAL BURN_TUMBLE_AV_MIN IS 0.5.
 GLOBAL BURN_TRIM_COMPLETE_FRAC IS 0.98.
 GLOBAL BURN_TRIM_COMPLETE_MAX_DV IS 0.05.
+GLOBAL BURN_TRIM_FORCE_MAX_DV IS 5.
+GLOBAL BURN_TRIM_ABS_COMPLETE_DV IS 0.5.
 GLOBAL BURN_FIXED_NODE_MAX_DV IS 50.
 GLOBAL BURN_FIXED_NODE_MIN_ECC IS 0.9.
 GLOBAL BURN_NODE_REBOUND_EPS IS 0.5.
@@ -223,6 +225,25 @@ GLOBAL FUNCTION executeManeuver {
         LOCAL remNow IS nd:DELTAV:MAG.
         LOCAL intRem IS MAX(0, bdv - appliedDv).
         LOCAL avNow IS SHIP:ANGULARVEL:MAG.
+        IF remNow <= BURN_TRIM_ABS_COMPLETE_DV {
+            SET burnCompleteReason TO "node-absolute-trim".
+            mLogWarn("Burn node absolute trim complete: remaining="
+                + ROUND(remNow, 2)
+                + " m/s applied=" + ROUND(appliedDv, 2)
+                + " of " + ROUND(bdv, 1) + " m/s.").
+            SET burnDone TO TRUE.
+            BREAK.
+        }
+        IF appliedDv >= bdv * BURN_TRIM_COMPLETE_FRAC
+                AND remNow <= BURN_TRIM_FORCE_MAX_DV {
+            SET burnCompleteReason TO "applied-node-trim".
+            mLogWarn("Burn applied/node trim complete: remaining="
+                + ROUND(remNow, 2)
+                + " m/s applied=" + ROUND(appliedDv, 2)
+                + " of " + ROUND(bdv, 1) + " m/s.").
+            SET burnDone TO TRUE.
+            BREAK.
+        }
         IF fixedBurnVector AND appliedDv >= bdv {
             SET burnCompleteReason TO "integrated-target".
             mLogWarn("Burn integrated target reached: applied="
@@ -358,6 +379,27 @@ GLOBAL FUNCTION executeManeuver {
                 SET remNow TO nd:DELTAV:MAG.
                 SET intRem TO MAX(0, bdv - appliedDv).
                 SET avNow TO SHIP:ANGULARVEL:MAG.
+                IF remNow <= BURN_TRIM_ABS_COMPLETE_DV {
+                    SET burnCompleteReason TO "node-absolute-trim".
+                    mLogWarn("Burn node absolute trim complete while paused: remaining="
+                        + ROUND(remNow, 2)
+                        + " m/s applied=" + ROUND(appliedDv, 2)
+                        + " of " + ROUND(bdv, 1) + " m/s.").
+                    SET burnDone TO TRUE.
+                    SET reacquired TO TRUE.
+                    BREAK.
+                }
+                IF appliedDv >= bdv * BURN_TRIM_COMPLETE_FRAC
+                        AND remNow <= BURN_TRIM_FORCE_MAX_DV {
+                    SET burnCompleteReason TO "applied-node-trim".
+                    mLogWarn("Burn applied/node trim complete while paused: remaining="
+                        + ROUND(remNow, 2)
+                        + " m/s applied=" + ROUND(appliedDv, 2)
+                        + " of " + ROUND(bdv, 1) + " m/s.").
+                    SET burnDone TO TRUE.
+                    SET reacquired TO TRUE.
+                    BREAK.
+                }
                 IF remNow > bdv + BURN_NODE_REBOUND_EPS {
                     IF appliedDv >= bdv * BURN_NODE_CORRUPT_COMPLETE_FRAC {
                         SET burnCompleteReason TO "node-corrupt-after-pause".
@@ -579,7 +621,7 @@ GLOBAL FUNCTION executeManeuver {
         } ELSE IF rem > 0.5 AND ma > 0 {
             LOCAL tts IS rem / ma.
             SET throttleCmd TO MAX(0.02, MIN(0.5, tts)).
-        } ELSE IF rem >= 0.04 {
+        } ELSE IF fixedBurnVector AND rem >= 0.04 {
             SET throttleCmd TO 0.01.
         } ELSE {
             SET throttleCmd TO 0.
