@@ -19,7 +19,7 @@ GLOBAL BURN_BV_SLEW_MIN_DV IS 20.
 GLOBAL BURN_BV_MIN_MAG IS 0.001.
 GLOBAL BURN_TUMBLE_AV_MIN IS 0.5.
 GLOBAL BURN_TRIM_COMPLETE_FRAC IS 0.98.
-GLOBAL BURN_TRIM_COMPLETE_MAX_DV IS 20.
+GLOBAL BURN_TRIM_COMPLETE_MAX_DV IS 0.05.
 GLOBAL BURN_FIXED_NODE_MAX_DV IS 50.
 GLOBAL BURN_FIXED_NODE_MIN_ECC IS 0.9.
 GLOBAL BURN_NODE_REBOUND_EPS IS 0.5.
@@ -28,6 +28,7 @@ GLOBAL BURN_NODE_FLIP_REMAINING_DV IS 20.
 GLOBAL BURN_NODE_CORRUPT_COMPLETE_FRAC IS 0.75.
 GLOBAL BURN_TICK_LOG_INTERVAL IS 1.0.
 GLOBAL BURN_ABORT_HOLD_VECTOR IS V(0, 0, 1).
+GLOBAL BURN_FULL_THROTTLE_MIN_DV IS 10.
 
 
 LOCAL CF        IS 0.001.
@@ -50,9 +51,10 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL st IS _cst(nd).
     _mpb(nd, bdv, st).
 
-    IF bdv < 10 { _stl(0.25). }
-    IF bdv < 2  { _stl(0.10). }
-    IF bdv < 0.5 { _stl(0.05). }
+    IF bdv < 50 { _stl(0.50). }
+    IF bdv < 10 { _stl(0.10). }
+    IF bdv < 2  { _stl(0.05). }
+    IF bdv < 0.5 { _stl(0.02). }
 
     IF st < TIME:SECONDS {
         mLogWarn("Burn window already passed by " + ROUND(TIME:SECONDS - st, 0) + "s — removing node.").
@@ -283,8 +285,7 @@ GLOBAL FUNCTION executeManeuver {
                     + " fixed="
                     + (CHOOSE "true" IF fixedBurnVector ELSE "false") + ".").
             }
-            IF NOT fixedBurnVector
-                    OR appliedDv >= bdv * BURN_NODE_CORRUPT_COMPLETE_FRAC {
+            IF NOT fixedBurnVector {
                 SET burnCompleteReason TO "node-vector-unstable".
                 SET burnDone TO TRUE.
                 BREAK.
@@ -577,7 +578,7 @@ GLOBAL FUNCTION executeManeuver {
 
         IF NOT fixedBurnVector AND dc < 0 { SET throttleCmd TO 0. BREAK. }
 
-        IF rem > 5.0 {
+        IF rem > BURN_FULL_THROTTLE_MIN_DV {
             SET throttleCmd TO 1.0.
         } ELSE IF rem > 0.5 AND ma > 0 {
             LOCAL tts IS rem / ma.
