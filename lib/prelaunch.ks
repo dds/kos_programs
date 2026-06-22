@@ -322,7 +322,7 @@ LOCAL FUNCTION _confirmPrelaunchWindow {
     }
 
     PRINT " ".
-    uiPrompt("SPACE wait / N launch now / ESC hold / 30s auto-wait").
+    uiPrompt("SPACE wait / N launch now / H hold / 30s auto-wait").
     PRINT "  " + label + " in " + ROUND(waitSeconds, 0) + "s.".
     LOCAL deadline IS TIME:SECONDS + 30.
     LOCAL choice IS "".
@@ -342,7 +342,9 @@ LOCAL FUNCTION _confirmPrelaunchWindow {
         PRINT statusLine AT (0, TERMINAL:HEIGHT - 1).
         IF TERMINAL:INPUT:HASCHAR {
             LOCAL ch IS UNCHAR(TERMINAL:INPUT:GETCHAR()).
-            IF ch = 27 {
+            // 'H' is the reliable hold key; KSP eats Escape (27) for
+            // its pause menu, but honor it too if it gets through.
+            IF ch = 72 OR ch = 104 OR ch = 27 {
                 SET choice TO "HOLD".
             } ELSE IF ch = 32 OR ch = 0 {
                 SET choice TO "WAIT".
@@ -798,7 +800,7 @@ GLOBAL FUNCTION confirmLaunch {
     }
 
     _prelaunchPrintConfig().
-    uiPrompt("SPACE to arm / ESC to hold / 30s auto-arm").
+    uiPrompt("SPACE to arm / H to hold / 30s auto-arm").
     uiPrompt("Edit globals in terminal to override").
     PRINT " ".
     LOCAL deadline IS TIME:SECONDS + 30.
@@ -816,10 +818,13 @@ GLOBAL FUNCTION confirmLaunch {
         }
         PRINT "  [" + bar + "] T-" + ("" + remaining):PADLEFT(2) + "s   " AT (0, TERMINAL:HEIGHT - 1).
         IF TERMINAL:INPUT:HASCHAR {
-            LOCAL ch IS TERMINAL:INPUT:GETCHAR().
-            IF UNCHAR(ch) = 27 {
+            LOCAL code IS UNCHAR(TERMINAL:INPUT:GETCHAR()).
+            // 'H'/'h' is the reliable hold key — KSP eats Escape (27)
+            // for its pause menu, so it rarely reaches the terminal;
+            // we still honor 27 if a setup does deliver it.
+            IF code = 72 OR code = 104 OR code = 27 {
                 SET aborted TO TRUE.
-            } ELSE IF UNCHAR(ch) = 32 OR UNCHAR(ch) = 0 {
+            } ELSE IF code = 32 OR code = 0 {
                 SET confirmed TO TRUE.
             }
         }
