@@ -1,0 +1,72 @@
+GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
+    "xfer_plan",
+    "maneuver_transfer",
+    "maneuver_targeting"
+).
+
+applyKnownMissionState().
+
+GLOBAL FUNCTION fhBuildPhaseSequence {
+    IF SEQUENCE:LENGTH > 0 {
+        RETURN phaseList(SEQUENCE).
+    }
+
+    LOCAL payloadPhases IS LEXICON(
+        "SCISAT", LIST("SCIENCE_OPS"),
+        "SCANSAT", LIST("SCANSAT_OPS"),
+        "RELAY", LIST("RELAY_OPS"),
+        "CREW", LIST("RELAY_OPS"),
+        "TOURIST", LIST("RELAY_OPS"),
+        "PASSENGER", LIST("RELAY_OPS")
+    ).
+
+    LOCAL seq IS LIST("PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK").
+    IF getTarget() <> "KERBIN" {
+        seq:ADD("XING").
+        seq:ADD("BPLANE").
+        seq:ADD("COAST_1HALF").
+        seq:ADD("REFINE_BPLANE").
+        seq:ADD("COAST_2HALF").
+        seq:ADD("CAPTURE").
+        seq:ADD("SHAPE").
+    }
+    FOR ptype IN missionPayloadsFromState() {
+        LOCAL t IS missionNormalizePayloadType(ptype).
+        IF payloadPhases:HASKEY(t) {
+            FOR phaseName IN payloadPhases[t] { seq:ADD(phaseName). }
+        }
+    }
+    seq:ADD("DONE").
+    RETURN phaseSequenceEnsurePrelaunch(seq).
+}
+
+GLOBAL FUNCTION fhBuildPhaseMap {
+    LOCAL phaseMap IS LEXICON().
+    phaseMapSet(phaseMap, "PARK", phaseParkingReload@).
+    RETURN phaseMap.
+}
+
+LOCAL FUNCTION _fhLibsForBand {
+    PARAMETER band.
+    LOCAL roots IS bootLibBandRoots(band).
+    missionAppendUnique(roots, LIST("solar")).
+    missionAppendUnique(roots, missionTypeConditionalRoots(band)).
+    LOCAL extras IS missionExtraLibs().
+    IF band <> "LAUNCH" {
+        LOCAL filtered IS LIST().
+        FOR libName IN extras {
+            IF libName = "launch" {
+                mLog("FalconHeavy extra lib launch skipped outside LAUNCH band.").
+            } ELSE {
+                filtered:ADD(libName).
+            }
+        }
+        SET extras TO filtered.
+    }
+    missionAppendUnique(roots, extras).
+    RETURN bootLibResolve(roots).
+}
+
+GLOBAL FUNCTION main {
+    rocketMain(fhBuildPhaseSequence@, fhBuildPhaseMap@).
+}
