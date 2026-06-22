@@ -5,6 +5,11 @@ SET TARGET_ TO "MINMUS".
 bootLibLoad("configs/landing-minmus").
 SET PAYLOADS TO LIST("SCISAT").
 SET SEQUENCE TO LIST("PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK", "XING", "BPLANE", "COAST_1HALF", "REFINE_BPLANE", "COAST_2HALF", "CAPTURE", "SHAPE").
+// Carry the solar lib so the long pre-burn coasts that DON'T already
+// pull it (SHAPE, BPLANE, and the return ESCAPE/MCC legs) sun-point and
+// charge. The arrival coasts (COAST_*/CAPTURE) get it via the capture
+// lib regardless. ~6KB/band — fine on this 200KB core.
+SET LIBS_EXTRA TO LIST("solar").
 
 // Kerbin launch and Minmus transfer.
 SET PARKING_ALT TO 80000.
