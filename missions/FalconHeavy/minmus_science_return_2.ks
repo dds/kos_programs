@@ -27,8 +27,8 @@ SET SHAPE_ALT_TOL TO 2500.
 
 // Automated landing: contract site, with terrain refinement nearby.
 // Replace TARGET_LAT/LNG with the contract coordinates before launch.
-SET TARGET_LAT TO 0.
-SET TARGET_LNG TO 0.
+SET TARGET_LAT TO 41.4475.
+SET TARGET_LNG TO 94.899444.
 SET TARGET_LOCK TO 1.
 SET LANDING_AUTO_TARGET TO 0.
 SET LANDING_CONFIRM_TARGET TO 0.
