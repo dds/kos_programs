@@ -266,7 +266,7 @@ IF HAS_LINK {
         LOCAL cleanupParts IS vehicleScript:SPLIT("/").
         IF cleanupParts[0] = "craft" { SET cleanupVehicle TO cleanupParts[1]. }
     }
-    bootCleanup(cleanupVehicle, vehicleLibs).
+    bootCleanup(cleanupVehicle, vehicleLibs, vehicleName).
     bootLibLoadList(vehicleLibs).
 } ELSE {
     PRINT "  NO LINK: Bypassing library sync.".

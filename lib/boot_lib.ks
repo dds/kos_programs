@@ -154,8 +154,9 @@ GLOBAL FUNCTION bootCompiledPath {
 
 GLOBAL FUNCTION bootBaseName {
     PARAMETER fn.
-    IF fn:CONTAINS(".ksm") { RETURN fn:SUBSTRING(0, fn:LENGTH - 4). }
-    IF fn:CONTAINS(".ks") { RETURN fn:SUBSTRING(0, fn:LENGTH - 3). }
+    LOCAL upFn IS fn:TOUPPER.
+    IF upFn:CONTAINS(".KSM") { RETURN fn:SUBSTRING(0, fn:LENGTH - 4). }
+    IF upFn:CONTAINS(".KS") { RETURN fn:SUBSTRING(0, fn:LENGTH - 3). }
     RETURN fn.
 }
 
@@ -468,6 +469,58 @@ GLOBAL FUNCTION bootPruneDir {
     RETURN rm.
 }
 
+LOCAL FUNCTION _bootIsMissionPlanFile {
+    PARAMETER fn.
+    LOCAL upFn IS fn:TOUPPER.
+    RETURN upFn:CONTAINS(".KS").
+}
+
+GLOBAL FUNCTION bootPruneMissionPlans {
+    PARAMETER cn.
+    PARAMETER mid.
+
+    LOCAL rm IS 0.
+    IF mid = "" OR NOT EXISTS("1:/missions") { RETURN rm. }
+
+    LOCAL currentDir IS ("1:/missions/" + cn):TOUPPER.
+    LOCAL sp IS PATH().
+    LOCAL dirs IS LIST().
+    CD("1:/missions").
+    LIST FILES IN dirs.
+    CD(sp).
+
+    FOR dirItem IN dirs {
+        LOCAL dirPath IS "1:/missions/" + dirItem:NAME.
+        IF dirItem:ISFILE {
+            IF _bootIsMissionPlanFile(dirItem:NAME) {
+                DELETEPATH(dirPath).
+                SET rm TO rm + 1.
+            }
+        } ELSE {
+            LOCAL items IS LIST().
+            CD(dirPath).
+            LIST FILES IN items.
+            CD(sp).
+
+            FOR item IN items {
+                IF item:ISFILE AND _bootIsMissionPlanFile(item:NAME) {
+                    LOCAL itemPath IS dirPath + "/" + item:NAME.
+                    LOCAL keep IS FALSE.
+                    IF dirPath:TOUPPER = currentDir
+                            AND bootBaseName(item:NAME) = mid {
+                        SET keep TO TRUE.
+                    }
+                    IF NOT keep {
+                        DELETEPATH(itemPath).
+                        SET rm TO rm + 1.
+                    }
+                }
+            }
+        }
+    }
+    RETURN rm.
+}
+
 GLOBAL FUNCTION bootSweepLogs {
     PARAMETER dirPath.
     PARAMETER archiveDir.
@@ -556,6 +609,8 @@ GLOBAL FUNCTION bootPruneLogs {
 GLOBAL FUNCTION bootCleanup {
     PARAMETER vn.
     PARAMETER wl.
+    PARAMETER missionVehicle IS "".
+    IF missionVehicle = "" { SET missionVehicle TO vn. }
     LOCAL kl IS LIST(
         "state", "logs", "boot_lib", "resume",
         "phases", "config", "dependencies"
@@ -574,6 +629,7 @@ GLOBAL FUNCTION bootCleanup {
     SET rm TO rm + bootPruneDir("1:/craft", LIST(vn)).
     SET rm TO rm + bootPruneDir("1:/roles", kr).
     SET rm TO rm + bootPruneDir("1:/cmd", LIST()).
+    SET rm TO rm + bootPruneMissionPlans(missionVehicle, stateGet("mission_id", "")).
     IF EXISTS("1:/zombie") {
         DELETEPATH("1:/zombie").
         SET rm TO rm + 1.
