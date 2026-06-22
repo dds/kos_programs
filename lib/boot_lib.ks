@@ -653,13 +653,6 @@ GLOBAL FUNCTION bootLibAppendResolved {
     bootLibAddUnique(libs, ln).
 }
 
-LOCAL FUNCTION _bootHasSolarPanels {
-    FOR p IN SHIP:PARTS {
-        IF p:HASMODULE("ModuleDeployableSolarPanel") { RETURN TRUE. }
-    }
-    RETURN FALSE.
-}
-
 GLOBAL FUNCTION bootLibResolve {
     PARAMETER roots.
     LOCAL libs IS LIST().
@@ -668,13 +661,6 @@ GLOBAL FUNCTION bootLibResolve {
     LOCAL deps IS dependencyLibs().
     FOR ln IN roots {
         bootLibAppendResolved(libs, ln, deps).
-    }
-    // Any craft with solar panels pulls the solar lib regardless of
-    // band, so long coasts can sun-point and charge. PHASES_HAS_SOLAR
-    // flips when 'solar' loads (see bootLibLoadList). Panels are
-    // detected here directly so this needs no lib already aboard.
-    IF NOT libs:CONTAINS("solar") AND _bootHasSolarPanels() {
-        bootLibAppendResolved(libs, "solar", deps).
     }
     RETURN libs.
 }
