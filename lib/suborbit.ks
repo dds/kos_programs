@@ -275,7 +275,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
     SET SAS TO TRUE.
 
     LOCAL finalDist IS _suborbitImpactDist(siteGeo).
-    mLogWarn("STATS suborbit-return deorbit reason=" + reason
+    mLog("STATS suborbit-return deorbit reason=" + reason
         + " dist=" + ROUND(MAX(-1, finalDist) / 1000, 0)
         + "km PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)).
     IF finalDist >= 0 AND finalDist <= tol {
@@ -337,7 +337,7 @@ LOCAL FUNCTION _suborbitReturnArc {
     IF haveDv > 0 AND haveDv < needDv * 1.05 + 80 {
         mLogError("Insufficient dV for the return arc — flying the"
             + " plain hop to descent instead.").
-        mLogWarn("STATS suborbit-return abort reason=insufficient-dv"
+        mLog("STATS suborbit-return abort reason=insufficient-dv"
             + " need=" + ROUND(needDv, 0)
             + " have=" + ROUND(haveDv, 0)).
         UNLOCK STEERING.
@@ -402,7 +402,7 @@ LOCAL FUNCTION _suborbitReturnArc {
     SET throttleCmd TO 0.
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
-    mLogWarn("STATS suborbit-return arc reason=" + cutReason
+    mLog("STATS suborbit-return arc reason=" + cutReason
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
         + " vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 0)).
@@ -483,7 +483,7 @@ GLOBAL FUNCTION phaseSuborbit {
     IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
     LOCK THROTTLE TO 0.
     UNLOCK THROTTLE.
-    mLogWarn("STATS suborbit cutoff ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
+    mLog("STATS suborbit cutoff ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
         + " altKm=" + ROUND(SHIP:ALTITUDE/1000, 1)
         + " vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 1)).
 

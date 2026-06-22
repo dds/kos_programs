@@ -234,7 +234,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
                 + ROUND(targetInc, 2) + " cannot pass over lat "
                 + ROUND(SHIP:LATITUDE, 3)
                 + "; AUTO falling back to equatorial launch.").
-            mLogWarn("STATS prelaunch body-plane fallback target=" + bod_:NAME
+            mLog("STATS prelaunch body-plane fallback target=" + bod_:NAME
                 + " inc=" + ROUND(targetInc, 2)
                 + " lat=" + ROUND(SHIP:LATITUDE, 3)).
             nextPhase(launchSeq).
@@ -269,7 +269,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
         + " LAN=" + ROUND(targetLan, 1)
         + " launchInc=" + ROUND(win["inc"], 2)
         + " lead=" + ROUND(leadTime, 0) + "s.").
-    mLogWarn("STATS prelaunch body-plane setup target=" + bod_:NAME
+    mLog("STATS prelaunch body-plane setup target=" + bod_:NAME
         + " node=" + win["node"]
         + " inc=" + ROUND(targetInc, 2)
         + " lan=" + ROUND(targetLan, 2)
@@ -539,7 +539,7 @@ LOCAL FUNCTION _prelaunchToInterplanetary {
             + "/" + ROUND(desiredPhase, 1)
             + " err=" + ROUND(immediateErr, 1)
             + " inc=" + ROUND(launchInc, 2) + ".").
-        mLogWarn("STATS prelaunch transfer target=" + targetName
+        mLog("STATS prelaunch transfer target=" + targetName
             + " xingTarget=" + xingBody:NAME
             + " wait=0"
             + " phase=" + ROUND(phaseAtImmediate, 2)
@@ -587,7 +587,7 @@ LOCAL FUNCTION _prelaunchToInterplanetary {
         + " inc=" + ROUND(launchInc, 2)
         + " xingTarget=" + xingBody:NAME
         + " lead=" + ROUND(leadTime, 0) + "s.").
-    mLogWarn("STATS prelaunch transfer target=" + targetName
+    mLog("STATS prelaunch transfer target=" + targetName
         + " xingTarget=" + xingBody:NAME
         + " wait=" + ROUND(launchUt - TIME:SECONDS, 0)
         + " departWait=" + ROUND(departUt - TIME:SECONDS, 0)
@@ -759,7 +759,7 @@ LOCAL FUNCTION _prelaunchToVessel {
         + "s  launch inc=" + ROUND(best["inc"], 2)
         + "  target lead at insertion=" + ROUND(best["lead"], 1)
         + " deg (want " + ROUND(desiredLead, 1) + ").").
-    mLogWarn("STATS prelaunch rdv setup target=" + ves:NAME
+    mLog("STATS prelaunch rdv setup target=" + ves:NAME
         + " inc=" + ROUND(best["inc"], 2)
         + " wait=" + ROUND(launchUt - TIME:SECONDS, 0)
         + " lead=" + ROUND(best["lead"], 1)).

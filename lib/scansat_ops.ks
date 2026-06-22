@@ -56,7 +56,7 @@ GLOBAL FUNCTION phaseScanSatOps {
         // available in this band (maneuver.ks doesn't fit on an OCTO).
         // RAISE/INCLINE should have delivered the correct orbit before this
         // phase ran; if they did not, log it and continue anyway.
-        mLogWarn("STATS scansat-ops resume PeKm="
+        mLog("STATS scansat-ops resume PeKm="
             + ROUND(SHIP:PERIAPSIS/1000,1)
             + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
         stateSet("scansat_recovered", "true").
@@ -201,7 +201,7 @@ LOCAL FUNCTION _scanSatMapDone {
             IF pct < targetCoverage { SET done TO FALSE. }
         }
     }
-    mLogWarn("STATS scansat required-coverage target="
+    mLog("STATS scansat required-coverage target="
         + ROUND(targetCoverage, 1) + " " + line:TRIM).
     RETURN done.
 }
@@ -287,7 +287,7 @@ LOCAL FUNCTION _scanSatSelfDeorbit {
         RETURN.
     }
 
-    mLogWarn("STATS scansat-self-deorbit setup PeKm="
+    mLog("STATS scansat-self-deorbit setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " targetPeKm=" + ROUND(targetPe/1000,1)
@@ -329,7 +329,7 @@ LOCAL FUNCTION _scanSatSelfDeorbit {
     } ELSE IF SHIP:PERIAPSIS >= targetPe {
         SET status_ TO "timeout".
     }
-    mLogWarn("STATS scansat-self-deorbit result status=" + status_
+    mLog("STATS scansat-self-deorbit result status=" + status_
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " durationS=" + ROUND(TIME:SECONDS - startT,1)).
@@ -378,13 +378,13 @@ LOCAL FUNCTION _disposeScanSatCarrier {
     }
 
     WAIT 1.
-    mLogWarn("STATS scansat-dispose setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+    mLog("STATS scansat-dispose setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " targetPeKm=" + ROUND(targetPe/1000,1)
         + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
 
     IF SHIP:AVAILABLETHRUST <= 0 {
-        mLogWarn("STATS scansat-dispose result status=no-thrust PeKm="
+        mLog("STATS scansat-dispose result status=no-thrust PeKm="
             + ROUND(SHIP:PERIAPSIS/1000,1)).
         RETURN.
     }
@@ -422,7 +422,7 @@ LOCAL FUNCTION _disposeScanSatCarrier {
     } ELSE IF SHIP:PERIAPSIS >= targetPe {
         SET status_ TO "timeout".
     }
-    mLogWarn("STATS scansat-dispose result status=" + status_
+    mLog("STATS scansat-dispose result status=" + status_
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " duration=" + ROUND(TIME:SECONDS - startT,1)).
@@ -441,7 +441,7 @@ LOCAL FUNCTION _scanSatImpactThenRecover {
     IF recoveryAp < 0 { SET recoveryAp TO TARGET_AP. }
     IF recoveryAp < 0 { SET recoveryAp TO 75000. }
 
-    mLogWarn("STATS scansat-impact-release setup PeKm="
+    mLog("STATS scansat-impact-release setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " impactPeKm=" + ROUND(impactPe/1000,1)
@@ -467,7 +467,7 @@ LOCAL FUNCTION _scanSatImpactThenRecover {
     }
 
     stateSet("scansat_released_time", TIME:SECONDS).
-    mLogWarn("STATS scansat-release result mass=" + ROUND(SHIP:MASS,3)
+    mLog("STATS scansat-release result mass=" + ROUND(SHIP:MASS,3)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     WAIT 0.5.
@@ -476,7 +476,7 @@ LOCAL FUNCTION _scanSatImpactThenRecover {
         STAGE.
         mLog("SCANsat staged after release.").
         WAIT 1.
-        mLogWarn("STATS scansat-stage result mass=" + ROUND(SHIP:MASS,3)
+        mLog("STATS scansat-stage result mass=" + ROUND(SHIP:MASS,3)
             + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
             + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
             + " availableThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).

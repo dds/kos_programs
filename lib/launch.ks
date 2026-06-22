@@ -55,7 +55,7 @@ LOCAL FUNCTION _vacuumLaunchCompletePhase {
 
 LOCAL FUNCTION _logAscentTelemetry {
     PARAMETER reason.
-    mLogWarn("STATS launch telemetry reason=" + reason
+    mLog("STATS launch telemetry reason=" + reason
         + " age=" + ROUND(_launchAge(),1)
         + " status=" + SHIP:STATUS
         + " massT=" + ROUND(SHIP:MASS,2)
@@ -385,7 +385,7 @@ LOCAL FUNCTION _logParkingPlaneResult {
     mLog("Parking plane vs " + planeTarget
         + ": incErr=" + ROUND(incErr, 2)
         + " LANErr=" + ROUND(lanErr, 2) + " deg.").
-    mLogWarn("STATS launch-plane result target=" + planeTarget
+    mLog("STATS launch-plane result target=" + planeTarget
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION, 3)
         + " lan=" + ROUND(SHIP:ORBIT:LAN, 3)
         + " targetInc=" + ROUND(tgtInc, 3)

@@ -58,7 +58,7 @@ GLOBAL FUNCTION phaseAbort {
     UNLOCK ALL.
     SET SAS TO TRUE.
 
-    mLogWarn("STATS abort entry alt=" + ROUND(SHIP:ALTITUDE, 0)
+    mLog("STATS abort entry alt=" + ROUND(SHIP:ALTITUDE, 0)
         + " vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 1)
         + " vs=" + ROUND(SHIP:VERTICALSPEED, 1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)).
@@ -101,7 +101,7 @@ GLOBAL FUNCTION phaseAbort {
         }
     }
 
-    mLogWarn("STATS abort landed status=" + SHIP:STATUS
+    mLog("STATS abort landed status=" + SHIP:STATUS
         + " lat=" + ROUND(SHIP:GEOPOSITION:LAT, 4)
         + " lng=" + ROUND(SHIP:GEOPOSITION:LNG, 4)).
 

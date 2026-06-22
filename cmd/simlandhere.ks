@@ -109,7 +109,7 @@ PRINT "SIM LANDING TARGET".
 PRINT "  " + source.
 PRINT "  lat=" + ROUND(lat,4) + " lng=" + ROUND(lng,4).
 PRINT "  Phase -> LAND_DEORBIT".
-mLogWarn("STATS sim-landing-target source=" + source
+mLog("STATS sim-landing-target source=" + source
     + " lat=" + ROUND(lat,4)
     + " lng=" + ROUND(lng,4)).
 WAIT 1.

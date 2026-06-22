@@ -178,7 +178,7 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
         mLog("ELEMENTS: coupled target"
             + _elementTargetSummary(targets)
             + " start" + _elementStateSummary(best)).
-        mLogWarn("STATS elements setup target=" + targetBody:NAME
+        mLog("STATS elements setup target=" + targetBody:NAME
             + _elementTargetSummary(targets)
             + " start" + _elementStateSummary(best)
             + " maxIter=" + maxIter
@@ -286,7 +286,7 @@ GLOBAL FUNCTION _targetPatchElementsCoupled {
     SET best TO _patchElementsCost(nd, targetBody, targets).
     best:ADD("SOLVED", solved).
     IF NOT quiet {
-        mLogWarn("STATS elements result target=" + targetBody:NAME
+        mLog("STATS elements result target=" + targetBody:NAME
             + " solved=" + solved
             + _elementStateSummary(best)
             + _elementErrorSummary(best, targets)

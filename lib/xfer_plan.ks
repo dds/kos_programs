@@ -64,7 +64,7 @@ LOCAL FUNCTION _postBurnTransferHandoffOk {
     LOCAL patch IS _getTargetPatch(SHIP, targetBody).
     IF patch <> 0 AND patch:PERIAPSIS > 0 AND patch:PERIAPSIS <= peMax {
         _recordXingArrivalUt(targetBody).
-        mLogWarn("STATS transfer handoff label=" + label
+        mLog("STATS transfer handoff label=" + label
             + " status=patch"
             + " target=" + targetBody:NAME
             + " PeKm=" + ROUND(patch:PERIAPSIS / 1000, 1)
@@ -85,7 +85,7 @@ LOCAL FUNCTION _postBurnTransferHandoffOk {
     IF ca["distance"] <= peMax {
         stateSet("xing_arrival_ut", ca["time"]).
         stateSet("xing_arrival_target", targetBody:NAME).
-        mLogWarn("STATS transfer handoff label=" + label
+        mLog("STATS transfer handoff label=" + label
             + " status=closest-approach"
             + " target=" + targetBody:NAME
             + " caKm=" + ROUND(ca["distance"] / 1000, 1)
@@ -95,7 +95,7 @@ LOCAL FUNCTION _postBurnTransferHandoffOk {
             + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 4)).
         RETURN TRUE.
     }
-    mLogWarn("STATS transfer handoff label=" + label
+    mLog("STATS transfer handoff label=" + label
         + " status=no-handoff"
         + " target=" + targetBody:NAME
         + " caKm=" + ROUND(ca["distance"] / 1000, 1)
@@ -118,7 +118,7 @@ GLOBAL FUNCTION phaseTransfer {
     IF HASNODE {
         LOCAL existing IS NEXTNODE.
         LOCAL pending IS stateGet("burn_pending", "false").
-        mLogWarn("STATS transfer resume existing-node pending=" + pending
+        mLog("STATS transfer resume existing-node pending=" + pending
             + " burnPhase=" + stateGet("burn_phase", "")
             + " dv="
             + ROUND(existing:DELTAV:MAG,1)
@@ -144,7 +144,7 @@ GLOBAL FUNCTION phaseTransfer {
             nextPhase(xferSeq).
             RETURN.
         }
-        mLogWarn("STATS transfer resume missing-node pending=true burnPhase="
+        mLog("STATS transfer resume missing-node pending=true burnPhase="
             + stateGet("burn_phase", "")
             + " burnDv=" + ROUND(stateGetNum("burn_dv", 0),1)
             + " — replanning.").

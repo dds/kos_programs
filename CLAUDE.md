@@ -123,11 +123,11 @@ Looks like Python/JS; is neither.
 - `LOCAL FUNCTION _name` private (underscore), `GLOBAL FUNCTION camelCase`
   public. (Some pre-refactor GLOBALs in `maneuver_targeting.ks` still carry
   underscores — rename when that solver is retired, not before.)
-- Logging: `mLog` info, `mLogWarn("STATS ...")` machine-readable metrics,
+- Logging: `mLog` info, `mLog("STATS ...")` console-only metrics,
   `mLogError` + `yieldToPrompt()` for operator-needed halts. Phases log a
   `STATS ... setup` and `... result` pair. Logs are per-boot/per-core
-  (`boot_###_<core>.log`); WARN-level `STATS` lines auto-archive when linked,
-  so make diagnostics compact and searchable.
+  (`boot_###_<core>.log`); promote only selected diagnostics to WARN so file
+  logs stay compact and searchable.
 - **Config is globals, not a safety wrapper.** Defaults live as `GLOBAL X IS`
   declarations in the file that owns the behavior, craft/profile scripts
   override with `SET X TO value.`, and libraries read `X` directly. Boot may

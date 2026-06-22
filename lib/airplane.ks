@@ -797,7 +797,7 @@ GLOBAL FUNCTION planePreflightReset {
         + ABS(SHIP:CONTROL:PILOTPITCHTRIM)
         + ABS(SHIP:CONTROL:PILOTROLLTRIM).
     IF pTrim > 0.01 {
-        mLogWarn("STATS preflight pilotTrim yaw="
+        mLog("STATS preflight pilotTrim yaw="
             + ROUND(SHIP:CONTROL:PILOTYAWTRIM, 3)
             + " pitch=" + ROUND(SHIP:CONTROL:PILOTPITCHTRIM, 3)
             + " roll=" + ROUND(SHIP:CONTROL:PILOTROLLTRIM, 3)

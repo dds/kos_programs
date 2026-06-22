@@ -49,7 +49,7 @@ GLOBAL FUNCTION _landingTargetRefineTick {
         AND horizontalSpeed <= LANDING_TARGET_REFINE_HSPEED.
     IF NOT ctx["TARGET_REFINE_LOGGED"] {
         SET ctx["TARGET_REFINE_LOGGED"] TO TRUE.
-        mLogWarn("STATS target-refine entry dist="
+        mLog("STATS target-refine entry dist="
             + ROUND(posErr:MAG,1)
             + " hs=" + ROUND(horizontalSpeed,1)
             + " vs=" + ROUND(ctx["V_SPEED"],1)
@@ -74,7 +74,7 @@ GLOBAL FUNCTION _landingTargetRefineTick {
         SET ctx["HOVER_REFINED"] TO TRUE.
         _landingSetThrottle(ctx, 0).
         IF climbLimited {
-            mLogWarn("STATS target-refine exit reason=climb dist="
+            mLog("STATS target-refine exit reason=climb dist="
                 + ROUND(posErr:MAG,1)
                 + " age=" + ROUND(refineAge,1)
                 + " hs=" + ROUND(horizontalSpeed,1)
@@ -83,7 +83,7 @@ GLOBAL FUNCTION _landingTargetRefineTick {
             _landingSetState(ctx, "VERTICAL_DESCENT",
                 "target refine climb guard triggered").
         } ELSE {
-            mLogWarn("STATS target-refine exit reason=timeout dist="
+            mLog("STATS target-refine exit reason=timeout dist="
                 + ROUND(posErr:MAG,1)
                 + " age=" + ROUND(refineAge,1)
                 + " hs=" + ROUND(horizontalSpeed,1)
@@ -139,7 +139,7 @@ GLOBAL FUNCTION _landingTargetRefineTick {
         1, 2, 13, CYAN, FALSE, refineEta).
 
     IF targetReady {
-        mLogWarn("STATS target-refine exit reason=position-captured dist="
+        mLog("STATS target-refine exit reason=position-captured dist="
             + ROUND(posErr:MAG,1)
             + " age=" + ROUND(refineAge,1)
             + " hs=" + ROUND(horizontalSpeed,1)).

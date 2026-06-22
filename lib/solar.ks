@@ -123,7 +123,7 @@ LOCAL FUNCTION _solarFinish {
     IF NOT lockSteering { UNLOCK STEERING. }
     mLog("Solar attitude set (" + note + "): flow="
         + ROUND(shipSolarFlow(), 2) + ".").
-    mLogWarn("STATS solar orient flow=" + ROUND(shipSolarFlow(), 2)
+    mLog("STATS solar orient flow=" + ROUND(shipSolarFlow(), 2)
         + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
 }
 
@@ -278,7 +278,7 @@ GLOBAL FUNCTION orientForSolar {
 
     IF bestFlow <= 0 {
         mLogWarn("Solar search: all axes zero flow — likely night.").
-        mLogWarn("STATS solar orient status=night charge="
+        mLog("STATS solar orient status=night charge="
             + ROUND(shipPowerFraction() * 100, 1) + "pct").
         UNLOCK STEERING.
         IF lockSteering { SET SAS TO FALSE. }

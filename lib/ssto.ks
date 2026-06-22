@@ -139,7 +139,7 @@ GLOBAL FUNCTION phaseAirclimb {
         WAIT 0.05.
     }
 
-    mLogWarn("STATS airclimb result spd=" + ROUND(SHIP:AIRSPEED, 0)
+    mLog("STATS airclimb result spd=" + ROUND(SHIP:AIRSPEED, 0)
         + " alt=" + ROUND(SHIP:ALTITUDE, 0)
         + " accel=" + ROUND(accel, 2)).
     altHoldOff().
@@ -211,7 +211,7 @@ GLOBAL FUNCTION phaseRocketclimb {
         }
     }
     orbitSummary().
-    mLogWarn("STATS rocketclimb result PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
+    mLog("STATS rocketclimb result PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)).
     nextPhase(launchSeq).
 }
@@ -270,7 +270,7 @@ GLOBAL FUNCTION phaseSstoDeorbit {
         + " m/s in " + ROUND(burnUt - TIME:SECONDS, 0)
         + "s, Pe -> " + ROUND(reentryPe / 1000, 0) + "km, lead "
         + lead + "deg ahead of " + ap_["name"] + ".").
-    mLogWarn("STATS ssto-deorbit plan dv=" + ROUND(nd:DELTAV:MAG, 1)
+    mLog("STATS ssto-deorbit plan dv=" + ROUND(nd:DELTAV:MAG, 1)
         + " lead=" + lead
         + " reentryPeKm=" + ROUND(reentryPe / 1000, 1)).
     maneuverUiArchiveLog("ssto-deorbit").
@@ -302,14 +302,14 @@ GLOBAL FUNCTION phaseReentry {
     // LOCK re-evaluates each tick, so this tracks the velocity vector.
     LOCK STEERING TO HEADING(_velHeading(), _velPitch() + aoa).
     mLog("Entry interface: holding " + aoa + "deg AoA above surface prograde.").
-    mLogWarn("STATS reentry start spd=" + ROUND(SHIP:AIRSPEED, 0)
+    mLog("STATS reentry start spd=" + ROUND(SHIP:AIRSPEED, 0)
         + " alt=" + ROUND(SHIP:ALTITUDE, 0)).
 
     UNTIL SHIP:ALTITUDE < endAlt AND SHIP:AIRSPEED < endSpeed {
         WAIT 0.2.
     }
     UNLOCK STEERING.
-    mLogWarn("STATS reentry end spd=" + ROUND(SHIP:AIRSPEED, 0)
+    mLog("STATS reentry end spd=" + ROUND(SHIP:AIRSPEED, 0)
         + " alt=" + ROUND(SHIP:ALTITUDE, 0)).
     mLog("Through entry — handing airframe to airplane assists.").
     IF NOT planeActive { planeInit(). }
@@ -386,7 +386,7 @@ GLOBAL FUNCTION phaseApproach {
         WAIT 0.1.
     }
     planeShutdown().
-    mLogWarn("STATS approach result runway=" + ap_["name"]
+    mLog("STATS approach result runway=" + ap_["name"]
         + " stopDist=" + ROUND(rwGeo:DISTANCE, 0)).
     mLog("Wheels stopped. " + SHIP:NAME + " home.").
     nextPhase(launchSeq).

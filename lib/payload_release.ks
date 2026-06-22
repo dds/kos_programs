@@ -66,7 +66,7 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
     IF recoveryAp < 0 { SET recoveryAp TO 75000. }
     IF tag = "" { SET tag TO "scansat_decoupler". }
 
-    mLogWarn("STATS scansat-impact-release setup PeKm="
+    mLog("STATS scansat-impact-release setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " impactPeKm=" + ROUND(impactPe/1000,1)
@@ -95,7 +95,7 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
         }
 
         stateSet("scansat_released_time", TIME:SECONDS).
-        mLogWarn("STATS scansat-release result mass=" + ROUND(SHIP:MASS,3)
+        mLog("STATS scansat-release result mass=" + ROUND(SHIP:MASS,3)
             + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
             + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
         WAIT 0.5.
@@ -108,7 +108,7 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
         stateSet("scansat_staged", "true").
         mLog("SCANsat staged after release.").
         WAIT 1.
-        mLogWarn("STATS scansat-stage result mass=" + ROUND(SHIP:MASS,3)
+        mLog("STATS scansat-stage result mass=" + ROUND(SHIP:MASS,3)
             + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
             + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
             + " availableThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
@@ -143,7 +143,7 @@ GLOBAL FUNCTION phaseScanSatImpactRelease {
 
     stateSet("scansat_recovered", "true").
     orbitSummary().
-    mLogWarn("STATS scansat-impact-release result PeKm="
+    mLog("STATS scansat-impact-release result PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
@@ -172,7 +172,7 @@ GLOBAL FUNCTION phasePayloadImpactRelease {
     IF tag = "" { SET tag TO "probe_decoupler". }
     IF label = "" { SET label TO "payload". }
 
-    mLogWarn("STATS payload-impact-release setup label=" + label
+    mLog("STATS payload-impact-release setup label=" + label
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " impactPeKm=" + ROUND(impactPe/1000,1)
@@ -206,7 +206,7 @@ GLOBAL FUNCTION phasePayloadImpactRelease {
         }
 
         stateSet(stateKey, TIME:SECONDS).
-        mLogWarn("STATS payload-release result label=" + label
+        mLog("STATS payload-release result label=" + label
             + " mass=" + ROUND(SHIP:MASS,3)
             + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
             + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
@@ -266,7 +266,7 @@ LOCAL FUNCTION _payloadRecoveryWindowSafe {
     LOCAL etaPe IS ETA:PERIAPSIS.
     LOCAL safe IS etaAp + margin < etaPe.
     LOCAL statusText IS CHOOSE "ok" IF safe ELSE "blocked".
-    mLogWarn("STATS payload-impact-release precheck label=" + label
+    mLog("STATS payload-impact-release precheck label=" + label
         + " status=" + statusText
         + " reason=recovery-window"
         + " next=" + nextPhase
@@ -286,7 +286,7 @@ LOCAL FUNCTION _payloadDisposeAttached {
     IF maxTime < 0 { SET maxTime TO SCANSAT_DISPOSE_MAX_TIME. }
     IF maxTime < 0 { SET maxTime TO 600. }
 
-    mLogWarn("STATS payload-dispose setup PeKm="
+    mLog("STATS payload-dispose setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " targetPeKm=" + ROUND(targetPe/1000,1)
@@ -334,7 +334,7 @@ LOCAL FUNCTION _payloadDisposeAttached {
     } ELSE IF SHIP:PERIAPSIS > targetPe {
         SET status_ TO "timeout".
     }
-    mLogWarn("STATS payload-dispose result status=" + status_
+    mLog("STATS payload-dispose result status=" + status_
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " duration=" + ROUND(TIME:SECONDS - startT,1)).
@@ -347,7 +347,7 @@ LOCAL FUNCTION _payloadClearDisposedStage {
     LOCAL clearDv IS 2.
     SET clearDv TO PAYLOAD_CLEARANCE_DV.
     IF clearDv <= 0 {
-        mLogWarn("STATS payload-clearance result status=disabled").
+        mLog("STATS payload-clearance result status=disabled").
         RETURN TRUE.
     }
 
@@ -358,7 +358,7 @@ LOCAL FUNCTION _payloadClearDisposedStage {
     SET throttle_ TO MAX(0.05, MIN(1, throttle_)).
 
     IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {
-        mLogWarn("STATS payload-clearance result status=no-thrust").
+        mLog("STATS payload-clearance result status=no-thrust").
         WAIT settleTime.
         RETURN FALSE.
     }
@@ -378,7 +378,7 @@ LOCAL FUNCTION _payloadClearDisposedStage {
 
     LOCAL burnTime IS clearDv / ((SHIP:AVAILABLETHRUST / SHIP:MASS) * throttle_).
     SET burnTime TO MAX(0.2, MIN(8, burnTime)).
-    mLogWarn("STATS payload-clearance setup dv=" + ROUND(clearDv,1)
+    mLog("STATS payload-clearance setup dv=" + ROUND(clearDv,1)
         + " dir=" + dirName
         + " throttle=" + ROUND(throttle_,2)
         + " burnTime=" + ROUND(burnTime,1)
@@ -403,7 +403,7 @@ LOCAL FUNCTION _payloadClearDisposedStage {
     UNLOCK STEERING.
     SET SAS TO TRUE.
     WAIT settleTime.
-    mLogWarn("STATS payload-clearance result status=complete PeKm="
+    mLog("STATS payload-clearance result status=complete PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     RETURN TRUE.
@@ -426,7 +426,7 @@ LOCAL FUNCTION _executeScanSatStep {
             mLogError(label + " node rejected: dV="
                 + ROUND(NEXTNODE:DELTAV:MAG,1)
                 + " m/s exceeds SCANsat cap " + ROUND(maxDv,1) + " m/s.").
-            mLogWarn("STATS scansat-burn rejected label=" + label
+            mLog("STATS scansat-burn rejected label=" + label
                 + " dv=" + ROUND(NEXTNODE:DELTAV:MAG,1)
                 + " cap=" + ROUND(maxDv,1)
                 + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -434,7 +434,7 @@ LOCAL FUNCTION _executeScanSatStep {
             REMOVE NEXTNODE.
             RETURN FALSE.
         }
-        mLogWarn("STATS scansat-burn setup label=" + label
+        mLog("STATS scansat-burn setup label=" + label
             + " dv=" + ROUND(NEXTNODE:DELTAV:MAG,1)
             + " eta=" + ROUND(NEXTNODE:ETA,1)).
         SET success TO executeManeuver().
@@ -495,7 +495,7 @@ LOCAL FUNCTION _scanSatRecoverPeDirect {
 
     LOCAL maxTime IS SCANSAT_RECOVER_MAX_TIME.
 
-    mLogWarn("STATS scansat-recover-direct setup PeKm="
+    mLog("STATS scansat-recover-direct setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " requestedPeKm=" + ROUND(requestedPe/1000,1)
@@ -544,7 +544,7 @@ LOCAL FUNCTION _scanSatRecoverPeDirect {
     } ELSE IF SHIP:PERIAPSIS < targetPe {
         SET status_ TO "timeout".
     }
-    mLogWarn("STATS scansat-recover-direct result status=" + status_
+    mLog("STATS scansat-recover-direct result status=" + status_
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " duration=" + ROUND(TIME:SECONDS - startT,1)).
@@ -564,7 +564,7 @@ LOCAL FUNCTION _scanSatClearDisposedStage {
     LOCAL clearDv IS 2.
     SET clearDv TO SCANSAT_CLEARANCE_DV.
     IF clearDv <= 0 {
-        mLogWarn("STATS scansat-clearance result status=disabled").
+        mLog("STATS scansat-clearance result status=disabled").
         RETURN TRUE.
     }
 
@@ -575,7 +575,7 @@ LOCAL FUNCTION _scanSatClearDisposedStage {
     SET throttle_ TO MAX(0.05, MIN(1, throttle_)).
 
     IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {
-        mLogWarn("STATS scansat-clearance result status=no-thrust").
+        mLog("STATS scansat-clearance result status=no-thrust").
         WAIT settleTime.
         RETURN FALSE.
     }
@@ -594,7 +594,7 @@ LOCAL FUNCTION _scanSatClearDisposedStage {
 
     LOCAL burnTime IS clearDv / ((SHIP:AVAILABLETHRUST / SHIP:MASS) * throttle_).
     SET burnTime TO MAX(0.2, MIN(8, burnTime)).
-    mLogWarn("STATS scansat-clearance setup dv=" + ROUND(clearDv,1)
+    mLog("STATS scansat-clearance setup dv=" + ROUND(clearDv,1)
         + " dir=" + dirName
         + " throttle=" + ROUND(throttle_,2)
         + " burnTime=" + ROUND(burnTime,1)
@@ -619,7 +619,7 @@ LOCAL FUNCTION _scanSatClearDisposedStage {
     UNLOCK STEERING.
     SET SAS TO TRUE.
     WAIT settleTime.
-    mLogWarn("STATS scansat-clearance result status=complete PeKm="
+    mLog("STATS scansat-clearance result status=complete PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     RETURN TRUE.
@@ -630,7 +630,7 @@ LOCAL FUNCTION _scanSatDisposeAttached {
 
     LOCAL maxTime IS SCANSAT_DISPOSE_MAX_TIME.
 
-    mLogWarn("STATS scansat-dispose setup PeKm="
+    mLog("STATS scansat-dispose setup PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " targetPeKm=" + ROUND(targetPe/1000,1)
@@ -678,7 +678,7 @@ LOCAL FUNCTION _scanSatDisposeAttached {
     } ELSE IF SHIP:PERIAPSIS > targetPe {
         SET status_ TO "timeout".
     }
-    mLogWarn("STATS scansat-dispose result status=" + status_
+    mLog("STATS scansat-dispose result status=" + status_
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " duration=" + ROUND(TIME:SECONDS - startT,1)).
@@ -724,7 +724,7 @@ LOCAL FUNCTION _scanSatPlanRaiseAp {
     mLog("SCANsat raise Ap node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " targetAp=" + ROUND(targetAp/1000,1) + "km"
         + " etaPe=" + ROUND(etaPe,1)).
-    mLogWarn("STATS scansat-raise-ap plan dv=" + ROUND(nd:DELTAV:MAG,1)
+    mLog("STATS scansat-raise-ap plan dv=" + ROUND(nd:DELTAV:MAG,1)
         + " targetApKm=" + ROUND(targetAp/1000,1)
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).

@@ -49,7 +49,7 @@ LOCAL iter IS 0.
 LOCAL ok IS TRUE.
 
 PRINT "SET ORBIT: " + ROUND(targetAlt/1000,1) + " km".
-mLogWarn("STATS set-orbit setup targetKm=" + ROUND(targetAlt/1000,1)
+mLog("STATS set-orbit setup targetKm=" + ROUND(targetAlt/1000,1)
     + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
     + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
 
@@ -71,6 +71,6 @@ UNTIL iter >= 4 OR (ABS(SHIP:PERIAPSIS - targetAlt) <= tol
 
 PRINT "Orbit: Pe=" + ROUND(SHIP:PERIAPSIS/1000,2)
     + " Ap=" + ROUND(SHIP:APOAPSIS/1000,2) + " km".
-mLogWarn("STATS set-orbit result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,2)
+mLog("STATS set-orbit result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,2)
     + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,2)
     + " targetKm=" + ROUND(targetAlt/1000,1)).

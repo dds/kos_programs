@@ -10,7 +10,7 @@ LOCAL FUNCTION _payloadSeq {
 GLOBAL FUNCTION phaseTargetedDeorbit {
     LOCAL targetInfo IS targetResolveDeorbitTarget().
     IF targetInfo["FOUND"] {
-        mLogWarn("STATS probe target source=" + targetInfo["SOURCE"]
+        mLog("STATS probe target source=" + targetInfo["SOURCE"]
             + " lat=" + ROUND(targetInfo["LAT"],4)
             + " lng=" + ROUND(targetInfo["LNG"],4)).
         IF NOT targetReachable(targetInfo["LAT"]) {

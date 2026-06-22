@@ -164,7 +164,7 @@ GLOBAL FUNCTION runPhases {
 
 LOCAL FUNCTION _logPhaseStats {
     PARAMETER phase.
-    mLogWarn("STATS phase entry phase=" + phase
+    mLog("STATS phase entry phase=" + phase
         + " body=" + SHIP:BODY:NAME
         + " status=" + SHIP:STATUS
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -366,13 +366,13 @@ LOCAL FUNCTION _coastHealthPoll {
         IF charge >= fullEc {
             LOCAL flow IS shipSolarFlow().
             IF flow = 0 {
-                mLogWarn("STATS coast health label=" + label
+                mLog("STATS coast health label=" + label
                     + " status=full-no-flow charge="
                     + ROUND(charge * 100, 1)
                     + "pct flow=" + ROUND(flow, 2)).
                 RETURN FALSE.
             }
-            mLogWarn("STATS coast health label=" + label
+            mLog("STATS coast health label=" + label
                 + " status=" + statusFull
                 + " charge=" + ROUND(charge * 100, 1)
                 + "pct flow=" + ROUND(flow, 2)).
@@ -381,7 +381,7 @@ LOCAL FUNCTION _coastHealthPoll {
     }
     IF shipBatteriesCharging(dT, minDelta) {
         SET charge TO shipPowerFraction().
-        mLogWarn("STATS coast health label=" + label
+        mLog("STATS coast health label=" + label
             + " status=" + statusCharging
             + " charge=" + ROUND(charge * 100, 1)
             + "pct flow=" + ROUND(shipSolarFlow(), 2)).

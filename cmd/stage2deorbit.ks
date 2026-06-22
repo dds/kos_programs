@@ -34,7 +34,7 @@ IF SHIP:PERIAPSIS < 30000 {
     UNLOCK STEERING.
     SET SAS TO TRUE.
     stateSet("stage2_deorbit_complete", "true").
-    mLogWarn("STATS stage2-manual result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+    mLog("STATS stage2-manual result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " durationS=" + ROUND(TIME:SECONDS - startT,1)).
     HUDTEXT("Deorbit done. Pe=" + ROUND(SHIP:PERIAPSIS/1000,1) + " km", 8, 2, 14, GREEN, FALSE).

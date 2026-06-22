@@ -263,7 +263,7 @@ GLOBAL FUNCTION phaseHop {
     UNLOCK THROTTLE.
     _hopRestoreThrustLimits(thrustLimits).
 
-    mLogWarn("STATS hop cutoff reason=" + reason
+    mLog("STATS hop cutoff reason=" + reason
         + " burn=" + ROUND(TIME:SECONDS - burnStart, 1)
         + " bestDist=" + ROUND(bestDist, 0)
         + " best=" + ROUND(bestLat, 5) + "," + ROUND(bestLng, 5)

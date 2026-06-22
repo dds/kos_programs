@@ -17,7 +17,7 @@ SET TARGET_DEORBIT_SCAN_SAMPLES TO 2048.
 SET TARGET_DEORBIT_MIN_LEAD TO 90.
 
 PRINT "KSC SPLASH: " + ROUND(targetLat,4) + ", " + ROUND(targetLng,4).
-mLogWarn("STATS ksc-splash setup target="
+mLog("STATS ksc-splash setup target="
     + ROUND(targetLat,4) + "," + ROUND(targetLng,4)
     + " toleranceKm=" + ROUND(tolerance/1000,1)
     + " body=" + SHIP:BODY:NAME
@@ -38,12 +38,12 @@ IF ok {
         IF ADDONS:TR:HASIMPACT {
             LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
             PRINT "Impact: " + ROUND(impactPos:LAT,4) + ", " + ROUND(impactPos:LNG,4).
-            mLogWarn("STATS ksc-splash result status=complete impact="
+            mLog("STATS ksc-splash result status=complete impact="
                 + ROUND(impactPos:LAT,4) + "," + ROUND(impactPos:LNG,4)).
             SET loggedImpact TO TRUE.
         }
     }
-    IF NOT loggedImpact { mLogWarn("STATS ksc-splash result status=complete impact=unknown"). }
+    IF NOT loggedImpact { mLog("STATS ksc-splash result status=complete impact=unknown"). }
 } ELSE {
     PRINT "KSC splash targeting failed; holding for manual review.".
     mLogError("KSC splash targeting failed.").

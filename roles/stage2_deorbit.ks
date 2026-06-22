@@ -47,14 +47,14 @@ GLOBAL FUNCTION main {
     WAIT UNTIL SHIP:PERIAPSIS > 220000.
 
     LOCAL baseMass IS SHIP:MASS.
-    mLogWarn("STATS stage2-deorbit setup baseMassT=" + ROUND(baseMass,3)
+    mLog("STATS stage2-deorbit setup baseMassT=" + ROUND(baseMass,3)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
     mLog("Stage2: in target orbit. Baseline " + ROUND(baseMass,3) + " t.").
 
     WAIT UNTIL SHIP:MASS < baseMass - 0.15.
 
-    mLogWarn("STATS stage2-deorbit separation-detected massT=" + ROUND(SHIP:MASS,3)
+    mLog("STATS stage2-deorbit separation-detected massT=" + ROUND(SHIP:MASS,3)
         + " dropT=" + ROUND(baseMass - SHIP:MASS,3)).
     mLog("Stage2: payload released - " + ROUND(baseMass - SHIP:MASS,3) + " t drop.").
     stateSet("stage2_separation_detected", "true").

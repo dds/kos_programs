@@ -25,7 +25,7 @@ GLOBAL FUNCTION executeDeorbitNode {
     IF startTime < TIME:SECONDS + 5 { SET startTime TO TIME:SECONDS + 5. }
     LOCAL alignStartTime IS startTime - 90.
     LOCAL kacAlarmId IS maneuverEnsureBurnAlarm(startTime, burnDV, "Deorbit burn", 90).
-    mLogWarn("STATS deorbit-burn setup dv=" + ROUND(burnDV,1)
+    mLog("STATS deorbit-burn setup dv=" + ROUND(burnDV,1)
         + " eta=" + ROUND(startTime - TIME:SECONDS,1)).
 
     IF TIME:SECONDS < alignStartTime {
@@ -79,7 +79,7 @@ GLOBAL FUNCTION executeDeorbitNode {
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
     SET SAS TO TRUE.
-    mLogWarn("STATS deorbit-burn result dv=" + ROUND(burnDV,1)
+    mLog("STATS deorbit-burn result dv=" + ROUND(burnDV,1)
         + " residual=" + ROUND(residual,2)).
     RETURN TRUE.
 }

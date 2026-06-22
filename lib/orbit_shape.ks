@@ -410,7 +410,7 @@ GLOBAL FUNCTION planPlaneMatch {
         + " m/s  theta=" + ROUND(theta, 2)
         + "deg  planeErr=" + ROUND(finalErr, 2)
         + "deg  ETA=" + ROUND(nd:ETA, 0) + "s").
-    mLogWarn("STATS plane-match plan dv=" + ROUND(nd:DELTAV:MAG, 1)
+    mLog("STATS plane-match plan dv=" + ROUND(nd:DELTAV:MAG, 1)
         + " theta=" + ROUND(theta, 2)
         + " targetInc=" + ROUND(targetInc, 2)
         + " targetLan=" + ROUND(targetLan, 2)
@@ -750,7 +750,7 @@ LOCAL FUNCTION _finishShapeNode {
     LOCAL seedNorm IS nd:NORMAL.
     LOCAL seedPro IS nd:PROGRADE.
     WAIT 0.1.
-    mLogWarn("STATS shape-seed label=" + label
+    mLog("STATS shape-seed label=" + label
         + " dv=" + ROUND(nd:DELTAV:MAG, 1)
         + " predictPeKm=" + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1)
         + " predictApKm=" + ROUND(nd:ORBIT:APOAPSIS / 1000, 1)
@@ -810,7 +810,7 @@ LOCAL FUNCTION _finishShapeNode {
         + ROUND(nd:ORBIT:APOAPSIS / 1000, 1) + " km  AoP "
         + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1)
         + "  cost=" + ROUND(cost, 2)).
-    mLogWarn("STATS shape-refine label=" + label
+    mLog("STATS shape-refine label=" + label
         + " dv=" + ROUND(nd:DELTAV:MAG, 1)
         + " cost=" + ROUND(cost, 2)).
     RETURN LEX("node", nd, "label", label).
@@ -949,7 +949,7 @@ LOCAL FUNCTION _runShapePhase {
     }
 
     mLog(phaseLabel + " targets: " + _targetSummary(targets)).
-    mLogWarn("STATS " + phaseLabel:TOLOWER + " setup" + _targetSummary(targets)
+    mLog("STATS " + phaseLabel:TOLOWER + " setup" + _targetSummary(targets)
         + _errorSummary(shapeErrors(targets))).
 
     LOCAL burns IS 0.
@@ -987,7 +987,7 @@ LOCAL FUNCTION _runShapePhase {
     LOCAL finalErrs IS shapeErrors(targets).
     LOCAL ok IS shapeConverged(targets).
     orbitSummary().
-    mLogWarn("STATS " + phaseLabel:TOLOWER + " result solved=" + ok
+    mLog("STATS " + phaseLabel:TOLOWER + " result solved=" + ok
         + " burns=" + burns
         + _errorSummary(finalErrs)).
     IF ok {

@@ -287,7 +287,7 @@ LOCAL FUNCTION _ascentCircularize {
     mLog("Circularize: dv=" + ROUND(dv, 1) + "m/s burnT="
         + ROUND(burnTime, 1) + "s lead=" + ROUND(lead, 1)
         + "s etaAp=" + ROUND(ETA:APOAPSIS, 0) + "s.").
-    mLogWarn("STATS ascent circularize plan dv=" + ROUND(dv, 1)
+    mLog("STATS ascent circularize plan dv=" + ROUND(dv, 1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 2)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 2)
         + " targetPeKm=" + ROUND(targetPe / 1000, 2)).
@@ -361,7 +361,7 @@ LOCAL FUNCTION _ascentCircularize {
         mLogWarn("Circularize: hit dV cap (" + ROUND(dvCap, 0)
             + "m/s) before target — check ascent profile.").
     }
-    mLogWarn("STATS ascent circularize result PeKm="
+    mLog("STATS ascent circularize result PeKm="
         + ROUND(SHIP:PERIAPSIS / 1000, 2)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 2)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 4)

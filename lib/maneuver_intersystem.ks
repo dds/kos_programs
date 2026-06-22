@@ -115,7 +115,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + " departLead=" + ROUND(minDepartLead,0) + "s"
         + " vInfH=" + ROUND(gates["VINF_HOHMANN"],1)
         + " dvEject=" + ROUND(gates["DV_EJECT"],1)).
-    mLogWarn("STATS lambert setup target=" + targetBody:NAME
+    mLog("STATS lambert setup target=" + targetBody:NAME
         + " center=" + transferCenter:NAME
         + " departSamples=" + nDepart
         + " tofSamples=" + nTof
@@ -176,7 +176,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
                 }
 
                 IF di = 0 AND ti = 0 AND flip {
-                    mLogWarn("STATS lambert-cell d=0 t=0 f=True"
+                    mLog("STATS lambert-cell d=0 t=0 f=True"
                         + " pass=analytic"
                         + " vInf=" + ROUND(vInfMag,1)
                         + " dv=" + ROUND(dvMag,1)
@@ -202,7 +202,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         }
     }
 
-    mLogWarn("STATS lambert-pass1 target=" + targetBody:NAME
+    mLog("STATS lambert-pass1 target=" + targetBody:NAME
         + " cells=" + pass1Cells
         + " survivors=" + pass1Survivors
         + " shortlist=" + shortlist:LENGTH
@@ -274,7 +274,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         WAIT 0.02.
     }
 
-    mLogWarn("STATS lambert-pass2 target=" + targetBody:NAME
+    mLog("STATS lambert-pass2 target=" + targetBody:NAME
         + " evals=" + pass2Evals
         + " selectedDepartT=" + ROUND(bestDepart - TIME:SECONDS,0)
         + " selectedAnalyticDv=" + ROUND(bestAnalyticDv,1)
@@ -291,7 +291,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     IF bestDepart < 0 {
         mLogError("planTransfer: Lambert scan found no gated "
             + targetBody:NAME + " encounter seed.").
-        mLogWarn("STATS lambert result target=" + targetBody:NAME
+        mLog("STATS lambert result target=" + targetBody:NAME
             + " status=no-encounter-seed"
             + " rawDepartT=" + ROUND(rawDepart - TIME:SECONDS,0)
             + " rawTof=" + ROUND(rawArrive - rawDepart,0)
@@ -307,7 +307,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
     LOCAL staleLead IS 45.
     IF bestDepart < TIME:SECONDS + staleLead {
         mLogError("planTransfer: Lambert best departure went stale during scan.").
-        mLogWarn("STATS lambert result target=" + targetBody:NAME
+        mLog("STATS lambert result target=" + targetBody:NAME
             + " status=stale-seed"
             + " rawDepartT=" + ROUND(bestDepart - TIME:SECONDS,0)
             + " minLead=" + staleLead
@@ -328,7 +328,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         + "s  dV=" + ROUND(bestDv,1)
         + "  vInf=" + ROUND(bestVinf,1)
         + "  CA=" + ROUND(bestCaKm,1) + "km").
-    mLogWarn("STATS lambert result target=" + targetBody:NAME
+    mLog("STATS lambert result target=" + targetBody:NAME
         + " status=refine-seed departT=" + ROUND(bestDepart - TIME:SECONDS,0)
         + " tof=" + ROUND(bestArrive - bestDepart,0)
         + " dv=" + ROUND(bestDv,1)
@@ -351,7 +351,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
         mLog("Encounter confirmed. Pe="
             + ROUND(finalPatch:PERIAPSIS/1000, 1)
             + "km CA=" + ROUND(finalCaKm,1) + "km").
-        mLogWarn("STATS lambert result target=" + targetBody:NAME
+        mLog("STATS lambert result target=" + targetBody:NAME
             + " status=refined-patch-seed"
             + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)
             + " tof=" + ROUND(bestArrive - nd:TIME,0)
@@ -366,7 +366,7 @@ GLOBAL FUNCTION planInterplanetaryTransfer {
 
     mLogError("planTransfer: Lambert refinement did not reach "
         + targetBody:NAME + " SOI.").
-    mLogWarn("STATS lambert result target=" + targetBody:NAME
+    mLog("STATS lambert result target=" + targetBody:NAME
         + " status=refine-failed"
         + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)
         + " dv=" + ROUND(nd:DELTAV:MAG,1)
@@ -402,7 +402,7 @@ LOCAL FUNCTION _lambertLogFrameSetup {
     PARAMETER targetBody.
     PARAMETER transferCenter.
 
-    mLogWarn("STATS lambert-frame target=" + targetBody:NAME
+    mLog("STATS lambert-frame target=" + targetBody:NAME
         + " originStateCenter=" + transferCenter:NAME
         + " targetStateCenter=" + transferCenter:NAME
         + " shipLocalStateCenter=" + BODY:NAME).
@@ -524,7 +524,7 @@ LOCAL FUNCTION _lambertLogSelection {
 
     LOCAL verdict IS "FAIL".
     IF info["SANITY_OK"] { SET verdict TO "PASS". }
-    mLogWarn("STATS lambert-selection label=" + info["LABEL"]
+    mLog("STATS lambert-selection label=" + info["LABEL"]
         + " target=" + targetBody:NAME
         + " center=" + transferCenter:NAME
         + " departUT=" + ROUND(info["DEPART_UT"],1)
@@ -532,11 +532,11 @@ LOCAL FUNCTION _lambertLogSelection {
         + " phaseDeg=" + ROUND(info["PHASE_ANGLE"],2)
         + " tof=" + ROUND(info["TOF"],0)
         + " tofHohmannFrac=" + ROUND(info["TOF_FRAC"],3)).
-    mLogWarn("STATS lambert-vectors label=" + info["LABEL"]
+    mLog("STATS lambert-vectors label=" + info["LABEL"]
         + " v1Helio=" + ROUND(info["V1_MAG"],1)
         + " vSunDepart=" + ROUND(info["VORIGIN_MAG"],1)
         + " vInf=" + ROUND(info["VINF_MAG"],1)).
-    mLogWarn("STATS lambert-node label=" + info["LABEL"]
+    mLog("STATS lambert-node label=" + info["LABEL"]
         + " prograde=" + ROUND(info["PROGRADE"],1)
         + " normal=" + ROUND(info["NORMAL"],1)
         + " radial=" + ROUND(info["RADIALOUT"],1)
@@ -545,7 +545,7 @@ LOCAL FUNCTION _lambertLogSelection {
         + " caUT=" + ROUND(info["CA_UT"],1)
         + " patch=" + info["PATCH"]
         + " patchPeKm=" + ROUND(info["PATCH_PE_KM"],1)).
-    mLogWarn("STATS lambert-sanity label=" + info["LABEL"]
+    mLog("STATS lambert-sanity label=" + info["LABEL"]
         + " verdict=" + verdict
         + " reason=" + info["SANITY_REASON"]
         + " center=" + info["CENTER"]
@@ -764,7 +764,7 @@ LOCAL FUNCTION _refineLambertPatchSeed {
         }
     }
 
-    mLogWarn("STATS lambert-patch-refine target=" + targetBody:NAME
+    mLog("STATS lambert-patch-refine target=" + targetBody:NAME
         + " finalCaKm=" + ROUND(best["CA"]["distance"]/1000,1)
         + " patch=" + (best["PATCH"] <> 0)
         + " patchOk=" + best["PATCH_OK"]

@@ -35,7 +35,7 @@ GLOBAL FUNCTION planCircularize {
     LOCAL nd IS NODE(TIME:SECONDS + ea, 0, 0, dv).
     ADD nd.
     mLog("Circularize node: dV=" + ROUND(dv,1) + " m/s at Ap in " + ROUND(ea,0) + "s").
-    mLogWarn("STATS circularize plan dv=" + ROUND(dv,1)
+    mLog("STATS circularize plan dv=" + ROUND(dv,1)
         + " eta=" + ROUND(ea,0)
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
@@ -58,7 +58,7 @@ GLOBAL FUNCTION planCapture {
     mLog("Capture node: dV=" + ROUND(dv,1)
         + " m/s at Pe in " + ROUND(ETA:PERIAPSIS,0)
         + "s  targetAp=" + ROUND(ta/1000,1) + "km").
-    mLogWarn("STATS capture plan target=" + tb:NAME
+    mLog("STATS capture plan target=" + tb:NAME
         + " dv=" + ROUND(dv,1)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " targetApKm=" + ROUND(ta/1000,1)
@@ -83,7 +83,7 @@ GLOBAL FUNCTION planRaisePeNow {
     ADD nd.
     mLog("Raise Pe node: dV=" + ROUND(dv,1)
         + " m/s  targetPe=" + ROUND(tp/1000,1) + "km").
-    mLogWarn("STATS raise-pe plan dv=" + ROUND(dv,1)
+    mLog("STATS raise-pe plan dv=" + ROUND(dv,1)
         + " targetPeKm=" + ROUND(tp/1000,1)
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
@@ -105,7 +105,7 @@ GLOBAL FUNCTION planLowerPe {
     ADD nd.
     mLog("Lower Pe node: dV=" + ROUND(nd:DELTAV:MAG,1)
         + " targetPe=" + ROUND(tp/1000,1) + "km").
-    mLogWarn("STATS lower-pe plan dv=" + ROUND(nd:DELTAV:MAG,1)
+    mLog("STATS lower-pe plan dv=" + ROUND(nd:DELTAV:MAG,1)
         + " targetPeKm=" + ROUND(tp/1000,1)
         + " startPeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " startApKm=" + ROUND(SHIP:APOAPSIS/1000,1)

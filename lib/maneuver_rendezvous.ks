@@ -118,7 +118,7 @@ GLOBAL FUNCTION phaseMatch {
     SET SAS TO TRUE.
     mLog("MATCH complete: sep=" + ROUND(sep, 0) + "m relV="
         + ROUND(relSpd, 2) + " m/s.").
-    mLogWarn("STATS match result sep=" + ROUND(sep, 0)
+    mLog("STATS match result sep=" + ROUND(sep, 0)
         + " relV=" + ROUND(relSpd, 2) + " target=" + ves:NAME).
     nextPhase(xferSeq).
 }
@@ -151,7 +151,7 @@ GLOBAL FUNCTION phaseCrewXfer {
     FOR crewMember IN SHIP:CREW() {
         SET roster TO roster + crewMember:NAME + " ".
     }
-    mLogWarn("STATS crew_xfer result count=" + SHIP:CREW():LENGTH
+    mLog("STATS crew_xfer result count=" + SHIP:CREW():LENGTH
         + " roster=" + roster:TRIM).
     stateRemove("crew_xfer_start").
     nextPhase(xferSeq).

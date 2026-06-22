@@ -61,7 +61,7 @@ GLOBAL FUNCTION planTransfer {
 
     LOCAL isLocal IS (targetBody:BODY = BODY).
     LOCAL isEscape IS (targetBody = BODY:BODY).
-    mLogWarn("STATS transfer setup target=" + targetBody:NAME
+    mLog("STATS transfer setup target=" + targetBody:NAME
         + " local=" + isLocal + " escape=" + isEscape
         + " mode=dumb-departure"
         + " targetPeKm=0"
@@ -107,7 +107,7 @@ GLOBAL FUNCTION planTransfer {
     IF NOT firstPatchOk {
         mLogError("planTransfer: Node intercepts " + firstPatch
             + " instead of " + targetBody:NAME + ". Transfer blocked.").
-        mLogWarn("STATS transfer result target=" + targetBody:NAME
+        mLog("STATS transfer result target=" + targetBody:NAME
             + " status=blocked-by-obstacle"
             + " obstacle=" + firstPatch
             + " dv=" + ROUND(nd:DELTAV:MAG,1)).
@@ -128,7 +128,7 @@ GLOBAL FUNCTION planTransfer {
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
     IF finalPatch = 0 {
         mLogError("planTransfer: no direct encounter after arrival targeting.").
-        mLogWarn("STATS transfer result target=" + targetBody:NAME
+        mLog("STATS transfer result target=" + targetBody:NAME
             + " status=no-direct-encounter"
             + " dv=" + ROUND(nd:DELTAV:MAG,1)).
         RETURN.
@@ -164,7 +164,7 @@ GLOBAL FUNCTION planTransfer {
         + "  arrivalETA=" + ROUND(arrivalEta,0) + "s"
         + coarseNote).
 
-    mLogWarn("STATS transfer result target=" + targetBody:NAME
+    mLog("STATS transfer result target=" + targetBody:NAME
         + " status=" + status
         + " mode=" + transferMode
         + " bplaneHandoffOk=" + bplaneHandoffOk
@@ -230,7 +230,7 @@ LOCAL FUNCTION _refineEjectionTarget {
         IF NOT _tmiHandoffOk(seedMeas, peMax) {
             SET status TO "needs-coarse-refine".
         }
-        mLogWarn("STATS targeted-tmi-seed target=" + targetBody:NAME
+        mLog("STATS targeted-tmi-seed target=" + targetBody:NAME
             + " status=" + status
             + " PeKm=" + ROUND(seedMeas["pe"] / 1000, 1)
             + " soiMult=" + ROUND(seedMeas["pe"] / targetBody:SOIRADIUS, 3)
@@ -238,7 +238,7 @@ LOCAL FUNCTION _refineEjectionTarget {
             + " incErr=" + ROUND(seedIncErr, 2)
             + " dv=" + ROUND(nd:DELTAV:MAG, 1)).
         IF status = "handoff-ok" {
-            mLogWarn("STATS targeted-tmi target=" + targetBody:NAME
+            mLog("STATS targeted-tmi target=" + targetBody:NAME
                 + " status=handoff-ok"
                 + " dv=" + ROUND(nd:DELTAV:MAG, 1)
                 + " PeKm=" + ROUND(seedMeas["pe"] / 1000, 1)
@@ -294,7 +294,7 @@ LOCAL FUNCTION _refineEjectionTarget {
                             + " inc=" + ROUND(trial["inc"],1)
                             + " incErr=" + ROUND(trialIncErr,2)
                             + " dv=" + ROUND(nd:DELTAV:MAG,1)).
-                        mLogWarn("STATS targeted-tmi target=" + targetBody:NAME
+                        mLog("STATS targeted-tmi target=" + targetBody:NAME
                             + " status=handoff-ok"
                             + " dv=" + ROUND(nd:DELTAV:MAG, 1)
                             + " PeKm=" + ROUND(trial["pe"] / 1000, 1)
@@ -366,7 +366,7 @@ LOCAL FUNCTION _refineEjectionTarget {
     } ELSE {
         SET status TO "no-patch".
     }
-    mLogWarn("STATS targeted-tmi target=" + targetBody:NAME
+    mLog("STATS targeted-tmi target=" + targetBody:NAME
         + " status=" + status
         + " dv=" + ROUND(nd:DELTAV:MAG, 1)
         + " PeKm=" + ROUND(finalPe / 1000, 1)
@@ -537,7 +537,7 @@ LOCAL FUNCTION _refineLocalSoiIntercept {
     }
 
     LOCAL final IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
-    mLogWarn("STATS soi-refine target=" + targetBody:NAME
+    mLog("STATS soi-refine target=" + targetBody:NAME
         + " startCaKm=" + ROUND(startCA / 1000, 1)
         + " finalCaKm=" + ROUND(final["CA"]["distance"] / 1000, 1)
         + " startPatch=" + startPatch
@@ -825,7 +825,7 @@ LOCAL FUNCTION _planLocalTransfer {
         + " score=" + ROUND(finalSeed["SCORE"], 2)
         + "  dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s"
         + "  depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
-    mLogWarn("STATS local-transfer target=" + targetBody:NAME
+    mLog("STATS local-transfer target=" + targetBody:NAME
         + " caKm=" + ROUND(finalCA["distance"]/1000,1)
         + " score=" + ROUND(finalSeed["SCORE"],2)
         + " patch=" + finalSeed["PATCH"]
@@ -852,7 +852,7 @@ LOCAL FUNCTION _logLocalTransferShortlist {
             SET shown TO shown + 1.
             LOCAL ca IS scanCAs[qi].
             LOCAL seed IS scanSeeds[qi].
-            mLogWarn("STATS local-candidate rank=" + shown
+            mLog("STATS local-candidate rank=" + shown
                 + " departT=" + ROUND(scanTimes[qi] - TIME:SECONDS, 0)
                 + " caKm=" + ROUND(ca["distance"] / 1000, 1)
                 + " closestT=" + ROUND(ca["time"] - TIME:SECONDS, 0)
@@ -1095,7 +1095,7 @@ LOCAL FUNCTION _planEscapeTransfer {
         + " score=" + ROUND(finalSeed["SCORE"], 2)
         + " patch=" + finalSeed["PATCH"]
         + " depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
-    mLogWarn("STATS escape-transfer target=" + targetBody:NAME
+    mLog("STATS escape-transfer target=" + targetBody:NAME
         + " dv=" + ROUND(nd:PROGRADE,1)
         + " score=" + ROUND(finalSeed["SCORE"],2)
         + " patch=" + finalSeed["PATCH"]

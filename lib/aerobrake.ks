@@ -70,7 +70,7 @@ GLOBAL FUNCTION phaseAerobrake {
     _aerobrakeSetEntryAlarm().
 
     mLog("Aerobrake pre-coast prep complete.").
-    mLogWarn("STATS aerobrake status=complete body=" + SHIP:BODY:NAME).
+    mLog("STATS aerobrake status=complete body=" + SHIP:BODY:NAME).
 
     // --- Step 4: Wait for atmosphere, retract antennas, then orient ---
     IF SHIP:BODY:ATM:EXISTS {
@@ -200,7 +200,7 @@ LOCAL FUNCTION _aerobrakeTrimReentryPe {
             + ROUND(maxPeChange/1000, 1) + "km cap ("
             + ROUND(MAX_PE_CORRECTION_FRACTION * 100, 1)
             + "% body radius).").
-        mLogWarn("STATS aerobrake pe-trim status=skipped reason=pe-change-cap"
+        mLog("STATS aerobrake pe-trim status=skipped reason=pe-change-cap"
             + " startPeKm=" + ROUND(currentPe/1000, 1)
             + " targetPeKm=" + ROUND(targetPe/1000, 1)
             + " maxChangeKm=" + ROUND(maxPeChange/1000, 1)).
@@ -269,7 +269,7 @@ LOCAL FUNCTION _aerobrakeTrimReentryPe {
     LOCAL totalDv IS nd:DELTAV:MAG.
     IF bestErr >= startErr OR totalDv < 0.2 {
         mLog("Reentry Pe trim not useful — skipping burn.").
-        mLogWarn("STATS aerobrake pe-trim status=skipped reason=no-useful-node"
+        mLog("STATS aerobrake pe-trim status=skipped reason=no-useful-node"
             + " startPeKm=" + ROUND(startPe/1000, 1)
             + " targetPeKm=" + ROUND(targetPe/1000, 1)
             + " predictPeKm=" + ROUND(bestPe/1000, 1)
@@ -280,7 +280,7 @@ LOCAL FUNCTION _aerobrakeTrimReentryPe {
 
     mLog("Reentry Pe trim: predicted Pe=" + ROUND(bestPe/1000, 1)
         + "km dV=" + ROUND(totalDv, 2) + " m/s.").
-    mLogWarn("STATS aerobrake pe-trim status=planned"
+    mLog("STATS aerobrake pe-trim status=planned"
         + " startPeKm=" + ROUND(currentPe/1000, 1)
         + " targetPeKm=" + ROUND(targetPe/1000, 1)
         + " predictPeKm=" + ROUND(bestPe/1000, 1)
@@ -298,7 +298,7 @@ LOCAL FUNCTION _aerobrakeTrimReentryPe {
     WAIT 1.
     mLog("Post-trim Pe=" + ROUND(SHIP:PERIAPSIS/1000, 1)
         + "km target=" + ROUND(targetPe/1000, 1) + "km.").
-    mLogWarn("STATS aerobrake pe-trim status=complete"
+    mLog("STATS aerobrake pe-trim status=complete"
         + " finalPeKm=" + ROUND(SHIP:PERIAPSIS/1000, 1)
         + " targetPeKm=" + ROUND(targetPe/1000, 1)
         + " dv=" + ROUND(totalDv, 2)).
@@ -340,7 +340,7 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
     LOCAL dist IS geoDistance(impactPos:LAT, impactPos:LNG, tgtLat, tgtLng).
     mLog("Reentry: current impact " + ROUND(impactPos:LAT, 2) + "," + ROUND(impactPos:LNG, 2)
         + "  dist=" + ROUND(dist/1000, 1) + "km from target.").
-    mLogWarn("STATS aerobrake pre-correction distKm=" + ROUND(dist/1000, 1)
+    mLog("STATS aerobrake pre-correction distKm=" + ROUND(dist/1000, 1)
         + " impact=" + ROUND(impactPos:LAT, 4) + "," + ROUND(impactPos:LNG, 4)).
 
     IF dist < CORRECTION_TOLERANCE {
@@ -452,7 +452,7 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
     LOCAL totalDv IS nd:DELTAV:MAG.
     mLog("Reentry correction: dist=" + ROUND(bestDist/1000, 1) + "km"
         + "  dV=" + ROUND(totalDv, 1) + " m/s").
-    mLogWarn("STATS aerobrake correction distKm=" + ROUND(bestDist/1000, 1)
+    mLog("STATS aerobrake correction distKm=" + ROUND(bestDist/1000, 1)
         + " dv=" + ROUND(totalDv, 1)
         + " radial=" + ROUND(bestRad, 2)
         + " normal=" + ROUND(bestNor, 2)
@@ -478,7 +478,7 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
         LOCAL finalDist IS geoDistance(finalImpact:LAT, finalImpact:LNG, tgtLat, tgtLng).
         mLog("Post-correction impact: " + ROUND(finalImpact:LAT, 2) + "," + ROUND(finalImpact:LNG, 2)
             + "  dist=" + ROUND(finalDist/1000, 1) + "km from target.").
-        mLogWarn("STATS aerobrake postburn distKm=" + ROUND(finalDist/1000, 1)
+        mLog("STATS aerobrake postburn distKm=" + ROUND(finalDist/1000, 1)
             + " impact=" + ROUND(finalImpact:LAT, 4) + "," + ROUND(finalImpact:LNG, 4)).
     }
 }

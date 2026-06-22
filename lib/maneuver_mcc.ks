@@ -137,7 +137,7 @@ GLOBAL FUNCTION phaseMidCourse {
     mLog("MCC: Pre-correction  Pe=" + ROUND(patch:PERIAPSIS/1000,1) + "km"
         + "  AoP=" + ROUND(patch:ARGUMENTOFPERIAPSIS,1)
         + "°  LAN=" + ROUND(patch:LAN,1) + "°.").
-    mLogWarn("STATS mcc setup target=" + target:NAME
+    mLog("STATS mcc setup target=" + target:NAME
         + " targetPeKm=" + ROUND(targetPe/1000,1)
         + " targetInc=" + ROUND(targetInc,1)
         + " targetLAN=" + ROUND(targetLan,1)
@@ -153,7 +153,7 @@ GLOBAL FUNCTION phaseMidCourse {
         mLogWarn("MCC: current Kerbin aerobrake Pe is safe ("
             + ROUND(patch:PERIAPSIS/1000, 1)
             + "km); skipping optional correction.").
-        mLogWarn("STATS mcc result target=" + target:NAME
+        mLog("STATS mcc result target=" + target:NAME
             + " status=skipped reason=safe-aerobrake-corridor"
             + " dv=0"
             + " PeKm=" + ROUND(patch:PERIAPSIS/1000,1)
@@ -238,7 +238,7 @@ GLOBAL FUNCTION phaseMidCourse {
             mLogWarn("MCC correction below threshold; skipping correction node.").
         }
         mLog("Encounter on target. Skipping MCC burn.").
-        mLogWarn("STATS mcc result target=" + target:NAME
+        mLog("STATS mcc result target=" + target:NAME
             + " status=skipped dv=" + ROUND(totalDv,1)
             + " minDv=" + ROUND(minMccDv,1)
             + " PeKm=" + ROUND(finalPeKm,1)
@@ -258,7 +258,7 @@ GLOBAL FUNCTION phaseMidCourse {
             SET logMsg TO logMsg + "  AoP=" + ROUND(finalPatch:ARGUMENTOFPERIAPSIS,1) + "°".
         }
         mLog(logMsg).
-        mLogWarn("STATS mcc result target=" + target:NAME
+        mLog("STATS mcc result target=" + target:NAME
             + " status=planned dv=" + ROUND(totalDv,1)
             + " PeKm=" + ROUND(finalPatch:PERIAPSIS/1000,1)
             + " inc=" + ROUND(finalPatch:INCLINATION,1)

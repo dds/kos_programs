@@ -240,7 +240,7 @@ GLOBAL FUNCTION phaseDunaAerocapture {
         RETURN.
     }
 
-    mLogWarn("STATS duna-aerocapture setup PeKm=" + ROUND(pe/1000,1)
+    mLog("STATS duna-aerocapture setup PeKm=" + ROUND(pe/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " etaPe=" + ROUND(ETA:PERIAPSIS,0)).
     _diRetractDeployables().
@@ -282,7 +282,7 @@ GLOBAL FUNCTION phaseDunaAerocapture {
     SET SAS TO TRUE.
     UNLOCK STEERING.
     orbitSummary().
-    mLogWarn("STATS duna-aerocapture result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+    mLog("STATS duna-aerocapture result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
@@ -451,7 +451,7 @@ GLOBAL FUNCTION phaseDunaEntryLowerPe {
         RETURN.
     }
     orbitSummary().
-    mLogWarn("STATS duna-entry-lower-pe result PeKm="
+    mLog("STATS duna-entry-lower-pe result PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " dv=" + ROUND(dv,1)).

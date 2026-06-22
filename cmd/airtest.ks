@@ -83,7 +83,7 @@ IF NOT err {
 
     PRINT " ".
     PRINT "  -- AIRTEST CARD: " + SHIP:NAME + " --".
-    mLogWarn("STATS airtest start craft=" + SHIP:NAME
+    mLog("STATS airtest start craft=" + SHIP:NAME
         + " alt=" + ROUND(SHIP:ALTITUDE, 0)
         + " spd=" + ROUND(SHIP:AIRSPEED, 0)
         + " dwell=" + dwell).
@@ -93,7 +93,7 @@ IF NOT err {
         PRINT "  [roll] wing leveler, " + dwell + "s.".
         wingLevelerOn().
         _fly(dwell).
-        mLogWarn("STATS airtest roll residualBank=" + ROUND(ABS(_bank()), 2)).
+        mLog("STATS airtest roll residualBank=" + ROUND(ABS(_bank()), 2)).
         wingLevelerOff().
     }
 
@@ -117,7 +117,7 @@ IF NOT err {
             }
             WAIT 0.05.
         }
-        mLogWarn("STATS airtest alt step=400 captureT=" + capT
+        mLog("STATS airtest alt step=400 captureT=" + capT
             + " overshoot=" + ROUND(MAX(0, maxAlt - altTgt), 0)
             + " finalErr=" + ROUND(SHIP:ALTITUDE - altTgt, 0)).
         altHoldOff().
@@ -165,7 +165,7 @@ IF NOT err {
                 HUDTEXT("HDG_BANK_SIGN flipped: "
                     + PLANE_HDG_BANK_SIGN, 8, 2, 16, YELLOW, FALSE).
             } ELSE {
-                mLogWarn("STATS airtest hdg step=90 captureT=" + capT
+                mLog("STATS airtest hdg step=90 captureT=" + capT
                     + " maxBank=" + ROUND(maxBank, 1)
                     + " sign=" + PLANE_HDG_BANK_SIGN
                     + " finalErr=" + ROUND(_wrap180(hdgTgt - SHIP:FACING:YAW), 1)).
@@ -185,7 +185,7 @@ IF NOT err {
         _fly(dwell).
         spdHoldOn(spd0 + 30).
         _fly(45).
-        mLogWarn("STATS airtest spd step=30 finalErr="
+        mLog("STATS airtest spd step=30 finalErr="
             + ROUND(SHIP:AIRSPEED - (spd0 + 30), 1)).
         spdHoldOff().
         wingLevelerOff().
@@ -199,5 +199,5 @@ IF NOT err {
     PRINT " ".
     PRINT "  AIRTEST COMPLETE — you have the airplane.".
     PRINT "  Results: STATS lines in flight log + 0:/logs/obs/.".
-    mLogWarn("STATS airtest done sign=" + PLANE_HDG_BANK_SIGN).
+    mLog("STATS airtest done sign=" + PLANE_HDG_BANK_SIGN).
 }

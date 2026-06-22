@@ -37,7 +37,7 @@ GLOBAL FUNCTION constellationDeploy {
 
     LOCAL releasedCount IS _syncRelayDeployedCount(relayCount).
     LOCAL pendingPhaseIdx IS _firstPendingPhase(relayCount).
-    mLogWarn("STATS constellation setup count=" + relayCount
+    mLog("STATS constellation setup count=" + relayCount
         + " released=" + releasedCount
         + " pendingPhase=" + pendingPhaseIdx
         + " targetAltKm=" + ROUND(targetAlt/1000,1)
@@ -45,7 +45,7 @@ GLOBAL FUNCTION constellationDeploy {
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
 
     IF pendingPhaseIdx = 0 AND NOT _ensureCircularBeforeDeploy(targetAlt) {
-        mLogWarn("STATS constellation result status=circularize-failed"
+        mLog("STATS constellation result status=circularize-failed"
             + " released=" + stateGetNum("relay_deployed_count", 0)).
         RETURN FALSE.
     }
@@ -58,7 +58,7 @@ GLOBAL FUNCTION constellationDeploy {
             mLog("Deploying relay " + idx + " of " + relayCount).
             IF NOT _deployOneRelay(idx) {
                 mLogError("Relay " + idx + " was not deployed; holding.").
-                mLogWarn("STATS constellation result status=deploy-failed"
+                mLog("STATS constellation result status=deploy-failed"
                     + " relay=" + idx
                     + " released=" + stateGetNum("relay_deployed_count", 0)).
                 yieldToPrompt().
@@ -70,7 +70,7 @@ GLOBAL FUNCTION constellationDeploy {
             IF NOT _phaseCarrierOneSlot(relayCount, targetAlt, targetBody, idx) {
                 mLogError("Relay phasing failed after relay " + idx
                     + "; holding for operator review.").
-                mLogWarn("STATS constellation result status=phase-failed"
+                mLog("STATS constellation result status=phase-failed"
                     + " relay=" + idx
                     + " released=" + stateGetNum("relay_deployed_count", 0)).
                 yieldToPrompt().
@@ -82,7 +82,7 @@ GLOBAL FUNCTION constellationDeploy {
 
     stateSet("relay_deployed_count", relayCount).
     mLog("Constellation deployment complete.").
-    mLogWarn("STATS constellation result status=complete"
+    mLog("STATS constellation result status=complete"
         + " released=" + relayCount
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
@@ -165,7 +165,7 @@ LOCAL FUNCTION _phaseCarrierOneSlot {
         RETURN FALSE.
     }
 
-    mLogWarn("STATS relay-phase setup targetAltKm=" + ROUND(targetAlt/1000,1)
+    mLog("STATS relay-phase setup targetAltKm=" + ROUND(targetAlt/1000,1)
         + " phasePeKm=" + ROUND(phasePeAlt/1000,1)
         + " targetPeriod=" + ROUND(targetPeriod,0)
         + " phasePeriod=" + ROUND(phasePeriod,0)
@@ -208,7 +208,7 @@ LOCAL FUNCTION _phaseCarrierOneSlot {
     }
 
     stateSet("relay_" + afterRelayIdx + "_phase_complete", TIME:SECONDS).
-    mLogWarn("STATS relay-phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+    mLog("STATS relay-phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
         + " afterRelay=" + afterRelayIdx).

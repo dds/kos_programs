@@ -143,7 +143,7 @@ GLOBAL FUNCTION measureArrival {
 
     IF NOT _BPLANE_MEASURE_LOGGED {
         SET _BPLANE_MEASURE_LOGGED TO TRUE.
-        mLogWarn("STATS bplane-measure target=" + targetBody:NAME
+        mLog("STATS bplane-measure target=" + targetBody:NAME
             + " rKm=" + ROUND(rMag / 1000, 1)
             + " v=" + ROUND(SQRT(v2), 3)
             + " h=" + ROUND(h, 1)

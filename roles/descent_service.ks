@@ -56,7 +56,7 @@ GLOBAL FUNCTION main {
     }
 
     LOCAL baseMass IS SHIP:MASS.
-    mLogWarn("STATS descent-service armed massT=" + ROUND(baseMass, 3)
+    mLog("STATS descent-service armed massT=" + ROUND(baseMass, 3)
         + " altKm=" + ROUND(SHIP:ALTITUDE/1000, 1)
         + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
 
@@ -68,7 +68,7 @@ GLOBAL FUNCTION main {
         RETURN.
     }
 
-    mLogWarn("STATS descent-service separation massT=" + ROUND(SHIP:MASS, 3)
+    mLog("STATS descent-service separation massT=" + ROUND(SHIP:MASS, 3)
         + " dropT=" + ROUND(baseMass - SHIP:MASS, 3)
         + " altKm=" + ROUND(SHIP:ALTITUDE/1000, 1)
         + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
@@ -93,7 +93,7 @@ GLOBAL FUNCTION main {
         WAIT UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
     }
 
-    mLogWarn("STATS descent-service landed type=" + SHIP:STATUS
+    mLog("STATS descent-service landed type=" + SHIP:STATUS
         + " speed=" + ROUND(SHIP:AIRSPEED, 1)).
     WAIT UNTIL FALSE.
 }

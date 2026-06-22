@@ -292,7 +292,7 @@ GLOBAL FUNCTION phaseCapture {
     LOCAL target IS missionTargetBody().
     WAIT 2.
     mLog("Planning capture into elliptical orbit at " + target:NAME + ".").
-    mLogWarn("STATS capture phase setup target=" + target:NAME
+    mLog("STATS capture phase setup target=" + target:NAME
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
@@ -324,7 +324,7 @@ GLOBAL FUNCTION phaseCapture {
     }
 
     orbitSummary().
-    mLogWarn("STATS capture phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+    mLog("STATS capture phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
@@ -355,7 +355,7 @@ GLOBAL FUNCTION phaseFlyby {
             "Auto-created by phaseFlyby").
     }
 
-    mLogWarn("STATS flyby setup target=" + target:NAME
+    mLog("STATS flyby setup target=" + target:NAME
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
@@ -385,7 +385,7 @@ GLOBAL FUNCTION phaseFlyby {
         mLog("Exited " + target:NAME + " SOI; current body=" + SHIP:BODY:NAME + ".").
     }
 
-    mLogWarn("STATS flyby result target=" + target:NAME
+    mLog("STATS flyby result target=" + target:NAME
         + " body=" + SHIP:BODY:NAME
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)

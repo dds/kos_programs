@@ -8,14 +8,14 @@ LOCAL FUNCTION _landingLogBrakeComplete {
     IF NOT ctx["HAS_TARGET"] { RETURN. }
     LOCAL trajErr IS _landingTrajError(ctx).
     IF NOT trajErr["FOUND"] {
-        mLogWarn("STATS brake-complete next=" + nextState
+        mLog("STATS brake-complete next=" + nextState
             + " impact=none bias=" + ROUND(LANDING_BRAKE_UNDERSHOOT_BIAS,0)
             + " hs=" + ROUND(ctx["H_SPEED"],1)
             + " vs=" + ROUND(ctx["V_SPEED"],1)).
         RETURN.
     }
 
-    mLogWarn("STATS brake-complete next=" + nextState
+    mLog("STATS brake-complete next=" + nextState
         + " impactLong=" + ROUND(trajErr["ALONG"],0)
         + " cross=" + ROUND(trajErr["CROSS_SIGNED"],0)
         + " dist=" + ROUND(trajErr["DIST"],0)

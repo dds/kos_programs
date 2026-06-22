@@ -537,7 +537,7 @@ GLOBAL FUNCTION planBplaneCorrection {
                 + " mode=" + planeMode
                 + " dv=" + ROUND(nd:DELTAV:MAG, 2)).
             IF i = 0 {
-                mLogWarn("STATS bplane-bvec target=" + targetBody:NAME
+                mLog("STATS bplane-bvec target=" + targetBody:NAME
                     + " measBtKm=" + ROUND(meas["bt"] / 1000,1)
                     + " tgtBtKm=" + ROUND(tgt["bt"] / 1000,1)
                     + " measBrKm=" + ROUND(meas["br"] / 1000,1)
@@ -741,7 +741,7 @@ GLOBAL FUNCTION planBplaneCorrection {
         RETURN 0.
     }
 
-    mLogWarn("STATS bplane plan target=" + targetBody:NAME
+    mLog("STATS bplane plan target=" + targetBody:NAME
         + " mode=" + planeMode
         + " converged=" + converged
         + " dv=" + ROUND(nd:DELTAV:MAG, 2)
@@ -814,7 +814,7 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
     IF NOT HASNODE { RETURN FALSE. }
 
     LOCAL nd IS NEXTNODE.
-    mLogWarn("STATS bplane resume existing-node dv="
+    mLog("STATS bplane resume existing-node dv="
         + ROUND(nd:DELTAV:MAG, 2)
         + " eta=" + ROUND(nd:ETA, 1)
         + " body=" + SHIP:BODY:NAME).
@@ -840,7 +840,7 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
     }
 
     LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
-    mLogWarn("STATS bplane existing-node target=" + targetBody:NAME
+    mLog("STATS bplane existing-node target=" + targetBody:NAME
         + " dv=" + ROUND(nd:DELTAV:MAG, 2)
         + " eta=" + ROUND(nd:ETA, 1)
         + " PeKm=" + ROUND(meas["pe"] / 1000, 1)
@@ -939,7 +939,7 @@ GLOBAL FUNCTION phaseBplane {
                 + targetBody:NAME + " SOI; handing off to refinement/capture. "
                 + "Pe=" + ROUND(meas["pe"] / 1000, 1)
                 + "km planeErr=" + ROUND(err["planeErr"], 2) + "deg.").
-            mLogWarn("STATS bplane result PeKm=" + ROUND(meas["pe"] / 1000, 1)
+            mLog("STATS bplane result PeKm=" + ROUND(meas["pe"] / 1000, 1)
                 + " inc=" + ROUND(meas["inc"], 2)
                 + " lan=" + ROUND(meas["lan"], 2)
                 + " planeErr=" + ROUND(err["planeErr"], 2)
@@ -953,7 +953,7 @@ GLOBAL FUNCTION phaseBplane {
             + "km want=" + ROUND(wantPe / 1000, 1)
             + "km planeErr=" + ROUND(err["planeErr"], 2)
             + "deg. Replan XING or raise BPLANE_DV_CAP.").
-        mLogWarn("STATS bplane result PeKm=" + ROUND(meas["pe"] / 1000, 1)
+        mLog("STATS bplane result PeKm=" + ROUND(meas["pe"] / 1000, 1)
             + " inc=" + ROUND(meas["inc"], 2)
             + " lan=" + ROUND(meas["lan"], 2)
             + " planeErr=" + ROUND(err["planeErr"], 2)
@@ -966,7 +966,7 @@ GLOBAL FUNCTION phaseBplane {
         + "km inc=" + ROUND(meas["inc"], 2)
         + " lan=" + ROUND(meas["lan"], 2)
         + " after " + burns + " burn(s).").
-    mLogWarn("STATS bplane result PeKm=" + ROUND(meas["pe"] / 1000, 1)
+    mLog("STATS bplane result PeKm=" + ROUND(meas["pe"] / 1000, 1)
         + " inc=" + ROUND(meas["inc"], 2)
         + " lan=" + ROUND(meas["lan"], 2)
         + " burns=" + burns).
@@ -1045,7 +1045,7 @@ GLOBAL FUNCTION phaseRefineBplane {
                     + ROUND(meas["pe"] / 1000, 1)
                     + "km planeErr=" + ROUND(err["planeErr"], 2)
                     + "deg burns=" + burns + "/" + maxBurns + ".").
-                mLogWarn("STATS refine-bplane result PeKm="
+                mLog("STATS refine-bplane result PeKm="
                     + ROUND(meas["pe"] / 1000, 1)
                     + " inc=" + ROUND(meas["inc"], 2)
                     + " lan=" + ROUND(meas["lan"], 2)

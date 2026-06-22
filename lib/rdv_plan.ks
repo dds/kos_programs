@@ -234,7 +234,7 @@ GLOBAL FUNCTION planRendezvous {
         + "  radiusErr=" + ROUND(finalScore["RADIUS_ERR"]/1000, 1) + "km"
         + "  relV=" + ROUND(relVel, 1) + " m/s"
         + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
-    mLogWarn("STATS rdv result target=" + targetVessel:NAME
+    mLog("STATS rdv result target=" + targetVessel:NAME
         + " dv=" + ROUND(nd:DELTAV:MAG,1)
         + " caKm=" + ROUND(finalCa["distance"]/1000,1)
         + " radiusErrKm=" + ROUND(finalScore["RADIUS_ERR"]/1000,1)

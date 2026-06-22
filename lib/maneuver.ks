@@ -67,13 +67,13 @@ GLOBAL FUNCTION executeManeuver {
     _rmb(nd).
 
     mLog("Maneuver: dV=" + ROUND(bdv,1) + " m/s  ETA=" + ROUND(st - TIME:SECONDS,1) + "s").
-    mLogWarn("STATS burn setup dv=" + ROUND(bdv,1)
+    mLog("STATS burn setup dv=" + ROUND(bdv,1)
         + " eta=" + ROUND(st - TIME:SECONDS,1)
         + " nodeEta=" + ROUND(nd:ETA,1)
         + " body=" + SHIP:BODY:NAME
         + " maxAcc=" + ROUND(_sma(),2)).
     IF _sma() <= 0 {
-        mLogWarn("STATS burn thrust status=no-thrust maxThrust="
+        mLog("STATS burn thrust status=no-thrust maxThrust="
             + ROUND(SHIP:MAXTHRUST,1)
             + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
     }
@@ -122,7 +122,7 @@ GLOBAL FUNCTION executeManeuver {
     WAIT UNTIL TIME:SECONDS >= apt.
     mLog("Burn in T-60").
     LOCK STEERING TO nd:BURNVECTOR.
-    mLogWarn("STATS burn relock checkpoint=T-60 angle="
+    mLog("STATS burn relock checkpoint=T-60 angle="
         + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
         + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)).
 
@@ -135,7 +135,7 @@ GLOBAL FUNCTION executeManeuver {
     }
     IF TIME:SECONDS < t10 { WAIT UNTIL TIME:SECONDS >= t10. }
     LOCK STEERING TO nd:BURNVECTOR.
-    mLogWarn("STATS burn relock checkpoint=T-10 angle="
+    mLog("STATS burn relock checkpoint=T-10 angle="
         + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
         + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)).
 
@@ -146,7 +146,7 @@ GLOBAL FUNCTION executeManeuver {
     }
 
     LOCAL ae IS VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR).
-    mLogWarn("STATS burn align angle=" + ROUND(ae,1)
+    mLog("STATS burn align angle=" + ROUND(ae,1)
         + " tol=" + ATOL
         + " timeToBurn=" + ROUND(st - TIME:SECONDS,1)).
     IF ae >= ATOL {
@@ -161,7 +161,7 @@ GLOBAL FUNCTION executeManeuver {
 
     WAIT UNTIL TIME:SECONDS >= st.
     LOCK STEERING TO nd:BURNVECTOR.
-    mLogWarn("STATS burn relock checkpoint=T-0 angle="
+    mLog("STATS burn relock checkpoint=T-0 angle="
         + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
         + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)).
     LOCAL ie IS VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR).
@@ -521,7 +521,7 @@ GLOBAL FUNCTION executeManeuver {
             } ELSE IF burnAbort = "" {
                 stateSet("burn_status", "burning").
                 stateRemove("burn_pause_reason").
-                mLogWarn("STATS burn pause result status=reacquired"
+                mLog("STATS burn pause result status=reacquired"
                     + " reason=" + pauseReason
                     + " pauseCount=" + pauseCount
                     + " pausedFor=" + ROUND(TIME:SECONDS - pauseStart,1)
@@ -598,7 +598,7 @@ GLOBAL FUNCTION executeManeuver {
         stateSet("burn_abort_time", TIME:SECONDS).
         stateSet("burn_abort_residual", res).
         stateSet("burn_abort_paused", totalPaused).
-        mLogWarn("STATS burn abort reason=" + burnAbort
+        mLog("STATS burn abort reason=" + burnAbort
             + " detail=" + burnAbortDetail
             + " dv=" + ROUND(bdv,1)
             + " residual=" + ROUND(res,2)
@@ -632,7 +632,7 @@ GLOBAL FUNCTION executeManeuver {
     }
 
     IF dra {
-        mLogWarn("STATS burn abort reason=dv-rebound"
+        mLog("STATS burn abort reason=dv-rebound"
             + " dv=" + ROUND(bdv,1)
             + " reboundDv=" + ROUND(rdv,2)
             + " duration=" + ROUND(TIME:SECONDS - bsc,1)
@@ -646,7 +646,7 @@ GLOBAL FUNCTION executeManeuver {
     }
 
     mLog("Burn complete. Residual dV ~" + ROUND(res, 2) + " m/s.").
-    mLogWarn("STATS burn result dv=" + ROUND(bdv,1)
+    mLog("STATS burn result dv=" + ROUND(bdv,1)
         + " residual=" + ROUND(res,2)
         + " applied=" + ROUND(appliedDv,2)
         + " intResidual=" + ROUND(MAX(0, bdv - appliedDv),2)

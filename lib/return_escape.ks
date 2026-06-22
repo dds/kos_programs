@@ -228,7 +228,7 @@ LOCAL FUNCTION _planReturnEscape {
     IF NOT finalSeed["PATCH"] {
         mLogError("Return escape planner found no " + targetBody:NAME
             + " patch.").
-        mLogWarn("STATS return-escape plan target=" + targetBody:NAME
+        mLog("STATS return-escape plan target=" + targetBody:NAME
             + " status=no-patch"
             + " dv=" + ROUND(nd:DELTAV:MAG, 1)
             + " score=" + ROUND(finalSeed["SCORE"], 2)
@@ -242,7 +242,7 @@ LOCAL FUNCTION _planReturnEscape {
         + " m/s Pe=" + ROUND(peKm, 1)
         + "km patch=" + finalSeed["PATCH"]
         + " depart T+" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s.").
-    mLogWarn("STATS return-escape plan target=" + targetBody:NAME
+    mLog("STATS return-escape plan target=" + targetBody:NAME
         + " dv=" + ROUND(nd:DELTAV:MAG, 1)
         + " PeKm=" + ROUND(peKm, 1)
         + " patch=" + finalSeed["PATCH"]

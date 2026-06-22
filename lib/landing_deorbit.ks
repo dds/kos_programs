@@ -52,7 +52,7 @@ LOCAL FUNCTION _resumeExistingLandingDeorbitNode {
     IF NOT HASNODE { RETURN FALSE. }
 
     LOCAL nd IS NEXTNODE.
-    mLogWarn("STATS landing-deorbit resume existing-node dv="
+    mLog("STATS landing-deorbit resume existing-node dv="
         + ROUND(nd:DELTAV:MAG,1)
         + " eta=" + ROUND(nd:ETA,1)
         + " body=" + SHIP:BODY:NAME).

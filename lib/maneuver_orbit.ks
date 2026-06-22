@@ -50,7 +50,7 @@ GLOBAL FUNCTION phaseCirc {
     }
 
     LOCAL circStatus IS "complete".
-    mLogWarn("STATS circ phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+    mLog("STATS circ phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
     IF _impactThreat() {
@@ -98,7 +98,7 @@ GLOBAL FUNCTION phaseCirc {
         }
     }
     orbitSummary().
-    mLogWarn("STATS circ phase result status=" + circStatus
+    mLog("STATS circ phase result status=" + circStatus
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
@@ -111,7 +111,7 @@ GLOBAL FUNCTION phaseRaiseAlt {
     LOCAL elliptical IS TARGET_PE >= 0 AND TARGET_AP >= 0.
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL bodyR IS SHIP:ORBIT:BODY:RADIUS.
-    mLogWarn("STATS raise phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
+    mLog("STATS raise phase setup PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " elliptical=" + elliptical).
 
@@ -150,7 +150,7 @@ GLOBAL FUNCTION phaseRaiseAlt {
         LOCAL targetAp IS RELAY_ALT.
         IF SHIP:APOAPSIS > targetAp * 0.99 {
             mLog("Already at target Ap.").
-            mLogWarn("STATS raise phase result status=skipped PeKm="
+            mLog("STATS raise phase result status=skipped PeKm="
                 + ROUND(SHIP:PERIAPSIS/1000,1)
                 + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)).
             nextPhase(xferSeq).
@@ -163,7 +163,7 @@ GLOBAL FUNCTION phaseRaiseAlt {
     }
 
     orbitSummary().
-    mLogWarn("STATS raise phase result status=complete PeKm="
+    mLog("STATS raise phase result status=complete PeKm="
         + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
@@ -205,7 +205,7 @@ GLOBAL FUNCTION phaseInclCorrect {
     LOCAL currentInc IS SHIP:ORBIT:INCLINATION.
     LOCAL inclTol IS INCL_TOLERANCE.
     LOCAL maxInclDv IS MAX_INCL_CHANGE_DV.
-    mLogWarn("STATS incline phase setup current=" + ROUND(currentInc,2)
+    mLog("STATS incline phase setup current=" + ROUND(currentInc,2)
         + " target=" + ROUND(targetInc,2)
         + " tol=" + inclTol).
 
@@ -213,7 +213,7 @@ GLOBAL FUNCTION phaseInclCorrect {
         mLogWarn("Retrograde orbit detected (inc=" + ROUND(currentInc,1)
             + "deg) but target is prograde (" + ROUND(targetInc,1)
             + "deg) — plane change would cost ~600m/s. Skipping.").
-        mLogWarn("STATS incline phase result status=skipped reason=retrograde-safety current="
+        mLog("STATS incline phase result status=skipped reason=retrograde-safety current="
             + ROUND(currentInc,2)
             + " target=" + ROUND(targetInc,2)).
         HUDTEXT("WARNING: Retrograde orbit — skipping incl correction",
@@ -225,7 +225,7 @@ GLOBAL FUNCTION phaseInclCorrect {
     LOCAL deltaInc IS ABS(currentInc - targetInc).
     IF deltaInc <= inclTol {
         mLog("Inclination within tolerance — skipping.").
-        mLogWarn("STATS incline phase result status=skipped current="
+        mLog("STATS incline phase result status=skipped current="
             + ROUND(currentInc,2)
             + " target=" + ROUND(targetInc,2)).
         nextPhase(xferSeq).
@@ -248,7 +248,7 @@ GLOBAL FUNCTION phaseInclCorrect {
 
     executeManeuver().
     orbitSummary().
-    mLogWarn("STATS incline phase result status=complete current="
+    mLog("STATS incline phase result status=complete current="
         + ROUND(SHIP:ORBIT:INCLINATION,2)
         + " target=" + ROUND(targetInc,2)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
@@ -301,7 +301,7 @@ GLOBAL FUNCTION phaseElliptical {
 
     IF targetPe >= 0 AND NOT _ellipticalRecoveryWindowSafe(targetPe) {
         mLogError("Elliptical recovery halted: apoapsis burn occurs after impact.").
-        mLogWarn("STATS elliptical precheck status=blocked reason=recovery-window"
+        mLog("STATS elliptical precheck status=blocked reason=recovery-window"
             + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
             + " targetPeKm=" + ROUND(targetPe/1000,1)
             + " floorPeKm=" + ROUND(_bodyImpactFloor()/1000,1)
@@ -415,7 +415,7 @@ LOCAL FUNCTION _ellipticalNodeBad {
 
     IF bad {
         mLogError("Elliptical " + label + " node rejected: " + reason + ".").
-        mLogWarn("STATS elliptical rejected label=" + label
+        mLog("STATS elliptical rejected label=" + label
             + " reason=" + reason
             + " dv=" + ROUND(nd:DELTAV:MAG,1)
             + " PeKm=" + ROUND(p:PERIAPSIS/1000,1)

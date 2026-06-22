@@ -178,7 +178,7 @@ GLOBAL FUNCTION phaseScienceOps {
     LOCAL ran IS scienceRunAll().
     WAIT 10.
     scienceStatus().
-    mLogWarn("STATS science-ops body=" + SHIP:BODY:NAME
+    mLog("STATS science-ops body=" + SHIP:BODY:NAME
         + " status=" + SHIP:STATUS
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
@@ -274,7 +274,7 @@ GLOBAL FUNCTION scienceScanStatus {
     }
     IF line = "" { SET line TO "none yet". }
     mLog("Scan coverage @ " + SHIP:BODY:NAME + ": " + line:TRIM).
-    mLogWarn("STATS scansat coverage body=" + SHIP:BODY:NAME
+    mLog("STATS scansat coverage body=" + SHIP:BODY:NAME
         + " " + line:TRIM).
 }
 
@@ -474,7 +474,7 @@ GLOBAL FUNCTION scansatDutyCycle {
 
         IF TIME:SECONDS > nextStatus {
             SET nextStatus TO TIME:SECONDS + 600.
-            mLogWarn("STATS scansat duty charge=" + ROUND(frac * 100, 1)
+            mLog("STATS scansat duty charge=" + ROUND(frac * 100, 1)
                 + "pct scans=" + scansOn
                 + " areaNew=" + areaNew
                 + " flow=" + ROUND(shipSolarFlow(), 2)).
@@ -500,7 +500,7 @@ GLOBAL FUNCTION scansatDutyCycle {
     scienceStopScanners().
     mLog("Mapping COMPLETE: all active scan types >= "
         + ROUND(targetCov, 0) + "% — scanners off, continuing.").
-    mLogWarn("STATS scansat duty result=complete types="
+    mLog("STATS scansat duty result=complete types="
         + active:JOIN(",")).
     HUDTEXT("Mapping complete", 10, 2, 18, GREEN, FALSE).
 }

@@ -137,11 +137,11 @@ dependencyBands()                phases that load together
   `stateGet`/`stateSet` — never raw file I/O for mission state. Survives
   reboots, quickloads, power loss. Legacy SimpleJSON state can be converted
   once with `RUNPATH("0:/cmd/convertstatejson.ks").`.
-- **Flight log**: `mLog`/`mLogWarn`/`mLogError`; WARN-level `STATS ...` lines
-  summarize every plan/burn/phase for post-flight analysis. Each boot writes a
-  numbered per-core log under `1:/run/logs/<flight>/`; archive copies land in
-  `0:/logs/archive/<flight>/` at phase transitions and after WARN-level
-  `STATS` events when linked.
+- **Flight log**: `mLog`/`mLogWarn`/`mLogError`; `STATS ...` lines summarize
+  every plan/burn/phase as console-only info unless deliberately promoted.
+  Each boot writes a numbered per-core log under `1:/run/logs/<flight>/`;
+  archive copies land in `0:/logs/archive/<flight>/` at phase transitions and
+  after selected WARN events when linked.
 - **Observation telemetry** (`lib/observe.ks`): periodic one-line samples
   streamed straight to `0:/logs/obs/` when linked (offline lines buffer
   locally and flush on reconnect). `cmd/airtest.ks` drops the interval to 1 s

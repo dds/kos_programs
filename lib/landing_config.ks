@@ -186,7 +186,7 @@ GLOBAL FUNCTION landingImpactWithinTolerance {
 GLOBAL FUNCTION landingImpactAcceptableForAssist {
     LOCAL impactInfo IS _getImpactAimInfo().
     IF impactInfo["FOUND"] {
-        mLogWarn("STATS land-assist-impact dist="
+        mLog("STATS land-assist-impact dist="
             + ROUND(impactInfo["DIST"],0)
             + " along=" + ROUND(impactInfo["ALONG"],0)
             + " cross=" + ROUND(impactInfo["CROSS"],0)

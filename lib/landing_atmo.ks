@@ -149,7 +149,7 @@ GLOBAL FUNCTION phaseAtmoWalk {
         }
 
         SET cycles TO cycles + 1.
-        mLogWarn("STATS atmo-walk cycle=" + cycles
+        mLog("STATS atmo-walk cycle=" + cycles
             + " altKm=" + ROUND(SHIP:ALTITUDE/1000, 1)
             + " offsetM=" + ROUND(offset:MAG, 0)
             + " driftMps=" + ROUND(driftRate:MAG, 1)
@@ -168,7 +168,7 @@ GLOBAL FUNCTION phaseAtmoWalk {
     mLog("ATMO_WALK done (" + stopReason + ") cycles=" + cycles
         + " spentDv=" + ROUND(spentDv, 1)
         + " finalOffsetM=" + ROUND(finalOff["DIST"], 0) + ".").
-    mLogWarn("STATS atmo-walk result reason=" + stopReason
+    mLog("STATS atmo-walk result reason=" + stopReason
         + " cycles=" + cycles
         + " spentDv=" + ROUND(spentDv, 1)
         + " finalOffsetM=" + ROUND(finalOff["DIST"], 0)
