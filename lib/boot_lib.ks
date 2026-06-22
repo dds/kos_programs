@@ -187,31 +187,6 @@ GLOBAL FUNCTION bootLibArchiveOnly {
     RETURN ao:CONTAINS(ln).
 }
 
-GLOBAL FUNCTION bootPruneLibs {
-    PARAMETER wl.
-    LOCAL keep IS LIST(
-        "STATE", "LOGS", "FILES", "BOOT_LIB",
-        "CONFIG", "RESUME", "dependencies"
-    ).
-    FOR lib IN wl {
-        IF NOT bootLibArchiveOnly(lib)
-                AND NOT keep:CONTAINS(lib) { keep:ADD(lib). }
-    }
-    LOCAL sp IS PATH().
-    LOCAL items IS LIST().
-    CD("1:/lib").
-    LIST FILES IN items.
-    CD(sp).
-    FOR item IN items {
-        IF item:ISFILE {
-            LOCAL base IS bootBaseName(item:NAME).
-            IF NOT keep:CONTAINS(base) {
-                DELETEPATH("1:/lib/" + item:NAME).
-            }
-        }
-    }
-}
-
 GLOBAL FUNCTION bootMissionConfigIds {
     PARAMETER cn.
     PARAMETER hl.
@@ -721,26 +696,6 @@ GLOBAL FUNCTION bootLibBandRoots {
     RETURN roots.
 }
 
-GLOBAL FUNCTION bootLibBand {
-    PARAMETER band.
-    RETURN bootLibResolve(bootLibBandRoots(band)).
-}
-
-GLOBAL FUNCTION bootLibBandPhases {
-    PARAMETER band.
-    LOCAL bands IS dependencyBands().
-    LOCAL ps IS LIST().
-    LOCAL bk IS band.
-    IF bands:HASKEY(bk) {
-        FOR pn IN bands[bk] {
-            ps:ADD(pn).
-        }
-    } ELSE IF bk <> "" {
-        ps:ADD(bk).
-    }
-    RETURN ps.
-}
-
 GLOBAL FUNCTION bootLibBandForPhase {
     PARAMETER pn.
     PARAMETER db IS "".
@@ -768,10 +723,6 @@ GLOBAL FUNCTION bootLibPhaseRoots {
         FOR ln IN ps[pk] { bootLibAddUnique(roots, ln). }
     }
     RETURN roots.
-}
-
-GLOBAL FUNCTION bootLibAllPhases {
-    RETURN dependencyPhases():KEYS.
 }
 
 // ============================================================
@@ -859,18 +810,6 @@ GLOBAL FUNCTION missionHasPayload {
     }
     RETURN FALSE.
 }
-
-GLOBAL FUNCTION missionHasLandingPayload {
-    FOR raw IN missionPayloadsFromState() {
-        LOCAL pt IS missionNormalizePayloadType(raw).
-        IF pt = "LANDER" OR pt = "ASSISTLANDER"
-                OR pt = "ROVER" OR pt = "ASSISTROVER" {
-            RETURN TRUE.
-        }
-    }
-    RETURN FALSE.
-}
-
 
 // LIBS_EXTRA entries may be phase-scoped with lib@PHASE: the lib
 // loads only while the mission has NOT yet passed PHASE in the

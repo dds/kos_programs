@@ -31,8 +31,6 @@ LOCAL FUNCTION _writeCoastAutomation {
     LOG "SET KEEP_WARP TO " + configLiteral(KEEP_WARP) + "." TO profilePath.
     LOG "SET COAST_AUTO_WARP TO " + configLiteral(COAST_AUTO_WARP) + "." TO profilePath.
     LOG "SET COAST_AUTO_WARP_MIN TO " + configLiteral(COAST_AUTO_WARP_MIN) + "." TO profilePath.
-    LOG "SET COAST_HIBERNATE TO " + configLiteral(COAST_HIBERNATE) + "." TO profilePath.
-    LOG "SET COAST_HIBERNATE_MIN TO " + configLiteral(COAST_HIBERNATE_MIN) + "." TO profilePath.
     LOG "SET COAST_WARP_5M_LIMIT TO " + configLiteral(COAST_WARP_5M_LIMIT) + "." TO profilePath.
     LOG "SET COAST_WARP_1H_LIMIT TO " + configLiteral(COAST_WARP_1H_LIMIT) + "." TO profilePath.
     LOG "SET COAST_WARP_5H_LIMIT TO " + configLiteral(COAST_WARP_5H_LIMIT) + "." TO profilePath.

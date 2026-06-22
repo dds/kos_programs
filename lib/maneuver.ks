@@ -101,10 +101,6 @@ GLOBAL FUNCTION executeManeuver {
         IF PHASES_HAS_SOLAR { orientForSolar(FALSE, TRUE). }
         mLog("Long coast wait (" + ROUND(rt - TIME:SECONDS, 0) + "s).").
         HUDTEXT("Coasting. Burn in " + ROUND(st - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
-        IF COAST_HIBERNATE > 0
-                AND rt - TIME:SECONDS >= COAST_HIBERNATE_MIN {
-            _hc().
-        }
         coastAutoWarp(rt, "Burn coast", aid).
         LOCAL sr IS -1.
         UNTIL TIME:SECONDS >= rt {
@@ -818,23 +814,5 @@ LOCAL FUNCTION _cpb {
         "burn_abort_time", "burn_abort_residual", "burn_abort_paused"
     ) {
         stateRemove(key).
-    }
-}
-
-LOCAL FUNCTION _hc {
-    LOCAL found IS FALSE.
-    FOR p IN SHIP:PARTS {
-        IF p:HASMODULE("ModuleCommand") {
-            LOCAL cm IS p:GETMODULE("ModuleCommand").
-            IF cm:HASFIELD("hibernation") {
-                cm:SETFIELD("hibernation", TRUE).
-                SET found TO TRUE.
-            }
-        }
-    }
-    IF found {
-        mLog("Command module hibernating for long coast.").
-    } ELSE {
-        mLogWarn("Long coast hibernation requested but no toggle found.").
     }
 }
