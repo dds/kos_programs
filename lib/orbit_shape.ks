@@ -59,6 +59,10 @@ GLOBAL SHAPE_AOP IS -1.
 GLOBAL SHAPE_ALT_TOL IS 5000.
 GLOBAL SHAPE_ANG_TOL IS 0.2.
 GLOBAL SHAPE_AOP_TOL IS 0.5.
+// An apsis a few km off (vs SHAPE_ALT_TOL) can need essentially no dV
+// from the far apsis on an eccentric orbit. Don't execute a node below
+// this floor — skip it and move to the next correction.
+GLOBAL SHAPE_MIN_BURN_DV IS 0.4.
 
 
 LOCAL MAX_RETRIES        IS 5.
@@ -816,6 +820,28 @@ LOCAL FUNCTION _finishShapeNode {
     RETURN LEX("node", nd, "label", label).
 }
 
+// _apsisBurn — plan a tangential apsis burn, but SKIP it when the
+// correction is below SHAPE_MIN_BURN_DV. On an eccentric orbit an
+// apsis can sit several km off target yet need ~0 m/s from the far
+// apsis; executing that node just burns an iteration (and, done from
+// a low periapsis, the trim is cheap — so skipping it lets the
+// eccentricity-reducing set-pe run first WITHOUT the dV penalty of
+// re-trimming AP later from a raised periapsis). Returns the finished
+// burn LEX, the string "skip" (caller falls through to the next
+// correction), or 0 when discarded.
+LOCAL FUNCTION _apsisBurn {
+    PARAMETER burnEta, burnTa, targetAlt, label, targets.
+    LOCAL nd IS _planTangentBurnAt(burnEta, burnTa, targetAlt, label).
+    IF nd:DELTAV:MAG < SHAPE_MIN_BURN_DV {
+        mLog("SHAPE " + label + ": dV " + ROUND(nd:DELTAV:MAG, 2)
+            + " m/s below " + SHAPE_MIN_BURN_DV
+            + " m/s floor — apsis already close, skipping.").
+        REMOVE nd.
+        RETURN "skip".
+    }
+    RETURN _finishShapeNode(nd, label, targets).
+}
+
 // ============================================================
 // shapeNextBurn — plan the single most-needed correction burn.
 // Returns LEX("node", nd, "label", text) or 0 when converged
@@ -849,9 +875,8 @@ GLOBAL FUNCTION shapeNextBurn {
             AND targets["AP"] >= SHIP:PERIAPSIS {
         LOCAL etaPe0 IS ETA:PERIAPSIS.
         IF etaPe0 < 60 { SET etaPe0 TO etaPe0 + SHIP:ORBIT:PERIOD. }
-        RETURN _finishShapeNode(
-            _planTangentBurnAt(etaPe0, 0, targets["AP"], "set-ap"),
-            "set-ap", targets).
+        LOCAL r0 IS _apsisBurn(etaPe0, 0, targets["AP"], "set-ap", targets).
+        IF r0:ISTYPE("Lexicon") { RETURN r0. }
     }
 
     // --- 2. Orbit plane (INC + LAN in one burn) ---
@@ -881,19 +906,16 @@ GLOBAL FUNCTION shapeNextBurn {
                 LOCAL ta1 IS _placedApsisTa(targets["AOP"]).
                 LOCAL eta1 IS etaToTrueAnomaly(ta1).
                 IF eta1 < 60 { SET eta1 TO eta1 + SHIP:ORBIT:PERIOD. }
-                RETURN _finishShapeNode(
-                    _planTangentBurnAt(eta1, ta1, targets["AP"], "placed-pe"),
-                    "placed-pe", targets).
-            }
-            IF targets:HASKEY("PE") {
+                LOCAL rp IS _apsisBurn(eta1, ta1, targets["AP"], "placed-pe", targets).
+                IF rp:ISTYPE("Lexicon") { RETURN rp. }
+            } ELSE IF targets:HASKEY("PE") {
                 // Shrinking orbit: burn retrograde at the desired AP
                 // location (AoP+180), lowering the opposite side to PE.
                 LOCAL ta2 IS _placedApsisTa(targets["AOP"] + 180).
                 LOCAL eta2 IS etaToTrueAnomaly(ta2).
                 IF eta2 < 60 { SET eta2 TO eta2 + SHIP:ORBIT:PERIOD. }
-                RETURN _finishShapeNode(
-                    _planTangentBurnAt(eta2, ta2, targets["PE"], "placed-ap"),
-                    "placed-ap", targets).
+                LOCAL rp IS _apsisBurn(eta2, ta2, targets["PE"], "placed-ap", targets).
+                IF rp:ISTYPE("Lexicon") { RETURN rp. }
             }
         }
     }
@@ -906,16 +928,14 @@ GLOBAL FUNCTION shapeNextBurn {
     IF needAp2 AND targets["AP"] >= SHIP:PERIAPSIS {
         LOCAL etaPe IS ETA:PERIAPSIS.
         IF etaPe < 60 { SET etaPe TO etaPe + SHIP:ORBIT:PERIOD. }
-        RETURN _finishShapeNode(
-            _planTangentBurnAt(etaPe, 0, targets["AP"], "set-ap"),
-            "set-ap", targets).
+        LOCAL r4 IS _apsisBurn(etaPe, 0, targets["AP"], "set-ap", targets).
+        IF r4:ISTYPE("Lexicon") { RETURN r4. }
     }
     IF needPe2 {
         LOCAL etaAp IS ETA:APOAPSIS.
         IF etaAp < 60 { SET etaAp TO etaAp + SHIP:ORBIT:PERIOD. }
-        RETURN _finishShapeNode(
-            _planTangentBurnAt(etaAp, 180, targets["PE"], "set-pe"),
-            "set-pe", targets).
+        LOCAL r5 IS _apsisBurn(etaAp, 180, targets["PE"], "set-pe", targets).
+        IF r5:ISTYPE("Lexicon") { RETURN r5. }
     }
 
     // --- 5. Argument of periapsis (in-plane apsidal rotation) ---
@@ -929,9 +949,8 @@ GLOBAL FUNCTION shapeNextBurn {
         // dip via the Ap burn anyway; next round restores PE.
         LOCAL etaAp2 IS ETA:APOAPSIS.
         IF etaAp2 < 60 { SET etaAp2 TO etaAp2 + SHIP:ORBIT:PERIOD. }
-        RETURN _finishShapeNode(
-            _planTangentBurnAt(etaAp2, 180, targets["AP"], "set-pe-for-ap"),
-            "set-pe-for-ap", targets).
+        LOCAL r6 IS _apsisBurn(etaAp2, 180, targets["AP"], "set-pe-for-ap", targets).
+        IF r6:ISTYPE("Lexicon") { RETURN r6. }
     }
 
     RETURN 0.
