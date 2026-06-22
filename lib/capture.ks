@@ -34,7 +34,6 @@ LOCAL FUNCTION _enterSolarCoast {
             AND PHASES_HAS_SOLAR {
         orientForSolar(TRUE, TRUE, TRUE).
     }
-    IF PHASES_HAS_SOLAR { commandCoresHibernate(TRUE). }
     LOCAL solarRef IS -1.
     IF checkEntryHealth {
         SET solarRef TO trySolarHoldTick(-1).

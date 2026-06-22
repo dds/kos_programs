@@ -11,7 +11,6 @@
 // --- Config defaults owned by this file ---
 GLOBAL SOLAR_HOLD_RATIO IS 0.92.
 GLOBAL SOLAR_HOLD_EC IS 0.75.
-GLOBAL SOLAR_HIBERNATE_CORES IS 1.
 GLOBAL SOLAR_SEARCH_SKIP_FIRST_BOOT IS 1.
 GLOBAL SOLAR_SEARCH_LAUNCH_GUARD IS 300.
 GLOBAL SOLAR_SEARCH_KSC_RADIUS IS 10000.
@@ -21,33 +20,8 @@ GLOBAL SOLAR_CHARGE_FULL_EC IS 0.995.
 
 IF DEFINED PHASES_HAS_SOLAR { SET PHASES_HAS_SOLAR TO TRUE. }
 
-LOCAL _commandHibernateActive IS FALSE.
-
-GLOBAL FUNCTION commandCoresHibernate {
-    PARAMETER enabled IS TRUE.
-    IF NOT enabled { RETURN 0. }
-    IF SOLAR_HIBERNATE_CORES = 0 { RETURN 0. }
-    IF NOT (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
-            OR SHIP:STATUS = "SUB_ORBITAL") {
-        RETURN 0.
-    }
-
-    LOCAL count IS 0.
-    FOR p IN SHIP:PARTS {
-        IF p:HASMODULE("ModuleCommand") {
-            LOCAL m IS p:GETMODULE("ModuleCommand").
-            IF m:HASFIELD("hibernation") {
-                m:SETFIELD("hibernation", TRUE).
-                SET count TO count + 1.
-            }
-        }
-    }
-    IF count > 0 AND NOT _commandHibernateActive {
-        mLog("Command core hibernation enabled (" + count + ").").
-    }
-    IF count > 0 { SET _commandHibernateActive TO TRUE. }
-    RETURN count.
-}
+// Command-core hibernation is handled by the stock "Hibernate in
+// Warp" part toggle (set in the VAB), so this lib no longer pokes it.
 
 // Sum of "energy flow" over all solar panels (falls back to
 // "sun exposure"); -1 when no readable panel fields exist.
@@ -119,15 +93,35 @@ LOCAL FUNCTION _solarAim {
         ROTATEFROMTO(SHIP:FACING * aShip, SUN:POSITION) * SHIP:FACING.
 }
 
+// Aim the axis at the Sun and wait until the ship is BOTH pointed and
+// has stopped rotating before returning — measuring flow mid-slew is
+// what made the coarse search bleed one axis's reading into the next.
 LOCAL FUNCTION _solarAimSettle {
     PARAMETER aShip.
     _solarAim(aShip).
-    LOCAL deadline IS TIME:SECONDS + 25.
-    UNTIL VANG(SHIP:FACING * aShip, SUN:POSITION) < 3
-            OR TIME:SECONDS > deadline {
+    LOCAL deadline IS TIME:SECONDS + 30.
+    UNTIL TIME:SECONDS > deadline {
+        IF VANG(SHIP:FACING * aShip, SUN:POSITION) < 2
+                AND SHIP:ANGULARVEL:MAG < 0.03 {
+            BREAK.
+        }
         WAIT 0.2.
     }
-    WAIT 2.   // let panel tracking and the flow readout update
+    WAIT 1.5.   // let panel sun-tracking and the flow readout catch up
+}
+
+// Cache the winning axis, release/keep steering per the caller, and log.
+LOCAL FUNCTION _solarFinish {
+    PARAMETER aShip.
+    PARAMETER lockSteering.
+    PARAMETER note.
+    stateSet("solar_axis", LIST(
+        ROUND(aShip:X, 4), ROUND(aShip:Y, 4), ROUND(aShip:Z, 4))).
+    IF NOT lockSteering { UNLOCK STEERING. }
+    mLog("Solar attitude set (" + note + "): flow="
+        + ROUND(shipSolarFlow(), 2) + ".").
+    mLogWarn("STATS solar orient flow=" + ROUND(shipSolarFlow(), 2)
+        + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
 }
 
 LOCAL FUNCTION _solarSearchGuardReason {
@@ -170,13 +164,16 @@ LOCAL FUNCTION _logSolarSearchGuard {
 
 // ============================================================
 // orientForSolar — find and hold the attitude that maximizes
-// MEASURED solar energy flow. Panel layouts differ (one panel
-// on one side is common), so no geometric assumption survives:
-// the six body axes of the first panel part are physically
-// tried, total energy flow is read from the panel modules, and
-// the winner is held — then cached in state (solar_axis) so
-// later calls skip the search. The hold is plain SAS, so
-// keeping the attitude costs (almost) no battery.
+// MEASURED solar energy flow, then cache it (solar_axis) so later
+// calls skip the search. Every decision is by measured flow, so no
+// panel-layout assumption is needed:
+//   1. Aim the panel's own normal at the Sun and settle (the settle
+//      waits for rotation to STOP before reading — otherwise the
+//      coarse search bleeds one axis's flow into the next).
+//   2. Tracking test: swing 45 deg off-Sun. If flow holds, the panels
+//      self-track — keep this aim and let them work (a search would
+//      just fight their motion).
+//   3. Fixed panels only: try the part's six body axes, hold the best.
 // ============================================================
 GLOBAL FUNCTION orientForSolar {
     PARAMETER forceSearch IS FALSE.
@@ -222,19 +219,49 @@ GLOBAL FUNCTION orientForSolar {
         }
     }
 
-    // Candidate sun-pointing axes: the panel part's six body
-    // axes, expressed in the SHIP frame so they survive turns.
+    // Point the panel part's own normal (its forward) at the Sun and
+    // measure once. This is candidate zero for fixed panels and the
+    // hold for self-tracking panels.
     LOCAL pf IS panels[0]:FACING.
     LOCAL inv IS SHIP:FACING:INVERSE.
+    LOCAL primary IS inv * pf:FOREVECTOR.
+    _solarAimSettle(primary).
+    LOCAL f1 IS shipSolarFlow().
+    IF f1 < 0 {
+        mLogWarn("Solar: panels found but no readable flow/exposure fields — skipping.").
+        UNLOCK STEERING.
+        IF lockSteering { SET SAS TO FALSE. }
+        RETURN.
+    }
+
+    // Tracking test: swing ~45 deg off the Sun. Sun-tracking panels
+    // re-aim themselves, so flow barely drops; fixed panels fall off
+    // like a cosine (cos 45 ~ 0.71). If they track, any sun-ish hold
+    // works — keep this aim and let the panel do the rest, instead of
+    // a six-axis search that would only fight its motion.
+    IF f1 > 0 {
+        LOCAL refV IS V(1, 0, 0).
+        IF ABS(primary:X) > 0.9 { SET refV TO V(0, 1, 0). }
+        LOCAL perp IS VCRS(primary, refV):NORMALIZED.
+        LOCAL offAxis IS (ANGLEAXIS(45, perp) * primary):NORMALIZED.
+        _solarAimSettle(offAxis).
+        LOCAL f2 IS shipSolarFlow().
+        IF f2 >= f1 * 0.8 {
+            _solarAimSettle(primary).
+            _solarFinish(primary, lockSteering, "tracking panels").
+            RETURN.
+        }
+    }
+
+    // Fixed panels: hold the best-measured of the part's six body axes.
     LOCAL cands IS LIST(
-        inv * pf:FOREVECTOR, inv * (-1 * pf:FOREVECTOR),
+        primary, inv * (-1 * pf:FOREVECTOR),
         inv * pf:TOPVECTOR,  inv * (-1 * pf:TOPVECTOR),
         inv * pf:STARVECTOR, inv * (-1 * pf:STARVECTOR)).
-
-    mLog("Solar search: trying 6 panel axes for best energy flow.").
-    LOCAL bestFlow IS -2.
-    LOCAL bestAxis IS cands[0].
-    LOCAL i IS 0.
+    mLog("Solar search: six fixed-panel axes for best energy flow.").
+    LOCAL bestFlow IS f1.
+    LOCAL bestAxis IS primary.
+    LOCAL i IS 1.   // primary already measured as cands[0]
     UNTIL i >= cands:LENGTH {
         _solarAimSettle(cands[i]).
         LOCAL flow IS shipSolarFlow().
@@ -246,68 +273,17 @@ GLOBAL FUNCTION orientForSolar {
         SET i TO i + 1.
     }
 
-    IF bestFlow < 0 {
-        mLogWarn("Solar search: panels found but no readable flow/exposure fields — skipping.").
-        UNLOCK STEERING.
-        IF lockSteering {
-            SET SAS TO FALSE.
-        }
-        RETURN.
-    }
     IF bestFlow <= 0 {
-        mLogWarn("Solar search: all axes have zero flow — likely night.").
-        mLogWarn("STATS solar orient status=night"
-            + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
+        mLogWarn("Solar search: all axes zero flow — likely night.").
+        mLogWarn("STATS solar orient status=night charge="
+            + ROUND(shipPowerFraction() * 100, 1) + "pct").
         UNLOCK STEERING.
-        IF lockSteering {
-            SET SAS TO FALSE.
-        }
+        IF lockSteering { SET SAS TO FALSE. }
         RETURN.
-    }
-
-    // Refine around the winner: the panel normal need not lie on
-    // a part axis (angled mounts, offset cells), so the coarse
-    // best can sit on a cosine shoulder. Hill-climb the aim with
-    // shrinking angular steps, keeping only candidates that
-    // MEASURE better. (VCRS here only generates trial directions
-    // — every decision is by measured flow, so the left-handed
-    // frame can't bite.)
-    LOCAL i2 IS 0.
-    FOR step IN LIST(15, 5) {
-        LOCAL refAxis IS V(1, 0, 0).
-        IF ABS(bestAxis:X) > 0.9 { SET refAxis TO V(0, 1, 0). }
-        LOCAL perpU IS VCRS(bestAxis, refAxis):NORMALIZED.
-        LOCAL perpW IS VCRS(bestAxis, perpU):NORMALIZED.
-        FOR rotAxis IN LIST(perpU, perpW) {
-            FOR sgn IN LIST(1, -1) {
-                LOCAL cand IS
-                    (ANGLEAXIS(step * sgn, rotAxis) * bestAxis):NORMALIZED.
-                _solarAimSettle(cand).
-                LOCAL flow IS shipSolarFlow().
-                SET i2 TO i2 + 1.
-                IF flow > bestFlow + 0.005 {
-                    mLog("  refine " + step + "deg: flow "
-                        + ROUND(bestFlow, 3) + " -> " + ROUND(flow, 3) + ".").
-                    SET bestFlow TO flow.
-                    SET bestAxis TO cand.
-                }
-            }
-        }
     }
 
     _solarAimSettle(bestAxis).
-    stateSet("solar_axis", LIST(
-        ROUND(bestAxis:X, 4),
-        ROUND(bestAxis:Y, 4),
-        ROUND(bestAxis:Z, 4))).
-    if lockSteering {
-    } else {
-        UNLOCK STEERING.
-    }
-    mLog("Solar attitude set: flow=" + ROUND(shipSolarFlow(), 2)
-        + " (best of search " + ROUND(bestFlow, 2) + ").").
-    mLogWarn("STATS solar orient flow=" + ROUND(shipSolarFlow(), 2)
-        + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
+    _solarFinish(bestAxis, lockSteering, "best of 6").
 }
 
 // ============================================================
@@ -325,7 +301,6 @@ GLOBAL FUNCTION orientForSolar {
 // ============================================================
 GLOBAL FUNCTION solarHoldTick {
     PARAMETER refFlow.
-    commandCoresHibernate(TRUE).
     IF NOT shipHasSolarPanels() { RETURN refFlow. }
     LOCAL ratio IS 0.92.
     SET ratio TO SOLAR_HOLD_RATIO.
@@ -362,7 +337,6 @@ GLOBAL FUNCTION solarHoldTick {
     orientForSolar(FALSE, TRUE).
     WAIT 1.
     LOCAL newRef IS shipSolarFlow().
-    commandCoresHibernate(TRUE).
     mLog("Solar hold: re-aimed at "
         + ROUND(100 * flow / refFlow, 0) + "% — flow "
         + ROUND(newRef, 2) + ". Restoring warp " + savedWarp + ".").
