@@ -8,6 +8,9 @@
 // for telemetry; electrical management itself belongs to AmpYear.
 // ============================================================
 
+@CLOBBERBUILTINS ON.
+@LAZYGLOBAL OFF.
+
 // --- Config defaults owned by this file ---
 GLOBAL SOLAR_HOLD_RATIO IS 0.92.
 GLOBAL SOLAR_HOLD_EC IS 0.75.
