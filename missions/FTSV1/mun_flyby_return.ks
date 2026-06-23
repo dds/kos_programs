@@ -47,6 +47,11 @@ SET LAUNCH_PLANE_MODE TO "BODY_ORBIT".   // align to the Mun's plane
 SET TRANSFER_SCAN_SAMPLES_PER_ORBIT TO 16.
 SET COAST_AUTO_WARP TO 1.                // auto-warp the long quiet coasts
 SET KEEP_WARP TO 1.
+// Launch escape system: tagged "abortsystem", AG1 decouples + fires its
+// jettison motor. PARK turns retrograde and fires it once in orbit
+// (these match the lib defaults; here for documentation).
+SET ABORT_TOWER_TAG TO "abortsystem".
+SET ABORT_TOWER_AG TO 1.
 
 // --- Mun flyby (no capture / no landing) ---
 // CAPTURE_PE is the flyby periapsis altitude over the Mun. 50 km is a

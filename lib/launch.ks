@@ -13,6 +13,12 @@ GLOBAL FAIRING_ALT IS 72000.
 GLOBAL EXTEND_ALT IS 73500.
 GLOBAL RECOVERY_PE IS -1.
 GLOBAL ORBIT_STAY_TIME IS 0.
+// Launch escape system: if a part is tagged ABORT_TOWER_TAG, the PARK
+// phase turns retrograde and fires ABORT_TOWER_AG (decouple + jettison
+// motor) once a stable parking orbit is reached. No tagged part => skip.
+GLOBAL ABORT_TOWER_TAG IS "abortsystem".
+GLOBAL ABORT_TOWER_AG IS 1.
+GLOBAL ABORT_TOWER_ALIGN_DEG IS 5.
 
 LOCAL FUNCTION _launchAge {
     RETURN TIME:SECONDS - stateGetNum("launch_time", 0).
@@ -394,6 +400,34 @@ LOCAL FUNCTION _logParkingPlaneResult {
         + " lanErr=" + ROUND(lanErr, 3)).
 }
 
+LOCAL FUNCTION _fireActionGroup {
+    PARAMETER n.
+    IF n = 1 { AG1 ON. } ELSE IF n = 2 { AG2 ON. }
+    ELSE IF n = 3 { AG3 ON. } ELSE IF n = 4 { AG4 ON. }
+    ELSE IF n = 5 { AG5 ON. } ELSE IF n = 6 { AG6 ON. }
+    ELSE IF n = 7 { AG7 ON. } ELSE IF n = 8 { AG8 ON. }
+    ELSE IF n = 9 { AG9 ON. } ELSE IF n = 10 { AG10 ON. }
+}
+
+// Jettison the launch escape system once in a parking orbit: point
+// retrograde, then fire its action group (decouple + jettison motor)
+// so it departs clear of the ship. No-op when nothing is tagged.
+LOCAL FUNCTION _jettisonAbortTower {
+    IF ABORT_TOWER_TAG = "" { RETURN. }
+    IF SHIP:PARTSTAGGED(ABORT_TOWER_TAG):LENGTH = 0 { RETURN. }
+
+    mLog("LES jettison: orienting retrograde, then AG" + ABORT_TOWER_AG + ".").
+    SAS OFF.
+    LOCK STEERING TO RETROGRADE.
+    LOCAL deadline IS TIME:SECONDS + 60.
+    WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, RETROGRADE:VECTOR) < ABORT_TOWER_ALIGN_DEG
+        OR TIME:SECONDS > deadline.
+    _fireActionGroup(ABORT_TOWER_AG).
+    WAIT 3.
+    UNLOCK STEERING.
+    mLog("Launch escape system jettisoned.").
+}
+
 GLOBAL FUNCTION phaseParking {
     mLog("Waiting for stable parking orbit...").
     WAIT UNTIL _isParkingOrbitStable() OR ABORT.
@@ -405,6 +439,7 @@ GLOBAL FUNCTION phaseParking {
     orbitSummary().
     _logParkingPlaneResult().
     mLog("Stable parking orbit confirmed.").
+    _jettisonAbortTower().
     nextPhase(launchSeq).
 }
 
