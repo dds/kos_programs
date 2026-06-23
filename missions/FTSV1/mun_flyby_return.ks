@@ -1,6 +1,12 @@
 // ============================================================
-// FTSV mission profile — Mun Flyby & Return (near KSC)
-// (0:/missions/FTSV/mun_flyby_return.ks)
+// FTSV1 mission profile — Mun Flyby & Return (near KSC)
+// (0:/missions/FTSV1/mun_flyby_return.ks)
+//
+// Vehicle: single fixed solar panel (orientForSolar's fixed-panel
+// search applies); reaches LKO with ~1286 m/s on a low-TWR pug upper
+// stage (0.38 -> 0.56 TWR) — expect long, early-started burns. The pug
+// stage flies the flyby and is decoupled during reentry (~49 km), flung
+// aside, leaving the capsule + chutes.
 //
 // The inaugural FTSV-class tourist flight. Goals, in order:
 //   SAFETY    — high (85 km) parking orbit for a gentle ascent and a
@@ -21,7 +27,7 @@
 // ============================================================
 
 SET MISSION_ID TO "mun_flyby_return".
-SET MISSION_NAME TO "FTSV Mun Flyby & Return".
+SET MISSION_NAME TO "FTSV1 Mun Flyby & Return".
 SET TARGET_ TO "MUN".
 SET PAYLOADS TO LIST("TOURIST").
 SET SEQUENCE TO LIST(
@@ -55,10 +61,15 @@ SET TARGET_LAT TO -0.0972.               // KSC
 SET TARGET_LNG TO -74.5577.
 SET TARGET_LOCK TO 1.
 SET AEROBRAKE_TARGETING TO 1.
-SET AEROBRAKE_REENTRY_DIR TO "RETROGRADE".
+SET AEROBRAKE_REENTRY_DIR TO "RETROGRADE".   // hold retrograde through entry
 SET AEROBRAKE_ARM_CHUTES TO 1.
 SET RETURN_ARM_CHUTES TO 1.
 
-// Chute / decoupler tags are airframe-specific — set DESCENT_CHUTES_TAG
-// (and any DESCENT_* drop tags) here once the FTSV's parts are tagged
-// in the VAB, or leave to craft/FTSV.ks hardware defaults.
+// --- Stage separation + chutes during reentry ---
+// Shed the spent pug stage at ~49 km (the tagged decoupler flings it
+// clear), leaving the capsule to ride its chutes down. Tags use the
+// house convention; confirm they match the FTSV1's VAB part tags.
+SET DESCENT_DECOUPLER_TAG TO "descent_decoupler".
+SET DESCENT_DECOUPLE_ALT TO 49000.
+SET DESCENT_CHUTES_TAG TO "descent_chutes".
+SET DESCENT_RELEASE_ALT TO 38000.            // arm/stage chutes (Kerbin)

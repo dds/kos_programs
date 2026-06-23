@@ -2,12 +2,12 @@
 // rocket_craft.ks — shared Falcon-family rocket flight-computer
 // plumbing  (0:/lib/rocket_craft.ks)
 //
-// The Falcon-family craft scripts (FalconHeavy, FTSV, ...) each
+// The Falcon-family craft scripts (FalconHeavy, FTSV1, ...) each
 // carried the same phase-sequence builder, phase map, and band-lib
 // resolver. They now reduce to config + delegation:
 //
 //   bootLibLoad("rocket_craft").
-//   GLOBAL BOOT_CLEANUP IS LEXICON("vehicle", "FTSV").
+//   GLOBAL BOOT_CLEANUP IS LEXICON("vehicle", "FTSV1").
 //   GLOBAL FUNCTION bootVehicleLibs { RETURN rocketVehicleLibs(). }
 //   GLOBAL FUNCTION main { rocketMain(rocketBuildPhaseSequence@,
 //                                     rocketBuildPhaseMap@). }

@@ -1,11 +1,12 @@
 // ============================================================
-// FTSV.ks — Falcon Tourist Service Vehicle flight computer
-// (0:/craft/FTSV.ks)
+// FTSV1.ks — Falcon Tourist Service Vehicle, hull 1
+// (0:/craft/FTSV1.ks)
 //
-// Crewed tourist Falcon: smooth ascent to a high parking orbit for
-// time in weightlessness, then beyond. Shares the Falcon-family rocket
-// plumbing in lib/rocket_craft.ks — this file is just config +
-// delegation.
+// First crewed FTSV-class tourist Falcon. Single fixed solar panel;
+// reaches LKO with ~1286 m/s spare on a low-TWR "pug" upper stage
+// (0.38 -> 0.56 TWR) that flies the Mun flyby and is shed during
+// reentry. Shares the Falcon-family rocket plumbing in
+// lib/rocket_craft.ks — this file is just config + delegation.
 // ============================================================
 
 GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
@@ -23,7 +24,7 @@ applyKnownMissionState().
 bootLibLoad("rocket_craft").
 
 GLOBAL BOOT_CLEANUP IS LEXICON(
-    "vehicle", "FTSV"
+    "vehicle", "FTSV1"
 ).
 
 GLOBAL FUNCTION bootVehicleLibs {
