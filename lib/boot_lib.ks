@@ -274,7 +274,7 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     }
     IF getTarget("") <> "" { PRINT "  Target:  " + getTarget(""). }
     IF PAYLOADS:LENGTH > 0 { PRINT "  Payload: " + PAYLOADS. }
-    printStorageStatus().
+    IF DEFINED printStorageStatus { printStorageStatus(). }
     RETURN TRUE.
 }
 
@@ -709,16 +709,18 @@ GLOBAL FUNCTION bootLibLoadList {
     PARAMETER roots.
     FOR ln IN bootLibResolve(roots) {
         LOCAL ap IS bootArchivePath(ln).
-        IF ln = "solar" AND DEFINED PHASES_HAS_SOLAR {
-            SET PHASES_HAS_SOLAR TO TRUE.
-        }
         IF ln:CONTAINS("/") {
             bootLibSync(ln).
             RUNPATH(bootCorePath(ln)).
-        } ELSE IF bootLibArchiveOnly(ln)
-                AND HOMECONNECTION:ISCONNECTED
-                AND EXISTS(ap) {
-            RUNONCEPATH(ap).
+        } ELSE IF bootLibArchiveOnly(ln) {
+            // Archive-only: run from 0:/ only when linked; never synced
+            // to the probe (saves local space). Offline it's simply not
+            // loaded this boot — callers must gate on a link or their own
+            // flag. solar.ks self-sets PHASES_HAS_SOLAR when it loads, so
+            // an unloaded solar leaves the flag FALSE and orient is skipped.
+            IF HOMECONNECTION:ISCONNECTED AND EXISTS(ap) {
+                RUNONCEPATH(ap).
+            }
         } ELSE {
             bootLibSync(ln).
             RUNONCEPATH(bootCorePath(ln)).

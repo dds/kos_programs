@@ -12,7 +12,12 @@
 GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
     "xfer_plan",
     "maneuver_transfer",
-    "maneuver_targeting"
+    "maneuver_targeting",
+    // Run solar from the archive only when linked — never synced to the
+    // probe's tight volume (6.5KB). Offline coast-charging is something
+    // we can live without when out of link; the maneuver/coast hooks gate
+    // on PHASES_HAS_SOLAR, which solar.ks self-sets only when it loads.
+    "solar"
 ).
 
 applyKnownMissionState().

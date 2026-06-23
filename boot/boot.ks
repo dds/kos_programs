@@ -289,7 +289,7 @@ IF phase_ = "" OR phase_ = "ABORT" {
 
 PRINT " ".
 PRINT "  BOOT #" + bootCount + " OK".
-printStorageStatus().
+IF DEFINED printStorageStatus { printStorageStatus(). }
 IF HAS_LINK { archiveLog(). }
 IF stateGet("phase", "") = "ABORT" { bootLibLoad("recovery"). }
 
