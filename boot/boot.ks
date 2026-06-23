@@ -65,7 +65,13 @@ LOCAL FUNCTION _syncLib {
     LOCAL dstKsm IS "1:/lib/" + libName + ".ksm".
     IF EXISTS(src) {
         IF NOT KSM_SKIP:CONTAINS(libName) {
-            COMPILE src TO dstKsm.
+            // Compile on the spacious archive, then copy the .ksm down
+            // (delete first so it needs only the file's size) — a
+            // nearly-full probe can't hold the compiler's scratch space.
+            LOCAL arKsm IS "0:/lib/" + libName + ".ksm".
+            COMPILE src TO arKsm.
+            IF EXISTS(dstKsm) { DELETEPATH(dstKsm). }
+            COPYPATH(arKsm, dstKsm).
         } ELSE {
             COPYPATH(src, dst).
         }

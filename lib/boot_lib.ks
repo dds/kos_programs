@@ -702,7 +702,16 @@ GLOBAL FUNCTION bootLibSync {
     LOCAL src IS bootArchivePath(ln).
     IF NOT EXISTS(src) { RETURN. }
     bootEnsureScriptDir(ln).
-    COMPILE src TO bootCompiledPath(ln).
+    // Compile on the (spacious) archive, then copy the finished .ksm to
+    // the probe. A nearly-full local volume can't hold the compiler's
+    // working space, but it can hold the file — delete the old copy
+    // first so the copy needs only the file's size, not double.
+    LOCAL arKsm IS "0:/lib/" + ln + ".ksm".
+    IF ln:CONTAINS("/") { SET arKsm TO "0:/" + ln + ".ksm". }
+    COMPILE src TO arKsm.
+    LOCAL dest IS bootCompiledPath(ln).
+    IF EXISTS(dest) { DELETEPATH(dest). }
+    COPYPATH(arKsm, dest).
 }
 
 GLOBAL FUNCTION bootLibLoadList {
