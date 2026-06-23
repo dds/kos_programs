@@ -50,6 +50,19 @@ LOCAL ATM_HEIGHTS IS LEXICON(
 GLOBAL FUNCTION phaseAerobrake {
     mLogPhase("AEROBRAKE").
 
+    // If entered while still coasting through an AIRLESS SOI (a Mun
+    // flyby's outbound leg hands off mid-escape), wait until we're at
+    // the body we'll actually aerobrake. Otherwise the Pe-trim and
+    // targeting run against the wrong orbit — flight-found: it tried to
+    // deepen the *Mun* Pe (2146km) to 25km and capped out.
+    IF NOT SHIP:BODY:ATM:EXISTS {
+        mLog("Aerobrake: in airless " + SHIP:BODY:NAME
+            + " SOI — coasting until at an atmosphere body...").
+        WAIT UNTIL SHIP:BODY:ATM:EXISTS
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+        mLog("Aerobrake: now at " + SHIP:BODY:NAME + ".").
+    }
+
     // --- Step 1: entry alarm FIRST, so the operator can warp the
     // approach down while impact-site targeting waits for Trajectories
     // to resolve an impact (it can't, far out on a return). ---
@@ -366,9 +379,11 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
         RETURN.
     }
 
-    // Create correction node 60s from now
+    // Correction node well ahead of now: the coordinate search below
+    // takes ~70s, and a 60s node had its window pass before executing
+    // (flight-found "burn window already passed by 15s").
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    LOCAL nd IS NODE(TIME:SECONDS + 60, 0, 0, 0).
+    LOCAL nd IS NODE(TIME:SECONDS + 240, 0, 0, 0).
     ADD nd.
     WAIT 0.3.
 
