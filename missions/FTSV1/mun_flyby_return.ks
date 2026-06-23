@@ -80,13 +80,20 @@ SET AEROBRAKE_TARGETING TO 1.
 SET AEROBRAKE_REENTRY_DIR TO "RETROGRADE".   // hold retrograde through entry
 SET AEROBRAKE_ARM_CHUTES TO 1.
 SET RETURN_ARM_CHUTES TO 1.
+// Auto-deepen the reentry Pe to REENTRY_PE (25km) with the pug stage
+// before it's jettisoned — guarantees capture + a Trajectories impact
+// so the KSC impact-site targeting has something to steer.
+SET AEROBRAKE_PE_TARGETING TO 1.
 
-// --- Stage separation + chutes during reentry ---
-// Shed the spent pug stage at ~49 km (the tagged decoupler flings it
-// clear), leaving the capsule to ride its chutes down. Tags use the
-// house convention; confirm they match the FTSV1's VAB part tags.
+// --- Stage separation + chutes ---
+// Shed the pug stage at 50.5km, flinging it clear. The pug stays
+// attached through the AEROBRAKE deepen + KSC-targeting burns (it has
+// the engine), then drops here. 50.5km, not lower: at 49km the pug's
+// solar panel cooked off before separation. Reentry stability is the
+// onion capsule's job (blunt heat shield forward). Tag must match the
+// FTSV1 decoupler in the VAB.
 SET DESCENT_DECOUPLER_TAG TO "descent_decoupler".
-SET DESCENT_DECOUPLE_ALT TO 49000.
+SET DESCENT_DECOUPLE_ALT TO 50500.
 SET DESCENT_CHUTES_TAG TO "descent_chutes".
 SET DESCENT_RELEASE_ALT TO 38000.            // arm/stage chutes (Kerbin)
 // Shed the heat shield low (~500m AGL) for a lighter final descent.

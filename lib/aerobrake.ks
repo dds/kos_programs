@@ -18,7 +18,12 @@ GLOBAL AEROBRAKE_DECOUPLE_TAG IS "".
 GLOBAL AEROBRAKE_REENTRY_DIR IS "".
 GLOBAL AEROBRAKE_ARM_CHUTES IS 0.
 GLOBAL AEROBRAKE_TARGETING IS 1.
-GLOBAL AEROBRAKE_PE_TARGETING IS 1.
+// Pe-trim is opt-in (off by default) so it can't fight a body that
+// sets its own aerobrake periapsis elsewhere (e.g. Duna aerocapture /
+// DUNA_ENTRY_LOWER_PE). When on, it deepens to AEROBRAKE_PE, or
+// REENTRY_PE if AEROBRAKE_PE is unset.
+GLOBAL AEROBRAKE_PE_TARGETING IS 0.
+GLOBAL AEROBRAKE_PE IS -1.
 
 LOCAL KSC_LAT IS -0.10.
 LOCAL KSC_LNG IS -74.25.
@@ -49,6 +54,12 @@ GLOBAL FUNCTION phaseAerobrake {
     // approach down while impact-site targeting waits for Trajectories
     // to resolve an impact (it can't, far out on a return). ---
     _aerobrakeSetEntryAlarm().
+
+    // Deepen the reentry Pe FIRST (before targeting + decouple) so the
+    // burn uses the propulsion stage that's about to be jettisoned.
+    IF AEROBRAKE_PE_TARGETING > 0 {
+        _aerobrakeTrimReentryPe().
+    }
 
     IF AEROBRAKE_TARGETING <= 0 {
         mLog("Aerobrake impact-site targeting disabled by config.").
@@ -174,6 +185,7 @@ LOCAL FUNCTION _aerobrakeTrimReentryPe {
     IF NOT _aerobrakeTargetingWindowOk("Aerobrake Pe trim") { RETURN. }
 
     LOCAL targetPe IS REENTRY_PE.
+    IF AEROBRAKE_PE >= 0 { SET targetPe TO AEROBRAKE_PE. }
     IF targetPe < 0 {
         mLog("Aerobrake Pe trim disabled: target Pe < 0.").
         RETURN.
