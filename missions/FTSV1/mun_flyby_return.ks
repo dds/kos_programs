@@ -32,7 +32,7 @@ SET TARGET_ TO "MUN".
 SET PAYLOADS TO LIST("TOURIST").
 SET SEQUENCE TO LIST(
     "PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK",
-    "XING", "FREE_RT_BPLANE", "COAST_1HALF", "MCC", "COAST_2HALF",
+    "XING", "FREE_RT_BPLANE", "COAST_1HALF", "COAST_2HALF",
     "FLYBY", "ESCAPE", "AEROBRAKE", "DESCENT", "DONE").
 // Free return: FREE_RT_BPLANE shapes the encounter so the post-flyby
 // Kerbin periapsis lands in the reentry corridor with NO return burn —
