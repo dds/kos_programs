@@ -32,8 +32,13 @@ SET TARGET_ TO "MUN".
 SET PAYLOADS TO LIST("TOURIST").
 SET SEQUENCE TO LIST(
     "PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK",
-    "XING", "BPLANE", "COAST_1HALF", "REFINE_BPLANE", "COAST_2HALF",
+    "XING", "FREE_RT_BPLANE", "COAST_1HALF", "COAST_2HALF",
     "FLYBY", "MCC", "AEROBRAKE", "DESCENT", "DONE").
+// Free return: FREE_RT_BPLANE shapes the encounter so the post-flyby
+// Kerbin periapsis lands in the reentry corridor with NO return burn —
+// passive abort safety. FLYBY then just coasts through; MCC becomes a
+// small KSC-longitude trim (not the load-bearing return burn it was).
+SET FREE_RETURN TO TRUE.
 
 // --- Ascent + 85 km parking orbit (the smooth ride / weightless time) ---
 SET PARKING_ALT TO 85000.
@@ -51,10 +56,12 @@ SET FLYBY_POST_PE_HOLD TO 900.           // ~15 min viewing hold at Pe
 SET FLYBY_EXIT_SOI TO 1.                 // continue out of the Mun SOI
 
 // --- Return to Kerbin, as close to KSC as the geometry allows ---
-// After the flyby exits the Mun SOI the craft is back in Kerbin's SOI;
-// MCC lowers the Kerbin periapsis to REENTRY_PE and times the reentry
-// for KSC, then AEROBRAKE flies the entry and DESCENT brings the chutes.
-SET REENTRY_PE TO 30000.                 // shallow, gentle entry for crew
+// The free return already puts the post-flyby Kerbin periapsis at the
+// reentry corridor (REENTRY_PE is FREE_RT_BPLANE's target Pe), so MCC
+// only trims the reentry longitude toward KSC, then AEROBRAKE flies the
+// entry and DESCENT brings the chutes.
+SET REENTRY_PE TO 30000.                 // free-return target Pe / gentle entry
+SET FREE_RETURN_MUN_PE_FLOOR TO 30000.   // never flyby the Mun below 30km
 SET RETURN_KSC_TARGET TO 1.
 SET ESCAPE_KSC_TARGET TO 1.
 SET TARGET_LAT TO -0.0972.               // KSC

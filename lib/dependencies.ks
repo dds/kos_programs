@@ -54,6 +54,7 @@ GLOBAL FUNCTION dependencyLibs {
         "orbit_nodes", LIST(),
         "orbit_shape", LIST("maneuver", "maneuver_plan", "orbit_nodes", "orbit"),
         "arrival_bplane", LIST("hohmann_transfer", "maneuver", "orbit", "lib_bplane_math"),
+        "free_return", LIST("maneuver", "orbit", "lib_bplane_math"),
         "goto_plan", LIST(),
         "payload_release", LIST("maneuver", "maneuver_plan", "orbit"),
         "ssto", LIST("airplane", "maneuver", "maneuver_plan", "orbit"),
@@ -120,6 +121,7 @@ GLOBAL FUNCTION dependencyPhases {
         "DEPARTURE_SHAPE", LIST("orbit_shape"),
         "BPLANE", LIST("arrival_bplane"),
         "REFINE_BPLANE", LIST("arrival_bplane"),
+        "FREE_RT_BPLANE", LIST("free_return"),
         "GOTO", LIST("goto_plan"),
         "AIRCLIMB", LIST("ssto"),
         "ROCKETCLIMB", LIST("ssto"),
@@ -147,6 +149,7 @@ GLOBAL FUNCTION dependencyBands {
         "RENDEZVOUS", LIST("MATCH", "CREW_XFER"),
         "COAST", LIST("COAST"),
         "XFER_BPLANE", LIST("BPLANE", "REFINE_BPLANE"),
+        "FREE_RT", LIST("FREE_RT_BPLANE"),
         "XFER_ARRIVE", LIST("COAST_1HALF", "COAST_2HALF", "CAPTURE", "FLYBY"),
         "XFER_ORBIT", LIST("CIRC", "RAISE", "INCLINE", "ELLIPTICAL"),
         "PAYLOAD_OPS", LIST("TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION"),
@@ -222,6 +225,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "DEPARTURE_SHAPE" { phaseMapSet(phaseMap, phaseKey, phaseDepartureShape@). }
     ELSE IF phaseKey = "BPLANE" { phaseMapSet(phaseMap, phaseKey, phaseBplane@). }
     ELSE IF phaseKey = "REFINE_BPLANE" { phaseMapSet(phaseMap, phaseKey, phaseRefineBplane@). }
+    ELSE IF phaseKey = "FREE_RT_BPLANE" { phaseMapSet(phaseMap, phaseKey, phaseFreeRtBplane@). }
     ELSE IF phaseKey = "GOTO" { phaseMapSet(phaseMap, phaseKey, phaseGoto@). }
     ELSE IF phaseKey = "AIRCLIMB" { phaseMapSet(phaseMap, phaseKey, phaseAirclimb@). }
     ELSE IF phaseKey = "ROCKETCLIMB" { phaseMapSet(phaseMap, phaseKey, phaseRocketclimb@). }
