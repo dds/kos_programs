@@ -32,8 +32,8 @@ SET TARGET_ TO "MUN".
 SET PAYLOADS TO LIST("TOURIST").
 SET SEQUENCE TO LIST(
     "PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK",
-    "XING", "FREE_RT_BPLANE", "COAST_1HALF", "COAST_2HALF",
-    "FLYBY", "MCC", "AEROBRAKE", "DESCENT", "DONE").
+    "XING", "FREE_RT_BPLANE", "COAST_1HALF", "MCC", "COAST_2HALF",
+    "FLYBY", "RETURN_SETUP", "AEROBRAKE", "DESCENT", "DONE").
 // Free return: FREE_RT_BPLANE shapes the encounter so the post-flyby
 // Kerbin periapsis lands in the reentry corridor with NO return burn —
 // passive abort safety. FLYBY then just coasts through; MCC becomes a
@@ -65,8 +65,8 @@ SET FLYBY_EXIT_SOI TO 1.                 // continue out of the Mun SOI
 // reentry corridor (REENTRY_PE is FREE_RT_BPLANE's target Pe), so MCC
 // only trims the reentry longitude toward KSC, then AEROBRAKE flies the
 // entry and DESCENT brings the chutes.
-SET REENTRY_PE TO 25000.                 // free-return target Pe — flight-found
-                                         // that ~25km is deep enough to capture
+SET REENTRY_PE TO 28000.                 // free-return target Pe — flight-found
+                                         // that ~28km is deep enough to capture
                                          // and give Trajectories an impact on a
                                          // fast lunar return (steeper/hotter,
                                          // but a single-pass capture for crew)
