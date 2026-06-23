@@ -54,10 +54,15 @@ LOCAL FUNCTION _enterSolarCoast {
 LOCAL FUNCTION _solarCoastCanWarp {
     PARAMETER refFlow.
     PARAMETER label IS "COAST".
+    // No solar flow alone shouldn't pin us at 1x — a short eclipse with a
+    // healthy battery is fine to warp through (it recharges on the sunny
+    // side). Only hold when there's no flow AND the battery is low.
     IF PHASES_HAS_SOLAR
             AND shipHasSolarPanels()
-            AND refFlow <= 0 {
-        mLogWarn(label + ": auto-warp skipped; no solar flow after orient.").
+            AND refFlow <= 0
+            AND shipPowerFraction() < SOLAR_HOLD_EC {
+        mLogWarn(label + ": auto-warp skipped; no solar flow and battery low ("
+            + ROUND(shipPowerFraction() * 100, 0) + "%).").
         RETURN FALSE.
     }
     RETURN TRUE.
