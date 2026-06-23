@@ -73,3 +73,6 @@ SET DESCENT_DECOUPLER_TAG TO "descent_decoupler".
 SET DESCENT_DECOUPLE_ALT TO 49000.
 SET DESCENT_CHUTES_TAG TO "descent_chutes".
 SET DESCENT_RELEASE_ALT TO 38000.            // arm/stage chutes (Kerbin)
+// Shed the heat shield low (~500m AGL) for a lighter final descent.
+SET DESCENT_HEATSHIELD_TAG TO "descent_heatshield".
+SET DESCENT_HEAT_SHIELD_DROP_ALT TO 500.

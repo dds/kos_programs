@@ -7,6 +7,7 @@ GLOBAL DESCENT_FAIRING_TAG IS "".
 GLOBAL DESCENT_DECOUPLER_TAG IS "".
 GLOBAL DESCENT_DECOUPLE_ALT IS -999999.
 GLOBAL DESCENT_HEAT_SHIELD_DROP_ALT IS -999999.
+GLOBAL DESCENT_HEATSHIELD_TAG IS "descent_heatshield".
 GLOBAL DESCENT_BAY_REOPEN_ALT IS -1.
 GLOBAL DESCENT_FAIRING_DEPLOY_SPEED IS 10.
 GLOBAL DESCENT_ENGINE_ASSIST IS 0.
@@ -608,24 +609,32 @@ LOCAL FUNCTION _descentDoFirstEvent {
 }
 
 LOCAL FUNCTION _descentDropHeatShield {
-    IF DESCENT_HEAT_SHIELD_DROP_ALT <= -999999 { RETURN. } ELSE {
-        RETURN.
-    }
+    IF DESCENT_HEAT_SHIELD_DROP_ALT <= -999999 { RETURN. }
 
     LOCAL dropAlt IS DESCENT_HEAT_SHIELD_DROP_ALT.
     IF dropAlt <= 0 { RETURN. }
 
+    // Prefer the tagged part — unambiguous when several ablators (a
+    // shield stack, or a decoupler that also ablates) would match the
+    // heuristic. The tagged part must carry its own decouple module
+    // (a heat shield that sits on a separator, or the separator below
+    // it); _descentDecouplePart warns if it can't shed it.
     LOCAL candidates IS LIST().
-    FOR p IN SHIP:PARTS {
-        LOCAL title IS p:TITLE:TOUPPER.
-        LOCAL looksLikeHeatShield IS p:HASMODULE("ModuleAblator")
-            OR title:CONTAINS("HEAT SHIELD")
-            OR title:CONTAINS("HEATSHIELD").
-        IF looksLikeHeatShield
-                AND (p:HASMODULE("ModuleDecouple")
-                    OR p:HASMODULE("ModuleAnchoredDecoupler")
-                    OR p:HASMODULE("ModuleJettison")) {
-            candidates:ADD(p).
+    IF DESCENT_HEATSHIELD_TAG <> "" {
+        FOR p IN SHIP:PARTSTAGGED(DESCENT_HEATSHIELD_TAG) { candidates:ADD(p). }
+    }
+    IF candidates:LENGTH = 0 {
+        FOR p IN SHIP:PARTS {
+            LOCAL title IS p:TITLE:TOUPPER.
+            LOCAL looksLikeHeatShield IS p:HASMODULE("ModuleAblator")
+                OR title:CONTAINS("HEAT SHIELD")
+                OR title:CONTAINS("HEATSHIELD").
+            IF looksLikeHeatShield
+                    AND (p:HASMODULE("ModuleDecouple")
+                        OR p:HASMODULE("ModuleAnchoredDecoupler")
+                        OR p:HASMODULE("ModuleJettison")) {
+                candidates:ADD(p).
+            }
         }
     }
 
