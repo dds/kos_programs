@@ -262,6 +262,18 @@ GLOBAL FUNCTION phaseEscape {
         RETURN.
     }
 
+    // ESCAPE plans a burn to leave a CAPTURED (bound) orbit. On a
+    // hyperbolic flyby the craft is already leaving — SHIP:ORBIT:PERIOD
+    // is Infinity and the planner pushes Infinity onto the stack.
+    // Detect "already escaping" and hand forward, no redundant burn.
+    IF SHIP:ORBIT:ECCENTRICITY >= 1 OR SHIP:ORBIT:HASNEXTPATCH {
+        mLog("ESCAPE: already leaving " + BODY:NAME + " (ecc="
+            + ROUND(SHIP:ORBIT:ECCENTRICITY, 2)
+            + ") — no escape burn needed; handing forward.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
+
     LOCAL target IS BODY:BODY.
     LOCAL targetPe IS _returnTargetPe().
     LOCAL success IS FALSE.
