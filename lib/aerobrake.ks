@@ -45,12 +45,10 @@ LOCAL ATM_HEIGHTS IS LEXICON(
 GLOBAL FUNCTION phaseAerobrake {
     mLogPhase("AEROBRAKE").
 
-    // --- Step 1: Reentry Pe cleanup and optional impact targeting ---
-    // IF AEROBRAKE_PE_TARGETING > 0 {
-    //     _aerobrakeTrimReentryPe().
-    // } ELSE {
-    //     mLog("Aerobrake Pe targeting disabled by config.").
-    // }
+    // --- Step 1: entry alarm FIRST, so the operator can warp the
+    // approach down while impact-site targeting waits for Trajectories
+    // to resolve an impact (it can't, far out on a return). ---
+    _aerobrakeSetEntryAlarm().
 
     IF AEROBRAKE_TARGETING <= 0 {
         mLog("Aerobrake impact-site targeting disabled by config.").
@@ -65,9 +63,6 @@ GLOBAL FUNCTION phaseAerobrake {
     // --- Step 2: Vessel prep (pre-coast) ---
     _aerobrakeDecouple().
     // Chutes are armed in descent phase after atmosphere entry.
-
-    // --- Step 3: KAC alarm for atmosphere entry ---
-    _aerobrakeSetEntryAlarm().
 
     mLog("Aerobrake pre-coast prep complete.").
     mLog("STATS aerobrake status=complete body=" + SHIP:BODY:NAME).
@@ -332,7 +327,18 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
     WAIT 0.5.
 
     IF NOT ADDONS:TR:HASIMPACT {
-        mLogWarn("Trajectories has no impact prediction — skipping impact-site correction.").
+        // Far out on a return, TR can't resolve an impact yet. Wait
+        // (warp the approach down toward the entry alarm) until it can,
+        // instead of skipping the whole KSC correction outright.
+        LOCAL skipAlt IS _aerobrakeAtmoHeight() * TARGETING_ATMO_SKIP_MULT.
+        mLog("Aerobrake: no impact prediction yet — warp the approach down; "
+            + "waiting for Trajectories to resolve...").
+        WAIT UNTIL ADDONS:TR:HASIMPACT
+            OR (skipAlt > 0 AND SHIP:ALTITUDE < skipAlt)
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+    }
+    IF NOT ADDONS:TR:HASIMPACT {
+        mLogWarn("Trajectories still has no impact prediction — skipping impact-site correction.").
         RETURN.
     }
 

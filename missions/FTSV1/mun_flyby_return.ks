@@ -60,8 +60,17 @@ SET FLYBY_EXIT_SOI TO 1.                 // continue out of the Mun SOI
 // reentry corridor (REENTRY_PE is FREE_RT_BPLANE's target Pe), so MCC
 // only trims the reentry longitude toward KSC, then AEROBRAKE flies the
 // entry and DESCENT brings the chutes.
-SET REENTRY_PE TO 30000.                 // free-return target Pe / gentle entry
-SET FREE_RETURN_MUN_PE_FLOOR TO 30000.   // never flyby the Mun below 30km
+SET REENTRY_PE TO 25000.                 // free-return target Pe — flight-found
+                                         // that ~25km is deep enough to capture
+                                         // and give Trajectories an impact on a
+                                         // fast lunar return (steeper/hotter,
+                                         // but a single-pass capture for crew)
+// Let the solver fly a closer Mun pass for more bending authority, so
+// the return Pe can actually reach the 30km target instead of stalling
+// shallow (~40km grazes and Trajectories sees no impact). 15km still
+// clears Mun terrain (max ~7.5km) comfortably — and a closer flyby is
+// the more thrilling view anyway.
+SET FREE_RETURN_MUN_PE_FLOOR TO 15000.
 SET RETURN_KSC_TARGET TO 1.
 SET ESCAPE_KSC_TARGET TO 1.
 SET TARGET_LAT TO -0.0972.               // KSC
