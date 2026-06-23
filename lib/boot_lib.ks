@@ -613,7 +613,12 @@ GLOBAL FUNCTION bootCleanup {
     IF missionVehicle = "" { SET missionVehicle TO vn. }
     LOCAL kl IS LIST(
         "state", "logs", "boot_lib", "resume",
-        "phases", "config", "dependencies"
+        "phases", "config", "dependencies",
+        // Rest of the preamble + the craft-loaded plumbing: keeping them
+        // avoids pruning libs that immediately re-sync next boot, which
+        // on a full volume fails the re-copy (flight-found: rocket_craft
+        // pruned -> "Can't find file 1:/lib/rocket_craft").
+        "files", "mission_type", "core", "countdown", "rocket_craft"
     ).
     FOR lib IN wl {
         IF NOT bootLibArchiveOnly(lib)
