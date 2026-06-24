@@ -91,20 +91,28 @@ GLOBAL FUNCTION phaseAerobrake {
     mLog("Aerobrake pre-coast prep complete.").
     mLog("STATS aerobrake status=complete body=" + SHIP:BODY:NAME).
 
-    // --- Step 4: Wait for atmosphere, retract antennas, then orient ---
+    // --- Step 3: Orient for reentry NOW and hold it through the coast
+    // into the atmosphere. We're committed to entry, so the ship should
+    // be in reentry attitude (heat shield forward) the whole way down,
+    // not drifting unoriented while it waits to reach the atmosphere. ---
+    _aerobrakeOrient().
+
+    // --- Step 4: Coast to the atmosphere holding that attitude, retract
+    // antennas just before interface, then hand off to DESCENT (which
+    // re-locks retrograde and flies the entry). ---
     IF SHIP:BODY:ATM:EXISTS {
         LOCAL atmHeight IS SHIP:BODY:ATM:HEIGHT.
         IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
             SET atmHeight TO ATM_HEIGHTS[SHIP:BODY:NAME].
         }
         IF SHIP:ALTITUDE > atmHeight {
-            mLog("Waiting for atmosphere (" + ROUND(atmHeight/1000, 0) + "km)...").
+            mLog("Coasting to atmosphere (" + ROUND(atmHeight/1000, 0)
+                + "km), holding reentry attitude...").
             WAIT UNTIL SHIP:ALTITUDE < atmHeight.
             mLog("Atmosphere entry at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
         }
         _aerobrakeRetractAntennas().
     }
-    _aerobrakeOrient().
 
     _aerobrakeAdvance().
 }
@@ -352,18 +360,14 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
     WAIT 0.5.
 
     IF NOT ADDONS:TR:HASIMPACT {
-        // Far out on a return, TR can't resolve an impact yet. Wait
-        // (warp the approach down toward the entry alarm) until it can,
-        // instead of skipping the whole KSC correction outright.
-        LOCAL skipAlt IS _aerobrakeAtmoHeight() * TARGETING_ATMO_SKIP_MULT.
-        mLog("Aerobrake: no impact prediction yet — warp the approach down; "
-            + "waiting for Trajectories to resolve...").
-        WAIT UNTIL ADDONS:TR:HASIMPACT
-            OR (skipAlt > 0 AND SHIP:ALTITUDE < skipAlt)
-            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
-    }
-    IF NOT ADDONS:TR:HASIMPACT {
-        mLogWarn("Trajectories still has no impact prediction — skipping impact-site correction.").
+        // Don't warp/wait for a TR impact. Far out on a fast return TR
+        // can't resolve one, and we're committed to entering the
+        // atmosphere regardless — sitting here warping the approach down
+        // just delays orienting for reentry. Skip the KSC impact-site
+        // correction; the phase orients and hands off to DESCENT. The
+        // correction only runs when TR already has an impact in hand.
+        mLogWarn("Aerobrake: Trajectories has no impact prediction — "
+            + "skipping KSC impact-site correction (committed to entry).").
         RETURN.
     }
 
