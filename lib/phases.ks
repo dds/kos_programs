@@ -430,6 +430,7 @@ GLOBAL FUNCTION trySolarHoldTick {
     IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
             OR SHIP:STATUS = "SUB_ORBITAL")
             AND PHASES_HAS_SOLAR {
+        RUNONCEPATH("1:/lib/solar").
         RETURN solarHoldTick(refFlow).
     }
     RETURN refFlow.
