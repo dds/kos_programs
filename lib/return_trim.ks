@@ -35,6 +35,7 @@
 //   RETURN_TRIM_MAX_RETRIES
 // Depends on: maneuver (executeManeuver), utils (geoDistance)
 // ============================================================
+@CLOBBERBUILTINS ON.
 @LAZYGLOBAL OFF.
 
 GLOBAL RETURN_TRIM IS FALSE.
