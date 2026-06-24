@@ -50,7 +50,7 @@ SET TRANSFER_SCAN_SAMPLES_PER_ORBIT TO 16.
 // CAPTURE_PE is the flyby periapsis altitude over the Mun. 50 km is a
 // safe, scenic standoff (well clear of Mun terrain) for a tourist pass.
 SET CAPTURE_PE TO 50000.
-SET FLYBY_POST_PE_HOLD TO 900.           // ~15 min viewing hold at Pe
+SET FLYBY_POST_PE_HOLD TO 300.           // ~5 min viewing hold at Pe
 SET FLYBY_EXIT_SOI TO 1.                 // continue out of the Mun SOI
 
 // --- Return to Kerbin, as close to KSC as the geometry allows ---
