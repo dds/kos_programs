@@ -33,7 +33,12 @@ SET PAYLOADS TO LIST("TOURIST").
 SET SEQUENCE TO LIST(
     "PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK",
     "XING", "FREE_RT_BPLANE", "COAST_1HALF", "COAST_2HALF",
-    "FLYBY", "AEROBRAKE", "DESCENT", "DONE").
+    "FLYBY", "RETURN_TRIM", "AEROBRAKE", "DESCENT", "DONE").
+// RETURN_TRIM: high-leverage KSC-longitude correction on the Kerbin
+// approach (a few m/s far out moves the impact thousands of km). It
+// never holds the return — if it can't safely improve the miss it hands
+// off to AEROBRAKE, which does the short-range impact nudge.
+SET RETURN_TRIM TO TRUE.
 // ESCAPE dropped: it plans an "escape current body -> its parent" burn,
 // only meaningful inside the Mun SOI. After FLYBY_EXIT_SOI the ship is
 // already at Kerbin (BODY:BODY would be the Sun), so AEROBRAKE owns the

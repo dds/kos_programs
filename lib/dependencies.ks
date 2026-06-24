@@ -55,6 +55,7 @@ GLOBAL FUNCTION dependencyLibs {
         "orbit_shape", LIST("maneuver", "maneuver_plan", "orbit_nodes", "orbit"),
         "arrival_bplane", LIST("hohmann_transfer", "maneuver", "orbit", "lib_bplane_math"),
         "free_return", LIST("maneuver", "orbit", "lib_bplane_math"),
+        "return_trim", LIST("maneuver", "orbit", "utils"),
         "goto_plan", LIST(),
         "payload_release", LIST("maneuver", "maneuver_plan", "orbit"),
         "ssto", LIST("airplane", "maneuver", "maneuver_plan", "orbit"),
@@ -122,6 +123,7 @@ GLOBAL FUNCTION dependencyPhases {
         "BPLANE", LIST("arrival_bplane"),
         "REFINE_BPLANE", LIST("arrival_bplane"),
         "FREE_RT_BPLANE", LIST("free_return"),
+        "RETURN_TRIM", LIST("return_trim"),
         "GOTO", LIST("goto_plan"),
         "AIRCLIMB", LIST("ssto"),
         "ROCKETCLIMB", LIST("ssto"),
@@ -150,6 +152,7 @@ GLOBAL FUNCTION dependencyBands {
         "COAST", LIST("COAST"),
         "XFER_BPLANE", LIST("BPLANE", "REFINE_BPLANE"),
         "FREE_RT", LIST("FREE_RT_BPLANE"),
+        "RETURN_TRIM", LIST("RETURN_TRIM"),
         "XFER_ARRIVE", LIST("COAST_1HALF", "COAST_2HALF", "CAPTURE", "FLYBY"),
         "XFER_ORBIT", LIST("CIRC", "RAISE", "INCLINE", "ELLIPTICAL"),
         "PAYLOAD_OPS", LIST("TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION"),
@@ -226,6 +229,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "BPLANE" { phaseMapSet(phaseMap, phaseKey, phaseBplane@). }
     ELSE IF phaseKey = "REFINE_BPLANE" { phaseMapSet(phaseMap, phaseKey, phaseRefineBplane@). }
     ELSE IF phaseKey = "FREE_RT_BPLANE" { phaseMapSet(phaseMap, phaseKey, phaseFreeRtBplane@). }
+    ELSE IF phaseKey = "RETURN_TRIM" { phaseMapSet(phaseMap, phaseKey, phaseReturnTrim@). }
     ELSE IF phaseKey = "GOTO" { phaseMapSet(phaseMap, phaseKey, phaseGoto@). }
     ELSE IF phaseKey = "AIRCLIMB" { phaseMapSet(phaseMap, phaseKey, phaseAirclimb@). }
     ELSE IF phaseKey = "ROCKETCLIMB" { phaseMapSet(phaseMap, phaseKey, phaseRocketclimb@). }
