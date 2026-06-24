@@ -17,6 +17,10 @@ GLOBAL DESCENT_ENGINE_ASSIST_HIGH_VS IS 12.
 GLOBAL DESCENT_ENGINE_ASSIST_MAX_THROTTLE IS 0.85.
 GLOBAL DESCENT_ENGINE_ASSIST_GAIN IS 0.18.
 GLOBAL DESCENT_ENGINE_ASSIST_ALIGN_DEG IS 20.
+// Capture-brake stops once periapsis is this deep (m over surface) — at
+// that depth a single pass guarantees reentry, so braking further just
+// wastes fuel and would drive Pe negative. -1 => auto (0.4 * atmo height).
+GLOBAL DESCENT_BRAKE_PE_FLOOR IS -1.
 
 // ============================================================
 // descent.ks  —  Atmospheric descent phase  (0:/lib/descent.ks)
@@ -447,11 +451,26 @@ LOCAL FUNCTION _descentBrakingBurn {
     LOCAL atmHeight IS 0.
     IF SHIP:BODY:ATM:EXISTS { SET atmHeight TO SHIP:BODY:ATM:HEIGHT. }
 
+    // Once periapsis is this deep, a single pass guarantees reentry — stop.
+    LOCAL peFloor IS atmHeight * 0.4.
+    IF DESCENT_BRAKE_PE_FLOOR >= 0 { SET peFloor TO DESCENT_BRAKE_PE_FLOOR. }
+
+    // Already committed (Pe deep in the atmosphere)? Don't burn at all —
+    // this is the fast-return case the apsis checks below never catch.
+    IF atmHeight > 0 AND SHIP:ORBIT:PERIAPSIS < peFloor {
+        mLog("Braking burn skipped: Pe " + ROUND(SHIP:PERIAPSIS/1000, 1)
+            + "km already below the reentry floor "
+            + ROUND(peFloor/1000, 1) + "km — reentry guaranteed.").
+        RETURN.
+    }
+
     mLog("Braking burn: thrust=" + ROUND(SHIP:AVAILABLETHRUST, 1)
         + "kN  fuel=" + ROUND(fuel, 1)
         + "  ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
         + "  ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
-        + "  atmKm=" + ROUND(atmHeight/1000, 1)).
+        + "  PeKm=" + ROUND(SHIP:PERIAPSIS/1000, 1)
+        + "  atmKm=" + ROUND(atmHeight/1000, 1)
+        + "  peFloorKm=" + ROUND(peFloor/1000, 1)).
 
     LOCK THROTTLE TO 1.
     LOCK STEERING TO RETROGRADE.
@@ -463,6 +482,11 @@ LOCAL FUNCTION _descentBrakingBurn {
             SET reason TO "fuel-exhausted".
         } ELSE IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
             SET reason TO "landed".
+        } ELSE IF atmHeight > 0 AND SHIP:ORBIT:PERIAPSIS < peFloor {
+            // Periapsis now deep enough — reentry guaranteed this pass.
+            // The stop that fires for fast returns, where eccentricity
+            // and (Mun-distance) apoapsis never satisfy the checks below.
+            SET reason TO "pe-below-reentry-floor".
         } ELSE IF SHIP:ORBIT:ECCENTRICITY < 1
                 AND SHIP:ORBIT:APOAPSIS > 0
                 AND SHIP:ORBIT:APOAPSIS < atmHeight {
