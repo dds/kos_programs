@@ -21,6 +21,8 @@ GLOBAL SOLAR_CHARGE_CHECK_DT IS 5.
 GLOBAL SOLAR_CHARGE_CHECK_MIN_DELTA IS 0.01.
 GLOBAL SOLAR_CHARGE_FULL_EC IS 0.995.
 
+IF DEFINED PHASES_HAS_SOLAR { SET PHASES_HAS_SOLAR TO TRUE. }
+
 // Command-core hibernation is handled by the stock "Hibernate in
 // Warp" part toggle (set in the VAB), so this lib no longer pokes it.
 
