@@ -24,6 +24,12 @@ GLOBAL AEROBRAKE_TARGETING IS 1.
 // REENTRY_PE if AEROBRAKE_PE is unset.
 GLOBAL AEROBRAKE_PE_TARGETING IS 0.
 GLOBAL AEROBRAKE_PE IS -1.
+// Multi-pass aerobrake: hold heat-shield-forward through each pass and
+// stay in this phase until captured AND slowed below this airspeed (m/s)
+// — i.e. through the fast/thick part — before handing to DESCENT. We never
+// reboot into DESCENT at orbital speed where a brief loss of control on a
+// not-yet-stable craft could tumble it.
+GLOBAL AEROBRAKE_HANDOFF_SPEED IS 600.
 
 LOCAL KSC_LAT IS -0.10.
 LOCAL KSC_LNG IS -74.25.
@@ -63,40 +69,111 @@ GLOBAL FUNCTION phaseAerobrake {
         mLog("Aerobrake: now at " + SHIP:BODY:NAME + ".").
     }
 
-    // --- Step 1: entry alarm FIRST, so the operator can warp the
-    // approach down while impact-site targeting waits for Trajectories
-    // to resolve an impact (it can't, far out on a return). ---
-    _aerobrakeSetEntryAlarm().
+    LOCAL atmHeight IS _aerobrakeAtmoHeight().
 
-    // Deepen the reentry Pe FIRST (before targeting + decouple) so the
-    // burn uses the propulsion stage that's about to be jettisoned.
+    // --- One-time prep (far out) ---
+    _aerobrakeSetEntryAlarm().
+    // Aim the periapsis at the aerobrake corridor (shallow enough that the
+    // craft stays controllable at orbital speed). Burns with the stage
+    // that may be jettisoned later.
     IF AEROBRAKE_PE_TARGETING > 0 {
         _aerobrakeTrimReentryPe().
     }
-
+    // One opportunistic impact nudge if Trajectories already resolves one;
+    // it can't far out on a fast return, and that is NOT a reason to bail
+    // to DESCENT — the multi-pass loop below carries on regardless.
     IF AEROBRAKE_TARGETING <= 0 {
         mLog("Aerobrake impact-site targeting disabled by config.").
+    } ELSE IF ADDONS:TR:AVAILABLE {
+        _aerobrakeReentryTargeting().
     } ELSE {
-        IF ADDONS:TR:AVAILABLE {
-            _aerobrakeReentryTargeting().
+        mLog("Trajectories not available — skipping impact-site targeting.").
+    }
+    _aerobrakeDecouple().
+    // Deployable antennas break in the airstream; retract before the first
+    // pass. (Fixed panels, e.g. FTSV1's, ride through fine.)
+    _aerobrakeRetractAntennas().
+
+    mLog("Aerobrake: multi-pass braking. Holding heat-shield-forward "
+        + "through each pass; staying until captured and slowed below "
+        + AEROBRAKE_HANDOFF_SPEED + " m/s before DESCENT.").
+
+    // If we somehow begin already inside the atmosphere, get oriented now.
+    IF SHIP:ALTITUDE < atmHeight { _aerobrakeOrient(). }
+
+    // --- Multi-pass aerobrake loop ---
+    LOCAL passNum IS 0.
+    LOCAL inPass IS FALSE.
+    UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+        IF _aerobrakeThroughThickPart(atmHeight) {
+            mLog("Aerobrake: captured (Ap "
+                + ROUND(SHIP:APOAPSIS / 1000, 1) + "km) and slowed to "
+                + ROUND(SHIP:AIRSPEED, 0)
+                + " m/s — through the thick part. Handing to DESCENT.").
+            BREAK.
+        }
+        IF SHIP:ALTITUDE > atmHeight {
+            IF inPass {
+                SET inPass TO FALSE.
+                mLog("STATS aerobrake pass=" + passNum + " out"
+                    + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
+                    + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
+                    + " vel=" + ROUND(SHIP:VELOCITY:ORBIT:MAG, 0)).
+            }
+            // Between passes (or the initial approach): solar-hold + warp
+            // the high coast, then orient heat-shield-forward for the pass.
+            phaseCoastToReentry(REENTRY_ORIENT_LEAD, "Aerobrake").
+            _aerobrakeOrient().
+            WAIT UNTIL SHIP:ALTITUDE < atmHeight
+                OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
         } ELSE {
-            mLog("Trajectories not available — skipping impact-site targeting.").
+            IF NOT inPass {
+                SET inPass TO TRUE.
+                SET passNum TO passNum + 1.
+                mLog("STATS aerobrake pass=" + passNum + " in"
+                    + " entryKm=" + ROUND(SHIP:ALTITUDE / 1000, 1)
+                    + " vel=" + ROUND(SHIP:VELOCITY:ORBIT:MAG, 0)).
+            }
+            // In a pass: heat-shield-forward, let drag bleed the energy.
+            WAIT UNTIL SHIP:ALTITUDE > atmHeight
+                OR _aerobrakeThroughThickPart(atmHeight)
+                OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
         }
     }
 
-    // --- Step 2: Vessel prep (pre-coast) ---
-    _aerobrakeDecouple().
-    // Chutes are armed in descent phase after atmosphere entry.
-
-    mLog("Aerobrake prep complete.").
-    mLog("STATS aerobrake status=complete body=" + SHIP:BODY:NAME).
-
-    // Hand off to DESCENT now — while still in vacuum, far from entry —
-    // so the band-change reboot can't land in the atmosphere, where a few
-    // seconds without control in dense air could tumble the craft.
-    // DESCENT solar-holds the coast, reorients ~10 min before entry, and
-    // flies the ENTIRE entry continuously with no further reboot.
+    mLog("STATS aerobrake status=complete passes=" + passNum
+        + " body=" + SHIP:BODY:NAME).
     _aerobrakeAdvance().
+}
+
+// Through the dangerous fast/thick regime: captured into a sub-atmosphere
+// orbit (won't climb back out) AND slowed below the safe handoff speed.
+// A negative/huge apoapsis (still hyperbolic, or a high ellipse needing
+// more passes) reads as NOT yet captured.
+LOCAL FUNCTION _aerobrakeThroughThickPart {
+    PARAMETER atmHeight.
+    IF SHIP:ALTITUDE > atmHeight { RETURN FALSE. }
+    LOCAL ap IS SHIP:ORBIT:APOAPSIS.
+    LOCAL captured IS ap > 0 AND ap < atmHeight.
+    RETURN captured AND SHIP:AIRSPEED < AEROBRAKE_HANDOFF_SPEED.
+}
+
+// Retract deployable antennas before the airstream snaps them off.
+LOCAL FUNCTION _aerobrakeRetractAntennas {
+    LOCAL retracted IS 0.
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleDeployableAntenna") {
+            LOCAL m IS p:GETMODULE("ModuleDeployableAntenna").
+            IF m:HASEVENT("retract antenna") {
+                m:DOEVENT("retract antenna").
+                SET retracted TO retracted + 1.
+            }
+        }
+    }
+    IF retracted > 0 {
+        mLog("Retracted " + retracted + " antenna(s) before aerobraking.").
+        WAIT 3.
+    }
 }
 
 // Set a KAC alarm before atmospheric interface so time warp
