@@ -34,6 +34,9 @@ GLOBAL AEROBRAKE_HANDOFF_SPEED IS 600.
 // surface); -1 => auto (0.4 * atmosphere height). Keeps it from driving
 // Pe negative if it ever runs to fuel exhaustion.
 GLOBAL AEROBRAKE_BRAKE_PE_FLOOR IS -1.
+// Hold the solar attitude through the long coast and only wake to get
+// ready for entry this many seconds before the atmosphere (default 15 min).
+GLOBAL AEROBRAKE_ENTRY_LEAD IS 900.
 
 LOCAL KSC_LAT IS -0.10.
 LOCAL KSC_LNG IS -74.25.
@@ -75,17 +78,22 @@ GLOBAL FUNCTION phaseAerobrake {
 
     LOCAL atmHeight IS _aerobrakeAtmoHeight().
 
-    // --- One-time prep (far out) ---
-    _aerobrakeSetEntryAlarm().
+    // --- Long-term setup: alarm the atmosphere entry, then orient for
+    // solar and hold (charging, panels still out) until 15 min before it. ---
+    LOCAL entryUt IS _aerobrakeSetEntryAlarm().
+    IF entryUt > 0 {
+        _aerobrakeSolarWait(entryUt - AEROBRAKE_ENTRY_LEAD).
+    }
+
+    // --- Wake up and get ready (~15 min before entry) ---
     // Aim the periapsis at the aerobrake corridor (shallow enough that the
-    // craft stays controllable at orbital speed). Burns with the stage
-    // that may be jettisoned later.
+    // craft stays controllable at orbital speed).
     IF AEROBRAKE_PE_TARGETING > 0 {
         _aerobrakeTrimReentryPe().
     }
     // One opportunistic impact nudge if Trajectories already resolves one;
-    // it can't far out on a fast return, and that is NOT a reason to bail
-    // to DESCENT — the multi-pass loop below carries on regardless.
+    // a missing impact is NOT a reason to bail to DESCENT — the multi-pass
+    // loop below carries on regardless.
     IF AEROBRAKE_TARGETING <= 0 {
         mLog("Aerobrake impact-site targeting disabled by config.").
     } ELSE IF ADDONS:TR:AVAILABLE {
@@ -95,9 +103,8 @@ GLOBAL FUNCTION phaseAerobrake {
     }
     _aerobrakeDecouple().
     // Deployable antennas/panels break in the airstream and open bays add
-    // unwanted torque; stow everything before the first pass. (Fixed
-    // panels, e.g. FTSV1's, ride through fine.) DESCENT re-extends them
-    // once it's slow enough.
+    // unwanted torque; stow everything now. (Fixed panels, e.g. FTSV1's,
+    // ride through fine.) DESCENT re-extends them once it's slow enough.
     _aerobrakeRetractSolarPanels().
     _aerobrakeRetractAntennas().
     _aerobrakeCloseExtendBays().
@@ -138,9 +145,9 @@ GLOBAL FUNCTION phaseAerobrake {
                     _aerobrakeBrakingBurn().
                 }
             }
-            // Between passes (or the initial approach): solar-hold + warp
-            // the high coast, then orient heat-shield-forward for the pass.
-            phaseCoastToReentry(REENTRY_ORIENT_LEAD, "Aerobrake").
+            // Between passes: solar-hold + warp the high coast, then orient
+            // heat-shield-forward ~15 min before the next pass.
+            _aerobrakeSolarWait(TIME:SECONDS + ETA:PERIAPSIS - AEROBRAKE_ENTRY_LEAD).
             _aerobrakeOrient().
             WAIT UNTIL SHIP:ALTITUDE < atmHeight
                 OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
@@ -273,34 +280,66 @@ LOCAL FUNCTION _aerobrakeBrakingBurn {
 // Set a KAC alarm before atmospheric interface so time warp
 // stops automatically. Uses the ATM_HEIGHTS table; falls back
 // to the body's own ATM:HEIGHT if not in the table.
+// Set the atmosphere-entry KAC alarm and RETURN the entry UT (periapsis
+// ETA, nudged earlier when Pe is already inside the atmosphere). -1 on an
+// airless body. Reliable — pure orbit ETA, no POSITIONAT prediction.
 LOCAL FUNCTION _aerobrakeSetEntryAlarm {
-    IF NOT ADDONS:KAC:AVAILABLE { RETURN. }
-    IF NOT SHIP:BODY:ATM:EXISTS { RETURN. }
+    IF NOT SHIP:BODY:ATM:EXISTS { RETURN -1. }
 
     LOCAL atmAlt IS SHIP:BODY:ATM:HEIGHT.
     IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
         SET atmAlt TO ATM_HEIGHTS[SHIP:BODY:NAME].
     }
 
-    // Estimate time to atmosphere from current orbit
-    // Use periapsis ETA as a rough guide — atmosphere entry
-    // happens shortly before periapsis on a suborbital/aerobrake trajectory
+    // Atmosphere entry happens shortly before periapsis on a reentry arc.
     LOCAL entryUt IS TIME:SECONDS + ETA:PERIAPSIS.
     IF SHIP:ORBIT:PERIAPSIS < atmAlt {
-        // We'll hit atmosphere before periapsis. Estimate using
-        // current descent rate or just put the alarm 2 minutes before PE.
         SET entryUt TO entryUt - 120.
     }
     SET entryUt TO MAX(entryUt, TIME:SECONDS + 30).
 
-    LOCAL alarmId IS kacEnsureAlarm("Atmo entry: " + SHIP:BODY:NAME,
-        entryUt,
-        "Atmosphere at " + ROUND(atmAlt/1000, 0) + "km").
-    IF alarmId <> "" {
-        mLog("KAC alarm set for atmosphere entry in "
-            + ROUND(entryUt - TIME:SECONDS, 0) + "s"
-            + " (" + SHIP:BODY:NAME + " atmo=" + ROUND(atmAlt/1000, 0) + "km).").
+    IF ADDONS:KAC:AVAILABLE {
+        LOCAL alarmId IS kacEnsureAlarm("Atmo entry: " + SHIP:BODY:NAME,
+            entryUt,
+            "Atmosphere at " + ROUND(atmAlt/1000, 0) + "km").
+        IF alarmId <> "" {
+            mLog("KAC alarm set for atmosphere entry in "
+                + ROUND(entryUt - TIME:SECONDS, 0) + "s"
+                + " (" + SHIP:BODY:NAME + " atmo=" + ROUND(atmAlt/1000, 0) + "km).").
+        }
     }
+    RETURN entryUt.
+}
+
+// Orient for solar and hold (auto-warping) until `wakeUt`, then return so
+// the caller can get ready for entry. No-op if already in the atmosphere
+// or wakeUt is already here.
+LOCAL FUNCTION _aerobrakeSolarWait {
+    PARAMETER wakeUt.
+    LOCAL atmHeight IS _aerobrakeAtmoHeight().
+    IF atmHeight > 0 AND SHIP:ALTITUDE < atmHeight { RETURN. }
+    IF wakeUt <= TIME:SECONDS + 30 { RETURN. }
+
+    mLog("Aerobrake: orienting for solar — holding until "
+        + ROUND(AEROBRAKE_ENTRY_LEAD / 60, 0)
+        + " min before atmosphere entry (wake in T+"
+        + ROUND(wakeUt - TIME:SECONDS, 0) + "s) to get ready.").
+    SET SAS TO TRUE.
+    UNLOCK STEERING.
+    LOCAL solarRef IS trySolarHoldTick(-1).
+    coastAutoWarp(wakeUt, "Aerobrake coast", "").
+    UNTIL TIME:SECONDS >= wakeUt
+            OR (atmHeight > 0 AND SHIP:ALTITUDE < atmHeight)
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+        SET solarRef TO trySolarHoldTick(solarRef).
+        WAIT MIN(10, MAX(1, wakeUt - TIME:SECONDS)).
+    }
+    IF WARP > 0 {
+        SET WARP TO 0.
+        WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+        WAIT 1.
+    }
+    mLog("Aerobrake: waking up to get ready for entry.").
 }
 
 LOCAL FUNCTION _aerobrakeAtmoHeight {
