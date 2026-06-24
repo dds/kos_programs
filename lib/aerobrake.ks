@@ -324,7 +324,6 @@ LOCAL FUNCTION _aerobrakeSolarWait {
         + ROUND(AEROBRAKE_ENTRY_LEAD / 60, 0)
         + " min before atmosphere entry (wake in T+"
         + ROUND(wakeUt - TIME:SECONDS, 0) + "s) to get ready.").
-    SET SAS TO TRUE.
     UNLOCK STEERING.
     LOCAL solarRef IS trySolarHoldTick(-1).
     coastAutoWarp(wakeUt, "Aerobrake coast", "").
