@@ -33,7 +33,7 @@ SET PAYLOADS TO LIST("TOURIST").
 SET SEQUENCE TO LIST(
     "PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK",
     "XING", "FREE_RT_BPLANE", "COAST_1HALF", "COAST_2HALF",
-    "FLYBY", "AEROBRAKE", "DESCENT", "DONE").
+    "FLYBY", "MCC", "AEROBRAKE", "DESCENT", "DONE").
 // Free return: FREE_RT_BPLANE shapes the encounter so the post-flyby
 // Kerbin periapsis lands in the reentry corridor with NO return burn —
 // passive abort safety. FLYBY then just coasts through; MCC becomes a
