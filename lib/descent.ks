@@ -41,55 +41,6 @@ LOCAL DECOUPLE_ALTS IS LEXICON(
     "TEKTO",  10000
 ).
 
-// Kepler ETA until the orbit descends through the given radius,
-// or -1 when it never does (self-contained — descent has no lib
-// dependencies). Mean anomaly advances linearly in time.
-LOCAL FUNCTION _descentEtaToRadius {
-    PARAMETER rTarget.
-    LOCAL obtEcc IS SHIP:ORBIT:ECCENTRICITY.
-    LOCAL sma IS SHIP:ORBIT:SEMIMAJORAXIS.
-    IF obtEcc >= 1 OR sma <= 0 { RETURN -1. }
-    IF rTarget <= sma * (1 - obtEcc) OR rTarget >= sma * (1 + obtEcc) {
-        RETURN -1.
-    }
-    LOCAL cosTa IS MAX(-1, MIN(1,
-        (sma * (1 - obtEcc ^ 2) / rTarget - 1) / obtEcc)).
-    // Descending branch: true anomaly approaching periapsis.
-    LOCAL taCross IS 360 - ARCCOS(cosTa).
-
-    LOCAL FUNCTION _meanAnom {
-        PARAMETER ta.
-        LOCAL eAnom IS 2 * ARCTAN2(
-            SQRT(1 - obtEcc) * SIN(ta / 2),
-            SQRT(1 + obtEcc) * COS(ta / 2)).
-        RETURN eAnom - obtEcc * SIN(eAnom) * CONSTANT:RADTODEG.
-    }
-    LOCAL dM IS _meanAnom(taCross) - _meanAnom(SHIP:ORBIT:TRUEANOMALY).
-    UNTIL dM >= 0  { SET dM TO dM + 360. }
-    UNTIL dM < 360 { SET dM TO dM - 360. }
-    RETURN (dM / 360) * SHIP:ORBIT:PERIOD.
-}
-
-// KAC alarm + warp-friendly wait until the ship descends through
-// targetRadius (flight-found: DESCENT blind-waited for reentry —
-// warping from the tracking station sailed past the alignment).
-LOCAL FUNCTION _descentWaitForRadius {
-    PARAMETER rTarget, label.
-    LOCAL alarmId IS "".
-    LOCAL eta_ IS _descentEtaToRadius(rTarget).
-    IF ADDONS:KAC:AVAILABLE AND eta_ > 180 {
-        SET alarmId TO kacEnsureAlarm(label,
-            TIME:SECONDS + eta_ - 120, "Auto-created by phaseDescent").
-        mLog("KAC alarm set for " + label + " in "
-            + ROUND(eta_ - 120, 0) + "s.").
-    }
-    LOCAL targetAlt IS rTarget - SHIP:BODY:RADIUS.
-    WAIT UNTIL SHIP:ALTITUDE < targetAlt
-        OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
-    SET WARP TO 0.
-    IF alarmId <> "" { DELETEALARM(alarmId). }
-}
-
 LOCAL FUNCTION _descentGravity {
     LOCAL radiusMag IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
     IF radiusMag <= 0 { RETURN 0.01. }
