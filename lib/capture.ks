@@ -14,6 +14,10 @@ GLOBAL SOI_BUFFER_TIME IS 120.
 GLOBAL BPLANE_LEAD IS 300.
 GLOBAL FLYBY_POST_PE_HOLD IS 0.
 GLOBAL FLYBY_EXIT_SOI IS 1.
+// After a flyby, the return-side phases work relative to the body we're
+// returning to. Retarget to FLYBY_NEXT_TARGET, or (unset) the flyby
+// body's parent (e.g. Mun -> Kerbin).
+GLOBAL FLYBY_NEXT_TARGET IS "".
 GLOBAL TARGET_AP IS -1.
 
 LOCAL MAX_RETRIES IS 5.
@@ -395,5 +399,17 @@ GLOBAL FUNCTION phaseFlyby {
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
+
+    // Retarget for the return: the moon is behind us, so ESCAPE/MCC/
+    // AEROBRAKE should work toward the body we're returning to — else
+    // they keep trying to re-acquire the moon. FLYBY_NEXT_TARGET if set,
+    // else the flyby body's parent. getTarget() reads state "target"
+    // first, so this sticks across the band-change reboot.
+    LOCAL nextTgt IS FLYBY_NEXT_TARGET.
+    IF nextTgt = "" AND target:HASBODY { SET nextTgt TO target:BODY:NAME. }
+    IF nextTgt <> "" {
+        stateSet("target", nextTgt).
+        mLog("Flyby: retargeting to " + nextTgt + " for the return leg.").
+    }
     nextPhase(xferSeq).
 }
