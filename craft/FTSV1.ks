@@ -10,6 +10,7 @@
 // ============================================================
 
 SET DESCENT_DROGUE_CUT_ALT TO -1.
+SET DESCENT_RELEASE_ALT  10000.
 
 GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
     "xfer_plan",
