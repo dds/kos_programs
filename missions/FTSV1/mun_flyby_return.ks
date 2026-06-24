@@ -33,7 +33,12 @@ SET PAYLOADS TO LIST("TOURIST").
 SET SEQUENCE TO LIST(
     "PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK",
     "XING", "FREE_RT_BPLANE", "COAST_1HALF", "COAST_2HALF",
-    "FLYBY", "ESCAPE", "AEROBRAKE", "DESCENT", "DONE").
+    "FLYBY", "AEROBRAKE", "DESCENT", "DONE").
+// ESCAPE dropped: it plans an "escape current body -> its parent" burn,
+// only meaningful inside the Mun SOI. After FLYBY_EXIT_SOI the ship is
+// already at Kerbin (BODY:BODY would be the Sun), so AEROBRAKE owns the
+// final injection tweak: Pe deepen via AEROBRAKE_PE_TARGETING + the KSC
+// impact-site nudge.
 // Free return: FREE_RT_BPLANE shapes the encounter so the post-flyby
 // Kerbin periapsis lands in the reentry corridor with NO return burn —
 // passive abort safety. FLYBY then just coasts through; MCC becomes a
