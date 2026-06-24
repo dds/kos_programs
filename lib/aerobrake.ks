@@ -737,13 +737,12 @@ LOCAL FUNCTION _aerobrakeDecouple {
 }
 
 LOCAL FUNCTION _aerobrakeOrient {
-    LOCAL dir IS "RETROGRADE".
     SET dir TO AEROBRAKE_REENTRY_DIR.
 
-    LOCAL steerDir IS RETROGRADE.
+    LOCAL steerDir IS SHIP:SRFRETROGRADE.
     LOCAL refVec IS -SHIP:VELOCITY:ORBIT.
     IF dir = "PROGRADE" {
-        SET steerDir TO PROGRADE.
+        SET steerDir TO SHIP:SRFPROGRADE.
         SET refVec TO SHIP:VELOCITY:ORBIT.
     }
 
