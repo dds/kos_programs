@@ -11,6 +11,7 @@
 
 SET DESCENT_DROGUE_CUT_ALT TO -1.
 SET DESCENT_RELEASE_ALT TO 10000.
+SET LIBS_EXTRA TO LIST("solar").
 SET PHASES_HAS_SOLAR TO TRUE.
 SET AEROBRAKE_BRAKE_PE_FLOOR TO 51000.
 
@@ -22,7 +23,6 @@ GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
     // probe's tight volume (6.5KB). Offline coast-charging is something
     // we can live without when out of link; the maneuver/coast hooks gate
     // on PHASES_HAS_SOLAR, which solar.ks self-sets only when it loads.
-    "solar"
 ).
 
 applyKnownMissionState().
