@@ -33,7 +33,7 @@ SET PAYLOADS TO LIST("TOURIST").
 SET SEQUENCE TO LIST(
     "PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK",
     "XING", "FREE_RT_BPLANE", "COAST_1HALF", "COAST_2HALF",
-    "FLYBY", "ESCAPE", "AEROBRAKE", "DESCENT", "DONE").
+    "FLYBY", "AEROBRAKE", "DESCENT", "DONE").
 // Free return: FREE_RT_BPLANE shapes the encounter so the post-flyby
 // Kerbin periapsis lands in the reentry corridor with NO return burn —
 // passive abort safety. FLYBY then just coasts through; MCC becomes a
@@ -45,13 +45,6 @@ SET PARKING_ALT TO 85000.
 SET LAUNCH_INCLINATION TO 0.
 SET LAUNCH_PLANE_MODE TO "BODY_ORBIT".   // align to the Mun's plane
 SET TRANSFER_SCAN_SAMPLES_PER_ORBIT TO 16.
-SET COAST_AUTO_WARP TO 1.                // auto-warp the long quiet coasts
-SET KEEP_WARP TO 1.
-// Launch escape system: tagged "abortsystem", AG1 decouples + fires its
-// jettison motor. PARK turns retrograde and fires it once in orbit
-// (these match the lib defaults; here for documentation).
-SET ABORT_TOWER_TAG TO "abortsystem".
-SET ABORT_TOWER_AG TO 1.
 
 // --- Mun flyby (no capture / no landing) ---
 // CAPTURE_PE is the flyby periapsis altitude over the Mun. 50 km is a
