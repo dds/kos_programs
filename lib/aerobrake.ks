@@ -30,6 +30,10 @@ GLOBAL AEROBRAKE_PE IS -1.
 // reboot into DESCENT at orbital speed where a brief loss of control on a
 // not-yet-stable craft could tumble it.
 GLOBAL AEROBRAKE_HANDOFF_SPEED IS 600.
+// The capture braking burn stops once periapsis is this deep (m over
+// surface); -1 => auto (0.4 * atmosphere height). Keeps it from driving
+// Pe negative if it ever runs to fuel exhaustion.
+GLOBAL AEROBRAKE_BRAKE_PE_FLOOR IS -1.
 
 LOCAL KSC_LAT IS -0.10.
 LOCAL KSC_LNG IS -74.25.
@@ -90,9 +94,13 @@ GLOBAL FUNCTION phaseAerobrake {
         mLog("Trajectories not available — skipping impact-site targeting.").
     }
     _aerobrakeDecouple().
-    // Deployable antennas break in the airstream; retract before the first
-    // pass. (Fixed panels, e.g. FTSV1's, ride through fine.)
+    // Deployable antennas/panels break in the airstream and open bays add
+    // unwanted torque; stow everything before the first pass. (Fixed
+    // panels, e.g. FTSV1's, ride through fine.) DESCENT re-extends them
+    // once it's slow enough.
+    _aerobrakeRetractSolarPanels().
     _aerobrakeRetractAntennas().
+    _aerobrakeCloseExtendBays().
 
     mLog("Aerobrake: multi-pass braking. Holding heat-shield-forward "
         + "through each pass; staying until captured and slowed below "
@@ -119,6 +127,16 @@ GLOBAL FUNCTION phaseAerobrake {
                     + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
                     + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
                     + " vel=" + ROUND(SHIP:VELOCITY:ORBIT:MAG, 0)).
+                // A pass that left us still hyperbolic would sail back out
+                // and escape — spend fuel to secure capture (the braking
+                // burn lives only in AEROBRAKE now). Stops as soon as the
+                // orbit is bound; aerobraking finishes the rest.
+                IF SHIP:ORBIT:ECCENTRICITY >= 1 {
+                    mLog("Aerobrake: pass " + passNum + " left ecc "
+                        + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
+                        + " (hyperbolic) — braking burn to secure capture.").
+                    _aerobrakeBrakingBurn().
+                }
             }
             // Between passes (or the initial approach): solar-hold + warp
             // the high coast, then orient heat-shield-forward for the pass.
@@ -174,6 +192,82 @@ LOCAL FUNCTION _aerobrakeRetractAntennas {
         mLog("Retracted " + retracted + " antenna(s) before aerobraking.").
         WAIT 3.
     }
+}
+
+// Retract deployable solar panels before the airstream snaps them off.
+LOCAL FUNCTION _aerobrakeRetractSolarPanels {
+    LOCAL retracted IS 0.
+    FOR p IN SHIP:PARTS {
+        IF p:HASMODULE("ModuleDeployableSolarPanel") {
+            LOCAL m IS p:GETMODULE("ModuleDeployableSolarPanel").
+            IF m:HASEVENT("Retract Solar Panel") {
+                m:DOEVENT("Retract Solar Panel").
+                SET retracted TO retracted + 1.
+            }
+        }
+    }
+    IF retracted > 0 {
+        mLog("Retracted " + retracted + " solar panel(s) before aerobraking.").
+        WAIT 3.
+    }
+}
+
+// Close tagged ('extend_bay') service bays before entry.
+LOCAL FUNCTION _aerobrakeCloseExtendBays {
+    LOCAL closed IS 0.
+    FOR p IN SHIP:PARTSTAGGED("extend_bay") {
+        IF p:HASMODULE("ModuleAnimateGeneric") {
+            LOCAL bm IS p:GETMODULE("ModuleAnimateGeneric").
+            IF bm:HASEVENT("Close") { bm:DOEVENT("Close"). SET closed TO closed + 1. }
+            ELSE IF bm:HASEVENT("Close Doors") { bm:DOEVENT("Close Doors"). SET closed TO closed + 1. }
+            ELSE IF bm:HASEVENT("Retract") { bm:DOEVENT("Retract"). SET closed TO closed + 1. }
+        }
+    }
+    IF closed > 0 {
+        mLog("Closed " + closed + " extend bay(s) before aerobraking.").
+        WAIT 1.
+    }
+}
+
+// Capture braking burn (AEROBRAKE-only): burn retrograde just long enough
+// to drop from a hyperbolic pass into a bound orbit, then let aerobraking
+// finish. Stops on capture (ecc<1), fuel exhaustion, the Pe floor, or
+// landing — so it can't run away and drive Pe negative.
+LOCAL FUNCTION _aerobrakeBrakingBurn {
+    IF SHIP:AVAILABLETHRUST <= 0 { RETURN. }
+    IF (STAGE:LIQUIDFUEL + STAGE:OXIDIZER) <= 0.1 {
+        mLog("Aerobrake braking burn: no fuel remaining.").
+        RETURN.
+    }
+    LOCAL atmHeight IS _aerobrakeAtmoHeight().
+    LOCAL peFloor IS atmHeight * 0.4.
+    IF AEROBRAKE_BRAKE_PE_FLOOR >= 0 { SET peFloor TO AEROBRAKE_BRAKE_PE_FLOOR. }
+
+    mLog("Aerobrake braking burn: ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
+        + " peFloorKm=" + ROUND(peFloor / 1000, 1)).
+    LOCK THROTTLE TO 1.
+    LOCK STEERING TO RETROGRADE.
+    LOCAL reason IS "".
+    UNTIL reason <> "" {
+        IF (STAGE:LIQUIDFUEL + STAGE:OXIDIZER) <= 0.1
+                OR SHIP:AVAILABLETHRUST <= 0 {
+            SET reason TO "fuel-exhausted".
+        } ELSE IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+            SET reason TO "landed".
+        } ELSE IF SHIP:ORBIT:ECCENTRICITY < 1 {
+            SET reason TO "captured".
+        } ELSE IF atmHeight > 0 AND SHIP:ORBIT:PERIAPSIS < peFloor {
+            SET reason TO "pe-below-reentry-floor".
+        }
+        WAIT 0.
+    }
+    LOCK THROTTLE TO 0.
+    UNLOCK THROTTLE.
+    mLog("Aerobrake braking burn complete: " + reason
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
+        + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)).
 }
 
 // Set a KAC alarm before atmospheric interface so time warp

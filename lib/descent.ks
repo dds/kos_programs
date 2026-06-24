@@ -17,10 +17,6 @@ GLOBAL DESCENT_ENGINE_ASSIST_HIGH_VS IS 12.
 GLOBAL DESCENT_ENGINE_ASSIST_MAX_THROTTLE IS 0.85.
 GLOBAL DESCENT_ENGINE_ASSIST_GAIN IS 0.18.
 GLOBAL DESCENT_ENGINE_ASSIST_ALIGN_DEG IS 20.
-// Capture-brake stops once periapsis is this deep (m over surface) — at
-// that depth a single pass guarantees reentry, so braking further just
-// wastes fuel and would drive Pe negative. -1 => auto (0.4 * atmo height).
-GLOBAL DESCENT_BRAKE_PE_FLOOR IS -1.
 
 // ============================================================
 // descent.ks  —  Atmospheric descent phase  (0:/lib/descent.ks)
@@ -44,30 +40,6 @@ LOCAL DECOUPLE_ALTS IS LEXICON(
     "LAYTHE", 10000,
     "TEKTO",  10000
 ).
-
-// Check if we need to burn remaining fuel to ensure capture.
-// If Trajectories predicts an impact, we're committed to landing
-// and don't need extra braking. If there's no impact (skip-out,
-// still orbital), we must decelerate to guarantee reentry.
-//
-// TODO: This doesn't cover aerobrake-assist scenarios (e.g. Laythe
-// atmosphere bend into Jool capture). HASIMPACT could be true on
-// Laythe but the post-aerobrake orbit still escapes Jool. Needs
-// post-atmospheric-pass orbit prediction to handle correctly.
-LOCAL FUNCTION _mustDecelerate {
-    IF NOT ADDONS:TR:AVAILABLE {
-        mLog("Trajectories not available — braking to be safe.").
-        RETURN TRUE.
-    }
-    IF ADDONS:TR:HASIMPACT {
-        LOCAL impact IS ADDONS:TR:IMPACTPOS.
-        mLog("Trajectories predicts impact at " + ROUND(impact:LAT, 2) + "," + ROUND(impact:LNG, 2)
-            + " — no braking needed.").
-        RETURN FALSE.
-    }
-    mLog("No impact predicted — braking to ensure capture.").
-    RETURN TRUE.
-}
 
 // Kepler ETA until the orbit descends through the given radius,
 // or -1 when it never does (self-contained — descent has no lib
@@ -223,72 +195,18 @@ LOCAL FUNCTION _descentAdvance {
 GLOBAL FUNCTION phaseDescent {
     mLogPhase("DESCENT").
 
-    // If still far from the atmosphere (handed off from AEROBRAKE in
-    // vacuum, or a direct descent), solar-hold the coast and wake ~10 min
-    // before entry rather than holding entry attitude for a whole day.
-    // No-op once we're already inside that window. DESCENT then flies the
-    // entire entry in one continuous run — no reboot once there's air.
-    phaseCoastToReentry(REENTRY_ORIENT_LEAD, "Descent").
 
-    // LOCK STEERING retrograde for descent orientation.
-    LOCAL dir IS "RETROGRADE".
-    IF AEROBRAKE_REENTRY_DIR <> "" {
-        SET dir TO AEROBRAKE_REENTRY_DIR.
-    }
-    SAS OFF.
-    IF dir = "PROGRADE" {
-        LOCK STEERING TO PROGRADE.
-    } ELSE {
-        LOCK STEERING TO RETROGRADE.
-    }
-    mLog(dir + " steering lock for descent.").
-
-    // Release attitude control once past the worst of entry
-    // (DESCENT_RELEASE_ALT, default 20km): below that the chutes
-    // stabilize the craft, and holding the steering lock / SAS
-    // just drains the battery when it is needed most. The
-    // throttle guard keeps it from releasing mid-braking-burn.
-    LOCAL releaseAlt IS 20000.
-    IF DESCENT_RELEASE_ALT >= 0 {
-        SET releaseAlt TO DESCENT_RELEASE_ALT.
-    }
-    IF SHIP:BODY:ATM:EXISTS AND releaseAlt > 0 {
-        WHEN SHIP:ALTITUDE < releaseAlt AND SHIP:VERTICALSPEED < 0
-                AND THROTTLE < 0.01 THEN {
-            UNLOCK STEERING.
-            SAS OFF.
-            mLog("Attitude control released at "
-                + ROUND(SHIP:ALTITUDE / 1000, 1)
-                + "km — conserving battery.").
-        }
-    }
-
-    // Wait for atmosphere entry (alarmed); on airless bodies, for
-    // the 30km action point instead.
-    IF SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE > SHIP:BODY:ATM:HEIGHT {
-        mLog("Waiting for atmospheric entry...").
-        _descentWaitForRadius(
-            SHIP:BODY:RADIUS + SHIP:BODY:ATM:HEIGHT, "Reentry").
-        mLog("Entered atmosphere at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
-        WAIT 5.
-    } ELSE IF NOT SHIP:BODY:ATM:EXISTS AND SHIP:ALTITUDE > 30000 {
-        mLog("Airless body — waiting for the 30km action point...").
-        _descentWaitForRadius(SHIP:BODY:RADIUS + 30000, "Descent action").
-        mLog("30km action point reached.").
-    }
+    // DESCENT is entered already on a descent trajectory with hardware
+    // stowed (AEROBRAKE handles capture + the braking burn + retract for
+    // atmospheric entries; airless landings go via LAND). These retracts
+    // are a no-op-if-already-done safety, mainly for the suborbital path
+    // (SUBORBIT -> DESCENT, no AEROBRAKE).
     _descentRetractSolarPanels().
     _descentRetractAntennas().
     _descentCloseExtendBays().
 
-    // Arm chutes early so they auto-deploy at safe altitude
+    // Arm chutes on entry so they auto-deploy at safe altitude.
     _descentArmChutes().
-
-    // Burn remaining fuel only if we're not committed to landing.
-    // If Trajectories predicts an impact, we're captured and don't
-    // need to waste dV. If no impact, brake to ensure reentry.
-    IF _mustDecelerate() {
-        _descentBrakingBurn().
-    }
 
     // Deploy fairing once slow enough for the active profile.
     _descentDeployFairing().
@@ -432,90 +350,6 @@ LOCAL FUNCTION _descentCutDrogues {
     } ELSE {
         mLog("Drogue chute cut pass: found=" + found + " cut=" + cutCount + ".").
     }
-}
-
-// Burn retrograde until we're guaranteed captured, then stop.
-//
-// Stop conditions (checked every tick):
-//   1. Landing this pass — apoapsis below atmosphere (won't exit)
-//   2. Captured in orbit — closed orbit, both apsides above atmosphere
-//   3. Fuel exhausted    — nothing left to burn
-//   4. Landed/splashed   — already on the surface
-//
-// Note: Trajectories HASIMPACT alone is insufficient — it models
-// multi-orbit drag decay and reports impact even when the apoapsis
-// is still above atmosphere. The vessel would orbit 2+ more times
-// before landing, which isn't survivable without solar panels.
-LOCAL FUNCTION _descentBrakingBurn {
-    IF SHIP:AVAILABLETHRUST <= 0 { RETURN. }
-
-    LOCAL fuel IS STAGE:LIQUIDFUEL + STAGE:OXIDIZER.
-    IF fuel <= 0.1 {
-        mLog("No fuel remaining — skipping braking burn.").
-        RETURN.
-    }
-
-    LOCAL atmHeight IS 0.
-    IF SHIP:BODY:ATM:EXISTS { SET atmHeight TO SHIP:BODY:ATM:HEIGHT. }
-
-    // Once periapsis is this deep, a single pass guarantees reentry — stop.
-    LOCAL peFloor IS atmHeight * 0.4.
-    IF DESCENT_BRAKE_PE_FLOOR >= 0 { SET peFloor TO DESCENT_BRAKE_PE_FLOOR. }
-
-    // Already committed (Pe deep in the atmosphere)? Don't burn at all —
-    // this is the fast-return case the apsis checks below never catch.
-    IF atmHeight > 0 AND SHIP:ORBIT:PERIAPSIS < peFloor {
-        mLog("Braking burn skipped: Pe " + ROUND(SHIP:PERIAPSIS/1000, 1)
-            + "km already below the reentry floor "
-            + ROUND(peFloor/1000, 1) + "km — reentry guaranteed.").
-        RETURN.
-    }
-
-    mLog("Braking burn: thrust=" + ROUND(SHIP:AVAILABLETHRUST, 1)
-        + "kN  fuel=" + ROUND(fuel, 1)
-        + "  ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
-        + "  ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
-        + "  PeKm=" + ROUND(SHIP:PERIAPSIS/1000, 1)
-        + "  atmKm=" + ROUND(atmHeight/1000, 1)
-        + "  peFloorKm=" + ROUND(peFloor/1000, 1)).
-
-    LOCK THROTTLE TO 1.
-    LOCK STEERING TO RETROGRADE.
-
-    LOCAL reason IS "".
-    UNTIL reason <> "" {
-        IF (STAGE:LIQUIDFUEL + STAGE:OXIDIZER) <= 0.1
-                OR SHIP:AVAILABLETHRUST <= 0 {
-            SET reason TO "fuel-exhausted".
-        } ELSE IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
-            SET reason TO "landed".
-        } ELSE IF atmHeight > 0 AND SHIP:ORBIT:PERIAPSIS < peFloor {
-            // Periapsis now deep enough — reentry guaranteed this pass.
-            // The stop that fires for fast returns, where eccentricity
-            // and (Mun-distance) apoapsis never satisfy the checks below.
-            SET reason TO "pe-below-reentry-floor".
-        } ELSE IF SHIP:ORBIT:ECCENTRICITY < 1
-                AND SHIP:ORBIT:APOAPSIS > 0
-                AND SHIP:ORBIT:APOAPSIS < atmHeight {
-            // Apoapsis below atmosphere — committed to landing this pass
-            SET reason TO "landing-this-pass".
-        } ELSE IF SHIP:ORBIT:ECCENTRICITY < 1
-                AND SHIP:ORBIT:APOAPSIS > atmHeight
-                AND SHIP:ORBIT:PERIAPSIS > atmHeight {
-            // Stable orbit above atmosphere — captured, no reentry needed
-            SET reason TO "orbit-captured".
-        }
-        WAIT 0.
-    }
-
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
-
-    mLog("Braking burn complete: " + reason
-        + "  speed=" + ROUND(SHIP:AIRSPEED, 1) + " m/s"
-        + "  ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
-        + "  ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
-        + "  PeKm=" + ROUND(SHIP:PERIAPSIS/1000, 1)).
 }
 
 // Deploy descent fairing once airspeed is below configured safe speed.
