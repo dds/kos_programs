@@ -160,12 +160,10 @@ GLOBAL FUNCTION phaseAerobrake {
                     + " vel=" + ROUND(SHIP:VELOCITY:ORBIT:MAG, 0)).
             }
             // In a pass: heat-shield-forward, let drag bleed the energy.
-            UNTIL SHIP:ALTITUDE > atmHeight
+            _aerobrakeOrient().
+            WAIT UNTIL SHIP:ALTITUDE > atmHeight
                 OR _aerobrakeThroughThickPart(atmHeight)
-                OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
-                _aerobrakeOrient().
-                WAIT 1.
-            }
+                OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
         }
     }
 
