@@ -7,6 +7,9 @@ GLOBAL KEEP_WARP IS 0.
 GLOBAL EVA_BIOMES IS "".
 GLOBAL COAST_AUTO_WARP IS 0.
 GLOBAL COAST_AUTO_WARP_MIN IS 60.
+// Reorient for atmospheric entry this many seconds before the craft
+// reaches the interface; solar-hold the coast up to that point.
+GLOBAL REENTRY_ORIENT_LEAD IS 600.
 GLOBAL COAST_WARP_5M_LIMIT IS 300.
 GLOBAL COAST_WARP_1H_LIMIT IS 3600.
 GLOBAL COAST_WARP_5H_LIMIT IS 18000.
@@ -334,6 +337,73 @@ GLOBAL FUNCTION coastAutoWarp {
         }
     }
     RETURN FALSE.
+}
+
+// UT the current orbit first descends through the atmosphere interface.
+// Frame-safe altitude (both POSITIONATs at the same t, so body motion
+// cancels). -1 if it doesn't cross within the window bracketing Pe.
+LOCAL FUNCTION _phaseAtmoEntryUt {
+    IF NOT SHIP:BODY:ATM:EXISTS { RETURN -1. }
+    LOCAL atmo IS SHIP:BODY:ATM:HEIGHT.
+    LOCAL bodyR IS SHIP:BODY:RADIUS.
+    LOCAL t0 IS TIME:SECONDS.
+    LOCAL peUt IS t0 + ETA:PERIAPSIS.
+    LOCAL prev IS MAX(t0 + 5, peUt - 3600).
+    LOCAL t IS prev + 20.
+    LOCAL tEnd IS peUt + 120.
+    UNTIL t > tEnd {
+        IF (POSITIONAT(SHIP, t) - POSITIONAT(SHIP:BODY, t)):MAG - bodyR < atmo {
+            LOCAL lo IS prev.
+            LOCAL hi IS t.
+            FROM { LOCAL i IS 0. } UNTIL i >= 16 STEP { SET i TO i + 1. } DO {
+                LOCAL mid IS (lo + hi) / 2.
+                IF (POSITIONAT(SHIP, mid) - POSITIONAT(SHIP:BODY, mid)):MAG
+                        - bodyR < atmo { SET hi TO mid. } ELSE { SET lo TO mid. }
+            }
+            RETURN (lo + hi) / 2.
+        }
+        SET prev TO t.
+        SET t TO t + 20.
+    }
+    RETURN -1.
+}
+
+// Solar-hold (and auto-warp) the reentry approach until `lead` seconds
+// before the craft reaches the atmosphere, with a wake alarm at that
+// point, then return so the caller can orient for entry. Keeps the panels
+// sunward through a multi-day coast instead of holding entry attitude the
+// whole way. No-op if already inside the lead window, already in the
+// atmosphere, or not on a reentry approach.
+GLOBAL FUNCTION phaseCoastToReentry {
+    PARAMETER lead IS 600.
+    PARAMETER label IS "Reentry".
+    IF NOT SHIP:BODY:ATM:EXISTS { RETURN. }
+    IF SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT { RETURN. }
+    LOCAL entryUt IS _phaseAtmoEntryUt().
+    IF entryUt < 0 { RETURN. }
+    LOCAL wakeUt IS entryUt - lead.
+    IF wakeUt <= TIME:SECONDS + 20 { RETURN. }
+
+    LOCAL alarmId IS kacEnsureAlarm(label + " orient: " + SHIP:BODY:NAME,
+        wakeUt, "Reorient for atmospheric entry").
+    mLog(label + ": solar-holding the coast; reorient for entry in T+"
+        + ROUND(wakeUt - TIME:SECONDS, 0) + "s (atmosphere in T+"
+        + ROUND(entryUt - TIME:SECONDS, 0) + "s).").
+    SET SAS TO TRUE.
+    UNLOCK STEERING.
+    LOCAL solarRef IS trySolarHoldTick(-1).
+    coastAutoWarp(wakeUt, label + " coast", alarmId).
+    UNTIL TIME:SECONDS >= wakeUt OR SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT {
+        SET solarRef TO trySolarHoldTick(solarRef).
+        WAIT MIN(10, MAX(1, wakeUt - TIME:SECONDS)).
+    }
+    IF WARP > 0 {
+        SET WARP TO 0.
+        WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+        WAIT 1.
+    }
+    IF alarmId <> "" { DELETEALARM(alarmId). }
+    mLog(label + ": coast complete — orienting for entry.").
 }
 
 GLOBAL FUNCTION coastEnsureHealthAlarm {

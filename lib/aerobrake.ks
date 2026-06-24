@@ -88,15 +88,14 @@ GLOBAL FUNCTION phaseAerobrake {
     _aerobrakeDecouple().
     // Chutes are armed in descent phase after atmosphere entry.
 
-    mLog("Aerobrake pre-coast prep complete.").
+    mLog("Aerobrake prep complete.").
     mLog("STATS aerobrake status=complete body=" + SHIP:BODY:NAME).
 
-    // --- Step 3: Orient for reentry NOW and hold it through the coast
-    // into the atmosphere. We're committed to entry, so the ship should
-    // be in reentry attitude (heat shield forward) the whole way down,
-    // not drifting unoriented while it waits to reach the atmosphere. ---
-    _aerobrakeOrient().
-
+    // Hand off to DESCENT now — while still in vacuum, far from entry —
+    // so the band-change reboot can't land in the atmosphere, where a few
+    // seconds without control in dense air could tumble the craft.
+    // DESCENT solar-holds the coast, reorients ~10 min before entry, and
+    // flies the ENTIRE entry continuously with no further reboot.
     _aerobrakeAdvance().
 }
 

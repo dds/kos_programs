@@ -223,6 +223,13 @@ LOCAL FUNCTION _descentAdvance {
 GLOBAL FUNCTION phaseDescent {
     mLogPhase("DESCENT").
 
+    // If still far from the atmosphere (handed off from AEROBRAKE in
+    // vacuum, or a direct descent), solar-hold the coast and wake ~10 min
+    // before entry rather than holding entry attitude for a whole day.
+    // No-op once we're already inside that window. DESCENT then flies the
+    // entire entry in one continuous run — no reboot once there's air.
+    phaseCoastToReentry(REENTRY_ORIENT_LEAD, "Descent").
+
     // LOCK STEERING retrograde for descent orientation.
     LOCAL dir IS "RETROGRADE".
     IF AEROBRAKE_REENTRY_DIR <> "" {
