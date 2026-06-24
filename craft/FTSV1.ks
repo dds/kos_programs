@@ -9,6 +9,8 @@
 // lib/rocket_craft.ks — this file is just config + delegation.
 // ============================================================
 
+SET DESCENT_DROGUE_CUT_ALT TO -1.
+
 GLOBAL BOOT_ARCHIVE_ONLY IS LIST(
     "xfer_plan",
     "maneuver_transfer",
