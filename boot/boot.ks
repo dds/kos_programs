@@ -313,8 +313,10 @@ IF HAS_LINK {
 LOCAL tailSolarInSpace IS SHIP:STATUS = "ORBITING"
     OR SHIP:STATUS = "ESCAPING"
     OR SHIP:STATUS = "SUB_ORBITAL".
-IF HOMECONNECTION:ISCONNECTED AND tailSolarInSpace
-        AND EXISTS("0:/cmd/orientForSolar.ks") {
+// Skip the (slow) solar re-orient on a manual boot — the operator has
+// taken over and can run cmd/orientForSolar.ks if they want it.
+IF NOT BOOT_MANUAL_REQUESTED AND HOMECONNECTION:ISCONNECTED
+        AND tailSolarInSpace AND EXISTS("0:/cmd/orientForSolar.ks") {
     RUNPATH("0:/cmd/orientForSolar.ks").
 }
 PRINT "END OF LINE. GODSPEED.".

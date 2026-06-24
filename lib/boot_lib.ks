@@ -404,6 +404,7 @@ GLOBAL FUNCTION bootResumeOrManual {
         IF TERMINAL:INPUT:HASCHAR {
             TERMINAL:INPUT:GETCHAR().
             SET mm TO TRUE.
+            SET BOOT_MANUAL_REQUESTED TO TRUE.
         }
     }
     IF NOT mm {
