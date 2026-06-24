@@ -97,23 +97,6 @@ GLOBAL FUNCTION phaseAerobrake {
     // not drifting unoriented while it waits to reach the atmosphere. ---
     _aerobrakeOrient().
 
-    // --- Step 4: Coast to the atmosphere holding that attitude, retract
-    // antennas just before interface, then hand off to DESCENT (which
-    // re-locks retrograde and flies the entry). ---
-    IF SHIP:BODY:ATM:EXISTS {
-        LOCAL atmHeight IS SHIP:BODY:ATM:HEIGHT.
-        IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
-            SET atmHeight TO ATM_HEIGHTS[SHIP:BODY:NAME].
-        }
-        IF SHIP:ALTITUDE > atmHeight {
-            mLog("Coasting to atmosphere (" + ROUND(atmHeight/1000, 0)
-                + "km), holding reentry attitude...").
-            WAIT UNTIL SHIP:ALTITUDE < atmHeight.
-            mLog("Atmosphere entry at " + ROUND(SHIP:ALTITUDE/1000, 1) + "km.").
-        }
-        _aerobrakeRetractAntennas().
-    }
-
     _aerobrakeAdvance().
 }
 
@@ -523,26 +506,6 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
 // ============================================================
 // Vessel prep helpers
 // ============================================================
-
-LOCAL FUNCTION _aerobrakeRetractAntennas {
-    LOCAL retracted IS 0.
-    FOR p IN SHIP:PARTS {
-        IF p:HASMODULE("ModuleDeployableAntenna") {
-            LOCAL m IS p:GETMODULE("ModuleDeployableAntenna").
-            IF m:HASEVENT("retract antenna") {
-                m:DOEVENT("retract antenna").
-                SET retracted TO retracted + 1.
-                mLog("Retracted antenna: " + p:TITLE).
-            }
-        }
-    }
-    IF retracted > 0 {
-        mLog("Retracted " + retracted + " antenna(s).").
-        WAIT 3.
-    } ELSE {
-        mLog("No deployable antennas to retract.").
-    }
-}
 
 LOCAL FUNCTION _aerobrakeDecouple {
     IF AEROBRAKE_DECOUPLE_TAG = "" { RETURN. }
