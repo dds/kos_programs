@@ -203,7 +203,10 @@ GLOBAL FUNCTION arrivalPlaneNormal {
 
     LOCAL sign IS 1.
     IF meas["inc"] > 0.3 AND meas["inc"] < 179.7 {
-        IF VANG(_candidate(meas["inc"], meas["lan"], 1), meas["hHat"]) > 90 {
+        // Both mirrors lie within 90 degrees on low-inclination
+        // orbits. Choose the closer one, not a hemisphere test.
+        IF VANG(_candidate(meas["inc"], meas["lan"], -1), meas["hHat"])
+                < VANG(_candidate(meas["inc"], meas["lan"], 1), meas["hHat"]) {
             SET sign TO -1.
         }
     }

@@ -129,11 +129,45 @@ LOCAL FUNCTION _bplaneCorridorError {
     PARAMETER targetBody, meas, wantPe, wantInc, wantLan.
 
     LOCAL tgt IS targetBplaneVector(targetBody, meas, wantPe, wantInc, wantLan).
-    LOCAL planeErr IS 0.
-    IF wantInc >= 0 { SET planeErr TO VANG(meas["hHat"], tgt["normal"]). }
+    LOCAL planeErr IS _bplaneElementPlaneError(
+        meas["inc"], meas["lan"], wantInc, wantLan).
+    // Keep the closest-achievable-plane policy for a tilted asymptote,
+    // but never reject elements that already satisfy the actual request.
+    IF wantInc >= 0 AND tgt["offPlane"] > 0.5 {
+        SET planeErr TO MIN(planeErr, VANG(meas["hHat"], tgt["normal"])).
+    }
     RETURN LEX("peErr", meas["pe"] - wantPe,
         "planeErr", planeErr,
         "target", tgt).
+}
+
+LOCAL FUNCTION _bplaneElementPlaneError {
+    PARAMETER inc, lan, wantInc, wantLan.
+    IF wantInc < 0 { RETURN 0. }
+    IF wantLan < 0 { RETURN ABS(inc - wantInc). }
+    // Compare requested elements, independently of the reconstructed
+    // B-plane basis. LAN has no weight at an equatorial target.
+    LOCAL cosPlane IS COS(inc) * COS(wantInc)
+        + SIN(inc) * SIN(wantInc) * COS(lan - wantLan).
+    RETURN ARCCOS(MAX(-1, MIN(1, cosPlane))).
+}
+
+LOCAL FUNCTION _bplaneCurrentCorridorOk {
+    PARAMETER targetBody, wantPe, wantInc, wantLan.
+    // Check the unburned patch before creating/reusing a node.
+    // POSITIONAT(SHIP, ...) includes pending maneuvers, so it must
+    // not supply the geometry for this no-burn acceptance decision.
+    LOCAL hit IS findArrivalPatch(0, targetBody).
+    IF hit = 0 { RETURN FALSE. }
+    LOCAL patch IS hit["patch"].
+    LOCAL peErr IS ABS(patch:PERIAPSIS - wantPe).
+    LOCAL planeErr IS _bplaneElementPlaneError(
+        patch:INCLINATION, patch:LAN, wantInc, wantLan).
+    IF peErr > BPLANE_PE_TOL OR planeErr > BPLANE_ANG_TOL { RETURN FALSE. }
+    mLog("BPLANE: current trajectory already in corridor; no correction. "
+        + "PeErrKm=" + ROUND(peErr / 1000, 2)
+        + " planeErr=" + ROUND(planeErr, 3)).
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _bplanePlaneFeasible {
@@ -158,9 +192,12 @@ LOCAL FUNCTION _bplanePlanScore {
     PARAMETER targetBody.
     PARAMETER wantInc.
 
-    LOCAL score IS ABS(err["peErr"]).
+    // Error inside the corridor costs nothing. Otherwise the search
+    // can prefer an exact Pe with a bad plane over an acceptable orbit.
+    LOCAL score IS MAX(0, ABS(err["peErr"]) - BPLANE_PE_TOL).
     IF wantInc >= 0 AND _bplanePlaneFeasible(err) {
-        SET score TO score + err["planeErr"] * targetBody:SOIRADIUS / 90.
+        SET score TO score + MAX(0, err["planeErr"] - BPLANE_ANG_TOL)
+            * targetBody:SOIRADIUS / 90.
     }
     RETURN score.
 }
@@ -227,6 +264,12 @@ LOCAL FUNCTION _bplaneFallbackSearch {
                             targetBody, trial, wantPe, wantInc, wantLan).
                         LOCAL trialScore IS _bplanePlanScore(
                             trialErr, targetBody, wantInc).
+                        IF _bplaneCorridorOk(trialErr, wantInc,
+                                BPLANE_PE_TOL, BPLANE_ANG_TOL) {
+                            mLog("  BPLANE[" + iter
+                                + "] fallback reached corridor; stopping search.").
+                            RETURN TRUE.
+                        }
                         IF trialScore < bestScore {
                             SET bestScore TO trialScore.
                             SET bestAxis TO axis.
@@ -439,11 +482,16 @@ GLOBAL FUNCTION planBplaneCorrection {
     LOCAL angTol IS BPLANE_ANG_TOL.
     LOCAL lead IS BPLANE_LEAD.
 
+    IF _bplaneCurrentCorridorOk(targetBody, wantPe, wantInc, wantLan) {
+        RETURN 0.
+    }
+
     LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, 0).
     ADD nd.
     bplaneResetWarnings().
     WAIT 0.02.
 
+    LOCAL acquired IS FALSE.
     LOCAL meas0 IS measureArrival(nd, targetBody).
     IF meas0 = 0 {
         mLogWarn("BPLANE: no hyperbolic encounter with "
@@ -455,6 +503,7 @@ GLOBAL FUNCTION planBplaneCorrection {
             REMOVE nd.
             RETURN 0.
         }
+        SET acquired TO TRUE.
         SET meas0 TO measureArrival(nd, targetBody).
         IF meas0 = 0 {
             mLogError("BPLANE: acquisition reported success but no "
@@ -466,7 +515,7 @@ GLOBAL FUNCTION planBplaneCorrection {
 
     LOCAL err0 IS _bplaneCorridorError(targetBody, meas0, wantPe, wantInc, wantLan).
     LOCAL tgt0 IS err0["target"].
-    LOCAL planeErr0 IS VANG(meas0["hHat"], tgt0["normal"]).
+    LOCAL planeErr0 IS err0["planeErr"].
     LOCAL planeMode IS "target-plane".
     IF wantInc >= 0 AND NOT _bplanePlaneFeasible(err0) {
         SET planeMode TO "pe-only".
@@ -477,6 +526,12 @@ GLOBAL FUNCTION planBplaneCorrection {
 
     // Already in the corridor?
     IF _bplaneCorridorOk(err0, wantInc, peTol, angTol) {
+        // Acquisition changed the node: this arrival still requires
+        // its burn. Removing it would discard the encounter just found.
+        IF acquired AND nd:DELTAV:MAG >= MIN_EXEC_DV {
+            mLog("BPLANE: acquisition reached corridor; keeping correction node.").
+            RETURN nd.
+        }
         IF pristineLog <> "" {
             mLog(pristineLog).
         } ELSE {
@@ -517,9 +572,9 @@ GLOBAL FUNCTION planBplaneCorrection {
             LOCAL errR IS tgt["br"] - meas["br"].
             LOCAL qT IS meas["bt"] - tgt["bt"].
             LOCAL qR IS meas["br"] - tgt["br"].
-            LOCAL planeErr IS VANG(meas["hHat"], tgt["normal"]).
             LOCAL corrErr IS _bplaneCorridorError(
                 targetBody, meas, wantPe, wantInc, wantLan).
+            LOCAL planeErr IS corrErr["planeErr"].
             LOCAL score IS _bplanePlanScore(corrErr, targetBody, wantInc).
             IF score < bestScore {
                 SET bestScore TO score.
@@ -897,20 +952,28 @@ GLOBAL FUNCTION phaseBplane {
 
     LOCAL wantLan IS CAPTURE_LAN.
     bplaneResetWarnings().
-    LOCAL wakeMeas IS measureArrival(0, targetBody).
-    IF wakeMeas <> 0 {
-        LOCAL wakeErr IS _bplaneCorridorError(targetBody, wakeMeas, wantPe, wantInc, wantLan).
-        mLog("BPLANE wake: initial arrival Pe="
-            + ROUND(wakeMeas["pe"] / 1000, 1)
-            + "km planeErr=" + ROUND(wakeErr["planeErr"], 2)
-            + "deg inc=" + ROUND(wakeMeas["inc"], 2)
-            + " lan=" + ROUND(wakeMeas["lan"], 2) + ".").
-    } ELSE {
-        mLog("BPLANE wake: no measurable arrival patch yet; planner will acquire if possible.").
-    }
 
     LOCAL burns IS 0.
     UNTIL burns >= MAX_BURNS {
+        IF _bplaneCurrentCorridorOk(targetBody, wantPe, wantInc, wantLan) {
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            mLog("STATS bplane result status=already-in-corridor burns=" + burns).
+            nextPhase(xferSeq).
+            RETURN.
+        }
+        IF burns = 0 AND NOT HASNODE {
+            LOCAL wakeMeas IS measureArrival(0, targetBody).
+            IF wakeMeas <> 0 {
+                LOCAL wakeErr IS _bplaneCorridorError(targetBody, wakeMeas, wantPe, wantInc, wantLan).
+                mLog("BPLANE wake: initial arrival Pe="
+                    + ROUND(wakeMeas["pe"] / 1000, 1)
+                    + "km planeErr=" + ROUND(wakeErr["planeErr"], 2)
+                    + "deg inc=" + ROUND(wakeMeas["inc"], 2)
+                    + " lan=" + ROUND(wakeMeas["lan"], 2) + ".").
+            } ELSE {
+                mLog("BPLANE wake: no measurable arrival patch yet; planner will acquire if possible.").
+            }
+        }
         LOCAL nd IS 0.
         IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan) {
             SET nd TO NEXTNODE.
@@ -1001,10 +1064,18 @@ GLOBAL FUNCTION phaseRefineBplane {
     LOCAL maxBurns IS MAX(1, REFINE_BPLANE_MAX_BURNS).
     LOCAL burns IS 0.
     UNTIL burns >= maxBurns {
-        LOCAL measLoop IS measureArrival(0, targetBody).
-        IF measLoop = 0 { BREAK. }
-        LOCAL errLoop IS _bplaneCorridorError(targetBody, measLoop, wantPe, wantInc, wantLan).
-        IF _bplaneCorridorOk(errLoop, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) { BREAK. }
+        IF _bplaneCurrentCorridorOk(targetBody, wantPe, wantInc, wantLan) {
+            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+            mLog("STATS refine-bplane result status=already-in-corridor burns=" + burns).
+            nextPhase(xferSeq).
+            RETURN.
+        }
+        IF NOT HASNODE {
+            LOCAL measLoop IS measureArrival(0, targetBody).
+            IF measLoop = 0 { BREAK. }
+            LOCAL errLoop IS _bplaneCorridorError(targetBody, measLoop, wantPe, wantInc, wantLan).
+            IF _bplaneCorridorOk(errLoop, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) { BREAK. }
+        }
 
         LOCAL nd IS 0.
         IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan) {

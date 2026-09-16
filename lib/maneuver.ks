@@ -40,6 +40,10 @@ LOCAL CRT IS 300.
 LOCAL CRL  IS 180.
 
 GLOBAL FUNCTION executeManeuver {
+    // A throttle lock does not clear the pilot setting it overrides.
+    // Clear both before any wait, including missed-window/abort exits.
+    LOCK THROTTLE TO 0.0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
     WAIT 0.1.
     IF NOT HASNODE {
         mLogError("executeManeuver: no node on flight plan.").
@@ -50,18 +54,20 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL nd    IS NEXTNODE.
     LOCAL ntm IS nd:TIME.
     LOCAL bdv  IS nd:DELTAV:MAG.
-    LOCAL st IS _cst(nd).
-    _mpb(nd, bdv, st).
-
     IF bdv < 50 { _stl(0.50). }
     IF bdv < 10 { _stl(0.10). }
     IF bdv < 2  { _stl(0.05). }
     IF bdv < 0.5 { _stl(0.02). }
+    // Estimate the centered start with the thrust limits actually used.
+    WAIT 0.1.
+    LOCAL st IS _cst(nd).
+    _mpb(nd, bdv, st).
 
     IF st < TIME:SECONDS {
         mLogWarn("Burn window already passed by " + ROUND(TIME:SECONDS - st, 0) + "s — removing node.").
         HUDTEXT("Burn window missed — replanning", 5, 2, 15, YELLOW, FALSE).
         REMOVE nd.
+        _stl(1.0).
         _cpb("missed-window").
         RETURN FALSE.
     }
@@ -171,8 +177,10 @@ GLOBAL FUNCTION executeManeuver {
         mLogError("Refusing burn: " + ROUND(ie, 1)
             + " deg off the burn vector at ignition.").
         LOCK THROTTLE TO 0.
+        SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
         UNLOCK THROTTLE.
         UNLOCK STEERING.
+        _stl(1.0).
         SET SAS TO FALSE.
         RETURN FALSE.
     }
@@ -181,6 +189,7 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL bsc IS TIME:SECONDS.
 
     LOCAL steerVec IS nd:BURNVECTOR.
+    LOCAL ignitionVec IS steerVec.
     LOCAL prevBV IS steerVec.
     LOCAL prevBVTime IS TIME:SECONDS.
     LOCAL fixedBurnVector IS bdv <= BURN_FIXED_NODE_MAX_DV
@@ -206,6 +215,7 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL appliedDv IS 0.
     LOCAL lastDvTime IS TIME:SECONDS.
     LOCAL prevVel IS SHIP:VELOCITY:ORBIT.
+    LOCAL prevGravity IS _gacc().
     LOCAL lastNodeRem IS nd:DELTAV:MAG.
     LOCAL nodeUnstableLogged IS FALSE.
 
@@ -213,19 +223,21 @@ GLOBAL FUNCTION executeManeuver {
         LOCAL now IS TIME:SECONDS.
         LOCAL dt IS MAX(0, now - lastDvTime).
         LOCAL curVel IS SHIP:VELOCITY:ORBIT.
+        LOCAL curGravity IS _gacc().
         IF throttleCmd > 0 AND dt > 0 {
-            LOCAL thrustDvVec IS curVel - prevVel - (_gacc() * dt).
+            LOCAL thrustDvVec IS curVel - prevVel
+                - ((prevGravity + curGravity) * (0.5 * dt)).
             LOCAL stepDv IS VDOT(thrustDvVec, steerVec:NORMALIZED).
-            IF stepDv > 0 {
-                SET appliedDv TO appliedDv + stepDv.
-            }
+            SET appliedDv TO MAX(0, appliedDv + stepDv).
         }
         SET lastDvTime TO now.
         SET prevVel TO curVel.
+        SET prevGravity TO curGravity.
         LOCAL remNow IS nd:DELTAV:MAG.
         LOCAL intRem IS MAX(0, bdv - appliedDv).
         LOCAL avNow IS SHIP:ANGULARVEL:MAG.
         IF remNow <= BURN_TRIM_ABS_COMPLETE_DV {
+            SET throttleCmd TO 0.0.
             SET burnCompleteReason TO "node-absolute-trim".
             mLogWarn("Burn node absolute trim complete: remaining="
                 + ROUND(remNow, 2)
@@ -236,6 +248,7 @@ GLOBAL FUNCTION executeManeuver {
         }
         IF appliedDv >= bdv * BURN_TRIM_COMPLETE_FRAC
                 AND remNow <= BURN_TRIM_FORCE_MAX_DV {
+            SET throttleCmd TO 0.0.
             SET burnCompleteReason TO "applied-node-trim".
             mLogWarn("Burn applied/node trim complete: remaining="
                 + ROUND(remNow, 2)
@@ -245,6 +258,7 @@ GLOBAL FUNCTION executeManeuver {
             BREAK.
         }
         IF fixedBurnVector AND appliedDv >= bdv {
+            SET throttleCmd TO 0.0.
             SET burnCompleteReason TO "integrated-target".
             mLogWarn("Burn integrated target reached: applied="
                 + ROUND(appliedDv, 2)
@@ -253,6 +267,7 @@ GLOBAL FUNCTION executeManeuver {
             BREAK.
         }
         IF fixedBurnVector AND _tc(intRem, bdv) {
+            SET throttleCmd TO 0.0.
             SET burnCompleteReason TO "integrated-trim-low-residual".
             mLogWarn("Burn integrated trim complete: remaining="
                 + ROUND(intRem, 2)
@@ -262,6 +277,7 @@ GLOBAL FUNCTION executeManeuver {
             BREAK.
         }
         IF NOT fixedBurnVector AND _tc(remNow, bdv) {
+            SET throttleCmd TO 0.0.
             SET burnCompleteReason TO "node-trim-low-residual".
             mLogWarn("Burn node trim complete: remaining="
                 + ROUND(remNow, 2)
@@ -270,7 +286,8 @@ GLOBAL FUNCTION executeManeuver {
             SET burnDone TO TRUE.
             BREAK.
         }
-        IF NOT fixedBurnVector AND _ic(nd, bdv) {
+        IF NOT fixedBurnVector AND _ic(nd, bdv, ignitionVec) {
+            SET throttleCmd TO 0.0.
             SET burnCompleteReason TO "completion-check".
             SET burnDone TO TRUE.
             BREAK.
@@ -292,6 +309,7 @@ GLOBAL FUNCTION executeManeuver {
                     OR remNow <= BURN_NODE_FLIP_REMAINING_DV
                     OR bdv <= BURN_FIXED_NODE_MAX_DV).
         IF nodeRebounded OR nodeFlipped {
+            IF NOT fixedBurnVector { SET throttleCmd TO 0.0. }
             IF NOT nodeUnstableLogged {
                 SET nodeUnstableLogged TO TRUE.
                 mLogWarn("Burn node vector unstable: rem=" + ROUND(remNow,2)
@@ -303,6 +321,7 @@ GLOBAL FUNCTION executeManeuver {
                     + (CHOOSE "true" IF fixedBurnVector ELSE "false") + ".").
             }
             IF NOT fixedBurnVector {
+                SET throttleCmd TO 0.0.
                 SET burnCompleteReason TO "node-vector-unstable".
                 SET burnDone TO TRUE.
                 BREAK.
@@ -380,6 +399,7 @@ GLOBAL FUNCTION executeManeuver {
                 SET intRem TO MAX(0, bdv - appliedDv).
                 SET avNow TO SHIP:ANGULARVEL:MAG.
                 IF remNow <= BURN_TRIM_ABS_COMPLETE_DV {
+                    SET throttleCmd TO 0.0.
                     SET burnCompleteReason TO "node-absolute-trim".
                     mLogWarn("Burn node absolute trim complete while paused: remaining="
                         + ROUND(remNow, 2)
@@ -391,6 +411,7 @@ GLOBAL FUNCTION executeManeuver {
                 }
                 IF appliedDv >= bdv * BURN_TRIM_COMPLETE_FRAC
                         AND remNow <= BURN_TRIM_FORCE_MAX_DV {
+                    SET throttleCmd TO 0.0.
                     SET burnCompleteReason TO "applied-node-trim".
                     mLogWarn("Burn applied/node trim complete while paused: remaining="
                         + ROUND(remNow, 2)
@@ -402,6 +423,7 @@ GLOBAL FUNCTION executeManeuver {
                 }
                 IF remNow > bdv + BURN_NODE_REBOUND_EPS {
                     IF appliedDv >= bdv * BURN_NODE_CORRUPT_COMPLETE_FRAC {
+                        SET throttleCmd TO 0.0.
                         SET burnCompleteReason TO "node-corrupt-after-pause".
                         mLogWarn("Burn complete: node residual exceeds target after pause"
                             + " rem=" + ROUND(remNow,2)
@@ -426,6 +448,7 @@ GLOBAL FUNCTION executeManeuver {
                     }
                 }
                 IF fixedBurnVector AND appliedDv >= bdv {
+                    SET throttleCmd TO 0.0.
                     SET burnCompleteReason TO "integrated-target".
                     mLogWarn("Burn integrated target reached while paused: applied="
                         + ROUND(appliedDv, 2)
@@ -435,6 +458,7 @@ GLOBAL FUNCTION executeManeuver {
                     BREAK.
                 }
                 IF fixedBurnVector AND _tc(intRem, bdv) {
+                    SET throttleCmd TO 0.0.
                     SET burnCompleteReason TO "integrated-trim-low-residual".
                     mLogWarn("Burn integrated trim complete while paused: remaining="
                         + ROUND(intRem, 2)
@@ -445,6 +469,7 @@ GLOBAL FUNCTION executeManeuver {
                     BREAK.
                 }
                 IF NOT fixedBurnVector AND _tc(remNow, bdv) {
+                    SET throttleCmd TO 0.0.
                     SET burnCompleteReason TO "node-trim-low-residual".
                     mLogWarn("Burn node trim complete while paused: remaining="
                         + ROUND(remNow, 2)
@@ -454,7 +479,8 @@ GLOBAL FUNCTION executeManeuver {
                     SET reacquired TO TRUE.
                     BREAK.
                 }
-                IF NOT fixedBurnVector AND _ic(nd, bdv) {
+                IF NOT fixedBurnVector AND _ic(nd, bdv, ignitionVec) {
+                    SET throttleCmd TO 0.0.
                     SET burnCompleteReason TO "completion-check".
                     SET burnDone TO TRUE.
                     SET reacquired TO TRUE.
@@ -557,6 +583,7 @@ GLOBAL FUNCTION executeManeuver {
             SET totalPaused TO totalPaused + (TIME:SECONDS - pauseStart).
             SET lastDvTime TO TIME:SECONDS.
             SET prevVel TO SHIP:VELOCITY:ORBIT.
+            SET prevGravity TO _gacc().
             SET alignOverStart TO -1.
             IF burnDone {
                 stateRemove("burn_pause_reason").
@@ -585,6 +612,7 @@ GLOBAL FUNCTION executeManeuver {
             WAIT 0.7.
             SET lastDvTime TO TIME:SECONDS.
             SET prevVel TO SHIP:VELOCITY:ORBIT.
+            SET prevGravity TO _gacc().
         }
 
         LOCAL rem IS remNow.
@@ -592,13 +620,21 @@ GLOBAL FUNCTION executeManeuver {
             SET rem TO MAX(0, bdv - appliedDv).
         }
         LOCAL ma    IS _sma().
+        IF ma <= 0 {
+            SET throttleCmd TO 0.0.
+            SET burnAbort TO "no-thrust".
+            SET burnAbortDetail TO "No available thrust after staging check.".
+            stateSet("burn_status", "aborted-no-thrust").
+            BREAK.
+        }
         LOCAL dc IS 1.
         IF NOT fixedBurnVector {
-            SET dc TO VDOT(nd:BURNVECTOR:NORMALIZED, nd:DELTAV:NORMALIZED).
+            SET dc TO VDOT(ignitionVec, nd:DELTAV).
         }
         IF rem < 2 {
             SET db2 TO TRUE.
         } ELSE IF db2 AND rem > 2 {
+            SET throttleCmd TO 0.0.
             SET rdv TO rem.
             IF bdv >= BURN_REBOUND_ACCEPT_MIN_DV
                     AND rem <= MAX(BURN_REBOUND_ACCEPT_MIN,
@@ -616,13 +652,15 @@ GLOBAL FUNCTION executeManeuver {
 
         IF NOT fixedBurnVector AND dc < 0 { SET throttleCmd TO 0.0. BREAK. }
 
-        IF rem > BURN_FULL_THROTTLE_MIN_DV {
-            SET throttleCmd TO 1.0.
-        } ELSE IF rem > 0.5 AND ma > 0 {
-            LOCAL tts IS rem / ma.
-            SET throttleCmd TO MAX(0.02, MIN(0.5, tts)).
-        } ELSE IF fixedBurnVector AND rem >= 0.04 {
-            SET throttleCmd TO 0.01.
+        IF ma > 0 AND (rem > 0.5 OR (fixedBurnVector AND rem >= 0.04)) {
+            // Taper by time-to-go even above 10 m/s. A fixed dV gate
+            // and minimum throttle can overshoot on high-acceleration
+            // craft or when the script takes several physics ticks.
+            LOCAL horizon IS MAX(1.0, 2 * dt).
+            SET throttleCmd TO MIN(1.0, rem / (ma * horizon)).
+            IF rem <= BURN_FULL_THROTTLE_MIN_DV {
+                SET throttleCmd TO MIN(0.5, throttleCmd).
+            }
         } ELSE {
             SET throttleCmd TO 0.0.
             BREAK.
@@ -630,9 +668,13 @@ GLOBAL FUNCTION executeManeuver {
         WAIT 0.01.
     }
 
-    LOCAL res IS nd:DELTAV:MAG.
     SET throttleCmd TO 0.0.
     LOCK THROTTLE TO 0.0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    // Let the zero command reach a physics update before restoring
+    // thrust limits or removing the node.
+    WAIT 0.01.
+    LOCAL res IS nd:DELTAV:MAG.
     IF burnAbort <> "" {
         SET BURN_ABORT_HOLD_VECTOR TO steerVec.
         LOCK STEERING TO BURN_ABORT_HOLD_VECTOR.
@@ -687,11 +729,7 @@ GLOBAL FUNCTION executeManeuver {
         RETURN FALSE.
     }
 
-    UNLOCK THROTTLE.
     UNLOCK STEERING.
-    SET throttleCmd TO 0.0.
-    LOCK THROTTLE TO 0.0.
-    mLogWarn("Throttle should be 0. THROTTLE=" + THROTTLE).
     mLogWarn("Burn complete. Residual dV ~" + ROUND(res, 2) + " m/s.").
     mLogWarn("STATS burn result dv=" + ROUND(bdv,1)
         + " residual=" + ROUND(res,2)
@@ -770,9 +808,11 @@ LOCAL FUNCTION _sma {
 }
 
 LOCAL FUNCTION _gacc {
-    LOCAL r IS SHIP:POSITION:MAG.
-    IF r <= 0 { RETURN V(0, 0, 0). }
-    RETURN -SHIP:POSITION:NORMALIZED * (SHIP:BODY:MU / (r * r)).
+    // kOS positions are ship-centered; gravity needs body-relative r.
+    LOCAL rVec IS SHIP:POSITION - SHIP:BODY:POSITION.
+    LOCAL rMag IS rVec:MAG.
+    IF rMag <= 0 { RETURN V(0, 0, 0). }
+    RETURN -rVec:NORMALIZED * (SHIP:BODY:MU / (rMag * rMag)).
 }
 
 LOCAL FUNCTION _nf {
@@ -799,10 +839,13 @@ LOCAL FUNCTION _bvo {
 }
 
 LOCAL FUNCTION _ic {
-    PARAMETER nd, origDV.
+    PARAMETER nd, origDV, ignitionVec.
     LOCAL rem IS nd:DELTAV:MAG.
     LOCAL th IS MAX(AC, origDV * CF).
-    LOCAL dc IS VDOT(nd:BURNVECTOR:NORMALIZED, nd:DELTAV:NORMALIZED).
+    IF rem < th { RETURN TRUE. }
+    // BURNVECTOR and DELTAV are aliases; comparing them cannot
+    // detect overshoot. Compare the residual to the ignition vector.
+    LOCAL dc IS VDOT(ignitionVec:NORMALIZED, nd:DELTAV:NORMALIZED).
     IF rem < 1.0 {
         RETURN rem < th OR dc < COS(ATOL).
     }
