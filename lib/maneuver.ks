@@ -189,7 +189,7 @@ GLOBAL FUNCTION executeManeuver {
         mLogWarn("Burn using fixed ignition vector: dv=" + ROUND(bdv,2)
             + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4) + ".").
     }
-    LOCAL throttleCmd IS 0.
+    LOCAL throttleCmd IS 0.0.
     LOCK STEERING TO steerVec.
     LOCK THROTTLE TO throttleCmd.
     LOCAL db2 IS FALSE.
@@ -360,7 +360,7 @@ GLOBAL FUNCTION executeManeuver {
         }
 
         IF pauseReason <> "" {
-            SET throttleCmd TO 0.
+            SET throttleCmd TO 0.0.
             SET pauseCount TO pauseCount + 1.
             LOCAL pauseStart IS TIME:SECONDS.
             stateSet("burn_status", "paused-recovering").
@@ -416,7 +416,7 @@ GLOBAL FUNCTION executeManeuver {
                             + " target=" + ROUND(bdv,2)
                             + " applied=" + ROUND(appliedDv,2)
                             + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4).
-                        SET throttleCmd TO 0.
+                        SET throttleCmd TO 0.0.
                         stateSet("burn_status", "aborted-node-corrupt").
                         stateSet("burn_abort_reason", burnAbort).
                         stateSet("burn_abort_detail", burnAbortDetail).
@@ -479,7 +479,7 @@ GLOBAL FUNCTION executeManeuver {
                                 + " rem=" + ROUND(remNow,2)
                                 + " applied=" + ROUND(appliedDv,2)
                                 + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4).
-                            SET throttleCmd TO 0.
+                            SET throttleCmd TO 0.0.
                             stateSet("burn_status", "aborted-tumbling").
                             stateSet("burn_abort_reason", burnAbort).
                             stateSet("burn_abort_detail", burnAbortDetail).
@@ -534,7 +534,7 @@ GLOBAL FUNCTION executeManeuver {
                                 + " bvSlew=" + ROUND(bvSlew,1)
                                 + " rem=" + ROUND(remNow,2)
                                 + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4).
-                            SET throttleCmd TO 0.
+                            SET throttleCmd TO 0.0.
                             stateSet("burn_status", "aborted-tumbling").
                             stateSet("burn_abort_reason", burnAbort).
                             stateSet("burn_abort_detail", burnAbortDetail).
@@ -579,7 +579,7 @@ GLOBAL FUNCTION executeManeuver {
         IF _ns() {
             HUDTEXT("Staging!", 2, 2, 15, YELLOW, FALSE).
             mLog("Auto-stage triggered.").
-            SET throttleCmd TO 0.
+            SET throttleCmd TO 0.0.
             WAIT 0.3.
             STAGE.
             WAIT 0.7.
@@ -610,11 +610,11 @@ GLOBAL FUNCTION executeManeuver {
                 mLogError("Burn dV rebounded after trim phase: remaining="
                     + ROUND(rem, 2) + " m/s — stopping maneuver.").
             }
-            SET throttleCmd TO 0.
+            SET throttleCmd TO 0.0.
             BREAK.
         }
 
-        IF NOT fixedBurnVector AND dc < 0 { SET throttleCmd TO 0. BREAK. }
+        IF NOT fixedBurnVector AND dc < 0 { SET throttleCmd TO 0.0. BREAK. }
 
         IF rem > BURN_FULL_THROTTLE_MIN_DV {
             SET throttleCmd TO 1.0.
@@ -624,15 +624,15 @@ GLOBAL FUNCTION executeManeuver {
         } ELSE IF fixedBurnVector AND rem >= 0.04 {
             SET throttleCmd TO 0.01.
         } ELSE {
-            SET throttleCmd TO 0.
+            SET throttleCmd TO 0.0.
             BREAK.
         }
         WAIT 0.01.
     }
 
     LOCAL res IS nd:DELTAV:MAG.
-    SET throttleCmd TO 0.
-    LOCK THROTTLE TO 0.
+    SET throttleCmd TO 0.0.
+    LOCK THROTTLE TO 0.0.
     IF burnAbort <> "" {
         SET BURN_ABORT_HOLD_VECTOR TO steerVec.
         LOCK STEERING TO BURN_ABORT_HOLD_VECTOR.
@@ -658,8 +658,8 @@ GLOBAL FUNCTION executeManeuver {
         }
         RETURN FALSE.
     }
-    UNLOCK THROTTLE.
-    UNLOCK STEERING.
+    SET throttleCmd TO 0.0.
+    LOCK THROTTLE TO 0.0.
     _ren(ntm).
     _stl(1.0).
     IF dra {
@@ -687,8 +687,13 @@ GLOBAL FUNCTION executeManeuver {
         RETURN FALSE.
     }
 
-    mLog("Burn complete. Residual dV ~" + ROUND(res, 2) + " m/s.").
-    mLog("STATS burn result dv=" + ROUND(bdv,1)
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SET throttleCmd TO 0.0.
+    LOCK THROTTLE TO 0.0.
+    mLogWarn("Throttle should be 0. THROTTLE=" + THROTTLE).
+    mLogWarn("Burn complete. Residual dV ~" + ROUND(res, 2) + " m/s.").
+    mLogWarn("STATS burn result dv=" + ROUND(bdv,1)
         + " residual=" + ROUND(res,2)
         + " applied=" + ROUND(appliedDv,2)
         + " intResidual=" + ROUND(MAX(0, bdv - appliedDv),2)

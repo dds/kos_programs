@@ -169,11 +169,12 @@ GLOBAL FUNCTION mLog {
         SET wroteLocal TO TRUE.
     }
 
-    IF wroteLocal AND level = "WARN" AND message:LENGTH >= 5
-            AND message:SUBSTRING(0,5) = "STATS"
-            AND HOMECONNECTION:ISCONNECTED {
-        archiveLog().
-    }
+    IF HOMECONNECTION:ISCONNECTED { archiveLog(). }
+    // IF wroteLocal // AND level = "WARN" AND message:LENGTH >= 5
+    //         // AND message:SUBSTRING(0,5) = "STATS"
+    //         AND HOMECONNECTION:ISCONNECTED {
+    //     archiveLog().
+    // }
 }
 
 GLOBAL FUNCTION mLogWarn  { PARAMETER m. mLog(m, "WARN").  }
