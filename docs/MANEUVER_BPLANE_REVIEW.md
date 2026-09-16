@@ -74,3 +74,43 @@ Flight checks still needed:
    LAN target: only the latter should need a LAN correction.
 6. Acquire a missing encounter into the corridor. Confirm the acquisition
    node remains for execution, then remeasure after the burn.
+
+## RO6 Minmus flight follow-up
+
+The next flight reported a transfer cutoff with about 5 m/s left, a
+mid-latitude arrival instead of polar, and impact during **Minmus CAPTURE**.
+The earlier changes had left these separate problems in place:
+
+- `applied-node-trim` declared success at 98% integrated dV with up to
+  5 m/s of node residual. Both running and paused versions are removed.
+  Ordinary node burns now trim to an absolute 0.05 m/s, including the
+  throttle tail. Percentage-based completion, the sub-1 m/s angle shortcut,
+  and multi-m/s rebound acceptance no longer report success. A stop outside
+  tolerance returns failure for replanning. The existing fixed-vector
+  fallback still uses integrated dV when node data cannot be trusted.
+- `phaseCapture` overwrote its 35 km fallback with unset `TARGET_AP = -1`.
+  `planCapture` then treated -1 metre as the opposite apsis of the desired
+  ellipse. Starting at 50 km Pe, that retrograde burn makes the burn point
+  the new Ap and puts the new Pe **one metre below the surface**. Preserve
+  the fallback when Ap is unset, reject negative targets in the planner,
+  and clamp targets below arrival Pe to a circle at arrival Pe. Verify the
+  node predicts a bound orbit above the surface and check the actual orbit
+  after execution. The other planner caller, Duna capture assist, now handles
+  a rejected node too.
+- Inclination-only B-plane targeting was still constructing its target
+  normal at the measured LAN, although LAN was unspecified. For a polar
+  target this could invent an infeasibility and switch to Pe-only correction.
+  With free LAN, intersect the requested inclination cone with the plane
+  perpendicular to the incoming asymptote, choosing the closer valid normal.
+  Keep explicit-LAN targeting separate. Every incoming asymptote can lie in
+  a polar plane; it need not lie in the polar plane at the old LAN.
+- `RO6/minmus_polar_orbit_return` now specifies `TARGET_AP = 50000` and a
+  `SHAPE` phase targeting 50 x 50 km at 90 degrees before science operations.
+  Capture alone preserves whichever arrival inclination BPLANE achieved.
+
+Follow-up numerical checks reproduced the -1 metre capture Pe, checked
+unset/below-Pe/circular/elliptical target handling, ran four burn tails from
+5 m/s to <=0.05 m/s without overshoot, and checked 152 free-LAN normal
+candidates for unit length, requested inclination, and perpendicularity to
+the incoming asymptote. Structural checks also pass. These follow-up fixes
+still need an in-game RO6 Minmus flight; they are not yet flight-proven.

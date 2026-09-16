@@ -213,6 +213,39 @@ GLOBAL FUNCTION arrivalPlaneNormal {
     RETURN _candidate(inc, lan, sign).
 }
 
+// With no requested LAN, choose either intersection of the inclination
+// cone with the plane perpendicular to S. Keeping the current LAN can
+// falsely make even a polar arrival look infeasible.
+LOCAL FUNCTION _arrivalInclinationNormal {
+    PARAMETER targetBody, meas, wantInc.
+    LOCAL sHat IS meas["S"].
+    LOCAL north_ IS targetBody:ANGULARVEL:NORMALIZED.
+    // Calibrate the angular-momentum sign against the measured orbit.
+    IF VDOT(meas["hHat"], north_) * COS(meas["inc"]) < -1e-8 {
+        SET north_ TO -north_.
+    }
+    LOCAL northInPlane IS north_ - VDOT(north_, sHat) * sHat.
+    LOCAL span IS northInPlane:MAG.
+    LOCAL wantCos IS COS(wantInc).
+    IF span < 1e-8 {
+        IF ABS(wantCos) < 1e-8 { RETURN meas["hHat"]. }
+    } ELSE IF ABS(wantCos) <= span {
+        LOCAL alongNorth IS northInPlane / span.
+        LOCAL acrossNorth IS VCRS(sHat, alongNorth):NORMALIZED.
+        LOCAL coeff IS MAX(-1, MIN(1, wantCos / span)).
+        LOCAL side IS SQRT(MAX(0, 1 - coeff ^ 2)).
+        LOCAL candidateA IS coeff * alongNorth + side * acrossNorth.
+        LOCAL candidateB IS coeff * alongNorth - side * acrossNorth.
+        IF VDOT(candidateB, meas["hHat"]) > VDOT(candidateA, meas["hHat"]) {
+            RETURN candidateB:NORMALIZED.
+        }
+        RETURN candidateA:NORMALIZED.
+    }
+    // No plane at this inclination contains the incoming asymptote.
+    // Let the existing projection/feasibility handling report that case.
+    RETURN arrivalPlaneNormal(targetBody, wantInc, meas["lan"], meas).
+}
+
 // ============================================================
 // targetBplaneVector — desired (B.T, B.R) for the requested
 // capture elements, given the current arrival measurement.
@@ -224,9 +257,11 @@ GLOBAL FUNCTION targetBplaneVector {
     LOCAL sHat IS meas["S"].
     LOCAL nTgt IS meas["hHat"].
     IF wantInc >= 0 {
-        LOCAL lan IS meas["lan"].
-        IF wantLan >= 0 { SET lan TO wantLan. }
-        SET nTgt TO arrivalPlaneNormal(targetBody, wantInc, lan, meas).
+        IF wantLan >= 0 {
+            SET nTgt TO arrivalPlaneNormal(targetBody, wantInc, wantLan, meas).
+        } ELSE {
+            SET nTgt TO _arrivalInclinationNormal(targetBody, meas, wantInc).
+        }
     }
 
     // The achievable plane must contain the asymptote. Project the

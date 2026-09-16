@@ -7,9 +7,6 @@
 
 // --- Config defaults owned by this file ---
 GLOBAL BURN_BRIEF IS 1.
-GLOBAL BURN_REBOUND_ACCEPT_MIN_DV IS 100.
-GLOBAL BURN_REBOUND_ACCEPT_FRAC IS 0.005.
-GLOBAL BURN_REBOUND_ACCEPT_MIN IS 3.
 GLOBAL BURN_ALIGN_GUARD_DEG IS 20.
 GLOBAL BURN_ALIGN_REACQUIRE_DEG IS 5.
 GLOBAL BURN_ALIGN_DEBOUNCE IS 0.5.
@@ -20,21 +17,17 @@ GLOBAL BURN_BV_MIN_MAG IS 0.001.
 GLOBAL BURN_TUMBLE_AV_MIN IS 0.5.
 GLOBAL BURN_TRIM_COMPLETE_FRAC IS 0.98.
 GLOBAL BURN_TRIM_COMPLETE_MAX_DV IS 0.05.
-GLOBAL BURN_TRIM_FORCE_MAX_DV IS 5.
-GLOBAL BURN_TRIM_ABS_COMPLETE_DV IS 0.5.
+GLOBAL BURN_TRIM_ABS_COMPLETE_DV IS 0.05.
 GLOBAL BURN_FIXED_NODE_MAX_DV IS 50.
 GLOBAL BURN_FIXED_NODE_MIN_ECC IS 0.9.
 GLOBAL BURN_NODE_REBOUND_EPS IS 0.5.
 GLOBAL BURN_NODE_FLIP_DEG IS 90.
 GLOBAL BURN_NODE_FLIP_REMAINING_DV IS 20.
-GLOBAL BURN_NODE_CORRUPT_COMPLETE_FRAC IS 0.75.
 GLOBAL BURN_TICK_LOG_INTERVAL IS 1.0.
 GLOBAL BURN_ABORT_HOLD_VECTOR IS V(0, 0, 1).
 GLOBAL BURN_FULL_THROTTLE_MIN_DV IS 10.
 
 
-LOCAL CF        IS 0.001.
-LOCAL AC           IS 0.0001.
 LOCAL ATOL      IS 2.0.
 LOCAL CRT IS 300.
 LOCAL CRL  IS 180.
@@ -54,6 +47,12 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL nd    IS NEXTNODE.
     LOCAL ntm IS nd:TIME.
     LOCAL bdv  IS nd:DELTAV:MAG.
+    IF bdv <= BURN_TRIM_ABS_COMPLETE_DV {
+        _ren(ntm).
+        _cpb("already-complete").
+        mLog("Maneuver already below absolute dV tolerance; skipping burn.").
+        RETURN TRUE.
+    }
     IF bdv < 50 { _stl(0.50). }
     IF bdv < 10 { _stl(0.10). }
     IF bdv < 2  { _stl(0.05). }
@@ -246,17 +245,7 @@ GLOBAL FUNCTION executeManeuver {
             SET burnDone TO TRUE.
             BREAK.
         }
-        IF appliedDv >= bdv * BURN_TRIM_COMPLETE_FRAC
-                AND remNow <= BURN_TRIM_FORCE_MAX_DV {
-            SET throttleCmd TO 0.0.
-            SET burnCompleteReason TO "applied-node-trim".
-            mLogWarn("Burn applied/node trim complete: remaining="
-                + ROUND(remNow, 2)
-                + " m/s applied=" + ROUND(appliedDv, 2)
-                + " of " + ROUND(bdv, 1) + " m/s.").
-            SET burnDone TO TRUE.
-            BREAK.
-        }
+
         IF fixedBurnVector AND appliedDv >= bdv {
             SET throttleCmd TO 0.0.
             SET burnCompleteReason TO "integrated-target".
@@ -286,7 +275,7 @@ GLOBAL FUNCTION executeManeuver {
             SET burnDone TO TRUE.
             BREAK.
         }
-        IF NOT fixedBurnVector AND _ic(nd, bdv, ignitionVec) {
+        IF NOT fixedBurnVector AND _ic(nd, ignitionVec) {
             SET throttleCmd TO 0.0.
             SET burnCompleteReason TO "completion-check".
             SET burnDone TO TRUE.
@@ -409,43 +398,20 @@ GLOBAL FUNCTION executeManeuver {
                     SET reacquired TO TRUE.
                     BREAK.
                 }
-                IF appliedDv >= bdv * BURN_TRIM_COMPLETE_FRAC
-                        AND remNow <= BURN_TRIM_FORCE_MAX_DV {
-                    SET throttleCmd TO 0.0.
-                    SET burnCompleteReason TO "applied-node-trim".
-                    mLogWarn("Burn applied/node trim complete while paused: remaining="
-                        + ROUND(remNow, 2)
-                        + " m/s applied=" + ROUND(appliedDv, 2)
-                        + " of " + ROUND(bdv, 1) + " m/s.").
-                    SET burnDone TO TRUE.
-                    SET reacquired TO TRUE.
-                    BREAK.
-                }
+
                 IF remNow > bdv + BURN_NODE_REBOUND_EPS {
-                    IF appliedDv >= bdv * BURN_NODE_CORRUPT_COMPLETE_FRAC {
-                        SET throttleCmd TO 0.0.
-                        SET burnCompleteReason TO "node-corrupt-after-pause".
-                        mLogWarn("Burn complete: node residual exceeds target after pause"
-                            + " rem=" + ROUND(remNow,2)
-                            + " target=" + ROUND(bdv,2)
-                            + " applied=" + ROUND(appliedDv,2) + ".").
-                        SET burnDone TO TRUE.
-                        SET reacquired TO TRUE.
-                        BREAK.
-                    } ELSE {
-                        SET burnAbort TO "node-corrupt-after-pause".
-                        SET burnAbortDetail TO "rem=" + ROUND(remNow,2)
-                            + " target=" + ROUND(bdv,2)
-                            + " applied=" + ROUND(appliedDv,2)
-                            + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4).
-                        SET throttleCmd TO 0.0.
-                        stateSet("burn_status", "aborted-node-corrupt").
-                        stateSet("burn_abort_reason", burnAbort).
-                        stateSet("burn_abort_detail", burnAbortDetail).
-                        mLogError("Burn abort: node corrupt after pause ("
-                            + burnAbortDetail + ").").
-                        BREAK.
-                    }
+                    SET burnAbort TO "node-corrupt-after-pause".
+                    SET burnAbortDetail TO "rem=" + ROUND(remNow,2)
+                        + " target=" + ROUND(bdv,2)
+                        + " applied=" + ROUND(appliedDv,2)
+                        + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4).
+                    SET throttleCmd TO 0.0.
+                    stateSet("burn_status", "aborted-node-corrupt").
+                    stateSet("burn_abort_reason", burnAbort).
+                    stateSet("burn_abort_detail", burnAbortDetail).
+                    mLogError("Burn abort: node corrupt after pause ("
+                        + burnAbortDetail + ").").
+                    BREAK.
                 }
                 IF fixedBurnVector AND appliedDv >= bdv {
                     SET throttleCmd TO 0.0.
@@ -479,7 +445,7 @@ GLOBAL FUNCTION executeManeuver {
                     SET reacquired TO TRUE.
                     BREAK.
                 }
-                IF NOT fixedBurnVector AND _ic(nd, bdv, ignitionVec) {
+                IF NOT fixedBurnVector AND _ic(nd, ignitionVec) {
                     SET throttleCmd TO 0.0.
                     SET burnCompleteReason TO "completion-check".
                     SET burnDone TO TRUE.
@@ -636,23 +602,16 @@ GLOBAL FUNCTION executeManeuver {
         } ELSE IF db2 AND rem > 2 {
             SET throttleCmd TO 0.0.
             SET rdv TO rem.
-            IF bdv >= BURN_REBOUND_ACCEPT_MIN_DV
-                    AND rem <= MAX(BURN_REBOUND_ACCEPT_MIN,
-                        bdv * BURN_REBOUND_ACCEPT_FRAC) {
-                mLogWarn("Burn dV rebounded slightly after trim phase: remaining="
-                    + ROUND(rem, 2) + " m/s — accepting large burn.").
-            } ELSE {
-                SET dra TO TRUE.
-                mLogError("Burn dV rebounded after trim phase: remaining="
-                    + ROUND(rem, 2) + " m/s — stopping maneuver.").
-            }
+            SET dra TO TRUE.
+            mLogError("Burn dV rebounded after trim phase: remaining="
+                + ROUND(rem, 2) + " m/s — stopping maneuver.").
             SET throttleCmd TO 0.0.
             BREAK.
         }
 
         IF NOT fixedBurnVector AND dc < 0 { SET throttleCmd TO 0.0. BREAK. }
 
-        IF ma > 0 AND (rem > 0.5 OR (fixedBurnVector AND rem >= 0.04)) {
+        IF rem > BURN_TRIM_ABS_COMPLETE_DV {
             // Taper by time-to-go even above 10 m/s. A fixed dV gate
             // and minimum throttle can overshoot on high-acceleration
             // craft or when the script takes several physics ticks.
@@ -675,6 +634,13 @@ GLOBAL FUNCTION executeManeuver {
     // thrust limits or removing the node.
     WAIT 0.01.
     LOCAL res IS nd:DELTAV:MAG.
+    IF burnAbort = "" AND NOT fixedBurnVector
+            AND res > BURN_TRIM_ABS_COMPLETE_DV {
+        SET burnAbort TO "residual-outside-tolerance".
+        SET burnAbortDetail TO "remaining=" + ROUND(res, 3)
+            + " stop=" + burnCompleteReason.
+        stateSet("burn_status", "aborted-residual").
+    }
     IF burnAbort <> "" {
         SET BURN_ABORT_HOLD_VECTOR TO steerVec.
         LOCK STEERING TO BURN_ABORT_HOLD_VECTOR.
@@ -839,17 +805,13 @@ LOCAL FUNCTION _bvo {
 }
 
 LOCAL FUNCTION _ic {
-    PARAMETER nd, origDV, ignitionVec.
+    PARAMETER nd, ignitionVec.
     LOCAL rem IS nd:DELTAV:MAG.
-    LOCAL th IS MAX(AC, origDV * CF).
-    IF rem < th { RETURN TRUE. }
-    // BURNVECTOR and DELTAV are aliases; comparing them cannot
-    // detect overshoot. Compare the residual to the ignition vector.
-    LOCAL dc IS VDOT(ignitionVec:NORMALIZED, nd:DELTAV:NORMALIZED).
-    IF rem < 1.0 {
-        RETURN rem < th OR dc < COS(ATOL).
-    }
-    RETURN rem < th OR dc < 0.
+    IF rem <= BURN_TRIM_ABS_COMPLETE_DV { RETURN TRUE. }
+    // Stop a reversed residual, but let final validation report failure
+    // when it is still outside tolerance. Neither a percentage of the
+    // original burn nor a small vector deflection means it is complete.
+    RETURN VDOT(ignitionVec, nd:DELTAV) < 0.
 }
 
 LOCAL FUNCTION _tc {

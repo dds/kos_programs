@@ -46,6 +46,17 @@ GLOBAL FUNCTION planCircularize {
 GLOBAL FUNCTION planCapture {
     PARAMETER tb.
     PARAMETER ta.
+    IF tb <> SHIP:BODY OR ta < 0 OR SHIP:PERIAPSIS <= 0 {
+        mLogError("Capture requires the current body, a nonnegative target Ap, "
+            + "and an arrival Pe above the surface.").
+        RETURN 0.
+    }
+    // A retrograde burn at Pe cannot put Ap below that burn altitude.
+    // Doing so swaps the apses and lowers the new Pe instead.
+    IF ta < SHIP:PERIAPSIS {
+        mLog("Capture target Ap below arrival Pe; circularizing at arrival Pe.").
+        SET ta TO SHIP:PERIAPSIS.
+    }
     LOCAL mu    IS tb:MU.
     LOCAL rp   IS tb:RADIUS + SHIP:PERIAPSIS.
     LOCAL ra   IS tb:RADIUS + ta.
@@ -55,6 +66,12 @@ GLOBAL FUNCTION planCapture {
     LOCAL dv       IS vc - vp.
     LOCAL nd IS NODE(TIME:SECONDS + ETA:PERIAPSIS, 0, 0, dv).
     ADD nd.
+    WAIT 0.02.
+    IF nd:ORBIT:PERIAPSIS <= 0 OR nd:ORBIT:ECCENTRICITY >= 1 {
+        mLogError("Capture node predicts an impact or unbound orbit; removing node.").
+        REMOVE nd.
+        RETURN 0.
+    }
     mLog("Capture node: dV=" + ROUND(dv,1)
         + " m/s at Pe in " + ROUND(ETA:PERIAPSIS,0)
         + "s  targetAp=" + ROUND(ta/1000,1) + "km").
@@ -62,6 +79,8 @@ GLOBAL FUNCTION planCapture {
         + " dv=" + ROUND(dv,1)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " targetApKm=" + ROUND(ta/1000,1)
+        + " plannedPeKm=" + ROUND(nd:ORBIT:PERIAPSIS/1000,1)
+        + " plannedApKm=" + ROUND(nd:ORBIT:APOAPSIS/1000,1)
         + " etaPe=" + ROUND(ETA:PERIAPSIS,0)).
     maneuverUiArchiveLog("capture").
     RETURN nd.

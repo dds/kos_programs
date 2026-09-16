@@ -133,7 +133,7 @@ LOCAL FUNCTION _bplaneCorridorError {
         meas["inc"], meas["lan"], wantInc, wantLan).
     // Keep the closest-achievable-plane policy for a tilted asymptote,
     // but never reject elements that already satisfy the actual request.
-    IF wantInc >= 0 AND tgt["offPlane"] > 0.5 {
+    IF wantInc >= 0 AND wantLan >= 0 AND tgt["offPlane"] > 0.5 {
         SET planeErr TO MIN(planeErr, VANG(meas["hHat"], tgt["normal"])).
     }
     RETURN LEX("peErr", meas["pe"] - wantPe,

@@ -187,6 +187,7 @@ LOCAL FUNCTION _diMaybeCaptureAssist {
     }
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     LOCAL nd IS planCapture(SHIP:BODY, DUNA_AEROCAPTURE_TARGET_AP).
+    IF nd = 0 { RETURN FALSE. }
     WAIT 0.2.
     LOCAL dv IS nd:DELTAV:MAG.
     IF dv < 0.5 {

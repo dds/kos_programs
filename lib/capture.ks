@@ -299,6 +299,10 @@ GLOBAL FUNCTION phaseCoast2Half {
 
 GLOBAL FUNCTION phaseCapture {
     LOCAL target IS missionTargetBody().
+    IF SHIP:BODY <> target {
+        mLogError("CAPTURE: vessel is not inside " + target:NAME + " SOI.").
+        RETURN.
+    }
     WAIT 2.
     mLog("Planning capture into elliptical orbit at " + target:NAME + ".").
     mLog("STATS capture phase setup target=" + target:NAME
@@ -313,13 +317,22 @@ GLOBAL FUNCTION phaseCapture {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
 
         // 1. Resolve target altitude from config
-        LOCAL captureAlt IS 35000.        SET captureAlt TO TARGET_AP.
+        LOCAL captureAlt IS MAX(35000, SHIP:PERIAPSIS).
+        IF TARGET_AP >= 0 { SET captureAlt TO TARGET_AP. }
 
         // 2. Delegate math to your existing library function
-        planCapture(target, captureAlt).
+        LOCAL nd IS planCapture(target, captureAlt).
+        IF nd = 0 {
+            mLogError("CAPTURE: no safe capture node; holding phase.").
+            RETURN.
+        }
 
         // 3. Execute with standard retry logic
         SET success TO executeManeuver().
+        IF success AND (SHIP:ORBIT:ECCENTRICITY >= 1 OR SHIP:PERIAPSIS <= 0) {
+            mLogError("CAPTURE: burn ended without a bound orbit above the surface; holding phase.").
+            RETURN.
+        }
 
         IF NOT success {
             SET retries TO retries + 1.

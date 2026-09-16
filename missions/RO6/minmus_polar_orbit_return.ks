@@ -8,7 +8,7 @@ SET PARKING_ALT TO 78000.
 SET SEQUENCE TO LIST(
     "PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK",
     "XING", "BPLANE", "COAST_1HALF", "REFINE_BPLANE", "COAST_2HALF",
-     "CAPTURE", "SCIENCE_OPS", "DONE").
+    "CAPTURE", "SHAPE", "SCIENCE_OPS", "DONE").
 
 // RETURN_TRIM: high-leverage KSC-longitude correction on the Kerbin
 // approach (a few m/s far out moves the impact thousands of km). It
@@ -25,6 +25,12 @@ SET CAPTURE_PE TO 50000.
 SET CAPTURE_INC TO 90.
 SET CAPTURE_DIR TO "POLAR".
 SET TARGET_PE TO 50000.
+SET TARGET_AP TO 50000.
+// Capture preserves the arrival plane; SHAPE finishes any residual
+// plane/apsis error before the polar science orbit is considered ready.
+SET SHAPE_PE TO 50000.
+SET SHAPE_AP TO 50000.
+SET SHAPE_INC TO 90.
 
 
 // Let the solver fly a closer Mun pass for more bending authority, so
