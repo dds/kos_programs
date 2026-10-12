@@ -151,6 +151,10 @@ Looks like Python/JS; is neither.
   with a no-thrust abort. The bounded automatic stage sequence falls back
   to a live manual-recovery wait. After a terminal hold, only the explicit
   `cmd/resumeburn.ks` request permits XING to continue the retained node now.
+  `burn_departure_*` survives burn cleanup and is cleared only after
+  `nextPhase` saves the phase beyond XING. On reload, inspect the actual
+  encounter first; never interpret a cleaned-up flown departure as unflown.
+  Release throttle/steering locks after cutoff before archive log I/O.
 
 ## Working in this repo
 

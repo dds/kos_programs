@@ -137,6 +137,30 @@ ordinary mission resume/reboot still keeps the hold, and the command does
 not clear ABORT. A long interruption can make the original trajectory
 inaccurate, so this command is an operator decision, not an automatic retry.
 
+Long, low-thrust burns can leave transverse node error because a maneuver
+node models an instantaneous impulse. The live throttle guard tapers the
+remaining component along the craft's thrust direction near cutoff, and
+latches off if the powered residual rebounds from its best value. A stopped
+burn with residual error is checked against the actual arrival trajectory;
+it is not declared precise just because the engines stopped. Controls are
+unlocked after cutoff, including failed burns. This is cutoff protection,
+not a finite-duration transfer optimizer.
+
+After reloading a save following departure, XING checks the actual encounter
+before considering the retained node. A departure marker survives burn
+cleanup until the next phase is saved, preventing a second departure plan
+in that save window. A valid encounter can proceed to arrival correction;
+otherwise the mission holds. Older saves can only use the markers they
+already contain.
+
+For a Minmus mission whose sequence includes **BPLANE**, if the departure is
+already flown but XING holds, inspect the actual orbit and remaining fuel.
+To keep the mission and request an arrival correction instead of replaying
+the departure, use `RUNPATH("0:/cmd/setphase.ks", "BPLANE").` then `REBOOT.`
+from the manual terminal while linked. BPLANE can attempt to reacquire a
+near miss within its correction budget; a Minmus encounter/landing is not
+guaranteed. Do not use `resumeburn.ks` to replay an overshot departure.
+
 ### Multi-leg flights
 
 Airline-style missions (land, swap passengers, fly on) and drone sorties end

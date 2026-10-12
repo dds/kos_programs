@@ -261,7 +261,9 @@ def integration():
     assert 'SET plan TO LEXICON(' in window  # no in-place mutation of state cache
     # Aborted/partial departures must hold before either replan/delete path.
     transfer = body(xfer, 'phaseTransfer')
-    assert transfer.count('_holdInterruptedTransfer()') == 3
+    assert transfer.count('_holdInterruptedTransfer()') == 4
+    assert transfer.index('_postBurnTransferHandoffOk(target, "phase-entry")') < transfer.index('executeManeuver()')
+    assert 'IF maneuverDepartureFlown() AND NOT BURN_RESUME_REQUESTED' in transfer
     for removal in re.finditer(r'UNTIL NOT HASNODE \{ REMOVE NEXTNODE', transfer):
         preceding = transfer[:removal.start()]
         assert '_holdInterruptedTransfer()' in preceding
@@ -269,6 +271,21 @@ def integration():
     assert execute.index('maneuverBurnInterrupted()') < execute.index('_mpb(')
     assert 'SET appliedDv TO 0' not in execute.split('_burnRecoverThrust(nd, burnTrace)', 1)[1]
     assert 'IF _ns()' not in execute
+    # Autosave after _cpb but before nextPhase must still mark XING flown.
+    clear_burn = body(BURN, '_cpb')
+    assert 'burn_departure_' not in clear_burn
+    assert 'stateSet("burn_departure_time", TIME:SECONDS)' in execute
+    flown = capture(r'RETURN (maneuverBurnInterrupted\(\).*?)\.', body(BURN, 'maneuverDepartureFlown'))
+    for pending, departure_time, saved_target, expected in (
+            (True, -1, '', True), (False, 1000, 'Minmus', True),
+            (False, -1, '', False), (False, 1000, 'Mun', False)):
+        assert evaluate(flown, maneuverBurnInterrupted=lambda: pending,
+                        stateGetNum=lambda key, default: departure_time,
+                        stateGet=lambda key, default: saved_target,
+                        getTarget=lambda default: 'Minmus') == expected
+    phases = (ROOT / 'lib/phases.ks').read_text()
+    advance = body(phases, 'nextPhase')
+    assert advance.index('stateSet("phase", nxt)') < advance.index('stateRemovePrefix("burn_departure_")')
     assert 'SET burnAbort TO "no-thrust"' not in execute
     # A second zero-thrust observation must cut throttle and loop, not abort.
     throttle = execute.split('LOCAL rem IS remNow.', 1)[1]

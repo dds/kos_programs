@@ -27,6 +27,9 @@ def expression(pattern):
 
 HORIZON = expression(r"LOCAL horizon IS (.*?)\.\s")
 OUTPUT = expression(r'SET cutoff\["output"\] TO (MIN\(.*?)\.\s')
+PROJECTED_REMAINING = expression(r'SET rem TO (MIN\(rem, MAX\(0, forwardRem\)\))\.\s')
+REBOUND_EPS = float(re.search(r'GLOBAL BURN_NODE_REBOUND_EPS IS ([0-9.]+)\.', SOURCE)[1])
+AXIS_GUARD = float(re.search(r'GLOBAL BURN_NODE_FLIP_REMAINING_DV IS ([0-9.]+)\.', SOURCE)[1])
 
 
 class Governor:
@@ -34,17 +37,35 @@ class Governor:
 
     def __init__(self):
         self.stopped = False
+        self.best_rem = -1
+        self.reason = ''
 
-    def command(self, residual, ceiling, acceleration, tick):
-        if ceiling <= 0 or self.stopped:
+    def command(self, residual, ceiling, acceleration, tick, forward_residual=None):
+        if self.stopped:
+            return 0.0
+        if ceiling <= 0:
+            self.best_rem = -1
+            return 0.0
+        if acceleration <= 0:
+            self.best_rem = -1
             return 0.0
         if not math.isfinite(residual) or abs(residual) <= TOLERANCE or residual < 0:
             self.stopped = True
             return 0.0
-        if acceleration <= 0:
+        if forward_residual is None:
+            forward_residual = residual
+        if abs(residual) <= AXIS_GUARD and forward_residual <= TOLERANCE:
+            self.stopped, self.reason = True, 'live-thrust-axis-trim'
             return 0.0
+        if self.best_rem >= 0 and abs(residual) > self.best_rem + REBOUND_EPS:
+            self.stopped, self.reason = True, 'live-residual-rebound'
+            return 0.0
+        self.best_rem = abs(residual) if self.best_rem < 0 else min(self.best_rem, abs(residual))
         values = dict(rem=abs(residual), command=ceiling, acc=acceleration, tickDt=tick)
         builtins = {"__builtins__": {}, "MAX": max, "MIN": min}
+        if abs(residual) <= AXIS_GUARD:
+            values['rem'] = eval(PROJECTED_REMAINING, builtins,
+                                 dict(rem=abs(residual), forwardRem=forward_residual))
         values["horizon"] = eval(HORIZON, builtins, values)
         return eval(OUTPUT, builtins, values)
 
@@ -86,7 +107,7 @@ def main():
     assert old_residual == -1.0
 
     cases = 0
-    for acceleration in (1, 20, 200):
+    for acceleration in (0.05, 0.2, 1, 20, 200):
         for tick in (0.02, 0.1, 0.25):
             for stall in (0, 0.1, 1, 5):
                 for latency in (0, 1):
@@ -110,18 +131,64 @@ def main():
     assert not governor.stopped
     assert governor.command(5, 1, 20, 0.02) > 0
 
+    # Low-thrust finite burns can retain transverse node error. A vector
+    # magnitude of several m/s must not carry thrust past the useful axis.
+    for acceleration in (0.05, 0.2, 2):
+        for tick in (0.02, 0.1, 0.25):
+            governor = Governor()
+            forward, lateral = 3.0, 4.0
+            pending = [0.0]
+            for _ in range(100000):
+                output = governor.command(math.hypot(forward, lateral), 1,
+                                          acceleration, tick, forward)
+                pending.append(output)
+                forward -= pending.pop(0) * acceleration * tick
+                assert forward >= 0
+                if governor.stopped and not any(pending):
+                    break
+            else:
+                raise AssertionError('Transverse-error tail did not stop')
+            assert governor.reason == 'live-thrust-axis-trim'
+            assert math.hypot(forward, lateral) > TOLERANCE
+    # Rebound is measured against the best powered residual, not merely
+    # the previous sample; it must latch even during a stalled main loop.
+    governor = Governor()
+    for residual in (30, 15, 8, 8.2, 8.4):
+        assert governor.command(residual, 1, 0.2, 0.02) > 0
+    assert governor.command(8.6, 1, 0.2, 0.02) == 0
+    assert governor.reason == 'live-residual-rebound'
+    assert governor.command(2, 1, 0.2, 0.02) == 0
+    # A staging/coast gap resets this baseline: orbital motion while
+    # propulsion is stopped must not be mistaken for a powered rebound.
+    for stopped_throttle, stopped_acceleration in ((0, 0.2), (1, 0)):
+        governor = Governor()
+        assert governor.command(8, 1, 0.2, 0.02) > 0
+        assert governor.command(8, stopped_throttle, stopped_acceleration, 0.02) == 0
+        assert governor.command(9, 1, 0.2, 0.02) > 0
+    governor = Governor()
+    assert governor.command(8, 1, 0.2, 0.02) > 0
+    assert governor.command(9, 1, 0, 0.02) == 0
+    assert not governor.stopped  # starvation wins over apparent rebound
+
     # Check the integration points that make the scheduler model apply.
     code = re.sub(r"//[^\n]*", "", GOVERNOR)
     assert not re.search(r"\b(WAIT|PRINT|LOG|mLog\w*|stateSet)\b", code)
     assert "LOCK THROTTLE TO _burnNodeThrottle(" in SOURCE
     assert 'cutoff["reason"] <> ""' in GOVERNOR
     assert "VDOT(ignitionVec, residual) < 0" in GOVERNOR
+    assert 'VDOT(SHIP:FACING:FOREVECTOR, residual)' in GOVERNOR
+    assert 'rem > cutoff["bestRem"] + BURN_NODE_REBOUND_EPS' in GOVERNOR
+    assert GOVERNOR.index('IF acc <= 0') < GOVERNOR.index('rem > cutoff["bestRem"]')
     assert 'mLogWarn("BURN tick status="' not in SOURCE
     flush = SOURCE.index("FOR traceLine IN burnTrace")
     shutdown = SOURCE.rindex("LOCK THROTTLE TO 0.0.", 0, flush)
     assert "WAIT 0.01." in SOURCE[shutdown:flush]
+    assert 'UNLOCK STEERING.' in SOURCE[shutdown:flush]
+    assert 'UNLOCK THROTTLE.' in SOURCE[shutdown:flush]
+    assert 'LOCK STEERING TO BURN_ABORT_HOLD_VECTOR' not in SOURCE
     print(f"PASS: reproduced old -1 m/s overshoot; {cases} delayed-loop tails stayed positive")
     print("PASS: cutoff latch, reversal, invalid telemetry, pause/resume, no-thrust, and lock/logging integration")
+    print("PASS: nine low-thrust vector tails, powered rebound cutoff, staging baseline reset and control release")
 
 
 if __name__ == "__main__":

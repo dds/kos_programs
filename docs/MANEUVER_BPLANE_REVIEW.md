@@ -212,3 +212,40 @@ readiness/ignition, manual activation after 15 seconds, event limits,
 final-engine exhaustion, abort, and guards against the second-sample abort.
 Flight-check manual recovery during BURN WAIT and explicit continuation
 after TRANSFER HOLD with the updated library loaded.
+
+## Low-thrust departure follow-up
+
+Flight feedback confirms transfer staging worked, but the lander engine
+took a long time to finish and appeared to overburn slightly. There is no
+cutoff telemetry from that flight yet, so whether this was throttle latency,
+node drift during a finite burn, or an attitude issue is not established.
+The reported KSP-wide input freeze is also unconfirmed. The code did retain
+control locks after an abort while follow-up phase logic ran; it now releases
+both locks after the zero-throttle physics update, before archive logging.
+This addresses script-held flight axes, not arbitrary KSP UI bugs.
+
+The physics-tick governor now tapers along the current thrust-axis component
+inside the existing near-cutoff guard, and latches a rebound measured from
+the best powered residual. Coasting/staging resets the rebound baseline.
+This prevents chasing transverse error through a useful-axis overshoot,
+but does not make an impulsive node an exact finite-duration trajectory.
+Residuals outside tolerance still use actual-encounter handoff or a hold.
+Stage diagnostics now include approximate remaining burn seconds and time
+past the node, to distinguish long burns from slow shutdown.
+
+The separate `burn_departure_*` checkpoint closes the save gap between burn
+cleanup and phase advancement. XING examines actual arrival geometry before
+reusing a node from a flown departure and will not plan a second departure
+if the encounter is absent. The existing BPLANE phase can attempt bounded
+arrival correction after explicit `cmd/setphase.ks` selection, preserving
+the mission's capture/science/landing goals. Older saves have no new marker;
+their retained `burn_pending`/`burn_started` state and trajectory remain the
+available evidence.
+
+Checks now include 120 scalar tails down to 0.05 m/s², nine tails with a
+4 m/s transverse residual, cumulative powered rebound, staging/coast
+baseline resets, control-release ordering, and departure-marker save/phase
+guards. These are source-expression/structural checks with synthetic physics,
+not a KSP flight or an input-freeze reproduction. Still needed: the actual
+low-thrust staged transfer, its cutoff log, a reload after cutoff, BPLANE
+reacquisition if the encounter was lost, and compiled storage checks.

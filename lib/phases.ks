@@ -185,11 +185,15 @@ GLOBAL FUNCTION nextPhase {
             IF i + 1 < seq:LENGTH {
                 LOCAL nxt IS seq[i + 1].
                 stateSet("phase", nxt).
+                // Clear only AFTER the next phase is durable. A save
+                // between burn cleanup and here still knows XING flew.
+                IF current = "XING" { stateRemovePrefix("burn_departure_"). }
                 mLog("Phase: " + current + " -> " + nxt).
                 archivePhaseLog().
                 RETURN nxt.
             } ELSE {
                 stateSet("phase", "DONE").
+                IF current = "XING" { stateRemovePrefix("burn_departure_"). }
                 archivePhaseLog().
                 RETURN "DONE".
             }

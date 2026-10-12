@@ -18,11 +18,15 @@ LOCAL MAX_RETRIES IS 5.
 GLOBAL TRANSFER_POST_BURN_HANDOFF_SOI_MULT IS 1.0.
 
 LOCAL FUNCTION _holdInterruptedTransfer {
-    IF NOT maneuverBurnInterrupted() { RETURN FALSE. }
-    mLogError("Transfer interrupted after ignition. Preserving the remaining node; no fresh departure plan.").
+    IF NOT maneuverDepartureFlown() { RETURN FALSE. }
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    mLogError("Flown transfer needs recovery. Preserving any remaining node; no fresh departure plan.").
     PRINT "  TRANSFER HOLD: inspect staging and the remaining maneuver.".
-    PRINT "  Burn reason: " + stateGet("burn_abort_reason", "reboot during burn").
-    PRINT "  After inspection, RUNPATH('0:/cmd/resumeburn.ks'). to continue this node now.".
+    PRINT "  Burn reason: " + stateGet("burn_abort_reason", "departure interrupted or saved before phase handoff").
+    PRINT "  Inspect the actual encounter before resuming. Do not re-burn an overshot node.".
+    PRINT "  resumeburn.ks continues an unfinished burn; arrival correction repairs a flown departure.".
     yieldToPrompt().
     RETURN TRUE.
 }
@@ -121,9 +125,14 @@ GLOBAL FUNCTION phaseTransfer {
     LOCAL success IS FALSE.
     LOCAL retries IS 0.
 
-    IF NOT HASNODE AND _postBurnTransferHandoffOk(target, "phase-entry") {
+    IF (NOT HASNODE OR maneuverDepartureFlown())
+            AND _postBurnTransferHandoffOk(target, "phase-entry") {
         orbitSummary().
         nextPhase(xferSeq).
+        RETURN.
+    }
+    IF maneuverDepartureFlown() AND NOT BURN_RESUME_REQUESTED {
+        _holdInterruptedTransfer().
         RETURN.
     }
 

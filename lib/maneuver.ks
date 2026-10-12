@@ -24,7 +24,6 @@ GLOBAL BURN_NODE_REBOUND_EPS IS 0.5.
 GLOBAL BURN_NODE_FLIP_DEG IS 90.
 GLOBAL BURN_NODE_FLIP_REMAINING_DV IS 20.
 GLOBAL BURN_TICK_LOG_INTERVAL IS 1.0.
-GLOBAL BURN_ABORT_HOLD_VECTOR IS V(0, 0, 1).
 GLOBAL BURN_FULL_THROTTLE_MIN_DV IS 10.
 GLOBAL BURN_STAGE_TIMEOUT IS 10.
 GLOBAL BURN_STAGE_SETTLE IS 0.5.
@@ -227,6 +226,12 @@ GLOBAL FUNCTION executeManeuver {
     // Persist before ignition so a reboot cannot turn a partially flown
     // departure into a fresh parking-orbit transfer plan.
     stateSet("burn_started", "true").
+    // Survive a save after cutoff/cleanup but before XING advances phase.
+    // Ordinary burn cleanup must not erase the fact that departure flew.
+    IF stateGet("phase", "") = "XING" {
+        stateSet("burn_departure_target", getTarget("")).
+        stateSet("burn_departure_time", TIME:SECONDS).
+    }
     LOCAL bsc IS TIME:SECONDS.
 
     LOCAL steerVec IS nd:BURNVECTOR.
@@ -241,7 +246,8 @@ GLOBAL FUNCTION executeManeuver {
     }
     LOCAL throttleCmd IS 0.0.
     LOCAL liveCutoff IS LEX("reason", "", "rem", -1, "time", 0,
-        "lastTick", TIME:SECONDS, "tickDt", 0.02, "output", 0).
+        "lastTick", TIME:SECONDS, "tickDt", 0.02, "output", 0,
+        "bestRem", -1).
     LOCAL burnTrace IS LIST().
     LOCK STEERING TO steerVec.
     IF fixedBurnVector {
@@ -736,6 +742,8 @@ GLOBAL FUNCTION executeManeuver {
         SET burnAbortDetail TO "Invalid residual at live cutoff or final sample.".
         IF NOT _nf(res) { SET res TO -1. }
     }
+    UNLOCK STEERING.
+    UNLOCK THROTTLE.
     // Flush only after the zero command has reached physics. mLog can
     // copy the entire log to the archive, so it is not burn-loop work.
     FOR traceLine IN burnTrace { mLogWarn(traceLine). }
@@ -756,8 +764,6 @@ GLOBAL FUNCTION executeManeuver {
         SET burnAbortDetail TO "Residual increased after trim; node retained.".
     }
     IF burnAbort <> "" {
-        SET BURN_ABORT_HOLD_VECTOR TO steerVec.
-        LOCK STEERING TO BURN_ABORT_HOLD_VECTOR.
         _stl(1.0).
         stateSet("burn_status", "interrupted").
         stateSet("burn_abort_reason", burnAbort).
@@ -783,8 +789,6 @@ GLOBAL FUNCTION executeManeuver {
         }
         RETURN FALSE.
     }
-    SET throttleCmd TO 0.0.
-    LOCK THROTTLE TO 0.0.
     _ren(ntm).
     _stl(1.0).
     _cpb("complete").
@@ -794,7 +798,6 @@ GLOBAL FUNCTION executeManeuver {
         DELETEALARM(aid).
     }
 
-    UNLOCK STEERING.
     mLogWarn("Burn complete. Residual dV ~" + ROUND(res, 2) + " m/s.").
     mLogWarn("STATS burn result dv=" + ROUND(bdv,1)
         + " residual=" + ROUND(res,2)
@@ -821,7 +824,17 @@ LOCAL FUNCTION _burnNodeThrottle {
     SET cutoff["lastTick"] TO tickNow.
     SET cutoff["tickDt"] TO tickDt.
     SET cutoff["output"] TO 0.
-    IF command <= 0 OR cutoff["reason"] <> "" { RETURN 0. }
+    IF cutoff["reason"] <> "" { RETURN 0. }
+    IF command <= 0 {
+        // Coasting/staging can change node error without any engine impulse.
+        SET cutoff["bestRem"] TO -1.
+        RETURN 0.
+    }
+    LOCAL acc IS _sma().
+    IF acc <= 0 {
+        SET cutoff["bestRem"] TO -1.
+        RETURN 0.
+    }
 
     LOCAL residual IS nd:DELTAV.
     LOCAL rem IS residual:MAG.
@@ -832,6 +845,16 @@ LOCAL FUNCTION _burnNodeThrottle {
     } ELSE IF VDOT(ignitionVec, residual) < 0 {
         SET reason TO "live-vector-passed-target".
     }
+    LOCAL forwardRem IS 0.
+    IF reason = "" { SET forwardRem TO VDOT(SHIP:FACING:FOREVECTOR, residual). }
+    IF reason = "" AND rem <= BURN_NODE_FLIP_REMAINING_DV
+            AND forwardRem <= BURN_TRIM_ABS_COMPLETE_DV {
+        SET reason TO "live-thrust-axis-trim".
+    }
+    IF reason = "" AND cutoff["bestRem"] >= 0
+            AND rem > cutoff["bestRem"] + BURN_NODE_REBOUND_EPS {
+        SET reason TO "live-residual-rebound".
+    }
     IF reason <> "" {
         SET cutoff["reason"] TO reason.
         SET cutoff["rem"] TO rem.
@@ -839,8 +862,15 @@ LOCAL FUNCTION _burnNodeThrottle {
         RETURN 0.
     }
 
-    LOCAL acc IS _sma().
-    IF acc <= 0 { RETURN 0. }
+    IF cutoff["bestRem"] < 0 OR rem < cutoff["bestRem"] {
+        SET cutoff["bestRem"] TO rem.
+    }
+    // A finite burn can leave transverse node error. Near cutoff, taper
+    // the component the CURRENT thrust direction can actually remove;
+    // do not accelerate through it trying to zero the vector's magnitude.
+    IF rem <= BURN_NODE_FLIP_REMAINING_DV {
+        SET rem TO MIN(rem, MAX(0, forwardRem)).
+    }
     // Reserve several physics steps for control latency; this limit
     // reads the current node and acceleration, never the loop's sample.
     LOCAL horizon IS MAX(1.0, 4 * tickDt).
@@ -1033,7 +1063,9 @@ LOCAL FUNCTION _burnRecoverThrust {
     // Do not turn a second asynchronous thrust sample into an abort.
     IF ABORT { RETURN FALSE. }
     _burnTraceAdd(trace, "STATS burn staging resumed stage=" + STAGE:NUMBER
-        + " rem=" + ROUND(nd:DELTAV:MAG, 3) + " acc=" + ROUND(_sma(), 3)).
+        + " rem=" + ROUND(nd:DELTAV:MAG, 3) + " acc=" + ROUND(_sma(), 3)
+        + " estRemainingSeconds=" + ROUND(nd:DELTAV:MAG / MAX(0.0001, _sma()), 1)
+        + " secondsPastNode=" + ROUND(TIME:SECONDS - nd:TIME, 1)).
     stateSet("burn_status", "burning").
     RETURN TRUE.
 }
@@ -1044,7 +1076,15 @@ GLOBAL FUNCTION maneuverBurnInterrupted {
         AND stateGet("burn_phase", "") = stateGet("phase", "").
 }
 
+GLOBAL FUNCTION maneuverDepartureFlown {
+    IF stateGet("phase", "") <> "XING" { RETURN FALSE. }
+    RETURN maneuverBurnInterrupted()
+        OR (stateGetNum("burn_departure_time", -1) >= 0
+            AND stateGet("burn_departure_target", "") = getTarget("")).
+}
+
 GLOBAL FUNCTION maneuverAcceptHandoff {
+    SET BURN_RESUME_REQUESTED TO FALSE.
     IF stateGet("burn_phase", "") <> stateGet("phase", "") { RETURN. }
     _ren(stateGetNum("burn_node_time", -1)).
     _cpb("arrival-handoff").
