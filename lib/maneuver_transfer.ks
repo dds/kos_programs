@@ -426,6 +426,14 @@ LOCAL FUNCTION _localInterceptEval {
                     * 20000.
             }
         }
+        // Once a safe direct encounter is inside the correction corridor,
+        // prefer lower departure dV over a smaller center-of-body miss.
+        // This is departure cost, not a promise of minimum total mission dV.
+        IF obstacleName = targetBody:NAME AND patch:PERIAPSIS > 0
+                AND ca["distance"] < targetBody:SOIRADIUS * 0.85
+                AND (captureInc < 0 OR incErr <= TRANSFER_DEFERRED_INC_ERR_TOL) {
+            SET score TO -1e9 + nd:DELTAV:MAG.
+        }
     }
     RETURN LEXICON(
         "SCORE", score,
@@ -661,18 +669,13 @@ LOCAL FUNCTION _planLocalTransfer {
             }
             IF trySeed["PATCH"] {
                 SET encounterCount TO encounterCount + 1.
-                IF encounterCount >= 6
-                        AND (captureInc < 0
-                            OR bestSeed["INC_ERR"] <= TRANSFER_DEFERRED_INC_ERR_TOL) {
-                    mLog("Raw transfer scan: found " + encounterCount
-                        + " target encounters; ending scan early.").
-                    BREAK.
-                }
             }
         }
     }
     SET nd:TIME TO bestTime.
     WAIT 0.1.
+    LOCAL scanBest IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
+    LOCAL scanBestAxes IS LIST(nd:TIME, nd:PROGRADE, nd:NORMAL, nd:RADIALOUT).
     mLog("Time scan: best CA=" + ROUND(bestCA["distance"]/1000, 1) + "km"
         + " score=" + ROUND(bestSeed["SCORE"], 2)
         + " encounters=" + encounterCount
@@ -755,13 +758,14 @@ LOCAL FUNCTION _planLocalTransfer {
         LOCAL nrmSteps IS 20.
         LOCAL nrmStep IS nrmRange * 2 / nrmSteps.
         LOCAL bestNrm IS nd:NORMAL.
+        LOCAL centerNrm IS bestNrm.
         LOCAL nrmGoodEnough IS FALSE.
         SET bestCA TO gateCA.
         SET bestEval TO _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
         SET bestSeed TO bestEval.
 
         FROM { LOCAL ni IS 0. } UNTIL ni > nrmSteps STEP { SET ni TO ni + 1. } DO {
-            LOCAL tryNrm IS bestNrm - nrmRange + ni * nrmStep.
+            LOCAL tryNrm IS centerNrm - nrmRange + ni * nrmStep.
             SET nd:NORMAL TO tryNrm.
             WAIT 0.02.
             LOCAL trySeed IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
@@ -772,11 +776,7 @@ LOCAL FUNCTION _planLocalTransfer {
                 SET bestNrm TO tryNrm.
             }
             IF tryCa["distance"] < targetBody:SOIRADIUS * 0.7 {
-                SET bestCA TO tryCa.
-                SET bestSeed TO trySeed.
-                SET bestNrm TO tryNrm.
                 SET nrmGoodEnough TO TRUE.
-                BREAK.
             }
         }
         SET nd:NORMAL TO bestNrm.
@@ -820,6 +820,16 @@ LOCAL FUNCTION _planLocalTransfer {
     }
 
     LOCAL finalSeed IS _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
+    // Golden-section searches assume a smooth unimodal objective. The
+    // encounter gate isn't one; never lose a better coarse candidate.
+    IF scanBest["SCORE"] < finalSeed["SCORE"] AND scanBestAxes[0] > TIME:SECONDS + 30 {
+        SET nd:TIME TO scanBestAxes[0].
+        SET nd:PROGRADE TO scanBestAxes[1].
+        SET nd:NORMAL TO scanBestAxes[2].
+        SET nd:RADIALOUT TO scanBestAxes[3].
+        WAIT 0.1.
+        SET finalSeed TO _localInterceptEval(nd, targetBody, hohmannTof, captureInc).
+    }
     LOCAL finalCA IS finalSeed["CA"].
     mLog("Optimized: CA=" + ROUND(finalCA["distance"]/1000, 1) + "km"
         + " score=" + ROUND(finalSeed["SCORE"], 2)

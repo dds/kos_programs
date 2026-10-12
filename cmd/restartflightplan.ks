@@ -74,6 +74,8 @@ IF NOT err {
     // Mission identity and runtime config overrides stay untouched,
     // so boot skips the selector and reloads the same profile.
     stateSet("phase", restartPhase).
+    stateRemove("launch_window").
+    stateRemovePrefix("burn_").
 
     // Clear any pending band-reload request from the previous leg
     FOR key IN LIST("reload_required", "reload_reason",

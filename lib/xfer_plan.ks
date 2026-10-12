@@ -17,6 +17,15 @@ GLOBAL ESCAPE_AOP IS -1.
 LOCAL MAX_RETRIES IS 5.
 GLOBAL TRANSFER_POST_BURN_HANDOFF_SOI_MULT IS 1.0.
 
+LOCAL FUNCTION _holdInterruptedTransfer {
+    IF NOT maneuverBurnInterrupted() { RETURN FALSE. }
+    mLogError("Transfer interrupted after ignition. Preserving the remaining node; no fresh departure plan.").
+    PRINT "  TRANSFER HOLD: inspect staging and the remaining maneuver.".
+    PRINT "  Burn reason: " + stateGet("burn_abort_reason", "reboot during burn").
+    yieldToPrompt().
+    RETURN TRUE.
+}
+
 LOCAL FUNCTION _recordXingArrivalUt {
     PARAMETER targetBody.
 
@@ -64,6 +73,7 @@ LOCAL FUNCTION _postBurnTransferHandoffOk {
     LOCAL patch IS _getTargetPatch(SHIP, targetBody).
     IF patch <> 0 AND patch:PERIAPSIS > 0 AND patch:PERIAPSIS <= peMax {
         _recordXingArrivalUt(targetBody).
+        maneuverAcceptHandoff().
         mLog("STATS transfer handoff label=" + label
             + " status=patch"
             + " target=" + targetBody:NAME
@@ -85,6 +95,7 @@ LOCAL FUNCTION _postBurnTransferHandoffOk {
     IF ca["distance"] <= peMax {
         stateSet("xing_arrival_ut", ca["time"]).
         stateSet("xing_arrival_target", targetBody:NAME).
+        maneuverAcceptHandoff().
         mLog("STATS transfer handoff label=" + label
             + " status=closest-approach"
             + " target=" + targetBody:NAME
@@ -136,6 +147,7 @@ GLOBAL FUNCTION phaseTransfer {
             nextPhase(xferSeq).
             RETURN.
         }
+        IF _holdInterruptedTransfer() { RETURN. }
         mLogWarn("Existing transfer node was not usable; replanning.").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     } ELSE IF stateGet("burn_pending", "false") = "true" {
@@ -144,6 +156,7 @@ GLOBAL FUNCTION phaseTransfer {
             nextPhase(xferSeq).
             RETURN.
         }
+        IF _holdInterruptedTransfer() { RETURN. }
         mLog("STATS transfer resume missing-node pending=true burnPhase="
             + stateGet("burn_phase", "")
             + " burnDv=" + ROUND(stateGetNum("burn_dv", 0),1)
@@ -174,6 +187,7 @@ GLOBAL FUNCTION phaseTransfer {
                     nextPhase(xferSeq).
                     RETURN.
                 }
+                IF _holdInterruptedTransfer() { RETURN. }
                 SET retries TO retries + 1.
                 mLog("Transfer missed (attempt " + retries + ") — waiting 10s and replanning.").
                 UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }

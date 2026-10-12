@@ -73,6 +73,52 @@ Emergency landing rescue is archive-only: run `0:/cmd/landassist.ks`,
 Commands require archive access. If you need one, get a link and run the
 archive copy directly.
 
+### Launch windows and staging
+
+Minmus profiles use `LAUNCH_PLANE_MODE = "BODY_ORBIT"`. PRELAUNCH offers
+**SPACE: wait for the target plane**, **N: launch east now**, or **H: hold**;
+the default after 30 seconds is to wait. Launching east uses the minimum
+direct-ascent inclination at the launch latitude, leaving encounter
+corrections to the transfer planner. A negative timed-launch inclination
+selects the southbound crossing, not a retrograde orbit.
+
+PRELAUNCH saves the window and immediately loads the LAUNCH band. LAUNCH
+waits against the absolute liftoff time after setup, with a KAC alarm when
+available. Missed plane windows are recalculated; missed rendezvous or
+interplanetary windows return to PRELAUNCH for a fresh plan. It never
+silently launches late. Both atmospheric and airless ascents use this gate.
+
+`LAUNCH_PLANE_LEAD` is a vehicle/profile calibration in seconds before the
+geometric plane crossing. Its default `-1` inherits
+`PRELAUNCH_PLANE_LEAD`, whose default is now **0**, replacing the old
+145-second allowance. Explicit `LAUNCH_PLANE_LEAD = 0` is supported.
+Keep reboot/loading delay out of this calibration. Compare `STATS launch
+liftoff` with `STATS launch-plane result`; `planeErr` is the actual angle
+between the parking and target planes, including both inclination and LAN.
+The new default still needs flight calibration for each ascent profile.
+
+Tag the stock procedural fairing base **`main_fairing`** and include `FAIR`
+in the mission sequence. Deployment waits for `FAIRING_ALT` (default 72 km)
+or a stable orbit above the atmosphere. Untagged fairings are skipped.
+
+Maneuver burns use the active stage's remaining fuel before advancing to
+the next engine. Separation and engine ignition may occupy separate stage
+slots; the same maneuver node and remaining dV are retained throughout.
+`BURN_STAGE_TIMEOUT` (10 s), `BURN_STAGE_SETTLE` (0.5 s), and
+`BURN_STAGE_MAX_EVENTS` (4) bound each transition. `BURN_STAGE_LIMIT` (0)
+is the lowest stage number allowed for the next engine; raise it in the
+mission profile to reserve lower-numbered stages. Arrange the staging stack
+so advancing to that engine only triggers intended separation/ignition events.
+An unrelated flamed-out engine does not force staging while usable engines
+are still active.
+
+If propulsion/attitude recovery fails after ignition, XING preserves the
+unfinished node and holds for the operator, unless the actual trajectory
+already supports arrival handoff. It also preserves an interrupted burn
+across reboot. It does **not** discard a partial departure and automatically
+plan another parking-orbit transfer. A hold requires inspection and a
+deliberate recovery plan; simply resuming the mission keeps the hold.
+
 ### Multi-leg flights
 
 Airline-style missions (land, swap passengers, fly on) and drone sorties end
@@ -300,7 +346,10 @@ Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
   scan when `CAPTURE_LAN` is set). Local moon transfers scan the next
   `TRANSFER_SCAN_LOOKAHEAD_HOURS` from the current time, default 6h, so
   a missed-burn rescue can reacquire promptly instead of searching whole
-  high-transfer orbits. Interplanetary transfers use the Lambert planner:
+  high-transfer orbits. The full local scan horizon is evaluated, and safe
+  direct encounters inside the correction corridor rank by departure dV
+  rather than closeness to the target's center. This is not a minimum-total-
+  mission-dV guarantee. Interplanetary transfers use the Lambert planner:
   analytic shortlist, patch refinement, ejection-dV ranking, and escape-path
   safety checks. When `BPLANE`/`SHAPE` follow, XING is only a handoff gate: it
   must create a real target patch, but it leaves exact arrival geometry to the

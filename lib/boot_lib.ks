@@ -372,13 +372,14 @@ GLOBAL FUNCTION bootResetMissionSelection {
     PARAMETER tn.
     PARAMETER pts.
     missionOverrideClear().
+    stateRemovePrefix("burn_").
     FOR key IN LIST(
         "mission_id", "mission_name", "phase", "fairing_deployed",
         "lib_band", "lib_band_phase", "lib_band_libs",
         "reload_required", "reload_reason", "reload_next_phase",
         "reload_next_band", "secondary_active", "secondary_release_done",
         "zombie_scansat_active", "zombie_scansat_required_types",
-        "launch_time", "launch_site_lat", "launch_site_lng",
+        "launch_time", "launch_site_lat", "launch_site_lng", "launch_window",
         "launch_vs_nonpos_logged", "log_flight_stamp", "boot_log_count"
     ) {
         stateRemove(key).

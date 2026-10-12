@@ -142,12 +142,21 @@ Looks like Python/JS; is neither.
   (for example `TARGET_`) to mark it as ours.
 - Parts are found by VAB tag (`SHIP:PARTSTAGGED`), never by index.
 - Retry pattern for burns: plan → `executeManeuver()` → on failure wait,
-  replan, cap attempts at `MAX_RETRIES IS 5`.
+  replan, cap attempts at `MAX_RETRIES IS 5`. **XING exception:** once
+  `burn_started` is persisted, a failed/reboot-interrupted departure must
+  preserve its node and hold (or accept a valid arrival handoff), never
+  blindly plan another parking-orbit departure. Stage transitions happen
+  inside the same executor call and retain the original node/progress.
 
 ## Working in this repo
 
 - Mission profiles are KerboScript files in `missions/<vehicle>/`; each is a
   list of `SET NAME TO value.` statements.
+- Launch timing: PRELAUNCH chooses/persists `launch_window`; the small
+  shared `launch_window` library waits after LAUNCH has loaded. Do not wait
+  until the window and then reboot. `LAUNCH_PLANE_LEAD` calibrates ascent
+  geometry only; PARK's `planeErr` and planned/actual liftoff UT are the
+  calibration evidence. Launch-east-now clears timed-plane intent.
 - Boot/storage mental model: state must preserve intent, not bulky derived
   products. Persist `mission_id`, `phase`, runtime progress markers, and
   reload intent. Do not cache computed band libs. If an upgraded vessel is

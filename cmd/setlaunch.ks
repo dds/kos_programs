@@ -25,7 +25,7 @@ LOCAL FUNCTION _clearLibCache {
 LOCAL FUNCTION _clearLaunchLegState {
     FOR key IN LIST(
         "fairing_deployed", "launch_vs_nonpos_logged",
-        "orbit_start_time", "prelaunch_plane_ut",
+        "orbit_start_time", "launch_window", "prelaunch_plane_ut",
         "prelaunch_plane_target", "prelaunch_plane_inc",
         "prelaunch_plane_lan", "landing_state", "landing_lat",
         "landing_lng", "landing_time"
@@ -36,6 +36,7 @@ LOCAL FUNCTION _clearLaunchLegState {
 
 LOCAL profilePath IS missionProfileBegin(stateGet("vehicle", ""), "setlaunch").
 missionOverrideClear().
+stateRemovePrefix("burn_").
 LOG "SET MISSION_ID TO " + configLiteral("setlaunch") + "." TO profilePath.
 LOG "SET MISSION_NAME TO " + configLiteral("Launch Reset") + "." TO profilePath.
 LOG "SET TARGET_ TO " + configLiteral(SHIP:BODY:NAME:TOUPPER) + "." TO profilePath.

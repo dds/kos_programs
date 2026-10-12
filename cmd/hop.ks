@@ -37,7 +37,7 @@ LOCAL FUNCTION _clearLibCache {
 LOCAL FUNCTION _clearHopLegState {
     FOR key IN LIST(
         "landing_state", "landing_lat", "landing_lng", "landing_time",
-        "prelaunch_plane_ut", "prelaunch_plane_target",
+        "launch_window", "prelaunch_plane_ut", "prelaunch_plane_target",
         "prelaunch_plane_inc", "prelaunch_plane_lan"
     ) {
         stateRemove(key).

@@ -26,6 +26,10 @@ GLOBAL BURN_NODE_FLIP_REMAINING_DV IS 20.
 GLOBAL BURN_TICK_LOG_INTERVAL IS 1.0.
 GLOBAL BURN_ABORT_HOLD_VECTOR IS V(0, 0, 1).
 GLOBAL BURN_FULL_THROTTLE_MIN_DV IS 10.
+GLOBAL BURN_STAGE_TIMEOUT IS 10.
+GLOBAL BURN_STAGE_SETTLE IS 0.5.
+GLOBAL BURN_STAGE_MAX_EVENTS IS 4.
+GLOBAL BURN_STAGE_LIMIT IS 0.
 
 
 LOCAL ATOL      IS 2.0.
@@ -47,6 +51,10 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL nd    IS NEXTNODE.
     LOCAL ntm IS nd:TIME.
     LOCAL bdv  IS nd:DELTAV:MAG.
+    IF maneuverBurnInterrupted() {
+        mLogError("Interrupted burn retained; inspect the remaining node before resuming.").
+        RETURN FALSE.
+    }
     IF bdv <= BURN_TRIM_ABS_COMPLETE_DV {
         _ren(ntm).
         _cpb("already-complete").
@@ -185,6 +193,9 @@ GLOBAL FUNCTION executeManeuver {
     }
     mLog("Burn start. dV=" + ROUND(bdv,1) + " m/s").
     stateSet("burn_status", "burning").
+    // Persist before ignition so a reboot cannot turn a partially flown
+    // departure into a fresh parking-orbit transfer plan.
+    stateSet("burn_started", "true").
     LOCAL bsc IS TIME:SECONDS.
 
     LOCAL steerVec IS nd:BURNVECTOR.
@@ -211,7 +222,6 @@ GLOBAL FUNCTION executeManeuver {
     }
     LOCAL db2 IS FALSE.
     LOCAL dra IS FALSE.
-    LOCAL rdv IS 0.
     LOCAL burnAbort IS "".
     LOCAL burnAbortDetail IS "".
     LOCAL alignOverStart IS -1.
@@ -228,6 +238,12 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL nodeUnstableLogged IS FALSE.
 
     UNTIL burnDone OR burnAbort <> "" {
+        IF ABORT {
+            SET throttleCmd TO 0.0.
+            SET burnAbort TO "operator-abort".
+            SET burnAbortDetail TO "Operator aborted the maneuver.".
+            BREAK.
+        }
         LOCAL now IS TIME:SECONDS.
         LOCAL dt IS MAX(0, now - lastDvTime).
         LOCAL curVel IS SHIP:VELOCITY:ORBIT.
@@ -594,16 +610,40 @@ GLOBAL FUNCTION executeManeuver {
         IF burnAbort <> "" { BREAK. }
         IF burnDone { BREAK. }
 
-        IF _ns() {
+        IF _sma() <= 0 {
             SET throttleCmd TO 0.0.
-            HUDTEXT("Staging!", 2, 2, 15, YELLOW, FALSE).
-            mLog("Auto-stage triggered.").
-            WAIT 0.3.
-            STAGE.
-            WAIT 0.7.
+            WAIT 0.01.
+            // Keep the same node, ignition vector, and applied-dV total.
+            // Separation and ignition may occupy different staging slots.
+            IF NOT _burnRecoverThrust(nd, burnTrace) {
+                SET burnAbort TO "stage-recovery-failed".
+                SET burnAbortDetail TO "No usable engine after bounded stage recovery; node retained.".
+                BREAK.
+            }
+            IF NOT fixedBurnVector {
+                IF NOT _bvo(nd:BURNVECTOR) {
+                    SET burnAbort TO "stage-vector-invalid".
+                    SET burnAbortDetail TO "Invalid node vector after staging.".
+                    BREAK.
+                }
+                SET steerVec TO nd:BURNVECTOR.
+            }
+            LOCAL alignDeadline IS TIME:SECONDS + BURN_ALIGN_REACQUIRE_TIMEOUT.
+            WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, steerVec) <= BURN_ALIGN_REACQUIRE_DEG
+                OR TIME:SECONDS >= alignDeadline OR ABORT.
+            IF ABORT OR VANG(SHIP:FACING:FOREVECTOR, steerVec) > BURN_ALIGN_REACQUIRE_DEG {
+                SET burnAbort TO "stage-alignment-failed".
+                SET burnAbortDetail TO "Could not reacquire burn direction after staging.".
+                BREAK.
+            }
             SET lastDvTime TO TIME:SECONDS.
             SET prevVel TO SHIP:VELOCITY:ORBIT.
             SET prevGravity TO _gacc().
+            SET remNow TO nd:DELTAV:MAG.
+            SET lastNodeRem TO remNow.
+            SET prevBV TO nd:BURNVECTOR.
+            SET prevBVTime TO TIME:SECONDS.
+            SET dt TO 0.
         }
 
         LOCAL rem IS remNow.
@@ -626,7 +666,6 @@ GLOBAL FUNCTION executeManeuver {
             SET db2 TO TRUE.
         } ELSE IF db2 AND rem > 2 {
             SET throttleCmd TO 0.0.
-            SET rdv TO rem.
             SET dra TO TRUE.
             mLogError("Burn dV rebounded after trim phase: remaining="
                 + ROUND(rem, 2) + " m/s — stopping maneuver.").
@@ -682,10 +721,17 @@ GLOBAL FUNCTION executeManeuver {
             + " stop=" + burnCompleteReason.
         stateSet("burn_status", "aborted-residual").
     }
+    IF dra AND burnAbort = "" {
+        SET burnAbort TO "dv-rebound".
+        SET burnAbortDetail TO "Residual increased after trim; node retained.".
+    }
     IF burnAbort <> "" {
         SET BURN_ABORT_HOLD_VECTOR TO steerVec.
         LOCK STEERING TO BURN_ABORT_HOLD_VECTOR.
         _stl(1.0).
+        stateSet("burn_status", "interrupted").
+        stateSet("burn_abort_reason", burnAbort).
+        stateSet("burn_abort_detail", burnAbortDetail).
         stateSet("burn_abort_time", TIME:SECONDS).
         stateSet("burn_abort_residual", res).
         stateSet("burn_abort_paused", totalPaused).
@@ -711,29 +757,11 @@ GLOBAL FUNCTION executeManeuver {
     LOCK THROTTLE TO 0.0.
     _ren(ntm).
     _stl(1.0).
-    IF dra {
-        _cpb("dv-rebound").
-    } ELSE {
-        _cpb("complete").
-    }
+    _cpb("complete").
 
     // Clean up the KAC alarm now that the burn is done.
     IF aid <> "" {
         DELETEALARM(aid).
-    }
-
-    IF dra {
-        mLog("STATS burn abort reason=dv-rebound"
-            + " dv=" + ROUND(bdv,1)
-            + " reboundDv=" + ROUND(rdv,2)
-            + " duration=" + ROUND(TIME:SECONDS - bsc,1)
-            + " paused=" + ROUND(totalPaused,1)
-            + " pauseCount=" + pauseCount
-            + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-            + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-            + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4)
-            + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)).
-        RETURN FALSE.
     }
 
     UNLOCK STEERING.
@@ -855,7 +883,13 @@ LOCAL FUNCTION _cst {
 
 LOCAL FUNCTION _sma {
     IF SHIP:MASS <= 0 { RETURN 0. }
-    RETURN SHIP:AVAILABLETHRUST / SHIP:MASS.
+    LOCAL available IS 0.
+    FOR eng IN SHIP:ENGINES {
+        IF eng:IGNITION AND NOT eng:FLAMEOUT {
+            SET available TO available + eng:AVAILABLETHRUST.
+        }
+    }
+    RETURN available / SHIP:MASS.
 }
 
 LOCAL FUNCTION _gacc {
@@ -906,12 +940,53 @@ LOCAL FUNCTION _tc {
     RETURN (MAX(0, origDV - rem) / origDV) >= BURN_TRIM_COMPLETE_FRAC.
 }
 
-LOCAL FUNCTION _ns {
-    LOCAL engs IS LIST().
-    LIST ENGINES IN engs.
-    FOR eng IN engs { IF eng:FLAMEOUT { RETURN TRUE. } }
-    IF SHIP:MAXTHRUST = 0 { RETURN TRUE. }
-    RETURN FALSE.
+LOCAL FUNCTION _burnRecoverThrust {
+    PARAMETER nd, trace.
+    // Only advance as far as the next unignited engine. Never stage
+    // blindly through payload/chute slots after the final engine dies.
+    LOCAL engineStage IS -1.
+    FOR eng IN SHIP:ENGINES {
+        IF NOT eng:IGNITION AND eng:STAGE < STAGE:NUMBER
+                AND eng:STAGE >= MAX(0, BURN_STAGE_LIMIT)
+                AND eng:DECOUPLEDIN < eng:STAGE {
+            SET engineStage TO MAX(engineStage, eng:STAGE).
+        }
+    }
+    IF engineStage < 0 { RETURN FALSE. }
+    LOCAL deadline IS TIME:SECONDS + MAX(1, BURN_STAGE_TIMEOUT).
+    LOCAL events IS 0.
+    _burnTraceAdd(trace, "STATS burn staging begin stage=" + STAGE:NUMBER
+        + " engineStage=" + engineStage + " rem=" + ROUND(nd:DELTAV:MAG, 3)).
+    UNTIL _sma() > 0 OR TIME:SECONDS >= deadline OR ABORT {
+        IF STAGE:NUMBER > engineStage AND STAGE:READY {
+            IF events >= BURN_STAGE_MAX_EVENTS { RETURN FALSE. }
+            LOCAL beforeStage IS STAGE:NUMBER.
+            STAGE.
+            SET events TO events + 1.
+            WAIT MAX(0.02, BURN_STAGE_SETTLE).
+            _burnTraceAdd(trace, "STATS burn staging event from=" + beforeStage
+                + " to=" + STAGE:NUMBER + " rem=" + ROUND(nd:DELTAV:MAG, 3)).
+            // A rejected staging command must not spin indefinitely.
+        } ELSE {
+            WAIT 0.05.
+        }
+    }
+    IF ABORT OR _sma() <= 0 { RETURN FALSE. }
+    _burnTraceAdd(trace, "STATS burn staging resumed stage=" + STAGE:NUMBER
+        + " rem=" + ROUND(nd:DELTAV:MAG, 3) + " acc=" + ROUND(_sma(), 3)).
+    RETURN TRUE.
+}
+
+GLOBAL FUNCTION maneuverBurnInterrupted {
+    RETURN stateGet("burn_pending", "false") = "true"
+        AND stateGet("burn_started", "false") = "true"
+        AND stateGet("burn_phase", "") = stateGet("phase", "").
+}
+
+GLOBAL FUNCTION maneuverAcceptHandoff {
+    IF stateGet("burn_phase", "") <> stateGet("phase", "") { RETURN. }
+    _ren(stateGetNum("burn_node_time", -1)).
+    _cpb("arrival-handoff").
 }
 
 LOCAL FUNCTION _ren {
@@ -933,6 +1008,7 @@ LOCAL FUNCTION _mpb {
     PARAMETER bdv.
     PARAMETER st.
     stateSet("burn_pending", "true").
+    stateSet("burn_started", "false").
     stateSet("burn_phase", stateGet("phase", "")).
     stateSet("burn_node_time", nd:TIME).
     stateSet("burn_start_time", st).
@@ -945,7 +1021,7 @@ LOCAL FUNCTION _cpb {
         mLog("Clearing pending burn state: " + reason + ".").
     }
     FOR key IN LIST(
-        "burn_pending", "burn_phase", "burn_node_time",
+        "burn_pending", "burn_started", "burn_phase", "burn_node_time",
         "burn_start_time", "burn_dv", "burn_status",
         "burn_pause_reason", "burn_abort_reason", "burn_abort_detail",
         "burn_abort_time", "burn_abort_residual", "burn_abort_paused"

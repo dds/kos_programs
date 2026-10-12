@@ -151,3 +151,43 @@ checks reversal, invalid telemetry, pause/resume, no-thrust behavior, and
 the lock/logging integration points. It is a numerical scheduling model,
 not a kOS runtime test; engine response and actual flight behavior still
 need confirmation.
+
+## Launch timing and stage continuity
+
+PRELAUNCH now persists a compact `launch_window`; the shared
+`launch_window.ks` handles the final wait after the ascent band has loaded.
+Missed plane windows select the next reachable crossing and its signed
+inclination; other timed windows return to PRELAUNCH. The immediate option
+explicitly selects due east and clears the timed-plane intent. Geometric
+lead defaults to zero instead of absorbing an assumed 145 seconds of
+startup/ascent latency; profiles can override it for measured ascent bias.
+PARK logs the true mutual plane angle, and liftoff logs planned/actual UT.
+
+The reported partial Minmus departure is consistent with the old executor
+staging once, waiting 0.7 seconds, then aborting on no thrust. Without the
+flight log that cause is not confirmed. Stage recovery now advances only
+as far as a surviving, unignited next engine, allowing separate decoupler
+and ignition slots with a bounded wait. Active non-flamed-out engines must
+be exhausted first. After staging, steering is reacquired and live node
+residual/acceleration are refreshed; the original node and applied dV stay
+intact. Traces record stage events and residuals without archive I/O during
+the burn. Stage/attitude recovery failure preserves the node. A persistent
+ignition marker prevents XING from deleting an interrupted departure and
+replanning it as an unflown parking-orbit maneuver, including after reboot.
+
+The local transfer scan no longer exits after six encounters. Safe direct
+encounters inside the correction corridor rank by departure dV, and a
+better coarse candidate survives a worse refinement. This remains a
+bounded departure search, not a total ascent/transfer/capture optimizer.
+
+Validation: `python3 scripts/check_burn_timing.py` covers the live throttle
+tail, and `PYTHONDONTWRITEBYTECODE=1 python3 scripts/check_launch_and_staging.py`
+checks 450 plane crossings against an independent plane equation, true
+plane-angle cases, engine/stage predicates, and nine synthetic 950 m/s
+burns using 100 m/s from the insertion stage before upper-stage ignition
+delays of 0.5, 2, or 6 seconds. These checks evaluate source expressions and
+integration guards; they do not execute a kOS VM or simulate KSP separation,
+engine modules, or MechJeb ascent. Required flight checks: both Minmus plane
+crossings, a reboot/warp-missed window, immediate-east launch, combined and
+separate separation/ignition stages, final-stage exhaustion, and small-core
+compiled storage. No new behavior here is flight-proven yet.

@@ -131,7 +131,7 @@ GLOBAL FUNCTION phaseLaunch {
         + "km  inc=" + LAUNCH_INCLINATION
         + "°  az=" + LAUNCH_AZIMUTH + "°").
 
-    WHEN bootLibAscentWatchPhase() THEN {
+    WHEN bootLibAscentWatchPhase() AND NOT _launchOnSurface() THEN {
         LOCAL abortTriggered IS FALSE.
 
         IF stateGet("launch_vs_nonpos_logged", "false") <> "true"
@@ -194,37 +194,22 @@ GLOBAL FUNCTION phaseLaunch {
         RETURN.
     }
 
-    stateSet("launch_time", TIME:SECONDS).
     stateSet("launch_site_lat", SHIP:GEOPOSITION:LAT).
     stateSet("launch_site_lng", SHIP:GEOPOSITION:LNG).
     stateSet("launch_vs_nonpos_logged", "false").
 
     LOCK THROTTLE TO 0.
-    mLog("Press ABORT within 5s to hold launch.").
-    HUDTEXT("T-5: ABORT to hold", 5, 2, 16, YELLOW, FALSE).
-    LOCAL tEnd IS TIME:SECONDS + 5.
-    WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT.
-    IF ABORT {
-        mLog("Launch hold — operator abort.").
-        SET asc:ENABLED TO FALSE.
-        LOCK THROTTLE TO 0.
-        UNLOCK THROTTLE.
-        RETURN.
-    }
-    countdown(3).
+    IF NOT launchWaitForLiftoff() { RETURN. }
 
-    IF ABORT OR stateGet("phase", "") = "ABORT" {
-        mLogWarn("Launch countdown interrupted by abort; holding ABORT phase.").
-        SET asc:ENABLED TO FALSE.
-        LOCK THROTTLE TO 0.
-        UNLOCK THROTTLE.
-        RETURN.
-    }
-
+    SET asc:DESIREDINCLINATION TO LAUNCH_INCLINATION.
     SET asc:ENABLED TO TRUE.
     UNLOCK THROTTLE.
-    WAIT 0.1.
     STAGE.
+    stateSet("launch_time", TIME:SECONDS).
+    mLog("STATS launch liftoff ut=" + ROUND(TIME:SECONDS, 3)
+        + " plannedUt=" + stateGetNum("prelaunch_plane_ut", 0)
+        + " inc=" + LAUNCH_INCLINATION).
+    stateRemove("launch_window").
     mLog("Launch — STAGE fired.").
     HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
     WAIT 0.5.
@@ -388,14 +373,21 @@ LOCAL FUNCTION _logParkingPlaneResult {
     LOCAL tgtLan IS stateGetNum("prelaunch_plane_lan", SHIP:ORBIT:LAN).
     LOCAL incErr IS _launchAngDiff(SHIP:ORBIT:INCLINATION, tgtInc).
     LOCAL lanErr IS _launchAngDiff(SHIP:ORBIT:LAN, tgtLan).
+    LOCAL planeCos IS COS(SHIP:ORBIT:INCLINATION) * COS(tgtInc)
+        + SIN(SHIP:ORBIT:INCLINATION) * SIN(tgtInc) * COS(lanErr).
+    LOCAL planeErr IS ARCCOS(MAX(-1, MIN(1, planeCos))).
     mLog("Parking plane vs " + planeTarget
-        + ": incErr=" + ROUND(incErr, 2)
+        + ": planeErr=" + ROUND(planeErr, 3)
+        + " deg, incErr=" + ROUND(incErr, 2)
         + " LANErr=" + ROUND(lanErr, 2) + " deg.").
     mLog("STATS launch-plane result target=" + planeTarget
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION, 3)
         + " lan=" + ROUND(SHIP:ORBIT:LAN, 3)
         + " targetInc=" + ROUND(tgtInc, 3)
         + " targetLan=" + ROUND(tgtLan, 3)
+        + " planeErr=" + ROUND(planeErr, 3)
+        + " liftoffUt=" + stateGetNum("launch_time", 0)
+        + " plannedUt=" + stateGetNum("prelaunch_plane_ut", 0)
         + " incErr=" + ROUND(incErr, 3)
         + " lanErr=" + ROUND(lanErr, 3)).
 }

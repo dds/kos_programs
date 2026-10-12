@@ -35,7 +35,7 @@ LOCAL DEAD_PREFIXES IS LIST(
 // in "stale" mode.
 LOCAL STALE_KEYS IS LIST(
     "prelaunch_plane_lan", "prelaunch_plane_inc",
-    "prelaunch_plane_target", "prelaunch_plane_ut",
+    "prelaunch_plane_target", "launch_window", "prelaunch_plane_ut",
     "xing_arrival_ut", "xing_arrival_target",
     "midcourse_refine_method", "midcourse_refine_fraction",
     "midcourse_refine_arrival_ut", "midcourse_refine_ut",

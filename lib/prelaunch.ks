@@ -1,17 +1,16 @@
 // ============================================================
 // prelaunch.ks  —  Launch-window timing  (0:/lib/prelaunch.ks)
 //
-// PRELAUNCH phase: wait on the pad for a launch-plane window
+// PRELAUNCH phase: select and persist a launch-plane window
 // (CAPTURE_LAN) or a rendezvous window derived from a target
 // vessel (RENDEZVOUS_TARGET / game target). Own lib so the
-// LAUNCH band doesn't carry it for every rocket.
+// LAUNCH band doesn't carry it for every rocket. The small shared
+// launch_window library owns the final wait after ascent has loaded.
 // ============================================================
 
 // --- Config defaults owned by this file ---
 GLOBAL LAUNCH_PLANE_TARGET IS "".
 GLOBAL LAUNCH_PLANE_MODE IS "".
-GLOBAL LAUNCH_PLANE_LEAD IS 0.
-GLOBAL PRELAUNCH_PLANE_LEAD IS 145.
 GLOBAL LAUNCH_RDV_ASCENT_TIME IS 300.
 GLOBAL LAUNCH_RDV_LEAD IS 30.
 GLOBAL LAUNCH_RDV_MAX_WINDOWS IS 16.
@@ -31,7 +30,7 @@ LOCAL FUNCTION _norm360 {
 }
 
 LOCAL FUNCTION _targetLaunchPlaneInc {
-    LOCAL inc IS LAUNCH_INCLINATION.
+    LOCAL inc IS ABS(LAUNCH_INCLINATION).
     IF TARGET_INCLINATION >= 0 {
         SET inc TO TARGET_INCLINATION.
     }
@@ -39,97 +38,6 @@ LOCAL FUNCTION _targetLaunchPlaneInc {
         SET inc TO CAPTURE_INC.
     }
     RETURN inc.
-}
-
-LOCAL FUNCTION _latIncOk {
-    PARAMETER latitude_.
-    PARAMETER inclination_.
-    LOCAL maxLat IS inclination_.
-    IF maxLat > 90 { SET maxLat TO 180 - maxLat. }
-    RETURN ABS(latitude_) <= ABS(maxLat) AND ABS(latitude_) < 90.
-}
-
-LOCAL FUNCTION _etaToLaunchPlane {
-    PARAMETER ascendingNode.
-    PARAMETER targetLan.
-    PARAMETER targetInc.
-    PARAMETER toleranceDeg IS 2.5. 
-
-    LOCAL eta_ IS -1.
-    LOCAL latitude_ IS SHIP:LATITUDE.
-    LOCAL longitude_ IS SHIP:LONGITUDE.
-    IF NOT _latIncOk(latitude_, targetInc) { RETURN eta_. }
-
-    LOCAL relLng IS 0.
-    IF ABS(ABS(targetInc) - 90) > 0.001 {
-        SET relLng TO ARCSIN(TAN(latitude_) / TAN(targetInc)).
-    }
-    IF NOT ascendingNode { SET relLng TO 180 - relLng. }
-
-    LOCAL geoLng IS _norm360(targetLan + relLng - SHIP:BODY:ROTATIONANGLE).
-    
-    // Fixed missing underscore on longitude_
-    LOCAL nodeAngle IS _norm360(geoLng - longitude_).
-
-    // Handle the wraparound if we just passed the window
-    IF nodeAngle > (360 - toleranceDeg) {
-        // Shift it to a negative angle representing how far past the window we are
-        SET nodeAngle TO nodeAngle - 360.
-    }
-
-    // ETA will be negative if we are past the window but within tolerance
-    SET eta_ TO (nodeAngle / 360) * SHIP:BODY:ROTATIONPERIOD.
-    RETURN eta_.
-}
-
-LOCAL FUNCTION _planeLaunchWait {
-    PARAMETER targetLan.
-    PARAMETER targetInc.
-    PARAMETER leadTime.
-
-    LOCAL period IS SHIP:BODY:ROTATIONPERIOD.
-    LOCAL best IS -1.
-    LOCAL etaAn IS _etaToLaunchPlane(TRUE, targetLan, targetInc).
-    LOCAL etaDn IS _etaToLaunchPlane(FALSE, targetLan, targetInc).
-    FOR eta IN LIST(etaAn, etaDn) {
-        IF eta >= 0 {
-            LOCAL waitTime IS eta - leadTime.
-            UNTIL waitTime >= 0 { SET waitTime TO waitTime + period. }
-            IF best < 0 OR waitTime < best { SET best TO waitTime. }
-        }
-    }
-    RETURN best.
-}
-
-LOCAL FUNCTION _planeLaunchWindow {
-    PARAMETER targetLan.
-    PARAMETER targetInc.
-    PARAMETER leadTime.
-
-    LOCAL best IS 0.
-    LOCAL bestWait IS -1.
-    LOCAL period IS SHIP:BODY:ROTATIONPERIOD.
-    LOCAL etaAn IS _etaToLaunchPlane(TRUE, targetLan, targetInc).
-    LOCAL etaDn IS _etaToLaunchPlane(FALSE, targetLan, targetInc).
-
-    FOR flavor IN LIST(
-            LEXICON("eta", etaAn, "inc", targetInc, "node", "AN"),
-            LEXICON("eta", etaDn, "inc", -targetInc, "node", "DN")) {
-        IF flavor["eta"] >= 0 {
-            LOCAL waitTime IS flavor["eta"] - leadTime.
-            UNTIL waitTime >= 0 { SET waitTime TO waitTime + period. }
-            IF bestWait < 0 OR waitTime < bestWait {
-                SET bestWait TO waitTime.
-                SET best TO LEXICON(
-                    "wait", waitTime,
-                    "ut", TIME:SECONDS + waitTime,
-                    "inc", flavor["inc"],
-                    "node", flavor["node"],
-                    "eta", flavor["eta"]).
-            }
-        }
-    }
-    RETURN best.
 }
 
 LOCAL FUNCTION _bodyNamed {
@@ -211,11 +119,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
 
     LOCAL targetInc IS bod_:ORBIT:INCLINATION.
     LOCAL targetLan IS bod_:ORBIT:LAN.
-    LOCAL leadTime IS PRELAUNCH_PLANE_LEAD.
-    IF LAUNCH_PLANE_LEAD > 0 {
-        SET leadTime TO LAUNCH_PLANE_LEAD.
-    }
-    IF leadTime < 0 { SET leadTime TO 0. }
+    LOCAL leadTime IS launchPlaneLead().
 
     IF targetInc <= 0 OR targetInc >= 180 {
         SET LAUNCH_INCLINATION TO targetInc.
@@ -226,14 +130,14 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
         RETURN.
     }
 
-    IF NOT _latIncOk(SHIP:LATITUDE, targetInc) {
+    IF NOT launchPlaneReachable(SHIP:LATITUDE, targetInc) {
         IF allowFallback {
-            SET LAUNCH_INCLINATION TO 0.
+            SET LAUNCH_INCLINATION TO ABS(SHIP:LATITUDE).
             _prelaunchWriteOverrides().
             mLogWarn("PRELAUNCH: " + bod_:NAME + " plane inc="
                 + ROUND(targetInc, 2) + " cannot pass over lat "
                 + ROUND(SHIP:LATITUDE, 3)
-                + "; AUTO falling back to equatorial launch.").
+                + "; AUTO falling back to due-east launch.").
             mLog("STATS prelaunch body-plane fallback target=" + bod_:NAME
                 + " inc=" + ROUND(targetInc, 2)
                 + " lat=" + ROUND(SHIP:LATITUDE, 3)).
@@ -249,7 +153,7 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
         RETURN.
     }
 
-    LOCAL win IS _planeLaunchWindow(targetLan, targetInc, leadTime).
+    LOCAL win IS launchPlaneWindow(targetLan, targetInc, leadTime).
     IF win = 0 {
         mLogError("PRELAUNCH: could not calculate body-plane timing.").
         yieldToPrompt().
@@ -277,39 +181,19 @@ LOCAL FUNCTION _prelaunchToBodyOrbit {
         + " wait=" + ROUND(win["wait"], 0)
         + " lead=" + ROUND(leadTime, 0)).
 
+    _prelaunchSavePlaneWindow(win, targetLan, targetInc, leadTime).
     IF NOT _prelaunchWindowGate(win["ut"], bod_:NAME + " body-plane window") {
         RETURN.
     }
-    mLog("PRELAUNCH complete; body-plane launch released.").
+    mLog("PRELAUNCH complete; body-plane launch scheduled.").
     nextPhase(launchSeq).
 }
 
-LOCAL FUNCTION _waitForPrelaunchUt {
-    PARAMETER targetUt.
-
-    LOCAL kacAlarmId IS "".
-    LOCAL alarmUt IS targetUt - 30.
-    IF alarmUt > TIME:SECONDS {
-        SET kacAlarmId TO kacEnsureAlarm("Prelaunch window",
-            alarmUt,
-            "Auto-created by PRELAUNCH. Fly safe.").
-        IF kacAlarmId <> "" {
-            mLog("KAC alarm set for prelaunch window in "
-                + ROUND(alarmUt - TIME:SECONDS, 0) + "s.").
-        }
-    }
-
-    mLog("PRELAUNCH waiting for launch window. Operator may warp.").
-    UNTIL TIME:SECONDS >= targetUt OR ABORT {
-        LOCAL remaining IS MAX(0, targetUt - TIME:SECONDS).
-        HUDTEXT("Prelaunch window in " + ROUND(remaining, 0) + "s", 5, 2, 13, CYAN, FALSE).
-        WAIT MIN(30, MAX(0.5, remaining)).
-    }
-    SET WARP TO 0.
-
-    IF kacAlarmId <> "" {
-        DELETEALARM(kacAlarmId).
-    }
+LOCAL FUNCTION _prelaunchSavePlaneWindow {
+    PARAMETER win, targetLan, targetInc, leadTime.
+    stateSet("launch_window", LEXICON("kind", "PLANE",
+        "body", SHIP:BODY:NAME, "ut", win["ut"], "launchInc", win["inc"],
+        "lan", targetLan, "inc", targetInc, "lead", leadTime)).
 }
 
 LOCAL FUNCTION _confirmPrelaunchWindow {
@@ -322,7 +206,7 @@ LOCAL FUNCTION _confirmPrelaunchWindow {
     }
 
     PRINT " ".
-    uiPrompt("SPACE wait / N launch now / H hold / 30s auto-wait").
+    uiPrompt("SPACE wait / N launch east now / H hold / 30s auto-wait").
     PRINT "  " + label + " in " + ROUND(waitSeconds, 0) + "s.".
     LOCAL deadline IS TIME:SECONDS + 30.
     LOCAL choice IS "".
@@ -377,16 +261,23 @@ LOCAL FUNCTION _prelaunchWindowGate {
         RETURN FALSE.
     }
     IF choice = "NOW" {
-        mLogWarn("PRELAUNCH: operator skipped launch-window wait; launching now.").
+        _prelaunchClearPlanState().
+        SET LAUNCH_INCLINATION TO ABS(SHIP:LATITUDE).
+        _prelaunchWriteOverrides().
+        mLogWarn("PRELAUNCH: launching due east now; transfer planner owns corrections.").
         RETURN TRUE.
     }
-
-    _waitForPrelaunchUt(targetUt).
     IF ABORT {
-        mLog("PRELAUNCH hold — operator abort.").
         yieldToPrompt().
         RETURN FALSE.
     }
+    IF stateGet("launch_window", 0) = 0 {
+        stateSet("launch_window", LEXICON("kind", "FIXED",
+            "body", SHIP:BODY:NAME, "ut", targetUt,
+            "launchInc", LAUNCH_INCLINATION)).
+    }
+    // Load LAUNCH now; its absolute countdown owns the wait and liftoff.
+    mLog("PRELAUNCH: window saved; loading ascent before the countdown.").
     RETURN TRUE.
 }
 
@@ -482,7 +373,7 @@ LOCAL FUNCTION _interplanetaryLaunchIncFor {
     PARAMETER targetOrbit.
     LOCAL inc IS targetOrbit:INCLINATION.
     IF inc <= 0 OR inc >= 180 { RETURN 0. }
-    IF _latIncOk(SHIP:LATITUDE, inc) { RETURN inc. }
+    IF launchPlaneReachable(SHIP:LATITUDE, inc) { RETURN inc. }
     mLogWarn("PRELAUNCH: " + targetName + " solar plane inc="
         + ROUND(inc, 2) + " cannot pass over lat "
         + ROUND(SHIP:LATITUDE, 3)
@@ -692,7 +583,7 @@ LOCAL FUNCTION _prelaunchToVessel {
     LOCAL ascentTime IS LAUNCH_RDV_ASCENT_TIME.
     LOCAL desiredLead IS LAUNCH_RDV_LEAD.
     LOCAL maxWindows IS LAUNCH_RDV_MAX_WINDOWS.
-    LOCAL leadTime IS PRELAUNCH_PLANE_LEAD.
+    LOCAL leadTime IS launchPlaneLead().
     LOCAL rotPeriod IS SHIP:BODY:ROTATIONPERIOD.
 
     mLog("PRELAUNCH: rendezvous with " + ves:NAME
@@ -705,9 +596,14 @@ LOCAL FUNCTION _prelaunchToVessel {
     // time grid for near-equatorial targets where the site is
     // always in plane.
     LOCAL candidates IS LIST().
-    LOCAL etaAn IS _etaToLaunchPlane(TRUE, tgtLan, tgtInc).
-    LOCAL etaDn IS _etaToLaunchPlane(FALSE, tgtLan, tgtInc).
-    IF etaAn < 0 AND etaDn < 0 {
+    IF NOT launchPlaneReachable(SHIP:LATITUDE, tgtInc) {
+        mLogError("PRELAUNCH: rendezvous plane cannot pass over launch site.").
+        yieldToPrompt().
+        RETURN.
+    }
+    LOCAL etaAn IS launchPlaneEta(TRUE, tgtLan, tgtInc).
+    LOCAL etaDn IS launchPlaneEta(FALSE, tgtLan, tgtInc).
+    IF tgtInc < 0.01 OR tgtInc > 179.99 {
         LOCAL j IS 1.
         UNTIL j > maxWindows {
             candidates:ADD(LEXICON(
@@ -787,7 +683,7 @@ LOCAL FUNCTION _prelaunchPrintConfig {
 
 LOCAL FUNCTION _prelaunchClearPlanState {
     FOR key IN LIST(
-        "prelaunch_plane_ut", "prelaunch_plane_target",
+        "launch_window", "prelaunch_plane_ut", "prelaunch_plane_target",
         "prelaunch_plane_inc", "prelaunch_plane_lan"
     ) {
         stateRemove(key).
@@ -888,7 +784,7 @@ GLOBAL FUNCTION phasePrelaunch {
 
     LOCAL targetLan IS CAPTURE_LAN.
     LOCAL targetInc IS _targetLaunchPlaneInc().
-    LOCAL leadTime IS PRELAUNCH_PLANE_LEAD.
+    LOCAL leadTime IS launchPlaneLead().
     IF leadTime < 0 { SET leadTime TO 0. }
 
     IF targetInc <= 0 OR targetInc >= 180 {
@@ -897,7 +793,7 @@ GLOBAL FUNCTION phasePrelaunch {
         RETURN.
     }
 
-    IF NOT _latIncOk(SHIP:LATITUDE, targetInc) {
+    IF NOT launchPlaneReachable(SHIP:LATITUDE, targetInc) {
         mLogError("PRELAUNCH: target plane never passes over launch latitude.").
         PRINT " ".
         PRINT "  PRELAUNCH HOLD".
@@ -907,21 +803,20 @@ GLOBAL FUNCTION phasePrelaunch {
         RETURN.
     }
 
-    LOCAL waitTime IS _planeLaunchWait(targetLan, targetInc, leadTime).
-    IF waitTime < 0 {
+    LOCAL win IS launchPlaneWindow(targetLan, targetInc, leadTime).
+    IF win = 0 {
         mLogError("PRELAUNCH: could not calculate launch-plane timing.").
         yieldToPrompt().
         RETURN.
     }
-
-    LOCAL targetUt IS TIME:SECONDS + waitTime.
-    stateSet("prelaunch_plane_ut", targetUt).
-    mLog("PRELAUNCH: target LAN=" + ROUND(targetLan, 1)
-        + " deg inc=" + ROUND(targetInc, 2)
-        + " deg lead=" + ROUND(leadTime, 0)
-        + "s wait=" + ROUND(waitTime, 0) + "s.").
-
-    IF NOT _prelaunchWindowGate(targetUt, "launch-plane window") {
+    SET LAUNCH_INCLINATION TO win["inc"].
+    _prelaunchWriteOverrides().
+    _prelaunchSavePlaneWindow(win, targetLan, targetInc, leadTime).
+    stateSet("prelaunch_plane_ut", win["ut"]).
+    stateSet("prelaunch_plane_target", "configured orbit").
+    stateSet("prelaunch_plane_inc", targetInc).
+    stateSet("prelaunch_plane_lan", targetLan).
+    IF NOT _prelaunchWindowGate(win["ut"], "launch-plane window") {
         RETURN.
     }
 

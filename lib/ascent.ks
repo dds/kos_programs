@@ -227,9 +227,8 @@ LOCAL FUNCTION _logVacuumAscentTelemetry {
 
 // Compass heading to reach LAUNCH_INCLINATION from the launch
 // latitude (standard launch-azimuth identity sin(az)=cos(i)/cos(lat),
-// az measured from north). Eastward/prograde solutions only — the
-// surface-return case wants a prograde orbit aligned with the Mun's
-// motion. A target inclination below the launch latitude is
+// az measured from north). Negative inclinations select the southbound
+// crossing, as in the atmospheric ascent. An inclination below launch latitude is
 // unreachable by direct ascent, so fly due east (90) for the minimum
 // (inclination = latitude); a plane-change burn would be needed to go
 // lower. Body rotation is ignored (negligible on Mun/Minmus).
@@ -239,8 +238,10 @@ LOCAL FUNCTION _ascentAzimuth {
     IF denom < 0.0001 { RETURN 90. }
     LOCAL ratio IS COS(ABS(LAUNCH_INCLINATION)) / denom.
     IF ratio >= 1 { RETURN 90. }
-    IF ratio <= -1 { RETURN 90. }
-    RETURN ARCSIN(ratio).
+    IF ratio <= -1 { RETURN 270. }
+    LOCAL azimuth_ IS ARCSIN(ratio).
+    IF LAUNCH_INCLINATION < 0 { SET azimuth_ TO 180 - azimuth_. }
+    RETURN MOD(azimuth_ + 360, 360).
 }
 
 // Horizontal (circularization) burn direction at the current point:
@@ -407,40 +408,31 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
         }
         armAscentStaging().
     } ELSE {
-        stateSet("launch_time", TIME:SECONDS).
         stateSet("launch_site_lat", SHIP:GEOPOSITION:LAT).
         stateSet("launch_site_lng", SHIP:GEOPOSITION:LNG).
         stateSet("launch_vs_nonpos_logged", "false").
 
         LOCK THROTTLE TO 0.
         LOCK STEERING TO SHIP:UP:VECTOR.
-        mLog("Press ABORT within 5s to hold launch.").
-        HUDTEXT("T-5: ABORT to hold", 5, 2, 16, YELLOW, FALSE).
-        LOCAL tEnd IS TIME:SECONDS + 5.
-        WAIT UNTIL TIME:SECONDS >= tEnd OR ABORT.
-        IF ABORT {
-            mLog("Launch hold — operator abort.").
-            LOCK THROTTLE TO 0.
-            UNLOCK THROTTLE.
-            UNLOCK STEERING.
-            RETURN FALSE.
-        }
-        countdown(3).
-
-        IF ABORT OR stateGet("phase", "") = "ABORT" {
-            mLogWarn("Vacuum launch countdown interrupted by abort.").
-            LOCK THROTTLE TO 0.
-            UNLOCK THROTTLE.
-            UNLOCK STEERING.
-            RETURN FALSE.
-        }
+        IF NOT launchWaitForLiftoff() { RETURN FALSE. }
+        SET ascentAz TO _ascentAzimuth().
 
         IF ASCENT_STAGED {
             STAGE.
+            LOCK THROTTLE TO 1.0.
+            stateSet("launch_time", TIME:SECONDS).
             mLog("Vacuum launch — STAGE fired.").
             WAIT 0.5.
             ascentRunPostStageHook().
         }
+        IF NOT ASCENT_STAGED {
+            LOCK THROTTLE TO 1.0.
+            stateSet("launch_time", TIME:SECONDS).
+        }
+        mLog("STATS launch liftoff ut=" + stateGetNum("launch_time", 0)
+            + " plannedUt=" + stateGetNum("prelaunch_plane_ut", 0)
+            + " inc=" + LAUNCH_INCLINATION + " az=" + ascentAz).
+        stateRemove("launch_window").
         HUDTEXT("Launch!", 3, 2, 18, YELLOW, FALSE).
         armAscentStaging().
     }
