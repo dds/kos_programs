@@ -84,6 +84,8 @@ GLOBAL BPLANE_PE_ONLY IS 0.
 GLOBAL BPLANE_CAPTURE_MARGIN IS -1.
 // Contract missions must not silently waive their requested plane.
 GLOBAL BPLANE_REQUIRE_PLANE IS 0.
+GLOBAL BPLANE_REVIEW_UNCONVERGED IS 0.
+GLOBAL BPLANE_REVIEW_MIN_PE IS 10000.
 
 
 LOCAL DEFAULT_DV_CAP   IS 150.
@@ -127,6 +129,7 @@ LOCAL FUNCTION _bplaneTrimCap {
 
 LOCAL FUNCTION _bplaneHoldCorrection {
     PARAMETER reason.
+    stateRemove("bplane_review").
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     mLogWarn("STATS bplane decision=hold reason=" + reason
         + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)
@@ -153,12 +156,14 @@ LOCAL FUNCTION _bplaneLogBaseline {
         + " correctionCap=" + ROUND(_bplaneTrimCap(targetBody, phaseCap), 2)).
 }
 
-LOCAL FUNCTION _bplaneCaptureCost {
+GLOBAL FUNCTION bplaneCaptureCost {
     PARAMETER patch, targetBody.
+    PARAMETER captureAp IS -1.
     LOCAL rp IS targetBody:RADIUS + patch:PERIAPSIS.
     IF rp <= 0 { RETURN 1.0e9. }
     LOCAL apAlt IS MAX(35000, patch:PERIAPSIS).
     IF TARGET_AP >= 0 { SET apAlt TO MAX(TARGET_AP, patch:PERIAPSIS). }
+    IF captureAp >= 0 { SET apAlt TO MAX(captureAp, patch:PERIAPSIS). }
     LOCAL ra IS targetBody:RADIUS + apAlt.
     LOCAL incoming IS SQRT(targetBody:MU * (1 + patch:ECCENTRICITY) / rp).
     LOCAL captured IS SQRT(targetBody:MU * (2 / rp - 2 / (rp + ra))).
@@ -167,8 +172,9 @@ LOCAL FUNCTION _bplaneCaptureCost {
 
 // Read raw patches: POSITIONAT would include the pending correction and
 // contaminate the comparison against the unburned encounter.
-LOCAL FUNCTION _bplaneCorrectionAllowed {
+GLOBAL FUNCTION bplaneCorrectionAllowed {
     PARAMETER nd, targetBody, phaseCap.
+    PARAMETER checkCorridor IS TRUE.
     LOCAL cap IS _bplaneTrimCap(targetBody, phaseCap).
     LOCAL original IS findArrivalPatch(0, targetBody).
     LOCAL planned IS findArrivalPatch(nd, targetBody).
@@ -181,7 +187,7 @@ LOCAL FUNCTION _bplaneCorrectionAllowed {
     IF planned = 0 {
         _bplaneHoldCorrection("planned-encounter-missing"). RETURN FALSE.
     }
-    IF BPLANE_REQUIRE_PLANE <> 0 {
+    IF BPLANE_REQUIRE_PLANE <> 0 AND checkCorridor {
         LOCAL patch IS planned["patch"].
         LOCAL planeErr IS _bplaneElementPlaneError(
             patch:INCLINATION, patch:LAN, _bplaneWantInc(), CAPTURE_LAN).
@@ -198,8 +204,8 @@ LOCAL FUNCTION _bplaneCorrectionAllowed {
     LOCAL afterCost IS 0.
     IF original <> 0 {
         SET shift TO ABS(planned["entryUt"] - original["entryUt"]).
-        SET beforeCost TO _bplaneCaptureCost(original["patch"], targetBody).
-        SET afterCost TO _bplaneCaptureCost(planned["patch"], targetBody).
+        SET beforeCost TO bplaneCaptureCost(original["patch"], targetBody).
+        SET afterCost TO bplaneCaptureCost(planned["patch"], targetBody).
         mLog("STATS bplane comparison originalPeKm=" + ROUND(original["patch"]:PERIAPSIS / 1000, 2)
             + " originalInc=" + ROUND(original["patch"]:INCLINATION, 2)
             + " originalEntryUt=" + ROUND(original["entryUt"], 1)
@@ -215,7 +221,7 @@ LOCAL FUNCTION _bplaneCorrectionAllowed {
     }
     IF BPLANE_CAPTURE_MARGIN >= 0 {
         LOCAL needed IS nd:DELTAV:MAG
-            + _bplaneCaptureCost(planned["patch"], targetBody) + BPLANE_CAPTURE_MARGIN.
+            + bplaneCaptureCost(planned["patch"], targetBody) + BPLANE_CAPTURE_MARGIN.
         mLog("STATS bplane capture-budget neededDv=" + ROUND(needed, 2)
             + " marginDv=" + BPLANE_CAPTURE_MARGIN
             + " availableDv=" + ROUND(SHIP:DELTAV:VACUUM, 2)).
@@ -232,6 +238,87 @@ LOCAL FUNCTION _bplaneCorrectionAllowed {
         _bplaneHoldCorrection("capture-cost-increase"). RETURN FALSE.
     }
     RETURN TRUE.
+}
+
+// Review intent is small and persistent: bind approval to this exact node,
+// phase and mission. A changed or expired node needs a fresh plan/review.
+GLOBAL FUNCTION bplaneReviewMatches {
+    PARAMETER saved, nd.
+    RETURN saved["mission"] = stateGet("mission_id", "")
+        AND saved["phase"] = stateGet("phase", "")
+        AND saved["body"] = SHIP:BODY:NAME
+        AND saved["target"] = getTarget("")
+        AND ABS(saved["ut"] - nd:TIME) < 0.01
+        AND ABS(saved["pro"] - nd:PROGRADE) < 0.001
+        AND ABS(saved["rad"] - nd:RADIALOUT) < 0.001
+        AND ABS(saved["normal"] - nd:NORMAL) < 0.001.
+}
+
+LOCAL FUNCTION _bplaneShowReview {
+    PARAMETER nd, targetBody.
+    LOCAL hit IS findArrivalPatch(nd, targetBody).
+    IF hit = 0 { PRINT "Reviewed node no longer has an encounter; replan.". RETURN. }
+    LOCAL patch IS hit["patch"].
+    LOCAL latitudeReach IS MIN(patch:INCLINATION, 180 - patch:INCLINATION).
+    mLog("STATS bplane review dv=" + ROUND(nd:DELTAV:MAG, 2)
+        + " PeKm=" + ROUND(patch:PERIAPSIS / 1000, 2)
+        + " inc=" + ROUND(patch:INCLINATION, 2)
+        + " maxLatitude=" + ROUND(latitudeReach, 2)
+        + " eta=" + ROUND(nd:ETA, 1)).
+    FOR apAlt IN LIST(50000, 100000, 500000) {
+        IF apAlt >= patch:PERIAPSIS AND apAlt < targetBody:SOIRADIUS - targetBody:RADIUS {
+            LOCAL cost IS bplaneCaptureCost(patch, targetBody, apAlt).
+            mLog("STATS bplane review captureApKm=" + (apAlt / 1000)
+                + " captureDv=" + ROUND(cost, 2)
+                + " remainingAfterDv=" + ROUND(SHIP:DELTAV:VACUUM - nd:DELTAV:MAG - cost, 2)).
+        }
+    }
+    PRINT "Partial solution retained. No fuel spent and no targets changed.".
+    PRINT "Review the map. Acceptance adopts this Pe/inclination for this mission leg.".
+    PRINT "RUNPATH(" + CHAR(34) + "0:/cmd/arrival.ks" + CHAR(34)
+        + ", " + CHAR(34) + "accept" + CHAR(34) + ").".
+    PRINT "Optional third argument: capture apoapsis in km (default keeps current target).".
+    PRINT "Use action replan to discard it. Game time continues; node ETA matters.".
+}
+
+GLOBAL FUNCTION bplanePauseForReview {
+    LOCAL saved IS stateGet("bplane_review", LEXICON()).
+    IF saved:LENGTH = 0 { RETURN FALSE. }
+    IF saved["mission"] <> stateGet("mission_id", "")
+            OR saved["phase"] <> stateGet("phase", "") {
+        stateRemove("bplane_review"). RETURN FALSE.
+    }
+    IF HASNODE {
+        IF bplaneReviewMatches(saved, NEXTNODE) {
+            _bplaneShowReview(NEXTNODE, BODY(saved["target"])).
+        } ELSE {
+            PRINT "Reviewed node changed; use arrival action replan.".
+        }
+    } ELSE {
+        PRINT "Reviewed node is missing; use arrival action replan.".
+    }
+    yieldToPrompt(). RETURN TRUE.
+}
+
+LOCAL FUNCTION _bplaneOfferReview {
+    PARAMETER nd, targetBody, phaseCap.
+    LOCAL hit IS findArrivalPatch(nd, targetBody).
+    IF hit = 0 {
+        _bplaneHoldCorrection("review-encounter-missing"). RETURN.
+    }
+    IF hit["patch"]:PERIAPSIS < BPLANE_REVIEW_MIN_PE
+            OR hit["patch"]:PERIAPSIS >= targetBody:SOIRADIUS - targetBody:RADIUS {
+        _bplaneHoldCorrection("review-periapsis-unsafe"). RETURN.
+    }
+    // Only the precision gate is waived for review. Existing fuel and
+    // trajectory constraints still apply; presenting a node is not approval.
+    IF NOT bplaneCorrectionAllowed(nd, targetBody, phaseCap, FALSE) { RETURN. }
+    stateSet("bplane_review", LEX(
+        "mission", stateGet("mission_id", ""), "phase", stateGet("phase", ""),
+        "body", SHIP:BODY:NAME, "target", targetBody:NAME,
+        "ut", nd:TIME, "pro", nd:PROGRADE, "rad", nd:RADIALOUT, "normal", nd:NORMAL)).
+    _bplaneShowReview(nd, targetBody).
+    yieldToPrompt().
 }
 
 LOCAL FUNCTION _bplaneReserveCorrection {
@@ -1080,6 +1167,10 @@ GLOBAL FUNCTION planBplaneCorrection {
         + " wantPeKm=" + ROUND(wantPe / 1000, 1)).
 
     IF NOT converged AND NOT acquired {
+        IF BPLANE_REVIEW_UNCONVERGED <> 0 {
+            _bplaneOfferReview(nd, targetBody, dvCap).
+            RETURN 0.
+        }
         _bplaneHoldCorrection("unconverged-optional-correction").
         RETURN 0.
     }
@@ -1170,7 +1261,7 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
         RETURN FALSE.
     }
 
-    IF NOT _bplaneCorrectionAllowed(nd, targetBody, phaseCap) { RETURN FALSE. }
+    IF NOT bplaneCorrectionAllowed(nd, targetBody, phaseCap) { RETURN FALSE. }
 
     bplaneResetWarnings().
     LOCAL meas IS measureArrival(nd, targetBody).
@@ -1215,6 +1306,7 @@ GLOBAL FUNCTION phaseBplane {
 
     // Resume safety: a reboot can land us here after the SOI
     // transition already happened. Nothing left to correct.
+    IF bplanePauseForReview() { RETURN. }
     IF SHIP:BODY = targetBody {
         mLog("BPLANE: already inside " + targetBody:NAME + " SOI — skipping.").
         nextPhase(xferSeq).
@@ -1272,7 +1364,7 @@ GLOBAL FUNCTION phaseBplane {
         }
         IF phaseShouldYield { RETURN. }
         IF nd = 0 { BREAK. }
-        IF NOT _bplaneCorrectionAllowed(nd, targetBody, BPLANE_DV_CAP) { RETURN. }
+        IF NOT bplaneCorrectionAllowed(nd, targetBody, BPLANE_DV_CAP) { RETURN. }
         _bplaneReserveCorrection(nd, targetBody).
         _bplaneClearCoastTimes().
         SET burns TO burns + 1.
@@ -1341,6 +1433,7 @@ GLOBAL FUNCTION phaseRefineBplane {
         RETURN.
     }
 
+    IF bplanePauseForReview() { RETURN. }
     IF SHIP:BODY = targetBody {
         mLog("REFINE_BPLANE: already inside " + targetBody:NAME + " SOI; skipping.").
         nextPhase(xferSeq).
@@ -1394,7 +1487,7 @@ GLOBAL FUNCTION phaseRefineBplane {
 
         IF phaseShouldYield { RETURN. }
         IF nd = 0 { BREAK. }
-        IF NOT _bplaneCorrectionAllowed(nd, targetBody, dvCap) { RETURN. }
+        IF NOT bplaneCorrectionAllowed(nd, targetBody, dvCap) { RETURN. }
         _bplaneReserveCorrection(nd, targetBody).
         _bplaneClearCoastTimes().
         SET burns TO burns + 1.

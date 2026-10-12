@@ -46,7 +46,7 @@ def check_budget():
 
 
 def check_decisions():
-    gate = body(BPLANE, '_bplaneCorrectionAllowed')
+    gate = body(BPLANE, 'bplaneCorrectionAllowed')
     conditions = re.findall(r'IF (.*?)\{\s*_bplaneHoldCorrection\("([^"]+)"\)', gate, re.S)
     # Pull just the last IF before each hold (earlier blocks contain logs).
     conditions = {reason: condition.rsplit('IF ', 1)[-1].strip()
@@ -77,7 +77,7 @@ def check_decisions():
 
 
 def check_capture_estimate():
-    source = body(BPLANE, '_bplaneCaptureCost')
+    source = body(BPLANE, 'bplaneCaptureCost')
     for vinf in (100, 300, 600):
         for pe in (15000, 50000):
             radius, mu, ap = 200000, 6.5138398e10, 100000
@@ -123,12 +123,12 @@ def check_logging_and_integration():
     assert 'unconverged-optional-correction' in planner
     for phase in ('phaseBplane', 'phaseRefineBplane'):
         source = body(BPLANE, phase)
-        assert source.index('_bplaneCorrectionAllowed(') < source.index('executeManeuver()')
+        assert source.index('bplaneCorrectionAllowed(') < source.index('executeManeuver()')
         assert source.index('_bplaneReserveCorrection(') < source.index('executeManeuver()')
         assert source.count('IF phaseShouldYield { RETURN. }') == 2
         assert '_bplaneLogBaseline(' in source
     existing = body(BPLANE, '_bplaneExistingNodeAcceptable')
-    assert '_bplaneCorrectionAllowed(nd, targetBody, phaseCap)' in existing
+    assert 'bplaneCorrectionAllowed(nd, targetBody, phaseCap)' in existing
     reserve = body(BPLANE, '_bplaneReserveCorrection')
     assert 'stateSet("bplane_budget_spent"' in reserve
     shape_run = body(SHAPE, '_runShapePhase')

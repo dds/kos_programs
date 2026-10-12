@@ -90,13 +90,13 @@ def check_solver():
 
 
 def check_fuel_and_capture():
-    gate = body(ARRIVAL, '_bplaneCorrectionAllowed')
+    gate = body(ARRIVAL, 'bplaneCorrectionAllowed')
     needed = re.search(r'LOCAL needed IS (.*?)\.', gate, re.S)[1]
     for correction, capture, fuel, allowed in [
         (25, 300, 899, True), (50, 799, 899, True),
         (50, 800, 899, False), (10, 300, 0, False)]:
         env = dict(nd=NS(DELTAV=NS(MAG=correction)), targetBody=None,
-                   planned={'patch': object()}, _bplaneCaptureCost=lambda *_: capture,
+                   planned={'patch': object()}, bplaneCaptureCost=lambda *_: capture,
                    BPLANE_CAPTURE_MARGIN=PROFILE['BPLANE_CAPTURE_MARGIN'])
         assert (evaluate(needed, **env) <= fuel) == allowed
     phase = body(CAPTURE, 'phaseCapture')
@@ -132,7 +132,7 @@ def check_resume_and_handoff():
     planner = body(ARRIVAL, 'planBplaneCorrection')
     assert planner.index('_bplanePlanPeOnly(') < planner.index('measureArrival(')
     resume = body(ARRIVAL, '_bplaneExistingNodeAcceptable')
-    assert resume.index('IF BPLANE_PE_ONLY <> 0') < resume.index('_bplaneCorrectionAllowed(')
+    assert resume.index('IF BPLANE_PE_ONLY <> 0') < resume.index('bplaneCorrectionAllowed(')
     for name in ('phaseBplane', 'phaseRefineBplane'):
         phase = body(ARRIVAL, name)
         assert phase.index('_bplaneClearCoastTimes()') < phase.index('executeManeuver()')
@@ -149,7 +149,7 @@ def check_resume_and_handoff():
 
 
 def check_polar_contract():
-    gate = body(ARRIVAL, '_bplaneCorrectionAllowed')
+    gate = body(ARRIVAL, 'bplaneCorrectionAllowed')
     condition = re.search(r'IF (ABS\(patch:PERIAPSIS - CAPTURE_PE\).*?) \{', gate, re.S)[1]
     for pe, inclination, reject in [(15000,0,True), (742000,90,True),
                                     (15000,90,False),(16000,89.9,False),(15000,89,True)]:

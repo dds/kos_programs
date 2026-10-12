@@ -54,6 +54,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/returntokerbin.ks").` | Full automated moon→Kerbin return (escape/MCC/aerobrake/descent) |
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
+| `RUNPATH("0:/cmd/arrival.ks", "review").` | Inspect a retained partial arrival; actions `accept` / `replan`, optional capture Ap in km |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
 | `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
@@ -401,14 +402,51 @@ this command if an earlier recovery version left a Pe-only/equatorial node.
 The recovery targets **15 km Pe / 100 km Ap, 90° inclination**, with LAN free
 for the planner to choose. `BPLANE_REQUIRE_PLANE=1` forbids Pe-only fallback
 or a safe-encounter handoff outside the requested plane. Before ignition,
-the actual node patch must satisfy both Pe and inclination tolerances.
+the actual node patch must satisfy both Pe and inclination tolerances
+against the nominal targets, or the targets explicitly accepted below.
 Initial corrections are capped at 150 m/s, midpoint corrections at 10 m/s,
 and the cumulative allowance is 160 m/s. A plane change can cost more than
 the previous 50 m/s Pe-only ceiling; the planner must still leave predicted
 capture cost plus 50 m/s, and CAPTURE rechecks its actual node cost. These
 are capture margins, **not a guarantee of landing or return fuel**.
 
-SHAPE verifies the captured polar ellipse without requesting circularization;
+With `BPLANE_REVIEW_UNCONVERGED=1`, a partial solution is retained for
+operator review when it has a real encounter, Pe at least 10 km, and passes
+the correction/capture fuel checks. No burn occurs and no budget is charged
+while presenting it. The console logs actual Pe, inclination, latitude reach,
+node ETA, and capture estimates for 50, 100 and 500 km apoapsis. A 27 km Pe
+and 7.81° error from polar still reaches both survey latitudes; it need not
+be discarded just because it missed the nominal 15 km / 90° request.
+
+After syncing the update, reboot the held BPLANE craft while connected to
+load it and replan. At the retained-candidate prompt, inspect the map, then:
+
+```kerboscript
+RUNPATH("0:/cmd/arrival.ks", "accept", 100).
+```
+
+This **accepts and resumes execution** with a 100 km capture Ap. Use `50`
+for a 50 km Ap, or `500` for a higher, cheaper initial capture; omitting the
+number keeps the configured Ap. At a fixed Pe, a lower capture Ap requires
+more braking. The command rechecks fuel for the selected Ap before changing
+any targets. Capture estimates are impulsive and do not guarantee the
+low-thrust burn or landing budget.
+
+Acceptance saves the node's actual Pe and inclination as the capture and
+SHAPE targets, plus matching capture Pe limits. They survive reboots without
+waiving future correction budgets; the landing coordinates and temperature
+survey remain unchanged. Other runtime overrides are retained. Do not rerun
+`munrecover` after accepting unless you intend to discard these overrides.
+Acceptance requires the exact reviewed node, mission, body and phase; an
+expired/changed node cannot inherit approval. Reboots hold a pending review
+rather than automatically executing it. **Game time continues during review.**
+To discard it and generate a fresh candidate at a future burn time:
+
+```kerboscript
+RUNPATH("0:/cmd/arrival.ks", "replan").
+```
+
+SHAPE verifies the accepted capture ellipse without requesting circularization;
 its cleanup allowance is 10 m/s per burn, 20 m/s total, with a 50 m/s reserve.
 SCIENCE_OPS runs the available experiments once, then holds for the contract
 survey (`SCIENCE_OPS_HOLD=1`). It does not fly temperature waypoints or check
@@ -430,7 +468,8 @@ only in this recovery profile; geometry changes can change both, so recovery
 checks the requested corridor and absolute capture affordability instead.
 `STATS bplane comparison`, `plan`, `capture-budget`, `decision=hold`, and
 `STATS capture budget` record the decisions. Offline checks:
-`python3 -B scripts/check_mun_recovery.py`; actual convergence and flight
+`python3 -B scripts/check_mun_recovery.py` and
+`python3 -B scripts/check_arrival_review.py`; actual convergence and flight
 execution still require flight testing.
 
 `RO8/mun_landing_return` and `RO8/minmus_landing_return` continue from

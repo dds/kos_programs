@@ -24,6 +24,7 @@ IF stateGet("vehicle", "") <> "RO8" {
     UNLOCK STEERING.
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     missionOverrideClear().
+    stateRemove("bplane_review").
     // This explicitly abandons old maneuver intent, never its fuel ledger.
     stateRemovePrefix("burn_").
     FOR key IN LIST("xing_arrival_ut", "midcourse_refine_ut",
