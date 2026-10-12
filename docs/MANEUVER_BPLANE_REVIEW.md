@@ -175,6 +175,22 @@ the burn. Stage/attitude recovery failure preserves the node. A persistent
 ignition marker prevents XING from deleting an interrupted departure and
 replanning it as an unflown parking-orbit maneuver, including after reboot.
 
+Follow-up flight feedback reported the specific `no-thrust` abort. The
+executor sampled acceleration twice: a positive sample skipped recovery,
+then a zero sample after fuel exhaustion aborted directly. The burn now
+uses one acceleration sample to select recovery/throttle, with any later
+loss returning through recovery on the next pass. The physics-tick throttle
+governor still observes live acceleration. Recovery also accepts an inactive
+engine in the current staging slot and explicitly activates it once, stops
+automatic staging at that engine, and logs engine eligibility/stage events.
+After automatic recovery stops, a 120-second live wait detects manual
+staging/activation without discarding the executor's node or integrated dV.
+The remaining hold after timeout/abort/reboot is intentional; the new
+`cmd/resumeburn.ks` gives the operator an explicit XING continuation path
+using the retained live residual, without missed-window deletion. It checks
+node time/body and alignment; it cannot undo trajectory error accumulated
+during a long interruption. Older saved burns lack the new body marker.
+
 The local transfer scan no longer exits after six encounters. Safe direct
 encounters inside the correction corridor rank by departure dV, and a
 better coarse candidate survives a worse refinement. This remains a
@@ -191,3 +207,8 @@ engine modules, or MechJeb ascent. Required flight checks: both Minmus plane
 crossings, a reboot/warp-missed window, immediate-east launch, combined and
 separate separation/ignition stages, final-stage exhaustion, and small-core
 compiled storage. No new behavior here is flight-proven yet.
+Recovery fixtures additionally cover a missed activation, delayed staging
+readiness/ignition, manual activation after 15 seconds, event limits,
+final-engine exhaustion, abort, and guards against the second-sample abort.
+Flight-check manual recovery during BURN WAIT and explicit continuation
+after TRANSFER HOLD with the updated library loaded.

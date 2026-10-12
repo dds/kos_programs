@@ -22,6 +22,7 @@ LOCAL FUNCTION _holdInterruptedTransfer {
     mLogError("Transfer interrupted after ignition. Preserving the remaining node; no fresh departure plan.").
     PRINT "  TRANSFER HOLD: inspect staging and the remaining maneuver.".
     PRINT "  Burn reason: " + stateGet("burn_abort_reason", "reboot during burn").
+    PRINT "  After inspection, RUNPATH('0:/cmd/resumeburn.ks'). to continue this node now.".
     yieldToPrompt().
     RETURN TRUE.
 }

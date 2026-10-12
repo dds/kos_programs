@@ -53,6 +53,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/restartflightplan.ks").` | Rewind the phase machine for the next sortie/leg |
 | `RUNPATH("0:/cmd/returntokerbin.ks").` | Full automated moon→Kerbin return (escape/MCC/aerobrake/descent) |
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
+| `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
 | `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
@@ -109,19 +110,32 @@ Maneuver burns use the active stage's remaining fuel before advancing to
 the next engine. Separation and engine ignition may occupy separate stage
 slots; the same maneuver node and remaining dV are retained throughout.
 `BURN_STAGE_TIMEOUT` (10 s), `BURN_STAGE_SETTLE` (0.5 s), and
-`BURN_STAGE_MAX_EVENTS` (4) bound each transition. `BURN_STAGE_LIMIT` (0)
+`BURN_STAGE_MAX_EVENTS` (4) bound automatic staging. An engine whose staging
+slot has fired but remains inactive gets an explicit activation attempt.
+If automatic recovery stalls, **BURN WAIT** keeps the executor running with
+zero throttle for `BURN_STAGE_MANUAL_WAIT` (120 s). Manual staging/engine
+activation during this wait is detected automatically; after realignment,
+the same burn continues. ABORT stops this recovery wait.
+`BURN_STAGE_LIMIT` (0)
 is the lowest stage number allowed for the next engine; raise it in the
 mission profile to reserve lower-numbered stages. Arrange the staging stack
 so advancing to that engine only triggers intended separation/ignition events.
 An unrelated flamed-out engine does not force staging while usable engines
 are still active.
 
-If propulsion/attitude recovery fails after ignition, XING preserves the
+If the recovery wait expires or attitude recovery fails after ignition, XING preserves the
 unfinished node and holds for the operator, unless the actual trajectory
 already supports arrival handoff. It also preserves an interrupted burn
 across reboot. It does **not** discard a partial departure and automatically
-plan another parking-orbit transfer. A hold requires inspection and a
-deliberate recovery plan; simply resuming the mission keeps the hold.
+plan another parking-orbit transfer. **TRANSFER HOLD** has returned to the
+terminal, so manual staging alone cannot restart it. After inspecting the
+remaining node and trajectory, `RUNPATH("0:/cmd/resumeburn.ks").` explicitly
+continues that node **now**, bypassing its already-passed ignition time. It
+checks the saved node time and body (when recorded), realigns, and burns the
+live residual. This requires the updated maneuver library to be loaded;
+ordinary mission resume/reboot still keeps the hold, and the command does
+not clear ABORT. A long interruption can make the original trajectory
+inaccurate, so this command is an operator decision, not an automatic retry.
 
 ### Multi-leg flights
 

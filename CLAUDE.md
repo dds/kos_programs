@@ -147,6 +147,10 @@ Looks like Python/JS; is neither.
   preserve its node and hold (or accept a valid arrival handoff), never
   blindly plan another parking-orbit departure. Stage transitions happen
   inside the same executor call and retain the original node/progress.
+  A late zero-thrust sample must re-enter recovery, never bypass staging
+  with a no-thrust abort. The bounded automatic stage sequence falls back
+  to a live manual-recovery wait. After a terminal hold, only the explicit
+  `cmd/resumeburn.ks` request permits XING to continue the retained node now.
 
 ## Working in this repo
 

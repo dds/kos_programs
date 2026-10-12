@@ -30,6 +30,8 @@ GLOBAL BURN_STAGE_TIMEOUT IS 10.
 GLOBAL BURN_STAGE_SETTLE IS 0.5.
 GLOBAL BURN_STAGE_MAX_EVENTS IS 4.
 GLOBAL BURN_STAGE_LIMIT IS 0.
+GLOBAL BURN_STAGE_MANUAL_WAIT IS 120.
+GLOBAL BURN_RESUME_REQUESTED IS FALSE.
 
 
 LOCAL ATOL      IS 2.0.
@@ -37,6 +39,8 @@ LOCAL CRT IS 300.
 LOCAL CRL  IS 180.
 
 GLOBAL FUNCTION executeManeuver {
+    LOCAL resumeRequested IS BURN_RESUME_REQUESTED.
+    SET BURN_RESUME_REQUESTED TO FALSE.
     // A throttle lock does not clear the pilot setting it overrides.
     // Clear both before any wait, including missed-window/abort exits.
     LOCK THROTTLE TO 0.0.
@@ -51,9 +55,19 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL nd    IS NEXTNODE.
     LOCAL ntm IS nd:TIME.
     LOCAL bdv  IS nd:DELTAV:MAG.
-    IF maneuverBurnInterrupted() {
-        mLogError("Interrupted burn retained; inspect the remaining node before resuming.").
-        RETURN FALSE.
+    LOCAL resuming IS maneuverBurnInterrupted().
+    IF ABORT { RETURN FALSE. }
+    IF resuming {
+        IF NOT resumeRequested {
+            mLogError("Interrupted burn retained; use cmd/resumeburn.ks after inspecting the remaining node.").
+            RETURN FALSE.
+        }
+        IF ABS(ntm - stateGetNum("burn_node_time", -1)) >= 0.5
+                OR stateGet("burn_body", SHIP:BODY:NAME) <> SHIP:BODY:NAME
+                OR NOT _nf(bdv) OR NOT _bvo(nd:BURNVECTOR) {
+            mLogError("Cannot resume: remaining node/body does not match the interrupted burn, or its vector is invalid.").
+            RETURN FALSE.
+        }
     }
     IF bdv <= BURN_TRIM_ABS_COMPLETE_DV {
         _ren(ntm).
@@ -67,10 +81,13 @@ GLOBAL FUNCTION executeManeuver {
     IF bdv < 0.5 { _stl(0.02). }
     // Estimate the centered start with the thrust limits actually used.
     WAIT 0.1.
-    LOCAL st IS _cst(nd).
-    _mpb(nd, bdv, st).
+    LOCAL st IS TIME:SECONDS.
+    IF NOT resuming {
+        SET st TO _cst(nd).
+        _mpb(nd, bdv, st).
+    }
 
-    IF st < TIME:SECONDS {
+    IF NOT resuming AND st < TIME:SECONDS {
         mLogWarn("Burn window already passed by " + ROUND(TIME:SECONDS - st, 0) + "s — removing node.").
         HUDTEXT("Burn window missed — replanning", 5, 2, 15, YELLOW, FALSE).
         REMOVE nd.
@@ -79,7 +96,7 @@ GLOBAL FUNCTION executeManeuver {
         RETURN FALSE.
     }
 
-    _rmb(nd).
+    IF NOT resuming { _rmb(nd). }
 
     mLog("Maneuver: dV=" + ROUND(bdv,1) + " m/s  ETA=" + ROUND(st - TIME:SECONDS,1) + "s").
     mLog("STATS burn setup dv=" + ROUND(bdv,1)
@@ -93,92 +110,106 @@ GLOBAL FUNCTION executeManeuver {
             + " availThrust=" + ROUND(SHIP:AVAILABLETHRUST,1)).
     }
 
-    LOCAL aid IS maneuverEnsureBurnAlarm(st, bdv, "Burn").
-
-    // Imminent burn: clear any player warp first. If the burn is
-    // still far enough from the T-60 KAC alarm, the guarded approach
-    // auto-warp below can restart at an appropriate low rate.
-    IF st - TIME:SECONDS < CRT {
+    LOCAL aid IS "".
+    IF resuming {
+        // Explicit operator continuation uses the LIVE residual now, not
+        // the original (already passed) centered ignition time.
         SET WARP TO 0.
-    }
+        SET SAS TO FALSE.
+        LOCK STEERING TO nd:BURNVECTOR.
+        mLogWarn("Resuming retained maneuver now: remaining=" + ROUND(bdv, 2) + "m/s.").
+        LOCAL resumeDeadline IS TIME:SECONDS + BURN_ALIGN_REACQUIRE_TIMEOUT.
+        WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ATOL
+            OR TIME:SECONDS >= resumeDeadline OR ABORT.
+        IF ABORT { RETURN FALSE. }
+    } ELSE {
+        SET aid TO maneuverEnsureBurnAlarm(st, bdv, "Burn").
 
-    SET SAS TO FALSE.
-    WAIT 0.1.
-    LOCK STEERING TO nd:BURNVECTOR.
-    mLog("Aligning to burn vector...").
-
-    LOCAL rt IS st - CRL.
-    IF TIME:SECONDS < rt - CRT {
-        // Spend the long coast sun-pointed for power; the checkpoint
-        // re-locks below reacquire the burn vector before ignition.
-        // solar is sheddable (not a maneuver dep) — orient only when
-        // a phase in this band actually brought the lib aboard.
-        IF PHASES_HAS_SOLAR { orientForSolar(FALSE, TRUE). }
-        mLog("Long coast wait (" + ROUND(rt - TIME:SECONDS, 0) + "s).").
-        HUDTEXT("Coasting. Burn in " + ROUND(st - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
-        coastAutoWarp(rt, "Burn coast", aid).
-        LOCAL sr IS -1.
-        UNTIL TIME:SECONDS >= rt {
-            SET sr TO trySolarHoldTick(sr).
-            WAIT MIN(10, MAX(0.5, rt - TIME:SECONDS)).
+        // Imminent burn: clear any player warp first. If the burn is
+        // still far enough from the T-60 KAC alarm, the guarded approach
+        // auto-warp below can restart at an appropriate low rate.
+        IF st - TIME:SECONDS < CRT {
+            SET WARP TO 0.
         }
-        SET WARP TO 0.
+
         SET SAS TO FALSE.
         WAIT 0.1.
         LOCK STEERING TO nd:BURNVECTOR.
-        mLog("Re-aligning — " + ROUND(st - TIME:SECONDS, 0) + "s to burn.").
-        HUDTEXT("Re-aligning. Burn in " + ROUND(st - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
-    }
+        mLog("Aligning to burn vector...").
 
-    LOCAL apt IS st - 60.
-    IF TIME:SECONDS < apt {
-        coastAutoWarp(apt, "Burn approach", aid).
-    }
-    WAIT UNTIL TIME:SECONDS >= apt.
-    mLog("Burn in T-60").
-    LOCK STEERING TO nd:BURNVECTOR.
-    mLog("STATS burn relock checkpoint=T-60 angle="
-        + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
-        + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)).
+        LOCAL rt IS st - CRL.
+        IF TIME:SECONDS < rt - CRT {
+            // Spend the long coast sun-pointed for power; the checkpoint
+            // re-locks below reacquire the burn vector before ignition.
+            // solar is sheddable (not a maneuver dep) — orient only when
+            // a phase in this band actually brought the lib aboard.
+            IF PHASES_HAS_SOLAR { orientForSolar(FALSE, TRUE). }
+            mLog("Long coast wait (" + ROUND(rt - TIME:SECONDS, 0) + "s).").
+            HUDTEXT("Coasting. Burn in " + ROUND(st - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
+            coastAutoWarp(rt, "Burn coast", aid).
+            LOCAL sr IS -1.
+            UNTIL TIME:SECONDS >= rt {
+                SET sr TO trySolarHoldTick(sr).
+                WAIT MIN(10, MAX(0.5, rt - TIME:SECONDS)).
+            }
+            SET WARP TO 0.
+            SET SAS TO FALSE.
+            WAIT 0.1.
+            LOCK STEERING TO nd:BURNVECTOR.
+            mLog("Re-aligning — " + ROUND(st - TIME:SECONDS, 0) + "s to burn.").
+            HUDTEXT("Re-aligning. Burn in " + ROUND(st - TIME:SECONDS, 0) + "s", 5, 2, 13, GREEN, FALSE).
+        }
 
-    LOCAL adl IS st - 5.
-    LOCAL t10 IS st - 10.
-    UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ATOL
-            OR TIME:SECONDS >= t10 {
+        LOCAL apt IS st - 60.
+        IF TIME:SECONDS < apt {
+            coastAutoWarp(apt, "Burn approach", aid).
+        }
+        WAIT UNTIL TIME:SECONDS >= apt.
+        mLog("Burn in T-60").
         LOCK STEERING TO nd:BURNVECTOR.
-        WAIT 0.1.
-    }
-    IF TIME:SECONDS < t10 { WAIT UNTIL TIME:SECONDS >= t10. }
-    LOCK STEERING TO nd:BURNVECTOR.
-    mLog("STATS burn relock checkpoint=T-10 angle="
-        + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
-        + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)).
+        mLog("STATS burn relock checkpoint=T-60 angle="
+            + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
+            + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)).
 
-    UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ATOL
-            OR TIME:SECONDS >= adl {
+        LOCAL adl IS st - 5.
+        LOCAL t10 IS st - 10.
+        UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ATOL
+                OR TIME:SECONDS >= t10 {
+            LOCK STEERING TO nd:BURNVECTOR.
+            WAIT 0.1.
+        }
+        IF TIME:SECONDS < t10 { WAIT UNTIL TIME:SECONDS >= t10. }
         LOCK STEERING TO nd:BURNVECTOR.
-        WAIT 0.1.
+        mLog("STATS burn relock checkpoint=T-10 angle="
+            + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
+            + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)).
+
+        UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < ATOL
+                OR TIME:SECONDS >= adl {
+            LOCK STEERING TO nd:BURNVECTOR.
+            WAIT 0.1.
+        }
+
+        LOCAL ae IS VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR).
+        mLog("STATS burn align angle=" + ROUND(ae,1)
+            + " tol=" + ATOL
+            + " timeToBurn=" + ROUND(st - TIME:SECONDS,1)).
+        IF ae >= ATOL {
+            mLogWarn("Burn starting with " + ROUND(ae,1) + "° misalignment.").
+        } ELSE {
+            mLog("Aligned. Waiting for burn window...").
+        }
+
+        WAIT UNTIL TIME:SECONDS >= adl.
+        HUDTEXT("Burn in T-4", 3, 2, 15, WHITE, FALSE).
+        countdown(4).
+
+        WAIT UNTIL TIME:SECONDS >= st.
+        LOCK STEERING TO nd:BURNVECTOR.
+        mLog("STATS burn relock checkpoint=T-0 angle="
+            + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
+            + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)).
     }
-
-    LOCAL ae IS VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR).
-    mLog("STATS burn align angle=" + ROUND(ae,1)
-        + " tol=" + ATOL
-        + " timeToBurn=" + ROUND(st - TIME:SECONDS,1)).
-    IF ae >= ATOL {
-        mLogWarn("Burn starting with " + ROUND(ae,1) + "° misalignment.").
-    } ELSE {
-        mLog("Aligned. Waiting for burn window...").
-    }
-
-    WAIT UNTIL TIME:SECONDS >= adl.
-    HUDTEXT("Burn in T-4", 3, 2, 15, WHITE, FALSE).
-    countdown(4).
-
-    WAIT UNTIL TIME:SECONDS >= st.
-    LOCK STEERING TO nd:BURNVECTOR.
-    mLog("STATS burn relock checkpoint=T-0 angle="
-        + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
-        + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)).
     LOCAL ie IS VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR).
     IF ie > 15 {
         mLogError("Refusing burn: " + ROUND(ie, 1)
@@ -610,14 +641,16 @@ GLOBAL FUNCTION executeManeuver {
         IF burnAbort <> "" { BREAK. }
         IF burnDone { BREAK. }
 
-        IF _sma() <= 0 {
+        LOCAL ma IS _sma().
+        IF ma <= 0 {
             SET throttleCmd TO 0.0.
             WAIT 0.01.
             // Keep the same node, ignition vector, and applied-dV total.
             // Separation and ignition may occupy different staging slots.
             IF NOT _burnRecoverThrust(nd, burnTrace) {
                 SET burnAbort TO "stage-recovery-failed".
-                SET burnAbortDetail TO "No usable engine after bounded stage recovery; node retained.".
+                SET burnAbortDetail TO "Stage recovery/manual wait ended; node retained.".
+                IF ABORT { SET burnAbort TO "operator-abort". }
                 BREAK.
             }
             IF NOT fixedBurnVector {
@@ -644,19 +677,12 @@ GLOBAL FUNCTION executeManeuver {
             SET prevBV TO nd:BURNVECTOR.
             SET prevBVTime TO TIME:SECONDS.
             SET dt TO 0.
+            SET ma TO _sma().
         }
 
         LOCAL rem IS remNow.
         IF fixedBurnVector {
             SET rem TO MAX(0, bdv - appliedDv).
-        }
-        LOCAL ma    IS _sma().
-        IF ma <= 0 {
-            SET throttleCmd TO 0.0.
-            SET burnAbort TO "no-thrust".
-            SET burnAbortDetail TO "No available thrust after staging check.".
-            stateSet("burn_status", "aborted-no-thrust").
-            BREAK.
         }
         LOCAL dc IS 1.
         IF NOT fixedBurnVector {
@@ -675,7 +701,11 @@ GLOBAL FUNCTION executeManeuver {
 
         IF NOT fixedBurnVector AND dc < 0 { SET throttleCmd TO 0.0. BREAK. }
 
-        IF rem > BURN_TRIM_ABS_COMPLETE_DV {
+        IF ma <= 0 {
+            // Thrust can disappear between physics ticks, including just
+            // after recovery. Stay in this executor and stage next pass.
+            SET throttleCmd TO 0.0.
+        } ELSE IF rem > BURN_TRIM_ABS_COMPLETE_DV {
             // Taper by time-to-go even above 10 m/s. A fixed dV gate
             // and minimum throttle can overshoot on high-acceleration
             // craft or when the script takes several physics ticks.
@@ -942,24 +972,41 @@ LOCAL FUNCTION _tc {
 
 LOCAL FUNCTION _burnRecoverThrust {
     PARAMETER nd, trace.
-    // Only advance as far as the next unignited engine. Never stage
-    // blindly through payload/chute slots after the final engine dies.
+    IF _sma() > 0 { RETURN TRUE. }
+    // Include an engine whose slot has already fired but needs activation.
+    // Never advance beyond the selected engine into payload/chute slots.
     LOCAL engineStage IS -1.
     FOR eng IN SHIP:ENGINES {
-        IF NOT eng:IGNITION AND eng:STAGE < STAGE:NUMBER
+        _burnTraceAdd(trace, "STATS burn staging engine=" + eng:NAME
+            + " stage=" + eng:STAGE + " decoupledIn=" + eng:DECOUPLEDIN
+            + " ignition=" + eng:IGNITION + " flameout=" + eng:FLAMEOUT
+            + " available=" + ROUND(eng:AVAILABLETHRUST, 3)).
+        IF NOT eng:IGNITION AND eng:STAGE <= STAGE:NUMBER
                 AND eng:STAGE >= MAX(0, BURN_STAGE_LIMIT)
                 AND eng:DECOUPLEDIN < eng:STAGE {
             SET engineStage TO MAX(engineStage, eng:STAGE).
         }
     }
-    IF engineStage < 0 { RETURN FALSE. }
     LOCAL deadline IS TIME:SECONDS + MAX(1, BURN_STAGE_TIMEOUT).
+    LOCAL manualDeadline IS 0.
+    LOCAL manualWait IS FALSE.
     LOCAL events IS 0.
+    LOCAL activated IS LIST().
     _burnTraceAdd(trace, "STATS burn staging begin stage=" + STAGE:NUMBER
         + " engineStage=" + engineStage + " rem=" + ROUND(nd:DELTAV:MAG, 3)).
-    UNTIL _sma() > 0 OR TIME:SECONDS >= deadline OR ABORT {
-        IF STAGE:NUMBER > engineStage AND STAGE:READY {
-            IF events >= BURN_STAGE_MAX_EVENTS { RETURN FALSE. }
+    UNTIL _sma() > 0 OR ABORT {
+        IF NOT manualWait AND (engineStage < 0 OR TIME:SECONDS >= deadline
+                OR (events >= BURN_STAGE_MAX_EVENTS AND STAGE:NUMBER > engineStage)) {
+            SET manualWait TO TRUE.
+            SET manualDeadline TO TIME:SECONDS + MAX(0, BURN_STAGE_MANUAL_WAIT).
+            stateSet("burn_status", "waiting-for-thrust").
+            _burnTraceAdd(trace, "STATS burn staging manual-wait stage=" + STAGE:NUMBER
+                + " engineStage=" + engineStage + " ready=" + STAGE:READY
+                + " events=" + events).
+            PRINT "BURN WAIT: stage/activate the transfer engine; auto-resume when ready. ABORT to stop.".
+        }
+        IF manualWait AND TIME:SECONDS >= manualDeadline { RETURN FALSE. }
+        IF NOT manualWait AND STAGE:NUMBER > engineStage AND STAGE:READY {
             LOCAL beforeStage IS STAGE:NUMBER.
             STAGE.
             SET events TO events + 1.
@@ -967,13 +1014,27 @@ LOCAL FUNCTION _burnRecoverThrust {
             _burnTraceAdd(trace, "STATS burn staging event from=" + beforeStage
                 + " to=" + STAGE:NUMBER + " rem=" + ROUND(nd:DELTAV:MAG, 3)).
             // A rejected staging command must not spin indefinitely.
-        } ELSE {
-            WAIT 0.05.
+        } ELSE IF NOT manualWait AND STAGE:NUMBER = engineStage {
+            // A separate decoupler slot may have fired without ignition,
+            // or activation may have been suppressed by an engine module.
+            FOR eng IN SHIP:ENGINES {
+                IF eng:STAGE = engineStage AND NOT eng:IGNITION
+                        AND eng:DECOUPLEDIN < eng:STAGE
+                        AND NOT activated:CONTAINS(eng:UID) {
+                    activated:ADD(eng:UID).
+                    eng:ACTIVATE.
+                    _burnTraceAdd(trace, "STATS burn staging activate engine=" + eng:NAME).
+                }
+            }
         }
+        WAIT 0.05.
     }
-    IF ABORT OR _sma() <= 0 { RETURN FALSE. }
+    // If thrust vanishes again, the caller loops back into recovery.
+    // Do not turn a second asynchronous thrust sample into an abort.
+    IF ABORT { RETURN FALSE. }
     _burnTraceAdd(trace, "STATS burn staging resumed stage=" + STAGE:NUMBER
         + " rem=" + ROUND(nd:DELTAV:MAG, 3) + " acc=" + ROUND(_sma(), 3)).
+    stateSet("burn_status", "burning").
     RETURN TRUE.
 }
 
@@ -1011,6 +1072,7 @@ LOCAL FUNCTION _mpb {
     stateSet("burn_started", "false").
     stateSet("burn_phase", stateGet("phase", "")).
     stateSet("burn_node_time", nd:TIME).
+    stateSet("burn_body", SHIP:BODY:NAME).
     stateSet("burn_start_time", st).
     stateSet("burn_dv", bdv).
 }
@@ -1022,7 +1084,7 @@ LOCAL FUNCTION _cpb {
     }
     FOR key IN LIST(
         "burn_pending", "burn_started", "burn_phase", "burn_node_time",
-        "burn_start_time", "burn_dv", "burn_status",
+        "burn_start_time", "burn_dv", "burn_status", "burn_body",
         "burn_pause_reason", "burn_abort_reason", "burn_abort_detail",
         "burn_abort_time", "burn_abort_residual", "burn_abort_paused"
     ) {

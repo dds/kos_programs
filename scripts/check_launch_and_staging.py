@@ -122,7 +122,7 @@ def launch_geometry():
 
 def engine(ignited, flameout, stage, decoupled=-1, thrust=20):
     return SimpleNamespace(IGNITION=ignited, FLAMEOUT=flameout, STAGE=stage,
-                           DECOUPLEDIN=decoupled, AVAILABLETHRUST=thrust)
+                           DECOUPLEDIN=decoupled, AVAILABLETHRUST=thrust, UID=str(stage))
 
 
 def staged_burn():
@@ -143,9 +143,77 @@ def staged_burn():
     assert not next_engine(engine(False, False, 5))   # already spent stage
     assert not next_engine(engine(False, False, 2), limit=3)
     assert not next_engine(engine(True, True, 4))     # dead active engine
-    assert 'IF engineStage < 0 { RETURN FALSE. }' in recovery
-    assert 'TIME:SECONDS >= deadline OR ABORT' in recovery
-    assert 'IF events >= BURN_STAGE_MAX_EVENTS { RETURN FALSE. }' in recovery
+    assert next_engine(engine(False, False, 4))       # slot fired, activation missing
+    assert 'IF _sma() > 0 { RETURN TRUE. }' in recovery
+    assert 'UNTIL _sma() > 0 OR ABORT' in recovery
+    assert 'IF manualWait AND TIME:SECONDS >= manualDeadline { RETURN FALSE. }' in recovery
+
+    # Exercise the actual recovery decision expressions on a staged craft.
+    # Physics/stage events below are fixtures, not a kOS runtime emulation.
+    manual_gate = capture(r'IF (NOT manualWait AND .*?) \{', recovery)
+    stage_gate = capture(r'IF (NOT manualWait AND STAGE:NUMBER >.*?) \{', recovery)
+    activate_gate = capture(r'IF (eng:STAGE = engineStage AND.*?) \{', recovery)
+
+    def recover(stage_number, upper=None, *, ignition_delay=0, manual_at=None,
+                ready_at=0, max_events=4, abort_at=999, auto_ignite=True):
+        engines = [engine(True, True, stage_number, decoupled=stage_number - 1)]
+        if upper is not None:
+            engines.append(upper)
+        stage = SimpleNamespace(NUMBER=stage_number, READY=True)
+        selected = max((e.STAGE for e in engines if evaluate(
+            eligible, eng=e, STAGE=stage, BURN_STAGE_LIMIT=0)), default=-1)
+        events, activated, now, manual_deadline = [], [], 0, 0
+        manual_wait, ready_engine_at = False, None
+        while now < 150:
+            if now >= abort_at:
+                return 'aborted', events, activated
+            if manual_at is not None and now >= manual_at:
+                engines = [engine(True, False, 0)]
+            if ready_engine_at is not None and now >= ready_engine_at:
+                upper.IGNITION, upper.FLAMEOUT = True, False
+            if any(usable(e) and e.AVAILABLETHRUST > 0 for e in engines):
+                return 'resumed', events, activated
+            values = dict(manualWait=manual_wait, engineStage=selected,
+                          TIME=SimpleNamespace(SECONDS=now), deadline=10,
+                          events=len(events), BURN_STAGE_MAX_EVENTS=max_events,
+                          STAGE=stage)
+            if evaluate(manual_gate, **values):
+                manual_wait, manual_deadline = True, now + 120
+            if manual_wait and now >= manual_deadline:
+                return 'held', events, activated
+            values['manualWait'] = manual_wait
+            stage.READY = now >= ready_at
+            if evaluate(stage_gate, **values):
+                stage.NUMBER -= 1
+                events.append(stage.NUMBER)
+                engines = [e for e in engines if e.DECOUPLEDIN != stage.NUMBER]
+                if upper in engines and upper.STAGE == stage.NUMBER and auto_ignite:
+                    upper.IGNITION, upper.FLAMEOUT = True, True
+                    ready_engine_at = now + ignition_delay
+                now += 0.5
+            elif not manual_wait and stage.NUMBER == selected:
+                for e in engines:
+                    if evaluate(activate_gate, eng=e, engineStage=selected,
+                                activated=SimpleNamespace(CONTAINS=lambda uid: uid in activated)):
+                        activated.append(e.UID)
+                        e.IGNITION, e.FLAMEOUT = True, True
+                        ready_engine_at = now + ignition_delay
+            now = round(now + 0.05, 3)
+        raise AssertionError('Recovery failed to stop')
+
+    for slot, expected in ((3, [3]), (2, [3, 2]), (0, [3, 2, 1, 0])):
+        status, events, activated = recover(4, engine(False, False, slot))
+        assert status == 'resumed' and events == expected and not activated
+    status, events, activated = recover(4, engine(False, False, 2), auto_ignite=False)
+    assert status == 'resumed' and events == [3, 2] and activated
+    status, events, activated = recover(4, engine(False, False, 4))
+    assert status == 'resumed' and not events and activated
+    assert recover(4, engine(False, False, 2), ready_at=8)[0] == 'resumed'
+    assert recover(4, engine(False, False, 2), ignition_delay=20)[0] == 'resumed'
+    assert recover(4, manual_at=15)[0] == 'resumed'
+    assert recover(4)[0] == 'held'  # final engine exhausted: no blind staging
+    assert recover(4, engine(False, False, 0), max_events=2)[:2] == ('held', [3, 2])
+    assert recover(4, engine(False, False, 2), ready_at=5, abort_at=1)[0] == 'aborted'
 
     # Integrate a 950 m/s node: insertion stage contributes exactly 100,
     # then propulsion is unavailable through separation and ignition.
@@ -173,7 +241,7 @@ def staged_burn():
             else:
                 raise AssertionError('Staged burn failed to complete')
             assert spent == 100 and 0 <= residual <= TOLERANCE
-    print('PASS: engine/stage eligibility and nine 100 + 850 m/s staged burns with ignition delays')
+    print('PASS: staging/activation, delayed/manual recovery, stage caps, abort and nine staged burns')
 
 
 def integration():
@@ -201,6 +269,29 @@ def integration():
     assert execute.index('maneuverBurnInterrupted()') < execute.index('_mpb(')
     assert 'SET appliedDv TO 0' not in execute.split('_burnRecoverThrust(nd, burnTrace)', 1)[1]
     assert 'IF _ns()' not in execute
+    assert 'SET burnAbort TO "no-thrust"' not in execute
+    # A second zero-thrust observation must cut throttle and loop, not abort.
+    throttle = execute.split('LOCAL rem IS remNow.', 1)[1]
+    zero_thrust = capture(r'IF ma <= 0 \{(.*?)\} ELSE IF rem', throttle)
+    assert 'SET throttleCmd TO 0.0.' in zero_thrust and 'BREAK.' not in zero_thrust
+    assert 'IF NOT resuming AND st < TIME:SECONDS' in execute
+    assert 'IF NOT resumeRequested' in execute
+    assert 'ABS(ntm - stateGetNum("burn_node_time", -1)) >= 0.5' in execute
+    resume_reject = capture(r'IF (ABS\(ntm - stateGetNum.*?\)) \{', execute)
+    for node_time, saved_body, vector_ok, rejected in (
+            (1000, 'Kerbin', True, False), (1001, 'Kerbin', True, True),
+            (1000, 'Mun', True, True), (1000, 'Kerbin', False, True)):
+        assert evaluate(resume_reject, ntm=node_time, bdv=850,
+                        stateGetNum=lambda key, default: 1000,
+                        stateGet=lambda key, default: saved_body,
+                        SHIP=SimpleNamespace(BODY=SimpleNamespace(NAME='Kerbin')),
+                        nd=SimpleNamespace(BURNVECTOR=vector_ok),
+                        _nf=math.isfinite, _bvo=bool) == rejected
+    resume_cmd = (ROOT / 'cmd/resumeburn.ks').read_text()
+    assert 'SET BURN_RESUME_REQUESTED TO TRUE.' in resume_cmd
+    assert resume_cmd.index('IF NOT HASNODE') < resume_cmd.index('SET BURN_RESUME_REQUESTED TO TRUE.')
+    assert 'SET ABORT TO FALSE' not in resume_cmd
+
     # Search the full horizon; feasible candidates rank by departure cost.
     assert 'encounterCount >= 6' not in TRANSFER
     score = capture(r'SET score TO (-1e9.*?)\.', body(TRANSFER, '_localInterceptEval'))
