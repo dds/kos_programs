@@ -19,6 +19,7 @@ SET TRANSFER_SCAN_SAMPLES_PER_ORBIT TO 16.
 SET CAPTURE_PE TO 15000.
 SET CAPTURE_INC TO 90.
 SET CAPTURE_DIR TO "POLAR".
+SET BPLANE_REQUIRE_PLANE TO 1.
 SET TARGET_PE TO 15000.
 SET TARGET_AP TO 100000.
 // Capture preserves the arrival plane; SHAPE finishes any residual
@@ -40,10 +41,16 @@ SET SHAPE_TOTAL_DV_CAP TO 20.
 SET SHAPE_RESERVE_DV TO 650.
 
 
+// Hold in polar orbit for both contract temperature readings before landing.
+SET SCIENCE_OPS_HOLD TO 1.
+// Each entry: latitude, longitude, exclusive minimum altitude (metres ASL).
+SET SCIENCE_SURVEY_POINTS TO LIST(
+    LIST(-66.765, 0.528, 10000), LIST(-39.831, 17.824, 10000)).
+
 // Automated landing: contract site, with terrain refinement nearby.
-// Replace TARGET_LAT/LNG with the contract coordinates before launch.
-SET TARGET_LAT TO -41.4475.
-SET TARGET_LNG TO 94.899444.
+// Contract landing site supplied by the operator.
+SET TARGET_LAT TO 44.593.
+SET TARGET_LNG TO -24.926.
 SET TARGET_LOCK TO 1.
 SET LANDING_AUTO_TARGET TO 0.
 SET LANDING_CONFIRM_TARGET TO 0.

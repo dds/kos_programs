@@ -4,6 +4,8 @@
 
 // --- Config defaults owned by this file ---
 GLOBAL AUTO_TRANSMIT IS 1.
+GLOBAL SCIENCE_OPS_HOLD IS 0.
+GLOBAL SCIENCE_SURVEY_POINTS IS LIST().
 GLOBAL SCANSAT_POWER_GUARD IS 0.
 GLOBAL SCANSAT_POWER_LOW IS 0.2.
 GLOBAL SCANSAT_POWER_RESUME IS 0.5.
@@ -183,6 +185,17 @@ GLOBAL FUNCTION phaseScienceOps {
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
         + " ran=" + ran).
+    IF SCIENCE_OPS_HOLD <> 0 {
+        mLog("STATS science-ops result=survey-hold remainingDv="
+            + ROUND(SHIP:DELTAV:VACUUM, 1)).
+        mLog("Survey hold: complete the required readings before advancing to the next phase.").
+        FOR site IN SCIENCE_SURVEY_POINTS {
+            PRINT "Temperature site: lat " + site[0] + ", lon " + site[1]
+                + ", above " + (site[2] / 1000) + " km ASL.".
+        }
+        PRINT "Confirm the contract readings and remaining landing fuel before deorbit.".
+        yieldToPrompt(). RETURN.
+    }
     nextPhase(xferSeq).
 }
 

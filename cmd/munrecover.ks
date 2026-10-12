@@ -1,5 +1,5 @@
 // ============================================================
-// munrecover.ks — switch the in-flight RO8 to capture-only recovery.
+// munrecover.ks — switch the in-flight RO8 to polar recovery.
 // Run with an archive link: RUNPATH("0:/cmd/munrecover.ks").
 // ============================================================
 RUNPATH("1:/lib/boot_lib").
@@ -32,13 +32,15 @@ IF stateGet("vehicle", "") <> "RO8" {
     }
     stateSet("target", "Mun").
     stateSet("mission_id", "mun_capture_recovery").
-    stateSet("mission_name", "RO8 Mun Capture Recovery").
+    stateSet("mission_name", "RO8 Mun Polar Recovery").
     stateSet("phase", "BPLANE").
     IF SHIP:BODY:NAME = "Mun" { stateSet("phase", "CAPTURE"). }
     stateSet("reload_required", "false").
     stateSet("reload_reason", "").
     stateSet("reload_next_phase", "").
     stateSet("reload_next_band", "").
-    PRINT "Mun recovery selected: 15 x 100 km capture, science, then hold.".
+    PRINT "Mun recovery selected: polar 15 x 100 km capture, then survey hold.".
+    PRINT "Targeted landing and return remain in the mission sequence.".
+    PRINT "Arrival corrections may use up to 150 m/s, preserving capture + 50 m/s.".
     PRINT "REBOOT with the archive link available to load the fix.".
 }

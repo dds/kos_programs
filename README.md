@@ -384,9 +384,9 @@ decision. `python3 -B scripts/check_arrival_budget.py` exercises the budget,
 resume, logging and capture-estimate predicates; flight validation is still
 required.
 
-For the fuel-limited RO8 already approaching the Mun at a high periapsis,
-use the capture-only recovery profile. With an archive link and the updated
-archive synced, run at the craft console:
+For the fuel-limited RO8 already approaching the Mun, `munrecover` retains
+its **polar survey and targeted landing** objectives. With an archive link
+and the updated archive synced, run at the craft console:
 
 ```kerboscript
 RUNPATH("0:/cmd/munrecover.ks").
@@ -395,24 +395,43 @@ REBOOT.
 
 This replaces old nodes and runtime overrides, clears stale coast timing,
 and resumes at BPLANE (CAPTURE if already inside the Mun SOI). It does not
-repeat XING or reset the accumulated arrival-correction fuel ledger.
-The recovery targets **15 km Pe / 100 km Ap**, without a polar-plane target,
-then runs SCIENCE_OPS and DONE. Landing and return require a later decision.
-It limits the initial correction to 50 m/s, midpoint corrections to 10 m/s,
-and their cumulative allowance to 60 m/s. Each proposed correction must
-leave the estimated capture cost plus 50 m/s; CAPTURE checks its actual node
-cost again. Estimates use stock vacuum dV and impulsive patched conics, so
-this is not a guarantee for a low-thrust craft.
+repeat XING or reset the accumulated arrival-correction fuel ledger. Rerun
+this command if an earlier recovery version left a Pe-only/equatorial node.
 
-Pe-only recovery measures raw maneuver-node patches with a scalar solver.
-It holds if it cannot reach 13–17 km within the budget, instead of handing
-the 742 km encounter to capture. The optional SOI-entry-time and relative
-capture-cost limits are disabled only in this recovery profile: lowering Pe
-changes the chord through the SOI, and recovery tests absolute affordability.
-A resumed safe bound orbit is accepted without another capture burn.
-`STATS bplane pe-only`, `capture-budget`, and `STATS capture budget` record
-the decisions. Offline checks: `python3 -B scripts/check_mun_recovery.py`;
-actual patched-conic convergence and flight execution still need flight testing.
+The recovery targets **15 km Pe / 100 km Ap, 90° inclination**, with LAN free
+for the planner to choose. `BPLANE_REQUIRE_PLANE=1` forbids Pe-only fallback
+or a safe-encounter handoff outside the requested plane. Before ignition,
+the actual node patch must satisfy both Pe and inclination tolerances.
+Initial corrections are capped at 150 m/s, midpoint corrections at 10 m/s,
+and the cumulative allowance is 160 m/s. A plane change can cost more than
+the previous 50 m/s Pe-only ceiling; the planner must still leave predicted
+capture cost plus 50 m/s, and CAPTURE rechecks its actual node cost. These
+are capture margins, **not a guarantee of landing or return fuel**.
+
+SHAPE verifies the captured polar ellipse without requesting circularization;
+its cleanup allowance is 10 m/s per burn, 20 m/s total, with a 50 m/s reserve.
+SCIENCE_OPS runs the available experiments once, then holds for the contract
+survey (`SCIENCE_OPS_HOLD=1`). It does not fly temperature waypoints or check
+contract completion. The saved temperature sites are **66.765° S, 0.528° E**
+and **39.831° S, 17.824° E**, both **above 10 km ASL**; the console prints
+these at the hold. Complete those readings and review remaining
+fuel before advancing to the landing site (44.593° N, 24.926° W):
+
+```kerboscript
+RUNPATH("0:/cmd/setphase.ks", "LAND_DEORBIT").
+REBOOT.
+```
+
+LAND_DEORBIT, LAND_ASSIST and SURFACE_RETURN_SETUP retain the original Mun
+mission's site and return settings. A safe bound orbit is accepted on a
+capture reboot, but SHAPE still checks inclination before survey/landing.
+The optional SOI-entry-time and relative capture-cost limits are disabled
+only in this recovery profile; geometry changes can change both, so recovery
+checks the requested corridor and absolute capture affordability instead.
+`STATS bplane comparison`, `plan`, `capture-budget`, `decision=hold`, and
+`STATS capture budget` record the decisions. Offline checks:
+`python3 -B scripts/check_mun_recovery.py`; actual convergence and flight
+execution still require flight testing.
 
 `RO8/mun_landing_return` and `RO8/minmus_landing_return` continue from
 `LAND_ASSIST` into `SURFACE_RETURN_SETUP`. Touchdown starts a new local

@@ -82,6 +82,8 @@ GLOBAL TARGET_AP IS -1.
 // Opt-in capture recovery: solve only Pe, preserving fuel for capture.
 GLOBAL BPLANE_PE_ONLY IS 0.
 GLOBAL BPLANE_CAPTURE_MARGIN IS -1.
+// Contract missions must not silently waive their requested plane.
+GLOBAL BPLANE_REQUIRE_PLANE IS 0.
 
 
 LOCAL DEFAULT_DV_CAP   IS 150.
@@ -179,6 +181,18 @@ LOCAL FUNCTION _bplaneCorrectionAllowed {
     IF planned = 0 {
         _bplaneHoldCorrection("planned-encounter-missing"). RETURN FALSE.
     }
+    IF BPLANE_REQUIRE_PLANE <> 0 {
+        LOCAL patch IS planned["patch"].
+        LOCAL planeErr IS _bplaneElementPlaneError(
+            patch:INCLINATION, patch:LAN, _bplaneWantInc(), CAPTURE_LAN).
+        mLog("STATS bplane required-corridor PeKm=" + ROUND(patch:PERIAPSIS / 1000, 3)
+            + " inc=" + ROUND(patch:INCLINATION, 3)
+            + " planeErr=" + ROUND(planeErr, 3)).
+        IF ABS(patch:PERIAPSIS - CAPTURE_PE) > BPLANE_PE_TOL
+                OR planeErr > BPLANE_ANG_TOL {
+            _bplaneHoldCorrection("required-arrival-corridor"). RETURN FALSE.
+        }
+    }
     LOCAL shift IS 0.
     LOCAL beforeCost IS 0.
     LOCAL afterCost IS 0.
@@ -232,6 +246,7 @@ LOCAL FUNCTION _bplaneSafeEncounter {
     PARAMETER targetBody.
     PARAMETER meas.
 
+    IF BPLANE_REQUIRE_PLANE <> 0 { RETURN FALSE. }
     IF meas = 0 { RETURN FALSE. }
     RETURN meas["pe"] <= targetBody:SOIRADIUS * BPLANE_SAFE_HANDOFF_SOI_MULT.
 }
@@ -274,7 +289,7 @@ LOCAL FUNCTION _bplaneCorridorError {
         meas["inc"], meas["lan"], wantInc, wantLan).
     // Keep the closest-achievable-plane policy for a tilted asymptote,
     // but never reject elements that already satisfy the actual request.
-    IF wantInc >= 0 AND wantLan >= 0 AND tgt["offPlane"] > 0.5 {
+    IF BPLANE_REQUIRE_PLANE = 0 AND wantInc >= 0 AND wantLan >= 0 AND tgt["offPlane"] > 0.5 {
         SET planeErr TO MIN(planeErr, VANG(meas["hHat"], tgt["normal"])).
     }
     RETURN LEX("peErr", meas["pe"] - wantPe,
@@ -324,7 +339,7 @@ LOCAL FUNCTION _bplaneCorridorOk {
 
     IF ABS(err["peErr"]) > peTol { RETURN FALSE. }
     IF wantInc < 0 { RETURN TRUE. }
-    IF NOT _bplanePlaneFeasible(err) { RETURN TRUE. }
+    IF BPLANE_REQUIRE_PLANE = 0 AND NOT _bplanePlaneFeasible(err) { RETURN TRUE. }
     RETURN err["planeErr"] <= angTol.
 }
 
@@ -336,7 +351,7 @@ LOCAL FUNCTION _bplanePlanScore {
     // Error inside the corridor costs nothing. Otherwise the search
     // can prefer an exact Pe with a bad plane over an acceptable orbit.
     LOCAL score IS MAX(0, ABS(err["peErr"]) - BPLANE_PE_TOL).
-    IF wantInc >= 0 AND _bplanePlaneFeasible(err) {
+    IF wantInc >= 0 AND (BPLANE_REQUIRE_PLANE <> 0 OR _bplanePlaneFeasible(err)) {
         SET score TO score + MAX(0, err["planeErr"] - BPLANE_ANG_TOL)
             * targetBody:SOIRADIUS / 90.
     }
@@ -712,6 +727,9 @@ GLOBAL FUNCTION planBplaneCorrection {
     PARAMETER pristineLog IS "".
 
     LOCAL dvCap IS BPLANE_DV_CAP.
+    IF BPLANE_REQUIRE_PLANE <> 0 AND (BPLANE_PE_ONLY <> 0 OR wantInc < 0) {
+        _bplaneHoldCorrection("required-plane-config-conflict"). RETURN 0.
+    }
     IF dvCapOverride >= 0 { SET dvCap TO dvCapOverride. }
     LOCAL peTol IS BPLANE_PE_TOL.
     LOCAL angTol IS BPLANE_ANG_TOL.
@@ -769,6 +787,9 @@ GLOBAL FUNCTION planBplaneCorrection {
     LOCAL planeErr0 IS err0["planeErr"].
     LOCAL planeMode IS "target-plane".
     IF wantInc >= 0 AND NOT _bplanePlaneFeasible(err0) {
+        IF BPLANE_REQUIRE_PLANE <> 0 {
+            _bplaneHoldCorrection("required-plane-infeasible"). RETURN 0.
+        }
         SET planeMode TO "pe-only".
         mLogWarn("BPLANE: requested capture plane is "
             + ROUND(tgt0["offPlane"], 1)
@@ -1104,7 +1125,7 @@ LOCAL FUNCTION _bplaneTargetBody {
 }
 
 LOCAL FUNCTION _bplaneWantInc {
-    IF BPLANE_PE_ONLY <> 0 { RETURN -1. }
+    IF BPLANE_PE_ONLY <> 0 AND BPLANE_REQUIRE_PLANE = 0 { RETURN -1. }
     LOCAL wantInc IS -1.
     IF CAPTURE_DIR <> "" {
         LOCAL dir IS CAPTURE_DIR.

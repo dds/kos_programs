@@ -74,7 +74,7 @@ def check_solver():
             if abs(impact) > initial_b + 100 or abs(impact) < 1000:
                 return None
             return math.sqrt((mu/vinf**2)**2 + impact**2) - mu/vinf**2 - radius
-        result = solve(patch, PROFILE['BPLANE_DV_CAP'])
+        result = solve(patch, 50)
         assert result is not None
         pro, radial, pe = result
         assert abs(pe - 15000) <= 2000
@@ -119,12 +119,15 @@ def check_fuel_and_capture():
 
 def check_resume_and_handoff():
     assert PROFILE['SEQUENCE'] == ['BPLANE', 'COAST_1HALF', 'REFINE_BPLANE',
-                                   'COAST_2HALF', 'CAPTURE', 'SCIENCE_OPS', 'DONE']
-    assert PROFILE['CAPTURE_DIR'] == '' and PROFILE['CAPTURE_INC'] == -1
+                                   'COAST_2HALF', 'CAPTURE', 'SHAPE', 'SCIENCE_OPS',
+                                   'LAND_DEORBIT', 'LAND_ASSIST', 'SURFACE_RETURN_SETUP']
+    assert PROFILE['CAPTURE_DIR'] == 'POLAR' and PROFILE['CAPTURE_INC'] == 90
+    assert PROFILE['BPLANE_PE_ONLY'] == 0 and PROFILE['BPLANE_REQUIRE_PLANE'] == 1
     assert PROFILE['BPLANE_TRIM_RESERVE_DV'] == -1
     assert PROFILE['BPLANE_MAX_ARRIVAL_SHIFT'] == -1
     assert PROFILE['BPLANE_MAX_CAPTURE_DV_INCREASE'] == -1
-    assert PROFILE['BPLANE_TRIM_TOTAL_DV_CAP'] == 60
+    assert PROFILE['BPLANE_TRIM_TOTAL_DV_CAP'] == 160
+    assert PROFILE['BPLANE_DV_CAP'] == PROFILE['BPLANE_TRIM_DV_CAP'] == 150
     assert 'GLOBAL BPLANE_PE_ONLY IS 0.' in ARRIVAL
     planner = body(ARRIVAL, 'planBplaneCorrection')
     assert planner.index('_bplanePlanPeOnly(') < planner.index('measureArrival(')
@@ -142,10 +145,47 @@ def check_resume_and_handoff():
     assert 'missionOverrideClear()' in cmd and 'REMOVE NEXTNODE' in cmd
     assert 'bplane_budget_spent' not in cmd  # Recovery does not refund flown burns.
     assert 'stateRemovePrefix("burn_")' in cmd
-    print('PASS: clean recovery activation, stale node/timing cleanup, strict handoff and capture-only sequence')
+    print('PASS: clean recovery activation, fuel ledger retained, and polar landing/return sequence')
+
+
+def check_polar_contract():
+    gate = body(ARRIVAL, '_bplaneCorrectionAllowed')
+    condition = re.search(r'IF (ABS\(patch:PERIAPSIS - CAPTURE_PE\).*?) \{', gate, re.S)[1]
+    for pe, inclination, reject in [(15000,0,True), (742000,90,True),
+                                    (15000,90,False),(16000,89.9,False),(15000,89,True)]:
+        assert evaluate(condition, patch=NS(PERIAPSIS=pe), CAPTURE_PE=15000,
+                        BPLANE_PE_TOL=2000, planeErr=abs(inclination-90),
+                        BPLANE_ANG_TOL=.2) == reject
+    corridor = body(ARRIVAL, '_bplaneCorridorOk')
+    waiver = re.search(r'IF (BPLANE_REQUIRE_PLANE.*?) \{', corridor)[1]
+    for required, waived in [(0,True), (1,False)]:
+        assert evaluate(waiver, BPLANE_REQUIRE_PLANE=required, err=None,
+                        _bplanePlaneFeasible=lambda _: False) == waived
+    safe = body(ARRIVAL, '_bplaneSafeEncounter')
+    assert 'IF BPLANE_REQUIRE_PLANE <> 0 { RETURN FALSE. }' in safe
+    planner = body(ARRIVAL, 'planBplaneCorrection')
+    assert planner.index('required-plane-infeasible') < planner.index('SET planeMode TO "pe-only"')
+    assert planner.index('required-plane-config-conflict') < planner.index('_bplanePlanPeOnly(')
+    science = (ROOT / 'lib/science.ks').read_text()
+    ops = body(science, 'phaseScienceOps')
+    assert ops.index('yieldToPrompt()') < ops.index('nextPhase(')
+    assert 'FOR site IN SCIENCE_SURVEY_POINTS' in ops
+    assert 'GLOBAL SCIENCE_OPS_HOLD IS 0.' in science
+    original = read_settings((ROOT / 'missions/RO8/mun_landing_return.ks').read_text(), {})
+    for cfg in (PROFILE, original):
+        assert cfg['BPLANE_REQUIRE_PLANE'] == 1
+        assert cfg['TARGET_LAT'] == 44.593 and cfg['TARGET_LNG'] == -24.926
+        assert cfg['SCIENCE_OPS_HOLD'] == 1
+        assert cfg['SCIENCE_SURVEY_POINTS'] == [[-66.765,.528,10000],[-39.831,17.824,10000]]
+    for key in original:
+        if key.startswith(('RETURN_', 'SURFACE_RETURN_', 'LANDING_', 'TERRAIN_')):
+            assert PROFILE[key] == original[key], key
+    assert PROFILE['SHAPE_INC'] == 90 and PROFILE['SHAPE_AP'] == PROFILE['TARGET_AP']
+    print('PASS: equatorial/high-Pe nodes rejected, no plane waiver, corrected sites and survey hold')
 
 
 if __name__ == '__main__':
     check_solver()
     check_fuel_and_capture()
     check_resume_and_handoff()
+    check_polar_contract()
