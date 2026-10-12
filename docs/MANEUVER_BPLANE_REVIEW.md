@@ -114,3 +114,40 @@ unset/below-Pe/circular/elliptical target handling, ran four burn tails from
 candidates for unit length, requested inclination, and perpendicularity to
 the incoming asymptote. Structural checks also pass. These follow-up fixes
 still need an in-game RO6 Minmus flight; they are not yet flight-proven.
+
+## Transfer overshoot after tighter trimming
+
+The following flight reported about 1 m/s of transfer overshoot. Without
+the final burn trace, its exact cause is not established. Inspection found
+a timing hazard the earlier constant-loop-time numerical checks missed:
+`mLog` calls `archiveLog()` for every message while connected, and
+`archiveLog` reads and copies the entire flight log. The executor logged
+`BURN tick` between measuring residual dV and updating `throttleCmd`.
+Its throttle lock simply repeated that command during the intervening work.
+Using the preceding loop's duration could not protect against a new stall.
+
+Ordinary node burns now use `_burnNodeThrottle` from `LOCK THROTTLE`.
+[kOS evaluates cooked control locks every physics tick](https://ksp-kos.github.io/KOS/commands/flight/cooked.html).
+The helper reads the live node vector and available acceleration, limits
+throttle using a physics-tick horizon, and latches zero when the residual
+reaches tolerance or reverses. No waiting, logging, state-file writes, or
+staging runs inside that helper. The existing fixed-vector/integrated-dV
+fallback retains its separate throttle path because its node is unreliable.
+
+Running burn traces now print to the terminal and keep only the latest
+20 samples in memory. They are written to the flight log after throttle is
+zero and a physics update has elapsed. Samples include their original UT,
+requested and live throttle, loop interval, and throttle-lock interval.
+`STATS burn cutoff` records the latched cutoff time/residual and subsequent
+residual sample. Staging also cuts throttle before its status logging.
+
+`python3 scripts/check_burn_timing.py` reproduces a -1 m/s overshoot from a
+stale command held for one additional second. It evaluates the new source
+throttle expressions in 72 synthetic cases with different accelerations,
+physics steps, main-loop stalls of up to five seconds, and zero or one
+physics tick of actuator delay. All stop with a positive residual no larger
+than 0.05 m/s and remain off if the residual later grows. The script also
+checks reversal, invalid telemetry, pause/resume, no-thrust behavior, and
+the lock/logging integration points. It is a numerical scheduling model,
+not a kOS runtime test; engine response and actual flight behavior still
+need confirmation.

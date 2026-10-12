@@ -198,8 +198,17 @@ GLOBAL FUNCTION executeManeuver {
             + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4) + ".").
     }
     LOCAL throttleCmd IS 0.0.
+    LOCAL liveCutoff IS LEX("reason", "", "rem", -1, "time", 0,
+        "lastTick", TIME:SECONDS, "tickDt", 0.02, "output", 0).
+    LOCAL burnTrace IS LIST().
     LOCK STEERING TO steerVec.
-    LOCK THROTTLE TO throttleCmd.
+    IF fixedBurnVector {
+        LOCK THROTTLE TO throttleCmd.
+    } ELSE {
+        // This expression runs every physics tick, even while the main
+        // loop is busy. A lock on throttleCmd alone repeats stale input.
+        LOCK THROTTLE TO _burnNodeThrottle(nd, ignitionVec, throttleCmd, liveCutoff).
+    }
     LOCAL db2 IS FALSE.
     LOCAL dra IS FALSE.
     LOCAL rdv IS 0.
@@ -235,6 +244,12 @@ GLOBAL FUNCTION executeManeuver {
         LOCAL remNow IS nd:DELTAV:MAG.
         LOCAL intRem IS MAX(0, bdv - appliedDv).
         LOCAL avNow IS SHIP:ANGULARVEL:MAG.
+        IF liveCutoff["reason"] <> "" {
+            SET throttleCmd TO 0.0.
+            SET burnCompleteReason TO liveCutoff["reason"].
+            SET burnDone TO TRUE.
+            BREAK.
+        }
         IF remNow <= BURN_TRIM_ABS_COMPLETE_DV {
             SET throttleCmd TO 0.0.
             SET burnCompleteReason TO "node-absolute-trim".
@@ -301,7 +316,7 @@ GLOBAL FUNCTION executeManeuver {
             IF NOT fixedBurnVector { SET throttleCmd TO 0.0. }
             IF NOT nodeUnstableLogged {
                 SET nodeUnstableLogged TO TRUE.
-                mLogWarn("Burn node vector unstable: rem=" + ROUND(remNow,2)
+                _burnTraceAdd(burnTrace, "Burn node vector unstable: rem=" + ROUND(remNow,2)
                     + " prevRem=" + ROUND(lastNodeRem,2)
                     + " applied=" + ROUND(appliedDv,2)
                     + " intRem=" + ROUND(intRem,2)
@@ -355,8 +370,9 @@ GLOBAL FUNCTION executeManeuver {
 
         IF now >= nextTickLog {
             SET nextTickLog TO now + BURN_TICK_LOG_INTERVAL.
-            mLogWarn("BURN tick status="
+            _burnTraceAdd(burnTrace, "BURN tick status="
                 + (CHOOSE "paused-recovering" IF pauseReason <> "" ELSE "burning")
+                + " ut=" + ROUND(now,3)
                 + " rem=" + ROUND(nd:DELTAV:MAG,2)
                 + " applied=" + ROUND(appliedDv,2)
                 + " intRem=" + ROUND(intRem,2)
@@ -364,7 +380,11 @@ GLOBAL FUNCTION executeManeuver {
                 + " av=" + ROUND(avNow,3)
                 + " bvSlew=" + ROUND(bvSlew,1)
                 + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4)
-                + " thr=" + ROUND(throttleCmd,2)).
+                + " thr=" + ROUND(throttleCmd,4)
+                + " liveThr=" + ROUND(
+                    (CHOOSE throttleCmd IF fixedBurnVector ELSE liveCutoff["output"]),4)
+                + " loopDt=" + ROUND(dt,3)
+                + " tickDt=" + ROUND(liveCutoff["tickDt"],3)).
         }
 
         IF pauseReason <> "" {
@@ -384,6 +404,11 @@ GLOBAL FUNCTION executeManeuver {
             LOCAL reacquired IS FALSE.
             UNTIL reacquired OR burnAbort <> "" {
                 SET now TO TIME:SECONDS.
+                IF liveCutoff["reason"] <> "" {
+                    SET burnCompleteReason TO liveCutoff["reason"].
+                    SET burnDone TO TRUE.
+                    BREAK.
+                }
                 SET remNow TO nd:DELTAV:MAG.
                 SET intRem TO MAX(0, bdv - appliedDv).
                 SET avNow TO SHIP:ANGULARVEL:MAG.
@@ -570,9 +595,9 @@ GLOBAL FUNCTION executeManeuver {
         IF burnDone { BREAK. }
 
         IF _ns() {
+            SET throttleCmd TO 0.0.
             HUDTEXT("Staging!", 2, 2, 15, YELLOW, FALSE).
             mLog("Auto-stage triggered.").
-            SET throttleCmd TO 0.0.
             WAIT 0.3.
             STAGE.
             WAIT 0.7.
@@ -634,6 +659,22 @@ GLOBAL FUNCTION executeManeuver {
     // thrust limits or removing the node.
     WAIT 0.01.
     LOCAL res IS nd:DELTAV:MAG.
+    IF liveCutoff["reason"] <> "" {
+        SET burnCompleteReason TO liveCutoff["reason"].
+    }
+    IF NOT _nf(res) OR liveCutoff["reason"] = "live-node-invalid" {
+        SET burnAbort TO "invalid-node-residual".
+        SET burnAbortDetail TO "Invalid residual at live cutoff or final sample.".
+        IF NOT _nf(res) { SET res TO -1. }
+    }
+    // Flush only after the zero command has reached physics. mLog can
+    // copy the entire log to the archive, so it is not burn-loop work.
+    FOR traceLine IN burnTrace { mLogWarn(traceLine). }
+    mLogWarn("STATS burn cutoff reason=" + burnCompleteReason
+        + " cutoffRem=" + _fs(liveCutoff["rem"],3)
+        + " cutoffUt=" + ROUND(liveCutoff["time"],3)
+        + " sampledResidual=" + ROUND(res,3)
+        + " fixed=" + fixedBurnVector).
     IF burnAbort = "" AND NOT fixedBurnVector
             AND res > BURN_TRIM_ABS_COMPLETE_DV {
         SET burnAbort TO "residual-outside-tolerance".
@@ -711,6 +752,50 @@ GLOBAL FUNCTION executeManeuver {
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)).
     HUDTEXT("Burn complete", 3, 2, 15, GREEN, FALSE).
     RETURN TRUE.
+}
+
+// No logging, file access, waits, steering, or staging in this function:
+// cooked-control locks run it as a high-priority physics-tick trigger.
+LOCAL FUNCTION _burnNodeThrottle {
+    PARAMETER nd, ignitionVec, command, cutoff.
+    LOCAL tickNow IS TIME:SECONDS.
+    LOCAL tickDt IS MAX(0.02, tickNow - cutoff["lastTick"]).
+    SET cutoff["lastTick"] TO tickNow.
+    SET cutoff["tickDt"] TO tickDt.
+    SET cutoff["output"] TO 0.
+    IF command <= 0 OR cutoff["reason"] <> "" { RETURN 0. }
+
+    LOCAL residual IS nd:DELTAV.
+    LOCAL rem IS residual:MAG.
+    LOCAL reason IS "".
+    IF NOT _nf(rem) { SET reason TO "live-node-invalid". }
+    ELSE IF rem <= BURN_TRIM_ABS_COMPLETE_DV {
+        SET reason TO "live-node-trim".
+    } ELSE IF VDOT(ignitionVec, residual) < 0 {
+        SET reason TO "live-vector-passed-target".
+    }
+    IF reason <> "" {
+        SET cutoff["reason"] TO reason.
+        SET cutoff["rem"] TO rem.
+        SET cutoff["time"] TO tickNow.
+        RETURN 0.
+    }
+
+    LOCAL acc IS _sma().
+    IF acc <= 0 { RETURN 0. }
+    // Reserve several physics steps for control latency; this limit
+    // reads the current node and acceleration, never the loop's sample.
+    LOCAL horizon IS MAX(1.0, 4 * tickDt).
+    SET cutoff["output"] TO MIN(command, rem / (acc * horizon)).
+    RETURN cutoff["output"].
+}
+
+LOCAL FUNCTION _burnTraceAdd {
+    PARAMETER trace, message.
+    // Bound memory use on long burns and preserve the cutoff approach.
+    IF trace:LENGTH >= 20 { trace:REMOVE(0). }
+    trace:ADD(message).
+    PRINT message.
 }
 
 LOCAL FUNCTION _rmb {
