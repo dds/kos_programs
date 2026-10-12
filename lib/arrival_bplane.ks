@@ -79,6 +79,9 @@ GLOBAL BPLANE_TRIM_RESERVE_DV IS -1.
 GLOBAL BPLANE_MAX_ARRIVAL_SHIFT IS -1.
 GLOBAL BPLANE_MAX_CAPTURE_DV_INCREASE IS -1.
 GLOBAL TARGET_AP IS -1.
+// Opt-in capture recovery: solve only Pe, preserving fuel for capture.
+GLOBAL BPLANE_PE_ONLY IS 0.
+GLOBAL BPLANE_CAPTURE_MARGIN IS -1.
 
 
 LOCAL DEFAULT_DV_CAP   IS 150.
@@ -195,6 +198,16 @@ LOCAL FUNCTION _bplaneCorrectionAllowed {
     }
     IF nd:DELTAV:MAG > cap + 0.001 {
         _bplaneHoldCorrection("correction-budget"). RETURN FALSE.
+    }
+    IF BPLANE_CAPTURE_MARGIN >= 0 {
+        LOCAL needed IS nd:DELTAV:MAG
+            + _bplaneCaptureCost(planned["patch"], targetBody) + BPLANE_CAPTURE_MARGIN.
+        mLog("STATS bplane capture-budget neededDv=" + ROUND(needed, 2)
+            + " marginDv=" + BPLANE_CAPTURE_MARGIN
+            + " availableDv=" + ROUND(SHIP:DELTAV:VACUUM, 2)).
+        IF needed > SHIP:DELTAV:VACUUM {
+            _bplaneHoldCorrection("correction-plus-capture-budget"). RETURN FALSE.
+        }
     }
     IF original = 0 { RETURN TRUE. }
     IF BPLANE_MAX_ARRIVAL_SHIFT >= 0 AND shift > BPLANE_MAX_ARRIVAL_SHIFT {
@@ -588,6 +601,100 @@ LOCAL FUNCTION _acquireEncounter {
     RETURN measureArrival(nd, targetBody) <> 0.
 }
 
+// A single Pe constraint needs a scalar solve, not the plane solver's
+// two B-vector constraints. Differentiate KSP's actual patch elements;
+// a minimum-length step in prograde/radial controls spends no normal dV.
+LOCAL FUNCTION _bplanePlanPeOnly {
+    PARAMETER targetBody, wantPe, dvCap.
+    IF findArrivalPatch(0, targetBody) = 0 {
+        _bplaneHoldCorrection("pe-recovery-encounter-missing"). RETURN 0.
+    }
+    LOCAL nd IS NODE(TIME:SECONDS + BPLANE_LEAD, 0, 0, 0).
+    ADD nd.
+    WAIT 0.1.
+    LOCAL iteration IS 0.
+    UNTIL iteration >= 16 {
+        SET iteration TO iteration + 1.
+        LOCAL hit IS findArrivalPatch(nd, targetBody).
+        IF hit = 0 { BREAK. }
+        LOCAL peNow IS hit["patch"]:PERIAPSIS.
+        LOCAL peError IS wantPe - peNow.
+        IF ABS(peError) <= BPLANE_PE_TOL {
+            mLog("STATS bplane pe-only converged=True PeKm=" + ROUND(peNow / 1000, 3)
+                + " dv=" + ROUND(nd:DELTAV:MAG, 3) + " iterations=" + iteration).
+            // Even a sub-0.3 m/s correction can matter far from the Mun.
+            // Do not throw away a needed correction as 'already there'.
+            RETURN nd.
+        }
+        LOCAL basePro IS nd:PROGRADE.
+        LOCAL baseRad IS nd:RADIALOUT.
+        LOCAL gradients IS LIST().
+        FOR axis IN LIST("PROGRADE", "RADIALOUT") {
+            LOCAL slope IS 0.
+            // Try both signs if the first probe loses the encounter.
+            FOR probe IN LIST(FD_STEP, -FD_STEP) {
+                _bplaneNodeAxisSet(nd, axis, _bplaneNodeAxisGet(nd, axis) + probe).
+                WAIT 0.1.
+                LOCAL sample IS findArrivalPatch(nd, targetBody).
+                IF sample <> 0 {
+                    SET slope TO (sample["patch"]:PERIAPSIS - peNow) / probe.
+                }
+                SET nd:PROGRADE TO basePro.
+                SET nd:RADIALOUT TO baseRad.
+                WAIT 0.1.
+                IF sample <> 0 { BREAK. }
+            }
+            gradients:ADD(slope).
+        }
+        LOCAL grad2 IS gradients[0]^2 + gradients[1]^2.
+        IF grad2 < 0.000001 { BREAK. }
+        LOCAL stepPro IS peError * gradients[0] / grad2.
+        LOCAL stepRad IS peError * gradients[1] / grad2.
+        LOCAL stepSize IS SQRT(stepPro^2 + stepRad^2).
+        LOCAL scale IS MIN(1, dvCap / MAX(0.000001, stepSize)).
+        LOCAL improved IS FALSE.
+        FOR fraction IN LIST(1, 0.5, 0.25, 0.125, 0.0625, 0.03125) {
+            SET nd:PROGRADE TO basePro + stepPro * scale * fraction.
+            SET nd:RADIALOUT TO baseRad + stepRad * scale * fraction.
+            WAIT 0.1.
+            IF nd:DELTAV:MAG <= dvCap + 0.001 {
+                LOCAL trial IS findArrivalPatch(nd, targetBody).
+                IF trial <> 0 {
+                    IF ABS(trial["patch"]:PERIAPSIS - wantPe) < ABS(peError) {
+                        SET improved TO TRUE. BREAK.
+                    }
+                }
+            }
+        }
+        IF NOT improved { BREAK. }
+    }
+    LOCAL finalHit IS findArrivalPatch(nd, targetBody).
+    IF finalHit <> 0 {
+        mLog("STATS bplane pe-only converged=False PeKm="
+            + ROUND(finalHit["patch"]:PERIAPSIS / 1000, 3)
+            + " dv=" + ROUND(nd:DELTAV:MAG, 3) + " cap=" + dvCap).
+    }
+    _bplaneHoldCorrection("pe-recovery-not-converged-within-budget").
+    RETURN 0.
+}
+
+LOCAL FUNCTION _bplaneFinishPeRecovery {
+    PARAMETER targetBody, wantPe.
+    // Raw patch check also works when vector reconstruction cannot.
+    IF _bplaneCurrentCorridorOk(targetBody, wantPe, -1, -1) {
+        mLog("STATS bplane pe-only result=inside-corridor").
+        nextPhase(xferSeq).
+    } ELSE {
+        _bplaneHoldCorrection("pe-recovery-outside-corridor").
+    }
+}
+
+LOCAL FUNCTION _bplaneClearCoastTimes {
+    stateSet("xing_arrival_ut", 0).
+    stateSet("midcourse_refine_ut", 0).
+    stateSet("midcourse_refine_arrival_ut", 0).
+}
+
 // ============================================================
 // planBplaneCorrection — build and converge a correction node.
 // Newton iteration: controls (radialout, normal) -> targets
@@ -618,6 +725,10 @@ GLOBAL FUNCTION planBplaneCorrection {
     IF dvCap < MIN_EXEC_DV {
         _bplaneHoldCorrection("no-optional-budget").
         RETURN 0.
+    }
+
+    IF BPLANE_PE_ONLY <> 0 {
+        RETURN _bplanePlanPeOnly(targetBody, wantPe, dvCap).
     }
 
     LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, 0).
@@ -993,6 +1104,7 @@ LOCAL FUNCTION _bplaneTargetBody {
 }
 
 LOCAL FUNCTION _bplaneWantInc {
+    IF BPLANE_PE_ONLY <> 0 { RETURN -1. }
     LOCAL wantInc IS -1.
     IF CAPTURE_DIR <> "" {
         LOCAL dir IS CAPTURE_DIR.
@@ -1013,6 +1125,11 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
     PARAMETER phaseCap.
 
     IF NOT HASNODE { RETURN FALSE. }
+
+    IF BPLANE_PE_ONLY <> 0 {
+        // Replan a saved node under the new Pe-only recovery objective.
+        RETURN FALSE.
+    }
 
     LOCAL nd IS NEXTNODE.
     mLog("STATS bplane resume existing-node dv="
@@ -1099,6 +1216,7 @@ GLOBAL FUNCTION phaseBplane {
     LOCAL wantInc IS _bplaneWantInc().
 
     LOCAL wantLan IS CAPTURE_LAN.
+    IF BPLANE_PE_ONLY <> 0 { SET wantLan TO -1. }
     bplaneResetWarnings().
     _bplaneLogBaseline(targetBody, BPLANE_DV_CAP).
 
@@ -1135,6 +1253,7 @@ GLOBAL FUNCTION phaseBplane {
         IF nd = 0 { BREAK. }
         IF NOT _bplaneCorrectionAllowed(nd, targetBody, BPLANE_DV_CAP) { RETURN. }
         _bplaneReserveCorrection(nd, targetBody).
+        _bplaneClearCoastTimes().
         SET burns TO burns + 1.
         IF NOT executeManeuver() {
             mLogWarn("BPLANE: burn execution failed — replanning once.").
@@ -1142,6 +1261,9 @@ GLOBAL FUNCTION phaseBplane {
         WAIT 2.
     }
 
+    IF BPLANE_PE_ONLY <> 0 {
+        _bplaneFinishPeRecovery(targetBody, wantPe). RETURN.
+    }
     LOCAL meas IS measureArrival(0, targetBody).
     IF meas = 0 {
         mLogError("BPLANE: finished with NO encounter — operator attention needed.").
@@ -1212,6 +1334,7 @@ GLOBAL FUNCTION phaseRefineBplane {
     }
     LOCAL wantInc IS _bplaneWantInc().
     LOCAL wantLan IS CAPTURE_LAN.
+    IF BPLANE_PE_ONLY <> 0 { SET wantLan TO -1. }
 
     LOCAL dvCap IS MAX(MIN_EXEC_DV, REFINE_BPLANE_DV_CAP).
     _bplaneLogBaseline(targetBody, dvCap).
@@ -1224,7 +1347,7 @@ GLOBAL FUNCTION phaseRefineBplane {
             nextPhase(xferSeq).
             RETURN.
         }
-        IF NOT HASNODE {
+        IF NOT HASNODE AND BPLANE_PE_ONLY = 0 {
             LOCAL measLoop IS measureArrival(0, targetBody).
             IF measLoop = 0 { BREAK. }
             LOCAL errLoop IS _bplaneCorridorError(targetBody, measLoop, wantPe, wantInc, wantLan).
@@ -1252,6 +1375,7 @@ GLOBAL FUNCTION phaseRefineBplane {
         IF nd = 0 { BREAK. }
         IF NOT _bplaneCorrectionAllowed(nd, targetBody, dvCap) { RETURN. }
         _bplaneReserveCorrection(nd, targetBody).
+        _bplaneClearCoastTimes().
         SET burns TO burns + 1.
         IF NOT executeManeuver() {
             mLogWarn("REFINE_BPLANE: burn execution failed; holding before capture.").
@@ -1263,6 +1387,9 @@ GLOBAL FUNCTION phaseRefineBplane {
         WAIT 2.
     }
 
+    IF BPLANE_PE_ONLY <> 0 {
+        _bplaneFinishPeRecovery(targetBody, wantPe). RETURN.
+    }
     LOCAL meas IS measureArrival(0, targetBody).
     IF meas <> 0 {
         LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).

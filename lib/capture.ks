@@ -19,6 +19,10 @@ GLOBAL FLYBY_EXIT_SOI IS 1.
 // body's parent (e.g. Mun -> Kerbin).
 GLOBAL FLYBY_NEXT_TARGET IS "".
 GLOBAL TARGET_AP IS -1.
+GLOBAL CAPTURE_RESERVE_DV IS -1.
+GLOBAL CAPTURE_MIN_PE IS -1.
+GLOBAL CAPTURE_MAX_PE IS -1.
+GLOBAL CAPTURE_ACCEPT_BOUND IS 0.
 
 LOCAL MAX_RETRIES IS 5.
 LOCAL SOI_BUFFER_TIME_DEFAULT IS 300.
@@ -316,6 +320,18 @@ GLOBAL FUNCTION phaseCapture {
     UNTIL success {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
 
+        IF CAPTURE_ACCEPT_BOUND <> 0 AND SHIP:ORBIT:ECCENTRICITY < 1
+                AND SHIP:PERIAPSIS > MAX(0, CAPTURE_MIN_PE)
+                AND SHIP:APOAPSIS < target:SOIRADIUS {
+            mLog("STATS capture result=already-bound; preserving recovered orbit").
+            SET success TO TRUE. BREAK.
+        }
+        IF (CAPTURE_MIN_PE >= 0 AND SHIP:PERIAPSIS < CAPTURE_MIN_PE)
+                OR (CAPTURE_MAX_PE >= 0 AND SHIP:PERIAPSIS > CAPTURE_MAX_PE) {
+            mLogWarn("STATS capture decision=hold reason=periapsis-outside-recovery-corridor").
+            yieldToPrompt(). RETURN.
+        }
+
         // 1. Resolve target altitude from config
         LOCAL captureAlt IS MAX(35000, SHIP:PERIAPSIS).
         IF TARGET_AP >= 0 { SET captureAlt TO TARGET_AP. }
@@ -325,6 +341,17 @@ GLOBAL FUNCTION phaseCapture {
         IF nd = 0 {
             mLogError("CAPTURE: no safe capture node; holding phase.").
             RETURN.
+        }
+
+        IF CAPTURE_RESERVE_DV >= 0 {
+            mLog("STATS capture budget dv=" + ROUND(nd:DELTAV:MAG, 2)
+                + " remainingDv=" + ROUND(SHIP:DELTAV:VACUUM, 2)
+                + " reserveDv=" + CAPTURE_RESERVE_DV).
+            IF nd:DELTAV:MAG + CAPTURE_RESERVE_DV > SHIP:DELTAV:VACUUM {
+                REMOVE nd.
+                mLogWarn("STATS capture decision=hold reason=capture-budget").
+                yieldToPrompt(). RETURN.
+            }
         }
 
         // 3. Execute with standard retry logic

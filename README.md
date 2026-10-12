@@ -384,6 +384,36 @@ decision. `python3 -B scripts/check_arrival_budget.py` exercises the budget,
 resume, logging and capture-estimate predicates; flight validation is still
 required.
 
+For the fuel-limited RO8 already approaching the Mun at a high periapsis,
+use the capture-only recovery profile. With an archive link and the updated
+archive synced, run at the craft console:
+
+```kerboscript
+RUNPATH("0:/cmd/munrecover.ks").
+REBOOT.
+```
+
+This replaces old nodes and runtime overrides, clears stale coast timing,
+and resumes at BPLANE (CAPTURE if already inside the Mun SOI). It does not
+repeat XING or reset the accumulated arrival-correction fuel ledger.
+The recovery targets **15 km Pe / 100 km Ap**, without a polar-plane target,
+then runs SCIENCE_OPS and DONE. Landing and return require a later decision.
+It limits the initial correction to 50 m/s, midpoint corrections to 10 m/s,
+and their cumulative allowance to 60 m/s. Each proposed correction must
+leave the estimated capture cost plus 50 m/s; CAPTURE checks its actual node
+cost again. Estimates use stock vacuum dV and impulsive patched conics, so
+this is not a guarantee for a low-thrust craft.
+
+Pe-only recovery measures raw maneuver-node patches with a scalar solver.
+It holds if it cannot reach 13–17 km within the budget, instead of handing
+the 742 km encounter to capture. The optional SOI-entry-time and relative
+capture-cost limits are disabled only in this recovery profile: lowering Pe
+changes the chord through the SOI, and recovery tests absolute affordability.
+A resumed safe bound orbit is accepted without another capture burn.
+`STATS bplane pe-only`, `capture-budget`, and `STATS capture budget` record
+the decisions. Offline checks: `python3 -B scripts/check_mun_recovery.py`;
+actual patched-conic convergence and flight execution still need flight testing.
+
 `RO8/mun_landing_return` and `RO8/minmus_landing_return` continue from
 `LAND_ASSIST` into `SURFACE_RETURN_SETUP`. Touchdown starts a new local
 `PRELAUNCH → LAUNCH → PARK → RETURN_SETUP` leg, using a 10 km polar parking
