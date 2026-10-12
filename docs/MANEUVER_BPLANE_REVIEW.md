@@ -246,6 +246,21 @@ Checks now include 120 scalar tails down to 0.05 m/s², nine tails with a
 4 m/s transverse residual, cumulative powered rebound, staging/coast
 baseline resets, control-release ordering, and departure-marker save/phase
 guards. These are source-expression/structural checks with synthetic physics,
-not a KSP flight or an input-freeze reproduction. Still needed: the actual
-low-thrust staged transfer, its cutoff log, a reload after cutoff, BPLANE
-reacquisition if the encounter was lost, and compiled storage checks.
+not a KSP flight or an input-freeze reproduction. Still needed: a flight
+with the new cutoff/control-release safeguards, its cutoff log, the new
+departure checkpoint across reload, and compiled storage checks.
+
+## RO8 flight result — 2026-10-12
+
+The operator identifies this flight as `missions/RO8/minmus_landing_return.ks`.
+Transfer staging succeeded, but the low-thrust landing stage's long burn
+left a near Minmus approach without an encounter. After reloading into
+XING and holding, switching to BPLANE successfully recovered the encounter.
+The mission reached COAST_1HALF, with about four game days until midpoint
+refinement. The hoped-for correction of at most 3 m/s is not yet measured;
+capture, science, landing and return have not been confirmed.
+
+This validates encounter reacquisition on the reported RO8 trajectory, not
+the subsequent cutoff/input-lock changes or a complete mission. The planned
+same-craft comparison is `missions/RO8/mun_landing_return.ks`; neither of
+these flight reports refers to the Falcon mission profiles.

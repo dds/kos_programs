@@ -217,7 +217,13 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out): BPLANE/SHAPE flew the
-  Mun contract end-to-end (2026-06); the suborbital return arc
+  Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered
+  a lost encounter after a staged, low-thrust departure via BPLANE and
+  reached COAST_1HALF (operator report, 2026-10-12). Midpoint refinement,
+  capture/landing/return, and the new cutoff/input safeguards remain
+  unverified on that flight. The companion RO8 `mun_landing_return` is
+  the planned same-craft follow-up, not the Falcon profiles.
+  The suborbital return arc
   (`lib/suborbit.ks` v3: elements-only arc + coast + targeted walk) is
   flight-proven — single-boot KRBCAP1 round-the-world hop, landed exactly
   on its predicted impact. The landatksc/KSC_DEORBIT recipe, native JSON
