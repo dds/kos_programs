@@ -43,6 +43,10 @@ LOCAL FUNCTION _bootCue {
     }
 }
 
+// Show this CPU's console before the startup cue and mission picker.
+IF CORE:HASEVENT("Open Terminal") {
+    CORE:DOEVENT("Open Terminal").
+}
 _bootCue(HAS_LINK).
 PRINT " ".
 

@@ -26,9 +26,9 @@ in-game processors.
 2. Name the vessel either `VEHICLE-TARGET-PAYLOADS...` (legacy hints, e.g.
    `FR3-MUN-SCANSAT-01`) or a friendly name whose first word is the vehicle
    id (`FR3 Mun Mapper 1`).
-3. Launch to the pad/runway. Boot syncs code from the archive, shows the
-   mission profile picker (when profiles exist under `missions/<vehicle>/`),
-   and runs the vehicle script.
+3. Launch to the pad/runway. Boot opens the console just before the startup
+   chime, syncs code from the archive, shows the mission profile picker (when
+   profiles exist under `missions/<vehicle>/`), and runs the vehicle script.
 4. Press any key after boot starts, during the manual-mode window, for
    **manual mode**; otherwise the mission auto-resumes from saved state.
 
