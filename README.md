@@ -87,6 +87,10 @@ waits against the absolute liftoff time after setup, with a KAC alarm when
 available. Missed plane windows are recalculated; missed rendezvous or
 interplanetary windows return to PRELAUNCH for a fresh plan. It never
 silently launches late. Both atmospheric and airless ascents use this gate.
+While waiting, there are no countdown updates more than an hour before
+liftoff. During the final hour, console notices appear at most once every
+15 game minutes; the HUD countdown runs only during the last 10 seconds.
+The KAC alarm stops warp 30 seconds before liftoff when available.
 
 `LAUNCH_PLANE_LEAD` is a vehicle/profile calibration in seconds before the
 geometric plane crossing. Its default `-1` inherits

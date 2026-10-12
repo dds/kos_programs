@@ -112,15 +112,23 @@ GLOBAL FUNCTION launchWaitForLiftoff {
             SET alarmId TO kacEnsureAlarm("Prelaunch window", launchUt - 30,
                 "Ascent loaded; waiting for timed liftoff.").
         }
-        mLog("Launch countdown armed: liftoff in "
-            + ROUND(MAX(0, launchUt - TIME:SECONDS), 1)
-            + "s; ABORT to hold.").
-        IF NOT timed { SET launchUt TO TIME:SECONDS + 8. }
+        IF NOT timed {
+            mLog("Launch countdown armed: liftoff in 8s; ABORT to hold.").
+            SET launchUt TO TIME:SECONDS + 8.
+        }
+        LOCAL nextNoticeUt IS 0.
         LOCAL lastSecond IS -1.
         UNTIL TIME:SECONDS >= launchUt OR ABORT {
             LOCAL remaining IS launchUt - TIME:SECONDS.
             LOCAL seconds IS CEILING(remaining).
-            IF seconds <> lastSecond {
+            // Stay quiet during long warps. KAC stops warp at T-30s;
+            // final-hour notices use game time and never catch up in a burst.
+            IF remaining <= 3600 AND remaining > 10 AND TIME:SECONDS >= nextNoticeUt {
+                mLog("Waiting for launch window: liftoff in "
+                    + ROUND(remaining / 60, 1) + "min; ABORT to hold.").
+                SET nextNoticeUt TO TIME:SECONDS + 900.
+            }
+            IF remaining <= 10 AND seconds <> lastSecond {
                 HUDTEXT("Liftoff in " + seconds + "s - ABORT to hold", 2, 2, 15, WHITE, FALSE).
                 IF seconds <= 3 { GETVOICE(0):PLAY(NOTE(440, 0.1)). }
                 SET lastSecond TO seconds.
