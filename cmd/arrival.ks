@@ -1,11 +1,42 @@
 // ============================================================
 // arrival.ks — review, accept, or replan a retained arrival correction.
-// Archive-only operator code; requires the updated BPLANE band loaded.
+// Archive-only operator code; loads its own saved mission/band context.
 // RUNPATH("0:/cmd/arrival.ks", "accept", 100).  // 100 km capture Ap
 // ============================================================
 @LAZYGLOBAL OFF.
 PARAMETER action IS "review".
 PARAMETER captureApKm IS -1.
+
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
+
+LOCAL FUNCTION _arrivalLoadContext {
+    LOCAL phase IS stateGet("phase", "").
+    IF phase <> "BPLANE" AND phase <> "REFINE_BPLANE" {
+        PRINT "Arrival review requires BPLANE or REFINE_BPLANE.". RETURN FALSE.
+    }
+    LOCAL vehicle IS stateGet("vehicle", "").
+    LOCAL mission IS stateGet("mission_id", "").
+    IF vehicle = "" OR mission = "" {
+        PRINT "Saved vehicle/mission missing; cannot load arrival context.". RETURN FALSE.
+    }
+    LOCAL hasLink IS HOMECONNECTION:ISCONNECTED.
+    LOCAL craftScript IS bootResolveScript(vehicle, LIST("craft"), hasLink).
+    IF craftScript = "" {
+        PRINT "Saved craft script unavailable; cannot resume arrival.". RETURN FALSE.
+    }
+    // Follow normal boot ordering, without starting the phase machine:
+    // profile for dependency planning, band libraries, then craft main.
+    // boot_lib installs an empty default main, so the craft MUST run again.
+    IF NOT bootApplyMissionConfig(vehicle, mission, hasLink) { RETURN FALSE. }
+    bootLibLoadList(bootPlannedMissionLibs()).
+    bootLibLoad(craftScript).
+    bootLibLoad("resume").
+    // Library/craft defaults must not erase fuel limits or accepted targets.
+    // This also reapplies the persisted runtime overrides after the profile.
+    IF NOT bootApplyMissionConfig(vehicle, mission, hasLink) { RETURN FALSE. }
+    RETURN TRUE.
+}
 
 // Rewrite the full override file, replacing only the accepted-target keys.
 // Preserve unrelated runtime settings and use literals for offline reboots.
@@ -101,4 +132,6 @@ LOCAL FUNCTION _arrivalCommand {
     resumeMission().
 }
 
-_arrivalCommand(action, captureApKm).
+IF _arrivalLoadContext() {
+    _arrivalCommand(action, captureApKm).
+}

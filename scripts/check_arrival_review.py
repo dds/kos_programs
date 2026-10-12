@@ -12,6 +12,62 @@ SOURCE = (ROOT / 'lib/arrival_bplane.ks').read_text()
 COMMAND = (ROOT / 'cmd/arrival.ks').read_text()
 
 
+def check_console_bootstrap():
+    """Audit a fresh command context using the real dependency graph/profile."""
+    boot = (ROOT / 'lib/boot_lib.ks').read_text()
+    deps_source = (ROOT / 'lib/dependencies.ks').read_text()
+    deps_expr = re.search(r'RETURN (.*)\.\s*$', body(deps_source, 'dependencyLibs'), re.S)[1]
+    deps = evaluate(deps_expr, LEXICON=lambda *xs: dict(zip(xs[::2], xs[1::2])),
+                    LIST=lambda *xs: list(xs))
+    loaded, symbols = [], set()
+
+    def load(name):
+        if name in loaded:
+            return
+        for dependency in deps.get(name, []):
+            load(dependency)
+        source = (ROOT / 'lib' / (name + '.ks')).read_text()
+        symbols.update(re.findall(r'GLOBAL FUNCTION (\w+)', source))
+        loaded.append(name)
+
+    # No boot globals survive into this fixture's console program.
+    assert 'stateGet' not in symbols
+    assert COMMAND.index('RUNPATH("1:/lib/boot_lib")') < COMMAND.index('bootPreamble()')
+    assert COMMAND.index('bootPreamble()') < COMMAND.index('stateGet(')
+    assert 'bootLibLoad("core")' in body(boot, 'bootPreamble')
+    load('core')
+    assert 'stateGet' in symbols
+    context = body(COMMAND, '_arrivalLoadContext')
+    first_profile = context.index('bootApplyMissionConfig(')
+    last_profile = context.rindex('bootApplyMissionConfig(')
+    assert first_profile < context.index('bootLibLoadList(bootPlannedMissionLibs())')
+    assert context.index('bootLibLoadList(') < context.index('bootLibLoad(craftScript)')
+    assert context.index('bootLibLoad(craftScript)') < context.index('bootLibLoad("resume")') < last_profile
+    assert context.index('IF phase <> "BPLANE"') < first_profile
+    assert 'IF NOT bootApplyMissionConfig' in context
+    assert 'IF _arrivalLoadContext()' in COMMAND
+    for forbidden in ('REMOVE NEXTNODE', 'missionOverrideClear(', 'stateRemove(', 'resumeMission()', 'REBOOT.'):
+        assert forbidden not in context  # Setup must preserve the reviewed candidate.
+    load('arrival_bplane')
+    load('rocket_craft')  # Loaded by the RO8 craft script, which restores main.
+    load('resume')
+    craft = (ROOT / 'craft/RO8.ks').read_text()
+    assert 'bootLibLoad("rocket_craft")' in craft and 'rocketMain(' in body(craft, 'main')
+    for required in ('stateGet', 'stateSet', 'missionOverridePath', 'applyMissionOverrides',
+                     'bplaneReviewMatches', 'bplanePauseForReview', 'findArrivalPatch',
+                     'bplaneCorrectionAllowed', 'bplaneCaptureCost', 'maneuverBurnInterrupted',
+                     'resumeMission', 'rocketMain', 'rocketBuildPhaseMap', 'rocketBuildPhaseSequence'):
+        assert required in symbols, required
+    assert 'applyKnownMissionState()' in body(boot, 'bootApplyMissionConfig')
+    # Mission + accepted overrides must win over newly loaded defaults.
+    profile = (ROOT / 'missions/RO8/mun_capture_recovery.ks').read_text()
+    cfg = read_settings(profile, {'CAPTURE_INC': -1, 'BPLANE_DV_CAP': 150, 'TARGET_AP': -1})
+    cfg = read_settings('SET CAPTURE_INC TO 82.19.\nSET TARGET_AP TO 50000.\n', cfg)
+    assert cfg['CAPTURE_INC'] == 82.19 and cfg['TARGET_AP'] == 50000
+    assert cfg['BPLANE_CAPTURE_MARGIN'] == 50 and cfg['BPLANE_TRIM_TOTAL_DV_CAP'] == 160
+    print('PASS: fresh-console imports, dependency closure, real craft main and final mission override ordering')
+
+
 def check_binding():
     match = body(SOURCE, 'bplaneReviewMatches')
     expr = re.search(r'RETURN (.*?)\.\s*$', match, re.S)[1]
@@ -119,6 +175,7 @@ def check_review_flow():
 
 
 if __name__ == '__main__':
+    check_console_bootstrap()
     check_binding()
     check_reboot_targets()
     check_capture_costs()

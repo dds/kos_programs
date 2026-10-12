@@ -425,6 +425,13 @@ load it and replan. At the retained-candidate prompt, inspect the map, then:
 RUNPATH("0:/cmd/arrival.ks", "accept", 100).
 ```
 
+The command loads its own core, saved mission's band libraries, craft script,
+and resume support, then reapplies the mission and runtime overrides. It can
+run from a fresh console without relying on functions left by boot; this
+setup preserves the retained node and review record. After syncing a command
+fix, rerun `arrival.ks` directly rather than resetting the mission. Loading
+takes time, so acceptance still checks the node's remaining ETA afterward.
+
 This **accepts and resumes execution** with a 100 km capture Ap. Use `50`
 for a 50 km Ap, or `500` for a higher, cheaper initial capture; omitting the
 number keeps the configured Ap. At a fixed Pe, a lower capture Ap requires
