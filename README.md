@@ -225,11 +225,15 @@ dependencyBands()                phases that load together
   `stateGet`/`stateSet` — never raw file I/O for mission state. Survives
   reboots, quickloads, power loss. Legacy SimpleJSON state can be converted
   once with `RUNPATH("0:/cmd/convertstatejson.ks").`.
-- **Flight log**: `mLog`/`mLogWarn`/`mLogError`; `STATS ...` lines summarize
-  every plan/burn/phase as console-only info unless deliberately promoted.
+- **Flight log**: `mLog`/`mLogWarn`/`mLogError`; `STATS ...` summaries and
+  non-INFO events are persisted by default. Ordinary INFO chatter stays on
+  the console; `LOG_INFO_TO_FILE = 1` enables it in files too.
   Each boot writes a numbered per-core log under `1:/run/logs/<flight>/`;
-  archive copies land in `0:/logs/archive/<flight>/` at phase transitions and
-  after selected WARN events when linked.
+  archive copies land in `0:/logs/archive/<flight>/` after persisted lines
+  when linked and at phase transitions. `LOG_FILE_RESERVE_BYTES` leaves
+  1,024 bytes free by default; a console warning reports when further file
+  logging is suppressed to preserve room for mission state. Logs cannot
+  reconstruct console-only diagnostics from older flights.
 - **Observation telemetry** (`lib/observe.ks`): periodic one-line samples
   streamed straight to `0:/logs/obs/` when linked (offline lines buffer
   locally and flush on reconnect). `cmd/airtest.ks` drops the interval to 1 s
@@ -349,6 +353,36 @@ boot clears any saved profile so a pad reboot re-opens the picker; after
 launch, reboots keep mission and phase.
 
 ### RO8 moon landing and return
+
+Arrival precision is budgeted separately from reaching the moon. Both RO8
+profiles limit corrections of an existing encounter to 10 m/s per burn and
+20 m/s total across BPLANE/REFINE_BPLANE, preserving 900 m/s on the Mun mission
+or 400 m/s on Minmus according to stock vacuum dV. Optional corrections may
+shift SOI entry by at most 600 seconds and raise the estimated periapsis
+capture cost by at most 5 m/s. A real patch with an unusable B-plane
+measurement holds instead of invoking lost-encounter acquisition. An
+unconverged optional correction also holds rather than spending its budget
+on a partial improvement.
+
+These checks apply to retained maneuver nodes on reboot as well as new
+plans. Rejected nodes are removed; the original trajectory is retained and
+the current phase yields to the console. **A hold does not stop game time.**
+It does not silently waive the polar orbit or landing-site requirements.
+SHAPE separately has a 10 m/s per-burn / 20 m/s total cap and a 650 m/s Mun
+or 200 m/s Minmus reserve. These are conservative capture/landing fuel
+floors, not proof that landing or return is affordable. Budgets reserve the
+planned burn cost before ignition and survive reboots; an interrupted burn
+does not refund its allowance automatically. Genuine lost-encounter recovery
+retains its separate existing cap; it is not treated as an optional trim.
+
+For the reported 899 m/s Mun flight with a retained 150 m/s node, a connected
+reboot into updated BPLANE rejects the correction before ignition (or clears
+it and advances if the original encounter already meets the corridor).
+`STATS bplane baseline`, `budget`, `comparison`, `plan`, and `decision=hold`
+records explain the unburned encounter, candidate geometry and acceptance
+decision. `python3 -B scripts/check_arrival_budget.py` exercises the budget,
+resume, logging and capture-estimate predicates; flight validation is still
+required.
 
 `RO8/mun_landing_return` and `RO8/minmus_landing_return` continue from
 `LAND_ASSIST` into `SURFACE_RETURN_SETUP`. Touchdown starts a new local

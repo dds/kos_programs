@@ -27,6 +27,18 @@ SET SHAPE_PE TO 15000.
 SET SHAPE_AP TO 15000.
 SET SHAPE_INC TO 90.
 
+// Precision is optional when fuel is marginal: hold with the original
+// encounter/orbit rather than silently buying a different arrival.
+// These are capture/landing floors, not a guarantee of return fuel.
+SET BPLANE_TRIM_DV_CAP TO 10.
+SET BPLANE_TRIM_TOTAL_DV_CAP TO 20.
+SET BPLANE_TRIM_RESERVE_DV TO 900.
+SET BPLANE_MAX_ARRIVAL_SHIFT TO 600.
+SET BPLANE_MAX_CAPTURE_DV_INCREASE TO 5.
+SET SHAPE_DV_CAP TO 10.
+SET SHAPE_TOTAL_DV_CAP TO 20.
+SET SHAPE_RESERVE_DV TO 650.
+
 
 // Automated landing: contract site, with terrain refinement nearby.
 // Replace TARGET_LAT/LNG with the contract coordinates before launch.

@@ -1,6 +1,10 @@
 // ============================================================
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
+GLOBAL LOG_INFO_TO_FILE IS 0.
+GLOBAL LOG_FILE_RESERVE_BYTES IS 1024.
+LOCAL _logSpaceWarned IS FALSE.
+
 LOCAL FUNCTION _logPath {
     LOCAL flightDir IS localFlightLogDir().
     IF NOT EXISTS(flightDir) { CREATEDIR(flightDir). }
@@ -164,17 +168,20 @@ GLOBAL FUNCTION mLog {
     LOCAL wroteLocal IS FALSE.
     // flightLogPath() is called for its side effect too: it ensures the
     // log file exists (with a header) before the LOG below writes to it.
-    IF level <> "INFO" AND CORE:VOLUME:FREESPACE > 150 {
+    // Persist decision summaries; full iteration chatter remains opt-in.
+    LOCAL persist IS level <> "INFO" OR message:STARTSWITH("STATS ")
+        OR LOG_INFO_TO_FILE > 0.
+    LOCAL enoughSpace IS CORE:VOLUME:FREESPACE
+        > MAX(150, LOG_FILE_RESERVE_BYTES) + line:LENGTH + 100.
+    IF persist AND enoughSpace {
         LOG line TO flightLogPath().
         SET wroteLocal TO TRUE.
+    } ELSE IF persist AND NOT _logSpaceWarned {
+        PRINT "Flight log storage reserve reached; further lines are console-only.".
+        SET _logSpaceWarned TO TRUE.
     }
 
-    IF HOMECONNECTION:ISCONNECTED { archiveLog(). }
-    // IF wroteLocal // AND level = "WARN" AND message:LENGTH >= 5
-    //         // AND message:SUBSTRING(0,5) = "STATS"
-    //         AND HOMECONNECTION:ISCONNECTED {
-    //     archiveLog().
-    // }
+    IF wroteLocal AND HOMECONNECTION:ISCONNECTED { archiveLog(). }
 }
 
 GLOBAL FUNCTION mLogWarn  { PARAMETER m. mLog(m, "WARN").  }

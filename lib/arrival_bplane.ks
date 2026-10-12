@@ -71,6 +71,14 @@ GLOBAL BPLANE_OFFPLANE_TOL IS 10.
 GLOBAL BPLANE_SAFE_HANDOFF_SOI_MULT IS 1.0.
 GLOBAL REFINE_BPLANE_DV_CAP IS 10.
 GLOBAL REFINE_BPLANE_MAX_BURNS IS 6.
+// Optional-correction limits for an EXISTING encounter. A genuinely
+// missing patch still uses the recovery cap. Negative = disabled.
+GLOBAL BPLANE_TRIM_DV_CAP IS -1.
+GLOBAL BPLANE_TRIM_TOTAL_DV_CAP IS -1.
+GLOBAL BPLANE_TRIM_RESERVE_DV IS -1.
+GLOBAL BPLANE_MAX_ARRIVAL_SHIFT IS -1.
+GLOBAL BPLANE_MAX_CAPTURE_DV_INCREASE IS -1.
+GLOBAL TARGET_AP IS -1.
 
 
 LOCAL DEFAULT_DV_CAP   IS 150.
@@ -86,6 +94,126 @@ LOCAL ACQUIRE_MIN_STEP     IS 0.05.
 LOCAL ACQUIRE_STEP_GROWTH  IS 1.2.
 LOCAL MAX_ACQUIRE_ITER     IS 150.
 LOCAL MAX_BURNS        IS 2.
+
+LOCAL FUNCTION _bplaneTrimSpent {
+    PARAMETER targetBody.
+    LOCAL id IS targetBody:NAME + ":" + stateGetNum("launch_time", 0).
+    IF stateGet("bplane_budget_id", "") <> id {
+        stateSet("bplane_budget_id", id).
+        stateSet("bplane_budget_spent", 0).
+    }
+    RETURN stateGetNum("bplane_budget_spent", 0).
+}
+
+LOCAL FUNCTION _bplaneTrimCap {
+    PARAMETER targetBody, phaseCap.
+    IF findArrivalPatch(0, targetBody) = 0 { RETURN phaseCap. }
+    LOCAL cap IS phaseCap.
+    IF BPLANE_TRIM_DV_CAP >= 0 { SET cap TO MIN(cap, BPLANE_TRIM_DV_CAP). }
+    IF BPLANE_TRIM_TOTAL_DV_CAP >= 0 {
+        SET cap TO MIN(cap, BPLANE_TRIM_TOTAL_DV_CAP - _bplaneTrimSpent(targetBody)).
+    }
+    IF BPLANE_TRIM_RESERVE_DV >= 0 {
+        // Stock vacuum dV is an estimate; zero leaves no optional budget.
+        SET cap TO MIN(cap, SHIP:DELTAV:VACUUM - BPLANE_TRIM_RESERVE_DV).
+    }
+    RETURN MAX(0, cap).
+}
+
+LOCAL FUNCTION _bplaneHoldCorrection {
+    PARAMETER reason.
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    mLogWarn("STATS bplane decision=hold reason=" + reason
+        + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)
+        + " reserveDv=" + BPLANE_TRIM_RESERVE_DV).
+    mLogWarn("Arrival correction rejected; original trajectory retained. "
+        + "Review the encounter and remaining mission before resuming.").
+    yieldToPrompt().
+}
+
+LOCAL FUNCTION _bplaneLogBaseline {
+    PARAMETER targetBody, phaseCap.
+    LOCAL hit IS findArrivalPatch(0, targetBody).
+    IF hit = 0 {
+        mLog("STATS bplane baseline target=" + targetBody:NAME + " patch=False").
+        RETURN.
+    }
+    LOCAL patch IS hit["patch"].
+    mLog("STATS bplane baseline target=" + targetBody:NAME
+        + " phase=" + stateGet("phase", "")
+        + " patch=True PeKm=" + ROUND(patch:PERIAPSIS / 1000, 2)
+        + " inc=" + ROUND(patch:INCLINATION, 2)
+        + " entryUt=" + ROUND(hit["entryUt"], 1)
+        + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)
+        + " correctionCap=" + ROUND(_bplaneTrimCap(targetBody, phaseCap), 2)).
+}
+
+LOCAL FUNCTION _bplaneCaptureCost {
+    PARAMETER patch, targetBody.
+    LOCAL rp IS targetBody:RADIUS + patch:PERIAPSIS.
+    IF rp <= 0 { RETURN 1.0e9. }
+    LOCAL apAlt IS MAX(35000, patch:PERIAPSIS).
+    IF TARGET_AP >= 0 { SET apAlt TO MAX(TARGET_AP, patch:PERIAPSIS). }
+    LOCAL ra IS targetBody:RADIUS + apAlt.
+    LOCAL incoming IS SQRT(targetBody:MU * (1 + patch:ECCENTRICITY) / rp).
+    LOCAL captured IS SQRT(targetBody:MU * (2 / rp - 2 / (rp + ra))).
+    RETURN MAX(0, incoming - captured).
+}
+
+// Read raw patches: POSITIONAT would include the pending correction and
+// contaminate the comparison against the unburned encounter.
+LOCAL FUNCTION _bplaneCorrectionAllowed {
+    PARAMETER nd, targetBody, phaseCap.
+    LOCAL cap IS _bplaneTrimCap(targetBody, phaseCap).
+    LOCAL original IS findArrivalPatch(0, targetBody).
+    LOCAL planned IS findArrivalPatch(nd, targetBody).
+    mLog("STATS bplane budget dv=" + ROUND(nd:DELTAV:MAG, 2)
+        + " cap=" + ROUND(cap, 2)
+        + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)
+        + " spent=" + ROUND(_bplaneTrimSpent(targetBody), 2)
+        + " originalPatch=" + (original <> 0)
+        + " plannedPatch=" + (planned <> 0)).
+    IF planned = 0 {
+        _bplaneHoldCorrection("planned-encounter-missing"). RETURN FALSE.
+    }
+    LOCAL shift IS 0.
+    LOCAL beforeCost IS 0.
+    LOCAL afterCost IS 0.
+    IF original <> 0 {
+        SET shift TO ABS(planned["entryUt"] - original["entryUt"]).
+        SET beforeCost TO _bplaneCaptureCost(original["patch"], targetBody).
+        SET afterCost TO _bplaneCaptureCost(planned["patch"], targetBody).
+        mLog("STATS bplane comparison originalPeKm=" + ROUND(original["patch"]:PERIAPSIS / 1000, 2)
+            + " originalInc=" + ROUND(original["patch"]:INCLINATION, 2)
+            + " originalEntryUt=" + ROUND(original["entryUt"], 1)
+            + " plannedPeKm=" + ROUND(planned["patch"]:PERIAPSIS / 1000, 2)
+            + " plannedInc=" + ROUND(planned["patch"]:INCLINATION, 2)
+            + " plannedEntryUt=" + ROUND(planned["entryUt"], 1)
+            + " shiftSeconds=" + ROUND(shift, 1)
+            + " captureBeforeDv=" + ROUND(beforeCost, 2)
+            + " captureAfterDv=" + ROUND(afterCost, 2)).
+    }
+    IF nd:DELTAV:MAG > cap + 0.001 {
+        _bplaneHoldCorrection("correction-budget"). RETURN FALSE.
+    }
+    IF original = 0 { RETURN TRUE. }
+    IF BPLANE_MAX_ARRIVAL_SHIFT >= 0 AND shift > BPLANE_MAX_ARRIVAL_SHIFT {
+        _bplaneHoldCorrection("arrival-time-shift"). RETURN FALSE.
+    }
+    IF BPLANE_MAX_CAPTURE_DV_INCREASE >= 0
+            AND afterCost - beforeCost > BPLANE_MAX_CAPTURE_DV_INCREASE {
+        _bplaneHoldCorrection("capture-cost-increase"). RETURN FALSE.
+    }
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _bplaneReserveCorrection {
+    PARAMETER nd, targetBody.
+    IF findArrivalPatch(0, targetBody) = 0 { RETURN. }
+    // Reserve planned cost before ignition; a power cut / partial burn
+    // must not reset the allowance on the next boot.
+    stateSet("bplane_budget_spent", _bplaneTrimSpent(targetBody) + nd:DELTAV:MAG).
+}
 
 LOCAL FUNCTION _bplaneSafeEncounter {
     PARAMETER targetBody.
@@ -486,6 +614,12 @@ GLOBAL FUNCTION planBplaneCorrection {
         RETURN 0.
     }
 
+    SET dvCap TO _bplaneTrimCap(targetBody, dvCap).
+    IF dvCap < MIN_EXEC_DV {
+        _bplaneHoldCorrection("no-optional-budget").
+        RETURN 0.
+    }
+
     LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, 0).
     ADD nd.
     bplaneResetWarnings().
@@ -494,6 +628,12 @@ GLOBAL FUNCTION planBplaneCorrection {
     LOCAL acquired IS FALSE.
     LOCAL meas0 IS measureArrival(nd, targetBody).
     IF meas0 = 0 {
+        // A failed vector measurement is not a lost encounter. Do not
+        // replace a real map patch with a different closest approach.
+        IF findArrivalPatch(0, targetBody) <> 0 {
+            _bplaneHoldCorrection("existing-patch-unmeasurable").
+            RETURN 0.
+        }
         mLogWarn("BPLANE: no hyperbolic encounter with "
             + targetBody:NAME + " on the current correction node; "
             + "starting acquisition.").
@@ -807,6 +947,11 @@ GLOBAL FUNCTION planBplaneCorrection {
         + " bestPlaneErr=" + ROUND(bestPlaneErr, 2)
         + " wantPeKm=" + ROUND(wantPe / 1000, 1)).
 
+    IF NOT converged AND NOT acquired {
+        _bplaneHoldCorrection("unconverged-optional-correction").
+        RETURN 0.
+    }
+
     LOCAL liveMeas IS measureArrival(0, targetBody).
     IF pristineLog = "" AND liveMeas <> 0
             AND _bplaneSafeEncounter(targetBody, liveMeas)
@@ -865,6 +1010,7 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
     PARAMETER wantPe.
     PARAMETER wantInc.
     PARAMETER wantLan.
+    PARAMETER phaseCap.
 
     IF NOT HASNODE { RETURN FALSE. }
 
@@ -885,6 +1031,8 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
         mLogWarn("BPLANE: existing node dV is below execution threshold; replanning.").
         RETURN FALSE.
     }
+
+    IF NOT _bplaneCorrectionAllowed(nd, targetBody, phaseCap) { RETURN FALSE. }
 
     bplaneResetWarnings().
     LOCAL meas IS measureArrival(nd, targetBody).
@@ -952,6 +1100,7 @@ GLOBAL FUNCTION phaseBplane {
 
     LOCAL wantLan IS CAPTURE_LAN.
     bplaneResetWarnings().
+    _bplaneLogBaseline(targetBody, BPLANE_DV_CAP).
 
     LOCAL burns IS 0.
     UNTIL burns >= MAX_BURNS {
@@ -965,7 +1114,7 @@ GLOBAL FUNCTION phaseBplane {
             LOCAL wakeMeas IS measureArrival(0, targetBody).
             IF wakeMeas <> 0 {
                 LOCAL wakeErr IS _bplaneCorridorError(targetBody, wakeMeas, wantPe, wantInc, wantLan).
-                mLog("BPLANE wake: initial arrival Pe="
+                mLog("STATS bplane wake initialPeKm="
                     + ROUND(wakeMeas["pe"] / 1000, 1)
                     + "km planeErr=" + ROUND(wakeErr["planeErr"], 2)
                     + "deg inc=" + ROUND(wakeMeas["inc"], 2)
@@ -975,13 +1124,17 @@ GLOBAL FUNCTION phaseBplane {
             }
         }
         LOCAL nd IS 0.
-        IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan) {
+        IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan, BPLANE_DV_CAP) {
             SET nd TO NEXTNODE.
         } ELSE {
+            IF phaseShouldYield { RETURN. }
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
             SET nd TO planBplaneCorrection(targetBody, wantPe, wantInc, wantLan).
         }
+        IF phaseShouldYield { RETURN. }
         IF nd = 0 { BREAK. }
+        IF NOT _bplaneCorrectionAllowed(nd, targetBody, BPLANE_DV_CAP) { RETURN. }
+        _bplaneReserveCorrection(nd, targetBody).
         SET burns TO burns + 1.
         IF NOT executeManeuver() {
             mLogWarn("BPLANE: burn execution failed — replanning once.").
@@ -1061,6 +1214,7 @@ GLOBAL FUNCTION phaseRefineBplane {
     LOCAL wantLan IS CAPTURE_LAN.
 
     LOCAL dvCap IS MAX(MIN_EXEC_DV, REFINE_BPLANE_DV_CAP).
+    _bplaneLogBaseline(targetBody, dvCap).
     LOCAL maxBurns IS MAX(1, REFINE_BPLANE_MAX_BURNS).
     LOCAL burns IS 0.
     UNTIL burns >= maxBurns {
@@ -1078,9 +1232,10 @@ GLOBAL FUNCTION phaseRefineBplane {
         }
 
         LOCAL nd IS 0.
-        IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan) {
+        IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan, dvCap) {
             SET nd TO NEXTNODE.
         } ELSE {
+            IF phaseShouldYield { RETURN. }
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
             mLog("REFINE_BPLANE: refining arrival with dV cap "
                 + dvCap + " m/s.").
@@ -1093,7 +1248,10 @@ GLOBAL FUNCTION phaseRefineBplane {
                 "Trajectory pristine, skipping refinement burn.").
         }
 
+        IF phaseShouldYield { RETURN. }
         IF nd = 0 { BREAK. }
+        IF NOT _bplaneCorrectionAllowed(nd, targetBody, dvCap) { RETURN. }
+        _bplaneReserveCorrection(nd, targetBody).
         SET burns TO burns + 1.
         IF NOT executeManeuver() {
             mLogWarn("REFINE_BPLANE: burn execution failed; holding before capture.").

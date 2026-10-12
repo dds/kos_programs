@@ -63,6 +63,9 @@ GLOBAL SHAPE_AOP_TOL IS 0.5.
 // from the far apsis on an eccentric orbit. Don't execute a node below
 // this floor — skip it and move to the next correction.
 GLOBAL SHAPE_MIN_BURN_DV IS 0.4.
+GLOBAL SHAPE_DV_CAP IS -1.
+GLOBAL SHAPE_TOTAL_DV_CAP IS -1.
+GLOBAL SHAPE_RESERVE_DV IS -1.
 
 
 LOCAL MAX_RETRIES        IS 5.
@@ -956,6 +959,35 @@ GLOBAL FUNCTION shapeNextBurn {
     RETURN 0.
 }
 
+LOCAL FUNCTION _shapeReserveBurn {
+    PARAMETER nd.
+    LOCAL id IS SHIP:BODY:NAME + ":" + stateGetNum("launch_time", 0).
+    IF stateGet("shape_budget_id", "") <> id {
+        stateSet("shape_budget_id", id).
+        stateSet("shape_budget_spent", 0).
+    }
+    LOCAL spent IS stateGetNum("shape_budget_spent", 0).
+    LOCAL cost IS nd:DELTAV:MAG.
+    LOCAL remaining IS SHIP:DELTAV:VACUUM.
+    LOCAL allowed IS (SHAPE_DV_CAP < 0 OR cost <= SHAPE_DV_CAP)
+        AND (SHAPE_TOTAL_DV_CAP < 0 OR spent + cost <= SHAPE_TOTAL_DV_CAP)
+        AND (SHAPE_RESERVE_DV < 0 OR remaining - cost >= SHAPE_RESERVE_DV).
+    mLog("STATS shape budget dv=" + ROUND(cost, 2)
+        + " spent=" + ROUND(spent, 2)
+        + " remainingVacDv=" + ROUND(remaining, 1)
+        + " reserveDv=" + SHAPE_RESERVE_DV
+        + " allowed=" + allowed).
+    IF NOT allowed {
+        REMOVE nd.
+        mLogWarn("SHAPE: correction exceeds mission budget; retaining current orbit. "
+            + "Review landing feasibility before skipping this phase.").
+        yieldToPrompt().
+        RETURN FALSE.
+    }
+    stateSet("shape_budget_spent", spent + cost).
+    RETURN TRUE.
+}
+
 LOCAL FUNCTION _runShapePhase {
     PARAMETER phaseLabel.
     PARAMETER prefix.
@@ -985,6 +1017,7 @@ LOCAL FUNCTION _runShapePhase {
         LOCAL success IS FALSE.
         LOCAL retries IS 0.
         UNTIL success {
+            IF phaseLabel = "SHAPE" AND NOT _shapeReserveBurn(NEXTNODE) { RETURN. }
             SET success TO executeManeuver().
             IF NOT success {
                 SET retries TO retries + 1.
