@@ -348,6 +348,36 @@ computed list (escape hatch); `LIBS_EXTRA = ...` appends. While prelaunch,
 boot clears any saved profile so a pad reboot re-opens the picker; after
 launch, reboots keep mission and phase.
 
+### RO8 moon landing and return
+
+`RO8/mun_landing_return` and `RO8/minmus_landing_return` continue from
+`LAND_ASSIST` into `SURFACE_RETURN_SETUP`. Touchdown starts a new local
+`PRELAUNCH → LAUNCH → PARK → RETURN_SETUP` leg, using a 10 km polar parking
+orbit. PRELAUNCH's usual 30-second auto-arm applies: press **H** there to
+hold for surface science before leaving.
+
+The generated Kerbin leg is
+`ESCAPE → COAST → MCC → RETURN_TRIM → AEROBRAKE → DESCENT → DONE`.
+It targets a **53 km initial periapsis** for the unshielded craft, with a
+52–54 km corridor for MCC and optional KSC corrections. `RETURN_PE_TOLERANCE`
+opts into this corridor; return setup preserves it across both generated
+profiles, together with the chute and decoupler settings. KSC trim has a
+20 m/s per-burn cap. The return MCC does not request an equatorial plane change.
+
+Aerobraking can take multiple passes. Propulsion stays attached through
+AEROBRAKE; DESCENT starts only after capture and slowing below 600 m/s.
+Drag may naturally lower periapsis during later passes: the corridor limits
+planned entry corrections, not atmospheric evolution. KSC recovery is best
+effort because intermediate passes change arrival timing; 53 km is an initial
+flight-test target, not a guarantee against overheating. These profiles do
+not schedule heat-shield jettison.
+
+For a craft already in flight, sync the updated profile and libraries on a
+connected reboot before relying on this return sequence. An offline reboot
+uses the existing local copies. The generated-profile regression check is
+`python3 scripts/check_surface_return.py`; kOS execution and thermal behavior
+still require in-game validation.
+
 ### Minmus science campaign
 
 Suggested order after Minmus unlock:

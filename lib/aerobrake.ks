@@ -24,6 +24,10 @@ GLOBAL AEROBRAKE_TARGETING IS 1.
 // REENTRY_PE if AEROBRAKE_PE is unset.
 GLOBAL AEROBRAKE_PE_TARGETING IS 0.
 GLOBAL AEROBRAKE_PE IS -1.
+// Optional bounds for impact-site corrections. A better KSC prediction
+// must not trade away an explicitly requested shallow entry corridor.
+GLOBAL AEROBRAKE_CORRECTION_PE_MIN IS -1.
+GLOBAL AEROBRAKE_CORRECTION_PE_MAX IS -1.
 // Multi-pass aerobrake: hold heat-shield-forward through each pass and
 // stay in this phase until captured AND slowed below this airspeed (m/s)
 // — i.e. through the fast/thick part — before handing to DESCENT. We never
@@ -526,6 +530,12 @@ LOCAL FUNCTION _aerobrakeTrimReentryPe {
         + " dv=" + ROUND(totalDv, 2)).
 }
 
+LOCAL FUNCTION _aerobrakeCorrectionPeOk {
+    PARAMETER pe.
+    RETURN (AEROBRAKE_CORRECTION_PE_MIN < 0 OR pe >= AEROBRAKE_CORRECTION_PE_MIN)
+        AND (AEROBRAKE_CORRECTION_PE_MAX < 0 OR pe <= AEROBRAKE_CORRECTION_PE_MAX).
+}
+
 LOCAL FUNCTION _aerobrakeReentryTargeting {
     IF NOT _aerobrakeTargetingWindowOk("Aerobrake reentry targeting") { RETURN. }
 
@@ -634,7 +644,8 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
                     SET nd:PROGRADE TO tryPro.
                     WAIT 0.2.
 
-                    IF ADDONS:TR:HASIMPACT {
+                    IF _aerobrakeCorrectionPeOk(nd:ORBIT:PERIAPSIS)
+                            AND ADDONS:TR:HASIMPACT {
                         LOCAL tryImpact IS ADDONS:TR:IMPACTPOS.
                         LOCAL tryDist IS geoDistance(tryImpact:LAT, tryImpact:LNG, tgtLat, tgtLng).
                         IF tryDist < trialBestDist {
@@ -689,6 +700,11 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
         + " normal=" + ROUND(bestNor, 2)
         + " prograde=" + ROUND(bestPro, 2)).
 
+    IF NOT _aerobrakeCorrectionPeOk(nd:ORBIT:PERIAPSIS) {
+        mLogWarn("Impact correction outside entry Pe corridor — skipping burn.").
+        REMOVE nd.
+        RETURN.
+    }
     IF totalDv < 0.5 {
         mLog("Correction too small — skipping burn.").
         REMOVE nd.

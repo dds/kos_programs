@@ -5,12 +5,18 @@
 // --- Config defaults owned by this file ---
 GLOBAL RETURN_SEQUENCE IS LIST("ESCAPE", "COAST", "MCC", "AEROBRAKE", "DESCENT", "DONE").
 GLOBAL RETURN_PE IS -1.
+// Opt-in entry corridor around RETURN_PE. Persist it through surface
+// ascent so MCC / site targeting cannot accept the default deep entry.
+GLOBAL RETURN_PE_TOLERANCE IS -1.
 GLOBAL RETURN_REENTRY_DIR IS "RETROGRADE".
 GLOBAL RETURN_KSC_TARGET IS 0.
+GLOBAL RETURN_KSC_TRIM_DV_CAP IS 80.
 GLOBAL RETURN_ARM_CHUTES IS 0.
 GLOBAL RETURN_DESCENT_FAIRING_TAG IS "".
 GLOBAL RETURN_DESCENT_DECOUPLER_TAG IS "".
 GLOBAL RETURN_DESCENT_CHUTES_TAG IS "".
+GLOBAL RETURN_DESCENT_DECOUPLE_ALT IS -999999.
+GLOBAL RETURN_DESCENT_RELEASE_ALT IS -1.
 GLOBAL SURFACE_RETURN_SEQUENCE IS LIST("PRELAUNCH", "LAUNCH", "PARK", "RETURN_SETUP").
 GLOBAL SURFACE_RETURN_PARKING_ALT IS 20000.
 GLOBAL SURFACE_RETURN_INCLINATION IS 0.
@@ -93,12 +99,16 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     LOG "SET LAUNCH_AZIMUTH TO " + configLiteral(LAUNCH_AZIMUTH) + "." TO profilePath.
     LOG "SET RETURN_SEQUENCE TO " + configLiteral(RETURN_SEQUENCE) + "." TO profilePath.
     LOG "SET RETURN_PE TO " + configLiteral(RETURN_PE) + "." TO profilePath.
+    LOG "SET RETURN_PE_TOLERANCE TO " + configLiteral(RETURN_PE_TOLERANCE) + "." TO profilePath.
     LOG "SET RETURN_REENTRY_DIR TO " + configLiteral(RETURN_REENTRY_DIR) + "." TO profilePath.
     LOG "SET RETURN_KSC_TARGET TO " + configLiteral(RETURN_KSC_TARGET) + "." TO profilePath.
+    LOG "SET RETURN_KSC_TRIM_DV_CAP TO " + configLiteral(RETURN_KSC_TRIM_DV_CAP) + "." TO profilePath.
     LOG "SET RETURN_ARM_CHUTES TO " + configLiteral(RETURN_ARM_CHUTES) + "." TO profilePath.
     IF RETURN_DESCENT_FAIRING_TAG <> "" { LOG "SET RETURN_DESCENT_FAIRING_TAG TO " + configLiteral(RETURN_DESCENT_FAIRING_TAG) + "." TO profilePath. }
     IF RETURN_DESCENT_DECOUPLER_TAG <> "" { LOG "SET RETURN_DESCENT_DECOUPLER_TAG TO " + configLiteral(RETURN_DESCENT_DECOUPLER_TAG) + "." TO profilePath. }
     IF RETURN_DESCENT_CHUTES_TAG <> "" { LOG "SET RETURN_DESCENT_CHUTES_TAG TO " + configLiteral(RETURN_DESCENT_CHUTES_TAG) + "." TO profilePath. }
+    LOG "SET RETURN_DESCENT_DECOUPLE_ALT TO " + configLiteral(RETURN_DESCENT_DECOUPLE_ALT) + "." TO profilePath.
+    LOG "SET RETURN_DESCENT_RELEASE_ALT TO " + configLiteral(RETURN_DESCENT_RELEASE_ALT) + "." TO profilePath.
     _writeCoastAutomation(profilePath).
     FOR key IN LIST("fairing_deployed", "orbit_start_time") {
         stateRemove(key).
@@ -170,13 +180,45 @@ GLOBAL FUNCTION phaseReturnSetup {
     LOG "SET ESCAPE_PE TO " + configLiteral(targetPe) + "." TO profilePath.
     LOG "SET CAPTURE_PE TO " + configLiteral(targetPe) + "." TO profilePath.
     LOG "SET CAPTURE_INC TO " + configLiteral(0) + "." TO profilePath.
+    // Keep the late Pe cleanup consistent with the escape target even
+    // after the original landing profile is no longer loaded.
+    LOG "SET REENTRY_PE TO " + configLiteral(targetPe) + "." TO profilePath.
+    LOG "SET AEROBRAKE_PE TO " + configLiteral(targetPe) + "." TO profilePath.
+    IF RETURN_PE_TOLERANCE >= 0 {
+        LOCAL minPe IS MAX(0, targetPe - RETURN_PE_TOLERANCE).
+        LOCAL maxPe IS targetPe + RETURN_PE_TOLERANCE.
+        LOG "SET MCC_AEROBRAKE_SAFE_PE_MIN TO " + configLiteral(minPe) + "." TO profilePath.
+        LOG "SET MCC_AEROBRAKE_SAFE_PE_MAX TO " + configLiteral(maxPe) + "." TO profilePath.
+        // Preserve the return plane: fuel is for the entry corridor,
+        // not forcing an equatorial orbit on the way home.
+        LOG "SET CAPTURE_INC TO -1." TO profilePath.
+        LOG "SET AEROBRAKE_PE_TARGETING TO 1." TO profilePath.
+        LOG "SET AEROBRAKE_CORRECTION_PE_MIN TO " + configLiteral(minPe) + "." TO profilePath.
+        LOG "SET AEROBRAKE_CORRECTION_PE_MAX TO " + configLiteral(maxPe) + "." TO profilePath.
+        LOG "SET AEROBRAKE_BRAKE_PE_FLOOR TO " + configLiteral(minPe) + "." TO profilePath.
+        LOG "SET RETURN_TRIM_PE_MIN TO " + configLiteral(minPe) + "." TO profilePath.
+        LOG "SET RETURN_TRIM_PE_MAX TO " + configLiteral(maxPe) + "." TO profilePath.
+    }
     LOG "SET AEROBRAKE_REENTRY_DIR TO " + configLiteral(RETURN_REENTRY_DIR) + "." TO profilePath.
     _writeCoastAutomation(profilePath).
-    IF RETURN_KSC_TARGET > 0 { LOG "SET ESCAPE_KSC_TARGET TO " + configLiteral(1) + "." TO profilePath. }
+    IF RETURN_KSC_TARGET > 0 {
+        LOG "SET ESCAPE_KSC_TARGET TO 1." TO profilePath.
+        LOG "SET TARGET_LAT TO -0.0972." TO profilePath.
+        LOG "SET TARGET_LNG TO -74.5577." TO profilePath.
+        LOG "SET TARGET_LOCK TO 1." TO profilePath.
+        LOG "SET TARGET_WAYPOINT TO " + configLiteral("") + "." TO profilePath.
+        LOG "SET AEROBRAKE_TARGETING TO 1." TO profilePath.
+        IF RETURN_SEQUENCE:CONTAINS("RETURN_TRIM") {
+            LOG "SET RETURN_TRIM TO TRUE." TO profilePath.
+            LOG "SET RETURN_TRIM_DV_CAP TO " + configLiteral(RETURN_KSC_TRIM_DV_CAP) + "." TO profilePath.
+        }
+    }
     IF RETURN_ARM_CHUTES > 0 { LOG "SET AEROBRAKE_ARM_CHUTES TO " + configLiteral(RETURN_ARM_CHUTES) + "." TO profilePath. }
     IF RETURN_DESCENT_FAIRING_TAG <> "" { LOG "SET DESCENT_FAIRING_TAG TO " + configLiteral(RETURN_DESCENT_FAIRING_TAG) + "." TO profilePath. }
     IF RETURN_DESCENT_DECOUPLER_TAG <> "" { LOG "SET DESCENT_DECOUPLER_TAG TO " + configLiteral(RETURN_DESCENT_DECOUPLER_TAG) + "." TO profilePath. }
     IF RETURN_DESCENT_CHUTES_TAG <> "" { LOG "SET DESCENT_CHUTES_TAG TO " + configLiteral(RETURN_DESCENT_CHUTES_TAG) + "." TO profilePath. }
+    IF RETURN_DESCENT_DECOUPLE_ALT > -999999 { LOG "SET DESCENT_DECOUPLE_ALT TO " + configLiteral(RETURN_DESCENT_DECOUPLE_ALT) + "." TO profilePath. }
+    IF RETURN_DESCENT_RELEASE_ALT >= 0 { LOG "SET DESCENT_RELEASE_ALT TO " + configLiteral(RETURN_DESCENT_RELEASE_ALT) + "." TO profilePath. }
 
     stateSet("phase", "ESCAPE").
     stateSet("lib_band", "ESCAPE").
@@ -186,13 +228,15 @@ GLOBAL FUNCTION phaseReturnSetup {
 
     mLog("Return setup: sequence=" + RETURN_SEQUENCE
         + " Pe=" + ROUND(targetPe/1000, 1) + "km"
-        + " inc=0"
+        + " entryToleranceKm=" + ROUND(RETURN_PE_TOLERANCE/1000, 1)
         + " KSC=" + RETURN_KSC_TARGET + ".").
     PRINT " ".
     PRINT "Return to Kerbin configured:".
     PRINT "  Sequence:  " + RETURN_SEQUENCE.
     PRINT "  Target PE: " + ROUND(targetPe/1000, 1) + "km".
-    PRINT "  Target Inc: 0 deg".
+    IF RETURN_PE_TOLERANCE >= 0 {
+        PRINT "  Entry Pe tolerance: +/- " + RETURN_PE_TOLERANCE/1000 + "km.".
+    }
     PRINT "  From:      " + BODY:NAME + ".".
     PRINT "  Rebooting into ESCAPE.".
     WAIT 3.

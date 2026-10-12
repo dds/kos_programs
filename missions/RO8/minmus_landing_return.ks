@@ -1,4 +1,4 @@
-// RO6 minmus polar orbit and return mission
+// RO8 Minmus landing, surface ascent and shallow Kerbin return
 
 SET MISSION_ID TO "minmus_landing_return".
 SET MISSION_NAME TO "RO8 Minmus Landing and Return".
@@ -8,15 +8,10 @@ SET PARKING_ALT TO 78000.
 SET SEQUENCE TO LIST(
     "PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK",
     "XING", "BPLANE", "COAST_1HALF", "REFINE_BPLANE", "COAST_2HALF",
-    "CAPTURE", "SHAPE", "SCIENCE_OPS", "LAND_DEORBIT", "LAND_ASSIST").
+    "CAPTURE", "SHAPE", "SCIENCE_OPS", "LAND_DEORBIT", "LAND_ASSIST",
+    "SURFACE_RETURN_SETUP").
 
-// RETURN_TRIM: high-leverage KSC-longitude correction on the Kerbin
-// approach (a few m/s far out moves the impact thousands of km). It
-// never holds the return — if it can't safely improve the miss it hands
-// off to AEROBRAKE, which does the short-range impact nudge.
-SET RETURN_TRIM TO TRUE.
-
-// --- Ascent + 85 km parking orbit (the smooth ride / weightless time) ---
+// Kerbin ascent and 78 km parking orbit.
 SET LAUNCH_INCLINATION TO 0.
 SET LAUNCH_PLANE_MODE TO "BODY_ORBIT".
 SET TRANSFER_SCAN_SAMPLES_PER_ORBIT TO 16.
@@ -32,40 +27,6 @@ SET SHAPE_PE TO 15000.
 SET SHAPE_AP TO 15000.
 SET SHAPE_INC TO 90.
 
-
-// Let the solver fly a closer Mun pass for more bending authority, so
-// the return Pe can actually reach the 30km target instead of stalling
-// shallow (~40km grazes and Trajectories sees no impact). 15km still
-// clears Mun terrain (max ~7.5km) comfortably — and a closer flyby is
-// the more thrilling view anyway.
-SET RETURN_KSC_TARGET TO 1.
-SET ESCAPE_KSC_TARGET TO 1.
-SET TARGET_LAT TO -0.0972.               // KSC
-SET TARGET_LNG TO -74.5577.
-SET TARGET_LOCK TO 1.
-SET AEROBRAKE_TARGETING TO 1.
-SET AEROBRAKE_REENTRY_DIR TO "RETROGRADE".   // hold retrograde through entry
-SET AEROBRAKE_ARM_CHUTES TO 1.
-SET RETURN_ARM_CHUTES TO 1.
-// Auto-deepen the reentry Pe to REENTRY_PE (25km) with the pug stage
-// before it's jettisoned — guarantees capture + a Trajectories impact
-// so the KSC impact-site targeting has something to steer.
-SET AEROBRAKE_PE_TARGETING TO 1.
-
-// --- Stage separation + chutes ---
-// Shed the pug stage at 50.5km, flinging it clear. The pug stays
-// attached through the AEROBRAKE deepen + KSC-targeting burns (it has
-// the engine), then drops here. 50.5km, not lower: at 49km the pug's
-// solar panel cooked off before separation. Reentry stability is the
-// onion capsule's job (blunt heat shield forward). Tag must match the
-// FTSV1 decoupler in the VAB.
-SET DESCENT_DECOUPLER_TAG TO "descent_decoupler".
-SET DESCENT_DECOUPLE_ALT TO 50500.
-SET DESCENT_CHUTES_TAG TO "descent_chutes".
-SET DESCENT_RELEASE_ALT TO 38000.            // arm/stage chutes (Kerbin)
-// Shed the heat shield low (~500m AGL) for a lighter final descent.
-SET DESCENT_HEATSHIELD_TAG TO "descent_heatshield".
-SET DESCENT_HEAT_SHIELD_DROP_ALT TO 500.
 
 // Automated landing: contract site, with terrain refinement nearby.
 // Replace TARGET_LAT/LNG with the contract coordinates before launch.
@@ -89,11 +50,24 @@ SET MAX_TILT TO 12.
 SET RELOAD_AFTER_LAND_ASSIST TO 0.
 SET RELOAD_AFTER_LAND TO 0.
 
-// Surface relaunch and Kerbin return.
+// After touchdown, generate the surface-ascent leg, then the Kerbin leg.
+// Return setup persists these values through both profile changes/reboots.
 SET SURFACE_RETURN_PARKING_ALT TO 10000.
 SET SURFACE_RETURN_INCLINATION TO 90.
-SET RETURN_SEQUENCE TO LIST("ESCAPE", "COAST", "MCC", "AEROBRAKE", "DESCENT", "DONE").
-SET RETURN_PE TO 35000.
+SET RETURN_SEQUENCE TO LIST(
+    "ESCAPE", "COAST", "MCC", "RETURN_TRIM", "AEROBRAKE", "DESCENT", "DONE").
+// Unshielded craft: target a 53 km initial Pe and allow repeated passes.
+// Optional KSC corrections must preserve the 52-54 km entry corridor.
+// This is a planned orbit constraint, not a thermal guarantee.
+SET RETURN_PE TO 53000.
+SET RETURN_PE_TOLERANCE TO 1000.
 SET RETURN_REENTRY_DIR TO "RETROGRADE".
-SET RETURN_KSC_TARGET TO 0.
+SET RETURN_KSC_TARGET TO 1.
+SET RETURN_KSC_TRIM_DV_CAP TO 20.
 SET RETURN_ARM_CHUTES TO 1.
+// Keep propulsion attached throughout aerobraking; DESCENT only starts
+// after the craft is captured and below the aerobrake handoff speed.
+SET RETURN_DESCENT_DECOUPLER_TAG TO "descent_decoupler".
+SET RETURN_DESCENT_DECOUPLE_ALT TO 50500.
+SET RETURN_DESCENT_CHUTES_TAG TO "descent_chutes".
+SET RETURN_DESCENT_RELEASE_ALT TO 38000.
