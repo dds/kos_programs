@@ -25,7 +25,9 @@ SET CAPTURE_AOP TO -1.
 SET CAPTURE_DIR TO "".
 SET BPLANE_PE_ONLY TO 1.
 SET BPLANE_REQUIRE_PLANE TO 0.
-SET BPLANE_PE_TOL TO 2000.
+// Orbital science does not need an exact 15 km Pe. Accept 10–20 km
+// rather than repeatedly buying tiny corrections on a usable approach.
+SET BPLANE_PE_TOL TO 5000.
 SET TARGET_PE TO 15000.
 // Capture directly into a low, near-circular orbit in one periapsis burn.
 // No SHAPE phase: no 100 km ellipse followed by separate circularization.
@@ -33,8 +35,9 @@ SET TARGET_AP TO 15000.
 SET SHAPE_INC TO -1.
 SET SHAPE_LAN TO -1.
 SET SHAPE_AOP TO -1.
-SET CAPTURE_MIN_PE TO 13000.
-SET CAPTURE_MAX_PE TO 17000.
+// Capture circularizes at the actual arrival Pe if it is above TARGET_AP.
+SET CAPTURE_MIN_PE TO 10000.
+SET CAPTURE_MAX_PE TO 20000.
 SET CAPTURE_ACCEPT_BOUND TO 0.
 
 // Small Pe-only arrival corrections. Retain 400 m/s AFTER capture for

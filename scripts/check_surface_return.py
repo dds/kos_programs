@@ -255,21 +255,42 @@ def check_orbit_return():
     assert not set(cfg['SEQUENCE']) & {'LAND_DEORBIT', 'LAND_ASSIST', 'SURFACE_RETURN_SETUP', 'SHAPE'}
     assert cfg['CAPTURE_PE'] == cfg['TARGET_AP'] == 15000
     assert cfg['CAPTURE_INC'] == -1 and cfg['BPLANE_PE_ONLY'] == 1
-    assert cfg['CAPTURE_MIN_PE'] == 13000 and cfg['CAPTURE_MAX_PE'] == 17000
+    assert cfg['CAPTURE_MIN_PE'] == 10000 and cfg['CAPTURE_MAX_PE'] == 20000
+    assert cfg['BPLANE_PE_TOL'] == 5000
     assert cfg['BPLANE_CAPTURE_MARGIN'] == cfg['CAPTURE_RESERVE_DV'] == 400
     assert cfg['SCIENCE_OPS_HOLD'] == 1 and cfg['SCIENCE_SURVEY_POINTS'] == []
     assert cfg['AUTO_TRANSMIT'] == 0
     # The real capture budget expressions must allow a representative
     # 900 m/s flight to capture while retaining departure/correction fuel.
     arrival = (ROOT / 'lib/arrival_bplane.ks').read_text()
+    corridor = body(arrival, '_bplaneCurrentCorridorOk')
+    reject = re.search(r'IF (peErr > BPLANE_PE_TOL.*?) \{', corridor)[1]
+    capture = (ROOT / 'lib/capture.ks').read_text()
+    capture_reject = re.search(r'IF (\(CAPTURE_MIN_PE.*?CAPTURE_MAX_PE\)) \{',
+                               body(capture, 'phaseCapture'), re.S)[1]
+    from types import SimpleNamespace as NS
+    for pe, allowed in [(6500, False), (9999, False), (10000, True),
+                        (15000, True), (19400, True), (20000, True), (20001, False)]:
+        assert (not evaluate(reject, peErr=abs(pe - cfg['CAPTURE_PE']),
+                            BPLANE_PE_TOL=cfg['BPLANE_PE_TOL'], planeErr=0,
+                            BPLANE_ANG_TOL=.5)) == allowed
+        assert (not evaluate(capture_reject, SHIP=NS(PERIAPSIS=pe),
+                            CAPTURE_MIN_PE=cfg['CAPTURE_MIN_PE'],
+                            CAPTURE_MAX_PE=cfg['CAPTURE_MAX_PE'])) == allowed
+    for phase_name in ('phaseBplane', 'phaseRefineBplane'):
+        phase = body(arrival, phase_name)
+        assert phase.index('_bplaneCurrentCorridorOk(') < phase.index('planBplaneCorrection(')
+    planner = body((ROOT / 'lib/maneuver_plan.ks').read_text(), 'planCapture')
+    assert 'IF ta < SHIP:PERIAPSIS' in planner and 'SET ta TO SHIP:PERIAPSIS.' in planner
     gate = body(arrival, 'bplaneCorrectionAllowed')
     needed = re.search(r'LOCAL needed IS (.*?)\.', gate, re.S)[1]
-    from types import SimpleNamespace as NS
-    for correction, capture, allowed in [(2, 300, True), (20, 480, True), (20, 481, False)]:
+    for fuel, correction, capture, allowed in [(900, 2, 300, True), (900, 20, 480, True),
+                                               (900, 20, 481, False), (891, 0, 491, True),
+                                               (891, 0, 492, False)]:
         cost = evaluate(needed, nd=NS(DELTAV=NS(MAG=correction)),
                         bplaneCaptureCost=lambda *_: capture, planned={'patch': None},
                         targetBody=None, BPLANE_CAPTURE_MARGIN=cfg['BPLANE_CAPTURE_MARGIN'])
-        assert (cost <= 900) == allowed
+        assert (cost <= fuel) == allowed
     science = (ROOT / 'lib/science.ks').read_text()
     assert 'IF AUTO_TRANSMIT > 0' in body(science, '_runExperiment')
     assert 'SCI_AUTO_TRANSMIT' not in science
@@ -282,7 +303,7 @@ def check_orbit_return():
     assert home['AEROBRAKE_TARGETING'] == home['ESCAPE_KSC_TARGET'] == 0
     assert home['DESCENT_DECOUPLE_ALT'] == 6000
     assert home['DESCENT_CHUTES_TAG'] == 'descent_chutes'
-    print('Mun orbital return: 900 m/s budget fixtures, science hold/storage and direct shallow return')
+    print('Mun orbital return: 19.4 km accepted before planning, 891/900 m/s budgets, science hold and return')
 
 
 if __name__ == '__main__':

@@ -563,7 +563,8 @@ settings are checked by `python3 -B scripts/check_surface_return.py`; flight
 validation is still required.
 
 For an **orbital-science-only Mun return**, select RO8 `mun_orbit_return`.
-It targets 15 km low orbit in the natural arrival plane, runs experiments,
+It targets 15 km low orbit, accepting a **10–20 km arrival periapsis** in the
+natural arrival plane, runs experiments,
 then holds in SCIENCE_OPS to let you inspect/store data before leaving.
 Automatic experiment transmission is disabled. There are no landing or
 surface-ascent phases. Its correction/capture checks reserve **400 m/s after
@@ -580,7 +581,7 @@ REBOOT.
 
 This switches the active profile without relaunching or clearing the spent
 arrival-correction budget. BPLANE must still raise a 6.5 km arrival into the
-13–17 km capture corridor; no low-periapsis checks are waived. Use this switch
+10–20 km capture corridor; no low-periapsis checks are waived. Use this switch
 on the Kerbin-side Mun approach, before entering the Mun SOI. After capture,
 check that the science data is retained in parts that will return with the
 probe (particularly before the engine/tank separates), collect any additional
@@ -590,6 +591,13 @@ available readings, and start the return when ready:
 RUNPATH("0:/cmd/setphase.ks", "RETURN_SETUP").
 REBOOT.
 ```
+
+An existing 19.4 km encounter now needs no precision correction. After sync,
+`RUNPATH("0:/cmd/arrival.ks", "replan").` loads the updated profile and checks
+the flown encounter before planning another burn. CAPTURE circularizes at
+the actual periapsis when it exceeds the nominal 15 km target, subject to
+the same 400 m/s post-capture reserve. This wider tolerance applies only to
+`mun_orbit_return`; the contract and landing profiles retain their limits.
 
 RETURN_SETUP writes the same 53 km shallow-entry Kerbin return used by the
 economy profiles, with no optional KSC targeting burns. The orbit-only
