@@ -20,9 +20,6 @@ bootLibLoad("return_setup").
 
 IF stateGet("vehicle", "") = "" {
     PRINT "Shallow return requires a saved vehicle identity.".
-} ELSE IF SHIP:PARTSTAGGED("descent_decoupler"):LENGTH = 0
-        OR SHIP:PARTSTAGGED("descent_chutes"):LENGTH = 0 {
-    PRINT "Tag the engine/tank decoupler descent_decoupler and chute descent_chutes, then retry.".
 } ELSE {
     SET RETURN_SEQUENCE TO LIST("ESCAPE", "COAST", "MCC", "RETURN_TRIM", "AEROBRAKE", "DESCENT", "DONE").
     SET RETURN_PE TO 53000.
