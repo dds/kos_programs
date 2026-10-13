@@ -24,6 +24,8 @@ def check_solver():
     fractions = [float(value) for value in fractions.split(',')]
     iterations = int(re.search(r'UNTIL iteration >= (\d+)', source)[1])
     fd = float(re.search(r'LOCAL FD_STEP\s+IS (\d+\.\d+)', ARRIVAL)[1])
+    tolerance = evaluate(re.search(r'LOCAL solveTol IS (.*?)\.\n', source)[1],
+                         BPLANE_PE_TOL=PROFILE['BPLANE_PE_TOL'])
 
     def solve(patch, cap):
         pro, radial = 0., 0.
@@ -31,7 +33,7 @@ def check_solver():
             pe = patch(pro, radial)
             if pe is None:
                 return None
-            if abs(pe - 15000) <= PROFILE['BPLANE_PE_TOL']:
+            if abs(pe - 15000) <= tolerance:
                 return pro, radial, pe
             gradients = []
             for axis in range(2):
@@ -84,6 +86,11 @@ def check_solver():
     assert solve(lambda *_: None, 50) is None
     assert solve(lambda *_: 742000, 50) is None  # No control authority.
     assert solve(lambda *_: 15000, 50) == (0., 0., 15000)
+    # Old planning accepted the edge, then the executor could swallow
+    # a <0.05 m/s retry while the real orbit remained below 13 km.
+    result = solve(lambda pro, radial: 12900 + pro * 50000, 20)
+    assert result is not None and abs(result[2] - 15000) <= 500
+    assert 0 < math.hypot(*result[:2]) < .05
     assert 'LIST("PROGRADE", "RADIALOUT")' in source
     assert 'SET nd:NORMAL' not in source
     print(f'PASS: {fixtures} nonlinear Pe solves, lost trial patches, exhausted budgets and zero authority')
@@ -135,7 +142,7 @@ def check_resume_and_handoff():
     assert resume.index('IF BPLANE_PE_ONLY <> 0') < resume.index('bplaneCorrectionAllowed(')
     for name in ('phaseBplane', 'phaseRefineBplane'):
         phase = body(ARRIVAL, name)
-        assert phase.index('_bplaneClearCoastTimes()') < phase.index('executeManeuver()')
+        assert phase.index('_bplaneClearCoastTimes()') < phase.index('_bplaneExecuteCorrection()')
         assert phase.index('_bplaneFinishPeRecovery(') < phase.index('_bplaneSafeEncounter(')
     finish = body(ARRIVAL, '_bplaneFinishPeRecovery')
     assert '_bplaneCurrentCorridorOk(targetBody, wantPe, -1, -1)' in finish

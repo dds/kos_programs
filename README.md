@@ -56,6 +56,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
 | `RUNPATH("0:/cmd/arrival.ks", "review").` | Inspect a retained partial arrival; actions `accept` / `replan`, optional capture Ap in km |
+| `RUNPATH("0:/cmd/arrival.ks", "status").` | Show actual arrival Pe, capture fuel estimate, correction spending and interrupted-burn reason without flying |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
 | `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
@@ -453,6 +454,18 @@ To discard it and generate a fresh candidate at a future burn time:
 ```kerboscript
 RUNPATH("0:/cmd/arrival.ks", "replan").
 ```
+
+For `pe-recovery-outside-corridor`, inspect with `arrival.ks` action `status`.
+Pe-only corrections now solve toward the middle of the arrival corridor
+(500 m planning tolerance for the usual 2 km acceptance tolerance), and use
+a smaller executor cutoff for tiny burns. A failed correction holds with its
+node retained, rather than deleting it and blindly retrying. Explicit
+`arrival.ks` action `replan` can discard an interrupted BPLANE/REFINE_BPLANE
+correction and clear its interruption state before planning from the actual
+flown orbit, including recovery from older saves whose node was already
+deleted. It preserves correction spending and all fuel/capture limits.
+This action does not apply to an interrupted XING departure. `status` does
+not execute a burn; `replan` resumes automatic planning and execution.
 
 SHAPE verifies the accepted capture ellipse without requesting circularization;
 its cleanup allowance is 10 m/s per burn, 20 m/s total, with a 50 m/s reserve.

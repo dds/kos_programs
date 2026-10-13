@@ -174,9 +174,36 @@ def check_review_flow():
     print('PASS: review retains node without ignition/charging; reboot holds; budget gates remain mandatory')
 
 
+def check_pe_execution_recovery():
+    wrapper = body(SOURCE, '_bplaneExecuteCorrection')
+    precision = re.search(r'LOCAL precision IS (.*?)\.\n', wrapper)[1]
+    for dv in (.02, .042, .3, 1, 20):
+        cutoff = min(.05, evaluate(precision, BURN_BV_MIN_MAG=.001,
+                                   NEXTNODE=NS(DELTAV=NS(MAG=dv))))
+        assert cutoff < dv
+        assert cutoff <= max(.001, dv * .01)
+    assert wrapper.index('SET BURN_TRIM_ABS_COMPLETE_DV TO oldAbs') > wrapper.index('executeManeuver()')
+    assert wrapper.index('SET BURN_TRIM_COMPLETE_MAX_DV TO oldMax') > wrapper.index('executeManeuver()')
+    hold = body(SOURCE, '_bplaneHoldCorrection')
+    assert 'IF NOT maneuverBurnInterrupted()' in hold
+    for name in ('phaseBplane', 'phaseRefineBplane'):
+        phase = body(SOURCE, name)
+        assert phase.index('IF maneuverBurnInterrupted()') < phase.index('REMOVE NEXTNODE')
+        failure = re.search(r'IF NOT _bplaneExecuteCorrection\(\) \{(.*?)\}', phase, re.S)[1]
+        assert 'RETURN.' in failure and 'REMOVE' not in failure
+    command = body(COMMAND, '_arrivalCommand')
+    status = re.search(r'IF action = "status" \{(.*?)\}', command, re.S)[1]
+    assert 'bplaneArrivalStatus(). RETURN.' in status and 'resumeMission' not in status
+    assert command.index('IF phase <> "BPLANE"') < command.index('maneuverAcceptHandoff()')
+    assert 'stateRemove("bplane_budget_spent")' not in command
+    assert 'stateRemovePrefix("burn_")' not in command
+    print('PASS: tiny correction cutoff, failed-node retention, diagnostic status and explicit correction replan')
+
+
 if __name__ == '__main__':
     check_console_bootstrap()
     check_binding()
     check_reboot_targets()
     check_capture_costs()
     check_review_flow()
+    check_pe_execution_recovery()

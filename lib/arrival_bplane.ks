@@ -130,13 +130,59 @@ LOCAL FUNCTION _bplaneTrimCap {
 LOCAL FUNCTION _bplaneHoldCorrection {
     PARAMETER reason.
     stateRemove("bplane_review").
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    // A failed execution owns its retained node until explicit replan.
+    IF NOT maneuverBurnInterrupted() {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    }
     mLogWarn("STATS bplane decision=hold reason=" + reason
         + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)
         + " reserveDv=" + BPLANE_TRIM_RESERVE_DV).
     mLogWarn("Arrival correction rejected; original trajectory retained. "
         + "Review the encounter and remaining mission before resuming.").
     yieldToPrompt().
+}
+
+GLOBAL FUNCTION bplaneArrivalStatus {
+    LOCAL targetBody IS _bplaneTargetBody().
+    IF targetBody = 0 { PRINT "No arrival target body.". RETURN. }
+    LOCAL hit IS findArrivalPatch(0, targetBody).
+    mLogWarn("STATS bplane status phase=" + stateGet("phase", "")
+        + " body=" + SHIP:BODY:NAME
+        + " target=" + targetBody:NAME + " patch=" + (hit <> 0)
+        + " remainingDv=" + ROUND(SHIP:DELTAV:VACUUM, 2)
+        + " spentDv=" + stateGetNum("bplane_budget_spent", 0)
+        + " interrupted=" + maneuverBurnInterrupted()
+        + " burnReason=" + stateGet("burn_abort_reason", "none")).
+    IF hit <> 0 {
+        LOCAL captureDv IS bplaneCaptureCost(hit["patch"], targetBody).
+        mLogWarn("STATS bplane status PeKm=" + ROUND(hit["patch"]:PERIAPSIS / 1000, 3)
+            + " targetPeKm=" + (CAPTURE_PE / 1000)
+            + " toleranceKm=" + (BPLANE_PE_TOL / 1000)
+            + " captureDv=" + ROUND(captureDv, 2)
+            + " afterCaptureDv=" + ROUND(SHIP:DELTAV:VACUUM - captureDv, 2)
+            + " requiredReserve=" + BPLANE_CAPTURE_MARGIN).
+    }
+    IF HASNODE {
+        mLogWarn("STATS bplane status nodeDv=" + ROUND(NEXTNODE:DELTAV:MAG, 4)
+            + " nodeEta=" + ROUND(NEXTNODE:ETA, 1)).
+    }
+}
+
+LOCAL FUNCTION _bplaneExecuteCorrection {
+    // A tiny Pe correction must not be swallowed whole by the executor's
+    // ordinary 0.05 m/s absolute cutoff. Aim for 1% of this node, bounded
+    // by vector resolution, then restore settings before any other burn.
+    LOCAL oldAbs IS BURN_TRIM_ABS_COMPLETE_DV.
+    LOCAL oldMax IS BURN_TRIM_COMPLETE_MAX_DV.
+    IF BPLANE_PE_ONLY <> 0 {
+        LOCAL precision IS MAX(BURN_BV_MIN_MAG, NEXTNODE:DELTAV:MAG * 0.01).
+        SET BURN_TRIM_ABS_COMPLETE_DV TO MIN(oldAbs, precision).
+        SET BURN_TRIM_COMPLETE_MAX_DV TO MIN(oldMax, precision).
+    }
+    LOCAL success IS executeManeuver().
+    SET BURN_TRIM_ABS_COMPLETE_DV TO oldAbs.
+    SET BURN_TRIM_COMPLETE_MAX_DV TO oldMax.
+    RETURN success.
 }
 
 LOCAL FUNCTION _bplaneLogBaseline {
@@ -715,13 +761,15 @@ LOCAL FUNCTION _bplanePlanPeOnly {
     ADD nd.
     WAIT 0.1.
     LOCAL iteration IS 0.
+    // Plan inside the acceptance corridor, leaving room for execution error.
+    LOCAL solveTol IS MIN(500, BPLANE_PE_TOL * 0.25).
     UNTIL iteration >= 16 {
         SET iteration TO iteration + 1.
         LOCAL hit IS findArrivalPatch(nd, targetBody).
         IF hit = 0 { BREAK. }
         LOCAL peNow IS hit["patch"]:PERIAPSIS.
         LOCAL peError IS wantPe - peNow.
-        IF ABS(peError) <= BPLANE_PE_TOL {
+        IF ABS(peError) <= solveTol {
             mLog("STATS bplane pe-only converged=True PeKm=" + ROUND(peNow / 1000, 3)
                 + " dv=" + ROUND(nd:DELTAV:MAG, 3) + " iterations=" + iteration).
             // Even a sub-0.3 m/s correction can matter far from the Mun.
@@ -782,6 +830,7 @@ LOCAL FUNCTION _bplanePlanPeOnly {
 
 LOCAL FUNCTION _bplaneFinishPeRecovery {
     PARAMETER targetBody, wantPe.
+    bplaneArrivalStatus().
     // Raw patch check also works when vector reconstruction cannot.
     IF _bplaneCurrentCorridorOk(targetBody, wantPe, -1, -1) {
         mLog("STATS bplane pe-only result=inside-corridor").
@@ -1296,6 +1345,9 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
 // is still outside the corridor; CAPTURE cannot fix a bad Pe/plane.
 // ============================================================
 GLOBAL FUNCTION phaseBplane {
+    IF maneuverBurnInterrupted() {
+        _bplaneHoldCorrection("interrupted-correction-use-arrival-replan"). RETURN.
+    }
     LOCAL targetBody IS _bplaneTargetBody().
     IF targetBody = 0 {
         mLogWarn("BPLANE: target '" + getTarget("")
@@ -1368,8 +1420,9 @@ GLOBAL FUNCTION phaseBplane {
         _bplaneReserveCorrection(nd, targetBody).
         _bplaneClearCoastTimes().
         SET burns TO burns + 1.
-        IF NOT executeManeuver() {
-            mLogWarn("BPLANE: burn execution failed — replanning once.").
+        IF NOT _bplaneExecuteCorrection() {
+            bplaneArrivalStatus().
+            _bplaneHoldCorrection("correction-execution-failed"). RETURN.
         }
         WAIT 2.
     }
@@ -1425,6 +1478,9 @@ GLOBAL FUNCTION phaseBplane {
 }
 
 GLOBAL FUNCTION phaseRefineBplane {
+    IF maneuverBurnInterrupted() {
+        _bplaneHoldCorrection("interrupted-correction-use-arrival-replan"). RETURN.
+    }
     LOCAL targetBody IS _bplaneTargetBody().
     IF targetBody = 0 {
         mLogWarn("REFINE_BPLANE: target '" + getTarget("")
@@ -1491,11 +1547,9 @@ GLOBAL FUNCTION phaseRefineBplane {
         _bplaneReserveCorrection(nd, targetBody).
         _bplaneClearCoastTimes().
         SET burns TO burns + 1.
-        IF NOT executeManeuver() {
-            mLogWarn("REFINE_BPLANE: burn execution failed; holding before capture.").
-            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-            WAIT 2.
-            BREAK.
+        IF NOT _bplaneExecuteCorrection() {
+            bplaneArrivalStatus().
+            _bplaneHoldCorrection("correction-execution-failed"). RETURN.
         }
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         WAIT 2.

@@ -73,9 +73,15 @@ LOCAL FUNCTION _arrivalCommand {
     IF phase <> "BPLANE" AND phase <> "REFINE_BPLANE" {
         PRINT "Arrival review requires BPLANE or REFINE_BPLANE.". RETURN.
     }
+    IF action = "status" { bplaneArrivalStatus(). RETURN. }
     IF action = "replan" {
+        IF ABORT { PRINT "Clear ABORT deliberately before replanning.". RETURN. }
         IF maneuverBurnInterrupted() {
-            PRINT "An interrupted burn needs recovery before replanning.". RETURN.
+            // Explicit operator replan of a correction, never an XING
+            // departure. Use the flown orbit and keep the spent-dV ledger.
+            bplaneArrivalStatus().
+            mLogWarn("Discarding interrupted correction; replanning from the actual trajectory.").
+            maneuverAcceptHandoff().
         }
         stateRemove("bplane_review").
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
@@ -86,7 +92,7 @@ LOCAL FUNCTION _arrivalCommand {
         PRINT "No retained candidate. Use arrival action replan to generate one.". RETURN.
     }
     IF action = "review" { bplanePauseForReview(). RETURN. }
-    IF action <> "accept" { PRINT "Arrival actions: review, accept, replan.". RETURN. }
+    IF action <> "accept" { PRINT "Arrival actions: status, review, accept, replan.". RETURN. }
     IF NOT HASNODE { PRINT "Reviewed node missing; replan.". RETURN. }
     LOCAL nd IS NEXTNODE.
     IF NOT bplaneReviewMatches(saved, nd) {
