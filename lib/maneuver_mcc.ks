@@ -19,6 +19,10 @@ GLOBAL CAPTURE_AOP IS -1.
 GLOBAL CAPTURE_DIR IS "".
 GLOBAL MCC_AEROBRAKE_SAFE_PE_MIN IS 20000.
 GLOBAL MCC_AEROBRAKE_SAFE_PE_MAX IS -1.
+// Establishing reentry is mandatory, unlike an optional flyby cleanup.
+// Reserve fuel for later entry/capture work; cap each correction burn.
+GLOBAL MCC_RETURN_DV_CAP IS 150.
+GLOBAL MCC_RETURN_RESERVE_DV IS 50.
 
 
 LOCAL MCC_DV_CAP           IS 50.
@@ -69,17 +73,115 @@ LOCAL FUNCTION _mccAerobrakePatchSafe {
         AND pe <= _mccAerobrakeSafePeMax(target, targetPe).
 }
 
+LOCAL FUNCTION _mccReturnHold {
+    PARAMETER reason.
+    SET WARP TO 0.
+    LOCK THROTTLE TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    mLogError("Return correction held: " + reason + ". Remaining in MCC.").
+    mLog("STATS return-mcc status=held reason=" + reason
+        + " body=" + SHIP:BODY:NAME
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 3)
+        + " remainingDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)).
+    yieldToPrompt().
+}
+
+LOCAL FUNCTION _mccReturnBudget {
+    RETURN MAX(0, MIN(MCC_RETURN_DV_CAP,
+        SHIP:DELTAV:VACUUM - MCC_RETURN_RESERVE_DV)).
+}
+
+// Return MCC owns acquisition of the entry corridor. Work in Kerbin's
+// frame as soon as the moon escape completes, then measure the flown
+// orbit after each burn. An optional-correction skip must never count as
+// a successful reentry acquisition. Preserve plane and landing hardware.
+LOCAL FUNCTION _mccReturn {
+    PARAMETER target, targetPe.
+    IF maneuverBurnInterrupted() {
+        _mccReturnHold("interrupted-burn-inspect-retained-node"). RETURN.
+    }
+    IF _getTargetPatch(SHIP, target) = 0 {
+        _mccReturnHold("no-Kerbin-patch"). RETURN.
+    }
+    IF SHIP:BODY:NAME <> target:NAME { waitForSOI(target). }
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+
+    // Three finite-burn corrections, each planned from the measured orbit.
+    FROM { LOCAL attempt IS 0. } UNTIL attempt > 3 STEP { SET attempt TO attempt + 1. } DO {
+        IF _mccAerobrakePatchSafe(SHIP:ORBIT, target, targetPe) {
+            mLog("STATS return-mcc status=verified PeKm="
+                + ROUND(SHIP:PERIAPSIS / 1000, 3) + " burns=" + attempt).
+            nextPhase(xferSeq). RETURN.
+        }
+        IF attempt = 3 { BREAK. }
+        IF ABORT { _mccReturnHold("abort-requested"). RETURN. }
+        IF SHIP:ALTITUDE <= target:ATM:HEIGHT OR ETA:PERIAPSIS < 600 {
+            _mccReturnHold("too-late-for-return-correction"). RETURN.
+        }
+        LOCAL cap IS _mccReturnBudget().
+        IF cap <= 0 { _mccReturnHold("fuel-reserve"). RETURN. }
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        LOCAL nd IS NODE(TIME:SECONDS + 120, 0, 0, 0).
+        ADD nd.
+        WAIT 0.1.
+        mLog("STATS return-mcc setup attempt=" + (attempt + 1)
+            + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 3)
+            + " targetPeKm=" + ROUND(targetPe / 1000, 3)
+            + " dvCap=" + ROUND(cap, 1)).
+        newtonTarget(nd, target, "PE", targetPe, LEX("DV_CAP", cap, "TOL", 250)).
+        WAIT 0.1.
+        LOCAL planned IS _getTargetPatch(nd, target).
+        LOCAL peOk IS _mccAerobrakePatchSafe(planned, target, targetPe).
+        LOCAL plannedPe IS -9999.
+        IF planned <> 0 { SET plannedPe TO planned:PERIAPSIS / 1000. }
+        LOCAL dv IS nd:DELTAV:MAG.
+        mLog("STATS return-mcc plan dv=" + ROUND(dv, 3)
+            + " PeKm=" + ROUND(plannedPe, 3)
+            + " corridorOk=" + peOk + " dvCap=" + ROUND(cap, 1)).
+        IF NOT peOk OR dv > cap OR nd:TIME < TIME:SECONDS + 30 {
+            REMOVE nd.
+            _mccReturnHold("no-corridor-solution-within-budget"). RETURN.
+        }
+        // Far from Kerbin, sub-2 m/s burns can be essential. Do not use
+        // the legacy optional-MCC minimum; allow finer executor cutoff.
+        LOCAL oldAbs IS BURN_TRIM_ABS_COMPLETE_DV.
+        LOCAL oldMax IS BURN_TRIM_COMPLETE_MAX_DV.
+        SET BURN_TRIM_ABS_COMPLETE_DV TO MIN(oldAbs, 0.005).
+        SET BURN_TRIM_COMPLETE_MAX_DV TO MIN(oldMax, 0.005).
+        LOCAL success IS executeManeuver().
+        SET BURN_TRIM_ABS_COMPLETE_DV TO oldAbs.
+        SET BURN_TRIM_COMPLETE_MAX_DV TO oldMax.
+        IF NOT success {
+            _mccReturnHold("burn-failed-inspect-retained-node"). RETURN.
+        }
+        WAIT 1.
+        mLog("STATS return-mcc flown PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 3)
+            + " targetPeKm=" + ROUND(targetPe / 1000, 3)).
+    }
+    _mccReturnHold("flown-orbit-outside-corridor").
+}
+
 // ============================================================
 GLOBAL FUNCTION phaseMidCourse {
     LOCAL target IS missionTargetBody().
 
     IF CAPTURE_PE < 0 {
+        IF _mccIsAerobrakeReturn(target) {
+            _mccReturnHold("missing-entry-periapsis"). RETURN.
+        }
         mLog("No CAPTURE_PE. Skipping MCC.").
         nextPhase(xferSeq).
         RETURN.
     }
 
     LOCAL targetPe  IS CAPTURE_PE.
+    IF _mccIsAerobrakeReturn(target) {
+        _mccReturn(target, targetPe).
+        RETURN.
+    }
     LOCAL targetInc IS -1.
     LOCAL targetLan IS -1.
     LOCAL targetAoP IS -1.

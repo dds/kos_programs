@@ -576,10 +576,17 @@ Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
 The older element-targeting pipeline (`MCC`, `CIRC`, `RAISE`, `INCLINE`,
 `ELLIPTICAL`) remains for legacy profiles and rescue flows.
 `cmd/returntokerbin.ks` runs the full moon-return + aerobrake + descent flow.
-Kerbin returns use `MCC`, targeting the configured reentry Pe and a 0 deg
-arrival inclination to improve KSC approach geometry. If the current Kerbin
-approach is already inside the configured aerobrake Pe corridor, MCC skips
-that optional correction and saves the remaining fuel.
+Kerbin aerobrake returns use `MCC` to establish the configured reentry Pe
+corridor while preserving the arrival plane. A trajectory already inside
+that corridor needs no correction. Otherwise MCC corrects after entering
+Kerbin's SOI and checks the **flown orbit** before advancing. It allows up to
+three corrections, with each burn limited to `MCC_RETURN_DV_CAP` (150 m/s)
+and the available vacuum dV minus `MCC_RETURN_RESERVE_DV` (50 m/s). Failed
+planning, insufficient fuel or failed execution holds in MCC; tiny but
+necessary corrections are no longer discarded by the optional-MCC cutoff.
+`RETURN_TRIM` remains an optional landing-site adjustment, not reentry
+acquisition. AEROBRAKE routes a Kerbin periapsis above the atmosphere back
+to MCC before coasting or stowing hardware (or holds if no MCC is available).
 
 For an RO6 already orbiting Minmus (or another parachute probe orbiting
 Mun/Minmus), use `RUNPATH("0:/cmd/returnshallow.ks").` from the manual
@@ -600,6 +607,19 @@ recipe. Multiple passes can shift the eventual landing site: KSC is best
 effort, and the 53 km target does not guarantee thermal survival. Profile
 persistence is checked by `python3 scripts/check_surface_return.py`; this
 recipe still needs flight validation.
+
+To recover an existing shallow return that advanced with a high Kerbin
+periapsis, wait for archive sync, then run while connected:
+
+```kerboscript
+RUNPATH("0:/cmd/setphase.ks", "MCC").
+REBOOT.
+```
+
+This preserves the existing 53 km profile, chute tags and late decoupling.
+Do not rerun the moon-departure setup from Kerbin orbit. Diagnostics are
+persisted as `STATS return-mcc setup`, `plan`, `flown`, `status=verified`
+or `status=held`. Offline checks: `python3 -B scripts/check_return_mcc.py`.
 
 ## Multi-CPU ships and roles
 

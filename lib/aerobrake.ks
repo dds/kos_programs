@@ -82,6 +82,23 @@ GLOBAL FUNCTION phaseAerobrake {
 
     LOCAL atmHeight IS _aerobrakeAtmoHeight().
 
+    // A skipped/failed return MCC is not an atmospheric approach.
+    // Repair it while still far out, before alarms, coast, or stowing
+    // hardware. This also recovers older saved returns already at AEROBRAKE.
+    IF SHIP:BODY:NAME = "Kerbin" AND SHIP:PERIAPSIS >= atmHeight {
+        SET WARP TO 0.
+        IF xferSeq:CONTAINS("MCC") {
+            mLogWarn("Aerobrake: no atmospheric approach; returning to MCC.").
+            mLog("STATS aerobrake status=return-to-mcc PeKm="
+                + ROUND(SHIP:PERIAPSIS / 1000, 3)).
+            stateSet("phase", "MCC").
+        } ELSE {
+            mLogError("Aerobrake: no atmospheric approach and no MCC phase; holding.").
+            yieldToPrompt().
+        }
+        RETURN.
+    }
+
     // --- Long-term setup: alarm the atmosphere entry, then orient for
     // solar and hold (charging, panels still out) until 15 min before it. ---
     LOCAL entryUt IS _aerobrakeSetEntryAlarm().
