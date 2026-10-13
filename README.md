@@ -508,6 +508,47 @@ uses the existing local copies. The generated-profile regression check is
 `python3 scripts/check_surface_return.py`; kOS execution and thermal behavior
 still require in-game validation.
 
+The separate **RO8 economy landing/return** profiles allow flexible landing
+sites instead of the polar contracts:
+
+| Profile ID | Name in the mission picker | Post-capture reserve floor |
+|---|---|---|
+| `mun_economy_return` | RO8 Mun Economy Landing and Return | 1,500 m/s |
+| `minmus_economy_return` | RO8 Minmus Economy Landing and Return | 550 m/s |
+
+Select one for a **fresh launch**. They wait for the target moon's orbital
+plane at Kerbin launch, accept the natural arrival inclination/direction,
+and correct only arrival periapsis. They do **not** force a polar or exactly
+equatorial moon orbit. Capture aims directly at a near-circular 15 km orbit;
+there is no separate SHAPE circularization/plane-change phase. Removing the
+second capture burn reduces operations, not the ideal impulse needed for
+the same final orbit. The principal savings come from dropping plane and
+fixed-site requirements.
+
+Orbital science runs once, followed by automatic ground-track site selection
+and nearby terrain refinement. Contract waypoints are ignored
+(`LANDING_USE_WAYPOINTS=0`); these profiles do not perform the polar temperature
+survey or land at the old contract coordinates. The existing targeted-deorbit
+path still needs Trajectories, with SCANsat refinement when available.
+Surface ascent flies east to a 10 km parking orbit, accepting the minimum
+inclination reachable from the actual landing latitude.
+
+The return retains the 53 km entry target and 52–54 km correction corridor,
+but omits optional KSC targeting burns: recovery can occur anywhere on
+Kerbin. The engine/tank remains attached through aerobraking and separates
+below 6 km in DESCENT. Use `descent_decoupler` and `descent_chutes` tags.
+PRELAUNCH still auto-arms after surface touchdown; press **H** there to hold
+for surface science. Existing polar/contract profiles remain available.
+
+Arrival corrections are limited to 20 m/s per burn (10 at midpoint), 30 m/s
+total, and must leave capture fuel plus the reserve above. CAPTURE checks the
+reserve again. These are planning allowances for descent, ascent and return,
+not craft-specific guarantees: a marginal craft may hold before capture.
+The profiles use the existing direct-transfer architecture, not gravity
+assists or ballistic-capture searches. Profile persistence and waypoint
+settings are checked by `python3 -B scripts/check_surface_return.py`; flight
+validation is still required.
+
 ### Minmus science campaign
 
 Suggested order after Minmus unlock:

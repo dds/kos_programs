@@ -198,7 +198,59 @@ def check_shallow_command():
     print('shallow command: fresh-boot profile preserves entry corridor and late stage separation')
 
 
+def check_economy_profiles():
+    for moon, reserve in (('mun', 1500), ('minmus', 550)):
+        cfg = read_settings((ROOT / f'missions/RO8/{moon}_economy_return.ks').read_text(), defaults())
+        assert cfg['MISSION_ID'] == f'{moon}_economy_return'
+        assert cfg['LAUNCH_PLANE_MODE'] == 'BODY_ORBIT'
+        assert cfg['CAPTURE_INC'] == cfg['CAPTURE_LAN'] == cfg['CAPTURE_AOP'] == -1
+        assert cfg['CAPTURE_DIR'] == ''
+        assert cfg['BPLANE_PE_ONLY'] == 1 and cfg['BPLANE_REQUIRE_PLANE'] == 0
+        assert cfg['CAPTURE_PE'] == cfg['TARGET_AP'] == 15000
+        assert 'SHAPE' not in cfg['SEQUENCE']
+        assert len(cfg['SEQUENCE']) == len(set(cfg['SEQUENCE']))
+        assert cfg['CAPTURE_RESERVE_DV'] == cfg['BPLANE_CAPTURE_MARGIN'] == reserve
+        assert cfg['SCIENCE_OPS_HOLD'] == 0 and cfg['SCIENCE_SURVEY_POINTS'] == []
+        assert cfg['TARGET_LAT'] == cfg['TARGET_LNG'] == 0
+        assert cfg['LANDING_USE_WAYPOINTS'] == 0 and cfg['LANDING_AUTO_TARGET'] == 1
+        cfg.update(BODY_NAME=moon.upper(), PARKING_ALT=cfg['SURFACE_RETURN_PARKING_ALT'],
+                   LAUNCH_INCLINATION=cfg['SURFACE_RETURN_INCLINATION'], LAUNCH_AZIMUTH=90)
+        surface = read_settings(emit_profile('phaseSurfaceReturnSetup', cfg), defaults())
+        assert surface['LAUNCH_INCLINATION'] == 0 and surface['LAUNCH_AZIMUTH'] == 90
+        assert surface['PARKING_ALT'] == 10000
+        surface['targetPe'] = surface['RETURN_PE']
+        # Fresh aerobrake defaults enable site targeting; the generated
+        # economy profile must explicitly turn it off after every reboot.
+        home = read_settings(emit_profile('phaseReturnSetup', surface),
+                             {'AEROBRAKE_TARGETING': 1, 'ESCAPE_KSC_TARGET': 1})
+        assert home['AEROBRAKE_TARGETING'] == home['ESCAPE_KSC_TARGET'] == 0
+        assert 'RETURN_TRIM' not in home['SEQUENCE']
+        assert home['CAPTURE_INC'] == -1
+        assert home['REENTRY_PE'] == home['AEROBRAKE_PE'] == 53000
+        assert home['MCC_AEROBRAKE_SAFE_PE_MIN'] == 52000
+        assert home['MCC_AEROBRAKE_SAFE_PE_MAX'] == 54000
+        assert home['AEROBRAKE_PE_TARGETING'] == 1  # Pe correction is still required.
+        assert home['DESCENT_DECOUPLE_ALT'] == 6000
+        assert home['DESCENT_DECOUPLER_TAG'] == 'descent_decoupler'
+        assert home['DESCENT_CHUTES_TAG'] == 'descent_chutes'
+        print(f'{moon} economy: free arrival plane, direct capture, east ascent and no KSC trim survive boots')
+
+    landing = (ROOT / 'lib/landing_config.ks').read_text()
+    resolver = body(landing, 'landingResolveTarget')
+    named_gate = re.search(r'IF (LANDING_USE_WAYPOINTS > 0 AND TARGET_WAYPOINT <> "")', resolver)[1]
+    for enabled in (0, 1):
+        for named in ('', 'old polar contract'):
+            assert evaluate(named_gate, LANDING_USE_WAYPOINTS=enabled,
+                            TARGET_WAYPOINT=named) == bool(enabled and named)
+    assert 'IF LANDING_USE_WAYPOINTS > 0 { SET selectedWp TO selectedWaypoint(). }' in resolver
+    assert 'GLOBAL LANDING_USE_WAYPOINTS IS 1.' in landing
+    # Locked auto-selected sites must still resolve with waypoints disabled.
+    assert 'SET result["SOURCE"] TO "locked config"' in resolver
+    print('landing target: economy ignores contract waypoints; default profiles keep waypoint selection')
+
+
 if __name__ == '__main__':
     check_profiles()
     check_site_corrections()
     check_shallow_command()
+    check_economy_profiles()

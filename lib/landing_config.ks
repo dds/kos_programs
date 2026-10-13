@@ -3,6 +3,8 @@ GLOBAL TARGET_LAT IS 0.
 GLOBAL TARGET_LNG IS 0.
 GLOBAL TARGET_LOCK IS 0.
 GLOBAL TARGET_WAYPOINT IS "".
+// Flexible-site missions can ignore selected/named contract waypoints.
+GLOBAL LANDING_USE_WAYPOINTS IS 1.
 GLOBAL LANDING_ASSIST_IMPACT_LIMIT IS 20000.
 GLOBAL LANDING_ASSIST_CROSSTRACK_LIMIT IS 100000.
 GLOBAL TOUCHDOWN_SPEED IS 2.
@@ -93,7 +95,7 @@ GLOBAL FUNCTION landingApplyMissionConfig {
 GLOBAL FUNCTION landingResolveTarget {
     LOCAL result IS LEXICON("FOUND", FALSE, "LAT", 0, "LNG", 0, "SOURCE", "none").
 
-    IF TARGET_WAYPOINT <> "" {
+    IF LANDING_USE_WAYPOINTS > 0 AND TARGET_WAYPOINT <> "" {
         LOCAL namedWp IS waypointNamed(TARGET_WAYPOINT).
         IF namedWp <> 0 {
             SET result["FOUND"] TO TRUE.
@@ -115,7 +117,8 @@ GLOBAL FUNCTION landingResolveTarget {
         RETURN result.
     }
 
-    LOCAL selectedWp IS selectedWaypoint().
+    LOCAL selectedWp IS 0.
+    IF LANDING_USE_WAYPOINTS > 0 { SET selectedWp TO selectedWaypoint(). }
     IF selectedWp <> 0 {
         SET result["FOUND"] TO TRUE.
         SET result["LAT"] TO selectedWp:GEOPOSITION:LAT.

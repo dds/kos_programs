@@ -201,6 +201,11 @@ GLOBAL FUNCTION phaseReturnSetup {
     }
     LOG "SET AEROBRAKE_REENTRY_DIR TO " + configLiteral(RETURN_REENTRY_DIR) + "." TO profilePath.
     _writeCoastAutomation(profilePath).
+    // No KSC request must also disable aerobrake's default site targeting.
+    IF RETURN_KSC_TARGET <= 0 {
+        LOG "SET ESCAPE_KSC_TARGET TO 0." TO profilePath.
+        LOG "SET AEROBRAKE_TARGETING TO 0." TO profilePath.
+    }
     IF RETURN_KSC_TARGET > 0 {
         LOG "SET ESCAPE_KSC_TARGET TO 1." TO profilePath.
         LOG "SET TARGET_LAT TO -0.0972." TO profilePath.
