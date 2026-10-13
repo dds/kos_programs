@@ -160,6 +160,45 @@ def check_site_corrections():
     print('impact targeting: corridor boundary fixtures and final burn guard passed')
 
 
+def check_shallow_command():
+    source = (ROOT / 'cmd/returnshallow.ks').read_text()
+    assert source.index('bootPreamble().') < source.index('stateGet(')
+    assert source.index('bootLibLoad("return_setup").') < source.index('SET RETURN_')
+    for tag in ('descent_decoupler', 'descent_chutes'):
+        assert f'SHIP:PARTSTAGGED("{tag}"):LENGTH = 0' in source
+    command = read_settings(source, defaults())
+    command['targetPe'] = command['RETURN_PE']
+    # The generated profile must override RO6 hardware defaults after reboot.
+    home = read_settings(emit_profile('phaseReturnSetup', command),
+                         {'DESCENT_RELEASE_ALT': 10000,
+                          'AEROBRAKE_BRAKE_PE_FLOOR': 51000,
+                          'AEROBRAKE_DECOUPLE_TAG': ''})
+    assert home['SEQUENCE'] == ['ESCAPE', 'COAST', 'MCC', 'RETURN_TRIM',
+                                'AEROBRAKE', 'DESCENT', 'DONE']
+    for key in ('ESCAPE_PE', 'CAPTURE_PE', 'REENTRY_PE', 'AEROBRAKE_PE'):
+        assert home[key] == 53000
+    for key in ('MCC_AEROBRAKE_SAFE_PE_MIN', 'RETURN_TRIM_PE_MIN',
+                'AEROBRAKE_CORRECTION_PE_MIN', 'AEROBRAKE_BRAKE_PE_FLOOR'):
+        assert home[key] == 52000
+    for key in ('MCC_AEROBRAKE_SAFE_PE_MAX', 'RETURN_TRIM_PE_MAX',
+                'AEROBRAKE_CORRECTION_PE_MAX'):
+        assert home[key] == 54000
+    assert home['CAPTURE_INC'] == -1
+    assert home['RETURN_TRIM'] is True and home['RETURN_TRIM_DV_CAP'] == 20
+    assert home['TARGET_LAT'] == -0.0972 and home['TARGET_LNG'] == -74.5577
+    assert home['TARGET_LOCK'] == home['ESCAPE_KSC_TARGET'] == 1
+    assert home['AEROBRAKE_TARGETING'] == home['AEROBRAKE_PE_TARGETING'] == 1
+    assert home['AEROBRAKE_REENTRY_DIR'] == 'RETROGRADE'
+    assert home['AEROBRAKE_ARM_CHUTES'] == 1
+    assert home['AEROBRAKE_DECOUPLE_TAG'] == ''  # no entry-stage jettison
+    assert home['DESCENT_DECOUPLER_TAG'] == 'descent_decoupler'
+    assert home['DESCENT_CHUTES_TAG'] == 'descent_chutes'
+    assert home['DESCENT_DECOUPLE_ALT'] == 6000
+    assert home['DESCENT_FAIRING_TAG'] == 'none'  # no fairing wait before separation
+    print('shallow command: fresh-boot profile preserves entry corridor and late stage separation')
+
+
 if __name__ == '__main__':
     check_profiles()
     check_site_corrections()
+    check_shallow_command()

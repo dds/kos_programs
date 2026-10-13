@@ -52,6 +52,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/goto.ks", "Minmus").` | Route to any body/vessel (see [goto](#universal-routing-goto)) |
 | `RUNPATH("0:/cmd/restartflightplan.ks").` | Rewind the phase machine for the next sortie/leg |
 | `RUNPATH("0:/cmd/returntokerbin.ks").` | Full automated moon→Kerbin return (escape/MCC/aerobrake/descent) |
+| `RUNPATH("0:/cmd/returnshallow.ks").` | 53 km moon→Kerbin return; keep engine/tank through aerobraking, then separate for parachute descent |
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
 | `RUNPATH("0:/cmd/arrival.ks", "review").` | Inspect a retained partial arrival; actions `accept` / `replan`, optional capture Ap in km |
@@ -579,6 +580,26 @@ Kerbin returns use `MCC`, targeting the configured reentry Pe and a 0 deg
 arrival inclination to improve KSC approach geometry. If the current Kerbin
 approach is already inside the configured aerobrake Pe corridor, MCC skips
 that optional correction and saves the remaining fuel.
+
+For an RO6 already orbiting Minmus (or another parachute probe orbiting
+Mun/Minmus), use `RUNPATH("0:/cmd/returnshallow.ks").` from the manual
+console with an archive link. First tag the decoupler between the retained
+probe and engine/tank `descent_decoupler`, and the parachute `descent_chutes`.
+The controlling CPU, power and parachute must stay with the probe after
+separation. This command loads its own libraries, writes a return profile,
+and **automatically reboots into ESCAPE**.
+
+The shallow return targets an initial Kerbin Pe of **53 km**, with corrections
+kept inside **52–54 km** and no forced equatorial arrival plane. It attempts
+KSC targeting with a **20 m/s pre-entry RETURN_TRIM cap**. The craft holds
+retrograde and retains the engine/tank through atmospheric passes. After
+AEROBRAKE hands off to DESCENT (apoapsis inside the atmosphere and airspeed
+below 600 m/s), it separates the tagged stage below **6 km ASL** and completes
+parachute descent. Fairing deployment is disabled for this exposed probe
+recipe. Multiple passes can shift the eventual landing site: KSC is best
+effort, and the 53 km target does not guarantee thermal survival. Profile
+persistence is checked by `python3 scripts/check_surface_return.py`; this
+recipe still needs flight validation.
 
 ## Multi-CPU ships and roles
 
