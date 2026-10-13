@@ -249,8 +249,45 @@ def check_economy_profiles():
     print('landing target: economy ignores contract waypoints; default profiles keep waypoint selection')
 
 
+def check_orbit_return():
+    cfg = read_settings((ROOT / 'missions/RO8/mun_orbit_return.ks').read_text(), defaults())
+    assert cfg['SEQUENCE'][-3:] == ['CAPTURE', 'SCIENCE_OPS', 'RETURN_SETUP']
+    assert not set(cfg['SEQUENCE']) & {'LAND_DEORBIT', 'LAND_ASSIST', 'SURFACE_RETURN_SETUP', 'SHAPE'}
+    assert cfg['CAPTURE_PE'] == cfg['TARGET_AP'] == 15000
+    assert cfg['CAPTURE_INC'] == -1 and cfg['BPLANE_PE_ONLY'] == 1
+    assert cfg['CAPTURE_MIN_PE'] == 13000 and cfg['CAPTURE_MAX_PE'] == 17000
+    assert cfg['BPLANE_CAPTURE_MARGIN'] == cfg['CAPTURE_RESERVE_DV'] == 400
+    assert cfg['SCIENCE_OPS_HOLD'] == 1 and cfg['SCIENCE_SURVEY_POINTS'] == []
+    assert cfg['AUTO_TRANSMIT'] == 0
+    # The real capture budget expressions must allow a representative
+    # 900 m/s flight to capture while retaining departure/correction fuel.
+    arrival = (ROOT / 'lib/arrival_bplane.ks').read_text()
+    gate = body(arrival, 'bplaneCorrectionAllowed')
+    needed = re.search(r'LOCAL needed IS (.*?)\.', gate, re.S)[1]
+    from types import SimpleNamespace as NS
+    for correction, capture, allowed in [(2, 300, True), (20, 480, True), (20, 481, False)]:
+        cost = evaluate(needed, nd=NS(DELTAV=NS(MAG=correction)),
+                        bplaneCaptureCost=lambda *_: capture, planned={'patch': None},
+                        targetBody=None, BPLANE_CAPTURE_MARGIN=cfg['BPLANE_CAPTURE_MARGIN'])
+        assert (cost <= 900) == allowed
+    science = (ROOT / 'lib/science.ks').read_text()
+    assert 'IF AUTO_TRANSMIT > 0' in body(science, '_runExperiment')
+    assert 'SCI_AUTO_TRANSMIT' not in science
+    phase = body(science, 'phaseScienceOps')
+    assert phase.index('scienceRunAll()') < phase.index('IF SCIENCE_OPS_HOLD')
+    assert phase.index('yieldToPrompt(). RETURN.') < phase.index('nextPhase(xferSeq)')
+    cfg['targetPe'] = cfg['RETURN_PE']
+    home = read_settings(emit_profile('phaseReturnSetup', cfg), {})
+    assert home['REENTRY_PE'] == 53000 and home['CAPTURE_INC'] == -1
+    assert home['AEROBRAKE_TARGETING'] == home['ESCAPE_KSC_TARGET'] == 0
+    assert home['DESCENT_DECOUPLE_ALT'] == 6000
+    assert home['DESCENT_CHUTES_TAG'] == 'descent_chutes'
+    print('Mun orbital return: 900 m/s budget fixtures, science hold/storage and direct shallow return')
+
+
 if __name__ == '__main__':
     check_profiles()
     check_site_corrections()
     check_shallow_command()
     check_economy_profiles()
+    check_orbit_return()

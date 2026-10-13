@@ -188,12 +188,12 @@ GLOBAL FUNCTION phaseScienceOps {
     IF SCIENCE_OPS_HOLD <> 0 {
         mLog("STATS science-ops result=survey-hold remainingDv="
             + ROUND(SHIP:DELTAV:VACUUM, 1)).
-        mLog("Survey hold: complete the required readings before advancing to the next phase.").
+        mLog("Science hold: inspect stored data and complete any required readings before advancing.").
         FOR site IN SCIENCE_SURVEY_POINTS {
             PRINT "Temperature site: lat " + site[0] + ", lon " + site[1]
                 + ", above " + (site[2] / 1000) + " km ASL.".
         }
-        PRINT "Confirm the contract readings and remaining landing fuel before deorbit.".
+        PRINT "Review stored science and remaining fuel before advancing to the next phase.".
         yieldToPrompt(). RETURN.
     }
     nextPhase(xferSeq).
@@ -325,7 +325,7 @@ LOCAL FUNCTION _runExperiment {
                 + "  biome=" + sciLastBiome
                 + "  situation=" + SHIP:STATUS).
 
-            IF SCI_AUTO_TRANSMIT {
+            IF AUTO_TRANSMIT > 0 {
                 WAIT 1.
                 IF modu:HASEVENT("Transmit Data") { modu:DOEVENT("Transmit Data"). }
             }

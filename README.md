@@ -549,6 +549,40 @@ assists or ballistic-capture searches. Profile persistence and waypoint
 settings are checked by `python3 -B scripts/check_surface_return.py`; flight
 validation is still required.
 
+For an **orbital-science-only Mun return**, select RO8 `mun_orbit_return`.
+It targets 15 km low orbit in the natural arrival plane, runs experiments,
+then holds in SCIENCE_OPS to let you inspect/store data before leaving.
+Automatic experiment transmission is disabled. There are no landing or
+surface-ascent phases. Its correction/capture checks reserve **400 m/s after
+capture** for departure and Kerbin approach work; the planners still check
+whether the actual capture is affordable.
+
+To salvage the economy mission currently held at BPLANE for the 1,500 m/s
+landing/return reserve, run while connected after archive sync:
+
+```kerboscript
+RUNPATH("0:/cmd/setphase.ks", "BPLANE", "mun_orbit_return").
+REBOOT.
+```
+
+This switches the active profile without relaunching or clearing the spent
+arrival-correction budget. BPLANE must still raise a 6.5 km arrival into the
+13–17 km capture corridor; no low-periapsis checks are waived. Use this switch
+on the Kerbin-side Mun approach, before entering the Mun SOI. After capture,
+check that the science data is retained in parts that will return with the
+probe (particularly before the engine/tank separates), collect any additional
+available readings, and start the return when ready:
+
+```kerboscript
+RUNPATH("0:/cmd/setphase.ks", "RETURN_SETUP").
+REBOOT.
+```
+
+RETURN_SETUP writes the same 53 km shallow-entry Kerbin return used by the
+economy profiles, with no optional KSC targeting burns. The orbit-only
+profile is covered by `python3 -B scripts/check_surface_return.py`; actual
+capture/departure costs and science recovery still need flight validation.
+
 ### Minmus science campaign
 
 Suggested order after Minmus unlock:
