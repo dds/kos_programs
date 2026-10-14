@@ -21,6 +21,15 @@ LOCAL _solidStagePeak IS 0.
 LOCAL _ascentStageReason IS "".
 LOCAL _ascentStageSolidFrac IS -1.
 
+LOCAL FUNCTION _ascentStopThrottle {
+    PARAMETER releaseLock IS TRUE.
+    LOCK THROTTLE TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    // LOCK/UNLOCK in the same tick can leave the old throttle applied.
+    WAIT 0.01.
+    IF releaseLock { UNLOCK THROTTLE. }
+}
+
 LOCAL FUNCTION _ascentOnSurface {
     RETURN SHIP:STATUS = "PRELAUNCH"
         OR SHIP:STATUS = "LANDED"
@@ -177,8 +186,7 @@ GLOBAL FUNCTION armAscentStaging {
             LOCK STEERING TO SHIP:PROGRADE.
             LOCK THROTTLE TO 1.
             WAIT UNTIL SHIP:PERIAPSIS >= PARKING_ALT * 0.95.
-            LOCK THROTTLE TO 0.
-            UNLOCK THROTTLE.
+            _ascentStopThrottle().
             UNLOCK STEERING.
             SET SAS TO TRUE.
             orbitSummary().
@@ -264,6 +272,26 @@ LOCAL FUNCTION _circHudInterval {
     RETURN 10.
 }
 
+LOCAL FUNCTION _circSafeThrottle {
+    PARAMETER command.
+    PARAMETER control.
+    // Evaluated by the flight-control lock, not only the planning loop.
+    // Once a limit trips, falling Pe or a stale command cannot re-ignite.
+    IF control["REASON"] <> "" { RETURN 0. }
+    IF ABORT { SET control["REASON"] TO "abort". }
+    IF SHIP:PERIAPSIS >= control["TARGET_PE"] {
+        SET control["REASON"] TO "parking-periapsis".
+    }
+    IF TIME:SECONDS >= control["DEADLINE"] {
+        SET control["REASON"] TO "time-limit".
+    }
+    IF control["APPLIED_DV"] >= control["DV_CAP"] {
+        SET control["REASON"] TO "dv-limit".
+    }
+    IF control["REASON"] <> "" { RETURN 0. }
+    RETURN MAX(0, MIN(1, command)).
+}
+
 // Circularize at apoapsis with a direct burn — no maneuver node, no
 // executeManeuver. Steers the horizontal circularization vector (NOT
 // live prograde) centered on apoapsis, and terminates when periapsis
@@ -309,8 +337,7 @@ LOCAL FUNCTION _ascentCircularize {
         WAIT 0.5.
     }
     IF ABORT {
-        LOCK THROTTLE TO 0.
-        UNLOCK THROTTLE.
+        _ascentStopThrottle().
         UNLOCK STEERING.
         RETURN FALSE.
     }
@@ -323,29 +350,41 @@ LOCAL FUNCTION _ascentCircularize {
     LOCAL appliedDv IS 0.
     LOCAL lastT IS TIME:SECONDS.
     LOCAL nextLog IS TIME:SECONDS.
-    LOCAL throt IS 1.
-    LOCK THROTTLE TO throt.
-    UNTIL ABORT OR appliedDv >= dvCap {
+    LOCAL throt IS 0.
+    LOCAL burnTrace IS LIST().
+    LOCAL control IS LEXICON("REASON", "", "TARGET_PE", targetPe,
+        "DEADLINE", TIME:SECONDS + MAX(60, burnTime * 4 + 30),
+        "APPLIED_DV", 0, "DV_CAP", dvCap).
+    LOCK THROTTLE TO _circSafeThrottle(throt, control).
+    UNTIL ABORT OR appliedDv >= dvCap OR SHIP:PERIAPSIS >= targetPe
+            OR control["REASON"] <> "" {
         LOCAL rMag IS bodyR + SHIP:ALTITUDE.
         LOCAL vCircVec IS VXCL(SHIP:UP:VECTOR, SHIP:VELOCITY:ORBIT):NORMALIZED
             * SQRT(mu / rMag).
         LOCAL remVec IS vCircVec - SHIP:VELOCITY:ORBIT.
         LOCAL remDv IS remVec:MAG.
-        IF remDv <= 0.3 { BREAK. }
-        IF remDv > 1 { LOCK STEERING TO remVec. }
-        SET throt TO MAX(0.05, MIN(1, remDv / 40)).
-        LOCK THROTTLE TO throt.
         LOCAL nowT IS TIME:SECONDS.
+        LOCAL dt IS MAX(0.01, nowT - lastT).
         SET appliedDv TO appliedDv
             + (SHIP:AVAILABLETHRUST / MAX(0.01, SHIP:MASS)) * throt * (nowT - lastT).
+        SET control["APPLIED_DV"] TO appliedDv.
         SET lastT TO nowT.
+        IF remDv <= 0.3 {
+            SET control["REASON"] TO "velocity-captured".
+            BREAK.
+        }
+        LOCK STEERING TO remVec.
+        LOCAL currentAcc IS SHIP:AVAILABLETHRUST / MAX(0.01, SHIP:MASS).
+        // No minimum throttle floor near cutoff. Allow at least a second
+        // of response time, expanding it if script updates were delayed.
+        SET throt TO MIN(1, remDv / (MAX(0.1, currentAcc) * MAX(1, 2 * dt))).
         IF SHIP:MAXTHRUST <= 0 AND NOT ascentStageAttemptPending() {
-            mLogWarn("Circularize: no thrust and no stage pending; stopping.").
+            burnTrace:ADD("Circularize: no thrust and no stage pending; stopping.").
             BREAK.
         }
         IF TIME:SECONDS >= nextLog {
             SET nextLog TO TIME:SECONDS + 2.
-            mLog("Circularize: Pe=" + ROUND(SHIP:PERIAPSIS / 1000, 2)
+            burnTrace:ADD("Circularize: Pe=" + ROUND(SHIP:PERIAPSIS / 1000, 2)
                 + "km Ap=" + ROUND(SHIP:APOAPSIS / 1000, 2)
                 + "km remDv=" + ROUND(remDv, 1)
                 + " thr=" + ROUND(throt, 2)
@@ -353,10 +392,16 @@ LOCAL FUNCTION _ascentCircularize {
         }
         WAIT 0.05.
     }
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF control["REASON"] = "" {
+        // Latch a loop-detected completion before releasing the live lock.
+        LOCAL finalCommand IS _circSafeThrottle(0, control).
+        IF control["REASON"] = "" { SET control["REASON"] TO "loop-exit". }
+    }
+    SET throt TO 0.
+    _ascentStopThrottle().
     UNLOCK STEERING.
     SET SAS TO TRUE.
+    FOR traceLine IN burnTrace { mLog(traceLine). }
     orbitSummary().
     IF appliedDv >= dvCap {
         mLogWarn("Circularize: hit dV cap (" + ROUND(dvCap, 0)
@@ -367,7 +412,9 @@ LOCAL FUNCTION _ascentCircularize {
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 2)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 4)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION, 2)
-        + " appliedDv=" + ROUND(appliedDv, 1)).
+        + " appliedDv=" + ROUND(appliedDv, 1)
+        + " cutoff=" + control["REASON"]
+        + " pilotThrottle=" + SHIP:CONTROL:PILOTMAINTHROTTLE).
     RETURN NOT ABORT AND SHIP:PERIAPSIS >= PARKING_ALT * 0.9.
 }
 
@@ -459,7 +506,7 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
         WAIT 0.1.
     }
 
-    LOCK THROTTLE TO 0.
+    _ascentStopThrottle(FALSE).
     IF ABORT {
         mLogWarn("Vacuum ascent aborted; holding launch phase.").
         UNLOCK THROTTLE.

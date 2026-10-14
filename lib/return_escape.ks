@@ -252,6 +252,33 @@ LOCAL FUNCTION _planReturnEscape {
     RETURN nd.
 }
 
+GLOBAL FUNCTION previewReturnEscape {
+    PARAMETER targetPe IS 53000.
+    IF (BODY:NAME <> "Mun" AND BODY:NAME <> "Minmus")
+            OR SHIP:STATUS <> "ORBITING" {
+        PRINT "Return preview requires a bound Mun/Minmus orbit.".
+        RETURN FALSE.
+    }
+    IF HASNODE {
+        PRINT "Existing maneuver retained. Remove it before requesting a new preview.".
+        RETURN FALSE.
+    }
+    SET ESCAPE_KSC_TARGET TO 0.
+    LOCAL nd IS _planReturnEscape(BODY:BODY, targetPe).
+    IF nd = 0 { RETURN FALSE. }
+    LOCAL patch IS _targetPatch(nd, BODY:BODY).
+    PRINT "RETURN PREVIEW ONLY - no burn or phase change".
+    PRINT "  Burn: " + ROUND(nd:DELTAV:MAG,2) + " m/s".
+    PRINT "  Remaining after burn (estimate): "
+        + ROUND(SHIP:DELTAV:VACUUM - nd:DELTAV:MAG,2) + " m/s".
+    PRINT "  Predicted Kerbin Pe: " + ROUND(patch:PERIAPSIS/1000,2) + " km".
+    PRINT "  Target: 53 km; KSC targeting disabled for this preview.".
+    PRINT "  Leave automation stopped and review these numbers before burning.".
+    mLog("STATS return-preview dv=" + nd:DELTAV:MAG
+        + " available=" + SHIP:DELTAV:VACUUM + " pe=" + patch:PERIAPSIS).
+    RETURN TRUE.
+}
+
 GLOBAL FUNCTION phaseEscape {
     IF BODY:BODY = 0 {
         mLogError("Return escape requires a parent body.").

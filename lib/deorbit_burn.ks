@@ -47,6 +47,8 @@ GLOBAL FUNCTION executeDeorbitNode {
     IF VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) > 15 {
         mLogError("Refusing deorbit burn: off vector.").
         LOCK THROTTLE TO 0.
+        SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+        WAIT 0.01.
         UNLOCK THROTTLE.
         UNLOCK STEERING.
         IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
@@ -74,6 +76,8 @@ GLOBAL FUNCTION executeDeorbitNode {
 
     LOCAL residual IS nd:DELTAV:MAG.
     LOCK THROTTLE TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    WAIT 0.01.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
