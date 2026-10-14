@@ -108,8 +108,8 @@ GLOBAL FUNCTION landingResolveTarget {
             + "' not found on " + SHIP:BODY:NAME + ".").
     }
 
-    IF TARGET_LOCK
-            AND (TARGET_LAT <> 0 OR TARGET_LNG <> 0) {
+    // An explicit lock makes 0 latitude / 0 longitude a valid site too.
+    IF TARGET_LOCK {
         SET result["FOUND"] TO TRUE.
         SET result["LAT"] TO TARGET_LAT.
         SET result["LNG"] TO TARGET_LNG.

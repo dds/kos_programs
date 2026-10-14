@@ -59,7 +59,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/arrival.ks", "status").` | Show actual arrival Pe, capture fuel estimate, correction spending and interrupted-burn reason without flying |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
-| `RUNPATH("0:/cmd/minmusrecover.ks").` | Select RO8 landing recovery from Minmus orbit and clear old overrides; then reboot |
+| `RUNPATH("0:/cmd/minmusrecover.ks").` | Select RO8 landing recovery; use argument `"waypoint"` for a visually chosen selected site without SCANsat coverage; then reboot |
 | `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
 | `RUNPATH("0:/cmd/dump.ks").` | Print persistent state |
 | `RUNONCEPATH("0:/cmd/trimstate.ks").` | Remove bulky stale state keys after a tight-storage boot |
@@ -638,6 +638,35 @@ cheapest landing. Missing coverage/no suitable site holds in orbit; choose
 another ground-track site or obtain coverage before retrying. Trajectories
 is still required. LAND_DEORBIT now loads the site scanner and persists its
 refined coordinates for LAND_ASSIST across the band reboot.
+
+Without SCANsat coverage, place and **select** a waypoint on a broad flat
+area close to the upcoming periapsis ground track, then run:
+
+```kerboscript
+RUNPATH("0:/cmd/minmusrecover.ks", "waypoint").
+REBOOT.
+```
+
+Waypoint mode records the selected Minmus coordinates in the overrides,
+disables automatic/map-based site selection, and retains the recovery
+sequence, Trajectories approach validation and local terrain refinement.
+Changing the selected waypoint later does not redirect the saved target.
+The selected site is visually assessed, not certified flat by the command.
+Keep it near the ground track to avoid spending fuel on lateral guidance.
+The solver chooses a burn before the site; do not wait until periapsis to
+start setup. It may need a later pass if the useful burn location has passed.
+
+A direct surface-to-Kerbin ascent is physically possible but is not an
+implemented return mode: `ascentAirlessToOrbit` circularizes, RETURN_SETUP
+requires ORBITING, and ESCAPE scans a bound parking orbit. Omitting PARK
+does not omit circularization. A direct path needs a surface launch window,
+departure-direction targeting, finite-burn guidance and a reboot-safe
+handoff to the Kerbin approach. For stock Minmus, ideal surface injection
+is roughly 333 m/s versus about 346 m/s for ascent to 10 km plus departure;
+the circularization speed is not all wasted, because it contributes toward
+escape speed. These are optimistic two-body estimates excluding losses,
+rotation and geometry. Keep the existing 10 km return for this probe rather
+than expecting a large fuel saving from skipping a phase.
 
 After touchdown, SCIENCE_OPS attempts available experiments without automatic
 transmission and **holds on the surface**. Check stored data and fuel; about

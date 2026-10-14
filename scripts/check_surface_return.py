@@ -304,6 +304,43 @@ def check_orbit_return():
     print('Mun orbital return: 19.4 km accepted before planning, 891/900 m/s budgets, science hold and return')
 
 
+def check_minmus_waypoint_recovery():
+    source = (ROOT / 'cmd/minmusrecover.ks').read_text()
+    assert source.index('bootPreamble().') < source.index('stateGet(')
+    missing = source.index('siteMode = "waypoint" AND selected = 0')
+    copy = source.index('COPYPATH(')
+    clear = source.index('missionOverrideClear().')
+    writes = source.index('LOG "SET TARGET_LAT')
+    phase = source.index('stateSet("phase", "LAND_DEORBIT")')
+    assert missing < copy < clear < writes < phase
+    assert 'wp:ISSELECTED AND wp:BODY:NAME = "Minmus"' in source
+    # Evaluate the real LOG expressions, then apply the resulting overrides
+    # after a fresh profile load, as boot does. No kOS runtime is simulated.
+    logs = re.findall(r'LOG (.*?) TO missionOverridePath\(\)\.', source)
+    for lat, lng in ((0, 0), (-12.5, 179.9), (44.593, -24.926)):
+        output = []
+        for expr in logs:
+            expr = expr.replace('selected:GEOPOSITION:LAT', 'chosenLat')
+            expr = expr.replace('selected:GEOPOSITION:LNG', 'chosenLng')
+            output.append(expression(expr, dict(chosenLat=lat, chosenLng=lng)))
+        cfg = read_settings((ROOT / 'missions/RO8/minmus_landing_recovery.ks').read_text(), defaults())
+        cfg = read_settings('\n'.join(output), cfg)
+        assert (cfg['TARGET_LAT'], cfg['TARGET_LNG']) == (lat, lng)
+        assert cfg['TARGET_LOCK'] == 1 and cfg['TARGET_WAYPOINT'] == ''
+        assert cfg['LANDING_USE_WAYPOINTS'] == cfg['LANDING_AUTO_TARGET'] == 0
+        assert cfg['LANDING_REQUIRE_SITE'] == cfg['LANDING_SITE_SCAN_ENABLE'] == 0
+        assert cfg['LANDING_SKIP_TARGET_SEARCH'] == 0
+        assert cfg['SEQUENCE'] == ['LAND_DEORBIT', 'LAND_ASSIST', 'SCIENCE_OPS', 'SURFACE_RETURN_SETUP']
+        assert cfg['SCIENCE_OPS_HOLD'] == 1 and cfg['RETURN_PE'] == 53000
+    resolver = body((ROOT / 'lib/landing_config.ks').read_text(), 'landingResolveTarget')
+    lock_gate = re.search(r'IF (TARGET_LOCK.*?) \{', resolver, re.S)[1]
+    assert evaluate(lock_gate, TARGET_LOCK=1, TARGET_LAT=0, TARGET_LNG=0)
+    assert not evaluate(lock_gate, TARGET_LOCK=0, TARGET_LAT=0, TARGET_LNG=0)
+    site = body((ROOT / 'lib/landing_site.ks').read_text(), 'selectScanSatLandingSite')
+    assert site.index('IF enabled <= 0 { RETURN out. }') < site.index('ADDONS:SCANSAT:AVAILABLE')
+    print('Minmus waypoint: coordinates survive boot, no SCANsat required, landing/return sequence preserved')
+
+
 def check_minmus_landing_recovery():
     cfg = read_settings((ROOT / 'missions/RO8/minmus_landing_recovery.ks').read_text(), defaults())
     assert cfg['SEQUENCE'] == ['LAND_DEORBIT', 'LAND_ASSIST', 'SCIENCE_OPS', 'SURFACE_RETURN_SETUP']
@@ -361,3 +398,4 @@ if __name__ == '__main__':
     check_economy_profiles()
     check_orbit_return()
     check_minmus_landing_recovery()
+    check_minmus_waypoint_recovery()
