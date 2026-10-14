@@ -18,6 +18,8 @@ GLOBAL TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM IS 0.
 GLOBAL LANDING_SIM_MODE IS 0.
 GLOBAL DEORBIT_CROSSTRACK_AUTHORITY_KM IS 0.
 GLOBAL DEORBIT_MIN_FPA IS 0.
+// Opt-in small lateral correction combined with the retrograde burn.
+GLOBAL TARGET_DEORBIT_NORMAL_DV_CAP IS 0.
 
 GLOBAL FUNCTION targetedDeorbit {
     LOCAL targetInfo IS targetResolveDeorbitTarget().
@@ -216,6 +218,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     LOCAL crossAuth IS _targetDeorbitCrossAuthority(solved).
                     mLogWarn("STATS deorbit candidate orbit=" + (orbitScan + 1)
                         + " nodeAngle=" + candidateAngle
+                        + " dv=" + ROUND(solved["DV"],2)
+                        + " reason=" + _targetDeorbitRejection(solved, minDownfield, maxDownfield)
                         + " solution outside deorbit band: dist="
                         + ROUND(solved["DIST"]/1000,2)
                         + "km downfield="
@@ -263,7 +267,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     LOCAL bestUT IS geometry["UT"].
-    LOCAL bestRetroDv IS solved["DV"].
+    LOCAL bestRetroDv IS solved["RETRO"].
+    LOCAL bestNormalDv IS solved["NORMAL"].
     LOCAL bestDist IS solved["DIST"].
     LOCAL bestAngle IS solved["ANGLE"].
     LOCAL bestDownfield IS solved["DOWNFIELD"].
@@ -281,7 +286,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
             + "/" + ROUND(bestCrossAuthority/1000,2) + "km".
     }
     mLog("STATS deorbit solved: T+" + ROUND(bestUT - nowUt,0)
-        + "s dv=" + ROUND(bestRetroDv,2)
+        + "s dv=" + ROUND(solved["DV"],2)
+        + " retro=" + ROUND(bestRetroDv,2)
+        + " normal=" + ROUND(bestNormalDv,2)
         + solvedImpactText
         + " Pe=" + ROUND(bestPe/1000,2) + "km"
         + " fpa=" + ROUND(bestAngle,1) + ".").
@@ -323,15 +330,16 @@ GLOBAL FUNCTION targetedDeorbitAt {
         mLogWarn("STATS deorbit result=hold reason=planning-window-expired").
         RETURN FALSE.
     }
-    LOCAL realNode IS _planRetroNode(bestUT, bestRetroDv).
+    LOCAL realNode IS _planRetroNode(bestUT, bestRetroDv, bestNormalDv).
     _logDeorbitNode("Selected deorbit node", realNode).
     WAIT 0.5.
     LOCAL finalCheck IS _readGeometricDeorbitNode(realNode,
         targetLat, targetLng, desiredDownfield).
     mLog("STATS deorbit final valid=" + finalCheck["VALID"]
-        + " dv=" + ROUND(bestRetroDv,2)
+        + " dv=" + ROUND(solved["DV"],2)
         + " downfieldKm=" + ROUND(finalCheck["DOWNFIELD"]/1000,2)
-        + " crossKm=" + ROUND(finalCheck["CROSS"]/1000,2)).
+        + " crossKm=" + ROUND(finalCheck["CROSS"]/1000,2)
+        + " reason=" + _targetDeorbitRejection(finalCheck, minDownfield, maxDownfield)).
     IF NOT _targetDeorbitSolutionAccepted(finalCheck, minDownfield, maxDownfield) {
         mLogWarn("Final deorbit prediction failed revalidation; retaining orbit.").
         REMOVE realNode.
@@ -403,15 +411,24 @@ LOCAL FUNCTION _targetDeorbitSolutionAccepted {
     PARAMETER solved.
     PARAMETER minDownfield.
     PARAMETER maxDownfield.
-    IF NOT solved["VALID"] OR NOT solved["HAS_IMPACT"] { RETURN FALSE. }
-    IF solved["DOWNFIELD"] < minDownfield { RETURN FALSE. }
-    IF solved["DOWNFIELD"] > maxDownfield { RETURN FALSE. }
+    RETURN _targetDeorbitRejection(solved, minDownfield, maxDownfield) = "accepted".
+}
+
+LOCAL FUNCTION _targetDeorbitRejection {
+    PARAMETER solved.
+    PARAMETER minDownfield.
+    PARAMETER maxDownfield.
+    IF NOT solved["VALID"] OR NOT solved["HAS_IMPACT"] { RETURN "no-impact-prediction". }
+    IF solved["DOWNFIELD"] < minDownfield { RETURN "insufficient-braking-lead". }
+    IF solved["DOWNFIELD"] > maxDownfield { RETURN "excessive-braking-lead". }
     IF DEORBIT_MIN_FPA > 0
             AND (solved["ANGLE"] < 0 OR solved["ANGLE"] < DEORBIT_MIN_FPA) {
-        RETURN FALSE.
+        RETURN "impact-angle".
     }
-    RETURN _targetCrossTrackFromSolved(solved)
-        <= _targetDeorbitCrossAuthority(solved).
+    IF _targetCrossTrackFromSolved(solved) > _targetDeorbitCrossAuthority(solved) {
+        RETURN "cross-track".
+    }
+    RETURN "accepted".
 }
 
 LOCAL FUNCTION _targetDeorbitCrossAuthority {
@@ -474,6 +491,7 @@ LOCAL FUNCTION _findDeorbitGeometryNode {
     LOCAL bestInfo IS prevInfo.
     LOCAL bestErr IS ABS(prevInfo["ANGLE"] - desiredAngle).
     LOCAL scanT IS scanStart + stepSec.
+    LOCAL samplesSinceYield IS 0.
 
     UNTIL scanT > scanEnd {
         LOCAL info IS _targetGroundAngleAt(scanT, targetLat, targetLng).
@@ -488,7 +506,9 @@ LOCAL FUNCTION _findDeorbitGeometryNode {
             LOCAL lo IS prevT.
             LOCAL hi IS scanT.
             LOCAL iter IS 0.
-            UNTIL iter >= 24 {
+            // Sub-second timing is sufficient here; avoid refining a
+            // coarse orbital seed to microseconds before consulting TR.
+            UNTIL iter >= 24 OR hi - lo <= 0.25 {
                 LOCAL mid IS (lo + hi) / 2.
                 LOCAL midInfo IS _targetGroundAngleAt(mid,
                     targetLat, targetLng).
@@ -510,7 +530,13 @@ LOCAL FUNCTION _findDeorbitGeometryNode {
         SET prevT TO scanT.
         SET prevInfo TO info.
         SET scanT TO scanT + stepSec.
-        WAIT 0.
+        // Pure geometry needs no physics update for each future sample.
+        // Keep the UI responsive without spending 512 ticks per scan.
+        SET samplesSinceYield TO samplesSinceYield + 1.
+        IF samplesSinceYield >= 16 {
+            WAIT 0.
+            SET samplesSinceYield TO 0.
+        }
     }
 
     IF bestErr < 1 {
@@ -601,11 +627,32 @@ LOCAL FUNCTION _solveGeometricDeorbitDv {
     LOCAL lowSet IS FALSE.
     LOCAL highSet IS FALSE.
     LOCAL currentDv IS seedDv.
+    LOCAL normalDv IS 0.
+    LOCAL normalTried IS FALSE.
     LOCAL iter IS 0.
 
     UNTIL iter >= 18 {
+        IF burnUT <= TIME:SECONDS + minLead {
+            mLogWarn("STATS deorbit solve stop=burn-window-expired").
+            RETURN LEXICON("VALID", FALSE).
+        }
         LOCAL trial IS _evalGeometricDeorbitNode(burnUT, currentDv,
-            targetLat, targetLng, minLead, desiredDownfield).
+            targetLat, targetLng, minLead, desiredDownfield, normalDv).
+        IF NOT normalTried AND TARGET_DEORBIT_NORMAL_DV_CAP > 0
+                AND _targetDeorbitRejection(trial, minDownfield, maxDownfield) = "cross-track" {
+            SET normalTried TO TRUE.
+            SET trial TO _correctDeorbitCrossTrack(burnUT, trial,
+                targetLat, targetLng, minLead, desiredDownfield, minDownfield, maxDownfield).
+            IF trial["NORMAL"] <> normalDv {
+                // A changed normal component changes the downrange curve.
+                // Old retrograde brackets no longer describe this solve.
+                SET lowSet TO FALSE.
+                SET highSet TO FALSE.
+                SET bestErr TO 999999999.
+                SET best TO LEXICON("VALID", FALSE).
+            }
+            SET normalDv TO trial["NORMAL"].
+        }
         IF trial["VALID"] {
             LOCAL trialErr IS ABS(trial["ERR"]).
             IF trialErr < bestErr {
@@ -625,12 +672,28 @@ LOCAL FUNCTION _solveGeometricDeorbitDv {
                     + "/" + ROUND(crossAuth/1000,2)
                     + "km tti=" + ROUND(trial["TTI"],0) + "s".
             }
-            mLog("DEBUG dv-solve: dv=" + ROUND(currentDv,2)
+            mLog("DEBUG dv-solve: dv=" + ROUND(trial["DV"],2)
+                + " retro=" + ROUND(currentDv,2) + " normal=" + ROUND(normalDv,2)
                 + " Pe=" + ROUND(trial["PE"]/1000,2)
                 + "km" + impactText
                 + " fpa=" + ROUND(trial["ANGLE"],1)).
             IF _targetDeorbitSolutionAccepted(trial,
                     minDownfield, maxDownfield) {
+                mLog("STATS deorbit solve stop=first-acceptable dv="
+                    + ROUND(trial["DV"],2) + " trials=" + (iter + 1)).
+                RETURN trial.
+            }
+
+            // This is a 1-D solve for downrange, not for lateral error
+            // or FPA. Once along-track is close, change the burn location
+            // instead of repeatedly polishing the same unusable root.
+            IF _targetDeorbitDownrangeConverged(trial, minDownfield, maxDownfield) {
+                mLogWarn("STATS deorbit solve stop=change-burn-location dv="
+                    + ROUND(trial["DV"],2)
+                    + " downErrKm=" + ROUND(trial["ERR"]/1000,2)
+                    + " crossKm=" + ROUND(trial["CROSS"]/1000,2)
+                    + " crossLimitKm=" + ROUND(_targetDeorbitCrossAuthority(trial)/1000,2)
+                    + " reason=" + _targetDeorbitRejection(trial, minDownfield, maxDownfield)).
                 RETURN trial.
             }
 
@@ -665,10 +728,79 @@ LOCAL FUNCTION _solveGeometricDeorbitDv {
     }
 
     IF best["VALID"] {
-        mLogWarn("Best deorbit dV misses downfield target by "
-            + ROUND(bestErr/1000,2) + "km.").
+        mLogWarn("STATS deorbit solve stop=search-limit reason="
+            + _targetDeorbitRejection(best, minDownfield, maxDownfield)
+            + " downErrKm=" + ROUND(bestErr/1000,2)).
     }
     RETURN best.
+}
+
+LOCAL FUNCTION _correctDeorbitCrossTrack {
+    PARAMETER burnUT.
+    PARAMETER base.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER minLead.
+    PARAMETER desiredDownfield.
+    PARAMETER minDownfield.
+    PARAMETER maxDownfield.
+
+    // Measure the sign in the game's node frame; do not assume normal's
+    // handedness. At most three extra TR evaluations per burn location.
+    LOCAL capDv IS TARGET_DEORBIT_NORMAL_DV_CAP.
+    LOCAL probeDv IS MIN(1, capDv).
+    LOCAL best IS base.
+    LOCAL plus IS _evalGeometricDeorbitNode(burnUT, base["RETRO"],
+        targetLat, targetLng, minLead, desiredDownfield, probeDv).
+    IF plus["VALID"] {
+        IF _targetDeorbitSolutionAccepted(plus, minDownfield, maxDownfield) { RETURN plus. }
+        IF plus["CROSS"] < best["CROSS"] { SET best TO plus. }
+    }
+    LOCAL minus IS _evalGeometricDeorbitNode(burnUT, base["RETRO"],
+        targetLat, targetLng, minLead, desiredDownfield, -probeDv).
+    IF minus["VALID"] {
+        IF _targetDeorbitSolutionAccepted(minus, minDownfield, maxDownfield) { RETURN minus. }
+        IF minus["CROSS"] < best["CROSS"] { SET best TO minus. }
+    }
+    IF NOT plus["VALID"] OR NOT minus["VALID"] { RETURN best. }
+    LOCAL normalGuess IS _targetDeorbitNormalGuess(base["SIGNED_CROSS"],
+        plus["SIGNED_CROSS"], minus["SIGNED_CROSS"], probeDv, capDv).
+    IF ABS(normalGuess) < 0.01 { RETURN best. }
+    LOCAL corrected IS _evalGeometricDeorbitNode(burnUT, base["RETRO"],
+        targetLat, targetLng, minLead, desiredDownfield, normalGuess).
+    IF corrected["VALID"] {
+        IF _targetDeorbitSolutionAccepted(corrected, minDownfield, maxDownfield) {
+            SET best TO corrected.
+        } ELSE IF corrected["CROSS"] < best["CROSS"] {
+            SET best TO corrected.
+        }
+    }
+    mLog("STATS deorbit normal dv=" + ROUND(best["DV"],2)
+        + " normal=" + ROUND(best["NORMAL"],2)
+        + " crossKm=" + ROUND(best["CROSS"]/1000,2)
+        + " reason=" + _targetDeorbitRejection(best, minDownfield, maxDownfield)).
+    RETURN best.
+}
+
+LOCAL FUNCTION _targetDeorbitNormalGuess {
+    PARAMETER baseCross.
+    PARAMETER plusCross.
+    PARAMETER minusCross.
+    PARAMETER probeDv.
+    PARAMETER capDv.
+    LOCAL slope IS (plusCross - minusCross) / (2 * probeDv).
+    IF ABS(slope) < 1 { RETURN 0. }
+    RETURN MAX(-capDv, MIN(capDv, -baseCross / slope)).
+}
+
+LOCAL FUNCTION _targetDeorbitDownrangeConverged {
+    PARAMETER solved.
+    PARAMETER minDownfield.
+    PARAMETER maxDownfield.
+    RETURN solved["VALID"] AND solved["HAS_IMPACT"]
+        AND solved["DOWNFIELD"] >= minDownfield
+        AND solved["DOWNFIELD"] <= maxDownfield
+        AND ABS(solved["ERR"]) <= 250.
 }
 
 LOCAL FUNCTION _evalGeometricDeorbitNode {
@@ -678,12 +810,13 @@ LOCAL FUNCTION _evalGeometricDeorbitNode {
     PARAMETER targetLng.
     PARAMETER minLead.
     PARAMETER desiredDownfield.
+    PARAMETER normalDv IS 0.
 
     IF burnUT <= TIME:SECONDS + minLead {
         RETURN LEXICON("VALID", FALSE, "HAS_IMPACT", FALSE).
     }
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-    LOCAL nd IS _planRetroNode(burnUT, retroDv).
+    LOCAL nd IS _planRetroNode(burnUT, retroDv, normalDv).
     WAIT 0.5.
     LOCAL result IS _readGeometricDeorbitNode(nd,
         targetLat, targetLng, desiredDownfield).
@@ -699,6 +832,8 @@ LOCAL FUNCTION _readGeometricDeorbitNode {
     LOCAL result IS LEXICON(
         "VALID", FALSE,
         "DV", nd:DELTAV:MAG,
+        "RETRO", ABS(nd:PROGRADE),
+        "NORMAL", nd:NORMAL,
         "DIST", 999999999,
         "DOWNFIELD", -999999999,
         "CROSS", 999999999,
@@ -725,6 +860,7 @@ LOCAL FUNCTION _readGeometricDeorbitNode {
         SET result["DIST"] TO offset["DIST"].
         SET result["DOWNFIELD"] TO offset["DOWNFIELD"].
         SET result["CROSS"] TO offset["CROSS"].
+        SET result["SIGNED_CROSS"] TO offset["SIGNED_CROSS"].
         SET result["ERR"] TO offset["DOWNFIELD"] - desiredDownfield.
         SET result["ANGLE"] TO _nodeImpactAngle(impactUT).
         // Lateral guidance starts AFTER the burn, not while waiting for it.
@@ -749,8 +885,9 @@ LOCAL FUNCTION _nodeImpactAngle {
 LOCAL FUNCTION _planRetroNode {
     PARAMETER burnUT.
     PARAMETER retroDv.
+    PARAMETER normalDv IS 0.
 
-    LOCAL nd IS NODE(burnUT, 0, 0, -ABS(retroDv)).
+    LOCAL nd IS NODE(burnUT, 0, normalDv, -ABS(retroDv)).
     ADD nd.
     RETURN nd.
 }

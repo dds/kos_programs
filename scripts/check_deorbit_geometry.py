@@ -66,7 +66,7 @@ def evaluate(expr, env):
     for old, new in (('TRUE', 'True'), ('FALSE', 'False'), ('AND', 'and'), ('OR', 'or'), ('NOT', 'not')):
         expr = re.sub(rf'\b{old}\b', new, expr)
     expr = re.sub(r'(?<![<>!=])=(?!=)', '==', expr)
-    helpers = dict(VDOT=dot, VXCL=exclude, MIN=min, MAX=max, ABS=abs,
+    helpers = dict(VDOT=dot, VXCL=exclude, VCRS=lambda a, b: Vec(np.cross(a, b)), MIN=min, MAX=max, ABS=abs,
                    ARCSIN=lambda x: math.degrees(math.asin(x)),
                    ARCCOS=lambda x: math.degrees(math.acos(x)),
                    ARCTAN2=lambda y, x: math.degrees(math.atan2(y, x)),
@@ -104,10 +104,12 @@ def offsets(target_up, impact_up, tangent):
 def check_offsets():
     rng = np.random.default_rng(42)
     cases = 0
-    for _ in range(8):
+    for orientation in range(8):
         transform, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+        if orientation % 2:
+            transform[:, 2] *= -1
         for along in (-45000, -30450, -15000, 0, 10000, 15000, 20000, 45000):
-            for cross in (0, 100, 610, 7800):
+            for cross in (-7800, -610, -100, 0, 100, 610, 7800):
                 a, c = along / 60000, cross / 60000
                 target = Vec(transform @ np.array((math.cos(c)*math.cos(a),
                                                    -math.cos(c)*math.sin(a), math.sin(c))))
@@ -116,7 +118,8 @@ def check_offsets():
                 result = offsets(target, impact, tangent)
                 assert result['VALID']
                 assert abs(result['DOWNFIELD'] - along) < 1e-7, result
-                assert abs(result['CROSS'] - cross) < 1e-7, result
+                assert abs(result['CROSS'] - abs(cross)) < 1e-7, result
+                assert abs(result['SIGNED_CROSS'] - cross*np.linalg.det(transform)) < 1e-7, result
                 assert abs(result['DIST'] - 60000*math.acos(np.clip(dot(target, impact), -1, 1))) < .002
                 cases += 1
     assert not offsets(Vec((1, 0, 0)), Vec((1, 0, 0)), Vec((1, 0, 0)))['VALID']
@@ -175,21 +178,51 @@ def check_future_frame():
     print('PASS: 14.6 x 100 km polar orbit ground positions, surface velocities and FPA; prograde/retrograde/no rotation')
 
 
+def rejection(solved, minimum_fpa=0):
+    source = body(PLAN, '_targetDeorbitRejection')
+    gates = re.findall(r'IF (.*?) \{\s*RETURN (.*?)\.\s*\}', source, re.S)
+    env = dict(solved=solved, minDownfield=10000, maxDownfield=20000,
+               DEORBIT_MIN_FPA=minimum_fpa, _targetCrossTrackFromSolved=lambda s: s['CROSS'],
+               _targetDeorbitCrossAuthority=lambda s: 610)
+    for condition, result in gates:
+        if evaluate(condition, env):
+            return evaluate(result, env)
+    return evaluate(source[source.rindex('RETURN ') + 7:].strip().removesuffix('.'), env)
+
+
+def prediction(down=15020, cross=2940, normal=0, valid=True, impact=True, fpa=37.8):
+    return dict(VALID=valid, HAS_IMPACT=impact, DOWNFIELD=down, ERR=down-15000,
+                CROSS=cross, ANGLE=fpa, RETRO=15, NORMAL=normal, DV=math.hypot(15, normal))
+
+
 def check_planner_guards():
     source = body(PLAN, '_targetDeorbitSolutionAccepted')
-    gates = re.findall(r'IF (.*?) \{\s*RETURN FALSE\.\s*\}', source, re.S)
     result_expr = source[source.rindex('RETURN ') + 7:].strip().removesuffix('.')
     def accepted(down, cross, valid=True, impact=True, fpa=37.8, minimum_fpa=0):
-        env = dict(solved={'VALID': valid, 'HAS_IMPACT': impact, 'DOWNFIELD': down,
-                           'CROSS': cross, 'ANGLE': fpa}, minDownfield=10000, maxDownfield=20000,
-                   DEORBIT_MIN_FPA=minimum_fpa, _targetCrossTrackFromSolved=lambda s: s['CROSS'],
-                   _targetDeorbitCrossAuthority=lambda s: 610)
-        return not any(evaluate(g, env) for g in gates) and evaluate(result_expr, env)
+        env = dict(solved=prediction(down, cross, valid=valid, impact=impact, fpa=fpa),
+                   minDownfield=10000, maxDownfield=20000,
+                   _targetDeorbitRejection=lambda s, lo, hi: rejection(s, minimum_fpa))
+        return evaluate(result_expr, env)
     assert accepted(15000, 0) and accepted(10000, 610) and accepted(20000, 0)
     assert not accepted(15000, 611) and not accepted(-30450, 7800)
     assert not accepted(9999, 0) and not accepted(20001, 0)
     assert not accepted(15000, 0, valid=False) and not accepted(15000, 0, impact=False)
     assert not accepted(15000, 0, fpa=20, minimum_fpa=30)
+    assert rejection(prediction()) == 'cross-track'  # Actual reported candidate.
+    assert accepted(15020, 200) and not accepted(200, 0)
+    convergence = body(PLAN, '_targetDeorbitDownrangeConverged')
+    expression = convergence[convergence.index('RETURN ') + 7:].strip().removesuffix('.')
+    for down, valid, expected in ((15020, True, True), (15250, True, True),
+                                  (15251, True, False), (14980, False, False)):
+        assert evaluate(expression, dict(solved=prediction(down, valid=valid),
+                                         minDownfield=10000, maxDownfield=20000)) == expected
+    solver = body(PLAN, '_solveGeometricDeorbitDv')
+    accept = solver.index('IF _targetDeorbitSolutionAccepted(trial,')
+    converge = solver.index('IF _targetDeorbitDownrangeConverged(')
+    assert accept < converge and 'RETURN trial.' in solver[accept:converge]
+    assert solver.index('_correctDeorbitCrossTrack(') < accept
+    assert 'NOT normalTried AND TARGET_DEORBIT_NORMAL_DV_CAP > 0' in solver
+    assert 'SET normalTried TO TRUE.' in solver
     planner = body(PLAN, 'targetedDeorbitAt')
     assert 'FOR candidateAngle IN LIST(50, 35, 65, 20, 80)' in planner
     assert 'stepA, candidateAngle)' in planner
@@ -206,7 +239,54 @@ def check_planner_guards():
     print('PASS: acceptance boundaries, multiple burn locations, final/late-node guards and post-burn correction time')
 
 
+def check_normal_correction():
+    source = body(PLAN, '_targetDeorbitNormalGuess')
+    slope_expr = re.search(r'LOCAL slope IS (.*?)\.', source)[1]
+    guard = re.search(r'IF (.*?) \{ RETURN 0\.', source)[1]
+    result_expr = source[source.rindex('RETURN ') + 7:].strip().removesuffix('.')
+    def guess(base, plus, minus, cap=10):
+        env = dict(baseCross=base, plusCross=plus, minusCross=minus, probeDv=min(1, cap), capDv=cap)
+        env['slope'] = evaluate(slope_expr, env)
+        return 0 if evaluate(guard, env) else evaluate(result_expr, env)
+    # The sign is measured, including mirrored node frames. Each synthetic
+    # response represents meters of cross-track change per m/s normal dV.
+    for signed_miss in (-2940, 2940):
+        for response in (-5000, -1500, -500, 500, 1500, 5000):
+            cross = lambda normal: signed_miss + response*normal
+            normal = guess(cross(0), cross(1), cross(-1))
+            assert abs(normal) <= 10
+            assert rejection(prediction(cross=abs(cross(normal)), normal=normal)) == 'accepted'
+    normal = guess(2940, 3040, 2840)
+    assert normal == -10 and rejection(prediction(cross=1940, normal=normal)) == 'cross-track'
+    assert guess(2940, 2940, 2940) == 0  # No measurable response.
+    assert guess(800, 800.2, 799.8) == 0  # Do not amplify numerical noise.
+    assert guess(2940, 2965, 2915, cap=.25) == -.25
+    # Removing lateral error alone does not authorize an unsafe along-track/FPA result.
+    assert rejection(prediction(down=5000, cross=0)) == 'insufficient-braking-lead'
+    assert rejection(prediction(down=25000, cross=0)) == 'excessive-braking-lead'
+    assert rejection(prediction(cross=0, valid=False)) == 'no-impact-prediction'
+    assert rejection(prediction(cross=0, fpa=10), minimum_fpa=30) == 'impact-angle'
+    corrector = body(PLAN, '_correctDeorbitCrossTrack')
+    assert corrector.count('_evalGeometricDeorbitNode(') == 3
+    assert 'IF NOT plus["VALID"] OR NOT minus["VALID"] { RETURN best. }' in corrector
+    assert corrector.count('_targetDeorbitSolutionAccepted(') == 3
+    assert 'base["SIGNED_CROSS"]' in corrector
+    assert 'plus["SIGNED_CROSS"], minus["SIGNED_CROSS"]' in corrector
+    planner = body(PLAN, 'targetedDeorbitAt')
+    assert 'LOCAL bestRetroDv IS solved["RETRO"].' in planner
+    assert 'LOCAL bestNormalDv IS solved["NORMAL"].' in planner
+    assert '_planRetroNode(bestUT, bestRetroDv, bestNormalDv)' in planner
+    node_source = body(PLAN, '_planRetroNode')
+    node_expr = re.search(r'LOCAL nd IS (.*?)\.', node_source)[1]
+    assert evaluate(node_expr, dict(burnUT=1234, retroDv=15, normalDv=-5.88,
+                                   NODE=lambda *args: args)) == (1234, 0, -5.88, -15)
+    profile = (ROOT / 'missions/RO8/minmus_landing_recovery.ks').read_text()
+    assert 'SET TARGET_DEORBIT_NORMAL_DV_CAP TO 10.' in profile
+    print('PASS: measured normal sign, bounded correction, unchanged acceptance gates and combined node components')
+
+
 if __name__ == '__main__':
     check_offsets()
     check_future_frame()
     check_planner_guards()
+    check_normal_correction()

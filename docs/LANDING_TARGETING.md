@@ -102,6 +102,9 @@ orbit; this is not a global minimum-dV search.
 It scans up to four orbits by default, or `TARGET_DEORBIT_SCAN_ORBITS` when
 configured. In `LANDING_SIM_MODE`, this is capped at two orbits. The current
 coarse step is `period / MAX(128, TARGET_DEORBIT_SCAN_SAMPLES)`.
+The geometry scan yields every 16 samples and refines burn timing to a
+0.25-second bracket, avoiding one physics tick per sample and unnecessary
+microsecond refinement.
 If `TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM` is set, an otherwise
 acceptable pass whose cross-track miss is wider than that threshold will not
 stop the scan immediately; the solver keeps looking through the configured
@@ -118,6 +121,28 @@ waits for Trajectories, and evaluates:
 - signed downfield distance and lateral miss in the predicted impact track
 - periapsis and impact flight-path angle
 - error from the desired 15 km downfield point
+
+`downErr` is the error from the phantom aim point, not total landing miss.
+For example, the reported `downfield=15km downErr=0.02km cross=2.94/0.61km`
+candidate missed laterally by 2.94 km despite only 20 m of downrange error.
+Its lateral miss exceeded the estimated 610 m descent correction allowance.
+
+The Minmus recovery profile enables `TARGET_DEORBIT_NORMAL_DV_CAP=10` m/s
+(default zero elsewhere). When downrange is acceptable but cross-track is
+not, the planner tries normal components of +1 and -1 m/s in the same node,
+measures which direction reduces lateral miss, then tests one bounded
+linear correction. These are predictions, not separate burns. It stops at
+the first complete acceptable solution; at most three extra predictions
+are made per burn location. If the normal correction shifts downrange out
+of the braking band, the retrograde solve continues with that normal
+component retained. The final node preserves both components and undergoes
+the usual impact and terrain checks. The cap limits the normal component,
+not the total burn; actual savings depend on the measured trajectory.
+
+If downrange has converged within 250 m but another limit still rejects the
+approach, the solver moves to another burn location instead of polishing
+the same downrange root. Persistent `STATS deorbit` records name the failing
+gate (`cross-track`, braking lead, impact angle, or missing prediction).
 
 The first solution in the 10-20 km downfield band with cross-track miss within
 the controller's allowance is accepted, also respecting `DEORBIT_MIN_FPA`

@@ -62,12 +62,16 @@ GLOBAL FUNCTION lmSurfaceTrackOffset {
     LOCAL alongCos IS VDOT(targetUp, impactUp).
     LOCAL alongSin IS -VDOT(targetUp, tangent).
     LOCAL crossVec IS targetUp - alongCos * impactUp + alongSin * tangent.
+    // Signed residual for measured node-response solves. Its handedness
+    // need not be assumed: both probe nodes use this same convention.
+    LOCAL crossSin IS VDOT(targetUp, VCRS(impactUp, tangent)).
     LOCAL metersPerDegree IS SHIP:BODY:RADIUS * CONSTANT:PI / 180.
     RETURN LEXICON(
         "VALID", TRUE,
         "DIST", ARCCOS(MAX(-1, MIN(1, alongCos))) * metersPerDegree,
         "DOWNFIELD", ARCTAN2(alongSin, alongCos) * metersPerDegree,
-        "CROSS", ARCSIN(MAX(0, MIN(1, crossVec:MAG))) * metersPerDegree
+        "CROSS", ARCSIN(MAX(0, MIN(1, crossVec:MAG))) * metersPerDegree,
+        "SIGNED_CROSS", ARCSIN(MAX(-1, MIN(1, crossSin))) * metersPerDegree
     ).
 }
 
