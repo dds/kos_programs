@@ -6,6 +6,7 @@ bootPreamble().
 
 LOCAL radiusMag IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
 LOCAL grav IS SHIP:BODY:MU / (radiusMag * radiusMag).
+LOCAL surfaceGrav IS SHIP:BODY:MU / (SHIP:BODY:RADIUS ^ 2).
 LOCAL maxAcc IS 0.
 IF SHIP:MASS > 0 {
     SET maxAcc TO SHIP:AVAILABLETHRUST / SHIP:MASS.
@@ -22,7 +23,9 @@ PRINT "  Surface  radar=" + ROUND(ALT:RADAR,1)
     + " v=" + ROUND(SHIP:VERTICALSPEED,2).
 PRINT "  Thrust   mass=" + ROUND(SHIP:MASS,3)
     + "t avail=" + ROUND(SHIP:AVAILABLETHRUST,2)
-    + "kN TWR=" + ROUND(maxAcc / grav,2).
+    + "kN TWR here=" + ROUND(maxAcc / grav,2)
+    + " surface=" + ROUND(maxAcc / surfaceGrav,2).
+PRINT "  Fuel     remaining vacuum dV=" + ROUND(SHIP:DELTAV:VACUUM,1) + "m/s".
 PRINT "  Attitude pitch=" + ROUND(SHIP:FACING:PITCH,1)
     + " roll=" + ROUND(SHIP:FACING:ROLL,1).
 

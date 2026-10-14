@@ -72,6 +72,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     PARAMETER targetLng.
     PARAMETER overrideTolerance IS 0.
     PARAMETER overrideOvershoot IS 0.
+    PARAMETER refineSite IS TRUE.
 
     IF NOT ADDONS:TR:AVAILABLE {
         mLogError("Trajectories not available; targeted landing deorbit requires TR.").
@@ -84,7 +85,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     LOCAL site IS LEXICON("FOUND", FALSE).
-    IF DEFINED BOOT_LIB_RAN AND BOOT_LIB_RAN:CONTAINS("landing_site") {
+    IF refineSite AND DEFINED BOOT_LIB_RAN AND BOOT_LIB_RAN:CONTAINS("landing_site") {
         SET site TO selectScanSatLandingSite(targetLat, targetLng).
     }
     IF site["FOUND"] {

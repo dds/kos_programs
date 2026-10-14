@@ -604,6 +604,60 @@ economy profiles, with no optional KSC targeting burns. The orbit-only
 profile is covered by `python3 -B scripts/check_surface_return.py`; actual
 capture/departure costs and science recovery still need flight validation.
 
+For an **RO8 already in Minmus orbit**, `minmus_landing_recovery` skips SHAPE
+and starts a flexible-site landing directly from the current orbit. For the
+reported 14.6 x 100 km ellipse, circularization alone would cost about
+26 m/s, exceeding the old profile's 10 m/s SHAPE burn cap. That warning is
+not a craft-specific prediction that landing is impossible.
+
+With roughly 640 m/s, landing plus return is marginal: an idealized stock
+Minmus calculation gives about 210 m/s for descent, 185 m/s for ascent to
+10 km and 160 m/s for departure. Powered-descent/ascent losses, actual
+departure geometry and corrections consume the remaining allowance. Run
+`RUNPATH("0:/cmd/landingcheck.ks").` first; use its **surface** TWR, not the
+much larger TWR at 100 km, to assess the engine's landing authority.
+
+After archive sync, while connected and still in Minmus orbit, remove any
+leftover maneuver nodes before this switch (LAND_DEORBIT resumes existing
+nodes). A SHAPE budget rejection normally already removes its node:
+
+```kerboscript
+RUNPATH("0:/cmd/setphase.ks", "LAND_DEORBIT", "minmus_landing_recovery").
+missionOverrideClear().
+REBOOT.
+```
+
+Clearing old overrides prevents the previous contract coordinates/sequence
+from winning over the new profile. It selects a nearby ground-track target,
+then requires SCANsat to find terrain of at most 5 degrees slope within a
+1.5 km north/east search extent before planning deorbit. This is a local
+terrain search, not a guarantee of reaching the Flats biome or the globally
+cheapest landing. Missing coverage/no suitable site holds in orbit; choose
+another ground-track site or obtain coverage before retrying. Trajectories
+is still required. LAND_DEORBIT now loads the site scanner and persists its
+refined coordinates for LAND_ASSIST across the band reboot.
+
+After touchdown, SCIENCE_OPS attempts available experiments without automatic
+transmission and **holds on the surface**. Check stored data and fuel; about
+400 m/s remaining is a useful return planning allowance, not a guarantee.
+Keep the science in parts that survive the eventual engine/tank separation.
+When ready to launch:
+
+```kerboscript
+RUNPATH("0:/cmd/setphase.ks", "SURFACE_RETURN_SETUP").
+REBOOT.
+```
+
+This starts the normal launch countdown, eastward ascent to 10 km, and a
+53 km Kerbin entry (52–54 km correction corridor). KSC targeting is enabled,
+but the optional RETURN_TRIM burn is capped at 5 m/s; MCC and aerobrake
+targeting have separate limits. Precise KSC recovery and unshielded thermal
+survival are not assured, especially after multiple atmospheric passes.
+Use `descent_decoupler` and `descent_chutes` tags. The engine/tank stays
+attached through aerobraking and separates below 6 km in DESCENT. Profile
+and site-handoff checks run in `scripts/check_surface_return.py`; this
+recovery sequence still needs flight validation.
+
 ### Minmus science campaign
 
 Suggested order after Minmus unlock:

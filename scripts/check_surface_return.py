@@ -306,9 +306,60 @@ def check_orbit_return():
     print('Mun orbital return: 19.4 km accepted before planning, 891/900 m/s budgets, science hold and return')
 
 
+def check_minmus_landing_recovery():
+    cfg = read_settings((ROOT / 'missions/RO8/minmus_landing_recovery.ks').read_text(), defaults())
+    assert cfg['SEQUENCE'] == ['LAND_DEORBIT', 'LAND_ASSIST', 'SCIENCE_OPS', 'SURFACE_RETURN_SETUP']
+    assert cfg['LANDING_USE_WAYPOINTS'] == cfg['TARGET_LOCK'] == 0
+    assert cfg['LANDING_REQUIRE_SITE'] == cfg['LANDING_SITE_SCAN_ENABLE'] == 1
+    assert cfg['LANDING_AUTO_TARGET'] == 1 and cfg['LANDING_SKIP_TARGET_SEARCH'] == 0
+    assert cfg['LANDING_SITE_MAX_SLOPE'] == 5
+    assert cfg['SCIENCE_OPS_HOLD'] == 1 and cfg['AUTO_TRANSMIT'] == 0
+    cfg.update(BODY_NAME='MINMUS', PARKING_ALT=cfg['SURFACE_RETURN_PARKING_ALT'],
+               LAUNCH_INCLINATION=cfg['SURFACE_RETURN_INCLINATION'], LAUNCH_AZIMUTH=90)
+    surface = read_settings(emit_profile('phaseSurfaceReturnSetup', cfg), defaults())
+    assert surface['LAUNCH_INCLINATION'] == 0 and surface['PARKING_ALT'] == 10000
+    surface['targetPe'] = surface['RETURN_PE']
+    home = read_settings(emit_profile('phaseReturnSetup', surface), {})
+    assert home['REENTRY_PE'] == 53000 and home['CAPTURE_INC'] == -1
+    assert home['MCC_AEROBRAKE_SAFE_PE_MIN'] == 52000
+    assert home['MCC_AEROBRAKE_SAFE_PE_MAX'] == 54000
+    assert home['RETURN_TRIM'] is True and home['RETURN_TRIM_DV_CAP'] == 5
+    assert home['ESCAPE_KSC_TARGET'] == home['AEROBRAKE_TARGETING'] == 1
+    assert home['DESCENT_DECOUPLE_ALT'] == 6000 and home['DESCENT_FAIRING_TAG'] == 'none'
+    assert home['DESCENT_DECOUPLER_TAG'] == 'descent_decoupler'
+    assert home['DESCENT_CHUTES_TAG'] == 'descent_chutes'
+
+    landing = (ROOT / 'lib/landing_deorbit.ks').read_text()
+    phase = body(landing, '_landingTargetedDeorbit')
+    predicate = re.search(r'IF (LANDING_REQUIRE_SITE > 0 AND NOT site\["FOUND"\])', phase)[1]
+    for required in (0, 1):
+        for found in (False, True):
+            assert evaluate(predicate, LANDING_REQUIRE_SITE=required,
+                            site={'FOUND': found}) == bool(required and not found)
+    guard = phase.index('IF LANDING_REQUIRE_SITE')
+    persist = phase.index('_landingWriteTargetOverrides().')
+    plan = phase.index('RETURN targetedDeorbitAt(')
+    assert guard < persist < plan
+    assert 'RETURN FALSE.' in phase[guard:persist]
+    assert 'SET TARGET_LAT TO site["LAT"].' in phase[:persist]
+    assert 'SET TARGET_LNG TO site["LNG"].' in phase[:persist]
+    # Only one refinement: the deorbit node and post-reboot descent share it.
+    assert 'targetedDeorbitAt(TARGET_LAT, TARGET_LNG, 0, 0, FALSE)' in phase
+    overrides = body(landing, '_landingWriteTargetOverrides')
+    for key in ('TARGET_LAT', 'TARGET_LNG', 'TARGET_LOCK', 'SEQUENCE'):
+        assert f'configLiteral({key})' in overrides
+    dependencies = (ROOT / 'lib/dependencies.ks').read_text()
+    assert '"landing_deorbit", LIST("landing_config", "landing_math", "landing_site")' in dependencies
+    targeting = body((ROOT / 'lib/deorbit_targeting.ks').read_text(), 'targetedDeorbitAt')
+    assert 'PARAMETER refineSite IS TRUE.' in targeting
+    assert 'IF refineSite AND DEFINED BOOT_LIB_RAN' in targeting
+    print('Minmus recovery: scanned-site hold/handoff, surface science hold, east ascent and shallow KSC return')
+
+
 if __name__ == '__main__':
     check_profiles()
     check_site_corrections()
     check_shallow_command()
     check_economy_profiles()
     check_orbit_return()
+    check_minmus_landing_recovery()

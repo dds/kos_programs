@@ -4,6 +4,8 @@ GLOBAL LANDING_DEORBIT_LEAD_MINUTES IS 0.
 GLOBAL LANDING_AUTO_TARGET IS 0.
 GLOBAL LANDING_AUTO_TARGET_MINUTES IS 5.
 GLOBAL LANDING_CONFIRM_TARGET IS 1.
+// Opt-in: remain in orbit unless SCANsat finds a site within the slope limit.
+GLOBAL LANDING_REQUIRE_SITE IS 0.
 GLOBAL TARGET_DEORBIT_SCAN_ORBITS IS 0.
 GLOBAL TARGET_DEORBIT_SCAN_SAMPLES IS 128.
 GLOBAL TARGET_DEORBIT_SCAN_CENTER_MINUTES IS 0.
@@ -205,11 +207,27 @@ LOCAL FUNCTION _landingTargetedDeorbit {
 
     SET TARGET_LAT TO landingTarget["LAT"].
     SET TARGET_LNG TO landingTarget["LNG"].
-    mLog("Landing deorbit target: " + ROUND(landingTarget["LAT"],4)
-        + "," + ROUND(landingTarget["LNG"],4)
+    LOCAL site IS selectScanSatLandingSite(TARGET_LAT, TARGET_LNG).
+    IF LANDING_REQUIRE_SITE > 0 AND NOT site["FOUND"] {
+        mLogWarn("STATS landing-site result=hold reason=no-suitable-scanned-site").
+        mLogWarn("No suitable scanned site nearby. Check SCANsat coverage or choose another ground-track site before retrying.").
+        RETURN FALSE.
+    }
+    IF site["FOUND"] {
+        SET TARGET_LAT TO site["LAT"].
+        SET TARGET_LNG TO site["LNG"].
+        SET TARGET_LOCK TO 1.
+        SET TARGET_WAYPOINT TO "".
+        // LAND_ASSIST loads after a reboot: preserve the same refined site.
+        _landingWriteTargetOverrides().
+        mLog("STATS landing-site result=selected lat=" + TARGET_LAT
+            + " lng=" + TARGET_LNG + " slope=" + site["SLOPE"]
+            + " distance=" + site["DIST"]).
+    }
+    mLog("Landing deorbit target: " + ROUND(TARGET_LAT,4)
+        + "," + ROUND(TARGET_LNG,4)
         + " from " + landingTarget["SOURCE"] + ".").
 
-    RETURN targetedDeorbitAt(
-        landingTarget["LAT"],
-        landingTarget["LNG"]).
+    // Already selected/persisted above; do not refine a second time.
+    RETURN targetedDeorbitAt(TARGET_LAT, TARGET_LNG, 0, 0, FALSE).
 }
