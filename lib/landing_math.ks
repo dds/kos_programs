@@ -8,6 +8,69 @@
 @CLOBBERBUILTINS ON.
 @LAZYGLOBAL OFF.
 
+// Same-SOI POSITIONAT is relative to the body's CURRENT center in KSP.
+// Subtracting POSITIONAT(body, ut) would inject its parent-orbit motion.
+// GEOPOSITIONOF uses current axes too: remove rotation since now to obtain
+// the ground coordinates at arrival. These helpers are for local landings,
+// not trajectories crossing into another body's SOI.
+GLOBAL FUNCTION lmGroundGeoAt {
+    PARAMETER ut.
+    LOCAL bdy IS SHIP:BODY.
+    LOCAL geo IS bdy:GEOPOSITIONOF(POSITIONAT(SHIP, ut)).
+    LOCAL longitude_ IS geo:LNG.
+    IF ABS(bdy:ROTATIONPERIOD) > 0.01 {
+        SET longitude_ TO longitude_ - 360 * (ut - TIME:SECONDS) / bdy:ROTATIONPERIOD.
+    }
+    RETURN LATLNG(geo:LAT, longitude_).
+}
+
+// A future position/velocity expressed in the body's current surface frame.
+// Keep radius so the derivative includes vertical speed; do not mix in the
+// parent-orbit motion from POSITIONAT(body, ut).
+GLOBAL FUNCTION lmGroundPositionAt {
+    PARAMETER ut.
+    LOCAL relativePos IS POSITIONAT(SHIP, ut) - SHIP:BODY:POSITION.
+    LOCAL geo IS lmGroundGeoAt(ut).
+    RETURN geo:ALTITUDEPOSITION(relativePos:MAG - SHIP:BODY:RADIUS)
+        - SHIP:BODY:POSITION.
+}
+
+GLOBAL FUNCTION lmGroundVelocityAt {
+    PARAMETER ut.
+    RETURN (lmGroundPositionAt(ut) - lmGroundPositionAt(ut - 0.5)) / 0.5.
+}
+
+// Spherical along-track/cross-track distances relative to the trajectory
+// tangent at impact. No flat-plane Pythagoras: chord sag is NOT cross-track.
+// This works across the pole/date line, without choosing a cross-product sign.
+GLOBAL FUNCTION lmSurfaceTrackOffset {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER impactLat.
+    PARAMETER impactLng.
+    PARAMETER groundVelocity.
+    LOCAL targetUp IS (LATLNG(targetLat, targetLng):ALTITUDEPOSITION(0)
+        - SHIP:BODY:POSITION):NORMALIZED.
+    LOCAL impactUp IS (LATLNG(impactLat, impactLng):ALTITUDEPOSITION(0)
+        - SHIP:BODY:POSITION):NORMALIZED.
+    LOCAL tangent IS VXCL(impactUp, groundVelocity).
+    IF tangent:MAG < 0.01 {
+        RETURN LEXICON("VALID", FALSE, "DIST", 999999999,
+            "DOWNFIELD", -999999999, "CROSS", 999999999).
+    }
+    SET tangent TO tangent:NORMALIZED.
+    LOCAL alongCos IS VDOT(targetUp, impactUp).
+    LOCAL alongSin IS -VDOT(targetUp, tangent).
+    LOCAL crossVec IS targetUp - alongCos * impactUp + alongSin * tangent.
+    LOCAL metersPerDegree IS SHIP:BODY:RADIUS * CONSTANT:PI / 180.
+    RETURN LEXICON(
+        "VALID", TRUE,
+        "DIST", ARCCOS(MAX(-1, MIN(1, alongCos))) * metersPerDegree,
+        "DOWNFIELD", ARCTAN2(alongSin, alongCos) * metersPerDegree,
+        "CROSS", ARCSIN(MAX(0, MIN(1, crossVec:MAG))) * metersPerDegree
+    ).
+}
+
 // Effective local gravity in meters per second squared.
 // For descent trigger math we subtract centripetal acceleration from
 // horizontal ground speed, so a fast near-surface pass does not overstate
@@ -189,11 +252,11 @@ GLOBAL FUNCTION lmTerrainClearanceCheck {
 
     UNTIL sampleUt > endUt {
         LOCAL pos IS POSITIONAT(SHIP, sampleUt).
-        LOCAL altRadius IS (pos - POSITIONAT(bdy, sampleUt)):MAG.
+        LOCAL altRadius IS (pos - bdy:POSITION):MAG.
         LOCAL altDatum IS altRadius - bodyRad.
 
         IF altDatum < safeAlt {
-            LOCAL geo IS bdy:GEOPOSITIONOF(pos).
+            LOCAL geo IS lmGroundGeoAt(sampleUt).
             LOCAL terrain IS LATLNG(geo:LAT, geo:LNG):TERRAINHEIGHT.
             IF (altDatum - terrain) <= minClearance {
                 RETURN geoDistance(geo:LAT, geo:LNG, targetLat, targetLng).
@@ -217,35 +280,26 @@ GLOBAL FUNCTION lmTerrainClearanceInfo {
     LOCAL sampleUt IS startUt.
     LOCAL bodyRad IS SHIP:BODY:RADIUS.
     LOCAL bdy IS SHIP:BODY.
-    LOCAL bodyPos IS bdy:POSITION.
-    LOCAL targetVec IS LATLNG(targetLat, targetLng):POSITION.
-    LOCAL upVec IS (targetVec - bodyPos):NORMALIZED.
-    LOCAL trackDir IS VXCL(upVec,
-        POSITIONAT(SHIP, burnUt + 10) - POSITIONAT(SHIP, burnUt)).
 
     UNTIL sampleUt > endUt {
         LOCAL pos IS POSITIONAT(SHIP, sampleUt).
-        LOCAL altRadius IS (pos - POSITIONAT(bdy, sampleUt)):MAG.
+        LOCAL altRadius IS (pos - bdy:POSITION):MAG.
         LOCAL altDatum IS altRadius - bodyRad.
 
         IF altDatum < safeAlt {
-            LOCAL geo IS bdy:GEOPOSITIONOF(pos).
+            LOCAL geo IS lmGroundGeoAt(sampleUt).
             LOCAL terrain IS LATLNG(geo:LAT, geo:LNG):TERRAINHEIGHT.
             LOCAL clearance IS altDatum - terrain.
             IF clearance <= minClearance {
-                LOCAL hitVec IS LATLNG(geo:LAT, geo:LNG):POSITION.
-                LOCAL hitOffset IS VXCL(upVec, hitVec - targetVec).
-                LOCAL downfield IS hitOffset:MAG.
-                IF trackDir:MAG >= 0.01 {
-                    SET downfield TO VDOT(hitOffset, trackDir:NORMALIZED).
-                }
+                LOCAL offset IS lmSurfaceTrackOffset(targetLat, targetLng,
+                    geo:LAT, geo:LNG, lmGroundVelocityAt(sampleUt)).
                 RETURN LEXICON(
                     "HIT", TRUE,
                     "UT", sampleUt,
                     "LAT", geo:LAT,
                     "LNG", geo:LNG,
-                    "DIST", geoDistance(geo:LAT, geo:LNG, targetLat, targetLng),
-                    "DOWNFIELD", downfield,
+                    "DIST", offset["DIST"],
+                    "DOWNFIELD", offset["DOWNFIELD"],
                     "CLEARANCE", clearance
                 ).
             }
@@ -268,16 +322,15 @@ GLOBAL FUNCTION lmTerrainImpactAngle {
 
     UNTIL sampleUt > endUt {
         LOCAL pos IS POSITIONAT(SHIP, sampleUt).
-        LOCAL altRadius IS (pos - POSITIONAT(bdy, sampleUt)):MAG.
+        LOCAL altRadius IS (pos - bdy:POSITION):MAG.
         LOCAL altDatum IS altRadius - bodyRad.
 
         IF altDatum < safeAlt {
-            LOCAL geo IS bdy:GEOPOSITIONOF(pos).
+            LOCAL geo IS lmGroundGeoAt(sampleUt).
             LOCAL terrain IS LATLNG(geo:LAT, geo:LNG):TERRAINHEIGHT.
             IF (altDatum - terrain) <= minClearance {
-                LOCAL prevPos IS POSITIONAT(SHIP, sampleUt - stepSec).
-                LOCAL velVec IS pos - prevPos.
-                LOCAL upVec IS (pos - POSITIONAT(bdy, sampleUt)):NORMALIZED.
+                LOCAL velVec IS lmGroundVelocityAt(sampleUt).
+                LOCAL upVec IS lmGroundPositionAt(sampleUt):NORMALIZED.
                 LOCAL downRate IS -VDOT(velVec, upVec).
                 LOCAL sideRate IS VXCL(upVec, velVec):MAG.
                 IF downRate <= 0 { RETURN 0. }

@@ -28,10 +28,11 @@ When the state machine changes tracks, `_landingEnsureStateTrack()` deletes
 the previous track from the local volume, syncs the next one from archive, and
 `RUNONCEPATH`s it.
 
-`landing_site` is optional. `deorbit_targeting` only calls
-`selectScanSatLandingSite()` if `landing_site` is already loaded in the boot
-library set. When present and enabled, it can shift the requested deorbit
-target to a nearby SCANsat-safe site before planning the deorbit node.
+`landing_deorbit` loads `landing_site`, refines enabled targets and persists
+the coordinates for the powered-descent reboot. Other `deorbit_targeting`
+callers only use site refinement if the scanner is already loaded. The
+RO8 recovery command's `waypoint` mode uses the visually selected site
+without requiring SCANsat coverage.
 
 ## Target resolution
 
@@ -39,8 +40,7 @@ target to a nearby SCANsat-safe site before planning the deorbit node.
 for deorbit and powered descent. The priority order is:
 
 1. `TARGET_WAYPOINT`, resolved by waypoint name on the current body.
-2. Locked configured coordinates, if `TARGET_LOCK` is true and either
-   `TARGET_LAT` or `TARGET_LNG` is nonzero.
+2. Locked configured coordinates, including an explicit 0,0 site.
 3. The currently selected Waypoint Manager waypoint.
 4. Nonzero `TARGET_LAT` / `TARGET_LNG` coordinates.
 
@@ -79,11 +79,11 @@ the real target:
 
 - nominal downfield distance: 15 km
 - accepted downfield band: 10-20 km
-- accepted straight-line target distance: 10-20 km
+- cross-track miss must fit the descent controller's correction allowance
 
 That downfield impact is the "phantom" target. It is a ballistic miss point
-beyond the actual landing site, measured along the ground track at the burn
-time. The real landing site remains `TARGET_LAT` / `TARGET_LNG`; the phantom
+beyond the actual landing site, measured along the surface track at predicted
+impact. The real landing site remains `TARGET_LAT` / `TARGET_LNG`; the phantom
 impact exists to preserve control authority and time. If the craft were aimed
 ballistically at the real target, the powered descent would have little room
 to kill horizontal velocity, correct crossrange error, and settle vertically.
@@ -95,13 +95,14 @@ target latitude is reachable from the current inclination. If `landing_site`
 is loaded and site scanning is enabled, it may replace the requested target
 with a nearby SCANsat-selected site before solving.
 
-The solver then scans candidate burn times looking for a geometric node where
-the vessel subpoint is about 50 degrees of central angle before the target.
+The solver scans candidate burn times at approaching ground angles of
+50, 35, 65, 20 and 80 degrees, accepting the first usable candidate. The
+additional seeds avoid assuming one burn location works for every eccentric
+orbit; this is not a global minimum-dV search.
 It scans up to four orbits by default, or `TARGET_DEORBIT_SCAN_ORBITS` when
 configured. In `LANDING_SIM_MODE`, this is capped at two orbits. The current
-implementation uses a fixed coarse step of `period / 128`; the
-`TARGET_DEORBIT_SCAN_SAMPLES` global exists, but is not currently used by this
-solver. If `TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM` is set, an otherwise
+coarse step is `period / MAX(128, TARGET_DEORBIT_SCAN_SAMPLES)`.
+If `TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM` is set, an otherwise
 acceptable pass whose cross-track miss is wider than that threshold will not
 stop the scan immediately; the solver keeps looking through the configured
 scan orbits and chooses the first pass inside the preferred cross-track band,
@@ -114,15 +115,45 @@ waits for Trajectories, and evaluates:
 - whether Trajectories predicts an impact
 - the predicted impact latitude/longitude
 - distance from the real target
-- signed downfield distance relative to the real target and burn ground track
+- signed downfield distance and lateral miss in the predicted impact track
 - periapsis and impact flight-path angle
 - error from the desired 15 km downfield point
 
-The first solution that lands in the 10-20 km downfield band and the 10-20 km
-distance band is accepted. Before execution, the chosen node is recreated for
-real and optionally terrain-validated: if projected terrain contact occurs
+The first solution in the 10-20 km downfield band with cross-track miss within
+the controller's allowance is accepted, also respecting `DEORBIT_MIN_FPA`
+when enabled. Before execution, the chosen node is recreated and its impact
+is rechecked against those same limits. Missing/changed impact predictions
+hold without burning. The node is optionally terrain-validated: if projected terrain contact occurs
 before the target pass, planning fails; post-target impact is only warned
 about because it is expected for the phantom target.
+
+### Geometry regression: eccentric polar Minmus landing
+
+The old cross-track calculation subtracted the squared projected downfield
+distance from the squared three-dimensional target/impact chord. That counts
+the planet's curvature as lateral error: a perfectly aligned 15 km downrange
+point on a 60 km-radius Minmus produced about **1,865 m false cross-track**.
+It could never satisfy a 610 m lateral limit. The new calculation resolves
+along-track and cross-track angles on the sphere using the impact tangent;
+altitude and radial chord sag are excluded.
+
+`lmGroundGeoAt` accounts for body rotation at the future sample time. For a
+same-SOI local landing, kOS/KSP `POSITIONAT(SHIP, ut)` uses the current body
+center; the radius is measured from `BODY:POSITION`, not
+`POSITIONAT(BODY, ut)`. Mixing those centers injected the moon's motion
+around its parent into the old impact-angle and terrain predictions. See
+[kOS vessel prediction implementation](https://github.com/KSP-KOS/KOS/blob/develop/src/kOS/Suffixed/VesselTarget.cs)
+and [body coordinate conversion](https://ksp-kos.github.io/KOS/structures/celestial_bodies/body.html#body-geopositionof).
+The helpers here are local-SOI geometry, not encounter/SOI-transition tools.
+
+Ground-relative velocity is a finite difference of the corrected positions,
+and the same geometry is used for impact FPA and terrain validation. Lateral
+correction time excludes the wait before the deorbit burn. Candidate failures,
+the selected plan and final validation now emit persistent `STATS deorbit`
+records. `scripts/check_deorbit_geometry.py` evaluates the actual source
+expressions against spherical/polar/rotating-body fixtures and acceptance
+boundaries. It does not simulate Trajectories updates, finite burns, terrain
+meshes or kOS execution; flight validation is still needed.
 
 `executeDeorbitNode()` centers the burn around the node time, starts alignment
 90 seconds early, creates a maneuver alarm, points along `nd:BURNVECTOR`, and

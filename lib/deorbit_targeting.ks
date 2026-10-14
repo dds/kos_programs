@@ -78,6 +78,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
         mLogError("Trajectories not available; targeted landing deorbit requires TR.").
         RETURN FALSE.
     }
+    IF NOT ADDONS:TR:ISVERTWOTWO {
+        mLogError("Targeted deorbit requires Trajectories 2.2+ impact timing.").
+        RETURN FALSE.
+    }
 
     IF NOT targetReachable(targetLat) {
         mLogError("Target latitude is not reachable from this orbit inclination.").
@@ -96,7 +100,6 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
     LOCAL tolerance IS TARGET_TOLERANCE.
     IF overrideTolerance > 0 { SET tolerance TO overrideTolerance. }
-    LOCAL nodeGroundAngle IS 50.
     LOCAL desiredDownfield IS 15000.
     IF overrideOvershoot > 0 { SET desiredDownfield TO overrideOvershoot. }
     LOCAL minDownfield IS 10000.
@@ -108,7 +111,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     mLog("Targeted deorbit: target=" + ROUND(targetLat,4) + ","
         + ROUND(targetLng,4)
-        + "  nodeAngle=" + ROUND(nodeGroundAngle,0) + "deg"
+        + "  nodeAngles=50,35,65,20,80deg"
         + "  downfield=" + ROUND(desiredDownfield/1000,1) + "km"
         + " band=" + ROUND(minDownfield/1000,1)
         + "-" + ROUND(maxDownfield/1000,1) + "km.").
@@ -125,7 +128,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
         IF scanOrbits > 2 { SET scanOrbits TO 2. }
     }
 
-    LOCAL stepA IS period / 128.
+    LOCAL stepA IS period / MAX(128, TARGET_DEORBIT_SCAN_SAMPLES).
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
     LOCAL geometry IS LEXICON(
         "VALID", FALSE,
@@ -160,65 +163,73 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL orbitScan IS 0.
 
     UNTIL orbitScan >= scanOrbits OR acceptedSolution {
-        LOCAL scanStart IS nowUt + minLead + orbitScan * period.
-        LOCAL scanEnd IS scanStart + period + 30.
-        SET geometry TO _findDeorbitGeometryNode(targetLat, targetLng,
-            scanStart, scanEnd, stepA, nodeGroundAngle).
+        // The old single 50-degree seed can miss a usable approach on
+        // an eccentric orbit. Try nearby burn locations before waiting
+        // another orbit; every candidate retains the same limits.
+        FOR candidateAngle IN LIST(50, 35, 65, 20, 80) {
+            IF acceptedSolution { BREAK. }
+            LOCAL scanStart IS MAX(TIME:SECONDS + minLead + 5,
+                nowUt + minLead + orbitScan * period).
+            LOCAL scanEnd IS scanStart + period + 30.
+            SET geometry TO _findDeorbitGeometryNode(targetLat, targetLng,
+                scanStart, scanEnd, stepA, candidateAngle).
 
-        IF geometry["VALID"] {
-            SET foundGeometry TO TRUE.
-            LOCAL candidateUT IS geometry["UT"].
-            mLog("Geometry node orbit " + (orbitScan + 1)
-                + "/" + scanOrbits
-                + ": T+" + ROUND(candidateUT - nowUt,0)
-                + "s angle=" + ROUND(geometry["ANGLE"],2)
-                + " subpoint=" + ROUND(geometry["LAT"],4)
-                + "," + ROUND(geometry["LNG"],4) + ".").
+            IF geometry["VALID"] {
+                SET foundGeometry TO TRUE.
+                LOCAL candidateUT IS geometry["UT"].
+                mLog("Geometry node orbit " + (orbitScan + 1)
+                    + "/" + scanOrbits
+                    + ": T+" + ROUND(candidateUT - nowUt,0)
+                    + "s angle=" + ROUND(geometry["ANGLE"],2)
+                    + " subpoint=" + ROUND(geometry["LAT"],4)
+                    + "," + ROUND(geometry["LNG"],4) + ".").
 
-            SET solved TO _solveGeometricDeorbitDv(candidateUT,
-                targetLat, targetLng,
-                minLead, minRetroDv, maxRetroDv, seedRetroDv,
-                desiredDownfield, minDownfield, maxDownfield).
-            IF NOT solved["VALID"] {
-                mLogWarn("Orbit " + (orbitScan + 1)
-                    + " geometry did not solve a valid deorbit.").
-            } ELSE IF _targetDeorbitSolutionAccepted(solved,
-                    minDownfield, maxDownfield) {
-                LOCAL crossTrack IS _targetCrossTrackFromSolved(solved).
-                IF NOT bestAccepted["VALID"]
-                        OR crossTrack < bestAcceptedCross {
-                    SET bestAccepted TO solved.
-                    SET bestAcceptedGeometry TO geometry.
-                    SET bestAcceptedCross TO crossTrack.
-                }
-
-                IF preferredCrossTrack <= 0 OR crossTrack <= preferredCrossTrack {
-                    SET acceptedSolution TO TRUE.
-                } ELSE {
+                SET solved TO _solveGeometricDeorbitDv(candidateUT,
+                    targetLat, targetLng,
+                    minLead, minRetroDv, maxRetroDv, seedRetroDv,
+                    desiredDownfield, minDownfield, maxDownfield).
+                IF NOT solved["VALID"] {
                     mLogWarn("Orbit " + (orbitScan + 1)
-                        + " solution accepted but wide: cross="
+                        + " geometry did not solve a valid deorbit.").
+                } ELSE IF _targetDeorbitSolutionAccepted(solved,
+                        minDownfield, maxDownfield) {
+                    LOCAL crossTrack IS _targetCrossTrackFromSolved(solved).
+                    IF NOT bestAccepted["VALID"]
+                            OR crossTrack < bestAcceptedCross {
+                        SET bestAccepted TO solved.
+                        SET bestAcceptedGeometry TO geometry.
+                        SET bestAcceptedCross TO crossTrack.
+                    }
+
+                    IF preferredCrossTrack <= 0 OR crossTrack <= preferredCrossTrack {
+                        SET acceptedSolution TO TRUE.
+                    } ELSE {
+                        mLogWarn("Orbit " + (orbitScan + 1)
+                            + " solution accepted but wide: cross="
+                            + ROUND(crossTrack/1000,2)
+                            + "km preferred<="
+                            + ROUND(preferredCrossTrack/1000,2)
+                            + "km; scanning later orbit(s).").
+                    }
+                } ELSE {
+                    LOCAL crossTrack IS _targetCrossTrackFromSolved(solved).
+                    LOCAL crossAuth IS _targetDeorbitCrossAuthority(solved).
+                    mLogWarn("STATS deorbit candidate orbit=" + (orbitScan + 1)
+                        + " nodeAngle=" + candidateAngle
+                        + " solution outside deorbit band: dist="
+                        + ROUND(solved["DIST"]/1000,2)
+                        + "km downfield="
+                        + ROUND(solved["DOWNFIELD"]/1000,2)
+                        + "km cross="
                         + ROUND(crossTrack/1000,2)
-                        + "km preferred<="
-                        + ROUND(preferredCrossTrack/1000,2)
-                        + "km; scanning later orbit(s).").
+                        + "/" + ROUND(crossAuth/1000,2)
+                        + "km fpa=" + ROUND(solved["ANGLE"],1) + ".").
                 }
             } ELSE {
-                LOCAL crossTrack IS _targetCrossTrackFromSolved(solved).
-                LOCAL crossAuth IS _targetDeorbitCrossAuthority(solved).
-                mLogWarn("Orbit " + (orbitScan + 1)
-                    + " solution outside deorbit band: dist="
-                    + ROUND(solved["DIST"]/1000,2)
-                    + "km downfield="
-                    + ROUND(solved["DOWNFIELD"]/1000,2)
-                    + "km cross="
-                    + ROUND(crossTrack/1000,2)
-                    + "/" + ROUND(crossAuth/1000,2)
-                    + "km fpa=" + ROUND(solved["ANGLE"],1) + ".").
+                mLogWarn("No deorbit node found at ground angle "
+                    + ROUND(candidateAngle,0) + "deg during orbit "
+                    + (orbitScan + 1) + "/" + scanOrbits + ".").
             }
-        } ELSE {
-            mLogWarn("No deorbit node found at ground angle "
-                + ROUND(nodeGroundAngle,0) + "deg during orbit "
-                + (orbitScan + 1) + "/" + scanOrbits + ".").
         }
 
         SET orbitScan TO orbitScan + 1.
@@ -237,11 +248,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     IF NOT acceptedSolution {
         IF NOT foundGeometry {
-            mLogError("No deorbit node found at ground angle "
-                + ROUND(nodeGroundAngle,0) + "deg from target within "
+            mLogError("STATS deorbit result=hold: no approaching burn geometry within "
                 + scanOrbits + " orbit(s).").
         } ELSE {
-            mLogError("No retrograde dV in " + ROUND(minRetroDv,1)
+            mLogError("STATS deorbit result=hold: no retrograde dV in " + ROUND(minRetroDv,1)
                 + "-" + ROUND(maxRetroDv,1) + "m/s put TR impact "
                 + ROUND(minDownfield/1000,1) + "-"
                 + ROUND(maxDownfield/1000,1)
@@ -270,7 +280,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
             + " cross=" + ROUND(bestCross/1000,2)
             + "/" + ROUND(bestCrossAuthority/1000,2) + "km".
     }
-    mLog("Solved deorbit: T+" + ROUND(bestUT - nowUt,0)
+    mLog("STATS deorbit solved: T+" + ROUND(bestUT - nowUt,0)
         + "s dv=" + ROUND(bestRetroDv,2)
         + solvedImpactText
         + " Pe=" + ROUND(bestPe/1000,2) + "km"
@@ -309,22 +319,23 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
+    IF bestUT <= TIME:SECONDS + minLead {
+        mLogWarn("STATS deorbit result=hold reason=planning-window-expired").
+        RETURN FALSE.
+    }
     LOCAL realNode IS _planRetroNode(bestUT, bestRetroDv).
     _logDeorbitNode("Selected deorbit node", realNode).
     WAIT 0.5.
-    IF ADDONS:TR:HASIMPACT {
-        LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-        LOCAL trDist IS _targetDeorbitDistance(impactPos:LAT, impactPos:LNG,
-            targetLat, targetLng).
-        LOCAL trDownfield IS _targetDownfieldDistance(impactPos:LAT,
-            impactPos:LNG, targetLat, targetLng, bestUT).
-        mLog("TR final: impact=" + ROUND(impactPos:LAT,4)
-            + "," + ROUND(impactPos:LNG,4)
-            + " dist=" + ROUND(trDist/1000,2) + "km"
-            + " downfield=" + ROUND(trDownfield/1000,2) + "km"
-            + " Pe=" + ROUND(realNode:ORBIT:PERIAPSIS/1000,1) + "km.").
-    } ELSE {
-        mLogWarn("TR final: no impact predicted for selected node.").
+    LOCAL finalCheck IS _readGeometricDeorbitNode(realNode,
+        targetLat, targetLng, desiredDownfield).
+    mLog("STATS deorbit final valid=" + finalCheck["VALID"]
+        + " dv=" + ROUND(bestRetroDv,2)
+        + " downfieldKm=" + ROUND(finalCheck["DOWNFIELD"]/1000,2)
+        + " crossKm=" + ROUND(finalCheck["CROSS"]/1000,2)).
+    IF NOT _targetDeorbitSolutionAccepted(finalCheck, minDownfield, maxDownfield) {
+        mLogWarn("Final deorbit prediction failed revalidation; retaining orbit.").
+        REMOVE realNode.
+        RETURN FALSE.
     }
 
     IF TERRAIN_VALIDATE {
@@ -353,11 +364,16 @@ GLOBAL FUNCTION targetedDeorbitAt {
         }
     }
 
+    IF bestUT <= TIME:SECONDS + minLead {
+        mLogWarn("STATS deorbit result=hold reason=validation-window-expired").
+        REMOVE realNode.
+        RETURN FALSE.
+    }
     mLog("Executing deorbit burn at T+" + ROUND(bestUT - TIME:SECONDS,0) + "s.").
     archiveLog().
     HUDTEXT("Deorbit burn in " + ROUND(bestUT - TIME:SECONDS,0) + "s",
         3, 2, 13, CYAN, FALSE).
-    executeDeorbitNode(realNode).
+    IF NOT executeDeorbitNode(realNode) { RETURN FALSE. }
 
     WAIT 2.
     IF ADDONS:TR:HASIMPACT {
@@ -365,7 +381,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
         LOCAL postDist IS _targetDeorbitDistance(postImpact:LAT,
             postImpact:LNG, targetLat, targetLng).
         LOCAL postDownfield IS _targetDownfieldDistance(postImpact:LAT,
-            postImpact:LNG, targetLat, targetLng, bestUT).
+            postImpact:LNG, targetLat, targetLng,
+            TIME:SECONDS + ADDONS:TR:TIMETILLIMPACT).
         mLog("Post-burn impact prediction: "
             + ROUND(postImpact:LAT,4) + "," + ROUND(postImpact:LNG,4)
             + " dist=" + ROUND(postDist/1000,1) + "km"
@@ -379,16 +396,14 @@ GLOBAL FUNCTION targetedDeorbitAt {
 LOCAL FUNCTION _targetCrossTrackFromSolved {
     PARAMETER solved.
     IF NOT solved["HAS_IMPACT"] { RETURN 999999999. }
-    LOCAL crossSq IS solved["DIST"] ^ 2 - solved["DOWNFIELD"] ^ 2.
-    IF crossSq < 0 { SET crossSq TO 0. }
-    RETURN SQRT(crossSq).
+    RETURN solved["CROSS"].
 }
 
 LOCAL FUNCTION _targetDeorbitSolutionAccepted {
     PARAMETER solved.
     PARAMETER minDownfield.
     PARAMETER maxDownfield.
-    IF NOT solved["HAS_IMPACT"] { RETURN FALSE. }
+    IF NOT solved["VALID"] OR NOT solved["HAS_IMPACT"] { RETURN FALSE. }
     IF solved["DOWNFIELD"] < minDownfield { RETURN FALSE. }
     IF solved["DOWNFIELD"] > maxDownfield { RETURN FALSE. }
     IF DEORBIT_MIN_FPA > 0
@@ -511,7 +526,7 @@ LOCAL FUNCTION _targetGroundAngleAt {
     PARAMETER targetLat.
     PARAMETER targetLng.
 
-    LOCAL geo IS SHIP:BODY:GEOPOSITIONOF(POSITIONAT(SHIP, ut)).
+    LOCAL geo IS lmGroundGeoAt(ut).
     RETURN LEXICON(
         "VALID", TRUE,
         "UT", ut,
@@ -529,8 +544,8 @@ LOCAL FUNCTION _targetCentralAngle {
     PARAMETER lng2.
 
     LOCAL bodyPos IS SHIP:BODY:POSITION.
-    RETURN VANG(LATLNG(lat1, lng1):POSITION - bodyPos,
-        LATLNG(lat2, lng2):POSITION - bodyPos).
+    RETURN VANG(LATLNG(lat1, lng1):ALTITUDEPOSITION(0) - bodyPos,
+        LATLNG(lat2, lng2):ALTITUDEPOSITION(0) - bodyPos).
 }
 
 LOCAL FUNCTION _targetDeorbitDistance {
@@ -539,7 +554,8 @@ LOCAL FUNCTION _targetDeorbitDistance {
     PARAMETER lat2.
     PARAMETER lng2.
 
-    RETURN (LATLNG(lat1, lng1):POSITION - LATLNG(lat2, lng2):POSITION):MAG.
+    RETURN _targetCentralAngle(lat1, lng1, lat2, lng2)
+        * SHIP:BODY:RADIUS * CONSTANT:PI / 180.
 }
 
 LOCAL FUNCTION _targetDownfieldDistance {
@@ -547,18 +563,10 @@ LOCAL FUNCTION _targetDownfieldDistance {
     PARAMETER impactLng.
     PARAMETER targetLat.
     PARAMETER targetLng.
-    PARAMETER burnUT.
-
-    LOCAL bodyPos IS SHIP:BODY:POSITION.
-    LOCAL targetVec IS LATLNG(targetLat, targetLng):POSITION.
-    LOCAL impactVec IS LATLNG(impactLat, impactLng):POSITION.
-    LOCAL upVec IS (targetVec - bodyPos):NORMALIZED.
-    LOCAL trackDir IS VXCL(upVec,
-        POSITIONAT(SHIP, burnUT + 10) - POSITIONAT(SHIP, burnUT)).
-    LOCAL impactOffset IS VXCL(upVec, impactVec - targetVec).
-
-    IF trackDir:MAG < 0.01 { RETURN impactOffset:MAG. }
-    RETURN VDOT(impactOffset, trackDir:NORMALIZED).
+    PARAMETER impactUT.
+    LOCAL offset IS lmSurfaceTrackOffset(targetLat, targetLng,
+        impactLat, impactLng, lmGroundVelocityAt(impactUT)).
+    RETURN offset["DOWNFIELD"].
 }
 
 LOCAL FUNCTION _solveGeometricDeorbitDv {
@@ -671,58 +679,66 @@ LOCAL FUNCTION _evalGeometricDeorbitNode {
     PARAMETER minLead.
     PARAMETER desiredDownfield.
 
+    IF burnUT <= TIME:SECONDS + minLead {
+        RETURN LEXICON("VALID", FALSE, "HAS_IMPACT", FALSE).
+    }
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
+    LOCAL nd IS _planRetroNode(burnUT, retroDv).
+    WAIT 0.5.
+    LOCAL result IS _readGeometricDeorbitNode(nd,
+        targetLat, targetLng, desiredDownfield).
+    REMOVE nd.
+    RETURN result.
+}
+
+LOCAL FUNCTION _readGeometricDeorbitNode {
+    PARAMETER nd.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER desiredDownfield.
     LOCAL result IS LEXICON(
         "VALID", FALSE,
-        "DV", retroDv,
+        "DV", nd:DELTAV:MAG,
         "DIST", 999999999,
         "DOWNFIELD", -999999999,
+        "CROSS", 999999999,
         "ERR", 999999999,
         "PE", 999999999,
         "ANGLE", -1,
         "HAS_IMPACT", FALSE,
         "LAT", 0,
-        "LNG", 0
+        "LNG", 0,
+        "TTI", 0
     ).
 
-    IF burnUT <= TIME:SECONDS + minLead { RETURN result. }
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
-    LOCAL nd IS _planRetroNode(burnUT, retroDv).
-    WAIT 0.2.
     SET result["PE"] TO nd:ORBIT:PERIAPSIS.
     IF ADDONS:TR:HASIMPACT {
         LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
-        LOCAL dist IS _targetDeorbitDistance(impactPos:LAT, impactPos:LNG,
-            targetLat, targetLng).
-        LOCAL downfield IS _targetDownfieldDistance(impactPos:LAT,
-            impactPos:LNG, targetLat, targetLng, burnUT).
-        LOCAL angle IS _nodeImpactAngle(impactPos).
+        LOCAL impactUT IS TIME:SECONDS + ADDONS:TR:TIMETILLIMPACT.
+        IF impactUT <= nd:TIME { RETURN result. }
+        LOCAL offset IS lmSurfaceTrackOffset(targetLat, targetLng,
+            impactPos:LAT, impactPos:LNG, lmGroundVelocityAt(impactUT)).
+        IF NOT offset["VALID"] { RETURN result. }
         SET result["HAS_IMPACT"] TO TRUE.
         SET result["LAT"] TO impactPos:LAT.
         SET result["LNG"] TO impactPos:LNG.
-        SET result["DIST"] TO dist.
-        SET result["DOWNFIELD"] TO downfield.
-        SET result["ERR"] TO downfield - desiredDownfield.
-        SET result["ANGLE"] TO angle.
-        SET result["TTI"] TO ADDONS:TR:TIMETILLIMPACT.
+        SET result["DIST"] TO offset["DIST"].
+        SET result["DOWNFIELD"] TO offset["DOWNFIELD"].
+        SET result["CROSS"] TO offset["CROSS"].
+        SET result["ERR"] TO offset["DOWNFIELD"] - desiredDownfield.
+        SET result["ANGLE"] TO _nodeImpactAngle(impactUT).
+        // Lateral guidance starts AFTER the burn, not while waiting for it.
+        SET result["TTI"] TO impactUT - nd:TIME.
         SET result["VALID"] TO TRUE.
     }
-    REMOVE nd.
     RETURN result.
 }
 
 LOCAL FUNCTION _nodeImpactAngle {
-    PARAMETER impactPos.
-
-    IF NOT ADDONS:TR:ISVERTWOTWO { RETURN -1. }
-
-    LOCAL impactUT IS TIME:SECONDS + ADDONS:TR:TIMETILLIMPACT.
-    LOCAL dt IS 0.5.
-    LOCAL body IS SHIP:BODY.
-
-    LOCAL rPlus IS POSITIONAT(SHIP, impactUT) - POSITIONAT(body, impactUT).
-    LOCAL rMinus IS POSITIONAT(SHIP, impactUT - dt) - POSITIONAT(body, impactUT - dt).
-    LOCAL impactVel IS ((rPlus - rMinus) / dt) - impactPos:VELOCITY:ORBIT.
-    LOCAL impactUp IS (impactPos:POSITION - body:POSITION):NORMALIZED.
+    PARAMETER impactUT.
+    LOCAL impactVel IS lmGroundVelocityAt(impactUT).
+    IF impactVel:MAG < 0.01 { RETURN -1. }
+    LOCAL impactUp IS lmGroundPositionAt(impactUT):NORMALIZED.
 
     // Descent FPA magnitude: 0 is horizontal, 90 is vertical.
     LOCAL sinFpa IS VDOT(impactVel:NORMALIZED, impactUp).

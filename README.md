@@ -656,6 +656,14 @@ Keep it near the ground track to avoid spending fuel on lateral guidance.
 The solver chooses a burn before the site; do not wait until periapsis to
 start setup. It may need a later pass if the useful burn location has passed.
 
+The deorbit geometry fix removes spherical curvature from cross-track error,
+accounts for rotation and uses consistent same-SOI position frames. It tries
+several burn locations and revalidates the selected node before execution.
+If this mission held on the old calculation, sync and run
+`RUNPATH("0:/cmd/setphase.ks", "LAND_DEORBIT").` then `REBOOT.` while connected;
+this preserves the saved waypoint overrides. The new `STATS deorbit candidate`,
+`solved` and `final` lines capture the geometry if planning still holds.
+
 A direct surface-to-Kerbin ascent is physically possible but is not an
 implemented return mode: `ascentAirlessToOrbit` circularizes, RETURN_SETUP
 requires ORBITING, and ESCAPE scans a bound parking orbit. Omitting PARK
