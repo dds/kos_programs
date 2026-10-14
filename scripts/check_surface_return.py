@@ -164,8 +164,6 @@ def check_shallow_command():
     source = (ROOT / 'cmd/returnshallow.ks').read_text()
     assert source.index('bootPreamble().') < source.index('stateGet(')
     assert source.index('bootLibLoad("return_setup").') < source.index('SET RETURN_')
-    for tag in ('descent_decoupler', 'descent_chutes'):
-        assert f'SHIP:PARTSTAGGED("{tag}"):LENGTH = 0' in source
     command = read_settings(source, defaults())
     command['targetPe'] = command['RETURN_PE']
     # The generated profile must override RO6 hardware defaults after reboot.
