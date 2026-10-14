@@ -59,6 +59,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/arrival.ks", "status").` | Show actual arrival Pe, capture fuel estimate, correction spending and interrupted-burn reason without flying |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
+| `RUNPATH("0:/cmd/minmusrecover.ks").` | Select RO8 landing recovery from Minmus orbit and clear old overrides; then reboot |
 | `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
 | `RUNPATH("0:/cmd/dump.ks").` | Print persistent state |
 | `RUNONCEPATH("0:/cmd/trimstate.ks").` | Remove bulky stale state keys after a tight-storage boot |
@@ -622,13 +623,14 @@ leftover maneuver nodes before this switch (LAND_DEORBIT resumes existing
 nodes). A SHAPE budget rejection normally already removes its node:
 
 ```kerboscript
-RUNPATH("0:/cmd/setphase.ks", "LAND_DEORBIT", "minmus_landing_recovery").
-missionOverrideClear().
+RUNPATH("0:/cmd/minmusrecover.ks").
 REBOOT.
 ```
 
-Clearing old overrides prevents the previous contract coordinates/sequence
-from winning over the new profile. It selects a nearby ground-track target,
+The command loads its own libraries, caches the profile and clears old
+overrides, preventing previous contract coordinates/sequence from winning
+over the new profile. It refuses to switch with a maneuver node present.
+The mission selects a nearby ground-track target,
 then requires SCANsat to find terrain of at most 5 degrees slope within a
 1.5 km north/east search extent before planning deorbit. This is a local
 terrain search, not a guarantee of reaching the Flats biome or the globally

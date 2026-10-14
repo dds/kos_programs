@@ -161,6 +161,10 @@ Looks like Python/JS; is neither.
 
 - Mission profiles are KerboScript files in `missions/<vehicle>/`; each is a
   list of `SET NAME TO value.` statements.
+- Console instructions must use runnable `cmd/` scripts for library helpers.
+  Embed calls such as `missionOverrideClear()` in a script that loads its own
+  boot preamble; do not ask the operator to call them at the console after
+  another script exits.
 - Launch timing: PRELAUNCH chooses/persists `launch_window`; the small
   shared `launch_window` library waits after LAUNCH has loaded. Do not wait
   until the window and then reboot. `LAUNCH_PLANE_LEAD` calibrates ascent
