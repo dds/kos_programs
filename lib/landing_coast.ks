@@ -47,9 +47,8 @@ GLOBAL FUNCTION _landingCoastMccError {
 LOCAL FUNCTION _landingCoastMccThrottle {
     PARAMETER nextBrakeEta.
 
-    LOCAL minThrottle IS MAX(0, MIN(1, LANDING_COAST_MCC_THROTTLE_MIN)).
-    LOCAL maxThrottle IS MAX(minThrottle,
-        MIN(1, LANDING_COAST_MCC_THROTTLE_MAX)).
+    LOCAL maxThrottle IS MAX(0, MIN(1, LANDING_COAST_MCC_THROTTLE_MAX)).
+    LOCAL minThrottle IS MAX(0, MIN(maxThrottle, LANDING_COAST_MCC_THROTTLE_MIN)).
     LOCAL earlyFrac IS MAX(0, MIN(1,
         (nextBrakeEta - LANDING_COAST_MCC_MIN_BRAKE_ETA)
             / MAX(1, LANDING_COAST_MCC_MIN_BRAKE_ETA))).
@@ -98,7 +97,7 @@ GLOBAL FUNCTION _landingCoastTick {
         _landingHudEtaNotice(ctx, "Braking burn", nextBrakeEta, YELLOW).
     }
 
-    IF ctx["HAS_TARGET"]
+    IF LANDING_COAST_MCC_THROTTLE_MAX > 0 AND ctx["HAS_TARGET"]
             AND nextBrakeEta < 999999
             AND nextBrakeEta > LANDING_COAST_MCC_MIN_BRAKE_ETA {
         LOCAL trajErr IS _landingTrajError(ctx).
@@ -146,6 +145,12 @@ GLOBAL FUNCTION _landingCoastTick {
 
 GLOBAL FUNCTION _landingCoastMccTick {
     PARAMETER ctx.
+
+    IF LANDING_COAST_MCC_THROTTLE_MAX <= 0 {
+        _landingSetThrottle(ctx, 0).
+        _landingSetState(ctx, "COAST", "coast correction disabled").
+        RETURN.
+    }
 
     IF NOT ctx:HASKEY("MCC_PULSE_UNTIL") {
         SET ctx["MCC_PULSE_UNTIL"] TO 0.

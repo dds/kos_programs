@@ -47,14 +47,24 @@ GLOBAL FUNCTION _landingTerrainCheck {
             "SHIFTED", FALSE
         ).
     }
+    // A final 20 m search must not sample only its SW corner when the
+    // mission's coarse grid step is 100 m. Seed the center explicitly too.
+    SET stepM TO MIN(stepM, radiusM).
 
     LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
     LOCAL lonScale IS MAX(0.01, COS(targetLat)).
 
     LOCAL bestLat IS targetLat.
     LOCAL bestLng IS targetLng.
-    LOCAL bestScore IS 999999.
     LOCAL centerTerrain IS LATLNG(targetLat, targetLng):TERRAINHEIGHT.
+    LOCAL centerGrade IS _landingTerrainGrade(targetLat, targetLng, stepM).
+    LOCAL bestScore IS centerGrade * 500.
+    IF centerGrade <= TAN(LANDING_TERRAIN_MAX_SLOPE) {
+        mLog("STATS landing-terrain shift=0 reason=center-within-slope-limit lat="
+            + targetLat + " lng=" + targetLng + " grade=" + ROUND(centerGrade,4)).
+        RETURN LEXICON("LAT", targetLat, "LNG", targetLng,
+            "ELEVATION", centerTerrain, "SHIFTED", FALSE).
+    }
 
     LOCAL northM IS -radiusM.
     UNTIL northM > radiusM {
@@ -63,13 +73,7 @@ GLOBAL FUNCTION _landingTerrainCheck {
             LOCAL sampleLat IS targetLat + northM * degPerM.
             LOCAL sampleLng IS targetLng + eastM * degPerM / lonScale.
 
-            LOCAL hN IS LATLNG(sampleLat + stepM * degPerM, sampleLng):TERRAINHEIGHT.
-            LOCAL hS IS LATLNG(sampleLat - stepM * degPerM, sampleLng):TERRAINHEIGHT.
-            LOCAL hE IS LATLNG(sampleLat, sampleLng + stepM * degPerM / lonScale):TERRAINHEIGHT.
-            LOCAL hW IS LATLNG(sampleLat, sampleLng - stepM * degPerM / lonScale):TERRAINHEIGHT.
-            LOCAL slopeNS IS ABS(hN - hS) / (2 * stepM).
-            LOCAL slopeEW IS ABS(hE - hW) / (2 * stepM).
-            LOCAL slopePenalty IS (slopeNS + slopeEW) * 500.
+            LOCAL slopePenalty IS _landingTerrainGrade(sampleLat, sampleLng, stepM) * 500.
             LOCAL distM IS SQRT(northM * northM + eastM * eastM).
             LOCAL score IS distM / 100 + slopePenalty.
 
@@ -84,7 +88,7 @@ GLOBAL FUNCTION _landingTerrainCheck {
     }
 
     LOCAL shiftDist IS geoDistance(targetLat, targetLng, bestLat, bestLng).
-    mLog("Terrain check: center elev=" + ROUND(centerTerrain,1)
+    mLog("STATS landing-terrain centerElev=" + ROUND(centerTerrain,1)
         + "m  best score=" + ROUND(bestScore,1)
         + "  shift=" + ROUND(shiftDist,0) + "m.").
 
@@ -112,6 +116,21 @@ GLOBAL FUNCTION _landingTerrainCheck {
     ).
 }
 
+LOCAL FUNCTION _landingTerrainGrade {
+    PARAMETER sampleLat.
+    PARAMETER sampleLng.
+    PARAMETER stepM.
+    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
+    LOCAL lonScale IS MAX(0.01, COS(sampleLat)).
+    LOCAL hN IS LATLNG(sampleLat + stepM * degPerM, sampleLng):TERRAINHEIGHT.
+    LOCAL hS IS LATLNG(sampleLat - stepM * degPerM, sampleLng):TERRAINHEIGHT.
+    LOCAL hE IS LATLNG(sampleLat, sampleLng + stepM * degPerM / lonScale):TERRAINHEIGHT.
+    LOCAL hW IS LATLNG(sampleLat, sampleLng - stepM * degPerM / lonScale):TERRAINHEIGHT.
+    // Magnitude of the terrain gradient, rather than adding both slopes.
+    RETURN SQRT(((hN - hS) / (2 * stepM)) ^ 2
+        + ((hE - hW) / (2 * stepM)) ^ 2).
+}
+
 // ------------------------------------------------------------
 // FSM helpers
 // ------------------------------------------------------------
@@ -121,10 +140,11 @@ GLOBAL FUNCTION _landingStateLog {
     PARAMETER fromState.
     PARAMETER toState.
     PARAMETER reason.
-    mLog("Landing state " + fromState + " -> " + toState + ": " + reason
+    mLog("STATS landing-state " + fromState + " -> " + toState + ": " + reason
         + " alt=" + ROUND(ALT:RADAR,0)
         + "m hs=" + ROUND(ctx["H_SPEED"],1)
-        + " vs=" + ROUND(ctx["V_SPEED"],1) + ".").
+        + " vs=" + ROUND(ctx["V_SPEED"],1)
+        + " age=" + ROUND(TIME:SECONDS - ctx["STATE_ENTERED"],1) + ".").
 }
 
 GLOBAL FUNCTION _landingBoolText {
@@ -569,6 +589,15 @@ LOCAL FUNCTION _landingFinish {
     mLog("TOUCHDOWN. vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s"
         + "  lat=" + ROUND(SHIP:LATITUDE,4)
         + "  lng=" + ROUND(SHIP:LONGITUDE,4)).
+    IF ctx["HAS_TARGET"] {
+        mLog("STATS landing-result requestedMiss="
+            + ROUND(lmDistanceToTarget(ctx["REQUESTED_LAT"], ctx["REQUESTED_LNG"]),1)
+            + " guidanceMiss="
+            + ROUND(lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]),1)
+            + " targetShift=" + ROUND(geoDistance(ctx["REQUESTED_LAT"], ctx["REQUESTED_LNG"],
+                ctx["TARGET_LAT"], ctx["TARGET_LNG"]),1)
+            + " remainingDv=" + ROUND(SHIP:DELTAV:VACUUM,1)).
+    }
     stateSet("landing_lat",  SHIP:LATITUDE).
     stateSet("landing_lng",  SHIP:LONGITUDE).
     stateSet("landing_time", TIME:SECONDS).
@@ -623,6 +652,8 @@ GLOBAL FUNCTION landExecute {
         "STATE", "COAST",
         "STATE_ENTERED", TIME:SECONDS,
         "HAS_TARGET", _hasTarget,
+        "REQUESTED_LAT", landingTarget["LAT"],
+        "REQUESTED_LNG", landingTarget["LNG"],
         "TARGET_LAT", TARGET_LAT,
         "TARGET_LNG", TARGET_LNG,
         "TARGET_ELEVATION", targetElevation,
@@ -658,6 +689,8 @@ GLOBAL FUNCTION landExecute {
         + " tr=" + _landingBoolText(ADDONS:TR:AVAILABLE) + ".").
     _landingEnsureStateTrack(ctx["STATE"]).
 
+    LOCAL priorArchiveDeferral IS LOG_ARCHIVE_DEFERRED.
+    SET LOG_ARCHIVE_DEFERRED TO 1.
     UNTIL landingAbortFlag OR ctx["TOUCHDOWN_SETTLED"] {
         LOCAL tickRate IS 0.33. // Slower tick for coasting.
 
@@ -689,9 +722,13 @@ GLOBAL FUNCTION landExecute {
 
     IF landingAbortFlag {
         vesselLandingCleanup().
+        SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.
+        IF LOG_ARCHIVE_DEFERRED <= 0 { archiveLog(). }
         RETURN.
     }
     _landingFinish(ctx).
+    SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.
+    IF LOG_ARCHIVE_DEFERRED <= 0 { archiveLog(). }
 }
 
 GLOBAL FUNCTION landingAssistStage {

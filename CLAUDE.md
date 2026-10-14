@@ -221,7 +221,14 @@ Looks like Python/JS; is neither.
 - Career context matters: this is a hard-mode career save. Don't assume
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
-- Flight-test ledger (update as things prove out): BPLANE/SHAPE flew the
+- Flight-test ledger (update as things prove out): RO8 Minmus recovery
+  landed successfully (operator report, 2026-10-14),
+  305 m from the requested waypoint with ~380 m/s remaining. The operator
+  reported prolonged corrections and a wasteful hover; exact state history
+  and any terrain-driven target shift were not captured. Surface ascent
+  reached orbit but circularization overburned; return is held with ~151 m/s
+  remaining. A 181 m/s preview with Kerbin Pe 22,050 km was rejected. The
+  subsequent terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered
   a lost encounter after a staged, low-thrust departure via BPLANE and
   reached COAST_1HALF (operator report, 2026-10-12). Midpoint refinement,

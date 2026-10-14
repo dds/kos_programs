@@ -206,9 +206,12 @@ acceptable, unless target search has explicitly been skipped.
 
 The one-shot terrain check samples a grid around the target using
 `TERRAIN_CHECK_RADIUS` and `TERRAIN_CHECK_STEP` (defaults 100 m and 20 m). It
-scores each point by local north/south and east/west slope plus distance from
-the requested center. If the best point is more than 5 m from the current
-target, it shifts `TARGET_LAT` / `TARGET_LNG` and updates Trajectories.
+first checks the requested center against `LANDING_TERRAIN_MAX_SLOPE` (5°).
+If it meets that limit, it keeps the center instead of buying a long diversion
+to slightly flatter terrain. Otherwise it scores nearby points by gradient
+magnitude and distance, as a best-effort terrain search. This is not a terrain
+safety certification. The center is always a candidate, and grid spacing is
+clamped to the search radius. `STATS landing-terrain` records any shift.
 
 If no target exists, the same state machine runs, but target-aware horizontal
 guidance is skipped and it becomes a vertical powered descent.
@@ -286,7 +289,7 @@ runs surface settling until the vehicle is slow and stable.
 
 ```text
 COAST
-  -> COAST_MCC        impact lead/cross error is large and braking is not soon
+  -> COAST_MCC        enabled, impact error is large and braking is not soon
   -> BRAKE_ALIGN      target landing, brake gate is within alignment lead
   -> BRAKING_BURN     horizontal/vertical gate is due, overshot, or blind suicide burn
   -> VERTICAL_DESCENT untargeted vertical gate
@@ -304,14 +307,15 @@ BRAKING_BURN
   -> APPROACH         post-brake miss remains outside approach radius
 
 TARGET_REFINE
-  -> APPROACH         lateral drift and Trajectories impact are acceptable
-  -> VERTICAL_DESCENT timeout or climb guard
+  -> APPROACH         velocity stabilized, timeout, or climb guard above final-hover height
+  -> VERTICAL_DESCENT too low for a translation handoff
 
 APPROACH
-  -> HOVER_REFINE     over target, hover-refine lead time, or terminal altitude
+  -> VERTICAL_DESCENT position and speed meet landing tolerances
+  -> HOVER_REFINE     final-hover altitude reached with residual miss
 
 HOVER_REFINE
-  -> VERTICAL_DESCENT final target position is settled
+  -> VERTICAL_DESCENT acceptable position/speed, or bounded hover time exhausted
 
 VERTICAL_DESCENT
   -> HOVER_REFINE     final hover refinement needed near the ground
@@ -337,7 +341,10 @@ to impact and burn time.
 
 ## COAST_MCC
 
-`COAST_MCC` is a small pulsed midcourse correction during the unpowered coast.
+`COAST_MCC` is an optional small pulsed midcourse correction during the
+unpowered coast. A nonpositive `LANDING_COAST_MCC_THROTTLE_MAX` disables it
+(default zero). The minimum throttle cannot override that maximum. Previously
+the default 2% minimum accidentally enabled burns even with the maximum zero.
 It does not try to move the Trajectories impact onto the real target. Instead
 it tries to put the predicted impact `LANDING_COAST_MCC_LEAD_DIST` ahead of
 the target, with crossrange error near zero. The default lead is 3 km. This is
@@ -425,58 +432,61 @@ the requested lateral acceleration. The correction bounds are scaled around
 hover throttle so high-TWR landers do not use a fixed, overpowering throttle
 limit.
 
-It advances to `APPROACH` when the flat position error is under 5 m and
-horizontal speed is below `LANDING_TARGET_REFINE_HSPEED`. It gives up and
-drops to `VERTICAL_DESCENT` if it times out
-at `LANDING_TARGET_REFINE_MAX_TIME` or if a climb guard trips.
+It hands off to `APPROACH` once horizontal speed is stabilized: immediately
+below `LANDING_TARGET_REFINE_HSPEED`, or after `LANDING_TARGET_REFINE_ACCEPT_TIME`
+below `LANDING_TARGET_REFINE_ACCEPT_HSPEED`. A timeout or climb guard also
+hands off to approach when above `LANDING_FINAL_HOVER_ALT`. Below that height,
+it finishes vertically instead of attempting a new translation. It no longer
+tries to cover hundreds of meters at 1 m/s inside a 20-second timeout and then
+silently abandons the position target.
 
 ## APPROACH
 
-`APPROACH` translates toward the final target while continuing a controlled
-descent. Desired horizontal speed is the minimum of several caps:
+`APPROACH` performs the final 20 m terrain check once, while continuing the
+approach. It translates toward the target while descending, using lateral
+acceleration available while supporting weight: the lesser of the thrust
+reserve and `g * tan(MAX_TILT)`, with a 20% response margin. This is much less
+than the full-thrust sideways brake acceleration on a high-TWR Minmus lander.
+The stopping-speed cap uses this upright acceleration and the remaining
+distance outside the small settle radius.
 
-- `MAX_APPROACH_SPEED`
-- a stopping-speed limit based on remaining distance outside
-  `VERTICAL_RADIUS`
-- a time-to-hover limit so the craft can arrive before reaching `HOVER_ALT`
-- an altitude cap that fades approach speed out as height approaches
-  `HOVER_ALT`
+Steering converts velocity error into acceleration using
+`LANDING_APPROACH_RESPONSE_TIME` (5 seconds), then into a tilt demand using
+local gravity. `targetWeight` changes the response, not the commanded speed;
+it no longer multiplies the speed beyond the stopping cap. The tilt limit is
+respected using `tan(MAX_TILT)` in the up-plus-horizontal steering vector.
 
-Steering is `lmApproachSteering()` toward the target at that desired speed,
-while throttle follows the vertical descent schedule.
+Descent speed is capped by the estimated time needed to translate and arrest
+horizontal motion. This allows continued descent rather than first holding
+altitude to complete the entire lateral correction. The old routine hover
+trigger at about 1 km plus lead time has been removed. A low-altitude speed
+cap retains the hover translation speed instead of fading all translation to
+zero before reaching the target.
 
-It enters `HOVER_REFINE` in three cases:
-
-- it is inside `VERTICAL_RADIUS` with horizontal speed below `VERTICAL_HSPEED`
-- hover refinement has not yet happened and terminal altitude is within
-  `LANDING_HOVER_REFINE_LEAD_TIME`
-- bottom radar altitude is at or below `TERMINAL_ALT`
+Once distance and horizontal speed meet `LANDING_HOVER_REFINE_ACCEPT_RADIUS`
+and `LANDING_HOVER_REFINE_ACCEPT_HSPEED` (30 m and 1.75 m/s), approach goes to
+vertical descent. If it reaches `LANDING_FINAL_HOVER_ALT` (15 m) with a larger
+miss, it enters final hover refinement.
 
 ## HOVER_REFINE
 
-`HOVER_REFINE` is the last target-selection and settling state. On first entry
-it performs another terrain check, temporarily reducing `TERRAIN_CHECK_RADIUS`
-to 20 m. This allows a small final shift to a flatter nearby patch after the
-craft is close enough that the initial grid may no longer be ideal.
+This is a final low-altitude correction, not an unconditional terrain-check
+pause high above the surface. If the fine terrain check has already run in
+approach, it is reused. Otherwise its grid spacing is limited to the 20 m
+search radius, so a mission with 100 m coarse spacing cannot force a spurious
+move to the southwest corner without sampling the center.
 
-It then translates gently to the refined target. Desired horizontal speed is
-limited by:
+Translation uses the same upright acceleration/stopping limits. If entered
+above final-hover height through another path, the craft continues descending
+while translating. At final-hover height it briefly supports altitude to
+settle. A result within the configured acceptable radius/speed can descend
+without waiting for the tighter 5 m / 0.3 m/s condition.
 
-- `LANDING_HOVER_REFINE_MAX_SPEED`
-- distance times `LANDING_HOVER_REFINE_SPEED_GAIN`
-- a stopping-speed estimate using 35 percent of max acceleration
-
-The approach steering target weight is increased by
-`LANDING_HOVER_REFINE_TARGET_WEIGHT`, making the hover correction more eager
-to remove residual position error. Vertically, the state remembers the bottom
-radar altitude at entry and tries to hold it, with vertical speed limited by
-`LANDING_HOVER_REFINE_ALT_VSPEED` and gain
-`LANDING_HOVER_REFINE_ALT_GAIN`.
-
-The default exit condition is intentionally tight because it uses the minimum
-of the accept and settle values: distance within 5 m and horizontal speed
-below 0.3 m/s. When that is achieved, `HOVER_REFINED` is set and the state
-moves to `VERTICAL_DESCENT`.
+`LANDING_HOVER_REFINE_MAX_TIME` (30 seconds) bounds this position-correction
+pause. Expiration proceeds to vertical landing and logs the residual miss;
+it does not claim precise capture. The separate near-ground horizontal-speed
+safety check remains active, so this limit does not force a fast sideways
+touchdown or bound all time spent supporting the craft.
 
 ## VERTICAL_DESCENT
 
@@ -615,7 +625,7 @@ These values come from `landing_config.ks`, `landing_main.ks`, and
 | approach | `VERTICAL_RADIUS` | 60 m | Close enough for final vertical descent |
 | approach | `MAX_APPROACH_SPEED` | 55 m/s | Upper bound on approach translation |
 | approach | `TERMINAL_ALT` | 1000 m | Force hover/refine at low altitude |
-| hover | `LANDING_HOVER_REFINE_LEAD_TIME` | 30 s | Start hover refine before terminal |
+| hover | `LANDING_HOVER_REFINE_MAX_TIME` | 30 s | Maximum final position-correction pause |
 | hover | `LANDING_HOVER_REFINE_MAX_SPEED` | 4 m/s | Hover translation cap |
 | hover | `LANDING_HOVER_REFINE_ACCEPT_RADIUS` | 30 m | Loose hover radius |
 | hover | `LANDING_HOVER_REFINE_SETTLE_RADIUS` | 5 m | Tight hover radius |
@@ -627,6 +637,24 @@ These values come from `landing_config.ks`, `landing_main.ks`, and
 | touchdown | `LANDING_TOUCHDOWN_VSPEED` | 1 m/s | Settled vertical speed |
 | touchdown | `LANDING_TOUCHDOWN_HSPEED` | 0.3 m/s | Settled horizontal speed |
 | touchdown | `LANDING_TOUCHDOWN_SETTLE_TICKS` | 120 | Stable ticks before finish |
+
+### Minmus landing efficiency regression
+
+The operator reported the first successful RO8 landing 305 m from the requested
+waypoint with about 380 m/s remaining, prolonged corrections and a wasteful
+hover (2026-10-14). No detailed state log was available, so a terrain-driven
+site shift cannot be distinguished from a guidance miss on that flight.
+State transitions, terrain shifts, and touchdown now persist `STATS` records.
+During powered guidance, records stay local; archive copies wait until landing
+cleanup has cleared throttle and allowed a physics update before unlocking.
+`STATS landing-result` separates requested-waypoint miss, final-guidance miss,
+and target relocation distance.
+
+`scripts/check_landing_guidance.py` runs selected source functions through a
+small fixture interpreter. Checks cover disabled MCC, centered terrain grids,
+stabilization handoffs, hover limits, and an idealized 305 m Minmus approach.
+That fixture assumes flat terrain, instantaneous steering and constant mass;
+it is not a kOS/KSP simulation or a prediction of flight accuracy/fuel savings.
 
 The important design idea is that early targeting is intentionally not
 pinpoint. The deorbit aims at a downfield phantom impact so powered descent

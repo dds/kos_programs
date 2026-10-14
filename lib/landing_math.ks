@@ -221,14 +221,41 @@ GLOBAL FUNCTION lmApproachSteering {
 
     LOCAL targetDir IS lmDirectionToTarget(targetLat, targetLng,
         upVec, shipPos).
-    LOCAL maxLean IS SIN(MAX_TILT).
-    LOCAL desiredVel IS targetDir * targetHorizontalSpeed
-        * MAX(0, targetWeight).
+    LOCAL maxLean IS TAN(MAX_TILT).
+    LOCAL desiredVel IS targetDir * targetHorizontalSpeed.
     LOCAL correctionVec IS desiredVel - horizontalVel.
     IF correctionVec:MAG <= 0.1 { RETURN upVec. }
 
-    LOCAL leanVec IS correctionVec:NORMALIZED * MIN(maxLean, correctionVec:MAG / 20).
+    // Convert velocity error to lateral acceleration, then tilt. The old
+    // /20 lean gain took ~40 seconds to respond in Minmus gravity.
+    // Weight affects response, not the speed/stopping-distance limit.
+    LOCAL leanDemand IS correctionVec:MAG * MAX(0, targetWeight)
+        / (MAX(0.01, lmGravity()) * MAX(1, LANDING_APPROACH_RESPONSE_TIME)).
+    LOCAL leanVec IS correctionVec:NORMALIZED * MIN(maxLean, leanDemand).
     RETURN (upVec + leanVec):NORMALIZED.
+}
+
+GLOBAL FUNCTION lmApproachAcceleration {
+    PARAMETER maxAcc.
+    PARAMETER gravAcc.
+    // Approach is upright, supporting weight, not a full-thrust sideways
+    // braking burn. Reserve 20% for response/attitude lag.
+    LOCAL thrustReserve IS SQRT(MAX(0, maxAcc ^ 2 - gravAcc ^ 2)).
+    RETURN 0.8 * MAX(0, MIN(thrustReserve, gravAcc * TAN(MAX_TILT))).
+}
+
+GLOBAL FUNCTION lmApproachDescentSpeed {
+    PARAMETER scheduledSpeed.
+    PARAMETER height.
+    PARAMETER distance.
+    PARAMETER horizontalSpeed.
+    PARAMETER lateralAcc.
+    LOCAL transitDist IS MAX(0, distance - LANDING_HOVER_REFINE_SETTLE_RADIUS).
+    LOCAL lateralTime IS 2 * SQRT(transitDist / MAX(0.01, lateralAcc))
+        + horizontalSpeed / MAX(0.01, lateralAcc)
+        + MAX(1, LANDING_APPROACH_RESPONSE_TIME).
+    RETURN MIN(scheduledSpeed,
+        MAX(0, height - LANDING_FINAL_HOVER_ALT) / lateralTime).
 }
 
 GLOBAL FUNCTION lmVerticalThrottle {

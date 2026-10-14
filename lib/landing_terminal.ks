@@ -70,28 +70,22 @@ GLOBAL FUNCTION _landingTargetRefineTick {
             >= LANDING_TARGET_REFINE_CLIMB_TIME.
     LOCAL timedOut IS refineAge >= LANDING_TARGET_REFINE_MAX_TIME.
 
-    IF climbLimited OR timedOut {
-        SET ctx["HOVER_REFINED"] TO TRUE.
-        _landingSetThrottle(ctx, 0).
-        IF climbLimited {
-            mLog("STATS target-refine exit reason=climb dist="
-                + ROUND(posErr:MAG,1)
-                + " age=" + ROUND(refineAge,1)
-                + " hs=" + ROUND(horizontalSpeed,1)
-                + " vs=" + ROUND(ctx["V_SPEED"],1)
-                + "/" + ROUND(targetVs,1)).
-            _landingSetState(ctx, "VERTICAL_DESCENT",
-                "target refine climb guard triggered").
-        } ELSE {
-            mLog("STATS target-refine exit reason=timeout dist="
-                + ROUND(posErr:MAG,1)
-                + " age=" + ROUND(refineAge,1)
-                + " hs=" + ROUND(horizontalSpeed,1)
-                + " vs=" + ROUND(ctx["V_SPEED"],1)
-                + "/" + ROUND(targetVs,1)).
-            _landingSetState(ctx, "VERTICAL_DESCENT",
-                "target refine timeout").
+    // This state stabilizes velocity; it cannot translate hundreds of
+    // meters at 1 m/s inside a 20-second timeout. Hand off to APPROACH.
+    LOCAL stabilized IS horizontalSpeed <= LANDING_TARGET_REFINE_HSPEED
+        OR (refineAge >= LANDING_TARGET_REFINE_ACCEPT_TIME
+            AND horizontalSpeed <= LANDING_TARGET_REFINE_ACCEPT_HSPEED).
+    IF stabilized OR climbLimited OR timedOut {
+        LOCAL nextState IS "APPROACH".
+        IF controlHeight <= LANDING_FINAL_HOVER_ALT {
+            SET nextState TO "VERTICAL_DESCENT".
+            SET ctx["HOVER_REFINED"] TO TRUE.
         }
+        mLog("STATS target-refine exit next=" + nextState
+            + " stabilized=" + stabilized + " timeout=" + timedOut
+            + " climb=" + climbLimited + " dist=" + ROUND(posErr:MAG,1)
+            + " age=" + ROUND(refineAge,1) + " hs=" + ROUND(horizontalSpeed,1)).
+        _landingSetState(ctx, nextState, "lateral stabilization handoff").
         RETURN.
     }
 
@@ -138,93 +132,11 @@ GLOBAL FUNCTION _landingTargetRefineTick {
         + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
         1, 2, 13, CYAN, FALSE, refineEta).
 
-    IF targetReady {
-        mLog("STATS target-refine exit reason=position-captured dist="
-            + ROUND(posErr:MAG,1)
-            + " age=" + ROUND(refineAge,1)
-            + " hs=" + ROUND(horizontalSpeed,1)).
-        _landingSetState(ctx, "APPROACH", "target refine position captured").
-    }
+
 }
 
-GLOBAL FUNCTION _landingApproachTick {
+GLOBAL FUNCTION _landingFinalTerrainCheck {
     PARAMETER ctx.
-
-    LOCAL distToTarget IS lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
-    LOCAL horizontalSpeed IS ctx["H_SPEED"].
-    LOCAL approachHeight IS _landingTargetHeight(ctx).
-    LOCAL bottomAlt IS _landingBottomRadar().
-    LOCAL controlHeight IS MIN(approachHeight, bottomAlt).
-    LOCAL horizontalAcc IS _landingHorizontalBrakeAcc(ctx).
-    LOCAL desiredSpeed IS MIN(MAX_APPROACH_SPEED,
-        SQRT(MAX(0, 2 * horizontalAcc * MAX(0, distToTarget - VERTICAL_RADIUS)))).
-    LOCAL descentSpeed IS lmDescentSpeed(
-        controlHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
-    LOCAL timeToHover IS MAX(1, (controlHeight - HOVER_ALT)
-        / MAX(1, descentSpeed)).
-    SET timeToHover TO MIN(timeToHover, 30).
-    LOCAL altitudeLimitedSpeed IS MAX(VERTICAL_HSPEED,
-        MAX(0, distToTarget - VERTICAL_RADIUS) / timeToHover).
-    SET desiredSpeed TO MIN(desiredSpeed, altitudeLimitedSpeed).
-    LOCAL altitudeCap IS MAX_APPROACH_SPEED
-        * MAX(0, MIN(1, (controlHeight - HOVER_ALT)
-            / APPROACH_SPEED_ALTITUDE_WINDOW)).
-    SET desiredSpeed TO MIN(desiredSpeed, altitudeCap).
-    _landingSetSteering(ctx, lmApproachSteering(
-        ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
-        ctx["UP_VEC"], ctx["POSITION"])).
-
-    LOCAL targetVs IS -descentSpeed.
-    _landingSetThrottle(ctx, lmVerticalThrottle(
-        targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
-
-    LOCAL verticalEta IS 0.
-    IF bottomAlt > TERMINAL_ALT {
-        SET verticalEta TO (bottomAlt - TERMINAL_ALT)
-            / MAX(1, ctx["DOWN_SPEED"]).
-    }
-    LOCAL approachTransitionEta IS verticalEta.
-    IF ctx["HAS_TARGET"] AND NOT ctx["HOVER_REFINED"] {
-        SET approachTransitionEta TO verticalEta - LANDING_HOVER_REFINE_LEAD_TIME.
-    }
-    IF distToTarget <= VERTICAL_RADIUS
-            AND horizontalSpeed <= VERTICAL_HSPEED {
-        SET approachTransitionEta TO 0.
-    }
-
-    _landingHudText(ctx, "APPROACH d=" + ROUND(distToTarget,0)
-        + " hT=" + ROUND(approachHeight,0)
-        + " bottom=" + ROUND(bottomAlt,0)
-        + " hs=" + ROUND(horizontalSpeed,1)
-        + "/" + ROUND(desiredSpeed,1)
-        + " cap=" + ROUND(altitudeCap,1)
-        + " vs=" + ROUND(ctx["V_SPEED"],1),
-        1, 2, 13, CYAN, FALSE, approachTransitionEta).
-
-    IF ctx["HAS_TARGET"] AND NOT ctx["HOVER_REFINED"] {
-        _landingHudEtaNotice(ctx, "Hover refinement",
-            verticalEta - LANDING_HOVER_REFINE_LEAD_TIME, CYAN).
-    } ELSE {
-        _landingHudEtaNotice(ctx, "Vertical descent", verticalEta, GREEN).
-    }
-
-    IF distToTarget <= VERTICAL_RADIUS
-            AND horizontalSpeed <= VERTICAL_HSPEED {
-        _landingSetState(ctx, "HOVER_REFINE",
-            "over target, entering hover pause").
-    } ELSE IF ctx["HAS_TARGET"]
-            AND NOT ctx["HOVER_REFINED"]
-            AND verticalEta <= LANDING_HOVER_REFINE_LEAD_TIME {
-        _landingSetState(ctx, "HOVER_REFINE",
-            "hover refinement lead time").
-    } ELSE IF bottomAlt <= TERMINAL_ALT {
-        _landingSetState(ctx, "HOVER_REFINE", "terminal altitude hover pause").
-    }
-}
-
-GLOBAL FUNCTION _landingHoverRefineTick {
-    PARAMETER ctx.
-
     IF NOT ctx["HOVER_TERRAIN_DONE"] {
         LOCAL originalTerrainRadius IS TERRAIN_CHECK_RADIUS.
         SET TERRAIN_CHECK_RADIUS TO 20.
@@ -242,6 +154,58 @@ GLOBAL FUNCTION _landingHoverRefineTick {
         }
     }
 
+}
+
+GLOBAL FUNCTION _landingApproachTick {
+    PARAMETER ctx.
+
+    _landingFinalTerrainCheck(ctx).
+
+    LOCAL distToTarget IS lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
+    LOCAL horizontalSpeed IS ctx["H_SPEED"].
+    LOCAL approachHeight IS _landingTargetHeight(ctx).
+    LOCAL bottomAlt IS _landingBottomRadar().
+    LOCAL controlHeight IS MIN(approachHeight, bottomAlt).
+    LOCAL horizontalAcc IS lmApproachAcceleration(ctx["MAX_ACC"], ctx["GRAV"]).
+    LOCAL desiredSpeed IS MIN(MAX_APPROACH_SPEED,
+        SQRT(MAX(0, 2 * horizontalAcc * MAX(0,
+            distToTarget - LANDING_HOVER_REFINE_SETTLE_RADIUS)))).
+    LOCAL descentSpeed IS lmApproachDescentSpeed(lmDescentSpeed(
+        controlHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED),
+        controlHeight, distToTarget, horizontalSpeed, horizontalAcc).
+    LOCAL altitudeCap IS MAX(LANDING_HOVER_REFINE_MAX_SPEED, MAX_APPROACH_SPEED
+        * MAX(0, MIN(1, (controlHeight - HOVER_ALT)
+            / APPROACH_SPEED_ALTITUDE_WINDOW))).
+    SET desiredSpeed TO MIN(desiredSpeed, altitudeCap).
+    _landingSetSteering(ctx, lmApproachSteering(
+        ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
+        ctx["UP_VEC"], ctx["POSITION"])).
+
+    LOCAL targetVs IS -descentSpeed.
+    _landingSetThrottle(ctx, lmVerticalThrottle(
+        targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
+
+    _landingHudText(ctx, "APPROACH d=" + ROUND(distToTarget,0)
+        + " bottom=" + ROUND(bottomAlt,0)
+        + " hs=" + ROUND(horizontalSpeed,1) + "/" + ROUND(desiredSpeed,1)
+        + " vs=" + ROUND(ctx["V_SPEED"],1) + "/" + ROUND(targetVs,1),
+        1, 2, 13, CYAN, FALSE).
+
+    IF distToTarget <= LANDING_HOVER_REFINE_ACCEPT_RADIUS
+            AND horizontalSpeed <= LANDING_HOVER_REFINE_ACCEPT_HSPEED {
+        SET ctx["HOVER_REFINED"] TO TRUE.
+        _landingSetState(ctx, "VERTICAL_DESCENT", "approach captured within landing tolerance").
+    } ELSE IF bottomAlt <= LANDING_FINAL_HOVER_ALT {
+        _landingSetState(ctx, "HOVER_REFINE", "low-altitude lateral settling").
+    }
+
+}
+
+GLOBAL FUNCTION _landingHoverRefineTick {
+    PARAMETER ctx.
+
+    _landingFinalTerrainCheck(ctx).
+
     LOCAL distToTarget IS lmDistanceToTarget(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
@@ -254,7 +218,8 @@ GLOBAL FUNCTION _landingHoverRefineTick {
     LOCAL transitDist IS MAX(0, distToTarget - settleRadius).
     LOCAL desiredSpeed IS MIN(LANDING_HOVER_REFINE_MAX_SPEED,
         transitDist * LANDING_HOVER_REFINE_SPEED_GAIN).
-    LOCAL stopSpeed IS SQRT(MAX(0, 2 * ctx["MAX_ACC"] * 0.35 * transitDist)).
+    LOCAL stopSpeed IS SQRT(MAX(0, 2 * lmApproachAcceleration(
+        ctx["MAX_ACC"], ctx["GRAV"]) * transitDist)).
     SET desiredSpeed TO MIN(desiredSpeed, stopSpeed).
 
     _landingSetSteering(ctx, lmApproachSteering(
@@ -270,6 +235,12 @@ GLOBAL FUNCTION _landingHoverRefineTick {
     LOCAL hoverTargetVs IS MAX(-LANDING_HOVER_REFINE_ALT_VSPEED,
         MIN(LANDING_HOVER_REFINE_ALT_VSPEED,
             (holdBottom - bottomAlt) * LANDING_HOVER_REFINE_ALT_GAIN)).
+    IF bottomAlt > LANDING_FINAL_HOVER_ALT {
+        SET hoverTargetVs TO -lmApproachDescentSpeed(lmDescentSpeed(
+            bottomAlt, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED),
+            bottomAlt, distToTarget, horizontalSpeed,
+            lmApproachAcceleration(ctx["MAX_ACC"], ctx["GRAV"])).
+    }
     _landingSetThrottle(ctx, lmVerticalThrottle(
         hoverTargetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
 
@@ -286,11 +257,19 @@ GLOBAL FUNCTION _landingHoverRefineTick {
         + "/" + ROUND(hoverTargetVs,1),
         1, 2, 13, GREEN, FALSE, hoverEta).
 
-    IF distToTarget <= settleRadius
-            AND horizontalSpeed <= settleHspeed {
+    LOCAL hoverAge IS TIME:SECONDS - ctx["STATE_ENTERED"].
+    LOCAL precise IS distToTarget <= settleRadius AND horizontalSpeed <= settleHspeed.
+    LOCAL acceptable IS distToTarget <= LANDING_HOVER_REFINE_ACCEPT_RADIUS
+        AND horizontalSpeed <= LANDING_HOVER_REFINE_ACCEPT_HSPEED.
+    LOCAL timedOut IS hoverAge >= LANDING_HOVER_REFINE_MAX_TIME.
+    IF precise OR acceptable OR timedOut {
+        mLog("STATS hover-refine exit precise=" + precise
+            + " acceptable=" + acceptable + " timeout=" + timedOut
+            + " dist=" + ROUND(distToTarget,1) + " age=" + ROUND(hoverAge,1)
+            + " hs=" + ROUND(horizontalSpeed,1)).
         SET ctx["HOVER_REFINED"] TO TRUE.
         _landingSetState(ctx, "VERTICAL_DESCENT",
-            "refinement complete, final drop").
+            "bounded final refinement complete").
     }
 }
 

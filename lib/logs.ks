@@ -2,6 +2,8 @@
 // logs.ks  —  Flight logging  (0:/lib/logs.ks)
 // ============================================================
 GLOBAL LOG_INFO_TO_FILE IS 0.
+// Keep local records during guidance, defer potentially slow archive copies.
+GLOBAL LOG_ARCHIVE_DEFERRED IS 0.
 GLOBAL LOG_FILE_RESERVE_BYTES IS 1024.
 LOCAL _logSpaceWarned IS FALSE.
 
@@ -181,7 +183,8 @@ GLOBAL FUNCTION mLog {
         SET _logSpaceWarned TO TRUE.
     }
 
-    IF wroteLocal AND HOMECONNECTION:ISCONNECTED { archiveLog(). }
+    IF wroteLocal AND LOG_ARCHIVE_DEFERRED <= 0
+            AND HOMECONNECTION:ISCONNECTED { archiveLog(). }
 }
 
 GLOBAL FUNCTION mLogWarn  { PARAMETER m. mLog(m, "WARN").  }
