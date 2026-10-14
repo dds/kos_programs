@@ -8,6 +8,7 @@
 GLOBAL ESCAPE_PE IS -1.
 GLOBAL ESCAPE_KSC_TARGET IS 0.
 GLOBAL REENTRY_PE IS 30000.
+GLOBAL RETURN_ESCAPE_PE_TOLERANCE IS 1000.
 
 LOCAL MAX_RETRIES IS 5.
 
@@ -272,11 +273,25 @@ GLOBAL FUNCTION previewReturnEscape {
     PRINT "  Remaining after burn (estimate): "
         + ROUND(SHIP:DELTAV:VACUUM - nd:DELTAV:MAG,2) + " m/s".
     PRINT "  Predicted Kerbin Pe: " + ROUND(patch:PERIAPSIS/1000,2) + " km".
-    PRINT "  Target: 53 km; KSC targeting disabled for this preview.".
+    PRINT "  Target: " + targetPe/1000 + " km; KSC targeting disabled for this preview.".
+    PRINT "  Entry corridor valid: " + _returnEscapeEntryValid(patch:PERIAPSIS, targetPe).
+    PRINT "  Burn affordable: " + (nd:DELTAV:MAG <= SHIP:DELTAV:VACUUM).
+    IF NOT _returnEscapeEntryValid(patch:PERIAPSIS, targetPe) {
+        PRINT "  REJECTED: escape found, requested Kerbin reentry NOT found.".
+    }
+    IF nd:DELTAV:MAG > SHIP:DELTAV:VACUUM {
+        PRINT "  REJECTED: maneuver exceeds remaining fuel.".
+    }
     PRINT "  Leave automation stopped and review these numbers before burning.".
     mLog("STATS return-preview dv=" + nd:DELTAV:MAG
         + " available=" + SHIP:DELTAV:VACUUM + " pe=" + patch:PERIAPSIS).
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _returnEscapeEntryValid {
+    PARAMETER predictedPe.
+    PARAMETER targetPe.
+    RETURN ABS(predictedPe - targetPe) <= RETURN_ESCAPE_PE_TOLERANCE.
 }
 
 GLOBAL FUNCTION phaseEscape {
@@ -319,6 +334,26 @@ GLOBAL FUNCTION phaseEscape {
             RETURN.
         }
 
+        LOCAL returnPatch IS _targetPatch(nd, target).
+        IF returnPatch = 0 {
+            mLogError("STATS return-escape hold reason=lost-parent-patch").
+            yieldToPrompt().
+            RETURN.
+        }
+        IF NOT _returnEscapeEntryValid(returnPatch:PERIAPSIS, targetPe)
+                OR nd:DELTAV:MAG > SHIP:DELTAV:VACUUM {
+            mLogError("STATS return-escape hold reason=entry-or-fuel dv="
+                + nd:DELTAV:MAG + " available=" + SHIP:DELTAV:VACUUM
+                + " predictedPe=" + returnPatch:PERIAPSIS + " targetPe=" + targetPe).
+            PRINT "RETURN ESCAPE REJECTED - NO BURN".
+            PRINT "  dV required/available: " + ROUND(nd:DELTAV:MAG,1)
+                + "/" + ROUND(SHIP:DELTAV:VACUUM,1) + " m/s".
+            PRINT "  Predicted/target Kerbin Pe: " + ROUND(returnPatch:PERIAPSIS/1000,1)
+                + "/" + ROUND(targetPe/1000,1) + " km".
+            PRINT "  Node retained for inspection; remain in manual control.".
+            yieldToPrompt().
+            RETURN.
+        }
         SET success TO executeManeuver().
         IF NOT success {
             SET retries TO retries + 1.

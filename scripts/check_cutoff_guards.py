@@ -66,7 +66,19 @@ def check_preview():
     command = (ROOT / 'cmd/returncheck.ks').read_text()
     assert 'bootPreamble().' in command and 'bootLibLoad("return_escape").' in command
     assert 'previewReturnEscape(53000).' in command
+    entry = body(src, '_returnEscapeEntryValid')
+    expr = entry[entry.index('RETURN ')+7:].strip().removesuffix('.')
+    for pe, expected in ((52000,True),(53000,True),(54000,True),(51999,False),
+                         (54001,False),(-1000,False),(22050000,False)):
+        assert evaluate(expr, predictedPe=pe, targetPe=53000, RETURN_ESCAPE_PE_TOLERANCE=1000) == expected
+    phase = body(src, 'phaseEscape')
+    guard = phase.index('IF NOT _returnEscapeEntryValid(')
+    execute = phase.index('SET success TO executeManeuver().')
+    assert guard < execute and 'yieldToPrompt().' in phase[guard:execute]
+    assert 'nd:DELTAV:MAG > SHIP:DELTAV:VACUUM' in phase[guard:execute]
+    assert 'RETURN.' in phase[guard:execute]
     print('PASS: return preview preserves phase/existing nodes and never executes a burn')
+    print('PASS: 22,050 km Pe rejected; automatic execution holds outside entry corridor or fuel budget')
 
 
 if __name__ == '__main__':
