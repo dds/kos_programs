@@ -22,6 +22,8 @@ GLOBAL TRANSFER_PREVIEW_SHORTLIST IS 6.
 GLOBAL TRANSFER_DEFERRED_INC_ERR_TOL IS 45.
 GLOBAL TRANSFER_TMI_HANDOFF_SOI_MULT IS 1.0.
 GLOBAL TRANSFER_TMI_HANDOFF_MAX_STEPS IS 6.
+GLOBAL TRANSFER_PE_TOL IS 2000.
+GLOBAL TRANSFER_PE_REFINE_DV_CAP IS 100.
 
 
 // ============================================================
@@ -33,8 +35,8 @@ GLOBAL TRANSFER_TMI_HANDOFF_MAX_STEPS IS 6.
 //              departure time + prograde dV to minimize distance to target.
 //              Smooth POSITIONAT objective, no binary encounter search.
 //      Interplanetary:  Lambert grid scan, full 3-axis node, conic validation
-//   2. Arrival pretargeting — target the requested B-plane when
-//      a capture inclination is configured, otherwise center-mass.
+//   2. Local arrival pretargeting — refine the requested periapsis and
+//      reject a bad encounter before burning. Plane precision is downstream.
 //
 // Global config keys consumed:
 //   CAPTURE_DIR  — "PROGRADE" / "POLAR" / "RETROPOLAR" / "RETROGRADE"
@@ -63,8 +65,7 @@ GLOBAL FUNCTION planTransfer {
     LOCAL isEscape IS (targetBody = BODY:BODY).
     mLog("STATS transfer setup target=" + targetBody:NAME
         + " local=" + isLocal + " escape=" + isEscape
-        + " mode=dumb-departure"
-        + " targetPeKm=0"
+        + " mode=arrival-pretarget"
         + " requestedCapturePeKm=" + ROUND(targetPe/1000,1)).
 
     // Resolve capture orbit direction before seeding the raw transfer
@@ -93,9 +94,8 @@ GLOBAL FUNCTION planTransfer {
     IF nd = 0 OR NOT nd:ISTYPE("Node") { RETURN. }
 
     // --- 2. Arrival handoff ---
-    // If a capture plane is requested, XING only validates that the
-    // departure has a real target patch inside BPLANE's correction
-    // corridor. Precision Pe/inc targeting belongs to BPLANE phases.
+    // Local departure owns the planned low approach. Downstream correction
+    // should repair execution error, not a knowingly bad departure plan.
     LOCAL firstPatch IS _firstPatchBodyName(nd).
     LOCAL firstPatchOk IS firstPatch = "none" OR firstPatch = targetBody:NAME.
     IF firstPatch <> "none" AND BODY:BODY <> 0 AND firstPatch = BODY:BODY:NAME {
@@ -115,7 +115,11 @@ GLOBAL FUNCTION planTransfer {
         RETURN.
     }
     LOCAL bplaneHandoffOk IS FALSE.
-    IF captureInc >= 0 {
+    IF isLocal {
+        // Buy the low approach at departure, not as an expensive late MCC.
+        // A requested plane remains downstream BPLANE/SHAPE's responsibility.
+        SET bplaneHandoffOk TO _refineLocalDeparturePe(nd, targetBody, targetPe).
+    } ELSE IF captureInc >= 0 {
         SET bplaneHandoffOk TO _refineEjectionTarget(
             nd, targetBody, targetPe, captureInc, lanTarget).
     } ELSE IF isEscape {
@@ -126,6 +130,7 @@ GLOBAL FUNCTION planTransfer {
 
     // --- Final report ---
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
+    IF NOT transferDepartureReady(nd, targetBody, targetPe) { RETURN 0. }
     IF finalPatch = 0 {
         mLogError("planTransfer: no direct encounter after arrival targeting.").
         mLog("STATS transfer result target=" + targetBody:NAME
@@ -150,6 +155,7 @@ GLOBAL FUNCTION planTransfer {
         SET transferMode TO "targeted-bplane".
         IF NOT bplaneHandoffOk { SET transferMode TO "coarse-bplane". }
     }
+    IF isLocal { SET transferMode TO "local-pe-targeted". }
     LOCAL status IS "planned".
     IF transferMode = "coarse-bplane" { SET status TO "planned-coarse". }
 
@@ -174,6 +180,102 @@ GLOBAL FUNCTION planTransfer {
 
     maneuverUiArchiveLog("transfer").
     RETURN nd.
+}
+
+// Recheck saved nodes too: an old broad-encounter plan must not bypass the
+// new local departure contract on reboot. Interrupted burns use resume rules.
+GLOBAL FUNCTION transferDepartureReady {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    IF targetBody:BODY <> BODY { RETURN TRUE. }
+    LOCAL patch IS _getTargetPatch(nd, targetBody).
+    LOCAL pe IS -1.
+    IF patch <> 0 { SET pe TO patch:PERIAPSIS. }
+    LOCAL ok IS patch <> 0 AND targetPe > 0 AND pe > 0
+        AND ABS(pe - targetPe) <= TRANSFER_PE_TOL
+        AND _firstPatchBodyName(nd) = targetBody:NAME.
+    mLog("STATS transfer departure-check target=" + targetBody:NAME
+        + " accepted=" + ok + " PeKm=" + ROUND(pe / 1000,3)
+        + " targetPeKm=" + ROUND(targetPe / 1000,3)
+        + " toleranceKm=" + (TRANSFER_PE_TOL / 1000)
+        + " dv=" + ROUND(nd:DELTAV:MAG,3)).
+    IF NOT ok {
+        mLogError("Departure blocked: predicted arrival is outside the requested Pe corridor. No burn authorized.").
+    }
+    RETURN ok.
+}
+
+// Minimum-norm Pe correction of the existing departure vector. Prograde
+// alone can be nearly insensitive at a grazing encounter; probe all axes.
+// Read numeric Pe BEFORE restoring a probe; patch objects may be live.
+LOCAL FUNCTION _refineLocalDeparturePe {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    IF targetPe <= 0 { RETURN FALSE. }
+    LOCAL seedPro IS nd:PROGRADE.
+    LOCAL seedRad IS nd:RADIALOUT.
+    LOCAL seedNrm IS nd:NORMAL.
+    LOCAL iteration IS 0.
+    UNTIL iteration >= 24 {
+        SET iteration TO iteration + 1.
+        LOCAL patch IS _getTargetPatch(nd, targetBody).
+        IF patch = 0 { BREAK. }
+        LOCAL peNow IS patch:PERIAPSIS.
+        LOCAL err IS targetPe - peNow.
+        IF ABS(err) <= MIN(500, TRANSFER_PE_TOL * 0.25) { RETURN TRUE. }
+        LOCAL basePro IS nd:PROGRADE.
+        LOCAL baseRad IS nd:RADIALOUT.
+        LOCAL baseNrm IS nd:NORMAL.
+        LOCAL gradients IS LIST().
+        FOR axis IN LIST("PROGRADE", "RADIALOUT", "NORMAL") {
+            LOCAL oldVal IS _nodeAxisGet(nd, axis).
+            LOCAL slope IS 0.
+            FOR probe IN LIST(0.1, -0.1) {
+                _nodeAxisSet(nd, axis, oldVal + probe).
+                WAIT 0.1.
+                LOCAL sample IS _getTargetPatch(nd, targetBody).
+                IF sample <> 0 { SET slope TO (sample:PERIAPSIS - peNow) / probe. }
+                _nodeAxisSet(nd, axis, oldVal).
+                WAIT 0.1.
+                IF sample <> 0 { BREAK. }
+            }
+            gradients:ADD(slope).
+        }
+        LOCAL grad2 IS gradients[0]^2 + gradients[1]^2 + gradients[2]^2.
+        IF grad2 < 0.000001 { BREAK. }
+        LOCAL stepPro IS err * gradients[0] / grad2.
+        LOCAL stepRad IS err * gradients[1] / grad2.
+        LOCAL stepNrm IS err * gradients[2] / grad2.
+        LOCAL stepSize IS SQRT(stepPro^2 + stepRad^2 + stepNrm^2).
+        LOCAL scale IS MIN(1, 20 / MAX(0.000001, stepSize)).
+        LOCAL improved IS FALSE.
+        FOR fraction IN LIST(1, 0.5, 0.25, 0.125, 0.0625, 0.03125) {
+            SET nd:PROGRADE TO basePro + stepPro * scale * fraction.
+            SET nd:RADIALOUT TO baseRad + stepRad * scale * fraction.
+            SET nd:NORMAL TO baseNrm + stepNrm * scale * fraction.
+            LOCAL change IS SQRT((nd:PROGRADE - seedPro)^2
+                + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2).
+            WAIT 0.1.
+            IF change <= TRANSFER_PE_REFINE_DV_CAP {
+                LOCAL trial IS _getTargetPatch(nd, targetBody).
+                IF trial <> 0 AND _firstPatchBodyName(nd) = targetBody:NAME {
+                    IF ABS(trial:PERIAPSIS - targetPe) < ABS(err) {
+                        SET improved TO TRUE. BREAK.
+                    }
+                }
+            }
+        }
+        IF NOT improved {
+            SET nd:PROGRADE TO basePro.
+            SET nd:RADIALOUT TO baseRad.
+            SET nd:NORMAL TO baseNrm.
+            WAIT 0.1.
+            BREAK.
+        }
+    }
+    RETURN transferDepartureReady(nd, targetBody, targetPe).
 }
 
 LOCAL FUNCTION _angleErrorDeg {

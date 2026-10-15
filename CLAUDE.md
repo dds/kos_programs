@@ -197,9 +197,13 @@ Looks like Python/JS; is neither.
   Local `XING` scans `TRANSFER_SCAN_LOOKAHEAD_HOURS` from now (default 6h),
   capped by `TRANSFER_SCAN_STEP_MINUTES`, so missed-burn rescue replans do
   not search whole high-orbit periods before trying a correction.
-  When BPLANE/SHAPE are downstream, XING's element gate is a handoff gate:
-  it accepts rough real patches within `TRANSFER_DEFERRED_PE_ERR_TOL`
-  (default 50 km) and `TRANSFER_DEFERRED_INC_ERR_TOL` (default 45 deg).
+  Local XING refines the selected departure to CAPTURE_PE with a three-axis
+  minimum-norm Pe solve, then requires positive Pe within TRANSFER_PE_TOL
+  (default 2 km). Broad encounter seeds cannot bypass this final gate, even
+  with BPLANE downstream. Saved unburned nodes pass the same check; flown
+  departures retain existing recovery/handoff rules. Arrival-plane precision
+  remains downstream. TRANSFER_DEFERRED_INC_ERR_TOL (45 deg) only influences
+  raw seed scoring; do not confuse that with a validated arrival-plane budget.
   Interplanetary `XING` uses Lambert seeds; validate against KSP patch
   creation, ejection dV, escape Pe, and departure/target body frames before
   trusting any analytic score. If a Lambert burn is already near complete,
@@ -238,8 +242,13 @@ Looks like Python/JS; is neither.
   a 1,780 km Mun Pe, about 3 h to Pe, and 550 + 1,400 m/s remaining in the
   transfer/lander stages. Pe-only recovery failed under economy correction limits;
   a 300 m/s recovery allowance subsequently failed the correction-plus-capture
-  budget. The operator confirms the engine stayed on too long; the exact
-  executor failure remains untraced. Independent thrust/mass impulse and
+  budget. The operator subsequently corrected the overburn diagnosis: the
+  planned node itself predicted about 2,200 km Mun Pe and went beyond the
+  Mun's orbit. Treat this flight as a planning failure, not a confirmed
+  executor failure. The economy path targeted zero Pe and accepted any patch
+  after an unchecked refinement. Local departure now targets requested Pe
+  and rejects outside-corridor nodes; source-driven synthetic fixtures pass,
+  but KSP flight validation remains outstanding. Independent thrust/mass impulse and
   stale-command limits, physical cutoff verification/shutdown, and a compact
   persistent burn report now have source-driven fixtures, not flight proof.
   Three-axis Pe recovery, budget-boundary/corridor fixes and explicit

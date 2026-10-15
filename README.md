@@ -817,13 +817,19 @@ Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
   `TRANSFER_SCAN_LOOKAHEAD_HOURS` from the current time, default 6h, so
   a missed-burn rescue can reacquire promptly instead of searching whole
   high-transfer orbits. The full local scan horizon is evaluated, and safe
-  direct encounters inside the correction corridor rank by departure dV
-  rather than closeness to the target's center. This is not a minimum-total-
-  mission-dV guarantee. Interplanetary transfers use the Lambert planner:
+  broad direct encounters rank by departure dV during seed selection.
+  The chosen local departure is then refined toward `CAPTURE_PE` using all
+  three burn axes, with no forced arrival plane. The final predicted Pe must
+  be positive and within `TRANSFER_PE_TOL` (default 2 km) of the request;
+  otherwise planning fails without burning. The refinement aims within
+  500 m and limits the vector change from the seed to
+  `TRANSFER_PE_REFINE_DV_CAP` (default 100 m/s). Saved, unburned XING nodes
+  pass the same Pe gate before execution. A cheap grazing encounter is no
+  longer enough. This is not a minimum-total-mission-dV guarantee.
+  Interplanetary transfers use the Lambert planner:
   analytic shortlist, patch refinement, ejection-dV ranking, and escape-path
-  safety checks. When `BPLANE`/`SHAPE` follow, XING is only a handoff gate: it
-  must create a real target patch, but it leaves exact arrival geometry to the
-  downstream phases.
+  safety checks. Local XING leaves precise arrival-plane targeting and
+  corrections for execution error to downstream `BPLANE`/`SHAPE` phases.
 - **BPLANE** (`lib/arrival_bplane.ks`) — mid-coast B-plane correction: a 2×2
   Newton iteration on (B·T, B·R) steers the arrival hyperbola onto the
   requested plane (`CAPTURE_INC`/`CAPTURE_LAN`) and periapsis (`CAPTURE_PE`).

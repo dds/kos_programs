@@ -145,6 +145,13 @@ GLOBAL FUNCTION phaseTransfer {
             + ROUND(existing:DELTAV:MAG,1)
             + " eta=" + ROUND(existing:ETA,1)
             + " body=" + SHIP:BODY:NAME).
+        IF NOT maneuverBurnInterrupted() AND NOT maneuverDepartureFlown() {
+            IF NOT transferDepartureReady(existing, target, CAPTURE_PE) {
+                mLogError("Saved departure node rejected; delete it and replan before launch from parking orbit.").
+                yieldToPrompt().
+                RETURN.
+            }
+        }
         SET success TO executeManeuver().
         IF success {
             _recordXingArrivalUt(target).

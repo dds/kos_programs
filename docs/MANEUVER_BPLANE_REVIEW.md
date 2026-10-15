@@ -265,12 +265,15 @@ the subsequent cutoff/input-lock changes or a complete mission. The planned
 same-craft comparison is `missions/RO8/mun_landing_return.ks`; neither of
 these flight reports refers to the Falcon mission profiles.
 
-## RO9 confirmed continued thrust — 2026-10-15
+## RO9 reported continued thrust — diagnosis corrected, 2026-10-15
 
-The operator confirms the engine stayed on too long during Mun departure.
+The operator initially reported the engine stayed on too long during Mun departure.
 The resulting encounter had a 1,780 km periapsis; increasing the recovery
 allowance to 300 m/s ran into the correction-plus-capture reserve. No cutoff
-trace is available to establish why the previous guards failed.
+trace is available. The operator subsequently corrected the diagnosis: the
+planned maneuver itself predicted about 2,200 km Mun Pe and went far beyond
+the Mun's orbit. This is evidence of a bad departure plan, not proof of an
+executor overrun. The following safeguards remain useful independent defenses.
 
 `executeManeuver` now applies an independent live guard to both normal-node
 and fixed-vector burns. It integrates actual `SHIP:THRUST / SHIP:MASS`, caps
@@ -298,3 +301,33 @@ same-timestamp and stubborn-thrust fixtures. The existing burn-timing and
 launch/staging suites also pass. These checks do not reproduce the actual
 game failure. Still required: compiled storage verification and an observed
 flight with its saved report, particularly a stage transition near cutoff.
+
+## Local departure periapsis contract
+
+The economy path called `newtonTarget(..., "PE", 0)` instead of targeting
+the requested capture altitude. It ignored convergence and returned any
+remaining encounter. The plane-requested path could likewise accept a Pe
+almost as large as the entire target SOI. This let a cheap grazing encounter
+become a departure burn even when downstream corrections were unaffordable.
+
+Local departures now refine the requested Pe using finite differences on all
+three node axes, with a minimum-norm update and backtracking that requires an
+improving direct encounter. The 100 m/s default cap applies to the vector
+change from the raw departure seed, not to total injection dV or a late MCC.
+Probe values are read before restoring the node, including when the game's
+patch object updates in place. Failed trials restore the best node.
+
+The independent final gate requires a direct, positive target Pe within 2 km
+of CAPTURE_PE; it aims within 500 m while solving. Unconverged/absent/impact
+encounters cannot be returned as executable plans. Saved unburned XING nodes
+pass the same gate; flown or explicitly resumed interrupted burns continue
+to use their recovery rules. No new forced plane or arbitrary apoapsis limit
+is imposed. A high post-flyby apoapsis alone does not diagnose a bad approach.
+
+`python3 -B scripts/check_departure_pe.py` executes solver and plan-gate
+bodies against synthetic responses, including a live patch object and an
+analytic 2,200 km hyperbolic Pe with zero prograde sensitivity. It checks
+convergence, bounded vector changes, lost probes and rejection despite a
+refiner returning a node. These are not flight tests or a reproduction of
+the deleted maneuver. The scan still optimizes a raw seed, so global mission
+fuel optimality is not guaranteed.
