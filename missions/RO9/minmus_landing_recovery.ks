@@ -49,10 +49,10 @@ SET AUTO_TRANSMIT TO 0.
 // Eastward ascent, accepting the inclination imposed by landing latitude.
 SET SURFACE_RETURN_PARKING_ALT TO 10000.
 SET SURFACE_RETURN_INCLINATION TO 0.
-SET RETURN_SEQUENCE TO LIST("ESCAPE", "COAST", "MCC", "RETURN_TRIM", "AERO9RAKE", "DESCENT", "DONE").
+SET RETURN_SEQUENCE TO LIST("ESCAPE", "COAST", "MCC", "RETURN_TRIM", "AEROBRAKE", "DESCENT", "DONE").
 SET RETURN_PE TO 53000.
 SET RETURN_PE_TOLERANCE TO 1000.
-SET RETURN_REENTRY_DIR TO "RETRO9RADE".
+SET RETURN_REENTRY_DIR TO "RETROGRADE".
 SET RETURN_KSC_TARGET TO 1.
 // Limit the optional pre-entry longitude trim; arrival corrections and
 // aerobrake targeting have separate limits. This is not a total return cap.
