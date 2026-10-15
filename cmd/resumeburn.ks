@@ -5,15 +5,12 @@
 
 IF stateGet("phase", "") <> "XING" OR NOT maneuverBurnInterrupted() {
     PRINT "No interrupted XING burn to resume.".
-    RETURN.
 }
-IF NOT HASNODE {
+ELSE IF NOT HASNODE {
     PRINT "Cannot resume: the interrupted maneuver node is missing.".
-    RETURN.
 }
-IF ABORT {
+ELSE IF ABORT {
     PRINT "ABORT is set. Clear it deliberately before resuming the burn.".
-    RETURN.
 }
 SET BURN_RESUME_REQUESTED TO TRUE.
 resumeMission().
