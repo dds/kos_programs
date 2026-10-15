@@ -233,7 +233,14 @@ Looks like Python/JS; is neither.
   Removing unintended coast-MCC thrust may have exposed older brake-gate and
   steering weaknesses. The subsequent coupled braking/terrain/latency gates,
   next-stage thrust reserve and nonblocking descent staging pass source-driven
-  point-mass/hardware fixtures, but remain unverified in KSP. The earlier
+  point-mass/hardware fixtures, but remain unverified in KSP. A subsequent
+  RO9 Mun transfer also missed its intended arrival: the operator reports
+  a 1,780 km Mun Pe, about 3 h to Pe, and 550 + 1,400 m/s remaining in the
+  transfer/lander stages. Pe-only recovery failed under economy correction limits;
+  actual correction cost and the reported overburn cause remain unverified.
+  Three-axis Pe recovery, budget-boundary/corridor fixes and explicit
+  `arrival` budget/plan-only commands have synthetic response fixtures only.
+  The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered
   a lost encounter after a staged, low-thrust departure via BPLANE and

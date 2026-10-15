@@ -57,6 +57,8 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
 | `RUNPATH("0:/cmd/arrival.ks", "review").` | Inspect a retained partial arrival; actions `accept` / `replan`, optional capture Ap in km |
+| `RUNPATH("0:/cmd/arrival.ks", "budget", 100).` | Allow up to 100 m/s of further arrival corrections; preserves capture/return reserves and does not burn |
+| `RUNPATH("0:/cmd/arrival.ks", "plan").` | Preview an arrival correction and hold for review; does not burn or advance the mission |
 | `RUNPATH("0:/cmd/arrival.ks", "status").` | Show actual arrival Pe, capture fuel estimate, correction spending and interrupted-burn reason without flying |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
@@ -490,6 +492,41 @@ flown orbit, including recovery from older saves whose node was already
 deleted. It preserves correction spending and all fuel/capture limits.
 This action does not apply to an interrupted XING departure. `status` does
 not execute a burn; `replan` resumes automatic planning and execution.
+
+For a real encounter held with `pe-recovery-not-converged-within-budget`,
+`status` now prints the effective correction cap as well as the raw encounter
+and capture estimate. Economy profiles normally allow only 20 m/s per arrival
+correction and 30 m/s cumulatively, independent of fuel remaining onboard.
+The Pe-only solver now measures all three node axes, projects trial corrections
+inside the total dV limit, restores the best candidate after rejected trials,
+and accepts the configured Pe corridor if the tighter internal aim is
+unreachable. It does not force an equatorial or polar plane.
+
+To explicitly allow up to **100 m/s of further corrections** and inspect the
+result before burning, run with an archive connection after sync:
+
+```kerboscript
+RUNPATH("0:/cmd/arrival.ks", "budget", 100).
+RUNPATH("0:/cmd/arrival.ks", "plan").
+```
+
+`budget` changes only correction allowances in the persisted override file;
+the total cap becomes previously spent/reserved dV plus the requested amount.
+It preserves the spent ledger, existing mission targets, plane requirements,
+and capture/return reserves. For the Mun economy landing mission, correction
+plus capture must still leave 1,500 m/s. The argument is an allowance, not an
+estimate of the correction's actual cost.
+
+`plan` removes stale pending nodes and previews from the flown trajectory,
+without burning or advancing the mission. It refuses an interrupted burn or
+ABORT state. A usable candidate is retained for review, including the capture
+estimate at the configured apoapsis and fuel remaining after both burns.
+Normal budget checks still reject an unaffordable correction/capture. Use
+`arrival.ks` action `accept` to execute a reviewed candidate and resume; use
+`plan` again if the node expires. A pending review also holds across reboot.
+These commands do not diagnose whether an earlier transfer miss was throttle
+overrun or finite-burn trajectory error; retain the `STATS burn cutoff` and
+`STATS burn result/abort` lines for that distinction.
 
 SHAPE verifies the accepted capture ellipse without requesting circularization;
 its cleanup allowance is 10 m/s per burn, 20 m/s total, with a 50 m/s reserve.

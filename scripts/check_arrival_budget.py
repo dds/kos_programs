@@ -114,7 +114,8 @@ def check_logging_and_integration():
     assert not evaluate(space, CORE=NS(VOLUME=NS(FREESPACE=1200)),
                         LOG_FILE_RESERVE_BYTES=1024, line=NS(LENGTH=200))
     assert 'IF persist AND enoughSpace' in log
-    assert 'IF wroteLocal AND HOMECONNECTION:ISCONNECTED' in log
+    assert 'IF wroteLocal AND LOG_ARCHIVE_DEFERRED <= 0' in log
+    assert 'AND HOMECONNECTION:ISCONNECTED' in log
     hold = body(BPLANE, '_bplaneHoldCorrection')
     assert 'REMOVE NEXTNODE' in hold and 'yieldToPrompt()' in hold
     planner = body(BPLANE, 'planBplaneCorrection')
@@ -123,8 +124,8 @@ def check_logging_and_integration():
     assert 'unconverged-optional-correction' in planner
     for phase in ('phaseBplane', 'phaseRefineBplane'):
         source = body(BPLANE, phase)
-        assert source.index('bplaneCorrectionAllowed(') < source.index('executeManeuver()')
-        assert source.index('_bplaneReserveCorrection(') < source.index('executeManeuver()')
+        assert source.index('bplaneCorrectionAllowed(') < source.index('_bplaneExecuteCorrection()')
+        assert source.index('_bplaneReserveCorrection(') < source.index('_bplaneExecuteCorrection()')
         assert source.count('IF phaseShouldYield { RETURN. }') == 2
         assert '_bplaneLogBaseline(' in source
     existing = body(BPLANE, '_bplaneExistingNodeAcceptable')

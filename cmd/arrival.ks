@@ -1,7 +1,9 @@
 // ============================================================
-// arrival.ks — review, accept, or replan a retained arrival correction.
+// arrival.ks — inspect, budget, preview, accept, or replan an arrival correction.
 // Archive-only operator code; loads its own saved mission/band context.
 // RUNPATH("0:/cmd/arrival.ks", "accept", 100).  // 100 km capture Ap
+// RUNPATH("0:/cmd/arrival.ks", "budget", 100).  // 100 m/s further corrections
+// RUNPATH("0:/cmd/arrival.ks", "plan").         // preview only, no burn
 // ============================================================
 @LAZYGLOBAL OFF.
 PARAMETER action IS "review".
@@ -38,15 +40,10 @@ LOCAL FUNCTION _arrivalLoadContext {
     RETURN TRUE.
 }
 
-// Rewrite the full override file, replacing only the accepted-target keys.
+// Rewrite the full override file, replacing only the supplied keys.
 // Preserve unrelated runtime settings and use literals for offline reboots.
-LOCAL FUNCTION _bplaneWriteAcceptedTargets {
-    PARAMETER pe, inc, apAlt.
-    LOCAL values IS LEX("CAPTURE_PE", pe, "CAPTURE_INC", inc, "CAPTURE_DIR", "",
-        "CAPTURE_LAN", -1, "TARGET_PE", pe, "TARGET_AP", apAlt,
-        "CAPTURE_MIN_PE", MAX(BPLANE_REVIEW_MIN_PE, pe - BPLANE_PE_TOL),
-        "CAPTURE_MAX_PE", pe + BPLANE_PE_TOL,
-        "SHAPE_PE", pe, "SHAPE_AP", apAlt, "SHAPE_INC", inc, "SHAPE_LAN", -1).
+LOCAL FUNCTION _arrivalWriteOverrides {
+    PARAMETER values.
     LOCAL previous IS LIST().
     LOCAL path IS missionOverridePath().
     IF EXISTS(path) { SET previous TO OPEN(path):READALL:STRING:SPLIT(CHAR(10)). }
@@ -67,6 +64,16 @@ LOCAL FUNCTION _bplaneWriteAcceptedTargets {
     applyMissionOverrides().
 }
 
+LOCAL FUNCTION _bplaneWriteAcceptedTargets {
+    PARAMETER pe, inc, apAlt.
+    LOCAL values IS LEX("CAPTURE_PE", pe, "CAPTURE_INC", inc, "CAPTURE_DIR", "",
+        "CAPTURE_LAN", -1, "TARGET_PE", pe, "TARGET_AP", apAlt,
+        "CAPTURE_MIN_PE", MAX(BPLANE_REVIEW_MIN_PE, pe - BPLANE_PE_TOL),
+        "CAPTURE_MAX_PE", pe + BPLANE_PE_TOL,
+        "SHAPE_PE", pe, "SHAPE_AP", apAlt, "SHAPE_INC", inc, "SHAPE_LAN", -1).
+    _arrivalWriteOverrides(values).
+}
+
 LOCAL FUNCTION _arrivalCommand {
     PARAMETER action IS "review", captureApKm IS -1.
     LOCAL phase IS stateGet("phase", "").
@@ -74,6 +81,23 @@ LOCAL FUNCTION _arrivalCommand {
         PRINT "Arrival review requires BPLANE or REFINE_BPLANE.". RETURN.
     }
     IF action = "status" { bplaneArrivalStatus(). RETURN. }
+    IF action = "budget" {
+        // For this action the third argument is additional correction m/s,
+        // not capture Ap. Changing the allowance never starts a burn.
+        IF captureApKm <= 0 {
+            PRINT "Budget action requires a positive additional correction allowance in m/s.". RETURN.
+        }
+        LOCAL values IS bplaneRecoveryBudgetValues(captureApKm).
+        IF values:LENGTH = 0 { PRINT "No arrival target body.". RETURN. }
+        _arrivalWriteOverrides(values).
+        mLog("STATS bplane recovery-budget additionalDv=" + captureApKm
+            + " totalCap=" + BPLANE_TRIM_TOTAL_DV_CAP
+            + " captureReserve=" + BPLANE_CAPTURE_MARGIN).
+        PRINT "Correction allowance saved. Capture/return reserves unchanged; no burn started.".
+        PRINT "Use arrival action plan to preview a correction without executing it.".
+        RETURN.
+    }
+    IF action = "plan" { bplanePreviewCorrection(). RETURN. }
     IF action = "replan" {
         IF ABORT { PRINT "Clear ABORT deliberately before replanning.". RETURN. }
         IF maneuverBurnInterrupted() {
@@ -92,7 +116,7 @@ LOCAL FUNCTION _arrivalCommand {
         PRINT "No retained candidate. Use arrival action replan to generate one.". RETURN.
     }
     IF action = "review" { bplanePauseForReview(). RETURN. }
-    IF action <> "accept" { PRINT "Arrival actions: status, review, accept, replan.". RETURN. }
+    IF action <> "accept" { PRINT "Arrival actions: status, budget, plan, review, accept, replan.". RETURN. }
     IF NOT HASNODE { PRINT "Reviewed node missing; replan.". RETURN. }
     LOCAL nd IS NEXTNODE.
     IF NOT bplaneReviewMatches(saved, nd) {

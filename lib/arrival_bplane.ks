@@ -146,6 +146,11 @@ GLOBAL FUNCTION bplaneArrivalStatus {
     LOCAL targetBody IS _bplaneTargetBody().
     IF targetBody = 0 { PRINT "No arrival target body.". RETURN. }
     LOCAL hit IS findArrivalPatch(0, targetBody).
+    LOCAL phaseCap IS BPLANE_DV_CAP.
+    IF stateGet("phase", "") = "REFINE_BPLANE" { SET phaseCap TO REFINE_BPLANE_DV_CAP. }
+    mLogWarn("STATS bplane status correctionCap=" + _bplaneTrimCap(targetBody, phaseCap)
+        + " phaseCap=" + phaseCap + " trimCap=" + BPLANE_TRIM_DV_CAP
+        + " totalCap=" + BPLANE_TRIM_TOTAL_DV_CAP).
     mLogWarn("STATS bplane status phase=" + stateGet("phase", "")
         + " body=" + SHIP:BODY:NAME
         + " target=" + targetBody:NAME + " patch=" + (hit <> 0)
@@ -166,6 +171,39 @@ GLOBAL FUNCTION bplaneArrivalStatus {
         mLogWarn("STATS bplane status nodeDv=" + ROUND(NEXTNODE:DELTAV:MAG, 4)
             + " nodeEta=" + ROUND(NEXTNODE:ETA, 1)).
     }
+}
+
+// Explicit operator allowance for further correction, preserving already
+// reserved/spent dV and all capture/return/plane constraints.
+GLOBAL FUNCTION bplaneRecoveryBudgetValues {
+    PARAMETER allowance.
+    LOCAL targetBody IS _bplaneTargetBody().
+    IF targetBody = 0 { RETURN LEXICON(). }
+    RETURN LEX("BPLANE_DV_CAP", allowance, "REFINE_BPLANE_DV_CAP", allowance,
+        "BPLANE_TRIM_DV_CAP", allowance,
+        "BPLANE_TRIM_TOTAL_DV_CAP", _bplaneTrimSpent(targetBody) + allowance).
+}
+
+GLOBAL FUNCTION bplanePreviewCorrection {
+    IF ABORT OR maneuverBurnInterrupted() {
+        PRINT "ABORT or interrupted burn present; inspect status before planning.". RETURN.
+    }
+    LOCAL targetBody IS _bplaneTargetBody().
+    IF targetBody = 0 OR SHIP:BODY = targetBody {
+        PRINT "Preview requires an approach from outside the target SOI.". RETURN.
+    }
+    stateRemove("bplane_review").
+    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    LOCAL phaseCap IS BPLANE_DV_CAP.
+    IF stateGet("phase", "") = "REFINE_BPLANE" { SET phaseCap TO REFINE_BPLANE_DV_CAP. }
+    LOCAL nd IS planBplaneCorrection(targetBody, CAPTURE_PE,
+        _bplaneWantInc(), CAPTURE_LAN, phaseCap).
+    IF phaseShouldYield { RETURN. }
+    IF nd = 0 {
+        bplaneArrivalStatus().
+        PRINT "No correction node produced. Mission phase unchanged.". RETURN.
+    }
+    _bplaneOfferReview(nd, targetBody, phaseCap).
 }
 
 LOCAL FUNCTION _bplaneExecuteCorrection {
@@ -311,6 +349,13 @@ LOCAL FUNCTION _bplaneShowReview {
         + " inc=" + ROUND(patch:INCLINATION, 2)
         + " maxLatitude=" + ROUND(latitudeReach, 2)
         + " eta=" + ROUND(nd:ETA, 1)).
+    LOCAL captureDv IS bplaneCaptureCost(patch, targetBody).
+    LOCAL captureAp IS MAX(35000, patch:PERIAPSIS).
+    IF TARGET_AP >= 0 { SET captureAp TO MAX(TARGET_AP, patch:PERIAPSIS). }
+    mLog("STATS bplane review configuredCaptureApKm=" + (captureAp / 1000)
+        + " captureDv=" + ROUND(captureDv, 2)
+        + " remainingAfterDv=" + ROUND(SHIP:DELTAV:VACUUM - nd:DELTAV:MAG - captureDv, 2)
+        + " requiredReserve=" + BPLANE_CAPTURE_MARGIN).
     FOR apAlt IN LIST(50000, 100000, 500000) {
         IF apAlt >= patch:PERIAPSIS AND apAlt < targetBody:SOIRADIUS - targetBody:RADIUS {
             LOCAL cost IS bplaneCaptureCost(patch, targetBody, apAlt).
@@ -319,7 +364,7 @@ LOCAL FUNCTION _bplaneShowReview {
                 + " remainingAfterDv=" + ROUND(SHIP:DELTAV:VACUUM - nd:DELTAV:MAG - cost, 2)).
         }
     }
-    PRINT "Partial solution retained. No fuel spent and no targets changed.".
+    PRINT "Arrival candidate retained. No fuel spent and no targets changed.".
     PRINT "Review the map. Acceptance adopts this Pe/inclination for this mission leg.".
     PRINT "RUNPATH(" + CHAR(34) + "0:/cmd/arrival.ks" + CHAR(34)
         + ", " + CHAR(34) + "accept" + CHAR(34) + ").".
@@ -751,9 +796,11 @@ LOCAL FUNCTION _acquireEncounter {
 
 // A single Pe constraint needs a scalar solve, not the plane solver's
 // two B-vector constraints. Differentiate KSP's actual patch elements;
-// a minimum-length step in prograde/radial controls spends no normal dV.
+// a minimum-length step may use any axis when no arrival plane is requested.
 LOCAL FUNCTION _bplanePlanPeOnly {
-    PARAMETER targetBody, wantPe, dvCap.
+    PARAMETER targetBody.
+    PARAMETER wantPe.
+    PARAMETER dvCap.
     IF findArrivalPatch(0, targetBody) = 0 {
         _bplaneHoldCorrection("pe-recovery-encounter-missing"). RETURN 0.
     }
@@ -761,6 +808,8 @@ LOCAL FUNCTION _bplanePlanPeOnly {
     ADD nd.
     WAIT 0.1.
     LOCAL iteration IS 0.
+    mLog("STATS bplane pe-only start targetPeKm=" + (wantPe / 1000)
+        + " cap=" + dvCap + " toleranceKm=" + (BPLANE_PE_TOL / 1000)).
     // Plan inside the acceptance corridor, leaving room for execution error.
     LOCAL solveTol IS MIN(500, BPLANE_PE_TOL * 0.25).
     UNTIL iteration >= 16 {
@@ -778,8 +827,9 @@ LOCAL FUNCTION _bplanePlanPeOnly {
         }
         LOCAL basePro IS nd:PROGRADE.
         LOCAL baseRad IS nd:RADIALOUT.
+        LOCAL baseNormal IS nd:NORMAL.
         LOCAL gradients IS LIST().
-        FOR axis IN LIST("PROGRADE", "RADIALOUT") {
+        FOR axis IN LIST("PROGRADE", "RADIALOUT", "NORMAL") {
             LOCAL slope IS 0.
             // Try both signs if the first probe loses the encounter.
             FOR probe IN LIST(FD_STEP, -FD_STEP) {
@@ -791,21 +841,33 @@ LOCAL FUNCTION _bplanePlanPeOnly {
                 }
                 SET nd:PROGRADE TO basePro.
                 SET nd:RADIALOUT TO baseRad.
+                SET nd:NORMAL TO baseNormal.
                 WAIT 0.1.
                 IF sample <> 0 { BREAK. }
             }
             gradients:ADD(slope).
         }
-        LOCAL grad2 IS gradients[0]^2 + gradients[1]^2.
+        LOCAL grad2 IS gradients[0]^2 + gradients[1]^2 + gradients[2]^2.
         IF grad2 < 0.000001 { BREAK. }
         LOCAL stepPro IS peError * gradients[0] / grad2.
         LOCAL stepRad IS peError * gradients[1] / grad2.
-        LOCAL stepSize IS SQRT(stepPro^2 + stepRad^2).
+        LOCAL stepNormal IS peError * gradients[2] / grad2.
+        LOCAL stepSize IS SQRT(stepPro^2 + stepRad^2 + stepNormal^2).
         LOCAL scale IS MIN(1, dvCap / MAX(0.000001, stepSize)).
         LOCAL improved IS FALSE.
         FOR fraction IN LIST(1, 0.5, 0.25, 0.125, 0.0625, 0.03125) {
             SET nd:PROGRADE TO basePro + stepPro * scale * fraction.
             SET nd:RADIALOUT TO baseRad + stepRad * scale * fraction.
+            SET nd:NORMAL TO baseNormal + stepNormal * scale * fraction.
+            // Project the whole candidate into the budget ball. Scaling only
+            // the increment stalls near its boundary, even with useful tangential steps.
+            LOCAL candidateDv IS SQRT(nd:PROGRADE^2 + nd:RADIALOUT^2 + nd:NORMAL^2).
+            IF candidateDv > dvCap {
+                LOCAL budgetScale IS dvCap / candidateDv.
+                SET nd:PROGRADE TO nd:PROGRADE * budgetScale.
+                SET nd:RADIALOUT TO nd:RADIALOUT * budgetScale.
+                SET nd:NORMAL TO nd:NORMAL * budgetScale.
+            }
             WAIT 0.1.
             IF nd:DELTAV:MAG <= dvCap + 0.001 {
                 LOCAL trial IS findArrivalPatch(nd, targetBody).
@@ -816,10 +878,25 @@ LOCAL FUNCTION _bplanePlanPeOnly {
                 }
             }
         }
-        IF NOT improved { BREAK. }
+        IF NOT improved {
+            // Rejected probes must not replace the best usable candidate.
+            SET nd:PROGRADE TO basePro.
+            SET nd:RADIALOUT TO baseRad.
+            SET nd:NORMAL TO baseNormal.
+            WAIT 0.1.
+            BREAK.
+        }
     }
     LOCAL finalHit IS findArrivalPatch(nd, targetBody).
     IF finalHit <> 0 {
+        // Tight solve tolerance is an aim point, not a stricter flight contract.
+        IF ABS(finalHit["patch"]:PERIAPSIS - wantPe) <= BPLANE_PE_TOL
+                AND nd:DELTAV:MAG <= dvCap + 0.001 {
+            mLog("STATS bplane pe-only converged=True result=inside-corridor PeKm="
+                + ROUND(finalHit["patch"]:PERIAPSIS / 1000, 3)
+                + " dv=" + ROUND(nd:DELTAV:MAG, 3) + " cap=" + dvCap).
+            RETURN nd.
+        }
         mLog("STATS bplane pe-only converged=False PeKm="
             + ROUND(finalHit["patch"]:PERIAPSIS / 1000, 3)
             + " dv=" + ROUND(nd:DELTAV:MAG, 3) + " cap=" + dvCap).

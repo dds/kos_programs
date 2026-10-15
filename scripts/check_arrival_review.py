@@ -100,7 +100,7 @@ def check_binding():
 
 def accepted_values(pe, inc, ap):
     writer = body(COMMAND, '_bplaneWriteAcceptedTargets')
-    expr = re.search(r'LOCAL values IS (.*?)\.\s*LOCAL previous', writer, re.S)[1]
+    expr = re.search(r'LOCAL values IS (.*?)\.\s*_arrivalWriteOverrides', writer, re.S)[1]
     return evaluate(expr, pe=pe, inc=inc, apAlt=ap, BPLANE_REVIEW_MIN_PE=10000,
                     BPLANE_PE_TOL=2000, LEX=lambda *args: dict(zip(args[::2], args[1::2])))
 

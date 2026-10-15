@@ -83,6 +83,10 @@ class Returned(Exception):
     def __init__(self, value): self.value = value
 
 
+class Broken(Exception):
+    pass
+
+
 def run(nodes, env):
     for statement, yes, no in nodes:
         if statement.startswith('IF '):
@@ -91,11 +95,13 @@ def run(nodes, env):
             match = re.fullmatch(r'FOR (\w+) IN (.*)', statement, re.S)
             for value in evaluate(match[2], env):
                 env[match[1]] = value
-                run(yes, env)
+                try: run(yes, env)
+                except Broken: break
         elif statement.startswith('UNTIL '):
             steps = 0
             while not evaluate(statement[6:], env):
-                run(yes, env)
+                try: run(yes, env)
+                except Broken: break
                 steps += 1
                 assert steps < 10000, 'fixture loop did not converge'
         elif statement.startswith('PARAMETER '):
@@ -110,6 +116,12 @@ def run(nodes, env):
             exec((match[1] or match[2]).replace(':', '.') + ' = fixtureValue', {'__builtins__': {}}, env)
         elif statement.startswith('RETURN'):
             raise Returned(evaluate(statement[7:], env) if statement != 'RETURN' else None)
+        elif statement == 'BREAK':
+            raise Broken()
+        elif statement.startswith('WAIT '):
+            env['fixture_wait'](evaluate(statement[5:], env))
+        elif statement.startswith('ADD '):
+            env['fixture_add'](evaluate(statement[4:], env))
         elif statement.startswith(('mLog', '_landingHud')):
             pass
         elif statement == 'STAGE':
