@@ -1,0 +1,65 @@
+// ============================================================
+// RO9 Minmus landing recovery — select only from an existing Minmus orbit.
+// Skip SHAPE, use a nearby scanned site, hold for surface science/fuel review.
+// (0:/missions/RO9/minmus_landing_recovery.ks)
+// ============================================================
+
+SET MISSION_ID TO "minmus_landing_recovery".
+SET MISSION_NAME TO "RO9 Minmus Landing Recovery and Return".
+SET TARGET_ TO "MINMUS".
+SET PAYLOADS TO LIST("SCISAT").
+SET SEQUENCE TO LIST("LAND_DEORBIT", "LAND_ASSIST", "SCIENCE_OPS", "SURFACE_RETURN_SETUP").
+
+// Keep the current orbital plane and ellipse; no contract-site detour.
+SET TARGET_LAT TO 0.
+SET TARGET_LNG TO 0.
+SET TARGET_LOCK TO 0.
+SET TARGET_WAYPOINT TO "".
+SET LANDING_USE_WAYPOINTS TO 0.
+SET LANDING_AUTO_TARGET TO 1.
+SET LANDING_AUTO_TARGET_MINUTES TO 5.
+SET LANDING_CONFIRM_TARGET TO 0.
+SET LANDING_SKIP_TARGET_SEARCH TO 0.
+SET LANDING_SIM_MODE TO 0.
+SET TARGET_TOLERANCE TO 1500.
+SET GUIDANCE_ALT TO 3000.
+// Spend lateral correction during the main brake, before terminal approach.
+SET GUIDANCE_CORRECTION_THRESHOLD TO 50.
+SET TARGET_DEORBIT_SCAN_ORBITS TO 4.
+SET TARGET_DEORBIT_SCAN_SAMPLES TO 512.
+SET TARGET_DEORBIT_MIN_LEAD TO 120.
+// Correct a modest lateral miss during deorbit instead of during landing.
+SET TARGET_DEORBIT_NORMAL_DV_CAP TO 10.
+SET LANDING_SITE_SCAN_ENABLE TO 1.
+SET LANDING_REQUIRE_SITE TO 1.
+SET LANDING_SITE_SCAN_RADIUS TO 1500.
+SET LANDING_SITE_SCAN_STEP TO 250.
+SET LANDING_SITE_MAX_SLOPE TO 5.
+SET TERRAIN_CHECK_RADIUS TO 500.
+SET TERRAIN_CHECK_STEP TO 100.
+SET MAX_TILT TO 12.
+SET RELOAD_AFTER_LAND_ASSIST TO 0.
+SET RELOAD_AFTER_LAND TO 0.
+
+// Remain landed until the operator explicitly starts SURFACE_RETURN_SETUP.
+SET SCIENCE_OPS_HOLD TO 1.
+SET SCIENCE_SURVEY_POINTS TO LIST().
+SET AUTO_TRANSMIT TO 0.
+
+// Eastward ascent, accepting the inclination imposed by landing latitude.
+SET SURFACE_RETURN_PARKING_ALT TO 10000.
+SET SURFACE_RETURN_INCLINATION TO 0.
+SET RETURN_SEQUENCE TO LIST("ESCAPE", "COAST", "MCC", "RETURN_TRIM", "AERO9RAKE", "DESCENT", "DONE").
+SET RETURN_PE TO 53000.
+SET RETURN_PE_TOLERANCE TO 1000.
+SET RETURN_REENTRY_DIR TO "RETRO9RADE".
+SET RETURN_KSC_TARGET TO 1.
+// Limit the optional pre-entry longitude trim; arrival corrections and
+// aerobrake targeting have separate limits. This is not a total return cap.
+SET RETURN_KSC_TRIM_DV_CAP TO 5.
+SET RETURN_ARM_CHUTES TO 1.
+SET RETURN_DESCENT_FAIRING_TAG TO "none".
+SET RETURN_DESCENT_DECOUPLER_TAG TO "descent_decoupler".
+SET RETURN_DESCENT_DECOUPLE_ALT TO 6000.
+SET RETURN_DESCENT_CHUTES_TAG TO "descent_chutes".
+SET RETURN_DESCENT_RELEASE_ALT TO 10000.
