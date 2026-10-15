@@ -240,46 +240,49 @@ vertical speed, and positive downspeed.
 
 `_landingBrakeGateInfo()` decides when braking should begin.
 
-Horizontal braking uses:
-
-- horizontal acceleration reserve calculated from the thrust vector budget
-- brake distance: `hspeed^2 / (2 * horizontalAcc)`
-- gate distance: brake distance plus `BRAKE_MARGIN`
-- target downrange distance projected along current horizontal velocity
-- extra lead: `LANDING_BRAKE_GATE_LEAD_DIST` when moving horizontally
-
-The horizontal acceleration is not a static fraction of thrust. The gate
-reserves vertical acceleration first: local gravity plus
-`LANDING_HORIZONTAL_ACCEL_VERTICAL_BUFFER`. It then treats `MAX_ACC` as the
-hypotenuse of the thrust vector and computes the horizontal leg:
+The trigger and braking controller share a coupled velocity-arrest budget:
 
 ```text
-verticalAcc = gravAcc * (1 + LANDING_HORIZONTAL_ACCEL_VERTICAL_BUFFER)
-horizontalAcc = sqrt(maxAcc^2 - verticalAcc^2)
+netAcc = 0.8 * max(0, availableAcceleration - gravity)
+futureDown = downSpeed + gravity * reactionTime
+stopTime = sqrt(horizontalSpeed^2 + futureDown^2) / netAcc * BURN_MARGIN
+horizontalGate = horizontalSpeed * (reactionTime + stopTime / 2)
+verticalGate = downSpeed * reactionTime + gravity * reactionTime^2 / 2
+               + futureDown * stopTime / 2 + clearance
 ```
 
-If available thrust cannot cover that vertical requirement, the gate falls
-back to `LANDING_HORIZONTAL_ACCEL_FALLBACK_FRACTION * MAX_ACC`, so low-TWR
-vehicles get a longer, earlier horizontal brake gate instead of an optimistic
-one.
+Defaults are three seconds of reaction time and 100 m clearance. The planning
+acceleration is the weaker of current propulsion and the next eligible
+stage's estimated acceleration after separation at its current wet mass.
+Planning uses full surface gravity, without credit for centripetal support
+that disappears as horizontal speed falls. An insufficient acceleration
+budget triggers braking immediately; it cannot make an underpowered craft
+capable of landing.
 
-Vertical braking uses:
+The horizontal trigger compares the gate with target downrange **minus**
+`LANDING_BRAKE_GATE_LEAD_DIST` and `LANDING_BRAKE_UNDERSHOOT_BIAS`. These
+positive allowances now advance ignition; the former addition delayed it.
+The vertical trigger uses the smaller of height above target elevation and
+bottom-of-vessel radar clearance. It remains active regardless of target
+miss or the Trajectories impact prediction.
 
-- vertical burn distance from `lmVerticalBurnDistance()`
-- vertical gate: burn distance times `BURN_MARGIN`, plus `BRAKE_MARGIN`
-- burn height: target-relative height, except during `VERTICAL_DESCENT` where
-  bottom radar altitude is used
+The vertical ETA searches the next 120 seconds of conservative coast,
+including the growth of stopping distance as downward speed increases.
+The horizontal ETA estimates closing time to the horizontal gate.
+`H_NOW`/`V_NOW` mean the corresponding gate has arrived. `H_OVERSHOT` means
+the target is behind the descending craft below `TERRAIN_SAFE_ALT`.
+The existing high-altitude horizontal suppression still applies when above
+`TERRAIN_SAFE_ALT`, above twice the horizontal gate, and over 60 seconds from
+the vertical trigger. It cannot suppress the vertical trigger.
 
-The gate returns both immediate flags and ETAs. `H_NOW` means downrange is
-inside the horizontal brake gate. `V_NOW` means the vertical burn gate has
-arrived. `H_OVERSHOT` means the target has passed behind the craft while the
-craft is descending below `TERRAIN_SAFE_ALT`.
-
-There is a high-altitude suppression rule for horizontal braking: if the craft
-is still above `TERRAIN_SAFE_ALT`, the burn height is more than twice the
-horizontal gate, and the vertical burn is more than 60 seconds away, the
-horizontal gate is deferred so the vehicle does not waste energy braking too
-early in a long descent.
+These are conservative point-mass bounds, not terrain-path or attitude
+simulation. Rising terrain ahead, unusually slow rotation, engine spool-up,
+or nonstandard staging can require additional allowance. The next-stage
+mass estimate assumes a conventional serial stack with the root/core on the
+retained lander. `landingcheck.ks` prints its estimated surface TWR.
+It uses [kOS engine POSSIBLETHRUST](https://ksp-kos.github.io/KOS/structures/vessels/engine.html#engine-possiblethrust),
+which reports thrust even before ignition, and current retained part mass.
+Any unaccounted vessel mass is conservatively retained on the lander.
 
 ## State machine overview
 
@@ -377,32 +380,29 @@ correction vector.
 `BRAKE_ALIGN` throttles to zero and points the ship for the braking burn before
 the gate arrives. The lead time defaults to 20 seconds.
 
-The steering comes from `_landingBrakeSteeringInfo()`:
-
-- default is retro steering from `lmRetroSteering()`
-- if horizontal speed is above `APPROACH_HSPEED` and there is plenty of height,
-  hard braking points mostly opposite horizontal velocity with a small upward
-  bias from `LANDING_HARD_BRAKE_UP_BIAS`
-- if Trajectories says the impact is already behind the target, the brake
-  guard suppresses horizontal retro steering and resets the cross PID
-- if crossrange error exceeds `GUIDANCE_CORRECTION_THRESHOLD`, the cross PID
-  biases steering toward the cross axis, capped by `TR_BRAKE_BIAS`
+Alignment uses the same gravity-compensated velocity-arrest vector as the
+burn. The brake track is loaded during landing setup, its disk file reclaimed,
+and its resident functions reused at ignition; state changes no longer fetch
+or compile that track near the ground.
 
 If either brake gate arrives, the state changes to `BRAKING_BURN`. If the gate
 is no longer close and was not merely suppressed, it returns to `COAST`.
 
 ## BRAKING_BURN
 
-`BRAKING_BURN` arrests vertical speed and kills most horizontal velocity. It
-uses the scheduled descent speed for the current height and computes a
-vertical throttle with `lmVerticalThrottle()`. If the craft is falling much
-faster than the schedule, it commands full throttle.
+One acceleration vector owns both throttle and direction:
+`gravity * up + netAcceleration * normalized(desiredVelocity - velocity)`.
+The net acceleration uses the same fractional budget as the trigger, with a
+one-second response taper near the desired velocity. The magnitude sets
+throttle and its normalized direction sets steering. This replaces a nearly
+horizontal fixed upward bias and an independently computed vertical throttle.
 
-When horizontal speed is still above `APPROACH_HSPEED` and there is enough
-height, it adds a horizontal-kill throttle between
-`LANDING_HKILL_THROTTLE_MIN` and `LANDING_HKILL_THROTTLE_MAX`, scaled by how
-far above the approach speed it is. The commanded throttle is the larger of
-vertical throttle and horizontal-kill throttle.
+Above `APPROACH_HSPEED`, desired horizontal and vertical speeds are zero.
+Maintaining the ordinary 30 m/s descent target throughout a long sideways
+burn would spend height absent from the stopping-distance calculation. Once
+lateral speed is low, the scheduled descent speed resumes. Trajectories
+undershoot and crossrange correction no longer reduce braking authority;
+position correction follows velocity capture in the terminal track.
 
 The state exits when the descent is captured and horizontal speed is low:
 
@@ -413,6 +413,30 @@ The state exits when the descent is captured and horizontal speed is low:
 It can also go to `TARGET_REFINE` once the approach corridor is captured
 within `APPROACH_RADIUS`, or to `VERTICAL_DESCENT` on a low vertical gate when
 targeting is absent or horizontal speed is already low.
+
+## Staging during powered descent
+
+The transfer engine remains in use while any active, non-flamed-out engine
+provides available thrust. On exhaustion, tick-driven staging advances only
+to the next inactive throttleable engine, respecting `LANDING_STAGE_LIMIT`
+and `LANDING_STAGE_MAX_EVENTS`. Separation and ignition may use separate
+slots. An engine still inactive at its selected slot gets one explicit
+activation attempt. The controller never advances past that slot merely
+because thrust has not appeared, and a manual engine activation is detected.
+
+Steering and guidance continue between events; throttle is held at zero for
+`LANDING_STAGE_SETTLE` (0.25 seconds). Acceleration and mass are refreshed
+before guidance after each event. No next engine means no further staging,
+so exhaustion cannot blindly progress into a chute or payload release.
+`STATS landing-stage` records events and restored thrust; `STATS landing-brake
+begin` records clearance, gates, thrust assumptions and alignment error.
+
+No tag is required. `landing_assist_decoupler` is an unused legacy label.
+The staging stack must contain only intended separation/ignition events en
+route to the next engine. Disposal is ballistic, not actively targeted, and
+still-fueled stages are not automatically discarded. Numerical fixtures
+cover trigger/controller consistency and staged thrust changes; actual
+separation clearance and KSP timing remain flight-test requirements.
 
 ## TARGET_REFINE
 
@@ -592,8 +616,10 @@ These values come from `landing_config.ks`, `landing_main.ks`, and
 |---|---:|---:|---|
 | braking | `BURN_MARGIN` | 1.1 | Multiplier on vertical burn distance |
 | braking | `BRAKE_MARGIN` | 100 m | Extra gate distance/height |
-| braking | `LANDING_HORIZONTAL_ACCEL_VERTICAL_BUFFER` | 0.1 | Extra vertical acceleration reserved over gravity |
-| braking | `LANDING_HORIZONTAL_ACCEL_FALLBACK_FRACTION` | 0.1 | Low-TWR horizontal acceleration fallback |
+| braking | `LANDING_BRAKE_ACCEL_FRACTION` | 0.8 | Shared fraction of net thrust acceleration for trigger/controller |
+| braking | `LANDING_BRAKE_REACTION_TIME` | 3 s | Coast allowance for ignition/rotation/staging |
+| braking | `LANDING_BRAKE_CLEARANCE` | 100 m | Height reserved after the predicted velocity stop |
+| braking | `LANDING_BRAKE_RESPONSE_TIME` | 1 s | Velocity-error taper near capture |
 | braking | `LANDING_BRAKE_GATE_LEAD_DIST` | 1500 m | Extra downrange lead in h-gate |
 | braking | `LANDING_BRAKE_ALIGN_LEAD` | 20 s | Alignment lead before burn |
 | braking | `APPROACH_HSPEED` | 18 m/s | Desired post-brake approach speed |

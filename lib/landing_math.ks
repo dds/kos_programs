@@ -140,6 +140,60 @@ GLOBAL FUNCTION lmVerticalBurnDistance {
     RETURN (downSpeed * downSpeed) / (2 * netAcc).
 }
 
+// Simultaneous horizontal/vertical stop, not two independent full-thrust
+// stops. Reserve full gravity even while orbital speed still supports weight.
+// The controller uses this same net acceleration budget.
+GLOBAL FUNCTION lmBrakeNetAcc {
+    PARAMETER maxAcc.
+    PARAMETER gravAcc.
+    RETURN MAX(0, maxAcc - gravAcc)
+        * MAX(0.1, MIN(1, LANDING_BRAKE_ACCEL_FRACTION)).
+}
+
+GLOBAL FUNCTION lmBrakeEnvelope {
+    PARAMETER horizontalSpeed.
+    PARAMETER downSpeed.
+    PARAMETER maxAcc.
+    PARAMETER gravAcc.
+    PARAMETER delay.
+    LOCAL netAcc IS lmBrakeNetAcc(maxAcc, gravAcc).
+    IF netAcc <= 0 {
+        RETURN LEXICON("H", 999999999, "V", 999999999).
+    }
+    LOCAL futureDown IS MAX(0, downSpeed + gravAcc * delay).
+    LOCAL speed IS SQRT(horizontalSpeed ^ 2 + futureDown ^ 2).
+    LOCAL stopTime IS speed / netAcc * MAX(1, BURN_MARGIN).
+    RETURN LEXICON(
+        "H", horizontalSpeed * (delay + stopTime / 2),
+        "V", MAX(0, downSpeed * delay + gravAcc * delay ^ 2 / 2)
+            + futureDown * stopTime / 2
+            + MAX(BRAKE_MARGIN, LANDING_BRAKE_CLEARANCE)
+    ).
+}
+
+// Gravity-compensated velocity arrest. Adding g upward before normalizing
+// avoids commanding full throttle almost sideways during a dangerous fall.
+GLOBAL FUNCTION lmBrakeThrust {
+    PARAMETER horizontalVel.
+    PARAMETER verticalSpeed.
+    PARAMETER targetVs.
+    PARAMETER upVec.
+    PARAMETER maxAcc.
+    PARAMETER gravAcc.
+    LOCAL deltaVel IS -horizontalVel + (targetVs - verticalSpeed) * upVec.
+    LOCAL thrustVec IS gravAcc * upVec.
+    IF deltaVel:MAG > 0.001 {
+        LOCAL netAcc IS MIN(lmBrakeNetAcc(maxAcc, gravAcc),
+            deltaVel:MAG / MAX(0.1, LANDING_BRAKE_RESPONSE_TIME)).
+        SET thrustVec TO thrustVec + deltaVel:NORMALIZED * netAcc.
+    }
+    // Faster descent comes from reducing support, never flipping the engine
+    // downward to chase the scheduled vertical speed on a high-TWR craft.
+    LOCAL upwardAcc IS VDOT(thrustVec, upVec).
+    IF upwardAcc < 0 { SET thrustVec TO thrustVec - upwardAcc * upVec. }
+    RETURN thrustVec.
+}
+
 // Constant-gravity vertical time to terrain. Positive roots only; returns
 // a large sentinel if the quadratic is not meaningful for the current state.
 GLOBAL FUNCTION lmTimeToImpact {

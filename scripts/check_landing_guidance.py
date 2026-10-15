@@ -12,7 +12,7 @@ from check_launch_and_staging import body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = '\n'.join((ROOT / ('lib/' + name + '.ks')).read_text() for name in
-                    ('landing_math', 'landing_config', 'landing_main', 'landing_coast', 'landing_terminal'))
+                    ('landing_math', 'landing_config', 'landing_main', 'landing_coast', 'landing_terminal', 'landing_brake', 'vessel_hardware'))
 
 
 def tokens(source):
@@ -43,7 +43,7 @@ def parse(source):
         while index < len(items) and items[index] != '}':
             statement = items[index]
             index += 1
-            if statement.startswith(('IF ', 'UNTIL ')):
+            if statement.startswith(('IF ', 'UNTIL ', 'FOR ')):
                 assert items[index] == '{', statement
                 index += 1
                 children = block()
@@ -87,6 +87,11 @@ def run(nodes, env):
     for statement, yes, no in nodes:
         if statement.startswith('IF '):
             run(yes if evaluate(statement[3:], env) else no, env)
+        elif statement.startswith('FOR '):
+            match = re.fullmatch(r'FOR (\w+) IN (.*)', statement, re.S)
+            for value in evaluate(match[2], env):
+                env[match[1]] = value
+                run(yes, env)
         elif statement.startswith('UNTIL '):
             steps = 0
             while not evaluate(statement[6:], env):
@@ -102,11 +107,15 @@ def run(nodes, env):
             match = re.fullmatch(r'(?:LOCAL (.*?) IS|SET (.*?) TO) (.*)', statement, re.S)
             assert match, statement
             env['fixtureValue'] = evaluate(match[3], env)
-            exec((match[1] or match[2]) + ' = fixtureValue', {'__builtins__': {}}, env)
+            exec((match[1] or match[2]).replace(':', '.') + ' = fixtureValue', {'__builtins__': {}}, env)
         elif statement.startswith('RETURN'):
             raise Returned(evaluate(statement[7:], env) if statement != 'RETURN' else None)
         elif statement.startswith(('mLog', '_landingHud')):
             pass
+        elif statement == 'STAGE':
+            env['stage_event']()
+        elif statement.endswith(':ACTIVATE'):
+            evaluate(statement + '()', env)
         else:
             evaluate(statement, env)
 

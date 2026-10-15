@@ -18,6 +18,7 @@
 GLOBAL landingAbortFlag IS FALSE.
 GLOBAL landingSteeringTarget IS V(0, 0, 0).
 GLOBAL landingActiveTrack IS "".
+GLOBAL landingLoadedTracks IS LIST("landing_terminal").
 GLOBAL LANDING_HUD_INTERVAL IS 5.
 GLOBAL LANDING_HUD_INTERVAL_MAX IS 45.
 GLOBAL LANDING_HUD_INTERVAL_ETA_SCALE IS 3.
@@ -144,6 +145,9 @@ GLOBAL FUNCTION _landingStateLog {
         + " alt=" + ROUND(ALT:RADAR,0)
         + "m hs=" + ROUND(ctx["H_SPEED"],1)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
+        + " acc=" + ROUND(ctx["MAX_ACC"],2)
+        + " planAcc=" + ROUND(ctx["PLAN_ACC"],2)
+        + " height=" + ROUND(_landingBurnHeight(ctx),0)
         + " age=" + ROUND(TIME:SECONDS - ctx["STATE_ENTERED"],1) + ".").
 }
 
@@ -181,6 +185,9 @@ GLOBAL FUNCTION _landingSetThrottle {
     PARAMETER ctx.
     PARAMETER throttleValue.
     SET ctx["TARGET_THROTTLE"] TO MAX(0, MIN(1, throttleValue)).
+    IF TIME:SECONDS < ctx["STAGE_UNTIL"] {
+        SET ctx["TARGET_THROTTLE"] TO 0.
+    }
 }
 
 GLOBAL FUNCTION _landingAdaptiveLogInterval {
@@ -263,7 +270,7 @@ GLOBAL FUNCTION _landingBurnHeight {
     IF ctx["STATE"] = "VERTICAL_DESCENT" {
         RETURN _landingBottomRadar().
     }
-    RETURN _landingTargetHeight(ctx).
+    RETURN MIN(_landingTargetHeight(ctx), _landingBottomRadar()).
 }
 
 GLOBAL FUNCTION _landingDownrangeToTarget {
@@ -285,7 +292,16 @@ GLOBAL FUNCTION _landingCacheTick {
     SET ctx["POSITION"] TO SHIP:POSITION.
     SET ctx["H_VEL"] TO hVel.
     SET ctx["H_SPEED"] TO hVel:MAG.
-    SET ctx["MAX_ACC"] TO lmMaxAcc().
+    SET ctx["MAX_ACC"] TO vesselLandingThrust() / MAX(0.01, SHIP:MASS).
+    SET ctx["BRAKE_GRAV"] TO SHIP:BODY:MU / SHIP:BODY:RADIUS ^ 2.
+    IF ctx["RESERVE_STAGE"] <> STAGE:NUMBER {
+        SET ctx["RESERVE_ACC"] TO vesselLandingReserveAcc().
+        SET ctx["RESERVE_STAGE"] TO STAGE:NUMBER.
+    }
+    SET ctx["PLAN_ACC"] TO ctx["MAX_ACC"].
+    IF ctx["RESERVE_ACC"] > 0 {
+        SET ctx["PLAN_ACC"] TO MIN(ctx["PLAN_ACC"], ctx["RESERVE_ACC"]).
+    }
     SET ctx["GRAV"] TO lmGravity().
     SET ctx["V_SPEED"] TO SHIP:VERTICALSPEED.
     SET ctx["DOWN_SPEED"] TO MAX(0, -ctx["V_SPEED"]).
@@ -342,40 +358,19 @@ GLOBAL FUNCTION _landingTouchdownSettled {
     RETURN ctx["TOUCHDOWN_TICKS"] >= LANDING_TOUCHDOWN_SETTLE_TICKS.
 }
 
-GLOBAL FUNCTION _landingHorizontalBrakeAcc {
-    PARAMETER ctx.
-
-    LOCAL maxAcc IS ctx["MAX_ACC"].
-    LOCAL gravAcc IS ctx["GRAV"].
-    LOCAL fallbackAcc IS MAX(0,
-        maxAcc * LANDING_HORIZONTAL_ACCEL_FALLBACK_FRACTION).
-    IF maxAcc <= 0 { RETURN fallbackAcc. }
-
-    LOCAL verticalAcc IS gravAcc
-        * (1 + LANDING_HORIZONTAL_ACCEL_VERTICAL_BUFFER).
-    IF maxAcc <= verticalAcc {
-        RETURN fallbackAcc.
-    }
-
-    LOCAL horizontalSq IS maxAcc * maxAcc - verticalAcc * verticalAcc.
-    IF horizontalSq <= 0 { RETURN fallbackAcc. }
-    RETURN MAX(fallbackAcc, SQRT(horizontalSq)).
-}
-
 GLOBAL FUNCTION _landingBrakeGateInfo {
     PARAMETER ctx.
 
-    LOCAL maxAcc IS ctx["MAX_ACC"].
-    LOCAL gravAcc IS ctx["GRAV"].
+    LOCAL maxAcc IS ctx["PLAN_ACC"].
+    LOCAL gravAcc IS ctx["BRAKE_GRAV"].
     LOCAL downSpeed IS ctx["DOWN_SPEED"].
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
-    LOCAL verticalAcc IS gravAcc
-        * (1 + LANDING_HORIZONTAL_ACCEL_VERTICAL_BUFFER).
-    LOCAL horizontalAcc IS _landingHorizontalBrakeAcc(ctx).
-    LOCAL brakeDist IS lmHorizontalBrakeDistance(
-        horizontalSpeed, horizontalAcc).
-    LOCAL burnDist IS lmVerticalBurnDistance(
-        downSpeed, maxAcc, gravAcc).
+    LOCAL verticalAcc IS gravAcc.
+    LOCAL horizontalAcc IS lmBrakeNetAcc(maxAcc, gravAcc).
+    LOCAL reactionTime IS MAX(0, LANDING_BRAKE_REACTION_TIME).
+    LOCAL envelope IS lmBrakeEnvelope(horizontalSpeed, downSpeed,
+        maxAcc, gravAcc, reactionTime).
+    LOCAL brakeDist IS envelope["H"].
     LOCAL burnHeight IS _landingBurnHeight(ctx).
     LOCAL distToTarget IS 999999.
     LOCAL downrangeToTarget IS 999999.
@@ -390,14 +385,14 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
             SET brakeLeadDist TO MAX(0, LANDING_BRAKE_GATE_LEAD_DIST).
             SET brakeUndershootBias TO MAX(0, LANDING_BRAKE_UNDERSHOOT_BIAS).
             SET brakeDownrange TO brakeDownrange
-                + brakeLeadDist
-                + brakeUndershootBias.
+                - brakeLeadDist
+                - brakeUndershootBias.
         }
     }
 
     LOCAL hBrakeGate IS brakeDist + BRAKE_MARGIN.
     LOCAL hBrakeEta IS 999999.
-    IF ctx["HAS_TARGET"] AND brakeDownrange > 0 {
+    IF ctx["HAS_TARGET"] {
         IF brakeDownrange <= hBrakeGate {
             SET hBrakeEta TO 0.
         } ELSE IF horizontalSpeed > 0.1 {
@@ -406,21 +401,30 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
         }
     }
 
-    LOCAL vBurnGate IS burnDist * BURN_MARGIN + BRAKE_MARGIN.
-    LOCAL vBurnEta IS 999999.
-    LOCAL vNow IS ctx["DOWN_SPEED"] > 0.5 AND burnHeight <= vBurnGate.
-    IF vNow {
-        SET vBurnEta TO 0.
-    } ELSE IF ctx["V_SPEED"] < 0 AND gravAcc > 0 {
-        LOCAL vDelta IS burnHeight - vBurnGate.
-        LOCAL vDisc IS ctx["V_SPEED"] * ctx["V_SPEED"] + 2 * vDelta * gravAcc.
-        IF vDisc >= 0 {
-            SET vBurnEta TO MAX(0, (SQRT(vDisc) + ctx["V_SPEED"]) / gravAcc).
+    LOCAL vBurnGate IS envelope["V"].
+    LOCAL vNow IS burnHeight <= vBurnGate.
+    // Search a short coast horizon including the GROWING stopping distance.
+    // Treat upward speed as zero here: alignment may be early, never late.
+    LOCAL etaLo IS 0.
+    LOCAL etaHi IS MAX(120, LANDING_BRAKE_ALIGN_LEAD * 2).
+    LOCAL iteration IS 0.
+    UNTIL iteration >= 12 {
+        LOCAL coastTime IS (etaLo + etaHi) / 2.
+        LOCAL futureGate IS lmBrakeEnvelope(horizontalSpeed,
+            downSpeed + gravAcc * coastTime, maxAcc, gravAcc, reactionTime).
+        LOCAL futureHeight IS burnHeight - downSpeed * coastTime
+            - gravAcc * coastTime ^ 2 / 2.
+        IF futureHeight <= futureGate["V"] {
+            SET etaHi TO coastTime.
+        } ELSE {
+            SET etaLo TO coastTime.
         }
+        SET iteration TO iteration + 1.
     }
+    LOCAL vBurnEta IS etaLo.
+    IF vNow { SET vBurnEta TO 0. }
 
-    LOCAL hNow IS ctx["HAS_TARGET"] AND brakeDownrange > 0
-        AND brakeDownrange <= hBrakeGate.
+    LOCAL hNow IS ctx["HAS_TARGET"] AND brakeDownrange <= hBrakeGate.
     LOCAL hSuppressed IS FALSE.
     IF hNow AND burnHeight > TERRAIN_SAFE_ALT
             AND burnHeight > hBrakeGate * 2
@@ -491,6 +495,10 @@ GLOBAL FUNCTION _landingEnsureStateTrack {
     IF previousTrack <> "" {
         _landingDeleteTrack(previousTrack).
     }
+    IF landingLoadedTracks:CONTAINS(nextTrack) {
+        SET landingActiveTrack TO nextTrack.
+        RETURN.
+    }
     bootLibSync(nextTrack).
     LOCAL corePath IS bootCorePath(nextTrack).
     IF NOT EXISTS(corePath + ".ksm") AND NOT EXISTS(corePath + ".ks") {
@@ -498,6 +506,7 @@ GLOBAL FUNCTION _landingEnsureStateTrack {
         RETURN.
     }
     RUNONCEPATH(corePath).
+    landingLoadedTracks:ADD(nextTrack).
     SET landingActiveTrack TO nextTrack.
     mLog("Landing guidance track loaded: " + nextTrack + ".").
 }
@@ -526,12 +535,20 @@ GLOBAL FUNCTION _landingSetState {
         _landingHudNotice(ctx, "Performing braking alignment.", YELLOW, TRUE).
     } ELSE IF nextState = "BRAKING_BURN" {
         LOCAL burnSteerInfo IS _landingBrakeSteeringInfo(ctx).
+        _landingSetThrottle(ctx, burnSteerInfo["THROTTLE"]).
+        LOCAL gate IS _landingBrakeGateInfo(ctx).
+        mLog("STATS landing-brake begin height=" + ROUND(_landingBurnHeight(ctx),0)
+            + " vGate=" + ROUND(gate["V_GATE"],0)
+            + " hGate=" + ROUND(gate["H_GATE"],0)
+            + " downrange=" + ROUND(gate["DOWNRANGE"],0)
+            + " acc=" + ROUND(ctx["MAX_ACC"],2)
+            + " planAcc=" + ROUND(ctx["PLAN_ACC"],2)
+            + " align=" + ROUND(burnSteerInfo["ALIGN_ERR"],1)).
         mLog("BRAKING BURN steering: err="
             + ROUND(burnSteerInfo["ALIGN_ERR"],1)
             + "deg retroErr=" + ROUND(burnSteerInfo["RETRO_ERR"],1)
             + "deg bias=" + ROUND(burnSteerInfo["BIAS"],3)
             + " hard=" + _landingBoolText(burnSteerInfo["HARD"]) + ".").
-        _landingSetThrottle(ctx, 1).
         _landingHudNotice(ctx, "Performing braking burn.", YELLOW, TRUE).
     } ELSE IF nextState = "COAST_MCC" {
         _landingSetThrottle(ctx, 0).
@@ -672,6 +689,13 @@ GLOBAL FUNCTION landExecute {
         "MCC_PULSE_UNTIL", 0,
         "MCC_SETTLE_UNTIL", 0,
         "TARGET_STEERING", SHIP:UP:VECTOR,
+        "RESERVE_STAGE", -999,
+        "RESERVE_ACC", 0,
+        "STAGE_UNTIL", 0,
+        "STAGE_ENGINE", -1,
+        "STAGE_EVENTS", 0,
+        "STAGE_ACTIVATED", FALSE,
+        "STAGE_WARNED", FALSE,
         "TARGET_THROTTLE", 0
     ).
     stateSet("landing_state", "COAST").
@@ -687,6 +711,9 @@ GLOBAL FUNCTION landExecute {
     LOCK THROTTLE TO ctx["TARGET_THROTTLE"].
     mLog("Landing setup target=" + _landingBoolText(_hasTarget)
         + " tr=" + _landingBoolText(ADDONS:TR:AVAILABLE) + ".").
+    // Load the next track while still at setup, then reclaim its disk file.
+    // RUNONCE functions remain resident: no archive/compile delay at ignition.
+    _landingEnsureStateTrack("BRAKE_ALIGN").
     _landingEnsureStateTrack(ctx["STATE"]).
 
     LOCAL priorArchiveDeferral IS LOG_ARCHIVE_DEFERRED.
@@ -704,13 +731,14 @@ GLOBAL FUNCTION landExecute {
             }
         } ELSE {
             SET ctx["TOUCHDOWN_TICKS"] TO 0.
-            IF vesselNeedsStage() {
-                LOCAL oldState IS ctx["STATE"].
-                _landingSetThrottle(ctx, 0).
-                vesselStageForLanding().
-                IF oldState = "BRAKING_BURN" { _landingSetThrottle(ctx, 1). }
-            }
+            vesselStageForLanding(ctx).
+            // Staging/activation changes mass and thrust; never fly this tick
+            // using the exhausted transfer stage's cached acceleration.
+            _landingCacheTick(ctx).
             _landingGuidanceTick(ctx).
+            IF TIME:SECONDS < ctx["STAGE_UNTIL"] OR vesselNeedsStage() {
+                _landingSetThrottle(ctx, 0).
+            }
         }
 
         IF ctx["STATE"] <> "COAST" {

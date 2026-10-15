@@ -28,58 +28,32 @@ LOCAL FUNCTION _landingLogBrakeComplete {
 GLOBAL FUNCTION _landingBrakeSteeringInfo {
     PARAMETER ctx.
 
-    LOCAL retroSteering IS lmRetroSteering(
-        ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"]).
-    LOCAL hardBrake IS ctx["H_SPEED"] > APPROACH_HSPEED
-        AND _landingBurnHeight(ctx) > HOVER_ALT * 2.
-    IF hardBrake AND ctx["H_VEL"]:MAG > 0.5 {
-        SET retroSteering TO ((-ctx["H_VEL"]):NORMALIZED
-            + ctx["UP_VEC"] * LANDING_HARD_BRAKE_UP_BIAS):NORMALIZED.
+    LOCAL height IS _landingBurnHeight(ctx).
+    LOCAL targetVs IS -lmDescentSpeed(height,
+        TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
+    // The gate budgets a velocity stop. Keeping a 30 m/s downward target
+    // throughout a long lateral burn spends height that budget never allowed.
+    IF ctx["H_SPEED"] > APPROACH_HSPEED { SET targetVs TO 0. }
+    LOCAL thrustVec IS lmBrakeThrust(ctx["H_VEL"], ctx["V_SPEED"],
+        targetVs, ctx["UP_VEC"], ctx["MAX_ACC"], ctx["GRAV"]).
+    LOCAL steeringTarget IS ctx["UP_VEC"].
+    IF thrustVec:MAG > 0.001 { SET steeringTarget TO thrustVec:NORMALIZED. }
+    _landingSetSteering(ctx, steeringTarget).
+    LOCAL throttleCommand IS 0.
+    IF ctx["MAX_ACC"] > 0 {
+        SET throttleCommand TO MIN(1, thrustVec:MAG / ctx["MAX_ACC"]).
     }
     LOCAL trajErr IS _landingTrajError(ctx).
-    LOCAL impactErr IS trajErr["DIST"].
-    LOCAL crossErr IS trajErr["CROSS_SIGNED"].
-    LOCAL crossAbs IS trajErr["CROSS"].
-    LOCAL brakeGuard IS 1.
-    SET brakeGuard TO MAX(0, MIN(1, trajErr["ALONG"] / BRAKE_MARGIN)).
-    LOCAL crossPid IS ctx["CROSS_PID"].
-    LOCAL steeringTarget IS retroSteering.
-    LOCAL biasMag IS 0.
-    IF brakeGuard <= 0 {
-        SET retroSteering TO ctx["UP_VEC"].
-        SET steeringTarget TO retroSteering.
-        crossPid:RESET().
-    } ELSE IF brakeGuard < 0.999 {
-        LOCAL lateralRetro IS VXCL(ctx["UP_VEC"], retroSteering).
-        IF lateralRetro:MAG > 0.001 {
-            SET retroSteering TO (ctx["UP_VEC"]
-                + lateralRetro * brakeGuard):NORMALIZED.
-            SET steeringTarget TO retroSteering.
-        }
-    }
-    IF brakeGuard > 0
-            AND trajErr["FOUND"]
-            AND crossAbs > GUIDANCE_CORRECTION_THRESHOLD {
-        LOCAL biasDeg IS crossPid:UPDATE(TIME:SECONDS, crossErr).
-        SET biasMag TO MAX(-TR_BRAKE_BIAS,
-            MIN(TR_BRAKE_BIAS, SIN(biasDeg))).
-        SET steeringTarget TO (retroSteering
-            + trajErr["CROSS_AXIS"] * biasMag):NORMALIZED.
-    } ELSE {
-        crossPid:RESET().
-    }
-    _landingSetSteering(ctx, steeringTarget).
-    SET ctx["CROSS_PID"] TO crossPid.
-
     RETURN LEXICON(
-        "IMPACT_ERR", impactErr,
-        "CROSS_ERR", crossErr,
-        "CROSS_ABS", crossAbs,
+        "IMPACT_ERR", trajErr["DIST"],
+        "CROSS_ERR", trajErr["CROSS_SIGNED"],
+        "CROSS_ABS", trajErr["CROSS"],
         "ALIGN_ERR", VANG(SHIP:FACING:FOREVECTOR, steeringTarget),
-        "RETRO_ERR", VANG(SHIP:FACING:FOREVECTOR, retroSteering),
-        "BIAS", biasMag,
-        "GUARD", brakeGuard,
-        "HARD", hardBrake
+        "RETRO_ERR", VANG(SHIP:FACING:FOREVECTOR, steeringTarget),
+        "BIAS", 0,
+        "GUARD", 1,
+        "HARD", ctx["H_SPEED"] > APPROACH_HSPEED,
+        "THROTTLE", throttleCommand
     ).
 }
 
@@ -142,25 +116,9 @@ GLOBAL FUNCTION _landingBrakingTick {
     }
 
     LOCAL steerInfo IS _landingBrakeSteeringInfo(ctx).
-    LOCAL verticalThrottle IS lmVerticalThrottle(
-        targetVs, maxAcc, gravAcc, ctx["V_SPEED"]).
-    LOCAL forceHorizontalBrake IS ctx["HAS_TARGET"]
-        AND horizontalSpeed > APPROACH_HSPEED
-        AND burnHeight > HOVER_ALT * 2.
-    LOCAL horizontalThrottle IS 0.
-    IF forceHorizontalBrake AND maxAcc > 0 {
-        LOCAL remHVel IS horizontalSpeed - APPROACH_HSPEED.
-        LOCAL timeToTargetSpeed IS remHVel / maxAcc.
-        SET horizontalThrottle TO MAX(0.01,
-            MIN(LANDING_HKILL_THROTTLE_MAX,
-            timeToTargetSpeed)).
-        SET horizontalThrottle TO horizontalThrottle * steerInfo["GUARD"].
-    }
-    IF ctx["V_SPEED"] < targetVs - 5 {
-        _landingSetThrottle(ctx, 1).
-    } ELSE {
-        _landingSetThrottle(ctx, MAX(verticalThrottle, horizontalThrottle)).
-    }
+    // One vector owns both steering and throttle. Trajectories aiming must
+    // not suppress velocity arrest when terrain clearance is running out.
+    _landingSetThrottle(ctx, steerInfo["THROTTLE"]).
 
     LOCAL brakeTransitionEta IS 0.
     IF NOT ctx["HAS_TARGET"] AND burnHeight > HOVER_ALT {
@@ -173,8 +131,6 @@ GLOBAL FUNCTION _landingBrakingTick {
         + " xAbs=" + ROUND(steerInfo["CROSS_ABS"],0)
         + " aErr=" + ROUND(steerInfo["ALIGN_ERR"],1)
         + " hard=" + _landingBoolText(steerInfo["HARD"])
-        + " hKill=" + _landingBoolText(forceHorizontalBrake)
-        + " hThr=" + ROUND(horizontalThrottle,2)
         + " hs=" + ROUND(horizontalSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)

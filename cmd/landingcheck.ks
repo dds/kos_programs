@@ -3,6 +3,7 @@
 
 RUNPATH("1:/lib/boot_lib").
 bootPreamble().
+bootLibLoad("vessel_hardware").
 
 LOCAL radiusMag IS SHIP:BODY:RADIUS + SHIP:ALTITUDE.
 LOCAL grav IS SHIP:BODY:MU / (radiusMag * radiusMag).
@@ -26,6 +27,9 @@ PRINT "  Thrust   mass=" + ROUND(SHIP:MASS,3)
     + "kN TWR here=" + ROUND(maxAcc / grav,2)
     + " surface=" + ROUND(maxAcc / surfaceGrav,2).
 PRINT "  Fuel     remaining vacuum dV=" + ROUND(SHIP:DELTAV:VACUUM,1) + "m/s".
+PRINT "  Staging  current=" + STAGE:NUMBER
+    + " next engine=" + vesselLandingNextEngineStage()
+    + " next-stage surface TWR=" + ROUND(vesselLandingReserveAcc() / surfaceGrav,2).
 PRINT "  Attitude pitch=" + ROUND(SHIP:FACING:PITCH,1)
     + " roll=" + ROUND(SHIP:FACING:ROLL,1).
 
@@ -53,6 +57,7 @@ IF selected <> 0 {
 LOCAL assistTag IS "landing_assist_decoupler".
 LOCAL decouplers IS SHIP:PARTSTAGGED(assistTag).
 PRINT "  Assist   decouplers tagged " + assistTag + "=" + decouplers:LENGTH.
+PRINT "           Landing uses KSP staging order; this legacy tag does not trigger separation.".
 PRINT "  Addons   TR=" + ADDONS:TR:AVAILABLE
     + " KE=" + ADDONS:KE:AVAILABLE
     + " SCANsat=" + ADDONS:SCANSAT:AVAILABLE.

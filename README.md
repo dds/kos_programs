@@ -128,6 +128,28 @@ so advancing to that engine only triggers intended separation/ignition events.
 An unrelated flamed-out engine does not force staging while usable engines
 are still active.
 
+Vacuum landing also uses the active transfer stage's fuel before staging.
+No landing-specific tags are required: put transfer-stage separation and
+lander ignition in the same staging slot or consecutive slots, with only
+intended events between them. Keep the controlling kOS core on the lander.
+The controller advances only to the next inactive, throttleable engine,
+continues guidance between staging events, and remeasures thrust/mass after
+ignition. `LANDING_STAGE_LIMIT` (0) reserves lower-numbered slots;
+`LANDING_STAGE_MAX_EVENTS` (4) and `LANDING_STAGE_SETTLE` (0.25 s) bound the
+automatic sequence. A usable engine prevents staging even if another engine
+has flamed out. Exhausting the final engine does not stage payloads or chutes.
+
+`RUNPATH("0:/cmd/landingcheck.ks").` reports the next engine slot and estimated
+post-separation surface TWR. Braking accounts for the weaker of current and
+next-stage acceleration, combined horizontal/vertical motion, terrain
+clearance, and a three-second reaction allowance. It can therefore start
+earlier than a vertical-only suicide-burn estimate. The spent stage is
+discarded ballistically; this is not a separate disposal-targeting program.
+If it still has fuel when braking ends, it stays attached: the controller
+does not burn fuel merely to empty it or jettison a fueled stage automatically.
+These braking/staging changes have numerical coverage but still need a KSP
+flight test, including separation clearance on the actual craft.
+
 If the recovery wait expires or attitude recovery fails after ignition, XING preserves the
 unfinished node and holds for the operator, unless the actual trajectory
 already supports arrival handoff. It also preserves an interrupted burn
@@ -933,7 +955,7 @@ uses 5, and longer waits cap at 6.
 | `main_fairing` | Fairing jettisoned by FAIR |
 | `probe_decoupler`, `probe_chute` | Probe payload release |
 | `scansat_decoupler` | Mapper release |
-| `landing_assist_decoupler` | Expendable descent-assist stage |
+| `landing_assist_decoupler` | Legacy label only; current vacuum landing uses staging order |
 | `relay_1`, `relay_2`, ... | Individual relay decouplers |
 | `chute_main` | Abort parachute |
 | `steering_gear` | Aircraft/drone nosewheel power steering |

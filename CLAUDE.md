@@ -226,9 +226,15 @@ Looks like Python/JS; is neither.
   305 m from the requested waypoint with ~380 m/s remaining. The operator
   reported prolonged corrections and a wasteful hover; exact state history
   and any terrain-driven target shift were not captured. Surface ascent
-  reached orbit but circularization overburned; return is held with ~151 m/s
-  remaining. A 181 m/s preview with Kerbin Pe 22,050 km was rejected. The
-  subsequent terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
+  reached orbit but circularization overburned. A 181 m/s preview with Kerbin
+  Pe 22,050 km was rejected; the operator retired this probe after transmitting
+  science. RO9 Mun economy descent crashed after BRAKING_BURN began only
+  seconds before impact (operator report, 2026-10-15); no crash log was available.
+  Removing unintended coast-MCC thrust may have exposed older brake-gate and
+  steering weaknesses. The subsequent coupled braking/terrain/latency gates,
+  next-stage thrust reserve and nonblocking descent staging pass source-driven
+  point-mass/hardware fixtures, but remain unverified in KSP. The earlier
+  terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered
   a lost encounter after a staged, low-thrust departure via BPLANE and
   reached COAST_1HALF (operator report, 2026-10-12). Midpoint refinement,

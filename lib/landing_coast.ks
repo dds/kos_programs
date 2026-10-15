@@ -111,17 +111,12 @@ GLOBAL FUNCTION _landingCoastTick {
     }
 
     IF gate["V_NOW"] {
-        IF ctx["HAS_TARGET"] {
-            _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
-        } ELSE {
-            _landingSetState(ctx, "VERTICAL_DESCENT", "vertical burn gate").
-        }
+        _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_OVERSHOT"] {
         _landingSetState(ctx, "BRAKING_BURN", "target passed below safe altitude").
-    } ELSE IF ctx["HAS_TARGET"]
-            AND MIN(gate["H_ETA"], gate["V_ETA"]) <= LANDING_BRAKE_ALIGN_LEAD {
+    } ELSE IF MIN(gate["H_ETA"], gate["V_ETA"]) <= LANDING_BRAKE_ALIGN_LEAD {
         _landingSetState(ctx, "BRAKE_ALIGN", "brake alignment lead").
     } ELSE IF NOT ctx["HAS_TARGET"] {
         LOCAL tti IS 999999.

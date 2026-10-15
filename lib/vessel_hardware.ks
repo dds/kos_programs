@@ -8,6 +8,10 @@
 
 @LAZYGLOBAL OFF.
 
+GLOBAL LANDING_STAGE_LIMIT IS 0.
+GLOBAL LANDING_STAGE_MAX_EVENTS IS 4.
+GLOBAL LANDING_STAGE_SETTLE IS 0.25.
+
 GLOBAL FUNCTION vesselDeployGear {
     FOR m IN SHIP:MODULESNAMED("ModuleWheelDeployment") {
         IF m:HASEVENT("Extend") { m:DOEVENT("Extend"). }
@@ -41,19 +45,106 @@ GLOBAL FUNCTION vesselSetReactionWheelAuthority {
 }
 
 GLOBAL FUNCTION vesselNeedsStage {
-    LOCAL engs IS LIST().
-    LIST ENGINES IN engs.
-    FOR eng IN engs {
-        IF eng:FLAMEOUT { RETURN TRUE. }
+    RETURN vesselLandingThrust() <= 0.001.
+}
+
+GLOBAL FUNCTION vesselLandingThrust {
+    LOCAL thrustSum IS 0.
+    FOR eng IN SHIP:ENGINES {
+        IF eng:IGNITION AND NOT eng:FLAMEOUT {
+            SET thrustSum TO thrustSum + eng:AVAILABLETHRUST.
+        }
     }
-    IF SHIP:MAXTHRUST = 0 { RETURN TRUE. }
-    RETURN FALSE.
+    RETURN thrustSum.
+}
+
+GLOBAL FUNCTION vesselLandingNextEngineStage {
+    LOCAL engineStage IS -1.
+    FOR eng IN SHIP:ENGINES {
+        IF NOT eng:IGNITION AND NOT eng:FLAMEOUT
+                AND NOT eng:THROTTLELOCK AND eng:POSSIBLETHRUST > 0
+                AND eng:STAGE <= STAGE:NUMBER
+                AND eng:STAGE >= MAX(0, LANDING_STAGE_LIMIT)
+                AND eng:DECOUPLEDIN < eng:STAGE {
+            SET engineStage TO MAX(engineStage, eng:STAGE).
+        }
+    }
+    RETURN engineStage.
+}
+
+// Conservative next-stage acceleration at its current wet mass. Fuel burn
+// can only improve this estimate for a conventional serial landing stack.
+GLOBAL FUNCTION vesselLandingReserveAcc {
+    LOCAL engineStage IS vesselLandingNextEngineStage().
+    IF engineStage < 0 { RETURN 0. }
+    LOCAL thrustSum IS 0.
+    FOR eng IN SHIP:ENGINES {
+        IF eng:STAGE = engineStage AND eng:DECOUPLEDIN < engineStage
+                AND NOT eng:THROTTLELOCK AND NOT eng:FLAMEOUT {
+            SET thrustSum TO thrustSum + eng:POSSIBLETHRUST.
+        }
+    }
+    LOCAL wetMass IS 0.
+    LOCAL accountedMass IS 0.
+    FOR part IN SHIP:PARTS {
+        SET accountedMass TO accountedMass + part:MASS.
+        IF part:DECOUPLEDIN < engineStage {
+            SET wetMass TO wetMass + part:MASS.
+        }
+    }
+    // kOS reports zero MASS for physicsless parts. Keep any discrepancy
+    // with vessel mass on the lander rather than overestimating its TWR.
+    SET wetMass TO wetMass + MAX(0, SHIP:MASS - accountedMass).
+    RETURN thrustSum / MAX(0.01, wetMass).
 }
 
 GLOBAL FUNCTION vesselStageForLanding {
-    WAIT 0.2.
-    STAGE.
-    WAIT 0.5.
+    PARAMETER ctx.
+    // Tick-driven: steering/control continue between separation and ignition.
+    IF TIME:SECONDS < ctx["STAGE_UNTIL"] { RETURN. }
+    IF NOT vesselNeedsStage() {
+        IF ctx["STAGE_ENGINE"] >= 0 {
+            mLog("STATS landing-stage resumed stage=" + STAGE:NUMBER
+                + " acc=" + ROUND(vesselLandingThrust() / MAX(0.01, SHIP:MASS),2)
+                + " radar=" + ROUND(ALT:RADAR,0)).
+        }
+        SET ctx["STAGE_ENGINE"] TO -1.
+        SET ctx["STAGE_EVENTS"] TO 0.
+        SET ctx["STAGE_ACTIVATED"] TO FALSE.
+        SET ctx["STAGE_WARNED"] TO FALSE.
+        RETURN.
+    }
+    IF ctx["STAGE_ENGINE"] < 0 {
+        SET ctx["STAGE_ENGINE"] TO vesselLandingNextEngineStage().
+    }
+    LOCAL engineStage IS ctx["STAGE_ENGINE"].
+    IF engineStage < 0 OR (ctx["STAGE_EVENTS"] >= LANDING_STAGE_MAX_EVENTS
+            AND STAGE:NUMBER > engineStage) {
+        IF NOT ctx["STAGE_WARNED"] {
+            mLogWarn("Landing thrust unavailable; inspect engine/staging. Guidance remains active.").
+            SET ctx["STAGE_WARNED"] TO TRUE.
+        }
+        RETURN.
+    }
+    // Never advance past the selected engine into return/payload/chute slots.
+    IF STAGE:NUMBER > engineStage AND STAGE:READY {
+        SET ctx["TARGET_THROTTLE"] TO 0.
+        SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+        STAGE.
+        SET ctx["STAGE_EVENTS"] TO ctx["STAGE_EVENTS"] + 1.
+        SET ctx["STAGE_UNTIL"] TO TIME:SECONDS + MAX(0.05, LANDING_STAGE_SETTLE).
+        mLog("STATS landing-stage event stage=" + STAGE:NUMBER
+            + " engineStage=" + engineStage + " radar=" + ROUND(ALT:RADAR,0)).
+    } ELSE IF STAGE:NUMBER = engineStage AND NOT ctx["STAGE_ACTIVATED"] {
+        SET ctx["STAGE_ACTIVATED"] TO TRUE.
+        FOR eng IN SHIP:ENGINES {
+            IF eng:STAGE = engineStage AND NOT eng:IGNITION
+                    AND eng:DECOUPLEDIN < engineStage {
+                eng:ACTIVATE.
+            }
+        }
+        SET ctx["STAGE_UNTIL"] TO TIME:SECONDS + MAX(0.05, LANDING_STAGE_SETTLE).
+    }
 }
 
 GLOBAL FUNCTION vesselLandingCleanup {
