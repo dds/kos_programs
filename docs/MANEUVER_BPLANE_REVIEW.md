@@ -331,3 +331,23 @@ convergence, bounded vector changes, lost probes and rejection despite a
 refiner returning a node. These are not flight tests or a reproduction of
 the deleted maneuver. The scan still optimizes a raw seed, so global mission
 fuel optimality is not guaranteed.
+
+## Ignition follow-up — 2026-10-15
+
+The operator reports the revised local departure planned a good encounter,
+but ignition entered `BURN WAIT`. That message specifically comes from the
+no-usable-thrust recovery path; engine/stage telemetry is still needed to
+explain why. `cmd/burnreport.ks` now distinguishes the latest completed
+cutoff from the saved current attempt and displays current engine activation,
+flameout, limiter, available/possible thrust and staging fields without
+changing the craft.
+
+Inspection also found a separate watchdog publication race: positive throttle
+was assigned before its timestamp was refreshed. A cooked-control evaluation
+between those statements could latch `live-command-stale` after a long
+zero-throttle setup/recovery. The loop now computes the next command, refreshes
+its timestamp, then exposes positive throttle. This does not explain entry
+into `BURN WAIT`, but could prevent a recovered engine from starting afterward.
+The source-driven watchdog fixture interrupts each publication operation in
+both burn modes and confirms ignition succeeds while a real stale command
+still latches zero. KSP validation remains outstanding.

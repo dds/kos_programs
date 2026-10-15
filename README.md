@@ -193,6 +193,12 @@ whether thrust stopped. This compact record survives phase reboots even if
 the log fills; the next maneuver replaces it. It cannot reconstruct an older
 burn flown before this update. `RUNPATH("0:/cmd/logs.ks").` archives the current
 boot's log when connected to KSC.
+The report also prints the saved attempt status and **current** engine
+activation, flameout, thrust limiter and staging information. `BURN WAIT`
+means the executor is waiting for usable thrust; the previous cutoff report
+alone may describe an earlier maneuver. The throttle watchdog refreshes its
+timestamp before publishing positive throttle, preventing an intentional
+zero-throttle setup or staging wait from being mistaken for a stale command.
 
 After reloading a save following departure, XING checks the actual encounter
 before considering the retained node. A departure marker survives burn

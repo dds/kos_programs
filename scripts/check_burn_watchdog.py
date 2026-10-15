@@ -120,7 +120,32 @@ def check_physical_cutoff():
     print('PASS: verified normal stop; forced engine shutdown; persistent-thrust failure; control cleanup precedes saved report')
 
 
+def check_command_publication():
+    executor=body(SOURCE,'executeManeuver')
+    publish=executor.split('ELSE IF rem > BURN_TRIM_ABS_COMPLETE_DV {',1)[1].split('} ELSE {',1)[0]
+    # Interrupt the actual publication statements after each operation, as
+    # the cooked-control trigger can do. The old code exposed positive
+    # throttle while its heartbeat was still from before a long zero hold.
+    for fixed in (False, True):
+        for remaining in (500, 1):
+            env,control,_,command=fixture(fixed)
+            env['TIME'].SECONDS=30
+            env.update(throttleCmd=0,liveCutoff=control,dt=0,ma=10,rem=remaining)
+            assert command(0)==0 and not control['reason']
+            for statement in ks.parse(publish):
+                ks.run([statement],env)
+                command(env['throttleCmd'])
+                assert not control['reason'], (fixed,remaining,statement[0],control)
+                env['TIME'].SECONDS+=.02
+            assert env['throttleCmd']>0 and control['output']>0
+            env['TIME'].SECONDS+=1.1
+            assert command(env['throttleCmd'])==0
+            assert control['reason']=='live-command-stale'
+    print('PASS: interleaved ignition/recovery publication starts both modes; genuine stale commands still latch off')
+
+
 if __name__=='__main__':
     check_frozen_node()
     check_heartbeat_abort_staging()
     check_physical_cutoff()
+    check_command_publication()

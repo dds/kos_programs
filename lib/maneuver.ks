@@ -719,15 +719,19 @@ GLOBAL FUNCTION executeManeuver {
             // and minimum throttle can overshoot on high-acceleration
             // craft or when the script takes several physics ticks.
             LOCAL horizon IS MAX(1.0, 2 * dt).
-            SET throttleCmd TO MIN(1.0, rem / (ma * horizon)).
+            LOCAL nextThrottle IS MIN(1.0, rem / (ma * horizon)).
             IF rem <= BURN_FULL_THROTTLE_MIN_DV {
-                SET throttleCmd TO MIN(0.5, throttleCmd).
+                SET nextThrottle TO MIN(0.5, nextThrottle).
             }
+            // Cooked control may run between any two statements. Publish
+            // freshness BEFORE positive throttle, including after a long
+            // zero-throttle setup/recovery, or the guard sees a stale command.
+            SET liveCutoff["heartbeat"] TO TIME:SECONDS.
+            SET throttleCmd TO nextThrottle.
         } ELSE {
             SET throttleCmd TO 0.0.
             BREAK.
         }
-        SET liveCutoff["heartbeat"] TO TIME:SECONDS.
         WAIT 0.01.
     }
 

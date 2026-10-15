@@ -248,7 +248,11 @@ Looks like Python/JS; is neither.
   executor failure. The economy path targeted zero Pe and accepted any patch
   after an unchecked refinement. Local departure now targets requested Pe
   and rejects outside-corridor nodes; source-driven synthetic fixtures pass,
-  but KSP flight validation remains outstanding. Independent thrust/mass impulse and
+  and the operator reports a good planned encounter on retry, but ignition
+  entered BURN WAIT. This is the no-usable-thrust path; hardware evidence is
+  pending. A separate watchdog publication race was fixed by refreshing the
+  timestamp before exposing positive throttle; interleaving fixtures pass,
+  but successful flight execution remains unverified. Independent thrust/mass impulse and
   stale-command limits, physical cutoff verification/shutdown, and a compact
   persistent burn report now have source-driven fixtures, not flight proof.
   Three-axis Pe recovery, budget-boundary/corridor fixes and explicit
