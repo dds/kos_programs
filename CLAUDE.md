@@ -252,7 +252,12 @@ Looks like Python/JS; is neither.
   entered BURN WAIT. This is the no-usable-thrust path; hardware evidence is
   pending. A separate watchdog publication race was fixed by refreshing the
   timestamp before exposing positive throttle; interleaving fixtures pass,
-  but successful flight execution remains unverified. Independent thrust/mass impulse and
+  but successful flight execution remains unverified. After an explicit
+  no-thrust retry, planning rejected an 856 m/s node with 1,058 km Mun Pe.
+  The solver now tries its stored alternate windows, projects trial vector
+  changes inside the existing cap, and logs each solve's stop reason.
+  Synthetic alternate-window/budget-edge checks pass; the exact flight
+  solver failure is not yet established. Independent thrust/mass impulse and
   stale-command limits, physical cutoff verification/shutdown, and a compact
   persistent burn report now have source-driven fixtures, not flight proof.
   Three-axis Pe recovery, budget-boundary/corridor fixes and explicit

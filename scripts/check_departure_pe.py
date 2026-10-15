@@ -19,6 +19,7 @@ class KList(list):
 class Node:
     def __init__(self):
         self.PROGRADE, self.RADIALOUT, self.NORMAL = 860., 0., 0.
+        self.TIME = 1000.
         self.ORBIT = NS(HASNEXTPATCH=False)
 
     @property
@@ -40,14 +41,14 @@ def fixture(response, cap=100, first='Mun'):
             return response(nd)
 
     patch = LivePatch()
-    env = dict(BODY=primary, TRANSFER_PE_TOL=2000, TRANSFER_PE_REFINE_DV_CAP=cap,
+    env = dict(BODY=primary, TIME=NS(SECONDS=0), TRANSFER_PE_TOL=2000, TRANSFER_PE_REFINE_DV_CAP=cap,
                LIST=lambda *xs: KList(xs), SQRT=math.sqrt, ROUND=round,
                fixture_wait=lambda _: None,
                _getTargetPatch=lambda *_: 0 if response(nd) is None else patch,
                _nodeAxisGet=lambda node, axis: getattr(node, axis),
                _nodeAxisSet=lambda node, axis, value: setattr(node, axis, value),
                _firstPatchBodyName=lambda _: first)
-    for name in ('transferDepartureReady', '_refineLocalDeparturePe'):
+    for name in ('transferDepartureReady', '_refineLocalDeparturePe', '_refineLocalDepartureCandidates'):
         env[name] = lambda *args, name=name: ks.call(name, env, *args)
     return env, nd, target
 
@@ -82,6 +83,41 @@ def check_refinement():
     assert abs(response(nd)-15000) <= 500
     print('PASS: flat gradients, refinement budget, lost probes and negative-direction fallback')
 
+    response = lambda nd: 15000+1000*((nd.PROGRADE-868)**2+4*(nd.RADIALOUT-8)**2-12)
+    env, nd, target = fixture(response, cap=10)
+    assert ks.call('_refineLocalDeparturePe', env, nd, target, 15000)
+    assert abs(response(nd)-15000) <= 2000
+    assert math.sqrt((nd.PROGRADE-860)**2+nd.RADIALOUT**2+nd.NORMAL**2) <= 10.000001
+    print('PASS: correction can turn along its budget boundary without exceeding the vector-change cap')
+
+
+def check_alternate_windows():
+    def response(nd):
+        if nd.TIME == 1000: return 1058000
+        return 30000+2000*nd.NORMAL
+    env, nd, target = fixture(response)
+    attempts=[]
+    def refine(*args):
+        attempts.append((nd.TIME, nd.PROGRADE, nd.NORMAL, nd.RADIALOUT))
+        return ks.call('_refineLocalDeparturePe',env,*args)
+    env['_refineLocalDeparturePe']=refine
+    assert ks.call('_refineLocalDepartureCandidates',env,nd,target,15000,KList((10,1000,2000,3000)),860)
+    assert [attempt[0] for attempt in attempts]==[1000,2000]
+    assert attempts[1]==(2000,860,0,0)
+    assert abs(response(nd)-15000)<=500 and nd.TIME==2000
+    # If every window fails, retain the best error rather than the last trial.
+    env, nd, target = fixture(lambda nd: {1000:1058000,2000:500000,3000:700000}[nd.TIME])
+    assert not ks.call('_refineLocalDepartureCandidates',env,nd,target,15000,KList((2000,3000)),860)
+    assert nd.TIME==2000
+    assert not ks.call('transferDepartureReady',env,nd,target,15000)
+    env, nd, target = fixture(lambda _: 15000)
+    assert ks.call('_refineLocalDepartureCandidates',env,nd,target,15000,KList((2000,3000)),860)
+    assert nd.TIME==1000  # An already-good plan must not be replaced.
+    local_plan=body(SOURCE,'_planLocalTransfer')
+    assert local_plan.index('_refineLocalDepartureCandidates(')<local_plan.index('RETURN nd.')
+    assert '_refineLocalDeparturePe(' not in body(SOURCE,'planTransfer')
+    print('PASS: alternate window solves after flat 1058 km seed; expired/duplicate seeds skipped; best failure restored')
+
 
 def check_plan_gate():
     for pe, first, accepted in ((2200000, 'Mun', False), (15000, 'Mun', True),
@@ -91,8 +127,8 @@ def check_plan_gate():
                                 (15000, 'Minmus', False)):
         env, nd, target = fixture(lambda _: pe, first=first)
         assert ks.call('transferDepartureReady', env, nd, target, 15000) == accepted
-        # A raw planner/refiner returning a node is not proof it is usable.
-        # Exercise the actual planTransfer return gate, including failed refinement.
+        # A raw planner returning a node is not proof it is usable.
+        # Exercise the actual planTransfer return gate after a failed refinement.
         env.update(CAPTURE_DIR='', CAPTURE_INC=-1, HASNODE=False,
                    _planLocalTransfer=lambda *_: nd,
                    _refineLocalDeparturePe=lambda *_: False,
@@ -107,4 +143,5 @@ def check_plan_gate():
 
 if __name__ == '__main__':
     check_refinement()
+    check_alternate_windows()
     check_plan_gate()

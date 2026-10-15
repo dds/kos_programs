@@ -841,7 +841,13 @@ Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
   500 m and limits the vector change from the seed to
   `TRANSFER_PE_REFINE_DV_CAP` (default 100 m/s). Saved, unburned XING nodes
   pass the same Pe gate before execution. A cheap grazing encounter is no
-  longer enough. This is not a minimum-total-mission-dV guarantee.
+  longer enough. If refinement fails, the planner tries the saved coarse
+  shortlist (`TRANSFER_PREVIEW_SHORTLIST`, default six), skipping duplicate
+  or imminent windows and stopping at the first usable one. Each alternate
+  starts from its own original seed; adjustment budgets do not accumulate
+  across candidates. `STATS departure-pe solve` reports the stopping reason,
+  final Pe and vector adjustment. If all fail, the best failed candidate is
+  restored for the rejection report. This is not a minimum-total-mission-dV guarantee.
   Interplanetary transfers use the Lambert planner:
   analytic shortlist, patch refinement, ejection-dV ranking, and escape-path
   safety checks. Local XING leaves precise arrival-plane targeting and

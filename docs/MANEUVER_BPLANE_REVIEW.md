@@ -351,3 +351,29 @@ into `BURN WAIT`, but could prevent a recovered engine from starting afterward.
 The source-driven watchdog fixture interrupts each publication operation in
 both burn modes and confirms ignition succeeds while a real stale command
 still latches zero. KSP validation remains outstanding.
+
+## Departure refinement follow-up — 2026-10-15
+
+After clearing an unflown XING attempt, the operator reports a rejected
+856 m/s node with 1,058 km Mun Pe. The final corridor guard worked, but the
+previous solve did not record why it stopped, so the exact numerical failure
+on that flight is unknown. Inspection identified two bounded-search problems:
+the departure refined only one selected window despite retaining a coarse
+shortlist, and it could stall at the vector-adjustment budget boundary.
+
+The local planner now refines while its shortlist is still available. On
+failure it tries the remaining coarse candidates at their original Hohmann
+prograde seed, skipping duplicate or less-than-120-second-lead windows. It
+stops at the first usable candidate and restores the best failed candidate
+if none pass. This is a bounded fallback, not a new global optimum search.
+Trial corrections are projected into the existing budget sphere so a change
+in direction can improve Pe without increasing that budget. The final Pe
+corridor and burn gate are unchanged. `STATS departure-pe solve` logs status,
+iteration count, final Pe, vector change, cap, total dV and departure ETA;
+intermediate failed candidates no longer print a terminal departure error.
+
+Source-driven checks cover a flat 1,058 km first window followed by a solvable
+alternative, expired/duplicate candidates, restoration after all candidates
+fail, and a curved response solvable only by turning along the budget edge.
+The response functions are synthetic; they do not reproduce the deleted
+flight node or prove success in KSP.

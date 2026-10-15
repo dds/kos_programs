@@ -118,7 +118,9 @@ GLOBAL FUNCTION planTransfer {
     IF isLocal {
         // Buy the low approach at departure, not as an expensive late MCC.
         // A requested plane remains downstream BPLANE/SHAPE's responsibility.
-        SET bplaneHandoffOk TO _refineLocalDeparturePe(nd, targetBody, targetPe).
+        // The local planner refines its selected seed and, if needed, the
+        // alternate windows while it still has the scan shortlist available.
+        SET bplaneHandoffOk TO transferDepartureReady(nd, targetBody, targetPe, FALSE).
     } ELSE IF captureInc >= 0 {
         SET bplaneHandoffOk TO _refineEjectionTarget(
             nd, targetBody, targetPe, captureInc, lanTarget).
@@ -188,6 +190,7 @@ GLOBAL FUNCTION transferDepartureReady {
     PARAMETER nd.
     PARAMETER targetBody.
     PARAMETER targetPe.
+    PARAMETER report IS TRUE.
     IF targetBody:BODY <> BODY { RETURN TRUE. }
     LOCAL patch IS _getTargetPatch(nd, targetBody).
     LOCAL pe IS -1.
@@ -195,13 +198,15 @@ GLOBAL FUNCTION transferDepartureReady {
     LOCAL ok IS patch <> 0 AND targetPe > 0 AND pe > 0
         AND ABS(pe - targetPe) <= TRANSFER_PE_TOL
         AND _firstPatchBodyName(nd) = targetBody:NAME.
-    mLog("STATS transfer departure-check target=" + targetBody:NAME
-        + " accepted=" + ok + " PeKm=" + ROUND(pe / 1000,3)
-        + " targetPeKm=" + ROUND(targetPe / 1000,3)
-        + " toleranceKm=" + (TRANSFER_PE_TOL / 1000)
-        + " dv=" + ROUND(nd:DELTAV:MAG,3)).
-    IF NOT ok {
-        mLogError("Departure blocked: predicted arrival is outside the requested Pe corridor. No burn authorized.").
+    IF report {
+        mLog("STATS transfer departure-check target=" + targetBody:NAME
+            + " accepted=" + ok + " PeKm=" + ROUND(pe / 1000,3)
+            + " targetPeKm=" + ROUND(targetPe / 1000,3)
+            + " toleranceKm=" + (TRANSFER_PE_TOL / 1000)
+            + " dv=" + ROUND(nd:DELTAV:MAG,3)).
+        IF NOT ok {
+            mLogError("Departure blocked: predicted arrival is outside the requested Pe corridor. No burn authorized.").
+        }
     }
     RETURN ok.
 }
@@ -213,18 +218,21 @@ LOCAL FUNCTION _refineLocalDeparturePe {
     PARAMETER nd.
     PARAMETER targetBody.
     PARAMETER targetPe.
-    IF targetPe <= 0 { RETURN FALSE. }
+    IF targetPe <= 0 OR TRANSFER_PE_REFINE_DV_CAP < 0 { RETURN FALSE. }
     LOCAL seedPro IS nd:PROGRADE.
     LOCAL seedRad IS nd:RADIALOUT.
     LOCAL seedNrm IS nd:NORMAL.
     LOCAL iteration IS 0.
+    LOCAL status IS "iteration-limit".
     UNTIL iteration >= 24 {
         SET iteration TO iteration + 1.
         LOCAL patch IS _getTargetPatch(nd, targetBody).
-        IF patch = 0 { BREAK. }
+        IF patch = 0 { SET status TO "no-patch". BREAK. }
         LOCAL peNow IS patch:PERIAPSIS.
         LOCAL err IS targetPe - peNow.
-        IF ABS(err) <= MIN(500, TRANSFER_PE_TOL * 0.25) { RETURN TRUE. }
+        IF ABS(err) <= MIN(500, TRANSFER_PE_TOL * 0.25) {
+            SET status TO "converged". BREAK.
+        }
         LOCAL basePro IS nd:PROGRADE.
         LOCAL baseRad IS nd:RADIALOUT.
         LOCAL baseNrm IS nd:NORMAL.
@@ -244,7 +252,7 @@ LOCAL FUNCTION _refineLocalDeparturePe {
             gradients:ADD(slope).
         }
         LOCAL grad2 IS gradients[0]^2 + gradients[1]^2 + gradients[2]^2.
-        IF grad2 < 0.000001 { BREAK. }
+        IF grad2 < 0.000001 { SET status TO "flat-gradient". BREAK. }
         LOCAL stepPro IS err * gradients[0] / grad2.
         LOCAL stepRad IS err * gradients[1] / grad2.
         LOCAL stepNrm IS err * gradients[2] / grad2.
@@ -257,8 +265,19 @@ LOCAL FUNCTION _refineLocalDeparturePe {
             SET nd:NORMAL TO baseNrm + stepNrm * scale * fraction.
             LOCAL change IS SQRT((nd:PROGRADE - seedPro)^2
                 + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2).
+            // Keep the WHOLE correction inside its budget ball. Merely
+            // shrinking the next step can stall at the boundary even when
+            // a useful change in direction remains within the same budget.
+            IF change > TRANSFER_PE_REFINE_DV_CAP {
+                LOCAL budgetScale IS TRANSFER_PE_REFINE_DV_CAP / change.
+                SET nd:PROGRADE TO seedPro + (nd:PROGRADE - seedPro) * budgetScale.
+                SET nd:RADIALOUT TO seedRad + (nd:RADIALOUT - seedRad) * budgetScale.
+                SET nd:NORMAL TO seedNrm + (nd:NORMAL - seedNrm) * budgetScale.
+            }
             WAIT 0.1.
-            IF change <= TRANSFER_PE_REFINE_DV_CAP {
+            SET change TO SQRT((nd:PROGRADE - seedPro)^2
+                + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2).
+            IF change <= TRANSFER_PE_REFINE_DV_CAP + 0.001 {
                 LOCAL trial IS _getTargetPatch(nd, targetBody).
                 IF trial <> 0 AND _firstPatchBodyName(nd) = targetBody:NAME {
                     IF ABS(trial:PERIAPSIS - targetPe) < ABS(err) {
@@ -272,10 +291,68 @@ LOCAL FUNCTION _refineLocalDeparturePe {
             SET nd:RADIALOUT TO baseRad.
             SET nd:NORMAL TO baseNrm.
             WAIT 0.1.
+            SET status TO "no-improving-step".
             BREAK.
         }
     }
-    RETURN transferDepartureReady(nd, targetBody, targetPe).
+    LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
+    LOCAL finalPe IS -1.
+    IF finalPatch <> 0 { SET finalPe TO finalPatch:PERIAPSIS. }
+    LOCAL accepted IS transferDepartureReady(nd, targetBody, targetPe, FALSE).
+    mLog("STATS departure-pe solve status=" + status + " accepted=" + accepted
+        + " iterations=" + iteration + " PeKm=" + ROUND(finalPe / 1000,3)
+        + " targetPeKm=" + ROUND(targetPe / 1000,3)
+        + " vectorChange=" + ROUND(SQRT((nd:PROGRADE - seedPro)^2
+            + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2),3)
+        + " cap=" + TRANSFER_PE_REFINE_DV_CAP
+        + " dv=" + ROUND(nd:DELTAV:MAG,3)
+        + " departT=" + ROUND(nd:TIME - TIME:SECONDS,1)).
+    RETURN accepted.
+}
+
+LOCAL FUNCTION _refineLocalDepartureCandidates {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    PARAMETER scanTimes.
+    PARAMETER seedDv.
+    IF _refineLocalDeparturePe(nd, targetBody, targetPe) { RETURN TRUE. }
+    LOCAL initialTime IS nd:TIME.
+    LOCAL bestAxes IS LIST(nd:TIME, nd:PROGRADE, nd:NORMAL, nd:RADIALOUT).
+    LOCAL bestError IS 9e15.
+    LOCAL patch IS _getTargetPatch(nd, targetBody).
+    IF patch <> 0 { SET bestError TO ABS(patch:PERIAPSIS - targetPe). }
+    LOCAL rank IS 0.
+    FOR candidateTime IN scanTimes {
+        SET rank TO rank + 1.
+        // These coarse seeds were evaluated at the original Hohmann dV
+        // with zero normal/radial components, not the failed refined vector.
+        IF candidateTime > TIME:SECONDS + 120 AND ABS(candidateTime - initialTime) > 1 {
+            SET nd:TIME TO candidateTime.
+            SET nd:PROGRADE TO seedDv.
+            SET nd:NORMAL TO 0.
+            SET nd:RADIALOUT TO 0.
+            WAIT 0.1.
+            mLog("STATS departure-pe alternate rank=" + rank
+                + " departT=" + ROUND(nd:TIME - TIME:SECONDS,1)).
+            IF _refineLocalDeparturePe(nd, targetBody, targetPe) { RETURN TRUE. }
+            SET patch TO _getTargetPatch(nd, targetBody).
+            IF patch <> 0 {
+                LOCAL peError IS ABS(patch:PERIAPSIS - targetPe).
+                IF peError < bestError {
+                    SET bestError TO peError.
+                    SET bestAxes TO LIST(nd:TIME, nd:PROGRADE, nd:NORMAL, nd:RADIALOUT).
+                }
+            }
+        }
+    }
+    // Report the best failed attempt, not whichever rejected trial ran last.
+    SET nd:TIME TO bestAxes[0].
+    SET nd:PROGRADE TO bestAxes[1].
+    SET nd:NORMAL TO bestAxes[2].
+    SET nd:RADIALOUT TO bestAxes[3].
+    WAIT 0.1.
+    RETURN FALSE.
 }
 
 LOCAL FUNCTION _angleErrorDeg {
@@ -949,6 +1026,7 @@ LOCAL FUNCTION _planLocalTransfer {
         + " radial=" + ROUND(nd:RADIALOUT,1)
         + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
 
+    _refineLocalDepartureCandidates(nd, targetBody, targetPe, scanTimes, hohmannDv).
     RETURN nd.
 }
 
