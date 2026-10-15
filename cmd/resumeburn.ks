@@ -12,6 +12,8 @@ ELSE IF NOT HASNODE {
 ELSE IF ABORT {
     PRINT "ABORT is set. Clear it deliberately before resuming the burn.".
 }
-SET BURN_RESUME_REQUESTED TO TRUE.
-resumeMission().
-SET BURN_RESUME_REQUESTED TO FALSE.
+ELSE {
+    SET BURN_RESUME_REQUESTED TO TRUE.
+    resumeMission().
+    SET BURN_RESUME_REQUESTED TO FALSE.
+}
