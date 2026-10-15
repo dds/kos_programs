@@ -31,6 +31,11 @@ GLOBAL BURN_STAGE_MAX_EVENTS IS 4.
 GLOBAL BURN_STAGE_LIMIT IS 0.
 GLOBAL BURN_STAGE_MANUAL_WAIT IS 120.
 GLOBAL BURN_RESUME_REQUESTED IS FALSE.
+// Independent limits: do not trust a maneuver residual as the sole cutoff.
+GLOBAL BURN_IMPULSE_MARGIN_FRAC IS 0.01.
+GLOBAL BURN_IMPULSE_MARGIN_DV IS 0.05.
+GLOBAL BURN_COMMAND_TIMEOUT IS 1.
+GLOBAL BURN_CUTOFF_VERIFY_TIME IS 0.25.
 
 
 LOCAL ATOL      IS 2.0.
@@ -247,16 +252,14 @@ GLOBAL FUNCTION executeManeuver {
     LOCAL throttleCmd IS 0.0.
     LOCAL liveCutoff IS LEX("reason", "", "rem", -1, "time", 0,
         "lastTick", TIME:SECONDS, "tickDt", 0.02, "output", 0,
-        "bestRem", -1).
+        "bestRem", -1, "fixed", fixedBurnVector,
+        "heartbeat", TIME:SECONDS, "impulseTime", TIME:SECONDS,
+        "impulse", 0, "lastAcc", SHIP:THRUST / MAX(0.01, SHIP:MASS),
+        "impulseCap", bdv + MAX(BURN_IMPULSE_MARGIN_DV, bdv * BURN_IMPULSE_MARGIN_FRAC)).
     LOCAL burnTrace IS LIST().
     LOCK STEERING TO steerVec.
-    IF fixedBurnVector {
-        LOCK THROTTLE TO throttleCmd.
-    } ELSE {
-        // This expression runs every physics tick, even while the main
-        // loop is busy. A lock on throttleCmd alone repeats stale input.
-        LOCK THROTTLE TO _burnNodeThrottle(nd, ignitionVec, throttleCmd, liveCutoff).
-    }
+    // Both modes get independent impulse, stale-command and ABORT limits.
+    LOCK THROTTLE TO _burnNodeThrottle(nd, ignitionVec, throttleCmd, liveCutoff).
     LOCAL db2 IS FALSE.
     LOCAL dra IS FALSE.
     LOCAL burnAbort IS "".
@@ -724,18 +727,32 @@ GLOBAL FUNCTION executeManeuver {
             SET throttleCmd TO 0.0.
             BREAK.
         }
+        SET liveCutoff["heartbeat"] TO TIME:SECONDS.
         WAIT 0.01.
     }
 
     SET throttleCmd TO 0.0.
     LOCK THROTTLE TO 0.0.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-    // Let the zero command reach a physics update before restoring
-    // thrust limits or removing the node.
-    WAIT 0.01.
+    // Verify physical thrust, not just the command. Keep the zero lock while
+    // checking and shut down throttleable engines if thrust persists.
+    LOCAL cutoffCheck IS _burnVerifyCutoff().
+    IF cutoffCheck["forced"] OR NOT cutoffCheck["stopped"] {
+        SET burnAbort TO "thrust-after-cutoff".
+        SET burnAbortDetail TO "forced=" + cutoffCheck["forced"]
+            + " stopped=" + cutoffCheck["stopped"]
+            + " thrust=" + ROUND(SHIP:THRUST,3).
+    }
     LOCAL res IS nd:DELTAV:MAG.
     IF liveCutoff["reason"] <> "" {
         SET burnCompleteReason TO liveCutoff["reason"].
+        IF burnAbort = "" AND (liveCutoff["reason"] = "live-impulse-limit"
+                OR liveCutoff["reason"] = "live-command-stale"
+                OR liveCutoff["reason"] = "live-operator-abort"
+                OR liveCutoff["reason"] = "live-thrust-invalid") {
+            SET burnAbort TO liveCutoff["reason"].
+            SET burnAbortDetail TO "Independent burn watchdog stopped thrust; inspect retained node.".
+        }
     }
     IF NOT _nf(res) OR liveCutoff["reason"] = "live-node-invalid" {
         SET burnAbort TO "invalid-node-residual".
@@ -744,6 +761,18 @@ GLOBAL FUNCTION executeManeuver {
     }
     UNLOCK STEERING.
     UNLOCK THROTTLE.
+    // Compact evidence survives log-space exhaustion and phase/boot changes.
+    // Never perform this state I/O while commanded thrust is nonzero.
+    LOCAL burnReport IS "STATS last-burn phase=" + stateGet("phase", "")
+        + " body=" + SHIP:BODY:NAME + " ut=" + ROUND(TIME:SECONDS,2)
+        + " plannedDv=" + ROUND(bdv,3) + " thrustDv=" + _fs(liveCutoff["impulse"],3)
+        + " impulseCap=" + ROUND(liveCutoff["impulseCap"],3)
+        + " residual=" + ROUND(res,3) + " reason=" + burnCompleteReason
+        + " cutoffFault=" + burnAbort
+        + " shutdownAttempted=" + cutoffCheck["forced"]
+        + " thrustStopped=" + cutoffCheck["stopped"].
+    stateSet("last_burn_report", burnReport).
+    mLogWarn(burnReport).
     // Flush only after the zero command has reached physics. mLog can
     // copy the entire log to the archive, so it is not burn-loop work.
     FOR traceLine IN burnTrace { mLogWarn(traceLine). }
@@ -818,13 +847,22 @@ GLOBAL FUNCTION executeManeuver {
 // No logging, file access, waits, steering, or staging in this function:
 // cooked-control locks run it as a high-priority physics-tick trigger.
 LOCAL FUNCTION _burnNodeThrottle {
-    PARAMETER nd, ignitionVec, command, cutoff.
+    PARAMETER nd.
+    PARAMETER ignitionVec.
+    PARAMETER command.
+    PARAMETER cutoff.
     LOCAL tickNow IS TIME:SECONDS.
     LOCAL tickDt IS MAX(0.02, tickNow - cutoff["lastTick"]).
     SET cutoff["lastTick"] TO tickNow.
     SET cutoff["tickDt"] TO tickDt.
     SET cutoff["output"] TO 0.
     IF cutoff["reason"] <> "" { RETURN 0. }
+    LOCAL independentLimit IS _burnImpulseThrottle(command, cutoff).
+    IF cutoff["reason"] <> "" { RETURN 0. }
+    IF cutoff["fixed"] {
+        SET cutoff["output"] TO independentLimit.
+        RETURN cutoff["output"].
+    }
     IF command <= 0 {
         // Coasting/staging can change node error without any engine impulse.
         SET cutoff["bestRem"] TO -1.
@@ -874,8 +912,64 @@ LOCAL FUNCTION _burnNodeThrottle {
     // Reserve several physics steps for control latency; this limit
     // reads the current node and acceleration, never the loop's sample.
     LOCAL horizon IS MAX(1.0, 4 * tickDt).
-    SET cutoff["output"] TO MIN(command, rem / (acc * horizon)).
+    SET cutoff["output"] TO MIN(independentLimit, MIN(command, rem / (acc * horizon))).
     RETURN cutoff["output"].
+}
+
+// Actual thrust/mass integration is independent of the node and orbit frame.
+// Called from the live lock even during intentional zero-throttle pauses.
+LOCAL FUNCTION _burnImpulseThrottle {
+    PARAMETER command.
+    PARAMETER cutoff.
+    LOCAL nowT IS TIME:SECONDS.
+    LOCAL elapsed IS MAX(0, nowT - cutoff["impulseTime"]).
+    LOCAL actualAcc IS SHIP:THRUST / MAX(0.01, SHIP:MASS).
+    LOCAL reason IS "".
+    IF ABORT { SET reason TO "live-operator-abort". }
+    IF NOT _nf(actualAcc) OR actualAcc < 0 { SET reason TO "live-thrust-invalid". }
+    IF reason = "" {
+        SET cutoff["impulse"] TO cutoff["impulse"]
+            + (cutoff["lastAcc"] + actualAcc) * elapsed / 2.
+        SET cutoff["lastAcc"] TO actualAcc.
+        SET cutoff["impulseTime"] TO nowT.
+        IF cutoff["impulse"] >= cutoff["impulseCap"] - 0.001 {
+            SET reason TO "live-impulse-limit".
+        } ELSE IF command > 0 AND nowT - cutoff["heartbeat"] > MAX(0.1, BURN_COMMAND_TIMEOUT) {
+            SET reason TO "live-command-stale".
+        }
+    }
+    IF reason <> "" {
+        SET cutoff["reason"] TO reason.
+        SET cutoff["time"] TO nowT.
+        RETURN 0.
+    }
+    IF command <= 0 { RETURN 0. }
+    LOCAL availableAcc IS _sma().
+    IF availableAcc <= 0 { RETURN 0. }
+    LOCAL remaining IS MAX(0, cutoff["impulseCap"] - cutoff["impulse"]).
+    RETURN MIN(command, remaining / (availableAcc * MAX(1, 4 * elapsed))).
+}
+
+LOCAL FUNCTION _burnVerifyCutoff {
+    LOCAL started IS TIME:SECONDS.
+    LOCAL forced IS FALSE.
+    LOCK THROTTLE TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    WAIT 0.02.
+    UNTIL SHIP:THRUST <= 0.001 OR TIME:SECONDS - started >= MAX(1, BURN_CUTOFF_VERIFY_TIME + 0.5) {
+        IF NOT forced AND TIME:SECONDS - started >= MAX(0.02, BURN_CUTOFF_VERIFY_TIME) {
+            SET forced TO TRUE.
+            FOR eng IN SHIP:ENGINES {
+                IF eng:IGNITION AND eng:THRUST > 0.001
+                        AND NOT eng:THROTTLELOCK AND eng:ALLOWSHUTDOWN {
+                    eng:SHUTDOWN.
+                }
+            }
+        }
+        SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+        WAIT 0.02.
+    }
+    RETURN LEX("forced", forced, "stopped", SHIP:THRUST <= 0.001).
 }
 
 LOCAL FUNCTION _burnTraceAdd {

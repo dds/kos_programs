@@ -264,3 +264,37 @@ This validates encounter reacquisition on the reported RO8 trajectory, not
 the subsequent cutoff/input-lock changes or a complete mission. The planned
 same-craft comparison is `missions/RO8/mun_landing_return.ks`; neither of
 these flight reports refers to the Falcon mission profiles.
+
+## RO9 confirmed continued thrust — 2026-10-15
+
+The operator confirms the engine stayed on too long during Mun departure.
+The resulting encounter had a 1,780 km periapsis; increasing the recovery
+allowance to 300 m/s ran into the correction-plus-capture reserve. No cutoff
+trace is available to establish why the previous guards failed.
+
+`executeManeuver` now applies an independent live guard to both normal-node
+and fixed-vector burns. It integrates actual `SHIP:THRUST / SHIP:MASS`, caps
+delivered dV at the ignition request plus max(1%, 0.05 m/s), and retains that
+budget through staging. Positive commands older than one second and ABORT
+also latch zero. This is independent of node residual and main-loop progress,
+but not independent of the kOS scheduler or KSP physics. A legitimate finite
+burn that needs more impulse may stop early rather than automatically exceed
+the cap.
+
+Cutoff holds zero through physics updates, checks actual thrust, and attempts
+shutdown of active throttleable engines that still thrust after 0.25 seconds.
+The verification is bounded and reports failure if thrust persists. Engine
+shutdown uses the documented [kOS engine controls](https://ksp-kos.github.io/KOS/structures/vessels/engine.html).
+No automatic restart follows this emergency shutdown inside the verifier.
+Controls are released before state/log I/O. `last_burn_report` is saved before
+trace flushing and survives phase reboot; `cmd/burnreport.ks` loads its own
+preamble to display it. The measured impulse ends at the live guard's last
+sample, so it does not include any subsequent shutdown tail. `cmd/logs.ks`
+now loads its preamble too, allowing current-boot log export from the prompt.
+
+`python3 -B scripts/check_burn_watchdog.py` runs the actual helper bodies
+against frozen-residual, stalled-main-loop, ABORT, staging/mass-change,
+same-timestamp and stubborn-thrust fixtures. The existing burn-timing and
+launch/staging suites also pass. These checks do not reproduce the actual
+game failure. Still required: compiled storage verification and an observed
+flight with its saved report, particularly a stage transition near cutoff.

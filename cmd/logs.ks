@@ -3,6 +3,9 @@
 // Usage: RUNPATH("0:/cmd/logs.ks").
 // ============================================================
 
+RUNPATH("1:/lib/boot_lib").
+bootPreamble().
+
 IF NOT HOMECONNECTION:ISCONNECTED {
     PRINT "  No KSC link — cannot archive.".
 } ELSE {

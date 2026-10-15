@@ -67,7 +67,8 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/dump.ks").` | Print persistent state |
 | `RUNONCEPATH("0:/cmd/trimstate.ks").` | Remove bulky stale state keys after a tight-storage boot |
 | `RUNPATH("0:/cmd/convertstatejson.ks").` | Convert legacy SimpleJSON state to native kOS JSON |
-| `RUNPATH("0:/cmd/logs.ks").` | Archive the flight log to KSC |
+| `RUNPATH("0:/cmd/logs.ks").` | Archive the current boot's flight log to KSC |
+| `RUNPATH("0:/cmd/burnreport.ks").` | Print the latest maneuver cutoff report, retained across reboots |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
@@ -174,6 +175,24 @@ burn with residual error is checked against the actual arrival trajectory;
 it is not declared precise just because the engines stopped. Controls are
 unlocked after cutoff, including failed burns. This is cutoff protection,
 not a finite-duration transfer optimizer.
+
+Both maneuver burn modes also integrate actual thrust divided by mass,
+independently of the node residual. The delivered-dV cap is the requested
+burn plus the larger of 1% or 0.05 m/s; it survives staging within the burn.
+The live throttle lock latches off if that cap is reached, ABORT is pressed,
+or a positive throttle command goes more than one second without a main-loop
+update. After commanding zero, the executor checks actual thrust and attempts
+engine shutdown if thrust persists for 0.25 seconds. A forced shutdown is a
+failed burn, not a successful completion; inspect the engine before resuming.
+These guards require kOS and KSP to keep executing and can stop a long finite
+burn early. They have numerical coverage, but still need flight validation.
+
+After the next maneuver, run `RUNPATH("0:/cmd/burnreport.ks").` to see planned
+and measured thrust dV, the independent cap, residual, cutoff reason, and
+whether thrust stopped. This compact record survives phase reboots even if
+the log fills; the next maneuver replaces it. It cannot reconstruct an older
+burn flown before this update. `RUNPATH("0:/cmd/logs.ks").` archives the current
+boot's log when connected to KSC.
 
 After reloading a save following departure, XING checks the actual encounter
 before considering the retained node. A departure marker survives burn

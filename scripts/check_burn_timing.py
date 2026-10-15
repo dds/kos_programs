@@ -13,8 +13,7 @@ from pathlib import Path
 
 SOURCE = (Path(__file__).resolve().parents[1] / "lib/maneuver.ks").read_text()
 GOVERNOR = SOURCE.split("LOCAL FUNCTION _burnNodeThrottle {", 1)[1].split(
-    "LOCAL FUNCTION _burnTraceAdd", 1
-)[0]
+    "LOCAL FUNCTION _burnImpulseThrottle", 1)[0]
 TOLERANCE = float(
     re.search(r"GLOBAL BURN_TRIM_ABS_COMPLETE_DV IS ([0-9.]+)\.", SOURCE)[1]
 )
@@ -61,7 +60,8 @@ class Governor:
             self.stopped, self.reason = True, 'live-residual-rebound'
             return 0.0
         self.best_rem = abs(residual) if self.best_rem < 0 else min(self.best_rem, abs(residual))
-        values = dict(rem=abs(residual), command=ceiling, acc=acceleration, tickDt=tick)
+        values = dict(rem=abs(residual), command=ceiling, independentLimit=ceiling,
+                      acc=acceleration, tickDt=tick)
         builtins = {"__builtins__": {}, "MAX": max, "MIN": min}
         if abs(residual) <= AXIS_GUARD:
             values['rem'] = eval(PROJECTED_REMAINING, builtins,
@@ -182,7 +182,10 @@ def main():
     assert 'mLogWarn("BURN tick status="' not in SOURCE
     flush = SOURCE.index("FOR traceLine IN burnTrace")
     shutdown = SOURCE.rindex("LOCK THROTTLE TO 0.0.", 0, flush)
-    assert "WAIT 0.01." in SOURCE[shutdown:flush]
+    assert "_burnVerifyCutoff()" in SOURCE[shutdown:flush]
+    verify = SOURCE.split("LOCAL FUNCTION _burnVerifyCutoff {", 1)[1].split(
+        "LOCAL FUNCTION _burnTraceAdd", 1)[0]
+    assert "WAIT 0.02." in verify and "eng:SHUTDOWN." in verify
     assert 'UNLOCK STEERING.' in SOURCE[shutdown:flush]
     assert 'UNLOCK THROTTLE.' in SOURCE[shutdown:flush]
     assert 'LOCK STEERING TO BURN_ABORT_HOLD_VECTOR' not in SOURCE

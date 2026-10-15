@@ -237,7 +237,11 @@ Looks like Python/JS; is neither.
   RO9 Mun transfer also missed its intended arrival: the operator reports
   a 1,780 km Mun Pe, about 3 h to Pe, and 550 + 1,400 m/s remaining in the
   transfer/lander stages. Pe-only recovery failed under economy correction limits;
-  actual correction cost and the reported overburn cause remain unverified.
+  a 300 m/s recovery allowance subsequently failed the correction-plus-capture
+  budget. The operator confirms the engine stayed on too long; the exact
+  executor failure remains untraced. Independent thrust/mass impulse and
+  stale-command limits, physical cutoff verification/shutdown, and a compact
+  persistent burn report now have source-driven fixtures, not flight proof.
   Three-axis Pe recovery, budget-boundary/corridor fixes and explicit
   `arrival` budget/plan-only commands have synthetic response fixtures only.
   The earlier

@@ -126,7 +126,9 @@ def run(nodes, env):
             pass
         elif statement == 'STAGE':
             env['stage_event']()
-        elif statement.endswith(':ACTIVATE'):
+        elif statement.startswith('LOCK '):
+            env['fixture_lock'](statement)
+        elif statement.endswith((':ACTIVATE', ':SHUTDOWN')):
             evaluate(statement + '()', env)
         else:
             evaluate(statement, env)
