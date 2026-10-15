@@ -69,6 +69,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/convertstatejson.ks").` | Convert legacy SimpleJSON state to native kOS JSON |
 | `RUNPATH("0:/cmd/logs.ks").` | Archive the current boot's flight log to KSC |
 | `RUNPATH("0:/cmd/burnreport.ks").` | Print the latest maneuver cutoff report, retained across reboots |
+| `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
@@ -166,6 +167,15 @@ live residual. This requires the updated maneuver library to be loaded;
 ordinary mission resume/reboot still keeps the hold, and the command does
 not clear ABORT. A long interruption can make the original trajectory
 inaccurate, so this command is an operator decision, not an automatic retry.
+
+If ignition never produced thrust and the node has been deleted, use
+`RUNPATH("0:/cmd/transferretry.ks").` then `REBOOT.` to clear the saved
+departure-attempt markers and plan a new window. This explicit reset requires
+XING, no node, throttle off, ABORT cleared, and a bound Kerbin orbit with Pe
+above the atmosphere, Ap at most 500 km, and no SOI transition. Use it only
+for a known unflown attempt; these orbit checks cannot prove no fuel was
+burned. It preserves the mission, overrides and latest cutoff report. It
+does not fix engine activation/fuel problems responsible for `BURN WAIT`.
 
 Long, low-thrust burns can leave transverse node error because a maneuver
 node models an instantaneous impulse. The live throttle guard tapers the
