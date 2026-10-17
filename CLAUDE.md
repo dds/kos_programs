@@ -387,8 +387,12 @@ Looks like Python/JS; is neither.
   ~7.3 km radar, hs=355.72, vs=-30.11. Replaying those values with the earlier
   2.72/2.76 m/s2 reserve yields V_GATE=7586/7325 m; economy targetVs is about
   -36/-37 m/s with effective g~1.03. This supports the gate arithmetic, not
-  a completed landing or an optimal burn. Current reserve/target HUD readings
-  and the touchdown outcome were not yet supplied.
+  a completed landing or an optimal burn. Subsequent HUD: vs=-16.9/-11.3,
+  throttle=1; later radar=1.14 km, hs=35. `check_reported_weak_lander` now
+  replays the 7.3 km entry using only constant 2.76 m/s2 thrust/mass, a
+  three-second ignition delay and changing centrifugal support; modeled
+  terminal capture is ~567 m, with no high hover. Actual reserve/target
+  readings at that later position and touchdown outcome remain pending.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered

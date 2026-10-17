@@ -87,7 +87,19 @@ def check_descent_efficiency():
     print('PASS: Mun/Minmus delayed ignition, weak next-stage interruption and changing centrifugal support retain positive clearance without high hover')
 
 
+def check_reported_weak_lander():
+    # Operator entry after the alignment fix: 7.3 km, hs=355.72, vs=-30.11.
+    # Conservatively give the whole modeled burn to the previously measured
+    # 2.76 m/s2 lander, without credit for transfer fuel or rising TWR.
+    # Keep the existing three-second delayed ignition and changing gravity.
+    result=simulate(1.63,2.76/1.63,355.72,30.11,economy=True,
+                    start_height=7300,dt=.5,curvature_radius=210000)
+    assert result['hover']<1 and result['minimum']>100
+    print('PASS: reported 7.3 km/356 m/s entry with TWR below 1.7 reaches modeled terminal capture without high hover; not a complete landing or a fuel-budget proof')
+
+
 if __name__=='__main__':
     check_vector_and_flare_budget()
     check_ballistic_gate()
     check_descent_efficiency()
+    check_reported_weak_lander()

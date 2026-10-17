@@ -215,6 +215,15 @@ radius, the economy controller requests targetVs about -35.5/-37 m/s for
 either the strong current stage or the weak stage. Actual current reserve,
 effective gravity and target-speed readings remain needed to confirm this
 specific guidance command. No touchdown outcome was reported at this point.
+The next readings were vs=-16.9/-11.3, throttle=1, followed by 1.14 km
+above terrain with hs=35 m/s. These show continued descent and horizontal
+arrest; they do not establish a successful touchdown. The permanent
+`check_reported_weak_lander` regression starts at the reported 7.3 km entry,
+uses constant 2.76 m/s2 acceleration without any transfer-stage credit,
+retains three seconds of ignition delay and models changing centrifugal
+support. It reaches terminal capture at about 567 m with no modeled high
+hover. This does not model actual attitude, terrain, fuel capacity, mass
+changes, terminal site diversions or touchdown.
 
 ## End-of-burn contract
 
