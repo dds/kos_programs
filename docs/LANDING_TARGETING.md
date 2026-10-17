@@ -197,14 +197,15 @@ acceptable, unless target search has explicitly been skipped.
 `landExecute()` in `landing_main.ks` owns the powered descent:
 
 - resolves and stores the landing target, if any
-- performs an initial terrain check near the target
+- performs an initial terrain check for precision targets; flexible economy
+  missions validate local sites incrementally during braking
 - initializes the crossrange PID used during braking
 - sets the initial FSM state to `COAST`
 - sets the Trajectories target, when available
 - disables SAS, deploys landing gear, locks steering and throttle
 - stages automatically if all thrust is gone or an engine flames out
 
-The one-shot terrain check samples a grid around the target using
+The precision one-shot terrain check samples a grid around the target using
 `TERRAIN_CHECK_RADIUS` and `TERRAIN_CHECK_STEP` (defaults 100 m and 20 m). It
 first checks the requested center against `LANDING_TERRAIN_MAX_SLOPE` (5°).
 If it meets that limit, it keeps the center instead of buying a long diversion
@@ -212,6 +213,25 @@ to slightly flatter terrain. Otherwise it scores nearby points by gradient
 magnitude and distance, as a best-effort terrain search. This is not a terrain
 safety certification. The center is always a candidate, and grid spacing is
 clamped to the search radius. `STATS landing-terrain` records any shift.
+
+Flexible-site missions defer validation until horizontal speed is at most
+`APPROACH_HSPEED`. They first try a reachable saved target, then search a
+square spiral around the predicted horizontal stopping point. Each guidance
+tick checks at most one candidate at the final 20 m slope scale; it also checks
+altitude clearance, correction time and the saved light/radio policy. A rejected
+candidate keeps the search pending and braking active. Pending searches block
+APPROACH handoff and chasing the old remote target. Mid-descent reboots skip
+the precision grids, and this search does not require Trajectories.
+
+Search radius/spacing/time default to 1000 m/100 m/15 s per pass. The normal
+limit remains 5°. Economy profiles explicitly enable the operator-authorized
+15° emergency allowance with `LANDING_DIVERT_EMERGENCY_SLOPE=15`; it is disabled
+by default and starts only after the normal pass fails. Logs name the active
+tier and accepted slope limit. Pending searches request slow descent (5 m/s)
+under the existing alignment/velocity controller. Exhaustion of every permitted
+tier retains powered arrest and requests intervention, without accepting an
+unqualified site. End-of-burn physical cutoff remains in FSM transitions and
+cleanup; a bounded terrain sample is not a burn-end handoff.
 
 If no target exists, the same state machine runs, but target-aware horizontal
 guidance is skipped and it becomes a vertical powered descent.

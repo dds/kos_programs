@@ -161,12 +161,24 @@ If it still has fuel when braking ends, it stays attached: the controller
 does not burn fuel merely to empty it or jettison a fueled stage automatically.
 
 RO8/RO9 Mun/Minmus economy profiles allow `LANDING_FLEXIBLE_SITE=1`.
-An actual deorbit miss beyond the 20 km assist corridor, or an estimated
-terminal correction beyond `LANDING_APPROACH_MAX_TIME` (120 seconds), reviews
-a nearby ballistic landing site. The replacement must pass coarse/fine
-terrain and the saved sunlight/Kerbin policy; otherwise descent holds for
-manual review. Precision profiles keep this option off. The time setting is
-a correction feasibility estimate, not a guaranteed landing deadline.
+After horizontal arrest, the controller validates the saved target or searches
+near its predicted horizontal stopping point. A remote site outside the
+`LANDING_APPROACH_MAX_TIME` correction estimate (120 seconds) is rejected.
+The search checks one candidate per guidance tick at the final 20 m terrain
+scale while continuing powered braking. Normal searches retain the 5° slope
+limit, sunlight policy and optional Kerbin requirement. Precision profiles
+keep their original target and survey policy. The time setting estimates
+correction feasibility; it does not guarantee touchdown timing or fuel.
+
+By operator request, economy profiles set `LANDING_DIVERT_EMERGENCY_SLOPE=15`.
+Only after the normal search fails may an emergency search accept terrain up
+to 15°. Its accepted-site log records `emergency=true` and `slopeLimit=15`.
+The default allowance is 0 (disabled). `LANDING_DIVERT_SEARCH_RADIUS` (1000 m),
+`LANDING_DIVERT_SEARCH_STEP` (100 m), and `LANDING_DIVERT_SEARCH_TIME` (15 s per
+pass) bound the search. During search, low-speed braking requests a controlled
+descent of up to `LANDING_DIVERT_SEARCH_DESCENT` (5 m/s). If both permitted
+searches fail, it retains powered arrest and signals manual intervention;
+it does not certify a rejected site or return to the prompt in free fall.
 After deorbit, diversions default to `LANDING_DIVERT_REQUIRE_KERBIN=0`: a lost
 Kerbin view does not abort an otherwise acceptable autonomous landing. The
 orbital site search retains its configured requirement (15 degrees in the economy profiles).
@@ -175,8 +187,9 @@ set `LANDING_DIVERT_REQUIRE_KERBIN=1`; its configurable
 `LANDING_DIVERT_KERBIN_TOLERANCE` subtracts 7 degrees from the planned requirement,
 with a lower bound of -2 degrees. Neither setting guarantees a live link.
 APPROACH admission uses hull radar clearance, so a distant mountain's elevation
-cannot start terminal guidance kilometres above the local ground. Fine terrain
-surveying completes before powered guidance. Landing temporarily raises IPU to
+cannot start terminal guidance kilometres above the local ground. Economy
+reboots skip blocking grids around the saved target; precision surveys finish
+before powered guidance. Landing temporarily raises IPU to
 at least `LANDING_MIN_IPU` (2000, capped at 2000 for the automatic raise), then
 restores the previous value on cleanup or the next boot.
 

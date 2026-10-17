@@ -18,6 +18,13 @@ GLOBAL LANDING_DIVERT_KERBIN_TOLERANCE IS 7.
 // Once committed to descent, keep flying without a Kerbin link. The original
 // orbital site selection still uses LANDING_REQUIRE_KERBIN and its margin.
 GLOBAL LANDING_DIVERT_REQUIRE_KERBIN IS 0.
+// One local candidate per guidance tick, with bounded search work/time.
+// Emergency slope allowance is opt-in and used only after normal failure.
+GLOBAL LANDING_DIVERT_SEARCH_RADIUS IS 1000.
+GLOBAL LANDING_DIVERT_SEARCH_STEP IS 100.
+GLOBAL LANDING_DIVERT_SEARCH_TIME IS 15.
+GLOBAL LANDING_DIVERT_SEARCH_DESCENT IS 5.
+GLOBAL LANDING_DIVERT_EMERGENCY_SLOPE IS 0.
 GLOBAL LANDING_MIN_IPU IS 2000.
 // Flexible economy descents brake to a downward flare entry, not a hover.
 // Precision profiles retain the original target-driven braking policy.

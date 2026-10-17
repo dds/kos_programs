@@ -126,6 +126,10 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
         SET thrustVec TO lmEconomyBrakeThrust(ctx["H_VEL"], ctx["V_SPEED"],
             targetVs, ctx["UP_VEC"], ctx["MAX_ACC"], ctx["GRAV"]).
     } ELSE {
+        IF ctx["DIVERT_PENDING"] {
+            SET targetVs TO -MIN(HIGH_DESCENT_SPEED, MAX(0, LANDING_DIVERT_SEARCH_DESCENT)).
+            IF ctx["DIVERT_SEARCH"]["EXHAUSTED"] { SET targetVs TO 0. }
+        }
         SET thrustVec TO lmBrakeThrust(ctx["H_VEL"], ctx["V_SPEED"],
             targetVs, ctx["UP_VEC"], ctx["MAX_ACC"], ctx["GRAV"]).
     }
@@ -201,7 +205,9 @@ GLOBAL FUNCTION _landingBrakeAlignTick {
     // Keep steering active and re-evaluate the envelope while throttle is zero.
     IF NOT steerInfo["ALIGNED"] { RETURN. }
 
-    IF gate["V_NOW"] {
+    IF ctx["DIVERT_PENDING"] {
+        _landingSetState(ctx, "BRAKING_BURN", "local terrain search").
+    } ELSE IF gate["V_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
@@ -233,7 +239,7 @@ GLOBAL FUNCTION _landingBrakingTick {
     LOCAL terminalReady IS _landingBottomRadar() <= TERMINAL_ALT.
     LOCAL coastEnvelope IS lmBrakeEnvelope(horizontalSpeed, downSpeed,
         ctx["PLAN_ACC"], ctx["BRAKE_GRAV"], MAX(0, LANDING_BRAKE_REACTION_TIME)).
-    IF NOT terminalReady AND horizontalSpeed <= APPROACH_HSPEED
+    IF NOT ctx["DIVERT_PENDING"] AND NOT terminalReady AND horizontalSpeed <= APPROACH_HSPEED
             AND burnHeight > coastEnvelope["V"] {
         // An early horizontal arrest must not turn into minutes of hovering
         // or backtracking. Re-enter coast and re-evaluate the full stop gate.
@@ -267,8 +273,12 @@ GLOBAL FUNCTION _landingBrakingTick {
         + " hs=" + ROUND(horizontalSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)
+        + " siteSearch=" + _landingBoolText(ctx["DIVERT_PENDING"])
         + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
         1, 2, 13, YELLOW, FALSE, brakeTransitionEta).
+
+    // A rejected candidate cannot hand control to the old remote target.
+    IF ctx["DIVERT_PENDING"] { RETURN. }
 
     IF NOT ctx["HAS_TARGET"] AND burnHeight > HOVER_ALT {
         _landingHudEtaNotice(ctx, "Vertical descent",

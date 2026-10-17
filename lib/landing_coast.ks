@@ -63,6 +63,10 @@ GLOBAL FUNCTION _landingCoastTick {
         SET landingAbortFlag TO TRUE.
         RETURN.
     }
+    IF ctx["DIVERT_PENDING"] {
+        _landingSetState(ctx, "BRAKE_ALIGN", "local terrain search").
+        RETURN.
+    }
     _landingSetSteering(ctx, lmRetroSteering(
         ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"])).
 

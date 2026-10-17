@@ -12,7 +12,7 @@ from check_launch_and_staging import body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = '\n'.join((ROOT / ('lib/' + name + '.ks')).read_text() for name in
-                    ('landing_math', 'landing_config', 'landing_main', 'landing_coast', 'landing_terminal', 'landing_brake', 'vessel_hardware'))
+                    ('landing_math', 'landing_config', 'landing_main', 'landing_coast', 'landing_terminal', 'landing_brake', 'landing_divert', 'vessel_hardware'))
 
 
 def tokens(source):
@@ -206,6 +206,7 @@ def check_terrain():
 def control_environment():
     env = environment()
     ctx = dict(TARGET_LAT=0, TARGET_LNG=0, UP_VEC=Vec((0,0,1)), POSITION=Vec((305,0,1000)),
+               DIVERT_PENDING=False, DIVERT_SEARCH={},
                H_VEL=Vec((0,0,0)), H_SPEED=0, V_SPEED=-10, MAX_ACC=.491*7.45, GRAV=.491,
                STATE_ENTERED=0, TARGET_REFINE_LOGGED=True, TARGET_REFINE_CLIMB_SINCE=0,
                HOVER_REFINED=False, HOVER_TERRAIN_DONE=True, HOVER_HOLD_BOTTOM=15)

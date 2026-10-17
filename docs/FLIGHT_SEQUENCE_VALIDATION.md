@@ -61,24 +61,20 @@ the later flight evidence below: it allowed wrong-direction thrust. The
 cause of the original 12 km ignition has not been established, and its
 conservative stage/terrain gates remain.
 
-RO8/RO9 Mun/Minmus economy profiles now enable `LANDING_FLEXIBLE_SITE=1`.
-An actual ballistic miss beyond the existing 20 km assist corridor triggers
-a nearby-site review before descent or after horizontal capture. Inside the terminal corridor, an
-estimated lateral translation/arrest time beyond
-`LANDING_APPROACH_MAX_TIME` (120 s) triggers the same review. This estimate
-is not a guaranteed touchdown deadline or a fuel budget. Replacements start
-at the actual timed Trajectories impact, receive coarse and fine terrain
-checks, and must pass slope and sunlight requirements. Kerbin view is optional
-for post-deorbit diversions by operator request; loss of a radio link alone
-must not abort an otherwise acceptable autonomous landing. Terminal replacements
-must also fit the time estimate. Failure requests manual review with checked
-cutoff, rather than silently accepting an unsuitable site. Precision
+RO8/RO9 Mun/Minmus economy profiles enable `LANDING_FLEXIBLE_SITE=1`.
+The original repair reviewed the ballistic impact with synchronous coarse/fine
+grids and returned to manual review on rejection. The later terrain-abort
+report below supersedes that behavior with incremental local validation and
+continued powered control. Candidate slope, sunlight and correction-time
+checks remain. Kerbin view is optional for post-deorbit diversions by operator
+request; loss of a link alone must not abort autonomous landing. The correction
+estimate is not a guaranteed touchdown deadline or fuel budget. Precision
 profiles retain their target and existing correction policy.
 
 Accepted diversions preserve unrelated mission overrides and the return leg.
 Original requested coordinates remain in the active descent context for the
-touchdown miss report. Fine surveying now finishes before powered guidance,
-instead of blocking with a stale positive command in APPROACH. A scoped
+touchdown miss report. Precision fine surveying finishes before powered
+guidance; flexible missions now use incremental checks. A scoped
 2000-IPU landing budget reduces scheduling delays; normal cleanup or the next
 boot restores the previous value. No KSP loop-latency bound is claimed.
 Powered descent loads shared light geometry, without orbital site search or
@@ -224,6 +220,39 @@ retains three seconds of ignition delay and models changing centrifugal
 support. It reaches terminal capture at about 567 m with no modeled high
 hover. This does not model actual attitude, terrain, fuel capacity, mass
 changes, terminal site diversions or touchdown.
+
+### Terrain rejection must preserve descent control
+
+The next flight reached about 857 m radar altitude. Its final BRAKE sample
+showed d=29,584 m, hs=23.6 m/s, vs=-21.4/-26.2 and throttle=1. After speed
+fell below 18 m/s, a ballistic-site review cut thrust and ran two terrain grids.
+The candidate had grade=0.238 (about 13.4°), above the 5° limit. Sun/radio
+passed. Returning FALSE then aborted `landExecute` and handed to the prompt.
+The operator reported downward speed 28.28 m/s, horizontal speed 17.55 m/s
+and 1020 m/s remaining. Thus terrain rejection, not fuel exhaustion, was the
+observed immediate cause. Only a save during descent was available.
+
+Flexible landing setup now skips remote synchronous grids. At low horizontal
+speed, it tries the saved target if reachable, then one candidate per tick
+near its predicted horizontal stopping point. Every candidate receives the
+20 m slope check, clearance, correction-time and sunlight/radio tests. Rejecting
+a point preserves guidance, and pending searches block handoff to the remote
+target. Search work is bounded by radius, spacing and elapsed time. Normal
+5° rejection remains; the operator explicitly authorized a second, emergency
+pass up to 15°. Economy profiles enable it, and accepted-site logs identify
+the active limit. Failure of all permitted passes retains powered arrest
+with an intervention message rather than causing an unpowered prompt hold.
+The alignment, stage reserve and physical burn-end cutoff checks remain.
+
+The source-driven failure replay starts at 857 m, vs=-28.28, hs=17.55,
+constant acceleration 2.76 m/s2 and a three-second thrust delay. Prescribed
+grade=0.238 terrain is rejected normally and accepted at 15.2 s only in the
+authorized emergency pass. It hands to terminal guidance above 140 m without
+aborting control. Other fixtures cover a steep center with a flat neighbor,
+one-candidate work bounds, complete spiral coverage, no Trajectories, rejected
+light/clearance/reachability, >15° rejection, default strict policy and
+precision boot surveys. This is not KSP terrain/attitude/CPU validation, a
+fuel budget, or proof of touchdown stability on a 13.4° slope.
 
 ## End-of-burn contract
 

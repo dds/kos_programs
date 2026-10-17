@@ -393,6 +393,21 @@ Looks like Python/JS; is neither.
   three-second ignition delay and changing centrifugal support; modeled
   terminal capture is ~567 m, with no high hover. Actual reserve/target
   readings at that later position and touchdown outcome remain pending.
+  The next report reached ~857 m but aborted after a terrain diversion:
+  d=29584, hs=23.6->17.55, vs=-21.4->-28.28, remaining dV~1020. The
+  candidate grade=.238 (~13.4 deg) failed the normal 5-deg gate; synchronous
+  cutoff/grids plus FALSE returned the craft to an unpowered prompt hold.
+  Do not reinstate that committed-descent abort for candidate rejection.
+  Flexible missions now skip boot grids, validate one local candidate/tick
+  after horizontal arrest, and retain powered braking while searching.
+  The operator explicitly authorized up to 15 deg ONLY after normal search
+  failure; economy profiles set LANDING_DIVERT_EMERGENCY_SLOPE=15, default0.
+  Every tier keeps fine slope, clearance, correction-time and light/radio
+  checks. Both tiers exhausted => powered arrest/intervention, no accepted
+  unsafe target. End-of-burn physical cutoff and alignment safeguards remain.
+  check_landing_divert models the reported low-altitude restart with constant
+  2.76 m/s2, 3 s latency and .238 terrain: emergency acceptance at15.2s,
+  terminal handoff >140 m; not flight/CPU/fuel/terrain-mesh validation.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered

@@ -142,6 +142,7 @@ GLOBAL FUNCTION _landingTargetRefineTick {
 
 GLOBAL FUNCTION _landingFinalTerrainCheck {
     PARAMETER ctx.
+    IF LANDING_FLEXIBLE_SITE > 0 { RETURN. }
     IF NOT ctx["HOVER_TERRAIN_DONE"] {
         LOCAL originalTerrainRadius IS TERRAIN_CHECK_RADIUS.
         SET TERRAIN_CHECK_RADIUS TO 20.
@@ -166,6 +167,10 @@ GLOBAL FUNCTION _landingApproachTick {
 
     IF NOT landingReviewReachableSite(ctx) {
         SET landingAbortFlag TO TRUE.
+        RETURN.
+    }
+    IF ctx["DIVERT_PENDING"] {
+        _landingSetState(ctx, "BRAKING_BURN", "local terrain search").
         RETURN.
     }
     IF _landingBottomRadar() > TERMINAL_ALT {

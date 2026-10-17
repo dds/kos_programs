@@ -716,12 +716,17 @@ GLOBAL FUNCTION landExecute {
 
     LOCAL targetElevation IS 0.
     LOCAL terrainDone IS FALSE.
-    IF _hasTarget {
+    IF _hasTarget AND LANDING_FLEXIBLE_SITE <= 0 {
         LOCAL terrainResult IS _landingTerrainCheck(TARGET_LAT, TARGET_LNG).
         SET terrainDone TO TRUE.
         SET TARGET_LAT TO terrainResult["LAT"].
         SET TARGET_LNG TO terrainResult["LNG"].
         SET targetElevation TO terrainResult["ELEVATION"].
+    } ELSE IF _hasTarget {
+        SET targetElevation TO LATLNG(TARGET_LAT, TARGET_LNG):TERRAINHEIGHT.
+        // A mid-descent reboot must not block on grids around an old site.
+        // Flexible-site validation runs incrementally after velocity arrest.
+        SET terrainDone TO TRUE.
     }
     LOCAL crossPid IS PIDLOOP(
         CROSS_PID_KP,
@@ -756,6 +761,8 @@ GLOBAL FUNCTION landExecute {
         "MCC_SETTLE_UNTIL", 0,
         "TARGET_STEERING", SHIP:UP:VECTOR,
         "BRAKE_ALIGN_BLOCKED", FALSE,
+        "DIVERT_PENDING", FALSE,
+        "DIVERT_SEARCH", LEXICON(),
         "RESERVE_STAGE", -999,
         "RESERVE_ACC", 0,
         "STAGE_UNTIL", 0,
@@ -766,10 +773,9 @@ GLOBAL FUNCTION landExecute {
         "TARGET_THROTTLE", 0
     ).
     _landingCacheTick(ctx).
-    IF NOT landingReviewReachableSite(ctx, TRUE) { SET landingAbortFlag TO TRUE. }
-    // Complete the fine survey while throttle is zero. Running its terrain
-    // grid in APPROACH leaves a stale positive command driving the vessel
-    // for as long as the synchronous scan takes at the current CPU budget.
+    IF NOT landingReviewReachableSite(ctx) { SET landingAbortFlag TO TRUE. }
+    // Precision surveys finish before thrust. Flexible missions use bounded
+    // per-tick site validation instead of blocking on a remote target grid.
     IF _hasTarget AND NOT landingAbortFlag { _landingFinalTerrainCheck(ctx). }
     stateSet("landing_state", "COAST").
 
