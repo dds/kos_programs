@@ -79,6 +79,9 @@ def check_descent_efficiency():
     assert old['hover']>30 and new['hover']<1,(old,new)
     assert new['spent']<old['spent']*.9 and new['elapsed']<old['elapsed'],(old,new)
     print(f'PASS: paired model hover {old["hover"]:.1f}->{new["hover"]:.1f} s; brake-to-approach impulse {old["spent"]:.1f}->{new["spent"]:.1f} m/s (not whole-flight savings)')
+
+
+def check_staged_and_curved_descent():
     for args in ((.491,7.45,120,60),(1.63,12,400,60,3)):
         result=simulate(*args,economy=True,dt=.2)
         assert result['hover']<1 and result['minimum']>100
@@ -102,4 +105,5 @@ if __name__=='__main__':
     check_vector_and_flare_budget()
     check_ballistic_gate()
     check_descent_efficiency()
+    check_staged_and_curved_descent()
     check_reported_weak_lander()

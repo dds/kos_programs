@@ -8,11 +8,13 @@ are NOT compiled byte sizes.
 import argparse
 import collections
 import re
+from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@lru_cache(maxsize=512)
 def mask(source):
     """Preserve offsets/newlines while hiding comments and string contents."""
     return re.sub(r'"[^"\n]*"|//[^\n]*',

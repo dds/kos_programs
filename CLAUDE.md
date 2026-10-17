@@ -82,6 +82,12 @@ Looks like Python/JS; is neither.
    conservative in mission-critical paths, log generously (`STATS` lines),
    and prefer self-correcting loops (re-measure → re-plan) over open-loop
    precision.
+   Routine individual checks should take less than one second. Optimize the
+   fixture harness before reducing frequency; preserve assertions, integration
+   steps and tolerances. `make check-times` profiles files and individual calls;
+   `make check-all` includes the explicitly requested `make check-slow` pass.
+   Run that full pass when changing the direct-ascent predictor or its harness.
+   The routine pass retains direct-return context, conic and orchestration checks.
 
 ## Architecture in one screen
 

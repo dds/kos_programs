@@ -4,6 +4,7 @@ Run: python3 -B scripts/check_deorbit_geometry.py
 """
 import math
 import re
+from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -22,7 +23,7 @@ class Vec(np.ndarray):
 
     @property
     def MAG(self):
-        return float(np.linalg.norm(self))
+        return math.sqrt(float(np.dot(self, self)))
 
     @property
     def NORMALIZED(self):
@@ -35,6 +36,14 @@ def dot(a, b):
 
 def exclude(axis, vec):
     return vec - dot(axis, vec) / dot(axis, axis) * axis
+
+
+def cross(a, b):
+    # Fixture vectors are always three-dimensional; avoid NumPy's general
+    # broadcasting/axis dispatch for each small vector operation.
+    ax, ay, az = a
+    bx, by, bz = b
+    return Vec((ay*bz-az*by, az*bx-ax*bz, ax*by-ay*bx))
 
 
 class Geo:
@@ -61,25 +70,39 @@ def expressions(source, env):
     return True
 
 
-def evaluate(expr, env):
+@lru_cache(maxsize=8192)
+def python_expression(expr):
     # Preserve KerboScript string contents: colons in volume paths and words
     # such as TRUE inside quotes must not be translated as code.
     literals = {}
     def keep_literal(match):
         name = f'_ks_literal_{len(literals)}'
-        literals[name] = match[0][1:-1]
+        literals[name] = repr(match[0][1:-1])
         return name
     expr = re.sub(r'"[^"\n]*"', keep_literal, expr)
     expr = ' '.join(expr.split()).replace(':', '.').replace('^', '**').replace('<>', '!=')
     for old, new in (('TRUE', 'True'), ('FALSE', 'False'), ('AND', 'and'), ('OR', 'or'), ('NOT', 'not')):
         expr = re.sub(rf'\b{old}\b', new, expr)
     expr = re.sub(r'(?<![<>!=])=(?!=)', '==', expr)
-    helpers = dict(VDOT=dot, VXCL=exclude, VCRS=lambda a, b: Vec(np.cross(a, b)), MIN=min, MAX=max, ABS=abs,
-                   ARCSIN=lambda x: math.degrees(math.asin(x)),
-                   ARCCOS=lambda x: math.degrees(math.acos(x)),
-                   ARCTAN2=lambda y, x: math.degrees(math.atan2(y, x)),
-                   LEXICON=lambda *xs: dict(zip(xs[::2], xs[1::2])))
-    return eval(expr, {'__builtins__': {}, **helpers}, dict(env, **literals))
+    return re.sub(r'\b_ks_literal_\d+\b', lambda m: literals[m[0]], expr)
+
+
+EVAL_GLOBALS = dict(__builtins__={}, VDOT=dot, VXCL=exclude, VCRS=cross,
+                    MIN=min, MAX=max, ABS=abs,
+                    ARCSIN=lambda x: math.degrees(math.asin(x)),
+                    ARCCOS=lambda x: math.degrees(math.acos(x)),
+                    ARCTAN2=lambda y, x: math.degrees(math.atan2(y, x)),
+                    LEXICON=lambda *xs: dict(zip(xs[::2], xs[1::2])))
+
+
+@lru_cache(maxsize=8192)
+def compiled_expression(expr):
+    return compile(python_expression(expr), '<KerboScript expression fixture>', 'eval')
+
+
+def evaluate(expr, env):
+    # Cache code, never values: fixture environments and live flags can change.
+    return eval(compiled_expression(expr), EVAL_GLOBALS, env)
 
 
 def fixture():

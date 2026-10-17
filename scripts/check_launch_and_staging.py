@@ -7,6 +7,7 @@ Run: python3 scripts/check_launch_and_staging.py
 
 import math
 import re
+from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -32,7 +33,8 @@ def body(source, name):
     raise AssertionError(name)
 
 
-def evaluate(expression, **values):
+@lru_cache(maxsize=1024)
+def compiled_expression(expression):
     """Only the arithmetic/boolean expressions used by these fixtures."""
     expression = ' '.join(expression.split()).replace(':', '.')
     expression = expression.replace('<>', '!=')
@@ -40,14 +42,20 @@ def evaluate(expression, **values):
     expression = re.sub(r'\bOR\b', 'or', expression)
     expression = re.sub(r'\bNOT\b', 'not', expression)
     expression = re.sub(r'(?<![<>!=])=(?!=)', '==', expression)
-    helpers = dict(ABS=abs, MIN=min, MAX=max,
+    return compile(expression, '<launch/staging expression fixture>', 'eval')
+
+
+EVAL_GLOBALS = dict(__builtins__={}, ABS=abs, MIN=min, MAX=max,
                    SIN=lambda x: math.sin(math.radians(x)),
                    COS=lambda x: math.cos(math.radians(x)),
                    TAN=lambda x: math.tan(math.radians(x)),
                    ARCSIN=lambda x: math.degrees(math.asin(x)),
                    ARCCOS=lambda x: math.degrees(math.acos(x)),
                    _windowNorm360=lambda x: x % 360)
-    return eval(expression, {'__builtins__': {}, **helpers}, values)
+
+
+def evaluate(expression, **values):
+    return eval(compiled_expression(expression), EVAL_GLOBALS, values)
 
 
 def capture(pattern, source):

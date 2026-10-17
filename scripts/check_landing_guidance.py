@@ -5,9 +5,10 @@ Run: python3 -B scripts/check_landing_guidance.py
 """
 import math
 import re
+from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace as NS
-from check_deorbit_geometry import Vec, evaluate, dot
+from check_deorbit_geometry import Vec, evaluate, dot, python_expression, EVAL_GLOBALS
 from check_launch_and_staging import body
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,64 +88,128 @@ class Broken(Exception):
     pass
 
 
+def freeze(nodes):
+    return tuple((statement, freeze(yes), freeze(no)) for statement, yes, no in nodes)
+
+
+@lru_cache(maxsize=1024)
+def compile_nodes(nodes):
+    """Translate the same fixture subset once, rather than interpret each tick.
+
+    This is Python fixture code, not a kOS compiler. Keep parse/run available
+    for checks that filter source statements or mutate a parsed tree.
+    """
+    lines, counters = [], []
+    def expression(source):
+        try:
+            compile(python_expression(source), '<fixture expression>', 'eval')
+        except SyntaxError:
+            return f'__fixture_evaluate({source!r}, __fixture_env)'
+        return python_expression(source)
+    def emit(text, indent):
+        lines.append('    '*indent + text)
+    def block(items, indent):
+        if not items:
+            emit('pass', indent)
+        for statement, yes, no in items:
+            if statement.startswith('IF '):
+                emit('if ' + expression(statement[3:]) + ':', indent)
+                block(yes, indent+1)
+                if no:
+                    emit('else:', indent)
+                    block(no, indent+1)
+            elif statement.startswith(('FOR ', 'UNTIL ')):
+                if statement.startswith('FOR '):
+                    match = re.fullmatch(r'FOR (\w+) IN (.*)', statement, re.S)
+                    emit(f'for {match[1]} in {expression(match[2])}:', indent)
+                else:
+                    counter = f'__fixture_steps_{len(counters)}'
+                    counters.append(counter)
+                    emit(f'{counter} = 0', indent)
+                    emit('while not (' + expression(statement[6:]) + '):', indent)
+                emit('try:', indent+1)
+                block(yes, indent+2)
+                emit('except __fixture_Broken:', indent+1)
+                emit('break', indent+2)
+                if statement.startswith('UNTIL '):
+                    emit(f'{counter} += 1', indent+1)
+                    emit(f'assert {counter} < 10000, "fixture loop did not converge"', indent+1)
+            elif statement.startswith('PARAMETER '):
+                match = re.fullmatch(r'PARAMETER (\w+)(?: IS (.*))?', statement, re.S)
+                emit(f'if not __fixture_has({match[1]!r}):', indent)
+                if match[2] is None:
+                    emit(f'raise __fixture_AssertionError({statement!r})', indent+1)
+                else:
+                    emit(f'{match[1]} = {expression(match[2])}', indent+1)
+            elif statement.startswith(('LOCAL ', 'SET ')):
+                match = re.fullmatch(r'(?:LOCAL (.*?) IS|SET (.*?) TO) (.*)', statement, re.S)
+                assert match, statement
+                emit('fixtureValue = ' + expression(match[3]), indent)
+                emit((match[1] or match[2]).replace(':', '.') + ' = fixtureValue', indent)
+            elif statement.startswith('RETURN'):
+                value = expression(statement[7:]) if statement != 'RETURN' else 'None'
+                emit(f'raise __fixture_Returned({value})', indent)
+            elif statement == 'BREAK':
+                emit('raise __fixture_Broken()', indent)
+            elif statement.startswith(('WAIT ', 'ADD ')):
+                kind, expr = statement.split(' ', 1)
+                emit(f'fixture_{"wait" if kind == "WAIT" else "add"}({expression(expr)})', indent)
+            elif statement.startswith(('mLog', '_landingHud')):
+                emit('pass', indent)
+            elif statement == 'STAGE':
+                emit('stage_event()', indent)
+            elif statement.startswith('LOCK '):
+                emit(f'fixture_lock({statement!r})', indent)
+            else:
+                expr = statement + '()' if statement.endswith((':ACTIVATE', ':SHUTDOWN')) else statement
+                # Unsupported primitives in unvisited branches remain lazy,
+                # just as with the old interpreter.
+                try:
+                    compile(python_expression(expr), '<fixture statement>', 'eval')
+                except SyntaxError:
+                    emit(f'__fixture_evaluate({expr!r}, __fixture_env)', indent)
+                else:
+                    emit(python_expression(expr), indent)
+    block(nodes, 0)
+    return compile('\n'.join(lines), '<KerboScript control fixture>', 'exec'), tuple(counters)
+
+
+def execute(compiled, env):
+    code, counters = compiled
+    helpers = dict(EVAL_GLOBALS, __fixture_Returned=Returned, __fixture_Broken=Broken,
+                   __fixture_AssertionError=AssertionError, __fixture_has=env.__contains__,
+                   __fixture_evaluate=evaluate, __fixture_env=env)
+    # Generated loop counters must not leak into an externally inspected env.
+    previous = {key: env[key] for key in counters if key in env}
+    try:
+        exec(code, helpers, env)
+    finally:
+        for key in counters:
+            env.pop(key, None)
+        env.update(previous)
+
+
 def run(nodes, env):
-    for statement, yes, no in nodes:
-        if statement.startswith('IF '):
-            run(yes if evaluate(statement[3:], env) else no, env)
-        elif statement.startswith('FOR '):
-            match = re.fullmatch(r'FOR (\w+) IN (.*)', statement, re.S)
-            for value in evaluate(match[2], env):
-                env[match[1]] = value
-                try: run(yes, env)
-                except Broken: break
-        elif statement.startswith('UNTIL '):
-            steps = 0
-            while not evaluate(statement[6:], env):
-                try: run(yes, env)
-                except Broken: break
-                steps += 1
-                assert steps < 10000, 'fixture loop did not converge'
-        elif statement.startswith('PARAMETER '):
-            match = re.fullmatch(r'PARAMETER (\w+)(?: IS (.*))?', statement, re.S)
-            if match[1] not in env:
-                assert match[2] is not None, statement
-                env[match[1]] = evaluate(match[2], env)
-        elif statement.startswith(('LOCAL ', 'SET ')):
-            match = re.fullmatch(r'(?:LOCAL (.*?) IS|SET (.*?) TO) (.*)', statement, re.S)
-            assert match, statement
-            env['fixtureValue'] = evaluate(match[3], env)
-            exec((match[1] or match[2]).replace(':', '.') + ' = fixtureValue', {'__builtins__': {}}, env)
-        elif statement.startswith('RETURN'):
-            raise Returned(evaluate(statement[7:], env) if statement != 'RETURN' else None)
-        elif statement == 'BREAK':
-            raise Broken()
-        elif statement.startswith('WAIT '):
-            env['fixture_wait'](evaluate(statement[5:], env))
-        elif statement.startswith('ADD '):
-            env['fixture_add'](evaluate(statement[4:], env))
-        elif statement.startswith(('mLog', '_landingHud')):
-            pass
-        elif statement == 'STAGE':
-            env['stage_event']()
-        elif statement.startswith('LOCK '):
-            env['fixture_lock'](statement)
-        elif statement.endswith((':ACTIVATE', ':SHUTDOWN')):
-            evaluate(statement + '()', env)
-        else:
-            evaluate(statement, env)
+    execute(compile_nodes(freeze(nodes)), env)
 
 
 PARSED = {}
+PARSED_SOURCE = None
+
 
 def call(name, env, *args):
+    global PARSED_SOURCE
+    if SOURCES is not PARSED_SOURCE:
+        PARSED.clear()
+        PARSED_SOURCE = SOURCES
     if name not in PARSED:
         source = body(SOURCES, name)
         params = re.findall(r'PARAMETER (\w+)', source)
-        PARSED[name] = (params, parse(source))
-    params, nodes = PARSED[name]
+        PARSED[name] = (params, compile_nodes(freeze(parse(source))))
+    params, compiled = PARSED[name]
     local = dict(env, **dict(zip(params, args)))
     try:
-        run(nodes, local)
+        execute(compiled, local)
     except Returned as result:
         return result.value
 

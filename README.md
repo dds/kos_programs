@@ -801,6 +801,14 @@ Precision targets and interrupted/suborbital recovery retain their original
 point policy. A retained unflown node can now hold with `sun-site-margin` or
 `kerbin-site-margin`; keep it for inspection or reselect with
 `RUNPATH("0:/cmd/landlight.ks", "apply", "SUNLIT", 1).` before replanning.
+The pause after `Economy planning region radius=...` is the light/radio
+ground-track search: about 512 samples across four orbits by default, with
+body predictions, eclipse checks and time-window checks. It logs its start,
+progress every 64 samples and completion, including elapsed game seconds,
+eligible sites and window-check counts. It temporarily uses the existing
+landing CPU budget (capped at 2000 instructions/update), then restores it;
+ABORT cancels selection, and the existing boot preamble recovers an interrupted
+CPU setting. This needs the updated library, with no boot-module replacement.
 `python3 scripts/replay_deorbit.py <snapshot>` independently replays bound,
 same-body prograde/retrograde-only nodes from these records. It reports the
 rotating target's closest pass, height and speed; it excludes powered flight,
@@ -1332,8 +1340,16 @@ state converter.
 
 ## Development
 
-- `make check` — repository contracts and source-driven numerical/control
-  regression fixtures (Python 3 + NumPy; does not run kOS or KSP).
+- `make check` — routine repository contracts and source-driven numerical/control
+  fixtures (Python 3 + NumPy; does not run kOS or KSP). Individual routine
+  check calls target under one second; a file can contain several calls.
+- `make check-slow` — explicitly run the full finite-burn predictor/independent
+  Heun comparison, which still exceeds one second after optimization.
+- `make check-all` — routine and slow checks together.
+- `make check-times` — run all checks and list the slowest files and individual
+  calls. For machine-readable results:
+  `python3 -B scripts/run_checks.py --suite all --timings --json /tmp/kos-check-times.json`.
+  See [check performance](docs/CHECK_PERFORMANCE.md) for measurements and scope.
 - `make audit` — phase/dependency coverage and source-token counts by band,
   including warnings for guarded but unavailable handlers.
 - [Codebase audit](docs/CODEBASE_AUDIT.md) — findings, repairs, remaining

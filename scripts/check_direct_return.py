@@ -4,6 +4,7 @@ No kOS VM, mesh/attitude/staging, or native KSP escape-patch validation.
 """
 import math
 import re
+import argparse
 from types import SimpleNamespace as NS
 
 import numpy as np
@@ -42,17 +43,21 @@ def context():
 
 def reference_coast(pos, vel, mu, soi, duration):
     """Independent numerical two-body propagation; no anomaly formula."""
-    state = np.r_[pos, vel].astype(float)
+    # Six scalar components avoid allocating tiny NumPy arrays on every RK4
+    # substep. Keep the independent algorithm, one-second step and tolerances.
+    state = tuple(map(float, (*pos, *vel)))
     def rate(st):
-        return np.r_[st[3:], -mu*st[:3]/np.linalg.norm(st[:3])**3]
+        scale = -mu/math.sqrt(st[0]**2+st[1]**2+st[2]**2)**3
+        return (*st[3:], scale*st[0], scale*st[1], scale*st[2])
     steps = math.ceil(duration/1.)
     dt = duration/steps
     for _ in range(steps):
         k1 = rate(state)
-        k2 = rate(state+dt*k1/2)
-        k3 = rate(state+dt*k2/2)
-        k4 = rate(state+dt*k3)
-        state += dt*(k1+2*k2+2*k3+k4)/6
+        k2 = rate(tuple(x+dt*k/2 for x,k in zip(state,k1)))
+        k3 = rate(tuple(x+dt*k/2 for x,k in zip(state,k2)))
+        k4 = rate(tuple(x+dt*k for x,k in zip(state,k3)))
+        state = tuple(x+dt*(a+2*b+2*c+d)/6 for x,a,b,c,d in zip(state,k1,k2,k3,k4))
+    state = np.array(state)
     assert abs(np.linalg.norm(state[:3])-soi) < .5
     return state
 
@@ -84,23 +89,27 @@ def check_conic_propagation():
 
 def reference_powered(ctx, program):
     """Independent small-step Heun ascent in the fixture's equatorial plane."""
-    pos, vel = np.array(ctx['POS']), np.array(ctx['VEL'])
+    pos, vel = tuple(map(float, ctx['POS'])), tuple(map(float, ctx['VEL']))
     duration = ctx['VE']/ctx['ACC']*(1-math.exp(-program['DV']/ctx['VE']))
     steps = math.ceil(duration/.01)
     dt = duration/steps
+    acc, exhaust, mu, clear = (ctx[key] for key in ('ACC', 'VE', 'MU', 'CLEAR_TIME'))
+    floor, turn, power = (program[key] for key in ('FLOOR', 'TURN', 'POWER'))
     def acceleration(point, time):
-        radius = np.linalg.norm(point)
-        radial = point/radius
+        x, y, z = point
+        radius = math.sqrt(x*x+y*y+z*z)
         # AZ=90 in this oracle; no cross products or production helper calls.
-        tangent = np.array((-radial[1], radial[0], 0))
-        fraction = max(0, time-ctx['CLEAR_TIME'])/program['TURN']
-        pitch = math.radians(program['FLOOR']+(90-program['FLOOR'])*math.exp(-fraction**program['POWER']))
-        return ctx['ACC']/(1-ctx['ACC']*time/ctx['VE'])*(radial*math.sin(pitch)+tangent*math.cos(pitch))-ctx['MU']*radial/radius**2
+        fraction = max(0, time-clear)/turn
+        pitch = math.radians(floor+(90-floor)*math.exp(-fraction**power))
+        thrust = acc/(1-acc*time/exhaust)
+        radial = thrust*math.sin(pitch)/radius-mu/radius**3
+        tangent = thrust*math.cos(pitch)/radius
+        return (radial*x-tangent*y, radial*y+tangent*x, radial*z)
     for step in range(steps):
         first = acceleration(pos, step*dt)
-        second = acceleration(pos+vel*dt, (step+1)*dt)
-        pos += dt*vel + dt*dt*first/2
-        vel += dt*(first+second)/2
+        second = acceleration(tuple(x+v*dt for x,v in zip(pos,vel)), (step+1)*dt)
+        pos = tuple(x+dt*v+dt*dt*a/2 for x,v,a in zip(pos,vel,first))
+        vel = tuple(v+dt*(a+b)/2 for v,a,b in zip(vel,first,second))
     env = environment()
     coast = env['rdCoastToSoi'](Vec(pos), Vec(vel), ctx['MU'], ctx['SOI'])
     assert coast['VALID']
@@ -216,7 +225,15 @@ def check_preview_controls():
 
 
 if __name__ == '__main__':
-    check_conic_propagation()
-    check_snapshot()
-    check_powered_prediction()
-    check_preview_controls()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--slow', action='store_true', help='include the full finite-burn/Heun comparison')
+    parser.add_argument('--slow-only', action='store_true', help='run only the finite-burn/Heun comparison')
+    args = parser.parse_args()
+    if not args.slow_only:
+        check_conic_propagation()
+        check_snapshot()
+        check_preview_controls()
+    if args.slow or args.slow_only:
+        check_powered_prediction()
+    else:
+        print('SKIP: full finite-burn/Heun comparison; request make check-slow or --slow')
