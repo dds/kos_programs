@@ -103,6 +103,7 @@ GLOBAL FUNCTION landingLightAt {
     PARAMETER lng.
     PARAMETER ut.
     PARAMETER kerbinTolerance IS 0.
+    PARAMETER requireKerbin IS LANDING_REQUIRE_KERBIN.
     LOCAL out IS LEXICON("OK", FALSE, "REASON", "invalid-light-config",
         "SUN", -90, "KERBIN", -90, "RISING", FALSE, "SETTING", FALSE).
     IF LANDING_LIGHT_MODE <> "ANY" AND LANDING_LIGHT_MODE <> "SUNLIT"
@@ -131,7 +132,7 @@ GLOBAL FUNCTION landingLightAt {
     // Independent live-position check for the stock Mun's circular tidal
     // lock: the same site must not acquire a different Kerbin view while
     // waiting in orbit. Hold if the runtime prediction convention disagrees.
-    IF LANDING_REQUIRE_KERBIN > 0 AND SHIP:BODY:NAME = "Mun" {
+    IF requireKerbin > 0 AND SHIP:BODY:NAME = "Mun" {
         LOCAL moonOrbit IS SHIP:BODY:ORBIT.
         IF moonOrbit:ECCENTRICITY < 0.0001
                 AND ABS(SHIP:BODY:ROTATIONPERIOD - moonOrbit:PERIOD) < moonOrbit:PERIOD * 0.0001 {
@@ -155,8 +156,10 @@ GLOBAL FUNCTION landingLightAt {
         }
     }
     SET out["REASON"] TO "kerbin-below-margin".
-    LOCAL kerbinFloor IS MAX(0, LANDING_KERBIN_MIN_ELEV - MAX(0, kerbinTolerance)).
-    IF LANDING_REQUIRE_KERBIN > 0 AND out["KERBIN"] < kerbinFloor { RETURN out. }
+    // Operator-approved diversion allowance; keep it bounded even if the
+    // caller supplies an excessive tolerance. Default callers retain +5.
+    LOCAL kerbinFloor IS MAX(-2, LANDING_KERBIN_MIN_ELEV - MAX(0, kerbinTolerance)).
+    IF requireKerbin > 0 AND out["KERBIN"] < kerbinFloor { RETURN out. }
     SET out["OK"] TO TRUE.
     SET out["REASON"] TO "ok".
     RETURN out.
@@ -169,11 +172,12 @@ GLOBAL FUNCTION landingLightWindow {
     PARAMETER lng.
     PARAMETER ut.
     PARAMETER kerbinTolerance IS 0.
-    LOCAL center IS landingLightAt(lat, lng, ut, kerbinTolerance).
+    PARAMETER requireKerbin IS LANDING_REQUIRE_KERBIN.
+    LOCAL center IS landingLightAt(lat, lng, ut, kerbinTolerance, requireKerbin).
     IF NOT center["OK"] { RETURN center. }
     FOR fraction IN LIST(-1, -0.5, 0.5, 1) {
         LOCAL sample IS landingLightAt(lat, lng,
-            ut + fraction * MAX(60, LANDING_LIGHT_TIME_MARGIN), kerbinTolerance).
+            ut + fraction * MAX(60, LANDING_LIGHT_TIME_MARGIN), kerbinTolerance, requireKerbin).
         IF NOT sample["OK"] { RETURN sample. }
     }
     RETURN center.

@@ -217,7 +217,7 @@ def check_windows_and_search():
     env['lmGroundGeoAt'] = lambda ut: Geo(0, 179, env['SHIP'].BODY, np.eye(3))
     assert not env['landingLitGroundTrack']()['FOUND']
     # Reject a center-time success if any sampled touchdown margin fails.
-    env['landingLightAt'] = lambda lat, lng, ut, tolerance=0: dict(OK=ut <= 1000, REASON='test-window')
+    env['landingLightAt'] = lambda lat, lng, ut, tolerance=0, required=1: dict(OK=ut <= 1000, REASON='test-window')
     assert not env['landingLightWindow'](0, -75, 1000)['OK']
     # Retained nodes cannot bypass missing timing or policy failures.
     env = environment(kerbin_longitude=-45)
@@ -339,15 +339,25 @@ def check_diversion_radio_margin():
     assert relaxed['OK'] and 0 < relaxed['KERBIN'] < 5
     assert env['landingLightWindow'](0,0,now,5)['OK']
     assert not env['landingLightWindow'](0,0,now)['OK']
-    # Tolerance never permits a geometric horizon violation, even if huge.
-    env=environment(kerbin_longitude=91)
+    # Operator-approved -1.11 degree case passes only under diversion policy.
+    env=environment(kerbin_longitude=90.16)
+    env['LANDING_LIGHT_MODE']='ANY'
+    negative=env['landingLightAt'](0,0,now,7)
+    assert negative['OK'] and -1.12 < negative['KERBIN'] < -1.1
+    assert env['landingLightWindow'](0,0,now,7)['OK']
+    assert not env['landingLightAt'](0,0,now)['OK']
+    # The allowance is still bounded at -2 degrees, even if huge.
+    env=environment(kerbin_longitude=94)
     env['LANDING_LIGHT_MODE']='ANY'
     assert not env['landingLightAt'](0,0,now,100)['OK']
+    assert env['landingLightWindow'](0,0,now,7,0)['OK']
+    assert env['LANDING_REQUIRE_KERBIN']==1  # No global policy mutation.
     # Solar policy remains active under the radio tolerance.
     env=environment(kerbin_longitude=87,sun_longitude=180)
     env['LANDING_LIGHT_MODE']='SUNLIT'
     assert env['landingLightAt'](0,0,now,5)['REASON']=='sun-below-margin'
-    print('PASS: diversion tolerance accepts 0-5 degree Kerbin margins; planning remains strict; horizon and Sun rejection remain active')
+    assert env['landingLightAt'](0,0,now,7,0)['REASON']=='sun-below-margin'
+    print('PASS: -1.11 degree allowance and link-free diversion; strict planning, optional -2 degree floor and Sun rejection remain active')
 
 
 if __name__ == '__main__':

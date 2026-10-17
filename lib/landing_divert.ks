@@ -55,12 +55,13 @@ GLOBAL FUNCTION landingReviewReachableSite {
     }
     LOCAL grade IS landingTerrainGrade(site["LAT"], site["LNG"], 20).
     LOCAL light IS landingLightWindow(site["LAT"], site["LNG"], impactUT,
-        LANDING_DIVERT_KERBIN_TOLERANCE).
+        LANDING_DIVERT_KERBIN_TOLERANCE, LANDING_DIVERT_REQUIRE_KERBIN).
     IF grade > TAN(LANDING_TERRAIN_MAX_SLOPE) OR NOT light["OK"] {
         mLogError("Economy diversion rejected: terrain grade=" + ROUND(grade,3)
             + " light/radio=" + light["REASON"]
             + " kerbin=" + ROUND(light["KERBIN"],2)
-            + " min=" + MAX(0, LANDING_KERBIN_MIN_ELEV - LANDING_DIVERT_KERBIN_TOLERANCE)
+            + " requireKerbin=" + LANDING_DIVERT_REQUIRE_KERBIN
+            + " min=" + MAX(-2, LANDING_KERBIN_MIN_ELEV - LANDING_DIVERT_KERBIN_TOLERANCE)
             + ". Original target retained.").
         RETURN FALSE.
     }
@@ -91,7 +92,8 @@ GLOBAL FUNCTION landingReviewReachableSite {
     mLogWarn("STATS landing-divert shift=" + ROUND(shift,0)
         + "m lat=" + TARGET_LAT + " lng=" + TARGET_LNG
         + " grade=" + ROUND(grade,3) + " sun=" + ROUND(light["SUN"],1)
-        + " kerbin=" + ROUND(light["KERBIN"],1)).
+        + " kerbin=" + ROUND(light["KERBIN"],1)
+        + " requireKerbin=" + LANDING_DIVERT_REQUIRE_KERBIN).
     // Terrain queries and cutoff take time. Do not run this tick's guidance
     // with the old velocity, acceleration or position cache.
     _landingCacheTick(ctx).

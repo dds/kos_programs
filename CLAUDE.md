@@ -341,6 +341,13 @@ Looks like Python/JS; is neither.
   descent. These changes have source fixtures only. Do not claim the early
   12 km ignition cause is established or tune away the stopping margins;
   `cmd/landingcheck` now retrieves its saved decision after future attempts.
+  The next RO9 economy flight aborted descent after rejecting a flat fallback
+  site solely for Kerbin view. The operator reported Kerbin=-1.11 degrees,
+  explicitly accepted it, and then prioritized autonomous landing without a
+  link after deorbit. `LANDING_DIVERT_REQUIRE_KERBIN` now defaults to 0;
+  orbital planning keeps its +5-degree requirement. An opt-in strict diversion
+  uses a 7-degree allowance bounded at -2 degrees. Do not restore a radio-only
+  post-deorbit abort by default. Sunlight, slope and cutoff gates remain active.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered

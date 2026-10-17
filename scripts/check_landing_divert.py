@@ -17,6 +17,7 @@ def fixture():
                REQUESTED_LAT=0, REQUESTED_LNG=0)
     events, overrides = [], dict(SEQUENCE=['LAND_ASSIST', 'SURFACE_RETURN_SETUP'],
                                   RETURN_PE=53000)
+    light_calls=[]
     impact = dict(FOUND=True, DIST=79622, LAT=1, LNG=2)
     env.update(ctx=ctx, initial=True, LANDING_FLEXIBLE_SITE=1, ROUND=round,
                _landingBottomRadar=lambda: 2504,
@@ -30,7 +31,8 @@ def fixture():
                thrustCutoffOk=lambda release: events.append('cutoff') or True,
                fixture_lock=lambda statement: events.append('rebind'),
                landingTerrainGrade=lambda *args: .02,
-               landingLightWindow=lambda *args: dict(OK=True, REASON='ok', SUN=15, KERBIN=20),
+               LANDING_REQUIRE_KERBIN=1, light_calls=light_calls,
+               landingLightWindow=lambda *args: (light_calls.append(args) or dict(OK=True, REASON='ok', SUN=15, KERBIN=-1.11)),
                geoDistance=lambda *args: 79500,
                missionOverrideUpdate=lambda changes: overrides.update(changes),
                _landingCacheTick=lambda _: events.append('refresh'))
@@ -56,6 +58,8 @@ def check_diversion():
         assert overrides['RETURN_PE']==53000 and overrides['TARGET_LAT']==1
         assert events==['cutoff','rebind',('survey',100),('survey',20),'target','refresh']
         assert env['TERRAIN_CHECK_RADIUS']==100
+        assert env['light_calls'][0][-2:]==(7,0)
+        assert env['LANDING_REQUIRE_KERBIN']==1
     for precision, initial, height, speed, miss in (
             (True,True,2504,7.2,79622), (False,True,2504,400,15000),
             (False,False,2504,7.2,15000), (False,False,900,400,79622),
@@ -83,6 +87,7 @@ def check_rejections():
         if failure=='steep': env['landingTerrainGrade']=lambda *args: .2
         if failure in ('sun','radio'):
             env['landingLightWindow']=lambda *args: dict(OK=False,REASON=failure,SUN=0,KERBIN=0)
+            if failure=='radio': env['LANDING_DIVERT_REQUIRE_KERBIN']=1
         if failure=='budget': env['lmDistanceToTarget']=lambda *args: 79622
         if failure=='lost-impact':
             env['_landingTrajImpactInfo']=lambda _: dict(FOUND=False,DIST=79622)

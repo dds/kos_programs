@@ -167,9 +167,13 @@ a nearby ballistic landing site. The replacement must pass coarse/fine
 terrain and the saved sunlight/Kerbin policy; otherwise descent holds for
 manual review. Precision profiles keep this option off. The time setting is
 a correction feasibility estimate, not a guaranteed landing deadline.
-Diversions allow `LANDING_DIVERT_KERBIN_TOLERANCE` (5 degrees) of the planned
-Kerbin margin to absorb burn errors. The effective requirement never falls
-below the geometric horizon; orbital planning retains its configured margin.
+After deorbit, diversions default to `LANDING_DIVERT_REQUIRE_KERBIN=0`: a lost
+Kerbin view does not abort an otherwise acceptable autonomous landing. The
+orbital site search retains its configured +5-degree Kerbin requirement.
+Sunlight and terrain checks remain active. To require radio view for diversions,
+set `LANDING_DIVERT_REQUIRE_KERBIN=1`; its configurable
+`LANDING_DIVERT_KERBIN_TOLERANCE` (7 degrees) allows a margin down to -2 degrees,
+including the reported -1.11-degree case. Neither setting guarantees a live link.
 APPROACH admission uses hull radar clearance, so a distant mountain's elevation
 cannot start terminal guidance kilometres above the local ground. Fine terrain
 surveying completes before powered guidance. Landing temporarily raises IPU to

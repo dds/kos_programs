@@ -11,9 +11,13 @@ GLOBAL LANDING_ASSIST_CROSSTRACK_LIMIT IS 100000.
 // nearby ballistic landing site, subject to terrain and light/radio checks.
 GLOBAL LANDING_FLEXIBLE_SITE IS 0.
 GLOBAL LANDING_APPROACH_MAX_TIME IS 120.
-// Burn dispersions may consume the planning margin, but never accept Kerbin
-// below the geometric horizon. This tolerance applies only to diversions.
-GLOBAL LANDING_DIVERT_KERBIN_TOLERANCE IS 5.
+// Operator accepts a small negative Kerbin elevation for burn dispersions.
+// Default 5-degree planning margin minus 7 degrees gives a -2-degree floor.
+// This tolerance applies only to diversions, not orbital site planning.
+GLOBAL LANDING_DIVERT_KERBIN_TOLERANCE IS 7.
+// Once committed to descent, keep flying without a Kerbin link. The original
+// orbital site selection still uses LANDING_REQUIRE_KERBIN and its margin.
+GLOBAL LANDING_DIVERT_REQUIRE_KERBIN IS 0.
 GLOBAL LANDING_MIN_IPU IS 2000.
 GLOBAL TOUCHDOWN_SPEED IS 2.
 GLOBAL HIGH_DESCENT_SPEED IS 30.
