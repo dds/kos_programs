@@ -729,7 +729,10 @@ The picker searches four orbits along the existing ground track. If no site
 meets both requirements, it holds in orbit rather than selecting a dark site
 or requesting a plane change. Each fresh economy plan in a bound parking
 orbit refreshes any old locked site from the current ground track before
-terrain refinement. Retained/interrupted burns keep their resume checks;
+terrain refinement. The selected pass time travels with the site: the burn
+search first tries the approaching half-orbit for that pass. Searching an
+earlier pass at the same coordinates can otherwise create a large lateral
+miss as Minmus rotates. Retained/interrupted burns keep their resume checks;
 `LANDING_AUTO_TARGET=0` preserves an intentionally fixed site. Contract waypoints are ignored
 (`LANDING_USE_WAYPOINTS=0`); these profiles do not perform the polar temperature
 survey or land at the old contract coordinates. The existing targeted-deorbit
@@ -739,6 +742,8 @@ up to 10 m/s normal correction if needed. Economy targets prefer lateral
 miss below 250 m and reject above 500 m. Trial-node evaluations stop at 64;
 geometry must pass before light/radio checks run. `STATS deorbit step` logs
 retained improvements, and `STATS deorbit search` reports the evaluation count.
+It also reports windows/candidates tried and whether the trial budget stopped
+the search; a hold does not claim that all four orbits were exhausted.
 Unflown retained nodes are rechecked against the current limits; rejection
 preserves the node. The 10–20 km downfield ballistic lead remains intentional.
 Surface ascent flies east to a 10 km parking orbit, accepting the minimum

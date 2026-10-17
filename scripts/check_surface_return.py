@@ -379,7 +379,8 @@ def check_minmus_landing_recovery():
     assert 'SET TARGET_LAT TO site["LAT"].' in phase[:persist]
     assert 'SET TARGET_LNG TO site["LNG"].' in phase[:persist]
     # Only one refinement: the deorbit node and post-reboot descent share it.
-    assert 'targetedDeorbitAt(TARGET_LAT, TARGET_LNG, 0, 0, FALSE)' in phase
+    assert 'targetedDeorbitAt(TARGET_LAT, TARGET_LNG, 0, 0, FALSE,' in phase
+    assert '_landingTargetPassUT)' in phase
     overrides = body(landing, '_landingWriteTargetOverrides')
     for key in ('TARGET_LAT', 'TARGET_LNG', 'TARGET_LOCK'):
         assert f'"{key}", {key}' in overrides

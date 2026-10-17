@@ -46,6 +46,7 @@ GLOBAL FUNCTION landingLitGroundTrack {
         + " preferredKerbin=" + LANDING_KERBIN_PREFERRED_ELEV
         + " found=" + out["FOUND"] + " lastReason=" + out["REASON"]
         + " samples=" + samples + " lat=" + out["LAT"] + " lng=" + out["LNG"]
+        + " passUT=" + ROUND(out["UT"],1)
         + " sun=" + out["SUN"] + " kerbin=" + out["KERBIN"]).
     RETURN out.
 }

@@ -99,8 +99,16 @@ The solver scans candidate burn times at approaching ground angles of
 50, 35, 65, 20 and 80 degrees, accepting the first usable candidate. The
 additional seeds avoid assuming one burn location works for every eccentric
 orbit; this is not a global minimum-dV search.
-It scans up to four orbits by default, or `TARGET_DEORBIT_SCAN_ORBITS` when
-configured. In `LANDING_SIM_MODE`, this is capped at two orbits. The current
+An automatic ground-track site passes its selected future pass UT through
+terrain refinement into the solver. The first search window is the half-orbit
+approaching that selected pass; fallback windows start after it. Without this
+context, a site beneath a later Minmus orbit was tested against earlier
+passes after the body had rotated to a different longitude. A latitude within
+the inclination limit did not establish a cheap descent on those passes.
+Fixed targets without pass context keep the ordinary forward search.
+The search permits up to four windows by default, or
+`TARGET_DEORBIT_SCAN_ORBITS` when configured. In `LANDING_SIM_MODE`, this is
+capped at two. Subsequent windows span one orbit. The current
 coarse step is `period / MAX(128, TARGET_DEORBIT_SCAN_SAMPLES)`.
 The geometry scan yields every 16 samples and refines burn timing to a
 0.25-second bracket, avoiding one physics tick per sample and unnecessary
@@ -148,6 +156,9 @@ are checked again on the final prediction. Each correction mode has at most
 three iterations; `TARGET_DEORBIT_MAX_EVALUATIONS` caps all trial-node
 predictions across the entire search at 64 by default. Exhaustion selects a
 previously admissible candidate or holds in orbit, never relaxes the gates.
+Search/hold diagnostics report actual windows and candidates tried, evaluation
+count and stopping reason. A budget stop does not claim an exhaustive four-orbit
+search or prove no solution exists.
 The landing phase temporarily raises planning IPU to the configured landing
 floor, capped at 2000, and restores it after either success or failure; boot
 already restores that marker after interruption.
@@ -182,6 +193,16 @@ to zero. Set `LANDING_AUTO_TARGET=0` for an intentional fixed site. Retained
 or partially flown nodes are preserved by the existing resume checks. From
 an unflown bound parking orbit, `cmd/landlight` with `apply` explicitly selects
 a fresh ground-track site and removes the old unflown node before reboot.
+The pass time is transient context for a fresh plan, cleared before target
+confirmation; it cannot leak into a later fixed-target plan. A reboot refreshes
+automatic orbit/site geometry. Retained nodes continue to use native checks.
+
+`scripts/check_deorbit_solver.py` reproduces the pass mismatch using an
+independent 20-degree circular Minmus model with body rotation: discarding
+the selected pass exhausts 64 predictions on earlier passes, while matching
+eight unburned ground-track sites to their selected passes converges within
+16 predictions and under 1 m/s normal correction. These are instantaneous
+Kepler/source fixtures, not Trajectories, finite-burn or flight validation.
 
 ### Geometry regression: eccentric polar Minmus landing
 

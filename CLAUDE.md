@@ -446,6 +446,18 @@ Looks like Python/JS; is neither.
   20-degree Kepler/source fixtures cover both normal signs, timing-only,
   nonlinear backtracking, saturation, singular response, budgets, geometry
   before light and CPU restoration; these are not Trajectories/KSP flight proof.
+  The next Minmus attempt held with no accepted footprint; its old message
+  claimed four orbits even when the 64-trial budget could stop early. Confirmed
+  linkage defect: the light picker returned a future ground-track pass UT,
+  but _autoLandingTarget discarded it after logging, and the solver started
+  at earlier passes. Minmus rotation can put that site kilometres sideways.
+  Fresh auto plans now carry transient pass context through terrain refinement
+  and try its approaching half-orbit first, then later windows. Fixed targets
+  reset that context; retained/interrupted recovery and all native acceptance,
+  normal/fuel, light, terrain and cutoff gates remain. Logs report actual
+  windows/candidates/trials and stop reason. An independent20-degree Minmus
+  fixture reproduces the old64-trial hold and resolves eight selected unburned
+  ground-track sites within16 trials and <1m/s normal. Not yet flight-validated.
   The requested Mun return is direct ascent to Kerbin Pe53km, no KSC/mandatory
   parking orbit. cmd/directreturn is a LANDED, single-stage MODEL PREVIEW ONLY:
   bounded heading/pitch/dV search, RK4 mass/thrust, analytic SOI handoff, actual

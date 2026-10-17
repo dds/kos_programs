@@ -105,8 +105,8 @@ def kepler_oracle(true_ut=1000, true_retro=15, true_normal=3.5, mirror=1):
         result = trajectory(ut,retro,normal)
         if result is None: return impact(ut,retro,normal,0,0,False)
         up,tangent,coast,angle = result
-        along = radius*math.atan2(-np.dot(target,tangent),np.dot(target,up))
-        cross = radius*math.asin(np.clip(np.dot(target,np.cross(up,tangent)),-1,1))
+        along = radius*math.atan2(-np.dot(oracle.target,tangent),np.dot(oracle.target,up))
+        cross = radius*math.asin(np.clip(np.dot(oracle.target,np.cross(up,tangent)),-1,1))
         prediction = impact(ut,retro,normal,along-15000,cross)
         prediction.update(TTI=coast,ANGLE=angle)
         return prediction
@@ -152,6 +152,61 @@ def check_physical_solver():
                 break
     assert found and count.value <= 64,(count.value,result)
     print('PASS: 20-degree Minmus Kepler footprints converge with both normal signs; timing correction works without a normal burn, within bounded native evaluations')
+
+
+def check_selected_pass():
+    def setup(fraction):
+        oracle = kepler_oracle()
+        pass_ut = fraction*oracle.period
+        # The real picker chooses the UNBURNED ground track, not a point
+        # constructed backwards from a conveniently feasible deorbit.
+        oracle.target = oracle.ground(pass_ut)
+        env,count,_ = environment(oracle)
+        env['_targetGroundAngleAt'] = lambda ut,*args: dict(VALID=True,UT=ut,
+            ANGLE=math.degrees(math.acos(np.clip(np.dot(oracle.ground(ut),oracle.target),-1,1))),
+            LAT=0,LNG=0)
+        return oracle,pass_ut,env,count
+
+    def search(oracle,env,pass_ut):
+        for window_index in range(4):
+            for angle in (50,35,65,20,80):
+                if env['_deorbitEvaluations'] >= 64: return None
+                window = env['_targetDeorbitScanWindow'](0,oracle.period,120,37,window_index,pass_ut)
+                seed = env['_findDeorbitGeometryNode'](19,129,window['START'],window['END'],oracle.period/512,angle)
+                if seed['VALID']:
+                    result = env['_solveGeometricDeorbitDv'](seed['UT'],19,129,120,2,120,15,15000,10000,20000)
+                    if env['_targetDeorbitRefineDone'](result,10000,20000): return result
+        return None
+
+    oracle,pass_ut,env,count = setup(1.5)
+    # Reproduce the regression: discarded pass context spends all the
+    # native evaluation budget on a 6+ km lateral miss in earlier passes.
+    assert search(oracle,env,0) is None and count.value == 64
+    for fraction in (.35,.7,1,1.5,2,2.7,3.8,4.3):
+        oracle,pass_ut,env,count = setup(fraction)
+        result = search(oracle,env,pass_ut)
+        assert result is not None, (fraction,count.value)
+        assert result['CROSS'] <= 250 and count.value <= 16, (fraction,result,count.value)
+        assert abs(result['NORMAL']) < 1, result
+        assert pass_ut-oracle.period/2 <= result['UT'] < pass_ut
+
+    # Live lead margin still applies, later windows follow the selected
+    # pass, and fixed/manual sites retain their ordinary forward search.
+    env['TIME'].SECONDS = 500
+    for context,index,expected in ((0,0,(657,3758)),(0,2,(6262,9363)),
+                                    (4607,0,(3071.5,4607)),(4607,1,(4607,7708)),
+                                    (4607,2,(7678,10779)),(600,0,(657,600))):
+        window = env['_targetDeorbitScanWindow'](0,3071,120,37,index,context)
+        assert (window['START'],window['END']) == expected, window
+    env['_targetGroundAngleAt'] = lambda *args: (_ for _ in ()).throw(AssertionError('expired/aborted window sampled'))
+    assert not env['_findDeorbitGeometryNode'](19,129,657,600,6,50)['VALID']
+    env['ABORT'] = True
+    assert not env['_findDeorbitGeometryNode'](19,129,657,800,6,50)['VALID']
+    planner = function_body(SOURCE,'targetedDeorbitAt')
+    assert 'window_["START"], window_["END"], stepA, candidateAngle' in planner
+    assert 'after scanning ' not in planner
+    assert 'windowsTried=' in planner and '"trial-budget"' in planner
+    print('PASS: discarded pass time reproduces the 64-trial hold; matching eight unburned Minmus ground-track sites solves in <=16 trials with <1 m/s normal; expired/aborted windows refuse sampling')
 
 
 def check_progress_and_failure():
@@ -248,17 +303,20 @@ def check_resume_and_cpu():
         assert ('burn' in calls) == (allowed or status!='ORBITING' or started or skip)
         assert env['HASNODE'] is True
     nodes = without_print(ks.parse(function_body(LANDING,'_landingTargetedDeorbit')))
-    for prior,success in ((150,True),(150,False),(2000,True)):
+    for prior,success,refined in ((150,True,False),(150,False,False),(2000,True,False),(150,True,True)):
         events,config = [],NS(IPU=prior)
         env = dict(CONFIG=config,LANDING_MIN_IPU=2000,LANDING_REQUIRE_SITE=0,
+                   _landingTargetPassUT=4607,
                    landingResolveTarget=lambda: dict(FOUND=True,LAT=19,LNG=129),
-                   selectScanSatLandingSite=lambda *args: dict(FOUND=False),
+                   selectScanSatLandingSite=lambda *args: dict(FOUND=refined,LAT=19.2,LNG=129.1,SLOPE=2,DIST=400),
+                   _landingWriteTargetOverrides=lambda: events.append(('persist',)),
                    stateSet=lambda *args: events.append(('save',args)),
                    stateRemove=lambda *args: events.append(('remove',args)),
-                   targetedDeorbitAt=lambda *args: events.append(('plan',config.IPU)) or success)
+                   targetedDeorbitAt=lambda *args: events.append(('plan',config.IPU,args[5])) or success)
         try: ks.run(nodes,env)
         except ks.Returned as result: assert result.value is success
-        assert config.IPU == prior and ('plan',2000) in events
+        assert config.IPU == prior and ('plan',2000,4607) in events
+        assert (('persist',) in events) == refined
         if prior==150: assert events[-1] == ('remove',('landing_prior_ipu',))
     print('PASS: unflown retained nodes revalidate without deletion; interrupted/suborbital/timed paths keep recovery behavior; planning CPU restores after success or failure')
 
@@ -312,6 +370,7 @@ def check_shared_terrain():
 
 if __name__ == '__main__':
     check_physical_solver()
+    check_selected_pass()
     check_progress_and_failure()
     check_geometry_before_light()
     check_resume_and_cpu()

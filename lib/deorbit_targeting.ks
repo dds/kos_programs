@@ -77,6 +77,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     PARAMETER overrideTolerance IS 0.
     PARAMETER overrideOvershoot IS 0.
     PARAMETER refineSite IS TRUE.
+    PARAMETER targetPassUT IS 0.
 
     IF NOT ADDONS:TR:AVAILABLE {
         mLogError("Trajectories not available; targeted landing deorbit requires TR.").
@@ -124,7 +125,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     mLog("STATS deorbit policy normalCap=" + TARGET_DEORBIT_NORMAL_DV_CAP
         + " preferredCrossKm=" + TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM
         + " crossCapKm=" + DEORBIT_CROSSTRACK_AUTHORITY_KM
-        + " maxTrials=" + TARGET_DEORBIT_MAX_EVALUATIONS + " ipu=" + CONFIG:IPU).
+        + " maxTrials=" + TARGET_DEORBIT_MAX_EVALUATIONS + " ipu=" + CONFIG:IPU
+        + " targetPassUT=" + ROUND(targetPassUT,1)).
 
     LOCAL nowUt IS TIME:SECONDS.
     LOCAL period IS SHIP:ORBIT:PERIOD.
@@ -173,6 +175,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
         SET preferredCrossTrack TO TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM * 1000.
     }
     LOCAL orbitScan IS 0.
+    LOCAL candidatesTried IS 0.
 
     UNTIL orbitScan >= scanOrbits OR acceptedSolution
             OR ABORT
@@ -182,19 +185,21 @@ GLOBAL FUNCTION targetedDeorbitAt {
         // another orbit; every candidate retains the same limits.
         FOR candidateAngle IN LIST(50, 35, 65, 20, 80) {
             IF acceptedSolution OR ABORT OR _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS { BREAK. }
-            LOCAL scanStart IS MAX(TIME:SECONDS + minLead + planningMargin,
-                nowUt + minLead + orbitScan * period).
-            LOCAL scanEnd IS scanStart + period + 30.
+            LOCAL window_ IS _targetDeorbitScanWindow(nowUt, period,
+                minLead, planningMargin, orbitScan, targetPassUT).
             SET geometry TO _findDeorbitGeometryNode(targetLat, targetLng,
-                scanStart, scanEnd, stepA, candidateAngle).
+                window_["START"], window_["END"], stepA, candidateAngle).
 
             IF geometry["VALID"] {
                 SET foundGeometry TO TRUE.
+                SET candidatesTried TO candidatesTried + 1.
                 LOCAL candidateUT IS geometry["UT"].
-                mLog("Geometry node orbit " + (orbitScan + 1)
+                mLog("Geometry node window " + (orbitScan + 1)
                     + "/" + scanOrbits
                     + ": T+" + ROUND(candidateUT - nowUt,0)
                     + "s angle=" + ROUND(geometry["ANGLE"],2)
+                    + " scanStart=" + ROUND(window_["START"],1)
+                    + " scanEnd=" + ROUND(window_["END"],1)
                     + " subpoint=" + ROUND(geometry["LAT"],4)
                     + "," + ROUND(geometry["LNG"],4) + ".").
 
@@ -203,7 +208,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     minLead, minRetroDv, maxRetroDv, seedRetroDv,
                     desiredDownfield, minDownfield, maxDownfield).
                 IF NOT solved["VALID"] {
-                    mLogWarn("Orbit " + (orbitScan + 1)
+                    mLogWarn("Window " + (orbitScan + 1)
                         + " geometry did not solve a valid deorbit.").
                 } ELSE IF _targetDeorbitSolutionAccepted(solved,
                         minDownfield, maxDownfield) {
@@ -224,7 +229,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                         IF preferredCrossTrack <= 0 OR crossTrack <= preferredCrossTrack {
                             SET acceptedSolution TO TRUE.
                         } ELSE {
-                            mLogWarn("Orbit " + (orbitScan + 1)
+                            mLogWarn("Window " + (orbitScan + 1)
                                 + " solution accepted but wide: cross="
                                 + ROUND(crossTrack/1000,2)
                                 + "km preferred<="
@@ -235,7 +240,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 } ELSE {
                     LOCAL crossTrack IS _targetCrossTrackFromSolved(solved).
                     LOCAL crossAuth IS _targetDeorbitCrossAuthority(solved).
-                    mLogWarn("STATS deorbit candidate orbit=" + (orbitScan + 1)
+                    mLogWarn("STATS deorbit candidate window=" + (orbitScan + 1)
                         + " nodeAngle=" + candidateAngle
                         + " dv=" + ROUND(solved["DV"],2)
                         + " reason=" + _targetDeorbitRejection(solved, minDownfield, maxDownfield)
@@ -250,7 +255,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 }
             } ELSE {
                 mLogWarn("No deorbit node found at ground angle "
-                    + ROUND(candidateAngle,0) + "deg during orbit "
+                    + ROUND(candidateAngle,0) + "deg during window "
                     + (orbitScan + 1) + "/" + scanOrbits + ".").
             }
         }
@@ -259,8 +264,14 @@ GLOBAL FUNCTION targetedDeorbitAt {
         WAIT 0.
     }
 
+    LOCAL searchStop IS "search-horizon".
+    IF ABORT { SET searchStop TO "abort". }
+    ELSE IF acceptedSolution { SET searchStop TO "preferred-solution". }
+    ELSE IF _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS { SET searchStop TO "trial-budget". }
     mLog("STATS deorbit search evaluations=" + _deorbitEvaluations
         + "/" + TARGET_DEORBIT_MAX_EVALUATIONS
+        + " windowsTried=" + orbitScan + "/" + scanOrbits
+        + " candidatesTried=" + candidatesTried + " stop=" + searchStop
         + " stopBudget=" + (_deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS)).
     IF ABORT { RETURN FALSE. }
 
@@ -276,15 +287,16 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     IF NOT acceptedSolution {
         IF NOT foundGeometry {
-            mLogError("STATS deorbit result=hold: no approaching burn geometry within "
-                + scanOrbits + " orbit(s).").
+            mLogError("STATS deorbit result=hold: no approaching burn geometry; stop="
+                + searchStop + " windowsTried=" + orbitScan + "/" + scanOrbits + ".").
         } ELSE {
-            mLogError("STATS deorbit result=hold: no retrograde dV in " + ROUND(minRetroDv,1)
-                + "-" + ROUND(maxRetroDv,1) + "m/s put TR impact "
+            mLogError("STATS deorbit result=hold: search found no validated TR footprint "
                 + ROUND(minDownfield/1000,1) + "-"
                 + ROUND(maxDownfield/1000,1)
-                + "km downfield with acceptable cross-track after scanning "
-                + scanOrbits + " orbit(s).").
+                + "km downfield with acceptable cross-track; retro=" + minRetroDv
+                + "-" + maxRetroDv + "m/s normalCap=" + TARGET_DEORBIT_NORMAL_DV_CAP
+                + "m/s stop=" + searchStop + " windowsTried=" + orbitScan + "/" + scanOrbits
+                + " trials=" + _deorbitEvaluations + "/" + TARGET_DEORBIT_MAX_EVALUATIONS + ".").
         }
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
         RETURN FALSE.
@@ -532,6 +544,33 @@ LOCAL FUNCTION _targetDeorbitLightAccepted {
     RETURN light["OK"].
 }
 
+// An automatic site is underneath ONE particular future orbital pass.
+// Searching earlier passes can require a large plane change on a rotating
+// body, even though the latitude is within the inclination. Try its own
+// approaching half-orbit first; only then consider later windows. Fixed
+// targets without pass context retain the ordinary forward search.
+LOCAL FUNCTION _targetDeorbitScanWindow {
+    PARAMETER nowUT.
+    PARAMETER period.
+    PARAMETER minLead.
+    PARAMETER planningMargin.
+    PARAMETER orbitScan.
+    PARAMETER targetPassUT.
+    LOCAL earliest IS TIME:SECONDS + minLead + planningMargin.
+    LOCAL startUT IS MAX(earliest, nowUT + minLead + orbitScan * period).
+    LOCAL endUT IS startUT + period + 30.
+    IF targetPassUT > 0 {
+        IF orbitScan = 0 {
+            SET startUT TO MAX(earliest, targetPassUT - period / 2).
+            SET endUT TO targetPassUT.
+        } ELSE {
+            SET startUT TO MAX(earliest, targetPassUT + (orbitScan - 1) * period).
+            SET endUT TO startUT + period + 30.
+        }
+    }
+    RETURN LEXICON("START", startUT, "END", endUT).
+}
+
 LOCAL FUNCTION _findDeorbitGeometryNode {
     PARAMETER targetLat.
     PARAMETER targetLng.
@@ -548,6 +587,7 @@ LOCAL FUNCTION _findDeorbitGeometryNode {
         "LAT", 0,
         "LNG", 0
     ).
+    IF scanStart >= scanEnd OR ABORT { RETURN result. }
 
     LOCAL prevT IS scanStart.
     LOCAL prevInfo IS _targetGroundAngleAt(prevT, targetLat, targetLng).
@@ -556,7 +596,7 @@ LOCAL FUNCTION _findDeorbitGeometryNode {
     LOCAL scanT IS scanStart + stepSec.
     LOCAL samplesSinceYield IS 0.
 
-    UNTIL scanT > scanEnd {
+    UNTIL scanT > scanEnd OR ABORT {
         LOCAL info IS _targetGroundAngleAt(scanT, targetLat, targetLng).
         LOCAL err IS ABS(info["ANGLE"] - desiredAngle).
         IF err < bestErr {
@@ -602,7 +642,7 @@ LOCAL FUNCTION _findDeorbitGeometryNode {
         }
     }
 
-    IF bestErr < 1 {
+    IF NOT ABORT AND bestErr < 1 {
         SET result TO bestInfo.
         SET result["VALID"] TO TRUE.
         SET result["ERR"] TO bestErr.

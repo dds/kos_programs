@@ -312,6 +312,7 @@ def check_economy_target_refresh():
                 selected.update(FOUND=True, LAT=19.045, LNG=129.478)
             return search_ok
         env = dict(LANDING_FLEXIBLE_SITE=flexible, LANDING_AUTO_TARGET=automatic,
+                   _landingTargetPassUT=9999,
                    SHIP=NS(STATUS=status, PERIAPSIS=15000 if status == 'ORBITING' else -5000),
                    LANDING_CONFIRM_TARGET=0, landingResolveTarget=lambda: dict(selected),
                    _autoLandingTarget=refresh, landingLightActive=lambda: True,
@@ -324,12 +325,13 @@ def check_economy_target_refresh():
         assert events.count('search') == searches
         assert ('hold' in events) == (not expected)
         assert selected['LAT'] == (19.045 if searches and search_ok else 0)
+        assert env['_landingTargetPassUT'] == 0  # Stale pass never leaks into a fixed site.
 
     # Real source ground prediction in a 20-degree orbit, with Minmus spin.
     # No equatorial placeholders: picker -> automatic target -> saved override.
     rng = np.random.default_rng(17)
     automatic = ks.parse(function_body(DEORBIT, '_autoLandingTarget'))
-    for mirrored in (False, True):
+    for mirrored,later_pass in ((False,False),(True,False),(False,True),(True,True)):
         frame, _ = np.linalg.qr(rng.normal(size=(3, 3)))
         if mirrored: frame[:, 0] *= -1
         env, _ = hierarchy_environment(frame, moon_name='Minmus')
@@ -349,11 +351,13 @@ def check_economy_target_refresh():
                        math.degrees(math.atan2(rel[1], rel[0])), moon, frame)
         moon.GEOPOSITIONOF = geoposition
         saved = []
+        earliest_ut = now + period*1.5 if later_pass else now
         env.update(POSITIONAT=positionat, LANDING_AUTO_TARGET=1,
                    LANDING_AUTO_TARGET_MINUTES=5, TARGET_LAT=0, TARGET_LNG=0,
                    TARGET_LOCK=1, TARGET_WAYPOINT='old equatorial site',
                    landingLightActive=lambda: True,
-                   landingLightAt=lambda *args: dict(OK=True, SUN=15, KERBIN=40, SETTING=False),
+                   landingLightAt=lambda lat,lng,ut: dict(OK=ut>=earliest_ut, SUN=15, KERBIN=40,
+                                                          SETTING=False, REASON='too-early'),
                    landingLightWindow=lambda *args: dict(OK=True, SUN=15, KERBIN=40),
                    _landingWriteTargetOverrides=lambda: saved.append((env['TARGET_LAT'], env['TARGET_LNG'])))
         # These invoke the source, using the updated fixture's prediction API.
@@ -362,12 +366,14 @@ def check_economy_target_refresh():
         try: ks.run(automatic, env)
         except ks.Returned as result: assert result.value is True
         pass_ut = now + max(600, period*.35)
+        while pass_ut < earliest_ut: pass_ut += period/env['LANDING_LIGHT_SCAN_SAMPLES']
         expected = geoposition(positionat(env['SHIP'], pass_ut))
         expected_lng = expected.LNG - 360*(pass_ut-now)/moon.ROTATIONPERIOD
         assert abs(env['TARGET_LAT']-expected.LAT) < 1e-9
         assert abs((env['TARGET_LNG']-expected_lng+180)%360-180) < 1e-9
         assert abs(env['TARGET_LAT']) > 10  # Fresh site is demonstrably not equatorial.
         assert env['TARGET_LOCK'] == 1 and env['TARGET_WAYPOINT'] == ''
+        assert env['_landingTargetPassUT'] == pass_ut
         assert saved == [(env['TARGET_LAT'], env['TARGET_LNG'])]
 
     phase = function_body(DEORBIT, 'phaseLandDeorbit')

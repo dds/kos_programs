@@ -15,6 +15,8 @@ GLOBAL LANDING_SIM_MODE IS 0.
 GLOBAL REENTRY_PE IS 30000.
 GLOBAL RELOAD_AFTER_LAND_ASSIST IS 1.
 GLOBAL RELOAD_AFTER_LAND IS 1.
+// Ephemeral context for this freshly selected site, not a cached orbit plan.
+LOCAL _landingTargetPassUT IS 0.
 
 // Landing deorbit phase: target, create, and execute the deorbit node.
 
@@ -157,6 +159,7 @@ LOCAL FUNCTION _timedLandingDeorbit {
 }
 
 LOCAL FUNCTION _confirmLandingTarget {
+    SET _landingTargetPassUT TO 0.
     LOCAL targetInfo IS landingResolveTarget().
     // Economy intent is the current orbit's ground track, not a coordinate
     // cached before capture/corrections. Refresh even an old locked target.
@@ -229,6 +232,7 @@ LOCAL FUNCTION _autoLandingTarget {
     }
     SET TARGET_LOCK TO 1.
     SET TARGET_WAYPOINT TO "".
+    SET _landingTargetPassUT TO passUT.
     _landingWriteTargetOverrides().
     mLog("STATS landing-target selected source=current-ground-track"
         + " targetLat=" + ROUND(TARGET_LAT,4)
@@ -274,7 +278,8 @@ LOCAL FUNCTION _landingTargetedDeorbit {
         stateSet("landing_prior_ipu", priorIpu).
         SET CONFIG:IPU TO MIN(2000, LANDING_MIN_IPU).
     }
-    LOCAL success IS targetedDeorbitAt(TARGET_LAT, TARGET_LNG, 0, 0, FALSE).
+    LOCAL success IS targetedDeorbitAt(TARGET_LAT, TARGET_LNG, 0, 0, FALSE,
+        _landingTargetPassUT).
     SET CONFIG:IPU TO priorIpu.
     IF priorIpu < MIN(2000, LANDING_MIN_IPU) { stateRemove("landing_prior_ipu"). }
     RETURN success.
