@@ -25,10 +25,11 @@ LOCAL FUNCTION _cmdDeorbitcheck {
 
     // Compilation/loading can outlast a link window. Recheck before I/O.
     IF NOT _deorbitCheckArchiveReady() { RETURN. }
-    LOCAL reportDir IS "0:/logs/archive/_diagnostics".
-    FOR dir_ IN LIST("0:/logs", "0:/logs/archive", reportDir) {
-        IF NOT EXISTS(dir_) { CREATEDIR(dir_). }
-    }
+    RUNONCEPATH("0:/lib/diagnostic_log.ks").
+    LOCAL reportState IS diagnosticArchiveOpen("deorbitcheck").
+    IF NOT reportState["READY"] { RETURN. }
+    LOCAL reportDir IS reportState["DIR"].
+    LOCAL reportPath IS reportState["PATH"].
     LOCAL FUNCTION _recoverDeorbitReports {
         PARAMETER legacyDir.
         PARAMETER sourceLabel.
@@ -52,27 +53,9 @@ LOCAL FUNCTION _cmdDeorbitcheck {
     }
     _recoverDeorbitReports("0:/logs", "archive").
     _recoverDeorbitReports("1:/run", "local").
-    LOCAL reportPath IS reportDir + "/deorbitcheck_" + slug() + "_"
-        + ROUND(TIME:SECONDS,0) + ".log".
-    PRINT "Archive report: " + reportPath.
-    LOCAL reportComplete IS TRUE.
     LOCAL FUNCTION report {
         PARAMETER row.
-        PRINT row.
-        IF NOT HOMECONNECTION:ISCONNECTED {
-            IF reportComplete { PRINT "Archive link lost; this snapshot is incomplete. Re-run when connected.". }
-            SET reportComplete TO FALSE.
-            RETURN FALSE.
-        }
-        LOG row TO reportPath.
-        RETURN TRUE.
-    }
-    LOCAL FUNCTION _deorbitCheckSaved {
-        PARAMETER completionRow.
-        IF NOT reportComplete { RETURN FALSE. }
-        IF NOT HOMECONNECTION:ISCONNECTED { RETURN FALSE. }
-        IF NOT EXISTS(reportPath) { RETURN FALSE. }
-        RETURN OPEN(reportPath):READALL:STRING:CONTAINS(completionRow).
+        RETURN diagnosticArchiveLine(reportState, row).
     }
     LOCAL FUNCTION lightRow {
         PARAMETER label.
@@ -108,7 +91,7 @@ LOCAL FUNCTION _cmdDeorbitcheck {
             "TR_QUATERNION_GAP", VANG(impactUp, rotateUp) * world:RADIUS * CONSTANT:PI / 180).
     }
 
-    report("STATS deorbit-check schema=2 code=" + codeVersion() + " ut=" + TIME:SECONDS
+    report("STATS deorbit-check schema=3 code=" + codeVersion() + " ut=" + TIME:SECONDS
         + " vessel=" + SHIP:NAME + " phase=" + stateGet("phase", "")
         + " mission=" + stateGet("mission_id", "") + " profile=" + profilePath
         + " burnStarted=" + stateGet("deorbit_burn_started", "false") + " file=" + reportPath).
@@ -130,6 +113,19 @@ LOCAL FUNCTION _cmdDeorbitcheck {
         + " relativePos=" + (SHIP:POSITION - bdy:POSITION)
         + " orbitalVel=" + SHIP:VELOCITY:ORBIT + " surfaceVel=" + SHIP:VELOCITY:SURFACE
         + " remainingDv=" + SHIP:DELTAV:VACUUM).
+    report("STATS deorbit-check hardware mass=" + SHIP:MASS
+        + " availableThrust=" + SHIP:AVAILABLETHRUST + " landingThrust=" + vesselLandingThrust()
+        + " activeAcc=" + (vesselLandingThrust() / MAX(0.01, SHIP:MASS))
+        + " reserveAcc=" + vesselLandingReserveAcc()
+        + " currentStage=" + STAGE:NUMBER + " nextEngine=" + vesselLandingNextEngineStage()
+        + " stageDv=" + STAGE:DELTAV:VACUUM).
+    FOR eng IN SHIP:ENGINES {
+        report("STATS deorbit-check engine name=" + eng:NAME + " stage=" + eng:STAGE
+            + " decoupledIn=" + eng:DECOUPLEDIN + " ignition=" + eng:IGNITION
+            + " flameout=" + eng:FLAMEOUT + " available=" + eng:AVAILABLETHRUST
+            + " possible=" + eng:POSSIBLETHRUST + " vacuumIsp=" + eng:VISP
+            + " limit=" + eng:THRUSTLIMIT + " throttleLock=" + eng:THROTTLELOCK).
+    }
     report("STATS deorbit-check policy flexible=" + LANDING_FLEXIBLE_SITE
         + " auto=" + LANDING_AUTO_TARGET + " light=" + LANDING_LIGHT_MODE
         + " minSun=" + LANDING_SUN_MIN_ELEV + " requireKerbin=" + LANDING_REQUIRE_KERBIN
@@ -203,15 +199,7 @@ LOCAL FUNCTION _cmdDeorbitcheck {
             }
         }
     }
-    LOCAL captureStatus IS "complete".
-    IF NOT reportComplete { SET captureStatus TO "incomplete". }
-    LOCAL completionRow IS "STATS deorbit-check " + captureStatus + " ut=" + TIME:SECONDS + " file=" + reportPath.
-    report(completionRow).
-    IF _deorbitCheckSaved(completionRow) {
-        PRINT "Verified snapshot in archive: " + reportPath.
-    } ELSE {
-        PRINT "Snapshot incomplete or unverified: " + reportPath + ". Re-run with a stable archive link.".
-    }
+    diagnosticArchiveClose(reportState, "STATS deorbit-check").
     PRINT "Node, phase and flight controls preserved.".
 }
 

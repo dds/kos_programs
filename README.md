@@ -72,6 +72,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/burnreport.ks").` | Print the latest maneuver cutoff report, retained across reboots |
 | `RUNPATH("0:/cmd/burncheck.ks").` | Read-only ignition check: engine availability, autopilot suppression, CPU roles/IPU, and timed throttle-governor probes against the retained node; never fires engines |
 | `RUNPATH("0:/cmd/deorbitcheck.ks").` | Read-only deorbit snapshot: keep the suspect node attached and run in manual mode with an archive link; saves and verifies the report under `0:/logs/archive/_diagnostics/` |
+| `RUNPATH("0:/cmd/landingcheck.ks").` | Print and archive landing hardware, current-stage dV, next-stage acceleration and the last brake decision; requires an archive link |
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
@@ -153,7 +154,11 @@ automatic sequence. A usable engine prevents staging even if another engine
 has flamed out. Exhausting the final engine does not stage payloads or chutes.
 
 `RUNPATH("0:/cmd/landingcheck.ks").` reports the next engine slot and estimated
-post-separation surface TWR, engine limits, and the saved last brake decision.
+post-separation surface TWR, engine limits/Isp, current-stage and total vacuum
+dV, and the saved last brake decision. It also saves every output row to
+`0:/logs/archive/_diagnostics/landingcheck_<vessel>_<UT>.log` and verifies the
+completion record. Copy that file for review; an archive link is required.
+There is no boot-sweep dependency or boot-module update.
 Braking accounts for the weaker of current and
 next-stage acceleration, combined horizontal/vertical motion, terrain
 clearance, and a three-second reaction allowance. It can therefore start
@@ -757,10 +762,16 @@ is no local fallback or reboot-sweep dependency, so no boot-module update is
 needed. Surviving reports from the old `0:/logs/` and `1:/run/` locations are
 copied into the same archive directory with a `recovered_` prefix, preserving
 originals and existing archive copies. It captures the saved target,
-active policy, orbit/state vectors, node components, repeated Trajectories
+active policy, orbit/state vectors, current/next-stage acceleration, stage dV,
+engine Isp/separation slots, node components, repeated Trajectories
 samples, native position at impact time and an independent rotation transform.
 It leaves the node, mission phase and flight controls alone. Return the log
 for inspection; a diagnostic snapshot is not a new landing plan.
+`python3 scripts/replay_deorbit.py <snapshot>` independently replays bound,
+same-body prograde/retrograde-only nodes from these records. It reports the
+rotating target's closest pass, height and speed; it excludes powered flight,
+finite burns, staging and terrain clearance along the path. A small geometric
+miss is not a powered landing or disposal guarantee.
 Surface ascent flies east to a 10 km parking orbit, accepting the minimum
 inclination reachable from the actual landing latitude.
 

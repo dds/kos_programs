@@ -11,7 +11,9 @@ from check_runtime_contracts import KString
 from types import SimpleNamespace as NS
 
 COMMAND = (ROOT/'cmd/deorbitcheck.ks').read_text()
-ks.SOURCES += '\n' + COMMAND
+LANDING_COMMAND = (ROOT/'cmd/landingcheck.ks').read_text()
+WRITER = (ROOT/'lib/diagnostic_log.ks').read_text()
+ks.SOURCES += '\n' + COMMAND + '\n' + WRITER
 
 
 class Rotation:
@@ -63,14 +65,17 @@ def check_geometry():
 
 
 def check_read_only():
-    clean = mask(COMMAND)
-    assert not command_entrypoint_errors(COMMAND)
-    assert not re.search(r'\b(?:ADD|REMOVE|LOCK|UNLOCK|STAGE|REBOOT|SHUTDOWN)\b',clean)
-    assert not re.search(r'\b(?:stateSet|stateRemove|missionOverrideUpdate|executeDeorbitNode|targetedDeorbitAt)\s*\(',clean)
-    assert not re.search(r'\bSET\s+(?:WARP|THROTTLE|STEERING|SHIP:CONTROL)',clean)
+    for source in (COMMAND, LANDING_COMMAND, WRITER):
+        clean = mask(source)
+        if source != WRITER:
+            assert not command_entrypoint_errors(source)
+        assert not re.search(r'(?<!:)\b(?:ADD|REMOVE|LOCK|UNLOCK|STAGE|REBOOT|SHUTDOWN)\b(?!:)',clean)
+        assert not re.search(r'\b(?:stateSet|stateRemove|missionOverrideUpdate|executeDeorbitNode|targetedDeorbitAt)\s*\(',clean)
+        assert not re.search(r'\bSET\s+(?:WARP|THROTTLE|STEERING|SHIP:CONTROL)',clean)
     # Diagnostics do not become dependencies carried by every flight band.
     assert 'deorbitcheck' not in (ROOT/'lib/dependencies.ks').read_text()
-    print('PASS: diagnostic has one wrapped command entry, no flight/node/mission-state mutation and no added flight-band dependency')
+    assert 'diagnostic_log' not in (ROOT/'lib/dependencies.ks').read_text()
+    print('PASS: wrapped diagnostics and shared archive writer have no flight/node/mission-state mutation or added flight-band dependency')
 
 
 def execute(source, env):
@@ -81,11 +86,10 @@ def execute(source, env):
 
 
 def check_archive_capture():
-    writer = function_body(COMMAND,'report').replace('LOG row TO reportPath.', 'append_row(row, reportPath).')
+    writer = function_body(WRITER,'diagnosticArchiveLine').replace('LOG row TO dest.', 'append_row(row, dest).')
     ready = function_body(COMMAND,'_deorbitCheckArchiveReady')
-    saved = function_body(COMMAND,'_deorbitCheckSaved')
+    saved = function_body(WRITER,'diagnosticArchiveClose')
     path = '0:/logs/archive/_diagnostics/deorbitcheck_fixture.log'
-    completion = 'STATS deorbit-check complete ut=1000'
     for links in ((True,True,True),(True,False,True),(False,False,False)):
         disk, reads = {}, []
         def append(row,dest):
@@ -95,29 +99,52 @@ def check_archive_capture():
             assert env['HOMECONNECTION'].ISCONNECTED
             reads.append(dest)
             return NS(READALL=NS(STRING=KString(disk[dest])))
-        env = dict(HOMECONNECTION=NS(ISCONNECTED=True),reportPath=path,
-                   reportComplete=True,completionRow=completion,
+        state = dict(READY=True,COMPLETE=True,PATH=path)
+        env = dict(HOMECONNECTION=NS(ISCONNECTED=True), reportState=state,
+                   label='STATS deorbit-check', TIME=NS(SECONDS='1000'),
                    append_row=append,EXISTS=lambda dest: dest in disk,OPEN=open_file)
+        def write(state,row):
+            env.update(reportState=state,row=row)
+            return execute(writer,env)
+        env['diagnosticArchiveLine'] = write
         for index,linked in enumerate(links):
             env['HOMECONNECTION'].ISCONNECTED = linked
             assert execute(ready,env) == linked
-            env['row'] = completion if index==2 else f'metric {index}'
-            assert execute(writer,env) == linked
+            assert write(state,f'metric {index}') == linked
         assert execute(saved,env) == all(links)
-        assert env['reportComplete'] == all(links)
+        assert state['COMPLETE'] == all(links)
         assert reads == ([path] if all(links) else [])
         assert all(dest.startswith('0:/logs/archive/_diagnostics/') for dest in disk)
     # A missing file/marker must never be announced as verified.
     env['HOMECONNECTION'].ISCONNECTED = True
-    env['reportComplete'] = True
+    state['COMPLETE'] = True
+    env['diagnosticArchiveLine'] = lambda *args: True
     disk.clear()
     assert execute(saved,env) is False
     disk[path] = 'partial snapshot\n'
     assert execute(saved,env) is False
-    entry = function_body(COMMAND,'_cmdDeorbitcheck')
-    assert entry.index('IF NOT _deorbitCheckArchiveReady()') < entry.index('RUNPATH(')
+    # Neither entry loads flight libraries before refusing a missing link.
+    for source,name,guard in ((COMMAND,'_cmdDeorbitcheck','IF NOT _deorbitCheckArchiveReady()'),
+                              (LANDING_COMMAND,'_cmdLandingcheck','IF NOT HOMECONNECTION:ISCONNECTED')):
+        entry = function_body(source,name)
+        assert entry.index(guard) < entry.index('RUNPATH(')
+        assert 'diagnosticArchiveOpen(' in entry and 'diagnosticArchiveClose(' in entry
+        assert 'STAGE:DELTAV:VACUUM' in entry and 'vesselLandingReserveAcc()' in entry
+        assert 'eng:DECOUPLEDIN' in entry and 'eng:VISP' in entry
     assert '1:/run/deorbitcheck.log' not in COMMAND
-    assert 'Verified snapshot in archive:' in COMMAND
+    assert 'Verified snapshot in archive:' in WRITER
+    # Capture creation stays archive-only and refuses even directory I/O offline.
+    opening = function_body(WRITER,'diagnosticArchiveOpen')
+    opening = opening.replace('ROUND(TIME:SECONDS,0)', '"1000"')
+    for linked in (False,True):
+        made = []
+        env = dict(HOMECONNECTION=NS(ISCONNECTED=linked), prefix='landingcheck',
+                   LEXICON=lambda *args: dict(zip(args[::2],args[1::2])), LIST=lambda *args: args,
+                   slug=lambda:'RO9',EXISTS=lambda path:False,CREATEDIR=made.append)
+        opened = execute(opening,env)
+        assert opened['READY'] == linked and opened['COMPLETE'] == linked
+        assert made == (['0:/logs','0:/logs/archive','0:/logs/archive/_diagnostics'] if linked else [])
+        assert opened['PATH'] == ('0:/logs/archive/_diagnostics/landingcheck_RO9_1000.log' if linked else '')
     print('PASS: archive-only capture refuses a missing link, marks mid-capture loss incomplete even after reconnect, and verifies the completion row before reporting success')
 
 

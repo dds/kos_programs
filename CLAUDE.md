@@ -477,6 +477,23 @@ Looks like Python/JS; is neither.
   row before success. Mid-capture link loss stays incomplete after reconnect.
   Legacy root/local reports are copied there without deleting originals.
   No installed boot-module update is required for this diagnostic routing.
+  landingcheck now uses the same archive writer and readback verification;
+  both reports include current-stage vacuum dV, active/reserve acceleration
+  and engine Isp/separation slots. The shared writer stays archive-only and
+  outside flight-band dependencies. Use these reports, not console copying.
+  The supplied deorbitcheck_RO9_1305239.log actually AGREES between TR/native
+  impact coordinates within0.2m (quaternion also agrees); this snapshot does
+  not show a stale prediction or incorrect longitude transform. An independent
+  two-body replay matches node Pe within0.12m and impact within3.1m. Its target
+  is17km off the plane NOW but rotates65.8deg into a pass within65m of the
+  actual descent path, ~2.93km above target terrain. These model numbers do
+  NOT certify powered touchdown, local terrain or staging/disposal. Do not
+  force a plane change based on the present-day map target. Reported hardware
+  is1.287t/55kN, stage2->engine1, next-stage surfaceTWR5.59 (~2.74m/s2).
+  Current-stage dV is still needed to budget strong-stage braking/disposal;
+  the controller currently stages only when usable thrust runs out. The
+  operator wants separation before touchdown while the discarded stage still
+  impacts; that behavior is not implemented or guaranteed by this diagnostic.
   The requested Mun return is direct ascent to Kerbin Pe53km, no KSC/mandatory
   parking orbit. cmd/directreturn is a LANDED, single-stage MODEL PREVIEW ONLY:
   bounded heading/pitch/dV search, RK4 mass/thrust, analytic SOI handoff, actual
