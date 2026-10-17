@@ -5,8 +5,10 @@ import re
 import numpy as np
 
 import check_landing_guidance as ks
-from check_codebase import ROOT, mask, command_entrypoint_errors
+from check_codebase import ROOT, mask, command_entrypoint_errors, function_body
 from check_deorbit_geometry import Vec, Geo, fixture
+from check_runtime_contracts import KString
+from types import SimpleNamespace as NS
 
 COMMAND = (ROOT/'cmd/deorbitcheck.ks').read_text()
 ks.SOURCES += '\n' + COMMAND
@@ -71,6 +73,91 @@ def check_read_only():
     print('PASS: diagnostic has one wrapped command entry, no flight/node/mission-state mutation and no added flight-band dependency')
 
 
+def execute(source, env):
+    def without_print(nodes):
+        return [(s,without_print(yes),without_print(no)) for s,yes,no in nodes if not s.startswith('PRINT ')]
+    try: ks.run(without_print(ks.parse(source)), env)
+    except ks.Returned as result: return result.value
+
+
+def check_archive_capture():
+    writer = function_body(COMMAND,'report').replace('LOG row TO reportPath.', 'append_row(row, reportPath).')
+    ready = function_body(COMMAND,'_deorbitCheckArchiveReady')
+    saved = function_body(COMMAND,'_deorbitCheckSaved')
+    path = '0:/logs/archive/_diagnostics/deorbitcheck_fixture.log'
+    completion = 'STATS deorbit-check complete ut=1000'
+    for links in ((True,True,True),(True,False,True),(False,False,False)):
+        disk, reads = {}, []
+        def append(row,dest):
+            assert dest == path and env['HOMECONNECTION'].ISCONNECTED
+            disk[dest] = disk.get(dest,'') + row + '\n'
+        def open_file(dest):
+            assert env['HOMECONNECTION'].ISCONNECTED
+            reads.append(dest)
+            return NS(READALL=NS(STRING=KString(disk[dest])))
+        env = dict(HOMECONNECTION=NS(ISCONNECTED=True),reportPath=path,
+                   reportComplete=True,completionRow=completion,
+                   append_row=append,EXISTS=lambda dest: dest in disk,OPEN=open_file)
+        for index,linked in enumerate(links):
+            env['HOMECONNECTION'].ISCONNECTED = linked
+            assert execute(ready,env) == linked
+            env['row'] = completion if index==2 else f'metric {index}'
+            assert execute(writer,env) == linked
+        assert execute(saved,env) == all(links)
+        assert env['reportComplete'] == all(links)
+        assert reads == ([path] if all(links) else [])
+        assert all(dest.startswith('0:/logs/archive/_diagnostics/') for dest in disk)
+    # A missing file/marker must never be announced as verified.
+    env['HOMECONNECTION'].ISCONNECTED = True
+    env['reportComplete'] = True
+    disk.clear()
+    assert execute(saved,env) is False
+    disk[path] = 'partial snapshot\n'
+    assert execute(saved,env) is False
+    entry = function_body(COMMAND,'_cmdDeorbitcheck')
+    assert entry.index('IF NOT _deorbitCheckArchiveReady()') < entry.index('RUNPATH(')
+    assert '1:/run/deorbitcheck.log' not in COMMAND
+    assert 'Verified snapshot in archive:' in COMMAND
+    print('PASS: archive-only capture refuses a missing link, marks mid-capture loss incomplete even after reconnect, and verifies the completion row before reporting success')
+
+
+def check_legacy_recovery():
+    class Name(KString):
+        def STARTSWITH(self,prefix): return self.casefold().startswith(prefix.casefold())
+        def ENDSWITH(self,suffix): return self.casefold().endswith(suffix.casefold())
+    source = function_body(COMMAND,'_recoverDeorbitReports').replace('LIST FILES IN items.', 'SET items TO list_files().')
+    names = ['deorbitcheck_RO9_100.log','deorbitcheck.log','DEORBITCHECK_OTHER.LOG',
+             'boot_012_core.log','deorbitcheck.txt','deorbitcheck_dir.log']
+    for linked in (False,True):
+        for legacy,label in (('0:/logs','archive'),('1:/run','local')):
+            disk = {legacy+'/'+name:'old '+name for name in names[:-1]}
+            old = dict(disk)
+            dirs = {legacy}
+            copies, cwd = [],['1:/']
+            report_dir = '0:/logs/archive/_diagnostics'
+            existing = report_dir+'/recovered_'+label+'_deorbitcheck.log'
+            disk[existing] = 'preserved archive copy'
+            def copy(src,dest):
+                copies.append((src,dest))
+                disk[dest] = disk[src]
+            def list_files():
+                assert cwd[0] == legacy
+                return [NS(NAME=Name(name),ISFILE=name!=names[-1]) for name in names]
+            env = dict(legacyDir=legacy,sourceLabel=label,reportDir=report_dir,
+                       HOMECONNECTION=NS(ISCONNECTED=linked),EXISTS=lambda p: p in disk or p in dirs,
+                       PATH=lambda: cwd[0],CD=lambda p: cwd.__setitem__(0,p),LIST=lambda: [],
+                       list_files=list_files,COPYPATH=copy)
+            execute(source,env)
+            assert cwd[0] == '1:/'
+            assert len(copies) == (2 if linked else 0),copies
+            assert all(disk[p] == value for p,value in old.items())
+            assert disk[existing] == 'preserved archive copy'
+            assert all(dest.startswith(report_dir+'/recovered_'+label+'_') for _,dest in copies)
+    print('PASS: old archive-root/local reports are recovered by name, with originals/existing copies and unrelated files preserved; no boot sweep needed')
+
+
 if __name__ == '__main__':
     check_geometry()
     check_read_only()
+    check_archive_capture()
+    check_legacy_recovery()

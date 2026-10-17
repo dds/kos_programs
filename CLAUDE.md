@@ -470,6 +470,13 @@ Looks like Python/JS; is neither.
   but asynchronous buffer publication; a fixed0.5s wait is not a freshness
   guarantee. Actual discrepancy evidence is pending; retain all existing
   guards while separating site selection, node planning and final validation.
+  The operator could not find the diagnostic after running/rebooting. Its
+  first version wrote linked reports outside logs/archive and used a local
+  fallback whose collection depended on the installed boot. Schema2 writes ONLY to
+  0:/logs/archive/_diagnostics, requires a link and verifies its completion
+  row before success. Mid-capture link loss stays incomplete after reconnect.
+  Legacy root/local reports are copied there without deleting originals.
+  No installed boot-module update is required for this diagnostic routing.
   The requested Mun return is direct ascent to Kerbin Pe53km, no KSC/mandatory
   parking orbit. cmd/directreturn is a LANDED, single-stage MODEL PREVIEW ONLY:
   bounded heading/pitch/dV search, RK4 mass/thrust, analytic SOI handoff, actual

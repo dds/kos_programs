@@ -87,6 +87,12 @@ both our longitude correction and a separate quaternion transform matching
 [Trajectories' native rotation code](https://github.com/neuoy/KSPTrajectories/blob/master/src/Plugin/Predictor/Trajectory.cs).
 The command reports sunlight/radio for the target and both predicted contacts;
 it does not create, edit, clear or execute a node, nor advance the phase.
+Reports are written directly to `0:/logs/archive/_diagnostics/`, with an
+archive readback of the completion record. A missing/lost link refuses or
+marks the capture incomplete; no local report is left dependent on a boot
+sweep. The command also recovers surviving legacy report files from
+`0:/logs/` and `1:/run/` without deleting originals. Updating the command
+does not require recompiling or installing `boot/boot.ksm`.
 
 The API returns the currently published prediction, not a result tagged with
 our trial node. The predictor includes maneuvers but publishes its buffered

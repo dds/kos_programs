@@ -4,6 +4,12 @@
 PARAMETER samples IS 3.
 
 LOCAL FUNCTION _cmdDeorbitcheck {
+    LOCAL FUNCTION _deorbitCheckArchiveReady {
+        IF HOMECONNECTION:ISCONNECTED { RETURN TRUE. }
+        PRINT "Deorbit capture requires an archive link. Re-run when connected; no report recorded.".
+        RETURN FALSE.
+    }
+    IF NOT _deorbitCheckArchiveReady() { RETURN. }
     RUNPATH("1:/lib/boot_lib").
     bootPreamble().
     bootLibLoad("landing_deorbit").
@@ -17,21 +23,56 @@ LOCAL FUNCTION _cmdDeorbitcheck {
     RUNPATH(profilePath).
     applyMissionOverrides().
 
-    LOCAL reportDir IS "1:/run".
-    IF HOMECONNECTION:ISCONNECTED { SET reportDir TO "0:/logs". }
-    IF NOT EXISTS(reportDir) { CREATEDIR(reportDir). }
+    // Compilation/loading can outlast a link window. Recheck before I/O.
+    IF NOT _deorbitCheckArchiveReady() { RETURN. }
+    LOCAL reportDir IS "0:/logs/archive/_diagnostics".
+    FOR dir_ IN LIST("0:/logs", "0:/logs/archive", reportDir) {
+        IF NOT EXISTS(dir_) { CREATEDIR(dir_). }
+    }
+    LOCAL FUNCTION _recoverDeorbitReports {
+        PARAMETER legacyDir.
+        PARAMETER sourceLabel.
+        IF NOT EXISTS(legacyDir) { RETURN. }
+        LOCAL priorPath IS PATH().
+        LOCAL items IS LIST().
+        CD(legacyDir).
+        LIST FILES IN items.
+        CD(priorPath).
+        FOR item IN items {
+            IF NOT HOMECONNECTION:ISCONNECTED { RETURN. }
+            IF item:ISFILE AND item:NAME:STARTSWITH("deorbitcheck")
+                    AND item:NAME:ENDSWITH(".log") {
+                LOCAL dest IS reportDir + "/recovered_" + sourceLabel + "_" + item:NAME.
+                IF NOT EXISTS(dest) {
+                    COPYPATH(legacyDir + "/" + item:NAME, dest).
+                    PRINT "Recovered older report: " + dest.
+                }
+            }
+        }
+    }
+    _recoverDeorbitReports("0:/logs", "archive").
+    _recoverDeorbitReports("1:/run", "local").
     LOCAL reportPath IS reportDir + "/deorbitcheck_" + slug() + "_"
         + ROUND(TIME:SECONDS,0) + ".log".
+    PRINT "Archive report: " + reportPath.
+    LOCAL reportComplete IS TRUE.
     LOCAL FUNCTION report {
         PARAMETER row.
         PRINT row.
-        IF reportPath:STARTSWITH("0:") AND NOT HOMECONNECTION:ISCONNECTED {
-            SET reportPath TO "1:/run/deorbitcheck.log".
+        IF NOT HOMECONNECTION:ISCONNECTED {
+            IF reportComplete { PRINT "Archive link lost; this snapshot is incomplete. Re-run when connected.". }
+            SET reportComplete TO FALSE.
+            RETURN FALSE.
         }
-        IF reportPath:STARTSWITH("0:")
-                OR CORE:VOLUME:FREESPACE > MAX(150, LOG_FILE_RESERVE_BYTES) + row:LENGTH + 100 {
-            LOG row TO reportPath.
-        } ELSE { PRINT "Storage reserve reached; this row is console-only.". }
+        LOG row TO reportPath.
+        RETURN TRUE.
+    }
+    LOCAL FUNCTION _deorbitCheckSaved {
+        PARAMETER completionRow.
+        IF NOT reportComplete { RETURN FALSE. }
+        IF NOT HOMECONNECTION:ISCONNECTED { RETURN FALSE. }
+        IF NOT EXISTS(reportPath) { RETURN FALSE. }
+        RETURN OPEN(reportPath):READALL:STRING:CONTAINS(completionRow).
     }
     LOCAL FUNCTION lightRow {
         PARAMETER label.
@@ -67,10 +108,10 @@ LOCAL FUNCTION _cmdDeorbitcheck {
             "TR_QUATERNION_GAP", VANG(impactUp, rotateUp) * world:RADIUS * CONSTANT:PI / 180).
     }
 
-    report("STATS deorbit-check schema=1 code=" + codeVersion() + " ut=" + TIME:SECONDS
+    report("STATS deorbit-check schema=2 code=" + codeVersion() + " ut=" + TIME:SECONDS
         + " vessel=" + SHIP:NAME + " phase=" + stateGet("phase", "")
         + " mission=" + stateGet("mission_id", "") + " profile=" + profilePath
-        + " burnStarted=" + stateGet("deorbit_burn_started", "false")).
+        + " burnStarted=" + stateGet("deorbit_burn_started", "false") + " file=" + reportPath).
     report("STATS deorbit-check controls thrust=" + SHIP:THRUST
         + " throttle=" + SHIP:CONTROL:MAINTHROTTLE
         + " pilot=" + SHIP:CONTROL:PILOTMAINTHROTTLE + " abort=" + ABORT
@@ -162,8 +203,16 @@ LOCAL FUNCTION _cmdDeorbitcheck {
             }
         }
     }
-    report("STATS deorbit-check complete ut=" + TIME:SECONDS + " file=" + reportPath).
-    PRINT "Snapshot saved to " + reportPath + ". Node, phase and flight controls preserved.".
+    LOCAL captureStatus IS "complete".
+    IF NOT reportComplete { SET captureStatus TO "incomplete". }
+    LOCAL completionRow IS "STATS deorbit-check " + captureStatus + " ut=" + TIME:SECONDS + " file=" + reportPath.
+    report(completionRow).
+    IF _deorbitCheckSaved(completionRow) {
+        PRINT "Verified snapshot in archive: " + reportPath.
+    } ELSE {
+        PRINT "Snapshot incomplete or unverified: " + reportPath + ". Re-run with a stable archive link.".
+    }
+    PRINT "Node, phase and flight controls preserved.".
 }
 
 _cmdDeorbitcheck().

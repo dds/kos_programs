@@ -71,7 +71,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/logs.ks").` | Archive the current boot's flight log to KSC |
 | `RUNPATH("0:/cmd/burnreport.ks").` | Print the latest maneuver cutoff report, retained across reboots |
 | `RUNPATH("0:/cmd/burncheck.ks").` | Read-only ignition check: engine availability, autopilot suppression, CPU roles/IPU, and timed throttle-governor probes against the retained node; never fires engines |
-| `RUNPATH("0:/cmd/deorbitcheck.ks").` | Read-only deorbit snapshot: keep the suspect node attached and run in manual mode; writes orbit, target, policy, node and repeated TR/native/frame comparisons to the printed log path |
+| `RUNPATH("0:/cmd/deorbitcheck.ks").` | Read-only deorbit snapshot: keep the suspect node attached and run in manual mode with an archive link; saves and verifies the report under `0:/logs/archive/_diagnostics/` |
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
@@ -749,8 +749,14 @@ Unflown retained nodes are rechecked against the current limits; rejection
 preserves the node. The 10–20 km downfield ballistic lead remains intentional.
 For an accepted node that looks wrong, stop automation and keep that node
 attached, then run `RUNPATH("0:/cmd/deorbitcheck.ks").` before clearing or
-replanning it. The command writes a separate snapshot to the printed archive
-path (or local run directory without a link). It captures the saved target,
+replanning it. The command writes directly to
+`0:/logs/archive/_diagnostics/deorbitcheck_<vessel>_<UT>.log` and verifies the
+completion record before printing success. It requires an archive link;
+losing that link marks the snapshot incomplete and requests a retry. There
+is no local fallback or reboot-sweep dependency, so no boot-module update is
+needed. Surviving reports from the old `0:/logs/` and `1:/run/` locations are
+copied into the same archive directory with a `recovered_` prefix, preserving
+originals and existing archive copies. It captures the saved target,
 active policy, orbit/state vectors, node components, repeated Trajectories
 samples, native position at impact time and an independent rotation transform.
 It leaves the node, mission phase and flight controls alone. Return the log
