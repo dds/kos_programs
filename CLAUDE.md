@@ -392,7 +392,8 @@ Looks like Python/JS; is neither.
   replays the 7.3 km entry using only constant 2.76 m/s2 thrust/mass, a
   three-second ignition delay and changing centrifugal support; modeled
   terminal capture is ~567 m, with no high hover. Actual reserve/target
-  readings at that later position and touchdown outcome remain pending.
+  readings at that later position were not supplied; that attempt aborted
+  on the subsequent terrain rejection described below.
   The next report reached ~857 m but aborted after a terrain diversion:
   d=29584, hs=23.6->17.55, vs=-21.4->-28.28, remaining dV~1020. The
   candidate grade=.238 (~13.4 deg) failed the normal 5-deg gate; synchronous
@@ -408,8 +409,12 @@ Looks like Python/JS; is neither.
   check_landing_divert models the reported low-altitude restart with constant
   2.76 m/s2, 3 s latency and .238 terrain: emergency acceptance at15.2s,
   terminal handoff >140 m; not flight/CPU/fuel/terrain-mesh validation.
-  The earlier
-  terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
+  After 2a27aa2, the operator reported an "ok landing" on the RO9 Mun economy
+  retry (2026-10-17). This is flight evidence for successful descent after the
+  alignment and terrain-abort repairs. Exact touchdown slope, emergency-tier
+  use, remaining dV and landing cost were not reported; ascent/return remains
+  unconfirmed. Do not treat this one landing as proof of optimal fuel use or
+  broad terrain/craft coverage. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered
   a lost encounter after a staged, low-thrust departure via BPLANE and
   reached COAST_1HALF (operator report, 2026-10-12). Midpoint refinement,

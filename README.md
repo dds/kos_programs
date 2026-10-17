@@ -208,8 +208,10 @@ guard runs throughout braking and after staging; an urgent stopping gate
 does not bypass it. `STATS landing-brake alignment hold/ready` records
 alignment changes, and the saved brake decision includes commanded throttle.
 These are source-driven model improvements, not a flight-proven optimum.
-These braking/staging changes have numerical coverage but still need a KSP
-flight test, including separation clearance on the actual craft.
+An RO9 Mun economy retry landed successfully after the alignment and terrain
+recovery fixes (operator report, 2026-10-17). Landing fuel cost and the
+ascent/return outcome remain unconfirmed; broader craft/terrain coverage is
+still needed.
 
 If the recovery wait expires or attitude recovery fails after ignition, XING preserves the
 unfinished node and holds for the operator, unless the actual trajectory

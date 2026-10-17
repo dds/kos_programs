@@ -254,6 +254,14 @@ light/clearance/reachability, >15° rejection, default strict policy and
 precision boot surveys. This is not KSP terrain/attitude/CPU validation, a
 fuel budget, or proof of touchdown stability on a 13.4° slope.
 
+After patch `2a27aa2`, the operator reported that the RO9 Mun economy retry
+made an "ok landing" (2026-10-17). This confirms successful descent on that
+retry after the alignment and terrain-abort repairs. The actual accepted
+slope, use of the emergency tier, remaining delta-v and landing fuel cost
+were not supplied. The 13.4° figure above describes the earlier rejected
+candidate, not a measured touchdown slope. Surface ascent and Kerbin return
+remain unconfirmed on this flight.
+
 ## End-of-burn contract
 
 `lib/thrust_cutoff.ks` owns `thrustCutoff()` and `thrustCutoffOk()`.
