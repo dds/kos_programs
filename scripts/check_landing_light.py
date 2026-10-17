@@ -217,7 +217,7 @@ def check_windows_and_search():
     env['lmGroundGeoAt'] = lambda ut: Geo(0, 179, env['SHIP'].BODY, np.eye(3))
     assert not env['landingLitGroundTrack']()['FOUND']
     # Reject a center-time success if any sampled touchdown margin fails.
-    env['landingLightAt'] = lambda lat, lng, ut: dict(OK=ut <= 1000, REASON='test-window')
+    env['landingLightAt'] = lambda lat, lng, ut, tolerance=0: dict(OK=ut <= 1000, REASON='test-window')
     assert not env['landingLightWindow'](0, -75, 1000)['OK']
     # Retained nodes cannot bypass missing timing or policy failures.
     env = environment(kerbin_longitude=-45)
@@ -330,7 +330,28 @@ def check_overrides():
     print('PASS: override upsert preserves return sequence/reserve and replaces each supplied key without growing the file')
 
 
+def check_diversion_radio_margin():
+    env=environment(kerbin_longitude=87)
+    env['LANDING_LIGHT_MODE']='ANY'
+    now=env['TIME'].SECONDS
+    assert not env['landingLightAt'](0,0,now)['OK']
+    relaxed=env['landingLightAt'](0,0,now,5)
+    assert relaxed['OK'] and 0 < relaxed['KERBIN'] < 5
+    assert env['landingLightWindow'](0,0,now,5)['OK']
+    assert not env['landingLightWindow'](0,0,now)['OK']
+    # Tolerance never permits a geometric horizon violation, even if huge.
+    env=environment(kerbin_longitude=91)
+    env['LANDING_LIGHT_MODE']='ANY'
+    assert not env['landingLightAt'](0,0,now,100)['OK']
+    # Solar policy remains active under the radio tolerance.
+    env=environment(kerbin_longitude=87,sun_longitude=180)
+    env['LANDING_LIGHT_MODE']='SUNLIT'
+    assert env['landingLightAt'](0,0,now,5)['REASON']=='sun-below-margin'
+    print('PASS: diversion tolerance accepts 0-5 degree Kerbin margins; planning remains strict; horizon and Sun rejection remain active')
+
+
 if __name__ == '__main__':
+    check_diversion_radio_margin()
     check_nested_radio_frame()
     check_afternoon()
     check_geometry()

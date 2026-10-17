@@ -102,6 +102,7 @@ GLOBAL FUNCTION landingLightAt {
     PARAMETER lat.
     PARAMETER lng.
     PARAMETER ut.
+    PARAMETER kerbinTolerance IS 0.
     LOCAL out IS LEXICON("OK", FALSE, "REASON", "invalid-light-config",
         "SUN", -90, "KERBIN", -90, "RISING", FALSE, "SETTING", FALSE).
     IF LANDING_LIGHT_MODE <> "ANY" AND LANDING_LIGHT_MODE <> "SUNLIT"
@@ -154,7 +155,8 @@ GLOBAL FUNCTION landingLightAt {
         }
     }
     SET out["REASON"] TO "kerbin-below-margin".
-    IF LANDING_REQUIRE_KERBIN > 0 AND out["KERBIN"] < LANDING_KERBIN_MIN_ELEV { RETURN out. }
+    LOCAL kerbinFloor IS MAX(0, LANDING_KERBIN_MIN_ELEV - MAX(0, kerbinTolerance)).
+    IF LANDING_REQUIRE_KERBIN > 0 AND out["KERBIN"] < kerbinFloor { RETURN out. }
     SET out["OK"] TO TRUE.
     SET out["REASON"] TO "ok".
     RETURN out.
@@ -166,11 +168,12 @@ GLOBAL FUNCTION landingLightWindow {
     PARAMETER lat.
     PARAMETER lng.
     PARAMETER ut.
-    LOCAL center IS landingLightAt(lat, lng, ut).
+    PARAMETER kerbinTolerance IS 0.
+    LOCAL center IS landingLightAt(lat, lng, ut, kerbinTolerance).
     IF NOT center["OK"] { RETURN center. }
     FOR fraction IN LIST(-1, -0.5, 0.5, 1) {
         LOCAL sample IS landingLightAt(lat, lng,
-            ut + fraction * MAX(60, LANDING_LIGHT_TIME_MARGIN)).
+            ut + fraction * MAX(60, LANDING_LIGHT_TIME_MARGIN), kerbinTolerance).
         IF NOT sample["OK"] { RETURN sample. }
     }
     RETURN center.

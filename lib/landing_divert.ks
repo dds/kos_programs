@@ -54,10 +54,14 @@ GLOBAL FUNCTION landingReviewReachableSite {
         RETURN FALSE.
     }
     LOCAL grade IS landingTerrainGrade(site["LAT"], site["LNG"], 20).
-    LOCAL light IS landingLightWindow(site["LAT"], site["LNG"], impactUT).
+    LOCAL light IS landingLightWindow(site["LAT"], site["LNG"], impactUT,
+        LANDING_DIVERT_KERBIN_TOLERANCE).
     IF grade > TAN(LANDING_TERRAIN_MAX_SLOPE) OR NOT light["OK"] {
         mLogError("Economy diversion rejected: terrain grade=" + ROUND(grade,3)
-            + " light/radio=" + light["REASON"] + ". Original target retained.").
+            + " light/radio=" + light["REASON"]
+            + " kerbin=" + ROUND(light["KERBIN"],2)
+            + " min=" + MAX(0, LANDING_KERBIN_MIN_ELEV - LANDING_DIVERT_KERBIN_TOLERANCE)
+            + ". Original target retained.").
         RETURN FALSE.
     }
     IF NOT initial AND _landingBottomRadar() <= TERMINAL_ALT {

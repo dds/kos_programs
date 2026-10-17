@@ -167,6 +167,9 @@ a nearby ballistic landing site. The replacement must pass coarse/fine
 terrain and the saved sunlight/Kerbin policy; otherwise descent holds for
 manual review. Precision profiles keep this option off. The time setting is
 a correction feasibility estimate, not a guaranteed landing deadline.
+Diversions allow `LANDING_DIVERT_KERBIN_TOLERANCE` (5 degrees) of the planned
+Kerbin margin to absorb burn errors. The effective requirement never falls
+below the geometric horizon; orbital planning retains its configured margin.
 APPROACH admission uses hull radar clearance, so a distant mountain's elevation
 cannot start terminal guidance kilometres above the local ground. Fine terrain
 surveying completes before powered guidance. Landing temporarily raises IPU to
