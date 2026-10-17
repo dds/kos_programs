@@ -172,8 +172,8 @@ Kerbin view does not abort an otherwise acceptable autonomous landing. The
 orbital site search retains its configured +5-degree Kerbin requirement.
 Sunlight and terrain checks remain active. To require radio view for diversions,
 set `LANDING_DIVERT_REQUIRE_KERBIN=1`; its configurable
-`LANDING_DIVERT_KERBIN_TOLERANCE` (7 degrees) allows a margin down to -2 degrees,
-including the reported -1.11-degree case. Neither setting guarantees a live link.
+`LANDING_DIVERT_KERBIN_TOLERANCE` subtracts 7 degrees from the planned requirement,
+with a lower bound of -2 degrees. Neither setting guarantees a live link.
 APPROACH admission uses hull radar clearance, so a distant mountain's elevation
 cannot start terminal guidance kilometres above the local ground. Fine terrain
 surveying completes before powered guidance. Landing temporarily raises IPU to
@@ -685,10 +685,13 @@ the same final orbit. The principal savings come from dropping plane and
 fixed-site requirements.
 
 Orbital science runs once, followed by automatic ground-track site selection
-and nearby terrain refinement. RO8 and RO9 Mun/Minmus economy profiles now
-require a **rising Sun at 10–30 degrees elevation**, preferring 15 degrees,
-and **Kerbin at least 5 degrees above the geometric horizon**. This approximates
-7am on a normalized 24-hour solar clock; it is not seven hours on the game clock.
+and nearby terrain refinement. RO8 and RO9 Mun/Minmus economy profiles require
+**Kerbin at least 15 degrees above the geometric horizon**, preferring 30 degrees
+or more to leave room for burn/landing dispersions. Any sunlit hour is eligible,
+with the **Sun at least 5 degrees up**. Morning's 15-degree Sun remains a soft
+preference; a later-day site wins when it has substantially better Kerbin view.
+At similar radio margins, the score favors rising light that will improve over
+setting light. This is geometric screening, not a guarantee of a live link.
 The picker searches four orbits along the existing ground track. If no site
 meets both requirements, it holds in orbit rather than selecting a dark site
 or requesting a plane change. Contract waypoints are ignored
@@ -702,8 +705,8 @@ For a vessel **already parked at the Mun/Minmus in LAND_DEORBIT**, stop at the
 manual prompt before ignition. With an archive link and the updated code synced:
 
 ```kos
-RUNPATH("0:/cmd/landlight.ks").                         // preview; preserve old node
-RUNPATH("0:/cmd/landlight.ks", "apply", "MORNING", 1).  // select site; remove old unflown node
+RUNPATH("0:/cmd/landlight.ks").                         // preview saved policy; preserve old node
+RUNPATH("0:/cmd/landlight.ks", "apply", "SUNLIT", 1).  // select site; remove old unflown node
 REBOOT.                                              // replan and fly the new deorbit
 ```
 

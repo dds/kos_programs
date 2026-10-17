@@ -55,6 +55,8 @@ def environment(frame=None, rotation=138984, sun_longitude=0, kerbin_longitude=-
                LANDING_AFTERNOON_MIN_ELEV=30, LANDING_AFTERNOON_MAX_ELEV=75,
                LANDING_AFTERNOON_PREFERRED_ELEV=52.5,
                LANDING_REQUIRE_KERBIN=1, LANDING_KERBIN_MIN_ELEV=5,
+               LANDING_KERBIN_PREFERRED_ELEV=30, LANDING_LIGHT_KERBIN_WEIGHT=0,
+               LANDING_LIGHT_SUN_WEIGHT=1, LANDING_LIGHT_SETTING_PENALTY=0,
                LANDING_LIGHT_SCAN_ORBITS=4, LANDING_LIGHT_SCAN_SAMPLES=128,
                LANDING_LIGHT_TIME_MARGIN=300, LIST=lambda *xs: KList(xs),
                MOD=lambda x, y: x % y, ROUND=round, fixture_wait=lambda _: None)
@@ -244,9 +246,47 @@ def check_windows_and_search():
     for vehicle in ('RO8', 'RO9'):
         for moon in ('mun', 'minmus'):
             profile = read_settings((ROOT/f'missions/{vehicle}/{moon}_economy_return.ks').read_text(), {})
-            assert profile['LANDING_LIGHT_MODE'] == 'MORNING' and profile['LANDING_REQUIRE_KERBIN'] == 1
-            assert profile['LANDING_SUN_PREFERRED_ELEV'] == 15 and profile['LANDING_KERBIN_MIN_ELEV'] == 5
+            assert profile['LANDING_LIGHT_MODE'] == 'SUNLIT' and profile['LANDING_REQUIRE_KERBIN'] == 1
+            assert profile['LANDING_SUN_MIN_ELEV'] == 5 and profile['LANDING_SUN_PREFERRED_ELEV'] == 15
+            assert profile['LANDING_KERBIN_MIN_ELEV'] == 15 and profile['LANDING_KERBIN_PREFERRED_ELEV'] == 30
+            assert profile['LANDING_LIGHT_KERBIN_WEIGHT'] == 1 and profile['LANDING_LIGHT_SUN_WEIGHT'] == .1
     print('PASS: bounded ground-track selection, no dark fallback, touchdown margin, retained-node timing/policy checks and offline dependencies')
+
+
+def check_economy_radio_priority():
+    env,_=hierarchy_environment(moon_phase=175)
+    profile=read_settings((ROOT/'missions/RO9/mun_economy_return.ks').read_text(),{})
+    env.update(profile)
+    now=env['TIME'].SECONDS
+    # Actual source geometry: ideal morning has ~19 degrees of Kerbin view;
+    # the afternoon alternative has ~47 degrees. Freeze these valid reports
+    # to isolate picker ranking from the separately tested body ephemerides.
+    morning=env['landingLightAt'](0,-75,now)
+    afternoon=env['landingLightAt'](0,37.5,now)
+    assert morning['OK'] and afternoon['OK'],(morning,afternoon)
+    assert 15 < morning['KERBIN'] < 20 and afternoon['KERBIN'] > 40
+    assert abs(morning['SUN']-15) < abs(afternoon['SUN']-15)
+    reports={-75:morning,37.5:afternoon}
+    counter=[0]
+    def track(ut):
+        counter[0]+=1
+        return Geo(0,-75 if counter[0]%2 else 37.5,env['SHIP'].BODY,np.eye(3))
+    env.update(lmGroundGeoAt=track,
+               landingLightAt=lambda lat,lng,ut: reports[lng],
+               landingLightWindow=lambda lat,lng,ut: reports[lng])
+    picked=env['landingLitGroundTrack']()
+    assert picked['FOUND'] and picked['LNG']==37.5,picked
+    # Similar radio margins: favor rising, improving light over setting light.
+    reports[-75]=dict(OK=True,REASON='ok',SUN=15,KERBIN=35,SETTING=True)
+    reports[37.5]=dict(OK=True,REASON='ok',SUN=10,KERBIN=35,SETTING=False)
+    assert env['landingLitGroundTrack']()['LNG']==37.5
+    # Planning still rejects a good-Sun site below the enlarged radio margin,
+    # and a dark site regardless of radio; this is not a dark-side fallback.
+    env,_=hierarchy_environment(moon_phase=175)
+    env.update(profile)
+    assert env['landingLightAt'](0,-80,now)['REASON']=='kerbin-below-margin'
+    assert env['landingLightAt'](0,179,now)['REASON']=='sun-below-margin'
+    print('PASS: economy selects 47-degree Kerbin afternoon over 19-degree ideal morning; favors rising light; enlarged radio and sunlight minima remain hard')
 
 
 def check_command():
@@ -255,7 +295,7 @@ def check_command():
     def without_print(nodes):
         return [(s, without_print(yes), without_print(no)) for s, yes, no in nodes if not s.startswith('PRINT ')]
     parsed = without_print(ks.parse(source))
-    for scenario in ('preview', 'apply', 'afternoon', 'status', 'no-site', 'suborbital', 'started', 'throttle'):
+    for scenario in ('preview', 'apply', 'afternoon', 'saved-policy', 'status', 'no-site', 'suborbital', 'started', 'throttle'):
         mutations, nodes = [], [object()]
         class HasNode:
             def __bool__(self): return bool(nodes)
@@ -264,7 +304,8 @@ def check_command():
         if scenario == 'status': state.update(phase='LAND_ASSIST', deorbit_burn_started='true')
         before = dict(state)
         env = dict(action=scenario if scenario in ('preview', 'status') else 'apply',
-                   mode='AFTERNOON' if scenario == 'afternoon' else 'MORNING', requireKerbin=1,
+                   mode='' if scenario=='saved-policy' else 'AFTERNOON' if scenario == 'afternoon' else 'MORNING', requireKerbin=1,
+                   LANDING_LIGHT_MODE='SUNLIT',
                    SHIP=NS(STATUS='SUB_ORBITAL' if scenario == 'suborbital' else 'LANDED' if scenario == 'status' else 'ORBITING',
                            BODY=NS(NAME='Mun'), ORBIT=NS(ECCENTRICITY=0), PERIAPSIS=14000,
                            THRUST=0, CONTROL=NS(MAINTHROTTLE=.1 if scenario == 'throttle' else 0, PILOTMAINTHROTTLE=0)),
@@ -283,12 +324,12 @@ def check_command():
         try: ks.run(parsed, env)
         except ks.Returned: pass
         assert state == before
-        assert bool(mutations) == (scenario in ('apply', 'afternoon'))
-        assert bool(nodes) == (scenario not in ('apply', 'afternoon'))
+        assert bool(mutations) == (scenario in ('apply', 'afternoon', 'saved-policy'))
+        assert bool(nodes) == (scenario not in ('apply', 'afternoon', 'saved-policy'))
         if mutations:
             assert 'SEQUENCE' not in mutations[0]
             assert mutations[0]['LANDING_REQUIRE_KERBIN'] == 1
-            assert mutations[0]['LANDING_LIGHT_MODE'] == ('AFTERNOON' if scenario == 'afternoon' else 'MORNING')
+            assert mutations[0]['LANDING_LIGHT_MODE'] == ('SUNLIT' if scenario=='saved-policy' else 'AFTERNOON' if scenario == 'afternoon' else 'MORNING')
     print('PASS: preview preserves node/mission; apply alone replaces target/node; no-site, begun burn, descent and positive throttle refuse mutation')
 
 
@@ -366,5 +407,6 @@ if __name__ == '__main__':
     check_afternoon()
     check_geometry()
     check_windows_and_search()
+    check_economy_radio_priority()
     check_command()
     check_overrides()

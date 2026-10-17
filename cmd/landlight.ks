@@ -8,13 +8,13 @@
 // Apply replaces the unflown deorbit node/target, preserving mission intent.
 // ============================================================
 @LAZYGLOBAL OFF.
-PARAMETER action IS "preview", mode IS "MORNING", requireKerbin IS 1.
+PARAMETER action IS "preview", mode IS "", requireKerbin IS 1.
 
 LOCAL FUNCTION _cmdLandlight {
     IF action <> "preview" AND action <> "apply" AND action <> "status" {
         PRINT "Use status/preview/apply, mode ANY/SUNLIT/MORNING/AFTERNOON, Kerbin view 0/1.". RETURN.
     }
-    IF (mode <> "ANY" AND mode <> "SUNLIT" AND mode <> "MORNING" AND mode <> "AFTERNOON")
+    IF (mode <> "" AND mode <> "ANY" AND mode <> "SUNLIT" AND mode <> "MORNING" AND mode <> "AFTERNOON")
             OR (requireKerbin <> 0 AND requireKerbin <> 1) {
         PRINT "Invalid light mode or Kerbin-view flag.". RETURN.
     }
@@ -30,6 +30,7 @@ LOCAL FUNCTION _cmdLandlight {
     IF NOT EXISTS(profilePath) { PRINT "Cached mission profile missing; cannot preserve mission context.". RETURN. }
     RUNPATH(profilePath).
     applyMissionOverrides().
+    IF mode = "" { SET mode TO LANDING_LIGHT_MODE. }
     IF action = "status" {
         PRINT "Saved light policy=" + LANDING_LIGHT_MODE + "; require Kerbin=" + LANDING_REQUIRE_KERBIN
             + "; minimum Kerbin elevation=" + LANDING_KERBIN_MIN_ELEV + " deg.".

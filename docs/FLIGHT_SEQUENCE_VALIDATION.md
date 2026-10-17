@@ -67,7 +67,9 @@ estimated lateral translation/arrest time beyond
 `LANDING_APPROACH_MAX_TIME` (120 s) triggers the same review. This estimate
 is not a guaranteed touchdown deadline or a fuel budget. Replacements start
 at the actual timed Trajectories impact, receive coarse and fine terrain
-checks, and must pass slope and Sun/Kerbin requirements. Terminal replacements
+checks, and must pass slope and sunlight requirements. Kerbin view is optional
+for post-deorbit diversions by operator request; loss of a radio link alone
+must not abort an otherwise acceptable autonomous landing. Terminal replacements
 must also fit the time estimate. Failure requests manual review with checked
 cutoff, rather than silently accepting an unsuitable site. Precision
 profiles retain their target and existing correction policy.
@@ -87,6 +89,39 @@ elevation, speed, gate flags, current/next-stage acceleration, stage and IPU.
 regressions cover the reported geometry, deferred node callbacks, diversion
 rejection gates, preserved return overrides and CPU recovery. These changes
 still need KSP validation from a named pre-deorbit quicksave.
+
+## Radio margin and partial-throttle braking, 2026-10-17
+
+The subsequent economy flight rejected a flat fallback (grade 0.006) because
+Kerbin was at -1.11 degrees. The operator explicitly accepted that elevation
+and prioritized autonomous landing after deorbit over radio availability.
+`LANDING_DIVERT_REQUIRE_KERBIN=0` is now the default. Original site selection
+still requires Kerbin view: economy profiles now require 15 degrees and favor
+30 degrees or more. Sunlit hours are eligible above a 5-degree Sun minimum;
+15-degree morning light is a soft preference, subordinate to radio margin.
+Similar radio sites favor rising over setting light. A source-geometry/ranking
+fixture chooses a 47-degree-Kerbin afternoon site over a 19-degree-Kerbin ideal
+morning site. The orbital search remains bounded to four orbits. Direct view
+does not establish antenna range, terrain clearance to Kerbin, or network routing.
+
+The operator also reported BRAKE at about 68% throttle. This matches the
+current controller: net velocity-arrest acceleration is 0.8 * (maxAcc - g),
+then the vector receives gravity support before conversion to throttle.
+High horizontal speed requests zero vertical speed. This is conservative
+velocity arrest, not an optimized full-thrust suicide-burn trajectory.
+In a source-driven flat, constant-g example (Mun g=1.63, TWR=4, horizontal
+speed 400 m/s and descent 60 m/s), it commands 68.34% throttle and a net
+3.912 m/s^2 arrest budget. An ideal full-thrust vector could provide
+6.076 m/s^2 in that direction, reducing the ideal velocity-stop duration from
+103.4 to 66.6 seconds. Those are illustrative model values, not measured RO9
+thrust or predicted flight savings.
+
+A full-thrust redesign must solve the vector thrust/gravity budget and use
+the same model for ignition height, steering and taper. It must retain
+reaction/staging time, terrain clearance, changing mass/thrust and cutoff
+checks. Merely forcing the existing command to 100%, or dropping the 20%
+reserve without validating its purpose, is not that redesign. No braking
+physics or safety margins changed in the radio-priority work.
 
 ## End-of-burn contract
 

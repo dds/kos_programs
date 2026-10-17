@@ -348,6 +348,15 @@ Looks like Python/JS; is neither.
   orbital planning keeps its +5-degree requirement. An opt-in strict diversion
   uses a 7-degree allowance bounded at -2 degrees. Do not restore a radio-only
   post-deorbit abort by default. Sunlight, slope and cutoff gates remain active.
+  Economy planning now prioritizes radio margin: Kerbin >=15 degrees,
+  preferred >=30, Sun >=5 at any sunlit hour; morning 15-degree Sun and rising
+  light are soft preferences. Explicit MORNING/AFTERNOON modes remain available.
+  Source geometry/ranking fixtures pass; flight verification is pending.
+  The operator's ~68% BRAKE observation is consistent with the 0.8*(a-g)
+  vector arrest budget plus gravity support, not a full-thrust suicide burn.
+  A constant-g TWR=4, hs=400, vs=-60 fixture reproduces 68.34%; it is not a
+  measurement of this craft. Braking optimization must change the gate and
+  controller together; do not bypass the reserve or force throttle alone.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered
