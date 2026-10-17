@@ -23,6 +23,7 @@ LOCAL FUNCTION _cmdLandlight {
     bootLibLoad("landing_deorbit").
     // Current flights can still have an older dependency manifest until
     // reboot. Load explicitly after the existing landing config/math deps.
+    bootLibLoad("landing_light_math").
     bootLibLoad("landing_light").
     LOCAL profilePath IS "1:/missions/" + stateGet("vehicle", "")
         + "/" + stateGet("mission_id", "") + ".ks".

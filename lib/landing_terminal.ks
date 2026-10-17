@@ -35,7 +35,7 @@ GLOBAL FUNCTION _landingTargetRefineTick {
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
     LOCAL refineAge IS TIME:SECONDS - ctx["STATE_ENTERED"].
     LOCAL controlHeight IS MIN(_landingTargetHeight(ctx), _landingBottomRadar()).
-    IF controlHeight > TERMINAL_ALT {
+    IF _landingBottomRadar() > TERMINAL_ALT {
         _landingSetThrottle(ctx, 0).
         _landingSetState(ctx, "COAST", "target refinement above terminal corridor").
         RETURN.
@@ -164,7 +164,11 @@ GLOBAL FUNCTION _landingFinalTerrainCheck {
 GLOBAL FUNCTION _landingApproachTick {
     PARAMETER ctx.
 
-    IF MIN(_landingTargetHeight(ctx), _landingBottomRadar()) > TERMINAL_ALT {
+    IF NOT landingReviewReachableSite(ctx) {
+        SET landingAbortFlag TO TRUE.
+        RETURN.
+    }
+    IF _landingBottomRadar() > TERMINAL_ALT {
         _landingSetThrottle(ctx, 0).
         _landingSetState(ctx, "COAST", "approach above terminal corridor").
         RETURN.

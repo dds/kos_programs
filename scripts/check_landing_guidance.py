@@ -150,14 +150,15 @@ def call(name, env, *args):
 
 
 def environment():
-    env = dict(SQRT=math.sqrt, TAN=lambda x: math.tan(math.radians(x)),
+    env = dict(landingReviewReachableSite=lambda *args: True,
+               SQRT=math.sqrt, TAN=lambda x: math.tan(math.radians(x)),
                SIN=lambda x: math.sin(math.radians(x)), COS=lambda x: math.cos(math.radians(x)),
                CONSTANT=NS(PI=math.pi), TIME=NS(SECONDS=0), SHIP=NS(BODY=NS(RADIUS=60000)))
     for name, value in re.findall(r'GLOBAL (\w+) IS ([^\n]+)\.', SOURCES):
         try: env[name] = evaluate(value, env)
         except (NameError, SyntaxError, AttributeError): pass
     for name in ('lmApproachAcceleration', 'lmApproachDescentSpeed', 'lmApproachSteering',
-                 'lmDescentSpeed', 'lmVerticalThrottle', '_landingTerrainGrade'):
+                 'lmDescentSpeed', 'lmVerticalThrottle', 'landingTerrainGrade'):
         env[name] = lambda *args, name=name: call(name, env, *args)
     return env
 

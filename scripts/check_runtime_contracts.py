@@ -180,13 +180,36 @@ def check_compact_burn():
     source = re.sub(r'UNLOCK (\w+)\.', r'fixture_unlock("\1").', source)
     source = source.replace('REMOVE nd.', 'fixture_remove(nd).')
     for scenario in ('normal', 'cutoff-fault', 'frozen', 'weak-thrust', 'abort', 'flameout', 'reversal', 'no-engine', 'expired', 'off-vector', 'unlit-site'):
-        node = NS(TIME=-1 if scenario == 'expired' else 200,
-                  DELTAV=NS(MAG=10.), BURNVECTOR=Vec((1, 0, 0)))
+        class AttachedNode:
+            # Match kOS Node.GetBurnVector/Remove: both suffix aliases throw
+            # after REMOVE invalidates this wrapper's NodeRef.
+            attached = True
+            TIME = -1 if scenario == 'expired' else 200
+            residual = NS(MAG=10.)
+            vector = Vec((1, 0, 0))
+            @property
+            def DELTAV(self):
+                if not self.attached: raise RuntimeError('Must attach node first')
+                return self.residual
+            @property
+            def BURNVECTOR(self):
+                if not self.attached: raise RuntimeError('Must attach node first')
+                return self.vector
+            @BURNVECTOR.setter
+            def BURNVECTOR(self, value): self.vector = value
+        node = AttachedNode()
         ship = NS(MASS=10., THRUST=0., AVAILABLETHRUST=0. if scenario == 'no-engine' else 100.,
                   CONTROL=NS(PILOTMAINTHROTTLE=0.), FACING=NS(FOREVECTOR=Vec((1, 0, 0))))
         removed, commands, elapsed = [], [], [0.]
-        markers = {}
+        markers, callbacks, history = {}, {}, []
+        def remove(nd):
+            removed.append(nd)
+            nd.attached = False
+            # Include an already queued callback even after UNLOCK, or an
+            # owner trigger unknown to a different compiled cleanup library.
+            for expression in history: evaluate(expression, env)
         env = dict(nd=node, TIME=NS(SECONDS=0.), SHIP=ship, ABORT=False, throttle=0.,
+                   CONFIG=NS(IPU=150), LANDING_MIN_IPU=2000,
                    KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),
                    ROUND=round, VANG=lambda *_: 30 if scenario == 'off-vector' else 0,
                    landingLightNodeAllowed=lambda *_: scenario != 'unlit-site',
@@ -195,15 +218,21 @@ def check_compact_burn():
                    vesselNeedsStage=lambda: ship.AVAILABLETHRUST <= 0,
                    vesselStageForLanding=lambda _: None,
                    maneuverEnsureBurnAlarm=lambda *_: '', coastAutoWarp=lambda *_: None,
-                   DELETEALARM=lambda _: None, fixture_remove=removed.append,
-                   fixture_unlock=lambda _: None)
+                   DELETEALARM=lambda _: None, fixture_remove=remove,
+                   fixture_unlock=lambda name: callbacks.pop(name, None))
 
         def lock(statement):
-            if statement.startswith('LOCK THROTTLE TO '):
-                env['throttle'] = evaluate(statement[17:], env)
+            name, expression = re.fullmatch(r'LOCK (\w+) TO (.*)', statement, re.S).groups()
+            callbacks[name] = expression
+            history.append(expression)
+            if name == 'THROTTLE':
+                env['throttle'] = evaluate(expression, env)
                 commands.append(env['throttle'])
 
         def wait(dt):
+            for name, expression in callbacks.items():
+                value = evaluate(expression, env)
+                if name == 'THROTTLE': env['throttle'] = value
             env['TIME'].SECONDS += dt
             ship.THRUST = ship.AVAILABLETHRUST * env['throttle'] * (.01 if scenario == 'weak-thrust' else 1)
             if env['throttle'] <= 0:
@@ -217,6 +246,9 @@ def check_compact_burn():
             assert env['TIME'].SECONDS < 300
 
         def cleanup():
+            # Physical cutoff can override throttle without removing the
+            # original file's steering trigger.
+            callbacks['THROTTLE'] = '0'
             env.update(throttle=0.)
             ship.CONTROL.PILOTMAINTHROTTLE=0
             wait(.02)
@@ -226,10 +258,18 @@ def check_compact_burn():
         result = run(source, env)
         assert result == (scenario == 'normal'), scenario
         assert bool(removed) == result and env['throttle'] == 0, scenario
+        assert env['CONFIG'].IPU==150 and 'burn_prior_ipu' not in markers
         if scenario in ('no-engine', 'expired', 'off-vector', 'unlit-site'): assert not any(commands)
-        assert ('deorbit_burn_started' in markers) == (any(commands) and not result), scenario
+        burned = elapsed[0] > 0
+        assert ('deorbit_burn_started' in markers) == (burned and not result), scenario
         if scenario == 'frozen': assert elapsed[0] < 1.1  # Old timeout allowed ~10 s of full thrust.
-    print('PASS: compact burn completion, timeout, abort, thrust loss, reversal, expired node and alignment; failed nodes retained')
+    print('PASS: compact burn completion and failures; deferred callbacks survive removed nodes without reading suffixes; failed nodes retained')
+    # A blocked publishing loop cannot leave the cached burn command on.
+    throttle=re.search(r'LOCK THROTTLE TO (throttleCmd.*?)\.(?=\s*\n)',source,re.S)[1]
+    for age,expected in ((0,.7),(.3,.7),(.49,.35),(.5,0),(10,0)):
+        value=evaluate(throttle,dict(throttleCmd=.7,commandUntil=100.5,TIME=NS(SECONDS=100+age)))
+        assert abs(value-expected)<1e-10,(age,value)
+    print('PASS: cached compact-burn command expires without publisher progress; temporary CPU budget restored on all burn results')
 
 
 def check_cutoff_handoffs():

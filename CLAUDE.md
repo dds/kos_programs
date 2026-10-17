@@ -326,6 +326,21 @@ Looks like Python/JS; is neither.
   AFTERNOON prefers a falling 52.5 deg Sun. Exact flight coordinates and
   in-game verification remain pending. `cmd/landlight status` provides live
   and predicted site elevations without changing the target/node/phase.
+  Later on 2026-10-17, a completed deorbit raised `Must attach node first`
+  at the compact executor's steering lock. Cached control values and
+  owner-file steering release now prevent callbacks from reading a removed
+  node. After reboot, BRAKE reportedly started near 12 km; its initial gate
+  telemetry is unavailable. APPROACH then displayed bottom=2504 m,
+  d=79622 m, hs=7.2/7.1 and vs=-0.3/-0.3. Terminal admission incorrectly used
+  distant target elevation; it now uses hull clearance. Economy profiles
+  can divert to a surveyed ballistic site after an excessive miss/correction
+  estimate, preserving slope, Sun/Kerbin and return-intent checks. Failure
+  holds for manual review. Fine scanning runs before powered guidance; a
+  scoped 2000-IPU landing floor restores on cleanup/reboot. Shared geometry
+  is in `landing_light_math`; orbital search/node checks stay out of powered
+  descent. These changes have source fixtures only. Do not claim the early
+  12 km ignition cause is established or tune away the stopping margins;
+  `cmd/landingcheck` now retrieves its saved decision after future attempts.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered

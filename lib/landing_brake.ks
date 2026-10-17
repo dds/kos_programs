@@ -84,6 +84,11 @@ GLOBAL FUNCTION _landingBrakeAlignTick {
         _landingHudEtaNotice(ctx, "Braking burn", nextBurnEta, YELLOW).
     }
 
+    // A geographic gate is not permission to burn while still slewing.
+    // Preserve urgent vertical arrest when the stopping envelope is already
+    // reached; the normal twenty-second alignment lead avoids this case.
+    IF steerInfo["ALIGN_ERR"] > 15 AND NOT gate["V_NOW"] { RETURN. }
+
     IF gate["V_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_NOW"] {
@@ -99,6 +104,10 @@ GLOBAL FUNCTION _landingBrakeAlignTick {
 GLOBAL FUNCTION _landingBrakingTick {
     PARAMETER ctx.
 
+    IF NOT landingReviewReachableSite(ctx) {
+        SET landingAbortFlag TO TRUE.
+        RETURN.
+    }
     LOCAL maxAcc IS ctx["MAX_ACC"].
     LOCAL gravAcc IS ctx["GRAV"].
     LOCAL downSpeed IS ctx["DOWN_SPEED"].
@@ -110,7 +119,7 @@ GLOBAL FUNCTION _landingBrakingTick {
         burnHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
     LOCAL targetVs IS -targetDescent.
     LOCAL verticalCaptured IS ABS(ctx["V_SPEED"] - targetVs) <= 5.
-    LOCAL terminalReady IS burnHeight <= TERMINAL_ALT.
+    LOCAL terminalReady IS _landingBottomRadar() <= TERMINAL_ALT.
     LOCAL coastEnvelope IS lmBrakeEnvelope(horizontalSpeed, downSpeed,
         ctx["PLAN_ACC"], ctx["BRAKE_GRAV"], MAX(0, LANDING_BRAKE_REACTION_TIME)).
     IF NOT terminalReady AND horizontalSpeed <= APPROACH_HSPEED

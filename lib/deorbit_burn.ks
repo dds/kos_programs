@@ -51,16 +51,17 @@ GLOBAL FUNCTION executeDeorbitNode {
     }
 
     SET SAS TO FALSE.
-    LOCK STEERING TO nd:BURNVECTOR.
-    UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < 5
-            OR TIME:SECONDS >= startTime - 2 OR ABORT {
-        LOCK STEERING TO nd:BURNVECTOR.
+    // System locks are asynchronous callbacks. Never let one retain a node
+    // suffix: successful cleanup removes the node before this file returns.
+    LOCAL steerVec IS nd:BURNVECTOR.
+    LOCK STEERING TO steerVec.
+    UNTIL TIME:SECONDS >= startTime OR ABORT {
+        SET steerVec TO nd:BURNVECTOR.
         WAIT 0.1.
     }
-
-    WAIT UNTIL TIME:SECONDS >= startTime OR ABORT.
     IF ABORT OR VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) > 15 {
         mLogError("Refusing deorbit burn: off vector.").
+        UNLOCK STEERING.
         vesselLandingCleanup().
         IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
         RETURN FALSE.
@@ -75,6 +76,17 @@ GLOBAL FUNCTION executeDeorbitNode {
     LOCAL appliedDV IS 0.
     LOCAL lastTime IS TIME:SECONDS.
     LOCAL lastAcc IS SHIP:THRUST / MAX(0.01, SHIP:MASS).
+    LOCAL priorIpu IS CONFIG:IPU.
+    IF priorIpu < MIN(2000, LANDING_MIN_IPU) {
+        stateSet("burn_prior_ipu", priorIpu).
+        SET CONFIG:IPU TO MIN(2000, LANDING_MIN_IPU).
+    }
+    LOCAL throttleCmd IS 0.
+    LOCAL commandUntil IS TIME:SECONDS.
+    // Cached commands must still expire if the publishing loop stalls.
+    // This small scalar callback needs neither a node nor engine queries.
+    LOCK THROTTLE TO throttleCmd
+        * MAX(0, MIN(1, (commandUntil - TIME:SECONDS) / 0.02)).
     UNTIL nd:DELTAV:MAG <= completeDV OR ABORT
             OR vesselNeedsStage()
             OR TIME:SECONDS - burnStart > burnTime * 2 + 8 {
@@ -89,17 +101,26 @@ GLOBAL FUNCTION executeDeorbitNode {
                 AND VDOT(origVec:NORMALIZED, nd:BURNVECTOR:NORMALIZED) < 0 {
             BREAK.
         }
-        LOCK STEERING TO nd:BURNVECTOR.
+        SET steerVec TO nd:BURNVECTOR.
         // No throttle floor: bound the requested tail impulse even for a
         // high-TWR lander rather than stepping through fixed 25%/5% burns.
-        LOCK THROTTLE TO MIN(1, nd:DELTAV:MAG
+        LOCAL nextThrottle IS MIN(1, nd:DELTAV:MAG
             / MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS)
             / MAX(1, 4 * (TIME:SECONDS - lastTime))).
+        SET commandUntil TO TIME:SECONDS + 0.5.
+        SET throttleCmd TO nextThrottle.
         WAIT 0.02.
     }
 
     LOCAL residual IS nd:DELTAV:MAG.
+    SET throttleCmd TO 0.
+    // Release the steering trigger in its owning compiled file. A different
+    // library's UNLOCK need not know about this file's system-lock trigger.
+    LOCK THROTTLE TO 0.
+    UNLOCK STEERING.
     LOCAL stopped IS vesselLandingCleanup().
+    SET CONFIG:IPU TO priorIpu.
+    stateRemove("burn_prior_ipu").
     LOCAL success IS stopped AND NOT ABORT AND residual <= completeDV.
     IF success {
         REMOVE nd.

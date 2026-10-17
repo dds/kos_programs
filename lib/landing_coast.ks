@@ -59,6 +59,10 @@ GLOBAL FUNCTION _landingCoastTick {
     PARAMETER ctx.
 
     _landingSetThrottle(ctx, 0).
+    IF NOT landingReviewReachableSite(ctx) {
+        SET landingAbortFlag TO TRUE.
+        RETURN.
+    }
     _landingSetSteering(ctx, lmRetroSteering(
         ctx["H_VEL"], ctx["SURFACE_VEL"], ctx["UP_VEC"])).
 
@@ -111,11 +115,11 @@ GLOBAL FUNCTION _landingCoastTick {
     }
 
     IF gate["V_NOW"] {
-        _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
+        _landingSetState(ctx, "BRAKE_ALIGN", "vertical burn gate").
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_NOW"] {
-        _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
+        _landingSetState(ctx, "BRAKE_ALIGN", "downrange <= brake distance").
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_OVERSHOT"] {
-        _landingSetState(ctx, "BRAKING_BURN", "target passed below safe altitude").
+        _landingSetState(ctx, "BRAKE_ALIGN", "target passed below safe altitude").
     } ELSE IF MIN(gate["H_ETA"], gate["V_ETA"]) <= LANDING_BRAKE_ALIGN_LEAD {
         _landingSetState(ctx, "BRAKE_ALIGN", "brake alignment lead").
     } ELSE IF NOT ctx["HAS_TARGET"] {
@@ -133,7 +137,7 @@ GLOBAL FUNCTION _landingCoastTick {
         LOCAL burnTime IS gate["DOWN_SPEED"]
             / MAX(0.1, gate["MAX_ACC"] - gate["GRAV"]).
         IF tti <= burnTime * BURN_MARGIN {
-            _landingSetState(ctx, "BRAKING_BURN", "blind suicide burn gate").
+            _landingSetState(ctx, "BRAKE_ALIGN", "blind suicide burn gate").
         }
     }
 }

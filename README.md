@@ -151,13 +151,27 @@ automatic sequence. A usable engine prevents staging even if another engine
 has flamed out. Exhausting the final engine does not stage payloads or chutes.
 
 `RUNPATH("0:/cmd/landingcheck.ks").` reports the next engine slot and estimated
-post-separation surface TWR. Braking accounts for the weaker of current and
+post-separation surface TWR, engine limits, and the saved last brake decision.
+Braking accounts for the weaker of current and
 next-stage acceleration, combined horizontal/vertical motion, terrain
 clearance, and a three-second reaction allowance. It can therefore start
 earlier than a vertical-only suicide-burn estimate. The spent stage is
 discarded ballistically; this is not a separate disposal-targeting program.
 If it still has fuel when braking ends, it stays attached: the controller
 does not burn fuel merely to empty it or jettison a fueled stage automatically.
+
+RO8/RO9 Mun/Minmus economy profiles allow `LANDING_FLEXIBLE_SITE=1`.
+An actual deorbit miss beyond the 20 km assist corridor, or an estimated
+terminal correction beyond `LANDING_APPROACH_MAX_TIME` (120 seconds), reviews
+a nearby ballistic landing site. The replacement must pass coarse/fine
+terrain and the saved sunlight/Kerbin policy; otherwise descent holds for
+manual review. Precision profiles keep this option off. The time setting is
+a correction feasibility estimate, not a guaranteed landing deadline.
+APPROACH admission uses hull radar clearance, so a distant mountain's elevation
+cannot start terminal guidance kilometres above the local ground. Fine terrain
+surveying completes before powered guidance. Landing temporarily raises IPU to
+at least `LANDING_MIN_IPU` (2000, capped at 2000 for the automatic raise), then
+restores the previous value on cleanup or the next boot.
 These braking/staging changes have numerical coverage but still need a KSP
 flight test, including separation clearance on the actual craft.
 

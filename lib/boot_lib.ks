@@ -767,6 +767,11 @@ GLOBAL FUNCTION bootPreamble {
         SET CONFIG:IPU TO priorIpu.
         stateRemove("burn_prior_ipu").
     }
+    SET priorIpu TO stateGetNum("landing_prior_ipu", -1).
+    IF priorIpu >= 0 {
+        SET CONFIG:IPU TO priorIpu.
+        stateRemove("landing_prior_ipu").
+    }
 }
 
 GLOBAL FUNCTION bootLibBandRoots {

@@ -50,6 +50,8 @@ def check_gates():
     assert gate['V_ETA'] < 20
     ctx['height'] = gate['V_GATE'] - 1
     call('_landingCoastTick', env, ctx)
+    assert ctx['STATE'] == 'BRAKE_ALIGN' and ctx['throttle'] == 0
+    call('_landingBrakeAlignTick', env, ctx)
     assert ctx['STATE'] == 'BRAKING_BURN'
     ctx.update(height=100000, downrange=gate['H_GATE'] + 599)
     env['TERRAIN_SAFE_ALT'] = 200000
@@ -81,6 +83,8 @@ def check_high_altitude_misses():
         # arrest once the full stopping envelope actually becomes urgent.
         ctx['height']=gate['V_GATE']-1
         call('_landingCoastTick',env,ctx)
+        assert ctx['STATE']=='BRAKE_ALIGN' and ctx['throttle']==0,ctx
+        call('_landingBrakeAlignTick',env,ctx)
         assert ctx['STATE']=='BRAKING_BURN',ctx
     for state in ('BRAKING_BURN','APPROACH','TARGET_REFINE'):
         env,ctx=fixture(twr=3,horizontal=.5 if state=='BRAKING_BURN' else 54.96,
@@ -91,6 +95,29 @@ def check_high_altitude_misses():
         call(function,env,ctx)
         assert ctx['STATE']=='COAST' and ctx['throttle']==0,(state,ctx)
     print('PASS: 14 km missed targets cannot force early braking; 13 km approach/refinement/coasting handoffs cut thrust; urgent vertical gate survives')
+
+
+def check_distant_elevated_site():
+    # RO9 report: bottom=2504 m, d=79622 m, hs=7.2, vs=-0.3.
+    # A high, distant site's elevation can put target-relative height inside
+    # the 1 km corridor even while actual hull clearance is still 2.5 km.
+    env,ctx=fixture(horizontal=7.2,down=.3,height=2504)
+    paced=call('lmApproachDescentSpeed',env,30,398,79622,7.2,.277)
+    assert .3 < paced < .4  # Reproduces the near-hover descent command.
+    for state, function in (('APPROACH', '_landingApproachTick'),
+                            ('TARGET_REFINE', '_landingTargetRefineTick')):
+        env, ctx = fixture(horizontal=7.2, down=.3, height=2504)
+        ctx.update(STATE=state, downrange=79622, throttle=.3)
+        env['_landingTargetHeight'] = lambda _: 390
+        call(function, env, ctx)
+        assert ctx['STATE']=='COAST' and ctx['throttle']==0, ctx
+    # A 400 m terrain shift changes only geography, not an altitude gate.
+    env,ctx=fixture(twr=3,horizontal=550,down=5.89,height=12000)
+    for shift in (-400,0,400):
+        ctx.update(STATE='COAST',downrange=80000+shift)
+        call('_landingCoastTick',env,ctx)
+        assert ctx['STATE']=='COAST' and ctx['throttle']==0
+    print('PASS: elevated 79.6 km target cannot admit APPROACH at 2504 m bottom; 400 m shifts do not command ignition')
 
 
 def simulate(gravity, twr, horizontal, down, next_twr=None):
@@ -251,6 +278,7 @@ def check_integration():
 if __name__=='__main__':
     check_gates()
     check_high_altitude_misses()
+    check_distant_elevated_site()
     for args in ((1.63,8,400,80),(1.63,3,300,100),(1.63,15,450,30),
                  (.491,7.45,120,60),(1.63,12,400,60,3)):
         simulate(*args)

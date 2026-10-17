@@ -37,6 +37,7 @@ GLOBAL LANDING_TOUCHDOWN_SETTLE_TICKS IS 120.
 GLOBAL FUNCTION _landingTerrainCheck {
     PARAMETER targetLat.
     PARAMETER targetLng.
+    PARAMETER applyShift IS TRUE.
 
     LOCAL radiusM IS TERRAIN_CHECK_RADIUS.
     LOCAL stepM IS TERRAIN_CHECK_STEP.
@@ -58,7 +59,7 @@ GLOBAL FUNCTION _landingTerrainCheck {
     LOCAL bestLat IS targetLat.
     LOCAL bestLng IS targetLng.
     LOCAL centerTerrain IS LATLNG(targetLat, targetLng):TERRAINHEIGHT.
-    LOCAL centerGrade IS _landingTerrainGrade(targetLat, targetLng, stepM).
+    LOCAL centerGrade IS landingTerrainGrade(targetLat, targetLng, stepM).
     LOCAL bestScore IS centerGrade * 500.
     IF centerGrade <= TAN(LANDING_TERRAIN_MAX_SLOPE) {
         mLog("STATS landing-terrain shift=0 reason=center-within-slope-limit lat="
@@ -74,7 +75,7 @@ GLOBAL FUNCTION _landingTerrainCheck {
             LOCAL sampleLat IS targetLat + northM * degPerM.
             LOCAL sampleLng IS targetLng + eastM * degPerM / lonScale.
 
-            LOCAL slopePenalty IS _landingTerrainGrade(sampleLat, sampleLng, stepM) * 500.
+            LOCAL slopePenalty IS landingTerrainGrade(sampleLat, sampleLng, stepM) * 500.
             LOCAL distM IS SQRT(northM * northM + eastM * eastM).
             LOCAL score IS distM / 100 + slopePenalty.
 
@@ -94,12 +95,14 @@ GLOBAL FUNCTION _landingTerrainCheck {
         + "  shift=" + ROUND(shiftDist,0) + "m.").
 
     IF shiftDist > 5 {
-        mLog("Shifting target by " + ROUND(shiftDist,0) + "m to flatter terrain"
-            + " lat=" + ROUND(bestLat,4) + " lng=" + ROUND(bestLng,4) + ".").
-        SET TARGET_LAT TO bestLat.
-        SET TARGET_LNG TO bestLng.
-        IF ADDONS:TR:AVAILABLE {
-            ADDONS:TR:SETTARGET(LATLNG(bestLat, bestLng)).
+        IF applyShift {
+            mLog("Shifting target by " + ROUND(shiftDist,0) + "m to flatter terrain"
+                + " lat=" + ROUND(bestLat,4) + " lng=" + ROUND(bestLng,4) + ".").
+            SET TARGET_LAT TO bestLat.
+            SET TARGET_LNG TO bestLng.
+            IF ADDONS:TR:AVAILABLE {
+                ADDONS:TR:SETTARGET(LATLNG(bestLat, bestLng)).
+            }
         }
         RETURN LEXICON(
             "LAT", bestLat,
@@ -117,7 +120,7 @@ GLOBAL FUNCTION _landingTerrainCheck {
     ).
 }
 
-LOCAL FUNCTION _landingTerrainGrade {
+GLOBAL FUNCTION landingTerrainGrade {
     PARAMETER sampleLat.
     PARAMETER sampleLng.
     PARAMETER stepM.
@@ -556,13 +559,35 @@ GLOBAL FUNCTION _landingSetState {
         LOCAL burnSteerInfo IS _landingBrakeSteeringInfo(ctx).
         _landingSetThrottle(ctx, burnSteerInfo["THROTTLE"]).
         LOCAL gate IS _landingBrakeGateInfo(ctx).
-        mLog("STATS landing-brake begin height=" + ROUND(_landingBurnHeight(ctx),0)
+        LOCAL brakeReport IS "STATS landing-brake begin ut=" + ROUND(TIME:SECONDS,1)
+            + " reason=" + reason
+            + " height=" + ROUND(_landingBurnHeight(ctx),0)
+            + " bottom=" + ROUND(_landingBottomRadar(),0)
+            + " asl=" + ROUND(SHIP:ALTITUDE,0)
+            + " targetElev=" + ROUND(ctx["TARGET_ELEVATION"],0)
+            + " lat=" + ROUND(ctx["TARGET_LAT"],4)
+            + " lng=" + ROUND(ctx["TARGET_LNG"],4)
             + " vGate=" + ROUND(gate["V_GATE"],0)
+            + " vNow=" + gate["V_NOW"]
+            + " vEta=" + ROUND(gate["V_ETA"],1)
             + " hGate=" + ROUND(gate["H_GATE"],0)
+            + " hNow=" + gate["H_NOW"]
+            + " hOver=" + gate["H_OVERSHOT"]
+            + " hSupp=" + gate["H_SUPPRESSED"]
             + " downrange=" + ROUND(gate["DOWNRANGE"],0)
+            + " hs=" + ROUND(ctx["H_SPEED"],1)
+            + " vs=" + ROUND(ctx["V_SPEED"],1)
             + " acc=" + ROUND(ctx["MAX_ACC"],2)
             + " planAcc=" + ROUND(ctx["PLAN_ACC"],2)
-            + " align=" + ROUND(burnSteerInfo["ALIGN_ERR"],1)).
+            + " reserveAcc=" + ROUND(ctx["RESERVE_ACC"],2)
+            + " grav=" + ROUND(ctx["BRAKE_GRAV"],2)
+            + " stage=" + STAGE:NUMBER
+            + " ipu=" + CONFIG:IPU
+            + " align=" + ROUND(burnSteerInfo["ALIGN_ERR"],1).
+        // One compact record survives a reboot and log rotation; no per-tick
+        // state writes or archive reads are needed to explain this ignition.
+        stateSet("last_landing_brake", brakeReport).
+        mLog(brakeReport).
         mLog("BRAKING BURN steering: err="
             + ROUND(burnSteerInfo["ALIGN_ERR"],1)
             + "deg retroErr=" + ROUND(burnSteerInfo["RETRO_ERR"],1)
@@ -652,6 +677,16 @@ GLOBAL FUNCTION landExecute {
     mLogPhase("LANDING").
     landingApplyMissionConfig().
     SET landingAbortFlag TO FALSE.
+    LOCK THROTTLE TO 0.
+    SET SHIP:CONTROL:MAINTHROTTLE TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    LOCAL priorArchiveDeferral IS LOG_ARCHIVE_DEFERRED.
+    SET LOG_ARCHIVE_DEFERRED TO 1.
+    LOCAL priorIpu IS CONFIG:IPU.
+    IF priorIpu < MIN(2000, LANDING_MIN_IPU) {
+        stateSet("landing_prior_ipu", priorIpu).
+        SET CONFIG:IPU TO MIN(2000, LANDING_MIN_IPU).
+    }
 
     IF SHIP:BODY:ATM:EXISTS {
         mLogWarn("Vacuum landing FSM requested on body with atmosphere; continuing with powered descent only.").
@@ -719,6 +754,12 @@ GLOBAL FUNCTION landExecute {
         "STAGE_WARNED", FALSE,
         "TARGET_THROTTLE", 0
     ).
+    _landingCacheTick(ctx).
+    IF NOT landingReviewReachableSite(ctx, TRUE) { SET landingAbortFlag TO TRUE. }
+    // Complete the fine survey while throttle is zero. Running its terrain
+    // grid in APPROACH leaves a stale positive command driving the vessel
+    // for as long as the synchronous scan takes at the current CPU budget.
+    IF _hasTarget AND NOT landingAbortFlag { _landingFinalTerrainCheck(ctx). }
     stateSet("landing_state", "COAST").
 
     IF _hasTarget AND ADDONS:TR:AVAILABLE {
@@ -737,8 +778,6 @@ GLOBAL FUNCTION landExecute {
     _landingEnsureStateTrack("BRAKE_ALIGN").
     _landingEnsureStateTrack(ctx["STATE"]).
 
-    LOCAL priorArchiveDeferral IS LOG_ARCHIVE_DEFERRED.
-    SET LOG_ARCHIVE_DEFERRED TO 1.
     UNTIL landingAbortFlag OR ctx["TOUCHDOWN_SETTLED"] {
         LOCAL tickRate IS 0.33. // Slower tick for coasting.
 
@@ -771,11 +810,15 @@ GLOBAL FUNCTION landExecute {
 
     IF landingAbortFlag {
         vesselLandingCleanup().
+        SET CONFIG:IPU TO priorIpu.
+        stateRemove("landing_prior_ipu").
         SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.
         IF LOG_ARCHIVE_DEFERRED <= 0 { archiveLog(). }
         RETURN FALSE.
     }
     LOCAL landed IS _landingFinish(ctx).
+    SET CONFIG:IPU TO priorIpu.
+    stateRemove("landing_prior_ipu").
     SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.
     IF LOG_ARCHIVE_DEFERRED <= 0 { archiveLog(). }
     RETURN landed.

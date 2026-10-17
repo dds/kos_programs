@@ -15,6 +15,7 @@ LOCAL FUNCTION _cmdLandingcheck {
     }
 
     PRINT "LANDING CHECK".
+    PRINT stateGet("last_landing_brake", "No saved landing brake decision (older code or no ignition yet).").
     PRINT "  Vessel   " + SHIP:NAME.
     PRINT "  Body     " + SHIP:BODY:NAME + "  status=" + SHIP:STATUS.
     PRINT "  Orbit    Pe=" + ROUND(SHIP:PERIAPSIS/1000,2)
@@ -61,7 +62,14 @@ LOCAL FUNCTION _cmdLandingcheck {
     PRINT "           Landing uses KSP staging order; this legacy tag does not trigger separation.".
     PRINT "  Addons   TR=" + ADDONS:TR:AVAILABLE
         + " KE=" + ADDONS:KE:AVAILABLE
-        + " SCANsat=" + ADDONS:SCANSAT:AVAILABLE.
+        + " SCANsat=" + ADDONS:AVAILABLE("SCANSAT").
+    FOR eng IN SHIP:ENGINES {
+        PRINT "  Engine   " + eng:NAME + " stage=" + eng:STAGE
+            + " ignition=" + eng:IGNITION + " flameout=" + eng:FLAMEOUT
+            + " limit=" + ROUND(eng:THRUSTLIMIT,1)
+            + " available=" + ROUND(eng:AVAILABLETHRUST,2)
+            + " possible=" + ROUND(eng:POSSIBLETHRUST,2).
+    }
 
     IF HASNODE {
         PRINT "  Node     dV=" + ROUND(NEXTNODE:DELTAV:MAG,2)

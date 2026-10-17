@@ -11,7 +11,7 @@ from check_deorbit_geometry import Vec
 from check_runtime_contracts import KString, KList, run
 from check_surface_return import read_settings
 
-LIGHT = (ROOT / 'lib/landing_light.ks').read_text()
+LIGHT = (ROOT / 'lib/landing_light_math.ks').read_text() + '\n' + (ROOT / 'lib/landing_light.ks').read_text()
 COMMAND = (ROOT / 'cmd/landlight.ks').read_text()
 CONFIG = (ROOT / 'lib/config.ks').read_text()
 ks.SOURCES += '\n' + LIGHT
@@ -239,7 +239,8 @@ def check_windows_and_search():
     assert env['landingLightNodeAllowed'](NS(TIME=1200))
     deps, _, _ = dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     assert 'landing_light' in closure(['deorbit_burn'], deps)
-    assert 'landing_light' not in closure(['landing_main'], deps)  # No extra powered-descent weight.
+    assert 'landing_light' not in closure(['landing_main'], deps)  # Orbital search stays out of powered descent.
+    assert 'landing_light_math' in closure(['landing_main'], deps)  # Diversions retain Sun/radio gates offline.
     for vehicle in ('RO8', 'RO9'):
         for moon in ('mun', 'minmus'):
             profile = read_settings((ROOT/f'missions/{vehicle}/{moon}_economy_return.ks').read_text(), {})

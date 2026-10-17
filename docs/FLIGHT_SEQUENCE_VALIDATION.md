@@ -30,6 +30,64 @@ coverage. They are not yet validated in this RO9 flight. A low-TWR craft
 arresting substantial horizontal speed can legitimately need a high ignition
 altitude; height alone is not an ignition criterion.
 
+## RO9 approach evidence, 2026-10-17
+
+After a completed deorbit, the operator reported `Must attach node first`
+at the compact executor's steering-lock line. kOS evaluates system locks
+as callbacks; the node wrapper throws that error when BURNVECTOR or DELTAV
+is read after REMOVE. The locks now use cached values, and the executor
+releases its own steering trigger before removing the node. Physical cutoff
+checks remain active. Cached throttle commands expire after 0.5 seconds
+without a fresh publication; the compact burn also uses the scoped CPU
+floor and restores it at cutoff/reboot. A fixture evaluates deferred callbacks after node
+removal, including callbacks queued before cleanup. Radio loss can delay
+archive-dependent band loading; it does not explain this node exception.
+
+On the resumed descent, braking reportedly started around 12 km, captured
+horizontal speed near 20 m/s, and handed to APPROACH. The reported display
+was `bottom=2504`, `d=79622`, `hs=7.2/7.1`, `vs=-0.3/-0.3`: an approximately
+80 km target chase. The initial brake-gate values remain unavailable. A
+400 m local terrain adjustment cannot account for this distance; the search
+is bounded to its configured grid (up to the square's diagonal).
+
+Terminal admission used the smaller of hull clearance and height above the
+target's terrain elevation. A distant high site could therefore admit
+APPROACH while local clearance was still 2.5 km. Admission now uses hull
+clearance. The conservative smaller height remains in the stopping envelope,
+preserving elevated-terrain protection. COAST hands to BRAKE_ALIGN, which
+remeasures the gate before thrust. Geographic ignition requires alignment
+within 15 degrees; an already urgent vertical envelope can still start
+emergency arrest without an artificial wait. The cause of the 12 km ignition
+has not been established, and its conservative stage/terrain gates remain.
+
+RO8/RO9 Mun/Minmus economy profiles now enable `LANDING_FLEXIBLE_SITE=1`.
+An actual ballistic miss beyond the existing 20 km assist corridor triggers
+a nearby-site review before descent or after horizontal capture. Inside the terminal corridor, an
+estimated lateral translation/arrest time beyond
+`LANDING_APPROACH_MAX_TIME` (120 s) triggers the same review. This estimate
+is not a guaranteed touchdown deadline or a fuel budget. Replacements start
+at the actual timed Trajectories impact, receive coarse and fine terrain
+checks, and must pass slope and Sun/Kerbin requirements. Terminal replacements
+must also fit the time estimate. Failure requests manual review with checked
+cutoff, rather than silently accepting an unsuitable site. Precision
+profiles retain their target and existing correction policy.
+
+Accepted diversions preserve unrelated mission overrides and the return leg.
+Original requested coordinates remain in the active descent context for the
+touchdown miss report. Fine surveying now finishes before powered guidance,
+instead of blocking with a stale positive command in APPROACH. A scoped
+2000-IPU landing budget reduces scheduling delays; normal cleanup or the next
+boot restores the previous value. No KSP loop-latency bound is claimed.
+Powered descent loads shared light geometry, without orbital site search or
+deorbit-node checks (`landing_light_math` is split from `landing_light`).
+
+`last_landing_brake` saves reason, hull/target-relative heights, target
+elevation, speed, gate flags, current/next-stage acceleration, stage and IPU.
+`cmd/landingcheck.ks` prints this record and engine limits. Source-driven
+regressions cover the reported geometry, deferred node callbacks, diversion
+rejection gates, preserved return overrides and CPU recovery. These changes
+still need KSP validation from a named pre-deorbit quicksave.
+
 ## End-of-burn contract
 
 `lib/thrust_cutoff.ks` owns `thrustCutoff()` and `thrustCutoffOk()`.
