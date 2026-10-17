@@ -32,6 +32,10 @@ def check_point_metrics():
         assert abs(point['CLEARANCE']-(4352-point['ELEVATION']))<1e-8
         assert abs(point['DIST']-math.hypot(north,east))<1e-8
         assert abs(point['TRANSIT']-2*math.sqrt(point['DIST']/.075))<1e-8
+        requests.clear()
+        details={}
+        assert ks.call('landingTerrainGrade',env,point['LAT'],point['LNG'],20,details)==point['GRADE']
+        assert len(requests)==4 and details['HEIGHTS']==[point[key] for key in ('N','S','E','W')]
     print('PASS: archive probe reports raw neighbor heights, independent/production grade, surface distance, altitude clearance and the exact correction-time estimate')
 
 

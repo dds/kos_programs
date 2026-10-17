@@ -234,7 +234,26 @@ light, plus the last candidate's distance and correction-time estimate.
 `grade=-1` with `reason=reachability` means that candidate's terrain was not
 sampled. BRAKE `d=` is surface distance to the saved target, excluding altitude.
 
-For a repeatable terrain snapshot, use `RUNPATH("0:/cmd/divertcheck.ks").` with
+Landing guidance now records diagnostics automatically, including its actual
+terrain samples (raw north/south/east/west elevations at 20 m), rejection
+reasons, search passes, limits and flight state. It captures the controller's
+current/commanded speeds, distance and throttle every two seconds, including
+approach/hover holds. There is no extra scan and no
+separate diagnostic command or reboot to collect them. With an archive link,
+it appends checkpoints to
+`0:/logs/archive/_diagnostics/landingdiag_*.log` during zero-thrust coast with
+at least 60 seconds until both braking gates, at most every 15 seconds.
+During burns and terminal descent it buffers up to 64 rows / 16,000 characters,
+reserving half for terrain/events so a long hold cannot erase that evidence;
+the report counts any older rows dropped. It also exports after landing or
+normal abort cleanup, verifies that final checkpoint, and copies a `.boot.log`
+sidecar. Transfer the report and sidecar when available. Without a safe coast
+window or a link, it keeps buffering during descent; it never holds altitude
+to write a report. Rows still unexported at phase exit or reboot are lost.
+Installing the updated landing
+libraries uses the usual connected boot; no replacement `boot/boot.ks` is needed.
+
+For an additional repeatable terrain snapshot, use `RUNPATH("0:/cmd/divertcheck.ks").` with
 an archive link from a saved test state or with flight control maintained
 separately. This command does not hover, land, stage or change the mission.
 It probes the center first, then up to 80 surrounding points at 50 m spacing.

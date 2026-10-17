@@ -35,9 +35,10 @@ def fixture(gravity=1.63, radius=200000):
         env['SHIP'].POSITION=c['POSITION']
         env['SHIP'].ALTITUDE=3000+c['height']
         events.append('refresh')
-    def grade(lat,lng,step):
+    def grade(lat,lng,step,details):
         assert step==20
         samples.append((round(lat*scale,6),round(lng*scale,6)))
+        details['HEIGHTS']=[3000,3000,3000,3000]
         return env['grade_at'](lat*scale,lng*scale)
     def light(*args):
         light_calls.append(args)
@@ -412,7 +413,7 @@ def check_provisional_coast_survey():
             ctx['POSITION'][1]=site['LNG']*60000*math.pi/180
         if failure=='terrain':env['grade_at']=lambda *args:.4
         if failure=='clearance':env['elevation_at']=lambda *args:10000
-        if failure=='light':env['landingLightWindow']=lambda *args:dict(OK=False,REASON='eclipse')
+        if failure=='light':env['landingLightWindow']=lambda *args:dict(OK=False,REASON='eclipse',SUN=0,KERBIN=0)
         env['_landingCacheTick'](ctx)
         tick(env,ctx,.2)
         assert ('TARGET_LAT' in overrides)==(failure=='none')

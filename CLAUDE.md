@@ -520,6 +520,21 @@ Looks like Python/JS; is neither.
   both reports include current-stage vacuum dV, active/reserve acceleration
   and engine Isp/separation slots. The shared writer stays archive-only and
   outside flight-band dependencies. Use these reports, not console copying.
+  Landing also has a small resident landing_diagnostics recorder: actual
+  candidate neighbors/reasons, no second scan; 64-row/16,000-character buffer.
+  It appends directly to logs/archive/_diagnostics/landingdiag_* only during
+  verified zero-thrust COAST with conservative V_ETA and H_ETA>=60s (15s cadence), or
+  after landing/abort cutoff. Final checkpoint is read back and boot log copied.
+  No logging-driven hover, burn-time archive access or installed boot update.
+  Offline/no safe coast means deferred export; buffered rows are not reboot
+  persistent and eviction counts are explicit. The larger operator-only
+  diagnostic_log helper remains outside flight dependencies.
+  The operator subsequently reports a renewed hover at260m (2026-10-17),
+  with no state/commanded-speed log yet. This remains unresolved: do not
+  claim the earlier high-coast repairs establish an efficient terminal
+  landing. The recorder keeps the real HUD current/commanded speeds,
+  distance, throttle and pending-search flag every2s to distinguish a
+  deliberate approach/search hold from tracking failure on the next retry.
   The supplied deorbitcheck_RO9_1305239.log actually AGREES between TR/native
   impact coordinates within0.2m (quaternion also agrees); this snapshot does
   not show a stale prediction or incorrect longitude transform. An independent

@@ -198,6 +198,7 @@ GLOBAL FUNCTION _landingHudText {
     PARAMETER blink.
     PARAMETER etaSeconds IS 0.
 
+    landingDiagnosticHud(ctx, text).
     LOCAL logInterval IS _landingAdaptiveLogInterval(etaSeconds).
     IF TIME:SECONDS - ctx["HUD_LAST"] < logInterval { RETURN. }
     SET ctx["HUD_LAST"] TO TIME:SECONDS.
@@ -782,6 +783,7 @@ GLOBAL FUNCTION landExecute {
         "TARGET_THROTTLE", 0
     ).
     _landingCacheTick(ctx).
+    landingDiagnosticStart(ctx).
     IF NOT landingReviewReachableSite(ctx) { SET landingAbortFlag TO TRUE. }
     // Precision surveys finish before thrust. Flexible missions use bounded
     // per-tick site validation instead of blocking on a remote target grid.
@@ -832,11 +834,13 @@ GLOBAL FUNCTION landExecute {
             SET tickRate TO 0.05.
         }
 
+        landingDiagnosticTick(ctx).
         WAIT tickRate.
     }
 
     IF landingAbortFlag {
         vesselLandingCleanup().
+        landingDiagnosticTick(ctx, TRUE).
         SET CONFIG:IPU TO priorIpu.
         stateRemove("landing_prior_ipu").
         SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.
@@ -844,6 +848,7 @@ GLOBAL FUNCTION landExecute {
         RETURN FALSE.
     }
     LOCAL landed IS _landingFinish(ctx).
+    landingDiagnosticTick(ctx, TRUE).
     SET CONFIG:IPU TO priorIpu.
     stateRemove("landing_prior_ipu").
     SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.

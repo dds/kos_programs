@@ -434,12 +434,16 @@ GLOBAL FUNCTION landingTerrainGrade {
     PARAMETER sampleLat.
     PARAMETER sampleLng.
     PARAMETER stepM.
+    PARAMETER details IS LEXICON().
     LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
     LOCAL lonScale IS MAX(0.01, COS(sampleLat)).
     LOCAL hN IS LATLNG(sampleLat + stepM * degPerM, sampleLng):TERRAINHEIGHT.
     LOCAL hS IS LATLNG(sampleLat - stepM * degPerM, sampleLng):TERRAINHEIGHT.
     LOCAL hE IS LATLNG(sampleLat, sampleLng + stepM * degPerM / lonScale):TERRAINHEIGHT.
     LOCAL hW IS LATLNG(sampleLat, sampleLng - stepM * degPerM / lonScale):TERRAINHEIGHT.
+    // Expose the existing measurements to the flight recorder, with no
+    // additional terrain probes. Order: north, south, east, west.
+    SET details["HEIGHTS"] TO LIST(hN,hS,hE,hW).
     // Magnitude of the terrain gradient, rather than adding both slopes.
     RETURN SQRT(((hN - hS) / (2 * stepM)) ^ 2
         + ((hE - hW) / (2 * stepM)) ^ 2).

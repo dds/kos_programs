@@ -36,6 +36,7 @@ LOCAL FUNCTION _landingDivertStart {
         + " hs=" + ROUND(ctx["H_SPEED"],1) + " emergency=" + emergency
         + " slopeLimit=" + slopeLimit + " radius=" + radiusM + " step=" + stepM
         + " retry=" + retried + " lat=" + center:LAT + " lng=" + center:LNG).
+    landingDiagnosticRecord(ctx, "STATS landing-diag pass " + landingDiagnosticSearchText(ctx)).
 }
 
 LOCAL FUNCTION _landingDivertRetryReady {
@@ -68,7 +69,8 @@ LOCAL FUNCTION _landingDivertCandidate {
     PARAMETER arrivalUt IS -1.
 
     LOCAL rejected IS LEXICON("OK", FALSE, "REASON", "reachability", "GRADE", -1,
-        "DIST", -1, "TRANSIT", -1, "ELEVATION", -999999).
+        "DIST", -1, "TRANSIT", -1, "ELEVATION", -999999, "TERRAIN", LIST(),
+        "SUN", -999, "KERBIN", -999).
     IF ABS(siteLat) > 90 { RETURN rejected. }
     LOCAL distance IS 0.
     LOCAL lateralAcc IS lmApproachAcceleration(ctx["MAX_ACC"], ctx["GRAV"]).
@@ -91,7 +93,9 @@ LOCAL FUNCTION _landingDivertCandidate {
     }
     // A coarse-grid winner can hide a steep local patch. Validate every
     // candidate at the final 20 m scale, including emergency candidates.
-    LOCAL grade IS landingTerrainGrade(siteLat, siteLng, 20).
+    LOCAL terrain IS LEXICON().
+    LOCAL grade IS landingTerrainGrade(siteLat, siteLng, 20, terrain).
+    SET rejected["TERRAIN"] TO terrain["HEIGHTS"].
     SET rejected["GRADE"] TO grade.
     IF grade > TAN(slopeLimit) {
         SET rejected["REASON"] TO "terrain-grade".
@@ -100,12 +104,15 @@ LOCAL FUNCTION _landingDivertCandidate {
     IF arrivalUt < 0 { SET arrivalUt TO TIME:SECONDS + MAX(1, lmTimeToImpact()). }
     LOCAL light IS landingLightWindow(siteLat, siteLng, arrivalUt,
         LANDING_DIVERT_KERBIN_TOLERANCE, LANDING_DIVERT_REQUIRE_KERBIN).
+    SET rejected["SUN"] TO light["SUN"].
+    SET rejected["KERBIN"] TO light["KERBIN"].
     IF NOT light["OK"] {
         SET rejected["REASON"] TO light["REASON"].
         RETURN rejected.
     }
     RETURN LEXICON("OK", TRUE, "LAT", siteLat, "LNG", siteLng,
-        "ELEVATION", elevation, "GRADE", grade,
+        "REASON", "ok", "ELEVATION", elevation, "GRADE", grade,
+        "TERRAIN", terrain["HEIGHTS"],
         "DIST", distance, "TRANSIT", transitTime,
         "SUN", light["SUN"], "KERBIN", light["KERBIN"]).
 }
@@ -130,6 +137,7 @@ LOCAL FUNCTION _landingDivertSurveyAhead {
         + MAX(0, _landingBottomRadar() - fallHeight) / MAX(10, HIGH_DESCENT_SPEED).
     LOCAL site IS _landingDivertCandidate(ctx, center:LAT, center:LNG,
         LANDING_TERRAIN_MAX_SLOPE, TRUE, arrivalUt).
+    landingDiagnosticSample(ctx, site, center:LAT, center:LNG, "preview", LANDING_TERRAIN_MAX_SLOPE).
     SET site["LAT"] TO center:LAT.
     SET site["LNG"] TO center:LNG.
     SET site["AT"] TO TIME:SECONDS.
@@ -188,6 +196,7 @@ GLOBAL FUNCTION landingReviewReachableSite {
             _landingDivertStart(ctx, FALSE, TRUE).
         } ELSE {
             SET search["EXHAUSTED"] TO TRUE.
+            landingDiagnosticRecord(ctx, "STATS landing-diag unavailable " + landingDiagnosticSearchText(ctx)).
             LOCAL minSlope IS -1.
             IF search["MIN_GRADE"] >= 0 { SET minSlope TO ARCTAN2(search["MIN_GRADE"],1). }
             mLogError("STATS landing-divert unavailable reason=" + search["LAST_REASON"]
@@ -241,6 +250,7 @@ GLOBAL FUNCTION landingReviewReachableSite {
     SET search["INDEX"] TO search["INDEX"] + 1.
     LOCAL site IS _landingDivertCandidate(ctx, siteLat, siteLng, search["SLOPE_LIMIT"]).
     SET search["CHECKED"] TO search["CHECKED"] + 1.
+    landingDiagnosticSample(ctx, site, siteLat, siteLng, search["EMERGENCY"],search["SLOPE_LIMIT"]).
     SET ctx["DIVERT_ELEVATION"] TO MAX(ctx["DIVERT_ELEVATION"], site["ELEVATION"]).
     IF site["GRADE"] >= 0 AND (search["MIN_GRADE"] < 0 OR site["GRADE"] < search["MIN_GRADE"]) {
         SET search["MIN_GRADE"] TO site["GRADE"].
