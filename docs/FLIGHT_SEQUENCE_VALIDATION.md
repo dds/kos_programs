@@ -123,6 +123,45 @@ checks. Merely forcing the existing command to 100%, or dropping the 20%
 reserve without validating its purpose, is not that redesign. No braking
 physics or safety margins changed in the radio-priority work.
 
+### Economy descent instead of a hovering brake
+
+The operator subsequently rejected the sustained altitude-supporting brake.
+Economy profiles now enable `LANDING_ECONOMY_BRAKE=1`. Their geographic
+horizontal/overshoot triggers are suppressed: the unchanged vertical stopping
+envelope already includes full horizontal speed, terrain, weak-stage thrust
+and latency. These geographic triggers protected precision targeting; they
+are not needed to enforce that combined collision-stopping envelope for a
+flexible-site landing. Other profiles retain their original triggers.
+
+The high-horizontal-speed controller now solves the exact vector thrust bound
+`|g*up + aNet*direction| = aMax` instead of using the triangle-inequality
+`aMax-g` bound for actuation. A bounded search chooses a downward flare-entry
+speed that fits the remaining altitude, rather than unconditionally requesting
+zero vertical speed. It reserves a conservative final flare with the existing
+80%-net acceleration envelope, residual lateral velocity, burn margin,
+reaction/staging time and clearance. The same 80% ignition envelope remains.
+The main burn can therefore use full thrust without silently removing those
+margins. Tail taper and the prohibition on engine-down steering remain.
+
+The altitude predictor uses the weaker planned stage. Its net-acceleration
+bound is the smaller of the exact limits at zero and maximum effective
+gravity: the limit is concave in gravity, so this bounds centrifugal support
+disappearing during braking. A pure-horizontal-thrust bound prevents the
+selected downward target from demanding an engine-down acceleration.
+An already urgent or underpowered state can still request full velocity
+arrest; continuing descent is not allowed to override terrain safety.
+
+In a paired flat, constant-g fixture (Mun g=1.63, TWR=4, initial hs=400,
+vs=-5, height=5000 m, target downrange=4000 m), high-altitude near-hover fell
+from 45.4 to 0 seconds. Braking-to-approach commanded impulse fell from
+534.1 to 440.6 m/s. This is not whole-landing fuel use or measured RO9 savings.
+Source-driven cases include three seconds of delayed ignition, a transfer-to-
+weaker-stage interruption, Minmus gravity and changing centrifugal support.
+Vector/flare property checks retain thrust bounds, no engine-down command,
+the weaker-stage flare budget and the unchanged ignition gate. The model
+omits terrain meshes, attitude dynamics, engine spool and the kOS scheduler;
+KSP quicksave testing remains required.
+
 ## End-of-burn contract
 
 `lib/thrust_cutoff.ks` owns `thrustCutoff()` and `thrustCutoffOk()`.

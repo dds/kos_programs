@@ -35,6 +35,7 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                                                CROSS_SIGNED=0, CROSS=0),
                _landingLogBrakeComplete=lambda *args: None)
     for name in ('lmBrakeNetAcc', 'lmBrakeEnvelope', 'lmBrakeThrust',
+                 'lmBrakeFullNetAcc','lmBrakeDescentTarget','lmEconomyBrakeThrust',
                  'lmVerticalBurnDistance', 'lmRetroSteering',
                  '_landingBurnHeight', '_landingBrakeGateInfo',
                  '_landingBrakeSteeringInfo'):
@@ -120,17 +121,23 @@ def check_distant_elevated_site():
     print('PASS: elevated 79.6 km target cannot admit APPROACH at 2504 m bottom; 400 m shifts do not command ignition')
 
 
-def simulate(gravity, twr, horizontal, down, next_twr=None):
+def simulate(gravity, twr, horizontal, down, next_twr=None, economy=False,
+             start_height=None, downrange=100000, dt=.1, curvature_radius=None):
     env, ctx = fixture(gravity, twr, horizontal, down)
+    env['LANDING_ECONOMY_BRAKE']=int(economy)
     if next_twr:
         ctx['PLAN_ACC'] = next_twr * gravity
     # Begin above the trigger; exercise real coast and alignment dispatch.
     ctx['height'] = call('_landingBrakeGateInfo', env, ctx)['V_GATE'] + 1000
-    dt, ignition, staged = .1, None, False
+    if start_height is not None: ctx['height']=start_height
+    ctx['downrange']=downrange
+    ignition, staged, spent, hover_time = None, False, 0., 0.
     minimum = ctx['height']
     for step in range(20000):
         now = step*dt
         env['TIME'].SECONDS = now
+        effective_g=gravity if curvature_radius is None else max(.01,gravity-ctx['H_SPEED']**2/curvature_radius)
+        ctx['GRAV']=effective_g
         env['SHIP'].FACING.FOREVECTOR = ctx.get('steering', ctx['UP_VEC'])
         state = ctx['STATE']
         if state == 'COAST':
@@ -153,8 +160,11 @@ def simulate(gravity, twr, horizontal, down, next_twr=None):
         if ctx['STATE'] not in ('COAST', 'BRAKE_ALIGN', 'BRAKING_BURN'):
             break
         thrust = ctx.get('steering', ctx['UP_VEC']) * (actual * ctx['MAX_ACC'])
+        spent += actual*ctx['MAX_ACC']*dt
+        if actual>0 and abs(ctx['V_SPEED'])<5 and ctx['height']>1000:
+            hover_time += dt
         assert thrust[2] >= -1e-9
-        vel = Vec((ctx['H_VEL'][0],0,ctx['V_SPEED'])) + (thrust-Vec((0,0,gravity)))*dt
+        vel = Vec((ctx['H_VEL'][0],0,ctx['V_SPEED'])) + (thrust-Vec((0,0,effective_g)))*dt
         ctx.update(H_VEL=Vec((vel[0],0,0)), H_SPEED=abs(vel[0]), SURFACE_VEL=vel,
                    V_SPEED=vel[2], DOWN_SPEED=max(0,-vel[2]))
         ctx['height'] += vel[2]*dt
@@ -166,6 +176,7 @@ def simulate(gravity, twr, horizontal, down, next_twr=None):
     assert minimum > 100, minimum
     assert staged == bool(next_twr)
     print(f'PASS: g={gravity} TWR={twr}->{next_twr or twr}, h/v={horizontal}/{down}: ignite {ignition_height:.0f} m, captured {minimum:.0f} m')
+    return dict(ignition=ignition_height,minimum=minimum,spent=spent,hover=hover_time,elapsed=now)
 
 
 def hardware_fixture():

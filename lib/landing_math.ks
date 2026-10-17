@@ -142,7 +142,8 @@ GLOBAL FUNCTION lmVerticalBurnDistance {
 
 // Simultaneous horizontal/vertical stop, not two independent full-thrust
 // stops. Reserve full gravity even while orbital speed still supports weight.
-// The controller uses this same net acceleration budget.
+// Precision actuation and the economy ignition/flare envelopes use this
+// budget. The economy main-burn vector solver lives in landing_brake.ks.
 GLOBAL FUNCTION lmBrakeNetAcc {
     PARAMETER maxAcc.
     PARAMETER gravAcc.

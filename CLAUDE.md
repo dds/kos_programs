@@ -357,6 +357,16 @@ Looks like Python/JS; is neither.
   A constant-g TWR=4, hs=400, vs=-60 fixture reproduces 68.34%; it is not a
   measurement of this craft. Braking optimization must change the gate and
   controller together; do not bypass the reserve or force throttle alone.
+  After the operator rejected the hover, economy profiles enabled
+  `LANDING_ECONOMY_BRAKE=1`: geographic target range cannot trigger the burn,
+  but the unchanged combined velocity/terrain gate still can. Main braking
+  uses an exact full-thrust vector and a downward flare-entry target, with
+  the original 80% envelope retained for ignition and final-flare safety.
+  The weaker-stage, latency, residual lateral speed, clearance, taper and
+  engine-down protections remain. A paired point-mass fixture reduced high
+  hover from 45.4 to 0 s and brake-to-approach impulse from 534.1 to 440.6 m/s;
+  these are model values, not flight or whole-mission savings. Staged and
+  variable-centrifugal-support fixtures exist in `check_landing_economy.py`.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered

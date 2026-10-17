@@ -443,6 +443,15 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
         AND horizontalSpeed > APPROACH_HSPEED
         AND ctx["V_SPEED"] < 0
         AND burnHeight <= TERRAIN_SAFE_ALT.
+    IF LANDING_ECONOMY_BRAKE > 0 {
+        // Flexible sites do not justify arresting velocity early just to
+        // preserve a geographic stopping point. The unchanged V gate still
+        // includes horizontal speed, terrain, latency and next-stage thrust.
+        SET hNow TO FALSE.
+        SET hOvershot TO FALSE.
+        SET hBrakeEta TO 999999.
+        SET hSuppressed TO TRUE.
+    }
 
     RETURN LEXICON(
         "DIST", distToTarget,
@@ -583,6 +592,8 @@ GLOBAL FUNCTION _landingSetState {
             + " grav=" + ROUND(ctx["BRAKE_GRAV"],2)
             + " stage=" + STAGE:NUMBER
             + " ipu=" + CONFIG:IPU
+            + " economyBrake=" + LANDING_ECONOMY_BRAKE
+            + " targetVs=" + ROUND(burnSteerInfo["TARGET_VS"],1)
             + " align=" + ROUND(burnSteerInfo["ALIGN_ERR"],1).
         // One compact record survives a reboot and log rotation; no per-tick
         // state writes or archive reads are needed to explain this ignition.

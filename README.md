@@ -169,7 +169,7 @@ manual review. Precision profiles keep this option off. The time setting is
 a correction feasibility estimate, not a guaranteed landing deadline.
 After deorbit, diversions default to `LANDING_DIVERT_REQUIRE_KERBIN=0`: a lost
 Kerbin view does not abort an otherwise acceptable autonomous landing. The
-orbital site search retains its configured +5-degree Kerbin requirement.
+orbital site search retains its configured requirement (15 degrees in the economy profiles).
 Sunlight and terrain checks remain active. To require radio view for diversions,
 set `LANDING_DIVERT_REQUIRE_KERBIN=1`; its configurable
 `LANDING_DIVERT_KERBIN_TOLERANCE` subtracts 7 degrees from the planned requirement,
@@ -179,6 +179,17 @@ cannot start terminal guidance kilometres above the local ground. Fine terrain
 surveying completes before powered guidance. Landing temporarily raises IPU to
 at least `LANDING_MIN_IPU` (2000, capped at 2000 for the automatic raise), then
 restores the previous value on cleanup or the next boot.
+
+The economy profiles enable `LANDING_ECONOMY_BRAKE=1`. Geographic target range
+alone cannot start braking: coast continues until the combined horizontal/
+vertical stopping envelope requires it. The main horizontal arrest uses the
+full available thrust vector while targeting a continuing descent, reserving
+enough height for the final vertical flare on the weaker planned stage.
+It tapers near velocity capture and keeps the existing reaction, clearance,
+staging and physical-cutoff checks. The conservative 80% acceleration budget
+remains in the ignition and flare envelopes; it does not cap the economy
+main-burn throttle. Precision profiles retain the previous policy.
+These are source-driven model improvements, not a flight-proven optimum.
 These braking/staging changes have numerical coverage but still need a KSP
 flight test, including separation clearance on the actual craft.
 

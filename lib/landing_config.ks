@@ -19,6 +19,9 @@ GLOBAL LANDING_DIVERT_KERBIN_TOLERANCE IS 7.
 // orbital site selection still uses LANDING_REQUIRE_KERBIN and its margin.
 GLOBAL LANDING_DIVERT_REQUIRE_KERBIN IS 0.
 GLOBAL LANDING_MIN_IPU IS 2000.
+// Flexible economy descents brake to a downward flare entry, not a hover.
+// Precision profiles retain the original target-driven braking policy.
+GLOBAL LANDING_ECONOMY_BRAKE IS 0.
 GLOBAL TOUCHDOWN_SPEED IS 2.
 GLOBAL HIGH_DESCENT_SPEED IS 30.
 GLOBAL HOVER_ALT IS 10.
@@ -49,8 +52,9 @@ GLOBAL LANDING_COAST_MCC_LEAD_DIST IS 3000.
 GLOBAL LANDING_BRAKE_GATE_LEAD_DIST IS 100.
 GLOBAL LANDING_BRAKE_UNDERSHOOT_BIAS IS 500.
 GLOBAL LANDING_BRAKE_ALIGN_LEAD IS 20.
-// Shared vector budget for trigger and controller, plus time without thrust
-// for control latency/rotation and a normal separation + ignition sequence.
+// Conservative ignition/flare budget; precision actuation shares it too.
+// Economy main braking uses a full vector while reserving this flare budget.
+// Reaction time covers control latency/rotation and separation + ignition.
 GLOBAL LANDING_BRAKE_ACCEL_FRACTION IS 0.8.
 GLOBAL LANDING_BRAKE_REACTION_TIME IS 3.
 GLOBAL LANDING_BRAKE_RESPONSE_TIME IS 1.
