@@ -83,6 +83,11 @@ Emergency landing rescue is archive-only: run `0:/cmd/landassist.ks`,
 Commands require archive access. If you need one, get a link and run the
 archive copy directly.
 
+**Current limitation:** `KSC_DEORBIT` has no atmospheric phase handler after
+the vacuum deorbit refactor. Profiles using it and `landat`/`landatksc` hold
+for manual review. The [codebase audit](docs/CODEBASE_AUDIT.md) records this
+gap, offline-loading limits, repairs, and validation still needed.
+
 ### Launch windows and staging
 
 Minmus profiles use `LAUNCH_PLANE_MODE = "BODY_ORBIT"`. PRELAUNCH offers
@@ -259,7 +264,7 @@ Mission profiles own `SEQUENCE` — the ordered phase names. Craft scripts map
 phase names to handlers and call `runPhases(phaseMap)`; each handler calls
 `nextPhase(seq)` when done. The current phase persists to state, so any
 reboot resumes exactly where it left off. Shared phases follow the naming
-convention `PHASE_NAME -> phasePhaseName`; generated bindings map the current
+convention `PHASE_NAME -> phasePhaseName`; explicit bindings map the current
 phase string to the matching handler after the phase's band is loaded.
 
 ### Progressive loading (bands)
@@ -277,7 +282,7 @@ phase/band rather than inside a shared band.
 `lib/dependencies.ks` is the boot dependency source of truth:
 
 ```
-dependencyPreamble()             roots loaded always
+dependencyLibs()["core"]         roots loaded always
 dependencyLibs()                 library dependency edges
 dependencyPhases()               libraries a phase needs
 dependencyBands()                phases that load together
@@ -1055,6 +1060,12 @@ state converter.
 
 ## Development
 
+- `make check` — repository contracts and source-driven numerical/control
+  regression fixtures (Python 3 + NumPy; does not run kOS or KSP).
+- `make audit` — phase/dependency coverage and source-token counts by band,
+  including warnings for guarded but unavailable handlers.
+- [Codebase audit](docs/CODEBASE_AUDIT.md) — findings, repairs, remaining
+  functional gaps, and flight validation priorities.
 - `make watch-sync` — safe auto-pull loop for live sim iteration (ff-only,
   dirty-tree aware).
 - `make release-version TAG=kos-YYYYMMDD-N` — stamp `VERSION` (printed in

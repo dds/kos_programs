@@ -66,8 +66,10 @@ Looks like Python/JS; is neither.
    (costs those missions one reboot; costs everyone else nothing) —
    `payload_release`, `duna_ike_setup`, and the split landing tracks are
    worked examples.
-6. **There is no compiler or test runner here.** Changes are validated by
-   brace/syntax inspection and then flight-tested in the game. Be
+6. **There is no kOS compiler or KSP flight runner here.** `make check` runs
+   structural and source-driven Python fixtures; `make audit` reports band
+   complexity and unresolved handlers. These supplement syntax inspection
+   and flight testing in the game, not replace them. Be
    conservative in mission-critical paths, log generously (`STATS` lines),
    and prefer self-correcting loops (re-measure → re-plan) over open-loop
    precision.
@@ -88,7 +90,7 @@ Looks like Python/JS; is neither.
   continuation phase instead. Shared handler naming convention:
   `PHASE_NAME → phasePhaseName`, bound by `lib/dependencies.ks` after the
   phase's band is loaded.
-- **dependencies.ks sections**: `dependencyPreamble`, `dependencyLibs`,
+- **dependencies.ks sections**: `dependencyLibs` (including the `core` preamble),
   `dependencyPhases`, `dependencyBands`, plus the phase-handler binding
   waterfall.
 - **Missing handler** in `runPhases` ⇒ band-change request (`reload_*` state
@@ -103,7 +105,7 @@ Looks like Python/JS; is neither.
 
 | Area | Files |
 |---|---|
-| Boot/loading | `boot/boot.ks`, `lib/boot_lib.ks`, `lib/dependencies.ks`, `lib/preflight_planner.ks` |
+| Boot/loading | `boot/boot.ks`, `lib/boot_lib.ks`, `lib/dependencies.ks` |
 | Phase machine | `lib/phases.ks`, `lib/resume.ks`, `lib/state.ks`, `lib/logs.ks` |
 | Ascent | `lib/launch.ks` (MechJeb), `lib/countdown.ks` |
 | New maneuver pipeline | `lib/goto_plan.ks` (routing), `lib/arrival_bplane.ks` (B-plane MCC/refinement), `lib/orbit_shape.ks` (closed-form shaping), `lib/maneuver.ks` (node execution), `lib/maneuver_plan.ks` (single-burn planners — split out so burn-only bands like BPLANE/SHAPE skip the planner weight) |
@@ -284,5 +286,12 @@ Looks like Python/JS; is neither.
   and friends) is retired-in-place: the stale `deorbit_targeting ->
   maneuver_targeting` dep is already severed; delete the lib once the
   rendezvous/intersystem flows stop importing it.
+- Audit status (2026-10-16): `docs/CODEBASE_AUDIT.md` records boot/config,
+  dependency, cleanup, rover, phase-handoff and propulsion repairs. They have
+  source fixtures only. `KSC_DEORBIT` lost its atmospheric handler during the
+  vacuum solver refactor; historical flight proof does not apply to the
+  current recipe. Its missing binding now holds explicitly. Offline
+  future-band/landing-track availability and crash-safe state replacement
+  remain open. Do not remove the legacy targeting solver: MCC still uses it.
 - Useful sandbox: quick brace-balance check over edited `.ks` files (strip
   `//` comments and strings, count `{`/`}`) catches most structural slips.
