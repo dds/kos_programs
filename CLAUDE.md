@@ -578,6 +578,21 @@ Looks like Python/JS; is neither.
   reserve100m/s, independent conic/time/Pe derivatives, drag/stale control,
   interruption/cutoff latches and profile persistence. Pe feedback uses a100m
   deadband to avoid large radial corrections for tiny near-Pe conic drift.
+  Operator reports an apparently fixed off-retrograde powered burn, ending
+  with153m/s left, then repeated aligned RETROGRADE entry logs. Native post-burn
+  Pe/Ap and cutoff reason are not yet available: do not certify that burn from
+  the navball or conic fixtures. Powered guidance intentionally departs from
+  retrograde outside atmosphere to preserve Pe (about23deg at the illustrative
+  fixture's3-minute point), so the old entry message did not describe the
+  subsequent burn. Separate confirmed defect: entry LOCK used a sampled
+  steerDir/refVec; moving-velocity source fixture reproduces41.7deg stale
+  heading after coast. New _aerobrakeEntryDirection reads live suffixes for
+  steering AND alignment after helper return; aligned rechecks are quiet.
+  Explicit pre-ignition timeout retains zero thrust. STATS align begin/checked
+  shows commanded offsets versus actual pointing error; result reports guard
+  peakFacingErr and RAM-sampled peak offsets. No diagnostic I/O during thrust.
+  Routine suite now161 cases, including finite-slew0/5deg/s ignition guards
+  and moving retro/prograde entry targets. No KSP attitude/engine proof.
   The supplied deorbitcheck_RO9_1305239.log actually AGREES between TR/native
   impact coordinates within0.2m (quaternion also agrees); this snapshot does
   not show a stale prediction or incorrect longitude transform. An independent

@@ -38,6 +38,23 @@ LOCAL FUNCTION _aeroApRemainingDv {
     RETURN MIN(SHIP:DELTAV:VACUUM,STAGE:DELTAV:VACUUM).
 }
 
+// Diagnostics only: called before/after thrust and once a second in RAM.
+LOCAL FUNCTION _aeroApAttitude {
+    PARAMETER direction.
+    LOCAL angles IS LEXICON("FACING_ERR",-1,"ORBIT_OFFSET",-1,"SURFACE_OFFSET",-1).
+    IF NOT (direction:MAG > 0.5) { RETURN angles. }
+    IF SHIP:FACING:FOREVECTOR:MAG > 0.5 {
+        SET angles["FACING_ERR"] TO VANG(SHIP:FACING:FOREVECTOR,direction).
+    }
+    IF SHIP:VELOCITY:ORBIT:MAG > 1 {
+        SET angles["ORBIT_OFFSET"] TO VANG(direction,-SHIP:VELOCITY:ORBIT).
+    }
+    IF SHIP:VELOCITY:SURFACE:MAG > 1 {
+        SET angles["SURFACE_OFFSET"] TO VANG(direction,-SHIP:VELOCITY:SURFACE).
+    }
+    RETURN angles.
+}
+
 LOCAL FUNCTION _aeroApEngine {
     LOCAL thrustSum IS 0.
     LOCAL flowSum IS 0.
@@ -172,7 +189,9 @@ LOCAL FUNCTION _aeroApSafeThrottle {
             AND SHIP:VELOCITY:ORBIT:MAG > 1 AND SHIP:VELOCITY:SURFACE:MAG > 1
             AND control["DIR"]:MAG > 0.5) { SET control["REASON"] TO "invalid-thrust-or-direction". }
     IF control["REASON"] <> "" { RETURN 0. }
-    IF NOT (VANG(SHIP:FACING:FOREVECTOR,control["DIR"]) <= 5
+    LOCAL facingErr IS VANG(SHIP:FACING:FOREVECTOR,control["DIR"]).
+    SET control["PEAK_FACING_ERR"] TO MAX(control["PEAK_FACING_ERR"],facingErr).
+    IF NOT (facingErr <= 5
             AND VDOT(control["DIR"],SHIP:VELOCITY:ORBIT) < -0.01*SHIP:VELOCITY:ORBIT:MAG) {
         SET control["REASON"] TO "alignment-or-energy". RETURN 0.
     }
@@ -211,7 +230,7 @@ GLOBAL FUNCTION aerobrakeApAssist {
     stateSet("aerobrake_ap_pass_used",TRUE).
     stateSet("aerobrake_ap_entered",FALSE).
     stateSet("aerobrake_ap_active",TRUE).
-    LOCAL control IS LEXICON("REASON","","DV",plan["DV"],"APPLIED",0,
+    LOCAL control IS LEXICON("REASON","","DV",plan["DV"],"APPLIED",0,"PEAK_FACING_ERR",0,
         "LOW",peLow,"HIGH",peHigh,"TARGET_AP",plan["TARGET_AP"],"ATMO",atmHeight,
         "BODY",plan["BODY"],"STAGE",plan["STAGE"],"UPDATED",TIME:SECONDS,
         "DEADLINE",plan["IGNITE"]+plan["DURATION"]+plan["SETTLE"],"DIR",V(0,0,0)).
@@ -221,6 +240,10 @@ GLOBAL FUNCTION aerobrakeApAssist {
         SHIP:AVAILABLETHRUST/MAX(0.01,SHIP:MASS)).
     IF control["DIR"]:MAG < 0.5 { SET control["DIR"] TO -SHIP:VELOCITY:ORBIT. }
     LOCK STEERING TO control["DIR"].
+    LOCAL angles IS _aeroApAttitude(control["DIR"]).
+    mLog("STATS aerobrake-assist align status=begin mode=preserve-pe facingErr=" + angles["FACING_ERR"]
+        + " orbitRetroOffset=" + angles["ORBIT_OFFSET"] + " surfaceRetroOffset=" + angles["SURFACE_OFFSET"]
+        + " Pe=" + SHIP:PERIAPSIS + " Ap=" + SHIP:APOAPSIS).
     LOCAL alignDeadline IS plan["IGNITE"]+5.
     UNTIL (TIME:SECONDS >= plan["IGNITE"] AND control["DIR"]:MAG > 0.5
             AND VANG(SHIP:FACING:FOREVECTOR,control["DIR"]) <= 5)
@@ -231,7 +254,17 @@ GLOBAL FUNCTION aerobrakeApAssist {
         IF control["DIR"]:MAG < 0.5 { SET control["DIR"] TO -SHIP:VELOCITY:ORBIT. }
         WAIT 0.05.
     }
+    SET angles TO _aeroApAttitude(control["DIR"]).
+    IF NOT (angles["FACING_ERR"] >= 0 AND angles["FACING_ERR"] <= 5) {
+        SET control["REASON"] TO "alignment-timeout".
+    }
+    mLog("STATS aerobrake-assist align status=checked mode=preserve-pe facingErr=" + angles["FACING_ERR"]
+        + " orbitRetroOffset=" + angles["ORBIT_OFFSET"] + " surfaceRetroOffset=" + angles["SURFACE_OFFSET"]
+        + " reason=" + control["REASON"]).
     LOCAL command IS 0.
+    LOCAL peakOrbitOffset IS angles["ORBIT_OFFSET"].
+    LOCAL peakSurfaceOffset IS angles["SURFACE_OFFSET"].
+    LOCAL nextAnglesUt IS TIME:SECONDS.
     LOCAL lastT IS TIME:SECONDS.
     LOCAL lastAcc IS SHIP:THRUST/MAX(0.01,SHIP:MASS).
     SET control["UPDATED"] TO TIME:SECONDS.
@@ -248,6 +281,12 @@ GLOBAL FUNCTION aerobrakeApAssist {
         LOCAL acceleration IS SHIP:AVAILABLETHRUST/MAX(0.01,SHIP:MASS).
         SET control["DIR"] TO aeroApDirection(SHIP:POSITION-SHIP:BODY:POSITION,
             SHIP:VELOCITY:ORBIT,SHIP:BODY:MU,SHIP:BODY:RADIUS+targetPe,acceleration).
+        IF TIME:SECONDS >= nextAnglesUt {
+            SET angles TO _aeroApAttitude(control["DIR"]).
+            SET peakOrbitOffset TO MAX(peakOrbitOffset,angles["ORBIT_OFFSET"]).
+            SET peakSurfaceOffset TO MAX(peakSurfaceOffset,angles["SURFACE_OFFSET"]).
+            SET nextAnglesUt TO TIME:SECONDS+1.
+        }
         LOCAL energyLeft IS SHIP:VELOCITY:ORBIT:MAG^2/2
             -SHIP:BODY:MU/(SHIP:BODY:RADIUS+SHIP:ALTITUDE)
             +SHIP:BODY:MU/(2*SHIP:BODY:RADIUS+targetPe+control["TARGET_AP"]).
@@ -274,6 +313,8 @@ GLOBAL FUNCTION aerobrakeApAssist {
     SET LOG_ARCHIVE_DEFERRED TO priorDeferral.
     mLog("STATS aerobrake-assist result reason=" + control["REASON"]
         + " appliedDv=" + control["APPLIED"] + " forecastDv=" + plan["DV"]
+        + " peakFacingErr=" + control["PEAK_FACING_ERR"]
+        + " peakOrbitRetroOffset=" + peakOrbitOffset + " peakSurfaceRetroOffset=" + peakSurfaceOffset
         + " Ap=" + SHIP:APOAPSIS + " Pe=" + SHIP:PERIAPSIS + " qAtm=" + SHIP:Q
         + " remainingDv=" + _aeroApRemainingDv() + " cutoffOk=" + stopped).
     RETURN plan.

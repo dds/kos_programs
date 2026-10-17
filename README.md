@@ -1279,6 +1279,14 @@ a direction that preserves Pe, with feedback toward the configured entry Pe.
 Feedback leaves errors within 100 m alone, avoiding needless radial steering
 near periapsis; the corridor checks still run continuously.
 Each subsequent pass recalculates from the actual orbit and remaining fuel.
+This powered direction can be noticeably off the navball's retrograde marker
+outside the atmosphere; it is recalculated from the current orbit, rather
+than pointing at a future retrograde marker. The entry hold uses current
+surface retrograde (or configured prograde) through a
+[live steering lock](https://ksp-kos.github.io/KOS/commands/flight/cooked.html#the-special-lock-variables-for-cooked-steering).
+It does not save a single retrograde snapshot through a changing coast.
+An already aligned entry hold stays quiet instead of printing the same
+orientation pair every second.
 
 For the economy Kerbin return, the existing 52–54 km entry corridor remains
 in force, with a 100 m inner stopping margin. The forecast can select only a
@@ -1307,12 +1315,17 @@ Dynamic pressure uses [kOS's atmosphere units](https://ksp-kos.github.io/KOS/str
 The forecast does not model drag, heating or attitude dynamics. Actual drag
 can shorten a burn through the live corridor and attitude guards; unused fuel
 is reconsidered next pass. This does not establish a globally optimal or
-thermally validated entry. `STATS aerobrake-assist policy/plan/forecast/result`
+thermally validated entry. `STATS aerobrake-assist policy/plan/forecast/align/result`
 records available fuel, calculation time, ignition, predicted Pe/Ap, measured
 impulse, final orbit and cutoff reason through the existing boot-log/archive
-pipeline. No archive/state writes occur during positive commanded thrust.
+pipeline. The `align` rows distinguish pointing error from the deliberate
+orbital/surface retrograde offsets. `peakFacingErr` in the result records the
+largest error seen by the throttle guard; peak retrograde offsets are sampled
+once a second in RAM. Only pre-burn and post-cutoff rows are written, with no
+archive/state writes during positive commanded thrust. An alignment timeout
+cannot enter the powered loop.
 Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
-The routine suite passes 157 cases; every individual case was below one
+The routine suite passes 161 cases; every individual case was below one
 second in the measured run. This is host-side timing, not a kOS flight timing
 guarantee; the flight plan records its own computation time.
 

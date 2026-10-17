@@ -12,7 +12,7 @@ SOURCE=(ROOT/'lib/aerobrake_assist.ks').read_text()
 MATH=(ROOT/'lib/aerobrake_ap_math.ks').read_text()
 CONFIG=(ROOT/'lib/aerobrake_config.ks').read_text()
 AERO=(ROOT/'lib/aerobrake.ks').read_text()
-ks.SOURCES+='\n'+CONFIG+'\n'+SOURCE+'\n'+MATH
+ks.SOURCES+='\n'+CONFIG+'\n'+SOURCE+'\n'+MATH+'\n'+AERO
 
 
 class Vec(BaseVec):
@@ -20,6 +20,13 @@ class Vec(BaseVec):
     # dot dispatch on every suffix read; keep the same vectors and steps.
     @property
     def MAG(self):return math.hypot(self[0],self[1],self[2])
+
+
+def slew(current,desired,maximum_degrees):
+    error=math.atan2(desired[1],desired[0])-math.atan2(current[1],current[0])
+    error=(error+math.pi)%(2*math.pi)-math.pi
+    angle=math.atan2(current[1],current[0])+max(-math.radians(maximum_degrees),min(math.radians(maximum_degrees),error))
+    return Vec((math.cos(angle),math.sin(angle),0))
 
 
 def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
@@ -38,7 +45,7 @@ def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
                vel=[-semi*motion*math.sin(anomaly)/(1-ecc*math.cos(anomaly)),
                     semi*motion*math.sqrt(1-ecc**2)*math.cos(anomaly)/(1-ecc*math.cos(anomaly))],
                mass=1.,actual_dv=0.,throttle='0',steering='',min_pe=53000.,max_pe=53000.,
-               thrust_history=[],state_history=[],drag=0.)
+               thrust_history=[],state_history=[],drag=0.,turn_rate=math.inf)
     dry=math.exp(-available/(315*9.80665))
     data={} if saved is None else dict(saved)
     ship=NS(BODY=NS(NAME='Kerbin',RADIUS=radius,MU=mu,POSITION=Vec((0,0,0)),ROTATIONPERIOD=21600),
@@ -67,11 +74,12 @@ def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
             mean=ea-ecc*math.sin(ea)
             env['ETA'].PERIAPSIS=(-mean)%(2*math.pi)/math.sqrt(mu/semi**3)
         else:env['ETA'].PERIAPSIS=0
-    def facing():
+    def facing(dt):
         if state['steering']:
             direction=(-ship.VELOCITY.SURFACE if 'SRFRETROGRADE' in state['steering']
                        else ks.evaluate(state['steering'],env))
-            if direction.MAG>0:ship.FACING.FOREVECTOR=direction.NORMALIZED
+            if direction.MAG>0:
+                ship.FACING.FOREVECTOR=slew(ship.FACING.FOREVECTOR,direction,state['turn_rate']*dt)
     def persist(key,value):
         assert ship.THRUST<=.001,'no persistent state I/O during thrust'
         state['state_history'].append((key,value));data[key]=value
@@ -80,7 +88,7 @@ def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
         elif statement.startswith('LOCK STEERING TO '):state['steering']=statement[17:]
     def physics(dt):
         if dt<=0:return
-        facing()
+        facing(dt)
         throttle=ks.evaluate(state['throttle'],env)
         assert 0<=throttle<=1
         ship.CONTROL.MAINTHROTTLE=throttle;ship.THRUST=throttle*ship.AVAILABLETHRUST
@@ -129,7 +137,7 @@ def run_assist(env):
 
 def control(env):
     return dict(REASON='',DEADLINE=1000,UPDATED=0,ATMO=70000,LOW=52000,HIGH=54000,
-                BODY='Kerbin',STAGE=1,DV=869,APPLIED=0,TARGET_AP=71000,
+                BODY='Kerbin',STAGE=1,DV=869,APPLIED=0,TARGET_AP=71000,PEAK_FACING_ERR=0,
                 DIR=-env['SHIP'].VELOCITY.ORBIT.NORMALIZED)
 
 
@@ -184,6 +192,50 @@ def check_entry_and_direction():
     print('PASS: true atmospheric-interface ETA and constant-Pe energy descent agree with independent conic/time/finite-difference calculations')
 
 
+def check_live_entry_orientation(mode):
+    # Each direction suffix is a SNAPSHOT. Only reading it again observes
+    # the rotating velocity vector; a stored Direction stays unchanged.
+    env=ks.environment();env.update(AEROBRAKE_REENTRY_DIR=mode,SAS=False)
+    class MovingShip:
+        FACING=NS(FOREVECTOR=Vec((0,1,0)))
+        @property
+        def SRFPROGRADE(self):
+            angle=math.radians(6*env['TIME'].SECONDS)
+            return NS(FOREVECTOR=Vec((math.cos(angle),math.sin(angle),0)))
+        @property
+        def SRFRETROGRADE(self):return NS(FOREVECTOR=-self.SRFPROGRADE.FOREVECTOR)
+    env['SHIP']=MovingShip();steering=''
+    def lock(statement):
+        nonlocal steering
+        assert statement.startswith('LOCK STEERING TO ')
+        steering=statement[17:]
+    def tick(dt):
+        env['TIME'].SECONDS+=dt
+        desired=ks.evaluate(steering,env).FOREVECTOR
+        current=env['SHIP'].FACING.FOREVECTOR
+        env['SHIP'].FACING.FOREVECTOR=slew(current,desired,30*dt)
+    env.update(fixture_lock=lock,fixture_wait=tick,
+               _aerobrakeEntryDirection=lambda:ks.call('_aerobrakeEntryDirection',env),
+               VANG=lambda a,b:math.degrees(math.acos(max(-1,min(1,float(a@b)/a.MAG/b.MAG)))))
+    logs=[];env['fixture_log']=logs.append
+    source=function_body(AERO,'_aerobrakeOrient').replace('SAS OFF.','SET SAS TO FALSE.').replace('mLog(','fixture_log(')
+    source=re.sub(r'WAIT UNTIL (.*?)\.',r'UNTIL \1 { WAIT 0.05. }',source,flags=re.S)
+    try:ks.run(ks.parse(source),env)
+    except ks.Returned:pass
+    assert env['TIME'].SECONDS<60
+    # The same installed steering lock must keep tracking AFTER the helper
+    # returns, through a coast in which the heading changes substantially.
+    for _ in range(80):tick(.05)
+    desired=getattr(env['SHIP'],'SRFPROGRADE' if mode=='PROGRADE' else 'SRFRETROGRADE').FOREVECTOR
+    error=env['VANG'](env['SHIP'].FACING.FOREVECTOR,desired)
+    assert error<2,(mode,error,steering)
+    before=len(logs)
+    try:ks.run(ks.parse(source),env)
+    except ks.Returned:pass
+    assert len(logs)==before,'aligned hold must not repeat the orienting/oriented log pair'
+    print(f'PASS: {mode} entry lock and alignment test track moving velocity with finite slew, including after orientation returns')
+
+
 def check_finite_plan():
     env,sim,data,refresh=fixture(before_entry=180)
     plan=env['_aeroApPlan'](70000,52000,54000,53000)
@@ -192,6 +244,19 @@ def check_finite_plan():
     assert plan['AP']<47600000 and plan['IGNITE']>5
     assert env['CONFIG'].IPU==150 and 'aerobrake_prior_ipu' not in data
     print('PASS: finite variable-mass three-minute plan selects useful energy reduction within both Pe bounds using actual fuel')
+
+
+def check_powered_alignment(turn_rate):
+    env,sim,data,refresh=fixture(before_entry=180,thrust=55)
+    sim['turn_rate']=turn_rate
+    assert run_assist(env)['OK']
+    if turn_rate==0:
+        assert sim['actual_dv']==0 and env['control']['REASON']=='alignment-timeout'
+    else:
+        assert sim['actual_dv']>300
+        assert env['control']['PEAK_FACING_ERR']<=5
+    assert env['SHIP'].THRUST==0 and not data['aerobrake_ap_active']
+    print(f'PASS: {turn_rate}deg/s attitude fixture: powered ignition requires actual alignment and stalled steering spends no fuel')
 
 
 def check_source_execution():
@@ -330,7 +395,9 @@ def check_profile_command_and_entry_alignment():
     assert not re.search(r'\b(?:STAGE|ADD|REMOVE|REBOOT|ACTIVATE|COPYPATH|OPEN|LOG)\b(?!:)',mask(SOURCE))
     assert 'aerobrake_prior_ipu' in function_body((ROOT/'lib/boot_lib.ks').read_text(),'bootPreamble')
     assert 'SET AEROBRAKE_AP_BURN TO 1.' in (ROOT/'craft/RO9.ks').read_text()
-    assert 'LOCAL refVec IS steerDir:FOREVECTOR.' in function_body(AERO,'_aerobrakeOrient')
+    orient=function_body(AERO,'_aerobrakeOrient')
+    assert 'LOCK STEERING TO _aerobrakeEntryDirection().' in orient
+    assert 'LOCAL steerDir' not in orient and 'LOCAL refVec' not in orient
     assert not re.search(r'AEROBRAKE_AP_(?:DV_CAP|PASS_DV_CAP|MAX_TIME|HEIGHT_WINDOW|TARGET)\b',SOURCE+CONFIG+command)
     print('PASS: boolean policy/RO9 default survive both return profiles; entry integration and archive command preserve phase/node, and interruption restores CPU budget')
 
@@ -338,7 +405,9 @@ def check_profile_command_and_entry_alignment():
 if __name__=='__main__':
     check_live_cutoffs()
     check_entry_and_direction()
+    for mode in ('RETROGRADE','PROGRADE'):check_live_entry_orientation(mode)
     check_finite_plan()
+    for turn_rate in (0,5):check_powered_alignment(turn_rate)
     check_source_execution()
     for args in ((869,0),(869,100),(3200,0)):check_uncapped_fuel(*args)
     for drag in (0,1,10):check_disturbance_and_stale_control(drag)

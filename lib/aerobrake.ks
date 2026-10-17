@@ -806,32 +806,33 @@ LOCAL FUNCTION _aerobrakeDecouple {
     WAIT 2.
 }
 
+LOCAL FUNCTION _aerobrakeEntryDirection {
+    IF AEROBRAKE_REENTRY_DIR = "PROGRADE" { RETURN SHIP:SRFPROGRADE. }
+    RETURN SHIP:SRFRETROGRADE.
+}
+
 LOCAL FUNCTION _aerobrakeOrient {
-    SET dir TO AEROBRAKE_REENTRY_DIR.
-
-    LOCAL steerDir IS SHIP:SRFRETROGRADE.
-    IF dir = "PROGRADE" {
-        SET steerDir TO SHIP:SRFPROGRADE.
-    }
-    // Validate the surface-relative direction actually being commanded.
-    LOCAL refVec IS steerDir:FOREVECTOR.
-
-    mLog("Orienting " + dir + " for entry.").
     SAS OFF.
-    LOCK STEERING TO steerDir.
+    // A stored Direction is a snapshot. Keep both the steering lock and
+    // alignment check live, including after this helper returns to coast.
+    LOCK STEERING TO _aerobrakeEntryDirection().
+    IF VANG(SHIP:FACING:FOREVECTOR,_aerobrakeEntryDirection():FOREVECTOR) < 2 { RETURN. }
+    LOCAL mode IS "RETROGRADE".
+    IF AEROBRAKE_REENTRY_DIR = "PROGRADE" { SET mode TO "PROGRADE". }
+    mLog("Orienting " + mode + " for entry.").
     LOCAL startTime IS TIME:SECONDS.
     LOCAL timeout IS 60.
-    WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, refVec) < 2
+    WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR,_aerobrakeEntryDirection():FOREVECTOR) < 2
         OR TIME:SECONDS > startTime + timeout.
-    IF VANG(SHIP:FACING:FOREVECTOR, refVec) < 2 {
-        mLog("Oriented " + dir + " (error < 2°).").
+    IF VANG(SHIP:FACING:FOREVECTOR,_aerobrakeEntryDirection():FOREVECTOR) < 2 {
+        mLog("Oriented " + mode + " (error < 2°).").
     } ELSE {
-        mLogWarn(dir + " alignment timed out.").
+        mLogWarn(mode + " alignment timed out.").
     }
 
     // LOCK STEERING stays active — phaseAerobrake will wait for
     // atmosphere entry and hand off to SAS before advancing.
-    mLog(dir + " steering lock active.").
+    mLog(mode + " steering lock active.").
 }
 
 LOCAL FUNCTION _aerobrakeArmChutes {
