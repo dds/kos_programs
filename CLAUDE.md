@@ -551,6 +551,33 @@ Looks like Python/JS; is neither.
   The existing1km/fuel rejection gates and downstream actual-orbit MCC
   corridor remain; no tolerance relaxation or new BPLANE phase. Prescribed
   response/source fixtures pass, native KSP flight evidence still pending.
+  Optional AEROBRAKE_AP_BURN now enables fuel-driven, finite-burn Ap reduction
+  with Pe-preserving steering. Default0; RO9 explicitly enables1 (authorized
+  craft difference from RO8). cmd/aeroassist takes ONLY boolean0/1. No fixed
+  total/pass dV caps: usable fuel is MIN(ship,stage vacuum dV) minus optional
+  reserve(default0). Config survives both generated return profiles. Plan at
+  actual conic atmospheric-interface ETA180s, three ignition candidates plus
+  finer verification, variable mass, automatic goalAp atmosphere+1km. Forecast
+  is VACUUM, not a drag/thermal certificate. Native live upper/lower entry Pe
+  corridor+100m margins, energy reduction, pressure<=.1atm, alignment<=5deg,
+  atmospheric surface-retrograde limit10deg, fuel/stage/node/abort/freshness
+  remain mandatory. Forecast impulse/time limits are computed, not preset dV
+  allowances. No staging/activation. Physical cutoff precedes state/log I/O.
+  Interrupted attempts retain their pass latch until observed entry AND exit;
+  outside-atmosphere alone cannot re-arm a pre-entry burn. Planning/control
+  IPU2000 is scoped; bootPreamble restores aerobrake_prior_ipu on interruption.
+  Late inside-atmo boots skip assist until next pass. Entry alignment now
+  compares the commanded surface-relative direction, fixing its mismatched
+  orbital reference without widening the2deg/60s guard. Planar conic/source
+  fixtures supplement flight tests; atmosphere/thermal/engine-lag validation
+  and actual pass-count savings remain unestablished.
+  Routine suite:157 cases pass; each measured<1s. The new long source-owner
+  replay is0.75s after a fixture-local three-component vector magnitude
+  optimization; steps/tolerances remain unchanged. New checks include869m/s
+  uncapped eligibility/execution, useful-energy stopping with3200m/s,
+  reserve100m/s, independent conic/time/Pe derivatives, drag/stale control,
+  interruption/cutoff latches and profile persistence. Pe feedback uses a100m
+  deadband to avoid large radial corrections for tiny near-Pe conic drift.
   The supplied deorbitcheck_RO9_1305239.log actually AGREES between TR/native
   impact coordinates within0.2m (quaternion also agrees); this snapshot does
   not show a stale prediction or incorrect longitude transform. An independent

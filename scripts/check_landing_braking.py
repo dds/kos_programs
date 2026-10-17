@@ -289,8 +289,13 @@ def check_integration():
     for path in [ROOT/'craft/RO9.ks',*(ROOT/'missions/RO9').glob('*.ks')]:
         original=ROOT/str(path.relative_to(ROOT)).replace('RO9','RO8')
         clean = lambda text: re.sub(r'//[^\n]*', '', text)
-        assert clean(path.read_text())==clean(original.read_text().replace('RO8','RO9')), path
-    print('PASS: brake code resident before coast; stage refresh precedes guidance; RO9 literal clone matches RO8')
+        actual=path.read_text()
+        if path==ROOT/'craft/RO9.ks':
+            # The operator explicitly enabled fuel-assisted aerobraking on RO9.
+            assert actual.count('SET AEROBRAKE_AP_BURN TO 1.\n')==1
+            actual=actual.replace('SET AEROBRAKE_AP_BURN TO 1.\n','')
+        assert clean(actual)==clean(original.read_text().replace('RO8','RO9')), path
+    print('PASS: brake code resident before coast; stage refresh precedes guidance; RO9 matches RO8 apart from its enabled aerobrake assist')
 
 
 if __name__=='__main__':

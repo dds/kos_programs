@@ -65,6 +65,7 @@ LOCAL ATM_HEIGHTS IS LEXICON(
 ).
 
 GLOBAL FUNCTION phaseAerobrake {
+    IF NOT aerobrakeApRecover() { RETURN. }
     mLogPhase("AEROBRAKE").
 
     // If entered while still coasting through an AIRLESS SOI (a Mun
@@ -140,6 +141,23 @@ GLOBAL FUNCTION phaseAerobrake {
     // --- Multi-pass aerobrake loop ---
     LOCAL passNum IS 0.
     LOCAL inPass IS FALSE.
+    LOCAL peFloor IS atmHeight*0.4.
+    IF AEROBRAKE_BRAKE_PE_FLOOR >= 0 { SET peFloor TO AEROBRAKE_BRAKE_PE_FLOOR. }
+    LOCAL assistPe IS REENTRY_PE.
+    IF AEROBRAKE_PE > 0 { SET assistPe TO AEROBRAKE_PE. }
+    LOCAL peLow IS MAX(peFloor,assistPe-1000).
+    LOCAL peHigh IS MIN(atmHeight-100,assistPe+1000).
+    IF AEROBRAKE_CORRECTION_PE_MIN >= 0 {
+        SET peLow TO MAX(peLow,AEROBRAKE_CORRECTION_PE_MIN).
+    }
+    IF AEROBRAKE_CORRECTION_PE_MAX >= 0 {
+        SET peHigh TO MIN(peHigh,AEROBRAKE_CORRECTION_PE_MAX).
+    }
+    IF AEROBRAKE_AP_BURN > 0 {
+        mLog("STATS aerobrake-assist policy enabled=true reserve=" + AEROBRAKE_AP_RESERVE_DV
+            + " planLead=" + AEROBRAKE_AP_PLAN_LEAD + " maxQAtm=" + AEROBRAKE_AP_MAX_Q
+            + " targetPe=" + assistPe + " peLow=" + peLow + " peHigh=" + peHigh).
+    }
     UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
         IF _aerobrakeThroughThickPart(atmHeight) {
             mLog("Aerobrake: captured (Ap "
@@ -148,6 +166,7 @@ GLOBAL FUNCTION phaseAerobrake {
                 + " m/s — through the thick part. Handing to DESCENT.").
             BREAK.
         }
+        aerobrakeApObserve(atmHeight).
         IF SHIP:ALTITUDE > atmHeight {
             IF inPass {
                 SET inPass TO FALSE.
@@ -170,8 +189,23 @@ GLOBAL FUNCTION phaseAerobrake {
             // Between passes: solar-hold + warp the high coast, then orient
             // heat-shield-forward ~15 min before the next pass.
             _aerobrakeSolarWait(TIME:SECONDS + ETA:PERIAPSIS - AEROBRAKE_ENTRY_LEAD).
+            IF AEROBRAKE_AP_BURN > 0 {
+                LOCAL approachEta IS aerobrakeApEntryEta(atmHeight).
+                IF approachEta > AEROBRAKE_AP_PLAN_LEAD {
+                    _aerobrakeSolarWait(TIME:SECONDS+approachEta-AEROBRAKE_AP_PLAN_LEAD).
+                }
+                _aerobrakeOrient().
+                LOCAL assistPlan IS aerobrakeApAssist(atmHeight,peLow,peHigh,assistPe).
+                IF phaseShouldYield { RETURN. }
+                IF assistPlan["OK"] AND assistPlan["ENTERED"] {
+                    SET inPass TO TRUE.
+                    SET passNum TO passNum+1.
+                    mLog("STATS aerobrake pass=" + passNum + " in powered=true").
+                }
+                aerobrakeApObserve(atmHeight).
+            }
             _aerobrakeOrient().
-            WAIT UNTIL SHIP:ALTITUDE < atmHeight
+            WAIT UNTIL SHIP:ALTITUDE < atmHeight OR inPass
                 OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
         } ELSE {
             IF NOT inPass {
@@ -186,6 +220,7 @@ GLOBAL FUNCTION phaseAerobrake {
                 OR _aerobrakeThroughThickPart(atmHeight)
                 OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
                 _aerobrakeOrient().
+                aerobrakeApObserve(atmHeight).
                 WAIT 1.
             }
         }
@@ -775,11 +810,11 @@ LOCAL FUNCTION _aerobrakeOrient {
     SET dir TO AEROBRAKE_REENTRY_DIR.
 
     LOCAL steerDir IS SHIP:SRFRETROGRADE.
-    LOCAL refVec IS -SHIP:VELOCITY:ORBIT.
     IF dir = "PROGRADE" {
         SET steerDir TO SHIP:SRFPROGRADE.
-        SET refVec TO SHIP:VELOCITY:ORBIT.
     }
+    // Validate the surface-relative direction actually being commanded.
+    LOCAL refVec IS steerDir:FOREVECTOR.
 
     mLog("Orienting " + dir + " for entry.").
     SAS OFF.

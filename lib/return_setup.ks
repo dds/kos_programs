@@ -44,6 +44,13 @@ LOCAL FUNCTION _writeCoastAutomation {
     LOG "SET COAST_WARP_10D_LIMIT TO " + configLiteral(COAST_WARP_10D_LIMIT) + "." TO profilePath.
     LOG "SET COAST_WARP_50D_LIMIT TO " + configLiteral(COAST_WARP_50D_LIMIT) + "." TO profilePath.
     LOG "SET COAST_WARP_MAX_RATE TO " + configLiteral(COAST_WARP_MAX_RATE) + "." TO profilePath.
+    // Keep the optional assist policy through both surface ascent
+    // and Kerbin-return profile replacements (which clear old overrides).
+    LOG "SET AEROBRAKE_AP_BURN TO " + configLiteral(AEROBRAKE_AP_BURN) + "." TO profilePath.
+    LOG "SET AEROBRAKE_AP_RESERVE_DV TO " + configLiteral(AEROBRAKE_AP_RESERVE_DV) + "." TO profilePath.
+    LOG "SET AEROBRAKE_AP_PLAN_LEAD TO " + configLiteral(AEROBRAKE_AP_PLAN_LEAD) + "." TO profilePath.
+    LOG "SET AEROBRAKE_AP_MAX_Q TO " + configLiteral(AEROBRAKE_AP_MAX_Q) + "." TO profilePath.
+    LOG "SET AEROBRAKE_AP_MAX_OFF_RETRO TO " + configLiteral(AEROBRAKE_AP_MAX_OFF_RETRO) + "." TO profilePath.
 }
 
 // Persist the next leg as a compact local mission profile. State keeps

@@ -54,6 +54,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/returntokerbin.ks").` | Full automated moon→Kerbin return (escape/MCC/aerobrake/descent) |
 | `RUNPATH("0:/cmd/returnshallow.ks").` | 53 km moon→Kerbin return; keep engine/tank through aerobraking, then separate for parachute descent |
 | `RUNPATH("0:/cmd/returncheck.ks").` | Plan a 53 km Mun/Minmus→Kerbin departure for review, with KSC targeting off; prints cost, remaining fuel and predicted Pe without burning or changing phase |
+| `RUNPATH("0:/cmd/aeroassist.ks",1).` | Enable fuel-assisted aerobraking at the next boot; `0` disables (RO9 defaults enabled) |
 | `RUNPATH("0:/cmd/directreturn.ks").` | From a landed Mun/Minmus craft, model a single-stage direct ascent to Kerbin Pe 53 km with a 20 m/s reserve; preview only, no launch or mission change |
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
@@ -1249,6 +1250,71 @@ This preserves the existing 53 km profile, chute tags and late decoupling.
 Do not rerun the moon-departure setup from Kerbin orbit. Diagnostics are
 persisted as `STATS return-mcc setup`, `plan`, `flown`, `status=verified`
 or `status=held`. Offline checks: `python3 -B scripts/check_return_mcc.py`.
+
+Optional propulsion lowers apoapsis while aiming to preserve the entry
+periapsis. **RO9 enables this automatically**; other craft default off.
+The operator switch is boolean:
+
+```kerboscript
+RUNPATH("0:/cmd/aeroassist.ks",1). // enable; use 0 to disable
+```
+
+The command saves one override for the next AEROBRAKE boot and preserves the
+phase, maneuver nodes and unrelated overrides. Both generated return profiles
+preserve the policy. After archive sync, reboot to load the new controller;
+no installed `boot/boot.ks` replacement is needed. A reboot already inside
+the atmosphere keeps normal aerobraking and waits until the following pass
+to plan assistance.
+
+About **180 seconds before the next actual atmospheric interface**, the
+controller measures usable fuel, active-engine thrust/Isp and mass. It tries
+three ignition times with a variable-mass, finite-thrust vacuum prediction,
+then verifies the selected forecast at a finer step. Timing comes from the
+conic's atmosphere crossing, rather than an assumed interval before Pe.
+The objective is to reduce orbital energy toward an apoapsis just above the
+atmosphere (atmosphere height + 1 km). There is **no fixed per-pass or total
+dV allowance**: all measured current-stage fuel is eligible by default.
+A long burn can start before entry. Its steering projects deceleration along
+a direction that preserves Pe, with feedback toward the configured entry Pe.
+Feedback leaves errors within 100 m alone, avoiding needless radial steering
+near periapsis; the corridor checks still run continuously.
+Each subsequent pass recalculates from the actual orbit and remaining fuel.
+
+For the economy Kerbin return, the existing 52–54 km entry corridor remains
+in force, with a 100 m inner stopping margin. The forecast can select only a
+partial burn if preserving that corridor or the entry attitude requires it.
+The live controller checks both Pe bounds, energy reduction, pressure,
+alignment, fuel, stage/body changes, abort and control freshness. It also
+stops at the forecast impulse/duration, or the apoapsis goal. These stopping
+limits come from the forecast and live conditions, rather than a preset fuel
+allowance. It aligns with zero throttle before ignition and verifies actual
+thrust and raw/pilot throttle are zero afterward. It never stages or activates
+engines. An interrupted attempt cannot repeat until an atmospheric entry and
+exit have both been observed. The temporary 2,000 IPU planning/control budget
+is restored afterward or by `bootPreamble` following interruption.
+
+Advanced profile settings are optional; the enable flag is sufficient:
+
+| Setting | Default | Effect |
+|---|---:|---|
+| `AEROBRAKE_AP_BURN` | 0; RO9 sets 1 | Enable fuel-assisted aerobraking |
+| `AEROBRAKE_AP_RESERVE_DV` | 0 m/s | Fuel to retain for another purpose, if desired |
+| `AEROBRAKE_AP_PLAN_LEAD` | 180 s | Forecast lead before atmospheric entry |
+| `AEROBRAKE_AP_MAX_Q` | 0.1 atm | Dynamic-pressure cutoff (about 10.1 kPa) |
+| `AEROBRAKE_AP_MAX_OFF_RETRO` | 10° | Maximum atmospheric departure from surface retrograde |
+
+Dynamic pressure uses [kOS's atmosphere units](https://ksp-kos.github.io/KOS/structures/vessels/vessel.html#attribute:VESSEL:Q).
+The forecast does not model drag, heating or attitude dynamics. Actual drag
+can shorten a burn through the live corridor and attitude guards; unused fuel
+is reconsidered next pass. This does not establish a globally optimal or
+thermally validated entry. `STATS aerobrake-assist policy/plan/forecast/result`
+records available fuel, calculation time, ignition, predicted Pe/Ap, measured
+impulse, final orbit and cutoff reason through the existing boot-log/archive
+pipeline. No archive/state writes occur during positive commanded thrust.
+Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
+The routine suite passes 157 cases; every individual case was below one
+second in the measured run. This is host-side timing, not a kOS flight timing
+guarantee; the flight plan records its own computation time.
 
 ## Multi-CPU ships and roles
 
