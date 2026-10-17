@@ -494,6 +494,43 @@ Looks like Python/JS; is neither.
   the controller currently stages only when usable thrust runs out. The
   operator wants separation before touchdown while the discarded stage still
   impacts; that behavior is not implemented or guaranteed by this diagnostic.
+  The subsequent landingcheck_RO9_1306245.log measures current stage364.9m/s,
+  total1817.1, activeAcc42.74434, reserveAcc2.74024. Torch stage2 drops in1;
+  Ant stage1 stays, 2kN/315s Isp. After14.85m/s deorbit, ~350m/s transfer dV
+  remains, so ordinary ~134m/s main braking will NOT exhaust it. New optional
+  LANDING_STAGE_DISCARD_HSPEED=80 in RO8/RO9 Minmus economy profiles performs
+  an elective fueled-stage handoff during braking, only for an adjacent
+  serial stack retaining the active CPU and all lander engines, with no
+  additional propulsion whose fuel would inflate the lander budget. It
+  reserves the existing weaker-stage envelope and braking dV plus700m/s;
+  requires a bound descending, node-free, atmosphere-free orbit passing
+  below measured periapsis terrain. A shared stage event verifies physical
+  zero; the tick-driven pending cutoff blocks all throttle publishers and
+  cancels after1s or invalidated clearance/budget. Existing recovery/limits
+  and alignment remain. Mun defaults stay fuel-first. cmd/landingdisposal
+  saves only these two overrides for the next landing-band boot, no node,
+  phase, target or return changes. Contact is predicted, not debris clearance
+  or component destruction. No flight validation yet.
+  A flat target-elevation replay of the actual node opens the production
+  gate54s/7.4km AFTER target pass. A point mass with measured thrust/Isp/mass,
+  fuel depletion, instantaneous attitude and3s initial +3s stage delay ends
+  main braking at1306m/8.1km aimpoint miss (transfer retained) or733m/9.3km
+  (80m/s handoff). Both keep downward speed>20m/s, ~134m/s impulse. These
+  are model values, not terminal landing/terrain/debris/CPU proof. The fixed
+  ballistic lead still does NOT certify an exact powered target landing.
+  To protect landing quality despite this footprint shift, orbital economy
+  site search and UNFLOWN native acceptance now reserve a21km geographic
+  Sun/radio region (LANDING_LIGHT_SITE_RADIUS, 0 opts out), with parallax
+  and the existing time window. This is a planning margin, not a guaranteed
+  touchdown region or terrain/eclipse certificate. Rankings also reserve it
+  before evaluating preferred Sun/Kerbin elevation. The recorded target's
+  Sun15.8/Kerbin29.5 fails the new regional margin on Minmus; replan it.
+  Precision sites and interrupted/suborbital recovery keep the original
+  point policy; all physical diversion/terrain/cutoff gates remain active.
+  Landing previously never read ABORT. The guidance owner now latches its
+  existing abort/cleanup path before loading another track; all throttle
+  commands and both elective/ordinary staging also honor ABORT. Source
+  fixtures cover abort during pending cutoff and missing-track recovery.
   The requested Mun return is direct ascent to Kerbin Pe53km, no KSC/mandatory
   parking orbit. cmd/directreturn is a LANDED, single-stage MODEL PREVIEW ONLY:
   bounded heading/pitch/dV search, RK4 mass/thrust, analytic SOI handoff, actual

@@ -188,7 +188,7 @@ GLOBAL FUNCTION _landingSetThrottle {
     PARAMETER ctx.
     PARAMETER throttleValue.
     SET ctx["TARGET_THROTTLE"] TO MAX(0, MIN(1, throttleValue)).
-    IF TIME:SECONDS < ctx["STAGE_UNTIL"] {
+    IF ABORT OR TIME:SECONDS < ctx["STAGE_UNTIL"] OR ctx["DISCARD_PENDING"] {
         SET ctx["TARGET_THROTTLE"] TO 0.
     }
 }
@@ -631,6 +631,11 @@ GLOBAL FUNCTION _landingSetState {
 GLOBAL FUNCTION _landingGuidanceTick {
     PARAMETER ctx.
 
+    IF ABORT {
+        _landingSetThrottle(ctx, 0).
+        SET landingAbortFlag TO TRUE.
+        RETURN.
+    }
     _landingEnsureStateTrack(ctx["STATE"]).
     IF landingAbortFlag { RETURN. }
     IF ctx["STATE"] = "COAST" {
@@ -770,6 +775,9 @@ GLOBAL FUNCTION landExecute {
         "STAGE_EVENTS", 0,
         "STAGE_ACTIVATED", FALSE,
         "STAGE_WARNED", FALSE,
+        "DISCARD_TRIED", FALSE,
+        "DISCARD_PENDING", FALSE,
+        "DISCARD_SINCE", 0,
         "TARGET_THROTTLE", 0
     ).
     _landingCacheTick(ctx).
@@ -808,7 +816,8 @@ GLOBAL FUNCTION landExecute {
             }
         } ELSE {
             SET ctx["TOUCHDOWN_TICKS"] TO 0.
-            vesselStageForLanding(ctx).
+            landingStageDisposalTick(ctx).
+            vesselStageForLanding(ctx, ctx["DISCARD_PENDING"]).
             // Staging/activation changes mass and thrust; never fly this tick
             // using the exhausted transfer stage's cached acceleration.
             _landingCacheTick(ctx).

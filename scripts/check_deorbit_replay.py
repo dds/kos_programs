@@ -3,7 +3,7 @@ import math
 
 import numpy as np
 
-from replay_deorbit import ellipse, parse_snapshot, replay, rotate
+from replay_deorbit import ellipse, parse_snapshot, replay, rotate, angle
 
 
 # Reduced numeric records from the operator's unflown Minmus node. The
@@ -85,6 +85,39 @@ def check_propagation():
     print('PASS: independent Kepler propagation reproduces its initial state and conserves orbital energy/momentum; rotation round-trips and unbound rejection verified')
 
 
+def check_recorded_brake_gate():
+    from check_landing_braking import fixture,call
+    data = parse_snapshot(SNAPSHOT)
+    report = replay(data)
+    before,_,_ = ellipse(data['position'],data['velocity'],data['mu'])
+    point,speed = before(data['burn_ut']-data['now'])
+    after,_,_ = ellipse(point,speed+data['prograde']*speed/np.linalg.norm(speed),data['mu'])
+    gravity = data['mu']/data['radius']**2
+    env,_ = fixture(gravity=gravity)
+    def clearance(ut):
+        point,speed = after(ut-data['burn_ut'])
+        up = point/np.linalg.norm(point)
+        surface = speed-np.cross(data['spin'],point)
+        down = max(0,-float(surface@up))
+        hs = float(np.linalg.norm(surface+(down*up)))
+        height = float(np.linalg.norm(point)-data['radius']-data['target_terrain'])
+        envelope = call('lmBrakeEnvelope',env,hs,down,2.74023930174613,gravity,3)
+        return height-envelope['V'],height,hs,down
+    lo,hi = report['target_pass_ut'],data['impact_ut']
+    assert clearance(lo)[0] > 1500
+    for _ in range(32):
+        mid = (lo+hi)/2
+        if clearance(mid)[0] > 0: lo=mid
+        else: hi=mid
+    pass_pos,_ = after(report['target_pass_ut']-data['burn_ut'])
+    burn_pos,_ = after(hi-data['burn_ut'])
+    distance = angle(pass_pos,rotate(burn_pos,data['spin'],-(hi-report['target_pass_ut'])))*data['radius']
+    assert 50 < hi-report['target_pass_ut'] < 60
+    assert 7300 < distance < 7500 and 1450 < clearance(hi)[1] < 1490
+    print('PASS: recorded coast over a flat target-elevation datum opens the unchanged production brake envelope 54s/7.4km beyond the aimpoint; ballistic lead alone cannot certify powered touchdown there')
+
+
 if __name__ == '__main__':
     check_recorded_node()
     check_propagation()
+    check_recorded_brake_gate()

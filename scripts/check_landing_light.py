@@ -48,7 +48,7 @@ def environment(frame=None, rotation=138984, sun_longitude=0, kerbin_longitude=-
         assert obj in (moon, sun, kerbin), 'Surface light must use BODY ephemerides, not vessel predictions'
         return obj.POSITION
 
-    env = dict(SHIP=NS(BODY=moon, PERIAPSIS=14000, ORBIT=NS(PERIOD=2200, ECCENTRICITY=0)),
+    env = dict(SHIP=NS(BODY=moon, STATUS='ORBITING', PERIAPSIS=14000, ORBIT=NS(PERIOD=2200, ECCENTRICITY=0)),
                SUN=sun, TIME=time, BODY=lambda name: kerbin,
                POSITIONAT=positionat, LATLNG=lambda lat, lng: Geo(lat, lng, moon, frame), V=lambda *xs: Vec(xs),
                LANDING_LIGHT_MODE='MORNING', LANDING_SUN_MIN_ELEV=10,
@@ -59,7 +59,12 @@ def environment(frame=None, rotation=138984, sun_longitude=0, kerbin_longitude=-
                LANDING_KERBIN_PREFERRED_ELEV=30, LANDING_LIGHT_KERBIN_WEIGHT=0,
                LANDING_LIGHT_SUN_WEIGHT=1, LANDING_LIGHT_SETTING_PENALTY=0,
                LANDING_LIGHT_SCAN_ORBITS=4, LANDING_LIGHT_SCAN_SAMPLES=128,
+               LANDING_FLEXIBLE_SITE=0, LANDING_ECONOMY_BRAKE=0, LANDING_LIGHT_SITE_RADIUS=21000,
+               stateGet=lambda key,default:default,
                LANDING_LIGHT_TIME_MARGIN=300, LIST=lambda *xs: KList(xs),
+               CONSTANT=NS(PI=math.pi),
+               SIN=lambda value:math.sin(math.radians(value)),
+               ARCSIN=lambda value:math.degrees(math.asin(value)),
                MOD=lambda x, y: x % y, ROUND=round, fixture_wait=lambda _: None)
     names = re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)', LIGHT)
     for name in names:
@@ -232,10 +237,11 @@ def check_windows_and_search():
     calls = []
     plan_env = dict(solved=dict(HAS_IMPACT=True, TTI=900), burnUT=5000, targetLat=7, targetLng=23,
                     landingLightActive=lambda: True,
-                    landingLightWindow=lambda *args: (calls.append(args) or dict(OK=True)))
+                    landingPlanningLight=lambda *args: (calls.append(args) or dict(OK=True)))
     assert run(planner, plan_env)
-    assert calls == [(7, 23, 5900)]  # Burn UT + post-burn TTI, not now + TTI or the search pass.
+    assert calls == [(7, 23, 5900, True)]  # Burn UT + post-burn TTI, not now + TTI or the search pass.
     env['landingLightWindow'] = lambda *args: dict(OK=False, REASON='kerbin-below-margin', SUN=15, KERBIN=-4)
+    env['landingPlanningLight'] = env['landingLightWindow']
     assert not env['landingLightNodeAllowed'](NS(TIME=1200))
     env['ADDONS'].TR.HASIMPACT = False
     assert not env['landingLightNodeAllowed'](NS(TIME=1200))
@@ -274,13 +280,13 @@ def check_economy_radio_priority():
         counter[0]+=1
         return Geo(0,-75 if counter[0]%2 else 37.5,env['SHIP'].BODY,np.eye(3))
     env.update(lmGroundGeoAt=track,
-               landingLightAt=lambda lat,lng,ut: reports[lng],
+               landingLightAt=lambda lat,lng,ut: dict(reports[lng]),
                landingLightWindow=lambda lat,lng,ut: reports[lng])
     picked=env['landingLitGroundTrack']()
     assert picked['FOUND'] and picked['LNG']==37.5,picked
     # Similar radio margins: favor rising, improving light over setting light.
-    reports[-75]=dict(OK=True,REASON='ok',SUN=15,KERBIN=35,SETTING=True)
-    reports[37.5]=dict(OK=True,REASON='ok',SUN=10,KERBIN=35,SETTING=False)
+    reports[-75]=dict(OK=True,REASON='ok',SUN=18,KERBIN=35,SETTING=True)
+    reports[37.5]=dict(OK=True,REASON='ok',SUN=12,KERBIN=35,SETTING=False)
     assert env['landingLitGroundTrack']()['LNG']==37.5
     # Planning still rejects a good-Sun site below the enlarged radio margin,
     # and a dark site regardless of radio; this is not a dark-side fallback.
@@ -366,7 +372,8 @@ def check_economy_target_refresh():
         try: ks.run(automatic, env)
         except ks.Returned as result: assert result.value is True
         pass_ut = now + max(600, period*.35)
-        while pass_ut < earliest_ut: pass_ut += period/env['LANDING_LIGHT_SCAN_SAMPLES']
+        while pass_ut-max(60,env['LANDING_LIGHT_TIME_MARGIN']) < earliest_ut:
+            pass_ut += period/env['LANDING_LIGHT_SCAN_SAMPLES']
         expected = geoposition(positionat(env['SHIP'], pass_ut))
         expected_lng = expected.LNG - 360*(pass_ut-now)/moon.ROTATIONPERIOD
         assert abs(env['TARGET_LAT']-expected.LAT) < 1e-9
@@ -494,6 +501,63 @@ def check_diversion_radio_margin():
     print('PASS: -1.11 degree allowance and link-free diversion; strict planning, optional -2 degree floor and Sun rejection remain active')
 
 
+def check_planning_region():
+    env = environment()
+    env.update(LANDING_LIGHT_MODE='SUNLIT',LANDING_FLEXIBLE_SITE=1,LANDING_ECONOMY_BRAKE=1,
+               LANDING_SUN_MIN_ELEV=5,LANDING_KERBIN_MIN_ELEV=15)
+    env['SHIP'].BODY.RADIUS = 60000
+    def measured(sun,kerbin):
+        return dict(OK=True,REASON='ok',SUN=sun,KERBIN=kerbin,RISING=False,SETTING=True)
+    # Recorded target center passes the old physical floors, but not a
+    # surrounding region large enough to contain the modeled stopping miss.
+    env['landingLightAt'] = lambda *args:measured(15.8036,29.4948)
+    assert not env['landingPlanningLight'](18.1421,76.9115,1000,True)['OK']
+    env['landingLightAt'] = lambda *args:measured(35,50)
+    assert env['landingPlanningLight'](18.1421,76.9115,1000,True)['OK']
+    env['landingLightAt'] = lambda lat,lng,ut:measured(35 if ut<=1000 else 15,50)
+    assert not env['landingPlanningLight'](18.1421,76.9115,1000,True)['OK']
+    env['LANDING_REQUIRE_KERBIN'] = 0
+    env['landingLightAt'] = lambda *args:measured(35,-20)
+    assert env['landingPlanningLight'](18.1421,76.9115,1000,True)['OK']
+    env['LANDING_REQUIRE_KERBIN'] = 1
+    env['LANDING_FLEXIBLE_SITE'] = 0
+    env['landingLightAt'] = lambda *args:measured(15.8036,29.4948)
+    assert env['landingPlanningLight'](18.1421,76.9115,1000,True)['OK']
+    # Recovery cannot acquire a stricter planning hold on an interrupted or
+    # already-suborbital trajectory. Unflown bound nodes do get the region.
+    env.update(landingLightWindow=lambda *args:measured(15.8,29.5),
+               landingPlanningLight=lambda *args:dict(OK=False,REASON='region',SUN=15.8,KERBIN=29.5),
+               ADDONS=NS(TR=NS(AVAILABLE=True,ISVERTWOTWO=True,HASIMPACT=True,
+                              IMPACTPOS=NS(LAT=8.45,LNG=91.62),TIMETILLIMPACT=1000)))
+    assert not env['landingLightNodeAllowed'](NS(TIME=1200),18.14,76.91)
+    env['stateGet'] = lambda key,default:'true' if key=='deorbit_burn_started' else default
+    assert env['landingLightNodeAllowed'](NS(TIME=1200),18.14,76.91)
+    env['stateGet'] = lambda key,default:default
+    env['SHIP'].STATUS = 'SUB_ORBITAL'
+    assert env['landingLightNodeAllowed'](NS(TIME=1200),18.14,76.91)
+    # Independent random spherical geometry verifies the normal rotation +
+    # finite-distance parallax bound, for both nearby Kerbin and distant Sun.
+    rng = np.random.default_rng(61)
+    for radius in (60000,200000):
+        env = environment()
+        env.update(LANDING_FLEXIBLE_SITE=1,LANDING_ECONOMY_BRAKE=1)
+        env['SHIP'].BODY.RADIUS = radius
+        for obj in (env['SUN'],env['BODY']('Kerbin')):
+            bound = env['_landingRegionAngle'](obj,1000)
+            to_obj = obj.POSITION-env['SHIP'].BODY.POSITION
+            for _ in range(80):
+                first = rng.normal(size=3); first /= np.linalg.norm(first)
+                tangent = rng.normal(size=3); tangent -= first*np.dot(first,tangent)
+                tangent /= np.linalg.norm(tangent)
+                theta = rng.uniform(0,21000/radius)
+                second = first*math.cos(theta)+tangent*math.sin(theta)
+                def elevation(unit):
+                    sight = to_obj-radius*unit
+                    return math.degrees(math.asin(np.clip(np.dot(unit,sight)/np.linalg.norm(sight),-1,1)))
+                assert abs(elevation(first)-elevation(second)) <= bound+1e-9
+    print('PASS: recorded Minmus aimpoint fails conservative 21km Sun/radio planning region; brighter sites/window checks pass; 320 spherical/parallax bounds, relay opt-out, precision and interrupted/suborbital recovery retained')
+
+
 if __name__ == '__main__':
     check_diversion_radio_margin()
     check_nested_radio_frame()
@@ -504,3 +568,4 @@ if __name__ == '__main__':
     check_economy_target_refresh()
     check_command()
     check_overrides()
+    check_planning_region()

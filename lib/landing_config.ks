@@ -29,6 +29,11 @@ GLOBAL LANDING_MIN_IPU IS 2000.
 // Flexible economy descents brake to a downward flare entry, not a hover.
 // Precision profiles retain the original target-driven braking policy.
 GLOBAL LANDING_ECONOMY_BRAKE IS 0.
+// Opt-in fueled transfer-stage disposal during braking. Zero keeps fuel-first
+// staging. Eligible stacks have one separation/lander-ignition slot and no
+// additional propulsion below the lander. Keep a post-landing dV allowance.
+GLOBAL LANDING_STAGE_DISCARD_HSPEED IS 0.
+GLOBAL LANDING_STAGE_DISCARD_RESERVE_DV IS 700.
 GLOBAL TOUCHDOWN_SPEED IS 2.
 GLOBAL HIGH_DESCENT_SPEED IS 30.
 GLOBAL HOVER_ALT IS 10.

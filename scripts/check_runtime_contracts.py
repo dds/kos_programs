@@ -162,7 +162,7 @@ def check_phase_failures():
             run(source, env)
             assert events == (['advance'] if success else ['hold']), (handler, success, events)
     guidance = function_body((ROOT / 'lib/landing_main.ks').read_text(), '_landingGuidanceTick')
-    env = dict(ctx=dict(STATE='COAST'), landingAbortFlag=True, _landingEnsureStateTrack=lambda _: None)
+    env = dict(ctx=dict(STATE='COAST'), ABORT=False, landingAbortFlag=True, _landingEnsureStateTrack=lambda _: None)
     run(guidance, env)  # Missing track must not invoke any guidance delegate.
     rover = (ROOT / 'craft/ROVER.ks').read_text()
     main = function_body(rover, 'main')

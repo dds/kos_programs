@@ -130,6 +130,7 @@ LOCAL FUNCTION _cmdDeorbitcheck {
         + " auto=" + LANDING_AUTO_TARGET + " light=" + LANDING_LIGHT_MODE
         + " minSun=" + LANDING_SUN_MIN_ELEV + " requireKerbin=" + LANDING_REQUIRE_KERBIN
         + " minKerbin=" + LANDING_KERBIN_MIN_ELEV + " preferredKerbin=" + LANDING_KERBIN_PREFERRED_ELEV
+        + " siteRadius=" + landingPlanningRadius()
         + " normalCap=" + TARGET_DEORBIT_NORMAL_DV_CAP
         + " crossCapKm=" + DEORBIT_CROSSTRACK_AUTHORITY_KM
         + " maxTrials=" + TARGET_DEORBIT_MAX_EVALUATIONS

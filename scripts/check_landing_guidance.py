@@ -12,7 +12,7 @@ from check_launch_and_staging import body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = '\n'.join((ROOT / ('lib/' + name + '.ks')).read_text() for name in
-                    ('landing_math', 'landing_config', 'landing_main', 'landing_coast', 'landing_terminal', 'landing_brake', 'landing_divert', 'vessel_hardware'))
+                    ('landing_math', 'landing_config', 'landing_main', 'landing_coast', 'landing_terminal', 'landing_brake', 'landing_divert', 'landing_disposal', 'vessel_hardware'))
 
 
 def tokens(source):
@@ -150,7 +150,7 @@ def call(name, env, *args):
 
 
 def environment():
-    env = dict(landingReviewReachableSite=lambda *args: True,
+    env = dict(landingReviewReachableSite=lambda *args: True, ABORT=False,
                SQRT=math.sqrt, TAN=lambda x: math.tan(math.radians(x)),
                SIN=lambda x: math.sin(math.radians(x)), COS=lambda x: math.cos(math.radians(x)),
                CONSTANT=NS(PI=math.pi), TIME=NS(SECONDS=0), SHIP=NS(BODY=NS(RADIUS=60000)))

@@ -186,7 +186,7 @@ def simulate(gravity, twr, horizontal, down, next_twr=None, economy=False,
 def hardware_fixture():
     env = environment()
     for name in ('vesselNeedsStage','vesselLandingThrust','vesselLandingNextEngineStage',
-                 'vesselLandingReserveAcc'):
+                 'vesselLandingReserveAcc', 'vesselLandingStageEvent'):
         env[name] = lambda *args, name=name: call(name,env,*args)
     def engine(stage, decoupled, ignition, flameout, thrust):
         eng = NS(STAGE=stage, DECOUPLEDIN=decoupled, IGNITION=ignition,
@@ -199,7 +199,8 @@ def hardware_fixture():
         return eng
     transfer = engine(4,3,True,False,50)
     lander = engine(2,0,False,False,15)
-    env.update(SHIP=NS(ENGINES=[transfer,lander], MASS=5, CONTROL=NS(PILOTMAINTHROTTLE=0),
+    env.update(SHIP=NS(ENGINES=[transfer,lander], MASS=5, THRUST=0,
+                       CONTROL=NS(PILOTMAINTHROTTLE=0,MAINTHROTTLE=0),
                        PARTS=[NS(MASS=3,DECOUPLEDIN=3),NS(MASS=2,DECOUPLEDIN=-1)]),
                STAGE=NS(NUMBER=4,READY=True), ALT=NS(RADAR=3000), ROUND=round)
     events=[]
@@ -212,7 +213,7 @@ def hardware_fixture():
         # Deliberately leave the engine disabled at its slot: test activation.
     env['stage_event']=stage
     ctx=dict(STAGE_UNTIL=0,STAGE_ENGINE=-1,STAGE_EVENTS=0,STAGE_ACTIVATED=False,
-             STAGE_WARNED=False,TARGET_THROTTLE=1)
+             STAGE_WARNED=False,TARGET_THROTTLE=1,DISCARD_PENDING=False)
     return env,ctx,transfer,lander,events
 
 
@@ -272,7 +273,7 @@ def check_staging():
 def check_integration():
     main=body(SOURCES,'landExecute')
     assert main.index('_landingEnsureStateTrack("BRAKE_ALIGN")') < main.index('UNTIL landingAbortFlag')
-    stage=main.index('vesselStageForLanding(ctx)')
+    stage=main.index('vesselStageForLanding(ctx, ctx["DISCARD_PENDING"])')
     assert stage < main.index('_landingCacheTick(ctx)',stage) < main.index('_landingGuidanceTick(ctx)',stage)
     assert 'WAIT ' not in body(SOURCES,'vesselStageForLanding')
     # Validate profile settings and phase names against actual declarations.

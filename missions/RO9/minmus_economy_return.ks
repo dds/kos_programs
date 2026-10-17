@@ -65,6 +65,11 @@ SET LANDING_USE_WAYPOINTS TO 0.
 SET LANDING_FLEXIBLE_SITE TO 1.
 SET LANDING_DIVERT_EMERGENCY_SLOPE TO 15.
 SET LANDING_ECONOMY_BRAKE TO 1.
+// Use the transfer engine for initial braking, then separate while still
+// moving fast. Handoff requires verified cutoff, lander clearance/fuel and
+// a terrain-intersecting ballistic orbit; otherwise keep fuel-first staging.
+SET LANDING_STAGE_DISCARD_HSPEED TO 80.
+SET LANDING_STAGE_DISCARD_RESERVE_DV TO 700.
 SET LANDING_APPROACH_MAX_TIME TO 120.
 SET LANDING_AUTO_TARGET TO 1.
 SET LANDING_AUTO_TARGET_MINUTES TO 5.

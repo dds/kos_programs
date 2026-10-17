@@ -538,9 +538,10 @@ LOCAL FUNCTION _targetDeorbitLightAccepted {
     PARAMETER targetLng.
     IF NOT landingLightActive() { RETURN TRUE. }
     IF NOT solved["HAS_IMPACT"] { RETURN FALSE. }
-    LOCAL light IS landingLightWindow(targetLat, targetLng, burnUT + solved["TTI"]).
+    LOCAL light IS landingPlanningLight(targetLat, targetLng, burnUT + solved["TTI"], TRUE).
     mLog("STATS deorbit light ok=" + light["OK"] + " reason=" + light["REASON"]
-        + " sun=" + ROUND(light["SUN"],2) + " kerbin=" + ROUND(light["KERBIN"],2)).
+        + " sun=" + ROUND(light["SUN"],2) + " kerbin=" + ROUND(light["KERBIN"],2)
+        + " siteRadius=" + landingPlanningRadius()).
     RETURN light["OK"].
 }
 

@@ -73,6 +73,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/burncheck.ks").` | Read-only ignition check: engine availability, autopilot suppression, CPU roles/IPU, and timed throttle-governor probes against the retained node; never fires engines |
 | `RUNPATH("0:/cmd/deorbitcheck.ks").` | Read-only deorbit snapshot: keep the suspect node attached and run in manual mode with an archive link; saves and verifies the report under `0:/logs/archive/_diagnostics/` |
 | `RUNPATH("0:/cmd/landingcheck.ks").` | Print and archive landing hardware, current-stage dV, next-stage acceleration and the last brake decision; requires an archive link |
+| `RUNPATH("0:/cmd/landingdisposal.ks").` | Save an optional transfer-stage handoff at 80 m/s horizontal speed with a 700 m/s lander reserve; preserves node, phase and other overrides; pass `0` to restore fuel-first staging |
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
@@ -164,8 +165,28 @@ next-stage acceleration, combined horizontal/vertical motion, terrain
 clearance, and a three-second reaction allowance. It can therefore start
 earlier than a vertical-only suicide-burn estimate. The spent stage is
 discarded ballistically; this is not a separate disposal-targeting program.
-If it still has fuel when braking ends, it stays attached: the controller
-does not burn fuel merely to empty it or jettison a fueled stage automatically.
+By default, a fueled transfer stage stays attached; the controller does not
+burn fuel merely to empty it. RO8/RO9 Minmus economy profiles instead enable
+`LANDING_STAGE_DISCARD_HSPEED=80`: after initial braking on the transfer engine,
+attempt separation while horizontal speed is between 30 and 80 m/s. This
+requires an adjacent serial separation/ignition slot, retention of the active
+CPU and lander engines, adequate weaker-stage stopping clearance, and enough
+lander dV for braking plus `LANDING_STAGE_DISCARD_RESERVE_DV` (700 m/s). The
+reserve is an allowance, not a complete surface-return budget.
+
+The handoff also requires a bound descending trajectory, no remaining nodes,
+no atmosphere, and predicted passage below measured terrain at periapsis.
+Guidance holds all throttle commands at zero across a physics step and
+verifies physical cutoff before staging. Failed checks keep existing
+propulsion; a cutoff/staging timeout cancels the elective handoff. Existing
+ignition recovery, stage limits and live alignment guards remain active.
+ABORT cancels elective staging and sends landing guidance through its existing
+verified throttle cleanup.
+This predicts debris contact, not component destruction or safe debris
+clearance. Mun profiles retain fuel-first staging pending a measured budget.
+For an in-flight mission, `RUNPATH("0:/cmd/landingdisposal.ks").` saves only
+these two overrides. It preserves the target, return sequence, phase and
+retained node. Passing `0` disables elective disposal.
 
 RO8/RO9 Mun/Minmus economy profiles allow `LANDING_FLEXIBLE_SITE=1`.
 After horizontal arrest, the controller validates the saved target or searches
@@ -767,6 +788,19 @@ engine Isp/separation slots, node components, repeated Trajectories
 samples, native position at impact time and an independent rotation transform.
 It leaves the node, mission phase and flight controls alone. Return the log
 for inspection; a diagnostic snapshot is not a new landing plan.
+The light picker and final unflown-node checks screen a wider region for
+flexible economy landings: `LANDING_LIGHT_SITE_RADIUS` defaults to 21 km.
+Sunlight and direct Kerbin view must have enough elevation margin across
+that radius, including finite-distance parallax, at each sampled arrival
+time. Rankings also reserve that margin before comparing preferred light
+and radio elevations. Set the radius to `0` to use the point policy.
+This is conservative planning around a shifting powered footprint, not an
+exact touchdown prediction or a guarantee against terrain shadows/eclipses
+throughout the region. Final local terrain and light checks remain active.
+Precision targets and interrupted/suborbital recovery retain their original
+point policy. A retained unflown node can now hold with `sun-site-margin` or
+`kerbin-site-margin`; keep it for inspection or reselect with
+`RUNPATH("0:/cmd/landlight.ks", "apply", "SUNLIT", 1).` before replanning.
 `python3 scripts/replay_deorbit.py <snapshot>` independently replays bound,
 same-body prograde/retrograde-only nodes from these records. It reports the
 rotating target's closest pass, height and speed; it excludes powered flight,

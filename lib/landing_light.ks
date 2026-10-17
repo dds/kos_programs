@@ -1,5 +1,64 @@
 // landing_light.ks - Orbital site search and pre-deorbit light checks.
 @LAZYGLOBAL OFF.
+// Economy braking can stop kilometres beyond the orbital aimpoint. Reserve
+// a region around it during planning (20 km lead + 1 km local search);
+// powered diversions retain the physical
+// Sun/radio floors. This is a geographic margin, not a touchdown predictor.
+GLOBAL LANDING_LIGHT_SITE_RADIUS IS 21000.
+
+GLOBAL FUNCTION landingPlanningRadius {
+    IF LANDING_FLEXIBLE_SITE <= 0 OR LANDING_ECONOMY_BRAKE <= 0 { RETURN 0. }
+    RETURN MAX(0, LANDING_LIGHT_SITE_RADIUS).
+}
+
+LOCAL FUNCTION _landingRegionAngle {
+    PARAMETER obj.
+    PARAMETER ut.
+    LOCAL radius IS SHIP:BODY:RADIUS.
+    LOCAL theta IS MIN(180, landingPlanningRadius() / radius * 180 / CONSTANT:PI).
+    LOCAL chord IS 2 * radius * SIN(theta / 2).
+    LOCAL distance IS (landingBodyOffsetAt(obj, ut) - landingBodyOffsetAt(SHIP:BODY, ut)):MAG.
+    // Include changing sightline direction across the region (parallax),
+    // especially for nearby Kerbin, as well as its changing surface normal.
+    RETURN theta + ARCSIN(MIN(1, chord / MAX(1, distance - radius))).
+}
+
+GLOBAL FUNCTION landingPlanningLight {
+    PARAMETER lat.
+    PARAMETER lng.
+    PARAMETER ut.
+    PARAMETER window IS FALSE.
+    LOCAL fractions IS LIST(0).
+    IF window { SET fractions TO LIST(0, -1, -0.5, 0.5, 1). }
+    LOCAL center IS LEXICON().
+    FOR fraction IN fractions {
+        LOCAL sampleUT IS ut + fraction * MAX(60, LANDING_LIGHT_TIME_MARGIN).
+        LOCAL light IS landingLightAt(lat, lng, sampleUT).
+        IF NOT light["OK"] { RETURN light. }
+        SET light["SUN_REGION_MARGIN"] TO 0.
+        SET light["KERBIN_REGION_MARGIN"] TO 0.
+        IF landingPlanningRadius() > 0 {
+            IF LANDING_LIGHT_MODE <> "ANY" {
+                LOCAL band IS landingSunBand().
+                SET light["SUN_REGION_MARGIN"] TO _landingRegionAngle(SUN, sampleUT).
+                IF light["SUN"] < band["MIN"] + light["SUN_REGION_MARGIN"] {
+                    SET light["OK"] TO FALSE.
+                    SET light["REASON"] TO "sun-site-margin".
+                }
+            }
+            IF LANDING_REQUIRE_KERBIN > 0 {
+                SET light["KERBIN_REGION_MARGIN"] TO _landingRegionAngle(BODY("Kerbin"), sampleUT).
+                IF light["KERBIN"] < LANDING_KERBIN_MIN_ELEV + light["KERBIN_REGION_MARGIN"] {
+                    SET light["OK"] TO FALSE.
+                    SET light["REASON"] TO "kerbin-site-margin".
+                }
+            }
+            IF NOT light["OK"] { RETURN light. }
+        }
+        IF fraction = 0 { SET center TO light. }
+    }
+    RETURN center.
+}
 
 GLOBAL FUNCTION landingLitGroundTrack {
     LOCAL out IS LEXICON("FOUND", FALSE, "LAT", 0, "LNG", 0,
@@ -17,19 +76,21 @@ GLOBAL FUNCTION landingLitGroundTrack {
     LOCAL samples IS 0.
     UNTIL sampleUT > endUT {
         LOCAL geo IS lmGroundGeoAt(sampleUT).
-        LOCAL light IS landingLightAt(geo:LAT, geo:LNG, sampleUT).
+        LOCAL light IS landingPlanningLight(geo:LAT, geo:LNG, sampleUT).
         IF light["OK"] {
-            LOCAL score IS MAX(0, LANDING_LIGHT_SUN_WEIGHT) * ABS(light["SUN"] - preferredSun)
+            LOCAL score IS MAX(0, LANDING_LIGHT_SUN_WEIGHT)
+                * ABS(light["SUN"] - light["SUN_REGION_MARGIN"] - preferredSun)
                 + 0.1 * (sampleUT - startUT) / period.
             IF LANDING_REQUIRE_KERBIN > 0 {
                 SET score TO score + MAX(0, LANDING_LIGHT_KERBIN_WEIGHT)
-                    * MAX(0, LANDING_KERBIN_PREFERRED_ELEV - light["KERBIN"]).
+                    * MAX(0, LANDING_KERBIN_PREFERRED_ELEV
+                        - (light["KERBIN"] - light["KERBIN_REGION_MARGIN"])).
             }
             IF light["SETTING"] {
                 SET score TO score + MAX(0, LANDING_LIGHT_SETTING_PENALTY).
             }
             IF score < bestScore {
-                SET light TO landingLightWindow(geo:LAT, geo:LNG, sampleUT).
+                SET light TO landingPlanningLight(geo:LAT, geo:LNG, sampleUT, TRUE).
                 IF light["OK"] {
                     SET bestScore TO score.
                     SET out TO LEXICON("FOUND", TRUE, "LAT", geo:LAT, "LNG", geo:LNG,
@@ -44,6 +105,7 @@ GLOBAL FUNCTION landingLitGroundTrack {
     mLog("STATS landing-light search mode=" + LANDING_LIGHT_MODE + " requireKerbin=" + LANDING_REQUIRE_KERBIN
         + " minKerbin=" + LANDING_KERBIN_MIN_ELEV
         + " preferredKerbin=" + LANDING_KERBIN_PREFERRED_ELEV
+        + " siteRadius=" + landingPlanningRadius()
         + " found=" + out["FOUND"] + " lastReason=" + out["REASON"]
         + " samples=" + samples + " lat=" + out["LAT"] + " lng=" + out["LNG"]
         + " passUT=" + ROUND(out["UT"],1)
@@ -71,12 +133,19 @@ GLOBAL FUNCTION landingLightNodeAllowed {
     LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
     LOCAL impactUT IS TIME:SECONDS + ADDONS:TR:TIMETILLIMPACT.
     IF impactUT <= nd:TIME { RETURN FALSE. }
-    LOCAL light IS landingLightWindow(targetLat, targetLng, impactUT).
+    LOCAL light IS LEXICON().
+    // The larger region is an UNFLOWN orbital planning constraint. Keep the
+    // existing point policy for interrupted/suborbital recovery.
+    IF SHIP:STATUS = "ORBITING" AND SHIP:PERIAPSIS > 0
+            AND stateGet("deorbit_burn_started", "false") <> "true" {
+        SET light TO landingPlanningLight(targetLat, targetLng, impactUT, TRUE).
+    } ELSE { SET light TO landingLightWindow(targetLat, targetLng, impactUT). }
     mLog("STATS landing-light node mode=" + LANDING_LIGHT_MODE + " requireKerbin=" + LANDING_REQUIRE_KERBIN
         + " ok=" + light["OK"] + " reason=" + light["REASON"]
         + " targetLat=" + targetLat + " targetLng=" + targetLng
         + " impactLat=" + impactPos:LAT
         + " impactLng=" + impactPos:LNG
+        + " siteRadius=" + landingPlanningRadius()
         + " sun=" + ROUND(light["SUN"],2) + " kerbin=" + ROUND(light["KERBIN"],2)).
     RETURN light["OK"].
 }

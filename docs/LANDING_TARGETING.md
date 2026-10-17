@@ -14,7 +14,7 @@ brake, and walking the final descent state machine down to touchdown.
   `deorbit_burn`.
 - `LAND` and `LAND_ASSIST` load `payload_landing` and `landing_main`.
   `landing_main` depends on `landing_config`, `landing_math`,
-  `vessel_hardware`, and `landing_terminal`.
+  `vessel_hardware`, `landing_terminal`, `landing_divert`, and `landing_disposal`.
 
 The terminal descent files are also loaded dynamically by `landing_main`:
 
@@ -541,10 +541,38 @@ begin` records clearance, gates, thrust assumptions and alignment error.
 
 No tag is required. `landing_assist_decoupler` is an unused legacy label.
 The staging stack must contain only intended separation/ignition events en
-route to the next engine. Disposal is ballistic, not actively targeted, and
-still-fueled stages are not automatically discarded. Numerical fixtures
+route to the next engine. Disposal is ballistic, not actively targeted. By
+default fueled stages stay attached. Minmus economy profiles opt into a
+handoff at 80 m/s horizontal speed: the adjacent serial stack must retain
+the active CPU/lander engines, leave weaker-stage stopping clearance and
+braking dV plus a 700 m/s allowance, and have a bound descending coast that
+passes below terrain at periapsis with no nodes or atmosphere. A tick-driven
+cutoff is verified before the common stage event; a failed check/timeout
+retains propulsion. There is no debris separation or destruction guarantee.
+`cmd/landingdisposal` saves these settings for the next landing-band boot
+without clearing the node, phase, target or return overrides. Numerical fixtures
 cover trigger/controller consistency and staged thrust changes; actual
 separation clearance and KSP timing remain flight-test requirements.
+
+The orbital aimpoint is not a certified powered stopping point. The recorded
+RO9 Minmus node passes within about 65 m of its rotating target at 2.93 km
+above target terrain. Replaying the conservative brake envelope over a flat
+surface at that elevation opens the gate another 54 seconds/7.4 km later.
+The measured-hardware point-mass model ends main braking 8.1 km beyond the
+aimpoint with the transfer stage attached, or 9.3 km beyond it after an
+80 m/s handoff and a conservative three-second staging gap. These estimates
+exclude actual terrain, attitude and kOS timing; they are not flight proof.
+
+For flexible economy sites, orbital selection and new/retained UNFLOWN
+node acceptance now reserve `LANDING_LIGHT_SITE_RADIUS` (21 km by default)
+around the aimpoint. The minimum Sun/Kerbin elevations gain the angular
+radius plus sightline parallax at each of the existing time-window samples.
+Ranking compares the resulting conservative margins with preferred light
+and radio elevations. This geographic margin does not locate a precise
+touchdown or certify the entire region's terrain/eclipses. Powered diversions
+still test the actual candidate against their original physical policy.
+Precision sites and interrupted/suborbital node recovery keep the point
+policy; no new regional planning hold is imposed on committed descent.
 
 ## TARGET_REFINE
 

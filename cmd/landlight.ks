@@ -62,6 +62,7 @@ LOCAL FUNCTION _cmdLandlight {
     SET LANDING_LIGHT_MODE TO mode.
     SET LANDING_REQUIRE_KERBIN TO requireKerbin.
     PRINT "Searching ground track: " + mode + ", require Kerbin=" + requireKerbin.
+    PRINT "Economy planning region radius=" + landingPlanningRadius() + "m; final terrain/site checks still required.".
     LOCAL site IS landingLitGroundTrack().
     IF NOT site["FOUND"] {
         PRINT "No eligible site within " + LANDING_LIGHT_SCAN_ORBITS + " orbits; last rejection=" + site["REASON"].

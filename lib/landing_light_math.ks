@@ -46,7 +46,7 @@ LOCAL FUNCTION _landingSurfaceOffsetAt {
 // Directly subtracting POSITIONAT(Kerbin, ut) and POSITIONAT(Mun, ut)
 // otherwise injects Kerbin's solar-orbit displacement into the Mun view.
 // Return a common root-centered position; RAW axes still apply.
-LOCAL FUNCTION _landingBodyOffsetAt {
+GLOBAL FUNCTION landingBodyOffsetAt {
     PARAMETER bdy.
     PARAMETER ut.
     LOCAL offset IS V(0, 0, 0).
@@ -58,7 +58,7 @@ LOCAL FUNCTION _landingBodyOffsetAt {
     RETURN offset.
 }
 
-LOCAL FUNCTION _landingSunBand {
+GLOBAL FUNCTION landingSunBand {
     IF LANDING_LIGHT_MODE = "AFTERNOON" {
         RETURN LEXICON("MIN", LANDING_AFTERNOON_MIN_ELEV, "MAX", LANDING_AFTERNOON_MAX_ELEV,
             "PREFERRED", LANDING_AFTERNOON_PREFERRED_ELEV).
@@ -93,7 +93,7 @@ LOCAL FUNCTION _landingSunClear {
     UNTIL NOT ancestor:HASBODY {
         SET ancestor TO ancestor:BODY.
         IF ancestor:NAME = SUN:NAME { BREAK. }
-        LOCAL toBlocker IS _landingBodyOffsetAt(ancestor, ut) - sitePos.
+        LOCAL toBlocker IS landingBodyOffsetAt(ancestor, ut) - sitePos.
         LOCAL along_ IS VDOT(toBlocker, toSun:NORMALIZED).
         IF along_ > 0 AND along_ < toSun:MAG {
             LOCAL miss IS (toBlocker - along_ * toSun:NORMALIZED):MAG.
@@ -114,7 +114,7 @@ GLOBAL FUNCTION landingLightAt {
         "SUN", -90, "KERBIN", -90, "RISING", FALSE, "SETTING", FALSE).
     IF LANDING_LIGHT_MODE <> "ANY" AND LANDING_LIGHT_MODE <> "SUNLIT"
             AND LANDING_LIGHT_MODE <> "MORNING" AND LANDING_LIGHT_MODE <> "AFTERNOON" { RETURN out. }
-    LOCAL band IS _landingSunBand().
+    LOCAL band IS landingSunBand().
     IF band["MIN"] < 0 OR band["MAX"] > 90
             OR band["MAX"] < band["MIN"]
             OR LANDING_KERBIN_MIN_ELEV < 0 OR LANDING_KERBIN_MIN_ELEV > 90 {
@@ -122,19 +122,19 @@ GLOBAL FUNCTION landingLightAt {
     }
     LOCAL offset IS _landingSurfaceOffsetAt(lat, lng, ut).
     IF offset:MAG < 1 { RETURN out. }
-    LOCAL sitePos IS _landingBodyOffsetAt(SHIP:BODY, ut) + offset.
-    LOCAL toSun IS _landingBodyOffsetAt(SUN, ut) - sitePos.
+    LOCAL sitePos IS landingBodyOffsetAt(SHIP:BODY, ut) + offset.
+    LOCAL toSun IS landingBodyOffsetAt(SUN, ut) - sitePos.
     IF toSun:MAG < 1 { RETURN out. }
     LOCAL sunElev IS _landingElevation(offset:NORMALIZED, toSun).
     LOCAL nextOffset IS _landingSurfaceOffsetAt(lat, lng, ut + 60).
-    LOCAL nextSun IS _landingBodyOffsetAt(SUN, ut + 60)
-        - _landingBodyOffsetAt(SHIP:BODY, ut + 60) - nextOffset.
+    LOCAL nextSun IS landingBodyOffsetAt(SUN, ut + 60)
+        - landingBodyOffsetAt(SHIP:BODY, ut + 60) - nextOffset.
     SET out["SUN"] TO sunElev.
     LOCAL nextSunElev IS _landingElevation(nextOffset:NORMALIZED, nextSun).
     SET out["RISING"] TO nextSunElev > sunElev + 0.00001.
     SET out["SETTING"] TO nextSunElev < sunElev - 0.00001.
     SET out["KERBIN"] TO _landingElevation(offset:NORMALIZED,
-        _landingBodyOffsetAt(BODY("Kerbin"), ut) - sitePos).
+        landingBodyOffsetAt(BODY("Kerbin"), ut) - sitePos).
     // Independent live-position check for the stock Mun's circular tidal
     // lock: the same site must not acquire a different Kerbin view while
     // waiting in orbit. Hold if the runtime prediction convention disagrees.

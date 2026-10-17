@@ -98,8 +98,33 @@ GLOBAL FUNCTION vesselLandingReserveAcc {
     RETURN thrustSum / MAX(0.01, wetMass).
 }
 
+// Shared separation event. The caller owns the decision to discard a stage;
+// even an authorized fueled-stage handoff must verify physical cutoff first.
+GLOBAL FUNCTION vesselLandingStageEvent {
+    PARAMETER ctx.
+    PARAMETER engineStage.
+    SET ctx["TARGET_THROTTLE"] TO 0.
+    SET SHIP:CONTROL:MAINTHROTTLE TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    IF ABORT OR NOT (SHIP:THRUST <= 0.001) OR NOT STAGE:READY
+            OR STAGE:NUMBER <= engineStage OR engineStage < MAX(0, LANDING_STAGE_LIMIT)
+            OR ctx["STAGE_EVENTS"] >= LANDING_STAGE_MAX_EVENTS { RETURN FALSE. }
+    STAGE.
+    SET ctx["STAGE_EVENTS"] TO ctx["STAGE_EVENTS"] + 1.
+    SET ctx["STAGE_UNTIL"] TO TIME:SECONDS + MAX(0.05, LANDING_STAGE_SETTLE).
+    mLog("STATS landing-stage event stage=" + STAGE:NUMBER
+        + " engineStage=" + engineStage + " radar=" + ROUND(ALT:RADAR,0)).
+    RETURN TRUE.
+}
+
 GLOBAL FUNCTION vesselStageForLanding {
     PARAMETER ctx.
+    PARAMETER paused IS FALSE.
+    IF ABORT {
+        SET ctx["TARGET_THROTTLE"] TO 0.
+        RETURN.
+    }
+    IF paused { RETURN. }
     // Tick-driven: steering/control continue between separation and ignition.
     IF TIME:SECONDS < ctx["STAGE_UNTIL"] { RETURN. }
     IF NOT vesselNeedsStage() {
@@ -128,13 +153,7 @@ GLOBAL FUNCTION vesselStageForLanding {
     }
     // Never advance past the selected engine into return/payload/chute slots.
     IF STAGE:NUMBER > engineStage AND STAGE:READY {
-        SET ctx["TARGET_THROTTLE"] TO 0.
-        SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-        STAGE.
-        SET ctx["STAGE_EVENTS"] TO ctx["STAGE_EVENTS"] + 1.
-        SET ctx["STAGE_UNTIL"] TO TIME:SECONDS + MAX(0.05, LANDING_STAGE_SETTLE).
-        mLog("STATS landing-stage event stage=" + STAGE:NUMBER
-            + " engineStage=" + engineStage + " radar=" + ROUND(ALT:RADAR,0)).
+        vesselLandingStageEvent(ctx, engineStage).
     } ELSE IF STAGE:NUMBER = engineStage AND NOT ctx["STAGE_ACTIVATED"] {
         SET ctx["STAGE_ACTIVATED"] TO TRUE.
         FOR eng IN SHIP:ENGINES {
