@@ -205,6 +205,17 @@ still leave insufficient turning/stopping time; the patch cannot recover
 lost altitude or fuel. KSP attitude dynamics and flight performance remain
 unverified.
 
+On the subsequent retry, the operator confirmed that thrust waited for the
+turn. This is flight evidence for the alignment correction, not the complete
+landing controller. The next observation was BRAKING_BURN at about 7.3 km
+above terrain, hs=355.72 m/s and vs=-30.11 m/s. With the previously observed
+2.72/2.76 m/s2 reserve and g=1.63, the source yields stopping gates of
+7586/7325 m. Using effective gravity 1.027 m/s2 for an illustrative 210 km
+radius, the economy controller requests targetVs about -35.5/-37 m/s for
+either the strong current stage or the weak stage. Actual current reserve,
+effective gravity and target-speed readings remain needed to confirm this
+specific guidance command. No touchdown outcome was reported at this point.
+
 ## End-of-burn contract
 
 `lib/thrust_cutoff.ks` owns `thrustCutoff()` and `thrustCutoffOk()`.

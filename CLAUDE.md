@@ -382,6 +382,13 @@ Looks like Python/JS; is neither.
   weak-stage stopping envelope is ~16 km at these speeds. Do not promise
   continuous descent or remove the reserve without budgeting useful remaining
   transfer-stage impulse and turning/staging time.
+  On the next retry the operator confirmed that turning now precedes thrust
+  (flight evidence for the alignment fix only). BRAKING_BURN then ran at
+  ~7.3 km radar, hs=355.72, vs=-30.11. Replaying those values with the earlier
+  2.72/2.76 m/s2 reserve yields V_GATE=7586/7325 m; economy targetVs is about
+  -36/-37 m/s with effective g~1.03. This supports the gate arithmetic, not
+  a completed landing or an optimal burn. Current reserve/target HUD readings
+  and the touchdown outcome were not yet supplied.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered
