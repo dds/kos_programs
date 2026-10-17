@@ -183,8 +183,7 @@ def main():
     flush = SOURCE.index("FOR traceLine IN burnTrace")
     shutdown = SOURCE.rindex("LOCK THROTTLE TO 0.0.", 0, flush)
     assert "_burnVerifyCutoff()" in SOURCE[shutdown:flush]
-    verify = SOURCE.split("LOCAL FUNCTION _burnVerifyCutoff {", 1)[1].split(
-        "LOCAL FUNCTION _burnTraceAdd", 1)[0]
+    verify = (Path(__file__).resolve().parents[1] / 'lib/thrust_cutoff.ks').read_text()
     assert "WAIT 0.02." in verify and "eng:SHUTDOWN." in verify
     assert 'UNLOCK STEERING.' in SOURCE[shutdown:flush]
     assert 'UNLOCK THROTTLE.' in SOURCE[shutdown:flush]

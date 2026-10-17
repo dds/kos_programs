@@ -57,17 +57,15 @@ LOCAL FUNCTION _matchBurnRel {
         WAIT 0.05.
     }
     SET throttleCmd TO 0.
-    _matchStopThrottle().
-    RETURN converged AND NOT ABORT.
+    LOCAL stopped IS _matchStopThrottle().
+    RETURN converged AND NOT ABORT AND stopped.
 }
 
 LOCAL FUNCTION _matchStopThrottle {
-    LOCK THROTTLE TO 0.
-    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-    WAIT 0.01.
-    UNLOCK THROTTLE.
+    LOCAL stopped IS thrustCutoffOk().
     UNLOCK STEERING.
     SAS ON.
+    RETURN stopped.
 }
 
 LOCAL FUNCTION _matchHold {

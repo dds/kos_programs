@@ -203,6 +203,22 @@ failed burn, not a successful completion; inspect the engine before resuming.
 These guards require kOS and KSP to keep executing and can stop a long finite
 burn early. They have numerical coverage, but still need flight validation.
 
+End-of-burn cutoff is shared through `lib/thrust_cutoff.ks`: maneuver,
+compact deorbit, ascent, rendezvous, landing, hop, disposal and atmospheric
+correction burns clear cooked, raw and pilot throttle, verify actual thrust,
+and check again after releasing control. Persistent thrust triggers a bounded
+engine-shutdown attempt; a forced shutdown or failed stop holds the mission.
+`cmd/burnreport.ks` prints the latest shared cutoff record. Burn owners must
+stop issuing positive commands before calling the checker.
+
+Vacuum APPROACH and TARGET_REFINE are limited to `TERMINAL_ALT` (1000 m by
+default). A completed early brake above that corridor returns to coast when
+the stopping envelope allows it. A passed target cannot masquerade as a
+horizontal stopping point ahead of the craft; urgent vertical/terrain braking
+remains active. These guards do not implement a fuel-optimal landing footprint
+or an approach fuel budget. See the [flight validation plan](docs/FLIGHT_SEQUENCE_VALIDATION.md)
+for the airless sequence and atmospheric follow-up.
+
 The executor temporarily raises `CONFIG:IPU` to `BURN_MIN_IPU` (2000 by
 default, capped at kOS's maximum) before installing the live governor, so
 its high-priority calculations leave time for the main loop. It restores

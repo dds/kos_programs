@@ -171,8 +171,7 @@ GLOBAL FUNCTION phaseHop {
     IF SHIP:MAXTHRUST <= 0 {
         PRINT "HOP failed: no thrust available.".
         mLogError("HOP failed: no thrust available.").
-        LOCK THROTTLE TO 0.
-        UNLOCK THROTTLE.
+        IF NOT thrustCutoffOk() { RETURN FALSE. }
         UNLOCK STEERING.
         RETURN.
     }
@@ -258,10 +257,9 @@ GLOBAL FUNCTION phaseHop {
         WAIT 0.1.
     }
 
-    LOCK THROTTLE TO 0.
-    WAIT 0.2.
-    UNLOCK THROTTLE.
+    LOCAL stopped IS thrustCutoffOk().
     _hopRestoreThrustLimits(thrustLimits).
+    IF NOT stopped { RETURN. }
 
     mLog("STATS hop cutoff reason=" + reason
         + " burn=" + ROUND(TIME:SECONDS - burnStart, 1)

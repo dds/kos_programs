@@ -269,8 +269,7 @@ LOCAL FUNCTION _suborbitCoastAndDeorbit {
         WAIT 0.05.
     }
     SET throttleCmd TO 0.
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     UNLOCK STEERING.
     SET SAS TO TRUE.
 
@@ -400,8 +399,7 @@ LOCAL FUNCTION _suborbitReturnArc {
         WAIT 0.05.
     }
     SET throttleCmd TO 0.
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     mLog("STATS suborbit-return arc reason=" + cutReason
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)
@@ -438,8 +436,9 @@ LOCAL FUNCTION _armDescentWatchdog {
             AND stateGet("phase", "") = "SUBORBIT" THEN {
         mLogError("DESCENT WATCHDOG: falling in atmosphere with"
             + " phase=SUBORBIT — forcing descent and rebooting.").
-        LOCK THROTTLE TO 0.
-        UNLOCK THROTTLE.
+        // Emergency chute/entry recovery still has to run if propulsion
+        // cannot be stopped. This is a failure fallback, not burn success.
+        LOCAL cutoff IS thrustCutoff(FALSE).
         UNLOCK STEERING.
         stateSet("phase", "DESCENT").
         stateSet("reload_required", "true").
@@ -481,8 +480,7 @@ GLOBAL FUNCTION phaseSuborbit {
     }
 
     IF ADDONS:MJ:AVAILABLE { SET ADDONS:MJ:ASCENT:ENABLED TO FALSE. }
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     mLog("STATS suborbit cutoff ApKm=" + ROUND(SHIP:APOAPSIS/1000, 1)
         + " altKm=" + ROUND(SHIP:ALTITUDE/1000, 1)
         + " vSurf=" + ROUND(SHIP:VELOCITY:SURFACE:MAG, 1)).

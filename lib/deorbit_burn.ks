@@ -54,11 +54,7 @@ GLOBAL FUNCTION executeDeorbitNode {
     WAIT UNTIL TIME:SECONDS >= startTime OR ABORT.
     IF ABORT OR VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) > 15 {
         mLogError("Refusing deorbit burn: off vector.").
-        LOCK THROTTLE TO 0.
-        SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-        WAIT 0.01.
-        UNLOCK THROTTLE.
-        UNLOCK STEERING.
+        vesselLandingCleanup().
         IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
         RETURN FALSE.
     }
@@ -79,30 +75,28 @@ GLOBAL FUNCTION executeDeorbitNode {
         SET lastAcc TO actualAcc.
         // A stale node must not keep thrusting until the time limit.
         IF appliedDV >= burnDV + completeDV { BREAK. }
-        LOCK STEERING TO nd:BURNVECTOR.
         IF nd:DELTAV:MAG > 0.1
                 AND VDOT(origVec:NORMALIZED, nd:BURNVECTOR:NORMALIZED) < 0 {
             BREAK.
         }
+        LOCK STEERING TO nd:BURNVECTOR.
         // No throttle floor: bound the requested tail impulse even for a
         // high-TWR lander rather than stepping through fixed 25%/5% burns.
         LOCK THROTTLE TO MIN(1, nd:DELTAV:MAG
-            / MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS) / 0.4).
+            / MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS)
+            / MAX(1, 4 * (TIME:SECONDS - lastTime))).
         WAIT 0.02.
     }
 
     LOCAL residual IS nd:DELTAV:MAG.
-    LOCK THROTTLE TO 0.
-    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-    WAIT 0.01.
-    UNLOCK THROTTLE.
-    UNLOCK STEERING.
-    LOCAL success IS NOT ABORT AND residual <= completeDV.
+    LOCAL stopped IS vesselLandingCleanup().
+    LOCAL success IS stopped AND NOT ABORT AND residual <= completeDV.
     IF success { REMOVE nd. }
     IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
     SET SAS TO TRUE.
     mLog("STATS deorbit-burn result dv=" + ROUND(burnDV,1)
         + " residual=" + ROUND(residual,2) + " appliedDv=" + ROUND(appliedDV,2)
+        + " thrustStopped=" + stopped
         + " success=" + success).
     IF NOT success { mLogError("Deorbit incomplete; node retained for inspection."). }
     RETURN success.

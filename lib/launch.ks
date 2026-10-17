@@ -445,11 +445,14 @@ GLOBAL FUNCTION phaseParking {
 // into the isolated abort library.
 GLOBAL FUNCTION launchAbort {
     LOCK THROTTLE TO 0.
+    SET SHIP:CONTROL:MAINTHROTTLE TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
     FOR eng IN SHIP:ENGINES {
         IF eng:IGNITION AND eng:ALLOWSHUTDOWN { eng:SHUTDOWN. }
     }
 
     ABORT ON.
+    LOCAL cutoff IS thrustCutoff(FALSE).
     stateSet("phase", "ABORT").
     REBOOT.
 }

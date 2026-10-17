@@ -23,11 +23,7 @@ LOCAL _ascentStageSolidFrac IS -1.
 
 LOCAL FUNCTION _ascentStopThrottle {
     PARAMETER releaseLock IS TRUE.
-    LOCK THROTTLE TO 0.
-    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-    // LOCK/UNLOCK in the same tick can leave the old throttle applied.
-    WAIT 0.01.
-    IF releaseLock { UNLOCK THROTTLE. }
+    RETURN thrustCutoffOk(releaseLock).
 }
 
 LOCAL FUNCTION _ascentOnSurface {
@@ -398,7 +394,7 @@ LOCAL FUNCTION _ascentCircularize {
         IF control["REASON"] = "" { SET control["REASON"] TO "loop-exit". }
     }
     SET throt TO 0.
-    _ascentStopThrottle().
+    IF NOT _ascentStopThrottle() { RETURN FALSE. }
     UNLOCK STEERING.
     SET SAS TO TRUE.
     FOR traceLine IN burnTrace { mLog(traceLine). }
@@ -506,7 +502,7 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
         WAIT 0.1.
     }
 
-    _ascentStopThrottle(FALSE).
+    IF NOT _ascentStopThrottle(FALSE) { RETURN FALSE. }
     IF ABORT {
         mLogWarn("Vacuum ascent aborted; holding launch phase.").
         UNLOCK THROTTLE.

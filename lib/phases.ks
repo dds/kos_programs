@@ -178,6 +178,9 @@ LOCAL FUNCTION _logPhaseStats {
 GLOBAL FUNCTION nextPhase {
     PARAMETER seq.
 
+    // A shared cutoff fault (or another explicit hold) cannot be erased by
+    // a legacy caller advancing unconditionally after its helper returns.
+    IF phaseShouldYield { RETURN stateGet("phase", ""). }
     LOCAL current IS stateGet("phase", seq[0]).
     LOCAL i IS 0.
     UNTIL i >= seq:LENGTH {

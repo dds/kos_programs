@@ -37,13 +37,13 @@ def check_cutoffs():
     assert safe_throttle(fresh(), command=-1) == 0
     assert safe_throttle(fresh(), command=.03) == .03
     stop = body(ASCENT, '_ascentStopThrottle')
-    assert stop.index('LOCK THROTTLE TO 0.') < stop.index('PILOTMAINTHROTTLE TO 0.') < stop.index('WAIT 0.01.') < stop.index('UNLOCK THROTTLE.')
+    assert 'RETURN thrustCutoffOk(releaseLock).' in stop
     circ = body(ASCENT, '_ascentCircularize')
     assert 'LOCK THROTTLE TO _circSafeThrottle(throt, control).' in circ
     loop = circ[circ.index('UNTIL ABORT OR appliedDv'):circ.index('IF control["REASON"] = ""')]
     assert 'mLog(' not in loop and 'mLogWarn(' not in loop
     assert 'LOCK THROTTLE TO throt.' not in circ
-    assert circ.index('_ascentStopThrottle().', circ.index('SET throt TO 0.')) < circ.index('FOR traceLine IN burnTrace')
+    assert circ.index('IF NOT _ascentStopThrottle()', circ.index('SET throt TO 0.')) < circ.index('FOR traceLine IN burnTrace')
     taper = re.search(r'SET throt TO (MIN\(1, remDv.*?\))\.', circ)[1]
     for acceleration in (.2, 4, 100):
         for dt in (.02, .2, 2):
@@ -51,9 +51,8 @@ def check_cutoffs():
             assert 0 < throttle <= 1
             assert throttle*acceleration*dt <= .31 + 1e-9
     deorbit = (ROOT / 'lib/deorbit_burn.ks').read_text()
-    for before in deorbit.split('UNLOCK THROTTLE.')[:-1]:
-        tail = before[before.rindex('LOCK THROTTLE TO 0.'):]
-        assert tail.index('PILOTMAINTHROTTLE TO 0.') < tail.index('WAIT 0.01.')
+    assert 'LOCAL stopped IS vesselLandingCleanup().' in deorbit
+    assert 'LOCAL success IS stopped AND NOT ABORT' in deorbit
     print('PASS: latched parking/abort/time/dV cutoffs, no throttle floor, zero reaches physics before unlock/logging')
 
 

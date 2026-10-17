@@ -28,8 +28,7 @@ LOCAL FUNCTION _payloadSeq {
 
 GLOBAL FUNCTION phaseScanSatOps {
     UNLOCK STEERING.
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     SET SAS TO TRUE.
 
     orbitSummary().
@@ -317,8 +316,7 @@ LOCAL FUNCTION _scanSatSelfDeorbit {
         LOCK STEERING TO RETROGRADE.
         WAIT 0.1.
     }
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     UNLOCK STEERING.
     SET SAS TO TRUE.
 
@@ -410,8 +408,7 @@ LOCAL FUNCTION _disposeScanSatCarrier {
         LOCK STEERING TO SHIP:RETROGRADE.
         WAIT 0.1.
     }
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     UNLOCK STEERING.
     SET SAS TO TRUE.
 
@@ -482,8 +479,7 @@ LOCAL FUNCTION _scanSatImpactThenRecover {
     }
 
     SET SAS TO TRUE.
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     WAIT 2.
 
     stateSet("scansat_recovered", "true").

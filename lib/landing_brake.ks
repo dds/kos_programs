@@ -110,6 +110,17 @@ GLOBAL FUNCTION _landingBrakingTick {
         burnHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
     LOCAL targetVs IS -targetDescent.
     LOCAL verticalCaptured IS ABS(ctx["V_SPEED"] - targetVs) <= 5.
+    LOCAL terminalReady IS burnHeight <= TERMINAL_ALT.
+    LOCAL coastEnvelope IS lmBrakeEnvelope(horizontalSpeed, downSpeed,
+        ctx["PLAN_ACC"], ctx["BRAKE_GRAV"], MAX(0, LANDING_BRAKE_REACTION_TIME)).
+    IF NOT terminalReady AND horizontalSpeed <= APPROACH_HSPEED
+            AND burnHeight > coastEnvelope["V"] {
+        // An early horizontal arrest must not turn into minutes of hovering
+        // or backtracking. Re-enter coast and re-evaluate the full stop gate.
+        _landingSetThrottle(ctx, 0).
+        _landingSetState(ctx, "COAST", "velocity captured above terminal corridor").
+        RETURN.
+    }
     LOCAL distToTarget IS 999999.
     IF ctx["HAS_TARGET"] {
         SET distToTarget TO lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"]).
@@ -143,6 +154,7 @@ GLOBAL FUNCTION _landingBrakingTick {
     }
 
     IF ctx["HAS_TARGET"]
+            AND terminalReady
             AND verticalCaptured
             AND horizontalSpeed <= TERMINAL_HSPEED {
         IF distToTarget <= VERTICAL_RADIUS {
@@ -164,6 +176,7 @@ GLOBAL FUNCTION _landingBrakingTick {
                 OR horizontalSpeed <= LANDING_LOW_ALT_HSPEED) {
         _landingSetState(ctx, "VERTICAL_DESCENT", "low vertical gate").
     } ELSE IF ctx["HAS_TARGET"]
+            AND terminalReady
             AND verticalCaptured
             AND horizontalSpeed <= APPROACH_HSPEED
             AND distToTarget <= APPROACH_RADIUS {
@@ -171,6 +184,7 @@ GLOBAL FUNCTION _landingBrakingTick {
         _landingSetState(ctx, "TARGET_REFINE",
             "approach corridor captured for target refinement").
     } ELSE IF NOT ctx["HAS_TARGET"]
+            AND terminalReady
             AND verticalCaptured
             AND horizontalSpeed < APPROACH_HSPEED {
         _landingSetState(ctx, "VERTICAL_DESCENT", "blind horizontal velocity killed").

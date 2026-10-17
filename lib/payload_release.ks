@@ -154,8 +154,7 @@ LOCAL FUNCTION _scanSatImpactHalt {
     PARAMETER reason.
     mLogError("SCANsat impact/release halted: " + reason + ".").
     stateSet("phase", "DROP_FOR_IMPACT_AND_RAISE_PE").
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     PRINT " ".
     PRINT "  SCANSAT RECOVERY HOLD".
     PRINT "  " + reason.
@@ -224,8 +223,7 @@ LOCAL FUNCTION _payloadImpactHalt {
     PARAMETER reason.
     mLogError("Payload impact/release halted: " + reason + ".").
     stateSet("phase", "DROP_FOR_IMPACT_AND_RAISE_PE").
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     PRINT " ".
     PRINT "  PAYLOAD RELEASE HOLD".
     PRINT "  " + reason.
@@ -323,8 +321,7 @@ LOCAL FUNCTION _payloadDisposeAttached {
         LOCK STEERING TO SHIP:RETROGRADE.
         WAIT 0.1.
     }
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     UNLOCK STEERING.
     SET SAS TO TRUE.
 
@@ -398,8 +395,7 @@ LOCAL FUNCTION _payloadClearDisposedStage {
 
     LOCK THROTTLE TO throttle_.
     WAIT burnTime.
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     UNLOCK STEERING.
     SET SAS TO TRUE.
     WAIT settleTime.
@@ -533,8 +529,7 @@ LOCAL FUNCTION _scanSatRecoverPeDirect {
         LOCK STEERING TO SHIP:PROGRADE.
         WAIT 0.1.
     }
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     UNLOCK STEERING.
     SET SAS TO TRUE.
 
@@ -614,8 +609,7 @@ LOCAL FUNCTION _scanSatClearDisposedStage {
 
     LOCK THROTTLE TO throttle_.
     WAIT burnTime.
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     UNLOCK STEERING.
     SET SAS TO TRUE.
     WAIT settleTime.
@@ -667,8 +661,7 @@ LOCAL FUNCTION _scanSatDisposeAttached {
         LOCK STEERING TO SHIP:RETROGRADE.
         WAIT 0.1.
     }
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     UNLOCK STEERING.
     SET SAS TO TRUE.
 

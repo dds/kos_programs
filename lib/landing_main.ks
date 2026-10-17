@@ -392,7 +392,8 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
 
     LOCAL hBrakeGate IS brakeDist + BRAKE_MARGIN.
     LOCAL hBrakeEta IS 999999.
-    IF ctx["HAS_TARGET"] {
+    IF ctx["HAS_TARGET"] AND horizontalSpeed > APPROACH_HSPEED
+            AND brakeDownrange > 0 {
         IF brakeDownrange <= hBrakeGate {
             SET hBrakeEta TO 0.
         } ELSE IF horizontalSpeed > 0.1 {
@@ -424,16 +425,19 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     LOCAL vBurnEta IS etaLo.
     IF vNow { SET vBurnEta TO 0. }
 
-    LOCAL hNow IS ctx["HAS_TARGET"] AND brakeDownrange <= hBrakeGate.
+    // A passed target is not a horizontal stopping point ahead of us.
+    // Never let a negative downrange bypass the separate overshoot gate.
+    LOCAL hNow IS ctx["HAS_TARGET"] AND horizontalSpeed > APPROACH_HSPEED
+        AND brakeDownrange > 0 AND brakeDownrange <= hBrakeGate.
     LOCAL hSuppressed IS FALSE.
-    IF hNow AND burnHeight > TERRAIN_SAFE_ALT
-            AND burnHeight > hBrakeGate * 2
-            AND vBurnEta > 60 {
+    IF ctx["HAS_TARGET"] AND hBrakeEta < 999999 AND burnHeight > TERRAIN_SAFE_ALT
+            AND vBurnEta > LANDING_BRAKE_ALIGN_LEAD {
         SET hNow TO FALSE.
         SET hBrakeEta TO 999999.
         SET hSuppressed TO TRUE.
     }
     LOCAL hOvershot IS ctx["HAS_TARGET"] AND downrangeToTarget <= 0
+        AND horizontalSpeed > APPROACH_HSPEED
         AND ctx["V_SPEED"] < 0
         AND burnHeight <= TERRAIN_SAFE_ALT.
 
@@ -520,6 +524,18 @@ GLOBAL FUNCTION _landingSetState {
 
     LOCAL prevState IS ctx["STATE"].
     IF prevState = nextState { RETURN. }
+    IF prevState = "BRAKING_BURN" OR prevState = "COAST_MCC"
+            OR prevState = "TARGET_REFINE" OR prevState = "APPROACH"
+            OR prevState = "HOVER_REFINE" OR prevState = "VERTICAL_DESCENT" {
+        _landingSetThrottle(ctx, 0).
+        IF NOT thrustCutoffOk(FALSE) {
+            SET landingAbortFlag TO TRUE.
+            RETURN.
+        }
+        // The checker temporarily owns a constant zero lock. Hand it back
+        // to the FSM's command variable only after physical cutoff.
+        LOCK THROTTLE TO ctx["TARGET_THROTTLE"].
+    }
     _landingStateLog(ctx, prevState, nextState, reason).
     SET ctx["STATE"] TO nextState.
     SET ctx["STATE_ENTERED"] TO TIME:SECONDS.
@@ -605,7 +621,7 @@ LOCAL FUNCTION _landingFinish {
     PARAMETER ctx.
 
     _landingSetState(ctx, "TOUCHDOWN", "surface contact").
-    vesselLandingCleanup().
+    IF NOT vesselLandingCleanup() { RETURN FALSE. }
     vesselSetReactionWheelAuthority(100).
     mLog("TOUCHDOWN. vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s"
         + "  lat=" + ROUND(SHIP:LATITUDE,4)
@@ -625,6 +641,7 @@ LOCAL FUNCTION _landingFinish {
     stateSet("landing_state", "TOUCHDOWN").
     vesselDeployAntennas().
     vesselDeploySolarPanels().
+    RETURN TRUE.
 }
 
 // ------------------------------------------------------------
@@ -758,10 +775,10 @@ GLOBAL FUNCTION landExecute {
         IF LOG_ARCHIVE_DEFERRED <= 0 { archiveLog(). }
         RETURN FALSE.
     }
-    _landingFinish(ctx).
+    LOCAL landed IS _landingFinish(ctx).
     SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.
     IF LOG_ARCHIVE_DEFERRED <= 0 { archiveLog(). }
-    RETURN TRUE.
+    RETURN landed.
 }
 
 GLOBAL FUNCTION landingAssistStage {

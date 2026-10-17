@@ -970,25 +970,7 @@ LOCAL FUNCTION _burnImpulseThrottle {
 }
 
 LOCAL FUNCTION _burnVerifyCutoff {
-    LOCAL started IS TIME:SECONDS.
-    LOCAL forced IS FALSE.
-    LOCK THROTTLE TO 0.
-    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-    WAIT 0.02.
-    UNTIL SHIP:THRUST <= 0.001 OR TIME:SECONDS - started >= MAX(1, BURN_CUTOFF_VERIFY_TIME + 0.5) {
-        IF NOT forced AND TIME:SECONDS - started >= MAX(0.02, BURN_CUTOFF_VERIFY_TIME) {
-            SET forced TO TRUE.
-            FOR eng IN SHIP:ENGINES {
-                IF eng:IGNITION AND eng:THRUST > 0.001
-                        AND NOT eng:THROTTLELOCK AND eng:ALLOWSHUTDOWN {
-                    eng:SHUTDOWN.
-                }
-            }
-        }
-        SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-        WAIT 0.02.
-    }
-    RETURN LEX("forced", forced, "stopped", SHIP:THRUST <= 0.001).
+    RETURN thrustCutoff(TRUE, BURN_CUTOFF_VERIFY_TIME).
 }
 
 LOCAL FUNCTION _burnTraceAdd {

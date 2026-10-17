@@ -164,6 +164,7 @@ GLOBAL FUNCTION phaseAerobrake {
                         + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
                         + " (hyperbolic) — braking burn to secure capture.").
                     _aerobrakeBrakingBurn().
+                    IF phaseShouldYield { RETURN. }
                 }
             }
             // Between passes: solar-hold + warp the high coast, then orient
@@ -293,8 +294,7 @@ LOCAL FUNCTION _aerobrakeBrakingBurn {
         }
         WAIT 0.
     }
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     mLog("Aerobrake braking burn complete: " + reason
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)

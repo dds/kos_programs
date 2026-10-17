@@ -179,7 +179,7 @@ def check_compact_burn():
     source = re.sub(r'WAIT UNTIL (.*?)\.(?=\s*\n)', r'UNTIL \1 { WAIT 0.02. }', source, flags=re.S)
     source = re.sub(r'UNLOCK (\w+)\.', r'fixture_unlock("\1").', source)
     source = source.replace('REMOVE nd.', 'fixture_remove(nd).')
-    for scenario in ('normal', 'frozen', 'weak-thrust', 'abort', 'flameout', 'reversal', 'no-engine', 'expired', 'off-vector'):
+    for scenario in ('normal', 'cutoff-fault', 'frozen', 'weak-thrust', 'abort', 'flameout', 'reversal', 'no-engine', 'expired', 'off-vector'):
         node = NS(TIME=-1 if scenario == 'expired' else 200,
                   DELTAV=NS(MAG=10.), BURNVECTOR=Vec((1, 0, 0)))
         ship = NS(MASS=10., THRUST=0., AVAILABLETHRUST=0. if scenario == 'no-engine' else 100.,
@@ -212,14 +212,56 @@ def check_compact_burn():
                 node.DELTAV.MAG -= ship.THRUST / ship.MASS * dt
             assert env['TIME'].SECONDS < 300
 
+        def cleanup():
+            env.update(throttle=0.)
+            ship.CONTROL.PILOTMAINTHROTTLE=0
+            wait(.02)
+            return scenario!='cutoff-fault'
         env.update(fixture_lock=lock, fixture_wait=wait,
-                   vesselLandingCleanup=lambda: env.update(throttle=0.))
+                   vesselLandingCleanup=cleanup)
         result = run(source, env)
         assert result == (scenario == 'normal'), scenario
         assert bool(removed) == result and env['throttle'] == 0, scenario
         if scenario in ('no-engine', 'expired', 'off-vector'): assert not any(commands)
         if scenario == 'frozen': assert elapsed[0] < 1.1  # Old timeout allowed ~10 s of full thrust.
     print('PASS: compact burn completion, timeout, abort, thrust loss, reversal, expired node and alignment; failed nodes retained')
+
+
+def check_cutoff_handoffs():
+    phase=function_body((ROOT/'lib/phases.ks').read_text(),'nextPhase')
+    state=dict(phase='LAND_DEORBIT')
+    # No sequence access, phase mutation, or phase-log I/O after a cutoff
+    # fault has asked the dispatcher to yield.
+    assert run(phase,dict(seq=[],phaseShouldYield=True,stateGet=state.get))=='LAND_DEORBIT'
+    source=function_body((ROOT/'lib/landing_main.ks').read_text(),'_landingSetState')
+    prefix=source[:source.index('_landingStateLog(')]
+    for okay in (False,True):
+        events=[]
+        ctx=dict(STATE='BRAKING_BURN',TARGET_THROTTLE=.35)
+        env=dict(ctx=ctx,nextState='COAST',reason='test',landingAbortFlag=False,
+                 _landingSetThrottle=lambda c,x: c.update(TARGET_THROTTLE=x),
+                 thrustCutoffOk=lambda release: (events.append(('verify',release)) or okay),
+                 fixture_lock=lambda s: events.append('rebind'))
+        run(prefix,env)
+        assert ctx['TARGET_THROTTLE']==0
+        assert events==([('verify',False),'rebind'] if okay else [('verify',False)])
+        assert env['landingAbortFlag']==(not okay)
+    # All direct burn families must declare a resident path to the shared
+    # routine. This also protects the offline, storage-limited deorbit band.
+    deps,_,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
+    for name in ('maneuver','deorbit_burn','ascent','maneuver_rendezvous',
+                 'landing_main','aerobrake','landing_atmo','hop','ssto','suborbit','payload_release',
+                 'scansat_ops','descent'):
+        assert 'thrust_cutoff' in closure([name],deps),name
+    for name in ('aerobrake','landing_atmo','hop','ssto','suborbit','payload_release','scansat_ops','descent'):
+        source=(ROOT/'lib'/f'{name}.ks').read_text()
+        assert not re.search(r'LOCK THROTTLE TO 0\.\s*(?:WAIT [\d.]+\.\s*)?UNLOCK THROTTLE\.',source),name
+    watchdog=function_body((ROOT/'lib/suborbit.ks').read_text(),'_armDescentWatchdog')
+    assert watchdog.index('thrustCutoff(FALSE)')<watchdog.index('stateSet("phase", "DESCENT")')
+    assert 'IF NOT thrustCutoffOk()' not in watchdog
+    abort=function_body((ROOT/'lib/launch.ks').read_text(),'launchAbort')
+    assert abort.index('ABORT ON.')<abort.index('thrustCutoff(FALSE)')<abort.index('REBOOT.')
+    print('PASS: cutoff fault blocks phase advancement; landing verifies zero before rebinding; direct burn families load shared cutoff offline')
 
 
 def check_rendezvous():
@@ -249,11 +291,11 @@ def check_rendezvous():
             if scenario == 'abort' and env['TIME'].SECONDS > .3: env['ABORT'] = True
 
         env.update(fixture_lock=lock, fixture_wait=wait,
-                   _matchStopThrottle=lambda: env.update(throttleCmd=0.))
+                   _matchStopThrottle=lambda: (env.update(throttleCmd=0.) or True))
         assert run(burn, env) == (scenario in ('normal', 'already-matched')), scenario
         assert env['throttleCmd'] == 0
     stop = function_body(source, '_matchStopThrottle')
-    assert stop.index('PILOTMAINTHROTTLE TO 0.') < stop.index('WAIT 0.01.') < stop.index('UNLOCK THROTTLE.')
+    assert 'thrustCutoffOk()' in stop and 'RETURN stopped.' in stop
     phase = function_body(source, 'phaseMatch')
     assert phase.index('_matchConverged(') < phase.index('nextPhase(')
     print('PASS: rendezvous requires distance AND relative speed; timeout/abort/no thrust hold; already-matched needs no engine')
@@ -265,4 +307,5 @@ if __name__ == '__main__':
     check_cleanup_and_links()
     check_phase_failures()
     check_compact_burn()
+    check_cutoff_handoffs()
     check_rendezvous()

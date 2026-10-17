@@ -68,6 +68,31 @@ def check_gates():
     print(f'PASS: coupled gate {gate["V_GATE"]:.0f} m vs old {old_vertical:.0f} m; lead advances ignition; terrain wins')
 
 
+def check_high_altitude_misses():
+    for downrange in (-10000,5000):
+        env,ctx=fixture(twr=3,horizontal=550,down=5.89,height=14000)
+        ctx['downrange']=downrange
+        gate=call('_landingBrakeGateInfo',env,ctx)
+        assert not gate['V_NOW'] and gate['V_ETA']>env['LANDING_BRAKE_ALIGN_LEAD'],gate
+        assert not gate['H_NOW'] and gate['H_ETA']>env['LANDING_BRAKE_ALIGN_LEAD'],gate
+        call('_landingCoastTick',env,ctx)
+        assert ctx['STATE']=='COAST' and ctx['throttle']==0,ctx
+        # A missed geographic target can never suppress terrain/velocity
+        # arrest once the full stopping envelope actually becomes urgent.
+        ctx['height']=gate['V_GATE']-1
+        call('_landingCoastTick',env,ctx)
+        assert ctx['STATE']=='BRAKING_BURN',ctx
+    for state in ('BRAKING_BURN','APPROACH','TARGET_REFINE'):
+        env,ctx=fixture(twr=3,horizontal=.5 if state=='BRAKING_BURN' else 54.96,
+                        down=5.89,height=13000)
+        ctx.update(STATE=state,throttle=.35,downrange=-10000)
+        function={'BRAKING_BURN':'_landingBrakingTick', 'APPROACH':'_landingApproachTick',
+                  'TARGET_REFINE':'_landingTargetRefineTick'}[state]
+        call(function,env,ctx)
+        assert ctx['STATE']=='COAST' and ctx['throttle']==0,(state,ctx)
+    print('PASS: 14 km missed targets cannot force early braking; 13 km approach/refinement/coasting handoffs cut thrust; urgent vertical gate survives')
+
+
 def simulate(gravity, twr, horizontal, down, next_twr=None):
     env, ctx = fixture(gravity, twr, horizontal, down)
     if next_twr:
@@ -225,6 +250,7 @@ def check_integration():
 
 if __name__=='__main__':
     check_gates()
+    check_high_altitude_misses()
     for args in ((1.63,8,400,80),(1.63,3,300,100),(1.63,15,450,30),
                  (.491,7.45,120,60),(1.63,12,400,60,3)):
         simulate(*args)

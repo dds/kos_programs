@@ -98,7 +98,7 @@ GLOBAL FUNCTION phaseAtmoWalk {
         IF spentDv >= ATMO_WALK_MAX_DV { SET stopReason TO "dv-cap". BREAK. }
 
         // --- Baseline: measure drag drift thrust-free ---
-        LOCK THROTTLE TO 0.
+        IF NOT thrustCutoffOk(FALSE) { RETURN. }
         LOCK STEERING TO SRFRETROGRADE.
         LOCAL o0 IS _atmoImpactOffset(tgtLat, tgtLng).
         IF NOT o0["FOUND"] { SET stopReason TO "no-impact". BREAK. }
@@ -130,7 +130,7 @@ GLOBAL FUNCTION phaseAtmoWalk {
             WAIT dt.
             SET applied TO applied + _atmoShipAccel() * dt.
         }
-        LOCK THROTTLE TO 0.
+        IF NOT thrustCutoffOk(FALSE) { RETURN. }
         SET spentDv TO spentDv + applied.
 
         // --- Settle, then attribute excess-over-drift to the pulse ---
@@ -160,8 +160,7 @@ GLOBAL FUNCTION phaseAtmoWalk {
         _atmoWalkHud(offset:MAG, driftRate:MAG, spentDv).
     }
 
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
     UNLOCK STEERING.
     SET SAS TO TRUE.
     LOCAL finalOff IS _atmoImpactOffset(tgtLat, tgtLng).

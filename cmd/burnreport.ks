@@ -6,6 +6,8 @@
 LOCAL FUNCTION _cmdBurnreport {
     RUNPATH("1:/lib/boot_lib").
     bootPreamble().
+    PRINT "Latest shared thrust cutoff:".
+    PRINT stateGet("last_thrust_cutoff", "No shared cutoff report yet.").
     PRINT "Latest completed cutoff (may be from an earlier maneuver):".
     PRINT stateGet("last_burn_report", "No saved cutoff report; the last attempt may not have reached cutoff.").
     PRINT "Saved attempt: phase=" + stateGet("phase", "")

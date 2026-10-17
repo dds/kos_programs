@@ -76,9 +76,7 @@ LOCAL FUNCTION _mccAerobrakePatchSafe {
 LOCAL FUNCTION _mccReturnHold {
     PARAMETER reason.
     SET WARP TO 0.
-    LOCK THROTTLE TO 0.
-    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN. }
     UNLOCK STEERING.
     mLogError("Return correction held: " + reason + ". Remaining in MCC.").
     mLog("STATS return-mcc status=held reason=" + reason

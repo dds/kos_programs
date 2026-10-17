@@ -2,12 +2,14 @@
 Run: python3 -B scripts/check_burn_watchdog.py
 """
 import math
+import json
 from types import SimpleNamespace as NS
 import check_landing_guidance as ks
 from check_launch_and_staging import body
 
 SOURCE=(ks.ROOT/'lib/maneuver.ks').read_text()
-ks.SOURCES+='\n'+SOURCE
+CUTOFF=(ks.ROOT/'lib/thrust_cutoff.ks').read_text()
+ks.SOURCES+='\n'+SOURCE+'\n'+CUTOFF.replace('UNLOCK THROTTLE.', 'fixture_unlock("throttle").')
 
 
 def fixture(fixed=False,cap=100,acc=10):
@@ -15,8 +17,10 @@ def fixture(fixed=False,cap=100,acc=10):
     ship=NS(THRUST=0,MASS=1,FACING=NS(FOREVECTOR=ks.Vec((1,0,0))),
             CONTROL=NS(PILOTMAINTHROTTLE=1))
     env.update(SHIP=ship,ABORT=False,_nf=math.isfinite,_sma=lambda: acc,
-               LEX=lambda *xs: dict(zip(xs[::2],xs[1::2])))
-    for name in ('_burnImpulseThrottle',):
+               LEX=lambda *xs: dict(zip(xs[::2],xs[1::2])),yieldToPrompt=lambda: None,
+               fixture_unlock=lambda _: None,stateGet=lambda *args: 'XING',
+               stateSet=lambda *args: None)
+    for name in ('_burnImpulseThrottle','thrustCutoff'):
         env[name]=lambda *args,name=name: ks.call(name,env,*args)
     control=dict(reason='',rem=-1,time=0,lastTick=0,tickDt=.02,output=0,
                  bestRem=-1,fixed=fixed,heartbeat=0,impulseTime=0,
@@ -118,6 +122,64 @@ def check_physical_cutoff():
         code=body(SOURCE,name)
         assert all(word not in code for word in ('WAIT ', 'mLog(', 'stateSet(', 'SHUTDOWN'))
     print('PASS: verified normal stop; forced engine shutdown; persistent-thrust failure; control cleanup precedes saved report')
+
+
+def check_shared_cutoff():
+    for scenario in ('normal','spool','persistent','unshuttable','solid','rebound','raw-rebound','nan'):
+        env,_,_,_=fixture()
+        ship=env['SHIP']
+        ship.THRUST=10
+        engine=NS(IGNITION=True,THRUST=10,THROTTLELOCK=scenario=='solid',
+                  ALLOWSHUTDOWN=scenario!='unshuttable')
+        idle=NS(IGNITION=False,THRUST=0,THROTTLELOCK=False,ALLOWSHUTDOWN=True)
+        ship.ENGINES=[engine,idle]
+        events=[]
+        saved={}
+        unlocked=[False]
+        def shutdown():
+            events.append('shutdown')
+            ship.THRUST=0
+            engine.THRUST=0
+        engine.SHUTDOWN=shutdown
+        idle.SHUTDOWN=lambda: events.append('wrong-engine')
+        def wait(dt):
+            env['TIME'].SECONDS+=dt
+            if scenario in ('normal','spool','rebound','raw-rebound'):
+                ship.THRUST=0 if scenario!='spool' or env['TIME'].SECONDS>=.15 else 10
+            if scenario=='rebound' and unlocked[0]:
+                ship.THRUST=10
+                ship.CONTROL.PILOTMAINTHROTTLE=.1
+            if scenario=='raw-rebound' and unlocked[0]: ship.CONTROL.MAINTHROTTLE=.1
+            engine.THRUST=ship.THRUST
+            if scenario=='nan': ship.THRUST=float('nan')
+        def lock(statement):
+            events.append('zero')
+            unlocked[0]=False
+        def unlock(_):
+            events.append('release')
+            unlocked[0]=True
+        env.update(fixture_wait=wait,fixture_lock=lock,fixture_unlock=unlock,
+                   yieldToPrompt=lambda: events.append('hold'),
+                   stateSet=lambda key,value: saved.update({key:value}))
+        source=body(CUTOFF,'thrustCutoff').replace('UNLOCK THROTTLE.', 'fixture_unlock("throttle").')
+        try:
+            ks.run(ks.parse(source),env)
+        except ks.Returned as returned:
+            check=returned.value
+        fault=scenario not in ('normal','spool')
+        assert ('hold' in events)==fault,(scenario,events)
+        assert check['forced']==fault
+        assert check['stopped']==(scenario not in ('unshuttable','solid','nan'))
+        assert 'wrong-engine' not in events
+        assert events.count('shutdown')==int(scenario in ('persistent','rebound')),(scenario,events)
+        assert ship.CONTROL.PILOTMAINTHROTTLE==0 and env['TIME'].SECONDS<=1.05
+        assert ship.CONTROL.MAINTHROTTLE==0
+        assert saved['last_thrust_cutoff']['stopped']==check['stopped']
+        assert saved['last_thrust_cutoff']['rawThrottle']==0
+        json.dumps(saved,allow_nan=False)
+        if scenario=='nan': assert saved['last_thrust_cutoff']['thrust']=='invalid'
+        assert ('release' in events)==(scenario in ('normal','spool','persistent','rebound','raw-rebound'))
+    print('PASS: shared cutoff checks release, spool, forced shutdown, solids, pilot/raw rebound, invalid thrust and durable evidence')
 
 
 def check_command_publication():
@@ -248,6 +310,7 @@ if __name__=='__main__':
     check_frozen_node()
     check_heartbeat_abort_staging()
     check_physical_cutoff()
+    check_shared_cutoff()
     check_command_publication()
     check_cpu_budget_recovery()
     check_passive_cpu_and_probe()

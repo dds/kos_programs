@@ -189,8 +189,7 @@ GLOBAL FUNCTION phaseRocketclimb {
         }
         WAIT 0.2.
     }
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
 
     // Circularize at Ap — after this we are a normal orbital vessel.
     LOCAL success IS FALSE.

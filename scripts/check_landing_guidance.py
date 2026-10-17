@@ -273,11 +273,11 @@ def check_logging():
     assert main.index('SET LOG_ARCHIVE_DEFERRED TO 1.') < main.index('UNTIL landingAbortFlag')
     end = main[main.index('IF landingAbortFlag {'):]
     assert end.index('vesselLandingCleanup().') < end.index('SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.')
-    assert end.index('_landingFinish(ctx).') < end.rindex('SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.')
+    assert end.index('_landingFinish(ctx)') < end.rindex('SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.')
     logs = (ROOT / 'lib/logs.ks').read_text()
     assert 'IF wroteLocal AND LOG_ARCHIVE_DEFERRED <= 0' in logs
     cleanup = body((ROOT / 'lib/vessel_hardware.ks').read_text(), 'vesselLandingCleanup')
-    assert cleanup.index('PILOTMAINTHROTTLE TO 0.') < cleanup.index('WAIT 0.01.') < cleanup.index('UNLOCK THROTTLE.')
+    assert 'thrustCutoffOk()' in cleanup and 'RETURN stopped.' in cleanup
     print('PASS: guidance logs stay local until throttle cleanup; landing cutoff clears pilot throttle before unlock')
 
 

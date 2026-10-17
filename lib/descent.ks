@@ -124,9 +124,9 @@ LOCAL FUNCTION _descentEngineAssist {
         WAIT 0.
     }
 
-    LOCK THROTTLE TO 0.
-    UNLOCK THROTTLE.
+    LOCAL stopped IS thrustCutoffOk().
     UNLOCK STEERING.
+    IF NOT stopped { RETURN FALSE. }
     mLog("Engine assist complete: " + SHIP:STATUS
         + " vs=" + ROUND(SHIP:VERTICALSPEED, 1) + ".").
 }

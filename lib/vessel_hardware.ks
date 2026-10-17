@@ -148,10 +148,8 @@ GLOBAL FUNCTION vesselStageForLanding {
 }
 
 GLOBAL FUNCTION vesselLandingCleanup {
-    LOCK THROTTLE TO 0.
-    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-    WAIT 0.01.
-    UNLOCK THROTTLE.
+    LOCAL stopped IS thrustCutoffOk().
     UNLOCK STEERING.
     SET SAS TO TRUE.
+    RETURN stopped.
 }

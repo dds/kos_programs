@@ -291,6 +291,19 @@ Looks like Python/JS; is neither.
   completion were not reported. The operator also found burncheck's invalid
   top-level RETURN statements; all cmd bodies and its archive helper now
   use local entry functions, with a repository-wide return-scope check.
+  Later in the same flight, the operator reports roughly 10% throttle after
+  LAND_DEORBIT, followed by immediate BRAKE and then APPROACH above 14 km.
+  At 13 km, approach held about 35% throttle, hs=54.96 and vs=-5.89 m/s;
+  about 960 m/s remained after braking. Final outcome and the ignition gate
+  telemetry are unknown. The compact executor now shares physical cutoff
+  verification, with a longer latency-aware taper. All direct burn families
+  use `thrust_cutoff`; raw/pilot commands, post-release thrust and forced
+  shutdown are checked, and phase advancement respects a cutoff hold.
+  Passed/high-altitude target gates and terminal handoffs have new regression
+  cases; physical stopping, terrain and next-stage limits remain active.
+  These changes are not yet flight-proven. Further landing-footprint,
+  approach-budget and sequence validation work is recorded in
+  `docs/FLIGHT_SEQUENCE_VALIDATION.md`.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered
