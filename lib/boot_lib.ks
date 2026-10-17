@@ -760,6 +760,13 @@ GLOBAL FUNCTION bootLibLoad {
 
 GLOBAL FUNCTION bootPreamble {
     bootLibLoad("core").
+    // An interrupted maneuver can leave its temporary CPU budget active.
+    // Restore before any command (including transferretry) clears burn_*.
+    LOCAL priorIpu IS stateGetNum("burn_prior_ipu", -1).
+    IF priorIpu >= 0 {
+        SET CONFIG:IPU TO priorIpu.
+        stateRemove("burn_prior_ipu").
+    }
 }
 
 GLOBAL FUNCTION bootLibBandRoots {

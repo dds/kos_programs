@@ -30,8 +30,11 @@ GLOBAL FUNCTION main {
     LOCAL massDrop IS DESCENT_SERVICE_SEPARATION_DROP.
     LOCAL releaseAlt IS DESCENT_SERVICE_RELEASE_ALT.
 
-    LOCK THROTTLE TO 0.
-    mLog("Descent service CPU: standby. No steering until separation.").
+    // Cooked throttle is shared by the vessel, not isolated per CPU. A
+    // zero lock here fights the primary's ascent/transfer throttle even
+    // while this processor is waiting. Own no controls until separation.
+    UNLOCK THROTTLE.
+    mLog("Descent service CPU: passive standby. No control locks until separation.").
     mLog("Arming below " + ROUND(armAlt/1000, 1) + "km on descent; mass drop trigger "
         + ROUND(massDrop, 2) + "t.").
 

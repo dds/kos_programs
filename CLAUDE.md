@@ -264,6 +264,21 @@ Looks like Python/JS; is neither.
   persistent burn report now have source-driven fixtures, not flight proof.
   Three-axis Pe recovery, budget-boundary/corridor fixes and explicit
   `arrival` budget/plan-only commands have synthetic response fixtures only.
+  RO9 zero-throttle investigation (2026-10-16): the passive
+  `descent_service` role held a competing zero throttle lock before separation.
+  It now releases its own lock while attached and retains cutoff/steering
+  after separation. This is a confirmed source defect, not confirmation that
+  this RO9 carries that role. `cmd/burncheck.ks` prints current engines, CPU
+  roles, suppression/IPU and read-only timed governor probes. Live RO9
+  evidence is still needed to distinguish hardware recovery, competing CPUs,
+  suppressed autopilot and a watchdog/scheduling cutoff. No cutoff is bypassed.
+  The operator subsequently reported only 'Burn start', with no tick or
+  BURN WAIT output after ten minutes. The governor's high-priority callback
+  can starve the main loop at kOS's default 150 IPU, before the first command
+  is published. The executor now uses at least BURN_MIN_IPU (2000 by default,
+  bounded by kOS's maximum), restoring the prior value after control release
+  or in bootPreamble after interruption. This matches the observed stop
+  location; scheduler/flight confirmation is still pending.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered

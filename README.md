@@ -69,6 +69,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/convertstatejson.ks").` | Convert legacy SimpleJSON state to native kOS JSON |
 | `RUNPATH("0:/cmd/logs.ks").` | Archive the current boot's flight log to KSC |
 | `RUNPATH("0:/cmd/burnreport.ks").` | Print the latest maneuver cutoff report, retained across reboots |
+| `RUNPATH("0:/cmd/burncheck.ks").` | Read-only ignition check: engine availability, autopilot suppression, CPU roles/IPU, and timed throttle-governor probes against the retained node; never fires engines |
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
@@ -201,6 +202,12 @@ engine shutdown if thrust persists for 0.25 seconds. A forced shutdown is a
 failed burn, not a successful completion; inspect the engine before resuming.
 These guards require kOS and KSP to keep executing and can stop a long finite
 burn early. They have numerical coverage, but still need flight validation.
+
+The executor temporarily raises `CONFIG:IPU` to `BURN_MIN_IPU` (2000 by
+default, capped at kOS's maximum) before installing the live governor, so
+its high-priority calculations leave time for the main loop. It restores
+the previous setting after cutoff or at the next boot after interruption.
+The one-second stale-command cutoff remains active.
 
 After the next maneuver, run `RUNPATH("0:/cmd/burnreport.ks").` to see planned
 and measured thrust dV, the independent cap, residual, cutoff reason, and

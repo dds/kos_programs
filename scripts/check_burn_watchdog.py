@@ -144,8 +144,96 @@ def check_command_publication():
     print('PASS: interleaved ignition/recovery publication starts both modes; genuine stale commands still latch off')
 
 
+def check_cpu_budget_recovery():
+    executor=body(SOURCE,'executeManeuver')
+    setup=executor[executor.index('LOCAL priorIpu IS CONFIG:IPU.'):executor.index('LOCAL throttleCmd IS')]
+    cleanup=executor[executor.index('SET CONFIG:IPU TO priorIpu.'):executor.index('// Compact evidence')]
+    boot=(ks.ROOT/'lib/boot_lib.ks').read_text()
+    recovery=ks.parse(body(boot,'bootPreamble'))
+    retry=(ks.ROOT/'cmd/transferretry.ks').read_text()
+    assert retry.index('bootPreamble().')<retry.index('stateRemovePrefix("burn_")')
+    assert setup.index('stateSet("burn_prior_ipu"')<setup.index('SET CONFIG:IPU')
+    assert executor.index('SET CONFIG:IPU TO MIN')<executor.index('LOCK THROTTLE TO _burnNodeThrottle')
+    zero=executor.rindex('LOCK THROTTLE TO 0.0.')
+    release=executor.index('UNLOCK THROTTLE.',zero)
+    assert release<executor.index('SET CONFIG:IPU TO priorIpu.')<executor.index('stateSet("last_burn_report"')
+    # Every terminal burn result reaches the common physical cutoff and
+    # restoration. Early alignment/window refusals occur before the boost.
+    running=executor[executor.index('LOCAL priorIpu'):release]
+    assert 'RETURN ' not in running
+    for initial,floor,expected in ((150,2000,2000),(500,2000,2000),
+                                   (2000,2000,2000),(150,3000,2000)):
+        saved={}
+        loaded=[]
+        env=ks.environment()
+        env.update(CONFIG=NS(IPU=initial),BURN_MIN_IPU=floor,
+                   stateSet=lambda key,value: saved.update({key:value}),
+                   stateRemove=lambda key: saved.pop(key,None),
+                   stateGetNum=lambda key,default: saved.get(key,default),
+                   bootLibLoad=loaded.append)
+        ks.run(ks.parse(setup),env)
+        assert env['CONFIG'].IPU==expected
+        assert saved==({'burn_prior_ipu':initial} if initial<expected else {})
+        # Normal cutoff restores without changing any watchdog thresholds.
+        ks.run(ks.parse(cleanup),env)
+        assert env['CONFIG'].IPU==initial and not saved
+        # Simulate a crash/reboot before common cutoff, then an ordinary
+        # command invocation. Both use the actual bootPreamble source.
+        ks.run(ks.parse(setup),env)
+        ks.run(recovery,env)
+        assert env['CONFIG'].IPU==initial and not saved
+        ks.run(recovery,env)
+        assert env['CONFIG'].IPU==initial and loaded==['core','core']
+    print('PASS: scoped CPU budget capped at 2000; normal cutoff and interrupted boot restore original IPU before retry clears state')
+
+
+def check_passive_cpu_and_probe():
+    role=(ks.ROOT/'roles/descent_service.ks').read_text()
+    main=body(role,'main')
+    standby,separated=main.split('mLog("Descent service separated',1)
+    # On one vessel the last CPU to update cooked throttle wins. A standby
+    # zero lock actively overwrites the primary; releasing our own lock
+    # preserves the primary's ownership. Keep zero after separation.
+    assert 'UNLOCK THROTTLE.' in standby
+    assert 'LOCK THROTTLE TO' not in standby and 'LOCK STEERING TO' not in standby
+    assert 'LOCK THROTTLE TO 0.' in separated and 'LOCK STEERING TO RETROGRADE.' in separated
+    probe=(ks.ROOT/'lib/burn_check.ks').read_text()
+    command=(ks.ROOT/'cmd/burncheck.ks').read_text()
+    assert 'bootLibLoad("maneuver")' in command and 'maneuverThrottleCheck()' in command
+    for text in (probe,command,body(SOURCE,'maneuverThrottleCheck')):
+        for forbidden in ('LOCK THROTTLE TO','LOCK STEERING TO','STAGE.',
+                          ':ACTIVATE','executeManeuver(', 'REMOVE ', 'stateSet(',
+                          'PILOTMAINTHROTTLE TO','SET CONFIG:'):
+            assert forbidden not in text
+    loop=probe[probe.index('FOR command IN LIST(0, 1)'):]
+    nodes=ks.parse(loop)
+    # Printing is not part of the probe computation under test.
+    def without_print(items):
+        return [(statement,without_print(yes),without_print(no))
+                for statement,yes,no in items if not statement.startswith('PRINT ')]
+    for delay in (0,.2,1.1):
+        env,_,nd,_=fixture()
+        results=[]
+        def governor(node,vec,value,cutoff):
+            env['TIME'].SECONDS+=delay
+            output=ks.call('_burnNodeThrottle',env,node,vec,value,cutoff)
+            results.append((value,output,cutoff['reason']))
+            return output
+        env.update(LIST=lambda *xs: list(xs),nd=nd,bdv=500,fixed=False,
+                   ignitionVec=ks.Vec((1,0,0)),governorFn=NS(CALL=governor))
+        ks.run(without_print(nodes),env)
+        assert results[0]==(0,0,'')
+        assert results[1][0]==1
+        assert (results[1][1]>0)==(delay<=1)
+        assert results[1][2]==('live-command-stale' if delay>1 else '')
+        assert env['SHIP'].CONTROL.PILOTMAINTHROTTLE==1
+    print('PASS: service standby owns no controls; post-separation cutoff retained; read-only probe distinguishes stale-command gate')
+
+
 if __name__=='__main__':
     check_frozen_node()
     check_heartbeat_abort_staging()
     check_physical_cutoff()
     check_command_publication()
+    check_cpu_budget_recovery()
+    check_passive_cpu_and_probe()

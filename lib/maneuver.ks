@@ -37,6 +37,10 @@ GLOBAL BURN_IMPULSE_MARGIN_FRAC IS 0.01.
 GLOBAL BURN_IMPULSE_MARGIN_DV IS 0.05.
 GLOBAL BURN_COMMAND_TIMEOUT IS 1.
 GLOBAL BURN_CUTOFF_VERIFY_TIME IS 0.25.
+// Cooked-control callbacks have priority over the main loop. At kOS's
+// default 150 IPU, this governor can consume the available instruction
+// budget even with command=0, starving the code that publishes ignition.
+GLOBAL BURN_MIN_IPU IS 2000.
 
 
 LOCAL ATOL      IS 2.0.
@@ -250,6 +254,14 @@ GLOBAL FUNCTION executeManeuver {
         mLogWarn("Burn using fixed ignition vector: dv=" + ROUND(bdv,2)
             + " ecc=" + _fs(SHIP:ORBIT:ECCENTRICITY,4) + ".").
     }
+    LOCAL priorIpu IS CONFIG:IPU.
+    IF priorIpu < MIN(2000, BURN_MIN_IPU) {
+        // Persist before changing the game setting. bootPreamble restores
+        // it after a power loss/error, before a retry can clear burn_*.
+        stateSet("burn_prior_ipu", priorIpu).
+        SET CONFIG:IPU TO MIN(2000, BURN_MIN_IPU).
+    }
+    mLog("STATS burn cpu previousIpu=" + priorIpu + " burnIpu=" + CONFIG:IPU).
     LOCAL throttleCmd IS 0.0.
     LOCAL liveCutoff IS LEX("reason", "", "rem", -1, "time", 0,
         "lastTick", TIME:SECONDS, "tickDt", 0.02, "output", 0,
@@ -766,6 +778,8 @@ GLOBAL FUNCTION executeManeuver {
     }
     UNLOCK STEERING.
     UNLOCK THROTTLE.
+    SET CONFIG:IPU TO priorIpu.
+    stateRemove("burn_prior_ipu").
     // Compact evidence survives log-space exhaustion and phase/boot changes.
     // Never perform this state I/O while commanded thrust is nonzero.
     LOCAL burnReport IS "STATS last-burn phase=" + stateGet("phase", "")
@@ -1005,6 +1019,14 @@ GLOBAL FUNCTION maneuverUiArchiveLog {
         IF EXISTS("0:/lib/maneuver_ui.ks") {
             RUNPATH("0:/lib/maneuver_ui.ks", 0, label).
         }
+    }
+}
+
+// Read-only archive diagnostics can inspect the private governor without
+// installing a throttle lock or carrying the diagnostic code in flight.
+GLOBAL FUNCTION maneuverThrottleCheck {
+    IF HOMECONNECTION:ISCONNECTED AND EXISTS("0:/lib/burn_check.ks") {
+        RUNPATH("0:/lib/burn_check.ks", _sma@, _burnNodeThrottle@).
     }
 }
 
