@@ -15,19 +15,19 @@ from check_runtime_contracts import run
 SOURCE = (ks.ROOT / 'lib/landing_divert.ks').read_text()
 
 
-def fixture():
-    env, ctx = brake_fixture(twr=2.76/1.63, horizontal=17.55, down=28.28, height=857)
-    ctx.update(TARGET_LAT=29584/200000*180/math.pi, TARGET_LNG=0,
+def fixture(gravity=1.63, radius=200000):
+    env, ctx = brake_fixture(gravity=gravity, twr=2.76/gravity, horizontal=17.55, down=28.28, height=857)
+    ctx.update(TARGET_LAT=29584/radius*180/math.pi, TARGET_LNG=0,
                TARGET_ELEVATION=3000, REQUESTED_LAT=9, REQUESTED_LNG=1,
                HOVER_TERRAIN_DONE=False, TARGET_THROTTLE=1, throttle=1,
                POSITION=Vec((0,0,857)), STATE='BRAKING_BURN')
     events, samples, light_calls = [], [], []
     overrides=dict(SEQUENCE=['LAND_ASSIST','SURFACE_RETURN_SETUP'], RETURN_PE=53000)
-    scale=200000*math.pi/180
+    scale=radius*math.pi/180
     def geo(lat,lng):
         return NS(LAT=lat,LNG=lng,TERRAINHEIGHT=env['elevation_at'](lat*scale,lng*scale),
                   POSITION=Vec((lat*scale,lng*scale,0)))
-    env['SHIP'].BODY=NS(RADIUS=200000, GEOPOSITIONOF=lambda pos: geo(pos[0]/scale,pos[1]/scale))
+    env['SHIP'].BODY=NS(RADIUS=radius, GEOPOSITIONOF=lambda pos: geo(pos[0]/scale,pos[1]/scale))
     env['SHIP'].POSITION=ctx['POSITION']
     env['SHIP'].ALTITUDE=3857
     def refresh(c):
@@ -41,7 +41,7 @@ def fixture():
     def light(*args):
         light_calls.append(args)
         return dict(OK=True,REASON='ok',SUN=20.2,KERBIN=7.26)
-    env.update(LANDING_FLEXIBLE_SITE=1, LANDING_REQUIRE_KERBIN=1,
+    env.update(LANDING_FLEXIBLE_SITE=1, LANDING_REQUIRE_KERBIN=1, MAX_TILT=12,
                LANDING_DIVERT_EMERGENCY_SLOPE=0, elevation_at=lambda x,y:3000,
                grade_at=lambda x,y:.02, landingTerrainGrade=grade,
                LATLNG=geo, landingLightWindow=light,
@@ -53,7 +53,7 @@ def fixture():
                _landingCacheTick=refresh, landingAbortFlag=False,
                _landingTerrainCheck=lambda *args: (_ for _ in ()).throw(AssertionError('blocking grid')),
                thrustCutoffOk=lambda *args: (_ for _ in ()).throw(AssertionError('search cut throttle')))
-    for name in ('_landingDivertStart','_landingDivertCandidate','landingReviewReachableSite'):
+    for name in ('_landingDivertStart','_landingDivertCandidate','_landingDivertRetryReady','landingReviewReachableSite'):
         env[name]=lambda *args,name=name:call(name,env,*args)
     return env,ctx,events,overrides,samples,light_calls
 
@@ -185,6 +185,132 @@ def check_reported_failure_recovery():
     print(f'PASS: reported 857 m / -28.28 m/s / 17.55 m/s restart, 2.76 m/s2, 3-second delay and 13.4-degree terrain retains powered guidance; emergency site at {accepted_at:.1f}s, terminal handoff above {minimum:.0f} m')
 
 
+def check_stale_reachability():
+    for captured_after_hold in (True, False):
+        env,ctx,events,overrides,samples,_=fixture(gravity=.491,radius=60000)
+        ctx.update(H_SPEED=12,H_VEL=Vec((12,0,0)),V_SPEED=0,DOWN_SPEED=0,
+                   height=1481,POSITION=Vec((0,0,1481)),TARGET_LAT=7980/60000*180/math.pi)
+        env.update(MAX_TILT=12,LANDING_DIVERT_EMERGENCY_SLOPE=15,LANDING_DIVERT_SEARCH_TIME=1,
+                   grade_at=lambda x,y:.1)
+        env['_landingCacheTick'](ctx)
+        # At 12 m/s the conservative Minmus approach budget cannot accept
+        # even the center. Reproduce both passes rejecting before capture.
+        for step in range(50):
+            if (not captured_after_hold and ctx['DIVERT_SEARCH'].get('EMERGENCY')
+                    and step*.05-ctx['DIVERT_SEARCH']['STARTED']>=1):
+                ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)))
+            tick(env,ctx,step*.05)
+            if ctx['DIVERT_SEARCH']['EXHAUSTED'] or ctx['DIVERT_SEARCH']['RETRIED']:
+                break
+        assert 'TARGET_LAT' not in overrides and not samples
+        if captured_after_hold:
+            assert ctx['DIVERT_SEARCH']['EXHAUSTED']
+            assert ctx['DIVERT_SEARCH']['REJECTS']['reachability']>0
+            ctx.update(H_SPEED=9,H_VEL=Vec((9,0,0)))
+            step+=1
+            tick(env,ctx,step*.05)
+            assert ctx['DIVERT_SEARCH']['EXHAUSTED'] and not ctx['DIVERT_SEARCH']['RETRIED']
+            ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)))
+        assert call('_landingDivertCandidate',env,ctx,0,0,15)['OK']
+        # An unchanged exhausted search used to hover forever despite this
+        # now-valid nearby site. The retry must still begin with normal slope.
+        for more in range(100):
+            before=len(samples)
+            tick(env,ctx,(step+more+1)*.05)
+            assert len(samples)-before<=1
+            if 'TARGET_LAT' in overrides: break
+        assert 'TARGET_LAT' in overrides and not ctx['DIVERT_PENDING']
+        search=ctx['DIVERT_SEARCH']
+        assert search['RETRIED'] and search['EMERGENCY'] and search['SLOPE_LIMIT']==15
+        assert search['REJECTS']['terrain-grade']>0  # 5-degree pass was retained.
+        assert search['REJECTS']['reachability']>0   # Original 8km site still rejected.
+        assert abs(ctx['TARGET_LAT'])<1e-9 and abs(ctx['TARGET_LNG'])<1e-9
+        assert overrides['RETURN_PE']==53000 and ctx['TARGET_THROTTLE']==1
+    print('PASS: Minmus 1481m/7980m target miss retries stale reachability after velocity capture, before or after exhaustion; 5-degree search precedes authorized 15-degree site and one-candidate work bound remains')
+
+
+def check_retry_bound_and_rejections():
+    env,ctx,_,overrides,_,_=fixture(gravity=.491,radius=60000)
+    ctx.update(H_SPEED=12,H_VEL=Vec((12,0,0)))
+    env.update(MAX_TILT=12,LANDING_DIVERT_EMERGENCY_SLOPE=15,LANDING_DIVERT_SEARCH_TIME=1,
+               grade_at=lambda x,y:.4)
+    for step in range(45): tick(env,ctx,step*.05)
+    assert ctx['DIVERT_SEARCH']['EXHAUSTED']
+    ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)))
+    for step in range(45,140): tick(env,ctx,step*.05)
+    search=ctx['DIVERT_SEARCH']
+    assert search['RETRIED'] and search['EXHAUSTED'] and ctx['DIVERT_PENDING']
+    assert search['REJECTS']['terrain-grade']>0 and 'TARGET_LAT' not in overrides
+    # Further motion cannot create an unbounded series of searches.
+    ctx['POSITION'][0]+=500
+    env['_landingCacheTick'](ctx)
+    for step in range(140,180): tick(env,ctx,step*.05)
+    assert ctx['DIVERT_SEARCH'] is search
+    for failure in ('terrain-grade','altitude-clearance','eclipse'):
+        env,ctx,_,_,_,_=fixture()
+        ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)))
+        env['LANDING_DIVERT_SEARCH_RADIUS']=0
+        if failure=='terrain-grade': env['grade_at']=lambda x,y:.4
+        if failure=='altitude-clearance': env['elevation_at']=lambda x,y:4000
+        if failure=='eclipse': env['landingLightWindow']=lambda *args:dict(OK=False,REASON='eclipse',SUN=20,KERBIN=10)
+        for step in range(6): tick(env,ctx,step*.05)
+        counts=ctx['DIVERT_SEARCH']['REJECTS']
+        category='light' if failure=='eclipse' else failure
+        assert counts[category]>0 and ctx['DIVERT_SEARCH']['LAST_REASON']==failure
+        assert ctx['DIVERT_SEARCH']['EXHAUSTED'] and ctx['DIVERT_PENDING']
+    print('PASS: only one changed-reachability retry; unsafe grade/clearance/light still reject, exhausted control retained and failure totals identify inner-site causes')
+
+
+def check_shifted_stopping_point():
+    env,ctx,_,overrides,_,_=fixture(gravity=.491,radius=60000)
+    ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)))
+    env.update(LANDING_DIVERT_SEARCH_RADIUS=0,
+               grade_at=lambda x,y:.02 if x>400 else .4)
+    for step in range(5): tick(env,ctx,step*.05)
+    assert ctx['DIVERT_SEARCH']['EXHAUSTED'] and 'TARGET_LAT' not in overrides
+    ctx['POSITION'][0]=500
+    env['_landingCacheTick'](ctx)
+    for step in range(5,10): tick(env,ctx,step*.05)
+    assert ctx['DIVERT_SEARCH']['RETRIED'] and not ctx['DIVERT_PENDING']
+    assert abs(ctx['TARGET_LAT']*60000*math.pi/180-500)<1e-6
+    assert ctx['DIVERT_SEARCH']['EMERGENCY'] is False
+    print('PASS: a materially shifted stopping point refreshes the local search even at unchanged speed, accepting only newly checked normal-limit terrain')
+
+
+def check_paused_minmus_hover():
+    env,ctx,_,overrides,_,_=fixture(gravity=.491,radius=60000)
+    ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)),V_SPEED=0,DOWN_SPEED=0,
+               SURFACE_VEL=Vec((0,0,0)),height=1481,POSITION=Vec((0,0,1481)),
+               TARGET_LAT=7980/60000*180/math.pi)
+    env.update(LANDING_DIVERT_EMERGENCY_SLOPE=15,grade_at=lambda *args:.1)
+    accepted=None
+    coasted=False
+    dt=.1
+    for step in range(2500):
+        env['TIME'].SECONDS=step*dt
+        env['SHIP'].FACING.FOREVECTOR=ctx.get('steering',ctx['UP_VEC'])
+        env['_landingCacheTick'](ctx)
+        handler={'COAST':'_landingCoastTick','BRAKE_ALIGN':'_landingBrakeAlignTick',
+                 'BRAKING_BURN':'_landingBrakingTick'}[ctx['STATE']]
+        call(handler,env,ctx)
+        if 'TARGET_LAT' in overrides and accepted is None: accepted=step*dt
+        coasted|=ctx['STATE']=='COAST' and accepted is not None
+        if ctx['STATE'] in ('VERTICAL_DESCENT','TARGET_REFINE','APPROACH'): break
+        command=ctx['TARGET_THROTTLE'] if step*dt>=3 else 0
+        thrust=ctx.get('steering',ctx['UP_VEC'])*(command*ctx['MAX_ACC'])
+        velocity=ctx['SURFACE_VEL']+(thrust-ctx['UP_VEC']*ctx['GRAV'])*dt
+        ctx.update(SURFACE_VEL=velocity,V_SPEED=velocity[2],DOWN_SPEED=max(0,-velocity[2]),
+                   H_SPEED=math.hypot(velocity[0],velocity[1]),H_VEL=Vec((velocity[0],velocity[1],0)))
+        ctx['POSITION']+=velocity*dt
+        ctx['height']=ctx['POSITION'][2]
+        assert ctx['height']>0
+    assert accepted is not None and accepted>=15 and coasted
+    assert ctx['STATE']=='VERTICAL_DESCENT' and 100<ctx['height']<1000
+    assert ctx['V_SPEED'] < -5 and not ctx['DIVERT_PENDING']
+    assert overrides['RETURN_PE']==53000
+    print(f'PASS: paused Minmus 1481m/zero-velocity/7980m miss restart selects a checked local site at {accepted:.1f}s, leaves search braking for coast and reaches descending terminal handoff at {ctx["height"]:.0f}m; flat point mass, not flight proof')
+
+
 def check_cpu_and_scan_order():
     main=function_body((ks.ROOT/'lib/landing_main.ks').read_text(),'landExecute')
     setup=main[main.index('LOCAL priorIpu'):main.index('IF SHIP:BODY:ATM:EXISTS')]
@@ -245,5 +371,9 @@ if __name__=='__main__':
     check_candidates_and_search()
     check_emergency_limits()
     check_reported_failure_recovery()
+    check_stale_reachability()
+    check_retry_bound_and_rejections()
+    check_shifted_stopping_point()
+    check_paused_minmus_hover()
     check_cpu_and_scan_order()
     check_library_scope()

@@ -410,11 +410,23 @@ Looks like Python/JS; is neither.
   The operator explicitly authorized up to 15 deg ONLY after normal search
   failure; economy profiles set LANDING_DIVERT_EMERGENCY_SLOPE=15, default0.
   Every tier keeps fine slope, clearance, correction-time and light/radio
-  checks. Both tiers exhausted => powered arrest/intervention, no accepted
-  unsafe target. End-of-burn physical cutoff and alignment safeguards remain.
+  checks. Both tiers exhausted => powered arrest/intervention unless materially
+  changed braking conditions permit the single fresh search cycle below;
+  no accepted unsafe target. End-of-burn physical cutoff and alignment safeguards remain.
   check_landing_divert models the reported low-altitude restart with constant
   2.76 m/s2, 3 s latency and .238 terrain: emergency acceptance at15.2s,
   terminal handoff >140 m; not flight/CPU/fuel/terrain-mesh validation.
+  RO9 Minmus later hovered at1475m, zero horizontal/vertical speed, d=7980m,
+  remainingDv1329; normal and15-degree emergency search exhausted with last
+  reason=reachability/grade=-1 (operator report, no full log). The source
+  latched EXHAUSTED forever, even when near candidates tested during braking
+  had become reachable. A Minmus/12-degree fixture reproduces that defect at
+  12->0m/s. One new normal/emergency cycle now rechecks the updated stopping
+  footprint after material speed/center change and earlier reach rejections.
+  No gate is relaxed. Counts expose all rejection categories instead of only
+  the last outer point. A separate1481m rest/7980m miss flat point mass selects
+  a .1-grade local site at15.2s and coasts/brakes into descending vertical
+  guidance at288m; not actual terrain, fuel, attitude or flight validation.
   After 2a27aa2, the operator reported an "ok landing" on the RO9 Mun economy
   retry (2026-10-17). This is flight evidence for successful descent after the
   alignment and terrain-abort repairs. The supplied boot_012_core.log then

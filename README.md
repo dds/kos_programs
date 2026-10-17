@@ -205,8 +205,18 @@ The default allowance is 0 (disabled). `LANDING_DIVERT_SEARCH_RADIUS` (1000 m),
 `LANDING_DIVERT_SEARCH_STEP` (100 m), and `LANDING_DIVERT_SEARCH_TIME` (15 s per
 pass) bound the search. During search, low-speed braking requests a controlled
 descent of up to `LANDING_DIVERT_SEARCH_DESCENT` (5 m/s). If both permitted
-searches fail, it retains powered arrest and signals manual intervention;
+searches fail after reachability rejections, a material reduction in horizontal
+speed or shift of the stopping point permits one fresh normal/emergency cycle.
+This revisits nearby sites that were rejected while braking but are reachable
+after velocity capture. It keeps the same slope, light, clearance and correction
+time gates, and still evaluates at most one candidate per tick. If that retry
+also fails, or the stopping conditions have not changed, it retains powered
+arrest and signals manual intervention;
 it does not certify a rejected site or return to the prompt in free fall.
+Failure logs include rejection totals by reachability, terrain, clearance and
+light, plus the last candidate's distance and correction-time estimate.
+`grade=-1` with `reason=reachability` means that candidate's terrain was not
+sampled. BRAKE `d=` is surface distance to the saved target, excluding altitude.
 After deorbit, diversions default to `LANDING_DIVERT_REQUIRE_KERBIN=0`: a lost
 Kerbin view does not abort an otherwise acceptable autonomous landing. The
 orbital site search retains its configured requirement (15 degrees in the economy profiles).

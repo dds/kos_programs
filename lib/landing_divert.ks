@@ -7,6 +7,7 @@
 LOCAL FUNCTION _landingDivertStart {
     PARAMETER ctx.
     PARAMETER emergency.
+    PARAMETER retried IS FALSE.
     // Predict horizontal rest using the low-speed controller's net budget.
     // A fast ballistic impact is not the post-brake landing footprint.
     LOCAL netAcc IS lmBrakeNetAcc(ctx["MAX_ACC"], ctx["GRAV"]).
@@ -16,12 +17,37 @@ LOCAL FUNCTION _landingDivertStart {
     IF emergency { SET slopeLimit TO MIN(15, LANDING_DIVERT_EMERGENCY_SLOPE). }
     SET ctx["DIVERT_SEARCH"] TO LEXICON("LAT", center:LAT, "LNG", center:LNG,
         "INDEX", -1, "STARTED", TIME:SECONDS, "EXHAUSTED", FALSE,
+        "RETRIED", retried, "START_HS", ctx["H_SPEED"], "CHECKED", 0,
+        "REJECTS", LEXICON("reachability", 0, "terrain-grade", 0,
+            "altitude-clearance", 0, "light", 0),
         "EMERGENCY", emergency, "SLOPE_LIMIT", slopeLimit,
-        "LAST_REASON", "none", "LAST_GRADE", -1).
+        "LAST_REASON", "none", "LAST_GRADE", -1, "LAST_DIST", 0, "LAST_TRANSIT", 0).
     SET ctx["DIVERT_PENDING"] TO TRUE.
     mLogWarn("STATS landing-divert search height=" + ROUND(_landingBottomRadar(),0)
         + " hs=" + ROUND(ctx["H_SPEED"],1) + " emergency=" + emergency
-        + " slopeLimit=" + slopeLimit + " radius=" + LANDING_DIVERT_SEARCH_RADIUS).
+        + " slopeLimit=" + slopeLimit + " radius=" + LANDING_DIVERT_SEARCH_RADIUS
+        + " retry=" + retried + " lat=" + center:LAT + " lng=" + center:LNG).
+}
+
+LOCAL FUNCTION _landingDivertRetryReady {
+    PARAMETER ctx.
+    PARAMETER search.
+    IF search["RETRIED"] OR search["REJECTS"]["reachability"] = 0 { RETURN FALSE. }
+    // A nearby site tested while braking may become reachable only after
+    // its grid point was visited. Do not permanently latch that old result.
+    LOCAL netAcc IS lmBrakeNetAcc(ctx["MAX_ACC"], ctx["GRAV"]).
+    LOCAL stopOffset IS ctx["H_VEL"] * ctx["H_SPEED"] / (2 * MAX(0.01, netAcc)).
+    LOCAL center IS SHIP:BODY:GEOPOSITIONOF(SHIP:POSITION + stopOffset).
+    LOCAL lateralAcc IS MAX(0.01, lmApproachAcceleration(ctx["MAX_ACC"], ctx["GRAV"])).
+    LOCAL transitTime IS 2 * SQRT(MAX(0, lmDistanceToTarget(center:LAT, center:LNG)) / lateralAcc)
+        + ctx["H_SPEED"] / lateralAcc.
+    // Do not spend the one retry while even its new center is unreachable.
+    IF transitTime > LANDING_APPROACH_MAX_TIME { RETURN FALSE. }
+    IF search["START_HS"] - ctx["H_SPEED"] >= MAX(1, search["START_HS"] * 0.25) {
+        RETURN TRUE.
+    }
+    RETURN geoDistance(search["LAT"], search["LNG"], center:LAT, center:LNG)
+        >= MAX(20, LANDING_DIVERT_SEARCH_STEP / 2).
 }
 
 LOCAL FUNCTION _landingDivertCandidate {
@@ -30,12 +56,15 @@ LOCAL FUNCTION _landingDivertCandidate {
     PARAMETER siteLng.
     PARAMETER slopeLimit.
 
-    LOCAL rejected IS LEXICON("OK", FALSE, "REASON", "reachability", "GRADE", -1).
+    LOCAL rejected IS LEXICON("OK", FALSE, "REASON", "reachability", "GRADE", -1,
+        "DIST", -1, "TRANSIT", -1).
     IF ABS(siteLat) > 90 { RETURN rejected. }
     LOCAL distance IS lmDistanceToTarget(siteLat, siteLng).
     LOCAL lateralAcc IS lmApproachAcceleration(ctx["MAX_ACC"], ctx["GRAV"]).
     LOCAL transitTime IS 2 * SQRT(MAX(0, distance) / MAX(0.01, lateralAcc))
         + ctx["H_SPEED"] / MAX(0.01, lateralAcc).
+    SET rejected["DIST"] TO distance.
+    SET rejected["TRANSIT"] TO transitTime.
     IF transitTime > LANDING_APPROACH_MAX_TIME { RETURN rejected. }
     LOCAL elevation IS LATLNG(siteLat, siteLng):TERRAINHEIGHT.
     IF elevation + LANDING_BRAKE_CLEARANCE >= SHIP:ALTITUDE {
@@ -45,9 +74,9 @@ LOCAL FUNCTION _landingDivertCandidate {
     // A coarse-grid winner can hide a steep local patch. Validate every
     // candidate at the final 20 m scale, including emergency candidates.
     LOCAL grade IS landingTerrainGrade(siteLat, siteLng, 20).
+    SET rejected["GRADE"] TO grade.
     IF grade > TAN(slopeLimit) {
         SET rejected["REASON"] TO "terrain-grade".
-        SET rejected["GRADE"] TO grade.
         RETURN rejected.
     }
     LOCAL arrivalUt IS TIME:SECONDS + MAX(1, lmTimeToImpact()).
@@ -77,7 +106,14 @@ GLOBAL FUNCTION landingReviewReachableSite {
         _landingDivertStart(ctx, FALSE).
     }
     LOCAL search IS ctx["DIVERT_SEARCH"].
-    IF search["EXHAUSTED"] { RETURN TRUE. }
+    IF search["EXHAUSTED"] {
+        IF _landingDivertRetryReady(ctx, search) {
+            mLogWarn("STATS landing-divert retry reason=changed-reachability"
+                + " startHs=" + ROUND(search["START_HS"],1) + " hs=" + ROUND(ctx["H_SPEED"],1)).
+            _landingDivertStart(ctx, FALSE, TRUE).
+        }
+        RETURN TRUE.
+    }
     LOCAL stepM IS MAX(20, LANDING_DIVERT_SEARCH_STEP).
     LOCAL radiusM IS MAX(0, LANDING_DIVERT_SEARCH_RADIUS).
     LOCAL ring IS 0.
@@ -86,12 +122,27 @@ GLOBAL FUNCTION landingReviewReachableSite {
             OR TIME:SECONDS - search["STARTED"] >= MAX(1, LANDING_DIVERT_SEARCH_TIME) {
         IF NOT search["EMERGENCY"]
                 AND MIN(15, LANDING_DIVERT_EMERGENCY_SLOPE) > search["SLOPE_LIMIT"] {
-            _landingDivertStart(ctx, TRUE).
+            _landingDivertStart(ctx, TRUE, search["RETRIED"]).
+            // Preserve the normal pass's braking state and rejection totals.
+            SET ctx["DIVERT_SEARCH"]["START_HS"] TO search["START_HS"].
+            SET ctx["DIVERT_SEARCH"]["REJECTS"] TO search["REJECTS"].
+            SET ctx["DIVERT_SEARCH"]["CHECKED"] TO search["CHECKED"].
+        } ELSE IF _landingDivertRetryReady(ctx, search) {
+            mLogWarn("STATS landing-divert retry reason=changed-reachability"
+                + " startHs=" + ROUND(search["START_HS"],1) + " hs=" + ROUND(ctx["H_SPEED"],1)).
+            _landingDivertStart(ctx, FALSE, TRUE).
         } ELSE {
             SET search["EXHAUSTED"] TO TRUE.
             mLogError("STATS landing-divert unavailable reason=" + search["LAST_REASON"]
                 + " grade=" + ROUND(search["LAST_GRADE"],3)
-                + " samples=" + search["INDEX"] + " height=" + ROUND(_landingBottomRadar(),0)
+                + " samples=" + search["CHECKED"] + " height=" + ROUND(_landingBottomRadar(),0)
+                + " emergency=" + search["EMERGENCY"] + " slopeLimit=" + search["SLOPE_LIMIT"]
+                + " retry=" + search["RETRIED"] + " lastDist=" + ROUND(search["LAST_DIST"],1)
+                + " transit=" + ROUND(search["LAST_TRANSIT"],1)
+                + " reachRejected=" + search["REJECTS"]["reachability"]
+                + " terrainRejected=" + search["REJECTS"]["terrain-grade"]
+                + " clearanceRejected=" + search["REJECTS"]["altitude-clearance"]
+                + " lightRejected=" + search["REJECTS"]["light"]
                 + ". No site accepted; powered braking retained. Manual intervention needed.").
         }
         RETURN TRUE.
@@ -127,9 +178,16 @@ GLOBAL FUNCTION landingReviewReachableSite {
     }
     SET search["INDEX"] TO search["INDEX"] + 1.
     LOCAL site IS _landingDivertCandidate(ctx, siteLat, siteLng, search["SLOPE_LIMIT"]).
+    SET search["CHECKED"] TO search["CHECKED"] + 1.
     IF NOT site["OK"] {
         SET search["LAST_REASON"] TO site["REASON"].
         SET search["LAST_GRADE"] TO site["GRADE"].
+        SET search["LAST_DIST"] TO site["DIST"].
+        SET search["LAST_TRANSIT"] TO site["TRANSIT"].
+        LOCAL category IS "light".
+        IF site["REASON"] = "reachability" OR site["REASON"] = "terrain-grade"
+                OR site["REASON"] = "altitude-clearance" { SET category TO site["REASON"]. }
+        SET search["REJECTS"][category] TO search["REJECTS"][category] + 1.
         _landingCacheTick(ctx).
         RETURN TRUE.
     }
