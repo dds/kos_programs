@@ -197,8 +197,10 @@ GLOBAL FUNCTION _landingHudText {
     PARAMETER color.
     PARAMETER blink.
     PARAMETER etaSeconds IS 0.
+    PARAMETER targetVs IS "uncontrolled".
+    PARAMETER targetHs IS "uncontrolled".
 
-    landingDiagnosticHud(ctx, text).
+    landingDiagnosticHud(ctx, text, targetVs, targetHs).
     LOCAL logInterval IS _landingAdaptiveLogInterval(etaSeconds).
     IF TIME:SECONDS - ctx["HUD_LAST"] < logInterval { RETURN. }
     SET ctx["HUD_LAST"] TO TIME:SECONDS.

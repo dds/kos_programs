@@ -4,7 +4,7 @@ from types import SimpleNamespace as NS
 
 import check_landing_guidance as ks
 from check_codebase import ROOT, function_body, mask, closure, dependency_tables
-from check_landing_divert import fixture as divert_fixture
+from check_landing_divert import fixture as divert_fixture, Vec
 
 SOURCE = (ROOT/'lib/landing_diagnostics.ks').read_text()
 
@@ -136,10 +136,42 @@ def check_export_gates():
         assert ctx['STATE']==before['STATE'] and ctx['TARGET_THROTTLE']==before['TARGET_THROTTLE']
         if scenario=='safe':
             saved=disk[ctx['DIAGNOSTIC']['PATH']]
-            assert 'schema=1' in saved and 'finished=False' in saved
+            assert 'schema=2' in saved and 'finished=False' in saved
             assert not ctx['DIAGNOSTIC']['ROWS'] and ctx['DIAGNOSTIC']['BYTES']==0
             assert not any(op[0] in ('read','copy') for op in ops)
     print('PASS: exports require physical/pilot/raw/requested zero, no staging/abort, COAST, valid >=60s gate, link and 15s cadence; no control changes or in-flight readback/copy')
+
+
+def check_hover_hypothesis_fields():
+    for exhausted in (False,True):
+        env,ctx,*_=divert_fixture(gravity=.491,radius=60000)
+        ctx.update(height=260,H_SPEED=0,H_VEL=Vec((0,0,0)),V_SPEED=0,DOWN_SPEED=0,
+                   DIVERT_PENDING=True,DIVERT_SEARCH=Lex(EXHAUSTED=exhausted))
+        env['_landingCacheTick'](ctx)
+        info=ks.call('_landingBrakeSteeringInfo',env,ctx)
+        assert info['TARGET_VS']==(0 if exhausted else -5)
+        assert abs(info['THROTTLE']-(.491/2.76 if exhausted else 0))<1e-12
+    env,ctx,disk,ops=fixture()
+    ctx.update(STATE='APPROACH',height=260,STATE_ENTERED=-120,
+               V_SPEED=-.00001,H_SPEED=.00002,TARGET_ELEVATION=3245)
+    env['SHIP'].ALTITUDE=3260
+    env['_landingTargetHeight']=lambda c:ks.call('_landingTargetHeight',env,c)
+    env['landingDiagnosticHud'](ctx,Text('APPROACH vs=0/0'),-.0000125,.123456)
+    row=ctx['DIAGNOSTIC']['CONTROL_ROWS'][-1]
+    for field in ('age=120','pending=False','exhausted=False','vsActual=-1e-05',
+                  'vsCommand=-1.25e-05','hsCommand=0.123456','bottom=260',
+                  'asl=3260','targetElevation=3245','controlHeight=15',
+                  'facingUp=1.0','thrust=0','mass=1.287','rawThrottle=0','pilotThrottle=0'):
+        assert field in row,(field,row)
+    assert not ops
+    hud=function_body((ROOT/'lib/landing_main.ks').read_text(),'_landingHudText')
+    assert 'landingDiagnosticHud(ctx, text, targetVs, targetHs)' in hud
+    terminal=(ROOT/'lib/landing_terminal.ks').read_text()
+    for expression in ('refineEta, targetVs, desiredVel:MAG','0, targetVs, desiredSpeed',
+                       'hoverEta, hoverTargetVs, desiredSpeed','touchdownEta, targetVs, 0'):
+        assert expression in terminal
+    assert 'brakeTransitionEta, targetVs, 0' in (ROOT/'lib/landing_brake.ks').read_text()
+    print('PASS: exhausted-search source replay reproduces a 260m hover while active search commands descent; exact commands, height mismatch, hold age, thrust and attitude remain distinguishable despite rounded HUD zeros')
 
 
 def check_completion_and_link_loss():
@@ -217,5 +249,6 @@ def check_candidate_capture_and_wiring():
 if __name__=='__main__':
     check_buffer_and_hover()
     check_export_gates()
+    check_hover_hypothesis_fields()
     check_completion_and_link_loss()
     check_candidate_capture_and_wiring()

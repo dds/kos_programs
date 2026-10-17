@@ -135,7 +135,7 @@ GLOBAL FUNCTION _landingTargetRefineTick {
         + "/" + ROUND(targetVs,1)
         + " cThr=" + ROUND(correctionThrottle,2)
         + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
-        1, 2, 13, CYAN, FALSE, refineEta).
+        1, 2, 13, CYAN, FALSE, refineEta, targetVs, desiredVel:MAG).
 
 
 }
@@ -208,7 +208,7 @@ GLOBAL FUNCTION _landingApproachTick {
         + " bottom=" + ROUND(bottomAlt,0)
         + " hs=" + ROUND(horizontalSpeed,1) + "/" + ROUND(desiredSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1) + "/" + ROUND(targetVs,1),
-        1, 2, 13, CYAN, FALSE).
+        1, 2, 13, CYAN, FALSE, 0, targetVs, desiredSpeed).
 
     IF distToTarget <= LANDING_HOVER_REFINE_ACCEPT_RADIUS
             AND horizontalSpeed <= LANDING_HOVER_REFINE_ACCEPT_HSPEED {
@@ -274,7 +274,7 @@ GLOBAL FUNCTION _landingHoverRefineTick {
         + "/" + ROUND(holdBottom,0)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(hoverTargetVs,1),
-        1, 2, 13, GREEN, FALSE, hoverEta).
+        1, 2, 13, GREEN, FALSE, hoverEta, hoverTargetVs, desiredSpeed).
 
     LOCAL hoverAge IS TIME:SECONDS - ctx["STATE_ENTERED"].
     LOCAL precise IS distToTarget <= settleRadius AND horizontalSpeed <= settleHspeed.
@@ -352,7 +352,7 @@ GLOBAL FUNCTION _landingVerticalTick {
         + " hs=" + ROUND(horizontalSpeed,1)
         + " hover=" + _landingBoolText(finalHover)
         + " solar=" + _landingBoolText(solarRoll),
-        1, 2, 13, GREEN, FALSE, touchdownEta).
+        1, 2, 13, GREEN, FALSE, touchdownEta, targetVs, 0).
 
     IF bottomAlt > LANDING_TOUCHDOWN_ALT {
         _landingHudEtaNotice(ctx, "Touchdown",

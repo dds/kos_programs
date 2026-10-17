@@ -535,6 +535,12 @@ Looks like Python/JS; is neither.
   landing. The recorder keeps the real HUD current/commanded speeds,
   distance, throttle and pending-search flag every2s to distinguish a
   deliberate approach/search hold from tracking failure on the next retry.
+  Schema2 adds unrounded controller targets plus continuous local/target/
+  control/burn heights, search exhaustion, state age, physical thrust/mass,
+  facing-up fraction and raw/pilot throttle. A source replay at260m/zero
+  velocity reproduces targetVs0/17.79% throttle for exhausted search with
+  g.491/acc2.76, versus -5m/s/zero initial throttle for active search. This
+  establishes a mechanism, not which branch the live craft occupied.
   The supplied deorbitcheck_RO9_1305239.log actually AGREES between TR/native
   impact coordinates within0.2m (quaternion also agrees); this snapshot does
   not show a stale prediction or incorrect longitude transform. An independent

@@ -276,7 +276,7 @@ GLOBAL FUNCTION _landingBrakingTick {
         + "/" + ROUND(targetVs,1)
         + " siteSearch=" + _landingBoolText(ctx["DIVERT_PENDING"])
         + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
-        1, 2, 13, YELLOW, FALSE, brakeTransitionEta).
+        1, 2, 13, YELLOW, FALSE, brakeTransitionEta, targetVs, 0).
 
     // A rejected candidate cannot hand control to the old remote target.
     IF ctx["DIVERT_PENDING"] { RETURN. }

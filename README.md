@@ -252,6 +252,11 @@ window or a link, it keeps buffering during descent; it never holds altitude
 to write a report. Rows still unexported at phase exit or reboot are lost.
 Installing the updated landing
 libraries uses the usual connected boot; no replacement `boot/boot.ks` is needed.
+Schema 2 also records unrounded speed commands, state age, pending/exhausted
+search flags, local clearance versus target/control heights, actual thrust,
+mass, gravity, facing-up fraction, and raw/pilot throttle at that cadence.
+These distinguish an intentional search hold, a target-elevation hold, and
+failure to follow a descent command; HUD rounding alone cannot do that.
 
 For an additional repeatable terrain snapshot, use `RUNPATH("0:/cmd/divertcheck.ks").` with
 an archive link from a saved test state or with flight control maintained

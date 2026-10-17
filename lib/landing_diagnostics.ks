@@ -11,7 +11,7 @@ GLOBAL FUNCTION landingDiagnosticStart {
         "PATH", "0:/logs/archive/_diagnostics/landingdiag_" + slug() + "_"
             + ROUND(TIME:SECONDS * 1000,0) + "_" + bootLogName(),
         "LAST_ATTEMPT", -9999, "LAST_HUD", -9999, "STATE", "",
-        "HEADER", "STATS landing-diag schema=1 ut=" + TIME:SECONDS
+        "HEADER", "STATS landing-diag schema=2 ut=" + TIME:SECONDS
             + " vessel=" + SHIP:NAME + " body=" + SHIP:BODY:NAME
             + " radius=" + SHIP:BODY:RADIUS + " mu=" + SHIP:BODY:MU
             + " rotation=" + SHIP:BODY:ROTATIONPERIOD
@@ -28,14 +28,34 @@ GLOBAL FUNCTION landingDiagnosticStart {
 GLOBAL FUNCTION landingDiagnosticHud {
     PARAMETER ctx.
     PARAMETER text.
+    PARAMETER targetVs IS "uncontrolled".
+    PARAMETER targetHs IS "uncontrolled".
     LOCAL capture IS ctx["DIAGNOSTIC"].
     IF TIME:SECONDS - capture["LAST_HUD"] < 2 { RETURN. }
     SET capture["LAST_HUD"] TO TIME:SECONDS.
+    LOCAL exhausted IS FALSE.
+    IF ctx["DIVERT_SEARCH"]:HASKEY("EXHAUSTED") {
+        SET exhausted TO ctx["DIVERT_SEARCH"]["EXHAUSTED"].
+    }
+    LOCAL bottom IS _landingBottomRadar().
     // Reuse the actual controller's current/commanded speeds and distances,
     // including hover/refinement commands, rather than reconstructing them.
     landingDiagnosticRecord(ctx, "STATS landing-diag control ut=" + TIME:SECONDS
         + " state=" + ctx["STATE"] + " throttle=" + ctx["TARGET_THROTTLE"]
-        + " pending=" + ctx["DIVERT_PENDING"] + " " + text, TRUE).
+        + " age=" + (TIME:SECONDS - ctx["STATE_ENTERED"])
+        + " pending=" + ctx["DIVERT_PENDING"] + " exhausted=" + exhausted
+        + " vsActual=" + ctx["V_SPEED"] + " vsCommand=" + targetVs
+        + " hsActual=" + ctx["H_SPEED"] + " hsCommand=" + targetHs
+        + " bottom=" + bottom + " asl=" + SHIP:ALTITUDE
+        + " targetElevation=" + ctx["TARGET_ELEVATION"]
+        + " controlHeight=" + MIN(bottom,_landingTargetHeight(ctx))
+        + " burnHeight=" + _landingBurnHeight(ctx)
+        + " rawThrottle=" + SHIP:CONTROL:MAINTHROTTLE
+        + " pilotThrottle=" + SHIP:CONTROL:PILOTMAINTHROTTLE
+        + " thrust=" + SHIP:THRUST + " mass=" + SHIP:MASS
+        + " gravity=" + ctx["GRAV"]
+        + " facingUp=" + VDOT(SHIP:FACING:FOREVECTOR,ctx["UP_VEC"])
+        + " " + text, TRUE).
 }
 
 GLOBAL FUNCTION landingDiagnosticSearchText {
