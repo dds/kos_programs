@@ -54,6 +54,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/returntokerbin.ks").` | Full automated moon→Kerbin return (escape/MCC/aerobrake/descent) |
 | `RUNPATH("0:/cmd/returnshallow.ks").` | 53 km moon→Kerbin return; keep engine/tank through aerobraking, then separate for parachute descent |
 | `RUNPATH("0:/cmd/returncheck.ks").` | Plan a 53 km Mun/Minmus→Kerbin departure for review, with KSC targeting off; prints cost, remaining fuel and predicted Pe without burning or changing phase |
+| `RUNPATH("0:/cmd/directreturn.ks").` | From a landed Mun/Minmus craft, model a single-stage direct ascent to Kerbin Pe 53 km with a 20 m/s reserve; preview only, no launch or mission change |
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
 | `RUNPATH("0:/cmd/arrival.ks", "review").` | Inspect a retained partial arrival; actions `accept` / `replan`, optional capture Ap in km |
@@ -735,6 +736,27 @@ survey or land at the old contract coordinates. The existing targeted-deorbit
 path still needs Trajectories, with SCANsat refinement when available.
 Surface ascent flies east to a 10 km parking orbit, accepting the minimum
 inclination reachable from the actual landing latitude.
+
+For a low-fuel landed save, `cmd/directreturn` previews ascent and escape
+together, without a parking-orbit or KSC constraint. It reads current-stage
+vacuum dV and enabled engines' limited thrust/Isp, searches headings and
+finite-burn pitch profiles, and propagates the resulting coast to the moon's
+SOI and a Kerbin periapsis. The default target is 53 km, accepted within 1 km,
+with 20 m/s left over. `RUNPATH("0:/cmd/directreturn.ks", "status").` prints
+the measured input snapshot without searching. Custom planning arguments are
+`"plan", targetPeMeters, reserveDv`. Planning can take several minutes on the
+flight CPU.
+
+This is a numerical feasibility preview, not an installed direct-ascent
+autopilot. It leaves the saved mission, controls and existing nodes alone;
+the normal surface-return sequence still circularizes. Candidates use one
+constant-thrust propulsion stage and the stock moons' circular parent orbits.
+They are rechecked with finer integration and fresh live geometry, but terrain
+mesh, attitude response, engine transitions and native KSP escape patches
+remain unvalidated. No candidate found means this bounded search failed,
+not that all possible departures are impossible. In particular, the RO9
+Mun landing's 830.5 m/s cannot be assumed sufficient simply by removing the
+circularization phase. Keep that save landed until a complete route is verified.
 
 For a vessel **already parked at the Mun/Minmus in LAND_DEORBIT**, stop at the
 manual prompt before ignition. With an archive link and the updated code synced:

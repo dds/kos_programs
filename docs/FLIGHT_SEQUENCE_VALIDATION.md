@@ -294,6 +294,27 @@ parking/circularization. Combining burns must still supply the missing ascent
 velocity; the 496.6 m/s is not all an escape reserve. A coupled finite-burn
 budget is needed before replaying the landed save.
 
+`cmd/directreturn` now supplies an isolated, plan-only probe of that budget
+from the real landed craft. The model integrates thrust and fuel mass through
+one continuous pitch program, searches launch headings/turn timing/pitch/cutoff
+impulse, then analytically propagates an outbound elliptic/parabolic/hyperbolic
+coast to the moon's SOI and transforms to Kerbin. It caps fuel at the lesser of
+current-stage and vessel dV minus a reserve; inactive stages do not supply free
+fuel/thrust. Supported body orbits are circular Mun/Minmus around Kerbin only.
+It introduces no launch/flight phase and cannot ignite, stage or change nodes.
+
+The source-driven checks compare SOI propagation against independent numerical
+two-body integration and the powered ascent against an independent small-step
+Heun model, including a reflected frame and the reported 830.5 m/s budget.
+One synthetic equatorial launch at 3.36 m/s2 and 320 s Isp can target about
+53 km with roughly 977 m/s; that is not the measured RO9 Isp or launch geometry,
+nor a minimum over arbitrary guidance/coasts. Finer integration and actual
+remaining fuel are necessary gates, but insufficient to certify flight.
+Actual terrain, finite attitude slew, engine behavior, restart control and
+native KSP parent-patch verification remain required before a direct executor
+can replace the existing surface-return sequence. No current-flight affordable
+direct return has been established.
+
 ## End-of-burn contract
 
 `lib/thrust_cutoff.ks` owns `thrustCutoff()` and `thrustCutoffOk()`.

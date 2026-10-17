@@ -432,6 +432,14 @@ Looks like Python/JS; is neither.
   no eligible light/radio site holds instead of reverting to the old lock.
   Precision/manual sites and retained/interrupted nodes remain protected.
   Native20-degree Minmus/source policy fixtures pass, not flight validation.
+  The requested Mun return is direct ascent to Kerbin Pe53km, no KSC/mandatory
+  parking orbit. cmd/directreturn is a LANDED, single-stage MODEL PREVIEW ONLY:
+  bounded heading/pitch/dV search, RK4 mass/thrust, analytic SOI handoff, actual
+  current-stage budget and fine-integration recheck. It never launches or
+  changes phases/nodes. No native patch/terrain/attitude/resume controller is
+  certified; do not bypass circularization in the existing ascent and call it
+  a validated direct return. The synthetic ~977m/s/320s-Isp fixture is not a
+  measured RO9 budget or an impossibility proof for its830.5m/s landed save.
   Do not treat this one landing as proof of optimal fuel use or
   broad terrain/craft coverage. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered

@@ -46,6 +46,7 @@ GLOBAL FUNCTION dependencyLibs {
         "recovery", LIST(),
         "return_setup", LIST(),
         "return_escape", LIST("maneuver"),
+        "return_direct", LIST(),
         "relay_constellation", LIST("maneuver", "maneuver_plan", "orbit", "solar"),
         "scansat_ops", LIST("orbit", "solar", "science", "thrust_cutoff"),
         "solar", LIST(),
