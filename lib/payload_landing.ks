@@ -51,7 +51,11 @@ GLOBAL FUNCTION phaseLand {
 
     IF _redirectOrbitalLandingPhase("LAND") { RETURN. }
 
-    landExecute().
+    IF NOT landExecute() {
+        mLogError("Landing failed; holding current phase for manual review.").
+        yieldToPrompt().
+        RETURN.
+    }
     nextPhase(launchSeq).
 }
 
@@ -69,9 +73,4 @@ LOCAL FUNCTION _redirectOrbitalLandingPhase {
         RETURN TRUE.
     }
     RETURN FALSE.
-}
-
-GLOBAL FUNCTION phaseRover {
-    roverInit().
-    roverHUD().
 }

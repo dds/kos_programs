@@ -19,7 +19,11 @@ GLOBAL FUNCTION phaseTargetedDeorbit {
                 + "deg — proceeding with best effort.").
         }
     }
-    targetedDeorbit().
+    IF NOT targetedDeorbit() {
+        mLogError("Payload deorbit failed; holding before probe release.").
+        yieldToPrompt().
+        RETURN.
+    }
     nextPhase(_payloadSeq()).
 }
 
@@ -97,25 +101,5 @@ GLOBAL FUNCTION phaseRelayOps {
     HUDTEXT("Relay deployed: " + getTarget(), 8, 2, 18, GREEN, FALSE).
     LOCAL n IS 0.
     UNTIL n >= 5 { WAIT 60. orbitSummary(). SET n TO n + 1. }
-    nextPhase(_payloadSeq()).
-}
-
-GLOBAL FUNCTION phaseLandDeorbit {
-    LOCAL deorbitOk IS landingTargetedDeorbit().
-    IF NOT deorbitOk {
-        mLogError("Landing deorbit did not meet target tolerance; holding phase.").
-        stateSet("phase", "LAND_DEORBIT").
-        WAIT UNTIL FALSE.
-    }
-    nextPhase(_payloadSeq()).
-}
-
-GLOBAL FUNCTION phaseLandAssist {
-    landingAssistStage().
-    nextPhase(_payloadSeq()).
-}
-
-GLOBAL FUNCTION phaseLand {
-    landExecute().
     nextPhase(_payloadSeq()).
 }

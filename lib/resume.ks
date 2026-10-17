@@ -3,14 +3,11 @@
 // (0:/lib/resume.ks)
 // ============================================================
 
-// --- Config defaults owned by this file ---
-GLOBAL TARGET_ IS "".
-GLOBAL PAYLOADS IS LIST().
-GLOBAL RENDEZVOUS_TARGET IS "".
-GLOBAL ASTEROID_TARGET IS "".
+// Mission defaults belong to boot_lib. This library loads AFTER the final
+// mission profile at boot; declaring them here would erase its settings.
 
 GLOBAL FUNCTION missionPayloads {
-    RETURN PAYLOADS.
+    RETURN missionPayloadsFromState().
 }
 
 GLOBAL FUNCTION missionHas {

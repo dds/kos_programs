@@ -28,6 +28,7 @@ mLog("STATS ksc-splash setup target="
 IF SHIP:BODY:NAME <> "KERBIN" {
     PRINT "Not in Kerbin SOI yet.".
     mLogError("KSC splash aborted: current body is " + SHIP:BODY:NAME + ".").
+    RETURN.
 }
 
 LOCAL ok IS targetedDeorbitAt(targetLat, targetLng, tolerance).

@@ -83,16 +83,13 @@ LOCAL FUNCTION _buildSequence {
 }
 
 LOCAL FUNCTION _phaseRecirc {
-    mLog("Re-circularizing relay at " + ROUND(RELAY_ALT/1000,0) + "km.").
-    planRecircularize(RELAY_ALT).
-    executeManeuver().
-    orbitSummary().
-    nextPhase(launchSeq).
+    mLogError("RECIRC planner is unavailable. Configure CIRC/RAISE or SHAPE and resume manually.").
+    yieldToPrompt().
 }
 
 LOCAL FUNCTION _phaseDeploySat {
-    mLog("DEPLOY_SAT: not yet implemented.").
-    nextPhase(launchSeq).
+    mLogError("DEPLOY_SAT is not implemented; holding before payload release.").
+    yieldToPrompt().
 }
 
 LOCAL FUNCTION _buildPhaseMap {

@@ -6,11 +6,11 @@ GLOBAL FUNCTION dependencyLibs {
     RETURN LEXICON(
         "core", LIST("state", "logs", "files", "phases", "dependencies", "config", "mission_type"),
         "capture", LIST("maneuver", "maneuver_plan", "orbit", "solar"),
-        "deorbit_burn", LIST(),
+        "deorbit_burn", LIST("vessel_hardware"),
         "duna_ike_setup", LIST("maneuver", "maneuver_plan", "orbit", "solar"),
-        "deorbit_targeting", LIST("orbit", "utils", "landing_config", "landing_math"),
+        "deorbit_targeting", LIST("orbit", "utils", "landing_config", "landing_math", "deorbit_burn"),
         "flightplan", LIST("ui"),
-        "inclination", LIST("orbit_nodes"),
+        "inclination", LIST("orbit_nodes", "maneuver"),
         "landing_config", LIST("utils"),
         "landing_deorbit", LIST("landing_config", "landing_math", "landing_site"),
         "landing_math", LIST("utils"),
@@ -36,17 +36,17 @@ GLOBAL FUNCTION dependencyLibs {
         "maneuver_rendezvous", LIST("hohmann_transfer", "maneuver"),
         "maneuver_transfer", LIST("hohmann_transfer", "maneuver", "maneuver_intersystem", "maneuver_targeting", "lib_navigation", "orbit", "lib_bplane_math"),
         "maneuver_mcc", LIST("maneuver", "maneuver_targeting", "lib_navigation", "orbit"),
-        "molniya", LIST("maneuver", "inclination"),
+        "molniya", LIST("maneuver", "inclination", "orbit"),
         "payload_landing", LIST("landing_config"),
         "payload_ops", LIST("orbit", "utils", "solar"),
         "recovery", LIST(),
         "return_setup", LIST(),
         "return_escape", LIST("maneuver"),
         "relay_constellation", LIST("maneuver", "maneuver_plan", "orbit", "solar"),
-        "scansat_ops", LIST("orbit", "solar"),
+        "scansat_ops", LIST("orbit", "solar", "science"),
         "solar", LIST(),
         "airplane", LIST("observe", "flightplan", "utils"),
-        "rover", LIST("payload_landing"),
+        "rover", LIST(),
         "science", LIST(),
         "aerobrake", LIST("maneuver", "utils", "landing_config"),
         "landing_atmo", LIST("landing_config", "utils", "orbit"),
@@ -156,7 +156,9 @@ GLOBAL FUNCTION dependencyBands {
         "RETURN_TRIM", LIST("RETURN_TRIM"),
         "XFER_ARRIVE", LIST("COAST_1HALF", "COAST_2HALF", "CAPTURE", "FLYBY"),
         "XFER_ORBIT", LIST("CIRC", "RAISE", "INCLINE", "ELLIPTICAL"),
-        "PAYLOAD_OPS", LIST("TARGETED_DEORBIT", "RELEASE_PROBE", "RELAY_OPS", "RELAY_CONSTELLATION"),
+        "PAYLOAD_OPS", LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
+        "RELAY_OPS", LIST("RELAY_OPS"),
+        "RELAY_CONSTELLATION", LIST("RELAY_CONSTELLATION"),
         "RETURN_SETUP", LIST("RETURN_SETUP", "SURFACE_RETURN_SETUP"),
         "AEROBRAKE", LIST("AEROBRAKE"),
         "ATMO_WALK", LIST("ATMO_WALK"),
@@ -200,7 +202,12 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "IKE_SETUP" { phaseMapSet(phaseMap, phaseKey, phaseIkeSetup@). }
     ELSE IF phaseKey = "DUNA_ENTRY_SETUP" { phaseMapSet(phaseMap, phaseKey, phaseDunaEntrySetup@). }
     ELSE IF phaseKey = "DUNA_ENTRY_LOWER_PE" { phaseMapSet(phaseMap, phaseKey, phaseDunaEntryLowerPe@). }
-    ELSE IF phaseKey = "KSC_DEORBIT" { phaseMapSet(phaseMap, phaseKey, phaseKscDeorbit@). }
+    // The atmospheric handler was removed when the vacuum solver replaced
+    // deorbit_targeting. Let runPhases report/hold a missing handler rather
+    // than crashing while evaluating an undefined delegate.
+    ELSE IF phaseKey = "KSC_DEORBIT" {
+        IF DEFINED phaseKscDeorbit { phaseMapSet(phaseMap, phaseKey, phaseKscDeorbit@). }
+    }
     ELSE IF phaseKey = "COAST" { phaseMapSet(phaseMap, phaseKey, phaseCoast@). }
     ELSE IF phaseKey = "COAST_1HALF" { phaseMapSet(phaseMap, phaseKey, phaseCoast1half@). }
     ELSE IF phaseKey = "COAST_2HALF" { phaseMapSet(phaseMap, phaseKey, phaseCoast2half@). }

@@ -62,6 +62,14 @@ def expressions(source, env):
 
 
 def evaluate(expr, env):
+    # Preserve KerboScript string contents: colons in volume paths and words
+    # such as TRUE inside quotes must not be translated as code.
+    literals = {}
+    def keep_literal(match):
+        name = f'_ks_literal_{len(literals)}'
+        literals[name] = match[0][1:-1]
+        return name
+    expr = re.sub(r'"[^"\n]*"', keep_literal, expr)
     expr = ' '.join(expr.split()).replace(':', '.').replace('^', '**').replace('<>', '!=')
     for old, new in (('TRUE', 'True'), ('FALSE', 'False'), ('AND', 'and'), ('OR', 'or'), ('NOT', 'not')):
         expr = re.sub(rf'\b{old}\b', new, expr)
@@ -71,7 +79,7 @@ def evaluate(expr, env):
                    ARCCOS=lambda x: math.degrees(math.acos(x)),
                    ARCTAN2=lambda y, x: math.degrees(math.atan2(y, x)),
                    LEXICON=lambda *xs: dict(zip(xs[::2], xs[1::2])))
-    return eval(expr, {'__builtins__': {}, **helpers}, env)
+    return eval(expr, {'__builtins__': {}, **helpers}, dict(env, **literals))
 
 
 def fixture():

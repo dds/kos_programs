@@ -141,8 +141,7 @@ LOCAL FUNCTION _scanSatOnStation {
 }
 
 LOCAL FUNCTION _scanSatAutoDeorbitEnabled {
-    RETURN SCANSAT_AUTO_DEORBIT > 0
-        AND SCANSAT_AUTO_DEORBIT > 0.
+    RETURN SCANSAT_AUTO_DEORBIT > 0.
 }
 
 LOCAL FUNCTION _scanSatRequiredTypes {

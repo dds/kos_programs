@@ -39,30 +39,57 @@ LOCAL FUNCTION _matchBurnRel {
     PARAMETER ves.
     PARAMETER desiredVec.
     LOCAL throttleCmd IS 0.
+    LOCAL converged IS FALSE.
+    SAS OFF.
     LOCK THROTTLE TO throttleCmd.
     LOCAL deadline IS TIME:SECONDS + 180.
-    UNTIL TIME:SECONDS > deadline {
+    UNTIL TIME:SECONDS > deadline OR ABORT {
         LOCAL errVec IS desiredVec - (SHIP:VELOCITY:ORBIT - ves:VELOCITY:ORBIT).
-        IF errVec:MAG < 0.2 { BREAK. }
+        IF errVec:MAG < 0.2 { SET converged TO TRUE. BREAK. }
+        IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 { BREAK. }
         LOCK STEERING TO errVec.
         IF VANG(SHIP:FACING:FOREVECTOR, errVec) < 5 {
             LOCAL acc IS MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS).
-            SET throttleCmd TO MIN(1, MAX(0.02, errVec:MAG / acc / 0.8)).
+            SET throttleCmd TO MIN(1, errVec:MAG / acc / 0.8).
         } ELSE {
             SET throttleCmd TO 0.
         }
         WAIT 0.05.
     }
     SET throttleCmd TO 0.
+    _matchStopThrottle().
+    RETURN converged AND NOT ABORT.
+}
+
+LOCAL FUNCTION _matchStopThrottle {
     LOCK THROTTLE TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    WAIT 0.01.
     UNLOCK THROTTLE.
+    UNLOCK STEERING.
+    SAS ON.
+}
+
+LOCAL FUNCTION _matchHold {
+    PARAMETER reason.
+    _matchStopThrottle().
+    mLogError("MATCH held: " + reason + ".").
+    yieldToPrompt().
+}
+
+LOCAL FUNCTION _matchConverged {
+    PARAMETER separation, relativeSpeed, finalDist.
+    RETURN NOT ABORT AND separation <= finalDist AND relativeSpeed < 0.2.
 }
 
 GLOBAL FUNCTION phaseMatch {
     LOCAL ves IS _matchTargetVessel().
     IF NOT ves:ISTYPE("Vessel") {
-        mLogWarn("MATCH: no rendezvous target found - skipping.").
-        nextPhase(xferSeq).
+        _matchHold("no rendezvous target").
+        RETURN.
+    }
+    IF ves:BODY <> SHIP:BODY {
+        _matchHold("target is in another SOI").
         RETURN.
     }
     SET TARGET TO ves.
@@ -100,20 +127,32 @@ GLOBAL FUNCTION phaseMatch {
         LOCAL approachDir IS (ves:POSITION - SHIP:POSITION):NORMALIZED.
         mLog("MATCH: approach pass " + pass + " sep="
             + ROUND(sep, 0) + "m at " + ROUND(closeSpd, 1) + " m/s.").
-        _matchBurnRel(ves, approachDir * closeSpd).
+        IF NOT _matchBurnRel(ves, approachDir * closeSpd) {
+            _matchHold("approach velocity burn failed"). RETURN.
+        }
 
         LOCAL lastSep IS sep + 1.
-        UNTIL FALSE {
+        LOCAL coastDeadline IS TIME:SECONDS + MAX(120, 2 * sep / closeSpd).
+        UNTIL ABORT OR TIME:SECONDS >= coastDeadline {
             SET sep TO (ves:POSITION - SHIP:POSITION):MAG.
             IF sep < finalDist OR sep > lastSep { BREAK. }
             SET lastSep TO sep.
             WAIT 1.
         }
-        _matchBurnRel(ves, V(0, 0, 0)).
+        IF NOT _matchBurnRel(ves, V(0, 0, 0)) {
+            _matchHold("relative velocity braking failed"). RETURN.
+        }
     }
 
+    // Being near the target is insufficient if we are still flying past it.
+    IF NOT _matchBurnRel(ves, V(0, 0, 0)) {
+        _matchHold("final relative velocity braking failed"). RETURN.
+    }
     SET sep TO (ves:POSITION - SHIP:POSITION):MAG.
     SET relSpd TO (SHIP:VELOCITY:ORBIT - ves:VELOCITY:ORBIT):MAG.
+    IF NOT _matchConverged(sep, relSpd, finalDist) {
+        _matchHold("distance or relative velocity outside the arrival corridor"). RETURN.
+    }
     UNLOCK STEERING.
     SET SAS TO TRUE.
     mLog("MATCH complete: sep=" + ROUND(sep, 0) + "m relV="

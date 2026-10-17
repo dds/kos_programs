@@ -2,32 +2,27 @@
 // rover.ks  —  Rover co-pilot library  (0:/lib/rover.ks)
 // ============================================================
 
-// --- Config defaults owned by this file ---
-GLOBAL WAYPOINT_WARN_DIST IS 3000.
-GLOBAL HUD_INTERVAL IS 0.25.
-
-GLOBAL ROVER_CFG IS LEXICON(
-    "MAX_SPEED_KERBIN",    20,
-    "MAX_SPEED_MUN",        8,
-    "MAX_SPEED_MINMUS",     5,
-    "MAX_SPEED_DEFAULT",    8,
-    "MAX_SLOPE_DEG",       25,
-    "SLOPE_SPEED_FACTOR",   0.5,
-    "MAX_ROLL_DEG",        30,
-    "FLIP_ROLL_DEG",       55,
-    "STEER_REF_SPEED",      5,
-    "STEER_MIN_FACTOR",     0.2,
-    "STEER_KP",             0.08,
-    "STEER_KI",             0.002,
-    "STEER_KD",             0.02,
-    "GOV_RELEASE_PCT",      0.9,
-    "AUTO_THROTTLE",        0.5,
-    "TRACTION_SLOPE_DEG",  15,
-    "TRACTION_TAG",        "front_motor",
-    "TRACTION_AG",          0,
-    "HUD_INTERVAL",         1,
-    "WAYPOINT_WARN_DIST",  50
-).
+// Defaults owned here; these names are read directly by the controller.
+GLOBAL ROVER_MAX_SPEED_KERBIN IS 20.
+GLOBAL ROVER_MAX_SPEED_MUN IS 8.
+GLOBAL ROVER_MAX_SPEED_MINMUS IS 5.
+GLOBAL ROVER_MAX_SPEED_DEFAULT IS 8.
+GLOBAL ROVER_MAX_SLOPE_DEG IS 25.
+GLOBAL ROVER_SLOPE_SPEED_FACTOR IS 0.5.
+GLOBAL ROVER_MAX_ROLL_DEG IS 30.
+GLOBAL ROVER_FLIP_ROLL_DEG IS 55.
+GLOBAL ROVER_STEER_REF_SPEED IS 5.
+GLOBAL ROVER_STEER_MIN_FACTOR IS 0.2.
+GLOBAL ROVER_STEER_KP IS 0.08.
+GLOBAL ROVER_STEER_KI IS 0.002.
+GLOBAL ROVER_STEER_KD IS 0.02.
+GLOBAL ROVER_GOV_RELEASE_PCT IS 0.9.
+GLOBAL ROVER_AUTO_THROTTLE IS 0.5.
+GLOBAL ROVER_TRACTION_SLOPE_DEG IS 15.
+GLOBAL ROVER_TRACTION_TAG IS "front_motor".
+GLOBAL ROVER_TRACTION_AG IS 0.
+GLOBAL ROVER_HUD_INTERVAL IS 1.
+GLOBAL ROVER_WAYPOINT_WARN_DIST IS 50.
 
 GLOBAL roverActive          IS FALSE.
 GLOBAL roverAutoSteerActive IS FALSE.
@@ -327,4 +322,10 @@ LOCAL FUNCTION _roverSetAG {
         ELSE IF agNum = 4 { AG4 OFF. }
         ELSE IF agNum = 5 { AG5 OFF. }
     }
+}
+
+GLOBAL FUNCTION phaseRover {
+    roverInit().
+    roverHUD().
+    nextPhase(launchSeq).
 }

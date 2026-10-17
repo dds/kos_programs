@@ -47,10 +47,13 @@ LOCAL FUNCTION _cleanupShouldDeleteSource {
 
     LOCAL upPath IS path_:TOUPPER.
     IF upPath:LENGTH >= 12 AND upPath:SUBSTRING(0, 12) = "1:/MISSIONS/" { RETURN FALSE. }
+    IF path_ = "1:/run/mission_overrides.ks" { RETURN FALSE. }
     IF NOT name_:CONTAINS(".KS") { RETURN FALSE. }
     IF name_:CONTAINS(".KSM") { RETURN FALSE. }
     IF path_ = "1:/BOOT/BOOT.KS" { RETURN FALSE. }
-    RETURN TRUE.
+    // Craft scripts and generated profiles may exist only as source. Keep
+    // the runnable copy required by an offline reboot.
+    RETURN EXISTS(path_:SUBSTRING(0, path_:LENGTH - 3) + ".ksm").
 }
 
 LOCAL FUNCTION _cleanupClearLogs {

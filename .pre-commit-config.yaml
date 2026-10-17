@@ -1,9 +1,9 @@
 repos:
   - repo: local
     hooks:
-      - id: generate-dependencies-ks
-        name: Generate lib/dependencies.ks
-        entry: python3 scripts/generate_dependencies_ks.py
+      - id: check-codebase
+        name: Check repository and flight regression fixtures
+        entry: make check
         language: system
         pass_filenames: false
-        files: ^lib/dependencies\.txt$
+        always_run: true

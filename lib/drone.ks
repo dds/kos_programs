@@ -30,7 +30,7 @@
 // ends after a commanded landing. restartflightplan flies the
 // next sortie. Low fuel/EC forces a landing (legacy autoland).
 //
-// Global config keys (defaults in lib/config.ks):
+// Global config keys (defaults in this file):
 //   DRONE_STYLE ("TILT")        DRONE_HOVER_AGL (15)
 //   DRONE_CRUISE_AGL (60)       DRONE_CRUISE_SPEED (25)
 //   DRONE_MAX_TILT (30)         DRONE_VS_CAP (8)
@@ -48,7 +48,7 @@ GLOBAL DRONE_HOVER_AGL IS 25.
 GLOBAL DRONE_RCS_ACC IS 1.
 GLOBAL DRONE_VS_CAP IS 4.
 GLOBAL DRONE_MAX_TILT IS 12.
-GLOBAL DRONE_LOW_RESOURCE IS 0.15.
+GLOBAL DRONE_LOW_RESOURCE IS 15. // Percent, matching _dnCheckResources.
 GLOBAL DRONE_ARRIVE_RADIUS IS 4.
 GLOBAL DRONE_KP_VEL IS 0.8.
 

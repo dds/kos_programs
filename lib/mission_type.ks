@@ -17,8 +17,7 @@ GLOBAL ASTEROID_TARGET IS "".
 // Detect mission type from effective globals plus runtime state.
 // Returns "kerbin_moon", "kerbin_return", or "interplanetary".
 GLOBAL FUNCTION missionTypeDetect {
-    LOCAL explicit IS stateGet("mission_type", "").
-    SET explicit TO MISSION_TYPE.
+    LOCAL explicit IS MISSION_TYPE.
     IF explicit <> "" { RETURN explicit. }
     LOCAL target IS getTarget().
     IF target = "MUN" OR target = "MINMUS" { RETURN "kerbin_moon". }

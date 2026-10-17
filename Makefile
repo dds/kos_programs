@@ -1,6 +1,6 @@
 TAG ?=
 
-.PHONY: help pre-commit require-tag stamp-version commit-version tag-version push-version release-version watch-sync
+.PHONY: help check audit pre-commit require-tag stamp-version commit-version tag-version push-version release-version watch-sync
 
 help:
 	@echo "Version/log tag workflow:"
@@ -10,9 +10,16 @@ help:
 	@echo "  make push-version TAG=kos-YYYYMMDD-N"
 	@echo "  make release-version TAG=kos-YYYYMMDD-N"
 	@echo "  make pre-commit"
+	@echo "  make check / make audit"
 	@echo "  make watch-sync"
 
-pre-commit:
+pre-commit: check
+
+check:
+	@failed=0; for check in scripts/check_*.py; do python3 -B "$$check" || failed=1; done; exit $$failed
+
+audit:
+	python3 -B scripts/check_codebase.py --report
 
 require-tag:
 	@test -n "$(TAG)" || (echo "Set TAG=kos-YYYYMMDD-N" && exit 1)

@@ -502,6 +502,8 @@ GLOBAL FUNCTION _landingEnsureStateTrack {
     bootLibSync(nextTrack).
     LOCAL corePath IS bootCorePath(nextTrack).
     IF NOT EXISTS(corePath + ".ksm") AND NOT EXISTS(corePath + ".ks") {
+        SET landingAbortFlag TO TRUE.
+        vesselLandingCleanup().
         mLogError("Landing guidance track unavailable: " + nextTrack + ".").
         RETURN.
     }
@@ -523,6 +525,7 @@ GLOBAL FUNCTION _landingSetState {
     SET ctx["STATE_ENTERED"] TO TIME:SECONDS.
     stateSet("landing_state", nextState).
     _landingEnsureStateTrack(nextState).
+    IF landingAbortFlag { RETURN. }
 
     IF nextState = "BRAKE_ALIGN" {
         _landingSetThrottle(ctx, 0).
@@ -578,6 +581,7 @@ GLOBAL FUNCTION _landingGuidanceTick {
     PARAMETER ctx.
 
     _landingEnsureStateTrack(ctx["STATE"]).
+    IF landingAbortFlag { RETURN. }
     IF ctx["STATE"] = "COAST" {
         _landingCoastTick(ctx).
     } ELSE IF ctx["STATE"] = "COAST_MCC" {
@@ -752,11 +756,12 @@ GLOBAL FUNCTION landExecute {
         vesselLandingCleanup().
         SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.
         IF LOG_ARCHIVE_DEFERRED <= 0 { archiveLog(). }
-        RETURN.
+        RETURN FALSE.
     }
     _landingFinish(ctx).
     SET LOG_ARCHIVE_DEFERRED TO priorArchiveDeferral.
     IF LOG_ARCHIVE_DEFERRED <= 0 { archiveLog(). }
+    RETURN TRUE.
 }
 
 GLOBAL FUNCTION landingAssistStage {

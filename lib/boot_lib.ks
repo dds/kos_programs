@@ -167,8 +167,7 @@ GLOBAL FUNCTION bootArchiveOnlyLibs {
         "maneuver_transfer",
         "maneuver_targeting",
         "maneuver_intersystem",
-        "lambert",
-        "lib_bplane_math"
+        "lambert"
     ) {
         IF NOT out:CONTAINS(ln) { out:ADD(ln). }
     }
@@ -184,6 +183,11 @@ GLOBAL FUNCTION bootArchiveOnlyLibs {
 
 GLOBAL FUNCTION bootLibArchiveOnly {
     PARAMETER ln.
+    // The return correction executes in flight, including offline reboots.
+    // XING can still leave the bulky legacy solver on the archive.
+    IF ln = "maneuver_targeting" AND stateGet("lib_band", "") = "MCC" {
+        RETURN FALSE.
+    }
     LOCAL ao IS bootArchiveOnlyLibs().
     RETURN ao:CONTAINS(ln).
 }
@@ -265,7 +269,9 @@ GLOBAL FUNCTION bootApplyMissionConfig {
         stateRemove("target").
         getTarget().
     }
-    IF PAYLOADS:LENGTH > 0 { stateRemove("payloads"). }
+    // A profile owns payload intent, including an explicitly empty list.
+    // Retaining parsed name hints here would resurrect disabled payload ops.
+    stateRemove("payloads").
     IF MISSION_TYPE <> "" { stateRemove("mission_type"). }
     IF MISSION_NAME <> "" {
         PRINT "  Mission: " + MISSION_NAME.
@@ -728,6 +734,7 @@ GLOBAL FUNCTION bootLibLoadList {
         IF ln:CONTAINS("/") {
             bootLibSync(ln).
             RUNPATH(bootCorePath(ln)).
+            bootLibAddUnique(BOOT_LIB_RAN, ln).
         } ELSE IF bootLibArchiveOnly(ln) {
             // Archive-only: run from 0:/ only when linked; never synced
             // to the probe (saves local space). Offline it's simply not
@@ -736,10 +743,12 @@ GLOBAL FUNCTION bootLibLoadList {
             // an unloaded solar leaves the flag FALSE and orient is skipped.
             IF HOMECONNECTION:ISCONNECTED AND EXISTS(ap) {
                 RUNONCEPATH(ap).
+                bootLibAddUnique(BOOT_LIB_RAN, ln).
             }
         } ELSE {
             bootLibSync(ln).
             RUNONCEPATH(bootCorePath(ln)).
+            bootLibAddUnique(BOOT_LIB_RAN, ln).
         }
     }
 }
@@ -802,8 +811,8 @@ GLOBAL FUNCTION bootLibPhaseRoots {
 // ============================================================
 // Mission planning helpers
 //
-// The bulky sequence-to-library planner lives in preflight_planner.ks.
-// Keep only tiny runtime helpers here.
+// Phase-band and legacy craft planning share this loader. The old
+// preflight_planner file is no longer part of the boot path.
 // ============================================================
 
 GLOBAL FUNCTION getTarget {
@@ -818,6 +827,22 @@ GLOBAL FUNCTION getTarget {
 
 GLOBAL FUNCTION bootPlannedMissionLibs {
     PARAMETER db IS "LAUNCH".
+    IF SEQUENCE:LENGTH = 0 {
+        LOCAL vehicle IS stateGet("vehicle", "").
+        LOCAL script IS bootResolveScript(vehicle, LIST("craft"), HOMECONNECTION:ISCONNECTED).
+        // Profile-less aircraft/rovers and legacy name-driven rockets own
+        // their defaults in bootVehicleLibs(). The installed boot calls this
+        // planner before loading the craft, so make that hook available here.
+        // X_SHOT is a standalone script with top-level launch side effects;
+        // it must run only at the installed boot's normal vehicle entry.
+        IF script <> "" AND vehicle <> "X_SHOT" {
+            bootLibLoad("resume").
+            bootLibLoad(script).
+            IF DEFINED bootVehicleLibs {
+                RETURN bootLibResolve(bootVehicleLibs()).
+            }
+        }
+    }
     LOCAL sq IS phaseSequenceEnsurePrelaunch(SEQUENCE).
     IF sq:LENGTH > 0 {
         bootEnsureInitialPhase(sq).

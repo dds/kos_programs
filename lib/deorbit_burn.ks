@@ -3,20 +3,28 @@
 GLOBAL FUNCTION executeDeorbitNode {
     PARAMETER nd.
     LOCAL burnDV IS nd:DELTAV:MAG.
-
-    IF SHIP:AVAILABLETHRUST <= 0 {
-        FOR eng IN SHIP:ENGINES {
-            IF NOT eng:IGNITION { eng:ACTIVATE. }
-        }
-        WAIT 0.5.
+    LOCK THROTTLE TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    IF ABORT OR nd:TIME <= TIME:SECONDS OR SHIP:MASS <= 0 {
+        vesselLandingCleanup().
+        mLogError("Deorbit burn refused: abort, expired node or invalid mass. Node retained.").
+        RETURN FALSE.
     }
-    IF SHIP:AVAILABLETHRUST <= 0 {
-        STAGE.
-        WAIT 1.
+    // Share the bounded next-engine staging policy with descent. Activating
+    // every inactive engine can ignite reserved return/payload stages.
+    LOCAL ctx IS LEXICON("STAGE_UNTIL", 0, "STAGE_ENGINE", -1,
+        "STAGE_EVENTS", 0, "STAGE_ACTIVATED", FALSE,
+        "STAGE_WARNED", FALSE, "TARGET_THROTTLE", 0).
+    LOCAL stageDeadline IS TIME:SECONDS + 10.
+    UNTIL NOT vesselNeedsStage() OR ABORT OR TIME:SECONDS >= stageDeadline {
+        vesselStageForLanding(ctx).
+        WAIT 0.05.
     }
-    IF SHIP:AVAILABLETHRUST <= 0 OR SHIP:MASS <= 0 {
-        mLogError("Deorbit burn failed: no thrust.").
-        REMOVE nd.
+    IF vesselNeedsStage() OR ABORT {
+        vesselLandingCleanup().
+        mLogError("Deorbit burn failed: no thrust or abort. Node retained.").
         RETURN FALSE.
     }
 
@@ -31,20 +39,20 @@ GLOBAL FUNCTION executeDeorbitNode {
     IF TIME:SECONDS < alignStartTime {
         coastAutoWarp(alignStartTime, "Deorbit burn approach", kacAlarmId).
     }
-    UNTIL TIME:SECONDS >= alignStartTime {
+    UNTIL TIME:SECONDS >= alignStartTime OR ABORT {
         WAIT MIN(10, MAX(0.5, alignStartTime - TIME:SECONDS)).
     }
 
     SET SAS TO FALSE.
     LOCK STEERING TO nd:BURNVECTOR.
     UNTIL VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) < 5
-            OR TIME:SECONDS >= startTime - 2 {
+            OR TIME:SECONDS >= startTime - 2 OR ABORT {
         LOCK STEERING TO nd:BURNVECTOR.
         WAIT 0.1.
     }
 
-    WAIT UNTIL TIME:SECONDS >= startTime.
-    IF VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) > 15 {
+    WAIT UNTIL TIME:SECONDS >= startTime OR ABORT.
+    IF ABORT OR VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR) > 15 {
         mLogError("Refusing deorbit burn: off vector.").
         LOCK THROTTLE TO 0.
         SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
@@ -57,20 +65,29 @@ GLOBAL FUNCTION executeDeorbitNode {
 
     LOCAL burnStart IS TIME:SECONDS.
     LOCAL origVec IS nd:BURNVECTOR.
-    UNTIL nd:DELTAV:MAG < MAX(0.08, burnDV * 0.01)
+    LOCAL completeDV IS MAX(0.08, burnDV * 0.01).
+    LOCAL appliedDV IS 0.
+    LOCAL lastTime IS TIME:SECONDS.
+    LOCAL lastAcc IS SHIP:THRUST / MAX(0.01, SHIP:MASS).
+    UNTIL nd:DELTAV:MAG <= completeDV OR ABORT
+            OR vesselNeedsStage()
             OR TIME:SECONDS - burnStart > burnTime * 2 + 8 {
+        LOCAL nowTime IS TIME:SECONDS.
+        LOCAL actualAcc IS SHIP:THRUST / MAX(0.01, SHIP:MASS).
+        SET appliedDV TO appliedDV + MAX(0, nowTime - lastTime) * (lastAcc + actualAcc) / 2.
+        SET lastTime TO nowTime.
+        SET lastAcc TO actualAcc.
+        // A stale node must not keep thrusting until the time limit.
+        IF appliedDV >= burnDV + completeDV { BREAK. }
         LOCK STEERING TO nd:BURNVECTOR.
         IF nd:DELTAV:MAG > 0.1
                 AND VDOT(origVec:NORMALIZED, nd:BURNVECTOR:NORMALIZED) < 0 {
             BREAK.
         }
-        IF nd:DELTAV:MAG > 3 {
-            LOCK THROTTLE TO 1.
-        } ELSE IF nd:DELTAV:MAG > 0.4 {
-            LOCK THROTTLE TO 0.25.
-        } ELSE {
-            LOCK THROTTLE TO 0.05.
-        }
+        // No throttle floor: bound the requested tail impulse even for a
+        // high-TWR lander rather than stepping through fixed 25%/5% burns.
+        LOCK THROTTLE TO MIN(1, nd:DELTAV:MAG
+            / MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS) / 0.4).
         WAIT 0.02.
     }
 
@@ -80,10 +97,13 @@ GLOBAL FUNCTION executeDeorbitNode {
     WAIT 0.01.
     UNLOCK THROTTLE.
     UNLOCK STEERING.
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+    LOCAL success IS NOT ABORT AND residual <= completeDV.
+    IF success { REMOVE nd. }
     IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
     SET SAS TO TRUE.
     mLog("STATS deorbit-burn result dv=" + ROUND(burnDV,1)
-        + " residual=" + ROUND(residual,2)).
-    RETURN TRUE.
+        + " residual=" + ROUND(residual,2) + " appliedDv=" + ROUND(appliedDV,2)
+        + " success=" + success).
+    IF NOT success { mLogError("Deorbit incomplete; node retained for inspection."). }
+    RETURN success.
 }

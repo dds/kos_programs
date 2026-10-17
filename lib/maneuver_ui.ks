@@ -8,9 +8,8 @@
 
 @LAZYGLOBAL OFF.
 
-// --- Config defaults owned by this file ---
-GLOBAL BURN_BRIEF IS 1.
-GLOBAL BURN_ART IS 1.
+// The executor owns these defaults. Re-declaring them in this archive
+// script would overwrite the operator's settings on every diagnostic call.
 
 
 PARAMETER nd IS 0.

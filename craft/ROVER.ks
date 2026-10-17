@@ -14,8 +14,7 @@ GLOBAL FUNCTION bootVehicleLibs {
 }
 
 LOCAL FUNCTION buildPhaseSequence {
-    LOCAL seq IS phaseList(SEQUENCE).
-    IF seq:LENGTH > 0 { RETURN seq. }
+    IF SEQUENCE:LENGTH > 0 { RETURN phaseList(SEQUENCE). }
     RETURN _seq.
 }
 
@@ -26,6 +25,8 @@ LOCAL FUNCTION _printConfig {
 
 GLOBAL FUNCTION main {
     LOCAL seq IS buildPhaseSequence().
+    SET launchSeq TO seq.
+    SET xferSeq TO seq.
     mLogPhase("MAIN").
     mLog("Sequence: " + seq:JOIN(" -> ")).
     IF stateGet("phase","") = "" { stateSet("phase", seq[0]). }
@@ -33,9 +34,14 @@ GLOBAL FUNCTION main {
     LOCAL phaseMap IS LEXICON(
         "TARGETED_DEORBIT", phaseTargetedDeorbit@,
         "LAND",             phaseLand@,
-        "ROVER",            roverInit@,
-        "DONE",             roverShutdown@
+        "ROVER",            phaseRover@,
+        "DONE",             _phaseRoverDone@
     ).
 
     runPhases(phaseMap).
+}
+
+LOCAL FUNCTION _phaseRoverDone {
+    roverShutdown().
+    phaseDone().
 }

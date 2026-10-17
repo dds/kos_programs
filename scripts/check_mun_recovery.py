@@ -17,52 +17,15 @@ PROFILE = read_settings((ROOT / 'missions/RO8/mun_capture_recovery.ks').read_tex
 
 
 def check_solver():
-    source = body(ARRIVAL, '_bplanePlanPeOnly')
-    assignments = {name: expr.replace('^', '**') for name, expr in
-                   re.findall(r'LOCAL (grad2|stepPro|stepRad|stepSize|scale) IS (.*?)\.\n', source)}
-    fractions = re.search(r'FOR fraction IN LIST\((.*?)\)', source)[1]
-    fractions = [float(value) for value in fractions.split(',')]
-    iterations = int(re.search(r'UNTIL iteration >= (\d+)', source)[1])
-    fd = float(re.search(r'LOCAL FD_STEP\s+IS (\d+\.\d+)', ARRIVAL)[1])
-    tolerance = evaluate(re.search(r'LOCAL solveTol IS (.*?)\.\n', source)[1],
-                         BPLANE_PE_TOL=PROFILE['BPLANE_PE_TOL'])
+    # Run the current three-axis source, sharing the interpreter harness
+    # with the normal-dominated Pe recovery fixtures.
+    from check_arrival_pe_recovery import solve as solve_source
 
     def solve(patch, cap):
-        pro, radial = 0., 0.
-        for _ in range(iterations):
-            pe = patch(pro, radial)
-            if pe is None:
-                return None
-            if abs(pe - 15000) <= tolerance:
-                return pro, radial, pe
-            gradients = []
-            for axis in range(2):
-                slope = 0.
-                for probe in (fd, -fd):
-                    sample = patch(pro + (probe if axis == 0 else 0),
-                                   radial + (probe if axis == 1 else 0))
-                    if sample is not None:
-                        slope = (sample - pe) / probe
-                        break
-                gradients.append(slope)
-            env = dict(gradients=gradients, peError=15000-pe,
-                       dvCap=cap, SQRT=math.sqrt)
-            env['grad2'] = evaluate(assignments['grad2'], **env)
-            if env['grad2'] < .000001:
-                return None
-            for name in ('stepPro', 'stepRad', 'stepSize', 'scale'):
-                env[name] = evaluate(assignments[name], **env)
-            for fraction in fractions:
-                trial_pro = pro + env['stepPro'] * env['scale'] * fraction
-                trial_rad = radial + env['stepRad'] * env['scale'] * fraction
-                trial_pe = patch(trial_pro, trial_rad)
-                if math.hypot(trial_pro, trial_rad) <= cap + .001 and trial_pe is not None:
-                    if abs(trial_pe - 15000) < abs(pe - 15000):
-                        pro, radial = trial_pro, trial_rad
-                        break
-            else:
-                return None
-        return None
+        result, _, _ = solve_source(lambda nd: patch(nd.PROGRADE, nd.RADIALOUT), cap)
+        if result == 0:
+            return None
+        return result.PROGRADE, result.RADIALOUT, patch(result.PROGRADE, result.RADIALOUT)
 
     # Independent hyperbolic impact-parameter -> periapsis relation.
     mu, radius, vinf = 6.5138398e10, 200000., 300.
@@ -91,8 +54,6 @@ def check_solver():
     result = solve(lambda pro, radial: 12900 + pro * 50000, 20)
     assert result is not None and abs(result[2] - 15000) <= 500
     assert 0 < math.hypot(*result[:2]) < .05
-    assert 'LIST("PROGRADE", "RADIALOUT")' in source
-    assert 'SET nd:NORMAL' not in source
     print(f'PASS: {fixtures} nonlinear Pe solves, lost trial patches, exhausted budgets and zero authority')
 
 

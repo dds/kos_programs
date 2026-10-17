@@ -43,7 +43,7 @@ GLOBAL FUNCTION observeStart {
     PRINT "  Offline ... buffers to " + obsBufferPath.
     PRINT "  Interval .. every " + OBS_INTERVAL + "s".
     PRINT "  Tracking .. spd gspd alt vs hdg pit rol thr".
-    IF planeActive {
+    IF DEFINED planeActive AND planeActive {
         PRINT "            + auth wlev/ahld/hhld/shld + ctrl/targets".
     }
     PRINT "  Auto-stop . abort, low offline storage, sentinel file".
@@ -112,7 +112,7 @@ LOCAL FUNCTION _observeLog {
         + " pit=" + ROUND(SHIP:FACING:PITCH,1)
         + " rol=" + ROUND(SHIP:FACING:ROLL,1)
         + " thr=" + ROUND(SHIP:CONTROL:PILOTMAINTHROTTLE,2).
-    IF planeActive {
+    IF DEFINED planeActive AND planeActive {
         // Tuning fields: mode flags, commanded surface outputs, and
         // the live targets, so PID response is readable from the log.
         SET line TO line

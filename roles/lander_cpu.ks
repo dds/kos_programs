@@ -4,7 +4,7 @@
 
 LOCAL roleSeq IS LIST("DESCEND", "LANDED", "DONE").
 GLOBAL FUNCTION bootVehicleLibs {
-    RETURN missionLibs(missionLibsForPhases(roleSeq)).
+    RETURN missionLibs(missionLibsForPhases(roleSeq, LIST("science"))).
 }
 
 GLOBAL FUNCTION main {
