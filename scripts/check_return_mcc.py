@@ -8,11 +8,16 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 
 from check_launch_and_staging import body, evaluate
+import check_landing_guidance as ks
+from check_deorbit_geometry import Vec
 
 ROOT = Path(__file__).resolve().parents[1]
 MCC = (ROOT / 'lib/maneuver_mcc.ks').read_text()
 AERO = (ROOT / 'lib/aerobrake.ks').read_text()
 TARGETING = (ROOT / 'lib/maneuver_targeting.ks').read_text()
+RECOVERY = (ROOT / 'cmd/reentrype.ks').read_text()
+PLAN = (ROOT / 'lib/maneuver_plan.ks').read_text()
+ks.SOURCES+='\n'+PLAN+'\n'+RECOVERY
 
 
 def check_gates():
@@ -106,7 +111,69 @@ def check_phase_flow():
     print('PASS: actual-orbit handoff, bounded retries, failure holds and saved AEROBRAKE recovery')
 
 
+def recovery_fixture(inclination=60):
+    mu,radius,rp,ra=3.5316e12,600000.,651096.,811500.
+    ship=NS(BODY=NS(MU=mu),APOAPSIS=ra-radius,PERIAPSIS=rp-radius,DELTAV=NS(VACUUM=153),
+            ORBIT=NS(BODY=NS(MU=mu,RADIUS=radius),SEMIMAJORAXIS=(rp+ra)/2,INCLINATION=inclination))
+    env=ks.environment();nodes=[]
+    def node(ut,radial,normal,prograde):
+        # Independent Cartesian conic reconstruction at the apsis, rotated
+        # into an inclined plane. No source Pe planner is used here.
+        angle=math.radians(inclination)
+        speed=math.sqrt(mu*(2/ra-2/(rp+ra)))
+        pos=Vec((ra,0,0))
+        vel=Vec((radial,(speed+prograde)*math.cos(angle)-normal*math.sin(angle),
+                 (speed+prograde)*math.sin(angle)+normal*math.cos(angle)))
+        h=Vec((0,-ra*vel[2],ra*vel[1]));energy=float(vel@vel)/2-mu/ra
+        eccentricity=math.sqrt(1+2*energy*h.MAG**2/mu**2)
+        pe=h.MAG**2/(mu*(1+eccentricity))
+        orbit=NS(PERIAPSIS=pe-radius,APOAPSIS=-mu/energy-pe-radius,
+                 INCLINATION=math.degrees(math.acos(h[2]/h.MAG)))
+        return NS(TIME=ut,RADIALOUT=radial,NORMAL=normal,PROGRADE=prograde,
+                  DELTAV=NS(MAG=math.sqrt(radial**2+normal**2+prograde**2)),ORBIT=orbit)
+    env.update(SHIP=ship,STAGE=NS(DELTAV=NS(VACUUM=153)),ETA=NS(APOAPSIS=600),NODE=node,
+               fixture_add=nodes.append,maneuverUiArchiveLog=lambda *_:None)
+    env['_sar']=lambda *args:ks.call('_sar',env,*args)
+    return env,nodes
+
+
+def check_apo_recovery():
+    for inclination in (0,6,60,120,179):
+        env,nodes=recovery_fixture(inclination)
+        nd=ks.call('planLowerPe',env,53000)
+        assert nodes==[nd] and nd.TIME==600 and 1.5<nd.PROGRADE<1.7
+        assert abs(nd.ORBIT.PERIAPSIS-53000)<1e-6 and abs(nd.ORBIT.APOAPSIS-211500)<1e-6
+        assert abs(nd.ORBIT.INCLINATION-inclination)<1e-7
+        assert ks.call('_reentryPeNodeOk',env,nd,53000)
+    print('PASS: actual shared apoapsis planner restores 51.096km Pe to 53km for 1.594m/s, preserving 211.5km Ap and five inclined planes')
+
+
+def check_recovery_guards():
+    for case in ('valid','late','excess-dv','no-fuel','pe','ap','plane','normal','radial','empty'):
+        env,_=recovery_fixture();nd=ks.call('planLowerPe',env,53000)
+        if case=='late':nd.TIME=29
+        if case=='excess-dv':nd.DELTAV.MAG=20.1
+        if case=='no-fuel':env['STAGE'].DELTAV.VACUUM=2
+        if case=='pe':nd.ORBIT.PERIAPSIS=51999
+        if case=='ap':nd.ORBIT.APOAPSIS+=101
+        if case=='plane':nd.ORBIT.INCLINATION+=.011
+        if case=='normal':nd.NORMAL=.01
+        if case=='radial':nd.RADIALOUT=.01
+        if case=='empty':nd.DELTAV.MAG=.01
+        assert ks.call('_reentryPeNodeOk',env,nd,53000)==(case=='valid'),case
+    owner=body(RECOVERY,'_cmdReentrype')
+    assert owner.index('HASNODE OR maneuverBurnInterrupted()')<owner.index('planLowerPe(')
+    assert owner.index('_reentryPeNodeOk(')<owner.index('executeManeuver()')
+    after=owner[owner.index('LOCAL success IS executeManeuver()'):]
+    assert 'nd:' not in after and 'REMOVE' not in after
+    assert after.index('thrustCutoffOk()')<after.index('status=flown')
+    assert 'stateSet' not in owner and 'missionOverride' not in owner
+    print('PASS: recovery rejects stale/large/unfunded/off-corridor/plane-changing nodes; existing and failed burns are retained; no detached-node read follows execution')
+
+
 if __name__ == '__main__':
     check_gates()
     check_planner_fixture()
     check_phase_flow()
+    check_apo_recovery()
+    check_recovery_guards()

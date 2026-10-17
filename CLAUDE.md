@@ -593,6 +593,19 @@ Looks like Python/JS; is neither.
   peakFacingErr and RAM-sampled peak offsets. No diagnostic I/O during thrust.
   Routine suite now161 cases, including finite-slew0/5deg/s ignition guards
   and moving retro/prograde entry targets. No KSP attitude/engine proof.
+  On atmosphere exit the operator reports Pe51096m, Ap211.5km, and a newly
+  very inclined orbit (pre/post inclinations and burn-cutoff Pe still absent).
+  This is NOT a proven correctly flown assist. Guidance should be in span(r,v);
+  investigate actual plane change separately from post-cutoff atmospheric Pe
+  loss. User prioritizes raising Pe at the new Ap while still outbound.
+  cmd/reentrype(target metres,default53000) reuses planLowerPe's element-based
+  apoapsis vis-viva planner (also valid for positive prograde dV), validates
+  native corridor/plane/Ap/time/fuel, then uses the existing executor and cutoff.
+  No phase/profile mutations or circularization; failed/retained nodes survive.
+  Independent Cartesian/inclined-conic fixtures reproduce1.594m/s for the
+  reported orbit. This is a command recovery, not flight proof or an automatic
+  between-pass Pe restoration. The older automatic trim still plans at now+60.
+  Recovery chunk:163 routine cases pass, every measured individual<1s.
   The supplied deorbitcheck_RO9_1305239.log actually AGREES between TR/native
   impact coordinates within0.2m (quaternion also agrees); this snapshot does
   not show a stale prediction or incorrect longitude transform. An independent

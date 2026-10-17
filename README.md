@@ -55,6 +55,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/returnshallow.ks").` | 53 km moon→Kerbin return; keep engine/tank through aerobraking, then separate for parachute descent |
 | `RUNPATH("0:/cmd/returncheck.ks").` | Plan a 53 km Mun/Minmus→Kerbin departure for review, with KSC targeting off; prints cost, remaining fuel and predicted Pe without burning or changing phase |
 | `RUNPATH("0:/cmd/aeroassist.ks",1).` | Enable fuel-assisted aerobraking at the next boot; `0` disables (RO9 defaults enabled) |
+| `RUNPATH("0:/cmd/reentrype.ks",53000).` | Restore Kerbin entry Pe at the upcoming apoapsis from an outbound orbit outside atmosphere; validates the native node, executes, preserves the mission |
 | `RUNPATH("0:/cmd/directreturn.ks").` | From a landed Mun/Minmus craft, model a single-stage direct ascent to Kerbin Pe 53 km with a 20 m/s reserve; preview only, no launch or mission change |
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
@@ -1251,6 +1252,19 @@ Do not rerun the moon-departure setup from Kerbin orbit. Diagnostics are
 persisted as `STATS return-mcc setup`, `plan`, `flown`, `status=verified`
 or `status=held`. Offline checks: `python3 -B scripts/check_return_mcc.py`.
 
+After an aerobrake pass, an outbound bound craft outside the atmosphere can
+restore its entry Pe with `RUNPATH("0:/cmd/reentrype.ks",53000).` Run it from
+manual mode with an archive link and at least 30 seconds before apoapsis.
+It changes Pe at that apoapsis, leaving Ap and the current orbital plane
+alone. The reported 51.096 km Pe / 211.5 km Ap needs about 1.594 m/s prograde
+in a two-body calculation. The command checks the game's actual node for the
+52–54 km corridor, 250 m target tolerance, unchanged Ap/inclination, zero
+radial/normal dV and adequate fuel. Its 20 m/s correction limit is separate
+from the uncapped energy-reduction assist. Existing or interrupted maneuvers
+are preserved. After execution it verifies physical cutoff and live Pe,
+without reading suffixes on a removed node. Reboot after success to resume
+the existing aerobrake mission. This command does not circularize the orbit.
+
 Optional propulsion lowers apoapsis while aiming to preserve the entry
 periapsis. **RO9 enables this automatically**; other craft default off.
 The operator switch is boolean:
@@ -1325,7 +1339,7 @@ once a second in RAM. Only pre-burn and post-cutoff rows are written, with no
 archive/state writes during positive commanded thrust. An alignment timeout
 cannot enter the powered loop.
 Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
-The routine suite passes 161 cases; every individual case was below one
+The routine suite passes 163 cases; every individual case was below one
 second in the measured run. This is host-side timing, not a kOS flight timing
 guarantee; the flight plan records its own computation time.
 
