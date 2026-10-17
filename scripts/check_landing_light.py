@@ -49,6 +49,8 @@ def environment(frame=None, rotation=138984, sun_longitude=0, kerbin_longitude=-
         return obj.POSITION
 
     env = dict(SHIP=NS(BODY=moon, STATUS='ORBITING', PERIAPSIS=14000, ORBIT=NS(PERIOD=2200, ECCENTRICITY=0)),
+               CONFIG=NS(IPU=150), LANDING_MIN_IPU=2000, ABORT=False,
+               stateSet=lambda *args: None, stateRemove=lambda *args: None,
                SUN=sun, TIME=time, BODY=lambda name: kerbin,
                POSITIONAT=positionat, LATLNG=lambda lat, lng: Geo(lat, lng, moon, frame), V=lambda *xs: Vec(xs),
                LANDING_LIGHT_MODE='MORNING', LANDING_SUN_MIN_ELEV=10,
@@ -259,6 +261,48 @@ def check_windows_and_search():
             assert profile['LANDING_KERBIN_MIN_ELEV'] == 15 and profile['LANDING_KERBIN_PREFERRED_ELEV'] == 30
             assert profile['LANDING_LIGHT_KERBIN_WEIGHT'] == 1 and profile['LANDING_LIGHT_SUN_WEIGHT'] == .1
     print('PASS: bounded ground-track selection, no dark fallback, touchdown margin, retained-node timing/policy checks and offline dependencies')
+
+
+def check_search_cpu_and_cancel():
+    boot = (ROOT/'lib/boot_lib.ks').read_text()
+    class Flag:
+        value = False
+        def __bool__(self): return self.value
+    for initial, minimum, expected in ((150,2000,2000), (500,1500,1500),
+                                       (2000,2000,2000), (2500,2000,2500),
+                                       (150,5000,2000)):
+        for scenario in ('found', 'no-site', 'abort', 'interrupted'):
+            env = environment()
+            env['ABORT'] = Flag()
+            saved, samples = {}, []
+            env['CONFIG'].IPU = initial
+            def sample(ut):
+                samples.append(ut)
+                assert env['CONFIG'].IPU == expected
+                assert saved == ({'landing_prior_ipu':initial} if initial < expected else {})
+                if scenario == 'interrupted':
+                    raise RuntimeError('simulate interrupted search')
+                if scenario == 'abort':
+                    env['ABORT'].value = True
+                return Geo(0, 179 if scenario == 'no-site' else -75, env['SHIP'].BODY, np.eye(3))
+            env.update(LANDING_MIN_IPU=minimum, LANDING_LIGHT_SCAN_ORBITS=1,
+                       LANDING_LIGHT_SCAN_SAMPLES=64, lmGroundGeoAt=sample,
+                       stateSet=lambda key,value:saved.update({key:value}),
+                       stateRemove=lambda key:saved.pop(key,None))
+            try:
+                result = env['landingLitGroundTrack']()
+            except RuntimeError as error:
+                assert scenario == 'interrupted' and str(error) == 'simulate interrupted search'
+                # The real boot preamble restores the saved CPU setting after
+                # an error/reboot, before loading the core again.
+                env.update(stateGetNum=lambda key,default:saved.get(key,default), bootLibLoad=lambda name:None)
+                ks.run(ks.parse(function_body(boot, 'bootPreamble')), env)
+            else:
+                assert result['FOUND'] is (scenario == 'found'), (initial, scenario, result)
+                if scenario == 'abort':
+                    assert result['REASON'] == 'aborted' and len(samples) == 1
+            assert env['CONFIG'].IPU == initial and not saved
+    print('PASS: light search borrows capped CPU budget before sampling, restores success/failure/cancellation, and recovers interrupted scope at boot')
 
 
 def check_economy_radio_priority():
@@ -564,6 +608,7 @@ if __name__ == '__main__':
     check_afternoon()
     check_geometry()
     check_windows_and_search()
+    check_search_cpu_and_cancel()
     check_economy_radio_priority()
     check_economy_target_refresh()
     check_command()

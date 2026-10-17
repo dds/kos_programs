@@ -810,6 +810,18 @@ Morning prefers a rising 15-degree Sun. The optional `AFTERNOON` mode prefers
 a falling 52.5-degree Sun, approximately 2:30pm at the equator. Neither solar
 score can compensate for Kerbin below its configured elevation margin.
 
+The pause between the command's `Economy planning region radius=...` line
+and `STATS landing-light search mode=...` is the ground-track light search,
+before terrain scanning or deorbit solving. Its default four orbits at 128
+samples/orbit require roughly 512 site evaluations, with repeated body
+ephemerides, solar trend and eclipse tests, plus regional and time-window
+checks. It now borrows the existing capped landing instruction budget during
+selection, restoring it on success, failure or ABORT; the existing
+`landing_prior_ipu` boot recovery handles interruption. No boot-module change
+is needed. Start/progress/completion rows report IPU, samples, eligible sites,
+window-check counts and elapsed game seconds. Progress is emitted every 64
+samples; the original eight-sample yields and all geometry gates remain.
+
 Do not subtract future `BODY` positions at different hierarchy levels as
 though they were fully propagated world positions. The
 [kOS body wrapper](https://github.com/KSP-KOS/KOS/blob/develop/src/kOS/Suffixed/BodyTarget.cs#L142)
