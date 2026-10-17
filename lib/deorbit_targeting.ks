@@ -289,6 +289,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
     mLog("STATS deorbit solved: T+" + ROUND(bestUT - nowUt,0)
         + "s dv=" + ROUND(solved["DV"],2)
+        + " targetLat=" + ROUND(targetLat,4)
+        + " targetLng=" + ROUND(targetLng,4)
+        + " orbitInc=" + ROUND(SHIP:ORBIT:INCLINATION,2)
         + " retro=" + ROUND(bestRetroDv,2)
         + " normal=" + ROUND(bestNormalDv,2)
         + solvedImpactText
@@ -369,7 +372,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
             RETURN FALSE.
         }
         IF crashInfo["HIT"] {
-            mLogWarn("Terrain check ignored post-target impact: downfield="
+            mLogWarn("Terrain contact beyond target (expected ballistic overshoot): hitLat="
+                + ROUND(crashInfo["LAT"],4)
+                + " hitLng=" + ROUND(crashInfo["LNG"],4)
+                + " downfield="
                 + ROUND(crashInfo["DOWNFIELD"],0)
                 + "m dist=" + ROUND(crashInfo["DIST"],0)
                 + "m clearance=" + ROUND(crashInfo["CLEARANCE"],1) + "m.").

@@ -13,6 +13,7 @@ from check_surface_return import read_settings
 
 LIGHT = (ROOT / 'lib/landing_light_math.ks').read_text() + '\n' + (ROOT / 'lib/landing_light.ks').read_text()
 COMMAND = (ROOT / 'cmd/landlight.ks').read_text()
+DEORBIT = (ROOT / 'lib/landing_deorbit.ks').read_text()
 CONFIG = (ROOT / 'lib/config.ks').read_text()
 ks.SOURCES += '\n' + LIGHT
 
@@ -224,7 +225,8 @@ def check_windows_and_search():
     # Retained nodes cannot bypass missing timing or policy failures.
     env = environment(kerbin_longitude=-45)
     env.update(landingResolveTarget=lambda: dict(FOUND=True, LAT=0, LNG=-75),
-               ADDONS=NS(TR=NS(AVAILABLE=True, ISVERTWOTWO=True, HASIMPACT=True, TIMETILLIMPACT=1000)))
+               ADDONS=NS(TR=NS(AVAILABLE=True, ISVERTWOTWO=True, HASIMPACT=True,
+                               IMPACTPOS=NS(LAT=0, LNG=-75), TIMETILLIMPACT=1000)))
     assert env['landingLightNodeAllowed'](NS(TIME=1200))
     planner = function_body((ROOT/'lib/deorbit_targeting.ks').read_text(), '_targetDeorbitLightAccepted')
     calls = []
@@ -287,6 +289,91 @@ def check_economy_radio_priority():
     assert env['landingLightAt'](0,-80,now)['REASON']=='kerbin-below-margin'
     assert env['landingLightAt'](0,179,now)['REASON']=='sun-below-margin'
     print('PASS: economy selects 47-degree Kerbin afternoon over 19-degree ideal morning; favors rising light; enlarged radio and sunlight minima remain hard')
+
+
+def check_economy_target_refresh():
+    def without_print(nodes):
+        return [(s, without_print(yes), without_print(no))
+                for s, yes, no in nodes if not s.startswith('PRINT ')]
+    confirmation = without_print(ks.parse(function_body(DEORBIT, '_confirmLandingTarget')))
+    for flexible, automatic, found, search_ok, status, expected, searches in (
+            (1, 1, True, True, 'ORBITING', True, 1),
+            (1, 1, True, False, 'ORBITING', False, 1), # No track: never fly old lock.
+            (1, 1, False, True, 'ORBITING', True, 1),
+            (0, 1, True, True, 'ORBITING', True, 0),  # Precision site retained.
+            (1, 0, True, True, 'ORBITING', True, 0),  # Explicit fixed-site override.
+            (0, 1, False, True, 'ORBITING', True, 1),
+            (1, 1, True, True, 'SUB_ORBITAL', True, 0)): # No orbital search mid-descent.
+        selected = dict(FOUND=found, LAT=0, LNG=90, SOURCE='locked config')
+        events = []
+        def refresh():
+            events.append('search')
+            if search_ok:
+                selected.update(FOUND=True, LAT=19.045, LNG=129.478)
+            return search_ok
+        env = dict(LANDING_FLEXIBLE_SITE=flexible, LANDING_AUTO_TARGET=automatic,
+                   SHIP=NS(STATUS=status, PERIAPSIS=15000 if status == 'ORBITING' else -5000),
+                   LANDING_CONFIRM_TARGET=0, landingResolveTarget=lambda: dict(selected),
+                   _autoLandingTarget=refresh, landingLightActive=lambda: True,
+                   yieldToPrompt=lambda: events.append('hold'))
+        try:
+            ks.run(confirmation, env)
+            raise AssertionError('confirmation did not return')
+        except ks.Returned as result:
+            assert result.value is expected
+        assert events.count('search') == searches
+        assert ('hold' in events) == (not expected)
+        assert selected['LAT'] == (19.045 if searches and search_ok else 0)
+
+    # Real source ground prediction in a 20-degree orbit, with Minmus spin.
+    # No equatorial placeholders: picker -> automatic target -> saved override.
+    rng = np.random.default_rng(17)
+    automatic = ks.parse(function_body(DEORBIT, '_autoLandingTarget'))
+    for mirrored in (False, True):
+        frame, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+        if mirrored: frame[:, 0] *= -1
+        env, _ = hierarchy_environment(frame, moon_name='Minmus')
+        moon, now = env['SHIP'].BODY, env['TIME'].SECONDS
+        period = 2*math.pi*math.sqrt(75000**3/1.7658e9)
+        env['SHIP'].ORBIT = NS(ECCENTRICITY=0, PERIOD=period, INCLINATION=20)
+        env['SHIP'].PERIAPSIS = 15000
+        native_positionat = env['POSITIONAT']
+        def positionat(obj, ut):
+            if obj is not env['SHIP']: return native_positionat(obj, ut)
+            phase, inc = 2*math.pi*(ut-now)/period + math.pi/2, math.radians(20)
+            return moon.POSITION + Vec(frame @ (75000*np.array(
+                (math.cos(phase), math.sin(phase)*math.cos(inc), math.sin(phase)*math.sin(inc)))))
+        def geoposition(pos):
+            rel = frame.T @ (pos-moon.POSITION)
+            return Geo(math.degrees(math.asin(rel[2]/np.linalg.norm(rel))),
+                       math.degrees(math.atan2(rel[1], rel[0])), moon, frame)
+        moon.GEOPOSITIONOF = geoposition
+        saved = []
+        env.update(POSITIONAT=positionat, LANDING_AUTO_TARGET=1,
+                   LANDING_AUTO_TARGET_MINUTES=5, TARGET_LAT=0, TARGET_LNG=0,
+                   TARGET_LOCK=1, TARGET_WAYPOINT='old equatorial site',
+                   landingLightActive=lambda: True,
+                   landingLightAt=lambda *args: dict(OK=True, SUN=15, KERBIN=40, SETTING=False),
+                   landingLightWindow=lambda *args: dict(OK=True, SUN=15, KERBIN=40),
+                   _landingWriteTargetOverrides=lambda: saved.append((env['TARGET_LAT'], env['TARGET_LNG'])))
+        # These invoke the source, using the updated fixture's prediction API.
+        env['lmGroundGeoAt'] = lambda ut: ks.call('lmGroundGeoAt', env, ut)
+        env['landingLitGroundTrack'] = lambda: ks.call('landingLitGroundTrack', env)
+        try: ks.run(automatic, env)
+        except ks.Returned as result: assert result.value is True
+        pass_ut = now + max(600, period*.35)
+        expected = geoposition(positionat(env['SHIP'], pass_ut))
+        expected_lng = expected.LNG - 360*(pass_ut-now)/moon.ROTATIONPERIOD
+        assert abs(env['TARGET_LAT']-expected.LAT) < 1e-9
+        assert abs((env['TARGET_LNG']-expected_lng+180)%360-180) < 1e-9
+        assert abs(env['TARGET_LAT']) > 10  # Fresh site is demonstrably not equatorial.
+        assert env['TARGET_LOCK'] == 1 and env['TARGET_WAYPOINT'] == ''
+        assert saved == [(env['TARGET_LAT'], env['TARGET_LNG'])]
+
+    phase = function_body(DEORBIT, 'phaseLandDeorbit')
+    assert phase.index('_resumeExistingLandingDeorbitNode()') < phase.index('_confirmLandingTarget()')
+    assert phase.index('stateGet("deorbit_burn_started"') < phase.index('_confirmLandingTarget()')
+    print('PASS: economy refreshes stale locks from a native 20-degree Minmus ground track; light failure holds, fixed sites and retained/interrupted nodes preserved')
 
 
 def check_command():
@@ -408,5 +495,6 @@ if __name__ == '__main__':
     check_geometry()
     check_windows_and_search()
     check_economy_radio_priority()
+    check_economy_target_refresh()
     check_command()
     check_overrides()

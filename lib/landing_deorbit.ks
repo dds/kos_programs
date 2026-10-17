@@ -141,7 +141,18 @@ LOCAL FUNCTION _timedLandingDeorbit {
 
 LOCAL FUNCTION _confirmLandingTarget {
     LOCAL targetInfo IS landingResolveTarget().
-    IF NOT targetInfo["FOUND"] {
+    // Economy intent is the current orbit's ground track, not a coordinate
+    // cached before capture/corrections. Refresh even an old locked target.
+    // Existing/interrupted nodes are handled before this function is called.
+    IF LANDING_FLEXIBLE_SITE > 0 AND LANDING_AUTO_TARGET > 0
+            AND SHIP:STATUS = "ORBITING" AND SHIP:PERIAPSIS > 0 {
+        IF NOT _autoLandingTarget() {
+            mLogWarn("Economy target refresh failed; retaining orbit instead of using an old site.").
+            yieldToPrompt().
+            RETURN FALSE.
+        }
+        SET targetInfo TO landingResolveTarget().
+    } ELSE IF NOT targetInfo["FOUND"] {
         IF _autoLandingTarget() {
             SET targetInfo TO landingResolveTarget().
         }
@@ -184,6 +195,7 @@ LOCAL FUNCTION _autoLandingTarget {
 
     LOCAL minutes IS 5.
     SET minutes TO LANDING_AUTO_TARGET_MINUTES.
+    LOCAL passUT IS TIME:SECONDS + minutes * 60.
     IF landingLightActive() {
         LOCAL site IS landingLitGroundTrack().
         IF NOT site["FOUND"] {
@@ -192,14 +204,20 @@ LOCAL FUNCTION _autoLandingTarget {
         }
         SET TARGET_LAT TO site["LAT"].
         SET TARGET_LNG TO site["LNG"].
+        SET passUT TO site["UT"].
     } ELSE {
-        LOCAL geo IS lmGroundGeoAt(TIME:SECONDS + minutes * 60).
+        LOCAL geo IS lmGroundGeoAt(passUT).
         SET TARGET_LAT TO geo:LAT.
         SET TARGET_LNG TO geo:LNG.
     }
     SET TARGET_LOCK TO 1.
     SET TARGET_WAYPOINT TO "".
     _landingWriteTargetOverrides().
+    mLog("STATS landing-target selected source=current-ground-track"
+        + " targetLat=" + ROUND(TARGET_LAT,4)
+        + " targetLng=" + ROUND(TARGET_LNG,4)
+        + " orbitInc=" + ROUND(SHIP:ORBIT:INCLINATION,2)
+        + " passUT=" + ROUND(passUT,1)).
     RETURN TRUE.
 }
 

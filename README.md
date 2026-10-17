@@ -210,8 +210,9 @@ alignment changes, and the saved brake decision includes commanded throttle.
 These are source-driven model improvements, not a flight-proven optimum.
 An RO9 Mun economy retry landed successfully after the alignment and terrain
 recovery fixes (operator report, 2026-10-17). Landing fuel cost and the
-ascent/return outcome remain unconfirmed; broader craft/terrain coverage is
-still needed.
+ascent/return outcome remain unconfirmed. Its flight log records a 12.6 m
+guidance miss, a normal-tier site and 830.5 m/s remaining. Broader craft/terrain
+coverage is still needed.
 
 If the recovery wait expires or attitude recovery fails after ignition, XING preserves the
 unfinished node and holds for the operator, unless the actual trajectory
@@ -725,7 +726,10 @@ At similar radio margins, the score favors rising light that will improve over
 setting light. This is geometric screening, not a guarantee of a live link.
 The picker searches four orbits along the existing ground track. If no site
 meets both requirements, it holds in orbit rather than selecting a dark site
-or requesting a plane change. Contract waypoints are ignored
+or requesting a plane change. Each fresh economy plan in a bound parking
+orbit refreshes any old locked site from the current ground track before
+terrain refinement. Retained/interrupted burns keep their resume checks;
+`LANDING_AUTO_TARGET=0` preserves an intentionally fixed site. Contract waypoints are ignored
 (`LANDING_USE_WAYPOINTS=0`); these profiles do not perform the polar temperature
 survey or land at the old contract coordinates. The existing targeted-deorbit
 path still needs Trajectories, with SCANsat refinement when available.

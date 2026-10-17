@@ -411,9 +411,28 @@ Looks like Python/JS; is neither.
   terminal handoff >140 m; not flight/CPU/fuel/terrain-mesh validation.
   After 2a27aa2, the operator reported an "ok landing" on the RO9 Mun economy
   retry (2026-10-17). This is flight evidence for successful descent after the
-  alignment and terrain-abort repairs. Exact touchdown slope, emergency-tier
-  use, remaining dV and landing cost were not reported; ascent/return remains
-  unconfirmed. Do not treat this one landing as proof of optimal fuel use or
+  alignment and terrain-abort repairs. The supplied boot_012_core.log then
+  confirmed grade=.076 (~4.35 deg), emergency=False, Sun12.4/Kerbin7 deg,
+  targetShift6435 m, guidanceMiss12.6 m, requestedMiss6447.6 m, remainingDv830.5.
+  Main braking lasted146.1s; TARGET_REFINE exited after15.8s on its climb
+  limiter, APPROACH lasted61.4s, VERTICAL_DESCENT43.4s. The log ends at the
+  reboot into RETURN_SETUP; actual surface-return setup/ascent is not logged.
+  Landing cost lacks a starting dV sample. A stock-body impulsive estimate
+  for the configured 10 km parking/53 km Kerbin Pe route is ~565 ascent
+  +313 departure=877 m/s before finite-burn losses, exceeding830.5. This is
+  an estimate, not a live return node or a proof of impossibility. The return
+  executor checks affordability only once in orbit; a coupled pre-ascent
+  budget remains an open planning gap. Do not claim return is affordable.
+  A Minmus orbit near20 deg raised an equatorial-target concern, but the
+  reported landing-light node lat19.045/lng129.478 identifies the REAL target,
+  not the impact. dist/downfield19.23km and cross.04/7.18km alone describe
+  the intended phantom overshoot; no plane-change defect is established.
+  Logs now label target/impact/hit coordinates. Fresh flexible automatic
+  plans in bound orbit refresh cached targets from the current ground track;
+  no eligible light/radio site holds instead of reverting to the old lock.
+  Precision/manual sites and retained/interrupted nodes remain protected.
+  Native20-degree Minmus/source policy fixtures pass, not flight validation.
+  Do not treat this one landing as proof of optimal fuel use or
   broad terrain/craft coverage. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered
   a lost encounter after a staged, low-thrust departure via BPLANE and

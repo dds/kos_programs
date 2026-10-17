@@ -256,11 +256,43 @@ fuel budget, or proof of touchdown stability on a 13.4° slope.
 
 After patch `2a27aa2`, the operator reported that the RO9 Mun economy retry
 made an "ok landing" (2026-10-17). This confirms successful descent on that
-retry after the alignment and terrain-abort repairs. The actual accepted
-slope, use of the emergency tier, remaining delta-v and landing fuel cost
-were not supplied. The 13.4° figure above describes the earlier rejected
-candidate, not a measured touchdown slope. Surface ascent and Kerbin return
-remain unconfirmed on this flight.
+retry after the alignment and terrain-abort repairs. The subsequently supplied
+`boot_012_core.log` records the following:
+
+- BRAKING_BURN began with hs=523 m/s, vs=-47.8, hull clearance 3863 m,
+  current/plan acceleration 46.06/2.72 m/s2 and alignment 11.7°. The strong
+  stage burned about 2.9 s before the lander stage took over; alignment
+  protection also paused thrust during that handoff.
+- At 792 m and hs=17.7, incremental search found a normal-tier site:
+  grade=.076 (~4.35°), Sun 12.4°, Kerbin 7°, `emergency=False`, slopeLimit=5.
+  The emergency 15° allowance was not used. The previous 13.4° rejected
+  candidate is not a measured slope for this touchdown.
+- Requested target shift 6435 m; touchdown guidance miss 12.6 m and original
+  request miss 6447.6 m. Remaining vacuum delta-v 830.5 m/s.
+- Main braking 146.1 s; refinement 15.8 s (climb-limiter handoff), approach 61.4 s,
+  vertical descent 43.4 s. A starting delta-v sample is absent, so fuel spent
+  cannot be obtained by subtracting the earlier failed attempt's 1020 m/s.
+- The craft entered SURFACE_RETURN_SETUP and requested a reboot into the
+  RETURN_SETUP band. The file does not include execution after that reboot.
+
+The configured economy return is eastward ascent to 10 km, then a departure
+targeting Kerbin Pe 53 km, with optional KSC targeting disabled. An illustrative
+stock-body patched-conic calculation from a 3.8 km surface site gives about
+564.5 m/s ideal impulsive ascent/circularization plus 312.5 m/s departure seed,
+877.1 m/s total before gravity/steering losses. This uses the repository's
+stock Mun/Kerbin fixture constants and a circular Mun parent orbit; it is not
+a live KSP maneuver-node budget or a strict impossibility proof. Its deficit
+against 830.5 m/s warrants checking before liftoff. Current code checks return
+escape affordability only after reaching parking orbit, leaving a pre-ascent
+round-trip budgeting gap. Ascent and Kerbin return remain unconfirmed.
+
+The operator subsequently reported starting circularization with 496.6 m/s
+left, falling below 200 m/s before circularization finished. The initial
+circularization plan's dV was unavailable. The requested next route is direct
+surface departure to Kerbin Pe about 53 km, without KSC targeting or mandatory
+parking/circularization. Combining burns must still supply the missing ascent
+velocity; the 496.6 m/s is not all an escape reserve. A coupled finite-burn
+budget is needed before replaying the landed save.
 
 ## End-of-burn contract
 

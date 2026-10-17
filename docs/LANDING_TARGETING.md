@@ -152,6 +152,25 @@ hold without burning. The node is optionally terrain-validated: if projected ter
 before the target pass, planning fails; post-target impact is only warned
 about because it is expected for the phantom target.
 
+`STATS landing-light node` labels the real site as `targetLat/targetLng`
+and the ballistic contact as `impactLat/impactLng`. The former `lat/lng`
+fields meant the target, not the impact. A site at 19 degrees latitude is
+reachable from a 20-degree inclined orbit without a plane change; orbital
+motion changes latitude naturally. `cross=0.04/7.18km` means 40 m predicted
+lateral miss versus a 7.18 km allowance, while `dist=19.23km downfield=19.23km`
+describes the intentional ballistic overshoot. These alone do not establish
+a latitude error or prove that powered descent will reach the site.
+
+Fresh economy deorbit plans (`LANDING_FLEXIBLE_SITE=1` and
+`LANDING_AUTO_TARGET=1`) refresh even a previously locked site from the
+current orbit's ground track. Failed sunlight/radio selection holds in orbit
+instead of falling back to the old site. This refresh precedes the local
+SCANsat terrain refinement; it neither flattens the orbit nor sets latitude
+to zero. Set `LANDING_AUTO_TARGET=0` for an intentional fixed site. Retained
+or partially flown nodes are preserved by the existing resume checks. From
+an unflown bound parking orbit, `cmd/landlight` with `apply` explicitly selects
+a fresh ground-track site and removes the old unflown node before reboot.
+
 ### Geometry regression: eccentric polar Minmus landing
 
 The old cross-track calculation subtracted the squared projected downfield

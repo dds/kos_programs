@@ -67,12 +67,15 @@ GLOBAL FUNCTION landingLightNodeAllowed {
     IF NOT ADDONS:TR:ISVERTWOTWO { RETURN FALSE. }
     WAIT 0.5.
     IF NOT ADDONS:TR:HASIMPACT { RETURN FALSE. }
+    LOCAL impactPos IS ADDONS:TR:IMPACTPOS.
     LOCAL impactUT IS TIME:SECONDS + ADDONS:TR:TIMETILLIMPACT.
     IF impactUT <= nd:TIME { RETURN FALSE. }
     LOCAL light IS landingLightWindow(targetLat, targetLng, impactUT).
     mLog("STATS landing-light node mode=" + LANDING_LIGHT_MODE + " requireKerbin=" + LANDING_REQUIRE_KERBIN
         + " ok=" + light["OK"] + " reason=" + light["REASON"]
-        + " lat=" + targetLat + " lng=" + targetLng
+        + " targetLat=" + targetLat + " targetLng=" + targetLng
+        + " impactLat=" + impactPos:LAT
+        + " impactLng=" + impactPos:LNG
         + " sun=" + ROUND(light["SUN"],2) + " kerbin=" + ROUND(light["KERBIN"],2)).
     RETURN light["OK"].
 }
