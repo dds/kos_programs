@@ -458,6 +458,18 @@ Looks like Python/JS; is neither.
   windows/candidates/trials and stop reason. An independent20-degree Minmus
   fixture reproduces the old64-trial hold and resolves eight selected unburned
   ground-track sites within16 trials and <1m/s normal. Not yet flight-validated.
+  The operator subsequently reported another accepted, visibly off-target
+  Minmus node: target18.241,76.9115, optional SCANsat search found no safe
+  site, then Executing deorbit burn T+7031s. Paused, still unflown in orbit.
+  They request dismantling/rebuilding LAND_DEORBIT and authorize diagnostic
+  command metrics. Do not explain this accepted node away as a temporary
+  trial, or treat the previous Kepler fixtures as live integration proof.
+  cmd/deorbitcheck captures the retained node, native/TR contacts and both
+  longitude/quaternion transforms, policy and vectors, in a separate log.
+  It has no flight/phase/node mutations. TR source confirms node inclusion
+  but asynchronous buffer publication; a fixed0.5s wait is not a freshness
+  guarantee. Actual discrepancy evidence is pending; retain all existing
+  guards while separating site selection, node planning and final validation.
   The requested Mun return is direct ascent to Kerbin Pe53km, no KSC/mandatory
   parking orbit. cmd/directreturn is a LANDED, single-stage MODEL PREVIEW ONLY:
   bounded heading/pitch/dV search, RK4 mass/thrust, analytic SOI handoff, actual

@@ -71,6 +71,36 @@ Otherwise the phase confirms the landing target, optionally auto-picking the
 geoposition `LANDING_AUTO_TARGET_MINUTES` into the future, then calls
 `targetedDeorbitAt(targetLat, targetLng)`.
 
+### Accepted-node discrepancy under investigation
+
+After the pass-time fix, the operator still reported an accepted Minmus plan
+for target18.241,76.9115 whose plotted descent was far off the site. It reached
+`Executing deorbit burn at T+7031s`; the game was paused before ignition.
+This is not established as a temporary trial-node misunderstanding. A previous
+synthetic Kepler solve does not verify the integration with live predictions.
+
+`cmd/deorbitcheck.ks` captures the suspect node before it is removed. It
+records the resolved target and loaded mission policy, current and planned
+orbital elements, raw state vectors, body spin, and repeated impact samples.
+At each impact UT it compares `POSITIONAT` with the TR coordinates, using
+both our longitude correction and a separate quaternion transform matching
+[Trajectories' native rotation code](https://github.com/neuoy/KSPTrajectories/blob/master/src/Plugin/Predictor/Trajectory.cs).
+The command reports sunlight/radio for the target and both predicted contacts;
+it does not create, edit, clear or execute a node, nor advance the phase.
+
+The API returns the currently published prediction, not a result tagged with
+our trial node. The predictor includes maneuvers but publishes its buffered
+calculation asynchronously. Our fixed0.5-second wait does not by itself prove
+freshness. See the [prediction API](https://github.com/neuoy/KSPTrajectories/blob/master/src/Plugin/API.cs)
+and predictor source above. Stale results and rotation/frame discrepancies
+remain hypotheses until the captured native/TR comparisons establish which
+contract fails. Do not label another timing/cap adjustment a flight-proven fix.
+
+`Site scan found no safe site` means the optional SCANsat refinement found
+no acceptable candidate in its local search. With `LANDING_REQUIRE_SITE=0`,
+the planner retains the original target; the message does not certify it as
+safe. Powered descent still applies its existing terrain/diversion checks.
+
 ## The phantom landing target
 
 The targeted deorbit solver does not try to make the unpowered impact land on
