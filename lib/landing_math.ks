@@ -428,3 +428,19 @@ GLOBAL FUNCTION lmTerrainImpactAngle {
     }
     RETURN -1.
 }
+
+// Fine-scale local terrain gradient, shared with archive diagnostics.
+GLOBAL FUNCTION landingTerrainGrade {
+    PARAMETER sampleLat.
+    PARAMETER sampleLng.
+    PARAMETER stepM.
+    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
+    LOCAL lonScale IS MAX(0.01, COS(sampleLat)).
+    LOCAL hN IS LATLNG(sampleLat + stepM * degPerM, sampleLng):TERRAINHEIGHT.
+    LOCAL hS IS LATLNG(sampleLat - stepM * degPerM, sampleLng):TERRAINHEIGHT.
+    LOCAL hE IS LATLNG(sampleLat, sampleLng + stepM * degPerM / lonScale):TERRAINHEIGHT.
+    LOCAL hW IS LATLNG(sampleLat, sampleLng - stepM * degPerM / lonScale):TERRAINHEIGHT.
+    // Magnitude of the terrain gradient, rather than adding both slopes.
+    RETURN SQRT(((hN - hS) / (2 * stepM)) ^ 2
+        + ((hE - hW) / (2 * stepM)) ^ 2).
+}

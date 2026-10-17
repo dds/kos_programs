@@ -120,20 +120,6 @@ GLOBAL FUNCTION _landingTerrainCheck {
     ).
 }
 
-GLOBAL FUNCTION landingTerrainGrade {
-    PARAMETER sampleLat.
-    PARAMETER sampleLng.
-    PARAMETER stepM.
-    LOCAL degPerM IS 180 / (SHIP:BODY:RADIUS * CONSTANT:PI).
-    LOCAL lonScale IS MAX(0.01, COS(sampleLat)).
-    LOCAL hN IS LATLNG(sampleLat + stepM * degPerM, sampleLng):TERRAINHEIGHT.
-    LOCAL hS IS LATLNG(sampleLat - stepM * degPerM, sampleLng):TERRAINHEIGHT.
-    LOCAL hE IS LATLNG(sampleLat, sampleLng + stepM * degPerM / lonScale):TERRAINHEIGHT.
-    LOCAL hW IS LATLNG(sampleLat, sampleLng - stepM * degPerM / lonScale):TERRAINHEIGHT.
-    // Magnitude of the terrain gradient, rather than adding both slopes.
-    RETURN SQRT(((hN - hS) / (2 * stepM)) ^ 2
-        + ((hE - hW) / (2 * stepM)) ^ 2).
-}
 
 // ------------------------------------------------------------
 // FSM helpers
@@ -272,6 +258,19 @@ GLOBAL FUNCTION _landingBurnHeight {
     PARAMETER ctx.
     IF ctx["STATE"] = "VERTICAL_DESCENT" {
         RETURN _landingBottomRadar().
+    }
+    IF LANDING_FLEXIBLE_SITE > 0 AND LANDING_ECONOMY_BRAKE > 0 AND ctx["DIVERT_PENDING"]
+            AND ctx["H_SPEED"] <= LANDING_TOUCHDOWN_HSPEED AND ctx["V_SPEED"] <= 0
+            AND LANDING_COAST_MCC_THROTTLE_MAX <= 0 {
+        // Ignore a distant old datum only after horizontal capture, outside
+        // even the low-speed drift corridor to impact. Moving craft and
+        // nearby old sites retain their original obstacle-height guard.
+        LOCAL driftBound IS LANDING_TOUCHDOWN_HSPEED * (MAX(0, lmTimeToImpact())
+            + MAX(0, LANDING_BRAKE_REACTION_TIME) + MAX(0, LANDING_BRAKE_ALIGN_LEAD)).
+        IF lmDistanceToTarget(ctx["TARGET_LAT"], ctx["TARGET_LNG"])
+                > MAX(1000, MAX(LANDING_DIVERT_SEARCH_RADIUS, driftBound)) {
+            RETURN MIN(SHIP:ALTITUDE - ctx["DIVERT_ELEVATION"], _landingBottomRadar()).
+        }
     }
     RETURN MIN(_landingTargetHeight(ctx), _landingBottomRadar()).
 }
@@ -768,6 +767,8 @@ GLOBAL FUNCTION landExecute {
         "BRAKE_ALIGN_BLOCKED", FALSE,
         "DIVERT_PENDING", FALSE,
         "DIVERT_SEARCH", LEXICON(),
+        "DIVERT_PREVIEW", LEXICON("OK", FALSE, "AT", -9999, "LOG_AT", -9999),
+        "DIVERT_ELEVATION", SHIP:ALTITUDE - _landingBottomRadar(),
         "RESERVE_STAGE", -999,
         "RESERVE_ACC", 0,
         "STAGE_UNTIL", 0,

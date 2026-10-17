@@ -73,6 +73,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/burncheck.ks").` | Read-only ignition check: engine availability, autopilot suppression, CPU roles/IPU, and timed throttle-governor probes against the retained node; never fires engines |
 | `RUNPATH("0:/cmd/deorbitcheck.ks").` | Read-only deorbit snapshot: keep the suspect node attached and run in manual mode with an archive link; saves and verifies the report under `0:/logs/archive/_diagnostics/` |
 | `RUNPATH("0:/cmd/landingcheck.ks").` | Print and archive landing hardware, current-stage dV, next-stage acceleration and the last brake decision; requires an archive link |
+| `RUNPATH("0:/cmd/divertcheck.ks").` | Archive nearby raw terrain heights/slopes, correction-time estimates, policy/hardware and a copy of the flight log; no flight control; sample limit/spacing optional |
 | `RUNPATH("0:/cmd/landingdisposal.ks").` | Save an optional transfer-stage handoff at 80 m/s horizontal speed with a 700 m/s lander reserve; preserves node, phase and other overrides; pass `0` to restore fuel-first staging |
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
@@ -189,11 +190,15 @@ these two overrides. It preserves the target, return sequence, phase and
 retained node. Passing `0` disables elective disposal.
 
 RO8/RO9 Mun/Minmus economy profiles allow `LANDING_FLEXIBLE_SITE=1`.
-After horizontal arrest, the controller validates the saved target or searches
-near its predicted horizontal stopping point. A remote site outside the
-`LANDING_APPROACH_MAX_TIME` correction estimate (120 seconds) is rejected.
+During coast/braking, economy guidance samples a provisional stopping footprint
+at most once every two seconds. These approximate forecasts cache terrain/light
+only: they never change the target or trigger ignition. At horizontal capture,
+the controller repeats actual reachability, clearance, fine terrain and light
+checks before accepting cached coordinates, or searches near the stopping point.
+A remote site outside the `LANDING_APPROACH_MAX_TIME` correction estimate
+(120 seconds) is rejected.
 The search checks one candidate per guidance tick at the final 20 m terrain
-scale while continuing powered braking. Normal searches retain the 5° slope
+scale while guidance continues. Normal searches retain the 5° slope
 limit, sunlight policy and optional Kerbin requirement. Precision profiles
 keep their original target and survey policy. The time setting estimates
 correction feasibility; it does not guarantee touchdown timing or fuel.
@@ -202,9 +207,20 @@ By operator request, economy profiles set `LANDING_DIVERT_EMERGENCY_SLOPE=15`.
 Only after the normal search fails may an emergency search accept terrain up
 to 15°. Its accepted-site log records `emergency=true` and `slopeLimit=15`.
 The default allowance is 0 (disabled). `LANDING_DIVERT_SEARCH_RADIUS` (1000 m),
-`LANDING_DIVERT_SEARCH_STEP` (100 m), and `LANDING_DIVERT_SEARCH_TIME` (15 s per
-pass) bound the search. During search, low-speed braking requests a controlled
-descent of up to `LANDING_DIVERT_SEARCH_DESCENT` (5 m/s). If both permitted
+`LANDING_DIVERT_SEARCH_STEP` (100 m maximum), and `LANDING_DIVERT_SEARCH_TIME` (15 s per
+pass) bound the search. The actual radius also fits the upright controller's
+120-second range; spacing tightens with the radius to a 20 m minimum.
+On Minmus this resolves small flat patches instead of spending most
+samples on unreachable outer points. Each pass logs its best measured slope.
+In economy mode an active or exhausted search cannot itself start braking or
+keep a captured craft burning above the stopping envelope. Search continues
+while falling; ignition still uses the existing terrain/velocity/staging gate.
+After horizontal capture, a pending economy diversion can use current hull
+clearance and the highest measured local terrain when the old target is beyond
+the low-speed coast corridor and at least 1 km away. Nearby targets, moving
+craft and enabled coast corrections retain the original height guard.
+When powered arrest is physically needed and no site has passed, low-speed
+search requests up to `LANDING_DIVERT_SEARCH_DESCENT` (5 m/s). If both permitted
 searches fail after reachability rejections, a material reduction in horizontal
 speed or shift of the stopping point permits one fresh normal/emergency cycle.
 This revisits nearby sites that were rejected while braking but are reachable
@@ -217,6 +233,19 @@ Failure logs include rejection totals by reachability, terrain, clearance and
 light, plus the last candidate's distance and correction-time estimate.
 `grade=-1` with `reason=reachability` means that candidate's terrain was not
 sampled. BRAKE `d=` is surface distance to the saved target, excluding altitude.
+
+For a repeatable terrain snapshot, use `RUNPATH("0:/cmd/divertcheck.ks").` with
+an archive link from a saved test state or with flight control maintained
+separately. This command does not hover, land, stage or change the mission.
+It probes the center first, then up to 80 surrounding points at 50 m spacing.
+Optional arguments set sample count (1–81) and spacing (20–100 m). Sampling
+checks a six-game-second deadline between points; loading and archive export
+take additional time. It restores its temporary instruction budget and writes
+the report directly under `0:/logs/archive/_diagnostics/divertcheck_*.log`, with
+a `.boot.log` sidecar copied from the current flight log. The report includes
+raw four-neighbor elevations, production/independent grades, slope degrees,
+clearance and correction-time estimates. Transfer both files for analysis;
+no boot sweep or boot-module update is required.
 After deorbit, diversions default to `LANDING_DIVERT_REQUIRE_KERBIN=0`: a lost
 Kerbin view does not abort an otherwise acceptable autonomous landing. The
 orbital site search retains its configured requirement (15 degrees in the economy profiles).

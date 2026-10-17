@@ -20,6 +20,8 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                PLAN_ACC=gravity*twr, GRAV=gravity, BRAKE_GRAV=gravity,
                BRAKE_ALIGN_BLOCKED=False,
                DIVERT_PENDING=False, DIVERT_SEARCH={},
+               DIVERT_PREVIEW=dict(OK=False,AT=-9999,LOG_AT=-9999),
+               DIVERT_ELEVATION=0,
                TARGET_LAT=0, TARGET_LNG=0, TARGET_ELEVATION=0,
                height=height, downrange=100000, STATE_ENTERED=0, TERRAIN_DONE=True)
     env['SHIP'] = NS(FACING=NS(FOREVECTOR=Vec((0, 0, 1))), ALTITUDE=height,

@@ -427,6 +427,27 @@ Looks like Python/JS; is neither.
   the last outer point. A separate1481m rest/7980m miss flat point mass selects
   a .1-grade local site at15.2s and coasts/brakes into descending vertical
   guidance at288m; not actual terrain, fuel, attitude or flight validation.
+  On retry the operator still hovered at1352m: emergency15 search ended with
+  232 samples, terrainRejected42/reachRejected190/lightRejected0, lastDist781m,
+  transit204.1s. Those totals combine normal/emergency passes and do not prove
+  the best emergency slope. A 100m grid can miss small safe patches. Search
+  radius/step now fit the upright correction range (minimum20m spacing), and
+  each pass logs its best measured slope. Economy pending/exhausted search no
+  longer forces early alignment/ignition or holds above the stopping envelope.
+  After horizontal capture, a pending economy diversion can replace an old
+  datum beyond the low-speed coast corridor (minimum1km) with local hull
+  clearance/highest observed search terrain. Nearby sites, moving/upward
+  craft, enabled coast corrections, precision and accepted targets retain
+  the original guard. This is not a general removal of terrain constraints.
+  Provisional terrain/light sampling runs during coast/braking, with fresh
+  actual gates before accepting cached sites. It cannot certify a future
+  footprint or bypass the weaker-stage envelope. A flat, instantaneous-attitude
+  Minmus6km/120m/s/-60m/s fixture has one main braking entry and descending
+  terminal handoff at529m, no high hover. Single-burn optimality, finite-stage
+  timing and actual steep terrain remain unverified. cmd/divertcheck writes
+  raw terrain/correction-time data and a boot-log sidecar directly to archive;
+  it samples for up to6 game seconds between points, with loading/export extra,
+  and never controls flight. Use a saved test state or separately held craft.
   After 2a27aa2, the operator reported an "ok landing" on the RO9 Mun economy
   retry (2026-10-17). This is flight evidence for successful descent after the
   alignment and terrain-abort repairs. The supplied boot_012_core.log then

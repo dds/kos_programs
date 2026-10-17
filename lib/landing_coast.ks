@@ -63,7 +63,7 @@ GLOBAL FUNCTION _landingCoastTick {
         SET landingAbortFlag TO TRUE.
         RETURN.
     }
-    IF ctx["DIVERT_PENDING"] {
+    IF ctx["DIVERT_PENDING"] AND LANDING_ECONOMY_BRAKE <= 0 {
         _landingSetState(ctx, "BRAKE_ALIGN", "local terrain search").
         RETURN.
     }

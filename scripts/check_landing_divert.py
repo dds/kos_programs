@@ -30,6 +30,7 @@ def fixture(gravity=1.63, radius=200000):
     env['SHIP'].BODY=NS(RADIUS=radius, GEOPOSITIONOF=lambda pos: geo(pos[0]/scale,pos[1]/scale))
     env['SHIP'].POSITION=ctx['POSITION']
     env['SHIP'].ALTITUDE=3857
+    ctx['DIVERT_ELEVATION']=3000
     def refresh(c):
         env['SHIP'].POSITION=c['POSITION']
         env['SHIP'].ALTITUDE=3000+c['height']
@@ -53,7 +54,8 @@ def fixture(gravity=1.63, radius=200000):
                _landingCacheTick=refresh, landingAbortFlag=False,
                _landingTerrainCheck=lambda *args: (_ for _ in ()).throw(AssertionError('blocking grid')),
                thrustCutoffOk=lambda *args: (_ for _ in ()).throw(AssertionError('search cut throttle')))
-    for name in ('_landingDivertStart','_landingDivertCandidate','_landingDivertRetryReady','landingReviewReachableSite'):
+    for name in ('_landingDivertStart','_landingDivertCandidate','_landingDivertRetryReady',
+                 '_landingDivertSurveyAhead','landingReviewReachableSite'):
         env[name]=lambda *args,name=name:call(name,env,*args)
     return env,ctx,events,overrides,samples,light_calls
 
@@ -106,13 +108,14 @@ def check_candidates_and_search():
     ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)))
     env.update(LANDING_DIVERT_SEARCH_RADIUS=200,LANDING_DIVERT_SEARCH_TIME=1000,
                grade_at=lambda x,y:.238)
-    for step in range(40):
+    for step in range(500):
         before=len(samples)
         assert tick(env,ctx,step*.05)
         assert len(samples)-before<=1
     assert ctx['DIVERT_PENDING'] and ctx['DIVERT_SEARCH']['EXHAUSTED']
-    assert len(samples)==25 and len(set(samples))==25
-    assert set(samples)=={(float(x),float(y)) for x in range(-200,201,100) for y in range(-200,201,100)}
+    step_m=ctx['DIVERT_SEARCH']['STEP']
+    assert step_m==20 and len(samples)==441 and len(set(samples))==441
+    assert set(samples)=={(round(x*step_m,6),round(y*step_m,6)) for x in range(-10,11) for y in range(-10,11)}
     assert ctx['TARGET_THROTTLE']==1 and 'TARGET_LAT' not in overrides
     # A steep center does not hide a nearby flat candidate.
     env,ctx,events,overrides,samples,_=fixture()
@@ -311,6 +314,151 @@ def check_paused_minmus_hover():
     print(f'PASS: paused Minmus 1481m/zero-velocity/7980m miss restart selects a checked local site at {accepted:.1f}s, leaves search braking for coast and reaches descending terminal handoff at {ctx["height"]:.0f}m; flat point mass, not flight proof')
 
 
+def check_economy_search_does_not_ignite():
+    for exhausted in (False, True):
+        env,ctx,_,_,_,_=fixture(gravity=.491,radius=60000)
+        ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)),V_SPEED=0,DOWN_SPEED=0,
+                   height=1352,POSITION=Vec((0,0,1352)),STATE='COAST')
+        env.update(LANDING_ECONOMY_BRAKE=1,grade_at=lambda *args:.4)
+        # A mountain at the old target must not define a local diversion's
+        # height. Measured nearby high terrain must still force stopping.
+        ctx['TARGET_ELEVATION']=6000
+        env['_landingTargetHeight']=lambda c:env['SHIP'].ALTITUDE-c['TARGET_ELEVATION']
+        env['_landingCacheTick'](ctx)
+        tick(env,ctx)
+        ctx['DIVERT_SEARCH']['EXHAUSTED']=exhausted
+        call('_landingCoastTick',env,ctx)
+        assert ctx['STATE']=='COAST' and ctx['TARGET_THROTTLE']==0
+        ctx['STATE']='BRAKE_ALIGN'
+        ctx['steering']=ctx['UP_VEC']
+        env['SHIP'].FACING.FOREVECTOR=ctx['UP_VEC']
+        call('_landingBrakeAlignTick',env,ctx)
+        assert ctx['STATE']=='COAST' and ctx['TARGET_THROTTLE']==0
+        ctx['STATE']='BRAKING_BURN'
+        call('_landingBrakingTick',env,ctx)
+        assert ctx['STATE']=='COAST' and ctx['TARGET_THROTTLE']==0
+        assert call('_landingBurnHeight',env,ctx)==1352
+        ctx['DIVERT_ELEVATION']=env['SHIP'].ALTITUDE-25
+        assert call('_landingBrakeGateInfo',env,ctx)['V_NOW']
+        ctx['DIVERT_ELEVATION']=3000
+        # The untouched vertical stopping envelope still starts real braking.
+        gate=call('_landingBrakeGateInfo',env,ctx)
+        ctx['height']=gate['V_GATE']-1
+        call('_landingCoastTick',env,ctx)
+        assert ctx['STATE']=='BRAKE_ALIGN' and ctx['TARGET_THROTTLE']==0
+    print('PASS: active/exhausted terrain search cannot ignite or hold economy braking at 1352m; coast and alignment remain unpowered until the unchanged stopping gate')
+
+
+def check_fine_reachable_grid():
+    env,ctx,_,overrides,samples,_=fixture(gravity=.491,radius=60000)
+    ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)))
+    env['grade_at']=lambda x,y:.02 if math.hypot(x+30,y+30)<8 else .4
+    # The old 100m grid cannot see this reachable normal-limit patch.
+    for x in (-100,0,100):
+        for y in (-100,0,100):assert env['grade_at'](x,y)>.26795
+    for step in range(6):tick(env,ctx,step*.05)
+    assert 'TARGET_LAT' in overrides and not ctx['DIVERT_PENDING']
+    assert not ctx['DIVERT_SEARCH']['EMERGENCY'] and len(samples)==2
+    assert 20<=ctx['DIVERT_SEARCH']['STEP']<35 and ctx['DIVERT_SEARCH']['RADIUS']<400
+    print('PASS: Minmus search resolves a checked flat patch missed by the 100m grid, with unchanged 5-degree and 120-second limits and a reachable bounded radius')
+
+
+def check_local_diversion_height():
+    env,ctx,_,_,_,_=fixture(gravity=.491,radius=60000)
+    ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)),TARGET_ELEVATION=6000,STATE='COAST')
+    env.update(LANDING_ECONOMY_BRAKE=1,elevation_at=lambda *args:3900,grade_at=lambda *args:.4)
+    env['_landingTargetHeight']=lambda c:env['SHIP'].ALTITUDE-c['TARGET_ELEVATION']
+    tick(env,ctx)  # The unreachable old target never supplies a height datum.
+    assert call('_landingBurnHeight',env,ctx)==857
+    tick(env,ctx,.05)  # The candidate above clearance still supplies an obstacle.
+    assert ctx['DIVERT_ELEVATION']==3900
+    assert call('_landingBurnHeight',env,ctx)==-43
+    env['elevation_at']=lambda *args:3000
+    tick(env,ctx,.1)
+    assert ctx['DIVERT_ELEVATION']==3900  # Lower neighbors cannot erase it.
+    ctx['H_SPEED']=2
+    assert call('_landingBurnHeight',env,ctx)==3857-6000
+    ctx['H_SPEED']=0
+    original=ctx['TARGET_LAT']
+    ctx['TARGET_LAT']=200/60000*180/math.pi
+    assert call('_landingBurnHeight',env,ctx)==3857-6000
+    ctx['TARGET_LAT']=original
+    for flexible,economy,pending in ((0,1,True),(1,0,True),(1,1,False)):
+        env.update(LANDING_FLEXIBLE_SITE=flexible,LANDING_ECONOMY_BRAKE=economy)
+        ctx['DIVERT_PENDING']=pending
+        assert call('_landingBurnHeight',env,ctx)==3857-6000
+    print('PASS: only pending economy diversions replace obsolete target height; rejected high local terrain remains a stopping constraint, and precision/accepted targets retain original datums')
+
+
+def check_provisional_coast_survey():
+    for failure in ('none','terrain','reachability','clearance','light'):
+        env,ctx,_,overrides,samples,lights=fixture(gravity=.491,radius=60000)
+        ctx.update(H_SPEED=120,H_VEL=Vec((120,0,0)),V_SPEED=-5,DOWN_SPEED=5,
+                   height=6000,POSITION=Vec((0,0,6000)),STATE='COAST')
+        env.update(LANDING_ECONOMY_BRAKE=1)
+        env['_landingCacheTick'](ctx)
+        call('_landingCoastTick',env,ctx)
+        assert ctx['STATE']=='COAST' and ctx['TARGET_THROTTLE']==0
+        assert ctx['DIVERT_PREVIEW']['OK'] and len(samples)==1 and len(lights)==1
+        assert not ctx['DIVERT_PENDING'] and 'TARGET_LAT' not in overrides
+        before=len(samples)
+        env['TIME'].SECONDS=.1
+        call('_landingCoastTick',env,ctx)
+        assert len(samples)==before  # At most one forecast every two seconds.
+        site=dict(ctx['DIVERT_PREVIEW'])
+        ctx.update(H_SPEED=0,H_VEL=Vec((0,0,0)))
+        if failure!='reachability':
+            ctx['POSITION'][0]=site['LAT']*60000*math.pi/180
+            ctx['POSITION'][1]=site['LNG']*60000*math.pi/180
+        if failure=='terrain':env['grade_at']=lambda *args:.4
+        if failure=='clearance':env['elevation_at']=lambda *args:10000
+        if failure=='light':env['landingLightWindow']=lambda *args:dict(OK=False,REASON='eclipse')
+        env['_landingCacheTick'](ctx)
+        tick(env,ctx,.2)
+        assert ('TARGET_LAT' in overrides)==(failure=='none')
+        if failure=='none':
+            assert ctx['TARGET_LAT']==site['LAT'] and ctx['TARGET_LNG']==site['LNG']
+        else:
+            assert ctx['DIVERT_PENDING'] and not ctx['HOVER_TERRAIN_DONE']
+    print('PASS: economy coast surveys provisional terrain/light without actuation or target changes; capture repeats real reachability, terrain and light before accepting cached coordinates')
+
+
+def check_falling_minmus_survey():
+    env,ctx,_,overrides,samples,_=fixture(gravity=.491,radius=60000)
+    ctx.update(H_SPEED=120,H_VEL=Vec((120,0,0)),V_SPEED=-60,DOWN_SPEED=60,
+               SURFACE_VEL=Vec((120,0,-60)),height=6000,POSITION=Vec((0,0,6000)),
+               STATE='COAST',MAX_ACC=.491*7.45,PLAN_ACC=.491*7.45,
+               TARGET_LAT=7980/60000*180/math.pi)
+    env['LANDING_ECONOMY_BRAKE']=1
+    burns=0
+    high_hover=0
+    dt=.2
+    for step in range(1500):
+        env['TIME'].SECONDS=step*dt
+        env['SHIP'].FACING.FOREVECTOR=ctx.get('steering',ctx['UP_VEC'])
+        env['_landingCacheTick'](ctx)
+        previous=ctx['STATE']
+        call({'COAST':'_landingCoastTick','BRAKE_ALIGN':'_landingBrakeAlignTick',
+              'BRAKING_BURN':'_landingBrakingTick'}[previous],env,ctx)
+        if step==0:
+            assert samples and 'TARGET_LAT' not in overrides and ctx['TARGET_THROTTLE']==0
+        burns+=ctx['STATE']=='BRAKING_BURN' and previous!='BRAKING_BURN'
+        if ctx['STATE'] in ('VERTICAL_DESCENT','TARGET_REFINE','APPROACH'):break
+        command=ctx['TARGET_THROTTLE'] if step*dt>=3 else 0
+        if ctx['height']>1000 and abs(ctx['V_SPEED'])<1 and command>0:high_hover+=dt
+        thrust=ctx.get('steering',ctx['UP_VEC'])*(command*ctx['MAX_ACC'])
+        velocity=ctx['SURFACE_VEL']+(thrust-ctx['UP_VEC']*ctx['GRAV'])*dt
+        ctx.update(SURFACE_VEL=velocity,V_SPEED=velocity[2],DOWN_SPEED=max(0,-velocity[2]),
+                   H_SPEED=math.hypot(velocity[0],velocity[1]),H_VEL=Vec((velocity[0],velocity[1],0)))
+        ctx['POSITION']+=velocity*dt
+        ctx['height']=ctx['POSITION'][2]
+        assert ctx['height']>0
+    assert ctx['STATE'] in ('VERTICAL_DESCENT','TARGET_REFINE','APPROACH') and burns==1
+    assert 'TARGET_LAT' in overrides and not ctx['DIVERT_PENDING'] and high_hover<1
+    assert ctx['V_SPEED']< -5 and 100<ctx['height']<1000
+    print(f'PASS: Minmus 6km/120m/s/60m/s model surveys while falling, uses one main braking entry and hands to descending terminal guidance at {ctx["height"]:.0f}m without a high hover; instantaneous attitude/flat terrain, not flight proof')
+
+
 def check_cpu_and_scan_order():
     main=function_body((ks.ROOT/'lib/landing_main.ks').read_text(),'landExecute')
     setup=main[main.index('LOCAL priorIpu'):main.index('IF SHIP:BODY:ATM:EXISTS')]
@@ -375,5 +523,10 @@ if __name__=='__main__':
     check_retry_bound_and_rejections()
     check_shifted_stopping_point()
     check_paused_minmus_hover()
+    check_economy_search_does_not_ignite()
+    check_fine_reachable_grid()
+    check_local_diversion_height()
+    check_provisional_coast_survey()
+    check_falling_minmus_survey()
     check_cpu_and_scan_order()
     check_library_scope()

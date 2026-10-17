@@ -205,7 +205,7 @@ GLOBAL FUNCTION _landingBrakeAlignTick {
     // Keep steering active and re-evaluate the envelope while throttle is zero.
     IF NOT steerInfo["ALIGNED"] { RETURN. }
 
-    IF ctx["DIVERT_PENDING"] {
+    IF ctx["DIVERT_PENDING"] AND LANDING_ECONOMY_BRAKE <= 0 {
         _landingSetState(ctx, "BRAKING_BURN", "local terrain search").
     } ELSE IF gate["V_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").
@@ -213,7 +213,7 @@ GLOBAL FUNCTION _landingBrakeAlignTick {
         _landingSetState(ctx, "BRAKING_BURN", "downrange <= brake distance").
     } ELSE IF ctx["HAS_TARGET"] AND gate["H_OVERSHOT"] {
         _landingSetState(ctx, "BRAKING_BURN", "target passed below safe altitude").
-    } ELSE IF NOT gate["H_SUPPRESSED"]
+    } ELSE IF (NOT gate["H_SUPPRESSED"] OR LANDING_ECONOMY_BRAKE > 0)
             AND MIN(gate["H_ETA"], gate["V_ETA"]) > LANDING_BRAKE_ALIGN_LEAD {
         _landingSetState(ctx, "COAST", "brake gate deferred").
     }
@@ -239,7 +239,8 @@ GLOBAL FUNCTION _landingBrakingTick {
     LOCAL terminalReady IS _landingBottomRadar() <= TERMINAL_ALT.
     LOCAL coastEnvelope IS lmBrakeEnvelope(horizontalSpeed, downSpeed,
         ctx["PLAN_ACC"], ctx["BRAKE_GRAV"], MAX(0, LANDING_BRAKE_REACTION_TIME)).
-    IF NOT ctx["DIVERT_PENDING"] AND NOT terminalReady AND horizontalSpeed <= APPROACH_HSPEED
+    IF (NOT ctx["DIVERT_PENDING"] OR LANDING_ECONOMY_BRAKE > 0)
+            AND NOT terminalReady AND horizontalSpeed <= APPROACH_HSPEED
             AND burnHeight > coastEnvelope["V"] {
         // An early horizontal arrest must not turn into minutes of hovering
         // or backtracking. Re-enter coast and re-evaluate the full stop gate.
