@@ -48,6 +48,67 @@ LOCAL FUNCTION _escapeScore {
     RETURN LEXICON("SCORE", score, "PATCH", hasPatch).
 }
 
+// Fuel-weighted search can prefer a cheaper node just outside the entry
+// corridor. Finish by targeting native parent-body Pe directly, without
+// widening the burn acceptance gate or importing the full MCC solver.
+LOCAL FUNCTION _polishReturnEscapePe {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    LOCAL initialDv IS nd:PROGRADE.
+    LOCAL tolerance IS MAX(1,MIN(250,RETURN_ESCAPE_PE_TOLERANCE)).
+    LOCAL iteration IS 0.
+    LOCAL status IS "iteration-limit".
+    UNTIL iteration >= 6 OR ABORT {
+        LOCAL patch IS _targetPatch(nd,targetBody).
+        IF patch = 0 { SET status TO "lost-parent-patch". BREAK. }
+        LOCAL error IS targetPe - patch:PERIAPSIS.
+        IF ABS(error) <= tolerance OR (iteration=0 AND ABS(error) <= RETURN_ESCAPE_PE_TOLERANCE) {
+            SET status TO "converged". BREAK.
+        }
+        LOCAL baseDv IS nd:PROGRADE.
+        SET nd:PROGRADE TO baseDv + 0.1.
+        WAIT 0.05.
+        LOCAL probe IS _targetPatch(nd,targetBody).
+        LOCAL sensitivity IS 0.
+        IF probe <> 0 { SET sensitivity TO (probe:PERIAPSIS - (targetPe-error)) / 0.1. }
+        SET nd:PROGRADE TO baseDv.
+        WAIT 0.05.
+        IF NOT (ABS(sensitivity) > 0.001 AND ABS(sensitivity) < 1e30) {
+            SET status TO "no-response". BREAK.
+        }
+        LOCAL correction IS MAX(-5,MIN(5,error/sensitivity)).
+        LOCAL accepted IS FALSE.
+        LOCAL fraction IS 1.
+        LOCAL trial IS 0.
+        UNTIL accepted OR trial >= 5 OR ABORT {
+            SET nd:PROGRADE TO MAX(initialDv-10,MIN(initialDv+10,baseDv+fraction*correction)).
+            WAIT 0.05.
+            LOCAL candidate IS _targetPatch(nd,targetBody).
+            IF candidate <> 0 {
+                SET accepted TO ABS(candidate:PERIAPSIS-targetPe) < ABS(error).
+            }
+            SET fraction TO fraction/2.
+            SET trial TO trial+1.
+        }
+        IF NOT accepted {
+            SET nd:PROGRADE TO baseDv.
+            WAIT 0.05.
+            SET status TO "no-improvement". BREAK.
+        }
+        SET iteration TO iteration+1.
+    }
+    IF ABORT { SET status TO "abort". }
+    LOCAL finalPatch IS _targetPatch(nd,targetBody).
+    LOCAL finalPe IS -999999.
+    IF finalPatch <> 0 { SET finalPe TO finalPatch:PERIAPSIS. }
+    mLog("STATS return-escape refine status=" + status + " iterations=" + iteration
+        + " deltaDv=" + (nd:PROGRADE-initialDv) + " predictedPe=" + finalPe
+        + " targetPe=" + targetPe + " tolerance=" + tolerance).
+    RETURN finalPatch <> 0 AND NOT ABORT
+        AND ABS(finalPe-targetPe) <= RETURN_ESCAPE_PE_TOLERANCE.
+}
+
 // Estimate KSC longitude penalty for a candidate escape node.
 // Kept local so the return path does not import maneuver_targeting.
 LOCAL FUNCTION _escapeKscPenalty {
@@ -224,6 +285,7 @@ LOCAL FUNCTION _planReturnEscape {
     SET nd:PROGRADE TO (dvA + dvB) / 2.
     WAIT 0.1.
 
+    _polishReturnEscapePe(nd,targetBody,targetPe).
     LOCAL finalSeed IS _escapeScore(nd, targetBody, targetPe).
     LOCAL patch IS _targetPatch(nd, targetBody).
     IF NOT finalSeed["PATCH"] {
@@ -344,7 +406,11 @@ GLOBAL FUNCTION phaseEscape {
                 OR nd:DELTAV:MAG > SHIP:DELTAV:VACUUM {
             mLogError("STATS return-escape hold reason=entry-or-fuel dv="
                 + nd:DELTAV:MAG + " available=" + SHIP:DELTAV:VACUUM
-                + " predictedPe=" + returnPatch:PERIAPSIS + " targetPe=" + targetPe).
+                + " predictedPe=" + returnPatch:PERIAPSIS + " targetPe=" + targetPe
+                + " peError=" + (returnPatch:PERIAPSIS-targetPe)
+                + " tolerance=" + RETURN_ESCAPE_PE_TOLERANCE
+                + " entryOk=" + _returnEscapeEntryValid(returnPatch:PERIAPSIS,targetPe)
+                + " fuelOk=" + (nd:DELTAV:MAG <= SHIP:DELTAV:VACUUM)).
             PRINT "RETURN ESCAPE REJECTED - NO BURN".
             PRINT "  dV required/available: " + ROUND(nd:DELTAV:MAG,1)
                 + "/" + ROUND(SHIP:DELTAV:VACUUM,1) + " m/s".

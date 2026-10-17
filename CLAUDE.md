@@ -541,6 +541,16 @@ Looks like Python/JS; is neither.
   velocity reproduces targetVs0/17.79% throttle for exhausted search with
   g.491/acc2.76, versus -5m/s/zero initial throttle for active search. This
   establishes a mechanism, not which branch the live craft occupied.
+  The operator then reports the Minmus lander landed and reached return
+  planning, but ESCAPE held at dV170.20/available1038, predicted Kerbin
+  Pe54717 versus53000. Landing success does not resolve the hover's cause.
+  Confirmed planner mismatch: the fuel-weighted score can favor a Pe outside
+  the separate1km entry gate. A bounded native-Pe polish now follows that
+  search (six iterations, improving-only backtracking, +/-5m/s steps and
+  +/-10m/s total prograde change). Already acceptable nodes keep their cost.
+  The existing1km/fuel rejection gates and downstream actual-orbit MCC
+  corridor remain; no tolerance relaxation or new BPLANE phase. Prescribed
+  response/source fixtures pass, native KSP flight evidence still pending.
   The supplied deorbitcheck_RO9_1305239.log actually AGREES between TR/native
   impact coordinates within0.2m (quaternion also agrees); this snapshot does
   not show a stale prediction or incorrect longitude transform. An independent

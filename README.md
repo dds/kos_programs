@@ -775,6 +775,13 @@ It targets a **53 km initial periapsis** for the unshielded craft, with a
 opts into this corridor; return setup preserves it across both generated
 profiles, together with the chute and decoupler settings. KSC trim has a
 20 m/s per-burn cap. The return MCC does not request an equatorial plane change.
+The escape planner finishes its fuel-weighted search with bounded native
+periapsis refinement. That prevents a cheaper but inaccurate node from
+winning the search and then failing the separate 1 km departure gate.
+It keeps improving trials only, limits prograde changes to 10 m/s total,
+and retains the final entry/fuel checks. `STATS return-escape refine` reports
+the result; a failed refinement still holds with the node for inspection.
+MCC subsequently checks the flown orbit and acquires the entry corridor.
 
 Aerobraking can take multiple passes. Propulsion stays attached through
 AEROBRAKE; DESCENT starts only after capture and slowing below 600 m/s.
