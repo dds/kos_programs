@@ -7,7 +7,8 @@ import re
 from types import SimpleNamespace as NS
 
 import check_landing_guidance as ks
-from check_codebase import ROOT, closure, dependency_tables, function_body
+from check_codebase import (ROOT, closure, dependency_tables, function_body,
+                            command_entrypoint_errors, unscoped_returns)
 from check_deorbit_geometry import Vec, evaluate
 
 
@@ -35,6 +36,42 @@ def run(source, env):
         ks.run(ks.parse(source), env)
     except ks.Returned as result:
         return result.value
+
+
+def check_command_scopes():
+    for source in ('RETURN.', 'IF NOT HASNODE { RETURN. }',
+                   'UNTIL done { IF ABORT { RETURN FALSE. } }',
+                   '@CLOBBERBUILTINS ON. IF ABORT { RETURN. }',
+                   'LOCAL FUNCTION main { RETURN. } RETURN.'):
+        assert unscoped_returns(source), source
+    for source in ('LOCAL FUNCTION main { IF ABORT { RETURN FALSE. } } main().',
+                   'FUNCTION outer { LOCAL FUNCTION inner { RETURN 1. } RETURN inner(). }',
+                   'WHEN ABORT THEN { RETURN FALSE. }',
+                   'ON AG1 { RETURN TRUE. }',
+                   'LOCAL callback IS { RETURN TRUE. }.',
+                   '// RETURN.\nPRINT "RETURN. { }".'):
+        assert not unscoped_returns(source), source
+    valid = '''@LAZYGLOBAL OFF.
+        GLOBAL LIMIT IS 0.5.
+        PARAMETER opts IS LEXICON().
+        LOCAL FUNCTION main {
+            LOCAL FUNCTION helper { RETURN 1. }
+            IF ABORT { RETURN. }
+            RUNPATH("1:/lib/boot_lib").
+        }
+        main().'''
+    assert not command_entrypoint_errors(valid)
+    for source in ('PRINT "old top-level command".',
+                   valid.replace('main().', ''),
+                   valid+'main().',
+                   valid+'IF ABORT { PRINT "top-level logic". }',
+                   valid.replace('main().', 'other().')):
+        assert command_entrypoint_errors(source), source
+    # The reported regression was inside the archive helper, beyond cmd/.
+    helper = (ROOT / 'lib/burn_check.ks').read_text()
+    assert not unscoped_returns(helper)
+    assert len(unscoped_returns(function_body(helper, '_burnCheckMain'))) == 2
+    print('PASS: scope guard rejects bare/nested file-level RETURN; command guard requires one local entry call; archive helper is covered')
 
 
 def check_boot():
@@ -223,6 +260,7 @@ def check_rendezvous():
 
 
 if __name__ == '__main__':
+    check_command_scopes()
     check_boot()
     check_cleanup_and_links()
     check_phase_failures()

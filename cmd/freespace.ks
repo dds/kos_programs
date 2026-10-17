@@ -13,31 +13,35 @@
 // Run while linked: RUNPATH("0:/cmd/freespace.ks").
 // ============================================================
 
-RUNPATH("1:/lib/boot_lib").
-bootPreamble().
+LOCAL FUNCTION _cmdFreespace {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
 
-LOCAL before IS CORE:VOLUME:FREESPACE.
+    LOCAL before IS CORE:VOLUME:FREESPACE.
 
-IF EXISTS("1:/lib/solar.ksm") {
-    DELETEPATH("1:/lib/solar.ksm").
-    PRINT "  dropped solar.ksm (archive-only).".
+    IF EXISTS("1:/lib/solar.ksm") {
+        DELETEPATH("1:/lib/solar.ksm").
+        PRINT "  dropped solar.ksm (archive-only).".
+    }
+
+    LOCAL swept IS bootSweepLogs("1:/run/logs", "0:/logs/archive",
+        HOMECONNECTION:ISCONNECTED).
+    PRINT "  swept " + swept + " log file(s) to archive.".
+
+    IF DEFINED stateRemovePrefix {
+        LOCAL n IS stateRemovePrefix("midcourse_refine_")
+            + stateRemovePrefix("xing_arrival_").
+        IF n > 0 { PRINT "  trimmed " + n + " stale state key(s).". }
+    }
+
+    PRINT " ".
+    PRINT "  Free: " + before + " -> " + CORE:VOLUME:FREESPACE + " bytes.".
+    IF NOT HOMECONNECTION:ISCONNECTED {
+        PRINT "  WARNING: no link — libs can't re-sync. Reconnect first.".
+    }
+    PRINT "  Rebooting in 3s...".
+    WAIT 3.
+    REBOOT.
 }
 
-LOCAL swept IS bootSweepLogs("1:/run/logs", "0:/logs/archive",
-    HOMECONNECTION:ISCONNECTED).
-PRINT "  swept " + swept + " log file(s) to archive.".
-
-IF DEFINED stateRemovePrefix {
-    LOCAL n IS stateRemovePrefix("midcourse_refine_")
-        + stateRemovePrefix("xing_arrival_").
-    IF n > 0 { PRINT "  trimmed " + n + " stale state key(s).". }
-}
-
-PRINT " ".
-PRINT "  Free: " + before + " -> " + CORE:VOLUME:FREESPACE + " bytes.".
-IF NOT HOMECONNECTION:ISCONNECTED {
-    PRINT "  WARNING: no link — libs can't re-sync. Reconnect first.".
-}
-PRINT "  Rebooting in 3s...".
-WAIT 3.
-REBOOT.
+_cmdFreespace().

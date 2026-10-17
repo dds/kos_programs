@@ -14,17 +14,21 @@
 
 PARAMETER opts IS LEXICON().
 
-LOCAL plan IS LEXICON(
-    "dest", "Jool",
-    "pe", 250000,
-    "ap", 15000000,
-    "inc", 0,
-    "reboot", TRUE
-).
+LOCAL FUNCTION _cmdGotojool {
+    LOCAL plan IS LEXICON(
+        "dest", "Jool",
+        "pe", 250000,
+        "ap", 15000000,
+        "inc", 0,
+        "reboot", TRUE
+    ).
 
-FOR key IN opts:KEYS {
-    IF plan:HASKEY(key) { plan:REMOVE(key). }
-    plan:ADD(key, opts[key]).
+    FOR key IN opts:KEYS {
+        IF plan:HASKEY(key) { plan:REMOVE(key). }
+        plan:ADD(key, opts[key]).
+    }
+
+    RUNPATH("0:/cmd/goto.ks", plan).
 }
 
-RUNPATH("0:/cmd/goto.ks", plan).
+_cmdGotojool().

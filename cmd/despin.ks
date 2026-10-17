@@ -20,37 +20,41 @@
 
 PARAMETER aim IS "".
 
-RUNPATH("1:/lib/boot_lib").
-bootPreamble().
+LOCAL FUNCTION _cmdDespin {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
 
-SAS OFF.
-RCS OFF.
-SET STEERINGMANAGER:MAXSTOPPINGTIME TO 5.
-LOCAL hold IS SHIP:FACING.
-LOCK STEERING TO hold.
-PRINT "Despinning from " + ROUND(SHIP:ANGULARVEL:MAG, 3)
-    + " rad/s (wheel torque + EC required)...".
-LOCAL deadline IS TIME:SECONDS + 300.
-UNTIL SHIP:ANGULARVEL:MAG < 0.03 OR TIME:SECONDS > deadline {
-    WAIT 0.5.
+    SAS OFF.
+    RCS OFF.
+    SET STEERINGMANAGER:MAXSTOPPINGTIME TO 5.
+    LOCAL hold IS SHIP:FACING.
+    LOCK STEERING TO hold.
+    PRINT "Despinning from " + ROUND(SHIP:ANGULARVEL:MAG, 3)
+        + " rad/s (wheel torque + EC required)...".
+    LOCAL deadline IS TIME:SECONDS + 300.
+    UNTIL SHIP:ANGULARVEL:MAG < 0.03 OR TIME:SECONDS > deadline {
+        WAIT 0.5.
+    }
+    PRINT "Rotation now " + ROUND(SHIP:ANGULARVEL:MAG, 4) + " rad/s.".
+
+    IF aim = "node" AND HASNODE {
+        LOCK STEERING TO NEXTNODE:DELTAV.
+        PRINT "Aiming at the next maneuver node.".
+    } ELSE IF aim = "prograde" {
+        LOCK STEERING TO SHIP:PROGRADE.
+        PRINT "Aiming prograde.".
+    } ELSE IF aim = "retrograde" {
+        LOCK STEERING TO SHIP:RETROGRADE.
+        PRINT "Aiming retrograde.".
+    }
+
+    PRINT "Holding with the reaction wheel. Press any key to release".
+    PRINT "(SAS-less cores drift again once released).".
+    WAIT UNTIL TERMINAL:INPUT:HASCHAR.
+    TERMINAL:INPUT:GETCHAR().
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    PRINT "Released.".
 }
-PRINT "Rotation now " + ROUND(SHIP:ANGULARVEL:MAG, 4) + " rad/s.".
 
-IF aim = "node" AND HASNODE {
-    LOCK STEERING TO NEXTNODE:DELTAV.
-    PRINT "Aiming at the next maneuver node.".
-} ELSE IF aim = "prograde" {
-    LOCK STEERING TO SHIP:PROGRADE.
-    PRINT "Aiming prograde.".
-} ELSE IF aim = "retrograde" {
-    LOCK STEERING TO SHIP:RETROGRADE.
-    PRINT "Aiming retrograde.".
-}
-
-PRINT "Holding with the reaction wheel. Press any key to release".
-PRINT "(SAS-less cores drift again once released).".
-WAIT UNTIL TERMINAL:INPUT:HASCHAR.
-TERMINAL:INPUT:GETCHAR().
-UNLOCK STEERING.
-SET SAS TO TRUE.
-PRINT "Released.".
+_cmdDespin().

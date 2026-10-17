@@ -7,16 +7,20 @@
 
 PARAMETER action IS "status".
 
-RUNPATH("1:/lib/boot_lib").
-bootPreamble().
-bootLibLoad("science").
+LOCAL FUNCTION _cmdScan {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
+    bootLibLoad("science").
 
-IF action = "start" {
-    scienceStartScanners().
-} ELSE IF action = "transmit" {
-    scienceTransmitAll().
-} ELSE IF action = "status" {
-    scienceScanStatus().
-} ELSE {
-    PRINT "Unknown action '" + action + "'. Use: start | status | transmit.".
+    IF action = "start" {
+        scienceStartScanners().
+    } ELSE IF action = "transmit" {
+        scienceTransmitAll().
+    } ELSE IF action = "status" {
+        scienceScanStatus().
+    } ELSE {
+        PRINT "Unknown action '" + action + "'. Use: start | status | transmit.".
+    }
 }
+
+_cmdScan().

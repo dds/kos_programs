@@ -3,15 +3,19 @@
 // Usage: RUNPATH("0:/cmd/logs.ks").
 // ============================================================
 
-RUNPATH("1:/lib/boot_lib").
-bootPreamble().
+LOCAL FUNCTION _cmdLogs {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
 
-IF NOT HOMECONNECTION:ISCONNECTED {
-    PRINT "  No KSC link — cannot archive.".
-} ELSE {
-    IF archiveLog() {
-        PRINT "  Boot log archived.".
+    IF NOT HOMECONNECTION:ISCONNECTED {
+        PRINT "  No KSC link — cannot archive.".
     } ELSE {
-        PRINT "  No flight log archived.".
+        IF archiveLog() {
+            PRINT "  Boot log archived.".
+        } ELSE {
+            PRINT "  No flight log archived.".
+        }
     }
 }
+
+_cmdLogs().

@@ -205,12 +205,26 @@ def check_passive_cpu_and_probe():
                           ':ACTIVATE','executeManeuver(', 'REMOVE ', 'stateSet(',
                           'PILOTMAINTHROTTLE TO','SET CONFIG:'):
             assert forbidden not in text
-    loop=probe[probe.index('FOR command IN LIST(0, 1)'):]
+    probe_body=body(probe,'_burnCheckMain')
+    loop=probe_body[probe_body.index('FOR command IN LIST(0, 1)'):]
     nodes=ks.parse(loop)
     # Printing is not part of the probe computation under test.
     def without_print(items):
         return [(statement,without_print(yes),without_print(no))
                 for statement,yes,no in items if not statement.startswith('PRINT ')]
+    guards=probe_body[probe_body.index('IF NOT HASNODE'):probe_body.index('LOCAL ignitionVec')]
+    for present,dv,vector,exits in ((False,0,0,True),(True,0,1,True),
+                                   (True,float('nan'),1,True),(True,float('inf'),1,True),
+                                   (True,500,0,True),(True,500,1,False)):
+        env=dict(HASNODE=present)
+        if present:
+            env['NEXTNODE']=NS(DELTAV=NS(MAG=dv),BURNVECTOR=NS(MAG=vector))
+        returned=False
+        try:
+            ks.run(without_print(ks.parse(guards)),env)
+        except ks.Returned:
+            returned=True
+        assert returned==exits, (present,dv,vector)
     for delay in (0,.2,1.1):
         env,_,nd,_=fixture()
         results=[]
@@ -227,7 +241,7 @@ def check_passive_cpu_and_probe():
         assert (results[1][1]>0)==(delay<=1)
         assert results[1][2]==('live-command-stale' if delay>1 else '')
         assert env['SHIP'].CONTROL.PILOTMAINTHROTTLE==1
-    print('PASS: service standby owns no controls; post-separation cutoff retained; read-only probe distinguishes stale-command gate')
+    print('PASS: passive service CPU; probe safely returns for missing/invalid nodes and distinguishes stale-command gate')
 
 
 if __name__=='__main__':

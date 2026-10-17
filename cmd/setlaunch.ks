@@ -7,60 +7,64 @@
 PARAMETER parkingKm IS 20.
 PARAMETER launchInc IS 0.
 
-RUNPATH("1:/lib/boot_lib").
-bootPreamble().
+LOCAL FUNCTION _cmdSetlaunch {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
 
-LOCAL parkingAlt IS parkingKm * 1000.
-IF parkingKm > 1000 { SET parkingAlt TO parkingKm. }
+    LOCAL parkingAlt IS parkingKm * 1000.
+    IF parkingKm > 1000 { SET parkingAlt TO parkingKm. }
 
-LOCAL FUNCTION _clearLibCache {
-    FOR key IN LIST(
-        "lib_band_libs", "lib_band_phase", "reload_reason",
-        "reload_next_phase", "reload_next_band"
-    ) {
-        stateRemove(key).
+    LOCAL FUNCTION _clearLibCache {
+        FOR key IN LIST(
+            "lib_band_libs", "lib_band_phase", "reload_reason",
+            "reload_next_phase", "reload_next_band"
+        ) {
+            stateRemove(key).
+        }
     }
+
+    LOCAL FUNCTION _clearLaunchLegState {
+        FOR key IN LIST(
+            "fairing_deployed", "launch_vs_nonpos_logged",
+            "orbit_start_time", "launch_window", "prelaunch_plane_ut",
+            "prelaunch_plane_target", "prelaunch_plane_inc",
+            "prelaunch_plane_lan", "landing_state", "landing_lat",
+            "landing_lng", "landing_time"
+        ) {
+            stateRemove(key).
+        }
+    }
+
+    LOCAL profilePath IS missionProfileBegin(stateGet("vehicle", ""), "setlaunch").
+    missionOverrideClear().
+    stateRemovePrefix("burn_").
+    LOG "SET MISSION_ID TO " + configLiteral("setlaunch") + "." TO profilePath.
+    LOG "SET MISSION_NAME TO " + configLiteral("Launch Reset") + "." TO profilePath.
+    LOG "SET TARGET_ TO " + configLiteral(SHIP:BODY:NAME:TOUPPER) + "." TO profilePath.
+    LOG "SET SEQUENCE TO " + configLiteral(LIST("PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK", "DONE")) + "." TO profilePath.
+    LOG "SET PARKING_ALT TO " + configLiteral(parkingAlt) + "." TO profilePath.
+    LOG "SET LAUNCH_INCLINATION TO " + configLiteral(launchInc) + "." TO profilePath.
+    LOG "SET LAUNCH_AZIMUTH TO " + configLiteral(0) + "." TO profilePath.
+    LOG "SET ORBIT_STAY_TIME TO " + configLiteral(0) + "." TO profilePath.
+
+    stateSet("mission_id", "setlaunch").
+    stateSet("phase", "PRELAUNCH").
+    stateSet("lib_band", "PRELAUNCH").
+    stateSet("reload_required", "false").
+    stateSet("launch_time", ROUND(TIME:SECONDS)).
+    _clearLibCache().
+    _clearLaunchLegState().
+
+    PRINT "Launch reset for " + SHIP:BODY:NAME + ".".
+    PRINT "Sequence -> PRELAUNCH,LAUNCH,FAIR,ANTS,PARK,DONE.".
+    PRINT "Orbit    -> " + ROUND(parkingAlt / 1000, 1)
+        + " km, inc " + ROUND(launchInc, 2) + " deg.".
+    PRINT "Reboot to load prelaunch band, then resume.".
+
+    mLog("Launch reset: body=" + SHIP:BODY:NAME
+        + " parkingKm=" + ROUND(parkingAlt / 1000, 1)
+        + " inc=" + ROUND(launchInc, 2)
+        + " sequence=PRELAUNCH,LAUNCH,FAIR,ANTS,PARK,DONE.").
 }
 
-LOCAL FUNCTION _clearLaunchLegState {
-    FOR key IN LIST(
-        "fairing_deployed", "launch_vs_nonpos_logged",
-        "orbit_start_time", "launch_window", "prelaunch_plane_ut",
-        "prelaunch_plane_target", "prelaunch_plane_inc",
-        "prelaunch_plane_lan", "landing_state", "landing_lat",
-        "landing_lng", "landing_time"
-    ) {
-        stateRemove(key).
-    }
-}
-
-LOCAL profilePath IS missionProfileBegin(stateGet("vehicle", ""), "setlaunch").
-missionOverrideClear().
-stateRemovePrefix("burn_").
-LOG "SET MISSION_ID TO " + configLiteral("setlaunch") + "." TO profilePath.
-LOG "SET MISSION_NAME TO " + configLiteral("Launch Reset") + "." TO profilePath.
-LOG "SET TARGET_ TO " + configLiteral(SHIP:BODY:NAME:TOUPPER) + "." TO profilePath.
-LOG "SET SEQUENCE TO " + configLiteral(LIST("PRELAUNCH", "LAUNCH", "FAIR", "ANTS", "PARK", "DONE")) + "." TO profilePath.
-LOG "SET PARKING_ALT TO " + configLiteral(parkingAlt) + "." TO profilePath.
-LOG "SET LAUNCH_INCLINATION TO " + configLiteral(launchInc) + "." TO profilePath.
-LOG "SET LAUNCH_AZIMUTH TO " + configLiteral(0) + "." TO profilePath.
-LOG "SET ORBIT_STAY_TIME TO " + configLiteral(0) + "." TO profilePath.
-
-stateSet("mission_id", "setlaunch").
-stateSet("phase", "PRELAUNCH").
-stateSet("lib_band", "PRELAUNCH").
-stateSet("reload_required", "false").
-stateSet("launch_time", ROUND(TIME:SECONDS)).
-_clearLibCache().
-_clearLaunchLegState().
-
-PRINT "Launch reset for " + SHIP:BODY:NAME + ".".
-PRINT "Sequence -> PRELAUNCH,LAUNCH,FAIR,ANTS,PARK,DONE.".
-PRINT "Orbit    -> " + ROUND(parkingAlt / 1000, 1)
-    + " km, inc " + ROUND(launchInc, 2) + " deg.".
-PRINT "Reboot to load prelaunch band, then resume.".
-
-mLog("Launch reset: body=" + SHIP:BODY:NAME
-    + " parkingKm=" + ROUND(parkingAlt / 1000, 1)
-    + " inc=" + ROUND(launchInc, 2)
-    + " sequence=PRELAUNCH,LAUNCH,FAIR,ANTS,PARK,DONE.").
+_cmdSetlaunch().

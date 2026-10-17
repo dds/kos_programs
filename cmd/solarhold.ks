@@ -20,9 +20,13 @@
 PARAMETER holdFor IS 0.
 PARAMETER research IS TRUE.
 
-RUNPATH("1:/lib/boot_lib").
-bootPreamble().
-bootLibLoad("solar").
+LOCAL FUNCTION _cmdSolarhold {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
+    bootLibLoad("solar").
 
-orientForSolar(research, TRUE, TRUE).
-solarMaintainHold(CHOOSE TIME:SECONDS + holdFor IF holdFor > 0 ELSE 0).
+    orientForSolar(research, TRUE, TRUE).
+    solarMaintainHold(CHOOSE TIME:SECONDS + holdFor IF holdFor > 0 ELSE 0).
+}
+
+_cmdSolarhold().

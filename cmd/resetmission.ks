@@ -8,27 +8,31 @@
 
 PARAMETER newMission IS "".
 
-RUNPATH("1:/lib/boot_lib").
-bootPreamble().
+LOCAL FUNCTION _cmdResetmission {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
 
-missionOverrideClear().
-stateRemovePrefix("burn_").
-FOR key IN LIST(
-    "mission_id", "mission_name", "target", "payloads", "phase",
-    "lib_band", "lib_band_phase", "lib_band_libs",
-    "reload_required", "reload_reason", "reload_next_phase",
-    "reload_next_band", "fairing_deployed",
-    "launch_window", "prelaunch_plane_ut", "prelaunch_plane_target",
-    "prelaunch_plane_inc", "prelaunch_plane_lan"
-) {
-    stateRemove(key).
+    missionOverrideClear().
+    stateRemovePrefix("burn_").
+    FOR key IN LIST(
+        "mission_id", "mission_name", "target", "payloads", "phase",
+        "lib_band", "lib_band_phase", "lib_band_libs",
+        "reload_required", "reload_reason", "reload_next_phase",
+        "reload_next_band", "fairing_deployed",
+        "launch_window", "prelaunch_plane_ut", "prelaunch_plane_target",
+        "prelaunch_plane_inc", "prelaunch_plane_lan"
+    ) {
+        stateRemove(key).
+    }
+
+    IF newMission <> "" {
+        stateSet("mission_id", newMission).
+        PRINT "Mission reset. Next boot will load profile: " + newMission.
+        mLog("Mission reset to profile " + newMission + ".").
+    } ELSE {
+        PRINT "Mission reset. Next boot will ask for a profile.".
+        mLog("Mission selection reset.").
+    }
 }
 
-IF newMission <> "" {
-    stateSet("mission_id", newMission).
-    PRINT "Mission reset. Next boot will load profile: " + newMission.
-    mLog("Mission reset to profile " + newMission + ".").
-} ELSE {
-    PRINT "Mission reset. Next boot will ask for a profile.".
-    mLog("Mission selection reset.").
-}
+_cmdResetmission().

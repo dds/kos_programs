@@ -949,6 +949,28 @@ keep them small — they usually live on OCTO-class cores.
 
 ## Extending the system
 
+Every `cmd/` script must wrap its executable body in a local entry function
+and invoke it once. Keep script parameters, directives and global defaults
+at file scope; put bootstrap and command logic inside the function:
+
+```kerboscript
+PARAMETER opts IS LEXICON().
+
+LOCAL FUNCTION _commandMain {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
+    IF ABORT { RETURN. }
+    // Command logic goes here.
+}
+
+_commandMain().
+```
+
+Use the same pattern for executable archive helpers. A file-level `RETURN`
+is invalid even inside an `IF` or loop; kOS permits returns from functions
+and triggers. `make check` enforces command entrypoints and return scope.
+See [CLAUDE.md](CLAUDE.md) for the required coding conventions.
+
 A vehicle script defines two things:
 
 ```

@@ -2,8 +2,12 @@
 PARAMETER key.
 PARAMETER value.
 
-RUNPATH("1:/lib/boot_lib").
-bootPreamble().
+LOCAL FUNCTION _cmdSetstate {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
 
-stateSet(key, value).
-PRINT key + " -> " + value.
+    stateSet(key, value).
+    PRINT key + " -> " + value.
+}
+
+_cmdSetstate().

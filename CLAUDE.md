@@ -29,6 +29,15 @@ Looks like Python/JS; is neither.
   (`up`, `north`, `body`, `target`, `alt`, `eta`).
 - `LOCAL FUNCTION` is file-private; `GLOBAL FUNCTION` is exported to the
   whole CPU. Use `@LAZYGLOBAL OFF.` in new libs.
+- **Wrap every command's executable body in a `LOCAL FUNCTION` and invoke
+  it once at the end of the file.** Keep script `PARAMETER` declarations,
+  directives and global defaults at file scope; put bootstrap/loading and
+  command logic inside the entry function, with helpers nested as needed.
+  Apply this to executable archive helpers such as `lib/burn_check.ks` too.
+  `RETURN` is legal only inside a function or trigger, never at file scope;
+  an `IF` or loop does not make it legal. Flight-found: `burncheck` failed to
+  compile because its archive helper had guarded top-level returns
+  (2026-10-16). `make check` now enforces command wrappers and return scope.
 - No exceptions; errors crash the program. Guard division, `ARCCOS`/`SQRT`
   domains, and `NORMALIZED` on possibly-zero vectors.
 - **Coordinate frames are treacherous.** KSP's frame is left-handed and
@@ -269,16 +278,19 @@ Looks like Python/JS; is neither.
   It now releases its own lock while attached and retains cutoff/steering
   after separation. This is a confirmed source defect, not confirmation that
   this RO9 carries that role. `cmd/burncheck.ks` prints current engines, CPU
-  roles, suppression/IPU and read-only timed governor probes. Live RO9
-  evidence is still needed to distinguish hardware recovery, competing CPUs,
-  suppressed autopilot and a watchdog/scheduling cutoff. No cutoff is bypassed.
+  roles, suppression/IPU and read-only timed governor probes. No cutoff is
+  bypassed.
   The operator subsequently reported only 'Burn start', with no tick or
   BURN WAIT output after ten minutes. The governor's high-priority callback
   can starve the main loop at kOS's default 150 IPU, before the first command
   is published. The executor now uses at least BURN_MIN_IPU (2000 by default,
   bounded by kOS's maximum), restoring the prior value after control release
-  or in bootPreamble after interruption. This matches the observed stop
-  location; scheduler/flight confirmation is still pending.
+  or in bootPreamble after interruption. The operator reports a successful
+  burn after transferretry/reboot with this change (2026-10-16), supporting
+  the instruction-budget diagnosis. Exact prior IPU/timing and full mission
+  completion were not reported. The operator also found burncheck's invalid
+  top-level RETURN statements; all cmd bodies and its archive helper now
+  use local entry functions, with a repository-wide return-scope check.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered

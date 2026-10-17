@@ -17,13 +17,17 @@
 
 PARAMETER opts IS LEXICON().
 
-IF NOT opts:HASKEY("lat") AND NOT opts:HASKEY("lng")
-        AND NOT opts:HASKEY("waypoint") {
-    opts:ADD("lat", -0.10).
-    opts:ADD("lng", -74.25).
-}
-IF NOT opts:HASKEY("name") {
-    opts:ADD("name", "Land at KSC").
+LOCAL FUNCTION _cmdLandatksc {
+    IF NOT opts:HASKEY("lat") AND NOT opts:HASKEY("lng")
+            AND NOT opts:HASKEY("waypoint") {
+        opts:ADD("lat", -0.10).
+        opts:ADD("lng", -74.25).
+    }
+    IF NOT opts:HASKEY("name") {
+        opts:ADD("name", "Land at KSC").
+    }
+
+    RUNPATH("0:/cmd/landat.ks", opts).
 }
 
-RUNPATH("0:/cmd/landat.ks", opts).
+_cmdLandatksc().

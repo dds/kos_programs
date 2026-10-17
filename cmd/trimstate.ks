@@ -18,76 +18,81 @@
 // ============================================================
 
 PARAMETER opts IS LEXICON().
-LOCAL dropStale IS FALSE.
-IF opts:HASKEY("stale") { SET dropStale TO opts["stale"]. }
 
-// Keys/prefixes the current codebase no longer reads or writes.
-// Extend these lists as more state is retired (git blame is the record).
-LOCAL DEAD_KEYS IS LIST(
-    "lib_band_libs"          // cached band libs — never persist derived libs
-).
-LOCAL DEAD_PREFIXES IS LIST(
-    "mission_cfg_"           // mission config moved out of state (5e07071)
-).
+LOCAL FUNCTION _cmdTrimstate {
+    LOCAL dropStale IS FALSE.
+    IF opts:HASKEY("stale") { SET dropStale TO opts["stale"]. }
 
-// Transient per-phase scratch: live keys, but disposable once their
-// phase is behind you (readers fall back to defaults). Only cleared
-// in "stale" mode.
-LOCAL STALE_KEYS IS LIST(
-    "prelaunch_plane_lan", "prelaunch_plane_inc",
-    "prelaunch_plane_target", "launch_window", "prelaunch_plane_ut",
-    "xing_arrival_ut", "xing_arrival_target",
-    "midcourse_refine_method", "midcourse_refine_fraction",
-    "midcourse_refine_arrival_ut", "midcourse_refine_ut",
-    "launch_vs_nonpos_logged"
-).
+    // Keys/prefixes the current codebase no longer reads or writes.
+    // Extend these lists as more state is retired (git blame is the record).
+    LOCAL DEAD_KEYS IS LIST(
+        "lib_band_libs"          // cached band libs — never persist derived libs
+    ).
+    LOCAL DEAD_PREFIXES IS LIST(
+        "mission_cfg_"           // mission config moved out of state (5e07071)
+    ).
 
-LOCAL loaded IS FALSE.
-IF EXISTS("1:/lib/state.ksm") {
-    RUNONCEPATH("1:/lib/state.ksm").
-    SET loaded TO TRUE.
-} ELSE IF EXISTS("1:/lib/state.ks") {
-    RUNONCEPATH("1:/lib/state.ks").
-    SET loaded TO TRUE.
-} ELSE {
-    PRINT "ERROR: cached state library not found.".
-    PRINT "Boot the vessel once with a link, then re-run.".
-}
+    // Transient per-phase scratch: live keys, but disposable once their
+    // phase is behind you (readers fall back to defaults). Only cleared
+    // in "stale" mode.
+    LOCAL STALE_KEYS IS LIST(
+        "prelaunch_plane_lan", "prelaunch_plane_inc",
+        "prelaunch_plane_target", "launch_window", "prelaunch_plane_ut",
+        "xing_arrival_ut", "xing_arrival_target",
+        "midcourse_refine_method", "midcourse_refine_fraction",
+        "midcourse_refine_arrival_ut", "midcourse_refine_ut",
+        "launch_vs_nonpos_logged"
+    ).
 
-IF loaded {
-    stateInit().
-    LOCAL before IS stateKeys():LENGTH.
-    LOCAL removed IS 0.
-    PRINT "trimstate: " + before + " state keys.".
-
-    FOR k IN DEAD_KEYS {
-        IF stateRemove(k) {
-            PRINT "  removed deprecated: " + k.
-            SET removed TO removed + 1.
-        }
-    }
-    FOR pfx IN DEAD_PREFIXES {
-        LOCAL n IS stateRemovePrefix(pfx).
-        IF n > 0 {
-            PRINT "  removed " + n + " deprecated '" + pfx + "*' key(s).".
-            SET removed TO removed + n.
-        }
+    LOCAL loaded IS FALSE.
+    IF EXISTS("1:/lib/state.ksm") {
+        RUNONCEPATH("1:/lib/state.ksm").
+        SET loaded TO TRUE.
+    } ELSE IF EXISTS("1:/lib/state.ks") {
+        RUNONCEPATH("1:/lib/state.ks").
+        SET loaded TO TRUE.
+    } ELSE {
+        PRINT "ERROR: cached state library not found.".
+        PRINT "Boot the vessel once with a link, then re-run.".
     }
 
-    IF dropStale {
-        PRINT "  (stale mode: clearing finished-phase scratch)".
-        FOR k IN STALE_KEYS {
+    IF loaded {
+        stateInit().
+        LOCAL before IS stateKeys():LENGTH.
+        LOCAL removed IS 0.
+        PRINT "trimstate: " + before + " state keys.".
+
+        FOR k IN DEAD_KEYS {
             IF stateRemove(k) {
-                PRINT "  removed stale: " + k.
+                PRINT "  removed deprecated: " + k.
                 SET removed TO removed + 1.
             }
         }
-    }
+        FOR pfx IN DEAD_PREFIXES {
+            LOCAL n IS stateRemovePrefix(pfx).
+            IF n > 0 {
+                PRINT "  removed " + n + " deprecated '" + pfx + "*' key(s).".
+                SET removed TO removed + n.
+            }
+        }
 
-    IF removed = 0 {
-        PRINT "trimstate: nothing to remove — state is clean.".
-    } ELSE {
-        PRINT "trimstate: removed " + removed + " key(s); "
-            + stateKeys():LENGTH + " remain.".
+        IF dropStale {
+            PRINT "  (stale mode: clearing finished-phase scratch)".
+            FOR k IN STALE_KEYS {
+                IF stateRemove(k) {
+                    PRINT "  removed stale: " + k.
+                    SET removed TO removed + 1.
+                }
+            }
+        }
+
+        IF removed = 0 {
+            PRINT "trimstate: nothing to remove — state is clean.".
+        } ELSE {
+            PRINT "trimstate: removed " + removed + " key(s); "
+                + stateKeys():LENGTH + " remain.".
+        }
     }
 }
+
+_cmdTrimstate().

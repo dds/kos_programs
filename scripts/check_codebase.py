@@ -1,8 +1,9 @@
 """Repository contracts, not a KerboScript compiler or a KSP simulator.
 
 Check lexical balance, dependency cycles/files, phase bindings, profile
-identities/sequences, and undeclared configuration names. --report also
-shows source-token counts per band; these are NOT compiled byte sizes.
+identities/sequences, undeclared configuration names, command entrypoints
+and RETURN scope. --report also shows source-token counts per band; these
+are NOT compiled byte sizes.
 """
 import argparse
 import collections
@@ -68,6 +69,58 @@ def declared_names(source):
     return {name.lower() for name in names}
 
 
+def unscoped_returns(source):
+    """Find RETURN outside named/anonymous functions and WHEN/ON bodies.
+
+    IF/FOR/UNTIL braces do not create a return scope. This is a lexical
+    guard for the flight-found command error, not a KerboScript parser.
+    """
+    clean = mask(source)
+    scopes = {match.end()-1 for match in re.finditer(
+        r'\bFUNCTION(?:\s+\w+)?\s*\{|\bTHEN\s*\{|\bON\b(?:[^{}.]+|\.(?=\d))*\{'
+        r'|(?:\bIS|\bTO|\(|,)\s*\{', clean, re.I)}
+    stack, bad = [], []
+    for match in re.finditer(r'\bRETURN\b|[{}]', clean, re.I):
+        if match[0] == '{':
+            stack.append(match.start() in scopes)
+        elif match[0] == '}':
+            if stack:
+                stack.pop()
+        elif not any(stack):
+            bad.append(clean[:match.start()].count('\n')+1)
+    return bad
+
+
+def command_entrypoint_errors(source):
+    """Only declarations/directives and one local entry call at file scope."""
+    clean = mask(source)
+    remainder = list(clean)
+    functions, covered = set(), -1
+    for match in re.finditer(r'\b(LOCAL|GLOBAL)\s+FUNCTION\s+(\w+)\s*\{', clean, re.I):
+        if match.start() < covered:
+            continue  # A helper nested inside the entry function.
+        depth, end = 1, match.end()
+        while end < len(clean) and depth:
+            depth += (clean[end] == '{') - (clean[end] == '}')
+            end += 1
+        if depth:
+            return ['unclosed command function']
+        if match[1].lower() == 'local':
+            functions.add(match[2].lower())
+        remainder[match.start():end] = ' ' * (end-match.start())
+        covered = end
+    statements = [s.strip() for s in re.split(r'\.(?!\d)', ''.join(remainder)) if s.strip()]
+    calls = []
+    for statement in statements:
+        if re.match(r'^(?:@\w+\b|PARAMETERS?\b|GLOBAL\s+\w+\s+IS\b)', statement, re.I):
+            continue
+        call = re.fullmatch(r'(\w+)\s*\(\s*\)', statement)
+        if not call or call[1].lower() not in functions:
+            return ['command executable body must be inside a LOCAL FUNCTION']
+        calls.append(call[1].lower())
+    return [] if len(calls) == 1 else ['command must invoke one local entry function exactly once']
+
+
 def audit(report=False):
     errors, warnings = [], []
     sources = {p.relative_to(ROOT).as_posix(): p.read_text()
@@ -86,6 +139,10 @@ def audit(report=False):
                     errors.append(f'{path}: mismatched delimiter at offset {pos}')
         if stack:
             errors.append(f'{path}: unclosed delimiters {stack}')
+        for line in unscoped_returns(sources[path]):
+            errors.append(f'{path}:{line}: RETURN outside a function or trigger')
+        if path.startswith('cmd/'):
+            errors.extend(f'{path}: {error}' for error in command_entrypoint_errors(sources[path]))
 
     libs = {Path(path).stem.lower(): src for path, src in sources.items() if path.startswith('lib/')}
     deps, phases, bands = dependency_tables(libs['dependencies'])

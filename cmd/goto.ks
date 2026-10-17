@@ -29,83 +29,87 @@
 
 PARAMETER opts IS LEXICON().
 
-RUNPATH("1:/lib/boot_lib").
-bootPreamble().
-bootLibLoad("goto_plan").
+LOCAL FUNCTION _cmdGoto {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
+    bootLibLoad("goto_plan").
 
-// Accept a bare destination string for quick use.
-IF opts:ISTYPE("String") {
-    SET opts TO LEXICON("dest", opts).
-}
-
-LOCAL dest IS "".
-LOCAL doReboot IS FALSE.
-LOCAL err IS FALSE.
-
-IF opts:HASKEY("dest")   { SET dest TO opts["dest"]. }
-IF opts:HASKEY("target") { SET dest TO opts["target"]. }
-IF opts:HASKEY("reboot") { SET doReboot TO opts["reboot"]. }
-
-IF dest = "" {
-    PRINT "ERROR: no destination. Usage:".
-    PRINT "  RUNPATH(" + CHAR(34) + "0:/cmd/goto.ks" + CHAR(34) + ", "
-        + CHAR(34) + "Minmus" + CHAR(34) + ").".
-    SET err TO TRUE.
-}
-IF SHIP:STATUS <> "ORBITING" {
-    PRINT "ERROR: must be in a stable orbit (status: " + SHIP:STATUS + ").".
-    SET err TO TRUE.
-}
-
-IF NOT err {
-
-    // Final orbit spec -> SHAPE_* mission config. Clear stale keys
-    // first so an omitted element really means "don't care".
-    SET SHAPE_AP TO -1.
-    SET SHAPE_PE TO -1.
-    SET SHAPE_INC TO -1.
-    SET SHAPE_LAN TO -1.
-    FOR key IN LIST("ap", "pe", "inc", "lan", "aop") {
-        IF opts:HASKEY(key) {
-            IF key = "ap" { SET SHAPE_AP TO opts[key]. }
-            IF key = "pe" { SET SHAPE_PE TO opts[key]. }
-            IF key = "inc" { SET SHAPE_INC TO opts[key]. }
-            IF key = "lan" { SET SHAPE_LAN TO opts[key]. }
-        }
+    // Accept a bare destination string for quick use.
+    IF opts:ISTYPE("String") {
+        SET opts TO LEXICON("dest", opts).
     }
 
-    SET GOTO_DEST TO dest.
-    LOCAL planned IS gotoBuildPlan(dest).
+    LOCAL dest IS "".
+    LOCAL doReboot IS FALSE.
+    LOCAL err IS FALSE.
 
-    IF NOT planned {
-        PRINT "ERROR: could not plan a route to '" + dest + "'.".
-    } ELSE {
-        // Archive the current leg's log, then take over the mission.
-        archiveLog().
+    IF opts:HASKEY("dest")   { SET dest TO opts["dest"]. }
+    IF opts:HASKEY("target") { SET dest TO opts["target"]. }
+    IF opts:HASKEY("reboot") { SET doReboot TO opts["reboot"]. }
 
-        gotoCommitPlan().
-        stateSet("launch_time", ROUND(TIME:SECONDS)).
+    IF dest = "" {
+        PRINT "ERROR: no destination. Usage:".
+        PRINT "  RUNPATH(" + CHAR(34) + "0:/cmd/goto.ks" + CHAR(34) + ", "
+            + CHAR(34) + "Minmus" + CHAR(34) + ").".
+        SET err TO TRUE.
+    }
+    IF SHIP:STATUS <> "ORBITING" {
+        PRINT "ERROR: must be in a stable orbit (status: " + SHIP:STATUS + ").".
+        SET err TO TRUE.
+    }
 
-        PRINT " ".
-        PRINT "GOTO configured: " + dest.
-        PRINT "  Next leg:  " + GOTO_PLAN_SUMMARY.
-        LOCAL specPrinted IS FALSE.
+    IF NOT err {
+
+        // Final orbit spec -> SHAPE_* mission config. Clear stale keys
+        // first so an omitted element really means "don't care".
+        SET SHAPE_AP TO -1.
+        SET SHAPE_PE TO -1.
+        SET SHAPE_INC TO -1.
+        SET SHAPE_LAN TO -1.
         FOR key IN LIST("ap", "pe", "inc", "lan", "aop") {
             IF opts:HASKEY(key) {
-                PRINT "  Final " + key:TOUPPER + ": " + opts[key].
-                SET specPrinted TO TRUE.
+                IF key = "ap" { SET SHAPE_AP TO opts[key]. }
+                IF key = "pe" { SET SHAPE_PE TO opts[key]. }
+                IF key = "inc" { SET SHAPE_INC TO opts[key]. }
+                IF key = "lan" { SET SHAPE_LAN TO opts[key]. }
             }
         }
-        IF NOT specPrinted {
-            PRINT "  Final orbit: capture defaults (no SHAPE spec).".
-        }
-        PRINT " ".
-        IF doReboot {
-            PRINT "Rebooting in 3s to fly the route...".
-            WAIT 3.
-            REBOOT.
+
+        SET GOTO_DEST TO dest.
+        LOCAL planned IS gotoBuildPlan(dest).
+
+        IF NOT planned {
+            PRINT "ERROR: could not plan a route to '" + dest + "'.".
         } ELSE {
-            PRINT "Reboot to fly the route.".
+            // Archive the current leg's log, then take over the mission.
+            archiveLog().
+
+            gotoCommitPlan().
+            stateSet("launch_time", ROUND(TIME:SECONDS)).
+
+            PRINT " ".
+            PRINT "GOTO configured: " + dest.
+            PRINT "  Next leg:  " + GOTO_PLAN_SUMMARY.
+            LOCAL specPrinted IS FALSE.
+            FOR key IN LIST("ap", "pe", "inc", "lan", "aop") {
+                IF opts:HASKEY(key) {
+                    PRINT "  Final " + key:TOUPPER + ": " + opts[key].
+                    SET specPrinted TO TRUE.
+                }
+            }
+            IF NOT specPrinted {
+                PRINT "  Final orbit: capture defaults (no SHAPE spec).".
+            }
+            PRINT " ".
+            IF doReboot {
+                PRINT "Rebooting in 3s to fly the route...".
+                WAIT 3.
+                REBOOT.
+            } ELSE {
+                PRINT "Reboot to fly the route.".
+            }
         }
     }
 }
+
+_cmdGoto().

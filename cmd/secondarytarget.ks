@@ -16,87 +16,91 @@ GLOBAL PAYLOAD_2_SOLAR_TAG IS "".
 
 PARAMETER doRelease IS TRUE.
 
-RUNPATH("1:/lib/boot_lib").
-bootPreamble().
+LOCAL FUNCTION _cmdSecondarytarget {
+    RUNPATH("1:/lib/boot_lib").
+    bootPreamble().
 
-applyKnownMissionState().
+    applyKnownMissionState().
 
-LOCAL FUNCTION _activateTag {
-    PARAMETER tagName.
-    PARAMETER moduleName.
-    PARAMETER events.
+    LOCAL FUNCTION _activateTag {
+        PARAMETER tagName.
+        PARAMETER moduleName.
+        PARAMETER events.
 
-    IF tagName = "" { RETURN 0. }
-    LOCAL parts IS SHIP:PARTSTAGGED(tagName).
-    LOCAL count IS 0.
-    FOR partRef IN parts {
-        IF partRef:HASMODULE(moduleName) {
-            LOCAL modu IS partRef:GETMODULE(moduleName).
-            LOCAL fired IS FALSE.
-            FOR eventName IN events {
-                IF NOT fired AND modu:HASEVENT(eventName) {
-                    modu:DOEVENT(eventName).
-                    SET fired TO TRUE.
-                    SET count TO count + 1.
+        IF tagName = "" { RETURN 0. }
+        LOCAL parts IS SHIP:PARTSTAGGED(tagName).
+        LOCAL count IS 0.
+        FOR partRef IN parts {
+            IF partRef:HASMODULE(moduleName) {
+                LOCAL modu IS partRef:GETMODULE(moduleName).
+                LOCAL fired IS FALSE.
+                FOR eventName IN events {
+                    IF NOT fired AND modu:HASEVENT(eventName) {
+                        modu:DOEVENT(eventName).
+                        SET fired TO TRUE.
+                        SET count TO count + 1.
+                    }
                 }
             }
         }
+        IF parts:LENGTH > 0 {
+            PRINT "Activated " + count + " from tag " + tagName + ".".
+        }
+        RETURN count.
     }
-    IF parts:LENGTH > 0 {
-        PRINT "Activated " + count + " from tag " + tagName + ".".
-    }
-    RETURN count.
-}
 
-LOCAL FUNCTION _releaseTag {
-    PARAMETER tagName.
-    IF tagName = "" { RETURN TRUE. }
-    LOCAL parts IS SHIP:PARTSTAGGED(tagName).
-    IF parts:LENGTH = 0 {
-        PRINT "No release part tagged " + tagName + "; assuming already gone.".
+    LOCAL FUNCTION _releaseTag {
+        PARAMETER tagName.
+        IF tagName = "" { RETURN TRUE. }
+        LOCAL parts IS SHIP:PARTSTAGGED(tagName).
+        IF parts:LENGTH = 0 {
+            PRINT "No release part tagged " + tagName + "; assuming already gone.".
+            RETURN TRUE.
+        }
+        LOCAL dc IS parts[0].
+        IF dc:HASMODULE("ModuleDecouple") {
+            dc:GETMODULE("ModuleDecouple"):DOEVENT("Decouple").
+        } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
+            dc:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
+        } ELSE {
+            PRINT "Release part " + tagName + " has no decouple module.".
+            RETURN FALSE.
+        }
+        WAIT 1.
         RETURN TRUE.
     }
-    LOCAL dc IS parts[0].
-    IF dc:HASMODULE("ModuleDecouple") {
-        dc:GETMODULE("ModuleDecouple"):DOEVENT("Decouple").
-    } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
-        dc:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
-    } ELSE {
-        PRINT "Release part " + tagName + " has no decouple module.".
-        RETURN FALSE.
+
+    IF doRelease AND stateGet("secondary_release_done", "false") <> "true" {
+        _activateTag(SECONDARY_RELEASE_ANTENNA_TAG,
+            "ModuleDeployableAntenna",
+            LIST("extend antenna", "Extend Antenna", "Extend", "Deploy")).
+        _activateTag(SECONDARY_RELEASE_SOLAR_TAG,
+            "ModuleDeployableSolarPanel",
+            LIST("Extend Solar Panel", "extend solar panel", "Extend", "Deploy")).
+        WAIT 1.
+        IF NOT _releaseTag(SECONDARY_RELEASE_TAG) {
+            PRINT "Secondary release failed; holding.".
+            WAIT UNTIL FALSE.
+        }
+        stateSet("secondary_release_done", "true").
+        PRINT "Secondary payload released.".
     }
+
+    LOCAL seqRaw IS SECONDARY_SEQUENCE.
+    IF seqRaw:LENGTH = 0 { SET seqRaw TO LIST("SHAPE", "SCANSAT_OPS", "DONE"). }
+    LOCAL seq IS phaseList(seqRaw).
+    SET launchSeq TO seq.
+    SET xferSeq TO seq.
+
+    stateSet("secondary_active", "true").
+    stateSet("phase", seq[0]).
+    stateSet("reload_required", "false").
+
+    PRINT "Secondary target active.".
+    PRINT "Sequence: " + seq:JOIN(" -> ").
+    PRINT "Rebooting into normal mission resume.".
     WAIT 1.
-    RETURN TRUE.
+    REBOOT.
 }
 
-IF doRelease AND stateGet("secondary_release_done", "false") <> "true" {
-    _activateTag(SECONDARY_RELEASE_ANTENNA_TAG,
-        "ModuleDeployableAntenna",
-        LIST("extend antenna", "Extend Antenna", "Extend", "Deploy")).
-    _activateTag(SECONDARY_RELEASE_SOLAR_TAG,
-        "ModuleDeployableSolarPanel",
-        LIST("Extend Solar Panel", "extend solar panel", "Extend", "Deploy")).
-    WAIT 1.
-    IF NOT _releaseTag(SECONDARY_RELEASE_TAG) {
-        PRINT "Secondary release failed; holding.".
-        WAIT UNTIL FALSE.
-    }
-    stateSet("secondary_release_done", "true").
-    PRINT "Secondary payload released.".
-}
-
-LOCAL seqRaw IS SECONDARY_SEQUENCE.
-IF seqRaw:LENGTH = 0 { SET seqRaw TO LIST("SHAPE", "SCANSAT_OPS", "DONE"). }
-LOCAL seq IS phaseList(seqRaw).
-SET launchSeq TO seq.
-SET xferSeq TO seq.
-
-stateSet("secondary_active", "true").
-stateSet("phase", seq[0]).
-stateSet("reload_required", "false").
-
-PRINT "Secondary target active.".
-PRINT "Sequence: " + seq:JOIN(" -> ").
-PRINT "Rebooting into normal mission resume.".
-WAIT 1.
-REBOOT.
+_cmdSecondarytarget().

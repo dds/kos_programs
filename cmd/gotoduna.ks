@@ -13,17 +13,21 @@
 
 PARAMETER opts IS LEXICON().
 
-LOCAL plan IS LEXICON(
-    "dest", "Duna",
-    "pe", 85000,
-    "ap", 250000,
-    "inc", 0,
-    "reboot", TRUE
-).
+LOCAL FUNCTION _cmdGotoduna {
+    LOCAL plan IS LEXICON(
+        "dest", "Duna",
+        "pe", 85000,
+        "ap", 250000,
+        "inc", 0,
+        "reboot", TRUE
+    ).
 
-FOR key IN opts:KEYS {
-    IF plan:HASKEY(key) { plan:REMOVE(key). }
-    plan:ADD(key, opts[key]).
+    FOR key IN opts:KEYS {
+        IF plan:HASKEY(key) { plan:REMOVE(key). }
+        plan:ADD(key, opts[key]).
+    }
+
+    RUNPATH("0:/cmd/goto.ks", plan).
 }
 
-RUNPATH("0:/cmd/goto.ks", plan).
+_cmdGotoduna().
