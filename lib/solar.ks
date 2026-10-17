@@ -13,6 +13,7 @@
 
 // --- Config defaults owned by this file ---
 GLOBAL SOLAR_HOLD_RATIO IS 0.92.
+GLOBAL SOLAR_REUSE_RATIO IS 0.90.
 GLOBAL SOLAR_HOLD_EC IS 0.75.
 GLOBAL SOLAR_SEARCH_SKIP_FIRST_BOOT IS 1.
 GLOBAL SOLAR_SEARCH_LAUNCH_GUARD IS 300.
@@ -118,13 +119,67 @@ LOCAL FUNCTION _solarFinish {
     PARAMETER aShip.
     PARAMETER lockSteering.
     PARAMETER note.
+    PARAMETER referenceFlow IS -1.
+    LOCAL flow IS shipSolarFlow().
     stateSet("solar_axis", LIST(
         ROUND(aShip:X, 4), ROUND(aShip:Y, 4), ROUND(aShip:Z, 4))).
+    IF flow > 0 {
+        LOCAL info IS _solarPanelInfo().
+        stateSet("solar_axis_peak", MAX(flow, referenceFlow)).
+        stateSet("solar_axis_distance", SUN:POSITION:MAG).
+        stateSet("solar_axis_panels", info["COUNT"]).
+        stateSet("solar_axis_scaled", info["SCALED"]).
+    }
     IF NOT lockSteering { UNLOCK STEERING. }
     mLog("Solar attitude set (" + note + "): flow="
         + ROUND(shipSolarFlow(), 2) + ".").
     mLog("STATS solar orient flow=" + ROUND(shipSolarFlow(), 2)
         + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
+}
+
+LOCAL FUNCTION _solarPanelInfo {
+    LOCAL count_ IS 0.
+    LOCAL scaled IS 1.
+    FOR part IN SHIP:PARTS {
+        IF part:HASMODULE("ModuleDeployableSolarPanel") {
+            SET count_ TO count_ + 1.
+            IF NOT part:GETMODULE("ModuleDeployableSolarPanel"):HASFIELD("energy flow") {
+                SET scaled TO 0.
+            }
+        }
+    }
+    RETURN LEXICON("COUNT", count_, "SCALED", scaled).
+}
+
+// A measured peak belongs to a panel set and measurement type. Energy
+// flow changes with Sun distance; exposure/mixed fallbacks cannot be scaled.
+LOCAL FUNCTION _solarCacheReference {
+    LOCAL info IS _solarPanelInfo().
+    LOCAL peak IS stateGetNum("solar_axis_peak", -1).
+    LOCAL distance_ IS stateGetNum("solar_axis_distance", 0).
+    IF peak <= 0 OR distance_ <= 0 OR SUN:POSITION:MAG <= 0
+            OR stateGetNum("solar_axis_panels", -1) <> info["COUNT"]
+            OR stateGetNum("solar_axis_scaled", -1) <> info["SCALED"] { RETURN -1. }
+    LOCAL distanceRatio IS distance_ / SUN:POSITION:MAG.
+    IF info["SCALED"] > 0 { RETURN peak * distanceRatio ^ 2. }
+    IF ABS(distanceRatio - 1) > 0.02 { RETURN -1. }
+    RETURN peak.
+}
+
+LOCAL FUNCTION _solarSunOccluded {
+    LOCAL toSun IS SUN:POSITION.
+    IF toSun:MAG < 1 { RETURN TRUE. }
+    LOCAL blocker IS SHIP:BODY.
+    UNTIL blocker:NAME = SUN:NAME {
+        LOCAL along_ IS VDOT(blocker:POSITION, toSun:NORMALIZED).
+        IF along_ > 0 AND along_ < toSun:MAG {
+            LOCAL miss IS (blocker:POSITION - along_ * toSun:NORMALIZED):MAG.
+            IF miss <= blocker:RADIUS + SUN:RADIUS * along_ / toSun:MAG { RETURN TRUE. }
+        }
+        IF NOT blocker:HASBODY { BREAK. }
+        SET blocker TO blocker:BODY.
+    }
+    RETURN FALSE.
 }
 
 LOCAL FUNCTION _solarSearchGuardReason {
@@ -168,8 +223,8 @@ LOCAL FUNCTION _logSolarSearchGuard {
 // ============================================================
 // orientForSolar — find and hold the attitude that maximizes
 // MEASURED solar energy flow, then cache it (solar_axis) so later
-// calls skip the search. Every decision is by measured flow, so no
-// panel-layout assumption is needed:
+// calls validate/reuse it before searching. Every decision is by measured
+// flow, so no panel-layout assumption is needed:
 //   1. Aim the panel's own normal at the Sun and settle (the settle
 //      waits for rotation to STOP before reading — otherwise the
 //      coarse search bleeds one axis's flow into the next).
@@ -212,13 +267,23 @@ GLOBAL FUNCTION orientForSolar {
     IF NOT forceSearch AND cached:ISTYPE("List") AND cached:LENGTH >= 3 {
         LOCAL aShip IS V(cached[0], cached[1], cached[2]).
         IF aShip:MAG > 0.5 {
+            SET aShip TO aShip:NORMALIZED.
             _solarAimSettle(aShip).
-            IF NOT lockSteering {
-                UNLOCK STEERING.
+            LOCAL cachedFlow IS shipSolarFlow().
+            LOCAL referenceFlow IS _solarCacheReference().
+            IF referenceFlow > 0 AND cachedFlow >= referenceFlow * SOLAR_REUSE_RATIO {
+                _solarFinish(aShip, lockSteering, "cached axis validated", referenceFlow).
+                RETURN.
             }
-            mLog("Solar attitude restored (flow="
-                + ROUND(shipSolarFlow(), 2) + ").").
-            RETURN.
+            IF cachedFlow < 0 OR _solarSunOccluded() {
+                // Darkness/unreadable fields cannot invalidate a known axis
+                // or replace its successful peak with a zero measurement.
+                IF NOT lockSteering { UNLOCK STEERING. }
+                mLog("Solar cached axis retained; flow cannot be validated in eclipse/unreadable telemetry.").
+                RETURN.
+            }
+            mLog("Solar cached axis below reuse threshold or missing peak; searching (flow="
+                + ROUND(cachedFlow, 2) + ", reference=" + ROUND(referenceFlow, 2) + ").").
         }
     }
 
@@ -251,7 +316,7 @@ GLOBAL FUNCTION orientForSolar {
         LOCAL f2 IS shipSolarFlow().
         IF f2 >= f1 * 0.8 {
             _solarAimSettle(primary).
-            _solarFinish(primary, lockSteering, "tracking panels").
+            _solarFinish(primary, lockSteering, "tracking panels", MAX(f1, f2)).
             RETURN.
         }
     }
@@ -286,7 +351,7 @@ GLOBAL FUNCTION orientForSolar {
     }
 
     _solarAimSettle(bestAxis).
-    _solarFinish(bestAxis, lockSteering, "best of 6").
+    _solarFinish(bestAxis, lockSteering, "best of 6", bestFlow).
 }
 
 // ============================================================
@@ -311,7 +376,7 @@ GLOBAL FUNCTION solarHoldTick {
     IF flow < 0 { RETURN refFlow. }
     IF refFlow <= 0 {
         IF flow <= 0 {
-            orientForSolar(TRUE, TRUE).
+            IF NOT _solarSunOccluded() { orientForSolar(FALSE, TRUE). }
             RETURN flow.
         }
         RETURN flow.

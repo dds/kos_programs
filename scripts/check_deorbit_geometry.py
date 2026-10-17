@@ -236,9 +236,10 @@ def check_planner_guards():
     assert 'stepA, candidateAngle)' in planner
     assert 'period / MAX(128, TARGET_DEORBIT_SCAN_SAMPLES)' in planner
     guard = planner.index('IF NOT _targetDeorbitSolutionAccepted(finalCheck')
-    execute = planner.index('IF NOT executeDeorbitNode(realNode)')
+    execute = planner.index('IF NOT executeDeorbitNode(realNode, targetLat, targetLng)')
     assert guard < execute and 'REMOVE realNode.' in planner[guard:execute]
     assert 'reason=validation-window-expired' in planner[guard:execute]
+    assert '_targetDeorbitLightAccepted(finalCheck, bestUT, targetLat, targetLng)' in planner[guard:execute]
     reader = body(PLAN, '_readGeometricDeorbitNode')
     assert 'SET result["TTI"] TO impactUT - nd:TIME.' in reader
     assert 'lmGroundVelocityAt(impactUT)' in reader

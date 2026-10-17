@@ -73,6 +73,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
+| `RUNPATH("0:/cmd/landlight.ks").` | Preview a lit ground-track site from Mun/Minmus parking orbit; `"apply", "MORNING", 1` selects it while preserving the return mission; use final argument `0` to waive direct Kerbin view |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
 | `RUNPATH("0:/cmd/geodistance.ks", lat1, lng1, lat2, lng2).` | Surface distance between two lat/lng points on the current body |
 | `RUNPATH("0:/cmd/kscsplash.ks").` | Target water splashdown offshore of KSC |
@@ -663,12 +664,61 @@ the same final orbit. The principal savings come from dropping plane and
 fixed-site requirements.
 
 Orbital science runs once, followed by automatic ground-track site selection
-and nearby terrain refinement. Contract waypoints are ignored
+and nearby terrain refinement. RO8 and RO9 Mun/Minmus economy profiles now
+require a **rising Sun at 10–30 degrees elevation**, preferring 15 degrees,
+and **Kerbin at least 5 degrees above the geometric horizon**. This approximates
+7am on a normalized 24-hour solar clock; it is not seven hours on the game clock.
+The picker searches four orbits along the existing ground track. If no site
+meets both requirements, it holds in orbit rather than selecting a dark site
+or requesting a plane change. Contract waypoints are ignored
 (`LANDING_USE_WAYPOINTS=0`); these profiles do not perform the polar temperature
 survey or land at the old contract coordinates. The existing targeted-deorbit
 path still needs Trajectories, with SCANsat refinement when available.
 Surface ascent flies east to a 10 km parking orbit, accepting the minimum
 inclination reachable from the actual landing latitude.
+
+For a vessel **already parked at the Mun/Minmus in LAND_DEORBIT**, stop at the
+manual prompt before ignition. With an archive link and the updated code synced:
+
+```kos
+RUNPATH("0:/cmd/landlight.ks").                         // preview; preserve old node
+RUNPATH("0:/cmd/landlight.ks", "apply", "MORNING", 1).  // select site; remove old unflown node
+REBOOT.                                              // replan and fly the new deorbit
+```
+
+Apply preserves the mission/return sequence and unrelated overrides. It refuses
+descent, positive throttle/thrust, and a recorded interrupted deorbit. Do not use
+it after any deorbit ignition, including a partial burn on older code without
+that marker. Preview/apply each search afresh, so read the selected coordinates
+and elevations. Apply does not ignite or reboot. An existing node also passes
+the light/radio screen before the executor can stage or ignite; a rejected saved
+node is retained for review.
+
+The command's final argument is `LANDING_REQUIRE_KERBIN`: use `0` once relay
+coverage is available to waive direct Kerbin visibility. This does not forecast
+the relay network. `LANDING_KERBIN_MIN_ELEV` configures the elevation margin.
+Light modes are `MORNING`, `SUNLIT` (either rising or setting, above
+`LANDING_SUN_MIN_ELEV`), or `ANY`. Other missions default to `ANY` with no
+Kerbin-view requirement. The deorbit solver rechecks the actual selected
+node's predicted impact time, with samples across a ±300-second touchdown
+window (`LANDING_LIGHT_TIME_MARGIN`). Existing terrain/slope/fuel checks remain.
+
+Sun ephemerides are available even in eclipse; no panel search or human Sun
+measurement is needed. The screen rejects ancestor-body eclipses, but geometric
+elevation does not model ridge shadows, antenna range, the location of ground
+stations, or continuous CommNet availability. A direct Kerbin view is the initial
+proxy for radio coverage. An incompatible morning/Kerbin geometry can require
+waiting for a different solar phase or providing relay coverage.
+
+Panel orientation uses a separate, saved **ship-frame panel axis**. Automatic
+coast/reorientation first aims that axis at the current Sun and measures flow.
+At least `SOLAR_REUSE_RATIO` (default 90%) of its saved successful peak reuses it;
+lower flow triggers a new search. Energy-flow references scale with Sun distance;
+changed panel counts invalidate the reference. Eclipse/unreadable measurements
+retain the last successful reference. Old saves without a measured peak learn
+one on their next successful search. Explicit forced-search commands still work.
+These geometry/cache changes pass source-driven fixtures; in-game validation
+of site selection, finite burns and panel telemetry is still required.
 
 The return retains the 53 km entry target and 52–54 km correction corridor,
 but omits optional KSC targeting burns: recovery can occur anywhere on

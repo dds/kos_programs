@@ -32,15 +32,15 @@ LOCAL MIDCOURSE_REFINE_MARGIN_DEFAULT IS 60.
 
 LOCAL FUNCTION _enterSolarCoast {
     PARAMETER label IS "COAST".
-    PARAMETER forceSearch IS FALSE.
+    PARAMETER orientOnEntry IS FALSE.
     PARAMETER checkEntryHealth IS TRUE.
     SET SAS TO TRUE.
     UNLOCK STEERING.
-    IF forceSearch
+    IF orientOnEntry
             AND (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
                 OR SHIP:STATUS = "SUB_ORBITAL")
             AND PHASES_HAS_SOLAR {
-        orientForSolar(TRUE, TRUE, TRUE).
+        orientForSolar(FALSE, TRUE, TRUE).
     }
     LOCAL solarRef IS -1.
     IF checkEntryHealth {

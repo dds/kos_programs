@@ -1,8 +1,8 @@
 // ============================================================
-// cmd/solarhold.ks  —  Re-find the best solar attitude and HOLD
+// cmd/solarhold.ks  —  Validate/find the best solar attitude and HOLD
 // (0:/cmd/solarhold.ks)
 //
-// Runs the full measured search (six axes + refinement), keeps
+// Tries the saved axis and validates measured flow before searching; keeps
 // the steering locked on the result — on craft with no SAS
 // source (no pilot, no SAS core) the hold lives exactly as long
 // as this program does — and maintains it warp-aware: when panel
@@ -13,12 +13,11 @@
 // Usage:
 //   RUNPATH("0:/cmd/solarhold.ks").           // hold indefinitely
 //   RUNPATH("0:/cmd/solarhold.ks", 86400).    // hold N seconds
-//   RUNPATH("0:/cmd/solarhold.ks", 0, FALSE). // skip the search,
-//                                             // quick cached aim
+//   RUNPATH("0:/cmd/solarhold.ks", 0, TRUE). // force a new search
 // ============================================================
 
 PARAMETER holdFor IS 0.
-PARAMETER research IS TRUE.
+PARAMETER research IS FALSE.
 
 LOCAL FUNCTION _cmdSolarhold {
     RUNPATH("1:/lib/boot_lib").

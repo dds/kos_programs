@@ -225,6 +225,13 @@ Looks like Python/JS; is neither.
   Keep it that way. The target is the real landing site, while the deorbit
   solver deliberately aims a downfield phantom impact to preserve braking
   authority. `docs/LANDING_TARGETING.md` is the current design note.
+  Economy sites use `landing_light` for future surface Sun/Kerbin geometry;
+  `solar_axis` is a ship-frame panel axis, never a geographical Sun vector.
+  Preserve unrelated overrides with `missionOverrideUpdate` when changing
+  a target/policy. `cmd/landlight` previews/applies only from an unflown moon
+  parking orbit; retained deorbit nodes still pass the executor's light gate.
+  Automatic solar orientation validates the cached axis against its saved
+  measured peak before searching; reserve forced searches for explicit requests.
 - Duna/Ike mental model: `duna_ike_setup` is mission glue, not a generic
   transfer dependency. It performs Duna aerocapture setup, writes the next
   Ike/Duna-entry leg as a local mission profile, and clears reload/band cache

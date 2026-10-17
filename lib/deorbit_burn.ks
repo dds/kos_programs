@@ -2,6 +2,8 @@
 
 GLOBAL FUNCTION executeDeorbitNode {
     PARAMETER nd.
+    PARAMETER targetLat IS 999.
+    PARAMETER targetLng IS 999.
     LOCAL burnDV IS nd:DELTAV:MAG.
     LOCK THROTTLE TO 0.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
@@ -10,6 +12,11 @@ GLOBAL FUNCTION executeDeorbitNode {
     IF ABORT OR nd:TIME <= TIME:SECONDS OR SHIP:MASS <= 0 {
         vesselLandingCleanup().
         mLogError("Deorbit burn refused: abort, expired node or invalid mass. Node retained.").
+        RETURN FALSE.
+    }
+    IF NOT landingLightNodeAllowed(nd, targetLat, targetLng) {
+        vesselLandingCleanup().
+        mLogError("Deorbit refused: landing light/Kerbin-view check failed. Node retained; use cmd/landlight to review/reselect from orbit.").
         RETURN FALSE.
     }
     // Share the bounded next-engine staging policy with descent. Activating
@@ -60,6 +67,9 @@ GLOBAL FUNCTION executeDeorbitNode {
     }
 
     LOCAL burnStart IS TIME:SECONDS.
+    // A reboot/failed burn must not authorize replacement from a still-bound
+    // but partially flown orbit. Only successful cutoff clears this marker.
+    stateSet("deorbit_burn_started", "true").
     LOCAL origVec IS nd:BURNVECTOR.
     LOCAL completeDV IS MAX(0.08, burnDV * 0.01).
     LOCAL appliedDV IS 0.
@@ -91,7 +101,10 @@ GLOBAL FUNCTION executeDeorbitNode {
     LOCAL residual IS nd:DELTAV:MAG.
     LOCAL stopped IS vesselLandingCleanup().
     LOCAL success IS stopped AND NOT ABORT AND residual <= completeDV.
-    IF success { REMOVE nd. }
+    IF success {
+        REMOVE nd.
+        stateRemove("deorbit_burn_started").
+    }
     IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
     SET SAS TO TRUE.
     mLog("STATS deorbit-burn result dv=" + ROUND(burnDV,1)

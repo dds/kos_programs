@@ -45,23 +45,7 @@ LOCAL FUNCTION _cmdArrival {
     // Preserve unrelated runtime settings and use literals for offline reboots.
     LOCAL FUNCTION _arrivalWriteOverrides {
         PARAMETER values.
-        LOCAL previous IS LIST().
-        LOCAL path IS missionOverridePath().
-        IF EXISTS(path) { SET previous TO OPEN(path):READALL:STRING:SPLIT(CHAR(10)). }
-        LOCAL rewritten IS "1:/run/arrival_overrides.ks".
-        IF EXISTS(rewritten) { DELETEPATH(rewritten). }
-        FOR line IN previous {
-            LOCAL keep IS TRUE.
-            FOR key IN values:KEYS {
-                IF line:TRIM:STARTSWITH("SET " + key + " TO ") { SET keep TO FALSE. }
-            }
-            IF keep AND line:TRIM <> "" { LOG line TO rewritten. }
-        }
-        FOR key IN values:KEYS {
-            LOG "SET " + key + " TO " + configLiteral(values[key]) + "." TO rewritten.
-        }
-        COPYPATH(rewritten, path).
-        DELETEPATH(rewritten).
+        missionOverrideUpdate(values).
         applyMissionOverrides().
     }
 

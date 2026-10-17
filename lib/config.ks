@@ -13,6 +13,10 @@
 GLOBAL FUNCTION configLiteral {
     PARAMETER raw.
     IF raw:ISTYPE("Scalar") { RETURN raw. }
+    IF raw:ISTYPE("Boolean") {
+        IF raw { RETURN "TRUE". }
+        RETURN "FALSE".
+    }
     IF raw:ISTYPE("List") {
         LOCAL parts IS LIST().
         FOR item IN raw {
@@ -31,6 +35,29 @@ GLOBAL FUNCTION missionOverridePath {
 GLOBAL FUNCTION missionOverrideClear {
     LOCAL overridePath IS "1:/run/mission_overrides.ks".
     IF EXISTS(overridePath) { DELETEPATH(overridePath). }
+}
+
+// Rewrite the current override set, replacing only supplied SET keys.
+// Stage the whole file first so unrelated mission/return intent survives.
+GLOBAL FUNCTION missionOverrideUpdate {
+    PARAMETER values.
+    LOCAL previous IS LIST().
+    LOCAL path IS missionOverridePath().
+    IF EXISTS(path) { SET previous TO OPEN(path):READALL:STRING:SPLIT(CHAR(10)). }
+    LOCAL rewritten IS "1:/run/updated_overrides.ks".
+    IF EXISTS(rewritten) { DELETEPATH(rewritten). }
+    FOR line IN previous {
+        LOCAL keep IS TRUE.
+        FOR key IN values:KEYS {
+            IF line:TRIM:STARTSWITH("SET " + key + " TO ") { SET keep TO FALSE. }
+        }
+        IF keep AND line:TRIM <> "" { LOG line TO rewritten. }
+    }
+    FOR key IN values:KEYS {
+        LOG "SET " + key + " TO " + configLiteral(values[key]) + "." TO rewritten.
+    }
+    COPYPATH(rewritten, path).
+    DELETEPATH(rewritten).
 }
 
 GLOBAL FUNCTION applyMissionOverrides {

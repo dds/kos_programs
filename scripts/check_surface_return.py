@@ -381,10 +381,11 @@ def check_minmus_landing_recovery():
     # Only one refinement: the deorbit node and post-reboot descent share it.
     assert 'targetedDeorbitAt(TARGET_LAT, TARGET_LNG, 0, 0, FALSE)' in phase
     overrides = body(landing, '_landingWriteTargetOverrides')
-    for key in ('TARGET_LAT', 'TARGET_LNG', 'TARGET_LOCK', 'SEQUENCE'):
-        assert f'configLiteral({key})' in overrides
+    for key in ('TARGET_LAT', 'TARGET_LNG', 'TARGET_LOCK'):
+        assert f'"{key}", {key}' in overrides
+    assert 'missionOverrideUpdate(' in overrides and 'missionOverrideClear(' not in overrides
     dependencies = (ROOT / 'lib/dependencies.ks').read_text()
-    assert '"landing_deorbit", LIST("landing_config", "landing_math", "landing_site")' in dependencies
+    assert '"landing_deorbit", LIST("landing_config", "landing_math", "landing_site", "landing_light")' in dependencies
     targeting = body((ROOT / 'lib/deorbit_targeting.ks').read_text(), 'targetedDeorbitAt')
     assert 'PARAMETER refineSite IS TRUE.' in targeting
     assert 'IF refineSite AND DEFINED BOOT_LIB_RAN' in targeting

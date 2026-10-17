@@ -105,7 +105,7 @@ def check_operator_flow():
     for forbidden in ('resumeMission','stateSet(', 'CAPTURE_MARGIN TO','CAPTURE_RESERVE_DV TO'):
         assert forbidden not in budget
     writer=body(COMMAND,'_arrivalWriteOverrides')
-    assert 'FOR line IN previous' in writer and 'FOR key IN values:KEYS' in writer
+    assert 'missionOverrideUpdate(values)' in writer
     assert 'applyMissionOverrides()' in writer
     print('PASS: explicit allowance preserves spent ledger/reserves; preview cannot burn or advance mission; overrides retained')
 

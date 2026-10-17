@@ -179,15 +179,19 @@ def check_compact_burn():
     source = re.sub(r'WAIT UNTIL (.*?)\.(?=\s*\n)', r'UNTIL \1 { WAIT 0.02. }', source, flags=re.S)
     source = re.sub(r'UNLOCK (\w+)\.', r'fixture_unlock("\1").', source)
     source = source.replace('REMOVE nd.', 'fixture_remove(nd).')
-    for scenario in ('normal', 'cutoff-fault', 'frozen', 'weak-thrust', 'abort', 'flameout', 'reversal', 'no-engine', 'expired', 'off-vector'):
+    for scenario in ('normal', 'cutoff-fault', 'frozen', 'weak-thrust', 'abort', 'flameout', 'reversal', 'no-engine', 'expired', 'off-vector', 'unlit-site'):
         node = NS(TIME=-1 if scenario == 'expired' else 200,
                   DELTAV=NS(MAG=10.), BURNVECTOR=Vec((1, 0, 0)))
         ship = NS(MASS=10., THRUST=0., AVAILABLETHRUST=0. if scenario == 'no-engine' else 100.,
                   CONTROL=NS(PILOTMAINTHROTTLE=0.), FACING=NS(FOREVECTOR=Vec((1, 0, 0))))
         removed, commands, elapsed = [], [], [0.]
+        markers = {}
         env = dict(nd=node, TIME=NS(SECONDS=0.), SHIP=ship, ABORT=False, throttle=0.,
                    KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),
                    ROUND=round, VANG=lambda *_: 30 if scenario == 'off-vector' else 0,
+                   landingLightNodeAllowed=lambda *_: scenario != 'unlit-site',
+                   stateSet=lambda key, value: markers.update({key: value}),
+                   stateRemove=lambda key: markers.pop(key, None),
                    vesselNeedsStage=lambda: ship.AVAILABLETHRUST <= 0,
                    vesselStageForLanding=lambda _: None,
                    maneuverEnsureBurnAlarm=lambda *_: '', coastAutoWarp=lambda *_: None,
@@ -222,7 +226,8 @@ def check_compact_burn():
         result = run(source, env)
         assert result == (scenario == 'normal'), scenario
         assert bool(removed) == result and env['throttle'] == 0, scenario
-        if scenario in ('no-engine', 'expired', 'off-vector'): assert not any(commands)
+        if scenario in ('no-engine', 'expired', 'off-vector', 'unlit-site'): assert not any(commands)
+        assert ('deorbit_burn_started' in markers) == (any(commands) and not result), scenario
         if scenario == 'frozen': assert elapsed[0] < 1.1  # Old timeout allowed ~10 s of full thrust.
     print('PASS: compact burn completion, timeout, abort, thrust loss, reversal, expired node and alignment; failed nodes retained')
 

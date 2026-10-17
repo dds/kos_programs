@@ -193,6 +193,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 IF NOT solved["VALID"] {
                     mLogWarn("Orbit " + (orbitScan + 1)
                         + " geometry did not solve a valid deorbit.").
+                } ELSE IF NOT _targetDeorbitLightAccepted(solved, candidateUT, targetLat, targetLng) {
+                    mLogWarn("Deorbit candidate rejected by light/Kerbin policy; scanning later passes.").
                 } ELSE IF _targetDeorbitSolutionAccepted(solved,
                         minDownfield, maxDownfield) {
                     LOCAL crossTrack IS _targetCrossTrackFromSolved(solved).
@@ -345,6 +347,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
         REMOVE realNode.
         RETURN FALSE.
     }
+    IF NOT _targetDeorbitLightAccepted(finalCheck, bestUT, targetLat, targetLng) {
+        REMOVE realNode.
+        RETURN FALSE.
+    }
 
     IF TERRAIN_VALIDATE {
         LOCAL crashInfo IS lmTerrainClearanceInfo(
@@ -381,7 +387,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     archiveLog().
     HUDTEXT("Deorbit burn in " + ROUND(bestUT - TIME:SECONDS,0) + "s",
         3, 2, 13, CYAN, FALSE).
-    IF NOT executeDeorbitNode(realNode) { RETURN FALSE. }
+    IF NOT executeDeorbitNode(realNode, targetLat, targetLng) { RETURN FALSE. }
 
     WAIT 2.
     IF ADDONS:TR:HASIMPACT {
@@ -467,6 +473,19 @@ LOCAL FUNCTION _targetDeorbitCrossAuthority {
     LOCAL brakeAuthority IS 0.5 * brakeAcc * brakeWindow ^ 2.
 
     RETURN mccAuthority + brakeAuthority.
+}
+
+LOCAL FUNCTION _targetDeorbitLightAccepted {
+    PARAMETER solved.
+    PARAMETER burnUT.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    IF NOT landingLightActive() { RETURN TRUE. }
+    IF NOT solved["HAS_IMPACT"] { RETURN FALSE. }
+    LOCAL light IS landingLightWindow(targetLat, targetLng, burnUT + solved["TTI"]).
+    mLog("STATS deorbit light ok=" + light["OK"] + " reason=" + light["REASON"]
+        + " sun=" + ROUND(light["SUN"],2) + " kerbin=" + ROUND(light["KERBIN"],2)).
+    RETURN light["OK"].
 }
 
 LOCAL FUNCTION _findDeorbitGeometryNode {

@@ -30,6 +30,11 @@ GLOBAL FUNCTION phaseLandDeorbit {
         RETURN.
     }
     IF _resumeExistingLandingDeorbitNode() { RETURN. }
+    IF stateGet("deorbit_burn_started", "false") = "true" {
+        mLogError("Interrupted deorbit has no retained node; refusing a replacement burn. Review the actual trajectory manually.").
+        yieldToPrompt().
+        RETURN.
+    }
     IF LANDING_SKIP_TARGET_SEARCH > 0 {
         IF _timedLandingDeorbit() {
             _advanceAfterLandDeorbit().
@@ -82,6 +87,7 @@ LOCAL FUNCTION _resumeExistingLandingDeorbitNode {
 }
 
 LOCAL FUNCTION _advanceAfterLandDeorbit {
+    stateRemove("deorbit_burn_started").
     LOCAL nxt IS nextPhase(launchSeq).
     LOCAL requiredBand IS bootLibBandForPhase(nxt, "").
     LOCAL loadedBand IS stateGet("lib_band", "").
@@ -148,7 +154,11 @@ LOCAL FUNCTION _confirmLandingTarget {
             + ", " + ROUND(targetInfo["LNG"],4).
     } ELSE {
         PRINT "  No landing target found.".
-        PRINT "  Select a waypoint, run simlandhere, or set TARGET_LAT/LNG.".
+        IF landingLightActive() {
+            PRINT "  Use cmd/landlight to review ground-track light/Kerbin constraints.".
+        } ELSE {
+            PRINT "  Select a waypoint or set TARGET_LAT/LNG.".
+        }
         yieldToPrompt().
         RETURN FALSE.
     }
@@ -164,21 +174,9 @@ LOCAL FUNCTION _confirmLandingTarget {
 }
 
 LOCAL FUNCTION _landingWriteTargetOverrides {
-    missionOverrideClear().
-    IF SEQUENCE:LENGTH > 0 { LOG "SET SEQUENCE TO " + configLiteral(SEQUENCE) + "." TO missionOverridePath(). }
-    LOG "SET TARGET_LAT TO " + configLiteral(TARGET_LAT) + "." TO missionOverridePath().
-    LOG "SET TARGET_LNG TO " + configLiteral(TARGET_LNG) + "." TO missionOverridePath().
-    LOG "SET TARGET_LOCK TO " + configLiteral(TARGET_LOCK) + "." TO missionOverridePath().
-    LOG "SET TARGET_WAYPOINT TO " + configLiteral(TARGET_WAYPOINT) + "." TO missionOverridePath().
-    LOG "SET LANDING_SIM_MODE TO " + configLiteral(LANDING_SIM_MODE) + "." TO missionOverridePath().
-    LOG "SET LANDING_SKIP_TARGET_SEARCH TO " + configLiteral(LANDING_SKIP_TARGET_SEARCH) + "." TO missionOverridePath().
-    LOG "SET LANDING_DEORBIT_LEAD_MINUTES TO " + configLiteral(LANDING_DEORBIT_LEAD_MINUTES) + "." TO missionOverridePath().
-    LOG "SET TARGET_DEORBIT_SCAN_ORBITS TO " + configLiteral(TARGET_DEORBIT_SCAN_ORBITS) + "." TO missionOverridePath().
-    LOG "SET TARGET_DEORBIT_SCAN_SAMPLES TO " + configLiteral(TARGET_DEORBIT_SCAN_SAMPLES) + "." TO missionOverridePath().
-    LOG "SET TARGET_DEORBIT_SCAN_CENTER_MINUTES TO " + configLiteral(TARGET_DEORBIT_SCAN_CENTER_MINUTES) + "." TO missionOverridePath().
-    LOG "SET TARGET_DEORBIT_SCAN_WINDOW_MINUTES TO " + configLiteral(TARGET_DEORBIT_SCAN_WINDOW_MINUTES) + "." TO missionOverridePath().
-    LOG "SET RELOAD_AFTER_LAND_ASSIST TO " + configLiteral(RELOAD_AFTER_LAND_ASSIST) + "." TO missionOverridePath().
-    LOG "SET RELOAD_AFTER_LAND TO " + configLiteral(RELOAD_AFTER_LAND) + "." TO missionOverridePath().
+    // Keep unrelated overrides, especially the surface-return sequence.
+    missionOverrideUpdate(LEXICON("TARGET_LAT", TARGET_LAT, "TARGET_LNG", TARGET_LNG,
+        "TARGET_LOCK", TARGET_LOCK, "TARGET_WAYPOINT", TARGET_WAYPOINT)).
 }
 
 LOCAL FUNCTION _autoLandingTarget {
@@ -186,12 +184,19 @@ LOCAL FUNCTION _autoLandingTarget {
 
     LOCAL minutes IS 5.
     SET minutes TO LANDING_AUTO_TARGET_MINUTES.
-    LOCAL geo IS lmGroundGeoAt(TIME:SECONDS + minutes * 60).
-    SET TARGET_LAT TO geo:LAT.
-    SET TARGET_LNG TO geo:LNG.
-    SET TARGET_LOCK TO TRUE.
-    SET TARGET_LAT TO geo:LAT.
-    SET TARGET_LNG TO geo:LNG.
+    IF landingLightActive() {
+        LOCAL site IS landingLitGroundTrack().
+        IF NOT site["FOUND"] {
+            mLogWarn("No ground-track site meets light/Kerbin requirements within the search horizon; holding orbit. Use cmd/landlight to review policy.").
+            RETURN FALSE.
+        }
+        SET TARGET_LAT TO site["LAT"].
+        SET TARGET_LNG TO site["LNG"].
+    } ELSE {
+        LOCAL geo IS lmGroundGeoAt(TIME:SECONDS + minutes * 60).
+        SET TARGET_LAT TO geo:LAT.
+        SET TARGET_LNG TO geo:LNG.
+    }
     SET TARGET_LOCK TO 1.
     SET TARGET_WAYPOINT TO "".
     _landingWriteTargetOverrides().

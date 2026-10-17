@@ -413,8 +413,8 @@ GLOBAL FUNCTION coastHealthCheck {
 
     mLogWarn(label + ": solar flow/charging unhealthy at "
         + ROUND(shipPowerFraction() * 100, 1)
-        + "%; forcing solar reorient.").
-    orientForSolar(TRUE, TRUE, TRUE).
+        + "%; checking solar reorient.").
+    orientForSolar(FALSE, TRUE, TRUE).
     IF _coastHealthPoll(label, "reoriented-full", "reoriented-charging",
             fullEc, dT, minDelta) {
         RETURN TRUE.
