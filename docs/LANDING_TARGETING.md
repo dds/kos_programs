@@ -664,6 +664,42 @@ These values come from `landing_config.ks`, `landing_main.ks`, and
 | touchdown | `LANDING_TOUCHDOWN_HSPEED` | 0.3 m/s | Settled horizontal speed |
 | touchdown | `LANDING_TOUCHDOWN_SETTLE_TICKS` | 120 | Stable ticks before finish |
 
+### Surface sunlight and Kerbin prediction frames
+
+`landing_light` selects only ground-track candidates, then keeps sunlight,
+Kerbin visibility and the existing deorbit/terrain acceptance gates separate.
+Morning prefers a rising 15-degree Sun. The optional `AFTERNOON` mode prefers
+a falling 52.5-degree Sun, approximately 2:30pm at the equator. Neither solar
+score can compensate for Kerbin below its configured elevation margin.
+
+Do not subtract future `BODY` positions at different hierarchy levels as
+though they were fully propagated world positions. The
+[kOS body wrapper](https://github.com/KSP-KOS/KOS/blob/develop/src/kOS/Suffixed/BodyTarget.cs#L142)
+delegates to the native body predictor. The native local-orbit predictor uses
+a current parent center, the behavior also described in the
+[vessel wrapper's child-body correction](https://github.com/KSP-KOS/KOS/blob/develop/src/kOS/Suffixed/VesselTarget.cs#L86).
+The calculation must remove the current parent center from each local orbit
+and accumulate every ancestor orbit to the same root before taking a
+body-to-body difference. Surface rotation still uses the inverse of
+`lmGroundGeoAt`'s longitude correction. This is separate from the future-vessel
+frame correction used by the deorbit solver.
+
+The original light tests incorrectly supplied fully propagated world positions
+for every body. They therefore could not detect parent motion leaking into
+the Kerbin direction. A nested Sun/Kerbin/Mun fixture now advances the moon
+and planet separately: the old formula reported +18.36 degrees at a site
+whose actual Kerbin elevation was -15.92 degrees. Corrected forecasts preserve
+the tidally locked Mun's constant Kerbin elevation, including reflected RAW
+axes and arbitrary origins. Minmus fixtures advance its spin independently
+of its orbit. These are source-driven numerical checks, not game proof.
+
+`landingKerbinElevationNow` uses only live positions as an independent check.
+On the circular, synchronized Mun, future Kerbin elevation must agree within
+0.5 degrees or the site is rejected with `kerbin-frame-mismatch`. The
+`landlight status` command displays both and the saved policy without flying
+or replacing the node. Direct Kerbin view remains a proxy: neither antenna
+range nor ground-station/relay routing is predicted.
+
 ### Minmus landing efficiency regression
 
 The operator reported the first successful RO8 landing 305 m from the requested

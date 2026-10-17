@@ -31,8 +31,7 @@ class Geo:
 def environment(frame=None, rotation=138984, sun_longitude=0, kerbin_longitude=-45):
     frame = np.eye(3) if frame is None else frame
     origin = Vec((9e7, -3e6, 8e6))
-    motion = Vec((235, -410, 107))
-    moon = NS(NAME='Mun', RADIUS=200000., ROTATIONPERIOD=rotation, POSITION=origin, HASBODY=True)
+    moon = NS(NAME='FixtureMoon', RADIUS=200000., ROTATIONPERIOD=rotation, POSITION=origin, HASBODY=True)
     sun = NS(NAME='Sun', RADIUS=2.6e8, HASBODY=False)
     kerbin = NS(NAME='Kerbin', RADIUS=600000., HASBODY=True, BODY=sun)
     moon.BODY = kerbin
@@ -42,18 +41,19 @@ def environment(frame=None, rotation=138984, sun_longitude=0, kerbin_longitude=-
         angle = math.radians(deg)
         return Vec(frame @ np.array((math.cos(angle), math.sin(angle), 0)))
 
+    sun.POSITION = origin + 1.36e10*direction(sun_longitude)
+    kerbin.POSITION = origin + 1.2e7*direction(kerbin_longitude)
     def positionat(obj, ut):
-        center = origin + motion*(ut-time.SECONDS)
-        if obj is moon: return center
-        if obj is sun: return center + 1.36e10*direction(sun_longitude)
-        if obj is kerbin: return center + 1.2e7*direction(kerbin_longitude)
-        raise AssertionError('Surface light must use BODY ephemerides, not vessel predictions')
+        assert obj in (moon, sun, kerbin), 'Surface light must use BODY ephemerides, not vessel predictions'
+        return obj.POSITION
 
     env = dict(SHIP=NS(BODY=moon, PERIAPSIS=14000, ORBIT=NS(PERIOD=2200, ECCENTRICITY=0)),
                SUN=sun, TIME=time, BODY=lambda name: kerbin,
-               POSITIONAT=positionat, LATLNG=lambda lat, lng: Geo(lat, lng, moon, frame),
+               POSITIONAT=positionat, LATLNG=lambda lat, lng: Geo(lat, lng, moon, frame), V=lambda *xs: Vec(xs),
                LANDING_LIGHT_MODE='MORNING', LANDING_SUN_MIN_ELEV=10,
                LANDING_SUN_MAX_ELEV=30, LANDING_SUN_PREFERRED_ELEV=15,
+               LANDING_AFTERNOON_MIN_ELEV=30, LANDING_AFTERNOON_MAX_ELEV=75,
+               LANDING_AFTERNOON_PREFERRED_ELEV=52.5,
                LANDING_REQUIRE_KERBIN=1, LANDING_KERBIN_MIN_ELEV=5,
                LANDING_LIGHT_SCAN_ORBITS=4, LANDING_LIGHT_SCAN_SAMPLES=128,
                LANDING_LIGHT_TIME_MARGIN=300, LIST=lambda *xs: KList(xs),
@@ -62,6 +62,105 @@ def environment(frame=None, rotation=138984, sun_longitude=0, kerbin_longitude=-
     for name in names:
         env[name] = lambda *args, name=name: ks.call(name, env, *args)
     return env
+
+
+def hierarchy_environment(frame=None, moon_name='Mun', moon_phase=0):
+    """Native body POSITIONAT: future local orbit plus CURRENT parent center.
+
+    This models the nested Orbit.getPositionAtUT convention used by the body
+    wrapper, not fictitious fully propagated world positions for every body.
+    The independent oracle propagates both circular orbits before subtraction.
+    """
+    frame = np.eye(3) if frame is None else frame
+    env = environment(frame)
+    moon, star = env['SHIP'].BODY, env['SUN']
+    moon.NAME = moon_name
+    if moon_name == 'Minmus':
+        moon.ROTATIONPERIOD, moon.RADIUS = 40400., 60000.
+    parent = moon.BODY
+    now = env['TIME'].SECONDS
+    outer_radius, inner_radius = 1.36e10, (4.7e7 if moon_name == 'Minmus' else 1.2e7)
+    outer_period = 9203545.
+    inner_period = 1077310. if moon_name == 'Minmus' else 138984.
+    star.POSITION = Vec(frame @ np.array((4e7, 2e7, -3e7)))
+
+    def local_orbit(obj, ut):
+        if obj is parent:
+            angle, radius = math.pi + 2*math.pi*(ut-now)/outer_period, outer_radius
+        elif obj is moon:
+            angle, radius = math.radians(moon_phase) + 2*math.pi*(ut-now)/inner_period, inner_radius
+        else: raise AssertionError('Only bodies with parents have orbits')
+        return Vec(frame @ np.array((radius*math.cos(angle), radius*math.sin(angle), 0)))
+
+    parent.POSITION = star.POSITION + local_orbit(parent, now)
+    moon.POSITION = parent.POSITION + local_orbit(moon, now)
+    parent.ORBIT = NS(PERIOD=outer_period)
+    moon.ORBIT = NS(PERIOD=inner_period, ECCENTRICITY=0)
+    env['POSITIONAT'] = lambda obj, ut: obj.BODY.POSITION + local_orbit(obj, ut) if obj.HASBODY else obj.POSITION
+
+    def true_center(obj, ut):
+        return true_center(obj.BODY, ut) + local_orbit(obj, ut) if obj.HASBODY else obj.POSITION
+
+    def elevation(lat, lng, obj, ut):
+        lat, lng = math.radians(lat), math.radians(lng + 360*(ut-now)/moon.ROTATIONPERIOD)
+        normal = Vec(frame @ np.array((math.cos(lat)*math.cos(lng), math.cos(lat)*math.sin(lng), math.sin(lat))))
+        direction = true_center(obj, ut) - true_center(moon, ut) - moon.RADIUS*normal
+        return math.degrees(math.asin(np.clip(np.dot(normal, direction)/np.linalg.norm(direction), -1, 1)))
+    return env, elevation
+
+
+def check_afternoon():
+    env, oracle = hierarchy_environment(moon_phase=-90)
+    env['LANDING_LIGHT_MODE'] = 'AFTERNOON'
+    now = env['TIME'].SECONDS
+    afternoon = env['landingLightAt'](0, 37.5, now)
+    assert afternoon['OK'] and afternoon['SETTING'] and not afternoon['RISING'], afternoon
+    assert 52 < afternoon['SUN'] < 53 and afternoon['KERBIN'] > 35
+    morning = env['landingLightAt'](0, -37.5, now)
+    assert not morning['OK'] and morning['REASON'] == 'not-afternoon', morning
+    env['lmGroundGeoAt'] = lambda ut: Geo(0, 37.5, env['SHIP'].BODY, np.eye(3))
+    selected = env['landingLitGroundTrack']()
+    assert selected['FOUND'] and selected['KERBIN'] >= 5 and 30 <= selected['SUN'] <= 75
+    # No solar preference is allowed to outweigh a hidden Kerbin.
+    env, oracle = hierarchy_environment()
+    env['LANDING_LIGHT_MODE'] = 'AFTERNOON'
+    env['lmGroundGeoAt'] = lambda ut: Geo(0, 37.5, env['SHIP'].BODY, np.eye(3))
+    assert not env['landingLitGroundTrack']()['FOUND']
+    # Minmus's faster spin must be predicted, not frozen to its current view.
+    env, oracle = hierarchy_environment(moon_name='Minmus')
+    parent = env['SHIP'].BODY.BODY
+    for dt in (0, 1000, 4000, 9000):
+        report = env['landingLightAt'](20, 37.5, now+dt)
+        assert abs(report['KERBIN'] - oracle(20, 37.5, parent, now+dt)) < 2e-6
+    print('PASS: afternoon prefers setting 52.5-degree Sun, rejects morning/hidden-Kerbin sites; Minmus predicts separate spin and orbit')
+
+
+def check_nested_radio_frame():
+    rng = np.random.default_rng(28)
+    for orientation in range(4):
+        frame, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+        if orientation % 2: frame[:, 0] *= -1
+        env, oracle = hierarchy_environment(frame)
+        parent = env['SHIP'].BODY.BODY
+        for dt in (0, 900, 4000, 9000):
+            for lat in (0, 45):
+                for lng in (-75, 0, 70, 160):
+                    result = env['landingLightAt'](lat, lng, 1000+dt)
+                    expected = oracle(lat, lng, parent, 1000+dt)
+                    assert abs(result['KERBIN']-expected) < 2e-6, (dt, lat, lng, result, expected)
+                    assert abs(expected-oracle(lat, lng, parent, 1000)) < 2e-6  # Tidal lock invariant.
+        # Regression: early-morning Sun preference cannot accept an Earth-hidden site.
+        rejected = env['landingLightAt'](0, -75, 5000)
+        assert not rejected['OK'] and rejected['REASON'] == 'kerbin-below-margin', rejected
+        # Prove this fixture would have accepted a false positive previously.
+        offset = env['_landingSurfaceOffsetAt'](0, -75, 1900)
+        legacy = env['POSITIONAT'](parent, 1900) - env['POSITIONAT'](env['SHIP'].BODY, 1900) - offset
+        legacy_elevation = math.degrees(math.asin(np.dot(offset.NORMALIZED, legacy.NORMALIZED)))
+        assert legacy_elevation > 18 and oracle(0, -75, parent, 1900) < -15
+        # A runtime/build convention mismatch must hold rather than approve.
+        env['landingKerbinElevationNow'] = lambda *args: -80
+        assert env['landingLightAt'](0, 160, 1900)['REASON'] == 'kerbin-frame-mismatch'
+    print('PASS: nested Sun/Kerbin/Mun native prediction frames, parent motion, reflected axes and invariant tidally locked Kerbin elevation')
 
 
 def check_geometry():
@@ -105,7 +204,7 @@ def check_geometry():
     assert not env['landingLightAt'](0, -75, 1000)['OK']
     env = environment(sun_longitude=0, kerbin_longitude=0)
     assert env['landingLightAt'](0, -75, 1000)['REASON'] == 'eclipse'
-    print(f'PASS: {cases} rotating/translating surface cases, reflected axes, rising vs setting, eclipse, radio opt-out and invalid policy')
+    print(f'PASS: {cases} surface elevation cases, reflected axes, rising vs setting, eclipse, radio opt-out and invalid policy')
 
 
 def check_windows_and_search():
@@ -155,32 +254,40 @@ def check_command():
     def without_print(nodes):
         return [(s, without_print(yes), without_print(no)) for s, yes, no in nodes if not s.startswith('PRINT ')]
     parsed = without_print(ks.parse(source))
-    for scenario in ('preview', 'apply', 'no-site', 'suborbital', 'started', 'throttle'):
+    for scenario in ('preview', 'apply', 'afternoon', 'status', 'no-site', 'suborbital', 'started', 'throttle'):
         mutations, nodes = [], [object()]
         class HasNode:
             def __bool__(self): return bool(nodes)
         state = dict(vehicle='RO9', mission_id='mun_economy_return', phase='LAND_DEORBIT')
         if scenario == 'started': state['deorbit_burn_started'] = 'true'
-        env = dict(action='preview' if scenario == 'preview' else 'apply', mode='MORNING', requireKerbin=1,
-                   SHIP=NS(STATUS='SUB_ORBITAL' if scenario == 'suborbital' else 'ORBITING',
+        if scenario == 'status': state.update(phase='LAND_ASSIST', deorbit_burn_started='true')
+        before = dict(state)
+        env = dict(action=scenario if scenario in ('preview', 'status') else 'apply',
+                   mode='AFTERNOON' if scenario == 'afternoon' else 'MORNING', requireKerbin=1,
+                   SHIP=NS(STATUS='SUB_ORBITAL' if scenario == 'suborbital' else 'LANDED' if scenario == 'status' else 'ORBITING',
                            BODY=NS(NAME='Mun'), ORBIT=NS(ECCENTRICITY=0), PERIAPSIS=14000,
                            THRUST=0, CONTROL=NS(MAINTHROTTLE=.1 if scenario == 'throttle' else 0, PILOTMAINTHROTTLE=0)),
                    TIME=NS(SECONDS=1000), ABORT=False, stateGet=state.get,
                    KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),
                    RUNPATH=lambda _: None, bootPreamble=lambda: None, bootLibLoad=lambda _: None,
                    EXISTS=lambda _: True, applyMissionOverrides=lambda: None,
+                   landingKerbinElevationNow=lambda *args: 10,
+                   landingResolveTarget=lambda: dict(FOUND=True, LAT=2, LNG=-75),
+                   LATLNG=lambda lat, lng: NS(LAT=lat, LNG=lng),
+                   landingLightAt=lambda *args: dict(KERBIN=10, SUN=15, REASON='ok'),
                    landingLitGroundTrack=lambda: dict(FOUND=scenario!='no-site', LAT=2, LNG=-75, UT=2000, SUN=15, KERBIN=10),
                    missionOverrideUpdate=lambda values: mutations.append(values),
                    LEXICON=lambda *xs: dict(zip(xs[::2], xs[1::2])), HASNODE=HasNode(),
                    remove_node=lambda: nodes.clear(), fixture_wait=lambda _: None)
         try: ks.run(parsed, env)
         except ks.Returned: pass
-        assert state['phase'] == 'LAND_DEORBIT' and state['mission_id'] == 'mun_economy_return'
-        assert bool(mutations) == (scenario == 'apply')
-        assert bool(nodes) == (scenario != 'apply')
+        assert state == before
+        assert bool(mutations) == (scenario in ('apply', 'afternoon'))
+        assert bool(nodes) == (scenario not in ('apply', 'afternoon'))
         if mutations:
             assert 'SEQUENCE' not in mutations[0]
             assert mutations[0]['LANDING_REQUIRE_KERBIN'] == 1
+            assert mutations[0]['LANDING_LIGHT_MODE'] == ('AFTERNOON' if scenario == 'afternoon' else 'MORNING')
     print('PASS: preview preserves node/mission; apply alone replaces target/node; no-site, begun burn, descent and positive throttle refuse mutation')
 
 
@@ -223,6 +330,8 @@ def check_overrides():
 
 
 if __name__ == '__main__':
+    check_nested_radio_frame()
+    check_afternoon()
     check_geometry()
     check_windows_and_search()
     check_command()

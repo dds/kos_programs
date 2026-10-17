@@ -73,7 +73,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
-| `RUNPATH("0:/cmd/landlight.ks").` | Preview a lit ground-track site from Mun/Minmus parking orbit; `"apply", "MORNING", 1` selects it while preserving the return mission; use final argument `0` to waive direct Kerbin view |
+| `RUNPATH("0:/cmd/landlight.ks").` | Preview a lit ground-track site from Mun/Minmus parking orbit; `"status"` checks the saved target with live positions; `"apply", "AFTERNOON", 1` selects afternoon while preserving the return mission; final argument `0` waives direct Kerbin view |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
 | `RUNPATH("0:/cmd/geodistance.ks", lat1, lng1, lat2, lng2).` | Surface distance between two lat/lng points on the current body |
 | `RUNPATH("0:/cmd/kscsplash.ks").` | Target water splashdown offshore of KSC |
@@ -698,7 +698,31 @@ The command's final argument is `LANDING_REQUIRE_KERBIN`: use `0` once relay
 coverage is available to waive direct Kerbin visibility. This does not forecast
 the relay network. `LANDING_KERBIN_MIN_ELEV` configures the elevation margin.
 Light modes are `MORNING`, `SUNLIT` (either rising or setting, above
-`LANDING_SUN_MIN_ELEV`), or `ANY`. Other missions default to `ANY` with no
+`LANDING_SUN_MIN_ELEV`), `AFTERNOON`, or `ANY`. `AFTERNOON` requires a falling
+Sun at 30–75 degrees elevation, preferring 52.5 degrees (roughly 2:30pm at
+the equator on the normalized clock). Its independent settings are
+`LANDING_AFTERNOON_MIN_ELEV`, `LANDING_AFTERNOON_MAX_ELEV` and
+`LANDING_AFTERNOON_PREFERRED_ELEV`. Latitude/solar declination affect the
+clock-to-elevation relationship. To choose an afternoon site for this flight:
+
+```kos
+RUNPATH("0:/cmd/landlight.ks", "status").
+RUNPATH("0:/cmd/landlight.ks", "preview", "AFTERNOON", 1).
+RUNPATH("0:/cmd/landlight.ks", "apply", "AFTERNOON", 1).
+REBOOT.
+```
+
+The status action does not reselect or fly: it prints the saved policy and
+target, Kerbin elevation from independent live body positions, and a T+1800s
+forecast. It also works after deorbit, while an archive link is available.
+Preview/apply print both live and future Kerbin elevation for the proposed
+site. These should agree closely on the stock tidally locked Mun: an obscured
+site does not rotate into Kerbin view later that afternoon. Select a different
+site that satisfies the Sun and Kerbin constraints together. A disagreement
+over 0.5 degrees on the circular, synchronized Mun holds with
+`kerbin-frame-mismatch` rather than trusting the forecast.
+
+Other missions default to `ANY` with no
 Kerbin-view requirement. The deorbit solver rechecks the actual selected
 node's predicted impact time, with samples across a ±300-second touchdown
 window (`LANDING_LIGHT_TIME_MARGIN`). Existing terrain/slope/fuel checks remain.

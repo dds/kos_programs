@@ -227,6 +227,13 @@ Looks like Python/JS; is neither.
   authority. `docs/LANDING_TARGETING.md` is the current design note.
   Economy sites use `landing_light` for future surface Sun/Kerbin geometry;
   `solar_axis` is a ship-frame panel axis, never a geographical Sun vector.
+  BODY prediction uses a future local orbit about the CURRENT parent center:
+  subtract `bdy:BODY:POSITION` from `POSITIONAT(bdy, ut)`, then accumulate
+  parent orbits to a common root (`_landingBodyOffsetAt`). Subtracting two
+  raw BODY predictions at different hierarchy levels injects parent motion.
+  The old light fixture missed this by moving all bodies together; nested
+  native-frame fixtures must preserve the Mun's tidal-lock radio invariant.
+  Morning/afternoon Sun preferences never override the direct Kerbin gate.
   Preserve unrelated overrides with `missionOverrideUpdate` when changing
   a target/policy. `cmd/landlight` previews/applies only from an unflown moon
   parking orbit; retained deorbit nodes still pass the executor's light gate.
@@ -311,6 +318,14 @@ Looks like Python/JS; is neither.
   These changes are not yet flight-proven. Further landing-footprint,
   approach-budget and sequence validation work is recorded in
   `docs/FLIGHT_SEQUENCE_VALIDATION.md`.
+  On 2026-10-17 the operator suspected the new morning site lacked Kerbin
+  visibility and requested an afternoon alternative. Nested body-frame
+  regression reproduced a false acceptance: +18.36 deg predicted versus
+  -15.92 deg actual in the fixture. Common-root body prediction and an
+  independent live-position Mun consistency gate fix that source defect;
+  AFTERNOON prefers a falling 52.5 deg Sun. Exact flight coordinates and
+  in-game verification remain pending. `cmd/landlight status` provides live
+  and predicted site elevations without changing the target/node/phase.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered
