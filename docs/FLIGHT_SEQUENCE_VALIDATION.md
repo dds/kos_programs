@@ -315,6 +315,39 @@ native KSP parent-patch verification remain required before a direct executor
 can replace the existing surface-return sequence. No current-flight affordable
 direct return has been established.
 
+## Deorbit search convergence
+
+After the ground-track refresh, the operator reported that Minmus deorbit
+planning still spent excessive time on poor candidates without making the
+needed north/south adjustment. Economy profiles left the normal correction
+cap at zero. The old solver varied retrograde alone and tried a limited
+lateral correction only after an acceptable downrange result, while the
+outer scan ran light/radio checks before rejecting bad footprints.
+
+The replacement bootstraps an impact, then jointly measures downrange and
+signed lateral response to retrograde/timing and retrograde/normal changes.
+Timing is tried first to avoid unnecessary plane-change dV. Newton steps
+share one trust factor, respect the existing retrograde bound, keep accepted
+timing shifts within 120 seconds, and backtrack rather than retain worse
+footprints. Economy enables normal up to 10 m/s, aims below 250 m lateral
+error, and refuses above 500 m. The whole plan has at most 64 trial-node
+evaluations; planning uses a scoped instruction floor and restores it on
+return/reboot. Admissible footprints alone proceed to light screening.
+
+Source-driven regression uses independent elliptic impact propagation for a
+20-degree circular Minmus orbit, including body rotation and both normal
+sign conventions. Refinements converge within 12 evaluations in those fixtures;
+the complete geometry-seed/bootstrap/refinement case takes 19 evaluations,
+reaching 2.5 m lateral error and 15.14 km downfield. It also solves a timing-only
+case with normal disabled. These are synthetic trajectories. Synthetic nonlinear,
+singular and cap-saturated responses cover backtracking and rejection.
+Production-entry tests enforce evaluation/fuel/time bounds before touching
+nodes; phase fixtures cover CPU restoration and retained-node checks without
+adding an orbital hold to interrupted/suborbital recovery. Final geometry,
+braking lead, FPA, terrain, light and physical cutoff gates remain, with added
+fuel and normal-component checks. Actual TR prediction latency, nonlinear
+flight response and powered landing accuracy still require flight evidence.
+
 ## End-of-burn contract
 
 `lib/thrust_cutoff.ks` owns `thrustCutoff()` and `thrustCutoffOk()`.

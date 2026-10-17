@@ -431,7 +431,21 @@ Looks like Python/JS; is neither.
   plans in bound orbit refresh cached targets from the current ground track;
   no eligible light/radio site holds instead of reverting to the old lock.
   Precision/manual sites and retained/interrupted nodes remain protected.
-  Native20-degree Minmus/source policy fixtures pass, not flight validation.
+  Source-driven20-degree Minmus policy fixtures pass, not flight validation.
+  The operator then reported that ground-track refresh did NOT fix the
+  slow/wandering deorbit solve or missing north/south correction. Confirmed
+  source causes: economy profiles left NORMAL_DV_CAP=0; the solver polished
+  a 1-D retrograde root; light checks preceded footprint rejection. The
+  replacement measures downrange/cross response jointly, tries timing first
+  (+/-120s) then bounded normal, with shared trust scaling and improving-only
+  backtracking. Economy permits normal10m/s, prefers cross250m, rejects>500m.
+  A global64-trial budget and scoped planning IPU floor bound work; boot
+  restores landing_prior_ipu after interruption. Final/retained UNFLOWN bound
+  nodes keep geometry/FPA/terrain/light/cutoff checks plus fuel/normal caps.
+  Do not add a new planning hold to interrupted/suborbital recovery. Independent
+  20-degree Kepler/source fixtures cover both normal signs, timing-only,
+  nonlinear backtracking, saturation, singular response, budgets, geometry
+  before light and CPU restoration; these are not Trajectories/KSP flight proof.
   The requested Mun return is direct ascent to Kerbin Pe53km, no KSC/mandatory
   parking orbit. cmd/directreturn is a LANDED, single-stage MODEL PREVIEW ONLY:
   bounded heading/pitch/dV search, RK4 mass/thrust, analytic SOI handoff, actual

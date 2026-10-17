@@ -74,6 +74,23 @@ LOCAL FUNCTION _resumeExistingLandingDeorbitNode {
         RETURN TRUE.
     }
 
+    // An unflown retained node may predate tighter geometry/fuel settings.
+    // Preserve it on rejection. Do not turn committed descent recovery into
+    // a new orbital planning hold after a partial burn.
+    IF LANDING_SKIP_TARGET_SEARCH <= 0 AND SHIP:STATUS = "ORBITING"
+            AND SHIP:PERIAPSIS > 0
+            AND stateGet("deorbit_burn_started", "false") <> "true" {
+        LOCAL landingTarget IS landingResolveTarget().
+        IF NOT landingTarget["FOUND"] {
+            mLogError("Retained deorbit node has no resolved target; node preserved.").
+            yieldToPrompt(). RETURN TRUE.
+        }
+        IF NOT landingDeorbitNodeAccepted(nd, landingTarget["LAT"], landingTarget["LNG"]) {
+            mLogError("Retained deorbit node fails geometry/terrain/fuel limits; node preserved. Replan from orbit with cmd/landlight apply.").
+            yieldToPrompt(). RETURN TRUE.
+        }
+    }
+
     IF executeDeorbitNode(nd) {
         _advanceAfterLandDeorbit().
     } ELSE {
@@ -252,5 +269,13 @@ LOCAL FUNCTION _landingTargetedDeorbit {
         + " from " + landingTarget["SOURCE"] + ".").
 
     // Already selected/persisted above; do not refine a second time.
-    RETURN targetedDeorbitAt(TARGET_LAT, TARGET_LNG, 0, 0, FALSE).
+    LOCAL priorIpu IS CONFIG:IPU.
+    IF priorIpu < MIN(2000, LANDING_MIN_IPU) {
+        stateSet("landing_prior_ipu", priorIpu).
+        SET CONFIG:IPU TO MIN(2000, LANDING_MIN_IPU).
+    }
+    LOCAL success IS targetedDeorbitAt(TARGET_LAT, TARGET_LNG, 0, 0, FALSE).
+    SET CONFIG:IPU TO priorIpu.
+    IF priorIpu < MIN(2000, LANDING_MIN_IPU) { stateRemove("landing_prior_ipu"). }
+    RETURN success.
 }

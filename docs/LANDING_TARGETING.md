@@ -111,9 +111,10 @@ stop the scan immediately; the solver keeps looking through the configured
 scan orbits and chooses the first pass inside the preferred cross-track band,
 or the best acceptable wider pass if none are cleaner.
 
-For each candidate burn time, `_solveGeometricDeorbitDv()` searches retrograde
-dV from a 15 m/s seed inside a 2-120 m/s range. It places temporary nodes,
-waits for Trajectories, and evaluates:
+For each candidate burn time, `_solveGeometricDeorbitDv()` starts at 15 m/s
+retrograde inside a 2-120 m/s range. It increases retrograde only until an
+impact exists, then refines the complete footprint. Temporary nodes let it
+measure:
 
 - whether Trajectories predicts an impact
 - the predicted impact latitude/longitude
@@ -127,28 +128,39 @@ For example, the reported `downfield=15km downErr=0.02km cross=2.94/0.61km`
 candidate missed laterally by 2.94 km despite only 20 m of downrange error.
 Its lateral miss exceeded the estimated 610 m descent correction allowance.
 
-The Minmus recovery profile enables `TARGET_DEORBIT_NORMAL_DV_CAP=10` m/s
-(default zero elsewhere). When downrange is acceptable but cross-track is
-not, the planner tries normal components of +1 and -1 m/s in the same node,
-measures which direction reduces lateral miss, then tests one bounded
-linear correction. These are predictions, not separate burns. It stops at
-the first complete acceptable solution; at most three extra predictions
-are made per burn location. If the normal correction shifts downrange out
-of the braking band, the retrograde solve continues with that normal
-component retained. The final node preserves both components and undergoes
-the usual impact and terrain checks. The cap limits the normal component,
-not the total burn; actual savings depend on the measured trajectory.
+The coupled refinement first tries burn timing together with retrograde dV,
+then normal together with retrograde when enabled. Each Jacobian measures
+both downrange and signed lateral response, including their coupling. It
+does not assume which normal sign moves north. Timing adjustments are bounded
+to 120 seconds around the seed; normal stays inside
+`TARGET_DEORBIT_NORMAL_DV_CAP`. A shared trust factor preserves the correction
+direction, and rejected full steps backtrack to half or quarter steps. Only
+steps that reduce lateral miss plus distance outside the braking band are
+retained. Small probe nodes may look worse; they are measurements, not burns.
+`STATS deorbit step` records retained improvements.
 
-If downrange has converged within 250 m but another limit still rejects the
-approach, the solver moves to another burn location instead of polishing
-the same downrange root. Persistent `STATS deorbit` records name the failing
-gate (`cross-track`, braking lead, impact angle, or missing prediction).
+RO8/RO9 Mun/Minmus economy and Minmus recovery profiles permit up to 10 m/s
+normal correction; the default elsewhere remains zero. Economy prefers
+250 m lateral error and rejects above 500 m, replacing the overly broad
+thrust-derived allowance for these profiles. All ordinary braking-lead,
+flight-path-angle and terrain limits remain. Fuel and normal-component caps
+are checked again on the final prediction. Each correction mode has at most
+three iterations; `TARGET_DEORBIT_MAX_EVALUATIONS` caps all trial-node
+predictions across the entire search at 64 by default. Exhaustion selects a
+previously admissible candidate or holds in orbit, never relaxes the gates.
+The landing phase temporarily raises planning IPU to the configured landing
+floor, capped at 2000, and restores it after either success or failure; boot
+already restores that marker after interruption.
 
 The first solution in the 10-20 km downfield band with cross-track miss within
 the controller's allowance is accepted, also respecting `DEORBIT_MIN_FPA`
 when enabled. Before execution, the chosen node is recreated and its impact
 is rechecked against those same limits. Missing/changed impact predictions
-hold without burning. The node is optionally terrain-validated: if projected terrain contact occurs
+hold without burning. Light/radio checks run only after geometry passes and
+use the corrected burn UT. Unflown retained nodes in bound orbit also undergo
+the current geometry/terrain/fuel checks, preserving rejected nodes for review. This
+does not add an orbital planning hold to interrupted/suborbital recovery.
+The node is optionally terrain-validated: if projected terrain contact occurs
 before the target pass, planning fails; post-target impact is only warned
 about because it is expected for the phantom target.
 
@@ -643,6 +655,8 @@ These values come from `landing_config.ks`, `landing_main.ks`, and
 | deorbit | retro dV search | 2-120 m/s | Range searched for the deorbit node |
 | deorbit | seed retro dV | 15 m/s | Initial dV trial |
 | deorbit | `TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM` | 0 km | Preferred max cross-track before waiting for a later orbit; 0 disables |
+| deorbit | `TARGET_DEORBIT_NORMAL_DV_CAP` | 0 m/s | Normal correction cap; economy/recovery profiles enable 10 m/s |
+| deorbit | `TARGET_DEORBIT_MAX_EVALUATIONS` | 64 | Trial-node prediction limit across the entire search |
 | terrain | `TERRAIN_CHECK_RADIUS` | 100 m | Initial flat-spot search radius |
 | terrain | `TERRAIN_CHECK_STEP` | 20 m | Initial flat-spot grid step |
 | terrain | hover radius override | 20 m | Final hover flat-spot search radius |

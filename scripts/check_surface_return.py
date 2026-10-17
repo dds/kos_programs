@@ -373,7 +373,7 @@ def check_minmus_landing_recovery():
                             site={'FOUND': found}) == bool(required and not found)
     guard = phase.index('IF LANDING_REQUIRE_SITE')
     persist = phase.index('_landingWriteTargetOverrides().')
-    plan = phase.index('RETURN targetedDeorbitAt(')
+    plan = phase.index('LOCAL success IS targetedDeorbitAt(')
     assert guard < persist < plan
     assert 'RETURN FALSE.' in phase[guard:persist]
     assert 'SET TARGET_LAT TO site["LAT"].' in phase[:persist]

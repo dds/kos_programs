@@ -734,6 +734,13 @@ terrain refinement. Retained/interrupted burns keep their resume checks;
 (`LANDING_USE_WAYPOINTS=0`); these profiles do not perform the polar temperature
 survey or land at the old contract coordinates. The existing targeted-deorbit
 path still needs Trajectories, with SCANsat refinement when available.
+The deorbit solver adjusts burn timing and retrograde dV together, then uses
+up to 10 m/s normal correction if needed. Economy targets prefer lateral
+miss below 250 m and reject above 500 m. Trial-node evaluations stop at 64;
+geometry must pass before light/radio checks run. `STATS deorbit step` logs
+retained improvements, and `STATS deorbit search` reports the evaluation count.
+Unflown retained nodes are rechecked against the current limits; rejection
+preserves the node. The 10–20 km downfield ballistic lead remains intentional.
 Surface ascent flies east to a 10 km parking orbit, accepting the minimum
 inclination reachable from the actual landing latitude.
 
