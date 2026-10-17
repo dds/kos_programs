@@ -162,6 +162,8 @@ def check_recovery_guards():
         if case=='empty':nd.DELTAV.MAG=.01
         assert ks.call('_reentryPeNodeOk',env,nd,53000)==(case=='valid'),case
     owner=body(RECOVERY,'_cmdReentrype')
+    assert owner.index('SET WARP TO 0.')<owner.index('bootPreamble()')
+    assert 'WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.' in owner
     assert owner.index('HASNODE OR maneuverBurnInterrupted()')<owner.index('planLowerPe(')
     assert owner.index('_reentryPeNodeOk(')<owner.index('executeManeuver()')
     after=owner[owner.index('LOCAL success IS executeManeuver()'):]

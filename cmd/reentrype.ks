@@ -18,6 +18,8 @@ LOCAL FUNCTION _reentryPeNodeOk {
 }
 
 LOCAL FUNCTION _cmdReentrype {
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
     RUNPATH("1:/lib/boot_lib").
     bootPreamble().
     bootLibLoad("maneuver_plan").
