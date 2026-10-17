@@ -56,9 +56,10 @@ APPROACH while local clearance was still 2.5 km. Admission now uses hull
 clearance. The conservative smaller height remains in the stopping envelope,
 preserving elevated-terrain protection. COAST hands to BRAKE_ALIGN, which
 remeasures the gate before thrust. Geographic ignition requires alignment
-within 15 degrees; an already urgent vertical envelope can still start
-emergency arrest without an artificial wait. The cause of the 12 km ignition
-has not been established, and its conservative stage/terrain gates remain.
+within 15 degrees. The former urgent-vertical exception was removed after
+the later flight evidence below: it allowed wrong-direction thrust. The
+cause of the original 12 km ignition has not been established, and its
+conservative stage/terrain gates remain.
 
 RO8/RO9 Mun/Minmus economy profiles now enable `LANDING_FLEXIBLE_SITE=1`.
 An actual ballistic miss beyond the existing 20 km assist corridor triggers
@@ -161,6 +162,48 @@ Vector/flare property checks retain thrust bounds, no engine-down command,
 the weaker-stage flare budget and the unchanged ignition gate. The model
 omits terrain meshes, attitude dynamics, engine spool and the kOS scheduler;
 KSP quicksave testing remains required.
+
+### Wrong-attitude ignition after a suborbital reboot
+
+The operator supplied a later RO9 log: COAST entered BRAKE_ALIGN at about
+4,244 m hull clearance, hs=522 m/s, vs=-46.7 m/s, current acceleration
+46.06 m/s2 and planned acceleration 2.72 m/s2. `vEta=0` requested immediate
+braking. Alignment error was 118.5 degrees, yet BRAKING_BURN began at about
+116.7 degrees. After transfer-stage exhaustion, the lander delivered
+2.76 m/s2. The weak-stage estimate was therefore close to the measured
+acceleration; the 412 m terrain shift was not the logged ignition trigger.
+A 21,453 m diversion preceded guidance, retaining the configured optional
+Kerbin policy. Economy geographic ignition was suppressed (`hSupp=true`).
+Replaying hs=521.5, vs=-46, height=4415 and planAcc=2.72 with surface
+g=1.63 yields a 15,994 m stopping-height envelope and a zero-vertical-speed
+target in both modes. The economy solver has no feasible descending flare
+entry under that conservative weak-stage budget. Thus its late-state full
+arrest fallback can still support altitude; fixing alignment preserves useful
+transfer-stage impulse but does not prove this case can descend continuously.
+Future stage-aware optimization must account for available transfer impulse
+and handoff/turning time before reducing that reserve, ideally before deorbit.
+
+`_landingBrakeAlignTick` explicitly exempted an urgent vertical gate from
+its 15-degree alignment requirement. State entry and live braking also
+published throttle without checking attitude. The vector owner now returns
+zero throttle whenever facing is more than 15 degrees off the commanded
+vector or below the horizon. The alignment tick always waits for this gate;
+state entry, continued braking and stage-induced vector changes share it.
+Hold/ready transitions are logged once per change, and the saved ignition
+record includes commanded throttle. The old `retroErr` log field duplicated
+the commanded-vector error, so it was removed rather than implying a second
+independent measurement. Stopping, stage-reserve, terrain, reaction-time and
+cutoff safeguards remain active.
+
+`check_landing_alignment.py` exercises the reported acceleration, speed,
+altitude and angles in both braking modes, the actual state-entry publisher,
+live attitude loss, and the weaker-stage vector change. A prescribed
+12 deg/s slew from 119.2 degrees with the 46.06-to-2.76 m/s2 transition
+applies no impulse outside the alignment/horizon guard. This is a short
+finite-slew regression, not a simulated complete landing. A late reboot can
+still leave insufficient turning/stopping time; the patch cannot recover
+lost altitude or fuel. KSP attitude dynamics and flight performance remain
+unverified.
 
 ## End-of-burn contract
 

@@ -367,6 +367,21 @@ Looks like Python/JS; is neither.
   hover from 45.4 to 0 s and brake-to-approach impulse from 534.1 to 440.6 m/s;
   these are model values, not flight or whole-mission savings. Staged and
   variable-centrifugal-support fixtures exist in `check_landing_economy.py`.
+  A subsequent RO9 suborbital reboot provided an ignition log: hs=522,
+  vs=-46.7, hull clearance ~4244 m, acc=46.06, planAcc=2.72, vEta=0;
+  BRAKE_ALIGN error=118.5 deg, ignition ~116.7 deg. The next stage delivered
+  2.76 m/s2, validating that reserve estimate. The urgent vertical gate
+  explicitly bypassed alignment. Never reinstate that exception: a stopping
+  deadline does not justify wrong-direction thrust. The brake vector owner
+  now zeros throttle beyond 15 deg or with actual facing below the horizon,
+  shared by alignment, state entry, live braking and stage changes. The
+  duplicated `retroErr` field is removed; hold/ready logs and saved ignition
+  throttle expose the guard. `check_landing_alignment.py` covers the reported
+  values, actual state entry and finite slew, but is not flight validation.
+  This late state also requests targetVs=0 in economy mode: the conservative
+  weak-stage stopping envelope is ~16 km at these speeds. Do not promise
+  continuous descent or remove the reserve without budgeting useful remaining
+  transfer-stage impulse and turning/staging time.
   The earlier
   terminal-guidance efficiency changes still need flight validation. BPLANE/SHAPE flew the
   Mun contract end-to-end (2026-06). RO8 `minmus_landing_return` recovered

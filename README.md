@@ -189,6 +189,11 @@ It tapers near velocity capture and keeps the existing reaction, clearance,
 staging and physical-cutoff checks. The conservative 80% acceleration budget
 remains in the ignition and flare envelopes; it does not cap the economy
 main-burn throttle. Precision profiles retain the previous policy.
+Braking waits for the actual facing direction to be within 15 degrees of
+the commanded thrust vector and at or above the horizon. The same throttle
+guard runs throughout braking and after staging; an urgent stopping gate
+does not bypass it. `STATS landing-brake alignment hold/ready` records
+alignment changes, and the saved brake decision includes commanded throttle.
 These are source-driven model improvements, not a flight-proven optimum.
 These braking/staging changes have numerical coverage but still need a KSP
 flight test, including separation clearance on the actual craft.

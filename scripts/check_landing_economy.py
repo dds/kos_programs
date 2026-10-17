@@ -64,6 +64,9 @@ def check_ballistic_gate():
     call('_landingCoastTick',env,ctx)
     assert ctx['STATE']=='BRAKE_ALIGN'
     call('_landingBrakeAlignTick',env,ctx)
+    assert ctx['STATE']=='BRAKE_ALIGN' and ctx['throttle']==0
+    env['SHIP'].FACING.FOREVECTOR = ctx['steering']
+    call('_landingBrakeAlignTick',env,ctx)
     assert ctx['STATE']=='BRAKING_BURN'
     print('PASS: economy geographic target cannot force an early burn; unchanged full velocity/terrain gate still starts urgent braking')
 

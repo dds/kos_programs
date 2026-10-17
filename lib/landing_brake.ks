@@ -136,13 +136,32 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
     IF ctx["MAX_ACC"] > 0 {
         SET throttleCommand TO MIN(1, thrustVec:MAG / ctx["MAX_ACC"]).
     }
+    // A stopping deadline cannot make thrust in the wrong direction useful.
+    // Own this guard with the vector so state entry, live braking and a new
+    // stage all receive the same zero command until attitude has caught up.
+    LOCAL alignErr IS VANG(SHIP:FACING:FOREVECTOR, steeringTarget).
+    LOCAL facingUp IS VDOT(SHIP:FACING:FOREVECTOR, ctx["UP_VEC"]).
+    LOCAL aligned IS alignErr <= 15 AND facingUp >= 0.
+    IF NOT aligned { SET throttleCommand TO 0. }
+    IF NOT aligned AND NOT ctx["BRAKE_ALIGN_BLOCKED"] {
+        mLog("STATS landing-brake alignment hold err=" + ROUND(alignErr,1)
+            + " up=" + ROUND(facingUp,3)
+            + " height=" + ROUND(height,0)
+            + " hs=" + ROUND(ctx["H_SPEED"],1)
+            + " vs=" + ROUND(ctx["V_SPEED"],1)
+            + " acc=" + ROUND(ctx["MAX_ACC"],2)).
+    } ELSE IF aligned AND ctx["BRAKE_ALIGN_BLOCKED"] {
+        mLog("STATS landing-brake alignment ready err=" + ROUND(alignErr,1)
+            + " height=" + ROUND(height,0) + " acc=" + ROUND(ctx["MAX_ACC"],2)).
+    }
+    SET ctx["BRAKE_ALIGN_BLOCKED"] TO NOT aligned.
     LOCAL trajErr IS _landingTrajError(ctx).
     RETURN LEXICON(
         "IMPACT_ERR", trajErr["DIST"],
         "CROSS_ERR", trajErr["CROSS_SIGNED"],
         "CROSS_ABS", trajErr["CROSS"],
-        "ALIGN_ERR", VANG(SHIP:FACING:FOREVECTOR, steeringTarget),
-        "RETRO_ERR", VANG(SHIP:FACING:FOREVECTOR, steeringTarget),
+        "ALIGN_ERR", alignErr,
+        "ALIGNED", aligned,
         "BIAS", 0,
         "GUARD", 1,
         "HARD", ctx["H_SPEED"] > APPROACH_HSPEED,
@@ -178,10 +197,9 @@ GLOBAL FUNCTION _landingBrakeAlignTick {
         _landingHudEtaNotice(ctx, "Braking burn", nextBurnEta, YELLOW).
     }
 
-    // A geographic gate is not permission to burn while still slewing.
-    // Preserve urgent vertical arrest when the stopping envelope is already
-    // reached; the normal twenty-second alignment lead avoids this case.
-    IF steerInfo["ALIGN_ERR"] > 15 AND NOT gate["V_NOW"] { RETURN. }
+    // An urgent vertical gate also has to wait for useful thrust direction.
+    // Keep steering active and re-evaluate the envelope while throttle is zero.
+    IF NOT steerInfo["ALIGNED"] { RETURN. }
 
     IF gate["V_NOW"] {
         _landingSetState(ctx, "BRAKING_BURN", "vertical burn gate").

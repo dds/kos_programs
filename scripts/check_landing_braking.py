@@ -18,6 +18,7 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                SURFACE_VEL=Vec((horizontal,0,-down)),
                V_SPEED=-down, DOWN_SPEED=down, MAX_ACC=gravity*twr,
                PLAN_ACC=gravity*twr, GRAV=gravity, BRAKE_GRAV=gravity,
+               BRAKE_ALIGN_BLOCKED=False,
                TARGET_LAT=0, TARGET_LNG=0, TARGET_ELEVATION=0,
                height=height, downrange=100000, STATE_ENTERED=0, TERRAIN_DONE=True)
     env['SHIP'] = NS(FACING=NS(FOREVECTOR=Vec((0, 0, 1))), ALTITUDE=height,
@@ -26,7 +27,7 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                _landingTargetHeight=lambda c: c['height'],
                _landingDownrangeToTarget=lambda c: c['downrange'],
                lmDistanceToTarget=lambda *args: abs(ctx['downrange']),
-               _landingSetThrottle=lambda c, x: c.update(throttle=x),
+               _landingSetThrottle=lambda c, x: c.update(throttle=x, TARGET_THROTTLE=x),
                _landingSetSteering=lambda c, x: c.update(steering=x),
                _landingSetState=lambda c, state, reason: c.update(STATE=state),
                _landingBoolText=str, ROUND=round, YELLOW=0, WHITE=0, GREEN=0,
@@ -52,6 +53,7 @@ def check_gates():
     ctx['height'] = gate['V_GATE'] - 1
     call('_landingCoastTick', env, ctx)
     assert ctx['STATE'] == 'BRAKE_ALIGN' and ctx['throttle'] == 0
+    env['SHIP'].FACING.FOREVECTOR = ctx['steering']
     call('_landingBrakeAlignTick', env, ctx)
     assert ctx['STATE'] == 'BRAKING_BURN'
     ctx.update(height=100000, downrange=gate['H_GATE'] + 599)
@@ -85,6 +87,7 @@ def check_high_altitude_misses():
         ctx['height']=gate['V_GATE']-1
         call('_landingCoastTick',env,ctx)
         assert ctx['STATE']=='BRAKE_ALIGN' and ctx['throttle']==0,ctx
+        env['SHIP'].FACING.FOREVECTOR = ctx['steering']
         call('_landingBrakeAlignTick',env,ctx)
         assert ctx['STATE']=='BRAKING_BURN',ctx
     for state in ('BRAKING_BURN','APPROACH','TARGET_REFINE'):

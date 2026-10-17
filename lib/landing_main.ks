@@ -560,7 +560,6 @@ GLOBAL FUNCTION _landingSetState {
         LOCAL alignSteerInfo IS _landingBrakeSteeringInfo(ctx).
         mLog("BRAKE ALIGN steering: err="
             + ROUND(alignSteerInfo["ALIGN_ERR"],1)
-            + "deg retroErr=" + ROUND(alignSteerInfo["RETRO_ERR"],1)
             + "deg bias=" + ROUND(alignSteerInfo["BIAS"],3)
             + " hard=" + _landingBoolText(alignSteerInfo["HARD"]) + ".").
         _landingHudNotice(ctx, "Performing braking alignment.", YELLOW, TRUE).
@@ -594,14 +593,14 @@ GLOBAL FUNCTION _landingSetState {
             + " ipu=" + CONFIG:IPU
             + " economyBrake=" + LANDING_ECONOMY_BRAKE
             + " targetVs=" + ROUND(burnSteerInfo["TARGET_VS"],1)
-            + " align=" + ROUND(burnSteerInfo["ALIGN_ERR"],1).
+            + " align=" + ROUND(burnSteerInfo["ALIGN_ERR"],1)
+            + " throttle=" + ROUND(ctx["TARGET_THROTTLE"],2).
         // One compact record survives a reboot and log rotation; no per-tick
         // state writes or archive reads are needed to explain this ignition.
         stateSet("last_landing_brake", brakeReport).
         mLog(brakeReport).
         mLog("BRAKING BURN steering: err="
             + ROUND(burnSteerInfo["ALIGN_ERR"],1)
-            + "deg retroErr=" + ROUND(burnSteerInfo["RETRO_ERR"],1)
             + "deg bias=" + ROUND(burnSteerInfo["BIAS"],3)
             + " hard=" + _landingBoolText(burnSteerInfo["HARD"]) + ".").
         _landingHudNotice(ctx, "Performing braking burn.", YELLOW, TRUE).
@@ -756,6 +755,7 @@ GLOBAL FUNCTION landExecute {
         "MCC_PULSE_UNTIL", 0,
         "MCC_SETTLE_UNTIL", 0,
         "TARGET_STEERING", SHIP:UP:VECTOR,
+        "BRAKE_ALIGN_BLOCKED", FALSE,
         "RESERVE_STAGE", -999,
         "RESERVE_ACC", 0,
         "STAGE_UNTIL", 0,
