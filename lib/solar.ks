@@ -17,6 +17,8 @@ GLOBAL SOLAR_REUSE_RATIO IS 0.90.
 GLOBAL SOLAR_HOLD_EC IS 0.75.
 GLOBAL SOLAR_AIM_TIMEOUT IS 90.
 GLOBAL SOLAR_SEARCH_TIMEOUT IS 300.
+GLOBAL SOLAR_AIM_TOLERANCE IS 5.
+GLOBAL SOLAR_HOLD_TOLERANCE IS 10.
 GLOBAL SOLAR_SEARCH_SKIP_FIRST_BOOT IS 1.
 GLOBAL SOLAR_SEARCH_LAUNCH_GUARD IS 300.
 GLOBAL SOLAR_SEARCH_KSC_RADIUS IS 10000.
@@ -107,6 +109,7 @@ LOCAL FUNCTION _solarAimSettle {
     PARAMETER deadlineUt IS 0.
     PARAMETER keepOnFailure IS TRUE.
     PARAMETER label IS "axis".
+    PARAMETER tolerance IS SOLAR_AIM_TOLERANCE.
     LOCAL began IS TIME:SECONDS.
     LOCAL deadline IS began + SOLAR_AIM_TIMEOUT.
     LOCAL timeoutReason IS "alignment-timeout".
@@ -121,29 +124,32 @@ LOCAL FUNCTION _solarAimSettle {
     }
     LOCAL startError IS VANG(SHIP:FACING * aShip,SUN:POSITION).
     mLog("STATS solar aim label=" + label + " status=begin err=" + ROUND(startError,2)
-        + " budget=" + ROUND(deadline-began,2) + " warp=" + WARP).
+        + " tolerance=" + tolerance + " budget=" + ROUND(deadline-began,2) + " warp=" + WARP).
     _solarAim(aShip).
     UNTIL TIME:SECONDS >= deadline {
-        IF VANG(SHIP:FACING * aShip, SUN:POSITION) < 2
+        IF VANG(SHIP:FACING * aShip, SUN:POSITION) <= tolerance
                 AND SHIP:ANGULARVEL:MAG < 0.03 {
             BREAK.
         }
         WAIT MIN(0.2,MAX(0,deadline-TIME:SECONDS)).
     }
-    IF NOT (VANG(SHIP:FACING * aShip,SUN:POSITION) < 2 AND SHIP:ANGULARVEL:MAG < 0.03) {
+    IF NOT (VANG(SHIP:FACING * aShip,SUN:POSITION) <= tolerance AND SHIP:ANGULARVEL:MAG < 0.03) {
         mLogWarn("STATS solar aim label=" + label + " status=" + timeoutReason
             + " elapsed=" + ROUND(TIME:SECONDS-began,2)
             + " err=" + ROUND(VANG(SHIP:FACING * aShip,SUN:POSITION),2)
-            + " rate=" + ROUND(SHIP:ANGULARVEL:MAG,4)).
+            + " tolerance=" + tolerance + " rate=" + ROUND(SHIP:ANGULARVEL:MAG,4)).
         IF NOT keepOnFailure { UNLOCK STEERING. }
         RETURN FALSE.
     }
     WAIT 1.5.   // let panel sun-tracking and the flow readout catch up
-    LOCAL success IS deadlineUt <= 0 OR TIME:SECONDS <= deadlineUt.
-    mLog("STATS solar aim label=" + label + " status=settled success=" + success
+    LOCAL success IS (deadlineUt <= 0 OR TIME:SECONDS <= deadlineUt)
+        AND VANG(SHIP:FACING * aShip,SUN:POSITION) <= tolerance AND SHIP:ANGULARVEL:MAG < 0.03.
+    LOCAL resultStatus IS "settled".
+    IF NOT success { SET resultStatus TO "readout-drift-or-deadline". }
+    mLog("STATS solar aim label=" + label + " status=" + resultStatus + " success=" + success
         + " elapsed=" + ROUND(TIME:SECONDS-began,2) + " startErr=" + ROUND(startError,2)
         + " err=" + ROUND(VANG(SHIP:FACING * aShip,SUN:POSITION),2)
-        + " rate=" + ROUND(SHIP:ANGULARVEL:MAG,4)).
+        + " tolerance=" + tolerance + " rate=" + ROUND(SHIP:ANGULARVEL:MAG,4)).
     IF NOT success AND NOT keepOnFailure { UNLOCK STEERING. }
     RETURN success.
 }
@@ -326,7 +332,7 @@ GLOBAL FUNCTION orientForSolar {
         LOCAL aShip IS V(cached[0], cached[1], cached[2]).
         IF aShip:MAG > 0.5 {
             SET aShip TO aShip:NORMALIZED.
-            IF NOT _solarAimSettle(aShip,deadlineUt,lockSteering,"cache") { RETURN FALSE. }
+            IF NOT _solarAimSettle(aShip,deadlineUt,lockSteering,"cache",SOLAR_HOLD_TOLERANCE) { RETURN FALSE. }
             LOCAL cachedFlow IS shipSolarFlow().
             IF referenceFlow > 0 AND cachedFlow >= referenceFlow * SOLAR_REUSE_RATIO {
                 _solarFinish(aShip, lockSteering, "cached axis validated", referenceFlow).

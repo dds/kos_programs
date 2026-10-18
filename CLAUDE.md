@@ -613,8 +613,8 @@ Looks like Python/JS; is neither.
   an immediate warp with no orientation attempt. Coast now explicitly aims
   off rails before warp, using cached-first validation, with a wake deadline.
   orientForSolar's optional fourth arg, and solarHoldTick/trySolarHoldTick's
-  optional second arg, propagate that deadline. Alignment requires <2deg
-  and angular rate<.03 before flow sampling;
+  optional second arg, propagate that deadline. Initial alignment required
+  <2deg and angular rate<.03 before flow sampling;
   timeout/partial attempts cannot overwrite proven axis/peak. orient returns
   Boolean success; non-holding callers release steering after a failed aim.
   No new launch/pad search bypass outside the explicitly safe aerobrake coast.
@@ -643,6 +643,13 @@ Looks like Python/JS; is neither.
   all-axis preservation in60 rotated/reflected frames, early stopping and
   total-budget/cache preservation. Alignment/readout/cache safeguards stay;
   physical flight performance and repeated re-aim causes remain unproven.
+  Operator requested broader solar alignment tolerance: SOLAR_AIM_TOLERANCE
+  defaults5deg for measurements; SOLAR_HOLD_TOLERANCE10deg for cached-axis
+  reuse, still gated by the valid saved flow benchmark. Rate<.03 and the
+  1.5s readout wait remain; pointing/rate now rechecked after that wait too.
+  Live steering still follows the Sun. Burn/landing/reentry tolerances are
+  unchanged. Routine179 cases include angle boundaries, 8deg cached reuse
+  with good flow, poor-flow/forced-search rejection and post-readout drift.
   Timing follow-up: ideal-attitude aero fixtures now normalize the full
   direction directly, reserving trig slew for finite-turn tests. Steps and
   tolerances are unchanged. Host load still moves the full codebase audit

@@ -25,6 +25,8 @@ class Items(KList):
 
 class Identity:
     def __mul__(self, axis): return axis
+    @property
+    def INVERSE(self): return self
 
 
 for index, component in enumerate('XYZ'):
@@ -292,7 +294,7 @@ def check_search_axis_route():
 def check_reference_early_exit():
     for stop_at in ('tracking-probe','fixed-2'):
         env,saved,attempts,finishes,_,reading=environment()
-        def aim(axis,deadline,keep,label):
+        def aim(axis,deadline,keep,label,*_):
             attempts.append(label)
             reading[0]={'cache':8,'primary':3,'tracking-probe':2}.get(label,1)
             if label==stop_at:reading[0]=9.2
@@ -339,6 +341,66 @@ def check_shared_search_budget():
         assert saved==before
         assert len(attempts)>1
     print('PASS: slow multi-axis searches share one total budget, obey an earlier caller wake time, and cannot publish a partial result over the proven cache')
+
+
+def check_alignment_tolerances():
+    for tolerance in (None,10):
+        limit=5 if tolerance is None else tolerance
+        for angle,rate in ((4,0),(5,0),(5.1,0),(8,0),(10,0),(10.1,0),(0,.04)):
+            env,saved,_,_,unlocked,_=environment()
+            before=saved.copy()
+            env.update(aShip=Vec((1,0,0)),deadlineUt=5,keepOnFailure=False,
+                       VANG=lambda *_:angle,_solarAim=lambda *_:None)
+            if tolerance is not None:env['tolerance']=tolerance
+            env['SHIP'].FACING=Identity();env['SHIP'].ANGULARVEL=NS(MAG=rate)
+            env['fixture_wait']=lambda dt:setattr(env['TIME'],'SECONDS',env['TIME'].SECONDS+dt)
+            expected=angle<=limit and rate<.03
+            assert run_solar_body('_solarAimSettle',env)==expected,(tolerance,angle,rate)
+            assert env['TIME'].SECONDS<=5 and saved==before
+            assert bool(unlocked)==(not expected)
+    print('PASS: five-degree search and ten-degree reuse tolerances accept their boundaries; excessive drift/spin and search deadlines still reject')
+
+
+def check_cached_hold_tolerance():
+    for angle,flow,force,expected in ((8,9.5,False,True),(11,9.5,False,False),
+                                     (8,8.9,False,False),(8,10,True,False)):
+        env,saved,attempts,finishes,_,reading=environment();reading[0]=flow
+        before=saved.copy()
+        env['SHIP'].FACING=Identity();env['SHIP'].ANGULARVEL=NS(MAG=0)
+        env.update(VANG=lambda *_:angle,_solarAim=attempts.append,
+                   fixture_wait=lambda dt:setattr(env['TIME'],'SECONDS',env['TIME'].SECONDS+dt))
+        used=[]
+        def settle(axis,deadline,keep,label,*tolerance):
+            used.append((label,tolerance))
+            return ks.call('_solarAimSettle',env,axis,deadline,keep,label,*tolerance)
+        env['_solarAimSettle']=settle
+        assert ks.call('orientForSolar',env,force,True,True,12)==expected
+        assert used[0]==(('primary',()) if force else ('cache',(10,)))
+        assert env['TIME'].SECONDS<=12
+        if expected:
+            assert len(attempts)==1 and finishes[0][2]=='cached axis validated'
+            assert env['TIME'].SECONDS==1.5
+        else:assert not finishes and saved==before
+        if flow<9:assert used==[('cache',(10,)),('primary',())]
+    print('PASS: an eight-degree cached attitude is reused quickly only with near-peak flow; poor flow, excessive drift and forced search keep the stricter measurement path')
+
+
+def check_readout_drift():
+    for drift in ('angle','rate'):
+        env,saved,attempts,finishes,_,_=environment()
+        before=saved.copy()
+        env['SHIP'].FACING=Identity();env['SHIP'].ANGULARVEL=NS(MAG=0)
+        env.update(VANG=lambda *_:8 if env['TIME'].SECONDS==0 or drift=='rate' else 11,
+                   _solarAim=attempts.append)
+        def tick(dt):
+            env['TIME'].SECONDS+=dt
+            if drift=='rate':env['SHIP'].ANGULARVEL.MAG=.04
+        env.update(fixture_wait=tick,
+                   _solarAimSettle=lambda *args:ks.call('_solarAimSettle',env,*args))
+        assert not ks.call('orientForSolar',env,False,True,True,12)
+        assert len(attempts)==1 and not finishes and saved==before
+        assert env['TIME'].SECONDS==1.5
+    print('PASS: pointing and rotation are rechecked after the panel-readout wait; renewed drift cannot validate or overwrite the saved attitude')
 
 
 def check_hold_deadline(ref_flow,flow,success=True):
@@ -393,5 +455,8 @@ if __name__ == '__main__':
     check_search_axis_route()
     check_reference_early_exit()
     check_shared_search_budget()
+    check_alignment_tolerances()
+    check_cached_hold_tolerance()
+    check_readout_drift()
     for args in ((-1,0,True),(10,5,True),(10,5,False)):check_hold_deadline(*args)
     check_hold_deferrals()

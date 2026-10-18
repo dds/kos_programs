@@ -1339,7 +1339,7 @@ once a second in RAM. Only pre-burn and post-cutoff rows are written, with no
 archive/state writes during positive commanded thrust. An alignment timeout
 cannot enter the powered loop.
 Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
-The routine suite passes 176 cases. Host-side timings vary with system load
+The routine suite passes 179 cases. Host-side timings vary with system load
 and are not a kOS flight timing guarantee; the flight plan records its own
 computation time.
 
@@ -1359,9 +1359,17 @@ attitude and warp-release validation still required.
 Solar turns allow up to `SOLAR_AIM_TIMEOUT` (90 seconds, previously 30),
 within one `SOLAR_SEARCH_TIMEOUT` budget (300 seconds). An earlier coast wake
 deadline still wins. These are maximum waits: each turn finishes as soon as
-the axis is within 2 degrees and rotation is below 0.03, followed by the
-existing 1.5-second panel/readout settle. The six-axis scan now visits the
-same candidates in quarter-turn steps rather than repeated half-turns;
+the axis is within `SOLAR_AIM_TOLERANCE` (5 degrees for search measurements)
+or `SOLAR_HOLD_TOLERANCE` (10 degrees for the cached solar attitude), with
+rotation below 0.03. Pointing and rotation are checked again after the
+existing 1.5-second panel/readout settle, before accepting the result.
+Cache validation still requires 90% of a valid saved peak when flow is
+measurable in daylight; existing eclipse/unreadable handling remains.
+The wider angular tolerance lets small drift settle sooner without changing
+the flow threshold. The steering lock continues following the Sun. These
+solar tolerances leave maneuver, landing and reentry pointing checks intact.
+The six-axis scan now visits the same candidates in quarter-turn steps
+rather than repeated half-turns;
 after the tracking probe its scan path is at most 465 degrees instead of
 720, excluding the final return to the winning axis. Automatic searches
 also finish early when a settled candidate reaches 90% of a valid saved
