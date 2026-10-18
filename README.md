@@ -1423,13 +1423,35 @@ measurable in daylight; existing eclipse/unreadable handling remains.
 The wider angular tolerance lets small drift settle sooner without changing
 the flow threshold. The steering lock continues following the Sun. These
 solar tolerances leave maneuver, landing and reentry pointing checks intact.
-The six-axis scan now visits the same candidates in quarter-turn steps
-rather than repeated half-turns;
-after the tracking probe its scan path is at most 465 degrees instead of
-720, excluding the final return to the winning axis. Automatic searches
-also finish early when a settled candidate reaches 90% of a valid saved
-peak; explicit forced searches still scan all six fixed-panel candidates.
-This reduces commanded travel, not a guaranteed flight duration.
+Solar now uses one loop: validate the cached axis, otherwise measure the
+six panel-part axes and hold the best. There is no tracking probe or inferred
+panel-type branch. Each turn snapshots a complete target attitude; the live
+lock follows Sun motion without using the vessel's changing attitude as its
+reference. The six candidates use quarter-turn steps. Automatic discovery
+can finish at a settled candidate reaching 90% of a valid saved peak;
+forced searches measure all six. Alignment, flow, eclipse and cache safeguards
+remain. Solar temporarily uses `SOLAR_MIN_IPU` (2000 by default), restoring the
+prior setting after success/failure or at the next boot after interruption.
+Boot-log archive copying is deferred during the search, so status messages
+do not each recopy the entire log.
+
+Automatic `solardiag_<craft>_<UTms>.log` reports go directly to
+`0:/logs/archive/_diagnostics/` after a quiet search. They contain five-second
+turn samples, actual and requested attitude vectors, the steering manager's
+target/errors, control commands, angular velocity, SAS/RCS/suppression,
+warp state, CPU budget, charge/flow, and accessible panel/wheel fields and CPU
+roles. Sampling writes no files and the recorder is bounded, with dropped-row
+counts. Exports require zero actual/raw/pilot thrust and time before an entry
+deadline. Offline reports use available local log space and the existing
+recursive boot sweep; otherwise details remain buffered until a safe export.
+The latest compact summary survives reboot. Run
+`RUNPATH("0:/cmd/solarreport.ks").` for that summary and the last verified file
+path, then send the report for analysis. No installed `boot.ks` replacement
+is needed. `SOLAR_DIAGNOSTICS=0` disables detailed recording.
+
+`solarhold` and `orientForSolar` commands start a continuing hold only after
+a successful orientation. A failed scan cannot silently enter an indefinite
+hold at its last unsuccessful candidate.
 `STATS solar search/aim/cache/sample/hold` rows distinguish the search budget,
 each turn's start error, elapsed time, final error and rotation rate, flow
 samples, and the start/result of a maintenance re-aim. `alignment-timeout`

@@ -777,6 +777,11 @@ GLOBAL FUNCTION bootPreamble {
         SET CONFIG:IPU TO priorIpu.
         stateRemove("aerobrake_prior_ipu").
     }
+    SET priorIpu TO stateGetNum("solar_prior_ipu", -1).
+    IF priorIpu >= 0 {
+        SET CONFIG:IPU TO priorIpu.
+        stateRemove("solar_prior_ipu").
+    }
 }
 
 GLOBAL FUNCTION bootLibBandRoots {

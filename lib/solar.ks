@@ -19,6 +19,7 @@ GLOBAL SOLAR_AIM_TIMEOUT IS 90.
 GLOBAL SOLAR_SEARCH_TIMEOUT IS 300.
 GLOBAL SOLAR_AIM_TOLERANCE IS 5.
 GLOBAL SOLAR_HOLD_TOLERANCE IS 10.
+GLOBAL SOLAR_MIN_IPU IS 2000.
 GLOBAL SOLAR_SEARCH_SKIP_FIRST_BOOT IS 1.
 GLOBAL SOLAR_SEARCH_LAUNCH_GUARD IS 300.
 GLOBAL SOLAR_SEARCH_KSC_RADIUS IS 10000.
@@ -93,12 +94,21 @@ GLOBAL FUNCTION shipBatteriesCharging {
     RETURN _shipElectricChargeAmount() > startEc + minDelta.
 }
 
-// Servo an arbitrary ship-frame axis onto the Sun. The LOCK is
-// self-referential, so it converges like a pointing servo.
+// Fix the full attitude for this turn, then follow only the Sun's motion.
+// Reading SHIP:FACING inside the lock moves the goal as the craft turns.
 LOCAL FUNCTION _solarAim {
     PARAMETER aShip.
-    LOCK STEERING TO
-        ROTATEFROMTO(SHIP:FACING * aShip, SUN:POSITION) * SHIP:FACING.
+    LOCAL facing IS SHIP:FACING.
+    LOCAL toSun IS SUN:POSITION.
+    LOCAL aim IS LEXICON("SUN", toSun,
+        "FACING", ROTATEFROMTO(facing * aShip, toSun) * facing).
+    LOCK STEERING TO _solarAimDirection(aim).
+    RETURN aim.
+}
+
+LOCAL FUNCTION _solarAimDirection {
+    PARAMETER aim.
+    RETURN ROTATEFROMTO(aim["SUN"], SUN:POSITION) * aim["FACING"].
 }
 
 // Aim the axis at the Sun and wait until the ship is BOTH pointed and
@@ -125,15 +135,22 @@ LOCAL FUNCTION _solarAimSettle {
     LOCAL startError IS VANG(SHIP:FACING * aShip,SUN:POSITION).
     mLog("STATS solar aim label=" + label + " status=begin err=" + ROUND(startError,2)
         + " tolerance=" + tolerance + " budget=" + ROUND(deadline-began,2) + " warp=" + WARP).
-    _solarAim(aShip).
-    UNTIL TIME:SECONDS >= deadline {
+    LOCAL aim IS _solarAim(aShip).
+    LOCAL nextSample IS TIME:SECONDS.
+    UNTIL TIME:SECONDS >= deadline OR ABORT {
+        IF TIME:SECONDS >= nextSample {
+            solarDiagnosticSample(label,"turning",aShip,_solarAimDirection(aim)).
+            SET nextSample TO TIME:SECONDS + 5.
+        }
         IF VANG(SHIP:FACING * aShip, SUN:POSITION) <= tolerance
                 AND SHIP:ANGULARVEL:MAG < 0.03 {
             BREAK.
         }
         WAIT MIN(0.2,MAX(0,deadline-TIME:SECONDS)).
     }
-    IF NOT (VANG(SHIP:FACING * aShip,SUN:POSITION) <= tolerance AND SHIP:ANGULARVEL:MAG < 0.03) {
+    IF ABORT { SET timeoutReason TO "operator-abort". }
+    IF ABORT OR NOT (VANG(SHIP:FACING * aShip,SUN:POSITION) <= tolerance AND SHIP:ANGULARVEL:MAG < 0.03) {
+        solarDiagnosticSample(label,timeoutReason,aShip,_solarAimDirection(aim)).
         mLogWarn("STATS solar aim label=" + label + " status=" + timeoutReason
             + " elapsed=" + ROUND(TIME:SECONDS-began,2)
             + " err=" + ROUND(VANG(SHIP:FACING * aShip,SUN:POSITION),2)
@@ -142,34 +159,18 @@ LOCAL FUNCTION _solarAimSettle {
         RETURN FALSE.
     }
     WAIT 1.5.   // let panel sun-tracking and the flow readout catch up
-    LOCAL success IS (deadlineUt <= 0 OR TIME:SECONDS <= deadlineUt)
+    LOCAL success IS NOT ABORT AND (deadlineUt <= 0 OR TIME:SECONDS <= deadlineUt)
         AND VANG(SHIP:FACING * aShip,SUN:POSITION) <= tolerance AND SHIP:ANGULARVEL:MAG < 0.03.
     LOCAL resultStatus IS "settled".
     IF NOT success { SET resultStatus TO "readout-drift-or-deadline". }
+    IF ABORT { SET resultStatus TO "operator-abort". }
+    solarDiagnosticSample(label,resultStatus,aShip,_solarAimDirection(aim)).
     mLog("STATS solar aim label=" + label + " status=" + resultStatus + " success=" + success
         + " elapsed=" + ROUND(TIME:SECONDS-began,2) + " startErr=" + ROUND(startError,2)
         + " err=" + ROUND(VANG(SHIP:FACING * aShip,SUN:POSITION),2)
         + " tolerance=" + tolerance + " rate=" + ROUND(SHIP:ANGULARVEL:MAG,4)).
     IF NOT success AND NOT keepOnFailure { UNLOCK STEERING. }
     RETURN success.
-}
-
-// The original +/- axis order repeatedly required half-turns. Start with
-// the nearest axis perpendicular to primary, then walk all six axes with
-// quarter-turns. These are still the same measured candidates, including
-// both signs of each axis; no panel layout or flow assumption is added.
-LOCAL FUNCTION _solarSearchAxes {
-    PARAMETER primary.
-    PARAMETER side.
-    PARAMETER other.
-    LOCAL toSun IS SHIP:FACING:INVERSE * SUN:POSITION:NORMALIZED.
-    IF ABS(VDOT(other,toSun)) > ABS(VDOT(side,toSun)) {
-        LOCAL swap_ IS side.
-        SET side TO other.
-        SET other TO swap_.
-    }
-    IF VDOT(side,toSun) < 0 { SET side TO -1 * side. }
-    RETURN LIST(primary,side,-1 * primary,other,-1 * side,-1 * other).
 }
 
 // Cache the winning axis, release/keep steering per the caller, and log.
@@ -283,13 +284,8 @@ LOCAL FUNCTION _logSolarSearchGuard {
 // MEASURED solar energy flow, then cache it (solar_axis) so later
 // calls validate/reuse it before searching. Every decision is by measured
 // flow, so no panel-layout assumption is needed:
-//   1. Aim the panel's own normal at the Sun and settle (the settle
-//      waits for rotation to STOP before reading — otherwise the
-//      coarse search bleeds one axis's flow into the next).
-//   2. Tracking test: swing 45 deg off-Sun. If flow holds, the panels
-//      self-track — keep this aim and let them work (a search would
-//      just fight their motion).
-//   3. Fixed panels only: try the part's six body axes, hold the best.
+//   1. Validate the saved axis against its measured peak, when available.
+//   2. Otherwise measure the six panel-part axes and hold the best.
 // ============================================================
 GLOBAL FUNCTION orientForSolar {
     PARAMETER forceSearch IS FALSE.
@@ -312,6 +308,32 @@ GLOBAL FUNCTION orientForSolar {
     }
     stateRemove("solar_search_guard_reason").
 
+    LOCAL searchDeadline IS TIME:SECONDS + SOLAR_SEARCH_TIMEOUT.
+    IF deadlineUt > 0 { SET searchDeadline TO MIN(searchDeadline,deadlineUt). }
+    LOCAL priorIpu IS CONFIG:IPU.
+    IF priorIpu < MIN(2000,SOLAR_MIN_IPU) {
+        stateSet("solar_prior_ipu",priorIpu).
+        SET CONFIG:IPU TO MIN(2000,SOLAR_MIN_IPU).
+    }
+    // Avoid re-copying the entire boot log to the archive at every aim/sample.
+    LOCAL priorLogDefer IS LOG_ARCHIVE_DEFERRED.
+    SET LOG_ARCHIVE_DEFERRED TO 1.
+    solarDiagnosticBegin(forceSearch,searchDeadline,priorIpu).
+    LOCAL success IS _solarOrient(forceSearch,lockSteering,searchDeadline).
+    solarDiagnosticFinish(success,deadlineUt).
+    SET LOG_ARCHIVE_DEFERRED TO priorLogDefer.
+    SET CONFIG:IPU TO priorIpu.
+    stateRemove("solar_prior_ipu").
+    RETURN success.
+}
+
+// Cache first; otherwise measure the six panel axes and hold the best.
+// No tracking probe, inferred panel type, or mid-scan attitude-dependent axes.
+LOCAL FUNCTION _solarOrient {
+    PARAMETER forceSearch.
+    PARAMETER lockSteering.
+    PARAMETER deadlineUt.
+
     LOCAL panels IS LIST().
     FOR p IN SHIP:PARTS {
         IF p:HASMODULE("ModuleDeployableSolarPanel") { panels:ADD(p). }
@@ -323,6 +345,9 @@ GLOBAL FUNCTION orientForSolar {
     SAS OFF.
     IF deadlineUt <= 0 { SET deadlineUt TO TIME:SECONDS + SOLAR_SEARCH_TIMEOUT. }
     ELSE { SET deadlineUt TO MIN(deadlineUt,TIME:SECONDS + SOLAR_SEARCH_TIMEOUT). }
+    SET WARP TO 0.
+    UNTIL KUNIVERSE:TIMEWARP:ISSETTLED OR TIME:SECONDS >= deadlineUt OR ABORT { WAIT 0.05. }
+    IF ABORT OR NOT KUNIVERSE:TIMEWARP:ISSETTLED OR TIME:SECONDS >= deadlineUt { RETURN FALSE. }
     mLog("STATS solar search status=begin force=" + forceSearch
         + " budget=" + ROUND(deadlineUt-TIME:SECONDS,2) + " turnTimeout=" + SOLAR_AIM_TIMEOUT).
     LOCAL referenceFlow IS _solarCacheReference().
@@ -350,57 +375,25 @@ GLOBAL FUNCTION orientForSolar {
         }
     }
 
-    // Point the panel part's own normal (its forward) at the Sun and
-    // measure once. This is candidate zero for fixed panels and the
-    // hold for self-tracking panels.
+    // Snapshot the part's body-frame basis BEFORE moving the vessel.
     LOCAL pf IS panels[0]:FACING.
     LOCAL inv IS SHIP:FACING:INVERSE.
     LOCAL primary IS inv * pf:FOREVECTOR.
-    IF NOT _solarAimSettle(primary,deadlineUt,lockSteering,"primary") { RETURN FALSE. }
-    LOCAL f1 IS shipSolarFlow().
-    IF f1 < 0 {
-        mLogWarn("Solar: panels found but no readable flow/exposure fields — skipping.").
-        UNLOCK STEERING.
-        IF lockSteering { SET SAS TO FALSE. }
-        RETURN FALSE.
-    }
-    IF NOT forceSearch AND referenceFlow > 0 AND f1 >= referenceFlow * SOLAR_REUSE_RATIO {
-        _solarFinish(primary,lockSteering,"reference reached",referenceFlow).
-        RETURN TRUE.
-    }
-
-    // Tracking test: swing ~45 deg off the Sun. Sun-tracking panels
-    // re-aim themselves, so flow barely drops; fixed panels fall off
-    // like a cosine (cos 45 ~ 0.71). If they track, any sun-ish hold
-    // works — keep this aim and let the panel do the rest, instead of
-    // a six-axis search that would only fight its motion.
-    IF f1 > 0 {
-        LOCAL refV IS V(1, 0, 0).
-        IF ABS(primary:X) > 0.9 { SET refV TO V(0, 1, 0). }
-        LOCAL perp IS VCRS(primary, refV):NORMALIZED.
-        LOCAL offAxis IS (ANGLEAXIS(45, perp) * primary):NORMALIZED.
-        IF NOT _solarAimSettle(offAxis,deadlineUt,lockSteering,"tracking-probe") { RETURN FALSE. }
-        LOCAL f2 IS shipSolarFlow().
-        IF NOT forceSearch AND referenceFlow > 0 AND f2 >= referenceFlow * SOLAR_REUSE_RATIO {
-            _solarFinish(offAxis,lockSteering,"reference reached",referenceFlow).
-            RETURN TRUE.
-        }
-        IF f2 >= f1 * 0.8 {
-            IF NOT _solarAimSettle(primary,deadlineUt,lockSteering,"tracking-hold") { RETURN FALSE. }
-            _solarFinish(primary, lockSteering, "tracking panels", MAX(f1, f2)).
-            RETURN TRUE.
-        }
-    }
-
-    // Fixed panels: hold the best-measured of the part's six body axes.
-    LOCAL cands IS _solarSearchAxes(primary,inv * pf:TOPVECTOR,inv * pf:STARVECTOR).
+    LOCAL side IS inv * pf:TOPVECTOR.
+    LOCAL other IS inv * pf:STARVECTOR.
+    LOCAL cands IS LIST(primary,side,-1 * primary,other,-1 * side,-1 * other).
     mLog("Solar search: six fixed-panel axes for best energy flow.").
-    LOCAL bestFlow IS f1.
+    LOCAL bestFlow IS -1.
     LOCAL bestAxis IS primary.
-    LOCAL i IS 1.   // primary already measured as cands[0]
+    LOCAL i IS 0.
     UNTIL i >= cands:LENGTH {
         IF NOT _solarAimSettle(cands[i],deadlineUt,lockSteering,"fixed-" + (i+1)) { RETURN FALSE. }
         LOCAL flow IS shipSolarFlow().
+        IF flow < 0 {
+            mLogWarn("Solar: no readable flow/exposure fields; search stopped.").
+            UNLOCK STEERING.
+            RETURN FALSE.
+        }
         mLog("STATS solar sample axis=" + (i + 1) + "/6 flow=" + ROUND(flow, 2)).
         IF NOT forceSearch AND referenceFlow > 0 AND flow >= referenceFlow * SOLAR_REUSE_RATIO {
             _solarFinish(cands[i],lockSteering,"reference reached",referenceFlow).
@@ -443,6 +436,7 @@ GLOBAL FUNCTION orientForSolar {
 GLOBAL FUNCTION solarHoldTick {
     PARAMETER refFlow.
     PARAMETER deadlineUt IS 0.
+    solarDiagnosticExport(deadlineUt).
     IF NOT shipHasSolarPanels() { RETURN refFlow. }
     LOCAL ratio IS 0.92.
     SET ratio TO SOLAR_HOLD_RATIO.
@@ -497,9 +491,9 @@ GLOBAL FUNCTION solarMaintainHold {
         + (CHOOSE " for " + ROUND(endUt - TIME:SECONDS, 0) + "s"
            IF endUt > 0 ELSE " indefinitely")
         + ". Warp at will.").
-    UNTIL (endUt > 0 AND TIME:SECONDS >= endUt) {
+    UNTIL ABORT OR (endUt > 0 AND TIME:SECONDS >= endUt) {
         SET refFlow TO solarHoldTick(refFlow,endUt).
-        IF endUt > 0 AND TIME:SECONDS >= endUt { BREAK. }
+        IF ABORT OR (endUt > 0 AND TIME:SECONDS >= endUt) { BREAK. }
         IF endUt > 0 { WAIT MIN(5,MAX(0,endUt-TIME:SECONDS)). }
         ELSE { WAIT 5. }
     }

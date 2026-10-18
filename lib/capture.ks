@@ -36,11 +36,12 @@ LOCAL FUNCTION _enterSolarCoast {
     PARAMETER checkEntryHealth IS TRUE.
     SET SAS TO TRUE.
     UNLOCK STEERING.
+    LOCAL aimed IS FALSE.
     IF orientOnEntry
             AND (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
                 OR SHIP:STATUS = "SUB_ORBITAL")
             AND PHASES_HAS_SOLAR {
-        orientForSolar(FALSE, TRUE, TRUE).
+        SET aimed TO orientForSolar(FALSE, TRUE, TRUE).
     }
     LOCAL solarRef IS -1.
     IF checkEntryHealth {
@@ -48,7 +49,7 @@ LOCAL FUNCTION _enterSolarCoast {
     } ELSE IF PHASES_HAS_SOLAR AND shipHasSolarPanels() {
         SET solarRef TO MAX(shipSolarFlow(), 0).
     }
-    mLog(label + ": solar coast attitude armed.").
+    mLog(label + ": solar coast initialAim=" + aimed + " flow=" + ROUND(solarRef,3)).
     IF checkEntryHealth {
         IF NOT coastHealthCheck(label + " entry") {
             mLogWarn(label + ": entry health check failed; remaining at 1x.").

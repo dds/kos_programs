@@ -7,7 +7,7 @@ import numpy as np
 
 import check_landing_guidance as ks
 from check_codebase import ROOT, function_body
-from check_deorbit_geometry import Vec
+from check_deorbit_geometry import Vec, evaluate
 from check_runtime_contracts import KList
 
 SOURCE = (ROOT / 'lib/solar.ks').read_text()
@@ -43,7 +43,12 @@ def environment():
     attempts, finishes, unlocked, reading = [], [], [], [10.]
     env = dict(SHIP=NS(STATUS='ORBITING', PARTS=Items([panel]), FACING=NS(INVERSE=Identity())),
                SUN=NS(POSITION=Vec((1e10, 0, 0))), forceSearch=False, lockSteering=False,
-               TIME=NS(SECONDS=0), WARP=0,
+               TIME=NS(SECONDS=0), WARP=0, ABORT=False,
+               CONFIG=NS(IPU=150),LOG_ARCHIVE_DEFERRED=0,
+               KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),
+               solarDiagnosticBegin=lambda *_:None,solarDiagnosticSample=lambda *_:None,
+               solarDiagnosticFinish=lambda *_:None,solarDiagnosticExport=lambda *_:False,
+               _solarAimDirection=lambda *_:Identity(),
                fixedLabel=lambda index:'fixed-'+str(index),
                overrideLaunchGuard=False, SOLAR_REUSE_RATIO=.9, LIST=lambda *xs: Items(xs),
                V=lambda *xs: Vec(xs), ROUND=round, stateGet=saved.get, stateGetNum=saved.get,
@@ -56,7 +61,7 @@ def environment():
                 re.findall(r'GLOBAL (SOLAR_\w+) IS (\d+(?:\.\d+)?)\.',SOURCE)})
     env['_solarPanelInfo'] = lambda: ks.call('_solarPanelInfo', env)
     env['_solarCacheReference'] = lambda: ks.call('_solarCacheReference', env)
-    env['_solarSearchAxes'] = lambda *args: ks.call('_solarSearchAxes', env, *args)
+    env['_solarOrient'] = lambda *args: ks.call('_solarOrient', env, *args)
     def aim(axis,*_):
         attempts.append(axis)
         reading[0] = max(0., float(np.dot(axis, primary))) * 10
@@ -260,22 +265,17 @@ def check_search_axis_route():
         if index%2:basis[:,0]*=-1 # No handedness assumption.
         primary,side,other=(Vec(axis) for axis in basis.T)
         env,*_=environment()
-        # A fixed-panel tracking probe ends 45 degrees off primary.
-        # Express that Sun direction in this arbitrary ship frame.
-        phase=index*math.pi/17
-        to_sun=Vec((primary+(side*math.cos(phase)+other*math.sin(phase)))/math.sqrt(2))
-        env['SUN'].POSITION=to_sun*1e10
-        axes=ks.call('_solarSearchAxes',env,primary,side,other)
+        expression=re.search(r'LOCAL cands IS (.*?)\.',function_body(SOURCE,'_solarOrient'))[1]
+        axes=evaluate(expression,env|dict(primary=primary,side=side,other=other))
         old=Items((primary,-primary,side,-side,other,-other))
         angle=lambda aa,bb:math.degrees(math.atan2(float(np.linalg.norm(np.cross(aa,bb))),float(np.dot(aa,bb))))
         assert len(axes)==6
         assert all(any(np.linalg.norm(axis-candidate)<1e-10 for candidate in axes) for axis in old)
         assert len({tuple(np.round(axis,8)) for axis in axes})==6
         assert all(abs(angle(aa,bb)-90)<1e-8 for aa,bb in zip(axes,axes[1:]))
-        assert angle(to_sun,axes[1])<=60+1e-8
-        old_travel=45+angle(to_sun,old[1])+sum(angle(aa,bb) for aa,bb in zip(old[1:],old[2:]))
-        new_travel=45+angle(to_sun,axes[1])+sum(angle(aa,bb) for aa,bb in zip(axes[1:],axes[2:]))
-        assert abs(old_travel-720)<1e-6 and new_travel<=465+1e-6,(index,old_travel,new_travel)
+        old_travel=sum(angle(aa,bb) for aa,bb in zip(old,old[1:]))
+        new_travel=sum(angle(aa,bb) for aa,bb in zip(axes,axes[1:]))
+        assert abs(old_travel-720)<1e-6 and abs(new_travel-450)<1e-6
     # Execute the reordered full search with fixed panels on every possible
     # +/- part axis; the maximum must survive the ordering change.
     for wanted in (Vec(axis)*sign for axis in np.eye(3) for sign in (-1,1)):
@@ -288,15 +288,15 @@ def check_search_axis_route():
         assert ks.call('orientForSolar',env,True)
         assert finishes[-1][2]=='best of 6' and np.linalg.norm(finishes[-1][0]-wanted)<1e-10
         assert reading[0]==10
-    print('PASS: 60 rotated/reflected frames retain every +/- panel axis, avoid half-turns, and reduce probe-plus-scan travel from 720 to at most 465 degrees')
+    print('PASS: 60 rotated/reflected frames retain all six panel axes with fixed 90-degree steps; full scans recover every winning axis without a tracking probe')
 
 
 def check_reference_early_exit():
-    for stop_at in ('tracking-probe','fixed-2'):
+    for stop_at in ('fixed-1','fixed-2'):
         env,saved,attempts,finishes,_,reading=environment()
         def aim(axis,deadline,keep,label,*_):
             attempts.append(label)
-            reading[0]={'cache':8,'primary':3,'tracking-probe':2}.get(label,1)
+            reading[0]={'cache':8,'fixed-1':3}.get(label,1)
             if label==stop_at:reading[0]=9.2
             return True
         env['_solarAimSettle']=aim
@@ -317,8 +317,8 @@ def check_reference_early_exit():
         return True
     env['_solarAimSettle']=tracking_aim
     assert ks.call('orientForSolar',env,True)
-    assert finishes[-1][2]=='tracking panels' and len(attempts)==3
-    print('PASS: automatic rediscovery stops at a settled near-peak candidate; changed-panel benchmarks and forced searches still require the full scan')
+    assert finishes[-1][2]=='best of 6' and len(attempts)==7
+    print('PASS: automatic discovery stops at a settled near-peak candidate; invalid benchmarks and forced scans retain all six; constant tracking-panel flow needs no special inference')
 
 
 def check_shared_search_budget():
@@ -329,10 +329,10 @@ def check_shared_search_budget():
         def slow_aim(axis,deadline,keep,label):
             attempts.append(label)
             assert deadline==expected
-            if env['TIME'].SECONDS+42>deadline:
+            if env['TIME'].SECONDS+50>deadline:
                 env['TIME'].SECONDS=deadline
                 return False
-            env['TIME'].SECONDS+=42
+            env['TIME'].SECONDS+=50
             reading[0]=max(0,float(axis[0]))*10
             return True
         env['_solarAimSettle']=slow_aim
@@ -375,13 +375,13 @@ def check_cached_hold_tolerance():
             return ks.call('_solarAimSettle',env,axis,deadline,keep,label,*tolerance)
         env['_solarAimSettle']=settle
         assert ks.call('orientForSolar',env,force,True,True,12)==expected
-        assert used[0]==(('primary',()) if force else ('cache',(10,)))
+        assert used[0]==(('fixed-1',()) if force else ('cache',(10,)))
         assert env['TIME'].SECONDS<=12
         if expected:
             assert len(attempts)==1 and finishes[0][2]=='cached axis validated'
             assert env['TIME'].SECONDS==1.5
         else:assert not finishes and saved==before
-        if flow<9:assert used==[('cache',(10,)),('primary',())]
+        if flow<9:assert used==[('cache',(10,)),('fixed-1',())]
     print('PASS: an eight-degree cached attitude is reused quickly only with near-peak flow; poor flow, excessive drift and forced search keep the stricter measurement path')
 
 

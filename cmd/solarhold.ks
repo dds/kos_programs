@@ -24,7 +24,10 @@ LOCAL FUNCTION _cmdSolarhold {
     bootPreamble().
     bootLibLoad("solar").
 
-    orientForSolar(research, TRUE, TRUE).
+    IF NOT orientForSolar(research, TRUE, TRUE) {
+        PRINT "Solar search failed; hold not started. Use cmd/solarreport.ks for the diagnostic path.".
+        RETURN.
+    }
     solarMaintainHold(CHOOSE TIME:SECONDS + holdFor IF holdFor > 0 ELSE 0).
 }
 

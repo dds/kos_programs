@@ -5,10 +5,8 @@ LOCAL FUNCTION _cmdOrientForSolar {
     RUNPATH("1:/lib/boot_lib").
     bootPreamble().
     bootLibLoad("solar").
-    orientForSolar(forceSearch, lockSteering, TRUE).
-    if lockSteering {
-        LOCK STEERING TO LOOKDIRUP(SHIP:FACING:FOREVECTOR, SHIP:FACING:TOPVECTOR).
-    }
+    IF NOT orientForSolar(forceSearch, lockSteering, TRUE) { RETURN. }
+    IF lockSteering { solarMaintainHold(). }
 }
 
 _cmdOrientForSolar().

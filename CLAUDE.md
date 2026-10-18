@@ -257,6 +257,26 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Solar rewrite after repeated fixed-2 ~90deg/90s timeouts (operator report,
+  no raw flight file yet): cache-first, then one six-axis loop; tracking
+  probe/type inference removed. _solarAim snapshots a full target and its
+  Sun vector once; its live lock transports that target with Sun motion,
+  without SHIP:FACING feedback. Nonidentity-frame and finite 3D-turn fixtures
+  execute actual aim/settle/search source; this is not proof of KSP wheel
+  dynamics or the precise reported stall cause. SOLAR_MIN_IPU2000 is scoped
+  and persisted for bootPreamble recovery. Defer boot-log archive copying
+  during search. Angle/rate/readout/flow/cache/eclipse/deadline guards remain.
+  Resident solar_diagnostics records 5s samples (64 rows/24k chars), requested
+  versus manager/actual attitude, commands, errors, rate, suppression/SAS,
+  warp, CPU and power plus panel/wheel fields and CPU roles. Quiet verified
+  reports go directly to archive/_diagnostics/solardiag_*.log; offline fallback
+  uses the recursively swept local log directory when space permits. No
+  file I/O in samples, and no export with thrust, imminent deadline or ABORT.
+  A compact last_solar_summary persists; cmd/solarreport prints it and the last
+  verified path (possibly earlier than the current buffered attempt). The
+  two solar commands no longer enter a blind hold after failed orientation
+  or replace the live solar lock with a self-referential current-facing lock.
+  Routine192 source checks pass; measured individual checks remain below1s.
   An unflown 0.1 m/s B-plane correction reportedly fell to a 0.0 display
   during the attitude turn/wait. Craft has no RCS; no engine burn had begun.
   Exact residual drift versus rounding/physics noise remains unmeasured.
