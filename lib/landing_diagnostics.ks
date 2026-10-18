@@ -8,10 +8,13 @@ GLOBAL FUNCTION landingDiagnosticStart {
     PARAMETER ctx.
     SET ctx["DIAGNOSTIC"] TO LEXICON("ROWS", LIST(), "BYTES", 0, "DROPPED", 0,
         "CONTROL_ROWS", LIST(), "CONTROL_BYTES", 0,
+        "PHASES", LEXICON(), "LAST_UT", TIME:SECONDS, "LAST_STATE", ctx["STATE"],
+        "LAST_ACC", MAX(0,SHIP:THRUST) / MAX(0.01,SHIP:MASS),
+        "LAST_BOTTOM", _landingBottomRadar(), "LAST_VS", ctx["V_SPEED"],
         "PATH", "0:/logs/archive/_diagnostics/landingdiag_" + slug() + "_"
             + ROUND(TIME:SECONDS * 1000,0) + "_" + bootLogName(),
         "LAST_ATTEMPT", -9999, "LAST_HUD", -9999, "STATE", "",
-        "HEADER", "STATS landing-diag schema=2 ut=" + TIME:SECONDS
+        "HEADER", "STATS landing-diag schema=3 ut=" + TIME:SECONDS
             + " vessel=" + SHIP:NAME + " body=" + SHIP:BODY:NAME
             + " radius=" + SHIP:BODY:RADIUS + " mu=" + SHIP:BODY:MU
             + " rotation=" + SHIP:BODY:ROTATIONPERIOD
@@ -22,7 +25,55 @@ GLOBAL FUNCTION landingDiagnosticStart {
             + " clearance=" + LANDING_BRAKE_CLEARANCE
             + " requireKerbin=" + LANDING_DIVERT_REQUIRE_KERBIN
             + " radioTolerance=" + LANDING_DIVERT_KERBIN_TOLERANCE
+            + " mass=" + SHIP:MASS + " remainingDv=" + SHIP:DELTAV:VACUUM
+            + " stageDv=" + STAGE:DELTAV:VACUUM + " stage=" + STAGE:NUMBER
+            + " startBottom=" + _landingBottomRadar() + " startHs=" + ctx["H_SPEED"]
+            + " startVs=" + ctx["V_SPEED"] + " activeAcc=" + ctx["MAX_ACC"]
+            + " planAcc=" + ctx["PLAN_ACC"] + " reserveAcc=" + ctx["RESERVE_ACC"]
             + " requested=" + ctx["REQUESTED_LAT"] + "," + ctx["REQUESTED_LNG"]).
+}
+
+// Nine FSM states bound this ledger even when detailed ring rows rotate.
+// Integrate live thrust/mass, not mass ratios across stage separations.
+// These are cadence-dependent impulse estimates; retain the largest gap
+// so a paused/slow CPU cannot masquerade as high precision. No I/O here.
+LOCAL FUNCTION _landingDiagnosticAccumulate {
+    PARAMETER ctx.
+    LOCAL capture IS ctx["DIAGNOSTIC"].
+    LOCAL phases IS capture["PHASES"].
+    LOCAL nowUt IS TIME:SECONDS.
+    LOCAL elapsed IS MAX(0,nowUt-capture["LAST_UT"]).
+    LOCAL bottom IS _landingBottomRadar().
+    LOCAL actualAcc IS MAX(0,SHIP:THRUST) / MAX(0.01,SHIP:MASS).
+    LOCAL meanAcc IS (capture["LAST_ACC"]+actualAcc)/2.
+    FOR phaseName IN LIST(capture["LAST_STATE"],ctx["STATE"]) {
+        IF NOT phases:HASKEY(phaseName) {
+            SET phases[phaseName] TO LEXICON("SECONDS",0,"POWERED",0,"IMPULSE",0,
+                "SLOW",0,"MAX_GAP",0,"ENTRIES",0,"MIN_BOTTOM",bottom,"MAX_BOTTOM",bottom).
+        }
+    }
+    LOCAL phase IS phases[capture["LAST_STATE"]].
+    IF phase["ENTRIES"] = 0 { SET phase["ENTRIES"] TO 1. }
+    SET phase["SECONDS"] TO phase["SECONDS"] + elapsed.
+    SET phase["IMPULSE"] TO phase["IMPULSE"] + meanAcc * elapsed.
+    SET phase["MAX_GAP"] TO MAX(phase["MAX_GAP"],elapsed).
+    SET phase["MIN_BOTTOM"] TO MIN(phase["MIN_BOTTOM"],MIN(bottom,capture["LAST_BOTTOM"])).
+    SET phase["MAX_BOTTOM"] TO MAX(phase["MAX_BOTTOM"],MAX(bottom,capture["LAST_BOTTOM"])).
+    IF meanAcc > 0.001 {
+        SET phase["POWERED"] TO phase["POWERED"] + elapsed.
+        IF MIN(bottom,capture["LAST_BOTTOM"]) > 50
+                AND MAX(ABS(ctx["V_SPEED"]),ABS(capture["LAST_VS"])) < 1 {
+            SET phase["SLOW"] TO phase["SLOW"] + elapsed.
+        }
+    }
+    IF capture["LAST_STATE"] <> ctx["STATE"] {
+        SET phases[ctx["STATE"]]["ENTRIES"] TO phases[ctx["STATE"]]["ENTRIES"] + 1.
+    }
+    SET capture["LAST_STATE"] TO ctx["STATE"].
+    SET capture["LAST_UT"] TO nowUt.
+    SET capture["LAST_ACC"] TO actualAcc.
+    SET capture["LAST_BOTTOM"] TO bottom.
+    SET capture["LAST_VS"] TO ctx["V_SPEED"].
 }
 
 GLOBAL FUNCTION landingDiagnosticHud {
@@ -128,6 +179,7 @@ GLOBAL FUNCTION landingDiagnosticTick {
     PARAMETER ctx.
     PARAMETER finished IS FALSE.
     LOCAL capture IS ctx["DIAGNOSTIC"].
+    _landingDiagnosticAccumulate(ctx).
     IF capture["STATE"] <> ctx["STATE"] OR finished {
         landingDiagnosticRecord(ctx, "STATS landing-diag state=" + ctx["STATE"]
             + " finished=" + finished + " ut=" + TIME:SECONDS
@@ -164,9 +216,19 @@ GLOBAL FUNCTION landingDiagnosticTick {
     LOCAL payload IS capture["HEADER"] + CHAR(10).
     FOR row IN capture["ROWS"] { SET payload TO payload + row + CHAR(10). }
     FOR row IN capture["CONTROL_ROWS"] { SET payload TO payload + row + CHAR(10). }
+    FOR phaseName IN capture["PHASES"]:KEYS {
+        LOCAL phase IS capture["PHASES"][phaseName].
+        SET payload TO payload + "STATS landing-diag summary cumulative=true state=" + phaseName
+            + " seconds=" + ROUND(phase["SECONDS"],3) + " poweredSeconds=" + ROUND(phase["POWERED"],3)
+            + " impulseDv=" + ROUND(phase["IMPULSE"],3) + " slowDescentSeconds=" + ROUND(phase["SLOW"],3)
+            + " entries=" + phase["ENTRIES"] + " maxSampleGap=" + ROUND(phase["MAX_GAP"],3)
+            + " minBottom=" + ROUND(phase["MIN_BOTTOM"],2) + " maxBottom=" + ROUND(phase["MAX_BOTTOM"],2)
+            + CHAR(10).
+    }
     SET payload TO payload + "STATS landing-diag " + landingDiagnosticSearchText(ctx) + CHAR(10).
     LOCAL completion IS "STATS landing-diag checkpoint ut=" + TIME:SECONDS
-        + " finished=" + finished + " dropped=" + capture["DROPPED"].
+        + " finished=" + finished + " dropped=" + capture["DROPPED"]
+        + " remainingDv=" + SHIP:DELTAV:VACUUM + " mass=" + SHIP:MASS.
     SET payload TO payload + completion.
     FOR dir_ IN LIST("0:/logs", "0:/logs/archive", "0:/logs/archive/_diagnostics") {
         IF NOT HOMECONNECTION:ISCONNECTED { RETURN FALSE. }

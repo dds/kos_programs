@@ -27,6 +27,8 @@ class Items(list):
 
 class Lex(dict):
     def HASKEY(self, key): return key in self
+    @property
+    def KEYS(self): return Items(self.keys())
 
 
 def fixture():
@@ -38,6 +40,7 @@ def fixture():
     env['SHIP'].BODY.ROTATIONPERIOD=40400
     env['SHIP'].NAME='RO9'
     env['SHIP'].MASS=1.287
+    env['SHIP'].DELTAV=NS(VACUUM=1500)
     env['SHIP'].THRUST=0
     env['SHIP'].CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)
     disk,dirs,operations={},{},[]
@@ -61,7 +64,7 @@ def fixture():
         disk[dest]=disk[src]
     env.update(LIST=lambda *xs:Items(xs),LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),
                fixture_text=Text,CHAR=lambda n:Text(chr(n)),MOD=lambda a,b:a%b,
-               STAGE=NS(NUMBER=1), HOMECONNECTION=NS(ISCONNECTED=True),
+               STAGE=NS(NUMBER=1,DELTAV=NS(VACUUM=400)), HOMECONNECTION=NS(ISCONNECTED=True),
                slug=lambda:Text('RO9'),bootLogName=lambda:Text('boot_012_core.log'),
                EXISTS=exists,CREATEDIR=mkdir,append_payload=append,OPEN=opening,COPYPATH=copy,
                flightLogPath=lambda:Text('1:/run/logs/boot_012_core.log'),
@@ -75,7 +78,7 @@ def fixture():
         local=dict(env,**dict(zip(re.findall(r'PARAMETER (\w+)',body),args)))
         try:ks.run(ks.parse(body),local)
         except ks.Returned as result:return result.value
-    for name in re.findall(r'GLOBAL FUNCTION (\w+)',SOURCE):
+    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',SOURCE):
         env[name]=lambda *args,name=name:invoke(name,*args)
     env['landingDiagnosticStart'](ctx)
     return env,ctx,disk,operations
@@ -136,7 +139,7 @@ def check_export_gates():
         assert ctx['STATE']==before['STATE'] and ctx['TARGET_THROTTLE']==before['TARGET_THROTTLE']
         if scenario=='safe':
             saved=disk[ctx['DIAGNOSTIC']['PATH']]
-            assert 'schema=2' in saved and 'finished=False' in saved
+            assert 'schema=3' in saved and 'finished=False' in saved
             assert not ctx['DIAGNOSTIC']['ROWS'] and ctx['DIAGNOSTIC']['BYTES']==0
             assert not any(op[0] in ('read','copy') for op in ops)
     print('PASS: exports require physical/pilot/raw/requested zero, no staging/abort, COAST, valid >=60s gate, link and 15s cadence; no control changes or in-flight readback/copy')
@@ -246,7 +249,50 @@ def check_candidate_capture_and_wiring():
     print('PASS: actual terrain/rejection data and sparse reachability rows recorded with no second scan; recorder is resident only in powered landing, ticks after guidance, exports after cleanup, and never actuates or loads archive commands')
 
 
+def check_phase_ledger():
+    env,ctx,disk,ops=fixture()
+    ctx.update(STATE='BRAKING_BURN',height=500,V_SPEED=-20,TARGET_THROTTLE=1)
+    env['SHIP'].MASS=1;env['SHIP'].THRUST=2
+    tick=env['landingDiagnosticTick']
+    assert not tick(ctx)
+    env['TIME'].SECONDS=10
+    assert not tick(ctx)
+    phase=ctx['DIAGNOSTIC']['PHASES']['BRAKING_BURN']
+    assert phase['SECONDS']==10 and phase['IMPULSE']==20 and phase['SLOW']==0
+    # Drop a stage without thrust: this must never look like fuel impulse.
+    env['SHIP'].THRUST=0;env['SHIP'].MASS=.2
+    assert not tick(ctx)
+    env['TIME'].SECONDS=20
+    assert not tick(ctx)
+    assert phase['IMPULSE']==20
+    ctx.update(STATE='APPROACH',V_SPEED=0)
+    env['SHIP'].THRUST=.4
+    assert not tick(ctx)
+    env['TIME'].SECONDS=30
+    assert not tick(ctx)
+    approach=ctx['DIAGNOSTIC']['PHASES']['APPROACH']
+    assert approach['IMPULSE']==20 and approach['SLOW']==10 and approach['ENTRIES']==1
+    # Hundreds of detailed control rows may rotate; the numerical ledger
+    # remains bounded by distinct FSM states and keeps the complete history.
+    for index in range(400):env['landingDiagnosticRecord'](ctx,Text('control '+str(index)),True)
+    assert ctx['DIAGNOSTIC']['DROPPED']>300 and phase['IMPULSE']==20 and approach['IMPULSE']==20
+    assert len(ctx['DIAGNOSTIC']['PHASES'])==3 and not ops
+    ctx.update(STATE='BRAKING_BURN',V_SPEED=-10)
+    assert not tick(ctx)
+    assert phase['ENTRIES']==2
+    env['SHIP'].THRUST=0
+    ctx['TARGET_THROTTLE']=0;ctx['STATE']='TOUCHDOWN'
+    assert tick(ctx,True)
+    report=disk[ctx['DIAGNOSTIC']['PATH']]
+    assert 'summary cumulative=true state=BRAKING_BURN seconds=20' in report
+    assert 'impulseDv=20.0' in report and 'slowDescentSeconds=10' in report
+    assert 'maxSampleGap=10' in report and 'remainingDv=1500' in report
+    assert 'stageDv=400' in report and report.count('summary cumulative=true')==4
+    print('PASS: bounded per-phase time/impulse ledger survives 400 rotated rows, tracks slow powered descent/reentries and sampling gaps, and cannot count an unpowered stage mass drop as fuel use')
+
+
 if __name__=='__main__':
+    check_phase_ledger()
     check_buffer_and_hover()
     check_export_gates()
     check_hover_hypothesis_fields()
