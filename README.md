@@ -1339,7 +1339,7 @@ once a second in RAM. Only pre-burn and post-cutoff rows are written, with no
 archive/state writes during positive commanded thrust. An alignment timeout
 cannot enter the powered loop.
 Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
-The routine suite passes 172 cases. Host-side timings vary with system load
+The routine suite passes 176 cases. Host-side timings vary with system load
 and are not a kOS flight timing guarantee; the flight plan records its own
 computation time.
 
@@ -1355,6 +1355,26 @@ canWarp=...`; missing solar support, alignment timeout and expired deadlines
 are reported explicitly. Eclipse handling and healthy-battery maintenance
 deferrals remain active. These paths have source-driven checks, with KSP
 attitude and warp-release validation still required.
+
+Solar turns allow up to `SOLAR_AIM_TIMEOUT` (90 seconds, previously 30),
+within one `SOLAR_SEARCH_TIMEOUT` budget (300 seconds). An earlier coast wake
+deadline still wins. These are maximum waits: each turn finishes as soon as
+the axis is within 2 degrees and rotation is below 0.03, followed by the
+existing 1.5-second panel/readout settle. The six-axis scan now visits the
+same candidates in quarter-turn steps rather than repeated half-turns;
+after the tracking probe its scan path is at most 465 degrees instead of
+720, excluding the final return to the winning axis. Automatic searches
+also finish early when a settled candidate reaches 90% of a valid saved
+peak; explicit forced searches still scan all six fixed-panel candidates.
+This reduces commanded travel, not a guaranteed flight duration.
+`STATS solar search/aim/cache/sample/hold` rows distinguish the search budget,
+each turn's start error, elapsed time, final error and rotation rate, flow
+samples, and the start/result of a maintenance re-aim. `alignment-timeout`
+means that turn exhausted its allowance; `search-deadline` means the shared
+search budget or earlier entry wake time ended. The gaps after the six-axis
+search message and before cache validation include actual steering/settling;
+they are not fixed 30-second computation delays. Failed attempts preserve
+the proven cache and do not authorize auto-warp.
 
 ## Multi-CPU ships and roles
 

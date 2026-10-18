@@ -613,8 +613,8 @@ Looks like Python/JS; is neither.
   an immediate warp with no orientation attempt. Coast now explicitly aims
   off rails before warp, using cached-first validation, with a wake deadline.
   orientForSolar's optional fourth arg, and solarHoldTick/trySolarHoldTick's
-  optional second arg, propagate that deadline (0 preserves unbounded caller
-  policy). Alignment requires <2deg and angular rate<.03 before flow sampling;
+  optional second arg, propagate that deadline. Alignment requires <2deg
+  and angular rate<.03 before flow sampling;
   timeout/partial attempts cannot overwrite proven axis/peak. orient returns
   Boolean success; non-holding callers release steering after a failed aim.
   No new launch/pad search bypass outside the explicitly safe aerobrake coast.
@@ -625,6 +625,24 @@ Looks like Python/JS; is neither.
   Routine172 cases cover positive-flow initialization, failed/unavailable
   solar, bounded search/re-aim, cache preservation and maintenance deferrals.
   Source evidence only; this does not resolve the reported burn-plane change.
+  Solar follow-up (operator timestamps1615136->1615218 before axis2/6,
+  then alignment-timeout-or-deadline): reboot briefly appeared to help,
+  but this is not evidence for stale code as the cause. Source had 30s per
+  turn and repeatedly scanned opposite axes. SOLAR_AIM_TIMEOUT now90s;
+  SOLAR_SEARCH_TIMEOUT300s bounds the entire call, capped by an earlier
+  caller wake deadline. Same six axes now use perpendicular consecutive
+  steps, with the first perpendicular axis closest to the current Sun
+  direction. Probe+scan travel falls720-><=465deg before the final best-axis
+  return; this is a geometry result, not flight timing proof. Automatic
+  recovery stops at a settled candidate meeting the valid saved peak ratio;
+  forced scans and invalid benchmarks still require full discovery.
+  Per-turn start/result STATS records error/rate/time/label and separates
+  alignment-timeout from search-deadline. Hold re-aim start/result and cache
+  threshold/axis samples now persist as STATS; the aim waits are instrumented.
+  176 routine cases include 40s turn success, stalled turn/deadline exits,
+  all-axis preservation in60 rotated/reflected frames, early stopping and
+  total-budget/cache preservation. Alignment/readout/cache safeguards stay;
+  physical flight performance and repeated re-aim causes remain unproven.
   Timing follow-up: ideal-attitude aero fixtures now normalize the full
   direction directly, reserving trig slew for finite-turn tests. Steps and
   tolerances are unchanged. Host load still moves the full codebase audit

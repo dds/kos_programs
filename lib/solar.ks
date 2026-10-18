@@ -4,7 +4,7 @@
 // Small and standalone on purpose: anything that spends time in
 // space can load it. orientForSolar finds the attitude that
 // maximizes MEASURED panel energy flow (no assumption about the
-// panel layout) and hands the hold to SAS. Power readers included
+// panel layout) and can keep steering locked. Power readers included
 // for telemetry; electrical management itself belongs to AmpYear.
 // ============================================================
 
@@ -15,6 +15,8 @@
 GLOBAL SOLAR_HOLD_RATIO IS 0.92.
 GLOBAL SOLAR_REUSE_RATIO IS 0.90.
 GLOBAL SOLAR_HOLD_EC IS 0.75.
+GLOBAL SOLAR_AIM_TIMEOUT IS 90.
+GLOBAL SOLAR_SEARCH_TIMEOUT IS 300.
 GLOBAL SOLAR_SEARCH_SKIP_FIRST_BOOT IS 1.
 GLOBAL SOLAR_SEARCH_LAUNCH_GUARD IS 300.
 GLOBAL SOLAR_SEARCH_KSC_RADIUS IS 10000.
@@ -104,13 +106,22 @@ LOCAL FUNCTION _solarAimSettle {
     PARAMETER aShip.
     PARAMETER deadlineUt IS 0.
     PARAMETER keepOnFailure IS TRUE.
-    LOCAL deadline IS TIME:SECONDS + 30.
-    IF deadlineUt > 0 { SET deadline TO MIN(deadline,deadlineUt-1.5). }
+    PARAMETER label IS "axis".
+    LOCAL began IS TIME:SECONDS.
+    LOCAL deadline IS began + SOLAR_AIM_TIMEOUT.
+    LOCAL timeoutReason IS "alignment-timeout".
+    IF deadlineUt > 0 AND deadlineUt-1.5 <= deadline {
+        SET deadline TO deadlineUt-1.5.
+        SET timeoutReason TO "search-deadline".
+    }
     IF TIME:SECONDS >= deadline {
-        mLogWarn("STATS solar orient status=deadline-before-aim").
+        mLogWarn("STATS solar aim label=" + label + " status=deadline-before-aim").
         IF NOT keepOnFailure { UNLOCK STEERING. }
         RETURN FALSE.
     }
+    LOCAL startError IS VANG(SHIP:FACING * aShip,SUN:POSITION).
+    mLog("STATS solar aim label=" + label + " status=begin err=" + ROUND(startError,2)
+        + " budget=" + ROUND(deadline-began,2) + " warp=" + WARP).
     _solarAim(aShip).
     UNTIL TIME:SECONDS >= deadline {
         IF VANG(SHIP:FACING * aShip, SUN:POSITION) < 2
@@ -120,14 +131,39 @@ LOCAL FUNCTION _solarAimSettle {
         WAIT MIN(0.2,MAX(0,deadline-TIME:SECONDS)).
     }
     IF NOT (VANG(SHIP:FACING * aShip,SUN:POSITION) < 2 AND SHIP:ANGULARVEL:MAG < 0.03) {
-        mLogWarn("STATS solar orient status=alignment-timeout-or-deadline").
+        mLogWarn("STATS solar aim label=" + label + " status=" + timeoutReason
+            + " elapsed=" + ROUND(TIME:SECONDS-began,2)
+            + " err=" + ROUND(VANG(SHIP:FACING * aShip,SUN:POSITION),2)
+            + " rate=" + ROUND(SHIP:ANGULARVEL:MAG,4)).
         IF NOT keepOnFailure { UNLOCK STEERING. }
         RETURN FALSE.
     }
     WAIT 1.5.   // let panel sun-tracking and the flow readout catch up
     LOCAL success IS deadlineUt <= 0 OR TIME:SECONDS <= deadlineUt.
+    mLog("STATS solar aim label=" + label + " status=settled success=" + success
+        + " elapsed=" + ROUND(TIME:SECONDS-began,2) + " startErr=" + ROUND(startError,2)
+        + " err=" + ROUND(VANG(SHIP:FACING * aShip,SUN:POSITION),2)
+        + " rate=" + ROUND(SHIP:ANGULARVEL:MAG,4)).
     IF NOT success AND NOT keepOnFailure { UNLOCK STEERING. }
     RETURN success.
+}
+
+// The original +/- axis order repeatedly required half-turns. Start with
+// the nearest axis perpendicular to primary, then walk all six axes with
+// quarter-turns. These are still the same measured candidates, including
+// both signs of each axis; no panel layout or flow assumption is added.
+LOCAL FUNCTION _solarSearchAxes {
+    PARAMETER primary.
+    PARAMETER side.
+    PARAMETER other.
+    LOCAL toSun IS SHIP:FACING:INVERSE * SUN:POSITION:NORMALIZED.
+    IF ABS(VDOT(other,toSun)) > ABS(VDOT(side,toSun)) {
+        LOCAL swap_ IS side.
+        SET side TO other.
+        SET other TO swap_.
+    }
+    IF VDOT(side,toSun) < 0 { SET side TO -1 * side. }
+    RETURN LIST(primary,side,-1 * primary,other,-1 * side,-1 * other).
 }
 
 // Cache the winning axis, release/keep steering per the caller, and log.
@@ -279,15 +315,19 @@ GLOBAL FUNCTION orientForSolar {
         RETURN FALSE.
     }
     SAS OFF.
+    IF deadlineUt <= 0 { SET deadlineUt TO TIME:SECONDS + SOLAR_SEARCH_TIMEOUT. }
+    ELSE { SET deadlineUt TO MIN(deadlineUt,TIME:SECONDS + SOLAR_SEARCH_TIMEOUT). }
+    mLog("STATS solar search status=begin force=" + forceSearch
+        + " budget=" + ROUND(deadlineUt-TIME:SECONDS,2) + " turnTimeout=" + SOLAR_AIM_TIMEOUT).
+    LOCAL referenceFlow IS _solarCacheReference().
 
     LOCAL cached IS stateGet("solar_axis", LIST()).
     IF NOT forceSearch AND cached:ISTYPE("List") AND cached:LENGTH >= 3 {
         LOCAL aShip IS V(cached[0], cached[1], cached[2]).
         IF aShip:MAG > 0.5 {
             SET aShip TO aShip:NORMALIZED.
-            IF NOT _solarAimSettle(aShip,deadlineUt,lockSteering) { RETURN FALSE. }
+            IF NOT _solarAimSettle(aShip,deadlineUt,lockSteering,"cache") { RETURN FALSE. }
             LOCAL cachedFlow IS shipSolarFlow().
-            LOCAL referenceFlow IS _solarCacheReference().
             IF referenceFlow > 0 AND cachedFlow >= referenceFlow * SOLAR_REUSE_RATIO {
                 _solarFinish(aShip, lockSteering, "cached axis validated", referenceFlow).
                 RETURN TRUE.
@@ -299,8 +339,8 @@ GLOBAL FUNCTION orientForSolar {
                 mLog("Solar cached axis retained; flow cannot be validated in eclipse/unreadable telemetry.").
                 RETURN TRUE.
             }
-            mLog("Solar cached axis below reuse threshold or missing peak; searching (flow="
-                + ROUND(cachedFlow, 2) + ", reference=" + ROUND(referenceFlow, 2) + ").").
+            mLog("STATS solar cache status=below-reference flow=" + ROUND(cachedFlow,2)
+                + " reference=" + ROUND(referenceFlow,2) + " searching=true").
         }
     }
 
@@ -310,13 +350,17 @@ GLOBAL FUNCTION orientForSolar {
     LOCAL pf IS panels[0]:FACING.
     LOCAL inv IS SHIP:FACING:INVERSE.
     LOCAL primary IS inv * pf:FOREVECTOR.
-    IF NOT _solarAimSettle(primary,deadlineUt,lockSteering) { RETURN FALSE. }
+    IF NOT _solarAimSettle(primary,deadlineUt,lockSteering,"primary") { RETURN FALSE. }
     LOCAL f1 IS shipSolarFlow().
     IF f1 < 0 {
         mLogWarn("Solar: panels found but no readable flow/exposure fields — skipping.").
         UNLOCK STEERING.
         IF lockSteering { SET SAS TO FALSE. }
         RETURN FALSE.
+    }
+    IF NOT forceSearch AND referenceFlow > 0 AND f1 >= referenceFlow * SOLAR_REUSE_RATIO {
+        _solarFinish(primary,lockSteering,"reference reached",referenceFlow).
+        RETURN TRUE.
     }
 
     // Tracking test: swing ~45 deg off the Sun. Sun-tracking panels
@@ -329,28 +373,33 @@ GLOBAL FUNCTION orientForSolar {
         IF ABS(primary:X) > 0.9 { SET refV TO V(0, 1, 0). }
         LOCAL perp IS VCRS(primary, refV):NORMALIZED.
         LOCAL offAxis IS (ANGLEAXIS(45, perp) * primary):NORMALIZED.
-        IF NOT _solarAimSettle(offAxis,deadlineUt,lockSteering) { RETURN FALSE. }
+        IF NOT _solarAimSettle(offAxis,deadlineUt,lockSteering,"tracking-probe") { RETURN FALSE. }
         LOCAL f2 IS shipSolarFlow().
+        IF NOT forceSearch AND referenceFlow > 0 AND f2 >= referenceFlow * SOLAR_REUSE_RATIO {
+            _solarFinish(offAxis,lockSteering,"reference reached",referenceFlow).
+            RETURN TRUE.
+        }
         IF f2 >= f1 * 0.8 {
-            IF NOT _solarAimSettle(primary,deadlineUt,lockSteering) { RETURN FALSE. }
+            IF NOT _solarAimSettle(primary,deadlineUt,lockSteering,"tracking-hold") { RETURN FALSE. }
             _solarFinish(primary, lockSteering, "tracking panels", MAX(f1, f2)).
             RETURN TRUE.
         }
     }
 
     // Fixed panels: hold the best-measured of the part's six body axes.
-    LOCAL cands IS LIST(
-        primary, inv * (-1 * pf:FOREVECTOR),
-        inv * pf:TOPVECTOR,  inv * (-1 * pf:TOPVECTOR),
-        inv * pf:STARVECTOR, inv * (-1 * pf:STARVECTOR)).
+    LOCAL cands IS _solarSearchAxes(primary,inv * pf:TOPVECTOR,inv * pf:STARVECTOR).
     mLog("Solar search: six fixed-panel axes for best energy flow.").
     LOCAL bestFlow IS f1.
     LOCAL bestAxis IS primary.
     LOCAL i IS 1.   // primary already measured as cands[0]
     UNTIL i >= cands:LENGTH {
-        IF NOT _solarAimSettle(cands[i],deadlineUt,lockSteering) { RETURN FALSE. }
+        IF NOT _solarAimSettle(cands[i],deadlineUt,lockSteering,"fixed-" + (i+1)) { RETURN FALSE. }
         LOCAL flow IS shipSolarFlow().
-        mLog("  axis " + (i + 1) + "/6: flow=" + ROUND(flow, 2) + ".").
+        mLog("STATS solar sample axis=" + (i + 1) + "/6 flow=" + ROUND(flow, 2)).
+        IF NOT forceSearch AND referenceFlow > 0 AND flow >= referenceFlow * SOLAR_REUSE_RATIO {
+            _solarFinish(cands[i],lockSteering,"reference reached",referenceFlow).
+            RETURN TRUE.
+        }
         IF flow > bestFlow {
             SET bestFlow TO flow.
             SET bestAxis TO cands[i].
@@ -367,7 +416,7 @@ GLOBAL FUNCTION orientForSolar {
         RETURN FALSE.
     }
 
-    IF NOT _solarAimSettle(bestAxis,deadlineUt,lockSteering) { RETURN FALSE. }
+    IF NOT _solarAimSettle(bestAxis,deadlineUt,lockSteering,"best-hold") { RETURN FALSE. }
     _solarFinish(bestAxis, lockSteering, "best of 6", bestFlow).
     RETURN TRUE.
 }
@@ -410,7 +459,10 @@ GLOBAL FUNCTION solarHoldTick {
     }
     IF deadlineUt > 0 AND TIME:SECONDS >= deadlineUt-3 { RETURN refFlow. }
 
+    LOCAL began IS TIME:SECONDS.
     LOCAL savedWarp IS WARP.
+    mLog("STATS solar hold status=reaim beforeFlow=" + flow + " reference=" + refFlow
+        + " charge=" + ROUND(shipPowerFraction()*100,1) + "pct savedWarp=" + savedWarp).
     SET WARP TO 0.
     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
     IF deadlineUt > 0 AND TIME:SECONDS >= deadlineUt-2 { RETURN refFlow. }
@@ -419,8 +471,9 @@ GLOBAL FUNCTION solarHoldTick {
     LOCAL aimed IS orientForSolar(FALSE, TRUE, FALSE,deadlineUt).
     IF deadlineUt <= 0 OR TIME:SECONDS+1 <= deadlineUt { WAIT 1. }
     LOCAL newRef IS shipSolarFlow().
-    mLog("STATS solar hold aimed=" + aimed + " beforeFlow=" + flow
-        + " reference=" + refFlow + " afterFlow=" + newRef + " savedWarp=" + savedWarp).
+    mLog("STATS solar hold status=result aimed=" + aimed + " beforeFlow=" + flow
+        + " reference=" + refFlow + " afterFlow=" + newRef + " savedWarp=" + savedWarp
+        + " elapsed=" + ROUND(TIME:SECONDS-began,2)).
     IF NOT aimed { RETURN refFlow. }
     IF savedWarp > 0 AND (deadlineUt <= 0 OR TIME:SECONDS < deadlineUt-2) {
         setWarpWithKac(savedWarp, "Solar hold restore").

@@ -12,6 +12,8 @@ from check_runtime_contracts import KList
 
 SOURCE = (ROOT / 'lib/solar.ks').read_text()
 SOURCE = SOURCE.replace('SAS OFF.', 'SET SAS TO FALSE.').replace('UNLOCK STEERING.', 'unlock().')
+# KerboScript concatenates scalar values into strings; Python does not.
+SOURCE = SOURCE.replace('"fixed-" + (i+1)', 'fixedLabel(i+1)')
 AERO = (ROOT/'lib/aerobrake.ks').read_text()
 PHASES = (ROOT/'lib/phases.ks').read_text()
 ks.SOURCES += '\n' + SOURCE+'\n'+AERO+'\n'+PHASES
@@ -39,6 +41,8 @@ def environment():
     attempts, finishes, unlocked, reading = [], [], [], [10.]
     env = dict(SHIP=NS(STATUS='ORBITING', PARTS=Items([panel]), FACING=NS(INVERSE=Identity())),
                SUN=NS(POSITION=Vec((1e10, 0, 0))), forceSearch=False, lockSteering=False,
+               TIME=NS(SECONDS=0), WARP=0,
+               fixedLabel=lambda index:'fixed-'+str(index),
                overrideLaunchGuard=False, SOLAR_REUSE_RATIO=.9, LIST=lambda *xs: Items(xs),
                V=lambda *xs: Vec(xs), ROUND=round, stateGet=saved.get, stateGetNum=saved.get,
                stateSet=lambda key, value: saved.update({key: value}),
@@ -46,8 +50,11 @@ def environment():
                _solarSearchGuardReason=lambda _: '', _solarSunOccluded=lambda: False,
                unlock=lambda: unlocked.append(True), shipSolarFlow=lambda: reading[0],
                shipPowerFraction=lambda: .8)
+    env.update({name:float(value) for name,value in
+                re.findall(r'GLOBAL (SOLAR_\w+) IS (\d+(?:\.\d+)?)\.',SOURCE)})
     env['_solarPanelInfo'] = lambda: ks.call('_solarPanelInfo', env)
     env['_solarCacheReference'] = lambda: ks.call('_solarCacheReference', env)
+    env['_solarSearchAxes'] = lambda *args: ks.call('_solarSearchAxes', env, *args)
     def aim(axis,*_):
         attempts.append(axis)
         reading[0] = max(0., float(np.dot(axis, primary))) * 10
@@ -80,7 +87,7 @@ def check_cache_decisions():
         env['_solarAimSettle'] = aim
         ks.call('orientForSolar', env)
         assert (len(attempts) > 1) == expect_search
-        assert finishes[-1][2] == ('best of 6' if expect_search else 'cached axis validated')
+        assert finishes[-1][2] == ('reference reached' if expect_search else 'cached axis validated')
     env, saved, attempts, finishes, _, reading = environment()
     saved['solar_axis'] = Items((-1, 0, 0))
     ks.call('orientForSolar', env)
@@ -202,7 +209,7 @@ def check_settle_deadline():
         env['SHIP'].FACING=Identity();env['SHIP'].ANGULARVEL=NS(MAG=0)
         env['fixture_wait']=lambda dt:setattr(env['TIME'],'SECONDS',env['TIME'].SECONDS+dt)
         assert run_solar_body('_solarAimSettle',env)==expected
-        assert env['TIME'].SECONDS<=(budget if budget else 30)+1e-8
+        assert env['TIME'].SECONDS<=(budget if budget else env['SOLAR_AIM_TIMEOUT'])+1e-8
         assert not finishes and saved['solar_axis_peak']==10
         assert bool(unlocked)==(not expected),'non-holding caller must release failed steering'
     env,saved,attempts,finishes,_,_=environment()
@@ -212,6 +219,126 @@ def check_settle_deadline():
     assert ks.call('orientForSolar',env,False,True,True,12)==False
     assert len(attempts)==1 and not finishes and saved['solar_axis_peak']==10
     print('PASS: solar alignment/search respects its deadline and actual settling; failed/partial attempts preserve the proven axis and peak')
+
+
+def check_long_turn_and_timeout_reason():
+    class Text(str):
+        def __add__(self,other):return Text(str(self)+str(other))
+    for hard_deadline,align_after,expected,status in (
+            (0,40,True,'settled'),(0,1000,False,'alignment-timeout'),
+            (20,40,False,'search-deadline')):
+        env,_,attempts,_,unlocked,_=environment()
+        env.update(aShip=Vec((1,0,0)),deadlineUt=hard_deadline,keepOnFailure=False,
+                   _solarAim=attempts.append)
+        env['SHIP'].FACING=Identity();env['SHIP'].ANGULARVEL=NS(MAG=.1)
+        env['VANG']=lambda *_: 0 if env['TIME'].SECONDS>=align_after else 45
+        def tick(dt):
+            env['TIME'].SECONDS+=dt
+            if env['TIME'].SECONDS>=align_after:env['SHIP'].ANGULARVEL.MAG=0
+        logs=[]
+        env.update(fixture_wait=tick,capture=logs.append,textValue=Text)
+        source=function_body(SOURCE,'_solarAimSettle').replace('mLogWarn(','capture(').replace('mLog(','capture(')
+        source=re.sub(r'"[^"\n]*"',lambda match:'textValue('+match[0]+')',source)
+        try:ks.run(ks.parse(source),env)
+        except ks.Returned as result:assert result.value==expected
+        else:raise AssertionError('aim helper must return its result')
+        assert any('status='+status in row for row in logs),logs
+        assert all(any(key in row for row in logs) for key in ('elapsed=','err=','rate='))
+        if expected:assert 40<=env['TIME'].SECONDS<43
+        elif hard_deadline:assert env['TIME'].SECONDS<=hard_deadline
+        else:assert abs(env['TIME'].SECONDS-env['SOLAR_AIM_TIMEOUT'])<1e-6
+        assert bool(unlocked)==(not expected)
+    print('PASS: a 40-second turn succeeds with the longer limit; stalled steering and hard search deadlines remain bounded and have distinct timing/error diagnostics')
+
+
+def check_search_axis_route():
+    rng=np.random.default_rng(71)
+    for index in range(60):
+        basis,_=np.linalg.qr(rng.normal(size=(3,3)))
+        if index%2:basis[:,0]*=-1 # No handedness assumption.
+        primary,side,other=(Vec(axis) for axis in basis.T)
+        env,*_=environment()
+        # A fixed-panel tracking probe ends 45 degrees off primary.
+        # Express that Sun direction in this arbitrary ship frame.
+        phase=index*math.pi/17
+        to_sun=Vec((primary+(side*math.cos(phase)+other*math.sin(phase)))/math.sqrt(2))
+        env['SUN'].POSITION=to_sun*1e10
+        axes=ks.call('_solarSearchAxes',env,primary,side,other)
+        old=Items((primary,-primary,side,-side,other,-other))
+        angle=lambda aa,bb:math.degrees(math.atan2(float(np.linalg.norm(np.cross(aa,bb))),float(np.dot(aa,bb))))
+        assert len(axes)==6
+        assert all(any(np.linalg.norm(axis-candidate)<1e-10 for candidate in axes) for axis in old)
+        assert len({tuple(np.round(axis,8)) for axis in axes})==6
+        assert all(abs(angle(aa,bb)-90)<1e-8 for aa,bb in zip(axes,axes[1:]))
+        assert angle(to_sun,axes[1])<=60+1e-8
+        old_travel=45+angle(to_sun,old[1])+sum(angle(aa,bb) for aa,bb in zip(old[1:],old[2:]))
+        new_travel=45+angle(to_sun,axes[1])+sum(angle(aa,bb) for aa,bb in zip(axes[1:],axes[2:]))
+        assert abs(old_travel-720)<1e-6 and new_travel<=465+1e-6,(index,old_travel,new_travel)
+    # Execute the reordered full search with fixed panels on every possible
+    # +/- part axis; the maximum must survive the ordering change.
+    for wanted in (Vec(axis)*sign for axis in np.eye(3) for sign in (-1,1)):
+        env,_,attempts,finishes,_,reading=environment()
+        def aim(axis,*_):
+            attempts.append(axis)
+            reading[0]=max(0,float(np.dot(axis,wanted)))*10
+            return True
+        env['_solarAimSettle']=aim
+        assert ks.call('orientForSolar',env,True)
+        assert finishes[-1][2]=='best of 6' and np.linalg.norm(finishes[-1][0]-wanted)<1e-10
+        assert reading[0]==10
+    print('PASS: 60 rotated/reflected frames retain every +/- panel axis, avoid half-turns, and reduce probe-plus-scan travel from 720 to at most 465 degrees')
+
+
+def check_reference_early_exit():
+    for stop_at in ('tracking-probe','fixed-2'):
+        env,saved,attempts,finishes,_,reading=environment()
+        def aim(axis,deadline,keep,label):
+            attempts.append(label)
+            reading[0]={'cache':8,'primary':3,'tracking-probe':2}.get(label,1)
+            if label==stop_at:reading[0]=9.2
+            return True
+        env['_solarAimSettle']=aim
+        assert ks.call('orientForSolar',env)
+        assert attempts[-1]==stop_at and len(finishes)==1
+        assert finishes[0][2:] == ('reference reached',10)
+        assert saved['solar_axis_peak']==10
+    env,saved,attempts,finishes,_,_=environment()
+    saved['solar_axis_panels']=2
+    assert ks.call('orientForSolar',env)
+    assert finishes[-1][2]=='best of 6' and len(attempts)>6
+    env,_,attempts,finishes,_,_=environment()
+    assert ks.call('orientForSolar',env,True)
+    assert finishes[-1][2]=='best of 6' and len(attempts)>6
+    env,_,attempts,finishes,_,reading=environment()
+    def tracking_aim(axis,*_):
+        attempts.append(axis);reading[0]=10
+        return True
+    env['_solarAimSettle']=tracking_aim
+    assert ks.call('orientForSolar',env,True)
+    assert finishes[-1][2]=='tracking panels' and len(attempts)==3
+    print('PASS: automatic rediscovery stops at a settled near-peak candidate; changed-panel benchmarks and forced searches still require the full scan')
+
+
+def check_shared_search_budget():
+    for caller_deadline in (0,70):
+        env,saved,attempts,finishes,_,reading=environment()
+        before=saved.copy()
+        expected=caller_deadline or env['SOLAR_SEARCH_TIMEOUT']
+        def slow_aim(axis,deadline,keep,label):
+            attempts.append(label)
+            assert deadline==expected
+            if env['TIME'].SECONDS+42>deadline:
+                env['TIME'].SECONDS=deadline
+                return False
+            env['TIME'].SECONDS+=42
+            reading[0]=max(0,float(axis[0]))*10
+            return True
+        env['_solarAimSettle']=slow_aim
+        assert not ks.call('orientForSolar',env,True,True,True,caller_deadline)
+        assert env['TIME'].SECONDS==expected and not finishes
+        assert saved==before
+        assert len(attempts)>1
+    print('PASS: slow multi-axis searches share one total budget, obey an earlier caller wake time, and cannot publish a partial result over the proven cache')
 
 
 def check_hold_deadline(ref_flow,flow,success=True):
@@ -262,5 +389,9 @@ if __name__ == '__main__':
     check_occultation()
     for args in ((True,True),(True,False),(False,True),(True,False,True)):check_aerobrake_coast_entry(*args)
     check_settle_deadline()
+    check_long_turn_and_timeout_reason()
+    check_search_axis_route()
+    check_reference_early_exit()
+    check_shared_search_budget()
     for args in ((-1,0,True),(10,5,True),(10,5,False)):check_hold_deadline(*args)
     check_hold_deferrals()
