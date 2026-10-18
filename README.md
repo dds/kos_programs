@@ -1339,9 +1339,22 @@ once a second in RAM. Only pre-burn and post-cutoff rows are written, with no
 archive/state writes during positive commanded thrust. An alignment timeout
 cannot enter the powered loop.
 Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
-The routine suite passes 163 cases; every individual case was below one
-second in the measured run. This is host-side timing, not a kOS flight timing
-guarantee; the flight plan records its own computation time.
+The routine suite passes 172 cases. Host-side timings vary with system load
+and are not a kOS flight timing guarantee; the flight plan records its own
+computation time.
+
+Aerobrake solar coasts explicitly establish the solar attitude before
+auto-warping. A positive panel-flow reading alone does not prove a solar
+steering hold was installed. The coast stops warp, waits for physics to
+settle, tries the saved axis first and validates it against its saved peak.
+Full rediscovery is used only when needed. Alignment/search and later
+maintenance re-aims share the coast's wake deadline, so they yield to entry
+preparation. An incomplete attempt preserves the proven cache and does not
+enable auto-warp. The log records `STATS aerobrake solar aimed=... flow=...
+canWarp=...`; missing solar support, alignment timeout and expired deadlines
+are reported explicitly. Eclipse handling and healthy-battery maintenance
+deferrals remain active. These paths have source-driven checks, with KSP
+attitude and warp-release validation still required.
 
 ## Multi-CPU ships and roles
 

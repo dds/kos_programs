@@ -79,7 +79,10 @@ def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
             direction=(-ship.VELOCITY.SURFACE if 'SRFRETROGRADE' in state['steering']
                        else ks.evaluate(state['steering'],env))
             if direction.MAG>0:
-                ship.FACING.FOREVECTOR=slew(ship.FACING.FOREVECTOR,direction,state['turn_rate']*dt)
+                # Preserve the full vector in the ideal-attitude cases and
+                # avoid trigonometry there. Finite-slew checks still rotate.
+                if math.isinf(state['turn_rate']):ship.FACING.FOREVECTOR=direction.NORMALIZED
+                else:ship.FACING.FOREVECTOR=slew(ship.FACING.FOREVECTOR,direction,state['turn_rate']*dt)
     def persist(key,value):
         assert ship.THRUST<=.001,'no persistent state I/O during thrust'
         state['state_history'].append((key,value));data[key]=value

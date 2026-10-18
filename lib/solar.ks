@@ -102,16 +102,32 @@ LOCAL FUNCTION _solarAim {
 // what made the coarse search bleed one axis's reading into the next.
 LOCAL FUNCTION _solarAimSettle {
     PARAMETER aShip.
-    _solarAim(aShip).
+    PARAMETER deadlineUt IS 0.
+    PARAMETER keepOnFailure IS TRUE.
     LOCAL deadline IS TIME:SECONDS + 30.
-    UNTIL TIME:SECONDS > deadline {
+    IF deadlineUt > 0 { SET deadline TO MIN(deadline,deadlineUt-1.5). }
+    IF TIME:SECONDS >= deadline {
+        mLogWarn("STATS solar orient status=deadline-before-aim").
+        IF NOT keepOnFailure { UNLOCK STEERING. }
+        RETURN FALSE.
+    }
+    _solarAim(aShip).
+    UNTIL TIME:SECONDS >= deadline {
         IF VANG(SHIP:FACING * aShip, SUN:POSITION) < 2
                 AND SHIP:ANGULARVEL:MAG < 0.03 {
             BREAK.
         }
-        WAIT 0.2.
+        WAIT MIN(0.2,MAX(0,deadline-TIME:SECONDS)).
+    }
+    IF NOT (VANG(SHIP:FACING * aShip,SUN:POSITION) < 2 AND SHIP:ANGULARVEL:MAG < 0.03) {
+        mLogWarn("STATS solar orient status=alignment-timeout-or-deadline").
+        IF NOT keepOnFailure { UNLOCK STEERING. }
+        RETURN FALSE.
     }
     WAIT 1.5.   // let panel sun-tracking and the flow readout catch up
+    LOCAL success IS deadlineUt <= 0 OR TIME:SECONDS <= deadlineUt.
+    IF NOT success AND NOT keepOnFailure { UNLOCK STEERING. }
+    RETURN success.
 }
 
 // Cache the winning axis, release/keep steering per the caller, and log.
@@ -237,19 +253,20 @@ GLOBAL FUNCTION orientForSolar {
     PARAMETER forceSearch IS FALSE.
     PARAMETER lockSteering IS FALSE.
     PARAMETER overrideLaunchGuard IS FALSE.
+    PARAMETER deadlineUt IS 0.
 
     // Surface/pad states have no useful attitude search — bail here
     // so callers don't each repeat a status guard (this replaces the
     // status check the old trySolarOrient wrapper carried).
     IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED"
             OR SHIP:STATUS = "PRELAUNCH" {
-        RETURN.
+        RETURN FALSE.
     }
 
     LOCAL guardReason IS _solarSearchGuardReason(overrideLaunchGuard).
     IF guardReason <> "" {
         _logSolarSearchGuard(guardReason).
-        RETURN.
+        RETURN FALSE.
     }
     stateRemove("solar_search_guard_reason").
 
@@ -259,7 +276,7 @@ GLOBAL FUNCTION orientForSolar {
     }
     IF panels:LENGTH = 0 {
         mLogWarn("orientForSolar: no solar panels found — skipping.").
-        RETURN.
+        RETURN FALSE.
     }
     SAS OFF.
 
@@ -268,19 +285,19 @@ GLOBAL FUNCTION orientForSolar {
         LOCAL aShip IS V(cached[0], cached[1], cached[2]).
         IF aShip:MAG > 0.5 {
             SET aShip TO aShip:NORMALIZED.
-            _solarAimSettle(aShip).
+            IF NOT _solarAimSettle(aShip,deadlineUt,lockSteering) { RETURN FALSE. }
             LOCAL cachedFlow IS shipSolarFlow().
             LOCAL referenceFlow IS _solarCacheReference().
             IF referenceFlow > 0 AND cachedFlow >= referenceFlow * SOLAR_REUSE_RATIO {
                 _solarFinish(aShip, lockSteering, "cached axis validated", referenceFlow).
-                RETURN.
+                RETURN TRUE.
             }
             IF cachedFlow < 0 OR _solarSunOccluded() {
                 // Darkness/unreadable fields cannot invalidate a known axis
                 // or replace its successful peak with a zero measurement.
                 IF NOT lockSteering { UNLOCK STEERING. }
                 mLog("Solar cached axis retained; flow cannot be validated in eclipse/unreadable telemetry.").
-                RETURN.
+                RETURN TRUE.
             }
             mLog("Solar cached axis below reuse threshold or missing peak; searching (flow="
                 + ROUND(cachedFlow, 2) + ", reference=" + ROUND(referenceFlow, 2) + ").").
@@ -293,13 +310,13 @@ GLOBAL FUNCTION orientForSolar {
     LOCAL pf IS panels[0]:FACING.
     LOCAL inv IS SHIP:FACING:INVERSE.
     LOCAL primary IS inv * pf:FOREVECTOR.
-    _solarAimSettle(primary).
+    IF NOT _solarAimSettle(primary,deadlineUt,lockSteering) { RETURN FALSE. }
     LOCAL f1 IS shipSolarFlow().
     IF f1 < 0 {
         mLogWarn("Solar: panels found but no readable flow/exposure fields — skipping.").
         UNLOCK STEERING.
         IF lockSteering { SET SAS TO FALSE. }
-        RETURN.
+        RETURN FALSE.
     }
 
     // Tracking test: swing ~45 deg off the Sun. Sun-tracking panels
@@ -312,12 +329,12 @@ GLOBAL FUNCTION orientForSolar {
         IF ABS(primary:X) > 0.9 { SET refV TO V(0, 1, 0). }
         LOCAL perp IS VCRS(primary, refV):NORMALIZED.
         LOCAL offAxis IS (ANGLEAXIS(45, perp) * primary):NORMALIZED.
-        _solarAimSettle(offAxis).
+        IF NOT _solarAimSettle(offAxis,deadlineUt,lockSteering) { RETURN FALSE. }
         LOCAL f2 IS shipSolarFlow().
         IF f2 >= f1 * 0.8 {
-            _solarAimSettle(primary).
+            IF NOT _solarAimSettle(primary,deadlineUt,lockSteering) { RETURN FALSE. }
             _solarFinish(primary, lockSteering, "tracking panels", MAX(f1, f2)).
-            RETURN.
+            RETURN TRUE.
         }
     }
 
@@ -331,7 +348,7 @@ GLOBAL FUNCTION orientForSolar {
     LOCAL bestAxis IS primary.
     LOCAL i IS 1.   // primary already measured as cands[0]
     UNTIL i >= cands:LENGTH {
-        _solarAimSettle(cands[i]).
+        IF NOT _solarAimSettle(cands[i],deadlineUt,lockSteering) { RETURN FALSE. }
         LOCAL flow IS shipSolarFlow().
         mLog("  axis " + (i + 1) + "/6: flow=" + ROUND(flow, 2) + ".").
         IF flow > bestFlow {
@@ -347,11 +364,12 @@ GLOBAL FUNCTION orientForSolar {
             + ROUND(shipPowerFraction() * 100, 1) + "pct").
         UNLOCK STEERING.
         IF lockSteering { SET SAS TO FALSE. }
-        RETURN.
+        RETURN FALSE.
     }
 
-    _solarAimSettle(bestAxis).
+    IF NOT _solarAimSettle(bestAxis,deadlineUt,lockSteering) { RETURN FALSE. }
     _solarFinish(bestAxis, lockSteering, "best of 6", bestFlow).
+    RETURN TRUE.
 }
 
 // ============================================================
@@ -369,46 +387,44 @@ GLOBAL FUNCTION orientForSolar {
 // ============================================================
 GLOBAL FUNCTION solarHoldTick {
     PARAMETER refFlow.
+    PARAMETER deadlineUt IS 0.
     IF NOT shipHasSolarPanels() { RETURN refFlow. }
     LOCAL ratio IS 0.92.
     SET ratio TO SOLAR_HOLD_RATIO.
     LOCAL flow IS shipSolarFlow().
     IF flow < 0 { RETURN refFlow. }
     IF refFlow <= 0 {
-        IF flow <= 0 {
-            IF NOT _solarSunOccluded() { orientForSolar(FALSE, TRUE). }
-            RETURN flow.
-        }
-        RETURN flow.
-    }
-    IF flow < refFlow * 0.15 { RETURN refFlow. }   // eclipse: wait it out
-    IF flow > refFlow { RETURN flow. }              // ratchet the reference
-    IF flow >= refFlow * ratio { RETURN refFlow. }
+        IF flow > 0 { RETURN flow. }
+        IF _solarSunOccluded() { RETURN flow. }
+    } ELSE {
+        IF flow < refFlow * 0.15 { RETURN refFlow. }   // eclipse: wait it out
+        IF flow > refFlow { RETURN flow. }              // ratchet the reference
+        IF flow >= refFlow * ratio { RETURN refFlow. }
 
-    // EC-aware deferral: while the battery is comfortable (above
-    // SOLAR_HOLD_EC, default 75%) and the panels still make SOME
-    // power, let the sag ride — interplanetary legs at 100000x
-    // should not drop warp to fix a cosmetic 10% loss. The re-aim
-    // happens when charge actually needs it; the flow ratio is
-    // the quality floor once it does.
-    LOCAL ecTrigger IS 0.75.
-    SET ecTrigger TO SOLAR_HOLD_EC.
-    IF shipPowerFraction() >= ecTrigger AND flow > refFlow * 0.25 {
-        RETURN refFlow.
+        // Defer cosmetic sag while batteries are comfortable. This is a
+        // maintenance decision, not initialization of a steering hold.
+        LOCAL ecTrigger IS SOLAR_HOLD_EC.
+        IF shipPowerFraction() >= ecTrigger AND flow > refFlow * 0.25 {
+            RETURN refFlow.
+        }
     }
+    IF deadlineUt > 0 AND TIME:SECONDS >= deadlineUt-3 { RETURN refFlow. }
 
     LOCAL savedWarp IS WARP.
     SET WARP TO 0.
     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    IF deadlineUt > 0 AND TIME:SECONDS >= deadlineUt-2 { RETURN refFlow. }
     WAIT 1.
     UNLOCK STEERING.
-    orientForSolar(FALSE, TRUE).
-    WAIT 1.
+    LOCAL aimed IS orientForSolar(FALSE, TRUE, FALSE,deadlineUt).
+    IF deadlineUt <= 0 OR TIME:SECONDS+1 <= deadlineUt { WAIT 1. }
     LOCAL newRef IS shipSolarFlow().
-    mLog("Solar hold: re-aimed at "
-        + ROUND(100 * flow / refFlow, 0) + "% — flow "
-        + ROUND(newRef, 2) + ". Restoring warp " + savedWarp + ".").
-    IF savedWarp > 0 { setWarpWithKac(savedWarp, "Solar hold restore"). }
+    mLog("STATS solar hold aimed=" + aimed + " beforeFlow=" + flow
+        + " reference=" + refFlow + " afterFlow=" + newRef + " savedWarp=" + savedWarp).
+    IF NOT aimed { RETURN refFlow. }
+    IF savedWarp > 0 AND (deadlineUt <= 0 OR TIME:SECONDS < deadlineUt-2) {
+        setWarpWithKac(savedWarp, "Solar hold restore").
+    }
     RETURN MAX(newRef, 0).
 }
 
@@ -423,8 +439,10 @@ GLOBAL FUNCTION solarMaintainHold {
            IF endUt > 0 ELSE " indefinitely")
         + ". Warp at will.").
     UNTIL (endUt > 0 AND TIME:SECONDS >= endUt) {
-        SET refFlow TO solarHoldTick(refFlow).
-        WAIT 5.
+        SET refFlow TO solarHoldTick(refFlow,endUt).
+        IF endUt > 0 AND TIME:SECONDS >= endUt { BREAK. }
+        IF endUt > 0 { WAIT MIN(5,MAX(0,endUt-TIME:SECONDS)). }
+        ELSE { WAIT 5. }
     }
     UNLOCK STEERING.
     mLog("Solar hold ended.").

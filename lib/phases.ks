@@ -434,10 +434,11 @@ GLOBAL FUNCTION coastHealthCheck {
 // the solar lib is aboard; a no-op pass-through otherwise.
 GLOBAL FUNCTION trySolarHoldTick {
     PARAMETER refFlow.
+    PARAMETER deadlineUt IS 0.
     IF (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
             OR SHIP:STATUS = "SUB_ORBITAL")
             AND PHASES_HAS_SOLAR {
-        RETURN solarHoldTick(refFlow).
+        RETURN solarHoldTick(refFlow,deadlineUt).
     }
     RETURN refFlow.
 }

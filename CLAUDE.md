@@ -606,6 +606,29 @@ Looks like Python/JS; is neither.
   reported orbit. This is a command recovery, not flight proof or an automatic
   between-pass Pe restoration. The older automatic trim still plans at now+60.
   Recovery chunk:163 routine cases pass, every measured individual<1s.
+  After running recovery the operator reports 'Aerobrake: orienting for solar'
+  without an apparent turn. Confirmed source linkage: _aerobrakeSolarWait
+  UNLOCKed steering, then trySolarHoldTick(-1) accepted any positive flow as
+  a new reference without calling orientForSolar. Source fixture reproduces
+  an immediate warp with no orientation attempt. Coast now explicitly aims
+  off rails before warp, using cached-first validation, with a wake deadline.
+  orientForSolar's optional fourth arg, and solarHoldTick/trySolarHoldTick's
+  optional second arg, propagate that deadline (0 preserves unbounded caller
+  policy). Alignment requires <2deg and angular rate<.03 before flow sampling;
+  timeout/partial attempts cannot overwrite proven axis/peak. orient returns
+  Boolean success; non-holding callers release steering after a failed aim.
+  No new launch/pad search bypass outside the explicitly safe aerobrake coast.
+  Existing eclipse/charge/flow maintenance deferrals remain. Those ticks are
+  maintenance, never a replacement for explicitly installing a solar hold.
+  Initial zero-flow re-aim also waits for actual warp release. STATS exposes
+  aimed/flow/canWarp or unavailable/timeout/deadline; no false success message.
+  Routine172 cases cover positive-flow initialization, failed/unavailable
+  solar, bounded search/re-aim, cache preservation and maintenance deferrals.
+  Source evidence only; this does not resolve the reported burn-plane change.
+  Timing follow-up: ideal-attitude aero fixtures now normalize the full
+  direction directly, reserving trig slew for finite-turn tests. Steps and
+  tolerances are unchanged. Host load still moves the full codebase audit
+  around1s; don't hide it in the slow pass or claim a hard wall-time bound.
   The supplied deorbitcheck_RO9_1305239.log actually AGREES between TR/native
   impact coordinates within0.2m (quaternion also agrees); this snapshot does
   not show a stale prediction or incorrect longitude transform. An independent

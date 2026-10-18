@@ -12,7 +12,9 @@ from check_runtime_contracts import KList
 
 SOURCE = (ROOT / 'lib/solar.ks').read_text()
 SOURCE = SOURCE.replace('SAS OFF.', 'SET SAS TO FALSE.').replace('UNLOCK STEERING.', 'unlock().')
-ks.SOURCES += '\n' + SOURCE
+AERO = (ROOT/'lib/aerobrake.ks').read_text()
+PHASES = (ROOT/'lib/phases.ks').read_text()
+ks.SOURCES += '\n' + SOURCE+'\n'+AERO+'\n'+PHASES
 
 
 class Items(KList):
@@ -46,9 +48,10 @@ def environment():
                shipPowerFraction=lambda: .8)
     env['_solarPanelInfo'] = lambda: ks.call('_solarPanelInfo', env)
     env['_solarCacheReference'] = lambda: ks.call('_solarCacheReference', env)
-    def aim(axis):
+    def aim(axis,*_):
         attempts.append(axis)
         reading[0] = max(0., float(np.dot(axis, primary))) * 10
+        return True
     env['_solarAimSettle'] = aim
     env['_solarFinish'] = lambda *args: finishes.append(args)
     def rotate(angle, axis):
@@ -70,9 +73,10 @@ def check_cache_decisions():
     for flow, expect_search in ((9.1, False), (8.9, True)):
         env, saved, attempts, finishes, _, reading = environment()
         original = env['_solarAimSettle']
-        def aim(axis):
+        def aim(axis,*args):
             original(axis)
             if len(attempts) == 1: reading[0] = flow
+            return True
         env['_solarAimSettle'] = aim
         ks.call('orientForSolar', env)
         assert (len(attempts) > 1) == expect_search
@@ -84,7 +88,10 @@ def check_cache_decisions():
     for occluded, flow in ((True, 0.), (False, -1.)):
         env, saved, attempts, finishes, unlocked, reading = environment()
         env['_solarSunOccluded'] = lambda: occluded
-        env['_solarAimSettle'] = lambda axis: (attempts.append(axis), reading.__setitem__(0, flow))
+        def dark_aim(axis,*_):
+            attempts.append(axis);reading[0]=flow
+            return True
+        env['_solarAimSettle'] = dark_aim
         ks.call('orientForSolar', env)
         assert len(attempts) == 1 and not finishes and unlocked
         assert saved['solar_axis_peak'] == 10
@@ -141,7 +148,119 @@ def check_occultation():
     print('PASS: measured-flow cache can distinguish daylight from own-body and ancestor-body eclipses')
 
 
+def check_aerobrake_coast_entry(solar_available=True,aim_success=True,consume_budget=False):
+    env,_,_,_,_,reading=environment()
+    env.update(TIME=NS(SECONDS=0),WARP=4,wakeUt=40,PHASES_HAS_SOLAR=solar_available,
+               SOLAR_HOLD_RATIO=.92,SOLAR_HOLD_EC=.75,AEROBRAKE_ENTRY_LEAD=900,
+               KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=False)),
+               _aerobrakeAtmoHeight=lambda:70000,shipHasSolarPanels=lambda:True)
+    env['SHIP'].ALTITUDE=100000;reading[0]=2 # Producing power in the WRONG attitude.
+    events=[]
+    def tick(dt):
+        env['TIME'].SECONDS+=dt
+        if env['WARP']==0:env['KUNIVERSE'].TIMEWARP.ISSETTLED=True
+    def aim(*args):
+        assert env['WARP']==0 and env['KUNIVERSE'].TIMEWARP.ISSETTLED
+        assert args==(False,True,True,40),args
+        events.append('aim')
+        env['TIME'].SECONDS=40 if consume_budget else env['TIME'].SECONDS+2
+        if aim_success:reading[0]=10
+        return aim_success
+    def warp(*args):
+        events.append('warp');env['WARP']=3
+        return True
+    env.update(orientForSolar=aim,coastAutoWarp=warp,fixture_wait=tick,
+               trySolarHoldTick=lambda *args:ks.call('trySolarHoldTick',env,*args),
+               solarHoldTick=lambda *args:ks.call('solarHoldTick',env,*args))
+    source=function_body(AERO,'_aerobrakeSolarWait').replace('UNLOCK STEERING.','unlock().')
+    source=re.sub(r'WAIT UNTIL (.*?)\.',r'UNTIL \1 { WAIT 0.05. }',source,flags=re.S)
+    try:ks.run(ks.parse(source),env)
+    except ks.Returned:pass
+    if solar_available:
+        assert events and events[0]=='aim',events
+        assert ('warp' in events)==aim_success,events
+    else:assert 'aim' not in events
+    assert env['WARP']==0 and env['KUNIVERSE'].TIMEWARP.ISSETTLED
+    if consume_budget:assert env['TIME'].SECONDS==40,'no extra coast wait after the solar deadline'
+    print('PASS: aerobrake solar coast explicitly aligns before warp, even with positive initial flow; failed/unavailable solar paths are explicit')
+
+
+def run_solar_body(name,env):
+    source=function_body(SOURCE,name)
+    source=re.sub(r'WAIT UNTIL (.*?)\.',r'UNTIL \1 { WAIT 0.05. }',source,flags=re.S)
+    try:ks.run(ks.parse(source),env)
+    except ks.Returned as result:return result.value
+
+
+def check_settle_deadline():
+    for budget,aligned,expected in ((10,True,True),(10,False,False),(1,True,False),(0,False,False)):
+        env,saved,attempts,finishes,unlocked,_=environment()
+        env.update(TIME=NS(SECONDS=0),aShip=Vec((1,0,0)),deadlineUt=budget,
+                   keepOnFailure=False,
+                   VANG=lambda *_:0 if aligned else 45,
+                   _solarAim=attempts.append)
+        env['SHIP'].FACING=Identity();env['SHIP'].ANGULARVEL=NS(MAG=0)
+        env['fixture_wait']=lambda dt:setattr(env['TIME'],'SECONDS',env['TIME'].SECONDS+dt)
+        assert run_solar_body('_solarAimSettle',env)==expected
+        assert env['TIME'].SECONDS<=(budget if budget else 30)+1e-8
+        assert not finishes and saved['solar_axis_peak']==10
+        assert bool(unlocked)==(not expected),'non-holding caller must release failed steering'
+    env,saved,attempts,finishes,_,_=environment()
+    # A timeout while trying the cache cannot initiate a full search or
+    # replace the proven cache with a partial, unmeasured candidate.
+    env['_solarAimSettle']=lambda axis,*_: (attempts.append(axis),False)[1]
+    assert ks.call('orientForSolar',env,False,True,True,12)==False
+    assert len(attempts)==1 and not finishes and saved['solar_axis_peak']==10
+    print('PASS: solar alignment/search respects its deadline and actual settling; failed/partial attempts preserve the proven axis and peak')
+
+
+def check_hold_deadline(ref_flow,flow,success=True):
+    env,_,_,_,_,reading=environment();reading[0]=flow
+    env.update(TIME=NS(SECONDS=0),WARP=4,refFlow=ref_flow,deadlineUt=20,
+               SOLAR_HOLD_RATIO=.92,SOLAR_HOLD_EC=.75,shipHasSolarPanels=lambda:True,
+               shipPowerFraction=lambda:.5,KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=False)))
+    events=[]
+    def tick(dt):
+        env['TIME'].SECONDS+=dt
+        if env['WARP']==0:env['KUNIVERSE'].TIMEWARP.ISSETTLED=True
+    def aim(*args):
+        assert env['WARP']==0 and env['KUNIVERSE'].TIMEWARP.ISSETTLED
+        assert args==(False,True,False,20)
+        events.append('aim')
+        if success:reading[0]=10
+        return success
+    def restore(rate,*_):
+        events.append('restore');env['WARP']=rate
+    env.update(orientForSolar=aim,fixture_wait=tick,setWarpWithKac=restore)
+    result=run_solar_body('solarHoldTick',env)
+    assert events==(['aim','restore'] if success else ['aim']),events
+    assert result==(10 if success else ref_flow)
+    env['TIME'].SECONDS=19;events.clear();reading[0]=flow
+    assert run_solar_body('solarHoldTick',env)==ref_flow and not events
+    print('PASS: initial zero-flow and sag re-aims settle out of warp, propagate the deadline, and restore warp/reference only after successful orientation')
+
+
+def check_hold_deferrals():
+    for ref,flow,charge,panels,expected in ((10,-1,.5,True,10),(-1,2,.8,True,2),
+            (10,0,.5,True,10),(10,8,.8,True,10),(10,9.5,.5,True,10),
+            (10,12,.5,True,12),(10,5,.5,False,10)):
+        env,_,_,_,_,reading=environment();reading[0]=flow
+        env.update(refFlow=ref,deadlineUt=20,TIME=NS(SECONDS=0),WARP=4,
+                   SOLAR_HOLD_RATIO=.92,SOLAR_HOLD_EC=.75,
+                   shipHasSolarPanels=lambda:panels,shipPowerFraction=lambda:charge,
+                   _solarSunOccluded=lambda:True)
+        def unexpected(*_):raise AssertionError('maintenance deferral must not initiate steering or warp')
+        env.update(orientForSolar=unexpected,fixture_wait=unexpected)
+        assert run_solar_body('solarHoldTick',env)==expected
+        assert env['WARP']==4
+    print('PASS: missing panels, unreadable flow, eclipses, healthy-battery sag, good flow and reference ratcheting retain their maintenance safeguards')
+
+
 if __name__ == '__main__':
     check_cache_decisions()
     check_reference_and_persistence()
     check_occultation()
+    for args in ((True,True),(True,False),(False,True),(True,False,True)):check_aerobrake_coast_entry(*args)
+    check_settle_deadline()
+    for args in ((-1,0,True),(10,5,True),(10,5,False)):check_hold_deadline(*args)
+    check_hold_deferrals()

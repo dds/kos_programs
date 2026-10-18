@@ -379,17 +379,29 @@ LOCAL FUNCTION _aerobrakeSolarWait {
     IF atmHeight > 0 AND SHIP:ALTITUDE < atmHeight { RETURN. }
     IF wakeUt <= TIME:SECONDS + 30 { RETURN. }
 
-    mLog("Aerobrake: orienting for solar — holding until "
-        + ROUND(AEROBRAKE_ENTRY_LEAD / 60, 0)
-        + " min before atmosphere entry (wake in T+"
-        + ROUND(wakeUt - TIME:SECONDS, 0) + "s) to get ready.").
-    UNLOCK STEERING.
-    LOCAL solarRef IS trySolarHoldTick(-1).
-    coastAutoWarp(wakeUt, "Aerobrake coast", "").
+    LOCAL solarRef IS -1.
+    LOCAL canWarp IS TRUE.
+    IF PHASES_HAS_SOLAR AND shipHasSolarPanels() {
+        // A health tick may simply accept nonzero flow without steering.
+        // Initialize the hold explicitly, off rails, before considering warp.
+        SET WARP TO 0.
+        WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+        UNLOCK STEERING.
+        mLog("Aerobrake: aiming for solar; wake in T+" + ROUND(wakeUt-TIME:SECONDS,0) + "s.").
+        LOCAL aimed IS orientForSolar(FALSE,TRUE,TRUE,wakeUt).
+        SET solarRef TO shipSolarFlow().
+        SET canWarp TO aimed AND (solarRef > 0 OR shipPowerFraction() >= SOLAR_HOLD_EC).
+        mLog("STATS aerobrake solar aimed=" + aimed + " flow=" + solarRef
+            + " canWarp=" + canWarp + " wakeUt=" + wakeUt).
+    } ELSE {
+        mLogWarn("STATS aerobrake solar status=unavailable coasting-without-solar-aim").
+    }
+    IF canWarp { coastAutoWarp(wakeUt, "Aerobrake coast", ""). }
     UNTIL TIME:SECONDS >= wakeUt
             OR (atmHeight > 0 AND SHIP:ALTITUDE < atmHeight)
             OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
-        SET solarRef TO trySolarHoldTick(solarRef).
+        SET solarRef TO trySolarHoldTick(solarRef,wakeUt).
+        IF TIME:SECONDS >= wakeUt { BREAK. }
         WAIT MIN(10, MAX(1, wakeUt - TIME:SECONDS)).
     }
     IF WARP > 0 {
