@@ -82,6 +82,10 @@ GLOBAL FUNCTION _landingTargetRefineTick {
             AND horizontalSpeed <= LANDING_TARGET_REFINE_ACCEPT_HSPEED).
     IF stabilized OR climbLimited OR timedOut {
         LOCAL nextState IS "APPROACH".
+        IF stabilized AND landingEconomyTerminalSite(ctx) {
+            SET nextState TO "VERTICAL_DESCENT".
+            SET ctx["HOVER_REFINED"] TO TRUE.
+        }
         IF controlHeight <= LANDING_FINAL_HOVER_ALT {
             SET nextState TO "VERTICAL_DESCENT".
             SET ctx["HOVER_REFINED"] TO TRUE.
@@ -176,6 +180,11 @@ GLOBAL FUNCTION _landingApproachTick {
     IF _landingBottomRadar() > TERMINAL_ALT {
         _landingSetThrottle(ctx, 0).
         _landingSetState(ctx, "COAST", "approach above terminal corridor").
+        RETURN.
+    }
+    IF landingEconomyTerminalSite(ctx) {
+        SET ctx["HOVER_REFINED"] TO TRUE.
+        _landingSetState(ctx,"VERTICAL_DESCENT","economy checked touchdown footprint").
         RETURN.
     }
     _landingFinalTerrainCheck(ctx).
@@ -334,6 +343,15 @@ GLOBAL FUNCTION _landingVerticalTick {
 
     LOCAL descentSpeed IS lmDescentSpeed(
         bottomAlt, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
+    IF LANDING_ECONOMY_BRAKE > 0 AND LANDING_FLEXIBLE_SITE > 0 AND NOT finalHover
+            AND NOT SHIP:BODY:ATM:EXISTS AND ctx["HAS_TARGET"] AND ctx["HOVER_TERRAIN_DONE"]
+            AND horizontalSpeed <= TERMINAL_HSPEED
+            AND lmDistanceToTarget(ctx["TARGET_LAT"],ctx["TARGET_LNG"]) <= VERTICAL_RADIUS {
+        LOCAL verticalAcc IS MIN(ctx["PLAN_ACC"],ctx["MAX_ACC"]
+            * MAX(0,VDOT(SHIP:FACING:FOREVECTOR,ctx["UP_VEC"]))).
+        SET descentSpeed TO lmEconomyDescentSpeed(descentSpeed,
+            MIN(bottomAlt,_landingTargetHeight(ctx)),horizontalSpeed,verticalAcc,ctx["BRAKE_GRAV"]).
+    }
     IF finalHover {
         SET descentSpeed TO LANDING_FINAL_HOVER_VSPEED.
     }

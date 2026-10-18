@@ -216,6 +216,7 @@ def call(name, env, *args):
 
 def environment():
     env = dict(landingReviewReachableSite=lambda *args: True, ABORT=False,
+               landingEconomyTerminalSite=lambda *args: False,
                landingDiagnosticRecord=lambda *args: None,
                landingDiagnosticSample=lambda *args: None,
                landingDiagnosticSearchText=lambda *args: 'fixture',
@@ -227,7 +228,7 @@ def environment():
         try: env[name] = evaluate(value, env)
         except (NameError, SyntaxError, AttributeError): pass
     for name in ('lmApproachAcceleration', 'lmApproachDescentSpeed', 'lmApproachSteering',
-                 'lmDescentSpeed', 'lmVerticalThrottle', 'landingTerrainGrade'):
+                 'lmDescentSpeed', 'lmEconomyDescentSpeed', 'lmVerticalThrottle', 'landingTerrainGrade'):
         env[name] = lambda *args, name=name: call(name, env, *args)
     return env
 

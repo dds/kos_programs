@@ -151,6 +151,37 @@ LOCAL FUNCTION _landingDivertSurveyAhead {
     }
 }
 
+// One normal-policy check while still descending. This does not start a
+// search or command a hold: rejection leaves the existing accepted site.
+// Precision targets and operator opt-outs never enter this path.
+GLOBAL FUNCTION landingEconomyTerminalSite {
+    PARAMETER ctx.
+    IF LANDING_FLEXIBLE_SITE <= 0 OR LANDING_ECONOMY_BRAKE <= 0
+            OR LANDING_ECONOMY_TERMINAL_RETARGET <= 0 OR NOT ctx["HAS_TARGET"]
+            OR ctx["DIVERT_PENDING"] OR ctx["H_SPEED"] > TERMINAL_HSPEED
+            OR _landingBottomRadar() > TERMINAL_ALT
+            OR ctx["TARGET_THROTTLE"] > 0 OR SHIP:THRUST > 0.001
+            OR SHIP:CONTROL:MAINTHROTTLE > 0 OR SHIP:CONTROL:PILOTMAINTHROTTLE > 0 { RETURN FALSE. }
+    IF ctx["ECONOMY_FOOTPRINT_TRIED"] { RETURN FALSE. }
+    SET ctx["ECONOMY_FOOTPRINT_TRIED"] TO TRUE.
+    IF lmDistanceToTarget(ctx["TARGET_LAT"],ctx["TARGET_LNG"]) <= VERTICAL_RADIUS {
+        RETURN FALSE.
+    }
+    LOCAL netAcc IS lmBrakeNetAcc(ctx["MAX_ACC"],ctx["GRAV"]).
+    LOCAL offset IS ctx["H_VEL"] * ctx["H_SPEED"] / (2 * MAX(0.01,netAcc)).
+    LOCAL center IS SHIP:BODY:GEOPOSITIONOF(SHIP:POSITION + offset).
+    LOCAL site IS _landingDivertCandidate(ctx,center:LAT,center:LNG,LANDING_TERRAIN_MAX_SLOPE).
+    landingDiagnosticSample(ctx,site,center:LAT,center:LNG,"terminal-footprint",LANDING_TERRAIN_MAX_SLOPE).
+    IF NOT site["OK"] {
+        mLog("STATS landing-footprint retained reason=" + site["REASON"]
+            + " grade=" + site["GRADE"] + " height=" + _landingBottomRadar()).
+        _landingCacheTick(ctx).
+        RETURN FALSE.
+    }
+    _landingAcceptDivert(ctx,site,FALSE,LANDING_TERRAIN_MAX_SLOPE,"terminal-footprint").
+    RETURN TRUE.
+}
+
 GLOBAL FUNCTION landingReviewReachableSite {
     PARAMETER ctx.
     IF LANDING_FLEXIBLE_SITE <= 0 OR NOT ctx["HAS_TARGET"] { RETURN TRUE. }
@@ -272,6 +303,15 @@ GLOBAL FUNCTION landingReviewReachableSite {
         RETURN TRUE.
     }
 
+    RETURN _landingAcceptDivert(ctx,site,search["EMERGENCY"],search["SLOPE_LIMIT"]).
+}
+
+LOCAL FUNCTION _landingAcceptDivert {
+    PARAMETER ctx.
+    PARAMETER site.
+    PARAMETER emergency.
+    PARAMETER slopeLimit.
+    PARAMETER reason IS "search".
     LOCAL shift IS geoDistance(ctx["TARGET_LAT"], ctx["TARGET_LNG"], site["LAT"], site["LNG"]).
     SET ctx["TARGET_LAT"] TO site["LAT"].
     SET ctx["TARGET_LNG"] TO site["LNG"].
@@ -290,8 +330,8 @@ GLOBAL FUNCTION landingReviewReachableSite {
         + "m lat=" + TARGET_LAT + " lng=" + TARGET_LNG
         + " grade=" + ROUND(site["GRADE"],3) + " sun=" + ROUND(site["SUN"],1)
         + " kerbin=" + ROUND(site["KERBIN"],1)
-        + " emergency=" + search["EMERGENCY"] + " slopeLimit=" + search["SLOPE_LIMIT"]
-        + " requireKerbin=" + LANDING_DIVERT_REQUIRE_KERBIN).
+        + " emergency=" + emergency + " slopeLimit=" + slopeLimit
+        + " requireKerbin=" + LANDING_DIVERT_REQUIRE_KERBIN + " reason=" + reason).
     _landingCacheTick(ctx).
     RETURN TRUE.
 }

@@ -245,6 +245,20 @@ GLOBAL FUNCTION _landingBrakingTick {
         // An early horizontal arrest must not turn into minutes of hovering
         // or backtracking. Re-enter coast and re-evaluate the full stop gate.
         _landingSetThrottle(ctx, 0).
+        IF LANDING_ECONOMY_BRAKE > 0 {
+            LOCAL gate IS _landingBrakeGateInfo(ctx).
+            IF gate["V_ETA"] <= LANDING_BRAKE_ALIGN_LEAD {
+                // Already inside the alignment lead: remain ready for the
+                // flare instead of flipping to retrograde and back through
+                // COAST/ALIGN every time mass loss moves the stopping gate.
+                // This is still unpowered fall, with the same ignition gate
+                // and the live attitude guard on every subsequent burn tick.
+                _landingBrakeSteeringInfo(ctx).
+                _landingHudText(ctx,"FLARE COAST height=" + ROUND(burnHeight,0)
+                    + " vEta=" + ROUND(gate["V_ETA"],1),1,2,13,CYAN,FALSE,gate["V_ETA"]).
+                RETURN.
+            }
+        }
         _landingSetState(ctx, "COAST", "velocity captured above terminal corridor").
         RETURN.
     }

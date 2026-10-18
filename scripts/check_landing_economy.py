@@ -101,7 +101,71 @@ def check_reported_weak_lander():
     print('PASS: reported 7.3 km/356 m/s entry with TWR below 1.7 reaches modeled terminal capture without high hover; not a complete landing or a fuel-budget proof')
 
 
+def check_terminal_stopping_profile():
+    rng=random.Random(118)
+    env,_=fixture()
+    extended=0
+    for _ in range(300):
+        grav=rng.uniform(.1,3)
+        acc=grav*rng.uniform(1.1,20)
+        height=rng.uniform(0,2000)
+        horizontal=rng.uniform(0,1)
+        scheduled=call('lmDescentSpeed',env,height,2,3,30)
+        down=call('lmEconomyDescentSpeed',env,scheduled,height,horizontal,acc,grav)
+        assert math.isfinite(down) and down>=scheduled
+        if down>scheduled+1e-9:
+            # Independent exact coupled envelope, not the quadratic bound.
+            delay=env['LANDING_BRAKE_REACTION_TIME']
+            future=down+grav*delay
+            net=(acc-grav)*env['LANDING_BRAKE_ACCEL_FRACTION']
+            required=down*delay+grav*delay**2/2
+            required+=future*math.hypot(horizontal,future)/net*env['BURN_MARGIN']/2
+            required+=max(env['BRAKE_MARGIN'],env['LANDING_BRAKE_CLEARANCE'])
+            assert required<=height+1e-7,(required,height,down)
+            extended+=1
+    assert extended>100
+    for height in (0,.2,3,15,50,100):
+        scheduled=call('lmDescentSpeed',env,height,2,3,30)
+        assert call('lmEconomyDescentSpeed',env,scheduled,height,.6,3.27,1.63)==scheduled
+    assert call('lmEconomyDescentSpeed',env,10,1000,0,1,1.63)==10
+    print('PASS: 300 terminal speed inversions stay inside the independent coupled stopping reserve whenever faster than the old schedule; 80% thrust, full gravity, delay, clearance and gentle touchdown remain')
+
+
+def check_terminal_delay_models():
+    from collections import deque
+    env,_=fixture()
+    modeled=0
+    for grav in (.491,1.63):
+        for ratio in (1.4,2.2,4,8):
+            acc=grav*ratio
+            if .8*(acc-grav)<2*8*6/97:
+                for height,scheduled in ((100,8),(1000,20),(2000,30)):
+                    assert call('lmEconomyDescentSpeed',env,scheduled,height,0,acc,grav)==scheduled
+                continue
+            modeled+=1
+            dt=.05
+            queue=deque([0.]*4) # 0.2s physical actuation delay.
+            height=1000.
+            initial=call('lmEconomyDescentSpeed',env,20,height,0,acc,grav)
+            speed=-min(20,initial*.8)
+            for step in range(20000):
+                scheduled=call('lmDescentSpeed',env,height,2,3,30)
+                planned=call('lmEconomyDescentSpeed',env,scheduled,height,0,acc,grav)
+                throttle=call('lmVerticalThrottle',env,-planned,acc,grav,speed)
+                queue.append(throttle)
+                speed+=(queue.popleft()*acc-grav)*dt
+                height+=speed*dt
+                assert speed<1,'no climb/hover arc in the nominal vertical model'
+                if height<=.2:break
+            else:raise AssertionError('terminal descent did not reach contact')
+            assert speed>=-2.5,(grav,ratio,height,speed)
+    assert modeled==5
+    print('PASS: five eligible airless terminal point masses reach gentle modeled contact with 0.2s actuation lag and no hover; three low-authority cases keep the original schedule; not kOS/attitude/terrain proof')
+
+
 if __name__=='__main__':
+    check_terminal_stopping_profile()
+    check_terminal_delay_models()
     check_vector_and_flare_budget()
     check_ballistic_gate()
     check_descent_efficiency()

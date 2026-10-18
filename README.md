@@ -205,6 +205,36 @@ limit, sunlight policy and optional Kerbin requirement. Precision profiles
 keep their original target and survey policy. The time setting estimates
 correction feasibility; it does not guarantee touchdown timing or fuel.
 
+Economy airless descent aims for an unpowered coast, a coupled braking arc,
+and a gentle touchdown at a checked reachable footprint. Brief unpowered
+intervals close to the flare gate keep braking attitude instead of cycling
+through COAST and BRAKE_ALIGN; the ignition envelope and live alignment
+guard still decide when thrust is allowed. Larger surplus height still
+returns to COAST.
+
+After velocity capture, a flexible economy landing can make one normal-policy
+check of its nearby stopping footprint before committing to a large approach
+correction. This runs at zero thrust/commands, while falling; it does not
+start another grid search or request a hover. A passing point goes straight
+to vertical descent. Failure keeps the accepted site and its normal recovery
+path. `LANDING_ECONOMY_TERMINAL_RETARGET=0` opts out of this final retarget;
+precision profiles retain their coordinates. The check retains reachability,
+100 m clearance, 20 m terrain samples, the normal slope limit, and the existing
+Sun/radio policy. It cannot invoke the emergency slope allowance.
+
+Once over a checked site with captured horizontal speed, airless economy
+vertical descent can fall faster above the gentle touchdown segment. The
+speed comes from a conservative inversion of the existing coupled stopping
+envelope, preserving the 80% net-thrust budget, full gravity, reaction time,
+burn margin and clearance. Actual vertical thrust projection and the weaker
+planned stage bound the calculation. Low-authority craft keep their existing
+schedule; the faster profile requires twice the net acceleration demanded by
+the gentle final ramp. Atmosphere, precision, unchecked/distant targets and
+final lateral settling keep their existing profiles. Coast terrain forecasts
+remain provisional; the deorbit solver still does not optimize a complete
+staged finite-burn landing. These changes have source-driven/model checks,
+not a flight-proven single-burn or globally minimum-dV solution.
+
 By operator request, economy profiles set `LANDING_DIVERT_EMERGENCY_SLOPE=15`.
 Only after the normal search fails may an emergency search accept terrain up
 to 15°. Its accepted-site log records `emergency=true` and `slopeLimit=15`.
@@ -257,6 +287,15 @@ libraries uses the usual connected boot; no replacement `boot/boot.ks` is needed
 Schema 2 also records unrounded speed commands, state age, pending/exhausted
 search flags, local clearance versus target/control heights, actual thrust,
 mass, gravity, facing-up fraction, and raw/pilot throttle at that cadence.
+Schema 3 adds the initial mass, available/stage dV and velocity/thrust snapshot,
+plus a bounded numerical ledger for each of the nine guidance states. Time,
+powered time, estimated scalar thrust impulse (`integral(thrust/mass dt)`),
+powered slow descent above 50 m, entry counts and the largest sample gap survive
+rotation of detailed rows. Unpowered stage separation does not count as fuel
+impulse. Summary rows are cumulative at each safe checkpoint; the sample gap
+exposes integration uncertainty. Native remaining dV and mass are recorded
+again at each checkpoint. The `.log.boot.log` file is the companion boot log,
+copied at final verification; it shares the report's filename/timestamp by design.
 These distinguish an intentional search hold, a target-elevation hold, and
 failure to follow a descent command; HUD rounding alone cannot do that.
 
@@ -1339,7 +1378,7 @@ once a second in RAM. Only pre-burn and post-cutoff rows are written, with no
 archive/state writes during positive commanded thrust. An alignment timeout
 cannot enter the powered loop.
 Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
-The routine suite passes 179 cases. Host-side timings vary with system load
+The routine suite passes 186 cases. Host-side timings vary with system load
 and are not a kOS flight timing guarantee; the flight plan records its own
 computation time.
 

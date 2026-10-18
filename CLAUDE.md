@@ -256,8 +256,35 @@ Looks like Python/JS; is neither.
 - Career context matters: this is a hard-mode career save. Don't assume
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
-- Flight-test ledger (update as things prove out): RO8 Minmus recovery
-  landed successfully (operator report, 2026-10-14),
+- Flight-test ledger (update as things prove out):
+  New RO9 Mun files landingdiag_RO9_1619274662_boot_011_core.log and its
+  .boot.log sidecar are one session, not duplicate descents (operator-success
+  report). Landed733.4m/s, guidanceMiss11.3m, targetShift57322m. Main burn141.2s
+  (stage2->1, weak2kN/2.76m/s2) descended9.4->3.2km, so no demonstrated high
+  hover. Five brake/coast/restart cycles; 351m approach at521m took76.1s and
+  25.503kg,41.8% of mass consumed after horizontal capture. Initial dV and298
+  evicted recorder rows prevent a complete fuel comparison with830.5m/s flight.
+  User prioritizes upfront checked footprint, late coupled braking and gentle
+  touchdown, minimizing hovering/translation. Economy now retains flare
+  attitude during short unpowered gate intervals; high surplus height still
+  coasts and all ignition/alignment/cutoff guards stay. One post-capture,
+  zero-command/physical-thrust footprint check may bypass a large approach
+  only with normal terrain/light/reachability/clearance acceptance; no new
+  hover/search on rejection. LANDING_ECONOMY_TERMINAL_RETARGET0 opts out;
+  precision unchanged. Fast airless vertical profile inverts a conservative
+  bound on the existing coupled envelope, uses actual vertical/weak-stage
+  authority and keeps the gentle final ramp. Require twice its nominal max
+  deceleration before acceleration of descent; low-authority cases retain
+  original schedule (do not claim their original final ramp is validated).
+  Conditional terminal model96.3->53.4s,169.1->100.7m/s; five eligible models
+  pass0.2s lag. These are not KSP or whole-flight/optimal-staging proof.
+  Upfront coast footprints remain provisional; no fully optimized native
+  staged powered-descent planner is implemented. Routine186 cases pass.
+  Recorder schema3 retains bounded per-FSM-state time/powered/impulse/slow
+  descent/entry/max-gap totals across ring eviction; scalar thrust/mass
+  integration avoids counting stage mass loss as propellant. Start/checkpoint
+  native dV/mass are saved, with no new burn-time archive I/O or hover.
+  RO8 Minmus recovery landed successfully (operator report, 2026-10-14),
   305 m from the requested waypoint with ~380 m/s remaining. The operator
   reported prolonged corrections and a wasteful hover; exact state history
   and any terrain-driven target shift were not captured. Surface ascent

@@ -20,16 +20,19 @@ def fixture(gravity=1.63, radius=200000):
     ctx.update(TARGET_LAT=29584/radius*180/math.pi, TARGET_LNG=0,
                TARGET_ELEVATION=3000, REQUESTED_LAT=9, REQUESTED_LNG=1,
                HOVER_TERRAIN_DONE=False, TARGET_THROTTLE=1, throttle=1,
-               POSITION=Vec((0,0,857)), STATE='BRAKING_BURN')
+               POSITION=Vec((0,0,857)), STATE='BRAKING_BURN',ECONOMY_FOOTPRINT_TRIED=False)
     events, samples, light_calls = [], [], []
     overrides=dict(SEQUENCE=['LAND_ASSIST','SURFACE_RETURN_SETUP'], RETURN_PE=53000)
     scale=radius*math.pi/180
     def geo(lat,lng):
         return NS(LAT=lat,LNG=lng,TERRAINHEIGHT=env['elevation_at'](lat*scale,lng*scale),
                   POSITION=Vec((lat*scale,lng*scale,0)))
-    env['SHIP'].BODY=NS(RADIUS=radius, GEOPOSITIONOF=lambda pos: geo(pos[0]/scale,pos[1]/scale))
+    env['SHIP'].BODY=NS(RADIUS=radius,ATM=NS(EXISTS=False),
+                        GEOPOSITIONOF=lambda pos: geo(pos[0]/scale,pos[1]/scale))
     env['SHIP'].POSITION=ctx['POSITION']
     env['SHIP'].ALTITUDE=3857
+    env['SHIP'].THRUST=0
+    env['SHIP'].CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)
     ctx['DIVERT_ELEVATION']=3000
     def refresh(c):
         env['SHIP'].POSITION=c['POSITION']
@@ -56,7 +59,8 @@ def fixture(gravity=1.63, radius=200000):
                _landingTerrainCheck=lambda *args: (_ for _ in ()).throw(AssertionError('blocking grid')),
                thrustCutoffOk=lambda *args: (_ for _ in ()).throw(AssertionError('search cut throttle')))
     for name in ('_landingDivertStart','_landingDivertCandidate','_landingDivertRetryReady',
-                 '_landingDivertSurveyAhead','landingReviewReachableSite'):
+                 '_landingDivertSurveyAhead','_landingAcceptDivert',
+                 'landingEconomyTerminalSite','landingReviewReachableSite'):
         env[name]=lambda *args,name=name:call(name,env,*args)
     return env,ctx,events,overrides,samples,light_calls
 
@@ -91,6 +95,140 @@ def check_diversion():
         if validated: ctx['TARGET_LAT']=ctx['TARGET_LNG']=0
         assert tick(env,ctx) and not ctx['DIVERT_PENDING'] and not events and not samples
     print('PASS: local post-brake site replaces 29.6 km target without blocking grids/cutoff; return intent, original request and optional radio policy retained; precision and fast coast unchanged')
+
+
+def check_economy_terminal_footprint():
+    # RO9 1619274 flight: 351 m correction at 521 m clearance after capture.
+    # A normal-policy footprint check can avoid that translation; rejected
+    # local terrain/light must leave the previously accepted site intact.
+    for failure in (None,'terrain','light','clearance'):
+        env,ctx,events,overrides,samples,lights=fixture()
+        env['LANDING_ECONOMY_BRAKE']=1
+        ctx.update(STATE='TARGET_REFINE',height=521,H_SPEED=.6,H_VEL=Vec((.6,0,0)),
+                   V_SPEED=-18.8,DOWN_SPEED=18.8,TARGET_LAT=351/200000*180/math.pi,
+                   TARGET_LNG=0,HOVER_TERRAIN_DONE=True,HOVER_REFINED=False,
+                   TARGET_THROTTLE=0,throttle=0,
+                   TARGET_REFINE_LOGGED=False,TARGET_REFINE_CLIMB_SINCE=0)
+        env['_landingCacheTick'](ctx)
+        original=(ctx['TARGET_LAT'],ctx['TARGET_LNG'])
+        if failure=='terrain':env['grade_at']=lambda *_:.238
+        if failure=='light':env['landingLightWindow']=lambda *_:dict(OK=False,REASON='sun',SUN=-1,KERBIN=50)
+        if failure=='clearance':env['elevation_at']=lambda *_:3500
+        call('_landingTargetRefineTick',env,ctx)
+        assert ctx['STATE']==('APPROACH' if failure else 'VERTICAL_DESCENT'),(failure,ctx)
+        assert ctx['ECONOMY_FOOTPRINT_TRIED'] and not ctx['DIVERT_PENDING']
+        assert len(samples)<2 and len(lights)<2
+        assert overrides['RETURN_PE']==53000 and overrides['SEQUENCE']==['LAND_ASSIST','SURFACE_RETURN_SETUP']
+        if failure:
+            assert (ctx['TARGET_LAT'],ctx['TARGET_LNG'])==original
+            assert 'TARGET_LAT' not in overrides and not ctx['HOVER_REFINED']
+        else:
+            assert ctx['HOVER_REFINED'] and env['lmDistanceToTarget'](ctx['TARGET_LAT'],ctx['TARGET_LNG'])<1
+            assert lights and 'target' in events
+        before=len(samples)
+        assert not call('landingEconomyTerminalSite',env,ctx) and len(samples)==before
+    for guard in ('precision','no-economy','opt-out','fast','high','pending','no-target','already-near',
+                  'command','physical','raw','pilot'):
+        env,ctx,events,overrides,samples,_=fixture()
+        env['LANDING_ECONOMY_BRAKE']=1
+        ctx.update(H_SPEED=.6,H_VEL=Vec((.6,0,0)),height=521,TARGET_THROTTLE=0)
+        if guard=='precision':env['LANDING_FLEXIBLE_SITE']=0
+        if guard=='no-economy':env['LANDING_ECONOMY_BRAKE']=0
+        if guard=='opt-out':env['LANDING_ECONOMY_TERMINAL_RETARGET']=0
+        if guard=='fast':ctx['H_SPEED']=1.1
+        if guard=='high':ctx['height']=1001
+        if guard=='pending':ctx['DIVERT_PENDING']=True
+        if guard=='no-target':ctx['HAS_TARGET']=False
+        if guard=='already-near':ctx['TARGET_LAT']=ctx['TARGET_LNG']=0
+        if guard=='command':ctx['TARGET_THROTTLE']=.1
+        if guard=='physical':env['SHIP'].THRUST=.1
+        if guard=='raw':env['SHIP'].CONTROL.MAINTHROTTLE=.1
+        if guard=='pilot':env['SHIP'].CONTROL.PILOTMAINTHROTTLE=.1
+        before=(ctx['TARGET_LAT'],ctx['TARGET_LNG'])
+        assert not call('landingEconomyTerminalSite',env,ctx)
+        assert not samples and not events and 'TARGET_LAT' not in overrides
+        assert (ctx['TARGET_LAT'],ctx['TARGET_LNG'])==before
+    print('PASS: recorded 351 m economy correction hands off to checked local vertical descent with one normal terrain/light/reachability check; rejection retains the old site without a hover/search; precision and opt-outs are preserved')
+
+
+def check_recorded_terminal_efficiency():
+    results=[]
+    for enabled in (0,1):
+        env,ctx,*_=fixture(gravity=1.5724)
+        env.update(LANDING_ECONOMY_BRAKE=1,LANDING_ECONOMY_TERMINAL_RETARGET=enabled,
+                   V=lambda *values:Vec(values),
+                   _landingFinalTerrainCheck=lambda *_:None,
+                   lmGravity=lambda:ctx['GRAV'],
+                   _landingSolarRollSteering=lambda forward,*_:forward)
+        ctx.update(STATE='TARGET_REFINE',POSITION=Vec((0,0,520.88)),height=520.88,
+                   H_SPEED=.589,H_VEL=Vec((.589,0,0)),V_SPEED=-18.8,DOWN_SPEED=18.8,
+                   MAX_ACC=3.2704,PLAN_ACC=3.2704,BRAKE_GRAV=1.62846,
+                   TARGET_LAT=350.8/200000*180/math.pi,
+                   TARGET_LNG=0,HOVER_TERRAIN_DONE=True,HOVER_REFINED=False,
+                   TARGET_REFINE_LOGGED=False,TARGET_REFINE_CLIMB_SINCE=0,
+                   TARGET_THROTTLE=0,throttle=0,HOVER_HOLD_BOTTOM=0)
+        env['SHIP'].UP=NS(VECTOR=ctx['UP_VEC'])
+        for name in ('lmDirectionToTarget','lmHoverSteering'):
+            env[name]=lambda *args,name=name:call(name,env,*args)
+        def state(c,name,reason):
+            c.update(STATE=name,STATE_ENTERED=env['TIME'].SECONDS,throttle=0,TARGET_THROTTLE=0)
+        env['_landingSetState']=state
+        impulse,slow=0.,0.
+        dt=.1
+        for step in range(3000):
+            env['TIME'].SECONDS=step*dt
+            env['_landingCacheTick'](ctx)
+            phase=ctx['STATE']
+            call({'TARGET_REFINE':'_landingTargetRefineTick','APPROACH':'_landingApproachTick',
+                  'HOVER_REFINE':'_landingHoverRefineTick','VERTICAL_DESCENT':'_landingVerticalTick'}[phase],env,ctx)
+            if ctx['STATE']!=phase:continue
+            acceleration=ctx['throttle']*ctx['MAX_ACC']
+            impulse+=acceleration*dt
+            if abs(ctx['V_SPEED'])<1 and ctx['height']>50 and acceleration>0:slow+=dt
+            thrust=ctx['steering']*acceleration
+            vel=Vec((ctx['H_VEL'][0],0,ctx['V_SPEED']))+(thrust-ctx['UP_VEC']*ctx['GRAV'])*dt
+            ctx['POSITION']=ctx['POSITION']+vel*dt
+            ctx.update(height=ctx['POSITION'][2],H_VEL=Vec((vel[0],0,0)),
+                       H_SPEED=abs(vel[0]),V_SPEED=vel[2],DOWN_SPEED=max(0,-vel[2]))
+            if ctx['height']<=.2:break
+        else:raise AssertionError('terminal model did not reach contact')
+        assert ctx['V_SPEED']>=-2.5 and ctx['H_SPEED']<.3 and slow<1,(enabled,ctx,slow)
+        results.append((step*dt,impulse))
+    old,new=results
+    assert new[0]<old[0] and new[1]<old[1]*.75,results
+    print(f'PASS: conditional flat-terrain replay of reported 521m/351m terminal entry: {old[0]:.1f}->{new[0]:.1f}s, impulse {old[1]:.1f}->{new[1]:.1f}m/s, gentle modeled contact; no KSP/terrain/attitude or total-flight fuel proof')
+
+
+def check_terminal_profile_policy():
+    for guard in (None,'atmosphere','precision','normal','blind','uncertified','far','fast','touchdown','tilt','weaker-stage'):
+        env,ctx,*_=fixture()
+        env['LANDING_ECONOMY_BRAKE']=1
+        ctx.update(STATE='VERTICAL_DESCENT',H_SPEED=0,H_VEL=Vec((0,0,0)),
+                   HOVER_REFINED=True,HOVER_TERRAIN_DONE=True,TARGET_LAT=0,TARGET_LNG=0,
+                   MAX_ACC=3.27,PLAN_ACC=3.27,BRAKE_GRAV=1.62846)
+        env['SHIP'].UP=NS(VECTOR=ctx['UP_VEC'])
+        calls=[]
+        env.update(_landingSolarRollSteering=lambda forward,*_:forward,
+                   V=lambda *values:Vec(values),lmGravity=lambda:ctx['GRAV'],
+                   lmDirectionToTarget=lambda *args:call('lmDirectionToTarget',env,*args),
+                   lmHoverSteering=lambda *args:call('lmHoverSteering',env,*args),
+                   lmEconomyDescentSpeed=lambda *args:(calls.append(args),25)[1])
+        if guard=='atmosphere':env['SHIP'].BODY.ATM.EXISTS=True
+        if guard=='precision':env['LANDING_FLEXIBLE_SITE']=0
+        if guard=='normal':env['LANDING_ECONOMY_BRAKE']=0
+        if guard=='blind':ctx['HAS_TARGET']=False
+        if guard=='uncertified':ctx['HOVER_TERRAIN_DONE']=False
+        if guard=='far':ctx['TARGET_LAT']=350/200000*180/math.pi
+        if guard=='fast':ctx['H_SPEED']=2
+        if guard=='touchdown':ctx.update(height=10,H_SPEED=.5,H_VEL=Vec((.5,0,0)))
+        if guard=='tilt':env['SHIP'].FACING.FOREVECTOR=Vec((.6,0,.8))
+        if guard=='weaker-stage':ctx['PLAN_ACC']=2
+        call('_landingVerticalTick',env,ctx)
+        assert bool(calls)==(guard in (None,'tilt','weaker-stage')),guard
+        if calls:
+            expected=2 if guard=='weaker-stage' else 3.27*(.8 if guard=='tilt' else 1)
+            assert abs(calls[0][-2]-expected)<1e-9
+    print('PASS: fast terminal profile requires airless economy, checked nearby site and captured velocity; atmosphere/precision/blind/uncertified/hover paths retain their schedule, and actual tilt/weaker-stage thrust bound its budget')
 
 
 def check_candidates_and_search():
@@ -516,6 +654,9 @@ def check_library_scope():
 
 
 if __name__=='__main__':
+    check_terminal_profile_policy()
+    check_recorded_terminal_efficiency()
+    check_economy_terminal_footprint()
     check_diversion()
     check_candidates_and_search()
     check_emergency_limits()

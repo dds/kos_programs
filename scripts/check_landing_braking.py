@@ -127,6 +127,38 @@ def check_distant_elevated_site():
     print('PASS: elevated 79.6 km target cannot admit APPROACH at 2504 m bottom; 400 m shifts do not command ignition')
 
 
+def check_recorded_flare_coast():
+    for height,hs,down,acc in ((2662.57,16.3306,68.6535,3.1417),
+                              (2118.95,12.6557,60.6596,3.1634),
+                              (1589.25,8.6367,51.5974,3.1879),
+                              (1172.72,5.3252,43.0351,3.2110)):
+        env,ctx=fixture(gravity=1.54,twr=acc/1.54,horizontal=hs,down=down,height=height)
+        env['LANDING_ECONOMY_BRAKE']=1
+        ctx.update(STATE='BRAKING_BURN',BRAKE_GRAV=65138397520.7807/200000**2)
+        gate=call('_landingBrakeGateInfo',env,ctx)
+        # The recorder sees height after synchronous physical cutoff; all
+        # four snapshots are just below the boundary by <one coast tick.
+        # Exercise the decision immediately above that same stopping gate.
+        assert 0<gate['V_GATE']-height<down*.33+1
+        ctx['height']=gate['V_GATE']+1
+        gate=call('_landingBrakeGateInfo',env,ctx)
+        assert not gate['V_NOW'] and gate['V_ETA']<env['LANDING_BRAKE_ALIGN_LEAD'],(height,gate)
+        call('_landingBrakingTick',env,ctx)
+        assert ctx['STATE']=='BRAKING_BURN' and ctx['TARGET_THROTTLE']==0
+        ctx['height']=gate['V_GATE']-1
+        env['SHIP'].FACING.FOREVECTOR=ctx['steering']
+        call('_landingBrakingTick',env,ctx)
+        assert ctx['STATE']=='BRAKING_BURN' and ctx['TARGET_THROTTLE']>0
+        env['SHIP'].FACING.FOREVECTOR=-ctx['steering']
+        call('_landingBrakingTick',env,ctx)
+        assert ctx['TARGET_THROTTLE']==0
+    env,ctx=fixture(horizontal=.5,down=5.89,height=13000)
+    env['LANDING_ECONOMY_BRAKE']=1;ctx['STATE']='BRAKING_BURN'
+    call('_landingBrakingTick',env,ctx)
+    assert ctx['STATE']=='COAST' and ctx['TARGET_THROTTLE']==0
+    print('PASS: four recorded flare coasts remain unpowered and aligned within the unchanged gate; ignition still requires attitude, and high-altitude arrest still returns to coast')
+
+
 def simulate(gravity, twr, horizontal, down, next_twr=None, economy=False,
              start_height=None, downrange=100000, dt=.1, curvature_radius=None):
     env, ctx = fixture(gravity, twr, horizontal, down)
@@ -299,6 +331,7 @@ def check_integration():
 
 
 if __name__=='__main__':
+    check_recorded_flare_coast()
     check_gates()
     check_high_altitude_misses()
     check_distant_elevated_site()

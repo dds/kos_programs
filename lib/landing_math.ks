@@ -227,6 +227,34 @@ GLOBAL FUNCTION lmDescentSpeed {
     RETURN touchdownSpeed.
 }
 
+// Fast airless terminal descent, bounded by the SAME coupled stopping
+// reserve used at ignition. Invert a conservative upper bound on V:
+// sqrt(hs^2 + futureDown^2) <= hs + futureDown. Rationalizing the
+// quadratic root avoids cancellation for low heights/large thrust.
+// The existing gentle schedule takes over near touchdown.
+GLOBAL FUNCTION lmEconomyDescentSpeed {
+    PARAMETER scheduledSpeed.
+    PARAMETER height.
+    PARAMETER horizontalSpeed.
+    PARAMETER maxAcc.
+    PARAMETER gravAcc.
+    LOCAL netAcc IS lmBrakeNetAcc(maxAcc,gravAcc).
+    // The final 100m ramp asks for up to speed*dSpeed/dHeight. Require
+    // twice that net reserve before making its preceding descent faster;
+    // low-authority craft retain their existing schedule.
+    LOCAL gentleAcc IS 2*8*MAX(0,8-TOUCHDOWN_SPEED)/MAX(1,100-UPRIGHT_ALT).
+    IF netAcc <= 0 OR netAcc < gentleAcc { RETURN scheduledSpeed. }
+    LOCAL delay IS MAX(0,LANDING_BRAKE_REACTION_TIME).
+    LOCAL quadratic IS MAX(1,BURN_MARGIN)/(2*netAcc).
+    LOCAL linear IS delay + quadratic*MAX(0,horizontalSpeed).
+    LOCAL available IS MAX(0,height-MAX(BRAKE_MARGIN,LANDING_BRAKE_CLEARANCE)
+        + gravAcc*delay^2/2).
+    LOCAL divisor IS SQRT(linear^2+4*quadratic*available)+linear.
+    IF divisor <= 0 { RETURN scheduledSpeed. }
+    LOCAL futureDown IS 2*available/divisor.
+    RETURN MAX(scheduledSpeed,MAX(0,futureDown-gravAcc*delay)).
+}
+
 GLOBAL FUNCTION lmDistanceToTarget {
     PARAMETER targetLat.
     PARAMETER targetLng.

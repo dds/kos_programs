@@ -6,6 +6,49 @@ vacuum powered-descent stack: choosing a target, deliberately aiming the
 ballistic trajectory beyond that target, shaping the coast, deciding when to
 brake, and walking the final descent state machine down to touchdown.
 
+Economy airless flights aim for a coast, one main coupled braking arc and a
+gentle touchdown on a reachable, terrain/light-checked footprint. Hover and
+large final translations are recovery tools. Geographic precision profiles
+retain the longer target-capture sequence described below.
+
+The RO9 Mun flight starting UT1619274.662 landed with733.4m/s remaining and
+11.3m miss to its accepted site. Its 351m post-brake correction took76.1s and
+25.5kg of propellant;298 rotated rows lost the detailed approach history.
+The primary burn took141s after ignition and kept descending, with a weak
+2kN lander stage. A long burn here is not itself proof of a hover.
+
+Economy guidance now makes at most one normal-policy footprint check at the
+unpowered terminal handoff after horizontal capture. A newly checked nearby
+site bypasses the large approach correction and proceeds to vertical descent;
+a rejection keeps the accepted target without starting another search or
+hold. This uses the existing reachability/clearance/20m terrain/light checks,
+and cannot invoke the emergency slope allowance. Precision and
+`LANDING_ECONOMY_TERMINAL_RETARGET=0` retain their chosen site.
+
+Brief unpowered flare intervals keep braking attitude inside the existing
+alignment lead. The same stopping and attitude gates still control ignition;
+large surplus altitude returns to coast. Over a checked nearby airless site,
+the economy vertical speed uses a conservative quadratic inversion of the
+coupled stopping envelope above the final gentle ramp. It retains full gravity,
+reaction time, net-thrust fraction, burn margin, clearance and weaker-stage
+authority. Actual facing bounds available vertical acceleration. Low-authority
+craft retain the existing schedule unless twice the gentle ramp's maximum
+deceleration is available. Atmospheric and precision profiles are unchanged.
+
+A flat-terrain source replay of this terminal entry gives96.3->53.4s and
+169.1->100.7m/s scalar impulse with gentle modeled contact. This assumes the
+new footprint passes its real checks and uses constant mass/gravity and
+instantaneous attitude; it is not flight accuracy or whole-mission savings.
+Five eligible vertical models also reach gentle contact with0.2s actuation
+lag. The upfront coast survey remains provisional and the orbital deorbit
+solver still uses a ballistic phantom impact. A complete staging-aware
+finite-burn landing optimization remains outside these changes.
+
+Recorder schema3 retains per-state time/impulse/slow-descent summaries across
+detail-buffer rotation, plus initial/native remaining dV. Impulse is sampled
+live thrust/mass, with the largest sampling gap reported. The paired
+`.log.boot.log` file is the copied boot log from the same recording session.
+
 ## Dependency shape
 
 `lib/dependencies.ks` splits landing into two bands:
@@ -868,9 +911,8 @@ stabilization handoffs, hover limits, and an idealized 305 m Minmus approach.
 That fixture assumes flat terrain, instantaneous steering and constant mass;
 it is not a kOS/KSP simulation or a prediction of flight accuracy/fuel savings.
 
-The important design idea is that early targeting is intentionally not
-pinpoint. The deorbit aims at a downfield phantom impact so powered descent
-has room to work. Coast MCC tightens that phantom lead. Braking spends the
-horizontal energy. Target refine and approach convert the remaining miss into
-a controlled hover. Hover refine picks the final local patch, and vertical
-descent finishes the landing.
+Precision targeting retains the downfield phantom impact so powered descent
+has room to work. Enabled coast MCC tightens that lead; braking removes
+horizontal speed, followed by target capture and final refinement. Economy
+flights use the checked-footprint and faster descent paths described above
+to reduce the correction and powered time before gentle touchdown.
