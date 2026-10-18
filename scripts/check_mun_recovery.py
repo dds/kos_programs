@@ -49,8 +49,8 @@ def check_solver():
     assert solve(lambda *_: None, 50) is None
     assert solve(lambda *_: 742000, 50) is None  # No control authority.
     assert solve(lambda *_: 15000, 50) == (0., 0., 15000)
-    # Old planning accepted the edge, then the executor could swallow
-    # a <0.05 m/s retry while the real orbit remained below 13 km.
+    # The scalar solver can still resolve a tiny mathematical candidate.
+    # Admission is now shared by both solver modes in planBplaneCorrection.
     result = solve(lambda pro, radial: 12900 + pro * 50000, 20)
     assert result is not None and abs(result[2] - 15000) <= 500
     assert 0 < math.hypot(*result[:2]) < .05
@@ -98,7 +98,8 @@ def check_resume_and_handoff():
     assert PROFILE['BPLANE_DV_CAP'] == PROFILE['BPLANE_TRIM_DV_CAP'] == 150
     assert 'GLOBAL BPLANE_PE_ONLY IS 0.' in ARRIVAL
     planner = body(ARRIVAL, 'planBplaneCorrection')
-    assert planner.index('_bplanePlanPeOnly(') < planner.index('measureArrival(')
+    assert '_bplanePlanPeOnly(' in planner and '_bplanePlanFullCorrection(' in planner
+    assert planner.index('_bplanePlanFullCorrection(') < planner.index('_bplaneCorrectionAboveMinimum(')
     resume = body(ARRIVAL, '_bplaneExistingNodeAcceptable')
     assert resume.index('IF BPLANE_PE_ONLY <> 0') < resume.index('bplaneCorrectionAllowed(')
     for name in ('phaseBplane', 'phaseRefineBplane'):
@@ -131,8 +132,9 @@ def check_polar_contract():
                         _bplanePlaneFeasible=lambda _: False) == waived
     safe = body(ARRIVAL, '_bplaneSafeEncounter')
     assert 'IF BPLANE_REQUIRE_PLANE <> 0 { RETURN FALSE. }' in safe
+    full = body(ARRIVAL, '_bplanePlanFullCorrection')
+    assert full.index('required-plane-infeasible') < full.index('SET planeMode TO "pe-only"')
     planner = body(ARRIVAL, 'planBplaneCorrection')
-    assert planner.index('required-plane-infeasible') < planner.index('SET planeMode TO "pe-only"')
     assert planner.index('required-plane-config-conflict') < planner.index('_bplanePlanPeOnly(')
     science = (ROOT / 'lib/science.ks').read_text()
     ops = body(science, 'phaseScienceOps')

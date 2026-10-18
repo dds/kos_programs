@@ -44,6 +44,7 @@
 //   BPLANE_TARGET  — optional body name (default: state "target")
 //   BPLANE_DV_CAP  — max correction dV in m/s (default 150)
 //   BPLANE_PE_TOL  — PE tolerance in m (default 2000)
+//   BPLANE_EARLY_PE_TOL — coarse airless Pe tolerance before midcourse (10000 m)
 //   BPLANE_ANG_TOL — plane tolerance in deg (default 0.5)
 //   BPLANE_LEAD    — seconds from now to the burn (default 300)
 //   BPLANE_EXISTING_NODE_MIN_ETA — min ETA to reuse a B-plane node
@@ -63,6 +64,9 @@ GLOBAL CAPTURE_AOP IS -1.
 GLOBAL CAPTURE_DIR IS "".
 GLOBAL BPLANE_DV_CAP IS 150.
 GLOBAL BPLANE_PE_TOL IS 2000.
+// Coarse Pe allowance before a scheduled midcourse refinement. Fine Pe
+// targeting still uses BPLANE_PE_TOL at REFINE_BPLANE. Zero disables deferral.
+GLOBAL BPLANE_EARLY_PE_TOL IS 10000.
 GLOBAL BPLANE_ANG_TOL IS 0.2.
 GLOBAL BPLANE_LEAD IS 300.
 GLOBAL BPLANE_EXISTING_NODE_MIN_ETA IS 30.
@@ -101,6 +105,59 @@ LOCAL ACQUIRE_MIN_STEP     IS 0.05.
 LOCAL ACQUIRE_STEP_GROWTH  IS 1.2.
 LOCAL MAX_ACQUIRE_ITER     IS 150.
 LOCAL MAX_BURNS        IS 2.
+
+LOCAL FUNCTION _bplaneCorrectionAboveMinimum {
+    PARAMETER nd.
+    LOCAL correctionDv IS nd:DELTAV:MAG.
+    IF correctionDv > MIN_EXEC_DV { RETURN TRUE. }
+    mLog("STATS bplane decision=skip reason=below-execution-minimum dv="
+        + ROUND(correctionDv, 4) + " minimumDv=" + MIN_EXEC_DV).
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _bplaneDeferPeToMidcourse {
+    PARAMETER targetBody.
+    PARAMETER wantPe.
+    IF BPLANE_PE_ONLY = 0 OR BPLANE_REQUIRE_PLANE <> 0
+            OR BPLANE_EARLY_PE_TOL <= 0 OR ABORT { RETURN FALSE. }
+    // Only an immediate, known coast/refinement pair can inherit this job.
+    // Recovery profiles without that pair must solve now or hold normally.
+    LOCAL phaseIndex IS 0.
+    UNTIL phaseIndex >= xferSeq:LENGTH {
+        IF xferSeq[phaseIndex] = "BPLANE" { BREAK. }
+        SET phaseIndex TO phaseIndex + 1.
+    }
+    IF phaseIndex + 2 >= xferSeq:LENGTH { RETURN FALSE. }
+    IF xferSeq[phaseIndex + 1] <> "COAST_1HALF"
+            OR xferSeq[phaseIndex + 2] <> "REFINE_BPLANE" { RETURN FALSE. }
+    IF targetBody:ATM:EXISTS { RETURN FALSE. }
+    IF NOT SHIP:ORBIT:HASNEXTPATCH { RETURN FALSE. }
+    IF SHIP:ORBIT:NEXTPATCH:BODY <> targetBody { RETURN FALSE. }
+    LOCAL hit IS findArrivalPatch(0, targetBody).
+    IF hit = 0 { RETURN FALSE. }
+    LOCAL peNow IS hit["patch"]:PERIAPSIS.
+    IF peNow <> peNow OR ABS(peNow) >= 1e30 { RETURN FALSE. }
+    IF peNow < MAX(0, BPLANE_REVIEW_MIN_PE)
+            OR peNow >= targetBody:SOIRADIUS - targetBody:RADIUS
+            OR ABS(peNow - wantPe) > MAX(BPLANE_PE_TOL, BPLANE_EARLY_PE_TOL) {
+        RETURN FALSE.
+    }
+    // Leave time for the guarded coast checkpoint, solving, alignment and
+    // its future node. Never defer to/through the SOI transition itself.
+    IF hit["entryUt"] - TIME:SECONDS <= 3 * MAX(1, BPLANE_LEAD) { RETURN FALSE. }
+    LOCAL laterCap IS _bplaneTrimCap(targetBody, REFINE_BPLANE_DV_CAP).
+    IF laterCap <= MIN_EXEC_DV { RETURN FALSE. }
+    LOCAL needed IS bplaneCaptureCost(hit["patch"], targetBody)
+        + MAX(0, BPLANE_CAPTURE_MARGIN) + laterCap.
+    IF needed > SHIP:DELTAV:VACUUM { RETURN FALSE. }
+    mLog("STATS bplane decision=defer-pe-to-midcourse PeKm=" + ROUND(peNow / 1000, 3)
+        + " targetPeKm=" + (wantPe / 1000)
+        + " earlyToleranceKm=" + (BPLANE_EARLY_PE_TOL / 1000)
+        + " refineToleranceKm=" + (BPLANE_PE_TOL / 1000)
+        + " soiEta=" + ROUND(hit["entryUt"] - TIME:SECONDS, 1)
+        + " laterCap=" + ROUND(laterCap, 3) + " neededDv=" + ROUND(needed, 1)).
+    RETURN TRUE.
+}
 
 LOCAL FUNCTION _bplaneTrimSpent {
     PARAMETER targetBody.
@@ -150,7 +207,8 @@ GLOBAL FUNCTION bplaneArrivalStatus {
     IF stateGet("phase", "") = "REFINE_BPLANE" { SET phaseCap TO REFINE_BPLANE_DV_CAP. }
     mLogWarn("STATS bplane status correctionCap=" + _bplaneTrimCap(targetBody, phaseCap)
         + " phaseCap=" + phaseCap + " trimCap=" + BPLANE_TRIM_DV_CAP
-        + " totalCap=" + BPLANE_TRIM_TOTAL_DV_CAP).
+        + " totalCap=" + BPLANE_TRIM_TOTAL_DV_CAP
+        + " minimumDv=" + MIN_EXEC_DV + " earlyPeToleranceKm=" + (BPLANE_EARLY_PE_TOL / 1000)).
     mLogWarn("STATS bplane status phase=" + stateGet("phase", "")
         + " body=" + SHIP:BODY:NAME
         + " target=" + targetBody:NAME + " patch=" + (hit <> 0)
@@ -207,9 +265,10 @@ GLOBAL FUNCTION bplanePreviewCorrection {
 }
 
 LOCAL FUNCTION _bplaneExecuteCorrection {
-    // A tiny Pe correction must not be swallowed whole by the executor's
-    // ordinary 0.05 m/s absolute cutoff. Aim for 1% of this node, bounded
-    // by vector resolution, then restore settings before any other burn.
+    IF NOT _bplaneCorrectionAboveMinimum(NEXTNODE) { RETURN FALSE. }
+    // For admitted Pe corrections, aim for 1% rather than lose a large
+    // fraction to the ordinary absolute cutoff. This is execution accuracy,
+    // not permission to bypass the shared minimum correction size.
     LOCAL oldAbs IS BURN_TRIM_ABS_COMPLETE_DV.
     LOCAL oldMax IS BURN_TRIM_COMPLETE_MAX_DV.
     IF BPLANE_PE_ONLY <> 0 {
@@ -821,8 +880,8 @@ LOCAL FUNCTION _bplanePlanPeOnly {
         IF ABS(peError) <= solveTol {
             mLog("STATS bplane pe-only converged=True PeKm=" + ROUND(peNow / 1000, 3)
                 + " dv=" + ROUND(nd:DELTAV:MAG, 3) + " iterations=" + iteration).
-            // Even a sub-0.3 m/s correction can matter far from the Mun.
-            // Do not throw away a needed correction as 'already there'.
+            // The common planner applies the execution minimum to this
+            // candidate, just as it does for a plane-and-Pe solution.
             RETURN nd.
         }
         LOCAL basePro IS nd:PROGRADE.
@@ -944,24 +1003,39 @@ GLOBAL FUNCTION planBplaneCorrection {
         _bplaneHoldCorrection("required-plane-config-conflict"). RETURN 0.
     }
     IF dvCapOverride >= 0 { SET dvCap TO dvCapOverride. }
-    LOCAL peTol IS BPLANE_PE_TOL.
-    LOCAL angTol IS BPLANE_ANG_TOL.
-    LOCAL lead IS BPLANE_LEAD.
-
     IF _bplaneCurrentCorridorOk(targetBody, wantPe, wantInc, wantLan) {
         RETURN 0.
     }
 
     SET dvCap TO _bplaneTrimCap(targetBody, dvCap).
-    IF dvCap < MIN_EXEC_DV {
+    IF dvCap <= MIN_EXEC_DV {
         _bplaneHoldCorrection("no-optional-budget").
         RETURN 0.
     }
 
+    LOCAL nd IS 0.
     IF BPLANE_PE_ONLY <> 0 {
-        RETURN _bplanePlanPeOnly(targetBody, wantPe, dvCap).
+        SET nd TO _bplanePlanPeOnly(targetBody, wantPe, dvCap).
+    } ELSE {
+        SET nd TO _bplanePlanFullCorrection(targetBody, wantPe, wantInc, wantLan,
+            dvCap, pristineLog).
     }
+    IF phaseShouldYield OR nd = 0 { RETURN 0. }
+    IF NOT _bplaneCorrectionAboveMinimum(nd) { REMOVE nd. RETURN 0. }
+    maneuverUiArchiveLog("bplane").
+    RETURN nd.
+}
 
+LOCAL FUNCTION _bplanePlanFullCorrection {
+    PARAMETER targetBody.
+    PARAMETER wantPe.
+    PARAMETER wantInc.
+    PARAMETER wantLan.
+    PARAMETER dvCap.
+    PARAMETER pristineLog.
+    LOCAL peTol IS BPLANE_PE_TOL.
+    LOCAL angTol IS BPLANE_ANG_TOL.
+    LOCAL lead IS BPLANE_LEAD.
     LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, 0).
     ADD nd.
     bplaneResetWarnings().
@@ -1013,7 +1087,7 @@ GLOBAL FUNCTION planBplaneCorrection {
     IF _bplaneCorridorOk(err0, wantInc, peTol, angTol) {
         // Acquisition changed the node: this arrival still requires
         // its burn. Removing it would discard the encounter just found.
-        IF acquired AND nd:DELTAV:MAG >= MIN_EXEC_DV {
+        IF acquired {
             mLog("BPLANE: acquisition reached corridor; keeping correction node.").
             RETURN nd.
         }
@@ -1301,29 +1375,11 @@ GLOBAL FUNCTION planBplaneCorrection {
         RETURN 0.
     }
 
-    LOCAL liveMeas IS measureArrival(0, targetBody).
-    IF pristineLog = "" AND liveMeas <> 0
-            AND _bplaneSafeEncounter(targetBody, liveMeas)
-            AND nd:DELTAV:MAG < 0.2 {
-        mLog("BPLANE: safe encounter; correction <0.2 m/s, handing off.").
-        REMOVE nd.
-        RETURN 0.
-    }
-    IF nd:DELTAV:MAG < MIN_EXEC_DV {
-        IF pristineLog <> "" {
-            mLog(pristineLog).
-        } ELSE {
-            mLog("BPLANE: correction below " + MIN_EXEC_DV + " m/s — skipping burn.").
-        }
-        REMOVE nd.
-        RETURN 0.
-    }
     IF NOT converged AND measF = 0 {
         mLogWarn("BPLANE: solver failed and encounter lost — removing node.").
         REMOVE nd.
         RETURN 0.
     }
-    maneuverUiArchiveLog("bplane").
     RETURN nd.
 }
 
@@ -1382,10 +1438,7 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
         RETURN FALSE.
     }
 
-    IF nd:DELTAV:MAG < MIN_EXEC_DV {
-        mLogWarn("BPLANE: existing node dV is below execution threshold; replanning.").
-        RETURN FALSE.
-    }
+    IF NOT _bplaneCorrectionAboveMinimum(nd) { RETURN FALSE. }
 
     IF NOT bplaneCorrectionAllowed(nd, targetBody, phaseCap) { RETURN FALSE. }
 
@@ -1461,6 +1514,13 @@ GLOBAL FUNCTION phaseBplane {
     IF BPLANE_PE_ONLY <> 0 { SET wantLan TO -1. }
     bplaneResetWarnings().
     _bplaneLogBaseline(targetBody, BPLANE_DV_CAP).
+
+    IF _bplaneDeferPeToMidcourse(targetBody, wantPe) {
+        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+        _bplaneClearCoastTimes().
+        nextPhase(xferSeq).
+        RETURN.
+    }
 
     LOCAL burns IS 0.
     UNTIL burns >= MAX_BURNS {

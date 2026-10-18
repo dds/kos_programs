@@ -107,8 +107,8 @@ GLOBAL FUNCTION executeManeuver {
 
     IF NOT resuming { _rmb(nd). }
 
-    mLog("Maneuver: dV=" + ROUND(bdv,1) + " m/s  ETA=" + ROUND(st - TIME:SECONDS,1) + "s").
-    mLog("STATS burn setup dv=" + ROUND(bdv,1)
+    mLog("Maneuver: dV=" + ROUND(bdv,3) + " m/s  ETA=" + ROUND(st - TIME:SECONDS,1) + "s").
+    mLog("STATS burn setup dv=" + ROUND(bdv,4)
         + " eta=" + ROUND(st - TIME:SECONDS,1)
         + " nodeEta=" + ROUND(nd:ETA,1)
         + " body=" + SHIP:BODY:NAME
@@ -217,7 +217,10 @@ GLOBAL FUNCTION executeManeuver {
         LOCK STEERING TO nd:BURNVECTOR.
         mLog("STATS burn relock checkpoint=T-0 angle="
             + ROUND(VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR), 1)
-            + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)).
+            + " timeToBurn=" + ROUND(st - TIME:SECONDS, 1)
+            + " remainingDv=" + ROUND(nd:DELTAV:MAG, 4)
+            + " setupDv=" + ROUND(bdv, 4)
+            + " angularRate=" + ROUND(SHIP:ANGULARVEL:MAG, 4)).
     }
     LOCAL ie IS VANG(SHIP:FACING:FOREVECTOR, nd:BURNVECTOR).
     IF ie > 15 {
@@ -231,7 +234,7 @@ GLOBAL FUNCTION executeManeuver {
         SET SAS TO FALSE.
         RETURN FALSE.
     }
-    mLog("Burn start. dV=" + ROUND(bdv,1) + " m/s").
+    mLog("Burn start. dV=" + ROUND(bdv,3) + " m/s remaining=" + ROUND(nd:DELTAV:MAG,4)).
     stateSet("burn_status", "burning").
     // Persist before ignition so a reboot cannot turn a partially flown
     // departure into a fresh parking-orbit transfer plan.

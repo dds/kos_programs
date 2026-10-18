@@ -257,6 +257,21 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  An unflown 0.1 m/s B-plane correction reportedly fell to a 0.0 display
+  during the attitude turn/wait. Craft has no RCS; no engine burn had begun.
+  Exact residual drift versus rounding/physics noise remains unmeasured.
+  Confirmed source defect: Pe-only returned before the normal solver's
+  minimum-size gate. Both kernels now return candidates through one common
+  admission gate (reject <=0.3 m/s), reused for saved nodes and execution.
+  The old <0.2 safe-handoff branch was redundant with that shared floor.
+  Do not reintroduce a Pe-only bypass or a distance/0.5 m/s rule. Early
+  airless Pe-only BPLANE can leave fine targeting to an immediate coast/refine
+  pair: native current encounter >=10km Pe, <=10km target error by default,
+  >3*BPLANE_LEAD to SOI, and fuel for capture/reserve/later correction. Bad
+  encounters, plane contracts and final refinement retain strict gates.
+  These are source-fixture checks, not flight proof. Logs now distinguish
+  setup versus ignition residual at four decimals; they do not prove the
+  underlying unpowered residual-change cause.
   New RO9 Mun files landingdiag_RO9_1619274662_boot_011_core.log and its
   .boot.log sidecar are one session, not duplicate descents (operator-success
   report). Landed733.4m/s, guidanceMiss11.3m, targetShift57322m. Main burn141.2s

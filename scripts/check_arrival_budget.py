@@ -118,7 +118,7 @@ def check_logging_and_integration():
     assert 'AND HOMECONNECTION:ISCONNECTED' in log
     hold = body(BPLANE, '_bplaneHoldCorrection')
     assert 'REMOVE NEXTNODE' in hold and 'yieldToPrompt()' in hold
-    planner = body(BPLANE, 'planBplaneCorrection')
+    planner = body(BPLANE, '_bplanePlanFullCorrection')
     assert planner.index('existing-patch-unmeasurable') < planner.index('_acquireEncounter(')
     assert 'IF NOT converged AND NOT acquired' in planner
     assert 'unconverged-optional-correction' in planner

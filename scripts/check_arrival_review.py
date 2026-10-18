@@ -164,7 +164,7 @@ def check_review_flow():
     assert 'IF BPLANE_REQUIRE_PLANE <> 0 AND checkCorridor' in gate
     for guard in ('correction-budget', 'correction-plus-capture-budget', 'arrival-time-shift', 'capture-cost-increase'):
         assert guard in gate
-    planner = body(SOURCE, 'planBplaneCorrection')
+    planner = body(SOURCE, '_bplanePlanFullCorrection')
     assert planner.index('_bplaneOfferReview(') < planner.index('unconverged-optional-correction')
     for phase in ('phaseBplane', 'phaseRefineBplane'):
         code = body(SOURCE, phase)
@@ -177,7 +177,7 @@ def check_review_flow():
 def check_pe_execution_recovery():
     wrapper = body(SOURCE, '_bplaneExecuteCorrection')
     precision = re.search(r'LOCAL precision IS (.*?)\.\n', wrapper)[1]
-    for dv in (.02, .042, .3, 1, 20):
+    for dv in (.301, .5, 1, 20):
         cutoff = min(.05, evaluate(precision, BURN_BV_MIN_MAG=.001,
                                    NEXTNODE=NS(DELTAV=NS(MAG=dv))))
         assert cutoff < dv

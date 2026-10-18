@@ -49,10 +49,10 @@ LOCAL FUNCTION _burnBrief {
     }
     PRINT " ".
     PRINT "  -- " + stateGet("phase", "MANEUVER") + " BURN --".
-    PRINT "  dV " + ROUND(nd_:DELTAV:MAG,1)
-        + " m/s (p " + ROUND(nd_:PROGRADE,1)
-        + " n " + ROUND(nd_:NORMAL,1)
-        + " r " + ROUND(nd_:RADIALOUT,1)
+    PRINT "  dV " + ROUND(nd_:DELTAV:MAG,3)
+        + " m/s (p " + ROUND(nd_:PROGRADE,3)
+        + " n " + ROUND(nd_:NORMAL,3)
+        + " r " + ROUND(nd_:RADIALOUT,3)
         + ")  ETA " + ROUND(nd_:ETA,0)
         + "s  burn ~" + ROUND(_burnTimeEstimate(nd_),0) + "s".
     PRINT "  now    " + _orbitLine(SHIP:ORBIT).

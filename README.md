@@ -733,8 +733,24 @@ RUNPATH("0:/cmd/arrival.ks", "replan").
 For `pe-recovery-outside-corridor`, inspect with `arrival.ks` action `status`.
 Pe-only corrections now solve toward the middle of the arrival corridor
 (500 m planning tolerance for the usual 2 km acceptance tolerance), and use
-a smaller executor cutoff for tiny burns. A failed correction holds with its
-node retained, rather than deleting it and blindly retrying. Explicit
+a smaller executor cutoff for admitted burns. Both solver modes share the
+same admission check: a correction of **0.3 m/s or less is discarded**, rather
+than scheduled. Saved nodes and execution admission use that same predicate.
+The old Pe-only return bypassed this check and could schedule a 0.1 m/s node.
+
+For airless Pe-only arrivals, early `BPLANE` leaves fine targeting to the
+following `COAST_1HALF` / `REFINE_BPLANE` pair when the actual unburned encounter
+is safe: Pe at least 10 km, within the coarse `BPLANE_EARLY_PE_TOL` (default
+10 km) of the requested Pe, enough time before SOI entry, and fuel for capture,
+its reserve and a later correction. This avoids steering and burning merely
+to perfect an early Minmus Pe. There is no distance-based 0.5 m/s rule.
+Set `BPLANE_EARLY_PE_TOL=0` to disable this deferral. Missing/unsafe encounters,
+plane requirements, absent refinement phases and insufficient time/fuel keep
+the ordinary solve/hold path. Midcourse still uses the original fine corridor;
+discarding a tiny node never declares an out-of-corridor arrival successful.
+
+A failed correction holds with its node retained, rather than deleting it
+and blindly retrying. Explicit
 `arrival.ks` action `replan` can discard an interrupted BPLANE/REFINE_BPLANE
 correction and clear its interruption state before planning from the actual
 flown orbit, including recovery from older saves whose node was already
