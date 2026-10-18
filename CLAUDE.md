@@ -257,8 +257,29 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Supplied solardiag_RO9_1644877384.log: anchored-six-axis search completed
+  successfully in63.78s, final flow0.3813675, no alignment timeout or dropped
+  rows. Winner fixed-5 is craft axis(0,.866,.5), the panel-part -Y axis;
+  final error3.63deg, battery39.45->38.25pct. Most time was turning/settling.
+  This file establishes that this attempt worked, not a global power maximum.
+  New coarse-to-fine source probes +/-15deg in two tangent directions at1deg
+  tolerance; a cosine gradient only proposes an independently measured peak.
+  Measured gain must exceed.2pct. Optional45s budget, <=15s/turn, reserves the
+  normal final-return allowance; abort/eclipsed/unreadable/failed final return
+  cannot replace a good cache. Valid older coarse caches refine directly once;
+  saved solar_axis_tolerance allows subsequent quick validation. Invalid
+  benchmarks skip the redundant cache trial. SOLAR_REFINE_TIMEOUT0 disables
+  refinement. Five finite 3D source replays cover tilted/diagonal mounts;
+  separate fixtures cover multiple panels, nonlinear/worse peak, noise,
+  partial/stalled refinement, cache upgrade and deadlines. These are models,
+  not KSP proof of refinement timing or gains. Recorder schema2 keeps24
+  settled comparisons outside the detail ring, including actualSunAxis.
+  rawCommand denotes SHIP:CONTROL channels, not measured cooked-steering
+  torque; ALLFIELDS contains names/types, not live wheel/panel values.
+  Routine197 source checks pass across33 files; this run's slowest individual
+  check was0.708s. Refinement still requires a flight report for validation.
   Solar rewrite after repeated fixed-2 ~90deg/90s timeouts (operator report,
-  no raw flight file yet): cache-first, then one six-axis loop; tracking
+  the earlier stalled attempt still has no raw file): cache-first, then one six-axis loop; tracking
   probe/type inference removed. _solarAim snapshots a full target and its
   Sun vector once; its live lock transports that target with Sun motion,
   without SHIP:FACING feedback. Nonidentity-frame and finite 3D-turn fixtures

@@ -39,7 +39,7 @@ def environment():
     module = NS(HASFIELD=lambda name: name == 'energy flow')
     panel = NS(HASMODULE=lambda name: True, GETMODULE=lambda name: module, FACING=facing)
     saved = dict(solar_axis=Items((1, 0, 0)), solar_axis_peak=10., solar_axis_distance=1e10,
-                 solar_axis_panels=1, solar_axis_scaled=1)
+                 solar_axis_panels=1, solar_axis_scaled=1,solar_axis_tolerance=1)
     attempts, finishes, unlocked, reading = [], [], [], [10.]
     env = dict(SHIP=NS(STATUS='ORBITING', PARTS=Items([panel]), FACING=NS(INVERSE=Identity())),
                SUN=NS(POSITION=Vec((1e10, 0, 0))), forceSearch=False, lockSteering=False,
@@ -49,6 +49,8 @@ def environment():
                solarDiagnosticBegin=lambda *_:None,solarDiagnosticSample=lambda *_:None,
                solarDiagnosticFinish=lambda *_:None,solarDiagnosticExport=lambda *_:False,
                _solarAimDirection=lambda *_:Identity(),
+               COS=lambda degrees:math.cos(math.radians(degrees)),
+               SIN=lambda degrees:math.sin(math.radians(degrees)),
                fixedLabel=lambda index:'fixed-'+str(index),
                overrideLaunchGuard=False, SOLAR_REUSE_RATIO=.9, LIST=lambda *xs: Items(xs),
                V=lambda *xs: Vec(xs), ROUND=round, stateGet=saved.get, stateGetNum=saved.get,
@@ -62,6 +64,8 @@ def environment():
     env['_solarPanelInfo'] = lambda: ks.call('_solarPanelInfo', env)
     env['_solarCacheReference'] = lambda: ks.call('_solarCacheReference', env)
     env['_solarOrient'] = lambda *args: ks.call('_solarOrient', env, *args)
+    env['_solarRefine'] = lambda axis,flow,*_:Items((axis,flow,env['SOLAR_AIM_TOLERANCE']))
+    env['_solarRefinedHold'] = lambda *args:ks.call('_solarRefinedHold',env,*args)
     def aim(axis,*_):
         attempts.append(axis)
         reading[0] = max(0., float(np.dot(axis, primary))) * 10
@@ -298,11 +302,12 @@ def check_reference_early_exit():
             attempts.append(label)
             reading[0]={'cache':8,'fixed-1':3}.get(label,1)
             if label==stop_at:reading[0]=9.2
+            if label=='best-hold':reading[0]=9.2
             return True
         env['_solarAimSettle']=aim
         assert ks.call('orientForSolar',env)
-        assert attempts[-1]==stop_at and len(finishes)==1
-        assert finishes[0][2:] == ('reference reached',10)
+        assert attempts[-2:]==[stop_at,'best-hold'] and len(finishes)==1
+        assert finishes[0][2:] == ('reference reached',10,5)
         assert saved['solar_axis_peak']==10
     env,saved,attempts,finishes,_,_=environment()
     saved['solar_axis_panels']=2
@@ -326,7 +331,7 @@ def check_shared_search_budget():
         env,saved,attempts,finishes,_,reading=environment()
         before=saved.copy()
         expected=caller_deadline or env['SOLAR_SEARCH_TIMEOUT']
-        def slow_aim(axis,deadline,keep,label):
+        def slow_aim(axis,deadline,keep,label,*tolerance):
             attempts.append(label)
             assert deadline==expected
             if env['TIME'].SECONDS+50>deadline:
@@ -403,6 +408,129 @@ def check_readout_drift():
     print('PASS: pointing and rotation are rechecked after the panel-readout wait; renewed drift cannot validate or overwrite the saved attitude')
 
 
+def refinement_fixture():
+    env,saved,attempts,finishes,unlocked,reading=environment()
+    normal=Vec((1,.32,-.21)).NORMALIZED
+    def flow(axis,label):return 10*max(0,float(np.dot(normal,axis)))
+    env['fixture_flow']=flow
+    env['fixture_duration']=2
+    env['fixture_failed_label']=''
+    def aim(axis,deadline,keep,label,tolerance=5):
+        attempts.append((label,axis,deadline,tolerance,env['TIME'].SECONDS))
+        if env['TIME'].SECONDS+env['fixture_duration']>deadline:
+            env['TIME'].SECONDS=deadline
+            return False
+        env['TIME'].SECONDS+=env['fixture_duration']
+        reading[0]=env['fixture_flow'](axis,label)
+        return label!=env['fixture_failed_label']
+    env['_solarAimSettle']=aim
+    env['_solarRefine']=lambda *args:ks.call('_solarRefine',env,*args)
+    return env,saved,attempts,finishes,unlocked,reading,normal
+
+
+def check_refinement_measured_peak():
+    env,_,attempts,_,_,_,normal=refinement_fixture()
+    center=Vec((1,0,0));coarse=env['fixture_flow'](center,'coarse')
+    result=env['_solarRefine'](center,coarse,300)
+    assert [row[0] for row in attempts]==['refine-center','refine-1+','refine-1-',
+                                          'refine-2+','refine-2-','refine-peak']
+    assert np.dot(result[0],normal)>1-1e-12 and abs(result[1]-10)<1e-12
+    assert result[2]==1 and result[1]>coarse*1.05
+    # Two illuminated panel groups need their weighted combined normal,
+    # rather than assuming the first panel's own normal is optimal.
+    env,_,_,_,_,_,_=refinement_fixture()
+    normals=[Vec((1,.3,0)).NORMALIZED,Vec((.6,.2,.6)).NORMALIZED]
+    combined=10*normals[0]+8*normals[1]
+    env['fixture_flow']=lambda axis,label:sum(weight*max(0,float(np.dot(axis,normal)))
+                                             for weight,normal in zip((10,8),normals))
+    result=env['_solarRefine'](center,env['fixture_flow'](center,'coarse'),300)
+    assert np.dot(result[0],combined.NORMALIZED)>1-1e-12
+    assert abs(result[1]-combined.MAG)<1e-12
+    # A nonlinear/shaded layout can invalidate the cosine prediction.
+    # Only its independent final measurement may authorize that direction.
+    env,_,attempts,_,_,_,_=refinement_fixture()
+    flows={'refine-center':8,'refine-1+':9,'refine-1-':5,
+           'refine-2+':8,'refine-2-':8,'refine-peak':3}
+    env['fixture_flow']=lambda axis,label:flows[label]
+    result=env['_solarRefine'](center,8,300)
+    assert attempts[-1][0]=='refine-peak' and result[1]==9
+    assert np.allclose(result[0],attempts[1][1])
+    # Sub-threshold jitter must not move a good center to a worse tilt.
+    env,_,attempts,_,_,_,_=refinement_fixture()
+    env['fixture_flow']=lambda axis,label:10 if label=='refine-center' else 10.01
+    result=env['_solarRefine'](center,10,300)
+    assert len(attempts)==5 and np.allclose(result[0],center) and result[1]==10
+    print('PASS: four tilts recover single/multiple-panel cosine peaks; a misleading nonlinear prediction cannot beat measured flow; tiny gain noise cannot move the winner')
+
+
+def check_refinement_fallback_and_budget():
+    center=Vec((1,0,0))
+    for disabled,deadline,abort in ((True,300,False),(False,94,False),(False,300,True)):
+        env,_,attempts,_,_,_,_=refinement_fixture()
+        env['ABORT']=abort
+        if disabled:env['SOLAR_REFINE_TIMEOUT']=0
+        result=env['_solarRefine'](center,9,deadline)
+        assert not attempts and np.allclose(result[0],center) and result[1:]==[9,5]
+    for failure in ('refine-center','refine-1-'):
+        env,_,attempts,_,_,_,_=refinement_fixture()
+        env['fixture_failed_label']=failure
+        result=env['_solarRefine'](center,9,300)
+        assert attempts[-1][0]==failure
+        if failure=='refine-center':
+            assert result[1:]==[9,5] and np.allclose(result[0],center)
+        else:
+            assert result[1]>=9 and result[2]==1
+            measured=[(row[1],env['fixture_flow'](row[1],row[0])) for row in attempts[:-1]]
+            assert any(np.allclose(result[0],axis) and abs(result[1]-flow)<1e-10
+                       for axis,flow in measured)
+    for deadline in (120,300):
+        env,_,attempts,_,_,_,_=refinement_fixture()
+        env['fixture_duration']=12
+        env['_solarRefine'](center,9,deadline)
+        end=min(45,deadline-90-1.5)
+        assert env['TIME'].SECONDS<=end
+        assert all(limit<=end and limit-start<=15 for _,_,limit,_,start in attempts)
+        assert deadline-env['TIME'].SECONDS>=91.5
+    print('PASS: disabled/aborted/time-tight refinement skips; stalled or partial refinement retains measured coarse/fine winners; probes share 45s and reserve the final return')
+
+
+def check_refined_cache_upgrade():
+    env,saved,attempts,_,_,_,normal=refinement_fixture()
+    saved.pop('solar_axis_tolerance')  # Existing flight: proven coarse axis.
+    saved['solar_axis_peak']=9.4
+    env['_solarFinish']=lambda *args:ks.call('_solarFinish',env,*args)
+    assert ks.call('orientForSolar',env,False,True,True)
+    assert attempts[0][0]=='cache' and attempts[-1][0]=='best-hold'
+    assert not any(row[0].startswith('fixed-') for row in attempts)
+    assert saved['solar_axis_tolerance']==1 and abs(saved['solar_axis_peak']-10)<1e-9
+    assert np.dot(Vec(saved['solar_axis']).NORMALIZED,normal)>.99999
+    attempts.clear()
+    assert ks.call('orientForSolar',env,False,True,True)
+    assert [row[0] for row in attempts]==['cache'] and saved['solar_axis_tolerance']==1
+    env,saved,attempts,_,_,_,_=refinement_fixture()
+    saved.pop('solar_axis_peak')
+    assert ks.call('orientForSolar',env,False,True,True)
+    assert attempts[0][0]=='fixed-1' and not any(row[0]=='cache' for row in attempts)
+    print('PASS: proven legacy cache refines without six-axis rediscovery, next call only validates; an unbenchmarked legacy axis does not duplicate the first turn')
+
+
+def check_refined_hold_failure():
+    for failure in ('alignment','zero','unreadable','eclipse','abort'):
+        env,saved,attempts,finishes,unlocked,reading,_=refinement_fixture()
+        before=saved.copy()
+        env['SOLAR_REFINE_TIMEOUT']=0
+        if failure=='alignment':env['fixture_failed_label']='best-hold'
+        if failure in ('zero','unreadable'):
+            env['fixture_flow']=lambda *_:0 if failure=='zero' else -1
+        if failure=='eclipse':env['_solarSunOccluded']=lambda:True
+        if failure=='abort':env['ABORT']=True
+        assert not env['_solarRefinedHold'](Vec((1,0,0)),10,10,False,300,'test')
+        assert saved==before and not finishes
+        if failure=='abort':assert not attempts
+        if failure!='alignment':assert unlocked
+    print('PASS: failed return, zero/unreadable flow, eclipse or abort cannot publish a new cache; abort cannot initiate a final turn')
+
+
 def check_hold_deadline(ref_flow,flow,success=True):
     env,_,_,_,_,reading=environment();reading[0]=flow
     env.update(TIME=NS(SECONDS=0),WARP=4,refFlow=ref_flow,deadlineUt=20,
@@ -458,5 +586,9 @@ if __name__ == '__main__':
     check_alignment_tolerances()
     check_cached_hold_tolerance()
     check_readout_drift()
+    check_refinement_measured_peak()
+    check_refinement_fallback_and_budget()
+    check_refined_cache_upgrade()
+    check_refined_hold_failure()
     for args in ((-1,0,True),(10,5,True),(10,5,False)):check_hold_deadline(*args)
     check_hold_deferrals()

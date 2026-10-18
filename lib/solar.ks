@@ -20,6 +20,10 @@ GLOBAL SOLAR_SEARCH_TIMEOUT IS 300.
 GLOBAL SOLAR_AIM_TOLERANCE IS 5.
 GLOBAL SOLAR_HOLD_TOLERANCE IS 10.
 GLOBAL SOLAR_MIN_IPU IS 2000.
+GLOBAL SOLAR_REFINE_STEP IS 15.
+GLOBAL SOLAR_REFINE_TOLERANCE IS 1.
+GLOBAL SOLAR_REFINE_TIMEOUT IS 45.
+GLOBAL SOLAR_REFINE_MIN_GAIN IS 0.002.
 GLOBAL SOLAR_SEARCH_SKIP_FIRST_BOOT IS 1.
 GLOBAL SOLAR_SEARCH_LAUNCH_GUARD IS 300.
 GLOBAL SOLAR_SEARCH_KSC_RADIUS IS 10000.
@@ -111,6 +115,96 @@ LOCAL FUNCTION _solarAimDirection {
     RETURN ROTATEFROMTO(aim["SUN"], SUN:POSITION) * aim["FACING"].
 }
 
+// Four nearby measurements estimate the two tilt components of the peak.
+// The cosine estimate proposes a direction; only MEASURED gains can win.
+// A completed coarse scan remains usable if this optional refinement stalls.
+LOCAL FUNCTION _solarRefine {
+    PARAMETER bestAxis.
+    PARAMETER bestFlow.
+    PARAMETER deadlineUt.
+    LOCAL endUt IS MIN(TIME:SECONDS + SOLAR_REFINE_TIMEOUT,
+        deadlineUt - SOLAR_AIM_TIMEOUT - 1.5).
+    IF SOLAR_REFINE_TIMEOUT <= 0 OR endUt <= TIME:SECONDS + 3 OR ABORT {
+        RETURN LIST(bestAxis,bestFlow,SOLAR_AIM_TOLERANCE).
+    }
+    LOCAL center IS bestAxis.
+    LOCAL coarseFlow IS bestFlow.
+    LOCAL step IS MAX(1,MIN(30,SOLAR_REFINE_STEP)).
+    LOCAL tolerance IS MAX(0.1,MIN(SOLAR_AIM_TOLERANCE,SOLAR_REFINE_TOLERANCE)).
+    LOCAL refVec IS V(1,0,0).
+    IF ABS(center:X) > 0.9 { SET refVec TO V(0,1,0). }
+    LOCAL side IS VCRS(center,refVec):NORMALIZED.
+    LOCAL other IS VCRS(center,side):NORMALIZED.
+    LOCAL tilts IS LIST(side,-side,other,-other).
+    LOCAL labels IS LIST("refine-1+","refine-1-","refine-2+","refine-2-").
+    LOCAL flows IS LIST().
+    mLog("STATS solar refine status=begin coarseFlow=" + coarseFlow
+        + " step=" + step + " tolerance=" + tolerance + " budget=" + (endUt-TIME:SECONDS)).
+    // Re-measure the center at fine tolerance: a 5-degree coarse residual
+    // must not masquerade as a gradient of the panel layout.
+    IF NOT _solarAimSettle(center,MIN(endUt,TIME:SECONDS+15),TRUE,"refine-center",tolerance) {
+        RETURN LIST(bestAxis,bestFlow,SOLAR_AIM_TOLERANCE).
+    }
+    LOCAL centerFlow IS shipSolarFlow().
+    IF centerFlow <= 0 OR _solarSunOccluded() { RETURN LIST(bestAxis,bestFlow,SOLAR_AIM_TOLERANCE). }
+    SET bestFlow TO MAX(bestFlow,centerFlow).
+    LOCAL i IS 0.
+    UNTIL i >= 4 OR ABORT {
+        LOCAL trial IS (center * COS(step) + tilts[i] * SIN(step)):NORMALIZED.
+        IF NOT _solarAimSettle(trial,MIN(endUt,TIME:SECONDS+15),TRUE,labels[i],tolerance) {
+            BREAK.
+        }
+        LOCAL flow IS shipSolarFlow().
+        IF flow < 0 OR _solarSunOccluded() { BREAK. }
+        flows:ADD(flow).
+        IF flow > bestFlow * (1 + SOLAR_REFINE_MIN_GAIN) {
+            SET bestAxis TO trial.
+            SET bestFlow TO flow.
+        }
+        SET i TO i + 1.
+    }
+    IF flows:LENGTH = 4 AND NOT ABORT AND TIME:SECONDS + 3 < endUt {
+        LOCAL gradientSide IS (flows[0]-flows[1]) / (2*SIN(step)).
+        LOCAL gradientOther IS (flows[2]-flows[3]) / (2*SIN(step)).
+        LOCAL peak IS center*centerFlow + side*gradientSide + other*gradientOther.
+        IF peak:MAG > bestFlow * (1 + SOLAR_REFINE_MIN_GAIN) {
+            LOCAL trial IS peak:NORMALIZED.
+            IF _solarAimSettle(trial,MIN(endUt,TIME:SECONDS+15),TRUE,"refine-peak",tolerance) {
+                LOCAL flow IS shipSolarFlow().
+                IF NOT _solarSunOccluded() AND flow > bestFlow * (1 + SOLAR_REFINE_MIN_GAIN) {
+                    SET bestAxis TO trial.
+                    SET bestFlow TO flow.
+                }
+            }
+        }
+    }
+    mLog("STATS solar refine status=result probes=" + flows:LENGTH
+        + " coarseFlow=" + coarseFlow + " bestFlow=" + bestFlow
+        + " gainPct=" + (100*(bestFlow/coarseFlow-1))).
+    RETURN LIST(bestAxis,bestFlow,tolerance).
+}
+
+LOCAL FUNCTION _solarRefinedHold {
+    PARAMETER bestAxis.
+    PARAMETER bestFlow.
+    PARAMETER referenceFlow.
+    PARAMETER lockSteering.
+    PARAMETER deadlineUt.
+    PARAMETER note.
+    LOCAL refined IS _solarRefine(bestAxis,bestFlow,deadlineUt).
+    IF ABORT {
+        IF NOT lockSteering { UNLOCK STEERING. }
+        RETURN FALSE.
+    }
+    IF NOT _solarAimSettle(refined[0],deadlineUt,lockSteering,"best-hold",refined[2]) { RETURN FALSE. }
+    IF shipSolarFlow() <= 0 OR _solarSunOccluded() {
+        IF NOT lockSteering { UNLOCK STEERING. }
+        RETURN FALSE.
+    }
+    _solarFinish(refined[0],lockSteering,note,MAX(refined[1],referenceFlow),refined[2]).
+    RETURN TRUE.
+}
+
 // Aim the axis at the Sun and wait until the ship is BOTH pointed and
 // has stopped rotating before returning — measuring flow mid-slew is
 // what made the coarse search bleed one axis's reading into the next.
@@ -179,6 +273,7 @@ LOCAL FUNCTION _solarFinish {
     PARAMETER lockSteering.
     PARAMETER note.
     PARAMETER referenceFlow IS -1.
+    PARAMETER learnedTolerance IS SOLAR_AIM_TOLERANCE.
     LOCAL flow IS shipSolarFlow().
     stateSet("solar_axis", LIST(
         ROUND(aShip:X, 4), ROUND(aShip:Y, 4), ROUND(aShip:Z, 4))).
@@ -188,6 +283,7 @@ LOCAL FUNCTION _solarFinish {
         stateSet("solar_axis_distance", SUN:POSITION:MAG).
         stateSet("solar_axis_panels", info["COUNT"]).
         stateSet("solar_axis_scaled", info["SCALED"]).
+        stateSet("solar_axis_tolerance", learnedTolerance).
     }
     IF NOT lockSteering { UNLOCK STEERING. }
     mLog("Solar attitude set (" + note + "): flow="
@@ -285,7 +381,8 @@ LOCAL FUNCTION _logSolarSearchGuard {
 // calls validate/reuse it before searching. Every decision is by measured
 // flow, so no panel-layout assumption is needed:
 //   1. Validate the saved axis against its measured peak, when available.
-//   2. Otherwise measure the six panel-part axes and hold the best.
+//   2. Otherwise measure the six panel-part axes.
+//   3. Fine-tune the winner with measured tilts, then cache and hold it.
 // ============================================================
 GLOBAL FUNCTION orientForSolar {
     PARAMETER forceSearch IS FALSE.
@@ -327,7 +424,7 @@ GLOBAL FUNCTION orientForSolar {
     RETURN success.
 }
 
-// Cache first; otherwise measure the six panel axes and hold the best.
+// Cache first; otherwise measure six axes, refine their winner and hold it.
 // No tracking probe, inferred panel type, or mid-scan attitude-dependent axes.
 LOCAL FUNCTION _solarOrient {
     PARAMETER forceSearch.
@@ -353,14 +450,20 @@ LOCAL FUNCTION _solarOrient {
     LOCAL referenceFlow IS _solarCacheReference().
 
     LOCAL cached IS stateGet("solar_axis", LIST()).
-    IF NOT forceSearch AND cached:ISTYPE("List") AND cached:LENGTH >= 3 {
+    IF NOT forceSearch AND referenceFlow > 0 AND cached:ISTYPE("List") AND cached:LENGTH >= 3 {
         LOCAL aShip IS V(cached[0], cached[1], cached[2]).
         IF aShip:MAG > 0.5 {
             SET aShip TO aShip:NORMALIZED.
             IF NOT _solarAimSettle(aShip,deadlineUt,lockSteering,"cache",SOLAR_HOLD_TOLERANCE) { RETURN FALSE. }
             LOCAL cachedFlow IS shipSolarFlow().
             IF referenceFlow > 0 AND cachedFlow >= referenceFlow * SOLAR_REUSE_RATIO {
-                _solarFinish(aShip, lockSteering, "cached axis validated", referenceFlow).
+                LOCAL learnedTolerance IS stateGetNum("solar_axis_tolerance",SOLAR_AIM_TOLERANCE).
+                IF SOLAR_REFINE_TIMEOUT > 0 AND learnedTolerance > SOLAR_REFINE_TOLERANCE
+                        AND deadlineUt-TIME:SECONDS > SOLAR_AIM_TIMEOUT+4.5 {
+                    RETURN _solarRefinedHold(aShip,cachedFlow,referenceFlow,lockSteering,
+                        deadlineUt,"cached axis refined").
+                }
+                _solarFinish(aShip, lockSteering, "cached axis validated", referenceFlow,learnedTolerance).
                 RETURN TRUE.
             }
             IF cachedFlow < 0 OR _solarSunOccluded() {
@@ -385,6 +488,7 @@ LOCAL FUNCTION _solarOrient {
     mLog("Solar search: six fixed-panel axes for best energy flow.").
     LOCAL bestFlow IS -1.
     LOCAL bestAxis IS primary.
+    LOCAL note IS "best of 6".
     LOCAL i IS 0.
     UNTIL i >= cands:LENGTH {
         IF NOT _solarAimSettle(cands[i],deadlineUt,lockSteering,"fixed-" + (i+1)) { RETURN FALSE. }
@@ -395,13 +499,13 @@ LOCAL FUNCTION _solarOrient {
             RETURN FALSE.
         }
         mLog("STATS solar sample axis=" + (i + 1) + "/6 flow=" + ROUND(flow, 2)).
-        IF NOT forceSearch AND referenceFlow > 0 AND flow >= referenceFlow * SOLAR_REUSE_RATIO {
-            _solarFinish(cands[i],lockSteering,"reference reached",referenceFlow).
-            RETURN TRUE.
-        }
         IF flow > bestFlow {
             SET bestFlow TO flow.
             SET bestAxis TO cands[i].
+        }
+        IF NOT forceSearch AND referenceFlow > 0 AND flow >= referenceFlow * SOLAR_REUSE_RATIO {
+            SET note TO "reference reached".
+            BREAK.
         }
         SET i TO i + 1.
     }
@@ -415,9 +519,7 @@ LOCAL FUNCTION _solarOrient {
         RETURN FALSE.
     }
 
-    IF NOT _solarAimSettle(bestAxis,deadlineUt,lockSteering,"best-hold") { RETURN FALSE. }
-    _solarFinish(bestAxis, lockSteering, "best of 6", bestFlow).
-    RETURN TRUE.
+    RETURN _solarRefinedHold(bestAxis,bestFlow,referenceFlow,lockSteering,deadlineUt,note).
 }
 
 // ============================================================

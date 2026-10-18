@@ -23,21 +23,24 @@ GLOBAL FUNCTION solarDiagnosticBegin {
     PARAMETER forceSearch.
     PARAMETER deadlineUt.
     PARAMETER priorIpu.
-    SET solarTrace TO LEXICON("ROWS",LIST(),"BYTES",0,"DROPPED",0,"PENDING",FALSE,
+    SET solarTrace TO LEXICON("ROWS",LIST(),"BYTES",0,"DROPPED",0,"PENDING",FALSE,"MEASUREMENTS",LIST(),
         "NAME","solardiag_" + slug() + "_" + ROUND(TIME:SECONDS*1000,0) + ".log",
         "LAST", "no turn sampled",
-        "HEADER","STATS solar-diag schema=1 algorithm=anchored-six-axis code=" + codeVersion()
+        "HEADER","STATS solar-diag schema=2 algorithm=anchored-six-axis-refine code=" + codeVersion()
             + " ut=" + TIME:SECONDS + " vessel=" + SHIP:NAME + " body=" + SHIP:BODY:NAME
             + " phase=" + stateGet("phase","") + " force=" + forceSearch
             + " deadline=" + deadlineUt + " priorIpu=" + priorIpu + " ipu=" + CONFIG:IPU
             + " aimTimeout=" + SOLAR_AIM_TIMEOUT + " searchTimeout=" + SOLAR_SEARCH_TIMEOUT
             + " aimTol=" + SOLAR_AIM_TOLERANCE + " holdTol=" + SOLAR_HOLD_TOLERANCE
+            + " refineStep=" + SOLAR_REFINE_STEP + " refineTol=" + SOLAR_REFINE_TOLERANCE
+            + " refineTimeout=" + SOLAR_REFINE_TIMEOUT + " refineMinGain=" + SOLAR_REFINE_MIN_GAIN
             + " peak=" + stateGetNum("solar_axis_peak",-1)
             + " cachedAxis=" + stateGet("solar_axis",LIST())
             + " cachedDistance=" + stateGetNum("solar_axis_distance",0)
             + " sunDistance=" + SUN:POSITION:MAG
             + " cachedPanels=" + stateGetNum("solar_axis_panels",-1)
             + " cachedScaled=" + stateGetNum("solar_axis_scaled",-1)
+            + " cachedTolerance=" + stateGetNum("solar_axis_tolerance",SOLAR_AIM_TOLERANCE)
             + " maxStoppingTime=" + STEERINGMANAGER:MAXSTOPPINGTIME
             + " rollRange=" + STEERINGMANAGER:ROLLCONTROLANGLERANGE
             + " settling=" + STEERINGMANAGER:PITCHTS + "," + STEERINGMANAGER:YAWTS
@@ -89,7 +92,7 @@ GLOBAL FUNCTION solarDiagnosticSample {
         + " managerAim=" + managerFace + " managerTop=" + managerTop
         + " errors=" + STEERINGMANAGER:PITCHERROR + "," + STEERINGMANAGER:YAWERROR
             + "," + STEERINGMANAGER:ROLLERROR
-        + " command=" + SHIP:CONTROL:PITCH + "," + SHIP:CONTROL:YAW + "," + SHIP:CONTROL:ROLL
+        + " rawCommand=" + SHIP:CONTROL:PITCH + "," + SHIP:CONTROL:YAW + "," + SHIP:CONTROL:ROLL
         + " sas=" + SAS + " rcs=" + RCS + " suppress=" + CONFIG:SUPPRESSAUTOPILOT
         + " ipu=" + CONFIG:IPU + " warp=" + WARP + " warpSettled=" + KUNIVERSE:TIMEWARP:ISSETTLED
         + " flow=" + flow + " charge=" + shipPowerFraction()
@@ -97,6 +100,13 @@ GLOBAL FUNCTION solarDiagnosticSample {
         + " pilotThrottle=" + SHIP:CONTROL:PILOTMAINTHROTTLE.
     _solarTraceRow(row).
     SET solarTrace["LAST"] TO row.
+    IF status = "settled" {
+        solarTrace["MEASUREMENTS"]:ADD("STATS solar-diag measured ut=" + ROUND(TIME:SECONDS,3)
+            + " label=" + label + " axis=" + _solarVectorText(aShip)
+            + " actualSunAxis=" + _solarVectorText(facing:INVERSE * SUN:POSITION:NORMALIZED)
+            + " flow=" + flow + " err=" + ROUND(error,3)).
+        IF solarTrace["MEASUREMENTS"]:LENGTH > 24 { solarTrace["MEASUREMENTS"]:REMOVE(0). }
+    }
     PRINT "SOLAR " + label + " " + status + " err="
         + ROUND(error,1) + " rate=" + ROUND(angularVel:MAG,3) + " flow=" + ROUND(flow,3).
 }
@@ -122,6 +132,7 @@ GLOBAL FUNCTION solarDiagnosticExport {
     IF NOT (SHIP:THRUST <= 0.001) OR NOT (SHIP:CONTROL:MAINTHROTTLE <= 0)
             OR NOT (SHIP:CONTROL:PILOTMAINTHROTTLE <= 0) { RETURN FALSE. }
     LOCAL payload IS solarTrace["HEADER"] + CHAR(10).
+    FOR row IN solarTrace["MEASUREMENTS"] { SET payload TO payload + row + CHAR(10). }
     FOR row IN solarTrace["ROWS"] { SET payload TO payload + row + CHAR(10). }
     SET payload TO payload + solarTrace["SUMMARY"].
     LOCAL dest IS "".

@@ -1394,7 +1394,7 @@ once a second in RAM. Only pre-burn and post-cutoff rows are written, with no
 archive/state writes during positive commanded thrust. An alignment timeout
 cannot enter the powered loop.
 Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
-The routine suite passes 186 cases. Host-side timings vary with system load
+The routine suite passes 197 cases. Host-side timings vary with system load
 and are not a kOS flight timing guarantee; the flight plan records its own
 computation time.
 
@@ -1423,14 +1423,35 @@ measurable in daylight; existing eclipse/unreadable handling remains.
 The wider angular tolerance lets small drift settle sooner without changing
 the flow threshold. The steering lock continues following the Sun. These
 solar tolerances leave maneuver, landing and reentry pointing checks intact.
-Solar now uses one loop: validate the cached axis, otherwise measure the
-six panel-part axes and hold the best. There is no tracking probe or inferred
-panel-type branch. Each turn snapshots a complete target attitude; the live
-lock follows Sun motion without using the vessel's changing attitude as its
-reference. The six candidates use quarter-turn steps. Automatic discovery
-can finish at a settled candidate reaching 90% of a valid saved peak;
-forced searches measure all six. Alignment, flow, eclipse and cache safeguards
-remain. Solar temporarily uses `SOLAR_MIN_IPU` (2000 by default), restoring the
+Solar validates the cached axis first. If discovery is needed, it measures the
+six panel-part axes, then fine-tunes the winner. Four nearby tilts measure the
+flow gradient in two directions; a cosine estimate proposes a final direction,
+which is accepted only if its measured flow improves on the winner. This uses
+total panel flow, so multiple panel groups contribute. It is a bounded local
+refinement, not a guarantee of the global maximum on a shaded craft.
+
+| Refinement setting | Default | Meaning |
+|---|---|---|
+| `SOLAR_REFINE_STEP` | 15° | Probe tilt on either side of each tangent axis |
+| `SOLAR_REFINE_TOLERANCE` | 1° | Pointing tolerance for fine measurements and final return |
+| `SOLAR_REFINE_TIMEOUT` | 45 s | Total optional refinement budget; 0 disables it |
+| `SOLAR_REFINE_MIN_GAIN` | 0.002 | Require a measured gain above 0.2% before changing the winner |
+
+Fine turns allow at most 15 seconds each within that shared budget, reserving
+time for the final return to the best measured direction. A stalled refinement
+retains the coarse result. An older proven cache gets this refinement without
+repeating the six-axis discovery; later calls validate/reuse the learned axis.
+An axis without a valid saved flow benchmark goes straight to discovery.
+Fresh discoveries require a settled final return and positive daylight flow
+before replacing the cache.
+
+There is no tracking probe or inferred panel-type branch. Each turn snapshots
+a complete target attitude; the live lock follows Sun motion without using
+the vessel's changing attitude as its reference. The six candidates use
+quarter-turn steps. Automatic discovery can stop its coarse pass at a settled
+candidate reaching 90% of a valid saved peak; forced searches measure all six.
+Alignment, flow, eclipse and cache safeguards remain.
+Solar temporarily uses `SOLAR_MIN_IPU` (2000 by default), restoring the
 prior setting after success/failure or at the next boot after interruption.
 Boot-log archive copying is deferred during the search, so status messages
 do not each recopy the entire log.
@@ -1438,21 +1459,25 @@ do not each recopy the entire log.
 Automatic `solardiag_<craft>_<UTms>.log` reports go directly to
 `0:/logs/archive/_diagnostics/` after a quiet search. They contain five-second
 turn samples, actual and requested attitude vectors, the steering manager's
-target/errors, control commands, angular velocity, SAS/RCS/suppression,
-warp state, CPU budget, charge/flow, and accessible panel/wheel fields and CPU
-roles. Sampling writes no files and the recorder is bounded, with dropped-row
-counts. Exports require zero actual/raw/pilot thrust and time before an entry
-deadline. Offline reports use available local log space and the existing
+target/errors, raw control channels, angular velocity, SAS/RCS/suppression,
+warp state, CPU budget, charge/flow, accessible panel/wheel field names/types,
+and CPU roles. Raw control channels do not measure the steering manager's
+actual torque. A separate ledger retains up to 24 settled coarse/fine readings,
+including requested and actual Sun axes in craft coordinates, even if the
+64-row/24,000-character detail ring fills. Sampling writes no files; dropped
+detail-row counts are explicit. Exports require zero actual/raw/pilot thrust
+and time before an entry deadline. Offline reports use available local log space and the existing
 recursive boot sweep; otherwise details remain buffered until a safe export.
 The latest compact summary survives reboot. Run
 `RUNPATH("0:/cmd/solarreport.ks").` for that summary and the last verified file
 path, then send the report for analysis. No installed `boot.ks` replacement
-is needed. `SOLAR_DIAGNOSTICS=0` disables detailed recording.
+is needed. `SOLAR_DIAGNOSTICS=0` disables detailed recording. The supplied RO9
+flight and its limits are recorded in [the solar review](docs/SOLAR_SEARCH_REVIEW.md).
 
 `solarhold` and `orientForSolar` commands start a continuing hold only after
 a successful orientation. A failed scan cannot silently enter an indefinite
 hold at its last unsuccessful candidate.
-`STATS solar search/aim/cache/sample/hold` rows distinguish the search budget,
+`STATS solar search/aim/cache/sample/refine/hold` rows distinguish the search budget,
 each turn's start error, elapsed time, final error and rotation rate, flow
 samples, and the start/result of a maintenance re-aim. `alignment-timeout`
 means that turn exhausted its allowance; `search-deadline` means the shared

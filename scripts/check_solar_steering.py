@@ -76,7 +76,8 @@ def check_anchored_target():
 
 
 def check_finite_six_axis_search():
-    for normal in (Vec((1,0,0)),Vec((0,-1,0)),Vec((0,0,1))):
+    for normal in (Vec((1,0,0)),Vec((0,-1,0)),Vec((0,0,1)),Vec((.35,.9,-.25)).NORMALIZED,
+                   Vec((.55,.61,.57)).NORMALIZED):
         env,rest=attitude_environment()
         saved,attempts,finishes,unlocked,reading=rest
         env['SHIP'].FACING=rotation((.2,.8,.3),1.1)
@@ -112,11 +113,12 @@ def check_finite_six_axis_search():
             env['SHIP'].ANGULARVEL=Vec(axis*turn/dt)
         env.update(_solarAim=aim,fixture_wait=wait)
         env['_solarAimSettle']=lambda *args:ks.call('_solarAimSettle',env,*args)
+        env['_solarRefine']=lambda *args:ks.call('_solarRefine',env,*args)
         assert ks.call('orientForSolar',env,True,True,True)
-        assert len(attempts)==7 and finishes[-1][2]=='best of 6'
+        assert 12<=len(attempts)<=13 and finishes[-1][2]=='best of 6'
         assert env['shipSolarFlow']()>9.99 and env['TIME'].SECONDS<60
         assert env['CONFIG'].IPU==150
-    print('PASS: actual aim/settle/search source completes six axes plus best hold with finite 3D turns and independent panel mounts')
+    print('PASS: actual coarse/refine/hold source reaches >99.9% flow with finite 3D turns for axis-aligned, tilted and diagonal panel normals')
 
 
 def check_scope_and_warp_release():
@@ -231,7 +233,7 @@ def check_diagnostic_capture():
     env['solarDiagnosticSample']('fixed-2','turning',axis,Direction(np.eye(3)))
     row=env['solarTrace']['LAST']
     for field in ('label=fixed-2','axis=','rate=','face=','top=','want=','wantTop=',
-                  'managerAim=','managerTop=','errors=','command=','suppress=',
+                  'managerAim=','managerTop=','errors=','rawCommand=','suppress=',
                   'ipu=','warpSettled=','charge=','flow=','rawThrottle='):
         assert field in row,field
     assert not ops and not saved,'sampling cannot perform disk I/O'
@@ -264,7 +266,7 @@ def check_diagnostic_capture():
         assert current['solarDiagnosticExport'](0)
         dest=state['last_solar_report']
         assert dest.startswith('0:/logs/archive/_diagnostics/' if linked else '1:/run/logs/')
-        assert all(item in files[dest] for item in ('schema=1','algorithm=anchored-six-axis',
+        assert all(item in files[dest] for item in ('schema=2','algorithm=anchored-six-axis-refine',
                    'CPU tag=core','status=alignment-timeout','complete','success=False'))
         assert any(op=='read' for op,_ in calls) and not current['solarTrace']['PENDING']
     current,state,files,calls=diagnostic_fixture()
@@ -294,8 +296,36 @@ def check_diagnostic_capture():
     print('PASS: recorder captures target/control/CPU/power evidence without sampling I/O; bounded data and summary survive failure; quiet verified archive/offline exports respect deadline, thrust and space')
 
 
+def check_measurement_ledger():
+    env,saved,disk,ops=diagnostic_fixture()
+    axis=Vec((1,0,0))
+    env['solarDiagnosticSample']('fixed-5','settled',axis,Direction(np.eye(3)))
+    measurement=env['solarTrace']['MEASUREMENTS'][0]
+    assert 'label=fixed-5' in measurement and 'actualSunAxis=1.0,0.0,0.0' in measurement
+    for _ in range(400):env['_solarTraceRow'](Text('x'*1000))
+    trace=env['solarTrace']
+    assert all('label=fixed-5' not in row for row in trace['ROWS'])
+    assert trace['MEASUREMENTS']==[measurement] and not ops and not saved
+    for index in range(30):
+        env['solarDiagnosticSample']('refine-'+str(index),'settled',axis,Direction(np.eye(3)))
+    assert len(trace['MEASUREMENTS'])==24 and 'label=refine-6 ' in trace['MEASUREMENTS'][0]
+    assert 'label=refine-29 ' in trace['MEASUREMENTS'][-1]
+    retained=trace['MEASUREMENTS'][0]
+    for _ in range(400):env['_solarTraceRow'](Text('x'*1000))
+    assert retained in trace['MEASUREMENTS'] and all('refine-6 ' not in row for row in trace['ROWS'])
+    assert not ops,'measurement ledger remains in RAM until quiet export'
+    env['solarDiagnosticFinish'](True,0)
+    env['HOMECONNECTION'].ISCONNECTED=True
+    assert env['solarDiagnosticExport'](0)
+    report=disk[saved['last_solar_report']]
+    assert retained in report and 'actualSunAxis=' in report
+    assert report.count('STATS solar-diag measured ')==24
+    print('PASS: independent 24-measurement ledger preserves coarse/fine comparisons through detail-ring eviction and verified export without sampling I/O')
+
+
 if __name__=='__main__':
     check_anchored_target()
     check_finite_six_axis_search()
     check_scope_and_warp_release()
     check_diagnostic_capture()
+    check_measurement_ledger()
