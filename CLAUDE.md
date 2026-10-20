@@ -290,6 +290,11 @@ Looks like Python/JS; is neither.
   actual KAC TIME as well as saved soi_alarm_ut before reusing an ID: the
   old ensureSoiAlarm fast path bypassed generic expiry checks. Arrival waits
   remove SOI alarms after crossing; no-KAC paths still poll the clock/body.
+  Both solver modes must share pre-SOI node creation: settle warp, cap the
+  configured node epoch at native entry minus SOI_BUFFER_TIME minus1s,
+  require BPLANE_EXISTING_NODE_MIN_ETA lead, then recheck lead/solved entry
+  before admission. Do not accept the node's current target-body patch as
+  a workaround: that silently changes the correction frame and entry epoch.
 - Duna/Ike mental model: `duna_ike_setup` is mission glue, not a generic
   transfer dependency. It performs Duna aerocapture setup, writes the next
   Ike/Duna-entry leg as a local mission profile, and clears reload/band cache
@@ -302,6 +307,18 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Operator's UT1865900 REFINE log has a measurable native Mun patch with
+  entry1866063.7, then existing-patch-unmeasurable. The old300s node lead
+  crosses SOI with only163s left; findArrivalPatch walks NEXT patches and
+  cannot find Mun when the node already starts there. Shared node creation
+  now bounds both full/Pe-only seeds before entry with the existing120s
+  buffer plus1s. Reported epoch permits about41.8s lead; post-solve lead and
+  retimed entry still must pass, otherwise resident timing hold. The normal
+  final900s checkpoint and all size/plane/fuel/alarm safeguards remain.
+  Routine234 source checks across38 scripts pass, including the actual
+  patch walker with modeled node frames, both seed paths, warp settlement,
+  abort and post-solve expiry. No native KSP propagation/alignment proof.
+  Why this phase entered only163s before SOI is not established by the log.
   Operator asks whether retry changes disabled SOI alarms. They remained in
   COAST_2HALF/waitForSOI but were absent during earlier long B-plane waits.
   Current fix schedules the independent native SOI alarm before B-plane and

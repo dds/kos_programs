@@ -107,6 +107,9 @@ def check_polar_solver_and_budget():
         return dict(bt=point[0],br=point[1],pe=pe,plane=plane)
     target=dict(bt=desired[0],br=desired[1],offPlane=0)
     env.update(NODE=Node,TIME=NS(SECONDS=1000),BPLANE_LEAD=300,
+               WARP=0,SHIP=NS(BODY=NS(NAME='Kerbin')),SOI_BUFFER_TIME=120,
+               BPLANE_EXISTING_NODE_MIN_ETA=30,
+               findArrivalPatch=lambda *_:dict(entryUt=11000),
                BPLANE_PE_TOL=2000,BPLANE_ANG_TOL=.2,BPLANE_REQUIRE_PLANE=1,
                BPLANE_REVIEW_UNCONVERGED=0,BPLANE_OFFPLANE_TOL=10,
                fixture_iterations=range(int(re.search(r'LOCAL MAX_NEWTON_ITER\s+IS (\d+)',SOURCE)[1])),
@@ -117,6 +120,7 @@ def check_polar_solver_and_budget():
                _bplaneFallbackSearch=lambda *_:False,
                _bplaneHoldCorrection=holds.append,
                _bplaneQueueMidcourseRetry=lambda reason:decisions.append(reason) or False)
+    env['_bplaneCreateCorrectionNode']=lambda *args:ks.call('_bplaneCreateCorrectionNode',env,*args)
     for name in ('_bplaneCorridorOk','_bplanePlanScore','_bplanePlaneFeasible'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
     assert 8000<measure(Node(0,0,0,0),moon)['pe']<9000
@@ -141,8 +145,9 @@ def check_polar_solver_and_budget():
     gate=function_body(SOURCE,'bplaneCorrectionAllowed')
     assert 'required-arrival-corridor' in gate and 'correction-plus-capture-budget' in gate
     env['ABORT']=True
+    before=len(nodes)
     assert ks.call('_bplanePlanFullAttempt',env,moon,15000,90,-1,100,'',True)==0
-    assert nodes[-1] in removed
+    assert len(nodes)==before
     print('PASS: full source solver on a synthetic polar encounter rejects a saturated 10 m/s candidate and converges within 100 m/s; RO9 keeps finite caps, required plane, arrival/capture guards and 900 m/s after-capture margin')
 
 

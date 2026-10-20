@@ -32,14 +32,17 @@ def solve(response, cap, tolerance=2000, public=False):
     nodes, holds = [], []
     def patch(nd, target):
         pe = response(nd or Node(0,0,0,0))
-        return 0 if pe is None else dict(patch=NS(PERIAPSIS=pe))
+        return 0 if pe is None else dict(patch=NS(PERIAPSIS=pe),entryUt=11000)
     env = dict(NODE=Node, TIME=NS(SECONDS=1000), BPLANE_LEAD=300,
+               WARP=0,SHIP=NS(BODY=NS(NAME='Kerbin')),SOI_BUFFER_TIME=120,
+               BPLANE_EXISTING_NODE_MIN_ETA=30,
                BPLANE_PE_TOL=tolerance, FD_STEP=.05, ABORT=False, LIST=lambda *xs: KList(xs),
                SQRT=math.sqrt, ROUND=round, findArrivalPatch=patch,
                fixture_add=nodes.append, fixture_wait=lambda _: None,
                _bplaneNodeAxisGet=lambda nd, axis: getattr(nd,axis),
                _bplaneNodeAxisSet=lambda nd, axis, value: setattr(nd,axis,value),
                _bplaneHoldCorrection=holds.append)
+    env['_bplaneCreateCorrectionNode']=lambda *args:ks.call('_bplaneCreateCorrectionNode',env,*args)
     if public:
         env.update(MIN_EXEC_DV=float(re.search(r'LOCAL MIN_EXEC_DV\s+IS ([0-9.]+)\.', SOURCE)[1]),
                    BPLANE_PE_ONLY=1, BPLANE_REQUIRE_PLANE=0, BPLANE_DV_CAP=cap,

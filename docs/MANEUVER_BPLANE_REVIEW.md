@@ -5,6 +5,45 @@ evidence. The newest continuation/clearance changes have offline checks and
 await flight testing. No saved log in this checkout establishes which defect
 caused a particular reported overburn.
 
+## Correction node beyond SOI — 2026-10-20
+
+The operator's REFINE_BPLANE log at UT 1865900 reports a valid raw Mun
+encounter at UT 1866063.7, then immediately holds with
+`existing-patch-unmeasurable`. The old full solver creates a node 300 seconds
+ahead despite only about 163 seconds remaining to entry. That puts the
+node's orbit in the Mun frame. `findArrivalPatch` walks subsequent patches,
+so it finds the raw Mun encounter but cannot find another Mun patch after
+that node. This timing/frame mismatch explains the apparently contradictory
+measurements in the supplied log. It was not addressed by the preceding
+SOI-alarm fix.
+
+Both full and Pe-only planners now use the same node factory. It settles
+warp, rereads native time/entry, then caps the node at entry minus the
+existing 120-second SOI buffer minus a one-second update allowance. It must
+retain at least the existing 30-second minimum node lead. After solving,
+admission rechecks remaining lead and the predicted entry gap. The reported
+case seeds a node about 41.8 seconds ahead; if solving uses too much of that
+window or shifts entry too early, it holds with
+`insufficient-pre-soi-burn-lead`, rather than approving an unsafe late burn.
+Invalid entry epochs and already-entered target bodies have distinct holds.
+`STATS bplane node-time` records the chosen epoch/lead, and
+`STATS bplane timing` records the final lead, entry and required margins.
+
+Normal early planning retains the configured 300-second lead. The final
+900-second checkpoint, independent SOI alarms, shared 0.3 m/s execution floor,
+required plane, fuel and capture guards remain unchanged. Accepting the
+node's current Mun patch would conceal a different burn frame and an
+incorrect SOI entry epoch; the patch walker is deliberately unchanged.
+The log does not establish why refinement entered this late. A usable late
+node epoch alone does not prove enough time remains to solve and align.
+
+Routine validation: 234 cases across 38 scripts. New fixtures execute the
+actual patch walker and planner seed source against modeled node frames:
+the old epoch loses its node-relative encounter; both new modes retain it.
+They also cover short/invalid/already-entered windows, warp settlement,
+abort and post-solve expiry/entry retiming. These are source/control-flow
+checks, not native KSP propagation, kOS compilation or attitude flight proof.
+
 ## SOI alarm coverage — 2026-10-20
 
 SOI alarms were still enabled in COAST_2HALF and waitForSOI, but an early

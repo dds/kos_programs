@@ -621,6 +621,18 @@ GLOBAL FUNCTION bplaneCorrectionAllowed {
     IF planned = 0 {
         _bplaneHoldCorrection("planned-encounter-missing",missionOwned). RETURN FALSE.
     }
+    // Recheck after solving: a trial burn can shift entry, and planning
+    // itself consumes some of the remaining alignment time.
+    mLog("STATS bplane timing nodeUt=" + nd:TIME
+        + " lead=" + (nd:TIME-TIME:SECONDS)
+        + " entryUt=" + planned["entryUt"]
+        + " soiGap=" + (planned["entryUt"]-nd:TIME)
+        + " minLead=" + BPLANE_EXISTING_NODE_MIN_ETA
+        + " minSoiGap=" + SOI_BUFFER_TIME).
+    IF NOT (nd:TIME-TIME:SECONDS >= BPLANE_EXISTING_NODE_MIN_ETA
+            AND planned["entryUt"]-nd:TIME > SOI_BUFFER_TIME) {
+        _bplaneHoldCorrection("insufficient-pre-soi-burn-lead",missionOwned). RETURN FALSE.
+    }
     IF BPLANE_REQUIRE_PLANE <> 0 AND checkCorridor {
         LOCAL patch IS planned["patch"].
         LOCAL planeErr IS _bplaneElementPlaneError(
@@ -1144,6 +1156,40 @@ LOCAL FUNCTION _acquireEncounter {
     RETURN measureArrival(nd, targetBody) <> 0.
 }
 
+// Both solver modes must put their correction in the pre-arrival frame.
+LOCAL FUNCTION _bplaneCreateCorrectionNode {
+    PARAMETER targetBody.
+    PARAMETER missionOwned IS FALSE.
+    IF ABORT { RETURN 0. }
+    IF WARP > 0 {
+        SET WARP TO 0.
+        WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    }
+    IF ABORT { RETURN 0. }
+    IF SHIP:BODY = targetBody {
+        _bplaneHoldCorrection("entered-target-before-correction-plan",missionOwned). RETURN 0.
+    }
+    LOCAL nodeUt IS TIME:SECONDS+BPLANE_LEAD.
+    LOCAL hit IS findArrivalPatch(0,targetBody).
+    IF hit <> 0 {
+        IF NOT (hit["entryUt"] > TIME:SECONDS AND hit["entryUt"] < 1e30) {
+            _bplaneHoldCorrection("invalid-arrival-time",missionOwned). RETURN 0.
+        }
+        // Keep the node in the current body's frame, including late boots.
+        // Leave the existing SOI buffer plus a physics-update allowance.
+        SET nodeUt TO MIN(nodeUt,hit["entryUt"]-SOI_BUFFER_TIME-1).
+    }
+    LOCAL lead IS nodeUt-TIME:SECONDS.
+    mLog("STATS bplane node-time ut=" + nodeUt + " lead=" + lead
+        + " configuredLead=" + BPLANE_LEAD + " patch=" + (hit <> 0)).
+    IF NOT (lead >= MAX(1,BPLANE_EXISTING_NODE_MIN_ETA) AND lead < 1e30) {
+        _bplaneHoldCorrection("insufficient-pre-soi-burn-lead",missionOwned). RETURN 0.
+    }
+    LOCAL nd IS NODE(nodeUt,0,0,0).
+    ADD nd.
+    RETURN nd.
+}
+
 // A single Pe constraint needs a scalar solve, not the plane solver's
 // two B-vector constraints. Differentiate KSP's actual patch elements;
 // a minimum-length step may use any axis when no arrival plane is requested.
@@ -1151,11 +1197,12 @@ LOCAL FUNCTION _bplanePlanPeOnly {
     PARAMETER targetBody.
     PARAMETER wantPe.
     PARAMETER dvCap.
+    PARAMETER missionOwned IS FALSE.
     IF findArrivalPatch(0, targetBody) = 0 {
         _bplaneHoldCorrection("pe-recovery-encounter-missing"). RETURN 0.
     }
-    LOCAL nd IS NODE(TIME:SECONDS + BPLANE_LEAD, 0, 0, 0).
-    ADD nd.
+    LOCAL nd IS _bplaneCreateCorrectionNode(targetBody,missionOwned).
+    IF nd = 0 { RETURN 0. }
     WAIT 0.1.
     LOCAL iteration IS 0.
     mLog("STATS bplane pe-only start targetPeKm=" + (wantPe / 1000)
@@ -1314,7 +1361,7 @@ GLOBAL FUNCTION planBplaneCorrection {
 
         LOCAL nd IS 0.
         IF BPLANE_PE_ONLY <> 0 {
-            SET nd TO _bplanePlanPeOnly(targetBody, wantPe, dvCap).
+            SET nd TO _bplanePlanPeOnly(targetBody, wantPe, dvCap,allowMidcourseRetry).
         } ELSE {
             SET nd TO _bplanePlanFullCorrection(targetBody, wantPe, wantInc, wantLan,
                 dvCap, pristineLog, allowMidcourseRetry).
@@ -1361,9 +1408,8 @@ LOCAL FUNCTION _bplanePlanFullAttempt {
     PARAMETER allowMidcourseRetry IS FALSE.
     LOCAL peTol IS BPLANE_PE_TOL.
     LOCAL angTol IS BPLANE_ANG_TOL.
-    LOCAL lead IS BPLANE_LEAD.
-    LOCAL nd IS NODE(TIME:SECONDS + lead, 0, 0, 0).
-    ADD nd.
+    LOCAL nd IS _bplaneCreateCorrectionNode(targetBody,allowMidcourseRetry).
+    IF nd = 0 { RETURN 0. }
     bplaneResetWarnings().
     WAIT 0.02.
 

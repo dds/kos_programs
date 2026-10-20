@@ -463,11 +463,11 @@ def check_retry_deadline_resident_hold():
 
 
 def check_resident_admission_guards():
-    for reason in ('planned-encounter-missing','required-arrival-corridor','correction-budget',
+    for reason in ('planned-encounter-missing','insufficient-pre-soi-burn-lead','required-arrival-corridor','correction-budget',
                    'correction-plus-capture-budget','arrival-time-shift','capture-cost-increase'):
         env,saved,events,alarms,moon,_=retry_environment()
         saved['phase']='REFINE_BPLANE'
-        node=NS(DELTAV=NS(MAG=20))
+        node=NS(DELTAV=NS(MAG=20),TIME=1300)
         original=dict(entryUt=11000,patch=NS(PERIAPSIS=15000,INCLINATION=90,LAN=0))
         planned=dict(entryUt=11000,patch=NS(PERIAPSIS=15000,INCLINATION=90,LAN=0))
         env['SHIP'].DELTAV=NS(VACUUM=2019.1)
@@ -478,6 +478,7 @@ def check_resident_admission_guards():
                    _bplaneElementPlaneError=lambda *_:0,
                    bplaneCaptureCost=lambda *_:280)
         if reason=='planned-encounter-missing':planned=0
+        if reason=='insufficient-pre-soi-burn-lead':node.TIME=10900
         if reason=='required-arrival-corridor':planned['patch'].PERIAPSIS=27000
         if reason=='correction-budget':node.DELTAV.MAG=101
         if reason=='correction-plus-capture-budget':env['SHIP'].DELTAV.VACUUM=1199
@@ -504,7 +505,7 @@ def check_resident_admission_guards():
     env.update(HASNODE=True,maneuverBurnInterrupted=lambda:True)
     env['_bplaneHoldCorrection']('correction-execution-failed',True)
     assert env['HASNODE'] and env['phaseShouldYield'] and events[-1][0]=='yield'
-    print('PASS: all six mission admission rejections retain their limits in resident 1x holds, charge no budget and never advance; interrupted burns still retain their node and require explicit review')
+    print('PASS: seven mission admission rejections retain timing/fuel/corridor limits in resident 1x holds, charge no budget and never advance; interrupted burns still retain their node and require explicit review')
 
 
 def parent_ellipse(env, pe=42600, ap=11370800, eccentric_angle=math.pi/3):

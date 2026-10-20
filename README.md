@@ -699,6 +699,14 @@ predictions do not retime it. Cleaning a retry alarm leaves the SOI alarm
 intact, and the normal arrival wait removes it after SOI entry. Cached
 alarms must still be future-dated and match the actual requested time.
 `STATS soi-alarm` records the target, absolute UT, ETA and alarm ID.
+Both B-plane solver modes also bound the node time to stay before native
+SOI entry, retaining the 120-second SOI buffer and at least 30 seconds of
+node lead. A late boot must not place a default 300-second-ahead correction
+inside the target body's patch. The planner settles warp before choosing
+that time, then rechecks lead and predicted entry after solving.
+`STATS bplane node-time` and `STATS bplane timing` record these margins;
+an exhausted window holds with `insufficient-pre-soi-burn-lead`. A late
+window may still be too short to solve, align and execute safely.
 If the final attempt still fails, no safe
 retry window remains, or a mission correction violates its admission limits,
 `ARRIVAL BLOCKED` stays resident at 1x for intervention. It does not fly the
