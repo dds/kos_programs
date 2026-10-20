@@ -275,7 +275,12 @@ Looks like Python/JS; is neither.
   retry: early BPLANE hands to midpoint; REFINE waits/replans later. Do not
   turn that skip into finished-outside-required-corridor or waive the plane.
   Later full-solver failures use the same solar/clock wait from coast_wait,
-  then replan within the pre-SOI/burn margin. Mission admission/window failures
+  then one final check at entry-BPLANE_FINAL_REFINE_LEAD (default900s), bounded
+  by SOI/burn margins. Do not repeatedly halve the remaining time: the operator
+  reports4-5 wakes on one Mun trip. Persist waiting/completed checkpoint bound
+  to mission/launch/phase/target; boot waits BEFORE a full solve, and ETA jitter
+  cannot recreate a consumed final check. Explicit replan/flown corrections
+  clear it and its alarm. Mission admission/window failures
   stay resident at 1x for intervention; previews/explicit review/interrupted
   burns retain their manual policy. Never accept an unconverged required
   plane just to keep the phase machine moving.
@@ -291,6 +296,16 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Operator reports overly frequent B-plane retries (4-5 during a Mun trip).
+  Reposted log is the older UT1853933 terminal hold and has no new wake rows;
+  source confirms the latest scheduler waits half the remaining safe window,
+  which yields progressively shorter intervals. Current policy retains the
+  normal midpoint then one final check900s before SOI, preserving larger
+  required burn/SOI margins. Wait/completed intent survives reboot, with
+  stale mission/target/alarm cleanup and no spent-fuel reset. Routine225
+  source cases cover bounded final cadence, persisted pre-solver waits,
+  overdue/retimed checkpoints, ETA jitter and explicit replan/burn cleanup.
+  Flight timing/adequate final correction lead still need operator validation.
   Operator reports the three-axis fix flew a36.3m/s correction successfully:
   UT1853929 residual0.05m/s, parent Kerbin Pe42.6km/Ap11370.8km, then actual
   Mun Pe13.6km/inc90.21deg. A converged0.09506m/s trim was skipped correctly

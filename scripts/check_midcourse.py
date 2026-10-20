@@ -69,7 +69,7 @@ def environment():
     for name in ('midcourseRefineUt','midcourseClearReviewAlarm','_transferArrivalUt',
                  '_bplaneScheduleHoldReview','enterSolarCoast','_coastHealthPoll','coastHealthCheck',
                  '_bplaneHasMidcourseRefinement','_bplaneParentClearUntil','_bplaneCoastEncounter','_bplaneRetryEncounter','_bplaneQueueMidcourseRetry',
-                 '_bplaneHandoffMidcourseRetry','_bplaneHoldCorrection','_bplaneWaitBeforeSolverRetry'):
+                 '_bplaneHandoffMidcourseRetry','_bplaneHoldCorrection','bplaneClearRetryWait','_bplaneRetryWaitPending','_bplaneWaitBeforeSolverRetry'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
     def resident(reason):
         # Run in the shared globals so the operator's ABORT write is visible
@@ -419,13 +419,14 @@ def check_later_live_solver_retries():
         node=NS(DELTAV=NS(MAG=20))
         def attempt(*args):
             attempts.append((env['TIME'].SECONDS,args[4]))
-            return -1 if len(attempts)<3 else node
+            return -1 if len(attempts)<2 else node
         env['_bplanePlanFullAttempt']=attempt
         caps=[]
         env['_bplaneTrimCap']=lambda target,cap:caps.append(cap) or cap
         result=env['_bplanePlanFullCorrection'](moon,15000,90,-1,30,'',True)
-        assert result is node and len(attempts)==3 and caps==[30]*3
-        assert attempts[0][0]<attempts[1][0]<attempts[2][0]<hit['entryUt']-env['BPLANE_LEAD']
+        assert result is node and len(attempts)==2 and caps==[30]*2
+        assert attempts[1][0]==hit['entryUt']-env['BPLANE_FINAL_REFINE_LEAD']
+        assert attempts[0][0]<attempts[1][0]<hit['entryUt']-env['BPLANE_LEAD']
         assert len(ticks)>500 and not alarms and saved['phase']=='REFINE_BPLANE'
         assert not env['phaseShouldYield'] and not any(row[0]=='yield' for row in events)
     # Explicit abort stops the shared wait before any solar/warp work.
@@ -613,7 +614,7 @@ def check_small_refinement_waits_for_useful_burn():
         env,saved,events,alarms,moon,_=retry_environment()
         saved['phase']='REFINE_BPLANE'
         env.update(BPLANE_PE_ONLY=mode,BPLANE_REQUIRE_PLANE=1-mode)
-        candidates=[NS(DELTAV=NS(MAG=dv)) for dv in (.095,.2,.4)]
+        candidates=[NS(DELTAV=NS(MAG=dv)) for dv in (.095,.4)]
         planned,removed=[],[]
         def solve(*_):
             candidate=candidates[len(planned)]
@@ -626,11 +627,106 @@ def check_small_refinement_waits_for_useful_burn():
         env['enterSolarCoast']=lambda *_:1
         env['waitUntilOrSOI']=lambda *args:ks.call('waitUntilOrSOI',env,*args)
         result=ks.call('planBplaneCorrection',env,moon,15000,-1 if mode else 90,-1,100,'',True)
-        assert result is candidates[2] and removed==candidates[:2]
-        assert planned[0][0]<planned[1][0]<planned[2][0]
+        assert result is candidates[1] and removed==candidates[:1]
+        assert planned[0][0]<planned[1][0]==11000-env['BPLANE_FINAL_REFINE_LEAD']
         assert saved['phase']=='REFINE_BPLANE' and not env['phaseShouldYield'] and not alarms
         assert env['MIN_EXEC_DV']==.3 and not any(row[0]=='yield' for row in events)
     print('PASS: both solver modes keep tiny midpoint refinements live and remeasure later until a useful burn is available; rejected nodes are removed and the shared 0.3 m/s floor stays unchanged')
+
+
+def check_retry_cadence_has_one_final_check():
+    for kac in (True,False):
+        for configured_lead in (900,0):
+            env,saved,events,alarms,moon,hit=retry_environment()
+            saved['phase']='REFINE_BPLANE'
+            env['ADDONS'].KAC.AVAILABLE=kac
+            env['BPLANE_FINAL_REFINE_LEAD']=configured_lead
+            env['enterSolarCoast']=lambda *_:1
+            env['waitUntilOrSOI']=lambda *args:ks.call('waitUntilOrSOI',env,*args)
+            attempts=[]
+            def attempt(*_):
+                attempts.append(env['TIME'].SECONDS)
+                return -1
+            env['_bplanePlanFullAttempt']=attempt
+            ordinary_wait=env['fixture_wait']
+            def wait(dt):
+                if env.get('reason')=='final-refinement-checkpoint-used':env['ABORT']=True
+                else:ordinary_wait(dt)
+            env['fixture_wait']=wait
+            result=env['_bplanePlanFullCorrection'](moon,15000,90,-1,30,'',True)
+            required_lead=env['SOI_BUFFER_TIME']+env['BPLANE_LEAD']+env['MIDCOURSE_REFINE_MARGIN']
+            final_ut=hit['entryUt']-max(configured_lead,required_lead)
+            assert result==0 and attempts==[1000,final_ut]
+            assert not alarms and not env['phaseShouldYield'] and env['WARP']==0
+            assert len([row for row in events if row[0]=='alarm'])==1
+            assert not saved['bplane_retry_wait']['waiting']
+            assert 'bplane_budget_spent' not in saved and saved['phase']=='REFINE_BPLANE'
+    print('PASS: a repeated failed solve gets one final wake, not a geometric series; default is 15min before SOI, short lead settings stay bounded by burn/SOI margins, and KAC absence cannot change cadence')
+
+
+class SimulatedReboot(Exception):pass
+
+
+def checkpoint_before_reboot():
+    env,saved,events,alarms,moon,hit=retry_environment()
+    saved['phase']='REFINE_BPLANE'
+    def reboot(*_):raise SimulatedReboot()
+    env['enterSolarCoast']=reboot
+    try:env['_bplaneWaitBeforeSolverRetry'](moon)
+    except SimulatedReboot:pass
+    else:raise AssertionError('fixture did not reach the persisted wait')
+    assert saved['bplane_retry_wait']['wakeUt']==10100
+    assert saved['bplane_retry_wait']['waiting']
+    return env,saved,events,alarms,moon,hit
+
+
+def check_retry_wait_resumes_before_solver():
+    for resumed_at,entry_ut,wake_ut in ((2500,11000,10100),(10080,11000,10100),
+                                       (10400,11000,10100),(2500,10000,9100)):
+        env,saved,events,alarms,moon,hit=checkpoint_before_reboot()
+        env['TIME'].SECONDS=resumed_at
+        hit['entryUt']=entry_ut
+        env['SHIP'].ORBIT.NEXTPATCHETA=hit['entryUt']-resumed_at
+        env['enterSolarCoast']=lambda *_:1
+        env['waitUntilOrSOI']=lambda *args:ks.call('waitUntilOrSOI',env,*args)
+        solves=[]
+        node=NS(DELTAV=NS(MAG=1))
+        env['_bplanePlanFullCorrection']=lambda *_:solves.append(env['TIME'].SECONDS) or node
+        env['_bplaneCorrectionAboveMinimum']=lambda nd:ks.call('_bplaneCorrectionAboveMinimum',env,nd)
+        env['maneuverUiArchiveLog']=lambda *_:None
+        result=ks.call('planBplaneCorrection',env,moon,15000,90,-1,100,'',True)
+        assert result is node and solves==[max(resumed_at,wake_ut)]
+        assert not alarms and not saved['bplane_retry_wait']['waiting']
+        # Later native entry jitter must not manufacture a fresh retry.
+        hit['entryUt']+=120
+        waits=[]
+        def stop(dt):
+            waits.append(dt)
+            env['ABORT']=True
+        env['fixture_wait']=stop
+        assert not env['_bplaneWaitBeforeSolverRetry'](moon)
+        assert waits==[1] and len(solves)==1 and not alarms
+        assert env['reason']=='final-refinement-checkpoint-used'
+    print('PASS: reboot during final coast waits before any solve, a nearly due wake stays anchored, overdue wakes solve immediately, and entry-ETA jitter cannot create another final check')
+
+
+def check_retry_wait_binding_and_cleanup():
+    for key,value in (('mission_id','other'),('launch_time',123),('phase','BPLANE')):
+        env,saved,_,alarms,moon,_=checkpoint_before_reboot()
+        saved[key]=value
+        assert not env['_bplaneRetryWaitPending'](moon)
+        assert 'bplane_retry_wait' not in saved and not alarms
+    env,saved,_,alarms,moon,_=checkpoint_before_reboot()
+    assert not env['_bplaneRetryWaitPending'](NS(NAME='Minmus'))
+    assert 'bplane_retry_wait' not in saved and not alarms
+    env,saved,_,alarms,_,_=checkpoint_before_reboot()
+    saved['bplane_budget_spent']=36.3
+    ks.call('_bplaneClearCoastTimes',env)
+    assert 'bplane_retry_wait' not in saved and not alarms and saved['bplane_budget_spent']==36.3
+    command=function_body((ROOT/'cmd/arrival.ks').read_text(),'_arrivalCommand')
+    replan=command.split('IF action = "replan" {',1)[1].split('LOCAL saved IS',1)[0]
+    assert 'bplaneClearRetryWait()' in replan
+    print('PASS: final checkpoint is bound to mission/launch/phase/target; stale/replanned/flown contexts clear its alarm without refunding spent fuel')
 
 
 if __name__=='__main__':
@@ -651,3 +747,6 @@ if __name__=='__main__':
     check_parent_atmosphere_timing()
     check_post_burn_tiny_correction_handoff()
     check_small_refinement_waits_for_useful_burn()
+    check_retry_cadence_has_one_final_check()
+    check_retry_wait_resumes_before_solver()
+    check_retry_wait_binding_and_cleanup()

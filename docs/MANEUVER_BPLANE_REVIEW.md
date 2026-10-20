@@ -5,7 +5,33 @@ evidence. The newest continuation/clearance changes have offline checks and
 await flight testing. No saved log in this checkout establishes which defect
 caused a particular reported overburn.
 
-## Post-burn minimum and coast timing — 2026-10-20
+## Retry cadence — 2026-10-20
+
+The operator reports four or five B-plane wake attempts during one Mun trip.
+The reposted log is the older terminal hold and contains no recent wake
+timestamps; source inspection shows the retry scheduler halves the remaining
+safe window on each failure, creating progressively shorter gaps.
+
+Keep the normal midpoint refinement, then one final full solve at
+`entryUt - BPLANE_FINAL_REFINE_LEAD` (default 900 seconds). The existing
+SOI buffer, burn lead and planning margin bound the latest allowable wake.
+Pending and consumed checkpoint state is bound to mission, launch, phase
+and target. A reboot during the coast waits before another full solve;
+an overdue safe checkpoint runs now, while earlier native arrival timing
+moves it earlier. Later ETA jitter cannot create a second final check.
+Explicit arrival replan or a flown correction clears the checkpoint/alarm
+without refunding fuel. Solar maintenance, battery checks, no-KAC polling,
+the execution floor, arrival corridor and all fuel gates remain unchanged.
+If the final solve still fails, the existing resident intervention hold
+remains; the scheduler does not create progressively shorter retry waits.
+
+Routine validation: 225 source checks across 36 scripts, including one final
+wake for persistent failure, default/short configured leads, KAC absence,
+reboot before/near/after the wake, retimed arrival, ETA jitter, stale intent
+and alarm cleanup. These check scheduling/control flow; actual final-burn
+timing remains to be tested in flight.
+
+## Post-burn minimum and coast timing — earlier 2026-10-20
 
 The next flight log confirms the three-axis correction worked: a 36.3 m/s
 burn ended with 0.05 m/s residual. The actual arrival became Mun Pe 13.6 km,

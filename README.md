@@ -682,9 +682,17 @@ Converged corrections at or below the shared 0.3 m/s execution minimum are
 removed and deferred through the same live retry path. A small residual
 outside the strict plane tolerance therefore stays assigned to midcourse;
 skipping a tiny early burn does not approve capture or abandon refinement.
-Later unconverged mission solves also stay running: a named `B-plane retry`
-alarm and the shared solar/clock wait schedule another attempt before the
-SOI/burn safety margin. Without KAC, the clock loop still wakes. If no safe
+After a failed midpoint refinement, the next full solve is a single final
+check, normally **15 minutes before SOI entry** (`BPLANE_FINAL_REFINE_LEAD=900`).
+The former policy repeatedly halved the remaining window and produced
+shorter, unnecessary retry intervals. The final wake stays outside the
+existing SOI/burn safety margin even if a shorter lead is configured.
+A named `B-plane retry` alarm and the shared solar/clock loop keep the
+mission running. The pending wake and completed checkpoint survive reboot;
+small encounter-ETA changes cannot manufacture another final check.
+Explicit arrival `replan` or a flown correction clears that checkpoint.
+Without KAC, the clock loop still wakes; battery/warp health checks remain.
+If the final attempt still fails, no safe
 retry window remains, or a mission correction violates its admission limits,
 `ARRIVAL BLOCKED` stays resident at 1x for intervention. It does not fly the
 rejected node or advance to capture. ABORT/terminal interruption remains

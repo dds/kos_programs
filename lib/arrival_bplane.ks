@@ -89,6 +89,8 @@ GLOBAL BPLANE_CAPTURE_MARGIN IS -1.
 GLOBAL BPLANE_REQUIRE_PLANE IS 0.
 GLOBAL BPLANE_REVIEW_UNCONVERGED IS 0.
 GLOBAL BPLANE_REVIEW_MIN_PE IS 10000.
+// One final refinement after the normal midpoint, with time to align/burn.
+GLOBAL BPLANE_FINAL_REFINE_LEAD IS 900.
 
 
 LOCAL DEFAULT_DV_CAP   IS 150.
@@ -341,37 +343,90 @@ LOCAL FUNCTION _bplaneQueueMidcourseRetry {
     RETURN TRUE.
 }
 
+GLOBAL FUNCTION bplaneClearRetryWait {
+    PARAMETER keepCheckpoint IS FALSE.
+    LOCAL pending IS stateGet("bplane_retry_wait",LEXICON()).
+    IF pending:LENGTH > 0 AND ADDONS:KAC:AVAILABLE {
+        IF pending["alarm"] <> "" { DELETEALARM(pending["alarm"]). }
+    }
+    IF keepCheckpoint AND pending:LENGTH > 0 {
+        SET pending["waiting"] TO FALSE.
+        SET pending["alarm"] TO "".
+        stateSet("bplane_retry_wait",pending).
+    } ELSE {
+        stateRemove("bplane_retry_wait").
+    }
+}
+
+LOCAL FUNCTION _bplaneRetryWaitPending {
+    PARAMETER targetBody.
+    PARAMETER waitingOnly IS TRUE.
+    LOCAL pending IS stateGet("bplane_retry_wait",LEXICON()).
+    IF pending:LENGTH = 0 { RETURN FALSE. }
+    IF pending["mission"] = stateGet("mission_id","")
+            AND pending["launch"] = stateGetNum("launch_time",0)
+            AND pending["phase"] = stateGet("phase","")
+            AND pending["target"] = targetBody:NAME {
+        RETURN NOT waitingOnly OR pending["waiting"].
+    }
+    bplaneClearRetryWait().
+    RETURN FALSE.
+}
+
 LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
     PARAMETER targetBody.
     IF ABORT { RETURN FALSE. }
     LOCAL hit IS _bplaneCoastEncounter(targetBody).
     LOCAL latestUt IS 0.
+    LOCAL wakeUt IS 0.
     IF hit <> 0 {
         SET latestUt TO hit["entryUt"] - SOI_BUFFER_TIME
             - BPLANE_LEAD - MIDCOURSE_REFINE_MARGIN.
+        SET wakeUt TO MIN(latestUt,hit["entryUt"]-BPLANE_FINAL_REFINE_LEAD).
     }
-    IF latestUt > TIME:SECONDS+60 AND latestUt < 1e30 {
-        LOCAL wakeUt IS MIN(latestUt,TIME:SECONDS+MAX(60,(latestUt-TIME:SECONDS)/2)).
+    IF _bplaneRetryWaitPending(targetBody,FALSE) AND hit <> 0 {
+        // Resume the existing checkpoint, clipped to current native safety.
+        LOCAL pending IS stateGet("bplane_retry_wait",LEXICON()).
+        IF pending["waiting"] {
+            SET wakeUt TO MIN(pending["wakeUt"],wakeUt).
+            IF wakeUt <= TIME:SECONDS AND TIME:SECONDS <= latestUt {
+                bplaneClearRetryWait(TRUE).
+                RETURN TRUE.
+            }
+        } ELSE {
+            // One final check per unburned trajectory, even if ETA jitters.
+            SET wakeUt TO 0.
+        }
+    }
+    IF wakeUt > TIME:SECONDS AND wakeUt < 1e30 {
         midcourseClearReviewAlarm().
         LOCAL alarmId IS kacEnsureAlarm("B-plane retry: " + targetBody:NAME,wakeUt,
             "Running mission retries arrival correction; no rejected burn is flown.").
+        stateSet("bplane_retry_wait",LEX("mission",stateGet("mission_id",""),
+            "launch",stateGetNum("launch_time",0),"phase",stateGet("phase",""),
+            "target",targetBody:NAME,"wakeUt",wakeUt,"alarm",alarmId,"waiting",TRUE)).
         mLogWarn("STATS bplane retry-wake target=" + targetBody:NAME
             + " wakeUt=" + wakeUt + " eta=" + (wakeUt-TIME:SECONDS)
-            + " latestUt=" + latestUt + " automaticResume=True").
+            + " latestUt=" + latestUt + " checkpoint=final automaticResume=True").
         PRINT "ARRIVAL RETRY: running coast until UT " + ROUND(wakeUt,1) + ".".
         LOCAL solarRef IS enterSolarCoast("BPLANE retry",TRUE,TRUE,wakeUt).
         waitUntilOrSOI(targetBody,wakeUt,10,alarmId,solarRef).
-        IF alarmId <> "" { DELETEALARM(alarmId). }
+        bplaneClearRetryWait(TIME:SECONDS >= wakeUt AND NOT ABORT).
         SET WARP TO 0.
         WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
         IF ABORT { RETURN FALSE. }
         IF SHIP:BODY <> targetBody AND TIME:SECONDS <= latestUt { RETURN TRUE. }
     }
+    LOCAL reason IS "no-safe-retry-time".
+    IF hit <> 0 AND latestUt >= TIME:SECONDS {
+        SET reason TO "final-refinement-checkpoint-used".
+    }
+    bplaneClearRetryWait(TRUE).
     // No safe time remains for another automatic attempt. Stay resident,
     // at 1x, with the rejected node removed. KAC cannot restart a script.
-    mLogError("STATS bplane retry-blocked reason=no-safe-retry-time target="
+    mLogError("STATS bplane retry-blocked reason=" + reason + " target="
         + targetBody:NAME + " latestUt=" + latestUt + " automaticResume=False resident=True").
-    _bplaneResidentHold("no-safe-retry-time").
+    _bplaneResidentHold(reason).
     RETURN FALSE.
 }
 
@@ -1209,6 +1264,7 @@ LOCAL FUNCTION _bplaneClearCoastTimes {
     stateSet("xing_arrival_ut", 0).
     stateSet("midcourse_refine_ut", 0).
     stateSet("midcourse_refine_arrival_ut", 0).
+    bplaneClearRetryWait().
 }
 
 // ============================================================
@@ -1229,6 +1285,9 @@ GLOBAL FUNCTION planBplaneCorrection {
     PARAMETER pristineLog IS "".
     PARAMETER allowMidcourseRetry IS FALSE.
 
+    IF allowMidcourseRetry AND _bplaneRetryWaitPending(targetBody) {
+        IF NOT _bplaneWaitBeforeSolverRetry(targetBody) { RETURN 0. }
+    }
     UNTIL ABORT {
         LOCAL dvCap IS BPLANE_DV_CAP.
         IF BPLANE_REQUIRE_PLANE <> 0 AND (BPLANE_PE_ONLY <> 0 OR wantInc < 0) {

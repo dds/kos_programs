@@ -94,6 +94,7 @@ LOCAL FUNCTION _cmdArrival {
             }
             stateRemove("bplane_review").
             stateRemove("bplane_midcourse_retry").
+            bplaneClearRetryWait().
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
             resumeMission(). RETURN.
         }
