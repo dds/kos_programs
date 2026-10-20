@@ -187,6 +187,7 @@ def check_midcourse_deferral():
     base.update(HASNODE=False, maneuverBurnInterrupted=lambda:False,
                 _bplaneHandoffMidcourseRetry=lambda *_:False,
                 _bplaneTargetBody=lambda:target,bplanePauseForReview=lambda:False,
+                _bplaneEnsureSoiAlarm=lambda *_:None,
                 _bplaneCoastOutOfDepartureSoi=lambda _:True,_bplaneWantInc=lambda:-1,
                 bplaneResetWarnings=lambda:None,_bplaneLogBaseline=lambda *_:None,
                 _bplaneClearCoastTimes=lambda:cleared.append(True),

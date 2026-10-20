@@ -47,6 +47,7 @@ def environment():
              stateRemove=lambda key:saved.pop(key,None),
              ADDONS=NS(KAC=NS(AVAILABLE=True)),
              missionTargetBody=lambda:moon,_bplaneTargetBody=lambda:moon,
+             ensureSoiAlarm=lambda *_:'',_bplaneEnsureSoiAlarm=lambda *_:None,
              findArrivalPatch=lambda node,target:hit,
              nextPhase=lambda seq:events.append(('advance',seq)),
              xferSeq=KList(('BPLANE','COAST_1HALF','REFINE_BPLANE','COAST_2HALF')),

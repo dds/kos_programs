@@ -692,6 +692,13 @@ mission running. The pending wake and completed checkpoint survive reboot;
 small encounter-ETA changes cannot manufacture another final check.
 Explicit arrival `replan` or a flown correction clears that checkpoint.
 Without KAC, the clock loop still wakes; battery/warp health checks remain.
+When KAC is available, a separate `<vessel>: SOI: <body>` alarm is created
+from the native encounter during BPLANE and before the midpoint/final waits.
+Corrections refresh its time from the actual orbit; temporary maneuver
+predictions do not retime it. Cleaning a retry alarm leaves the SOI alarm
+intact, and the normal arrival wait removes it after SOI entry. Cached
+alarms must still be future-dated and match the actual requested time.
+`STATS soi-alarm` records the target, absolute UT, ETA and alarm ID.
 If the final attempt still fails, no safe
 retry window remains, or a mission correction violates its admission limits,
 `ARRIVAL BLOCKED` stays resident at 1x for intervention. It does not fly the

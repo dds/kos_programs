@@ -54,7 +54,7 @@ GLOBAL FUNCTION ensureSoiAlarm {
     PARAMETER msg IS "Auto-created by waitForSOI. Fly safe.".
 
     IF NOT ADDONS:KAC:AVAILABLE { RETURN "". }
-    IF soiUt <= TIME:SECONDS { RETURN "". }
+    IF NOT (soiUt > TIME:SECONDS AND soiUt < 1e30) { RETURN "". }
     LOCAL alarmName IS "SOI: " + targetBody:NAME.
     LOCAL fullName IS kacShipAlarmName(alarmName).
 
@@ -67,7 +67,8 @@ GLOBAL FUNCTION ensureSoiAlarm {
         LOCAL alarms IS LISTALARMS("All").
         FOR a IN alarms {
             IF a:ID = oldId {
-                IF a:NAME = fullName {
+                IF a:NAME = fullName AND a:TIME > TIME:SECONDS
+                        AND ABS(a:TIME - soiUt) < 60 {
                     mLog("KAC SOI alarm already set for " + targetBody:NAME
                         + " in " + ROUND(soiUt - TIME:SECONDS, 0) + "s.").
                     RETURN oldId.
@@ -83,15 +84,14 @@ GLOBAL FUNCTION ensureSoiAlarm {
     stateSet("soi_alarm_target", targetBody:NAME).
     stateSet("soi_alarm_ut", soiUt).
     stateSet("soi_alarm_id", alarmId).
-    mLog("KAC alarm set for SOI transition in "
-        + ROUND(soiUt - TIME:SECONDS, 0) + "s.").
+    mLog("STATS soi-alarm target=" + targetBody:NAME + " ut=" + soiUt
+        + " eta=" + ROUND(soiUt - TIME:SECONDS, 0) + " alarm=" + alarmId).
     RETURN alarmId.
 }
 
 GLOBAL FUNCTION waitForSOI {
     PARAMETER targetBody.
     PARAMETER pollInterval IS 5.
-    IF PHASES_HAS_SOLAR { orientForSolar(). }
     mLog("Waiting for SOI: " + targetBody:NAME).
 
     // Set a KAC alarm at the SOI transition so time warp stops automatically.
@@ -102,6 +102,7 @@ GLOBAL FUNCTION waitForSOI {
         SET soiUt TO TIME:SECONDS + SHIP:ORBIT:NEXTPATCHETA.
         SET kacAlarmId TO ensureSoiAlarm(targetBody, soiUt).
     }
+    IF PHASES_HAS_SOLAR { orientForSolar(). }
     LOCAL solarRef IS trySolarHoldTick(-1).
     IF soiUt > TIME:SECONDS {
         IF PHASES_HAS_SOLAR

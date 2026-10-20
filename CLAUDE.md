@@ -284,6 +284,12 @@ Looks like Python/JS; is neither.
   stay resident at 1x for intervention; previews/explicit review/interrupted
   burns retain their manual policy. Never accept an unconverged required
   plane just to keep the phase machine moving.
+  SOI alarms are separate from midpoint/final retry alarms. Create/refresh
+  the native encounter alarm in BPLANE, after successful/partial corrections
+  and before coast/solar waits; retry cleanup must leave it intact. Check
+  actual KAC TIME as well as saved soi_alarm_ut before reusing an ID: the
+  old ensureSoiAlarm fast path bypassed generic expiry checks. Arrival waits
+  remove SOI alarms after crossing; no-KAC paths still poll the clock/body.
 - Duna/Ike mental model: `duna_ike_setup` is mission glue, not a generic
   transfer dependency. It performs Duna aerocapture setup, writes the next
   Ike/Duna-entry leg as a local mission profile, and clears reload/band cache
@@ -296,6 +302,15 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Operator asks whether retry changes disabled SOI alarms. They remained in
+  COAST_2HALF/waitForSOI but were absent during earlier long B-plane waits.
+  Current fix schedules the independent native SOI alarm before B-plane and
+  midpoint/final coast work, refreshes after actual correction execution,
+  and installs it before solar setup in arrival/standalone SOI waits.
+  Expired/mis-timed cached IDs are replaced even when saved UT looks valid.
+  Routine230 cases cover alarm independence, reboot reuse/cache loss,
+  correction retiming, no-KAC polling and cleanup on actual SOI entry.
+  Native KAC UI/warp-stop behavior still needs flight confirmation.
   Operator reports overly frequent B-plane retries (4-5 during a Mun trip).
   Reposted log is the older UT1853933 terminal hold and has no new wake rows;
   source confirms the latest scheduler waits half the remaining safe window,

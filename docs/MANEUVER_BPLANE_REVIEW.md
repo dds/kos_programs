@@ -5,7 +5,30 @@ evidence. The newest continuation/clearance changes have offline checks and
 await flight testing. No saved log in this checkout establishes which defect
 caused a particular reported overburn.
 
-## Retry cadence — 2026-10-20
+## SOI alarm coverage — 2026-10-20
+
+SOI alarms were still enabled in COAST_2HALF and waitForSOI, but an early
+B-plane retry could show only its retry alarm until refinement succeeded.
+The independent native SOI alarm now exists at B-plane phase entry, before
+midpoint/final coasts, and is refreshed after successful or partial
+corrections. It uses `findArrivalPatch(0, targetBody)`, excluding unflown
+nodes. Solar setup happens after alarm installation in arrival/standalone
+SOI waits. Retry-alarm cleanup cannot delete the SOI alarm.
+
+The SOI-specific cached-ID fast path also checked only ID/name and saved
+UT; it could bypass the generic future-time check and reuse an expired or
+incorrectly timed actual alarm. Reuse now requires a future KAC timestamp
+within the existing 60-second tolerance. Invalid requested epochs cannot
+create an alarm. `STATS soi-alarm` records target, UT, ETA and ID.
+
+Routine validation: 230 cases across 37 scripts. New fixtures execute the
+real alarm/phase/clock source against a fake KAC store: reboot/cache-loss
+reuse, expired/mis-timed replacement, separate midpoint/final/SOI IDs,
+post-correction actual retiming, creation before solar, no-KAC polling and
+cleanup after crossing. Actual KAC UI and warp-stop behavior await flight
+validation.
+
+## Retry cadence — earlier 2026-10-20
 
 The operator reports four or five B-plane wake attempts during one Mun trip.
 The reposted log is the older terminal hold and contains no recent wake

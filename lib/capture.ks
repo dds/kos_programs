@@ -64,6 +64,7 @@ GLOBAL FUNCTION phaseCoast1Half {
         RETURN.
     }
 
+    ensureSoiAlarm(target,tArrival,"Auto-created before midcourse coast.").
     LOCAL tStart IS TIME:SECONDS.
     LOCAL tMidpoint IS midcourseRefineUt(tStart, tArrival).
     IF tMidpoint <= TIME:SECONDS {
@@ -94,7 +95,6 @@ GLOBAL FUNCTION phaseCoast1Half {
 GLOBAL FUNCTION phaseCoast2Half {
     midcourseClearReviewAlarm().
     LOCAL target IS missionTargetBody().
-    LOCAL solarRef IS enterSolarCoast("COAST_2HALF", FALSE, FALSE).
 
     IF SHIP:BODY = target {
         mLog("COAST_2HALF: already inside " + target:NAME + " SOI.").
@@ -119,6 +119,7 @@ GLOBAL FUNCTION phaseCoast2Half {
     LOCAL coastUntil IS MAX(TIME:SECONDS, tArrival - soiBuffer).
     mLog("Coasting toward " + target:NAME + " SOI boundary; buffer="
         + ROUND(soiBuffer, 0) + "s.").
+    LOCAL solarRef IS enterSolarCoast("COAST_2HALF", FALSE, FALSE).
     waitUntilOrSOI(target, coastUntil, 10, soiAlarmId, solarRef, FALSE).
     IF ABORT { RETURN. }
 

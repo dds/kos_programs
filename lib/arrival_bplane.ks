@@ -376,6 +376,7 @@ LOCAL FUNCTION _bplaneRetryWaitPending {
 LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
     PARAMETER targetBody.
     IF ABORT { RETURN FALSE. }
+    _bplaneEnsureSoiAlarm(targetBody).
     LOCAL hit IS _bplaneCoastEncounter(targetBody).
     LOCAL latestUt IS 0.
     LOCAL wakeUt IS 0.
@@ -579,6 +580,13 @@ LOCAL FUNCTION _bplaneLogBaseline {
         + " entryUt=" + ROUND(hit["entryUt"], 1)
         + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)
         + " correctionCap=" + ROUND(_bplaneTrimCap(targetBody, phaseCap), 2)).
+}
+
+LOCAL FUNCTION _bplaneEnsureSoiAlarm {
+    PARAMETER targetBody.
+    IF SHIP:BODY = targetBody { RETURN. }
+    LOCAL hit IS findArrivalPatch(0,targetBody).
+    IF hit <> 0 { ensureSoiAlarm(targetBody,hit["entryUt"],"Native B-plane encounter; refreshed after corrections."). }
 }
 
 GLOBAL FUNCTION bplaneCaptureCost {
@@ -1795,6 +1803,7 @@ GLOBAL FUNCTION phaseBplane {
 
     // Resume safety: a reboot can land us here after the SOI
     // transition already happened. Nothing left to correct.
+    _bplaneEnsureSoiAlarm(targetBody).
     IF bplanePauseForReview() { RETURN. }
     IF _bplaneHandoffMidcourseRetry(targetBody) { RETURN. }
     IF SHIP:BODY = targetBody {
@@ -1866,7 +1875,9 @@ GLOBAL FUNCTION phaseBplane {
         _bplaneReserveCorrection(nd, targetBody).
         _bplaneClearCoastTimes().
         SET burns TO burns + 1.
-        IF NOT _bplaneExecuteCorrection() {
+        LOCAL executed IS _bplaneExecuteCorrection().
+        _bplaneEnsureSoiAlarm(targetBody).
+        IF NOT executed {
             bplaneArrivalStatus().
             _bplaneHoldCorrection("correction-execution-failed"). RETURN.
         }
@@ -1935,6 +1946,7 @@ GLOBAL FUNCTION phaseRefineBplane {
         RETURN.
     }
 
+    _bplaneEnsureSoiAlarm(targetBody).
     IF bplanePauseForReview() { RETURN. }
     IF SHIP:BODY = targetBody {
         mLog("REFINE_BPLANE: already inside " + targetBody:NAME + " SOI; skipping.").
@@ -1993,7 +2005,9 @@ GLOBAL FUNCTION phaseRefineBplane {
         _bplaneReserveCorrection(nd, targetBody).
         _bplaneClearCoastTimes().
         SET burns TO burns + 1.
-        IF NOT _bplaneExecuteCorrection() {
+        LOCAL executed IS _bplaneExecuteCorrection().
+        _bplaneEnsureSoiAlarm(targetBody).
+        IF NOT executed {
             bplaneArrivalStatus().
             _bplaneHoldCorrection("correction-execution-failed"). RETURN.
         }

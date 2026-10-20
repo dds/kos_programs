@@ -189,7 +189,9 @@ def check_pe_execution_recovery():
     for name in ('phaseBplane', 'phaseRefineBplane'):
         phase = body(SOURCE, name)
         assert phase.index('IF maneuverBurnInterrupted()') < phase.index('REMOVE NEXTNODE')
-        failure = re.search(r'IF NOT _bplaneExecuteCorrection\(\) \{(.*?)\}', phase, re.S)[1]
+        failure = re.search(r'IF NOT executed \{(.*?)\}', phase, re.S)[1]
+        after_burn=phase.split('LOCAL executed IS _bplaneExecuteCorrection().',1)[1]
+        assert after_burn.index('_bplaneEnsureSoiAlarm(')<after_burn.index('IF NOT executed')
         assert 'RETURN.' in failure and 'REMOVE' not in failure
     command = body(COMMAND, '_arrivalCommand')
     status = re.search(r'IF action = "status" \{(.*?)\}', command, re.S)[1]
