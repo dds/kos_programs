@@ -673,6 +673,15 @@ This pre-SOI wait checks the current parent orbit's clearance and the direct
 future encounter. The target's review Pe floor does not apply to waiting:
 the reported 8.44 km Mun Pe can still be corrected before arrival from a
 safe 78.3 km Kerbin orbit. Actual arrival/capture Pe and plane gates remain.
+When a correction leaves the hypothetical Kerbin Pe inside its atmosphere,
+the wait instead requires a finite elliptical time-to-atmosphere proof: the
+moon encounter must precede atmospheric entry by `SOI_BUFFER_TIME` (120 s).
+`STATS bplane parent-coast` reports those ETAs and the clearance decision.
+Current atmospheric entry, invalid data or an unproven coast still blocks.
+Converged corrections at or below the shared 0.3 m/s execution minimum are
+removed and deferred through the same live retry path. A small residual
+outside the strict plane tolerance therefore stays assigned to midcourse;
+skipping a tiny early burn does not approve capture or abandon refinement.
 Later unconverged mission solves also stay running: a named `B-plane retry`
 alarm and the shared solar/clock wait schedule another attempt before the
 SOI/burn safety margin. Without KAC, the clock loop still wakes. If no safe

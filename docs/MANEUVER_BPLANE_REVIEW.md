@@ -1,11 +1,48 @@
-# Maneuver execution and B-plane review — 2026-09-16
+# Maneuver execution and B-plane review
 
-The code defects below are fixed in this revision. The changes have numerical
-and structural checks, but have **not been flight-tested**. There are no saved
-flight logs in this checkout establishing which defect caused a particular
-reported overburn.
+This note records historical maneuver defects and subsequent B-plane flight
+evidence. The newest continuation/clearance changes have offline checks and
+await flight testing. No saved log in this checkout establishes which defect
+caused a particular reported overburn.
 
-## RO9 polar correction and live retry — 2026-10-20
+## Post-burn minimum and coast timing — 2026-10-20
+
+The next flight log confirms the three-axis correction worked: a 36.3 m/s
+burn ended with 0.05 m/s residual. The actual arrival became Mun Pe 13.6 km,
+inc 90.21°. A second solve produced a converged 0.09506 m/s trim to Pe 14.6 km
+and plane error 0.06°. Skipping it respected the shared 0.3 m/s floor, but
+the early phase then treated the uncorrected 0.21° error as a terminal miss
+of its 0.2° goal. That left refinement unassigned.
+
+The shared public planner now removes a below-minimum candidate and keeps
+its automatic retry. Early BPLANE queues the existing midpoint handoff;
+refinement waits and recomputes later if a correction is still too small.
+Both solver modes use that same admission/retry decision. Previews still
+return immediately; the final plane and Pe checks remain unchanged.
+
+That burn also lowered hypothetical Kerbin Pe to 42.6 km. A whole-orbit Pe
+check alone would reject the coast despite a moon encounter potentially
+truncating the orbit before atmospheric entry. For a finite ellipse outside
+the atmosphere, compute its inbound interface eccentric anomaly from
+`r = a*(1-e*cos(E))`; convert `E-e*sin(E)` to seconds before Pe and subtract
+from native Pe ETA. Require encounter ETA plus the 120-second SOI buffer
+to precede that atmospheric crossing. Current entry, invalid timing and
+unsupported low-Pe conics still reject. This avoids position/frame prediction.
+The scalar API comes from kOS's [Orbit](https://ksp-kos.github.io/KOS/structures/orbits/orbit.html)
+and [OrbitEta](https://ksp-kos.github.io/KOS/structures/orbits/eta.html) contracts.
+
+The routine suite passes 222 source checks across 36 scripts. New fixtures
+execute the first-burn/tiny-candidate sequence through
+the live midpoint wake with/without KAC, retain the spent ledger, and verify
+later small candidates wait until an executable correction is available in
+both modes. Independent integration of `dt/d(true anomaly)` checks 18
+inbound/outbound ellipses on both sides of the safety margin; invalid
+clearance/timing cases reject. The model supplies current altitude/Pe ETA;
+the operator's log does not contain those, so actual coast clearance must
+be verified in the new `STATS bplane parent-coast` row. Successful arrival
+and capture remain to be demonstrated in flight.
+
+## RO9 polar correction and live retry — earlier 2026-10-20
 
 The operator supplied a complete BPLANE log beginning at UT 1851812.1:
 unburned Mun Pe 8.44 km/inc 178.75°, requested Pe 15 km/inc 90°, available 2019.1 m/s.

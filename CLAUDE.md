@@ -267,6 +267,13 @@ Looks like Python/JS; is neither.
   Pre-SOI coast safety is the parent orbit's clearance/direct encounter and
   a finite wake before arrival; do not apply the target review Pe floor to
   that wait. The actual 8.44 km Mun Pe excluded the previous automatic path.
+  A parent Pe inside its atmosphere can also be safe until a moon encounter:
+  prove encounterETA+SOI_BUFFER_TIME < time to inbound atmospheric crossing
+  using the current ellipse and ETA:PERIAPSIS. Never substitute future Pe
+  alone for that timed proof. Unknown/current-entry hazards still reject.
+  A converged node skipped by the shared minimum must also keep its mission
+  retry: early BPLANE hands to midpoint; REFINE waits/replans later. Do not
+  turn that skip into finished-outside-required-corridor or waive the plane.
   Later full-solver failures use the same solar/clock wait from coast_wait,
   then replan within the pre-SOI/burn margin. Mission admission/window failures
   stay resident at 1x for intervention; previews/explicit review/interrupted
@@ -284,6 +291,17 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Operator reports the three-axis fix flew a36.3m/s correction successfully:
+  UT1853929 residual0.05m/s, parent Kerbin Pe42.6km/Ap11370.8km, then actual
+  Mun Pe13.6km/inc90.21deg. A converged0.09506m/s trim was skipped correctly
+  but the phase fell into a resident terminal hold at planeErr0.21deg vs0.2.
+  Current fix defers a below-minimum converged candidate via the shared
+  live retry path in BOTH modes, preserving0.3m/s floor/final0.2deg plane.
+  Parent coast safety now proves atmospheric entry timing when its whole
+  hypothetical ellipse has a low Pe; the native moon patch truncates it.
+  Routine222 source cases cover the first burn + tiny candidate + actual
+  midpoint wake, later tiny retries until useful, and18 ellipses checked against
+  independent true-anomaly time integration. Arrival/capture still unproven.
   Complete RO9 log at UT1851812 confirms the previous deferred retry did NOT
   activate: native Mun Pe8.44km failed the 10km review floor, despite safe
   Kerbin Pe78.3km and 14220s until encounter. Solver saturated10m/s, reduced

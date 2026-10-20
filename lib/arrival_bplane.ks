@@ -238,14 +238,43 @@ LOCAL FUNCTION _bplaneCoastEncounter {
     LOCAL pe IS hit["patch"]:PERIAPSIS.
     // This coast ends BEFORE SOI entry, not at target periapsis. The review
     // Pe floor is a burn/arrival gate, not a reason to lose the timed retry.
-    LOCAL parentClearance IS 0.
-    IF SHIP:BODY:ATM:EXISTS { SET parentClearance TO SHIP:BODY:ATM:HEIGHT. }
-    IF NOT (SHIP:PERIAPSIS > parentClearance AND SHIP:PERIAPSIS < 1e30) { RETURN 0. }
     IF NOT (pe > -targetBody:RADIUS AND ABS(pe) < 1e30
             AND pe < targetBody:SOIRADIUS - targetBody:RADIUS
             AND hit["entryUt"] < 1e30
             AND hit["entryUt"] > TIME:SECONDS) { RETURN 0. }
+    IF NOT _bplaneParentClearUntil(hit["entryUt"]) { RETURN 0. }
     RETURN hit.
+}
+
+LOCAL FUNCTION _bplaneParentClearUntil {
+    PARAMETER entryUt.
+    IF NOT (entryUt > TIME:SECONDS AND entryUt < 1e30) { RETURN FALSE. }
+    LOCAL clearance IS 0.
+    IF SHIP:BODY:ATM:EXISTS { SET clearance TO SHIP:BODY:ATM:HEIGHT. }
+    LOCAL pe IS SHIP:PERIAPSIS.
+    IF NOT (ABS(pe) < 1e30) { RETURN FALSE. }
+    IF pe > clearance { RETURN TRUE. }
+    // A future moon encounter can truncate an ellipse whose hypothetical
+    // parent Pe is inside the atmosphere. Prove entry precedes that hazard.
+    IF NOT SHIP:BODY:ATM:EXISTS { RETURN FALSE. }
+    IF NOT (SHIP:ALTITUDE > clearance AND SHIP:ALTITUDE < 1e30) { RETURN FALSE. }
+    LOCAL sma IS SHIP:ORBIT:SEMIMAJORAXIS.
+    LOCAL ecc IS SHIP:ORBIT:ECCENTRICITY.
+    LOCAL mu IS SHIP:BODY:MU.
+    LOCAL peEta IS ETA:PERIAPSIS.
+    IF NOT (sma > 0 AND sma < 1e30 AND ecc > 0 AND ecc < 1
+            AND mu > 0 AND mu < 1e30 AND peEta > 0 AND peEta < 1e30) { RETURN FALSE. }
+    LOCAL cosE IS (1-(SHIP:BODY:RADIUS+clearance)/sma)/ecc.
+    IF NOT (cosE >= -1 AND cosE <= 1) { RETURN FALSE. }
+    LOCAL eccentricAngle IS ARCCOS(cosE).
+    LOCAL meanAngle IS eccentricAngle*CONSTANT:PI/180-ecc*SIN(eccentricAngle).
+    LOCAL hazardEta IS peEta-meanAngle*SQRT(sma^3/mu).
+    LOCAL encounterEta IS entryUt-TIME:SECONDS.
+    LOCAL clear IS encounterEta+SOI_BUFFER_TIME < hazardEta.
+    mLog("STATS bplane parent-coast PeKm=" + (pe/1000)
+        + " encounterEta=" + encounterEta + " atmosphereEta=" + hazardEta
+        + " buffer=" + SOI_BUFFER_TIME + " clear=" + clear).
+    RETURN clear.
 }
 
 // Minimum-length Newton step for two B-plane residuals using all burn axes.
@@ -1200,32 +1229,42 @@ GLOBAL FUNCTION planBplaneCorrection {
     PARAMETER pristineLog IS "".
     PARAMETER allowMidcourseRetry IS FALSE.
 
-    LOCAL dvCap IS BPLANE_DV_CAP.
-    IF BPLANE_REQUIRE_PLANE <> 0 AND (BPLANE_PE_ONLY <> 0 OR wantInc < 0) {
-        _bplaneHoldCorrection("required-plane-config-conflict",allowMidcourseRetry). RETURN 0.
-    }
-    IF dvCapOverride >= 0 { SET dvCap TO dvCapOverride. }
-    IF _bplaneCurrentCorridorOk(targetBody, wantPe, wantInc, wantLan) {
-        RETURN 0.
-    }
+    UNTIL ABORT {
+        LOCAL dvCap IS BPLANE_DV_CAP.
+        IF BPLANE_REQUIRE_PLANE <> 0 AND (BPLANE_PE_ONLY <> 0 OR wantInc < 0) {
+            _bplaneHoldCorrection("required-plane-config-conflict",allowMidcourseRetry). RETURN 0.
+        }
+        IF dvCapOverride >= 0 { SET dvCap TO dvCapOverride. }
+        IF _bplaneCurrentCorridorOk(targetBody, wantPe, wantInc, wantLan) {
+            RETURN 0.
+        }
 
-    SET dvCap TO _bplaneTrimCap(targetBody, dvCap).
-    IF dvCap <= MIN_EXEC_DV {
-        _bplaneHoldCorrection("no-optional-budget",allowMidcourseRetry).
-        RETURN 0.
-    }
+        SET dvCap TO _bplaneTrimCap(targetBody, dvCap).
+        IF dvCap <= MIN_EXEC_DV {
+            _bplaneHoldCorrection("no-optional-budget",allowMidcourseRetry).
+            RETURN 0.
+        }
 
-    LOCAL nd IS 0.
-    IF BPLANE_PE_ONLY <> 0 {
-        SET nd TO _bplanePlanPeOnly(targetBody, wantPe, dvCap).
-    } ELSE {
-        SET nd TO _bplanePlanFullCorrection(targetBody, wantPe, wantInc, wantLan,
-            dvCap, pristineLog, allowMidcourseRetry).
+        LOCAL nd IS 0.
+        IF BPLANE_PE_ONLY <> 0 {
+            SET nd TO _bplanePlanPeOnly(targetBody, wantPe, dvCap).
+        } ELSE {
+            SET nd TO _bplanePlanFullCorrection(targetBody, wantPe, wantInc, wantLan,
+                dvCap, pristineLog, allowMidcourseRetry).
+        }
+        IF phaseShouldYield OR ABORT OR nd = 0 { RETURN 0. }
+        IF NOT _bplaneCorrectionAboveMinimum(nd) {
+            REMOVE nd.
+            IF NOT allowMidcourseRetry { RETURN 0. }
+            WAIT 0.02.
+            IF _bplaneQueueMidcourseRetry("below-execution-minimum") { RETURN 0. }
+            IF NOT _bplaneWaitBeforeSolverRetry(targetBody) { RETURN 0. }
+        } ELSE {
+            maneuverUiArchiveLog("bplane").
+            RETURN nd.
+        }
     }
-    IF phaseShouldYield OR ABORT OR nd = 0 { RETURN 0. }
-    IF NOT _bplaneCorrectionAboveMinimum(nd) { REMOVE nd. RETURN 0. }
-    maneuverUiArchiveLog("bplane").
-    RETURN nd.
+    RETURN 0.
 }
 
 LOCAL FUNCTION _bplanePlanFullCorrection {

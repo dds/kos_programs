@@ -33,8 +33,12 @@ def environment():
               NEXTPATCH=NS(BODY=moon,HASNEXTPATCH=False))
     hit=dict(entryUt=11000,patch=NS(PERIAPSIS=15000))
     env=dict(TIME=NS(SECONDS=1000), ABORT=False,
-             SHIP=NS(BODY=NS(NAME='Kerbin',ATM=NS(EXISTS=True,HEIGHT=70000)),
-                     PERIAPSIS=78300,ORBIT=native,STATUS='ESCAPING'),
+             SHIP=NS(BODY=NS(NAME='Kerbin',ATM=NS(EXISTS=True,HEIGHT=70000),
+                             RADIUS=600000,MU=3.5316e12),
+                     PERIAPSIS=78300,ALTITUDE=0,ORBIT=native,STATUS='ESCAPING'),
+             ETA=NS(PERIAPSIS=0),SQRT=math.sqrt,
+             CONSTANT=NS(PI=math.pi),ARCCOS=lambda val:math.degrees(math.acos(val)),
+             SIN=lambda degrees:math.sin(math.radians(degrees)),
              WARP=0,KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),
              fixture_settle=lambda:None,
              ROUND=round, LIST=lambda *xs:KList(xs),
@@ -64,7 +68,7 @@ def environment():
     env['DELETEALARM']=lambda key:alarms.pop(key,None)
     for name in ('midcourseRefineUt','midcourseClearReviewAlarm','_transferArrivalUt',
                  '_bplaneScheduleHoldReview','enterSolarCoast','_coastHealthPoll','coastHealthCheck',
-                 '_bplaneHasMidcourseRefinement','_bplaneCoastEncounter','_bplaneRetryEncounter','_bplaneQueueMidcourseRetry',
+                 '_bplaneHasMidcourseRefinement','_bplaneParentClearUntil','_bplaneCoastEncounter','_bplaneRetryEncounter','_bplaneQueueMidcourseRetry',
                  '_bplaneHandoffMidcourseRetry','_bplaneHoldCorrection','_bplaneWaitBeforeSolverRetry'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
     def resident(reason):
@@ -501,6 +505,134 @@ def check_resident_admission_guards():
     print('PASS: all six mission admission rejections retain their limits in resident 1x holds, charge no budget and never advance; interrupted burns still retain their node and require explicit review')
 
 
+def parent_ellipse(env, pe=42600, ap=11370800, eccentric_angle=math.pi/3):
+    """Native scalar fixtures; current radius and Pe ETA from Kepler's law."""
+    central=env['SHIP'].BODY
+    sma=(central.RADIUS+pe+central.RADIUS+ap)/2
+    ecc=(ap-pe)/(2*sma)
+    rate=math.sqrt(central.MU/sma**3)
+    env['SHIP'].PERIAPSIS=pe
+    env['SHIP'].ALTITUDE=sma*(1-ecc*math.cos(eccentric_angle))-central.RADIUS
+    env['SHIP'].ORBIT.SEMIMAJORAXIS=sma
+    env['SHIP'].ORBIT.ECCENTRICITY=ecc
+    env['ETA'].PERIAPSIS=(2*math.pi-eccentric_angle+ecc*math.sin(eccentric_angle))/rate
+    return sma,ecc
+
+
+def check_parent_atmosphere_timing():
+    # Independent numerical dt/d(true anomaly), not the implementation's
+    # eccentric-anomaly time-to-boundary expression.
+    for pe in (-10000,42600,69900):
+        for ap in (2000000,11370800):
+            for eccentric_angle in (math.pi/3,math.pi,5*math.pi/3):
+                env,_,_,_,_,_=retry_environment()
+                sma,ecc=parent_ellipse(env,pe,ap,eccentric_angle)
+                central=env['SHIP'].BODY
+                semi_latus=sma*(1-ecc*ecc)
+                nu=math.atan2(math.sqrt(1-ecc*ecc)*math.sin(eccentric_angle),
+                              math.cos(eccentric_angle)-ecc)%(2*math.pi)
+                boundary=2*math.pi-math.acos((semi_latus/(central.RADIUS+central.ATM.HEIGHT)-1)/ecc)
+                count=4096
+                delta=(boundary-nu)/count
+                def integrand(angle):
+                    return semi_latus**1.5/math.sqrt(central.MU)/(1+ecc*math.cos(angle))**2
+                total=integrand(nu)+integrand(boundary)
+                total+=sum((4 if index%2 else 2)*integrand(nu+index*delta) for index in range(1,count))
+                hazard=total*delta/3
+                for offset,expected in ((-1,True),(1,False)):
+                    entry=env['TIME'].SECONDS+hazard-env['SOI_BUFFER_TIME']+offset
+                    assert env['_bplaneParentClearUntil'](entry)==expected,(pe,ap,eccentric_angle,hazard)
+    for invalid in ('inside','nan-peri','nan-eta','past-peri','hyperbolic','nan-sma','invalid-radius','missing-timing'):
+        env,_,_,_,_,_=retry_environment()
+        parent_ellipse(env)
+        if invalid=='inside':env['SHIP'].ALTITUDE=69999
+        if invalid=='nan-peri':env['SHIP'].PERIAPSIS=math.nan
+        if invalid=='nan-eta':env['ETA'].PERIAPSIS=math.nan
+        if invalid=='past-peri':env['ETA'].PERIAPSIS=-100
+        if invalid=='hyperbolic':env['SHIP'].ORBIT.ECCENTRICITY=1.1
+        if invalid=='nan-sma':env['SHIP'].ORBIT.SEMIMAJORAXIS=math.nan
+        if invalid=='invalid-radius':env['SHIP'].ORBIT.SEMIMAJORAXIS=100000
+        entry=math.nan if invalid=='missing-timing' else 11000
+        assert not env['_bplaneParentClearUntil'](entry),invalid
+    print('PASS: parent-atmosphere clearance matches independent true-anomaly time integration for 18 inbound/outbound ellipses and both safety-margin boundaries; invalid/late/current entry proofs reject')
+
+
+def check_post_burn_tiny_correction_handoff():
+    for kac in (True,False):
+        env,saved,events,alarms,moon,hit=retry_environment()
+        env['ADDONS'].KAC.AVAILABLE=kac
+        env.update(BPLANE_DV_CAP=100,REFINE_BPLANE_DV_CAP=100)
+        env['SHIP'].DELTAV=NS(VACUUM=2019.1)
+        big=NS(DELTAV=NS(MAG=36.3))
+        tiny=NS(DELTAV=NS(MAG=.0950603159765149))
+        candidates=iter((big,tiny))
+        plans,removed,executed=[],[],[]
+        def solve(*_):
+            candidate=next(candidates)
+            plans.append(candidate)
+            return candidate
+        env['_bplanePlanFullCorrection']=solve
+        env['planBplaneCorrection']=lambda *args:ks.call('planBplaneCorrection',env,*args)
+        env['_bplaneCorrectionAboveMinimum']=lambda nd:ks.call('_bplaneCorrectionAboveMinimum',env,nd)
+        env['fixture_remove']=removed.append
+        env['maneuverUiArchiveLog']=lambda *_:None
+        def admit(nd,*_):
+            assert nd is big,'tiny correction bypassed the shared floor'
+            return True
+        def reserve(nd,target):saved['bplane_budget_spent']=nd.DELTAV.MAG
+        def burn():
+            executed.append(big)
+            hit['patch'].PERIAPSIS=13600
+            hit['patch'].INCLINATION=90.21
+            env['SHIP'].DELTAV.VACUUM=1982.9
+            parent_ellipse(env)  # Reported parent Pe42.6km, Ap11370.8km.
+            return True
+        env.update(bplaneCorrectionAllowed=admit,_bplaneReserveCorrection=reserve,
+                   _bplaneExecuteCorrection=burn,
+                   _bplaneClearCoastTimes=lambda:ks.call('_bplaneClearCoastTimes',env))
+        run(function_body(SOURCE,'phaseBplane'),env)
+        assert plans==[big,tiny] and executed==[big] and removed==[tiny]
+        assert saved['phase']=='COAST_1HALF' and not env['phaseShouldYield']
+        assert saved['bplane_budget_spent']==36.3 and env['SHIP'].DELTAV.VACUUM==1982.9
+        assert env['BPLANE_ANG_TOL']==.2 and hit['patch'].INCLINATION==90.21
+        assert 'bplane_midcourse_retry' not in saved and not any(row[0]=='yield' for row in events)
+        wake=saved['midcourse_refine_ut']
+        def solar(label,orient,health,deadline):
+            assert ('Midcourse refine: Mun' in alarms)==kac and deadline==wake
+            return 1
+        env['enterSolarCoast']=solar
+        env['waitUntilOrSOI']=lambda *args:ks.call('waitUntilOrSOI',env,*args)
+        ks.call('phaseCoast1Half',env)
+        assert saved['phase']=='REFINE_BPLANE' and env['TIME'].SECONDS==wake
+        assert not alarms and executed==[big] and not env['phaseShouldYield']
+    print('PASS: logged 36.3 m/s burn followed by a 0.095 m/s candidate flies only once, preserves the spent ledger and strict 0.2deg goal, proves coast before parent atmosphere and wakes at refinement with/without KAC')
+
+
+def check_small_refinement_waits_for_useful_burn():
+    for mode in (0,1):
+        env,saved,events,alarms,moon,_=retry_environment()
+        saved['phase']='REFINE_BPLANE'
+        env.update(BPLANE_PE_ONLY=mode,BPLANE_REQUIRE_PLANE=1-mode)
+        candidates=[NS(DELTAV=NS(MAG=dv)) for dv in (.095,.2,.4)]
+        planned,removed=[],[]
+        def solve(*_):
+            candidate=candidates[len(planned)]
+            planned.append((env['TIME'].SECONDS,candidate))
+            return candidate
+        env['_bplanePlanPeOnly' if mode else '_bplanePlanFullCorrection']=solve
+        env['_bplaneCorrectionAboveMinimum']=lambda nd:ks.call('_bplaneCorrectionAboveMinimum',env,nd)
+        env['fixture_remove']=removed.append
+        env['maneuverUiArchiveLog']=lambda *_:None
+        env['enterSolarCoast']=lambda *_:1
+        env['waitUntilOrSOI']=lambda *args:ks.call('waitUntilOrSOI',env,*args)
+        result=ks.call('planBplaneCorrection',env,moon,15000,-1 if mode else 90,-1,100,'',True)
+        assert result is candidates[2] and removed==candidates[:2]
+        assert planned[0][0]<planned[1][0]<planned[2][0]
+        assert saved['phase']=='REFINE_BPLANE' and not env['phaseShouldYield'] and not alarms
+        assert env['MIN_EXEC_DV']==.3 and not any(row[0]=='yield' for row in events)
+    print('PASS: both solver modes keep tiny midpoint refinements live and remeasure later until a useful burn is available; rejected nodes are removed and the shared 0.3 m/s floor stays unchanged')
+
+
 if __name__=='__main__':
     check_checkpoint_persistence()
     check_arrival_hold_alarm()
@@ -516,3 +648,6 @@ if __name__=='__main__':
     check_later_live_solver_retries()
     check_retry_deadline_resident_hold()
     check_resident_admission_guards()
+    check_parent_atmosphere_timing()
+    check_post_burn_tiny_correction_handoff()
+    check_small_refinement_waits_for_useful_burn()
