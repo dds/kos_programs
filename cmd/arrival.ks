@@ -93,6 +93,7 @@ LOCAL FUNCTION _cmdArrival {
                 maneuverAcceptHandoff().
             }
             stateRemove("bplane_review").
+            stateRemove("bplane_midcourse_retry").
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
             resumeMission(). RETURN.
         }

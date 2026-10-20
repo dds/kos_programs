@@ -143,6 +143,7 @@ def defer_fixture():
                xferSeq=KList(('XING','BPLANE','COAST_1HALF','REFINE_BPLANE','COAST_2HALF','CAPTURE')),
                findArrivalPatch=lambda *_:hit,_bplaneTrimCap=lambda *_:10,
                bplaneCaptureCost=lambda *_:180)
+    env['_bplaneHasMidcourseRefinement']=lambda:ks.call('_bplaneHasMidcourseRefinement',env)
     return env,moon,hit
 
 
@@ -163,7 +164,8 @@ def check_midcourse_deferral():
                     dict(SHIP=NS(ORBIT=NS(HASNEXTPATCH=False))),
                     dict(SHIP=NS(ORBIT=NS(HASNEXTPATCH=True,NEXTPATCH=NS(BODY='Mun'))))):
         base,target,_=defer_fixture()
-        assert not ks.call('_bplaneDeferPeToMidcourse',base|changes,target,15000)
+        base.update(changes)
+        assert not ks.call('_bplaneDeferPeToMidcourse',base,target,15000)
     for seconds,expected in ((900,False),(901,True)):
         base,target,prediction=defer_fixture()
         prediction['entryUt']=base['TIME'].SECONDS+seconds
@@ -183,6 +185,7 @@ def check_midcourse_deferral():
     base,target,_=defer_fixture()
     advanced,cleared=[],[]
     base.update(HASNODE=False, maneuverBurnInterrupted=lambda:False,
+                _bplaneHandoffMidcourseRetry=lambda *_:False,
                 _bplaneTargetBody=lambda:target,bplanePauseForReview=lambda:False,
                 _bplaneCoastOutOfDepartureSoi=lambda _:True,_bplaneWantInc=lambda:-1,
                 bplaneResetWarnings=lambda:None,_bplaneLogBaseline=lambda *_:None,

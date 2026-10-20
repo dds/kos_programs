@@ -639,14 +639,21 @@ or 400 m/s on Minmus according to stock vacuum dV. Optional corrections may
 shift SOI entry by at most 600 seconds and raise the estimated periapsis
 capture cost by at most 5 m/s. A real patch with an unusable B-plane
 measurement holds instead of invoking lost-encounter acquisition. An
-unconverged optional correction also holds rather than spending its budget
-on a partial improvement.
+unconverged optional correction is never burned as a partial improvement.
+During early `BPLANE`, a safe future airless encounter with the normal
+`COAST_1HALF → REFINE_BPLANE` sequence hands that retry to midcourse
+automatically. The mission stays active, maintains solar attitude, sets its
+midpoint alarm and retries when the running coast reaches the wake time.
+KAC stops warp; the coast loop performs the continuation. An overdue saved
+midpoint retries immediately. The required polar plane and all correction
+budgets are still checked by refinement before a burn or capture handoff.
 
 These checks apply to retained maneuver nodes on reboot as well as new
-plans. Rejected nodes are removed; the original trajectory is retained and
-the current phase yields to the console. **A hold does not stop game time.**
+plans. A terminal rejection removes the node, retains the original trajectory
+and yields to the console. **A hold does not stop game time.**
 It does not silently waive the polar orbit or landing-site requirements.
-Arrival holds schedule a named `Arrival review: <body>` KAC alarm at the
+Cases without that timed retry path still hold for review. These terminal
+arrival holds schedule a named `Arrival review: <body>` KAC alarm at the
 anchored midcourse checkpoint, or request immediate review if it is overdue.
 The log prints its UT, remaining seconds and `automaticResume=False`.
 This is an operator-review alarm: it does **not** restart refinement or approve
@@ -1409,7 +1416,7 @@ once a second in RAM. Only pre-burn and post-cutoff rows are written, with no
 archive/state writes during positive commanded thrust. An alignment timeout
 cannot enter the powered loop.
 Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
-The routine suite passes 203 cases. Host-side timings vary with system load
+The routine suite passes 207 cases. Host-side timings vary with system load
 and are not a kOS flight timing guarantee; the flight plan records its own
 computation time.
 

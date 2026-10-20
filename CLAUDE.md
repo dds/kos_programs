@@ -245,6 +245,12 @@ Looks like Python/JS; is neither.
   parking orbit; retained deorbit nodes still pass the executor's light gate.
   Automatic solar orientation validates the cached axis against its saved
   measured peak before searching; reserve forced searches for explicit requests.
+  Scheduled mission waits must stay in the running coast loop. KAC KillWarp
+  alarms do not restart scripts or resume yielded phases. Early unconverged
+  optional B-plane trims with a safe future airless encounter hand off to the
+  existing COAST_1HALF/REFINE_BPLANE pair, preserving the midpoint and all later
+  burn/plane/fuel gates. Do not replace that with a review alarm plus prompt
+  exit or an unrelated indefinite solar hold (operator correction,2026-10-20).
 - Duna/Ike mental model: `duna_ike_setup` is mission glue, not a generic
   transfer dependency. It performs Duna aerocapture setup, writes the next
   Ike/Duna-entry leg as a local mission profile, and clears reload/band cache
@@ -257,6 +263,20 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  The operator tested07ea7db and reports review in7948s, then Godspeed. This
+  confirms the manual-review change failed the intended automatic wake flow.
+  Early mission BPLANE now explicitly enables deferred retry on an unflown
+  unconverged optional full correction. Reject/remove its node, bind pending
+  intent to mission/launch/target, then enter the existing COAST_1HALF handler;
+  its alarm, live solar/clock wait and REFINE_BPLANE retry stay in the mission.
+  Midpoints already past advance immediately. Abort, interrupted/manual nodes,
+  unsafe/missing/late encounters and absent coast/refinement pair cannot defer.
+  This delays an attempt, never accepts a bad burn or waives the polar goal.
+  Preview/review commands and midpoint solves do not enable this early policy.
+  Routine207 source checks include rejection-tail -> actual phase -> live wait
+  -> midpoint retry, with/without KAC, reboot intent and unchanged rejection
+  of a subsequent unconverged required-plane correction. Native convergence,
+  actual KAC timing and a successful flight remain unproven.
   RO9 Mun science return flight reports decision=hold reason=
   unconverged-optional-correction followed by solar engagement, no alarm and
   no wake time (2026-10-19). Source confirms hold yields before COAST_1HALF;

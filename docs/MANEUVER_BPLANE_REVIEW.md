@@ -411,3 +411,36 @@ health, boot-return and alarm-reuse functions. Existing correction, required
 plane, minimum-burn, reserve and interrupted-execution tests remain active.
 These establish control-flow behavior, not successful native polar targeting
 or KAC integration in flight. No installed `boot.ks` replacement is required.
+
+## Restore automatic midcourse continuation — 2026-10-20
+
+The operator tested the preceding change and reported a review alarm in
+7948 seconds followed by the Godspeed prompt. That was the implemented
+manual-review policy, but it was the wrong behavior for this mission: its
+scheduled wait must remain alive and retry automatically. KAC's KillWarp
+action stops warp; it does not restart an exited kOS program.
+
+Early mission `BPLANE` now explicitly permits an unconverged optional full
+correction to defer to the existing `COAST_1HALF → REFINE_BPLANE` pair. It
+removes the rejected node and records pending intent bound to the mission,
+launch and target, preserving the anchored midpoint. The normal coast owns
+the alarm, solar maintenance and running clock loop. At wake time it enters
+refinement; an overdue midpoint enters refinement immediately. Rebooting
+between the rejection and handoff resumes that same intent. A prior manual
+review alarm is cleared as the automatic coast takes ownership.
+
+Deferral requires an existing direct future airless encounter with safe
+positive Pe and time for the later solve. It cannot defer aborts, interrupted
+burns, unexpected nodes, missing/unsafe encounters or profiles without the
+coast/refinement pair. Required-plane feasibility, correction budgets and
+minimum burn size remain mandatory when refinement plans/executes. The
+preview/review commands and later midpoint solve do not enable this early
+deferral policy. A later unsolved or unsafe trajectory can still require a
+terminal review; the code does not accept a partial correction to avoid it.
+
+Source-driven replay follows the actual unconverged decision tail through
+the early phase, live coast loop and midpoint phase. It tests KAC availability,
+alarm-before-solar ordering, reboot and overdue checkpoints, and rejection of
+a second unconverged polar correction without entering capture. It does not
+establish native solver convergence or game-side alarm timing. No installed
+boot replacement is required.

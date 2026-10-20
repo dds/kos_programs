@@ -121,14 +121,7 @@ LOCAL FUNCTION _bplaneDeferPeToMidcourse {
             OR BPLANE_EARLY_PE_TOL <= 0 OR ABORT { RETURN FALSE. }
     // Only an immediate, known coast/refinement pair can inherit this job.
     // Recovery profiles without that pair must solve now or hold normally.
-    LOCAL phaseIndex IS 0.
-    UNTIL phaseIndex >= xferSeq:LENGTH {
-        IF xferSeq[phaseIndex] = "BPLANE" { BREAK. }
-        SET phaseIndex TO phaseIndex + 1.
-    }
-    IF phaseIndex + 2 >= xferSeq:LENGTH { RETURN FALSE. }
-    IF xferSeq[phaseIndex + 1] <> "COAST_1HALF"
-            OR xferSeq[phaseIndex + 2] <> "REFINE_BPLANE" { RETURN FALSE. }
+    IF NOT _bplaneHasMidcourseRefinement() { RETURN FALSE. }
     IF targetBody:ATM:EXISTS { RETURN FALSE. }
     IF NOT SHIP:ORBIT:HASNEXTPATCH { RETURN FALSE. }
     IF SHIP:ORBIT:NEXTPATCH:BODY <> targetBody { RETURN FALSE. }
@@ -185,11 +178,14 @@ LOCAL FUNCTION _bplaneTrimCap {
 
 LOCAL FUNCTION _bplaneHoldCorrection {
     PARAMETER reason.
+    PARAMETER allowMidcourseRetry IS FALSE.
     stateRemove("bplane_review").
     // A failed execution owns its retained node until explicit replan.
     IF NOT maneuverBurnInterrupted() {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     }
+    IF allowMidcourseRetry AND reason = "unconverged-optional-correction"
+            AND _bplaneQueueMidcourseRetry(reason) { RETURN. }
     mLogWarn("STATS bplane decision=hold reason=" + reason
         + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)
         + " reserveDv=" + BPLANE_TRIM_RESERVE_DV).
@@ -197,6 +193,71 @@ LOCAL FUNCTION _bplaneHoldCorrection {
         + "Review the encounter and remaining mission before resuming.").
     _bplaneScheduleHoldReview(reason).
     yieldToPrompt().
+}
+
+LOCAL FUNCTION _bplaneHasMidcourseRefinement {
+    LOCAL phaseIndex IS 0.
+    UNTIL phaseIndex >= xferSeq:LENGTH {
+        IF xferSeq[phaseIndex] = "BPLANE" { BREAK. }
+        SET phaseIndex TO phaseIndex + 1.
+    }
+    IF phaseIndex + 2 >= xferSeq:LENGTH { RETURN FALSE. }
+    RETURN xferSeq[phaseIndex + 1] = "COAST_1HALF"
+        AND xferSeq[phaseIndex + 2] = "REFINE_BPLANE".
+}
+
+LOCAL FUNCTION _bplaneRetryEncounter {
+    PARAMETER targetBody.
+    IF ABORT OR maneuverBurnInterrupted() OR HASNODE
+            OR stateGet("phase", "") <> "BPLANE"
+            OR NOT _bplaneHasMidcourseRefinement() { RETURN 0. }
+    IF targetBody:ATM:EXISTS OR SHIP:BODY = targetBody { RETURN 0. }
+    IF NOT SHIP:ORBIT:HASNEXTPATCH { RETURN 0. }
+    IF SHIP:ORBIT:NEXTPATCH:BODY <> targetBody { RETURN 0. }
+    LOCAL hit IS findArrivalPatch(0, targetBody).
+    IF hit = 0 { RETURN 0. }
+    LOCAL pe IS hit["patch"]:PERIAPSIS.
+    IF NOT (pe >= MAX(0,BPLANE_REVIEW_MIN_PE)
+            AND pe < targetBody:SOIRADIUS - targetBody:RADIUS
+            AND hit["entryUt"] < 1e30
+            AND hit["entryUt"]-TIME:SECONDS > 3*MAX(1,BPLANE_LEAD)) { RETURN 0. }
+    RETURN hit.
+}
+
+LOCAL FUNCTION _bplaneQueueMidcourseRetry {
+    PARAMETER reason.
+    LOCAL targetBody IS _bplaneTargetBody().
+    IF targetBody = 0 { RETURN FALSE. }
+    LOCAL hit IS _bplaneRetryEncounter(targetBody).
+    IF hit = 0 { RETURN FALSE. }
+    LOCAL wakeUt IS midcourseRefineUt(TIME:SECONDS, hit["entryUt"]).
+    midcourseClearReviewAlarm().
+    stateSet("bplane_midcourse_retry", LEX("mission",stateGet("mission_id",""),
+        "launch",stateGetNum("launch_time",0),"target",targetBody:NAME,"wakeUt",wakeUt)).
+    mLog("STATS bplane decision=defer reason=" + reason + " wakeUt=" + wakeUt
+        + " eta=" + (wakeUt-TIME:SECONDS) + " automaticResume=True").
+    mLog("Rejected correction removed; handing off to automatic midcourse refinement.").
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _bplaneHandoffMidcourseRetry {
+    PARAMETER targetBody.
+    LOCAL pending IS stateGet("bplane_midcourse_retry", LEXICON()).
+    IF pending:LENGTH = 0 { RETURN FALSE. }
+    IF pending["mission"] <> stateGet("mission_id", "")
+            OR pending["launch"] <> stateGetNum("launch_time",0)
+            OR pending["target"] <> targetBody:NAME {
+        stateRemove("bplane_midcourse_retry"). RETURN FALSE.
+    }
+    IF _bplaneRetryEncounter(targetBody) = 0 {
+        stateRemove("bplane_midcourse_retry"). RETURN FALSE.
+    }
+    // The existing coast owns the live wait, solar maintenance and KAC wake.
+    // REFINE_BPLANE must still meet every required plane/fuel/corridor gate.
+    nextPhase(xferSeq).
+    IF stateGet("phase", "") = "BPLANE" { RETURN FALSE. }
+    stateRemove("bplane_midcourse_retry").
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _bplaneScheduleHoldReview {
@@ -1021,6 +1082,8 @@ LOCAL FUNCTION _bplaneClearCoastTimes {
 // patched-conic propagation. Returns the node (already converged
 // and ready to execute), or 0 when no correction is needed or
 // possible. The node is REMOVEd internally on failure.
+// Only phaseBplane enables automatic retry via the existing midcourse pair;
+// previews and the refinement itself retain the default stop/review policy.
 // ============================================================
 GLOBAL FUNCTION planBplaneCorrection {
     PARAMETER targetBody.
@@ -1029,6 +1092,7 @@ GLOBAL FUNCTION planBplaneCorrection {
     PARAMETER wantLan IS -1.
     PARAMETER dvCapOverride IS -1.
     PARAMETER pristineLog IS "".
+    PARAMETER allowMidcourseRetry IS FALSE.
 
     LOCAL dvCap IS BPLANE_DV_CAP.
     IF BPLANE_REQUIRE_PLANE <> 0 AND (BPLANE_PE_ONLY <> 0 OR wantInc < 0) {
@@ -1050,7 +1114,7 @@ GLOBAL FUNCTION planBplaneCorrection {
         SET nd TO _bplanePlanPeOnly(targetBody, wantPe, dvCap).
     } ELSE {
         SET nd TO _bplanePlanFullCorrection(targetBody, wantPe, wantInc, wantLan,
-            dvCap, pristineLog).
+            dvCap, pristineLog, allowMidcourseRetry).
     }
     IF phaseShouldYield OR nd = 0 { RETURN 0. }
     IF NOT _bplaneCorrectionAboveMinimum(nd) { REMOVE nd. RETURN 0. }
@@ -1065,6 +1129,7 @@ LOCAL FUNCTION _bplanePlanFullCorrection {
     PARAMETER wantLan.
     PARAMETER dvCap.
     PARAMETER pristineLog.
+    PARAMETER allowMidcourseRetry IS FALSE.
     LOCAL peTol IS BPLANE_PE_TOL.
     LOCAL angTol IS BPLANE_ANG_TOL.
     LOCAL lead IS BPLANE_LEAD.
@@ -1403,7 +1468,7 @@ LOCAL FUNCTION _bplanePlanFullCorrection {
             _bplaneOfferReview(nd, targetBody, dvCap).
             RETURN 0.
         }
-        _bplaneHoldCorrection("unconverged-optional-correction").
+        _bplaneHoldCorrection("unconverged-optional-correction",allowMidcourseRetry).
         RETURN 0.
     }
 
@@ -1521,6 +1586,7 @@ GLOBAL FUNCTION phaseBplane {
     // Resume safety: a reboot can land us here after the SOI
     // transition already happened. Nothing left to correct.
     IF bplanePauseForReview() { RETURN. }
+    IF _bplaneHandoffMidcourseRetry(targetBody) { RETURN. }
     IF SHIP:BODY = targetBody {
         mLog("BPLANE: already inside " + targetBody:NAME + " SOI — skipping.").
         nextPhase(xferSeq).
@@ -1581,9 +1647,10 @@ GLOBAL FUNCTION phaseBplane {
         } ELSE {
             IF phaseShouldYield { RETURN. }
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-            SET nd TO planBplaneCorrection(targetBody, wantPe, wantInc, wantLan).
+            SET nd TO planBplaneCorrection(targetBody, wantPe, wantInc, wantLan,-1,"",TRUE).
         }
         IF phaseShouldYield { RETURN. }
+        IF _bplaneHandoffMidcourseRetry(targetBody) { RETURN. }
         IF nd = 0 { BREAK. }
         IF NOT bplaneCorrectionAllowed(nd, targetBody, BPLANE_DV_CAP) { RETURN. }
         _bplaneReserveCorrection(nd, targetBody).
