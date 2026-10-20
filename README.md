@@ -85,6 +85,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/geodistance.ks", lat1, lng1, lat2, lng2).` | Surface distance between two lat/lng points on the current body |
 | `RUNPATH("0:/cmd/kscsplash.ks").` | Target water splashdown offshore of KSC |
 | `RUNPATH("0:/cmd/zombie.ks").` | Power-cycle every *other* CPU on the vessel |
+| `RUNPATH("0:/cmd/updateboot.ks").` | Compile/install the current bootstrap while linked and thrust/throttle are zero; select it for the next reboot |
 
 Emergency landing rescue is archive-only: run `0:/cmd/landassist.ks`,
 `0:/cmd/landmin.ks`, or `0:/cmd/landingrescue.ks` while linked.
@@ -450,7 +451,7 @@ leg's log, rewinds `phase` to the start of the sequence, stamps a fresh
 
 ### Boot chain
 
-`boot/boot.ks` (installed in the VAB, **not remotely updatable**) syncs only
+`boot/boot.ks` (initially installed in the VAB) syncs only
 `lib/boot_lib.ks` + `lib/dependencies.ks`, then delegates: preamble/core
 libs load, EVA kerbals are auto-detected (root part `kerbalEVA`), `CORE:TAG`
 routes tagged CPUs to `roles/`, untagged CPUs load `craft/<vehicle>.ks`.
@@ -466,6 +467,26 @@ vehicle defaults, then re-runs the mission profile so mission/body overrides
 win before resume. The planned library list is deliberately not cached in
 state; if storage runs out mid-boot, the next connected boot can recover the
 selected mission from `mission_id` or the cached profile copy.
+
+Craft, role and archive mission scripts use the same compile/copy installer as
+libraries. Local execution selects an explicit `.ksm` filename first, then
+`.ks`, then a legacy extensionless file. This fixes deployed probes whose
+old bootstrap copied `craft/RO9` without an extension while offline discovery
+looked only for `.ks` or `.ksm`. Cached compiled profiles retain their exact
+mission ID. Profiles generated during flight remain source; rewriting one
+invalidates any older bytecode with the same name. Missing craft/profile code
+holds the mission instead of continuing with empty defaults.
+
+Existing probes need the revised **installed bootstrap** to compile craft code
+on connected boots. While linked, with thrust and both throttle controls zero,
+run `RUNPATH("0:/cmd/updateboot.ks").` and reboot when ready. The command compiles
+the current archive source in kOS, copies it to an alternate local boot file,
+then selects that file using `CORE:BOOTFILENAME`. It preserves the previously
+selected boot file and does not change the mission or phase. The following
+connected boot installs the craft and selected archive profile as `.ksm` files
+for later offline boots. The updated `boot_lib` also recognizes legacy bare
+craft files with an older bootstrap, but that bootstrap still needs updating
+to use the uniform installer.
 
 ### Phase machine and sequences
 

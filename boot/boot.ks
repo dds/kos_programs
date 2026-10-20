@@ -244,6 +244,7 @@ mLog("=== BOOT #" + bootCount + " === " + SHIP:NAME + " ===").
 IF vehicleScript = "" {
     PRINT "  !! SCRIPT NOT FOUND: " + vehicleName.
     mLogError("No script found for " + vehicleName).
+    SET BOOT_MANUAL_REQUESTED TO TRUE.
 }
 
 IF vehicleScript:CONTAINS("/") {
@@ -254,7 +255,7 @@ IF vehicleScript:CONTAINS("/") {
 IF HAS_LINK {
     IF vehicleScript <> "" {
         PRINT "  SYNC " + vehicleScript + " ....... ".
-        COPYPATH("0:/" + vehicleScript, "1:/" + vehicleScript).
+        bootLibSync(vehicleScript).
     }
 }
 
@@ -263,7 +264,7 @@ bootMissionConfig(vehicleName, HAS_LINK).
 LOCAL vehicleLibs IS LIST().
 IF isRoleScript AND vehicleScript <> "" {
     // Roles may not have mission profiles; keep their explicit boot hook.
-    RUNPATH(vehicleScript).
+    RUNPATH(bootLocalScriptPath(vehicleScript)).
     SET vehicleLibs TO bootVehicleLibs().
 } ELSE {
     SET vehicleLibs TO bootPlannedMissionLibs().
@@ -284,7 +285,7 @@ IF HAS_LINK {
 }
 
 IF vehicleScript <> "" {
-    RUNPATH(vehicleScript).
+    RUNPATH(bootLocalScriptPath(vehicleScript)).
 }
 
 IF stateGet("mission_id", "") <> "" {

@@ -68,8 +68,13 @@ Looks like Python/JS; is neither.
 3. **Reboots happen** (power, quickload, scene change, band reload). Every
    phase must be resumable from `1:/run/state.json` via `stateGet`/`stateSet`
    — never raw file I/O for mission state.
-4. **`boot/boot.ks` is installed in the VAB and cannot be updated remotely.**
-   Everything else (including `boot_lib`) re-syncs at connected boots.
+4. **`boot/boot.ks` is initially installed in the VAB.** Changes to it require
+   an installed bootstrap update; syncing `boot_lib` alone cannot change its
+   top-level actions. `cmd/updateboot.ks` compiles the archive source in kOS,
+   copies to an alternate local boot slot, then selects CORE:BOOTFILENAME.
+   It requires a link and zero physical/raw/pilot throttle, preserves the old
+   selected file, and leaves reboot timing to the operator. Other code
+   (including `boot_lib`) re-syncs at connected boots.
 5. **Bands load the libraries of EVERY phase in the band**, not just the
    mission's. Code used by only some missions goes in its own phase/band
    (costs those missions one reboot; costs everyone else nothing) —
@@ -198,6 +203,14 @@ Looks like Python/JS; is neither.
   already RUNPATHs that for the selected `mission_id`. Short-lived overrides go
   in `1:/run/mission_overrides.ks`; the override file is rewritten as a full
   current override set, not accumulated as state.
+  Craft/roles/archive profiles must use `bootLibSync`, just like libraries.
+  Execute explicit local `.ksm` paths first; accept `.ks` and extensionless
+  legacy craft files offline. The old installed bootstrap raw-copied craft
+  to `1:/craft/RO9`, while its resolver required an extension, causing the
+  reported empty-main offline boot. Updating boot_lib fixes discovery;
+  updating the installed boot fixes uniform craft compilation. Normalize
+  both `.ksm` and `.ks` cached mission IDs, and invalidate stale `.ksm` when
+  regenerating a local source profile. Do not compile mission_overrides.
 - Transfer-planning mental model: for
   `XING,BPLANE,COAST_1HALF,REFINE_BPLANE,COAST_2HALF,CAPTURE,SHAPE`,
   `XING` must produce a real target SOI patch, but it should not be treated

@@ -20,10 +20,12 @@ GLOBAL SCANSAT_RELEASE_AFTER_CAPTURE IS 0.
 GLOBAL REENTRY_PE IS 30000.
 
 GLOBAL FUNCTION main {
-    mLogWarn("Default empty main() called; no vehicle main loaded.").
+    mLogError("Default main() reached; vehicle program was not loaded. Mission held.").
     PRINT " ".
     PRINT "  DEFAULT MAIN".
     PRINT "  No vehicle main() was loaded.".
+    SET BOOT_MANUAL_REQUESTED TO TRUE.
+    yieldToPrompt().
 }
 
 GLOBAL FUNCTION bootEnsureDirs {
@@ -111,15 +113,26 @@ GLOBAL FUNCTION bootResolveScript {
         FOR d IN dirs {
             IF EXISTS("0:/" + d + "/" + name + ".ks") { RETURN d + "/" + name. }
         }
-        IF EXISTS("0:/" + name + ".ks") { RETURN name. }
+        IF EXISTS("0:/" + name + ".ks") { RETURN "./" + name. }
     }
     FOR d IN dirs {
-        IF EXISTS("1:/" + d + "/" + name + ".ks")
-                OR EXISTS("1:/" + d + "/" + name + ".ksm") {
+        IF bootLocalScriptPath(d + "/" + name) <> "" {
             RETURN d + "/" + name.
         }
     }
-    IF EXISTS("1:/" + name + ".ks") OR EXISTS("1:/" + name + ".ksm") { RETURN name. }
+    IF bootLocalScriptPath(name, "1:/" + name) <> "" { RETURN "./" + name. }
+    RETURN "".
+}
+
+// Explicit paths avoid a legacy extensionless source shadowing fresh KSM.
+// Keep source/bare fallbacks so already deployed probes can recover offline.
+GLOBAL FUNCTION bootLocalScriptPath {
+    PARAMETER sp_.
+    PARAMETER basePath IS "".
+    IF basePath = "" { SET basePath TO bootCorePath(sp_). }
+    FOR suffix IN LIST(".ksm", ".ks", "") {
+        IF EXISTS(basePath + suffix) { RETURN basePath + suffix. }
+    }
     RETURN "".
 }
 
@@ -143,8 +156,13 @@ GLOBAL FUNCTION bootEnsureScriptDir {
     PARAMETER sp_.
     IF NOT sp_:CONTAINS("/") { RETURN. }
     LOCAL parts IS sp_:SPLIT("/").
-    LOCAL dp IS "1:/" + parts[0].
-    IF NOT EXISTS(dp) { CREATEDIR(dp). }
+    LOCAL dp IS "1:".
+    LOCAL i IS 0.
+    UNTIL i >= parts:LENGTH - 1 {
+        SET dp TO dp + "/" + parts[i].
+        IF NOT EXISTS(dp) { CREATEDIR(dp). }
+        SET i TO i + 1.
+    }
 }
 
 GLOBAL FUNCTION bootCompiledPath {
@@ -155,8 +173,12 @@ GLOBAL FUNCTION bootCompiledPath {
 GLOBAL FUNCTION bootBaseName {
     PARAMETER fn.
     LOCAL upFn IS fn:TOUPPER.
-    IF upFn:CONTAINS(".KSM") { RETURN fn:SUBSTRING(0, fn:LENGTH - 4). }
-    IF upFn:CONTAINS(".KS") { RETURN fn:SUBSTRING(0, fn:LENGTH - 3). }
+    IF fn:LENGTH >= 4 AND upFn:SUBSTRING(fn:LENGTH-4,4) = ".KSM" {
+        RETURN fn:SUBSTRING(0, fn:LENGTH - 4).
+    }
+    IF fn:LENGTH >= 3 AND upFn:SUBSTRING(fn:LENGTH-3,3) = ".KS" {
+        RETURN fn:SUBSTRING(0, fn:LENGTH - 3).
+    }
     RETURN fn.
 }
 
@@ -206,8 +228,9 @@ GLOBAL FUNCTION bootMissionConfigIds {
     FOR item IN items {
         IF item:ISFILE {
             LOCAL nm IS item:NAME.
-            IF nm:CONTAINS(".ks") {
-                ids:ADD(nm:SUBSTRING(0, nm:LENGTH - 3)).
+            LOCAL id IS bootBaseName(nm).
+            IF id + ".ks" = nm AND NOT ids:CONTAINS(id) {
+                ids:ADD(id).
             }
         }
     }
@@ -227,8 +250,9 @@ GLOBAL FUNCTION bootCachedMissionConfigIds {
     FOR item IN items {
         IF item:ISFILE {
             LOCAL nm IS item:NAME.
-            IF nm:CONTAINS(".ks") {
-                ids:ADD(nm:SUBSTRING(0, nm:LENGTH - 3)).
+            LOCAL id IS bootBaseName(nm).
+            IF id <> nm AND NOT ids:CONTAINS(id) {
+                ids:ADD(id).
             }
         }
     }
@@ -243,22 +267,15 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     // Persist the selected profile before any bulky copy/profile work.
     // If storage runs out later, the next boot can still recover intent.
     stateSet("mission_id", mid).
-    LOCAL ap IS "0:/missions/" + cn + "/" + mid + ".ks".
-    LOCAL cd_ IS "1:/missions/" + cn.
-    LOCAL cp IS cd_ + "/" + mid + ".ks".
+    LOCAL script IS "missions/" + cn + "/" + mid.
+    LOCAL ap IS bootArchivePath(script).
     IF hl AND EXISTS(ap) {
-        IF NOT EXISTS("1:/missions") { CREATEDIR("1:/missions"). }
-        IF NOT EXISTS(cd_) { CREATEDIR(cd_). }
-        COPYPATH(ap, cp).
+        bootLibSync(script).
     }
-    LOCAL path_ IS cp.
-    IF NOT EXISTS(path_) {
-        IF hl AND EXISTS(ap) {
-            SET path_ TO ap.
-        } ELSE {
-            PRINT "  Mission config not found: " + path_.
-            RETURN FALSE.
-        }
+    LOCAL path_ IS bootLocalScriptPath(script).
+    IF path_ = "" {
+        mLogError("Mission config unavailable locally: " + script).
+        RETURN FALSE.
     }
     RUNPATH(path_).
     applyKnownMissionState().
@@ -323,7 +340,10 @@ GLOBAL FUNCTION bootMissionConfig {
         }
     }
     IF mid <> "" {
-        bootApplyMissionConfig(cn, mid, hl).
+        IF NOT bootApplyMissionConfig(cn, mid, hl) {
+            SET BOOT_MANUAL_REQUESTED TO TRUE.
+            mLogError("Selected mission unavailable; automatic resume disabled.").
+        }
     }
 }
 
@@ -731,6 +751,11 @@ GLOBAL FUNCTION bootLibSync {
     LOCAL dest IS bootCompiledPath(ln).
     IF EXISTS(dest) { DELETEPATH(dest). }
     COPYPATH(arKsm, dest).
+    // Only remove redundant source after the compiled local copy exists.
+    // Generated profiles without an archive source never enter this path.
+    IF EXISTS(dest) AND EXISTS(bootCorePath(ln) + ".ks") {
+        DELETEPATH(bootCorePath(ln) + ".ks").
+    }
 }
 
 GLOBAL FUNCTION bootLibLoadList {
@@ -739,7 +764,9 @@ GLOBAL FUNCTION bootLibLoadList {
         LOCAL ap IS bootArchivePath(ln).
         IF ln:CONTAINS("/") {
             bootLibSync(ln).
-            RUNPATH(bootCorePath(ln)).
+            LOCAL localPath IS bootLocalScriptPath(ln).
+            IF localPath = "" { mLogError("Local script unavailable: " + ln). yieldToPrompt(). RETURN. }
+            RUNPATH(localPath).
             bootLibAddUnique(BOOT_LIB_RAN, ln).
         } ELSE IF bootLibArchiveOnly(ln) {
             // Archive-only: run from 0:/ only when linked; never synced
@@ -753,7 +780,9 @@ GLOBAL FUNCTION bootLibLoadList {
             }
         } ELSE {
             bootLibSync(ln).
-            RUNONCEPATH(bootCorePath(ln)).
+            LOCAL localPath IS bootLocalScriptPath(ln).
+            IF localPath = "" { mLogError("Local library unavailable: " + ln). yieldToPrompt(). RETURN. }
+            RUNONCEPATH(localPath).
             bootLibAddUnique(BOOT_LIB_RAN, ln).
         }
     }

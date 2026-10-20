@@ -88,6 +88,9 @@ GLOBAL FUNCTION missionProfileBegin {
     PARAMETER mid.
     LOCAL path IS missionProfilePath(cn, mid).
     IF path = "" { RETURN "". }
+    // A newly generated source profile supersedes any old cached bytecode.
+    LOCAL compiled IS path:SUBSTRING(0,path:LENGTH-3) + ".ksm".
+    IF EXISTS(compiled) { DELETEPATH(compiled). }
     IF EXISTS(path) { DELETEPATH(path). }
     RETURN path.
 }
