@@ -62,8 +62,7 @@ def fixture(linked=True):
     def adapt(source):
         source=re.sub(r'\bPRINT\s+(?:"[^"]*"|[^."])*\.', '',source)
         source=source.replace('COMPILE src TO arKsm.','compile_file(src,arKsm).')
-        source=source.replace('COMPILE "0:/boot/boot.ks" TO "0:/boot/boot.ksm".',
-                              'compile_file("0:/boot/boot.ks","0:/boot/boot.ksm").')
+        source=re.sub(r'COMPILE ("[^"]+") TO ("[^"]+")\.',r'compile_file(\1,\2).',source)
         source=source.replace('LIST FILES IN items.','listing(items).')
         source=source.replace('DEFINED printStorageStatus','FALSE')
         return re.sub(r'"[^"\n]*"',lambda match:'text('+match[0]+')',source)
@@ -144,15 +143,19 @@ def check_boot_entry_and_missing_main():
 
 def check_boot_update_install():
     body=function_body((ROOT/'cmd/updateboot.ks').read_text(),'_cmdUpdateBoot')
-    for selected in ('boot/boot.ksm','boot/boot_updated.ksm'):
+    for selected in ('boot/boot.ksm','boot/boot_updated.ksm','1:/boot/boot_updated.ksm','/boot/boot_updated.ksm'):
         env,files,events,state=fixture()
         env['CORE']=NS(BOOTFILENAME=Text(selected))
         env['SHIP']=NS(THRUST=0,CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0))
         files['0:/boot/boot.ks']='new bootstrap source'
-        files['1:/'+selected]=('ksm','previous boot')
+        files['0:/boot/boot.ksm']=('ksm','tracked VAB release')
+        files['0:/boot/boot_update.ksm']=('ksm','previous build')
+        selected_path=selected if selected.startswith('1:/') else '1:/'+selected.lstrip('/')
+        files[selected_path]=('ksm','previous boot')
         env['run_body'](body)
-        assert env['CORE'].BOOTFILENAME!=selected and files['1:/'+selected]==('ksm','previous boot')
+        assert env['CORE'].BOOTFILENAME!=selected and files[selected_path]==('ksm','previous boot')
         assert files['1:/'+env['CORE'].BOOTFILENAME]==('ksm','new bootstrap source')
+        assert files['0:/boot/boot.ksm']==('ksm','tracked VAB release')
         assert not state  # Installation never resets or starts a mission.
     for failure in ('offline','thrust','copy'):
         env,files,events,_=fixture(failure!='offline')

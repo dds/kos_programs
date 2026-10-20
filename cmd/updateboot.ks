@@ -12,15 +12,18 @@ LOCAL FUNCTION _cmdUpdateBoot {
         PRINT "Archive bootstrap source missing.". RETURN.
     }
     // Compile on the archive; do not overwrite the selected boot file.
-    COMPILE "0:/boot/boot.ks" TO "0:/boot/boot.ksm".
+    // Use ignored build output, not the tracked VAB bootstrap bytecode.
+    IF EXISTS("0:/boot/boot_update.ksm") { DELETEPATH("0:/boot/boot_update.ksm"). }
+    COMPILE "0:/boot/boot.ks" TO "0:/boot/boot_update.ksm".
     LOCAL dest IS "1:/boot/boot_updated.ksm".
     IF "boot/boot_updated.ksm" = CORE:BOOTFILENAME
+            OR "/boot/boot_updated.ksm" = CORE:BOOTFILENAME
             OR "1:/boot/boot_updated.ksm" = CORE:BOOTFILENAME {
         SET dest TO "1:/boot/boot.ksm".
     }
     IF NOT EXISTS("1:/boot") { CREATEDIR("1:/boot"). }
     IF EXISTS(dest) { DELETEPATH(dest). }
-    COPYPATH("0:/boot/boot.ksm", dest).
+    COPYPATH("0:/boot/boot_update.ksm", dest).
     IF NOT EXISTS(dest) { PRINT "Boot copy failed; previous boot remains selected.". RETURN. }
     SET CORE:BOOTFILENAME TO dest:SUBSTRING(3,dest:LENGTH-3).
     PRINT "Boot installed: " + CORE:BOOTFILENAME + ". Reboot when ready.".
