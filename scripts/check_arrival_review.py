@@ -164,7 +164,7 @@ def check_review_flow():
     assert 'IF BPLANE_REQUIRE_PLANE <> 0 AND checkCorridor' in gate
     for guard in ('correction-budget', 'correction-plus-capture-budget', 'arrival-time-shift', 'capture-cost-increase'):
         assert guard in gate
-    planner = body(SOURCE, '_bplanePlanFullCorrection')
+    planner = body(SOURCE, '_bplanePlanFullAttempt')
     assert planner.index('_bplaneOfferReview(') < planner.index('unconverged-optional-correction')
     for phase in ('phaseBplane', 'phaseRefineBplane'):
         code = body(SOURCE, phase)

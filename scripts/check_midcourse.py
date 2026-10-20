@@ -9,13 +9,16 @@ from check_runtime_contracts import KList, run
 
 MID = (ROOT/'lib/midcourse.ks').read_text()
 CAPTURE = (ROOT/'lib/capture.ks').read_text()
+COAST = (ROOT/'lib/coast_wait.ks').read_text()
 PHASES = (ROOT/'lib/phases.ks').read_text()
 BOOT = (ROOT/'lib/boot_lib.ks').read_text()
 ARRIVAL = (ROOT/'lib/arrival_bplane.ks').read_text()
-SOURCE = '\n'.join((MID,CAPTURE,PHASES,BOOT,ARRIVAL))
+SOURCE = '\n'.join((MID,CAPTURE,COAST,PHASES,BOOT,ARRIVAL))
 # Console output has no role in these decisions. Keep function/branch source.
 SOURCE = re.sub(r'\bPRINT\s+(?:"[^"]*"|[^."])*\.', '', SOURCE)
 SOURCE = SOURCE.replace('UNLOCK STEERING.', 'fixture_unlock().')
+SOURCE = SOURCE.replace('REMOVE nd.', 'fixture_remove(nd).')
+SOURCE = SOURCE.replace('WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.', 'fixture_settle().')
 ks.SOURCES += '\n'+SOURCE
 
 
@@ -29,8 +32,12 @@ def environment():
     native=NS(HASNEXTPATCH=True,NEXTPATCHETA=10000,
               NEXTPATCH=NS(BODY=moon,HASNEXTPATCH=False))
     hit=dict(entryUt=11000,patch=NS(PERIAPSIS=15000))
-    env=dict(TIME=NS(SECONDS=1000), ABORT=False, SHIP=NS(BODY='Kerbin',ORBIT=native,
-             STATUS='ESCAPING'), ROUND=round, LIST=lambda *xs:KList(xs),
+    env=dict(TIME=NS(SECONDS=1000), ABORT=False,
+             SHIP=NS(BODY=NS(NAME='Kerbin',ATM=NS(EXISTS=True,HEIGHT=70000)),
+                     PERIAPSIS=78300,ORBIT=native,STATUS='ESCAPING'),
+             WARP=0,KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),
+             fixture_settle=lambda:None,
+             ROUND=round, LIST=lambda *xs:KList(xs),
              stateGet=saved.get,stateGetNum=saved.get,
              stateSet=lambda key,value:saved.update({key:value}),
              stateRemove=lambda key:saved.pop(key,None),
@@ -56,10 +63,16 @@ def environment():
     env['kacEnsureAlarm']=alarm
     env['DELETEALARM']=lambda key:alarms.pop(key,None)
     for name in ('midcourseRefineUt','midcourseClearReviewAlarm','_transferArrivalUt',
-                 '_bplaneScheduleHoldReview','_enterSolarCoast','_coastHealthPoll','coastHealthCheck',
-                 '_bplaneHasMidcourseRefinement','_bplaneRetryEncounter','_bplaneQueueMidcourseRetry',
-                 '_bplaneHandoffMidcourseRetry','_bplaneHoldCorrection'):
+                 '_bplaneScheduleHoldReview','enterSolarCoast','_coastHealthPoll','coastHealthCheck',
+                 '_bplaneHasMidcourseRefinement','_bplaneCoastEncounter','_bplaneRetryEncounter','_bplaneQueueMidcourseRetry',
+                 '_bplaneHandoffMidcourseRetry','_bplaneHoldCorrection','_bplaneWaitBeforeSolverRetry'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
+    def resident(reason):
+        # Run in the shared globals so the operator's ABORT write is visible
+        # during the loop; ks.call normally copies the fixture environment.
+        env['reason']=reason
+        return run(function_body(SOURCE,'_bplaneResidentHold'),env)
+    env['_bplaneResidentHold']=resident
     return env,saved,events,alarms,moon,hit
 
 
@@ -121,11 +134,11 @@ def check_alarm_before_solar():
         events.append(('solar',deadline))
         env['TIME'].SECONDS=deadline
         return 1
-    env['_enterSolarCoast']=solar
+    env['enterSolarCoast']=solar
     def wait(target,ut,poll,alarm,ref):
         assert env['TIME'].SECONDS==ut==6000 and alarm=='Midcourse refine: Mun'
         events.append(('wait',ut))
-    env['_waitUntilOrSOI']=wait
+    env['waitUntilOrSOI']=wait
     ks.call('phaseCoast1Half',env)
     assert [row[0] for row in events]==['alarm','solar','wait','advance']
     assert not alarms
@@ -158,14 +171,14 @@ def check_solar_and_health_deadlines():
     assert not env['coastHealthCheck']('test',deadline)
     assert events==[('charging',3)] and env['TIME'].SECONDS==deadline
     events.clear();env['TIME'].SECONDS=1000
-    env['_enterSolarCoast']('COAST_1HALF',True,True,deadline)
+    env['enterSolarCoast']('COAST_1HALF',True,True,deadline)
     assert events==[('aim',deadline)] and env['TIME'].SECONDS==deadline
     # No wait after a full battery drops at the deadline, either.
     env['TIME'].SECONDS=1000;events.clear()
     env['shipPowerFraction']=lambda:1 if env['TIME'].SECONDS<deadline else .5
     assert not env['coastHealthCheck']('test',deadline)
     assert not events and env['TIME'].SECONDS==deadline
-    wait=function_body(CAPTURE,'_waitUntilOrSOI')
+    wait=function_body(COAST,'waitUntilOrSOI')
     assert 'trySolarHoldTick(solarRef, targetUt)' in wait
     assert 'trySolarHoldTick(solarRef, midUt)' in wait
     print('PASS: solar alignment and health/readout waits cannot consume a passed midpoint budget; maintenance re-aims inherit the wake time')
@@ -223,6 +236,8 @@ def retry_environment():
         env['phaseShouldYield']=True
         events.append(('yield',saved['phase']))
     def wait(dt):
+        # Conic refresh waits have no native propagation in this fixture.
+        if dt<1:return
         env['TIME'].SECONDS+=dt
         env['SHIP'].ORBIT.NEXTPATCHETA=hit['entryUt']-env['TIME'].SECONDS
     def forbidden(*_):raise AssertionError('rejected correction reached burn/capture')
@@ -231,7 +246,7 @@ def retry_environment():
                bplaneCorrectionAllowed=forbidden)
     # Execute the actual unconverged-kernel decision tail. Synthetic planner
     # responses isolate orchestration; no claim of native solver convergence.
-    tail=function_body(SOURCE,'_bplanePlanFullCorrection').split(
+    tail=function_body(SOURCE,'_bplanePlanFullAttempt').split(
         'IF NOT converged AND NOT acquired {',1)[1]
     tail='IF NOT converged AND NOT acquired {'+tail
     def plan(target,pe,inc,lan,cap=-1,note='',allow=False):
@@ -239,7 +254,11 @@ def retry_environment():
         local=dict(env,converged=False,acquired=False,nd=None,targetBody=target,
                    dvCap=10,measF=1,allowMidcourseRetry=allow)
         return run(tail,local)
-    env['planBplaneCorrection']=plan
+    env['_bplanePlanFullAttempt']=plan
+    env['_bplaneTrimCap']=lambda target,cap:cap
+    env['_bplanePlanFullCorrection']=lambda *args:ks.call('_bplanePlanFullCorrection',env,*args)
+    env['planBplaneCorrection']=lambda target,pe,inc,lan,cap=-1,note='',allow=False:env['_bplanePlanFullCorrection'](target,pe,inc,lan,10 if cap<0 else cap,note,allow)
+    env['fixture_remove']=lambda nd:events.append(('remove',nd))
     return env,saved,events,alarms,moon,hit
 
 
@@ -260,33 +279,42 @@ def check_automatic_retry_through_coast():
             assert label=='COAST_1HALF' and deadline==6000
             assert ('Midcourse refine: Mun' in alarms)==kac
             return 1
-        env['_enterSolarCoast']=enter
-        env['_waitUntilOrSOI']=lambda *args:ks.call('_waitUntilOrSOI',env,*args)
+        env['enterSolarCoast']=enter
+        env['waitUntilOrSOI']=lambda *args:ks.call('waitUntilOrSOI',env,*args)
         ks.call('phaseCoast1Half',env)
         assert env['TIME'].SECONDS==6000 and saved['phase']=='REFINE_BPLANE'
         assert len(ticks)>400 and all(deadline==6000 for _,deadline in ticks)
         assert not env['phaseShouldYield']
         # The midpoint must retry instead of silently waiving the polar goal.
-        # A second unconverged result still cannot execute or enter capture.
+        # The later retry remains resident too. Explicit ABORT stops it;
+        # a rejected result still cannot execute or enter capture.
         env['measureArrival']=lambda *_:dict(pe=15000,inc=45,lan=0)
         env['_bplaneCorridorError']=lambda *_:dict(planeErr=45,peErr=0)
         env['_bplaneCorridorOk']=lambda *_:False
+        def abort_retry(target):
+            events.append(('resident-retry',saved['phase']))
+            env['ABORT']=True
+            return False
+        env['_bplaneWaitBeforeSolverRetry']=abort_retry
         run(function_body(SOURCE,'phaseRefineBplane'),env)
-        assert saved['phase']=='REFINE_BPLANE' and env['phaseShouldYield']
-        assert events[-1]==('yield','REFINE_BPLANE')
-        assert ('plan','REFINE_BPLANE',False) in events
+        assert saved['phase']=='REFINE_BPLANE'
+        assert ('resident-retry','REFINE_BPLANE') in events
+        assert ('plan','REFINE_BPLANE',True) in events
         assert env['CAPTURE_INC']==90 and env['BPLANE_REQUIRE_PLANE']==1
     print('PASS: actual rejection tail and phase handlers hand off without yielding, maintain a live timed solar coast, wake at midpoint and retry with polar/burn gates intact; KAC absence still polls the clock')
 
 
 def check_retry_eligibility_and_resume():
-    for failure in ('abort','interrupted','node','patch','unsafe','nan','late','path','atmosphere','phase'):
+    for failure in ('abort','interrupted','node','patch','invalid-pe','unsafe-parent','nan-parent','infinite-parent','nan','late','path','atmosphere','phase'):
         env,saved,events,_,moon,hit=retry_environment()
         if failure=='abort':env['ABORT']=True
         if failure=='interrupted':env['maneuverBurnInterrupted']=lambda:True
         if failure=='node':env['HASNODE']=True
         if failure=='patch':env['findArrivalPatch']=lambda *_:0
-        if failure in ('unsafe','nan'):hit['patch'].PERIAPSIS=-1 if failure=='unsafe' else math.nan
+        if failure in ('invalid-pe','nan'):hit['patch'].PERIAPSIS=-moon.RADIUS if failure=='invalid-pe' else math.nan
+        if failure=='unsafe-parent':env['SHIP'].PERIAPSIS=69999
+        if failure=='nan-parent':env['SHIP'].PERIAPSIS=math.nan
+        if failure=='infinite-parent':env['SHIP'].PERIAPSIS=math.inf
         if failure=='late':hit['entryUt']=env['TIME'].SECONDS+900
         if failure=='path':env['xferSeq']=KList(('BPLANE','CAPTURE'))
         if failure=='atmosphere':moon.ATM.EXISTS=True
@@ -311,8 +339,7 @@ def check_retry_eligibility_and_resume():
 
 
 def check_retry_is_mission_owned():
-    # Only the early mission handler explicitly enables deferred retry.
-    # Public previews, retained-node inspection and midpoint solves default off.
+    # Mission handlers enable live retry; public previews default off.
     for allow in (False,True):
         env,_,_,_,moon,_=retry_environment()
         calls=[]
@@ -334,7 +361,7 @@ def check_retry_is_mission_owned():
     command=function_body((ROOT/'cmd/arrival.ks').read_text(),'_arrivalCommand')
     replan=command.split('IF action = "replan" {',1)[1].split('LOCAL saved IS',1)[0]
     assert 'stateRemove("bplane_midcourse_retry")' in replan
-    print('PASS: deferred retry is explicitly enabled only by early BPLANE mission execution; previews and later unconverged solves retain their stop/review policy')
+    print('PASS: live retries are mission-owned; operator previews and explicit review retain their stop/review policy')
 
 
 def check_overdue_retry_handoff():
@@ -345,11 +372,133 @@ def check_overdue_retry_handoff():
     run(function_body(SOURCE,'phaseBplane'),env)
     assert saved['phase']=='COAST_1HALF' and not env['phaseShouldYield']
     def forbidden(*_):raise AssertionError('overdue retry started another solar coast')
-    env['_enterSolarCoast']=forbidden
+    env['enterSolarCoast']=forbidden
     ks.call('phaseCoast1Half',env)
     assert saved['phase']=='REFINE_BPLANE' and env['TIME'].SECONDS==2500
     assert saved['midcourse_refine_ut']==1200
     print('PASS: a reboot after the retained midpoint advances immediately to refinement instead of exiting or inventing another wait')
+
+
+def check_reported_low_periapsis_retry():
+    env,saved,events,_,_,hit=retry_environment()
+    hit.update(entryUt=15220.57559)
+    hit['patch'].PERIAPSIS=8440
+    env['SHIP'].ORBIT.NEXTPATCHETA=hit['entryUt']-1000
+    run(function_body(SOURCE,'phaseBplane'),env)
+    assert saved['phase']=='COAST_1HALF' and not env['phaseShouldYield']
+    assert 1000<saved['midcourse_refine_ut']<hit['entryUt']-env['BPLANE_LEAD']
+    # This is permission to wait before arrival, not to accept an 8.44 km Pe
+    # or a 70-degree plane miss. The actual final admission remains required.
+    assert 'bplaneCorrectionAllowed(nd, targetBody, BPLANE_DV_CAP,TRUE,TRUE)' in function_body(SOURCE,'phaseBplane')
+    assert 'required-arrival-corridor' in function_body(SOURCE,'bplaneCorrectionAllowed')
+    assert hit['patch'].PERIAPSIS==8440 and not any(row[0]=='yield' for row in events)
+    print('PASS: reported 8.44 km Mun Pe with safe 78.3 km Kerbin orbit retains the scheduled pre-SOI retry; final arrival/plane admission is unchanged')
+
+
+def check_later_live_solver_retries():
+    for kac in (True,False):
+        env,saved,events,alarms,moon,hit=retry_environment()
+        saved['phase']='REFINE_BPLANE'
+        env['ADDONS'].KAC.AVAILABLE=kac
+        hit['patch'].PERIAPSIS=8440
+        ticks=[]
+        def enter(label,orient,health,deadline):
+            assert label=='BPLANE retry' and orient and health
+            assert ('B-plane retry: Mun' in alarms)==kac
+            assert env['TIME'].SECONDS<deadline<hit['entryUt']-env['BPLANE_LEAD']
+            events.append(('solar',deadline))
+            return 1
+        env['enterSolarCoast']=enter
+        env['trySolarHoldTick']=lambda ref,deadline:ticks.append((env['TIME'].SECONDS,deadline)) or ref
+        env['waitUntilOrSOI']=lambda *args:ks.call('waitUntilOrSOI',env,*args)
+        attempts=[]
+        node=NS(DELTAV=NS(MAG=20))
+        def attempt(*args):
+            attempts.append((env['TIME'].SECONDS,args[4]))
+            return -1 if len(attempts)<3 else node
+        env['_bplanePlanFullAttempt']=attempt
+        caps=[]
+        env['_bplaneTrimCap']=lambda target,cap:caps.append(cap) or cap
+        result=env['_bplanePlanFullCorrection'](moon,15000,90,-1,30,'',True)
+        assert result is node and len(attempts)==3 and caps==[30]*3
+        assert attempts[0][0]<attempts[1][0]<attempts[2][0]<hit['entryUt']-env['BPLANE_LEAD']
+        assert len(ticks)>500 and not alarms and saved['phase']=='REFINE_BPLANE'
+        assert not env['phaseShouldYield'] and not any(row[0]=='yield' for row in events)
+    # Explicit abort stops the shared wait before any solar/warp work.
+    env,_,events,_,moon,_=retry_environment()
+    env.update(ABORT=True,solarRef=-1,targetBody=moon,targetUt=2000)
+    run(function_body(SOURCE,'waitUntilOrSOI'),env)
+    assert env['TIME'].SECONDS==1000 and not events
+    print('PASS: later unconverged mission solves remain live, schedule alarms before solar, poll without KAC and retry with freshly capped budgets; ABORT cannot start a wait')
+
+
+def check_retry_deadline_resident_hold():
+    for failure in ('late','missing','unsafe-parent','wrong-body','overslept'):
+        env,saved,events,alarms,moon,hit=retry_environment()
+        saved['phase']='REFINE_BPLANE'
+        if failure=='late':hit['entryUt']=env['TIME'].SECONDS+env['BPLANE_LEAD']
+        if failure=='missing':env['findArrivalPatch']=lambda *_:0
+        if failure=='unsafe-parent':env['SHIP'].PERIAPSIS=69999
+        if failure=='wrong-body':env['SHIP'].ORBIT.NEXTPATCH.BODY=NS(NAME='Minmus')
+        if failure=='overslept':
+            env['enterSolarCoast']=lambda *_:1
+            def oversleep(*_):env['TIME'].SECONDS=hit['entryUt']
+            env['waitUntilOrSOI']=oversleep
+        waits=[]
+        def stop(dt):
+            waits.append(dt)
+            env['ABORT']=True  # Operator aborts the resident, 1x hold.
+        env.update(targetBody=moon,fixture_wait=stop,WARP=4)
+        result=run(function_body(SOURCE,'_bplaneWaitBeforeSolverRetry'),env)
+        assert result is False and waits==[1] and env['WARP']==0
+        assert not alarms and saved['phase']=='REFINE_BPLANE' and not env['phaseShouldYield']
+        assert not any(row[0]=='yield' for row in events)
+    print('PASS: exhausted/invalid retry windows and an overslept deadline stop at a resident 1x intervention hold, without yielding, advancing or accepting the rejected burn')
+
+
+def check_resident_admission_guards():
+    for reason in ('planned-encounter-missing','required-arrival-corridor','correction-budget',
+                   'correction-plus-capture-budget','arrival-time-shift','capture-cost-increase'):
+        env,saved,events,alarms,moon,_=retry_environment()
+        saved['phase']='REFINE_BPLANE'
+        node=NS(DELTAV=NS(MAG=20))
+        original=dict(entryUt=11000,patch=NS(PERIAPSIS=15000,INCLINATION=90,LAN=0))
+        planned=dict(entryUt=11000,patch=NS(PERIAPSIS=15000,INCLINATION=90,LAN=0))
+        env['SHIP'].DELTAV=NS(VACUUM=2019.1)
+        env.update(nd=node,targetBody=moon,phaseCap=100,checkCorridor=True,missionOwned=True,
+                   BPLANE_CAPTURE_MARGIN=900,BPLANE_MAX_ARRIVAL_SHIFT=600,
+                   BPLANE_MAX_CAPTURE_DV_INCREASE=5,BPLANE_TRIM_RESERVE_DV=900,
+                   _bplaneTrimSpent=lambda _:0,_bplaneTrimCap=lambda *_:100,
+                   _bplaneElementPlaneError=lambda *_:0,
+                   bplaneCaptureCost=lambda *_:280)
+        if reason=='planned-encounter-missing':planned=0
+        if reason=='required-arrival-corridor':planned['patch'].PERIAPSIS=27000
+        if reason=='correction-budget':node.DELTAV.MAG=101
+        if reason=='correction-plus-capture-budget':env['SHIP'].DELTAV.VACUUM=1199
+        if reason=='arrival-time-shift':planned['entryUt']=11601
+        if reason=='capture-cost-increase':
+            env['bplaneCaptureCost']=lambda patch,_:286 if patch is planned['patch'] else 280
+        env['findArrivalPatch']=lambda nd,_:planned if nd else original
+        waits=[]
+        def stop(dt):
+            waits.append(dt)
+            env['ABORT']=True
+        env.update(fixture_wait=stop,WARP=5)
+        guard=function_body(SOURCE,'bplaneCorrectionAllowed').replace(
+            'PARAMETER nd, targetBody, phaseCap.',
+            'PARAMETER nd. PARAMETER targetBody. PARAMETER phaseCap.')
+        result=run(guard,env)
+        assert result is False and env['reason']==reason and waits==[1]
+        assert env['WARP']==0 and not env['phaseShouldYield'] and not alarms
+        assert saved['phase']=='REFINE_BPLANE' and not any(row[0]=='yield' for row in events)
+        assert 'bplane_budget_spent' not in saved
+    # An interrupted execution still owns its node and explicitly yields for
+    # review even when called from the mission; no speculative retry/cleanup.
+    env,_,events,_,_,_=retry_environment()
+    env.update(HASNODE=True,maneuverBurnInterrupted=lambda:True)
+    env['_bplaneHoldCorrection']('correction-execution-failed',True)
+    assert env['HASNODE'] and env['phaseShouldYield'] and events[-1][0]=='yield'
+    print('PASS: all six mission admission rejections retain their limits in resident 1x holds, charge no budget and never advance; interrupted burns still retain their node and require explicit review')
 
 
 if __name__=='__main__':
@@ -363,3 +512,7 @@ if __name__=='__main__':
     check_retry_eligibility_and_resume()
     check_retry_is_mission_owned()
     check_overdue_retry_handoff()
+    check_reported_low_periapsis_retry()
+    check_later_live_solver_retries()
+    check_retry_deadline_resident_hold()
+    check_resident_admission_guards()

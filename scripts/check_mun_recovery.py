@@ -132,7 +132,7 @@ def check_polar_contract():
                         _bplanePlaneFeasible=lambda _: False) == waived
     safe = body(ARRIVAL, '_bplaneSafeEncounter')
     assert 'IF BPLANE_REQUIRE_PLANE <> 0 { RETURN FALSE. }' in safe
-    full = body(ARRIVAL, '_bplanePlanFullCorrection')
+    full = body(ARRIVAL, '_bplanePlanFullAttempt')
     assert full.index('required-plane-infeasible') < full.index('SET planeMode TO "pe-only"')
     planner = body(ARRIVAL, 'planBplaneCorrection')
     assert planner.index('required-plane-config-conflict') < planner.index('_bplanePlanPeOnly(')

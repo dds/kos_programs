@@ -140,7 +140,7 @@ def check_reference_and_persistence():
     reading[0] = 0
     ks.call('_solarFinish', env, Vec((1, 0, 0)), False, 'eclipse')
     assert saved['solar_axis_peak'] == 11
-    for filename, name in (('phases', 'coastHealthCheck'), ('capture', '_enterSolarCoast'), ('solar', 'solarHoldTick')):
+    for filename, name in (('phases', 'coastHealthCheck'), ('coast_wait', 'enterSolarCoast'), ('solar', 'solarHoldTick')):
         code = function_body((ROOT/f'lib/{filename}.ks').read_text(), name)
         assert 'orientForSolar(TRUE' not in code
     command = (ROOT/'cmd/solarhold.ks').read_text()

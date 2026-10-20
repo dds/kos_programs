@@ -669,17 +669,37 @@ KAC stops warp; the coast loop performs the continuation. An overdue saved
 midpoint retries immediately. The required polar plane and all correction
 budgets are still checked by refinement before a burn or capture handoff.
 
+This pre-SOI wait checks the current parent orbit's clearance and the direct
+future encounter. The target's review Pe floor does not apply to waiting:
+the reported 8.44 km Mun Pe can still be corrected before arrival from a
+safe 78.3 km Kerbin orbit. Actual arrival/capture Pe and plane gates remain.
+Later unconverged mission solves also stay running: a named `B-plane retry`
+alarm and the shared solar/clock wait schedule another attempt before the
+SOI/burn safety margin. Without KAC, the clock loop still wakes. If no safe
+retry window remains, or a mission correction violates its admission limits,
+`ARRIVAL BLOCKED` stays resident at 1x for intervention. It does not fly the
+rejected node or advance to capture. ABORT/terminal interruption remains
+available; game time continues during a resident hold.
+
+RO9's Mun polar science mission has a separate correction allowance: 100 m/s
+per early/refinement burn, 150 m/s total, plus a 900 m/s margin after predicted
+capture. The reported 10 m/s cap left its required polar plane 70° away.
+The full solver now uses a minimum-length Newton step across prograde,
+radial and normal axes, with up to 16 iterations. Both line-search/total
+caps and the 600-second arrival-shift/5 m/s capture-cost-increase limits
+remain. These changes have source/numerical checks; native flight convergence
+still needs verification.
+
 These checks apply to retained maneuver nodes on reboot as well as new
-plans. A terminal rejection removes the node, retains the original trajectory
-and yields to the console. **A hold does not stop game time.**
-It does not silently waive the polar orbit or landing-site requirements.
-Cases without that timed retry path still hold for review. These terminal
-arrival holds schedule a named `Arrival review: <body>` KAC alarm at the
+plans. Operator previews, explicitly configured candidate review, and
+interrupted burns retain the manual review policy. They do not enable
+automatic retry or silently waive polar orbit/landing-site requirements.
+Manual arrival holds schedule a named `Arrival review: <body>` KAC alarm at the
 anchored midcourse checkpoint, or request immediate review if it is overdue.
 The log prints its UT, remaining seconds and `automaticResume=False`.
 This is an operator-review alarm: it does **not** restart refinement or approve
 a rejected correction. If timing or KAC is unavailable, the log says so.
-Deliberate mission holds return to the prompt; boot does not start its
+Explicit manual holds return to the prompt; boot does not start its
 indefinite fallback solar hold afterward. No installed boot replacement is
 needed. `RUNPATH("0:/cmd/arrival.ks", "status").` reports the encounter and
 budget; the existing `plan`, `review`, `accept` and `replan` actions remain

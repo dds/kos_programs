@@ -264,6 +264,14 @@ Looks like Python/JS; is neither.
   existing COAST_1HALF/REFINE_BPLANE pair, preserving the midpoint and all later
   burn/plane/fuel gates. Do not replace that with a review alarm plus prompt
   exit or an unrelated indefinite solar hold (operator correction,2026-10-20).
+  Pre-SOI coast safety is the parent orbit's clearance/direct encounter and
+  a finite wake before arrival; do not apply the target review Pe floor to
+  that wait. The actual 8.44 km Mun Pe excluded the previous automatic path.
+  Later full-solver failures use the same solar/clock wait from coast_wait,
+  then replan within the pre-SOI/burn margin. Mission admission/window failures
+  stay resident at 1x for intervention; previews/explicit review/interrupted
+  burns retain their manual policy. Never accept an unconverged required
+  plane just to keep the phase machine moving.
 - Duna/Ike mental model: `duna_ike_setup` is mission glue, not a generic
   transfer dependency. It performs Duna aerocapture setup, writes the next
   Ike/Duna-entry leg as a local mission profile, and clears reload/band cache
@@ -276,6 +284,24 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Complete RO9 log at UT1851812 confirms the previous deferred retry did NOT
+  activate: native Mun Pe8.44km failed the 10km review floor, despite safe
+  Kerbin Pe78.3km and 14220s until encounter. Solver saturated10m/s, reduced
+  planeErr88.75->70.01deg, final Pe31.7km, offPlane0, available2019.1m/s.
+  Current patch separates pre-SOI wait safety from arrival acceptance,
+  uses a three-axis minimum-norm B-plane residual step (prograde was omitted
+  from Newton), and allows16 iterations. RO9 mun_landing_return gets100m/s
+  per correction/150total with900m/s AFTER capture; plane, time-shift600s,
+  capture-cost-increase5m/s and cumulative budget checks remain mandatory.
+  Later unconverged full solves stay in timed solar/clock retries; all mission
+  admission/window failures stay resident1x with explicit intervention text.
+  Operator previews and interrupted burns still require deliberate review.
+  Routine219 source checks include actual8.44km eligibility, KAC/no-KAC live
+  retries, deadline/abort holds, six admission guards, 50 independent
+  least-squares comparisons, synthetic polar convergence/cap rejection, and
+  offline craft/profile compile/copy/cold-load/updater cases. No native kOS
+  compiler or KSP integration runner; actual flight convergence is unproven.
+  Historical6daffcd attempt (superseded by the complete log above):
   The operator tested07ea7db and reports review in7948s, then Godspeed. This
   confirms the manual-review change failed the intended automatic wake flow.
   Early mission BPLANE now explicitly enables deferred retry on an unflown

@@ -5,6 +5,70 @@ and structural checks, but have **not been flight-tested**. There are no saved
 flight logs in this checkout establishing which defect caused a particular
 reported overburn.
 
+## RO9 polar correction and live retry — 2026-10-20
+
+The operator supplied a complete BPLANE log beginning at UT 1851812.1:
+unburned Mun Pe 8.44 km/inc 178.75°, requested Pe 15 km/inc 90°, available 2019.1 m/s.
+The requested plane is feasible (`offPlane=0`). Eight iterations saturated
+the 10 m/s correction cap, ending with Pe 31.7 km and plane error 70.01°. The node
+was rejected. A manual review alarm was installed at UT 1858084.4, followed by
+`MISSION HELD` and the Godspeed prompt. This proves a budget-limited failed
+solve and a failed automatic continuation; it does not prove the same
+encounter is infeasible with a larger budget.
+
+The previous automatic handoff required target Pe >= 10 km. That rejected this
+8.44 km encounter before it could reach COAST_1HALF. The replacement check is
+specific to a wait **before** target SOI entry: the current parent orbit must
+clear its atmosphere/surface, the next native patch must be the target, and
+its conic/timing must be finite with a usable pre-arrival margin. The review
+Pe floor remains an arrival acceptance safeguard. The supplied Kerbin
+Pe 78.3 km can therefore wait for correction before the Mun encounter without
+approving an 8.44 km landing/capture trajectory.
+
+Full correction now differentiates both residuals against all three maneuver
+axes and solves the minimum-norm step `J' * (J*J')^-1 * -residual`, with the
+existing damping, cap projection, improving line search and best-node restore.
+Target-vector changes are included in the finite differences. Lost positive
+probes try the negative direction; rank-deficient responses do not create an
+arbitrary step. Maximum Newton iterations increase from 8 to 16.
+
+RO9's Mun polar-science profile permits 100 m/s per correction/refinement and
+150 m/s cumulatively. The 900 m/s reserve is also enforced **after** estimated
+capture. Required plane/Pe, 600-second arrival shift and 5 m/s capture-cost
+increase checks remain. Other vehicles/profiles keep their existing budgets.
+The larger allowance enables a substantial polar correction while preserving
+finite spending limits; native KSP propagation still decides whether a node
+satisfies all constraints.
+
+Early unconverged mission attempts remove their unflown node and hand off to
+the existing midpoint pair. Later attempts use the extracted `coast_wait`
+solar/clock helpers, installing the KAC alarm before solar work and retrying
+before the SOI/burn margin. The clock loop works without KAC. When no safe
+retry window remains, or a mission-owned admission guard rejects a node, the
+mission remains resident at 1x with an explicit intervention message. It does
+not advance or burn the compromise. Operator previews/explicit review keep
+their prompt behavior. An interrupted execution still owns its retained node
+and requires explicit review/replan.
+
+Validation: 219 routine source fixtures pass across 36 scripts. New checks run
+50 Newton steps against independent NumPy least-squares answers, including
+essential prograde authority and moving target vectors; test opposite-sign
+probes/singular responses; and execute the full solver on a synthetic polar
+response using the supplied initial B-vector. In that model 10 m/s rejects and
+100 m/s converges. This is a model check, not reconstructed KSP physics.
+Control fixtures exercise the actual 8.44 km eligibility, midpoint and later
+live waits with/without KAC, six admission rejections, abort/deadline handling
+and unchanged interrupted-node ownership. Boot fixtures separately cover the
+reported extensionless craft/source-profile offline regression and installer.
+
+Next flight evidence: `STATS bplane step` (minimum-norm proposal/cap/axes),
+`STATS bplane plan`, `STATS bplane budget/comparison/capture-budget`, and
+`STATS bplane decision=defer`, `midcourse wake`, `bplane retry-wake` or
+`bplane blocked`. Verify the corrected native Pe and polar plane before burn,
+the actual post-burn corridor, and the printed wake reaching refinement in
+the running script. No native compile, KAC integration or successful polar
+flight has been established by these offline checks.
+
 ## Burn execution
 
 - The overshoot checks compared `nd:BURNVECTOR` with `nd:DELTAV`. These are

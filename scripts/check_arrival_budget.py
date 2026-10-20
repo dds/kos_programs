@@ -47,7 +47,7 @@ def check_budget():
 
 def check_decisions():
     gate = body(BPLANE, 'bplaneCorrectionAllowed')
-    conditions = re.findall(r'IF (.*?)\{\s*_bplaneHoldCorrection\("([^"]+)"\)', gate, re.S)
+    conditions = re.findall(r'IF (.*?)\{\s*_bplaneHoldCorrection\("([^"]+)"(?:,missionOwned)?\)', gate, re.S)
     # Pull just the last IF before each hold (earlier blocks contain logs).
     conditions = {reason: condition.rsplit('IF ', 1)[-1].strip()
                   for condition, reason in conditions}
@@ -118,7 +118,7 @@ def check_logging_and_integration():
     assert 'AND HOMECONNECTION:ISCONNECTED' in log
     hold = body(BPLANE, '_bplaneHoldCorrection')
     assert 'REMOVE NEXTNODE' in hold and 'yieldToPrompt()' in hold
-    planner = body(BPLANE, '_bplanePlanFullCorrection')
+    planner = body(BPLANE, '_bplanePlanFullAttempt')
     assert planner.index('existing-patch-unmeasurable') < planner.index('_acquireEncounter(')
     assert 'IF NOT converged AND NOT acquired' in planner
     assert 'unconverged-optional-correction' in planner
@@ -126,10 +126,10 @@ def check_logging_and_integration():
         source = body(BPLANE, phase)
         assert source.index('bplaneCorrectionAllowed(') < source.index('_bplaneExecuteCorrection()')
         assert source.index('_bplaneReserveCorrection(') < source.index('_bplaneExecuteCorrection()')
-        assert source.count('IF phaseShouldYield { RETURN. }') == 2
+        assert source.count('IF phaseShouldYield OR ABORT { RETURN. }') == 2
         assert '_bplaneLogBaseline(' in source
     existing = body(BPLANE, '_bplaneExistingNodeAcceptable')
-    assert 'bplaneCorrectionAllowed(nd, targetBody, phaseCap)' in existing
+    assert 'bplaneCorrectionAllowed(nd, targetBody, phaseCap,TRUE,missionOwned)' in existing
     reserve = body(BPLANE, '_bplaneReserveCorrection')
     assert 'stateSet("bplane_budget_spent"' in reserve
     shape_run = body(SHAPE, '_runShapePhase')

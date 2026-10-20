@@ -28,12 +28,14 @@ SET SHAPE_PE TO 15000.
 SET SHAPE_AP TO 15000.
 SET SHAPE_INC TO 90.
 
-// Precision is optional when fuel is marginal: hold with the original
-// encounter/orbit rather than silently buying a different arrival.
-// These are capture/landing floors, not a guarantee of return fuel.
-SET BPLANE_TRIM_DV_CAP TO 10.
-SET BPLANE_TRIM_TOTAL_DV_CAP TO 20.
+// A required polar arrival is a substantial correction, not a 10 m/s trim.
+// Keep finite correction limits and reserve 900 m/s AFTER capture as well.
+SET BPLANE_DV_CAP TO 100.
+SET REFINE_BPLANE_DV_CAP TO 100.
+SET BPLANE_TRIM_DV_CAP TO 100.
+SET BPLANE_TRIM_TOTAL_DV_CAP TO 150.
 SET BPLANE_TRIM_RESERVE_DV TO 900.
+SET BPLANE_CAPTURE_MARGIN TO 900.
 SET BPLANE_MAX_ARRIVAL_SHIFT TO 600.
 SET BPLANE_MAX_CAPTURE_DV_INCREASE TO 5.
 SET SHAPE_DV_CAP TO 10.

@@ -12,8 +12,8 @@
 // shifts, which is what made the old 4-axis coordinate-descent
 // solver stall. The B-vector (the aim point in the plane
 // perpendicular to the incoming asymptote) is a SMOOTH, nearly
-// LINEAR function of small correction burns, so a 2x2 Newton
-// iteration on (B.T, B.R) converges in a handful of steps.
+// LINEAR function of small correction burns. Solve its two residuals
+// with a minimum-length step across all three maneuver axes.
 //
 // Geometry used (all derived per-iteration from the live patch):
 //   v∞² = -mu/a                 (hyperbolic excess speed)
@@ -96,7 +96,7 @@ LOCAL DEFAULT_PE_TOL   IS 2000.
 LOCAL DEFAULT_ANG_TOL  IS 0.5.
 LOCAL DEFAULT_LEAD     IS 300.
 LOCAL MIN_EXEC_DV      IS 0.3.
-LOCAL MAX_NEWTON_ITER  IS 8.
+LOCAL MAX_NEWTON_ITER  IS 16.
 LOCAL NEWTON_DAMP      IS 0.7.
 LOCAL FD_STEP          IS 0.05.
 LOCAL ACQUIRE_INITIAL_STEP IS 2.0.
@@ -178,21 +178,32 @@ LOCAL FUNCTION _bplaneTrimCap {
 
 LOCAL FUNCTION _bplaneHoldCorrection {
     PARAMETER reason.
-    PARAMETER allowMidcourseRetry IS FALSE.
+    PARAMETER missionOwned IS FALSE.
     stateRemove("bplane_review").
     // A failed execution owns its retained node until explicit replan.
     IF NOT maneuverBurnInterrupted() {
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
     }
-    IF allowMidcourseRetry AND reason = "unconverged-optional-correction"
-            AND _bplaneQueueMidcourseRetry(reason) { RETURN. }
     mLogWarn("STATS bplane decision=hold reason=" + reason
         + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)
         + " reserveDv=" + BPLANE_TRIM_RESERVE_DV).
+    IF missionOwned AND NOT maneuverBurnInterrupted() {
+        _bplaneResidentHold(reason).
+        RETURN.
+    }
     mLogWarn("Arrival correction rejected; original trajectory retained. "
         + "Review the encounter and remaining mission before resuming.").
     _bplaneScheduleHoldReview(reason).
     yieldToPrompt().
+}
+
+LOCAL FUNCTION _bplaneResidentHold {
+    PARAMETER reason.
+    SET WARP TO 0.
+    mLogError("STATS bplane blocked reason=" + reason
+        + " automaticResume=False resident=True ut=" + TIME:SECONDS).
+    PRINT "ARRIVAL BLOCKED: " + reason + "; intervention needed now; running at 1x.".
+    UNTIL ABORT { WAIT 1. }
 }
 
 LOCAL FUNCTION _bplaneHasMidcourseRefinement {
@@ -211,17 +222,78 @@ LOCAL FUNCTION _bplaneRetryEncounter {
     IF ABORT OR maneuverBurnInterrupted() OR HASNODE
             OR stateGet("phase", "") <> "BPLANE"
             OR NOT _bplaneHasMidcourseRefinement() { RETURN 0. }
+    LOCAL hit IS _bplaneCoastEncounter(targetBody).
+    IF hit = 0 { RETURN 0. }
+    IF hit["entryUt"]-TIME:SECONDS <= 3*MAX(1,BPLANE_LEAD) { RETURN 0. }
+    RETURN hit.
+}
+
+LOCAL FUNCTION _bplaneCoastEncounter {
+    PARAMETER targetBody.
     IF targetBody:ATM:EXISTS OR SHIP:BODY = targetBody { RETURN 0. }
     IF NOT SHIP:ORBIT:HASNEXTPATCH { RETURN 0. }
     IF SHIP:ORBIT:NEXTPATCH:BODY <> targetBody { RETURN 0. }
     LOCAL hit IS findArrivalPatch(0, targetBody).
     IF hit = 0 { RETURN 0. }
     LOCAL pe IS hit["patch"]:PERIAPSIS.
-    IF NOT (pe >= MAX(0,BPLANE_REVIEW_MIN_PE)
+    // This coast ends BEFORE SOI entry, not at target periapsis. The review
+    // Pe floor is a burn/arrival gate, not a reason to lose the timed retry.
+    LOCAL parentClearance IS 0.
+    IF SHIP:BODY:ATM:EXISTS { SET parentClearance TO SHIP:BODY:ATM:HEIGHT. }
+    IF NOT (SHIP:PERIAPSIS > parentClearance AND SHIP:PERIAPSIS < 1e30) { RETURN 0. }
+    IF NOT (pe > -targetBody:RADIUS AND ABS(pe) < 1e30
             AND pe < targetBody:SOIRADIUS - targetBody:RADIUS
             AND hit["entryUt"] < 1e30
-            AND hit["entryUt"]-TIME:SECONDS > 3*MAX(1,BPLANE_LEAD)) { RETURN 0. }
+            AND hit["entryUt"] > TIME:SECONDS) { RETURN 0. }
     RETURN hit.
+}
+
+// Minimum-length Newton step for two B-plane residuals using all burn axes.
+// J'*(J*J')^-1 uses prograde authority too; no axis sign/frame is assumed.
+LOCAL FUNCTION _bplaneNewtonStep {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER wantPe.
+    PARAMETER wantInc.
+    PARAMETER wantLan.
+    PARAMETER qT.
+    PARAMETER qR.
+    LOCAL pro IS nd:PROGRADE.
+    LOCAL rad IS nd:RADIALOUT.
+    LOCAL normalDv IS nd:NORMAL.
+    LOCAL rowT IS LIST().
+    LOCAL rowR IS LIST().
+    FOR axis IN LIST("PROGRADE","RADIALOUT","NORMAL") {
+        LOCAL slopeT IS 0.
+        LOCAL slopeR IS 0.
+        FOR probe IN LIST(FD_STEP,-FD_STEP) {
+            _bplaneNodeAxisSet(nd,axis,_bplaneNodeAxisGet(nd,axis)+probe).
+            WAIT 0.02.
+            LOCAL sample IS measureArrival(nd,targetBody).
+            IF sample <> 0 {
+                LOCAL desired IS targetBplaneVector(targetBody,sample,wantPe,wantInc,wantLan,TRUE).
+                SET slopeT TO ((sample["bt"]-desired["bt"])-qT)/probe.
+                SET slopeR TO ((sample["br"]-desired["br"])-qR)/probe.
+            }
+            SET nd:PROGRADE TO pro.
+            SET nd:RADIALOUT TO rad.
+            SET nd:NORMAL TO normalDv.
+            WAIT 0.02.
+            IF sample <> 0 { BREAK. }
+        }
+        rowT:ADD(slopeT).
+        rowR:ADD(slopeR).
+    }
+    LOCAL gramTT IS rowT[0]^2+rowT[1]^2+rowT[2]^2.
+    LOCAL gramRR IS rowR[0]^2+rowR[1]^2+rowR[2]^2.
+    LOCAL gramTR IS rowT[0]*rowR[0]+rowT[1]*rowR[1]+rowT[2]*rowR[2].
+    LOCAL det IS gramTT*gramRR-gramTR^2.
+    IF NOT (det > 0.000000000001*gramTT*gramRR) { RETURN LIST(). }
+    LOCAL dualT IS (-gramRR*qT+gramTR*qR)/det.
+    LOCAL dualR IS (gramTR*qT-gramTT*qR)/det.
+    RETURN LIST(NEWTON_DAMP*(rowT[0]*dualT+rowR[0]*dualR),
+        NEWTON_DAMP*(rowT[1]*dualT+rowR[1]*dualR),
+        NEWTON_DAMP*(rowT[2]*dualT+rowR[2]*dualR)).
 }
 
 LOCAL FUNCTION _bplaneQueueMidcourseRetry {
@@ -238,6 +310,40 @@ LOCAL FUNCTION _bplaneQueueMidcourseRetry {
         + " eta=" + (wakeUt-TIME:SECONDS) + " automaticResume=True").
     mLog("Rejected correction removed; handing off to automatic midcourse refinement.").
     RETURN TRUE.
+}
+
+LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
+    PARAMETER targetBody.
+    IF ABORT { RETURN FALSE. }
+    LOCAL hit IS _bplaneCoastEncounter(targetBody).
+    LOCAL latestUt IS 0.
+    IF hit <> 0 {
+        SET latestUt TO hit["entryUt"] - SOI_BUFFER_TIME
+            - BPLANE_LEAD - MIDCOURSE_REFINE_MARGIN.
+    }
+    IF latestUt > TIME:SECONDS+60 AND latestUt < 1e30 {
+        LOCAL wakeUt IS MIN(latestUt,TIME:SECONDS+MAX(60,(latestUt-TIME:SECONDS)/2)).
+        midcourseClearReviewAlarm().
+        LOCAL alarmId IS kacEnsureAlarm("B-plane retry: " + targetBody:NAME,wakeUt,
+            "Running mission retries arrival correction; no rejected burn is flown.").
+        mLogWarn("STATS bplane retry-wake target=" + targetBody:NAME
+            + " wakeUt=" + wakeUt + " eta=" + (wakeUt-TIME:SECONDS)
+            + " latestUt=" + latestUt + " automaticResume=True").
+        PRINT "ARRIVAL RETRY: running coast until UT " + ROUND(wakeUt,1) + ".".
+        LOCAL solarRef IS enterSolarCoast("BPLANE retry",TRUE,TRUE,wakeUt).
+        waitUntilOrSOI(targetBody,wakeUt,10,alarmId,solarRef).
+        IF alarmId <> "" { DELETEALARM(alarmId). }
+        SET WARP TO 0.
+        WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+        IF ABORT { RETURN FALSE. }
+        IF SHIP:BODY <> targetBody AND TIME:SECONDS <= latestUt { RETURN TRUE. }
+    }
+    // No safe time remains for another automatic attempt. Stay resident,
+    // at 1x, with the rejected node removed. KAC cannot restart a script.
+    mLogError("STATS bplane retry-blocked reason=no-safe-retry-time target="
+        + targetBody:NAME + " latestUt=" + latestUt + " automaticResume=False resident=True").
+    _bplaneResidentHold("no-safe-retry-time").
+    RETURN FALSE.
 }
 
 LOCAL FUNCTION _bplaneHandoffMidcourseRetry {
@@ -410,6 +516,7 @@ GLOBAL FUNCTION bplaneCaptureCost {
 GLOBAL FUNCTION bplaneCorrectionAllowed {
     PARAMETER nd, targetBody, phaseCap.
     PARAMETER checkCorridor IS TRUE.
+    PARAMETER missionOwned IS FALSE.
     LOCAL cap IS _bplaneTrimCap(targetBody, phaseCap).
     LOCAL original IS findArrivalPatch(0, targetBody).
     LOCAL planned IS findArrivalPatch(nd, targetBody).
@@ -420,7 +527,7 @@ GLOBAL FUNCTION bplaneCorrectionAllowed {
         + " originalPatch=" + (original <> 0)
         + " plannedPatch=" + (planned <> 0)).
     IF planned = 0 {
-        _bplaneHoldCorrection("planned-encounter-missing"). RETURN FALSE.
+        _bplaneHoldCorrection("planned-encounter-missing",missionOwned). RETURN FALSE.
     }
     IF BPLANE_REQUIRE_PLANE <> 0 AND checkCorridor {
         LOCAL patch IS planned["patch"].
@@ -431,7 +538,7 @@ GLOBAL FUNCTION bplaneCorrectionAllowed {
             + " planeErr=" + ROUND(planeErr, 3)).
         IF ABS(patch:PERIAPSIS - CAPTURE_PE) > BPLANE_PE_TOL
                 OR planeErr > BPLANE_ANG_TOL {
-            _bplaneHoldCorrection("required-arrival-corridor"). RETURN FALSE.
+            _bplaneHoldCorrection("required-arrival-corridor",missionOwned). RETURN FALSE.
         }
     }
     LOCAL shift IS 0.
@@ -452,7 +559,7 @@ GLOBAL FUNCTION bplaneCorrectionAllowed {
             + " captureAfterDv=" + ROUND(afterCost, 2)).
     }
     IF nd:DELTAV:MAG > cap + 0.001 {
-        _bplaneHoldCorrection("correction-budget"). RETURN FALSE.
+        _bplaneHoldCorrection("correction-budget",missionOwned). RETURN FALSE.
     }
     IF BPLANE_CAPTURE_MARGIN >= 0 {
         LOCAL needed IS nd:DELTAV:MAG
@@ -461,16 +568,16 @@ GLOBAL FUNCTION bplaneCorrectionAllowed {
             + " marginDv=" + BPLANE_CAPTURE_MARGIN
             + " availableDv=" + ROUND(SHIP:DELTAV:VACUUM, 2)).
         IF needed > SHIP:DELTAV:VACUUM {
-            _bplaneHoldCorrection("correction-plus-capture-budget"). RETURN FALSE.
+            _bplaneHoldCorrection("correction-plus-capture-budget",missionOwned). RETURN FALSE.
         }
     }
     IF original = 0 { RETURN TRUE. }
     IF BPLANE_MAX_ARRIVAL_SHIFT >= 0 AND shift > BPLANE_MAX_ARRIVAL_SHIFT {
-        _bplaneHoldCorrection("arrival-time-shift"). RETURN FALSE.
+        _bplaneHoldCorrection("arrival-time-shift",missionOwned). RETURN FALSE.
     }
     IF BPLANE_MAX_CAPTURE_DV_INCREASE >= 0
             AND afterCost - beforeCost > BPLANE_MAX_CAPTURE_DV_INCREASE {
-        _bplaneHoldCorrection("capture-cost-increase"). RETURN FALSE.
+        _bplaneHoldCorrection("capture-cost-increase",missionOwned). RETURN FALSE.
     }
     RETURN TRUE.
 }
@@ -1077,13 +1184,12 @@ LOCAL FUNCTION _bplaneClearCoastTimes {
 
 // ============================================================
 // planBplaneCorrection — build and converge a correction node.
-// Newton iteration: controls (radialout, normal) -> targets
+// Newton iteration: controls (prograde, radialout, normal) -> targets
 // (B.T, B.R), Jacobian by finite differences against KSP's own
 // patched-conic propagation. Returns the node (already converged
 // and ready to execute), or 0 when no correction is needed or
 // possible. The node is REMOVEd internally on failure.
-// Only phaseBplane enables automatic retry via the existing midcourse pair;
-// previews and the refinement itself retain the default stop/review policy.
+// Mission handlers enable live retry; operator previews default to review.
 // ============================================================
 GLOBAL FUNCTION planBplaneCorrection {
     PARAMETER targetBody.
@@ -1096,7 +1202,7 @@ GLOBAL FUNCTION planBplaneCorrection {
 
     LOCAL dvCap IS BPLANE_DV_CAP.
     IF BPLANE_REQUIRE_PLANE <> 0 AND (BPLANE_PE_ONLY <> 0 OR wantInc < 0) {
-        _bplaneHoldCorrection("required-plane-config-conflict"). RETURN 0.
+        _bplaneHoldCorrection("required-plane-config-conflict",allowMidcourseRetry). RETURN 0.
     }
     IF dvCapOverride >= 0 { SET dvCap TO dvCapOverride. }
     IF _bplaneCurrentCorridorOk(targetBody, wantPe, wantInc, wantLan) {
@@ -1105,7 +1211,7 @@ GLOBAL FUNCTION planBplaneCorrection {
 
     SET dvCap TO _bplaneTrimCap(targetBody, dvCap).
     IF dvCap <= MIN_EXEC_DV {
-        _bplaneHoldCorrection("no-optional-budget").
+        _bplaneHoldCorrection("no-optional-budget",allowMidcourseRetry).
         RETURN 0.
     }
 
@@ -1116,13 +1222,30 @@ GLOBAL FUNCTION planBplaneCorrection {
         SET nd TO _bplanePlanFullCorrection(targetBody, wantPe, wantInc, wantLan,
             dvCap, pristineLog, allowMidcourseRetry).
     }
-    IF phaseShouldYield OR nd = 0 { RETURN 0. }
+    IF phaseShouldYield OR ABORT OR nd = 0 { RETURN 0. }
     IF NOT _bplaneCorrectionAboveMinimum(nd) { REMOVE nd. RETURN 0. }
     maneuverUiArchiveLog("bplane").
     RETURN nd.
 }
 
 LOCAL FUNCTION _bplanePlanFullCorrection {
+    PARAMETER targetBody.
+    PARAMETER wantPe.
+    PARAMETER wantInc.
+    PARAMETER wantLan.
+    PARAMETER dvCap.
+    PARAMETER pristineLog.
+    PARAMETER allowMidcourseRetry IS FALSE.
+    UNTIL ABORT {
+        LOCAL nd IS _bplanePlanFullAttempt(targetBody,wantPe,wantInc,wantLan,
+            _bplaneTrimCap(targetBody,dvCap),pristineLog,allowMidcourseRetry).
+        IF nd <> -1 { RETURN nd. }
+        IF NOT _bplaneWaitBeforeSolverRetry(targetBody) { RETURN 0. }
+    }
+    RETURN 0.
+}
+
+LOCAL FUNCTION _bplanePlanFullAttempt {
     PARAMETER targetBody.
     PARAMETER wantPe.
     PARAMETER wantInc.
@@ -1144,7 +1267,7 @@ LOCAL FUNCTION _bplanePlanFullCorrection {
         // A failed vector measurement is not a lost encounter. Do not
         // replace a real map patch with a different closest approach.
         IF findArrivalPatch(0, targetBody) <> 0 {
-            _bplaneHoldCorrection("existing-patch-unmeasurable").
+            _bplaneHoldCorrection("existing-patch-unmeasurable",allowMidcourseRetry).
             RETURN 0.
         }
         mLogWarn("BPLANE: no hyperbolic encounter with "
@@ -1172,7 +1295,7 @@ LOCAL FUNCTION _bplanePlanFullCorrection {
     LOCAL planeMode IS "target-plane".
     IF wantInc >= 0 AND NOT _bplanePlaneFeasible(err0) {
         IF BPLANE_REQUIRE_PLANE <> 0 {
-            _bplaneHoldCorrection("required-plane-infeasible"). RETURN 0.
+            _bplaneHoldCorrection("required-plane-infeasible",allowMidcourseRetry). RETURN 0.
         }
         SET planeMode TO "pe-only".
         mLogWarn("BPLANE: requested capture plane is "
@@ -1215,6 +1338,7 @@ LOCAL FUNCTION _bplanePlanFullCorrection {
     LOCAL entryPlaneErr IS planeErr0.
 
     FROM { LOCAL i IS 0. } UNTIL i >= MAX_NEWTON_ITER STEP { SET i TO i + 1. } DO {
+        IF ABORT { REMOVE nd. RETURN 0. }
         LOCAL meas IS measureArrival(nd, targetBody).
         IF meas = 0 {
             mLogWarn("BPLANE[" + i + "]: lost the encounter — backing off.").
@@ -1305,49 +1429,28 @@ LOCAL FUNCTION _bplanePlanFullCorrection {
                 }
             } ELSE {
 
-            // Finite-difference Jacobian: d(B.T,B.R)/d(radial,normal).
-
-            SET nd:RADIALOUT TO r0 + FD_STEP. WAIT 0.02.
-            LOCAL mRad IS measureArrival(nd, targetBody).
-            SET nd:RADIALOUT TO r0. WAIT 0.02.
-
-            SET nd:NORMAL TO n0 + FD_STEP. WAIT 0.02.
-            LOCAL mNrm IS measureArrival(nd, targetBody).
-            SET nd:NORMAL TO n0. WAIT 0.02.
-
-            IF mRad = 0 OR mNrm = 0 {
-                mLogWarn("BPLANE[" + i + "]: probe lost encounter — stopping.").
-                BREAK.
+            LOCAL step IS _bplaneNewtonStep(nd,targetBody,wantPe,wantInc,wantLan,qT,qR).
+            IF step:LENGTH = 0 {
+                mLogWarn("BPLANE: singular three-axis response; stopping."). BREAK.
             }
-
-            LOCAL tRad IS targetBplaneVector(targetBody, mRad, wantPe, wantInc, wantLan, TRUE).
-            LOCAL tNrm IS targetBplaneVector(targetBody, mNrm, wantPe, wantInc, wantLan, TRUE).
-            LOCAL j11 IS ((mRad["bt"] - tRad["bt"]) - qT) / FD_STEP.
-            LOCAL j21 IS ((mRad["br"] - tRad["br"]) - qR) / FD_STEP.
-            LOCAL j12 IS ((mNrm["bt"] - tNrm["bt"]) - qT) / FD_STEP.
-            LOCAL j22 IS ((mNrm["br"] - tNrm["br"]) - qR) / FD_STEP.
-            LOCAL det IS j11 * j22 - j12 * j21.
-            IF ABS(det) < 1e-3 {
-                mLogWarn("BPLANE[" + i + "]: singular Jacobian (det="
-                    + ROUND(det, 5) + ") — stopping.").
-                BREAK.
-            }
-
-            LOCAL dRad IS NEWTON_DAMP * ( j22 * errT - j12 * errR) / det.
-            LOCAL dNrm IS NEWTON_DAMP * (-j21 * errT + j11 * errR) / det.
+            LOCAL dPro IS step[0].
+            LOCAL dRad IS step[1].
+            LOCAL dNrm IS step[2].
 
             // Per-step and total caps keep a bad Jacobian from
             // flinging the node into a different patch topology.
-            LOCAL stepMag IS SQRT(dRad ^ 2 + dNrm ^ 2).
+            LOCAL stepMag IS SQRT(dPro ^ 2 + dRad ^ 2 + dNrm ^ 2).
+            mLog("STATS bplane step minimumNormDv=" + stepMag + " cap=" + dvCap + " axes=3").
             LOCAL stepCap IS MAX(1, dvCap * 0.5).
             IF stepMag > stepCap {
+                SET dPro TO dPro * stepCap / stepMag.
                 SET dRad TO dRad * stepCap / stepMag.
                 SET dNrm TO dNrm * stepCap / stepMag.
             }
             LOCAL accepted IS FALSE.
             LOCAL bestTrialScore IS score.
             FOR frac IN LIST(1.0, 0.5, 0.25, 0.125) {
-                SET nd:PROGRADE TO p0.
+                SET nd:PROGRADE TO p0 + dPro * frac.
                 SET nd:RADIALOUT TO r0 + dRad * frac.
                 SET nd:NORMAL TO n0 + dNrm * frac.
                 WAIT 0.02.
@@ -1468,7 +1571,15 @@ LOCAL FUNCTION _bplanePlanFullCorrection {
             _bplaneOfferReview(nd, targetBody, dvCap).
             RETURN 0.
         }
-        _bplaneHoldCorrection("unconverged-optional-correction",allowMidcourseRetry).
+        IF allowMidcourseRetry {
+            // Early failures use the normal midpoint pair. Later failures
+            // signal the resident wrapper to wait and solve again.
+            REMOVE nd.
+            WAIT 0.02.
+            IF _bplaneQueueMidcourseRetry("unconverged-optional-correction") { RETURN 0. }
+            RETURN -1.
+        }
+        _bplaneHoldCorrection("unconverged-optional-correction").
         RETURN 0.
     }
 
@@ -1514,6 +1625,7 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
     PARAMETER wantInc.
     PARAMETER wantLan.
     PARAMETER phaseCap.
+    PARAMETER missionOwned IS FALSE.
 
     IF NOT HASNODE { RETURN FALSE. }
 
@@ -1537,7 +1649,7 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
 
     IF NOT _bplaneCorrectionAboveMinimum(nd) { RETURN FALSE. }
 
-    IF NOT bplaneCorrectionAllowed(nd, targetBody, phaseCap) { RETURN FALSE. }
+    IF NOT bplaneCorrectionAllowed(nd, targetBody, phaseCap,TRUE,missionOwned) { RETURN FALSE. }
 
     bplaneResetWarnings().
     LOCAL meas IS measureArrival(nd, targetBody).
@@ -1642,17 +1754,17 @@ GLOBAL FUNCTION phaseBplane {
             }
         }
         LOCAL nd IS 0.
-        IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan, BPLANE_DV_CAP) {
+        IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan, BPLANE_DV_CAP,TRUE) {
             SET nd TO NEXTNODE.
         } ELSE {
-            IF phaseShouldYield { RETURN. }
+            IF phaseShouldYield OR ABORT { RETURN. }
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
             SET nd TO planBplaneCorrection(targetBody, wantPe, wantInc, wantLan,-1,"",TRUE).
         }
-        IF phaseShouldYield { RETURN. }
+        IF phaseShouldYield OR ABORT { RETURN. }
         IF _bplaneHandoffMidcourseRetry(targetBody) { RETURN. }
         IF nd = 0 { BREAK. }
-        IF NOT bplaneCorrectionAllowed(nd, targetBody, BPLANE_DV_CAP) { RETURN. }
+        IF NOT bplaneCorrectionAllowed(nd, targetBody, BPLANE_DV_CAP,TRUE,TRUE) { RETURN. }
         _bplaneReserveCorrection(nd, targetBody).
         _bplaneClearCoastTimes().
         SET burns TO burns + 1.
@@ -1669,7 +1781,7 @@ GLOBAL FUNCTION phaseBplane {
     LOCAL meas IS measureArrival(0, targetBody).
     IF meas = 0 {
         mLogError("BPLANE: finished with NO encounter — operator attention needed.").
-        WAIT 30.
+        _bplaneHoldCorrection("finished-without-encounter",TRUE).
         RETURN.
     }
     LOCAL err IS _bplaneCorridorError(targetBody, meas, wantPe, wantInc, wantLan).
@@ -1699,7 +1811,7 @@ GLOBAL FUNCTION phaseBplane {
             + " planeErr=" + ROUND(err["planeErr"], 2)
             + " burns=" + burns
             + " status=failed-corridor").
-        WAIT 30.
+        _bplaneHoldCorrection("finished-outside-required-corridor",TRUE).
         RETURN.
     }
     mLog("BPLANE done: Pe=" + ROUND(meas["pe"] / 1000, 1)
@@ -1761,10 +1873,10 @@ GLOBAL FUNCTION phaseRefineBplane {
         }
 
         LOCAL nd IS 0.
-        IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan, dvCap) {
+        IF _bplaneExistingNodeAcceptable(targetBody, wantPe, wantInc, wantLan, dvCap,TRUE) {
             SET nd TO NEXTNODE.
         } ELSE {
-            IF phaseShouldYield { RETURN. }
+            IF phaseShouldYield OR ABORT { RETURN. }
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
             mLog("REFINE_BPLANE: refining arrival with dV cap "
                 + dvCap + " m/s.").
@@ -1774,12 +1886,12 @@ GLOBAL FUNCTION phaseRefineBplane {
                 wantInc,
                 wantLan,
                 dvCap,
-                "Trajectory pristine, skipping refinement burn.").
+                "Trajectory pristine, skipping refinement burn.",TRUE).
         }
 
-        IF phaseShouldYield { RETURN. }
+        IF phaseShouldYield OR ABORT { RETURN. }
         IF nd = 0 { BREAK. }
-        IF NOT bplaneCorrectionAllowed(nd, targetBody, dvCap) { RETURN. }
+        IF NOT bplaneCorrectionAllowed(nd, targetBody, dvCap,TRUE,TRUE) { RETURN. }
         _bplaneReserveCorrection(nd, targetBody).
         _bplaneClearCoastTimes().
         SET burns TO burns + 1.
@@ -1820,7 +1932,7 @@ GLOBAL FUNCTION phaseRefineBplane {
                 + "km want=" + ROUND(wantPe / 1000, 1)
                 + "km planeErr=" + ROUND(err["planeErr"], 2)
                 + "deg burns=" + burns + "/" + maxBurns + ".").
-            WAIT 30.
+            _bplaneHoldCorrection("finished-outside-required-corridor",TRUE).
             RETURN.
         }
         mLog("REFINE_BPLANE done: Pe=" + ROUND(meas["pe"] / 1000, 1)
@@ -1829,7 +1941,7 @@ GLOBAL FUNCTION phaseRefineBplane {
             + " after " + burns + " burn(s).").
     } ELSE {
         mLogWarn("REFINE_BPLANE: no encounter measurement after refinement.").
-        WAIT 30.
+        _bplaneHoldCorrection("finished-without-encounter",TRUE).
         RETURN.
     }
     nextPhase(xferSeq).

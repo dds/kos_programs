@@ -34,7 +34,7 @@ def solve(response, cap, tolerance=2000, public=False):
         pe = response(nd or Node(0,0,0,0))
         return 0 if pe is None else dict(patch=NS(PERIAPSIS=pe))
     env = dict(NODE=Node, TIME=NS(SECONDS=1000), BPLANE_LEAD=300,
-               BPLANE_PE_TOL=tolerance, FD_STEP=.05, LIST=lambda *xs: KList(xs),
+               BPLANE_PE_TOL=tolerance, FD_STEP=.05, ABORT=False, LIST=lambda *xs: KList(xs),
                SQRT=math.sqrt, ROUND=round, findArrivalPatch=patch,
                fixture_add=nodes.append, fixture_wait=lambda _: None,
                _bplaneNodeAxisGet=lambda nd, axis: getattr(nd,axis),
@@ -99,7 +99,7 @@ def check_shared_minimum():
             node=Node(1300,0,0,dv)
             removed, dispatched=[],[]
             env=dict(MIN_EXEC_DV=minimum, BPLANE_PE_ONLY=mode, BPLANE_REQUIRE_PLANE=0,
-                     BPLANE_DV_CAP=20, phaseShouldYield=False,
+                     BPLANE_DV_CAP=20, phaseShouldYield=False,ABORT=False,
                      _bplaneCurrentCorridorOk=lambda *_:False, _bplaneTrimCap=lambda *_:20,
                      fixture_remove=removed.append, maneuverUiArchiveLog=lambda _:None)
             for branch in (0,1):

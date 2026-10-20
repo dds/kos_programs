@@ -322,12 +322,19 @@ def check_integration():
         original=ROOT/str(path.relative_to(ROOT)).replace('RO9','RO8')
         clean = lambda text: re.sub(r'//[^\n]*', '', text)
         actual=path.read_text()
+        expected=original.read_text().replace('RO8','RO9')
         if path==ROOT/'craft/RO9.ks':
             # The operator explicitly enabled fuel-assisted aerobraking on RO9.
             assert actual.count('SET AEROBRAKE_AP_BURN TO 1.\n')==1
             actual=actual.replace('SET AEROBRAKE_AP_BURN TO 1.\n','')
-        assert clean(actual)==clean(original.read_text().replace('RO8','RO9')), path
-    print('PASS: brake code resident before coast; stage refresh precedes guidance; RO9 matches RO8 apart from its enabled aerobrake assist')
+        if path==ROOT/'missions/RO9/mun_landing_return.ks':
+            # Required polar targeting has its own finite budgets on RO9;
+            # check_bplane_newton verifies values, reserve and plane guards.
+            keys='BPLANE_DV_CAP|REFINE_BPLANE_DV_CAP|BPLANE_TRIM_DV_CAP|BPLANE_TRIM_TOTAL_DV_CAP|BPLANE_CAPTURE_MARGIN'
+            actual=re.sub(r'SET ('+keys+r') TO [^.]+\.', '', actual)
+            expected=re.sub(r'SET ('+keys+r') TO [^.]+\.', '', expected)
+        assert clean(actual).split()==clean(expected).split(), path
+    print('PASS: brake code resident before coast; stage refresh precedes guidance; RO9 preserves RO8 landing behavior with explicit aerobrake/polar-budget differences')
 
 
 if __name__=='__main__':
