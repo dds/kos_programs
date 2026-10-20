@@ -445,6 +445,12 @@ GLOBAL FUNCTION bootResumeOrManual {
             resumeMission().
         }
     }
+    // A deliberate mission hold must reach the prompt. The installed boot
+    // already uses this flag to skip its indefinite tail solar command.
+    IF phaseShouldYield {
+        SET BOOT_MANUAL_REQUESTED TO TRUE.
+        PRINT "  MISSION HELD in " + stateGet("phase", "") + "; automatic progression stopped.".
+    }
     IF HOMECONNECTION:ISCONNECTED {
         archiveLog().
     }

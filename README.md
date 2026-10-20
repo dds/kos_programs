@@ -646,6 +646,17 @@ These checks apply to retained maneuver nodes on reboot as well as new
 plans. Rejected nodes are removed; the original trajectory is retained and
 the current phase yields to the console. **A hold does not stop game time.**
 It does not silently waive the polar orbit or landing-site requirements.
+Arrival holds schedule a named `Arrival review: <body>` KAC alarm at the
+anchored midcourse checkpoint, or request immediate review if it is overdue.
+The log prints its UT, remaining seconds and `automaticResume=False`.
+This is an operator-review alarm: it does **not** restart refinement or approve
+a rejected correction. If timing or KAC is unavailable, the log says so.
+Deliberate mission holds return to the prompt; boot does not start its
+indefinite fallback solar hold afterward. No installed boot replacement is
+needed. `RUNPATH("0:/cmd/arrival.ks", "status").` reports the encounter and
+budget; the existing `plan`, `review`, `accept` and `replan` actions remain
+explicit operator choices.
+
 SHAPE separately has a 10 m/s per-burn / 20 m/s total cap and a 650 m/s Mun
 or 200 m/s Minmus reserve. These are conservative capture/landing fuel
 floors, not proof that landing or return is affordable. Budgets reserve the
@@ -1249,8 +1260,12 @@ Both are thin wrappers over `cmd/goto.ks`; pass a lexicon to override `pe`,
   still leaves the ship inside the departure SOI, BPLANE first coasts out to
   the transfer body's frame before measuring the arrival.
 - **COAST_1HALF / REFINE_BPLANE / COAST_2HALF** — long transfers split around
-  a timed midpoint. The first coast preserves solar attitude and can set a KAC
-  alarm, `REFINE_BPLANE` performs capped small correction burns until the
+  a timed midpoint. The first coast anchors its midpoint and sets the KAC
+  alarm before solar alignment. Solar alignment, maintenance and charging
+  checks share that wake deadline. The checkpoint survives reboots and
+  arrival review; an overdue checkpoint advances straight to refinement.
+  Live encounter timing takes priority over an old departure estimate.
+  `REFINE_BPLANE` performs capped small correction burns until the
   arrival corridor is met, and the second coast waits to the SOI buffer.
 - **CAPTURE** — tangential burn at Pe (preserves plane, Pe, and apsis line);
   `TARGET_AP` puts the apoapsis where the final orbit wants it.
@@ -1394,7 +1409,7 @@ once a second in RAM. Only pre-burn and post-cutoff rows are written, with no
 archive/state writes during positive commanded thrust. An alignment timeout
 cannot enter the powered loop.
 Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
-The routine suite passes 197 cases. Host-side timings vary with system load
+The routine suite passes 203 cases. Host-side timings vary with system load
 and are not a kOS flight timing guarantee; the flight plan records its own
 computation time.
 

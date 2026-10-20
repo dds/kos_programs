@@ -257,6 +257,22 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  RO9 Mun science return flight reports decision=hold reason=
+  unconverged-optional-correction followed by solar engagement, no alarm and
+  no wake time (2026-10-19). Source confirms hold yields before COAST_1HALF;
+  the installed boot then started its indefinite solar command. Midcourse
+  had not been scheduled. bootResumeOrManual now marks deliberate yields
+  manual using the installed tail guard (no boot.ks replacement). Arrival
+  holds use raw encounter timing to anchor a review alarm; this alarm does
+  NOT auto-resume or waive required polar plane, budget or interrupted-node
+  ownership. Unburned Pe/plane error and exact solver failure remain unknown.
+  New small midcourse library shares the unchanged timing policy with capture;
+  capture sets the midpoint alarm BEFORE solar and propagates its deadline
+  through alignment, health waits and maintenance. Past checkpoints refine now;
+  native arrival timing wins over stale XING estimates. Expired KAC alarms
+  cannot be reused as a future wake. Routine203 source checks cover review
+  alarms, reboot anchoring, overdue handoff, deadline and boot-tail behavior;
+  no KSP/KAC integration or successful polar correction proof yet.
   Supplied solardiag_RO9_1644877384.log: anchored-six-axis search completed
   successfully in63.78s, final flow0.3813675, no alignment timeout or dropped
   rows. Winner fixed-5 is craft axis(0,.866,.5), the panel-part -Y axis;

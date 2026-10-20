@@ -9,7 +9,7 @@ from types import SimpleNamespace as NS
 import check_landing_guidance as ks
 from check_launch_and_staging import body
 
-SOURCE = (ks.ROOT / 'lib/arrival_bplane.ks').read_text()
+SOURCE = (ks.ROOT / 'lib/arrival_bplane.ks').read_text() + '\n' + (ks.ROOT / 'lib/midcourse.ks').read_text()
 COMMAND = (ks.ROOT / 'cmd/arrival.ks').read_text()
 ks.SOURCES += '\n' + SOURCE.replace('REMOVE nd.', 'fixture_remove(nd).')
 

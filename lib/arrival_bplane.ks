@@ -68,7 +68,6 @@ GLOBAL BPLANE_PE_TOL IS 2000.
 // targeting still uses BPLANE_PE_TOL at REFINE_BPLANE. Zero disables deferral.
 GLOBAL BPLANE_EARLY_PE_TOL IS 10000.
 GLOBAL BPLANE_ANG_TOL IS 0.2.
-GLOBAL BPLANE_LEAD IS 300.
 GLOBAL BPLANE_EXISTING_NODE_MIN_ETA IS 30.
 GLOBAL BPLANE_TARGET IS "".
 GLOBAL BPLANE_OFFPLANE_TOL IS 10.
@@ -196,7 +195,39 @@ LOCAL FUNCTION _bplaneHoldCorrection {
         + " reserveDv=" + BPLANE_TRIM_RESERVE_DV).
     mLogWarn("Arrival correction rejected; original trajectory retained. "
         + "Review the encounter and remaining mission before resuming.").
+    _bplaneScheduleHoldReview(reason).
     yieldToPrompt().
+}
+
+LOCAL FUNCTION _bplaneScheduleHoldReview {
+    PARAMETER reason.
+    // This alarm requests operator review; it never approves a correction
+    // or resumes the phase machine. Keep the required-plane/fuel gates.
+    LOCAL targetBody IS _bplaneTargetBody().
+    IF targetBody = 0 { RETURN. }
+    LOCAL hit IS findArrivalPatch(0, targetBody).
+    IF hit = 0 {
+        mLogWarn("BPLANE HOLD: no encounter timing; review NOW. No automatic refinement is running.").
+        RETURN.
+    }
+    LOCAL arrivalUt IS hit["entryUt"].
+    IF NOT (arrivalUt > TIME:SECONDS AND arrivalUt < 1e30) {
+        mLogWarn("BPLANE HOLD: arrival timing due/invalid; review NOW. No automatic refinement is running.").
+        RETURN.
+    }
+    LOCAL reviewUt IS midcourseRefineUt(TIME:SECONDS, arrivalUt).
+    // An overdue checkpoint needs attention now, not a new half-transfer wait.
+    SET reviewUt TO MIN(arrivalUt, MAX(TIME:SECONDS+1, reviewUt)).
+    LOCAL alarmId IS kacEnsureAlarm("Arrival review: " + targetBody:NAME, reviewUt,
+        "Mission HELD in " + stateGet("phase", "") + ": " + reason
+        + ". Operator review required; this alarm does not resume refinement.").
+    stateSet("arrival_review_alarm", alarmId).
+    mLogWarn("STATS bplane hold-wake reviewUt=" + reviewUt
+        + " eta=" + (reviewUt-TIME:SECONDS) + " arrivalUt=" + arrivalUt
+        + " alarm=" + alarmId + " automaticResume=False").
+    PRINT "ARRIVAL HELD: automatic midcourse refinement is paused; review in "
+        + ROUND(reviewUt-TIME:SECONDS,0) + "s (UT " + ROUND(reviewUt,1) + ").".
+    IF alarmId = "" { PRINT "No KAC alarm available; the review time above is informational only.". }
 }
 
 GLOBAL FUNCTION bplaneArrivalStatus {
@@ -977,6 +1008,7 @@ LOCAL FUNCTION _bplaneFinishPeRecovery {
 }
 
 LOCAL FUNCTION _bplaneClearCoastTimes {
+    midcourseClearReviewAlarm().
     stateSet("xing_arrival_ut", 0).
     stateSet("midcourse_refine_ut", 0).
     stateSet("midcourse_refine_arrival_ut", 0).

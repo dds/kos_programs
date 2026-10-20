@@ -243,7 +243,7 @@ GLOBAL FUNCTION kacEnsureAlarm {
     LOCAL alarms IS LISTALARMS("All").
     FOR a IN alarms {
         IF a:NAME = fullName {
-            IF ABS(a:TIME - almUt) < 60 { RETURN a:ID. }
+            IF a:TIME > TIME:SECONDS AND ABS(a:TIME - almUt) < 60 { RETURN a:ID. }
             DELETEALARM(a:ID).
         }
     }
@@ -365,7 +365,10 @@ LOCAL FUNCTION _coastHealthPoll {
     PARAMETER fullEc.
     PARAMETER dT.
     PARAMETER minDelta.
+    PARAMETER deadlineUt IS 0.
 
+    IF deadlineUt > 0 { SET dT TO MIN(dT, MAX(0, deadlineUt-TIME:SECONDS)). }
+    IF dT <= 0 OR ABORT { RETURN FALSE. }
     LOCAL charge IS shipPowerFraction().
     IF charge >= fullEc {
         WAIT dT.
@@ -386,6 +389,8 @@ LOCAL FUNCTION _coastHealthPoll {
             RETURN TRUE.
         }
     }
+    IF deadlineUt > 0 { SET dT TO MIN(dT, MAX(0, deadlineUt-TIME:SECONDS)). }
+    IF dT <= 0 OR ABORT { RETURN FALSE. }
     IF shipBatteriesCharging(dT, minDelta) {
         SET charge TO shipPowerFraction().
         mLog("STATS coast health label=" + label
@@ -399,24 +404,27 @@ LOCAL FUNCTION _coastHealthPoll {
 
 GLOBAL FUNCTION coastHealthCheck {
     PARAMETER label IS "coast".
+    PARAMETER deadlineUt IS 0.
 
     IF COAST_HEALTH_CHECK <= 0 { RETURN TRUE. }
     IF NOT PHASES_HAS_SOLAR { RETURN TRUE. }
     IF NOT shipHasSolarPanels() { RETURN TRUE. }
+    IF ABORT OR (deadlineUt > 0 AND TIME:SECONDS >= deadlineUt) { RETURN FALSE. }
 
     LOCAL fullEc IS SOLAR_CHARGE_FULL_EC.
     LOCAL dT IS SOLAR_CHARGE_CHECK_DT.
     LOCAL minDelta IS SOLAR_CHARGE_CHECK_MIN_DELTA.
-    IF _coastHealthPoll(label, "full", "charging", fullEc, dT, minDelta) {
+    IF _coastHealthPoll(label, "full", "charging", fullEc, dT, minDelta, deadlineUt) {
         RETURN TRUE.
     }
+    IF ABORT OR (deadlineUt > 0 AND TIME:SECONDS >= deadlineUt) { RETURN FALSE. }
 
     mLogWarn(label + ": solar flow/charging unhealthy at "
         + ROUND(shipPowerFraction() * 100, 1)
         + "%; checking solar reorient.").
-    orientForSolar(FALSE, TRUE, TRUE).
+    orientForSolar(FALSE, TRUE, TRUE, deadlineUt).
     IF _coastHealthPoll(label, "reoriented-full", "reoriented-charging",
-            fullEc, dT, minDelta) {
+            fullEc, dT, minDelta, deadlineUt) {
         RETURN TRUE.
     }
 

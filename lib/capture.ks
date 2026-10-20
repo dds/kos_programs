@@ -7,11 +7,6 @@
 // ============================================================
 
 // --- Config defaults owned by this file ---
-GLOBAL MIDCOURSE_REFINE_FRACTION IS 0.5.
-GLOBAL MIDCOURSE_REFINE_MIN_LEAD IS 600.
-GLOBAL MIDCOURSE_REFINE_MARGIN IS 60.
-GLOBAL SOI_BUFFER_TIME IS 120.
-GLOBAL BPLANE_LEAD IS 300.
 GLOBAL FLYBY_POST_PE_HOLD IS 0.
 GLOBAL FLYBY_EXIT_SOI IS 1.
 // After a flyby, the return-side phases work relative to the body we're
@@ -25,15 +20,12 @@ GLOBAL CAPTURE_MAX_PE IS -1.
 GLOBAL CAPTURE_ACCEPT_BOUND IS 0.
 
 LOCAL MAX_RETRIES IS 5.
-LOCAL SOI_BUFFER_TIME_DEFAULT IS 300.
-LOCAL MIDCOURSE_REFINE_FRACTION_DEFAULT IS 0.5.
-LOCAL MIDCOURSE_REFINE_MIN_LEAD_DEFAULT IS 300.
-LOCAL MIDCOURSE_REFINE_MARGIN_DEFAULT IS 60.
 
 LOCAL FUNCTION _enterSolarCoast {
     PARAMETER label IS "COAST".
     PARAMETER orientOnEntry IS FALSE.
     PARAMETER checkEntryHealth IS TRUE.
+    PARAMETER deadlineUt IS 0.
     SET SAS TO TRUE.
     UNLOCK STEERING.
     LOCAL aimed IS FALSE.
@@ -41,20 +33,20 @@ LOCAL FUNCTION _enterSolarCoast {
             AND (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
                 OR SHIP:STATUS = "SUB_ORBITAL")
             AND PHASES_HAS_SOLAR {
-        SET aimed TO orientForSolar(FALSE, TRUE, TRUE).
+        SET aimed TO orientForSolar(FALSE, TRUE, TRUE, deadlineUt).
     }
     LOCAL solarRef IS -1.
     IF checkEntryHealth {
-        SET solarRef TO trySolarHoldTick(-1).
+        SET solarRef TO trySolarHoldTick(-1, deadlineUt).
     } ELSE IF PHASES_HAS_SOLAR AND shipHasSolarPanels() {
         SET solarRef TO MAX(shipSolarFlow(), 0).
     }
     mLog(label + ": solar coast initialAim=" + aimed + " flow=" + ROUND(solarRef,3)).
     IF checkEntryHealth {
-        IF NOT coastHealthCheck(label + " entry") {
+        IF NOT coastHealthCheck(label + " entry", deadlineUt) {
             mLogWarn(label + ": entry health check failed; remaining at 1x.").
         } ELSE {
-            SET solarRef TO trySolarHoldTick(-1).
+            SET solarRef TO trySolarHoldTick(-1, deadlineUt).
         }
     }
     RETURN solarRef.
@@ -80,13 +72,8 @@ LOCAL FUNCTION _solarCoastCanWarp {
 LOCAL FUNCTION _transferArrivalUt {
     PARAMETER targetBody.
 
-    LOCAL arrivalUt IS stateGetNum("xing_arrival_ut", 0).
-    LOCAL arrivalTarget IS stateGet("xing_arrival_target", "").
-    IF arrivalUt > TIME:SECONDS AND arrivalTarget = targetBody:NAME {
-        RETURN arrivalUt.
-    }
-
     IF SHIP:BODY = targetBody { RETURN TIME:SECONDS. }
+    LOCAL arrivalUt IS 0.
     LOCAL p IS SHIP:ORBIT.
     UNTIL NOT p:HASNEXTPATCH {
         LOCAL transitionEta IS p:NEXTPATCHETA.
@@ -97,6 +84,11 @@ LOCAL FUNCTION _transferArrivalUt {
             stateSet("xing_arrival_target", targetBody:NAME).
             RETURN arrivalUt.
         }
+    }
+    // Prefer the live unburned patch above to an old departure estimate.
+    SET arrivalUt TO stateGetNum("xing_arrival_ut", 0).
+    IF arrivalUt > TIME:SECONDS AND stateGet("xing_arrival_target", "") = targetBody:NAME {
+        RETURN arrivalUt.
     }
     RETURN 0.
 }
@@ -110,7 +102,7 @@ LOCAL FUNCTION _waitUntilOrSOI {
     PARAMETER checkPreWarpHealth IS TRUE.
 
     IF checkPreWarpHealth {
-        SET solarRef TO trySolarHoldTick(solarRef).
+        SET solarRef TO trySolarHoldTick(solarRef, targetUt).
     } ELSE IF PHASES_HAS_SOLAR AND shipHasSolarPanels() AND solarRef < 0 {
         SET solarRef TO MAX(shipSolarFlow(), 0).
     }
@@ -120,7 +112,7 @@ LOCAL FUNCTION _waitUntilOrSOI {
             AND idealCoastWarpRate(waitSeconds) > 0
             AND _solarCoastCanWarp(solarRef, "SOI coast")
             AND (NOT checkPreWarpHealth
-                OR coastHealthCheck("SOI coast pre-warp")) {
+                OR coastHealthCheck("SOI coast pre-warp", targetUt)) {
         SET waitSeconds TO MAX(0, targetUt - TIME:SECONDS).
         IF COAST_HEALTH_CHECK > 0
                 AND waitSeconds >= COAST_AUTO_WARP_MIN * 2 {
@@ -131,8 +123,8 @@ LOCAL FUNCTION _waitUntilOrSOI {
                 + ROUND(midUt - TIME:SECONDS, 0) + "s.").
             IF coastAutoWarp(midUt, "SOI coast midpoint", healthAlarmId) {
                 UNTIL TIME:SECONDS >= midUt OR SHIP:BODY = targetBody {
-                    SET solarRef TO trySolarHoldTick(solarRef).
-                    WAIT MIN(pollInterval, MAX(1, midUt - TIME:SECONDS)).
+                    SET solarRef TO trySolarHoldTick(solarRef, midUt).
+                    WAIT MIN(pollInterval, MAX(0, midUt - TIME:SECONDS)).
                 }
                 IF healthAlarmId <> "" { DELETEALARM(healthAlarmId). }
                 IF WARP > 0 {
@@ -141,8 +133,8 @@ LOCAL FUNCTION _waitUntilOrSOI {
                     WAIT 1.
                 }
                 IF SHIP:BODY <> targetBody
-                        AND coastHealthCheck("SOI coast midpoint") {
-                    SET solarRef TO trySolarHoldTick(-1).
+                        AND coastHealthCheck("SOI coast midpoint", targetUt) {
+                    SET solarRef TO trySolarHoldTick(-1, targetUt).
                     IF _solarCoastCanWarp(solarRef, "SOI coast") {
                         coastAutoWarp(targetUt, "SOI coast", alarmId).
                     }
@@ -153,70 +145,9 @@ LOCAL FUNCTION _waitUntilOrSOI {
         }
     }
     UNTIL TIME:SECONDS >= targetUt OR SHIP:BODY = targetBody {
-        SET solarRef TO trySolarHoldTick(solarRef).
-        WAIT MIN(pollInterval, MAX(1, targetUt - TIME:SECONDS)).
+        SET solarRef TO trySolarHoldTick(solarRef, targetUt).
+        WAIT MIN(pollInterval, MAX(0, targetUt - TIME:SECONDS)).
     }
-}
-
-LOCAL FUNCTION _timeMidcourseUt {
-    PARAMETER tStart.
-    PARAMETER tArrival.
-
-    // Stable check-in: the trajectory-refinement waypoint must not
-    // drift on reboot / ship-switch. Once anchored for this arrival,
-    // reuse the persisted UT; only the first COAST_1HALF entry sets it
-    // (off tStart=now). If we rebooted past it, refine now rather than
-    // re-slipping the point even later. (Health-check ALARMS stay
-    // dynamic by design — only refinement timing is frozen here.)
-    LOCAL storedUt IS stateGetNum("midcourse_refine_ut", 0).
-    LOCAL storedArrival IS stateGetNum("midcourse_refine_arrival_ut", 0).
-    IF storedUt > 0 AND ABS(storedArrival - tArrival) < 1 {
-        IF storedUt > TIME:SECONDS {
-            mLog("COAST_1HALF: reusing persisted refine point T+"
-                + ROUND(storedUt - TIME:SECONDS, 0) + "s.").
-            RETURN storedUt.
-        }
-        mLog("COAST_1HALF: persisted refine point already passed; refining now.").
-        RETURN TIME:SECONDS.
-    }
-
-    LOCAL frac IS MIDCOURSE_REFINE_FRACTION.
-    SET frac TO MAX(0.05, MIN(0.95, frac)).
-
-    LOCAL rawUt IS tStart + frac * (tArrival - tStart).
-    LOCAL minLead IS MIDCOURSE_REFINE_MIN_LEAD.
-    LOCAL margin IS MIDCOURSE_REFINE_MARGIN.
-    LOCAL soiBuffer IS SOI_BUFFER_TIME.
-    LOCAL bplaneLead IS BPLANE_LEAD.
-    LOCAL latestUt IS tArrival - soiBuffer - bplaneLead - margin.
-    LOCAL refineUt IS rawUt.
-
-    IF latestUt <= tStart {
-        mLogWarn("COAST_1HALF: transfer too short for guarded midpoint; "
-            + "refining now.").
-        RETURN tStart.
-    }
-
-    IF refineUt < tStart + minLead AND tStart + minLead < latestUt {
-        SET refineUt TO tStart + minLead.
-    }
-    IF refineUt > latestUt {
-        SET refineUt TO latestUt.
-    }
-
-    stateSet("midcourse_refine_method", "TIME").
-    stateSet("midcourse_refine_fraction", frac).
-    stateSet("midcourse_refine_arrival_ut", tArrival).
-    stateSet("midcourse_refine_ut", refineUt).
-    FOR key IN LIST("midcourse_refine_distance",
-            "midcourse_refine_start_distance") {
-        stateRemove(key).
-    }
-
-    mLog("COAST_1HALF: time midpoint fraction=" + ROUND(frac, 2)
-        + " rawT+" + ROUND(rawUt - TIME:SECONDS, 0)
-        + "s scheduledT+" + ROUND(refineUt - TIME:SECONDS, 0) + "s.").
-    RETURN refineUt.
 }
 
 GLOBAL FUNCTION phaseCoast {
@@ -230,8 +161,7 @@ GLOBAL FUNCTION phaseCoast {
 
 GLOBAL FUNCTION phaseCoast1Half {
     LOCAL target IS missionTargetBody().
-    LOCAL solarRef IS _enterSolarCoast("COAST_1HALF", TRUE, TRUE).
-
+    midcourseClearReviewAlarm().
     LOCAL tArrival IS _transferArrivalUt(target).
     IF tArrival <= TIME:SECONDS {
         mLogWarn("COAST_1HALF: no future arrival timestamp; continuing to refinement.").
@@ -240,13 +170,21 @@ GLOBAL FUNCTION phaseCoast1Half {
     }
 
     LOCAL tStart IS TIME:SECONDS.
-    LOCAL tMidpoint IS _timeMidcourseUt(tStart, tArrival).
+    LOCAL tMidpoint IS midcourseRefineUt(tStart, tArrival).
+    IF tMidpoint <= TIME:SECONDS {
+        mLog("COAST_1HALF: refinement checkpoint due; handing forward now.").
+        nextPhase(xferSeq).
+        RETURN.
+    }
 
     mLog("Coasting to mid-course refinement at T+"
         + ROUND(tMidpoint - TIME:SECONDS, 0) + "s.").
     LOCAL alarmId IS kacEnsureAlarm("Midcourse refine: " + target:NAME,
         tMidpoint,
         "Auto-created by COAST_1HALF").
+    mLog("STATS midcourse wake refineUt=" + tMidpoint + " arrivalUt=" + tArrival
+        + " alarm=" + alarmId + " automaticResume=True").
+    LOCAL solarRef IS _enterSolarCoast("COAST_1HALF", TRUE, TRUE, tMidpoint).
     _waitUntilOrSOI(target, tMidpoint, 10, alarmId, solarRef).
     IF alarmId <> "" { DELETEALARM(alarmId). }
 
@@ -258,6 +196,7 @@ GLOBAL FUNCTION phaseCoast1Half {
 }
 
 GLOBAL FUNCTION phaseCoast2Half {
+    midcourseClearReviewAlarm().
     LOCAL target IS missionTargetBody().
     LOCAL solarRef IS _enterSolarCoast("COAST_2HALF", FALSE, FALSE).
 
@@ -303,6 +242,7 @@ GLOBAL FUNCTION phaseCoast2Half {
 }
 
 GLOBAL FUNCTION phaseCapture {
+    midcourseClearReviewAlarm().
     LOCAL target IS missionTargetBody().
     IF SHIP:BODY <> target {
         mLogError("CAPTURE: vessel is not inside " + target:NAME + " SOI.").

@@ -377,3 +377,37 @@ alternative, expired/duplicate candidates, restoration after all candidates
 fail, and a curved response solvable only by turning along the budget edge.
 The response functions are synthetic; they do not reproduce the deleted
 flight node or prove success in KSP.
+
+## Arrival hold mistaken for midcourse coast — 2026-10-19
+
+An RO9 Mun science flight reported `unconverged-optional-correction`, then
+solar engagement without an alarm or visible wake time. The source path is
+unambiguous: `_bplaneHoldCorrection` yields to the operator before the
+`COAST_1HALF` handler runs. Boot's fallback `orientForSolar` command then
+entered its default indefinite hold. No midpoint alarm existed because
+its owner had never been reached. The flight's unburned Pe, plane error and
+solver trial metrics have not been supplied, so the numerical failure is
+still unclassified.
+
+Deliberate yields now set boot's existing manual flag, allowing its installed
+tail guard to return the prompt. Arrival rejection also schedules a named
+operator-review alarm using a checkpoint anchored to the live encounter.
+An overdue checkpoint requests immediate attention. Alarm UT, seconds to
+review, arrival UT and `automaticResume=False` are logged. Missing timing or
+KAC is explicit. This alarm does not restart the mission, accept a partial
+correction, refund spent correction budget or waive required plane checks.
+
+The existing midpoint policy moved into `lib/midcourse.ks`, shared by arrival
+and capture without loading capture's planners into the B-plane band. A normal
+`COAST_1HALF` now schedules its alarm before solar alignment and propagates the
+wake time through alignment, maintenance and charge checks. Reboots reuse the
+checkpoint; overdue coasts hand directly to refinement. Native unburned
+arrival timing takes precedence over an old stored XING estimate. Stale KAC
+alarms that have already fired are replaced even if their time is within the
+usual 60-second reuse window.
+
+Source-driven checks exercise the actual hold, checkpoint, coast-entry,
+health, boot-return and alarm-reuse functions. Existing correction, required
+plane, minimum-burn, reserve and interrupted-execution tests remain active.
+These establish control-flow behavior, not successful native polar targeting
+or KAC integration in flight. No installed `boot.ks` replacement is required.

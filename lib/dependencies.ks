@@ -5,7 +5,8 @@
 GLOBAL FUNCTION dependencyLibs {
     RETURN LEXICON(
         "core", LIST("state", "logs", "files", "phases", "dependencies", "config", "mission_type"),
-        "capture", LIST("maneuver", "maneuver_plan", "orbit", "solar"),
+        "capture", LIST("maneuver", "maneuver_plan", "orbit", "solar", "midcourse"),
+        "midcourse", LIST(),
         "deorbit_burn", LIST("vessel_hardware", "landing_light"),
         "duna_ike_setup", LIST("maneuver", "maneuver_plan", "orbit", "solar"),
         "deorbit_targeting", LIST("orbit", "utils", "landing_config", "landing_math", "deorbit_burn"),
@@ -65,7 +66,7 @@ GLOBAL FUNCTION dependencyLibs {
         "xfer_plan", LIST("maneuver_transfer", "orbit"),
         "orbit_nodes", LIST(),
         "orbit_shape", LIST("maneuver", "maneuver_plan", "orbit_nodes", "orbit"),
-        "arrival_bplane", LIST("hohmann_transfer", "maneuver", "orbit", "lib_bplane_math"),
+        "arrival_bplane", LIST("hohmann_transfer", "maneuver", "orbit", "lib_bplane_math", "midcourse"),
         "free_return", LIST("maneuver", "orbit", "lib_bplane_math"),
         "return_trim", LIST("maneuver", "orbit", "utils"),
         "goto_plan", LIST(),
