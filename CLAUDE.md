@@ -296,6 +296,17 @@ Looks like Python/JS; is neither.
   bad pass. deorbit_burn declares coast_wait for offline solar availability.
   On exhaustion print STATS deorbit best-rejected with geometry/light
   reasons, window, both burn components and actual downfield/cross/FPA/Pe.
+  Powered RO9 fixed-site Mun landing now opts into LANDING_STAGE_BRAKE_CREDIT1
+  and LANDING_ECONOMY_BRAKE1 while retaining FLEXIBLE_SITE0 and geographic
+  gates. Only flexible sites suppress H/overshoot gates; descending control
+  must not implicitly waive a fixed target. landing_stage_brake is powered-band
+  only, declared via landing_main, never shared hardware/deorbit payload.
+  Credit only bounded current-stage impulse: single controllable engine,
+  adjacent serial discard, enabled local tank mixture, rocket equation and
+  stock dV minimum. Unsupported/empty/unknown/atmospheric cases fall back to
+  the whole weaker-stage stop. Keep full gravity,80% net reserve, separate
+  reaction/staging pauses, clearance and live attitude/cutoff guards.
+  PLAN_ACC remains the weaker stage; logs expose brakeStageDv and flags.
   Automatic solar orientation validates the cached axis against its saved
   measured peak before searching; reserve forced searches for explicit requests.
   Scheduled mission waits must stay in the running coast loop. KAC KillWarp
@@ -347,6 +358,21 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  After successful fixed-site deorbit, operator reports immediate BRAKE at
+  radar14869m/control height9149m, hs504.9/vs-3.8, acc44.68/planAcc2.72;
+  shifted target640m. Paused game then crashed; no remaining-fuel/begin row.
+  Exact speed/acc/height numbers reproduce Hgate152km/Veta12.7s, allowing H
+  ignition within alignment lead. Whole-stop-on-weak-stage assumption ignores
+  usable transfer fuel; legacy fixed-site controller also commands vertical0.
+  Added opt-in staged envelope plus existing descending full-vector mode for
+  this profile, preserving fixed-site geographic gates. Illustrative313m/s
+  transfer credit changes Hgate48.3km/Veta38s; actual fuel here is unknown.
+  Paired finite-fuel curved models reach horizontal capture with high-hover
+  159->0s and impulse594->502m/s; ignition control-height9147->7611m. Neither
+  endpoint is a full landing/return or target-accuracy proof. Full-surface-g
+  boundary run retains flare margin with two3s unpowered gaps. Native flight
+  pending; routine258 cases/41 files pass with all individual calls below1s.
+  Do not promise a low-altitude suicide burn on a weak/fuel-poor stack.
   Follow-up fixed-site failure: window2 angle50, retro25.57/normal-10,
   downfield49.22km/cross31.313km versus0.5km cap, FPA4.71, Pe-20.662km.
   This is a large miss at saturated normal authority, not grounds to waive

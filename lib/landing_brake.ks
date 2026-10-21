@@ -113,8 +113,8 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
     LOCAL height IS _landingBurnHeight(ctx).
     LOCAL targetVs IS -lmDescentSpeed(height,
         TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED).
-    // Precision guidance keeps its original single-stop model. Economy
-    // guidance below explicitly budgets a separate descending flare entry.
+    // Legacy guidance targets vertical arrest. Opt-in descending guidance
+    // budgets a separate flare entry without changing a fixed site's gates.
     IF ctx["H_SPEED"] > APPROACH_HSPEED { SET targetVs TO 0. }
     LOCAL fullVector IS LANDING_ECONOMY_BRAKE > 0
         AND ctx["H_SPEED"] > APPROACH_HSPEED.

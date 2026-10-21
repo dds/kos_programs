@@ -26,9 +26,13 @@ GLOBAL LANDING_DIVERT_SEARCH_TIME IS 15.
 GLOBAL LANDING_DIVERT_SEARCH_DESCENT IS 5.
 GLOBAL LANDING_DIVERT_EMERGENCY_SLOPE IS 0.
 GLOBAL LANDING_MIN_IPU IS 2000.
-// Flexible economy descents brake to a downward flare entry, not a hover.
-// Precision profiles retain the original target-driven braking policy.
+// Brake toward a downward flare entry rather than zero vertical speed.
+// Fixed-site profiles retain geographic stopping gates; only flexible sites
+// suppress them. Zero keeps the legacy vertical-arrest controller.
 GLOBAL LANDING_ECONOMY_BRAKE IS 0.
+// Opt-in serial-stage ignition model; unknown current-stage fuel falls back
+// to planning the entire stop on the weaker lander.
+GLOBAL LANDING_STAGE_BRAKE_CREDIT IS 0.
 // Economy may accept a newly checked footprint after velocity capture,
 // avoiding an expensive late translation back to an obsolete stopping point.
 GLOBAL LANDING_ECONOMY_TERMINAL_RETARGET IS 1.

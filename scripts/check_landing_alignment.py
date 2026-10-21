@@ -86,7 +86,7 @@ def check_state_entry():
                    landingAbortFlag=False,
                    ROUND=lambda *args: str(round(*args)),
                    STAGE=NS(NUMBER=LogNumber(2)), CONFIG=NS(IPU=LogNumber(2000)),
-                   LANDING_ECONOMY_BRAKE=LogNumber(1))
+                   LANDING_ECONOMY_BRAKE=LogNumber(1),LANDING_STAGE_BRAKE_CREDIT=LogNumber(0))
         call('_landingSetState', env, ctx, 'BRAKING_BURN', 'fixture forced entry')
         assert (ctx['throttle'] == 0) == (error > 15)
         assert 'throttle=' in saved['last_landing_brake']

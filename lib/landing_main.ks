@@ -137,6 +137,7 @@ GLOBAL FUNCTION _landingStateLog {
         + " acc=" + ROUND(ctx["MAX_ACC"],2)
         + " planAcc=" + ROUND(ctx["PLAN_ACC"],2)
         + " height=" + ROUND(_landingBurnHeight(ctx),0)
+        + " stageDv=" + ROUND(ctx["BRAKE_STAGE_DV"],1)
         + " age=" + ROUND(TIME:SECONDS - ctx["STATE_ENTERED"],1) + ".").
 }
 
@@ -303,6 +304,10 @@ GLOBAL FUNCTION _landingCacheTick {
         SET ctx["RESERVE_ACC"] TO vesselLandingReserveAcc().
         SET ctx["RESERVE_STAGE"] TO STAGE:NUMBER.
     }
+    SET ctx["BRAKE_STAGE_DV"] TO 0.
+    IF LANDING_STAGE_BRAKE_CREDIT > 0 AND NOT ctx["DISCARD_PENDING"] {
+        SET ctx["BRAKE_STAGE_DV"] TO vesselLandingBrakeStageDv().
+    }
     SET ctx["PLAN_ACC"] TO ctx["MAX_ACC"].
     IF ctx["RESERVE_ACC"] > 0 {
         SET ctx["PLAN_ACC"] TO MIN(ctx["PLAN_ACC"], ctx["RESERVE_ACC"]).
@@ -372,9 +377,7 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     LOCAL horizontalSpeed IS ctx["H_SPEED"].
     LOCAL verticalAcc IS gravAcc.
     LOCAL horizontalAcc IS lmBrakeNetAcc(maxAcc, gravAcc).
-    LOCAL reactionTime IS MAX(0, LANDING_BRAKE_REACTION_TIME).
-    LOCAL envelope IS lmBrakeEnvelope(horizontalSpeed, downSpeed,
-        maxAcc, gravAcc, reactionTime).
+    LOCAL envelope IS _landingStopEnvelope(ctx,horizontalSpeed,downSpeed).
     LOCAL brakeDist IS envelope["H"].
     LOCAL burnHeight IS _landingBurnHeight(ctx).
     LOCAL distToTarget IS 999999.
@@ -416,8 +419,8 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     LOCAL iteration IS 0.
     UNTIL iteration >= 12 {
         LOCAL coastTime IS (etaLo + etaHi) / 2.
-        LOCAL futureGate IS lmBrakeEnvelope(horizontalSpeed,
-            downSpeed + gravAcc * coastTime, maxAcc, gravAcc, reactionTime).
+        LOCAL futureGate IS _landingStopEnvelope(ctx,horizontalSpeed,
+            downSpeed + gravAcc * coastTime).
         LOCAL futureHeight IS burnHeight - downSpeed * coastTime
             - gravAcc * coastTime ^ 2 / 2.
         IF futureHeight <= futureGate["V"] {
@@ -445,7 +448,7 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
         AND horizontalSpeed > APPROACH_HSPEED
         AND ctx["V_SPEED"] < 0
         AND burnHeight <= TERRAIN_SAFE_ALT.
-    IF LANDING_ECONOMY_BRAKE > 0 {
+    IF LANDING_ECONOMY_BRAKE > 0 AND LANDING_FLEXIBLE_SITE > 0 {
         // Flexible sites do not justify arresting velocity early just to
         // preserve a geographic stopping point. The unchanged V gate still
         // includes horizontal speed, terrain, latency and next-stage thrust.
@@ -590,6 +593,8 @@ GLOBAL FUNCTION _landingSetState {
             + " acc=" + ROUND(ctx["MAX_ACC"],2)
             + " planAcc=" + ROUND(ctx["PLAN_ACC"],2)
             + " reserveAcc=" + ROUND(ctx["RESERVE_ACC"],2)
+            + " brakeStageDv=" + ROUND(ctx["BRAKE_STAGE_DV"],1)
+            + " stageCredit=" + LANDING_STAGE_BRAKE_CREDIT
             + " grav=" + ROUND(ctx["BRAKE_GRAV"],2)
             + " stage=" + STAGE:NUMBER
             + " ipu=" + CONFIG:IPU
@@ -775,6 +780,7 @@ GLOBAL FUNCTION landExecute {
         "DIVERT_ELEVATION", SHIP:ALTITUDE - _landingBottomRadar(),
         "RESERVE_STAGE", -999,
         "RESERVE_ACC", 0,
+        "BRAKE_STAGE_DV", 0,
         "STAGE_UNTIL", 0,
         "STAGE_ENGINE", -1,
         "STAGE_EVENTS", 0,
@@ -802,8 +808,11 @@ GLOBAL FUNCTION landExecute {
     vesselDeployGear().
     _landingSetSteering(ctx, ctx["TARGET_STEERING"]).
     LOCK THROTTLE TO ctx["TARGET_THROTTLE"].
-    mLog("Landing setup target=" + _landingBoolText(_hasTarget)
-        + " tr=" + _landingBoolText(ADDONS:TR:AVAILABLE) + ".").
+    mLog("STATS landing setup target=" + _landingBoolText(_hasTarget)
+        + " tr=" + _landingBoolText(ADDONS:TR:AVAILABLE)
+        + " economyBrake=" + LANDING_ECONOMY_BRAKE + " flexible=" + LANDING_FLEXIBLE_SITE
+        + " stageCredit=" + LANDING_STAGE_BRAKE_CREDIT
+        + " brakeStageDv=" + ROUND(ctx["BRAKE_STAGE_DV"],1) + ".").
     // Load the next track while still at setup, then reclaim its disk file.
     // RUNONCE functions remain resident: no archive/compile delay at ignition.
     _landingEnsureStateTrack("BRAKE_ALIGN").

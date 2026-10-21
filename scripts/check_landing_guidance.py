@@ -13,7 +13,7 @@ from check_launch_and_staging import body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = '\n'.join((ROOT / ('lib/' + name + '.ks')).read_text() for name in
-                    ('landing_math', 'landing_config', 'landing_main', 'landing_coast', 'landing_terminal', 'landing_brake', 'landing_divert', 'landing_diagnostics', 'landing_disposal', 'vessel_hardware'))
+                    ('landing_math', 'landing_config', 'landing_main', 'landing_coast', 'landing_terminal', 'landing_brake', 'landing_divert', 'landing_diagnostics', 'landing_disposal', 'vessel_hardware', 'landing_stage_brake'))
 
 
 def tokens(source):

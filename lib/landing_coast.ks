@@ -95,7 +95,10 @@ GLOBAL FUNCTION _landingCoastTick {
         + " vEta=" + ROUND(gate["V_ETA"],0)
         + " hSupp=" + _landingBoolText(gate["H_SUPPRESSED"])
         + " hOver=" + _landingBoolText(gate["H_OVERSHOT"])
-        + " hs=" + ROUND(gate["H_SPEED"],1),
+        + " hs=" + ROUND(gate["H_SPEED"],1)
+        + " vGate=" + ROUND(gate["V_GATE"],0)
+        + " height=" + ROUND(_landingBurnHeight(ctx),0)
+        + " stageDv=" + ROUND(ctx["BRAKE_STAGE_DV"],1),
         1, 2, 13, WHITE, FALSE, coastTransitionEta).
 
     IF ctx["HAS_TARGET"] AND nextBrakeEta < 999999 {

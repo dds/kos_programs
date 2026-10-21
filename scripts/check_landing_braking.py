@@ -18,6 +18,7 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                SURFACE_VEL=Vec((horizontal,0,-down)),
                V_SPEED=-down, DOWN_SPEED=down, MAX_ACC=gravity*twr,
                PLAN_ACC=gravity*twr, GRAV=gravity, BRAKE_GRAV=gravity,
+               BRAKE_STAGE_DV=0,
                BRAKE_ALIGN_BLOCKED=False,
                DIVERT_PENDING=False, DIVERT_SEARCH={},
                DIVERT_PREVIEW=dict(OK=False,AT=-9999,LOG_AT=-9999),
@@ -41,7 +42,7 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
     for name in ('lmBrakeNetAcc', 'lmBrakeEnvelope', 'lmBrakeThrust',
                  'lmBrakeFullNetAcc','lmBrakeDescentTarget','lmEconomyBrakeThrust',
                  'lmVerticalBurnDistance', 'lmRetroSteering',
-                 '_landingBurnHeight', '_landingBrakeGateInfo',
+                 '_landingBurnHeight', '_landingStopEnvelope', 'lmStagedBrakeEnvelope', '_landingBrakeGateInfo',
                  '_landingBrakeSteeringInfo'):
         env[name] = lambda *args, name=name: call(name, env, *args)
     return env, ctx
@@ -163,6 +164,7 @@ def simulate(gravity, twr, horizontal, down, next_twr=None, economy=False,
              start_height=None, downrange=100000, dt=.1, curvature_radius=None):
     env, ctx = fixture(gravity, twr, horizontal, down)
     env['LANDING_ECONOMY_BRAKE']=int(economy)
+    env['LANDING_FLEXIBLE_SITE']=int(economy)
     if next_twr:
         ctx['PLAN_ACC'] = next_twr * gravity
     # Begin above the trigger; exercise real coast and alignment dispatch.
@@ -331,7 +333,7 @@ def check_integration():
             # Required polar targeting, circularization and bounded lateral
             # deorbit correction have explicit RO9 settings. Their numerical
             # checks live in check_bplane_newton/arrival_budget/deorbit_solver.
-            keys='BPLANE_DV_CAP|REFINE_BPLANE_DV_CAP|BPLANE_TRIM_DV_CAP|BPLANE_TRIM_TOTAL_DV_CAP|BPLANE_CAPTURE_MARGIN|SHAPE_DV_CAP|SHAPE_TOTAL_DV_CAP|TARGET_DEORBIT_NORMAL_DV_CAP|TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM|DEORBIT_CROSSTRACK_AUTHORITY_KM|TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS'
+            keys='BPLANE_DV_CAP|REFINE_BPLANE_DV_CAP|BPLANE_TRIM_DV_CAP|BPLANE_TRIM_TOTAL_DV_CAP|BPLANE_CAPTURE_MARGIN|SHAPE_DV_CAP|SHAPE_TOTAL_DV_CAP|TARGET_DEORBIT_NORMAL_DV_CAP|TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM|DEORBIT_CROSSTRACK_AUTHORITY_KM|TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS|LANDING_STAGE_BRAKE_CREDIT|LANDING_ECONOMY_BRAKE'
             actual=re.sub(r'SET ('+keys+r') TO -?\d+(?:\.\d+)?\.', '', actual)
             expected=re.sub(r'SET ('+keys+r') TO -?\d+(?:\.\d+)?\.', '', expected)
         assert clean(actual).split()==clean(expected).split(), path

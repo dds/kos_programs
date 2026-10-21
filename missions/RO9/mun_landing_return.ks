@@ -64,6 +64,11 @@ SET GUIDANCE_ALT TO 3000.
 SET TARGET_DEORBIT_SCAN_ORBITS TO 8.
 SET TARGET_DEORBIT_SCAN_SAMPLES TO 512.
 SET TARGET_DEORBIT_MIN_LEAD TO 120.
+// Spend the attached transfer stage before budgeting the weaker lander's
+// residual stop; retain conservative fallback for unknown/unsupported stacks.
+SET LANDING_STAGE_BRAKE_CREDIT TO 1.
+// Descend through braking while preserving this fixed site's stopping gates.
+SET LANDING_ECONOMY_BRAKE TO 1.
 // Survey one surface rotation for close passes before spending native
 // footprint trials; eight consecutive polar orbits can all miss this site.
 SET TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS TO 1.

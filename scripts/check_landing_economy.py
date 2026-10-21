@@ -54,7 +54,7 @@ def check_ballistic_gate():
     ctx['downrange']=4000
     original=call('_landingBrakeGateInfo',env,ctx)
     assert original['H_NOW'] and not original['V_NOW']
-    env['LANDING_ECONOMY_BRAKE']=1
+    env.update(LANDING_ECONOMY_BRAKE=1,LANDING_FLEXIBLE_SITE=1)
     revised=call('_landingBrakeGateInfo',env,ctx)
     assert not revised['H_NOW'] and not revised['H_OVERSHOT']
     for key in ('V_NOW','V_GATE','V_ETA'): assert revised[key]==original[key]

@@ -19,6 +19,7 @@ GLOBAL FUNCTION landingDiagnosticStart {
             + " radius=" + SHIP:BODY:RADIUS + " mu=" + SHIP:BODY:MU
             + " rotation=" + SHIP:BODY:ROTATIONPERIOD
             + " economy=" + LANDING_ECONOMY_BRAKE + " flexible=" + LANDING_FLEXIBLE_SITE
+            + " stageCredit=" + LANDING_STAGE_BRAKE_CREDIT + " brakeStageDv=" + ctx["BRAKE_STAGE_DV"]
             + " normalSlope=" + LANDING_TERRAIN_MAX_SLOPE
             + " emergencySlope=" + MIN(15, LANDING_DIVERT_EMERGENCY_SLOPE)
             + " maxTilt=" + MAX_TILT + " maxTime=" + LANDING_APPROACH_MAX_TIME
@@ -104,7 +105,7 @@ GLOBAL FUNCTION landingDiagnosticHud {
         + " rawThrottle=" + SHIP:CONTROL:MAINTHROTTLE
         + " pilotThrottle=" + SHIP:CONTROL:PILOTMAINTHROTTLE
         + " thrust=" + SHIP:THRUST + " mass=" + SHIP:MASS
-        + " gravity=" + ctx["GRAV"]
+        + " gravity=" + ctx["GRAV"] + " brakeStageDv=" + ctx["BRAKE_STAGE_DV"]
         + " facingUp=" + VDOT(SHIP:FACING:FOREVECTOR,ctx["UP_VEC"])
         + " " + text, TRUE).
 }

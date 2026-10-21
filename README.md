@@ -334,7 +334,20 @@ enough height for the final vertical flare on the weaker planned stage.
 It tapers near velocity capture and keeps the existing reaction, clearance,
 staging and physical-cutoff checks. The conservative 80% acceleration budget
 remains in the ignition and flare envelopes; it does not cap the economy
-main-burn throttle. Precision profiles retain the previous policy.
+main-burn throttle. The RO9 fixed-site Mun profile now enables the same
+descending controller while keeping its geographic stopping gates and target
+lock; only flexible-site missions suppress the geographic gate.
+It also enables `LANDING_STAGE_BRAKE_CREDIT=1`. On a supported single-engine
+serial transfer stage, the ignition calculation credits that stage's remaining
+impulse, capped by its own enabled propellant mixture and current-stage dV.
+The weaker lander still covers every residual velocity component, with the
+80% acceleration reserve, full gravity, clearance and separate reaction and
+staging pauses. Unknown fuel, unsupported stacks and atmosphere retain the
+older whole-stop-on-the-weaker-stage calculation. Other profiles default off.
+`STATS landing setup` prints the effective flags and `brakeStageDv`; COAST
+shows `vGate`, `height` and `stageDv`, and the saved brake decision includes
+the credit. A connected reboot loads the new powered-landing library; no
+installed bootstrap update is needed.
 Braking waits for the actual facing direction to be within 15 degrees of
 the commanded thrust vector and at or above the horizon. The same throttle
 guard runs throughout braking and after staging; an urgent stopping gate

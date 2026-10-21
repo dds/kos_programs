@@ -519,6 +519,44 @@ that disappears as horizontal speed falls. An insufficient acceleration
 budget triggers braking immediately; it cannot make an underpowered craft
 capable of landing.
 
+RO9's fixed-site Mun profile opts into `LANDING_STAGE_BRAKE_CREDIT=1`.
+The powered-band-only `landing_stage_brake` module computes a two-stage
+stop rather than assuming the entire stop uses the weaker lander. For a
+single controllable engine on an adjacent serial transfer stage, it bounds
+remaining impulse by the lesser of stock current-stage dV and the rocket
+equation applied to enabled propellant in the discarded parts. The limiting
+mixture component bounds usable fuel; retained lander tanks, disabled tanks,
+empty mixtures, massless required resources, parallel/multimode/locked engines,
+nonadjacent staging and atmospheric vacuum estimates supply no credit.
+The stock dV value alone is insufficient: [kOS documents update lag and
+inaccuracies](https://ksp-kos.github.io/KOS/structures/vessels/deltav.html).
+Part tank amounts are used rather than `ConsumedResource:AMOUNT`, which is
+only valid while the engine is running. This is a conventional serial-stack
+model, not a general fuel-routing or arbitrary modded-engine certification.
+
+The available active-stage net impulse is bounded by
+`stageDv * activeNetAcc / activeAcc / BURN_MARGIN`. Integrate that portion
+with the existing 80% net acceleration reserve, then reserve a separate
+separation/ignition coast and give all residual velocity to the weaker stage.
+Both components retain full surface gravity, reaction time, burn margin and
+clearance. If the extra pause consumes the benefit, retain the old envelope;
+zero/unmeasurable credit uses the original calculation. `PLAN_ACC` still
+records the weaker stage. No budget assumes the 44.68 m/s2 transfer engine
+can burn throughout a stop after its fuel runs out.
+
+The reported fixed-site entry (504.9 m/s horizontal, -3.8 m/s vertical,
+44.68/2.72 m/s2 active/planned acceleration, 9,149 m control height versus
+14,869 m radar) reproduces a 152 km horizontal gate with vertical ETA12.7s.
+That lets the horizontal trigger ignite within the 20s alignment lead while
+the vertical gate is still false. An illustrative313 m/s transfer-stage
+budget reduces the horizontal gate to48.3 km and increases vertical ETA38s,
+preventing ignition at that snapshot. The actual remaining transfer fuel
+was not supplied, so these revised numbers are conditional, not a replay.
+`STATS landing setup`, COAST display, the persisted brake decision and resident
+diagnostic header/control rows now record the credited budget.
+The640m terrain shift is not required to reproduce the mechanism; target
+height/radar minimum still preserves the higher terrain guard.
+
 The horizontal trigger compares the gate with target downrange **minus**
 `LANDING_BRAKE_GATE_LEAD_DIST` and `LANDING_BRAKE_UNDERSHOOT_BIAS`. These
 positive allowances now advance ignition; the former addition delayed it.
@@ -531,9 +569,11 @@ including the growth of stopping distance as downward speed increases.
 The horizontal ETA estimates closing time to the horizontal gate.
 `H_NOW`/`V_NOW` mean the corresponding gate has arrived. `H_OVERSHOT` means
 the target is behind the descending craft below `TERRAIN_SAFE_ALT`.
-The existing high-altitude horizontal suppression still applies when above
-`TERRAIN_SAFE_ALT`, above twice the horizontal gate, and over 60 seconds from
-the vertical trigger. It cannot suppress the vertical trigger.
+High-altitude horizontal suppression applies above `TERRAIN_SAFE_ALT` when
+more than `LANDING_BRAKE_ALIGN_LEAD` (20s by default) from the vertical gate.
+It cannot suppress the vertical trigger. Full-vector descending control alone
+does not suppress fixed-site horizontal/overshoot gates; that also requires
+`LANDING_FLEXIBLE_SITE>0`.
 
 These are conservative point-mass bounds, not terrain-path or attitude
 simulation. Rising terrain ahead, unusually slow rotation, engine spool-up,
@@ -657,10 +697,13 @@ one-second response taper near the desired velocity. The magnitude sets
 throttle and its normalized direction sets steering. This replaces a nearly
 horizontal fixed upward bias and an independently computed vertical throttle.
 
-Above `APPROACH_HSPEED`, desired horizontal and vertical speeds are zero.
-Maintaining the ordinary 30 m/s descent target throughout a long sideways
-burn would spend height absent from the stopping-distance calculation. Once
-lateral speed is low, the scheduled descent speed resumes. Trajectories
+With legacy control (`LANDING_ECONOMY_BRAKE=0`), desired horizontal and
+vertical speeds are zero above `APPROACH_HSPEED`. This can sustain a long
+high-altitude near-hover. `LANDING_ECONOMY_BRAKE=1` instead uses the existing
+full-vector descending controller and budgets its remaining vertical flare
+against the weaker stage. RO9's fixed-site Mun profile now enables this mode
+while retaining its target and geographic gates. Once lateral speed is low,
+the scheduled descent speed resumes. Trajectories
 undershoot and crossrange correction no longer reduce braking authority;
 position correction follows velocity capture in the terminal track.
 
@@ -673,6 +716,20 @@ The state exits when the descent is captured and horizontal speed is low:
 It can also go to `TARGET_REFINE` once the approach corridor is captured
 within `APPROACH_RADIUS`, or to `VERTICAL_DESCENT` on a low vertical gate when
 targeting is absent or horizontal speed is already low.
+
+`scripts/check_landing_stage_brake.py` checks physical fuel caps, live cache
+refresh, unsupported-stack fallback, the reported gate, fixed-site policy,
+and paired finite-fuel point masses with3s ignition and staging gaps. With an
+illustrative313 m/s transfer budget and the reported speeds, the revised
+model ignites about1.5 km lower in target-relative height, reduces powered
+near-zero descent before horizontal capture from159s to0s, and reduces impulse
+to capture from594 to502 m/s. These endpoints are not complete landings or a
+proof of target accuracy/fuel savings on the actual flight. A separate run
+starts only1m above the staged gate under constant full surface gravity and
+retains weaker-stage flare clearance after both delays. Terrain geometry,
+SteeringManager dynamics, stock resource routing and KSP scheduling still
+require flight validation. The ignition altitude is calculated from available
+thrust/fuel, not forced to an arbitrary low altitude.
 
 ## Staging during powered descent
 
