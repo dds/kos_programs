@@ -20,7 +20,7 @@ GLOBAL FUNCTION landingDiagnosticStart {
             + " rotation=" + SHIP:BODY:ROTATIONPERIOD
             + " economy=" + LANDING_ECONOMY_BRAKE + " flexible=" + LANDING_FLEXIBLE_SITE
             + " poweredLead=" + LANDING_POWERED_LEAD
-            + " landingStageFloor=" + LANDING_STAGE_LIMIT
+            + " landingStageFloor=" + vesselLandingStageFloor()
             + " stageCredit=" + LANDING_STAGE_BRAKE_CREDIT + " brakeStageDv=" + ctx["BRAKE_STAGE_DV"]
             + " normalSlope=" + LANDING_TERRAIN_MAX_SLOPE
             + " emergencySlope=" + MIN(15, LANDING_DIVERT_EMERGENCY_SLOPE)

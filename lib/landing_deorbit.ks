@@ -28,6 +28,11 @@ GLOBAL FUNCTION phaseLandDeorbit {
         yieldToPrompt().
         RETURN.
     }
+    IF NOT vesselLandingPrepareRoles() AND SHIP:STATUS = "ORBITING" {
+        mLogError("Landing role tags failed validation; retaining orbit. Review STATS landing roles.").
+        yieldToPrompt().
+        RETURN.
+    }
     IF SHIP:STATUS = "SUB_ORBITAL"
             AND (LANDING_SKIP_TARGET_SEARCH > 0) {
         _advanceAfterLandDeorbit().

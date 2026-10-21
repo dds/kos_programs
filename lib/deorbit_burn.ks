@@ -15,6 +15,11 @@ GLOBAL FUNCTION executeDeorbitNode {
         mLogError("Deorbit burn refused: abort, expired node or invalid mass. Node retained.").
         RETURN FALSE.
     }
+    IF NOT vesselLandingPrepareRoles() {
+        vesselLandingCleanup().
+        mLogError("Deorbit refused: invalid landing role tags. Node retained.").
+        RETURN FALSE.
+    }
     IF NOT landingLightNodeAllowed(nd, targetLat, targetLng) {
         vesselLandingCleanup().
         mLogError("Deorbit refused: landing light/Kerbin-view check failed. Node retained; use cmd/landlight to review/reselect from orbit.").

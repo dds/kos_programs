@@ -8,7 +8,6 @@
 
 @LAZYGLOBAL OFF.
 
-GLOBAL LANDING_STAGE_LIMIT IS 0.
 GLOBAL LANDING_STAGE_MAX_EVENTS IS 4.
 GLOBAL LANDING_STAGE_SETTLE IS 0.25.
 
@@ -64,7 +63,7 @@ GLOBAL FUNCTION vesselLandingNextEngineStage {
         IF NOT eng:IGNITION AND NOT eng:FLAMEOUT
                 AND NOT eng:THROTTLELOCK AND eng:POSSIBLETHRUST > 0
                 AND eng:STAGE <= STAGE:NUMBER
-                AND eng:STAGE >= MAX(0, LANDING_STAGE_LIMIT)
+                AND eng:STAGE >= vesselLandingStageFloor()
                 AND eng:DECOUPLEDIN < eng:STAGE {
             SET engineStage TO MAX(engineStage, eng:STAGE).
         }
@@ -75,6 +74,10 @@ GLOBAL FUNCTION vesselLandingNextEngineStage {
 // Conservative next-stage acceleration at its current wet mass. Fuel burn
 // can only improve this estimate for a conventional serial landing stack.
 GLOBAL FUNCTION vesselLandingReserveAcc {
+    // Bad role metadata must not make a committed descent assume that the
+    // current transfer engine can power the entire stop. Keep an urgent
+    // conservative brake while further staging waits for correction.
+    IF NOT landingRolePolicy["VALID"] { RETURN 0.001. }
     LOCAL engineStage IS vesselLandingNextEngineStage().
     IF engineStage < 0 { RETURN 0. }
     LOCAL thrustSum IS 0.
@@ -107,7 +110,7 @@ GLOBAL FUNCTION vesselLandingStageEvent {
     SET SHIP:CONTROL:MAINTHROTTLE TO 0.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
     IF ABORT OR NOT (SHIP:THRUST <= 0.001) OR NOT STAGE:READY
-            OR STAGE:NUMBER <= engineStage OR engineStage < MAX(0, LANDING_STAGE_LIMIT)
+            OR STAGE:NUMBER <= engineStage OR engineStage < vesselLandingStageFloor()
             OR ctx["STAGE_EVENTS"] >= LANDING_STAGE_MAX_EVENTS { RETURN FALSE. }
     STAGE.
     SET ctx["STAGE_EVENTS"] TO ctx["STAGE_EVENTS"] + 1.
@@ -143,7 +146,7 @@ GLOBAL FUNCTION vesselStageForLanding {
         SET ctx["STAGE_ENGINE"] TO vesselLandingNextEngineStage().
     }
     LOCAL engineStage IS ctx["STAGE_ENGINE"].
-    IF engineStage < 0 OR (ctx["STAGE_EVENTS"] >= LANDING_STAGE_MAX_EVENTS
+    IF engineStage < vesselLandingStageFloor() OR (ctx["STAGE_EVENTS"] >= LANDING_STAGE_MAX_EVENTS
             AND STAGE:NUMBER > engineStage) {
         IF NOT ctx["STAGE_WARNED"] {
             mLogWarn("Landing thrust unavailable; inspect engine/staging. Guidance remains active.").

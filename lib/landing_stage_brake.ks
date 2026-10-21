@@ -24,7 +24,7 @@ GLOBAL FUNCTION vesselLandingBrakeStageDv {
         // contributes no current-stage propellant or thrust. Its retained
         // mass is already included in the next-stage acceleration budget.
         IF eng:POSSIBLETHRUST > 0 AND NOT eng:FLAMEOUT
-                AND eng:STAGE >= MAX(0,LANDING_STAGE_LIMIT)
+                AND eng:STAGE >= vesselLandingStageFloor()
                 AND eng:DECOUPLEDIN < engineStage AND eng:STAGE <> engineStage {
             RETURN 0.
         }

@@ -149,19 +149,41 @@ so advancing to that engine only triggers intended separation/ignition events.
 An unrelated flamed-out engine does not force staging while usable engines
 are still active.
 
-For a serial transfer3/lander2/return1 stack, stop at a throttle-off manual
-point before deorbit and run `RUNPATH("0:/cmd/landingstages.ks", 2).`, then
-reboot to resume the mission. This validates a usable retained engine at2
-and saves only `LANDING_STAGE_LIMIT=2` for this vessel's current mission.
-Landing can use3 then2 but cannot auto-stage into1 when2 runs dry. Keep
-crossfeed from the reserved return tanks disabled: the floor controls staging,
-not fuel flow, and it does not prove the landing fuel is sufficient. No
-RO9-wide stage number is assumed; older stacks can have different roles.
-The normal surface-return setup clears this landing override; ascent may
-use leftover lander fuel and then stage into the return engine. The readiness
-report and archived flight header include the active floor. The command does
-not burn, stage, change the target/sequence or reboot itself. No bootstrap
-update is required.
+Use kOS part name tags to declare reusable hardware roles:
+
+| Tag on the actual decoupler | Role |
+|---|---|
+| `return_decoupler` | Separates the ascent/return craft from landing tanks, engine and legs. Landing reserves this boundary and the return engines. |
+| `lander_decoupler` | Releases the complete lander from its transfer section or surveyor/carrier. Identifies the release hardware; finding it does not fire it. |
+
+One part per tag. A unique valid `return_decoupler` is enough to reserve the
+return stage: a3/2/1 stack derives floor2 from the tagged stage1 separator.
+No numeric configuration command is needed for correctly tagged hardware.
+Names can be changed with `LANDING_RETURN_DECOUPLER_TAG` and
+`LANDING_RELEASE_DECOUPLER_TAG`; blank/`none` disables that role lookup.
+The resolver checks actual separator modules, staging order, lander/return
+engines and retention of the controlling CPU. Duplicates and invalid roles
+hold deorbit while still in orbit. A committed descent retains active-engine
+guidance, blocks further staging and uses a conservative brake budget when
+roles are invalid. Tags never fire separators or ignite engines by themselves.
+A combined surveyor/lander still needs its release timing and separate CPU/
+mission handoff configured; these tags do not install a dual-vessel mission.
+
+After syncing this code at a connected boot, landing entry points read the
+tags from the vessel, including after a reboot. `STATS landing roles` shows
+`valid`, `floor`, `returnStage` and `releaseStage`; the example should report
+`valid=True floor=2 returnStage=1 releaseStage=2`. No derived stage numbers
+are persisted. `cmd/landingcheck` includes the current role reason/floor.
+Untagged craft retain their existing manual/default policy. The numerical
+fallback remains `RUNPATH("0:/cmd/landingstages.ks", 2).` at a throttle-off
+manual point before deorbit, followed by reboot; it changes only that flight's
+landing stage limit. A manual floor can tighten a tagged boundary, not weaken it.
+
+Keep crossfeed from reserved return tanks disabled: this policy controls
+staging, not fuel flow, and cannot prove descent fuel is sufficient. Surface
+ascent uses its own staging and can use leftover lander fuel before shedding
+the lander. No bootstrap update is required. Hardware tags follow kOS's
+[Part name-tag and staging interfaces](https://ksp-kos.github.io/KOS/structures/vessels/part.html).
 
 Vacuum landing also uses the active transfer stage's fuel before staging.
 No landing-specific tags are required: put transfer-stage separation and

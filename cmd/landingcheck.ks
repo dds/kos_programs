@@ -9,6 +9,7 @@ LOCAL FUNCTION _cmdLandingcheck {
     RUNPATH("1:/lib/boot_lib").
     bootPreamble().
     bootLibLoad("vessel_hardware").
+    vesselLandingPrepareRoles().
     RUNONCEPATH("0:/lib/diagnostic_log.ks").
     LOCAL reportState IS diagnosticArchiveOpen("landingcheck").
     IF NOT reportState["READY"] { RETURN. }
@@ -44,7 +45,8 @@ LOCAL FUNCTION _cmdLandingcheck {
     report("  Fuel     remaining vacuum dV=" + ROUND(SHIP:DELTAV:VACUUM,1)
         + "m/s current stage=" + ROUND(STAGE:DELTAV:VACUUM,1) + "m/s").
     report("  Staging  current=" + STAGE:NUMBER
-        + " landingFloor=" + LANDING_STAGE_LIMIT
+        + " landingFloor=" + vesselLandingStageFloor()
+        + " roleReason=" + landingRolePolicy["REASON"]
         + " next engine=" + vesselLandingNextEngineStage()
         + " next-stage surface TWR=" + ROUND(vesselLandingReserveAcc() / surfaceGrav,2)).
     report("  Guidance activeAcc=" + (vesselLandingThrust() / MAX(0.01, SHIP:MASS))

@@ -60,6 +60,42 @@ about additional future propulsion. Three source cases exercise the reported
 3/2/1 handoff and reservation, fuel exclusion and command refusal paths;
 actual multistage landing/ascent flight remains unverified.
 
+Hardware roles can now be explicit kOS part tags rather than saved stage
+numbers. Put `return_decoupler` on the separator between the return craft and
+landing engine/tanks/legs; put `lander_decoupler` on the separator between the
+whole lander and transfer/carrier. Both are configurable tag names. The return
+boundary alone is enough to derive the protected floor; the release tag
+identifies hardware and validates relative order while still attached. Spent
+carrier separators may remain attached without invalidating return protection.
+The helper never fires an event. Future combined surveyor/lander deployments
+still need release timing and CPU/mission ownership planned explicitly.
+
+`landing_roles` is a small dependency of vessel_hardware, present in both
+orbital landing and powered bands without pulling the FSM into deorbit.
+Before a deorbit solve/execution or powered setup, it validates unique tagged
+stock separators and, for a return boundary, a stageable unspent separator,
+retained CPU, a lander engine on the discarded side and an inactive return
+engine on the retained side. Its effective stage floor is the larger of the
+manual setting and tagged return stage+1. Staging, activation and finite
+transfer-credit filtering all use this same floor. The floor reads the live
+part staging number and is reconstructed on reboot; derived stage numbers
+are not saved as mission intent. Untagged craft keep legacy/manual behavior.
+
+Bad tags hold an unflown orbital deorbit. During a committed descent, active
+engine guidance continues with an urgent conservative future-thrust budget,
+while automatic separation/activation is blocked. A metadata error cannot
+silently make the stopping gate assume inexhaustible transfer thrust. This
+cannot guarantee survival if usable fuel runs out; tag errors require repair.
+All attitude, physical cutoff, stage readiness and settle checks remain.
+`STATS landing roles valid=... floor=... returnStage=... releaseStage=...`
+and readiness reports expose the policy. The3/2/1 example should show floor2,
+returnStage1, releaseStage2. Correct tags remove the need for the numeric
+`cmd/landingstages` setup; that command remains a per-flight fallback.
+
+This uses the documented [kOS Part TAG/STAGE/DECOUPLEDIN interface](https://ksp-kos.github.io/KOS/structures/vessels/part.html)
+and [Separator ISDECOUPLED/STAGED interface](https://ksp-kos.github.io/KOS/structures/vessels/separator.html).
+The tests model those interfaces, not native part trees or flight timing.
+
 The next RO9 fixed-site Mun run opts into `LANDING_POWERED_LEAD=1`.
 The later measured ignition at control-height6101m/radar7977m,
 hs516.1m/s/vs-44.9m/s, active44.68/plan2.72m/s2 and223.9m/s transfer credit

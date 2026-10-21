@@ -214,6 +214,7 @@ def check_compact_burn():
                    CONFIG=NS(IPU=150), LANDING_MIN_IPU=2000,
                    KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),
                    ROUND=round, VANG=lambda *_: 30 if scenario == 'off-vector' else 0,
+                   vesselLandingPrepareRoles=lambda:True,
                    landingLightNodeAllowed=lambda *_: scenario != 'unlit-site',
                    stateSet=lambda key, value: markers.update({key: value}),
                    stateRemove=lambda key: markers.pop(key, None),

@@ -31,6 +31,7 @@ def environment(oracle, cap=10, budget=64):
                TARGET_DEORBIT_NORMAL_DV_CAP=cap, TARGET_DEORBIT_MAX_EVALUATIONS=budget,
                TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=0, LANDING_POWERED_LEAD=0,
                TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM=.25, DEORBIT_MIN_FPA=0,
+               vesselLandingPrepareRoles=lambda:True,
                _deorbitEvaluations=counter, LIST=lambda *xs: KList(xs),
                SQRT=math.sqrt, fixture_wait=lambda _: None)
     for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)', SOURCE + LEAD):

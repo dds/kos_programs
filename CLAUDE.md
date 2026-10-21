@@ -358,6 +358,34 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  User prefers explicit part roles over stage-number inference. Optional
+  return_decoupler identifies the return/lander boundary; lander_decoupler
+  identifies complete-lander release from transfer/carrier. landing_roles
+  validates unique stock separator modules, return staging, retained CPU and
+  plausible engines; it derives floor=return separator STAGE+1, tightened by
+  an existing numeric limit. No tags preserves legacy policy. Tags do NOT
+  fire hardware or install a surveyor/lander mission/control handoff.
+  Resolver runs before orbital planning/burning and powered-descent setup,
+  recomputes from physical tags after reboot, persists no derived numbers.
+  Invalid roles refuse unflown deorbit; committed descent keeps active-engine
+  guidance with conservative future thrust and blocks additional staging,
+  including cached activation. Do not abort a falling craft just for metadata.
+  Existing separation, ignition, throttle, staging-settle and fuel guards remain.
+  cmd/landingcheck and STATS landing roles report effective floor and reason;
+  new manifest/helper needs a connected boot, not an installed-bootstrap update.
+  Source tests cover tagged3/2/1, renumbered6/5/4, absent/partial/released/custom
+  tags, invalid/duplicate/order/CPU/engine cases, orbital hold and committed
+  recovery. Routine275 cases/44 files pass; slowest individual0.93s.
+  Native tagged hardware flight still needs validation.
+  User later asks whether827m/s on the leg-carrying landing stage suffices
+  from15km Mun circular orbit, and considers reducing the return tank to
+  lighten descent. Treat827 as a descent-stage reading, not a verified total
+  return budget; lander/return TWR and exact revised allocations remain needed.
+  Efficient descent can make827 plausible, but near-unity TWR, long hover or
+  large translation can consume the margin. Smaller return tank improves
+  lander mass/dV/TWR but spends ascent/return margin. Existing ascent can burn
+  leftover lander fuel before discarding legs/tanks; do not assume 1165 stays
+  unchanged after a tank resize or promise affordability without a full budget.
   New-style RO9 mun_economy_return: operator reports LKO total3270m/s;
   transfer3 has1371 before883.1m/s departure, lander2 has735, return1 has1165.
   Components sum3271 (rounding). Return1 is intended for surface liftoff;

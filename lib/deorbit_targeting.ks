@@ -91,6 +91,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
         RETURN FALSE.
     }
 
+    IF NOT vesselLandingPrepareRoles() { RETURN FALSE. }
     IF NOT targetReachable(targetLat) {
         mLogError("Target latitude is not reachable from this orbit inclination.").
         RETURN FALSE.

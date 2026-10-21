@@ -712,6 +712,9 @@ GLOBAL FUNCTION landExecute {
     LOCK THROTTLE TO 0.
     SET SHIP:CONTROL:MAINTHROTTLE TO 0.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    IF NOT vesselLandingPrepareRoles() {
+        mLogError("Landing role tags invalid: further automatic staging blocked; active descent guidance retained.").
+    }
     LOCAL priorArchiveDeferral IS LOG_ARCHIVE_DEFERRED.
     SET LOG_ARCHIVE_DEFERRED TO 1.
     LOCAL priorIpu IS CONFIG:IPU.

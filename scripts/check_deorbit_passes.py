@@ -131,6 +131,7 @@ def check_long_coast_admission():
                  vesselNeedsStage=lambda:False,
                  maneuverEnsureBurnAlarm=lambda *args:events.append(('alarm',args)) or 'burn-alarm',
                  vesselLandingCleanup=lambda:events.append(('cutoff',)) or True,
+                 vesselLandingPrepareRoles=lambda:True,
                  DELETEALARM=lambda alarm:events.append(('delete',alarm)),
                  solarCoastCanWarp=lambda *args:True,
                  coastHealthCheck=lambda *args:scenario!='unhealthy',

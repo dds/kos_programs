@@ -13,7 +13,7 @@ from check_launch_and_staging import body
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = '\n'.join((ROOT / ('lib/' + name + '.ks')).read_text() for name in
-                    ('landing_math', 'landing_config', 'landing_main', 'landing_coast', 'landing_terminal', 'landing_brake', 'landing_divert', 'landing_diagnostics', 'landing_disposal', 'vessel_hardware', 'landing_stage_brake'))
+                    ('landing_math', 'landing_config', 'landing_main', 'landing_coast', 'landing_terminal', 'landing_brake', 'landing_divert', 'landing_diagnostics', 'landing_disposal', 'vessel_hardware', 'landing_roles', 'landing_stage_brake'))
 
 
 def tokens(source):
@@ -230,7 +230,7 @@ def environment():
     for name, value in re.findall(r'GLOBAL (\w+) IS ([^\n]+)\.', SOURCES):
         try: env[name] = evaluate(value, env)
         except (NameError, SyntaxError, AttributeError): pass
-    for name in ('lmApproachAcceleration', 'lmApproachDescentSpeed', 'lmApproachSteering',
+    for name in ('vesselLandingStageFloor', 'lmApproachAcceleration', 'lmApproachDescentSpeed', 'lmApproachSteering',
                  'lmDescentSpeed', 'lmEconomyDescentSpeed', 'lmVerticalThrottle', 'landingTerrainGrade'):
         env[name] = lambda *args, name=name: call(name, env, *args)
     return env
