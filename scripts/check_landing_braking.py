@@ -333,7 +333,7 @@ def check_integration():
             # Required polar targeting, circularization and bounded lateral
             # deorbit correction have explicit RO9 settings. Their numerical
             # checks live in check_bplane_newton/arrival_budget/deorbit_solver.
-            keys='BPLANE_DV_CAP|REFINE_BPLANE_DV_CAP|BPLANE_TRIM_DV_CAP|BPLANE_TRIM_TOTAL_DV_CAP|BPLANE_CAPTURE_MARGIN|SHAPE_DV_CAP|SHAPE_TOTAL_DV_CAP|TARGET_DEORBIT_NORMAL_DV_CAP|TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM|DEORBIT_CROSSTRACK_AUTHORITY_KM|TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS|LANDING_STAGE_BRAKE_CREDIT|LANDING_ECONOMY_BRAKE|LANDING_POWERED_LEAD'
+            keys='BPLANE_DV_CAP|REFINE_BPLANE_DV_CAP|BPLANE_TRIM_DV_CAP|BPLANE_TRIM_TOTAL_DV_CAP|BPLANE_CAPTURE_MARGIN|SHAPE_DV_CAP|SHAPE_TOTAL_DV_CAP|TARGET_DEORBIT_NORMAL_DV_CAP|TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM|DEORBIT_CROSSTRACK_AUTHORITY_KM|TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS|LANDING_STAGE_BRAKE_CREDIT|LANDING_ECONOMY_BRAKE|LANDING_POWERED_LEAD|LANDING_FLEXIBLE_SITE'
             actual=re.sub(r'SET ('+keys+r') TO -?\d+(?:\.\d+)?\.', '', actual)
             expected=re.sub(r'SET ('+keys+r') TO -?\d+(?:\.\d+)?\.', '', expected)
         assert clean(actual).split()==clean(expected).split(), path

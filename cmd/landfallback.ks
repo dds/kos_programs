@@ -18,6 +18,9 @@ LOCAL FUNCTION _cmdLandfallback {
     }
     missionOverrideUpdate(LEXICON("LANDING_FLEXIBLE_SITE",enabled,"LANDING_ECONOMY_BRAKE",1)).
     PRINT "Local fallback permission=" + enabled + "; mission/return sequence and current phase preserved.".
+    IF enabled > 0 {
+        PRINT "This permits replacing the contract target with a checked reachable local site.".
+    }
     PRINT "Terrain, reachability, light/radio and emergency-slope checks still apply.".
     PRINT "REBOOT when ready; this command does not start a burn or change the target.".
 }

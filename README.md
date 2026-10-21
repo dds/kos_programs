@@ -193,7 +193,8 @@ For an in-flight mission, `RUNPATH("0:/cmd/landingdisposal.ks").` saves only
 these two overrides. It preserves the target, return sequence, phase and
 retained node. Passing `0` disables elective disposal.
 
-RO9's fixed-site `mun_landing_return` enables `LANDING_POWERED_LEAD=1`.
+RO9's fixed-site `mun_landing_return` explicitly sets `LANDING_FLEXIBLE_SITE=0`
+and enables `LANDING_POWERED_LEAD=1`, retaining the locked contract target.
 The orbital solver now estimates ignition on the post-deorbit conic and
 subtracts the staged powered-braking travel from the remaining ballistic
 travel. It refines that required overshoot with the same bounded native

@@ -358,6 +358,14 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Operator clarification after the896m/s touchdown: this was intended as a
+  TARGETED landing. Better braking/refinement at a local fallback is not a
+  completed contract-site mission. Direct-return experimentation is deferred
+  to the next craft. Fresh RO9 mun_landing_return explicitly sets flexible0;
+  preserve its locked contract coordinates and bounded local terrain search.
+  cmd/landfallback is a deliberate recovery concession, never the normal
+  targeted-flight procedure; its output now states that the target may be
+  replaced. The orbital powered-lead/target accuracy still needs validation.
   After8926227, the operator reports this committed Mun descent did much
   better: a smart braking burn, descent onto the flat side of a crater and
   excellent refinement, with896m/s dV remaining at touchdown (operator report).

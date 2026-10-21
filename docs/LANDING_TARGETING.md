@@ -23,6 +23,15 @@ command is still a feasibility preview rather than flight guidance.
 Because this retry started after deorbit, it does not validate
 the new orbital powered-lead solve or establish whole-mission fuel savings.
 
+The operator clarified that this flight was intended to reach the contract
+site. Successful local-fallback descent is not a successful targeted mission.
+Direct-return testing is deferred to the next craft. The fresh RO9 profile
+explicitly sets `LANDING_FLEXIBLE_SITE=0`, retaining the locked contract site
+and bounded nearby terrain refinement. `cmd/landfallback` remains a deliberate
+recovery concession and now states that it permits replacing the contract
+target. Its successful descent must not be used to mark orbital target
+accuracy or the mission's landing contract as validated.
+
 The next RO9 fixed-site Mun run opts into `LANDING_POWERED_LEAD=1`.
 The later measured ignition at control-height6101m/radar7977m,
 hs516.1m/s/vs-44.9m/s, active44.68/plan2.72m/s2 and223.9m/s transfer credit

@@ -68,7 +68,7 @@ def check_live_stage_cache():
     profile=read_settings((ROOT/'missions/RO9/mun_landing_return.ks').read_text(),{})
     assert profile['LANDING_STAGE_BRAKE_CREDIT']==1 and profile['LANDING_ECONOMY_BRAKE']==1
     assert profile['TARGET_LOCK']==1 and profile['LANDING_AUTO_TARGET']==0
-    assert profile.get('LANDING_FLEXIBLE_SITE',0)==0
+    assert profile['LANDING_FLEXIBLE_SITE']==0
     deps,_,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     assert 'landing_stage_brake' in closure(['landing_main'],deps)
     assert 'landing_stage_brake' in closure(['deorbit_targeting'],deps)
