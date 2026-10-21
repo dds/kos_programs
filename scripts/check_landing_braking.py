@@ -42,7 +42,7 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
     for name in ('lmBrakeNetAcc', 'lmBrakeEnvelope', 'lmBrakeThrust',
                  'lmBrakeFullNetAcc','lmBrakeDescentTarget','lmEconomyBrakeThrust',
                  'lmVerticalBurnDistance', 'lmRetroSteering',
-                 '_landingBurnHeight', '_landingStopEnvelope', 'lmStagedBrakeEnvelope', '_landingBrakeGateInfo',
+                 '_landingBurnHeight', '_landingStopEnvelope', 'lmStagedBrakeEnvelope', 'lmFullBrakeEnvelope', '_landingBrakeGateInfo',
                  '_landingBrakeSteeringInfo'):
         env[name] = lambda *args, name=name: call(name, env, *args)
     return env, ctx

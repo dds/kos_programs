@@ -1,21 +1,5 @@
 // landing_brake.ks - BRAKE_ALIGN and BRAKING_BURN guidance track.
 
-// Exact net-acceleration limit in a chosen velocity-change direction:
-// |g*up + aNet*direction| = aMax. The old aMax-g is its conservative
-// triangle-inequality bound. Use this only with a separately checked gate.
-GLOBAL FUNCTION lmBrakeFullNetAcc {
-    PARAMETER horizontalSpeed.
-    PARAMETER deltaDown.
-    PARAMETER maxAcc.
-    PARAMETER gravAcc.
-    IF maxAcc <= gravAcc { RETURN 0. }
-    LOCAL speed IS SQRT(horizontalSpeed ^ 2 + deltaDown ^ 2).
-    IF speed < 0.001 { RETURN 0. }
-    LOCAL upFraction IS deltaDown / speed.
-    RETURN MAX(0, -gravAcc * upFraction
-        + SQRT(MAX(0, maxAcc ^ 2 - gravAcc ^ 2 * (1 - upFraction ^ 2)))).
-}
-
 // Spend surplus altitude descending during horizontal arrest, then leave
 // enough height to stop the remaining descent on the weaker planned stage.
 // Reaction time, full gravity and existing clearance are reserved first.

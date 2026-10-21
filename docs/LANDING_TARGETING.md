@@ -540,7 +540,8 @@ with the existing 80% net acceleration reserve, then reserve a separate
 separation/ignition coast and give all residual velocity to the weaker stage.
 Both components retain full surface gravity, reaction time, burn margin and
 clearance. If the extra pause consumes the benefit, retain the old envelope;
-zero/unmeasurable credit uses the original calculation. `PLAN_ACC` still
+zero/unmeasurable credit uses the whole-weaker-stage calculation without
+transfer credit (the vector limit in full-vector mode). `PLAN_ACC` still
 records the weaker stage. No budget assumes the 44.68 m/s2 transfer engine
 can burn throughout a stop after its fuel runs out.
 
@@ -556,6 +557,39 @@ was not supplied, so these revised numbers are conditional, not a replay.
 diagnostic header/control rows now record the credited budget.
 The640m terrain shift is not required to reproduce the mechanism; target
 height/radar minimum still preserves the higher terrain guard.
+
+A subsequent measured ignition confirmed the horizontal trigger: hs510m/s,
+vs-30.8m/s, active44.68/plan2.72m/s2, stage credit223.9m/s,
+height8628m, radar12741m, vGate6286m, vEta8.4s,
+hGate74180m and downrange74695m. Subtracting the configured600m lead/bias
+put74095m just inside the horizontal gate. The vertical gate was false.
+The operator's later11098m radar reading is a current local clearance,
+not that earlier ignition's target-relative8628m control height.
+
+That staged model still used the legacy triangle bound `aMax-g`, while the
+controller used full thrust-vector authority. The opt-in full-vector gate
+now solves the physical constraint `|g*up + netAcc*direction| <= aMax`, then
+applies the unchanged80% net reserve and burn margin. Gravity consumes a
+vector component rather than being subtracted directly from sideways thrust.
+For stopping direction with upward fraction `u`, the full net limit is
+`-g*u + sqrt(aMax^2-g^2*(1-u^2))`. Full surface gravity still bounds the
+entire calculation, including both reaction and staging coasts. This is the
+same net-limit helper used by the controller, moved to the resident powered
+budget module so coast/ignition can use it before the track executes.
+
+Rounded measured inputs reproduce the old~74km horizontal/~6.3km vertical
+bound and yield~40.6km horizontal/~3.46km vertical with the vector budget;
+vertical ETA increases to~25.7s. The old ignition snapshot remains in COAST.
+No-fuel/unsupported stacks receive no transfer credit and use only weaker-stage
+vector capability; legacy control retains the original triangle bound.
+Pure-vertical and underpowered gates retain their original values. Independent
+physical-norm checks across200 velocity/gravity/thrust cases verify reserved
+vectors stay within available thrust for gravity from0 to the surface bound.
+Point-mass runs start1m above the new gate with finite223.9m/s transfer fuel
+and two3s coast interruptions, retaining the original weaker-stage flare
+clearance at horizontal capture. None establishes native target accuracy,
+optimal ignition time or a complete landing/return fuel budget.
+`vectorGate=true` in setup and saved ignition reports identifies this model.
 
 The horizontal trigger compares the gate with target downrange **minus**
 `LANDING_BRAKE_GATE_LEAD_DIST` and `LANDING_BRAKE_UNDERSHOOT_BIAS`. These

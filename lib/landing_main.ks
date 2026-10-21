@@ -595,6 +595,7 @@ GLOBAL FUNCTION _landingSetState {
             + " reserveAcc=" + ROUND(ctx["RESERVE_ACC"],2)
             + " brakeStageDv=" + ROUND(ctx["BRAKE_STAGE_DV"],1)
             + " stageCredit=" + LANDING_STAGE_BRAKE_CREDIT
+            + " vectorGate=" + _landingBoolText(LANDING_STAGE_BRAKE_CREDIT > 0 AND LANDING_ECONOMY_BRAKE > 0)
             + " grav=" + ROUND(ctx["BRAKE_GRAV"],2)
             + " stage=" + STAGE:NUMBER
             + " ipu=" + CONFIG:IPU
@@ -812,6 +813,7 @@ GLOBAL FUNCTION landExecute {
         + " tr=" + _landingBoolText(ADDONS:TR:AVAILABLE)
         + " economyBrake=" + LANDING_ECONOMY_BRAKE + " flexible=" + LANDING_FLEXIBLE_SITE
         + " stageCredit=" + LANDING_STAGE_BRAKE_CREDIT
+        + " vectorGate=" + _landingBoolText(LANDING_STAGE_BRAKE_CREDIT > 0 AND LANDING_ECONOMY_BRAKE > 0)
         + " brakeStageDv=" + ROUND(ctx["BRAKE_STAGE_DV"],1) + ".").
     // Load the next track while still at setup, then reclaim its disk file.
     // RUNONCE functions remain resident: no archive/compile delay at ignition.

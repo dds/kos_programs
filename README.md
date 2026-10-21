@@ -343,8 +343,15 @@ impulse, capped by its own enabled propellant mixture and current-stage dV.
 The weaker lander still covers every residual velocity component, with the
 80% acceleration reserve, full gravity, clearance and separate reaction and
 staging pauses. Unknown fuel, unsupported stacks and atmosphere retain the
-older whole-stop-on-the-weaker-stage calculation. Other profiles default off.
-`STATS landing setup` prints the effective flags and `brakeStageDv`; COAST
+whole-stop-on-the-weaker-stage calculation without transfer credit. Full-vector
+mode still uses that weaker engine's vector limit. Other profiles default off.
+For this full-vector mode, the stopping budget now uses the engine's vector
+thrust limit before applying the existing 80% net-acceleration reserve.
+Subtracting gravity directly from horizontal braking had inflated the
+reported stopping distance to74 km. The supplied510m/s, -30.8m/s,
+223.9m/s-transfer-credit case instead has a calculated gate of about41 km;
+this is a stopping bound, not a promised ignition distance or altitude.
+`STATS landing setup` prints `vectorGate=true`, effective flags and `brakeStageDv`; COAST
 shows `vGate`, `height` and `stageDv`, and the saved brake decision includes
 the credit. A connected reboot loads the new powered-landing library; no
 installed bootstrap update is needed.

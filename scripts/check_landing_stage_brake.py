@@ -1,5 +1,6 @@
 """Serial-stage braking regressions; no KSP, terrain or attitude runner."""
 import math
+import random
 from types import SimpleNamespace as NS
 
 from check_landing_braking import fixture, call, Vec
@@ -143,13 +144,13 @@ def check_fixed_brake_policy():
     print('PASS: descending full-vector braking preserves a fixed site and all its gates; only explicitly flexible sites suppress geographic ignition')
 
 
-def descent(credit, flat=False, height=9149):
-    env,ctx=fixture(gravity=1.6284599,twr=44.68/1.6284599,horizontal=504.9,down=3.8,height=9149)
+def descent(credit, flat=False, height=9149, horizontal=504.9, down=3.8, budget=313):
+    env,ctx=fixture(gravity=1.6284599,twr=44.68/1.6284599,horizontal=horizontal,down=down,height=height)
     env['LANDING_STAGE_BRAKE_CREDIT']=int(credit)
     env['LANDING_ECONOMY_BRAKE']=int(credit)
-    ctx.update(PLAN_ACC=2.72,BRAKE_STAGE_DV=313)
+    ctx.update(PLAN_ACC=2.72,BRAKE_STAGE_DV=budget)
     ctx['height']=height
-    budget,impulse,hover=313.,0.,0.
+    impulse,hover=0.,0.
     ignite=None;staged=False;settle=0
     dt=.2
     for step in range(10000):
@@ -196,11 +197,64 @@ def check_surface_gravity_margin():
     # Start only one metre above the staged stopping bound, with full surface
     # gravity throughout, then spend both 3s latency reserves unpowered.
     env,ctx=fixture(gravity=1.6284599,twr=44.68/1.6284599,horizontal=504.9,down=3.8,height=9149)
-    envelope=call('lmStagedBrakeEnvelope',env,504.9,3.8,44.68,2.72,313,1.6284599,3)
+    envelope=call('lmStagedBrakeEnvelope',env,504.9,3.8,44.68,2.72,313,1.6284599,3,True)
     result=descent(True,flat=True,height=envelope['V']+1)
     flare=call('lmBrakeEnvelope',env,result['horizontal'],result['down'],2.72,1.6284599,3)
     assert result['height']>flare['V'],(result,flare)
     print('PASS: immediate staged-gate entry with full surface gravity, finite transfer impulse and two 3s unpowered gaps retains the weaker-stage flare clearance at horizontal capture')
+
+
+def check_vector_reserve_geometry():
+    rng=random.Random(2239)
+    env,_=fixture()
+    for _ in range(200):
+        grav=rng.uniform(.05,3)
+        acc=grav*rng.uniform(1.05,50)
+        horizontal,down=rng.uniform(0,600),rng.uniform(0,200)
+        future=down+grav*3
+        direction=Vec((horizontal,0,future))/math.hypot(horizontal,future)
+        limit=call('lmBrakeFullNetAcc',env,horizontal,future,acc,grav)
+        reserved=limit*env['LANDING_BRAKE_ACCEL_FRACTION']
+        assert reserved>=call('lmBrakeNetAcc',env,acc,grav)-1e-9
+        # Independently check the physical vector norm, rather than copying
+        # the root formula. No gravity between zero and the surface bound
+        # can require more thrust than the engine supplies.
+        for effective in (0,grav/4,grav/2,grav*.75,grav):
+            demand=direction*reserved+Vec((0,0,effective))
+            assert demand.MAG<=acc+1e-9
+        full=call('lmFullBrakeEnvelope',env,0,down,acc,grav,3)
+        original=call('lmBrakeEnvelope',env,0,down,acc,grav,3)
+        assert abs(full['V']-original['V'])<1e-7
+    for acc in (0,.5,1.63):
+        exact=call('lmFullBrakeEnvelope',env,510,30.8,acc,1.63,3)
+        original=call('lmBrakeEnvelope',env,510,30.8,acc,1.63,3)
+        assert exact==original and exact['V']>1e8
+    print('PASS: 200 reserved net vectors fit physical thrust for every sampled gravity up to the surface bound; pure-vertical and underpowered stopping guards retain their original values')
+
+
+def check_reported_distance_gate():
+    env,ctx=fixture(gravity=1.6284599,twr=44.68/1.6284599,horizontal=510,down=30.8,height=8628)
+    env.update(LANDING_STAGE_BRAKE_CREDIT=1,LANDING_ECONOMY_BRAKE=0)
+    ctx.update(PLAN_ACC=2.72,BRAKE_STAGE_DV=223.9,downrange=74695)
+    conservative=call('_landingBrakeGateInfo',env,ctx)
+    assert conservative['H_NOW'] and 74000<conservative['H_GATE']<74500
+    assert not conservative['V_NOW'] and abs(conservative['V_ETA']-8.4)<.1
+    env['LANDING_ECONOMY_BRAKE']=1
+    revised=call('_landingBrakeGateInfo',env,ctx)
+    assert not revised['H_NOW'] and not revised['V_NOW'] and revised['V_ETA']>20
+    assert 40000<revised['H_GATE']<41000 and 3400<revised['V_GATE']<3500
+    call('_landingCoastTick',env,ctx)
+    assert ctx['STATE']=='COAST' and ctx['TARGET_THROTTLE']==0
+    result=descent(True,flat=True,height=revised['V_GATE']+1,horizontal=510,down=30.8,budget=223.9)
+    flare=call('lmBrakeEnvelope',env,result['horizontal'],result['down'],2.72,1.6284599,3)
+    assert result['height']>flare['V'],(result,flare)
+    # Zero fuel receives no active-stage credit, but still uses only the
+    # weaker engine's exact thrust-vector bound in this opt-in full mode.
+    ctx['BRAKE_STAGE_DV']=0
+    fallback=call('_landingStopEnvelope',env,ctx,510,30.8)
+    weak=call('lmFullBrakeEnvelope',env,510,30.8,2.72,1.6284599,3)
+    assert fallback==weak
+    print('PASS: measured 74.7km/510m/s/223.9m/s-credit snapshot stops the old early H trigger; exact-vector bound keeps 80% reserve and both latency gaps, retains flare clearance from the later gate, and never credits unknown fuel')
 
 
 if __name__=='__main__':
@@ -210,3 +264,5 @@ if __name__=='__main__':
     check_fixed_brake_policy()
     check_staged_descent()
     check_surface_gravity_margin()
+    check_vector_reserve_geometry()
+    check_reported_distance_gate()

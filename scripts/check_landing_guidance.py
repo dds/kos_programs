@@ -207,7 +207,10 @@ def call(name, env, *args):
         params = re.findall(r'PARAMETER (\w+)', source)
         PARSED[name] = (params, compile_nodes(freeze(parse(source))))
     params, compiled = PARSED[name]
-    local = dict(env, **dict(zip(params, args)))
+    # Copy the function scope once; avoid building and validating a second
+    # keyword-argument dictionary on every numerical helper invocation.
+    local = dict(env)
+    local.update(zip(params, args))
     try:
         execute(compiled, local)
     except Returned as result:

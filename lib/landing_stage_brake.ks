@@ -55,6 +55,46 @@ GLOBAL FUNCTION vesselLandingBrakeStageDv {
     RETURN MIN(stockDv,physicalDv).
 }
 
+// Exact net-acceleration limit in a chosen velocity-change direction:
+// |g*up + aNet*direction| = aMax. The old aMax-g is its conservative
+// triangle-inequality bound. Shared by full-vector control and its gate.
+GLOBAL FUNCTION lmBrakeFullNetAcc {
+    PARAMETER horizontalSpeed.
+    PARAMETER deltaDown.
+    PARAMETER maxAcc.
+    PARAMETER gravAcc.
+    IF maxAcc <= gravAcc { RETURN 0. }
+    LOCAL speed IS SQRT(horizontalSpeed ^ 2 + deltaDown ^ 2).
+    IF speed < 0.001 { RETURN 0. }
+    LOCAL upFraction IS deltaDown / speed.
+    RETURN MAX(0, -gravAcc * upFraction
+        + SQRT(MAX(0, maxAcc ^ 2 - gravAcc ^ 2 * (1 - upFraction ^ 2)))).
+}
+
+// Full-vector stop with the same acceleration reserve, latency and gravity.
+// For u=(horizontal,upward) net braking, |g*up+aNet*u| <= aMax gives
+// aNet=-g*uUp+sqrt(aMax^2-g^2*(1-uUp^2)). This avoids charging full g
+// against the horizontal component. The weaker aMax-g bound remains fallback.
+GLOBAL FUNCTION lmFullBrakeEnvelope {
+    PARAMETER horizontalSpeed.
+    PARAMETER downSpeed.
+    PARAMETER maxAcc.
+    PARAMETER gravAcc.
+    PARAMETER delay.
+    LOCAL futureDown IS MAX(0,downSpeed+gravAcc*delay).
+    LOCAL speed IS SQRT(horizontalSpeed^2+futureDown^2).
+    IF maxAcc <= gravAcc { RETURN lmBrakeEnvelope(horizontalSpeed,downSpeed,maxAcc,gravAcc,delay). }
+    LOCAL stopTime IS 0.
+    IF speed > 0.001 {
+        LOCAL netAcc IS lmBrakeFullNetAcc(horizontalSpeed,futureDown,maxAcc,gravAcc)
+            * MAX(0.1,MIN(1,LANDING_BRAKE_ACCEL_FRACTION)).
+        SET stopTime TO speed/MAX(0.001,netAcc)*MAX(1,BURN_MARGIN).
+    }
+    RETURN LEXICON("H",horizontalSpeed*(delay+stopTime/2),
+        "V",MAX(0,downSpeed*delay+gravAcc*delay^2/2)
+            + futureDown*stopTime/2+MAX(BRAKE_MARGIN,LANDING_BRAKE_CLEARANCE)).
+}
+
 // Serial high-thrust stage followed by the weaker lander. Credit only
 // measured current-stage fuel, converted to net impulse with the same 80%
 // reserve and burn margin. Both coast/ignition intervals retain full gravity.
@@ -66,13 +106,21 @@ GLOBAL FUNCTION lmStagedBrakeEnvelope {
     PARAMETER stageDv.
     PARAMETER gravAcc.
     PARAMETER delay.
-    LOCAL fallback IS lmBrakeEnvelope(horizontalSpeed,downSpeed,planAcc,gravAcc,delay).
-    LOCAL activeNet IS lmBrakeNetAcc(activeAcc,gravAcc).
-    IF stageDv <= 0 OR activeAcc <= planAcc OR planAcc <= gravAcc
-            OR activeNet <= 0 { RETURN fallback. }
+    PARAMETER fullVector IS FALSE.
+    LOCAL fallback IS 0.
+    IF fullVector {
+        SET fallback TO lmFullBrakeEnvelope(horizontalSpeed,downSpeed,planAcc,gravAcc,delay).
+    } ELSE { SET fallback TO lmBrakeEnvelope(horizontalSpeed,downSpeed,planAcc,gravAcc,delay). }
+    IF stageDv <= 0 OR activeAcc <= planAcc OR planAcc <= gravAcc { RETURN fallback. }
     LOCAL futureDown IS MAX(0,downSpeed+gravAcc*delay).
     LOCAL speed IS SQRT(horizontalSpeed^2+futureDown^2).
     IF speed <= 0.001 { RETURN fallback. }
+    LOCAL activeNet IS 0.
+    IF fullVector {
+        SET activeNet TO lmBrakeFullNetAcc(horizontalSpeed,futureDown,activeAcc,gravAcc)
+            * MAX(0.1,MIN(1,LANDING_BRAKE_ACCEL_FRACTION)).
+    } ELSE { SET activeNet TO lmBrakeNetAcc(activeAcc,gravAcc). }
+    IF activeNet <= 0 { RETURN fallback. }
     LOCAL credit IS MIN(speed,stageDv*activeNet/activeAcc/MAX(1,BURN_MARGIN)).
     LOCAL activeTime IS credit/activeNet*MAX(1,BURN_MARGIN).
     LOCAL remaining IS MAX(0,1-credit/speed).
@@ -80,7 +128,10 @@ GLOBAL FUNCTION lmStagedBrakeEnvelope {
     LOCAL remainingDown IS futureDown*remaining.
     // Reserve an additional separation/ignition pause after spending the
     // credited impulse. The weaker stage still owns all residual velocity.
-    LOCAL tail IS lmBrakeEnvelope(remainingH,remainingDown,planAcc,gravAcc,delay).
+    LOCAL tail IS 0.
+    IF fullVector {
+        SET tail TO lmFullBrakeEnvelope(remainingH,remainingDown,planAcc,gravAcc,delay).
+    } ELSE { SET tail TO lmBrakeEnvelope(remainingH,remainingDown,planAcc,gravAcc,delay). }
     LOCAL horizontalDist IS horizontalSpeed*delay
         + (horizontalSpeed+remainingH)*activeTime/2+tail["H"].
     LOCAL verticalDist IS MAX(0,downSpeed*delay+gravAcc*delay^2/2)
@@ -100,7 +151,7 @@ GLOBAL FUNCTION _landingStopEnvelope {
         // Include both staging settle intervals and bounded control latency.
         SET delay TO MAX(delay,1+2*MAX(0.05,LANDING_STAGE_SETTLE)).
         RETURN lmStagedBrakeEnvelope(horizontalSpeed,downSpeed,ctx["MAX_ACC"],
-            ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],ctx["BRAKE_GRAV"],delay).
+            ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],ctx["BRAKE_GRAV"],delay,LANDING_ECONOMY_BRAKE > 0).
     }
     RETURN lmBrakeEnvelope(horizontalSpeed,downSpeed,ctx["PLAN_ACC"],ctx["BRAKE_GRAV"],delay).
 }

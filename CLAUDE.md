@@ -358,6 +358,23 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Further ignition reading confirms H-trigger: alt12741/control height8628,
+  hs510/vs-30.8,active44.68/plan2.72,stageDv223.9; vGate6286,vEta8.4,
+  hGate74180,downrange74695,targetVs-27. D74695-600lead/bias=74095 inside
+  Hgate despite Vgatefalse. Later11098radar is a current local reading.
+  Replace staged full-control gate's aMax-g triangle bound with the exact
+  thrust-vector root, retaining80% net reserve, full surfaceg, margin, clearance
+  and both delays. Rounded inputs yield Hgate40.6km/Vgate3.46km/Veta25.7s;
+  measured early snapshot coasts. Full net helper is now resident budget code,
+  not a dynamically loaded brake-track definition. No-fuel fallback credits
+  only the weaker engine's exact vector; legacy mode retains triangle budget.
+  Pure vertical/underpowered checks unchanged.200 independent physical norm
+  tests and worst-surface-g finite-fuel boundary runs pass; native accuracy,
+  minimum-fuel whole landing and return budget remain pending. Operator's goal
+  is a late descending main burn and short gentle flare, not geographic hover.
+  Routine261 cases/41 files pass; slowest individual0.91s after eliminating
+  redundant fixture function-scope keyword dictionaries. Integration steps,
+  tolerances and assertions were preserved.
   Next retry prevented immediate phase-entry burn, but operator reports later
   braking/separation still too far from site. Supplied BRAKE d73988/trErr21195,
   x566,aErr0.3,hs418.5,vs-31/-36.4,siteSearchfalse,thr0. No height/gate row.
