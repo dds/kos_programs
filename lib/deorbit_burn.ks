@@ -4,6 +4,7 @@ GLOBAL FUNCTION executeDeorbitNode {
     PARAMETER nd.
     PARAMETER targetLat IS 999.
     PARAMETER targetLng IS 999.
+    PARAMETER beforeBurn IS 0.
     LOCAL burnDV IS nd:DELTAV:MAG.
     LOCK THROTTLE TO 0.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
@@ -43,11 +44,41 @@ GLOBAL FUNCTION executeDeorbitNode {
     mLog("STATS deorbit-burn setup dv=" + ROUND(burnDV,1)
         + " eta=" + ROUND(startTime - TIME:SECONDS,1)).
 
-    IF TIME:SECONDS < alignStartTime {
-        coastAutoWarp(alignStartTime, "Deorbit burn approach", kacAlarmId).
+    LOCAL burnBody IS SHIP:BODY.
+    LOCAL solarRef IS -1.
+    LOCAL coasted IS TIME:SECONDS < alignStartTime.
+    IF coasted {
+        SET solarRef TO enterSolarCoast("Deorbit burn approach", TRUE, TRUE, alignStartTime).
+        IF NOT ABORT AND SHIP:BODY = burnBody AND HASNODE
+                AND solarCoastCanWarp(solarRef,"Deorbit burn approach")
+                AND coastHealthCheck("Deorbit burn pre-warp",alignStartTime) {
+            coastAutoWarp(alignStartTime, "Deorbit burn approach", kacAlarmId).
+        }
     }
-    UNTIL TIME:SECONDS >= alignStartTime OR ABORT {
+    UNTIL TIME:SECONDS >= alignStartTime OR ABORT OR SHIP:BODY <> burnBody OR NOT HASNODE {
+        SET solarRef TO trySolarHoldTick(solarRef,alignStartTime).
         WAIT MIN(10, MAX(0.5, alignStartTime - TIME:SECONDS)).
+    }
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    IF ABORT OR SHIP:BODY <> burnBody OR NOT HASNODE {
+        vesselLandingCleanup().
+        IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
+        mLogWarn("Deorbit coast interrupted before alignment; no burn started.").
+        RETURN FALSE.
+    }
+
+    IF coasted {
+        LOCAL accepted IS landingLightNodeAllowed(nd,targetLat,targetLng).
+        IF accepted AND beforeBurn <> 0 {
+            SET accepted TO beforeBurn:CALL(nd,targetLat,targetLng).
+        }
+        IF NOT accepted OR ABORT OR nd:TIME <= TIME:SECONDS {
+            vesselLandingCleanup().
+            IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
+            mLogError("Deorbit pre-burn revalidation failed; node retained, no burn started.").
+            RETURN FALSE.
+        }
     }
 
     SET SAS TO FALSE.

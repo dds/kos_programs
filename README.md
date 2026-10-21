@@ -730,7 +730,19 @@ in its deorbit burn. It prefers cross-track error below 250 m and rejects
 above 500 m, reducing the lateral work left to powered descent. Its locked
 contract coordinates and light policy remain unchanged. The deorbit search
 tries one burn angle across the available windows before alternate angles;
-all trials still share the 64-evaluation limit. A hold now ends with
+all trials still share the 64-evaluation limit. This profile first surveys up
+to one Mun rotation for the eight closest unburned ground-track passes, then
+tests those passes with Trajectories. Eight consecutive orbits can miss a
+fixed site after its usable approach has already passed. The setting is
+`TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=1`; zero retains consecutive windows.
+`STATS deorbit fixed-pass` reports each ranked pass UT and unburned miss;
+these are seeds, not approved landing predictions. A selected pass may be
+many hours away. The executor installs its KAC alarm before solar hold,
+remains running through the coast, and rechecks geometry, terrain, fuel and
+light before alignment. No installed bootstrap update is needed.
+Far-downfield footprints first get a bounded retrograde-only refinement
+before the timing/normal solve; `STATS deorbit range-seed` records its progress.
+A hold now ends with
 `STATS deorbit best-rejected`, showing the closest footprint's geometry
 reason, light result, window, retro/normal dV, downfield/cross-track distance,
 cross-track limit, impact angle and Pe. A budget stop is not proof that the

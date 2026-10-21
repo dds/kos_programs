@@ -11,7 +11,7 @@ import numpy as np
 import check_landing_guidance as ks
 from check_codebase import ROOT, function_body, mask
 from check_surface_return import read_settings
-from check_runtime_contracts import run
+from check_runtime_contracts import run, KList
 
 SOURCE = (ROOT/'lib/deorbit_targeting.ks').read_text()
 LANDING = (ROOT/'lib/landing_deorbit.ks').read_text()
@@ -28,8 +28,9 @@ def environment(oracle, cap=10, budget=64):
     counter, trials = Counter(), []
     env = dict(TIME=NS(SECONDS=0), ABORT=False, SHIP=NS(DELTAV=NS(VACUUM=1000)),
                TARGET_DEORBIT_NORMAL_DV_CAP=cap, TARGET_DEORBIT_MAX_EVALUATIONS=budget,
+               TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=0,
                TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM=.25, DEORBIT_MIN_FPA=0,
-               _deorbitEvaluations=counter, LIST=lambda *xs: list(xs),
+               _deorbitEvaluations=counter, LIST=lambda *xs: KList(xs),
                SQRT=math.sqrt, fixture_wait=lambda _: None)
     for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)', SOURCE):
         env[name] = lambda *args,name=name: ks.call(name,env,*args)
@@ -287,12 +288,13 @@ def without_print(nodes):
 
 
 def check_resume_and_cpu():
-    nodes = without_print(ks.parse(function_body(LANDING,'_resumeExistingLandingDeorbitNode')))
+    nodes = without_print(ks.parse(function_body(LANDING,'_resumeExistingLandingDeorbitNode').replace('landingDeorbitNodeAccepted@','fixtureAdmission')))
     for status,started,skip,allowed in (('ORBITING',False,0,False),('ORBITING',False,0,True),
                                        ('SUB_ORBITAL',False,0,False),('ORBITING',True,0,False),
                                        ('ORBITING',False,1,False)):
         calls = []
-        env = dict(HASNODE=True,NEXTNODE=NS(DELTAV=NS(MAG=15),ETA=500),
+        env = dict(fixtureAdmission=NS(CALL=lambda *args:allowed),
+                   HASNODE=True,NEXTNODE=NS(DELTAV=NS(MAG=15),ETA=500),
                    SHIP=NS(STATUS=status,PERIAPSIS=15000,BODY=NS(NAME='Minmus')),
                    LANDING_SKIP_TARGET_SEARCH=skip,
                    stateGet=lambda *args: 'true' if started else 'false',
@@ -371,17 +373,17 @@ def check_shared_terrain():
     print('PASS: new and retained unflown nodes share the original terrain window/clearance guard; pre-target collisions reject, intentional post-target contact remains allowed')
 
 
-def planner_prefix(env):
+def planner_prefix(env, period=1000, target_pass=0):
     """Run real search ordering/admission, stopping before final node creation."""
     env.update(targetLat=19,targetLng=129,overrideTolerance=0,overrideOvershoot=0,
-               refineSite=False,targetPassUT=0,ADDONS=NS(TR=NS(AVAILABLE=True,ISVERTWOTWO=True,
+               refineSite=False,targetPassUT=target_pass,ADDONS=NS(TR=NS(AVAILABLE=True,ISVERTWOTWO=True,
                    SETTARGET=lambda _:None)),targetReachable=lambda _:True,
                LATLNG=lambda lat,lng:None,HUDTEXT=lambda *args:None,CYAN='cyan',
                CONFIG=NS(IPU=2000),TARGET_TOLERANCE=1500,TARGET_DEORBIT_MIN_LEAD=120,
                TARGET_DEORBIT_SCAN_ORBITS=8,TARGET_DEORBIT_SCAN_SAMPLES=512,
                TARGET_DEORBIT_SCAN_CENTER_MINUTES=0,TARGET_DEORBIT_SCAN_WINDOW_MINUTES=0,
                LANDING_SIM_MODE=0,HASNODE=False)
-    env['SHIP'].ORBIT=NS(PERIOD=1000)
+    env['SHIP'].ORBIT=NS(PERIOD=period,ECCENTRICITY=0,HASNEXTPATCH=False)
     source=function_body(SOURCE,'targetedDeorbitAt').split('LOCAL bestUT IS geometry["UT"].',1)[0]
     source=source.replace('IF refineSite AND DEFINED BOOT_LIB_RAN AND BOOT_LIB_RAN:CONTAINS("landing_site") {',
                           'IF refineSite {')

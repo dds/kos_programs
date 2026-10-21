@@ -200,6 +200,7 @@ def check_compact_burn():
             def BURNVECTOR(self, value): self.vector = value
         node = AttachedNode()
         ship = NS(MASS=10., THRUST=0., AVAILABLETHRUST=0. if scenario == 'no-engine' else 100.,
+                  BODY=NS(NAME='Mun'),
                   CONTROL=NS(PILOTMAINTHROTTLE=0.), FACING=NS(FOREVECTOR=Vec((1, 0, 0))))
         removed, commands, elapsed = [], [], [0.]
         markers, callbacks, history = {}, {}, []
@@ -219,6 +220,9 @@ def check_compact_burn():
                    vesselNeedsStage=lambda: ship.AVAILABLETHRUST <= 0,
                    vesselStageForLanding=lambda _: None,
                    maneuverEnsureBurnAlarm=lambda *_: '', coastAutoWarp=lambda *_: None,
+                   enterSolarCoast=lambda *_:1,solarCoastCanWarp=lambda *_:True,
+                   coastHealthCheck=lambda *_:True,
+                   trySolarHoldTick=lambda ref,*_:ref,HASNODE=True,
                    DELETEALARM=lambda _: None, fixture_remove=remove,
                    fixture_unlock=lambda name: callbacks.pop(name, None))
 

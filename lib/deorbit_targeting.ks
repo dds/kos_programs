@@ -21,6 +21,9 @@ GLOBAL DEORBIT_MIN_FPA IS 0.
 // Opt-in small lateral correction combined with the retrograde burn.
 GLOBAL TARGET_DEORBIT_NORMAL_DV_CAP IS 0.
 GLOBAL TARGET_DEORBIT_MAX_EVALUATIONS IS 64.
+// Fixed sites may need to rotate back under the orbit after a missed pass.
+// Zero retains the consecutive-window search. Survey geometry, not TR nodes.
+GLOBAL TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS IS 0.
 LOCAL _deorbitEvaluations IS 0.
 
 GLOBAL FUNCTION targetedDeorbit {
@@ -144,6 +147,24 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL stepA IS period / MAX(128, TARGET_DEORBIT_SCAN_SAMPLES).
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
+    LOCAL rankedPasses IS LIST().
+    IF targetPassUT <= 0 AND TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS > 0 {
+        IF SHIP:STATUS <> "ORBITING" OR SHIP:ORBIT:HASNEXTPATCH
+                OR NOT (SHIP:PERIAPSIS > 0 AND SHIP:ORBIT:ECCENTRICITY < 1
+                    AND period > 0 AND period < 1e30) {
+            mLogError("STATS deorbit result=hold reason=fixed-pass-survey-needs-bound-orbit").
+            RETURN FALSE.
+        }
+        SET rankedPasses TO _targetDeorbitFixedPasses(targetLat,targetLng,
+            TIME:SECONDS+minLead+planningMargin+period*80/360,period,scanOrbits).
+        IF ABORT { RETURN FALSE. }
+        IF rankedPasses:LENGTH = 0 {
+            mLogError("STATS deorbit result=hold reason=no-fixed-site-pass-found").
+            RETURN FALSE.
+        }
+    }
+    LOCAL searchWindows IS scanOrbits.
+    IF rankedPasses:LENGTH > 0 { SET searchWindows TO rankedPasses:LENGTH. }
     LOCAL geometry IS LEXICON(
         "VALID", FALSE,
         "UT", nowUt + minLead,
@@ -188,13 +209,19 @@ GLOBAL FUNCTION targetedDeorbitAt {
     // evaluation limit and the same physical acceptance gates.
     FOR candidateAngle IN LIST(50, 35, 65, 20, 80) {
         SET orbitScan TO 0.
-        UNTIL orbitScan >= scanOrbits OR acceptedSolution
+        UNTIL orbitScan >= searchWindows OR acceptedSolution
                 OR ABORT
                 OR _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS {
             IF acceptedSolution OR ABORT OR _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS { BREAK. }
             SET windowsTried TO MAX(windowsTried, orbitScan + 1).
+            LOCAL passUT IS targetPassUT.
+            LOCAL windowIndex IS orbitScan.
+            IF rankedPasses:LENGTH > 0 {
+                SET passUT TO rankedPasses[orbitScan]["UT"].
+                SET windowIndex TO 0.
+            }
             LOCAL window_ IS _targetDeorbitScanWindow(nowUt, period,
-                minLead, planningMargin, orbitScan, targetPassUT).
+                minLead, planningMargin, windowIndex, passUT).
             SET geometry TO _findDeorbitGeometryNode(targetLat, targetLng,
                 window_["START"], window_["END"], stepA, candidateAngle).
 
@@ -208,6 +235,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     + "s angle=" + ROUND(geometry["ANGLE"],2)
                     + " scanStart=" + ROUND(window_["START"],1)
                     + " scanEnd=" + ROUND(window_["END"],1)
+                    + " passUT=" + ROUND(passUT,1)
                     + " subpoint=" + ROUND(geometry["LAT"],4)
                     + "," + ROUND(geometry["LNG"],4) + ".").
 
@@ -442,7 +470,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     archiveLog().
     HUDTEXT("Deorbit burn in " + ROUND(bestUT - TIME:SECONDS,0) + "s",
         3, 2, 13, CYAN, FALSE).
-    IF NOT executeDeorbitNode(realNode, targetLat, targetLng) { RETURN FALSE. }
+    IF NOT executeDeorbitNode(realNode, targetLat, targetLng, landingDeorbitNodeAccepted@) { RETURN FALSE. }
 
     WAIT 2.
     IF ADDONS:TR:HASIMPACT {
@@ -460,6 +488,86 @@ GLOBAL FUNCTION targetedDeorbitAt {
         mLogWarn("Post-burn: Trajectories has no impact prediction.").
     }
     RETURN TRUE.
+}
+
+// Find local minima of range on the unburned, rotating ground track.
+// These are seeds only: all TR/terrain/light/fuel checks still follow.
+LOCAL FUNCTION _targetDeorbitFixedPasses {
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER earliestPass.
+    PARAMETER period.
+    PARAMETER keepCount.
+    LOCAL span IS MAX(period * keepCount,
+        ABS(SHIP:BODY:ROTATIONPERIOD) * MIN(2, TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS)).
+    LOCAL stepSec IS MAX(period/64,span/4096).
+    LOCAL endUT IS earliestPass + span.
+    LOCAL passes IS LIST().
+    LOCAL surveyStart IS TIME:SECONDS.
+    LOCAL previous IS _targetGroundAngleAt(earliestPass,targetLat,targetLng).
+    LOCAL beforeUT IS earliestPass.
+    LOCAL beforeAngle IS previous["ANGLE"].
+    LOCAL sampleUT IS earliestPass + stepSec.
+    LOCAL samples IS 0.
+    mLog("STATS deorbit pass-survey begin startUT=" + earliestPass
+        + " endUT=" + endUT + " stepSec=" + stepSec).
+    UNTIL sampleUT > endUT OR ABORT OR samples >= 4096 {
+        LOCAL sample IS _targetGroundAngleAt(sampleUT,targetLat,targetLng).
+        IF previous["ANGLE"] <= sample["ANGLE"] AND beforeUT < previous["UT"] {
+            // Only refine a descending-to-ascending minimum, not a flat
+            // pole-distance plateau or an already receding boundary.
+            IF beforeAngle > previous["ANGLE"] {
+                LOCAL lo IS beforeUT.
+                LOCAL hi IS sampleUT.
+                LOCAL iter IS 0.
+                UNTIL hi-lo <= 0.5 OR iter >= 16 OR ABORT {
+                    LOCAL leftUT IS lo + (hi-lo)/3.
+                    LOCAL rightUT IS hi - (hi-lo)/3.
+                    LOCAL left IS _targetGroundAngleAt(leftUT,targetLat,targetLng).
+                    LOCAL right IS _targetGroundAngleAt(rightUT,targetLat,targetLng).
+                    IF left["ANGLE"] <= right["ANGLE"] { SET hi TO rightUT. }
+                    ELSE { SET lo TO leftUT. }
+                    SET iter TO iter + 1.
+                }
+                LOCAL passInfo IS _targetGroundAngleAt((lo+hi)/2,targetLat,targetLng).
+                passes:ADD(passInfo).
+                IF passes:LENGTH > keepCount {
+                    LOCAL worst IS 0.
+                    LOCAL i IS 1.
+                    UNTIL i >= passes:LENGTH {
+                        IF passes[i]["ANGLE"] > passes[worst]["ANGLE"] { SET worst TO i. }
+                        SET i TO i+1.
+                    }
+                    passes:REMOVE(worst).
+                }
+            }
+        }
+        SET beforeUT TO previous["UT"].
+        SET beforeAngle TO previous["ANGLE"].
+        SET previous TO sample.
+        SET sampleUT TO sampleUT+stepSec.
+        SET samples TO samples+1.
+        IF MOD(samples,16) = 0 { WAIT 0. }
+    }
+    LOCAL ordered IS LIST().
+    UNTIL passes:LENGTH = 0 OR ABORT {
+        LOCAL best IS 0.
+        LOCAL i IS 1.
+        UNTIL i >= passes:LENGTH {
+            IF passes[i]["ANGLE"] < passes[best]["ANGLE"] { SET best TO i. }
+            SET i TO i+1.
+        }
+        LOCAL passInfo IS passes[best].
+        ordered:ADD(passInfo).
+        passes:REMOVE(best).
+        mLog("STATS deorbit fixed-pass rank=" + ordered:LENGTH
+            + " passUT=" + passInfo["UT"] + " eta=" + (passInfo["UT"]-TIME:SECONDS)
+            + " unburnedMissKm=" + passInfo["ANGLE"]*SHIP:BODY:RADIUS*CONSTANT:PI/180000).
+    }
+    mLog("STATS deorbit pass-survey complete samples=" + samples
+        + " ranked=" + ordered:LENGTH + " nativeTrials=" + _deorbitEvaluations
+        + " elapsedSec=" + ROUND(TIME:SECONDS-surveyStart,1)).
+    RETURN ordered.
 }
 
 LOCAL FUNCTION _targetCrossTrackFromSolved {
@@ -761,6 +869,8 @@ LOCAL FUNCTION _solveGeometricDeorbitDv {
             targetLat, targetLng, minLead, desiredDownfield).
         IF trial["VALID"] {
             IF _targetDeorbitRefineDone(trial, minDownfield, maxDownfield) { RETURN trial. }
+            SET trial TO _targetDeorbitRangeSeed(trial, targetLat, targetLng,
+                minLead, desiredDownfield, minDownfield, maxDownfield, minDv, maxAllowed).
             RETURN _refineDeorbitFootprint(trial, targetLat, targetLng,
                 minLead, desiredDownfield, minDownfield, maxDownfield, minDv, maxAllowed).
         }
@@ -769,6 +879,45 @@ LOCAL FUNCTION _solveGeometricDeorbitDv {
         SET iter TO iter + 1.
     }
     RETURN LEXICON("VALID", FALSE, "HAS_IMPACT", FALSE).
+}
+
+// Precondition a far-downrange seed at fixed time before the coupled solve.
+// Otherwise cross-track sensitivity can force tiny retro changes while timing
+// runs against its limit. Every probe consumes the same native-trial budget.
+LOCAL FUNCTION _targetDeorbitRangeSeed {
+    PARAMETER best.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER minLead.
+    PARAMETER desiredDownfield.
+    PARAMETER minDownfield.
+    PARAMETER maxDownfield.
+    PARAMETER minDv.
+    PARAMETER maxDv.
+    LOCAL iter IS 0.
+    UNTIL iter >= 6 OR ABORT OR _deorbitEvaluations + 2 > TARGET_DEORBIT_MAX_EVALUATIONS {
+        IF best["DOWNFIELD"] >= minDownfield AND best["DOWNFIELD"] <= maxDownfield { BREAK. }
+        LOCAL probeDv IS MIN(1, maxDv-best["RETRO"]).
+        IF probeDv < 0.01 { SET probeDv TO -MIN(1,best["RETRO"]-minDv). }
+        IF ABS(probeDv) < 0.01 { BREAK. }
+        LOCAL probe IS _evalGeometricDeorbitNode(best["UT"],best["RETRO"]+probeDv,
+            targetLat,targetLng,minLead,desiredDownfield,best["NORMAL"]).
+        IF NOT probe["VALID"] { BREAK. }
+        LOCAL slope IS (probe["ERR"]-best["ERR"])/probeDv.
+        IF ABS(slope) < 1 { BREAK. }
+        LOCAL nextRetro IS MAX(minDv,MIN(maxDv,
+            best["RETRO"]+MAX(-40,MIN(40,-best["ERR"]/slope)))).
+        IF ABS(nextRetro-best["RETRO"]) < 0.001 { BREAK. }
+        LOCAL trial IS _evalGeometricDeorbitNode(best["UT"],nextRetro,
+            targetLat,targetLng,minLead,desiredDownfield,best["NORMAL"]).
+        IF NOT trial["VALID"] OR ABS(trial["ERR"]) >= ABS(best["ERR"]) { BREAK. }
+        SET best TO trial.
+        mLog("STATS deorbit range-seed retro=" + ROUND(best["RETRO"],2)
+            + " downfieldM=" + ROUND(best["DOWNFIELD"],0)
+            + " crossM=" + ROUND(best["CROSS"],0) + " evaluations=" + _deorbitEvaluations).
+        SET iter TO iter+1.
+    }
+    RETURN best.
 }
 
 LOCAL FUNCTION _targetDeorbitRefineDone {

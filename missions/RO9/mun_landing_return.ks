@@ -64,6 +64,9 @@ SET GUIDANCE_ALT TO 3000.
 SET TARGET_DEORBIT_SCAN_ORBITS TO 8.
 SET TARGET_DEORBIT_SCAN_SAMPLES TO 512.
 SET TARGET_DEORBIT_MIN_LEAD TO 120.
+// Survey one surface rotation for close passes before spending native
+// footprint trials; eight consecutive polar orbits can all miss this site.
+SET TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS TO 1.
 // A fixed site rotates sideways during descent too. Permit a small measured
 // normal correction rather than leaving kilometres of lateral work to BRAKE.
 SET TARGET_DEORBIT_NORMAL_DV_CAP TO 10.

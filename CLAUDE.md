@@ -282,6 +282,18 @@ Looks like Python/JS; is neither.
   Deorbit candidate order is angle-first across windows, so early windows
   cannot consume all trials on their alternate angles before later passes.
   Keep the global64 budget; no guarantee all8 windows receive native trials.
+  The fixed-site profile also opts into a geometry-only pass survey over one
+  surface rotation (TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=1, default0).
+  Keep the closest scanOrbits minima, anchor each pre-pass window to its UT;
+  auto-picker pass context bypasses the survey. Eight consecutive polar
+  orbits can all miss after the usable burn for a just-overhead site passed.
+  Survey max4096 coarse geometry samples plus bounded minimum refinements;
+  no trial nodes. Far-range seeds get six bounded improving-only scalar
+  retro steps before coupled timing/normal refinement, within the same64
+  budget. Long node coasts install KAC before solar and stay resident.
+  Targeted new/retained unflown nodes supply fresh admission callback after
+  coast; do not remove terrain/fuel/light checks or change the site to fit a
+  bad pass. deorbit_burn declares coast_wait for offline solar availability.
   On exhaustion print STATS deorbit best-rejected with geometry/light
   reasons, window, both burn components and actual downfield/cross/FPA/Pe.
   Automatic solar orientation validates the cached axis against its saved
@@ -335,6 +347,16 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Follow-up fixed-site failure: window2 angle50, retro25.57/normal-10,
+  downfield49.22km/cross31.313km versus0.5km cap, FPA4.71, Pe-20.662km.
+  This is a large miss at saturated normal authority, not grounds to waive
+  cross limits. It does not by itself establish which future pass is viable.
+  Added geometry pass ranking and range preconditioning: a just-overhead
+  44.593deg polar15km Mun conic fails the prior eight consecutive windows,
+  then solves a later pass in22 trials (downfield15.08km/cross3.4m/normal-3.3).
+  Coast source fixtures verify KAC-before-solar, continued polling, fresh
+  admission and interrupted-wait refusal. Routine252 cases in40 check files
+  pass; new pass/coast cases each run below1s. Native KSP flight remains untested.
   Mun fixed-site deorbit held: normalCap0, windows2/8, trials64/64. Operator
   cannot reconstruct scrolled candidates and asks for an end summary. Current
   patch enables bounded normal10 and stricter250/500m cross preference/cap,

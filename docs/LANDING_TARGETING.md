@@ -241,7 +241,20 @@ approaching that selected pass; fallback windows start after it. Without this
 context, a site beneath a later Minmus orbit was tested against earlier
 passes after the body had rotated to a different longitude. A latitude within
 the inclination limit did not establish a cheap descent on those passes.
-Fixed targets without pass context keep the ordinary forward search.
+Fixed targets without pass context normally keep the ordinary forward search.
+The RO9 fixed-site Mun profile opts into
+`TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=1`: survey one surface rotation,
+refine local minima in unburned ground-track range, retain the eight closest
+passes, and anchor each burn window to that pass's preceding half-orbit.
+This matters when the craft is already over the site: the burn for that pass
+is behind it, and eight consecutive later passes need not come close again.
+The forecast is restricted to a bound orbit without a next SOI patch and uses
+at most 4,096 coarse geometry samples plus local-minimum refinements. It
+creates no maneuver nodes. `STATS deorbit pass-survey` reports the bounds and
+sample count; `STATS deorbit fixed-pass` reports ranked epochs and unburned
+misses. These are provisional seeds; native footprint admission still applies.
+Zero disables the survey; positive values are capped at two surface rotations.
+Picker-provided automatic pass context bypasses this fixed-site survey.
 The search permits up to four windows by default, or
 `TARGET_DEORBIT_SCAN_ORBITS` when configured. In `LANDING_SIM_MODE`, this is
 capped at two. Subsequent windows span one orbit. The current
@@ -262,8 +275,14 @@ or the best acceptable wider pass if none are cleaner.
 
 For each candidate burn time, `_solveGeometricDeorbitDv()` starts at 15 m/s
 retrograde inside a 2-120 m/s range. It increases retrograde only until an
-impact exists, then refines the complete footprint. Temporary nodes let it
-measure:
+impact exists. A far-downfield seed then gets up to six measured
+retrograde-only Newton steps at fixed time (at most 40 m/s per step, inside
+the original 2-120 m/s bounds, accepting only smaller absolute downfield
+error). This prevents a coupled timing/cross-track direction from using its
+small timing allowance without fixing a large range error. The subsequent
+coupled solve still owns lateral correction and full acceptance. All probes
+consume the same 64-trial budget. `STATS deorbit range-seed` logs retained
+steps. Temporary nodes let it measure:
 
 - whether Trajectories predicts an impact
 - the predicted impact latitude/longitude
@@ -311,6 +330,19 @@ downfield/cross-track error and cap, impact FPA, Pe and burn UT. It is a
 diagnostic candidate, never permission to burn. Geometry acceptance with
 `light=rejected` still holds. If no valid impact existed, that is reported
 explicitly instead. This avoids relying on a scrolled-away candidate row.
+A distant accepted node keeps the running executor in solar coast, with a
+burn KAC alarm installed before solar aiming. Alarm firing only stops warp;
+the clock loop performs continuation. On leaving coast the executor rechecks
+light and, for targeted unflown nodes, the native footprint, terrain and fuel
+gates before alignment. Abort, body change, node removal or expiry prevents
+ignition. Retained interrupted/suborbital burns keep their recovery path.
+`scripts/check_deorbit_passes.py` reproduces an overhead polar Mun target for
+which the consecutive eight-orbit search fails. Geometry ranking plus range
+preconditioning solves its later pass in 22 native-response trials, with
+about 3.4 m lateral error and 3.3 m/s normal correction. This is an independent
+idealized conic fixture, not the user's measured orbit or KSP validation;
+it establishes neither global fuel optimality nor that the next flight solves.
+
 Three new fixtures exercise the actual search prefix/order and failure
 summary state, plus independent 15 km polar Mun footprints that require
 bounded normal authority with both signs. The 247-case routine suite is

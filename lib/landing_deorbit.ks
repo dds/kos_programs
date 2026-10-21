@@ -85,6 +85,9 @@ LOCAL FUNCTION _resumeExistingLandingDeorbitNode {
     // An unflown retained node may predate tighter geometry/fuel settings.
     // Preserve it on rejection. Do not turn committed descent recovery into
     // a new orbital planning hold after a partial burn.
+    LOCAL beforeBurn IS 0.
+    LOCAL targetLat IS 999.
+    LOCAL targetLng IS 999.
     IF LANDING_SKIP_TARGET_SEARCH <= 0 AND SHIP:STATUS = "ORBITING"
             AND SHIP:PERIAPSIS > 0
             AND stateGet("deorbit_burn_started", "false") <> "true" {
@@ -93,13 +96,16 @@ LOCAL FUNCTION _resumeExistingLandingDeorbitNode {
             mLogError("Retained deorbit node has no resolved target; node preserved.").
             yieldToPrompt(). RETURN TRUE.
         }
+        SET beforeBurn TO landingDeorbitNodeAccepted@.
+        SET targetLat TO landingTarget["LAT"].
+        SET targetLng TO landingTarget["LNG"].
         IF NOT landingDeorbitNodeAccepted(nd, landingTarget["LAT"], landingTarget["LNG"]) {
             mLogError("Retained deorbit node fails geometry/terrain/fuel limits; node preserved. Replan from orbit with cmd/landlight apply.").
             yieldToPrompt(). RETURN TRUE.
         }
     }
 
-    IF executeDeorbitNode(nd) {
+    IF executeDeorbitNode(nd,targetLat,targetLng,beforeBurn) {
         _advanceAfterLandDeorbit().
     } ELSE {
         stateSet("phase", "LAND_DEORBIT").
