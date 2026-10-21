@@ -707,6 +707,27 @@ the scheduled descent speed resumes. Trajectories
 undershoot and crossrange correction no longer reduce braking authority;
 position correction follows velocity capture in the terminal track.
 
+Full-vector descending control also has a small upward aim margin. A
+reported BRAKE row at d73,988m, TR error21,195m, cross566m, hs418.5m/s,
+vs-31/-36.4, alignment0.3deg and throttle0 does not by itself identify the
+cutoff: a stage-settle interval or a slightly engine-down actual attitude can
+both do it. With an illustrative44.68m/s2 active stage, plan2.72m/s2,
+effective gravity0.58m/s2 and9km control height, the actual source reproduces
+the rounded commanded speed and nearly horizontal desired attitude. A0.3deg
+tracking error puts actual thrust below the horizon and correctly cuts it.
+Those illustrative stage/gravity/height inputs were not measured in that row.
+
+`LANDING_BRAKE_MIN_PITCH=1` rotates only shallower thrust requests up to a
+1-degree elevation at unchanged magnitude (configuration clamped0-2deg).
+It leaves descent targets, fuel credit, all ignition gates, maximum thrust
+and the live actual-facing guard intact. `check_landing_alignment.py`
+reproduces the dead zone with zero margin, permits useful thrust with the
+margin and0.3deg tracking error, and still blocks actual engine-down thrust.
+The BRAKE row now includes `cut=` and actual facing `up=` so staging pauses,
+alignment/engine-down holds, unavailable thrust and zero requests can be
+distinguished on the next flight. This repair does not establish whether the
+reported burn began too early or whether that row occurred during staging.
+
 The state exits when the descent is captured and horizontal speed is low:
 
 - if within `VERTICAL_RADIUS`, go directly to `VERTICAL_DESCENT`

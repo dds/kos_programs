@@ -353,6 +353,13 @@ the commanded thrust vector and at or above the horizon. The same throttle
 guard runs throughout braking and after staging; an urgent stopping gate
 does not bypass it. `STATS landing-brake alignment hold/ready` records
 alignment changes, and the saved brake decision includes commanded throttle.
+Descending braking aims at least `LANDING_BRAKE_MIN_PITCH` (1 degree by
+default, bounded to 0-2) above the horizon at unchanged thrust magnitude.
+An exactly horizontal aim could otherwise let a 0.3-degree tracking error
+repeatedly trip the actual engine-below-horizon cutoff. That cutoff remains.
+BRAKE now reports `cut=` (`none`, `below-horizon`, `alignment`, `stage-settle`,
+`separating`, `no-thrust`, or `zero-command`) and actual facing `up=` beside
+throttle, so a zero command can be distinguished from a staging pause.
 These are source-driven model improvements, not a flight-proven optimum.
 An RO9 Mun economy retry landed successfully after the alignment and terrain
 recovery fixes (operator report, 2026-10-17). Landing fuel cost and the

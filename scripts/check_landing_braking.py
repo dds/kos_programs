@@ -18,7 +18,7 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                SURFACE_VEL=Vec((horizontal,0,-down)),
                V_SPEED=-down, DOWN_SPEED=down, MAX_ACC=gravity*twr,
                PLAN_ACC=gravity*twr, GRAV=gravity, BRAKE_GRAV=gravity,
-               BRAKE_STAGE_DV=0,
+               BRAKE_STAGE_DV=0, DISCARD_PENDING=False, STAGE_UNTIL=0,
                BRAKE_ALIGN_BLOCKED=False,
                DIVERT_PENDING=False, DIVERT_SEARCH={},
                DIVERT_PREVIEW=dict(OK=False,AT=-9999,LOG_AT=-9999),

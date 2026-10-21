@@ -358,6 +358,16 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Next retry prevented immediate phase-entry burn, but operator reports later
+  braking/separation still too far from site. Supplied BRAKE d73988/trErr21195,
+  x566,aErr0.3,hs418.5,vs-31/-36.4,siteSearchfalse,thr0. No height/gate row.
+  This proves neither hover nor premature ignition. Source model at illustrative
+  acc44.68,plan2.72,gEff.58,height9000 reproduces target-36.397 and a nearly
+  horizontal command:0.3deg error below horizon trips the correct guard.
+  Stage settling remains an alternative explanation for the actual zero.
+  Add1deg constant-magnitude upward aim margin (config clamped0-2), retain
+  actual no-engine-down cutoff. BRAKE cut/up telemetry distinguishes causes.
+  Operator is reloading an earlier save; native cause/ignition timing pending.
   After successful fixed-site deorbit, operator reports immediate BRAKE at
   radar14869m/control height9149m, hs504.9/vs-3.8, acc44.68/planAcc2.72;
   shifted target640m. Paused game then crashed; no remaining-fuel/begin row.

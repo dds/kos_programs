@@ -93,6 +93,35 @@ def check_state_entry():
     print('PASS: actual BRAKING_BURN entry uses guarded throttle even if its caller bypasses alignment; persisted ignition includes the command')
 
 
+def check_horizon_tracking_margin():
+    for minimum,expected in ((0,False),(1,True),(2,True),(100,True)):
+        env,ctx=fixture(gravity=1.6284599,twr=44.68/1.6284599,
+                        horizontal=418.5,down=31,height=9000)
+        env.update(LANDING_ECONOMY_BRAKE=1,LANDING_BRAKE_MIN_PITCH=minimum)
+        ctx.update(PLAN_ACC=2.72,GRAV=.58,STATE='BRAKING_BURN')
+        info=call('_landingBrakeSteeringInfo',env,ctx)
+        assert abs(info['TARGET_VS']+36.4)<.01
+        desired=ctx['steering']
+        env['SHIP'].FACING.FOREVECTOR=rotated(desired,.3)
+        info=call('_landingBrakeSteeringInfo',env,ctx)
+        assert abs(info['ALIGN_ERR']-.3)<1e-8
+        assert (info['THROTTLE']>0)==expected
+        if minimum:
+            assert desired[2]>=math.sin(math.radians(min(minimum,2)))-1e-12
+            assert abs(info['THROTTLE']-1)<1e-12
+        else:
+            assert desired[2]<.0001 and env['SHIP'].FACING.FOREVECTOR[2]<0
+        call('_landingBrakingTick',env,ctx)
+        assert (ctx['TARGET_THROTTLE']>0)==expected
+        # The aim margin never permits actual engine-down thrust, even with
+        # a very small vector error. Re-aiming, rather than relaxing this
+        # guard, resolves the dead zone.
+        env['SHIP'].FACING.FOREVECTOR=Vec((-math.cos(math.radians(.1)),0,
+                                         -math.sin(math.radians(.1))))
+        assert call('_landingBrakeSteeringInfo',env,ctx)['THROTTLE']==0
+    print('PASS: reported 418.5m/s, vs=-31/-36.4, error0.3deg reproduces a horizon-aim zero-throttle dead zone; 1deg constant-magnitude margin removes it while actual below-horizon thrust stays forbidden')
+
+
 def check_finite_slew():
     env, ctx = reported_flight(1)
     call('_landingBrakeSteeringInfo', env, ctx)
@@ -138,4 +167,5 @@ def check_finite_slew():
 if __name__ == '__main__':
     check_wrong_attitude()
     check_state_entry()
+    check_horizon_tracking_margin()
     check_finite_slew()

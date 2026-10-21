@@ -79,6 +79,16 @@ GLOBAL FUNCTION lmEconomyBrakeThrust {
     }
     LOCAL upwardAcc IS VDOT(thrustVec, upVec).
     IF upwardAcc < 0 { SET thrustVec TO thrustVec - upwardAcc * upVec. }
+    LOCAL pitchFloor IS MAX(0,MIN(2,LANDING_BRAKE_MIN_PITCH)).
+    LOCAL magnitude IS thrustVec:MAG.
+    LOCAL horizontalThrust IS VXCL(upVec,thrustVec).
+    IF horizontalThrust:MAG > 0.001
+            AND VDOT(thrustVec,upVec) < magnitude*SIN(pitchFloor) {
+        // Rotate at constant magnitude; never increase requested thrust.
+        // The live actual-facing guard still forbids engine-down thrust.
+        SET thrustVec TO magnitude*(horizontalThrust:NORMALIZED*COS(pitchFloor)
+            + upVec*SIN(pitchFloor)).
+    }
     RETURN thrustVec.
 }
 
@@ -273,6 +283,18 @@ GLOBAL FUNCTION _landingBrakingTick {
     // One vector owns both steering and throttle. Trajectories aiming must
     // not suppress velocity arrest when terrain clearance is running out.
     _landingSetThrottle(ctx, steerInfo["THROTTLE"]).
+    LOCAL cutoffReason IS "none".
+    IF ctx["TARGET_THROTTLE"] <= 0 {
+        IF NOT steerInfo["ALIGNED"] {
+            SET cutoffReason TO "alignment".
+            IF VDOT(SHIP:FACING:FOREVECTOR,ctx["UP_VEC"]) < 0 {
+                SET cutoffReason TO "below-horizon".
+            }
+        } ELSE IF ctx["DISCARD_PENDING"] { SET cutoffReason TO "separating". }
+        ELSE IF TIME:SECONDS < ctx["STAGE_UNTIL"] { SET cutoffReason TO "stage-settle". }
+        ELSE IF maxAcc <= 0 { SET cutoffReason TO "no-thrust". }
+        ELSE { SET cutoffReason TO "zero-command". }
+    }
 
     LOCAL brakeTransitionEta IS 0.
     IF NOT ctx["HAS_TARGET"] AND burnHeight > HOVER_ALT {
@@ -289,7 +311,9 @@ GLOBAL FUNCTION _landingBrakingTick {
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)
         + " siteSearch=" + _landingBoolText(ctx["DIVERT_PENDING"])
-        + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2),
+        + " thr=" + ROUND(ctx["TARGET_THROTTLE"],2)
+        + " cut=" + cutoffReason
+        + " up=" + ROUND(VDOT(SHIP:FACING:FOREVECTOR,ctx["UP_VEC"]),4),
         1, 2, 13, YELLOW, FALSE, brakeTransitionEta, targetVs, 0).
 
     // A rejected candidate cannot hand control to the old remote target.
