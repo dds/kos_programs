@@ -360,9 +360,13 @@ Looks like Python/JS; is neither.
 - Flight-test ledger (update as things prove out):
   After8926227, the operator reports this committed Mun descent did much
   better: a smart braking burn, descent onto the flat side of a crater and
-  excellent refinement. This is positive qualitative native-flight evidence
-  for the revised powered-descent/recovery path. No new archive was inspected;
-  remaining dV, target miss, hover duration and touchdown speeds are unknown.
+  excellent refinement, with896m/s dV remaining at touchdown (operator report).
+  This is positive qualitative native-flight evidence for the revised
+  powered-descent/recovery path. No new archive was inspected; target miss,
+  hover duration and touchdown speeds are unknown.896m/s is not an approved
+  return budget: prior illustrative10km-parking/53km-entry estimate877m/s
+  leaves only19m/s before finite-burn/steering losses. Directreturn remains
+  preview-only; the automatic surface-return sequence still circularizes.
   The available saves were already post-deorbit, so this report does NOT
   validate the new orbital powered-lead solve. Preserve the working descent
   behavior while measuring landing fuel and ascent/return feasibility.

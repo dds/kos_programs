@@ -15,8 +15,12 @@ After the8926227 update, the operator reports a substantially better Mun
 landing: a smart braking burn, descent onto the flat side of a crater and
 excellent refinement. This is qualitative flight evidence for the revised
 descent/recovery behavior; no corresponding diagnostic archive has yet been
-reviewed. Remaining dV, target miss, hover duration and touchdown speeds are
-not supplied. Because this retry started after deorbit, it does not validate
+reviewed. The operator subsequently reports896m/s remaining at touchdown;
+target miss, hover duration and touchdown speeds remain unknown. This does
+not establish an affordable return: the earlier illustrative877m/s parking
+and departure estimate excludes finite-burn losses, and the direct-ascent
+command is still a feasibility preview rather than flight guidance.
+Because this retry started after deorbit, it does not validate
 the new orbital powered-lead solve or establish whole-mission fuel savings.
 
 The next RO9 fixed-site Mun run opts into `LANDING_POWERED_LEAD=1`.
