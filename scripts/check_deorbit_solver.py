@@ -11,6 +11,7 @@ import numpy as np
 import check_landing_guidance as ks
 from check_codebase import ROOT, function_body, mask
 from check_surface_return import read_settings
+from check_runtime_contracts import run
 
 SOURCE = (ROOT/'lib/deorbit_targeting.ks').read_text()
 LANDING = (ROOT/'lib/landing_deorbit.ks').read_text()
@@ -56,14 +57,14 @@ def solve(env, base):
     return env['_refineDeorbitFootprint'](base,19.,129.,120,15000,10000,20000,2,120)
 
 
-def kepler_oracle(true_ut=1000, true_retro=15, true_normal=3.5, mirror=1):
-    """Independent circular 20-degree Minmus orbit, instantaneous deorbit.
+def kepler_oracle(true_ut=1000, true_retro=15, true_normal=3.5, mirror=1, mun=False):
+    """Independent inclined circular orbit, instantaneous deorbit.
 
     Exact ellipse intersection with the surface, including Minmus rotation.
     Target is 15 km upstream of one known reachable ballistic footprint.
     """
-    mu, orbital_radius, radius = 1.7658e9, 75000., 60000.
-    inc, spin = math.radians(20), 2*math.pi/40400.
+    mu, orbital_radius, radius = (6.5138398e10,215000.,200000.) if mun else (1.7658e9,75000.,60000.)
+    inc, spin = (math.pi/2,2*math.pi/138984.) if mun else (math.radians(20),2*math.pi/40400.)
     rate = math.sqrt(mu/orbital_radius**3)
     def rotation(angle):
         return np.array(((math.cos(angle),-math.sin(angle),0),
@@ -265,11 +266,13 @@ def check_geometry_before_light():
         env.update(solved=candidate,geometry=dict(UT=1111),targetLat=19,targetLng=129,
                    minDownfield=10000,maxDownfield=20000,orbitScan=0,scanOrbits=4,
                    candidateAngle=50,bestAccepted=dict(VALID=False),bestAcceptedCross=1e9,
+                   newClosest=True,closestLight='not-checked',
                    preferredCrossTrack=250,acceptedSolution=False,
                    _targetDeorbitLightAccepted=lambda solved,ut,*args: light_calls.append(ut) or kind != 'bad-light')
         ks.run(nodes,env)
         assert light_calls == ([1234] if kind in ('accepted','bad-light') else [])
         assert env['acceptedSolution'] is (kind == 'accepted')
+        assert env['closestLight'] == ('accepted' if kind=='accepted' else 'rejected' if kind=='bad-light' else 'not-checked')
     for craft in ('RO8','RO9'):
         for moon in ('mun','minmus'):
             profile = read_settings((ROOT/f'missions/{craft}/{moon}_economy_return.ks').read_text(),{})
@@ -368,6 +371,90 @@ def check_shared_terrain():
     print('PASS: new and retained unflown nodes share the original terrain window/clearance guard; pre-target collisions reject, intentional post-target contact remains allowed')
 
 
+def planner_prefix(env):
+    """Run real search ordering/admission, stopping before final node creation."""
+    env.update(targetLat=19,targetLng=129,overrideTolerance=0,overrideOvershoot=0,
+               refineSite=False,targetPassUT=0,ADDONS=NS(TR=NS(AVAILABLE=True,ISVERTWOTWO=True,
+                   SETTARGET=lambda _:None)),targetReachable=lambda _:True,
+               LATLNG=lambda lat,lng:None,HUDTEXT=lambda *args:None,CYAN='cyan',
+               CONFIG=NS(IPU=2000),TARGET_TOLERANCE=1500,TARGET_DEORBIT_MIN_LEAD=120,
+               TARGET_DEORBIT_SCAN_ORBITS=8,TARGET_DEORBIT_SCAN_SAMPLES=512,
+               TARGET_DEORBIT_SCAN_CENTER_MINUTES=0,TARGET_DEORBIT_SCAN_WINDOW_MINUTES=0,
+               LANDING_SIM_MODE=0,HASNODE=False)
+    env['SHIP'].ORBIT=NS(PERIOD=1000)
+    source=function_body(SOURCE,'targetedDeorbitAt').split('LOCAL bestUT IS geometry["UT"].',1)[0]
+    source=source.replace('IF refineSite AND DEFINED BOOT_LIB_RAN AND BOOT_LIB_RAN:CONTAINS("landing_site") {',
+                          'IF refineSite {')
+    source=source.replace('SET _deorbitEvaluations TO 0.','fixture_reset().')
+    source=source.replace('REMOVE NEXTNODE.','fixture_remove().')
+    return run(source,env)
+
+
+def search_fixture(reachable_window=None):
+    env,count,_=environment(lambda *args:None)
+    calls=[]
+    env['fixture_reset']=lambda:setattr(count,'value',0)
+    def geometry(lat,lng,start,end,step,angle):
+        return dict(VALID=True,UT=start+200,ANGLE=angle,LAT=19,LNG=129)
+    def solve_at(ut,*args):
+        window=int(ut/1000)
+        calls.append(window)
+        # A bounded synthetic footprint response isolates search ordering;
+        # the numerical source solver has independent conic fixtures.
+        left=64-count.value
+        count.value+=min(6,left)
+        if left<6:return dict(VALID=False,HAS_IMPACT=False)
+        cross=100 if window==reachable_window else 600+abs(window-4)*200
+        return impact(ut,15,3,0,cross)
+    env.update(_findDeorbitGeometryNode=geometry,_solveGeometricDeorbitDv=solve_at,
+               _targetDeorbitLightAccepted=lambda *args:True)
+    return env,count,calls
+
+
+def check_pass_first_order():
+    env,count,calls=search_fixture(reachable_window=2)
+    planner_prefix(env)
+    assert env['acceptedSolution'] and calls==[0,1,2] and count.value==18
+    assert env['windowsTried']==3 and env['candidatesTried']==3
+    # Old five-angles-per-pass order exhausts this same 64-call budget
+    # before completing a third-window candidate, where the valid footprint lives.
+    old=[index for index in range(8) for _ in range(5)][:64//6]
+    assert 2 not in old
+    print('PASS: actual planner validates a third-window candidate in 18 trials; the former per-window angle order cannot complete it within 64; acceptance gates remain active')
+
+
+def check_failure_candidate_summary():
+    env,count,calls=search_fixture()
+    assert planner_prefix(env) is False
+    assert count.value==64 and env['windowsTried']==8
+    assert env['closestWindow']==5 and env['closestRejected']['CROSS']==600
+    assert env['closestLight']=='not-checked' and not env['acceptedSolution']
+    assert env['_targetDeorbitRejection'](env['closestRejected'],10000,20000)=='cross-track'
+    summary=SOURCE.split('STATS deorbit best-rejected window=',1)[1].split('} ELSE {',1)[0]
+    for key in ('geometryReason=','light=','retro=','normal=','downfieldKm=',
+                'crossKm=','crossCapKm=','fpa=','PeKm=','burnUT='):
+        assert key in summary
+    print('PASS: a failed actual search keeps the nearest rejected footprint through later worse trials, reports its real window/reason/limits and stops at 64 without approval')
+
+
+def check_mun_normal_authority():
+    cfg=read_settings((ROOT/'missions/RO9/mun_landing_return.ks').read_text(),{})
+    assert cfg['TARGET_DEORBIT_NORMAL_DV_CAP']==10
+    assert cfg['TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM']==.25
+    assert cfg['DEORBIT_CROSSTRACK_AUTHORITY_KM']==.5
+    assert cfg['TARGET_LAT']==44.593 and cfg['TARGET_LNG']==-24.926 and cfg['TARGET_LOCK']==1
+    for mirror in (-1,1):
+        oracle=kepler_oracle(true_normal=8.5,mirror=mirror,mun=True)
+        no_normal,_,_=environment(oracle,cap=0)
+        base=oracle(1000,16,0)
+        assert not no_normal['_targetDeorbitSolutionAccepted'](solve(no_normal,base),10000,20000)
+        env,count,_=environment(oracle,cap=cfg['TARGET_DEORBIT_NORMAL_DV_CAP'])
+        result=solve(env,base)
+        assert env['_targetDeorbitRefineDone'](result,10000,20000),result
+        assert .1<abs(result['NORMAL'])<=10 and count.value<=32
+    print('PASS: synthetic 15km polar Mun footprints need lateral authority and solve within the 10m/s normal cap for both signs; fixed site unchanged and allowed cross-track tightens to 500m')
+
+
 if __name__ == '__main__':
     check_physical_solver()
     check_selected_pass()
@@ -376,3 +463,6 @@ if __name__ == '__main__':
     check_resume_and_cpu()
     check_actual_trial_budget()
     check_shared_terrain()
+    check_pass_first_order()
+    check_failure_candidate_summary()
+    check_mun_normal_authority()

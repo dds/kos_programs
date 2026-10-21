@@ -176,15 +176,23 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
     LOCAL orbitScan IS 0.
     LOCAL candidatesTried IS 0.
+    LOCAL windowsTried IS 0.
+    LOCAL closestRejected IS LEXICON("VALID", FALSE).
+    LOCAL closestMerit IS 1e30.
+    LOCAL closestWindow IS 0.
+    LOCAL closestNodeAngle IS 0.
+    LOCAL closestLight IS "not-checked".
 
-    UNTIL orbitScan >= scanOrbits OR acceptedSolution
-            OR ABORT
-            OR _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS {
-        // The old single 50-degree seed can miss a usable approach on
-        // an eccentric orbit. Try nearby burn locations before waiting
-        // another orbit; every candidate retains the same limits.
-        FOR candidateAngle IN LIST(50, 35, 65, 20, 80) {
+    // Spread the first burn angle across passes before spending trials on
+    // alternate angles of the same pass. Every candidate keeps the global
+    // evaluation limit and the same physical acceptance gates.
+    FOR candidateAngle IN LIST(50, 35, 65, 20, 80) {
+        SET orbitScan TO 0.
+        UNTIL orbitScan >= scanOrbits OR acceptedSolution
+                OR ABORT
+                OR _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS {
             IF acceptedSolution OR ABORT OR _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS { BREAK. }
+            SET windowsTried TO MAX(windowsTried, orbitScan + 1).
             LOCAL window_ IS _targetDeorbitScanWindow(nowUt, period,
                 minLead, planningMargin, orbitScan, targetPassUT).
             SET geometry TO _findDeorbitGeometryNode(targetLat, targetLng,
@@ -207,6 +215,16 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     targetLat, targetLng,
                     minLead, minRetroDv, maxRetroDv, seedRetroDv,
                     desiredDownfield, minDownfield, maxDownfield).
+                LOCAL newClosest IS FALSE.
+                LOCAL merit IS _targetDeorbitMerit(solved, minDownfield, maxDownfield).
+                IF merit < closestMerit {
+                    SET newClosest TO TRUE.
+                    SET closestRejected TO solved.
+                    SET closestMerit TO merit.
+                    SET closestWindow TO orbitScan + 1.
+                    SET closestNodeAngle TO candidateAngle.
+                    SET closestLight TO "not-checked".
+                }
                 IF NOT solved["VALID"] {
                     mLogWarn("Window " + (orbitScan + 1)
                         + " geometry did not solve a valid deorbit.").
@@ -215,7 +233,12 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     // Correction may move the burn time. Geometry must pass
                     // before spending ephemeris work on sunlight/radio.
                     SET geometry["UT"] TO solved["UT"].
-                    IF NOT _targetDeorbitLightAccepted(solved, solved["UT"], targetLat, targetLng) {
+                    LOCAL lightAllowed IS _targetDeorbitLightAccepted(solved, solved["UT"], targetLat, targetLng).
+                    IF newClosest {
+                        SET closestLight TO "rejected".
+                        IF lightAllowed { SET closestLight TO "accepted". }
+                    }
+                    IF NOT lightAllowed {
                         mLogWarn("Deorbit candidate rejected by light/Kerbin policy; scanning later passes.").
                     } ELSE {
                         LOCAL crossTrack IS _targetCrossTrackFromSolved(solved).
@@ -258,10 +281,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
                     + ROUND(candidateAngle,0) + "deg during window "
                     + (orbitScan + 1) + "/" + scanOrbits + ".").
             }
+            SET orbitScan TO orbitScan + 1.
+            WAIT 0.
         }
-
-        SET orbitScan TO orbitScan + 1.
-        WAIT 0.
     }
 
     LOCAL searchStop IS "search-horizon".
@@ -270,7 +292,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     ELSE IF _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS { SET searchStop TO "trial-budget". }
     mLog("STATS deorbit search evaluations=" + _deorbitEvaluations
         + "/" + TARGET_DEORBIT_MAX_EVALUATIONS
-        + " windowsTried=" + orbitScan + "/" + scanOrbits
+        + " windowsTried=" + windowsTried + "/" + scanOrbits
         + " candidatesTried=" + candidatesTried + " stop=" + searchStop
         + " stopBudget=" + (_deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS)).
     IF ABORT { RETURN FALSE. }
@@ -286,16 +308,33 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
 
     IF NOT acceptedSolution {
+        IF closestRejected["VALID"] {
+            mLogWarn("STATS deorbit best-rejected window=" + closestWindow
+                + " nodeAngle=" + closestNodeAngle
+                + " geometryReason=" + _targetDeorbitRejection(closestRejected,minDownfield,maxDownfield)
+                + " light=" + closestLight
+                + " retro=" + ROUND(closestRejected["RETRO"],2)
+                + " normal=" + ROUND(closestRejected["NORMAL"],2)
+                + " dv=" + ROUND(closestRejected["DV"],2)
+                + " downfieldKm=" + ROUND(closestRejected["DOWNFIELD"]/1000,3)
+                + " crossKm=" + ROUND(closestRejected["CROSS"]/1000,3)
+                + " crossCapKm=" + ROUND(_targetDeorbitCrossAuthority(closestRejected)/1000,3)
+                + " fpa=" + ROUND(closestRejected["ANGLE"],2)
+                + " PeKm=" + ROUND(closestRejected["PE"]/1000,3)
+                + " burnUT=" + closestRejected["UT"]).
+        } ELSE {
+            mLogWarn("STATS deorbit best-rejected geometryReason=no-valid-impact-prediction candidates=" + candidatesTried).
+        }
         IF NOT foundGeometry {
             mLogError("STATS deorbit result=hold: no approaching burn geometry; stop="
-                + searchStop + " windowsTried=" + orbitScan + "/" + scanOrbits + ".").
+                + searchStop + " windowsTried=" + windowsTried + "/" + scanOrbits + ".").
         } ELSE {
             mLogError("STATS deorbit result=hold: search found no validated TR footprint "
                 + ROUND(minDownfield/1000,1) + "-"
                 + ROUND(maxDownfield/1000,1)
                 + "km downfield with acceptable cross-track; retro=" + minRetroDv
                 + "-" + maxRetroDv + "m/s normalCap=" + TARGET_DEORBIT_NORMAL_DV_CAP
-                + "m/s stop=" + searchStop + " windowsTried=" + orbitScan + "/" + scanOrbits
+                + "m/s stop=" + searchStop + " windowsTried=" + windowsTried + "/" + scanOrbits
                 + " trials=" + _deorbitEvaluations + "/" + TARGET_DEORBIT_MAX_EVALUATIONS + ".").
         }
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }

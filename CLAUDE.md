@@ -275,6 +275,15 @@ Looks like Python/JS; is neither.
   SET ABORT TO FALSE. and REBOOT. when ready. Selector revision/admission
   reasons distinguish cancellation, safety rejection and an actual no-site
   result; do not weaken guards based on a generic no-target message.
+  RO9's fixed-site Mun profile now explicitly enables normal deorbit10m/s,
+  preferred cross250m/maximum500m. The old implicit zero cap applied even
+  though economy profiles already opted in. Keep its target lock and do not
+  enable flexible/economy landing or waive night/radio policy implicitly.
+  Deorbit candidate order is angle-first across windows, so early windows
+  cannot consume all trials on their alternate angles before later passes.
+  Keep the global64 budget; no guarantee all8 windows receive native trials.
+  On exhaustion print STATS deorbit best-rejected with geometry/light
+  reasons, window, both burn components and actual downfield/cross/FPA/Pe.
   Automatic solar orientation validates the cached axis against its saved
   measured peak before searching; reserve forced searches for explicit requests.
   Scheduled mission waits must stay in the running coast loop. KAC KillWarp
@@ -326,6 +335,15 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Mun fixed-site deorbit held: normalCap0, windows2/8, trials64/64. Operator
+  cannot reconstruct scrolled candidates and asks for an end summary. Current
+  patch enables bounded normal10 and stricter250/500m cross preference/cap,
+  spreads seed angles across passes and retains the nearest rejected actual
+  footprint for a final summary. Routine247 source cases include synthetic
+  15km polar Mun solutions for both normal signs, the disabled-authority
+  rejection, later-window budget regression and actual failure-tail summary
+  state. No native flight diagnosis identifies the exact best rejected
+  footprint from the supplied hold alone; do not promise this retry succeeds.
   After the solar-wait patch, Minmus 15km circular reboot exited with only
   phase-entry STATS, no light search, and generic no-site/refresh-failed text.
   Operator confirmed PRINT ABORT. returns TRUE. This reproduces the exact

@@ -725,6 +725,16 @@ remains a burn-admission floor, not proof of a landing and return budget.
 `totalOk`, `reserveOk` decisions. After archive sync, a connected reboot in
 SHAPE replans from the retained orbit using this profile; it does not refund
 previous shaping expenditure or skip the requested orbit.
+The fixed-site RO9 Mun profile also permits up to 10 m/s of normal correction
+in its deorbit burn. It prefers cross-track error below 250 m and rejects
+above 500 m, reducing the lateral work left to powered descent. Its locked
+contract coordinates and light policy remain unchanged. The deorbit search
+tries one burn angle across the available windows before alternate angles;
+all trials still share the 64-evaluation limit. A hold now ends with
+`STATS deorbit best-rejected`, showing the closest footprint's geometry
+reason, light result, window, retro/normal dV, downfield/cross-track distance,
+cross-track limit, impact angle and Pe. A budget stop is not proof that the
+target is unreachable. After sync, a connected reboot in LAND_DEORBIT replans.
 The full solver now uses a minimum-length Newton step across prograde,
 radial and normal axes, with up to 16 iterations. Both line-search/total
 caps and the 600-second arrival-shift/5 m/s capture-cost-increase limits

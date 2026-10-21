@@ -246,6 +246,11 @@ The search permits up to four windows by default, or
 `TARGET_DEORBIT_SCAN_ORBITS` when configured. In `LANDING_SIM_MODE`, this is
 capped at two. Subsequent windows span one orbit. The current
 coarse step is `period / MAX(128, TARGET_DEORBIT_SCAN_SAMPLES)`.
+Candidate order now tries 50 degrees across those windows, then 35, 65, 20
+and 80 degrees across them. Previously every alternate angle on an early
+pass came before any later pass; a budget stop could therefore exclude a
+usable later window. The shared 64-trial ceiling still bounds all work, so
+this ordering does not promise exhaustive coverage of every window/angle.
 The geometry scan yields every 16 samples and refines burn timing to a
 0.25-second bracket, avoiding one physics tick per sample and unnecessary
 microsecond refinement.
@@ -283,9 +288,12 @@ steps that reduce lateral miss plus distance outside the braking band are
 retained. Small probe nodes may look worse; they are measurements, not burns.
 `STATS deorbit step` records retained improvements.
 
-RO8/RO9 Mun/Minmus economy and Minmus recovery profiles permit up to 10 m/s
-normal correction; the default elsewhere remains zero. Economy prefers
-250 m lateral error and rejects above 500 m, replacing the overly broad
+RO8/RO9 Mun/Minmus economy, Minmus recovery and RO9's fixed-site Mun landing
+profile permit up to 10 m/s normal correction; the default elsewhere remains
+zero. The fixed-site Mun profile previously inherited zero despite its
+rotating target, and reported a 64/64-trial hold after two of eight windows.
+It now keeps the target lock and uses the same lateral preference/limit as
+economy: preferred 250 m and maximum 500 m. These replace the overly broad
 thrust-derived allowance for these profiles. All ordinary braking-lead,
 flight-path-angle and terrain limits remain. Fuel and normal-component caps
 are checked again on the final prediction. Each correction mode has at most
@@ -295,6 +303,18 @@ previously admissible candidate or holds in orbit, never relaxes the gates.
 Search/hold diagnostics report actual windows and candidates tried, evaluation
 count and stopping reason. A budget stop does not claim an exhaustive four-orbit
 search or prove no solution exists.
+Failures now end with `STATS deorbit best-rejected` before the hold line.
+It retains the valid footprint minimizing cross-track error squared plus
+distance outside the downfield band squared, and reports its window, seed
+angle, geometric rejection, light-check status, retro/normal components,
+downfield/cross-track error and cap, impact FPA, Pe and burn UT. It is a
+diagnostic candidate, never permission to burn. Geometry acceptance with
+`light=rejected` still holds. If no valid impact existed, that is reported
+explicitly instead. This avoids relying on a scrolled-away candidate row.
+Three new fixtures exercise the actual search prefix/order and failure
+summary state, plus independent 15 km polar Mun footprints that require
+bounded normal authority with both signs. The 247-case routine suite is
+source/model validation; the reported flight needs a new native prediction.
 The landing phase temporarily raises planning IPU to the configured landing
 floor, capped at 2000, and restores it after either success or failure; boot
 already restores that marker after interruption.
