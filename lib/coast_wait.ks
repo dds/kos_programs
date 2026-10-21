@@ -1,5 +1,5 @@
 // ============================================================
-// coast_wait.ks - live solar/clock waits for capture and B-plane retry
+// coast_wait.ks - live solar/clock waits for arrival and orbital retries
 // KAC guards warp; these loops resume execution.
 // ============================================================
 @LAZYGLOBAL OFF.
@@ -52,6 +52,17 @@ GLOBAL FUNCTION solarCoastCanWarp {
     RETURN TRUE.
 }
 
+LOCAL FUNCTION _coastWaitBodyLimit {
+    PARAMETER targetBody.
+    PARAMETER stayInBody.
+    IF stayInBody {
+        RETURN SHIP:BODY <> targetBody OR HASNODE OR SHIP:STATUS <> "ORBITING"
+            OR NOT (SHIP:PERIAPSIS > 0 AND SHIP:ORBIT:ECCENTRICITY < 1)
+            OR SHIP:ORBIT:HASNEXTPATCH.
+    }
+    RETURN SHIP:BODY = targetBody.
+}
+
 GLOBAL FUNCTION waitUntilOrSOI {
     PARAMETER targetBody.
     PARAMETER targetUt.
@@ -59,8 +70,10 @@ GLOBAL FUNCTION waitUntilOrSOI {
     PARAMETER alarmId IS "".
     PARAMETER solarRef IS -1.
     PARAMETER checkPreWarpHealth IS TRUE.
+    // A landing-window retry waits IN this body, rather than FOR entry.
+    PARAMETER stayInBody IS FALSE.
 
-    IF ABORT { RETURN. }
+    IF ABORT OR _coastWaitBodyLimit(targetBody,stayInBody) { RETURN. }
 
     IF checkPreWarpHealth {
         SET solarRef TO trySolarHoldTick(solarRef, targetUt).
@@ -83,7 +96,7 @@ GLOBAL FUNCTION waitUntilOrSOI {
             mLog("SOI coast: midpoint health check in T+"
                 + ROUND(midUt - TIME:SECONDS, 0) + "s.").
             IF coastAutoWarp(midUt, "SOI coast midpoint", healthAlarmId) {
-                UNTIL TIME:SECONDS >= midUt OR SHIP:BODY = targetBody OR ABORT {
+                UNTIL TIME:SECONDS >= midUt OR _coastWaitBodyLimit(targetBody,stayInBody) OR ABORT {
                     SET solarRef TO trySolarHoldTick(solarRef, midUt).
                     WAIT MIN(pollInterval, MAX(0, midUt - TIME:SECONDS)).
                 }
@@ -93,7 +106,7 @@ GLOBAL FUNCTION waitUntilOrSOI {
                     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
                     WAIT 1.
                 }
-                IF NOT ABORT AND SHIP:BODY <> targetBody
+                IF NOT ABORT AND NOT _coastWaitBodyLimit(targetBody,stayInBody)
                         AND coastHealthCheck("SOI coast midpoint", targetUt) {
                     SET solarRef TO trySolarHoldTick(-1, targetUt).
                     IF solarCoastCanWarp(solarRef, "SOI coast") {
@@ -105,10 +118,10 @@ GLOBAL FUNCTION waitUntilOrSOI {
             coastAutoWarp(targetUt, "SOI coast", alarmId).
         }
     }
-    UNTIL TIME:SECONDS >= targetUt OR SHIP:BODY = targetBody OR ABORT {
+    UNTIL TIME:SECONDS >= targetUt OR _coastWaitBodyLimit(targetBody,stayInBody) OR ABORT {
         SET solarRef TO trySolarHoldTick(solarRef, targetUt).
         WAIT MIN(pollInterval, MAX(0, targetUt - TIME:SECONDS)).
     }
-    IF ABORT { SET WARP TO 0. }
+    IF ABORT OR _coastWaitBodyLimit(targetBody,stayInBody) { SET WARP TO 0. }
 }
 

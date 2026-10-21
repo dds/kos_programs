@@ -11,6 +11,50 @@ gentle touchdown on a reachable, terrain/light-checked footprint. Hover and
 large final translations are recovery tools. Geographic precision profiles
 retain the longer target-capture sequence described below.
 
+Automatic site selection now stays in a running orbital solar wait when no
+ground-track point meets the light/radio policy (2026-10-21). Previously
+`_confirmLandingTarget` yielded to Godspeed after this expected rejection.
+The Minmus report, with its sunlit side facing away from Kerbin, should keep
+the rejection and defer landing rather than abandon automatic progression.
+
+`landingLitGroundTrack(TRUE)` reuses the normal ephemerides and planning
+region/window checks for a coarse forecast beyond the nearby search. It
+samples at most 512 epochs over the larger of eight vessel orbits, one
+surface rotation or two moon orbital periods, stopping at the first eligible
+sample. This can miss opportunities and does not identify the earliest
+possible opening. It only schedules a retry; its coordinates are never
+persisted as a landing target. Wake places the sample about two vessel
+orbits into the normal search range. If the forecast finds no window, the
+mission rechecks after roughly one sixteenth of that horizon, with at least
+one vessel orbit between checks.
+
+`landing_light_wait` persists mission/launch/phase/body, relevant light
+policy, orbit plane/period, wake UT and its named KAC alarm. It installs the
+alarm before solar setup, keeps the solar/clock loop running and repeats
+the normal local search at wake. No KAC is required for the clock loop to
+resume. Reboot keeps the pending deadline; an overdue deadline searches
+immediately. Changed context cancels the old intent, and successful manual
+`landlight apply` clears it. Preview/status do not enter this wait.
+
+Only an uncommitted bound airless orbit with no maneuver/transition or
+predicted Trajectories impact can enter the wait. Physical cutoff is checked
+before solar coast. The shared coast wait has an explicit stay-in-body mode,
+preserving the original body through slow solar setup and terminating on a
+new node, departure, descent or abort. Solar/power health and the existing
+auto-warp setting still govern warp. Invalid light configuration or frame
+disagreement retains manual review. A real deorbit still needs fresh
+terrain, reachability, light/radio, fuel and execution admission.
+
+New `STATS landing-light retry-scheduled` and `wait` rows record the rejection,
+estimated opportunity, coarse step, wake time and alarm. Search rows identify
+forecast versus normal mode and its sampled interval. The ETA is a retry
+estimate, never a guarantee of landing or a continuous surface link.
+Eight new source cases cover a modeled native-frame inclined Minmus
+opposition through a fresh post-wake search, KAC/no-KAC continuation, reboot,
+stale/overdue intent, guards/interruption, fallback cadence, power/warp and
+CPU restoration. The full routine suite has 243 cases across 39 scripts;
+native kOS execution, KAC UI and actual warp behavior await flight testing.
+
 The RO9 Mun flight starting UT1619274.662 landed with733.4m/s remaining and
 11.3m miss to its accepted site. Its 351m post-brake correction took76.1s and
 25.5kg of propellant;298 rotated rows lost the detailed approach history.

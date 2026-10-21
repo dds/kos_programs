@@ -71,6 +71,8 @@ def environment(frame=None, rotation=138984, sun_longitude=0, kerbin_longitude=-
     names = re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)', LIGHT)
     for name in names:
         env[name] = lambda *args, name=name: ks.call(name, env, *args)
+    # Successful picker fixtures do not exercise the separate mission wait.
+    env['landingAwaitLitGroundTrack'] = env['landingLitGroundTrack']
     return env
 
 
@@ -463,6 +465,7 @@ def check_command():
                    landingLightAt=lambda *args: dict(KERBIN=10, SUN=15, REASON='ok'),
                    landingLitGroundTrack=lambda: dict(FOUND=scenario!='no-site', LAT=2, LNG=-75, UT=2000, SUN=15, KERBIN=10),
                    missionOverrideUpdate=lambda values: mutations.append(values),
+                   landingLightWaitClear=lambda: mutations.append('clear-wait'),
                    LEXICON=lambda *xs: dict(zip(xs[::2], xs[1::2])), HASNODE=HasNode(),
                    remove_node=lambda: nodes.clear(), fixture_wait=lambda _: None)
         try: ks.run(parsed, env)
@@ -471,6 +474,7 @@ def check_command():
         assert bool(mutations) == (scenario in ('apply', 'afternoon', 'saved-policy'))
         assert bool(nodes) == (scenario not in ('apply', 'afternoon', 'saved-policy'))
         if mutations:
+            assert mutations[-1]=='clear-wait' and len(mutations)==2
             assert 'SEQUENCE' not in mutations[0]
             assert mutations[0]['LANDING_REQUIRE_KERBIN'] == 1
             assert mutations[0]['LANDING_LIGHT_MODE'] == ('SUNLIT' if scenario=='saved-policy' else 'AFTERNOON' if scenario == 'afternoon' else 'MORNING')

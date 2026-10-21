@@ -256,6 +256,17 @@ Looks like Python/JS; is neither.
   Preserve unrelated overrides with `missionOverrideUpdate` when changing
   a target/policy. `cmd/landlight` previews/applies only from an unflown moon
   parking orbit; retained deorbit nodes still pass the executor's light gate.
+  An automatic light/radio no-site result must remain in a RUNNING solar
+  coast, never a KAC alarm plus yield/Godspeed. landing_light_wait owns only
+  context-bound wake intent, not a cached site. The optional forecast mode
+  in landingLitGroundTrack is bounded512 samples over a long horizon and
+  only estimates a retry; rerun the normal local search at wake. The shared
+  coast_wait stayInBody mode stops on departure/new node/unsafe orbit;
+  normal arrival waits retain their target-entry termination. Install KAC
+  before solar, keep no-KAC clock polling/health checks, and preserve the
+  original body across solar setup. Manual landlight apply clears wait
+  state/alarm, preview never waits. New code needs a connected boot to cache
+  landing_light_wait and its manifest; no installed bootstrap change.
   Automatic solar orientation validates the cached axis against its saved
   measured peak before searching; reserve forced searches for explicit requests.
   Scheduled mission waits must stay in the running coast loop. KAC KillWarp
@@ -307,6 +318,15 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Minmus operator reports no sunlit+Kerbin-visible site; the rejection is
+  correct but _confirmLandingTarget used to yield/Godspeed. Automatic light
+  selection now forecasts, persists a retry, enters solar coast with its
+  timer already installed, and reselects after wake without exiting.
+  Forecast estimates are not a promise of a reachable/safe site. Routine243
+  cases across39 scripts cover a native-frame inclined Minmus opposition
+  forecast/fresh search, KAC/no-KAC continuation, JSON reboot/overdue/stale
+  waits, safety/abort/body-change guards, fallback cadence, battery/health
+  warp gating and CPU restoration. Native kOS/KAC/warp flight unverified.
   RO9 mun_landing_return captured successfully, then SHAPE rejected set-ap
   dv43.79, spent3.27, remaining1752.1, reserve650. Its profile requested
   captureAp100km then circular15km but allowed only10m/s per burn/20total.

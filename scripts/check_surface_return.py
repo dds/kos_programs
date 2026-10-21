@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 from check_launch_and_staging import body, evaluate
+from check_codebase import closure, dependency_tables
 
 ROOT = Path(__file__).resolve().parents[1]
 SETUP = (ROOT / 'lib/return_setup.ks').read_text()
@@ -386,7 +387,9 @@ def check_minmus_landing_recovery():
         assert f'"{key}", {key}' in overrides
     assert 'missionOverrideUpdate(' in overrides and 'missionOverrideClear(' not in overrides
     dependencies = (ROOT / 'lib/dependencies.ks').read_text()
-    assert '"landing_deorbit", LIST("landing_config", "landing_math", "landing_site", "landing_light")' in dependencies
+    deps,_,_=dependency_tables(dependencies)
+    assert {'landing_config','landing_math','landing_site','landing_light',
+            'landing_light_wait','coast_wait','solar'}<=closure(['landing_deorbit'],deps)
     targeting = body((ROOT / 'lib/deorbit_targeting.ks').read_text(), 'targetedDeorbitAt')
     assert 'PARAMETER refineSite IS TRUE.' in targeting
     assert 'IF refineSite AND DEFINED BOOT_LIB_RAN' in targeting

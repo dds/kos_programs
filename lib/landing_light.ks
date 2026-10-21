@@ -61,11 +61,13 @@ GLOBAL FUNCTION landingPlanningLight {
 }
 
 GLOBAL FUNCTION landingLitGroundTrack {
+    PARAMETER forecast IS FALSE.
     LOCAL out IS LEXICON("FOUND", FALSE, "LAT", 0, "LNG", 0,
-        "UT", 0, "SUN", -90, "KERBIN", -90, "REASON", "no-reachable-window").
+        "UT", 0, "SUN", -90, "KERBIN", -90, "REASON", "no-reachable-window",
+        "SCAN_END", 0, "STEP", 0).
     IF SHIP:ORBIT:ECCENTRICITY >= 1 OR SHIP:PERIAPSIS <= 0 { RETURN out. }
     LOCAL period IS SHIP:ORBIT:PERIOD.
-    IF period <= 0 { RETURN out. }
+    IF NOT (period > 0 AND period < 1e30) { RETURN out. }
     // Site selection precedes the deorbit solver's CPU scope, and operator
     // previews call us directly. Share its capped, reboot-recoverable budget.
     LOCAL priorIpu IS CONFIG:IPU.
@@ -76,6 +78,17 @@ GLOBAL FUNCTION landingLitGroundTrack {
     LOCAL startUT IS TIME:SECONDS + MAX(600, period * 0.35).
     LOCAL endUT IS startUT + period * MAX(1, MIN(8, LANDING_LIGHT_SCAN_ORBITS)).
     LOCAL stepSec IS period / MAX(64, MIN(512, LANDING_LIGHT_SCAN_SAMPLES)).
+    IF forecast {
+        // Sparse long-range estimate only. The near-term search must run
+        // again after waiting; these samples never authorize a deorbit.
+        SET startUT TO endUT.
+        LOCAL span IS MAX(8 * period, ABS(SHIP:BODY:ROTATIONPERIOD)).
+        IF SHIP:BODY:HASBODY {
+            SET span TO MAX(span, 2 * SHIP:BODY:ORBIT:PERIOD).
+        }
+        SET endUT TO startUT + span.
+        SET stepSec TO span / 512.
+    }
     LOCAL sampleUT IS startUT.
     LOCAL beganUT IS TIME:SECONDS.
     LOCAL bestScore IS 999999999.
@@ -85,11 +98,13 @@ GLOBAL FUNCTION landingLitGroundTrack {
     LOCAL eligible IS 0.
     LOCAL windowChecks IS 0.
     mLog("STATS landing-light search-start mode=" + LANDING_LIGHT_MODE
+        + " forecast=" + forecast
         + " requireKerbin=" + LANDING_REQUIRE_KERBIN
         + " orbits=" + MAX(1, MIN(8, LANDING_LIGHT_SCAN_ORBITS))
         + " samplesPerOrbit=" + MAX(64, MIN(512, LANDING_LIGHT_SCAN_SAMPLES))
+        + " startUT=" + startUT + " endUT=" + endUT + " stepSec=" + stepSec
         + " siteRadius=" + landingPlanningRadius() + " ipu=" + CONFIG:IPU).
-    UNTIL sampleUT > endUT OR ABORT {
+    UNTIL sampleUT > endUT OR ABORT OR (forecast AND (out["FOUND"] OR samples >= 512)) {
         LOCAL geo IS lmGroundGeoAt(sampleUT).
         LOCAL light IS landingPlanningLight(geo:LAT, geo:LNG, sampleUT).
         IF light["OK"] {
@@ -126,9 +141,12 @@ GLOBAL FUNCTION landingLitGroundTrack {
         IF MOD(samples, 8) = 0 { WAIT 0. }
     }
     IF ABORT { SET out["FOUND"] TO FALSE. SET out["REASON"] TO "aborted". }
+    SET out["SCAN_END"] TO endUT.
+    SET out["STEP"] TO stepSec.
     SET CONFIG:IPU TO priorIpu.
     IF priorIpu < MIN(2000, LANDING_MIN_IPU) { stateRemove("landing_prior_ipu"). }
     mLog("STATS landing-light search mode=" + LANDING_LIGHT_MODE + " requireKerbin=" + LANDING_REQUIRE_KERBIN
+        + " forecast=" + forecast
         + " minKerbin=" + LANDING_KERBIN_MIN_ELEV
         + " preferredKerbin=" + LANDING_KERBIN_PREFERRED_ELEV
         + " siteRadius=" + landingPlanningRadius()

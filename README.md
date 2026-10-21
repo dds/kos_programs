@@ -980,8 +980,23 @@ preference; a later-day site wins when it has substantially better Kerbin view.
 At similar radio margins, the score favors rising light that will improve over
 setting light. This is geometric screening, not a guarantee of a live link.
 The picker searches four orbits along the existing ground track. If no site
-meets both requirements, it holds in orbit rather than selecting a dark site
-or requesting a plane change. Each fresh economy plan in a bound parking
+meets both requirements, automatic selection stays in a running solar hold
+in the parking orbit. A coarse forecast samples up to two moon orbital
+periods (or at least eight vessel orbits/one surface rotation) to estimate
+a later opportunity. It sets a named `Landing light retry` KAC alarm before
+solar setup, prints the retry ETA/UT, then automatically runs a fresh nearby
+site search when due. The forecast never approves a landing site or burn.
+If it finds no future window, spaced rechecks continue; the displayed time
+is a retry estimate, not a guaranteed landing time. Without KAC, the running
+clock loop still resumes. Existing solar, battery and configured auto-warp
+checks remain active. Wake intent survives reboot and is invalidated by a
+changed mission, body, orbit plane/period or light policy. Successful
+`landlight apply` clears it; previews remain immediate and do not start a wait.
+Only an uncommitted, bound airless parking orbit can enter this wait;
+retained nodes, begun burns and invalid geometry/config still need review.
+The light/radio limits remain in force throughout planning.
+
+Each fresh economy plan in a bound parking
 orbit refreshes any old locked site from the current ground track before
 terrain refinement. The selected pass time travels with the site: the burn
 search first tries the approaching half-orbit for that pass. Searching an

@@ -68,7 +68,7 @@ def environment():
     env['kacEnsureAlarm']=alarm
     env['DELETEALARM']=lambda key:alarms.pop(key,None)
     for name in ('midcourseRefineUt','midcourseClearReviewAlarm','_transferArrivalUt',
-                 '_bplaneScheduleHoldReview','enterSolarCoast','_coastHealthPoll','coastHealthCheck',
+                 '_bplaneScheduleHoldReview','enterSolarCoast','_coastWaitBodyLimit','_coastHealthPoll','coastHealthCheck',
                  '_bplaneHasMidcourseRefinement','_bplaneParentClearUntil','_bplaneCoastEncounter','_bplaneRetryEncounter','_bplaneQueueMidcourseRetry',
                  '_bplaneHandoffMidcourseRetry','_bplaneHoldCorrection','bplaneClearRetryWait','_bplaneRetryWaitPending','_bplaneWaitBeforeSolverRetry'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)

@@ -217,7 +217,7 @@ LOCAL FUNCTION _autoLandingTarget {
     SET minutes TO LANDING_AUTO_TARGET_MINUTES.
     LOCAL passUT IS TIME:SECONDS + minutes * 60.
     IF landingLightActive() {
-        LOCAL site IS landingLitGroundTrack().
+        LOCAL site IS landingAwaitLitGroundTrack().
         IF NOT site["FOUND"] {
             mLogWarn("No ground-track site meets light/Kerbin requirements within the search horizon; holding orbit. Use cmd/landlight to review policy.").
             RETURN FALSE.

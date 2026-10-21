@@ -25,6 +25,7 @@ LOCAL FUNCTION _cmdLandlight {
     // reboot. Load explicitly after the existing landing config/math deps.
     bootLibLoad("landing_light_math").
     bootLibLoad("landing_light").
+    bootLibLoad("landing_light_wait").
     LOCAL profilePath IS "1:/missions/" + stateGet("vehicle", "")
         + "/" + stateGet("mission_id", "") + ".ks".
     IF NOT EXISTS(profilePath) { PRINT "Cached mission profile missing; cannot preserve mission context.". RETURN. }
@@ -86,6 +87,7 @@ LOCAL FUNCTION _cmdLandlight {
         "TARGET_LOCK", 1, "TARGET_WAYPOINT", "", "LANDING_USE_WAYPOINTS", 0,
         "LANDING_SKIP_TARGET_SEARCH", 0, "LANDING_LIGHT_MODE", mode,
         "LANDING_REQUIRE_KERBIN", requireKerbin)).
+    landingLightWaitClear().
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
     PRINT "Applied site; old unflown deorbit node removed. Mission/return sequence preserved.".
     PRINT "REBOOT when ready to plan and execute the new deorbit. No burn was started by this command.".
