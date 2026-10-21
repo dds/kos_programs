@@ -716,6 +716,15 @@ available; game time continues during a resident hold.
 RO9's Mun polar science mission has a separate correction allowance: 100 m/s
 per early/refinement burn, 150 m/s total, plus a 900 m/s margin after predicted
 capture. The reported 10 m/s cap left its required polar plane 70° away.
+Its subsequent SHAPE allowance is 60 m/s per burn and 80 m/s total, including
+the roughly 44 m/s required to lower the deliberately captured 100 km
+apoapsis to the 15 km science orbit. The old 10/20 m/s cleanup allowance
+could not perform that requested circularization. The 650 m/s SHAPE reserve
+remains a burn-admission floor, not proof of a landing and return budget.
+`STATS shape budget` includes per-burn/total caps and separate `burnOk`,
+`totalOk`, `reserveOk` decisions. After archive sync, a connected reboot in
+SHAPE replans from the retained orbit using this profile; it does not refund
+previous shaping expenditure or skip the requested orbit.
 The full solver now uses a minimum-length Newton step across prograde,
 radial and normal axes, with up to 16 iterations. Both line-search/total
 caps and the 600-second arrival-shift/5 m/s capture-cost-increase limits

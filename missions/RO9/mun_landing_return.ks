@@ -38,8 +38,11 @@ SET BPLANE_TRIM_RESERVE_DV TO 900.
 SET BPLANE_CAPTURE_MARGIN TO 900.
 SET BPLANE_MAX_ARRIVAL_SHIFT TO 600.
 SET BPLANE_MAX_CAPTURE_DV_INCREASE TO 5.
-SET SHAPE_DV_CAP TO 10.
-SET SHAPE_TOTAL_DV_CAP TO 20.
+// SHAPE includes the required ~44 m/s burn from the 100 km capture
+// ellipse to the low science orbit, plus small plane/apsis cleanup.
+// A 10/20 m/s trim allowance cannot complete that requested orbit.
+SET SHAPE_DV_CAP TO 60.
+SET SHAPE_TOTAL_DV_CAP TO 80.
 SET SHAPE_RESERVE_DV TO 650.
 
 

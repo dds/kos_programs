@@ -5,6 +5,51 @@ evidence. The newest continuation/clearance changes have offline checks and
 await flight testing. No saved log in this checkout establishes which defect
 caused a particular reported overburn.
 
+## Required RO9 shaping burn exceeds trim caps — 2026-10-21
+
+After successful Mun capture, SHAPE rejected a `set-ap` burn of 43.79 m/s
+with 3.27 m/s already spent, 1752.1 m/s available and a 650 m/s reserve.
+The profile deliberately captures at Ap 100 km then requests a 15 km
+circular science orbit. Independent vis-viva gives about 43.6 m/s for that
+circularization, even with perfect capture. Both the 10 m/s per-burn and
+20 m/s total trim allowances therefore conflict with the requested orbit;
+the fuel reserve was not the rejecting condition.
+
+Only RO9 `mun_landing_return` now allows 60 m/s per shaping burn and 80 m/s
+total, accommodating the mandatory circularization plus bounded cleanup.
+The reserve, spent ledger, polar requirement and fixed landing site remain.
+Other profiles retain their allowances. `STATS shape budget` now records
+both caps and individual per-burn, total and reserve decisions. A rejected
+node is still removed without charging the ledger or advancing the phase.
+
+The reported burn would leave 1708.31 m/s. A simple stock, zero-elevation,
+impulsive model gives about 589 m/s descent from a 13.6 km circle, 584 m/s
+surface ascent to a 10 km circle, and 313 m/s for an aligned Kerbin-return
+departure to Pe 53 km. Their sum of about 1486 m/s leaves roughly 222 m/s
+for finite-burn losses and other costs. This is a feasibility estimate,
+not a native route or sufficient fuel guarantee: terrain, engine/stage
+availability, site interception, plane geometry and corrections can consume
+that margin. The operator confirms 313 m/s is in the transfer stage;
+roughly 269 m/s remains there after the proposed shaping burn. It must
+contribute to descent before separation: throwing it away unused would
+exceed the modeled 222 m/s margin. The Mun profile uses default fuel-first
+staging; the optional early fueled-discard policy is enabled only on Minmus
+economy profiles. Source policy alone does not prove actual fuel use or
+debris disposal. Discarded-stage fuel cannot be counted as surface-return fuel.
+The existing 650 m/s reserve does not establish round-trip affordability.
+The automatic return still circularizes first; the direct-ascent command
+remains a preview. Aim to preserve about 1000 m/s at touchdown and inspect
+actual ascent/return geometry before treating the mission as affordable.
+This fixed-site polar profile retains precision landing guidance; it does
+not inherit flexible economy braking, and target corrections/hovering can
+consume the modeled margin.
+
+Routine validation: 235 cases across 38 scripts. The new budget fixture
+executes the admission/ledger/rejection source for the supplied values,
+the independent circularization estimate and each limit separately. No
+KSP flight, finite-burn landing or complete return is established by these
+checks.
+
 ## Correction node beyond SOI — 2026-10-20
 
 The operator's REFINE_BPLANE log at UT 1865900 reports a valid raw Mun

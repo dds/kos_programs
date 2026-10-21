@@ -969,13 +969,16 @@ LOCAL FUNCTION _shapeReserveBurn {
     LOCAL spent IS stateGetNum("shape_budget_spent", 0).
     LOCAL cost IS nd:DELTAV:MAG.
     LOCAL remaining IS SHIP:DELTAV:VACUUM.
-    LOCAL allowed IS (SHAPE_DV_CAP < 0 OR cost <= SHAPE_DV_CAP)
-        AND (SHAPE_TOTAL_DV_CAP < 0 OR spent + cost <= SHAPE_TOTAL_DV_CAP)
-        AND (SHAPE_RESERVE_DV < 0 OR remaining - cost >= SHAPE_RESERVE_DV).
+    LOCAL burnOk IS SHAPE_DV_CAP < 0 OR cost <= SHAPE_DV_CAP.
+    LOCAL totalOk IS SHAPE_TOTAL_DV_CAP < 0 OR spent + cost <= SHAPE_TOTAL_DV_CAP.
+    LOCAL reserveOk IS SHAPE_RESERVE_DV < 0 OR remaining - cost >= SHAPE_RESERVE_DV.
+    LOCAL allowed IS burnOk AND totalOk AND reserveOk.
     mLog("STATS shape budget dv=" + ROUND(cost, 2)
         + " spent=" + ROUND(spent, 2)
         + " remainingVacDv=" + ROUND(remaining, 1)
+        + " burnCap=" + SHAPE_DV_CAP + " totalCap=" + SHAPE_TOTAL_DV_CAP
         + " reserveDv=" + SHAPE_RESERVE_DV
+        + " burnOk=" + burnOk + " totalOk=" + totalOk + " reserveOk=" + reserveOk
         + " allowed=" + allowed).
     IF NOT allowed {
         REMOVE nd.

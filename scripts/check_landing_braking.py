@@ -328,9 +328,10 @@ def check_integration():
             assert actual.count('SET AEROBRAKE_AP_BURN TO 1.\n')==1
             actual=actual.replace('SET AEROBRAKE_AP_BURN TO 1.\n','')
         if path==ROOT/'missions/RO9/mun_landing_return.ks':
-            # Required polar targeting has its own finite budgets on RO9;
-            # check_bplane_newton verifies values, reserve and plane guards.
-            keys='BPLANE_DV_CAP|REFINE_BPLANE_DV_CAP|BPLANE_TRIM_DV_CAP|BPLANE_TRIM_TOTAL_DV_CAP|BPLANE_CAPTURE_MARGIN'
+            # Required polar targeting and capture-ellipse circularization
+            # have separate finite RO9 allowances. Numerical/admission checks
+            # live in check_bplane_newton and check_arrival_budget.
+            keys='BPLANE_DV_CAP|REFINE_BPLANE_DV_CAP|BPLANE_TRIM_DV_CAP|BPLANE_TRIM_TOTAL_DV_CAP|BPLANE_CAPTURE_MARGIN|SHAPE_DV_CAP|SHAPE_TOTAL_DV_CAP'
             actual=re.sub(r'SET ('+keys+r') TO [^.]+\.', '', actual)
             expected=re.sub(r'SET ('+keys+r') TO [^.]+\.', '', expected)
         assert clean(actual).split()==clean(expected).split(), path

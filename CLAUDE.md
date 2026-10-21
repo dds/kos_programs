@@ -307,6 +307,28 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  RO9 mun_landing_return captured successfully, then SHAPE rejected set-ap
+  dv43.79, spent3.27, remaining1752.1, reserve650. Its profile requested
+  captureAp100km then circular15km but allowed only10m/s per burn/20total.
+  Both caps, not the reserve, reject the mandatory~44m/s circularization.
+  This profile now allows60per/80total; reserve650, spent ledger, polar/site
+  goals and other profiles remain. Shape budget logs expose all caps and
+  individual admission results. Routine235 source cases include independent
+  vis-viva, the reported admission and three guarded rejections with no charge.
+  1708.31m/s after the reported burn is not a certified round-trip budget:
+  a stock zero-elevation impulsive estimate is~589 descent+584 ascent to10km
+  +313 aligned Kerbin departure=1486m/s, leaving only~222 for losses/margins.
+  Actual terrain, staging, fixed-site diversion and return-plane geometry
+  are missing. Operator confirms313m/s is transfer-stage fuel: after shaping
+  about269m/s remains there and must contribute to descent before separation.
+  Mun profile uses default fuel-first staging (discard threshold0); early
+  fueled discard is enabled only on Minmus economy profiles. This proves
+  source policy, not an actual impact/disposal or complete fuel-use outcome.
+  Mun polar profile still flies precision guidance, not flexible economy;
+  hovering/target corrections can exceed the~222m/s idealized margin.
+  The automatic return still circularizes; directreturn is a
+  preview, not an executable replacement. Do not promise the return from a
+  total-vacuum-dV sample or treat650m/s as sufficient fuel after touchdown.
   Operator's UT1865900 REFINE log has a measurable native Mun patch with
   entry1866063.7, then existing-patch-unmeasurable. The old300s node lead
   crosses SOI with only163s left; findArrivalPatch walks NEXT patches and
