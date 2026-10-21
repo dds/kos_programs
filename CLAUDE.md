@@ -358,6 +358,30 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  New-style RO9 mun_economy_return: operator reports LKO total3270m/s;
+  transfer3 has1371 before883.1m/s departure, lander2 has735, return1 has1165.
+  Components sum3271 (rounding). Return1 is intended for surface liftoff;
+  leftover lander2 fuel can also assist ascent. Crossfeed2->1 is confirmed
+  disabled. About488m/s transfer fuel remains after departure, before capture
+  and corrections. More promising than the prior896m/s total touchdown,
+  but no complete new-flight return budget is yet validated.
+  Default landing floor0 would select return1 after lander2 exhaustion.
+  cmd/landingstages2 validates actual engine/core/idle conditions and saves
+  LANDING_STAGE_LIMIT2 only for this flight, preserving mission/phase/target.
+  It does not configure the running game until the operator executes it.
+  Do NOT set floor2 for every RO9: older craft use lander1. Crossfeed isolation
+  is separate; do not claim staging alone protects propellant. Surface return
+  profile creation clears landing overrides; ascent has its own staging and
+  ASCENT_STAGED defaultsfalse, allowing leftover lander fuel before separation.
+  Bounded transfer credit may ignore an INACTIVE engine below the explicit
+  floor: only discarded-stage enabled propellant contributes, retained mass
+  still bounds lander acceleration, and active parallel propulsion rejects.
+  Optional fueled-stage disposal retains its stricter multi-stage rejection.
+  New source tests cover actual3->2 handoff/blocked1, the unreserved risk,
+  wet return mass, retained-fuel exclusion and configuration refusals. Routine
+  271 cases/43 files pass, slowest individual0.89s. Native three-stage
+  descent/ascent remains untested; the floor can leave descent without thrust
+  if permitted lander fuel is insufficient, so do not call it a fuel guarantee.
   Operator clarification after the896m/s touchdown: this was intended as a
   TARGETED landing. Better braking/refinement at a local fallback is not a
   completed contract-site mission. Direct-return experimentation is deferred

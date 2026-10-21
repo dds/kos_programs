@@ -44,6 +44,7 @@ LOCAL FUNCTION _cmdLandingcheck {
     report("  Fuel     remaining vacuum dV=" + ROUND(SHIP:DELTAV:VACUUM,1)
         + "m/s current stage=" + ROUND(STAGE:DELTAV:VACUUM,1) + "m/s").
     report("  Staging  current=" + STAGE:NUMBER
+        + " landingFloor=" + LANDING_STAGE_LIMIT
         + " next engine=" + vesselLandingNextEngineStage()
         + " next-stage surface TWR=" + ROUND(vesselLandingReserveAcc() / surfaceGrav,2)).
     report("  Guidance activeAcc=" + (vesselLandingThrust() / MAX(0.01, SHIP:MASS))

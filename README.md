@@ -77,6 +77,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/landingcheck.ks").` | Print and archive landing hardware, current-stage dV, next-stage acceleration and the last brake decision; requires an archive link |
 | `RUNPATH("0:/cmd/divertcheck.ks").` | Archive nearby raw terrain heights/slopes, correction-time estimates, policy/hardware and a copy of the flight log; no flight control; sample limit/spacing optional |
 | `RUNPATH("0:/cmd/landfallback.ks").` | Permit a checked local fallback during a committed airless LAND_ASSIST/LAND descent; requires zero throttle, then reboot; preserves the return mission and phase |
+| `RUNPATH("0:/cmd/landingstages.ks", 2).` | Save a verified per-flight landing stage floor: stage 2 and above may be used; stage 1 is reserved for ascent/return; requires automation stopped and zero throttle |
 | `RUNPATH("0:/cmd/landingdisposal.ks").` | Save an optional transfer-stage handoff at 80 m/s horizontal speed with a 700 m/s lander reserve; preserves node, phase and other overrides; pass `0` to restore fuel-first staging |
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
@@ -147,6 +148,20 @@ mission profile to reserve lower-numbered stages. Arrange the staging stack
 so advancing to that engine only triggers intended separation/ignition events.
 An unrelated flamed-out engine does not force staging while usable engines
 are still active.
+
+For a serial transfer3/lander2/return1 stack, stop at a throttle-off manual
+point before deorbit and run `RUNPATH("0:/cmd/landingstages.ks", 2).`, then
+reboot to resume the mission. This validates a usable retained engine at2
+and saves only `LANDING_STAGE_LIMIT=2` for this vessel's current mission.
+Landing can use3 then2 but cannot auto-stage into1 when2 runs dry. Keep
+crossfeed from the reserved return tanks disabled: the floor controls staging,
+not fuel flow, and it does not prove the landing fuel is sufficient. No
+RO9-wide stage number is assumed; older stacks can have different roles.
+The normal surface-return setup clears this landing override; ascent may
+use leftover lander fuel and then stage into the return engine. The readiness
+report and archived flight header include the active floor. The command does
+not burn, stage, change the target/sequence or reboot itself. No bootstrap
+update is required.
 
 Vacuum landing also uses the active transfer stage's fuel before staging.
 No landing-specific tags are required: put transfer-stage separation and

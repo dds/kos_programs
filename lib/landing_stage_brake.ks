@@ -20,7 +20,11 @@ GLOBAL FUNCTION vesselLandingBrakeStageDv {
                     OR eng:MULTIMODE OR activeEngine <> 0 { RETURN 0. }
             SET activeEngine TO eng.
         }
+        // An inactive engine explicitly reserved below the landing floor
+        // contributes no current-stage propellant or thrust. Its retained
+        // mass is already included in the next-stage acceleration budget.
         IF eng:POSSIBLETHRUST > 0 AND NOT eng:FLAMEOUT
+                AND eng:STAGE >= MAX(0,LANDING_STAGE_LIMIT)
                 AND eng:DECOUPLEDIN < engineStage AND eng:STAGE <> engineStage {
             RETURN 0.
         }

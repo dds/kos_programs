@@ -32,6 +32,34 @@ recovery concession and now states that it permits replacing the contract
 target. Its successful descent must not be used to mark orbital target
 accuracy or the mission's landing contract as validated.
 
+A subsequent new-style RO9 **Mun economy** flight has a separate return
+propulsion stage. Operator-reported LKO values are3270m/s total, with1371m/s
+on transfer3 before an883.1m/s departure,735m/s on lander2 and1165m/s on
+return1. Component totals differ by1m/s through rounding. Crossfeed between
+lander and return is disabled. Return1 is intended for liftoff; leftover2
+fuel can also be used during ascent. Capture/corrections still draw from the
+roughly488m/s transfer remainder, so these numbers do not certify landing
+or return affordability. Flexible economy targeting remains enabled.
+
+The default landing floor0 can select1 after2 exhausts, potentially consuming
+the dedicated return stage during descent. `cmd/landingstages.ks, 2` saves a
+validated per-flight floor without changing the target, mission, node or
+sequence. The operator must run it while idle before deorbit; no global
+RO9 stage-number default changes. With the floor applied, landing can stage
+3->2 but cannot select/ignite1. It cannot enforce fuel isolation through an
+open crossfeed path or guarantee735m/s is enough for descent. Surface-return
+setup clears the override and ascent retains its independent staging.
+
+The bounded transfer-credit helper now accepts an extra inactive engine only
+when it is explicitly excluded by that floor. Its fuel credit is still capped
+by enabled propellant physically on discarded parts and stock stage dV;
+reserved return tanks cannot increase it. The return wet mass remains part
+of the lander acceleration calculation, and an active parallel engine still
+rejects this simple model. Optional fueled-stage disposal remains conservative
+about additional future propulsion. Three source cases exercise the reported
+3/2/1 handoff and reservation, fuel exclusion and command refusal paths;
+actual multistage landing/ascent flight remains unverified.
+
 The next RO9 fixed-site Mun run opts into `LANDING_POWERED_LEAD=1`.
 The later measured ignition at control-height6101m/radar7977m,
 hs516.1m/s/vs-44.9m/s, active44.68/plan2.72m/s2 and223.9m/s transfer credit
