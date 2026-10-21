@@ -71,7 +71,9 @@ def check_live_stage_cache():
     assert profile.get('LANDING_FLEXIBLE_SITE',0)==0
     deps,_,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     assert 'landing_stage_brake' in closure(['landing_main'],deps)
-    assert 'landing_stage_brake' not in closure(['landing_deorbit','deorbit_targeting','deorbit_burn'],deps)
+    assert 'landing_stage_brake' in closure(['deorbit_targeting'],deps)
+    assert 'landing_main' not in closure(['deorbit_targeting'],deps)
+    assert 'landing_brake' not in closure(['deorbit_targeting'],deps)
     env,ctx,active,lander,held=hardware()
     ship=env['SHIP']
     ship.VELOCITY=NS(SURFACE=Vec((504.9,0,-3.8)))

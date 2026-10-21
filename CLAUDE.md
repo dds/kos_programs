@@ -358,6 +358,30 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Next measured ignition: control6101/bottom7977/ASL10212/targetElev4113m,
+  hs516.1/vs-44.9, active44.68/plan2.72, stageDv223.9, Hgate42847/Vgate4775,
+  Vfalse/Veta6.6, Htrue. Post-separation BRAKE d39974, hs286.7,
+  vs-32.3/-32.1, thr1/cutnone. Height at later row unknown. Craft paused,
+  only post-deorbit saves; operator authorized landing off-site for this run.
+  This is geographic range mismatch despite working thrust, not proven hover.
+  RO9 fixed profile opts LANDING_POWERED_LEAD1: nominal geographic range
+  differs from conservative vertical deadline. Sixteen speed intervals model
+  full lateral authority with gravity support/centrifugal change, mid-descent
+  radius, actual finite serial-stage impulse and both latency gaps. V safety
+  unchanged. Orbital12-step native coast forecast derives ballistic minus
+  powered travel, charges deorbit fuel first and refits with3 bounded model
+  passes inside64 trials. New/retained/pre-burn share policy. Unknown/model
+  failure retains orbit. Shared budget/lead only enter deorbit, never FSM tracks.
+  Supplied ignition reproduces43km Hgate -> about23km nominal. Actual-controller
+  point masses differ <700m in two stated cases (later height assumed5km).
+  Independent15km-ap Mun conic asks about37km lead, not old15km. Limited
+  approximation, not native accuracy/minimum fuel/full-flight validation.
+  cmd/landfallback preserves return mission/phase and enables existing checked
+  local fallback after zero-throttle/manual interrupt and connected reboot.
+  It waives no site safeguards and cannot guarantee a no-hover search.
+  Brake stopRangeError and capture targetDist plus archive recorder measure
+  model error. Routine268 checks/42 files pass; slowest individual0.79s.
+  Do not promise this already-burned trajectory reaches contract.
   Further ignition reading confirms H-trigger: alt12741/control height8628,
   hs510/vs-30.8,active44.68/plan2.72,stageDv223.9; vGate6286,vEta8.4,
   hGate74180,downrange74695,targetVs-27. D74695-600lead/bias=74095 inside

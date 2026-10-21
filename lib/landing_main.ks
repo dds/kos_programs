@@ -379,6 +379,12 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     LOCAL horizontalAcc IS lmBrakeNetAcc(maxAcc, gravAcc).
     LOCAL envelope IS _landingStopEnvelope(ctx,horizontalSpeed,downSpeed).
     LOCAL brakeDist IS envelope["H"].
+    IF LANDING_POWERED_LEAD > 0 AND LANDING_ECONOMY_BRAKE > 0 {
+        LOCAL nominalRange IS lmNominalBrakeRange(horizontalSpeed,ctx["MAX_ACC"],
+            ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],gravAcc,
+            MAX(0,LANDING_BRAKE_REACTION_TIME),SHIP:BODY:RADIUS,SHIP:ALTITUDE).
+        IF nominalRange >= 0 { SET brakeDist TO MIN(brakeDist,nominalRange). }
+    }
     LOCAL burnHeight IS _landingBurnHeight(ctx).
     LOCAL distToTarget IS 999999.
     LOCAL downrangeToTarget IS 999999.
@@ -466,6 +472,7 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
         "BRAKE_BIAS", brakeUndershootBias,
         "H_BRAKE", brakeDist,
         "H_GATE", hBrakeGate,
+        "RANGE_ERROR", brakeDist-downrangeToTarget,
         "H_ETA", hBrakeEta,
         "H_NOW", hNow,
         "H_SUPPRESSED", hSuppressed,
@@ -584,6 +591,7 @@ GLOBAL FUNCTION _landingSetState {
             + " vNow=" + gate["V_NOW"]
             + " vEta=" + ROUND(gate["V_ETA"],1)
             + " hGate=" + ROUND(gate["H_GATE"],0)
+            + " stopRangeError=" + ROUND(gate["RANGE_ERROR"],0)
             + " hNow=" + gate["H_NOW"]
             + " hOver=" + gate["H_OVERSHOT"]
             + " hSupp=" + gate["H_SUPPRESSED"]
@@ -595,6 +603,7 @@ GLOBAL FUNCTION _landingSetState {
             + " reserveAcc=" + ROUND(ctx["RESERVE_ACC"],2)
             + " brakeStageDv=" + ROUND(ctx["BRAKE_STAGE_DV"],1)
             + " stageCredit=" + LANDING_STAGE_BRAKE_CREDIT
+            + " poweredLead=" + _landingBoolText(LANDING_POWERED_LEAD > 0)
             + " vectorGate=" + _landingBoolText(LANDING_STAGE_BRAKE_CREDIT > 0 AND LANDING_ECONOMY_BRAKE > 0)
             + " grav=" + ROUND(ctx["BRAKE_GRAV"],2)
             + " stage=" + STAGE:NUMBER

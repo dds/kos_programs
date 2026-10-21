@@ -69,6 +69,8 @@ SET TARGET_DEORBIT_MIN_LEAD TO 120.
 SET LANDING_STAGE_BRAKE_CREDIT TO 1.
 // Descend through braking while preserving this fixed site's stopping gates.
 SET LANDING_ECONOMY_BRAKE TO 1.
+// Couple the ballistic overshoot to the actual staged powered-braking range.
+SET LANDING_POWERED_LEAD TO 1.
 // Survey one surface rotation for close passes before spending native
 // footprint trials; eight consecutive polar orbits can all miss this site.
 SET TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS TO 1.

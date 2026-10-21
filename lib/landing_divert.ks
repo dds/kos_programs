@@ -133,6 +133,19 @@ LOCAL FUNCTION _landingDivertSurveyAhead {
         + futureDown * stopTime / 2.
     LOCAL center IS SHIP:BODY:GEOPOSITIONOF(SHIP:POSITION
         + ctx["H_VEL"] * (coastTime + delay + stopTime / 2) - ctx["UP_VEC"] * fallHeight).
+    IF LANDING_POWERED_LEAD > 0 {
+        LOCAL nominalRange IS lmNominalBrakeRange(ctx["H_SPEED"],ctx["MAX_ACC"],
+            ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],ctx["BRAKE_GRAV"],delay,
+            SHIP:BODY:RADIUS,SHIP:ALTITUDE).
+        IF nominalRange >= 0 {
+            // Surface arc, not a long tangent displaced by uncertain fall.
+            // Preview remains provisional and is rechecked at selection.
+            LOCAL angleDeg IS (ctx["H_SPEED"]*coastTime+nominalRange)
+                /SHIP:BODY:RADIUS*180/CONSTANT:PI.
+            SET center TO SHIP:BODY:GEOPOSITIONOF(SHIP:BODY:POSITION+SHIP:BODY:RADIUS
+                *(ctx["UP_VEC"]*COS(angleDeg)+ctx["H_VEL"]:NORMALIZED*SIN(angleDeg))).
+        }
+    }
     LOCAL arrivalUt IS TIME:SECONDS + coastTime + delay + stopTime
         + MAX(0, _landingBottomRadar() - fallHeight) / MAX(10, HIGH_DESCENT_SPEED).
     LOCAL site IS _landingDivertCandidate(ctx, center:LAT, center:LNG,

@@ -6,6 +6,8 @@ GLOBAL TARGET_WAYPOINT IS "".
 // Flexible-site missions can ignore selected/named contract waypoints.
 GLOBAL LANDING_USE_WAYPOINTS IS 1.
 GLOBAL LANDING_ASSIST_IMPACT_LIMIT IS 20000.
+// Opt-in coupled deorbit/ignition range model. Vertical safety stays reserved.
+GLOBAL LANDING_POWERED_LEAD IS 0.
 GLOBAL LANDING_ASSIST_CROSSTRACK_LIMIT IS 100000.
 // Precision missions retain their site. Economy profiles may divert to a
 // nearby ballistic landing site, subject to terrain and light/radio checks.

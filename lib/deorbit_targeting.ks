@@ -109,10 +109,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL targetGeo IS LATLNG(targetLat, targetLng).
     LOCAL tolerance IS TARGET_TOLERANCE.
     IF overrideTolerance > 0 { SET tolerance TO overrideTolerance. }
-    LOCAL desiredDownfield IS 15000.
-    IF overrideOvershoot > 0 { SET desiredDownfield TO overrideOvershoot. }
-    LOCAL minDownfield IS 10000.
-    LOCAL maxDownfield IS 20000.
+    LOCAL seedPolicy IS landingDeorbitLegacyLead(overrideOvershoot).
+    LOCAL desiredDownfield IS seedPolicy["AIM"].
+    LOCAL minDownfield IS seedPolicy["MIN"].
+    LOCAL maxDownfield IS seedPolicy["MAX"].
     LOCAL minRetroDv IS 2.
     LOCAL seedRetroDv IS 15.
     LOCAL maxRetroDv IS 120.
@@ -369,6 +369,40 @@ GLOBAL FUNCTION targetedDeorbitAt {
         RETURN FALSE.
     }
 
+    // A geometric seed is not yet a powered landing solution. Refit its
+    // phantom impact to this stack's braking travel, under the SAME native
+    // trial cap and normal/cross limits. At most three fresh model passes.
+    LOCAL poweredPass IS 0.
+    LOCAL poweredAccepted IS LANDING_POWERED_LEAD <= 0.
+    UNTIL poweredAccepted OR poweredPass >= 3 OR ABORT
+            OR _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS {
+        SET _deorbitEvaluations TO _deorbitEvaluations+1.
+        LOCAL probeNode IS _planRetroNode(solved["UT"],solved["RETRO"],solved["NORMAL"]).
+        WAIT 0.5.
+        LOCAL leadPolicy IS landingDeorbitLeadPolicy(probeNode,targetLat,targetLng).
+        REMOVE probeNode.
+        IF NOT leadPolicy["VALID"] {
+            mLogWarn("STATS deorbit result=hold reason=powered-lead-" + leadPolicy["REASON"]).
+            RETURN FALSE.
+        }
+        SET desiredDownfield TO leadPolicy["AIM"].
+        SET minDownfield TO leadPolicy["MIN"].
+        SET maxDownfield TO leadPolicy["MAX"].
+        SET solved["ERR"] TO solved["DOWNFIELD"]-desiredDownfield.
+        IF _targetDeorbitSolutionAccepted(solved,minDownfield,maxDownfield) {
+            SET poweredAccepted TO TRUE.
+        } ELSE {
+            SET solved TO _refineDeorbitFootprint(solved,targetLat,targetLng,minLead,
+                desiredDownfield,minDownfield,maxDownfield,minRetroDv,maxRetroDv).
+        }
+        SET poweredPass TO poweredPass+1.
+    }
+    IF ABORT OR NOT poweredAccepted {
+        mLogWarn("STATS deorbit result=hold reason=powered-lead-not-converged trials="
+            + _deorbitEvaluations + "/" + TARGET_DEORBIT_MAX_EVALUATIONS).
+        RETURN FALSE.
+    }
+    SET geometry["UT"] TO solved["UT"].
     LOCAL bestUT IS geometry["UT"].
     LOCAL bestRetroDv IS solved["RETRO"].
     LOCAL bestNormalDv IS solved["NORMAL"].
@@ -456,7 +490,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
         RETURN FALSE.
     }
 
-    IF NOT _targetDeorbitTerrainAccepted(bestUT, targetLat, targetLng) {
+    IF NOT landingDeorbitNodeAccepted(realNode,targetLat,targetLng) {
         REMOVE realNode.
         RETURN FALSE.
     }
@@ -581,8 +615,13 @@ GLOBAL FUNCTION landingDeorbitNodeAccepted {
     PARAMETER targetLat.
     PARAMETER targetLng.
     WAIT 0.5.
-    LOCAL solved IS _readGeometricDeorbitNode(nd, targetLat, targetLng, 15000).
-    LOCAL reason IS _targetDeorbitRejection(solved, 10000, 20000).
+    LOCAL leadPolicy IS landingDeorbitLeadPolicy(nd,targetLat,targetLng).
+    IF NOT leadPolicy["VALID"] {
+        mLogWarn("STATS deorbit retained-node geometryReason=powered-lead-" + leadPolicy["REASON"]).
+        RETURN FALSE.
+    }
+    LOCAL solved IS _readGeometricDeorbitNode(nd, targetLat, targetLng, leadPolicy["AIM"]).
+    LOCAL reason IS _targetDeorbitRejection(solved, leadPolicy["MIN"], leadPolicy["MAX"]).
     mLog("STATS deorbit retained-node geometryReason=" + reason
         + " targetLat=" + targetLat + " targetLng=" + targetLng
         + " downfieldM=" + solved["DOWNFIELD"] + " crossM=" + solved["CROSS"]).

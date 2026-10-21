@@ -11,6 +11,70 @@ gentle touchdown on a reachable, terrain/light-checked footprint. Hover and
 large final translations are recovery tools. Geographic precision profiles
 retain the longer target-capture sequence described below.
 
+The next RO9 fixed-site Mun run opts into `LANDING_POWERED_LEAD=1`.
+The later measured ignition at control-height6101m/radar7977m,
+hs516.1m/s/vs-44.9m/s, active44.68/plan2.72m/s2 and223.9m/s transfer credit
+still fired on Hgate42847m with Vgate4775m false. Later, after separation,
+BRAKE reported distance39974m, hs286.7m/s, vs-32.3/-32.1 and full throttle.
+The engines work; these rows identify a range mismatch, not a zero-throttle
+or stationary-hover failure. The remaining transfer fuel/height at the later
+row was not supplied. This mission has only post-deorbit saves.
+
+A conservative maximum stopping envelope is appropriate for the vertical
+impact deadline, but it systematically commands early geographic arrest when
+used to aim full-thrust braking at a site. `lmNominalBrakeRange` separates
+these purposes. Sixteen speed intervals estimate full horizontal thrust with
+gravity support, changing centrifugal support, a mid-descent radius, finite
+transfer impulse, the weaker stage and both latency gaps. It assumes roughly
+steady descent; it is not a numerical simulation of the full controller or
+an optimal-control solution. The fixed site's H gate uses this nominal
+estimate, capped by the old stopping bound. The V gate and its full gravity,
+80% net reserve, terrain/hull height, staging and alignment guards are unchanged.
+Invalid range inputs retain the old conservative geographic fallback.
+
+`landing_deorbit_lead` samples the attached node's native post-burn conic
+using the established ground-position/numeric-velocity helpers. Twelve
+bisections locate the vertical safety boundary, including target and local
+terrain heights. It subtracts nominal powered travel from remaining ballistic
+ground-track travel to get the required phantom lead. Deorbit dV is first
+subtracted from the measured transfer budget. At most three model passes
+refit the native footprint under the original64-trial cap (model probe nodes
+also consume trials), retro/normal/cross limits and final terrain/light/fuel
+admission. All temporary nodes are removed. Unsupported/unknown/underpowered
+stacks, no coast, nonpositive leads and failure to converge retain orbit.
+New, retained and pre-burn node admission recompute the same policy;
+there is no separate retained-node10–20km exception. Non-opted profiles
+retain their legacy band. The powered band still loads its FSM/tracks
+separately: deorbit adds only the shared budget and prediction helpers.
+
+The supplied ignition snapshot now has a nominal geographic gate around23km,
+versus43km previously, with identical vertical safety values. Source-driven
+point-mass integration of the actual descending controller is within700m of
+the nominal range in that case and an explicitly assumed5km post-stage case.
+An independent20m/s deorbit conic at15km Mun apoapsis derives about37km lead
+rather than15km (exact value varies with terrain/hardware). These limited
+checks do not establish native target accuracy, terrain clearance during the
+powered arc, total landing fuel or minimum-dV performance. Flight validation
+is still needed, including late descent-speed changes and rotation-induced
+cross-track drift. No plan promises a high-precision touchdown from this model.
+
+`STATS deorbit powered-lead` records aim, powered/ballistic ranges, ignition
+state, post-deorbit transfer budget and computation elapsed time. Brake entry
+persists `poweredLead` and `stopRangeError`; negative error predicts a short
+capture. `brake-complete targetDist` plus the resident archived flight rows
+let us compare this prediction against actual capture and terminal fuel.
+No additional archive I/O or large scans run in the powered control loop.
+
+The operator has allowed this already-committed craft to land away from its
+contract site. `cmd/landfallback` saves flexible-site/descending-control
+permission only from an airless suborbital LAND_ASSIST/LAND phase with zero
+actual/raw/pilot throttle and Abort clear. It retains the return mission,
+sequence and phase. Reboot applies the policy; existing provisional previews
+and fresh reachability/clearance/20m-grade/light checks still select the site.
+Normal/emergency slope limits are not changed. This is recovery permission,
+not a guarantee that a nearby safe site exists or that a search cannot hover.
+A rejected site still cannot silently become a landing target.
+
 Automatic site selection now stays in a running orbital solar wait when no
 ground-track point meets the light/radio policy (2026-10-21). Previously
 `_confirmLandingTarget` yielded to Godspeed after this expected rejection.
@@ -213,8 +277,10 @@ The targeted deorbit solver does not try to make the unpowered impact land on
 the real target. It deliberately solves for a Trajectories impact downfield of
 the real target:
 
-- nominal downfield distance: 15 km
-- accepted downfield band: 10-20 km
+- legacy nominal downfield distance: 15 km
+- legacy accepted downfield band: 10-20 km
+- opted-in powered lead: ballistic travel minus nominal staged braking travel,
+  with target tolerance clamped to250–2500m around that model estimate
 - cross-track miss must fit the descent controller's correction allowance
 
 That downfield impact is the "phantom" target. It is a ballistic miss point
@@ -351,9 +417,10 @@ The landing phase temporarily raises planning IPU to the configured landing
 floor, capped at 2000, and restores it after either success or failure; boot
 already restores that marker after interruption.
 
-The first solution in the 10-20 km downfield band with cross-track miss within
+The first geometric seed in the legacy10–20km band with cross-track miss within
 the controller's allowance is accepted, also respecting `DEORBIT_MIN_FPA`
-when enabled. Before execution, the chosen node is recreated and its impact
+when enabled. Opted-in powered targeting then refits its lead as described
+above. Before execution, the chosen node is recreated and its impact
 is rechecked against those same limits. Missing/changed impact predictions
 hold without burning. Light/radio checks run only after geometry passes and
 use the corrected burn UT. Unflown retained nodes in bound orbit also undergo

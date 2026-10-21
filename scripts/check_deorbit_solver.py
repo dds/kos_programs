@@ -15,7 +15,8 @@ from check_runtime_contracts import run, KList
 
 SOURCE = (ROOT/'lib/deorbit_targeting.ks').read_text()
 LANDING = (ROOT/'lib/landing_deorbit.ks').read_text()
-ks.SOURCES += '\n' + SOURCE
+LEAD = (ROOT/'lib/landing_deorbit_lead.ks').read_text()
+ks.SOURCES += '\n' + SOURCE + '\n' + LEAD
 
 
 class Counter:
@@ -28,11 +29,11 @@ def environment(oracle, cap=10, budget=64):
     counter, trials = Counter(), []
     env = dict(TIME=NS(SECONDS=0), ABORT=False, SHIP=NS(DELTAV=NS(VACUUM=1000)),
                TARGET_DEORBIT_NORMAL_DV_CAP=cap, TARGET_DEORBIT_MAX_EVALUATIONS=budget,
-               TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=0,
+               TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=0, LANDING_POWERED_LEAD=0,
                TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM=.25, DEORBIT_MIN_FPA=0,
                _deorbitEvaluations=counter, LIST=lambda *xs: KList(xs),
                SQRT=math.sqrt, fixture_wait=lambda _: None)
-    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)', SOURCE):
+    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)', SOURCE + LEAD):
         env[name] = lambda *args,name=name: ks.call(name,env,*args)
     env['_targetDeorbitCrossAuthority'] = lambda _: 500
     def evaluate(ut, retro, lat, lng, lead, desired, normal=0):
@@ -368,7 +369,7 @@ def check_shared_terrain():
     assert env['_targetDeorbitTerrainAccepted'](1000,19,129) and len(requests) == 3
     planner = function_body(SOURCE,'targetedDeorbitAt')
     retained = function_body(SOURCE,'landingDeorbitNodeAccepted')
-    assert '_targetDeorbitTerrainAccepted(bestUT, targetLat, targetLng)' in planner
+    assert 'landingDeorbitNodeAccepted(realNode,targetLat,targetLng)' in planner
     assert '_targetDeorbitTerrainAccepted(nd:TIME, targetLat, targetLng)' in retained
     print('PASS: new and retained unflown nodes share the original terrain window/clearance guard; pre-target collisions reject, intentional post-target contact remains allowed')
 

@@ -76,6 +76,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/deorbitcheck.ks").` | Read-only deorbit snapshot: keep the suspect node attached and run in manual mode with an archive link; saves and verifies the report under `0:/logs/archive/_diagnostics/` |
 | `RUNPATH("0:/cmd/landingcheck.ks").` | Print and archive landing hardware, current-stage dV, next-stage acceleration and the last brake decision; requires an archive link |
 | `RUNPATH("0:/cmd/divertcheck.ks").` | Archive nearby raw terrain heights/slopes, correction-time estimates, policy/hardware and a copy of the flight log; no flight control; sample limit/spacing optional |
+| `RUNPATH("0:/cmd/landfallback.ks").` | Permit a checked local fallback during a committed airless LAND_ASSIST/LAND descent; requires zero throttle, then reboot; preserves the return mission and phase |
 | `RUNPATH("0:/cmd/landingdisposal.ks").` | Save an optional transfer-stage handoff at 80 m/s horizontal speed with a 700 m/s lander reserve; preserves node, phase and other overrides; pass `0` to restore fuel-first staging |
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
@@ -191,6 +192,28 @@ clearance. Mun profiles retain fuel-first staging pending a measured budget.
 For an in-flight mission, `RUNPATH("0:/cmd/landingdisposal.ks").` saves only
 these two overrides. It preserves the target, return sequence, phase and
 retained node. Passing `0` disables elective disposal.
+
+RO9's fixed-site `mun_landing_return` enables `LANDING_POWERED_LEAD=1`.
+The orbital solver now estimates ignition on the post-deorbit conic and
+subtracts the staged powered-braking travel from the remaining ballistic
+travel. It refines that required overshoot with the same bounded native
+solver; new, retained and pre-burn nodes share the fresh admission policy.
+The geographic ignition gate uses a nominal full-thrust range estimate;
+the conservative vertical stopping envelope, terrain bound, alignment and
+staging checks retain their margins. Other profiles keep the legacy policy.
+This is a constant-descent approximation, not a complete landing optimizer.
+`STATS deorbit powered-lead` records both ranges, remaining transfer fuel,
+ignition UT and prediction time; `landing-brake begin` now includes
+`poweredLead` and `stopRangeError` (negative means nominal capture short of
+the site). The landing recorder remains active through touchdown.
+
+For an already-deorbited craft that may land off-target, interrupt automation,
+cut throttle fully, then run `RUNPATH("0:/cmd/landfallback.ks").` and reboot
+while linked. This permits the existing checked local-site diversion and
+preserves the mission/return sequence, phase and other overrides. It does
+not select a site, waive terrain/light/radio checks or start a burn. An old
+fixed-site deorbit cannot be repaired retroactively by changing the planner.
+No installed bootstrap update is needed for this change.
 
 RO8/RO9 Mun/Minmus economy profiles allow `LANDING_FLEXIBLE_SITE=1`.
 During coast/braking, economy guidance samples a provisional stopping footprint
@@ -1071,7 +1094,8 @@ retained improvements, and `STATS deorbit search` reports the evaluation count.
 It also reports windows/candidates tried and whether the trial budget stopped
 the search; a hold does not claim that all four orbits were exhausted.
 Unflown retained nodes are rechecked against the current limits; rejection
-preserves the node. The 10–20 km downfield ballistic lead remains intentional.
+preserves the node. Legacy profiles retain the 10–20 km downfield ballistic
+lead; RO9's fixed-site profile derives its lead from the powered-range model.
 For an accepted node that looks wrong, stop automation and keep that node
 attached, then run `RUNPATH("0:/cmd/deorbitcheck.ks").` before clearing or
 replanning it. The command writes directly to

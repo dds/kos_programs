@@ -1,7 +1,7 @@
 // ============================================================
 // landing_stage_brake.ks - Bounded serial-stage powered-descent budget
 // (0:/lib/landing_stage_brake.ks)
-// Kept out of the compact deorbit and shared hardware/math bands.
+// Shared with deorbit prediction; no landing FSM or guidance tracks loaded.
 // ============================================================
 @LAZYGLOBAL OFF.
 
@@ -156,3 +156,61 @@ GLOBAL FUNCTION _landingStopEnvelope {
     RETURN lmBrakeEnvelope(horizontalSpeed,downSpeed,ctx["PLAN_ACC"],ctx["BRAKE_GRAV"],delay).
 }
 
+
+// Nominal geographic range, NOT a collision-avoidance envelope. During the
+// descending main burn most thrust arrests horizontal speed while supporting
+// weight. The conservative safety envelope reserves net thrust; using that
+// same reserve to aim at a site systematically stops short. Keep the V gate
+// unchanged and use full physical horizontal authority here. This estimate
+// assumes roughly constant descent speed and a mid-descent radius; flight logs
+// must measure its error. It does not certify touchdown or terrain.
+GLOBAL FUNCTION lmNominalBrakeRange {
+    PARAMETER horizontalSpeed.
+    PARAMETER activeAcc.
+    PARAMETER planAcc.
+    PARAMETER stageDv.
+    PARAMETER gravAcc.
+    PARAMETER delay.
+    PARAMETER bodyRadius IS 0.
+    PARAMETER altitudeAsl IS 0.
+    IF planAcc <= gravAcc OR activeAcc < planAcc { RETURN -1. }
+    LOCAL endSpeed IS MIN(horizontalSpeed,MAX(0,APPROACH_HSPEED)).
+    LOCAL remaining IS horizontalSpeed.
+    LOCAL distance IS horizontalSpeed*MAX(0,delay).
+    LOCAL fuelLeft IS MAX(0,stageDv).
+    LOCAL modelRadius IS bodyRadius+MAX(0,altitudeAsl)/2.
+    // Integrate sixteen speed intervals, splitting precisely at the one
+    // supported stage transition. Mid-descent radius approximates falling
+    // altitude; centrifugal support decreases with horizontal speed, as in
+    // lmGravity. No per-tick orbital/terrain sampling or numerical trajectory.
+    LOCAL interval IS 1.
+    UNTIL interval > 16 {
+        LOCAL nextSpeed IS horizontalSpeed-(horizontalSpeed-endSpeed)*interval/16.
+        LOCAL passCount IS 0.
+        UNTIL remaining <= nextSpeed+0.000001 OR passCount >= 2 {
+            LOCAL maxAcc IS planAcc.
+            LOCAL transfer IS activeAcc > planAcc AND fuelLeft > 0.000001.
+            IF transfer { SET maxAcc TO activeAcc. }
+            LOCAL effectiveGrav IS gravAcc.
+            IF bodyRadius > 0 {
+                SET effectiveGrav TO MAX(0.01,gravAcc*(bodyRadius/modelRadius)^2
+                    - ((remaining+nextSpeed)/2)^2/modelRadius).
+            }
+            LOCAL hAcc IS SQRT(MAX(0.000001,maxAcc^2-effectiveGrav^2)).
+            LOCAL deltaH IS remaining-nextSpeed.
+            IF transfer { SET deltaH TO MIN(deltaH,fuelLeft*hAcc/maxAcc). }
+            LOCAL afterSpeed IS remaining-deltaH.
+            SET distance TO distance+(remaining^2-afterSpeed^2)/(2*hAcc).
+            SET remaining TO afterSpeed.
+            IF transfer {
+                SET fuelLeft TO MAX(0,fuelLeft-deltaH*maxAcc/hAcc).
+                IF fuelLeft <= 0.000001 AND remaining > endSpeed {
+                    SET distance TO distance+remaining*MAX(0,delay).
+                }
+            }
+            SET passCount TO passCount+1.
+        }
+        SET interval TO interval+1.
+    }
+    RETURN distance.
+}
