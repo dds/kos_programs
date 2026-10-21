@@ -195,6 +195,12 @@ def check_stale_context_and_failure_guards():
         result=env['landingAwaitLitGroundTrack']()
         stale=fault in ('mission','body','mode')
         assert result['FOUND']==stale and calls==([False] if stale else [])
+        if not stale:
+            expected={'node':'maneuver-node-present','descent':'not-orbiting',
+                      'patch':'future-orbit-patch','impact':'predicted-impact',
+                      'started':'deorbit-already-started','atmosphere':'atmospheric-body',
+                      'period-zero':'invalid-orbit-period','period-nan':'invalid-orbit-period'}
+            assert result['REASON']==expected[fault]
         assert not alarms and 'landing_light_wait' not in saved
         assert not any(e[0]=='aim' for e in events)
     for reason in ('invalid-light-config','kerbin-frame-mismatch'):
@@ -285,6 +291,24 @@ def check_forecast_abort_scope():
     print('PASS: cancelling the long forecast cannot select a candidate or leak its temporary CPU budget')
 
 
+def check_abort_on_phase_entry():
+    env,saved,events,alarms=fixture()
+    env['ABORT'].value=True
+    def forbidden(*args):raise AssertionError('Abort-on-entry reached search/wait/burn')
+    env.update(landingApplyMissionConfig=lambda:None,
+               landingLitGroundTrack=forbidden,enterSolarCoast=forbidden,
+               _confirmLandingTarget=forbidden,_resumeExistingLandingDeorbitNode=forbidden)
+    before=dict(saved)
+    run(function_body(SOURCE,'phaseLandDeorbit'),env)
+    assert bool(env['ABORT']) and env['phaseShouldYield']
+    assert events==[('yield','LAND_DEORBIT')] and saved==before and not alarms
+    # Direct callers still get cancellation without running a picker.
+    result=env['landingAwaitLitGroundTrack']()
+    assert not result['FOUND'] and result['REASON']=='aborted'
+    assert env['_landingLightWaitBlockReason']()=='abort-active'
+    print('PASS: confirmed Abort-on reboot reports an explicit phase pause, performs no search/solar/burn and never clears Abort or changes saved intent')
+
+
 if __name__=='__main__':
     check_minmus_opposition_forecast()
     check_live_wait_and_target_selection()
@@ -294,3 +318,4 @@ if __name__=='__main__':
     check_forecast_fallback_and_dependencies()
     check_parking_coast_health()
     check_forecast_abort_scope()
+    check_abort_on_phase_entry()

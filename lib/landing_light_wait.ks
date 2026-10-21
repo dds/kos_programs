@@ -14,16 +14,33 @@ LOCAL FUNCTION _landingLightWaitContext {
         "inc", ROUND(SHIP:ORBIT:INCLINATION, 1), "lan", ROUND(SHIP:ORBIT:LAN, 1)).
 }
 
-LOCAL FUNCTION _landingLightWaitSafe {
-    IF ABORT OR HASNODE OR SHIP:STATUS <> "ORBITING"
-            OR NOT (SHIP:PERIAPSIS > 0 AND SHIP:ORBIT:ECCENTRICITY < 1)
-            OR NOT (SHIP:ORBIT:PERIOD > 0 AND SHIP:ORBIT:PERIOD < 1e30)
-            OR SHIP:ORBIT:HASNEXTPATCH OR SHIP:BODY:ATM:EXISTS
-            OR stateGet("deorbit_burn_started", "false") = "true" { RETURN FALSE. }
+LOCAL FUNCTION _landingLightWaitBlockReason {
+    IF ABORT { RETURN "abort-active". }
+    IF HASNODE { RETURN "maneuver-node-present". }
+    IF SHIP:STATUS <> "ORBITING" { RETURN "not-orbiting". }
+    IF NOT (SHIP:PERIAPSIS > 0 AND SHIP:ORBIT:ECCENTRICITY < 1) { RETURN "invalid-bound-orbit". }
+    IF NOT (SHIP:ORBIT:PERIOD > 0 AND SHIP:ORBIT:PERIOD < 1e30) { RETURN "invalid-orbit-period". }
+    IF SHIP:ORBIT:HASNEXTPATCH { RETURN "future-orbit-patch". }
+    IF SHIP:BODY:ATM:EXISTS { RETURN "atmospheric-body". }
+    IF stateGet("deorbit_burn_started", "false") = "true" { RETURN "deorbit-already-started". }
     IF ADDONS:TR:AVAILABLE {
-        IF ADDONS:TR:HASIMPACT { RETURN FALSE. }
+        IF ADDONS:TR:HASIMPACT { RETURN "predicted-impact". }
     }
-    RETURN TRUE.
+    RETURN "".
+}
+
+LOCAL FUNCTION _landingLightWaitSafe {
+    PARAMETER report IS 0.
+    LOCAL reason IS _landingLightWaitBlockReason().
+    IF reason <> "" {
+        IF report <> 0 { SET report["REASON"] TO reason. }
+        mLogWarn("STATS landing-light wait-rejected reason=" + reason
+            + " abort=" + ABORT + " status=" + SHIP:STATUS
+            + " PeKm=" + SHIP:PERIAPSIS/1000 + " ecc=" + SHIP:ORBIT:ECCENTRICITY
+            + " period=" + SHIP:ORBIT:PERIOD + " hasNode=" + HASNODE
+            + " nextPatch=" + SHIP:ORBIT:HASNEXTPATCH).
+    }
+    RETURN reason = "".
 }
 
 GLOBAL FUNCTION landingLightWaitClear {
@@ -45,11 +62,13 @@ LOCAL FUNCTION _landingLightWaitMatches {
 }
 
 GLOBAL FUNCTION landingAwaitLitGroundTrack {
+    mLog("STATS landing-light selector revision=2 abort=" + ABORT
+        + " status=" + SHIP:STATUS + " PeKm=" + SHIP:PERIAPSIS/1000).
     LOCAL site IS LEXICON("FOUND", FALSE, "REASON", "aborted").
     UNTIL ABORT {
         LOCAL saved IS stateGet("landing_light_wait", LEXICON()).
         IF saved:LENGTH > 0 {
-            IF NOT _landingLightWaitSafe() {
+            IF NOT _landingLightWaitSafe(site) {
                 landingLightWaitClear().
                 RETURN site.
             }
@@ -78,7 +97,7 @@ GLOBAL FUNCTION landingAwaitLitGroundTrack {
                     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
                 }
                 landingLightWaitClear().
-                IF NOT _landingLightWaitSafe() OR SHIP:BODY <> waitBody
+                IF NOT _landingLightWaitSafe(site) OR SHIP:BODY <> waitBody
                         OR NOT _landingLightWaitMatches(saved) {
                     mLogWarn("Landing light wait interrupted; recheck orbit/node before deorbit.").
                     RETURN site.
@@ -89,7 +108,7 @@ GLOBAL FUNCTION landingAwaitLitGroundTrack {
         IF site["FOUND"] OR ABORT { RETURN site. }
         // Only an unmet light/radio window is an automatic retry. Preserve
         // manual handling of invalid configuration or frame disagreements.
-        IF NOT _landingLightWaitSafe() OR NOT landingLightActive()
+        IF NOT _landingLightWaitSafe(site) OR NOT landingLightActive()
                 OR site["REASON"] = "invalid-light-config"
                 OR site["REASON"] = "kerbin-frame-mismatch" { RETURN site. }
         LOCAL estimate IS landingLitGroundTrack(TRUE).

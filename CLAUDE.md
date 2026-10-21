@@ -267,6 +267,14 @@ Looks like Python/JS; is neither.
   original body across solar setup. Manual landlight apply clears wait
   state/alarm, preview never waits. New code needs a connected boot to cache
   landing_light_wait and its manifest; no installed bootstrap change.
+  Flight-found follow-up: ABORT is a persistent KSP action group, not a
+  reboot-cleared script flag. An active group skipped the selector's UNTIL
+  loop before any search STATS, but the caller misreported a light failure.
+  LAND_DEORBIT now explicitly pauses at entry when Abort is on; NEVER clear
+  it automatically. Instruct the operator to PRINT ABORT., then deliberately
+  SET ABORT TO FALSE. and REBOOT. when ready. Selector revision/admission
+  reasons distinguish cancellation, safety rejection and an actual no-site
+  result; do not weaken guards based on a generic no-target message.
   Automatic solar orientation validates the cached axis against its saved
   measured peak before searching; reserve forced searches for explicit requests.
   Scheduled mission waits must stay in the running coast loop. KAC KillWarp
@@ -318,6 +326,14 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  After the solar-wait patch, Minmus 15km circular reboot exited with only
+  phase-entry STATS, no light search, and generic no-site/refresh-failed text.
+  Operator confirmed PRINT ABORT. returns TRUE. This reproduces the exact
+  early exit; no geometry failure was established by that boot. Added phase
+  Abort guard, selector revision2, exact rejection reasons, and cancellation
+  messages while retaining deliberate Abort control. Routine244 cases pass,
+  including an Abort-on-entry phase replay with no search/solar/burn or state
+  mutation. Clearing Abort and actual orbital solar hold await flight evidence.
   Minmus operator reports no sunlit+Kerbin-visible site; the rejection is
   correct but _confirmLandingTarget used to yield/Godspeed. Automatic light
   selection now forecasts, persists a retry, enters solar coast with its

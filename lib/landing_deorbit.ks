@@ -22,6 +22,12 @@ LOCAL _landingTargetPassUT IS 0.
 
 GLOBAL FUNCTION phaseLandDeorbit {
     landingApplyMissionConfig().
+    IF ABORT {
+        mLogWarn("LAND_DEORBIT paused: Abort action group is ON; no site search or burn attempted.").
+        PRINT "Clear Abort deliberately with SET ABORT TO FALSE. then REBOOT when ready.".
+        yieldToPrompt().
+        RETURN.
+    }
     IF SHIP:STATUS = "SUB_ORBITAL"
             AND (LANDING_SKIP_TARGET_SEARCH > 0) {
         _advanceAfterLandDeorbit().
@@ -219,7 +225,14 @@ LOCAL FUNCTION _autoLandingTarget {
     IF landingLightActive() {
         LOCAL site IS landingAwaitLitGroundTrack().
         IF NOT site["FOUND"] {
-            mLogWarn("No ground-track site meets light/Kerbin requirements within the search horizon; holding orbit. Use cmd/landlight to review policy.").
+            mLogWarn("STATS landing-light selection result=not-selected reason=" + site["REASON"]
+                + " abort=" + ABORT).
+            IF ABORT {
+                mLogWarn("Landing site selection canceled by Abort; no light-window failure established.").
+            } ELSE {
+                mLogWarn("No ground-track site selected; reason=" + site["REASON"]
+                    + ". Orbit retained. Use cmd/landlight to review policy.").
+            }
             RETURN FALSE.
         }
         SET TARGET_LAT TO site["LAT"].

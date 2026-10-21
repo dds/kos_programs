@@ -995,6 +995,12 @@ changed mission, body, orbit plane/period or light policy. Successful
 Only an uncommitted, bound airless parking orbit can enter this wait;
 retained nodes, begun burns and invalid geometry/config still need review.
 The light/radio limits remain in force throughout planning.
+If LAND_DEORBIT exits before any search, check `PRINT ABORT.` at the prompt.
+The Abort action group can remain on across a CPU reboot. Clear it deliberately
+with `SET ABORT TO FALSE.` and `REBOOT.` when ready to resume. Abort-on-entry
+now prints an explicit pause instead of claiming no light/Kerbin site exists.
+`STATS landing-light selector revision=2` identifies the new selector, and
+`wait-rejected` records the exact orbit/node/impact gate if a wait is refused.
 
 Each fresh economy plan in a bound parking
 orbit refreshes any old locked site from the current ground track before

@@ -55,6 +55,19 @@ stale/overdue intent, guards/interruption, fallback cadence, power/warp and
 CPU restoration. The full routine suite has 243 cases across 39 scripts;
 native kOS execution, KAC UI and actual warp behavior await flight testing.
 
+The first post-update Minmus reboot returned immediately from a 15 km
+circular orbit with no search statistics. The operator then confirmed
+`PRINT ABORT.` returned TRUE. The selector's `UNTIL ABORT` correctly skipped
+search/wait work, but its caller incorrectly presented that cancellation as
+a light/Kerbin failure. LAND_DEORBIT now pauses explicitly on Abort at entry;
+the operator deliberately clears it with `SET ABORT TO FALSE.` before
+rebooting to resume. The software never clears that action group itself.
+`STATS landing-light selector revision=2` identifies selector entry;
+`wait-rejected` logs a specific node/orbit/impact reason and basic state,
+also carried in the failed selection result. The routine suite now has
+244 cases, including the reported Abort-on-entry path. No actual search
+failure or invalid orbit was established by this particular reboot.
+
 The RO9 Mun flight starting UT1619274.662 landed with733.4m/s remaining and
 11.3m miss to its accepted site. Its 351m post-brake correction took76.1s and
 25.5kg of propellant;298 rotated rows lost the detailed approach history.
