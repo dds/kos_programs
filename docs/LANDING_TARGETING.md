@@ -11,6 +11,14 @@ gentle touchdown on a reachable, terrain/light-checked footprint. Hover and
 large final translations are recovery tools. Geographic precision profiles
 retain the longer target-capture sequence described below.
 
+After the8926227 update, the operator reports a substantially better Mun
+landing: a smart braking burn, descent onto the flat side of a crater and
+excellent refinement. This is qualitative flight evidence for the revised
+descent/recovery behavior; no corresponding diagnostic archive has yet been
+reviewed. Remaining dV, target miss, hover duration and touchdown speeds are
+not supplied. Because this retry started after deorbit, it does not validate
+the new orbital powered-lead solve or establish whole-mission fuel savings.
+
 The next RO9 fixed-site Mun run opts into `LANDING_POWERED_LEAD=1`.
 The later measured ignition at control-height6101m/radar7977m,
 hs516.1m/s/vs-44.9m/s, active44.68/plan2.72m/s2 and223.9m/s transfer credit

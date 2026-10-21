@@ -358,6 +358,14 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  After8926227, the operator reports this committed Mun descent did much
+  better: a smart braking burn, descent onto the flat side of a crater and
+  excellent refinement. This is positive qualitative native-flight evidence
+  for the revised powered-descent/recovery path. No new archive was inspected;
+  remaining dV, target miss, hover duration and touchdown speeds are unknown.
+  The available saves were already post-deorbit, so this report does NOT
+  validate the new orbital powered-lead solve. Preserve the working descent
+  behavior while measuring landing fuel and ascent/return feasibility.
   Next measured ignition: control6101/bottom7977/ASL10212/targetElev4113m,
   hs516.1/vs-44.9, active44.68/plan2.72, stageDv223.9, Hgate42847/Vgate4775,
   Vfalse/Veta6.6, Htrue. Post-separation BRAKE d39974, hs286.7,
