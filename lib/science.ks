@@ -185,6 +185,20 @@ GLOBAL FUNCTION phaseScienceOps {
                 + ", above " + (site[2] / 1000) + " km ASL.".
         }
         PRINT "Review stored science and remaining fuel before advancing to the next phase.".
+        LOCAL current IS stateGet("phase", "").
+        LOCAL i IS 0.
+        UNTIL i >= xferSeq:LENGTH {
+            IF xferSeq[i] = current {
+                IF i + 1 < xferSeq:LENGTH {
+                    PRINT "To continue to " + xferSeq[i + 1] + ", run:".
+                    PRINT "RUNPATH(" + CHAR(34) + "0:/cmd/setphase.ks" + CHAR(34)
+                        + ", " + CHAR(34) + xferSeq[i + 1] + CHAR(34) + ").".
+                    PRINT "REBOOT.".
+                }
+                BREAK.
+            }
+            SET i TO i + 1.
+        }
         yieldToPrompt(). RETURN.
     }
     nextPhase(xferSeq).

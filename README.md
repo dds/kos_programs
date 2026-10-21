@@ -896,7 +896,9 @@ overrun or finite-burn trajectory error; retain the `STATS burn cutoff` and
 SHAPE verifies the accepted capture ellipse without requesting circularization;
 its cleanup allowance is 10 m/s per burn, 20 m/s total, with a 50 m/s reserve.
 SCIENCE_OPS runs the available experiments once, then holds for the contract
-survey (`SCIENCE_OPS_HOLD=1`). It does not fly temperature waypoints or check
+survey (`SCIENCE_OPS_HOLD=1`). The hold prints the `setphase` command for the
+next phase in the active mission sequence, followed by `REBOOT.`. It does
+not advance automatically. It does not fly temperature waypoints or check
 contract completion. The saved temperature sites are **66.765° S, 0.528° E**
 and **39.831° S, 17.824° E**, both **above 10 km ASL**; the console prints
 these at the hold. Complete those readings and review remaining
