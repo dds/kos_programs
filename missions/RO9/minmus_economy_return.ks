@@ -65,6 +65,8 @@ SET LANDING_USE_WAYPOINTS TO 0.
 SET LANDING_FLEXIBLE_SITE TO 1.
 SET LANDING_DIVERT_EMERGENCY_SLOPE TO 15.
 SET LANDING_ECONOMY_BRAKE TO 1.
+// Credit only measured, isolated transfer propellant on supported serial stacks.
+SET LANDING_STAGE_BRAKE_CREDIT TO 1.
 // Use the transfer engine for initial braking, then separate while still
 // moving fast. Handoff requires verified cutoff, lander clearance/fuel and
 // a terrain-intersecting ballistic orbit; otherwise keep fuel-first staging.

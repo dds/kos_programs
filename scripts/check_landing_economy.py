@@ -57,7 +57,9 @@ def check_ballistic_gate():
     env.update(LANDING_ECONOMY_BRAKE=1,LANDING_FLEXIBLE_SITE=1)
     revised=call('_landingBrakeGateInfo',env,ctx)
     assert not revised['H_NOW'] and not revised['H_OVERSHOT']
-    for key in ('V_NOW','V_GATE','V_ETA'): assert revised[key]==original[key]
+    weak=call('lmFullBrakeEnvelope',env,400,5,ctx['PLAN_ACC'],ctx['BRAKE_GRAV'],3)
+    assert revised['V_GATE']==weak['V'] and revised['V_GATE']<original['V_GATE']
+    assert not revised['V_NOW'] and revised['V_ETA']>=original['V_ETA']
     call('_landingCoastTick',env,ctx)
     assert ctx['STATE']=='COAST' and ctx['throttle']==0
     ctx['height']=revised['V_GATE']-1
@@ -68,7 +70,7 @@ def check_ballistic_gate():
     env['SHIP'].FACING.FOREVECTOR = ctx['steering']
     call('_landingBrakeAlignTick',env,ctx)
     assert ctx['STATE']=='BRAKING_BURN'
-    print('PASS: economy geographic target cannot force an early burn; unchanged full velocity/terrain gate still starts urgent braking')
+    print('PASS: economy geographic target cannot force an early burn; matching full-vector velocity/terrain gate still starts urgent braking')
 
 
 def check_descent_efficiency():

@@ -151,11 +151,17 @@ GLOBAL FUNCTION _landingStopEnvelope {
     PARAMETER horizontalSpeed.
     PARAMETER downSpeed.
     LOCAL delay IS MAX(0,LANDING_BRAKE_REACTION_TIME).
+    LOCAL fullVector IS LANDING_ECONOMY_BRAKE > 0 AND horizontalSpeed > APPROACH_HSPEED.
     IF LANDING_STAGE_BRAKE_CREDIT > 0 {
         // Include both staging settle intervals and bounded control latency.
         SET delay TO MAX(delay,1+2*MAX(0.05,LANDING_STAGE_SETTLE)).
         RETURN lmStagedBrakeEnvelope(horizontalSpeed,downSpeed,ctx["MAX_ACC"],
-            ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],ctx["BRAKE_GRAV"],delay,LANDING_ECONOMY_BRAKE > 0).
+            ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],ctx["BRAKE_GRAV"],delay,fullVector).
+    }
+    // Match the actual controller even when transfer credit is disabled or
+    // unavailable. Credit controls fuel accounting, not thrust geometry.
+    IF fullVector {
+        RETURN lmFullBrakeEnvelope(horizontalSpeed,downSpeed,ctx["PLAN_ACC"],ctx["BRAKE_GRAV"],delay).
     }
     RETURN lmBrakeEnvelope(horizontalSpeed,downSpeed,ctx["PLAN_ACC"],ctx["BRAKE_GRAV"],delay).
 }

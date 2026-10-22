@@ -32,8 +32,8 @@ GLOBAL LANDING_MIN_IPU IS 2000.
 // Fixed-site profiles retain geographic stopping gates; only flexible sites
 // suppress them. Zero keeps the legacy vertical-arrest controller.
 GLOBAL LANDING_ECONOMY_BRAKE IS 0.
-// Opt-in serial-stage ignition model; unknown current-stage fuel falls back
-// to planning the entire stop on the weaker lander.
+// Opt-in bounded serial-stage fuel credit. Unknown fuel plans the entire
+// stop on the weaker lander. Thrust geometry follows ECONOMY_BRAKE separately.
 GLOBAL LANDING_STAGE_BRAKE_CREDIT IS 0.
 // Economy may accept a newly checked footprint after velocity capture,
 // avoiding an expensive late translation back to an obsolete stopping point.

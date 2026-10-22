@@ -307,6 +307,11 @@ Looks like Python/JS; is neither.
   the whole weaker-stage stop. Keep full gravity,80% net reserve, separate
   reaction/staging pauses, clearance and live attitude/cutoff guards.
   PLAN_ACC remains the weaker stage; logs expose brakeStageDv and flags.
+  ECONOMY_BRAKE's stopping geometry must match its controller regardless of
+  STAGE_BRAKE_CREDIT: full vector above APPROACH_HSPEED, original flare below.
+  The separate credit flag controls measured fuel only. Both RO8/RO9 economy
+  moon profiles now opt into bounded credit; do not enable POWERED_LEAD or
+  disable fixed-site geographic gates just because a mission uses this control.
   Automatic solar orientation validates the cached axis against its saved
   measured peak before searching; reserve forced searches for explicit requests.
   Scheduled mission waits must stay in the running coast loop. KAC KillWarp
@@ -358,6 +363,23 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  New RO9 Mun economy flight reported premature V ignition: height9422m,
+  bottom11058m, ASL13918m, targetElev4497m, hs513.2/vs-18.2,
+  active39.78/plan=reserve2.45m/s2 (surface TWR~1.50), stage3,
+  Vgate9432m/VnowTrue, Hgate207518m/HnowFalse, vectorGateFalse.
+  Operator confirmed brakeStageDv0/stageCredit0. This exposed our previous
+  fixed-profile-only opt-in and incorrect coupling of vector geometry to
+  fuel credit. Rounded source replay gives oldV9455m vs corrected no-credit
+  V4503m, ETA13.4s. This is at the SAME recorded state; falling increases
+  the gate, so do not promise ignition at4.5km. H suppression remains correct.
+  Downrange17600 transcription conflicts with gate/rangeError89903; don't
+  infer an actual landing miss from that number. Source regressions load all
+  four economy profiles and cover no-credit/disabled-credit geometry, zero
+  alignment throttle, unchanged low-speed flare. Weak2.45m/s2-only full-g,
+  3s-delay point mass retains~301m modeled capture clearance from gate+1m;
+  separate illustrative200m/s bounded transfer burn preserves flare after
+  both3s gaps. Routine44 files pass; slowest individual0.87s. No native
+  flight or whole-mission fuel success claimed.
   User prefers explicit part roles over stage-number inference. Optional
   return_decoupler identifies the return/lander boundary; lander_decoupler
   identifies complete-lander release from transfer/carrier. landing_roles

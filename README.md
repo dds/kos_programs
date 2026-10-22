@@ -398,20 +398,31 @@ remains in the ignition and flare envelopes; it does not cap the economy
 main-burn throttle. The RO9 fixed-site Mun profile now enables the same
 descending controller while keeping its geographic stopping gates and target
 lock; only flexible-site missions suppress the geographic gate.
-It also enables `LANDING_STAGE_BRAKE_CREDIT=1`. On a supported single-engine
+The RO8/RO9 Mun and Minmus economy profiles and RO9 fixed-site Mun profile
+also enable `LANDING_STAGE_BRAKE_CREDIT=1`. On a supported single-engine
 serial transfer stage, the ignition calculation credits that stage's remaining
 impulse, capped by its own enabled propellant mixture and current-stage dV.
 The weaker lander still covers every residual velocity component, with the
 80% acceleration reserve, full gravity, clearance and separate reaction and
 staging pauses. Unknown fuel, unsupported stacks and atmosphere retain the
 whole-stop-on-the-weaker-stage calculation without transfer credit. Full-vector
-mode still uses that weaker engine's vector limit. Other profiles default off.
-For this full-vector mode, the stopping budget now uses the engine's vector
+mode still uses that weaker engine's vector limit. Other profiles default off
+for transfer credit. The vector calculation follows `LANDING_ECONOMY_BRAKE`
+independently of that credit flag; disabling credit cannot restore the older
+triangle calculation while the main burn uses full vector authority.
+Above `APPROACH_HSPEED`, the stopping budget uses the engine's vector
 thrust limit before applying the existing 80% net-acceleration reserve.
 Subtracting gravity directly from horizontal braking had inflated the
 reported stopping distance to74 km. The supplied510m/s, -30.8m/s,
 223.9m/s-transfer-credit case instead has a calculated gate of about41 km;
 this is a stopping bound, not a promised ignition distance or altitude.
+At lower horizontal speeds the controller and gate retain the original flare
+calculation. In the later RO9 economy report, `stageCredit=0 vectorGate=false`
+identified a missed profile setting. The rounded513.2/-18.2m/s,
+39.78/2.45m/s2 snapshot reproduces a9.45km vertical gate with the older math;
+the matching vector bound is4.50km at that same state even with zero credit.
+Those heights use target elevation, not local radar. The gate grows as fall
+speed increases, so this is not a prediction of the eventual ignition height.
 `STATS landing setup` prints `vectorGate=true`, effective flags and `brakeStageDv`; COAST
 shows `vGate`, `height` and `stageDv`, and the saved brake decision includes
 the credit. A connected reboot loads the new powered-landing library; no

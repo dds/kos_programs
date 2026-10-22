@@ -456,7 +456,7 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
         AND burnHeight <= TERRAIN_SAFE_ALT.
     IF LANDING_ECONOMY_BRAKE > 0 AND LANDING_FLEXIBLE_SITE > 0 {
         // Flexible sites do not justify arresting velocity early just to
-        // preserve a geographic stopping point. The unchanged V gate still
+        // preserve a geographic stopping point. The separate V gate still
         // includes horizontal speed, terrain, latency and next-stage thrust.
         SET hNow TO FALSE.
         SET hOvershot TO FALSE.
@@ -604,7 +604,7 @@ GLOBAL FUNCTION _landingSetState {
             + " brakeStageDv=" + ROUND(ctx["BRAKE_STAGE_DV"],1)
             + " stageCredit=" + LANDING_STAGE_BRAKE_CREDIT
             + " poweredLead=" + _landingBoolText(LANDING_POWERED_LEAD > 0)
-            + " vectorGate=" + _landingBoolText(LANDING_STAGE_BRAKE_CREDIT > 0 AND LANDING_ECONOMY_BRAKE > 0)
+            + " vectorGate=" + _landingBoolText(LANDING_ECONOMY_BRAKE > 0 AND ctx["H_SPEED"] > APPROACH_HSPEED)
             + " grav=" + ROUND(ctx["BRAKE_GRAV"],2)
             + " stage=" + STAGE:NUMBER
             + " ipu=" + CONFIG:IPU
@@ -825,7 +825,7 @@ GLOBAL FUNCTION landExecute {
         + " tr=" + _landingBoolText(ADDONS:TR:AVAILABLE)
         + " economyBrake=" + LANDING_ECONOMY_BRAKE + " flexible=" + LANDING_FLEXIBLE_SITE
         + " stageCredit=" + LANDING_STAGE_BRAKE_CREDIT
-        + " vectorGate=" + _landingBoolText(LANDING_STAGE_BRAKE_CREDIT > 0 AND LANDING_ECONOMY_BRAKE > 0)
+        + " vectorGate=" + _landingBoolText(LANDING_ECONOMY_BRAKE > 0 AND ctx["H_SPEED"] > APPROACH_HSPEED)
         + " brakeStageDv=" + ROUND(ctx["BRAKE_STAGE_DV"],1) + ".").
     // Load the next track while still at setup, then reclaim its disk file.
     // RUNONCE functions remain resident: no archive/compile delay at ignition.

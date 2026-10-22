@@ -719,7 +719,7 @@ The operator's later11098m radar reading is a current local clearance,
 not that earlier ignition's target-relative8628m control height.
 
 That staged model still used the legacy triangle bound `aMax-g`, while the
-controller used full thrust-vector authority. The opt-in full-vector gate
+controller used full thrust-vector authority. The full-vector gate
 now solves the physical constraint `|g*up + netAcc*direction| <= aMax`, then
 applies the unchanged80% net reserve and burn margin. Gravity consumes a
 vector component rather than being subtracted directly from sideways thrust.
@@ -742,6 +742,40 @@ and two3s coast interruptions, retaining the original weaker-stage flare
 clearance at horizontal capture. None establishes native target accuracy,
 optimal ignition time or a complete landing/return fuel budget.
 `vectorGate=true` in setup and saved ignition reports identifies this model.
+
+A later RO9 Mun **economy** flight exposed a configuration gap: only the
+fixed-site mission had enabled transfer credit, and the vector gate was
+incorrectly conditional on that separate flag. The flight explicitly reported
+`stageCredit=0 brakeStageDv=0 vectorGate=false`, height9422m/bottom11058m,
+ASL13918m/targetElev4497m, hs513.2m/s, vs-18.2m/s, active39.78m/s2,
+plan/reserve2.45m/s2, g1.63 and stage3. The V gate fired at9432m;
+H was suppressed as required for a flexible site. Rounded inputs reproduce
+V9455m, so the target shift/horizontal trigger is unnecessary to explain it.
+The reported downrange17600m disagrees with Hgate207518m and rangeError89903m
+(which suggest approximately117600m after the600m bias); do not treat that
+transcribed distance as a measured landing miss.
+
+The stopping envelope now follows the controller: above APPROACH_HSPEED,
+ECONOMY_BRAKE uses vector geometry regardless of the credit setting. Lower
+speeds retain the controller's original flare envelope. Both RO8/RO9 economy
+moon profiles explicitly enable physically bounded stage credit. Fuel and
+hardware validation remain mandatory; e.g. a3/2/1 stack needs a valid reserved
+return boundary to credit transfer fuel without treating the return engine as
+an unsupported extra stage. A flag alone cannot supply measured fuel.
+
+At the supplied state, zero transfer credit gives V4503m and ETA13.4s;
+illustrative100/200m/s measured credit would give V4234/3111m and ETA17.6/27.2s.
+These are instantaneous target-relative bounds, not promised ignition heights.
+An unpowered alignment can start within the20s lead, and increasing fall
+speed moves the gate upward. The80% net reserve, full surface gravity,
+reaction/staging delays and clearance remain. Source tests load all four
+economy profiles, reproduce the early V gate, verify credit-disabled/unknown
+fuel vector fallback, unpowered alignment, and preserve the low-speed flare.
+A point-mass run starting1m above the revised gate with only the2.45m/s2
+engine, full surface gravity and3s ignition delay reaches modeled capture
+above300m without high hover. A separate finite200m/s transfer-credit run
+retains the weaker-stage flare clearance after two3s thrust interruptions.
+Neither measures a native landing or proves sufficient fuel/target precision.
 
 The horizontal trigger compares the gate with target downrange **minus**
 `LANDING_BRAKE_GATE_LEAD_DIST` and `LANDING_BRAKE_UNDERSHOOT_BIAS`. These

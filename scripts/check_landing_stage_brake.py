@@ -3,7 +3,7 @@ import math
 import random
 from types import SimpleNamespace as NS
 
-from check_landing_braking import fixture, call, Vec
+from check_landing_braking import fixture, call, simulate, Vec
 from check_runtime_contracts import KList
 from check_codebase import ROOT, closure, dependency_tables
 from check_surface_return import read_settings
@@ -133,7 +133,8 @@ def check_fixed_brake_policy():
     legacy=call('_landingBrakeGateInfo',env,ctx)
     env['LANDING_ECONOMY_BRAKE']=1
     fixed=call('_landingBrakeGateInfo',env,ctx)
-    assert fixed==legacy and fixed['H_NOW']
+    assert fixed['H_NOW'] and fixed['V_GATE']<legacy['V_GATE']
+    assert fixed['V_ETA']>=legacy['V_ETA']
     site=(ctx['TARGET_LAT'],ctx['TARGET_LNG'])
     control=call('_landingBrakeSteeringInfo',env,ctx)
     assert control['TARGET_VS']<ctx['V_SPEED']
@@ -143,14 +144,64 @@ def check_fixed_brake_policy():
     assert site==(ctx['TARGET_LAT'],ctx['TARGET_LNG'])
     env['LANDING_FLEXIBLE_SITE']=1
     assert not call('_landingBrakeGateInfo',env,ctx)['H_NOW']
-    print('PASS: descending full-vector braking preserves a fixed site and all its gates; only explicitly flexible sites suppress geographic ignition')
+    print('PASS: descending full-vector braking preserves a fixed site and geographic ignition with its matching velocity envelope; only explicitly flexible sites suppress geographic ignition')
 
 
-def descent(credit, flat=False, height=9149, horizontal=504.9, down=3.8, budget=313):
-    env,ctx=fixture(gravity=1.6284599,twr=44.68/1.6284599,horizontal=horizontal,down=down,height=height)
+def check_economy_profile_gate():
+    # Flight report: RO9 economy, transfer3/lander2/return1, stageCredit=0,
+    # height9422/bottom11058, hs513.2, vs-18.2, active39.78/plan2.45.
+    env,ctx=fixture(gravity=1.6284599,twr=39.78/1.6284599,
+                    horizontal=513.2,down=18.2,height=9422)
+    ctx.update(PLAN_ACC=2.45,BRAKE_STAGE_DV=0,downrange=117600)
+    legacy=call('_landingBrakeGateInfo',env,ctx)
+    assert legacy['V_NOW'] and 9400<legacy['V_GATE']<9500
+    for craft in ('RO8','RO9'):
+        for moon in ('mun','minmus'):
+            profile=read_settings((ROOT/f'missions/{craft}/{moon}_economy_return.ks').read_text(),{})
+            assert profile['LANDING_ECONOMY_BRAKE']==profile['LANDING_STAGE_BRAKE_CREDIT']==1
+            assert profile['LANDING_FLEXIBLE_SITE']==profile['LANDING_AUTO_TARGET']==1
+            assert profile['TARGET_LOCK']==0 and 'LANDING_POWERED_LEAD' not in profile
+            env.update(profile)
+            for credit in (0,1):
+                env['LANDING_STAGE_BRAKE_CREDIT']=credit
+                gate=call('_landingBrakeGateInfo',env,ctx)
+                weak=call('lmFullBrakeEnvelope',env,513.2,18.2,2.45,1.6284599,3)
+                assert abs(gate['V_GATE']-weak['V'])<1e-8
+                assert 4490<gate['V_GATE']<4510 and not gate['V_NOW']
+                assert not gate['H_NOW'] and not gate['H_OVERSHOT']
+                ctx['STATE']='COAST'
+                call('_landingCoastTick',env,ctx)
+                assert ctx['STATE']=='BRAKE_ALIGN' and ctx['throttle']==0
+                # Alignment lead may turn early; actual ignition still waits.
+                env['SHIP'].FACING.FOREVECTOR=ctx['steering']
+                call('_landingBrakeAlignTick',env,ctx)
+                assert ctx['STATE']=='BRAKE_ALIGN' and ctx['throttle']==0
+    # At flare speeds the actual controller uses the original envelope.
+    for horizontal in (0,env['APPROACH_HSPEED']):
+        for credit in (0,1):
+            env['LANDING_STAGE_BRAKE_CREDIT']=credit
+            gate=call('_landingStopEnvelope',env,ctx,horizontal,18.2)
+            assert gate==call('lmBrakeEnvelope',env,horizontal,18.2,2.45,1.6284599,3)
+    print('PASS: all four economy profiles enable bounded credit and preserve flexible targeting; measured 9.45km premature V gate becomes a 4.50km weaker-stage vector bound even with credit disabled/zero; alignment stays unpowered and the low-speed flare retains its original bound')
+
+
+def check_economy_weak_stage_margin():
+    grav=1.6284599
+    env,ctx=fixture(gravity=grav,twr=2.45/grav,horizontal=513.2,down=18.2)
+    env['LANDING_ECONOMY_BRAKE']=1
+    gate=call('_landingBrakeGateInfo',env,ctx)
+    result=simulate(grav,2.45/grav,513.2,18.2,economy=True,
+                    start_height=gate['V_GATE']+1,dt=.2)
+    assert result['minimum']>env['LANDING_BRAKE_CLEARANCE'] and result['hover']==0
+    print('PASS: reported 2.45m/s2 weak lander alone, zero transfer credit, full surface gravity and 3s unpowered ignition delay retain clearance from 1m above the revised gate without high hover; not a native landing/fuel-budget proof')
+
+
+def descent(credit, flat=False, height=9149, horizontal=504.9, down=3.8, budget=313,
+            active_acc=44.68,plan_acc=2.72):
+    env,ctx=fixture(gravity=1.6284599,twr=active_acc/1.6284599,horizontal=horizontal,down=down,height=height)
     env['LANDING_STAGE_BRAKE_CREDIT']=int(credit)
     env['LANDING_ECONOMY_BRAKE']=int(credit)
-    ctx.update(PLAN_ACC=2.72,BRAKE_STAGE_DV=budget)
+    ctx.update(PLAN_ACC=plan_acc,BRAKE_STAGE_DV=budget)
     ctx['height']=height
     impulse,hover=0.,0.
     ignite=None;staged=False;settle=0
@@ -180,11 +231,21 @@ def descent(credit, flat=False, height=9149, horizontal=504.9, down=3.8, budget=
         assert ctx['height']>100,(credit,ctx)
         if applied>0 and abs(ctx['V_SPEED'])<5 and ctx['height']>1000:hover+=dt
         if not staged and budget<=1e-9:
-            staged=True;ctx['MAX_ACC']=2.72;settle=now+3
+            staged=True;ctx['MAX_ACC']=plan_acc;settle=now+3
         if ctx['H_SPEED']<=env['APPROACH_HSPEED']:break
     assert staged and ignite is not None and step<9999
     return dict(ignition=ignite[1],impulse=impulse,hover=hover,height=ctx['height'],
                 down=ctx['DOWN_SPEED'],horizontal=ctx['H_SPEED'])
+
+
+def check_economy_staged_margin():
+    env,_=fixture()
+    envelope=call('lmStagedBrakeEnvelope',env,513.2,18.2,39.78,2.45,200,1.6284599,3,True)
+    result=descent(True,flat=True,height=envelope['V']+1,horizontal=513.2,
+                    down=18.2,budget=200,active_acc=39.78,plan_acc=2.45)
+    flare=call('lmBrakeEnvelope',env,result['horizontal'],result['down'],2.45,1.6284599,3)
+    assert result['height']>flare['V'] and result['hover']==0,(result,flare)
+    print('PASS: reported 39.78->2.45m/s2 stack with illustrative bounded 200m/s transfer fuel retains weaker-stage flare clearance from the staged gate under full surface gravity and two 3s thrust interruptions; no assumed unlimited transfer fuel')
 
 
 def check_staged_descent():
@@ -264,6 +325,9 @@ if __name__=='__main__':
     check_live_stage_cache()
     check_reported_gate()
     check_fixed_brake_policy()
+    check_economy_profile_gate()
+    check_economy_weak_stage_margin()
+    check_economy_staged_margin()
     check_staged_descent()
     check_surface_gravity_margin()
     check_vector_reserve_geometry()
