@@ -1406,6 +1406,21 @@ escape speed. These are optimistic two-body estimates excluding losses,
 rotation and geometry. Keep the existing 10 km return for this probe rather
 than expecting a large fuel saving from skipping a phase.
 
+Airless ascent circularizes with a direct burn, so its countdown has no
+maneuver node. It now creates an owned `Ascent circularize` KAC KillWarp
+alarm at T-60, retains the running clock wait without KAC, and settles warp
+before ignition. `STATS ascent circularize plan/wait` reports the direct
+burn's ignition UT, dV, acceleration and alarm ID. A connected LAUNCH boot
+also retains `return_setup` when the sequence needs it after PARK, allowing
+the later return-setup reboot to work offline. An incomplete cache reports
+the missing library and holds instead of taking an undefined handler.
+
+The ascent pitch program still depends on speed and vertical-speed guards;
+it is not yet an optimized plan for changing stage TWR. Live console samples
+include acceleration, TWR, stage, mass and remaining vacuum dV. One usable
+sample per observed stage is buffered as `STATS ascent stage` and saved after
+verified climb cutoff, so ordinary diagnostics add no powered-climb file I/O.
+
 After touchdown, SCIENCE_OPS attempts available experiments without automatic
 transmission and **holds on the surface**. Check stored data and fuel; about
 400 m/s remaining is a useful return planning allowance, not a guarantee.

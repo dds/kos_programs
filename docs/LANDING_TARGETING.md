@@ -53,6 +53,28 @@ active landing engine for liftoff by default and independent ascent staging
 can shed it after exhaustion, so the497m/s need not be discarded before launch.
 Actual return success remains to be established.
 
+The same craft subsequently reached a reported10673m apoapsis and8103m
+periapsis with430m/s left before circularization. It announced a roughly1000s
+wait with no maneuver node or KAC alarm. Ascent deliberately circularizes
+directly, but the missing owned alarm was a defect. The wait now creates a
+T-60 `Ascent circularize` KillWarp alarm, reuses it after replanning, cleans up
+only that alarm, retains a clock fallback without KAC and settles warp before
+the burn. Ignition UT, estimated duration/acceleration, stage and remaining
+dV are included in the saved plan. The user's stage-TWR efficiency concern
+is still open: the pitch law is unchanged. Per-stage usable acceleration/TWR
+observations are now buffered and saved after verified cutoff for future tuning.
+
+An offline RETURN_SETUP reboot then failed on an undefined handler; obtaining
+a link and rebooting recovered the mission. Although the phase manifest
+declares the correct provider, LAUNCH's cleanup set previously needn't retain
+it. The shared conditional planner now includes return_setup and its config
+for LAUNCH sequences with RETURN_SETUP, so a connected ascent boot caches and
+keeps those files for the following offline handoff. Other launch sequences
+retain their original dependency set. Both return-setup bindings also check
+that their delegates exist, allowing the normal missing-handler hold and
+explicit link/reboot guidance for an incomplete cache. These preventative
+changes and the new alarm still need native flight validation.
+
 The default landing floor0 can select1 after2 exhausts, potentially consuming
 the dedicated return stage during descent. `cmd/landingstages.ks, 2` saves a
 validated per-flight floor without changing the target, mission, node or

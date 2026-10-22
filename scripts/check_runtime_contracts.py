@@ -175,6 +175,58 @@ def check_phase_failures():
     print('PASS: failed deorbit/landing cannot advance; missing track exits before delegation; rover/science/telemetry config')
 
 
+def check_return_setup_binding():
+    source=function_body((ROOT/'lib/dependencies.ks').read_text(),'dependencyBindPhase')
+    source=re.sub(r'DEFINED (\w+)',r'fixture_defined("\1")',source)
+    source=re.sub(r'(\w+)@',r'fixture_delegate("\1")',source)
+    declared=set(re.findall(r'GLOBAL FUNCTION (\w+)',(ROOT/'lib/return_setup.ks').read_text()))
+    for phase,handler in (('RETURN_SETUP','phaseReturnSetup'),
+                          ('SURFACE_RETURN_SETUP','phaseSurfaceReturnSetup')):
+        for loaded in (True,False):
+            symbols=declared if loaded else set()
+            bindings={}
+            def delegate(name):
+                assert name in symbols,('undefined handler dereferenced',name)
+                return name
+            env=dict(phaseMap=bindings,phaseName=phase,fixture_defined=lambda name:name in symbols,
+                     fixture_delegate=delegate,
+                     phaseMapSet=lambda mapping,key,value:mapping.update({key:value}))
+            run(source,env)
+            assert bindings==({phase:handler} if loaded else {})
+    machine=function_body((ROOT/'lib/phases.ks').read_text(),'runPhases')
+    assert machine.index('dependencyBindPhase(phaseMap, phase)')<machine.index('PHASE HANDLER MISSING:')
+    assert 'yieldToPrompt().' in machine[machine.index('PHASE HANDLER MISSING:'):]
+    print('PASS: both return setup handlers bind only available delegates; an incomplete offline cache reaches the explicit missing-handler hold instead of dereferencing an undefined function')
+
+
+def check_ascent_return_cache():
+    source=function_body((ROOT/'lib/mission_type.ks').read_text(),'missionTypeConditionalRoots')
+    class Sequence(list):
+        CONTAINS=list.__contains__
+    deps,phases,bands=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
+    baseline=closure(['core']+[lib for phase in bands['launch'] for lib in phases[phase]],deps)
+    assert 'return_setup' not in baseline
+    # The actual conditional planner is used by both installed boot planning
+    # and rocketVehicleLibsForBand; test generated surface-return intent.
+    for band,sequence,wanted in (
+            ('LAUNCH',['PRELAUNCH','LAUNCH','PARK','RETURN_SETUP'],True),
+            ('LAUNCH',['PRELAUNCH','LAUNCH','PARK','DONE'],False),
+            ('PRELAUNCH',['PRELAUNCH','LAUNCH','PARK','RETURN_SETUP'],False),
+            ('RETURN_SETUP',['PRELAUNCH','LAUNCH','PARK','RETURN_SETUP'],False)):
+        env=dict(bandKey=band,SEQUENCE=Sequence(sequence),LIST=lambda *xs:KList(xs))
+        extra=run(source,env)
+        assert ('return_setup' in extra)==wanted
+        if wanted:
+            keep=baseline|closure(extra,deps)
+            assert {'return_setup','aerobrake_config'}<=keep
+            assert 'maneuver' not in keep and 'maneuver_plan' not in keep
+    boot=(ROOT/'lib/boot_lib.ks').read_text()
+    rocket=(ROOT/'lib/rocket_craft.ks').read_text()
+    assert 'missionTypeConditionalRoots(band)' in function_body(boot,'bootPlannedMissionLibs')
+    assert 'missionTypeConditionalRoots(band)' in function_body(rocket,'rocketVehicleLibsForBand')
+    print('PASS: connected surface-ascent planning caches return_setup and its config before cleanup; ordinary launch/other bands retain their original closure and the maneuver executor stays out of LAUNCH')
+
+
 def check_compact_burn():
     source = function_body((ROOT / 'lib/deorbit_burn.ks').read_text(), 'executeDeorbitNode')
     source = re.sub(r'WAIT UNTIL (.*?)\.(?=\s*\n)', r'UNTIL \1 { WAIT 0.02. }', source, flags=re.S)
@@ -357,6 +409,8 @@ if __name__ == '__main__':
     check_boot()
     check_cleanup_and_links()
     check_phase_failures()
+    check_return_setup_binding()
+    check_ascent_return_cache()
     check_compact_burn()
     check_cutoff_handoffs()
     check_rendezvous()

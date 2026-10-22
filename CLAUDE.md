@@ -363,6 +363,30 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  The newest Mun economy craft subsequently reached a reported10673m Ap /
+  8103m Pe with430m/s vacuum dV before a small circularization trim. Relative
+  to1151m/s at touchdown the displayed budget fell~721m/s; that is not an
+  integrated-thrust measurement. The user observes poor response to the
+  lander/return TWR change. _vacuumAscentPitch is still speed-based with VS
+  floors; no stage-aware efficiency improvement is claimed. Added console
+  acc/TWR/mass/stage/dV samples, buffering one usable observation per stage
+  until verified cutoff for STATS logging; don't add disk I/O to powered climb.
+  The circularization countdown~1000s had no node (intentional direct burn)
+  AND no owned KAC alarm (bug). It now owns a reusableT-60 KillWarp alarm,
+  passes only that ID to coastAutoWarp, keeps a1x clock fallback without KAC
+  and settles warp before ignition/Abort/early target completion. Existing
+  live cutoff, taper, time/dV limits and stage recovery stay intact.
+  User then hit undefined phaseReturnSetup in dependencies while booting
+  RETURN_SETUP offline; a linked reboot recovered. Source return_setup is
+  declared correctly, but LAUNCH cleanup needn't retain its future provider.
+  Conditional roots now keep return_setup+aerobrake_config during LAUNCH
+  when SEQUENCE contains RETURN_SETUP; both boot planners share that path.
+  Ordinary launch missions do not pay for it. Missing return delegates now
+  leave the existing explicit missing-handler hold, with link/reboot guidance.
+  Do not late-import config-owning libraries after profile application without
+  restoring the profile: defaults could reset the53km return corridor.
+  Current recovery is operator-confirmed; preventative cache/alarm updates
+  still require flight validation. No installed bootstrap update is needed.
   Operator reports the newest RO9 Mun economy craft has landed, retaining
   497m/s in lander2 and654m/s in return1 (1151m/s staged sum). It came short
   of the original Trajectories target; no diagnostic archive, final miss,

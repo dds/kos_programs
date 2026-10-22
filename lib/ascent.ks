@@ -222,11 +222,23 @@ LOCAL FUNCTION _vacuumAscentPitch {
 
 LOCAL FUNCTION _logVacuumAscentTelemetry {
     PARAMETER pitchAngle.
-    mLog("Vacuum ascent: radar="
+    PARAMETER trace.
+    LOCAL acceleration IS SHIP:AVAILABLETHRUST/MAX(0.01,SHIP:MASS).
+    LOCAL localGravity IS SHIP:BODY:MU/MAX(1,(SHIP:BODY:RADIUS+SHIP:ALTITUDE)^2).
+    LOCAL row IS "radar="
         + ROUND(ALT:RADAR, 0) + "m Ap="
         + ROUND(SHIP:APOAPSIS / 1000, 2) + "km pitch="
         + ROUND(pitchAngle, 1) + "deg vOrb="
-        + ROUND(SHIP:VELOCITY:ORBIT:MAG, 1) + "m/s.").
+        + ROUND(SHIP:VELOCITY:ORBIT:MAG, 1) + "m/s vs=" + ROUND(SHIP:VERTICALSPEED,1)
+        + " stage=" + STAGE:NUMBER + " massT=" + ROUND(SHIP:MASS,3)
+        + " acc=" + ROUND(acceleration,2) + " twr=" + ROUND(acceleration/MAX(0.01,localGravity),2)
+        + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM,1).
+    mLog("Vacuum ascent: " + row).
+    // Buffer one observation per stage; persist only after physical cutoff.
+    IF acceleration > 0 AND STAGE:NUMBER <> trace["STAGE"] {
+        trace["ROWS"]:ADD("STATS ascent stage " + row).
+        SET trace["STAGE"] TO STAGE:NUMBER.
+    }
 }
 
 // Compass heading to reach LAUNCH_INCLINATION from the launch
@@ -288,6 +300,38 @@ LOCAL FUNCTION _circSafeThrottle {
     RETURN MAX(0, MIN(1, command)).
 }
 
+// Direct circularization still needs its own alarm. An unrelated future
+// alarm cannot protect this burn, and KAC does not restart a stopped script.
+// Keep the resident clock wait even when KAC is unavailable.
+LOCAL FUNCTION _ascentWaitForCircularize {
+    PARAMETER igniteUt.
+    PARAMETER dv.
+    PARAMETER targetPe.
+    LOCAL alarmId IS maneuverEnsureBurnAlarm(igniteUt,dv,"Ascent circularize").
+    mLog("STATS ascent circularize wait mode=direct ignitionUt=" + ROUND(igniteUt,1)
+        + " eta=" + ROUND(MAX(0,igniteUt-TIME:SECONDS),1) + " alarm=" + alarmId).
+    IF alarmId <> "" AND igniteUt > TIME:SECONDS+60 {
+        coastAutoWarp(igniteUt-60,"Circularize coast",alarmId).
+    } ELSE {
+        SET WARP TO 0.
+        WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    }
+    LOCAL nextHud IS 0.
+    UNTIL TIME:SECONDS >= igniteUt OR ABORT OR SHIP:PERIAPSIS >= targetPe {
+        IF TIME:SECONDS >= nextHud {
+            LOCAL etaIg IS MAX(0,igniteUt-TIME:SECONDS).
+            HUDTEXT("Circularize burn in " + ROUND(etaIg,0) + "s",
+                2,2,16,YELLOW,FALSE).
+            SET nextHud TO TIME:SECONDS+_circHudInterval(etaIg).
+        }
+        WAIT MIN(0.5,MAX(0,igniteUt-TIME:SECONDS)).
+    }
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    IF alarmId <> "" { DELETEALARM(alarmId). }
+    RETURN NOT ABORT.
+}
+
 // Circularize at apoapsis with a direct burn — no maneuver node, no
 // executeManeuver. Steers the horizontal circularization vector (NOT
 // live prograde) centered on apoapsis, and terminates when periapsis
@@ -315,24 +359,14 @@ LOCAL FUNCTION _ascentCircularize {
     mLog("STATS ascent circularize plan dv=" + ROUND(dv, 1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 2)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 2)
-        + " targetPeKm=" + ROUND(targetPe / 1000, 2)).
+        + " targetPeKm=" + ROUND(targetPe / 1000, 2)
+        + " mode=direct ignitionUt=" + ROUND(igniteUt,1)
+        + " burnT=" + ROUND(burnTime,2) + " acc=" + ROUND(acc0,2)
+        + " stage=" + STAGE:NUMBER + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM,1)).
 
     SAS OFF.
     LOCK STEERING TO _circBurnVec().
-    IF igniteUt > TIME:SECONDS + 5 {
-        coastAutoWarp(igniteUt, "Circularize coast", "").
-    }
-    LOCAL nextHud IS 0.
-    UNTIL TIME:SECONDS >= igniteUt OR ABORT OR SHIP:PERIAPSIS >= targetPe {
-        IF TIME:SECONDS >= nextHud {
-            LOCAL etaIg IS MAX(0, igniteUt - TIME:SECONDS).
-            HUDTEXT("Circularize burn in " + ROUND(etaIg, 0) + "s",
-                2, 2, 16, YELLOW, FALSE).
-            SET nextHud TO TIME:SECONDS + _circHudInterval(etaIg).
-        }
-        WAIT 0.5.
-    }
-    IF ABORT {
+    IF NOT _ascentWaitForCircularize(igniteUt,dv,targetPe) {
         _ascentStopThrottle().
         UNLOCK STEERING.
         RETURN FALSE.
@@ -427,6 +461,7 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
     LOCAL clearAlt IS 150.
     LOCAL targetVel IS _vacuumTargetOrbitalVelocity().
     LOCAL nextTelemetry IS TIME:SECONDS.
+    LOCAL ascentTrace IS LEXICON("STAGE",-999,"ROWS",LIST()).
     LOCAL ascentAz IS _ascentAzimuth().
     LOCAL achInc IS MAX(ABS(LAUNCH_INCLINATION), ABS(SHIP:LATITUDE)).
 
@@ -485,7 +520,7 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
     mLog("Vacuum ascent clearing terrain to " + clearAlt + "m AGL.").
     UNTIL ALT:RADAR > clearAlt OR SHIP:APOAPSIS >= PARKING_ALT OR ABORT {
         IF TIME:SECONDS >= nextTelemetry {
-            _logVacuumAscentTelemetry(90).
+            _logVacuumAscentTelemetry(90,ascentTrace).
             SET nextTelemetry TO TIME:SECONDS + 5.
         }
         WAIT 0.1.
@@ -496,13 +531,14 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
         SET currentPitch TO _vacuumAscentPitch(targetVel).
         LOCK STEERING TO HEADING(ascentAz, currentPitch).
         IF TIME:SECONDS >= nextTelemetry {
-            _logVacuumAscentTelemetry(currentPitch).
+            _logVacuumAscentTelemetry(currentPitch,ascentTrace).
             SET nextTelemetry TO TIME:SECONDS + 5.
         }
         WAIT 0.1.
     }
 
     IF NOT _ascentStopThrottle(FALSE) { RETURN FALSE. }
+    FOR row IN ascentTrace["ROWS"] { mLog(row). }
     IF ABORT {
         mLogWarn("Vacuum ascent aborted; holding launch phase.").
         UNLOCK THROTTLE.

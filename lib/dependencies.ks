@@ -239,8 +239,14 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "RELAY_OPS" { phaseMapSet(phaseMap, phaseKey, phaseRelayOps@). }
     ELSE IF phaseKey = "RELAY_CONSTELLATION" { phaseMapSet(phaseMap, phaseKey, phaseRelayConstellation@). }
     ELSE IF phaseKey = "SCANSAT_OPS" { phaseMapSet(phaseMap, phaseKey, phaseScansatOps@). }
-    ELSE IF phaseKey = "RETURN_SETUP" { phaseMapSet(phaseMap, phaseKey, phaseReturnSetup@). }
-    ELSE IF phaseKey = "SURFACE_RETURN_SETUP" { phaseMapSet(phaseMap, phaseKey, phaseSurfaceReturnSetup@). }
+    ELSE IF phaseKey = "RETURN_SETUP" {
+        IF DEFINED phaseReturnSetup { phaseMapSet(phaseMap, phaseKey, phaseReturnSetup@). }
+        ELSE { mLogError("RETURN_SETUP library unavailable; obtain a link and reboot to cache return_setup."). }
+    }
+    ELSE IF phaseKey = "SURFACE_RETURN_SETUP" {
+        IF DEFINED phaseSurfaceReturnSetup { phaseMapSet(phaseMap, phaseKey, phaseSurfaceReturnSetup@). }
+        ELSE { mLogError("SURFACE_RETURN_SETUP library unavailable; obtain a link and reboot to cache return_setup."). }
+    }
     ELSE IF phaseKey = "LAND_DEORBIT" { phaseMapSet(phaseMap, phaseKey, phaseLandDeorbit@). }
     ELSE IF phaseKey = "LAND" { phaseMapSet(phaseMap, phaseKey, phaseLand@). }
     ELSE IF phaseKey = "LAND_ASSIST" { phaseMapSet(phaseMap, phaseKey, phaseLandAssist@). }
