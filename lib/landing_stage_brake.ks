@@ -174,6 +174,8 @@ GLOBAL FUNCTION _landingStopEnvelope {
 // unchanged and use full physical horizontal authority here. This estimate
 // assumes roughly constant descent speed and a mid-descent radius; flight logs
 // must measure its error. It does not certify touchdown or terrain.
+// delay is NOMINAL ignition latency, not the V envelope's reaction reserve.
+// stageDelay separates real staging coast from that initial latency.
 GLOBAL FUNCTION lmNominalBrakeRange {
     PARAMETER horizontalSpeed.
     PARAMETER activeAcc.
@@ -183,11 +185,14 @@ GLOBAL FUNCTION lmNominalBrakeRange {
     PARAMETER delay.
     PARAMETER bodyRadius IS 0.
     PARAMETER altitudeAsl IS 0.
+    PARAMETER stageDelay IS -1.
     IF planAcc <= gravAcc OR activeAcc < planAcc { RETURN -1. }
     LOCAL endSpeed IS MIN(horizontalSpeed,MAX(0,APPROACH_HSPEED)).
     LOCAL remaining IS horizontalSpeed.
     LOCAL distance IS horizontalSpeed*MAX(0,delay).
     LOCAL fuelLeft IS MAX(0,stageDv).
+    LOCAL separationDelay IS MAX(0,delay).
+    IF stageDelay >= 0 { SET separationDelay TO stageDelay. }
     LOCAL modelRadius IS bodyRadius+MAX(0,altitudeAsl)/2.
     // Integrate sixteen speed intervals, splitting precisely at the one
     // supported stage transition. Mid-descent radius approximates falling
@@ -215,7 +220,7 @@ GLOBAL FUNCTION lmNominalBrakeRange {
             IF transfer {
                 SET fuelLeft TO MAX(0,fuelLeft-deltaH*maxAcc/hAcc).
                 IF fuelLeft <= 0.000001 AND remaining > endSpeed {
-                    SET distance TO distance+remaining*MAX(0,delay).
+                    SET distance TO distance+remaining*separationDelay.
                 }
             }
             SET passCount TO passCount+1.

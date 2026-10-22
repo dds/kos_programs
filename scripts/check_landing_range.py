@@ -27,7 +27,7 @@ def check_reported_ignition():
     assert old['H_NOW'] and not old['V_NOW'] and 42000<old['H_GATE']<44000
     env['LANDING_POWERED_LEAD']=1
     new=call('_landingBrakeGateInfo',env,ctx)
-    assert not new['H_NOW'] and not new['V_NOW'] and 21000<new['H_GATE']<24000
+    assert not new['H_NOW'] and not new['V_NOW'] and 20000<new['H_GATE']<21000
     for key in ('V_GATE','V_ETA','V_NOW'):assert old[key]==new[key]
     call('_landingCoastTick',env,ctx)
     assert ctx['STATE']=='BRAKE_ALIGN' and ctx['throttle']==0
@@ -40,8 +40,8 @@ def check_reported_ignition():
     ctx.update(H_SPEED=286.7,H_VEL=Vec((286.7,0,0)),MAX_ACC=2.72,
                BRAKE_STAGE_DV=0,downrange=39974)
     miss=call('_landingBrakeGateInfo',env,ctx)['RANGE_ERROR']
-    assert -22000<miss<-19000
-    print('PASS: supplied 516/-44.9/223.9 state replaces the 43km geographic gate with ~23km nominal range, preserves every vertical safety value and alignment guard; post-stage 40km target is flagged ~20km beyond nominal capture')
+    assert -23000<miss<-22000
+    print('PASS: supplied 516/-44.9/223.9 state replaces the 43km geographic gate with ~20.2km nominal range, preserves every vertical safety value and alignment guard; post-stage 40km target remains far beyond nominal capture')
 
 
 def check_range_physics():
@@ -70,10 +70,11 @@ def check_range_physics():
     print('PASS: staged nominal range agrees with independent full-thrust gravity-support integration; finite fuel/staging gaps/capture speed retained and underpowered/inverted acceleration inputs rejected')
 
 
-def control_distance(hs,vs,height,budget,active=44.68,weak=2.72):
+def control_distance(hs,vs,height,budget,active=44.68,weak=2.72,
+                     initial_delay=3,stage_delay=3):
     env,ctx=fixture(gravity=1.6284599,twr=active/1.6284599,
                     horizontal=hs,down=-vs,height=height)
-    distance=0.;dt=.4;pause=3.;now=0.
+    distance=0.;dt=.4;pause=initial_delay;now=0.
     while now<600 and ctx['H_SPEED']>18:
         acc=active if budget>1e-6 else weak
         radius=200000+4113+height
@@ -85,7 +86,7 @@ def control_distance(hs,vs,height,budget,active=44.68,weak=2.72):
         elif budget>1e-6:
             thrust=thrust*min(1,budget/max(thrust.MAG*dt,1e-20))
             budget-=thrust.MAG*dt
-            if budget<=1e-6:pause=now+3
+            if budget<=1e-6:pause=now+stage_delay
         old_h=ctx['H_SPEED'];vel=Vec((old_h,0,vs))+(thrust-Vec((0,0,grav)))*dt
         ctx.update(H_SPEED=max(0,vel[0]),H_VEL=Vec((max(0,vel[0]),0,0)))
         vs=vel[2];height+=vs*dt;distance+=(old_h+ctx['H_SPEED'])*dt/2;now+=dt
@@ -104,6 +105,30 @@ def check_controller_range():
         physical=control_distance(hs,vs,height,fuel)
         assert abs(physical-estimate)<700,(physical,estimate)
     print('PASS: nominal range is within 700m of actual descending-controller capture in the reported ignition case and an explicitly assumed 5km post-stage case; far smaller than the old ~20km geographic error, not a flight accuracy guarantee')
+
+
+def check_nominal_timing():
+    env,_=fixture()
+    for hs,vs,height,fuel in ((516.1,-44.9,6101,223.9),(286.7,-32.3,5000,0)):
+        active=44.68 if fuel else 2.72
+        old=call('lmNominalBrakeRange',env,hs,active,2.72,fuel,1.6284599,3,200000,height+4113)
+        revised=call('lmNominalBrakeRange',env,hs,active,2.72,fuel,1.6284599,0,
+                      200000,height+4113,2*env['LANDING_STAGE_SETTLE'])
+        physical=control_distance(hs,vs,height,fuel,initial_delay=.05,
+                                   stage_delay=2*env['LANDING_STAGE_SETTLE'])
+        assert abs(revised-physical)<700 and abs(revised-physical)<abs(old-physical)/2
+        if fuel:assert old-physical>2000
+    main=(ROOT/'lib/landing_main.ks').read_text()
+    assert 'LOCAL tickRate IS 0.33.' in main and 'SET tickRate TO 0.05.' in main
+    hardware=(ROOT/'lib/vessel_hardware.ks').read_text()
+    assert 'GLOBAL LANDING_STAGE_SETTLE IS 0.25.' in hardware
+    for path in ('landing_main','landing_deorbit_lead','landing_divert'):
+        text=(ROOT/f'lib/{path}.ks').read_text()
+        callsite=text[text.index('lmNominalBrakeRange('):]
+        callsite=callsite[:callsite.index(').')]
+        assert '2*MAX(0.05,LANDING_STAGE_SETTLE)' in callsite
+        assert 'BRAKE_REACTION_TIME' not in callsite
+    print('PASS: source-aligned .05s actuation/.5s staging fixture exposes >2km bias hidden by forced 3s pauses; nominal geographic prediction improves without changing the V deadline, and all three production callers share actual settle timing')
 
 
 def lead_environment():
@@ -324,6 +349,7 @@ if __name__=='__main__':
     check_reported_ignition()
     check_range_physics()
     check_controller_range()
+    check_nominal_timing()
     check_native_lead()
     check_lead_refusals()
     check_powered_refinement()

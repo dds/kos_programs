@@ -380,9 +380,11 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     LOCAL envelope IS _landingStopEnvelope(ctx,horizontalSpeed,downSpeed).
     LOCAL brakeDist IS envelope["H"].
     IF LANDING_POWERED_LEAD > 0 AND LANDING_ECONOMY_BRAKE > 0 {
+        // Alignment precedes ignition. Safety latency belongs to the V
+        // envelope, not nominal powered travel; use the real settle budget.
         LOCAL nominalRange IS lmNominalBrakeRange(horizontalSpeed,ctx["MAX_ACC"],
-            ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],gravAcc,
-            MAX(0,LANDING_BRAKE_REACTION_TIME),SHIP:BODY:RADIUS,SHIP:ALTITUDE).
+            ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],gravAcc,0,
+            SHIP:BODY:RADIUS,SHIP:ALTITUDE,2*MAX(0.05,LANDING_STAGE_SETTLE)).
         IF nominalRange >= 0 { SET brakeDist TO MIN(brakeDist,nominalRange). }
     }
     LOCAL burnHeight IS _landingBurnHeight(ctx).

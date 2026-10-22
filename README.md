@@ -240,10 +240,21 @@ The geographic ignition gate uses a nominal full-thrust range estimate;
 the conservative vertical stopping envelope, terrain bound, alignment and
 staging checks retain their margins. Other profiles keep the legacy policy.
 This is a constant-descent approximation, not a complete landing optimizer.
+Nominal travel assumes ignition after the existing alignment and uses two
+actual staging-settle intervals. It does not add the vertical safety model's
+three-second reaction reserve as travel before ignition and again at staging;
+that inflated geographic range and could make the craft stop short. The
+vertical safety envelope retains its full reaction/staging allowances.
 `STATS deorbit powered-lead` records both ranges, remaining transfer fuel,
 ignition UT and prediction time; `landing-brake begin` now includes
 `poweredLead` and `stopRangeError` (negative means nominal capture short of
 the site). The landing recorder remains active through touchdown.
+
+A later targeted attempt landed about5km short and the operator reported
+excessive approach fuel use. That is a target miss. The timing correction
+removes one demonstrated range bias; the full cause and approach impulse
+still need that flight's diagnostic archive. It does not increase hover time
+or relax target tolerance to hide the miss.
 
 Powered refinement uses the existing 64-trial budget, reserves a trial to
 validate each changed node, and stops when accepted or unable to improve.

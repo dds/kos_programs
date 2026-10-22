@@ -135,8 +135,8 @@ LOCAL FUNCTION _landingDivertSurveyAhead {
         + ctx["H_VEL"] * (coastTime + delay + stopTime / 2) - ctx["UP_VEC"] * fallHeight).
     IF LANDING_POWERED_LEAD > 0 {
         LOCAL nominalRange IS lmNominalBrakeRange(ctx["H_SPEED"],ctx["MAX_ACC"],
-            ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],ctx["BRAKE_GRAV"],delay,
-            SHIP:BODY:RADIUS,SHIP:ALTITUDE).
+            ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],ctx["BRAKE_GRAV"],0,
+            SHIP:BODY:RADIUS,SHIP:ALTITUDE,2*MAX(0.05,LANDING_STAGE_SETTLE)).
         IF nominalRange >= 0 {
             // Surface arc, not a long tangent displaced by uncertain fall.
             // Preview remains provisional and is rechecked at selection.

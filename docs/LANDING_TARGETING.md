@@ -202,16 +202,40 @@ validation after trial63 refines. Model failures, drifting/non-convergent goals,
 no progress, missing impacts and insufficient validation budget still hold.
 These are controlled source fixtures, not a replay of the native failed flight.
 
-The supplied ignition snapshot now has a nominal geographic gate around23km,
-versus43km previously, with identical vertical safety values. Source-driven
-point-mass integration of the actual descending controller is within700m of
-the nominal range in that case and an explicitly assumed5km post-stage case.
+With the original nominal timing, the supplied ignition snapshot had a
+geographic gate around23km versus43km previously, with identical vertical
+safety values. That point-mass comparison was within700m only while forcing
+the same three-second ignition and staging pauses assumed by the estimator.
 An independent20m/s deorbit conic at15km Mun apoapsis derives about37km lead
 rather than15km (exact value varies with terrain/hardware). These limited
 checks do not establish native target accuracy, terrain clearance during the
 powered arc, total landing fuel or minimum-dV performance. Flight validation
 is still needed, including late descent-speed changes and rotation-induced
 cross-track drift. No plan promises a high-precision touchdown from this model.
+
+The following targeted run landed about5km SHORT and the operator reported
+excessive approach fuel use. It is a target miss, not a pinpoint success.
+Only older archives were available locally during this follow-up. The latest
+landingdiag and boot sidecar were requested to separate braking-range error,
+target changes and final handoff, and to measure impulse spent in APPROACH.
+No5km geographic offset or extra hovering is an acceptable substitute.
+
+The range estimator had reused the vertical safety reaction reserve as real
+travel: three seconds before thrust and another three at staging. The flight
+code pre-aligns, ticks at0.05s under power and has0.25s per staging settle.
+For the earlier supplied516.1/-44.9/223.9 state, a source-timed0.05s/0.5s
+point mass travels~20.20km, while the old nominal estimate was~22.47km.
+The corrected estimate is~20.19km. The later illustrative287m/s post-stage
+case also improves. This proves a model bias; it is not a replay or complete
+explanation of the latest5km flight miss.
+
+Nominal range now uses pre-aligned ignition (zero nominal initial delay) and
+two actual settle intervals, separately from the unchanged V safety envelope.
+Orbital lead, live geographic gate and provisional preview use this same
+timing. The full three-second safety reserve, clearance, actual-facing cutoff,
+staging limits and fixed-site policy remain. Forecast/header diagnostics state
+both nominal and safety timing. Variable mass/TWR, remaining model error and
+the approach recovery cost still require the new flight archive.
 
 `STATS deorbit powered-lead` records aim, powered/ballistic ranges, ignition
 state, post-deorbit transfer budget and computation elapsed time. Brake entry

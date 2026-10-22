@@ -363,6 +363,25 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  The next targeted Mun attempt landed about5km SHORT of its target; operator
+  also reports excessive approach fuel use. This is not a successful pinpoint
+  landing. Only older landingdiag files are currently local; latest archive,
+  target/guidance miss, phase impulse and actual ignition/staging rows requested.
+  Do not infer the entire5km mechanism without them or add a5km fudge factor.
+  Found a separate provable range-model bias: geographic prediction charged
+  the V safety reserve3s before thrust and again at staging, but guidance
+  pre-aligns, ticks at.05s while powered and stage settle defaults.25s.
+  Prior <700m fixture forced those same3s pauses, hiding the mismatch. New
+  source-timed .05s/.5s fixture gives~20.20km actual modeled travel vs old
+  22.47km estimate for the earlier supplied516.1/-44.9/223.9 state; revised
+  nominal gives~20.19km. Later illustrative287m/s state also improves. These
+  aren't native replay results for the latest5km miss. Nominal ignition delay
+  is now0 (pre-aligned), separate stage delay is2*settle in orbital lead, live
+  H gate and provisional preview. V envelope/reaction/staging/clearance and
+  live attitude guards remain unchanged; target and approach time/tilt limits
+  are unchanged. Diagnostic header/forecast state nominal vs safety timing.
+  Fuel-burn TWR growth and the remaining flight-specific residual stay open
+  until the archive can distinguish model error from handoff/target changes.
   Repeated RO9 targeted Mun deorbit held on powered-lead-not-converged at54/64;
   operator supplied aim63610/range20847/ballistic84457m. No final downfield or
   residual was supplied. Definite control bug:3 forecasts each optionally

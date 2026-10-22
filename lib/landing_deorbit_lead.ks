@@ -86,7 +86,7 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
     IF ABORT { SET policy["REASON"] TO "abort". RETURN policy. }
     LOCAL ignition IS _landingLeadStateAt(hi,elevation).
     LOCAL rangeM IS lmNominalBrakeRange(ignition["HS"],activeAcc,planAcc,
-        stageDv,gravAcc,delay,SHIP:BODY:RADIUS,ignition["ASL"]).
+        stageDv,gravAcc,0,SHIP:BODY:RADIUS,ignition["ASL"],2*MAX(0.05,LANDING_STAGE_SETTLE)).
     LOCAL ballistic IS lmSurfaceTrackOffset(ignition["LAT"],ignition["LNG"],
         impactGeo:LAT,impactGeo:LNG,lmGroundVelocityAt(impactUT)).
     IF rangeM < 0 OR NOT ballistic["VALID"] {
@@ -109,6 +109,8 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         + " hs=" + ROUND(ignition["HS"],1) + " down=" + ROUND(ignition["DOWN"],1)
         + " activeAcc=" + ROUND(activeAcc,2) + " planAcc=" + ROUND(planAcc,2)
         + " stageDvAfterDeorbit=" + ROUND(stageDv,1)
+        + " nominalIgnitionDelay=0 nominalStageDelay=" + (2*MAX(0.05,LANDING_STAGE_SETTLE))
+        + " safetyReaction=" + delay
         + " toleranceM=" + tolerance + " elapsed=" + ROUND(TIME:SECONDS-started,2)
         + " model=constant-descent nominal=true").
     RETURN policy.
