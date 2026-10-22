@@ -278,21 +278,48 @@ def check_source_execution():
 def check_uncapped_fuel(available,reserve):
     env,sim,data,refresh=fixture(before_entry=180,thrust=55,available=available)
     env['AEROBRAKE_AP_RESERVE_DV']=reserve
+    retained=max(10,reserve)
     result=run_assist(env)
     assert result['OK'],result
-    assert sim['actual_dv']>300 and sim['actual_dv']<=available-reserve+.2
+    assert sim['actual_dv']>300 and sim['actual_dv']<=available-retained+.2
     assert 52000<=sim['min_pe']<=sim['max_pe']<=54000
-    assert env['SHIP'].DELTAV.VACUUM>=reserve-.2
+    assert env['SHIP'].DELTAV.VACUUM>=retained-.2
     if available==869:
-        assert abs(result['DV']-(available-reserve))<1e-6
+        assert abs(result['DV']-(available-retained))<1e-6
         # Independent 50 ms impulse sampling can differ from the owner's
         # trapezoidal feedback; exact propellant accounting stays within 1 m/s.
-        assert abs(sim['actual_dv']-(available-reserve))<1
+        assert abs(sim['actual_dv']-(available-retained))<1
     else:
         assert result['REASON']=='apoapsis-target'
         assert env['SHIP'].DELTAV.VACUUM>1000
         assert abs(env['SHIP'].APOAPSIS-71000)<500
-    print(f'PASS: {available}m/s fuel, {reserve}m/s reserve: no preset 150/300 cap; stop at physical fuel or useful apoapsis target')
+    print(f'PASS: {available}m/s fuel, {reserve}m/s configured reserve retains at least {retained}m/s: no preset 150/300 cap; stop at available budget or useful apoapsis target')
+
+
+def check_repair_reserve():
+    settings=read_settings(CONFIG,{},'GLOBAL')
+    assert settings['AEROBRAKE_AP_RESERVE_DV']==10
+    for configured in (0,10,100):
+        retained=max(10,configured)
+        for limited in ('ship','stage'):
+            for delta in (-.1,0,.1):
+                env,_,_,_=fixture()
+                env['AEROBRAKE_AP_RESERVE_DV']=configured
+                assert env['aerobrakeApReserveDv']()==retained
+                if limited=='ship':env['SHIP'].DELTAV.VACUUM=retained+delta
+                else:env['STAGE'].DELTAV.VACUUM=retained+delta
+                owner=control(env)
+                actual=env['_aeroApSafeThrottle'](.7,owner)
+                assert actual==(.7 if delta>0 else 0),(configured,limited,delta,owner)
+                if delta<=0:
+                    assert owner['REASON']=='fuel-reserve'
+                    env['SHIP'].DELTAV.VACUUM=env['STAGE'].DELTAV.VACUUM=869
+                    assert env['_aeroApSafeThrottle'](1,owner)==0 # Latched cutoff.
+    for available in (0,9.9,10,10.1):
+        env,sim,_,_=fixture(available=available,before_entry=180)
+        env['AEROBRAKE_AP_RESERVE_DV']=0 # Legacy generated profile.
+        assert not run_assist(env)['OK'] and sim['actual_dv']==0
+    print('PASS: 10m/s default/minimum applies to old zero-reserve profiles; larger reserves win, ship/stage fuel bounds latch cutoff and a craft with only the repair allowance cannot start assistance')
 
 
 def check_disturbance_and_stale_control(drag):
@@ -382,6 +409,10 @@ def check_profile_command_and_entry_alignment():
     surface['targetPe']=53000
     home=read_settings(emit_profile('phaseReturnSetup',surface)+'\n'+serialize(surface),defaults()|settings)
     for key in settings:assert home[key]==surface[key]==initial[key],key
+    # Legacy serialized zero remains compatible without erasing unrelated
+    # policy; the effective reserve still protects ten at execution time.
+    env,_,_,_=fixture();env.update(home)
+    assert env['aerobrakeApReserveDv']()==10
     deps,phases,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     assert 'aerobrake_assist' in closure(['aerobrake'],deps)
     assert 'aerobrake_assist' not in closure(['return_setup'],deps)
@@ -407,6 +438,7 @@ def check_profile_command_and_entry_alignment():
 
 if __name__=='__main__':
     check_live_cutoffs()
+    check_repair_reserve()
     check_entry_and_direction()
     for mode in ('RETROGRADE','PROGRADE'):check_live_entry_orientation(mode)
     check_finite_plan()

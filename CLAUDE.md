@@ -363,6 +363,17 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Operator requests about10m/s retained by powered aerobrake assistance for
+  a possible later apoapsis Pe raise. AEROBRAKE_AP_RESERVE_DV now defaults10;
+  shared aerobrakeApReserveDv applies MAX(10,configured) in both the forecast
+  budget and live latched cutoff, and policy/result diagnostics show the
+  effective amount. Legacy generated return profiles explicitly serialized0;
+  they must not bypass this new allowance. Larger reserves remain intact.
+  This reserves fuel only, not an automatic repair burn or a guarantee10m/s
+  covers every orbit. No fixed total/per-pass cap, attitude/Pe/pressure/staging
+  or cutoff safeguard was removed. Source cases cover both ship/stage limits
+  at/below/above reserve, latched cutoff, insufficient-budget no-start,
+  legacy0, larger100 and finite-fuel planar burns with the10m/s allowance.
   The newest Mun economy craft subsequently reached a reported10673m Ap /
   8103m Pe with430m/s vacuum dV before a small circularization trim. Relative
   to1151m/s at touchdown the displayed budget fell~721m/s; that is not an

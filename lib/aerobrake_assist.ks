@@ -38,6 +38,12 @@ LOCAL FUNCTION _aeroApRemainingDv {
     RETURN MIN(SHIP:DELTAV:VACUUM,STAGE:DELTAV:VACUUM).
 }
 
+GLOBAL FUNCTION aerobrakeApReserveDv {
+    // Older generated return profiles explicitly saved zero. They still
+    // need the Pe-repair allowance; do not let that cached value bypass it.
+    RETURN MAX(10,AEROBRAKE_AP_RESERVE_DV).
+}
+
 // Diagnostics only: called before/after thrust and once a second in RAM.
 LOCAL FUNCTION _aeroApAttitude {
     PARAMETER direction.
@@ -88,7 +94,8 @@ LOCAL FUNCTION _aeroApPlan {
     LOCAL entryEta IS aerobrakeApEntryEta(atmHeight).
     SET skipped["REASON"] TO "outside-planning-window".
     IF NOT (entryEta > 0 AND entryEta <= AEROBRAKE_AP_PLAN_LEAD+30) { RETURN skipped. }
-    LOCAL budget IS _aeroApRemainingDv()-MAX(0,AEROBRAKE_AP_RESERVE_DV).
+    LOCAL reserveDv IS aerobrakeApReserveDv().
+    LOCAL budget IS _aeroApRemainingDv()-reserveDv.
     LOCAL engine IS _aeroApEngine().
     SET skipped["REASON"] TO "fuel-engine-or-corridor-unavailable".
     IF NOT (budget > 0.1 AND budget < 1e30 AND engine["THRUST"] > 0
@@ -136,7 +143,7 @@ LOCAL FUNCTION _aeroApPlan {
         SET best["OK"] TO FALSE. SET best["REASON"] TO "forecast-too-late".
     }
     mLog("STATS aerobrake-assist plan ok=" + best["OK"] + " reason=" + best["REASON"]
-        + " model=finite-vacuum entryEta=" + entryEta + " fuelDv=" + budget
+        + " model=finite-vacuum entryEta=" + entryEta + " fuelDv=" + budget + " reserveDv=" + reserveDv
         + " computeSec=" + (TIME:SECONDS-epoch)).
     IF NOT best["OK"] { RETURN best. }
     SET best["IGNITE"] TO epoch+best["DELAY"].
@@ -179,7 +186,7 @@ LOCAL FUNCTION _aeroApSafeThrottle {
     IF NOT (SHIP:Q >= 0 AND SHIP:Q <= AEROBRAKE_AP_MAX_Q) {
         SET control["REASON"] TO "dynamic-pressure".
     }
-    IF NOT (_aeroApRemainingDv() > MAX(0,AEROBRAKE_AP_RESERVE_DV)) {
+    IF NOT (_aeroApRemainingDv() > aerobrakeApReserveDv()) {
         SET control["REASON"] TO "fuel-reserve".
     }
     IF control["APPLIED"] >= control["DV"]-0.01 { SET control["REASON"] TO "forecast-dv". }
@@ -316,6 +323,7 @@ GLOBAL FUNCTION aerobrakeApAssist {
         + " peakFacingErr=" + control["PEAK_FACING_ERR"]
         + " peakOrbitRetroOffset=" + peakOrbitOffset + " peakSurfaceRetroOffset=" + peakSurfaceOffset
         + " Ap=" + SHIP:APOAPSIS + " Pe=" + SHIP:PERIAPSIS + " qAtm=" + SHIP:Q
-        + " remainingDv=" + _aeroApRemainingDv() + " cutoffOk=" + stopped).
+        + " remainingDv=" + _aeroApRemainingDv() + " reserveDv=" + aerobrakeApReserveDv()
+        + " cutoffOk=" + stopped).
     RETURN plan.
 }

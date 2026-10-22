@@ -1606,7 +1606,12 @@ then verifies the selected forecast at a finer step. Timing comes from the
 conic's atmosphere crossing, rather than an assumed interval before Pe.
 The objective is to reduce orbital energy toward an apoapsis just above the
 atmosphere (atmosphere height + 1 km). There is **no fixed per-pass or total
-dV allowance**: all measured current-stage fuel is eligible by default.
+dV allowance**: measured current-stage fuel above the repair reserve is eligible.
+The assist retains at least **10 m/s** for a later periapsis-raising burn at
+apoapsis. A larger configured reserve is honored. Older generated profiles
+that saved zero still receive the 10 m/s minimum; planning and the latched
+live throttle guard use the same reserve. This sets fuel aside, without
+creating or executing a periapsis-repair maneuver.
 A long burn can start before entry. Its steering projects deceleration along
 a direction that preserves Pe, with feedback toward the configured entry Pe.
 Feedback leaves errors within 100 m alone, avoiding needless radial steering
@@ -1639,7 +1644,7 @@ Advanced profile settings are optional; the enable flag is sufficient:
 | Setting | Default | Effect |
 |---|---:|---|
 | `AEROBRAKE_AP_BURN` | 0; RO9 sets 1 | Enable fuel-assisted aerobraking |
-| `AEROBRAKE_AP_RESERVE_DV` | 0 m/s | Fuel to retain for another purpose, if desired |
+| `AEROBRAKE_AP_RESERVE_DV` | 10 m/s | Retain at least 10 m/s for Pe repair; higher settings retain more |
 | `AEROBRAKE_AP_PLAN_LEAD` | 180 s | Forecast lead before atmospheric entry |
 | `AEROBRAKE_AP_MAX_Q` | 0.1 atm | Dynamic-pressure cutoff (about 10.1 kPa) |
 | `AEROBRAKE_AP_MAX_OFF_RETRO` | 10° | Maximum atmospheric departure from surface retrograde |

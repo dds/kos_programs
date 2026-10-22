@@ -154,7 +154,7 @@ GLOBAL FUNCTION phaseAerobrake {
         SET peHigh TO MIN(peHigh,AEROBRAKE_CORRECTION_PE_MAX).
     }
     IF AEROBRAKE_AP_BURN > 0 {
-        mLog("STATS aerobrake-assist policy enabled=true reserve=" + AEROBRAKE_AP_RESERVE_DV
+        mLog("STATS aerobrake-assist policy enabled=true reserve=" + aerobrakeApReserveDv()
             + " planLead=" + AEROBRAKE_AP_PLAN_LEAD + " maxQAtm=" + AEROBRAKE_AP_MAX_Q
             + " targetPe=" + assistPe + " peLow=" + peLow + " peHigh=" + peHigh).
     }
