@@ -245,6 +245,13 @@ ignition UT and prediction time; `landing-brake begin` now includes
 `poweredLead` and `stopRangeError` (negative means nominal capture short of
 the site). The landing recorder remains active through touchdown.
 
+Powered refinement uses the existing 64-trial budget, reserves a trial to
+validate each changed node, and stops when accepted or unable to improve.
+It no longer stops after three model passes without checking the final
+adjustment. `STATS deorbit powered-fit` reports actual downfield distance,
+the fresh lead aim, residual, cross-track and trial count. A hold includes
+`stop=trial-budget` or `stop=no-improving-step` and the remaining error.
+
 For an already-deorbited craft that may land off-target, interrupt automation,
 cut throttle fully, then run `RUNPATH("0:/cmd/landfallback.ks").` and reboot
 while linked. This permits the existing checked local-site diversion and

@@ -188,39 +188,109 @@ def check_lead_refusals():
     print('PASS: unsupported models, insufficient/unknown transfer fuel, underpowered stages, missing/late impacts, absent coast, abort and invalid/upfield ranges cannot authorize a deorbit')
 
 
+def powered_source():
+    source=function_body(solver.SOURCE,'targetedDeorbitAt')
+    source=source[source.index('LOCAL poweredPass IS'):source.index('LOCAL bestUT IS')]
+    return source.replace('REMOVE probeNode.','remove_probe(probeNode).')
+
+
 def check_powered_refinement():
-    # Execute the actual planner's bounded post-seed polish against a native
-    # footprint oracle whose response is independent of its requested aim.
-    for kind in ('solve','model-fails','budget','nonconverging','spent-trials'):
+    for kind in ('solve','third-step','model-fails','no-progress','nonconverging',
+                 'spent-trials','validation-reserve','no-impact'):
         env,_,_=solver.environment(lambda *args:None)
         base=solver.impact(1000,15,0,0,0)
+        env['_deorbitEvaluations']=40
         if kind=='spent-trials':env['_deorbitEvaluations']=64
-        policies=[];nodes=[]
+        if kind=='validation-reserve':env['_deorbitEvaluations']=60
+        policies=[];nodes=[];refinements=[]
         def policy(*args):
             policies.append(1)
-            aim=35000+len(policies)*10000 if kind=='nonconverging' else 35000
+            aim=35000+len(policies)*10000 if kind=='nonconverging' else 63610
             return dict(VALID=kind!='model-fails',REASON='fixture',AIM=aim,MIN=aim-1500,MAX=aim+1500)
-        def refine(best,lat,lng,lead,aim,lo,hi,*args):
-            assert lo<=aim<=hi
+        def refine(best,lat,lng,lead,aim,lo,hi,min_dv,max_dv,reserve):
+            assert reserve==1 and lo<=aim<=hi
+            refinements.append(aim)
+            assert env['_deorbitEvaluations']+3<=63
+            env['_deorbitEvaluations']+=3
             result=dict(best)
-            if kind!='budget':result.update(DOWNFIELD=aim,ERR=0)
+            if kind!='no-progress':
+                result['DOWNFIELD']=min(aim,best['DOWNFIELD']+20000) if kind=='third-step' else aim
+                result['ERR']=result['DOWNFIELD']-aim
+                result['RETRO']=max(min_dv,best['RETRO']-1)
+            return result
+        def read(*args):
+            result=dict(env['solved'])
+            if kind=='no-impact':result.update(VALID=False,HAS_IMPACT=False)
             return result
         env.update(solved=base,geometry=dict(UT=1000),LANDING_POWERED_LEAD=1,
                    targetLat=0,targetLng=0,minLead=120,minRetroDv=2,maxRetroDv=120,
                    desiredDownfield=15000,minDownfield=10000,maxDownfield=20000,
                    _planRetroNode=lambda *args:nodes.append(1) or object(),
+                   _readGeometricDeorbitNode=read,
                    remove_probe=lambda _:nodes.pop(),landingDeorbitLeadPolicy=policy,
                    _refineDeorbitFootprint=refine)
-        source=function_body(solver.SOURCE,'targetedDeorbitAt')
-        source=source[source.index('LOCAL poweredPass IS'):source.index('LOCAL bestUT IS')]
-        source=source.replace('REMOVE probeNode.','remove_probe(probeNode).')
-        result=run(source,env)
-        assert not nodes and len(policies)<=3
+        result=run(powered_source(),env)
+        assert not nodes and env['_deorbitEvaluations']<=64
         if kind=='spent-trials':assert not policies
-        assert env['poweredAccepted']==(kind=='solve')
-        if kind=='solve':assert env['solved']['DOWNFIELD']==35000
+        assert env['poweredAccepted']==(kind in ('solve','third-step'))
+        if kind in ('solve','third-step'):assert env['solved']['DOWNFIELD']==63610
         else:assert result is False
-    print('PASS: production powered polish moves a geometric 15km seed to 35km, removes every sample node and refuses model failures, exhausted corrections and moving targets after at most three forecasts')
+        if kind=='third-step':
+            assert len(refinements)==3 and len(policies)==4 and env['_deorbitEvaluations']==53
+        if kind=='no-progress':assert len(policies)==1 and env['poweredStop']=='no-improving-step'
+        if kind=='validation-reserve':assert not refinements and len(policies)==1
+    print('PASS: powered polish freshly validates the third refinement instead of falsely holding at 53/64; absent impacts, bad models, no progress, drifting targets and exhausted budgets retain orbit, remove all probes and reserve the final validation trial')
+
+
+def check_coupled_powered_refinement(start=30,contraction=.6):
+    # The model changes with the measured footprint, rather than following
+    # a requested aim. A contracting moving goal requires more than three
+    # passes. Execute the REAL timing/normal Newton refiner inside the outer
+    # model loop, charging every footprint probe and forecast to one counter.
+    def oracle(ut,retro,normal):
+        along=5000*(15-retro)+500*(ut-1000)
+        cross=60*(ut-1000)+1000*normal
+        return solver.impact(ut,retro,normal,along,cross)
+    env,counter,trials=solver.environment(oracle)
+    counter.value=start
+    base=oracle(1000,15,0)
+    nodes=[];forecasts=[]
+    evaluate=env['_evalGeometricDeorbitNode']
+    def measured(ut,retro,lat,lng,lead,desired,normal=0):
+        result=evaluate(ut,retro,lat,lng,lead,desired,normal)
+        if result['VALID']:result['ERR']=result['DOWNFIELD']-desired
+        return result
+    env['_evalGeometricDeorbitNode']=measured
+    def plan(ut,retro,normal):
+        node=NS(TIME=ut,retro=retro,normal=normal)
+        nodes.append(node)
+        return node
+    def read(node,lat,lng,desired):
+        result=oracle(node.TIME,node.retro,node.normal)
+        result['ERR']=result['DOWNFIELD']-desired
+        return result
+    def policy(node,*_):
+        actual=oracle(node.TIME,node.retro,node.normal)['DOWNFIELD']
+        aim=63610+contraction*(actual-63610)
+        forecasts.append((actual,aim))
+        return dict(VALID=True,AIM=aim,MIN=aim-1500,MAX=aim+1500)
+    env.update(solved=base,geometry=dict(UT=1000),LANDING_POWERED_LEAD=1,
+               targetLat=44.593,targetLng=-24.926,minLead=120,minRetroDv=2,maxRetroDv=120,
+               desiredDownfield=15000,minDownfield=10000,maxDownfield=20000,
+               _planRetroNode=plan,_readGeometricDeorbitNode=read,landingDeorbitLeadPolicy=policy,
+               remove_probe=lambda node:nodes.remove(node),
+               charge_forecast=lambda:setattr(counter,'value',counter.value+1))
+    source=powered_source().replace('SET _deorbitEvaluations TO _deorbitEvaluations+1.',
+                                     'charge_forecast().')
+    run(source,env)
+    assert env['poweredAccepted'] and not nodes,forecasts
+    if contraction:assert len(forecasts)>3
+    assert abs(forecasts[-1][0]-forecasts[-1][1])<=1500
+    assert counter.value<=64 and counter.value==start+len(forecasts)+len(trials)
+    if start==59:assert counter.value==64 and len(forecasts)==2 and len(trials)==3
+    assert env['targetLat']==44.593 and env['targetLng']==-24.926
+    assert env['solved']['CROSS']<=500 and abs(env['solved']['NORMAL'])<=10
+    print(f'PASS: actual coupled Newton/powered-model loop converges a footprint-dependent lead in {len(forecasts)} fresh forecasts / {counter.value}/64 total trials, retaining target, lateral/fuel bounds and probe cleanup')
 
 
 def check_shared_admission_and_rescue():
@@ -257,4 +327,6 @@ if __name__=='__main__':
     check_native_lead()
     check_lead_refusals()
     check_powered_refinement()
+    check_coupled_powered_refinement()
+    check_coupled_powered_refinement(59,0)
     check_shared_admission_and_rescue()

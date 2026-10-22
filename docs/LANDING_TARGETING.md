@@ -169,7 +169,7 @@ using the established ground-position/numeric-velocity helpers. Twelve
 bisections locate the vertical safety boundary, including target and local
 terrain heights. It subtracts nominal powered travel from remaining ballistic
 ground-track travel to get the required phantom lead. Deorbit dV is first
-subtracted from the measured transfer budget. At most three model passes
+subtracted from the measured transfer budget. Fresh model passes
 refit the native footprint under the original64-trial cap (model probe nodes
 also consume trials), retro/normal/cross limits and final terrain/light/fuel
 admission. All temporary nodes are removed. Unsupported/unknown/underpowered
@@ -178,6 +178,29 @@ New, retained and pre-burn node admission recompute the same policy;
 there is no separate retained-node10–20km exception. Non-opted profiles
 retain their legacy band. The powered band still loads its FSM/tracks
 separately: deorbit adds only the shared budget and prediction helpers.
+
+The next targeted Mun attempt held on `powered-lead-not-converged` at54/64
+trials. The operator read aim63610m, powered range20847m and ballistic
+range84457m; these are consistent with the modeled phantom lead, not a request
+to land63km from the site. The original loop stopped after three forecasts,
+each followed by a possible refinement, leaving its third adjustment unchecked.
+This could reject a converged node while native trials remained. The supplied
+row alone does not establish whether that particular final node was acceptable.
+
+The outer polish now uses the remaining64-trial budget and stops on fresh
+acceptance or no improving node change. Each inner refiner reserves one trial
+for the subsequent forecast. Geometry and the lead model are read from the
+same newly attached probe; all probes are removed on rejection or acceptance.
+`STATS deorbit powered-fit` records pass, downfield/aim/residual, cross-track,
+rejection reason and count; the failure summary distinguishes budget exhaustion
+from no improvement. Original retro/fuel/normal/cross/FPA, fixed coordinates,
+terrain/light and final/pre-burn admission remain. Source regressions reproduce
+a third-step success falsely held by the old loop, then freshly validate it at
+53/64. A footprint-dependent model with the actual timing/normal Newton refiner
+converges in seven forecasts at55/64, and a near-limit case uses trial64 for
+validation after trial63 refines. Model failures, drifting/non-convergent goals,
+no progress, missing impacts and insufficient validation budget still hold.
+These are controlled source fixtures, not a replay of the native failed flight.
 
 The supplied ignition snapshot now has a nominal geographic gate around23km,
 versus43km previously, with identical vertical safety values. Source-driven

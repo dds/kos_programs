@@ -363,6 +363,23 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Repeated RO9 targeted Mun deorbit held on powered-lead-not-converged at54/64;
+  operator supplied aim63610/range20847/ballistic84457m. No final downfield or
+  residual was supplied. Definite control bug:3 forecasts each optionally
+  refined, but the third changed node was never checked before the loop limit.
+  Powered polish now continues under the same64 native trial cap, reserves
+  one inner-refiner trial for fresh model validation and stops on no changed
+  node. Geometry/model read the same attached probe; all temporary nodes are
+  removed. Never accept the last frozen-policy result without recomputing
+  its powered lead. Fixed coordinates, normal/fuel/cross/FPA and final terrain,
+  light and pre-burn admission stay intact. Added powered-fit residual/reason
+  rows and hold stop/pass/geometry summary so another failure is diagnosable.
+  Source fixtures reproduce third-step success at53/64, actual inner Newton
+  against a footprint-dependent lead converges in7 forecasts at55/64, and a
+  boundary case spends63 on refinement/64 on validation. Missing impacts,
+  model errors, drifting goals, no progress and insufficient budget still hold.
+  Not a native replay or proof that the reported last node would have passed;
+  a new connected boot/retry and logs remain needed.
   2026-10-21: operator reports FIRST SUCCESSFUL AUTOMATED MUN LANDING AND
   RETURN TO KERBIN, with the newest RO9 mun_economy_return craft landed back
   on Kerbin. This closes the previously pending whole-flight outcome for the
@@ -522,8 +539,8 @@ Looks like Python/JS; is neither.
   full lateral authority with gravity support/centrifugal change, mid-descent
   radius, actual finite serial-stage impulse and both latency gaps. V safety
   unchanged. Orbital12-step native coast forecast derives ballistic minus
-  powered travel, charges deorbit fuel first and refits with3 bounded model
-  passes inside64 trials. New/retained/pre-burn share policy. Unknown/model
+  powered travel, charges deorbit fuel first and refits inside64 trials with
+  fresh validation after changes. New/retained/pre-burn share policy. Unknown/model
   failure retains orbit. Shared budget/lead only enter deorbit, never FSM tracks.
   Supplied ignition reproduces43km Hgate -> about23km nominal. Actual-controller
   point masses differ <700m in two stated cases (later height assumed5km).

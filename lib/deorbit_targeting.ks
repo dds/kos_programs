@@ -372,14 +372,24 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     // A geometric seed is not yet a powered landing solution. Refit its
     // phantom impact to this stack's braking travel, under the SAME native
-    // trial cap and normal/cross limits. At most three fresh model passes.
+    // trial cap and normal/cross limits. Every changed node needs a fresh
+    // model check, including the last refinement; leave one trial for it.
     LOCAL poweredPass IS 0.
     LOCAL poweredAccepted IS LANDING_POWERED_LEAD <= 0.
-    UNTIL poweredAccepted OR poweredPass >= 3 OR ABORT
+    LOCAL poweredStop IS "trial-budget".
+    LOCAL poweredReason IS "not-checked".
+    UNTIL poweredAccepted OR ABORT
             OR _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS {
         SET _deorbitEvaluations TO _deorbitEvaluations+1.
         LOCAL probeNode IS _planRetroNode(solved["UT"],solved["RETRO"],solved["NORMAL"]).
         WAIT 0.5.
+        // Geometry and powered travel must describe the same attached node.
+        SET solved TO _readGeometricDeorbitNode(probeNode,targetLat,targetLng,desiredDownfield).
+        IF NOT solved["VALID"] OR NOT solved["HAS_IMPACT"] {
+            REMOVE probeNode.
+            mLogWarn("STATS deorbit result=hold reason=powered-lead-no-impact-prediction").
+            RETURN FALSE.
+        }
         LOCAL leadPolicy IS landingDeorbitLeadPolicy(probeNode,targetLat,targetLng).
         REMOVE probeNode.
         IF NOT leadPolicy["VALID"] {
@@ -390,17 +400,39 @@ GLOBAL FUNCTION targetedDeorbitAt {
         SET minDownfield TO leadPolicy["MIN"].
         SET maxDownfield TO leadPolicy["MAX"].
         SET solved["ERR"] TO solved["DOWNFIELD"]-desiredDownfield.
+        SET poweredPass TO poweredPass+1.
+        SET poweredReason TO _targetDeorbitRejection(solved,minDownfield,maxDownfield).
+        mLog("STATS deorbit powered-fit pass=" + poweredPass
+            + " downfieldM=" + ROUND(solved["DOWNFIELD"],0) + " aimM=" + ROUND(desiredDownfield,0)
+            + " residualM=" + ROUND(solved["ERR"],0) + " crossM=" + ROUND(solved["CROSS"],0)
+            + " reason=" + poweredReason + " trials=" + _deorbitEvaluations
+            + "/" + TARGET_DEORBIT_MAX_EVALUATIONS).
         IF _targetDeorbitSolutionAccepted(solved,minDownfield,maxDownfield) {
             SET poweredAccepted TO TRUE.
         } ELSE {
+            // A Newton step needs two probes and a trial, then a new model
+            // validation. Never spend the last trial on an unchecked change.
+            IF _deorbitEvaluations+4 > TARGET_DEORBIT_MAX_EVALUATIONS { BREAK. }
+            LOCAL priorUT IS solved["UT"].
+            LOCAL priorRetro IS solved["RETRO"].
+            LOCAL priorNormal IS solved["NORMAL"].
             SET solved TO _refineDeorbitFootprint(solved,targetLat,targetLng,minLead,
-                desiredDownfield,minDownfield,maxDownfield,minRetroDv,maxRetroDv).
+                desiredDownfield,minDownfield,maxDownfield,minRetroDv,maxRetroDv,1).
+            IF ABS(solved["UT"]-priorUT) < 0.001 AND ABS(solved["RETRO"]-priorRetro) < 0.001
+                    AND ABS(solved["NORMAL"]-priorNormal) < 0.001 {
+                SET poweredStop TO "no-improving-step".
+                BREAK.
+            }
         }
-        SET poweredPass TO poweredPass+1.
     }
     IF ABORT OR NOT poweredAccepted {
+        IF ABORT { SET poweredStop TO "abort". }
         mLogWarn("STATS deorbit result=hold reason=powered-lead-not-converged trials="
-            + _deorbitEvaluations + "/" + TARGET_DEORBIT_MAX_EVALUATIONS).
+            + _deorbitEvaluations + "/" + TARGET_DEORBIT_MAX_EVALUATIONS
+            + " stop=" + poweredStop + " passes=" + poweredPass
+            + " geometryReason=" + poweredReason + " downfieldM=" + ROUND(solved["DOWNFIELD"],0)
+            + " aimM=" + ROUND(desiredDownfield,0) + " residualM=" + ROUND(solved["ERR"],0)
+            + " crossM=" + ROUND(solved["CROSS"],0)).
         RETURN FALSE.
     }
     SET geometry["UT"] TO solved["UT"].
@@ -1007,6 +1039,8 @@ LOCAL FUNCTION _refineDeorbitFootprint {
     PARAMETER maxDownfield.
     PARAMETER minDv.
     PARAMETER maxDv.
+    PARAMETER reserveTrials IS 0.
+    LOCAL trialLimit IS MAX(0,TARGET_DEORBIT_MAX_EVALUATIONS-MAX(0,reserveTrials)).
     LOCAL best IS base.
     LOCAL admissible IS LEXICON("VALID", FALSE).
     IF _targetDeorbitSolutionAccepted(base, minDownfield, maxDownfield) { SET admissible TO base. }
@@ -1017,7 +1051,7 @@ LOCAL FUNCTION _refineDeorbitFootprint {
     FOR mode IN LIST("TIME", "NORMAL") {
         IF mode = "TIME" OR capDv > 0 {
             LOCAL iter IS 0.
-            UNTIL iter >= 3 OR ABORT OR _deorbitEvaluations + 3 > TARGET_DEORBIT_MAX_EVALUATIONS {
+            UNTIL iter >= 3 OR ABORT OR _deorbitEvaluations + 3 > trialLimit {
                 IF _targetDeorbitRefineDone(best, minDownfield, maxDownfield) { RETURN best. }
                 LOCAL retroProbe IS MIN(1, maxDv - best["RETRO"]).
                 IF retroProbe < 0.01 { SET retroProbe TO -MIN(1, best["RETRO"] - minDv). }
@@ -1071,7 +1105,7 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                 IF scale < 0.0001 { BREAK. }
                 LOCAL improved IS FALSE.
                 FOR fraction IN LIST(1, 0.5, 0.25) {
-                    IF ABORT OR _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS { BREAK. }
+                    IF ABORT OR _deorbitEvaluations >= trialLimit { BREAK. }
                     LOCAL trialUT IS best["UT"].
                     LOCAL trialNormal IS best["NORMAL"].
                     IF mode = "NORMAL" { SET trialNormal TO trialNormal + deltaOther * scale * fraction. }
