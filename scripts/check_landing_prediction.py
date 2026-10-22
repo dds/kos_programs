@@ -215,16 +215,19 @@ def check_live_gate_and_minmus():
 def check_fixed_gate_coupling():
     from check_landing_range import lead_environment
     env,node,_=lead_environment()
+    # The policies already run the full forecast. Capture those exact results
+    # instead of paying for two identical extra integrations in this check.
+    predictor=env['landingPredictBrake'];forecasts=[]
+    def record_forecast(*args):
+        result=predictor(*args);forecasts.append(result);return result
+    env['landingPredictBrake']=record_forecast
     vertical=env['landingDeorbitLeadPolicy'](node,0,0)
-    stack=env['landingBrakeStackAt'](env['landingBrakeStack'](),1.,20.)
-    forecast=env['landingPredictBrake'](env['lmGroundPositionAt'](vertical['IGNITION_UT']),
-                                        env['lmGroundVelocityAt'](vertical['IGNITION_UT']),stack,0)
-    target_geo=env['SHIP'].BODY.GEOPOSITIONOF(forecast['POSITION'])
+    target_geo=env['SHIP'].BODY.GEOPOSITIONOF(forecasts[-1]['POSITION'])
     env['LANDING_FLEXIBLE_SITE']=0
     fixed=env['landingDeorbitLeadPolicy'](node,target_geo.LAT,target_geo.LNG)
     assert fixed['VALID'] and fixed['IGNITION_UT']<vertical['IGNITION_UT']
-    actual=env['landingPredictBrake'](env['lmGroundPositionAt'](fixed['IGNITION_UT']),
-                                      env['lmGroundVelocityAt'](fixed['IGNITION_UT']),stack,0)
+    assert len(forecasts)==2
+    actual=forecasts[-1]
     capture=env['SHIP'].BODY.GEOPOSITIONOF(actual['POSITION'])
     error=env['lmSurfaceTrackOffset'](target_geo.LAT,target_geo.LNG,capture.LAT,capture.LNG,
                                       env['lmGroundVelocityAt'](fixed['IGNITION_UT']))
