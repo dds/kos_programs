@@ -6,6 +6,17 @@ vacuum powered-descent stack: choosing a target, deliberately aiming the
 ballistic trajectory beyond that target, shaping the coast, deciding when to
 brake, and walking the final descent state machine down to touchdown.
 
+On2026-10-21, the operator reported the first successful automated Mun
+landing and return to a landing on Kerbin, using the newest RO9 economy
+craft. Its reported checkpoints were497+654m/s remaining on the Mun and
+430m/s before the final orbital circularization trim. This establishes a
+working round-trip baseline. The run included debugging/reboots and a linked
+RETURN_SETUP recovery; no final diagnostic archive or exact flown version
+has been reviewed. It does not establish a fully unattended repeat, pinpoint
+landing accuracy, optimal fuel use or validation of every subsequent fix.
+The remaining priorities are powered-footprint targeting, stage-aware ascent
+efficiency and repeatable offline/alarm handoffs.
+
 Economy airless flights aim for a coast, one main coupled braking arc and a
 gentle touchdown on a reachable, terrain/light-checked footprint. Hover and
 large final translations are recovery tools. Geographic precision profiles
@@ -51,7 +62,8 @@ for real ascent losses and corrections; this is a plausible return budget,
 not a live solution or guaranteed margin. Surface-return setup retains the
 active landing engine for liftoff by default and independent ascent staging
 can shed it after exhaustion, so the497m/s need not be discarded before launch.
-Actual return success remains to be established.
+Return was still pending at this checkpoint; the later successful Kerbin
+touchdown is recorded above.
 
 The same craft subsequently reached a reported10673m apoapsis and8103m
 periapsis with430m/s left before circularization. It announced a roughly1000s
@@ -92,7 +104,8 @@ of the lander acceleration calculation, and an active parallel engine still
 rejects this simple model. Optional fueled-stage disposal remains conservative
 about additional future propulsion. Three source cases exercise the reported
 3/2/1 handoff and reservation, fuel exclusion and command refusal paths;
-actual multistage landing/ascent flight remains unverified.
+the later round trip is operator-confirmed, but its detailed staging trace
+and the new role/reservation behavior have not been verified from an archive.
 
 Hardware roles can now be explicit kOS part tags rather than saved stage
 numbers. Put `return_decoupler` on the separator between the return craft and

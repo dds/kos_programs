@@ -363,6 +363,17 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  2026-10-21: operator reports FIRST SUCCESSFUL AUTOMATED MUN LANDING AND
+  RETURN TO KERBIN, with the newest RO9 mun_economy_return craft landed back
+  on Kerbin. This closes the previously pending whole-flight outcome for the
+  497+654m/s Mun-touchdown /430m/s pre-circularization run below. Treat it as
+  an operator-confirmed successful round trip and a working baseline; no final
+  diagnostic archive, exact flown code version, final fuel or touchdown speeds
+  supplied. The run included operator debugging/reboots and linked recovery
+  of RETURN_SETUP, so it does not prove an unattended clean run or every
+  subsequent preventative fix. Flexible-site touchdown does not validate
+  fixed-coordinate accuracy. Stage-aware ascent efficiency, powered-footprint
+  prediction and clean offline/alarm handoffs remain optimization priorities.
   Operator requests about10m/s retained by powered aerobrake assistance for
   a possible later apoapsis Pe raise. AEROBRAKE_AP_RESERVE_DV now defaults10;
   shared aerobrakeApReserveDv applies MAX(10,configured) in both the forecast
@@ -409,7 +420,8 @@ Looks like Python/JS; is neither.
   Surface-return setup clears the landing override, defaults ASCENT_STAGEDFalse,
   uses the still-active lander engine at liftoff and arms independent exhaustion
   staging. Preserve the497m/s for ascent rather than discarding it prelaunch.
-  Actual ascent, circularization and return outcome remain unverified.
+  Ascent and return were pending at this checkpoint; the later successful
+  Kerbin touchdown is recorded at the top of this ledger.
   New RO9 Mun economy flight reported premature V ignition: height9422m,
   bottom11058m, ASL13918m, targetElev4497m, hs513.2/vs-18.2,
   active39.78/plan=reserve2.45m/s2 (surface TWR~1.50), stage3,

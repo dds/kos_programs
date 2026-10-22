@@ -439,6 +439,14 @@ repeatedly trip the actual engine-below-horizon cutoff. That cutoff remains.
 BRAKE now reports `cut=` (`none`, `below-horizon`, `alignment`, `stage-settle`,
 `separating`, `no-thrust`, or `zero-command`) and actual facing `up=` beside
 throttle, so a zero command can be distinguished from a staging pause.
+On2026-10-21, the operator reported the first successful automated **RO9 Mun
+economy landing and return to a landing on Kerbin**. The craft retained
+497m/s in the lander stage plus654m/s in the return stage on the Mun, then
+430m/s before the final circularization trim. This is a working round-trip
+baseline; the run included debugging/reboots and a linked return-setup
+recovery. Fixed-site accuracy, stage-aware ascent efficiency and an unattended
+repeat remain to be established.
+
 These are source-driven model improvements, not a flight-proven optimum.
 An RO9 Mun economy retry landed successfully after the alignment and terrain
 recovery fixes (operator report, 2026-10-17). Landing fuel cost and the
