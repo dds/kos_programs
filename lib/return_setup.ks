@@ -254,3 +254,7 @@ GLOBAL FUNCTION phaseReturnSetup {
     WAIT 3.
     REBOOT.
 }
+
+// Scalar capability marker, assigned only when this library has run. Bare
+// DEFINED functionName is not a reliable cross-compiled function probe.
+GLOBAL RETURN_SETUP_LOADED IS TRUE.

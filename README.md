@@ -101,6 +101,14 @@ the vacuum deorbit refactor. Profiles using it and `landat`/`landatksc` hold
 for manual review. The [codebase audit](docs/CODEBASE_AUDIT.md) records this
 gap, offline-loading limits, repairs, and validation still needed.
 
+If a linked reboot says `RETURN_SETUP library unavailable`, the loaded-file
+check previously used `DEFINED` on a function name and could reject a provider
+that had loaded. It now tests the provider's explicit scalar readiness marker.
+Sync and reboot with a link to update both `dependencies` and `return_setup`;
+no installed bootstrap replacement is needed. If the active return phase still
+holds, retain the boot log—the warning is not evidence of harmless future-band
+loading, and a genuinely missing provider remains a hold.
+
 ### Programmed surface hops
 
 `cmd/hoproute` saves 1–16 explicit latitude/longitude pairs on the current

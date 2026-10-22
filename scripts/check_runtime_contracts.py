@@ -184,12 +184,15 @@ def check_return_setup_binding():
                           ('SURFACE_RETURN_SETUP','phaseSurfaceReturnSetup')):
         for loaded,active_phase in ((True,phase),(False,phase),(False,'LAND_ASSIST')):
             warnings=[]
-            symbols=declared if loaded else set()
+            # Cross-compiled functions occupy $name*, not scalar $name.
+            # DEFINED must probe the provider's explicit scalar capability.
+            symbols={name+'*' for name in declared} if loaded else set()
+            variables={'RETURN_SETUP_LOADED'} if loaded else set()
             bindings={}
             def delegate(name):
-                assert name in symbols,('undefined handler dereferenced',name)
+                assert name+'*' in symbols,('undefined handler dereferenced',name)
                 return name
-            env=dict(phaseMap=bindings,phaseName=phase,fixture_defined=lambda name:name in symbols,
+            env=dict(phaseMap=bindings,phaseName=phase,fixture_defined=lambda name:name in variables,RETURN_SETUP_LOADED=loaded,
                      stateGet=lambda key,default='':active_phase,mLogError=warnings.append,
                      fixture_delegate=delegate,
                      phaseMapSet=lambda mapping,key,value:mapping.update({key:value}))
@@ -198,12 +201,15 @@ def check_return_setup_binding():
             checked=source.replace('mLogError(', 'capture_error(')
             env['capture_error']=warnings.append
             run(checked,env)
+            assert (handler in symbols)==False
             assert bindings==({phase:handler} if loaded else {})
             assert bool(warnings)==(not loaded and active_phase==phase)
     machine=function_body((ROOT/'lib/phases.ks').read_text(),'runPhases')
     assert machine.index('dependencyBindPhase(phaseMap, phase)')<machine.index('PHASE HANDLER MISSING:')
     assert 'yieldToPrompt().' in machine[machine.index('PHASE HANDLER MISSING:'):]
-    print('PASS: both return setup handlers bind only available delegates; an incomplete offline cache reaches the explicit missing-handler hold instead of dereferencing an undefined function')
+    assert 'GLOBAL RETURN_SETUP_LOADED IS TRUE.' in (ROOT/'lib/return_setup.ks').read_text()
+    assert 'DEFINED phaseReturnSetup' not in source and 'DEFINED phaseSurfaceReturnSetup' not in source
+    print('PASS: return binding uses an actually loaded scalar capability rather than bare cross-compiled function names; loaded providers bind both delegates and missing providers retain the explicit hold')
 
 
 def check_ascent_return_cache():

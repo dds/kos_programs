@@ -395,8 +395,17 @@ Looks like Python/JS; is neither.
   return guarantee; stage-only launch/landing budget also has to pass.
   New hops and numerical prediction still require flight tests. Commands
   configure without ignition/reboot; operator reboots after review to launch.
-  Return-provider absence is normal while mapping future unloaded bands:
-  warn only if that provider's phase is current; retain missing-current hold.
+  Return-provider warning follow-up: dispatcher binds only CURRENT phase;
+  the earlier idea that this was harmless future-band noise was WRONG.
+  Cross-compiled function pointers live as $name*, while DEFINED bareName
+  can test an ordinary $name variable and falsely report unavailable after
+  a successful load. RETURN_SETUP/SURFACE_RETURN_SETUP now test the scalar
+  RETURN_SETUP_LOADED marker assigned at the end of return_setup, not bare
+  function names. Missing/stale providers still hold and require a connected
+  reboot. No late import/reset of return settings. Fixtures must model the
+  scalar/function-pointer distinction rather than assuming DEFINED(name)
+  works for any declared function. Audit other cross-library bare DEFINED
+  function probes before trusting them. Native reload still needed.
   Repeated RO9 targeted Mun deorbit held on powered-lead-not-converged at54/64;
   operator supplied aim63610/range20847/ballistic84457m. No final downfield or
   residual was supplied. Definite control bug:3 forecasts each optionally

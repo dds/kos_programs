@@ -82,10 +82,21 @@ declares the correct provider, LAUNCH's cleanup set previously needn't retain
 it. The shared conditional planner now includes return_setup and its config
 for LAUNCH sequences with RETURN_SETUP, so a connected ascent boot caches and
 keeps those files for the following offline handoff. Other launch sequences
-retain their original dependency set. Both return-setup bindings also check
-that their delegates exist, allowing the normal missing-handler hold and
-explicit link/reboot guidance for an incomplete cache. These preventative
-changes and the new alarm still need native flight validation.
+retain their original dependency set. Return bindings use the scalar
+`RETURN_SETUP_LOADED`, assigned only when the provider executes. Bare
+`DEFINED phaseReturnSetup` is an ordinary-variable check across separately
+compiled files and can falsely report unavailable even after a successful
+load. A missing/stale provider still reaches the missing-handler hold; a
+connected reboot is needed for the updated marker. The dispatcher binds only
+the current phase, so this warning must not be dismissed as future-band noise.
+No late library import resets return settings. These changes and the new
+alarm still need native flight validation.
+
+The distinction is visible in the upstream kOS
+[compiler](https://github.com/KSP-KOS/KOS/blob/develop/src/kOS.Safe/Compilation/KS/Compiler.cs)
+and [identifier lookup](https://github.com/KSP-KOS/KOS/blob/develop/src/kOS.Safe/Execution/CPU.cs):
+user-function delegate lookups use a trailing asterisk, whereas a bare
+cross-file identifier existence test need not use that function-pointer name.
 
 The default landing floor0 can select1 after2 exhausts, potentially consuming
 the dedicated return stage during descent. `cmd/landingstages.ks, 2` saves a
