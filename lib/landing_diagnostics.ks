@@ -36,6 +36,19 @@ GLOBAL FUNCTION landingDiagnosticStart {
             + " startVs=" + ctx["V_SPEED"] + " activeAcc=" + ctx["MAX_ACC"]
             + " planAcc=" + ctx["PLAN_ACC"] + " reserveAcc=" + ctx["RESERVE_ACC"]
             + " requested=" + ctx["REQUESTED_LAT"] + "," + ctx["REQUESTED_LNG"]).
+    LOCAL model IS ctx["BRAKE_MODEL"].
+    IF model["VALID"] {
+        LOCAL slot IS 0.
+        FOR item IN model["STAGES"] {
+            SET ctx["DIAGNOSTIC"]["HEADER"] TO ctx["DIAGNOSTIC"]["HEADER"]+CHAR(10)
+                + "STATS landing-diag engine slot="+slot+" snapshotMass="+model["MASS"]
+                + " thrust="+item["THRUST"]+" exhaust="+item["EXHAUST"]
+                + " fuelMass="+item["FUEL"]+" dryDrop="+item["DROP"]
+                + " reserveAcc="+model["RESERVE_ACC"].
+            SET slot TO slot+1.
+        }
+    }
+
 }
 
 // Nine FSM states bound this ledger even when detailed ring rows rotate.

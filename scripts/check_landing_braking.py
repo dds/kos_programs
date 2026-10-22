@@ -18,14 +18,14 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                SURFACE_VEL=Vec((horizontal,0,-down)),
                V_SPEED=-down, DOWN_SPEED=down, MAX_ACC=gravity*twr,
                PLAN_ACC=gravity*twr, GRAV=gravity, BRAKE_GRAV=gravity,
-               BRAKE_STAGE_DV=0, DISCARD_PENDING=False, STAGE_UNTIL=0,
+               BRAKE_STAGE_DV=0, BRAKE_MODEL=dict(VALID=False), DISCARD_PENDING=False, STAGE_UNTIL=0,
                BRAKE_ALIGN_BLOCKED=False,
                DIVERT_PENDING=False, DIVERT_SEARCH={},
                DIVERT_PREVIEW=dict(OK=False,AT=-9999,LOG_AT=-9999),
                DIVERT_ELEVATION=0,
                TARGET_LAT=0, TARGET_LNG=0, TARGET_ELEVATION=0,
                height=height, downrange=100000, STATE_ENTERED=0, TERRAIN_DONE=True)
-    env['SHIP'] = NS(FACING=NS(FOREVECTOR=Vec((0, 0, 1))), ALTITUDE=height,
+    env['SHIP'] = NS(MASS=1.,FACING=NS(FOREVECTOR=Vec((0, 0, 1))), ALTITUDE=height,
                      BOUNDS=NS(BOTTOMALTRADAR=height))
     env.update(_landingBottomRadar=lambda: ctx['height'],
                _landingTargetHeight=lambda c: c['height'],
@@ -41,7 +41,7 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                _landingLogBrakeComplete=lambda *args: None)
     for name in ('lmBrakeNetAcc', 'lmBrakeEnvelope', 'lmBrakeThrust',
                  'lmBrakeFullNetAcc','lmBrakeDescentTarget','lmEconomyBrakeThrust',
-                 'lmNominalBrakeRange', 'lmVerticalBurnDistance', 'lmRetroSteering',
+                 'lmNominalBrakeRange', 'landingBrakeStackAt', 'lmVerticalBurnDistance', 'lmRetroSteering',
                  '_landingBurnHeight', '_landingStopEnvelope', 'lmStagedBrakeEnvelope', 'lmFullBrakeEnvelope', '_landingBrakeGateInfo',
                  '_landingBrakeSteeringInfo'):
         env[name] = lambda *args, name=name: call(name, env, *args)
@@ -329,7 +329,7 @@ def check_integration():
             # The operator explicitly enabled fuel-assisted aerobraking on RO9.
             assert actual.count('SET AEROBRAKE_AP_BURN TO 1.\n')==1
             actual=actual.replace('SET AEROBRAKE_AP_BURN TO 1.\n','')
-        if path==ROOT/'missions/RO9/mun_landing_return.ks':
+        if path in (ROOT/'missions/RO9/mun_landing_return.ks',ROOT/'missions/RO9/minmus_landing_return.ks'):
             # Required polar targeting, circularization and bounded lateral
             # deorbit correction have explicit RO9 settings. Their numerical
             # checks live in check_bplane_newton/arrival_budget/deorbit_solver.
@@ -337,7 +337,7 @@ def check_integration():
             actual=re.sub(r'SET ('+keys+r') TO -?\d+(?:\.\d+)?\.', '', actual)
             expected=re.sub(r'SET ('+keys+r') TO -?\d+(?:\.\d+)?\.', '', expected)
         assert clean(actual).split()==clean(expected).split(), path
-    print('PASS: brake code resident before coast; stage refresh precedes guidance; RO9 preserves RO8 landing behavior with explicit aerobrake/polar-budget differences')
+    print('PASS: brake code resident before coast; stage refresh precedes guidance; RO9 preserves RO8 landing behavior with explicit aerobrake, polar-budget and targeted-controller differences')
 
 
 if __name__=='__main__':

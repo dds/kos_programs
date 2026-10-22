@@ -24,9 +24,12 @@ GLOBAL FUNCTION dependencyLibs {
         "thrust_cutoff", LIST(),
         "landing_divert", LIST("landing_light_math", "landing_diagnostics", "landing_stage_brake"),
         "landing_diagnostics", LIST(),
-        "landing_main", LIST("landing_config", "landing_math", "vessel_hardware", "landing_terminal", "landing_divert", "landing_disposal", "landing_stage_brake"),
-        "landing_stage_brake", LIST("landing_config", "landing_math", "vessel_hardware"),
-        "landing_deorbit_lead", LIST("landing_stage_brake"),
+        "landing_main", LIST("landing_config", "landing_math", "vessel_hardware", "landing_terminal", "landing_divert", "landing_disposal", "landing_brake_math"),
+        "landing_brake_math", LIST("landing_stage_brake"),
+        "landing_prediction", LIST("landing_brake_math"),
+        "landing_brake_fuel", LIST("landing_config", "vessel_hardware"),
+        "landing_stage_brake", LIST("landing_config", "landing_math", "vessel_hardware", "landing_brake_fuel"),
+        "landing_deorbit_lead", LIST("landing_prediction"),
         "landing_disposal", LIST("landing_config", "landing_math", "vessel_hardware"),
         "landing", LIST("landing_main"),
         "landing_site", LIST(),
@@ -34,7 +37,7 @@ GLOBAL FUNCTION dependencyLibs {
         "launch", LIST("orbit", "countdown", "utils", "recovery", "ascent", "launch_window"),
         "launch_window", LIST(),
         "ascent", LIST("orbit", "countdown", "launch_window", "thrust_cutoff"),
-        "hop", LIST("utils", "thrust_cutoff"),
+        "hop", LIST("utils", "thrust_cutoff", "payload_landing", "landing_math", "vessel_hardware"),
         "maneuver", LIST("countdown", "orbit_nodes", "thrust_cutoff"),
         "maneuver_plan", LIST("maneuver", "orbit_nodes"),
         "prelaunch", LIST("flightplan", "launch_window"),
@@ -92,6 +95,7 @@ GLOBAL FUNCTION dependencyPhases {
         "SCIENCE_OPS_LOW", LIST("science", "orbit", "solar"),
         "LAUNCH", LIST("launch"),
         "HOP", LIST("hop"),
+        "HOP_REVIEW", LIST("hop"),
         "FAIR", LIST("launch"),
         "ANTS", LIST("launch"),
         "PARK", LIST("launch"),
@@ -160,7 +164,7 @@ GLOBAL FUNCTION dependencyBands {
         "SSTO_RETURN", LIST("SSTO_DEORBIT", "REENTRY", "APPROACH"),
         "PRELAUNCH", LIST("PRELAUNCH"),
         "LAUNCH", LIST("LAUNCH", "FAIR", "ANTS", "PARK"),
-        "HOP", LIST("HOP"),
+        "HOP", LIST("HOP", "HOP_REVIEW"),
         "ABORT", LIST("ABORT"),
         "ESCAPE", LIST("ESCAPE"),
         "XFER_DEPARTURE_SHAPE", LIST("DEPARTURE_SHAPE"),
@@ -200,6 +204,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "SCIENCE_OPS_LOW" { phaseMapSet(phaseMap, phaseKey, phaseScienceOpsLow@). }
     ELSE IF phaseKey = "LAUNCH" { phaseMapSet(phaseMap, phaseKey, phaseLaunch@). }
     ELSE IF phaseKey = "HOP" { phaseMapSet(phaseMap, phaseKey, phaseHop@). }
+    ELSE IF phaseKey = "HOP_REVIEW" { phaseMapSet(phaseMap, phaseKey, phaseHopReview@). }
     ELSE IF phaseKey = "FAIR" { phaseMapSet(phaseMap, phaseKey, phaseFair@). }
     ELSE IF phaseKey = "ANTS" { phaseMapSet(phaseMap, phaseKey, phaseAnts@). }
     ELSE IF phaseKey = "PARK" { phaseMapSet(phaseMap, phaseKey, phasePark@). }

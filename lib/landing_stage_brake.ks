@@ -174,6 +174,8 @@ GLOBAL FUNCTION _landingStopEnvelope {
 // unchanged and use full physical horizontal authority here. This estimate
 // assumes roughly constant descent speed and a mid-descent radius; flight logs
 // must measure its error. It does not certify touchdown or terrain.
+// A supported optional fuel snapshot uses mass-aware quadrature instead of
+// the legacy constant-acceleration fallback below.
 // delay is NOMINAL ignition latency, not the V envelope's reaction reserve.
 // stageDelay separates real staging coast from that initial latency.
 GLOBAL FUNCTION lmNominalBrakeRange {
@@ -186,6 +188,14 @@ GLOBAL FUNCTION lmNominalBrakeRange {
     PARAMETER bodyRadius IS 0.
     PARAMETER altitudeAsl IS 0.
     PARAMETER stageDelay IS -1.
+    PARAMETER stack IS LEXICON("VALID",FALSE).
+    IF stack["VALID"] {
+        LOCAL estimate IS lmFuelBrakeRange(horizontalSpeed,stack,
+            gravAcc*(bodyRadius/MAX(1,bodyRadius+MAX(0,altitudeAsl)/2))^2,
+            bodyRadius+MAX(0,altitudeAsl)/2,MAX(0,stageDelay)).
+        IF estimate < 0 { RETURN -1. }
+        RETURN horizontalSpeed*MAX(0,delay)+estimate.
+    }
     IF planAcc <= gravAcc OR activeAcc < planAcc { RETURN -1. }
     LOCAL endSpeed IS MIN(horizontalSpeed,MAX(0,APPROACH_HSPEED)).
     LOCAL remaining IS horizontalSpeed.

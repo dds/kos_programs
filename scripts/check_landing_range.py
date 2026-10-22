@@ -122,7 +122,7 @@ def check_nominal_timing():
     assert 'LOCAL tickRate IS 0.33.' in main and 'SET tickRate TO 0.05.' in main
     hardware=(ROOT/'lib/vessel_hardware.ks').read_text()
     assert 'GLOBAL LANDING_STAGE_SETTLE IS 0.25.' in hardware
-    for path in ('landing_main','landing_deorbit_lead','landing_divert'):
+    for path in ('landing_main','landing_divert'):
         text=(ROOT/f'lib/{path}.ks').read_text()
         callsite=text[text.index('lmNominalBrakeRange('):]
         callsite=callsite[:callsite.index(').')]
@@ -145,9 +145,9 @@ def lead_environment():
         for _ in range(12):anomaly-=(anomaly-ecc*math.sin(anomaly)-mean)/(1-ecc*math.cos(anomaly))
         return Vec((-semi*math.sqrt(1-ecc**2)*math.sin(anomaly),0,-semi*(math.cos(anomaly)-ecc)))
     def geo(lat,lng):
-        theta=math.radians(lng)
+        theta=math.radians(lng);latitude=math.radians(lat)
         return NS(LAT=lat,LNG=lng,TERRAINHEIGHT=0,
-                  ALTITUDEPOSITION=lambda alt:Vec((math.sin(theta)*(radius+alt),0,math.cos(theta)*(radius+alt))))
+                  ALTITUDEPOSITION=lambda alt:Vec((math.cos(latitude)*math.sin(theta)*(radius+alt),math.sin(latitude)*(radius+alt),math.cos(latitude)*math.cos(theta)*(radius+alt))))
     def geo_at(ut):
         pos=position(ut)
         return geo(0,math.degrees(math.atan2(pos[0],pos[2])))
@@ -164,8 +164,23 @@ def lead_environment():
                VDOT=lambda a,b:float(a@b),VCRS=lambda a,b:Vec(__import__('numpy').cross(a,b)),
                ARCCOS=lambda x:math.degrees(math.acos(x)),ARCSIN=lambda x:math.degrees(math.asin(x)),
                ARCTAN2=lambda a,b:math.degrees(math.atan2(a,b)))
-    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',LEAD):
+    from check_landing_prediction import SOURCE as prediction_source
+    from check_runtime_contracts import KList
+    env['CONSTANT']=NS(E=math.e,PI=math.pi)
+    env['LN']=math.log
+    env['LIST']=lambda *args:KList(args)
+    env['SHIP'].BODY.ROTATIONPERIOD=1e30
+    env['SHIP'].BODY.GEOPOSITIONOF=lambda pos:geo(math.degrees(math.asin(pos[1]/pos.MAG)),math.degrees(math.atan2(pos[0],pos[2])))
+    def stack():
+        mass=1.;retained=.6;exhaust=320*9.80665
+        fuel=mass*(1-math.exp(-244/exhaust))
+        return dict(VALID=True,MASS=mass,STAGE=2,RESERVE_ACC=2.72,
+                    STAGES=KList([dict(THRUST=44.68,EXHAUST=exhaust,FUEL=fuel,DROP=mass-retained-fuel),
+                                  dict(THRUST=2.72*retained,EXHAUST=300*9.80665,FUEL=.25,DROP=0)]))
+    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',LEAD+'\n'+prediction_source):
         env[name]=lambda *args,name=name:call(name,env,*args)
+    env['landingBrakeStack']=stack
+    env['LANDING_FLEXIBLE_SITE']=1
     env['lmSurfaceTrackOffset']=lambda *args:call('lmSurfaceTrackOffset',env,*args)
     return env,nd,impact_ut
 
@@ -178,15 +193,25 @@ def check_native_lead():
     assert 10000<policy['RANGE']<50000 and policy['AIM']>20000,policy
     assert abs(policy['AIM']+policy['RANGE']-policy['BALLISTIC'])<1e-8
     assert policy['MIN']==policy['AIM']-1500 and policy['MAX']==policy['AIM']+1500
-    # Deorbit impulse has already been charged against the transfer budget.
+    # The exact same physical post-deorbit stack must yield the same result
+    # when supplied as a now-flown (zero-node-dV) trajectory. Charge once.
     full_fuel=env['vesselLandingBrakeStageDv']
-    env['vesselLandingBrakeStageDv']=lambda:full_fuel()+20
-    extra=env['landingDeorbitLeadPolicy'](nd,0,0)
-    assert extra['RANGE']<policy['RANGE'] and extra['IGNITION_UT']>policy['IGNITION_UT']
+    original_stack=env['landingBrakeStack']
+    charged=env['landingBrakeStackAt'](original_stack(),1.,20.)
+    env['landingBrakeStack']=lambda:charged
+    env['SHIP'].MASS=charged['MASS']
+    env['vesselLandingBrakeStageDv']=lambda:full_fuel()-20
     nd.DELTAV.MAG=0
-    env['vesselLandingBrakeStageDv']=full_fuel
-    uncharged=env['landingDeorbitLeadPolicy'](nd,0,0)
-    assert uncharged==extra
+    assert env['landingDeorbitLeadPolicy'](nd,0,0)==policy
+    # More measured transfer fuel may help, but cannot come from return tanks.
+    env['SHIP'].MASS=1.;nd.DELTAV.MAG=20.
+    env['vesselLandingBrakeStageDv']=lambda:full_fuel()+20
+    def fuller_stack():
+        result=original_stack();result['STAGES'][0]['FUEL']+=.01;result['STAGES'][0]['DROP']-=.01
+        return result
+    env['landingBrakeStack']=fuller_stack
+    extra=env['landingDeorbitLeadPolicy'](nd,0,0)
+    assert extra['VALID'] and extra['RANGE']<policy['RANGE'] and extra['IGNITION_UT']>policy['IGNITION_UT']
     env['LANDING_POWERED_LEAD']=0
     legacy=env['landingDeorbitLeadPolicy'](nd,0,0)
     assert legacy['AIM']==15000 and legacy['MIN']==10000 and legacy['MAX']==20000
@@ -206,7 +231,7 @@ def check_lead_refusals():
         if kind=='timing':nd.TIME=impact_ut
         if kind=='abort':env['ABORT']=True
         if kind=='no-coast':env['_landingLeadStateAt']=lambda *args:dict(HS=500,DOWN=80,HEIGHT=1)
-        if kind=='range':env['lmNominalBrakeRange']=lambda *args:-1
+        if kind=='range':env['landingPredictBrake']=lambda *args:dict(VALID=False,REASON='test-range-failure')
         if kind=='upfield':env['lmSurfaceTrackOffset']=lambda *args:dict(VALID=True,DOWNFIELD=-1)
         result=env['landingDeorbitLeadPolicy'](nd,0,0)
         assert not result['VALID'],(kind,result)

@@ -303,6 +303,7 @@ GLOBAL FUNCTION _landingCacheTick {
     IF ctx["RESERVE_STAGE"] <> STAGE:NUMBER {
         SET ctx["RESERVE_ACC"] TO vesselLandingReserveAcc().
         SET ctx["RESERVE_STAGE"] TO STAGE:NUMBER.
+        IF LANDING_POWERED_LEAD > 0 { SET ctx["BRAKE_MODEL"] TO landingBrakeStack(). }
     }
     SET ctx["BRAKE_STAGE_DV"] TO 0.
     IF LANDING_STAGE_BRAKE_CREDIT > 0 AND NOT ctx["DISCARD_PENDING"] {
@@ -382,9 +383,10 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     IF LANDING_POWERED_LEAD > 0 AND LANDING_ECONOMY_BRAKE > 0 {
         // Alignment precedes ignition. Safety latency belongs to the V
         // envelope, not nominal powered travel; use the real settle budget.
+        LOCAL stack IS landingBrakeStackAt(ctx["BRAKE_MODEL"],SHIP:MASS).
         LOCAL nominalRange IS lmNominalBrakeRange(horizontalSpeed,ctx["MAX_ACC"],
             ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],gravAcc,0,
-            SHIP:BODY:RADIUS,SHIP:ALTITUDE,2*MAX(0.05,LANDING_STAGE_SETTLE)).
+            SHIP:BODY:RADIUS,SHIP:ALTITUDE,2*MAX(0.05,LANDING_STAGE_SETTLE),stack).
         IF nominalRange >= 0 { SET brakeDist TO MIN(brakeDist,nominalRange). }
     }
     LOCAL burnHeight IS _landingBurnHeight(ctx).
@@ -796,6 +798,7 @@ GLOBAL FUNCTION landExecute {
         "RESERVE_STAGE", -999,
         "RESERVE_ACC", 0,
         "BRAKE_STAGE_DV", 0,
+        "BRAKE_MODEL", LEXICON("VALID",FALSE),
         "STAGE_UNTIL", 0,
         "STAGE_ENGINE", -1,
         "STAGE_EVENTS", 0,

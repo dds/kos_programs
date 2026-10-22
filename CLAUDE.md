@@ -299,8 +299,8 @@ Looks like Python/JS; is neither.
   Powered RO9 fixed-site Mun landing now opts into LANDING_STAGE_BRAKE_CREDIT1
   and LANDING_ECONOMY_BRAKE1 while retaining FLEXIBLE_SITE0 and geographic
   gates. Only flexible sites suppress H/overshoot gates; descending control
-  must not implicitly waive a fixed target. landing_stage_brake is powered-band
-  only, declared via landing_main, never shared hardware/deorbit payload.
+  must not implicitly waive a fixed target. landing_stage_brake is a shared pure budget library; neither it nor the
+  shared brake math may pull the landing FSM into the orbital band.
   Credit only bounded current-stage impulse: single controllable engine,
   adjacent serial discard, enabled local tank mixture, rocket equation and
   stock dV minimum. Unsupported/empty/unknown/atmospheric cases fall back to
@@ -363,25 +363,40 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
-  The next targeted Mun attempt landed about5km SHORT of its target; operator
-  also reports excessive approach fuel use. This is not a successful pinpoint
-  landing. Only older landingdiag files are currently local; latest archive,
-  target/guidance miss, phase impulse and actual ignition/staging rows requested.
-  Do not infer the entire5km mechanism without them or add a5km fudge factor.
-  Found a separate provable range-model bias: geographic prediction charged
-  the V safety reserve3s before thrust and again at staging, but guidance
-  pre-aligns, ticks at.05s while powered and stage settle defaults.25s.
-  Prior <700m fixture forced those same3s pauses, hiding the mismatch. New
-  source-timed .05s/.5s fixture gives~20.20km actual modeled travel vs old
-  22.47km estimate for the earlier supplied516.1/-44.9/223.9 state; revised
-  nominal gives~20.19km. Later illustrative287m/s state also improves. These
-  aren't native replay results for the latest5km miss. Nominal ignition delay
-  is now0 (pre-aligned), separate stage delay is2*settle in orbital lead, live
-  H gate and provisional preview. V envelope/reaction/staging/clearance and
-  live attitude guards remain unchanged; target and approach time/tilt limits
-  are unchanged. Diagnostic header/forecast state nominal vs safety timing.
-  Fuel-burn TWR growth and the remaining flight-specific residual stay open
-  until the archive can distinguish model error from handoff/target changes.
+  Latest reviewed targeted Mun archive: landingdiag_RO9_2157921508_boot_014_core
+  plus.boot.log. Main brake ended4051m short; APPROACH320s/519.5m/s impulse,
+  hover30s/48.7m/s; touchdown requestedMiss2791/guidanceMiss2279/targetShift640m.
+  This is physical touchdown, NOT pinpoint success. The20.6km gate matches
+  older3s nominal timing; a0a23c8's timing fix gives18.4km at this snapshot,
+  fuel-aware gate17.5km vs about17.1km flown. Do not attribute all error to
+  mass or apply an unexplained geographic offset. Shared landing_brake_math
+  owns the unchanged live/forecast control law. landing_brake_fuel snapshots
+  stage-local enabled mixture/stock cap, evolving mass and dry separation;
+  landing_prediction integrates it only in orbital planning, not throttle
+  locks/live guidance. Stage roles and reserved return fuel remain protected.
+  Forecast uses native conic H/V ignition and full controller through capture,
+  target-height terrain and ideal attitude; no powered-terrain/touchdown
+  guarantee. Independent inertial RK4 agrees within120m in the fixture.
+  Assumed345/290s Isp replay gives16.74km/155s vs ~17.05km/154s flown;
+  actual engine suffixes missing, so not an exact native reproduction.
+  New landing archive engine rows record thrust/exhaust/fuel/dryDrop for that.
+  V gravity/reserve/clearance/delay, facing/up, stage and physical cutoff
+  remain unchanged. Unsupported precision stacks hold rather than silently
+  authorize an old model. RO9 fixed Minmus now opts in with normal10m/s and
+  cross500m, retaining its locked coordinates; economy remains flexible.
+  Programmed rocket hops use the ORIGINAL mission plus scoped overrides and
+  a durable route index, not a replacement profile discarding return intent.
+  HOP_REVIEW MUST stop after every landing, including the last; explicit N
+  advances one site and R restores original return/DONE. Never auto-clear
+  Abort, repeat an interrupted launch, stage into return, or restore a thrust
+  limiter before physical zero. Capture limits by engine UID and persist
+  once before liftoff for reboot recovery. Cache both launch/landing/review
+  halves only for routes. Default return700m/s is an allowance, not a solved
+  return guarantee; stage-only launch/landing budget also has to pass.
+  New hops and numerical prediction still require flight tests. Commands
+  configure without ignition/reboot; operator reboots after review to launch.
+  Return-provider absence is normal while mapping future unloaded bands:
+  warn only if that provider's phase is current; retain missing-current hold.
   Repeated RO9 targeted Mun deorbit held on powered-lead-not-converged at54/64;
   operator supplied aim63610/range20847/ballistic84457m. No final downfield or
   residual was supplied. Definite control bug:3 forecasts each optionally

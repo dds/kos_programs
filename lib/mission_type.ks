@@ -38,6 +38,11 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
     IF bandKey = "LAUNCH" AND SEQUENCE:CONTAINS("RETURN_SETUP") {
         roots:ADD("return_setup").
     }
+    IF SEQUENCE:CONTAINS("HOP_REVIEW") AND (bandKey = "HOP" OR bandKey = "LANDING") {
+        // Keep both halves through cleanup: a ballistic hop can lose radio
+        // between launch and landing, and review/next launch must work offline.
+        FOR ln IN LIST("hop","landing_main","landing_coast","landing_brake") { roots:ADD(ln). }
+    }
     IF bandKey = "XFER_PLAN" {
         LOCAL mType IS missionTypeDetect().
         LOCAL seq IS "".

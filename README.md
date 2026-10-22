@@ -65,6 +65,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/arrival.ks", "status").` | Show actual arrival Pe, capture fuel estimate, correction spending and interrupted-burn reason without flying |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
+| `RUNPATH("0:/cmd/hoproute.ks", LIST(LIST(lat1,lng1),LIST(lat2,lng2)),700).` | Save local airless rocket hops while landed; replace coordinates, review, then reboot. Stops after every landing for science; N continues, R restores return/DONE. Last argument reserves return dV |
 | `RUNPATH("0:/cmd/minmusrecover.ks").` | Select RO8 landing recovery; use argument `"waypoint"` for a visually chosen selected site without SCANsat coverage; then reboot |
 | `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
 | `RUNPATH("0:/cmd/dump.ks").` | Print persistent state |
@@ -99,6 +100,32 @@ archive copy directly.
 the vacuum deorbit refactor. Profiles using it and `landat`/`landatksc` hold
 for manual review. The [codebase audit](docs/CODEBASE_AUDIT.md) records this
 gap, offline-loading limits, repairs, and validation still needed.
+
+### Programmed surface hops
+
+`cmd/hoproute` saves 1–16 explicit latitude/longitude pairs on the current
+body, checking normal terrain slope and limiting each leg to a quarter of the
+body radius. Run it while landed, idle and linked; it does not launch until
+you reboot. `cmd/hop` is the one-site form. These are rocket ballistic hops,
+separate from FDR1's RCS drone missions. This new route path needs flight testing.
+
+Every touchdown remains in a running surface review: do science, then press
+**N** for the next site or **R** to stop hopping and resume the original surface
+return setup, already-generated ascent leg, or DONE. No archive command is
+needed at that review. The selected mission/profile and unrelated return
+settings are retained. A reboot during a flown hop resumes landing rather
+than repeating liftoff. Launch/landing/review libraries stay cached together
+for route reboots; later return bands may still need their normal link/cache.
+
+The default return allowance is700m/s, configurable in the command; it is not
+a solved return trajectory. Each leg also needs an independent landing
+allowance and a conservative launch/braking estimate, both on the currently
+permitted engine stage as well as in total vessel dV. The executor never
+stages into the return engine, clears Abort or ignites after a failed
+alignment. It lifts vertically before pitching toward the site, and preserves
+thrust limits across an interrupted boot. Keep reserved-tank crossfeed disabled.
+The route is local and experimental; it does not guarantee contract precision,
+resource/biome science completion, or an optimized multi-biome tour.
 
 ### Launch windows and staging
 
@@ -230,31 +257,42 @@ For an in-flight mission, `RUNPATH("0:/cmd/landingdisposal.ks").` saves only
 these two overrides. It preserves the target, return sequence, phase and
 retained node. Passing `0` disables elective disposal.
 
-RO9's fixed-site `mun_landing_return` explicitly sets `LANDING_FLEXIBLE_SITE=0`
-and enables `LANDING_POWERED_LEAD=1`, retaining the locked contract target.
-The orbital solver now estimates ignition on the post-deorbit conic and
-subtracts the staged powered-braking travel from the remaining ballistic
-travel. It refines that required overshoot with the same bounded native
-solver; new, retained and pre-burn nodes share the fresh admission policy.
-The geographic ignition gate uses a nominal full-thrust range estimate;
-the conservative vertical stopping envelope, terrain bound, alignment and
-staging checks retain their margins. Other profiles keep the legacy policy.
-This is a constant-descent approximation, not a complete landing optimizer.
-Nominal travel assumes ignition after the existing alignment and uses two
-actual staging-settle intervals. It does not add the vertical safety model's
-three-second reaction reserve as travel before ignition and again at staging;
-that inflated geographic range and could make the craft stop short. The
-vertical safety envelope retains its full reaction/staging allowances.
-`STATS deorbit powered-lead` records both ranges, remaining transfer fuel,
-ignition UT and prediction time; `landing-brake begin` now includes
-`poweredLead` and `stopRangeError` (negative means nominal capture short of
-the site). The landing recorder remains active through touchdown.
+RO9's fixed-site `mun_landing_return` and `minmus_landing_return` enable
+`LANDING_POWERED_LEAD=1`, retaining their locked contract coordinates. Change
+those coordinates for a new contract before launch. The planner samples the
+native post-deorbit conic, finds ignition using both live H/V gate policies,
+and simulates the descending braking/flare controller with evolving mass,
+local engine propellant, dry-stage separation, vacuum Isp and body rotation.
+It aims the ballistic footprint beyond the site by the difference between
+ballistic travel and predicted powered travel. Unsupported/fuel-exhausted or
+nonconvergent precision models hold in orbit; they do not authorize a burn.
+New, retained and pre-burn nodes share the admission checks.
 
-A later targeted attempt landed about5km short and the operator reported
-excessive approach fuel use. That is a target miss. The timing correction
-removes one demonstrated range bias; the full cause and approach impulse
-still need that flight's diagnostic archive. It does not increase hover time
-or relax target tolerance to hide the miss.
+The live H gate uses a cheaper 32-bin mass-aware range quadrature from a
+per-stage hardware snapshot. The full forward simulation stays in orbital
+planning; it is not run in a throttle lock or powered guidance tick. Both
+read the same stage fuel/thrust data, while flight and forward prediction use
+one shared descent/thrust law. Vertical safety reserves, terrain clearance,
+actual-facing checks and throttle cutoff remain unchanged. Economy profiles
+retain their flexible-site policy rather than becoming pinpoint missions.
+
+The reviewed `landingdiag_RO9_2157921508_boot_014_core` run ended main braking
+4051m from the guidance site, spent320s /519.5m/s thrust-integrated impulse in
+APPROACH and another48.7m/s in final hover, and logged touchdown2791m from the
+requested site. Its20.6km H gate matches the older nominal timing; the prior
+timing fix reduces this snapshot to18.4km, and fuel accounting reduces it to
+17.5km, versus roughly17.1km flown. A replay assuming345s transfer /290s lander
+Isp predicts16.7km /155s versus154s flown. These are partial model checks,
+not proof of native pinpoint accuracy or whole-flight fuel savings.
+
+`STATS deorbit powered-lead` records capture location error, height/velocity,
+time, impulse, mass and iteration count. Landing archives now include engine
+thrust, exhaust velocity, local fuel mass and jettison mass, so later replays
+need not assume Isp. The forecast stops at braking/flare capture, uses ideal
+attitude and target-height terrain, and does not certify powered-path terrain
+clearance or touchdown. Existing native terrain and live safety checks remain.
+No installed bootstrap update is needed; use a connected boot to cache the
+new shared libraries before flight.
 
 Powered refinement uses the existing 64-trial budget, reserves a trial to
 validate each changed node, and stops when accepted or unable to improve.

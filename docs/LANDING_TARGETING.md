@@ -152,32 +152,49 @@ The engines work; these rows identify a range mismatch, not a zero-throttle
 or stationary-hover failure. The remaining transfer fuel/height at the later
 row was not supplied. This mission has only post-deorbit saves.
 
-A conservative maximum stopping envelope is appropriate for the vertical
-impact deadline, but it systematically commands early geographic arrest when
-used to aim full-thrust braking at a site. `lmNominalBrakeRange` separates
-these purposes. Sixteen speed intervals estimate full horizontal thrust with
-gravity support, changing centrifugal support, a mid-descent radius, finite
-transfer impulse, the weaker stage and both latency gaps. It assumes roughly
-steady descent; it is not a numerical simulation of the full controller or
-an optimal-control solution. The fixed site's H gate uses this nominal
-estimate, capped by the old stopping bound. The V gate and its full gravity,
-80% net reserve, terrain/hull height, staging and alignment guards are unchanged.
-Invalid range inputs retain the old conservative geographic fallback.
+A conservative stopping envelope still owns the vertical collision deadline.
+Geographic aiming now uses evolving fuel mass rather than a constant initial
+acceleration. `landing_brake_fuel` snapshots one active and at most one eligible
+serial landing engine, limiting enabled local propellant by mixture, rocket
+equation and stock stage dV. Reserved return tanks cannot add fuel; their wet
+mass remains carried. Solids, parallel/multimode engines, massless mixtures,
+atmosphere, elective fueled disposal and ambiguous stage roles reject this
+precision model. A final single landing stage is supported too.
 
-`landing_deorbit_lead` samples the attached node's native post-burn conic
-using the established ground-position/numeric-velocity helpers. Twelve
-bisections locate the vertical safety boundary, including target and local
-terrain heights. It subtracts nominal powered travel from remaining ballistic
-ground-track travel to get the required phantom lead. Deorbit dV is first
-subtracted from the measured transfer budget. Fresh model passes
-refit the native footprint under the original64-trial cap (model probe nodes
-also consume trials), retro/normal/cross limits and final terrain/light/fuel
-admission. All temporary nodes are removed. Unsupported/unknown/underpowered
-stacks, no coast, nonpositive leads and failure to converge retain orbit.
-New, retained and pre-burn node admission recompute the same policy;
-there is no separate retained-node10–20km exception. Non-opted profiles
-retain their legacy band. The powered band still loads its FSM/tracks
-separately: deorbit adds only the shared budget and prediction helpers.
+`lmNominalBrakeRange` uses32 speed intervals with mass loss for supported
+snapshots; its old16-bin constant-acceleration estimate is only a live fallback
+for unsupported hardware. The snapshot is taken per stage and adjusted by
+current mass, without extra per-tick tank scans. The H gate remains capped by
+the old reserved bound. The V envelope, gravity/80% net reserve, latency,
+terrain/hull clearance, stage floor and actual-facing cutoff are unchanged.
+
+`landing_deorbit_lead` samples the attached node's native conic using numeric
+POSITIONAT derivatives. Twelve bisections find ignition using the live fixed-site
+H and V policies, including local terrain and H suppression. The deorbit impulse
+is charged against both mass and current-stage fuel exactly once.
+`landing_prediction` then integrates the shared live descent/thrust law in a
+rotating body-fixed frame using midpoint steps, variable mass flow, dry-mass
+jettison and the real two-settle staging interval. Cross-product handedness is
+measured against native increasing longitude. Gravity, Coriolis and centrifugal
+terms are physical; the controller's effective-gravity convention is retained.
+Low-speed flare/coast continues until the braking capture conditions are met.
+The forecast is bounded1024 steps,900 simulated seconds and20 execution seconds.
+It is not an arbitrary-terrain touchdown or attitude-slew simulation.
+
+Ballistic minus powered travel defines the phantom lead. Fresh passes refine
+under the original64-trial cap, retro/normal/cross/FPA limits and final native
+terrain/light/fuel checks. Model failure, exhausted local landing fuel, no coast,
+nonpositive lead or no convergence retain orbit. No probes survive. New,
+retained and pre-burn admissions share this policy. RO9's fixed-site Mun and
+Minmus profiles opt in; economy missions remain flexible and do not opt in.
+
+Flight and prediction share `landing_brake_math`; only orbital planning loads
+the full integrator. A cheap32-bin fuel-aware geographic gate runs in flight,
+not the numerical forecast. This separation preserves control cadence and
+keeps the landing FSM out of the deorbit band. Independent inertial-frame RK4
+fixtures agree within120m with the rotating midpoint forecast in the stated
+case, and halving the forecast step changes capture position by less than40m.
+These test the numerical model, not native execution or optimality.
 
 The next targeted Mun attempt held on `powered-lead-not-converged` at54/64
 trials. The operator read aim63610m, powered range20847m and ballistic
@@ -213,29 +230,28 @@ powered arc, total landing fuel or minimum-dV performance. Flight validation
 is still needed, including late descent-speed changes and rotation-induced
 cross-track drift. No plan promises a high-precision touchdown from this model.
 
-The following targeted run landed about5km SHORT and the operator reported
-excessive approach fuel use. It is a target miss, not a pinpoint success.
-Only older archives were available locally during this follow-up. The latest
-landingdiag and boot sidecar were requested to separate braking-range error,
-target changes and final handoff, and to measure impulse spent in APPROACH.
-No5km geographic offset or extra hovering is an acceptable substitute.
+The following targeted run was described as about5km short; its newly supplied
+archive `landingdiag_RO9_2157921508_boot_014_core.log` and boot sidecar quantify
+4051m guidance miss at braking capture,320s /519.5m/s approach impulse and30s /
+48.7m/s hover impulse. Touchdown was2791m from the requested point and2279m from
+the refined guidance point (640m target shift). Physical touchdown is not a
+successful pinpoint contract landing.
 
-The range estimator had reused the vertical safety reaction reserve as real
-travel: three seconds before thrust and another three at staging. The flight
-code pre-aligns, ticks at0.05s under power and has0.25s per staging settle.
-For the earlier supplied516.1/-44.9/223.9 state, a source-timed0.05s/0.5s
-point mass travels~20.20km, while the old nominal estimate was~22.47km.
-The corrected estimate is~20.19km. The later illustrative287m/s post-stage
-case also improves. This proves a model bias; it is not a replay or complete
-explanation of the latest5km flight miss.
+At ignition hs542.3m/s,vs-31.2m/s,ASL9522m,target elevation4113m, transfer credit
+293.4m/s and current/weak acceleration40.18/2.45m/s2, the logged H gate was20637m.
+It matches the older three-second nominal ignition/staging travel assumption.
+The prior timing correction alone gives18396m; adding mass loss gives17494m.
+Observed travel is approximately21103-4051=17052m. Do not attribute all the
+range error to changing mass: both timing and mass contributed.
 
-Nominal range now uses pre-aligned ignition (zero nominal initial delay) and
-two actual settle intervals, separately from the unchanged V safety envelope.
-Orbital lead, live geographic gate and provisional preview use this same
-timing. The full three-second safety reserve, clearance, actual-facing cutoff,
-staging limits and fixed-site policy remain. Forecast/header diagnostics state
-both nominal and safety timing. Variable mass/TWR, remaining model error and
-the approach recovery cost still require the new flight archive.
+A flat-target-height controller replay with explicitly assumed transfer Isp345s
+and lander290s predicts16738m and155s to capture, against154s flown. The actual
+engine suffixes are absent from this archive, so this is not an exact replay.
+It predicts end mass0.7196t versus0.7183t logged. New diagnostic engine rows
+record exhaust velocity, thrust, fuel and discarded mass for future validation.
+No5km offset, longer hover, weaker terrain policy or relaxed target tolerance
+was added. The remaining fast-gate approximation, attitude pauses, actual terrain
+and rotation-induced cross-track drift still need native target validation.
 
 `STATS deorbit powered-lead` records aim, powered/ballistic ranges, ignition
 state, post-deorbit transfer budget and computation elapsed time. Brake entry

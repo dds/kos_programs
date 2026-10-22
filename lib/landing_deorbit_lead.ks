@@ -28,9 +28,56 @@ LOCAL FUNCTION _landingLeadStateAt {
         "LAT",geo:LAT,"LNG",geo:LNG,"ASL",asl).
 }
 
+// Mirror both live ignition gates, including the fixed-site geographic gate.
+// A forecast that assumes V-only ignition while flight burns at H cannot
+// converge reliably. Native conic samples supply local terrain clearance.
+LOCAL FUNCTION _landingLeadGateAt {
+    PARAMETER ut.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER elevation.
+    PARAMETER activeAcc.
+    PARAMETER planAcc.
+    PARAMETER stageDv.
+    PARAMETER gravAcc.
+    PARAMETER delay.
+    PARAMETER stack.
+    LOCAL sample IS _landingLeadStateAt(ut,elevation).
+    LOCAL envelope IS lmStagedBrakeEnvelope(sample["HS"],sample["DOWN"],
+        activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
+    IF sample["HEIGHT"] <= envelope["V"] { RETURN TRUE. }
+    IF LANDING_FLEXIBLE_SITE > 0 { RETURN FALSE. }
+    LOCAL velocityVec IS lmGroundVelocityAt(ut).
+    LOCAL positionVec IS lmGroundPositionAt(ut).
+    LOCAL hVel IS VXCL(positionVec:NORMALIZED,velocityVec).
+    IF hVel:MAG <= APPROACH_HSPEED { RETURN FALSE. }
+    LOCAL targetVec IS LATLNG(targetLat,targetLng):ALTITUDEPOSITION(elevation)-SHIP:BODY:POSITION.
+    LOCAL downrange IS VDOT(VXCL(positionVec:NORMALIZED,targetVec-positionVec),hVel:NORMALIZED).
+    IF downrange <= 0 { RETURN sample["HEIGHT"] <= TERRAIN_SAFE_ALT. }
+    LOCAL etaLo IS 0.
+    LOCAL etaHi IS MAX(120,LANDING_BRAKE_ALIGN_LEAD*2).
+    LOCAL iteration IS 0.
+    UNTIL iteration >= 12 {
+        LOCAL coastTime IS (etaLo+etaHi)/2.
+        LOCAL future IS lmStagedBrakeEnvelope(sample["HS"],sample["DOWN"]+gravAcc*coastTime,
+            activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
+        LOCAL futureHeight IS sample["HEIGHT"]-sample["DOWN"]*coastTime-gravAcc*coastTime^2/2.
+        IF futureHeight <= future["V"] { SET etaHi TO coastTime. }
+        ELSE { SET etaLo TO coastTime. }
+        SET iteration TO iteration+1.
+    }
+    IF sample["HEIGHT"] > TERRAIN_SAFE_ALT AND etaLo > LANDING_BRAKE_ALIGN_LEAD { RETURN FALSE. }
+    LOCAL nominal IS lmNominalBrakeRange(sample["HS"],activeAcc,planAcc,stageDv,gravAcc,0,
+        SHIP:BODY:RADIUS,sample["ASL"],2*MAX(0.05,LANDING_STAGE_SETTLE),stack).
+    IF nominal < 0 { RETURN FALSE. }
+    LOCAL hGate IS MIN(envelope["H"],nominal)+BRAKE_MARGIN
+        + MAX(0,LANDING_BRAKE_GATE_LEAD_DIST)+MAX(0,LANDING_BRAKE_UNDERSHOOT_BIAS).
+    RETURN downrange <= hGate.
+}
+
 // The attached node is included by native POSITIONAT propagation. Find the
-// conservative vertical ignition boundary on that post-node conic, then
-// subtract nominal powered travel from remaining ballistic travel. That
+// first live H/V ignition boundary on that post-node conic, then
+// subtract integrated powered travel from remaining ballistic travel. That
 // difference is the required phantom-impact lead, not a fixed 15 km.
 // Same policy is recomputed for new, retained and pre-burn node admission.
 GLOBAL FUNCTION landingDeorbitLeadPolicy {
@@ -45,7 +92,10 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
     IF LANDING_ECONOMY_BRAKE <= 0 OR LANDING_STAGE_BRAKE_CREDIT <= 0
             OR SHIP:BODY:ATM:EXISTS OR NOT ADDONS:TR:HASIMPACT { RETURN policy. }
     LOCAL started IS TIME:SECONDS.
-    LOCAL activeAcc IS vesselLandingThrust()/MAX(0.01,SHIP:MASS).
+    LOCAL stack IS landingBrakeStackAt(landingBrakeStack(),SHIP:MASS,nd:DELTAV:MAG).
+    IF NOT stack["VALID"] { SET policy["REASON"] TO stack["REASON"]. RETURN policy. }
+
+    LOCAL activeAcc IS stack["STAGES"][0]["THRUST"]/stack["MASS"].
     LOCAL planAcc IS vesselLandingReserveAcc().
     IF planAcc <= 0 { SET planAcc TO activeAcc. }
     SET planAcc TO MIN(activeAcc,planAcc).
@@ -67,29 +117,29 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
     IF hi <= lo OR hi-lo > 1800 { SET policy["REASON"] TO "impact-time". RETURN policy. }
     LOCAL elevation IS LATLNG(targetLat,targetLng):TERRAINHEIGHT.
     LOCAL delay IS MAX(LANDING_BRAKE_REACTION_TIME,1+2*MAX(0.05,LANDING_STAGE_SETTLE)).
-    LOCAL firstState IS _landingLeadStateAt(lo,elevation).
-    LOCAL firstGate IS lmStagedBrakeEnvelope(firstState["HS"],firstState["DOWN"],
-        activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
-    IF firstState["HEIGHT"] <= firstGate["V"] {
+    IF _landingLeadGateAt(lo,targetLat,targetLng,elevation,activeAcc,planAcc,stageDv,gravAcc,delay,stack) {
         SET policy["REASON"] TO "no-coast-before-powered-stop". RETURN policy.
     }
     LOCAL iteration IS 0.
     UNTIL iteration >= 12 OR ABORT {
         LOCAL midpoint IS (lo+hi)/2.
-        LOCAL sample IS _landingLeadStateAt(midpoint,elevation).
-        LOCAL envelope IS lmStagedBrakeEnvelope(sample["HS"],sample["DOWN"],
-            activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
-        IF sample["HEIGHT"] <= envelope["V"] { SET hi TO midpoint. }
+        IF _landingLeadGateAt(midpoint,targetLat,targetLng,elevation,activeAcc,planAcc,stageDv,gravAcc,delay,stack) { SET hi TO midpoint. }
         ELSE { SET lo TO midpoint. }
         SET iteration TO iteration+1.
     }
     IF ABORT { SET policy["REASON"] TO "abort". RETURN policy. }
     LOCAL ignition IS _landingLeadStateAt(hi,elevation).
-    LOCAL rangeM IS lmNominalBrakeRange(ignition["HS"],activeAcc,planAcc,
-        stageDv,gravAcc,0,SHIP:BODY:RADIUS,ignition["ASL"],2*MAX(0.05,LANDING_STAGE_SETTLE)).
+    LOCAL forecast IS landingPredictBrake(lmGroundPositionAt(hi),lmGroundVelocityAt(hi),stack,elevation).
+    IF NOT forecast["VALID"] { SET policy["REASON"] TO forecast["REASON"]. RETURN policy. }
+    LOCAL capturedGeo IS SHIP:BODY:GEOPOSITIONOF(forecast["POSITION"]+SHIP:BODY:POSITION).
+    LOCAL travel IS lmSurfaceTrackOffset(ignition["LAT"],ignition["LNG"],capturedGeo:LAT,capturedGeo:LNG,
+        lmGroundVelocityAt(hi)).
+    LOCAL rangeM IS travel["DOWNFIELD"].
+    LOCAL captureError IS lmSurfaceTrackOffset(targetLat,targetLng,capturedGeo:LAT,capturedGeo:LNG,
+        lmGroundVelocityAt(hi)).
     LOCAL ballistic IS lmSurfaceTrackOffset(ignition["LAT"],ignition["LNG"],
         impactGeo:LAT,impactGeo:LNG,lmGroundVelocityAt(impactUT)).
-    IF rangeM < 0 OR NOT ballistic["VALID"] {
+    IF rangeM < 0 OR NOT travel["VALID"] OR NOT ballistic["VALID"] {
         SET policy["REASON"] TO "no-powered-range". RETURN policy.
     }
     LOCAL leadM IS ballistic["DOWNFIELD"]-rangeM.
@@ -112,6 +162,13 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         + " nominalIgnitionDelay=0 nominalStageDelay=" + (2*MAX(0.05,LANDING_STAGE_SETTLE))
         + " safetyReaction=" + delay
         + " toleranceM=" + tolerance + " elapsed=" + ROUND(TIME:SECONDS-started,2)
-        + " model=constant-descent nominal=true").
+        + " captureDownfield=" + ROUND(captureError["DOWNFIELD"],0)
+        + " captureCross=" + ROUND(captureError["CROSS"],0)
+        + " captureHeight=" + ROUND(forecast["HEIGHT"],0)
+        + " captureHs=" + ROUND(forecast["HS"],2) + " captureVs=" + ROUND(forecast["VS"],2)
+        + " poweredSeconds=" + ROUND(forecast["SECONDS"],1)
+        + " impulseDv=" + ROUND(forecast["IMPULSE"],1) + " endMass=" + ROUND(forecast["MASS"],4)
+        + " modelSteps=" + forecast["STEPS"]
+        + " model=variable-mass-controller capture=true").
     RETURN policy.
 }
