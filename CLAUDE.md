@@ -363,6 +363,18 @@ Looks like Python/JS; is neither.
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.
 - Flight-test ledger (update as things prove out):
+  Operator reports the newest RO9 Mun economy craft has landed, retaining
+  497m/s in lander2 and654m/s in return1 (1151m/s staged sum). It came short
+  of the original Trajectories target; no diagnostic archive, final miss,
+  hover duration, stage-role log or code-version line supplied for this run.
+  This confirms reported touchdown, not pinpoint accuracy or a native
+  validation of every2f87166 change. Prior illustrative10km-parking/53km-entry
+  estimate~877m/s leaves~274m/s for losses/corrections before any differences
+  in site altitude, geometry or thrust; plausible margin, not a return guarantee.
+  Surface-return setup clears the landing override, defaults ASCENT_STAGEDFalse,
+  uses the still-active lander engine at liftoff and arms independent exhaustion
+  staging. Preserve the497m/s for ascent rather than discarding it prelaunch.
+  Actual ascent, circularization and return outcome remain unverified.
   New RO9 Mun economy flight reported premature V ignition: height9422m,
   bottom11058m, ASL13918m, targetElev4497m, hs513.2/vs-18.2,
   active39.78/plan=reserve2.45m/s2 (surface TWR~1.50), stage3,

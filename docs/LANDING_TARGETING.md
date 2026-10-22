@@ -41,6 +41,18 @@ fuel can also be used during ascent. Capture/corrections still draw from the
 roughly488m/s transfer remainder, so these numbers do not certify landing
 or return affordability. Flexible economy targeting remains enabled.
 
+The operator subsequently reports touchdown of the newest Mun economy craft
+with497m/s left in the landing stage and654m/s in the return stage:1151m/s
+combined staged vacuum dV. The reported descent stopped short of the original
+Trajectories target. No corresponding archive, final miss or hover duration
+has been reviewed, and the code version has not been confirmed. The earlier
+illustrative~877m/s ideal10km-parking/53km-Kerbin-entry route would leave~274m/s
+for real ascent losses and corrections; this is a plausible return budget,
+not a live solution or guaranteed margin. Surface-return setup retains the
+active landing engine for liftoff by default and independent ascent staging
+can shed it after exhaustion, so the497m/s need not be discarded before launch.
+Actual return success remains to be established.
+
 The default landing floor0 can select1 after2 exhausts, potentially consuming
 the dedicated return stage during descent. `cmd/landingstages.ks, 2` saves a
 validated per-flight floor without changing the target, mission, node or
