@@ -36,7 +36,7 @@ LOCAL FUNCTION _cmdHoproute {
         PRINT "Current mission unavailable; no hop route saved.". RETURN.
     }
     IF stateGet("hop_route_active",FALSE) {
-        PRINT "A route is already active; finish it with R at landing review before replacing it.". RETURN.
+        PRINT "A route is already active; use the printed local hop commands at surface review.". RETURN.
     }
     IF SEQUENCE:LENGTH = 0 { PRINT "Current mission has no return/finish sequence to preserve.". RETURN. }
     IF NOT vesselLandingPrepareRoles() { PRINT "Invalid landing/return stage roles.". RETURN. }
@@ -78,7 +78,7 @@ LOCAL FUNCTION _cmdHoproute {
         "HOP_TWR",hopTwr,"HOP_RETURN_RESERVE_DV",returnReserveDv)).
     stateSaveReloadState("HOP_ROUTE_ARMED","HOP","HOP").
     PRINT "Route saved; return mission retained. Review sites/limits before REBOOT. to launch.".
-    PRINT "Every landing waits for N (next hop) or R (finish hops/resume return).".
+    PRINT "Every settled landing prints local continue/waypoint/economy-return commands, then returns to the prompt.".
 }
 
 _cmdHoproute().

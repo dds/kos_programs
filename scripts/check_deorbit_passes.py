@@ -122,14 +122,14 @@ def check_long_coast_admission():
     source=function_body((ROOT/'lib/deorbit_burn.ks').read_text(),'executeDeorbitNode')
     source=source.split('    SET SAS TO FALSE.',1)[0]
     source=re.sub(r'WAIT UNTIL (.*?)\.(?=\s*\n)',r'UNTIL \1 { WAIT 0.02. }',source,flags=re.S)
-    for scenario in ('accepted','geometry-rejected','light-changed','abort','body-changed','removed','unhealthy','expired'):
+    for scenario in ('accepted','geometry-rejected','light-changed','abort','body-changed','removed','unhealthy','expired','no-owned-alarm'):
         events=[]
         node=NS(TIME=100000,DELTAV=NS(MAG=10))
         ship=NS(BODY='Mun',MASS=1,AVAILABLETHRUST=10,CONTROL=NS(PILOTMAINTHROTTLE=.2))
         env=dict(nd=node,targetLat=44.593,targetLng=-24.926,TIME=NS(SECONDS=0),SHIP=ship,
                  KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),ABORT=False,HASNODE=True,ROUND=round,
                  vesselNeedsStage=lambda:False,
-                 maneuverEnsureBurnAlarm=lambda *args:events.append(('alarm',args)) or 'burn-alarm',
+                 maneuverEnsureBurnAlarm=lambda *args:events.append(('alarm',args)) or ('' if scenario=='no-owned-alarm' else 'burn-alarm'),
                  vesselLandingCleanup=lambda:events.append(('cutoff',)) or True,
                  vesselLandingPrepareRoles=lambda:True,
                  DELETEALARM=lambda alarm:events.append(('delete',alarm)),
@@ -164,11 +164,11 @@ def check_long_coast_admission():
         env.update(landingLightNodeAllowed=light,enterSolarCoast=solar,coastAutoWarp=warp,
                    trySolarHoldTick=tick,fixture_wait=wait,beforeBurn=NS(CALL=admission))
         result=run(source,env)
-        accepted=scenario in ('accepted','unhealthy')
+        accepted=scenario in ('accepted','unhealthy','no-owned-alarm')
         assert result is (None if accepted else False),(scenario,result)
         names=[event[0] for event in events]
         assert names.index('alarm')<names.index('solar')
-        assert ('warp' in names)==(scenario not in ('abort','body-changed','removed','unhealthy'))
+        assert ('warp' in names)==(scenario not in ('abort','body-changed','removed','unhealthy','no-owned-alarm'))
         if accepted:
             assert names.count('tick')==2 and names.count('light')==2 and 'geometry' in names
             assert env['TIME'].SECONDS==99909.5 and 'cutoff' not in names

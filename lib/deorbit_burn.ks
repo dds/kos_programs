@@ -54,7 +54,7 @@ GLOBAL FUNCTION executeDeorbitNode {
     LOCAL coasted IS TIME:SECONDS < alignStartTime.
     IF coasted {
         SET solarRef TO enterSolarCoast("Deorbit burn approach", TRUE, TRUE, alignStartTime).
-        IF NOT ABORT AND SHIP:BODY = burnBody AND HASNODE
+        IF NOT ABORT AND kacAlarmId <> "" AND SHIP:BODY = burnBody AND HASNODE
                 AND solarCoastCanWarp(solarRef,"Deorbit burn approach")
                 AND coastHealthCheck("Deorbit burn pre-warp",alignStartTime) {
             coastAutoWarp(alignStartTime, "Deorbit burn approach", kacAlarmId).

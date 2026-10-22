@@ -117,13 +117,31 @@ body radius. Run it while landed, idle and linked; it does not launch until
 you reboot. `cmd/hop` is the one-site form. These are rocket ballistic hops,
 separate from FDR1's RCS drone missions. This new route path needs flight testing.
 
-Every touchdown remains in a running surface review: do science, then press
-**N** for the next site or **R** to stop hopping and resume the original surface
-return setup, already-generated ascent leg, or DONE. No archive command is
-needed at that review. The selected mission/profile and unrelated return
-settings are retained. A reboot during a flown hop resumes landing rather
+Every touchdown settles for two seconds with brakes set and throttle off,
+then returns to the Godspeed prompt and prints these commands:
+
+- `RUNPATH("1:/run/hop").` — next route site; after the last site, resume the original return/DONE.
+- `RUNPATH("1:/run/hop","waypoint").` — replace the next hop with the currently selected navigation waypoint.
+- `RUNPATH("1:/run/hop","return").` — end hops and begin economy Kerbin return, targeting 53 km Pe without KSC targeting.
+
+The small script is saved locally before yielding, so these commands need no
+archive or radio link. They reload the cached libraries and mission settings,
+then recheck surface contact, Abort and applicable terrain/fuel limits before
+rebooting into the selected action. The selected mission/profile and unrelated
+return settings are retained. A reboot during a flown hop resumes landing rather
 than repeating liftoff. Launch/landing/review libraries stay cached together
 for route reboots; later return bands may still need their normal link/cache.
+
+Use the printed script commands: kOS disallows calling a program's user
+functions directly from the terminal. See the
+[kOS interpreter limitation](https://ksp-kos.github.io/KOS/language/user_functions.html#functions-and-the-terminal-interpreter).
+
+Surface review yields at 1× with no automatic departure timer or solar
+pointing. Scheduled orbital waits instead set an
+owned KAC alarm before solar setup and stay running until their wake time.
+KAC stops warp; the running script resumes the mission. Without a usable
+owned alarm, these waits poll the clock at 1×. Abort and trajectory/body
+changes interrupt the wait; alarm cleanup preserves independent SOI alarms.
 
 The default return allowance is700m/s, configurable in the command; it is not
 a solved return trajectory. Each leg also needs an independent landing

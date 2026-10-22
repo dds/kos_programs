@@ -73,6 +73,9 @@ GLOBAL FUNCTION waitUntilOrSOI {
     // A landing-window retry waits IN this body, rather than FOR entry.
     PARAMETER stayInBody IS FALSE.
 
+    // Never inherit an unguarded warp from a caller, quickload or manual UI.
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
     IF ABORT OR _coastWaitBodyLimit(targetBody,stayInBody) { RETURN. }
 
     IF checkPreWarpHealth {
@@ -81,12 +84,13 @@ GLOBAL FUNCTION waitUntilOrSOI {
         SET solarRef TO MAX(shipSolarFlow(), 0).
     }
     LOCAL waitSeconds IS MAX(0, targetUt - TIME:SECONDS).
-    IF NOT ABORT AND COAST_AUTO_WARP > 0
+    IF NOT ABORT AND alarmId <> "" AND COAST_AUTO_WARP > 0
             AND waitSeconds >= COAST_AUTO_WARP_MIN
             AND idealCoastWarpRate(waitSeconds) > 0
             AND solarCoastCanWarp(solarRef, "SOI coast")
             AND (NOT checkPreWarpHealth
-                OR coastHealthCheck("SOI coast pre-warp", targetUt)) {
+                OR coastHealthCheck("SOI coast pre-warp", targetUt))
+            AND NOT ABORT AND NOT _coastWaitBodyLimit(targetBody,stayInBody) {
         SET waitSeconds TO MAX(0, targetUt - TIME:SECONDS).
         IF COAST_HEALTH_CHECK > 0
                 AND waitSeconds >= COAST_AUTO_WARP_MIN * 2 {
@@ -95,12 +99,11 @@ GLOBAL FUNCTION waitUntilOrSOI {
                 midUt, "SOI coast health").
             mLog("SOI coast: midpoint health check in T+"
                 + ROUND(midUt - TIME:SECONDS, 0) + "s.").
-            IF coastAutoWarp(midUt, "SOI coast midpoint", healthAlarmId) {
+            IF healthAlarmId <> "" AND coastAutoWarp(midUt, "SOI coast midpoint", healthAlarmId) {
                 UNTIL TIME:SECONDS >= midUt OR _coastWaitBodyLimit(targetBody,stayInBody) OR ABORT {
                     SET solarRef TO trySolarHoldTick(solarRef, midUt).
                     WAIT MIN(pollInterval, MAX(0, midUt - TIME:SECONDS)).
                 }
-                IF healthAlarmId <> "" { DELETEALARM(healthAlarmId). }
                 IF WARP > 0 {
                     SET WARP TO 0.
                     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
@@ -109,11 +112,14 @@ GLOBAL FUNCTION waitUntilOrSOI {
                 IF NOT ABORT AND NOT _coastWaitBodyLimit(targetBody,stayInBody)
                         AND coastHealthCheck("SOI coast midpoint", targetUt) {
                     SET solarRef TO trySolarHoldTick(-1, targetUt).
-                    IF solarCoastCanWarp(solarRef, "SOI coast") {
+                    IF NOT ABORT AND NOT _coastWaitBodyLimit(targetBody,stayInBody)
+                            AND solarCoastCanWarp(solarRef, "SOI coast") {
                         coastAutoWarp(targetUt, "SOI coast", alarmId).
                     }
                 }
             }
+            // A declined warp still owns the alarm created above.
+            IF healthAlarmId <> "" { DELETEALARM(healthAlarmId). }
         } ELSE {
             coastAutoWarp(targetUt, "SOI coast", alarmId).
         }
@@ -122,6 +128,7 @@ GLOBAL FUNCTION waitUntilOrSOI {
         SET solarRef TO trySolarHoldTick(solarRef, targetUt).
         WAIT MIN(pollInterval, MAX(0, targetUt - TIME:SECONDS)).
     }
-    IF ABORT OR _coastWaitBodyLimit(targetBody,stayInBody) { SET WARP TO 0. }
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
 }
 

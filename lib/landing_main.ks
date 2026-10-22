@@ -716,6 +716,8 @@ GLOBAL FUNCTION landExecute {
     LOCK THROTTLE TO 0.
     SET SHIP:CONTROL:MAINTHROTTLE TO 0.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
     IF NOT vesselLandingPrepareRoles() {
         mLogError("Landing role tags invalid: further automatic staging blocked; active descent guidance retained.").
     }

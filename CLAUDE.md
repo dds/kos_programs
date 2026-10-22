@@ -346,6 +346,19 @@ Looks like Python/JS; is neither.
   actual KAC TIME as well as saved soi_alarm_ut before reusing an ID: the
   old ensureSoiAlarm fast path bypassed generic expiry checks. Arrival waits
   remove SOI alarms after crossing; no-KAC paths still poll the clock/body.
+  Shared coast waits must discard inherited warp on entry and settle at1x
+  on every exit. Auto-warp needs the wait's own nonempty, future alarm ID;
+  an unrelated future alarm cannot protect a missing/expired wake alarm.
+  Clean midpoint health alarms even when warp is declined. User-directed
+  hop surface review is explicitly manual: settle2s, set brakes, print
+  local RUNPATH("1:/run/hop"[,"waypoint"/"return"]) commands, then yield at1x.
+  No N/R listener, invented departure alarm or solar pointing. The local
+  prompt script reloads cached libraries/settings: kOS forbids calling a
+  program's user functions from the terminal. Actions recheck surface/body/
+  Abort and applicable fuel/terrain before rebooting;
+  hopReturn starts economy Kerbin return through existing safety gates.
+  Timed waits, operator review, and short attitude/
+  powered-control ticks have different purposes: do not add KAC to every WAIT.
   Both solver modes must share pre-SOI node creation: settle warp, cap the
   configured node epoch at native entry minus SOI_BUFFER_TIME minus1s,
   require BPLANE_EXISTING_NODE_MIN_ETA lead, then recheck lead/solved entry
@@ -386,15 +399,18 @@ Looks like Python/JS; is neither.
   cross500m, retaining its locked coordinates; economy remains flexible.
   Programmed rocket hops use the ORIGINAL mission plus scoped overrides and
   a durable route index, not a replacement profile discarding return intent.
-  HOP_REVIEW MUST stop after every landing, including the last; explicit N
-  advances one site and R restores original return/DONE. Never auto-clear
+  HOP_REVIEW MUST stop after every landing, including the last; its local
+  prompt script explicitly continues, selects a waypoint or returns home.
+  User replaced the former N/R listener with Godspeed plus printed commands.
+  Never auto-clear
   Abort, repeat an interrupted launch, stage into return, or restore a thrust
   limiter before physical zero. Capture limits by engine UID and persist
   once before liftoff for reboot recovery. Cache both launch/landing/review
   halves only for routes. Default return700m/s is an allowance, not a solved
   return guarantee; stage-only launch/landing budget also has to pass.
   New hops and numerical prediction still require flight tests. Commands
-  configure without ignition/reboot; operator reboots after review to launch.
+  configure routes without ignition/reboot; prompt actions explicitly reboot
+  into the chosen next leg. Cache the return_setup provider for route bands too.
   Return-provider warning follow-up: dispatcher binds only CURRENT phase;
   the earlier idea that this was harmless future-band noise was WRONG.
   Cross-compiled function pointers live as $name*, while DEFINED bareName

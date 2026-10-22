@@ -284,9 +284,9 @@ GLOBAL FUNCTION warpKacGuarded {
     LOCAL alarms IS LISTALARMS("All").
     IF alarmId <> "" {
         FOR a IN alarms {
-            IF a:ID = alarmId { RETURN TRUE. }
+            IF a:ID = alarmId AND a:TIME > TIME:SECONDS { RETURN TRUE. }
         }
-        mLogWarn(label + ": warp skipped; KAC alarm missing.").
+        mLogWarn(label + ": warp skipped; KAC alarm missing or expired.").
         RETURN FALSE.
     }
     FOR a IN alarms {

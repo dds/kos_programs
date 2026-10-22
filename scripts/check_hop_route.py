@@ -21,6 +21,7 @@ def execute(name,env,*args):
     params=re.findall(r'PARAMETER (\w+)',source)
     local=dict(env);local.update(zip(params,args))
     source=source.replace('UNTIL ABORT','UNTIL route_cancelled()')
+    source=source.replace('WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.','fixture_settle().')
     source=source.replace('UNLOCK STEERING.','unlock_steering().').replace('REBOOT.','reboot().')
     try:ks.run(without_prints(ks.parse(source)),local)
     except ks.Returned as result:return result.value
@@ -30,31 +31,37 @@ class Items(KList):
     def CONTAINS(self,item):return item in self
 
 
+class Lex(dict):
+    LENGTH=property(len)
+
+
 class Reboot(Exception):pass
 
 
 def fixture():
-    state=dict(hop_route_active=True,hop_route_body='Minmus',hop_route_index=0,
+    state=dict(phase='HOP_REVIEW',hop_route_active=True,hop_route_body='Minmus',hop_route_index=0,
                hop_route_sites=KList([KList([0,1]),KList([0,2])]),hop_inflight=True,
-               hop_route_restore=dict(SEQUENCE=Items(['LAND_ASSIST','SURFACE_RETURN_SETUP']),
+               hop_route_restore=Lex(SEQUENCE=Items(['LAND_ASSIST','SURFACE_RETURN_SETUP']),
                                       RETURN_PE=53000,LANDING_FLEXIBLE_SITE=1))
     updates={};events=[];keys=[]
     def reload(reason,phase,band):state.update(phase=phase,lib_band=band,reload_reason=reason)
     def reboot():raise Reboot()
-    def wait(seconds):
-        if not keys:env['ABORT']=True
+    def wait(seconds):env['TIME'].SECONDS+=seconds
     env=dict(stateGet=lambda key,default='':state.get(key,default),
              stateGetNum=lambda key,default=0:state.get(key,default),
              stateSet=lambda key,value:state.update({key:value}),stateRemove=lambda key:state.pop(key,None),stateSaveReloadState=reload,
              missionOverrideUpdate=lambda values:updates.update(values),
-             LIST=lambda *args:KList(args),LEXICON=lambda *args:dict(zip(args[::2],args[1::2])),
+             LIST=lambda *args:KList(args),LEXICON=lambda *args:Lex(zip(args[::2],args[1::2])),
              SHIP=NS(STATUS='LANDED',LATITUDE=0,LONGITUDE=1,ALTITUDE=0,
-                     BODY=NS(NAME='Minmus',RADIUS=60000,MU=.491*60000**2),DELTAV=NS(VACUUM=2000)),
+                     BODY=NS(NAME='Minmus',ATM=NS(EXISTS=False),RADIUS=60000,MU=.491*60000**2),DELTAV=NS(VACUUM=2000),
+                     VELOCITY=NS(SURFACE=NS(MAG=0))),
              STAGE=NS(DELTAV=NS(VACUUM=1300)),MIN=min,MAX=max,SQRT=math.sqrt,
              SIN=lambda value:math.sin(math.radians(value)),HOP_PITCH=45,
              HOP_RETURN_RESERVE_DV=700,HOP_LANDING_RESERVE_DV=180,
-             ABORT=False,ROUND=round,bootLibBandForPhase=lambda name:'RETURN_SETUP',
-             _hopRestoreSavedLimits=lambda:None,thrustCutoffOk=lambda:events.append('cutoff') or True,unlock_steering=lambda:events.append('unlock'),
+             ABORT=False,HASNODE=False,TIME=NS(SECONDS=0),ABS=abs,CHAR=chr,TAN=lambda value:math.tan(math.radians(value)),
+             LANDING_TERRAIN_MAX_SLOPE=5,landingTerrainGrade=lambda *args:0,
+             vesselLandingPrepareRoles=lambda:True,selectedWaypoint=lambda:0,ROUND=round,bootLibBandForPhase=lambda name:'RETURN_SETUP',fixture_settle=lambda:None,
+             _hopRestoreSavedLimits=lambda:None,_hopWritePromptCommand=lambda:None,thrustCutoffOk=lambda:events.append('cutoff') or True,unlock_steering=lambda:events.append('unlock'),
              yieldToPrompt=lambda:events.append('yield'),reboot=reboot,fixture_wait=wait,route_cancelled=lambda:env['ABORT'],
              geoDistance=lambda *args:1000,mLogError=lambda *args:None)
     class Input:
@@ -62,41 +69,36 @@ def fixture():
         def HASCHAR(self):return bool(keys)
         def GETCHAR(self):return keys.pop(0)
     env['TERMINAL']=NS(INPUT=Input())
-    for name in ('hopRouteBudget','hopRouteFuelOk'):
+    for name in ('hopRouteBudget','hopRouteFuelOk','_hopSurfaceReady','_hopDestinationAllowed',
+                 '_hopScheduleSite','hopContinue','hopWaypoint','hopReturn'):
         env[name]=lambda *args,name=name:execute(name,env,*args)
+    env['_hopFinishRoute']=lambda economy=False:execute('_hopFinishRoute',env,economy)
     return env,state,updates,events,keys
 
 
 def check_review_and_reboot():
     env,state,updates,events,keys=fixture()
     execute('phaseHopReview',env)
-    assert events==['cutoff','unlock','yield'] and state['hop_route_index']==0
-    assert not state['hop_inflight'] and not updates
-    env['ABORT']=False;keys.append('n')
-    try:execute('phaseHopReview',env)
+    assert events[0]=='cutoff' and events[-1]=='yield' and state['hop_route_index']==0
+    assert not state['hop_inflight'] and not updates and 2<=env['TIME'].SECONDS<=2.3
+    try:execute('hopContinue',env)
     except Reboot:pass
     else:raise AssertionError('no next-leg reboot')
-    # JSON round trip stands for state surviving the band reboot.
     saved=json.loads(json.dumps(state))
-    saved['hop_route_restore']['SEQUENCE']=Items(saved['hop_route_restore']['SEQUENCE'])
     assert saved['hop_route_index']==0 and saved['hop_route_pending']==1 and saved['phase']=='HOP'
     assert updates==dict(HOP_TARGET_LAT=0,HOP_TARGET_LNG=2)
-    # A second boot between committing index and deleting pending is harmless.
     execute('_hopApplyPending',env)
     state['hop_route_pending']=1
     execute('_hopApplyPending',env)
     assert state['hop_route_index']==1 and 'hop_route_pending' not in state
-    saved['hop_route_index']=1
-    saved.pop('hop_route_pending',None)
-    env['stateGet']=lambda key,default='':saved.get(key,default)
-    env['stateGetNum']=lambda key,default=0:saved.get(key,default)
-    env['ABORT']=False;keys.append('r')
-    try:execute('phaseHopReview',env)
+    state['phase']='HOP_REVIEW'
+    try:execute('hopContinue',env)
     except Reboot:pass
+    else:raise AssertionError('no original mission reboot')
     assert state['phase']=='SURFACE_RETURN_SETUP'
     assert updates['RETURN_PE']==53000 and updates['LANDING_FLEXIBLE_SITE']==1
     assert updates['SEQUENCE']==['LAND_ASSIST','SURFACE_RETURN_SETUP']
-    print('PASS: every landing remains unpowered for review; explicit N advances one persisted site, explicit R restores the original sequence/return policy without changing mission identity')
+    print('PASS: settled touchdown yields without input; explicit hopContinue advances one persisted site and after the last restores original return policy without changing mission identity')
 
 
 def check_budget_and_recovery():
@@ -104,8 +106,8 @@ def check_budget_and_recovery():
     for available,stage,allowed in ((2000,1300,True),(800,1300,False),(2000,100,False)):
         env['SHIP'].DELTAV.VACUUM=available;env['STAGE'].DELTAV.VACUUM=stage
         assert env['hopRouteFuelOk'](1000)==allowed
-    env['SHIP'].DELTAV.VACUUM=800;keys.append('n')
-    execute('phaseHopReview',env)
+    env['SHIP'].DELTAV.VACUUM=800
+    execute('hopContinue',env)
     assert not updates and state['hop_route_index']==0
     phase=function_body(HOP,'phaseHop')
     assert phase.index('IF SHIP:STATUS <> "LANDED"')<phase.index('stateSet("hop_inflight",TRUE)')
@@ -118,6 +120,97 @@ def check_budget_and_recovery():
     assert 'SET hopThrottle TO 0.' in phase and 'VDOT(SHIP:FACING:FOREVECTOR,SHIP:UP:VECTOR) > 0' in phase
     assert 'thrustCutoffOk().' in phase
     print('PASS: whole-vessel and permitted-stage budgets protect return and landing allowances; interrupted launch goes to descent/review, no hop stages or clears Abort, and initial/live actual-attitude guards own throttle')
+
+
+def check_review_wait_policy():
+    review=function_body(HOP,'phaseHopReview')
+    assert review.index('SET WARP TO 0.')<review.index('_hopRestoreSavedLimits()')
+    assert 'WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.' in review and 'SET BRAKES TO TRUE.' in review
+    assert 'TERMINAL:INPUT' not in HOP
+    assert not re.search(r'\b(?:ADDALARM|kacEnsureAlarm|orientForSolar|enterSolarCoast)\s*\(',review)
+    for fault in ('airborne','body','abort','node','moving','wrong-phase','inactive','roles','terrain','unknown-terrain'):
+        env,state,updates,events,keys=fixture()
+        if fault=='airborne':env['SHIP'].STATUS='FLYING'
+        if fault=='body':env['SHIP'].BODY.NAME='Mun'
+        if fault=='abort':env['ABORT']=True
+        if fault=='node':env['HASNODE']=True
+        if fault=='moving':env['SHIP'].VELOCITY.SURFACE.MAG=1
+        if fault=='wrong-phase':state['phase']='HOP'
+        if fault=='inactive':state['hop_route_active']=False
+        if fault=='roles':env['vesselLandingPrepareRoles']=lambda:False
+        if fault in ('terrain','unknown-terrain'):env['landingTerrainGrade']=lambda *args:1 if fault=='terrain' else -1
+        execute('hopContinue',env)
+        assert not updates and 'hop_route_pending' not in state,fault
+    env,state,updates,events,keys=fixture()
+    env['SHIP'].VELOCITY.SURFACE.MAG=1
+    execute('phaseHopReview',env)
+    assert env['TIME'].SECONDS>=10 and events[-1]=='yield' and not updates
+    print('PASS: review settles at1x with brakes then yields, never listens for keys or invents alarms/solar; prompt actions reject unsafe surface/body/Abort/nodes/phase/staging/terrain and moving saves time out safely')
+
+
+def check_waypoint_and_economy_return():
+    env,state,updates,events,keys=fixture()
+    execute('hopWaypoint',env)
+    assert not updates and len(state['hop_route_sites'])==2
+    env['selectedWaypoint']=lambda:NS(LATITUDE=1,LONGITUDE=3)
+    try:execute('hopWaypoint',env)
+    except Reboot:pass
+    assert state['hop_route_sites']==[[0,1],[1,3]] and state['hop_route_pending']==1
+    assert updates==dict(HOP_TARGET_LAT=1,HOP_TARGET_LNG=3)
+    env,state,updates,events,keys=fixture()
+    state['hop_route_index']=1
+    env['selectedWaypoint']=lambda:NS(LATITUDE=2,LONGITUDE=4)
+    try:execute('hopWaypoint',env)
+    except Reboot:pass
+    assert state['hop_route_sites']==[[0,1],[0,2],[2,4]] and state['hop_route_pending']==2
+    env,state,updates,events,keys=fixture()
+    try:execute('hopReturn',env)
+    except Reboot:pass
+    assert not state['hop_route_active'] and state['phase']=='SURFACE_RETURN_SETUP'
+    assert updates['SEQUENCE']==['SURFACE_RETURN_SETUP'] and updates['RETURN_PE']==53000
+    assert updates['RETURN_KSC_TARGET']==0 and updates['RETURN_PE_TOLERANCE']==1000
+    assert updates['RETURN_SEQUENCE']==['ESCAPE','COAST','MCC','AEROBRAKE','DESCENT','DONE']
+    assert updates['SURFACE_RETURN_PARKING_ALT']==10000
+    assert 'mission_id' not in state and 'hop_route_pending' not in state
+    print('PASS: waypoint command replaces/appends only the next leg; explicit hopReturn abandons the route for economy Kerbin return through normal ascent/entry phases without KSC targeting')
+
+
+def check_local_prompt_script():
+    lines=[];deleted=[]
+    writer=function_body(HOP,'_hopWritePromptCommand')
+    writer=re.sub(r'^\s*LOG (.*) TO wrapperPath\.$',r'fixture_log(\1,wrapperPath).',writer,flags=re.M)
+    env=dict(CHAR=chr,EXISTS=lambda path:True,DELETEPATH=deleted.append,
+             fixture_log=lambda line,path:lines.append(line))
+    ks.run(ks.parse(writer),env)
+    source='\n'.join(lines)
+    assert deleted==['1:/run/hop.ks'] and not command_entrypoint_errors(source)
+    assert source.startswith('PARAMETER action IS "continue".')
+    body=function_body(source,'_hopPrompt').replace('WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.','fixture_settle().')
+    # Each call starts a fresh program context: no prior library functions
+    # survive the Godspeed prompt. Bootstrap/craft/mission must be reloaded.
+    for action in ('continue','waypoint','return','unknown'):
+        for configured in (False,True):
+            calls=[]
+            env=dict(action=action,ABORT=False,SHIP=NS(STATUS='LANDED',THRUST=0,
+                     CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)),
+                     RUNPATH=lambda path:calls.append(('run',path)),
+                     fixture_settle=lambda:None,bootPreamble=lambda:calls.append(('preamble',)),
+                     bootLibLoad=lambda name:calls.append(('load',name)),
+                     stateGet=lambda key,default='':{'vehicle':'RO9','mission_id':'minmus_economy_return'}.get(key,default),
+                     HOMECONNECTION=NS(ISCONNECTED=False),
+                     bootApplyMissionConfig=lambda *args:calls.append(('profile',args)) or configured,
+                     hopContinue=lambda:calls.append(('action','continue')),
+                     hopWaypoint=lambda:calls.append(('action','waypoint')),
+                     hopReturn=lambda:calls.append(('action','return')))
+            try:ks.run(without_prints(ks.parse(body)),env)
+            except ks.Returned:pass
+            assert calls[:4]==[('run','1:/lib/boot_lib'),('preamble',),('load','hop'),('load','craft/RO9')]
+            assert calls[4]==('profile',('RO9','minmus_economy_return',False))
+            assert calls[5:]==([('action',action)] if configured and action!='unknown' else [])
+    review=function_body(HOP,'phaseHopReview')
+    assert review.index('_hopWritePromptCommand()')<review.rindex('yieldToPrompt()')
+    assert '"1:/run/hop"' in review and 'CHAR(34)' in review
+    print('PASS: review writes a wrapped local script before yielding; printed RUNPATH actions start fresh offline contexts, reload cached hop/craft/profile, refuse missing settings and never call old interpreter function pointers')
 
 
 def check_command_and_offline_band():
@@ -136,7 +229,7 @@ def check_command_and_offline_band():
     assert 'hop_review' in bands['hop']
     conditional=function_body((ROOT/'lib/mission_type.ks').read_text(),'missionTypeConditionalRoots')
     assert 'SEQUENCE:CONTAINS("HOP_REVIEW")' in conditional
-    assert '"hop","landing_main","landing_coast","landing_brake"' in conditional
+    assert '"hop","landing_main","landing_coast","landing_brake","return_setup"' in conditional
     assert conditional.index('bandKey = "HOP" OR bandKey = "LANDING"')<conditional.index('roots:ADD(ln)')
     print('PASS: route setup never ignites/reboots, checks sites/terrain and preserves current mission; only route bands retain launch, landing and review code through disconnected reboots')
 
@@ -191,8 +284,8 @@ def check_limits_and_finish():
     execute('_hopRestoreThrustLimits',env,limits)
     assert engine1.THRUSTLIMIT==100 and engine2.THRUSTLIMIT==80
     state['hop_route_restore']['SEQUENCE']=Items(['PRELAUNCH','LAUNCH','PARK','RETURN_SETUP'])
-    keys.append('r')
-    try:execute('phaseHopReview',env)
+    state['hop_route_index']=1
+    try:execute('hopContinue',env)
     except Reboot:pass
     assert state['phase']=='PRELAUNCH' and not state['hop_route_active']
     # Review's local SEQUENCE assignment deliberately only controls the saved
@@ -207,6 +300,9 @@ def check_limits_and_finish():
 if __name__=='__main__':
     check_review_and_reboot()
     check_budget_and_recovery()
+    check_review_wait_policy()
+    check_waypoint_and_economy_return()
+    check_local_prompt_script()
     check_command_and_offline_band()
     check_route_command_execution()
     check_limits_and_finish()
