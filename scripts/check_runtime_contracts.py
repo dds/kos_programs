@@ -182,17 +182,24 @@ def check_return_setup_binding():
     declared=set(re.findall(r'GLOBAL FUNCTION (\w+)',(ROOT/'lib/return_setup.ks').read_text()))
     for phase,handler in (('RETURN_SETUP','phaseReturnSetup'),
                           ('SURFACE_RETURN_SETUP','phaseSurfaceReturnSetup')):
-        for loaded in (True,False):
+        for loaded,active_phase in ((True,phase),(False,phase),(False,'LAND_ASSIST')):
+            warnings=[]
             symbols=declared if loaded else set()
             bindings={}
             def delegate(name):
                 assert name in symbols,('undefined handler dereferenced',name)
                 return name
             env=dict(phaseMap=bindings,phaseName=phase,fixture_defined=lambda name:name in symbols,
+                     stateGet=lambda key,default='':active_phase,mLogError=warnings.append,
                      fixture_delegate=delegate,
                      phaseMapSet=lambda mapping,key,value:mapping.update({key:value}))
-            run(source,env)
+            # This check needs the real warning branch; the general run()
+            # helper suppresses logging for physics-only cases.
+            checked=source.replace('mLogError(', 'capture_error(')
+            env['capture_error']=warnings.append
+            run(checked,env)
             assert bindings==({phase:handler} if loaded else {})
+            assert bool(warnings)==(not loaded and active_phase==phase)
     machine=function_body((ROOT/'lib/phases.ks').read_text(),'runPhases')
     assert machine.index('dependencyBindPhase(phaseMap, phase)')<machine.index('PHASE HANDLER MISSING:')
     assert 'yieldToPrompt().' in machine[machine.index('PHASE HANDLER MISSING:'):]
