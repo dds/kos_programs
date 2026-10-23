@@ -1178,6 +1178,18 @@ Looks like Python/JS; is neither.
   The existing1km/fuel rejection gates and downstream actual-orbit MCC
   corridor remain; no tolerance relaxation or new BPLANE phase. Prescribed
   response/source fixtures pass, native KSP flight evidence still pending.
+  Follow-up Minmus failure (25.14deg,9.5x10km,1195.8m/s available): the
+  separable timing/thrust seed stopped at Pe1578.6km; its one-axis polish
+  made no improvement. Do not relax the1km entry gate. Failed polish now
+  invokes a native-patch time/prograde/signed-normal pattern search, with
+  a joint time/thrust coarse seed, available-dV bound,256 trial/32 round/
+  20 game-second limits and Abort. Planning settles warp first. Independent
+  Kepler/SOI fixtures for inclined Minmus with the physical escape seed reach
+  the corridor in202-211m/s;
+  this is not a native replay or finite-burn proof. Automatic entry/fuel/
+  lost-patch/Abort rejection removes only its unflown node before yielding;
+  a pre-existing operator node blocks replanning without deletion. Explicit
+  previews still retain their inspection node. No installed bootstrap change.
   Optional AEROBRAKE_AP_BURN now enables fuel-driven, finite-burn Ap reduction
   with Pe-preserving steering. Default0; RO9 explicitly enables1 (authorized
   craft difference from RO8). cmd/aeroassist takes ONLY boolean0/1. No fixed

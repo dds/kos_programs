@@ -1148,9 +1148,15 @@ profiles, together with the chute and decoupler settings. KSC trim has a
 The escape planner finishes its fuel-weighted search with bounded native
 periapsis refinement. That prevents a cheaper but inaccurate node from
 winning the search and then failing the separate 1 km departure gate.
-It keeps improving trials only, limits prograde changes to 10 m/s total,
-and retains the final entry/fuel checks. `STATS return-escape refine` reports
-the result; a failed refinement still holds with the node for inspection.
+That first refinement keeps improving trials only and limits prograde
+changes to 10 m/s total. If it cannot reach the corridor, a bounded fallback
+searches burn time, prograde and signed normal thrust together, using native
+parent-body patches and the available vessel dV. This handles departure
+planes that cannot reach Kerbin entry through prograde adjustment alone.
+`STATS return-escape joint` reports trials, Pe error and burn components.
+The final entry/fuel checks remain mandatory. Automatic rejection removes
+the planner's unflown node and holds ESCAPE. Existing operator nodes are
+preserved; explicit return previews retain their inspection policy.
 MCC subsequently checks the flown orbit and acquires the entry corridor.
 
 Aerobraking can take multiple passes. Propulsion stays attached through

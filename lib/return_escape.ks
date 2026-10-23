@@ -109,6 +109,106 @@ LOCAL FUNCTION _polishReturnEscapePe {
         AND ABS(finalPe-targetPe) <= RETURN_ESCAPE_PE_TOLERANCE.
 }
 
+// Coupled fallback for a poor timing/prograde seed. A one-axis derivative
+// can be flat at the lowest reachable Pe in that departure plane; normal
+// thrust and burn epoch must then move as well. Only native patches decide.
+LOCAL FUNCTION _returnEscapeTrial {
+    PARAMETER ctx.
+    PARAMETER epoch.
+    PARAMETER progradeDv.
+    PARAMETER normalDv.
+    IF ABORT OR ctx["TRIALS"] >= 256 OR TIME:SECONDS >= ctx["DEADLINE"] { RETURN. }
+    LOCAL nd IS ctx["NODE"].
+    SET nd:TIME TO MAX(ctx["START"],MIN(ctx["END"],epoch)).
+    SET nd:PROGRADE TO MAX(0,MIN(ctx["BUDGET"],progradeDv)).
+    LOCAL normalCap IS SQRT(MAX(0,ctx["BUDGET"]^2-nd:PROGRADE^2)).
+    SET nd:NORMAL TO MAX(-normalCap,MIN(normalCap,normalDv)).
+    WAIT 0.02.
+    SET ctx["TRIALS"] TO ctx["TRIALS"]+1.
+    LOCAL patch IS _targetPatch(nd,ctx["BODY"]).
+    IF patch = 0 { RETURN. }
+    LOCAL error IS ABS(patch:PERIAPSIS-ctx["PE"]).
+    IF NOT (error >= 0 AND error < 1e30) { RETURN. }
+    LOCAL feasible IS error <= RETURN_ESCAPE_PE_TOLERANCE.
+    LOCAL bestFeasible IS ctx["ERROR"] <= RETURN_ESCAPE_PE_TOLERANCE.
+    LOCAL cost IS nd:DELTAV:MAG*0.01.
+    IF ctx["KSC"] {
+        SET cost TO cost+_escapeKscPenalty(nd,ctx["BODY"],nd:TIME,
+            ctx["TRANSIT_A"],ctx["PARENT_MU"],-74.6).
+    }
+    IF (feasible AND NOT bestFeasible)
+            OR (feasible AND bestFeasible AND cost < ctx["COST"])
+            OR (NOT bestFeasible AND error < ctx["ERROR"]) {
+        SET ctx["ERROR"] TO error.
+        SET ctx["DV"] TO nd:DELTAV:MAG.
+        SET ctx["COST"] TO cost.
+        SET ctx["TIME"] TO nd:TIME.
+        SET ctx["PROGRADE"] TO nd:PROGRADE.
+        SET ctx["NORMAL"] TO nd:NORMAL.
+    }
+}
+
+LOCAL FUNCTION _jointReturnEscape {
+    PARAMETER nd.
+    PARAMETER parentBody.
+    PARAMETER targetPe.
+    PARAMETER seedDv.
+    LOCAL budget IS SHIP:DELTAV:VACUUM.
+    IF NOT (budget > 0 AND budget < 1e30) { RETURN FALSE. }
+    LOCAL period IS SHIP:ORBIT:PERIOD.
+    LOCAL ctx IS LEXICON("NODE",nd,"BODY",parentBody,"PE",targetPe,
+        "START",TIME:SECONDS+60,"END",TIME:SECONDS+60+period,
+        "BUDGET",budget,"DEADLINE",TIME:SECONDS+20,"TRIALS",0,
+        "ERROR",1e30,"DV",1e30,"COST",1e30,"KSC",ESCAPE_KSC_TARGET <> 0,
+        "TIME",nd:TIME,"PROGRADE",nd:PROGRADE,"NORMAL",nd:NORMAL).
+    IF ctx["KSC"] {
+        SET ctx["TRANSIT_A"] TO (SHIP:BODY:ORBIT:SEMIMAJORAXIS+parentBody:RADIUS+targetPe)/2.
+        SET ctx["PARENT_MU"] TO parentBody:MU.
+    }
+    _returnEscapeTrial(ctx,nd:TIME,nd:PROGRADE,nd:NORMAL).
+    // Scan thrust AND time, rather than freezing a time chosen at one thrust.
+    LOCAL sample IS 0.
+    UNTIL sample >= 12 OR ABORT OR TIME:SECONDS >= ctx["DEADLINE"] {
+        LOCAL epoch IS ctx["START"]+sample*period/12.
+        FOR fraction IN LIST(0.85,1,1.25) {
+            _returnEscapeTrial(ctx,epoch,seedDv*fraction,0).
+        }
+        SET sample TO sample+1.
+    }
+    LOCAL timeStep IS period/24.
+    LOCAL dvStep IS MAX(5,seedDv*0.15).
+    LOCAL normalStep IS dvStep.
+    LOCAL iteration IS 0.
+    UNTIL ctx["ERROR"] <= RETURN_ESCAPE_PE_TOLERANCE OR iteration >= 32
+            OR ctx["TRIALS"] >= 256 OR ABORT OR TIME:SECONDS >= ctx["DEADLINE"] {
+        LOCAL baseTime IS ctx["TIME"].
+        LOCAL baseDv IS ctx["PROGRADE"].
+        LOCAL baseNormal IS ctx["NORMAL"].
+        LOCAL baseError IS ctx["ERROR"].
+        FOR sign IN LIST(-1,1) {
+            _returnEscapeTrial(ctx,baseTime+sign*timeStep,baseDv,baseNormal).
+            _returnEscapeTrial(ctx,baseTime,baseDv+sign*dvStep,baseNormal).
+            _returnEscapeTrial(ctx,baseTime,baseDv,baseNormal+sign*normalStep).
+        }
+        IF ctx["ERROR"] >= baseError {
+            SET timeStep TO timeStep/2.
+            SET dvStep TO dvStep/2.
+            SET normalStep TO normalStep/2.
+        }
+        SET iteration TO iteration+1.
+    }
+    SET nd:TIME TO ctx["TIME"].
+    SET nd:PROGRADE TO ctx["PROGRADE"].
+    SET nd:NORMAL TO ctx["NORMAL"].
+    WAIT 0.05.
+    mLog("STATS return-escape joint trials=" + ctx["TRIALS"]
+        + " iterations=" + iteration + " peError=" + ctx["ERROR"]
+        + " dv=" + ctx["DV"] + " prograde=" + nd:PROGRADE + " normal=" + nd:NORMAL
+        + " eta=" + (nd:TIME-TIME:SECONDS) + " abort=" + ABORT
+        + " deadline=" + (TIME:SECONDS >= ctx["DEADLINE"])).
+    RETURN NOT ABORT AND ctx["ERROR"] <= RETURN_ESCAPE_PE_TOLERANCE.
+}
+
 // Estimate KSC longitude penalty for a candidate escape node.
 // Kept local so the return path does not import maneuver_targeting.
 LOCAL FUNCTION _escapeKscPenalty {
@@ -137,6 +237,8 @@ LOCAL FUNCTION _escapeKscPenalty {
 LOCAL FUNCTION _planReturnEscape {
     PARAMETER targetBody.
     PARAMETER targetPe.
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
 
     LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
     LOCAL muParent IS targetBody:MU.
@@ -285,7 +387,9 @@ LOCAL FUNCTION _planReturnEscape {
     SET nd:PROGRADE TO (dvA + dvB) / 2.
     WAIT 0.1.
 
-    _polishReturnEscapePe(nd,targetBody,targetPe).
+    IF NOT _polishReturnEscapePe(nd,targetBody,targetPe) AND NOT ABORT {
+        _jointReturnEscape(nd,targetBody,targetPe,escapeDv).
+    }
     LOCAL finalSeed IS _escapeScore(nd, targetBody, targetPe).
     LOCAL patch IS _targetPatch(nd, targetBody).
     IF NOT finalSeed["PATCH"] {
@@ -383,8 +487,12 @@ GLOBAL FUNCTION phaseEscape {
     LOCAL success IS FALSE.
     LOCAL retries IS 0.
 
+    IF HASNODE {
+        PRINT "Existing maneuver retained; remove/review it before automatic return planning.".
+        yieldToPrompt(). RETURN.
+    }
+
     UNTIL success {
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         LOCAL nd IS _planReturnEscape(target, targetPe).
         IF nd = 0 OR NOT nd:ISTYPE("Node") {
             SET retries TO retries + 1.
@@ -399,10 +507,11 @@ GLOBAL FUNCTION phaseEscape {
         LOCAL returnPatch IS _targetPatch(nd, target).
         IF returnPatch = 0 {
             mLogError("STATS return-escape hold reason=lost-parent-patch").
+            REMOVE nd.
             yieldToPrompt().
             RETURN.
         }
-        IF NOT _returnEscapeEntryValid(returnPatch:PERIAPSIS, targetPe)
+        IF ABORT OR NOT _returnEscapeEntryValid(returnPatch:PERIAPSIS, targetPe)
                 OR nd:DELTAV:MAG > SHIP:DELTAV:VACUUM {
             mLogError("STATS return-escape hold reason=entry-or-fuel dv="
                 + nd:DELTAV:MAG + " available=" + SHIP:DELTAV:VACUUM
@@ -416,7 +525,8 @@ GLOBAL FUNCTION phaseEscape {
                 + "/" + ROUND(SHIP:DELTAV:VACUUM,1) + " m/s".
             PRINT "  Predicted/target Kerbin Pe: " + ROUND(returnPatch:PERIAPSIS/1000,1)
                 + "/" + ROUND(targetPe/1000,1) + " km".
-            PRINT "  Node retained for inspection; remain in manual control.".
+            REMOVE nd.
+            PRINT "  Rejected planner node removed; mission held, no burn.".
             yieldToPrompt().
             RETURN.
         }

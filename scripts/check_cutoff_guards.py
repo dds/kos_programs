@@ -75,7 +75,7 @@ def check_preview():
                          (54001,False),(-1000,False),(22050000,False)):
         assert evaluate(expr, predictedPe=pe, targetPe=53000, RETURN_ESCAPE_PE_TOLERANCE=1000) == expected
     phase = body(src, 'phaseEscape')
-    guard = phase.index('IF NOT _returnEscapeEntryValid(')
+    guard = phase.index('IF ABORT OR NOT _returnEscapeEntryValid(')
     execute = phase.index('SET success TO executeManeuver().')
     assert guard < execute and 'yieldToPrompt().' in phase[guard:execute]
     assert 'nd:DELTAV:MAG > SHIP:DELTAV:VACUUM' in phase[guard:execute]
