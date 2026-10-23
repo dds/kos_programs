@@ -902,9 +902,11 @@ an exhausted window holds with `insufficient-pre-soi-burn-lead`. A late
 window may still be too short to solve, align and execute safely.
 If the final attempt still fails, no safe
 retry window remains, or a mission correction violates its admission limits,
-`ARRIVAL BLOCKED` stays resident at 1x for intervention. It does not fly the
-rejected node or advance to capture. ABORT/terminal interruption remains
-available; game time continues during a resident hold.
+`ARRIVAL BLOCKED` prints the reason, settles warp to 1x and returns to the
+Godspeed prompt for manual control. The saved phase stays unchanged; it
+does not fly the rejected node, advance to capture or require an Abort toggle.
+Timed `ARRIVAL RETRY` waits continue running and resume automatically at their
+scheduled checkpoint; only a blocked arrival yields to the prompt.
 
 RO9's Mun polar science mission has a separate correction allowance: 100 m/s
 per early/refinement burn, 150 m/s total, plus a 900 m/s margin after predicted

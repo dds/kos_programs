@@ -72,12 +72,10 @@ def environment():
                  '_bplaneHasMidcourseRefinement','_bplaneParentClearUntil','_bplaneCoastEncounter','_bplaneRetryEncounter','_bplaneQueueMidcourseRetry',
                  '_bplaneHandoffMidcourseRetry','_bplaneHoldCorrection','bplaneClearRetryWait','_bplaneRetryWaitPending','_bplaneWaitBeforeSolverRetry'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
-    def resident(reason):
-        # Run in the shared globals so the operator's ABORT write is visible
-        # during the loop; ks.call normally copies the fixture environment.
+    def blocked(reason):
         env['reason']=reason
-        return run(function_body(SOURCE,'_bplaneResidentHold'),env)
-    env['_bplaneResidentHold']=resident
+        return run(function_body(SOURCE,'_bplaneBlockedToPrompt'),env)
+    env['_bplaneBlockedToPrompt']=blocked
     return env,saved,events,alarms,moon,hit
 
 
@@ -438,7 +436,7 @@ def check_later_live_solver_retries():
     print('PASS: later unconverged mission solves remain live, schedule alarms before solar, poll without KAC and retry with freshly capped budgets; ABORT cannot start a wait')
 
 
-def check_retry_deadline_resident_hold():
+def check_retry_deadline_returns_prompt():
     for failure in ('late','missing','unsafe-parent','wrong-body','overslept'):
         env,saved,events,alarms,moon,hit=retry_environment()
         saved['phase']='REFINE_BPLANE'
@@ -451,18 +449,16 @@ def check_retry_deadline_resident_hold():
             def oversleep(*_):env['TIME'].SECONDS=hit['entryUt']
             env['waitUntilOrSOI']=oversleep
         waits=[]
-        def stop(dt):
-            waits.append(dt)
-            env['ABORT']=True  # Operator aborts the resident, 1x hold.
-        env.update(targetBody=moon,fixture_wait=stop,WARP=4)
+        env.update(targetBody=moon,fixture_wait=waits.append,WARP=4)
         result=run(function_body(SOURCE,'_bplaneWaitBeforeSolverRetry'),env)
-        assert result is False and waits==[1] and env['WARP']==0
-        assert not alarms and saved['phase']=='REFINE_BPLANE' and not env['phaseShouldYield']
-        assert not any(row[0]=='yield' for row in events)
-    print('PASS: exhausted/invalid retry windows and an overslept deadline stop at a resident 1x intervention hold, without yielding, advancing or accepting the rejected burn')
+        assert result is False and not waits and env['WARP']==0 and not env['ABORT']
+        assert not alarms and saved['phase']=='REFINE_BPLANE' and env['phaseShouldYield']
+        assert events[-1]==('yield','REFINE_BPLANE')
+        assert not any(row[0]=='advance' for row in events)
+    print('PASS: exhausted/invalid retry windows and an overslept deadline yield to manual control at1x without an Abort toggle, resident loop, phase advance or rejected burn')
 
 
-def check_resident_admission_guards():
+def check_prompt_admission_guards():
     for reason in ('planned-encounter-missing','insufficient-pre-soi-burn-lead','required-arrival-corridor','correction-budget',
                    'correction-plus-capture-budget','arrival-time-shift','capture-cost-increase'):
         env,saved,events,alarms,moon,_=retry_environment()
@@ -487,17 +483,15 @@ def check_resident_admission_guards():
             env['bplaneCaptureCost']=lambda patch,_:286 if patch is planned['patch'] else 280
         env['findArrivalPatch']=lambda nd,_:planned if nd else original
         waits=[]
-        def stop(dt):
-            waits.append(dt)
-            env['ABORT']=True
-        env.update(fixture_wait=stop,WARP=5)
+        env.update(fixture_wait=waits.append,WARP=5)
         guard=function_body(SOURCE,'bplaneCorrectionAllowed').replace(
             'PARAMETER nd, targetBody, phaseCap.',
             'PARAMETER nd. PARAMETER targetBody. PARAMETER phaseCap.')
         result=run(guard,env)
-        assert result is False and env['reason']==reason and waits==[1]
-        assert env['WARP']==0 and not env['phaseShouldYield'] and not alarms
-        assert saved['phase']=='REFINE_BPLANE' and not any(row[0]=='yield' for row in events)
+        assert result is False and env['reason']==reason and not waits
+        assert env['WARP']==0 and env['phaseShouldYield'] and not alarms and not env['ABORT']
+        assert saved['phase']=='REFINE_BPLANE' and events[-1]==('yield','REFINE_BPLANE')
+        assert not any(row[0]=='advance' for row in events)
         assert 'bplane_budget_spent' not in saved
     # An interrupted execution still owns its node and explicitly yields for
     # review even when called from the mission; no speculative retry/cleanup.
@@ -505,7 +499,32 @@ def check_resident_admission_guards():
     env.update(HASNODE=True,maneuverBurnInterrupted=lambda:True)
     env['_bplaneHoldCorrection']('correction-execution-failed',True)
     assert env['HASNODE'] and env['phaseShouldYield'] and events[-1][0]=='yield'
-    print('PASS: seven mission admission rejections retain timing/fuel/corridor limits in resident 1x holds, charge no budget and never advance; interrupted burns still retain their node and require explicit review')
+    print('PASS: seven mission admission rejections yield at1x, preserve timing/fuel/corridor limits, charge no budget and never advance; interrupted burns still retain their node and require explicit review')
+
+
+def check_blocked_phase_unwinds_to_prompt():
+    for phase in ('BPLANE','REFINE_BPLANE'):
+        env,saved,events,_,_,_=retry_environment()
+        saved['phase']=phase
+        class PhaseMap(dict):
+            HASKEY=dict.__contains__
+        calls=[]
+        def handler():
+            calls.append(saved['phase'])
+            env['_bplaneBlockedToPrompt']('final-refinement-checkpoint-used')
+        env.update(phaseMap=PhaseMap({phase:NS(CALL=handler)}),
+                   _logPhaseStats=lambda *_:None,WARP=5,
+                   fixture_settle=lambda:events.append(('settled',env['WARP'])))
+        run(function_body(SOURCE,'runPhases'),env)
+        assert calls==[phase] and saved['phase']==phase
+        assert env['phaseShouldYield'] and env['WARP']==0 and not env['ABORT']
+        assert events==[('settled',0),('yield',phase)]
+        env.update(hl=False,bootCheckManualKey=lambda:True,
+                   BOOT_MANUAL_REQUESTED=False,HOMECONNECTION=NS(ISCONNECTED=False))
+        run(function_body(SOURCE,'bootResumeOrManual'),env)
+        assert env['BOOT_MANUAL_REQUESTED'] # Installed boot skips tail solar hold.
+        assert events==[('settled',0),('yield',phase)] and saved['phase']==phase
+    print('PASS: blocked arrivals unwind the actual phase runner after one handler call, preserve BPLANE/REFINE_BPLANE and set the boot manual flag that reaches Godspeed without a tail solar hold')
 
 
 def parent_ellipse(env, pe=42600, ap=11370800, eccentric_angle=math.pi/3):
@@ -650,16 +669,12 @@ def check_retry_cadence_has_one_final_check():
                 attempts.append(env['TIME'].SECONDS)
                 return -1
             env['_bplanePlanFullAttempt']=attempt
-            ordinary_wait=env['fixture_wait']
-            def wait(dt):
-                if env.get('reason')=='final-refinement-checkpoint-used':env['ABORT']=True
-                else:ordinary_wait(dt)
-            env['fixture_wait']=wait
             result=env['_bplanePlanFullCorrection'](moon,15000,90,-1,30,'',True)
             required_lead=env['SOI_BUFFER_TIME']+env['BPLANE_LEAD']+env['MIDCOURSE_REFINE_MARGIN']
             final_ut=hit['entryUt']-max(configured_lead,required_lead)
             assert result==0 and attempts==[1000,final_ut]
-            assert not alarms and not env['phaseShouldYield'] and env['WARP']==0
+            assert not alarms and env['phaseShouldYield'] and env['WARP']==0 and not env['ABORT']
+            assert events[-1]==('yield','REFINE_BPLANE')
             assert len([row for row in events if row[0]=='alarm'])==1
             assert not saved['bplane_retry_wait']['waiting']
             assert 'bplane_budget_spent' not in saved and saved['phase']=='REFINE_BPLANE'
@@ -682,11 +697,11 @@ def check_reported_minmus_final_microburn():
         requests.append(reason)
         return ks.call('_bplaneWaitBeforeSolverRetry',env,target,reason)
     env['_bplaneWaitBeforeSolverRetry']=retry
-    env['_bplaneResidentHold']=lambda reason:events.append(('blocked',reason))
     result=ks.call('planBplaneCorrection',env,moon,9300,63.4,-1,100,'',True)
     assert result==0 and planned==[1000,hit['entryUt']-env['BPLANE_FINAL_REFINE_LEAD']]
     assert removed==[node,node] and requests==['below-execution-minimum']*2
-    assert events[-1]==('blocked','final-refinement-checkpoint-used')
+    assert env['reason']=='final-refinement-checkpoint-used'
+    assert events[-1]==('yield','REFINE_BPLANE') and env['phaseShouldYield']
     assert not saved['bplane_retry_wait']['waiting'] and not alarms
     assert env['MIN_EXEC_DV']==.3 and saved['phase']=='REFINE_BPLANE'
     diagnostic=function_body(SOURCE,'_bplaneWaitBeforeSolverRetry')
@@ -697,6 +712,7 @@ def check_reported_minmus_final_microburn():
     # phase skip or checkpoint reset is needed for the now-admissible patch.
     from check_minmus_kolniya import configuration
     cfg=configuration()
+    env['phaseShouldYield']=False # A fresh boot starts a new phase run.
     for key in ('BPLANE_ANG_TOL','BPLANE_PE_TOL','CAPTURE_PE','CAPTURE_INC','CAPTURE_LAN'):
         env[key]=cfg[key]
     env['_bplaneWantInc']=lambda:cfg['CAPTURE_INC']
@@ -750,13 +766,11 @@ def check_retry_wait_resumes_before_solver():
         # Later native entry jitter must not manufacture a fresh retry.
         hit['entryUt']+=120
         waits=[]
-        def stop(dt):
-            waits.append(dt)
-            env['ABORT']=True
-        env['fixture_wait']=stop
+        env['fixture_wait']=waits.append
         assert not env['_bplaneWaitBeforeSolverRetry'](moon)
-        assert waits==[1] and len(solves)==1 and not alarms
+        assert not waits and len(solves)==1 and not alarms
         assert env['reason']=='final-refinement-checkpoint-used'
+        assert env['phaseShouldYield'] and not env['ABORT']
     print('PASS: reboot during final coast waits before any solve, a nearly due wake stays anchored, overdue wakes solve immediately, and entry-ETA jitter cannot create another final check')
 
 
@@ -792,8 +806,9 @@ if __name__=='__main__':
     check_overdue_retry_handoff()
     check_reported_low_periapsis_retry()
     check_later_live_solver_retries()
-    check_retry_deadline_resident_hold()
-    check_resident_admission_guards()
+    check_retry_deadline_returns_prompt()
+    check_prompt_admission_guards()
+    check_blocked_phase_unwinds_to_prompt()
     check_parent_atmosphere_timing()
     check_post_burn_tiny_correction_handoff()
     check_small_refinement_waits_for_useful_burn()

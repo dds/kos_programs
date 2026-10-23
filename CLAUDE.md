@@ -340,8 +340,12 @@ Looks like Python/JS; is neither.
   logs after=<rejection>. final-refinement-checkpoint-used can legitimately
   follow a second below-execution-minimum result; it alone does not prove
   a skipped wake. Do not add repeated timers or bypass the shared0.3m/s floor.
-  Mission admission/window failures
-  stay resident at 1x for intervention; previews/explicit review/interrupted
+  Operator correction (2026-10-22): ARRIVAL BLOCKED must print its reason,
+  settle warp at1x and yieldToPrompt, preserving the phase. Do not wait in an
+  UNTIL ABORT loop or start a tail solar hold; the operator needs Godspeed
+  without toggling the persistent Abort action group. Timed ARRIVAL RETRY
+  stays live and automatically wakes; only blocked arrival failures yield.
+  Mission admission/window failures yield for intervention; previews/explicit review/interrupted
   burns retain their manual policy. Never accept an unconverged required
   plane just to keep the phase machine moving.
   SOI alarms are separate from midpoint/final retry alarms. Create/refresh
@@ -741,7 +745,7 @@ Looks like Python/JS; is neither.
   cannot find Mun when the node already starts there. Shared node creation
   now bounds both full/Pe-only seeds before entry with the existing120s
   buffer plus1s. Reported epoch permits about41.8s lead; post-solve lead and
-  retimed entry still must pass, otherwise resident timing hold. The normal
+  retimed entry still must pass, otherwise a manual timing hold. The normal
   final900s checkpoint and all size/plane/fuel/alarm safeguards remain.
   Routine234 source checks across38 scripts pass, including the actual
   patch walker with modeled node frames, both seed paths, warp settlement,
@@ -786,8 +790,9 @@ Looks like Python/JS; is neither.
   from Newton), and allows16 iterations. RO9 mun_landing_return gets100m/s
   per correction/150total with900m/s AFTER capture; plane, time-shift600s,
   capture-cost-increase5m/s and cumulative budget checks remain mandatory.
-  Later unconverged full solves stay in timed solar/clock retries; all mission
-  admission/window failures stay resident1x with explicit intervention text.
+  Later unconverged full solves stay in timed solar/clock retries; mission
+  admission/window failures now print ARRIVAL BLOCKED and yield at1x to the
+  Godspeed prompt (operator correction,2026-10-22), retaining the saved phase.
   Operator previews and interrupted burns still require deliberate review.
   Routine219 source checks include actual8.44km eligibility, KAC/no-KAC live
   retries, deadline/abort holds, six admission guards, 50 independent

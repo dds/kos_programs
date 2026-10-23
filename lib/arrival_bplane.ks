@@ -190,7 +190,7 @@ LOCAL FUNCTION _bplaneHoldCorrection {
         + " remainingVacDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)
         + " reserveDv=" + BPLANE_TRIM_RESERVE_DV).
     IF missionOwned AND NOT maneuverBurnInterrupted() {
-        _bplaneResidentHold(reason).
+        _bplaneBlockedToPrompt(reason).
         RETURN.
     }
     mLogWarn("Arrival correction rejected; original trajectory retained. "
@@ -199,13 +199,14 @@ LOCAL FUNCTION _bplaneHoldCorrection {
     yieldToPrompt().
 }
 
-LOCAL FUNCTION _bplaneResidentHold {
+LOCAL FUNCTION _bplaneBlockedToPrompt {
     PARAMETER reason.
     SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
     mLogError("STATS bplane blocked reason=" + reason
-        + " automaticResume=False resident=True ut=" + TIME:SECONDS).
-    PRINT "ARRIVAL BLOCKED: " + reason + "; intervention needed now; running at 1x.".
-    UNTIL ABORT { WAIT 1. }
+        + " automaticResume=False resident=False ut=" + TIME:SECONDS).
+    PRINT "ARRIVAL BLOCKED: " + reason + "; returning to manual control at 1x.".
+    yieldToPrompt().
 }
 
 LOCAL FUNCTION _bplaneHasMidcourseRefinement {
@@ -433,15 +434,15 @@ LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
         SET reason TO "final-refinement-checkpoint-used".
     }
     bplaneClearRetryWait(TRUE).
-    // No safe time remains for another automatic attempt. Stay resident,
-    // at 1x, with the rejected node removed. KAC cannot restart a script.
+    // No further automatic retry is allowed. Return to manual control at
+    // 1x with the rejected node removed; keep the saved phase for review.
     mLogError("STATS bplane retry-blocked reason=" + reason + " target="
         + targetBody:NAME + " latestUt=" + latestUt + " after=" + retryReason
-        + " ut=" + TIME:SECONDS + " automaticResume=False resident=True").
+        + " ut=" + TIME:SECONDS + " automaticResume=False resident=False").
     IF reason = "final-refinement-checkpoint-used" {
         PRINT "Final arrival correction attempt rejected: " + retryReason + ". No further automatic retry.".
     }
-    _bplaneResidentHold(reason).
+    _bplaneBlockedToPrompt(reason).
     RETURN FALSE.
 }
 
