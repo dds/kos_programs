@@ -50,7 +50,7 @@ GLOBAL FUNCTION dependencyLibs {
         "rdv_plan", LIST("hohmann_transfer", "maneuver", "lib_navigation", "orbit"),
         "maneuver_rendezvous", LIST("hohmann_transfer", "maneuver"),
         "maneuver_transfer", LIST("hohmann_transfer", "maneuver", "maneuver_intersystem", "maneuver_targeting", "lib_navigation", "orbit", "lib_bplane_math"),
-        "maneuver_mcc", LIST("maneuver", "maneuver_targeting", "lib_navigation", "orbit"),
+        "maneuver_mcc", LIST("maneuver", "maneuver_targeting", "lib_navigation", "orbit", "coast_wait"),
         "molniya", LIST("maneuver", "inclination", "orbit"),
         "payload_landing", LIST("landing_config"),
         "payload_ops", LIST("orbit", "utils", "solar"),

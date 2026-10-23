@@ -380,6 +380,30 @@ Looks like Python/JS; is neither.
   game's archive folder syncs from the pushed repo; unpushed code is
   untestable. Logical, bisectable commits in short-imperative style. Leave
   unrelated untracked files (e.g. `package.json`) alone.
+- Missed Minmus capture recovery (2026-10-23): user reports a predicted
+  Kerbin52,446,066mAp/9,895,530mPe/i54.821/LAN82.932/AoP21.140,2261m/s in
+  stages595/1012/654 while still in Minmus SOI. These are a diagnostic fixture,
+  NEVER flight constants. cmd/kerbinrecover probes the native current/future
+  Kerbin patch and vessel/stage dV every invocation. Default check is read-only
+  with a verified direct archive diagnostic; apply reuses phaseReturnSetup's
+  profile writer via explicit MCC entry, not stable-moon ESCAPE. Existing
+  callers default to ESCAPE with their original moon/orbit guards. Apply
+  revalidates native patch, Abort/node/interruption and physical/raw/pilot
+  cutoff before state/profile edits. Entry53km/corridor52-54km, no forced
+  equatorial plane, optional KSC20m/s RETURN_TRIM and existing late-separation
+  tags; KSC precision remains unproven. Ideal apoapsis estimate~108.06m/s is
+  informational, NOT the actual MCC burn/cost. MCC uses existing SOI alarm/
+  live solar/clock wait and checks actual body/Abort after wake before planning.
+  Recovery alone enables MCC_RETURN_AT_APOAPSIS (other profiles default0),
+  persisted by the shared writer: a stable outbound Kerbin ellipse with no
+  future SOI wakes300s before native apoapsis via coast_wait, with its own
+  KAC alarm before solar and no-KAC clock fallback. Inbound/unbound/near-apo
+  attempts do not wait an extra orbit. Reject another SOI, bad ETA or an
+  interrupted wait; keep150m/s correction and50m/s reserve. The same reported
+  ellipse needs~156m/s if burned immediately at45Mm versus108m/s at apoapsis;
+  do not raise the cap to hide poor burn timing. Native execution unproven.
+  Never use a Minmus-frame burn to apply a Kerbin-frame estimate, never bake
+  pasted elements into recovery, and do not claim native flight validation.
 - Career context matters: this is a hard-mode career save. Don't assume
   parts beyond the unlocked tech (Wheesley-era jets as of mid-2026; no
   RAPIERs yet). Keep new systems engine-agnostic via config globals.

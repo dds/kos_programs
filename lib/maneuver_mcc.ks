@@ -23,6 +23,8 @@ GLOBAL MCC_AEROBRAKE_SAFE_PE_MAX IS -1.
 // Reserve fuel for later entry/capture work; cap each correction burn.
 GLOBAL MCC_RETURN_DV_CAP IS 150.
 GLOBAL MCC_RETURN_RESERVE_DV IS 50.
+// Opt-in missed-capture recovery: plan near apoapsis on an outbound ellipse.
+GLOBAL MCC_RETURN_AT_APOAPSIS IS 0.
 
 
 LOCAL MCC_DV_CAP           IS 50.
@@ -91,6 +93,38 @@ LOCAL FUNCTION _mccReturnBudget {
         SHIP:DELTAV:VACUUM - MCC_RETURN_RESERVE_DV)).
 }
 
+LOCAL FUNCTION _mccReturnApoapsisCoast {
+    PARAMETER target.
+    PARAMETER targetPe.
+    IF MCC_RETURN_AT_APOAPSIS <= 0
+            OR _mccAerobrakePatchSafe(SHIP:ORBIT,target,targetPe) { RETURN TRUE. }
+    IF SHIP:STATUS <> "ORBITING" OR SHIP:ALTITUDE <= target:ATM:HEIGHT
+            OR NOT (SHIP:ORBIT:ECCENTRICITY >= 0 AND SHIP:ORBIT:ECCENTRICITY < 1
+            AND VDOT(SHIP:POSITION-target:POSITION,SHIP:VELOCITY:ORBIT) > 0) {
+        RETURN TRUE.
+    }
+    LOCAL wakeUt IS TIME:SECONDS+ETA:APOAPSIS-300.
+    IF NOT (ETA:APOAPSIS > 0 AND ETA:APOAPSIS < 1e30)
+            OR SHIP:ORBIT:HASNEXTPATCH {
+        _mccReturnHold("unsafe-apoapsis-coast"). RETURN FALSE.
+    }
+    IF wakeUt <= TIME:SECONDS { RETURN TRUE. }
+    LOCAL alarmId IS kacEnsureAlarm("Return apoapsis planning",wakeUt,
+        "Running recovery wakes to solve the live Kerbin entry burn before apoapsis.").
+    mLog("STATS return-mcc apoapsis-wake ut=" + wakeUt
+        + " eta=" + (wakeUt-TIME:SECONDS) + " alarm=" + alarmId).
+    LOCAL solarRef IS enterSolarCoast("Return apoapsis coast",TRUE,TRUE,wakeUt).
+    waitUntilOrSOI(target,wakeUt,5,alarmId,solarRef,TRUE,TRUE).
+    IF alarmId <> "" { DELETEALARM(alarmId). }
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    IF ABORT OR SHIP:BODY:NAME <> target:NAME OR HASNODE
+            OR SHIP:ORBIT:HASNEXTPATCH OR TIME:SECONDS < wakeUt {
+        _mccReturnHold("apoapsis-coast-interrupted"). RETURN FALSE.
+    }
+    RETURN TRUE.
+}
+
 // Return MCC owns acquisition of the entry corridor. Work in Kerbin's
 // frame as soon as the moon escape completes, then measure the flown
 // orbit after each burn. An optional-correction skip must never count as
@@ -106,6 +140,10 @@ LOCAL FUNCTION _mccReturn {
     IF SHIP:BODY:NAME <> target:NAME { waitForSOI(target). }
     SET WARP TO 0.
     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    IF ABORT OR SHIP:BODY:NAME <> target:NAME {
+        _mccReturnHold("Kerbin-soi-wait-interrupted"). RETURN.
+    }
+    IF NOT _mccReturnApoapsisCoast(target,targetPe) { RETURN. }
 
     // Three finite-burn corrections, each planned from the measured orbit.
     FROM { LOCAL attempt IS 0. } UNTIL attempt > 3 STEP { SET attempt TO attempt + 1. } DO {

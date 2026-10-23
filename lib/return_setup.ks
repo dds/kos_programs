@@ -12,6 +12,7 @@ GLOBAL RETURN_REENTRY_DIR IS "RETROGRADE".
 GLOBAL RETURN_KSC_TARGET IS 0.
 GLOBAL RETURN_KSC_TRIM_DV_CAP IS 80.
 GLOBAL RETURN_ARM_CHUTES IS 0.
+GLOBAL MCC_RETURN_AT_APOAPSIS IS 0.
 GLOBAL RETURN_DESCENT_FAIRING_TAG IS "".
 GLOBAL RETURN_DESCENT_DECOUPLER_TAG IS "".
 GLOBAL RETURN_DESCENT_CHUTES_TAG IS "".
@@ -162,8 +163,40 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     REBOOT.
 }
 
+// Native patch chain, including the current orbit. Never use a pasted orbit
+// or a pending maneuver's prediction as the recovery source of truth.
+GLOBAL FUNCTION returnKerbinPatch {
+    IF HASNODE { RETURN 0. }
+    LOCAL patch IS SHIP:ORBIT.
+    LOCAL checked IS 0.
+    UNTIL checked >= 16 {
+        IF patch:BODY:NAME = "Kerbin" { RETURN patch. }
+        IF NOT patch:HASNEXTPATCH { RETURN 0. }
+        SET patch TO patch:NEXTPATCH.
+        SET checked TO checked + 1.
+    }
+    RETURN 0.
+}
+
 GLOBAL FUNCTION phaseReturnSetup {
-    IF BODY:NAME <> "Mun" AND BODY:NAME <> "Minmus" {
+    PARAMETER startPhase IS "ESCAPE".
+    IF startPhase <> "ESCAPE" AND startPhase <> "MCC" {
+        mLogError("Unsupported return setup entry phase: " + startPhase).
+        yieldToPrompt(). RETURN.
+    }
+    IF startPhase = "MCC" {
+        IF ABORT OR HASNODE OR returnKerbinPatch() = 0
+                OR NOT (SHIP:STATUS = "ORBITING" OR SHIP:STATUS = "ESCAPING"
+                    OR SHIP:STATUS = "SUB_ORBITAL")
+                OR NOT RETURN_SEQUENCE:CONTAINS("MCC")
+                OR (stateGet("burn_pending","false") = "true"
+                    AND stateGet("burn_started","false") = "true")
+                OR NOT (SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
+                    AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0) {
+            PRINT "Recovery setup refused: require an unmodified Kerbin patch, stopped thrust/throttle and no Abort or interrupted burn.".
+            yieldToPrompt(). RETURN.
+        }
+    } ELSE IF BODY:NAME <> "Mun" AND BODY:NAME <> "Minmus" {
         mLogError("RETURN_SETUP requires Mun or Minmus orbit; current body="
             + BODY:NAME + ".").
         PRINT " ".
@@ -172,7 +205,7 @@ GLOBAL FUNCTION phaseReturnSetup {
         yieldToPrompt().
         RETURN.
     }
-    IF SHIP:STATUS <> "ORBITING" {
+    IF startPhase = "ESCAPE" AND SHIP:STATUS <> "ORBITING" {
         mLogError("RETURN_SETUP requires stable orbit; status="
             + SHIP:STATUS + ".").
         PRINT " ".
@@ -210,6 +243,7 @@ GLOBAL FUNCTION phaseReturnSetup {
     // after the original landing profile is no longer loaded.
     LOG "SET REENTRY_PE TO " + configLiteral(targetPe) + "." TO profilePath.
     LOG "SET AEROBRAKE_PE TO " + configLiteral(targetPe) + "." TO profilePath.
+    LOG "SET MCC_RETURN_AT_APOAPSIS TO " + configLiteral(MCC_RETURN_AT_APOAPSIS) + "." TO profilePath.
     IF RETURN_PE_TOLERANCE >= 0 {
         LOCAL minPe IS MAX(0, targetPe - RETURN_PE_TOLERANCE).
         LOCAL maxPe IS targetPe + RETURN_PE_TOLERANCE.
@@ -251,8 +285,8 @@ GLOBAL FUNCTION phaseReturnSetup {
     IF RETURN_DESCENT_DECOUPLE_ALT > -999999 { LOG "SET DESCENT_DECOUPLE_ALT TO " + configLiteral(RETURN_DESCENT_DECOUPLE_ALT) + "." TO profilePath. }
     IF RETURN_DESCENT_RELEASE_ALT >= 0 { LOG "SET DESCENT_RELEASE_ALT TO " + configLiteral(RETURN_DESCENT_RELEASE_ALT) + "." TO profilePath. }
 
-    stateSet("phase", "ESCAPE").
-    stateSet("lib_band", "ESCAPE").
+    stateSet("phase", startPhase).
+    stateSet("lib_band", bootLibBandForPhase(startPhase,startPhase)).
     stateSet("reload_required", "false").
     _returnSetupClearLibCache().
     stateSet("launch_time", ROUND(TIME:SECONDS)).
@@ -269,7 +303,7 @@ GLOBAL FUNCTION phaseReturnSetup {
         PRINT "  Entry Pe tolerance: +/- " + RETURN_PE_TOLERANCE/1000 + "km.".
     }
     PRINT "  From:      " + BODY:NAME + ".".
-    PRINT "  Rebooting into ESCAPE.".
+    PRINT "  Rebooting into " + startPhase + ".".
     WAIT 3.
     REBOOT.
 }

@@ -58,6 +58,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/reentrype.ks",53000).` | Restore Kerbin entry Pe at the upcoming apoapsis from an outbound orbit outside atmosphere; validates the native node, executes, preserves the mission |
 | `RUNPATH("0:/cmd/directreturn.ks").` | From a landed Mun/Minmus craft, model a single-stage direct ascent to Kerbin Pe 53 km with a 20 m/s reserve; preview only, no launch or mission change |
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
+| `RUNPATH("0:/cmd/kerbinrecover.ks").` | Inspect the live current/predicted Kerbin orbit and stage fuel; archive a report without changing the mission. Pass `"apply"` to configure shallow recovery with optional KSC targeting and reboot into MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
 | `RUNPATH("0:/cmd/arrival.ks", "review").` | Inspect a retained partial arrival; actions `accept` / `replan`, optional capture Ap in km |
 | `RUNPATH("0:/cmd/arrival.ks", "budget", 100).` | Allow up to 100 m/s of further arrival corrections; preserves capture/return reserves and does not burn |
@@ -1697,6 +1698,39 @@ recipe. Multiple passes can shift the eventual landing site: KSC is best
 effort, and the 53 km target does not guarantee thermal survival. Profile
 persistence is checked by `python3 scripts/check_surface_return.py`; this
 recipe still needs flight validation.
+
+For a missed moon capture with an existing Kerbin exit patch, or a probe
+already in Kerbin orbit, run this while linked and automation is stopped:
+
+```kerboscript
+RUNPATH("0:/cmd/kerbinrecover.ks").
+```
+
+It reads the native patch chain each time: current/predicted Kerbin Pe, Ap,
+inclination, LAN, argument of Pe, total vacuum dV and active-stage dV. Its
+apoapsis-burn estimate is informational, excludes targeting/losses, and is
+unavailable for invalid/unbound ellipses. The verified report is written
+directly to `0:/logs/archive/_diagnostics/kerbinrecover_<vessel>_<UT>.log`.
+Existing nodes must be inspected first; the probe never deletes them.
+
+`RUNPATH("0:/cmd/kerbinrecover.ks","apply").` reads the live values again,
+then uses the shared return-profile writer and reboots into
+`MCC → RETURN_TRIM → AEROBRAKE → DESCENT → DONE`. This bypasses a new moon
+departure burn. MCC waits for actual Kerbin SOI entry using the existing
+SOI-alarm/solar/clock path, then remeasures and plans against the game's
+native orbit. On a stable outbound ellipse without another SOI encounter,
+this recipe enables `MCC_RETURN_AT_APOAPSIS`: its own KAC/solar/clock wait
+wakes 5 minutes before the live apoapsis to plan a cheaper correction.
+Inbound, near-apoapsis and unbound approaches use the immediate correction;
+the command does not wait another orbit. Existing 150 m/s correction/50 m/s reserve limits still apply;
+failure to reach the entry corridor holds rather than flying a rejected node.
+The 53 km target retains the 52–54 km corridor and arrival plane. Optional
+KSC trim is capped at 20 m/s; this does not guarantee a KSC landing.
+The recipe uses the same `descent_chutes` / `descent_decoupler` tags and
+6 km separation as `returnshallow`. Apply refuses Abort, pending nodes,
+interrupted burns, or nonzero physical/raw/pilot thrust/throttle. Ordinary
+moon RETURN_SETUP still requires stable moon orbit and starts at ESCAPE.
+Other return profiles leave `MCC_RETURN_AT_APOAPSIS` off by default.
 
 To recover an existing shallow return that advanced with a high Kerbin
 periapsis, wait for archive sync, then run while connected:
