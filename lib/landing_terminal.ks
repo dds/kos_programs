@@ -1,5 +1,80 @@
 // landing_terminal.ks - target refinement, approach, final descent, touchdown.
 
+// Time for an accelerate/cruise/brake translation, with signed closing speed.
+// An away-going or cross-track velocity must first be removed. Unlike the
+// old triangle-only estimate, respect the speed actually commanded in flight.
+GLOBAL FUNCTION lmApproachTransitTime {
+    PARAMETER distance.
+    PARAMETER alongSpeed.
+    PARAMETER crossSpeed.
+    PARAMETER lateralAcc.
+    PARAMETER cruiseSpeed.
+    LOCAL accel IS MAX(0.01,lateralAcc).
+    LOCAL remaining IS MAX(0,distance-LANDING_HOVER_REFINE_SETTLE_RADIUS).
+    LOCAL delay IS MAX(1,LANDING_APPROACH_RESPONSE_TIME)+MAX(0,crossSpeed)/accel.
+    LOCAL stopDistance IS MAX(0,alongSpeed)^2/(2*accel).
+    IF alongSpeed > 0 AND stopDistance > remaining {
+        RETURN delay+alongSpeed/accel+2*SQRT((stopDistance-remaining)/accel).
+    }
+    LOCAL cap IS MAX(0.1,cruiseSpeed).
+    IF alongSpeed > cap {
+        SET remaining TO MAX(0,remaining-(alongSpeed^2-cap^2)/(2*accel)).
+        SET delay TO delay+(alongSpeed-cap)/accel.
+        SET alongSpeed TO cap.
+    }
+    LOCAL peak IS MIN(cap,SQRT(MAX(0,accel*remaining+alongSpeed^2/2))).
+    LOCAL ramps IS (2*peak^2-alongSpeed^2)/(2*accel).
+    RETURN delay+MAX(0,peak-alongSpeed)/accel+peak/accel
+        + MAX(0,remaining-ramps)/MAX(0.1,peak).
+}
+
+// Fixed-target recovery reserves a full coupled stop at the current height,
+// rather than slowing in proportion to an arbitrary 3km altitude ramp.
+GLOBAL FUNCTION lmFixedApproachPlan {
+    PARAMETER height.
+    PARAMETER distance.
+    PARAMETER alongSpeed.
+    PARAMETER crossSpeed.
+    PARAMETER downSpeed.
+    PARAMETER maxAcc.
+    PARAMETER gravAcc.
+    LOCAL lateralAcc IS lmApproachAcceleration(maxAcc,gravAcc).
+    LOCAL response IS MAX(1,LANDING_APPROACH_RESPONSE_TIME).
+    LOCAL remaining IS MAX(0,distance-LANDING_HOVER_REFINE_SETTLE_RADIUS).
+    // Include response lag in the horizontal stop-distance limit.
+    LOCAL cap IS MIN(MAX_APPROACH_SPEED,
+        SQRT((lateralAcc*response)^2+2*lateralAcc*remaining)-lateralAcc*response).
+    IF height <= MAX(BRAKE_MARGIN,LANDING_BRAKE_CLEARANCE)+LANDING_FINAL_HOVER_ALT {
+        // The main-burn clearance cannot authorize flight this near the
+        // ground. Keep the existing slow final-settling corridor instead.
+        SET cap TO MIN(cap,LANDING_HOVER_REFINE_MAX_SPEED).
+        RETURN LEXICON("SPEED",MAX(0,cap),"DESCENT",lmApproachDescentSpeed(
+            lmDescentSpeed(height,TOUCHDOWN_SPEED,UPRIGHT_ALT,HIGH_DESCENT_SPEED),
+            height,distance,SQRT(alongSpeed^2+crossSpeed^2),lateralAcc),
+            "TRANSIT",lmApproachTransitTime(distance,alongSpeed,crossSpeed,lateralAcc,MAX(0,cap)),
+            "STOP_HEIGHT",MAX(BRAKE_MARGIN,LANDING_BRAKE_CLEARANCE)).
+    }
+    LOCAL low IS 0.
+    LOCAL high IS MAX(0,cap).
+    LOCAL iteration IS 0.
+    UNTIL iteration >= 10 {
+        LOCAL speed IS (low+high)/2.
+        LOCAL envelope IS lmBrakeEnvelope(speed,MAX(0,downSpeed),maxAcc,gravAcc,
+            MAX(0,LANDING_BRAKE_REACTION_TIME)).
+        IF envelope["V"] <= height { SET low TO speed. }
+        ELSE { SET high TO speed. }
+        SET iteration TO iteration+1.
+    }
+    LOCAL transit IS lmApproachTransitTime(distance,alongSpeed,crossSpeed,lateralAcc,low).
+    LOCAL reserve IS lmBrakeEnvelope(MAX(low,SQRT(alongSpeed^2+crossSpeed^2)),
+        MAX(0,downSpeed),maxAcc,gravAcc,
+        MAX(0,LANDING_BRAKE_REACTION_TIME)).
+    LOCAL scheduled IS lmDescentSpeed(height,TOUCHDOWN_SPEED,UPRIGHT_ALT,HIGH_DESCENT_SPEED).
+    LOCAL descent IS MIN(scheduled,MAX(0,height-reserve["V"])/MAX(1,transit)).
+    RETURN LEXICON("SPEED",low,"DESCENT",descent,"TRANSIT",transit,
+        "STOP_HEIGHT",reserve["V"]).
+}
+
 GLOBAL FUNCTION _landingTargetRefineSteering {
     PARAMETER ctx.
 
@@ -204,19 +279,40 @@ GLOBAL FUNCTION _landingApproachTick {
     LOCAL altitudeCap IS MAX(LANDING_HOVER_REFINE_MAX_SPEED, MAX_APPROACH_SPEED
         * MAX(0, MIN(1, (controlHeight - HOVER_ALT)
             / APPROACH_SPEED_ALTITUDE_WINDOW))).
-    SET desiredSpeed TO MIN(desiredSpeed, altitudeCap).
-    _landingSetSteering(ctx, lmApproachSteering(
+    LOCAL recoveryTime IS 0.
+    LOCAL stopHeight IS 0.
+    LOCAL poweredRecovery IS LANDING_POWERED_LEAD > 0 AND LANDING_ECONOMY_BRAKE > 0
+        AND LANDING_FLEXIBLE_SITE <= 0.
+    IF poweredRecovery {
+        LOCAL direction IS lmDirectionToTarget(ctx["TARGET_LAT"],ctx["TARGET_LNG"],
+            ctx["UP_VEC"],ctx["POSITION"]).
+        LOCAL alongSpeed IS VDOT(ctx["H_VEL"],direction).
+        LOCAL crossSpeed IS (ctx["H_VEL"]-alongSpeed*direction):MAG.
+        LOCAL plan IS lmFixedApproachPlan(controlHeight,distToTarget,alongSpeed,crossSpeed,
+            ctx["DOWN_SPEED"],ctx["MAX_ACC"],ctx["BRAKE_GRAV"]).
+        SET desiredSpeed TO plan["SPEED"].
+        SET descentSpeed TO plan["DESCENT"].
+        SET recoveryTime TO plan["TRANSIT"].
+        SET stopHeight TO plan["STOP_HEIGHT"].
+    } ELSE { SET desiredSpeed TO MIN(desiredSpeed, altitudeCap). }
+    LOCAL steeringTarget IS lmApproachSteering(
         ctx["TARGET_LAT"], ctx["TARGET_LNG"], desiredSpeed, ctx["H_VEL"],
-        ctx["UP_VEC"], ctx["POSITION"])).
+        ctx["UP_VEC"], ctx["POSITION"]).
+    _landingSetSteering(ctx,steeringTarget).
 
     LOCAL targetVs IS -descentSpeed.
-    _landingSetThrottle(ctx, lmVerticalThrottle(
-        targetVs, ctx["MAX_ACC"], ctx["GRAV"], ctx["V_SPEED"])).
+    LOCAL throttle IS lmVerticalThrottle(targetVs,ctx["MAX_ACC"],ctx["GRAV"],ctx["V_SPEED"]).
+    IF poweredRecovery {
+        // Account for the upward thrust lost while translating under tilt.
+        SET throttle TO MIN(1,throttle/MAX(0.1,VDOT(steeringTarget,ctx["UP_VEC"]))).
+    }
+    _landingSetThrottle(ctx,throttle).
 
     _landingHudText(ctx, "APPROACH d=" + ROUND(distToTarget,0)
         + " bottom=" + ROUND(bottomAlt,0)
         + " hs=" + ROUND(horizontalSpeed,1) + "/" + ROUND(desiredSpeed,1)
-        + " vs=" + ROUND(ctx["V_SPEED"],1) + "/" + ROUND(targetVs,1),
+        + " vs=" + ROUND(ctx["V_SPEED"],1) + "/" + ROUND(targetVs,1)
+        + " tLat=" + ROUND(recoveryTime,1) + " stopH=" + ROUND(stopHeight,0),
         1, 2, 13, CYAN, FALSE, 0, targetVs, desiredSpeed).
 
     IF distToTarget <= LANDING_HOVER_REFINE_ACCEPT_RADIUS

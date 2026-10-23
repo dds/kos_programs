@@ -304,6 +304,27 @@ one shared descent/thrust law. Vertical safety reserves, terrain clearance,
 actual-facing checks and throttle cutoff remain unchanged. Economy profiles
 retain their flexible-site policy rather than becoming pinpoint missions.
 
+A reported fixed-site Mun run exposed a separate ignition delay: at18.97km
+downrange the modeled H gate was already due, but its old V-ETA arming guard
+kept it suppressed until13.19km. Validated powered fixed-site ranges now arm
+independently of V-ETA through a predicate shared with orbital prediction.
+Legacy/unknown models retain the high-altitude suppression; flexible economy
+sites still use their vertical stopping gate. `hModel` and `hSupp` show which
+policy is active. The vertical envelope and alignment requirements are unchanged.
+
+Powered fixed-site APPROACH also uses a response-aware horizontal stopping
+limit and coupled stopping-height reserve instead of the old3km altitude ramp.
+It estimates acceleration/cruise/braking time from signed closing velocity,
+cross velocity and the speed actually commanded, then descends only through
+height above that reserve. Tilt compensation preserves vertical thrust while
+translating. Safe terminal handoff can retain lateral motion up to18m/s once
+vertical capture is secure, rather than first nulling it below1m/s. Legacy
+and flexible approaches and the slow final settling corridor retain their
+existing limits. `tLat`/`stopH` expose recovery time and reserved height.
+In a flat, constant-thrust replay of the reported5km/594m recovery, target/speed
+capture improves from1167s/1924m/s integrated thrust to149s/284m/s. This is
+not native flight proof, a fuel budget, or a guarantee of pinpoint landing.
+
 The reviewed `landingdiag_RO9_2157921508_boot_014_core` run ended main braking
 4051m from the guidance site, spent320s /519.5m/s thrust-integrated impulse in
 APPROACH and another48.7m/s in final hover, and logged touchdown2791m from the

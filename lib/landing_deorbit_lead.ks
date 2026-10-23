@@ -54,22 +54,26 @@ LOCAL FUNCTION _landingLeadGateAt {
     LOCAL targetVec IS LATLNG(targetLat,targetLng):ALTITUDEPOSITION(elevation)-SHIP:BODY:POSITION.
     LOCAL downrange IS VDOT(VXCL(positionVec:NORMALIZED,targetVec-positionVec),hVel:NORMALIZED).
     IF downrange <= 0 { RETURN sample["HEIGHT"] <= TERRAIN_SAFE_ALT. }
-    LOCAL etaLo IS 0.
-    LOCAL etaHi IS MAX(120,LANDING_BRAKE_ALIGN_LEAD*2).
-    LOCAL iteration IS 0.
-    UNTIL iteration >= 12 {
-        LOCAL coastTime IS (etaLo+etaHi)/2.
-        LOCAL future IS lmStagedBrakeEnvelope(sample["HS"],sample["DOWN"]+gravAcc*coastTime,
-            activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
-        LOCAL futureHeight IS sample["HEIGHT"]-sample["DOWN"]*coastTime-gravAcc*coastTime^2/2.
-        IF futureHeight <= future["V"] { SET etaHi TO coastTime. }
-        ELSE { SET etaLo TO coastTime. }
-        SET iteration TO iteration+1.
-    }
-    IF sample["HEIGHT"] > TERRAIN_SAFE_ALT AND etaLo > LANDING_BRAKE_ALIGN_LEAD { RETURN FALSE. }
     LOCAL nominal IS lmNominalBrakeRange(sample["HS"],activeAcc,planAcc,stageDv,gravAcc,0,
         SHIP:BODY:RADIUS,sample["ASL"],2*MAX(0.05,LANDING_STAGE_SETTLE),stack).
     IF nominal < 0 { RETURN FALSE. }
+    LOCAL etaLo IS 0.
+    // The fixed-site modeled deadline does not depend on V-ETA. Avoid a
+    // nested twelve-sample search when that extra condition is irrelevant.
+    IF NOT lmHorizontalBrakeGateArmed(sample["HEIGHT"],999999,stack["VALID"]) {
+        LOCAL etaHi IS MAX(120,LANDING_BRAKE_ALIGN_LEAD*2).
+        LOCAL iteration IS 0.
+        UNTIL iteration >= 12 {
+            LOCAL coastTime IS (etaLo+etaHi)/2.
+            LOCAL future IS lmStagedBrakeEnvelope(sample["HS"],sample["DOWN"]+gravAcc*coastTime,
+                activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
+            LOCAL futureHeight IS sample["HEIGHT"]-sample["DOWN"]*coastTime-gravAcc*coastTime^2/2.
+            IF futureHeight <= future["V"] { SET etaHi TO coastTime. }
+            ELSE { SET etaLo TO coastTime. }
+            SET iteration TO iteration+1.
+        }
+        IF NOT lmHorizontalBrakeGateArmed(sample["HEIGHT"],etaLo,stack["VALID"]) { RETURN FALSE. }
+    }
     LOCAL hGate IS MIN(envelope["H"],nominal)+BRAKE_MARGIN
         + MAX(0,LANDING_BRAKE_GATE_LEAD_DIST)+MAX(0,LANDING_BRAKE_UNDERSHOOT_BIAS).
     RETURN downrange <= hGate.

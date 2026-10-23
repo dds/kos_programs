@@ -912,9 +912,13 @@ The horizontal ETA estimates closing time to the horizontal gate.
 the target is behind the descending craft below `TERRAIN_SAFE_ALT`.
 High-altitude horizontal suppression applies above `TERRAIN_SAFE_ALT` when
 more than `LANDING_BRAKE_ALIGN_LEAD` (20s by default) from the vertical gate.
-It cannot suppress the vertical trigger. Full-vector descending control alone
-does not suppress fixed-site horizontal/overshoot gates; that also requires
-`LANDING_FLEXIBLE_SITE>0`.
+The exception is a valid mass/fuel-aware powered range on an explicitly
+powered fixed-site profile: its H deadline is independently armed by
+`lmHorizontalBrakeGateArmed`, shared with the orbital ignition forecast.
+The reported525.5m/s case was already inside its19km stopping gate, but the
+old suppression delayed ignition another~6km. A merely geometric/legacy or
+invalid model still has the old arming guard. V safety is never suppressed;
+flexible economy sites still suppress geography and use the V gate.
 
 These are conservative point-mass bounds, not terrain-path or attitude
 simulation. Rising terrain ahead, unusually slow rotation, engine spool-up,
@@ -1188,11 +1192,32 @@ it no longer multiplies the speed beyond the stopping cap. The tilt limit is
 respected using `tan(MAX_TILT)` in the up-plus-horizontal steering vector.
 
 Descent speed is capped by the estimated time needed to translate and arrest
-horizontal motion. This allows continued descent rather than first holding
-altitude to complete the entire lateral correction. The old routine hover
-trigger at about 1 km plus lead time has been removed. A low-altitude speed
-cap retains the hover translation speed instead of fading all translation to
-zero before reaching the target.
+horizontal motion. Legacy profiles retain their altitude speed ramp and
+triangle-time estimate. For powered fixed-site recovery, that combination
+caused a slowdown spiral: the reported5km miss entered near600m, commanded
+only10m/s, and slowed toward4m/s as it descended. Gravity alone cannot remove
+a lateral miss; at that geometry, some powered weight support is unavoidable.
+
+The powered fixed-site path now uses a signed accelerate/cruise/brake time
+estimate, including away-going and cross velocity and the actual cruise cap.
+The speed limit reserves response delay plus upright lateral stopping
+distance. A bounded search additionally requires the full coupled braking
+envelope to fit inside the current control height. Descent spends only height
+above this reserve; tilt compensation maintains the requested vertical
+acceleration. MAX_APPROACH_SPEED55m/s, MAX_TILT30deg, the20% response reserve
+and throttle cap remain. Within the main-burn clearance plus final-hover
+height, the original slow settling law remains; an inapplicable100m clearance
+must not freeze a31m correction near the ground. Safe BRAKE handoff can begin
+at or below18m/s after vertical capture instead of demanding complete lateral
+arrest first. It cannot bypass the terminal altitude or vertical capture gate.
+
+The flat, constant2.84m/s² thrust/1.63m/s² gravity fixture starts at the reported
+594m control height,4960m miss and19.6m/s descent. Full source-controller
+integration reaches unchanged target/speed tolerance in148.5s/283.9m/s thrust
+impulse versus1166.5s/1923.5m/s for legacy guidance. Signed/cross-velocity starts
+also converge. Terrain relief, finite attitude response and actual fuel/stage
+mass evolution are absent here: this is comparative control evidence, not a
+prediction of the crashed probe or a flight-validated precision landing.
 
 Once distance and horizontal speed meet `LANDING_HOVER_REFINE_ACCEPT_RADIUS`
 and `LANDING_HOVER_REFINE_ACCEPT_HSPEED` (30 m and 1.75 m/s), approach goes to

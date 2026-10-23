@@ -41,6 +41,8 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                _landingLogBrakeComplete=lambda *args: None)
     for name in ('lmBrakeNetAcc', 'lmBrakeEnvelope', 'lmBrakeThrust',
                  'lmBrakeFullNetAcc','lmBrakeDescentTarget','lmEconomyBrakeThrust',
+                 'lmHorizontalBrakeGateArmed',
+                 'lmApproachTransitTime', 'lmFixedApproachPlan', 'lmDirectionToTarget',
                  'lmNominalBrakeRange', 'landingBrakeStackAt', 'lmVerticalBurnDistance', 'lmRetroSteering',
                  '_landingBurnHeight', '_landingStopEnvelope', 'lmStagedBrakeEnvelope', 'lmFullBrakeEnvelope', '_landingBrakeGateInfo',
                  '_landingBrakeSteeringInfo'):

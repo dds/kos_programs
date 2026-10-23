@@ -321,6 +321,29 @@ Looks like Python/JS; is neither.
   the whole weaker-stage stop. Keep full gravity,80% net reserve, separate
   reaction/staging pauses, clearance and live attitude/cutoff guards.
   PLAN_ACC remains the weaker stage; logs expose brakeStageDv and flags.
+  Native UT2517847-2518232 fixed-site Mun report: dr18966/Hbrake19046,
+  hs525.5,Veta22 but Hsupptrue; ignition dr13189/Hgate19171,~6km late.
+  Old V-ETA20s arming suppressed a valid independent modeled H deadline.
+  lmHorizontalBrakeGateArmed now shared by flight/planner: valid mass/fuel
+  powered fixed-site ranges arm independently; legacy/invalid models keep
+  old high-altitude guard, flexible economy still suppresses geography.
+  V envelope/attitude/terrain/fuel guards unchanged. hModel logs evidence.
+  Same flight ended BRAKE at4960m miss/594m control height/hs0.4/vs-19.6;
+  APPROACH then slowed10.3->4.3m/s as its3km altitude ramp shrank, while its
+  triangle-time descent estimate ignored that cap. Powered fixed-site recovery
+  now uses signed accelerate/cruise/brake timing, response-aware stopping
+  distance and coupled stopping-height cap; descend only through surplus
+  height and compensate tilt. Keep55m/s/30deg/20% reserve/throttle bounds,
+  unchanged final slow corridor and target tolerance. Safe terminal BRAKE
+  handoff permits residual<=18m/s only after vertical capture, not during
+  unsafe flare. Legacy/flexible approaches retain prior policy.
+  Flat constant-thrust source replay:148.5s/283.9m/s impulse vs1166.5s/1923.5;
+  target/speed tolerance unchanged, signed/cross starts checked. This is NOT
+  native terrain/attitude/mass/fuel or precision-landing validation. A5km miss
+  from600m with nearly zero lateral speed cannot be recovered on gravity
+  alone: fix the main burn timing first, do not waive the requested site.
+  Recovery-only math ships inside landing_terminal's dynamic track, not
+  landing_math/orbital planning. Only the cheap H-arming predicate is shared.
   ECONOMY_BRAKE's stopping geometry must match its controller regardless of
   STAGE_BRAKE_CREDIT: full vector above APPROACH_HSPEED, original flare below.
   The separate credit flag controls measured fuel only. Both RO8/RO9 economy

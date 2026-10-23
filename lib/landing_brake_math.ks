@@ -1,6 +1,18 @@
 // Shared powered-descent control law: flight and orbital prediction.
 @LAZYGLOBAL OFF.
 
+// A validated powered range is a fixed site's lateral braking deadline,
+// independent of the vertical stopping deadline. Legacy/unknown range still
+// needs the altitude/V-ETA guard that prevents distant targets causing hover.
+GLOBAL FUNCTION lmHorizontalBrakeGateArmed {
+    PARAMETER height.
+    PARAMETER verticalEta.
+    PARAMETER poweredRangeValid.
+    RETURN height <= TERRAIN_SAFE_ALT OR verticalEta <= LANDING_BRAKE_ALIGN_LEAD
+        OR (poweredRangeValid AND LANDING_POWERED_LEAD > 0
+            AND LANDING_ECONOMY_BRAKE > 0 AND LANDING_FLEXIBLE_SITE <= 0).
+}
+
 // Spend surplus altitude descending during horizontal arrest, then leave
 // enough height to stop the remaining descent on the weaker planned stage.
 // Reaction time, full gravity and existing clearance are reserved first.

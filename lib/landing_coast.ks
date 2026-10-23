@@ -94,6 +94,7 @@ GLOBAL FUNCTION _landingCoastTick {
         + " hEta=" + ROUND(gate["H_ETA"],0)
         + " vEta=" + ROUND(gate["V_ETA"],0)
         + " hSupp=" + _landingBoolText(gate["H_SUPPRESSED"])
+        + " hModel=" + _landingBoolText(gate["H_MODEL_VALID"])
         + " hOver=" + _landingBoolText(gate["H_OVERSHOT"])
         + " hs=" + ROUND(gate["H_SPEED"],1)
         + " vGate=" + ROUND(gate["V_GATE"],0)

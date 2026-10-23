@@ -380,6 +380,7 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
     LOCAL horizontalAcc IS lmBrakeNetAcc(maxAcc, gravAcc).
     LOCAL envelope IS _landingStopEnvelope(ctx,horizontalSpeed,downSpeed).
     LOCAL brakeDist IS envelope["H"].
+    LOCAL poweredRangeValid IS FALSE.
     IF LANDING_POWERED_LEAD > 0 AND LANDING_ECONOMY_BRAKE > 0 {
         // Alignment precedes ignition. Safety latency belongs to the V
         // envelope, not nominal powered travel; use the real settle budget.
@@ -387,7 +388,10 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
         LOCAL nominalRange IS lmNominalBrakeRange(horizontalSpeed,ctx["MAX_ACC"],
             ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],gravAcc,0,
             SHIP:BODY:RADIUS,SHIP:ALTITUDE,2*MAX(0.05,LANDING_STAGE_SETTLE),stack).
-        IF nominalRange >= 0 { SET brakeDist TO MIN(brakeDist,nominalRange). }
+        IF nominalRange >= 0 {
+            SET brakeDist TO MIN(brakeDist,nominalRange).
+            SET poweredRangeValid TO stack["VALID"].
+        }
     }
     LOCAL burnHeight IS _landingBurnHeight(ctx).
     LOCAL distToTarget IS 999999.
@@ -449,7 +453,7 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
         AND brakeDownrange > 0 AND brakeDownrange <= hBrakeGate.
     LOCAL hSuppressed IS FALSE.
     IF ctx["HAS_TARGET"] AND hBrakeEta < 999999 AND burnHeight > TERRAIN_SAFE_ALT
-            AND vBurnEta > LANDING_BRAKE_ALIGN_LEAD {
+            AND NOT lmHorizontalBrakeGateArmed(burnHeight,vBurnEta,poweredRangeValid) {
         SET hNow TO FALSE.
         SET hBrakeEta TO 999999.
         SET hSuppressed TO TRUE.
@@ -480,6 +484,7 @@ GLOBAL FUNCTION _landingBrakeGateInfo {
         "H_ETA", hBrakeEta,
         "H_NOW", hNow,
         "H_SUPPRESSED", hSuppressed,
+        "H_MODEL_VALID", poweredRangeValid,
         "H_OVERSHOT", hOvershot,
         "H_ACC", horizontalAcc,
         "V_GATE", vBurnGate,
@@ -599,6 +604,7 @@ GLOBAL FUNCTION _landingSetState {
             + " hNow=" + gate["H_NOW"]
             + " hOver=" + gate["H_OVERSHOT"]
             + " hSupp=" + gate["H_SUPPRESSED"]
+            + " hModel=" + gate["H_MODEL_VALID"]
             + " downrange=" + ROUND(gate["DOWNRANGE"],0)
             + " hs=" + ROUND(ctx["H_SPEED"],1)
             + " vs=" + ROUND(ctx["V_SPEED"],1)

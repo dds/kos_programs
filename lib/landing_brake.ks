@@ -110,6 +110,7 @@ GLOBAL FUNCTION _landingBrakeAlignTick {
         + " hEta=" + ROUND(gate["H_ETA"],0)
         + " vEta=" + ROUND(gate["V_ETA"],0)
         + " hSupp=" + _landingBoolText(gate["H_SUPPRESSED"])
+        + " hModel=" + _landingBoolText(gate["H_MODEL_VALID"])
         + " hOver=" + _landingBoolText(gate["H_OVERSHOT"])
         + " trErr=" + ROUND(steerInfo["IMPACT_ERR"],0)
         + " x=" + ROUND(steerInfo["CROSS_ERR"],0)
@@ -234,10 +235,15 @@ GLOBAL FUNCTION _landingBrakingTick {
             (burnHeight - HOVER_ALT) / MAX(1, downSpeed), GREEN).
     }
 
+    // Once vertical arrest is secure, retain useful lateral motion for a
+    // fixed-site correction instead of first demanding <1m/s in both axes.
+    LOCAL earlyApproach IS LANDING_POWERED_LEAD > 0 AND LANDING_ECONOMY_BRAKE > 0
+        AND LANDING_FLEXIBLE_SITE <= 0 AND distToTarget > APPROACH_RADIUS
+        AND horizontalSpeed <= APPROACH_HSPEED.
     IF ctx["HAS_TARGET"]
             AND terminalReady
             AND verticalCaptured
-            AND horizontalSpeed <= TERMINAL_HSPEED {
+            AND (horizontalSpeed <= TERMINAL_HSPEED OR earlyApproach) {
         IF distToTarget <= VERTICAL_RADIUS {
             _landingLogBrakeComplete(ctx, "VERTICAL_DESCENT", steerInfo).
             _landingSetState(ctx, "VERTICAL_DESCENT",
