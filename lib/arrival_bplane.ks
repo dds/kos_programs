@@ -375,6 +375,7 @@ LOCAL FUNCTION _bplaneRetryWaitPending {
 
 LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
     PARAMETER targetBody.
+    PARAMETER retryReason IS "unconverged-optional-correction".
     IF ABORT { RETURN FALSE. }
     _bplaneEnsureSoiAlarm(targetBody).
     LOCAL hit IS _bplaneCoastEncounter(targetBody).
@@ -392,6 +393,9 @@ LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
             SET wakeUt TO MIN(pending["wakeUt"],wakeUt).
             IF wakeUt <= TIME:SECONDS AND TIME:SECONDS <= latestUt {
                 bplaneClearRetryWait(TRUE).
+                mLog("STATS bplane retry-resume target=" + targetBody:NAME
+                    + " wakeUt=" + wakeUt + " ut=" + TIME:SECONDS
+                    + " latestUt=" + latestUt + " solvingNow=True").
                 RETURN TRUE.
             }
         } ELSE {
@@ -408,7 +412,8 @@ LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
             "target",targetBody:NAME,"wakeUt",wakeUt,"alarm",alarmId,"waiting",TRUE)).
         mLogWarn("STATS bplane retry-wake target=" + targetBody:NAME
             + " wakeUt=" + wakeUt + " eta=" + (wakeUt-TIME:SECONDS)
-            + " latestUt=" + latestUt + " checkpoint=final automaticResume=True").
+            + " latestUt=" + latestUt + " checkpoint=final automaticResume=True"
+            + " after=" + retryReason).
         PRINT "ARRIVAL RETRY: running coast until UT " + ROUND(wakeUt,1) + ".".
         LOCAL solarRef IS enterSolarCoast("BPLANE retry",TRUE,TRUE,wakeUt).
         waitUntilOrSOI(targetBody,wakeUt,10,alarmId,solarRef).
@@ -416,7 +421,12 @@ LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
         SET WARP TO 0.
         WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
         IF ABORT { RETURN FALSE. }
-        IF SHIP:BODY <> targetBody AND TIME:SECONDS <= latestUt { RETURN TRUE. }
+        IF SHIP:BODY <> targetBody AND TIME:SECONDS <= latestUt {
+            mLog("STATS bplane retry-resume target=" + targetBody:NAME
+                + " wakeUt=" + wakeUt + " ut=" + TIME:SECONDS
+                + " latestUt=" + latestUt + " solvingNow=True").
+            RETURN TRUE.
+        }
     }
     LOCAL reason IS "no-safe-retry-time".
     IF hit <> 0 AND latestUt >= TIME:SECONDS {
@@ -426,7 +436,11 @@ LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
     // No safe time remains for another automatic attempt. Stay resident,
     // at 1x, with the rejected node removed. KAC cannot restart a script.
     mLogError("STATS bplane retry-blocked reason=" + reason + " target="
-        + targetBody:NAME + " latestUt=" + latestUt + " automaticResume=False resident=True").
+        + targetBody:NAME + " latestUt=" + latestUt + " after=" + retryReason
+        + " ut=" + TIME:SECONDS + " automaticResume=False resident=True").
+    IF reason = "final-refinement-checkpoint-used" {
+        PRINT "Final arrival correction attempt rejected: " + retryReason + ". No further automatic retry.".
+    }
     _bplaneResidentHold(reason).
     RETURN FALSE.
 }
@@ -1372,7 +1386,7 @@ GLOBAL FUNCTION planBplaneCorrection {
             IF NOT allowMidcourseRetry { RETURN 0. }
             WAIT 0.02.
             IF _bplaneQueueMidcourseRetry("below-execution-minimum") { RETURN 0. }
-            IF NOT _bplaneWaitBeforeSolverRetry(targetBody) { RETURN 0. }
+            IF NOT _bplaneWaitBeforeSolverRetry(targetBody,"below-execution-minimum") { RETURN 0. }
         } ELSE {
             maneuverUiArchiveLog("bplane").
             RETURN nd.

@@ -880,6 +880,10 @@ A named `B-plane retry` alarm and the shared solar/clock loop keep the
 mission running. The pending wake and completed checkpoint survive reboot;
 small encounter-ETA changes cannot manufacture another final check.
 Explicit arrival `replan` or a flown correction clears that checkpoint.
+`STATS bplane retry-resume ... solvingNow=True` marks the final solve;
+`retry-blocked ... after=...` records why that attempt was rejected.
+`final-refinement-checkpoint-used` can follow a below-minimum correction;
+it does not mean the scheduled wake was skipped.
 Without KAC, the clock loop still wakes; battery/warp health checks remain.
 When KAC is available, a separate `<vessel>: SOI: <body>` alarm is created
 from the native encounter during BPLANE and before the midpoint/final waits.
@@ -1141,8 +1145,12 @@ RO9's `minmus_kolniya_flats_return` is a separate mission with these targets
 | After Flats landing and ascent | 659,734 | 554,472 | 0° | Unspecified | 0.4° |
 | Kerbin return | — | 52,000 | Unspecified | Unspecified | Unspecified |
 
-Capture aims at 9.3 km Pe and 63.4° inclination, then SHAPE finishes the
-requested LAN, apsides and argument. SCIENCE_OPS holds for your review; it
+Capture aims at 9.3 km Pe and 63.4° inclination. This profile accepts an
+arrival within 1 km of that Pe and 1° of that inclination; SHAPE still
+requires the final plane within 0.1° and finishes the requested LAN,
+apsides and argument. This avoids chasing sub-0.3 m/s arrival corrections
+for precision that belongs to SHAPE. Capture bounds and fuel reserves
+remain enforced. SCIENCE_OPS holds for your review; it
 does not automatically deorbit. Select a navigation waypoint inside a
 Minmus Flats biome, preferably near the equator to reduce ascent plane cost,
 then run the commands also printed by the hold:

@@ -336,7 +336,11 @@ Looks like Python/JS; is neither.
   reports4-5 wakes on one Mun trip. Persist waiting/completed checkpoint bound
   to mission/launch/phase/target; boot waits BEFORE a full solve, and ETA jitter
   cannot recreate a consumed final check. Explicit replan/flown corrections
-  clear it and its alarm. Mission admission/window failures
+  clear it and its alarm. retry-resume logs solvingNow=True; retry-blocked
+  logs after=<rejection>. final-refinement-checkpoint-used can legitimately
+  follow a second below-execution-minimum result; it alone does not prove
+  a skipped wake. Do not add repeated timers or bypass the shared0.3m/s floor.
+  Mission admission/window failures
   stay resident at 1x for intervention; previews/explicit review/interrupted
   burns retain their manual policy. Never accept an unconverged required
   plane just to keep the phase machine moving.
@@ -426,6 +430,14 @@ Looks like Python/JS; is neither.
   capture Pe9300/inc63.4, SHAPE Ap397272/Pe9300/inc63.4/LAN79.2/AoP90,
   explicit SCIENCE_OPS hold, then selected Flats waypoint landing. Capture
   leaves LAN unspecified so SHAPE can finish it after the arrival asymptote.
+  Confirmed native arrival Pe8.7km/planeErr0.8deg produced a0.1324m/s final
+  trim, correctly skipped at shared minimum0.3, then resident checkpoint-used.
+  This profile now admits coarse arrival plane1deg (Pe tolerance1000m and
+  capture bounds8300-10300m unchanged); mandatory SHAPE still requires0.1deg
+  at the requested LAN before science/landing. No global tolerance waiver,
+  no tiny burn and no bypass of final precision or reserve budgets. Source
+  fixtures reproduce rejection/wake and check the coarse/final gate split;
+  native capture/SHAPE still needs flight validation.
   Surface return writes optional SURFACE_RETURN_ORBIT fields to the NEW local
   profile's SHAPE_* (Ap659734/Pe554472/inc0/noLAN/AoP0.4) and sequences
   PRELAUNCH/LAUNCH/PARK/SHAPE/RETURN_SETUP, then Kerbin Pe52000. Empty orbit

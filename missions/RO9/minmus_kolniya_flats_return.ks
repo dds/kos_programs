@@ -27,7 +27,10 @@ SET TARGET_AP TO 397272.
 SET BPLANE_PE_ONLY TO 0.
 SET BPLANE_REQUIRE_PLANE TO 1.
 SET BPLANE_PE_TOL TO 1000.
-SET BPLANE_ANG_TOL TO 0.2.
+// Arrival is an intermediate orbit: SHAPE still requires0.1deg at the
+// requested LAN before science/landing. Avoid chasing a sub-minimum trim
+// solely to enforce final-orbit precision before capture.
+SET BPLANE_ANG_TOL TO 1.
 SET CAPTURE_MIN_PE TO 8300.
 SET CAPTURE_MAX_PE TO 10300.
 SET CAPTURE_ACCEPT_BOUND TO 0.

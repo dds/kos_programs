@@ -111,7 +111,45 @@ def check_surface_shaping_cache_and_gate():
     print('PASS: generated ascent uses real phase bindings and keeps return_setup through prelaunch/launch/shaping cleanup; specifying post-ascent elements without SHAPE holds before changing mission identity')
 
 
+def check_coarse_arrival_strict_final_orbit():
+    cfg=configuration()
+    arrival=(ROOT/'lib/arrival_bplane.ks').read_text()
+    current=function_body(arrival,'_bplaneCurrentCorridorOk')
+    element=function_body(arrival,'_bplaneElementPlaneError')
+    # The fixture supplies parameters directly, including multi-parameter
+    # declarations not otherwise needed by this small source interpreter.
+    current=re.sub(r'PARAMETER [^.]+\.', '',current)
+    element=re.sub(r'PARAMETER [^.]+\.', '',element)
+    patch=NS(PERIAPSIS=8700,INCLINATION=64.2,LAN=300)
+    env=dict(cfg,targetBody=NS(NAME='Minmus'),wantPe=9300,wantInc=63.4,wantLan=-1,
+             findArrivalPatch=lambda *_:dict(patch=patch))
+    env['_bplaneElementPlaneError']=lambda inc,lan,want_inc,want_lan:execute(element,
+        dict(inc=inc,lan=lan,wantInc=want_inc,wantLan=want_lan))
+    assert cfg['BPLANE_ANG_TOL']==1 and cfg['BPLANE_REQUIRE_PLANE']==1
+    assert execute(current,env)
+    env['BPLANE_ANG_TOL']=.2
+    assert not execute(current,env) # Reproduce the overly strict old profile.
+    env['BPLANE_ANG_TOL']=cfg['BPLANE_ANG_TOL']
+    for pe,inc,allowed in ((8700,62.6,True),(8300,63.4,True),(10300,63.4,True),
+                           (8299,63.4,False),(10301,63.4,False),(9300,64.401,False)):
+        patch.PERIAPSIS=pe;patch.INCLINATION=inc
+        assert bool(execute(current,env))==allowed,(pe,inc)
+    class Errors(dict):
+        HASKEY=dict.__contains__
+    converged=function_body((ROOT/'lib/orbit_shape.ks').read_text(),'shapeConverged')
+    final=dict(cfg,targets={},shapeErrors=lambda _:Errors(AP=0,PE=0,PLANE=.8,AOP=0))
+    assert not execute(converged,final)
+    final['shapeErrors']=lambda _:Errors(AP=0,PE=0,PLANE=.09,AOP=0)
+    assert execute(converged,final)
+    assert cfg['CAPTURE_MIN_PE']==8300 and cfg['CAPTURE_MAX_PE']==10300
+    assert cfg['SHAPE_ANG_TOL']==.1 and cfg['SHAPE_RESERVE_DV']==900
+    assert cfg['SEQUENCE'].index('SHAPE')<cfg['SEQUENCE'].index('SCIENCE_OPS')<cfg['SEQUENCE'].index('LAND_DEORBIT')
+    assert 'LOCAL MIN_EXEC_DV      IS 0.3.' in arrival
+    print('PASS: reported8.7km/0.8deg arrival passes only the coarse Kolniya gate; bad Pe/>1deg still rejects, mandatory SHAPE still rejects0.8deg and needs0.1deg before science/landing;0.3m/s minimum and fuel reserves remain')
+
+
 if __name__=='__main__':
     check_requested_orbits_across_boots()
     check_manual_release_and_waypoint_required()
     check_surface_shaping_cache_and_gate()
+    check_coarse_arrival_strict_final_orbit()

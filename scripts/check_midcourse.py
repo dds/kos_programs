@@ -666,6 +666,54 @@ def check_retry_cadence_has_one_final_check():
     print('PASS: a repeated failed solve gets one final wake, not a geometric series; default is 15min before SOI, short lead settings stay bounded by burn/SOI margins, and KAC absence cannot change cadence')
 
 
+def check_reported_minmus_final_microburn():
+    env,saved,events,alarms,moon,hit=retry_environment()
+    saved['phase']='REFINE_BPLANE'
+    moon.NAME='Minmus';hit['patch'].PERIAPSIS=8700;hit['patch'].INCLINATION=64.2
+    planned=[];removed=[];requests=[]
+    node=NS(DELTAV=NS(MAG=.1324))
+    def solve(*_):planned.append(env['TIME'].SECONDS);return node
+    env['_bplanePlanFullCorrection']=solve
+    env['_bplaneCorrectionAboveMinimum']=lambda nd:ks.call('_bplaneCorrectionAboveMinimum',env,nd)
+    env['fixture_remove']=removed.append
+    env['enterSolarCoast']=lambda *_:1
+    env['waitUntilOrSOI']=lambda *args:ks.call('waitUntilOrSOI',env,*args)
+    def retry(target,reason='unconverged-optional-correction'):
+        requests.append(reason)
+        return ks.call('_bplaneWaitBeforeSolverRetry',env,target,reason)
+    env['_bplaneWaitBeforeSolverRetry']=retry
+    env['_bplaneResidentHold']=lambda reason:events.append(('blocked',reason))
+    result=ks.call('planBplaneCorrection',env,moon,9300,63.4,-1,100,'',True)
+    assert result==0 and planned==[1000,hit['entryUt']-env['BPLANE_FINAL_REFINE_LEAD']]
+    assert removed==[node,node] and requests==['below-execution-minimum']*2
+    assert events[-1]==('blocked','final-refinement-checkpoint-used')
+    assert not saved['bplane_retry_wait']['waiting'] and not alarms
+    assert env['MIN_EXEC_DV']==.3 and saved['phase']=='REFINE_BPLANE'
+    diagnostic=function_body(SOURCE,'_bplaneWaitBeforeSolverRetry')
+    assert 'STATS bplane retry-resume target=' in diagnostic and 'solvingNow=True' in diagnostic
+    assert '" after=" + retryReason' in diagnostic
+    # A connected reboot reloads the revised mission settings. Exercise the
+    # real phase entry with its consumed checkpoint still present: no manual
+    # phase skip or checkpoint reset is needed for the now-admissible patch.
+    from check_minmus_kolniya import configuration
+    cfg=configuration()
+    for key in ('BPLANE_ANG_TOL','BPLANE_PE_TOL','CAPTURE_PE','CAPTURE_INC','CAPTURE_LAN'):
+        env[key]=cfg[key]
+    env['_bplaneWantInc']=lambda:cfg['CAPTURE_INC']
+    hit['patch'].LAN=300
+    current=re.sub(r'PARAMETER [^.]+\.', '',function_body(SOURCE,'_bplaneCurrentCorridorOk'))
+    element=re.sub(r'PARAMETER [^.]+\.', '',function_body(SOURCE,'_bplaneElementPlaneError'))
+    env['_bplaneElementPlaneError']=lambda inc,lan,wi,wl:run(element,
+        dict(env,inc=inc,lan=lan,wantInc=wi,wantLan=wl))
+    env['_bplaneCurrentCorridorOk']=lambda target,pe,inc,lan:run(current,
+        dict(env,targetBody=target,wantPe=pe,wantInc=inc,wantLan=lan))
+    run(function_body(SOURCE,'phaseRefineBplane'),env)
+    assert saved['phase']=='COAST_2HALF' and len(planned)==2
+    assert not saved['bplane_retry_wait']['waiting'] and not alarms
+    assert not env['phaseShouldYield'] and env['MIN_EXEC_DV']==.3
+    print('PASS: reported0.1324m/s correction is retried once and rejected at0.3m/s; updated Minmus profile resumes through the real REFINE phase with its consumed checkpoint intact, no extra solve, timer or burn')
+
+
 class SimulatedReboot(Exception):pass
 
 
@@ -750,5 +798,6 @@ if __name__=='__main__':
     check_post_burn_tiny_correction_handoff()
     check_small_refinement_waits_for_useful_burn()
     check_retry_cadence_has_one_final_check()
+    check_reported_minmus_final_microburn()
     check_retry_wait_resumes_before_solver()
     check_retry_wait_binding_and_cleanup()
