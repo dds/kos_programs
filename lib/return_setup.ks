@@ -21,6 +21,9 @@ GLOBAL SURFACE_RETURN_SEQUENCE IS LIST("PRELAUNCH", "LAUNCH", "PARK", "RETURN_SE
 GLOBAL SURFACE_RETURN_PARKING_ALT IS 20000.
 GLOBAL SURFACE_RETURN_INCLINATION IS 0.
 GLOBAL SURFACE_RETURN_AZIMUTH IS 0.
+// Optional post-ascent SHAPE settings, written into the generated local
+// surface-return profile. Empty preserves every existing return sequence.
+GLOBAL SURFACE_RETURN_ORBIT IS LEXICON().
 GLOBAL REENTRY_PE IS 30000.
 
 LOCAL FUNCTION _returnSetupClearLibCache {
@@ -61,6 +64,16 @@ LOCAL FUNCTION _beginLegProfile {
     RETURN missionProfileBegin(stateGet("vehicle", ""), mid).
 }
 
+LOCAL FUNCTION _writeSurfaceReturnOrbit {
+    PARAMETER profilePath.
+    FOR key IN LIST("AP","PE","INC","LAN","AOP","ALT_TOL","ANG_TOL","AOP_TOL",
+            "DV_CAP","TOTAL_DV_CAP","RESERVE_DV") {
+        IF SURFACE_RETURN_ORBIT:HASKEY(key) {
+            LOG "SET SHAPE_" + key + " TO " + configLiteral(SURFACE_RETURN_ORBIT[key]) + "." TO profilePath.
+        }
+    }
+}
+
 GLOBAL FUNCTION phaseSurfaceReturnSetup {
     IF BODY:NAME <> "Mun" AND BODY:NAME <> "Minmus" {
         mLogError("SURFACE_RETURN_SETUP requires Mun or Minmus surface; current body="
@@ -79,6 +92,11 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
         PRINT "  Current status: " + SHIP:STATUS + ".".
         yieldToPrompt().
         RETURN.
+    }
+
+    IF SURFACE_RETURN_ORBIT:LENGTH > 0 AND NOT SURFACE_RETURN_SEQUENCE:CONTAINS("SHAPE") {
+        mLogError("Surface return orbit configured without SHAPE in its sequence; profile unchanged.").
+        yieldToPrompt(). RETURN.
     }
 
     IF HOMECONNECTION:ISCONNECTED {
@@ -104,6 +122,7 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     LOG "SET PARKING_ALT TO " + configLiteral(PARKING_ALT) + "." TO profilePath.
     LOG "SET LAUNCH_INCLINATION TO " + configLiteral(LAUNCH_INCLINATION) + "." TO profilePath.
     LOG "SET LAUNCH_AZIMUTH TO " + configLiteral(LAUNCH_AZIMUTH) + "." TO profilePath.
+    _writeSurfaceReturnOrbit(profilePath).
     LOG "SET RETURN_SEQUENCE TO " + configLiteral(RETURN_SEQUENCE) + "." TO profilePath.
     LOG "SET RETURN_PE TO " + configLiteral(RETURN_PE) + "." TO profilePath.
     LOG "SET RETURN_PE_TOLERANCE TO " + configLiteral(RETURN_PE_TOLERANCE) + "." TO profilePath.

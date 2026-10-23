@@ -224,7 +224,9 @@ def check_ascent_return_cache():
     for band,sequence,wanted in (
             ('LAUNCH',['PRELAUNCH','LAUNCH','PARK','RETURN_SETUP'],True),
             ('LAUNCH',['PRELAUNCH','LAUNCH','PARK','DONE'],False),
-            ('PRELAUNCH',['PRELAUNCH','LAUNCH','PARK','RETURN_SETUP'],False),
+            ('PRELAUNCH',['PRELAUNCH','LAUNCH','PARK','RETURN_SETUP'],True),
+            ('SHAPE',['PRELAUNCH','LAUNCH','PARK','SHAPE','RETURN_SETUP'],True),
+            ('SHAPE',['CAPTURE','SHAPE','SCIENCE_OPS','LAND_DEORBIT'],False),
             ('RETURN_SETUP',['PRELAUNCH','LAUNCH','PARK','RETURN_SETUP'],False)):
         env=dict(bandKey=band,SEQUENCE=Sequence(sequence),LIST=lambda *xs:KList(xs))
         extra=run(source,env)

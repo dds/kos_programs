@@ -1132,6 +1132,40 @@ checks the requested corridor and absolute capture affordability instead.
 `python3 -B scripts/check_arrival_review.py`; actual convergence and flight
 execution still require flight testing.
 
+RO9's `minmus_kolniya_flats_return` is a separate mission with these targets
+(apsides in metres above Minmus sea level):
+
+| Leg | Ap | Pe | Inclination | LAN | Argument of Pe |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| First Minmus orbit | 397,272 | 9,300 | 63.4° | 79.2° | 90° |
+| After Flats landing and ascent | 659,734 | 554,472 | 0° | Unspecified | 0.4° |
+| Kerbin return | — | 52,000 | Unspecified | Unspecified | Unspecified |
+
+Capture aims at 9.3 km Pe and 63.4° inclination, then SHAPE finishes the
+requested LAN, apsides and argument. SCIENCE_OPS holds for your review; it
+does not automatically deorbit. Select a navigation waypoint inside a
+Minmus Flats biome, preferably near the equator to reduce ascent plane cost,
+then run the commands also printed by the hold:
+
+```kerboscript
+RUNPATH("0:/cmd/setphase.ks", "LAND_DEORBIT").
+REBOOT.
+```
+
+The advance command needs an archive link. Missing waypoint selection holds
+in orbit; the profile never substitutes an automatic economy landing site.
+SCANsat is optional, while terrain, braking and staging checks stay active.
+Surface return first establishes a 10 km orbit, then SHAPE builds the high
+equatorial ellipse before automatically starting Kerbin return. At zero
+inclination LAN is undefined, so the second orbit requests no LAN.
+This new route needs native flight testing and has additional shaping costs
+compared with the economy mission. Budget/reserve limits hold if unaffordable.
+
+`SURFACE_RETURN_ORBIT` optionally supplies the generated ascent profile's
+`SHAPE_*` targets, tolerances and dV limits. Its `SURFACE_RETURN_SEQUENCE`
+must include SHAPE; existing missions default to an empty orbit specification.
+The return provider remains cached through prelaunch, ascent and shaping.
+
 `RO8/mun_landing_return` and `RO8/minmus_landing_return` continue from
 `LAND_ASSIST` into `SURFACE_RETURN_SETUP`. Touchdown starts a new local
 `PRELAUNCH → LAUNCH → PARK → RETURN_SETUP` leg, using a 10 km polar parking

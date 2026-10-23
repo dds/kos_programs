@@ -422,6 +422,18 @@ Looks like Python/JS; is neither.
   scalar/function-pointer distinction rather than assuming DEFINED(name)
   works for any declared function. Audit other cross-library bare DEFINED
   function probes before trusting them. Native reload still needed.
+  RO9 minmus_kolniya_flats_return is intentionally not an RO8 clone:
+  capture Pe9300/inc63.4, SHAPE Ap397272/Pe9300/inc63.4/LAN79.2/AoP90,
+  explicit SCIENCE_OPS hold, then selected Flats waypoint landing. Capture
+  leaves LAN unspecified so SHAPE can finish it after the arrival asymptote.
+  Surface return writes optional SURFACE_RETURN_ORBIT fields to the NEW local
+  profile's SHAPE_* (Ap659734/Pe554472/inc0/noLAN/AoP0.4) and sequences
+  PRELAUNCH/LAUNCH/PARK/SHAPE/RETURN_SETUP, then Kerbin Pe52000. Empty orbit
+  settings preserve existing missions; nonempty settings without SHAPE hold
+  before profile/state changes. Keep return_setup through PRELAUNCH/LAUNCH/
+  SHAPE cleanup for sequences containing RETURN_SETUP. Waypoint selection
+  is required; do not replace it with an economy site or waive terrain/fuel
+  gates. No new bootstrap, native mission flight testing still required.
   Repeated RO9 targeted Mun deorbit held on powered-lead-not-converged at54/64;
   operator supplied aim63610/range20847/ballistic84457m. No final downfield or
   residual was supplied. Definite control bug:3 forecasts each optionally

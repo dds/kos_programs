@@ -22,6 +22,7 @@ def expression(text, env):
     text = re.sub(r'\bFALSE\b', 'False', text)
     text = text.replace('<>', '!=')
     return eval(text, {'__builtins__': {}, 'LIST': lambda *xs: list(xs),
+                      'LEXICON': lambda *xs:dict(zip(xs[::2],xs[1::2])),
                       'MAX': max, 'configLiteral': literal}, env)
 
 
@@ -73,6 +74,8 @@ def emit_profile(function, env):
             continue
         elif chunk.startswith('LOCAL profilePath') or chunk == '_writeCoastAutomation(profilePath).':
             continue
+        elif chunk == '_writeSurfaceReturnOrbit(profilePath).':
+            output.extend(emit_surface_orbit(env))
         elif chunk.startswith('LOCAL '):
             match = re.fullmatch(r'LOCAL (\w+) IS (.*?)\.', chunk)
             assert match, chunk
@@ -83,6 +86,20 @@ def emit_profile(function, env):
             output.append(expression(match[1], env))
     assert active == [True]
     return '\n'.join(output) + '\n'
+
+
+def emit_surface_orbit(env):
+    """Execute the real optional writer, capturing LOG instead of disk IO."""
+    import check_landing_guidance as ks
+    class Orbit(dict):
+        def HASKEY(self,key):return key in self
+    source=body(SETUP,'_writeSurfaceReturnOrbit')
+    source=re.sub(r'LOG (.*?) TO profilePath\.',r'capture_log(\1).',source)
+    output=[]
+    ks.run(ks.parse(source),dict(profilePath='fixture-profile',
+           SURFACE_RETURN_ORBIT=Orbit(env.get('SURFACE_RETURN_ORBIT',{})),
+           LIST=lambda *xs:list(xs),configLiteral=literal,capture_log=output.append))
+    return output
 
 
 def defaults():

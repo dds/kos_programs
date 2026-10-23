@@ -32,10 +32,10 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
     PARAMETER bandKey.
     LOCAL roots IS LIST().
     // The surface-ascent leg reboots into RETURN_SETUP after PARK, possibly
-    // out of radio view. Cache its small provider during the connected ascent
-    // boot, and include it in cleanup's keep set. Other ascent missions pay
-    // no storage/runtime cost for this future transition.
-    IF bandKey = "LAUNCH" AND SEQUENCE:CONTAINS("RETURN_SETUP") {
+    // out of radio view. Keep its small provider through prelaunch, ascent
+    // and optional post-ascent shaping. Other missions pay no extra cost.
+    IF (bandKey = "PRELAUNCH" OR bandKey = "LAUNCH" OR bandKey = "SHAPE")
+            AND SEQUENCE:CONTAINS("RETURN_SETUP") {
         roots:ADD("return_setup").
     }
     IF SEQUENCE:CONTAINS("HOP_REVIEW") AND (bandKey = "HOP" OR bandKey = "LANDING") {
