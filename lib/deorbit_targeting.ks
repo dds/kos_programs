@@ -657,7 +657,10 @@ GLOBAL FUNCTION landingDeorbitNodeAccepted {
     LOCAL reason IS _targetDeorbitRejection(solved, leadPolicy["MIN"], leadPolicy["MAX"]).
     mLog("STATS deorbit retained-node geometryReason=" + reason
         + " targetLat=" + targetLat + " targetLng=" + targetLng
-        + " downfieldM=" + solved["DOWNFIELD"] + " crossM=" + solved["CROSS"]).
+        + " downfieldM=" + solved["DOWNFIELD"] + " crossM=" + solved["CROSS"]
+        + " aimM=" + leadPolicy["AIM"] + " minM=" + leadPolicy["MIN"]
+        + " maxM=" + leadPolicy["MAX"] + " residualM=" + solved["ERR"]
+        + " nodeUt=" + nd:TIME + " nodeDv=" + nd:DELTAV:MAG).
     IF reason <> "accepted" { RETURN FALSE. }
     RETURN _targetDeorbitTerrainAccepted(nd:TIME, targetLat, targetLng).
 }

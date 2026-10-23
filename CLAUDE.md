@@ -294,6 +294,20 @@ Looks like Python/JS; is neither.
   Targeted new/retained unflown nodes supply fresh admission callback after
   coast; do not remove terrain/fuel/light checks or change the site to fit a
   bad pass. deorbit_burn declares coast_wait for offline solar availability.
+  Native UT2477634 retained-node report: target44.593/-24.926, dv38.5,
+  ETA40005s, new powered aim82706m versus actual downfield62904m/cross50m,
+  captureDownfield-19808m. Operator thinks it predates a code update and
+  explicitly requests replanning. Treat that as a legitimate model admission
+  rejection, not proof the new forecast is wrong; do not waive the~20km miss.
+  cmd/deorbitretry removes ONLY the next unflown node and vessel Deorbit burn
+  alarm, preserving target/phase/mission/return/overrides. Requires stable
+  moon orbit, no deorbit or interrupted-burn marker, Abort clear, physical/
+  raw/pilot controls zero before/after settling warp. No automatic reboot or
+  burn; operator runs it then REBOOT. Additional nodes remain for review.
+  Retained-node refusal must recommend this command, NOT landlight apply:
+  that command intentionally chooses another site. Admission logs now include
+  required aim/min/max/residual plus node UT/dV. New source guards/byte-exact
+  state-preservation tests do not prove native landing accuracy.
   On exhaustion print STATS deorbit best-rejected with geometry/light
   reasons, window, both burn components and actual downfield/cross/FPA/Pe.
   Powered RO9 fixed-site Mun landing now opts into LANDING_STAGE_BRAKE_CREDIT1

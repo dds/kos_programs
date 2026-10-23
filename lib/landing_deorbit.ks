@@ -105,7 +105,8 @@ LOCAL FUNCTION _resumeExistingLandingDeorbitNode {
         SET targetLat TO landingTarget["LAT"].
         SET targetLng TO landingTarget["LNG"].
         IF NOT landingDeorbitNodeAccepted(nd, landingTarget["LAT"], landingTarget["LNG"]) {
-            mLogError("Retained deorbit node fails geometry/terrain/fuel limits; node preserved. Replan from orbit with cmd/landlight apply.").
+            mLogError("Retained deorbit node fails current geometry/terrain/fuel limits; node preserved. Use cmd/deorbitretry to replan the saved target.").
+            PRINT "Run RUNPATH('0:/cmd/deorbitretry.ks'). then REBOOT. to replan without selecting a different site.".
             yieldToPrompt(). RETURN TRUE.
         }
     }

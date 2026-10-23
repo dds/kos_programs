@@ -76,6 +76,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/burnreport.ks").` | Print the latest maneuver cutoff report, retained across reboots |
 | `RUNPATH("0:/cmd/burncheck.ks").` | Read-only ignition check: engine availability, autopilot suppression, CPU roles/IPU, and timed throttle-governor probes against the retained node; never fires engines |
 | `RUNPATH("0:/cmd/deorbitcheck.ks").` | Read-only deorbit snapshot: keep the suspect node attached and run in manual mode with an archive link; saves and verifies the report under `0:/logs/archive/_diagnostics/` |
+| `RUNPATH("0:/cmd/deorbitretry.ks").` | Discard the next unflown moon landing node while preserving the configured target, mission and overrides; then reboot to replan. Refuses committed/interrupted burns or unsafe controls/orbits |
 | `RUNPATH("0:/cmd/landingcheck.ks").` | Print and archive landing hardware, current-stage dV, next-stage acceleration and the last brake decision; requires an archive link |
 | `RUNPATH("0:/cmd/divertcheck.ks").` | Archive nearby raw terrain heights/slopes, correction-time estimates, policy/hardware and a copy of the flight log; no flight control; sample limit/spacing optional |
 | `RUNPATH("0:/cmd/landfallback.ks").` | Permit a checked local fallback during a committed airless LAND_ASSIST/LAND descent; requires zero throttle, then reboot; preserves the return mission and phase |
@@ -1351,6 +1352,25 @@ not that all possible departures are impossible. In particular, the RO9
 Mun landing's 830.5 m/s cannot be assumed sufficient simply by removing the
 circularization phase. Keep that save landed until a complete route is verified.
 
+For a **targeted landing** whose retained unflown deorbit node fails the current
+powered-lead check after a code update, keep the configured site and replan:
+
+```kerboscript
+RUNPATH("0:/cmd/deorbitretry.ks").
+REBOOT.
+```
+
+This command removes only the next unflown node and its vessel's `Deorbit burn`
+alarm. It preserves the saved phase, mission/return sequence, target and all
+overrides. Other nodes and unrelated alarms remain for review. It requires
+stable Mun/Minmus orbit, no recorded deorbit/interrupted ignition, Abort clear
+and physical/raw/pilot throttle off, rechecked after warp settles. It neither
+ignites nor reboots. The new solver and pre-burn validation retain all powered
+lead, terrain, fuel, cross-track and light/radio limits. A node accepted by an
+older model is not automatically accepted by the updated one.
+
+`landlight apply` selects a new site; use it only when changing the landing
+location is intended, not merely to repair a node for a configured target.
 For a vessel **already parked at the Mun/Minmus in LAND_DEORBIT**, stop at the
 manual prompt before ignition. With an archive link and the updated code synced:
 

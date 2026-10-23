@@ -289,6 +289,80 @@ def without_print(nodes):
     return [(s,without_print(yes),without_print(no)) for s,yes,no in nodes if not s.startswith('PRINT ')]
 
 
+def check_explicit_deorbit_retry():
+    command=(ROOT/'cmd/deorbitretry.ks').read_text()
+    ready=function_body(command,'ready')
+    entry=function_body(command,'_cmdDeorbitretry').replace('LOCAL FUNCTION ready {'+ready+'}','')
+    entry=re.sub(r'RUNPATH\([^\n]+\)\.', 'fixture_load().',entry)
+    entry=entry.replace('WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.','fixture_settle().')
+    entry=entry.replace('REMOVE nd.','remove_node(nd).')
+    nodes=without_print(ks.parse(entry))
+    for failure in ('none','minmus','no-node','more-nodes','no-kac','phase','body','suborbital',
+                    'periapsis','eccentricity','soi','deorbit-started','burn-interrupted',
+                    'abort','thrust','raw','pilot','nan-thrust','abort-after-settle'):
+        saved=dict(phase='LAND_DEORBIT',vehicle='RO9',mission_id='mun_landing_return',
+                   targetLat=44.593,targetLng=-24.926,returnReserve=900,
+                   last_burn_report='keep',runtimeOverrides='keep byte for byte')
+        removed=[];deleted=[]
+        class Node:
+            detached=False
+            @property
+            def TIME(self):
+                assert not self.detached;return 2517639.3
+            @property
+            def DELTAV(self):
+                assert not self.detached;return NS(MAG=38.5)
+        node=Node();other=Node()
+        queue=[] if failure=='no-node' else [node,other] if failure=='more-nodes' else [node]
+        env=dict(HASNODE=bool(queue),NEXTNODE=queue[0] if queue else None,ABORT=False,WARP=4,
+            SHIP=NS(BODY=NS(NAME='Mun'),STATUS='ORBITING',PERIAPSIS=14600,THRUST=0,
+                ORBIT=NS(ECCENTRICITY=.0011,HASNEXTPATCH=False),
+                CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)),
+            stateGet=saved.get,fixture_load=lambda:None,bootPreamble=lambda:None,
+            ADDONS=NS(KAC=NS(AVAILABLE=failure!='no-kac')),
+            kacShipAlarmName=lambda name:'RO9: '+name,
+            LISTALARMS=lambda _: [NS(NAME='RO9: Deorbit burn',ID='old-deorbit'),
+                                 NS(NAME='Other: Deorbit burn',ID='other-vessel'),
+                                 NS(NAME='RO9: SOI: Mun',ID='soi')],DELETEALARM=deleted.append)
+        def available():
+            try:ks.run(ks.parse(ready),env)
+            except ks.Returned as result:return result.value
+        def remove(candidate):
+            assert candidate is queue.pop(0);candidate.detached=True;removed.append(candidate)
+            env['HASNODE']=bool(queue);env['NEXTNODE']=queue[0] if queue else None
+        def settle():
+            if failure=='abort-after-settle':env['ABORT']=True
+        env.update(ready=available,remove_node=remove,fixture_settle=settle)
+        if failure=='minmus':env['SHIP'].BODY.NAME='Minmus'
+        if failure=='phase':saved['phase']='LAND_ASSIST'
+        if failure=='body':env['SHIP'].BODY.NAME='Kerbin'
+        if failure=='suborbital':env['SHIP'].STATUS='SUB_ORBITAL'
+        if failure=='periapsis':env['SHIP'].PERIAPSIS=-10
+        if failure=='eccentricity':env['SHIP'].ORBIT.ECCENTRICITY=1.1
+        if failure=='soi':env['SHIP'].ORBIT.HASNEXTPATCH=True
+        if failure=='deorbit-started':saved['deorbit_burn_started']='true'
+        if failure=='burn-interrupted':saved.update(burn_pending='true',burn_started='true')
+        if failure=='abort':env['ABORT']=True
+        if failure=='thrust':env['SHIP'].THRUST=1
+        if failure=='raw':env['SHIP'].CONTROL.MAINTHROTTLE=.1
+        if failure=='pilot':env['SHIP'].CONTROL.PILOTMAINTHROTTLE=.1
+        if failure=='nan-thrust':env['SHIP'].THRUST=math.nan
+        original=dict(saved)
+        try:ks.run(nodes,env)
+        except ks.Returned:pass
+        allowed=failure in ('none','minmus','no-node','more-nodes','no-kac')
+        assert removed==([node] if allowed and failure!='no-node' else []),failure
+        assert deleted==(['old-deorbit'] if allowed and failure not in ('no-node','no-kac') else []),failure
+        assert saved==original,failure
+        if allowed:assert env['WARP']==0
+        if failure=='more-nodes':assert queue==[other] and not other.detached
+    resume=function_body(LANDING,'_resumeExistingLandingDeorbitNode')
+    assert 'cmd/deorbitretry' in resume and 'landlight apply' not in resume
+    assert 'landingDeorbitNodeAccepted(nd,' in resume
+    assert 'REBOOT.' not in mask(entry) and 'missionOverrideUpdate(' not in entry
+    print('PASS: explicit unflown deorbit retry preserves fixed target/return/overrides byte-for-byte, removes only the next node and its vessel burn alarm, guards interruption/throttle/orbit changes and never flies or reboots')
+
+
 def check_resume_and_cpu():
     nodes = without_print(ks.parse(function_body(LANDING,'_resumeExistingLandingDeorbitNode').replace('landingDeorbitNodeAccepted@','fixtureAdmission')))
     for status,started,skip,allowed in (('ORBITING',False,0,False),('ORBITING',False,0,True),
@@ -464,6 +538,7 @@ if __name__ == '__main__':
     check_selected_pass()
     check_progress_and_failure()
     check_geometry_before_light()
+    check_explicit_deorbit_retry()
     check_resume_and_cpu()
     check_actual_trial_budget()
     check_shared_terrain()
