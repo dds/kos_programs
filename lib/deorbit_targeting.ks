@@ -378,6 +378,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL poweredAccepted IS LANDING_POWERED_LEAD <= 0.
     LOCAL poweredStop IS "trial-budget".
     LOCAL poweredReason IS "not-checked".
+    LOCAL previousPoweredDownfield IS 0.
+    LOCAL previousPoweredResidual IS 0.
+    LOCAL hasPoweredHistory IS FALSE.
     UNTIL poweredAccepted OR ABORT
             OR _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS {
         SET _deorbitEvaluations TO _deorbitEvaluations+1.
@@ -416,8 +419,30 @@ GLOBAL FUNCTION targetedDeorbitAt {
             LOCAL priorUT IS solved["UT"].
             LOCAL priorRetro IS solved["RETRO"].
             LOCAL priorNormal IS solved["NORMAL"].
+            LOCAL stepAim IS _targetPoweredStepAim(solved,desiredDownfield,
+                previousPoweredDownfield,previousPoweredResidual,hasPoweredHistory).
+            SET previousPoweredDownfield TO solved["DOWNFIELD"].
+            SET previousPoweredResidual TO solved["ERR"].
+            SET hasPoweredHistory TO TRUE.
+            LOCAL stepTolerance IS (maxDownfield-minDownfield)/2.
+            mLog("STATS deorbit powered-step mode=" + stepAim["MODE"]
+                + " goalM=" + ROUND(stepAim["AIM"],0) + " slope=" + stepAim["SLOPE"]
+                + " acceptedStepLimit=1 reserveValidation=1").
+            // This goal is a proposal only. The next powered forecast must
+            // still pass its own fresh lead, geometry and fuel constraints.
+            SET solved["ERR"] TO solved["DOWNFIELD"]-stepAim["AIM"].
             SET solved TO _refineDeorbitFootprint(solved,targetLat,targetLng,minLead,
-                desiredDownfield,minDownfield,maxDownfield,minRetroDv,maxRetroDv,1).
+                stepAim["AIM"],MAX(0,stepAim["AIM"]-stepTolerance),
+                stepAim["AIM"]+stepTolerance,minRetroDv,maxRetroDv,1,1).
+            SET solved["ERR"] TO solved["DOWNFIELD"]-desiredDownfield.
+            IF stepAim["MODE"] = "secant" AND _deorbitEvaluations+4 <= TARGET_DEORBIT_MAX_EVALUATIONS
+                    AND ABS(solved["UT"]-priorUT) < 0.001 AND ABS(solved["RETRO"]-priorRetro) < 0.001
+                    AND ABS(solved["NORMAL"]-priorNormal) < 0.001 {
+                // A bounded extrapolation can miss a nonlinear branch.
+                // Fall back to the measured model goal, not a wider gate.
+                SET solved TO _refineDeorbitFootprint(solved,targetLat,targetLng,minLead,
+                    desiredDownfield,minDownfield,maxDownfield,minRetroDv,maxRetroDv,1,1).
+            }
             IF ABS(solved["UT"]-priorUT) < 0.001 AND ABS(solved["RETRO"]-priorRetro) < 0.001
                     AND ABS(solved["NORMAL"]-priorNormal) < 0.001 {
                 SET poweredStop TO "no-improving-step".
@@ -1032,6 +1057,30 @@ LOCAL FUNCTION _targetDeorbitCorrection {
         "OTHER", (crossRetro * alongError - alongRetro * crossError) / determinant).
 }
 
+// Estimate the root of actual powered capture residual versus downfield.
+// Reject noisy/reversed slopes, and bound extrapolation to three current
+// residuals. Native probes and a fresh full forecast still own acceptance.
+LOCAL FUNCTION _targetPoweredStepAim {
+    PARAMETER solved.
+    PARAMETER modelAim.
+    PARAMETER previousDownfield.
+    PARAMETER previousResidual.
+    PARAMETER hasHistory.
+    LOCAL result IS LEXICON("AIM",modelAim,"MODE","model","SLOPE",0).
+    IF NOT hasHistory { RETURN result. }
+    LOCAL changeDownfield IS solved["DOWNFIELD"]-previousDownfield.
+    LOCAL changeResidual IS solved["ERR"]-previousResidual.
+    IF ABS(changeDownfield) < 250 OR ABS(changeResidual) < 250 { RETURN result. }
+    LOCAL slope IS changeResidual/changeDownfield.
+    IF NOT (slope >= 0.1 AND slope <= 2) { RETURN result. }
+    LOCAL maxShift IS 3*ABS(solved["ERR"]).
+    SET result["AIM"] TO MAX(250,solved["DOWNFIELD"]
+        + MAX(-maxShift,MIN(maxShift,-solved["ERR"]/slope))).
+    SET result["MODE"] TO "secant".
+    SET result["SLOPE"] TO slope.
+    RETURN result.
+}
+
 LOCAL FUNCTION _refineDeorbitFootprint {
     PARAMETER base.
     PARAMETER targetLat.
@@ -1043,11 +1092,13 @@ LOCAL FUNCTION _refineDeorbitFootprint {
     PARAMETER minDv.
     PARAMETER maxDv.
     PARAMETER reserveTrials IS 0.
+    PARAMETER maxAcceptedSteps IS 0.
     LOCAL trialLimit IS MAX(0,TARGET_DEORBIT_MAX_EVALUATIONS-MAX(0,reserveTrials)).
     LOCAL best IS base.
     LOCAL admissible IS LEXICON("VALID", FALSE).
     IF _targetDeorbitSolutionAccepted(base, minDownfield, maxDownfield) { SET admissible TO base. }
     LOCAL originalUT IS base["UT"].
+    LOCAL acceptedSteps IS 0.
     LOCAL capDv IS MAX(0, TARGET_DEORBIT_NORMAL_DV_CAP).
     // Try free timing changes before spending normal dV. Native finite
     // differences measure both residuals and the game's normal sign.
@@ -1128,6 +1179,8 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                             + " retro=" + ROUND(best["RETRO"],2) + " normal=" + ROUND(best["NORMAL"],2)
                             + " downfieldM=" + ROUND(best["DOWNFIELD"],0)
                             + " crossM=" + ROUND(best["CROSS"],0) + " evaluations=" + _deorbitEvaluations).
+                        SET acceptedSteps TO acceptedSteps+1.
+                        IF maxAcceptedSteps > 0 AND acceptedSteps >= maxAcceptedSteps { RETURN best. }
                         BREAK.
                     }
                 }

@@ -245,7 +245,7 @@ def powered_source():
 
 
 def check_powered_refinement():
-    for kind in ('solve','third-step','model-fails','no-progress','nonconverging',
+    for kind in ('solve','third-step','secant-fallback','model-fails','no-progress','nonconverging',
                  'spent-trials','validation-reserve','no-impact'):
         env,_,_=solver.environment(lambda *args:None)
         base=solver.impact(1000,15,0,0,0)
@@ -255,16 +255,16 @@ def check_powered_refinement():
         policies=[];nodes=[];refinements=[]
         def policy(*args):
             policies.append(1)
-            aim=35000+len(policies)*10000 if kind=='nonconverging' else 63610
+            aim=env['solved']['DOWNFIELD']+10000 if kind=='nonconverging' else 63610
             return dict(VALID=kind!='model-fails',REASON='fixture',AIM=aim,MIN=aim-1500,MAX=aim+1500)
-        def refine(best,lat,lng,lead,aim,lo,hi,min_dv,max_dv,reserve):
-            assert reserve==1 and lo<=aim<=hi
+        def refine(best,lat,lng,lead,aim,lo,hi,min_dv,max_dv,reserve,max_steps):
+            assert reserve==1 and max_steps==1 and lo<=aim<=hi
             refinements.append(aim)
             assert env['_deorbitEvaluations']+3<=63
             env['_deorbitEvaluations']+=3
             result=dict(best)
-            if kind!='no-progress':
-                result['DOWNFIELD']=min(aim,best['DOWNFIELD']+20000) if kind=='third-step' else aim
+            if kind!='no-progress' and not (kind=='secant-fallback' and len(refinements)==2):
+                result['DOWNFIELD']=min(aim,best['DOWNFIELD']+20000) if kind in ('third-step','secant-fallback') else aim
                 result['ERR']=result['DOWNFIELD']-aim
                 result['RETRO']=max(min_dv,best['RETRO']-1)
             return result
@@ -282,11 +282,13 @@ def check_powered_refinement():
         result=run(powered_source(),env)
         assert not nodes and env['_deorbitEvaluations']<=64
         if kind=='spent-trials':assert not policies
-        assert env['poweredAccepted']==(kind in ('solve','third-step'))
-        if kind in ('solve','third-step'):assert env['solved']['DOWNFIELD']==63610
+        assert env['poweredAccepted']==(kind in ('solve','third-step','secant-fallback')),(kind,policies,refinements,env['solved'])
+        if kind in ('solve','third-step','secant-fallback'):assert env['solved']['DOWNFIELD']==63610
         else:assert result is False
         if kind=='third-step':
             assert len(refinements)==3 and len(policies)==4 and env['_deorbitEvaluations']==53
+        if kind=='secant-fallback':
+            assert len(refinements)==4 and len(policies)==4 and env['_deorbitEvaluations']==56
         if kind=='no-progress':assert len(policies)==1 and env['poweredStop']=='no-improving-step'
         if kind=='validation-reserve':assert not refinements and len(policies)==1
     print('PASS: powered polish freshly validates the third refinement instead of falsely holding at 53/64; absent impacts, bad models, no progress, drifting targets and exhausted budgets retain orbit, remove all probes and reserve the final validation trial')
@@ -334,7 +336,7 @@ def check_coupled_powered_refinement(start=30,contraction=.6):
                                      'charge_forecast().')
     run(source,env)
     assert env['poweredAccepted'] and not nodes,forecasts
-    if contraction:assert len(forecasts)>3
+    if contraction:assert 1<len(forecasts)<=3
     assert abs(forecasts[-1][0]-forecasts[-1][1])<=1500
     assert counter.value<=64 and counter.value==start+len(forecasts)+len(trials)
     if start==59:assert counter.value==64 and len(forecasts)==2 and len(trials)==3
@@ -370,6 +372,86 @@ def check_shared_admission_and_rescue():
     print('PASS: retained admission uses the same fresh lead/terrain policy, accepts a modeled 35km footprint and rejects stale 15km policy; local fallback command preserves return intent and rejects wrong phases or live thrust')
 
 
+def check_powered_step_hint_guards():
+    env,_,_=solver.environment(lambda *args:None)
+    hint=lambda down,err,old_down,old_err,history=True:env['_targetPoweredStepAim'](
+        dict(DOWNFIELD=down,ERR=err),down-err,old_down,old_err,history)
+    # Native pass1->2 data: actual powered residual, not just the ballistic
+    # footprint. A useful positive secant accelerates the moving-goal solve.
+    measured=hint(34667,-10464,18301,-16380)
+    assert measured['MODE']=='secant' and 63000<measured['AIM']<64000
+    for args in ((44650,-15216,34667,-10464), # Reversed/noisy branch.
+                 (60018,-5253,59900,-5300), # Too little motion.
+                 (60018,-5253,44650,-5300), # Too little residual change.
+                 (10000,-1000,0,-1001),    # Near-zero derivative.
+                 (10000,-1000,9000,-10000), # Excessive derivative.
+                 (10000,-1000,0,float('nan'))):
+        assert hint(*args)['MODE']=='model',args
+    assert hint(34667,-10464,18301,-16380,False)['MODE']=='model'
+    bounded=hint(10000,-10000,0,-11000)
+    assert bounded['MODE']=='secant' and bounded['AIM']==40000 # Three residuals max.
+    print('PASS: measured powered residuals drive the step hint; reversed/noisy/nonfinite/ill-conditioned slopes fall back, extrapolation stays bounded and cannot change admission tolerances')
+
+
+def check_logged_moving_lead(curvature):
+    # Observed (ballistic downfield, freshly modeled required lead). Linear
+    # interpolation/extrapolation supplies a test response, NOT a native
+    # orbit replay. The independent nonlinear geometry exercises the real
+    # timing/normal Newton refiner and full outer admission under64 trials.
+    measured=((18301,34681),(34667,45131),(44650,59866),(60018,65270),(66635,70623))
+    def required(downfield):
+        index=0
+        while index<len(measured)-2 and downfield>measured[index+1][0]:index+=1
+        left,aim=measured[index];right,next_aim=measured[index+1]
+        return aim+(downfield-left)*(next_aim-aim)/(right-left)
+    outcomes=[]
+    for legacy in (True,False):
+        def oracle(ut,retro,normal):
+            delta=60-retro;elapsed=ut-1000
+            down=18301+2500*delta+50*delta**2+500*elapsed+2*elapsed**2
+            cross=100*elapsed-200*delta+curvature*elapsed**2+1000*normal
+            return solver.impact(ut,retro,normal,down-15000,cross)
+        env,count,trials=solver.environment(oracle);count.value=18
+        geometry=env['_evalGeometricDeorbitNode']
+        def evaluate(ut,retro,lat,lng,lead,aim,normal=0):
+            result=geometry(ut,retro,lat,lng,lead,aim,normal)
+            if result['VALID']:result['ERR']=result['DOWNFIELD']-aim
+            return result
+        env['_evalGeometricDeorbitNode']=evaluate
+        nodes=[];forecasts=[]
+        def plan(ut,retro,normal):
+            node=NS(TIME=ut,retro=retro,normal=normal);nodes.append(node);return node
+        def read(node,lat,lng,aim):
+            result=oracle(node.TIME,node.retro,node.normal)
+            result['ERR']=result['DOWNFIELD']-aim
+            return result
+        def policy(node,*_):
+            down=oracle(node.TIME,node.retro,node.normal)['DOWNFIELD'];aim=required(down)
+            forecasts.append((down,aim))
+            return dict(VALID=True,AIM=aim,MIN=aim-1500,MAX=aim+1500)
+        env.update(solved=oracle(1000,60,0),geometry=dict(UT=1000),LANDING_POWERED_LEAD=1,
+            targetLat=44.593,targetLng=-24.926,minLead=120,minRetroDv=2,maxRetroDv=120,
+            desiredDownfield=15000,minDownfield=10000,maxDownfield=20000,
+            _planRetroNode=plan,_readGeometricDeorbitNode=read,landingDeorbitLeadPolicy=policy,
+            remove_probe=lambda node:nodes.remove(node),
+            charge_forecast=lambda:setattr(count,'value',count.value+1))
+        if legacy:
+            env['_targetPoweredStepAim']=lambda solved,aim,*_:dict(AIM=aim,MODE='model',SLOPE=0)
+            env['_refineDeorbitFootprint']=lambda *args:call('_refineDeorbitFootprint',env,*args[:-1],0)
+        source=powered_source().replace('SET _deorbitEvaluations TO _deorbitEvaluations+1.','charge_forecast().')
+        run(source,env)
+        assert not nodes and count.value<=64
+        assert count.value==18+len(trials)+len(forecasts)
+        assert env['targetLat']==44.593 and env['targetLng']==-24.926
+        outcomes.append((env['poweredAccepted'],count.value,env['solved']['ERR']))
+        if not legacy:
+            assert abs(forecasts[-1][0]-forecasts[-1][1])<=1500
+            assert env['solved']['CROSS']<=500 and abs(env['solved']['NORMAL'])<=10
+    assert not outcomes[0][0] and outcomes[1][0],outcomes
+    assert outcomes[1][1]<outcomes[0][1],outcomes
+    print('PASS: observed moving-lead curve with independent nonlinear geometry curvature%d holds the legacy policy outside tolerance at%d/64, while fresh one-step/secant refinement passes at%d/64 with unchanged1500m/cross/fuel bounds (not a native replay)'%(curvature,outcomes[0][1],outcomes[1][1]))
+
+
 if __name__=='__main__':
     check_reported_ignition()
     check_range_physics()
@@ -381,3 +463,6 @@ if __name__=='__main__':
     check_coupled_powered_refinement()
     check_coupled_powered_refinement(59,0)
     check_shared_admission_and_rescue()
+    check_powered_step_hint_guards()
+    check_logged_moving_lead(200)
+    check_logged_moving_lead(500)

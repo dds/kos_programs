@@ -296,6 +296,16 @@ ballistic travel and predicted powered travel. Unsupported/fuel-exhausted or
 nonconvergent precision models hold in orbit; they do not authorize a burn.
 New, retained and pre-burn nodes share the admission checks.
 
+Powered refinement takes one accepted geometric step before re-running the
+full braking forecast. Polishing a frozen lead wastes trials when each node
+change also moves the required powered lead. Successive checked residuals
+may supply a bounded secant proposal; noisy/reversed slopes or a proposal
+that cannot improve the geometry fall back to the measured model goal.
+Each changed node still needs fresh powered validation, with one trial
+reserved for it. The64-trial cap, landing tolerance and admission limits
+remain unchanged. `STATS deorbit powered-step` records the proposal mode,
+goal and slope; its goal is not an accepted landing forecast.
+
 The live H gate uses a cheaper 32-bin mass-aware range quadrature from a
 per-stage hardware snapshot. The full forward simulation stays in orbital
 planning; it is not run in a throttle lock or powered guidance tick. Both

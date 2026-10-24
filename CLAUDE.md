@@ -523,11 +523,31 @@ Looks like Python/JS; is neither.
   light and pre-burn admission stay intact. Added powered-fit residual/reason
   rows and hold stop/pass/geometry summary so another failure is diagnosable.
   Source fixtures reproduce third-step success at53/64, actual inner Newton
-  against a footprint-dependent lead converges in7 forecasts at55/64, and a
+  against a footprint-dependent lead originally converged in7 forecasts
+  at55/64, and a
   boundary case spends63 on refinement/64 on validation. Missing impacts,
   model errors, drifting goals, no progress and insufficient budget still hold.
   Not a native replay or proof that the reported last node would have passed;
   a new connected boot/retry and logs remain needed.
+  New native UT2741348-2741430 report after6635266: geometric seed18/64,
+  powered residuals-16380,-10464,-15216,-5253,-3989m at19,34,50,55,61trials.
+  The moving lead grew34.7->70.6km; inner Newton wasted multiple accepted
+  steps on each frozen goal, leaving no3-probe+validation budget at61/64.
+  Powered-only refinement now caps EACH inner call at1 accepted step, then
+  forecasts afresh; initial geometric solving keeps its prior step policy.
+  _targetPoweredStepAim uses actual fresh capture residual versus downfield
+  to propose a secant root only with positive slope0.1-2 and250m changes;
+  bound shift to3 current residuals. Noisy/reversed/nonfinite slopes fall
+  back to model AIM, and a non-improving secant proposal gets one bounded
+  plain-model fallback if budget permits. These are trial goals, NEVER
+  acceptance gates. Same64 total counter,1 validation reserve, actual1500m
+  lead tolerance, cross/normal/fuel/FPA/terrain/light gates remain. New row
+  STATS deorbit powered-step exposes mode/goal/slope. Actual coupled source
+  regression improves7forecasts/55trials to3/39. Observed lead-curve plus
+  independent nonlinear geometry fixtures hold the old policy at63, pass
+  new at35/39; interpolation/extrapolation is TEST ONLY, not a native replay
+  or flight constants. Need native replan; do not loosen the goal to fly a
+  rejected~4km-short candidate or simply raise the cap.
   2026-10-21: operator reports FIRST SUCCESSFUL AUTOMATED MUN LANDING AND
   RETURN TO KERBIN, with the newest RO9 mun_economy_return craft landed back
   on Kerbin. This closes the previously pending whole-flight outcome for the
