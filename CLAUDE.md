@@ -9,6 +9,24 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 native Mun touchdown on887aa4d: retrieved full adjacent logs and
+landingdiag2956003095 to/tmp/kos-mun-landing-2956003 (includes analysis.json).
+Hull fix validated4.67m; long-coast lead stable within metres while old radar
+size grows1764->3207m. Ignition forecast2956310.2 vs flown2956311.5.
+BRAKE ends1265m from refined site (cross1209m, along-424m) at bottom720m,
+hs1.5/vs-20. APPROACH then118.86s/~205.176m/s sampled thrust impulse; BRAKE /
+alignment~630.472m/s, terminal~53.152m/s. Touchdown guidanceMiss2m vs original
+requestedMiss638.8m from deliberate640m terrain shift; remainingDv1102.7.
+Do not call the final approach inaccurate or tighten the2km admission to
+mask missing lateral control. _landingBrakeSteeringInfo's thrust is purely
+velocity-arrest; it reads TR error AFTER choosing steering, for output only.
+Both flight and predictor lack target-dependent braking cross-track feedback;
+CROSS_PID is constructed but unused in braking. Next fix must share lateral
+control with the predictor and preserve all physical/terrain/staging guards.
+Detailed diagnostic control ring loses earlier BRAKE/APPROACH samples by
+landing; retain representative phase/stage history without powered I/O.
+Only logs/notes changed during this inspection; no new flight-control law.
+
 2026-10-27 Mun deorbit follow-up UT2885757..2885817:2km cross cap works
 (seed1591m), but powered fitting stops35/64 with normal-10, cross1458m,
 downfield54283m/aim68772m, residual-14489m. Diagnostics expose bogus

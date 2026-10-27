@@ -32,8 +32,10 @@ record remaining uncertainty before closing a task.
   powered planning: 58/64 trials, cross116m, modeled residual-1212m within
   1500m. Cache gate is removed. Latest boot027 instead held after its powered
   forecast changed during coast; bounded pre-burn refit is implemented below,
-  operator now confirms planning succeeded on887aa4d and accepts the3-day
-  scheduled wait. Preserve that node; descent validation remains pending.
+  operator now confirms touchdown on887aa4d. Retrieved native diagnostics:
+  ignition within1.3s of forecast; guidance miss2m, original miss638.8m due to
+  terrain shift640m. Next priority is target-dependent BRAKE lateral guidance:
+  it left1209m cross-track for APPROACH, costing119s/~205m/s estimated impulse.
   Operator authorizes2km deorbit cross-track
   for RO9 mun_landing_return only; preferred250m/normal10m/s/trials64 remain.
 - Operator confirmed the Minmus3 Kolniya orbital objective succeeded. Next
@@ -54,32 +56,62 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
-- [ ] **Fix false hull clearance and capped-direction deorbit stall.** Native
+- [ ] **Move fixed-site lateral correction into powered braking.** Native
+  RO9-mun2 landingUT2956618.2, diagnostic2956003095/boot033 copied locally to
+  `/tmp/kos-mun-landing-2956003/` (diagnostic + sidecar + boot031..034 +
+  analysis.json). BRAKE lasts136.1s, ends1265m from guidance site, along-424m /
+  cross1209m, bottom720m, hs1.5m/s, vs-20m/s. APPROACH then uses118.86s /
+  ~205.176m/s sampled thrust impulse, descending720->183m. Total brake /
+  alignment impulse~630.472m/s; terminal impulse~53.152m/s. Touchdown2m from
+  refined site,638.8m from requested waypoint, intentional terrain shift640m;
+  remaining vacuum dV1102.7m/s. Final targeting accuracy worked; late transfer
+  is the efficiency problem. Source confirms _landingBrakeSteeringInfo calls
+  velocity-only lmEconomyBrakeThrust; target cross-track is only returned for
+  diagnostics afterward. CROSS_PID is constructed but unused in braking.
+  Next implementation: bounded target-dependent lateral steering while
+  braking/flare altitude is still available, shared with the forward
+  predictor. Preserve vertical stopping, stage reserves, thrust/attitude /
+  engine-up guards and site terrain checks. Do not tighten the2km admission
+  cap to conceal this missing feedback. Separately review terrain-shift
+  policy if closer original-waypoint precision is requested.
+- [ ] **Preserve BRAKE/APPROACH diagnostic samples through touchdown.** The
+  bounded detailed-control ring retains mainly late terminal/settle rows;
+  phase totals/transitions survived, but detailed earlier controls rotated
+  out. Retain bounded representative first/last/per-stage control samples
+  across phases without adding synchronous archive I/O during powered ticks,
+  changing guidance cadence, or introducing hovering for export.
+
+
+- [x] **Fix false hull clearance and capped-direction deorbit stall.** Native
   UT2885788..2885817 reports hull2223..2358m, normal-10m/s and cross1458m
   inside the2km cap, but along-track residual-14489m; no-improving-step35/64.
   ALT:RADAR can fall back to ASL while bounds bottom radar queries terrain;
   subtracting them is not physical vessel size. Forecast now snapshots the
   bounding box once and uses its enclosing radius about CoM for every gate
   probe. Preserves future terrain/target and live bottom-radar safety. New
-  geometric/legacy/origin diagnostics distinguish it on the next flight.
+  geometric/legacy/origin diagnostics distinguish the measurements.
   Added measured retro-only fallback when coupled time/normal directions
   stall and hard cross-track is already acceptable; epoch/normal stay fixed,
   existing trust/fuel/normal/cross/trial/reserved-forecast/final checks remain.
   All62 routine check files passed in68.82s; final origin/radar diagnostics,
   invalid-bounds and full-forecast radar-invariance regressions also pass in
-  targeted range checks. Operator now confirms native planning succeeded
-  with a burn scheduled3days ahead and accepts that wait. Preserve its node;
-  descent efficiency/accuracy remain unvalidated. Closest-pass ranking remains
-  unchanged; preferring the earliest feasible window is still open.
+  targeted range checks. Native boot032 now confirms hull4.67m and stable
+  lead~67197m across a long coast despite legacy radar offset1764->3207m.
+  Predicted ignition2956310.2 vs actual2956311.5; landed successfully.
+  Lateral-guidance efficiency remains open as a separate task above.
+  Closest-pass ranking remains unchanged; preferring the earliest feasible
+  window is still open.
 
 
-- [ ] **Wider Mun targeted deorbit cross-track, operator authorized.** At
+- [x] **Wider Mun targeted deorbit cross-track, operator authorized.** At
   UT2885617.1, best rejected candidate cross1.563km already used normal-10m/s;
   the earlier departure window has passed. Existing profile setting raised
   from0.5km to2km for RO9 mun_landing_return only. Preferred250m, target
   coordinates, touchdown tolerance1500m and other physical/model/radio/fuel
-  checks remain. Admission still requires fresh powered validation; later
-  passes / native landing performance remain unvalidated. Targeted solver,
+  checks remain. Admission still requires fresh powered validation. Native
+  boot032 accepted cross1917m; boot033 landed2m from the refined site, but
+  BRAKE left1209m cross-track for APPROACH. The missing lateral guidance is
+  tracked separately above; wider admission is not an efficiency fix. Targeted solver,
   variable-mass predictor and structural checks passed; boundary cases admit
   1563/2000m and reject2001m under the configured2km cap.
 
@@ -98,8 +130,10 @@ record remaining uncertainty before closing a task.
   cover reported8.15km drift with both response signs and rejection/rollback
   for invalid/cross/normal/fuel/terrain/radio/abort/deadline/committed/active
   thrust states. All62 routine check files passed in68.90s; final body-change
-  stop guards also passed targeted solver checks. Native refinement and
-  root-cause diagnostics remain open.
+  stop guards also passed targeted solver checks. Native boot032 now
+  establishes the radar-derived hull error and stable lead after887aa4d;
+  that root cause is closed above. A native exercise of the bounded refit
+  itself remains unconfirmed because this flight did not require one.
 
 
 - [x] **RO9-mun2 powered validation starved by ballistic preference.**
