@@ -515,30 +515,20 @@ GLOBAL FUNCTION _landingTrackForState {
     RETURN "".
 }
 
-GLOBAL FUNCTION _landingDeleteTrack {
-    PARAMETER trackName.
-    IF trackName = "" { RETURN. }
-    FOR suffix IN LIST(".ksm", ".ks") {
-        LOCAL path IS bootCorePath(trackName) + suffix.
-        IF EXISTS(path) { DELETEPATH(path). }
-    }
-}
-
 GLOBAL FUNCTION _landingEnsureStateTrack {
     PARAMETER stateName.
     LOCAL nextTrack IS _landingTrackForState(stateName).
     IF nextTrack = "" OR nextTrack = landingActiveTrack { RETURN. }
-    LOCAL previousTrack IS landingActiveTrack.
-    IF previousTrack <> "" {
-        _landingDeleteTrack(previousTrack).
-    }
     IF landingLoadedTracks:CONTAINS(nextTrack) {
         SET landingActiveTrack TO nextTrack.
         RETURN.
     }
-    bootLibSync(nextTrack).
-    LOCAL corePath IS bootCorePath(nextTrack).
-    IF NOT EXISTS(corePath + ".ksm") AND NOT EXISTS(corePath + ".ks") {
+    LOCAL corePath IS bootLocalScriptPath(nextTrack).
+    IF corePath = "" {
+        bootLibSync(nextTrack).
+        SET corePath TO bootLocalScriptPath(nextTrack).
+    }
+    IF corePath = "" {
         SET landingAbortFlag TO TRUE.
         vesselLandingCleanup().
         mLogError("Landing guidance track unavailable: " + nextTrack + ".").
@@ -840,8 +830,7 @@ GLOBAL FUNCTION landExecute {
         + " stageCredit=" + LANDING_STAGE_BRAKE_CREDIT
         + " vectorGate=" + _landingBoolText(LANDING_ECONOMY_BRAKE > 0 AND ctx["H_SPEED"] > APPROACH_HSPEED)
         + " brakeStageDv=" + ROUND(ctx["BRAKE_STAGE_DV"],1) + ".").
-    // Load the next track while still at setup, then reclaim its disk file.
-    // RUNONCE functions remain resident: no archive/compile delay at ignition.
+    // Load tracks before ignition, retaining their files for offline reboots.
     _landingEnsureStateTrack("BRAKE_ALIGN").
     _landingEnsureStateTrack(ctx["STATE"]).
 

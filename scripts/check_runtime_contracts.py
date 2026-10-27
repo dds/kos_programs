@@ -29,6 +29,7 @@ class KList(list):
     @property
     def LENGTH(self): return len(self)
     def ADD(self, value): self.append(value)
+    def CONTAINS(self, value): return value in self
     @property
     def COPY(self): return type(self)(self)
 
@@ -249,7 +250,7 @@ def check_compact_burn():
     source = re.sub(r'WAIT UNTIL (.*?)\.(?=\s*\n)', r'UNTIL \1 { WAIT 0.02. }', source, flags=re.S)
     source = re.sub(r'UNLOCK (\w+)\.', r'fixture_unlock("\1").', source)
     source = source.replace('REMOVE nd.', 'fixture_remove(nd).')
-    for scenario in ('normal', 'cutoff-fault', 'frozen', 'weak-thrust', 'abort', 'flameout', 'reversal', 'no-engine', 'expired', 'off-vector', 'unlit-site'):
+    for scenario in ('normal', 'cutoff-fault', 'frozen', 'weak-thrust', 'abort', 'flameout', 'reversal', 'no-engine', 'expired', 'off-vector', 'unlit-site','missing-cache'):
         class AttachedNode:
             # Match kOS Node.GetBurnVector/Remove: both suffix aliases throw
             # after REMOVE invalidates this wrapper's NodeRef.
@@ -285,6 +286,7 @@ def check_compact_burn():
                    ROUND=round, VANG=lambda *_: 30 if scenario == 'off-vector' else 0,
                    vesselLandingPrepareRoles=lambda:True,
                    landingLightNodeAllowed=lambda *_: scenario != 'unlit-site',
+                   landingHandoffReady=lambda *_:scenario!='missing-cache',
                    stateSet=lambda key, value: markers.update({key: value}),
                    stateRemove=lambda key: markers.pop(key, None),
                    vesselNeedsStage=lambda: ship.AVAILABLETHRUST <= 0,
@@ -334,7 +336,7 @@ def check_compact_burn():
         assert result == (scenario == 'normal'), scenario
         assert bool(removed) == result and env['throttle'] == 0, scenario
         assert env['CONFIG'].IPU==150 and 'burn_prior_ipu' not in markers
-        if scenario in ('no-engine', 'expired', 'off-vector', 'unlit-site'): assert not any(commands)
+        if scenario in ('no-engine', 'expired', 'off-vector', 'unlit-site','missing-cache'): assert not any(commands)
         burned = elapsed[0] > 0
         assert ('deorbit_burn_started' in markers) == (burned and not result), scenario
         if scenario == 'frozen': assert elapsed[0] < 1.1  # Old timeout allowed ~10 s of full thrust.

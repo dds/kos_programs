@@ -7,7 +7,7 @@ LOCAL FUNCTION _landingLightWaitContext {
     RETURN LEXICON("mission", stateGet("mission_id", ""),
         "launch", stateGetNum("launch_time", 0), "phase", stateGet("phase", ""),
         "body", SHIP:BODY:NAME, "mode", LANDING_LIGHT_MODE,
-        "radio", LANDING_REQUIRE_KERBIN, "kerbinMin", LANDING_KERBIN_MIN_ELEV,
+        "radio", landingRequireKerbin(), "kerbinMin", LANDING_KERBIN_MIN_ELEV,
         "sunMin", band["MIN"], "sunMax", band["MAX"],
         "radius", landingPlanningRadius(), "margin", LANDING_LIGHT_TIME_MARGIN,
         "period", ROUND(SHIP:ORBIT:PERIOD, 0),

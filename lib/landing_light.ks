@@ -46,7 +46,7 @@ GLOBAL FUNCTION landingPlanningLight {
                     SET light["REASON"] TO "sun-site-margin".
                 }
             }
-            IF LANDING_REQUIRE_KERBIN > 0 {
+            IF landingRequireKerbin() > 0 {
                 SET light["KERBIN_REGION_MARGIN"] TO _landingRegionAngle(BODY("Kerbin"), sampleUT).
                 IF light["KERBIN"] < LANDING_KERBIN_MIN_ELEV + light["KERBIN_REGION_MARGIN"] {
                     SET light["OK"] TO FALSE.
@@ -99,7 +99,7 @@ GLOBAL FUNCTION landingLitGroundTrack {
     LOCAL windowChecks IS 0.
     mLog("STATS landing-light search-start mode=" + LANDING_LIGHT_MODE
         + " forecast=" + forecast
-        + " requireKerbin=" + LANDING_REQUIRE_KERBIN
+        + " requireKerbin=" + landingRequireKerbin()
         + " orbits=" + MAX(1, MIN(8, LANDING_LIGHT_SCAN_ORBITS))
         + " samplesPerOrbit=" + MAX(64, MIN(512, LANDING_LIGHT_SCAN_SAMPLES))
         + " startUT=" + startUT + " endUT=" + endUT + " stepSec=" + stepSec
@@ -112,7 +112,7 @@ GLOBAL FUNCTION landingLitGroundTrack {
             LOCAL score IS MAX(0, LANDING_LIGHT_SUN_WEIGHT)
                 * ABS(light["SUN"] - light["SUN_REGION_MARGIN"] - preferredSun)
                 + 0.1 * (sampleUT - startUT) / period.
-            IF LANDING_REQUIRE_KERBIN > 0 {
+            IF landingRequireKerbin() > 0 {
                 SET score TO score + MAX(0, LANDING_LIGHT_KERBIN_WEIGHT)
                     * MAX(0, LANDING_KERBIN_PREFERRED_ELEV
                         - (light["KERBIN"] - light["KERBIN_REGION_MARGIN"])).
@@ -145,7 +145,7 @@ GLOBAL FUNCTION landingLitGroundTrack {
     SET out["STEP"] TO stepSec.
     SET CONFIG:IPU TO priorIpu.
     IF priorIpu < MIN(2000, LANDING_MIN_IPU) { stateRemove("landing_prior_ipu"). }
-    mLog("STATS landing-light search mode=" + LANDING_LIGHT_MODE + " requireKerbin=" + LANDING_REQUIRE_KERBIN
+    mLog("STATS landing-light search mode=" + LANDING_LIGHT_MODE + " requireKerbin=" + landingRequireKerbin()
         + " forecast=" + forecast
         + " minKerbin=" + LANDING_KERBIN_MIN_ELEV
         + " preferredKerbin=" + LANDING_KERBIN_PREFERRED_ELEV
@@ -186,7 +186,7 @@ GLOBAL FUNCTION landingLightNodeAllowed {
             AND stateGet("deorbit_burn_started", "false") <> "true" {
         SET light TO landingPlanningLight(targetLat, targetLng, impactUT, TRUE).
     } ELSE { SET light TO landingLightWindow(targetLat, targetLng, impactUT). }
-    mLog("STATS landing-light node mode=" + LANDING_LIGHT_MODE + " requireKerbin=" + LANDING_REQUIRE_KERBIN
+    mLog("STATS landing-light node mode=" + LANDING_LIGHT_MODE + " requireKerbin=" + landingRequireKerbin()
         + " ok=" + light["OK"] + " reason=" + light["REASON"]
         + " targetLat=" + targetLat + " targetLng=" + targetLng
         + " impactLat=" + impactPos:LAT

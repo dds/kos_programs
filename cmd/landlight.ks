@@ -4,18 +4,19 @@
 // RUNPATH("0:/cmd/landlight.ks", "apply", "MORNING", 1).
 // RUNPATH("0:/cmd/landlight.ks", "preview", "AFTERNOON", 1).
 // RUNPATH("0:/cmd/landlight.ks", "status"). // saved policy/site, live geometry
-// Final argument: 1 requires direct Kerbin view; 0 permits relay coverage.
+// Final argument: 1 requires direct Kerbin view; 0 permits offline landing.
+// Omit it to inherit the shared body/relay policy.
 // Apply replaces the unflown deorbit node/target, preserving mission intent.
 // ============================================================
 @LAZYGLOBAL OFF.
-PARAMETER action IS "preview", mode IS "", requireKerbin IS 1.
+PARAMETER action IS "preview", mode IS "", requireKerbin IS -1.
 
 LOCAL FUNCTION _cmdLandlight {
     IF action <> "preview" AND action <> "apply" AND action <> "status" {
         PRINT "Use status/preview/apply, mode ANY/SUNLIT/MORNING/AFTERNOON, Kerbin view 0/1.". RETURN.
     }
     IF (mode <> "" AND mode <> "ANY" AND mode <> "SUNLIT" AND mode <> "MORNING" AND mode <> "AFTERNOON")
-            OR (requireKerbin <> 0 AND requireKerbin <> 1) {
+            OR (requireKerbin <> -1 AND requireKerbin <> 0 AND requireKerbin <> 1) {
         PRINT "Invalid light mode or Kerbin-view flag.". RETURN.
     }
     RUNPATH("1:/lib/boot_lib").
@@ -33,7 +34,8 @@ LOCAL FUNCTION _cmdLandlight {
     applyMissionOverrides().
     IF mode = "" { SET mode TO LANDING_LIGHT_MODE. }
     IF action = "status" {
-        PRINT "Saved light policy=" + LANDING_LIGHT_MODE + "; require Kerbin=" + LANDING_REQUIRE_KERBIN
+        PRINT "Saved light policy=" + LANDING_LIGHT_MODE + "; require Kerbin=" + landingRequireKerbin()
+            + "; radio mode=" + LANDING_RADIO_MODE
             + "; minimum Kerbin elevation=" + LANDING_KERBIN_MIN_ELEV + " deg.".
         LOCAL targetInfo IS landingResolveTarget().
         IF NOT targetInfo["FOUND"] { PRINT "No saved landing target resolved.". RETURN. }
@@ -61,8 +63,12 @@ LOCAL FUNCTION _cmdLandlight {
     SET WARP TO 0.
     UNTIL KUNIVERSE:TIMEWARP:ISSETTLED { WAIT 0.1. }
     SET LANDING_LIGHT_MODE TO mode.
-    SET LANDING_REQUIRE_KERBIN TO requireKerbin.
-    PRINT "Searching ground track: " + mode + ", require Kerbin=" + requireKerbin.
+    IF requireKerbin >= 0 {
+        SET LANDING_REQUIRE_KERBIN TO requireKerbin.
+        SET LANDING_RADIO_MODE TO "OFFLINE".
+        IF requireKerbin > 0 { SET LANDING_RADIO_MODE TO "DIRECT". }
+    }
+    PRINT "Searching ground track: " + mode + ", require Kerbin=" + landingRequireKerbin().
     PRINT "Economy planning region radius=" + landingPlanningRadius() + "m; final terrain/site checks still required.".
     LOCAL site IS landingLitGroundTrack().
     IF NOT site["FOUND"] {
@@ -86,7 +92,8 @@ LOCAL FUNCTION _cmdLandlight {
     missionOverrideUpdate(LEXICON("TARGET_LAT", site["LAT"], "TARGET_LNG", site["LNG"],
         "TARGET_LOCK", 1, "TARGET_WAYPOINT", "", "LANDING_USE_WAYPOINTS", 0,
         "LANDING_SKIP_TARGET_SEARCH", 0, "LANDING_LIGHT_MODE", mode,
-        "LANDING_REQUIRE_KERBIN", requireKerbin)).
+        "LANDING_REQUIRE_KERBIN", LANDING_REQUIRE_KERBIN,
+        "LANDING_RADIO_MODE", LANDING_RADIO_MODE)).
     landingLightWaitClear().
     UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0. }
     PRINT "Applied site; old unflown deorbit node removed. Mission/return sequence preserved.".

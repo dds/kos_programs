@@ -41,6 +41,7 @@ def fixture():
     saved.update(phase='LAND_DEORBIT',mission_id='minmus_economy_return',launch_time=12)
     env.update(ABORT=Flag(),LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),
                LANDING_LIGHT_MODE='SUNLIT',LANDING_REQUIRE_KERBIN=1,
+               landingRequireKerbin=lambda:env['LANDING_REQUIRE_KERBIN'],
                LANDING_KERBIN_MIN_ELEV=15,LANDING_LIGHT_TIME_MARGIN=300,
                landingSunBand=lambda:dict(MIN=5,MAX=30),landingPlanningRadius=lambda:21000,
                landingLightActive=lambda:True,thrustCutoffOk=lambda:True,

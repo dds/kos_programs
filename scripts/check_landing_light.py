@@ -11,7 +11,7 @@ from check_deorbit_geometry import Vec
 from check_runtime_contracts import KString, KList, run
 from check_surface_return import read_settings
 
-LIGHT = (ROOT / 'lib/landing_light_math.ks').read_text() + '\n' + (ROOT / 'lib/landing_light.ks').read_text()
+LIGHT = (ROOT / 'lib/landing_radio.ks').read_text() + '\n' + (ROOT / 'lib/landing_light_math.ks').read_text() + '\n' + (ROOT / 'lib/landing_light.ks').read_text()
 COMMAND = (ROOT / 'cmd/landlight.ks').read_text()
 DEORBIT = (ROOT / 'lib/landing_deorbit.ks').read_text()
 CONFIG = (ROOT / 'lib/config.ks').read_text()
@@ -58,6 +58,7 @@ def environment(frame=None, rotation=138984, sun_longitude=0, kerbin_longitude=-
                LANDING_AFTERNOON_MIN_ELEV=30, LANDING_AFTERNOON_MAX_ELEV=75,
                LANDING_AFTERNOON_PREFERRED_ELEV=52.5,
                LANDING_REQUIRE_KERBIN=1, LANDING_KERBIN_MIN_ELEV=5,
+               LANDING_RADIO_MODE='AUTO',LANDING_DIRECT_KERBIN_BODIES=KList(),LANDING_RELAY_BODIES=KList(),
                LANDING_KERBIN_PREFERRED_ELEV=30, LANDING_LIGHT_KERBIN_WEIGHT=0,
                LANDING_LIGHT_SUN_WEIGHT=1, LANDING_LIGHT_SETTING_PENALTY=0,
                LANDING_LIGHT_SCAN_ORBITS=4, LANDING_LIGHT_SCAN_SAMPLES=128,
@@ -441,7 +442,7 @@ def check_command():
     def without_print(nodes):
         return [(s, without_print(yes), without_print(no)) for s, yes, no in nodes if not s.startswith('PRINT ')]
     parsed = without_print(ks.parse(source))
-    for scenario in ('preview', 'apply', 'afternoon', 'saved-policy', 'status', 'no-site', 'suborbital', 'started', 'throttle'):
+    for scenario in ('preview', 'apply', 'afternoon', 'saved-policy', 'offline', 'inherit', 'status', 'no-site', 'suborbital', 'started', 'throttle'):
         mutations, nodes = [], [object()]
         class HasNode:
             def __bool__(self): return bool(nodes)
@@ -450,8 +451,9 @@ def check_command():
         if scenario == 'status': state.update(phase='LAND_ASSIST', deorbit_burn_started='true')
         before = dict(state)
         env = dict(action=scenario if scenario in ('preview', 'status') else 'apply',
-                   mode='' if scenario=='saved-policy' else 'AFTERNOON' if scenario == 'afternoon' else 'MORNING', requireKerbin=1,
-                   LANDING_LIGHT_MODE='SUNLIT',
+                   mode='' if scenario=='saved-policy' else 'AFTERNOON' if scenario == 'afternoon' else 'MORNING',
+                   requireKerbin=0 if scenario=='offline' else -1 if scenario=='inherit' else 1,
+                   LANDING_LIGHT_MODE='SUNLIT',LANDING_RADIO_MODE='AUTO',LANDING_REQUIRE_KERBIN=1,
                    SHIP=NS(STATUS='SUB_ORBITAL' if scenario == 'suborbital' else 'LANDED' if scenario == 'status' else 'ORBITING',
                            BODY=NS(NAME='Mun'), ORBIT=NS(ECCENTRICITY=0), PERIAPSIS=14000,
                            THRUST=0, CONTROL=NS(MAINTHROTTLE=.1 if scenario == 'throttle' else 0, PILOTMAINTHROTTLE=0)),
@@ -471,12 +473,13 @@ def check_command():
         try: ks.run(parsed, env)
         except ks.Returned: pass
         assert state == before
-        assert bool(mutations) == (scenario in ('apply', 'afternoon', 'saved-policy'))
-        assert bool(nodes) == (scenario not in ('apply', 'afternoon', 'saved-policy'))
+        assert bool(mutations) == (scenario in ('apply', 'afternoon', 'saved-policy','offline','inherit'))
+        assert bool(nodes) == (scenario not in ('apply', 'afternoon', 'saved-policy','offline','inherit'))
         if mutations:
             assert mutations[-1]=='clear-wait' and len(mutations)==2
             assert 'SEQUENCE' not in mutations[0]
-            assert mutations[0]['LANDING_REQUIRE_KERBIN'] == 1
+            assert mutations[0]['LANDING_REQUIRE_KERBIN'] == (0 if scenario=='offline' else 1)
+            assert mutations[0]['LANDING_RADIO_MODE'] == ('OFFLINE' if scenario=='offline' else 'AUTO' if scenario=='inherit' else 'DIRECT')
             assert mutations[0]['LANDING_LIGHT_MODE'] == ('SUNLIT' if scenario=='saved-policy' else 'AFTERNOON' if scenario == 'afternoon' else 'MORNING')
     print('PASS: preview preserves node/mission; apply alone replaces target/node; no-site, begun burn, descent and positive throttle refuse mutation')
 

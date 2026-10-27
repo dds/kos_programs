@@ -25,7 +25,7 @@ GLOBAL LANDING_LIGHT_SCAN_SAMPLES IS 128.
 GLOBAL LANDING_LIGHT_TIME_MARGIN IS 300.
 
 GLOBAL FUNCTION landingLightActive {
-    RETURN LANDING_LIGHT_MODE <> "ANY" OR LANDING_REQUIRE_KERBIN > 0.
+    RETURN LANDING_LIGHT_MODE <> "ANY" OR landingRequireKerbin() > 0.
 }
 
 // Inverse of lmGroundGeoAt's rotation correction, in current RAW axes.
@@ -109,11 +109,14 @@ GLOBAL FUNCTION landingLightAt {
     PARAMETER lng.
     PARAMETER ut.
     PARAMETER kerbinTolerance IS 0.
-    PARAMETER requireKerbin IS LANDING_REQUIRE_KERBIN.
+    PARAMETER requireKerbin IS -1.
+    IF requireKerbin < 0 { SET requireKerbin TO landingRequireKerbin(). }
     LOCAL out IS LEXICON("OK", FALSE, "REASON", "invalid-light-config",
         "SUN", -90, "KERBIN", -90, "RISING", FALSE, "SETTING", FALSE).
     IF LANDING_LIGHT_MODE <> "ANY" AND LANDING_LIGHT_MODE <> "SUNLIT"
             AND LANDING_LIGHT_MODE <> "MORNING" AND LANDING_LIGHT_MODE <> "AFTERNOON" { RETURN out. }
+    IF LANDING_RADIO_MODE <> "AUTO" AND LANDING_RADIO_MODE <> "DIRECT"
+            AND LANDING_RADIO_MODE <> "RELAY" AND LANDING_RADIO_MODE <> "OFFLINE" { RETURN out. }
     LOCAL band IS landingSunBand().
     IF band["MIN"] < 0 OR band["MAX"] > 90
             OR band["MAX"] < band["MIN"]
@@ -178,7 +181,7 @@ GLOBAL FUNCTION landingLightWindow {
     PARAMETER lng.
     PARAMETER ut.
     PARAMETER kerbinTolerance IS 0.
-    PARAMETER requireKerbin IS LANDING_REQUIRE_KERBIN.
+    PARAMETER requireKerbin IS -1.
     LOCAL center IS landingLightAt(lat, lng, ut, kerbinTolerance, requireKerbin).
     IF NOT center["OK"] { RETURN center. }
     FOR fraction IN LIST(-1, -0.5, 0.5, 1) {

@@ -122,7 +122,7 @@ def check_long_coast_admission():
     source=function_body((ROOT/'lib/deorbit_burn.ks').read_text(),'executeDeorbitNode')
     source=source.split('    SET SAS TO FALSE.',1)[0]
     source=re.sub(r'WAIT UNTIL (.*?)\.(?=\s*\n)',r'UNTIL \1 { WAIT 0.02. }',source,flags=re.S)
-    for scenario in ('accepted','geometry-rejected','light-changed','abort','body-changed','removed','unhealthy','expired','no-owned-alarm'):
+    for scenario in ('accepted','geometry-rejected','light-changed','cache-lost','abort','body-changed','removed','unhealthy','expired','no-owned-alarm'):
         events=[]
         node=NS(TIME=100000,DELTAV=NS(MAG=10))
         ship=NS(BODY='Mun',MASS=1,AVAILABLETHRUST=10,CONTROL=NS(PILOTMAINTHROTTLE=.2))
@@ -132,6 +132,7 @@ def check_long_coast_admission():
                  maneuverEnsureBurnAlarm=lambda *args:events.append(('alarm',args)) or ('' if scenario=='no-owned-alarm' else 'burn-alarm'),
                  vesselLandingCleanup=lambda:events.append(('cutoff',)) or True,
                  vesselLandingPrepareRoles=lambda:True,
+                 landingHandoffReady=lambda prepare=False:prepare or scenario!='cache-lost',
                  DELETEALARM=lambda alarm:events.append(('delete',alarm)),
                  solarCoastCanWarp=lambda *args:True,
                  coastHealthCheck=lambda *args:scenario!='unhealthy',

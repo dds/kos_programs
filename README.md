@@ -498,6 +498,40 @@ Sunlight and terrain checks remain active. To require radio view for diversions,
 set `LANDING_DIVERT_REQUIRE_KERBIN=1`; its configurable
 `LANDING_DIVERT_KERBIN_TOLERANCE` subtracts 7 degrees from the planned requirement,
 with a lower bound of -2 degrees. Neither setting guarantees a live link.
+
+Before deorbit, the shared policy in [landing_radio.ks](lib/landing_radio.ks)
+uses `LANDING_RADIO_MODE="AUTO"`. Mun and Minmus are in
+`LANDING_DIRECT_KERBIN_BODIES`; `LANDING_RELAY_BODIES` starts empty. Thus a
+profile's older `LANDING_REQUIRE_KERBIN=0` no longer silently permits a
+far-side landing on those bodies. Once a relay network is ready, add its body
+to `LANDING_RELAY_BODIES` in that one file and sync at a connected boot.
+AUTO then waives the direct Kerbin requirement for that body across profiles.
+Per-flight `DIRECT`, `RELAY` or `OFFLINE` modes explicitly override AUTO.
+This is operator-declared relay coverage, not discovery or verification of a
+live CommNet route. Existing sunlight, terrain and elevation margins remain.
+`cmd/landlight` inherits this policy when its final argument is omitted;
+explicit1 selects DIRECT and explicit0 selects OFFLINE for that flight.
+
+Radio policy cannot replace offline code readiness. All powered-landing
+deorbits now verify the complete next landing band, including the coast and
+braking tracks and any conditional return provider, before staging or thrust.
+With a link, missing/unloaded libraries compile on the archive; the whole
+copy is sized before changing local files, retaining at least4KB of headroom.
+Insufficient storage or missing code leaves the orbit/node intact. A long
+coast rechecks the cache before ignition; expired nodes are not burned after
+slow preparation. Guidance tracks remain on disk through landing for offline
+reboots, and cached tracks no longer need archive compilation at state changes.
+No installed bootstrap update is required; use a connected reboot.
+
+Native Minmus3 boot026 exposed a capacity problem as well as a missing
+readiness check: only13,719bytes were free in LAND_DEORBIT, while the measured
+additional compiled landing/return files total59,130bytes. The conservative
+guard will hold this layout in orbit. It does not reclaim active planner code
+or increase storage. More onboard space or a smaller planner-to-descent
+handoff is still required for that layout; the new guard is not flight proof
+that both bands fit. Source cache/radio/reboot regressions supplement native
+testing, including actual compilation and storage measurement.
+
 APPROACH admission uses hull radar clearance, so a distant mountain's elevation
 cannot start terminal guidance kilometres above the local ground. Economy
 reboots skip blocking grids around the saved target; precision surveys finish

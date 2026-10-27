@@ -9,6 +9,30 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 Minmus3 blackout after deorbit: operator reports missing
+payload_landing at15km, no radio, no preburn save; declines command/rescue
+attempt. Leave that flight alone. Native RO9_2460361 boot026 has13,719bytes
+free in LAND_DEORBIT; archive KSM measurement adds59,130bytes for landing /
+tracks / return_setup. Whole-set storage does NOT fit the current layout.
+landing_handoff now guards executeDeorbitNode before staging and rechecks
+before ignition. It resolves the actual future boot closure, compiles/sizes
+before any copy, keeps4KB headroom, rejects missing/archive-only/empty files
+and incomplete LIBS overrides. Never run another band's functions just to
+cache them. Helpers stay in this dedicated library, not universal boot_lib.
+No active code is evicted; insufficient capacity holds safely in orbit.
+mission_type LANDING roots now retain both dynamic tracks and conditionally
+return_setup. _landingEnsureStateTrack keeps cached files for offline reboots
+and only syncs an absent file. Native fit/boot/flight remain unvalidated.
+Next work: a smaller validated planner-to-descent handoff or more disk space;
+do not claim the guard alone makes this core's offline landing feasible.
+landing_radio owns shared AUTO/DIRECT/RELAY/OFFLINE policy. AUTO requires
+direct Kerbin for Mun/Minmus unless declared in LANDING_RELAY_BODIES; legacy
+LANDING_REQUIRE_KERBIN still applies elsewhere. Declared relays supersede
+that legacy flag in AUTO; DIRECT always requires Kerbin. Defaults: no relays.
+cmd/landlight omitted radio arg inherits; explicit0/1 saves OFFLINE/DIRECT.
+After commitment, explicit diversion requireKerbin0 remains valid; do not
+abort a falling craft for missing radio. Cache readiness is never waived.
+
 2026-10-27 aerobrake fuel follow-up: native RO9_2446359 boot027 first
 spent370.31m/s and retained10.03m/s in transfer stage3. Operator separated
 it manually; stage2 DID replan/burn619.27m/s, ending52.7km Pe/77.5km Ap.

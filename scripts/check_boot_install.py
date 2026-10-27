@@ -10,6 +10,7 @@ BOOT=(ROOT/'lib/boot_lib.ks').read_text()
 CONFIG=(ROOT/'lib/config.ks').read_text()
 
 class Text(KString):
+    TRIM=property(lambda self:Text(self.strip()))
     def __add__(self,other):return Text(str(self)+str(other))
     def __radd__(self,other):return Text(str(other)+str(self))
     def SUBSTRING(self,start,count=None):return Text(super().SUBSTRING(start,count))
@@ -18,7 +19,8 @@ class Text(KString):
 class Items(KList):
     def CONTAINS(self,value):return value in self
 
-def fixture(linked=True):
+def fixture(linked=True,extra_source=''):
+    fixture_source=BOOT+'\n'+CONFIG+'\n'+extra_source
     files,events,state={},[],{}
     cwd=[Text('1:/')]
     env=dict(HOMECONNECTION=NS(ISCONNECTED=linked),HAS_LINK=linked,
@@ -62,17 +64,18 @@ def fixture(linked=True):
     def adapt(source):
         source=re.sub(r'\bPRINT\s+(?:"[^"]*"|[^."])*\.', '',source)
         source=source.replace('COMPILE src TO arKsm.','compile_file(src,arKsm).')
+        source=re.sub(r'COMPILE (\w+) TO (\w+)\.',r'compile_file(\1,\2).',source)
         source=re.sub(r'COMPILE ("[^"]+") TO ("[^"]+")\.',r'compile_file(\1,\2).',source)
         source=source.replace('LIST FILES IN items.','listing(items).')
         source=source.replace('DEFINED printStorageStatus','FALSE')
         return re.sub(r'"[^"\n]*"',lambda match:'text('+match[0]+')',source)
     env.update(compile_file=compile_file,listing=listing,RUNPATH=running,RUNONCEPATH=running)
     def invoke(name,*args):
-        body=function_body(BOOT+'\n'+CONFIG,name)
+        body=function_body(fixture_source,name)
         local=env if name in ('bootApplyMissionConfig','main') else dict(env)
         local.update(zip(re.findall(r'PARAMETER (\w+)',body),args))
         return run(adapt(body),local)
-    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',BOOT+'\n'+CONFIG):
+    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',fixture_source):
         env[name]=lambda *args,name=name:invoke(name,*args)
     env['bootLibResolve']=lambda roots:roots
     env['bootLibArchiveOnly']=lambda _:False

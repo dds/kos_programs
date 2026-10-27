@@ -31,6 +31,13 @@ GLOBAL FUNCTION missionTypeDetect {
 GLOBAL FUNCTION missionTypeConditionalRoots {
     PARAMETER bandKey.
     LOCAL roots IS LIST().
+    IF bandKey = "LANDING" {
+        // Both dynamic tracks must survive connected cleanup and an offline
+        // reboot; descent must never compile/fetch its next braking state.
+        roots:ADD("landing_coast").
+        roots:ADD("landing_brake").
+        IF SEQUENCE:CONTAINS("SURFACE_RETURN_SETUP") { roots:ADD("return_setup"). }
+    }
     // The surface-ascent leg reboots into RETURN_SETUP after PARK, possibly
     // out of radio view. Keep its small provider through prelaunch, ascent
     // and optional post-ascent shaping. Other missions pay no extra cost.
