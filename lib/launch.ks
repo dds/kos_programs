@@ -438,26 +438,26 @@ GLOBAL FUNCTION phaseParking {
 
 LOCAL FUNCTION _parkingControllerHandoff {
     // The broad orbit gate can pass before MJ finishes its circularization
-    // node. Do not reboot away while either native controller still owns it.
+    // node. The installed bridge exposes ASCENT, but not NODE. MJ ascent
+    // completes only after its circularization node has finished.
     IF _launchHasAtmosphere() AND ADDONS:MJ:AVAILABLE {
         LOCAL deadline IS TIME:SECONDS+120.
         LOCAL nextReport IS TIME:SECONDS.
-        UNTIL (NOT ADDONS:MJ:ASCENT:ENABLED AND NOT ADDONS:MJ:NODE:ENABLED)
+        UNTIL NOT ADDONS:MJ:ASCENT:ENABLED
                 OR ABORT OR TIME:SECONDS >= deadline {
             IF TIME:SECONDS >= nextReport {
                 mLog("STATS launch parking-handoff status=waiting-mechjeb ascent="
-                    + ADDONS:MJ:ASCENT:ENABLED + " nodeExecutor=" + ADDONS:MJ:NODE:ENABLED
+                    + ADDONS:MJ:ASCENT:ENABLED
                     + " hasNode=" + HASNODE + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,3)).
                 SET nextReport TO TIME:SECONDS+5.
             }
             // This is an active ascent controller, not a warp/coast wait.
             WAIT 0.1.
         }
-        IF ABORT OR ADDONS:MJ:ASCENT:ENABLED OR ADDONS:MJ:NODE:ENABLED {
+        IF ABORT OR ADDONS:MJ:ASCENT:ENABLED {
             SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
-            SET ADDONS:MJ:NODE:ENABLED TO FALSE.
             IF NOT thrustCutoffOk() { RETURN FALSE. }
-            mLogError("PARK: MechJeb completion timed out or was aborted; controllers stopped, node retained for review.").
+            mLogError("PARK: MechJeb completion timed out or was aborted; ascent stopped, node retained for review.").
             yieldToPrompt(). RETURN FALSE.
         }
     }

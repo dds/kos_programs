@@ -10,7 +10,8 @@ ks.SOURCES+='\n'+SOURCE
 
 def fixture(mode='normal'):
     events=[]
-    mj=NS(AVAILABLE=mode!='no-addon',ASCENT=NS(ENABLED=True),NODE=NS(ENABLED=True))
+    # Match the installed bridge: there is no top-level NODE suffix.
+    mj=NS(AVAILABLE=mode!='no-addon',ASCENT=NS(ENABLED=True))
     env=dict(ADDONS=NS(MJ=mj),TIME=NS(SECONDS=0),ABORT=False,HASNODE=True,
              SHIP=NS(PERIAPSIS=72700,APOAPSIS=78000),phaseShouldYield=False,
              _launchHasAtmosphere=lambda:mode!='airless',
@@ -20,16 +21,14 @@ def fixture(mode='normal'):
         env['TIME'].SECONDS+=seconds
         events.append(('wait',seconds))
         if mode=='abort':env['ABORT']=True
-        if mode not in ('timeout','abort') and env['TIME'].SECONDS>=1:
-            mj.ASCENT.ENABLED=False
         if mode not in ('timeout','abort') and env['TIME'].SECONDS>=2:
-            mj.NODE.ENABLED=False
+            mj.ASCENT.ENABLED=False
             # Emulate MJ removing its own completed circularization node.
             if mode!='foreign-node':env['HASNODE']=False
             env['SHIP'].PERIAPSIS=69900 if mode=='bad-orbit' else 77700
     def cutoff():
         if mode not in ('no-addon','airless'):
-            assert not mj.ASCENT.ENABLED and not mj.NODE.ENABLED
+            assert not mj.ASCENT.ENABLED
         events.append(('cutoff',))
         if mode=='cutoff':env['phaseShouldYield']=True;return False
         return True
@@ -48,7 +47,7 @@ def check_controller_completion():
     source=function_body(SOURCE,'phaseParking')
     assert source.index('_parkingControllerHandoff()')<source.index('nextPhase(launchSeq)')
     assert 'REMOVE' not in mask(function_body(SOURCE,'_parkingControllerHandoff'))
-    print('PASS: measured72.7x78km loose gate waits for both MJ controllers to finish, verifies cutoff before advancing, preserves foreign nodes, and leaves native airless/no-addon insertion independent')
+    print('PASS: bridge without NODE waits for MJ ascent completion, verifies cutoff before advancing, preserves foreign nodes, and leaves native airless/no-addon insertion independent')
 
 
 def check_controller_failure():
@@ -57,9 +56,9 @@ def check_controller_failure():
         assert not ks.call('_parkingControllerHandoff',env) and env['phaseShouldYield'],mode
         assert events[-1]==('cutoff',)
         if mode in ('timeout','abort'):
-            assert env['HASNODE'] and not env['ADDONS'].MJ.ASCENT.ENABLED and not env['ADDONS'].MJ.NODE.ENABLED
+            assert env['HASNODE'] and not env['ADDONS'].MJ.ASCENT.ENABLED
         if mode=='timeout':assert 120<=env['TIME'].SECONDS<120.2
-    print('PASS: timeout/Abort stop both native controllers before cutoff and preserve nodes; failed cutoff or degraded parking orbit cannot hand off to XING')
+    print('PASS: timeout/Abort stop native ascent before cutoff and preserve nodes; failed cutoff or degraded parking orbit cannot hand off to XING')
 
 
 if __name__=='__main__':

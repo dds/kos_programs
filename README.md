@@ -798,7 +798,7 @@ DONE`. Older profiles may still use `MCC` or a single `COAST`. Payload tokens
 (`RELAY`, `SCANSAT`, `SCISAT`, `PROBE`, `CRASHPROBE`, `LANDER`,
 `ASSISTLANDER`, `ROVER`, `ASSISTROVER`) come from the profile or the legacy
 ship name and append their phases automatically. MechJeb flies the ascent.
-PARK waits for both MechJeb ascent and its node executor to finish, then
+PARK waits for MechJeb ascent to finish its circularization, then
 verifies zero thrust/throttle before handing control to the next phase.
 The broad parking-altitude gate alone is insufficient while circularization
 is still running. A controller still active after 120 seconds is stopped and
@@ -808,8 +808,8 @@ If an older launch reaches XING with an expired small circularization node,
 the departure corridor check rejects it. Inspect and delete that stale node
 in the map, then `REBOOT.` to let XING create the actual transfer. Keep the
 departure Pe corridor intact; a missing encounter is not a solved bad Pe.
-The addon exposes both controllers through its documented
-[ascent and node interfaces](https://github.com/belpyro/kOS.MechJeb2.Addon/blob/main/README.md).
+The installed addon exposes `ASCENT:ENABLED`; the handoff uses that signal
+and does not require the newer top-level `NODE` interface.
 
 FR3 adds targeted rover landings (Trajectories deorbit + named/selected
 waypoints, optional SCANsat site scan), Mun mapper impact-disposal flows, and

@@ -12,10 +12,13 @@ distinguish source-test results from native mission validation.
 2026-10-27 Tundra XING boot004: RO9_2815982 at UT2816238.4 resumed a4.437m/s
 expired node (ETA-25.2,pending=false,burn_phase empty), not a transfer plan.
 PARK advanced at UT2816224.8 in72.7x78km: its90% Pe gate can pass while MJ
-is still circularizing. PARK now waits for MJ ASCENT and NODE ENABLED to
-clear, verifies physical cutoff and the orbit again before advancing.
+is still circularizing. PARK now waits for MJ ASCENT:ENABLED to clear,
+then verifies physical cutoff and the orbit again before advancing.
 120s timeout/Abort stops controllers and holds; never deletes a node.
-Installed Deck bridge was checked read-only for NODE/ENABLED/NodeExecutor.
+Native testing proves this installed Addon(MJAddon) has NO top-level NODE
+suffix. DLL strings and newer online documentation did not prove runtime
+availability. Use ASCENT:ENABLED, which includes its circularization lifecycle;
+the regression fixture deliberately omits NODE. Do not reintroduce it.
 Current inflight XING still needs operator deletion of its stale node and
 REBOOT. Keep transferDepartureReady's real arrival corridor unchanged;
 hasTargetPatch=False means PeKm=-0.001 was a sentinel, not a solved Pe.

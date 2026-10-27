@@ -43,10 +43,11 @@ record remaining uncertainty before closing a task.
   burn_phase. No transfer planning runs. Its missing Minmus patch is printed
   as PeKm=-0.001; this is not a solved Minmus periapsis. Likely MJ ascent is
   still finishing circularization when the loose parking gate advances.
-  Implemented PARK wait for both MJ ascent/node executor to finish, physical
+  Implemented PARK wait for MJ ascent/circularization to finish, physical
   cutoff and final orbit recheck before advancement.120s timeout or Abort
-  stops controllers and holds without deleting nodes. Read-only DLL inspection
-  confirms the installed bridge has NODE/ENABLED and NodeExecutor support.
+  stops ascent and holds without deleting nodes. Native reboot found that
+  Addon(MJAddon) lacks a top-level NODE suffix; removed that dependency and
+  made the fixture omit it. DLL strings were insufficient API validation.
   Departure diagnostics now distinguish a missing target patch; no Pe
   corridor or Tundra target was relaxed. Source fixtures cover the reported
   orbit, delayed completion, retained foreign nodes, timeout/Abort/failed
