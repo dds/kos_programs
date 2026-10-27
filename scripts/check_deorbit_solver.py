@@ -522,8 +522,14 @@ def check_mun_normal_authority():
     cfg=read_settings((ROOT/'missions/RO9/mun_landing_return.ks').read_text(),{})
     assert cfg['TARGET_DEORBIT_NORMAL_DV_CAP']==10
     assert cfg['TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM']==.25
-    assert cfg['DEORBIT_CROSSTRACK_AUTHORITY_KM']==.5
+    assert cfg['DEORBIT_CROSSTRACK_AUTHORITY_KM']==2
     assert cfg['TARGET_LAT']==44.593 and cfg['TARGET_LNG']==-24.926 and cfg['TARGET_LOCK']==1
+    assert cfg['TARGET_TOLERANCE']==1500
+    widened,_,_=environment(lambda *args:None)
+    widened['DEORBIT_CROSSTRACK_AUTHORITY_KM']=cfg['DEORBIT_CROSSTRACK_AUTHORITY_KM']
+    widened['_targetDeorbitCrossAuthority']=lambda solved:ks.call('_targetDeorbitCrossAuthority',widened,solved)
+    for cross,allowed in ((1563,True),(2000,True),(2001,False)):
+        assert widened['_targetDeorbitSolutionAccepted'](impact(1000,32.43,-10,0,cross),10000,20000) is allowed
     for mirror in (-1,1):
         oracle=kepler_oracle(true_normal=8.5,mirror=mirror,mun=True)
         no_normal,_,_=environment(oracle,cap=0)

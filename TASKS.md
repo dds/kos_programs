@@ -32,7 +32,8 @@ record remaining uncertainty before closing a task.
   powered planning: 58/64 trials, cross116m, modeled residual-1212m within
   1500m. Cache gate is removed. Latest boot027 instead held after its powered
   forecast changed during coast; bounded pre-burn refit is implemented below,
-  native recovery pending. Keep250m preferred/500m hard and64 trials unchanged.
+  native recovery pending. Operator now authorizes2km deorbit cross-track
+  for RO9 mun_landing_return only; preferred250m/normal10m/s/trials64 remain.
 - Operator confirmed the Minmus3 Kolniya orbital objective succeeded. Next
   flight step is the existing LAND_PREP/landing route; the comparison is an
   optimization, not a new prerequisite. Stage handoff/next-entry KAC flight
@@ -48,6 +49,17 @@ record remaining uncertainty before closing a task.
   inspection is complete, settings unchanged, Plex excluded.
 
 ## In progress
+
+- [ ] **Wider Mun targeted deorbit cross-track, operator authorized.** At
+  UT2885617.1, best rejected candidate cross1.563km already used normal-10m/s;
+  the earlier departure window has passed. Existing profile setting raised
+  from0.5km to2km for RO9 mun_landing_return only. Preferred250m, target
+  coordinates, touchdown tolerance1500m and other physical/model/radio/fuel
+  checks remain. Admission still requires fresh powered validation; later
+  passes / native landing performance remain unvalidated. Targeted solver,
+  variable-mass predictor and structural checks passed; boundary cases admit
+  1563/2000m and reject2001m under the configured2km cap.
+
 
 - [ ] **RO9-mun2 powered forecast changes during coast.** Native boot027
   retained footprint118214m/cross220m, but lead119365->126363m and ignition

@@ -173,7 +173,8 @@ def check_prediction_limits():
         profile=read_settings((ROOT/f'missions/RO9/{moon}_landing_return.ks').read_text(),{})
         assert profile['TARGET_LOCK']==1 and profile['LANDING_AUTO_TARGET']==0 and profile['LANDING_FLEXIBLE_SITE']==0
         assert profile['LANDING_POWERED_LEAD']==profile['LANDING_ECONOMY_BRAKE']==profile['LANDING_STAGE_BRAKE_CREDIT']==1
-        assert profile['TARGET_DEORBIT_NORMAL_DV_CAP']==10 and profile['DEORBIT_CROSSTRACK_AUTHORITY_KM']==.5
+        assert profile['TARGET_DEORBIT_NORMAL_DV_CAP']==10
+        assert profile['DEORBIT_CROSSTRACK_AUTHORITY_KM']==(2 if moon=='mun' else .5)
     deps,_,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     planning=closure(['landing_deorbit_lead'],deps);flight=closure(['landing_main'],deps)
     assert 'landing_brake_math' in planning and 'landing_brake_math' in flight

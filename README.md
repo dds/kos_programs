@@ -1078,8 +1078,11 @@ to the strict check; physical-cutoff and watchdog faults still fail. Cutoff,
 sampled residual and acceptance limit are logged to nine decimal places.
 
 The fixed-site RO9 Mun profile also permits up to 10 m/s of normal correction
-in its deorbit burn. It prefers cross-track error below 250 m and rejects
-above 500 m, reducing the lateral work left to powered descent. Its locked
+in its deorbit burn. It prefers cross-track error below 250 m. At the operator's
+request its deorbit cross-track limit is now 2 km, allowing the reported
+1.563 km miss to proceed to powered validation. Its separate 1,500 m landing
+target tolerance is unchanged; admission is not a promise of touchdown accuracy.
+Other profiles retain their existing cross-track limits. Its locked
 contract coordinates and light policy remain unchanged. The deorbit search
 tries one burn angle across the available windows before alternate angles;
 all trials still share the 64-evaluation limit. This profile first surveys up

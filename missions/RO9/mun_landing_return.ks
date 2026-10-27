@@ -80,7 +80,9 @@ SET TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS TO 1.
 // normal correction rather than leaving kilometres of lateral work to BRAKE.
 SET TARGET_DEORBIT_NORMAL_DV_CAP TO 10.
 SET TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM TO 0.25.
-SET DEORBIT_CROSSTRACK_AUTHORITY_KM TO 0.5.
+// Operator accepts a wider deorbit footprint after missing the closest pass.
+// Keep the fixed touchdown target and its separate 1500 m tolerance.
+SET DEORBIT_CROSSTRACK_AUTHORITY_KM TO 2.
 SET LANDING_SITE_SCAN_ENABLE TO 1.
 SET LANDING_SITE_SCAN_RADIUS TO 500.
 SET LANDING_SITE_SCAN_STEP TO 100.

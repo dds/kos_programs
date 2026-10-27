@@ -9,6 +9,15 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 operator explicitly requests wider sideways tolerance after the
+missed Mun pass. RO9 mun_landing_return now sets the existing configurable
+DEORBIT_CROSSTRACK_AUTHORITY_KM to2 (was0.5). Latest best native rejected
+candidate was1.563km cross at the10m/s normal cap; it may now proceed to full
+powered/terrain/light/fuel validation, not automatically burn. Keep preferred
+250m, locked target, TARGET_TOLERANCE1500m, normal10m/s and trial64 unchanged.
+This supersedes the earlier500m profile-specific hard-limit instructions;
+other profiles keep their limits. No new global policy or bypass is added.
+
 2026-10-27 RO9-mun2 boot027 follow-up: pre-coast lead119365m / footprint
 118214m passed; pre-burn footprint stayed118214m / cross220m but ignition
 moved2885843.3->2885830.1 and lead rose126363m, residual-8149m. No burn.
