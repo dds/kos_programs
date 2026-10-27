@@ -9,6 +9,24 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 aerobrake fuel follow-up: native RO9_2446359 boot027 first
+spent370.31m/s and retained10.03m/s in transfer stage3. Operator separated
+it manually; stage2 DID replan/burn619.27m/s, ending52.7km Pe/77.5km Ap.
+Operator confirms survival/touchdown. Automatic staging is NOT validated
+by that manual event. The old active-stage reserve was wasting disposable
+fuel. aerobrakeApFuelPolicy shares the COMPLETE _aeroStagePlan hardware/
+successor-fuel audit; only its depletion requirement is optional for fuel
+eligibility. A funded successor holds the repair allowance while the active
+stage can spend down to zero; both own and stock estimates must be<=1m/s
+before automatic separation. Last/unaudited stages still keepMAX(10,config).
+Recheck successor identity/funding before committing; the live lock always
+keeps the craft-wide reserve, plus its frozen active-stage reserve. No
+hardware scan in the powered lock, no in-atmosphere staging or same-pass
+rearming. Pre-entry wait now responds to manual staging and replaces KAC
+before fresh planning. A pre-entry powered arc also refreshes its alarm:
+native stage2 entry moved from predictedUT2841863 to actualUT2842262 after
+the finite burn. Source regressions are not native validation of these fixes.
+
 2026-10-27 landing-route comparison: landing_route now owns LAND_PREP_*
 defaults and landingPrepTargets (moved from landing_orbit, unchanged goals).
 Its small dependency closure excludes maneuver/SHAPE/powered controllers.

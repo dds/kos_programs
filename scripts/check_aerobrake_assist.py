@@ -7,13 +7,15 @@ import check_landing_guidance as ks
 from check_codebase import ROOT, function_body, mask, closure, dependency_tables
 from check_deorbit_geometry import Vec as BaseVec
 from check_surface_return import defaults, read_settings, emit_profile, expression
+from check_runtime_contracts import KList
 
 SOURCE=(ROOT/'lib/aerobrake_assist.ks').read_text()
 MATH=(ROOT/'lib/aerobrake_ap_math.ks').read_text()
 CONFIG=(ROOT/'lib/aerobrake_config.ks').read_text()
 GUARD=(ROOT/'lib/aerobrake_guard.ks').read_text()
+STAGING=(ROOT/'lib/aerobrake_staging.ks').read_text()
 AERO=(ROOT/'lib/aerobrake.ks').read_text()
-ks.SOURCES+='\n'+CONFIG+'\n'+SOURCE+'\n'+MATH+'\n'+AERO+'\n'+GUARD
+ks.SOURCES+='\n'+CONFIG+'\n'+SOURCE+'\n'+MATH+'\n'+AERO+'\n'+GUARD+'\n'+STAGING
 
 
 class Vec(BaseVec):
@@ -121,6 +123,7 @@ def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
         return True
     env.update(SHIP=ship,STAGE=stage,HASNODE=False,ABORT=False,SAS=False,CONFIG=NS(IPU=150),ETA=NS(PERIAPSIS=0),
                AEROBRAKE_AP_BURN=1,AEROBRAKE_REENTRY_DIR='RETROGRADE',LOG_ARCHIVE_DEFERRED=0,
+               AEROBRAKE_AP_STAGE_TAGS=KList(),
                V=lambda a,b,c:Vec((a,b,c)),LN=math.log,CONSTANT=NS(PI=math.pi,E=math.e,G0=9.80665),
                VANG=lambda a,b:math.degrees(math.acos(max(-1,min(1,float(a@b)/a.MAG/b.MAG)))),
                stateGet=lambda key,default=None:data.get(key,default),
@@ -128,7 +131,7 @@ def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
                stateRemove=lambda key:data.pop(key,None),fixture_lock=lock,fixture_wait=physics,
                thrustCutoffOk=cutoff,phaseShouldYield=False,WARP=0,
                KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)))
-    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',SOURCE+'\n'+MATH+'\n'+GUARD):
+    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',SOURCE+'\n'+MATH+'\n'+GUARD+'\n'+STAGING):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
     refresh();ship.FACING.FOREVECTOR=-ship.VELOCITY.ORBIT.NORMALIZED
     return env,state,data,refresh
@@ -144,6 +147,7 @@ def run_assist(env):
 def control(env):
     return dict(REASON='',DEADLINE=1000,UPDATED=0,ATMO=70000,LOW=52000,HIGH=54000,
                 BODY='Kerbin',STAGE=1,DV=869,APPLIED=0,TARGET_AP=71000,PEAK_FACING_ERR=0,
+                RESERVE=env['aerobrakeApReserveDv'](),
                 DIR=-env['SHIP'].VELOCITY.ORBIT.NORMALIZED)
 
 
@@ -426,7 +430,8 @@ def check_profile_command_and_entry_alignment():
     assert not re.search(r'(?<!:)\b(?:REBOOT|STAGE|LOCK|UNLOCK|REMOVE)\b',mask(command))
     phase=function_body(AERO,'phaseAerobrake')
     assert phase.index('aerobrakeApRecover()')<phase.index('mLogPhase(')
-    assert 'approachEta-AEROBRAKE_AP_PLAN_LEAD' in phase and 'OR inPass' in phase
+    assert 'approachEta-AEROBRAKE_AP_PLAN_LEAD' in phase
+    assert '_aerobrakeAwaitEntry(atmHeight,inPass,entryStage)' in phase
     owner=function_body(SOURCE,'aerobrakeApAssist')
     assert owner.index('stateSet("aerobrake_ap_active",TRUE)')<owner.index('LOCK THROTTLE TO _aeroApSafeThrottle')
     assert owner.index('thrustCutoffOk()')<owner.index('stateSet("aerobrake_ap_active",FALSE)')<owner.index('result reason=')

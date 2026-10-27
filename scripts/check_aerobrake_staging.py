@@ -15,6 +15,7 @@ ks.SOURCES+='\n'+SOURCE
 class Map(dict):
     LENGTH=property(len)
     VALUES=property(lambda self:KList(self.values()))
+    HASKEY=dict.__contains__
 
 
 class Seq(KList):
@@ -54,11 +55,12 @@ def fixture():
     tags={'lander_decoupler':KList([release]),'return_decoupler':KList([returning]),'descent_chutes':KList([chute])}
     ship=NS(PARTS=KList([core,chute,release,returning,*engines,*tanks]),ENGINES=KList(engines),
             PARTSTAGGED=lambda tag:tags.get(tag,KList()),MASS=1.25,
+            DELTAV=NS(VACUUM=2000),
             BODY=NS(NAME='Kerbin'),ORBIT=NS(ECCENTRICITY=.8),STATUS='ORBITING',
             THRUST=0,CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0),
             ALTITUDE=100000,PERIAPSIS=53000,APOAPSIS=211500,Q=0)
     env=ks.environment()
-    env.update(SHIP=ship,CORE=NS(PART=core),STAGE=NS(NUMBER=3,READY=True,DELTAV=NS(VACUUM=10)),
+    env.update(SHIP=ship,CORE=NS(PART=core),STAGE=NS(NUMBER=3,READY=True,DELTAV=NS(VACUUM=.5)),
                AEROBRAKE_AP_STAGE_TAGS=KList(['lander_decoupler','return_decoupler']),
                AEROBRAKE_AP_BURN=1,AEROBRAKE_AP_MAX_Q=.1,AEROBRAKE_REENTRY_DIR='RETROGRADE',
                LOG_ARCHIVE_DEFERRED=0,WARP=0,KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),
@@ -98,7 +100,7 @@ def fixture():
         fuel_mass=ship.MASS*(1-math.exp(-dv/(engines[index].VISP*9.80665)))
         tanks[index].RESOURCES[0].AMOUNT=fuel_mass/.005*.45
         tanks[index].RESOURCES[1].AMOUNT=fuel_mass/.005*.55
-    set_fuel(0,10)
+    set_fuel(0,.5)
     return env,events,saved,tags,engines,tanks,set_fuel
 
 
@@ -114,13 +116,13 @@ def check_two_handoffs():
     assert events.index(('cutoff',))<next(i for i,e in enumerate(events) if e[0]=='state')<events.index(('stage',2))
     assert events[-1]==('cutoff',) and env['LOG_ARCHIVE_DEFERRED']==0
     assert not run(env) # Fresh lander fuel cannot be thrown away.
-    env['STAGE'].DELTAV.VACUUM=10;set_fuel(1,10)
+    env['STAGE'].DELTAV.VACUUM=.5;set_fuel(1,.5)
     assert run(env) and env['STAGE'].NUMBER==1 and engines[2].IGNITION
     assert not run(env) # Never stage into the parachute slot.
     assert env['CORE'].PART in env['SHIP'].PARTS
     assert tags['descent_chutes'][0] in env['SHIP'].PARTS
     assert [e for e in events if e[0]=='stage']==[('stage',2),('stage',1)]
-    print('PASS: two separate reserve-limited 3→2→1 coast handoffs verify cutoff before each event, preserve CPU/chutes, wait for fuel use and never advance into stage0')
+    print('PASS: two separate depletion-limited 3→2→1 coast handoffs verify cutoff before each event, preserve CPU/chutes, wait for fuel use and never advance into stage0')
 
 
 def check_rejections():
@@ -204,14 +206,14 @@ def check_native_slot_modules():
                     'ModuleTestSubject','ModuleStructuralNode','ModuleStructuralNodeToggle',
                     'ModuleRestockModifyFairingMaterials']))
     env['SHIP'].PARTS.extend((leg,fairing))
-    env['SHIP'].MASS+=.02;set_fuel(0,10)
+    env['SHIP'].MASS+=.02;set_fuel(0,.5)
     for eng in engines:
         eng.MODULES=Seq(passive+['ModuleEnginesFX','ModuleTestSubject','ModuleJettison',
                                'FXModuleThrottleEffects','ModuleColorChanger'])
     for tag in ('lander_decoupler','return_decoupler'):
         tags[tag][0].MODULES=Seq(passive+['ModuleDecouple','ModuleToggleCrossfeed','ModuleTestSubject'])
     assert run(env) and env['STAGE'].NUMBER==2
-    set_fuel(1,10);env['STAGE'].DELTAV.VACUUM=10
+    set_fuel(1,.5);env['STAGE'].DELTAV.VACUUM=.5
     assert run(env) and env['STAGE'].NUMBER==1
     for mutation in ('retained-fairing','unknown-on-engine','unknown-on-separator','extra-chute','extra-engine','extra-decoupler'):
         env,events,_,tags,engines,tanks,set_fuel=fixture()
@@ -297,9 +299,111 @@ def check_fresh_forecast():
     print('PASS: post-handoff finite forecast uses new wet mass/engine; phase stages only after warp release, refreshes KAC and plans anew, preserving powered stage-change cutoff and return-setup loading size')
 
 
+def check_disposable_reserve():
+    env,events,saved,tags,engines,tanks,set_fuel=fixture()
+    env['STAGE'].DELTAV.VACUUM=380.3212;set_fuel(0,380.3212)
+    policy=env['aerobrakeApFuelPolicy']()
+    assert policy['DISPOSABLE'] and policy['RESERVE']==0
+    assert abs(policy['BUDGET']-380.3212)<1e-9
+    assert policy['NEXT_ENGINE_UID']==engines[1].UID
+    assert not run(env) # Fuel eligibility is not permission to discard it.
+    # Reported old cutoff: consume the last10m/s, don't separate it yet.
+    env['STAGE'].DELTAV.VACUUM=10.0302;set_fuel(0,10.0302)
+    assert abs(env['aerobrakeApFuelPolicy']()['BUDGET']-10.0302)<1e-9
+    assert not run(env)
+    for current,stock,stage in ((.9,.9,True),(0,.9,True),(.9,1.1,False),(1.1,0,False)):
+        env,events,saved,tags,engines,tanks,set_fuel=fixture()
+        set_fuel(0,current);env['STAGE'].DELTAV.VACUUM=stock
+        assert run(env)==stage,(current,stock)
+    # Losing next-stage resources or its audited identity restores the
+    # active-stage reserve. Neither total stock dV nor a tag alone is proof.
+    for hazard in ('no-fuel','disabled-fuel','unknown-engine','cpu','chute','prior-attempt','no-tags'):
+        env,events,saved,tags,engines,tanks,set_fuel=fixture()
+        env['STAGE'].DELTAV.VACUUM=380;set_fuel(0,380)
+        if hazard=='no-fuel':set_fuel(1,0)
+        if hazard=='disabled-fuel':tanks[1].RESOURCES[0].ENABLED=False
+        if hazard=='unknown-engine':engines[1].MODULES.ADD('UnknownStagingModule')
+        if hazard=='cpu':env['CORE'].PART.DECOUPLEDIN=2
+        if hazard=='chute':tags['descent_chutes'][0].DECOUPLEDIN=2
+        if hazard=='prior-attempt':saved['aerobrake_ap_stage_attempt']='release'
+        if hazard=='no-tags':env['AEROBRAKE_AP_STAGE_TAGS']=KList()
+        policy=env['aerobrakeApFuelPolicy']()
+        assert not policy['DISPOSABLE'] and policy['RESERVE']==10 and policy['BUDGET']==370,hazard
+    # Both real handoffs leave the untagged final engine protected.
+    env,events,saved,tags,engines,tanks,set_fuel=fixture()
+    assert run(env)
+    set_fuel(1,.5);env['STAGE'].DELTAV.VACUUM=.5
+    assert run(env)
+    policy=env['aerobrakeApFuelPolicy']()
+    assert policy['RESERVE']==10 and not policy['DISPOSABLE'] and policy['BUDGET']==390
+    assert not run(env)
+    for reserve,disposable in ((100,True),(5000,False)):
+        env,events,saved,tags,engines,tanks,set_fuel=fixture()
+        env['aerobrakeApReserveDv']=lambda:reserve
+        env['STAGE'].DELTAV.VACUUM=380;set_fuel(0,380)
+        policy=env['aerobrakeApFuelPolicy']()
+        assert policy['DISPOSABLE']==disposable
+        assert policy['RESERVE']==(0 if disposable else reserve)
+    print('PASS: audited disposable stages budget all380.32m/s and the old10.03m/s remainder; both fuel gauges must deplete before separation; missing successor fuel/hardware restores reserve and the final engine keeps10m/s')
+
+
+def check_disposable_forecast_and_guards():
+    env,events,saved,tags,engines,tanks,set_fuel=fixture()
+    set_fuel(0,380.3212);env['STAGE'].DELTAV.VACUUM=380.3212
+    policy=env['aerobrakeApFuelPolicy']()
+    flight,sim,data,refresh=flight_fixture(before_entry=180,thrust=55,available=380.3212)
+    flight['SHIP'].DELTAV.VACUUM+=1000
+    flight['aerobrakeApFuelPolicy']=lambda:policy
+    plan=flight['_aeroApPlan'](70000,52000,54000,53000)
+    assert plan['OK'] and plan['RESERVE']==0 and abs(plan['DV']-380.3212)<1e-6
+    # The live lock uses the frozen stage budget but ALWAYS keeps the
+    # craft-wide repair floor, even when an audited stage reserve is zero.
+    from check_aerobrake_assist import control,run_assist
+    owner=control(flight);owner['RESERVE']=0
+    flight['STAGE'].DELTAV.VACUUM=.05
+    assert flight['_aeroApSafeThrottle'](.5,owner)==.5
+    flight['SHIP'].DELTAV.VACUUM=10
+    assert flight['_aeroApSafeThrottle'](.5,owner)==0 and owner['REASON']=='fuel-reserve'
+    # Execute the actual owner with independent propellant/point-mass
+    # integration. The fixture's extra1000m/s represents the fueled retained
+    # successor; it must not be mistaken for this engine's fuel budget.
+    flight,sim,data,refresh=flight_fixture(before_entry=180,thrust=55,available=380.3212)
+    flight['STAGE'].NUMBER=3
+    flight['aerobrakeApFuelPolicy']=lambda:policy
+    physics=flight['fixture_wait']
+    def wait(dt):
+        physics(dt)
+        flight['SHIP'].DELTAV.VACUUM+=1000
+    flight['fixture_wait']=wait
+    flight['SHIP'].DELTAV.VACUUM+=1000
+    result=run_assist(flight)
+    assert result['OK'] and result['RESERVE']==0
+    assert 379.5<sim['actual_dv']<380.6
+    assert flight['STAGE'].DELTAV.VACUUM<1 and flight['SHIP'].DELTAV.VACUUM>1000
+    assert flight['SHIP'].THRUST==0 and not data['aerobrake_ap_active']
+    assert data['aerobrake_ap_pass_used'] # No same-entry re-arming.
+    # Successor changes during the ignition coast reject the original
+    # burn without setting active/pass markers or spending any propellant.
+    for changed in ('reserve','engine','fuel'):
+        flight,sim,data,refresh=flight_fixture(before_entry=180,thrust=55)
+        flight['_aeroApPlan']=lambda *args:dict(plan)
+        revised=dict(policy)
+        if changed=='reserve':revised['RESERVE']=10
+        if changed=='engine':revised['NEXT_ENGINE_UID']='foreign-engine'
+        if changed=='fuel':revised['BUDGET']=.1
+        flight['aerobrakeApFuelPolicy']=lambda:revised
+        result=run_assist(flight)
+        assert not result['OK'] and result['REASON']=='successor-reserve-changed'
+        assert sim['actual_dv']==0 and not data.get('aerobrake_ap_active',False)
+        assert not data.get('aerobrake_ap_pass_used',False)
+    print('PASS: actual forecast/owner consume the disposable-stage remainder with independent mass flow; live craft reserve latches zero, pass ownership stays intact and successor reserve/identity/fuel changes reject without thrust')
+
+
 if __name__=='__main__':
     check_two_handoffs()
     check_rejections()
     check_native_slot_modules()
     check_interruption_and_revalidation()
     check_fresh_forecast()
+    check_disposable_reserve()
+    check_disposable_forecast_and_guards()

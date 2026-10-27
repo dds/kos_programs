@@ -85,6 +85,7 @@ LOCAL FUNCTION _aeroStageUnexpectedModule {
 
 LOCAL FUNCTION _aeroStagePlan {
     PARAMETER pendingUid IS "".
+    PARAMETER requireDepleted IS TRUE.
     LOCAL result IS LEXICON("OK",FALSE,"REASON","no-adjacent-tagged-boundary").
     LOCAL nextStage IS STAGE:NUMBER-1.
     IF nextStage < 0 { RETURN result. }
@@ -155,17 +156,42 @@ LOCAL FUNCTION _aeroStagePlan {
     LOCAL nextFuel IS _aeroStageFuelDv(arriving,arriving:DECOUPLEDIN,retainedMass).
     LOCAL reserve IS aerobrakeApReserveDv().
     LOCAL stockFuel IS STAGE:DELTAV:VACUUM.
+    SET result["CURRENT_DV"] TO currentFuel.
+    SET result["STOCK_DV"] TO stockFuel.
+    SET result["NEXT_DV"] TO nextFuel.
     SET result["REASON"] TO "fuel-not-depleted-or-next-reserve-unavailable".
-    // Both independent estimates must say the active stage is at its reserve.
-    // A transient stock zero alone must never discard a fueled stage.
-    IF NOT (currentFuel >= 0 AND currentFuel <= reserve+1
-            AND stockFuel >= 0 AND stockFuel <= reserve+1
+    IF NOT (currentFuel >= 0 AND currentFuel < 1e30
+            AND stockFuel >= 0 AND stockFuel < 1e30
             AND nextFuel > reserve+1 AND nextFuel < 1e30) { RETURN result. }
-    RETURN LEXICON("OK",TRUE,"REASON","reserve-reached","STAGE",nextStage,
+    // A funded, audited successor holds the repair reserve. Spend the
+    // departing stage first; both estimates must confirm depletion before
+    // separation. The 1m/s allowance covers cutoff/stock-sampling residuals.
+    IF requireDepleted AND (currentFuel > 1 OR stockFuel > 1) { RETURN result. }
+    RETURN LEXICON("OK",TRUE,"REASON","audited-successor","STAGE",nextStage,
         "SEPARATOR",separator,"DEPARTING",departing,"ARRIVING",arriving,
         "BODY",SHIP:BODY:NAME,"SEPARATOR_UID",separator:UID,
         "DEPARTING_UID",departing:UID,"ARRIVING_UID",arriving:UID,
-        "CURRENT_DV",currentFuel,"NEXT_DV",nextFuel,"MASS_AFTER",retainedMass).
+        "CURRENT_DV",currentFuel,"STOCK_DV",stockFuel,"NEXT_DV",nextFuel,"MASS_AFTER",retainedMass).
+}
+
+// Called only while coasting/planning, never in a powered lock. A zero
+// active-stage reserve is allowed only when the same full staging audit
+// proves that the successor can retain the craft's Pe-repair allowance.
+GLOBAL FUNCTION aerobrakeApFuelPolicy {
+    LOCAL repair IS aerobrakeApReserveDv().
+    LOCAL available IS MIN(SHIP:DELTAV:VACUUM,STAGE:DELTAV:VACUUM).
+    LOCAL policy IS LEXICON("RESERVE",repair,"BUDGET",available-repair,
+        "DISPOSABLE",FALSE,"NEXT_ENGINE_UID","","REASON","active-stage-reserve").
+    IF AEROBRAKE_AP_STAGE_TAGS:LENGTH = 0 { RETURN policy. }
+    LOCAL successor IS _aeroStagePlan("",FALSE).
+    SET policy["REASON"] TO successor["REASON"].
+    IF NOT successor["OK"] { RETURN policy. }
+    SET policy["RESERVE"] TO 0.
+    SET policy["BUDGET"] TO MIN(available,MIN(successor["CURRENT_DV"],
+        SHIP:DELTAV:VACUUM-repair)).
+    SET policy["DISPOSABLE"] TO TRUE.
+    SET policy["NEXT_ENGINE_UID"] TO successor["ARRIVING_UID"].
+    RETURN policy.
 }
 
 GLOBAL FUNCTION aerobrakeApStageCoast {
@@ -176,6 +202,11 @@ GLOBAL FUNCTION aerobrakeApStageCoast {
     LOCAL plan IS _aeroStagePlan().
     mLog("STATS aerobrake-stage check ok=" + plan["OK"] + " reason=" + plan["REASON"]
         + " stage=" + STAGE:NUMBER + " Pe=" + SHIP:PERIAPSIS + " Ap=" + SHIP:APOAPSIS).
+    IF plan:HASKEY("CURRENT_DV") {
+        mLog("STATS aerobrake-stage fuel physicalDv=" + plan["CURRENT_DV"]
+            + " stockDv=" + plan["STOCK_DV"] + " nextDv=" + plan["NEXT_DV"]
+            + " depletionDv=1 retainedReserveDv=" + aerobrakeApReserveDv()).
+    }
     IF NOT plan["OK"] { RETURN FALSE. }
     IF NOT thrustCutoffOk(FALSE) { RETURN FALSE. }
     LOCAL priorDeferral IS LOG_ARCHIVE_DEFERRED.

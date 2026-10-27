@@ -201,6 +201,7 @@ GLOBAL FUNCTION phaseAerobrake {
             // Between passes: solar-hold + warp the high coast, then orient
             // heat-shield-forward ~15 min before the next pass.
             IF entryUt > 0 { _aerobrakeSolarWait(entryUt - AEROBRAKE_ENTRY_LEAD). }
+            LOCAL entryStage IS STAGE:NUMBER.
             IF AEROBRAKE_AP_BURN > 0 {
                 LOCAL approachEta IS aerobrakeApEntryEta(atmHeight).
                 IF approachEta > AEROBRAKE_AP_PLAN_LEAD {
@@ -212,6 +213,7 @@ GLOBAL FUNCTION phaseAerobrake {
                     SET entryUt TO _aerobrakeSetEntryAlarm().
                 }
                 IF phaseShouldYield { RETURN. }
+                SET entryStage TO STAGE:NUMBER.
                 _aerobrakeOrient().
                 LOCAL assistPlan IS aerobrakeApAssist(atmHeight,peLow,peHigh,assistPe).
                 IF phaseShouldYield { RETURN. }
@@ -219,12 +221,27 @@ GLOBAL FUNCTION phaseAerobrake {
                     SET inPass TO TRUE.
                     SET passNum TO passNum+1.
                     mLog("STATS aerobrake pass=" + passNum + " in powered=true").
+                } ELSE IF assistPlan["OK"] AND SHIP:ALTITUDE > atmHeight {
+                    // A pre-entry finite burn can move the interface by
+                    // minutes. Replace the pre-burn alarm on the new conic.
+                    SET entryUt TO _aerobrakeSetEntryAlarm().
                 }
                 aerobrakeApObserve(atmHeight).
             }
             _aerobrakeOrient().
-            WAIT UNTIL SHIP:ALTITUDE < atmHeight OR inPass
-                OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED".
+            // The engine/forecast may change while waiting, even after a
+            // skipped assist. Re-enter planning on an operator separation;
+            // do not clear the once-per-pass latch or burn inside atmosphere.
+            IF _aerobrakeAwaitEntry(atmHeight,inPass,entryStage) {
+                IF NOT thrustCutoffOk() { RETURN. }
+                mLog("STATS aerobrake-assist status=stage-changed-replan oldStage="
+                    + entryStage + " newStage=" + STAGE:NUMBER).
+                SET entryUt TO _aerobrakeSetEntryAlarm().
+            }
+            IF ABORT OR phaseShouldYield {
+                IF thrustCutoffOk() { yieldToPrompt(). }
+                RETURN.
+            }
         } ELSE {
             IF NOT inPass {
                 SET inPass TO TRUE.
@@ -247,6 +264,23 @@ GLOBAL FUNCTION phaseAerobrake {
     mLog("STATS aerobrake status=complete passes=" + passNum
         + " body=" + SHIP:BODY:NAME).
     _aerobrakeAdvance().
+}
+
+// Resident wait, responsive to manual separation before atmospheric entry.
+// Stage changes during an actual pass remain under the powered cutoff and
+// heat-shield guidance; only a fresh outside-atmosphere plan can use them.
+LOCAL FUNCTION _aerobrakeAwaitEntry {
+    PARAMETER atmHeight.
+    PARAMETER inPass.
+    PARAMETER entryStage.
+    UNTIL SHIP:ALTITUDE < atmHeight OR inPass OR ABORT OR phaseShouldYield
+            OR STAGE:NUMBER <> entryStage
+            OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+        WAIT 0.5.
+    }
+    RETURN NOT ABORT AND NOT phaseShouldYield AND NOT inPass
+        AND SHIP:ALTITUDE > atmHeight AND STAGE:NUMBER <> entryStage
+        AND SHIP:STATUS <> "LANDED" AND SHIP:STATUS <> "SPLASHED".
 }
 
 // Through the dangerous fast/thick regime: captured into a sub-atmosphere

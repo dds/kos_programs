@@ -131,11 +131,9 @@ def check_multi_pass_order():
                phaseShouldYield=False,AEROBRAKE_BRAKE_PE_FLOOR=52000,AEROBRAKE_PE=53000,
                REENTRY_PE=53000,AEROBRAKE_CORRECTION_PE_MIN=52000,AEROBRAKE_CORRECTION_PE_MAX=54000,
                AEROBRAKE_HANDOFF_SPEED=600,fixture_wait=lambda dt:setattr(env['TIME'],'SECONDS',env['TIME'].SECONDS+dt))
+    env['_aerobrakeAwaitEntry']=lambda alt,inside,stage:execute(function_body(AERO,'_aerobrakeAwaitEntry'),dict(env,atmHeight=alt,inPass=inside,entryStage=stage))
     env['_aerobrakeThroughThickPart']=lambda alt:execute(function_body(AERO,'_aerobrakeThroughThickPart'),dict(env,atmHeight=alt))
     source=function_body(AERO,'phaseAerobrake')
-    source=re.sub(r'WAIT UNTIL SHIP:ALTITUDE < atmHeight OR inPass\s+OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED"\.',
-                  'fixture_entered().',source)
-    env['fixture_entered']=lambda:None if ship.ALTITUDE<70000 else (_ for _ in ()).throw(AssertionError('entry wait bypassed'))
     execute(source,env)
     created=[e[2] for e in events if e[0]=='alarm']
     assert created==times,(created,events)
@@ -143,6 +141,76 @@ def check_multi_pass_order():
     assert events.index(('alarm','RO9: Atmo entry: Kerbin',22000))<events.index(('solar',21100))
     assert env['passNum']==3 and events[-1]==('advance',) and len(alarms)==1
     print('PASS: three real phase-loop passes refresh next-entry KillWarp alarms after exits/capture repair and before solar holds; no per-tick alarm churn, no duplicate or prompt exit, 900s entry-based preparation preserved')
+
+
+def check_manual_stage_wait():
+    source=function_body(AERO,'_aerobrakeAwaitEntry')
+    for event in ('stage','entry','abort','hold','landed','in-pass'):
+        env,sim,data,refresh=flight_fixture(before_entry=180)
+        env.update(atmHeight=70000,inPass=event=='in-pass',entryStage=1)
+        count=[0]
+        def wait(dt):
+            assert dt==.5
+            env['TIME'].SECONDS+=dt;count[0]+=1
+            if count[0]==2:
+                if event=='stage':env['STAGE'].NUMBER=0
+                if event=='entry':env['SHIP'].ALTITUDE=69999
+                if event=='abort':env['ABORT']=True
+                if event=='hold':env['phaseShouldYield']=True
+                if event=='landed':env['SHIP'].STATUS='LANDED'
+        env['fixture_wait']=wait
+        assert execute(source,env)==(event=='stage'),event
+        assert count[0]==(0 if event=='in-pass' else 2)
+        assert data=={} # Wait cannot reset the pass latch or arm a burn.
+    phase=function_body(AERO,'phaseAerobrake')
+    change=phase.index('IF _aerobrakeAwaitEntry(')
+    assert change<phase.index('_aerobrakeSetEntryAlarm()',change)
+    assert 'thrustCutoffOk()' in phase[change:phase.index('stage-changed-replan',change)]
+    assert 'aerobrake_ap_pass_used' not in source+phase
+    print('PASS: real pre-entry wait detects manual staging within0.5s, returns to fresh alarm/planning at verified zero thrust, preserves the pass latch and responds to entry/Abort/hold/landing')
+
+
+def check_manual_stage_phase_replan():
+    env,sim,data,refresh=flight_fixture(before_entry=100)
+    alarms,events=alarm_fixture(env)
+    ship=env['SHIP'];ship.ALTITUDE=80000;ship.AIRSPEED=3000;ship.ORBIT.APOAPSIS=1e6
+    env['STAGE'].NUMBER=3
+    expected=[100.];plans=[];waits=[0]
+    def coast(when):env['TIME'].SECONDS=max(env['TIME'].SECONDS,when)
+    def wait(dt):
+        env['TIME'].SECONDS+=dt;waits[0]+=1
+        assert waits[0]<4,'manual stage failed to reach fresh planning'
+        if waits[0]==1:
+            env['STAGE'].NUMBER=2;ship.MASS=.7
+            expected[0]=env['TIME'].SECONDS+200
+        else:ship.ALTITUDE=69999
+    def assist(*args):
+        plans.append((env['STAGE'].NUMBER,ship.MASS,entry_alarm(alarms).TIME))
+        if len(plans)==2:
+            expected[0]=env['TIME'].SECONDS+80 # A powered arc changed entry.
+            return dict(OK=True,ENTERED=False)
+        return dict(OK=False,REASON='fixture-no-burn')
+    def orient():
+        if ship.ALTITUDE<70000:ship.ORBIT.APOAPSIS=65000;ship.AIRSPEED=500
+    env.update(aerobrakeApEntryEta=lambda _:expected[0]-env['TIME'].SECONDS,
+               aerobrakeApRecover=lambda:True,_aerobrakeSolarWait=coast,
+               aerobrakeApStageCoast=lambda *args:False,aerobrakeApAssist=assist,
+               _aerobrakeOrient=orient,_aerobrakeTrimReentryPe=lambda:None,
+               _aerobrakeDecouple=lambda:None,_aerobrakeRetractSolarPanels=lambda:None,
+               _aerobrakeRetractAntennas=lambda:None,_aerobrakeCloseExtendBays=lambda:None,
+               _aerobrakeAdvance=lambda:events.append(('advance',)),
+               AEROBRAKE_AP_BURN=1,AEROBRAKE_PE_TARGETING=0,AEROBRAKE_TARGETING=0,
+               AEROBRAKE_BRAKE_PE_FLOOR=52000,AEROBRAKE_PE=53000,REENTRY_PE=53000,
+               AEROBRAKE_CORRECTION_PE_MIN=52000,AEROBRAKE_CORRECTION_PE_MAX=54000,
+               AEROBRAKE_HANDOFF_SPEED=600,fixture_wait=wait)
+    env['_aerobrakeAwaitEntry']=lambda alt,inside,stage:execute(function_body(AERO,'_aerobrakeAwaitEntry'),dict(env,atmHeight=alt,inPass=inside,entryStage=stage))
+    env['_aerobrakeThroughThickPart']=lambda alt:execute(function_body(AERO,'_aerobrakeThroughThickPart'),dict(env,atmHeight=alt))
+    execute(function_body(AERO,'phaseAerobrake'),env)
+    assert plans==[(3,1.,100.),(2,.7,200.5)],plans
+    assert events[-1]==('advance',) and len(alarms)==1 and not data
+    assert entry_alarm(alarms).TIME==100.5
+    assert [e[2] for e in events if e[0]=='alarm']==[100.,200.5,100.5]
+    print('PASS: complete phase loop replans after manual3→2 separation, refreshes entry alarm for the new stage AND the pre-entry powered arc, then enters descent normally; no duplicate pass/reset or prompt exit')
 
 
 def hardware_fixture():
@@ -232,5 +300,7 @@ def check_solar_dependency_and_wait():
 if __name__=='__main__':
     check_conic_alarm_and_reboot()
     check_multi_pass_order()
+    check_manual_stage_wait()
+    check_manual_stage_phase_replan()
     check_hardware_policy()
     check_solar_dependency_and_wait()

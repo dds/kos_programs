@@ -100,8 +100,9 @@ LOCAL FUNCTION _aeroApPlan {
     LOCAL entryEta IS aerobrakeApEntryEta(atmHeight).
     SET skipped["REASON"] TO "outside-planning-window".
     IF NOT (entryEta > 0 AND entryEta <= AEROBRAKE_AP_PLAN_LEAD+30) { RETURN skipped. }
-    LOCAL reserveDv IS aerobrakeApReserveDv().
-    LOCAL budget IS _aeroApRemainingDv()-reserveDv.
+    LOCAL fuelPolicy IS aerobrakeApFuelPolicy().
+    LOCAL reserveDv IS fuelPolicy["RESERVE"].
+    LOCAL budget IS fuelPolicy["BUDGET"].
     LOCAL engine IS aerobrakeBurnEngine().
     SET skipped["REASON"] TO "fuel-engine-or-corridor-unavailable".
     IF NOT (budget > 0.1 AND budget < 1e30 AND engine["THRUST"] > 0
@@ -150,6 +151,8 @@ LOCAL FUNCTION _aeroApPlan {
     }
     mLog("STATS aerobrake-assist plan ok=" + best["OK"] + " reason=" + best["REASON"]
         + " model=finite-vacuum entryEta=" + entryEta + " fuelDv=" + budget + " reserveDv=" + reserveDv
+        + " retainedReserveDv=" + aerobrakeApReserveDv() + " disposable=" + fuelPolicy["DISPOSABLE"]
+        + " fuelPolicy=" + fuelPolicy["REASON"]
         + " computeSec=" + (TIME:SECONDS-epoch)).
     IF NOT best["OK"] { RETURN best. }
     SET best["IGNITE"] TO epoch+best["DELAY"].
@@ -160,6 +163,8 @@ LOCAL FUNCTION _aeroApPlan {
     SET best["HIGH"] TO peHigh.
     SET best["TARGET_AP"] TO targetAp.
     SET best["ENTERED"] TO FALSE.
+    SET best["RESERVE"] TO reserveDv.
+    SET best["NEXT_ENGINE_UID"] TO fuelPolicy["NEXT_ENGINE_UID"].
     // The live one-second taper decays exponentially. Include its settling
     // time to the 0.01 m/s cutoff instead of expiring a short burn early.
     SET best["SETTLE"] TO MAX(5,LN(MAX(1,acc*CONSTANT:E^(best["DV"]/engine["VE"])/0.01))+2).
@@ -186,7 +191,8 @@ LOCAL FUNCTION _aeroApSafeThrottle {
     IF NOT (SHIP:Q >= 0 AND SHIP:Q <= AEROBRAKE_AP_MAX_Q) {
         SET control["REASON"] TO "dynamic-pressure".
     }
-    IF NOT (_aeroApRemainingDv() > aerobrakeApReserveDv()) {
+    IF NOT (_aeroApRemainingDv() > control["RESERVE"]
+            AND SHIP:DELTAV:VACUUM > aerobrakeApReserveDv()) {
         SET control["REASON"] TO "fuel-reserve".
     }
     IF control["APPLIED"] >= control["DV"]-0.01 { SET control["REASON"] TO "forecast-dv". }
@@ -226,6 +232,19 @@ GLOBAL FUNCTION aerobrakeApAssist {
     IF ABORT OR HASNODE OR SHIP:BODY:NAME <> plan["BODY"] OR STAGE:NUMBER <> plan["STAGE"] {
         SET plan["OK"] TO FALSE. RETURN plan.
     }
+    // Coast/operator changes can invalidate the successor's reserve. Repeat
+    // the audit before committing to consume the active stage completely.
+    IF plan["RESERVE"] < aerobrakeApReserveDv() {
+        LOCAL checkedFuel IS aerobrakeApFuelPolicy().
+        IF checkedFuel["RESERVE"] <> plan["RESERVE"]
+                OR checkedFuel["NEXT_ENGINE_UID"] <> plan["NEXT_ENGINE_UID"]
+                OR checkedFuel["BUDGET"]+0.1 < plan["DV"] {
+            SET plan["OK"] TO FALSE.
+            SET plan["REASON"] TO "successor-reserve-changed".
+            mLogWarn("STATS aerobrake-assist skipped reason=" + plan["REASON"]).
+            RETURN plan.
+        }
+    }
     LOCAL priorDeferral IS LOG_ARCHIVE_DEFERRED.
     SET LOG_ARCHIVE_DEFERRED TO 1.
     aerobrakeBurnCpuBegin().
@@ -234,6 +253,7 @@ GLOBAL FUNCTION aerobrakeApAssist {
     stateSet("aerobrake_ap_active",TRUE).
     LOCAL control IS LEXICON("REASON","","DV",plan["DV"],"APPLIED",0,"PEAK_FACING_ERR",0,
         "LOW",peLow,"HIGH",peHigh,"TARGET_AP",plan["TARGET_AP"],"ATMO",atmHeight,
+        "RESERVE",plan["RESERVE"],
         "BODY",plan["BODY"],"STAGE",plan["STAGE"],"UPDATED",TIME:SECONDS,
         "DEADLINE",plan["IGNITE"]+plan["DURATION"]+plan["SETTLE"],"DIR",V(0,0,0)).
     SAS OFF.
@@ -318,7 +338,8 @@ GLOBAL FUNCTION aerobrakeApAssist {
         + " peakFacingErr=" + control["PEAK_FACING_ERR"]
         + " peakOrbitRetroOffset=" + peakOrbitOffset + " peakSurfaceRetroOffset=" + peakSurfaceOffset
         + " Ap=" + SHIP:APOAPSIS + " Pe=" + SHIP:PERIAPSIS + " qAtm=" + SHIP:Q
-        + " remainingDv=" + _aeroApRemainingDv() + " reserveDv=" + aerobrakeApReserveDv()
+        + " remainingDv=" + _aeroApRemainingDv() + " reserveDv=" + control["RESERVE"]
+        + " retainedReserveDv=" + aerobrakeApReserveDv()
         + " cutoffOk=" + stopped).
     RETURN plan.
 }

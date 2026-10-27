@@ -19,6 +19,10 @@ record remaining uncertainty before closing a task.
   `/tmp/ksp-renderer-config-audit-20261027.json`. Settings remain unchanged.
 - Route comparison is implemented and pushed in `ea80331`; it is advisory,
   not a native powered-trajectory choice. The next flight can use LAND_PREP.
+- Current interruption: finish aerobrake disposable-stage reserve and
+  manual-stage/finite-burn entry replanning, then resume landing/ascent work.
+  RO9_2446359 boot027 survived; operator confirms touchdown. Manual stage
+  separation on that run does not validate automatic handoffs.
 - Operator confirmed the Minmus3 Kolniya orbital objective succeeded. Next
   flight step is the existing LAND_PREP/landing route; the comparison is an
   optimization, not a new prerequisite. Stage handoff/next-entry KAC flight
@@ -35,6 +39,24 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Aerobrake disposable fuel and pre-entry replanning follow-up.**
+  Native boot027 spent370.31m/s and retained10.03m/s in stage3. After manual
+  separation, stage2 DID forecast and burn619.27m/s, ending52.7km Pe/77.5km
+  Ap; operator confirms landing. Implemented shared full hardware/fuel audit
+  for zero active-stage reserve only with a funded successor. Final/unknown
+  engines keep the10m/s minimum; the craft-wide live reserve always remains.
+  Own and stock stage estimates must both fall<=1m/s before separation.
+  Manual staging now wakes the resident pre-entry wait, verifies cutoff,
+  refreshes KAC and replans. The same-pass attempt latch remains intact.
+  Finite burns ending before entry refresh their alarm too: native stage2
+  moved actual entry~399s beyond the old pre-burn alarm. Source checks cover
+  full disposable fuel use, successor funding/identity changes, live reserve,
+  both handoffs, original50 rejection cases, complete manual-stage phase
+  progression and fresh post-burn alarms. All61 routine check files passed
+  in61.66s; new individual cases took<=0.57s. Additional higher-reserve
+  assertions passed in the final targeted staging check. Native automatic
+  handoffs/new reserve/alarm behavior still need validation after a connected
+  reboot. No live game controls or settings were changed.
 - [ ] **Emergency hyperbolic capture safety.** Implemented zero-throttle
   alignment before live orbital-retrograde thrust. Optional assist and capture
   share body/stage/node/Abort/warp/freshness/deadline and attitude/energy guards.
@@ -133,8 +155,8 @@ record remaining uncertainty before closing a task.
 - [ ] **Use excess fuel across return stages safely.** Implemented RO9
   tagged 3→2→1 handoffs at the next entry-preparation wake, outside atmosphere
   and after warp release. Requires physical cutoff, CPU/chute retention,
-  full staging-slot module audit, current-stage stock AND own-tank depletion
-  to the repair allowance, and next-engine fuel above that allowance.
+  full staging-slot module audit, current-stage stock AND own-tank estimates
+  <=1m/s, and next-engine fuel above the retained repair allowance.
   One attempt per separator UID survives reboot; failed verification holds.
   Next engine gets a fresh forecast and refreshed entry alarm. Original
   powered stage-change/alignment/Pe/pressure/reserve cutoffs remain intact.
@@ -152,6 +174,8 @@ record remaining uncertainty before closing a task.
   preserve other alarms and the running clock wait without KAC. Implemented;
   the three-pass source regression and all 54 check files passed. Native
   next-pass alarm timing still needs validation after a connected reboot.
+  Native boot027 confirms a refreshed alarm/solar wake after the first exit;
+  the new post-powered-arc refresh still needs flight validation.
 - [ ] **RO9 return hardware and powered-assist setup.** Native RO9 flight
   `RO9_2446359`, boot 019 at UT 2783434, Pe 53.135 km / Ap 35038.7 km: generated
   `kerbin_return` explicitly saves `AEROBRAKE_AP_BURN=0`. It overrides the

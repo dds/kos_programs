@@ -2084,17 +2084,24 @@ then verifies the selected forecast at a finer step. Timing comes from the
 conic's atmosphere crossing, rather than an assumed interval before Pe.
 The objective is to reduce orbital energy toward an apoapsis just above the
 atmosphere (atmosphere height + 1 km). There is **no fixed per-pass or total
-dV allowance**: measured current-stage fuel above the repair reserve is eligible.
-The assist retains at least **10 m/s** for a later periapsis-raising burn at
-apoapsis. A larger configured reserve is honored. Older generated profiles
-that saved zero still receive the 10 m/s minimum; planning and the latched
-live throttle guard use the same reserve. This sets fuel aside, without
-creating or executing a periapsis-repair maneuver.
+dV allowance**: measured current-stage fuel is eligible, subject to the
+retained repair reserve. The craft keeps at least **10 m/s** for a later
+periapsis-raising burn at apoapsis; a larger configured reserve is honored.
+An audited, fueled successor can hold that reserve while the disposable
+active stage uses its fuel. Without that proof, the active stage keeps it.
+Older generated profiles that saved zero still receive the 10 m/s minimum.
+The successor is checked again before committing the burn, and the live
+throttle guard always retains the craft-wide reserve. This sets fuel aside,
+without creating or executing a periapsis-repair maneuver.
 A long burn can start before entry. Its steering projects deceleration along
 a direction that preserves Pe, with feedback toward the configured entry Pe.
 Feedback leaves errors within 100 m alone, avoiding needless radial steering
 near periapsis; the corridor checks still run continuously.
 Each subsequent pass recalculates from the actual orbit and remaining fuel.
+A manual separation during the pre-entry wait returns to fresh planning
+and entry-alarm timing. It does not clear the once-per-pass burn latch.
+A powered arc that ends before atmospheric entry also refreshes the alarm:
+its new conic can reach the atmosphere minutes after the old prediction.
 This powered direction can be noticeably off the navball's retrograde marker
 outside the atmosphere; it is recalculated from the current orbit, rather
 than pointing at a future retrograde marker. The entry hold uses current
@@ -2122,8 +2129,8 @@ for **between-pass** engine handoffs. Other vehicles retain active-engine-only
 behavior unless their profile supplies `AEROBRAKE_AP_STAGE_TAGS`. At the next
 entry preparation wake, off rails and at least 1 km above the atmosphere,
 the craft may discard an upper stage only when both its own enabled tank
-mixture and KSP's current-stage estimate put it within 1 m/s of the repair
-reserve. The next engine must have fuel above that reserve. The separator
+mixture and KSP's current-stage estimate put it within 1 m/s of empty.
+The next engine must have fuel above the retained repair reserve. The separator
 must be adjacent in the staging list and retain this CPU and every tagged
 `descent_chutes` parachute. The full slot is audited: unknown modules, extra
 engines/separators/chutes and retained fairings block automation. Inert RO9
@@ -2134,7 +2141,8 @@ Each handoff verifies physical cutoff before staging, records one attempt
 per separator UID, and verifies the old engine departed and the new one
 ignited at zero throttle. An interrupted or failed recorded event cannot
 repeat automatically; inspect hardware/staging manually if it holds.
-`STATS aerobrake-stage check/result` records the decision, discarded fuel and
+`STATS aerobrake-stage check/fuel/result` records the decision, both depletion
+estimates, next-stage fuel, discarded fuel and
 post-event status. A successful handoff refreshes the entry alarm, then the
 normal assist planner forecasts from the new engine, fuel and wet mass.
 It does **not** switch engines inside the atmosphere or spend all three stages
@@ -2148,7 +2156,7 @@ Advanced profile settings are optional; the enable flag is sufficient:
 | Setting | Default | Effect |
 |---|---:|---|
 | `AEROBRAKE_AP_BURN` | 0; RO9 sets 1 | Enable fuel-assisted aerobraking |
-| `AEROBRAKE_AP_RESERVE_DV` | 10 m/s | Retain at least 10 m/s for Pe repair; higher settings retain more |
+| `AEROBRAKE_AP_RESERVE_DV` | 10 m/s | Craft-wide Pe-repair reserve; an audited fueled successor may hold it while a disposable stage empties |
 | `AEROBRAKE_AP_PLAN_LEAD` | 180 s | Forecast lead before atmospheric entry |
 | `AEROBRAKE_AP_MAX_Q` | 0.1 atm | Dynamic-pressure cutoff (about 10.1 kPa) |
 | `AEROBRAKE_AP_MAX_OFF_RETRO` | 10° | Maximum atmospheric departure from surface retrograde |
