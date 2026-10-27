@@ -5,20 +5,6 @@
 // ============================================================
 @LAZYGLOBAL OFF.
 
-// -1 apsides choose a low, mildly elliptical orbit above the safety floor.
-// -1 plane elements retain the current plane, not the contract's SHAPE_*.
-GLOBAL LAND_PREP_AP IS -1.
-GLOBAL LAND_PREP_PE IS -1.
-GLOBAL LAND_PREP_INC IS -1.
-GLOBAL LAND_PREP_LAN IS -1.
-GLOBAL LAND_PREP_MIN_PE IS 10000.
-GLOBAL LAND_PREP_ALT_TOL IS 1000.
-GLOBAL LAND_PREP_ANG_TOL IS 0.5.
-GLOBAL LAND_PREP_MIN_BURN_DV IS 0.3.
-GLOBAL LAND_PREP_DV_CAP IS 150.
-GLOBAL LAND_PREP_TOTAL_DV_CAP IS 300.
-GLOBAL LAND_PREP_RESERVE_DV IS 900.
-
 LOCAL FUNCTION _landPrepStable {
     LOCAL floorAlt IS 0.
     IF SHIP:BODY:ATM:EXISTS { SET floorAlt TO SHIP:BODY:ATM:HEIGHT. }
@@ -28,23 +14,6 @@ LOCAL FUNCTION _landPrepStable {
         AND SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
         AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0.
 }
-
-LOCAL FUNCTION _landPrepTargets {
-    LOCAL floorAlt IS MAX(0,LAND_PREP_MIN_PE).
-    IF SHIP:BODY:ATM:EXISTS { SET floorAlt TO MAX(floorAlt,SHIP:BODY:ATM:HEIGHT+10000). }
-    LOCAL peAlt IS LAND_PREP_PE.
-    IF peAlt < 0 { SET peAlt TO MAX(floorAlt,MIN(SHIP:PERIAPSIS,floorAlt+1000)). }
-    LOCAL apAlt IS LAND_PREP_AP.
-    IF apAlt < 0 { SET apAlt TO peAlt+10000. }
-    LOCAL inc IS LAND_PREP_INC.
-    IF inc < 0 { SET inc TO SHIP:ORBIT:INCLINATION. }
-    LOCAL lan IS LAND_PREP_LAN.
-    IF lan < 0 { SET lan TO SHIP:ORBIT:LAN. }
-    IF NOT (peAlt >= floorAlt AND apAlt >= peAlt AND inc >= 0 AND inc <= 180
-            AND lan >= 0 AND lan < 360 AND apAlt < 1e30) { RETURN LEXICON(). }
-    RETURN LEXICON("AP",apAlt,"PE",peAlt,"INC",inc,"LAN",lan).
-}
-
 LOCAL FUNCTION _landPrepAdmit {
     PARAMETER nd.
     PARAMETER targets.
@@ -241,7 +210,7 @@ GLOBAL FUNCTION phaseLandPrep {
             mLogError("LAND_PREP: a retained node/burn blocks changing the preparation goal.").
             yieldToPrompt(). RETURN.
         }
-        LOCAL targets IS _landPrepTargets().
+        LOCAL targets IS landingPrepTargets().
         IF targets:LENGTH = 0 {
             mLogError("LAND_PREP: invalid apsides/plane or target below the body safety floor.").
             yieldToPrompt(). RETURN.
@@ -255,6 +224,7 @@ GLOBAL FUNCTION phaseLandPrep {
     }
     stateRemove("landing_orbit_ready").
     LOCAL targets IS intent["TARGETS"].
+    FOR row IN landingRouteLines(landingRouteSnapshot(targets)) { mLog(row). }
     mLog("STATS land-prep setup Ap=" + targets["AP"] + " Pe=" + targets["PE"]
         + " inc=" + targets["INC"] + " lan=" + targets["LAN"]
         + " altTolerance=" + LAND_PREP_ALT_TOL + " reserve=" + LAND_PREP_RESERVE_DV).

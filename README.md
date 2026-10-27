@@ -1346,6 +1346,40 @@ complete flight still need testing. Update from the archive with a link.
 
 ### Preparing a landing orbit
 
+While coasting at zero throttle, compare the current orbit with the same
+preparation goals used by `LAND_PREP`:
+
+```kerboscript
+RUNPATH("0:/cmd/landingroute.ks").
+```
+
+The command prints and verifies a report directly in
+`0:/logs/archive/_diagnostics/`. It creates no maneuver or mission override.
+LAND_PREP also records the comparison before planning its first correction.
+The small shared `landing_route` library owns the preparation defaults and
+target calculation, so the report and flight phase use the same goals.
+
+The report compares two ordinary apsis-transfer orders, ideal deorbit and
+ground-relative stopping costs, orbit periods and target-latitude crossing
+heights. The resolved landing target supplies terrain elevation; without a
+resolved target, it reports an equatorial zero-ASL reference. The Kolniya
+9.3 × 397.272 km example needs about45.46m/s to reach9.3 × 19.3km. At an
+equatorial zero-ASL reference, ideal total costs are about226.03m/s direct
+versus230.14m/s including preparation; equatorial crossings fall from60.36km
+to13.96km and period changes20200s to3028s.
+
+These are reference costs, not a proved optimum or powered landing forecast.
+The optional gravity allowance is a sensitivity calculation using the weaker
+measured landing acceleration and constant surface gravity; it is unavailable
+when that acceleration cannot exceed gravity. Preparation reserve margin
+uses the existing **post-preparation** reserve. The separate after-landing
+remainders are total stock vacuum dV references, not stage-qualified landing
+fuel or a new return reserve. Plane changes and atmospheric landings are
+outside this model; target longitude, terrain clearance and the staged
+powered footprint still require the native deorbit checks. Existing
+preparation policy, mission/survey sequence, burn budgets and safeguards stay
+in charge of execution.
+
 Insert `LAND_PREP` between an orbital objective/review and `LAND_DEORBIT` in
 any mission sequence. It uses the shared orbit-shaping planners and maneuver
 executor in its own library band. It can run before a landing waypoint is

@@ -13,10 +13,11 @@ from check_minmus_kolniya import PROFILE
 from check_burn_completion import retry_fixture, retry
 
 SOURCE=(ROOT/'lib/landing_orbit.ks').read_text()
+ROUTE=(ROOT/'lib/landing_route.ks').read_text()
 CONFIG=(ROOT/'lib/landing_config.ks').read_text()
 SHAPE=(ROOT/'lib/orbit_shape.ks').read_text()
 DEORBIT=(ROOT/'lib/landing_deorbit.ks').read_text()
-ks.SOURCES+='\n'+SOURCE+'\n'+CONFIG+'\n'+SHAPE
+ks.SOURCES+='\n'+SOURCE+'\n'+CONFIG+'\n'+SHAPE+'\n'+ROUTE
 
 
 class Seq(KList):
@@ -38,11 +39,12 @@ def normal(inc,lan):
 
 def fixture(profile=True):
     env=ks.environment()
-    read_settings(SHAPE,env,'GLOBAL');read_settings(SOURCE,env,'GLOBAL')
+    read_settings(SHAPE,env,'GLOBAL');read_settings(ROUTE,env,'GLOBAL');read_settings(SOURCE,env,'GLOBAL')
     if profile:read_settings(PROFILE,env)
     env.update(LEXICON=lambda *args:Lex(zip(args[::2],args[1::2])),
                LEX=lambda *args:Lex(zip(args[::2],args[1::2])),LIST=lambda *args:Seq(args),
                SIN=lambda x:math.sin(math.radians(x)),COS=lambda x:math.cos(math.radians(x)),
+               ARCSIN=lambda x:math.degrees(math.asin(x)),
                ARCCOS=lambda x:math.degrees(math.acos(x)),VANG=lambda a,b:math.degrees(math.acos(max(-1,min(1,float(a@b)/a.MAG/b.MAG)))),
                CONSTANT=NS(PI=math.pi),ROUND=round,ABORT=False,phaseShouldYield=False,HASNODE=False,
                BURN_STAGE_LIMIT=0,MIN_AOP_TARGET_ECC=.004,NEAR_CIRC_ECC=.01,
@@ -51,7 +53,7 @@ def fixture(profile=True):
     env['launchSeq']=env['xferSeq']
     orbit=NS(PERIAPSIS=9300,APOAPSIS=397272,INCLINATION=63.4,LAN=79.2,ARGUMENTOFPERIAPSIS=90,
              HASNEXTPATCH=False)
-    ship=NS(STATUS='ORBITING',PERIAPSIS=9300,APOAPSIS=397272,ALTITUDE=100000,
+    ship=NS(STATUS='ORBITING',PERIAPSIS=9300,APOAPSIS=397272,ALTITUDE=100000,MASS=1.287,
             BODY=NS(NAME='Minmus',RADIUS=60000,MU=1.7658e9,ROTATIONPERIOD=40400,ATM=NS(EXISTS=False)),
             ORBIT=orbit,THRUST=0,AVAILABLETHRUST=55,DELTAV=NS(VACUUM=2093.9),
             CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0))
@@ -77,12 +79,16 @@ def fixture(profile=True):
                stateRemove=lambda key:saved.pop(key,None),fixture_wait=lambda dt:events.append(('wait',dt)),
                yieldToPrompt=lambda:env.update(phaseShouldYield=True),
                vesselLandingPrepareRoles=lambda:True,vesselLandingStageFloor=lambda:2,
+               vesselLandingThrust=lambda:ship.AVAILABLETHRUST,vesselLandingReserveAcc=lambda:2.72,
+               landingResolveTarget=lambda:Lex(FOUND=False),
                maneuverBurnInterrupted=lambda:saved.get('burn_started')=='true' and saved.get('burn_phase')==saved['phase'],
                nextPhase=lambda seq:saved.update(phase=seq[seq.index(saved['phase'])+1]),
                _shipNormal=lambda:normal(orbit.INCLINATION,orbit.LAN),planeNormalFromIncLan=normal,
                _angDiff=lambda a,b:(a-b+180)%360-180)
-    for name in re.findall(r'(?:LOCAL|GLOBAL) FUNCTION (\w+)',SOURCE):
+    for name in re.findall(r'(?:LOCAL|GLOBAL) FUNCTION (\w+)',SOURCE+'\n'+ROUTE):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
+    # Native string coercion and diagnostic presentation are not simulated.
+    env['landingRouteLines']=lambda result:Seq()
     def link_wait():
         # Mutations from wait callbacks represent native global controls,
         # which must remain live across loop iterations.
@@ -155,7 +161,7 @@ def check_kolniya_transition():
 def check_generic_goals():
     env,saved,events,nodes,refresh=fixture(False)
     env['SHIP'].PERIAPSIS=200000;env['SHIP'].APOAPSIS=500000;refresh()
-    targets=env['_landPrepTargets']()
+    targets=env['landingPrepTargets']()
     assert (targets['PE'],targets['AP'],targets['INC'])==(11000,21000,63.4)
     env['LAND_PREP_DV_CAP']=500;env['LAND_PREP_TOTAL_DV_CAP']=1000;env['LAND_PREP_RESERVE_DV']=100
     env['STAGE'].DELTAV.VACUUM=1500
@@ -165,11 +171,11 @@ def check_generic_goals():
     env,saved,events,nodes,refresh=fixture(False)
     env['SHIP'].BODY.ATM=NS(EXISTS=True,HEIGHT=70000)
     env['SHIP'].PERIAPSIS=100000;refresh()
-    targets=env['_landPrepTargets']();assert targets['PE']==81000 and targets['AP']==91000
-    env['LAND_PREP_PE']=50000;assert not env['_landPrepTargets']()
+    targets=env['landingPrepTargets']();assert targets['PE']==81000 and targets['AP']==91000
+    env['LAND_PREP_PE']=50000;assert not env['landingPrepTargets']()
     env,saved,events,nodes,refresh=fixture()
     env.update(LAND_PREP_INC=90,LAND_PREP_LAN=120)
-    targets=env['_landPrepTargets']();assert targets['INC']==90 and targets['LAN']==120
+    targets=env['landingPrepTargets']();assert targets['INC']==90 and targets['LAN']==120
     assert 'planPlaneMatch(tInc, tLan)' in function_body(SHAPE,'shapeNextBurn')
     plane=function_body(SHAPE,'planPlaneMatch')
     assert 'orbitNodeAngleToRelativeAscending' in plane and 'orbitNodeAngleToRelativeDescending' in plane
@@ -199,7 +205,7 @@ def check_groundtrack_coverage():
                 misses.append(min(radius*math.acos(max(-1,min(1,math.sin(lat)**2
                     +math.cos(lat)**2*math.cos(lon-math.radians(target))))) for lon in longitudes))
         return period,misses
-    env,_,_,_,_=fixture();new=env['_landPrepTargets']()
+    env,_,_,_,_=fixture();new=env['landingPrepTargets']()
     before,old_misses=coverage(397272);after,new_misses=coverage(new['AP'])
     assert max(new_misses)<4000 and max(old_misses)>80000
     cfg=read_settings(PROFILE,{})
@@ -214,7 +220,7 @@ def check_admission_limits():
                   'nan','wrong-context','total','reserve','stage','idle','modified-owned-cost'):
         env,saved,events,nodes,refresh=fixture()
         env.update(SHAPE_ALT_TOL=1000,SHAPE_ANG_TOL=.5,SHAPE_MIN_PE=9000,SHAPE_MIN_BURN_DV=.3)
-        targets=env['_landPrepTargets']();env['shapeNextBurn'](targets);node=nodes[0]
+        targets=env['landingPrepTargets']();env['shapeNextBurn'](targets);node=nodes[0]
         ledger=Lex(CONTEXT=env['landingOrbitContext'](),SPENT=0,NODE_UT=-1,NODE_DV=0)
         saved['land_prep_budget']=ledger
         if fault=='low-pe':node.ORBIT.PERIAPSIS=8999

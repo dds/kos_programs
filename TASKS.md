@@ -13,8 +13,14 @@ record remaining uncertainty before closing a task.
 - Tundra XING boot004 at UT2816238.4 treats an expired4.437m/s parking node
   as a departure. Operator must inspect/delete that stale node and reboot;
   the PARK handoff fix prevents advancing while MJ is still circularizing.
-- Emergency capture and cached-state caller fixes are implemented. Next:
-  continue the read-only Deck renderer investigation, with settings unchanged.
+- Current operator priority: landing-preparation route/cost comparison, then
+  landing accuracy/fuel use and staged ascent/return efficiency. Deck renderer
+  investigation is deferred; its latest read-only snapshot is
+  `/tmp/ksp-renderer-config-audit-20261027.json`. Settings remain unchanged.
+- Operator confirmed the Minmus3 Kolniya orbital objective succeeded. Next
+  flight step is the existing LAND_PREP/landing route; the comparison is an
+  optimization, not a new prerequisite. Stage handoff/next-entry KAC flight
+  confirmations remain pending from the operator.
 - Native bridge correction `5698546`: no top-level MJ NODE suffix exists.
   PARK uses supported ASCENT:ENABLED, then verifies physical cutoff/orbit.
 - Preserve existing capture, Pe, fuel, staging and return reserve safeguards.
@@ -165,12 +171,6 @@ record remaining uncertainty before closing a task.
 
 ## Next changes
 
-- [ ] **Landing-preparation efficiency refinements.** The generic LAND_PREP
-  now deliberately provides a low parking orbit for broad target coverage.
-  A future optional comparison can estimate direct descent versus a parking
-  change for a known site, including descent cost/reserve. Do not reintroduce
-  a target-specific optimizer into the generic phase or assume Ap is a plane
-  intersection. Retain the waypoint and native final deorbit checks.
 - [ ] **Continue landing accuracy and efficiency validation.** Targeted
   landings must meet their locked target; economy sites may divert under
   their explicit policy. Validate powered-lead convergence, burn timing
@@ -182,12 +182,6 @@ record remaining uncertainty before closing a task.
 
 ## Flight validation / measurements pending
 
-- [ ] **Minmus3 Kolniya contract completion.** `e9d94c3` is in the Deck
-  archive. Native boot018 shows the 0.023342 m/s AP correction succeeded,
-  leaving AP error about -40 m; a 0.190152 m/s PE correction is scheduled.
-  Need the final SHAPE errors and in-game contract completion. Fine trims
-  are necessary: current profile uses 100 m apsis tolerance, 0.002 m/s minimum,
-  0.001 m/s cutoff and 9 km Pe floor. Do not waive these targets on a skip.
 - [ ] **Deck memory headroom.** Five approved settings applied and verified:
   Scatterer shadows 2048, nonpersistent 128 MB upload buffer, 256 MB temporary
   texture-load budget, NoIVA placeholder mode, Making History optional
@@ -201,6 +195,23 @@ record remaining uncertainty before closing a task.
 
 ## Completed checkpoints
 
+- [x] Landing-preparation reference comparison (operator priority3): added
+  shared `landing_route` goals/cost math, read-only `cmd/landingroute.ks`
+  direct-to-archive report and automatic pre-planning LAND_PREP diagnostics.
+  Reports ideal direct/prepared descent, two ordinary transfer orders, return
+  remainder, correctly scoped preparation reserve, periods and latitude
+  crossing heights, plus optional gravity sensitivity using weaker measured
+  descent acceleration. Kolniya reference:45.46m/s prep,226.03 vs230.14m/s
+  ideal total, equatorial crossing60.36->13.96km, period20200->3028s.
+  Advisory only: no automatic route selection or bypass of mission/survey,
+  target longitude/terrain, staging, native powered footprint or fuel guards.
+  All61 routine check files passed in79.41s; native report/flight still need
+  validation. Continue landing/ascent efficiency next; stage/KAC confirmations
+  remain pending from operator.
+- [x] Minmus3 Kolniya orbital objective: operator confirmed success on
+  2026-10-27. Keep100m/0.1deg final shaping tolerances,0.002m/s burn minimum,
+  0.001m/s cutoff and9km Pe floor. Landing/high equatorial orbit/return remain
+  separate objectives awaiting validation.
 - [x] Cached-state caller audit: fixed final B-plane checkpoint consumption,
   landing-light replacement alarm and hop waypoint replacement/append. Each
   now copies its collection before mutation; shared state semantics, guards,

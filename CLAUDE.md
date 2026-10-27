@@ -9,6 +9,20 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 landing-route comparison: landing_route now owns LAND_PREP_*
+defaults and landingPrepTargets (moved from landing_orbit, unchanged goals).
+Its small dependency closure excludes maneuver/SHAPE/powered controllers.
+cmd/landingroute archives a read-only snapshot; phaseLandPrep logs it before
+planning. Reference only: two apsis-transfer orders, ideal Ap deorbit plus
+ground-relative surface stop, periods/latitude crossings and a constant-g
+initial-acceleration sensitivity allowance. Do not let these estimates
+authorize a burn or bypass target longitude/terrain/staging/native footprint
+checks. LAND_PREP_RESERVE_DV is a post-preparation floor, not a post-landing
+return floor. Preserve that distinction in reporting. Kolniya example:
+45.46m/s preparation,226.03 direct vs230.14 prepared ideal total at equator,
+crossing60.36->13.96km and period20200->3028s. Operator confirmed the original
+Kolniya orbital objective complete; landing/second orbit/return remain open.
+
 2026-10-27 collection audit: fixed cached edits in bplaneClearRetryWait
 (consume waiting/alarm), landingAwaitLitGroundTrack (replacement alarm before
 solar), and hopWaypoint (replace/append the outer route list). Copy before
