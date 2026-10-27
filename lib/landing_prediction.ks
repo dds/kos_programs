@@ -18,6 +18,7 @@ LOCAL FUNCTION _landingPredictionCommand {
     PARAMETER maxAcc.
     PARAMETER planAcc.
     PARAMETER elevation.
+    PARAMETER targetPosition IS V(0,0,0).
     LOCAL upVec IS pos:NORMALIZED.
     LOCAL verticalSpeed IS VDOT(vel,upVec).
     LOCAL hVel IS VXCL(upVec,vel).
@@ -26,9 +27,17 @@ LOCAL FUNCTION _landingPredictionCommand {
     LOCAL effectiveG IS MAX(0.01,SHIP:BODY:MU/pos:MAG^2-hVel:MAG^2/pos:MAG).
     LOCAL command IS pos*0.
     IF hVel:MAG > APPROACH_HSPEED {
+        LOCAL lateralGuidance IS targetPosition:MAG > 0
+            AND LANDING_POWERED_LEAD > 0 AND LANDING_FLEXIBLE_SITE <= 0
+            AND planAcc*COS(15) > surfaceG.
+        LOCAL descentAcc IS planAcc.
+        IF lateralGuidance { SET descentAcc TO descentAcc*COS(15). }
         LOCAL desiredVs IS lmBrakeDescentTarget(hVel:MAG,MAX(0,-verticalSpeed),height,
-            maxAcc,planAcc,surfaceG,MAX(0,LANDING_BRAKE_REACTION_TIME),effectiveG).
+            maxAcc,descentAcc,surfaceG,MAX(0,LANDING_BRAKE_REACTION_TIME),effectiveG).
         SET command TO lmEconomyBrakeThrust(hVel,verticalSpeed,desiredVs,upVec,maxAcc,effectiveG).
+        IF lateralGuidance {
+            SET command TO lmBrakeLateralThrust(command,hVel,targetPosition-pos,upVec,planAcc,effectiveG).
+        }
     } ELSE {
         LOCAL envelope IS lmBrakeEnvelope(hVel:MAG,MAX(0,-verticalSpeed),planAcc,
             surfaceG,MAX(0,LANDING_BRAKE_REACTION_TIME)).
@@ -60,6 +69,7 @@ GLOBAL FUNCTION landingPredictBrake {
     PARAMETER stack.
     PARAMETER elevation.
     PARAMETER stepSeconds IS 1.
+    PARAMETER targetPosition IS V(0,0,0).
     LOCAL failure IS LEXICON("VALID",FALSE,"REASON","prediction-budget").
     IF NOT stack["VALID"] { RETURN stack. }
     LOCAL omega IS landingRotationVector().
@@ -91,7 +101,7 @@ GLOBAL FUNCTION landingPredictBrake {
         }
         LOCAL step IS MAX(0.05,MIN(2,stepSeconds)).
         IF hs < APPROACH_HSPEED*2 { SET step TO MIN(step,0.25). }
-        LOCAL command IS _landingPredictionCommand(pos,vel,maxAcc,planAcc,elevation).
+        LOCAL command IS _landingPredictionCommand(pos,vel,maxAcc,planAcc,elevation,targetPosition).
         LOCAL flow IS command:MAG*massNow/item["EXHAUST"].
         IF pauseLeft > 0 { SET command TO pos*0. SET flow TO 0. SET step TO MIN(step,pauseLeft). }
         IF flow > 0 { SET step TO MIN(step,fuelLeft/flow). }
@@ -104,7 +114,7 @@ GLOBAL FUNCTION landingPredictBrake {
         IF stageIndex = 0 AND stack["RESERVE_ACC"] > 0 {
             SET midpointPlan TO MIN(midpointAcc,stack["RESERVE_ACC"]).
         }
-        SET command TO _landingPredictionCommand(midpointPos,midpointVel,midpointAcc,midpointPlan,elevation).
+        SET command TO _landingPredictionCommand(midpointPos,midpointVel,midpointAcc,midpointPlan,elevation,targetPosition).
         IF pauseLeft > 0 { SET command TO pos*0. }
         // Bound midpoint fuel use at the exact depletion event.
         LOCAL used IS MIN(fuelLeft,command:MAG*midpointMass/item["EXHAUST"]*step).

@@ -221,9 +221,10 @@ def environment():
     env = dict(landingReviewReachableSite=lambda *args: True, ABORT=False,
                landingEconomyTerminalSite=lambda *args: False,
                landingDiagnosticRecord=lambda *args: None,
+               landingDiagnosticBrake=lambda *args: None,
                landingDiagnosticSample=lambda *args: None,
                landingDiagnosticSearchText=lambda *args: 'fixture',
-               SQRT=math.sqrt, TAN=lambda x: math.tan(math.radians(x)),
+               SQRT=math.sqrt, V=lambda x,y,z:Vec((x,y,z)), TAN=lambda x: math.tan(math.radians(x)),
                SIN=lambda x: math.sin(math.radians(x)), COS=lambda x: math.cos(math.radians(x)),
                LIST=lambda *xs:list(xs), CONSTANT=NS(PI=math.pi),
                TIME=NS(SECONDS=0), SHIP=NS(BODY=NS(RADIUS=60000)))

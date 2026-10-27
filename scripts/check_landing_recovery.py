@@ -130,7 +130,8 @@ def check_descending_handoff():
         ctx.update(STATE='BRAKING_BURN',downrange=4960)
         # Isolate the terminal handoff without changing its V safety gate.
         env['_landingBrakeSteeringInfo']=lambda _:dict(TARGET_VS=-20,THROTTLE=.8,ALIGNED=True,
-            IMPACT_ERR=4960,CROSS_ERR=0,CROSS_ABS=0,ALIGN_ERR=0,HARD=False)
+            IMPACT_ERR=4960,CROSS_ERR=0,CROSS_ABS=0,ALIGN_ERR=0,HARD=False,
+            LATERAL=False,LATERAL_YAW=0,LATERAL_MISS=0)
         call('_landingBrakingTick',env,ctx)
         assert (ctx['STATE']=='APPROACH')==expected,(speed,down,ctx['STATE'])
     print('PASS: fixed-site correction can retain useful lateral motion after vertical capture; excessive horizontal speed or unsafe descent cannot take the early terminal handoff')

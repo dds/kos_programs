@@ -31,8 +31,11 @@ SET BPLANE_PE_TOL TO 1000.
 // requested LAN before science/landing. Avoid chasing a sub-minimum trim
 // solely to enforce final-orbit precision before capture.
 SET BPLANE_ANG_TOL TO 1.
-SET CAPTURE_MIN_PE TO 8300.
-SET CAPTURE_MAX_PE TO 10300.
+// A converged micro-correction can be below the shared0.3m/s floor.
+// Accept a1.5km no-burn Pe miss; SHAPE still enforces100m after capture.
+SET BPLANE_MINIMUM_PE_TOL TO 1500.
+SET CAPTURE_MIN_PE TO 7800.
+SET CAPTURE_MAX_PE TO 10800.
 SET CAPTURE_ACCEPT_BOUND TO 0.
 SET BPLANE_DV_CAP TO 100.
 SET REFINE_BPLANE_DV_CAP TO 100.
@@ -55,7 +58,7 @@ SET SHAPE_AOP_TOL TO 0.2.
 // economy floor and0.05m/s executor residual cannot achieve100m here.
 SET SHAPE_MIN_BURN_DV TO 0.002.
 SET SHAPE_BURN_TOLERANCE TO 0.001.
-// Keep an explicit9km floor, above this same profile's8.3km capture minimum.
+// Keep an explicit9km floor for the final shaped orbit.
 SET SHAPE_MIN_PE TO 9000.
 SET SHAPE_DV_CAP TO 300.
 SET SHAPE_TOTAL_DV_CAP TO 500.

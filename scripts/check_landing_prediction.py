@@ -96,7 +96,7 @@ def check_snapshot():
     print('PASS: actual 3/2/1 snapshot isolates limiting mixtures and return wet mass, charges deorbit fuel once, copies without mutation and rejects unsupported/depleted hardware')
 
 
-def independent_inertial_capture(env,stack,pos,ground_vel,dt=.25):
+def independent_inertial_capture(env,stack,pos,ground_vel,dt=.25,target=None):
     # An independent RK4 flight model in a NONROTATING frame. The production
     # model uses midpoint integration in a surface-fixed rotating frame.
     omega=env['landingRotationVector']();rate=omega.MAG
@@ -116,7 +116,8 @@ def independent_inertial_capture(env,stack,pos,ground_vel,dt=.25):
         assert height>3
         acc=item['THRUST']/mass
         planned=min(acc,stack['RESERVE_ACC']) if index==0 and stack['RESERVE_ACC'] else acc
-        force=env['_landingPredictionCommand'](pos,vel,acc,planned,4113.1358)*mass
+        force=env['_landingPredictionCommand'](pos,vel,acc,planned,4113.1358,
+            Vec((0,0,0)) if target is None else target)*mass
         if pause>0:force=force*0
         flow=force.MAG/item['EXHAUST']
         step=min(dt,fuel/flow) if flow else dt

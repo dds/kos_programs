@@ -113,6 +113,36 @@ def check_buffer_and_hover():
     print('PASS: recorder bounds rows/characters with eviction counts and captures a 260m approach hold every two seconds without archive I/O or changing thrust')
 
 
+def check_retained_lateral_history():
+    env,ctx,disk,ops=fixture()
+    ctx.update(STATE='BRAKING_BURN',TARGET_THROTTLE=1)
+    env['SHIP'].THRUST=2
+    env['SHIP'].CONTROL.MAINTHROTTLE=1
+    steering=dict(LATERAL=True,LATERAL_YAW=10,LATERAL_MISS=1200,
+                  CROSS_ERR=1190,ALIGNED=True,THROTTLE=1)
+    for now in range(180):
+        env['TIME'].SECONDS=now
+        env['landingDiagnosticBrake'](ctx,steering)
+    capture=ctx['DIAGNOSTIC']
+    assert len(capture['BRAKE_ROWS'])==12
+    assert capture['BRAKE_BYTES']<=3000
+    assert capture['BRAKE_BYTES']==sum(map(len,capture['BRAKE_ROWS']))
+    before=list(capture['BRAKE_ROWS'])
+    env['STAGE'].NUMBER=2
+    env['landingDiagnosticBrake'](ctx,steering)
+    assert capture['BRAKE_ROWS'][-1]!=before[-1] and 'stage=2' in capture['BRAKE_ROWS'][-1]
+    for index in range(200):env['landingDiagnosticRecord'](ctx,Text('late terminal control '+str(index)),True)
+    assert not ops and len(capture['BRAKE_ROWS'])<=12
+    assert 'geometricCross=1200' in capture['BRAKE_ROWS'][0]
+    ctx.update(STATE='TOUCHDOWN',TARGET_THROTTLE=0)
+    env['SHIP'].THRUST=0;env['SHIP'].CONTROL.MAINTHROTTLE=0
+    assert env['landingDiagnosticTick'](ctx,True)
+    report=disk[capture['PATH']]
+    assert 'STATS landing-lateral' in report and 'yaw=10' in report and 'trCross=1190' in report
+    assert not capture['BRAKE_ROWS'] and capture['BRAKE_BYTES']==0
+    print('PASS: bounded3kB/12-row lateral history survives terminal ring eviction, samples15s/stage changes without powered I/O and exports at touchdown')
+
+
 def check_export_gates():
     scenarios=('burn','approach','align','requested','physical','pilot','raw','stage',
                'discard','gate','horizontal-gate','invalid-gate','abort','offline','cadence','safe')
@@ -292,6 +322,7 @@ def check_phase_ledger():
 
 
 if __name__=='__main__':
+    check_retained_lateral_history()
     check_phase_ledger()
     check_buffer_and_hover()
     check_export_gates()

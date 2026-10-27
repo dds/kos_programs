@@ -47,6 +47,7 @@ def solve(response, cap, tolerance=2000, public=False):
         env.update(MIN_EXEC_DV=float(re.search(r'LOCAL MIN_EXEC_DV\s+IS ([0-9.]+)\.', SOURCE)[1]),
                    BPLANE_PE_ONLY=1, BPLANE_REQUIRE_PLANE=0, BPLANE_DV_CAP=cap,
                    phaseShouldYield=False, _bplaneCurrentCorridorOk=lambda *_: False,
+                   _bplaneMinimumSkip=dict(ACCEPTED=False),
                    _bplaneTrimCap=lambda *_: cap, fixture_remove=nodes.remove,
                    maneuverUiArchiveLog=lambda _: None)
         for name in ('_bplanePlanPeOnly', '_bplaneCorrectionAboveMinimum'):
@@ -103,6 +104,7 @@ def check_shared_minimum():
             removed, dispatched=[],[]
             env=dict(MIN_EXEC_DV=minimum, BPLANE_PE_ONLY=mode, BPLANE_REQUIRE_PLANE=0,
                      BPLANE_DV_CAP=20, phaseShouldYield=False,ABORT=False,
+                     _bplaneMinimumSkip=dict(ACCEPTED=False),
                      _bplaneCurrentCorridorOk=lambda *_:False, _bplaneTrimCap=lambda *_:20,
                      fixture_remove=removed.append, maneuverUiArchiveLog=lambda _:None)
             for branch in (0,1):

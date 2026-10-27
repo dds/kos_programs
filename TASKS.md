@@ -34,7 +34,8 @@ record remaining uncertainty before closing a task.
   forecast changed during coast; bounded pre-burn refit is implemented below,
   operator now confirms touchdown on887aa4d. Retrieved native diagnostics:
   ignition within1.3s of forecast; guidance miss2m, original miss638.8m due to
-  terrain shift640m. Next priority is target-dependent BRAKE lateral guidance:
+  terrain shift640m. Target-dependent BRAKE lateral guidance is implemented,
+  shared with prediction, and awaiting native validation:
   it left1209m cross-track for APPROACH, costing119s/~205m/s estimated impulse.
   Operator authorizes2km deorbit cross-track
   for RO9 mun_landing_return only; preferred250m/normal10m/s/trials64 remain.
@@ -68,18 +69,47 @@ record remaining uncertainty before closing a task.
   is the efficiency problem. Source confirms _landingBrakeSteeringInfo calls
   velocity-only lmEconomyBrakeThrust; target cross-track is only returned for
   diagnostics afterward. CROSS_PID is constructed but unused in braking.
-  Next implementation: bounded target-dependent lateral steering while
-  braking/flare altitude is still available, shared with the forward
-  predictor. Preserve vertical stopping, stage reserves, thrust/attitude /
-  engine-up guards and site terrain checks. Do not tighten the2km admission
-  cap to conceal this missing feedback. Separately review terrain-shift
-  policy if closer original-waypoint precision is requested.
+  Implemented lmBrakeLateralThrust shared by live/predicted fixed-site
+  braking: geometric pursuit, up to15deg horizontal yaw, same vertical and
+  total thrust, weaker-stage stopping-time scale, fade before18m/s handoff.
+  Descent planning reserves cos15 authority. Target comes from cached site
+  elevation, not repeated terrain queries or phantom TR impact steering.
+  Native attitude/engine-up, terrain, stage/reserve and ignition guards
+  remain; flexible/blind/divert/legacy paths are unchanged. The forecast now
+  receives the actual body-fixed target. Staged3D cases reduce1.2km miss to
+  101m (+4.02m/s impulse), +/-2km to237/235m (+9.62/7.77m/s); Minmus Flats
+  single-stage1.2km becomes17m. Guided prediction agrees with independent
+  inertial RK4/mass/staging physics within120m. Native flight validation is
+  still open. Do not tighten the2km admission cap to hide missing feedback.
+  Separately review terrain-shift policy if closer original-waypoint
+  precision is requested.
 - [ ] **Preserve BRAKE/APPROACH diagnostic samples through touchdown.** The
   bounded detailed-control ring retains mainly late terminal/settle rows;
   phase totals/transitions survived, but detailed earlier controls rotated
   out. Retain bounded representative first/last/per-stage control samples
   across phases without adding synchronous archive I/O during powered ticks,
   changing guidance cadence, or introducing hovering for export.
+  Implemented a separate12-row/3000-character BRAKE history, sampled15s/on
+  stage changes and exported through existing quiet-coast/touchdown gates.
+  Includes lateral active/yaw/geometric cross/TR cross/alignment/throttle.
+  Source tests prove it survives terminal ring eviction with no powered I/O.
+  Representative APPROACH history/native recorder validation remain open.
+
+- [ ] **Minmus final B-plane micro-correction must continue safely.** Native
+  RO9_2815982 boot010 atUT3019581.9: Tundra arrivalPe~8.3km/inc116.71deg,
+  converged0.0715m/s candidate was skipped, then the consumed final retry
+  checkpoint wrongly blocked progression. Common planner now removes the
+  tiny node, checks the unburned encounter/parent coast/required plane and
+  capture+reserve fuel, then both phase handlers consume a fresh no-burn
+  handoff instead of retrying. Retry state clears; SOI alarm is refreshed;
+  no budget is charged/refunded. Default no-burn Pe tolerance is unchanged;
+  explicit BPLANE_MINIMUM_PE_TOL1500 for Kolniya/Tundra matches their revised
+  7.8..10.8km capture corridor. Required1deg plane and final100m/0.1deg SHAPE
+  remain. Real phase/retry fixtures reproduce the0.0715m/s case in both
+  profiles with/without KAC, including changed-patch and unsafe/fuel/plane
+  rejection. Native connected reboot/resume remains unvalidated.
+  All64 routine check files passed92.81s; final cached-elevation guidance /
+  range/recovery/structural and minimum-handoff/midcourse/Pe/SOI checks pass.
 
 
 - [x] **Fix false hull clearance and capped-direction deorbit stall.** Native

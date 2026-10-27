@@ -155,7 +155,8 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
     LOCAL ignition IS _landingLeadStateAt(hi,elevation,hullClearance).
     LOCAL gate IS lmStagedBrakeEnvelope(ignition["HS"],ignition["DOWN"],
         activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
-    LOCAL forecast IS landingPredictBrake(lmGroundPositionAt(hi),lmGroundVelocityAt(hi),stack,elevation).
+    LOCAL targetPosition IS LATLNG(targetLat,targetLng):ALTITUDEPOSITION(elevation)-SHIP:BODY:POSITION.
+    LOCAL forecast IS landingPredictBrake(lmGroundPositionAt(hi),lmGroundVelocityAt(hi),stack,elevation,1,targetPosition).
     IF NOT forecast["VALID"] { SET policy["REASON"] TO forecast["REASON"]. RETURN policy. }
     LOCAL capturedGeo IS SHIP:BODY:GEOPOSITIONOF(forecast["POSITION"]+SHIP:BODY:POSITION).
     LOCAL travel IS lmSurfaceTrackOffset(ignition["LAT"],ignition["LNG"],capturedGeo:LAT,capturedGeo:LNG,

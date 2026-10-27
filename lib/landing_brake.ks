@@ -38,13 +38,33 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
     IF ctx["H_SPEED"] > APPROACH_HSPEED { SET targetVs TO 0. }
     LOCAL fullVector IS LANDING_ECONOMY_BRAKE > 0
         AND ctx["H_SPEED"] > APPROACH_HSPEED.
+    LOCAL lateralGuidance IS fullVector AND LANDING_POWERED_LEAD > 0
+        AND LANDING_FLEXIBLE_SITE <= 0 AND ctx["HAS_TARGET"]
+        AND NOT ctx["DIVERT_PENDING"] AND ctx["PLAN_ACC"]*COS(15) > ctx["BRAKE_GRAV"].
     LOCAL thrustVec IS ctx["UP_VEC"] * 0.
+    LOCAL lateralYaw IS 0.
+    LOCAL lateralMiss IS 0.
     IF fullVector {
+        LOCAL descentAcc IS ctx["PLAN_ACC"].
+        IF lateralGuidance { SET descentAcc TO descentAcc*COS(15). }
         SET targetVs TO lmBrakeDescentTarget(ctx["H_SPEED"], ctx["DOWN_SPEED"], height,
-            ctx["MAX_ACC"], ctx["PLAN_ACC"], ctx["BRAKE_GRAV"],
+            ctx["MAX_ACC"], descentAcc, ctx["BRAKE_GRAV"],
             MAX(0, LANDING_BRAKE_REACTION_TIME), ctx["GRAV"]).
         SET thrustVec TO lmEconomyBrakeThrust(ctx["H_VEL"], ctx["V_SPEED"],
             targetVs, ctx["UP_VEC"], ctx["MAX_ACC"], ctx["GRAV"]).
+        IF lateralGuidance {
+            // Use the accepted site's cached elevation; POSITION would
+            // query terrain again on every powered guidance tick.
+            LOCAL targetOffset IS LATLNG(ctx["TARGET_LAT"],ctx["TARGET_LNG"]):ALTITUDEPOSITION(ctx["TARGET_ELEVATION"])
+                -ctx["POSITION"].
+            SET thrustVec TO lmBrakeLateralThrust(thrustVec,ctx["H_VEL"],targetOffset,
+                ctx["UP_VEC"],ctx["PLAN_ACC"],ctx["GRAV"]).
+            SET lateralMiss TO VXCL(ctx["H_VEL"],VXCL(ctx["UP_VEC"],targetOffset)):MAG.
+            LOCAL horizontalThrust IS VXCL(ctx["UP_VEC"],thrustVec).
+            IF horizontalThrust:MAG > 0.001 {
+                SET lateralYaw TO VANG(-ctx["H_VEL"],horizontalThrust).
+            }
+        }
     } ELSE {
         IF ctx["DIVERT_PENDING"] {
             SET targetVs TO -MIN(HIGH_DESCENT_SPEED, MAX(0, LANDING_DIVERT_SEARCH_DESCENT)).
@@ -89,6 +109,9 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
         "BIAS", 0,
         "GUARD", 1,
         "HARD", ctx["H_SPEED"] > APPROACH_HSPEED,
+        "LATERAL", lateralGuidance,
+        "LATERAL_YAW", lateralYaw,
+        "LATERAL_MISS", lateralMiss,
         "TARGET_VS", targetVs,
         "THROTTLE", throttleCommand
     ).
@@ -189,6 +212,7 @@ GLOBAL FUNCTION _landingBrakingTick {
     }
 
     LOCAL steerInfo IS _landingBrakeSteeringInfo(ctx).
+    landingDiagnosticBrake(ctx,steerInfo).
     SET targetVs TO steerInfo["TARGET_VS"].
     LOCAL verticalCaptured IS ABS(ctx["V_SPEED"] - targetVs) <= 5.
     // One vector owns both steering and throttle. Trajectories aiming must
@@ -218,6 +242,9 @@ GLOBAL FUNCTION _landingBrakingTick {
         + " xAbs=" + ROUND(steerInfo["CROSS_ABS"],0)
         + " aErr=" + ROUND(steerInfo["ALIGN_ERR"],1)
         + " hard=" + _landingBoolText(steerInfo["HARD"])
+        + " lateral=" + _landingBoolText(steerInfo["LATERAL"])
+        + " latYaw=" + ROUND(steerInfo["LATERAL_YAW"],2)
+        + " latMiss=" + ROUND(steerInfo["LATERAL_MISS"],0)
         + " hs=" + ROUND(horizontalSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1)
         + "/" + ROUND(targetVs,1)

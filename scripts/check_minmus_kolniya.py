@@ -148,7 +148,8 @@ def check_coarse_arrival_strict_final_orbit():
     assert not execute(converged,final)
     final['shapeErrors']=lambda _:Errors(AP=0,PE=0,PLANE=.09,AOP=0)
     assert execute(converged,final)
-    assert cfg['CAPTURE_MIN_PE']==8300 and cfg['CAPTURE_MAX_PE']==10300
+    assert cfg['BPLANE_MINIMUM_PE_TOL']==1500
+    assert cfg['CAPTURE_MIN_PE']==7800 and cfg['CAPTURE_MAX_PE']==10800
     assert cfg['SHAPE_ANG_TOL']==.1 and cfg['SHAPE_RESERVE_DV']==900
     assert cfg['SEQUENCE'].index('SHAPE')<cfg['SEQUENCE'].index('SCIENCE_OPS')<cfg['SEQUENCE'].index('LAND_DEORBIT')
     assert 'LOCAL MIN_EXEC_DV      IS 0.3.' in arrival

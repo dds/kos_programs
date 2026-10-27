@@ -230,6 +230,9 @@ def retry_environment():
                bplanePauseForReview=lambda:False,_bplaneCoastOutOfDepartureSoi=lambda _:True,
                _bplaneWantInc=lambda:90,bplaneResetWarnings=lambda:None,
                _bplaneLogBaseline=lambda *_:None,_bplaneDeferPeToMidcourse=lambda *_:False,
+               _bplaneMinimumSkip=Lex(ACCEPTED=False),
+               _bplaneMinimumArrivalOk=lambda *_:False,
+               _bplaneFinishMinimumSkip=lambda *args:ks.call('_bplaneFinishMinimumSkip',env,*args),
                _bplaneCurrentCorridorOk=lambda *_:False,measureArrival=lambda *_:0,
                _bplaneExistingNodeAcceptable=lambda *_:False)
     def advance(seq):

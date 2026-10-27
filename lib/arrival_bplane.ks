@@ -91,6 +91,10 @@ GLOBAL BPLANE_REVIEW_UNCONVERGED IS 0.
 GLOBAL BPLANE_REVIEW_MIN_PE IS 10000.
 // One final refinement after the normal midpoint, with time to align/burn.
 GLOBAL BPLANE_FINAL_REFINE_LEAD IS 900.
+// Optional no-burn Pe corridor for a converged sub-minimum correction.
+// Profiles may use a coarser capture corridor than the solver's aim point;
+// required plane and capture/return fuel constraints still apply.
+GLOBAL BPLANE_MINIMUM_PE_TOL IS -1.
 
 
 LOCAL DEFAULT_DV_CAP   IS 150.
@@ -98,6 +102,7 @@ LOCAL DEFAULT_PE_TOL   IS 2000.
 LOCAL DEFAULT_ANG_TOL  IS 0.5.
 LOCAL DEFAULT_LEAD     IS 300.
 LOCAL MIN_EXEC_DV      IS 0.3.
+LOCAL _bplaneMinimumSkip IS LEXICON("ACCEPTED",FALSE).
 LOCAL MAX_NEWTON_ITER  IS 16.
 LOCAL NEWTON_DAMP      IS 0.7.
 LOCAL FD_STEP          IS 0.05.
@@ -114,6 +119,50 @@ LOCAL FUNCTION _bplaneCorrectionAboveMinimum {
     mLog("STATS bplane decision=skip reason=below-execution-minimum dv="
         + ROUND(correctionDv, 4) + " minimumDv=" + MIN_EXEC_DV).
     RETURN FALSE.
+}
+
+LOCAL FUNCTION _bplaneMinimumArrivalOk {
+    PARAMETER targetBody.
+    PARAMETER wantPe.
+    PARAMETER wantInc.
+    PARAMETER wantLan.
+    IF ABORT OR maneuverBurnInterrupted() OR HASNODE { RETURN FALSE. }
+    LOCAL hit IS _bplaneCoastEncounter(targetBody).
+    IF hit = 0 { RETURN FALSE. }
+    LOCAL patch IS hit["patch"].
+    LOCAL pe IS patch:PERIAPSIS.
+    LOCAL tolerance IS BPLANE_PE_TOL.
+    IF BPLANE_MINIMUM_PE_TOL >= 0 { SET tolerance TO BPLANE_MINIMUM_PE_TOL. }
+    IF NOT (pe > 0 AND ABS(pe-wantPe) <= tolerance
+            AND pe < targetBody:SOIRADIUS-targetBody:RADIUS) { RETURN FALSE. }
+    LOCAL planeErr IS _bplaneElementPlaneError(patch:INCLINATION,patch:LAN,wantInc,wantLan).
+    IF NOT (planeErr >= 0 AND planeErr < 1e30) { RETURN FALSE. }
+    IF BPLANE_REQUIRE_PLANE <> 0 AND planeErr > BPLANE_ANG_TOL { RETURN FALSE. }
+    LOCAL reserve IS MAX(0,MAX(BPLANE_CAPTURE_MARGIN,BPLANE_TRIM_RESERVE_DV)).
+    LOCAL needed IS bplaneCaptureCost(patch,targetBody)+reserve.
+    IF NOT (needed >= 0 AND needed <= SHIP:DELTAV:VACUUM) { RETURN FALSE. }
+    mLog("STATS bplane minimum-handoff PeKm=" + ROUND(pe/1000,3)
+        + " peTolerance=" + tolerance + " planeErr=" + ROUND(planeErr,3)
+        + " neededDv=" + ROUND(needed,1) + " noBurn=True").
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _bplaneFinishMinimumSkip {
+    PARAMETER targetBody.
+    PARAMETER wantPe.
+    PARAMETER wantInc.
+    PARAMETER wantLan.
+    IF NOT _bplaneMinimumSkip["ACCEPTED"] { RETURN FALSE. }
+    SET _bplaneMinimumSkip["ACCEPTED"] TO FALSE.
+    // Recheck the unburned native patch, never the removed node's patch.
+    IF NOT _bplaneMinimumArrivalOk(targetBody,wantPe,wantInc,wantLan) {
+        _bplaneHoldCorrection("minimum-skip-arrival-changed",TRUE). RETURN TRUE.
+    }
+    bplaneClearRetryWait().
+    _bplaneEnsureSoiAlarm(targetBody).
+    mLog("STATS bplane result status=below-minimum-safe-handoff").
+    nextPhase(xferSeq).
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _bplaneDeferPeToMidcourse {
@@ -1358,6 +1407,7 @@ GLOBAL FUNCTION planBplaneCorrection {
     PARAMETER pristineLog IS "".
     PARAMETER allowMidcourseRetry IS FALSE.
 
+    SET _bplaneMinimumSkip["ACCEPTED"] TO FALSE.
     IF allowMidcourseRetry AND _bplaneRetryWaitPending(targetBody) {
         IF NOT _bplaneWaitBeforeSolverRetry(targetBody) { RETURN 0. }
     }
@@ -1389,6 +1439,10 @@ GLOBAL FUNCTION planBplaneCorrection {
             REMOVE nd.
             IF NOT allowMidcourseRetry { RETURN 0. }
             WAIT 0.02.
+            IF _bplaneMinimumArrivalOk(targetBody,wantPe,wantInc,wantLan) {
+                SET _bplaneMinimumSkip["ACCEPTED"] TO TRUE.
+                RETURN 0.
+            }
             IF _bplaneQueueMidcourseRetry("below-execution-minimum") { RETURN 0. }
             IF NOT _bplaneWaitBeforeSolverRetry(targetBody,"below-execution-minimum") { RETURN 0. }
         } ELSE {
@@ -1934,6 +1988,7 @@ GLOBAL FUNCTION phaseBplane {
         }
         IF phaseShouldYield OR ABORT { RETURN. }
         IF _bplaneHandoffMidcourseRetry(targetBody) { RETURN. }
+        IF nd = 0 AND _bplaneFinishMinimumSkip(targetBody,wantPe,wantInc,wantLan) { RETURN. }
         IF nd = 0 { BREAK. }
         IF NOT bplaneCorrectionAllowed(nd, targetBody, BPLANE_DV_CAP,TRUE,TRUE) { RETURN. }
         _bplaneReserveCorrection(nd, targetBody).
@@ -2064,6 +2119,7 @@ GLOBAL FUNCTION phaseRefineBplane {
         }
 
         IF phaseShouldYield OR ABORT { RETURN. }
+        IF nd = 0 AND _bplaneFinishMinimumSkip(targetBody,wantPe,wantInc,wantLan) { RETURN. }
         IF nd = 0 { BREAK. }
         IF NOT bplaneCorrectionAllowed(nd, targetBody, dvCap,TRUE,TRUE) { RETURN. }
         _bplaneReserveCorrection(nd, targetBody).

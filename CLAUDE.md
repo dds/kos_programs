@@ -9,6 +9,32 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 lateral braking and Minmus minimum-correction handoff implemented:
+lmBrakeLateralThrust is shared by live fixed-site economy-style braking and
+landing_prediction; landingDeorbitLeadPolicy passes the actual body-fixed
+target. Up to15deg horizontal yaw preserves vertical/total thrust; weaker
+stage authority sets correction time, cos15 is reserved in descent planning,
+and correction fades by18m/s. No new powered simulation or terrain queries:
+flight uses cached TARGET_ELEVATION via ALTITUDEPOSITION. Flexible/blind/
+divert/legacy modes and actual-facing/staging/terrain guards remain.
+Staged Mun1.2km cross miss ->101m for+4.02m/s impulse; +/-2km ->237/235m
+for+9.62/7.77m/s. Single-stage Minmus Flats1.2km ->17m. Independent inertial
+RK4 verifies guided predictor within120m. These are simulations, not flight
+proof. New12-row/3kB braking history survives late terminal ring rotation;
+15s/stage-change memory sampling, same unpowered export gates.
+Native Minmus Tundra boot010 onRO9_2815982 skipped0.0715m/s then exhausted
+its final checkpoint. Planner now admits a no-burn handoff only on a fresh
+safe unburned encounter, valid required plane and capture/reserve fuel;
+both phase handlers revalidate, clear retry state, preserve SOI KAC and
+advance without prompt/extra wait/burn. BPLANE_MINIMUM_PE_TOL defaults to
+normal tolerance; Kolniya/Tundra explicitly1500m with matching7.8..10.8km
+capture range. Final SHAPE100m/0.1deg and arrival-plane1deg remain.
+All64 routine check files passed92.81s; final cached-elevation change passed
+targeted guidance/range/recovery/structural checks. Final optional-plane
+policy and both-phase/both-solver minimum handoff checks also pass, along
+with midcourse/Pe-recovery/SOI regressions. Native landing and Minmus resume
+remain pending. No boot module change required.
+
 2026-10-27 native Mun touchdown on887aa4d: retrieved full adjacent logs and
 landingdiag2956003095 to/tmp/kos-mun-landing-2956003 (includes analysis.json).
 Hull fix validated4.67m; long-coast lead stable within metres while old radar

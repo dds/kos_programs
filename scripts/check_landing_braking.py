@@ -24,10 +24,13 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                DIVERT_PREVIEW=dict(OK=False,AT=-9999,LOG_AT=-9999),
                DIVERT_ELEVATION=0,
                TARGET_LAT=0, TARGET_LNG=0, TARGET_ELEVATION=0,
+               POSITION=Vec((0,0,height)),
                height=height, downrange=100000, STATE_ENTERED=0, TERRAIN_DONE=True)
     env['SHIP'] = NS(MASS=1.,FACING=NS(FOREVECTOR=Vec((0, 0, 1))), ALTITUDE=height,
                      BOUNDS=NS(BOTTOMALTRADAR=height))
     env.update(_landingBottomRadar=lambda: ctx['height'],
+               LATLNG=lambda *_:NS(POSITION=ctx['POSITION']+Vec((ctx['downrange'],0,0)),
+                   ALTITUDEPOSITION=lambda _:ctx['POSITION']+Vec((ctx['downrange'],0,0))),
                _landingTargetHeight=lambda c: c['height'],
                _landingDownrangeToTarget=lambda c: c['downrange'],
                lmDistanceToTarget=lambda *args: abs(ctx['downrange']),
@@ -40,7 +43,7 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                                                CROSS_SIGNED=0, CROSS=0),
                _landingLogBrakeComplete=lambda *args: None)
     for name in ('lmBrakeNetAcc', 'lmBrakeEnvelope', 'lmBrakeThrust',
-                 'lmBrakeFullNetAcc','lmBrakeDescentTarget','lmEconomyBrakeThrust',
+                 'lmBrakeFullNetAcc','lmBrakeDescentTarget','lmEconomyBrakeThrust','lmBrakeLateralThrust',
                  'lmHorizontalBrakeGateArmed',
                  'lmApproachTransitTime', 'lmFixedApproachPlan', 'lmDirectionToTarget',
                  'lmNominalBrakeRange', 'landingBrakeStackAt', 'lmVerticalBurnDistance', 'lmRetroSteering',

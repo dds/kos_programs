@@ -88,3 +88,36 @@ GLOBAL FUNCTION lmEconomyBrakeThrust {
     }
     RETURN thrustVec.
 }
+
+// Bend horizontal braking toward the fixed site while there is still
+// useful travel. Do not chase a ballistic TR impact: it intentionally
+// overshoots the site. This is geometric pursuit in the surface frame.
+// Preserve the vertical command and total thrust; horizontal arrest loses
+// at most 1-cos(15deg). The descent schedule reserves that same allowance.
+GLOBAL FUNCTION lmBrakeLateralThrust {
+    PARAMETER thrustVec.
+    PARAMETER horizontalVel.
+    PARAMETER targetOffset.
+    PARAMETER upVec.
+    PARAMETER planAcc.
+    PARAMETER gravAcc.
+    LOCAL hs IS horizontalVel:MAG.
+    IF hs <= APPROACH_HSPEED OR planAcc <= gravAcc { RETURN thrustVec. }
+    LOCAL travelDir IS horizontalVel:NORMALIZED.
+    LOCAL lateral IS VXCL(travelDir,VXCL(upVec,targetOffset)).
+    LOCAL horizontalThrust IS VXCL(upVec,thrustVec).
+    LOCAL arrest IS -VDOT(horizontalThrust,travelDir).
+    IF lateral:MAG < 0.1 OR arrest <= 0 { RETURN thrustVec. }
+    // Use the weaker stage's stopping time, not the transfer engine's
+    // momentary acceleration. Recompute cheaply after every stage/tick.
+    LOCAL horizontalAcc IS SQRT(MAX(0,planAcc^2-gravAcc^2)).
+    LOCAL remaining IS MAX(5,hs/MAX(0.01,horizontalAcc)).
+    // A symmetric accelerate/decelerate transfer covers a*t^2/4.
+    LOCAL fraction IS MIN(SIN(15)/COS(15),4*lateral:MAG/(remaining^2*arrest)).
+    // Fade before the terminal handoff, avoiding a heading discontinuity
+    // when horizontal speed approaches zero. No hover or powered search.
+    SET fraction TO fraction*MIN(1,MAX(0,(hs-APPROACH_HSPEED)/APPROACH_HSPEED)).
+    LOCAL aimed IS -travelDir+lateral:NORMALIZED*fraction.
+    RETURN VDOT(thrustVec,upVec)*upVec
+        + horizontalThrust:MAG*aimed:NORMALIZED.
+}

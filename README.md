@@ -347,6 +347,17 @@ Legacy/unknown models retain the high-altitude suppression; flexible economy
 sites still use their vertical stopping gate. `hModel` and `hSupp` show which
 policy is active. The vertical envelope and alignment requirements are unchanged.
 
+Powered fixed-site braking also steers sideways toward the actual landing
+site, rather than leaving all cross-track correction to APPROACH. Flight and
+the forward predictor share geometric lateral guidance: the horizontal thrust
+direction can turn at most15deg while preserving vertical thrust and total
+command magnitude. The descent schedule reserves the corresponding loss of
+horizontal arrest; lateral steering fades before the terminal handoff.
+Flexible economy sites, blind landing, terrain-search recovery and legacy
+braking retain their existing policy. `lateral`, `latYaw` and `latMiss` show
+the live command. Staged3D simulations reduce a1.2km cross-track miss to101m
+for about4m/s additional braking impulse; this awaits native flight validation.
+
 Powered fixed-site APPROACH also uses a response-aware horizontal stopping
 limit and coupled stopping-height reserve instead of the old3km altitude ramp.
 It estimates acceleration/cruise/braking time from signed closing velocity,
@@ -479,7 +490,10 @@ it appends checkpoints to
 at least 60 seconds until both braking gates, at most every 15 seconds.
 During burns and terminal descent it buffers up to 64 rows / 16,000 characters,
 reserving half for terrain/events so a long hold cannot erase that evidence;
-the report counts any older rows dropped. It also exports after landing or
+the report counts any older rows dropped. A separate12-row/3,000-character
+braking history samples lateral steering every15s and on stage changes, so
+late terminal samples cannot erase it. This buffer adds no powered archive
+I/O. It also exports after landing or
 normal abort cleanup, verifies that final checkpoint, and copies a `.boot.log`
 sidecar. Transfer the report and sidecar when available. Without a safe coast
 window or a link, it keeps buffering during descent; it never holds altitude
@@ -1155,6 +1169,16 @@ records explain the unburned encounter, candidate geometry and acceptance
 decision. `python3 -B scripts/check_arrival_budget.py` exercises the budget,
 resume, logging and capture-estimate predicates; flight validation is still
 required.
+
+A converged correction at or below the shared0.3m/s execution floor is removed.
+If the unburned encounter is safe, within its permitted Pe/plane corridor and
+has capture/reserve fuel, mission execution continues through the normal SOI
+coast; a consumed retry checkpoint cannot block this no-burn handoff. The SOI
+alarm is retained/refreshed. `BPLANE_MINIMUM_PE_TOL` optionally sets a coarser
+Pe corridor for this case; its default retains `BPLANE_PE_TOL`. RO9 Kolniya
+and Tundra profiles allow1500m and use matching7.8–10.8km capture limits.
+Their required1deg arrival-plane limit and final100m/0.1deg SHAPE objective
+remain. Unsafe/out-of-corridor encounters still hold for review.
 
 For the fuel-limited RO8 already approaching the Mun, `munrecover` retains
 its **polar survey and targeted landing** objectives. With an archive link

@@ -8,6 +8,7 @@ GLOBAL FUNCTION landingDiagnosticStart {
     PARAMETER ctx.
     SET ctx["DIAGNOSTIC"] TO LEXICON("ROWS", LIST(), "BYTES", 0, "DROPPED", 0,
         "CONTROL_ROWS", LIST(), "CONTROL_BYTES", 0,
+        "BRAKE_ROWS", LIST(), "BRAKE_BYTES", 0, "BRAKE_AT", -9999, "BRAKE_STAGE", -1,
         "PHASES", LEXICON(), "LAST_UT", TIME:SECONDS, "LAST_STATE", ctx["STATE"],
         "LAST_ACC", MAX(0,SHIP:THRUST) / MAX(0.01,SHIP:MASS),
         "LAST_BOTTOM", _landingBottomRadar(), "LAST_VS", ctx["V_SPEED"],
@@ -163,6 +164,32 @@ GLOBAL FUNCTION landingDiagnosticRecord {
     }
 }
 
+// Keep a short braking history even after the terminal control ring wraps.
+// Memory only while powered; the existing quiet-coast/touchdown gates own I/O.
+GLOBAL FUNCTION landingDiagnosticBrake {
+    PARAMETER ctx.
+    PARAMETER steering.
+    LOCAL capture IS ctx["DIAGNOSTIC"].
+    IF TIME:SECONDS-capture["BRAKE_AT"] < 15
+            AND STAGE:NUMBER = capture["BRAKE_STAGE"] { RETURN. }
+    SET capture["BRAKE_AT"] TO TIME:SECONDS.
+    SET capture["BRAKE_STAGE"] TO STAGE:NUMBER.
+    LOCAL row IS "STATS landing-lateral ut=" + ROUND(TIME:SECONDS,1)
+        + " stage=" + STAGE:NUMBER + " height=" + ROUND(_landingBurnHeight(ctx),0)
+        + " hs=" + ROUND(ctx["H_SPEED"],1) + " vs=" + ROUND(ctx["V_SPEED"],1)
+        + " active=" + steering["LATERAL"] + " yaw=" + ROUND(steering["LATERAL_YAW"],2)
+        + " geometricCross=" + ROUND(steering["LATERAL_MISS"],0)
+        + " trCross=" + ROUND(steering["CROSS_ERR"],0)
+        + " aligned=" + steering["ALIGNED"] + " throttle=" + ROUND(steering["THROTTLE"],2).
+    capture["BRAKE_ROWS"]:ADD(row).
+    SET capture["BRAKE_BYTES"] TO capture["BRAKE_BYTES"]+row:LENGTH.
+    UNTIL capture["BRAKE_ROWS"]:LENGTH <= 12 AND capture["BRAKE_BYTES"] <= 3000 {
+        SET capture["BRAKE_BYTES"] TO capture["BRAKE_BYTES"]-capture["BRAKE_ROWS"][0]:LENGTH.
+        capture["BRAKE_ROWS"]:REMOVE(0).
+        SET capture["DROPPED"] TO capture["DROPPED"]+1.
+    }
+}
+
 GLOBAL FUNCTION landingDiagnosticSample {
     PARAMETER ctx.
     PARAMETER site.
@@ -234,6 +261,7 @@ GLOBAL FUNCTION landingDiagnosticTick {
     LOCAL payload IS capture["HEADER"] + CHAR(10).
     FOR row IN capture["ROWS"] { SET payload TO payload + row + CHAR(10). }
     FOR row IN capture["CONTROL_ROWS"] { SET payload TO payload + row + CHAR(10). }
+    FOR row IN capture["BRAKE_ROWS"] { SET payload TO payload + row + CHAR(10). }
     FOR phaseName IN capture["PHASES"]:KEYS {
         LOCAL phase IS capture["PHASES"][phaseName].
         SET payload TO payload + "STATS landing-diag summary cumulative=true state=" + phaseName
@@ -271,6 +299,8 @@ GLOBAL FUNCTION landingDiagnosticTick {
     SET capture["BYTES"] TO 0.
     SET capture["CONTROL_ROWS"] TO LIST().
     SET capture["CONTROL_BYTES"] TO 0.
+    SET capture["BRAKE_ROWS"] TO LIST().
+    SET capture["BRAKE_BYTES"] TO 0.
     IF NOT finished { mLog("Landing diagnostic checkpoint: " + dest). }
     // Re-measure after any I/O before the owner evaluates its next gate.
     _landingCacheTick(ctx).
