@@ -9,6 +9,21 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 latest crash21:25:22..23CET verified GPU allocation failure:
+kernel repeats amdgpu_vm_validate failed / Not enough memory for command
+submission; gamescope1559 logs DRM flip ENOSPC/fatal flip then SIGABRT,
+session restarts and game exits. SSD game filesystem47.3GiB free. No new
+Unity dump (morning09:20UTC report is old), Linux OOM-kill or earlier TTM
+hung-stack signature in captured interval. Do not conflate immediate cause
+with proven mod/leak/driver bug. Raw evidence paths are in TASKS.md.
+Prepared docs/steamdeck/DeckMemory.cfg, NOT installed on Deck: MM FINAL
+overrides persistent uploadsfalse, temporary budget256MB, Deferred SSRfalse.
+KSPTL Config.ModuleManagerPostLoad reloads/applies the patched node; Deferred
+Settings.LoadSettings reads GameDatabase. Whole-game restart required;
+verify effective ModuleManager.ConfigCache and then actual scene memory.
+No shadow-manager disable/forced-runtime-shadow change;8k startup log alone
+is not final allocation proof. User requested detailed manual instructions.
+
 2026-10-27 memory suggestions audit: effective MM cache confirms prior
 KSPTextureLoader settings reverted (persistent buffertrue, temporary cap
 absent/auto, buffer128MB); propose false/256MB in a separate MM override,

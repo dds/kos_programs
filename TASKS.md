@@ -313,6 +313,25 @@ record remaining uncertainty before closing a task.
   Optional next modest cut: disable Deferred SSR, keeping basic reflection
   probes/lighting. Reports `/tmp/ksp-deck-low-impact-settings-20261027.json`
   and `/tmp/ksp-deck-memory-overrides-20261027.json` preserve configuration.
+  Latest crash21:25:22..23CET is now directly diagnosed: AMDGPU repeatedly
+  reports amdgpu_vm_validate failed / Not enough memory for command
+  submission (804 paired failures in final interval). gamescope1559 logs
+  DRM flip ENOSPC / fatal flip error then SIGABRT at21:25:23; gaming session
+  restarts and KSP exits. Game filesystem still has47.3GiB free; this ENOSPC
+  is from display submission. No new Unity crash dump found (only09:20UTC
+  report), Linux OOM-kill or same hung-task stack in captured interval.
+  This establishes GPU allocation failure/compositor abort, not the exact
+  mod/leak/driver allocation defect. Post-exit RAMavailable12.3GiB. Evidence:
+  `/tmp/ksp-deck-latest-crash-20261027.json`,
+  `/tmp/ksp-deck-gamescope-crash-20261027.json`,
+  `/tmp/ksp-gamescope-kernel-end-20261027.log`,
+  `/tmp/ksp-gamescope-core-info-20261027.txt`.
+  Prepared `docs/steamdeck/DeckMemory.cfg` for MANUAL installation: loader
+  false/256 plus Deferred SSRfalse. Source verifies ModuleManagerPostLoad
+  reloads/applies KSPTL config; Deferred reads patched GameDatabase settings.
+  No Deck settings installed/changed; whole-game restart and effective MM
+  cache/native memory confirmation remain pending. Shadow resolution is
+  deliberately unchanged pending actual runtime ownership verification.
 - [ ] **Latest Deck crash: renderer/memory follow-up.** Inspected before
   mission work. Crash_2026-10-27_092057394/error.log reports UnityPlayer.dll
   access violation0xc0000005 at09:20:58UTC,94% physical memory used/800MB
