@@ -438,6 +438,9 @@ def check_logged_moving_lead(curvature):
         if legacy:
             env['_targetPoweredStepAim']=lambda solved,aim,*_:dict(AIM=aim,MODE='model',SLOPE=0)
             env['_refineDeorbitFootprint']=lambda *args:call('_refineDeorbitFootprint',env,*args[:-1],0)
+            # Include the previous inner preference-polishing policy in the
+            # legacy comparison, not the revised powered-seed stopping rule.
+            env['_targetDeorbitRefineDone']=lambda solved,lo,hi:env['_targetDeorbitSolutionAccepted'](solved,lo,hi) and solved['CROSS']<=250
         source=powered_source().replace('SET _deorbitEvaluations TO _deorbitEvaluations+1.','charge_forecast().')
         run(source,env)
         assert not nodes and count.value<=64

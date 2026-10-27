@@ -28,6 +28,9 @@ record remaining uncertainty before closing a task.
   alone. Add whole-descent cache admission and shared body/relay policy.
   Existing core cannot fit both bands; a smaller handoff/storage remedy is
   required before claiming unattended landing works on this layout.
+- Current flight: RO9-mun2 deorbit search atUT2884581.6. Investigated
+  geometric-preference budget starvation; keep250m preferred/500m hard and
+  the64-trial cap. Separate offline-cache/storage admission remains mandatory.
 - Operator confirmed the Minmus3 Kolniya orbital objective succeeded. Next
   flight step is the existing LAND_PREP/landing route; the comparison is an
   optimization, not a new prerequisite. Stage handoff/next-entry KAC flight
@@ -44,6 +47,23 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **RO9-mun2 powered validation starved by ballistic preference.**
+  Read RO9_2518776 boot023: first valid seed cross368m/downfield13235m,
+  retro31.78m/s/normal-6.26m/s passed hard500m cap. Search chased250m,
+  consumed64/64 on worse later passes, then held withpoweredPass=0 and
+  geometryReason=not-checked atUT2884581.6. Implemented shared stopping
+  predicate: a powered mission hands off the first physically admitted /
+  radio-accepted geometric seed; inner polishing also conserves those
+  trials for mandatory finite-burn fitting. All hard limits and64-trial
+  cap unchanged; no trial reset, tolerance widening or target change.
+  New diagnostics expose seed/hard/preferred cross values, trials left and
+  zero-forecast budget exhaustion. Synthetic reported-seed regression runs
+  actual full outer/Newton/powered code: old policy64/64/no model checks;
+  new33/64/four checks, with cross/normal/fuel/radio/model rejections retained.
+  Native convergence and complete landing remain unvalidated. The existing
+  whole-descent cache/storage guard may independently block ignition; do
+  not waive it to fly this probe. All62 routine check files passed in75.50s;
+  no new structural errors (existing missingksc_deorbit handler warning).
 - [ ] **Minmus3 offline deorbit-to-landing handoff / storage.** Native
   RO9_2460361 boot026 planned from9.3x19.4km Minmus orbit, free13,719bytes,
   target7.7795,-165.6543. Static Kolniya profile hadANY light / legacy direct

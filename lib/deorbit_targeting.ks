@@ -278,8 +278,15 @@ GLOBAL FUNCTION targetedDeorbitAt {
                             SET bestAcceptedCross TO crossTrack.
                         }
 
-                        IF preferredCrossTrack <= 0 OR crossTrack <= preferredCrossTrack {
+                        IF _targetDeorbitRefineDone(solved,minDownfield,maxDownfield) {
                             SET acceptedSolution TO TRUE.
+                            IF LANDING_POWERED_LEAD > 0 {
+                                mLog("STATS deorbit seed crossM=" + ROUND(crossTrack,0)
+                                    + " preferredCrossM=" + ROUND(preferredCrossTrack,0)
+                                    + " hardCrossM=" + ROUND(_targetDeorbitCrossAuthority(solved),0)
+                                    + " trialsLeft=" + (TARGET_DEORBIT_MAX_EVALUATIONS-_deorbitEvaluations)
+                                    + " next=powered-validation").
+                            }
                         } ELSE {
                             mLogWarn("Window " + (orbitScan + 1)
                                 + " solution accepted but wide: cross="
@@ -317,7 +324,10 @@ GLOBAL FUNCTION targetedDeorbitAt {
 
     LOCAL searchStop IS "search-horizon".
     IF ABORT { SET searchStop TO "abort". }
-    ELSE IF acceptedSolution { SET searchStop TO "preferred-solution". }
+    ELSE IF acceptedSolution {
+        SET searchStop TO "preferred-solution".
+        IF LANDING_POWERED_LEAD > 0 { SET searchStop TO "powered-seed". }
+    }
     ELSE IF _deorbitEvaluations >= TARGET_DEORBIT_MAX_EVALUATIONS { SET searchStop TO "trial-budget". }
     mLog("STATS deorbit search evaluations=" + _deorbitEvaluations
         + "/" + TARGET_DEORBIT_MAX_EVALUATIONS
@@ -452,7 +462,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
     }
     IF ABORT OR NOT poweredAccepted {
         IF ABORT { SET poweredStop TO "abort". }
-        mLogWarn("STATS deorbit result=hold reason=powered-lead-not-converged trials="
+        LOCAL holdReason IS "powered-lead-not-converged".
+        IF poweredPass = 0 AND NOT ABORT { SET holdReason TO "powered-validation-budget-exhausted". }
+        mLogWarn("STATS deorbit result=hold reason=" + holdReason + " trials="
             + _deorbitEvaluations + "/" + TARGET_DEORBIT_MAX_EVALUATIONS
             + " stop=" + poweredStop + " passes=" + poweredPass
             + " geometryReason=" + poweredReason + " downfieldM=" + ROUND(solved["DOWNFIELD"],0)
@@ -1025,6 +1037,12 @@ LOCAL FUNCTION _targetDeorbitRefineDone {
     PARAMETER minDownfield.
     PARAMETER maxDownfield.
     IF NOT _targetDeorbitSolutionAccepted(solved, minDownfield, maxDownfield) { RETURN FALSE. }
+    // The preferred ballistic cross-track is an optimization, not admission.
+    // Once a powered mission has a physically admissible seed, spend the
+    // remaining trials on its mandatory finite-burn forecast and moving
+    // downfield goal. This predicate also stops needless inner polishing;
+    // the outer powered loop still requires its own fresh model acceptance.
+    IF LANDING_POWERED_LEAD > 0 { RETURN TRUE. }
     LOCAL aim IS _targetDeorbitCrossAuthority(solved).
     IF TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM > 0 {
         SET aim TO MIN(aim, TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM * 1000).

@@ -9,6 +9,21 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 RO9-mun2 preference starvation: native RO9_2518776 boot023
+endsUT2884581.6 in14.5x15.1km polar Mun orbit. First candidate cross368m
+passed the500m hard cap, but pursuit of the250m preference spent64/64 and
+left poweredPass=0/geometryReason=not-checked. Do NOT widen either tolerance
+or reset/increase the trial cap. _targetDeorbitRefineDone now stops geometric
+polishing at hard admission for POWERED_LEAD>0; the outer search shares this
+predicate and hands the first admissible/radio-accepted seed to mandatory
+powered fitting. Legacy non-powered preference behavior stays unchanged.
+New seed/trials-left logs distinguish this handoff; zero forecasts report
+powered-validation-budget-exhausted. Regression ablates the stopping policy
+to reproduce64/64/no forecasts, then validates the same368m synthetic seed
+with actual outer/Newton/powered code in33/64/four forecasts. Not a native
+orbit replay. Physical cross/normal/fuel/radio/model gates remain; separate
+offline-cache/storage blocker is still active and must not be bypassed.
+
 2026-10-27 Minmus3 blackout after deorbit: operator reports missing
 payload_landing at15km, no radio, no preburn save; declines command/rescue
 attempt. Leave that flight alone. Native RO9_2460361 boot026 has13,719bytes

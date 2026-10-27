@@ -32,6 +32,7 @@ def environment(oracle, cap=10, budget=64):
                TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=0, LANDING_POWERED_LEAD=0,
                TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM=.25, DEORBIT_MIN_FPA=0,
                vesselLandingPrepareRoles=lambda:True,
+               fixture_charge_forecast=lambda:setattr(counter,'value',counter.value+1),
                _deorbitEvaluations=counter, LIST=lambda *xs: KList(xs),
                SQRT=math.sqrt, fixture_wait=lambda _: None)
     for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)', SOURCE + LEAD):
@@ -449,9 +450,9 @@ def check_shared_terrain():
     print('PASS: new and retained unflown nodes share the original terrain window/clearance guard; pre-target collisions reject, intentional post-target contact remains allowed')
 
 
-def planner_prefix(env, period=1000, target_pass=0):
+def planner_prefix(env, period=1000, target_pass=0,target_lat=19,target_lng=129):
     """Run real search ordering/admission, stopping before final node creation."""
-    env.update(targetLat=19,targetLng=129,overrideTolerance=0,overrideOvershoot=0,
+    env.update(targetLat=target_lat,targetLng=target_lng,overrideTolerance=0,overrideOvershoot=0,
                refineSite=False,targetPassUT=target_pass,ADDONS=NS(TR=NS(AVAILABLE=True,ISVERTWOTWO=True,
                    SETTARGET=lambda _:None)),targetReachable=lambda _:True,
                LATLNG=lambda lat,lng:None,HUDTEXT=lambda *args:None,CYAN='cyan',
@@ -464,7 +465,9 @@ def planner_prefix(env, period=1000, target_pass=0):
     source=source.replace('IF refineSite AND DEFINED BOOT_LIB_RAN AND BOOT_LIB_RAN:CONTAINS("landing_site") {',
                           'IF refineSite {')
     source=source.replace('SET _deorbitEvaluations TO 0.','fixture_reset().')
+    source=source.replace('SET _deorbitEvaluations TO _deorbitEvaluations+1.','fixture_charge_forecast().')
     source=source.replace('REMOVE NEXTNODE.','fixture_remove().')
+    source=source.replace('REMOVE probeNode.','fixture_remove_probe(probeNode).')
     return run(source,env)
 
 
@@ -533,6 +536,73 @@ def check_mun_normal_authority():
     print('PASS: synthetic 15km polar Mun footprints need lateral authority and solve within the 10m/s normal cap for both signs; fixed site unchanged and allowed cross-track tightens to 500m')
 
 
+def check_reported_preference_budget():
+    outcomes=[]
+    for scenario in ('old-preference','powered','cross-cap','normal-cap','fuel','radio','model-fails'):
+        # Native boot023 found this admissible coarse seed, then spent64/64
+        # looking for250m and ran ZERO powered checks. The response below is
+        # a synthetic measured Jacobian, not a replay of native trajectories.
+        def oracle(ut,retro,normal):
+            along=13235+(31.78-retro)*1000+(ut-357)*100
+            cross=368+(normal+6.26)*300+(ut-357)*20
+            return impact(ut,retro,normal,along-15000,cross)
+        env,count,trials=environment(oracle)
+        env.update(LANDING_POWERED_LEAD=1,fixture_reset=lambda:setattr(count,'value',0))
+        searches=[];costs=[];models=[];nodes=[]
+        def geometry(lat,lng,start,end,step,angle):
+            return dict(VALID=True,UT=start+200,ANGLE=angle,LAT=lat,LNG=lng)
+        def coarse(ut,*args):
+            searches.append(ut);cost=min(20,64-count.value);costs.append(cost);count.value+=cost
+            if len(searches)==1:
+                seed=impact(ut,31.78,-6.26,-1765,501 if scenario=='cross-cap' else 368)
+                if scenario=='normal-cap':seed['NORMAL']=10.1
+                return seed
+            return impact(ut,33,0,0,1591)
+        def plan(ut,retro,normal):
+            node=NS(TIME=ut,retro=retro,normal=normal);nodes.append(node);return node
+        def read(node,lat,lng,aim):
+            result=oracle(node.TIME,node.retro,node.normal);result['ERR']=result['DOWNFIELD']-aim
+            return result
+        evaluate=env['_evalGeometricDeorbitNode']
+        def measured(ut,retro,lat,lng,lead,aim,normal=0):
+            result=evaluate(ut,retro,lat,lng,lead,aim,normal)
+            if result['VALID']:result['ERR']=result['DOWNFIELD']-aim
+            return result
+        def policy(node,lat,lng):
+            models.append((node.TIME,node.retro,node.normal))
+            return dict(VALID=scenario!='model-fails',REASON='fixture-model-rejected',
+                        AIM=35000,MIN=33500,MAX=36500)
+        env.update(_findDeorbitGeometryNode=geometry,_solveGeometricDeorbitDv=coarse,
+                   _evalGeometricDeorbitNode=measured,_planRetroNode=plan,
+                   _readGeometricDeorbitNode=read,landingDeorbitLeadPolicy=policy,
+                   _targetDeorbitLightAccepted=lambda *args:scenario!='radio',
+                   fixture_remove_probe=lambda node:nodes.remove(node))
+        if scenario=='fuel':env['SHIP'].DELTAV.VACUUM=20
+        if scenario=='old-preference':
+            env['_targetDeorbitRefineDone']=lambda solved,lo,hi:env['_targetDeorbitSolutionAccepted'](solved,lo,hi) and solved['CROSS']<=250
+        # Exercise the complete search AND powered refinement, stopping before
+        # final node creation/execution. Node and counter adapters match the
+        # other numerical solver fixtures; all acceptance logic is real code.
+        result=planner_prefix(env,target_lat=44.593,target_lng=-24.926)
+        assert not nodes and count.value<=64
+        assert count.value==sum(costs)+len(trials)+len(models)
+        assert env['targetLat']==44.593 and env['targetLng']==-24.926
+        if scenario=='powered':
+            assert result is None and env['poweredAccepted'] and len(searches)==1
+            assert env['searchStop']=='powered-seed' and len(models)>1
+            assert 33500<=env['solved']['DOWNFIELD']<=36500
+            assert env['solved']['CROSS']<=500 and abs(env['solved']['NORMAL'])<=10
+        else:
+            assert result is False and not env.get('poweredAccepted',False)
+            assert len(models)==(1 if scenario=='model-fails' else 0)
+        if scenario=='old-preference':
+            assert count.value==64 and env['poweredPass']==0
+            assert env['bestAcceptedCross']==368
+            assert env['holdReason']=='powered-validation-budget-exhausted'
+        outcomes.append((scenario,count.value,len(models)))
+    print('PASS: reported368m/250m preference reproduces64/64 and zero forecasts under the old policy; revised full search/Newton/powered flow validates in%d/64 with%d forecasts, preserving target and cross/normal/fuel/radio/model rejection'% (outcomes[1][1],outcomes[1][2]))
+
+
 if __name__ == '__main__':
     check_physical_solver()
     check_selected_pass()
@@ -545,3 +615,4 @@ if __name__ == '__main__':
     check_pass_first_order()
     check_failure_candidate_summary()
     check_mun_normal_authority()
+    check_reported_preference_budget()

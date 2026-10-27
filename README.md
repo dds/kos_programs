@@ -309,6 +309,17 @@ reserved for it. The64-trial cap, landing tolerance and admission limits
 remain unchanged. `STATS deorbit powered-step` records the proposal mode,
 goal and slope; its goal is not an accepted landing forecast.
 
+For powered landings, the preferred ballistic cross-track goal (typically
+250m) does not consume the trials needed for finite-burn validation. A seed
+inside the unchanged hard cross-track limit (typically500m), downfield, fuel
+and normal-burn limits proceeds directly to powered fitting. Inner geometric
+polishing follows the same rule. Radio checks still precede that handoff;
+fresh powered forecasts, final terrain checks and offline-code admission
+still authorize the burn. `STATS deorbit seed` reports the hard/preferred
+cross-track values and remaining trials; search stops with`powered-seed`.
+The64-trial cap is unchanged. If no model check could run, the hold now says
+`powered-validation-budget-exhausted` rather than implying model nonconvergence.
+
 The live H gate uses a cheaper 32-bin mass-aware range quadrature from a
 per-stage hardware snapshot. The full forward simulation stays in orbital
 planning; it is not run in a throttle lock or powered guidance tick. Both
