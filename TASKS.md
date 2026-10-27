@@ -57,6 +57,19 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Landing coast: KAC alarm for braking alignment.** RO9-minmus4
+  diagnostic3243569410/boot021 confirms a resident COAST/countdown, zero
+  throttle and no braking alarm. Source only printed the HUD estimate;
+  maneuver alarms cover the earlier deorbit burn, not landing coast.
+  Added a vessel-owned KillWarp alarm from the displayed transition ETA,
+  checked every5s, strict1s reuse tolerance, reboot reuse/manual-deletion
+  recovery and cleanup on coast exit/landing finish/abort. Shared alarm
+  helper keeps its existing60s tolerance for other callers. No solar, warp,
+  blocking wait or ignition-gate changes. Source-driven lifecycle checks
+  pass; all65 routine check files passed78.11s; final guidance/alarm/structure
+  checks also pass after cleanup/sentinel refinements. Native KAC/kOS flight
+  confirmation remains pending; these are source fixtures, not native proof.
+  Retrieved evidence `/tmp/ksp-minmus4-brake-alarm-20261027.json`.
 - [ ] **Move fixed-site lateral correction into powered braking.** Native
   RO9-mun2 landingUT2956618.2, diagnostic2956003095/boot033 copied locally to
   `/tmp/kos-mun-landing-2956003/` (diagnostic + sidecar + boot031..034 +

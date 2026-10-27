@@ -219,6 +219,8 @@ def call(name, env, *args):
 
 def environment():
     env = dict(landingReviewReachableSite=lambda *args: True, ABORT=False,
+               _landingCoastAlarm=lambda *args: None,
+               _landingClearCoastAlarm=lambda *args: None,
                landingEconomyTerminalSite=lambda *args: False,
                landingDiagnosticRecord=lambda *args: None,
                landingDiagnosticBrake=lambda *args: None,

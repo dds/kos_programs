@@ -648,6 +648,12 @@ the commanded thrust vector and at or above the horizon. The same throttle
 guard runs throughout braking and after staging; an urgent stopping gate
 does not bypass it. `STATS landing-brake alignment hold/ready` records
 alignment changes, and the saved brake decision includes commanded throttle.
+During landing COAST, the alignment countdown also owns a vessel-specific
+`Landing braking alignment` KAC alarm (`Landing braking burn` without a
+target). Its estimate refreshes every five seconds and the alarm is removed
+when coast ends or landing finishes/aborts. Guidance remains resident at 1x;
+this alarm does not start a burn or replace the live safety gates. Stay with
+the craft during descent. Without KAC, the same guidance loop continues.
 Descending braking aims at least `LANDING_BRAKE_MIN_PITCH` (1 degree by
 default, bounded to 0-2) above the horizon at unchanged thrust magnitude.
 An exactly horizontal aim could otherwise let a 0.3-degree tracking error

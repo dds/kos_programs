@@ -52,7 +52,7 @@ def alarm_fixture(env):
     env['SHIP'].NAME = 'RO9'
     env['SHIP'].BODY.ATM = NS(EXISTS=True, HEIGHT=70000)
     env['kacShipAlarmName'] = lambda name: execute(function_body(PHASES,'kacShipAlarmName'),dict(env,almName=name))
-    env['kacEnsureAlarm'] = lambda name,ut,note: execute(function_body(PHASES,'kacEnsureAlarm'),dict(env,almName=name,almUt=ut,almNote=note))
+    env['kacEnsureAlarm'] = lambda name,ut,note: execute(function_body(PHASES,'kacEnsureAlarm'),dict(env,almName=name,almUt=ut,almNote=note,reuseTolerance=60))
     env['_aerobrakeAtmoHeight'] = lambda: execute(function_body(AERO,'_aerobrakeAtmoHeight'),dict(env))
     env['_aerobrakeSetEntryAlarm'] = lambda: execute(function_body(AERO,'_aerobrakeSetEntryAlarm'),dict(env))
     return alarms, events

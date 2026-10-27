@@ -84,9 +84,10 @@ GLOBAL FUNCTION _landingCoastTick {
     LOCAL gate IS _landingBrakeGateInfo(ctx).
     LOCAL nextBrakeEta IS MIN(gate["H_ETA"], gate["V_ETA"]).
     LOCAL coastTransitionEta IS nextBrakeEta.
-    IF ctx["HAS_TARGET"] {
+    IF ctx["HAS_TARGET"] AND nextBrakeEta < 999999 {
         SET coastTransitionEta TO nextBrakeEta - LANDING_BRAKE_ALIGN_LEAD.
     }
+    _landingCoastAlarm(ctx,coastTransitionEta).
 
     _landingHudText(ctx, "COAST d=" + ROUND(gate["DIST"],0)
         + " dr=" + ROUND(gate["DOWNRANGE"],0)

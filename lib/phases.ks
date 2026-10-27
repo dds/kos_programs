@@ -238,12 +238,13 @@ GLOBAL FUNCTION kacEnsureAlarm {
     PARAMETER almName.
     PARAMETER almUt.
     PARAMETER almNote.
+    PARAMETER reuseTolerance IS 60.
     IF NOT ADDONS:KAC:AVAILABLE { RETURN "". }
     LOCAL fullName IS kacShipAlarmName(almName).
     LOCAL alarms IS LISTALARMS("All").
     FOR a IN alarms {
         IF a:NAME = fullName {
-            IF a:TIME > TIME:SECONDS AND ABS(a:TIME - almUt) < 60 { RETURN a:ID. }
+            IF a:TIME > TIME:SECONDS AND ABS(a:TIME - almUt) < MAX(0.01,reuseTolerance) { RETURN a:ID. }
             DELETEALARM(a:ID).
         }
     }

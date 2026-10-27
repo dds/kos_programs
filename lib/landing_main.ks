@@ -146,6 +146,52 @@ GLOBAL FUNCTION _landingBoolText {
     RETURN CHOOSE "true" IF flag ELSE "false".
 }
 
+GLOBAL FUNCTION _landingClearCoastAlarm {
+    PARAMETER ctx.
+    IF NOT ctx:HASKEY("COAST_ALARM_ID") { RETURN. }
+    IF ctx["COAST_ALARM_ID"] <> "" AND ADDONS:KAC:AVAILABLE {
+        DELETEALARM(ctx["COAST_ALARM_ID"]).
+    }
+    SET ctx["COAST_ALARM_ID"] TO "".
+}
+
+GLOBAL FUNCTION _landingCoastAlarm {
+    PARAMETER ctx.
+    PARAMETER transitionEta.
+    IF NOT ctx:HASKEY("COAST_ALARM_ID") {
+        SET ctx["COAST_ALARM_ID"] TO "".
+        SET ctx["COAST_ALARM_CHECK"] TO 0.
+        SET ctx["COAST_ALARM_UNAVAILABLE"] TO FALSE.
+    }
+    IF NOT (transitionEta > 0 AND transitionEta < 999999) {
+        _landingClearCoastAlarm(ctx).
+        RETURN.
+    }
+    // Informational warp-stop only: the resident guidance loop still owns
+    // the live gates. Never solar-aim, warp or block during descent.
+    IF TIME:SECONDS < ctx["COAST_ALARM_CHECK"] { RETURN. }
+    SET ctx["COAST_ALARM_CHECK"] TO TIME:SECONDS + 5.
+    IF NOT ADDONS:KAC:AVAILABLE {
+        IF NOT ctx["COAST_ALARM_UNAVAILABLE"] {
+            mLogWarn("STATS landing coast-alarm status=unavailable resident=True warp=0").
+            SET ctx["COAST_ALARM_UNAVAILABLE"] TO TRUE.
+        }
+        RETURN.
+    }
+    SET ctx["COAST_ALARM_UNAVAILABLE"] TO FALSE.
+    LOCAL wakeUt IS TIME:SECONDS + transitionEta.
+    LOCAL label IS "Landing braking alignment".
+    IF NOT ctx["HAS_TARGET"] { SET label TO "Landing braking burn". }
+    LOCAL alarmId IS kacEnsureAlarm(label,wakeUt,
+        "Estimated landing coast end. Stay with the craft; live guidance controls ignition.",1).
+    IF alarmId <> ctx["COAST_ALARM_ID"] {
+        mLog("STATS landing coast-alarm wakeUt=" + wakeUt
+            + " eta=" + transitionEta + " alarm=" + alarmId
+            + " resident=True warp=0").
+    }
+    SET ctx["COAST_ALARM_ID"] TO alarmId.
+}
+
 GLOBAL FUNCTION _landingTrajImpactInfo {
     PARAMETER ctx.
     IF NOT ctx["HAS_TARGET"] { RETURN LEXICON("FOUND", FALSE, "DIST", 999999). }
@@ -547,6 +593,7 @@ GLOBAL FUNCTION _landingSetState {
 
     LOCAL prevState IS ctx["STATE"].
     IF prevState = nextState { RETURN. }
+    IF prevState = "COAST" { _landingClearCoastAlarm(ctx). }
     IF prevState = "BRAKING_BURN" OR prevState = "COAST_MCC"
             OR prevState = "TARGET_REFINE" OR prevState = "APPROACH"
             OR prevState = "HOVER_REFINE" OR prevState = "VERTICAL_DESCENT" {
@@ -868,6 +915,7 @@ GLOBAL FUNCTION landExecute {
 
     IF landingAbortFlag {
         vesselLandingCleanup().
+        _landingClearCoastAlarm(ctx).
         landingDiagnosticTick(ctx, TRUE).
         SET CONFIG:IPU TO priorIpu.
         stateRemove("landing_prior_ipu").
@@ -876,6 +924,7 @@ GLOBAL FUNCTION landExecute {
         RETURN FALSE.
     }
     LOCAL landed IS _landingFinish(ctx).
+    _landingClearCoastAlarm(ctx).
     landingDiagnosticTick(ctx, TRUE).
     SET CONFIG:IPU TO priorIpu.
     stateRemove("landing_prior_ipu").

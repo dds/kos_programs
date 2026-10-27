@@ -9,6 +9,13 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 RO9-minmus4 missing braking-alignment KAC alarm: landing COAST
+only emitted HUD countdowns. Added owned alarm from same ETA,5s polling,
+strict1s reuse, cleanup at coast exit/finish/abort; no solar/warp/wait/gate
+changes. kacEnsureAlarm has optional reuseTolerance default60 unchanged for
+existing callers. Native alarm confirmation pending; do not reboot a live
+descent just to install this fix. Details/evidence in TASKS.md.
+
 2026-10-27 latest crash21:25:22..23CET verified GPU allocation failure:
 kernel repeats amdgpu_vm_validate failed / Not enough memory for command
 submission; gamescope1559 logs DRM flip ENOSPC/fatal flip then SIGABRT,
