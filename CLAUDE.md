@@ -26,7 +26,15 @@ KSPTL Config.ModuleManagerPostLoad reloads/applies the patched node; Deferred
 Settings.LoadSettings reads GameDatabase. Whole-game restart required;
 verify effective ModuleManager.ConfigCache and then actual scene memory.
 No shadow-manager disable/forced-runtime-shadow change;8k startup log alone
-is not final allocation proof. Runtime application/memory effect still pending.
+is not final allocation proof.
+Post-reboot verification21:14..21:15UTC: fresh ModuleManager.ConfigCache
+contains false/256/SSRfalse, startup logs both FINAL patches and KSPTL
+ModuleManagerPostLoad; RO9-minmus4 is in FLIGHT. NoIVAplaceholder/MHdisabled
+also persist. RAMavailable0.485GiB, zram logical usage5.80GiB, disk swap0,
+GTT6.31/8GiB, VRAM0.83/1GiB; memory PSI full avg10 fell15.28% to4.73%.
+No current-boot allocation/hung-task/OOM/GPU-reset signatures found.
+Settings verified, but capacity still tight and long-run stability/savings
+not proven. Snapshots /tmp/ksp-deck-post-settings-{verification,settled}-20261027.json.
 
 2026-10-27 memory suggestions audit: effective MM cache confirms prior
 KSPTextureLoader settings reverted (persistent buffertrue, temporary cap

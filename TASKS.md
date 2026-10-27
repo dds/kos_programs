@@ -333,8 +333,17 @@ record remaining uncertainty before closing a task.
   `~/Kerbal Space Program/GameData/zzz_DeckTweaks/DeckMemory.cfg`; readback
   matches repository SHA256 c5c71cc281dcb50dc6e353f403eeda72949b12f1adbcc379517c8940a78bd291.
   Config snapshots/rollback manifest: `~/ksp-memory-backups/20261027T204744Z`.
-  Whole-game startup and effective MM cache/native memory confirmation
-  remain pending. Shadow resolution is
+  Post-reboot21:14..21:15UTC: fresh MM cache confirms false/256/SSRfalse;
+  startup logs both FINAL patches plus KSPTL ModuleManagerPostLoad. Native
+  RO9-minmus4 FLIGHT loaded; NoIVAplaceholder/MHdisabled also persist.
+  RAMavailable0.485GiB, swap5.80GiB logical zram/0disk, GTT6.31/8GiB,
+  VRAM0.83/1GiB. Memory PSI full avg10 declined15.28% to4.73% after loading;
+  vmstat follow-up shows modest swap-ins/no swap-outs, not heavy disk churn.
+  Current-boot journal has no matching allocation/hung-task/OOM/GPU-reset
+  failure signatures. Settings applied, but memory headroom still tight;
+  long-run stability and comparable-scene savings remain unproven. Evidence:
+  `/tmp/ksp-deck-post-settings-verification-20261027.json` and
+  `/tmp/ksp-deck-post-settings-settled-20261027.json`. Shadow resolution is
   deliberately unchanged pending actual runtime ownership verification.
 - [ ] **Latest Deck crash: renderer/memory follow-up.** Inspected before
   mission work. Crash_2026-10-27_092057394/error.log reports UnityPlayer.dll
