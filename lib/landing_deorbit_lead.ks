@@ -22,10 +22,11 @@ LOCAL FUNCTION _landingLeadStateAt {
     LOCAL geo IS lmGroundGeoAt(ut).
     LOCAL asl IS positionVec:MAG-SHIP:BODY:RADIUS.
     LOCAL hull IS MAX(0,ALT:RADAR-SHIP:BOUNDS:BOTTOMALTRADAR).
+    LOCAL terrain IS geo:TERRAINHEIGHT.
     RETURN LEXICON("HS",VXCL(upVec,velocityVec):MAG,
         "DOWN",MAX(0,-VDOT(velocityVec,upVec)),
-        "HEIGHT",MIN(asl-targetElevation,asl-geo:TERRAINHEIGHT-hull),
-        "LAT",geo:LAT,"LNG",geo:LNG,"ASL",asl).
+        "HEIGHT",MIN(asl-targetElevation,asl-terrain-hull),
+        "LAT",geo:LAT,"LNG",geo:LNG,"ASL",asl,"TERRAIN",terrain,"HULL",hull).
 }
 
 // Mirror both live ignition gates, including the fixed-site geographic gate.
@@ -133,6 +134,8 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
     }
     IF ABORT { SET policy["REASON"] TO "abort". RETURN policy. }
     LOCAL ignition IS _landingLeadStateAt(hi,elevation).
+    LOCAL gate IS lmStagedBrakeEnvelope(ignition["HS"],ignition["DOWN"],
+        activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
     LOCAL forecast IS landingPredictBrake(lmGroundPositionAt(hi),lmGroundVelocityAt(hi),stack,elevation).
     IF NOT forecast["VALID"] { SET policy["REASON"] TO forecast["REASON"]. RETURN policy. }
     LOCAL capturedGeo IS SHIP:BODY:GEOPOSITIONOF(forecast["POSITION"]+SHIP:BODY:POSITION).
@@ -160,6 +163,11 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
     mLog("STATS deorbit powered-lead aimM=" + ROUND(leadM,0)
         + " rangeM=" + ROUND(rangeM,0) + " ballisticM=" + ROUND(ballistic["DOWNFIELD"],0)
         + " ignitionUT=" + ROUND(hi,1) + " height=" + ROUND(ignition["HEIGHT"],0)
+        + " ignitionLat=" + ROUND(ignition["LAT"],5) + " ignitionLng=" + ROUND(ignition["LNG"],5)
+        + " asl=" + ROUND(ignition["ASL"],1) + " targetElev=" + ROUND(elevation,1)
+        + " localTerrain=" + ROUND(ignition["TERRAIN"],1) + " hull=" + ROUND(ignition["HULL"],2)
+        + " vGate=" + ROUND(gate["V"],1) + " vNow=" + (ignition["HEIGHT"] <= gate["V"])
+        + " nodeUt=" + nd:TIME + " prograde=" + nd:PROGRADE + " normal=" + nd:NORMAL
         + " hs=" + ROUND(ignition["HS"],1) + " down=" + ROUND(ignition["DOWN"],1)
         + " activeAcc=" + ROUND(activeAcc,2) + " planAcc=" + ROUND(planAcc,2)
         + " stageDvAfterDeorbit=" + ROUND(stageDv,1)

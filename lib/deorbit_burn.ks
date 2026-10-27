@@ -53,10 +53,12 @@ GLOBAL FUNCTION executeDeorbitNode {
     LOCAL burnTime IS burnDV / MAX(0.1, SHIP:AVAILABLETHRUST / SHIP:MASS).
     LOCAL startTime IS nd:TIME - burnTime / 2.
     IF startTime < TIME:SECONDS + 5 { SET startTime TO TIME:SECONDS + 5. }
-    LOCAL alignStartTime IS startTime - 90.
-    LOCAL kacAlarmId IS maneuverEnsureBurnAlarm(startTime, burnDV, "Deorbit burn", 90).
+    LOCAL approachLead IS 90.
+    IF beforeBurn <> 0 { SET approachLead TO 300. }
+    LOCAL alignStartTime IS startTime - approachLead.
+    LOCAL kacAlarmId IS maneuverEnsureBurnAlarm(startTime, burnDV, "Deorbit burn", approachLead).
     mLog("STATS deorbit-burn setup dv=" + ROUND(burnDV,1)
-        + " eta=" + ROUND(startTime - TIME:SECONDS,1)).
+        + " eta=" + ROUND(startTime - TIME:SECONDS,1) + " revalidateLead=" + approachLead).
 
     LOCAL burnBody IS SHIP:BODY.
     LOCAL solarRef IS -1.
@@ -91,8 +93,46 @@ GLOBAL FUNCTION executeDeorbitNode {
             vesselLandingCleanup().
             IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
             mLogError("Deorbit pre-burn revalidation failed; node retained, no burn started.").
+            PRINT "Run RUNPATH('0:/cmd/deorbitretry.ks'). then REBOOT. to replan the saved target from orbit.".
             RETURN FALSE.
         }
+    }
+
+    // A successful pre-burn callback may refine the attached node in place.
+    // Refresh every executor quantity that depends on its impulse.
+    SET burnDV TO nd:DELTAV:MAG.
+    SET burnTime TO burnDV / MAX(0.1,SHIP:AVAILABLETHRUST/SHIP:MASS).
+    SET startTime TO nd:TIME-burnTime/2.
+    // Preserve the original 90-second final validation after the earlier
+    // refinement opportunity. A second change still cancels ignition.
+    IF coasted AND beforeBurn <> 0 {
+        LOCAL finalCheckTime IS startTime-90.
+        UNTIL TIME:SECONDS >= finalCheckTime OR ABORT OR NOT HASNODE OR SHIP:BODY <> burnBody {
+            SET solarRef TO trySolarHoldTick(solarRef,finalCheckTime).
+            WAIT MIN(10,MAX(0.5,finalCheckTime-TIME:SECONDS)).
+        }
+        IF ABORT OR NOT HASNODE OR SHIP:BODY <> burnBody {
+            vesselLandingCleanup().
+            IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
+            RETURN FALSE.
+        }
+        LOCAL accepted IS landingLightNodeAllowed(nd,targetLat,targetLng).
+        IF accepted { SET accepted TO beforeBurn:CALL(nd,targetLat,targetLng). }
+        IF NOT accepted OR ABORT OR NOT HASNODE {
+            vesselLandingCleanup().
+            IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
+            mLogError("Deorbit final forecast changed; node retained, no burn started. Use cmd/deorbitretry then REBOOT to replan the saved target.").
+            RETURN FALSE.
+        }
+        SET burnDV TO nd:DELTAV:MAG.
+        SET burnTime TO burnDV/MAX(0.1,SHIP:AVAILABLETHRUST/SHIP:MASS).
+        SET startTime TO nd:TIME-burnTime/2.
+    }
+    IF startTime <= TIME:SECONDS+5 {
+        vesselLandingCleanup().
+        IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
+        mLogError("Deorbit pre-burn checks exhausted alignment time; node retained, no burn started.").
+        RETURN FALSE.
     }
 
     SET SAS TO FALSE.

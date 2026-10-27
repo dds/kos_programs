@@ -25,6 +25,7 @@ GLOBAL TARGET_DEORBIT_MAX_EVALUATIONS IS 64.
 // Zero retains the consecutive-window search. Survey geometry, not TR nodes.
 GLOBAL TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS IS 0.
 LOCAL _deorbitEvaluations IS 0.
+LOCAL _deorbitLastCheck IS LEXICON("VALID",FALSE).
 
 GLOBAL FUNCTION targetedDeorbit {
     LOCAL targetInfo IS targetResolveDeorbitTarget().
@@ -574,7 +575,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
     archiveLog().
     HUDTEXT("Deorbit burn in " + ROUND(bestUT - TIME:SECONDS,0) + "s",
         3, 2, 13, CYAN, FALSE).
-    IF NOT executeDeorbitNode(realNode, targetLat, targetLng, landingDeorbitNodeAccepted@) { RETURN FALSE. }
+    IF NOT executeDeorbitNode(realNode, targetLat, targetLng, landingDeorbitNodeReady@) { RETURN FALSE. }
 
     WAIT 2.
     IF ADDONS:TR:HASIMPACT {
@@ -684,7 +685,9 @@ GLOBAL FUNCTION landingDeorbitNodeAccepted {
     PARAMETER nd.
     PARAMETER targetLat.
     PARAMETER targetLng.
+    SET _deorbitLastCheck TO LEXICON("VALID",FALSE).
     WAIT 0.5.
+    IF ABORT OR NOT HASNODE { RETURN FALSE. }
     LOCAL leadPolicy IS landingDeorbitLeadPolicy(nd,targetLat,targetLng).
     IF NOT leadPolicy["VALID"] {
         mLogWarn("STATS deorbit retained-node geometryReason=powered-lead-" + leadPolicy["REASON"]).
@@ -692,6 +695,7 @@ GLOBAL FUNCTION landingDeorbitNodeAccepted {
     }
     LOCAL solved IS _readGeometricDeorbitNode(nd, targetLat, targetLng, leadPolicy["AIM"]).
     LOCAL reason IS _targetDeorbitRejection(solved, leadPolicy["MIN"], leadPolicy["MAX"]).
+    SET _deorbitLastCheck TO LEXICON("VALID",TRUE,"REASON",reason,"ERR",solved["ERR"]).
     mLog("STATS deorbit retained-node geometryReason=" + reason
         + " targetLat=" + targetLat + " targetLng=" + targetLng
         + " downfieldM=" + solved["DOWNFIELD"] + " crossM=" + solved["CROSS"]
@@ -700,6 +704,79 @@ GLOBAL FUNCTION landingDeorbitNodeAccepted {
         + " nodeUt=" + nd:TIME + " nodeDv=" + nd:DELTAV:MAG).
     IF reason <> "accepted" { RETURN FALSE. }
     RETURN _targetDeorbitTerrainAccepted(nd:TIME, targetLat, targetLng).
+}
+
+// A late forecast can change even with an unchanged TR impact. Refit ONLY
+// its along-track residual, at the same epoch and with the same normal/radial
+// components. Never replace/detach the executor's node or relax admission.
+// This is a separate bounded pre-burn pass, not a reset of the orbital search.
+GLOBAL FUNCTION landingDeorbitNodeReady {
+    PARAMETER nd.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    IF landingDeorbitNodeAccepted(nd,targetLat,targetLng) { RETURN TRUE. }
+    IF LANDING_POWERED_LEAD <= 0 { RETURN FALSE. }
+    IF NOT _deorbitLastCheck["VALID"] { RETURN FALSE. }
+    LOCAL reason IS _deorbitLastCheck["REASON"].
+    IF reason <> "insufficient-braking-lead" AND reason <> "excessive-braking-lead" { RETURN FALSE. }
+    IF ABORT OR NOT HASNODE OR SHIP:STATUS <> "ORBITING" OR SHIP:PERIAPSIS <= 0
+            OR stateGet("deorbit_burn_started","false") = "true"
+            OR SHIP:THRUST > 0.001 OR SHIP:CONTROL:MAINTHROTTLE > 0
+            OR SHIP:CONTROL:PILOTMAINTHROTTLE > 0 { RETURN FALSE. }
+    LOCAL originalPro IS nd:PROGRADE.
+    IF originalPro > -2 OR originalPro < -120 OR ABS(nd:RADIALOUT) > 0.001 { RETURN FALSE. }
+    LOCAL originalBody IS SHIP:BODY.
+    LOCAL baseRetro IS -originalPro.
+    LOCAL baseError IS _deorbitLastCheck["ERR"].
+    LOCAL deadline IS MIN(TIME:SECONDS+160,nd:TIME-90).
+    LOCAL iteration IS 0.
+    LOCAL checks IS 1.
+    LOCAL admitted IS FALSE.
+    mLogWarn("STATS deorbit preburn-refit status=begin residualM=" + ROUND(baseError,0)
+        + " retro=" + baseRetro + " eta=" + ROUND(nd:ETA,1) + " maxForecasts=7").
+    UNTIL iteration >= 3 OR ABORT OR NOT HASNODE OR SHIP:BODY <> originalBody OR TIME:SECONDS+25 >= deadline {
+        LOCAL probeRetro IS MIN(120,baseRetro+0.5).
+        IF probeRetro-baseRetro < 0.01 { SET probeRetro TO MAX(2,baseRetro-0.5). }
+        SET probeRetro TO MAX(-originalPro-10,MIN(-originalPro+10,probeRetro)).
+        LOCAL probeDv IS probeRetro-baseRetro.
+        IF ABS(probeDv) < 0.01 { BREAK. }
+        SET nd:PROGRADE TO -probeRetro.
+        SET checks TO checks+1.
+        SET admitted TO landingDeorbitNodeAccepted(nd,targetLat,targetLng).
+        IF admitted { BREAK. }
+        IF ABORT OR NOT HASNODE OR SHIP:BODY <> originalBody OR NOT _deorbitLastCheck["VALID"] { BREAK. }
+        SET reason TO _deorbitLastCheck["REASON"].
+        IF reason <> "insufficient-braking-lead" AND reason <> "excessive-braking-lead" { BREAK. }
+        LOCAL slope IS (_deorbitLastCheck["ERR"]-baseError)/probeDv.
+        IF NOT (ABS(slope) >= 1 AND ABS(slope) < 1e30) OR TIME:SECONDS+25 >= deadline { BREAK. }
+        LOCAL trialRetro IS MAX(2,MIN(120,baseRetro+MAX(-5,MIN(5,-baseError/slope)))).
+        SET trialRetro TO MAX(-originalPro-10,MIN(-originalPro+10,trialRetro)).
+        IF ABS(trialRetro-baseRetro) < 0.001 { BREAK. }
+        SET nd:PROGRADE TO -trialRetro.
+        SET checks TO checks+1.
+        SET admitted TO landingDeorbitNodeAccepted(nd,targetLat,targetLng).
+        IF admitted { BREAK. }
+        IF ABORT OR NOT HASNODE OR SHIP:BODY <> originalBody OR NOT _deorbitLastCheck["VALID"] { BREAK. }
+        SET reason TO _deorbitLastCheck["REASON"].
+        IF reason <> "insufficient-braking-lead" AND reason <> "excessive-braking-lead" { BREAK. }
+        IF NOT (ABS(_deorbitLastCheck["ERR"]) < ABS(baseError)) { BREAK. }
+        SET baseRetro TO trialRetro.
+        SET baseError TO _deorbitLastCheck["ERR"].
+        SET iteration TO iteration+1.
+    }
+    // REASON alone cannot approve terrain or a cancelled/deadline-late check.
+    IF admitted AND NOT ABORT AND HASNODE AND TIME:SECONDS < deadline
+            AND SHIP:BODY = originalBody AND SHIP:STATUS = "ORBITING" AND SHIP:PERIAPSIS > 0
+            AND SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
+            AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0
+            AND landingLightNodeAllowed(nd,targetLat,targetLng) {
+        mLog("STATS deorbit preburn-refit status=accepted forecasts=" + checks
+            + " retro=" + -nd:PROGRADE + " residualM=" + ROUND(_deorbitLastCheck["ERR"],0)).
+        RETURN TRUE.
+    }
+    IF HASNODE { SET nd:PROGRADE TO originalPro. WAIT 0.5. }
+    mLogWarn("STATS deorbit preburn-refit status=hold forecasts=" + checks + " originalNodeRestored=" + HASNODE).
+    RETURN FALSE.
 }
 
 LOCAL FUNCTION _targetDeorbitTerrainAccepted {
@@ -738,6 +815,12 @@ LOCAL FUNCTION _targetDeorbitRejection {
     PARAMETER minDownfield.
     PARAMETER maxDownfield.
     IF NOT solved["VALID"] OR NOT solved["HAS_IMPACT"] { RETURN "no-impact-prediction". }
+    // NaN is neither below nor above a band; it must not fall through as
+    // accepted when a native predictor/probe returns invalid geometry.
+    IF NOT (ABS(solved["DOWNFIELD"]) < 1e30
+            AND minDownfield >= 0 AND maxDownfield >= minDownfield AND maxDownfield < 1e30
+            AND solved["CROSS"] >= 0 AND solved["CROSS"] < 1e30
+            AND solved["DV"] >= 0 AND solved["DV"] < 1e30) { RETURN "invalid-impact-geometry". }
     IF solved["DV"] > SHIP:DELTAV:VACUUM { RETURN "fuel". }
     IF ABS(solved["NORMAL"]) > MAX(0, TARGET_DEORBIT_NORMAL_DV_CAP) + 0.001 { RETURN "normal-cap". }
     IF solved["DOWNFIELD"] < minDownfield { RETURN "insufficient-braking-lead". }

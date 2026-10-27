@@ -9,6 +9,24 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 RO9-mun2 boot027 follow-up: pre-coast lead119365m / footprint
+118214m passed; pre-burn footprint stayed118214m / cross220m but ignition
+moved2885843.3->2885830.1 and lead rose126363m, residual-8149m. No burn.
+This is forecast/gate drift, not TR footprint drift. Existing logs do NOT
+prove which terrain/clearance input changed. New lead rows log ignition geo,
+ASL/target/local terrain/hull/V gate and node components to distinguish it.
+Targeted coasts now wake300s ahead for landingDeorbitNodeReady: same attached
+node, fixed UT/normal/radial/target, retro-only bounded powered-residual probes.
+At most7 forecasts /3 iterations, <=5m/s per step and10m/s total, original
+2..120 retro limits; no global search budget reset. Full fresh admission and
+terrain on each candidate, light on final acceptance; physical/throttle/
+interrupted-burn/deadline guards; restore original prograde on any failure.
+Keep original90s final revalidation as well; no further late refit after its
+deadline. Executor refreshes burnDV/duration/start after a successful change.
+No tolerance relaxation or cache gate. All62 routine checks passed in68.90s;
+final body-change stop guards also passed targeted solver checks. Native
+recovery still needs testing.
+
 2026-10-27 explicit operator override: "remove the blackout protection,
 it's a risk we have to take." Removed both mandatory whole-descent cache
 checks from executeDeorbitNode and the unused landing_handoff library.

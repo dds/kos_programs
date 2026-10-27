@@ -121,8 +121,9 @@ def check_long_coast_admission():
     # which has its own physical cutoff and attached-node fixture.
     source=function_body((ROOT/'lib/deorbit_burn.ks').read_text(),'executeDeorbitNode')
     source=source.split('    SET SAS TO FALSE.',1)[0]
+    source=re.sub(r'PRINT "[^"]*"\.', '', source)
     source=re.sub(r'WAIT UNTIL (.*?)\.(?=\s*\n)',r'UNTIL \1 { WAIT 0.02. }',source,flags=re.S)
-    for scenario in ('accepted','geometry-rejected','light-changed','cache-lost','abort','body-changed','removed','unhealthy','expired','no-owned-alarm'):
+    for scenario in ('accepted','refined','refine-too-late','final-geometry','final-light','geometry-rejected','light-changed','cache-lost','abort','body-changed','removed','unhealthy','expired','no-owned-alarm'):
         events=[]
         node=NS(TIME=100000,DELTAV=NS(MAG=10))
         ship=NS(BODY='Mun',MASS=1,AVAILABLETHRUST=10,CONTROL=NS(PILOTMAINTHROTTLE=.2))
@@ -138,10 +139,10 @@ def check_long_coast_admission():
                  fixture_lock=lambda statement:events.append(('lock',statement)))
         def light(nd,lat,lng):
             events.append(('light',lat,lng))
-            return scenario!='light-changed' or env['TIME'].SECONDS==0
+            return (scenario!='light-changed' or env['TIME'].SECONDS==0) and (scenario!='final-light' or len([e for e in events if e[0]=='light'])<3)
         def solar(label,orient,health,deadline):
             events.append(('solar',deadline))
-            assert orient and health and deadline==99909.5
+            assert orient and health and deadline==99699.5
             # Advance most of this synthetic long coast without thousands of
             # identical clock ticks. The actual final poll loop still executes.
             env['TIME'].SECONDS=deadline-20
@@ -160,23 +161,27 @@ def check_long_coast_admission():
             if scenario=='expired':node.TIME=env['TIME'].SECONDS
         def admission(nd,lat,lng):
             events.append(('geometry',lat,lng))
-            return scenario!='geometry-rejected'
+            if scenario=='refined':node.DELTAV.MAG=22
+            if scenario=='refine-too-late':env['TIME'].SECONDS=node.TIME-4
+            return scenario!='geometry-rejected' and (scenario!='final-geometry' or len([e for e in events if e[0]=='geometry'])<2)
         env.update(landingLightNodeAllowed=light,enterSolarCoast=solar,coastAutoWarp=warp,
                    trySolarHoldTick=tick,fixture_wait=wait,beforeBurn=NS(CALL=admission))
         result=run(source,env)
-        accepted=scenario in ('accepted','cache-lost','unhealthy','no-owned-alarm')
+        accepted=scenario in ('accepted','refined','cache-lost','unhealthy','no-owned-alarm')
         assert result is (None if accepted else False),(scenario,result)
         names=[event[0] for event in events]
         assert names.index('alarm')<names.index('solar')
         assert ('warp' in names)==(scenario not in ('abort','body-changed','removed','unhealthy','no-owned-alarm'))
         if accepted:
-            assert names.count('tick')==2 and names.count('light')==2 and 'geometry' in names
-            assert env['TIME'].SECONDS==99909.5 and 'cutoff' not in names
+            assert names.count('tick')>=2 and names.count('light')==3 and names.count('geometry')==2
+            assert env['TIME'].SECONDS==(99908.9 if scenario=='refined' else 99909.5) and 'cutoff' not in names
         else:
             assert 'cutoff' in names and ('delete','burn-alarm') in events
         assert all('TO 0' in event[1] for event in events if event[0]=='lock')
-        assert node.DELTAV.MAG==10 and ship.CONTROL.PILOTMAINTHROTTLE==0
-    print('PASS: distant deorbit coasts install KAC before solar, keep polling, revalidate geometry/light, skip unhealthy warp and refuse ignition after abort, body change, node removal or expiry')
+        assert node.DELTAV.MAG==(22 if scenario=='refined' else 10) and ship.CONTROL.PILOTMAINTHROTTLE==0
+        if scenario=='refined':
+            assert env['burnDV']==22 and env['burnTime']==2.2 and env['startTime']==99998.9
+    print('PASS: distant deorbit coasts install KAC before solar, keep polling, revalidate geometry/light, skip unhealthy warp, refresh burn timing after refinement and refuse ignition after abort, body change, node removal, expiry or exhausted alignment time')
 
 
 if __name__=='__main__':

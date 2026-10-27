@@ -348,8 +348,8 @@ def check_coupled_powered_refinement(start=30,contraction=.6):
 def check_shared_admission_and_rescue():
     env,_,_=solver.environment(lambda *args:None)
     calls=[]
-    env.update(_readGeometricDeorbitNode=lambda *args:dict(VALID=True,HAS_IMPACT=True,
-                   DV=20,NORMAL=0,DOWNFIELD=35000,CROSS=0,ANGLE=20),
+    env.update(HASNODE=True,_readGeometricDeorbitNode=lambda *args:dict(VALID=True,HAS_IMPACT=True,
+                   DV=20,NORMAL=0,DOWNFIELD=35000,CROSS=0,ANGLE=20,ERR=0),
                landingDeorbitLeadPolicy=lambda *args:dict(VALID=True,AIM=35000,MIN=33500,MAX=36500),
                _targetDeorbitTerrainAccepted=lambda *args:calls.append('terrain') or True)
     assert env['landingDeorbitNodeAccepted'](NS(TIME=1000),0,0) and calls==['terrain']

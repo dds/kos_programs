@@ -365,7 +365,7 @@ def check_explicit_deorbit_retry():
 
 
 def check_resume_and_cpu():
-    nodes = without_print(ks.parse(function_body(LANDING,'_resumeExistingLandingDeorbitNode').replace('landingDeorbitNodeAccepted@','fixtureAdmission')))
+    nodes = without_print(ks.parse(function_body(LANDING,'_resumeExistingLandingDeorbitNode').replace('landingDeorbitNodeReady@','fixtureAdmission')))
     for status,started,skip,allowed in (('ORBITING',False,0,False),('ORBITING',False,0,True),
                                        ('SUB_ORBITAL',False,0,False),('ORBITING',True,0,False),
                                        ('ORBITING',False,1,False)):
@@ -697,6 +697,68 @@ def check_normal_fallback_search_budget():
     print('PASS: actual full search/inner solver/powered validation avoids64-trial abandonment and finishes in%d/64 with first-pass normal recovery; fixed target and all hard admission gates remain'%(results[1]))
 
 
+def check_preburn_refit():
+    ready=function_body(SOURCE,'landingDeorbitNodeReady')
+    admission=function_body(SOURCE,'landingDeorbitNodeAccepted')
+    cases=('changed','already-ok','cross','normal','fuel','terrain','light','invalid',
+           'flat','nan','wrong-slope','unreachable','deadline','late-model',
+           'abort','removed','suborbital','committed','thrust','main','pilot','radial','body-change')
+    for case in cases:
+        env,_,_=environment(lambda *args:None)
+        node=NS(TIME=300.,ETA=300.,PROGRADE=-14.59,NORMAL=-7.7,RADIALOUT=0.,DELTAV=NS(MAG=16.5))
+        body=NS(NAME='Mun');seen=[]
+        env.update(nd=node,targetLat=44.593,targetLng=-24.926,HASNODE=True,LANDING_POWERED_LEAD=1,
+                   SHIP=NS(BODY=body,STATUS='ORBITING',PERIAPSIS=14500,THRUST=0.,
+                           CONTROL=NS(MAINTHROTTLE=0.,PILOTMAINTHROTTLE=0.),DELTAV=NS(VACUUM=1000)),
+                   stateGet=lambda *args:'true' if case=='committed' else 'false',
+                   _targetDeorbitTerrainAccepted=lambda *args:case!='terrain',
+                   landingLightNodeAllowed=lambda *args:case!='light')
+        def policy(nd,lat,lng):
+            seen.append(nd.PROGRADE)
+            env['TIME'].SECONDS+=100 if case=='late-model' else 10
+            if len(seen)>1 and case=='abort':env['ABORT']=True
+            if len(seen)>1 and case=='removed':env['HASNODE']=False
+            if len(seen)>1 and case=='body-change':env['SHIP'].BODY=NS(NAME='Kerbin')
+            return dict(VALID=case!='invalid',REASON='unsupported',AIM=126363.,MIN=124863.,MAX=127863.)
+        def geometry(nd,lat,lng,aim):
+            retro=-nd.PROGRADE
+            error=-8149+(-1200)*(retro-14.59)
+            if case=='already-ok':error=0
+            if case in ('terrain','light'):error=0 if len(seen)>1 else error
+            if case=='flat':error=-8149
+            if case=='nan':error=float('nan') if len(seen)>1 else error
+            if case=='wrong-slope':error=-8149+1200*(retro-14.59)
+            if case=='unreachable':error=-8149+10*(retro-14.59)
+            result=impact(nd.TIME,retro,nd.NORMAL,error,220)
+            result.update(DOWNFIELD=aim+error,ERR=error,DV=16.5)
+            if case=='cross':result['CROSS']=900
+            if case=='normal':result['NORMAL']=11
+            if case=='fuel':result['DV']=2000
+            return result
+        env.update(landingDeorbitLeadPolicy=policy,_readGeometricDeorbitNode=geometry)
+        def actual_admission(nd,lat,lng):
+            scope=dict(env,nd=nd,targetLat=lat,targetLng=lng)
+            result=run(admission,scope)
+            env['_deorbitLastCheck']=scope['_deorbitLastCheck']
+            return result
+        env['landingDeorbitNodeAccepted']=actual_admission
+        if case=='deadline':env['TIME'].SECONDS=200
+        if case=='suborbital':env['SHIP'].STATUS='SUB_ORBITAL'
+        if case=='thrust':env['SHIP'].THRUST=.1
+        if case=='main':env['SHIP'].CONTROL.MAINTHROTTLE=.1
+        if case=='pilot':env['SHIP'].CONTROL.PILOTMAINTHROTTLE=.1
+        if case=='radial':node.RADIALOUT=1
+        result=run(ready,env)
+        expected=case in ('changed','already-ok','wrong-slope')
+        assert result is expected,(case,result,seen)
+        assert len(seen)<=7 and all(2<=-p<=120 and abs(p+14.59)<=10 for p in seen),(case,seen)
+        assert node.TIME==300 and node.NORMAL==-7.7 and node.RADIALOUT==(1 if case=='radial' else 0)
+        if not expected and env['HASNODE']:assert node.PROGRADE==-14.59,(case,node)
+        if case=='changed':assert abs(geometry(node,44.593,-24.926,126363)['ERR'])<=1500
+        if case=='already-ok':assert len(seen)==1 and node.PROGRADE==-14.59
+    print('PASS: actual pre-burn admission/refit recovers the reported8.15km moving-forecast miss at the same epoch/normal/target; both slope signs work; <=7 forecasts, fuel/cross/normal/terrain/light/deadline/abort/interruption guards and exact original-node restoration remain')
+
+
 if __name__ == '__main__':
     check_physical_solver()
     check_selected_pass()
@@ -713,3 +775,4 @@ if __name__ == '__main__':
     check_normal_band_fallback()
     check_normal_probe_guards()
     check_normal_fallback_search_budget()
+    check_preburn_refit()

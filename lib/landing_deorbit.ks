@@ -114,7 +114,7 @@ LOCAL FUNCTION _resumeExistingLandingDeorbitNode {
             mLogError("Retained deorbit node has no resolved target; node preserved.").
             yieldToPrompt(). RETURN TRUE.
         }
-        SET beforeBurn TO landingDeorbitNodeAccepted@.
+        SET beforeBurn TO landingDeorbitNodeReady@.
         SET targetLat TO landingTarget["LAT"].
         SET targetLng TO landingTarget["LNG"].
         IF NOT landingDeorbitNodeAccepted(nd, landingTarget["LAT"], landingTarget["LNG"]) {

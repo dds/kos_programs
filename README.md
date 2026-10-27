@@ -521,6 +521,24 @@ set `LANDING_DIVERT_REQUIRE_KERBIN=1`; its configurable
 `LANDING_DIVERT_KERBIN_TOLERANCE` subtracts 7 degrees from the planned requirement,
 with a lower bound of -2 degrees. Neither setting guarantees a live link.
 
+Targeted deorbit coasts now wake five minutes before the burn for a fresh
+powered forecast. If only the braking lead changed, a bounded local pass can
+adjust the same node's retrograde component while keeping its time, normal,
+radial component and landing target fixed. It measures the powered residual
+response rather than treating the ballistic footprint as the landing point.
+At most seven forecasts are allowed, with 5 m/s steps, a 10 m/s total change
+limit and the original 2–120 m/s retrograde range. Each candidate must still
+meet the original geometry, fuel and terrain limits; radio is rechecked before
+acceptance. A failed pass restores the original node. The original final
+check 90 seconds before the burn remains; another forecast change cancels
+ignition. KAC is installed before the solar coast, and the wait stays resident.
+
+The `STATS deorbit powered-lead` row includes ignition latitude/longitude,
+ASL, target elevation, local terrain, hull clearance and the vertical gate.
+These distinguish terrain-dependent ignition changes from orbital-footprint
+drift. If revalidation fails while still in orbit, use
+`RUNPATH("0:/cmd/deorbitretry.ks").` then `REBOOT.` to replan the saved target.
+
 Before deorbit, the shared policy in [landing_radio.ks](lib/landing_radio.ks)
 uses `LANDING_RADIO_MODE="AUTO"`. Mun and Minmus are in
 `LANDING_DIRECT_KERBIN_BODIES`; `LANDING_RELAY_BODIES` starts empty. Thus a

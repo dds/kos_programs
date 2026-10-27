@@ -30,8 +30,9 @@ record remaining uncertainty before closing a task.
   restore it. Storage reduction is now a nonblocking resilience task.
 - RO9-mun2 boot025 on88feef6 now validates the normal-only fallback and full
   powered planning: 58/64 trials, cross116m, modeled residual-1212m within
-  1500m. The separate cache gate alone blocked ignition; it is now removed.
-  Keep250m preferred/500m hard cross limits and the64-trial cap unchanged.
+  1500m. Cache gate is removed. Latest boot027 instead held after its powered
+  forecast changed during coast; bounded pre-burn refit is implemented below,
+  native recovery pending. Keep250m preferred/500m hard and64 trials unchanged.
 - Operator confirmed the Minmus3 Kolniya orbital objective succeeded. Next
   flight step is the existing LAND_PREP/landing route; the comparison is an
   optimization, not a new prerequisite. Stage handoff/next-entry KAC flight
@@ -47,6 +48,24 @@ record remaining uncertainty before closing a task.
   inspection is complete, settings unchanged, Plex excluded.
 
 ## In progress
+
+- [ ] **RO9-mun2 powered forecast changes during coast.** Native boot027
+  retained footprint118214m/cross220m, but lead119365->126363m and ignition
+  moved13.2s earlier. Initial residual-1152m passed; final-8149m held without
+  thrust. Terrain-dependent gate is suspected, not established; new rows
+  expose local terrain/target elevation/hull/ASL/vertical gate and ignition
+  coordinates. Added300s pre-burn wake with bounded same-node retro-only
+  refit (7 forecasts, 3 iterations, 5m/s step/10m/s change, original2..120
+  retro bounds), unchanged fresh admission/terrain/radio/fuel limits and
+  exact rollback on failure. Original90s final validation remains; another
+  change holds. KAC precedes solar; no prompt exit on the scheduled wait.
+  Executor refreshes impulse/timing after accepted refinement. Source cases
+  cover reported8.15km drift with both response signs and rejection/rollback
+  for invalid/cross/normal/fuel/terrain/radio/abort/deadline/committed/active
+  thrust states. All62 routine check files passed in68.90s; final body-change
+  stop guards also passed targeted solver checks. Native refinement and
+  root-cause diagnostics remain open.
+
 
 - [x] **RO9-mun2 powered validation starved by ballistic preference.**
   Read RO9_2518776 boot023: first valid seed cross368m/downfield13235m,
