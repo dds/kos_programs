@@ -1269,6 +1269,70 @@ compared with the economy mission. Budget/reserve limits hold if unaffordable.
 must include SHAPE; existing missions default to an empty orbit specification.
 The return provider remains cached through prelaunch, ascent and shaping.
 
+### Minmus Tundra, temperature surveys and landing
+
+Select RO9 profile `minmus_tundra_survey_return` for this sequence:
+
+1. Capture and finish Ap **397,272 m**, Pe **9,300 m**, inclination
+   **116.6°**, LAN **337°**, argument of Pe **270°**. The existing strict
+   orbital tolerances and fuel safeguards apply. The first science hold
+   preserves empty thermometers. Verify the orbital contract, then use its
+   printed `setphase.ks`, `LAND_PREP` and `REBOOT` commands.
+2. `LAND_PREP` lowers Ap to approximately 19.3 km while keeping the 9.3 km
+   Pe and retrograde plane. `ORBITAL_SURVEY` predicts overhead passes and
+   takes temperature readings near the following sites, in the order its
+   pass forecasts allow. Surveys precede landing to avoid another ascent
+   into a plane reaching the northern sites.
+
+   | Site | Latitude | Longitude | Minimum altitude ASL |
+   | --- | ---: | ---: | ---: |
+   | 1 | 52.648° | 2.235° | 6,600 m |
+   | 2 | 34.308° | -12.419° | 6,600 m |
+   | 3 | 52.176° | 18.898° | 6,600 m |
+   | 4 | 35.436° | -18.744° | 6,600 m |
+   | 5 | 52.128° | 82.575° | 6,600 m |
+
+   The supplied 3,200–6,600 m values are **minimum thresholds**; flying
+   above 6,600 m covers all of them without lowering the safety floor.
+3. `SCIENCE_OPS_LOW` holds for you to verify the five contract ticks and
+   stored data. A recorded deployment is not proof of contract completion.
+   To release the fixed landing, run the printed commands:
+
+   ```kerboscript
+   RUNPATH("0:/cmd/setphase.ks", "LAND_DEORBIT").
+   REBOOT.
+   ```
+
+4. Land at **-29.189°, 17.465°**, retaining terrain/footprint and stage
+   checks. The locked site takes precedence over navigation waypoints;
+   neither darkness nor lack of direct Kerbin view substitutes a new site.
+   Surface return launches eastward into a low orbit near 29.189°
+   inclination, then departs for a **53 km Kerbin entry** with the readings.
+
+Before launch, put an empty stock thermometer and an Experiment Storage
+Unit on the retained return section, with the CPU. Alternatively use one
+retained empty thermometer per site. Prelaunch checks for this hardware.
+The survey only collects into containers retained with the CPU; it never
+dumps or transmits data, and resets a rerunnable thermometer only after its
+data has been removed. If storage rejects a reading, it uses another empty
+thermometer or holds for review with the reading intact. Selecting
+`SCIENCE_OPS_RUN_ALL=0` reserves these sensors at the two review holds;
+other profiles keep the existing run-all behavior.
+
+No contract radius was supplied. `ORBITAL_SURVEY_RADIUS=1000` m is an explicit,
+configurable overhead proximity criterion, **not an inferred contract
+radius**. Forecasts scan at most 48 orbits and refine each remaining site's
+closest sampled pass. They preserve the orbit and do not claim an optimal
+tour or make plane changes. Missing passes retry in a running KAC/solar
+coast; KAC is created before solar aiming, and an unavailable KAC leaves a
+live clock wait at 1x. Live position/altitude checks gate every observation.
+Copied persistent progress survives reboot. Abort, a new node, a changed
+body, unsafe orbit or unavailable measurement holds the phase for review.
+
+This profile and survey controller have source/conic regression checks;
+native compilation, storage behavior, waypoint/contract acceptance and the
+complete flight still need testing. Update from the archive with a link.
+
 ### Preparing a landing orbit
 
 Insert `LAND_PREP` between an orbital objective/review and `LAND_DEORBIT` in

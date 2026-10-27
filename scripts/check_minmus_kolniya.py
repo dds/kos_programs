@@ -10,7 +10,9 @@ from check_surface_return import defaults, read_settings, emit_profile, emit_sur
 PROFILE=(ROOT/'missions/RO9/minmus_kolniya_flats_return.ks').read_text()
 
 
-def configuration():return read_settings(PROFILE,defaults())
+def configuration():
+    science=(ROOT/'lib/science.ks').read_text().split('GLOBAL FUNCTION',1)[0]
+    return read_settings(PROFILE,read_settings(science,defaults(),'GLOBAL'))
 
 
 def executable(source):

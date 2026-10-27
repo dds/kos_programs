@@ -9,6 +9,24 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 Tundra/survey mission: RO9 minmus_tundra_survey_return requests
+397272/9300m,116.6deg,LAN337,AoP270. User clarified3200-6600m are ABOVE
+thresholds, not an altitude band. Use >6600m for every site, keep9km floor.
+SCIENCE_OPS_RUN_ALL defaults1; this profile0 reserves empty thermometers at
+orbital holds. Prelaunch's conditional survey_hardware root checks retained
+empty stock sensors plus storage (or one sensor/site) before arming.
+ORBITAL_SURVEY owns a separate band, shares lmGroundGeoAt/coast_wait/solar/
+cutoff, never maneuvers. Survey-first retains the broad retrograde plane;
+LAND_PREP lowers Ap once. Five coords and landing coords are separate.
+1km overhead radius is explicit policy, not a discovered contract radius.
+Stock ScienceExperimentModule DEPLOY/HASDATA/RERUNNABLE and retained
+ScienceContainerModule COLLECTALL are documented APIs. RESET only after
+HASDATA becomes false; a declined duplicate must remain intact, using another
+sensor or holding. Observed deployment is NOT a contract completion API.
+After five observations advance only to SCIENCE_OPS_LOW/manual tick review.
+Copy nested DONE list before mutation/stateSet. KAC before solar on every
+resident wait; no-KAC remains a clock wait. Native APIs/flight still unproven.
+
 2026-10-27 generic landing preparation: LAND_PREP -> landing_orbit is a
 dedicated band sharing orbit_shape/maneuver/roles/coast_wait. It changes the
 special orbit into a low landing parking orbit, independently of target

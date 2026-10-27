@@ -65,6 +65,8 @@ GLOBAL FUNCTION dependencyLibs {
         "airplane", LIST("observe", "flightplan", "utils"),
         "rover", LIST(),
         "science", LIST(),
+        "survey_hardware", LIST(),
+        "orbital_survey", LIST("science", "landing_math", "coast_wait", "thrust_cutoff"),
         "aerobrake", LIST("maneuver", "utils", "landing_config", "aerobrake_assist", "solar"),
         "aerobrake_assist", LIST("aerobrake_config", "aerobrake_ap_math", "aerobrake_staging", "thrust_cutoff"),
         "aerobrake_staging", LIST("aerobrake_config", "thrust_cutoff"),
@@ -95,6 +97,7 @@ GLOBAL FUNCTION dependencyPhases {
         "EVA_SCIENCE", LIST("science", "orbit"),
         "SCIENCE_OPS", LIST("science", "orbit", "solar"),
         "SCIENCE_OPS_LOW", LIST("science", "orbit", "solar"),
+        "ORBITAL_SURVEY", LIST("orbital_survey"),
         "LAUNCH", LIST("launch"),
         "HOP", LIST("hop"),
         "HOP_REVIEW", LIST("hop"),
@@ -189,6 +192,7 @@ GLOBAL FUNCTION dependencyBands {
         "DUNA_IKE_SETUP", LIST("DUNA_AEROCAPTURE", "IKE_SETUP", "DUNA_ENTRY_SETUP", "DUNA_ENTRY_LOWER_PE"),
         "LAND_DEORBIT", LIST("LAND_DEORBIT"),
         "LAND_PREP", LIST("LAND_PREP"),
+        "ORBITAL_SURVEY", LIST("ORBITAL_SURVEY"),
         "LANDING", LIST("LAND_ASSIST", "LAND"),
         "MOLNIYA", LIST("MOLNIYA", "MOLNIYA_INSERT"),
         "DONE", LIST("DONE")
@@ -206,6 +210,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "EVA_SCIENCE" { phaseMapSet(phaseMap, phaseKey, phaseEvaScience@). }
     ELSE IF phaseKey = "SCIENCE_OPS" { phaseMapSet(phaseMap, phaseKey, phaseScienceOps@). }
     ELSE IF phaseKey = "SCIENCE_OPS_LOW" { phaseMapSet(phaseMap, phaseKey, phaseScienceOpsLow@). }
+    ELSE IF phaseKey = "ORBITAL_SURVEY" { phaseMapSet(phaseMap, phaseKey, phaseOrbitalSurvey@). }
     ELSE IF phaseKey = "LAUNCH" { phaseMapSet(phaseMap, phaseKey, phaseLaunch@). }
     ELSE IF phaseKey = "HOP" { phaseMapSet(phaseMap, phaseKey, phaseHop@). }
     ELSE IF phaseKey = "HOP_REVIEW" { phaseMapSet(phaseMap, phaseKey, phaseHopReview@). }

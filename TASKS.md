@@ -6,6 +6,48 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Latest Deck crash: renderer/memory follow-up.** Inspected before
+  mission work. Crash_2026-10-27_092057394/error.log reports UnityPlayer.dll
+  access violation0xc0000005 at09:20:58UTC,94% physical memory used/800MB
+  free,9951MB process paging/commit and6947MB peak working set (Proton
+  reporting; not Linux swap/PSS). KSP.log has12432 RenderBuiltins stack
+  entries beginning09:15:00UTC after Kerbin camera/cloud setup. No kernel
+  OOM/GPU-allocation error in09:15–09:24UTC. Cause remains unproven; distinguish
+  renderer failure from memory pressure. ShadowMan requested8192 shadow-map
+  resolution despite the separately applied Scatterer2048 setting; verify
+  final ownership before changing anything. Read-only reports preserved at
+  `/tmp/ksp-deck-crash-20261027.json` and
+  `/tmp/ksp-deck-crash-detail-20261027.json`; full Unity logs/dump remain in
+  the dated crash directory on Deck. No game settings changed. Exclude Plex.
+- [ ] **New RO9 Minmus Tundra / survey / landing / science-return mission.**
+  First achieve Ap397272m, Pe9300m, inclination116.6deg, LAN337deg,
+  AoP270deg. Then choose an efficient order for five overhead orbital
+  temperature surveys above the supplied3200–6600m minimum thresholds and
+  a landing at lat-29.189/lon17.465. Survey sites:
+  (52.648,2.235), (34.308,-12.419), (52.176,18.898),
+  (35.436,-18.744), (52.128,82.575). Return the science to Kerbin.
+  Implemented `missions/RO9/minmus_tundra_survey_return.ks`: exact first
+  orbit and review -> generic LAND_PREP retaining116.6deg/9.3km Pe while
+  lowering Ap to~19.3km -> ORBITAL_SURVEY -> contract-review hold -> fixed
+  landing -> eastward29.189deg low-orbit ascent ->53km Kerbin entry.
+  Survey-first avoids an ascent into the northern survey plane after landing;
+  no global optimality claim. All readings use >6600m ASL, retaining the9km
+  safety floor. Configurable1km overhead criterion is not a supplied contract
+  radius. Bounded rotating ground-track forecasts, closest-pass refinement,
+  KAC-before-solar resident retries, live position/altitude admission and
+  copied persistent progress are implemented. Measurements are not contract
+  verification; manual release follows the five readings. Prelaunch requires
+  retained thermometer/storage hardware or one empty sensor per site. No
+  transmit/dump; reset only after data collection; duplicate refusal holds.
+  First orbital review now reserves sensors instead of pre-deploying them.
+  Independent retrograde conic/source fixtures reach all five actual sites;
+  source checks cover hardware/data preservation, waits/cancellation, two
+  fresh return profiles and reboot progress. All57 routine check files
+  passed in78.11s; targeted survey/loading/legacy-profile checks and the
+  structural audit were rerun after the final loading refinement. Audit:
+  zero errors, existing missing `ksc_deorbit` handler warning unchanged.
+  Native compile/cache size,
+  storage behavior, contract acceptance, full landing and return pending.
 - [ ] **Generic landing-orbit preparation / Kolniya mission.** Implemented
   reusable LAND_PREP in its own band, after SCIENCE_OPS review and before
   target-specific LAND_DEORBIT. Automatic low apsides preserve an already-low

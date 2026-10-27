@@ -5,6 +5,7 @@
 // --- Config defaults owned by this file ---
 GLOBAL AUTO_TRANSMIT IS 1.
 GLOBAL SCIENCE_OPS_HOLD IS 0.
+GLOBAL SCIENCE_OPS_RUN_ALL IS 1.
 GLOBAL SCIENCE_SURVEY_POINTS IS LIST().
 GLOBAL SCANSAT_POWER_GUARD IS 0.
 GLOBAL SCANSAT_POWER_LOW IS 0.2.
@@ -168,7 +169,9 @@ GLOBAL FUNCTION phaseScienceOps {
     SET SAS TO TRUE.
     orbitSummary().
     scienceStatus().
-    LOCAL ran IS scienceRunAll().
+    // A survey flight may reserve its empty thermometers for the sites.
+    LOCAL ran IS 0.
+    IF SCIENCE_OPS_RUN_ALL <> 0 { SET ran TO scienceRunAll(). }
     WAIT 10.
     scienceStatus().
     mLog("STATS science-ops body=" + SHIP:BODY:NAME

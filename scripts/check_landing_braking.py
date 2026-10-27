@@ -324,9 +324,9 @@ def check_integration():
             assert name in names, (path,name)
     for path in [ROOT/'craft/RO9.ks',*(ROOT/'missions/RO9').glob('*.ks')]:
         original=ROOT/str(path.relative_to(ROOT)).replace('RO9','RO8')
-        if path==ROOT/'missions/RO9/minmus_kolniya_flats_return.ks':
-            # Operator-requested RO9-only two-orbit mission. Its generated
-            # profiles and waypoint/review behavior have their own fixture.
+        if path.name in ('minmus_kolniya_flats_return.ks','minmus_tundra_survey_return.ks'):
+            # Operator-requested RO9-only missions have generated-profile,
+            # survey/waypoint/review fixtures; no RO8 counterpart is intended.
             assert not original.exists()
             continue
         clean = lambda text: re.sub(r'//[^\n]*', '', text)

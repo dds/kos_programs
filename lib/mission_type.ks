@@ -31,6 +31,10 @@ GLOBAL FUNCTION missionTypeDetect {
 GLOBAL FUNCTION missionTypeConditionalRoots {
     PARAMETER bandKey.
     LOCAL roots IS LIST().
+    IF bandKey = "PRELAUNCH" AND SEQUENCE:CONTAINS("ORBITAL_SURVEY") {
+        // Only survey flights need this small read-only hardware check.
+        roots:ADD("survey_hardware").
+    }
     // The surface-ascent leg reboots into RETURN_SETUP after PARK, possibly
     // out of radio view. Keep its small provider through prelaunch, ascent
     // and optional post-ascent shaping. Other missions pay no extra cost.
