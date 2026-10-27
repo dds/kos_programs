@@ -13,8 +13,10 @@ record remaining uncertainty before closing a task.
 - Tundra XING boot004 at UT2816238.4 treats an expired4.437m/s parking node
   as a departure. Operator must inspect/delete that stale node and reboot;
   the PARK handoff fix prevents advancing while MJ is still circularizing.
-- Emergency capture source fix is implemented; then audit cached-state
-  mutations and continue the read-only Deck renderer investigation.
+- Emergency capture and cached-state caller fixes are implemented. Next:
+  continue the read-only Deck renderer investigation, with settings unchanged.
+- Native bridge correction `5698546`: no top-level MJ NODE suffix exists.
+  PARK uses supported ASCENT:ENABLED, then verifies physical cutoff/orbit.
 - Preserve existing capture, Pe, fuel, staging and return reserve safeguards.
   Timed waits stay resident with KAC before solar and a clock fallback.
 - Implemented Tundra, LAND_PREP, between-pass staging and entry-alarm/solar
@@ -169,12 +171,6 @@ record remaining uncertainty before closing a task.
   change for a known site, including descent cost/reserve. Do not reintroduce
   a target-specific optimizer into the generic phase or assume Ap is a plane
   intersection. Retain the waypoint and native final deorbit checks.
-- [ ] **Audit mutable persistent-state collections.** stateGet returns its
-  cached Lexicon; in-place mutation can make stateSet skip its flush. The new
-  preparation ledger copies flat metadata before each edit and its fixture
-  exercises cache-reference semantics plus a separate disk snapshot. Audit
-  other callers before changing shared state behavior; no other flight bug
-  has yet been attributed to this pattern.
 - [ ] **Continue landing accuracy and efficiency validation.** Targeted
   landings must meet their locked target; economy sites may divert under
   their explicit policy. Validate powered-lead convergence, burn timing
@@ -205,6 +201,17 @@ record remaining uncertainty before closing a task.
 
 ## Completed checkpoints
 
+- [x] Cached-state caller audit: fixed final B-plane checkpoint consumption,
+  landing-light replacement alarm and hop waypoint replacement/append. Each
+  now copies its collection before mutation; shared state semantics, guards,
+  budgets and scheduling policy are unchanged. Reviewed current lib/cmd
+  collection reads and mutation paths; staging attempt marker is scalar,
+  payload/solar/review reads are read-only, and existing LAND_PREP/survey/
+  launch-window writers already copy or replace their records. New fixtures
+  execute actual stateGet/stateSet, JSON reboot immediately before later
+  writes, and removal of each fix to reproduce lost persistence. All60 check
+  files passed in72.69s; the later MJ compatibility correction passed its
+  focused handoff checks. Native occurrence in past incidents is unproven.
 - [x] Emergency capture live interlocks and MJ parking-controller handoff
   implemented;59 routine check files passed. Native validation remains above.
 - [x] Public SSH keys installed for `deck@10.200.26.154`; both verified in

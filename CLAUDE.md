@@ -9,6 +9,15 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 collection audit: fixed cached edits in bplaneClearRetryWait
+(consume waiting/alarm), landingAwaitLitGroundTrack (replacement alarm before
+solar), and hopWaypoint (replace/append the outer route list). Copy before
+editing; nested objects here stay read-only. Shared state semantics remain
+unchanged. check_state_collections executes actual stateGet/stateSet with
+JSON disk/reboot boundaries, interrupts before later writes can mask a lost
+flush, and removes each copy to reproduce the failure. No earlier native
+flight incident is attributed to these bugs without its corresponding log.
+
 2026-10-27 Tundra XING boot004: RO9_2815982 at UT2816238.4 resumed a4.437m/s
 expired node (ETA-25.2,pending=false,burn_phase empty), not a transfer plan.
 PARK advanced at UT2816224.8 in72.7x78km: its90% Pe gate can pass while MJ

@@ -37,6 +37,8 @@ GLOBAL FUNCTION stateGet {
     PARAMETER key.
     PARAMETER dflt IS "".
     _ensureLoaded().
+    // Collections are borrowed cache references. Copy before editing;
+    // copy any nested collection you will mutate too, then call stateSet.
     IF _cache:HASKEY(key) { RETURN _cache[key]. }
     RETURN dflt.
 }

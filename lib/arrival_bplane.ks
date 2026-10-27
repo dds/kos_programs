@@ -351,6 +351,9 @@ GLOBAL FUNCTION bplaneClearRetryWait {
         IF pending["alarm"] <> "" { DELETEALARM(pending["alarm"]). }
     }
     IF keepCheckpoint AND pending:LENGTH > 0 {
+        // stateGet returns the cache object. Consume the checkpoint on disk
+        // before a reboot can observe it as still waiting.
+        SET pending TO pending:COPY.
         SET pending["waiting"] TO FALSE.
         SET pending["alarm"] TO "".
         stateSet("bplane_retry_wait",pending).

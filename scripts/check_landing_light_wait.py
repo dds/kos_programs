@@ -22,6 +22,7 @@ ks.SOURCES=SOURCE+'\n'+ks.SOURCES
 class Lex(dict):
     LENGTH=property(len)
     KEYS=property(lambda self:list(self))
+    COPY=property(lambda self:Lex(self))
 
 
 class Flag:

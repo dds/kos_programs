@@ -24,6 +24,7 @@ ks.SOURCES += '\n'+SOURCE
 
 class Lex(dict):
     LENGTH=property(len)
+    COPY=property(lambda self:Lex(self))
 
 
 def environment():

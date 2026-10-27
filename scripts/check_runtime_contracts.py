@@ -29,6 +29,8 @@ class KList(list):
     @property
     def LENGTH(self): return len(self)
     def ADD(self, value): self.append(value)
+    @property
+    def COPY(self): return type(self)(self)
 
 
 def run(source, env):

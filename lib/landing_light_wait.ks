@@ -80,6 +80,7 @@ GLOBAL FUNCTION landingAwaitLitGroundTrack {
                 LOCAL waitBody IS SHIP:BODY.
                 IF wakeUt > TIME:SECONDS {
                     // Install the timer BEFORE potentially slow solar setup.
+                    SET saved TO saved:COPY.
                     SET saved["alarm"] TO kacEnsureAlarm("Landing light retry: " + SHIP:BODY:NAME,
                         wakeUt, "Estimated light/radio window; fresh site search required at wake.").
                     stateSet("landing_light_wait", saved).

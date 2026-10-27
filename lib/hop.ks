@@ -134,7 +134,8 @@ GLOBAL FUNCTION hopWaypoint {
     IF wp = 0 { PRINT "Select a navigation waypoint on this body first.". RETURN. }
     LOCAL site IS LIST(wp:LATITUDE,wp:LONGITUDE).
     IF NOT _hopDestinationAllowed(site) { RETURN. }
-    LOCAL sites IS stateGet("hop_route_sites",LIST()).
+    // Only the outer list changes; existing coordinate pairs are read-only.
+    LOCAL sites IS stateGet("hop_route_sites",LIST()):COPY.
     LOCAL nextIndex IS stateGetNum("hop_route_index",0)+1.
     IF nextIndex < sites:LENGTH { SET sites[nextIndex] TO site. }
     ELSE { sites:ADD(site). }
