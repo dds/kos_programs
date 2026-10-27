@@ -43,6 +43,10 @@ def check_requested_orbits_across_boots():
     assert [surface['SHAPE_'+key] for key in ('AP','PE','INC','LAN','AOP')]==[659734,554472,0,-1,.4]
     assert surface['SHAPE_RESERVE_DV']==300 and surface['SHAPE_TOTAL_DV_CAP']==250
     assert surface['SHAPE_ALT_TOL']==500 and surface['SHAPE_ANG_TOL']==.1
+    assert initial['SHAPE_ALT_TOL']==100 and initial['SHAPE_MIN_PE']==9000
+    for profile in (initial,surface):
+        assert profile['SHAPE_MIN_BURN_DV']==.002 and profile['SHAPE_BURN_TOLERANCE']==.001
+    assert surface['SHAPE_MIN_PE']==10000
     surface['targetPe']=surface['RETURN_PE']
     home=read_settings(emit_profile('phaseReturnSetup',surface),{})
     assert home['SEQUENCE']==['ESCAPE','COAST','MCC','AEROBRAKE','DESCENT','DONE']

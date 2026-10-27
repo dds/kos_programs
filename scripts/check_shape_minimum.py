@@ -32,6 +32,8 @@ def execute(name,env):
 def fixture():
     removed=[];events=[]
     env=dict(SHAPE_MIN_BURN_DV=.4,_shapeMinimumSkipped=False,
+        SHAPE_BURN_TOLERANCE=-1,BURN_TRIM_ABS_COMPLETE_DV=.05,BURN_TRIM_COMPLETE_MAX_DV=.05,
+        _peFloor=lambda:9000,
         SHAPE_ALT_TOL=250,SHAPE_ANG_TOL=.1,SHAPE_AOP_TOL=.2,
         NEAR_CIRC_ECC=.01,MIN_AOP_TARGET_ECC=.004,
         SHIP=NS(PERIAPSIS=9300,APOAPSIS=410000,ALTITUDE=100000,

@@ -68,7 +68,7 @@ LOCAL FUNCTION _beginLegProfile {
 LOCAL FUNCTION _writeSurfaceReturnOrbit {
     PARAMETER profilePath.
     FOR key IN LIST("AP","PE","INC","LAN","AOP","ALT_TOL","ANG_TOL","AOP_TOL",
-            "DV_CAP","TOTAL_DV_CAP","RESERVE_DV") {
+            "DV_CAP","TOTAL_DV_CAP","RESERVE_DV","MIN_BURN_DV","BURN_TOLERANCE","MIN_PE") {
         IF SURFACE_RETURN_ORBIT:HASKEY(key) {
             LOG "SET SHAPE_" + key + " TO " + configLiteral(SURFACE_RETURN_ORBIT[key]) + "." TO profilePath.
         }

@@ -965,6 +965,17 @@ floor and ETA; `STATS shape execution` records admitted burns and live errors.
 The `set-pe-for-ap` fallback is used only when the desired Ap really is below
 the current Pe, never just because a normal AP trim was below the minimum.
 
+Precision orbit profiles can explicitly lower `SHAPE_MIN_BURN_DV` and set
+`SHAPE_BURN_TOLERANCE` to a finer executor residual (minimum 0.001 m/s).
+The residual override applies only during each SHAPE/DEPARTURE_SHAPE burn;
+the previous executor settings are restored on success or failure. It never
+loosens an already stricter cutoff. All throttle, alignment, staging, impulse,
+budget and final orbit checks remain active. `SHAPE_MIN_PE` defaults to
+10,000 m and is shared by plane and apsis refiners; an explicit airless-body
+profile may choose a different safe floor. Atmospheric bodies always retain
+at least atmosphere height plus 10 km. A target Pe corridor entirely below
+the floor holds before planning, with the conflicting values in the log.
+
 The fixed-site RO9 Mun profile also permits up to 10 m/s of normal correction
 in its deorbit burn. It prefers cross-track error below 250 m and rejects
 above 500 m, reducing the lateral work left to powered descent. Its locked
@@ -1196,8 +1207,15 @@ Capture aims at 9.3 km Pe and 63.4° inclination. This profile accepts an
 arrival within 1 km of that Pe and 1° of that inclination; SHAPE still
 requires the final plane within 0.1° and finishes the requested LAN,
 apsides and argument. This avoids chasing sub-0.3 m/s arrival corrections
-for precision that belongs to SHAPE. Capture bounds and fuel reserves
-remain enforced. SCIENCE_OPS holds for your review; it
+for precision that belongs to SHAPE. The first orbit uses 100 m apsis
+tolerances, a 0.002 m/s SHAPE burn minimum and a 0.001 m/s executor
+residual: the contract can require a real 0.02 m/s correction at periapsis.
+The first orbit uses an explicit 9 km SHAPE safety floor (above this profile's
+8.3 km capture minimum), allowing the requested 9.3 km Pe; the high orbit
+uses the default 10 km floor and its existing 500 m apsis tolerance. The fine
+burn minimum and residual survive the generated surface-ascent profile.
+Capture bounds and fuel reserves remain enforced.
+SCIENCE_OPS holds for your review; it
 does not automatically deorbit. Select a navigation waypoint inside a
 Minmus Flats biome, preferably near the equator to reduce ascent plane cost,
 then run the commands also printed by the hold:

@@ -31,6 +31,8 @@
 //   SHAPE_ALT_TOL — apsis tolerance in m (default 1000)
 //   SHAPE_ANG_TOL — plane tolerance in deg (default 0.15)
 //   SHAPE_AOP_TOL — AoP tolerance in deg (default 1.0)
+//   SHAPE_MIN_PE — explicit airless Pe safety floor (default10000m)
+//   SHAPE_BURN_TOLERANCE — opt-in executor residual; -1 keeps defaults
 //
 // Notes:
 //   - INC+LAN are converged as a single PLANE error: the angle
@@ -64,6 +66,10 @@ GLOBAL SHAPE_AOP_TOL IS 0.5.
 // final shape nodes, including plane/AoP and optimizer-shrunk apsis trims.
 // Skipping does not waive final orbit tolerances; other corrections go first.
 GLOBAL SHAPE_MIN_BURN_DV IS 0.4.
+// Explicit precision missions may lower the airless floor and request a
+// tighter executor residual. Atmospheric clearance cannot be reduced here.
+GLOBAL SHAPE_MIN_PE IS 10000.
+GLOBAL SHAPE_BURN_TOLERANCE IS -1.
 GLOBAL SHAPE_DV_CAP IS -1.
 GLOBAL SHAPE_TOTAL_DV_CAP IS -1.
 GLOBAL SHAPE_RESERVE_DV IS -1.
@@ -404,8 +410,7 @@ GLOBAL FUNCTION planPlaneMatch {
     LOCAL seedErr IS _planeErrOf(nd:ORBIT, nTgt).
     LOCAL finalErr IS _refinePlaneNode(nd, nTgt).
 
-    LOCAL peFloor IS 10000.
-    IF SHIP:BODY:ATM:EXISTS { SET peFloor TO SHIP:BODY:ATM:HEIGHT + 10000. }
+    LOCAL peFloor IS _peFloor().
     IF nd:ORBIT:ECCENTRICITY >= 1 OR nd:ORBIT:PERIAPSIS < peFloor {
         mLogError("Plane match: planned node is unsafe (Pe "
             + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + "km ecc "
@@ -462,10 +467,7 @@ LOCAL FUNCTION _refinePlaneNode {
     // Hard floor: the apsis penalty is light by design (later
     // SHAPE steps restore the apsides cheaply), but the refiner
     // must never trade periapsis into terrain or atmosphere.
-    LOCAL peFloor IS 10000.
-    IF SHIP:BODY:ATM:EXISTS {
-        SET peFloor TO SHIP:BODY:ATM:HEIGHT + 10000.
-    }
+    LOCAL peFloor IS _peFloor().
 
     LOCAL FUNCTION _cost {
         IF nd:ORBIT:ECCENTRICITY >= 1 { RETURN 9999. }
@@ -550,7 +552,7 @@ LOCAL FUNCTION _planTangentBurnAt {
     LOCAL vNew IS SQRT(mu * (2 / rBurn - 1 / tSMA)).
     LOCAL nd IS NODE(TIME:SECONDS + burnEta, 0, 0, vNew - vNow).
     ADD nd.
-    mLog(label + " node: dV=" + ROUND(nd:DELTAV:MAG, 1)
+    mLog(label + " node: dV=" + ROUND(nd:DELTAV:MAG, 4)
         + " m/s  targetAlt=" + ROUND(targetAlt / 1000, 1)
         + "km  ETA=" + ROUND(burnEta, 0) + "s").
     maneuverUiArchiveLog(label).
@@ -587,8 +589,11 @@ LOCAL FUNCTION _placedApsisTa {
 }
 
 LOCAL FUNCTION _peFloor {
-    IF SHIP:BODY:ATM:EXISTS { RETURN SHIP:BODY:ATM:HEIGHT + 10000. }
-    RETURN 10000.
+    LOCAL floorAlt IS MAX(0, SHAPE_MIN_PE).
+    IF SHIP:BODY:ATM:EXISTS {
+        RETURN MAX(floorAlt, SHIP:BODY:ATM:HEIGHT + 10000).
+    }
+    RETURN floorAlt.
 }
 
 // Evaluate a cost delegate until two consecutive reads agree.
@@ -761,7 +766,7 @@ LOCAL FUNCTION _finishShapeNode {
     LOCAL seedPro IS nd:PROGRADE.
     WAIT 0.1.
     mLog("STATS shape-seed label=" + label
-        + " dv=" + ROUND(nd:DELTAV:MAG, 1)
+        + " dv=" + ROUND(nd:DELTAV:MAG, 4)
         + " predictPeKm=" + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1)
         + " predictApKm=" + ROUND(nd:ORBIT:APOAPSIS / 1000, 1)
         + " predictAoP=" + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1)).
@@ -816,13 +821,13 @@ LOCAL FUNCTION _finishShapeNode {
     }
 
     IF NOT _shapeNodeAboveMinimum(nd,label) { RETURN "skip". }
-    mLog("SHAPE " + label + ": dV=" + ROUND(nd:DELTAV:MAG, 1)
+    mLog("SHAPE " + label + ": dV=" + ROUND(nd:DELTAV:MAG, 4)
         + " m/s -> " + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + " x "
         + ROUND(nd:ORBIT:APOAPSIS / 1000, 1) + " km  AoP "
         + ROUND(nd:ORBIT:ARGUMENTOFPERIAPSIS, 1)
         + "  cost=" + ROUND(cost, 2)).
     mLog("STATS shape-refine label=" + label
-        + " dv=" + ROUND(nd:DELTAV:MAG, 1)
+        + " dv=" + ROUND(nd:DELTAV:MAG, 4)
         + " cost=" + ROUND(cost, 2)).
     RETURN LEX("node", nd, "label", label).
 }
@@ -1023,7 +1028,16 @@ LOCAL FUNCTION _runShapePhase {
 
     mLog(phaseLabel + " targets: " + _targetSummary(targets)).
     mLog("STATS " + phaseLabel:TOLOWER + " setup" + _targetSummary(targets)
-        + _errorSummary(shapeErrors(targets))).
+        + _errorSummary(shapeErrors(targets))
+        + " altTolerance=" + SHAPE_ALT_TOL + " planeTolerance=" + SHAPE_ANG_TOL
+        + " aopTolerance=" + SHAPE_AOP_TOL + " minimumDv=" + SHAPE_MIN_BURN_DV
+        + " burnTolerance=" + SHAPE_BURN_TOLERANCE + " peFloor=" + _peFloor()).
+    IF targets:HASKEY("PE") AND targets["PE"] + SHAPE_ALT_TOL < _peFloor() {
+        mLogError(phaseLabel + ": requested periapsis corridor is below the safety floor; review profile."
+            + " targetPe=" + targets["PE"] + " tolerance=" + SHAPE_ALT_TOL
+            + " peFloor=" + _peFloor()).
+        yieldToPrompt(). RETURN.
+    }
 
     LOCAL burns IS 0.
     UNTIL shapeConverged(targets) OR burns >= MAX_SHAPE_BURNS {
@@ -1048,7 +1062,18 @@ LOCAL FUNCTION _runShapePhase {
             mLog("STATS shape execution label=" + planned["label"]
                 + " dv=" + NEXTNODE:DELTAV:MAG + " minimumDv=" + SHAPE_MIN_BURN_DV
                 + " eta=" + ROUND(NEXTNODE:ETA,1) + _errorSummary(shapeErrors(targets))).
+            // Scope precision to this burn, including failed executor exits.
+            // A small node must not be declared complete by the usual0.05m/s
+            // residual. Never loosen an already stricter executor setting.
+            LOCAL savedAbsTol IS BURN_TRIM_ABS_COMPLETE_DV.
+            LOCAL savedMaxTol IS BURN_TRIM_COMPLETE_MAX_DV.
+            IF SHAPE_BURN_TOLERANCE > 0 {
+                SET BURN_TRIM_ABS_COMPLETE_DV TO MIN(savedAbsTol, MAX(0.001, SHAPE_BURN_TOLERANCE)).
+                SET BURN_TRIM_COMPLETE_MAX_DV TO MIN(savedMaxTol, BURN_TRIM_ABS_COMPLETE_DV).
+            }
             SET success TO executeManeuver().
+            SET BURN_TRIM_ABS_COMPLETE_DV TO savedAbsTol.
+            SET BURN_TRIM_COMPLETE_MAX_DV TO savedMaxTol.
             IF NOT success {
                 SET retries TO retries + 1.
                 IF retries >= MAX_RETRIES {

@@ -518,6 +518,23 @@ Looks like Python/JS; is neither.
   is a weighted objective, not proof the burn is valuable/within tolerance.
   Source regressions cover final shrink, all node types, fallback geometry,
   retry/execution admission and preserved hold. Native flight still unproven.
+  Follow-up native report: ApErr=-770m PeErr=+960m planeErr0.012deg
+  AoPErr0.045deg did NOT satisfy the contract. Tiny SHAPE burns are necessary
+  for this precision mission; do not apply the optional-arrival burn policy
+  to contract completion. Kolniya now requires100m apsides, minimumDv0.002,
+  SHAPE_BURN_TOLERANCE0.001 (scoped to executor calls; restores previous
+  absolute/max residual on success/failure and never loosens stricter values).
+  The usual executor absolute0.05 would skip the required~0.0234m/s AP trim.
+  Shared SHAPE_MIN_PE defaults10000; this profile explicitly sets9000, ABOVE
+  its existing8300 capture minimum, to allow9300 Pe. All plane/apsis safety
+  gates use the same floor; atmosphere+10000 clearance cannot be reduced.
+  Impossible target Pe corridor below floor holds before planning. Generated
+  surface-orbit profile serializes optional MIN_BURN_DV/BURN_TOLERANCE/MIN_PE,
+  with its existing500m apsides, same burn precision, and10000 floor for
+  the high orbit (100m there would require~0.0018m/s AP trims, below0.002).
+  Source/ideal-tangent replay of reported errors reaches100m using~0.0234
+  and0.1909m/s; real source governor reaches0.001 residual without overshoot
+  in its scalar fixture. Neither establishes native engine/physics precision.
   Surface return writes optional SURFACE_RETURN_ORBIT fields to the NEW local
   profile's SHAPE_* (Ap659734/Pe554472/inc0/noLAN/AoP0.4) and sequences
   PRELAUNCH/LAUNCH/PARK/SHAPE/RETURN_SETUP, then Kerbin Pe52000. Empty orbit
