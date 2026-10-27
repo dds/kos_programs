@@ -10,9 +10,8 @@ from check_landing_orbit import Lex, Seq as BaseSeq
 from check_surface_return import read_settings, defaults, emit_profile, literal
 
 SOURCE = (ROOT/'lib/orbital_survey.ks').read_text()
-HARDWARE = (ROOT/'lib/survey_hardware.ks').read_text()
 PROFILE = (ROOT/'missions/RO9/minmus_tundra_survey_return.ks').read_text()
-ks.SOURCES += '\n' + SOURCE + '\n' + HARDWARE
+ks.SOURCES += '\n' + SOURCE
 
 
 class Seq(BaseSeq):
@@ -82,15 +81,8 @@ def hardware(env,reject=False):
     return experiment,collected,therm,store
 
 
-def check_hardware_and_review_before_launch():
-    env,state,_,events,_=fixture();experiment,_,therm,store=hardware(env)
-    env['surveyHardwareReady']=lambda count:ks.call('surveyHardwareReady',env,count)
-    assert env['surveyHardwareReady'](5)
-    store.DECOUPLEDIN=2;assert not env['surveyHardwareReady'](5)
-    env['SHIP'].PARTS=Seq([therm]*5);assert env['surveyHardwareReady'](5)
-    experiment.DEPLOY();assert not env['surveyHardwareReady'](5)
-    preflight=function_body((ROOT/'lib/prelaunch.ks').read_text(),'phasePrelaunch')
-    assert preflight.index('surveyHardwareReady(')<preflight.index('confirmLaunch()')
+def check_review_reserves_thermometers():
+    env,state,_,events,_=fixture()
     cfg=read_settings(PROFILE,defaults())
     from check_minmus_kolniya import execute
     conditional=function_body((ROOT/'lib/mission_type.ks').read_text(),'missionTypeConditionalRoots')
@@ -98,7 +90,7 @@ def check_hardware_and_review_before_launch():
         for band in ('PRELAUNCH','LAUNCH','SHAPE'):
             roots=execute(conditional,dict(SEQUENCE=Seq(cfg['SEQUENCE'] if surveys else ['PRELAUNCH','LAUNCH']),
                 bandKey=band,LIST=lambda *xs:Seq(xs)))
-            assert ('survey_hardware' in roots)==(surveys and band=='PRELAUNCH')
+            assert 'survey_hardware' not in roots
     env.update(cfg,fixture_unlock=lambda:None,fixture_lock=lambda *_:None,
                scienceRunAll=lambda:(_ for _ in ()).throw(AssertionError('spent thermometer at review')),
                orbitSummary=lambda:None,scienceStatus=lambda:None,
@@ -106,7 +98,7 @@ def check_hardware_and_review_before_launch():
                xferSeq=Seq(cfg['SEQUENCE']))
     execute(function_body((ROOT/'lib/science.ks').read_text(),'phaseScienceOps'),env)
     assert env['phaseShouldYield'] and not events and cfg['SCIENCE_OPS_RUN_ALL']==0
-    print('PASS: prelaunch rejects missing/discarded storage and spent thermometers before arming; five retained empty sensors are an alternative; first orbit review preserves empty sensors instead of running them early')
+    print('PASS: no survey hardware prelaunch gate; first orbit review preserves empty sensors instead of running them early')
 
 
 def check_profile_and_return():
@@ -277,7 +269,7 @@ def check_phase_progress_and_reboot():
 
 
 if __name__=='__main__':
-    check_hardware_and_review_before_launch()
+    check_review_reserves_thermometers()
     check_profile_and_return()
     check_forecast_and_geometry()
     check_rotating_retrograde_route()

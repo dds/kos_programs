@@ -36,8 +36,8 @@ record remaining uncertainty before closing a task.
   radius. Bounded rotating ground-track forecasts, closest-pass refinement,
   KAC-before-solar resident retries, live position/altitude admission and
   copied persistent progress are implemented. Measurements are not contract
-  verification; manual release follows the five readings. Prelaunch requires
-  retained thermometer/storage hardware or one empty sensor per site. No
+  verification; manual release follows the five readings. Operator removed
+  the prelaunch thermometer/storage gate; its helper was also removed. No
   transmit/dump; reset only after data collection; duplicate refusal holds.
   First orbital review now reserves sensors instead of pre-deploying them.
   Independent retrograde conic/source fixtures reach all five actual sites;

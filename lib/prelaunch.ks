@@ -736,12 +736,6 @@ GLOBAL FUNCTION confirmLaunch {
 }
 
 GLOBAL FUNCTION phasePrelaunch {
-    IF launchSeq:CONTAINS("ORBITAL_SURVEY") {
-        IF NOT surveyHardwareReady(SCIENCE_SURVEY_POINTS:LENGTH) {
-            mLogError("Temperature surveys need retained empty thermometers and science storage, or one retained thermometer per site. Check hardware before launch.").
-            yieldToPrompt(). RETURN.
-        }
-    }
     IF NOT confirmLaunch() {
         yieldToPrompt().
         RETURN.

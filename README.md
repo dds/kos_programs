@@ -1309,9 +1309,7 @@ Select RO9 profile `minmus_tundra_survey_return` for this sequence:
    Surface return launches eastward into a low orbit near 29.189°
    inclination, then departs for a **53 km Kerbin entry** with the readings.
 
-Before launch, put an empty stock thermometer and an Experiment Storage
-Unit on the retained return section, with the CPU. Alternatively use one
-retained empty thermometer per site. Prelaunch checks for this hardware.
+The prelaunch thermometer/storage check was removed at operator request.
 The survey only collects into containers retained with the CPU; it never
 dumps or transmits data, and resets a rerunnable thermometer only after its
 data has been removed. If storage rejects a reading, it uses another empty

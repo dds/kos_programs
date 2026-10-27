@@ -13,8 +13,8 @@ distinguish source-test results from native mission validation.
 397272/9300m,116.6deg,LAN337,AoP270. User clarified3200-6600m are ABOVE
 thresholds, not an altitude band. Use >6600m for every site, keep9km floor.
 SCIENCE_OPS_RUN_ALL defaults1; this profile0 reserves empty thermometers at
-orbital holds. Prelaunch's conditional survey_hardware root checks retained
-empty stock sensors plus storage (or one sensor/site) before arming.
+orbital holds. Operator explicitly removed the prelaunch thermometer/storage
+gate and its survey_hardware helper; do not reinstate it.
 ORBITAL_SURVEY owns a separate band, shares lmGroundGeoAt/coast_wait/solar/
 cutoff, never maneuvers. Survey-first retains the broad retrograde plane;
 LAND_PREP lowers Ap once. Five coords and landing coords are separate.
