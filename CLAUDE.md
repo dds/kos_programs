@@ -9,6 +9,20 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 Deck kernel hang (separate from earlier Unity access violation):
+Read dmesg via SSH; first warning5039s reports gamescope-xwm1727 blocked122s,
+so onset~4917s. gamescope-xwm anddxvk-cs5232 wait atttm_global_swapout mutex;
+kernel says likely owned bydxvk-submit5230, which waits at__drm_exec_lock_obj
+while TTM evicts graphics buffers. Repeats614s then reports suppressed.
+Strong evidence of graphics-memory locking deadlock; exact bug not pinned.
+No accompanying OOM-kill/Oops/runtime GPU reset. RAM~157MiB available; zram
+full7.2GiB, disk swap2.6GiB; KSP RSS1.94GiB/swap7.65GiB; GTT8.22GiB allocated
+against8GiB budget (counts overlap, not additive). SteamOS3.9.5 stable / kernel
+7.2.7-valve2, ttm pages_min/limit2097152. Do not call this a proven mod leak,
+claim an arbitrary upstream fix applies, or blindly increase TTM/swap limits.
+Raw log and summary in/tmp/ksp-deck-dmesg-20261027.txt and
+/tmp/ksp-deck-hang-20261027.json. No remote settings/process/power changes.
+
 2026-10-27 operator explicitly requests wider sideways tolerance after the
 missed Mun pass. RO9 mun_landing_return now sets the existing configurable
 DEORBIT_CROSSTRACK_AUTHORITY_KM to2 (was0.5). Latest best native rejected

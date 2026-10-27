@@ -45,8 +45,10 @@ record remaining uncertainty before closing a task.
 - Implemented Tundra, LAND_PREP, between-pass staging and entry-alarm/solar
   changes await native compilation/flight evidence. Do not close those tasks
   on source tests alone. Landing efficiency changes need fresh flight logs.
-- Deck crash is an unsolved Unity renderer failure under memory pressure;
-  inspection is complete, settings unchanged, Plex excluded.
+- Earlier Unity crash remains unresolved. Latest Deck incident has native
+  TTM/DRM graphics-memory locking stalls at5039s; probable deadlock under
+  severe memory pressure. See crash follow-up below. Settings unchanged, Plex
+  excluded. Do not conflate the two incidents or assume a particular fix.
 
 ## In progress
 
@@ -177,6 +179,25 @@ record remaining uncertainty before closing a task.
   validate native MJ completion, node cleanup and XING planning after update.
   All59 routine check files passed in70.94s, including both capture and
   parking handoff regressions; structural audit has no new errors.
+- [ ] **Deck kernel graphics-memory hang at uptime5039s.** Read-only
+  inspection2026-10-27: SteamOS3.9.5 / kernel7.2.7-valve2. First warning
+  gamescope-xwm1727 blocked122s, implying onset~4917s; dxvk-cs5232 shares
+  amdgpu_gem_fault -> ttm_tt_populate -> ttm_global_swapout mutex wait.
+  Kernel identifies dxvk-submit5230 as likely mutex owner; its stack waits
+  in __drm_exec_lock_obj during ttm_device_swapout buffer eviction. Same
+  stacks persist614s, then hung-task reports are suppressed. Strong evidence
+  for a graphics-memory lock deadlock; exact defect/lock cycle not proven.
+  No accompanying OOM-kill, kernel Oops or runtime GPU reset. Available RAM
+  ~157MiB; zram full7.2GiB plus disk swap2.6GiB. Game5186 remainsD, RSS1.94GiB /
+  swap7.65GiB. GPU reports GTT8.22GiB against8GiB budget, VRAM0.78/1GiB;
+  GTT/RSS/system counts overlap. TTM pages_min=pages_limit=2097152. Do not
+  increase these limits or swap blindly. Current vmstat/PSI activity is low
+  after the stall; it does not disprove earlier allocation pressure. A ps
+  memory query also stalled. Raw dmesg2552lines and structured report saved:
+  `/tmp/ksp-deck-dmesg-20261027.txt`, `/tmp/ksp-deck-hang-20261027.json`.
+  Next: verify applicable Valve kernel/TTM fixes and reduce measured graphics /
+  texture memory demand; no specific patch or mod cause is established.
+  No settings/process/power changes. Separate from the earlier Unity fault.
 - [ ] **Latest Deck crash: renderer/memory follow-up.** Inspected before
   mission work. Crash_2026-10-27_092057394/error.log reports UnityPlayer.dll
   access violation0xc0000005 at09:20:58UTC,94% physical memory used/800MB
