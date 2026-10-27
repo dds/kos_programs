@@ -9,6 +9,24 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 explicit operator override: "remove the blackout protection,
+it's a risk we have to take." Removed both mandatory whole-descent cache
+checks from executeDeorbitNode and the unused landing_handoff library.
+Do not restore that admission gate without a further request. Post-burn
+LANDING reboot uses normal library sync/cache; missing code during a blackout
+can still prevent descent. Keep cached guidance tracks and conditional
+LANDING providers, plus all trajectory/radio-site/terrain/fuel/attitude/
+staging/cutoff guards. All62 routine check files passed in65.12s; native
+descent remains unvalidated. No installed bootstrap update is required.
+
+Native RO9_2518776 boot025 on88feef6 validated the normal-only fallback:
+736m cross became0m at18 trials. Five powered forecasts produced an accepted
+15.79m/s node in58/64 trials, final cross116m and modeled along-track
+residual-1212m within1500m. Kerbin elevation11.55deg; code-cache admission
+alone blocked ignition. Operator explicitly accepts that loading risk.
+Deorbit planning has native evidence; descent accuracy/fuel use still need
+flight validation. Preserve the retained node for normal revalidation.
+
 2026-10-27 RO9-mun2 follow-up on53e23f0: reloaded save reuses boot023 log,
 nowUT2871244.7..2871292.6. First pass stops at736m cross/downfield12827m,
 retro32.33/normal-5 while total normal cap10 remains. Remaining passes are
@@ -22,8 +40,8 @@ Do not assert TR staleness/noise as the native cause without probe evidence.
 New refine-stop rows expose response deltas; success logs identify method.
 Synthetic nonlinear/singular/both-sign/range-backtracking/cap/reserve cases
 and actual full-search fixture reproduce64-trial abandonment without the
-fallback and pass in16/64 with it. Native convergence/landing still pending;
-offline whole-code cache/storage guard remains mandatory.
+fallback and pass in16/64 with it. Native planning subsequently succeeded
+in boot025 as recorded above; landing still needs flight validation.
 
 2026-10-27 RO9-mun2 preference starvation: native RO9_2518776 boot023
 endsUT2884581.6 in14.5x15.1km polar Mun orbit. First candidate cross368m
@@ -37,32 +55,26 @@ New seed/trials-left logs distinguish this handoff; zero forecasts report
 powered-validation-budget-exhausted. Regression ablates the stopping policy
 to reproduce64/64/no forecasts, then validates the same368m synthetic seed
 with actual outer/Newton/powered code in33/64/four forecasts. Not a native
-orbit replay. Physical cross/normal/fuel/radio/model gates remain; separate
-offline-cache/storage blocker is still active and must not be bypassed.
+orbit replay. Physical cross/normal/fuel/radio/model gates remain. The later
+operator override above removes the separate offline-cache/storage blocker.
 
 2026-10-27 Minmus3 blackout after deorbit: operator reports missing
 payload_landing at15km, no radio, no preburn save; declines command/rescue
 attempt. Leave that flight alone. Native RO9_2460361 boot026 has13,719bytes
 free in LAND_DEORBIT; archive KSM measurement adds59,130bytes for landing /
 tracks / return_setup. Whole-set storage does NOT fit the current layout.
-landing_handoff now guards executeDeorbitNode before staging and rechecks
-before ignition. It resolves the actual future boot closure, compiles/sizes
-before any copy, keeps4KB headroom, rejects missing/archive-only/empty files
-and incomplete LIBS overrides. Never run another band's functions just to
-cache them. Helpers stay in this dedicated library, not universal boot_lib.
-No active code is evicted; insufficient capacity holds safely in orbit.
-mission_type LANDING roots now retain both dynamic tracks and conditionally
-return_setup. _landingEnsureStateTrack keeps cached files for offline reboots
-and only syncs an absent file. Native fit/boot/flight remain unvalidated.
-Next work: a smaller validated planner-to-descent handoff or more disk space;
-do not claim the guard alone makes this core's offline landing feasible.
+A whole-descent cache guard was initially implemented, then removed by the
+explicit operator override recorded above. Normal band loading still retains
+both dynamic tracks and conditional return_setup; _landingEnsureStateTrack
+keeps cached files and only syncs an absent file. Smaller code/storage use
+remains desirable, but must not block deorbit on cache readiness.
 landing_radio owns shared AUTO/DIRECT/RELAY/OFFLINE policy. AUTO requires
 direct Kerbin for Mun/Minmus unless declared in LANDING_RELAY_BODIES; legacy
 LANDING_REQUIRE_KERBIN still applies elsewhere. Declared relays supersede
 that legacy flag in AUTO; DIRECT always requires Kerbin. Defaults: no relays.
 cmd/landlight omitted radio arg inherits; explicit0/1 saves OFFLINE/DIRECT.
 After commitment, explicit diversion requireKerbin0 remains valid; do not
-abort a falling craft for missing radio. Cache readiness is never waived.
+abort a falling craft for missing radio. There is no pre-burn cache gate.
 
 2026-10-27 aerobrake fuel follow-up: native RO9_2446359 boot027 first
 spent370.31m/s and retained10.03m/s in transfer stage3. Operator separated

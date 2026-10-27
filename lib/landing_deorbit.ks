@@ -70,11 +70,11 @@ GLOBAL FUNCTION phaseLandDeorbit {
     IF NOT _confirmLandingTarget() { RETURN. }
     LOCAL deorbitOk IS _landingTargetedDeorbit().
     IF NOT deorbitOk {
-        mLogError("Landing deorbit did not meet target tolerance; holding for manual review.").
+        mLogError("Landing deorbit planning or execution failed; holding for manual review.").
         stateSet("phase", "LAND_DEORBIT").
         PRINT " ".
-        PRINT "  LANDING DEORBIT FAILED TARGET CHECK".
-        PRINT "  Keep/reselect the waypoint, check orbit reachability, then resume manually.".
+        PRINT "  LANDING DEORBIT DID NOT COMPLETE".
+        PRINT "  Review the preceding failure reason and retained node before resuming.".
         yieldToPrompt().
         RETURN.
     }

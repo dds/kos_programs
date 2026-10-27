@@ -314,9 +314,8 @@ For powered landings, the preferred ballistic cross-track goal (typically
 inside the unchanged hard cross-track limit (typically500m), downfield, fuel
 and normal-burn limits proceeds directly to powered fitting. Inner geometric
 polishing follows the same rule. Radio checks still precede that handoff;
-fresh powered forecasts, final terrain checks and offline-code admission
-still authorize the burn. `STATS deorbit seed` reports the hard/preferred
-cross-track values and remaining trials; search stops with`powered-seed`.
+fresh powered forecasts and final terrain checks still authorize the burn.
+`STATS deorbit seed` reports the hard/preferred cross-track values and remaining trials; search stops with`powered-seed`.
 The64-trial cap is unchanged. If no model check could run, the hold now says
 `powered-validation-budget-exhausted` rather than implying model nonconvergence.
 
@@ -535,25 +534,18 @@ live CommNet route. Existing sunlight, terrain and elevation margins remain.
 `cmd/landlight` inherits this policy when its final argument is omitted;
 explicit1 selects DIRECT and explicit0 selects OFFLINE for that flight.
 
-Radio policy cannot replace offline code readiness. All powered-landing
-deorbits now verify the complete next landing band, including the coast and
-braking tracks and any conditional return provider, before staging or thrust.
-With a link, missing/unloaded libraries compile on the archive; the whole
-copy is sized before changing local files, retaining at least4KB of headroom.
-Insufficient storage or missing code leaves the orbit/node intact. A long
-coast rechecks the cache before ignition; expired nodes are not burned after
-slow preparation. Guidance tracks remain on disk through landing for offline
-reboots, and cached tracks no longer need archive compilation at state changes.
-No installed bootstrap update is required; use a connected reboot.
+At the operator's explicit request, deorbit no longer requires the complete
+future landing code to be cached before burning. The normal post-burn band
+reboot loads landing libraries through the usual sync/cache path. A lost
+link with missing libraries can prevent descent from running; this risk is
+accepted rather than blocked by a storage check. Existing guidance tracks
+remain cached for later state changes and offline reboots. Site radio policy
+and the trajectory, terrain, fuel, staging and throttle safeguards still apply.
+No installed bootstrap update is required; pull and reboot while linked.
 
-Native Minmus3 boot026 exposed a capacity problem as well as a missing
-readiness check: only13,719bytes were free in LAND_DEORBIT, while the measured
-additional compiled landing/return files total59,130bytes. The conservative
-guard will hold this layout in orbit. It does not reclaim active planner code
-or increase storage. More onboard space or a smaller planner-to-descent
-handoff is still required for that layout; the new guard is not flight proof
-that both bands fit. Source cache/radio/reboot regressions supplement native
-testing, including actual compilation and storage measurement.
+Native Minmus3 boot026 showed that the full planner and descent code cannot
+fit together on its current core. Reducing storage use remains a resilience
+improvement, not a prerequisite for deorbit authorization.
 
 APPROACH admission uses hull radar clearance, so a distant mountain's elevation
 cannot start terminal guidance kilometres above the local ground. Economy

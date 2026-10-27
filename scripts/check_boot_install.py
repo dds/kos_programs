@@ -19,8 +19,8 @@ class Text(KString):
 class Items(KList):
     def CONTAINS(self,value):return value in self
 
-def fixture(linked=True,extra_source=''):
-    fixture_source=BOOT+'\n'+CONFIG+'\n'+extra_source
+def fixture(linked=True):
+    fixture_source=BOOT+'\n'+CONFIG
     files,events,state={},[],{}
     cwd=[Text('1:/')]
     env=dict(HOMECONNECTION=NS(ISCONNECTED=linked),HAS_LINK=linked,

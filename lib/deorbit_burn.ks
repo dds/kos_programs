@@ -20,17 +20,13 @@ GLOBAL FUNCTION executeDeorbitNode {
         mLogError("Deorbit refused: invalid landing role tags. Node retained.").
         RETURN FALSE.
     }
-    IF NOT landingHandoffReady(TRUE) {
-        vesselLandingCleanup().
-        RETURN FALSE.
-    }
     IF NOT HASNODE OR ABORT {
         vesselLandingCleanup().
         RETURN FALSE.
     }
     IF nd:TIME <= TIME:SECONDS+5 {
         vesselLandingCleanup().
-        mLogError("Deorbit node became too close while preparing offline code; no burn started.").
+        mLogError("Deorbit node is too close after preflight; no burn started.").
         RETURN FALSE.
     }
     IF NOT landingLightNodeAllowed(nd, targetLat, targetLng) {
@@ -99,12 +95,6 @@ GLOBAL FUNCTION executeDeorbitNode {
         }
     }
 
-    // Recheck without archive work after a long coast and all revalidation.
-    IF NOT landingHandoffReady() {
-        vesselLandingCleanup().
-        IF kacAlarmId <> "" { DELETEALARM(kacAlarmId). }
-        RETURN FALSE.
-    }
     SET SAS TO FALSE.
     // System locks are asynchronous callbacks. Never let one retain a node
     // suffix: successful cleanup removes the node before this file returns.

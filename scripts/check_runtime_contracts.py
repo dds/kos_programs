@@ -286,7 +286,6 @@ def check_compact_burn():
                    ROUND=round, VANG=lambda *_: 30 if scenario == 'off-vector' else 0,
                    vesselLandingPrepareRoles=lambda:True,
                    landingLightNodeAllowed=lambda *_: scenario != 'unlit-site',
-                   landingHandoffReady=lambda *_:scenario!='missing-cache',
                    stateSet=lambda key, value: markers.update({key: value}),
                    stateRemove=lambda key: markers.pop(key, None),
                    vesselNeedsStage=lambda: ship.AVAILABLETHRUST <= 0,
@@ -333,10 +332,10 @@ def check_compact_burn():
         env.update(fixture_lock=lock, fixture_wait=wait,
                    vesselLandingCleanup=cleanup)
         result = run(source, env)
-        assert result == (scenario == 'normal'), scenario
+        assert result == (scenario in ('normal','missing-cache')), scenario
         assert bool(removed) == result and env['throttle'] == 0, scenario
         assert env['CONFIG'].IPU==150 and 'burn_prior_ipu' not in markers
-        if scenario in ('no-engine', 'expired', 'off-vector', 'unlit-site','missing-cache'): assert not any(commands)
+        if scenario in ('no-engine', 'expired', 'off-vector', 'unlit-site'): assert not any(commands)
         burned = elapsed[0] > 0
         assert ('deorbit_burn_started' in markers) == (burned and not result), scenario
         if scenario == 'frozen': assert elapsed[0] < 1.1  # Old timeout allowed ~10 s of full thrust.

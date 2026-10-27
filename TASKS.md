@@ -23,18 +23,15 @@ record remaining uncertainty before closing a task.
   manual-stage/finite-burn entry replanning, then resume landing/ascent work.
   RO9_2446359 boot027 survived; operator confirms touchdown. Manual stage
   separation on that run does not validate automatic handoffs.
-- Current urgent follow-up: Minmus3 deorbited with no landing-band cache
-  and lost radio. Operator declined recovery commands; leave that flight
-  alone. Add whole-descent cache admission and shared body/relay policy.
-  Existing core cannot fit both bands; a smaller handoff/storage remedy is
-  required before claiming unattended landing works on this layout.
-- Current flight: RO9-mun2 deorbit search atUT2884581.6. Investigated
-  geometric-preference budget starvation; keep250m preferred/500m hard and
-  the64-trial cap. Separate offline-cache/storage admission remains mandatory.
-- Latest retry on53e23f0 reloads an earlier save and overwrites boot023;
-  endsUT2871292.6 with first-pass736m cross atnormal-5. Added bounded measured
-  normal-only fallback for an already-valid downfield band; native validation
-  pending. Do not call this a preference failure or widen the500m cap.
+- Minmus3 deorbited without landing code and lost radio. Operator declined
+  recovery commands; leave that flight alone. Shared body/relay radio policy
+  and cached-track retention remain. Operator explicitly requested removing
+  the whole-descent cache gate and accepts missing-code blackout risk; do not
+  restore it. Storage reduction is now a nonblocking resilience task.
+- RO9-mun2 boot025 on88feef6 now validates the normal-only fallback and full
+  powered planning: 58/64 trials, cross116m, modeled residual-1212m within
+  1500m. The separate cache gate alone blocked ignition; it is now removed.
+  Keep250m preferred/500m hard cross limits and the64-trial cap unchanged.
 - Operator confirmed the Minmus3 Kolniya orbital objective succeeded. Next
   flight step is the existing LAND_PREP/landing route; the comparison is an
   optimization, not a new prerequisite. Stage handoff/next-entry KAC flight
@@ -51,7 +48,7 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
-- [ ] **RO9-mun2 powered validation starved by ballistic preference.**
+- [x] **RO9-mun2 powered validation starved by ballistic preference.**
   Read RO9_2518776 boot023: first valid seed cross368m/downfield13235m,
   retro31.78m/s/normal-6.26m/s passed hard500m cap. Search chased250m,
   consumed64/64 on worse later passes, then held withpoweredPass=0 and
@@ -64,9 +61,9 @@ record remaining uncertainty before closing a task.
   zero-forecast budget exhaustion. Synthetic reported-seed regression runs
   actual full outer/Newton/powered code: old policy64/64/no model checks;
   new33/64/four checks, with cross/normal/fuel/radio/model rejections retained.
-  Native convergence and complete landing remain unvalidated. The existing
-  whole-descent cache/storage guard may independently block ignition; do
-  not waive it to fly this probe. All62 routine check files passed in75.50s;
+  Complete landing remains unvalidated; native planning evidence follows.
+  The operator subsequently removed the whole-descent cache/storage gate.
+  All62 routine check files passed in75.50s;
   no new structural errors (existing missingksc_deorbit handler warning).
   **Follow-up:** latest boot023 on53e23f0 endsUT2871292.6. First pass stalls
   atcross736m/downfield12827m,retro32.33/normal-5; later passes worse;64/64.
@@ -79,33 +76,27 @@ record remaining uncertainty before closing a task.
   still reject. Real full-search source fixture improves64->16 trials and
   includes a mandatory powered check. All62 routine check files passed in
   71.50s; the final nonfinite-range guard also passed targeted solver checks.
-  Native validation remains pending; this is not proof of the native TR
-  failure mechanism or a flight replay. Captured raw retry log:
+  Native boot025 on88feef6 now succeeds: normal-only recovers736m cross to0m
+  at18 trials; five powered forecasts converge in58/64 trials, final cross
+  116m and modeled residual-1212m within1500m. Accepted node15.79m/s at
+  UT2885483.33; no burn yet because the cache guard alone blocked ignition.
+  This validates planning, not descent performance. Captured earlier retry log:
   `/tmp/kos-mun2-deorbit-2871292.log` (boot023 is overwritten by save reloads).
-- [ ] **Minmus3 offline deorbit-to-landing handoff / storage.** Native
-  RO9_2460361 boot026 planned from9.3x19.4km Minmus orbit, free13,719bytes,
-  target7.7795,-165.6543. Static Kolniya profile hadANY light / legacy direct
-  Kerbin flag0. After burning, offline boot failed atpayload_landing.
-  Operator cannot reload before burn and declined further rescue commands.
-  Archive KSM measurements: additional landing/tracks/return files59,130bytes;
-  union with current planner cannot fit. Implemented conservative whole-set
-  compile/size/cache guard BEFORE staging and again before ignition,4KB
-  headroom, no active-code eviction or node/target changes. LANDING boot
-  roots retain dynamic coast/brake tracks and conditional return provider;
-  state changes retain track files for offline reboots. Dedicated helpers
-  keep other bands small. Shared landing_radio config defaults to direct
-  Kerbin on Mun/Minmus, no relays; per-body declared relays or explicit modes
-  configure later networks/offline flights. The independent cache guard
-  always remains mandatory. Source tests cover capacity/connection/copy
-  failure, full closure, incomplete overrides, cached-track retention,
-  zero-thrust rejection, node expiry and radio policy. All62 routine check
-  files passed in68.32s. Added initial-missing/coast-lost cache cases also
-  pass in the targeted executor regressions. Native validation remains open.
-  **Unresolved:** smaller planner-to-descent handoff (preserving live
-  geometry/fuel/terrain admission and interrupted-burn recovery), or additional
-  onboard storage. Current layout will HOLD safely rather than deorbit;
-  do not label it flight-ready. No installed bootstrap change is required
-  for the guard; native compilation/fit/offline descent still need testing.
+- [ ] **Reduce landing storage use without blocking deorbit.** Native
+  RO9_2460361 boot026 had13,719bytes free; additional compiled landing /
+  tracks / return files measured59,130bytes. After deorbit, radio loss left
+  payload_landing unavailable. Operator declined further rescue commands.
+  Whole-set cache admission was implemented, then explicitly removed at the
+  operator's request accepting blackout risk. Both entry/ignition checks and
+  unused landing_handoff helper are removed; normal post-burn library sync
+  remains. Keep both dynamic LANDING tracks, conditional return provider and
+  cached-track retention. Shared landing_radio defaults to direct Kerbin on
+  Mun/Minmus with configurable relays; this independent site policy remains.
+  Storage improvements are optional resilience work, not a new flight gate.
+  Source checks verify uncached burns, normal band/track loading and unchanged
+  physical/radio admission. All62 routine check files passed in65.12s; no new
+  structural errors. Native descent with this layout remains open.
+  No installed bootstrap update is required; use a connected reboot.
 - [ ] **Aerobrake disposable fuel and pre-entry replanning follow-up.**
   Native boot027 spent370.31m/s and retained10.03m/s in stage3. After manual
   separation, stage2 DID forecast and burn619.27m/s, ending52.7km Pe/77.5km

@@ -132,7 +132,6 @@ def check_long_coast_admission():
                  maneuverEnsureBurnAlarm=lambda *args:events.append(('alarm',args)) or ('' if scenario=='no-owned-alarm' else 'burn-alarm'),
                  vesselLandingCleanup=lambda:events.append(('cutoff',)) or True,
                  vesselLandingPrepareRoles=lambda:True,
-                 landingHandoffReady=lambda prepare=False:prepare or scenario!='cache-lost',
                  DELETEALARM=lambda alarm:events.append(('delete',alarm)),
                  solarCoastCanWarp=lambda *args:True,
                  coastHealthCheck=lambda *args:scenario!='unhealthy',
@@ -165,7 +164,7 @@ def check_long_coast_admission():
         env.update(landingLightNodeAllowed=light,enterSolarCoast=solar,coastAutoWarp=warp,
                    trySolarHoldTick=tick,fixture_wait=wait,beforeBurn=NS(CALL=admission))
         result=run(source,env)
-        accepted=scenario in ('accepted','unhealthy','no-owned-alarm')
+        accepted=scenario in ('accepted','cache-lost','unhealthy','no-owned-alarm')
         assert result is (None if accepted else False),(scenario,result)
         names=[event[0] for event in events]
         assert names.index('alarm')<names.index('solar')
