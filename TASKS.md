@@ -17,6 +17,8 @@ record remaining uncertainty before closing a task.
   landing accuracy/fuel use and staged ascent/return efficiency. Deck renderer
   investigation is deferred; its latest read-only snapshot is
   `/tmp/ksp-renderer-config-audit-20261027.json`. Settings remain unchanged.
+- Route comparison is implemented and pushed in `ea80331`; it is advisory,
+  not a native powered-trajectory choice. The next flight can use LAND_PREP.
 - Operator confirmed the Minmus3 Kolniya orbital objective succeeded. Next
   flight step is the existing LAND_PREP/landing route; the comparison is an
   optimization, not a new prerequisite. Stage handoff/next-entry KAC flight
@@ -176,9 +178,19 @@ record remaining uncertainty before closing a task.
   their explicit policy. Validate powered-lead convergence, burn timing
   across stage changes and recovery without prolonged low-altitude hovering.
   Last source fixes: `6635266` and `90099ef`; new flight logs still needed.
+  Rechecked live braking/flare/approach against the shared forecast: the
+  validated fixed-site H deadline and response-aware approach fixes are
+  present. Automatic archives already record stage hardware, control
+  commands and cumulative per-phase impulse/time. Compare those on the next
+  post-LAND_PREP descent before changing the controller again.
 - [ ] **Continue ascent/return efficiency work.** Account for changing TWR
   across lander/return stages and compare direct Kerbin departure against
   parking-orbit insertion. Preserve entry corridor and fuel reserves.
+  Explored a live-TWR/gravity-support pitch floor in a separate point-mass
+  experiment. It did not change the tested nominal ascents, so it was not
+  adopted or credited with savings. Existing pitch, staging and reserve
+  policy remain unchanged. Stage-aware ascent optimization remains open;
+  the existing per-stage acceleration/fuel trace is needed for flight review.
 
 ## Flight validation / measurements pending
 
