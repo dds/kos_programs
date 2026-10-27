@@ -326,11 +326,15 @@ record remaining uncertainty before closing a task.
   `/tmp/ksp-deck-gamescope-crash-20261027.json`,
   `/tmp/ksp-gamescope-kernel-end-20261027.log`,
   `/tmp/ksp-gamescope-core-info-20261027.txt`.
-  Prepared `docs/steamdeck/DeckMemory.cfg` for MANUAL installation: loader
+  Installed `docs/steamdeck/DeckMemory.cfg` with user authorization: loader
   false/256 plus Deferred SSRfalse. Source verifies ModuleManagerPostLoad
   reloads/applies KSPTL config; Deferred reads patched GameDatabase settings.
-  No Deck settings installed/changed; whole-game restart and effective MM
-  cache/native memory confirmation remain pending. Shadow resolution is
+  Installed while KSP was closed at2026-10-27T20:47:44Z to
+  `~/Kerbal Space Program/GameData/zzz_DeckTweaks/DeckMemory.cfg`; readback
+  matches repository SHA256 c5c71cc281dcb50dc6e353f403eeda72949b12f1adbcc379517c8940a78bd291.
+  Config snapshots/rollback manifest: `~/ksp-memory-backups/20261027T204744Z`.
+  Whole-game startup and effective MM cache/native memory confirmation
+  remain pending. Shadow resolution is
   deliberately unchanged pending actual runtime ownership verification.
 - [ ] **Latest Deck crash: renderer/memory follow-up.** Inspected before
   mission work. Crash_2026-10-27_092057394/error.log reports UnityPlayer.dll

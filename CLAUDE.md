@@ -16,13 +16,17 @@ session restarts and game exits. SSD game filesystem47.3GiB free. No new
 Unity dump (morning09:20UTC report is old), Linux OOM-kill or earlier TTM
 hung-stack signature in captured interval. Do not conflate immediate cause
 with proven mod/leak/driver bug. Raw evidence paths are in TASKS.md.
-Prepared docs/steamdeck/DeckMemory.cfg, NOT installed on Deck: MM FINAL
+Installed docs/steamdeck/DeckMemory.cfg on Deck with user authorization at
+2026-10-27T20:47:44Z, while KSP was closed, to
+~/Kerbal Space Program/GameData/zzz_DeckTweaks/DeckMemory.cfg. MM FINAL
 overrides persistent uploadsfalse, temporary budget256MB, Deferred SSRfalse.
+Remote readback matches repository SHA256 c5c71cc281dcb50dc6e353f403eeda72949b12f1adbcc379517c8940a78bd291.
+Backup snapshots and rollback manifest: ~/ksp-memory-backups/20261027T204744Z.
 KSPTL Config.ModuleManagerPostLoad reloads/applies the patched node; Deferred
 Settings.LoadSettings reads GameDatabase. Whole-game restart required;
 verify effective ModuleManager.ConfigCache and then actual scene memory.
 No shadow-manager disable/forced-runtime-shadow change;8k startup log alone
-is not final allocation proof. User requested detailed manual instructions.
+is not final allocation proof. Runtime application/memory effect still pending.
 
 2026-10-27 memory suggestions audit: effective MM cache confirms prior
 KSPTextureLoader settings reverted (persistent buffertrue, temporary cap
