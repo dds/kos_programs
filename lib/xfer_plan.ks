@@ -147,7 +147,7 @@ GLOBAL FUNCTION phaseTransfer {
             + " body=" + SHIP:BODY:NAME).
         IF NOT maneuverBurnInterrupted() AND NOT maneuverDepartureFlown() {
             IF NOT transferDepartureReady(existing, target, CAPTURE_PE) {
-                mLogError("Saved departure node rejected; delete it and replan before launch from parking orbit.").
+                mLogError("Existing node is not a validated departure. It may be a parking/circularization remainder; inspect it, delete only if stale, then REBOOT to plan the transfer.").
                 yieldToPrompt().
                 RETURN.
             }

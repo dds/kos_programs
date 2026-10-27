@@ -9,6 +9,17 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 Tundra XING boot004: RO9_2815982 at UT2816238.4 resumed a4.437m/s
+expired node (ETA-25.2,pending=false,burn_phase empty), not a transfer plan.
+PARK advanced at UT2816224.8 in72.7x78km: its90% Pe gate can pass while MJ
+is still circularizing. PARK now waits for MJ ASCENT and NODE ENABLED to
+clear, verifies physical cutoff and the orbit again before advancing.
+120s timeout/Abort stops controllers and holds; never deletes a node.
+Installed Deck bridge was checked read-only for NODE/ENABLED/NodeExecutor.
+Current inflight XING still needs operator deletion of its stale node and
+REBOOT. Keep transferDepartureReady's real arrival corridor unchanged;
+hasTargetPatch=False means PeKm=-0.001 was a sentinel, not a solved Pe.
+
 2026-10-27 emergency capture: aerobrake_guard shares live frame/attitude
 interlocks with optional assist. Capture aligns at zero, tracks live orbital
 velocity, keeps fuel/Pe/capture stops, scopes the shared2000IPU/log deferral,

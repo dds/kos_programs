@@ -6,12 +6,13 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- Current baseline: `7270867`, clean main, pushed. Tundra mission is launching.
+- Code checkpoints: prelaunch gate removed in `7270867`; emergency capture
+  implemented in `84203cc`. Parking handoff fix is recorded below.
 - Operator explicitly removed the thermometer/storage prelaunch gate. Do not
   restore it or add temperature transmission without a further request.
-- Current flight blocker: Tundra XING boot004 at UT2816238.4 treats an
-  expired4.437m/s node as a departure; parking is72.7x78km. Fix the MJ parking
-  handoff without weakening the arrival corridor or deleting foreign nodes.
+- Tundra XING boot004 at UT2816238.4 treats an expired4.437m/s parking node
+  as a departure. Operator must inspect/delete that stale node and reboot;
+  the PARK handoff fix prevents advancing while MJ is still circularizing.
 - Emergency capture source fix is implemented; then audit cached-state
   mutations and continue the read-only Deck renderer investigation.
 - Preserve existing capture, Pe, fuel, staging and return reserve safeguards.
@@ -34,15 +35,26 @@ record remaining uncertainty before closing a task.
   Interrupted capture cuts off and holds once for review; outbound hyperbolic
   reboot resumes can retry capture before coasting. Existing optional-assist
   checks and new independent capture/finite-slew/cutoff fixtures passed.
-  Full suite deferred for the new XING flight blocker. Native validation open.
+  Combined source checks now cover this and the parking handoff. Native
+  validation remains open; neither actual capture nor cache size is proven.
 - [ ] **Tundra departure blocked by a parking node.** Native RO9_2815982
   boot003 reaches parking and advances at UT2816224.8. Boot004 XING at
   UT2816238.4 resumes a4.437m/s node with ETA-25.2s, pending=false and empty
   burn_phase. No transfer planning runs. Its missing Minmus patch is printed
   as PeKm=-0.001; this is not a solved Minmus periapsis. Likely MJ ascent is
   still finishing circularization when the loose parking gate advances.
-  Operator can delete the old node and reboot. Inspect/fix ownership and
-  completion at the PARK handoff; retain the real departure corridor check.
+  Implemented PARK wait for both MJ ascent/node executor to finish, physical
+  cutoff and final orbit recheck before advancement.120s timeout or Abort
+  stops controllers and holds without deleting nodes. Read-only DLL inspection
+  confirms the installed bridge has NODE/ENABLED and NodeExecutor support.
+  Departure diagnostics now distinguish a missing target patch; no Pe
+  corridor or Tundra target was relaxed. Source fixtures cover the reported
+  orbit, delayed completion, retained foreign nodes, timeout/Abort/failed
+  cutoff/degraded orbit, and existing departure corridor/refinement cases.
+  Current probe: inspect/delete the expired node, REBOOT. Future launches:
+  validate native MJ completion, node cleanup and XING planning after update.
+  All59 routine check files passed in70.94s, including both capture and
+  parking handoff regressions; structural audit has no new errors.
 - [ ] **Latest Deck crash: renderer/memory follow-up.** Inspected before
   mission work. Crash_2026-10-27_092057394/error.log reports UnityPlayer.dll
   access violation0xc0000005 at09:20:58UTC,94% physical memory used/800MB
@@ -192,6 +204,8 @@ record remaining uncertainty before closing a task.
 
 ## Completed checkpoints
 
+- [x] Emergency capture live interlocks and MJ parking-controller handoff
+  implemented;59 routine check files passed. Native validation remains above.
 - [x] Public SSH keys installed for `deck@10.200.26.154`; both verified in
   fresh password-disabled logins. Never put credentials in this file.
 - [x] SHAPE minimum/fallback and precision fixes pushed (`2618381`,

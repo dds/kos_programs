@@ -798,6 +798,19 @@ DONE`. Older profiles may still use `MCC` or a single `COAST`. Payload tokens
 (`RELAY`, `SCANSAT`, `SCISAT`, `PROBE`, `CRASHPROBE`, `LANDER`,
 `ASSISTLANDER`, `ROVER`, `ASSISTROVER`) come from the profile or the legacy
 ship name and append their phases automatically. MechJeb flies the ascent.
+PARK waits for both MechJeb ascent and its node executor to finish, then
+verifies zero thrust/throttle before handing control to the next phase.
+The broad parking-altitude gate alone is insufficient while circularization
+is still running. A controller still active after 120 seconds is stopped and
+the mission holds in PARK with its nodes retained for review.
+
+If an older launch reaches XING with an expired small circularization node,
+the departure corridor check rejects it. Inspect and delete that stale node
+in the map, then `REBOOT.` to let XING create the actual transfer. Keep the
+departure Pe corridor intact; a missing encounter is not a solved bad Pe.
+The addon exposes both controllers through its documented
+[ascent and node interfaces](https://github.com/belpyro/kOS.MechJeb2.Addon/blob/main/README.md).
+
 FR3 adds targeted rover landings (Trajectories deorbit + named/selected
 waypoints, optional SCANsat site scan), Mun mapper impact-disposal flows, and
 the emergency `mun_rover_emergency_surface` profile. FalconHeavy carries the
@@ -2021,6 +2034,14 @@ post-correction checks use the same path; same-name alarms are reused or
 retimed through the shared helper, while other craft's alarms are preserved.
 Without KAC the clock wait still runs. No alarm is invented when there is
 no future crossing. `STATS aerobrake entry-alarm` logs entry/preparation UT.
+
+The emergency capture burn after a hyperbolic skip-out first aligns at zero
+throttle, then follows live orbital retrograde. It shares the optional
+assist's body/stage/node/Abort, attitude and publisher-freshness interlocks.
+Its existing capture, fuel and Pe-floor stops remain. Physical cutoff is
+verified before restoring CPU/log policy or clearing the recovery marker.
+An interrupted capture holds for review; after an explicit reboot, an
+outbound hyperbola with an atmospheric Pe can retry before solar coast.
 
 About **180 seconds before the next actual atmospheric interface**, the
 controller measures usable fuel, active-engine thrust/Isp and mass. It tries

@@ -200,7 +200,8 @@ GLOBAL FUNCTION transferDepartureReady {
         AND _firstPatchBodyName(nd) = targetBody:NAME.
     IF report {
         mLog("STATS transfer departure-check target=" + targetBody:NAME
-            + " accepted=" + ok + " PeKm=" + ROUND(pe / 1000,3)
+            + " accepted=" + ok + " hasTargetPatch=" + (patch <> 0)
+            + " PeKm=" + ROUND(pe / 1000,3)
             + " targetPeKm=" + ROUND(targetPe / 1000,3)
             + " toleranceKm=" + (TRANSFER_PE_TOL / 1000)
             + " dv=" + ROUND(nd:DELTAV:MAG,3)).

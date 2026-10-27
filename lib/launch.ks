@@ -424,6 +424,7 @@ GLOBAL FUNCTION phaseParking {
     mLog("Waiting for stable parking orbit...").
     WAIT UNTIL _isParkingOrbitStable() OR ABORT.
     IF ABORT { RETURN. }
+    IF NOT _parkingControllerHandoff() { RETURN. }
     // Orbit-insertion timestamp for ORBIT_STAY_TIME holds.
     IF stateGetNum("orbit_start_time", 0) = 0 {
         stateSet("orbit_start_time", ROUND(TIME:SECONDS)).
@@ -433,6 +434,43 @@ GLOBAL FUNCTION phaseParking {
     mLog("Stable parking orbit confirmed.").
     _jettisonAbortTower().
     nextPhase(launchSeq).
+}
+
+LOCAL FUNCTION _parkingControllerHandoff {
+    // The broad orbit gate can pass before MJ finishes its circularization
+    // node. Do not reboot away while either native controller still owns it.
+    IF _launchHasAtmosphere() AND ADDONS:MJ:AVAILABLE {
+        LOCAL deadline IS TIME:SECONDS+120.
+        LOCAL nextReport IS TIME:SECONDS.
+        UNTIL (NOT ADDONS:MJ:ASCENT:ENABLED AND NOT ADDONS:MJ:NODE:ENABLED)
+                OR ABORT OR TIME:SECONDS >= deadline {
+            IF TIME:SECONDS >= nextReport {
+                mLog("STATS launch parking-handoff status=waiting-mechjeb ascent="
+                    + ADDONS:MJ:ASCENT:ENABLED + " nodeExecutor=" + ADDONS:MJ:NODE:ENABLED
+                    + " hasNode=" + HASNODE + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,3)).
+                SET nextReport TO TIME:SECONDS+5.
+            }
+            // This is an active ascent controller, not a warp/coast wait.
+            WAIT 0.1.
+        }
+        IF ABORT OR ADDONS:MJ:ASCENT:ENABLED OR ADDONS:MJ:NODE:ENABLED {
+            SET ADDONS:MJ:ASCENT:ENABLED TO FALSE.
+            SET ADDONS:MJ:NODE:ENABLED TO FALSE.
+            IF NOT thrustCutoffOk() { RETURN FALSE. }
+            mLogError("PARK: MechJeb completion timed out or was aborted; controllers stopped, node retained for review.").
+            yieldToPrompt(). RETURN FALSE.
+        }
+    }
+    // The burn owner has released control; apply the common physical cutoff
+    // before any phase change, archive I/O or reboot. Never remove a node.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
+    IF ABORT OR NOT _isParkingOrbitStable() {
+        mLogError("PARK: insertion ended outside the parking corridor; keeping phase and nodes for review.").
+        yieldToPrompt(). RETURN FALSE.
+    }
+    mLog("STATS launch parking-handoff status=complete hasNode=" + HASNODE
+        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,3) + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,3)).
+    RETURN TRUE.
 }
 
 // ── Staging ──────────────────────────────────────────────────
