@@ -32,7 +32,9 @@ record remaining uncertainty before closing a task.
   powered planning: 58/64 trials, cross116m, modeled residual-1212m within
   1500m. Cache gate is removed. Latest boot027 instead held after its powered
   forecast changed during coast; bounded pre-burn refit is implemented below,
-  native recovery pending. Operator now authorizes2km deorbit cross-track
+  operator now confirms planning succeeded on887aa4d and accepts the3-day
+  scheduled wait. Preserve that node; descent validation remains pending.
+  Operator authorizes2km deorbit cross-track
   for RO9 mun_landing_return only; preferred250m/normal10m/s/trials64 remain.
 - Operator confirmed the Minmus3 Kolniya orbital objective succeeded. Next
   flight step is the existing LAND_PREP/landing route; the comparison is an
@@ -65,7 +67,9 @@ record remaining uncertainty before closing a task.
   existing trust/fuel/normal/cross/trial/reserved-forecast/final checks remain.
   All62 routine check files passed in68.82s; final origin/radar diagnostics,
   invalid-bounds and full-forecast radar-invariance regressions also pass in
-  targeted range checks. Native convergence/descent still need testing. Closest-pass ranking remains
+  targeted range checks. Operator now confirms native planning succeeded
+  with a burn scheduled3days ahead and accepts that wait. Preserve its node;
+  descent efficiency/accuracy remain unvalidated. Closest-pass ranking remains
   unchanged; preferring the earliest feasible window is still open.
 
 
@@ -345,10 +349,22 @@ record remaining uncertainty before closing a task.
 
 ## Flight validation / measurements pending
 
+- [ ] **Post-upgrade Deck memory observation,2026-10-27.** Both updates now
+  verified: Parallax plugin1.0.6 and scatter textures1.0.5. During the newly
+  solved Mun deorbit coast, available RAM470->638MiB, total swap7.38->7.33GiB,
+  GTT6.32GiB steady (pre-hang8.22GiB). KSP RSS3.38GiB/swap5.61GiB at first
+  sample; overlapping graphics counts must not be added. Six-second vmstat
+  sample: no swap-out, modest164–376KiB/s swap-in, memory PSI avg10 zero.
+  Improved compared with the hang, but <1GiB available is still tight; this
+  is not a matched-scene savings benchmark or long-session stability proof.
+  Snapshots:/tmp/ksp-deck-memory-after-20261027.json and
+  /tmp/ksp-deck-memory-followup-20261027.txt. Effective shadow-map allocation
+  remains the next visual-memory investigation. No settings or game-control
+  changes made during inspection.
 - [ ] **Next Deck memory reductions, recommendations only.** Verified CKAN
   baseline: ParallaxContinued1.0.4 with scatter textures1.0.3. Operator upgrade
-  now verified plugin1.0.6; scatter pack still1.0.3 on last check. CKAN metadata
-  offers scatter pack1.0.5; operator advised to update that separately. Upstream
+  now verified plugin1.0.6 AND scatter pack1.0.5; operator completed both
+  upgrades after the CKAN retry. Upstream
   release1.0.5 fixes a2GB scene-start VRAM spike and reports scatter usage
   800MB->74MB on Kerbin;1.0.6 is current. Update plugin AND matching scatter
   assets together before judging whether Parallax must be removed. These are
