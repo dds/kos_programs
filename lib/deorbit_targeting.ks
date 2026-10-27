@@ -1075,6 +1075,27 @@ LOCAL FUNCTION _targetDeorbitCorrection {
         "OTHER", (crossRetro * alongError - alongRetro * crossError) / determinant).
 }
 
+// A footprint already inside its downfield band need not be driven to the
+// band's center to fix latitude. Reuse the measured normal probe for a
+// bounded coordinate step when the coupled Newton response cannot improve.
+LOCAL FUNCTION _targetDeorbitNormalCorrection {
+    PARAMETER best.
+    PARAMETER probe.
+    PARAMETER probeDv.
+    PARAMETER minDownfield.
+    PARAMETER maxDownfield.
+    LOCAL invalid IS LEXICON("VALID",FALSE).
+    IF NOT best["VALID"] OR NOT probe["VALID"] { RETURN invalid. }
+    IF NOT best["HAS_IMPACT"] OR NOT probe["HAS_IMPACT"] { RETURN invalid. }
+    IF NOT (best["DOWNFIELD"] >= minDownfield AND best["DOWNFIELD"] <= maxDownfield)
+            OR ABS(probeDv) < 0.01 OR NOT (ABS(best["SIGNED_CROSS"]) < 1e30) { RETURN invalid. }
+    LOCAL slope IS (probe["SIGNED_CROSS"]-best["SIGNED_CROSS"])/probeDv.
+    IF NOT (ABS(slope) >= 1 AND ABS(slope) < 1e30) { RETURN invalid. }
+    LOCAL stepDv IS -best["SIGNED_CROSS"]/slope.
+    IF NOT (ABS(stepDv) < 1e30) { RETURN invalid. }
+    RETURN LEXICON("VALID",TRUE,"RETRO",0,"OTHER",stepDv).
+}
+
 // Estimate the root of actual powered capture residual versus downfield.
 // Reject noisy/reversed slopes, and bound extrapolation to three current
 // residuals. Native probes and a fresh full forecast still own acceptance.
@@ -1153,7 +1174,19 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                     (other["ERR"] - best["ERR"]) / otherProbe,
                     (retro["SIGNED_CROSS"] - best["SIGNED_CROSS"]) / retroProbe,
                     (other["SIGNED_CROSS"] - best["SIGNED_CROSS"]) / otherProbe).
-                IF NOT correction["VALID"] { BREAK. }
+                LOCAL stepMethod IS "coupled".
+                IF NOT correction["VALID"] AND mode = "NORMAL" {
+                    SET correction TO _targetDeorbitNormalCorrection(best,other,otherProbe,minDownfield,maxDownfield).
+                    SET stepMethod TO "normal-only".
+                }
+                IF NOT correction["VALID"] {
+                    mLog("STATS deorbit refine-stop mode=" + mode + " reason=singular-response"
+                        + " downfieldM=" + ROUND(best["DOWNFIELD"],0) + " crossM=" + ROUND(best["CROSS"],0)
+                        + " retroDownfieldDelta=" + (retro["DOWNFIELD"]-best["DOWNFIELD"])
+                        + " otherDownfieldDelta=" + (other["DOWNFIELD"]-best["DOWNFIELD"])
+                        + " otherCrossDelta=" + (other["SIGNED_CROSS"]-best["SIGNED_CROSS"])).
+                    BREAK.
+                }
                 LOCAL deltaRetro IS correction["RETRO"].
                 LOCAL deltaOther IS correction["OTHER"].
                 IF ABS(deltaRetro) < 0.001 AND ABS(deltaOther) < 0.001 { BREAK. }
@@ -1174,35 +1207,66 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                 }
                 IF deltaOther > 0 { SET scale TO MIN(scale, (otherMax - otherValue) / deltaOther). }
                 IF deltaOther < 0 { SET scale TO MIN(scale, (otherMin - otherValue) / deltaOther). }
-                IF scale < 0.0001 { BREAK. }
                 LOCAL improved IS FALSE.
-                FOR fraction IN LIST(1, 0.5, 0.25) {
-                    IF ABORT OR _deorbitEvaluations >= trialLimit { BREAK. }
-                    LOCAL trialUT IS best["UT"].
-                    LOCAL trialNormal IS best["NORMAL"].
-                    IF mode = "NORMAL" { SET trialNormal TO trialNormal + deltaOther * scale * fraction. }
-                    ELSE { SET trialUT TO trialUT + deltaOther * scale * fraction. }
-                    LOCAL trial IS _evalGeometricDeorbitNode(trialUT,
-                        best["RETRO"] + deltaRetro * scale * fraction,
-                        targetLat, targetLng, minLead, desiredDownfield, trialNormal).
-                    IF _targetDeorbitMerit(trial, minDownfield, maxDownfield)
-                            < _targetDeorbitMerit(best, minDownfield, maxDownfield) {
-                        SET best TO trial.
-                        SET improved TO TRUE.
-                        IF _targetDeorbitSolutionAccepted(best, minDownfield, maxDownfield) {
-                            IF NOT admissible["VALID"] { SET admissible TO best. }
-                            ELSE IF best["CROSS"] < admissible["CROSS"] { SET admissible TO best. }
+                IF scale >= 0.0001 {
+                    FOR fraction IN LIST(1, 0.5, 0.25) {
+                        IF ABORT OR _deorbitEvaluations >= trialLimit { BREAK. }
+                        LOCAL trialUT IS best["UT"].
+                        LOCAL trialNormal IS best["NORMAL"].
+                        IF mode = "NORMAL" { SET trialNormal TO trialNormal + deltaOther * scale * fraction. }
+                        ELSE { SET trialUT TO trialUT + deltaOther * scale * fraction. }
+                        LOCAL trial IS _evalGeometricDeorbitNode(trialUT,
+                            best["RETRO"] + deltaRetro * scale * fraction,
+                            targetLat, targetLng, minLead, desiredDownfield, trialNormal).
+                        IF _targetDeorbitMerit(trial, minDownfield, maxDownfield)
+                                < _targetDeorbitMerit(best, minDownfield, maxDownfield) {
+                            SET best TO trial.
+                            SET improved TO TRUE.
+                            BREAK.
                         }
-                        mLog("STATS deorbit step mode=" + mode + " ut=" + ROUND(best["UT"],1)
-                            + " retro=" + ROUND(best["RETRO"],2) + " normal=" + ROUND(best["NORMAL"],2)
-                            + " downfieldM=" + ROUND(best["DOWNFIELD"],0)
-                            + " crossM=" + ROUND(best["CROSS"],0) + " evaluations=" + _deorbitEvaluations).
-                        SET acceptedSteps TO acceptedSteps+1.
-                        IF maxAcceptedSteps > 0 AND acceptedSteps >= maxAcceptedSteps { RETURN best. }
-                        BREAK.
                     }
                 }
-                IF NOT improved { BREAK. }
+                IF NOT improved AND mode = "NORMAL" AND stepMethod = "coupled" {
+                    LOCAL normalCorrection IS _targetDeorbitNormalCorrection(best,other,otherProbe,minDownfield,maxDownfield).
+                    IF normalCorrection["VALID"] {
+                        SET stepMethod TO "normal-only".
+                        LOCAL normalStep IS MAX(-capDv-best["NORMAL"],MIN(capDv-best["NORMAL"],
+                            MAX(-5,MIN(5,normalCorrection["OTHER"])))).
+                        IF ABS(normalStep) >= 0.001 {
+                            FOR fraction IN LIST(1,0.5,0.25) {
+                                IF ABORT OR _deorbitEvaluations >= trialLimit { BREAK. }
+                                LOCAL trial IS _evalGeometricDeorbitNode(best["UT"],best["RETRO"],
+                                    targetLat,targetLng,minLead,desiredDownfield,best["NORMAL"]+normalStep*fraction).
+                                IF _targetDeorbitMerit(trial,minDownfield,maxDownfield)
+                                        < _targetDeorbitMerit(best,minDownfield,maxDownfield) {
+                                    SET best TO trial.
+                                    SET improved TO TRUE.
+                                    BREAK.
+                                }
+                            }
+                        }
+                    }
+                }
+                IF NOT improved {
+                    mLog("STATS deorbit refine-stop mode=" + mode + " reason=no-improving-step method=" + stepMethod
+                        + " downfieldM=" + ROUND(best["DOWNFIELD"],0) + " crossM=" + ROUND(best["CROSS"],0)
+                        + " retro=" + best["RETRO"] + " normal=" + best["NORMAL"]
+                        + " retroDownfieldDelta=" + (retro["DOWNFIELD"]-best["DOWNFIELD"])
+                        + " otherDownfieldDelta=" + (other["DOWNFIELD"]-best["DOWNFIELD"])
+                        + " otherCrossDelta=" + (other["SIGNED_CROSS"]-best["SIGNED_CROSS"])).
+                    BREAK.
+                }
+                IF _targetDeorbitSolutionAccepted(best, minDownfield, maxDownfield) {
+                    IF NOT admissible["VALID"] { SET admissible TO best. }
+                    ELSE IF best["CROSS"] < admissible["CROSS"] { SET admissible TO best. }
+                }
+                mLog("STATS deorbit step mode=" + mode + " ut=" + ROUND(best["UT"],1)
+                    + " retro=" + ROUND(best["RETRO"],2) + " normal=" + ROUND(best["NORMAL"],2)
+                    + " downfieldM=" + ROUND(best["DOWNFIELD"],0)
+                    + " crossM=" + ROUND(best["CROSS"],0) + " evaluations=" + _deorbitEvaluations
+                    + " method=" + stepMethod).
+                SET acceptedSteps TO acceptedSteps+1.
+                IF maxAcceptedSteps > 0 AND acceptedSteps >= maxAcceptedSteps { RETURN best. }
                 SET iter TO iter + 1.
             }
         }

@@ -320,6 +320,18 @@ cross-track values and remaining trials; search stops with`powered-seed`.
 The64-trial cap is unchanged. If no model check could run, the hold now says
 `powered-validation-budget-exhausted` rather than implying model nonconvergence.
 
+If a coupled retrograde/normal step stalls while downfield is already inside
+its allowed band, the solver can reuse its measured normal response for a
+normal-only correction. It keeps burn time and retrograde dV fixed, bounds
+each normal step to 5 m/s within the existing total cap, and backtracks through
+the same full/half/quarter fractions. Every probe consumes the original trial
+budget; the powered-validation reserve still applies. Invalid/flat/nonfinite
+responses cannot produce a correction, and no hard landing limit changes.
+Accepted steps record `method=normal-only`; failed responses include the
+measured downfield/cross deltas in `STATS deorbit refine-stop`. This improves
+recovery from a bad local Newton response; it does not prove why a particular
+native TR response changed or guarantee convergence for an unreachable site.
+
 The live H gate uses a cheaper 32-bin mass-aware range quadrature from a
 per-stage hardware snapshot. The full forward simulation stays in orbital
 planning; it is not run in a throttle lock or powered guidance tick. Both

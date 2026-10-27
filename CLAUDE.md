@@ -9,6 +9,22 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 RO9-mun2 follow-up on53e23f0: reloaded save reuses boot023 log,
+nowUT2871244.7..2871292.6. First pass stops at736m cross/downfield12827m,
+retro32.33/normal-5 while total normal cap10 remains. Remaining passes are
+worse;64/64 no acceptable seed. This is distinct from preference starvation.
+Added measured normal-only fallback when downfield is already in-band and
+the coupled response is singular, bounded-out or fails its line search.
+Reuse the existing normal probe; keep time/retro fixed, max5m/s per step,
+total normal cap/fuel/lead/trial/reserved-forecast guards unchanged, accept
+only improved freshly evaluated merit and normal hard admission afterward.
+Do not assert TR staleness/noise as the native cause without probe evidence.
+New refine-stop rows expose response deltas; success logs identify method.
+Synthetic nonlinear/singular/both-sign/range-backtracking/cap/reserve cases
+and actual full-search fixture reproduce64-trial abandonment without the
+fallback and pass in16/64 with it. Native convergence/landing still pending;
+offline whole-code cache/storage guard remains mandatory.
+
 2026-10-27 RO9-mun2 preference starvation: native RO9_2518776 boot023
 endsUT2884581.6 in14.5x15.1km polar Mun orbit. First candidate cross368m
 passed the500m hard cap, but pursuit of the250m preference spent64/64 and

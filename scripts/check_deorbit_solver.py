@@ -603,6 +603,100 @@ def check_reported_preference_budget():
     print('PASS: reported368m/250m preference reproduces64/64 and zero forecasts under the old policy; revised full search/Newton/powered flow validates in%d/64 with%d forecasts, preserving target and cross/normal/fuel/radio/model rejection'% (outcomes[1][1],outcomes[1][2]))
 
 
+def band_normal_oracle(mirror=1,singular=False,range_coupled=False,retro_base=32.33,cross_base=736,normal_base=-5):
+    def response(ut,retro,normal):
+        delta=retro-retro_base
+        normal_delta=mirror*normal-normal_base
+        # Smooth nonlinear response: one-m/s retro probe sees zero ridge,
+        # while the proposed intermediate retro changes spoil cross-track.
+        # This stresses the measured Newton model, not a native TR replay.
+        down=12827+(0 if singular else 5000*delta)-(4000*normal_delta if range_coupled else 0)
+        cross=cross_base+300*normal_delta+10000*math.sin(math.pi*delta)**2
+        return impact(ut,retro,normal,down-15000,cross)
+    return response
+
+
+def check_normal_band_fallback():
+    for mirror in (-1,1):
+        for singular,range_coupled in ((False,False),(True,False),(False,True)):
+            oracle=band_normal_oracle(mirror,singular,range_coupled)
+            env,count,trials=environment(oracle)
+            env['LANDING_POWERED_LEAD']=1
+            base=oracle(1000,32.33,-5*mirror)
+            correction=env['_targetDeorbitNormalCorrection']
+            env['_targetDeorbitNormalCorrection']=lambda *args:dict(VALID=False)
+            old=solve(env,base)
+            assert not env['_targetDeorbitSolutionAccepted'](old,10000,20000)
+            count.value=0;trials.clear();env['_targetDeorbitNormalCorrection']=correction
+            result=solve(env,base)
+            assert env['_targetDeorbitSolutionAccepted'](result,10000,20000),result
+            assert result['CROSS']<500 and abs(result['NORMAL'])<=10 and count.value<20
+            assert result['UT']==1000 and result['RETRO']==32.33
+            assert all(abs(row['NORMAL'])<=10 and 2<=row['RETRO']<=120 for row in trials)
+            if range_coupled:assert any(row['DOWNFIELD']>20000 for row in trials)
+    # Bounds still win when the remaining normal/fuel/trial authority is
+    # genuinely inadequate. Reserve the last forecast slot without guessing.
+    oracle=band_normal_oracle()
+    for cap,budget,reserve,used in ((5.5,64,0,0),(10,7,0,0),(10,64,1,56)):
+        env,count,trials=environment(oracle,cap=cap,budget=budget)
+        env['LANDING_POWERED_LEAD']=1;count.value=used
+        base=oracle(1000,32.33,-5)
+        result=env['_refineDeorbitFootprint'](base,19,129,120,15000,10000,20000,2,120,reserve)
+        assert count.value<=budget-reserve
+        assert not env['_targetDeorbitSolutionAccepted'](result,10000,20000)
+        assert all(abs(row['NORMAL'])<=cap for row in trials)
+    print('PASS: stalled736m banded footprint and singular Jacobian recover via measured normal-only steps for both signs; bad range roots backtrack, while normal/trial caps and reserved validation slot still hold')
+
+
+def check_normal_probe_guards():
+    env,_,_=environment(lambda *args:None)
+    best=impact(1000,32.33,-5,-2173,736)
+    for scenario in ('ok','out-of-band','no-impact','invalid','zero-step','flat','nan','nan-base','nan-range'):
+        base=dict(best);probe=dict(best);probe['SIGNED_CROSS']=1036;delta=1
+        if scenario=='out-of-band':base['DOWNFIELD']=9999
+        if scenario=='no-impact':probe['HAS_IMPACT']=False
+        if scenario=='invalid':probe['VALID']=False
+        if scenario=='zero-step':delta=0
+        if scenario=='flat':probe['SIGNED_CROSS']=base['SIGNED_CROSS']
+        if scenario=='nan':probe['SIGNED_CROSS']=float('nan')
+        if scenario=='nan-base':base['SIGNED_CROSS']=float('nan')
+        if scenario=='nan-range':base['DOWNFIELD']=float('nan')
+        result=env['_targetDeorbitNormalCorrection'](base,probe,delta,10000,20000)
+        assert result['VALID']==(scenario=='ok'),scenario
+        if scenario=='ok':assert result['RETRO']==0 and -2.46<result['OTHER']<-2.45
+    print('PASS: normal-only fallback needs valid impacts, an already-admissible downfield band and a finite measured slope; zero/flat/NaN responses cannot produce a node request')
+
+
+def check_normal_fallback_search_budget():
+    results=[]
+    for legacy in (True,False):
+        oracle=band_normal_oracle(retro_base=15,cross_base=2236,normal_base=0)
+        env,count,trials=environment(oracle)
+        env.update(LANDING_POWERED_LEAD=1,fixture_reset=lambda:setattr(count,'value',0))
+        models=[];nodes=[]
+        env['_findDeorbitGeometryNode']=lambda lat,lng,start,end,*args:dict(VALID=True,UT=start+200,ANGLE=50,LAT=lat,LNG=lng)
+        env['_targetDeorbitLightAccepted']=lambda *args:True
+        def plan(ut,retro,normal):
+            node=NS(TIME=ut,retro=retro,normal=normal);nodes.append(node);return node
+        env['_planRetroNode']=plan
+        env['fixture_remove_probe']=lambda node:nodes.remove(node)
+        env['_readGeometricDeorbitNode']=lambda node,*args:oracle(node.TIME,node.retro,node.normal)
+        def policy(*args):
+            models.append(1)
+            return dict(VALID=True,AIM=15000,MIN=10000,MAX=20000)
+        env['landingDeorbitLeadPolicy']=policy
+        if legacy:env['_targetDeorbitNormalCorrection']=lambda *args:dict(VALID=False)
+        result=planner_prefix(env,target_lat=44.593,target_lng=-24.926)
+        assert not nodes and count.value<=64 and count.value==len(trials)+len(models)
+        if legacy:assert result is False and not models and count.value==64
+        else:
+            assert result is None and env['poweredAccepted'] and env['windowsTried']==1
+            assert env['solved']['CROSS']<=500 and len(models)==1
+            assert count.value<30 and abs(env['solved']['NORMAL'])<=10
+        results.append(count.value)
+    print('PASS: actual full search/inner solver/powered validation avoids64-trial abandonment and finishes in%d/64 with first-pass normal recovery; fixed target and all hard admission gates remain'%(results[1]))
+
+
 if __name__ == '__main__':
     check_physical_solver()
     check_selected_pass()
@@ -616,3 +710,6 @@ if __name__ == '__main__':
     check_failure_candidate_summary()
     check_mun_normal_authority()
     check_reported_preference_budget()
+    check_normal_band_fallback()
+    check_normal_probe_guards()
+    check_normal_fallback_search_budget()

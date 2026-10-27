@@ -31,6 +31,10 @@ record remaining uncertainty before closing a task.
 - Current flight: RO9-mun2 deorbit search atUT2884581.6. Investigated
   geometric-preference budget starvation; keep250m preferred/500m hard and
   the64-trial cap. Separate offline-cache/storage admission remains mandatory.
+- Latest retry on53e23f0 reloads an earlier save and overwrites boot023;
+  endsUT2871292.6 with first-pass736m cross atnormal-5. Added bounded measured
+  normal-only fallback for an already-valid downfield band; native validation
+  pending. Do not call this a preference failure or widen the500m cap.
 - Operator confirmed the Minmus3 Kolniya orbital objective succeeded. Next
   flight step is the existing LAND_PREP/landing route; the comparison is an
   optimization, not a new prerequisite. Stage handoff/next-entry KAC flight
@@ -64,6 +68,20 @@ record remaining uncertainty before closing a task.
   whole-descent cache/storage guard may independently block ignition; do
   not waive it to fly this probe. All62 routine check files passed in75.50s;
   no new structural errors (existing missingksc_deorbit handler warning).
+  **Follow-up:** latest boot023 on53e23f0 endsUT2871292.6. First pass stalls
+  atcross736m/downfield12827m,retro32.33/normal-5; later passes worse;64/64.
+  Added measured normal-only fallback after singular or non-improving coupled
+  Newton response, only when already inside the downfield band. Time/retro
+  remain fixed; existing5m/s step/10m/s total bounds, line search, fuel/lead/
+  trial/reserved-validation limits remain. Diagnostics expose failed response
+  deltas and accepted method. Synthetic nonlinear/singular/mirrored cases
+  recover736m while preserving downfield acceptance; infeasible caps/budgets
+  still reject. Real full-search source fixture improves64->16 trials and
+  includes a mandatory powered check. All62 routine check files passed in
+  71.50s; the final nonfinite-range guard also passed targeted solver checks.
+  Native validation remains pending; this is not proof of the native TR
+  failure mechanism or a flight replay. Captured raw retry log:
+  `/tmp/kos-mun2-deorbit-2871292.log` (boot023 is overwritten by save reloads).
 - [ ] **Minmus3 offline deorbit-to-landing handoff / storage.** Native
   RO9_2460361 boot026 planned from9.3x19.4km Minmus orbit, free13,719bytes,
   target7.7795,-165.6543. Static Kolniya profile hadANY light / legacy direct
