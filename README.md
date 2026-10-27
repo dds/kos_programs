@@ -533,10 +533,27 @@ acceptance. A failed pass restores the original node. The original final
 check 90 seconds before the burn remains; another forecast change cancels
 ignition. KAC is installed before the solar coast, and the wait stays resident.
 
+Powered forecasts measure hull clearance from a single snapshot of the
+vessel's physical bounding box, using its half-diagonal plus its centre's
+offset from the centre of mass. This encloses every corner for any attitude.
+They do not infer vessel size by subtracting radar altitudes: `ALT:RADAR` can
+fall back to sea-level altitude, while `BOTTOMALTRADAR` samples terrain under
+the bounding box. Their difference falsely reported a 2.2–2.4 km RO9 hull.
+Future terrain and target-elevation clearance checks remain in place. Live
+landing guidance still uses its original bottom-radar guard.
+
+If a coupled solve stalls at a timing/normal bound but cross-track is already
+acceptable, a powered mission can try a measured retrograde-only step. It
+keeps time/normal fixed, backtracks within the existing retrograde limits,
+retains the hard cross-track cap and reserves a fresh powered-model check.
+The shared 64-trial limit and all final admission checks remain unchanged.
+
 The `STATS deorbit powered-lead` row includes ignition latitude/longitude,
-ASL, target elevation, local terrain, hull clearance and the vertical gate.
-These distinguish terrain-dependent ignition changes from orbital-footprint
-drift. If revalidation fails while still in orbit, use
+ASL, target elevation, local terrain, geometric hull clearance and the vertical
+gate. `hullMode=geometric-radius`, `legacyRadarHull`, `originAsl` and
+`originRadar` distinguish the corrected measurement from the old terrain
+contamination. These diagnostics remain in the normal archived flight log.
+If revalidation fails while still in orbit, use
 `RUNPATH("0:/cmd/deorbitretry.ks").` then `REBOOT.` to replan the saved target.
 
 Before deorbit, the shared policy in [landing_radio.ks](lib/landing_radio.ks)

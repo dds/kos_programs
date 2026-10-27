@@ -9,6 +9,30 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 Mun deorbit follow-up UT2885757..2885817:2km cross cap works
+(seed1591m), but powered fitting stops35/64 with normal-10, cross1458m,
+downfield54283m/aim68772m, residual-14489m. Diagnostics expose bogus
+hull2223..2358m: ALT:RADAR-BOTTOMALTRADAR mixes terrain readings, not vessel
+geometry. kOS VesselAlt.GetRadar uses heightFromTerrain or falls back to ASL;
+BoundsValue.BottomAltitudeRadar uses BodyTarget/GeoCoordinates terrain.
+Forecast now snapshots SHIP:BOUNDS ONCE and uses EXTENTS:MAG plus
+(ABSCENTER-SHIP:POSITION):MAG; this encloses physical corners at any attitude.
+Pass that same clearance through every ignition probe; keep future terrain /
+target clearance and live bottom-radar guidance unchanged. No arbitrary hull
+size cap. Log geometric hull, legacy radar difference and origin ASL/radar.
+Also added retro-only fallback for a powered solve with acceptable cross-track
+and out-of-band along-track residual when coupled/normal-only directions
+stall. Reuse existing measured retro probe, keep time/normal fixed, use
+bounded/backtracked steps and unchanged global64 cap/reserved validation.
+Each changed footprint still needs fresh powered/terrain/light/fuel admission.
+All62 routine check files passed in68.82s. Final origin/radar diagnostics,
+invalid-bounds and full-forecast radar-invariance changes passed targeted
+range checks. Corner/rotation and capped-normal synthetic regressions pass;
+no exact flight replay or native success claimed. Rerun saved target
+from orbit after update. Prior3-day pass ranking policy is unchanged.
+kOS API references: https://github.com/KSP-KOS/KOS/blob/develop/src/kOS/Suffixed/VesselAlt.cs
+and https://ksp-kos.github.io/KOS/structures/vessels/bounds.html
+
 2026-10-27 Deck kernel hang (separate from earlier Unity access violation):
 Read dmesg via SSH; first warning5039s reports gamescope-xwm1727 blocked122s,
 so onset~4917s. gamescope-xwm anddxvk-cs5232 wait atttm_global_swapout mutex;

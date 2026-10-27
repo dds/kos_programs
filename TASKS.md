@@ -52,6 +52,23 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Fix false hull clearance and capped-direction deorbit stall.** Native
+  UT2885788..2885817 reports hull2223..2358m, normal-10m/s and cross1458m
+  inside the2km cap, but along-track residual-14489m; no-improving-step35/64.
+  ALT:RADAR can fall back to ASL while bounds bottom radar queries terrain;
+  subtracting them is not physical vessel size. Forecast now snapshots the
+  bounding box once and uses its enclosing radius about CoM for every gate
+  probe. Preserves future terrain/target and live bottom-radar safety. New
+  geometric/legacy/origin diagnostics distinguish it on the next flight.
+  Added measured retro-only fallback when coupled time/normal directions
+  stall and hard cross-track is already acceptable; epoch/normal stay fixed,
+  existing trust/fuel/normal/cross/trial/reserved-forecast/final checks remain.
+  All62 routine check files passed in68.82s; final origin/radar diagnostics,
+  invalid-bounds and full-forecast radar-invariance regressions also pass in
+  targeted range checks. Native convergence/descent still need testing. Closest-pass ranking remains
+  unchanged; preferring the earliest feasible window is still open.
+
+
 - [ ] **Wider Mun targeted deorbit cross-track, operator authorized.** At
   UT2885617.1, best rejected candidate cross1.563km already used normal-10m/s;
   the earlier departure window has passed. Existing profile setting raised
@@ -329,7 +346,9 @@ record remaining uncertainty before closing a task.
 ## Flight validation / measurements pending
 
 - [ ] **Next Deck memory reductions, recommendations only.** Verified CKAN
-  after reboot: ParallaxContinued1.0.4 with scatter textures1.0.3. Upstream
+  baseline: ParallaxContinued1.0.4 with scatter textures1.0.3. Operator upgrade
+  now verified plugin1.0.6; scatter pack still1.0.3 on last check. CKAN metadata
+  offers scatter pack1.0.5; operator advised to update that separately. Upstream
   release1.0.5 fixes a2GB scene-start VRAM spike and reports scatter usage
   800MB->74MB on Kerbin;1.0.6 is current. Update plugin AND matching scatter
   assets together before judging whether Parallax must be removed. These are

@@ -765,6 +765,45 @@ def check_preburn_refit():
     print('PASS: actual pre-burn admission/refit recovers the reported8.15km moving-forecast miss at the same epoch/normal/target; both slope signs work; <=7 forecasts, fuel/cross/normal/terrain/light/deadline/abort/interruption guards and exact original-node restoration remain')
 
 
+def check_retro_only_fallback():
+    for sign in (-1,1):
+        outcomes=[]
+        for enabled in (False,True):
+            def response(ut,retro,normal):
+                down=54283-12500.2*(retro-22.3587)+504.7*(ut-1000)-156.38*(normal-sign*10)
+                lateral=-sign*1458+324.387*(normal-sign*10)+25*(retro-22.3587)+9.4*(ut-1000)
+                result=impact(ut,retro,normal,down-68772,lateral,abs(ut-1000)<=5.001)
+                result['DOWNFIELD']=down
+                return result
+            env,count,trials=environment(response)
+            env.update(LANDING_POWERED_LEAD=1,_targetDeorbitCrossAuthority=lambda _:2000)
+            if not enabled:env['_targetDeorbitRetroCorrection']=lambda *args:dict(VALID=False)
+            base=response(1000,22.3587,sign*10)
+            result=env['_refineDeorbitFootprint'](base,44.593,-24.926,120,68772,67272,70272,2,120,1,1)
+            outcomes.append(result)
+            if enabled:
+                assert env['_targetDeorbitSolutionAccepted'](result,67272,70272),result
+                assert result['UT']==1000 and result['NORMAL']==sign*10 and result['CROSS']<=2000
+                assert abs(result['RETRO']-base['RETRO'])<2 and count.value<=63
+            else:assert result==base and not env['_targetDeorbitSolutionAccepted'](result,67272,70272)
+        assert outcomes[1]['DOWNFIELD']>outcomes[0]['DOWNFIELD']
+    env,_,_=environment(lambda *args:None);env['LANDING_POWERED_LEAD']=1
+    base=impact(1000,22,-10,-14489,1458);probe=impact(1000,23,-10,-26989,1460)
+    env['_targetDeorbitCrossAuthority']=lambda _:2000
+    for fault in ('cross','flat','nan','in-band','invalid','no-impact','zero-probe','legacy'):
+        best=dict(base);other=dict(probe);dv=1.;env['LANDING_POWERED_LEAD']=1
+        if fault=='cross':best['CROSS']=2001
+        if fault=='flat':other['ERR']=best['ERR']
+        if fault=='nan':other['ERR']=float('nan')
+        if fault=='in-band':best.update(DOWNFIELD=15000,ERR=0)
+        if fault=='invalid':other['VALID']=False
+        if fault=='no-impact':best['HAS_IMPACT']=False
+        if fault=='zero-probe':dv=0
+        if fault=='legacy':env['LANDING_POWERED_LEAD']=0
+        assert not env['_targetDeorbitRetroCorrection'](best,other,dv,10000,20000)['VALID'],fault
+    print('PASS: coupled timing steps fail and normal is capped in a reported54.3->68.8km/1458m synthetic footprint; retro-only fallback recovers both normal signs without changing epoch/normal/hard cross bounds, reserves validation and rejects invalid/flat/NaN/unacceptable cross inputs')
+
+
 if __name__ == '__main__':
     check_physical_solver()
     check_selected_pass()
@@ -782,3 +821,4 @@ if __name__ == '__main__':
     check_normal_probe_guards()
     check_normal_fallback_search_budget()
     check_preburn_refit()
+    check_retro_only_fallback()

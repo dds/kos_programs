@@ -16,17 +16,27 @@ GLOBAL FUNCTION landingDeorbitLegacyLead {
 LOCAL FUNCTION _landingLeadStateAt {
     PARAMETER ut.
     PARAMETER targetElevation.
+    PARAMETER hullClearance.
     LOCAL positionVec IS lmGroundPositionAt(ut).
     LOCAL velocityVec IS lmGroundVelocityAt(ut).
     LOCAL upVec IS positionVec:NORMALIZED.
     LOCAL geo IS lmGroundGeoAt(ut).
     LOCAL asl IS positionVec:MAG-SHIP:BODY:RADIUS.
-    LOCAL hull IS MAX(0,ALT:RADAR-SHIP:BOUNDS:BOTTOMALTRADAR).
     LOCAL terrain IS geo:TERRAINHEIGHT.
     RETURN LEXICON("HS",VXCL(upVec,velocityVec):MAG,
         "DOWN",MAX(0,-VDOT(velocityVec,upVec)),
-        "HEIGHT",MIN(asl-targetElevation,asl-terrain-hull),
-        "LAT",geo:LAT,"LNG",geo:LNG,"ASL",asl,"TERRAIN",terrain,"HULL",hull).
+        "HEIGHT",MIN(asl-targetElevation,asl-terrain-hullClearance),
+        "LAT",geo:LAT,"LNG",geo:LNG,"ASL",asl,"TERRAIN",terrain,"HULL",hullClearance).
+}
+
+// Enclose every box corner about CoM, in any future attitude. Subtracting
+// ALT:RADAR and BOTTOMALTRADAR mixes KSP and kOS terrain samples; their
+// difference is not a physical hull dimension (native RO9 reported >2km).
+// Snapshot the expensive vessel bounds once per forecast, not per gate probe.
+LOCAL FUNCTION _landingLeadHullClearance {
+    PARAMETER vesselBounds.
+    PARAMETER centerOfMass.
+    RETURN vesselBounds:EXTENTS:MAG+(vesselBounds:ABSCENTER-centerOfMass):MAG.
 }
 
 // Mirror both live ignition gates, including the fixed-site geographic gate.
@@ -43,7 +53,8 @@ LOCAL FUNCTION _landingLeadGateAt {
     PARAMETER gravAcc.
     PARAMETER delay.
     PARAMETER stack.
-    LOCAL sample IS _landingLeadStateAt(ut,elevation).
+    PARAMETER hullClearance.
+    LOCAL sample IS _landingLeadStateAt(ut,elevation,hullClearance).
     LOCAL envelope IS lmStagedBrakeEnvelope(sample["HS"],sample["DOWN"],
         activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
     IF sample["HEIGHT"] <= envelope["V"] { RETURN TRUE. }
@@ -97,6 +108,14 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
     IF LANDING_ECONOMY_BRAKE <= 0 OR LANDING_STAGE_BRAKE_CREDIT <= 0
             OR SHIP:BODY:ATM:EXISTS OR NOT ADDONS:TR:HASIMPACT { RETURN policy. }
     LOCAL started IS TIME:SECONDS.
+    LOCAL vesselBounds IS SHIP:BOUNDS.
+    LOCAL hullClearance IS _landingLeadHullClearance(vesselBounds,SHIP:POSITION).
+    IF NOT (hullClearance >= 0 AND hullClearance < 1e30) {
+        SET policy["REASON"] TO "invalid-vessel-bounds". RETURN policy.
+    }
+    LOCAL currentAsl IS SHIP:ALTITUDE.
+    LOCAL currentRadar IS ALT:RADAR.
+    LOCAL legacyRadarHull IS MAX(0,currentRadar-vesselBounds:BOTTOMALTRADAR).
     LOCAL stack IS landingBrakeStackAt(landingBrakeStack(),SHIP:MASS,nd:DELTAV:MAG).
     IF NOT stack["VALID"] { SET policy["REASON"] TO stack["REASON"]. RETURN policy. }
 
@@ -122,18 +141,18 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
     IF hi <= lo OR hi-lo > 1800 { SET policy["REASON"] TO "impact-time". RETURN policy. }
     LOCAL elevation IS LATLNG(targetLat,targetLng):TERRAINHEIGHT.
     LOCAL delay IS MAX(LANDING_BRAKE_REACTION_TIME,1+2*MAX(0.05,LANDING_STAGE_SETTLE)).
-    IF _landingLeadGateAt(lo,targetLat,targetLng,elevation,activeAcc,planAcc,stageDv,gravAcc,delay,stack) {
+    IF _landingLeadGateAt(lo,targetLat,targetLng,elevation,activeAcc,planAcc,stageDv,gravAcc,delay,stack,hullClearance) {
         SET policy["REASON"] TO "no-coast-before-powered-stop". RETURN policy.
     }
     LOCAL iteration IS 0.
     UNTIL iteration >= 12 OR ABORT {
         LOCAL midpoint IS (lo+hi)/2.
-        IF _landingLeadGateAt(midpoint,targetLat,targetLng,elevation,activeAcc,planAcc,stageDv,gravAcc,delay,stack) { SET hi TO midpoint. }
+        IF _landingLeadGateAt(midpoint,targetLat,targetLng,elevation,activeAcc,planAcc,stageDv,gravAcc,delay,stack,hullClearance) { SET hi TO midpoint. }
         ELSE { SET lo TO midpoint. }
         SET iteration TO iteration+1.
     }
     IF ABORT { SET policy["REASON"] TO "abort". RETURN policy. }
-    LOCAL ignition IS _landingLeadStateAt(hi,elevation).
+    LOCAL ignition IS _landingLeadStateAt(hi,elevation,hullClearance).
     LOCAL gate IS lmStagedBrakeEnvelope(ignition["HS"],ignition["DOWN"],
         activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
     LOCAL forecast IS landingPredictBrake(lmGroundPositionAt(hi),lmGroundVelocityAt(hi),stack,elevation).
@@ -166,6 +185,8 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         + " ignitionLat=" + ROUND(ignition["LAT"],5) + " ignitionLng=" + ROUND(ignition["LNG"],5)
         + " asl=" + ROUND(ignition["ASL"],1) + " targetElev=" + ROUND(elevation,1)
         + " localTerrain=" + ROUND(ignition["TERRAIN"],1) + " hull=" + ROUND(ignition["HULL"],2)
+        + " hullMode=geometric-radius legacyRadarHull=" + ROUND(legacyRadarHull,2)
+        + " originAsl=" + ROUND(currentAsl,1) + " originRadar=" + ROUND(currentRadar,1)
         + " vGate=" + ROUND(gate["V"],1) + " vNow=" + (ignition["HEIGHT"] <= gate["V"])
         + " nodeUt=" + nd:TIME + " prograde=" + nd:PROGRADE + " normal=" + nd:NORMAL
         + " hs=" + ROUND(ignition["HS"],1) + " down=" + ROUND(ignition["DOWN"],1)

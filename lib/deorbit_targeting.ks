@@ -1179,6 +1179,25 @@ LOCAL FUNCTION _targetDeorbitNormalCorrection {
     RETURN LEXICON("VALID",TRUE,"RETRO",0,"OTHER",stepDv).
 }
 
+// At a normal/time bound, do not scale an otherwise useful retrograde step
+// to zero just to chase cross-track zero. Existing acceptable cross-track
+// may be retained while the powered along-track goal is still out of band.
+LOCAL FUNCTION _targetDeorbitRetroCorrection {
+    PARAMETER best.
+    PARAMETER probe.
+    PARAMETER probeDv.
+    PARAMETER minDownfield.
+    PARAMETER maxDownfield.
+    LOCAL invalid IS LEXICON("VALID",FALSE).
+    IF LANDING_POWERED_LEAD <= 0 OR NOT best["VALID"] OR NOT probe["VALID"] { RETURN invalid. }
+    IF NOT best["HAS_IMPACT"] OR NOT probe["HAS_IMPACT"] OR ABS(probeDv) < 0.01 { RETURN invalid. }
+    IF NOT (best["CROSS"] <= _targetDeorbitCrossAuthority(best)) { RETURN invalid. }
+    IF NOT (best["DOWNFIELD"] < minDownfield OR best["DOWNFIELD"] > maxDownfield) { RETURN invalid. }
+    LOCAL slope IS (probe["ERR"]-best["ERR"])/probeDv.
+    IF NOT (ABS(slope) >= 1 AND ABS(slope) < 1e30 AND ABS(best["ERR"]) < 1e30) { RETURN invalid. }
+    RETURN LEXICON("VALID",TRUE,"RETRO",-best["ERR"]/slope).
+}
+
 // Estimate the root of actual powered capture residual versus downfield.
 // Reject noisy/reversed slopes, and bound extrapolation to three current
 // residuals. Native probes and a fresh full forecast still own acceptance.
@@ -1263,6 +1282,13 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                     SET stepMethod TO "normal-only".
                 }
                 IF NOT correction["VALID"] {
+                    LOCAL retroCorrection IS _targetDeorbitRetroCorrection(best,retro,retroProbe,minDownfield,maxDownfield).
+                    IF retroCorrection["VALID"] {
+                        SET correction TO LEXICON("VALID",TRUE,"RETRO",retroCorrection["RETRO"],"OTHER",0).
+                        SET stepMethod TO "retro-only".
+                    }
+                }
+                IF NOT correction["VALID"] {
                     mLog("STATS deorbit refine-stop mode=" + mode + " reason=singular-response"
                         + " downfieldM=" + ROUND(best["DOWNFIELD"],0) + " crossM=" + ROUND(best["CROSS"],0)
                         + " retroDownfieldDelta=" + (retro["DOWNFIELD"]-best["DOWNFIELD"])
@@ -1302,7 +1328,8 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                             best["RETRO"] + deltaRetro * scale * fraction,
                             targetLat, targetLng, minLead, desiredDownfield, trialNormal).
                         IF _targetDeorbitMerit(trial, minDownfield, maxDownfield)
-                                < _targetDeorbitMerit(best, minDownfield, maxDownfield) {
+                                < _targetDeorbitMerit(best, minDownfield, maxDownfield)
+                                AND (stepMethod <> "retro-only" OR trial["CROSS"] <= _targetDeorbitCrossAuthority(trial)) {
                             SET best TO trial.
                             SET improved TO TRUE.
                             BREAK.
@@ -1326,6 +1353,27 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                                     SET improved TO TRUE.
                                     BREAK.
                                 }
+                            }
+                        }
+                    }
+                }
+                IF NOT improved AND stepMethod <> "retro-only" {
+                    LOCAL retroCorrection IS _targetDeorbitRetroCorrection(best,retro,retroProbe,minDownfield,maxDownfield).
+                    IF retroCorrection["VALID"] {
+                        SET stepMethod TO "retro-only".
+                        LOCAL retroStep IS MAX(minDv-best["RETRO"],MIN(maxDv-best["RETRO"],
+                            MAX(-10,MIN(10,retroCorrection["RETRO"])))).
+                        FOR fraction IN LIST(1,0.5,0.25) {
+                            IF ABORT OR _deorbitEvaluations >= trialLimit { BREAK. }
+                            LOCAL trial IS _evalGeometricDeorbitNode(best["UT"],best["RETRO"]+retroStep*fraction,
+                                targetLat,targetLng,minLead,desiredDownfield,best["NORMAL"]).
+                            IF trial["VALID"] AND trial["HAS_IMPACT"]
+                                    AND trial["CROSS"] <= _targetDeorbitCrossAuthority(trial)
+                                    AND _targetDeorbitMerit(trial,minDownfield,maxDownfield)
+                                        < _targetDeorbitMerit(best,minDownfield,maxDownfield) {
+                                SET best TO trial.
+                                SET improved TO TRUE.
+                                BREAK.
                             }
                         }
                     }

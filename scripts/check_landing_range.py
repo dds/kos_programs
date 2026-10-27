@@ -152,8 +152,9 @@ def lead_environment():
         pos=position(ut)
         return geo(0,math.degrees(math.atan2(pos[0],pos[2])))
     impact_ut=nd.TIME+coast
-    env.update(SHIP=NS(MASS=1.,BODY=NS(RADIUS=radius,MU=mu,POSITION=Vec((0,0,0)),ATM=NS(EXISTS=False)),
-                       BOUNDS=NS(BOTTOMALTRADAR=15000)),ALT=NS(RADAR=15000),
+    env.update(SHIP=NS(MASS=1.,ALTITUDE=15000.,BODY=NS(RADIUS=radius,MU=mu,POSITION=Vec((0,0,0)),ATM=NS(EXISTS=False)),
+                       BOUNDS=NS(BOTTOMALTRADAR=15000,EXTENTS=Vec((0,0,0)),ABSCENTER=Vec((0,0,0))),
+                       POSITION=Vec((0,0,0))),ALT=NS(RADAR=15000),
                ADDONS=NS(TR=NS(HASIMPACT=True,TIMETILLIMPACT=impact_ut,IMPACTPOS=geo_at(impact_ut))),
                LANDING_POWERED_LEAD=1,LANDING_ECONOMY_BRAKE=1,LANDING_STAGE_BRAKE_CREDIT=1,
                TARGET_TOLERANCE=1500,LATLNG=geo,
@@ -187,7 +188,15 @@ def lead_environment():
 
 def check_native_lead():
     env,nd,impact_ut=lead_environment()
+    ship=env['SHIP'];reads=[]
+    class CountedShip:
+        def __getattr__(self,name):
+            if name=='BOUNDS':reads.append(name)
+            return getattr(ship,name)
+    env['SHIP']=CountedShip()
     policy=env['landingDeorbitLeadPolicy'](nd,0,0)
+    env['SHIP']=ship
+    assert len(reads)==1,reads
     assert policy['VALID'],policy
     assert nd.TIME<policy['IGNITION_UT']<impact_ut
     assert 10000<policy['RANGE']<50000 and policy['AIM']>20000,policy
@@ -202,7 +211,9 @@ def check_native_lead():
     env['SHIP'].MASS=charged['MASS']
     env['vesselLandingBrakeStageDv']=lambda:full_fuel()-20
     nd.DELTAV.MAG=0
+    env['ALT'].RADAR+=2299.01 # Unrelated current radar/terrain change during coast.
     assert env['landingDeorbitLeadPolicy'](nd,0,0)==policy
+    env['ALT'].RADAR-=2299.01
     # More measured transfer fuel may help, but cannot come from return tanks.
     env['SHIP'].MASS=1.;nd.DELTAV.MAG=20.
     env['vesselLandingBrakeStageDv']=lambda:full_fuel()+20
@@ -219,8 +230,9 @@ def check_native_lead():
 
 
 def check_lead_refusals():
-    for kind in ('mode','credit','atmosphere','impact','underpowered','unknown-fuel','spent-fuel','timing','abort','no-coast','range','upfield'):
+    for kind in ('bounds','mode','credit','atmosphere','impact','underpowered','unknown-fuel','spent-fuel','timing','abort','no-coast','range','upfield'):
         env,nd,impact_ut=lead_environment()
+        if kind=='bounds':env['SHIP'].BOUNDS.EXTENTS=Vec((float('nan'),0,0))
         if kind=='mode':env['LANDING_ECONOMY_BRAKE']=0
         if kind=='credit':env['LANDING_STAGE_BRAKE_CREDIT']=0
         if kind=='atmosphere':env['SHIP'].BODY.ATM.EXISTS=True
@@ -455,6 +467,37 @@ def check_logged_moving_lead(curvature):
     print('PASS: observed moving-lead curve with independent nonlinear geometry curvature%d holds the legacy policy outside tolerance at%d/64, while fresh one-step/secant refinement passes at%d/64 with unchanged1500m/cross/fuel bounds (not a native replay)'%(curvature,outcomes[0][1],outcomes[1][1]))
 
 
+def check_geometric_hull_clearance():
+    env,_,_=lead_environment()
+    extents=Vec((2.,3.,8.));com=Vec((100.,-50.,20.));offset=Vec((0.,0.,2.))
+    bounds=NS(EXTENTS=extents,ABSCENTER=com+offset,BOTTOMALTRADAR=12000.)
+    radius=env['_landingLeadHullClearance'](bounds,com)
+    assert abs(radius-(math.sqrt(77)+2))<1e-10
+    # Independent corner distances: root/box centre differs from CoM, and
+    # rotating the entire vessel cannot change its enclosing radius.
+    for theta in (0.,.4,1.2,2.8):
+        def rotate(v):return Vec((v[0]*math.cos(theta)-v[2]*math.sin(theta),v[1],v[0]*math.sin(theta)+v[2]*math.cos(theta)))
+        bounds.ABSCENTER=com+rotate(offset)
+        assert abs(env['_landingLeadHullClearance'](bounds,com)-radius)<1e-10
+        for x in (-extents[0],extents[0]):
+            for y in (-extents[1],extents[1]):
+                for z in (-extents[2],extents[2]):
+                    assert (rotate(Vec((x,y,z))+offset)).MAG<=radius+1e-10
+    env['lmGroundPositionAt']=lambda _:Vec((0,0,200000+8791.7))
+    env['lmGroundVelocityAt']=lambda _:Vec((533,0,-42.7))
+    env['lmGroundGeoAt']=lambda _:NS(TERRAINHEIGHT=2460.5,LAT=33.78813,LNG=-25.69067)
+    states=[]
+    for false_hull in (0,2299.01,2358.15,20000):
+        env['ALT'].RADAR=12000+false_hull
+        bounds.BOTTOMALTRADAR=12000
+        states.append(env['_landingLeadStateAt'](1234,4196,radius))
+    assert all(state==states[0] for state in states)
+    assert abs(states[0]['HEIGHT']-4595.7)<1e-7
+    old_height=min(8791.7-4196,8791.7-2460.5-2299.01)
+    assert old_height<=4039.5<states[0]['HEIGHT']
+    print('PASS: logged2299m false radar-derived hull would ignite at4039.5m gate; geometric~10.8m enclosing radius preserves4595.7m clearance, bounds every corner/attitude and is independent of current terrain/radar mismatch')
+
+
 if __name__=='__main__':
     check_reported_ignition()
     check_range_physics()
@@ -469,3 +512,4 @@ if __name__=='__main__':
     check_powered_step_hint_guards()
     check_logged_moving_lead(200)
     check_logged_moving_lead(500)
+    check_geometric_hull_clearance()
