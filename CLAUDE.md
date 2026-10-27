@@ -9,6 +9,18 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 memory suggestions audit: effective MM cache confirms prior
+KSPTextureLoader settings reverted (persistent buffertrue, temporary cap
+absent/auto, buffer128MB); propose false/256MB in a separate MM override,
+not another vendor-file edit. No changes applied. NoIVAplaceholder and MH
+disabled persist; stock TEXTURE_QUALITY already2, Parallaxdensity0.15.
+ShadowMan source sets8192 first, explicitly before Scatterer; configured
+Scatterer2048 may subsequently override. Never infer active8k just from
+ShadowMan's startup log. Actual light/shadow texture needs verification.
+Deferred SSR enabled/half-resolution: optional modest visual/memory cut,
+retain probe-based lighting/reflections. Source/settings evidence paths
+are recorded in TASKS.md. Do not recommend lowering textures as if still1.
+
 2026-10-27 second Deck graphics-memory freeze, operator rebooted before
 inspection finished. Prior boot32952dec persisted kernel evidence after all:
 first hung-task warning8848.456s (20:22:26CET), gamescope-xwm14915 and

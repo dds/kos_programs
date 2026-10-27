@@ -300,6 +300,19 @@ record remaining uncertainty before closing a task.
   SSH inspection completed at uptime499s after reboot: RAMavailable9.68GiB,
   swap0, KSPRSS1.17GiB; asset loading/scene differs, not a proven leak.
   Current game already running; no game settings/processes/power changed.
+  Low-impact follow-up re-read active settings/MM cache: stock texture
+  quality already2, density0.15, Deferred SSR on/half-resolution, reflections
+  already low; NoIVAplaceholder/MHdisabled remain. Texture-loader overrides
+  reverted: active AsyncUploadPersistentBuffer=true, MaxTextureLoadMemory
+  absent/automatic, upload buffer128MB. Recommend restoring false/256MB via
+  a local MM override surviving package updates (same visuals; loading /
+  allocation tradeoff; peak cap is not a resident-texture cap). Settings
+  unchanged this turn. ShadowMan source hardcodes8192 but initializes before
+  Scatterer, which is configured2048: startup log is NOT proof of effective
+  8192 allocation. Verify runtime ownership before changing/counting savings.
+  Optional next modest cut: disable Deferred SSR, keeping basic reflection
+  probes/lighting. Reports `/tmp/ksp-deck-low-impact-settings-20261027.json`
+  and `/tmp/ksp-deck-memory-overrides-20261027.json` preserve configuration.
 - [ ] **Latest Deck crash: renderer/memory follow-up.** Inspected before
   mission work. Crash_2026-10-27_092057394/error.log reports UnityPlayer.dll
   access violation0xc0000005 at09:20:58UTC,94% physical memory used/800MB
