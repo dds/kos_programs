@@ -65,7 +65,7 @@ GLOBAL FUNCTION dependencyLibs {
         "airplane", LIST("observe", "flightplan", "utils"),
         "rover", LIST(),
         "science", LIST(),
-        "aerobrake", LIST("maneuver", "utils", "landing_config", "aerobrake_assist"),
+        "aerobrake", LIST("maneuver", "utils", "landing_config", "aerobrake_assist", "solar"),
         "aerobrake_assist", LIST("aerobrake_config", "aerobrake_ap_math", "thrust_cutoff"),
         "aerobrake_ap_math", LIST(),
         "aerobrake_config", LIST(),

@@ -5,6 +5,29 @@ Komptroller is kOS (KerbalScript) mission automation for Kerbal Space Program.
 commands. This file is what you need to *work on the code* without breaking a
 mission.
 
+`TASKS.md` tracks current work, queued changes and outstanding flight checks.
+Read it when resuming and update it when work is added, completed or blocked;
+distinguish source-test results from native mission validation.
+
+2026-10-27 return audit: native RO9_2446359 boot019 UT2783434 entered
+AEROBRAKE at Kerbin Pe53.135km/Ap35038.7km. Its generated local profile
+saved AP_BURN0 (despite craft default1), descent_decoupler at6km; actual
+saved hardware has only return_decoupler stage1 and lander_decoupler stage2,
+both attached, and retained descent_chutes/CPU. aeroassist now accepts an
+optional final-descent tag, validates attached separator/CPU/chutes and
+stopped controls before saving ONLY policy/tag overrides. Does not stage,
+ignite, reboot or change altitude/phase. Final separation is still AFTER
+AEROBRAKE's captured/slow handoff; no sequential use of inactive stages.
+Native solar panel is supported ModuleDeployableSolarPanel, so unavailable
+was not Kopernicus renaming: bootPlannedMissionLibs runs BEFORE the craft
+adds solar via LIBS_EXTRA; generated return profile lacks that extra and
+old AEROBRAKE closure had no solar. Declare it explicitly in dependencies,
+not a bootstrap workaround. Warning now distinguishes missing helper/panels.
+After atmospheric exits/capture burns, refresh the owned entry alarm using
+aerobrakeApEntryEta and use the same crossing for solar preparation. Initial
+and post-correction setup share that helper. Native stage sequence, next-pass
+alarm and solar attitude still require flight validation; see TASKS.md.
+
 ## The language (kerboscript, `.ks`)
 
 Looks like Python/JS; is neither.

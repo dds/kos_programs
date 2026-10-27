@@ -130,6 +130,8 @@ GLOBAL FUNCTION phaseAerobrake {
     _aerobrakeRetractSolarPanels().
     _aerobrakeRetractAntennas().
     _aerobrakeCloseExtendBays().
+    // Entry timing may have changed during Pe/site correction burns.
+    SET entryUt TO _aerobrakeSetEntryAlarm().
 
     mLog("Aerobrake: multi-pass braking. Holding heat-shield-forward "
         + "through each pass; staying until captured and slowed below "
@@ -185,10 +187,13 @@ GLOBAL FUNCTION phaseAerobrake {
                     _aerobrakeBrakingBurn().
                     IF phaseShouldYield { RETURN. }
                 }
+                // Drag (and any capture burn) changed the next orbit.
+                // Refresh the owned alarm before beginning its solar coast.
+                SET entryUt TO _aerobrakeSetEntryAlarm().
             }
             // Between passes: solar-hold + warp the high coast, then orient
             // heat-shield-forward ~15 min before the next pass.
-            _aerobrakeSolarWait(TIME:SECONDS + ETA:PERIAPSIS - AEROBRAKE_ENTRY_LEAD).
+            IF entryUt > 0 { _aerobrakeSolarWait(entryUt - AEROBRAKE_ENTRY_LEAD). }
             IF AEROBRAKE_AP_BURN > 0 {
                 LOCAL approachEta IS aerobrakeApEntryEta(atmHeight).
                 IF approachEta > AEROBRAKE_AP_PLAN_LEAD {
@@ -336,26 +341,20 @@ LOCAL FUNCTION _aerobrakeBrakingBurn {
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)).
 }
 
-// Set a KAC alarm before atmospheric interface so time warp
-// stops automatically. Uses the ATM_HEIGHTS table; falls back
-// to the body's own ATM:HEIGHT if not in the table.
-// Set the atmosphere-entry KAC alarm and RETURN the entry UT (periapsis
-// ETA, nudged earlier when Pe is already inside the atmosphere). -1 on an
-// airless body. Reliable — pure orbit ETA, no POSITIONAT prediction.
+// Alarm the next inbound atmosphere crossing from the live conic and return
+// its UT. Returns -1 for an airless body or no future crossing. No POSITIONAT
+// frame prediction and no fixed time offset from periapsis.
 LOCAL FUNCTION _aerobrakeSetEntryAlarm {
-    IF NOT SHIP:BODY:ATM:EXISTS { RETURN -1. }
-
-    LOCAL atmAlt IS SHIP:BODY:ATM:HEIGHT.
-    IF ATM_HEIGHTS:HASKEY(SHIP:BODY:NAME) {
-        SET atmAlt TO ATM_HEIGHTS[SHIP:BODY:NAME].
+    LOCAL atmAlt IS _aerobrakeAtmoHeight().
+    IF atmAlt <= 0 { RETURN -1. }
+    // Share the actual next inbound conic crossing with assist planning,
+    // including an outbound ellipse after a skip. No fixed Pe-minus120s.
+    LOCAL entryEta IS aerobrakeApEntryEta(atmAlt).
+    IF NOT (entryEta > 0 AND entryEta < 1e30) {
+        mLog("STATS aerobrake entry-alarm status=no-future-crossing body=" + SHIP:BODY:NAME).
+        RETURN -1.
     }
-
-    // Atmosphere entry happens shortly before periapsis on a reentry arc.
-    LOCAL entryUt IS TIME:SECONDS + ETA:PERIAPSIS.
-    IF SHIP:ORBIT:PERIAPSIS < atmAlt {
-        SET entryUt TO entryUt - 120.
-    }
-    SET entryUt TO MAX(entryUt, TIME:SECONDS + 30).
+    LOCAL entryUt IS TIME:SECONDS + entryEta.
 
     IF ADDONS:KAC:AVAILABLE {
         LOCAL alarmId IS kacEnsureAlarm("Atmo entry: " + SHIP:BODY:NAME,
@@ -367,6 +366,9 @@ LOCAL FUNCTION _aerobrakeSetEntryAlarm {
                 + " (" + SHIP:BODY:NAME + " atmo=" + ROUND(atmAlt/1000, 0) + "km).").
         }
     }
+    mLog("STATS aerobrake entry-alarm entryUt=" + entryUt + " eta=" + entryEta
+        + " prepareUt=" + (entryUt-AEROBRAKE_ENTRY_LEAD)
+        + " body=" + SHIP:BODY:NAME + " kac=" + ADDONS:KAC:AVAILABLE).
     RETURN entryUt.
 }
 
@@ -381,7 +383,9 @@ LOCAL FUNCTION _aerobrakeSolarWait {
 
     LOCAL solarRef IS -1.
     LOCAL canWarp IS TRUE.
-    IF PHASES_HAS_SOLAR AND shipHasSolarPanels() {
+    LOCAL hasPanels IS FALSE.
+    IF PHASES_HAS_SOLAR { SET hasPanels TO shipHasSolarPanels(). }
+    IF PHASES_HAS_SOLAR AND hasPanels {
         // A health tick may simply accept nonzero flow without steering.
         // Initialize the hold explicitly, off rails, before considering warp.
         SET WARP TO 0.
@@ -394,7 +398,10 @@ LOCAL FUNCTION _aerobrakeSolarWait {
         mLog("STATS aerobrake solar aimed=" + aimed + " flow=" + solarRef
             + " canWarp=" + canWarp + " wakeUt=" + wakeUt).
     } ELSE {
-        mLogWarn("STATS aerobrake solar status=unavailable coasting-without-solar-aim").
+        LOCAL reason IS "solar-library-not-loaded".
+        IF PHASES_HAS_SOLAR { SET reason TO "no-supported-solar-panels". }
+        mLogWarn("STATS aerobrake solar status=unavailable coasting-without-solar-aim"
+            + " reason=" + reason + " helperLoaded=" + PHASES_HAS_SOLAR + " panels=" + hasPanels).
     }
     IF canWarp { coastAutoWarp(wakeUt, "Aerobrake coast", ""). }
     UNTIL TIME:SECONDS >= wakeUt

@@ -19,6 +19,8 @@ in-game processors.
   vehicle sections.
 - **Writing code?** See [Architecture](#architecture),
   [Extending](#extending-the-system), and `CLAUDE.md` for conventions.
+- **Following current work?** See [TASKS.md](TASKS.md) for active changes,
+  queued improvements and outstanding flight validation.
 
 ## Quick start
 
@@ -1866,12 +1868,41 @@ The operator switch is boolean:
 RUNPATH("0:/cmd/aeroassist.ks",1). // enable; use 0 to disable
 ```
 
-The command saves one override for the next AEROBRAKE boot and preserves the
+The command saves an override for the next AEROBRAKE boot and preserves the
 phase, maneuver nodes and unrelated overrides. Both generated return profiles
 preserve the policy. After archive sync, reboot to load the new controller;
 no installed `boot/boot.ks` replacement is needed. A reboot already inside
 the atmosphere keeps normal aerobraking and waits until the following pass
 to plan assistance.
+
+Older generated profiles may explicitly save `AEROBRAKE_AP_BURN=0`, overriding
+the RO9 craft default; the command's saved override enables it deliberately.
+For a return stack whose final separator has another tag, an optional second
+argument selects it for DESCENT:
+
+```kerboscript
+RUNPATH("0:/cmd/aeroassist.ks",1,"return_decoupler").
+```
+
+This hardware option requires AEROBRAKE, Abort clear and zero thrust/raw/pilot
+throttle. It verifies one attached, stageable separator and that both the CPU
+and all `descent_chutes` parts remain aboard. It preserves the configured
+separation altitude (6 km in the shallow-return profile). It does not fire
+the separator, ignite engines or change phase. Pull updates and use a safe
+coast outside the atmosphere for the connected reboot. On RO9's3/2/1 stack,
+`return_decoupler` removes the lower lander/transfer stack at final DESCENT;
+it does not spend those stages' fuel sequentially during aerobraking. There
+is no automatic powered landing unless that is separately configured.
+
+After every atmospheric exit, AEROBRAKE refreshes the vessel's `Atmo entry:
+<body>` KAC KillWarp alarm from the new orbit, after any capture burn and
+before the next solar coast. It uses the next actual inbound atmosphere
+crossing rather than Pe minus a fixed120 seconds. Preparation uses that
+same crossing minus `AEROBRAKE_ENTRY_LEAD` (default900 seconds). Startup and
+post-correction checks use the same path; same-name alarms are reused or
+retimed through the shared helper, while other craft's alarms are preserved.
+Without KAC the clock wait still runs. No alarm is invented when there is
+no future crossing. `STATS aerobrake entry-alarm` logs entry/preparation UT.
 
 About **180 seconds before the next actual atmospheric interface**, the
 controller measures usable fuel, active-engine thrust/Isp and mass. It tries
@@ -1942,7 +1973,11 @@ and are not a kOS flight timing guarantee; the flight plan records its own
 computation time.
 
 Aerobrake solar coasts explicitly establish the solar attitude before
-auto-warping. A positive panel-flow reading alone does not prove a solar
+auto-warping. AEROBRAKE declares solar as a phase dependency, so profile-first
+boot planning loads/caches it even when the craft's `LIBS_EXTRA` runs later.
+The unavailable warning distinguishes `solar-library-not-loaded` from
+`no-supported-solar-panels`, with helper/panel flags. A positive panel-flow
+reading alone does not prove a solar
 steering hold was installed. The coast stops warp, waits for physics to
 settle, tries the saved axis first and validates it against its saved peak.
 Full rediscovery is used only when needed. Alignment/search and later

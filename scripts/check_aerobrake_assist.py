@@ -417,9 +417,9 @@ def check_profile_command_and_entry_alignment():
     assert 'aerobrake_assist' in closure(['aerobrake'],deps)
     assert 'aerobrake_assist' not in closure(['return_setup'],deps)
     command=(ROOT/'cmd/aeroassist.ks').read_text()
-    assert len(re.findall(r'\bPARAMETER ',command))==1
+    assert len(re.findall(r'\bPARAMETER ',command))==2
     assert 'missionOverrideUpdate(' in command and not re.search(r'\b(?:stateSet|stateRemove|missionOverrideClear|nextPhase)\(',command)
-    assert not re.search(r'\b(?:REBOOT|STAGE|LOCK|UNLOCK|REMOVE)\b',mask(command))
+    assert not re.search(r'(?<!:)\b(?:REBOOT|STAGE|LOCK|UNLOCK|REMOVE)\b',mask(command))
     phase=function_body(AERO,'phaseAerobrake')
     assert phase.index('aerobrakeApRecover()')<phase.index('mLogPhase(')
     assert 'approachEta-AEROBRAKE_AP_PLAN_LEAD' in phase and 'OR inPass' in phase
