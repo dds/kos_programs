@@ -60,8 +60,9 @@ GLOBAL SHAPE_ALT_TOL IS 5000.
 GLOBAL SHAPE_ANG_TOL IS 0.2.
 GLOBAL SHAPE_AOP_TOL IS 0.5.
 // An apsis a few km off (vs SHAPE_ALT_TOL) can need essentially no dV
-// from the far apsis on an eccentric orbit. Don't execute a node below
-// this floor — skip it and move to the next correction.
+// from the far apsis on an eccentric orbit. Apply this shared floor to ALL
+// final shape nodes, including plane/AoP and optimizer-shrunk apsis trims.
+// Skipping does not waive final orbit tolerances; other corrections go first.
 GLOBAL SHAPE_MIN_BURN_DV IS 0.4.
 GLOBAL SHAPE_DV_CAP IS -1.
 GLOBAL SHAPE_TOTAL_DV_CAP IS -1.
@@ -75,6 +76,7 @@ LOCAL DEFAULT_ANG_TOL    IS 0.15.
 LOCAL DEFAULT_AOP_TOL    IS 1.0.
 LOCAL NEAR_CIRC_ECC      IS 0.01.
 LOCAL MIN_AOP_TARGET_ECC IS 0.004.
+LOCAL _shapeMinimumSkipped IS FALSE.
 
 // ============================================================
 // Small helpers
@@ -745,7 +747,8 @@ LOCAL FUNCTION _burnCostNow {
 // seed itself is unsafe, plane-wrecking, or simply does not
 // accomplish its objective (cost gate — flight-found: a stuck
 // refine delivered AoP 17 for a target of 269 at cost 117 and
-// was accepted because it was merely SAFE). Returns LEX or 0.
+// was accepted because it was merely SAFE). Returns LEX, "skip" for a
+// sub-minimum final node, or 0 for a failed quality/safety check.
 LOCAL FUNCTION _finishShapeNode {
     PARAMETER nd, label, targets.
     IF nd = 0 { RETURN 0. }
@@ -812,6 +815,7 @@ LOCAL FUNCTION _finishShapeNode {
         RETURN 0.
     }
 
+    IF NOT _shapeNodeAboveMinimum(nd,label) { RETURN "skip". }
     mLog("SHAPE " + label + ": dV=" + ROUND(nd:DELTAV:MAG, 1)
         + " m/s -> " + ROUND(nd:ORBIT:PERIAPSIS / 1000, 1) + " x "
         + ROUND(nd:ORBIT:APOAPSIS / 1000, 1) + " km  AoP "
@@ -835,14 +839,25 @@ LOCAL FUNCTION _finishShapeNode {
 LOCAL FUNCTION _apsisBurn {
     PARAMETER burnEta, burnTa, targetAlt, label, targets.
     LOCAL nd IS _planTangentBurnAt(burnEta, burnTa, targetAlt, label).
-    IF nd:DELTAV:MAG < SHAPE_MIN_BURN_DV {
-        mLog("SHAPE " + label + ": dV " + ROUND(nd:DELTAV:MAG, 2)
-            + " m/s below " + SHAPE_MIN_BURN_DV
-            + " m/s floor — apsis already close, skipping.").
-        REMOVE nd.
-        RETURN "skip".
-    }
+    // Cheap seed rejection avoids pointless refinement. The final node is
+    // checked again after refinement by the same helper in _finishShapeNode.
+    IF NOT _shapeNodeAboveMinimum(nd,label) { RETURN "skip". }
     RETURN _finishShapeNode(nd, label, targets).
+}
+
+LOCAL FUNCTION _shapeNodeAboveMinimum {
+    PARAMETER nd.
+    PARAMETER label.
+    IF nd = 0 { RETURN FALSE. }
+    LOCAL dv IS nd:DELTAV:MAG.
+    LOCAL floorDv IS MAX(0,SHAPE_MIN_BURN_DV).
+    IF dv > 0 AND dv >= floorDv { RETURN TRUE. }
+    // Capture all node data before removal; no budget charge/alarm/wait.
+    mLog("STATS shape decision=skip reason=below-execution-minimum label=" + label
+        + " dv=" + dv + " minimumDv=" + floorDv + " eta=" + nd:ETA).
+    SET _shapeMinimumSkipped TO TRUE.
+    REMOVE nd.
+    RETURN FALSE.
 }
 
 // ============================================================
@@ -889,7 +904,9 @@ GLOBAL FUNCTION shapeNextBurn {
         IF targets:HASKEY("INC") { SET tInc TO targets["INC"]. }
         IF targets:HASKEY("LAN") { SET tLan TO targets["LAN"]. }
         LOCAL nd IS planPlaneMatch(tInc, tLan).
-        IF nd <> 0 { RETURN LEX("node", nd, "label", "plane"). }
+        IF nd <> 0 {
+            IF _shapeNodeAboveMinimum(nd,"plane") { RETURN LEX("node", nd, "label", "plane"). }
+        }
     }
 
     // --- 3. Near-circular start with a requested AoP: establish
@@ -944,10 +961,11 @@ GLOBAL FUNCTION shapeNextBurn {
     // --- 5. Argument of periapsis (in-plane apsidal rotation) ---
     IF errs:HASKEY("AOP") AND ABS(errs["AOP"]) > aopTol
             AND SHIP:ORBIT:ECCENTRICITY >= NEAR_CIRC_ECC {
-        RETURN _finishShapeNode(
+        LOCAL aopBurn IS _finishShapeNode(
             planAoPChange(targets["AOP"]), "aop", targets).
+        IF aopBurn:ISTYPE("Lexicon") { RETURN aopBurn. }
     }
-    IF needAp2 {
+    IF needAp2 AND targets["AP"] < SHIP:PERIAPSIS {
         // AP target below current Pe and PE already in tolerance:
         // dip via the Ap burn anyway; next round restores PE.
         LOCAL etaAp2 IS ETA:APOAPSIS.
@@ -994,6 +1012,7 @@ LOCAL FUNCTION _shapeReserveBurn {
 LOCAL FUNCTION _runShapePhase {
     PARAMETER phaseLabel.
     PARAMETER prefix.
+    SET _shapeMinimumSkipped TO FALSE.
 
     LOCAL targets IS shapeTargetsWithPrefix(prefix).
     IF targets:LENGTH = 0 {
@@ -1020,7 +1039,15 @@ LOCAL FUNCTION _runShapePhase {
         LOCAL success IS FALSE.
         LOCAL retries IS 0.
         UNTIL success {
+            IF NOT _shapeNodeAboveMinimum(NEXTNODE,planned["label"]) {
+                mLogWarn(phaseLabel + ": node fell below the execution minimum; phase retained"
+                    + _errorSummary(shapeErrors(targets))).
+                yieldToPrompt(). RETURN.
+            }
             IF phaseLabel = "SHAPE" AND NOT _shapeReserveBurn(NEXTNODE) { RETURN. }
+            mLog("STATS shape execution label=" + planned["label"]
+                + " dv=" + NEXTNODE:DELTAV:MAG + " minimumDv=" + SHAPE_MIN_BURN_DV
+                + " eta=" + ROUND(NEXTNODE:ETA,1) + _errorSummary(shapeErrors(targets))).
             SET success TO executeManeuver().
             IF NOT success {
                 SET retries TO retries + 1.
@@ -1034,6 +1061,7 @@ LOCAL FUNCTION _runShapePhase {
                 UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
                 LOCAL replanned IS shapeNextBurn(targets).
                 IF replanned = 0 { SET success TO TRUE. }
+                ELSE { SET planned TO replanned. }
             }
         }
         WAIT 2.
@@ -1057,6 +1085,10 @@ LOCAL FUNCTION _runShapePhase {
         + _errorSummary(finalErrs)).
     PRINT " ".
     PRINT "  " + phaseLabel + " UNCONVERGED — holding this phase.".
+    IF _shapeMinimumSkipped {
+        PRINT "  Sub-minimum corrections were skipped; requested orbit tolerances still apply.".
+        PRINT "  Review the remaining errors and minimum before changing phase or tolerances.".
+    }
     PRINT "  Reboot to replan, or setphase to skip:".
     PRINT "  RUNPATH(" + CHAR(34) + "0:/cmd/setphase.ks" + CHAR(34)
         + ", " + CHAR(34) + "<NEXT_PHASE>" + CHAR(34) + ").".

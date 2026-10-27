@@ -503,6 +503,21 @@ Looks like Python/JS; is neither.
   no tiny burn and no bypass of final precision or reserve budgets. Source
   fixtures reproduce rejection/wake and check the coarse/final gate split;
   native capture/SHAPE still needs flight validation.
+  RO9-minmus3 Kolniya native report (2026-10-26): SHAPE schedules a4h-away
+  set-pe-for-ap trim displayed0.1m/s, cost0.87. Two proven source gaps:
+  fallback ran on any remaining AP error, including a normal AP trim skipped
+  below its seed minimum, despite its own comment requiring targetAP<currentPE;
+  and the0.4m/s floor covered initial apsis seeds only, not plane/AoP or
+  optimizer-shrunk nodes. Fallback now requires actual geometric need.
+  _shapeNodeAboveMinimum is shared by seed/final planning and the common
+  execution boundary, including retries; log rawdV/floor/ETA/label. Tiny
+  plane/AoP trims fall through to other useful corrections. Keep strict
+  convergence/tolerances and budget ledgers; if ONLY sub-minimum corrections
+  remain, hold SHAPE explicitly, never advance to science/landing or silently
+  relax the Kolniya goal. Update planned label after retries. Optimizer cost
+  is a weighted objective, not proof the burn is valuable/within tolerance.
+  Source regressions cover final shrink, all node types, fallback geometry,
+  retry/execution admission and preserved hold. Native flight still unproven.
   Surface return writes optional SURFACE_RETURN_ORBIT fields to the NEW local
   profile's SHAPE_* (Ap659734/Pe554472/inc0/noLAN/AoP0.4) and sequences
   PRELAUNCH/LAUNCH/PARK/SHAPE/RETURN_SETUP, then Kerbin Pe52000. Empty orbit

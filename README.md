@@ -953,6 +953,18 @@ remains a burn-admission floor, not proof of a landing and return budget.
 `totalOk`, `reserveOk` decisions. After archive sync, a connected reboot in
 SHAPE replans from the retained orbit using this profile; it does not refund
 previous shaping expenditure or skip the requested orbit.
+
+`SHAPE_MIN_BURN_DV` (default **0.4 m/s**) applies to every final SHAPE and
+DEPARTURE_SHAPE node: plane, AoP and apsis corrections, including nodes that
+shrink during refinement or retry. Sub-minimum trims are removed before
+budget admission, alarms or execution. The planner can continue with another
+useful correction; if only tiny corrections remain outside the configured
+orbit tolerances, it holds at the prompt with those errors rather than
+declaring success. `STATS shape decision=skip` records the label, exact dV,
+floor and ETA; `STATS shape execution` records admitted burns and live errors.
+The `set-pe-for-ap` fallback is used only when the desired Ap really is below
+the current Pe, never just because a normal AP trim was below the minimum.
+
 The fixed-site RO9 Mun profile also permits up to 10 m/s of normal correction
 in its deorbit burn. It prefers cross-track error below 250 m and rejects
 above 500 m, reducing the lateral work left to powered descent. Its locked
