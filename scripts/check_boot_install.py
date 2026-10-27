@@ -70,11 +70,16 @@ def fixture(linked=True,extra_source=''):
         source=source.replace('DEFINED printStorageStatus','FALSE')
         return re.sub(r'"[^"\n]*"',lambda match:'text('+match[0]+')',source)
     env.update(compile_file=compile_file,listing=listing,RUNPATH=running,RUNONCEPATH=running)
+    prepared={}
     def invoke(name,*args):
-        body=function_body(fixture_source,name)
+        if name not in prepared:
+            body=function_body(fixture_source,name)
+            prepared[name]=(re.findall(r'PARAMETER (\w+)',body),ks.compile_nodes(ks.freeze(ks.parse(adapt(body)))))
+        params,compiled=prepared[name]
         local=env if name in ('bootApplyMissionConfig','main') else dict(env)
-        local.update(zip(re.findall(r'PARAMETER (\w+)',body),args))
-        return run(adapt(body),local)
+        local.update(zip(params,args))
+        try:ks.execute(compiled,local)
+        except ks.Returned as result:return result.value
     for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',fixture_source):
         env[name]=lambda *args,name=name:invoke(name,*args)
     env['bootLibResolve']=lambda roots:roots
