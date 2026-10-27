@@ -9,6 +9,18 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 minmus_polar_hops_return profile: high polar1064182/444576m,
+90/298.9/244.9deg -> LAND_PREP9.3x19.3km -> fixed A(-1.080,1.365),
+three hops B(-1.190,1.596),C(-1.554,2.780),D(-3.029,2.189),600s resident
+KAC science stops at all four -> ascent/SHAPE659734/554472m,0deg,AoP0.4
+-> Kerbin53km with assist/10m/s reserve. HOP_ROUTE_SETUP/HOP_AUTO_REVIEW
+are opt-in via new hop_route provider/band. Existing manual HOP_REVIEW
+stays a prompt; hopReviewPhase selects saved automatic route recovery.
+Deadline/experiment attempt are persisted before events; no surface solar
+turn or auto-warp. A->B~270m requires50m hop tolerance and20m terrain shifts.
+All66 routine check files pass77.71s; new route checks0.58s. Native
+compile/storage/short-hop flight validation pending. See TASKS.md.
+
 2026-10-27 RO9-minmus4 missing braking-alignment KAC alarm: landing COAST
 only emitted HUD countdowns. Added owned alarm from same ETA,5s polling,
 strict1s reuse, cleanup at coast exit/finish/abort; no solar/warp/wait/gate

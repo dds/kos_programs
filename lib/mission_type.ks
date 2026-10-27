@@ -50,6 +50,12 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
         // between launch and landing, and review/next launch must work offline.
         FOR ln IN LIST("hop","landing_main","landing_coast","landing_brake","return_setup") { roots:ADD(ln). }
     }
+    IF (SEQUENCE:CONTAINS("HOP_ROUTE_SETUP") OR SEQUENCE:CONTAINS("HOP_AUTO_REVIEW"))
+            AND (bandKey = "HOP" OR bandKey = "HOP_ROUTE" OR bandKey = "LANDING") {
+        // Profile-programmed routes retain their timed science/review code
+        // through the same offline hop/landing transitions as manual routes.
+        FOR ln IN LIST("hop_route","landing_main","landing_coast","landing_brake","return_setup") { roots:ADD(ln). }
+    }
     IF bandKey = "XFER_PLAN" {
         LOCAL mType IS missionTypeDetect().
         LOCAL seq IS "".

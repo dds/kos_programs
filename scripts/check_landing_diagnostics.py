@@ -267,8 +267,10 @@ def check_candidate_capture_and_wiring():
     main=function_body((ROOT/'lib/landing_main.ks').read_text(),'landExecute')
     assert main.index('landingDiagnosticStart(ctx)')<main.index('landingReviewReachableSite(ctx)')
     assert main.index('_landingGuidanceTick(ctx)')<main.index('landingDiagnosticTick(ctx)')<main.index('WAIT tickRate')
-    assert 'vesselLandingCleanup().\n        landingDiagnosticTick(ctx, TRUE).' in main
-    assert '_landingFinish(ctx).\n    landingDiagnosticTick(ctx, TRUE).' in main
+    abort=main[main.index('IF landingAbortFlag {',main.index('WAIT tickRate.')):]
+    assert abort.index('vesselLandingCleanup()')<abort.index('landingDiagnosticTick(ctx, TRUE)')
+    finish=main[main.index('LOCAL landed IS _landingFinish(ctx).'):]
+    assert finish.index('_landingFinish(ctx)')<finish.index('landingDiagnosticTick(ctx, TRUE)')
     deps,_,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     assert 'landing_diagnostics' in closure(['landing_main'],deps)
     assert 'landing_diagnostics' not in closure(['landing_deorbit'],deps)

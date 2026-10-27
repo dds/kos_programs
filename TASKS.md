@@ -57,6 +57,26 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **RO9 Minmus polar orbit, four sites and equatorial return.** New
+  profile requested: Ap1064182m/Pe444576m/inc90/LAN298.9/AoP244.9, then
+  LAND_PREP and fixed A(-1.080,1.365), hops B(-1.190,1.596), C(-1.554,2.780),
+  D(-3.029,2.189). Ten-minute resident KAC science stop at every site,
+  automatically proceeding for this profile only. Then ascent/SHAPE to
+  Ap659734m/Pe554472m/inc0/AoP0.4 and fuel-assisted Kerbin entry Pe53000m.
+  A->B only~270m: tighten hop acceptance and local terrain shifts. Preserve
+  existing manual hop review, staged return reserve and all flight gates.
+  Implemented `missions/RO9/minmus_polar_hops_return.ks` plus generic
+  HOP_ROUTE_SETUP/HOP_AUTO_REVIEW provider/band. Fixed100m surface admission,
+  50m hop prediction tolerance,20m terrain-refinement radius. KAC installed
+  before science; persisted600s deadline and one experiment attempt survive
+  reboot. Stops remain at1x with brakes/attitude retained; unavailable KAC
+  uses the resident clock. After D, restore the original shaped-orbit return.
+  Existing manual routes keep HOP_REVIEW/prompt semantics. New source cases
+  verify four stops/three launches, return serialization, partial setup,
+  reboot deadlines, no-KAC and unsafe-control/site/fuel/terrain rejection;
+  new case file0.58s, each case<0.24s. All66 routine files pass77.71s.
+  Native kOS compilation/storage, short-hop dynamics, science result
+  availability and the full automated mission remain unvalidated.
 - [ ] **Landing coast: KAC alarm for braking alignment.** RO9-minmus4
   diagnostic3243569410/boot021 confirms a resident COAST/countdown, zero
   throttle and no braking alarm. Source only printed the HUD estimate;

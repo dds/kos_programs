@@ -70,7 +70,8 @@ def fixture():
         def GETCHAR(self):return keys.pop(0)
     env['TERMINAL']=NS(INPUT=Input())
     for name in ('hopRouteBudget','hopRouteFuelOk','_hopSurfaceReady','_hopDestinationAllowed',
-                 '_hopScheduleSite','hopContinue','hopWaypoint','hopReturn'):
+                 '_hopScheduleSite','hopContinue','hopWaypoint','hopReturn',
+                 'hopReviewPhase','hopRouteRestoreSettings'):
         env[name]=lambda *args,name=name:execute(name,env,*args)
     env['_hopFinishRoute']=lambda economy=False:execute('_hopFinishRoute',env,economy)
     return env,state,updates,events,keys
@@ -112,7 +113,7 @@ def check_budget_and_recovery():
     phase=function_body(HOP,'phaseHop')
     assert phase.index('IF SHIP:STATUS <> "LANDED"')<phase.index('stateSet("hop_inflight",TRUE)')
     assert re.search(r'_hopPrepLandingAssist\(\)\.\s*REBOOT\.',phase)
-    assert 'HOP_SURFACE_RECOVERY' in phase and 'HOP_REVIEW' in phase
+    assert 'HOP_SURFACE_RECOVERY' in phase and 'hopReviewPhase()' in phase
     assert 'HOP_ROUTE' not in function_body(HOP,'_hopCaptureThrustLimits')
     assert not re.search(r'\bSTAGE\s*\.',mask(HOP))
     assert not re.search(r'SET ABORT TO FALSE',mask(HOP))

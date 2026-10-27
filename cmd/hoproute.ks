@@ -59,18 +59,15 @@ LOCAL FUNCTION _cmdHoproute {
         }
         SET previousLat TO site[0]. SET previousLng TO site[1].
     }
-    LOCAL restore IS LEXICON("SEQUENCE",SEQUENCE,"TARGET_LAT",TARGET_LAT,"TARGET_LNG",TARGET_LNG,
-        "TARGET_LOCK",TARGET_LOCK,"TARGET_WAYPOINT",TARGET_WAYPOINT,
-        "LANDING_USE_WAYPOINTS",LANDING_USE_WAYPOINTS,"LANDING_FLEXIBLE_SITE",LANDING_FLEXIBLE_SITE,
-        "LANDING_ECONOMY_BRAKE",LANDING_ECONOMY_BRAKE,"LANDING_STAGE_BRAKE_CREDIT",LANDING_STAGE_BRAKE_CREDIT,
-        "LANDING_POWERED_LEAD",LANDING_POWERED_LEAD,"LANDING_STAGE_DISCARD_HSPEED",LANDING_STAGE_DISCARD_HSPEED,
-        "RELOAD_AFTER_LAND_ASSIST",RELOAD_AFTER_LAND_ASSIST).
+    LOCAL restore IS hopRouteRestoreSettings().
     stateSet("hop_route_restore",restore).
     stateSet("hop_route_sites",sites).
     stateSet("hop_route_index",0).
     stateRemove("hop_route_pending").
     stateSet("hop_route_body",SHIP:BODY:NAME).
     stateSet("hop_route_active",TRUE).
+    stateSet("hop_route_automatic",FALSE).
+    stateRemove("hop_site_dwell").
     stateSet("hop_inflight",FALSE).
     missionOverrideUpdate(LEXICON("SEQUENCE",LIST("HOP","LAND_ASSIST","HOP_REVIEW"),
         "HOP_TARGET_LAT",sites[0][0],"HOP_TARGET_LNG",sites[0][1],"HOP_TOLERANCE",toleranceM,

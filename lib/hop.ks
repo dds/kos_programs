@@ -17,6 +17,20 @@ GLOBAL HOP_MIN_THRUST_LIMIT IS 1.
 GLOBAL HOP_RETURN_RESERVE_DV IS 700.
 GLOBAL HOP_LANDING_RESERVE_DV IS 180.
 
+GLOBAL FUNCTION hopReviewPhase {
+    IF stateGet("hop_route_automatic",FALSE) { RETURN "HOP_AUTO_REVIEW". }
+    RETURN "HOP_REVIEW".
+}
+
+GLOBAL FUNCTION hopRouteRestoreSettings {
+    RETURN LEXICON("SEQUENCE",SEQUENCE,"TARGET_LAT",TARGET_LAT,"TARGET_LNG",TARGET_LNG,
+        "TARGET_LOCK",TARGET_LOCK,"TARGET_WAYPOINT",TARGET_WAYPOINT,
+        "LANDING_USE_WAYPOINTS",LANDING_USE_WAYPOINTS,"LANDING_FLEXIBLE_SITE",LANDING_FLEXIBLE_SITE,
+        "LANDING_ECONOMY_BRAKE",LANDING_ECONOMY_BRAKE,"LANDING_STAGE_BRAKE_CREDIT",LANDING_STAGE_BRAKE_CREDIT,
+        "LANDING_POWERED_LEAD",LANDING_POWERED_LEAD,"LANDING_STAGE_DISCARD_HSPEED",LANDING_STAGE_DISCARD_HSPEED,
+        "RELOAD_AFTER_LAND_ASSIST",RELOAD_AFTER_LAND_ASSIST).
+}
+
 GLOBAL FUNCTION hopRouteBudget {
     PARAMETER distance.
     LOCAL gravAcc IS SHIP:BODY:MU/SHIP:BODY:RADIUS^2.
@@ -49,7 +63,7 @@ LOCAL FUNCTION _hopApplyPending {
 // be called directly from the interpreter after the program context ends.
 LOCAL FUNCTION _hopSurfaceReady {
     IF ABORT OR HASNODE OR NOT stateGet("hop_route_active",FALSE)
-            OR stateGet("phase","") <> "HOP_REVIEW"
+            OR (stateGet("phase","") <> "HOP_REVIEW" AND stateGet("phase","") <> "HOP_AUTO_REVIEW")
             OR SHIP:STATUS <> "LANDED" OR SHIP:BODY:ATM:EXISTS
             OR SHIP:BODY:NAME <> stateGet("hop_route_body","")
             OR SHIP:VELOCITY:SURFACE:MAG > 0.5 {
@@ -114,6 +128,8 @@ LOCAL FUNCTION _hopFinishRoute {
         SET nextName TO "SURFACE_RETURN_SETUP".
     }
     stateSet("hop_route_active",FALSE).
+    stateSet("hop_route_automatic",FALSE).
+    stateRemove("hop_site_dwell").
     stateRemove("hop_route_pending").
     stateSaveReloadState("HOP_ROUTE_FINISHED",nextName,bootLibBandForPhase(nextName)).
     REBOOT.
@@ -205,7 +221,7 @@ GLOBAL FUNCTION phaseHopReview {
 LOCAL FUNCTION _hopPrepLandingAssist {
     LOCAL nextSequence IS LIST("HOP","LAND_ASSIST","DONE").
     IF stateGet("hop_route_active",FALSE) {
-        SET nextSequence TO LIST("HOP","LAND_ASSIST","HOP_REVIEW").
+        SET nextSequence TO LIST("HOP","LAND_ASSIST",hopReviewPhase()).
     }
     missionOverrideUpdate(LEXICON("TARGET_LAT",HOP_TARGET_LAT,"TARGET_LNG",HOP_TARGET_LNG,
         "TARGET_LOCK",1,"TARGET_WAYPOINT","",
@@ -257,7 +273,7 @@ LOCAL FUNCTION _hopRestoreThrustLimits {
     }
 }
 
-LOCAL FUNCTION _hopRestoreSavedLimits {
+GLOBAL FUNCTION _hopRestoreSavedLimits {
     _hopRestoreThrustLimits(stateGet("hop_thrust_limits",LIST())).
     stateRemove("hop_thrust_limits").
 }
@@ -339,7 +355,8 @@ GLOBAL FUNCTION phaseHop {
         yieldToPrompt(). RETURN.
     }
     IF stateGet("hop_inflight",FALSE) {
-        stateSaveReloadState("HOP_SURFACE_RECOVERY","HOP_REVIEW","HOP").
+        LOCAL reviewPhase IS hopReviewPhase().
+        stateSaveReloadState("HOP_SURFACE_RECOVERY",reviewPhase,bootLibBandForPhase(reviewPhase)).
         REBOOT.
     }
     IF SHIP:BODY:ATM:EXISTS OR NOT vesselLandingPrepareRoles()
@@ -382,7 +399,8 @@ GLOBAL FUNCTION phaseHop {
 
     IF startDist <= HOP_TOLERANCE {
         IF stateGet("hop_route_active",FALSE) {
-            stateSaveReloadState("HOP_ALREADY_AT_SITE","HOP_REVIEW","HOP"). REBOOT.
+            LOCAL reviewPhase IS hopReviewPhase().
+            stateSaveReloadState("HOP_ALREADY_AT_SITE",reviewPhase,bootLibBandForPhase(reviewPhase)). REBOOT.
         }
         PRINT "Already inside hop tolerance; rebooting into LAND_ASSIST.".
         mLog("HOP skipped: already inside tolerance.").

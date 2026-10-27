@@ -1345,6 +1345,58 @@ checks the requested corridor and absolute capture affordability instead.
 `python3 -B scripts/check_arrival_review.py`; actual convergence and flight
 execution still require flight testing.
 
+RO9's `minmus_polar_hops_return` runs a programmed four-site surface route
+between two specified Minmus orbits. Select it from the fresh-mission picker.
+All apsides below are metres ASL; angles are degrees.
+
+| Leg | Ap | Pe | Inclination | LAN | Argument of Pe |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Initial polar orbit | 1,064,182 | 444,576 | 90 | 298.9 | 244.9 |
+| After site D and ascent | 659,734 | 554,472 | 0 | Unspecified | 0.4 |
+| Assisted Kerbin entry | — | 53,000 | Unspecified | Unspecified | Unspecified |
+
+After SHAPE completes the polar objective, LAND_PREP lowers the orbit to
+9.3 × 19.3 km while retaining the polar plane. Targeted deorbit lands at A;
+the new `HOP_ROUTE_SETUP` phase arms B–D and saves the original return plan.
+
+| Site | Latitude | Longitude | Arrival |
+| --- | ---: | ---: | --- |
+| A | -1.080 | 1.365 | Initial landing |
+| B | -1.190 | 1.596 | Hop 1 |
+| C | -1.554 | 2.780 | Hop 2 |
+| D | -3.029 | 2.189 | Hop 3 |
+
+At **each of A–D**, `HOP_AUTO_REVIEW` requires settled surface contact,
+sets brakes and a KAC alarm, attempts available experiments once, then waits
+**600 seconds of game time at 1x** before continuing. The deadline and
+experiment-attempt flag survive a reboot; rebooting does not restart the
+ten-minute clock. No KAC uses the same resident clock wait. The craft keeps
+its surface attitude rather than running an orbital solar rotation.
+Experiments already deployed, inoperable or unavailable can be skipped;
+this is an experiment attempt, not a guarantee of four new science results.
+Data is retained for return, with no automatic reset or transmission.
+
+A–B is only about270 m, so this profile uses50 m hop prediction tolerance,
+20 m terrain-refinement radius and100 m site admission. It holds if a
+landing misses that site radius. Normal terrain/slope, actual attitude,
+permitted landing-stage fuel and700 m/s return-reserve checks remain active.
+After D's ten-minute stop, the original surface-ascent/SHAPE return resumes
+automatically. It targets Kerbin rather than KSC, enables fuel-assisted
+aerobraking and preserves10 m/s for a possible periapsis repair.
+Abort interrupts automatic departure; unsafe controls, motion, nodes, body,
+terrain or fuel also hold for review. Clear the cause and reboot the saved
+phase when ready. Keep the vessel active during its surface stops and hops.
+
+This is an opt-in profile route: existing `cmd/hoproute.ks` routes still
+stop at the prompt after each landing. Generic profile controls live in
+`hop_route.ks`: `HOP_ROUTE_SITES` includes the initial landing followed by
+hop sites, `HOP_SITE_DWELL_SECONDS` sets the stop, `HOP_SITE_RADIUS` sets
+surface admission and `HOP_SITE_RUN_SCIENCE` enables experiment attempts.
+Route bands retain their next-hop, landing, science and return providers
+through offline reboots; ordinary missions do not load the timed route.
+Source checks cover progression and recovery; native compilation, storage,
+short-hop dynamics and the full mission still need flight validation.
+
 RO9's `minmus_kolniya_flats_return` is a separate mission with these targets
 (apsides in metres above Minmus sea level):
 

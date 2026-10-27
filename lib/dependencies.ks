@@ -39,6 +39,7 @@ GLOBAL FUNCTION dependencyLibs {
         "launch_window", LIST(),
         "ascent", LIST("orbit", "countdown", "launch_window", "thrust_cutoff"),
         "hop", LIST("utils", "thrust_cutoff", "payload_landing", "landing_math", "vessel_hardware"),
+        "hop_route", LIST("hop", "science"),
         "maneuver", LIST("countdown", "orbit_nodes", "thrust_cutoff"),
         "maneuver_plan", LIST("maneuver", "orbit_nodes"),
         "prelaunch", LIST("flightplan", "launch_window"),
@@ -103,6 +104,8 @@ GLOBAL FUNCTION dependencyPhases {
         "LAUNCH", LIST("launch"),
         "HOP", LIST("hop"),
         "HOP_REVIEW", LIST("hop"),
+        "HOP_ROUTE_SETUP", LIST("hop_route"),
+        "HOP_AUTO_REVIEW", LIST("hop_route"),
         "FAIR", LIST("launch"),
         "ANTS", LIST("launch"),
         "PARK", LIST("launch"),
@@ -173,6 +176,7 @@ GLOBAL FUNCTION dependencyBands {
         "PRELAUNCH", LIST("PRELAUNCH"),
         "LAUNCH", LIST("LAUNCH", "FAIR", "ANTS", "PARK"),
         "HOP", LIST("HOP", "HOP_REVIEW"),
+        "HOP_ROUTE", LIST("HOP_ROUTE_SETUP", "HOP_AUTO_REVIEW"),
         "ABORT", LIST("ABORT"),
         "ESCAPE", LIST("ESCAPE"),
         "XFER_DEPARTURE_SHAPE", LIST("DEPARTURE_SHAPE"),
@@ -216,6 +220,8 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "LAUNCH" { phaseMapSet(phaseMap, phaseKey, phaseLaunch@). }
     ELSE IF phaseKey = "HOP" { phaseMapSet(phaseMap, phaseKey, phaseHop@). }
     ELSE IF phaseKey = "HOP_REVIEW" { phaseMapSet(phaseMap, phaseKey, phaseHopReview@). }
+    ELSE IF phaseKey = "HOP_ROUTE_SETUP" { phaseMapSet(phaseMap, phaseKey, phaseHopRouteSetup@). }
+    ELSE IF phaseKey = "HOP_AUTO_REVIEW" { phaseMapSet(phaseMap, phaseKey, phaseHopAutoReview@). }
     ELSE IF phaseKey = "FAIR" { phaseMapSet(phaseMap, phaseKey, phaseFair@). }
     ELSE IF phaseKey = "ANTS" { phaseMapSet(phaseMap, phaseKey, phaseAnts@). }
     ELSE IF phaseKey = "PARK" { phaseMapSet(phaseMap, phaseKey, phasePark@). }
