@@ -6,6 +6,22 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Use excess fuel across return stages safely.** Implemented RO9
+  tagged 3→2→1 handoffs at the next entry-preparation wake, outside atmosphere
+  and after warp release. Requires physical cutoff, CPU/chute retention,
+  full staging-slot module audit, current-stage stock AND own-tank depletion
+  to the repair allowance, and next-engine fuel above that allowance.
+  One attempt per separator UID survives reboot; failed verification holds.
+  Next engine gets a fresh forecast and refreshed entry alarm. Original
+  powered stage-change/alignment/Pe/pressure/reserve cutoffs remain intact.
+  Source regressions include both handoffs, 50 rejection cases, persistence
+  races and failed/interrupted events. Read-only saved RO9 inspection confirmed
+  actual inert tank/leg stage indices and the disposable `main_fairing` layout.
+  All 55 routine check files passed in 101.33 s; new staging file passed in
+  under one second when run separately. `make audit` reports no errors and
+  the pre-existing missing `ksc_deorbit` handler warning.
+  Native flight and compiled cache size remain unverified. This deliberately
+  uses successive entries, not in-atmosphere stage changes during one burn.
 - [ ] **Aerobrake: refresh the next-entry KAC alarm after every skip-out.**
   Replace the stale first-pass alarm after drag and any capture burn, before
   the next solar coast. Use the actual next inbound atmosphere crossing,
@@ -33,14 +49,12 @@ record remaining uncertainty before closing a task.
 
 ## Next changes
 
-- [ ] **Use excess fuel across return stages safely.** Current aerobrake
-  assist intentionally uses only the active stage, retains at least 10 m/s,
-  and never separates or ignites engines. It cannot spend the reported
-  stage 3/2/1 budgets of roughly 380/1012/654 m/s automatically. Implement
-  explicit, validated stage boundaries and stage-aware forecasts/replanning
-  only after verified cutoff. Preserve Pe, alignment, pressure, CPU/chutes,
-  interruption and repair-reserve safeguards. Do not remove the stage-change
-  cutoff or add an unmodelled STAGE during thrust.
+- [ ] **Emergency hyperbolic-capture burn safety.** The separate legacy
+  `_aerobrakeBrakingBurn` starts full throttle before verifying alignment and
+  lacks the powered assist's live Abort/freshness guards. Consolidate its
+  alignment and cutoff contract without weakening emergency capture, Pe
+  floor or fuel protections. This is separate from the optional finite assist
+  and its new between-pass staging, which require an already bound orbit.
 - [ ] **Kolniya-to-landing approach preparation.** After the first orbit
   objective, manual SCIENCE_OPS release and waypoint selection, compare
   direct powered descent, a later ground-track opportunity, and a preparatory
@@ -86,5 +100,8 @@ record remaining uncertainty before closing a task.
 - [x] Aerobrake KAC/solar dependency fixes and optional validated final
   separator configuration implemented and documented; 54 check files passed.
   Keep the native validation entries above open until flight evidence arrives.
+- [x] RO9 between-pass stage handoffs implemented with saved-hardware layout,
+  depletion, complete slot-module, interruption and fresh-forecast regressions;
+  all 55 routine check files passed. Native staging remains open above.
 - [x] First automated Mun landing and return to Kerbin succeeded. This is
   a milestone, not proof that targeted landings or fuel use are optimal.

@@ -55,6 +55,7 @@ LOCAL FUNCTION _writeCoastAutomation {
     LOG "SET AEROBRAKE_AP_PLAN_LEAD TO " + configLiteral(AEROBRAKE_AP_PLAN_LEAD) + "." TO profilePath.
     LOG "SET AEROBRAKE_AP_MAX_Q TO " + configLiteral(AEROBRAKE_AP_MAX_Q) + "." TO profilePath.
     LOG "SET AEROBRAKE_AP_MAX_OFF_RETRO TO " + configLiteral(AEROBRAKE_AP_MAX_OFF_RETRO) + "." TO profilePath.
+    LOG "SET AEROBRAKE_AP_STAGE_TAGS TO " + configLiteral(AEROBRAKE_AP_STAGE_TAGS) + "." TO profilePath.
 }
 
 // Persist the next leg as a compact local mission profile. State keeps

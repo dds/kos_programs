@@ -17,7 +17,25 @@ both attached, and retained descent_chutes/CPU. aeroassist now accepts an
 optional final-descent tag, validates attached separator/CPU/chutes and
 stopped controls before saving ONLY policy/tag overrides. Does not stage,
 ignite, reboot or change altitude/phase. Final separation is still AFTER
-AEROBRAKE's captured/slow handoff; no sequential use of inactive stages.
+AEROBRAKE's captured/slow handoff. Between-pass staging now has its own
+`aerobrake_staging` library, outside the powered controller. RO9 approves
+only its two named boundaries; other vehicles default to an empty list.
+At the next entry-prep wake require bound orbit, off rails, >1km above atmo,
+>60s entry lead, corridor/pressure/idle controls, adjacent tagged separator,
+retained CPU/chutes, one conventional departing/arriving engine and audited
+slot modules. Native Part:STAGE also labels inert tanks/legs, so a part-count
+whitelist is wrong. Recognize their known passive modules; only permit
+main_fairing deployment on the discarded side, never retained protection.
+Require both stock and own-stage mixture dV near the repair allowance,
+and next-stage mixture fuel above it. Verified cutoff precedes persisted
+one-attempt-per-separator UID and STAGE; recheck context/hardware after state
+I/O, verify retained-vessel identities without reading detached part suffixes,
+hold on failure and never repeat a recorded event. Refresh KAC before fresh
+next-stage planning. No in-atmosphere handoff or same-pass burn rearming.
+Serialize tag policy through both generated return legs; native staging and
+compiled size remain unvalidated. The legacy emergency capture burn has a
+separate alignment/watchdog gap queued in TASKS.md; do not confuse its
+unconditional throttle lock with the guarded optional assist.
 Native solar panel is supported ModuleDeployableSolarPanel, so unavailable
 was not Kopernicus renaming: bootPlannedMissionLibs runs BEFORE the craft
 adds solar via LIBS_EXTRA; generated return profile lacks that extra and

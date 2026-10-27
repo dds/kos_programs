@@ -46,7 +46,7 @@ LOCAL FUNCTION _cmdAeroassist {
     PRINT "Applies at the next AEROBRAKE boot. This command does not take over active flight.".
     IF descentTag <> "" {
         PRINT "Final DESCENT separator saved: " + descentTag + "; existing separation altitude preserved.".
-        PRINT "Aerobrake assist uses the active engine only; this does not stage through other fuel tanks.".
+        PRINT "RO9 can hand off approved tagged engine stages between entries; final descent separation remains separate.".
     }
 }
 

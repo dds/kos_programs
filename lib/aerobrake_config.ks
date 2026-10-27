@@ -10,3 +10,6 @@ GLOBAL AEROBRAKE_AP_PLAN_LEAD IS 180.
 // kOS dynamic pressure is in atmospheres; 0.1 atm is about 10.1 kPa.
 GLOBAL AEROBRAKE_AP_MAX_Q IS 0.1.
 GLOBAL AEROBRAKE_AP_MAX_OFF_RETRO IS 10.
+// Only these named boundaries may be crossed, between atmospheric passes.
+// Empty preserves active-engine-only behavior on other vehicles.
+GLOBAL AEROBRAKE_AP_STAGE_TAGS IS LIST().

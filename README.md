@@ -1939,10 +1939,36 @@ alignment, fuel, stage/body changes, abort and control freshness. It also
 stops at the forecast impulse/duration, or the apoapsis goal. These stopping
 limits come from the forecast and live conditions, rather than a preset fuel
 allowance. It aligns with zero throttle before ignition and verifies actual
-thrust and raw/pilot throttle are zero afterward. It never stages or activates
-engines. An interrupted attempt cannot repeat until an atmospheric entry and
+thrust and raw/pilot throttle are zero afterward. The powered controller never
+stages or activates engines. An interrupted burn attempt cannot repeat until an atmospheric entry and
 exit have both been observed. The temporary 2,000 IPU planning/control budget
 is restored afterward or by `bootPreamble` following interruption.
+
+RO9 also approves the `lander_decoupler` and `return_decoupler` boundaries
+for **between-pass** engine handoffs. Other vehicles retain active-engine-only
+behavior unless their profile supplies `AEROBRAKE_AP_STAGE_TAGS`. At the next
+entry preparation wake, off rails and at least 1 km above the atmosphere,
+the craft may discard an upper stage only when both its own enabled tank
+mixture and KSP's current-stage estimate put it within 1 m/s of the repair
+reserve. The next engine must have fuel above that reserve. The separator
+must be adjacent in the staging list and retain this CPU and every tagged
+`descent_chutes` parachute. The full slot is audited: unknown modules, extra
+engines/separators/chutes and retained fairings block automation. Inert RO9
+tanks and legs are recognized; its tagged `main_fairing` is allowed only on
+the discarded side of the approved separator.
+
+Each handoff verifies physical cutoff before staging, records one attempt
+per separator UID, and verifies the old engine departed and the new one
+ignited at zero throttle. An interrupted or failed recorded event cannot
+repeat automatically; inspect hardware/staging manually if it holds.
+`STATS aerobrake-stage check/result` records the decision, discarded fuel and
+post-event status. A successful handoff refreshes the entry alarm, then the
+normal assist planner forecasts from the new engine, fuel and wet mass.
+It does **not** switch engines inside the atmosphere or spend all three stages
+in one entry. Final DESCENT separation still follows its separate policy.
+These staging checks have source regressions and a saved RO9 hardware audit;
+native staging, compiled cache size and atmospheric performance need flight
+validation after a connected reboot.
 
 Advanced profile settings are optional; the enable flag is sufficient:
 
@@ -1953,6 +1979,7 @@ Advanced profile settings are optional; the enable flag is sufficient:
 | `AEROBRAKE_AP_PLAN_LEAD` | 180 s | Forecast lead before atmospheric entry |
 | `AEROBRAKE_AP_MAX_Q` | 0.1 atm | Dynamic-pressure cutoff (about 10.1 kPa) |
 | `AEROBRAKE_AP_MAX_OFF_RETRO` | 10° | Maximum atmospheric departure from surface retrograde |
+| `AEROBRAKE_AP_STAGE_TAGS` | Empty; RO9 approves its two named separators | Boundaries eligible for audited between-pass engine handoffs |
 
 Dynamic pressure uses [kOS's atmosphere units](https://ksp-kos.github.io/KOS/structures/vessels/vessel.html#attribute:VESSEL:Q).
 The forecast does not model drag, heating or attitude dynamics. Actual drag
@@ -1967,10 +1994,10 @@ largest error seen by the throttle guard; peak retrograde offsets are sampled
 once a second in RAM. Only pre-burn and post-cutoff rows are written, with no
 archive/state writes during positive commanded thrust. An alignment timeout
 cannot enter the powered loop.
-Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py`.
-The routine suite passes 207 cases. Host-side timings vary with system load
-and are not a kOS flight timing guarantee; the flight plan records its own
-computation time.
+Source-driven checks: `python3 -B scripts/check_aerobrake_assist.py` and
+`python3 -B scripts/check_aerobrake_staging.py`; `make check` runs the routine
+suite. Host-side timings vary with system load and are not a kOS flight
+timing guarantee; the flight plan records its own computation time.
 
 Aerobrake solar coasts explicitly establish the solar attitude before
 auto-warping. AEROBRAKE declares solar as a phase dependency, so profile-first

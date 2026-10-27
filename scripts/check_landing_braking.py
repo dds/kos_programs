@@ -336,6 +336,7 @@ def check_integration():
             # The operator explicitly enabled fuel-assisted aerobraking on RO9.
             assert actual.count('SET AEROBRAKE_AP_BURN TO 1.\n')==1
             actual=actual.replace('SET AEROBRAKE_AP_BURN TO 1.\n','')
+            actual=actual.replace('SET AEROBRAKE_AP_STAGE_TAGS TO LIST("lander_decoupler", "return_decoupler").\n','')
         if path in (ROOT/'missions/RO9/mun_landing_return.ks',ROOT/'missions/RO9/minmus_landing_return.ks'):
             # Required polar targeting, circularization and bounded lateral
             # deorbit correction have explicit RO9 settings. Their numerical

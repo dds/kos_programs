@@ -199,6 +199,12 @@ GLOBAL FUNCTION phaseAerobrake {
                 IF approachEta > AEROBRAKE_AP_PLAN_LEAD {
                     _aerobrakeSolarWait(TIME:SECONDS+approachEta-AEROBRAKE_AP_PLAN_LEAD).
                 }
+                // Solar wait has released warp. A depleted tagged upper
+                // engine can now hand off before a fresh next-entry forecast.
+                IF aerobrakeApStageCoast(atmHeight,peLow,peHigh) {
+                    SET entryUt TO _aerobrakeSetEntryAlarm().
+                }
+                IF phaseShouldYield { RETURN. }
                 _aerobrakeOrient().
                 LOCAL assistPlan IS aerobrakeApAssist(atmHeight,peLow,peHigh,assistPe).
                 IF phaseShouldYield { RETURN. }

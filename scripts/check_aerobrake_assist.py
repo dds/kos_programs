@@ -399,10 +399,11 @@ def check_interruption_and_opt_in():
 def check_profile_command_and_entry_alignment():
     settings=read_settings(CONFIG,{},'GLOBAL');assert settings['AEROBRAKE_AP_BURN']==0
     setup=(ROOT/'lib/return_setup.ks').read_text();writer=function_body(setup,'_writeCoastAutomation')
-    rows=re.findall(r'LOG ("SET AEROBRAKE_AP_.*?) TO profilePath\.',writer);assert len(rows)==5
+    rows=re.findall(r'LOG ("SET AEROBRAKE_AP_.*?) TO profilePath\.',writer);assert len(rows)==6
     def serialize(env):return '\n'.join(expression(row,env) for row in rows)
     initial=defaults()|settings
     initial.update(AEROBRAKE_AP_BURN=1,AEROBRAKE_AP_RESERVE_DV=0,BODY_NAME='MINMUS')
+    initial['AEROBRAKE_AP_STAGE_TAGS']=['lander_decoupler','return_decoupler']
     initial.update(PARKING_ALT=initial['SURFACE_RETURN_PARKING_ALT'],
                    LAUNCH_INCLINATION=initial['SURFACE_RETURN_INCLINATION'],LAUNCH_AZIMUTH=90)
     surface=read_settings(emit_profile('phaseSurfaceReturnSetup',initial)+'\n'+serialize(initial),defaults()|settings)
