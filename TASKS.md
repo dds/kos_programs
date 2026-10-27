@@ -328,6 +328,21 @@ record remaining uncertainty before closing a task.
 
 ## Flight validation / measurements pending
 
+- [ ] **Next Deck memory reductions, recommendations only.** Verified CKAN
+  after reboot: ParallaxContinued1.0.4 with scatter textures1.0.3. Upstream
+  release1.0.5 fixes a2GB scene-start VRAM spike and reports scatter usage
+  800MB->74MB on Kerbin;1.0.6 is current. Update plugin AND matching scatter
+  assets together before judging whether Parallax must be removed. These are
+  upstream measurements, not promised Deck savings. Release notes:
+  https://github.com/Gameslinx/Parallax-Continued/releases
+  Next verify ShadowMan's logged8192 shadow request vs Scatterer2048 actual
+  rendering ownership; cap the real map at2048, then compare the same scene.
+  Further candidates: stock TEXTURE_QUALITY1->2 (half->quarter resolution,
+  custom texture loaders may bypass), Deferred screen-space reflections,
+  Parallax visual range/shadows. Scatter density already0.15; reducing it
+  alone does not guarantee texture memory is freed. Keep NoIVA/mission-editor
+  reductions. Do not sum GTT+RSS or equate asset-bundle disk bytes with RAM.
+  No additional game settings or mods changed for these recommendations.
 - [ ] **Deck memory headroom.** Five approved settings applied and verified:
   Scatterer shadows 2048, nonpersistent 128 MB upload buffer, 256 MB temporary
   texture-load budget, NoIVA placeholder mode, Making History optional
