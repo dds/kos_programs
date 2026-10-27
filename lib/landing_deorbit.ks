@@ -33,6 +33,19 @@ GLOBAL FUNCTION phaseLandDeorbit {
         yieldToPrompt().
         RETURN.
     }
+    // Upgraded inflight missions may already be pinned to LAND_DEORBIT.
+    // Honor their newly inserted generic preparation phase before solving.
+    IF SHIP:STATUS = "ORBITING" AND launchSeq:CONTAINS("LAND_PREP")
+            AND stateGet("deorbit_burn_started","false") <> "true"
+            AND stateGet("landing_orbit_ready","") <> landingOrbitContext() {
+        IF HASNODE {
+            mLogError("Landing orbit preparation is required; existing deorbit node preserved. Review it, then use cmd/deorbitretry before rebooting.").
+            yieldToPrompt(). RETURN.
+        }
+        stateSet("phase","LAND_PREP").
+        mLog("STATS landing-deorbit route=LAND_PREP reason=landing-orbit-not-prepared").
+        RETURN.
+    }
     IF SHIP:STATUS = "SUB_ORBITAL"
             AND (LANDING_SKIP_TARGET_SEARCH > 0) {
         _advanceAfterLandDeorbit().

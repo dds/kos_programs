@@ -6,6 +6,28 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Generic landing-orbit preparation / Kolniya mission.** Implemented
+  reusable LAND_PREP in its own band, after SCIENCE_OPS review and before
+  target-specific LAND_DEORBIT. Automatic low apsides preserve an already-low
+  safe Pe; current inclination/LAN remain unless explicitly requested.
+  Uses shared real plane-intersection/apsis planners, executor, cutoff,
+  return-stage floor, separate budget and KAC/solar waits. Owned unflown
+  nodes and reserved cost survive reboot; incomplete burns require explicit
+  shaperetry. Full next-band cache inspection allows offline progression;
+  otherwise a running link-check wait replaces a prompt exit. New code needs
+  a connected boot; no installed bootstrap change.
+  Native Minmus3 boot021/022 is9.3x397.2km/i63.39, with repeating best site
+  misses~40.2km and deorbit normal cap10m/s unable to repair them. The ideal
+  source/conic fixture uses45.46m/s to prepare9.3x19.3km, retaining plane and
+  all waypoint/contract/return intent. Period changes20200->3028s; the profile
+  surveys48 low-orbit passes under unchanged4096 geometry/64 native limits.
+  Regressions cover budget/floor/plane/patch guards, disk-persisted ownership,
+  reboot, cutoff/interruption, cache/link/no-KAC waits and inflight rerouting.
+  All 56 routine check files passed in 110.36 s; each new preparation case
+  took less than 0.18 s in the timing pass. Structural audit has no errors;
+  its missing `ksc_deorbit` handler warning predates this change.
+  Native compilation/cache size, actual preparation, deorbit solve and full
+  Flats landing/high-equatorial-orbit/Kerbin return still need validation.
 - [ ] **Use excess fuel across return stages safely.** Implemented RO9
   tagged 3→2→1 handoffs at the next entry-preparation wake, outside atmosphere
   and after warp release. Requires physical cutoff, CPU/chute retention,
@@ -55,13 +77,18 @@ record remaining uncertainty before closing a task.
   alignment and cutoff contract without weakening emergency capture, Pe
   floor or fuel protections. This is separate from the optional finite assist
   and its new between-pass staging, which require an already bound orbit.
-- [ ] **Kolniya-to-landing approach preparation.** After the first orbit
-  objective, manual SCIENCE_OPS release and waypoint selection, compare
-  direct powered descent, a later ground-track opportunity, and a preparatory
-  orbit change. Minimize combined prep/deorbit/descent cost; preserve the
-  waypoint and return reserve. Prefer low-speed plane intersections; do not
-  assume apoapsis is a valid plane-change point or circularize by default.
-  Use a distinct resumable phase if needed; sequences cannot repeat SHAPE.
+- [ ] **Landing-preparation efficiency refinements.** The generic LAND_PREP
+  now deliberately provides a low parking orbit for broad target coverage.
+  A future optional comparison can estimate direct descent versus a parking
+  change for a known site, including descent cost/reserve. Do not reintroduce
+  a target-specific optimizer into the generic phase or assume Ap is a plane
+  intersection. Retain the waypoint and native final deorbit checks.
+- [ ] **Audit mutable persistent-state collections.** stateGet returns its
+  cached Lexicon; in-place mutation can make stateSet skip its flush. The new
+  preparation ledger copies flat metadata before each edit and its fixture
+  exercises cache-reference semantics plus a separate disk snapshot. Audit
+  other callers before changing shared state behavior; no other flight bug
+  has yet been attributed to this pattern.
 - [ ] **Continue landing accuracy and efficiency validation.** Targeted
   landings must meet their locked target; economy sites may divert under
   their explicit policy. Validate powered-lead convergence, burn timing
@@ -103,5 +130,7 @@ record remaining uncertainty before closing a task.
 - [x] RO9 between-pass stage handoffs implemented with saved-hardware layout,
   depletion, complete slot-module, interruption and fresh-forecast regressions;
   all 55 routine check files passed. Native staging remains open above.
+- [x] Generic LAND_PREP phase and Minmus3 integration implemented; 56 routine
+  check files passed. Native preparation and the full mission remain open.
 - [x] First automated Mun landing and return to Kerbin succeeded. This is
   a milestone, not proof that targeted landings or fuel use are optimal.

@@ -75,6 +75,7 @@ GLOBAL FUNCTION dependencyLibs {
         "xfer_plan", LIST("maneuver_transfer", "orbit"),
         "orbit_nodes", LIST(),
         "orbit_shape", LIST("maneuver", "maneuver_plan", "orbit_nodes", "orbit"),
+        "landing_orbit", LIST("orbit_shape", "landing_config", "vessel_hardware", "coast_wait"),
         "arrival_bplane", LIST("hohmann_transfer", "maneuver", "orbit", "lib_bplane_math", "midcourse", "coast_wait"),
         "free_return", LIST("maneuver", "orbit", "lib_bplane_math"),
         "return_trim", LIST("maneuver", "orbit", "utils"),
@@ -134,6 +135,7 @@ GLOBAL FUNCTION dependencyPhases {
         "RETURN_SETUP", LIST("return_setup"),
         "SURFACE_RETURN_SETUP", LIST("return_setup"),
         "LAND_DEORBIT", LIST("landing_deorbit", "deorbit_targeting", "deorbit_burn"),
+        "LAND_PREP", LIST("landing_orbit"),
         "LAND", LIST("payload_landing", "landing_main"),
         "LAND_ASSIST", LIST("payload_landing", "landing_main"),
         "ROVER", LIST("rover"),
@@ -186,6 +188,7 @@ GLOBAL FUNCTION dependencyBands {
         "ATMO_WALK", LIST("ATMO_WALK"),
         "DUNA_IKE_SETUP", LIST("DUNA_AEROCAPTURE", "IKE_SETUP", "DUNA_ENTRY_SETUP", "DUNA_ENTRY_LOWER_PE"),
         "LAND_DEORBIT", LIST("LAND_DEORBIT"),
+        "LAND_PREP", LIST("LAND_PREP"),
         "LANDING", LIST("LAND_ASSIST", "LAND"),
         "MOLNIYA", LIST("MOLNIYA", "MOLNIYA_INSERT"),
         "DONE", LIST("DONE")
@@ -254,6 +257,7 @@ GLOBAL FUNCTION dependencyBindPhase {
         ELSE IF stateGet("phase", "") = phaseKey { mLogError("SURFACE_RETURN_SETUP library unavailable; obtain a link and reboot to cache return_setup."). }
     }
     ELSE IF phaseKey = "LAND_DEORBIT" { phaseMapSet(phaseMap, phaseKey, phaseLandDeorbit@). }
+    ELSE IF phaseKey = "LAND_PREP" { phaseMapSet(phaseMap, phaseKey, phaseLandPrep@). }
     ELSE IF phaseKey = "LAND" { phaseMapSet(phaseMap, phaseKey, phaseLand@). }
     ELSE IF phaseKey = "LAND_ASSIST" { phaseMapSet(phaseMap, phaseKey, phaseLandAssist@). }
     ELSE IF phaseKey = "ROVER" { phaseMapSet(phaseMap, phaseKey, phaseRover@). }

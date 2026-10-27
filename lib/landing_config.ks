@@ -144,6 +144,12 @@ GLOBAL FUNCTION landingApplyMissionConfig {
     RETURN TRUE.
 }
 
+// Preparation completion is scoped to this flight, mission and body, not
+// to a particular landing target. Waypoint selection belongs to deorbit.
+GLOBAL FUNCTION landingOrbitContext {
+    RETURN SHIP:BODY:NAME+":"+stateGet("mission_id","")+":"+stateGet("launch_time","").
+}
+
 GLOBAL FUNCTION landingResolveTarget {
     LOCAL result IS LEXICON("FOUND", FALSE, "LAT", 0, "LNG", 0, "SOURCE", "none").
 

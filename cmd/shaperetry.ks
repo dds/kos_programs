@@ -1,4 +1,4 @@
-// Replan SHAPE from the achieved orbit after an interrupted shaping burn.
+// Replan SHAPE or LAND_PREP from the achieved orbit after an interrupted burn.
 // RUNPATH("0:/cmd/shaperetry.ks"). Then REBOOT. Does not ignite or advance.
 @LAZYGLOBAL OFF.
 
@@ -8,8 +8,9 @@ LOCAL FUNCTION _cmdShaperetry {
     LOCAL FUNCTION ready {
         LOCAL floorAlt IS 0.
         IF SHIP:BODY:ATM:EXISTS { SET floorAlt TO SHIP:BODY:ATM:HEIGHT. }
-        RETURN stateGet("phase","") = "SHAPE"
-            AND stateGet("burn_phase","") = "SHAPE"
+        LOCAL phase_ IS stateGet("phase","").
+        RETURN (phase_ = "SHAPE" OR phase_ = "LAND_PREP")
+            AND stateGet("burn_phase","") = phase_
             AND stateGet("burn_body","") = SHIP:BODY:NAME
             AND stateGet("burn_pending","false") = "true"
             AND stateGet("burn_started","false") = "true"
@@ -21,7 +22,7 @@ LOCAL FUNCTION _cmdShaperetry {
     }
     LOCAL FUNCTION resetShape {
         IF NOT ready() {
-            PRINT "SHAPE retry requires its interrupted burn, matching body, stable orbit, Abort clear and all thrust/throttle zero. Nothing changed.".
+            PRINT "Orbit retry requires its SHAPE/LAND_PREP interrupted burn, matching body, stable orbit, Abort clear and all thrust/throttle zero. Nothing changed.".
             RETURN FALSE.
         }
         SET WARP TO 0.
@@ -42,11 +43,11 @@ LOCAL FUNCTION _cmdShaperetry {
         // Keep last_burn_report, budget ledger, mission, phase and overrides.
         // bootPreamble restores any interrupted CPU setting before clearing it.
         stateRemovePrefix("burn_").
-        mLog("STATS shape retry reset=True phase=SHAPE replan=achieved-orbit budgetPreserved=True").
+        mLog("STATS shape retry reset=True phase="+stateGet("phase","")+" replan=achieved-orbit budgetPreserved=True").
         RETURN TRUE.
     }
     IF resetShape() {
-        PRINT "Interrupted SHAPE attempt cleared; achieved orbit and mission budget retained.".
+        PRINT "Interrupted orbit-shaping attempt cleared; achieved orbit and mission budget retained.".
         PRINT "REBOOT. to load updates and plan remaining corrections. No burn started here.".
     }
 }

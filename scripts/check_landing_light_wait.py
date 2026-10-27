@@ -136,6 +136,7 @@ def check_live_wait_and_target_selection():
     env.update(landingLitGroundTrack=search,LANDING_AUTO_TARGET=1,
                LANDING_AUTO_TARGET_MINUTES=5,LANDING_FLEXIBLE_SITE=1,
                LANDING_SKIP_TARGET_SEARCH=0,LANDING_CONFIRM_TARGET=0,
+               launchSeq=NS(CONTAINS=lambda phase:phase in ('LAND_DEORBIT','LAND_ASSIST')),
                vesselLandingPrepareRoles=lambda:True,
                landingApplyMissionConfig=lambda:None,_resumeExistingLandingDeorbitNode=lambda:False,
                landingResolveTarget=lambda:target,_landingWriteTargetOverrides=persist,

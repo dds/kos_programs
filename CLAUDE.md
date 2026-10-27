@@ -9,6 +9,33 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 generic landing preparation: LAND_PREP -> landing_orbit is a
+dedicated band sharing orbit_shape/maneuver/roles/coast_wait. It changes the
+special orbit into a low landing parking orbit, independently of target
+selection. Default automatic Pe preserves an already-low safe Pe; Ap is10km
+higher. Retain the current plane unless LAND_PREP_INC/LAN is explicit; use
+real plane intersections through shapeNextBurn, never assume Ap is a node.
+Scope planner tolerances/floor/minimum and BURN_STAGE_LIMIT, restore them on
+every normal return, and keep the original SHAPE goals/ledger untouched.
+land_prep_budget stores context, spent, owned node UT and reserved cost in
+one state update. Before mutating a stateGet Lexicon COPY it: stateGet returns
+the cached object and stateSet can suppress a flush of that same object.
+COPY is shallow; nested edits need separate copies. Owned unflown nodes
+resume without double charging; started burns hold until explicit shaperetry
+(now SHAPE or LAND_PREP, same body/node/idle guards). The phase never removes
+foreign/started nodes. Only its newly rejected unflown node is removed.
+Generic completion precedes target-specific deorbit checks. Inflight missions
+already in LAND_DEORBIT route through their newly added LAND_PREP when the
+flight/body/mission ready marker is missing; committed descent is untouched.
+Check the next band's full local closure without loading it here; use the
+shared KAC-before-solar clock wait for a missing-link cache handoff. New
+phase loading requires a connected boot, no installed bootstrap update.
+Minmus3 boot021/022 already in9.3x397.2km/i63.39 got repeating~40.2km site
+misses. Generic defaults with9km floor produce9.3x19.3km/i63.4 (~45.5m/s,
+period20200->3028s in the ideal fixture). Its deorbit geometry survey now
+considers48 passes;4096 geometry/64 native trial caps remain. Source fixtures
+do not prove native cache size, plane execution or final targeted touchdown.
+
 2026-10-27 return audit: native RO9_2446359 boot019 UT2783434 entered
 AEROBRAKE at Kerbin Pe53.135km/Ap35038.7km. Its generated local profile
 saved AP_BURN0 (despite craft default1), descent_decoupler at6km; actual

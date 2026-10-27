@@ -1242,9 +1242,18 @@ Minmus Flats biome, preferably near the equator to reduce ascent plane cost,
 then run the commands also printed by the hold:
 
 ```kerboscript
-RUNPATH("0:/cmd/setphase.ks", "LAND_DEORBIT").
+RUNPATH("0:/cmd/setphase.ks", "LAND_PREP").
 REBOOT.
 ```
+
+The generic `LAND_PREP` phase first changes the special orbit into a low
+landing parking orbit. This profile keeps the 9.3 km periapsis and 63.4°
+plane and lowers apoapsis to about 19.3 km; an ideal two-body calculation
+requires about 45.5 m/s. That breaks the nearly repeating Kolniya ground
+track. The deorbit survey can consider 48 low-orbit passes, while retaining
+the 4096 geometry-sample and 64 native-prediction limits. A long selected wait
+uses the existing KAC/solar maneuver approach. These are planning bounds,
+not a guarantee of reaching every site or meeting the final landing error.
 
 The advance command needs an archive link. Missing waypoint selection holds
 in orbit; the profile never substitutes an automatic economy landing site.
@@ -1259,6 +1268,53 @@ compared with the economy mission. Budget/reserve limits hold if unaffordable.
 `SHAPE_*` targets, tolerances and dV limits. Its `SURFACE_RETURN_SEQUENCE`
 must include SHAPE; existing missions default to an empty orbit specification.
 The return provider remains cached through prelaunch, ascent and shaping.
+
+### Preparing a landing orbit
+
+Insert `LAND_PREP` between an orbital objective/review and `LAND_DEORBIT` in
+any mission sequence. It uses the shared orbit-shaping planners and maneuver
+executor in its own library band. It can run before a landing waypoint is
+chosen. Contract `SHAPE_*` goals and their strict tolerances remain available
+for the original orbital objective; preparation has its own targets, budget
+ledger and tolerances.
+
+Defaults choose periapsis near the body safety floor and apoapsis 10 km
+higher. An already-safe low periapsis is preserved. Inclination and LAN are
+retained, so an inclined survey orbit keeps its latitude coverage. An
+equatorial orbit still reaches mainly equatorial sites; request
+`LAND_PREP_INC=90` when broad polar coverage warrants the plane-change cost.
+Plane corrections use the actual plane intersections, choosing the slower
+one, through the existing calibrated planner. Target-specific descent still
+requires the ordinary reachability, terrain, light, powered-lead and fuel
+checks in `LAND_DEORBIT`.
+
+| Setting | Default | Purpose |
+|---|---:|---|
+| `LAND_PREP_AP`, `LAND_PREP_PE` | -1 | Automatic low apsides; nonnegative values request explicit altitudes in metres |
+| `LAND_PREP_INC`, `LAND_PREP_LAN` | -1 | Preserve the current plane; set explicitly for different coverage |
+| `LAND_PREP_MIN_PE` | 10,000 m | Body-specific safety floor; atmosphere+10 km remains a hard minimum |
+| `LAND_PREP_ALT_TOL`, `LAND_PREP_ANG_TOL` | 1,000 m / 0.5° | Parking-orbit tolerances |
+| `LAND_PREP_MIN_BURN_DV` | 0.3 m/s | Smallest preparation correction |
+| `LAND_PREP_DV_CAP`, `LAND_PREP_TOTAL_DV_CAP` | 150 / 300 m/s | Per-burn and cumulative preparation allowances |
+| `LAND_PREP_RESERVE_DV` | 900 m/s | Minimum vacuum dV retained after preparation burns |
+
+The floor needs to suit the body's terrain. The reserve is a planning
+allowance, not proof that landing, ascent and return are affordable.
+Preparation reserves current-stage fuel and protects the tagged return stage.
+It verifies physical cutoff, remeasures the achieved orbit, and advances only
+when the parking goal is met. An unflown owned node survives a reboot without
+a second budget charge. Interrupted burns hold; after inspecting the orbit,
+`RUNPATH("0:/cmd/shaperetry.ks").` permits replanning while retaining the ledger.
+
+When the next band's libraries are cached, preparation can continue offline.
+Otherwise it stays running in the safe orbit, installing a KAC link-check
+alarm before solar hold and polling by clock when KAC is unavailable. It
+does not end the mission just because the radio link is down. New code needs
+a connected boot; the installed bootstrap does not need replacement.
+`STATS land-prep setup/budget/execution/result/wait` records decisions through
+the normal archive pipeline. Source regressions and independent ground-track
+geometry support this implementation; native preparation and touchdown remain
+flight checks.
 
 `RO8/mun_landing_return` and `RO8/minmus_landing_return` continue from
 `LAND_ASSIST` into `SURFACE_RETURN_SETUP`. Touchdown starts a new local

@@ -31,7 +31,8 @@ def check_requested_orbits_across_boots():
     assert initial['CAPTURE_INC']==63.4 and initial['CAPTURE_LAN']==-1
     assert initial['TARGET_AP']==397272 and initial['BPLANE_REQUIRE_PLANE']==1
     assert [initial['SHAPE_'+key] for key in ('AP','PE','INC','LAN','AOP')]==[397272,9300,63.4,79.2,90]
-    assert initial['SEQUENCE'][10:]==['CAPTURE','SHAPE','SCIENCE_OPS','LAND_DEORBIT','LAND_ASSIST','SURFACE_RETURN_SETUP']
+    assert initial['SEQUENCE'][10:]==['CAPTURE','SHAPE','SCIENCE_OPS','LAND_PREP','LAND_DEORBIT','LAND_ASSIST','SURFACE_RETURN_SETUP']
+    assert initial['LAND_PREP_MIN_PE']==9000 and initial['LAND_PREP_RESERVE_DV']==900
     assert len(initial['SEQUENCE'])==len(set(initial['SEQUENCE']))
     # Execute the real optional serializer; no original globals are carried
     # into the ascent or home boots except its generated SET statements.

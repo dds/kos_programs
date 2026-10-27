@@ -8,7 +8,7 @@ SET PARKING_ALT TO 78000.
 SET SEQUENCE TO LIST(
     "PRELAUNCH","LAUNCH","FAIR","ANTS","PARK",
     "XING","BPLANE","COAST_1HALF","REFINE_BPLANE","COAST_2HALF",
-    "CAPTURE","SHAPE","SCIENCE_OPS","LAND_DEORBIT","LAND_ASSIST",
+    "CAPTURE","SHAPE","SCIENCE_OPS","LAND_PREP","LAND_DEORBIT","LAND_ASSIST",
     "SURFACE_RETURN_SETUP").
 SET LAUNCH_INCLINATION TO 0.
 SET LAUNCH_PLANE_MODE TO "BODY_ORBIT".
@@ -62,7 +62,13 @@ SET SHAPE_TOTAL_DV_CAP TO 500.
 SET SHAPE_RESERVE_DV TO 900.
 
 // Manual orbital review. Select a Minmus Flats navigation waypoint, then
-// use the printed setphase LAND_DEORBIT command and REBOOT when ready.
+// use the printed setphase LAND_PREP command and REBOOT when ready.
+// Generic low landing orbit, preserving the useful63.4deg plane and9.3km
+// Pe. Automatic apsides give about9.3x19.3km; no equatorial plane change or
+// contract AoP/LAN polishing. Independent prep budget preserves return fuel.
+SET LAND_PREP_MIN_PE TO 9000.
+SET LAND_PREP_ALT_TOL TO 1000.
+SET LAND_PREP_RESERVE_DV TO 900.
 SET SCIENCE_OPS_HOLD TO 1.
 SET SCIENCE_SURVEY_POINTS TO LIST().
 SET AUTO_TRANSMIT TO 0.
@@ -91,7 +97,9 @@ SET TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM TO 0.25.
 SET DEORBIT_CROSSTRACK_AUTHORITY_KM TO 0.5.
 SET TARGET_TOLERANCE TO 1500.
 SET GUIDANCE_ALT TO 3000.
-SET TARGET_DEORBIT_SCAN_ORBITS TO 8.
+// Low parking orbit needs many passes to sample Minmus longitudes. The
+// survey is cheap geometry; the native TR solver still has64 total trials.
+SET TARGET_DEORBIT_SCAN_ORBITS TO 48.
 SET TARGET_DEORBIT_SCAN_SAMPLES TO 512.
 SET TARGET_DEORBIT_MIN_LEAD TO 120.
 SET TERRAIN_CHECK_RADIUS TO 500.
