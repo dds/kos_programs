@@ -82,6 +82,13 @@ GLOBAL FUNCTION phaseAerobrake {
     }
 
     LOCAL atmHeight IS _aerobrakeAtmoHeight().
+    // A reboot after a skipped pass may have lost the RAM-only inPass flag.
+    // An outbound hyperbola still needs capture before any solar wait.
+    IF SHIP:ALTITUDE > atmHeight AND SHIP:PERIAPSIS < atmHeight
+            AND SHIP:ORBIT:ECCENTRICITY >= 1 AND SHIP:VERTICALSPEED > 0 {
+        _aerobrakeBrakingBurn().
+        IF phaseShouldYield { RETURN. }
+    }
 
     // A skipped/failed return MCC is not an atmospheric approach.
     // Repair it while still far out, before alarms, coast, or stowing
@@ -311,40 +318,98 @@ LOCAL FUNCTION _aerobrakeCloseExtendBays {
 // to drop from a hyperbolic pass into a bound orbit, then let aerobraking
 // finish. Stops on capture (ecc<1), fuel exhaustion, the Pe floor, or
 // landing — so it can't run away and drive Pe negative.
-LOCAL FUNCTION _aerobrakeBrakingBurn {
-    IF SHIP:AVAILABLETHRUST <= 0 { RETURN. }
-    IF (STAGE:LIQUIDFUEL + STAGE:OXIDIZER) <= 0.1 {
-        mLog("Aerobrake braking burn: no fuel remaining.").
-        RETURN.
+LOCAL FUNCTION _aerobrakeCaptureStop {
+    PARAMETER control.
+    LOCAL reason IS aerobrakeBurnFrameReason(control).
+    IF reason <> "" { RETURN reason. }
+    IF NOT (STAGE:LIQUIDFUEL+STAGE:OXIDIZER > 0.1) { RETURN "fuel-exhausted". }
+    IF SHIP:ORBIT:ECCENTRICITY < 1 { RETURN "captured". }
+    IF NOT (SHIP:ORBIT:ECCENTRICITY >= 1 AND SHIP:ORBIT:ECCENTRICITY < 1e30) { RETURN "invalid-orbit". }
+    IF NOT (SHIP:PERIAPSIS >= control["FLOOR"]) { RETURN "pe-below-reentry-floor". }
+    IF NOT (SHIP:ALTITUDE > control["ATMO"]) { RETURN "returned-to-atmosphere". }
+    RETURN "".
+}
+
+LOCAL FUNCTION _aerobrakeCaptureThrottle {
+    PARAMETER command.
+    PARAMETER control.
+    IF control["REASON"] <> "" { RETURN 0. }
+    SET control["REASON"] TO _aerobrakeCaptureStop(control).
+    IF NOT (ABS(command) < 1e30) { SET control["REASON"] TO "invalid-command". }
+    IF control["REASON"] <> "" { RETURN 0. }
+    IF NOT aerobrakeBurnAligned(control)
+            OR NOT (VANG(control["DIR"],-SHIP:VELOCITY:ORBIT) <= 5) {
+        SET control["REASON"] TO "alignment-or-energy". RETURN 0.
     }
+    RETURN MAX(0,MIN(1,command)).
+}
+
+LOCAL FUNCTION _aerobrakeBrakingBurn {
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    IF NOT thrustCutoffOk(FALSE) { RETURN FALSE. }
+    IF SHIP:ORBIT:ECCENTRICITY < 1 { RETURN TRUE. }
     LOCAL atmHeight IS _aerobrakeAtmoHeight().
     LOCAL peFloor IS atmHeight * 0.4.
     IF AEROBRAKE_BRAKE_PE_FLOOR >= 0 { SET peFloor TO AEROBRAKE_BRAKE_PE_FLOOR. }
-
-    mLog("Aerobrake braking burn: ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
-        + " peFloorKm=" + ROUND(peFloor / 1000, 1)).
-    LOCK THROTTLE TO 1.
-    LOCK STEERING TO RETROGRADE.
-    LOCAL reason IS "".
-    UNTIL reason <> "" {
-        IF (STAGE:LIQUIDFUEL + STAGE:OXIDIZER) <= 0.1
-                OR SHIP:AVAILABLETHRUST <= 0 {
-            SET reason TO "fuel-exhausted".
-        } ELSE IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
-            SET reason TO "landed".
-        } ELSE IF SHIP:ORBIT:ECCENTRICITY < 1 {
-            SET reason TO "captured".
-        } ELSE IF atmHeight > 0 AND SHIP:ORBIT:PERIAPSIS < peFloor {
-            SET reason TO "pe-below-reentry-floor".
-        }
-        WAIT 0.
+    LOCAL engine IS aerobrakeBurnEngine().
+    IF NOT (atmHeight > 0 AND engine["VE"] > 0 AND engine["VE"] < 1e30
+            AND engine["THRUST"] > 0 AND engine["THRUST"] < 1e30) {
+        mLogError("Emergency capture: unavailable atmosphere/controllable engine; no burn.").
+        yieldToPrompt(). RETURN FALSE.
     }
+    LOCAL priorDeferral IS LOG_ARCHIVE_DEFERRED.
+    SET LOG_ARCHIVE_DEFERRED TO 1.
+    aerobrakeBurnCpuBegin().
+    stateSet("aerobrake_capture_active",TRUE).
+    LOCAL started IS TIME:SECONDS.
+    LOCAL control IS LEXICON("BODY",SHIP:BODY:NAME,"STAGE",STAGE:NUMBER,
+        "UPDATED",started,"DEADLINE",started+60,"REASON","","PEAK_FACING_ERR",0,
+        "DIR",-SHIP:VELOCITY:ORBIT,"FLOOR",peFloor,"ATMO",atmHeight).
+    SAS OFF.
+    // Re-read orbital velocity in the steering lock, rather than storing
+    // a Direction snapshot that becomes wrong as the velocity turns.
+    LOCK STEERING TO -SHIP:VELOCITY:ORBIT.
+    mLog("STATS aerobrake-capture align status=begin Pe=" + SHIP:PERIAPSIS
+        + " peFloor=" + peFloor + " stage=" + control["STAGE"]).
+    UNTIL control["REASON"] <> "" OR aerobrakeBurnAligned(control) {
+        SET control["DIR"] TO -SHIP:VELOCITY:ORBIT.
+        SET control["UPDATED"] TO TIME:SECONDS.
+        SET control["REASON"] TO _aerobrakeCaptureStop(control).
+        IF control["REASON"] = "" { WAIT 0.05. }
+    }
+    // At full throttle, burning the entire wet mass would take m/flow.
+    // This deliberately generous physical upper bound avoids an arbitrary
+    // duration cap on a weak engine. Real fuel exhaustion stops sooner.
+    SET control["DEADLINE"] TO TIME:SECONDS+engine["VE"]*SHIP:MASS/engine["THRUST"]+5.
+    SET control["UPDATED"] TO TIME:SECONDS.
+    LOCAL command IS 1.
+    LOCK THROTTLE TO _aerobrakeCaptureThrottle(command,control).
+    UNTIL control["REASON"] <> "" {
+        // Check the old publication time before refreshing it. Both this
+        // check and the throttle lock latch a stale publisher at zero.
+        IF TIME:SECONDS-control["UPDATED"] > 0.5 { SET control["REASON"] TO "stale-control". }
+        SET control["DIR"] TO -SHIP:VELOCITY:ORBIT.
+        SET control["UPDATED"] TO TIME:SECONDS.
+        LOCAL checked IS _aerobrakeCaptureThrottle(command,control).
+        IF control["REASON"] = "" { WAIT 0.05. }
+    }
+    SET command TO 0.
     IF NOT thrustCutoffOk() { RETURN FALSE. }
-    mLog("Aerobrake braking burn complete: " + reason
-        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY, 3)
+    aerobrakeBurnCpuEnd().
+    stateSet("aerobrake_capture_active",FALSE).
+    LOCK STEERING TO SHIP:SRFRETROGRADE.
+    SET LOG_ARCHIVE_DEFERRED TO priorDeferral.
+    mLog("STATS aerobrake-capture result reason=" + control["REASON"]
+        + " elapsed=" + (TIME:SECONDS-started) + " peakFacingErr=" + control["PEAK_FACING_ERR"]
+        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,3)
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 1)).
+    IF control["REASON"] <> "captured" {
+        mLogError("Emergency capture incomplete; review trajectory, attitude and fuel before resuming.").
+        yieldToPrompt(). RETURN FALSE.
+    }
+    RETURN TRUE.
 }
 
 // Alarm the next inbound atmosphere crossing from the live conic and return

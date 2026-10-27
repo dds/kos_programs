@@ -280,7 +280,7 @@ def check_fresh_forecast():
     flight['STAGE'].NUMBER=2;flight['STAGE'].DELTAV.VACUUM=400
     plan=flight['_aeroApPlan'](70000,52000,54000,53000)
     assert plan['OK'] and plan['STAGE']==2 and plan['DV']<=390
-    actual=flight['_aeroApEngine']()
+    actual=flight['aerobrakeBurnEngine']()
     assert actual['THRUST']==20 and abs(actual['VE']-315*9.80665)<1e-9
     source=function_body(AERO,'phaseAerobrake')
     stage_at=source.index('aerobrakeApStageCoast(')
@@ -288,7 +288,9 @@ def check_fresh_forecast():
     assert source.rfind('_aerobrakeSolarWait(',0,stage_at)>source.index('UNTIL SHIP:STATUS')
     assert stage_at<source.index('_aerobrakeSetEntryAlarm()',stage_at)<forecast_at
     assert 'STAGE.' not in mask(ASSIST) # Original live stage-change cutoff remains.
-    assert 'STAGE:NUMBER <> control["STAGE"]' in ASSIST
+    guard=(ROOT/'lib/aerobrake_guard.ks').read_text()
+    assert 'STAGE:NUMBER <> control["STAGE"]' in function_body(guard,'aerobrakeBurnFrameReason')
+    assert 'aerobrakeBurnFrameReason(control)' in function_body(ASSIST,'_aeroApSafeThrottle')
     deps,_,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     assert 'aerobrake_staging' in closure(['aerobrake'],deps)
     assert 'aerobrake_staging' not in closure(['return_setup'],deps)

@@ -4,8 +4,45 @@ Updated 2026-10-27. Keep this list current as scope changes. A source check
 passing is not native flight validation. Preserve mission safeguards and
 record remaining uncertainty before closing a task.
 
+## Compact working handoff
+
+- Current baseline: `7270867`, clean main, pushed. Tundra mission is launching.
+- Operator explicitly removed the thermometer/storage prelaunch gate. Do not
+  restore it or add temperature transmission without a further request.
+- Current flight blocker: Tundra XING boot004 at UT2816238.4 treats an
+  expired4.437m/s node as a departure; parking is72.7x78km. Fix the MJ parking
+  handoff without weakening the arrival corridor or deleting foreign nodes.
+- Emergency capture source fix is implemented; then audit cached-state
+  mutations and continue the read-only Deck renderer investigation.
+- Preserve existing capture, Pe, fuel, staging and return reserve safeguards.
+  Timed waits stay resident with KAC before solar and a clock fallback.
+- Implemented Tundra, LAND_PREP, between-pass staging and entry-alarm/solar
+  changes await native compilation/flight evidence. Do not close those tasks
+  on source tests alone. Landing efficiency changes need fresh flight logs.
+- Deck crash is an unsolved Unity renderer failure under memory pressure;
+  inspection is complete, settings unchanged, Plex excluded.
+
 ## In progress
 
+- [ ] **Emergency hyperbolic capture safety.** Implemented zero-throttle
+  alignment before live orbital-retrograde thrust. Optional assist and capture
+  share body/stage/node/Abort/warp/freshness/deadline and attitude/energy guards.
+  Capture preserves its0.1-unit fuel stop, configured Pe floor and bound-orbit
+  stop; no staging/engine activation was added. Full-wet-mass/flow duration
+  bound replaces an unlimited burn; stale publishers latch zero. Shared
+  physical cutoff precedes CPU/log restoration and clearing the active marker.
+  Interrupted capture cuts off and holds once for review; outbound hyperbolic
+  reboot resumes can retry capture before coasting. Existing optional-assist
+  checks and new independent capture/finite-slew/cutoff fixtures passed.
+  Full suite deferred for the new XING flight blocker. Native validation open.
+- [ ] **Tundra departure blocked by a parking node.** Native RO9_2815982
+  boot003 reaches parking and advances at UT2816224.8. Boot004 XING at
+  UT2816238.4 resumes a4.437m/s node with ETA-25.2s, pending=false and empty
+  burn_phase. No transfer planning runs. Its missing Minmus patch is printed
+  as PeKm=-0.001; this is not a solved Minmus periapsis. Likely MJ ascent is
+  still finishing circularization when the loose parking gate advances.
+  Operator can delete the old node and reboot. Inspect/fix ownership and
+  completion at the PARK handoff; retain the real departure corridor check.
 - [ ] **Latest Deck crash: renderer/memory follow-up.** Inspected before
   mission work. Crash_2026-10-27_092057394/error.log reports UnityPlayer.dll
   access violation0xc0000005 at09:20:58UTC,94% physical memory used/800MB
@@ -113,12 +150,6 @@ record remaining uncertainty before closing a task.
 
 ## Next changes
 
-- [ ] **Emergency hyperbolic-capture burn safety.** The separate legacy
-  `_aerobrakeBrakingBurn` starts full throttle before verifying alignment and
-  lacks the powered assist's live Abort/freshness guards. Consolidate its
-  alignment and cutoff contract without weakening emergency capture, Pe
-  floor or fuel protections. This is separate from the optional finite assist
-  and its new between-pass staging, which require an already bound orbit.
 - [ ] **Landing-preparation efficiency refinements.** The generic LAND_PREP
   now deliberately provides a low parking orbit for broad target coverage.
   A future optional comparison can estimate direct descent versus a parking

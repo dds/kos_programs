@@ -9,6 +9,14 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 emergency capture: aerobrake_guard shares live frame/attitude
+interlocks with optional assist. Capture aligns at zero, tracks live orbital
+velocity, keeps fuel/Pe/capture stops, scopes the shared2000IPU/log deferral,
+and verifies cutoff before clearing aerobrake_capture_active. No stages fire.
+Reboot recovery cuts off and holds once; an outbound hyperbola on the next
+explicit reboot can retry before solar coast. Capture's duration bound is
+wet mass/flow, not an arbitrary dV cap. Native behavior remains unverified.
+
 2026-10-27 Tundra/survey mission: RO9 minmus_tundra_survey_return requests
 397272/9300m,116.6deg,LAN337,AoP270. User clarified3200-6600m are ABOVE
 thresholds, not an altitude band. Use >6600m for every site, keep9km floor.

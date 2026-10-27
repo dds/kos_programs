@@ -5,9 +5,15 @@
 @LAZYGLOBAL OFF.
 
 GLOBAL FUNCTION aerobrakeApRecover {
-    IF NOT stateGet("aerobrake_ap_active",FALSE) { RETURN TRUE. }
+    LOCAL captureActive IS stateGet("aerobrake_capture_active",FALSE).
+    IF NOT stateGet("aerobrake_ap_active",FALSE) AND NOT captureActive { RETURN TRUE. }
     IF NOT thrustCutoffOk() { RETURN FALSE. }
     stateSet("aerobrake_ap_active",FALSE).
+    IF captureActive {
+        stateSet("aerobrake_capture_active",FALSE).
+        mLogError("Emergency capture was interrupted; inspect trajectory and fuel before rebooting to resume.").
+        yieldToPrompt(). RETURN FALSE.
+    }
     mLogWarn("STATS aerobrake-assist status=recovered same-pass-attempt-retained").
     RETURN TRUE.
 }
@@ -24,12 +30,12 @@ GLOBAL FUNCTION aerobrakeApObserve {
     }
 }
 
-LOCAL FUNCTION _aeroApCpuBegin {
+GLOBAL FUNCTION aerobrakeBurnCpuBegin {
     stateSet("aerobrake_prior_ipu",CONFIG:IPU).
     SET CONFIG:IPU TO MAX(CONFIG:IPU,2000).
 }
 
-LOCAL FUNCTION _aeroApCpuEnd {
+GLOBAL FUNCTION aerobrakeBurnCpuEnd {
     SET CONFIG:IPU TO stateGetNum("aerobrake_prior_ipu",CONFIG:IPU).
     stateRemove("aerobrake_prior_ipu").
 }
@@ -61,7 +67,7 @@ LOCAL FUNCTION _aeroApAttitude {
     RETURN angles.
 }
 
-LOCAL FUNCTION _aeroApEngine {
+GLOBAL FUNCTION aerobrakeBurnEngine {
     LOCAL thrustSum IS 0.
     LOCAL flowSum IS 0.
     FOR eng IN SHIP:ENGINES {
@@ -96,7 +102,7 @@ LOCAL FUNCTION _aeroApPlan {
     IF NOT (entryEta > 0 AND entryEta <= AEROBRAKE_AP_PLAN_LEAD+30) { RETURN skipped. }
     LOCAL reserveDv IS aerobrakeApReserveDv().
     LOCAL budget IS _aeroApRemainingDv()-reserveDv.
-    LOCAL engine IS _aeroApEngine().
+    LOCAL engine IS aerobrakeBurnEngine().
     SET skipped["REASON"] TO "fuel-engine-or-corridor-unavailable".
     IF NOT (budget > 0.1 AND budget < 1e30 AND engine["THRUST"] > 0
             AND engine["VE"] > 0 AND peHigh > peLow+200) { RETURN skipped. }
@@ -129,7 +135,7 @@ LOCAL FUNCTION _aeroApPlan {
     LOCAL usefulTime IS engine["VE"]/acc*(1-CONSTANT:E^(-usefulDv/engine["VE"])).
     LOCAL peEta IS ETA:PERIAPSIS.
     LOCAL best IS skipped.
-    _aeroApCpuBegin().
+    aerobrakeBurnCpuBegin().
     FOR delay IN LIST(MAX(15,peEta-usefulTime/2),MAX(15,peEta),MAX(15,peEta-fullTime)) {
         LOCAL trial IS aeroApPredict(ctx,delay).
         IF trial["OK"] {
@@ -138,7 +144,7 @@ LOCAL FUNCTION _aeroApPlan {
         } ELSE IF NOT best["OK"] { SET best TO trial. }
     }
     IF best["OK"] { SET best TO aeroApPredict(ctx,best["DELAY"],1). }
-    _aeroApCpuEnd().
+    aerobrakeBurnCpuEnd().
     IF best["OK"] AND epoch+best["DELAY"] <= TIME:SECONDS+5 {
         SET best["OK"] TO FALSE. SET best["REASON"] TO "forecast-too-late".
     }
@@ -170,16 +176,10 @@ LOCAL FUNCTION _aeroApSafeThrottle {
     PARAMETER command.
     PARAMETER control.
     IF control["REASON"] <> "" { RETURN 0. }
+    SET control["REASON"] TO aerobrakeBurnFrameReason(control).
+    IF control["REASON"] <> "" { RETURN 0. }
     IF NOT (ABS(command) < 1e30) { SET control["REASON"] TO "invalid-command". }
     IF ABORT OR AEROBRAKE_AP_BURN <= 0 { SET control["REASON"] TO "disabled-or-abort". }
-    IF TIME:SECONDS >= control["DEADLINE"] { SET control["REASON"] TO "forecast-duration". }
-    IF TIME:SECONDS-control["UPDATED"] > 0.5 { SET control["REASON"] TO "stale-control". }
-    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
-        SET control["REASON"] TO "landed".
-    }
-    IF SHIP:BODY:NAME <> control["BODY"] OR STAGE:NUMBER <> control["STAGE"] OR HASNODE {
-        SET control["REASON"] TO "body-stage-or-node-changed".
-    }
     IF NOT (SHIP:PERIAPSIS >= control["LOW"]+100 AND SHIP:PERIAPSIS <= control["HIGH"]-100) {
         SET control["REASON"] TO "periapsis-corridor".
     }
@@ -192,14 +192,9 @@ LOCAL FUNCTION _aeroApSafeThrottle {
     IF control["APPLIED"] >= control["DV"]-0.01 { SET control["REASON"] TO "forecast-dv". }
     IF SHIP:ORBIT:ECCENTRICITY < 1 AND SHIP:APOAPSIS > 0
             AND SHIP:APOAPSIS <= control["TARGET_AP"] { SET control["REASON"] TO "apoapsis-target". }
-    IF NOT (SHIP:AVAILABLETHRUST > 0 AND SHIP:MASS > 0
-            AND SHIP:VELOCITY:ORBIT:MAG > 1 AND SHIP:VELOCITY:SURFACE:MAG > 1
-            AND control["DIR"]:MAG > 0.5) { SET control["REASON"] TO "invalid-thrust-or-direction". }
+    IF NOT (SHIP:VELOCITY:SURFACE:MAG > 1) { SET control["REASON"] TO "invalid-thrust-or-direction". }
     IF control["REASON"] <> "" { RETURN 0. }
-    LOCAL facingErr IS VANG(SHIP:FACING:FOREVECTOR,control["DIR"]).
-    SET control["PEAK_FACING_ERR"] TO MAX(control["PEAK_FACING_ERR"],facingErr).
-    IF NOT (facingErr <= 5
-            AND VDOT(control["DIR"],SHIP:VELOCITY:ORBIT) < -0.01*SHIP:VELOCITY:ORBIT:MAG) {
+    IF NOT aerobrakeBurnAligned(control) {
         SET control["REASON"] TO "alignment-or-energy". RETURN 0.
     }
     IF SHIP:ALTITUDE <= control["ATMO"]
@@ -233,7 +228,7 @@ GLOBAL FUNCTION aerobrakeApAssist {
     }
     LOCAL priorDeferral IS LOG_ARCHIVE_DEFERRED.
     SET LOG_ARCHIVE_DEFERRED TO 1.
-    _aeroApCpuBegin().
+    aerobrakeBurnCpuBegin().
     stateSet("aerobrake_ap_pass_used",TRUE).
     stateSet("aerobrake_ap_entered",FALSE).
     stateSet("aerobrake_ap_active",TRUE).
@@ -313,7 +308,7 @@ GLOBAL FUNCTION aerobrakeApAssist {
     // A failed physical cutoff already requests a hold. Keep its recovery
     // marker and local-log deferral; do no further I/O with uncertain thrust.
     IF NOT stopped { RETURN plan. }
-    _aeroApCpuEnd().
+    aerobrakeBurnCpuEnd().
     stateSet("aerobrake_ap_active",FALSE).
     IF plan["ENTERED"] { stateSet("aerobrake_ap_entered",TRUE). }
     LOCK STEERING TO SHIP:SRFRETROGRADE.

@@ -11,8 +11,9 @@ from check_surface_return import defaults, read_settings, emit_profile, expressi
 SOURCE=(ROOT/'lib/aerobrake_assist.ks').read_text()
 MATH=(ROOT/'lib/aerobrake_ap_math.ks').read_text()
 CONFIG=(ROOT/'lib/aerobrake_config.ks').read_text()
+GUARD=(ROOT/'lib/aerobrake_guard.ks').read_text()
 AERO=(ROOT/'lib/aerobrake.ks').read_text()
-ks.SOURCES+='\n'+CONFIG+'\n'+SOURCE+'\n'+MATH+'\n'+AERO
+ks.SOURCES+='\n'+CONFIG+'\n'+SOURCE+'\n'+MATH+'\n'+AERO+'\n'+GUARD
 
 
 class Vec(BaseVec):
@@ -63,6 +64,7 @@ def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
         ship.PERIAPSIS=h*h/(mu*(1+ecc))-radius
         ship.APOAPSIS=-mu/energy-(ship.PERIAPSIS+radius)-radius if energy<0 else 1e30
         ship.ORBIT.ECCENTRICITY=ecc;ship.ALTITUDE=rr-radius;ship.MASS=state['mass']
+        ship.VERTICALSPEED=(x*vx+y*vy)/rr
         ship.POSITION=Vec((x,y,0));ship.VELOCITY.ORBIT=Vec((vx,vy,0))
         spin=2*math.pi/21600
         ship.VELOCITY.SURFACE=Vec((vx+spin*y,vy-spin*x,0))
@@ -110,7 +112,7 @@ def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
         state['mass']-=flow*dt
         state['actual_dv']+=315*9.80665*math.log(mass_before/state['mass']);env['TIME'].SECONDS+=dt
         refresh()
-    def cutoff():
+    def cutoff(release=True):
         owner=env.get('control')
         if owner is not None:
             assert owner['REASON']
@@ -124,8 +126,9 @@ def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
                stateGet=lambda key,default=None:data.get(key,default),
                stateGetNum=lambda key,default=0:data.get(key,default),stateSet=persist,
                stateRemove=lambda key:data.pop(key,None),fixture_lock=lock,fixture_wait=physics,
-               thrustCutoffOk=cutoff,phaseShouldYield=False)
-    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',SOURCE+'\n'+MATH):
+               thrustCutoffOk=cutoff,phaseShouldYield=False,WARP=0,
+               KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)))
+    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',SOURCE+'\n'+MATH+'\n'+GUARD):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
     refresh();ship.FACING.FOREVECTOR=-ship.VELOCITY.ORBIT.NORMALIZED
     return env,state,data,refresh
