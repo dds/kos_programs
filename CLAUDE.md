@@ -9,6 +9,25 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-27 second Deck graphics-memory freeze, operator rebooted before
+inspection finished. Prior boot32952dec persisted kernel evidence after all:
+first hung-task warning8848.456s (20:22:26CET), gamescope-xwm14915 and
+dxvk-cs16902 blocked122s in ttm_global_swapout; likely mutex owner
+dxvk-submit16900 waits in __drm_exec_lock_obj while evicting/validating GPU
+buffers. Same7.2.7 kernel/signature as earlier5039s incident. Full prior
+kernel2113lines/205603bytes saved at
+/tmp/ksp-deck-previous-kernel-32952dec-20261027.log. No OOM-kill or runtime
+GPU-reset evidence there; exact driver defect and any mod/leak unproven.
+New bootaa1c9c6e snapshot uptime1862s: RAMavailable121MiB, swap8.40GiB,
+zram full, GTT7.28/8GiB, VRAM0.78/1GiB; no inspected KSP/gamescopeD threads,
+DXVKordinaryfutex/poll and memory PSIavg10~0.19%. Tight capacity, not proof
+of an active new lockup. Structured snapshot at
+/tmp/ksp-deck-reboot-followup-20261027.json. Old interrupted SSH job actually
+ran early in that same new boot (499s): RAMavailable9.68GiB/swap0 and game
+starting. Do not mislabel the later loaded-game reading a fresh idle
+baseline, or infer a leak from different loading/scenes. No settings,
+game controls, processes, power or kernel configuration were changed.
+
 2026-10-27 lateral braking and Minmus minimum-correction handoff implemented:
 lmBrakeLateralThrust is shared by live fixed-site economy-style braking and
 landing_prediction; landingDeorbitLeadPolicy passes the actual body-fixed

@@ -283,6 +283,23 @@ record remaining uncertainty before closing a task.
   Next: verify applicable Valve kernel/TTM fixes and reduce measured graphics /
   texture memory demand; no specific patch or mod cause is established.
   No settings/process/power changes. Separate from the earlier Unity fault.
+  Recurrence recovered after operator reboot: prior boot32952dec, first
+  warning uptime8848.456s (20:22:26CET), gamescope-xwm14915/dxvk-cs16902
+  blocked122s in ttm_global_swapout; likely owner dxvk-submit16900 waits
+  in __drm_exec_lock_obj during GPU buffer validation/eviction. Same7.2.7
+  kernel and lock-stack signature. Full previous journal saved2113lines /
+  205603bytes to `/tmp/ksp-deck-previous-kernel-32952dec-20261027.log`.
+  No OOM-kill/runtime GPU reset found in that complete previous-boot log;
+  precise driver defect/mod cause remains unproven. New bootaa1c9c6e at
+  uptime1862s already has RAMavailable121MiB, swap8.40GiB (zram full plus
+  disk1.17GiB), GTT7.28/8GiB, VRAM0.78/1GiB. No D-state threads in the
+  inspected KSP/gamescope processes then; DXVK waits are ordinary futex /
+  poll. PSI memoryavg10~0.19%, so tight capacity is not proof of current
+  active thrashing. Structured snapshot/thread waits/previous-kernel tail /
+  vmstat saved `/tmp/ksp-deck-reboot-followup-20261027.json`. Old pending
+  SSH inspection completed at uptime499s after reboot: RAMavailable9.68GiB,
+  swap0, KSPRSS1.17GiB; asset loading/scene differs, not a proven leak.
+  Current game already running; no game settings/processes/power changed.
 - [ ] **Latest Deck crash: renderer/memory follow-up.** Inspected before
   mission work. Crash_2026-10-27_092057394/error.log reports UnityPlayer.dll
   access violation0xc0000005 at09:20:58UTC,94% physical memory used/800MB
