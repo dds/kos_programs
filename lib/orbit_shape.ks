@@ -1014,6 +1014,17 @@ LOCAL FUNCTION _shapeReserveBurn {
     RETURN TRUE.
 }
 
+LOCAL FUNCTION _shapeInterruptedHold {
+    PARAMETER phaseLabel.
+    IF NOT maneuverBurnInterrupted() { RETURN FALSE. }
+    mLogError(phaseLabel + ": interrupted burn retained; inspect node/orbit before replanning.").
+    IF phaseLabel = "SHAPE" {
+        PRINT "RUNPATH('0:/cmd/shaperetry.ks'). then REBOOT. to replan from the achieved orbit.".
+    }
+    yieldToPrompt().
+    RETURN TRUE.
+}
+
 LOCAL FUNCTION _runShapePhase {
     PARAMETER phaseLabel.
     PARAMETER prefix.
@@ -1038,6 +1049,7 @@ LOCAL FUNCTION _runShapePhase {
             + " peFloor=" + _peFloor()).
         yieldToPrompt(). RETURN.
     }
+    IF _shapeInterruptedHold(phaseLabel) { RETURN. }
 
     LOCAL burns IS 0.
     UNTIL shapeConverged(targets) OR burns >= MAX_SHAPE_BURNS {
@@ -1075,6 +1087,7 @@ LOCAL FUNCTION _runShapePhase {
             SET BURN_TRIM_ABS_COMPLETE_DV TO savedAbsTol.
             SET BURN_TRIM_COMPLETE_MAX_DV TO savedMaxTol.
             IF NOT success {
+                IF _shapeInterruptedHold(phaseLabel) { RETURN. }
                 SET retries TO retries + 1.
                 IF retries >= MAX_RETRIES {
                     mLogError(phaseLabel + ": burn " + planned["label"]

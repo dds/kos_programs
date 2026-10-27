@@ -535,6 +535,25 @@ Looks like Python/JS; is neither.
   Source/ideal-tangent replay of reported errors reaches100m using~0.0234
   and0.1909m/s; real source governor reaches0.001 residual without overshoot
   in its scalar fixture. Neither establishes native engine/physics precision.
+  Native follow-up: governor live-node-trim at rounded0.001 followed by
+  sampledResidual rounded0.001 triggered residual-outside-tolerance. Exact
+  drift is unknown because both were logged to3places. Final acceptance now
+  uses _burnFinalResidualLimit: ONLY finite, nonnegative full-vector
+  live-node-trim evidence <=ABS tolerance gets a settling margin of
+  MIN(0.001,0.5*tolerance); precision limit0.0015, usual0.05 limit0.051.
+  Larger/axis-only/reversal/rebound/invalid evidence is not excused; physical
+  cutoff/watchdog faults and strict SHAPE element convergence remain. No
+  governor/throttle target changes. Nine-place residual/limit diagnostics;
+  classify final residual/rebound BEFORE saving last_burn_report so it
+  captures the real fault. Source regression covers live-latch then late
+  sample, boundaries and fault preservation; exact native drift still needs
+  new telemetry. _shapeInterruptedHold prevents automatic removal/retries
+  of a flown interrupted node, at entry and after failure (restore precision
+  first). cmd/shaperetry is an explicit stable-orbit SHAPE-only reset: match
+  body/attempt/node time, physical/raw/pilot zero, Abort clear, recheck after
+  warp settle; clear burn_* only after boot CPU restoration, keep mission,
+  budget and last report. Old versions may already have replaced the node:
+  mismatch is preserved; operator inspects/removes it then reruns command.
   Surface return writes optional SURFACE_RETURN_ORBIT fields to the NEW local
   profile's SHAPE_* (Ap659734/Pe554472/inc0/noLAN/AoP0.4) and sequences
   PRELAUNCH/LAUNCH/PARK/SHAPE/RETURN_SETUP, then Kerbin Pe52000. Empty orbit

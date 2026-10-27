@@ -783,13 +783,25 @@ GLOBAL FUNCTION executeManeuver {
     UNLOCK THROTTLE.
     SET CONFIG:IPU TO priorIpu.
     stateRemove("burn_prior_ipu").
+    LOCAL finalResidualLimit IS _burnFinalResidualLimit(liveCutoff).
+    IF burnAbort = "" AND NOT fixedBurnVector AND res > finalResidualLimit {
+        SET burnAbort TO "residual-outside-tolerance".
+        SET burnAbortDetail TO "remaining=" + _fs(res,9)
+            + " limit=" + _fs(finalResidualLimit,9) + " stop=" + burnCompleteReason.
+        stateSet("burn_status", "aborted-residual").
+    }
+    IF dra AND burnAbort = "" {
+        SET burnAbort TO "dv-rebound".
+        SET burnAbortDetail TO "Residual increased after trim; node retained.".
+    }
     // Compact evidence survives log-space exhaustion and phase/boot changes.
     // Never perform this state I/O while commanded thrust is nonzero.
     LOCAL burnReport IS "STATS last-burn phase=" + stateGet("phase", "")
         + " body=" + SHIP:BODY:NAME + " ut=" + ROUND(TIME:SECONDS,2)
-        + " plannedDv=" + ROUND(bdv,3) + " thrustDv=" + _fs(liveCutoff["impulse"],3)
+        + " plannedDv=" + ROUND(bdv,6) + " thrustDv=" + _fs(liveCutoff["impulse"],6)
         + " impulseCap=" + ROUND(liveCutoff["impulseCap"],3)
-        + " residual=" + ROUND(res,3) + " reason=" + burnCompleteReason
+        + " residual=" + _fs(res,9) + " residualLimit=" + _fs(finalResidualLimit,9)
+        + " reason=" + burnCompleteReason
         + " cutoffFault=" + burnAbort
         + " shutdownAttempted=" + cutoffCheck["forced"]
         + " thrustStopped=" + cutoffCheck["stopped"].
@@ -799,21 +811,12 @@ GLOBAL FUNCTION executeManeuver {
     // copy the entire log to the archive, so it is not burn-loop work.
     FOR traceLine IN burnTrace { mLogWarn(traceLine). }
     mLogWarn("STATS burn cutoff reason=" + burnCompleteReason
-        + " cutoffRem=" + _fs(liveCutoff["rem"],3)
+        + " cutoffRem=" + _fs(liveCutoff["rem"],9)
         + " cutoffUt=" + ROUND(liveCutoff["time"],3)
-        + " sampledResidual=" + ROUND(res,3)
+        + " sampledResidual=" + _fs(res,9)
+        + " trimTolerance=" + _fs(BURN_TRIM_ABS_COMPLETE_DV,9)
+        + " residualLimit=" + _fs(finalResidualLimit,9)
         + " fixed=" + fixedBurnVector).
-    IF burnAbort = "" AND NOT fixedBurnVector
-            AND res > BURN_TRIM_ABS_COMPLETE_DV {
-        SET burnAbort TO "residual-outside-tolerance".
-        SET burnAbortDetail TO "remaining=" + ROUND(res, 3)
-            + " stop=" + burnCompleteReason.
-        stateSet("burn_status", "aborted-residual").
-    }
-    IF dra AND burnAbort = "" {
-        SET burnAbort TO "dv-rebound".
-        SET burnAbortDetail TO "Residual increased after trim; node retained.".
-    }
     IF burnAbort <> "" {
         _stl(1.0).
         stateSet("burn_status", "interrupted").
@@ -824,9 +827,9 @@ GLOBAL FUNCTION executeManeuver {
         stateSet("burn_abort_paused", totalPaused).
         mLog("STATS burn abort reason=" + burnAbort
             + " detail=" + burnAbortDetail
-            + " dv=" + ROUND(bdv,1)
-            + " residual=" + ROUND(res,2)
-            + " applied=" + ROUND(appliedDv,2)
+            + " dv=" + ROUND(bdv,6)
+            + " residual=" + _fs(res,9)
+            + " applied=" + ROUND(appliedDv,6)
             + " intResidual=" + ROUND(MAX(0, bdv - appliedDv),2)
             + " duration=" + ROUND(TIME:SECONDS - bsc,1)
             + " paused=" + ROUND(totalPaused,1)
@@ -849,10 +852,10 @@ GLOBAL FUNCTION executeManeuver {
         DELETEALARM(aid).
     }
 
-    mLogWarn("Burn complete. Residual dV ~" + ROUND(res, 2) + " m/s.").
-    mLogWarn("STATS burn result dv=" + ROUND(bdv,1)
-        + " residual=" + ROUND(res,2)
-        + " applied=" + ROUND(appliedDv,2)
+    mLogWarn("Burn complete. Residual dV ~" + ROUND(res, 6) + " m/s.").
+    mLogWarn("STATS burn result dv=" + ROUND(bdv,6)
+        + " residual=" + _fs(res,9)
+        + " applied=" + ROUND(appliedDv,6)
         + " intResidual=" + ROUND(MAX(0, bdv - appliedDv),2)
         + " completeReason=" + burnCompleteReason
         + " duration=" + ROUND(TIME:SECONDS - bsc,1)
@@ -864,6 +867,22 @@ GLOBAL FUNCTION executeManeuver {
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,2)).
     HUDTEXT("Burn complete", 3, 2, 15, GREEN, FALSE).
     RETURN TRUE.
+}
+
+// The governor's full-vector trim sample precedes physical cutoff verification.
+// Coast/engine settling can move the node slightly after that valid sample.
+// Bound that allowance to half a tolerance AND at most0.001m/s; never use it
+// for axis-only trims, reversals, rebound, missing/bad evidence or watchdogs.
+// This changes final acceptance only, never the throttle cutoff target.
+LOCAL FUNCTION _burnFinalResidualLimit {
+    PARAMETER cutoff.
+    LOCAL tolerance IS BURN_TRIM_ABS_COMPLETE_DV.
+    IF tolerance > 0 AND cutoff["reason"] = "live-node-trim"
+            AND _nf(cutoff["rem"]) AND cutoff["rem"] >= 0
+            AND cutoff["rem"] <= tolerance {
+        RETURN tolerance + MIN(0.001, tolerance * 0.5).
+    }
+    RETURN tolerance.
 }
 
 // No logging, file access, waits, steering, or staging in this function:

@@ -60,6 +60,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
 | `RUNPATH("0:/cmd/kerbinrecover.ks").` | Inspect the live current/predicted Kerbin orbit and stage fuel; archive a report without changing the mission. Pass `"apply"` to configure shallow recovery with optional KSC targeting and reboot into MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
+| `RUNPATH("0:/cmd/shaperetry.ks").` | Clear an interrupted SHAPE attempt in stable orbit, retaining mission/targets/budget; then reboot to replan from the achieved orbit. Preserves unrelated nodes |
 | `RUNPATH("0:/cmd/arrival.ks", "review").` | Inspect a retained partial arrival; actions `accept` / `replan`, optional capture Ap in km |
 | `RUNPATH("0:/cmd/arrival.ks", "budget", 100).` | Allow up to 100 m/s of further arrival corrections; preserves capture/return reserves and does not burn |
 | `RUNPATH("0:/cmd/arrival.ks", "plan").` | Preview an arrival correction and hold for review; does not burn or advance the mission |
@@ -975,6 +976,24 @@ budget and final orbit checks remain active. `SHAPE_MIN_PE` defaults to
 profile may choose a different safe floor. Atmospheric bodies always retain
 at least atmosphere height plus 10 km. A target Pe corridor entirely below
 the floor holds before planning, with the conflicting values in the log.
+
+An interrupted SHAPE burn now holds with its node intact, including on reboot.
+After inspecting the orbit, run `RUNPATH("0:/cmd/shaperetry.ks").` and then
+`REBOOT.` to calculate the remaining corrections. The command requires the
+matching interrupted SHAPE/body, stable orbit, Abort clear and zero physical,
+raw and pilot throttle; it clears only the attempt and matching next node,
+retaining the budget, profile, overrides and last burn report. If an older
+version left a different retry node, it preserves that node: inspect it and,
+if unwanted, `REMOVE NEXTNODE.` before retrying the command.
+
+The executor distinguishes its full-vector live cutoff sample from the
+residual measured after thrust settles. Only a recorded `live-node-trim`
+sample within tolerance allows a bounded final-sample settling margin:
+the smaller of half the tolerance and 0.001 m/s. Thus a 0.001 m/s cutoff
+allows a final sample up to 0.0015 m/s; it does not raise the throttle cutoff
+target. Axis-only trims, invalid evidence and larger residuals remain subject
+to the strict check; physical-cutoff and watchdog faults still fail. Cutoff,
+sampled residual and acceptance limit are logged to nine decimal places.
 
 The fixed-site RO9 Mun profile also permits up to 10 m/s of normal correction
 in its deorbit burn. It prefers cross-track error below 250 m and rejects

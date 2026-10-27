@@ -209,7 +209,7 @@ def check_command_publication():
 def check_cpu_budget_recovery():
     executor=body(SOURCE,'executeManeuver')
     setup=executor[executor.index('LOCAL priorIpu IS CONFIG:IPU.'):executor.index('LOCAL throttleCmd IS')]
-    cleanup=executor[executor.index('SET CONFIG:IPU TO priorIpu.'):executor.index('// Compact evidence')]
+    cleanup=executor[executor.index('SET CONFIG:IPU TO priorIpu.'):executor.index('LOCAL finalResidualLimit')]
     boot=(ks.ROOT/'lib/boot_lib.ks').read_text()
     recovery=ks.parse(body(boot,'bootPreamble'))
     retry=(ks.ROOT/'cmd/transferretry.ks').read_text()
