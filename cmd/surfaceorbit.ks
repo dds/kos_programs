@@ -29,6 +29,11 @@ LOCAL FUNCTION _cmdSurfaceorbit {
     } ELSE { RUNPATH("1:/lib/boot_lib"). }
     bootPruneLandedHopCache().
     bootPreamble().
+    // RUNONCEPATH can retain the previous serializer at a live prompt.
+    // Refresh its function-only source before persisting the orbit lexicon.
+    IF HOMECONNECTION:ISCONNECTED AND EXISTS("0:/lib/config.ks") {
+        RUNPATH("0:/lib/config.ks").
+    }
     // Only the route/settings helpers are needed now. The next reboot
     // loads return_setup by band, rather than crowding this surface boot.
     bootLibLoad("hop").

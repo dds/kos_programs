@@ -119,6 +119,72 @@ def check_rejections_and_caching():
     print('PASS: invalid/unsafe orbit and surface state leave the route/phase/overrides untouched; orbital-review band retains the return provider and entry policy')
 
 
+def check_written_override_roundtrip():
+    # Execute configLiteral and missionOverrideUpdate themselves. A dict-only
+    # override stub concealed that the old serializer quoted a Lexicon's
+    # display text instead of writing an executable LEXICON(...).
+    class Text(str):
+        def ISTYPE(self, kind):return kind=='String'
+        def __add__(self, other):return Text(str(self)+str(other))
+        def __radd__(self, other):return Text(str(other)+str(self))
+        TRIM=property(lambda self:Text(self.strip()))
+        def STARTSWITH(self, other):return self.startswith(other)
+        def SPLIT(self, separator):return Items(Text(item) for item in self.split(separator))
+    class Number(float):
+        def ISTYPE(self, kind):return kind=='Scalar'
+    class Boolean:
+        def __init__(self,value):self.value=value
+        def ISTYPE(self, kind):return kind=='Boolean'
+        def __bool__(self):return self.value
+    class Items(list):
+        def ISTYPE(self, kind):return kind=='List'
+        def ADD(self, item):self.append(item)
+        def JOIN(self, separator):return Text(separator.join(map(str,self)))
+    class Lex(dict):
+        def ISTYPE(self, kind):return kind=='Lexicon'
+        KEYS=property(lambda self:Items(Text(key) for key in self))
+    def native(value):
+        if isinstance(value,dict):return Lex({Text(key):native(item) for key,item in value.items()})
+        if isinstance(value,list):return Items(native(item) for item in value)
+        if isinstance(value,str):return Text(value)
+        if isinstance(value,bool):return Boolean(value)
+        if isinstance(value,(int,float)):return Number(value)
+        return value
+    config=(ROOT/'lib/config.ks').read_text()
+    def serialize(value):
+        return execute(function_body(config,'configLiteral'),dict(raw=native(value),
+            LIST=lambda:Items(),CHAR=lambda number:Text(chr(int(number))),configLiteral=serialize))
+    disk={'1:/run/mission_overrides.ks':[Text('SET RETURN_PE TO 53000.')]}
+    code=function_body(config,'missionOverrideUpdate')
+    code=re.sub(r'LOG (.*?) TO rewritten\.',r'append_line(\1,rewritten).',code)
+    env,state,updates,events,alarms=fixture()
+    env['EXISTS']=lambda path:path=='0:/lib/config.ks'
+    env['RUNPATH']=lambda path:events.append(('library',path))
+    def write(values):
+        events.append(('write-overrides',))
+        execute(code,dict(values=native(values),missionOverridePath=lambda:Text('1:/run/mission_overrides.ks'),
+            LIST=lambda:Items(),CHAR=lambda number:Text(chr(int(number))),configLiteral=serialize,
+            EXISTS=lambda path:path in disk,DELETEPATH=lambda path:disk.pop(path,None),
+            OPEN=lambda path:NS(READALL=NS(STRING=Text('\n'.join(disk[path])))),
+            COPYPATH=lambda source,target:disk.update({target:disk[source].copy()}),
+            append_line=lambda line,path:disk.setdefault(path,[]).append(Text(line))))
+        updates.update(values)
+    env['missionOverrideUpdate']=write
+    command(env)
+    assert events.index(('library','0:/lib/config.ks'))<events.index(('write-overrides',))
+    text='\n'.join(disk['1:/run/mission_overrides.ks'])
+    assert 'SET SURFACE_RETURN_ORBIT TO LEXICON(' in text,text
+    fresh=read_settings(text,{})
+    assert fresh['SURFACE_RETURN_ORBIT']==updates['SURFACE_RETURN_ORBIT']
+    assert fresh['RETURN_PE']==53000 and fresh['SURFACE_RETURN_REVIEW']==1
+    assert fresh['SURFACE_RETURN_SEQUENCE'][-3:]==['SHAPE','SCIENCE_OPS','RETURN_SETUP']
+    nested=native(dict(items=[dict(enabled=True,number=7)],empty={}))
+    loaded=read_settings('SET VALUE TO '+str(serialize(nested))+'.',{})['VALUE']
+    assert loaded==dict(items=[dict(enabled=True,number=7)],empty={})
+    print('PASS: actual shared Lexicon/list/scalar serializer and override writer reload the selected orbit, nested collections, review sequence and original entry policy from executable SET text')
+
+
 if __name__=='__main__':
     check_selection_and_review()
     check_rejections_and_caching()
+    check_written_override_roundtrip()

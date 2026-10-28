@@ -30,6 +30,15 @@ sequence replay. Native new-command flight confirmation pending.
 All71 routine check files passed89.49s after this change; no bootstrap
 recompilation required. Operator must pull/sync, select surfaceorbit, then
 REBOOT when ready. After the orbit review, setphase RETURN_SETUP and REBOOT.
+Final post-push review caught shared configLiteral missing Lexicon support;
+the new orbit override would otherwise be quoted display text. Added native
+LEXICON(...) serialization and a real writer->SET reload regression, including
+nested maps/lists/booleans. Do not trust dict-only missionOverrideUpdate stubs
+as serialization evidence. Pull the serializer follow-up with72a512b.
+Full71-file pass93.10s includes serializer; linked surfaceorbit refreshes
+the config function-only source before writing to bypass an old RUNONCEPATH
+cache at the current prompt. This avoids needing an initial automatic-route
+reboot just to select the new leg. Focused real-writer case covers ordering.
 
 2026-10-28 operational diagnostics: use the stable executable
 /home/dds/code/kos_programs/scripts/deck-diagnostics instead of repeated inline

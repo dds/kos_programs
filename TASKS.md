@@ -121,6 +121,18 @@ record remaining uncertainty before closing a task.
   Full71-file routine suite passed89.49s, including all satellite/snapshot,
   boot/cache, return serialization and hop checks. Existing unrelated
   ksc_deorbit warning remains. No live command or flight action performed.
+  Post-push review found configLiteral did not support Lexicon values:
+  a SURFACE_RETURN_ORBIT override would become quoted display text. Added
+  shared recursive LEXICON serialization and a regression executing the real
+  configLiteral AND missionOverrideUpdate, then reloading the emitted SET
+  text after selection. It covers the orbit, review sequence, retained return
+  Pe and nested list/map/boolean values; a dict-only override stub had hidden
+  this. Use the serializer follow-up with72a512b, not that commit alone.
+  Command refreshes the function-only config source when linked before any
+  override write, avoiding RUNONCEPATH retaining the old serializer at the
+  current surface prompt. Full71-file suite passed93.10s with serializer;
+  the final command-refresh/real-writer case is also covered by its focused
+  check. No need to reboot into an automatic surface route just to select.
 - [ ] **Duna/Ike science flight design.** Prepare after the satellite/Mun
   profiles: Duna orbital flyby and Ike science, transmit before committing
   optional return or atmospheric/surface attempt. No craft supplied yet;

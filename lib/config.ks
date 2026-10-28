@@ -24,6 +24,14 @@ GLOBAL FUNCTION configLiteral {
         }
         RETURN "LIST(" + parts:JOIN(", ") + ")".
     }
+    IF raw:ISTYPE("Lexicon") {
+        LOCAL parts IS LIST().
+        FOR key IN raw:KEYS {
+            parts:ADD(configLiteral(key)).
+            parts:ADD(configLiteral(raw[key])).
+        }
+        RETURN "LEXICON(" + parts:JOIN(", ") + ")".
+    }
     RETURN CHAR(34) + raw + CHAR(34).
 }
 
