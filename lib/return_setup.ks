@@ -25,6 +25,8 @@ GLOBAL SURFACE_RETURN_AZIMUTH IS 0.
 // Optional post-ascent SHAPE settings, written into the generated local
 // surface-return profile. Empty preserves every existing return sequence.
 GLOBAL SURFACE_RETURN_ORBIT IS LEXICON().
+// Explicit contract review after post-ascent shaping, before departure.
+GLOBAL SURFACE_RETURN_REVIEW IS 0.
 GLOBAL REENTRY_PE IS 30000.
 
 LOCAL FUNCTION _returnSetupClearLibCache {
@@ -100,6 +102,10 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
         mLogError("Surface return orbit configured without SHAPE in its sequence; profile unchanged.").
         yieldToPrompt(). RETURN.
     }
+    IF SURFACE_RETURN_REVIEW > 0 AND NOT SURFACE_RETURN_SEQUENCE:CONTAINS("SCIENCE_OPS") {
+        mLogError("Surface return review configured without SCIENCE_OPS; profile unchanged.").
+        yieldToPrompt(). RETURN.
+    }
 
     IF HOMECONNECTION:ISCONNECTED {
         archiveLog().
@@ -125,6 +131,10 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     LOG "SET LAUNCH_INCLINATION TO " + configLiteral(LAUNCH_INCLINATION) + "." TO profilePath.
     LOG "SET LAUNCH_AZIMUTH TO " + configLiteral(LAUNCH_AZIMUTH) + "." TO profilePath.
     _writeSurfaceReturnOrbit(profilePath).
+    IF SURFACE_RETURN_REVIEW > 0 {
+        LOG "SET SCIENCE_OPS_HOLD TO 1." TO profilePath.
+        LOG "SET SCIENCE_OPS_RUN_ALL TO 0." TO profilePath.
+    }
     LOG "SET RETURN_SEQUENCE TO " + configLiteral(RETURN_SEQUENCE) + "." TO profilePath.
     LOG "SET RETURN_PE TO " + configLiteral(RETURN_PE) + "." TO profilePath.
     LOG "SET RETURN_PE_TOLERANCE TO " + configLiteral(RETURN_PE_TOLERANCE) + "." TO profilePath.

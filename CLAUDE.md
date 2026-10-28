@@ -17,6 +17,19 @@ not yet a specified craft/flight-ready plan. Snapshot request is local script
 only: scripts/ksp_snapshot.py; no further laptop SSH, DNS edits or transfers.
 Earlier SSH name-resolution attempts never connected to the Mac and no
 search-domain configuration was changed. Operator handles runtime/copy.
+Satellite/Mun files and snapshot script committed20399fb. Current in-flight
+request: from Delta or any settled Minmus site, select659734/554472m,0deg,
+AoP0.4 then review before Kerbin return. New cmd/surfaceorbit.ks selects only;
+operator REBOOT starts the normal surface setup/ascent/SHAPE chain. No site
+coordinates baked into the command, no flight controls invoked remotely.
+SURFACE_RETURN_REVIEW opt-in serializes SCIENCE_OPS_HOLD1/RUN_ALL0, requires
+the review phase and retains return_setup through science-band cleanup.
+Original polar-hop profile opts in. Preserve300m/s shaping reserve, return
+decoupler/chute/53km entry policy and saved hop restoration; no fresh launch
+sequence replay. Native new-command flight confirmation pending.
+All71 routine check files passed89.49s after this change; no bootstrap
+recompilation required. Operator must pull/sync, select surfaceorbit, then
+REBOOT when ready. After the orbit review, setphase RETURN_SETUP and REBOOT.
 
 2026-10-28 operational diagnostics: use the stable executable
 /home/dds/code/kos_programs/scripts/deck-diagnostics instead of repeated inline

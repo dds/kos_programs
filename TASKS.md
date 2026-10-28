@@ -106,6 +106,21 @@ record remaining uncertainty before closing a task.
   RETURN_SETUP. Add a simple guarded selection command and an orbital review
   stop, preserving stored science and the original return hardware/entry
   policy. Do not invoke the command or launch the craft remotely.
+  Implemented cmd/surfaceorbit.ks(Ap,Pe,Inc,AoP[,LAN]): validates live settled
+  moon state/roles and bound orbit, restores/finishes any active hop route,
+  preserves original return and shaping policy, persists the selected leg,
+  and prints REBOOT without ignition. Fresh SURFACE_RETURN_SETUP then launches
+  into safe parking/SHAPE/SCIENCE_OPS review/RETURN_SETUP. Review deploys no
+  experiments and does not auto-depart; printed setphase command releases it.
+  Original polar-hop profile now also has this review after its specified
+  equatorial ellipse. Shared return_setup emits the opt-in review settings;
+  review bands keep the return provider/config through cleanup. Other missions
+  remain opt-out. Source tests use Delta and unrelated coordinates, retained
+  budgets/tags, fresh profile generation, actual manual-review hold, and20
+  rejection cases with unchanged state. Native flight/remaining fuel pending.
+  Full71-file routine suite passed89.49s, including all satellite/snapshot,
+  boot/cache, return serialization and hop checks. Existing unrelated
+  ksc_deorbit warning remains. No live command or flight action performed.
 - [ ] **Duna/Ike science flight design.** Prepare after the satellite/Mun
   profiles: Duna orbital flyby and Ike science, transmit before committing
   optional return or atmospheric/surface attempt. No craft supplied yet;

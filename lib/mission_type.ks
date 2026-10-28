@@ -42,9 +42,11 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
     }
     // The surface-ascent leg reboots into RETURN_SETUP after PARK, possibly
     // out of radio view. Keep its small provider through prelaunch, ascent
-    // and optional post-ascent shaping. Other missions pay no extra cost.
-    IF (bandKey = "PRELAUNCH" OR bandKey = "LAUNCH" OR bandKey = "SHAPE")
-            AND SEQUENCE:CONTAINS("RETURN_SETUP") {
+    // optional post-ascent shaping and orbital review. Surface science
+    // review before relaunch needs the same provider. Other missions do not.
+    IF ((bandKey = "PRELAUNCH" OR bandKey = "LAUNCH" OR bandKey = "SHAPE" OR bandKey = "PAYLOAD_OPS")
+            AND SEQUENCE:CONTAINS("RETURN_SETUP"))
+            OR (bandKey = "PAYLOAD_OPS" AND SEQUENCE:CONTAINS("SURFACE_RETURN_SETUP")) {
         roots:ADD("return_setup").
     }
     IF bandKey = "XFER_PLAN" {

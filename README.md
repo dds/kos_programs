@@ -1388,9 +1388,13 @@ A–B is only about270 m, so this profile uses50 m hop prediction tolerance,
 20 m terrain-refinement radius and100 m site admission. It holds if a
 landing misses that site radius. Normal terrain/slope, actual attitude,
 permitted landing-stage fuel and700 m/s return-reserve checks remain active.
-After D's ten-minute stop, the original surface-ascent/SHAPE return resumes
-automatically. It targets Kerbin rather than KSC, enables fuel-assisted
-aerobraking and preserves10 m/s for a possible periapsis repair.
+After D's ten-minute stop, the original surface-ascent/SHAPE leg resumes
+automatically. Once the specified high equatorial orbit is reached, it
+holds in `SCIENCE_OPS` for contract review before departing. This review
+does not deploy/reset/transmit experiments. The printed continuation is
+`RUNPATH("0:/cmd/setphase.ks","RETURN_SETUP").` followed by `REBOOT.`.
+The return targets Kerbin rather than KSC, enables fuel-assisted aerobraking
+and preserves10 m/s for a possible periapsis repair.
 Abort interrupts automatic departure; unsafe controls, motion, nodes, body,
 terrain or fuel also hold for review. Clear the cause and reboot the saved
 phase when ready. Keep the vessel active during its surface stops and hops.
@@ -1413,8 +1417,31 @@ can still require a link on the next boot. Ordinary missions do not load
 the timed route.
 Future science caching waits until verified touchdown; it does not add
 archive work while the hop is falling.
-Source checks cover progression and recovery; native compilation, storage,
-short-hop dynamics and the full mission still need flight validation.
+The operator confirms the hop mission completed with improved approaches.
+The new post-ascent review/selection command still needs native validation.
+
+For a craft already on the surface, select a specified orbital leg directly:
+
+```kerboscript
+RUNPATH("0:/cmd/surfaceorbit.ks",659734,554472,0,0.4).
+REBOOT.
+```
+
+Arguments are Ap, Pe (metres ASL), inclination, optional argument of periapsis,
+and optional LAN (degrees; omitted angular targets use-1). This wrapped
+command uses the live Mun/Minmus body and position, not a programmed hop site.
+It requires settled touchdown, idle throttle/thrust, valid stage roles, no
+node and Abort clear. It finishes any saved hop route, preserves the craft's
+return hardware/entry policy and orbital-shaping budgets, and selects
+`SURFACE_RETURN_SETUP` without igniting or rebooting. Reboot when ready.
+The normal ascent reaches a safe parking orbit; SHAPE then establishes the
+requested orbit. An eastward departure from nonzero latitude initially has
+some inclination; SHAPE removes it rather than pretending the launch can be
+equatorial immediately. A manual `SCIENCE_OPS` review holds the achieved orbit
+before `RETURN_SETUP`; it prints the continuation command and preserves data.
+Shared maneuver waits retain their KAC alarms and clock fallback. The return
+provider stays cached through the orbital review. Other missions retain their
+existing sequence unless they opt into `SURFACE_RETURN_REVIEW`.
 
 To skip Beta after completing its temperature scan from Alpha, update the
 archive, then run `RUNPATH("0:/cmd/hopnext.ks",3).` and `REBOOT.` when ready.

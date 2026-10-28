@@ -96,7 +96,8 @@ def check_profile_and_return():
     cfg.update(BODY_NAME='MINMUS',PARKING_ALT=cfg['SURFACE_RETURN_PARKING_ALT'],
                LAUNCH_INCLINATION=cfg['SURFACE_RETURN_INCLINATION'],LAUNCH_AZIMUTH=90)
     surface=read_settings(emit_profile('phaseSurfaceReturnSetup',cfg),defaults())
-    assert surface['SEQUENCE']==['PRELAUNCH','LAUNCH','PARK','SHAPE','RETURN_SETUP']
+    assert surface['SEQUENCE']==['PRELAUNCH','LAUNCH','PARK','SHAPE','SCIENCE_OPS','RETURN_SETUP']
+    assert surface['SCIENCE_OPS_HOLD']==1 and surface['SCIENCE_OPS_RUN_ALL']==0
     assert [surface['SHAPE_'+k] for k in ('AP','PE','INC','LAN','AOP')]==[659734,554472,0,-1,.4]
     assert surface['SHAPE_ALT_TOL']==100 and surface['SHAPE_RESERVE_DV']==300
     surface['targetPe']=surface['RETURN_PE']
