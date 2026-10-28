@@ -1761,8 +1761,19 @@ the requested2h52m23s..3h06m45s period and eccentricity<0.02 windows.
 Science hardware, antenna reach and total fuel still depend on the new craft.
 
 `RO9/mun_target_science_return` instead lands at **-10.590,99.490**, collects
-surface science, and returns to Kerbin with a53km initial entry Pe and RO9's
-existing aerobrake assistance. It captures directly into a15km/15deg Mun
+surface science, then launches west to complete a retrograde equatorial
+Mun orbit: **Ap1,737,680m, Pe1,543,150m, inclination180deg, AoP34.3deg**.
+LAN is unconstrained. Ascent first parks at11km, then SHAPE raises the
+orbit and finishes its plane/apsidal alignment. At the landing latitude,
+westward ascent reaches about169.41deg; the remaining10.59deg correction
+is planned in orbit after raising Ap. The shaping allowance is300m/s per
+burn/500m/s total with300m/s reserved,100m apsis and0.1/0.2deg plane/AoP
+tolerances. These limits do not guarantee fuel sufficiency for a given craft.
+After shaping, `SCIENCE_OPS` holds at the prompt without running experiments
+or automatically transmitting saved science. Check the contract, then run
+`RUNPATH("0:/cmd/setphase.ks","RETURN_SETUP").` and `REBOOT.` to return to
+Kerbin with the existing53km entry Pe and RO9 aerobrake assistance.
+The initial arrival still captures directly into a15km/15deg Mun
 orbit, sufficient for the target latitude, without the older polar-survey
 detour. It keeps the target fixed, limits local terrain refinement to20m,
 and retains slope/attitude/staging/fuel safeguards. This specified site can

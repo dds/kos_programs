@@ -244,10 +244,10 @@ LOCAL FUNCTION _logVacuumAscentTelemetry {
 // Compass heading to reach LAUNCH_INCLINATION from the launch
 // latitude (standard launch-azimuth identity sin(az)=cos(i)/cos(lat),
 // az measured from north). Negative inclinations select the southbound
-// crossing, as in the atmospheric ascent. An inclination below launch latitude is
-// unreachable by direct ascent, so fly due east (90) for the minimum
-// (inclination = latitude); a plane-change burn would be needed to go
-// lower. Body rotation is ignored (negligible on Mun/Minmus).
+// crossing, as in the atmospheric ascent. Inclinations outside the launch
+// latitude's reachable range use the nearest east/west plane and
+// finish with an orbital plane change. Body rotation is ignored
+// (negligible on Mun/Minmus).
 LOCAL FUNCTION _ascentAzimuth {
     LOCAL phi IS ABS(SHIP:LATITUDE).
     LOCAL denom IS COS(phi).
@@ -463,7 +463,8 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
     LOCAL nextTelemetry IS TIME:SECONDS.
     LOCAL ascentTrace IS LEXICON("STAGE",-999,"ROWS",LIST()).
     LOCAL ascentAz IS _ascentAzimuth().
-    LOCAL achInc IS MAX(ABS(LAUNCH_INCLINATION), ABS(SHIP:LATITUDE)).
+    LOCAL achInc IS MIN(180-ABS(SHIP:LATITUDE),
+        MAX(ABS(LAUNCH_INCLINATION),ABS(SHIP:LATITUDE))).
 
     mLog("Vacuum ascent armed. Alt=" + ROUND(PARKING_ALT / 1000, 1)
         + "km targetInc=" + LAUNCH_INCLINATION
@@ -471,11 +472,11 @@ GLOBAL FUNCTION ascentAirlessToOrbit {
         + " -> az=" + ROUND(ascentAz, 1)
         + " achInc=" + ROUND(achInc, 1)
         + " targetV=" + ROUND(targetVel, 1) + "m/s.").
-    IF ABS(LAUNCH_INCLINATION) < ABS(SHIP:LATITUDE) - 0.5 {
+    IF ABS(achInc-ABS(LAUNCH_INCLINATION)) > 0.5 {
         mLogWarn("Ascent: target inc " + ROUND(ABS(LAUNCH_INCLINATION), 1)
-            + " below launch latitude " + ROUND(ABS(SHIP:LATITUDE), 1)
-            + " — unreachable by direct ascent; flying due east for "
-            + "minimum inclination (plane change needed to go lower).").
+            + " unreachable from latitude " + ROUND(SHIP:LATITUDE, 1)
+            + "; flying heading " + ROUND(ascentAz,1) + " for inc " + ROUND(achInc,1)
+            + ". Orbital plane correction required.").
     }
 
     IF NOT _ascentOnSurface() {

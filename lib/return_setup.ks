@@ -134,6 +134,9 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     SET PARKING_ALT TO _surfaceReturnParkingAlt().
     SET LAUNCH_INCLINATION TO SURFACE_RETURN_INCLINATION.
     SET LAUNCH_AZIMUTH TO 90.
+    // Airless ascent computes its exact heading from inclination/latitude.
+    // Keep the generated fallback and operator summary on the same side.
+    IF COS(SURFACE_RETURN_INCLINATION) < 0 { SET LAUNCH_AZIMUTH TO 270. }
 
     LOCAL profilePath IS _beginLegProfile("surface_return").
     LOG "SET MISSION_ID TO " + configLiteral("surface_return") + "." TO profilePath.
@@ -148,6 +151,7 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     IF SURFACE_RETURN_REVIEW > 0 {
         LOG "SET SCIENCE_OPS_HOLD TO 1." TO profilePath.
         LOG "SET SCIENCE_OPS_RUN_ALL TO 0." TO profilePath.
+        LOG "SET AUTO_TRANSMIT TO 0." TO profilePath.
     }
     LOG "SET RETURN_SEQUENCE TO " + configLiteral(RETURN_SEQUENCE) + "." TO profilePath.
     LOG "SET RETURN_PE TO " + configLiteral(RETURN_PE) + "." TO profilePath.

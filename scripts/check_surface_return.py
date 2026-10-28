@@ -5,6 +5,7 @@ not flight dynamics or the kOS VM. Run: python3 scripts/check_surface_return.py
 """
 
 import re
+import math
 from pathlib import Path
 
 from check_launch_and_staging import body, evaluate
@@ -52,9 +53,19 @@ def emit_profile(function, env):
         class Orbit(dict):
             LENGTH=property(len)
             HASKEY=dict.__contains__
-        local=dict(env,SURFACE_RETURN_ORBIT=Orbit(env.get('SURFACE_RETURN_ORBIT',{})))
-        try:ks.run(ks.parse(body(SETUP,'_surfaceReturnParkingAlt')),local)
-        except ks.Returned as result:env['PARKING_ALT']=result.value
+        def parking():
+            local=dict(env,SURFACE_RETURN_ORBIT=Orbit(env.get('SURFACE_RETURN_ORBIT',{})))
+            try:ks.run(ks.parse(body(SETUP,'_surfaceReturnParkingAlt')),local)
+            except ks.Returned as result:return result.value
+        # Execute the actual heading/inclination prelude too: injecting the
+        # caller's values would hide eastward metadata for a westward ascent.
+        prelude=body(SETUP,function)
+        prelude=prelude[prelude.index('SET PARKING_ALT TO'):prelude.index('LOCAL profilePath')]
+        local=dict(env,_surfaceReturnParkingAlt=parking,
+                   COS=lambda angle:math.cos(math.radians(angle)))
+        ks.run(ks.parse(prelude),local)
+        for key in ('PARKING_ALT','LAUNCH_INCLINATION','LAUNCH_AZIMUTH'):
+            env[key]=local[key]
     source = body(SETUP, function)
     source = source[source.index('LOCAL profilePath'):]
     source = source[:source.index('    stateSet("phase"')]

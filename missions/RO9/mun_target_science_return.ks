@@ -1,7 +1,8 @@
-// Fixed Mun science landing at-10.590,99.490, then Kerbin return.
+// Fixed Mun science landing at-10.590,99.490, then retrograde equatorial
+// contract orbit, operator review, and Kerbin return. Metres ASL/degrees.
 // No polar survey, hops, or optional KSC targeting.
 SET MISSION_ID TO "mun_target_science_return".
-SET MISSION_NAME TO "RO9 Mun Target Science Landing and Return".
+SET MISSION_NAME TO "RO9 Mun Target Landing, Retrograde Orbit and Return".
 SET TARGET_ TO "MUN".
 SET PAYLOADS TO LIST("SCISAT").
 SET PARKING_ALT TO 78000.
@@ -76,8 +77,19 @@ SET AUTO_TRANSMIT TO 0.
 SET SCIENCE_OPS_HOLD TO 0.
 SET SCIENCE_OPS_RUN_ALL TO 1.
 SET SCIENCE_SURVEY_POINTS TO LIST().
+// Depart west from the actual landing site. At10.59deg south the nearest
+// direct ascent plane is169.41deg; SHAPE removes that residual at high Ap,
+// rather than launching east and paying for a complete orbital reversal.
+// The shared setup leaves1km headroom above SHAPE's10km periapsis floor.
 SET SURFACE_RETURN_PARKING_ALT TO 10000.
-SET SURFACE_RETURN_INCLINATION TO 0.
+SET SURFACE_RETURN_INCLINATION TO 180.
+SET SURFACE_RETURN_SEQUENCE TO LIST("PRELAUNCH","LAUNCH","PARK","SHAPE","SCIENCE_OPS","RETURN_SETUP").
+SET SURFACE_RETURN_REVIEW TO 1.
+SET SURFACE_RETURN_ORBIT TO LEXICON(
+    "AP",1737680,"PE",1543150,"INC",180,"LAN",-1,"AOP",34.3,
+    "ALT_TOL",100,"ANG_TOL",0.1,"AOP_TOL",0.2,
+    "MIN_BURN_DV",0.002,"BURN_TOLERANCE",0.001,"MIN_PE",10000,
+    "DV_CAP",300,"TOTAL_DV_CAP",500,"RESERVE_DV",300).
 SET RETURN_SEQUENCE TO LIST("ESCAPE","COAST","MCC","AEROBRAKE","DESCENT","DONE").
 SET RETURN_PE TO 53000.
 SET RETURN_PE_TOLERANCE TO 1000.

@@ -6,6 +6,12 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Latest mission update: mun_target_science_return now fixed Mun landing,
+  surface science, westward ascent/11km parking, retrograde equatorial
+  AP1737680 PE1543150 INC180 AOP34.3 (LAN free), orbital review then53km
+  assisted Kerbin return. Preserve powered landing/terrain and reserve
+  safeguards. First operator request was geo setphase command (provided).
+  No remote activation/launch; native mission validation pending.
 - Latest satellite reuse blocker: sun-sync->medium SHAPE RO9_4704531
   boot005 charges945.4m/s plane node even though its ETA was already-9455.7s.
   Planning ran under warp; actual burn never fired. All2185.2m/s available
@@ -85,6 +91,23 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Mun target landing -> retrograde contract orbit -> return.** Same
+  mission ID and landing(-10.590,99.490), capture15km/15deg, powered lead and
+  tight local terrain policy. Surface science runs once, then generic
+  surface return generates PRELAUNCH/LAUNCH/PARK/SHAPE/SCIENCE_OPS/RETURN_SETUP.
+  Westward ascent avoids an unnecessary full plane reversal;169.41deg
+  attainable at this latitude, then finish180deg at high Ap. Orbit targets
+  AP1737680/PE1543150m, INC180/LAN-1/AOP34.3deg;100m/.1/.2 tolerances,
+  minDv.002/burnTol.001, perburn300/total500/reserve300m/s. Generated review
+  holds with RUN_ALL0/AUTO_TRANSMIT0, prints operator RETURN_SETUP+REBOOT.
+  Original53km assisted home entry/chutes/hardware remain. Shared fallback
+  heading now270 for retrograde, achievable-inc telemetry clamps upper
+  latitude limit too. Actual controller heading was already correct.
+  Source fixture now executes actual setup heading/parking prelude before
+  serializing, and checks exact orbit/review/west heading/home policy across
+  fresh boots. Existing prograde return fixtures pass. Native flight pending;
+  no remote mission activation or bootstrap recompilation.
+  All73 routine check files passed94.20s; new mission flight validation pending.
 - [ ] **Orbital-contract reuse: expired plane node charged to SHAPE ledger.**
   Native RO9_4704531 boot005, local read-only evidence:
   /tmp/ksp-deck-20261028T230148Z-fetch-dfed8zys/logs/RO9_4704531/boot_005_core.log.

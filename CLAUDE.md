@@ -9,6 +9,24 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 new operator request: first provide geo command setphase SHAPE,
+kerbin_geostationary_satellite; then extend mun_target_science_return.
+Original fixed(-10.590,99.490) landing/powered guidance/terrain/15deg capture
+unchanged. Post-surface: westward180deg ascent,11km parking floor headroom,
+SHAPE AP1737680 PE1543150 INC180 LAN-1 AOP34.3;100m/.1/.2 precision,
+minDv.002/burnTol.001,300perburn/500total/300reserve. Opt-in orbital review
+SCIENCE_OPS_HOLD1/RUN_ALL0/AUTO_TRANSMIT0, then operator setphaseRETURN_SETUP
+and REBOOT for existing53km assisted Kerbin return; no hops or KSC targeting.
+Shared surface setup now reports/writes west270 fallback for retrograde
+inclinations; actual airless controller already calculated that heading.
+Achievable-inc telemetry/warning now clamps both prograde and retrograde
+latitude limits (169.41deg from this site, rather than falsely180deg).
+Generated-profile fixture executes actual heading/parking prelude; tests
+cover exact shaped orbit, west heading, review preserving science and home
+policy across fresh boots. No profile activation/remote craft changes.
+Native mission validation pending; bootstrap compilation not needed.
+All73 routine check files pass94.20s after the mission/generic-return update.
+
 2026-10-28 satellite reuse SHAPE budget hold: RO9_4704531 boot005 after
 switching sun-sync->semisynchronous. Active519m/s isn't the blocker:
 native remainingVacDv2185.2 includes all stages. First196.97m/s Ap raise
