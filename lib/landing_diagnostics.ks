@@ -9,6 +9,7 @@ GLOBAL FUNCTION landingDiagnosticStart {
     SET ctx["DIAGNOSTIC"] TO LEXICON("ROWS", LIST(), "BYTES", 0, "DROPPED", 0,
         "CONTROL_ROWS", LIST(), "CONTROL_BYTES", 0,
         "BRAKE_ROWS", LIST(), "BRAKE_BYTES", 0, "BRAKE_AT", -9999, "BRAKE_STAGE", -1,
+        "APPROACH_ROWS", LIST(), "APPROACH_BYTES", 0, "APPROACH_AT", -9999,
         "PHASES", LEXICON(), "LAST_UT", TIME:SECONDS, "LAST_STATE", ctx["STATE"],
         "LAST_ACC", MAX(0,SHIP:THRUST) / MAX(0.01,SHIP:MASS),
         "LAST_BOTTOM", _landingBottomRadar(), "LAST_VS", ctx["V_SPEED"],
@@ -190,6 +191,33 @@ GLOBAL FUNCTION landingDiagnosticBrake {
     }
 }
 
+// Retain entry and recent approach motion after touchdown evicts the live
+// control ring. Bounded memory only; the existing safe export owns all I/O.
+GLOBAL FUNCTION landingDiagnosticApproach {
+    PARAMETER ctx.
+    PARAMETER distance.
+    PARAMETER alongSpeed.
+    PARAMETER crossSpeed.
+    PARAMETER desiredSpeed.
+    PARAMETER lateralAcc.
+    LOCAL capture IS ctx["DIAGNOSTIC"].
+    IF TIME:SECONDS-capture["APPROACH_AT"] < 15 { RETURN. }
+    SET capture["APPROACH_AT"] TO TIME:SECONDS.
+    LOCAL row IS "STATS landing-approach ut=" + ROUND(TIME:SECONDS,1)
+        + " distance=" + ROUND(distance,1) + " bottom=" + ROUND(_landingBottomRadar(),1)
+        + " along=" + ROUND(alongSpeed,2) + " cross=" + ROUND(crossSpeed,2)
+        + " command=" + ROUND(desiredSpeed,2) + " lateralAcc=" + ROUND(lateralAcc,3)
+        + " vs=" + ROUND(ctx["V_SPEED"],2) + " throttle=" + ROUND(ctx["TARGET_THROTTLE"],3).
+    capture["APPROACH_ROWS"]:ADD(row).
+    SET capture["APPROACH_BYTES"] TO capture["APPROACH_BYTES"]+row:LENGTH.
+    UNTIL capture["APPROACH_ROWS"]:LENGTH <= 8 AND capture["APPROACH_BYTES"] <= 2000 {
+        LOCAL discard IS MIN(1,capture["APPROACH_ROWS"]:LENGTH-1).
+        SET capture["APPROACH_BYTES"] TO capture["APPROACH_BYTES"]-capture["APPROACH_ROWS"][discard]:LENGTH.
+        capture["APPROACH_ROWS"]:REMOVE(discard).
+        SET capture["DROPPED"] TO capture["DROPPED"]+1.
+    }
+}
+
 GLOBAL FUNCTION landingDiagnosticSample {
     PARAMETER ctx.
     PARAMETER site.
@@ -262,6 +290,7 @@ GLOBAL FUNCTION landingDiagnosticTick {
     FOR row IN capture["ROWS"] { SET payload TO payload + row + CHAR(10). }
     FOR row IN capture["CONTROL_ROWS"] { SET payload TO payload + row + CHAR(10). }
     FOR row IN capture["BRAKE_ROWS"] { SET payload TO payload + row + CHAR(10). }
+    FOR row IN capture["APPROACH_ROWS"] { SET payload TO payload + row + CHAR(10). }
     FOR phaseName IN capture["PHASES"]:KEYS {
         LOCAL phase IS capture["PHASES"][phaseName].
         SET payload TO payload + "STATS landing-diag summary cumulative=true state=" + phaseName
@@ -301,6 +330,8 @@ GLOBAL FUNCTION landingDiagnosticTick {
     SET capture["CONTROL_BYTES"] TO 0.
     SET capture["BRAKE_ROWS"] TO LIST().
     SET capture["BRAKE_BYTES"] TO 0.
+    SET capture["APPROACH_ROWS"] TO LIST().
+    SET capture["APPROACH_BYTES"] TO 0.
     IF NOT finished { mLog("Landing diagnostic checkpoint: " + dest). }
     // Re-measure after any I/O before the owner evaluates its next gate.
     _landingCacheTick(ctx).

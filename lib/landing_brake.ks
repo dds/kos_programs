@@ -27,6 +27,23 @@ LOCAL FUNCTION _landingLogBrakeComplete {
         + " vs=" + ROUND(ctx["V_SPEED"],1)).
 }
 
+// Do not hand a close fixed target to the gentle upright controller with
+// more momentum than its tilt/thrust budget can arrest before that target.
+// This also keeps a short hop's main brake active below APPROACH_HSPEED.
+LOCAL FUNCTION _landingApproachNeedsBrake {
+    PARAMETER ctx.
+    PARAMETER distance IS -1.
+    IF LANDING_POWERED_LEAD <= 0 OR LANDING_ECONOMY_BRAKE <= 0
+            OR LANDING_FLEXIBLE_SITE > 0 OR NOT ctx["HAS_TARGET"]
+            OR ctx["DIVERT_PENDING"] OR _landingBottomRadar() > TERMINAL_ALT {
+        RETURN FALSE.
+    }
+    IF distance < 0 {
+        SET distance TO lmDistanceToTarget(ctx["TARGET_LAT"],ctx["TARGET_LNG"]).
+    }
+    RETURN lmApproachNeedsBrake(ctx["H_SPEED"],distance,ctx["MAX_ACC"],ctx["GRAV"]).
+}
+
 GLOBAL FUNCTION _landingBrakeSteeringInfo {
     PARAMETER ctx.
 
@@ -37,8 +54,9 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
     // budgets a separate flare entry without changing a fixed site's gates.
     IF ctx["H_SPEED"] > APPROACH_HSPEED { SET targetVs TO 0. }
     LOCAL fullVector IS LANDING_ECONOMY_BRAKE > 0
-        AND ctx["H_SPEED"] > APPROACH_HSPEED.
-    LOCAL lateralGuidance IS fullVector AND LANDING_POWERED_LEAD > 0
+        AND (ctx["H_SPEED"] > APPROACH_HSPEED OR _landingApproachNeedsBrake(ctx)).
+    LOCAL lateralGuidance IS fullVector AND ctx["H_SPEED"] > APPROACH_HSPEED
+        AND LANDING_POWERED_LEAD > 0
         AND LANDING_FLEXIBLE_SITE <= 0 AND ctx["HAS_TARGET"]
         AND NOT ctx["DIVERT_PENDING"] AND ctx["PLAN_ACC"]*COS(15) > ctx["BRAKE_GRAV"].
     LOCAL thrustVec IS ctx["UP_VEC"] * 0.
@@ -108,7 +126,7 @@ GLOBAL FUNCTION _landingBrakeSteeringInfo {
         "ALIGNED", aligned,
         "BIAS", 0,
         "GUARD", 1,
-        "HARD", ctx["H_SPEED"] > APPROACH_HSPEED,
+        "HARD", ctx["H_SPEED"] > APPROACH_HSPEED OR fullVector,
         "LATERAL", lateralGuidance,
         "LATERAL_YAW", lateralYaw,
         "LATERAL_MISS", lateralMiss,
@@ -267,9 +285,11 @@ GLOBAL FUNCTION _landingBrakingTick {
     LOCAL earlyApproach IS LANDING_POWERED_LEAD > 0 AND LANDING_ECONOMY_BRAKE > 0
         AND LANDING_FLEXIBLE_SITE <= 0 AND distToTarget > APPROACH_RADIUS
         AND horizontalSpeed <= APPROACH_HSPEED.
+    LOCAL lateralCaptured IS NOT _landingApproachNeedsBrake(ctx,distToTarget).
     IF ctx["HAS_TARGET"]
             AND terminalReady
             AND verticalCaptured
+            AND lateralCaptured
             AND (horizontalSpeed <= TERMINAL_HSPEED OR earlyApproach) {
         IF distToTarget <= VERTICAL_RADIUS {
             _landingLogBrakeComplete(ctx, "VERTICAL_DESCENT", steerInfo).
@@ -292,6 +312,7 @@ GLOBAL FUNCTION _landingBrakingTick {
     } ELSE IF ctx["HAS_TARGET"]
             AND terminalReady
             AND verticalCaptured
+            AND lateralCaptured
             AND horizontalSpeed <= APPROACH_HSPEED
             AND distToTarget <= APPROACH_RADIUS {
         _landingLogBrakeComplete(ctx, "TARGET_REFINE", steerInfo).

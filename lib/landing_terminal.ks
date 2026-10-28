@@ -39,11 +39,7 @@ GLOBAL FUNCTION lmFixedApproachPlan {
     PARAMETER maxAcc.
     PARAMETER gravAcc.
     LOCAL lateralAcc IS lmApproachAcceleration(maxAcc,gravAcc).
-    LOCAL response IS MAX(1,LANDING_APPROACH_RESPONSE_TIME).
-    LOCAL remaining IS MAX(0,distance-LANDING_HOVER_REFINE_SETTLE_RADIUS).
-    // Include response lag in the horizontal stop-distance limit.
-    LOCAL cap IS MIN(MAX_APPROACH_SPEED,
-        SQRT((lateralAcc*response)^2+2*lateralAcc*remaining)-lateralAcc*response).
+    LOCAL cap IS MIN(MAX_APPROACH_SPEED,lmApproachSpeedLimit(distance,lateralAcc)).
     IF height <= MAX(BRAKE_MARGIN,LANDING_BRAKE_CLEARANCE)+LANDING_FINAL_HOVER_ALT {
         // The main-burn clearance cannot authorize flight this near the
         // ground. Keep the existing slow final-settling corridor instead.
@@ -271,8 +267,7 @@ GLOBAL FUNCTION _landingApproachTick {
     LOCAL controlHeight IS MIN(approachHeight, bottomAlt).
     LOCAL horizontalAcc IS lmApproachAcceleration(ctx["MAX_ACC"], ctx["GRAV"]).
     LOCAL desiredSpeed IS MIN(MAX_APPROACH_SPEED,
-        SQRT(MAX(0, 2 * horizontalAcc * MAX(0,
-            distToTarget - LANDING_HOVER_REFINE_SETTLE_RADIUS)))).
+        lmApproachSpeedLimit(distToTarget,horizontalAcc)).
     LOCAL descentSpeed IS lmApproachDescentSpeed(lmDescentSpeed(
         controlHeight, TOUCHDOWN_SPEED, UPRIGHT_ALT, HIGH_DESCENT_SPEED),
         controlHeight, distToTarget, horizontalSpeed, horizontalAcc).
@@ -281,13 +276,13 @@ GLOBAL FUNCTION _landingApproachTick {
             / APPROACH_SPEED_ALTITUDE_WINDOW))).
     LOCAL recoveryTime IS 0.
     LOCAL stopHeight IS 0.
+    LOCAL direction IS lmDirectionToTarget(ctx["TARGET_LAT"],ctx["TARGET_LNG"],
+        ctx["UP_VEC"],ctx["POSITION"]).
+    LOCAL alongSpeed IS VDOT(ctx["H_VEL"],direction).
+    LOCAL crossSpeed IS (ctx["H_VEL"]-alongSpeed*direction):MAG.
     LOCAL poweredRecovery IS LANDING_POWERED_LEAD > 0 AND LANDING_ECONOMY_BRAKE > 0
         AND LANDING_FLEXIBLE_SITE <= 0.
     IF poweredRecovery {
-        LOCAL direction IS lmDirectionToTarget(ctx["TARGET_LAT"],ctx["TARGET_LNG"],
-            ctx["UP_VEC"],ctx["POSITION"]).
-        LOCAL alongSpeed IS VDOT(ctx["H_VEL"],direction).
-        LOCAL crossSpeed IS (ctx["H_VEL"]-alongSpeed*direction):MAG.
         LOCAL plan IS lmFixedApproachPlan(controlHeight,distToTarget,alongSpeed,crossSpeed,
             ctx["DOWN_SPEED"],ctx["MAX_ACC"],ctx["BRAKE_GRAV"]).
         SET desiredSpeed TO plan["SPEED"].
@@ -307,10 +302,12 @@ GLOBAL FUNCTION _landingApproachTick {
         SET throttle TO MIN(1,throttle/MAX(0.1,VDOT(steeringTarget,ctx["UP_VEC"]))).
     }
     _landingSetThrottle(ctx,throttle).
+    landingDiagnosticApproach(ctx,distToTarget,alongSpeed,crossSpeed,desiredSpeed,horizontalAcc).
 
     _landingHudText(ctx, "APPROACH d=" + ROUND(distToTarget,0)
         + " bottom=" + ROUND(bottomAlt,0)
         + " hs=" + ROUND(horizontalSpeed,1) + "/" + ROUND(desiredSpeed,1)
+        + " along=" + ROUND(alongSpeed,1) + " cross=" + ROUND(crossSpeed,1)
         + " vs=" + ROUND(ctx["V_SPEED"],1) + "/" + ROUND(targetVs,1)
         + " tLat=" + ROUND(recoveryTime,1) + " stopH=" + ROUND(stopHeight,0),
         1, 2, 13, CYAN, FALSE, 0, targetVs, desiredSpeed).

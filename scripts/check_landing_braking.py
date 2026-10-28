@@ -48,7 +48,7 @@ def fixture(gravity=1.63, twr=8, horizontal=400, down=80, height=5000):
                  'lmApproachTransitTime', 'lmFixedApproachPlan', 'lmDirectionToTarget',
                  'lmNominalBrakeRange', 'landingBrakeStackAt', 'lmVerticalBurnDistance', 'lmRetroSteering',
                  '_landingBurnHeight', '_landingStopEnvelope', 'lmStagedBrakeEnvelope', 'lmFullBrakeEnvelope', '_landingBrakeGateInfo',
-                 '_landingBrakeSteeringInfo'):
+                 '_landingApproachNeedsBrake', '_landingBrakeSteeringInfo'):
         env[name] = lambda *args, name=name: call(name, env, *args)
     return env, ctx
 

@@ -224,6 +224,7 @@ def environment():
                landingEconomyTerminalSite=lambda *args: False,
                landingDiagnosticRecord=lambda *args: None,
                landingDiagnosticBrake=lambda *args: None,
+               landingDiagnosticApproach=lambda *args: None,
                landingDiagnosticSample=lambda *args: None,
                landingDiagnosticSearchText=lambda *args: 'fixture',
                SQRT=math.sqrt, V=lambda x,y,z:Vec((x,y,z)), TAN=lambda x: math.tan(math.radians(x)),
@@ -233,7 +234,7 @@ def environment():
     for name, value in re.findall(r'GLOBAL (\w+) IS ([^\n]+)\.', SOURCES):
         try: env[name] = evaluate(value, env)
         except (NameError, SyntaxError, AttributeError): pass
-    for name in ('vesselLandingStageFloor', 'lmApproachAcceleration', 'lmApproachDescentSpeed', 'lmApproachSteering',
+    for name in ('vesselLandingStageFloor', 'lmApproachAcceleration', 'lmApproachSpeedLimit', 'lmApproachNeedsBrake', 'lmApproachDescentSpeed', 'lmApproachSteering',
                  'lmDescentSpeed', 'lmEconomyDescentSpeed', 'lmVerticalThrottle', 'landingTerrainGrade'):
         env[name] = lambda *args, name=name: call(name, env, *args)
     return env

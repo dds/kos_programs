@@ -9,6 +9,20 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 hop approach: operator confirms hop success but repeated lateral
+overshoot. Native RO9_4214328/boot007 Gamma landed4.1m away after145.36s/
+78.035m/s APPROACH. BRAKE321m/15.3m/s ->20s refinement ->106m/9m/s at72m
+altitude/MAX_TILT12: upright stopping distance already excessive. Shared
+lmApproachSpeedLimit reserves servo lag and damps final position pursuit;
+close fixed-site economy brakes retain full-vector arrest until gentle
+capture is feasible, including below18m/s. Predictor shares the predicate.
+No tilt/tolerance/reserve/attitude safeguards relaxed. Archive keeps bounded
+2kB approach history after touchdown overwrites live controls. Source point-
+mass simulations eliminate overshoot for reported brake state and mirrored
+drift/0-3s lag; native next-hop validation pending. No bootstrap recompile.
+Operator's574ce79 compiled bootstrap retained; don't repeat obsolete claims
+that the successful hop or that compilation is still unconfirmed.
+
 2026-10-28 graphics preference follow-up: preserve shiny/specular appearance
 (Magpie/TU/Deferred) and ReStock+. User questions relevance of ocean/atmo
 cuts while on Minmus: they are low priority for that scene, not a verified

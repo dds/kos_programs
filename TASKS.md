@@ -57,6 +57,28 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Hop approach overshoot and repeated lateral correction.** Operator
+  confirms the hop mostly worked. Native RO9_4214328/boot007 and diagnostic
+  landingdiag_RO9_4214365637 show Gamma touchdown4.1m from the fixed target,
+  but145.36s/78.035m/s APPROACH. BRAKE handed321m/15.3m/s to refinement;
+  its20s timeout handed106m/9m/s at72m terrain clearance to the12deg upright
+  controller. That momentum exceeds the upright stopping distance. The
+  detailed approach rows were evicted by final descent; direction reversals
+  are operator-observed, not reconstructable from that ring alone.
+  Added shared response/stopping-distance speed limit with a damped final
+  position loop. Close fixed-site economy brakes now retain full-vector
+  arrest below18m/s until upright capture is feasible; predictor shares the
+  same decision. Physical attitude/cutoff, tilt, terrain, altitude, target
+  tolerance and return-stage safeguards remain. Sparse approach history
+  retains entry plus seven recent rows (<=2kB), every15s, no powered I/O;
+  HUD/archive report closing speed, transverse drift and lateral authority.
+  Source simulations at the reported brake state capture without passing
+  the target in65-71s/~50-53m/s impulse for mirrored cross-drift and prescribed
+  0/1/3s steering lags. Flat constant-mass physics, not a native flight replay;
+  an already-too-late APPROACH entry cannot undo its stopping distance.
+  Native validation on the next hop remains pending. No bootstrap change.
+  All67 routine check files passed90.11s; existing unrelated ksc_deorbit
+  warning unchanged. No live flight controls or Deck files changed.
 - [x] **Record native NOT DEFINED syntax quirk.** Pulled operator574ce79,
   preserving both the positive IF DEFINED/ELSE boot fix and compiled boot.ksm.
   Documented the rule in README/CLAUDE and added a masked-source guard plus
@@ -104,8 +126,9 @@ record remaining uncertainty before closing a task.
   initialization. This change DOES require installing new boot/boot.ks; use
   hopnext while landed/linked, cmd/updateboot.ks, then reboot. Real bootstrap
   functions are exercised against the151B-free case and missing-offline case.
-  All67 routine check files passed73.04s. Native new bootstrap compilation /
-  installation remains pending; the existing compiled bootstrap is retained.
+  All67 routine check files passed73.04s. Operator supplied compiled bootstrap
+  in574ce79 and now confirms a successful hop. Full offline/storage recovery
+  validation remains separate; preserve the operator's compiled bootstrap.
 - [ ] **Latest Deck crash (2026-10-28).** Operator requests investigation
   after the bootstrap repair. Read current/previous kernel/journal, KSP/Unity
   crash evidence and memory/GPU counters; do not restart anything or infer
@@ -199,7 +222,9 @@ record remaining uncertainty before closing a task.
   admission. Return orbit/entry settings and completed-site index survive.
   Operator completed Alpha/Beta temperature scans from this landing; skip
   Beta next. Retain all body/idle/stage/terrain/fuel and flight guards.
-  Native menu/compile/storage/Gamma hop confirmation remains pending. Source
+  Operator now confirms the hop mostly worked; retrieved Gamma touchdown
+  confirms4.1m miss. Remaining route/menu/offline storage tests and corrected
+  approach flight validation are pending. Source
   tests cover actual command, cold/active recovery, menu/alarms/cancellation,
   integrated600s+30s continuation and null/failed state writes. Initial full
   routine pass:67 files/44.90s; final full routine pass67 files/44.52s.

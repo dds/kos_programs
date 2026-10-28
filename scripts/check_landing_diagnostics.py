@@ -143,6 +143,27 @@ def check_retained_lateral_history():
     print('PASS: bounded3kB/12-row lateral history survives terminal ring eviction, samples15s/stage changes without powered I/O and exports at touchdown')
 
 
+def check_retained_approach_history():
+    env,ctx,disk,ops=fixture()
+    ctx.update(STATE='APPROACH',height=72,V_SPEED=-5.9,TARGET_THROTTLE=.2)
+    capture=ctx['DIAGNOSTIC'];record=env['landingDiagnosticApproach']
+    for now in range(300):
+        env['TIME'].SECONDS=now
+        record(ctx,105,9,-2,4,.083)
+        env['landingDiagnosticRecord'](ctx,Text('late-control '+str(now)),True)
+    assert len(capture['APPROACH_ROWS'])==8 and capture['APPROACH_BYTES']<=2000
+    assert capture['APPROACH_BYTES']==sum(map(len,capture['APPROACH_ROWS']))
+    assert 'ut=0' in capture['APPROACH_ROWS'][0] and 'ut=285' in capture['APPROACH_ROWS'][-1]
+    assert 'along=9' in capture['APPROACH_ROWS'][0] and 'lateralAcc=0.083' in capture['APPROACH_ROWS'][0]
+    assert not capture['BRAKE_ROWS'] and not ops
+    ctx.update(STATE='TOUCHDOWN',TARGET_THROTTLE=0)
+    assert env['landingDiagnosticTick'](ctx,True)
+    report=disk[capture['PATH']]
+    assert report.count('STATS landing-approach')==8 and 'distance=105' in report
+    assert not capture['APPROACH_ROWS'] and capture['APPROACH_BYTES']==0
+    print('PASS: bounded2kB/eight-row approach history preserves entry plus recent signed drift/speed/authority after control-ring eviction, with no powered I/O; touchdown exports and clears it')
+
+
 def check_export_gates():
     scenarios=('burn','approach','align','requested','physical','pilot','raw','stage',
                'discard','gate','horizontal-gate','invalid-gate','abort','offline','cadence','safe')
@@ -325,6 +346,7 @@ def check_phase_ledger():
 
 if __name__=='__main__':
     check_retained_lateral_history()
+    check_retained_approach_history()
     check_phase_ledger()
     check_buffer_and_hover()
     check_export_gates()

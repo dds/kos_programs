@@ -137,6 +137,93 @@ def check_descending_handoff():
     print('PASS: fixed-site correction can retain useful lateral motion after vertical capture; excessive horizontal speed or unsafe descent cannot take the early terminal handoff')
 
 
+def check_hop_handoff():
+    # Native Gamma hop: BRAKE ended at321m/15.3m/s, refinement then
+    # delivered9m/s to APPROACH only106m from the target at72m altitude.
+    env,ctx=fixture(gravity=.49,twr=2.69/.49,horizontal=15.3,down=15,height=247)
+    env.update(LANDING_POWERED_LEAD=1,LANDING_ECONOMY_BRAKE=1,MAX_TILT=12)
+    ctx.update(STATE='BRAKING_BURN',downrange=321)
+    assert call('_landingApproachNeedsBrake',env,ctx)
+    info=call('_landingBrakeSteeringInfo',env,ctx)
+    assert info['HARD']  # Report full braking even below the old18m/s threshold.
+    env['SHIP'].FACING.FOREVECTOR=ctx['steering']
+    call('_landingBrakingTick',env,ctx)
+    assert ctx['STATE']=='BRAKING_BURN' and ctx['TARGET_THROTTLE']>0
+    # Actual attitude guards still own this additional short brake.
+    env['SHIP'].FACING.FOREVECTOR=-ctx['steering']
+    call('_landingBrakingTick',env,ctx)
+    assert ctx['TARGET_THROTTLE']==0 and ctx['STATE']=='BRAKING_BURN'
+    for policy in ('flexible','legacy','no-target','high','search'):
+        env,ctx=fixture(gravity=.49,twr=2.69/.49,horizontal=15.3,down=15,height=247)
+        env.update(LANDING_POWERED_LEAD=int(policy!='legacy'),LANDING_ECONOMY_BRAKE=1,
+                   LANDING_FLEXIBLE_SITE=int(policy=='flexible'),MAX_TILT=12)
+        ctx.update(HAS_TARGET=policy!='no-target',DIVERT_PENDING=policy=='search')
+        if policy=='high':ctx['height']=1100
+        assert not call('_landingApproachNeedsBrake',env,ctx),policy
+    print('PASS: native15.3m/s/321m hop keeps braking instead of handing excessive momentum to upright refinement; existing attitude guards and flexible/legacy/high/search paths retained')
+
+
+def simulate_hop_capture(cross=0,lag=0,start='BRAKING_BURN',distance=321,height=247,speed=15.3):
+    env,ctx=fixture(gravity=.49,twr=2.69/.49,horizontal=speed,down=15,height=height)
+    env.update(LANDING_POWERED_LEAD=1,LANDING_ECONOMY_BRAKE=1,MAX_TILT=12,
+        LATLNG=lambda *_:NS(POSITION=Vec((0,0,0)),ALTITUDEPOSITION=lambda _:Vec((0,0,0))),
+        lmGravity=lambda:.49,_landingFinalTerrainCheck=lambda *_:None)
+    ctx.update(STATE=start,HOVER_HOLD_BOTTOM=0,HOVER_REFINED=False,
+        TARGET_REFINE_LOGGED=False,TARGET_REFINE_CLIMB_SINCE=0)
+    env['_landingSetState']=lambda c,state,reason:c.update(STATE=state,STATE_ENTERED=env['TIME'].SECONDS)
+    env['_landingTargetRefineSteering']=lambda c:call('_landingTargetRefineSteering',env,c)
+    pos=Vec((distance,0,height));vel=Vec((-speed,cross,-15 if start=='BRAKING_BURN' else -5.9))
+    facing=Vec((0,0,1));elapsed=0.;impulse=0.;min_x=distance
+    ticks={'BRAKING_BURN':'_landingBrakingTick','TARGET_REFINE':'_landingTargetRefineTick',
+        'APPROACH':'_landingApproachTick','HOVER_REFINE':'_landingHoverRefineTick'}
+    dt=.2
+    for _ in range(2000):
+        horizontal=Vec((vel[0],vel[1],0))
+        ctx.update(POSITION=pos,H_VEL=horizontal,H_SPEED=horizontal.MAG,V_SPEED=vel[2],
+            DOWN_SPEED=max(0,-vel[2]),height=pos[2],downrange=math.hypot(pos[0],pos[1]))
+        env['TIME'].SECONDS=elapsed;env['SHIP'].FACING.FOREVECTOR=facing
+        env['lmDistanceToTarget']=lambda *_:math.hypot(pos[0],pos[1])
+        state=ctx['STATE']
+        if state not in ticks:
+            assert state=='VERTICAL_DESCENT' and ctx['downrange']<=env['LANDING_HOVER_REFINE_ACCEPT_RADIUS']
+            assert horizontal.MAG<=env['LANDING_HOVER_REFINE_ACCEPT_HSPEED']
+            return elapsed,impulse,min_x
+        call(ticks[state],env,ctx)
+        direction=ctx['steering']
+        if state!='BRAKING_BURN':
+            assert direction[2]>=math.cos(math.radians(12))-1e-8
+        elif ctx['TARGET_THROTTLE']>0:
+            assert facing[2]>=0 and env['VANG'](facing,direction)<=15
+        # Prescribed first-order steering lag, not a SteeringManager model.
+        facing=(facing+(direction-facing)*min(1,dt/max(.01,lag))).NORMALIZED
+        thrust=facing*(2.69*ctx['TARGET_THROTTLE'])
+        assert 0<=ctx['TARGET_THROTTLE']<=1 and thrust.MAG<=2.690001
+        acceleration=thrust-Vec((0,0,.49))
+        pos=pos+vel*dt+acceleration*dt**2/2;vel=vel+acceleration*dt
+        impulse+=thrust.MAG*dt;elapsed+=dt;min_x=min(min_x,pos[0])
+        assert pos[2]>0,('ground contact before capture',cross,lag,elapsed,pos,vel)
+    raise AssertionError(('hop capture timeout',cross,lag,pos,vel))
+
+
+def check_hop_capture():
+    for cross,lag in ((0,0),(0,1),(0,3),(-4,1),(4,1)):
+        elapsed,impulse,min_x=simulate_hop_capture(cross,lag)
+        assert elapsed<85 and impulse<65 and min_x>0,(cross,lag,elapsed,impulse,min_x)
+    # An already-controlled approach must also slow before crossing the
+    # target; extending BRAKE alone cannot repair the old position loop.
+    for distance,speed in ((100,3),(35,1.6)):
+        result=simulate_hop_capture(lag=1,start='APPROACH',distance=distance,height=72,speed=speed)
+        assert result[2]>0 and result[0]<100,result
+    env,_=fixture()
+    for acceleration in (.083,.75):
+        for distance in (5,10,30,100,1000):
+            speed=call('lmApproachSpeedLimit',env,distance,acceleration)
+            response=env['LANDING_APPROACH_RESPONSE_TIME']/1.25
+            assert speed*response+speed**2/(2*acceleration)<=max(0,distance-5)+1e-8
+            assert speed<=max(0,distance-5)/(4*response)+1e-8
+    print('PASS: actual hop brake/refine/approach source captures without crossing the target in<85s/<65m/s impulse for mirrored drift and0/1/3s attitude lags; approach-only arrivals also stop before overshoot (flat point mass)')
+
+
 if __name__=='__main__':
     check_reported_horizontal_deadline()
     check_legacy_approach()
@@ -146,3 +233,5 @@ if __name__=='__main__':
     check_signed_approach(18,-5)
     check_transit_and_stopping_reserve()
     check_descending_handoff()
+    check_hop_handoff()
+    check_hop_capture()

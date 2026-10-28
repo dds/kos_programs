@@ -26,8 +26,12 @@ LOCAL FUNCTION _landingPredictionCommand {
     LOCAL surfaceG IS SHIP:BODY:MU/SHIP:BODY:RADIUS^2.
     LOCAL effectiveG IS MAX(0.01,SHIP:BODY:MU/pos:MAG^2-hVel:MAG^2/pos:MAG).
     LOCAL command IS pos*0.
-    IF hVel:MAG > APPROACH_HSPEED {
-        LOCAL lateralGuidance IS targetPosition:MAG > 0
+    LOCAL terminalBrake IS height <= TERMINAL_ALT AND targetPosition:MAG > 0
+        AND LANDING_POWERED_LEAD > 0 AND LANDING_ECONOMY_BRAKE > 0
+        AND LANDING_FLEXIBLE_SITE <= 0 AND lmApproachNeedsBrake(hVel:MAG,
+            VXCL(upVec,targetPosition-pos):MAG,maxAcc,effectiveG).
+    IF hVel:MAG > APPROACH_HSPEED OR terminalBrake {
+        LOCAL lateralGuidance IS hVel:MAG > APPROACH_HSPEED AND targetPosition:MAG > 0
             AND LANDING_POWERED_LEAD > 0 AND LANDING_FLEXIBLE_SITE <= 0
             AND planAcc*COS(15) > surfaceG.
         LOCAL descentAcc IS planAcc.

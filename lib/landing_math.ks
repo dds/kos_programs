@@ -293,6 +293,29 @@ GLOBAL FUNCTION lmHoverSteering {
     RETURN (upVec + (-horizontalVel):NORMALIZED * leanMag):NORMALIZED.
 }
 
+// A velocity servo needs distance to respond as well as distance to stop.
+// Four servo time constants make the near-target position loop critically
+// damped; a bare sqrt(2*a*d) request brakes late and repeatedly crosses over.
+GLOBAL FUNCTION lmApproachSpeedLimit {
+    PARAMETER distance.
+    PARAMETER lateralAcc.
+    PARAMETER targetWeight IS 1.25.
+    LOCAL remaining IS MAX(0,distance-LANDING_HOVER_REFINE_SETTLE_RADIUS).
+    LOCAL response IS MAX(1,LANDING_APPROACH_RESPONSE_TIME)/MAX(0.01,targetWeight).
+    LOCAL lagSpeed IS MAX(0,lateralAcc)*response.
+    RETURN MIN(SQRT(lagSpeed^2+2*MAX(0,lateralAcc)*remaining)-lagSpeed,
+        remaining/(4*response)).
+}
+
+GLOBAL FUNCTION lmApproachNeedsBrake {
+    PARAMETER horizontalSpeed.
+    PARAMETER distance.
+    PARAMETER maxAcc.
+    PARAMETER gravAcc.
+    RETURN horizontalSpeed > MAX(TERMINAL_HSPEED,lmApproachSpeedLimit(distance,
+        lmApproachAcceleration(maxAcc,gravAcc))).
+}
+
 GLOBAL FUNCTION lmApproachSteering {
     PARAMETER targetLat.
     PARAMETER targetLng.
@@ -302,10 +325,13 @@ GLOBAL FUNCTION lmApproachSteering {
     PARAMETER shipPos.
     PARAMETER targetWeight IS 1.25.
 
-    LOCAL targetDir IS lmDirectionToTarget(targetLat, targetLng,
-        upVec, shipPos).
+    LOCAL targetOffset IS VXCL(upVec,LATLNG(targetLat,targetLng):POSITION-shipPos).
+    LOCAL targetDir IS V(0,0,0).
+    IF targetOffset:MAG >= 0.01 { SET targetDir TO targetOffset:NORMALIZED. }
     LOCAL maxLean IS TAN(MAX_TILT).
-    LOCAL desiredVel IS targetDir * targetHorizontalSpeed.
+    LOCAL speedLimit IS lmApproachSpeedLimit(targetOffset:MAG,
+        0.8*MAX(0,lmGravity())*TAN(MAX_TILT),targetWeight).
+    LOCAL desiredVel IS targetDir * MIN(MAX(0,targetHorizontalSpeed),speedLimit).
     LOCAL correctionVec IS desiredVel - horizontalVel.
     IF correctionVec:MAG <= 0.1 { RETURN upVec. }
 

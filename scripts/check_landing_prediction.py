@@ -237,7 +237,34 @@ def check_fixed_gate_coupling():
     print('PASS: native-conic fixture with the actual fixed-site H policy ignites before V and captures within750m of the intended site, rather than assuming V-only ignition while flight burns at H')
 
 
+def check_terminal_brake_agreement():
+    env=environment()
+    body=env['SHIP'].BODY
+    body.RADIUS=60000;body.MU=1765800026.31247
+    pos=Vec((60247,0,0));vel=Vec((-15,0,15.3))
+    angle=321/body.RADIUS
+    target=Vec((body.RADIUS*math.cos(angle),0,body.RADIUS*math.sin(angle)))
+    gravity=body.MU/pos.MAG**2-15.3**2/pos.MAG
+    _,ctx=fixture(gravity=gravity,twr=2.69/gravity,horizontal=15.3,down=15,height=247)
+    ctx.update(UP_VEC=Vec((1,0,0)),H_VEL=Vec((0,0,15.3)),POSITION=pos,
+               BRAKE_GRAV=body.MU/body.RADIUS**2)
+    env.update(LANDING_POWERED_LEAD=1,LANDING_ECONOMY_BRAKE=1,MAX_TILT=12,
+        _landingBurnHeight=lambda _:247,_landingBottomRadar=lambda:247,
+        lmDistanceToTarget=lambda *_:321,
+        _landingSetSteering=lambda c,x:c.update(steering=x))
+    env['SHIP'].FACING=NS(FOREVECTOR=Vec((1,0,0)))
+    forecast=env['_landingPredictionCommand'](pos,vel,2.69,2.69,0,target)
+    call('_landingBrakeSteeringInfo',env,ctx)
+    env['SHIP'].FACING.FOREVECTOR=ctx['steering']
+    live=call('_landingBrakeSteeringInfo',env,ctx)
+    actual=ctx['steering']*(2.69*live['THROTTLE'])
+    assert (forecast-actual).MAG<1e-8,(forecast,actual)
+    assert forecast.MAG>1 and forecast[2]<-.5
+    print('PASS: close-target15.3m/s terminal braking uses the same stopping-speed decision and thrust vector in the powered predictor and actual live controller')
+
+
 if __name__=='__main__':
+    check_terminal_brake_agreement()
     check_recorded_capture()
     check_snapshot()
     check_independent_prediction()
