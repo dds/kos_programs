@@ -1680,6 +1680,37 @@ uses the existing local copies. The generated-profile regression check is
 `python3 scripts/check_surface_return.py`; kOS execution and thermal behavior
 still require in-game validation.
 
+The additional **RO9 science satellite** profiles are prepared for new craft;
+creating these files does not select a mission or launch anything:
+
+| Profile ID | Destination orbit |
+|---|---|
+| `kerbin_geostationary_satellite` | Kerbin, Ap/Pe2,863,334m, inclination0deg; no longitude slot specified |
+| `kerbin_sunsync_satellite` | Kerbin, circular700km, retrograde99deg; inside the requested500-900km/96-102deg window |
+| `kerbin_semisynchronous_satellite` | Kerbin, circular1,581,668m,55deg; about2h59m34s, eccentricity near zero |
+| `minmus_elliptical_satellite` | Minmus, Ap1,041,045m / Pe465,764m, inclination21.6deg, LAN255.5deg, AoP157.3deg |
+
+They launch into the useful plane, shape the destination orbit, run/transmit
+available science, then hold for operator review in `SCIENCE_OPS`. The
+three Kerbin missions use no interbody transfer. The retrograde profile
+targets the supplied orbit window; it does not implement Sun-tracking
+station keeping. The medium-orbit altitude assumes stock Kerbin's radius
+and gravitational parameter; its accepted apsis errors remain well inside
+the requested2h52m23s..3h06m45s period and eccentricity<0.02 windows.
+Science hardware, antenna reach and total fuel still depend on the new craft.
+
+`RO9/mun_target_science_return` instead lands at **-10.590,99.490**, collects
+surface science, and returns to Kerbin with a53km initial entry Pe and RO9's
+existing aerobrake assistance. It captures directly into a15km/15deg Mun
+orbit, sufficient for the target latitude, without the older polar-survey
+detour. It keeps the target fixed, limits local terrain refinement to20m,
+and retains slope/attitude/staging/fuel safeguards. This specified site can
+be dark or beyond direct Kerbin view: the profile explicitly uses autonomous
+landing (`LANDING_RADIO_MODE="OFFLINE"`), not a claim of relay coverage.
+There are no hops, additional orbital surveys, or paid KSC-targeting detours.
+The profile is prepared only; review the eventual craft's lander/return
+staging and fuel before selecting it.
+
 The separate **RO8 economy landing/return** profiles allow flexible landing
 sites instead of the polar contracts:
 
@@ -2650,6 +2681,32 @@ state converter.
 
 ## Development
 
+- `python3 -B scripts/ksp_snapshot.py` — create a private full-game `.tar.gz`
+  snapshot locally, plus SHA-256 checksum and embedded mod/source manifest.
+  Save and quit KSP first. For the Deck installation and separate kOS repo:
+
+  ```bash
+  python3 -B "$HOME/code/kos_programs/scripts/ksp_snapshot.py" \
+    --game "$HOME/Kerbal Space Program" \
+    --archive-root "$HOME/code/kos_programs"
+  ```
+
+  Output defaults to `$HOME/ksp-snapshots/ksp-<UTC>.tar.gz`. It preserves the
+  full installed game build, GameData (including manually changed mods),
+  saves and their onboard kOS state, Ships, settings and optional kOS archive.
+  kOS archive symlinks become real files so the copy stands on its own.
+  Logs, git metadata, CKAN download caches and regenerable ModuleManager
+  caches are omitted. It refuses overwrite, insufficient space, unexpected
+  external links, and detected source-file changes; `--allow-running` is an
+  explicit non-atomic live-copy option. It saves disk state, not unsaved play.
+  Copy the `.tar.gz` and `.sha256` yourself, verify with `shasum -a 256 -c
+  <filename>.sha256`, then extract into a fresh directory. Keep the source
+  copy as a backup. The captured Windows build still needs your chosen
+  Windows runtime on the Mac; Proton/Wine prefixes and Steam credentials
+  are not included. Parallax's published Mac setup uses
+  [CrossOver](https://github.com/Gameslinx/Parallax-Continued#installation-instructions---mac).
+  This script has no SSH, install, launch, settings-change or restore action;
+  only small synthetic fixtures were captured while developing it.
 - `scripts/deck-diagnostics status` — read-only Steam Deck memory, GPU counters
   and process states. The fixed wrapper also supports `crash --boot previous`
   (or `current`), `logs --craft RO9 --count 12`, and

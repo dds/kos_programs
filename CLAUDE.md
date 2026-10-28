@@ -9,6 +9,15 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 latest scope: operator confirms the improved hop mission completed.
+Prepare four satellite profiles and Mun target(-10.590,99.490) return only;
+do not select/start a profile or change existing craft/state/overrides. Duna/
+Ike transmitted-science flyby with optional return/entry/landing is queued,
+not yet a specified craft/flight-ready plan. Snapshot request is local script
+only: scripts/ksp_snapshot.py; no further laptop SSH, DNS edits or transfers.
+Earlier SSH name-resolution attempts never connected to the Mac and no
+search-domain configuration was changed. Operator handles runtime/copy.
+
 2026-10-28 operational diagnostics: use the stable executable
 /home/dds/code/kos_programs/scripts/deck-diagnostics instead of repeated inline
 SSH/Python commands. Its exact prefix is approved for status, crash, logs,

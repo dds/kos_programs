@@ -6,6 +6,13 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Latest operator priority: prepare four RO9 satellite missions and one new
+  targeted Mun return, without activating profiles or launching craft. Hop
+  mission completed successfully with improved approach. Duna/Ike flyby /
+  transmitted science and optional return/entry/soft-landing attempt is the
+  next mission family; craft design and branch requirements remain open.
+- Snapshot request is script-only. No further laptop SSH, DNS changes or
+  transfers; operator will handle the Mac runtime and copy themselves.
 - Code checkpoints: prelaunch gate removed in `7270867`; emergency capture
   implemented in `84203cc`. Parking handoff fix is recorded below.
 - Operator explicitly removed the thermometer/storage prelaunch gate. Do not
@@ -67,15 +74,44 @@ record remaining uncertainty before closing a task.
   symlinks, size limits, virtual GPU counters and actual CLI report handling.
   Exact wrapper prefix permission saved. Live status/crash/log listing/fetch
   all succeeded through that same saved permission. Source checks pass.
-- [ ] **Portable game capture for another machine/Mac.** Operator requests a
-  reusable capture script and has SSH access to the Mac; address/CPU family
-  requested asynchronously. Preserve saves/ships/kOS archive, actual mods and
-  inventory, distinguish portable content from platform-specific game build /
-  shaders/native plugins. Build and verify the snapshot before destination
-  changes. Parallax Continued official Mac instructions require Windows KSP
-  under CrossOver/D3DMetal; native Mac is not equivalent. Assess actual
-  target before promising visual compatibility or stability. Do not strip
-  preferred shaders or parts from the Deck install.
+- [x] **Portable game capture script.** Scope clarified: only provide a local
+  script; no laptop SSH/DNS edits/transfers. Added scripts/ksp_snapshot.py:
+  full installed game/mods/saves/ships/settings and optional separate kOS repo,
+  safe archive-link dereference, embedded manifest and SHA256. Excludes logs,
+  git/download/MM caches; rejects overwrite, low disk, outside links/cycles,
+  running game by default and detected file changes. Tests use synthetic
+  fixtures only. Operator handles Mac runtime/copy; captured platform build
+  is unchanged. No game snapshot, laptop access or DNS change performed.
+- [ ] **New RO9 satellite and Mun science profiles.** Added inactive files:
+  kerbin_geostationary_satellite2863334m/0deg;
+  kerbin_sunsync_satellite700km/99deg;
+  kerbin_semisynchronous_satellite1581668m/55deg/~10774s;
+  minmus_elliptical_satellite1041045/465764m,21.6/255.5/157.3deg;
+  mun_target_science_return(-10.590,99.490), then53km Kerbin return. Science
+  satellites transmit and hold for review; no unnecessary transfer on Kerbin.
+  Mun uses15deg arrival to reach latitude, fixed local refinement and an
+  explicit mission-local offline/dark-site waiver, no polar survey/hops/KSC
+  detours. Existing terrain/thrust/stage/return reserve gates retained. Tests
+  check actual window margins, bindings and two fresh return serializations.
+  No profile selected, craft/override/state modified or mission started.
+  Await native craft validation; no craft exists for the new Mun mission yet.
+  Full70-file routine run passed69 files; the sole failure was the old
+  RO8/RO9 clone check assuming all new RO9 profiles had RO8 equivalents.
+  Registered the five intentional RO9-only profiles and reran that entire
+  check successfully, plus snapshot/profile fixtures after final edits.
+- [ ] **Generic surface ascent to a specified orbit, then review/home.**
+  Operator is at Delta and requests659734/554472m,0deg,AoP0.4, without hard
+  coded coordinates. Existing polar-hop profile already has these orbital
+  targets, but its generated ascent sequence goes straight from SHAPE to
+  RETURN_SETUP. Add a simple guarded selection command and an orbital review
+  stop, preserving stored science and the original return hardware/entry
+  policy. Do not invoke the command or launch the craft remotely.
+- [ ] **Duna/Ike science flight design.** Prepare after the satellite/Mun
+  profiles: Duna orbital flyby and Ike science, transmit before committing
+  optional return or atmospheric/surface attempt. No craft supplied yet;
+  do not invent a safe landing or sufficient radio/fuel/thermal margin. Reuse
+  existing interplanetary phases where appropriate; firm payload, trajectory
+  and return/entry branch choices still needed before a flight-ready profile.
 - [ ] **28Oct18:33 hop-transition Deck crash.** Operator saw apparent approach
   success before hard crash; save has about20s ballistic impact estimate.
   Boot f3a9b3cf restarted18:36. Previous kernel journal now recovered locally:
@@ -85,10 +121,9 @@ record remaining uncertainty before closing a task.
   UnityGfxDeviceW3825 follow18:35:53; do not equate this evidence with the
   earlier pure lock-hang or claim an exact offending mod. Last archived
   boot011 entered LAND_ASSIST atUT4215340.5; no approach recorder swept yet.
-  No game/save/settings changed; latest native controller validation remains
-  interrupted. Reassess live motion on reload, no landing guarantee from the
-  ballistic impact countdown alone.
-- [ ] **Hop approach overshoot and repeated lateral correction.** Operator
+  No game/save/settings changed. Operator later confirms improved hops and
+  completion of the mission after reload. Root mod/driver cause remains open.
+- [x] **Hop approach overshoot and repeated lateral correction.** Operator
   confirms the hop mostly worked. Native RO9_4214328/boot007 and diagnostic
   landingdiag_RO9_4214365637 show Gamma touchdown4.1m from the fixed target,
   but145.36s/78.035m/s APPROACH. BRAKE handed321m/15.3m/s to refinement;
@@ -107,7 +142,9 @@ record remaining uncertainty before closing a task.
   the target in65-71s/~50-53m/s impulse for mirrored cross-drift and prescribed
   0/1/3s steering lags. Flat constant-mass physics, not a native flight replay;
   an already-too-late APPROACH entry cannot undo its stopping distance.
-  Native validation on the next hop remains pending. No bootstrap change.
+  Operator confirms improved subsequent hops and completed mission. Native
+  efficiency metrics remain unavailable; do not turn subjective improvement
+  into measured fuel/landing-error claims. No bootstrap change.
   All67 routine check files passed90.11s; existing unrelated ksc_deorbit
   warning unchanged. No live flight controls or Deck files changed.
 - [x] **Record native NOT DEFINED syntax quirk.** Pulled operator574ce79,

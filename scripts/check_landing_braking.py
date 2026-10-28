@@ -328,9 +328,12 @@ def check_integration():
     for path in [ROOT/'craft/RO9.ks',*(ROOT/'missions/RO9').glob('*.ks')]:
         original=ROOT/str(path.relative_to(ROOT)).replace('RO9','RO8')
         if path.name in ('minmus_kolniya_flats_return.ks','minmus_tundra_survey_return.ks',
-                         'minmus_polar_hops_return.ks'):
+                         'minmus_polar_hops_return.ks','kerbin_geostationary_satellite.ks',
+                         'kerbin_sunsync_satellite.ks','kerbin_semisynchronous_satellite.ks',
+                         'minmus_elliptical_satellite.ks','mun_target_science_return.ks'):
             # Operator-requested RO9-only missions have generated-profile,
-            # survey/waypoint/review fixtures; no RO8 counterpart is intended.
+            # orbit-window/survey/waypoint/review fixtures; no RO8 counterpart
+            # is intended. Shared legacy landing profiles still compare below.
             assert not original.exists()
             continue
         clean = lambda text: re.sub(r'//[^\n]*', '', text)
