@@ -20,6 +20,10 @@ Deadline/experiment attempt are persisted before events; no surface solar
 turn or auto-warp. A->B~270m requires50m hop tolerance and20m terrain shifts.
 All66 routine check files pass77.71s; new route checks0.58s. Native
 compile/storage/short-hop flight validation pending. See TASKS.md.
+Native follow-up: LAND_PREP blocked on0.297m/s Pe trim with0.3 minimum;
+operator explicitly requests0.1. Shared LAND_PREP_MIN_BURN_DV now0.1,
+also pinned in the polar profile; BPLANE minimum and strict orbit tolerance
+unchanged. LAND_DEORBIT rerouting until readiness remains intentional.
 
 2026-10-27 RO9-minmus4 missing braking-alignment KAC alarm: landing COAST
 only emitted HUD countdowns. Added owned alarm from same ETA,5s polling,

@@ -77,6 +77,14 @@ record remaining uncertainty before closing a task.
   new case file0.58s, each case<0.24s. All66 routine files pass77.71s.
   Native kOS compilation/storage, short-hop dynamics, science result
   availability and the full automated mission remain unvalidated.
+  Flight follow-up:0.297m/s set-pe skipped by LAND_PREP's0.3m/s minimum,
+  preventing readiness; a forced LAND_DEORBIT correctly routed back to prep.
+  Operator requests0.1m/s. Updated shared preparation default and explicit
+  polar profile setting; other burn families and250m tolerance unchanged.
+  Independent vis-viva/source replay added for exactly0.297m/s plus0.1
+  admission boundary, preserving readiness, budgets and strict SHAPE policy.
+  Landing preparation/route, polar mission, Kolniya and structural checks
+  pass; native retry after a connected reboot remains pending.
 - [ ] **Landing coast: KAC alarm for braking alignment.** RO9-minmus4
   diagnostic3243569410/boot021 confirms a resident COAST/countdown, zero
   throttle and no braking alarm. Source only printed the HUD estimate;

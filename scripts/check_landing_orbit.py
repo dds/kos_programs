@@ -32,6 +32,11 @@ class Lex(dict):
     COPY=property(lambda self:Lex(self))
 
 
+class Scalar(float):
+    # Native kOS scalars support ISTYPE, including a planner's no-node0.
+    ISTYPE=lambda self,name:False
+
+
 def normal(inc,lan):
     inc,lan=map(math.radians,(inc,lan))
     return Vec((math.sin(inc)*math.cos(lan),math.sin(inc)*math.sin(lan),math.cos(inc)))
@@ -96,8 +101,12 @@ def fixture(profile=True):
         except ks.Returned as result:return result.value
     env['_landPrepLinkWait']=link_wait
     env['_landPrepNextCached']=lambda:False
-    for name in ('landingOrbitContext','shapeErrors','shapeConverged','shapeNextBurn'):
+    for name in ('landingOrbitContext','shapeErrors','shapeConverged'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
+    def next_burn(targets):
+        result=ks.call('shapeNextBurn',env,targets)
+        return result if isinstance(result,Lex) else Scalar(result)
+    env['shapeNextBurn']=next_burn
     def apsis(eta,ta,opposite,label,targets):
         # Native NODE/ORBIT substitute: independent vis-viva propagation at
         # the requested apsis. The real shapeNextBurn chooses order/timing.
@@ -106,7 +115,7 @@ def fixture(profile=True):
         old_speed=math.sqrt(ship.BODY.MU*(2/radius-1/orbit.SEMIMAJORAXIS))
         new_speed=math.sqrt(ship.BODY.MU*(2/radius-2/(radius+other)))
         cost=abs(new_speed-old_speed)
-        if cost<env['SHAPE_MIN_BURN_DV']:return Lex()
+        if cost<env['SHAPE_MIN_BURN_DV']:return Scalar(0)
         after=NS(APOAPSIS=max(burn_alt,opposite),PERIAPSIS=min(burn_alt,opposite),
                  INCLINATION=orbit.INCLINATION,LAN=orbit.LAN,HASNEXTPATCH=False)
         after.ECCENTRICITY=(after.APOAPSIS-after.PERIAPSIS)/(2*ship.BODY.RADIUS+after.APOAPSIS+after.PERIAPSIS)
@@ -216,7 +225,7 @@ def check_groundtrack_coverage():
 
 
 def check_admission_limits():
-    for fault in ('ok','low-pe','unbound','patch','wrong-plane','no-progress','late','subminimum',
+    for fault in ('ok','minimum','low-pe','unbound','patch','wrong-plane','no-progress','late','subminimum',
                   'nan','wrong-context','total','reserve','stage','idle','modified-owned-cost'):
         env,saved,events,nodes,refresh=fixture()
         env.update(SHAPE_ALT_TOL=1000,SHAPE_ANG_TOL=.5,SHAPE_MIN_PE=9000,SHAPE_MIN_BURN_DV=.3)
@@ -229,7 +238,8 @@ def check_admission_limits():
         if fault=='wrong-plane':node.ORBIT.INCLINATION=90
         if fault=='no-progress':node.ORBIT.APOAPSIS=env['SHIP'].APOAPSIS
         if fault=='late':node.ETA=59
-        if fault=='subminimum':node.DELTAV.MAG=.1
+        if fault=='minimum':node.DELTAV.MAG=.1
+        if fault=='subminimum':node.DELTAV.MAG=.05
         if fault=='nan':node.DELTAV.MAG=math.nan
         if fault=='wrong-context':ledger['CONTEXT']='other-flight'
         if fault=='total':ledger['SPENT']=299
@@ -239,8 +249,41 @@ def check_admission_limits():
         if fault=='modified-owned-cost':
             env['LAND_PREP_TOTAL_DV_CAP']=55
             ledger.update(SPENT=45,NODE_UT=node.TIME,NODE_DV=45);node.DELTAV.MAG=60
-        assert bool(env['_landPrepAdmit'](node,targets))==(fault=='ok'),fault
+        assert bool(env['_landPrepAdmit'](node,targets))==(fault in ('ok','minimum')),fault
     print('PASS: fresh/retained preparation admission enforces progress, plane preservation, hard Pe/patch/corridor, minimum, context, lead, idle controls, separate total budget, current-stage fuel and return reserve; enlarged owned nodes pay their extra cost')
+
+
+def check_polar_small_trim():
+    profile=(ROOT/'missions/RO9/minmus_polar_hops_return.ks').read_text()
+    # Independent vis-viva inverse: choose an achieved Pe requiring exactly
+    # the reported0.297m/s set-pe trim from a19.3km Ap to9.3km Pe.
+    mu=1.7658e9;at=79300.;target=69300.
+    target_speed=math.sqrt(mu*(2/at-2/(at+target)))
+    achieved_speed=target_speed+.297
+    achieved_pe=2/(2/at-achieved_speed**2/mu)-at-60000
+    assert achieved_pe-9300>250
+    for minimum,expected in ((.3,False),(.1,True)):
+        env,saved,events,nodes,refresh=fixture(False)
+        read_settings(profile,env)
+        assert env['LAND_PREP_MIN_BURN_DV']==.1
+        env['LAND_PREP_MIN_BURN_DV']=minimum
+        env['xferSeq']=env['launchSeq']=Seq(env['SEQUENCE'])
+        saved['mission_id']='minmus_polar_hops_return'
+        env['SHIP'].PERIAPSIS=achieved_pe;env['SHIP'].APOAPSIS=19300
+        env['SHIP'].ORBIT.INCLINATION=90;env['SHIP'].ORBIT.LAN=298.9
+        env['SHIP'].ORBIT.ARGUMENTOFPERIAPSIS=244.9
+        refresh()
+        prior={k:env[k] for k in ('SHAPE_MIN_BURN_DV','SHAPE_ALT_TOL','SHAPE_MIN_PE','BURN_STAGE_LIMIT')}
+        run(env)
+        assert len(nodes)==int(expected) and env['phaseShouldYield']==(not expected)
+        assert saved['phase']==('LAND_DEORBIT' if expected else 'LAND_PREP')
+        assert ('landing_orbit_ready' in saved)==expected
+        assert all(env[k]==v for k,v in prior.items())
+        if expected:
+            assert abs(nodes[0].DELTAV.MAG-.297)<1e-9
+            assert abs(env['SHIP'].PERIAPSIS-9300)<1e-6
+            assert abs(saved['land_prep_budget']['SPENT']-.297)<1e-9
+    print('PASS: native-style0.297m/s polar Pe trim is blocked by0.3 but executes at0.1, meets unchanged250m tolerance, records readiness and advances to LAND_DEORBIT while restoring strict SHAPE/stage policy')
 
 
 def check_wait_and_cancel():
@@ -358,6 +401,7 @@ if __name__=='__main__':
     check_generic_goals()
     check_groundtrack_coverage()
     check_admission_limits()
+    check_polar_small_trim()
     check_wait_and_cancel()
     check_reboot_and_holds()
     check_inflight_routing_and_dependencies()

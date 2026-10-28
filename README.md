@@ -1572,7 +1572,7 @@ checks in `LAND_DEORBIT`.
 | `LAND_PREP_INC`, `LAND_PREP_LAN` | -1 | Preserve the current plane; set explicitly for different coverage |
 | `LAND_PREP_MIN_PE` | 10,000 m | Body-specific safety floor; atmosphere+10 km remains a hard minimum |
 | `LAND_PREP_ALT_TOL`, `LAND_PREP_ANG_TOL` | 1,000 m / 0.5° | Parking-orbit tolerances |
-| `LAND_PREP_MIN_BURN_DV` | 0.3 m/s | Smallest preparation correction |
+| `LAND_PREP_MIN_BURN_DV` | 0.1 m/s | Smallest preparation correction |
 | `LAND_PREP_DV_CAP`, `LAND_PREP_TOTAL_DV_CAP` | 150 / 300 m/s | Per-burn and cumulative preparation allowances |
 | `LAND_PREP_RESERVE_DV` | 900 m/s | Minimum vacuum dV retained after preparation burns |
 

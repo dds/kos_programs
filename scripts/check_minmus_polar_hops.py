@@ -81,6 +81,7 @@ def check_profile_and_return():
     assert [cfg['SHAPE_'+k] for k in ('AP','PE','INC','LAN','AOP')]==[1064182,444576,90,298.9,244.9]
     assert cfg['CAPTURE_PE']==cfg['TARGET_PE']==444576 and cfg['TARGET_AP']==1064182
     assert cfg['LAND_PREP_AP']==19300 and cfg['LAND_PREP_PE']==9300
+    assert cfg['LAND_PREP_MIN_BURN_DV']==.1
     assert cfg['SEQUENCE'][-5:]==['LAND_PREP','LAND_DEORBIT','LAND_ASSIST','HOP_ROUTE_SETUP','SURFACE_RETURN_SETUP']
     assert len(cfg['SEQUENCE'])==len(set(cfg['SEQUENCE']))
     sites=[[-1.080,1.365],[-1.190,1.596],[-1.554,2.780],[-3.029,2.189]]
