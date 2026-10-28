@@ -97,14 +97,36 @@ LOCAL FUNCTION _hopDestinationAllowed {
 LOCAL FUNCTION _hopScheduleSite {
     PARAMETER siteIndex.
     PARAMETER site.
+    PARAMETER rebootNow IS TRUE.
     missionOverrideUpdate(LEXICON("HOP_TARGET_LAT",site[0],"HOP_TARGET_LNG",site[1])).
     stateSet("hop_route_pending",siteIndex).
     stateSaveReloadState("HOP_NEXT_SITE","HOP","HOP").
-    REBOOT.
+    IF rebootNow { REBOOT. }
+}
+
+GLOBAL FUNCTION hopSelectSite {
+    PARAMETER siteNumber.
+    PARAMETER rebootNow IS TRUE.
+    IF NOT _hopSurfaceReady() { RETURN FALSE. }
+    LOCAL sites IS stateGet("hop_route_sites",LIST()).
+    LOCAL index IS siteNumber-1.
+    IF index < 0 OR index >= sites:LENGTH OR index <> FLOOR(index) {
+        PRINT "Choose a listed site number; no hop selected.". RETURN FALSE.
+    }
+    IF NOT _hopDestinationAllowed(sites[index]) { RETURN FALSE. }
+    _hopScheduleSite(index,sites[index],rebootNow).
+    RETURN TRUE.
+}
+
+GLOBAL FUNCTION hopFinishRoute {
+    PARAMETER rebootNow IS TRUE.
+    IF NOT _hopSurfaceReady() { RETURN. }
+    _hopFinishRoute(FALSE,rebootNow).
 }
 
 LOCAL FUNCTION _hopFinishRoute {
     PARAMETER economyReturn IS FALSE.
+    PARAMETER rebootNow IS TRUE.
     LOCAL previous IS stateGet("hop_route_restore",LEXICON()).
     IF previous:LENGTH = 0 { PRINT "Original mission settings unavailable; no return configured.". RETURN. }
     IF economyReturn AND SHIP:BODY:NAME <> "Mun" AND SHIP:BODY:NAME <> "Minmus" {
@@ -132,7 +154,7 @@ LOCAL FUNCTION _hopFinishRoute {
     stateRemove("hop_site_dwell").
     stateRemove("hop_route_pending").
     stateSaveReloadState("HOP_ROUTE_FINISHED",nextName,bootLibBandForPhase(nextName)).
-    REBOOT.
+    IF rebootNow { REBOOT. }
 }
 
 GLOBAL FUNCTION hopContinue {
@@ -317,6 +339,10 @@ GLOBAL FUNCTION phaseHop {
     IF stateGet("hop_route_active",FALSE) AND SHIP:BODY:NAME <> stateGet("hop_route_body","") {
         PRINT "HOP held: route belongs to a different body.". yieldToPrompt(). RETURN.
     }
+    IF HASNODE OR (SHIP:STATUS = "LANDED" AND SHIP:VELOCITY:SURFACE:MAG > 0.5) {
+        PRINT "HOP held: clear the maneuver node and settle the craft first.".
+        yieldToPrompt(). RETURN.
+    }
     stateSet("phase", "HOP").
     stateSet("lib_band", "HOP").
     stateSet("reload_required", "false").
@@ -418,7 +444,8 @@ GLOBAL FUNCTION phaseHop {
     WAIT UNTIL VANG(SHIP:FACING:FOREVECTOR, steeringTarget) < 8
         OR TIME:SECONDS > alignDeadline OR ABORT.
 
-    IF ABORT OR VANG(SHIP:FACING:FOREVECTOR,steeringTarget) >= 8 {
+    IF ABORT OR HASNODE OR SHIP:VELOCITY:SURFACE:MAG > 0.5
+            OR VANG(SHIP:FACING:FOREVECTOR,steeringTarget) >= 8 {
         thrustCutoffOk(). UNLOCK STEERING.
         PRINT "HOP held: ignition alignment not achieved.".
         yieldToPrompt(). RETURN.

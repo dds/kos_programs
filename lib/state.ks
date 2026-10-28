@@ -147,6 +147,20 @@ GLOBAL FUNCTION stateDump {
 }
 
 LOCAL FUNCTION _flush {
-    IF EXISTS(STATE_PATH) { DELETEPATH(STATE_PATH). }
+    // WRITEJSON/Harddisk.SaveFile checks space before replacing an existing
+    // file. Deleting first loses the last valid mission on a failed write.
+    // SaveFile can return a native null on insufficient space. Do not access
+    // suffixes on its result: verify the persisted value instead. Local disk
+    // I/O is in memory; no archive or radio operation is involved.
     WRITEJSON(_cache, STATE_PATH).
+    LOCAL matches IS FALSE.
+    IF EXISTS(STATE_PATH) { SET matches TO ("" + READJSON(STATE_PATH)) = ("" + _cache). }
+    IF NOT matches {
+        LOCK THROTTLE TO 0.
+        SET SHIP:CONTROL:MAINTHROTTLE TO 0.
+        SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+        SET WARP TO 0.
+        PRINT "MISSION STATE WRITE FAILED: last saved state retained. Free onboard storage before rebooting.".
+        SHUTDOWN.
+    }
 }

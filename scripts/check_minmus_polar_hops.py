@@ -39,6 +39,7 @@ def fixture():
     env.update(geoDistance=distance,LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),
                configLiteral=lambda value:json.dumps(value,sort_keys=True),phaseShouldYield=False,
                HOP_TARGET_LAT=0,HOP_TARGET_LNG=0)
+    env.update(getTarget=lambda:'Minmus',hopChooseSite=lambda default:default)
     state.update(phase='HOP_ROUTE_SETUP',hop_route_active=False,mission_id='minmus_polar_hops_return')
     state.pop('hop_route_restore')
     env['SHIP'].LATITUDE,env['SHIP'].LONGITUDE = env['HOP_ROUTE_SITES'][0]
@@ -55,7 +56,7 @@ def fixture():
         events.append(('alarm',ut));return key
     env.update(kacEnsureAlarm=alarm,DELETEALARM=lambda key:alarms.pop(key,None),
                scienceRunAll=lambda:events.append(('science',env['TIME'].SECONDS)) or 1)
-    for name in ('phaseHopRouteSetup','phaseHopAutoReview','_hopPrepLandingAssist','_hopApplyPending'):
+    for name in ('hopRoutePrepare','phaseHopRouteSetup','phaseHopAutoReview','_hopPrepLandingAssist','_hopApplyPending'):
         env[name]=lambda *args,name=name:hop.execute(name,env,*args)
     # This pure predicate runs every simulated second. Reuse the fixture's
     # compiled source body instead of reparsing it thousands of times.

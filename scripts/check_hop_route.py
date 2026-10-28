@@ -55,7 +55,7 @@ def fixture():
              SHIP=NS(STATUS='LANDED',LATITUDE=0,LONGITUDE=1,ALTITUDE=0,
                      BODY=NS(NAME='Minmus',ATM=NS(EXISTS=False),RADIUS=60000,MU=.491*60000**2),DELTAV=NS(VACUUM=2000),
                      VELOCITY=NS(SURFACE=NS(MAG=0))),
-             STAGE=NS(DELTAV=NS(VACUUM=1300)),MIN=min,MAX=max,SQRT=math.sqrt,
+             STAGE=NS(DELTAV=NS(VACUUM=1300)),MIN=min,MAX=max,SQRT=math.sqrt,FLOOR=math.floor,
              SIN=lambda value:math.sin(math.radians(value)),HOP_PITCH=45,
              HOP_RETURN_RESERVE_DV=700,HOP_LANDING_RESERVE_DV=180,
              ABORT=False,HASNODE=False,TIME=NS(SECONDS=0),ABS=abs,CHAR=chr,TAN=lambda value:math.tan(math.radians(value)),
@@ -71,9 +71,9 @@ def fixture():
     env['TERMINAL']=NS(INPUT=Input())
     for name in ('hopRouteBudget','hopRouteFuelOk','_hopSurfaceReady','_hopDestinationAllowed',
                  '_hopScheduleSite','hopContinue','hopWaypoint','hopReturn',
-                 'hopReviewPhase','hopRouteRestoreSettings'):
+                 'hopReviewPhase','hopRouteRestoreSettings','hopSelectSite','hopFinishRoute'):
         env[name]=lambda *args,name=name:execute(name,env,*args)
-    env['_hopFinishRoute']=lambda economy=False:execute('_hopFinishRoute',env,economy)
+    env['_hopFinishRoute']=lambda economy=False,rebootNow=True:execute('_hopFinishRoute',env,economy,rebootNow)
     return env,state,updates,events,keys
 
 

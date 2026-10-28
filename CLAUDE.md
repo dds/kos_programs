@@ -9,6 +9,27 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 RO9 polar landing/hop recovery: operator did NOT reset any kOS
+files. Automatic HOP_ROUTE_SETUP band reboot4209161 -> new flight stamp4209170,
+boot001/PRELAUNCH; saved processor lacks launch/route progress. Exact loss
+mechanism unproven. state._flush deleted old state before WRITEJSON; now
+overwrites without deleting, re-reads/verifies persistence (SaveFile can return
+native null), cuts controls/warp and SHUTDOWN on mismatch. Do not reinstate
+delete-first state writes. bootEnsureInitialPhase recovers opted-in target-
+surface routes to guarded setup/review; generic HOP no longer inserts original
+PRELAUNCH. cmd/hopnext.ks selects a one-based site without reboot/ignition;
+3 skips Beta for Gamma,0 restores configured return. Lost route rebuild only
+at Alpha through setup guards. Profile has30s KAC site menu after600s dwell;
+ENTER/timeout next,H hold,R return. Pending index commits at hop start.
+Native touchdown was6.5m from Alpha after159s/~95m/s APPROACH; weak stage-based
+lateral horizon gave~1deg correction during3s transfer pulse, then low-speed
+coast/flare lacked targeting. Controller unchanged in this patch: investigate
+shared coast/flare capture before claiming a flight efficiency fix. Evidence
+under/tmp/kos-ro9-4208486; see TASKS.md. All67 routine check files passed44.52s,
+then final menu refinements passed seven affected files/structural audit.
+Native recovery/menu/storage/Gamma hop remain pending. No bootstrap
+recompilation required.
+
 2026-10-27 minmus_polar_hops_return profile: high polar1064182/444576m,
 90/298.9/244.9deg -> LAND_PREP9.3x19.3km -> fixed A(-1.080,1.365),
 three hops B(-1.190,1.596),C(-1.554,2.780),D(-3.029,2.189),600s resident

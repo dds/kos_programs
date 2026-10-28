@@ -70,6 +70,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
 | `RUNPATH("0:/cmd/hoproute.ks", LIST(LIST(lat1,lng1),LIST(lat2,lng2)),700).` | Save local airless rocket hops while landed; replace coordinates, review, then reboot. Stops after every landing for science; N continues, R restores return/DONE. Last argument reserves return dV |
+| `RUNPATH("0:/cmd/hopnext.ks",3).` | Select site 3 of a saved hop route without igniting; reboot when ready. Omit the number for a site menu; 0 selects the configured return |
 | `RUNPATH("0:/cmd/minmusrecover.ks").` | Select RO8 landing recovery; use argument `"waypoint"` for a visually chosen selected site without SCANsat coverage; then reboot |
 | `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
 | `RUNPATH("0:/cmd/dump.ks").` | Print persistent state |
@@ -1358,6 +1359,8 @@ All apsides below are metres ASL; angles are degrees.
 After SHAPE completes the polar objective, LAND_PREP lowers the orbit to
 9.3 × 19.3 km while retaining the polar plane. Targeted deorbit lands at A;
 the new `HOP_ROUTE_SETUP` phase arms B–D and saves the original return plan.
+Hops use their own bounded launch burn followed by `LAND_ASSIST`; their
+sequence does not include the original PRELAUNCH/LAUNCH/transfer phases.
 
 | Site | Latitude | Longitude | Arrival |
 | --- | ---: | ---: | --- |
@@ -1372,6 +1375,11 @@ sets brakes and a KAC alarm, attempts available experiments once, then waits
 experiment-attempt flag survive a reboot; rebooting does not restart the
 ten-minute clock. No KAC uses the same resident clock wait. The craft keeps
 its surface attitude rather than running an orbital solar rotation.
+After the stop, a **30-second site menu** lists coordinates and distances.
+Type a site number and ENTER to skip/revisit a site, H to hold at the prompt,
+or R to start the configured return. ENTER or timeout keeps the next site
+(after D, the configured return). The menu has its own KAC deadline and
+cancels if surface/control safety changes.
 Experiments already deployed, inoperable or unavailable can be skipped;
 this is an experiment attempt, not a guarantee of four new science results.
 Data is retained for return, with no automatic reset or transmission.
@@ -1392,10 +1400,23 @@ stop at the prompt after each landing. Generic profile controls live in
 `hop_route.ks`: `HOP_ROUTE_SITES` includes the initial landing followed by
 hop sites, `HOP_SITE_DWELL_SECONDS` sets the stop, `HOP_SITE_RADIUS` sets
 surface admission and `HOP_SITE_RUN_SCIENCE` enables experiment attempts.
+`HOP_MENU_SECONDS` enables the bounded menu; its default 0 retains automatic
+next-site selection without a menu for other profiles.
 Route bands retain their next-hop, landing, science and return providers
 through offline reboots; ordinary missions do not load the timed route.
 Source checks cover progression and recovery; native compilation, storage,
 short-hop dynamics and the full mission still need flight validation.
+
+To skip Beta after completing its temperature scan from Alpha, update the
+archive, then run `RUNPATH("0:/cmd/hopnext.ks",3).` and `REBOOT.` when ready.
+The command selects Gamma (-1.554,2.780) without igniting or marking it landed.
+It uses the saved route, so editing profile coordinates alone does not change
+an active route. If the surface checkpoint was lost, this profile can rebuild
+it only at its first site, with the normal body, staging, terrain and fuel
+checks. A landed route with a missing or stale departure phase recovers to
+route setup/review instead of replaying the original departure. A failed
+state-file replacement retains the previous file and shuts down with throttle
+off; free onboard space before rebooting. No bootstrap recompilation is needed.
 
 RO9's `minmus_kolniya_flats_return` is a separate mission with these targets
 (apsides in metres above Minmus sea level):

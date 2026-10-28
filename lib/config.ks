@@ -103,7 +103,9 @@ GLOBAL FUNCTION phaseList {
 
 GLOBAL FUNCTION phaseNeedsPrelaunch {
     PARAMETER phaseName.
-    RETURN phaseName = "LAUNCH" OR phaseName = "HOP".
+    // HOP owns its own settled-surface, budget, attitude and cutoff checks;
+    // it must not inherit a departure-plane setup from the original flight.
+    RETURN phaseName = "LAUNCH".
 }
 
 GLOBAL FUNCTION phaseSequenceEnsurePrelaunch {

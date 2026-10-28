@@ -357,6 +357,18 @@ GLOBAL FUNCTION bootIsLaunchStartPhase {
 GLOBAL FUNCTION bootEnsureInitialPhase {
     PARAMETER seq.
     LOCAL phase IS stateGet("phase", "").
+    IF SHIP:STATUS = "LANDED"
+            AND (seq:CONTAINS("HOP_ROUTE_SETUP")
+                OR (seq:CONTAINS("HOP_AUTO_REVIEW") AND stateGet("hop_route_active",FALSE)))
+            AND (phase = "" OR phase = "PRELAUNCH" OR phase = "LAUNCH")
+            AND SHIP:BODY:NAME:TOUPPER = TARGET_:TOUPPER {
+        // A lost/legacy surface checkpoint must not replay Kerbin departure.
+        // Route setup still validates the site/body/hardware before any hop.
+        SET phase TO "HOP_ROUTE_SETUP".
+        IF stateGet("hop_route_active",FALSE) { SET phase TO "HOP_AUTO_REVIEW". }
+        stateSet("phase",phase).
+        mLogWarn("Recovered landed route at " + phase + "; original departure sequence suppressed.").
+    }
     IF (phase = "" OR phase:CONTAINS("MAIN")) AND seq:LENGTH > 0 {
         LOCAL initialPhase IS seq[0].
         IF phase = "" AND SHIP:STATUS = "ORBITING"

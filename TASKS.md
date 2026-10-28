@@ -1,6 +1,6 @@
 # Flight automation work
 
-Updated 2026-10-27. Keep this list current as scope changes. A source check
+Updated 2026-10-28. Keep this list current as scope changes. A source check
 passing is not native flight validation. Preserve mission safeguards and
 record remaining uncertainty before closing a task.
 
@@ -57,6 +57,41 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **RO9 polar landing audit and surface-hop recovery/menu.** Retrieved
+  boot017/018, landingdiag4208486237 and its sidecar to
+  `/tmp/kos-ro9-4208486/`; raw current save/state captures under
+  `/tmp/ksp-ro9-4209204-*.json`. Native surface coordinates -1.0861463,
+  1.364514 are~6.5m from Alpha, after159.22s APPROACH/~94.62m/s impulse.
+  Three-second transfer BRAKE at7.6km enabled lateral guidance but yaw~1deg;
+  then unpowered coast and a low-speed flare with lateral correction off.
+  Review staged correction horizon and cross/along capture; no native proof
+  yet of a controller fix. Keep the controller change separate from the
+  surface recovery fix; instant higher yaw alone would not account for the
+  ensuing coast and could overshoot sideways. Automatic reboot from HOP_ROUTE_SETUP changed
+  boot018/RO9_3268520 to boot001/RO9_4209170, empty progress/route state and
+  original mission PRELAUNCH. User confirms no manual reset/file changes.
+  Implemented overwrite/readback verification without delete-first state
+  writes; native SaveFile null result is not dereferenced. A failed write
+  retains the checkpoint and stops CPU/throttle/warp. The old deletion was
+  unsafe, but no captured native I/O exception proves it caused this reset.
+  Target-surface opted-in routes now recover to guarded setup/review, and
+  HOP no longer gets generic PRELAUNCH inserted. It retains its own engine,
+  budget, attitude, cutoff and bounded-burn guards, with node/motion checks
+  at entry and just before ignition. Added30s KAC site menu after600s stop,
+  clock fallback, default continuation/H hold/R configured return. Wrapped
+  cmd/hopnext.ks selects a numbered pending site without ignition/reboot;
+  site3 is Gamma. Existing saved route is authoritative; reconstruction after
+  state loss requires Alpha proximity and normal body/stage/terrain/fuel
+  admission. Return orbit/entry settings and completed-site index survive.
+  Operator completed Alpha/Beta temperature scans from this landing; skip
+  Beta next. Retain all body/idle/stage/terrain/fuel and flight guards.
+  Native menu/compile/storage/Gamma hop confirmation remains pending. Source
+  tests cover actual command, cold/active recovery, menu/alarms/cancellation,
+  integrated600s+30s continuation and null/failed state writes. Initial full
+  routine pass:67 files/44.90s; final full routine pass67 files/44.52s.
+  Final menu1x/hold-command refinements passed the seven affected check files;
+  structural audit299 scripts/77 profiles/72 phases/32 bands,0 errors (the
+  pre-existing missing ksc_deorbit handler warning remains unrelated).
 - [ ] **RO9 Minmus polar orbit, four sites and equatorial return.** New
   profile requested: Ap1064182m/Pe444576m/inc90/LAN298.9/AoP244.9, then
   LAND_PREP and fixed A(-1.080,1.365), hops B(-1.190,1.596), C(-1.554,2.780),
