@@ -9,6 +9,21 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 graphics preference follow-up: preserve shiny/specular appearance
+(Magpie/TU/Deferred) and ReStock+. User questions relevance of ocean/atmo
+cuts while on Minmus: they are low priority for that scene, not a verified
+fix; cached-resource residency unmeasured. Durable inventory in
+docs/steamdeck/mod-inventory-20261028.json separates28Oct folders from26Oct
+CKAN IDs/AVC versions/size observations; refresh currently SSH refused.
+Parallax bundles dominate disk assets (terrain~1981MiB/scatter1190MiB),
+Magpie is~0.8MiB/configs. Sizes aren't VRAM. No official low-res Parallax
+variant verified in checked releases; custom Unity-bundle overrides need
+work. BetterDres8K assets and BoulderCo are optional candidates, but don't
+remove planetary terrain or shaders blindly. OPM folder is apparently the
+KSPedia map package, not proof of full OPM; registry had only its map ID.
+ReStock blacklist audit is a quality-preserving next investigation. No
+game/assets/settings changes authorized or applied by this assessment.
+
 2026-10-28 latest Deck freeze investigated after pushing bootstrap2ae0dff:
 native kernel first hung-task16:48:16CET/122s =>onset~16:46:14. KSP4434 is
 still alive; dxvk-cs4481/UnityGfxDeviceW4490 D/ttm_global_swapout, likely

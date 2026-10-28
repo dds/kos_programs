@@ -57,6 +57,34 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Graphics-memory reductions preserving the preferred look.** Operator
+  values shiny/specular parts and ReStock/ReStockPlus. Preserve Magpie/TU/
+  Deferred appearance by default. Permanent inventory now saved at
+  docs/steamdeck/mod-inventory-20261028.json: folder presence28Oct, CKAN IDs /
+  AVC versions / measured package sizes26Oct, dates explicitly separated.
+  Fresh registry/size refresh refused SSH; no remote changes made. Ocean /
+  atmosphere cuts are low priority for this airless Minmus freeze; earlier
+  scene resources may persist but that residency has not been measured.
+  Recorded disk sizes: Parallax terrain1981MiB/scatter1190MiB/planet250MiB;
+  BetterDres173MiB incl8K colour/normal/height maps/rings; BoulderCo68MiB;
+  Magpie~0.8MiB/configs only. Do not present disk sizes as VRAM savings.
+  Official Parallax1.0.5/1.0.6 assets examined; no ready low-resolution stock
+  texture variant verified. Modern Parallax uses Unity bundles: selective
+  lower-resolution overrides/rebuilds are feasible but not a simple settings
+  toggle. Loose DDS colour/normal reductions are easier; preserve format,
+  alpha channels, mipmaps, height/biome data and shininess. User has already
+  set stock texture quality2; don't propose that as a new fix.
+  Next candidates: audit ReStock's blacklist so unused stock assets aren't
+  loaded alongside replacements; consider optional BetterDres visual assets
+  only if operator doesn't value that planet's revamp (it changes geography,
+  so no casual removal), optional BoulderCo cloud/city-light texture quality.
+  Verify texture residency before promises. OPM folders here appear to be
+  KSPedia/delta-v charts; CKAN snapshot has no full OPM package, so do not
+  recommend removing an assumed Outer Planets Mod. Most utilities are small
+  graphics consumers; a400MiB Burst compiler ZIP is not a400MiB GPU texture.
+  Sources: Parallax release1.0.3 bundle migration; KSPTextureLoader bundle
+  override precedence docs; ReStock Asset Blacklist and Whitelist wiki;
+  Deferred compatibility docs / Magpie's TU shiny-config description.
 - [ ] **Bootstrap undefined BOOT_LIB_RAN / full-volume installer.** Operator
   recompiled boot.ks but line194 still dereferenced an absent export. Actual
   early bootstrap _syncLib bypassed the safer shared installer, deleted old

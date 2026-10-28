@@ -1,0 +1,1506 @@
+{
+  "description": "Saved Steam Deck KSP inventory. Dates distinguish current folder presence from older version/size observations.",
+  "game_data_folders_observed": "2026-10-28",
+  "game_data_folders": [
+    "000_ClickThroughBlocker",
+    "000_FilterExtensions",
+    "000_FilterExtensions_Configs",
+    "000_Harmony",
+    "000_KSPBurst",
+    "000_NiakoUtils",
+    "000_TexturesUnlimited",
+    "001_ToolbarControl",
+    "Astrogator",
+    "B9PartSwitch",
+    "BetterBurnTime",
+    "BetterDres",
+    "BetterLoadSaveGame",
+    "BetterScienceLabsContinued",
+    "BetterTimeWarp",
+    "BonVoyage",
+    "BoulderCo",
+    "CameraFocusChanger",
+    "Chatterer",
+    "CommunityCategoryKit",
+    "CommunityTechTree",
+    "ContractConfigurator",
+    "ContractPacks",
+    "CustomBarnKit",
+    "DMagicUtilities",
+    "EnvironmentalVisualEnhancements",
+    "GPWS",
+    "HideEmptyTechTreeNodes",
+    "ImprovedChaseCamera",
+    "JX2Antenna",
+    "JanitorsCloset",
+    "KRnD",
+    "KSPCommunityFixes",
+    "KSPTextureLoader",
+    "KerbVisionIR",
+    "KerbalChangelog",
+    "KerbalEngineer",
+    "KerbalizedFlagpack",
+    "Kopernicus",
+    "KramaxAutoPilot",
+    "MagpieMods",
+    "MechJeb2",
+    "MechJebForAll",
+    "ModularFlightIntegrator",
+    "NavInstruments",
+    "Nereid",
+    "OPM",
+    "OPM_AIO_DVMAP",
+    "ParallaxContinued",
+    "Parallax_LifelessEvePatch",
+    "Parallax_StockPlanetTextures",
+    "Parallax_StockScatterTextures",
+    "Parallax_StockTerrainTextures",
+    "PlanetInfoPlus",
+    "REPOSoftTech",
+    "ReStock",
+    "ReStockPlus",
+    "SCANsat",
+    "Scatterer",
+    "ScattererAtmosphereCache",
+    "Shabby",
+    "SpaceTuxLibrary",
+    "SpaceTuxSA",
+    "Squad",
+    "SquadExpansion",
+    "StageRecovery",
+    "StockAlarmClockDisabler",
+    "StockScattererConfigs",
+    "ThroughTheEyes",
+    "Trajectories",
+    "TriggerTech",
+    "UnKerballedStart",
+    "VaporCones",
+    "WasdEditorCamera",
+    "Waterfall",
+    "WaypointManager",
+    "XyphosAerospace",
+    "[x]_Science!",
+    "kOS",
+    "kOS-Astrogator",
+    "kOS-KerbalEngineer",
+    "kOS-SCANsat",
+    "kOS.MechJeb2.Addon",
+    "ksp-advanced-flybywire",
+    "z_BetterRCS",
+    "zzz_DeckTweaks",
+    "zzz_Deferred"
+  ],
+  "ckan_identifiers_observed": "2026-10-26",
+  "ckan_identifiers": [
+    "AdvancedFlyByWire",
+    "AmpYearPowerManager",
+    "Astrogator",
+    "B9PartSwitch",
+    "BetterBurnTime",
+    "BetterDres",
+    "BetterLoadSaveGame",
+    "BetterRCS",
+    "BetterScienceLabsContinued",
+    "BetterTimeWarpCont",
+    "BonVoyage",
+    "BreakingGround-DLC",
+    "CameraFocusChanger",
+    "CapCom",
+    "Chatterer",
+    "ChattererExtended",
+    "ClickThroughBlocker",
+    "CommunityCategoryKit",
+    "CommunityTechTree",
+    "ContractConfigurator",
+    "ContractConfigurator-AnomalySurveyor",
+    "ContractConfigurator-CareerEvolution",
+    "ContractConfigurator-CleverSats",
+    "ContractConfigurator-ExplorationPlus",
+    "ContractConfigurator-GrandTours",
+    "ContractConfigurator-KerbinSpaceStation",
+    "ContractConfigurator-RoverMissionsRedux",
+    "ContractConfigurator-UnmannedContracts",
+    "ContractParser",
+    "ContractsWindowPlus",
+    "CustomBarnKit",
+    "Deferred",
+    "DeflatableHeatShield",
+    "EnvironmentalVisualEnhancements",
+    "EnvironmentalVisualEnhancements-HR",
+    "FinalFrontier",
+    "GAP",
+    "GPWS",
+    "Harmony2",
+    "HideEmptyTechNodes",
+    "ImprovedUpdatedChaseCam",
+    "JX2Antenna",
+    "JanitorsCloset",
+    "KRnD",
+    "KSPBurst",
+    "KSPBurst-Lite",
+    "KSPCommunityFixes",
+    "KSPTextureLoader",
+    "KerbVisionIR",
+    "KerbalAlarmClock",
+    "KerbalChangelog",
+    "KerbalEngineerRedux",
+    "KerbalizedFlagpack",
+    "Kopernicus",
+    "KramaxAutopilotContinued",
+    "MagpieMods",
+    "MakingHistory-DLC",
+    "MechJeb2",
+    "MechJebForAll",
+    "ModularFlightIntegrator",
+    "ModuleManager",
+    "NavUtilitiesUpdated",
+    "OPMAllinOneKSPediaDeltaVMap",
+    "ParallaxContinued",
+    "ParallaxContinued-Lifeless-Eve-Patch",
+    "ParallaxContinued-Planet-Textures",
+    "ParallaxContinued-Scatter-Textures",
+    "ParallaxContinued-Terrain-Textures",
+    "PlanetInfoPlus",
+    "ProgressParser",
+    "REPOSoftTech-Agencies",
+    "ReStock",
+    "ReStockPlus",
+    "ResearchAdvancementDivision",
+    "SCANsat",
+    "Scatterer",
+    "Scatterer-config",
+    "Scatterer-sunflare",
+    "Shabby",
+    "SpaceTuxLibrary",
+    "SpacetuxSA",
+    "StageRecovery",
+    "StockAlarmClockDisabler",
+    "TexturesUnlimited",
+    "ThroughTheEyesOfaKerbal",
+    "ToolbarController",
+    "TourismExpanded",
+    "Trajectories",
+    "TransferWindowPlannerFork",
+    "UnKerballedStart",
+    "VaporCones",
+    "VertexMitchellNetravaliHeightMap",
+    "WasdEditorCameraContinued",
+    "Waterfall",
+    "WaypointManager",
+    "kOS",
+    "kOS-Astrogator",
+    "kOS-KerbalEngineer",
+    "kOS-MechJeb2",
+    "kOS-SCANSat",
+    "kOSforAll",
+    "xScienceContinued"
+  ],
+  "avc_version_files_observed": "2026-10-26",
+  "avc_versions": [
+    {
+      "file": "GameData/000_ClickThroughBlocker/ClickThroughBlocker.version",
+      "name": "ClickThroughBlocker",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 1,
+        "PATCH": 10,
+        "BUILD": 23
+      },
+      "ksp": null
+    },
+    {
+      "file": "GameData/000_Harmony/Harmony.version",
+      "name": "Harmony",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 2,
+        "PATCH": 1,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 8,
+        "PATCH": 0
+      }
+    },
+    {
+      "file": "GameData/000_KSPBurst/KSPBurst.version",
+      "name": "KSPBurst",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 7,
+        "PATCH": 4,
+        "BUILD": 11
+      },
+      "ksp": null
+    },
+    {
+      "file": "GameData/000_TexturesUnlimited/TexturesUnlimited.version",
+      "name": "TexturesUnlimited",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 6,
+        "PATCH": 4,
+        "BUILD": 30
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 9,
+        "PATCH": 0
+      }
+    },
+    {
+      "file": "GameData/001_ToolbarControl/ToolbarControl.version",
+      "name": "ToolbarControl",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 1,
+        "PATCH": 9,
+        "BUILD": 14
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 3
+      }
+    },
+    {
+      "file": "GameData/Astrogator/Astrogator.version",
+      "name": "Astrogator",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 0,
+        "PATCH": 2
+      },
+      "ksp": null
+    },
+    {
+      "file": "GameData/B9PartSwitch/B9PartSwitch.version",
+      "name": "B9PartSwitch",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 21,
+        "PATCH": 0,
+        "BUILD": 4
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/BetterLoadSaveGame/BetterLoadSaveGame.version",
+      "name": "BetterLoadSaveGame",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 5,
+        "PATCH": 3,
+        "BUILD": 7
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 2
+      }
+    },
+    {
+      "file": "GameData/BetterScienceLabsContinued/BetterScienceLabsContinued.version",
+      "name": "Better Science Labs Continued",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 2,
+        "PATCH": 2,
+        "BUILD": 1
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 0
+      }
+    },
+    {
+      "file": "GameData/BetterTimeWarp/BetterTimeWarp.version",
+      "name": "BetterTimeWarpContinued",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 3,
+        "PATCH": 14,
+        "BUILD": 2
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/BonVoyage/BonVoyage.version",
+      "name": "BonVoyage /L",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 5,
+        "PATCH": 1,
+        "BUILD": 3
+      },
+      "ksp": null
+    },
+    {
+      "file": "GameData/CameraFocusChanger/CameraFocusChanger.version",
+      "name": "Camera Focus Changer",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 1,
+        "PATCH": 0,
+        "BUILD": 3
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 99
+      }
+    },
+    {
+      "file": "GameData/Chatterer/ChattererExtended.version",
+      "name": "Chatterer Extended",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 6,
+        "PATCH": 2,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 4,
+        "PATCH": 2
+      }
+    },
+    {
+      "file": "GameData/CommunityCategoryKit/CCK.version",
+      "name": "Community Category Kit",
+      "version": {
+        "BUILD": 112,
+        "MAJOR": 0,
+        "MINOR": 1,
+        "PATCH": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 3
+      }
+    },
+    {
+      "file": "GameData/CommunityTechTree/Versioning/CommunityTechTree.version",
+      "name": "CommunityTechTree",
+      "version": {
+        "MAJOR": 3,
+        "MINOR": 4,
+        "PATCH": 5,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/ContractConfigurator/ContractConfigurator.version",
+      "name": "Contract Configurator",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 13,
+        "PATCH": 4,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 3
+      }
+    },
+    {
+      "file": "GameData/ContractPacks/ExplorationPlus.version",
+      "name": "Contract Pack: Exploration Plus",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 0,
+        "PATCH": 1,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 9,
+        "PATCH": 1
+      }
+    },
+    {
+      "file": "GameData/ContractPacks/KerbinSpaceStation/BasesandStations.version",
+      "name": "Contract Pack: Bases and Stations",
+      "version": {
+        "MAJOR": 3,
+        "MINOR": 7,
+        "PATCH": 3,
+        "BUILD": 3
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 2
+      }
+    },
+    {
+      "file": "GameData/ContractPacks/TourismExpanded/ContractPack-TourismExpanded.version",
+      "name": "Contract Pack: Tourism Expanded",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 0,
+        "PATCH": 2,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 3
+      }
+    },
+    {
+      "file": "GameData/ContractPacks/AnomalySurveyor/ContractPack-AnomalySurveyor.version",
+      "name": "Contract Pack: Anomaly Surveyor",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 1,
+        "PATCH": 0,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/ContractPacks/RAD/RAD.version",
+      "name": "Contract Pack: Research Advancement Division",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 3,
+        "PATCH": 0,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/ContractPacks/GAP/GAP.version",
+      "name": "Contract Pack: Giving Aircraft a Purpose",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 11,
+        "PATCH": 1,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/ContractPacks/Spacetux/Grandtours/GrandTour.version",
+      "name": "Contract Pack: Grand Tour Contracts",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 1,
+        "PATCH": 10,
+        "BUILD": 3
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 2,
+        "PATCH": 0
+      }
+    },
+    {
+      "file": "GameData/ContractPacks/Spacetux/UnmannedContracts/UnmannedContracts.version",
+      "name": "Contract Pack: Unmanned Contracts",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 3,
+        "PATCH": 27,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 2,
+        "PATCH": 1
+      }
+    },
+    {
+      "file": "GameData/ContractPacks/Spacetux/RoverMissions/rovercontracts.version",
+      "name": "Rover Missions",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 1,
+        "PATCH": 7,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 2,
+        "PATCH": 2
+      }
+    },
+    {
+      "file": "GameData/ContractPacks/CEContracts/Contract-Pack-Career-Evolution.version",
+      "name": "CareerEvolution",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 3,
+        "PATCH": 2,
+        "BUILD": 1
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/CustomBarnKit/CustomBarnKit.version",
+      "name": "CustomBarnKit",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 1,
+        "PATCH": 22,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 99
+      }
+    },
+    {
+      "file": "GameData/EnvironmentalVisualEnhancements/EnvironmentalVisualEnhancements.version",
+      "name": "Environmental Visual Enhancements - Redux",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 11,
+        "PATCH": 7,
+        "BUILD": 2
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 11,
+        "PATCH": 1
+      }
+    },
+    {
+      "file": "GameData/GPWS/GPWS.version",
+      "name": "GPWS",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 4,
+        "PATCH": 0,
+        "BUILD": 2
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 2
+      }
+    },
+    {
+      "file": "GameData/ImprovedChaseCamera/ImprovedChaseCamera.version",
+      "name": "ImprovedChaseCamera",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 6,
+        "PATCH": 4,
+        "BUILD": 4
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/JanitorsCloset/JanitorsCloset.version",
+      "name": "JanitorsCloset",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 4,
+        "PATCH": 1,
+        "BUILD": 7
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/KRnD/KRnD.version",
+      "name": "KRnD",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 16,
+        "PATCH": 0,
+        "BUILD": 14
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/KSPCommunityFixes/KSPCommunityFixes.version",
+      "name": "KSPCommunityFixes",
+      "version": "1.41.1",
+      "ksp": "1.12.5"
+    },
+    {
+      "file": "GameData/KSPTextureLoader/KSPTextureLoader.version",
+      "name": "KSPTextureLoader",
+      "version": "1.0.36.0",
+      "ksp": "1.12"
+    },
+    {
+      "file": "GameData/KerbVisionIR/KerbVisionIR.version",
+      "name": "KerbVisionIR",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 0,
+        "PATCH": 3
+      },
+      "ksp": null
+    },
+    {
+      "file": "GameData/KerbalChangelog/KerbalChangelog.version",
+      "name": "KerbalChangelog",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 4,
+        "PATCH": 2
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 11
+      }
+    },
+    {
+      "file": "GameData/KerbalEngineer/KerbalEngineer.version",
+      "name": "Kerbal Engineer Redux",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 1,
+        "PATCH": 9,
+        "BUILD": 5
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/Kopernicus/Plugins/Kopernicus.version",
+      "name": "Kopernicus",
+      "version": "1.12.1.247",
+      "ksp": "1.12"
+    },
+    {
+      "file": "GameData/KramaxAutoPilot/KramaxAutoPilot.version",
+      "name": "KramaxAutoPilotContinued",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 4,
+        "PATCH": 0,
+        "BUILD": 1
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 2
+      }
+    },
+    {
+      "file": "GameData/MechJebForAll/MechJebForAll.version",
+      "name": "MechJebForAll",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 3,
+        "PATCH": 0,
+        "BUILD": 7
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 0
+      }
+    },
+    {
+      "file": "GameData/ModularFlightIntegrator/ModularFlightIntegrator.version",
+      "name": "ModularFlightIntegrator",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 2,
+        "PATCH": 10,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 0
+      }
+    },
+    {
+      "file": "GameData/NavInstruments/NavInstruments.version",
+      "name": "NavInstrumentsContinued",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 8,
+        "PATCH": 1,
+        "BUILD": 1
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 2
+      }
+    },
+    {
+      "file": "GameData/Nereid/FinalFrontier/FinalFrontier.version",
+      "name": "Final Frontier",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 10,
+        "PATCH": 0,
+        "BUILD": 3485
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 8,
+        "PATCH": 1
+      }
+    },
+    {
+      "file": "GameData/ReStock/Versioning/ReStock.version",
+      "name": "ReStock",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 5,
+        "PATCH": 1,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/ReStockPlus/Versioning/ReStockPlus.version",
+      "name": "ReStockPlus",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 5,
+        "PATCH": 1,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/SCANsat/SCANsat.version",
+      "name": "SCANsat",
+      "version": "21.1.0.0",
+      "ksp": "1.12"
+    },
+    {
+      "file": "GameData/Shabby/Shabby.version",
+      "name": "Shabby",
+      "version": "0.4.2.0",
+      "ksp": "1.12"
+    },
+    {
+      "file": "GameData/SpaceTuxLibrary/ButtonManager.version",
+      "name": "ButtonManager",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 0,
+        "PATCH": 2,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 2
+      }
+    },
+    {
+      "file": "GameData/SpaceTuxLibrary/SpaceTuxLibrary.version",
+      "name": "SpaceTuxLibrary",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 0,
+        "PATCH": 9,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 4
+      }
+    },
+    {
+      "file": "GameData/SpaceTuxSA/SpaceTuxSA.version",
+      "name": "Spacetux",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 3,
+        "PATCH": 13,
+        "BUILD": 1
+      },
+      "ksp": null
+    },
+    {
+      "file": "GameData/StageRecovery/StageRecovery.version",
+      "name": "StageRecovery",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 9,
+        "PATCH": 8,
+        "BUILD": 1
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/ThroughTheEyes/ThroughTheEyes.version",
+      "name": "ThroughTheEyes",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 0,
+        "PATCH": 4,
+        "BUILD": 5
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/Trajectories/Trajectories.version",
+      "name": "Trajectories",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 4,
+        "PATCH": 5,
+        "BUILD": 4
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/TriggerTech/KerbalAlarmClock/KerbalAlarmClock.version",
+      "name": "Kerbal Alarm Clock Updated",
+      "version": {
+        "MAJOR": 3,
+        "MINOR": 14,
+        "PATCH": 2,
+        "BUILD": 7
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/TriggerTech/TransferWindowPlanner/TransferWindowPlanner.version",
+      "name": "Transfer Window Planner",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 9,
+        "PATCH": 1,
+        "BUILD": 1
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/UnKerballedStart/UnKerballedStart.version",
+      "name": "UnKerballedStart",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 3,
+        "PATCH": 2,
+        "BUILD": 0
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 3
+      }
+    },
+    {
+      "file": "GameData/WasdEditorCamera/WasdEditorCamera.version",
+      "name": "WASDEditorCameraContinued",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 7,
+        "PATCH": 3,
+        "BUILD": 3
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 1
+      }
+    },
+    {
+      "file": "GameData/Waterfall/Waterfall.version",
+      "name": "Waterfall",
+      "version": "0.11.0.0",
+      "ksp": "1.12"
+    },
+    {
+      "file": "GameData/WaypointManager/WaypointManager.version",
+      "name": "Waypoint Manager",
+      "version": {
+        "MAJOR": 2,
+        "MINOR": 8,
+        "PATCH": 4,
+        "BUILD": 7
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 4
+      }
+    },
+    {
+      "file": "GameData/[x]_Science!/X-Science.version",
+      "name": "[x] Science!",
+      "version": {
+        "MAJOR": 6,
+        "MINOR": 0,
+        "PATCH": 3,
+        "BUILD": 1
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 5
+      }
+    },
+    {
+      "file": "GameData/kOS/kOS.version",
+      "name": "kOS",
+      "version": "1.6.0.1",
+      "ksp": "1.12"
+    },
+    {
+      "file": "GameData/kOS-Astrogator/kOS-Astrogator.version",
+      "name": "kOS-Astrogator",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 2,
+        "PATCH": 2
+      },
+      "ksp": null
+    },
+    {
+      "file": "GameData/kOS-KerbalEngineer/kOS-KerbalEngineer.version",
+      "name": "kOS-KerbalEngineer",
+      "version": {
+        "MAJOR": 0,
+        "MINOR": 1,
+        "PATCH": 1
+      },
+      "ksp": null
+    },
+    {
+      "file": "GameData/kOS.MechJeb2.Addon/kOS.MechJeb2.Addon.version",
+      "name": "kOS.MechJeb2.Addon",
+      "version": "0.0.4",
+      "ksp": "1.12"
+    },
+    {
+      "file": "GameData/ksp-advanced-flybywire/ksp-advanced-flybywire.version",
+      "name": "AdvancedFlyByWire",
+      "version": {
+        "MAJOR": 1,
+        "MINOR": 8,
+        "PATCH": 4,
+        "BUILD": 5
+      },
+      "ksp": {
+        "MAJOR": 1,
+        "MINOR": 12,
+        "PATCH": 4
+      }
+    }
+  ],
+  "folder_sizes_observed": "2026-10-26",
+  "folder_sizes_note": "Bytes on disk only; NOT measurements of resident RAM or GPU memory. Bundle file sizes do not imply all bundled textures are resident.",
+  "folder_sizes": [
+    {
+      "folder": "Parallax_StockTerrainTextures",
+      "bytes": 2077603452,
+      "loose_texture_bytes": 349680
+    },
+    {
+      "folder": "Parallax_StockScatterTextures",
+      "bytes": 1248258869,
+      "loose_texture_bytes": 592766
+    },
+    {
+      "folder": "Squad",
+      "bytes": 1170678558,
+      "loose_texture_bytes": 1022322383
+    },
+    {
+      "folder": "SquadExpansion",
+      "bytes": 944142945,
+      "loose_texture_bytes": 398921082
+    },
+    {
+      "folder": "ReStock",
+      "bytes": 720865786,
+      "loose_texture_bytes": 601177448
+    },
+    {
+      "folder": "000_KSPBurst",
+      "bytes": 410325549,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "Parallax_StockPlanetTextures",
+      "bytes": 262615629,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "ScattererAtmosphereCache",
+      "bytes": 193462272,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "BetterDres",
+      "bytes": 181521065,
+      "loose_texture_bytes": 180321110
+    },
+    {
+      "folder": "KSPCommunityFixes",
+      "bytes": 139515781,
+      "loose_texture_bytes": 874688
+    },
+    {
+      "folder": "BoulderCo",
+      "bytes": 71607652,
+      "loose_texture_bytes": 71594482
+    },
+    {
+      "folder": "ReStockPlus",
+      "bytes": 67579068,
+      "loose_texture_bytes": 57400365
+    },
+    {
+      "folder": "SCANsat",
+      "bytes": 51180591,
+      "loose_texture_bytes": 36692486
+    },
+    {
+      "folder": "Chatterer",
+      "bytes": 47073858,
+      "loose_texture_bytes": 28384
+    },
+    {
+      "folder": "ParallaxContinued",
+      "bytes": 26440076,
+      "loose_texture_bytes": 267296
+    },
+    {
+      "folder": "Kopernicus",
+      "bytes": 21374280,
+      "loose_texture_bytes": 9250
+    },
+    {
+      "folder": "KerbalizedFlagpack",
+      "bytes": 20262156,
+      "loose_texture_bytes": 18882624
+    },
+    {
+      "folder": "JX2Antenna",
+      "bytes": 17060680,
+      "loose_texture_bytes": 3495704
+    },
+    {
+      "folder": "OPM",
+      "bytes": 15058108,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "Waterfall",
+      "bytes": 11958231,
+      "loose_texture_bytes": 4385495
+    },
+    {
+      "folder": "ContractConfigurator",
+      "bytes": 11868093,
+      "loose_texture_bytes": 560054
+    },
+    {
+      "folder": "000_TexturesUnlimited",
+      "bytes": 11202656,
+      "loose_texture_bytes": 1078
+    },
+    {
+      "folder": "kOS",
+      "bytes": 9355169,
+      "loose_texture_bytes": 7456867
+    },
+    {
+      "folder": "MechJeb2",
+      "bytes": 9205761,
+      "loose_texture_bytes": 746308
+    },
+    {
+      "folder": "BetterScienceLabsContinued",
+      "bytes": 8782876,
+      "loose_texture_bytes": 8463465
+    },
+    {
+      "folder": "ContractPacks",
+      "bytes": 6128611,
+      "loose_texture_bytes": 4195534
+    },
+    {
+      "folder": "Scatterer",
+      "bytes": 5740519,
+      "loose_texture_bytes": 23694
+    },
+    {
+      "folder": "KerbalEngineer",
+      "bytes": 4189896,
+      "loose_texture_bytes": 3383747
+    },
+    {
+      "folder": "TriggerTech",
+      "bytes": 2472631,
+      "loose_texture_bytes": 156039
+    },
+    {
+      "folder": "REPOSoftTech",
+      "bytes": 2442953,
+      "loose_texture_bytes": 844442
+    },
+    {
+      "folder": "KSPTextureLoader",
+      "bytes": 2232877,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "NavInstruments",
+      "bytes": 1918753,
+      "loose_texture_bytes": 430288
+    },
+    {
+      "folder": "CommunityTechTree",
+      "bytes": 1884225,
+      "loose_texture_bytes": 1697299
+    },
+    {
+      "folder": "StockScattererConfigs",
+      "bytes": 1881601,
+      "loose_texture_bytes": 1867029
+    },
+    {
+      "folder": "Nereid",
+      "bytes": 1797471,
+      "loose_texture_bytes": 1550061
+    },
+    {
+      "folder": "zzz_Deferred",
+      "bytes": 1393175,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "KerbVisionIR",
+      "bytes": 1141006,
+      "loose_texture_bytes": 14151
+    },
+    {
+      "folder": "000_Harmony",
+      "bytes": 942253,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "EnvironmentalVisualEnhancements",
+      "bytes": 902370,
+      "loose_texture_bytes": 28372
+    },
+    {
+      "folder": "MagpieMods",
+      "bytes": 818092,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "GPWS",
+      "bytes": 589264,
+      "loose_texture_bytes": 1125
+    },
+    {
+      "folder": "SpaceTuxLibrary",
+      "bytes": 581408,
+      "loose_texture_bytes": 426948
+    },
+    {
+      "folder": "BonVoyage",
+      "bytes": 539577,
+      "loose_texture_bytes": 200063
+    },
+    {
+      "folder": "UnKerballedStart",
+      "bytes": 534670,
+      "loose_texture_bytes": 83120
+    },
+    {
+      "folder": "DMagicUtilities",
+      "bytes": 497936,
+      "loose_texture_bytes": 43652
+    },
+    {
+      "folder": "[x]_Science!",
+      "bytes": 390611,
+      "loose_texture_bytes": 34568
+    },
+    {
+      "folder": "Trajectories",
+      "bytes": 350461,
+      "loose_texture_bytes": 41524
+    },
+    {
+      "folder": "ksp-advanced-flybywire",
+      "bytes": 324888,
+      "loose_texture_bytes": 5720
+    },
+    {
+      "folder": "JanitorsCloset",
+      "bytes": 307341,
+      "loose_texture_bytes": 38312
+    },
+    {
+      "folder": "B9PartSwitch",
+      "bytes": 293600,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "CommunityCategoryKit",
+      "bytes": 227010,
+      "loose_texture_bytes": 191917
+    },
+    {
+      "folder": "OPM_AIO_DVMAP",
+      "bytes": 219427,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "WaypointManager",
+      "bytes": 196162,
+      "loose_texture_bytes": 39119
+    },
+    {
+      "folder": "KramaxAutoPilot",
+      "bytes": 182864,
+      "loose_texture_bytes": 2265
+    },
+    {
+      "folder": "Astrogator",
+      "bytes": 177982,
+      "loose_texture_bytes": 11136
+    },
+    {
+      "folder": "SpaceTuxSA",
+      "bytes": 161646,
+      "loose_texture_bytes": 39771
+    },
+    {
+      "folder": "000_ClickThroughBlocker",
+      "bytes": 158766,
+      "loose_texture_bytes": 89325
+    },
+    {
+      "folder": "StageRecovery",
+      "bytes": 152560,
+      "loose_texture_bytes": 7138
+    },
+    {
+      "folder": "z_BetterRCS",
+      "bytes": 143630,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "001_ToolbarControl",
+      "bytes": 127512,
+      "loose_texture_bytes": 43823
+    },
+    {
+      "folder": "HideEmptyTechTreeNodes",
+      "bytes": 122562,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "kOS.MechJeb2.Addon",
+      "bytes": 120648,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "ThroughTheEyes",
+      "bytes": 115244,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "KRnD",
+      "bytes": 90212,
+      "loose_texture_bytes": 5151
+    },
+    {
+      "folder": "BetterBurnTime",
+      "bytes": 79522,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "PlanetInfoPlus",
+      "bytes": 73604,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "kOS-Astrogator",
+      "bytes": 73331,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "BetterTimeWarp",
+      "bytes": 69901,
+      "loose_texture_bytes": 1682
+    },
+    {
+      "folder": "WasdEditorCamera",
+      "bytes": 62526,
+      "loose_texture_bytes": 4989
+    },
+    {
+      "folder": "KerbalChangelog",
+      "bytes": 59198,
+      "loose_texture_bytes": 369
+    },
+    {
+      "folder": "BetterLoadSaveGame",
+      "bytes": 55057,
+      "loose_texture_bytes": 2736
+    },
+    {
+      "folder": "kOS-KerbalEngineer",
+      "bytes": 52535,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "StockAlarmClockDisabler",
+      "bytes": 49405,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "CustomBarnKit",
+      "bytes": 41756,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "MechJebForAll",
+      "bytes": 37111,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "ImprovedChaseCamera",
+      "bytes": 28510,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "Shabby",
+      "bytes": 26061,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "ModularFlightIntegrator",
+      "bytes": 24261,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "CameraFocusChanger",
+      "bytes": 21065,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "kOS-SCANsat",
+      "bytes": 18665,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "VaporCones",
+      "bytes": 16601,
+      "loose_texture_bytes": 2872
+    },
+    {
+      "folder": "000_NiakoUtils",
+      "bytes": 10278,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "XyphosAerospace",
+      "bytes": 819,
+      "loose_texture_bytes": 0
+    },
+    {
+      "folder": "Parallax_LifelessEvePatch",
+      "bytes": 412,
+      "loose_texture_bytes": 0
+    }
+  ],
+  "user_preferences": {
+    "preserve": [
+      "specular highlights and shiny parts",
+      "Magpie Mods / Textures Unlimited / Deferred look",
+      "ReStock",
+      "ReStockPlus"
+    ],
+    "already_authorized": [
+      "NoIVA",
+      "disable optional Making History mission-editor features"
+    ]
+  },
+  "notes": [
+    "The OPM and OPM_AIO_DVMAP folders alone do not establish that Outer Planets Mod is installed. Captured CKAN identifiers include OPMAllinOneKSPediaDeltaVMap, not OPM.",
+    "Fresh CKAN registry/size refresh on2026-10-28 was unavailable because SSH connection was refused; do not label historical sizes or versions as fresh."
+  ]
+}
