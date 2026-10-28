@@ -9,6 +9,23 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 SHAPE throttle diagnosis: RO9_4218202 boot019 UT4257230..4257296
+plane9.742m/s burned66.3s: legacy dv<10 engine10% plus command50% stacked.
+Actual configured acceleration~3.2m/s^2, limited maxAcc0.32. Replaced fixed
+dV buckets with relative engine limiting only for impulse durations<2s
+(BURN_MIN_FULL_THRUST_SECONDS); preserve existing partial/zero limits during
+setup. Removed redundant50% command ceiling: main-loop time-to-go taper
+and live tick/axis/impulse/stale-command governors already bound output.
+Precision, attitude, physical cutoff, staging and reserves unchanged.
+Source checks exercise actual helper/publication expression/live governor
+in108 latency/acceleration/burn/stale-loop cases plus prior120 delayed tails.
+All72 routine check files pass127.65s; test count corrected from324 to108.
+Native new-policy flight not yet observed. New setup log includes thrustScale.
+Boot019 also confirms floor repair flew55.8777m/s with0.000999 residual,
+achieved~10x659.7km, then proceeded to plane/apsis refinement. Original floor
+dead end resolved in flight; full requested orbit completion still pending.
+Read-only evidence /tmp/ksp-deck-20261028T200230Z-fetch-bueku20u/logs/.
+
 2026-10-28 SHAPE live failure now diagnosed: RO9_4218202 boot018 atUT4218532,
 9.52x10.031km/3.029deg parking,10km floor,0 burns by4218577.2. Ascent99% Pe
 target and0.3m/s residual can land below SHAPE's floor. Do not lower it.

@@ -25,7 +25,7 @@ GLOBAL BURN_NODE_REBOUND_EPS IS 0.5.
 GLOBAL BURN_NODE_FLIP_DEG IS 90.
 GLOBAL BURN_NODE_FLIP_REMAINING_DV IS 20.
 GLOBAL BURN_TICK_LOG_INTERVAL IS 1.0.
-GLOBAL BURN_FULL_THROTTLE_MIN_DV IS 10.
+GLOBAL BURN_MIN_FULL_THRUST_SECONDS IS 2.
 GLOBAL BURN_STAGE_TIMEOUT IS 10.
 GLOBAL BURN_STAGE_SETTLE IS 0.5.
 GLOBAL BURN_STAGE_MAX_EVENTS IS 4.
@@ -84,10 +84,7 @@ GLOBAL FUNCTION executeManeuver {
         mLog("Maneuver already below absolute dV tolerance; skipping burn.").
         RETURN TRUE.
     }
-    IF bdv < 50 { _stl(0.50). }
-    IF bdv < 10 { _stl(0.10). }
-    IF bdv < 2  { _stl(0.05). }
-    IF bdv < 0.5 { _stl(0.02). }
+    LOCAL thrustScale IS _burnLimitThrust(bdv).
     // Estimate the centered start with the thrust limits actually used.
     WAIT 0.1.
     LOCAL st IS TIME:SECONDS.
@@ -112,6 +109,7 @@ GLOBAL FUNCTION executeManeuver {
         + " eta=" + ROUND(st - TIME:SECONDS,1)
         + " nodeEta=" + ROUND(nd:ETA,1)
         + " body=" + SHIP:BODY:NAME
+        + " thrustScale=" + ROUND(thrustScale,6)
         + " maxAcc=" + ROUND(_sma(),2)).
     IF _sma() <= 0 {
         mLog("STATS burn thrust status=no-thrust maxThrust="
@@ -736,9 +734,6 @@ GLOBAL FUNCTION executeManeuver {
             // craft or when the script takes several physics ticks.
             LOCAL horizon IS MAX(1.0, 2 * dt).
             LOCAL nextThrottle IS MIN(1.0, rem / (ma * horizon)).
-            IF rem <= BURN_FULL_THROTTLE_MIN_DV {
-                SET nextThrottle TO MIN(0.5, nextThrottle).
-            }
             // Cooked control may run between any two statements. Publish
             // freshness BEFORE positive throttle, including after a long
             // zero-throttle setup/recovery, or the guard sees a stale command.
@@ -1039,6 +1034,23 @@ LOCAL FUNCTION _stl {
     FOR eng IN SHIP:ENGINES {
         SET eng:THRUSTLIMIT TO pct * 100.
     }
+}
+
+LOCAL FUNCTION _burnLimitThrust {
+    PARAMETER dv.
+    LOCAL acc IS _sma().
+    LOCAL fraction IS 1.
+    IF _nf(dv) AND dv > 0 AND _nf(acc) AND acc > 0 {
+        // Lengthen genuinely short burns, not every burn below a fixed dV.
+        // Scale the existing limits: _sma already includes those settings.
+        SET fraction TO MIN(1, dv / (acc * MAX(1, BURN_MIN_FULL_THRUST_SECONDS))).
+        IF fraction < 1 {
+            FOR eng IN SHIP:ENGINES {
+                SET eng:THRUSTLIMIT TO eng:THRUSTLIMIT * fraction.
+            }
+        }
+    }
+    RETURN fraction.
 }
 
 // Single-burn node planners (planCircularize / planCapture /

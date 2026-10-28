@@ -6,12 +6,13 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- Latest live blocker: RO9_4218202 boot018 SHAPE atUT4218532..4218577
-  refused all nodes after9.52x10.03km parking because its unchanged Pe floor
-  is10km. No burns executed. Implementing a legal above-floor Pe repair and
-  a1km headroom handoff for future shaped ascents; satellite profiles also
-  need85km parking above Kerbin's80km floor. Do not lower safety floors or
-  change target elements to make this pass. Read-only logs recovered below.
+- Latest native SHAPE issue: RO9_4218202 boot019 plane9.742m/s took66.3s
+  atUT4257230..4257296 because engine10% and throttle50% limits stacked.
+  Acceleration-based duration limiting and existing live taper replace those
+  fixed dV limits; source simulation passes, native new timing pending.
+  Previous floor dead end is resolved in flight:55.8777m/s combined raise
+  reached~10x659.7km and proceeded to plane/apsis shaping. Keep Pe floor,
+  requested elements, precision and300m/s reserve. Full objective pending.
 - Latest operator priority: prepare four RO9 satellite missions and one new
   targeted Mun return, without activating profiles or launching craft. Hop
   mission completed successfully with improved approach. Duna/Ike flyby /
@@ -70,6 +71,20 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **SHAPE excessive partial-throttle burns.** Read-only boot019 evidence:
+  /tmp/ksp-deck-20261028T200230Z-fetch-bueku20u/logs/RO9_4218202/boot_019_core.log.
+  Plane9.742m/s atUT4257230.1..4257296.3 took66.3s, node residual0.000988m/s.
+  Legacy engine10% and main-loop50% stacked, effective~5% configured power.
+  Replaced fixed dv buckets with relative engine-limit scaling based on
+  available acceleration and2s minimum full-throttle impulse duration.
+  Existing partial/zero limits respected during setup. Shared main/live
+  time-to-go taper governs final precision instead of a blanket50% ceiling.
+  Attitude/axis/rebound/impulse/stale-command/physical-stop/staging/fuel guards
+  remain. Setup records thrustScale. Source-driven108 delayed-control/accel/
+  burn/heartbeat cases plus prior120 delayed tails pass. Native duration,
+  precision and final orbital objective still need flight confirmation;
+  no remote flight/library/state changes. No bootstrap compilation needed.
+  All72 routine check files passed127.65s; new case count corrected to108.
 - [ ] **Low parking orbit vs SHAPE safety-floor dead end.** Retrieved RO9
   logs with approved diagnostic wrapper; local evidence:
   /tmp/ksp-deck-20261028T185848Z-fetch-kef4ikf6/logs/RO9_4218202/boot_018_core.log
@@ -106,8 +121,11 @@ record remaining uncertainty before closing a task.
   actual seed/cost/minimum/budget/phase logic. LAND_PREP's fixture now binds
   the real private floor helpers called by shapeNextBurn. Native next burn
   should be set-pe-for-ap~55.8m/s at current Ap; follow normal SHAPE with the
-  same goals/review. Pull and connected REBOOT in SHAPE; do not rerun the
-  surface selection command from orbit. No bootstrap recompilation.
+  same goals/review. Native boot019 now confirms first55.8777m/s raise
+  completed with0.000999m/s residual and~10x659.7km, followed by plane/apsis
+  refinement; original admission dead end is resolved. Full final orbit
+  remains unconfirmed. Pull and connected REBOOT in SHAPE to load any further
+  changes; do not rerun surface selection from orbit. No bootstrap recompile.
 - [x] **Reusable read-only Deck diagnostic wrapper.** Operator requests fewer
   repeated approvals. Added executable scripts/deck-diagnostics with fixed
   status/crash/logs/fetch actions and a reusable exact absolute-path approval.

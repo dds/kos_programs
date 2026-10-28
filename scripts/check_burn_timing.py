@@ -9,6 +9,7 @@ Run: python3 scripts/check_burn_timing.py
 import math
 import re
 from pathlib import Path
+from types import SimpleNamespace as NS
 
 
 SOURCE = (Path(__file__).resolve().parents[1] / "lib/maneuver.ks").read_text()
@@ -29,6 +30,93 @@ OUTPUT = expression(r'SET cutoff\["output"\] TO (MIN\(.*?)\.\s')
 PROJECTED_REMAINING = expression(r'SET rem TO (MIN\(rem, MAX\(0, forwardRem\)\))\.\s')
 REBOUND_EPS = float(re.search(r'GLOBAL BURN_NODE_REBOUND_EPS IS ([0-9.]+)\.', SOURCE)[1])
 AXIS_GUARD = float(re.search(r'GLOBAL BURN_NODE_FLIP_REMAINING_DV IS ([0-9.]+)\.', SOURCE)[1])
+MAIN_HORIZON = compile(re.search(r'LOCAL horizon IS (.*?)\.\s',
+    SOURCE.split('ELSE IF rem > BURN_TRIM_ABS_COMPLETE_DV {', 1)[1])[1],
+    '<main-loop horizon>', 'eval')
+MAIN_THROTTLE = compile(re.search(r'LOCAL nextThrottle IS (.*?)\.\s', SOURCE)[1],
+    '<main-loop throttle>', 'eval')
+
+
+def check_duration_limits():
+    import check_landing_guidance as ks
+    from check_burn_watchdog import fixture as governor_fixture
+    # Execute the real helper, including engines with existing partial/zero
+    # limits. Acceleration is the configured value, not unlimited engine power.
+    for dv in (.008, .1589, 1, 9.7422, 49, 55.8777, 900):
+        for acc in (.01, .32, 3.2, 46, 400):
+            env, _, _, _ = governor_fixture(acc=acc)
+            engines = [NS(THRUSTLIMIT=x) for x in (100, 50, 0)]
+            env['SHIP'].ENGINES = engines
+            scale = ks.call('_burnLimitThrust', env, dv)
+            assert 0 < scale <= 1
+            assert abs(scale - min(1, dv / (acc * 2))) < 1e-12
+            assert [e.THRUSTLIMIT for e in engines] == [100*scale, 50*scale, 0]
+            assert dv / (acc * scale) >= 2 - 1e-12
+            if dv / acc >= 2:
+                assert scale == 1
+    for acc in (0, -1, math.nan, math.inf):
+        env, _, _, _ = governor_fixture(acc=acc)
+        engine = NS(THRUSTLIMIT=37)
+        env['SHIP'].ENGINES = [engine]
+        assert ks.call('_burnLimitThrust', env, 9.7422) == 1
+        assert engine.THRUSTLIMIT == 37
+    print('PASS: actual duration limiter adapts to acceleration, preserves relative/zero engine limits and leaves slow burns at available power')
+
+
+def check_full_power_cutoff():
+    import check_landing_guidance as ks
+    from check_burn_watchdog import fixture as governor_fixture
+    # Main-loop expression plus actual live governor with one physics tick of
+    # control latency. Test low acceleration AND high acceleration, tiny burns,
+    # precision tails, a delayed loop and a genuine heartbeat timeout.
+    builtins = {'__builtins__': {}, 'MAX': max, 'MIN': min}
+    cases = 0
+    for dv in (.008, .1589, 9.7422, 55.8777):
+        for configured_acc in (.32, 3.2, 400):
+            acc = configured_acc * min(1, dv/(configured_acc*2))
+            for tick in (.02, .1, .25):
+                for stall in (0, .4, 1.2):
+                    cases += 1
+                    env, cutoff, node, live = governor_fixture(acc=acc, cap=dv*1.01+.05)
+                    env['BURN_TRIM_ABS_COMPLETE_DV'] = .001
+                    residual, output, delivered, command = dv, 0, 0, 0
+                    last_main = -tick
+                    max_command = 0
+                    for i in range(10000):
+                        now = i*tick
+                        residual -= delivered*acc*tick
+                        assert residual >= -1e-10, (dv, acc, tick, stall, residual)
+                        env['TIME'].SECONDS = now
+                        env['SHIP'].THRUST = delivered*acc
+                        node.DELTAV = ks.Vec((max(0, residual), 0, 0))
+                        if not (tick <= now < tick+stall):
+                            dt = now-last_main
+                            horizon = eval(MAIN_HORIZON, builtins, dict(dt=dt))
+                            command = eval(MAIN_THROTTLE, builtins,
+                                           dict(rem=max(0, residual), ma=acc, horizon=horizon))
+                            max_command = max(max_command, command)
+                            cutoff['heartbeat'] = now
+                            last_main = now
+                        delivered, output = output, live(command)
+                        if cutoff['reason'] and delivered == 0 and output == 0:
+                            break
+                    else:
+                        raise AssertionError(('No cutoff', dv, acc, tick, stall))
+                    if stall > 1:
+                        assert cutoff['reason'] == 'live-command-stale'
+                    else:
+                        assert cutoff['reason'] == 'live-node-trim', cutoff
+                        assert residual <= .001
+                    assert max_command == 1  # no blanket half-throttle ceiling
+                    assert live(1) == 0  # later residual changes cannot reignite
+    # Native report: previously 10% engine limit AND half throttle at 9.742m/s.
+    # At configured3.2m/s^2 this is a3.04s full-power impulse, not60.9s.
+    assert 9.7422/(3.2*.1*.5) > 60
+    assert 9.7422/3.2 < 3.1
+    executor = SOURCE.split('GLOBAL FUNCTION executeManeuver {', 1)[1]
+    assert executor.index('_burnLimitThrust(bdv)') < executor.index('_cst(nd)')
+    assert 'MIN(0.5, nextThrottle)' not in executor
+    print(f'PASS: {cases} actual-governor burns retain precision cutoff, latency margin and stale-command latch at full power; reported double limit reproduced')
 
 
 class Governor:
@@ -100,6 +188,8 @@ def fly_tail(acceleration, tick, main_stall, latency_ticks=0):
 
 
 def main():
+    check_duration_limits()
+    check_full_power_cutoff()
     # Reproduce the reported scale without inventing a failed taper law:
     # a perfectly reasonable previous command, held for one extra second,
     # turns +0.5 m/s remaining into -1.0 m/s remaining.

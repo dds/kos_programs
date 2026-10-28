@@ -742,6 +742,15 @@ its high-priority calculations leave time for the main loop. It restores
 the previous setting after cutoff or at the next boot after interruption.
 The one-second stale-command cutoff remains active.
 
+Maneuver engine limiting uses measured available acceleration and
+`BURN_MIN_FULL_THRUST_SECONDS` (2 seconds by default). It scales existing
+engine limits only when the full-throttle impulse would be shorter than that;
+longer burns use available power. Remaining-dV/control-latency tapering still
+reduces throttle near cutoff. There is no separate half-throttle ceiling
+below 10 m/s. `STATS burn setup` records `thrustScale` and the resulting
+`maxAcc`; the duration floor describes the full-power impulse, not the final
+elapsed time including precision tapering or alignment pauses.
+
 After the next maneuver, run `RUNPATH("0:/cmd/burnreport.ks").` to see planned
 and measured thrust dV, the independent cap, residual, cutoff reason, and
 whether thrust stopped. This compact record survives phase reboots even if
