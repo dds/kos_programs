@@ -9,6 +9,22 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 latest Deck freeze investigated after pushing bootstrap2ae0dff:
+native kernel first hung-task16:48:16CET/122s =>onset~16:46:14. KSP4434 is
+still alive; dxvk-cs4481/UnityGfxDeviceW4490 D/ttm_global_swapout, likely
+owner dxvk-submit4479 waits __drm_exec_lock_obj. Same locking signature as
+earlier; no captured OOM-kill/GPU reset. Separate17:04eglinfo crash is later.
+Raw full kernel and thread JSON /tmp/ksp-deck-crash-kernel-20261028.{log,json},
+snapshot /tmp/ksp-deck-crash-20261028.json. No remote actions/settings changed.
+Primary KSP resource-pressure report https://github.com/doitsujin/dxvk/issues/5140
+is related, not proof of identical lockup. Its defrag-off trial failed; do not
+recommend native/OpenGL/WineD3D blindly with Parallax's Proton/DX11 requirement.
+Fresh graphics settings/texture audit /tmp/ksp-deck-graphics-audit-20261028.json:
+720p/2xAA/quarter textures/density0.15 and previous false/256/SSRfalse patch
+persist. Scatterer low-res atmospherefalse/ocean reflections true remain
+candidate modest cuts. Larger asset/bundle investigation pending; DDS-only
+largest-file list misses Parallax bundles. TASKS.md has evidence/research links.
+
 2026-10-28 bootstrap follow-up: actual boot/boot.ks::_syncLib still used
 delete-before-copy and _loadLib just warned, then line194 dereferenced
 BOOT_LIB_RAN without checking that boot_lib ran. Source fix preflights size,

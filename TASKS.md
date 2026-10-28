@@ -74,6 +74,39 @@ record remaining uncertainty before closing a task.
   after the bootstrap repair. Read current/previous kernel/journal, KSP/Unity
   crash evidence and memory/GPU counters; do not restart anything or infer
   the earlier GPU-memory failure has repeated without new evidence.
+  Bootstrap fix committed/pushed2ae0dff first. Native audit now confirms same
+  TTM/DRM locking-hang pattern: boot77dd7b67, kernel7.2.7-valve2; first report
+  16:48:16CET already122s blocked (onset~16:46:14). dxvk-cs4481 and
+  UnityGfxDeviceW4490 D/ttm_global_swapout, likely mutex owner dxvk-submit4479
+  waiting at __drm_exec_lock_obj. Still stuck17:10; KSP4434 remains alive.
+  Full current kernel2138lines/214137bytes at
+  /tmp/ksp-deck-crash-kernel-20261028.log; JSON thread snapshot beside it;
+  broader snapshot /tmp/ksp-deck-crash-20261028.json. No inspected kernel
+  OOM-kill/GPU-reset/allocation-failure evidence. Separate eglinfo SIGSEGV at
+  17:04 is later, not the cause of the16:46 KSP freeze. RAMavailable~541MiB,
+  swapused~10.75GiB; KSP RSS1.29GiB/swap8.58GiB. GPUActive counter~8.02GiB
+  overlaps other memory accounting; do not add these as independent totals.
+  No system/game/settings actions were taken. Driver defect/trigger unresolved.
+  Research: primary KSP/DXVK issue5140 covers GTT overspill/Parallax and resource
+  pressure; it does NOT demonstrate the same kernel lockup. Defrag-off trial
+  failed for that reporter; WineD3D helped a different commenter, but current
+  Parallax explicitly requires Proton/DX11, so no blind renderer switch.
+  https://github.com/doitsujin/dxvk/issues/5140
+  Upstream2026-07-03 Natalie Vock TTM/drm_exec eviction patch series discusses
+  memory-contention locking failures; patch presence/applicability here unproven:
+  https://lore.kernel.org/lkml/20260703-ttm_2_drm_exec-v1-0-43685ac1286b@gmx.de/
+  Fresh graphics audit /tmp/ksp-deck-graphics-audit-20261028.json confirms
+  1280x720,2xAA,TEXTURE_QUALITY2,density0.15,range1,Scatterer2048shadow,
+  low-res atmospherefalse/ocean reflections true, persistent-uploadfalse /
+  temporary256/DeferredSSRfalse. NoIVA/MH changes already handled earlier.
+  Next low-impact candidates: Scatterer low-resolution atmosphere and ocean
+  reflection reduction; larger savings likely need visual texture/bundle
+  inventory or controlled Parallax comparison, not yet measured. Largest loose
+  DDSs are BetterDres8K maps and ReStock/stock4K parts; disk sizes do not prove
+  actual GPU residency. Parallax bundles were not counted by the DDS-only scan.
+  DXVK maxDeviceMemory/maxSharedMemory are reported amounts, not hard limits;
+  current maxMemoryBudget is a debug budget with documented severe performance
+  risk. No config or mod changes applied during this audit.
 - [ ] **Hop boot storage exhaustion after f075e3c.** Native saveUT4212185
   confirms199849/200000bytes used, only151bytes free; return_setup absent,
   state15896bytes. State survived with Gamma pending2 but phase review.
