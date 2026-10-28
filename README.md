@@ -2650,6 +2650,18 @@ state converter.
 
 ## Development
 
+- `scripts/deck-diagnostics status` — read-only Steam Deck memory, GPU counters
+  and process states. The fixed wrapper also supports `crash --boot previous`
+  (or `current`), `logs --craft RO9 --count 12`, and
+  `fetch RO9_4214328/boot_011_core.log`. Each run saves a new private report
+  directory under `/tmp/ksp-deck-*`; stdout prints its path. Crash journals
+  keep up to20,000 kernel lines; game logs keep256KiB tails and fetched flight
+  logs keep2MiB tails, with truncation marked in `report.json`.
+  Approve the exact absolute wrapper prefix once to reuse it for these
+  diagnostics. There is no arbitrary-command, sudo, settings, reboot or
+  flight-control action. SSH uses the existing key and pinned host identity;
+  update `HOST` if the Deck address changes, and enroll host keys separately.
+  Reports contain machine/flight logs; inspect them before sharing publicly.
 - `make check` — routine repository contracts and source-driven numerical/control
   fixtures (Python 3 + NumPy; does not run kOS or KSP). Individual routine
   check calls target under one second; a file can contain several calls.

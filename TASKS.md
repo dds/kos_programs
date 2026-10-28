@@ -57,6 +57,37 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [x] **Reusable read-only Deck diagnostic wrapper.** Operator requests fewer
+  repeated approvals. Added executable scripts/deck-diagnostics with fixed
+  status/crash/logs/fetch actions and a reusable exact absolute-path approval.
+  No arbitrary remote commands, sudo, configuration/game writes or restart
+  actions. Strict existing SSH host/key; request travels on stdin. Bounded
+  archive reads reject traversal and symlink escapes; reports stay in fresh
+  private local /tmp directories. Source tests cover admission, fixed argv,
+  symlinks, size limits, virtual GPU counters and actual CLI report handling.
+  Exact wrapper prefix permission saved. Live status/crash/log listing/fetch
+  all succeeded through that same saved permission. Source checks pass.
+- [ ] **Portable game capture for another machine/Mac.** Operator requests a
+  reusable capture script and has SSH access to the Mac; address/CPU family
+  requested asynchronously. Preserve saves/ships/kOS archive, actual mods and
+  inventory, distinguish portable content from platform-specific game build /
+  shaders/native plugins. Build and verify the snapshot before destination
+  changes. Parallax Continued official Mac instructions require Windows KSP
+  under CrossOver/D3DMetal; native Mac is not equivalent. Assess actual
+  target before promising visual compatibility or stability. Do not strip
+  preferred shaders or parts from the Deck install.
+- [ ] **28Oct18:33 hop-transition Deck crash.** Operator saw apparent approach
+  success before hard crash; save has about20s ballistic impact estimate.
+  Boot f3a9b3cf restarted18:36. Previous kernel journal now recovered locally:
+  /tmp/ksp-deck-kernel-prev-20261028-1835.log,10257lines/1264596bytes. First
+  relevant GPU errors18:33:16CET: amdgpu_vm_validate failed / Not enough memory
+  for command submission. TTM lru bulk-move/reservation WARNs in
+  UnityGfxDeviceW3825 follow18:35:53; do not equate this evidence with the
+  earlier pure lock-hang or claim an exact offending mod. Last archived
+  boot011 entered LAND_ASSIST atUT4215340.5; no approach recorder swept yet.
+  No game/save/settings changed; latest native controller validation remains
+  interrupted. Reassess live motion on reload, no landing guarantee from the
+  ballistic impact countdown alone.
 - [ ] **Hop approach overshoot and repeated lateral correction.** Operator
   confirms the hop mostly worked. Native RO9_4214328/boot007 and diagnostic
   landingdiag_RO9_4214365637 show Gamma touchdown4.1m from the fixed target,

@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Read-only Steam Deck diagnostics with a stable, narrowly scoped approval prefix."""
+import argparse
+import json
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+from deck_diagnostics_remote import validate
+
+HOST = 'deck@10.200.26.154'
+REMOTE = Path(__file__).with_name('deck_diagnostics_remote.py')
+
+
+def arguments(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest='action', required=True)
+    commands.add_parser('status', help='Memory, GPU counters and process states; no process arguments')
+    crash = commands.add_parser('crash', help='Kernel/session journal and bounded KSP/Player log tails')
+    crash.add_argument('--boot', choices=('previous', 'current'), default='previous')
+    logs = commands.add_parser('logs', help='List recent archived flight and diagnostic logs')
+    logs.add_argument('--craft', default='')
+    logs.add_argument('--count', type=int, default=12)
+    fetch = commands.add_parser('fetch', help='Copy one archived log into a new local /tmp report')
+    fetch.add_argument('path', help='For example RO9_4214328/boot_011_core.log')
+    request = vars(parser.parse_args(argv))
+    try:
+        return validate(request)
+    except ValueError as error:
+        parser.error(str(error))
+
+
+def ssh_command():
+    return ['ssh', '-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
+        '-i', str(Path.home() / '.ssh/id_ed25519'),
+        '-o', 'UserKnownHostsFile=/tmp/ksp-deck-known_hosts', '-o', 'StrictHostKeyChecking=yes',
+        '-o', 'ConnectTimeout=8', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=2',
+        HOST, 'python3 -']
+
+
+def save_report(report):
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    directory = Path(tempfile.mkdtemp(prefix='ksp-deck-' + stamp + '-' + report['action'] + '-'))
+    (directory / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+    for name, record in report['commands'].items():
+        (directory / (name + '.log')).write_text(record.get('stdout', '') + record.get('stderr', ''))
+    for name, record in report['files'].items():
+        destination = directory / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(record.get('text', record.get('error', '')))
+    return directory
+
+
+def summary(report, directory):
+    print('Saved diagnostics: ' + str(directory))
+    if report['action'] == 'status':
+        print(report['commands']['memory'].get('stdout', '').strip())
+    for log in report.get('logs', []):
+        print(f"{log['bytes']:>9}  {log['path']}")
+    for name, record in report['commands'].items():
+        if record.get('error') or record.get('returncode', 0):
+            print('Unavailable command: ' + name + ' (details in report.json)')
+        if record.get('truncated'):
+            print('Truncated command output: ' + name)
+    for name, record in report['files'].items():
+        if record.get('truncated'):
+            print('Saved tail only: ' + name)
+
+
+def main(argv=None):
+    request = arguments(argv)
+    # The remote shell sees one constant command. Validated data travels
+    # as a Python string literal on stdin, never as interpolated shell code.
+    payload = REMOTE.read_text() + '\nimport json\nprint(json.dumps(collect(json.loads('
+    payload += repr(json.dumps(request)) + '))))\n'
+    try:
+        done = subprocess.run(ssh_command(), input=payload, text=True, capture_output=True, timeout=100)
+        if done.returncode:
+            print(done.stderr.strip() or 'SSH diagnostics failed', file=sys.stderr)
+            return 1
+        report = json.loads(done.stdout)
+        summary(report, save_report(report))
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        print('Diagnostics failed: ' + str(error), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

@@ -9,6 +9,22 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 operational diagnostics: use the stable executable
+/home/dds/code/kos_programs/scripts/deck-diagnostics instead of repeated inline
+SSH/Python commands. Its exact prefix is approved for status, crash, logs,
+fetch. Fixed unprivileged read-only collectors, no arbitrary remote command
+or settings/game actions; keep that approval boundary when extending it.
+Reports are private /tmp/ksp-deck-<UTC>-<action>-*/ with report.json plus raw
+logs. Pinned host key /tmp/ksp-deck-known_hosts, key ~/.ssh/id_ed25519,
+deck@10.200.26.154. No password/automatic host enrollment. See README.
+Latest18:33:16CET crash differs from earlier pure TTM lock hang: previous-boot
+kernel explicitly logged amdgpu_vm_validate failed / Not enough memory for
+command submission, followed18:35:53 by TTM bulk-move WARNs in Unity graphics.
+Full10257-line/1264596-byte journal preserved locally at
+/tmp/ksp-deck-kernel-prev-20261028-1835.log. No exact mod/root driver cause
+proven; no captured landing script exception. Updated approach native
+validation interrupted by this crash, not yet confirmed.
+
 2026-10-28 hop approach: operator confirms hop success but repeated lateral
 overshoot. Native RO9_4214328/boot007 Gamma landed4.1m away after145.36s/
 78.035m/s APPROACH. BRAKE321m/15.3m/s ->20s refinement ->106m/9m/s at72m
