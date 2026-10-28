@@ -208,7 +208,7 @@ IF HAS_LINK {
 }
 
 IF NOT _loadLib("boot_lib") { _bootUnavailable("boot_lib"). }
-IF NOT DEFINED BOOT_LIB_RAN { _bootUnavailable("boot_lib exports"). }
+IF DEFINED BOOT_LIB_RAN { } ELSE { _bootUnavailable("boot_lib exports"). }
 IF DEFINED BOOT_HAS_SURFACE_CACHE_RECOVERY AND BOOT_HAS_SURFACE_CACHE_RECOVERY {
     IF bootPruneLandedHopCache() > 0 {
         // The archive fallback can make room before any mission-state writes.
