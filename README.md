@@ -2494,10 +2494,16 @@ within one `SOLAR_SEARCH_TIMEOUT` budget (300 seconds). An earlier coast wake
 deadline still wins. These are maximum waits: each turn finishes as soon as
 the axis is within `SOLAR_AIM_TOLERANCE` (5 degrees for search measurements)
 or `SOLAR_HOLD_TOLERANCE` (10 degrees for the cached solar attitude), with
-rotation below 0.03. Pointing and rotation are checked again after the
-existing 1.5-second panel/readout settle, before accepting the result.
+rotation below 0.03. After the 1.5-second panel/readout settle, coarse turns
+may remain within the existing 10-degree hold tolerance; crossing back over
+5 degrees by a fraction no longer discards the whole search. Fine probes
+retain their requested 1-degree precision during readout. Excessive drift
+or renewed spin retries the same anchored target within the original turn
+and coast deadlines. Logs include both tolerances and `readout-reacquire`.
 Cache validation still requires 90% of a valid saved peak when flow is
 measurable in daylight; existing eclipse/unreadable handling remains.
+During maintenance, near-zero flow defers aiming only when body geometry
+confirms an eclipse. A panel facing away in daylight triggers recovery.
 The wider angular tolerance lets small drift settle sooner without changing
 the flow threshold. The steering lock continues following the Sun. These
 solar tolerances leave maneuver, landing and reentry pointing checks intact.

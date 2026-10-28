@@ -1,5 +1,28 @@
 # Solar search: RO9 evidence and refinement
 
+The 2026-10-28 return-flight logs reproduce a later settling regression.
+RO9_4417586 boot029 at UT4665056..4665077 acquires fixed-1 at4.932deg,
+measuring flow0.03269, then acquires fixed-2 but drifts to5.252deg during
+the1.5s readout wait. The helper returns false immediately, despite having
+most of its90s turn budget left. The next search similarly rejects fixed-1
+at5.155deg. Boot028 repeats this cycle many times. No axis/peak is cached;
+the craft really turns, with requested/manager attitudes agreeing, no warp,
+autopilot suppression or thrust. This is a readout boundary failure, not
+evidence of an unavailable Sun or a steering lock that never moves.
+
+Coarse acquisition remains5deg; its readout uses the existing10deg hold
+tolerance. Fine gradient probes retain their1deg tolerance. If readout
+drift/spin exceeds its bound, the same target is reacquired within the
+original turn/coast deadline, rather than aborting on the first transient.
+The source regression replays4.9->5.252deg across all six axes, returns to
+the illuminated winner, persists its measured peak and validates that cache
+on the next call. Strict fine, excessive drift/spin, failed cache updates,
+abort and deadline cases remain covered. Native corrected-flight evidence
+is pending. Diagnostics identify this policy with
+`settlePolicy=acquire-hold-retry`; aim rows record acquisition/readout bounds.
+Maintenance also checks actual body occlusion before treating near-zero
+flow as eclipse; pointing away in daylight must trigger recovery.
+
 The supplied `solardiag_RO9_1644877384.log` records a successful search in
 63.78 seconds, ending at flow 0.3813675. It has no alignment timeout, dropped
 rows, engine thrust or active warp. This attempt does not reproduce the
@@ -49,8 +72,8 @@ repeating discovery. See the README for settings and commands.
 
 The new pass has source-driven finite-turn tests for tilted and diagonal
 mounts, plus tests for multiple panels, failed peak predictions, measurement
-noise, timeouts, cache upgrades and recorder eviction. It has not flown in
-KSP yet. The supplied flight already points near its best coarse axis;
+noise, timeouts, cache upgrades and recorder eviction. Successful refinement
+in KSP remains unconfirmed. The earlier flight points near its best coarse axis;
 substantial additional flow on this particular craft is not established.
 
 Diagnostic schema 2 preserves up to 24 settled measurements independently

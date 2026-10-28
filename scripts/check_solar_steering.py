@@ -267,6 +267,7 @@ def check_diagnostic_capture():
         dest=state['last_solar_report']
         assert dest.startswith('0:/logs/archive/_diagnostics/' if linked else '1:/run/logs/')
         assert all(item in files[dest] for item in ('schema=2','algorithm=anchored-six-axis-refine',
+                                                   'settlePolicy=acquire-hold-retry',
                    'CPU tag=core','status=alignment-timeout','complete','success=False'))
         assert any(op=='read' for op,_ in calls) and not current['solarTrace']['PENDING']
     current,state,files,calls=diagnostic_fixture()

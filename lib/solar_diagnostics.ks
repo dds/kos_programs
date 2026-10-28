@@ -26,7 +26,7 @@ GLOBAL FUNCTION solarDiagnosticBegin {
     SET solarTrace TO LEXICON("ROWS",LIST(),"BYTES",0,"DROPPED",0,"PENDING",FALSE,"MEASUREMENTS",LIST(),
         "NAME","solardiag_" + slug() + "_" + ROUND(TIME:SECONDS*1000,0) + ".log",
         "LAST", "no turn sampled",
-        "HEADER","STATS solar-diag schema=2 algorithm=anchored-six-axis-refine code=" + codeVersion()
+        "HEADER","STATS solar-diag schema=2 algorithm=anchored-six-axis-refine settlePolicy=acquire-hold-retry code=" + codeVersion()
             + " ut=" + TIME:SECONDS + " vessel=" + SHIP:NAME + " body=" + SHIP:BODY:NAME
             + " phase=" + stateGet("phase","") + " force=" + forceSearch
             + " deadline=" + deadlineUt + " priorIpu=" + priorIpu + " ipu=" + CONFIG:IPU

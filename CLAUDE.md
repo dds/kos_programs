@@ -9,6 +9,24 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 solar regression confirmed from RO9_4417586 boot028/029 and
+solardiag_RO9_4665056018/4665069698 atUT4665056..4665077. Coarse turn reaches
+4.932deg then readout drifts5.252deg; immediately aborts despite90s budget.
+Repeated searches lose all measurements/cache, leaving the wrong last axis.
+Steering does turn, manager/want match, no suppression/warp/thrust, EC~89%.
+Fix: retain5deg acquisition, apply existing10deg hold band during coarse
+readout; fine probes keep1deg. Excess readout drift/spin reacquires the same
+anchored target within original deadline. No partial cache publication,
+precision/rotation/abort/entry limits bypass. Maintenance near-zero flow
+requires geometric eclipse before deferring recovery; daylight darkness
+can mean pointing away. New diagnostic settlePolicy=acquire-hold-retry,
+aim readoutTolerance and readout-reacquire markers. Source recorded-jitter
+case completes six axes, holds winner/persists peak, then reuses cache.
+Native corrected policy still pending. Downloaded read-only evidence in
+/tmp/ksp-deck-20261028T210235Z-fetch-{35wz8ku7,7g8wfzl9,rutjl2rp,bclzkfhk}/logs/.
+No remote control/code/save mutations. No bootstrap compilation needed.
+All72 routine check files pass99.59s, including native-jitter source replay.
+
 2026-10-28 SHAPE throttle diagnosis: RO9_4218202 boot019 UT4257230..4257296
 plane9.742m/s burned66.3s: legacy dv<10 engine10% plus command50% stacked.
 Actual configured acceleration~3.2m/s^2, limited maxAcc0.32. Replaced fixed

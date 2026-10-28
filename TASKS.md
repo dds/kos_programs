@@ -6,6 +6,13 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Latest solar blocker: RO9 return atUT4665077 repeatedly aborts coarse
+  search when acquired4.9deg drifts to5.15..5.25deg during readout. Geometry
+  steering works; no valid cache is ever saved. Implemented5deg acquisition/
+  existing10deg coarse readout band, strict1deg fine probes and bounded
+  reacquisition. Source replay now finishes six axes and reuses saved peak;
+  native corrected search pending. Low-flow maintenance now checks eclipse
+  geometry before waiting, so daylight mispointing can recover.
 - Latest native SHAPE issue: RO9_4218202 boot019 plane9.742m/s took66.3s
   atUT4257230..4257296 because engine10% and throttle50% limits stacked.
   Acceleration-based duration limiting and existing live taper replace those
@@ -71,6 +78,24 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Solar search readout-boundary regression on return.** Read-only
+  RO9_4417586 boot028/029 and diagnostics4665056018/4665069698 confirm
+  acquired4.932deg, readout5.252deg => immediate failure of whole search,
+  repeated at5.155deg. Most90s budget unused; no peak/axis saved; ends on a
+  dark orientation. Manager/target match, no warp/suppression/thrust, EC~89%.
+  Local evidence /tmp/ksp-deck-20261028T210235Z-fetch-*/logs/.
+  Coarse readout now uses existing10deg hold band after5deg acquisition;
+  fine measurements retain1deg. Excess drift/spin reacquires same anchored
+  target within original turn/coast deadline. Cache requires completed
+  valid search/return and measured flow as before. Actual source jitter
+  regression completes six axes, returns to winner, persists peak and
+  reuses it on next call. Added strict fine/readout-spin/reacquisition cases.
+  Near-zero maintenance flow now requires actual eclipse before waiting;
+  daylight zero/very-low flow initiates recovery. Native corrected behavior
+  pending. Header settlePolicy and per-aim readoutTolerance/reacquire rows
+  distinguish this version in next archives. No bootstrap rebuild or remote
+  flight/library/state changes.
+  All72 routine check files passed99.59s; corrected native flight pending.
 - [ ] **SHAPE excessive partial-throttle burns.** Read-only boot019 evidence:
   /tmp/ksp-deck-20261028T200230Z-fetch-bueku20u/logs/RO9_4218202/boot_019_core.log.
   Plane9.742m/s atUT4257230.1..4257296.3 took66.3s, node residual0.000988m/s.

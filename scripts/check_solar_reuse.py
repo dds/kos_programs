@@ -404,8 +404,82 @@ def check_readout_drift():
                    _solarAimSettle=lambda *args:ks.call('_solarAimSettle',env,*args))
         assert not ks.call('orientForSolar',env,False,True,True,12)
         assert len(attempts)==1 and not finishes and saved==before
-        assert env['TIME'].SECONDS==1.5
-    print('PASS: pointing and rotation are rechecked after the panel-readout wait; renewed drift cannot validate or overwrite the saved attitude')
+        assert 1.5 < env['TIME'].SECONDS <= 12
+    print('PASS: excessive readout drift/spin retries within the existing deadline and cannot validate or overwrite the saved attitude')
+
+
+def check_native_readout_boundary():
+    # RO9 UT4665056..4665077: each turn acquires at~4.9deg, then coasts to
+    # 5.15..5.25deg during the1.5s readout. The old one-shot recheck aborted
+    # the scan at fixed-2, discarding the future winning fixed-5 direction.
+    env,saved,attempts,finishes,_,reading=environment()
+    saved.clear()
+    env['SOLAR_REFINE_TIMEOUT']=0
+    env['SHIP'].FACING=Identity()
+    env['SHIP'].ANGULARVEL=NS(MAG=.0062)
+    wanted=Vec((0,.866,.5)).NORMALIZED
+    turn_start=[0.]
+    def aim(axis):
+        turn_start[0]=env['TIME'].SECONDS
+        attempts.append(axis)
+        reading[0]=10*max(0,float(np.dot(axis,wanted)))
+    def error(*_):
+        age=env['TIME'].SECONDS-turn_start[0]
+        if age<4.8:return 94.8
+        return 4.9 if age<5.2 else 5.252
+    env.update(VANG=error,_solarAim=aim,
+               fixture_wait=lambda dt:setattr(env['TIME'],'SECONDS',env['TIME'].SECONDS+dt),
+               _solarAimSettle=lambda *args:ks.call('_solarAimSettle',env,*args))
+    original=env['_solarFinish']
+    def finish(*args):
+        original(*args)
+        ks.call('_solarFinish',env,*args)
+    env['_solarFinish']=finish
+    assert ks.call('orientForSolar',env,False,True,True)
+    assert len(attempts)==7 and finishes[-1][2]=='best of 6'
+    assert saved['solar_axis']==[0,1,0] and saved['solar_axis_peak']>8.6
+    assert env['TIME'].SECONDS<50
+    # The completed scan now supplies a proven peak for the next call:
+    # validate/reuse, rather than restarting the same unsuccessful first axis.
+    attempts.clear()
+    assert ks.call('orientForSolar',env,False,True,True)
+    assert len(attempts)==1 and finishes[-1][2]=='cached axis validated'
+    print('PASS: recorded4.9->5.252deg readout jitter completes six axes, returns to the illuminated winner, persists its peak and reuses it on the next call')
+
+
+def check_readout_reacquisition():
+    for tolerance,drift in ((5,'angle'),(5,'rate'),(1,'angle'),(1,'rate')):
+        env,_,attempts,_,_,_=environment()
+        env.update(aShip=Vec((1,0,0)),tolerance=tolerance,deadlineUt=12,
+                   keepOnFailure=False,_solarAim=attempts.append)
+        env['SHIP'].FACING=Identity()
+        env['SHIP'].ANGULARVEL=NS(MAG=0)
+        samples=[]
+        def error(*_):
+            # Coarse drift is outside10deg; fine drift is only1.05deg and
+            # must STILL fail that readout, despite being well inside10deg.
+            if 1.4<=env['TIME'].SECONDS<1.7 and drift=='angle':
+                return 11 if tolerance==5 else 1.05
+            return tolerance-.1
+        def tick(dt):
+            env['TIME'].SECONDS+=dt
+            env['SHIP'].ANGULARVEL.MAG=.04 if drift=='rate' and 1.4<=env['TIME'].SECONDS<1.7 else 0
+        env.update(VANG=error,fixture_wait=tick,
+                   solarDiagnosticSample=lambda label,status,*_:samples.append(status))
+        assert run_solar_body('_solarAimSettle',env)
+        assert 'readout-reacquire' in samples and samples[-1]=='settled'
+        assert 3.2-1e-8<=env['TIME'].SECONDS<5 and len(attempts)==1
+    # A tight configured coarse tolerance equal to refinement must never
+    # accidentally inherit the10deg readout allowance either.
+    env,_,_,_,_,_=environment()
+    env.update(aShip=Vec((1,0,0)),tolerance=1,SOLAR_AIM_TOLERANCE=1,
+               deadlineUt=5,_solarAim=lambda *_:None,
+               VANG=lambda *_:.9 if env['TIME'].SECONDS==0 else 1.05,
+               fixture_wait=lambda dt:setattr(env['TIME'],'SECONDS',env['TIME'].SECONDS+dt))
+    env['SHIP'].FACING=Identity();env['SHIP'].ANGULARVEL=NS(MAG=0)
+    assert not run_solar_body('_solarAimSettle',env)
+    assert env['TIME'].SECONDS<=5
+    print('PASS: transient coarse drift/spin reacquires the same target; fine probes retain1deg precision and all retries share the original deadline')
 
 
 def refinement_fixture():
@@ -586,9 +660,11 @@ if __name__ == '__main__':
     check_alignment_tolerances()
     check_cached_hold_tolerance()
     check_readout_drift()
+    check_native_readout_boundary()
+    check_readout_reacquisition()
     check_refinement_measured_peak()
     check_refinement_fallback_and_budget()
     check_refined_cache_upgrade()
     check_refined_hold_failure()
-    for args in ((-1,0,True),(10,5,True),(10,5,False)):check_hold_deadline(*args)
+    for args in ((-1,0,True),(10,0,True),(10,.1,True),(10,5,True),(10,5,False)):check_hold_deadline(*args)
     check_hold_deferrals()
