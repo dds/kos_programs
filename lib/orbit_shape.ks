@@ -321,6 +321,8 @@ GLOBAL FUNCTION planPlaneMatch {
     PARAMETER targetLan.
     PARAMETER beforeUt IS -1.
 
+    IF NOT _shapePlanningReady() { RETURN 0. }
+
     LOCAL b IS _shipNormal().
     LOCAL nTgt IS planeNormalFromIncLan(targetInc, targetLan).
     LOCAL theta IS VANG(b, nTgt).
@@ -1030,6 +1032,25 @@ GLOBAL FUNCTION shapeNextBurn {
     RETURN 0.
 }
 
+// Conic refinement can take many instructions. At high warp its candidate
+// epoch can pass before planning finishes; never plan or retry on rails.
+LOCAL FUNCTION _shapePlanningReady {
+    SET WARP TO 0.
+    UNTIL KUNIVERSE:TIMEWARP:ISSETTLED OR ABORT { WAIT 0.05. }
+    RETURN NOT ABORT.
+}
+
+LOCAL FUNCTION _shapeNodeTimingReady {
+    PARAMETER nd.
+    IF ABORT { RETURN FALSE. }
+    IF WARP = 0 AND KUNIVERSE:TIMEWARP:ISSETTLED
+            AND nd:ETA >= 60 AND nd:ETA < 1e30 { RETURN TRUE. }
+    mLogWarn("STATS shape timing reason=insufficient-node-lead eta=" + nd:ETA
+        + " warp=" + WARP + " budgetCharged=False").
+    REMOVE nd.
+    RETURN FALSE.
+}
+
 LOCAL FUNCTION _shapeReserveBurn {
     PARAMETER nd.
     LOCAL id IS SHIP:BODY:NAME + ":" + stateGetNum("launch_time", 0).
@@ -1077,6 +1098,7 @@ LOCAL FUNCTION _runShapePhase {
     PARAMETER phaseLabel.
     PARAMETER prefix.
     SET _shapeMinimumSkipped TO FALSE.
+    IF NOT _shapePlanningReady() { yieldToPrompt(). RETURN. }
 
     LOCAL targets IS shapeTargetsWithPrefix(prefix).
     IF targets:LENGTH = 0 {
@@ -1101,6 +1123,7 @@ LOCAL FUNCTION _runShapePhase {
 
     LOCAL burns IS 0.
     UNTIL shapeConverged(targets) OR burns >= MAX_SHAPE_BURNS {
+        IF NOT _shapePlanningReady() { yieldToPrompt(). RETURN. }
         UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
         LOCAL planned IS shapeNextBurn(targets).
         IF planned = 0 {
@@ -1118,6 +1141,7 @@ LOCAL FUNCTION _runShapePhase {
                     + _errorSummary(shapeErrors(targets))).
                 yieldToPrompt(). RETURN.
             }
+            IF NOT _shapeNodeTimingReady(NEXTNODE) { yieldToPrompt(). RETURN. }
             IF phaseLabel = "SHAPE" AND NOT _shapeReserveBurn(NEXTNODE) { RETURN. }
             mLog("STATS shape execution label=" + planned["label"]
                 + " dv=" + NEXTNODE:DELTAV:MAG + " minimumDv=" + SHAPE_MIN_BURN_DV
@@ -1145,6 +1169,7 @@ LOCAL FUNCTION _runShapePhase {
                 mLog(phaseLabel + ": burn missed (attempt " + retries + ") — replanning.").
                 WAIT 10.
                 UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
+                IF NOT _shapePlanningReady() { yieldToPrompt(). RETURN. }
                 LOCAL replanned IS shapeNextBurn(targets).
                 IF replanned = 0 { SET success TO TRUE. }
                 ELSE { SET planned TO replanned. }

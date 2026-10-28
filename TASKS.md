@@ -6,6 +6,13 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Latest satellite reuse blocker: sun-sync->medium SHAPE RO9_4704531
+  boot005 charges945.4m/s plane node even though its ETA was already-9455.7s.
+  Planning ran under warp; actual burn never fired. All2185.2m/s available
+  across stages is counted correctly. Total1900 cap rejects next retry
+  with1749.3 already charged. Warp settling and pre-budget finite60s lead
+  gate implemented; cmd/shapebudget1500 grants1500 further allowance without
+  erasing ledger or changing the per-burn cap/100m/s reserve. Native retry pending.
 - Latest solar blocker: RO9 return atUT4665077 repeatedly aborts coarse
   search when acquired4.9deg drifts to5.15..5.25deg during readout. Geometry
   steering works; no valid cache is ever saved. Implemented5deg acquisition/
@@ -78,6 +85,24 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Orbital-contract reuse: expired plane node charged to SHAPE ledger.**
+  Native RO9_4704531 boot005, local read-only evidence:
+  /tmp/ksp-deck-20261028T230148Z-fetch-dfed8zys/logs/RO9_4704531/boot_005_core.log.
+  Completed sun-sync at700km/99deg, selected medium1581.668km/55deg. Ap raise
+ 196.97m/s succeeds; plane945.4m/s planning runs under warp and returns
+  eta-9455.7s. Charged on803.9 ledger before executor misses window, leaving
+  1749.3 charged; next945.4 retry fails1900 total cap. All2185.2m/s total
+  vessel fuel is counted;519 active/1012 lander/654 return isn't the problem.
+  Added warp settlement at SHAPE/plane planning and retry, common finite
+  60s lead check before any charge/execution. Expired nodes hold uncharged.
+  Added cmd/shapebudget.ks: bounded additional allowance, preserves ledger,
+  targets, phase, per-burn cap and100m/s reserve; idle SHAPE/no-node/Abort
+  clear only. Matching body/launch spending baseline; new ID starts zero.
+  Source native-node/warp/real-budget/command rejection fixtures pass.
+  Pull then RUNPATH("0:/cmd/shapebudget.ks",1500). REBOOT. No bootstrap build,
+  remote flight changes or automatic refund of earlier recorded attempts.
+  Corrected native mission remains pending.
+  All73 routine check files passed91.21s, including native missed-node replay.
 - [ ] **Solar search readout-boundary regression on return.** Read-only
   RO9_4417586 boot028/029 and diagnostics4665056018/4665069698 confirm
   acquired4.932deg, readout5.252deg => immediate failure of whole search,

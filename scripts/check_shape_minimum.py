@@ -39,7 +39,8 @@ def fixture():
         NEAR_CIRC_ECC=.01,MIN_AOP_TARGET_ECC=.004,
         SHIP=NS(PERIAPSIS=9300,APOAPSIS=410000,ALTITUDE=100000,
             ORBIT=NS(INCLINATION=63.4,LAN=79.2,ECCENTRICITY=.65,PERIOD=20000)),
-        ETA=NS(PERIAPSIS=1000,APOAPSIS=14000),HASNODE=False)
+        ETA=NS(PERIAPSIS=1000,APOAPSIS=14000),HASNODE=False,
+        WARP=0,ABORT=False,KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)))
     def remove(node):
         removed.append(node);env['HASNODE']=False
     env.update(fixture_remove=remove,fixture_wait=lambda dt:events.append(('wait',dt)),
@@ -52,6 +53,8 @@ def fixture():
         env['_shapeMinimumSkipped']=local['_shapeMinimumSkipped']
         return result
     env['_shapeNodeAboveMinimum']=above
+    env['_shapePlanningReady']=lambda:execute('_shapePlanningReady',env)
+    env['_shapeNodeTimingReady']=lambda node:execute('_shapeNodeTimingReady',dict(env,nd=node))
     return env,removed,events
 
 

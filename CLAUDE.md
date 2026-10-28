@@ -9,6 +9,25 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 satellite reuse SHAPE budget hold: RO9_4704531 boot005 after
+switching sun-sync->semisynchronous. Active519m/s isn't the blocker:
+native remainingVacDv2185.2 includes all stages. First196.97m/s Ap raise
+worked. Plane945.4m/s planned under warp: native eta-9455.7s, charged before
+executor missed-window; ledger803.9->1749.3 although no plane burn fired.
+Next retry945.4 exceeds total1900 only; burn/reserve flags true. Read-only
+evidence /tmp/ksp-deck-20261028T230148Z-fetch-dfed8zys/logs/RO9_4704531/boot_005_core.log.
+Fix: settle warp before SHAPE phase/planning/retries and shared plane seed;
+common finite>=60s node timing gate before budget/ignition. Existing ledger
+is retained; no speculative refunds. cmd/shapebudget.ks,1500 grants1500m/s
+further cumulative allowance on matching body/launch (zero baseline for new
+ID), preserves per-burn/reserve/targets/phase/ledger, requires idle SHAPE/no
+node/Abort clear. Pull+command+REBOOT, not shaperetry (no interrupted burn).
+Source replay checks native rejected node before spending, warp release,
+override guards and real three-cap admission with total ship fuel. Native
+retry pending; no remote flight/code/save changes; no bootstrap compilation.
+All73 routine check files pass91.21s. Existing945.4 charged attempt remains
+on ledger; the operator-approved additional allowance is explicit recovery.
+
 2026-10-28 solar regression confirmed from RO9_4417586 boot028/029 and
 solardiag_RO9_4665056018/4665069698 atUT4665056..4665077. Coarse turn reaches
 4.932deg then readout drifts5.252deg; immediately aborts despite90s budget.

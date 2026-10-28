@@ -63,6 +63,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/kerbinrecover.ks").` | Inspect the live current/predicted Kerbin orbit and stage fuel; archive a report without changing the mission. Pass `"apply"` to configure shallow recovery with optional KSC targeting and reboot into MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
 | `RUNPATH("0:/cmd/shaperetry.ks").` | Clear an interrupted SHAPE attempt in stable orbit, retaining mission/targets/budget; then reboot to replan from the achieved orbit. Preserves unrelated nodes |
+| `RUNPATH("0:/cmd/shapebudget.ks",1500).` | Allow1500 m/s further SHAPE corrections; preserves recorded spending, per-burn cap and fuel reserve. Reboot to replan |
 | `RUNPATH("0:/cmd/arrival.ks", "review").` | Inspect a retained partial arrival; actions `accept` / `replan`, optional capture Ap in km |
 | `RUNPATH("0:/cmd/arrival.ks", "budget", 100).` | Allow up to 100 m/s of further arrival corrections; preserves capture/return reserves and does not burn |
 | `RUNPATH("0:/cmd/arrival.ks", "plan").` | Preview an arrival correction and hold for review; does not burn or advance the mission |
@@ -1083,6 +1084,19 @@ remains a burn-admission floor, not proof of a landing and return budget.
 `totalOk`, `reserveOk` decisions. After archive sync, a connected reboot in
 SHAPE replans from the retained orbit using this profile; it does not refund
 previous shaping expenditure or skip the requested orbit.
+
+When reusing a satellite for another orbital contract, cumulative SHAPE
+spending carries across profile switches on the same body/launch. At an idle
+SHAPE budget hold with no maneuver node, use
+`RUNPATH("0:/cmd/shapebudget.ks",1500).` then `REBOOT.` to grant1500m/s
+of further allowance. This changes only the cumulative cap to recorded
+spending plus the requested allowance; it preserves the ledger, per-burn
+cap, physical fuel reserve, targets and mission. A new body/launch starts
+from zero as in normal SHAPE admission. This does not ignite or stage.
+SHAPE now settles warp before planning/retries, including shared plane
+matching, and checks finite node lead of at least60s before charging a burn.
+An expired candidate holds with `budgetCharged=False` rather than consuming
+allowance on a node that is already too late to execute.
 
 `SHAPE_MIN_BURN_DV` (default **0.4 m/s**) applies to every final SHAPE and
 DEPARTURE_SHAPE node: plane, AoP and apsis corrections, including nodes that
