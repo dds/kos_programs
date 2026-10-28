@@ -45,6 +45,16 @@ def read_settings(source, env, declaration='SET'):
 
 def emit_profile(function, env):
     """Run the source's profile-writing block, with IO captured as text."""
+    if function == 'phaseSurfaceReturnSetup':
+        # Execute the real setup's parking-floor handoff, not a fixture-
+        # supplied PARKING_ALT that silently disagrees with the next phase.
+        import check_landing_guidance as ks
+        class Orbit(dict):
+            LENGTH=property(len)
+            HASKEY=dict.__contains__
+        local=dict(env,SURFACE_RETURN_ORBIT=Orbit(env.get('SURFACE_RETURN_ORBIT',{})))
+        try:ks.run(ks.parse(body(SETUP,'_surfaceReturnParkingAlt')),local)
+        except ks.Returned as result:env['PARKING_ALT']=result.value
     source = body(SETUP, function)
     source = source[source.index('LOCAL profilePath'):]
     source = source[:source.index('    stateSet("phase"')]

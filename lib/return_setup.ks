@@ -29,6 +29,20 @@ GLOBAL SURFACE_RETURN_ORBIT IS LEXICON().
 GLOBAL SURFACE_RETURN_REVIEW IS 0.
 GLOBAL REENTRY_PE IS 30000.
 
+LOCAL FUNCTION _surfaceReturnParkingAlt {
+    LOCAL altitude IS SURFACE_RETURN_PARKING_ALT.
+    IF SURFACE_RETURN_ORBIT:LENGTH > 0 {
+        LOCAL floorAlt IS 10000.
+        IF SURFACE_RETURN_ORBIT:HASKEY("MIN_PE") {
+            SET floorAlt TO MAX(0,SURFACE_RETURN_ORBIT["MIN_PE"]).
+        }
+        // Direct ascent permits a small circularization residual. Its
+        // 99% Pe target/0.3m/s cutoff need room above the next phase's floor.
+        SET altitude TO MAX(altitude,floorAlt+1000).
+    }
+    RETURN altitude.
+}
+
 LOCAL FUNCTION _returnSetupClearLibCache {
     FOR key IN LIST(
         "lib_band_libs", "lib_band_phase", "reload_reason",
@@ -117,7 +131,7 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     stateSet("mission_id", "surface_return").
     stateSet("mission_name", "Surface Return").
 
-    SET PARKING_ALT TO SURFACE_RETURN_PARKING_ALT.
+    SET PARKING_ALT TO _surfaceReturnParkingAlt().
     SET LAUNCH_INCLINATION TO SURFACE_RETURN_INCLINATION.
     SET LAUNCH_AZIMUTH TO 90.
 

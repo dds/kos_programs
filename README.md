@@ -1442,6 +1442,16 @@ before `RETURN_SETUP`; it prints the continuation command and preserves data.
 Shared maneuver waits retain their KAC alarms and clock fallback. The return
 provider stays cached through the orbital review. Other missions retain their
 existing sequence unless they opt into `SURFACE_RETURN_REVIEW`.
+For a shaped surface return, the generated parking altitude leaves1km
+above the configured SHAPE periapsis floor (11km with a10km floor). Ordinary
+economy returns without a shaped orbit retain their10km parking target.
+If an older ascent already parked slightly below that floor, SHAPE first
+tries raising the requested apoapsis from the current, higher apsis; that
+burn point becomes the new periapsis. A small standalone periapsis repair
+remains available when needed. The repair node itself must clear the
+unchanged floor, have room for executor residuals, and pass the ordinary
+fuel/minimum-dV/attitude gates. Without that headroom it holds. It never
+temporarily waives the floor to raise apoapsis or change the plane.
 
 To skip Beta after completing its temperature scan from Alpha, update the
 archive, then run `RUNPATH("0:/cmd/hopnext.ks",3).` and `REBOOT.` when ready.
@@ -1719,7 +1729,8 @@ creating these files does not select a mission or launch anything:
 
 They launch into the useful plane, shape the destination orbit, run/transmit
 available science, then hold for operator review in `SCIENCE_OPS`. The
-three Kerbin missions use no interbody transfer. The retrograde profile
+three Kerbin missions use no interbody transfer and park at85km, leaving
+room above SHAPE's80km atmospheric safety floor. The retrograde profile
 targets the supplied orbit window; it does not implement Sun-tracking
 station keeping. The medium-orbit altitude assumes stock Kerbin's radius
 and gravitational parameter; its accepted apsis errors remain well inside

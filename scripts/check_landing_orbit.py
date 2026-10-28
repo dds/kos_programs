@@ -101,7 +101,7 @@ def fixture(profile=True):
         except ks.Returned as result:return result.value
     env['_landPrepLinkWait']=link_wait
     env['_landPrepNextCached']=lambda:False
-    for name in ('landingOrbitContext','shapeErrors','shapeConverged'):
+    for name in ('landingOrbitContext','shapeErrors','shapeConverged','_peFloor','_shapeRepairPeriapsis'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
     def next_burn(targets):
         result=ks.call('shapeNextBurn',env,targets)

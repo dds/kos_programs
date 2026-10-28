@@ -98,6 +98,7 @@ def check_profile_and_return():
     surface=read_settings(emit_profile('phaseSurfaceReturnSetup',cfg),defaults())
     assert surface['SEQUENCE']==['PRELAUNCH','LAUNCH','PARK','SHAPE','SCIENCE_OPS','RETURN_SETUP']
     assert surface['SCIENCE_OPS_HOLD']==1 and surface['SCIENCE_OPS_RUN_ALL']==0
+    assert surface['PARKING_ALT']==11000 and surface['SHAPE_MIN_PE']==10000
     assert [surface['SHAPE_'+k] for k in ('AP','PE','INC','LAN','AOP')]==[659734,554472,0,-1,.4]
     assert surface['SHAPE_ALT_TOL']==100 and surface['SHAPE_RESERVE_DV']==300
     surface['targetPe']=surface['RETURN_PE']

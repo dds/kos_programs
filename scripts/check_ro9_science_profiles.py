@@ -29,6 +29,7 @@ def check_satellite_windows():
     assert medium['SHAPE_INC'] + medium['SHAPE_ANG_TOL'] < 60
     assert medium['SHAPE_ALT_TOL'] / (radius + medium['SHAPE_AP']) < .02
     for cfg in (geo, polar, medium):
+        assert cfg['PARKING_ALT']>=85000 # SHAPE retains Kerbin's80km floor.
         assert cfg['LAUNCH_INCLINATION'] == cfg['SHAPE_INC']
         assert cfg['LAUNCH_PLANE_MODE'] == '' and cfg['CAPTURE_LAN'] == -1
         assert 'XING' not in cfg['SEQUENCE'] and cfg['AUTO_TRANSMIT'] == cfg['SCIENCE_OPS_HOLD'] == 1

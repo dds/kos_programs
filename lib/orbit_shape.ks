@@ -877,9 +877,57 @@ LOCAL FUNCTION _shapeNodeAboveMinimum {
 // burn is refined against nd:ORBIT before being returned. Each
 // call re-reads the live orbit, so the sequence self-heals.
 // ============================================================
+// A safe ascent can finish slightly below SHAPE's stricter Pe floor.
+// Raise Pe first, with a node which already passes that unchanged floor;
+// never admit a below-floor apoapsis/plane node as a temporary exception.
+LOCAL FUNCTION _shapeRepairPeriapsis {
+    PARAMETER targets.
+    LOCAL floorAlt IS _peFloor().
+    IF SHIP:STATUS <> "ORBITING" OR NOT (SHIP:PERIAPSIS >= 0
+            AND SHIP:ORBIT:ECCENTRICITY >= 0 AND SHIP:ORBIT:ECCENTRICITY < 1) {
+        mLogError("SHAPE floor repair requires a bound orbit with positive periapsis.").
+        RETURN 0.
+    }
+    IF SHIP:BODY:ATM:EXISTS AND SHIP:PERIAPSIS <= SHIP:BODY:ATM:HEIGHT {
+        mLogError("SHAPE floor repair cannot coast through the atmosphere.").
+        RETURN 0.
+    }
+    LOCAL precision IS BURN_TRIM_ABS_COMPLETE_DV.
+    IF SHAPE_BURN_TOLERANCE > 0 {
+        SET precision TO MIN(precision,MAX(0.001,SHAPE_BURN_TOLERANCE)).
+    }
+    // 4*r/v bounds far-apsis sensitivity for a raise toward circular.
+    // Leave three residual budgets, and never aim exactly at the floor.
+    LOCAL margin IS MAX(10,12*(SHIP:BODY:RADIUS+SHIP:APOAPSIS)
+        *precision/MAX(0.01,_speedAtTa(180))).
+    LOCAL headroom IS SHIP:APOAPSIS-floorAlt.
+    IF NOT (headroom > 2*margin) {
+        mLogError("SHAPE floor repair unavailable: Ap="+SHIP:APOAPSIS
+            + " floor="+floorAlt+" requiredHeadroom="+(2*margin)).
+        RETURN 0.
+    }
+    LOCAL repairPe IS floorAlt+MIN(MAX(margin,SHAPE_ALT_TOL),headroom/2).
+    LOCAL eta IS ETA:APOAPSIS.
+    IF eta < 60 { SET eta TO eta+SHIP:ORBIT:PERIOD. }
+    // If a high Ap is wanted, a prograde burn at this legal, higher
+    // apsis makes it the new Pe. Meet the floor AND raise Ap in one burn.
+    IF targets:HASKEY("AP") AND targets["AP"] > SHIP:APOAPSIS+SHAPE_ALT_TOL {
+        mLog("STATS shape floor-repair mode=raise-ap-from-ap currentPe="+SHIP:PERIAPSIS
+            + " burnAltitude="+SHIP:APOAPSIS+" targetAp="+targets["AP"]+" floor="+floorAlt).
+        LOCAL raised IS _apsisBurn(eta,180,targets["AP"],"set-pe-for-ap",targets).
+        IF raised:ISTYPE("Lexicon") { RETURN raised. }
+    }
+    mLog("STATS shape floor-repair currentPe="+SHIP:PERIAPSIS+" targetPe="+repairPe
+        + " floor="+floorAlt+" margin="+margin+" eta="+eta).
+    LOCAL repair IS _apsisBurn(eta,180,repairPe,"floor-pe",LEXICON("PE",repairPe)).
+    IF repair:ISTYPE("Lexicon") { RETURN repair. }
+    RETURN 0.
+}
+
 GLOBAL FUNCTION shapeNextBurn {
     PARAMETER targets.
 
+    IF SHIP:PERIAPSIS < _peFloor() { RETURN _shapeRepairPeriapsis(targets). }
     LOCAL errs IS shapeErrors(targets).
     LOCAL altTol IS SHAPE_ALT_TOL.
     LOCAL angTol IS SHAPE_ANG_TOL.

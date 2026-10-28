@@ -9,6 +9,29 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 SHAPE live failure now diagnosed: RO9_4218202 boot018 atUT4218532,
+9.52x10.031km/3.029deg parking,10km floor,0 burns by4218577.2. Ascent99% Pe
+target and0.3m/s residual can land below SHAPE's floor. Do not lower it.
+New _shapeRepairPeriapsis first plans a legal high-Ap boost from current Ap
+(~55.8m/s), making that point the new Pe without a separate tiny burn.
+An above-floor~0.28m/s Pe repair is the fallback. Both retain headroom/
+residual margin and all existing admission/executor gates.
+Then normal AP/plane/PE/AoP shaping. No safe repair =>hold. Future shaped
+surface setup parks at least floor+1km (11km here); ordinary returns remain
+10km. Kerbin satellite profiles now park85km above their80km SHAPE floor.
+Source fixture executes actual parking helper and SHAPE node/cost/budget
+chain with independent apsis physics; not native optimizer/attitude proof.
+Read-only downloaded logs under/tmp/ksp-deck-20261028T185848Z-fetch-*/logs/.
+No remote control/save/library changes performed. Native retry pending.
+Operator questioned floor necessity; keep proposed-orbit checking for now.
+10km is conservative policy, not a physical Minmus boundary, but there is no
+independent global terrain-clearance proof replacing it. Selecting the legal
+burn fixes the dead end without removing that protection.
+All72 routine check files pass95.03s. Expected native retry: current SHAPE
+first plans set-pe-for-ap~55.8m/s at current10.031km Ap (new Pe), then normal
+plane/apsis/AoP work. Pull/connected REBOOT in SHAPE; no surfaceorbit rerun
+from orbit, no original target/tolerance/reserve change or bootstrap rebuild.
+
 2026-10-28 latest scope: operator confirms the improved hop mission completed.
 Prepare four satellite profiles and Mun target(-10.590,99.490) return only;
 do not select/start a profile or change existing craft/state/overrides. Duna/

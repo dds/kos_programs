@@ -52,6 +52,7 @@ def check_selection_and_review():
                                  LAUNCH_INCLINATION=0,LAUNCH_AZIMUTH=90)
         fresh=read_settings(emit_profile('phaseSurfaceReturnSetup',cfg),defaults())
         assert fresh['SCIENCE_OPS_HOLD']==1 and fresh['SCIENCE_OPS_RUN_ALL']==0
+        assert fresh['PARKING_ALT']==11000 and fresh['SHAPE_MIN_PE']==10000
         assert fresh['SEQUENCE']==updates['SURFACE_RETURN_SEQUENCE']
         assert [fresh['SHAPE_'+key] for key in ('AP','PE','INC','AOP')]==[659734,554472,0,.4]
         assert fresh['RETURN_PE']==53000 and fresh['RETURN_DESCENT_DECOUPLER_TAG']=='return_decoupler'

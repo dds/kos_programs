@@ -42,7 +42,7 @@ def check_requested_orbits_across_boots():
                    LAUNCH_INCLINATION=initial['SURFACE_RETURN_INCLINATION'],LAUNCH_AZIMUTH=90)
     surface=read_settings(emit_profile('phaseSurfaceReturnSetup',initial),defaults())
     assert surface['SEQUENCE']==['PRELAUNCH','LAUNCH','PARK','SHAPE','RETURN_SETUP']
-    assert surface['PARKING_ALT']==10000 and surface['LAUNCH_INCLINATION']==0
+    assert surface['PARKING_ALT']==11000 and surface['LAUNCH_INCLINATION']==0
     assert [surface['SHAPE_'+key] for key in ('AP','PE','INC','LAN','AOP')]==[659734,554472,0,-1,.4]
     assert surface['SHAPE_RESERVE_DV']==300 and surface['SHAPE_TOTAL_DV_CAP']==250
     assert surface['SHAPE_ALT_TOL']==500 and surface['SHAPE_ANG_TOL']==.1

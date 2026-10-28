@@ -6,6 +6,12 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Latest live blocker: RO9_4218202 boot018 SHAPE atUT4218532..4218577
+  refused all nodes after9.52x10.03km parking because its unchanged Pe floor
+  is10km. No burns executed. Implementing a legal above-floor Pe repair and
+  a1km headroom handoff for future shaped ascents; satellite profiles also
+  need85km parking above Kerbin's80km floor. Do not lower safety floors or
+  change target elements to make this pass. Read-only logs recovered below.
 - Latest operator priority: prepare four RO9 satellite missions and one new
   targeted Mun return, without activating profiles or launching craft. Hop
   mission completed successfully with improved approach. Duna/Ike flyby /
@@ -64,6 +70,44 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Low parking orbit vs SHAPE safety-floor dead end.** Retrieved RO9
+  logs with approved diagnostic wrapper; local evidence:
+  /tmp/ksp-deck-20261028T185848Z-fetch-kef4ikf6/logs/RO9_4218202/boot_018_core.log
+  plus boot017 ascent in sibling fetch-rl7fofni. Native shape has Pe9.52km,
+  Ap10.031km, inc3.029deg, floor10km; set-ap55.5678m/s preserves low Pe and
+  is correctly rejected, plane candidate also below floor. set-pe54.2671
+  swaps apsides at the low current Ap rather than reaching554km Pe, cost272.3
+  rejected. Solver exits0 burns at4218577.2. Root mismatch: direct ascent's
+  99%-parking Pe target/0.3m/s capture residual vs later10km hard floor.
+  Added a floor-recovery step using a native node above the unchanged
+  floor, three residual budgets/10m minimum margin and explicit Ap headroom.
+  Prefer raising the requested Ap from the existing Ap: above-circular
+  prograde thrust makes that already-high point the new Pe, repairing the
+  floor mismatch in the same~55.8m/s transfer burn. A~0.28m/s floor-pe repair
+  remains available when a combined raise is unnecessary/unavailable.
+  Bound orbit/above-atmosphere, node quality, min-dV, budget, plane and physical
+  executor gates remain. No legal repair means hold. Independent apsis
+  fixture reproduces the combined raise then reaches both requested apsides
+  in two burns through actual SHAPE seed/cost/budget/phase code with1mm/s residuals; no
+  optimizer, attitude or plane/AoP flight proof. Future shaped surface setup
+  selects at least floor+1km parking; plain economy returns stay10km.
+  Three new Kerbin satellite profiles use85km rather than78km below their
+  80km floor. Generated-profile fixture now executes the actual parking
+  helper instead of injecting a caller's PARKING_ALT. Native retry pending;
+  no live node/phase/flight state changed on the Deck.
+  Operator questioned necessity of the check:10km is configurable conservative
+  policy, not a proven physical terrain bound. Keep proposed-orbit admission
+  until independent terrain clearance can replace it; selecting a legal burn
+  does not make the protection redundant. Do not confuse initial low Pe with
+  permission for arbitrary below-floor future nodes.
+  All72 routine check files passed95.03s after the combined-raise update.
+  New test independently propagates tangent impulses, preserves the final
+  target dictionary and requires every proposed/achieved Pe above10km with
+  actual seed/cost/minimum/budget/phase logic. LAND_PREP's fixture now binds
+  the real private floor helpers called by shapeNextBurn. Native next burn
+  should be set-pe-for-ap~55.8m/s at current Ap; follow normal SHAPE with the
+  same goals/review. Pull and connected REBOOT in SHAPE; do not rerun the
+  surface selection command from orbit. No bootstrap recompilation.
 - [x] **Reusable read-only Deck diagnostic wrapper.** Operator requests fewer
   repeated approvals. Added executable scripts/deck-diagnostics with fixed
   status/crash/logs/fetch actions and a reusable exact absolute-path approval.
