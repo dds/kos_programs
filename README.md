@@ -1428,7 +1428,19 @@ state-file replacement retains the previous file and shuts down with throttle
 off. If this processor is already full, run `cmd/hopnext.ks` while linked
 and safely landed **before rebooting**: it frees four replaceable descent
 controller files before loading the recovery code. Mission state and route
-overrides are retained. No bootstrap recompilation is needed.
+overrides are retained. The startup recovery fix also requires updating the
+installed bootstrap. While linked and landed, run these in order after pulling:
+
+```kerboscript
+RUNPATH("0:/cmd/hopnext.ks",3).
+RUNPATH("0:/cmd/updateboot.ks").
+REBOOT.
+```
+
+The bootstrap keeps an old library if its replacement cannot fit, uses current
+archive code while linked to recover space, and stops explicitly if a required
+bootstrap library or its exports are unavailable. It does not reset mission
+state or fabricate an empty library registry.
 
 RO9's `minmus_kolniya_flats_return` is a separate mission with these targets
 (apsides in metres above Minmus sea level):

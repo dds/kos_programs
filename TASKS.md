@@ -57,6 +57,23 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Bootstrap undefined BOOT_LIB_RAN / full-volume installer.** Operator
+  recompiled boot.ks but line194 still dereferenced an absent export. Actual
+  early bootstrap _syncLib bypassed the safer shared installer, deleted old
+  boot_lib first and continued after a failed copy/load. Added size preflight,
+  old-copy retention, linked archive fallback and explicit missing-export /
+  dependencies stop before registry use. Shared safe landed-hop cache prune
+  now works before state initialization; startup retries cache copies after
+  freeing space. hopnext uses the same helper. No state reset or fake registry
+  initialization. This change DOES require installing new boot/boot.ks; use
+  hopnext while landed/linked, cmd/updateboot.ks, then reboot. Real bootstrap
+  functions are exercised against the151B-free case and missing-offline case.
+  All67 routine check files passed73.04s. Native new bootstrap compilation /
+  installation remains pending; the existing compiled bootstrap is retained.
+- [ ] **Latest Deck crash (2026-10-28).** Operator requests investigation
+  after the bootstrap repair. Read current/previous kernel/journal, KSP/Unity
+  crash evidence and memory/GPU counters; do not restart anything or infer
+  the earlier GPU-memory failure has repeated without new evidence.
 - [ ] **Hop boot storage exhaustion after f075e3c.** Native saveUT4212185
   confirms199849/200000bytes used, only151bytes free; return_setup absent,
   state15896bytes. State survived with Gamma pending2 but phase review.

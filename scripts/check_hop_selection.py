@@ -17,6 +17,7 @@ def fixture():
                bootApplyMissionConfig=lambda *_:True,HOMECONNECTION=NS(ISCONNECTED=True),
                UNCHAR=ord,EXISTS=lambda _:False,RUNPATH=lambda *_:None)
     env['_hopMenuSafe']=lambda:hop.ks.call('_hopMenuSafe',env)
+    env['bootPruneLandedHopCache']=lambda:run(function_body((ROOT/'lib/boot_lib.ks').read_text(),'bootPruneLandedHopCache'),dict(env))
     env['hopChooseSite']=lambda default:hop.execute('hopChooseSite',env,default)
     return env,state,updates,events,alarms
 

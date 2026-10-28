@@ -11,26 +11,10 @@ LOCAL FUNCTION _cmdHopnext {
         PRINT "Hop selection requires a settled airless landing, idle controls, no node and Abort clear.".
         RETURN.
     }
-    // Recover a full landed route before loading/updating any libraries.
-    // Only disposable descent files with available archive sources are
-    // removed. Keep state, overrides, route and return intent untouched.
-    IF HOMECONNECTION:ISCONNECTED AND EXISTS("1:/run/state.json") {
-        LOCAL saved IS READJSON("1:/run/state.json").
-        IF saved:HASKEY("hop_route_active") AND saved["hop_route_active"]
-                AND saved:HASKEY("hop_route_body") AND saved["hop_route_body"] = SHIP:BODY:NAME {
-            FOR lib IN LIST("landing_main","landing_brake","landing_coast","landing_terminal") {
-                IF EXISTS("0:/lib/"+lib+".ks") {
-                    FOR ext IN LIST(".ksm",".ks") {
-                        LOCAL oldPath IS "1:/lib/"+lib+ext.
-                        IF EXISTS(oldPath) { DELETEPATH(oldPath). }
-                    }
-                }
-            }
-        }
-    }
     IF HOMECONNECTION:ISCONNECTED AND EXISTS("0:/lib/boot_lib.ks") {
         RUNPATH("0:/lib/boot_lib.ks").
     } ELSE { RUNPATH("1:/lib/boot_lib"). }
+    bootPruneLandedHopCache().
     bootPreamble().
     bootLibLoad("hop_route").
     LOCAL vehicle IS stateGet("vehicle","").

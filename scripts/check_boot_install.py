@@ -7,6 +7,7 @@ from check_codebase import ROOT, function_body
 from check_runtime_contracts import KString, KList, run
 
 BOOT=(ROOT/'lib/boot_lib.ks').read_text()
+BOOTSTRAP=(ROOT/'boot/boot.ks').read_text()
 CONFIG=(ROOT/'lib/config.ks').read_text()
 
 class Text(KString):
@@ -20,7 +21,7 @@ class Items(KList):
     def CONTAINS(self,value):return value in self
 
 def fixture(linked=True,capacity=200000):
-    fixture_source=BOOT+'\n'+CONFIG
+    fixture_source=BOOT+'\n'+CONFIG+'\n'+BOOTSTRAP
     files,events,state={},[],{}
     cwd=[Text('1:/')]
     env=dict(HOMECONNECTION=NS(ISCONNECTED=linked),HAS_LINK=linked,
@@ -28,6 +29,7 @@ def fixture(linked=True,capacity=200000):
         COPYPATH=lambda src,dest:copy(src,dest),DELETEPATH=lambda path:files.pop(str(path)),
         PATH=lambda:cwd[0],CD=lambda path:cwd.__setitem__(0,Text(path)),
         LIST=lambda *xs:Items(xs),text=Text,BOOT_LIB_RAN=Items(),BOOT_CACHE_PENDING=False,MAX=max,
+        KSM_SKIP=Items(),archiveBootstrapLibs=Items(),
         stateGet=state.get,stateGetNum=state.get,
         stateSet=lambda key,value:state.update({key:value}),stateRemove=lambda key:state.pop(key,None),
         SHIP=NS(STATUS='ORBITING'),BOOT_MANUAL_REQUESTED=False,phaseShouldYield=False,
@@ -78,6 +80,8 @@ def fixture(linked=True,capacity=200000):
         source=re.sub(r'COMPILE ("[^"]+") TO ("[^"]+")\.',r'compile_file(\1,\2).',source)
         source=source.replace('LIST FILES IN items.','listing(items).')
         source=source.replace('DEFINED printStorageStatus','FALSE')
+        source=source.replace('DEFINED BOOT_LIB_RAN','defined_boot_registry()')
+        source=source.replace('SHUTDOWN.','shutdown().')
         return re.sub(r'"[^"\n]*"',lambda match:'text('+match[0]+')',source)
     env.update(compile_file=compile_file,listing=listing,RUNPATH=running,RUNONCEPATH=running)
     prepared={}
@@ -96,6 +100,37 @@ def fixture(linked=True,capacity=200000):
     env['bootLibArchiveOnly']=lambda _:False
     env['run_body']=lambda source:run(adapt(source),env)
     return env,files,events,state
+
+
+def check_bootstrap_full_disk_fallback_and_missing_exports():
+    env,files,events,_=fixture()
+    initial='SET BOOT_LIB_RAN TO LIST().\n'
+    fresh=initial+'//'+('n'*(19686-len(initial)-2))
+    old='SET stale_boot TO TRUE.\n//'+('o'*(18949-25))
+    files.update({'0:/lib/boot_lib.ks':fresh,'1:/lib/boot_lib.ksm':old,
+                  '1:/run/state.json':'checkpoint','1:/other':''})
+    files['1:/other']='x'*(199849-sum(len(value) for path,value in files.items() if path.startswith('1:/')))
+    env.pop('BOOT_LIB_RAN')
+    assert env['CORE'].VOLUME.FREESPACE==151
+    assert env['_syncLib'](Text('boot_lib')) is False
+    assert files['1:/lib/boot_lib.ksm']==old
+    assert env['_loadLib'](Text('boot_lib')) is True
+    assert 'BOOT_LIB_RAN' in env and 'stale_boot' not in env
+    assert files['1:/run/state.json']=='checkpoint'
+    assert [event[1] for event in events if event[0]=='run']==['0:/lib/boot_lib.ks']
+    env,files,events,_=fixture(False);env.pop('BOOT_LIB_RAN')
+    class Stopped(Exception):pass
+    def stopped():raise Stopped()
+    env.update(defined_boot_registry=lambda:'BOOT_LIB_RAN' in env,shutdown=stopped,
+               fixture_lock=lambda *_:None,WARP=3)
+    env['SHIP'].CONTROL=NS(MAINTHROTTLE=.3,PILOTMAINTHROTTLE=.2)
+    guard=BOOTSTRAP.split('IF NOT _loadLib("boot_lib")',1)[1].split('IF DEFINED BOOT_HAS_SURFACE_CACHE_RECOVERY',1)[0]
+    guard='IF NOT _loadLib("boot_lib")'+guard
+    try:env['run_body'](guard)
+    except Stopped:pass
+    else:raise AssertionError('missing bootstrap must stop before dereferencing BOOT_LIB_RAN')
+    assert 'BOOT_LIB_RAN' not in env and env['SHIP'].CONTROL.MAINTHROTTLE==env['SHIP'].CONTROL.PILOTMAINTHROTTLE==0
+    print('PASS: actual bootstrap with151B free preserves old19KB library and executes fresh archive exports; missing offline bootstrap stops with cutoff before registry use, without fabricating initialization or changing state')
 
 def check_legacy_and_compiled_resolution():
     for suffix in ('','.ks','.ksm'):
@@ -231,6 +266,7 @@ def check_boot_update_install():
 if __name__=='__main__':
     check_legacy_and_compiled_resolution()
     check_shared_install_and_offline_main()
+    check_bootstrap_full_disk_fallback_and_missing_exports()
     check_full_hop_disk_and_reserved_cache()
     check_cache_is_not_executed()
     check_profile_listing_and_generation()

@@ -55,6 +55,7 @@ IF SHIP:STATUS = "PRELAUNCH" OR SHIP:STATUS = "LANDED" {
 }
 
 GLOBAL KSM_SKIP IS LIST().
+LOCAL archiveBootstrapLibs IS LIST().
 
 LOCAL FUNCTION _ensureDir {
     PARAMETER p.
@@ -74,6 +75,13 @@ LOCAL FUNCTION _syncLib {
             // nearly-full probe can't hold the compiler's scratch space.
             LOCAL arKsm IS "0:/lib/" + libName + ".ksm".
             COMPILE src TO arKsm.
+            LOCAL oldSize IS 0.
+            IF EXISTS(dstKsm) { SET oldSize TO OPEN(dstKsm):SIZE. }
+            IF CORE:VOLUME:FREESPACE+oldSize < OPEN(arKsm):SIZE {
+                PRINT "  BOOT CACHE FULL: " + libName + "; old copy retained, using archive.".
+                archiveBootstrapLibs:ADD(libName).
+                RETURN FALSE.
+            }
             IF EXISTS(dstKsm) { DELETEPATH(dstKsm). }
             COPYPATH(arKsm, dstKsm).
         } ELSE {
@@ -84,13 +92,31 @@ LOCAL FUNCTION _syncLib {
 
 LOCAL FUNCTION _loadLib {
     PARAMETER libName.
-    IF EXISTS("1:/lib/" + libName + ".ksm") {
+    LOCAL archiveSource IS "0:/lib/" + libName + ".ks".
+    IF HAS_LINK AND archiveBootstrapLibs:CONTAINS(libName) AND EXISTS(archiveSource) {
+        RUNONCEPATH(archiveSource).
+    } ELSE IF EXISTS("1:/lib/" + libName + ".ksm") {
         RUNONCEPATH("1:/lib/" + libName + ".ksm").
     } ELSE IF EXISTS("1:/lib/" + libName + ".ks") {
         RUNONCEPATH("1:/lib/" + libName + ".ks").
+    } ELSE IF HAS_LINK AND EXISTS(archiveSource) {
+        PRINT "  LOAD archive fallback: " + libName.
+        RUNONCEPATH(archiveSource).
     } ELSE {
         PRINT "  WARN: " + libName + " unavailable".
+        RETURN FALSE.
     }
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _bootUnavailable {
+    PARAMETER libName.
+    LOCK THROTTLE TO 0.
+    SET SHIP:CONTROL:MAINTHROTTLE TO 0.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    SET WARP TO 0.
+    PRINT "BOOT STOPPED: " + libName + " did not load; mission state retained. Restore its cached file or obtain an archive link.".
+    SHUTDOWN.
 }
 
 _ensureDir("1:/lib").
@@ -181,7 +207,15 @@ IF HAS_LINK {
     PRINT "  LOAD core (cached) . ".
 }
 
-_loadLib("boot_lib").
+IF NOT _loadLib("boot_lib") { _bootUnavailable("boot_lib"). }
+IF NOT DEFINED BOOT_LIB_RAN { _bootUnavailable("boot_lib exports"). }
+IF DEFINED BOOT_HAS_SURFACE_CACHE_RECOVERY AND BOOT_HAS_SURFACE_CACHE_RECOVERY {
+    IF bootPruneLandedHopCache() > 0 {
+        // The archive fallback can make room before any mission-state writes.
+        _syncLib("boot_lib").
+        _syncLib("dependencies").
+    }
+}
 LOCAL sweptLogs IS preSweptLogs.
 IF DEFINED bootSweepLogs {
     SET sweptLogs TO sweptLogs + bootSweepLogs("1:/run/logs", "0:/logs/archive", HAS_LINK).
@@ -190,7 +224,7 @@ IF DEFINED bootSweepLogs {
 IF sweptLogs > 0 {
     PRINT "  OLD LOGS swept: " + sweptLogs + ".".
 }
-_loadLib("dependencies").
+IF NOT _loadLib("dependencies") { _bootUnavailable("dependencies"). }
 BOOT_LIB_RAN:ADD("dependencies").
 bootPreamble().
 stateInit().

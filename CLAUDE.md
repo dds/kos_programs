@@ -9,6 +9,22 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 bootstrap follow-up: actual boot/boot.ks::_syncLib still used
+delete-before-copy and _loadLib just warned, then line194 dereferenced
+BOOT_LIB_RAN without checking that boot_lib ran. Source fix preflights size,
+retains old bytecode and runs current archive source when linked/full or
+missing. Missing library/exports/dependencies cut controls and stop before
+registry/preamble/state. bootPruneLandedHopCache is shared by startup and
+hopnext, reads durable route state before core initialization and only drops
+four replaceable descent files on a linked, idle, settled active route on
+the correct airless body. Retry bootstrap copies after making room. Global
+registry/cache flags live at the top of boot_lib. This source change DOES
+require bootstrap installation: hopnext3, updateboot, reboot. User'sc117959
+compiled old bootstrap is preserved in history; don't pretend it incorporates
+this fix. Latest Deck crash queued AFTER committing/pushing this repair.
+All67 routine check files passed73.04s; native new-bootstrap installation
+is still pending. No live processor or game state changed during repair.
+
 2026-10-28 hop follow-up: native saved diskUT4212185 is199849/200000bytes,
 state15896B/return_setup absent. This failure is proven storage exhaustion.
 Operator authorizes separate science/landing reboots. hop_control now owns

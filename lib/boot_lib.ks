@@ -4,6 +4,35 @@
 
 @CLOBBERBUILTINS ON.
 
+GLOBAL BOOT_LIB_RAN IS LIST().
+GLOBAL BOOT_CACHE_LIBS IS LIST().
+GLOBAL BOOT_CACHE_PENDING IS FALSE.
+GLOBAL BOOT_HAS_SURFACE_CACHE_RECOVERY IS TRUE.
+
+// Safe before core/state initialization: read the durable checkpoint only.
+// Never remove descent code while airborne or without its archive source.
+GLOBAL FUNCTION bootPruneLandedHopCache {
+    IF NOT HOMECONNECTION:ISCONNECTED OR ABORT OR HASNODE
+            OR SHIP:STATUS <> "LANDED" OR SHIP:BODY:ATM:EXISTS
+            OR SHIP:VELOCITY:SURFACE:MAG > 0.5 OR SHIP:THRUST > 0.001
+            OR SHIP:CONTROL:MAINTHROTTLE > 0 OR SHIP:CONTROL:PILOTMAINTHROTTLE > 0
+            OR NOT EXISTS("1:/run/state.json") { RETURN 0. }
+    LOCAL saved IS READJSON("1:/run/state.json").
+    LOCAL removed IS 0.
+    IF saved:HASKEY("hop_route_active") AND saved["hop_route_active"]
+            AND saved:HASKEY("hop_route_body") AND saved["hop_route_body"] = SHIP:BODY:NAME {
+        FOR lib IN LIST("landing_main","landing_brake","landing_coast","landing_terminal") {
+            IF EXISTS("0:/lib/"+lib+".ks") {
+                FOR ext IN LIST(".ksm",".ks") {
+                    LOCAL oldPath IS "1:/lib/"+lib+ext.
+                    IF EXISTS(oldPath) { DELETEPATH(oldPath). SET removed TO removed+1. }
+                }
+            }
+        }
+    }
+    RETURN removed.
+}
+
 // --- Config defaults owned by this file ---
 GLOBAL MISSION_ID IS "".
 GLOBAL MISSION_NAME IS "".
@@ -699,10 +728,6 @@ GLOBAL FUNCTION bootCleanup {
 // ============================================================
 // boot_lib.ks - boot-time library dependency expansion
 // ============================================================
-
-GLOBAL BOOT_LIB_RAN IS LIST().
-GLOBAL BOOT_CACHE_LIBS IS LIST().
-GLOBAL BOOT_CACHE_PENDING IS FALSE.
 
 // Manual-mode request: boot/boot.ks drains stale terminal input before
 // loading this library. Any keypress noticed after that flags manual
