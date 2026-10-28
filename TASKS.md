@@ -57,6 +57,34 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Hop boot storage exhaustion after f075e3c.** Native saveUT4212185
+  confirms199849/200000bytes used, only151bytes free; return_setup absent,
+  state15896bytes. State survived with Gamma pending2 but phase review.
+  Operator authorizes separate launch/landing/science reboots. Split hop
+  controller from surface helpers, narrow loaded phase bands and stage only
+  the next phase's cache with state/log headroom. Inspect pending phase handoff
+  so Gamma is not replaced by default Beta. Keep write verification/cutoff.
+  Implemented hop_control/provider split and disk-only next-band caching:
+  review->launch/return, launch->landing, landing->review; at least4KiB
+  headroom for optional cache copies. Current file is not deleted when its
+  replacement cannot fit. No mandatory blackout/cache admission gate added.
+  hopnext frees four archived/recoverable descent files before any library
+  load on a linked settled active route, preserving state/overrides. Use it
+  before rebooting the full processor. Root cause of stuck review also
+  found: stateSaveReloadState wrote reload_next_phase but not phase; no boot
+  reader consumes that metadata. Helper now commits phase last. Actual helper
+  JSON test replaces the old special phase-setting stub, and pending Gamma
+  in an old review checkpoint is revalidated without defaulting to Beta.
+  Source fixtures reproduce exact199849B/151B-free accounting, safe failure /
+  old-file retention, recovery space, no execution of future cache, and
+  loaded-vs-cached providers. Native compile/new free space/flight pending.
+  Future cache sync runs only while landed, including the post-touchdown
+  wrappers before reboot; no science prefetch during a falling short hop.
+  All67 routine check files passed91.79s; final cache deferral passed nine
+  affected files, structural audit300 scripts/77 profiles/72 phases/32 bands,
+  0 errors (existing unrelated ksc_deorbit warning). No live code/controls
+  were changed on the Deck; current native free space/compilation/flight must
+  be confirmed after the operator installs this version.
 - [ ] **RO9 polar landing audit and surface-hop recovery/menu.** Retrieved
   boot017/018, landingdiag4208486237 and its sidecar to
   `/tmp/kos-ro9-4208486/`; raw current save/state captures under

@@ -379,7 +379,7 @@ def check_inflight_routing_and_dependencies():
     env,_,_,_,_=fixture();cached=set(closure(phases['land_deorbit'],deps))
     env.update(bootLibBandForPhase=lambda name,default:name.lower(),
                bootLibBandRoots=lambda band:Seq(phases[band]),
-               missionTypeConditionalRoots=lambda _:Seq(),missionExtraLibs=lambda:Seq(),
+               missionTypeConditionalRoots=lambda _:Seq(),missionTypeCacheRoots=lambda _:Seq(),missionExtraLibs=lambda:Seq(),
                missionAppendUnique=lambda dest,src:dest.extend(x for x in src if x not in dest),
                LIBS=Seq(),dependencyLibs=lambda:deps,bootLibArchiveOnly=lambda _:False,
                bootLocalScriptPath=lambda name:'1:/lib/'+name+'.ksm' if name in cached else '')

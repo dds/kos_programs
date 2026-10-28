@@ -8,7 +8,7 @@ import check_landing_guidance as ks
 from check_codebase import ROOT, function_body, mask, command_entrypoint_errors, dependency_tables, closure
 from check_runtime_contracts import KList
 
-HOP=(ROOT/'lib/hop.ks').read_text()
+HOP=(ROOT/'lib/hop.ks').read_text()+'\n'+(ROOT/'lib/hop_control.ks').read_text()
 
 
 def without_prints(nodes):
@@ -228,11 +228,13 @@ def check_command_and_offline_band():
     deps,phases,bands=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     assert 'hop' in closure(phases['hop_review'],deps)
     assert 'hop_review' in bands['hop']
-    conditional=function_body((ROOT/'lib/mission_type.ks').read_text(),'missionTypeConditionalRoots')
-    assert 'SEQUENCE:CONTAINS("HOP_REVIEW")' in conditional
-    assert '"hop","landing_main","landing_coast","landing_brake","return_setup"' in conditional
-    assert conditional.index('bandKey = "HOP" OR bandKey = "LANDING"')<conditional.index('roots:ADD(ln)')
-    print('PASS: route setup never ignites/reboots, checks sites/terrain and preserves current mission; only route bands retain launch, landing and review code through disconnected reboots')
+    cache=function_body((ROOT/'lib/mission_type.ks').read_text(),'missionTypeCacheRoots')
+    assert 'SEQUENCE:CONTAINS("HOP_REVIEW")' in cache
+    assert 'LIST("landing_main","landing_coast","landing_brake")' in cache
+    assert 'RETURN LIST("hop")' in cache
+    assert 'hop_control' in closure(phases['hop'],deps)
+    assert 'hop_control' not in closure(phases['hop_auto_review'],deps)
+    print('PASS: route setup never ignites/reboots and preserves mission guards; ballistic control and surface review are separate, with only next-band cache retention')
 
 
 

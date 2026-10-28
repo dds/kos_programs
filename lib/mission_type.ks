@@ -36,7 +36,9 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
         // reboot; descent must never compile/fetch its next braking state.
         roots:ADD("landing_coast").
         roots:ADD("landing_brake").
-        IF SEQUENCE:CONTAINS("SURFACE_RETURN_SETUP") { roots:ADD("return_setup"). }
+        IF SEQUENCE:CONTAINS("SURFACE_RETURN_SETUP")
+                AND NOT SEQUENCE:CONTAINS("HOP_ROUTE_SETUP")
+                AND NOT SEQUENCE:CONTAINS("HOP_AUTO_REVIEW") { roots:ADD("return_setup"). }
     }
     // The surface-ascent leg reboots into RETURN_SETUP after PARK, possibly
     // out of radio view. Keep its small provider through prelaunch, ascent
@@ -44,17 +46,6 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
     IF (bandKey = "PRELAUNCH" OR bandKey = "LAUNCH" OR bandKey = "SHAPE")
             AND SEQUENCE:CONTAINS("RETURN_SETUP") {
         roots:ADD("return_setup").
-    }
-    IF SEQUENCE:CONTAINS("HOP_REVIEW") AND (bandKey = "HOP" OR bandKey = "LANDING") {
-        // Keep both halves through cleanup: a ballistic hop can lose radio
-        // between launch and landing, and review/next launch must work offline.
-        FOR ln IN LIST("hop","landing_main","landing_coast","landing_brake","return_setup") { roots:ADD(ln). }
-    }
-    IF (SEQUENCE:CONTAINS("HOP_ROUTE_SETUP") OR SEQUENCE:CONTAINS("HOP_AUTO_REVIEW"))
-            AND (bandKey = "HOP" OR bandKey = "HOP_ROUTE" OR bandKey = "LANDING") {
-        // Profile-programmed routes retain their timed science/review code
-        // through the same offline hop/landing transitions as manual routes.
-        FOR ln IN LIST("hop_route","landing_main","landing_coast","landing_brake","return_setup") { roots:ADD(ln). }
     }
     IF bandKey = "XFER_PLAN" {
         LOCAL mType IS missionTypeDetect().
@@ -79,6 +70,29 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
         IF missionHasPayload("SCANSAT") OR missionHasPayload("SCISAT") {
             roots:ADD("science").
         }
+    }
+    RETURN roots.
+}
+
+// Next-band files are cached without executing them in the current program.
+// Retain one transition, rather than every flight/science/return provider at
+// once. Boot's cache sync reserves space for progress and logs; failure is
+// diagnostic, never a new blackout/deorbit admission gate.
+GLOBAL FUNCTION missionTypeCacheRoots {
+    PARAMETER bandKey.
+    LOCAL roots IS LIST().
+    LOCAL automatic IS SEQUENCE:CONTAINS("HOP_ROUTE_SETUP") OR SEQUENCE:CONTAINS("HOP_AUTO_REVIEW").
+    LOCAL manualRoute IS SEQUENCE:CONTAINS("HOP_REVIEW").
+    IF NOT automatic AND NOT manualRoute { RETURN roots. }
+    IF bandKey = "HOP_ROUTE" {
+        RETURN LIST("hop_control","return_setup").
+    }
+    IF bandKey = "HOP" {
+        RETURN LIST("landing_main","landing_coast","landing_brake").
+    }
+    IF bandKey = "LANDING" {
+        IF automatic { RETURN LIST("hop_route"). }
+        RETURN LIST("hop").
     }
     RETURN roots.
 }

@@ -1402,8 +1402,17 @@ hop sites, `HOP_SITE_DWELL_SECONDS` sets the stop, `HOP_SITE_RADIUS` sets
 surface admission and `HOP_SITE_RUN_SCIENCE` enables experiment attempts.
 `HOP_MENU_SECONDS` enables the bounded menu; its default 0 retains automatic
 next-site selection without a menu for other profiles.
-Route bands retain their next-hop, landing, science and return providers
-through offline reboots; ordinary missions do not load the timed route.
+Hop launch, powered landing and surface science/menu run in separate bands,
+with a reboot between them. `hop_control.ks` owns the ballistic burn; the
+surface review band loads only the shared route helpers and science.
+Boot caches the next band's files without executing them: review prepares
+launch/return, launch prepares landing, and landing prepares surface review.
+Cache copies leave4 KiB for state growth and logs and retain an existing
+file if its replacement cannot fit. Caching is best effort; a missing file
+can still require a link on the next boot. Ordinary missions do not load
+the timed route.
+Future science caching waits until verified touchdown; it does not add
+archive work while the hop is falling.
 Source checks cover progression and recovery; native compilation, storage,
 short-hop dynamics and the full mission still need flight validation.
 
@@ -1416,7 +1425,10 @@ it only at its first site, with the normal body, staging, terrain and fuel
 checks. A landed route with a missing or stale departure phase recovers to
 route setup/review instead of replaying the original departure. A failed
 state-file replacement retains the previous file and shuts down with throttle
-off; free onboard space before rebooting. No bootstrap recompilation is needed.
+off. If this processor is already full, run `cmd/hopnext.ks` while linked
+and safely landed **before rebooting**: it frees four replaceable descent
+controller files before loading the recovery code. Mission state and route
+overrides are retained. No bootstrap recompilation is needed.
 
 RO9's `minmus_kolniya_flats_return` is a separate mission with these targets
 (apsides in metres above Minmus sea level):

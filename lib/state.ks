@@ -137,6 +137,9 @@ GLOBAL FUNCTION stateSaveReloadState {
     stateSet("reload_reason", reason).
     stateSet("reload_next_phase", nextPhaseName).
     stateSet("reload_next_band", nextBand).
+    // Boot planning reads phase, not reload_next_phase. Commit the handoff
+    // itself after its metadata, so a reboot cannot replay the old phase.
+    stateSet("phase", nextPhaseName).
 }
 
 GLOBAL FUNCTION stateDump {
@@ -160,7 +163,8 @@ LOCAL FUNCTION _flush {
         SET SHIP:CONTROL:MAINTHROTTLE TO 0.
         SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
         SET WARP TO 0.
-        PRINT "MISSION STATE WRITE FAILED: last saved state retained. Free onboard storage before rebooting.".
+        PRINT "MISSION STATE WRITE FAILED: last saved state retained. Free onboard storage before rebooting. freeBytes="
+            + CORE:VOLUME:FREESPACE.
         SHUTDOWN.
     }
 }

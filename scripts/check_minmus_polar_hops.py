@@ -204,15 +204,32 @@ def check_setup_and_offline_roots():
     deps,phases,bands=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     assert bands['hop_route']==['hop_route_setup','hop_auto_review']
     assert 'science' in closure(phases['hop_auto_review'],deps)
-    conditional=function_body((ROOT/'lib/mission_type.ks').read_text(),'missionTypeConditionalRoots')
+    conditional=function_body((ROOT/'lib/mission_type.ks').read_text(),'missionTypeCacheRoots')
+    loaded_policy=function_body((ROOT/'lib/mission_type.ks').read_text(),'missionTypeConditionalRoots')
     for seq in (configuration()['SEQUENCE'],['HOP','LAND_ASSIST','HOP_AUTO_REVIEW']):
         for band in ('LANDING','HOP','HOP_ROUTE'):
             scope=dict(bandKey=band,SEQUENCE=hop.Items(seq),LIST=lambda *xs:hop.Items(xs))
             try:hop.ks.run(hop.ks.parse(conditional),scope)
             except hop.ks.Returned as result:extra=result.value
-            assert {'hop_route','hop','science','landing_coast','landing_brake','return_setup'}<=closure(extra,deps)
+            cached=closure(extra,deps)
+            if band=='LANDING':
+                assert {'hop_route','hop','science'}<=cached and 'hop_control' not in cached
+                assert 'return_setup' not in cached
+            elif band=='HOP':
+                assert {'landing_main','landing_coast','landing_brake'}<=cached
+                assert not {'science','hop_route','return_setup'} & cached
+            else:
+                assert {'hop_control','return_setup'}<=cached and 'landing_main' not in cached
+            active_phase={'HOP':'hop','LANDING':'land_assist','HOP_ROUTE':'hop_auto_review'}[band]
+            try:hop.ks.run(hop.ks.parse(loaded_policy),scope)
+            except hop.ks.Returned as result:loaded_extra=result.value
+            loaded=closure(['core']+phases[active_phase]+list(loaded_extra),deps)
+            assert ('science' in loaded)==(band=='HOP_ROUTE')
+            assert ('hop_control' in loaded)==(band=='HOP')
+            assert ('landing_main' in loaded)==(band=='LANDING')
+            assert 'return_setup' not in loaded
     assert 'hop_route' not in closure(phases['hop_review'],deps)
-    print('PASS: setup rejects malformed/foreign/unsafe routes, partial handoff preserves restore intent, route bands retain next-hop/landing/science/return providers offline; ordinary manual review does not load the new timed phase')
+    print('PASS: guarded setup preserves restore intent; launch/landing/science providers load in separate bands and cache only their next transition; ordinary manual review does not load the timed phase')
 
 
 if __name__=='__main__':

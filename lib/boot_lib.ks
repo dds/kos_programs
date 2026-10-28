@@ -670,6 +670,9 @@ GLOBAL FUNCTION bootCleanup {
         IF NOT bootLibArchiveOnly(lib)
                 AND NOT kl:CONTAINS(lib) { kl:ADD(lib). }
     }
+    FOR lib IN BOOT_CACHE_LIBS {
+        IF NOT bootLibArchiveOnly(lib) AND NOT kl:CONTAINS(lib) { kl:ADD(lib). }
+    }
 
     LOCAL kr IS LIST().
     IF CORE:TAG <> "" { kr:ADD(CORE:TAG). }
@@ -698,6 +701,8 @@ GLOBAL FUNCTION bootCleanup {
 // ============================================================
 
 GLOBAL BOOT_LIB_RAN IS LIST().
+GLOBAL BOOT_CACHE_LIBS IS LIST().
+GLOBAL BOOT_CACHE_PENDING IS FALSE.
 
 // Manual-mode request: boot/boot.ks drains stale terminal input before
 // loading this library. Any keypress noticed after that flags manual
@@ -749,6 +754,7 @@ GLOBAL FUNCTION bootLibResolve {
 
 GLOBAL FUNCTION bootLibSync {
     PARAMETER ln.
+    PARAMETER reserveBytes IS 0.
     IF NOT HOMECONNECTION:ISCONNECTED { RETURN. }
     LOCAL src IS bootArchivePath(ln).
     IF NOT EXISTS(src) { RETURN. }
@@ -761,6 +767,14 @@ GLOBAL FUNCTION bootLibSync {
     IF ln:CONTAINS("/") { SET arKsm TO "0:/" + ln + ".ksm". }
     COMPILE src TO arKsm.
     LOCAL dest IS bootCompiledPath(ln).
+    LOCAL oldSize IS 0.
+    IF EXISTS(dest) { SET oldSize TO OPEN(dest):SIZE. }
+    IF CORE:VOLUME:FREESPACE+oldSize < OPEN(arKsm):SIZE+MAX(0,reserveBytes) {
+        mLogWarn("STATS library cache skipped name=" + ln + " reason=storage free="
+            + CORE:VOLUME:FREESPACE + " size=" + OPEN(arKsm):SIZE
+            + " reserve=" + reserveBytes + "; existing copy retained.").
+        RETURN FALSE.
+    }
     IF EXISTS(dest) { DELETEPATH(dest). }
     COPYPATH(arKsm, dest).
     // Only remove redundant source after the compiled local copy exists.
@@ -768,6 +782,7 @@ GLOBAL FUNCTION bootLibSync {
     IF EXISTS(dest) AND EXISTS(bootCorePath(ln) + ".ks") {
         DELETEPATH(bootCorePath(ln) + ".ks").
     }
+    RETURN EXISTS(dest).
 }
 
 GLOBAL FUNCTION bootLibLoadList {
@@ -796,6 +811,23 @@ GLOBAL FUNCTION bootLibLoadList {
             IF localPath = "" { mLogError("Local library unavailable: " + ln). yieldToPrompt(). RETURN. }
             RUNONCEPATH(localPath).
             bootLibAddUnique(BOOT_LIB_RAN, ln).
+        }
+    }
+    bootCacheNextBand().
+}
+
+GLOBAL FUNCTION bootCacheNextBand {
+    IF NOT BOOT_CACHE_PENDING { RETURN. }
+    IF BOOT_CACHE_LIBS:LENGTH = 0 { SET BOOT_CACHE_PENDING TO FALSE. RETURN. }
+    // Future science is not fetched while a short hop is falling. Landing
+    // wrappers call again after verified touchdown, before the next reboot.
+    IF SHIP:STATUS <> "LANDED" { RETURN. }
+    SET BOOT_CACHE_PENDING TO FALSE.
+    // No RUNPATH: these files belong to the next reboot, not this CPU
+    // program. Preserve at least4KiB for state growth and local logging.
+    FOR ln IN BOOT_CACHE_LIBS {
+        IF NOT BOOT_LIB_RAN:CONTAINS(ln) AND NOT bootLibArchiveOnly(ln) {
+            bootLibSync(ln,4096).
         }
     }
 }
@@ -926,6 +958,8 @@ GLOBAL FUNCTION bootPlannedMissionLibs {
         SET fb TO "".
     }
     LOCAL band IS bootLibBandForPhase(phase, fb).
+    SET BOOT_CACHE_LIBS TO bootLibResolve(missionTypeCacheRoots(band)).
+    SET BOOT_CACHE_PENDING TO TRUE.
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).
     stateSet("reload_required", "false").

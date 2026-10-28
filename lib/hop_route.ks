@@ -149,6 +149,14 @@ GLOBAL FUNCTION phaseHopAutoReview {
     SET WARP TO 0.
     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
     _hopRestoreSavedLimits().
+    // Upgrade recovery: older reload helpers saved the pending destination
+    // but left phase in review. Revalidate that explicit selection instead
+    // of replacing it with the next sequential/default site.
+    LOCAL pending IS stateGetNum("hop_route_pending",-1).
+    IF pending >= 0 AND NOT stateGet("hop_inflight",FALSE) {
+        hopSelectSite(pending+1).
+        yieldToPrompt(). RETURN.
+    }
     LOCAL index IS stateGetNum("hop_route_index",-1).
     LOCAL sites IS stateGet("hop_route_sites",LIST()).
     IF index < 0 OR index >= sites:LENGTH OR NOT _hopDwellSafe(index) {

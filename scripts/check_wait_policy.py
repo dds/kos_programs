@@ -65,7 +65,7 @@ def check_expired_alarm_cannot_guard_warp():
 
 def check_powered_entry_settles_warp():
     for filename,name,cutoff,last in (
-        ('hop','phaseHop','thrustCutoffOk()','LOCAL steeringTarget'),
+        ('hop_control','phaseHop','thrustCutoffOk()','LOCAL steeringTarget'),
         ('landing_main','landExecute','SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.','vesselLandingPrepareRoles()')):
         source=function_body((ROOT/'lib'/f'{filename}.ks').read_text(),name)
         assert source.index(cutoff)<source.index('SET WARP TO 0.')<source.index('WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.')<source.index(last)

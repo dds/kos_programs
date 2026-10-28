@@ -112,13 +112,14 @@ def check_boot():
     for linked in (False, True):
         events, ran = [], []
         names = KList(map(KString, ('solar', 'xfer_plan', 'craft/Falcon')))
-        env = dict(roots=names, BOOT_LIB_RAN=ran, HOMECONNECTION=NS(ISCONNECTED=linked),
+        env = dict(roots=names, BOOT_LIB_RAN=ran, BOOT_CACHE_PENDING=False, HOMECONNECTION=NS(ISCONNECTED=linked),
                    bootLibResolve=lambda roots: roots, bootArchivePath=lambda name: '0:/' + name,
                    bootCorePath=lambda name: '1:/' + name, bootLibSync=lambda _: None,
                    bootLocalScriptPath=lambda name:'1:/'+name,
                    bootLibArchiveOnly=lambda name: name == 'xfer_plan', EXISTS=lambda _: True,
                    RUNONCEPATH=events.append, RUNPATH=events.append,
                    bootLibAddUnique=lambda dest, name: dest.append(name) if name not in dest else None)
+        env['bootCacheNextBand']=lambda:None
         run(load_source, env)
         assert ran == (list(names) if linked else [names[0], names[2]])
         assert len(events) == len(ran)
@@ -162,6 +163,7 @@ def check_phase_failures():
                        _redirectOrbitalLandingPhase=lambda _: False, _payloadSeq=lambda: [], launchSeq=[],
                        yieldToPrompt=lambda: events.append('hold'), nextPhase=lambda _: events.append('advance'),
                        mLogError=lambda _: None)
+            env['bootCacheNextBand']=lambda:None
             env[operation] = lambda: success
             run(source, env)
             assert events == (['advance'] if success else ['hold']), (handler, success, events)

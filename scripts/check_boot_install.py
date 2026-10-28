@@ -19,7 +19,7 @@ class Text(KString):
 class Items(KList):
     def CONTAINS(self,value):return value in self
 
-def fixture(linked=True):
+def fixture(linked=True,capacity=200000):
     fixture_source=BOOT+'\n'+CONFIG
     files,events,state={},[],{}
     cwd=[Text('1:/')]
@@ -27,7 +27,7 @@ def fixture(linked=True):
         EXISTS=lambda path:exists(path),CREATEDIR=lambda path:files.update({str(path):None}),
         COPYPATH=lambda src,dest:copy(src,dest),DELETEPATH=lambda path:files.pop(str(path)),
         PATH=lambda:cwd[0],CD=lambda path:cwd.__setitem__(0,Text(path)),
-        LIST=lambda *xs:Items(xs),text=Text,BOOT_LIB_RAN=Items(),
+        LIST=lambda *xs:Items(xs),text=Text,BOOT_LIB_RAN=Items(),BOOT_CACHE_PENDING=False,MAX=max,
         stateGet=state.get,stateGetNum=state.get,
         stateSet=lambda key,value:state.update({key:value}),stateRemove=lambda key:state.pop(key,None),
         SHIP=NS(STATUS='ORBITING'),BOOT_MANUAL_REQUESTED=False,phaseShouldYield=False,
@@ -36,11 +36,21 @@ def fixture(linked=True):
         bootLibResolve=lambda roots:roots,bootLibArchiveOnly=lambda _:False,
         bootLibAddUnique=lambda dest,key:dest.ADD(key) if key not in dest else None,
         yieldToPrompt=lambda:env.update(phaseShouldYield=True))
+    def file_size(value):
+        if value is None:return 0
+        if isinstance(value,tuple):value=value[1]
+        return len(value.encode())
+    class Volume:
+        FREESPACE=property(lambda self:capacity-sum(file_size(value) for path,value in files.items() if path.startswith('1:/')))
+    volume=Volume()
+    env.update(CORE=NS(VOLUME=volume),OPEN=lambda path:NS(SIZE=file_size(files[str(path)])))
     def exists(path):
         if str(path).startswith('0:/'):assert env['HOMECONNECTION'].ISCONNECTED
         return str(path).replace('/./','/') in files
     def copy(src,dest):
         assert exists(src)
+        if str(dest).startswith('1:/'):
+            assert volume.FREESPACE+file_size(files.get(str(dest)))>=file_size(files[str(src)])
         events.append(('copy',str(src),str(dest)))
         files[str(dest)]=files[str(src)]
     def compile_file(src,dest):
@@ -76,7 +86,7 @@ def fixture(linked=True):
             body=function_body(fixture_source,name)
             prepared[name]=(re.findall(r'PARAMETER (\w+)',body),ks.compile_nodes(ks.freeze(ks.parse(adapt(body)))))
         params,compiled=prepared[name]
-        local=env if name in ('bootApplyMissionConfig','main') else dict(env)
+        local=env if name in ('bootApplyMissionConfig','bootLibLoadList','bootCacheNextBand','main') else dict(env)
         local.update(zip(params,args))
         try:ks.execute(compiled,local)
         except ks.Returned as result:return result.value
@@ -123,6 +133,46 @@ def check_shared_install_and_offline_main():
     assert state['phase']=='COAST_1HALF'
     assert all(event[0]=='run' and event[1].startswith('1:/') for event in events)
     print('PASS: craft and static profile compile on archive via shared installer; cold offline reload restores RO9 main and selected profile without phase mutation')
+
+
+def check_full_hop_disk_and_reserved_cache():
+    env,files,events,_=fixture(capacity=200000)
+    # Measured native disk at UT4212185: state15,896B, landing_main16,634B,
+    # total199,849B. Fake bytecode sizes are explicit, not native compilation.
+    files.update({'1:/run/state.json':'s'*15896,'1:/lib/landing_main.ksm':'m'*16634,
+                  '1:/other':'x'*(199849-15896-16634),'0:/lib/return_setup.ks':'r'*6896})
+    assert env['CORE'].VOLUME.FREESPACE==151
+    assert not env['bootLibSync'](Text('return_setup'),4096)
+    assert '1:/lib/return_setup.ksm' not in files and files['1:/run/state.json']=='s'*15896
+    files['1:/lib/return_setup.ksm']='old'
+    assert not env['bootLibSync'](Text('return_setup'),4096)
+    assert files['1:/lib/return_setup.ksm']=='old'
+    del files['1:/lib/landing_main.ksm']
+    assert env['bootLibSync'](Text('return_setup'),4096)
+    assert env['CORE'].VOLUME.FREESPACE>=4096 and files['1:/run/state.json']=='s'*15896
+    print('PASS: measured151B-free hop disk cannot install6,896B return library; preflight retains checkpoint/old code, then installs after bounded surface cleanup with4KiB state/log headroom')
+
+
+def check_cache_is_not_executed():
+    env,files,events,_=fixture()
+    files['0:/lib/core.ks']='SET KEEP_WARP TO 0.'
+    files['0:/lib/next.ks']='SET simulated_throttle TO 1.'
+    env.update(BOOT_CACHE_PENDING=True,BOOT_CACHE_LIBS=Items([Text('next')]))
+    env['bootLibLoadList'](Items([Text('core')]))
+    assert env['BOOT_CACHE_PENDING'] and '1:/lib/next.ksm' not in files
+    env['SHIP'].STATUS='LANDED'
+    env['bootCacheNextBand']()
+    assert not env['BOOT_CACHE_PENDING'] and 'simulated_throttle' not in env
+    assert '1:/lib/next.ksm' in files
+    assert [event[1] for event in events if event[0]=='run']==['1:/lib/core.ksm']
+    keep=function_body(BOOT,'bootCleanup').split('LOCAL kr IS',1)[0]+'RETURN kl.'
+    env.update(vn='RO9',wl=Items([Text('core')]),missionVehicle='RO9')
+    assert 'next' in env['run_body'](keep)
+    env['HOMECONNECTION'].ISCONNECTED=False
+    events.clear();env['BOOT_CACHE_PENDING']=True
+    env['bootLibLoadList'](Items([Text('core')]))
+    assert 'simulated_throttle' not in env and all(event[0]=='run' for event in events)
+    print('PASS: airborne boot defers future caching until touchdown; next-band files survive cleanup without RUNPATH or leaked handlers/config/throttle, and offline boot never accesses archive')
 
 def check_profile_listing_and_generation():
     env,files,_,_=fixture(False)
@@ -181,6 +231,8 @@ def check_boot_update_install():
 if __name__=='__main__':
     check_legacy_and_compiled_resolution()
     check_shared_install_and_offline_main()
+    check_full_hop_disk_and_reserved_cache()
+    check_cache_is_not_executed()
     check_profile_listing_and_generation()
     check_boot_entry_and_missing_main()
     check_boot_update_install()

@@ -9,6 +9,26 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 hop follow-up: native saved diskUT4212185 is199849/200000bytes,
+state15896B/return_setup absent. This failure is proven storage exhaustion.
+Operator authorizes separate science/landing reboots. hop_control now owns
+the bounded executor; hop owns route/config/review/limiter restore. HOP_ROUTE
+loads helpers/science, HOP loads control, LANDING loads descent. Removed
+all-at-once conditional retention for hop routes. BOOT_CACHE_LIBS is a
+disk-only next-band closure, kept through cleanup and synced once after the
+running band;4KiB reserve, no RUNPATH or mandatory deorbit/cache gate.
+bootLibSync preflights size before deleting old bytecode. hopnext's initial
+linked/idle/surface recovery prunes only four replaceable descent files,
+then loads archive boot_lib; run it BEFORE reboot on the existing full core.
+Native Gamma pending2 survived but phase stayedHOP_AUTO_REVIEW: shared
+stateSaveReloadState never wrote phase, and prior tests masked it with a
+phase-setting stub. Helper now commits phase last; real-helper JSON reboot
+test and pending-Gamma upgrade recovery added. No bootstrap module change.
+All67 routine check files passed91.79s. Final post-touchdown cache deferral
+passed nine affected files, including structural audit300 scripts/0 errors
+(unrelated existing ksc_deorbit warning). New native compiled sizes and hop
+flight remain unverified. No remote files/flight controls were changed.
+
 2026-10-28 RO9 polar landing/hop recovery: operator did NOT reset any kOS
 files. Automatic HOP_ROUTE_SETUP band reboot4209161 -> new flight stamp4209170,
 boot001/PRELAUNCH; saved processor lacks launch/route progress. Exact loss

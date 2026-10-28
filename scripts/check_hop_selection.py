@@ -5,7 +5,7 @@ from types import SimpleNamespace as NS
 import check_minmus_polar_hops as route
 from check_codebase import ROOT, function_body, command_entrypoint_errors
 from check_runtime_contracts import KString, run
-from check_state_collections import collection
+from check_state_collections import collection, Store
 
 hop = route.hop
 
@@ -15,7 +15,7 @@ def fixture():
     state.update(vehicle='RO9',phase='PRELAUNCH')
     env.update(siteNumber=3,bootPreamble=lambda:None,bootLibLoad=lambda *_:None,
                bootApplyMissionConfig=lambda *_:True,HOMECONNECTION=NS(ISCONNECTED=True),
-               UNCHAR=ord)
+               UNCHAR=ord,EXISTS=lambda _:False,RUNPATH=lambda *_:None)
     env['_hopMenuSafe']=lambda:hop.ks.call('_hopMenuSafe',env)
     env['hopChooseSite']=lambda default:hop.execute('hopChooseSite',env,default)
     return env,state,updates,events,alarms
@@ -172,7 +172,7 @@ def check_failed_state_write_preserves_checkpoint():
         env=dict(_cache=collection(current),STATE_PATH='1:/run/state.json',WRITEJSON=write,
                  EXISTS=lambda _:True,READJSON=lambda _:collection(json.loads(disk[0])),
                  SHIP=NS(CONTROL=NS(MAINTHROTTLE=.4,PILOTMAINTHROTTLE=.2)),WARP=4,
-                 fixture_lock=lambda text:events.append(text),shutdown=stopped)
+                 fixture_lock=lambda text:events.append(text),shutdown=stopped,CORE=NS(VOLUME=NS(FREESPACE=151)))
         stopped_safely=False
         try:hop.ks.run(hop.without_prints(hop.ks.parse(source)),env)
         except Stopped:stopped_safely=True
@@ -185,6 +185,51 @@ def check_failed_state_write_preserves_checkpoint():
     print('PASS: actual flush source never deletes the previous state, verifies the replacement and stops with throttle/warp zero on failed space-limited writes, including native-null returns')
 
 
+def check_real_reload_commit_and_pending_upgrade():
+    env,state,updates,events,alarms=fixture()
+    store=Store(state);store.bind(env)
+    # Substitute only serialization, not the handoff: all keys use the same
+    # generic writer, with no special phase/band mutation in the reboot stub.
+    def persist(key,value):
+        store.cache[key]=collection(value);store.flush()
+    env['stateSet']=persist
+    env['stateSaveReloadState']=lambda *args:hop.ks.call('stateSaveReloadState',env,*args)
+    command(env)
+    store.reboot()
+    assert store.get('phase')=='HOP' and store.get('hop_route_pending')==2
+    assert store.get('reload_next_phase')=='HOP' and store.get('hop_route_index')==0
+    assert store.get('mission_id')=='minmus_polar_hops_return'
+    env,state,updates,events,alarms=fixture();env['hopRoutePrepare']()
+    state.update(phase='HOP_AUTO_REVIEW',hop_route_pending=2)
+    updates.clear()
+    route.rebooting(env['phaseHopAutoReview'])
+    assert state['phase']=='HOP' and state['hop_route_pending']==2 and state['hop_route_index']==0
+    assert updates['HOP_TARGET_LAT']==-1.554 and not alarms and env['TIME'].SECONDS==0
+    print('PASS: actual reload helper durably changes boot phase to HOP through JSON, without a fake phase-setting stub; upgrading the native stuck-review/Gamma checkpoint preserves the explicit pending site')
+
+
+def check_landed_disk_recovery():
+    for safe in (True,False):
+        env,state,updates,events,alarms=fixture();env['hopRoutePrepare']()
+        if not safe:env['SHIP'].STATUS='FLYING'
+        files={'1:/run/state.json':'checkpoint','1:/run/mission_overrides.ks':'Gamma',
+               '0:/lib/boot_lib.ks':'source','1:/lib/boot_lib.ksm':'cached'}
+        for lib in ('landing_main','landing_brake','landing_coast','landing_terminal'):
+            files['0:/lib/'+lib+'.ks']='source';files['1:/lib/'+lib+'.ksm']='cached'
+        deleted=[]
+        env.update(EXISTS=lambda path:path in files,READJSON=lambda _:route.Lex(state),
+                   DELETEPATH=lambda path:deleted.append(path) or files.pop(path),
+                   RUNPATH=lambda path:events.append(('run',path)),
+                   bootPreamble=lambda:events.append(('preamble',len(deleted))))
+        command(env)
+        assert len(deleted)==(4 if safe else 0)
+        assert files['1:/run/state.json']=='checkpoint' and files['1:/run/mission_overrides.ks']=='Gamma'
+        if safe:
+            assert ('preamble',4) in events and ('run','0:/lib/boot_lib.ks') in events
+            assert state['hop_route_pending']==2
+    print('PASS: linked settled-surface recovery frees only four replaceable descent caches before loading libraries; state/overrides survive, and an airborne craft cannot prune or select a hop')
+
+
 if __name__=='__main__':
     check_gamma_and_original_return()
     check_selection_guards()
@@ -192,3 +237,5 @@ if __name__=='__main__':
     check_timed_stop_reaches_real_menu()
     check_cold_boot_and_sequence()
     check_failed_state_write_preserves_checkpoint()
+    check_real_reload_commit_and_pending_upgrade()
+    check_landed_disk_recovery()

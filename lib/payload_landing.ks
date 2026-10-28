@@ -1,8 +1,3 @@
-// --- Config defaults owned by this file ---
-GLOBAL LANDING_SKIP_TARGET_SEARCH IS 0.
-GLOBAL RELOAD_AFTER_LAND_ASSIST IS 1.
-GLOBAL RELOAD_AFTER_LAND IS 1.
-
 // Landing descent phase wrappers.
 
 GLOBAL FUNCTION phaseLandAssist {
@@ -31,6 +26,7 @@ GLOBAL FUNCTION phaseLandAssist {
         yieldToPrompt().
         RETURN.
     }
+    bootCacheNextBand().
     nextPhase(launchSeq).
 }
 
@@ -56,6 +52,7 @@ GLOBAL FUNCTION phaseLand {
         yieldToPrompt().
         RETURN.
     }
+    bootCacheNextBand().
     nextPhase(launchSeq).
 }
 
