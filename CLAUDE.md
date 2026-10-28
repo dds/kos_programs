@@ -511,6 +511,11 @@ Looks like Python/JS; is neither.
   body executes `PRESERVE.` (or returns true).
 - `LEXICON()` = dict, `LIST()` = array, `delegate@` = function reference,
   `:CALL()` invokes one.
+- **Never write `IF NOT DEFINED name { ... }`.** Native kOS rejects it at
+  the opening brace. Use `IF DEFINED name { } ELSE { ... }` for a missing
+  variable. Flight-found in boot at BOOT_LIB_RAN, fixed by the operator in
+  574ce79 with matching compiled boot. `make check` rejects NOT DEFINED in
+  executable source; comments/strings and ordinary boolean NOT are allowed.
 - Identifiers AND string comparisons are case-insensitive — never add
   `TOUPPER`/`TOLOWER` just to compare.
 - **No escape sequences in strings.** `"\""` is a syntax error (flight-found)

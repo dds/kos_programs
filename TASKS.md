@@ -57,6 +57,14 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [x] **Record native NOT DEFINED syntax quirk.** Pulled operator574ce79,
+  preserving both the positive IF DEFINED/ELSE boot fix and compiled boot.ksm.
+  Documented the rule in README/CLAUDE and added a masked-source guard plus
+  regressions so the Python fixture cannot silently admit this invalid form.
+  No other executable NOT DEFINED occurrences found; no flight code changed.
+  Structural, runtime-contract and bootstrap-install checks all pass; existing
+  unrelated missing ksc_deorbit warning unchanged. No recompilation required
+  beyond the compiled bootstrap supplied in574ce79.
 - [ ] **Graphics-memory reductions preserving the preferred look.** Operator
   values shiny/specular parts and ReStock/ReStockPlus. Preserve Magpie/TU/
   Deferred appearance by default. Permanent inventory now saved at

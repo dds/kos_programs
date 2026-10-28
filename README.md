@@ -2528,6 +2528,10 @@ is invalid even inside an `IF` or loop; kOS permits returns from functions
 and triggers. `make check` enforces command entrypoints and return scope.
 See [CLAUDE.md](CLAUDE.md) for the required coding conventions.
 
+kOS also rejects `IF NOT DEFINED name { ... }`. To handle an absent variable,
+use `IF DEFINED name { } ELSE { ... }`. The repository check flags this
+parser quirk; ordinary boolean negation such as `IF NOT ABORT` is valid.
+
 A vehicle script defines two things:
 
 ```

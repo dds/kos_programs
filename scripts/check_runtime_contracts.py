@@ -8,7 +8,7 @@ from types import SimpleNamespace as NS
 
 import check_landing_guidance as ks
 from check_codebase import (ROOT, closure, dependency_tables, function_body,
-                            command_entrypoint_errors, unscoped_returns)
+                            command_entrypoint_errors, unscoped_returns, negated_defined_conditions)
 from check_deorbit_geometry import Vec, evaluate
 
 
@@ -42,6 +42,14 @@ def run(source, env):
 
 
 def check_command_scopes():
+    for source in ('IF NOT DEFINED BOOT_LIB_RAN { stop(). }',
+                   'if not\n// parser quirk\ndefined registry { stop(). }',
+                   'IF NOT DEFINED registry AND registry:LENGTH > 0 { stop(). }'):
+        assert negated_defined_conditions(source),source
+    for source in ('IF DEFINED registry { } ELSE { stop(). }',
+                   'IF NOT ABORT { continueMission(). }',
+                   '// IF NOT DEFINED registry { }\nPRINT "NOT DEFINED".'):
+        assert not negated_defined_conditions(source),source
     for source in ('RETURN.', 'IF NOT HASNODE { RETURN. }',
                    'UNTIL done { IF ABORT { RETURN FALSE. } }',
                    '@CLOBBERBUILTINS ON. IF ABORT { RETURN. }',
@@ -74,7 +82,7 @@ def check_command_scopes():
     helper = (ROOT / 'lib/burn_check.ks').read_text()
     assert not unscoped_returns(helper)
     assert len(unscoped_returns(function_body(helper, '_burnCheckMain'))) == 2
-    print('PASS: scope guard rejects bare/nested file-level RETURN; command guard requires one local entry call; archive helper is covered')
+    print('PASS: guards reject NOT DEFINED and file-level RETURN, preserve positive DEFINED/ELSE and normal NOT, and require wrapped command entrypoints including the archive helper')
 
 
 def check_boot():

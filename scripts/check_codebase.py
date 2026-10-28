@@ -2,8 +2,8 @@
 
 Check lexical balance, dependency cycles/files, phase bindings, profile
 identities/sequences, undeclared configuration names, command entrypoints
-and RETURN scope. --report also shows source-token counts per band; these
-are NOT compiled byte sizes.
+and RETURN scope, plus unsupported NOT DEFINED syntax. --report also shows
+source-token counts per band; these are NOT compiled byte sizes.
 """
 import argparse
 import collections
@@ -93,6 +93,13 @@ def unscoped_returns(source):
     return bad
 
 
+def negated_defined_conditions(source):
+    """Reject the flight-found NOT DEFINED form; use IF DEFINED/ELSE."""
+    clean = mask(source)
+    return [clean[:match.start()].count('\n')+1
+            for match in re.finditer(r'\bNOT\s+DEFINED\b', clean, re.I)]
+
+
 def command_entrypoint_errors(source):
     """Only declarations/directives and one local entry call at file scope."""
     clean = mask(source)
@@ -143,6 +150,8 @@ def audit(report=False):
             errors.append(f'{path}: unclosed delimiters {stack}')
         for line in unscoped_returns(sources[path]):
             errors.append(f'{path}:{line}: RETURN outside a function or trigger')
+        for line in negated_defined_conditions(sources[path]):
+            errors.append(f'{path}:{line}: unsupported NOT DEFINED; use IF DEFINED ... {{ }} ELSE {{ ... }}')
         if path.startswith('cmd/'):
             errors.extend(f'{path}: {error}' for error in command_entrypoint_errors(sources[path]))
 
