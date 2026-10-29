@@ -3,9 +3,9 @@
 //
 // Drive the current orbit to a fully (or partially) specified
 // target orbit around the CURRENT body: AP, PE, INC, LAN, AOP.
-// No numeric search — every burn is computed in closed form from
-// classical orbital mechanics, and the phase loop re-measures the
-// real orbit after each burn, so execution errors self-correct.
+// Closed-form seeds are checked/refined against native maneuver patches.
+// The phase loop re-measures the real orbit after each burn so execution
+// errors can be corrected without relaxing the requested orbit tolerances.
 //
 // Why this works as a sequence of independent 1D problems:
 //   1. PLANE  — rotating the velocity vector about the radial
@@ -18,7 +18,7 @@
 //      (planAoPChange in maneuver.ks).
 //   3. APSES  — prograde burns at Pe/Ap set the opposite apsis
 //      and move neither the plane nor the apsidal line.
-// So PLANE -> AOP -> APSES converges in one round plus trims.
+// Burn order depends on current errors; raise Ap before large plane changes.
 //
 // Phase: SHAPE  (bind via dependencies.ks: SHAPE -> orbit_shape)
 //
@@ -395,14 +395,21 @@ GLOBAL FUNCTION planPlaneMatch {
     IF burnEta < 60 { SET burnEta TO burnEta + SHIP:ORBIT:PERIOD. }
     LOCAL burnUt IS TIME:SECONDS + burnEta.
 
-    // Pure-normal seed from elements: a plane rotation by theta
-    // costs 2 v sin(theta/2) at the node. Sign and exactness are
-    // the refiner's job (it owns the NORMAL axis and walks through
-    // zero if the sense is wrong) — no frames, no predictions.
-    LOCAL dvSeed IS 2 * _speedAtTa(burnTa) * SIN(theta / 2).
-    LOCAL nd IS NODE(burnUt, 0, dvSeed, 0).
+    // Rotate the transverse velocity, preserving speed and radial motion.
+    // The TOTAL plane-change dV is not a pure-normal impulse: it includes
+    // retrograde thrust. All input velocities come from elements, never
+    // a future VELOCITYAT frame. Native patches choose the axis signs.
+    LOCAL nd IS NODE(burnUt, 0, 0, 0).
     ADD nd.
     WAIT 0.02.
+    IF NOT _seedPlaneRotation(nd,burnTa,theta,nTgt) {
+        mLogError("Plane match: no safe velocity-rotation seed; node discarded.").
+        REMOVE nd. RETURN 0.
+    }
+    LOCAL dvSeed IS nd:DELTAV:MAG.
+    LOCAL seedPro IS nd:PROGRADE.
+    LOCAL seedNrm IS nd:NORMAL.
+    LOCAL seedRad IS nd:RADIALOUT.
 
     // The analytic node is only a SEED. Refine it against the
     // game's own propagation (nd:ORBIT) in pure element space —
@@ -431,6 +438,8 @@ GLOBAL FUNCTION planPlaneMatch {
         + " targetInc=" + ROUND(targetInc, 2)
         + " targetLan=" + ROUND(targetLan, 2)
         + " seedDv=" + ROUND(dvSeed, 1)
+        + " seedModel=velocity-rotation seedPrograde=" + ROUND(seedPro,3)
+        + " seedNormal=" + ROUND(seedNrm,3) + " seedRadial=" + ROUND(seedRad,3)
         + " seedErr=" + ROUND(seedErr, 2)
         + " finalErr=" + ROUND(finalErr, 2)
         + " eta=" + ROUND(nd:ETA, 0)).
@@ -443,6 +452,57 @@ GLOBAL FUNCTION planPlaneMatch {
     }
     maneuverUiArchiveLog("plane-match").
     RETURN nd.
+}
+
+LOCAL FUNCTION _planeNodeCost {
+    PARAMETER nd,nTgt,pe0,ap0,peFloor.
+    LOCAL o IS nd:ORBIT.
+    IF NOT (o:ECCENTRICITY >= 0 AND o:ECCENTRICITY < 1
+            AND o:PERIAPSIS >= peFloor AND o:PERIAPSIS < 1e30
+            AND o:APOAPSIS >= o:PERIAPSIS AND o:APOAPSIS < 1e30) { RETURN 9999. }
+    RETURN _planeErrOf(o,nTgt)
+        + 0.01*(ABS(o:PERIAPSIS-pe0)+ABS(o:APOAPSIS-ap0))/1000.
+}
+
+LOCAL FUNCTION _seedPlaneRotation {
+    PARAMETER nd,burnTa,theta,nTgt.
+    LOCAL p IS SHIP:ORBIT:SEMIMAJORAXIS*(1-SHIP:ORBIT:ECCENTRICITY^2).
+    LOCAL speed IS _speedAtTa(burnTa).
+    LOCAL radius IS _radiusAtTa(burnTa).
+    IF NOT (p > 0 AND p < 1e30 AND speed > 0 AND speed < 1e30
+            AND radius > 0 AND radius < 1e30) { RETURN FALSE. }
+    LOCAL vt IS SQRT(SHIP:BODY:MU*p)/radius.
+    LOCAL vr IS SQRT(SHIP:BODY:MU/p)*SHIP:ORBIT:ECCENTRICITY*SIN(burnTa).
+    LOCAL deltaT IS vt*(COS(theta)-1).
+    // Node prograde follows velocity, not the transverse direction on an
+    // eccentric orbit. Project the in-plane change onto both node axes.
+    SET nd:PROGRADE TO deltaT*vt/speed.
+    LOCAL radial IS -deltaT*vr/speed.
+    LOCAL normal IS vt*SIN(theta).
+    LOCAL pe0 IS SHIP:PERIAPSIS.
+    LOCAL ap0 IS SHIP:APOAPSIS.
+    LOCAL peFloor IS _peFloor().
+    LOCAL FUNCTION cost {
+        RETURN _planeNodeCost(nd,nTgt,pe0,ap0,peFloor).
+    }
+    LOCAL signs IS LIST(1).
+    IF ABS(radial) > 0.000001 { SET signs TO LIST(1,-1). }
+    LOCAL best IS 9999.
+    LOCAL bestNrm IS 0.
+    LOCAL bestRad IS 0.
+    FOR nSign IN LIST(1,-1) {
+        SET nd:NORMAL TO normal*nSign.
+        FOR rSign IN signs {
+            SET nd:RADIALOUT TO radial*rSign.
+            LOCAL score IS _stableEval(cost@).
+            IF score < best {
+                SET best TO score. SET bestNrm TO nd:NORMAL. SET bestRad TO nd:RADIALOUT.
+            }
+        }
+    }
+    IF NOT (best < 9999) { RETURN FALSE. }
+    SET nd:NORMAL TO bestNrm. SET nd:RADIALOUT TO bestRad.
+    RETURN _stableEval(cost@) < 9999.
 }
 
 // Plane error of an orbit (by its elements) against a target
@@ -472,11 +532,7 @@ LOCAL FUNCTION _refinePlaneNode {
     LOCAL peFloor IS _peFloor().
 
     LOCAL FUNCTION _cost {
-        IF nd:ORBIT:ECCENTRICITY >= 1 { RETURN 9999. }
-        IF nd:ORBIT:PERIAPSIS < peFloor { RETURN 9999. }
-        RETURN _planeErrOf(nd:ORBIT, nTgt)
-            + 0.01 * (ABS(nd:ORBIT:PERIAPSIS - pe0)
-                    + ABS(nd:ORBIT:APOAPSIS - ap0)) / 1000.
+        RETURN _planeNodeCost(nd,nTgt,pe0,ap0,peFloor).
     }
 
     LOCAL axes IS LIST("TIME", "NORMAL", "PROGRADE", "RADIALOUT").

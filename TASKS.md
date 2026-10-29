@@ -6,6 +6,13 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Latest native geo SHAPE failure atUT4868219: RO9_4704531 boot013 is at
+ 2863km but55.156deg. Pure-normal seed935m/s warps apsides; coordinate cost
+  shrinks it to603m/s/20.41deg and rejects. Implemented full speed-preserving
+  rotation seed with native sign/Pe validation; independent144 conic cases
+  and recorded failure pass. Specific satellite has only~813.5m/s implied
+  remaining after prior122m/s circularization vs~935 direct correction;
+  reserve/fuel/allowance guards stay active. Native new policy pending.
 - Latest mission update: mun_target_science_return now fixed Mun landing,
   surface science, westward ascent/11km parking, retrograde equatorial
   AP1737680 PE1543150 INC180 AOP34.3 (LAN free), orbital review then53km
@@ -91,6 +98,27 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **Large plane corrections stuck because of pure-normal seed.**
+  Native RO9_4704531 boot013 at4868189..4868219: correct2863.2x2863.3km
+  altitude, inc55.156, want0. Seed935m/s normal-only has12.36deg error but
+  huge Ap inflation; optimizer prefers603m/s and20.41deg, then discards.
+  Boot012 similarly failed17.58deg before circularizing122.051m/s instead.
+  Full rotation now includes retrograde and (off-apsis) radial components,
+  derives velocities only from elements, chooses signs via stable native
+  predictions and unchanged plane/apsis cost, retains Pe/bound/quality gates.
+  Source independent144 eccentric/circular/axis-sign/retrograde cases retain
+  apsides and hit plane; reproduces old12.36deg seed and actual planner
+  admission. New seed logging identifies the model/components. No manual
+  node/burn, no safeguard relaxation. Read-only logs in
+  /tmp/ksp-deck-20261029T001825Z-fetch-{ajqo1_k5,1bmz9nzf}/logs/.
+  Native corrected seed/finite burn pending. This satellite may be unable
+  to fund direct correction:935.5 remaining before122.05 circularization
+  implies~813.5 now vs~935 correction plus100reserve. Keep that separate
+  from the solver bug; total4135.8 cap also remains insufficient for935
+  after3379.9 already charged. Do not remove guards to force the maneuver.
+  All74 routine check files passed104.10s. Corrected native flight pending;
+  this seed preserves current apsides rather than optimizing a combined
+  plane/circularization maneuver.
 - [ ] **Mun target landing -> retrograde contract orbit -> return.** Same
   mission ID and landing(-10.590,99.490), capture15km/15deg, powered lead and
   tight local terrain policy. Surface science runs once, then generic

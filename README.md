@@ -1098,6 +1098,14 @@ matching, and checks finite node lead of at least60s before charging a burn.
 An expired candidate holds with `budgetCharged=False` rather than consuming
 allowance on a node that is already too late to execute.
 
+Plane matching seeds a full velocity rotation, including the retrograde
+component needed to preserve orbital speed. On eccentric orbits it also
+projects the change onto the radial node axis. Native predicted patches
+choose axis signs and retain the existing bound-orbit/periapsis checks
+before refinement. `STATS plane-match plan` records
+`seedModel=velocity-rotation` and the three seed components. A failed
+refinement or an unaffordable correction still holds without burning.
+
 `SHAPE_MIN_BURN_DV` (default **0.4 m/s**) applies to every final SHAPE and
 DEPARTURE_SHAPE node: plane, AoP and apsis corrections, including nodes that
 shrink during refinement or retry. Sub-minimum trims are removed before

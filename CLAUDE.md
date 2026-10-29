@@ -9,6 +9,28 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 geo refinement failure atUT4868219 is RO9_4704531 boot013:
+2863.2x2863.3km/55.156deg ->target0deg. Old pure-normal935m/s seed has
+12.36deg plane miss and gross Ap inflation. Coordinate cost minimization
+shrinks to603m/s but leaves20.41deg; safely discarded,0burns. Boot012 had
+same failure then circularized122.051m/s instead. Corrected full rotation
+seed: transverse vt*cos(theta),normal vt*sin(theta),same radial velocity;
+project into node prograde/radial, probe both native normal/radial signs,
+shared existing apsis/plane cost and strict Pe/bound guards, then normal
+native refiner/final-quality/budget/executor. No tolerance/reserve relaxation.
+Diagnostics seedModel=velocity-rotation plus seedPrograde/Normal/Radial.
+Independent144 eccentric/circular/sign/retrograde impulse cases preserve
+apsides/plane; reported pure-normal12.36deg failure reproduced, actual
+planner integration and unsafe/invalid/fuel/total-cap rejection checked.
+Native corrected seed/finite-burn flight pending. Specific geo flight may
+be fuel-limited:935.5m/s before122.05 circularization =>~813.5m/s left,
+below~935m/s direct plane burn even before100reserve; do not advise a blind
+allowance override. Current total override4135.8 also leaves<935 budget.
+Read-only logs /tmp/ksp-deck-20261029T001825Z-fetch-{ajqo1_k5,1bmz9nzf}/logs/.
+No remote control/code/save mutation; normal library sync, no bootstrap build.
+All74 routine check files pass104.10s. Current seed preserves the existing
+apsides; combined plane/apsis fuel optimization is a separate future change.
+
 2026-10-28 new operator request: first provide geo command setphase SHAPE,
 kerbin_geostationary_satellite; then extend mun_target_science_return.
 Original fixed(-10.590,99.490) landing/powered guidance/terrain/15deg capture
