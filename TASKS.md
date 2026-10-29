@@ -6,6 +6,24 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Current RO9 interruption: native RO9_4880796 boot024 repaired43.2->53km
+  after its pass, but8.648m/s burn aborted on0.008181178 residual against an
+  unnecessarily strict0.005 limit. boot025 holds despite deleting the node
+  because durable interrupted markers remain. Implemented Pe-sensitivity
+  cutoff, intent-bound achieved-orbit reconciliation and explicit legacy
+  cmd/reentryresume recovery. No common executor/attitude/cutoff relaxation;
+  historical report and unrelated nodes retained. Source/independent conic
+  tests pass; all76routinecheckfiles pass135.25s. Native corrected recovery
+  pending. This saved flight still
+  logs AEROBRAKE_AP_BURN=False: command aeroassist1 is a separate operator
+  choice before reboot. No remote craft control or save changes.
+- Resume after urgent RO9 recovery: Espoir configurable powered science entry.
+  Operator selected DIRECT CONTROLLED DESCENT, not deliberate multi-pass
+  capture. Reuse powered-entry controller in SCIENCE_ENTRY, preserve science
+  sampling between powered intervals, add conditional library/cache roots
+  with safe orbital prefetch; no in-atmosphere reboot or forced capture.
+  Implementation remains queued while this live craft is unblocked.
+
 - Latest native geo SHAPE failure atUT4868219: RO9_4704531 boot013 is at
  2863km but55.156deg. Pure-normal seed935m/s warps apsides; coordinate cost
   shrinks it to603m/s/20.41deg and rejects. Implemented full speed-preserving

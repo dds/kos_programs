@@ -543,10 +543,12 @@ LOCAL FUNCTION _aerobrakeSolarWait {
 LOCAL FUNCTION _aerobrakeRestorePe {
     PARAMETER atmHeight, targetPe, peLow, peHigh.
     IF AEROBRAKE_PE_TARGETING <= 0 OR ABORT OR phaseShouldYield { RETURN NOT ABORT AND NOT phaseShouldYield. }
-    // Even a nearly completed repair can retain a live interrupted node.
-    // Do not let an already-good Pe or inbound reboot bypass its ownership.
+    // A reboot can interrupt goal verification after an otherwise good Pe
+    // repair. Only its recorded intent permits automatic reconciliation.
+    IF maneuverBurnInterrupted() { reentryPeRecover(targetPe,peLow,peHigh). }
     IF HASNODE OR maneuverBurnInterrupted() {
         mLogError("Aerobrake Pe repair blocked by an existing/interrupted maneuver.").
+        PRINT "If this was a completed Pe repair with a tiny residual, run cmd/reentryresume.ks to verify the current orbit.".
         yieldToPrompt(). RETURN FALSE.
     }
     IF SHIP:ALTITUDE <= atmHeight OR SHIP:APOAPSIS <= atmHeight

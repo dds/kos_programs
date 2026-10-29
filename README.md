@@ -57,6 +57,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/returnshallow.ks").` | 53 km moon→Kerbin return; keep engine/tank through aerobraking, then separate for parachute descent |
 | `RUNPATH("0:/cmd/returncheck.ks").` | Plan a 53 km Mun/Minmus→Kerbin departure for review, with KSC targeting off; prints cost, remaining fuel and predicted Pe without burning or changing phase |
 | `RUNPATH("0:/cmd/aeroassist.ks",1).` | Enable fuel-assisted aerobraking at the next boot; `0` disables (RO9 defaults enabled) |
+| `RUNPATH("0:/cmd/reentryresume.ks").` | Verify an already-achieved Kerbin Pe repair after a tiny-residual abort; accepts only a stopped safe orbit and matching/deleted node, then operator reboots |
 | `RUNPATH("0:/cmd/reentrype.ks",53000).` | Restore Kerbin entry Pe at the upcoming apoapsis from an outbound orbit outside atmosphere; validates the native node, executes, preserves the mission |
 | `RUNPATH("0:/cmd/directreturn.ks").` | From a landed Mun/Minmus craft, model a single-stage direct ascent to Kerbin Pe 53 km with a 20 m/s reserve; preview only, no launch or mission change |
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
@@ -2510,6 +2511,26 @@ apoapsis. The running phase sets its KAC wake before solar coast, wakes
 three minutes before apoapsis, validates a small pure-prograde node against
 the game's predicted Pe/Ap/plane, and spends the protected reserve as needed.
 The manual `reentrype` command uses the same repair and validation code.
+Cutoff precision follows the orbit's Pe sensitivity, bounded by the existing
+burn settings and 0.05m/s. The achieved orbit still has to meet the Pe, Ap
+and plane limits. A stopped tiny-residual abort can be accepted automatically
+only when its saved repair intent matches that burn and the achieved orbit.
+
+For an older repair that reached the corridor but retained an interrupted
+marker (even after its node was deleted), run outside atmosphere:
+
+```kerboscript
+RUNPATH("0:/cmd/reentryresume.ks").
+REBOOT.
+```
+
+This explicitly accepts the current safe Kerbin entry orbit after checking
+AEROBRAKE, a residual no larger than0.05m/s, a benign trim cutoff, idle
+thrust/throttle, Pe within500m of53km and inside52–54km. It preserves unrelated
+nodes and the historical burn report; other aborts remain blocked. It starts
+no burn or staging and does not enable assistance in an old disabled profile.
+Use `aeroassist.ks`,1 separately if needed before the outside-atmosphere reboot.
+
 Entry alarms refresh after repair, then the next powered-assist forecast
 uses the corrected orbit and remaining fuel. An empty audited stage can
 hand off before repair; the strict entry corridor still applies to the

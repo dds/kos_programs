@@ -9,6 +9,21 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 RO9 repair residual hold: boot024 native8.648m/s repair reached
+Pe53km but axis-trim0.008181178 exceeded forced0.005 cutoff. boot025 stale
+interrupted marker blocks after node deletion. reentry_pe now derives cutoff
+from apoapsis dPe/dv (62.5m budget, <=normal0.05 and stricter settings).
+Intent-bound tiny-residual reconciliation verifies nativePe/Ap/inc and exact
+burn ownership, zero thrust, benign trim/no forcedshutdown before shared
+maneuverAcceptHandoff cleanup; common executor protections unchanged.
+Explicit cmd/reentryresume accepts the current safe legacyKerbin orbit with
+matching/deletednode, <=0.05 residual, Pewithin500m/52..54km, AEROBRAKE only;
+no ignition/staging/phasechange. All76routinecheckfiles pass135.25s; focused
+repairfile0.80s. Old report retained, reject unrelatednodes,
+other aborts, badgoal/physics. User must pull/runcommand thenREBOOT outside
+atmosphere; boot/boot.ksm unchanged. Native recovery still pending. Espoir
+controlled entry request remains queued: user chose direct controlleddescent.
+
 2026-10-28 native KSC recovery now verified:RO9_4880796 boot019 solved
 440.937m/s under763.4 budget and achievedPe53.234km/inc55.16 inoneburn.
 boot022 instead proves assisted aerobraking was disabled: no policy/forecast,
@@ -21,7 +36,8 @@ regression reproduces oldoffprofile and verifies on/safetysettings survive.
 Protected10m/s also lacked an automatic consumer. Newshared reentry_pe owns
 nodevalidation/execution for manualreentrype andautomaticapoapsisrepair;
 20m/s/nativePe/AP/plane/pureprograde/activefuel+0.5/timing guards preserved,
-0.005 trim precision, physicalcutoff andliveorbit verified,failednodekept.
+Pe-sensitivity trim precision (normal0.05 ceiling), physicalcutoff and
+liveorbit verified,failednodekept.
 With PE_TARGETING, repair drift>250m on outboundboundoutside-atmo orbit;
 KACownedwake before solar,three-minutes-beforeAp,clockfallback/revalidation.
 Initialoutboundreboot andeverypostpass check it before next-entrycoast/assist;
