@@ -9,6 +9,32 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 current mission design: Espoir (French for hope), different probe
+hardware fromRO9, primaryDuna transmitted science/flyby/impact, Ike only if
+fuel/trajectoryallow. craft/Espoir +duna_science_impact profile reuse normal
+85km launch/interplanetary/BPLANE/coast,5km+/-3km entry. No capture, return,
+RO9 stage/tag assumptions, entry staging/chutes/landing burn. New dedicated
+SCIENCE_ENTRY band samples/transmits continuously, liveSRFRETROGRADE at1x
+through atmosphere; bounded3pass passive recapture, hold if no futureentry.
+Typed stock/DMagic experiment discovery bymoduleindex; never reset retained
+data or an active animated request. Requests/pending/observedcontext survive
+reboot; only actual data marks a contextobserved. kOS nativeTRANSMIT queues
+and immediately removes data: no confirmed-delivery/R&Dcredit claim; logs
+saydeliveryConfirmedFalse. Link+5%EC threshold is attemptpolicy, not proof
+of transmission energy sufficiency. Sampling boundaries configurable;
+withoutSCANsat no biome-change triggers. ResidentKAC-before-solar waits with
+owned-alarm+health warp,clockfallback,deadline/SOI/Abort cleanup. Existing
+Ike only,zero addedmaneuver:>=20kmPe and subsequentDunaPe actually between
+thatpatch's start/endETAs; no active detouroptimizer yet. Entry roots cached
+disk-only duringXFER_BPLANE/ARRIVE, no mandatory cachegate or boot change.
+All75 routinecheckfiles pass106.90s, newfocusedcheck~0.43s. Nativecompile,
+compiledstoragefit andhardwareflight pending; sourcefixtures are notKSP.
+VAB separate request:160m/s onlegstage+654m/s parachutestage, estimated
+KerbinTWR<1; recommend grounds. Need measuredTWR, retainedgear and measured
+roofgeometry before deliberate poweredroof guidance. Do not recommend the
+existing landatksc wrapper: KSC_DEORBIT handler is still absent. No vehicle
+control/save/profileactivation/remote mutation performed for these tasks.
+
 2026-10-28 geo refinement failure atUT4868219 is RO9_4704531 boot013:
 2863.2x2863.3km/55.156deg ->target0deg. Old pure-normal935m/s seed has
 12.36deg plane miss and gross Ap inflation. Coordinate cost minimization

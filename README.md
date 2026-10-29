@@ -896,6 +896,7 @@ derived state, and use `RUNONCEPATH("0:/cmd/trimstate.ks").` to clear the old
 | `FR3` | Multi-payload launcher | Banded loading, profile-first, rover/mapper missions |
 | `Falcon` | Crew/science launcher | Banded profile flights for crew, tourists, and science returns |
 | `FalconHeavy` | Heavy Falcon variant | Falcon plumbing for heavier moon/interplanetary payloads |
+| `Espoir` | Duna science probe | New hardware; transmitted-science flyby and atmospheric impact attempt |
 | `FJ1A` | Juno trainer jet | `airplaneMain()` configuration |
 | `FJ4B` | Supersonic jet | No landing assist — pilot owns the rollout |
 | `FBIJ` | Business jet | GAP airline missions, multi-leg, touch-and-go aware |
@@ -1003,6 +1004,64 @@ Boot derives the libraries to load from `SEQUENCE`. `LIBS = ...` replaces the
 computed list (escape hatch); `LIBS_EXTRA = ...` appends. While prelaunch,
 boot clears any saved profile so a pad reboot re-opens the picker; after
 launch, reboots keep mission and phase.
+
+### Espoir: Duna science and impact attempt
+
+`missions/Espoir/duna_science_impact.ks` is the first Espoir profile. Name
+the new probe **Espoir** (or use the normal fleet-name suffix convention)
+and select this profile in the normal mission picker when ready. No mission
+is selected or launched by adding these files. Espoir uses the shared rocket
+flight computer; it inherits no RO9 stage numbers or decoupler tags.
+
+The sequence launches to85km parking, transfers to Duna, refines arrival,
+then runs `SCIENCE_ENTRY` continuously through approach and atmospheric
+descent. The requested Pe is5km ASL with3km tolerance. This deliberately
+targets deep entry; it does not promise an impact coordinate, survivable
+heating, or a soft landing. There is no capture, return, automatic entry
+staging, chute deployment or landing burn in this profile. Those depend on
+the actual new hardware. A passive drag capture can make another entry;
+each future pass gets a fresh KAC checkpoint/solar coast. After three passes
+without touchdown, or if no future atmospheric crossing remains, the phase
+reports the reason and returns to manual control instead of declaring a
+successful impact. Destruction naturally ends the running processor.
+
+Ike is opportunistic in this version: an **existing native encounter** is
+sampled at no added maneuver cost, only if its predicted Pe clears20km and
+the subsequent Duna patch actually reaches an atmospheric Pe before its
+next transition. An unsafe/incomplete moon prediction holds for review.
+Espoir does not purchase a Duna capture or plan an extra Ike detour. An
+active detour optimizer remains future work once the probe's fuel and
+propulsion are known.
+
+The science loop discovers kOS `ScienceExperimentModule` instruments,
+including supported DMagic types, by module index. It deploys in each
+configured body/altitude/biome context, waits without blocking guidance for
+data, and requests transmission when a home link and at least5% battery are
+available. Old data and active animated measurements are preserved; an
+unavailable undeployed request retries after10s, an unsuccessful transmission
+request after30s. Rerunnable instruments can measure again in a new context;
+one-shot instruments can become inoperable after their first transmission.
+Sampling boundaries in `SCIENCE_ENTRY_BANDS` are editable for modified
+science rules; without SCANsat, altitude/body contexts still work but biome
+changes cannot trigger additional runs.
+
+`STATS science-flight observed` records obtained readings;
+`transmit-request ... deliveryConfirmed=False` records queue submission.
+kOS queues the data and removes the experiment copy before delivery, so
+these messages are **not confirmed science credit**. See the
+[kOS experiment API](https://ksp-kos.github.io/KOS/structures/vessels/scienceexperiment.html)
+and [stock transmission implementation](https://github.com/KSP-KOS/KOS/blob/develop/src/kOS/Suffixed/PartModuleField/StockScienceExperimentFields.cs).
+Use the R&D ledger to confirm credited science. These STATS rows use the
+normal boot-log archive path. Entry code is prefetched to disk during the
+arrival bands without a new mandatory cache gate. No bootstrap recompile
+is needed; actual native compilation, storage fit and flight are pending.
+
+For the new build, provide a Duna-range communication link, deployable
+antennas/solar through the normal launcher tags, enough EC for instrument
+and antenna bursts, attitude authority, suitable instruments and the chosen
+entry protection. No thermometer or science-container prelaunch check has
+been added. Flight-computer configuration is prepared; hardware capability
+has not yet been demonstrated.
 
 ### RO8 moon landing and return
 

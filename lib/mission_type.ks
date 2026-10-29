@@ -83,6 +83,12 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
 GLOBAL FUNCTION missionTypeCacheRoots {
     PARAMETER bandKey.
     LOCAL roots IS LIST().
+    // Disk-only entry code prefetch before Duna/SOI handoff. No executing
+    // a second band here and no mandatory new blackout/cache admission gate.
+    IF SEQUENCE:CONTAINS("SCIENCE_ENTRY")
+            AND (bandKey = "XFER_BPLANE" OR bandKey = "XFER_ARRIVE") {
+        roots:ADD("science_entry").
+    }
     LOCAL automatic IS SEQUENCE:CONTAINS("HOP_ROUTE_SETUP") OR SEQUENCE:CONTAINS("HOP_AUTO_REVIEW").
     LOCAL manualRoute IS SEQUENCE:CONTAINS("HOP_REVIEW").
     IF NOT automatic AND NOT manualRoute { RETURN roots. }

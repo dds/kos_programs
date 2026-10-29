@@ -42,9 +42,12 @@ record remaining uncertainty before closing a task.
   requested elements, precision and300m/s reserve. Full objective pending.
 - Latest operator priority: prepare four RO9 satellite missions and one new
   targeted Mun return, without activating profiles or launching craft. Hop
-  mission completed successfully with improved approach. Duna/Ike flyby /
-  transmitted science and optional return/entry/soft-landing attempt is the
-  next mission family; craft design and branch requirements remain open.
+  mission completed successfully with improved approach. Espoir is now the
+  selected Duna science/impact mission, using new hardware; the first source
+  profile/continuous science-entry phase is prepared. Ike is opportunistic,
+  currently native encounters only; active detours and hardware validation
+  remain open. Current probe's VAB-roof question is a separate feasibility
+  task, not authorization to command it remotely.
 - Snapshot request is script-only. No further laptop SSH, DNS changes or
   transfers; operator will handle the Mac runtime and copy themselves.
 - Code checkpoints: prelaunch gate removed in `7270867`; emergency capture
@@ -296,12 +299,45 @@ record remaining uncertainty before closing a task.
   current surface prompt. Full71-file suite passed93.10s with serializer;
   the final command-refresh/real-writer case is also covered by its focused
   check. No need to reboot into an automatic surface route just to select.
-- [ ] **Duna/Ike science flight design.** Prepare after the satellite/Mun
-  profiles: Duna orbital flyby and Ike science, transmit before committing
-  optional return or atmospheric/surface attempt. No craft supplied yet;
-  do not invent a safe landing or sufficient radio/fuel/thermal margin. Reuse
-  existing interplanetary phases where appropriate; firm payload, trajectory
-  and return/entry branch choices still needed before a flight-ready profile.
+- [ ] **Espoir Duna science flyby and impact attempt.** Operator selected
+  Espoir (French for hope), a different probe rather than RO9, and Ike only
+  if fuel/trajectory allow. Prepare a craft adapter/profile without RO9
+  stage numbers or tags. Reuse interplanetary transfer/refinement, then
+  continuously collect/transmit science through approach and entry; the
+  existing FLYBY wait does not collect atmospheric science. An existing
+  native Ike encounter can be sampled without buying a Duna capture.
+  Active Ike detours require a validated subsequent Duna entry and hardware
+  budget; do not silently replace the primary mission with capture/Ike setup.
+  No physical craft supplied yet: radio, power, heating and optional chute
+  survival remain unverified. Do not launch or activate a profile remotely.
+  Source implementation now includes craft/Espoir.ks and the
+  duna_science_impact profile:85km parking, existing transfer/BPLANE pair,
+  5km+/-3km Duna entry, no capture/return/staging/assumed powered landing.
+  Dedicated SCIENCE_ENTRY band continuously samples typed stock/DMagic
+  modules, preserves old data/animated requests, retries unavailable requests
+  and queues transmission with a home link/5% EC floor. Native TRANSMIT
+  removes data immediately on queueing: logs explicitly do not claim
+  delivery. Actual R&D credit remains to be confirmed in game.
+  Body/altitude/SCANsat-biome contexts and sampling progress survive reboot.
+  Solar waits own KAC alarms before steering, require the owned alarm/power
+  health to warp, resume by clock without KAC, and stop for SOI/Abort.
+  Entry uses live surface retrograde at1x with zero thrust and no band
+  reboot. Native Ike passes need>=20km Pe plus a future in-patch Duna entry;
+  no extra detour planner exists yet. Three passive atmospheric passes are
+  bounded; skipout/missed entry holds rather than claiming impact success.
+  Disk-only arrival prefetch is nonblocking. No bootstrap rebuild required.
+  All75 routine check files pass106.90s, including the new0.43s science
+  lifecycle/phase/wait checks. Native compilation/storage/flight remain
+  pending. No game state or selected mission changed.
+- [ ] **VAB rooftop landing feasibility.** Current probe has160m/s in the
+  leg-bearing stage,654m/s and parachute after dropping it, estimated Kerbin
+  TWR below1. Recommend KSC vicinity for this vehicle; a deliberate powered
+  roof landing needs measured near-surface TWR, retained landing gear, a
+  measured roof height/footprint and collider-aware terminal guidance.
+  Existing KSC targeting is not roof precision; MechJeb targets terrain
+  elevation. Do not hardcode an unmeasured VAB height or promise chute
+  placement. Existing cmd/landatksc also has an unresolved KSC_DEORBIT
+  handler; do not present it as a working recovery command.
 - [ ] **28Oct18:33 hop-transition Deck crash.** Operator saw apparent approach
   success before hard crash; save has about20s ballistic impact estimate.
   Boot f3a9b3cf restarted18:36. Previous kernel journal now recovered locally:

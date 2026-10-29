@@ -68,6 +68,8 @@ GLOBAL FUNCTION dependencyLibs {
         "airplane", LIST("observe", "flightplan", "utils"),
         "rover", LIST(),
         "science", LIST(),
+        "science_flight", LIST(),
+        "science_entry", LIST("science_flight", "aerobrake_ap_math", "coast_wait", "thrust_cutoff"),
         "orbital_survey", LIST("science", "landing_math", "coast_wait", "thrust_cutoff"),
         "aerobrake", LIST("maneuver", "utils", "landing_config", "aerobrake_assist", "solar"),
         "aerobrake_assist", LIST("aerobrake_config", "aerobrake_ap_math", "aerobrake_staging", "aerobrake_guard", "thrust_cutoff"),
@@ -101,6 +103,7 @@ GLOBAL FUNCTION dependencyPhases {
         "EVA_SCIENCE", LIST("science", "orbit"),
         "SCIENCE_OPS", LIST("science", "orbit", "solar"),
         "SCIENCE_OPS_LOW", LIST("science", "orbit", "solar"),
+        "SCIENCE_ENTRY", LIST("science_entry"),
         "ORBITAL_SURVEY", LIST("orbital_survey"),
         "LAUNCH", LIST("launch"),
         "HOP", LIST("hop_control"),
@@ -200,6 +203,7 @@ GLOBAL FUNCTION dependencyBands {
         "LAND_DEORBIT", LIST("LAND_DEORBIT"),
         "LAND_PREP", LIST("LAND_PREP"),
         "ORBITAL_SURVEY", LIST("ORBITAL_SURVEY"),
+        "SCIENCE_ENTRY", LIST("SCIENCE_ENTRY"),
         "LANDING", LIST("LAND_ASSIST", "LAND"),
         "MOLNIYA", LIST("MOLNIYA", "MOLNIYA_INSERT"),
         "DONE", LIST("DONE")
@@ -217,6 +221,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "EVA_SCIENCE" { phaseMapSet(phaseMap, phaseKey, phaseEvaScience@). }
     ELSE IF phaseKey = "SCIENCE_OPS" { phaseMapSet(phaseMap, phaseKey, phaseScienceOps@). }
     ELSE IF phaseKey = "SCIENCE_OPS_LOW" { phaseMapSet(phaseMap, phaseKey, phaseScienceOpsLow@). }
+    ELSE IF phaseKey = "SCIENCE_ENTRY" { phaseMapSet(phaseMap, phaseKey, phaseScienceEntry@). }
     ELSE IF phaseKey = "ORBITAL_SURVEY" { phaseMapSet(phaseMap, phaseKey, phaseOrbitalSurvey@). }
     ELSE IF phaseKey = "LAUNCH" { phaseMapSet(phaseMap, phaseKey, phaseLaunch@). }
     ELSE IF phaseKey = "HOP" { phaseMapSet(phaseMap, phaseKey, phaseHop@). }
