@@ -64,7 +64,43 @@ LOCAL ATM_HEIGHTS IS LEXICON(
     "TEKTO",  95000
 ).
 
+// Entry attitude must not depend on accepting an unfinished orbital burn.
+// Bind the passive rescue to this mission/launch/body, including reboots.
+GLOBAL FUNCTION aerobrakeEntryOnlyId {
+    RETURN stateGet("mission_id","") + ":" + stateGetNum("launch_time",0)
+        + ":" + SHIP:BODY:NAME.
+}
+
+GLOBAL FUNCTION aerobrakeEntryOnly {
+    RETURN stateGet("aerobrake_entry_only","") = aerobrakeEntryOnlyId().
+}
+
+LOCAL FUNCTION _aerobrakeProtectEntry {
+    IF ABORT OR phaseShouldYield { RETURN FALSE. }
+    IF NOT SHIP:BODY:ATM:EXISTS { RETURN TRUE. }
+    LOCAL protect IS aerobrakeEntryOnly().
+    IF NOT protect AND (HASNODE OR maneuverBurnInterrupted()) {
+        LOCAL entryEta IS aerobrakeApEntryEta(SHIP:BODY:ATM:HEIGHT).
+        SET protect TO SHIP:ALTITUDE <= SHIP:BODY:ATM:HEIGHT OR (entryEta >= 0 AND entryEta <= 120).
+    }
+    IF NOT protect { RETURN TRUE. }
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED OR ABORT.
+    IF ABORT { RETURN FALSE. }
+    // Live attitude precedes state/log I/O. Do not accept/delete the burn.
+    SAS OFF.
+    LOCK STEERING TO _aerobrakeEntryDirection().
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
+    IF NOT aerobrakeEntryOnly() {
+        stateSet("aerobrake_entry_only",aerobrakeEntryOnlyId()).
+        IF NOT thrustCutoffOk() { RETURN FALSE. }
+    }
+    mLogWarn("STATS aerobrake mode=passive-entry interrupted-maneuver-retained=True powered-corrections=False").
+    RETURN TRUE.
+}
+
 GLOBAL FUNCTION phaseAerobrake {
+    IF NOT _aerobrakeProtectEntry() { RETURN. }
     IF NOT aerobrakeApRecover() { RETURN. }
     mLogPhase("AEROBRAKE").
 
@@ -203,7 +239,7 @@ GLOBAL FUNCTION phaseAerobrake {
             // heat-shield-forward ~15 min before the next pass.
             IF entryUt > 0 { _aerobrakeSolarWait(entryUt - AEROBRAKE_ENTRY_LEAD). }
             LOCAL entryStage IS STAGE:NUMBER.
-            IF AEROBRAKE_AP_BURN > 0 {
+            IF AEROBRAKE_AP_BURN > 0 AND NOT aerobrakeEntryOnly() {
                 LOCAL approachEta IS aerobrakeApEntryEta(atmHeight).
                 IF approachEta > AEROBRAKE_AP_PLAN_LEAD {
                     _aerobrakeSolarWait(TIME:SECONDS+approachEta-AEROBRAKE_AP_PLAN_LEAD).
@@ -254,11 +290,13 @@ GLOBAL FUNCTION phaseAerobrake {
             // In a pass: heat-shield-forward, let drag bleed the energy.
             UNTIL SHIP:ALTITUDE > atmHeight
                 OR _aerobrakeThroughThickPart(atmHeight)
-                OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+                OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED"
+                OR ABORT OR phaseShouldYield {
                 _aerobrakeOrient().
                 aerobrakeApObserve(atmHeight).
                 WAIT 1.
             }
+            IF ABORT OR phaseShouldYield { thrustCutoffOk(). RETURN. }
         }
     }
 
@@ -380,6 +418,7 @@ LOCAL FUNCTION _aerobrakeCaptureThrottle {
 }
 
 LOCAL FUNCTION _aerobrakeBrakingBurn {
+    IF aerobrakeEntryOnly() { RETURN. }
     SET WARP TO 0.
     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
     IF NOT thrustCutoffOk(FALSE) { RETURN FALSE. }
@@ -543,6 +582,7 @@ LOCAL FUNCTION _aerobrakeSolarWait {
 LOCAL FUNCTION _aerobrakeRestorePe {
     PARAMETER atmHeight, targetPe, peLow, peHigh.
     IF AEROBRAKE_PE_TARGETING <= 0 OR ABORT OR phaseShouldYield { RETURN NOT ABORT AND NOT phaseShouldYield. }
+    IF aerobrakeEntryOnly() { RETURN TRUE. }
     // A reboot can interrupt goal verification after an otherwise good Pe
     // repair. Only its recorded intent permits automatic reconciliation.
     IF maneuverBurnInterrupted() { reentryPeRecover(targetPe,peLow,peHigh). }
@@ -609,6 +649,7 @@ LOCAL FUNCTION _aerobrakeAtmoHeight {
 
 LOCAL FUNCTION _aerobrakeTargetingWindowOk {
     PARAMETER label.
+    IF aerobrakeEntryOnly() { RETURN FALSE. }
 
     LOCAL atmAlt IS _aerobrakeAtmoHeight().
     IF atmAlt < 0 { RETURN TRUE. }
@@ -984,6 +1025,8 @@ LOCAL FUNCTION _aerobrakeReentryTargeting {
 // ============================================================
 
 LOCAL FUNCTION _aerobrakeDecouple {
+    // Preserve the interrupted maneuver's stack until ordinary DESCENT.
+    IF aerobrakeEntryOnly() { RETURN. }
     IF AEROBRAKE_DECOUPLE_TAG = "" { RETURN. }
     LOCAL tag IS AEROBRAKE_DECOUPLE_TAG.
     LOCAL decouplers IS SHIP:PARTSTAGGED(tag).

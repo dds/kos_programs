@@ -17,6 +17,24 @@ STAGING=(ROOT/'lib/aerobrake_staging.ks').read_text()
 AERO=(ROOT/'lib/aerobrake.ks').read_text()
 ks.SOURCES+='\n'+CONFIG+'\n'+SOURCE+'\n'+MATH+'\n'+AERO+'\n'+GUARD+'\n'+STAGING
 
+ENTRY_NODES={name:ks.parse(re.sub(r'WAIT UNTIL [^.]+\.', '',function_body(AERO,name))
+                         .replace('SAS OFF.','SET SAS TO FALSE.'))
+             for name in ('aerobrakeEntryOnlyId','aerobrakeEntryOnly','_aerobrakeProtectEntry')}
+
+
+class Scalar(float):
+    def __radd__(self,other):
+        return other+format(self,'.17g') if isinstance(other,str) else other+float(self)
+
+
+def entry_helpers(env):
+    def call(name):
+        numeric=env['stateGetNum']
+        scope=dict(env,stateGetNum=lambda key,default=0:Scalar(numeric(key,default)))
+        try:ks.run(ENTRY_NODES[name],scope)
+        except ks.Returned as result:return result.value
+    for name in ENTRY_NODES:env[name]=lambda name=name:call(name)
+
 
 class Vec(BaseVec):
     # These fixtures always use three components. Avoid NumPy's general
@@ -133,6 +151,8 @@ def fixture(available=869, before_entry=None, saved=None, thrust=2.74):
                KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)))
     for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',SOURCE+'\n'+MATH+'\n'+GUARD+'\n'+STAGING):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
+    env['maneuverBurnInterrupted']=lambda:False
+    entry_helpers(env)
     refresh();ship.FACING.FOREVECTOR=-ship.VELOCITY.ORBIT.NORMALIZED
     return env,state,data,refresh
 

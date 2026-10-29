@@ -9,6 +9,24 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-29 current RO9 entry emergency: boot026 at4898685 blocked42.617s
+before interface,Pe53/Ap94.7. User paused. Emergency console hold provided:
+SASOFF LOCKTHROTTLE0 LOCKSTEERING SHIP:SRFRETROGRADE WAITUNTILABORT; Ctrl+C
+ends it for new command. cmd/entrynow reloads current AEROBRAKE and existing
+craft/profile/overrides at zero throttle/live retrograde, calls main without
+reboot. Passive rescue intent bound to mission/launch/body: no burn accepted,
+no node removed, no Pe/site/assist/capture burns or entry decoupling. Normal
+stow and slow-flight DESCENT handoff remain. Fresh aero startup automatically
+arms passive rescue for pending node/interruption <=120s toentry or inside.
+Verified outside reentryPeRecover also clears passive flag; don't relax its
+outside-only goal acceptance while drag acts. No-link command only holds
+retrograde/zero until Abort/touchdown; no claim of full descent then. Source
+replay recorded42.617 state/inside/48km drag Pe passes, native pending.
+All77routinecheckfiles passed99.81s; final focused direction/warp checks
+retain configured PROGRADE on other craft, zero warp/settle before recovery.
+No remote craft controls, code deployment or save edits; bootstrap unchanged.
+Espoir controlled science entry remains the next queued mission-code task.
+
 2026-10-28 RO9 repair residual hold: boot024 native8.648m/s repair reached
 Pe53km but axis-trim0.008181178 exceeded forced0.005 cutoff. boot025 stale
 interrupted marker blocks after node deletion. reentry_pe now derives cutoff

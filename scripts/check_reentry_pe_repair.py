@@ -70,6 +70,8 @@ def fixture():
         env['HASNODE']=False
         return True
     env['executeManeuver']=burn
+    from check_aerobrake_assist import entry_helpers
+    entry_helpers(env)
     return env,nodes,events
 
 

@@ -87,6 +87,7 @@ GLOBAL FUNCTION reentryPeRecover {
         "Pe",SHIP:PERIAPSIS,"Ap",SHIP:APOAPSIS,"legacy",intent:LENGTH = 0)).
     maneuverAcceptHandoff().
     stateRemove("reentry_pe_intent").
+    stateRemove("aerobrake_entry_only").
     mLogWarn("STATS reentry-pe status=reconciled nativePe=" + SHIP:PERIAPSIS
         + " nativeAp=" + SHIP:APOAPSIS + " legacy=" + (intent:LENGTH = 0)).
     RETURN TRUE.

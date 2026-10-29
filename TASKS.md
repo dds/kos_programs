@@ -1,10 +1,26 @@
 # Flight automation work
 
-Updated 2026-10-28. Keep this list current as scope changes. A source check
+Updated 2026-10-29. Keep this list current as scope changes. A source check
 passing is not native flight validation. Preserve mission safeguards and
 record remaining uncertainty before closing a task.
 
 ## Compact working handoff
+
+- Urgent entry follow-up (29Oct): RO9_4880796 boot026 holds42.617s before
+  atmospheric interface despite Pe53km/Ap94.7km. Previous reentryresume was
+  deliberately outside-only; do not relax its native-goal/cutoff acceptance
+  while drag changes Pe. Added cmd/entrynow: zero throttle/live surface
+  retrograde before loading, refresh old aero function cache, restore the
+  existing craft/profile/overrides and resume main with passive-entry intent.
+  Same mission/launch/body persists mode across boots. No burn/node erased;
+  all Pe/site/assist/capture burns and entry separation deferred. Normal
+  hardware stow and slow-flight DESCENT handoff remain. New AEROBRAKE boots
+  automatically protect entry from a pending node/repair within120s or inside
+  atmosphere. Source replay of recorded42.617s state and inside/drag48kmPe
+  reaches descent with marker/node retained and no engine planning/staging.
+  All77routinecheckfiles passed99.81s; final direction/warp guards also
+  checked in focused aero replays. Native flight confirmation pending;
+  no remote control/save changes.
 
 - Current RO9 interruption: native RO9_4880796 boot024 repaired43.2->53km
   after its pass, but8.648m/s burn aborted on0.008181178 residual against an

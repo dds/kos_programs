@@ -57,6 +57,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/returnshallow.ks").` | 53 km moon→Kerbin return; keep engine/tank through aerobraking, then separate for parachute descent |
 | `RUNPATH("0:/cmd/returncheck.ks").` | Plan a 53 km Mun/Minmus→Kerbin departure for review, with KSC targeting off; prints cost, remaining fuel and predicted Pe without burning or changing phase |
 | `RUNPATH("0:/cmd/aeroassist.ks",1).` | Enable fuel-assisted aerobraking at the next boot; `0` disables (RO9 defaults enabled) |
+| `RUNPATH("0:/cmd/entrynow.ks").` | Resume blocked AEROBRAKE immediately in passive surface-retrograde mode, then normal DESCENT; retains interrupted burn/node, no reboot or powered corrections |
 | `RUNPATH("0:/cmd/reentryresume.ks").` | Verify an already-achieved Kerbin Pe repair after a tiny-residual abort; accepts only a stopped safe orbit and matching/deleted node, then operator reboots |
 | `RUNPATH("0:/cmd/reentrype.ks",53000).` | Restore Kerbin entry Pe at the upcoming apoapsis from an outbound orbit outside atmosphere; validates the native node, executes, preserves the mission |
 | `RUNPATH("0:/cmd/directreturn.ks").` | From a landed Mun/Minmus craft, model a single-stage direct ascent to Kerbin Pe 53 km with a 20 m/s reserve; preview only, no launch or mission change |
@@ -2524,7 +2525,30 @@ RUNPATH("0:/cmd/reentryresume.ks").
 REBOOT.
 ```
 
-This explicitly accepts the current safe Kerbin entry orbit after checking
+If already entering atmosphere and the repair cannot be accepted, use:
+
+```kerboscript
+RUNPATH("0:/cmd/entrynow.ks").
+```
+
+This immediately holds zero throttle and live surface retrograde, reloads
+the existing mission's configuration, and resumes AEROBRAKE without reboot.
+It retains the interrupted burn/node and defers Pe/site corrections, optional
+powered assistance, capture burns and entry separation. Panels/antennas/bays
+still stow; the usual slow-flight DESCENT handoff retains the configured
+separation and parachutes. The passive mode survives reboot for this same
+mission/launch/body. A successful outside-atmosphere `reentryresume` clears
+it along with the verified repair interruption. Without an archive link,
+`entrynow` can only hold zero throttle/retrograde until Abort or touchdown;
+it cannot fetch missing mission code or provide the full descent sequence.
+
+Fresh AEROBRAKE starts also choose this passive mode automatically if an
+interrupted/existing maneuver remains inside atmosphere or within120 seconds
+of entry. This prevents a repair hold from ending atmospheric guidance.
+Farther out, the existing review hold remains; other burn faults are never
+accepted as completed by this mode.
+
+`reentryresume` explicitly accepts the current safe Kerbin entry orbit after checking
 AEROBRAKE, a residual no larger than0.05m/s, a benign trim cutoff, idle
 thrust/throttle, Pe within500m of53km and inside52–54km. It preserves unrelated
 nodes and the historical burn report; other aborts remain blocked. It starts
