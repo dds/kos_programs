@@ -6,6 +6,23 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Latest Mun retry: native RO9_4854889 boot017 at4918463 confirms storage
+  improvement: phase free7038->13826bytes. New failure is an H-gate plateau:
+  fresh powered residuals-687,-687,-682m while downfield57570->58091m and
+  AIM58257->58773m, cross41..42m. Earlier feasibility fix was insufficient.
+  Fixed mission TARGET_TOLERANCE500 inherited deliberate UNDERSHOOT_BIAS500
+  plus100m ignition lead/15m margin. H-trigger follows the target, making
+  node-only root fitting ineffective. mun_target_science_return now explicitly
+  sets bias0; legacy default500, other profiles and all safety gates unchanged.
+  Actual live/forecast gate + variable-mass predictor replay of logged scalar
+  ignition, flat terrain datum and explicit55/2kN,345/290s assumptions gives
+  ~-730->-235m capture, H ignition0.94s later, V clearance reserve>1.5km.
+  This is not exact native TR/terrain/attitude validation. Final forecast now
+  includes hLead/hBias and actual first/last engine fuel/exhaust/thrust/drop,
+  initial mass/count to remove these hardware assumptions on the next run.
+  All81routinecheckfiles pass140.10s; native corrected retry pending.
+  No deployment, craft controls or save edits.
+
 - Current priority: Mun deorbit near-root rejection AND onboard storage.
   User explicitly paused Duna/Ike on29Oct. Its uncommitted work is preserved
   separately at /tmp/kos-duna-ike-paused-20261029-1fk3rmgq (tracked.patch,

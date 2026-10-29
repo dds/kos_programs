@@ -56,6 +56,10 @@ SET LANDING_STAGE_BRAKE_CREDIT TO 1.
 SET LANDING_ECONOMY_BRAKE TO 1.
 SET LANDING_POWERED_LEAD TO 1.
 SET TARGET_TOLERANCE TO 500.
+// Aim at the contract site. A deliberate 500m early-stop preference plus
+// the separate ignition lead conflicts with this 500m powered corridor.
+// Keep the ignition lead and all vertical/terrain/response reserves.
+SET LANDING_BRAKE_UNDERSHOOT_BIAS TO 0.
 SET GUIDANCE_ALT TO 3000.
 SET TARGET_DEORBIT_SCAN_ORBITS TO 48.
 SET TARGET_DEORBIT_SCAN_SAMPLES TO 512.

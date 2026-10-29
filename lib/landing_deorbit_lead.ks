@@ -180,6 +180,8 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         "MIN",MAX(0,leadM-tolerance),"MAX",leadM+tolerance,
         "REASON","powered-range","RANGE",rangeM,"BALLISTIC",ballistic["DOWNFIELD"],
         "IGNITION_UT",hi).
+    LOCAL firstEngine IS stack["STAGES"][0].
+    LOCAL lastEngine IS stack["STAGES"][stack["STAGES"]:LENGTH-1].
     LOCAL diagnostic IS "STATS deorbit powered-lead aimM=" + ROUND(leadM,0)
         + " rangeM=" + ROUND(rangeM,0) + " ballisticM=" + ROUND(ballistic["DOWNFIELD"],0)
         + " ignitionUT=" + ROUND(hi,1) + " height=" + ROUND(ignition["HEIGHT"],0)
@@ -195,6 +197,8 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         + " stageDvAfterDeorbit=" + ROUND(stageDv,1)
         + " nominalIgnitionDelay=0 nominalStageDelay=" + (2*MAX(0.05,LANDING_STAGE_SETTLE))
         + " safetyReaction=" + delay
+        + " hLeadM=" + MAX(0,LANDING_BRAKE_GATE_LEAD_DIST)
+        + " hBiasM=" + MAX(0,LANDING_BRAKE_UNDERSHOOT_BIAS)
         + " toleranceM=" + tolerance + " elapsed=" + ROUND(TIME:SECONDS-started,2)
         + " captureDownfield=" + ROUND(captureError["DOWNFIELD"],0)
         + " captureCross=" + ROUND(captureError["CROSS"],0)
@@ -202,6 +206,13 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         + " captureHs=" + ROUND(forecast["HS"],2) + " captureVs=" + ROUND(forecast["VS"],2)
         + " poweredSeconds=" + ROUND(forecast["SECONDS"],1)
         + " impulseDv=" + ROUND(forecast["IMPULSE"],1) + " endMass=" + ROUND(forecast["MASS"],4)
+        + " startMass=" + ROUND(stack["MASS"],6) + " stages=" + stack["STAGES"]:LENGTH
+        + " firstThrust=" + ROUND(firstEngine["THRUST"],4)
+        + " firstExhaust=" + ROUND(firstEngine["EXHAUST"],4)
+        + " firstFuel=" + ROUND(firstEngine["FUEL"],6) + " firstDrop=" + ROUND(firstEngine["DROP"],6)
+        + " lastThrust=" + ROUND(lastEngine["THRUST"],4)
+        + " lastExhaust=" + ROUND(lastEngine["EXHAUST"],4)
+        + " lastFuel=" + ROUND(lastEngine["FUEL"],6) + " lastDrop=" + ROUND(lastEngine["DROP"],6)
         + " modelSteps=" + forecast["STEPS"]
         + " model=variable-mass-controller capture=true".
     SET policy["DIAGNOSTIC"] TO diagnostic.
@@ -210,6 +221,7 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         + " rangeM=" + ROUND(rangeM,0) + " height=" + ROUND(ignition["HEIGHT"],0)
         + " captureDownfield=" + ROUND(captureError["DOWNFIELD"],0)
         + " captureCross=" + ROUND(captureError["CROSS"],0)
-        + " toleranceM=" + tolerance + " impulseDv=" + ROUND(forecast["IMPULSE"],1)).
+        + " toleranceM=" + tolerance + " impulseDv=" + ROUND(forecast["IMPULSE"],1)
+        + " hBiasM=" + MAX(0,LANDING_BRAKE_UNDERSHOOT_BIAS)).
     RETURN policy.
 }

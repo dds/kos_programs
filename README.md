@@ -412,6 +412,16 @@ limits remain unchanged; every changed node still needs a fresh powered
 forecast. A stalled near-root fit records `STATS deorbit local-fit` with its
 rejection reason and scores.
 
+The targeted Mun science-return profile explicitly sets
+`LANDING_BRAKE_UNDERSHOOT_BIAS=0`. Its 500 m corridor conflicts with the
+legacy preference to stop 500 m short plus the separate ignition lead.
+With horizontal ignition, changing the deorbit node can then move ignition
+while leaving nearly the same short capture. The mission retains the
+100 m ignition lead and all vertical, terrain, alignment and staging guards.
+Other profiles keep their existing bias. Final forecast diagnostics record
+`hBiasM`, `hLeadM`, initial mass and the first/last engine thrust, exhaust
+velocity, local fuel and jettison mass for later replay.
+
 LAND_DEORBIT loads automatic ground-track search/wait code only when
 `LANDING_AUTO_TARGET` is enabled, and the optional SCANsat site picker only
 when `LANDING_SITE_SCAN_ENABLE` or `LANDING_REQUIRE_SITE` is enabled. Fixed

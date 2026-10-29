@@ -9,6 +9,23 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-29 latest Mun boot017 at4918463 confirms free13826 vs7038bytes.
+Feasibility scoring fix alone insufficient: powered residual-687,-687,-682
+as downfield57570->58091 andAIM58257->58773, cross41..42. Horizontal gate
+follows target; inherited500m UNDERSHOOT_BIAS +100m lead +15m margin conflict
+with mission500m capture tolerance. mun_target_science_return nowexplicitly
+sets bias0; no shareddefault/safety/tolerance change. Real live+forecastgate
+andpoweredmodel replay of recorded scalarstate with explicitflatdatum and
+55/2kN345/290s assumptions captures-730->-235m with0.94s laterH, unchangedV
+and>1.5km Vreserve. Not exactnativeTR/terrain/attitude proof. Final model
+diagnostic adds hBias/hLead and actualfirst/lastengine fuel,exhaust,thrust,
+drop +startmass/count for exacthardware inputsnexttime. Singleengine safe.
+Newtests keepgateagreement/Vpriority/tolerance/fuel, scopedprofilechange.
+All81routinecheckfiles pass140.10s; native corrected retry pending.
+No remote craft/code/savechanges; no bootstraprecompile.
+Duna/Ike remainPAUSED. Latestread-onlylogs:/tmp/ksp-deck-20261029T180551Z-
+fetch-195uj4kn/logs/RO9_4854889/boot_017_core.log; boot016fetch-w_3at6xp.
+
 2026-10-29 follow-up Mun boot015 at4917363: compact logging retained final
 hold/forecast. down44146 aim44648 residual-502 vs500m, cross30, trials63.
 Raw merit outsideBand^2+cross^2 favored a point2m outside range over a valid
