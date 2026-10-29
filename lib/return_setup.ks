@@ -12,7 +12,9 @@ GLOBAL RETURN_REENTRY_DIR IS "RETROGRADE".
 GLOBAL RETURN_KSC_TARGET IS 0.
 GLOBAL RETURN_KSC_TRIM_DV_CAP IS 80.
 GLOBAL RETURN_ARM_CHUTES IS 0.
-GLOBAL MCC_RETURN_AT_APOAPSIS IS 0.
+// Negative leaves existing maneuver staging policy unchanged. Recovery
+// recipes can derive a floor which retains the CPU and tagged parachutes.
+GLOBAL RETURN_BURN_STAGE_LIMIT IS -1.
 GLOBAL RETURN_DESCENT_FAIRING_TAG IS "".
 GLOBAL RETURN_DESCENT_DECOUPLER_TAG IS "".
 GLOBAL RETURN_DESCENT_CHUTES_TAG IS "".
@@ -273,6 +275,11 @@ GLOBAL FUNCTION phaseReturnSetup {
     LOG "SET REENTRY_PE TO " + configLiteral(targetPe) + "." TO profilePath.
     LOG "SET AEROBRAKE_PE TO " + configLiteral(targetPe) + "." TO profilePath.
     LOG "SET MCC_RETURN_AT_APOAPSIS TO " + configLiteral(MCC_RETURN_AT_APOAPSIS) + "." TO profilePath.
+    LOG "SET MCC_RETURN_DV_CAP TO " + configLiteral(MCC_RETURN_DV_CAP) + "." TO profilePath.
+    LOG "SET MCC_RETURN_RESERVE_DV TO " + configLiteral(MCC_RETURN_RESERVE_DV) + "." TO profilePath.
+    IF RETURN_BURN_STAGE_LIMIT >= 0 {
+        LOG "SET BURN_STAGE_LIMIT TO " + configLiteral(RETURN_BURN_STAGE_LIMIT) + "." TO profilePath.
+    }
     IF RETURN_PE_TOLERANCE >= 0 {
         LOCAL minPe IS MAX(0, targetPe - RETURN_PE_TOLERANCE).
         LOCAL maxPe IS targetPe + RETURN_PE_TOLERANCE.

@@ -101,6 +101,24 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
+- [ ] **KSC recovery deorbit funding across stages.** Native
+  RO9_4879463 boot017 at4879483 caps the solve at150m/s and rejects its
+  140m/s node/1442.481km Pe. Live diagnostic:2863.2215x2863.3144km,
+  inc55.156,813.434m/s total,159.507m/s active stage2; independent ideal
+  deorbit to53km is441.007m/s. Recovery now opts into a negative MCC cap
+  meaning live whole-stack fuel minus unchanged50m/s reserve. Ordinary
+  moon-return150m/s cap remains. Shared setup/runtime config and generated
+  profile preserve cap/reserve through reboot. Recovery derives the engine
+  floor from CPU/tagged chute retention, then uses the existing executor's
+  depleted-stage handoff to stage1/return_decoupler; no new stager or early
+  separation. Fresh archive writer bypasses old RUNONCEPATH at the held
+  prompt. Source checks execute real budget/serialization/stage owner,
+  delayed ignition and protected-floor/Abort/fueled-stage cases. Native
+  retry pending; all75 routine check files pass107.60s. Command is
+  kerbinrecover apply again
+  after pull, automatic reboot, no bootstrap build. Read-only evidence:
+  /tmp/ksp-deck-20261029T011555Z-fetch-l6lfy49n and
+  /tmp/ksp-deck-20261029T011636Z-fetch-kzl_qgzk. No live flight changes.
 - [ ] **Large plane corrections stuck because of pure-normal seed.**
   Native RO9_4704531 boot013 at4868189..4868219: correct2863.2x2863.3km
   altitude, inc55.156, want0. Seed935m/s normal-only has12.36deg error but
@@ -326,6 +344,10 @@ record remaining uncertainty before closing a task.
   no extra detour planner exists yet. Three passive atmospheric passes are
   bounded; skipout/missed entry holds rather than claiming impact success.
   Disk-only arrival prefetch is nonblocking. No bootstrap rebuild required.
+  Follow-up found bootCacheNextBand currently defers all synchronization
+  until LANDED (the hop rule). Espoir's new arrival cache roots are declared
+  and retained but are not yet copied during flight; extend/test this for
+  an idle orbital coast before relying on an offline SCIENCE_ENTRY handoff.
   All75 routine check files pass106.90s, including the new0.43s science
   lifecycle/phase/wait checks. Native compilation/storage/flight remain
   pending. No game state or selected mission changed.

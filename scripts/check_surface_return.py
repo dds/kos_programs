@@ -125,7 +125,8 @@ def emit_surface_orbit(env):
 
 def defaults():
     # Only declarations preceding the functions: no flight code is evaluated.
-    return read_settings(SETUP[:SETUP.index('LOCAL FUNCTION')], {}, 'GLOBAL')
+    shared=read_settings((ROOT/'lib/return_mcc_config.ks').read_text(),{},'GLOBAL')
+    return read_settings(SETUP[:SETUP.index('LOCAL FUNCTION')], shared, 'GLOBAL')
 
 
 def check_profiles():

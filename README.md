@@ -1052,9 +1052,11 @@ these messages are **not confirmed science credit**. See the
 [kOS experiment API](https://ksp-kos.github.io/KOS/structures/vessels/scienceexperiment.html)
 and [stock transmission implementation](https://github.com/KSP-KOS/KOS/blob/develop/src/kOS/Suffixed/PartModuleField/StockScienceExperimentFields.cs).
 Use the R&D ledger to confirm credited science. These STATS rows use the
-normal boot-log archive path. Entry code is prefetched to disk during the
-arrival bands without a new mandatory cache gate. No bootstrap recompile
-is needed; actual native compilation, storage fit and flight are pending.
+normal boot-log archive path. Entry cache roots are declared for arrival,
+but the current hop-oriented cache synchronizer still waits for a landed
+state. In-flight prefetch needs a follow-up before an offline entry handoff
+can rely on it; maintain a link for that reboot in the meantime. No mandatory
+cache gate was added. Native compilation, storage fit and flight are pending.
 
 For the new build, provide a Duna-range communication link, deployable
 antennas/solar through the normal launcher tags, enough EC for instrument
@@ -2322,8 +2324,10 @@ Kerbin aerobrake returns use `MCC` to establish the configured reentry Pe
 corridor while preserving the arrival plane. A trajectory already inside
 that corridor needs no correction. Otherwise MCC corrects after entering
 Kerbin's SOI and checks the **flown orbit** before advancing. It allows up to
-three corrections, with each burn limited to `MCC_RETURN_DV_CAP` (150 m/s)
-and the available vacuum dV minus `MCC_RETURN_RESERVE_DV` (50 m/s). Failed
+three corrections, with each burn limited to `MCC_RETURN_DV_CAP` (150 m/s
+by default) and the available vacuum dV minus `MCC_RETURN_RESERVE_DV`
+(50 m/s). A negative cap explicitly selects the live total-fuel budget
+minus that reserve. Failed
 planning, insufficient fuel or failed execution holds in MCC; tiny but
 necessary corrections are no longer discarded by the optional-MCC cutoff.
 `RETURN_TRIM` remains an optional landing-site adjustment, not reentry
@@ -2373,8 +2377,12 @@ native orbit. On a stable outbound ellipse without another SOI encounter,
 this recipe enables `MCC_RETURN_AT_APOAPSIS`: its own KAC/solar/clock wait
 wakes 5 minutes before the live apoapsis to plan a cheaper correction.
 Inbound, near-apoapsis and unbound approaches use the immediate correction;
-the command does not wait another orbit. Existing 150 m/s correction/50 m/s reserve limits still apply;
-failure to reach the entry corridor holds rather than flying a rejected node.
+the command does not wait another orbit. This recovery recipe selects
+`MCC_RETURN_DV_CAP=-1`: the current total vacuum dV minus the unchanged
+50 m/s reserve funds the deorbit, including fuel in later engine stages.
+The generated profile preserves this policy across reboot. Ordinary moon
+returns retain the150m/s cap. Failure to reach the entry corridor holds
+rather than flying a rejected node.
 The 53 km target retains the 52–54 km corridor and arrival plane. Optional
 KSC trim is capped at 20 m/s; this does not guarantee a KSC landing.
 The recipe uses the same `descent_chutes` / `descent_decoupler` tags and
@@ -2382,6 +2390,18 @@ The recipe uses the same `descent_chutes` / `descent_decoupler` tags and
 interrupted burns, or nonzero physical/raw/pilot thrust/throttle. Ordinary
 moon RETURN_SETUP still requires stable moon orbit and starts at ESCAPE.
 Other return profiles leave `MCC_RETURN_AT_APOAPSIS` off by default.
+
+The recovery recipe derives `BURN_STAGE_LIMIT` from the CPU and tagged
+`descent_chutes` retention groups. The shared maneuver executor burns the
+active stage first, then advances through the configured separation/ignition
+slots, including `return_decoupler` on a correctly staged RO9. It keeps the
+same maneuver and realigns before resuming thrust. It does not separate a
+fueled stage simply because the planned burn is larger than that stage's
+dV. The staging timeout/manual-recovery path and entry corridor remain in
+force. After pulling this update, rerun
+`RUNPATH("0:/cmd/kerbinrecover.ks","apply").` at the held idle prompt to
+replace an older150m/s recovery profile; it automatically reboots. No
+bootstrap compilation is needed.
 
 To recover an existing shallow return that advanced with a high Kerbin
 periapsis, wait for archive sync, then run while connected:

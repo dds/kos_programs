@@ -4,7 +4,7 @@ import re
 from types import SimpleNamespace as NS
 
 import check_landing_guidance as ks
-from check_codebase import ROOT, function_body
+from check_codebase import ROOT, function_body, dependency_tables, closure
 from check_surface_return import defaults, emit_profile, read_settings
 
 COMMAND=(ROOT/'cmd/kerbinrecover.ks').read_text()
@@ -41,7 +41,9 @@ def fixture():
         STAGE=NS(NUMBER=3,DELTAV=NS(VACUUM=595)),BODY=native.BODY,
         LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),SQRT=math.sqrt,
         stateGet=saved.get,stateSet=lambda key,value:saved.update({key:value}),
-        LIST=lambda *xs:list(xs),HOMECONNECTION=NS(ISCONNECTED=True))
+        LIST=lambda *xs:list(xs),HOMECONNECTION=NS(ISCONNECTED=True),
+        CORE=NS(PART=NS(DECOUPLEDIN=0)))
+    env['SHIP'].PARTSTAGGED=lambda tag:[NS(DECOUPLEDIN=0)] if tag=='descent_chutes' else []
     env['returnKerbinPatch']=lambda:execute(function_body(SETUP,'returnKerbinPatch'),env)
     return env,saved,patch
 
@@ -94,6 +96,7 @@ def check_command_and_profile():
                 function_body(COMMAND,'_kerbinRecoverySnapshot'),env),
             diagnosticArchiveOpen=lambda _:Lex(READY=True),
             diagnosticArchiveClose=lambda *args:action!='bad-report',
+            _kerbinRecoveryStageFloor=lambda:execute(function_body(COMMAND,'_kerbinRecoveryStageFloor'),env),
             phaseReturnSetup=lambda phase:calls.append(phase))
         if action=='offline':env['HOMECONNECTION'].ISCONNECTED=False
         if action=='no-patch':env['HASNODE']=True
@@ -107,6 +110,8 @@ def check_command_and_profile():
             assert home['CAPTURE_PE']==home['REENTRY_PE']==home['AEROBRAKE_PE']==53000
             assert home['CAPTURE_INC']==-1 and home['RETURN_TRIM_PE_MIN']==52000
             assert home['MCC_RETURN_AT_APOAPSIS']==1
+            assert home['MCC_RETURN_DV_CAP']==-1 and home['MCC_RETURN_RESERVE_DV']==50
+            assert home['BURN_STAGE_LIMIT']==1
             assert home['RETURN_TRIM_PE_MAX']==54000 and home['RETURN_TRIM_DV_CAP']==20
             assert home['TARGET_LOCK']==home['AEROBRAKE_TARGETING']==1
             assert [home[key] for key in ('TARGET_LAT','TARGET_LNG')]==[-.0972,-74.5577]
@@ -114,6 +119,82 @@ def check_command_and_profile():
     assert 'diagnosticArchiveOpen("kerbinrecover")' in COMMAND
     assert 'diagnosticArchiveClose(reportState,"KERBIN RECOVERY")' in COMMAND
     print('PASS: check/invalid/offline/unverified captures change no mission; apply reuses shared serialization for52-54km entry, plane preservation, optional KSC trim and late separation without ESCAPE')
+
+
+def check_large_recovery_budget_and_staging():
+    from check_runtime_contracts import KList
+    shared=(ROOT/'lib/return_mcc_config.ks').read_text()
+    default=read_settings(shared,{},'GLOBAL')
+    assert default['MCC_RETURN_DV_CAP']==150 and default['MCC_RETURN_RESERVE_DV']==50
+    deps,_,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
+    for root in ('return_setup','maneuver_mcc'):
+        assert 'return_mcc_config' in closure([root],deps)
+    # Current native craft:2863.2215x2863.3144km,159.5065m/s onstage2,
+    # 813.4343m/s total. Independent vis-viva validates a cross-stage burn.
+    mu,radius=3.5316e12,600000
+    rp,ra=radius+2863221.52404498,radius+2863314.35046328
+    required=math.sqrt(mu*(2/ra-2/(rp+ra)))-math.sqrt(mu*(2/ra-2/(ra+radius+53000)))
+    assert abs(required-441.0067697)<1e-6
+    budget_env=dict(MCC_RETURN_DV_CAP=-1,MCC_RETURN_RESERVE_DV=50,
+                    SHIP=NS(DELTAV=NS(VACUUM=813.434265136719)))
+    budget=lambda:execute(function_body(MCC,'_mccReturnBudget'),budget_env)
+    assert 150<required<budget() and required>159.506530761719
+    budget_env['SHIP'].DELTAV.VACUUM-=required
+    assert abs(budget()-(813.434265136719-required-50))<1e-7
+    # Execute the existing stage recovery owner, not a replacement stager.
+    burn=(ROOT/'lib/maneuver.ks').read_text()
+    source=function_body(burn,'_burnRecoverThrust').replace('_burnTraceAdd(', 'mLog(')
+    for mode in ('powered','normal','delayed','protected','abort'):
+        env,saved,_=fixture();events=[]
+        current=NS(NAME='lander',STAGE=2,DECOUPLEDIN=1,IGNITION=True,
+                   FLAMEOUT=mode!='powered',AVAILABLETHRUST=10 if mode=='powered' else 0)
+        returning=NS(NAME='return',STAGE=1,DECOUPLEDIN=0,IGNITION=False,
+                     FLAMEOUT=False,AVAILABLETHRUST=0,UID='return-engine')
+        forbidden=NS(NAME='payload',STAGE=0,DECOUPLEDIN=-1,IGNITION=False,
+                     FLAMEOUT=False,AVAILABLETHRUST=0,UID='payload-engine')
+        separator=NS(TAG='return_decoupler',STAGE=1,ISDECOUPLED=False)
+        engines=[current,returning,forbidden]
+        env['SHIP'].ENGINES=engines
+        env['STAGE']=NS(NUMBER=2,READY=True)
+        env['RETURN_DESCENT_CHUTES_TAG']='descent_chutes'
+        floor=execute(function_body(COMMAND,'_kerbinRecoveryStageFloor'),env)
+        assert floor==1
+        nd=NS(DELTAV=NS(MAG=300),TIME=1100)
+        env.update(nd=nd,trace=None,ABORT=mode=='abort',BURN_STAGE_LIMIT=2 if mode=='protected' else floor,
+                   BURN_STAGE_TIMEOUT=10,BURN_STAGE_MAX_EVENTS=4,BURN_STAGE_SETTLE=.5,
+                   BURN_STAGE_MANUAL_WAIT=.2,LIST=lambda *xs:KList(xs))
+        ignition_due=[None]
+        def sma():return sum(e.AVAILABLETHRUST for e in engines if e.IGNITION and not e.FLAMEOUT)
+        def wait(dt):
+            env['TIME'].SECONDS+=dt
+            if ignition_due[0] is not None and env['TIME'].SECONDS>=ignition_due[0]:
+                returning.FLAMEOUT=False;returning.AVAILABLETHRUST=20
+        def stage_event():
+            assert env['STAGE'].NUMBER==2 and floor==1
+            env['STAGE'].NUMBER=1;separator.ISDECOUPLED=True
+            engines.remove(current);returning.IGNITION=True
+            returning.FLAMEOUT=True
+            ignition_due[0]=env['TIME'].SECONDS+(2 if mode=='delayed' else 0)
+            events.append('return_decoupler')
+        env.update(_sma=sma,fixture_wait=wait,stage_event=stage_event)
+        result=execute(source,env)
+        assert bool(result)==(mode in ('powered','normal','delayed')),mode
+        assert events==(['return_decoupler'] if mode in ('normal','delayed') else []),mode
+        assert not forbidden.IGNITION and env['CORE'].PART.DECOUPLEDIN==0
+        assert nd.DELTAV.MAG==300 # same node/progress, never reset on separation
+    # A parachute on a lower section raises the floor instead of discarding
+    # it to reach another engine; a core in that section does the same.
+    env,_,_=fixture();env['RETURN_DESCENT_CHUTES_TAG']='descent_chutes'
+    env['SHIP'].PARTSTAGGED=lambda _:[NS(DECOUPLEDIN=1)]
+    assert execute(function_body(COMMAND,'_kerbinRecoveryStageFloor'),env)==2
+    env['SHIP'].PARTSTAGGED=lambda _:[];env['CORE'].PART.DECOUPLEDIN=2
+    assert execute(function_body(COMMAND,'_kerbinRecoveryStageFloor'),env)==3
+    # Refresh the actual writer after loading it: old RUNONCEPATH definitions
+    # at a held MCC prompt must not omit the newly serialized policy.
+    owner=function_body(COMMAND,'_cmdKerbinrecover')
+    assert owner.index('bootLibLoad("return_mcc_config")')<owner.index('RUNPATH("0:/lib/return_setup.ks")')
+    assert owner.index('RUNPATH("0:/lib/return_setup.ks")')<owner.index('SET MCC_RETURN_DV_CAP TO -1')
+    print('PASS: native441m/s case is funded across159+654 stages with50m/s retained; actual executor keeps fueled stage, separates return_decoupler on depletion, survives delayed ignition and preserves node/CPU/chutes/floor/Abort safeguards')
 
 
 def check_setup_and_soi_guards():
@@ -213,5 +294,6 @@ def check_apoapsis_live_coast():
 if __name__=='__main__':
     check_live_snapshot()
     check_command_and_profile()
+    check_large_recovery_budget_and_staging()
     check_setup_and_soi_guards()
     check_apoapsis_live_coast()

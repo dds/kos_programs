@@ -19,12 +19,7 @@ GLOBAL CAPTURE_AOP IS -1.
 GLOBAL CAPTURE_DIR IS "".
 GLOBAL MCC_AEROBRAKE_SAFE_PE_MIN IS 20000.
 GLOBAL MCC_AEROBRAKE_SAFE_PE_MAX IS -1.
-// Establishing reentry is mandatory, unlike an optional flyby cleanup.
-// Reserve fuel for later entry/capture work; cap each correction burn.
-GLOBAL MCC_RETURN_DV_CAP IS 150.
-GLOBAL MCC_RETURN_RESERVE_DV IS 50.
-// Opt-in missed-capture recovery: plan near apoapsis on an outbound ellipse.
-GLOBAL MCC_RETURN_AT_APOAPSIS IS 0.
+// Shared setup/runtime return budget defaults live in return_mcc_config.
 
 
 LOCAL MCC_DV_CAP           IS 50.
@@ -89,8 +84,13 @@ LOCAL FUNCTION _mccReturnHold {
 }
 
 LOCAL FUNCTION _mccReturnBudget {
-    RETURN MAX(0, MIN(MCC_RETURN_DV_CAP,
-        SHIP:DELTAV:VACUUM - MCC_RETURN_RESERVE_DV)).
+    LOCAL available IS SHIP:DELTAV:VACUUM.
+    IF NOT (available >= 0 AND available < 1e30
+            AND MCC_RETURN_RESERVE_DV >= 0 AND MCC_RETURN_RESERVE_DV < 1e30
+            AND ABS(MCC_RETURN_DV_CAP) < 1e30) { RETURN 0. }
+    LOCAL budget IS MAX(0,available-MCC_RETURN_RESERVE_DV).
+    IF MCC_RETURN_DV_CAP >= 0 { SET budget TO MIN(budget,MCC_RETURN_DV_CAP). }
+    RETURN budget.
 }
 
 LOCAL FUNCTION _mccReturnApoapsisCoast {
@@ -166,7 +166,12 @@ LOCAL FUNCTION _mccReturn {
         mLog("STATS return-mcc setup attempt=" + (attempt + 1)
             + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 3)
             + " targetPeKm=" + ROUND(targetPe / 1000, 3)
-            + " dvCap=" + ROUND(cap, 1)).
+            + " dvCap=" + ROUND(cap, 1)
+            + " configuredCap=" + MCC_RETURN_DV_CAP
+            + " reserveDv=" + MCC_RETURN_RESERVE_DV
+            + " activeDv=" + ROUND(STAGE:DELTAV:VACUUM,1)
+            + " totalDv=" + ROUND(SHIP:DELTAV:VACUUM,1)
+            + " stageFloor=" + BURN_STAGE_LIMIT).
         newtonTarget(nd, target, "PE", targetPe, LEX("DV_CAP", cap, "TOL", 250)).
         WAIT 0.1.
         LOCAL planned IS _getTargetPatch(nd, target).

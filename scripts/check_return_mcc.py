@@ -21,10 +21,17 @@ ks.SOURCES+='\n'+PLAN+'\n'+RECOVERY
 
 
 def check_gates():
-    budget = re.search(r'RETURN (.*?)\.', body(MCC, '_mccReturnBudget'), re.S)[1]
-    for fuel, expected in [(480, 150), (180, 130), (51, 1), (50, 0), (0, 0)]:
-        assert evaluate(budget, MCC_RETURN_DV_CAP=150, MCC_RETURN_RESERVE_DV=50,
-                        SHIP=NS(DELTAV=NS(VACUUM=fuel))) == expected
+    from check_minmus_kolniya import execute
+    budget = body(MCC, '_mccReturnBudget')
+    for cap,fuel,expected in [(150,480,150),(150,180,130),(150,51,1),(150,50,0),(150,0,0),
+                              (-1,813.434,763.434),(-1,180,130),(-1,50,0),(-1,49,0),(0,480,0),
+                              (-1,math.nan,0),(-1,math.inf,0),(math.nan,480,0),(math.inf,480,0)]:
+        actual=execute(budget,dict(MCC_RETURN_DV_CAP=cap,MCC_RETURN_RESERVE_DV=50,
+                                  SHIP=NS(DELTAV=NS(VACUUM=fuel))))
+        assert abs(actual-expected)<1e-9,(cap,fuel,actual)
+    for reserve in (-1,math.nan,math.inf):
+        assert execute(budget,dict(MCC_RETURN_DV_CAP=-1,MCC_RETURN_RESERVE_DV=reserve,
+                                  SHIP=NS(DELTAV=NS(VACUUM=813))))==0
     corridor = re.search(r'RETURN (pe >=.*?)\.',
                          body(MCC, '_mccAerobrakePatchSafe'), re.S)[1]
     for pe, allowed in [(2200000, False), (70000, False), (54001, False),
@@ -40,7 +47,7 @@ def check_gates():
                                   (True, 45, 29, True)]:
         assert evaluate(rejection, peOk=good, dv=dv, cap=150,
                         nd=NS(TIME=1000 + eta), TIME=NS(SECONDS=1000)) == reject
-    print('PASS: 480 m/s budget, reserve, 52–54 km corridor, tiny burns and stale nodes')
+    print('PASS: ordinary150m/s cap, opt-in live full-stack budget, unchanged50m/s reserve, invalid-value rejection,52–54km corridor, tiny burns and stale nodes')
 
 
 def check_planner_fixture():
@@ -52,8 +59,14 @@ def check_planner_fixture():
     update = re.search(r'LOCAL correction IS (.*?)\.', source)[1]
     step = re.search(r'LOCAL maxStep IS CHOOSE .*? ELSE (.*?)\.\n', source)[1]
     mu, radius, wanted = 3.5316e12, 600000., 53000.
-    for distance in (35e6, 45e6, 47e6):
-        rp, ra = radius + 2200000, 52e6
+    cases=[(distance,radius+2200000,52e6,150,True) for distance in (35e6,45e6,47e6)]
+    # The reported circular recovery requires441m/s and crosses stages.
+    # Reproduce the old140m/s/1442km rejection, then solve the same conic
+    # using the funded813.434-50 budget and unchanged Newton limits.
+    for cap,converges in ((150,False),(813.434265136719-50,True)):
+        cases.append((radius+2863314.35046328,radius+2863221.52404498,
+                      radius+2863314.35046328,cap,converges))
+    for distance,rp,ra,cap,converges in cases:
         semimajor = (rp + ra) / 2
         speed = math.sqrt(mu * (2 / distance - 1 / semimajor))
         transverse = math.sqrt(2 * mu * rp * ra / (rp + ra)) / distance
@@ -74,10 +87,18 @@ def check_planner_fixture():
             sens = (periapsis(prograde + .1) - current) / .1
             correction = evaluate(update, err=err, sens=sens, damp=.5)
             limit = evaluate(step, err=err)
+            old=prograde
             prograde += max(-limit, min(limit, correction))
-            assert abs(prograde) <= 150
-        assert abs(periapsis(prograde) - wanted) < 250
-    print('PASS: existing PE solver converges for three analytic 2200 km return fixtures')
+            if abs(prograde)>cap:
+                prograde=old
+                break
+            assert abs(prograde) <= cap
+        assert (abs(periapsis(prograde) - wanted) < 250)==converges
+        if not converges:
+            assert abs(prograde)==140 and 1442400<periapsis(prograde)<1442600
+        if cap>150:
+            assert abs(abs(prograde)-441.0067697)<.1
+    print('PASS: unchanged Newton scalar updates reproduce140m/s/1442km cap failure and converge on441m/s recovery with funded budget, plus three analytic2200km return fixtures')
 
 
 def check_phase_flow():

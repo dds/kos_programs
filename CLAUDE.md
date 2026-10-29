@@ -9,6 +9,23 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 latest KSC recovery cap: actualRO9_4879463 boot0174879483,
+140m/s candidate/1442.481kmPe rejected under150cap. Diagnostic has813.434
+total,159.507 active(stage2),2863.2215x2863.3144km/55.156deg; independent
+ideal53km deorbit441.007. kerbinrecover now selectsMCC_RETURN_DV_CAP=-1
+meaning currentwhole-stackfuel minus unchanged50reserve. Ordinary returns
+stay150. Sharedreturn_mcc_config owns cap/reserve/apoapsisflag, requiredby
+setup/runtime. Profilewriter serializes allthree and optionalenginefloor;
+recipe derivesfloor fromCPU/taggedchuteDECOUPLEDIN+1 (usualRO9=1). Existing
+executor spendscurrentstage then same-node stage1/return_decoupler handoff,
+zero-command/realign/manualwait guards retained. Fresh archive function-only
+writer avoids staleRUNONCEPATH atoldheldMCCprompt. Pull thenreruncommand
+kerbinrecover apply; autoreboot,no bootstrapcompilation. All75routinechecks
+pass107.60s; native newflightpending. Read-onlyevidence /tmp/ksp-deck-
+20261029T011555Z-fetch-l6lfy49n,/tmp/ksp-deck-20261029T011636Z-fetch-kzl_qgzk.
+No remotecontrols/profile/gamechanges. Do not override physicalfuelguard to
+retry the earlier unaffordable935m/s geostationary plane correction.
+
 2026-10-28 current mission design: Espoir (French for hope), different probe
 hardware fromRO9, primaryDuna transmitted science/flyby/impact, Ike only if
 fuel/trajectoryallow. craft/Espoir +duna_science_impact profile reuse normal
@@ -27,6 +44,9 @@ owned-alarm+health warp,clockfallback,deadline/SOI/Abort cleanup. Existing
 Ike only,zero addedmaneuver:>=20kmPe and subsequentDunaPe actually between
 thatpatch's start/endETAs; no active detouroptimizer yet. Entry roots cached
 disk-only duringXFER_BPLANE/ARRIVE, no mandatory cachegate or boot change.
+Follow-up: bootCacheNextBand actually defers sync untilLANDED; these roots
+are declared/retained, not yet copiedinflight. Extend/test orbital prefetch
+before relying on an offlineEspoir handoff; README/TASKS now state this.
 All75 routinecheckfiles pass106.90s, newfocusedcheck~0.43s. Nativecompile,
 compiledstoragefit andhardwareflight pending; sourcefixtures are notKSP.
 VAB separate request:160m/s onlegstage+654m/s parachutestage, estimated

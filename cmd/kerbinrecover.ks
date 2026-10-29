@@ -39,6 +39,14 @@ LOCAL FUNCTION _kerbinRecoverySnapshot {
     RETURN result.
 }
 
+LOCAL FUNCTION _kerbinRecoveryStageFloor {
+    LOCAL floorStage IS MAX(0,CORE:PART:DECOUPLEDIN+1).
+    FOR chute IN SHIP:PARTSTAGGED(RETURN_DESCENT_CHUTES_TAG) {
+        SET floorStage TO MAX(floorStage,chute:DECOUPLEDIN+1).
+    }
+    RETURN floorStage.
+}
+
 LOCAL FUNCTION _cmdKerbinrecover {
     IF action <> "check" AND action <> "apply" {
         PRINT "Use kerbinrecover with check (default) or apply.". RETURN.
@@ -48,7 +56,11 @@ LOCAL FUNCTION _cmdKerbinrecover {
     }
     RUNPATH("1:/lib/boot_lib").
     bootPreamble().
+    bootLibLoad("return_mcc_config").
     bootLibLoad("return_setup").
+    // The linked command may run at an old MCC prompt. Refresh this
+    // function-only writer; RUNONCEPATH could retain its pre-upgrade body.
+    RUNPATH("0:/lib/return_setup.ks").
     LOCAL snapshot IS _kerbinRecoverySnapshot().
     IF NOT snapshot["FOUND"] {
         PRINT "No unmodified Kerbin patch found. Inspect any existing node; no mission changes made.". RETURN.
@@ -79,6 +91,8 @@ LOCAL FUNCTION _cmdKerbinrecover {
     SET RETURN_PE TO 53000.
     SET RETURN_PE_TOLERANCE TO 1000.
     SET MCC_RETURN_AT_APOAPSIS TO 1.
+    SET MCC_RETURN_DV_CAP TO -1.
+    SET MCC_RETURN_RESERVE_DV TO 50.
     SET RETURN_REENTRY_DIR TO "RETROGRADE".
     SET RETURN_KSC_TARGET TO 1.
     SET RETURN_KSC_TRIM_DV_CAP TO 20.
@@ -87,6 +101,7 @@ LOCAL FUNCTION _cmdKerbinrecover {
     SET RETURN_DESCENT_DECOUPLER_TAG TO "descent_decoupler".
     SET RETURN_DESCENT_CHUTES_TAG TO "descent_chutes".
     SET RETURN_DESCENT_DECOUPLE_ALT TO 6000.
+    SET RETURN_BURN_STAGE_LIMIT TO _kerbinRecoveryStageFloor().
     // Revalidate the native patch and stopped controls immediately before
     // changing state/profile. Existing moon-return callers still use ESCAPE.
     phaseReturnSetup("MCC").
