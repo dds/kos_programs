@@ -107,9 +107,21 @@ GLOBAL FUNCTION phaseAerobrake {
         RETURN.
     }
 
+    LOCAL peFloor IS atmHeight*0.4.
+    IF AEROBRAKE_BRAKE_PE_FLOOR >= 0 { SET peFloor TO AEROBRAKE_BRAKE_PE_FLOOR. }
+    LOCAL assistPe IS REENTRY_PE.
+    IF AEROBRAKE_PE > 0 { SET assistPe TO AEROBRAKE_PE. }
+    LOCAL peLow IS MAX(peFloor,assistPe-1000).
+    LOCAL peHigh IS MIN(atmHeight-100,assistPe+1000).
+    IF AEROBRAKE_CORRECTION_PE_MIN >= 0 { SET peLow TO MAX(peLow,AEROBRAKE_CORRECTION_PE_MIN). }
+    IF AEROBRAKE_CORRECTION_PE_MAX >= 0 { SET peHigh TO MIN(peHigh,AEROBRAKE_CORRECTION_PE_MAX). }
+
     // --- Long-term setup: alarm the atmosphere entry, then orient for
     // solar and hold (charging, panels still out) until 15 min before it. ---
     LOCAL entryUt IS _aerobrakeSetEntryAlarm().
+    // Also handles a reboot on the outbound leg after a skipped pass.
+    IF NOT _aerobrakeRestorePe(atmHeight,assistPe,peLow,peHigh) { RETURN. }
+    SET entryUt TO _aerobrakeSetEntryAlarm().
     IF entryUt > 0 {
         _aerobrakeSolarWait(entryUt - AEROBRAKE_ENTRY_LEAD).
     }
@@ -150,23 +162,10 @@ GLOBAL FUNCTION phaseAerobrake {
     // --- Multi-pass aerobrake loop ---
     LOCAL passNum IS 0.
     LOCAL inPass IS FALSE.
-    LOCAL peFloor IS atmHeight*0.4.
-    IF AEROBRAKE_BRAKE_PE_FLOOR >= 0 { SET peFloor TO AEROBRAKE_BRAKE_PE_FLOOR. }
-    LOCAL assistPe IS REENTRY_PE.
-    IF AEROBRAKE_PE > 0 { SET assistPe TO AEROBRAKE_PE. }
-    LOCAL peLow IS MAX(peFloor,assistPe-1000).
-    LOCAL peHigh IS MIN(atmHeight-100,assistPe+1000).
-    IF AEROBRAKE_CORRECTION_PE_MIN >= 0 {
-        SET peLow TO MAX(peLow,AEROBRAKE_CORRECTION_PE_MIN).
-    }
-    IF AEROBRAKE_CORRECTION_PE_MAX >= 0 {
-        SET peHigh TO MIN(peHigh,AEROBRAKE_CORRECTION_PE_MAX).
-    }
-    IF AEROBRAKE_AP_BURN > 0 {
-        mLog("STATS aerobrake-assist policy enabled=true reserve=" + aerobrakeApReserveDv()
-            + " planLead=" + AEROBRAKE_AP_PLAN_LEAD + " maxQAtm=" + AEROBRAKE_AP_MAX_Q
-            + " targetPe=" + assistPe + " peLow=" + peLow + " peHigh=" + peHigh).
-    }
+    mLog("STATS aerobrake-assist policy enabled=" + (AEROBRAKE_AP_BURN > 0)
+        + " reserve=" + aerobrakeApReserveDv() + " planLead=" + AEROBRAKE_AP_PLAN_LEAD
+        + " maxQAtm=" + AEROBRAKE_AP_MAX_Q + " targetPe=" + assistPe
+        + " peLow=" + peLow + " peHigh=" + peHigh + " repair=" + AEROBRAKE_PE_TARGETING).
     UNTIL SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
         IF _aerobrakeThroughThickPart(atmHeight) {
             mLog("Aerobrake: captured (Ap "
@@ -198,6 +197,8 @@ GLOBAL FUNCTION phaseAerobrake {
                 // Refresh the owned alarm before beginning its solar coast.
                 SET entryUt TO _aerobrakeSetEntryAlarm().
             }
+            IF NOT _aerobrakeRestorePe(atmHeight,assistPe,peLow,peHigh) { RETURN. }
+            SET entryUt TO _aerobrakeSetEntryAlarm().
             // Between passes: solar-hold + warp the high coast, then orient
             // heat-shield-forward ~15 min before the next pass.
             IF entryUt > 0 { _aerobrakeSolarWait(entryUt - AEROBRAKE_ENTRY_LEAD). }
@@ -482,10 +483,17 @@ LOCAL FUNCTION _aerobrakeSetEntryAlarm {
 // or wakeUt is already here.
 LOCAL FUNCTION _aerobrakeSolarWait {
     PARAMETER wakeUt.
+    PARAMETER wakeAlarm IS "".
     LOCAL atmHeight IS _aerobrakeAtmoHeight().
     IF atmHeight > 0 AND SHIP:ALTITUDE < atmHeight { RETURN. }
     IF wakeUt <= TIME:SECONDS + 30 { RETURN. }
 
+    LOCAL coastBody IS SHIP:BODY.
+    LOCAL ownsAlarm IS wakeAlarm = "".
+    IF ownsAlarm {
+        SET wakeAlarm TO kacEnsureAlarm("Aerobrake coast wake",wakeUt,
+            "Running aerobrake wakes for entry preparation.",1).
+    }
     LOCAL solarRef IS -1.
     LOCAL canWarp IS TRUE.
     LOCAL hasPanels IS FALSE.
@@ -508,8 +516,12 @@ LOCAL FUNCTION _aerobrakeSolarWait {
         mLogWarn("STATS aerobrake solar status=unavailable coasting-without-solar-aim"
             + " reason=" + reason + " helperLoaded=" + PHASES_HAS_SOLAR + " panels=" + hasPanels).
     }
-    IF canWarp { coastAutoWarp(wakeUt, "Aerobrake coast", ""). }
+    IF canWarp AND wakeAlarm <> "" AND NOT ABORT AND NOT phaseShouldYield {
+        coastAutoWarp(wakeUt, "Aerobrake coast", wakeAlarm).
+    }
     UNTIL TIME:SECONDS >= wakeUt
+            OR ABORT OR phaseShouldYield
+            OR SHIP:BODY <> coastBody
             OR (atmHeight > 0 AND SHIP:ALTITUDE < atmHeight)
             OR SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
         SET solarRef TO trySolarHoldTick(solarRef,wakeUt).
@@ -521,7 +533,66 @@ LOCAL FUNCTION _aerobrakeSolarWait {
         WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
         WAIT 1.
     }
+    IF ownsAlarm AND wakeAlarm <> "" { DELETEALARM(wakeAlarm). }
     mLog("Aerobrake: waking up to get ready for entry.").
+}
+
+// The same periapsis target governs powered energy reduction and the
+// between-pass repair. Spend the protected repair allowance at apoapsis,
+// not by chasing the osculating Pe while drag is acting in atmosphere.
+LOCAL FUNCTION _aerobrakeRestorePe {
+    PARAMETER atmHeight, targetPe, peLow, peHigh.
+    IF AEROBRAKE_PE_TARGETING <= 0 OR ABORT OR phaseShouldYield { RETURN NOT ABORT AND NOT phaseShouldYield. }
+    // Even a nearly completed repair can retain a live interrupted node.
+    // Do not let an already-good Pe or inbound reboot bypass its ownership.
+    IF HASNODE OR maneuverBurnInterrupted() {
+        mLogError("Aerobrake Pe repair blocked by an existing/interrupted maneuver.").
+        yieldToPrompt(). RETURN FALSE.
+    }
+    IF SHIP:ALTITUDE <= atmHeight OR SHIP:APOAPSIS <= atmHeight
+            OR NOT (SHIP:ORBIT:ECCENTRICITY >= 0 AND SHIP:ORBIT:ECCENTRICITY < 1)
+            OR ABS(SHIP:PERIAPSIS-targetPe) <= 250
+            OR VDOT(SHIP:POSITION-SHIP:BODY:POSITION,SHIP:VELOCITY:ORBIT) <= 0 { RETURN TRUE. }
+    IF SHIP:DELTAV:VACUUM <= 0.5 {
+        mLogWarn("STATS aerobrake pe-repair status=passive reason=insufficient-fuel Pe=" + SHIP:PERIAPSIS).
+        RETURN TRUE.
+    }
+    LOCAL repairBody IS SHIP:BODY.
+    LOCAL wakeUt IS TIME:SECONDS+ETA:APOAPSIS-180.
+    IF NOT (ETA:APOAPSIS > 30 AND ETA:APOAPSIS < 1e30)
+            OR SHIP:ORBIT:HASNEXTPATCH { RETURN TRUE. }
+    IF wakeUt > TIME:SECONDS+30 {
+        LOCAL alarm IS kacEnsureAlarm("Aerobrake Pe repair",wakeUt,
+            "Wake before apoapsis to restore the configured entry periapsis.",1).
+        mLog("STATS aerobrake pe-repair status=waiting targetPe=" + targetPe
+            + " Pe=" + SHIP:PERIAPSIS + " wakeUt=" + wakeUt + " alarm=" + alarm).
+        _aerobrakeSolarWait(wakeUt,alarm).
+        IF alarm <> "" { DELETEALARM(alarm). }
+    }
+    IF ABORT OR phaseShouldYield OR SHIP:BODY <> repairBody
+            OR SHIP:ALTITUDE <= atmHeight OR HASNODE
+            OR SHIP:ORBIT:HASNEXTPATCH {
+        mLogError("Aerobrake Pe repair coast interrupted; no repair burn.").
+        yieldToPrompt(). RETURN FALSE.
+    }
+    IF MIN(SHIP:DELTAV:VACUUM,STAGE:DELTAV:VACUUM) <= 1 {
+        // Repair is a vacuum job before apoapsis, not authorization to
+        // enter on this Pe. Allow measured drift in this COAST check;
+        // hardware/depletion/CPU/chute guards and the subsequent repair
+        // node's strict requested corridor remain mandatory.
+        aerobrakeApStageCoast(atmHeight,MIN(peLow,SHIP:PERIAPSIS-1000),MAX(peHigh,SHIP:PERIAPSIS+1000)).
+        IF phaseShouldYield { RETURN FALSE. }
+    }
+    LOCAL repair IS restoreEntryPe(targetPe,peLow,peHigh).
+    IF NOT repair["OK"] {
+        IF repair["REASON"] = "insufficient-fuel" {
+            mLogWarn("STATS aerobrake pe-repair status=passive reason=insufficient-fuel Pe=" + SHIP:PERIAPSIS).
+            RETURN TRUE.
+        }
+        mLogError("STATS aerobrake pe-repair status=hold reason=" + repair["REASON"]).
+        yieldToPrompt(). RETURN FALSE.
+    }
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _aerobrakeAtmoHeight {

@@ -101,7 +101,39 @@ record remaining uncertainty before closing a task.
 
 ## In progress
 
-- [ ] **KSC recovery deorbit funding across stages.** Native
+- [ ] **Assisted recovery and automatic between-pass Pe repair.** Native
+  RO9_4880796 boot022: no enabled-assist policy/forecast; passive entry at
+  4885785, exit4885950 leaves1549.8kmAp/52.8kmPe. Manual recovery loaded
+  aerobrake_config defaults0 and serialized them without restoring RO9's
+  effective policy. kerbinrecover now replays craft/profile/overrides after
+  defaults and explicitly enables assistance, preserving limits/reserve/tags.
+  Its real coast writer is tested through a fresh profile boot (including
+  an old disabled profile and custom pressure/attitude/larger-reserve values).
+  The10m/s reserve had no automatic repair consumer: multipass code only
+  refreshed the next-entry alarm. New shared reentry_pe validates the
+  existing20m/s/active-fuel/native-Pe/Ap/plane/axis/timing guards and verifies
+  cutoff/live orbit. Manual command and automatic path share execution.
+  AEROBRAKE_PE_TARGETING schedules an apoapsis repair after skip-out or
+  outbound reboot if drift>250m, with owned KAC before resident solar wait;
+  no repair in atmosphere, on inbound leg or after final sub-atmosphere Ap.
+  Optional assistance still retains>=10m/s; repair may spend it down to the
+  existing0.5m/s margin. Audited empty-stage handoff may precede repair on
+  a bound vacuum coast even when Pe has drifted; no entry/burn corridor or
+  hardware guard is waived. No fuel => report/passive descent, failed burn
+  => retained recovery information/hold. Per-pass entry alarm refreshes after
+  repair; subsequent powered forecast uses the corrected orbit. Policy logs
+  now show disabled as well as enabled. Solar waits own their wake alarms
+  and react to Abort/body changes, without warping on an unrelated alarm.
+  All76 routine check files pass137.46s; new repair/recovery files each<1s.
+  Final added source cases also run the real stager at51.096km Pe: CPU,
+  parachute and nonempty-stage hazards still reject, and the real powered
+  forecast still refuses the drifted Pe before repair. Native flight pending.
+  Current
+  operator says inside atmosphere: do not reboot there. After skip-out,
+  linked aeroassist1 +REBOOT enables the corrected next-pass flow without
+  restarting MCC. Read-only evidence /tmp/ksp-deck-20261029T020914Z-fetch-
+  lvetde5h andqgdo9lfw. No live controls, code or save modified remotely.
+- [x] **KSC recovery deorbit funding across stages.** Native
   RO9_4879463 boot017 at4879483 caps the solve at150m/s and rejects its
   140m/s node/1442.481km Pe. Live diagnostic:2863.2215x2863.3144km,
   inc55.156,813.434m/s total,159.507m/s active stage2; independent ideal
@@ -114,7 +146,11 @@ record remaining uncertainty before closing a task.
   separation. Fresh archive writer bypasses old RUNONCEPATH at the held
   prompt. Source checks execute real budget/serialization/stage owner,
   delayed ignition and protected-floor/Abort/fueled-stage cases. Native
-  retry pending; all75 routine check files pass107.60s. Command is
+  retry now confirmed in RO9_4880796 boot019:440.937m/s plan under763.4
+  budget, flown53.234kmPe with unchanged55.16deg plane; phase verified in
+  one burn. The archive lacks the earlier staging trace, so exact separation
+  event validation remains separate. All75 routine checks passed107.60s.
+  Command is
   kerbinrecover apply again
   after pull, automatic reboot, no bootstrap build. Read-only evidence:
   /tmp/ksp-deck-20261029T011555Z-fetch-l6lfy49n and

@@ -5,7 +5,7 @@ from types import SimpleNamespace as NS
 
 import check_landing_guidance as ks
 from check_codebase import ROOT, function_body, dependency_tables, closure
-from check_surface_return import defaults, emit_profile, read_settings
+from check_surface_return import defaults, emit_profile, read_settings, expression
 
 COMMAND=(ROOT/'cmd/kerbinrecover.ks').read_text()
 SETUP=(ROOT/'lib/return_setup.ks').read_text()
@@ -92,6 +92,7 @@ def check_command_and_profile():
         env,saved,_=fixture();original=dict(saved);calls=[]
         env.update(action='check' if action in ('offline','no-patch','bad-report') else action,
             fixture_load=lambda:None,bootPreamble=lambda:None,bootLibLoad=lambda *_:None,
+            bootApplyMissionConfig=lambda *_:True,
             fixture_settle=lambda:None,_kerbinRecoverySnapshot=lambda:execute(
                 function_body(COMMAND,'_kerbinRecoverySnapshot'),env),
             diagnosticArchiveOpen=lambda _:Lex(READY=True),
@@ -197,6 +198,49 @@ def check_large_recovery_budget_and_staging():
     print('PASS: native441m/s case is funded across159+654 stages with50m/s retained; actual executor keeps fueled stage, separates return_decoupler on depletion, survives delayed ignition and preserves node/CPU/chutes/floor/Abort safeguards')
 
 
+def check_assisted_recovery_policy():
+    source=function_body(COMMAND,'_cmdKerbinrecover')
+    source=re.sub(r'RUN(?:ONCE)?PATH\([^\n]+\)\.', 'fixture_load().',source)
+    source=source.replace('diagnosticArchiveLine(', 'mLog(').replace(
+        'WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.','fixture_settle().')
+    config=(ROOT/'lib/aerobrake_config.ks').read_text()
+    phases=(ROOT/'lib/phases.ks').read_text().split('GLOBAL FUNCTION',1)[0]
+    env,saved,_=fixture();calls=[]
+    env.update(read_settings(config,{},'GLOBAL'))
+    env.update(read_settings(phases,{},'GLOBAL'))
+    def load(name):
+        if name=='return_setup':env.update(read_settings(config,{},'GLOBAL'))
+        if name=='craft/RO9':
+            calls.append('craft');env.update(AEROBRAKE_AP_BURN=1,AEROBRAKE_AP_STAGE_TAGS=['return_decoupler'])
+    def restore(*args):
+        assert calls==['craft'];calls.append('profile')
+        # Old generated return disabled assistance. Other deliberate safety
+        # settings must survive enabling it for this new recovery request.
+        env.update(AEROBRAKE_AP_BURN=0,AEROBRAKE_AP_RESERVE_DV=25,
+                   AEROBRAKE_AP_MAX_Q=.04,AEROBRAKE_AP_MAX_OFF_RETRO=6,
+                   AEROBRAKE_AP_STAGE_TAGS=['custom_separator'])
+        return True
+    env.update(action='apply',fixture_load=lambda:None,bootPreamble=lambda:None,
+        bootLibLoad=load,bootApplyMissionConfig=restore,fixture_settle=lambda:None,
+        _kerbinRecoverySnapshot=lambda:execute(function_body(COMMAND,'_kerbinRecoverySnapshot'),env),
+        diagnosticArchiveOpen=lambda _:Lex(READY=True),diagnosticArchiveClose=lambda *_:True,
+        _kerbinRecoveryStageFloor=lambda:execute(function_body(COMMAND,'_kerbinRecoveryStageFloor'),env),
+        phaseReturnSetup=lambda phase:calls.append(phase))
+    execute(source,env)
+    assert calls==['craft','profile','MCC'] and env['AEROBRAKE_AP_BURN']==1
+    rows=re.findall(r'LOG (.*?) TO profilePath\.',function_body(SETUP,'_writeCoastAutomation'))
+    coast='\n'.join(expression(row,env) for row in rows)
+    env['targetPe']=env['RETURN_PE']
+    home=read_settings(emit_profile('phaseReturnSetup',env)+'\n'+coast,{})
+    fresh=read_settings(config,{},'GLOBAL');fresh.update(home)
+    assert fresh['AEROBRAKE_AP_BURN']==1 and fresh['AEROBRAKE_PE_TARGETING']==1
+    assert fresh['AEROBRAKE_PE']==53000 and fresh['AEROBRAKE_AP_RESERVE_DV']==25
+    assert fresh['AEROBRAKE_AP_MAX_Q']==.04 and fresh['AEROBRAKE_AP_MAX_OFF_RETRO']==6
+    assert fresh['AEROBRAKE_AP_STAGE_TAGS']==['custom_separator']
+    assert fresh['MCC_RETURN_DV_CAP']==-1 and fresh['MCC_RETURN_RESERVE_DV']==50
+    print('PASS: actual recovery command reloads craft/profile after config defaults, explicitly enables assist and serializes it through the real coast writer/fresh boot, preserving larger reserve, pressure/attitude limits and custom stage tags')
+
+
 def check_setup_and_soi_guards():
     setup=function_body(SETUP,'phaseReturnSetup')
     # Stop at archive entry: a passing guard must reach it, while rejection
@@ -295,5 +339,6 @@ if __name__=='__main__':
     check_live_snapshot()
     check_command_and_profile()
     check_large_recovery_budget_and_staging()
+    check_assisted_recovery_policy()
     check_setup_and_soi_guards()
     check_apoapsis_live_coast()

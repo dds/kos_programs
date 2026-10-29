@@ -17,7 +17,8 @@ AERO = (ROOT / 'lib/aerobrake.ks').read_text()
 TARGETING = (ROOT / 'lib/maneuver_targeting.ks').read_text()
 RECOVERY = (ROOT / 'cmd/reentrype.ks').read_text()
 PLAN = (ROOT / 'lib/maneuver_plan.ks').read_text()
-ks.SOURCES+='\n'+PLAN+'\n'+RECOVERY
+REPAIR = (ROOT / 'lib/reentry_pe.ks').read_text()
+ks.SOURCES+='\n'+PLAN+'\n'+RECOVERY+'\n'+REPAIR
 
 
 def check_gates():
@@ -165,7 +166,7 @@ def check_apo_recovery():
         assert nodes==[nd] and nd.TIME==600 and 1.5<nd.PROGRADE<1.7
         assert abs(nd.ORBIT.PERIAPSIS-53000)<1e-6 and abs(nd.ORBIT.APOAPSIS-211500)<1e-6
         assert abs(nd.ORBIT.INCLINATION-inclination)<1e-7
-        assert ks.call('_reentryPeNodeOk',env,nd,53000)
+        assert ks.call('reentryPeNodeOk',env,nd,53000,52000,54000)
     print('PASS: actual shared apoapsis planner restores 51.096km Pe to 53km for 1.594m/s, preserving 211.5km Ap and five inclined planes')
 
 
@@ -181,13 +182,14 @@ def check_recovery_guards():
         if case=='normal':nd.NORMAL=.01
         if case=='radial':nd.RADIALOUT=.01
         if case=='empty':nd.DELTAV.MAG=.01
-        assert ks.call('_reentryPeNodeOk',env,nd,53000)==(case=='valid'),case
+        assert ks.call('reentryPeNodeOk',env,nd,53000,52000,54000)==(case=='valid'),case
     owner=body(RECOVERY,'_cmdReentrype')
     assert owner.index('SET WARP TO 0.')<owner.index('bootPreamble()')
     assert 'WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.' in owner
-    assert owner.index('HASNODE OR maneuverBurnInterrupted()')<owner.index('planLowerPe(')
-    assert owner.index('_reentryPeNodeOk(')<owner.index('executeManeuver()')
-    after=owner[owner.index('LOCAL success IS executeManeuver()'):]
+    assert owner.index('HASNODE OR maneuverBurnInterrupted()')<owner.index('restoreEntryPe(')
+    shared=body(REPAIR,'restoreEntryPe')
+    assert shared.index('reentryPeNodeOk(')<shared.index('executeManeuver()')
+    after=shared[shared.index('LOCAL success IS executeManeuver()'):]
     assert 'nd:' not in after and 'REMOVE' not in after
     assert after.index('thrustCutoffOk()')<after.index('status=flown')
     assert 'stateSet' not in owner and 'missionOverride' not in owner

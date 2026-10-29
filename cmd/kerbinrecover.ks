@@ -87,12 +87,21 @@ LOCAL FUNCTION _cmdKerbinrecover {
     IF stateGet("vehicle","") = "" { PRINT "Recovery requires a saved vehicle identity.". RETURN. }
     SET WARP TO 0.
     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
+    // Config libraries above initialize defaults. Restore the actual craft,
+    // selected profile and overrides before carrying coast/assist policy to
+    // the new leg; a command is not running inside the boot's config scope.
+    LOCAL vehicle IS stateGet("vehicle","").
+    bootLibLoad("craft/"+vehicle).
+    IF NOT bootApplyMissionConfig(vehicle,stateGet("mission_id",""),TRUE) { RETURN. }
     SET RETURN_SEQUENCE TO LIST("MCC","RETURN_TRIM","AEROBRAKE","DESCENT","DONE").
     SET RETURN_PE TO 53000.
     SET RETURN_PE_TOLERANCE TO 1000.
     SET MCC_RETURN_AT_APOAPSIS TO 1.
     SET MCC_RETURN_DV_CAP TO -1.
     SET MCC_RETURN_RESERVE_DV TO 50.
+    // Recovery explicitly includes powered aerobraking when useful. Preserve
+    // the restored pressure/attitude limits, repair reserve and stage tags.
+    SET AEROBRAKE_AP_BURN TO 1.
     SET RETURN_REENTRY_DIR TO "RETROGRADE".
     SET RETURN_KSC_TARGET TO 1.
     SET RETURN_KSC_TRIM_DV_CAP TO 20.

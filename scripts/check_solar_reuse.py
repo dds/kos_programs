@@ -169,10 +169,12 @@ def check_occultation():
 def check_aerobrake_coast_entry(solar_available=True,aim_success=True,consume_budget=False):
     env,_,_,_,_,reading=environment()
     env.update(TIME=NS(SECONDS=0),WARP=4,wakeUt=40,PHASES_HAS_SOLAR=solar_available,
+               phaseShouldYield=False,kacEnsureAlarm=lambda *args:'wake',DELETEALARM=lambda *_:None,
                SOLAR_HOLD_RATIO=.92,SOLAR_HOLD_EC=.75,AEROBRAKE_ENTRY_LEAD=900,
                KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=False)),
                _aerobrakeAtmoHeight=lambda:70000,shipHasSolarPanels=lambda:True)
     env['SHIP'].ALTITUDE=100000;reading[0]=2 # Producing power in the WRONG attitude.
+    env['SHIP'].BODY='Kerbin'
     events=[]
     def tick(dt):
         env['TIME'].SECONDS+=dt

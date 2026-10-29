@@ -2391,6 +2391,12 @@ interrupted burns, or nonzero physical/raw/pilot thrust/throttle. Ordinary
 moon RETURN_SETUP still requires stable moon orbit and starts at ESCAPE.
 Other return profiles leave `MCC_RETURN_AT_APOAPSIS` off by default.
 
+KSC recovery explicitly enables powered aerobraking. It reloads the craft,
+selected mission and overrides after loading library defaults, so pressure,
+attitude, reserve and approved stage settings survive into the new return
+profile. Previously a manual recovery command could serialize the library's
+disabled default over RO9's enabled craft policy.
+
 The recovery recipe derives `BURN_STAGE_LIMIT` from the CPU and tagged
 `descent_chutes` retention groups. The shared maneuver executor burns the
 active stage first, then advances through the configured separation/ignition
@@ -2495,8 +2501,25 @@ An audited, fueled successor can hold that reserve while the disposable
 active stage uses its fuel. Without that proof, the active stage keeps it.
 Older generated profiles that saved zero still receive the 10 m/s minimum.
 The successor is checked again before committing the burn, and the live
-throttle guard always retains the craft-wide reserve. This sets fuel aside,
-without creating or executing a periapsis-repair maneuver.
+throttle guard always retains the craft-wide reserve.
+
+With `AEROBRAKE_PE_TARGETING` enabled, the same configured Pe (53 km for
+shallow Kerbin returns) is maintained between passes. After a skip-out or an
+outbound reboot, a drift greater than250m schedules a repair at the next
+apoapsis. The running phase sets its KAC wake before solar coast, wakes
+three minutes before apoapsis, validates a small pure-prograde node against
+the game's predicted Pe/Ap/plane, and spends the protected reserve as needed.
+The manual `reentrype` command uses the same repair and validation code.
+Entry alarms refresh after repair, then the next powered-assist forecast
+uses the corrected orbit and remaining fuel. An empty audited stage can
+hand off before repair; the strict entry corridor still applies to the
+repair node and all powered-entry forecasts. No periapsis chasing is done
+while drag is acting inside atmosphere. A final pass whose Ap remains below
+the atmosphere continues to descent. If no repair fuel remains, the phase
+reports that and continues passive aerobraking; failed or invalid burns
+retain their recovery information for review. Larger repairs still use
+MCC rather than bypassing the existing20m/s repair limit.
+
 A long burn can start before entry. Its steering projects deceleration along
 a direction that preserves Pe, with feedback toward the configured entry Pe.
 Feedback leaves errors within 100 m alone, avoiding needless radial steering

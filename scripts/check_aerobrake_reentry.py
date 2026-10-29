@@ -122,6 +122,7 @@ def check_multi_pass_order():
         events.append(('capture',))
         ship.ORBIT.ECCENTRICITY=.9
     env.update(aerobrakeApEntryEta=eta, aerobrakeApRecover=lambda:True,
+               _aerobrakeRestorePe=lambda *args:True,
                aerobrakeApObserve=lambda _:None, _aerobrakeSolarWait=coast,
                _aerobrakeOrient=orient, _aerobrakeBrakingBurn=capture,
                _aerobrakeTrimReentryPe=lambda:None, _aerobrakeDecouple=lambda:None,
@@ -194,6 +195,7 @@ def check_manual_stage_phase_replan():
         if ship.ALTITUDE<70000:ship.ORBIT.APOAPSIS=65000;ship.AIRSPEED=500
     env.update(aerobrakeApEntryEta=lambda _:expected[0]-env['TIME'].SECONDS,
                aerobrakeApRecover=lambda:True,_aerobrakeSolarWait=coast,
+               _aerobrakeRestorePe=lambda *args:True,
                aerobrakeApStageCoast=lambda *args:False,aerobrakeApAssist=assist,
                _aerobrakeOrient=orient,_aerobrakeTrimReentryPe=lambda:None,
                _aerobrakeDecouple=lambda:None,_aerobrakeRetractSolarPanels=lambda:None,
@@ -279,8 +281,9 @@ def check_solar_dependency_and_wait():
         def have_panels():
             assert loaded,'called an unloaded solar helper'
             return panels
-        env=dict(wakeUt=200,TIME=NS(SECONDS=0),WARP=0,
-                 SHIP=NS(ALTITUDE=80000,STATUS='ORBITING'),PHASES_HAS_SOLAR=loaded,
+        env=dict(wakeUt=200,wakeAlarm="",ABORT=False,phaseShouldYield=False,TIME=NS(SECONDS=0),WARP=0,
+                 SHIP=NS(ALTITUDE=80000,STATUS='ORBITING',BODY='Kerbin'),PHASES_HAS_SOLAR=loaded,
+                 kacEnsureAlarm=lambda *args:'wake',DELETEALARM=lambda *_:None,
                  shipHasSolarPanels=have_panels,_aerobrakeAtmoHeight=lambda:70000,
                  orientForSolar=lambda force,lock,override,wake:events.append(('aim',wake)) or True,
                  shipSolarFlow=lambda:1,shipPowerFraction=lambda:1,SOLAR_HOLD_EC=.75,

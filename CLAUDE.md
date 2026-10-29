@@ -9,6 +9,36 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-28 native KSC recovery now verified:RO9_4880796 boot019 solved
+440.937m/s under763.4 budget and achievedPe53.234km/inc55.16 inoneburn.
+boot022 instead proves assisted aerobraking was disabled: no policy/forecast,
+pass4885785..4885950 leavesAp1549.8km/Pe52.8km. Operator currently INSIDE
+ATMOSPHERE: no reboot/control takeover. kerbinrecover command had loaded
+config0 then serialized it without hydrating craft/profile. New command
+replays savedcraft/profile/overrides after defaults, explicitlyenablesassist,
+preserves pressure/attitude/largerreserve/tags. Real coast writer +freshboot
+regression reproduces oldoffprofile and verifies on/safetysettings survive.
+Protected10m/s also lacked an automatic consumer. Newshared reentry_pe owns
+nodevalidation/execution for manualreentrype andautomaticapoapsisrepair;
+20m/s/nativePe/AP/plane/pureprograde/activefuel+0.5/timing guards preserved,
+0.005 trim precision, physicalcutoff andliveorbit verified,failednodekept.
+With PE_TARGETING, repair drift>250m on outboundboundoutside-atmo orbit;
+KACownedwake before solar,three-minutes-beforeAp,clockfallback/revalidation.
+Initialoutboundreboot andeverypostpass check it before next-entrycoast/assist;
+alarms refresh afterrepair. Can spend reservedfuel, optionalassiststillkeeps10.
+Ifactiveempty, auditedcoaststager can exposefundednextengine before repair;
+coastPe envelope includes measureddrift ONLY forthatnonthrustinghandoff,
+native repair/entry corridor andallhardware guards remain strict. No fuel
+reports/passive, finalAp<atmo/inbound/in-atmo donot scheduleapo repair.
+Solarcoastnow owns wakealarm,stopsforAbort/bodychange; policylogs explicitoff.
+All76routinechecks pass137.46s; repair/recoveryfiles<1s. Extra real-stager
+drift cases pass and prove CPU/chute/fueled-stage hazards remain rejected;
+actualpoweredplanner still rejects driftedPe untilrepair. Nativeflightpending.
+Outsideafteraskip withlink:
+cmd/aeroassist1 thenREBOOT; do not rerunkerbinrecover to restartMCCmidpass.
+Read-only evidence /tmp/ksp-deck-20261029T020914Z-fetch-{k_gbn4de,qgdo9lfw,
+lvetde5h}; no remoteflight/code/savechanges.
+
 2026-10-28 latest KSC recovery cap: actualRO9_4879463 boot0174879483,
 140m/s candidate/1442.481kmPe rejected under150cap. Diagnostic has813.434
 total,159.507 active(stage2),2863.2215x2863.3144km/55.156deg; independent
