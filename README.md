@@ -1053,7 +1053,67 @@ computed list (escape hatch); `LIBS_EXTRA = ...` appends. While prelaunch,
 boot clears any saved profile so a pad reboot re-opens the picker; after
 launch, reboots keep mission and phase.
 
-### Espoir: Duna science and impact attempt
+### Espoir fleet profiles
+
+Select each profile independently for a new Espoir-family probe. Adding these
+files does not select a mission or launch a craft. Delta-v figures below are
+build allowances **remaining after85km Kerbin parking**, including the payload;
+the actual departure window, thrust and hardware still determine affordability.
+
+| Profile ID | Objective | Transfer / operations allowance |
+|---|---|---|
+| `duna_orbital_surveyor` | Powered capture,300km polar Duna mapping orbit |1500 /1000m/s |
+| `ike_orbital_surveyor` | High Duna capture, Ike transfer,150km polar mapping orbit |1500 /800m/s |
+| `ike_impactor` | High Duna capture, Ike capture, science during deliberate impact |1500 /800m/s |
+| `duna_impactor` | Direct Duna atmospheric science and impact attempt |1500 /400m/s |
+
+Both surveyors retain the CPU, propulsion and scanners as one spacecraft. No
+`scansat_decoupler` is required, and neither automatically deorbits after mapping.
+Scanning is power-managed between30% and60% battery, with periodic solar aims.
+The baseline altitudes are editable to suit the installed SCANsat instruments.
+The configured types are low-resolution terrain, resource and biome mapping;
+fitting the necessary sensors remains a hardware choice. These are independent
+surveyors, not relay satellites. Each needs its own Kerbin-range direct link.
+
+Ike launch profiles first target an85km Pe /2880km Ap Duna capture orbit, avoiding
+low Duna circularization and atmospheric capture. `IKE_SETUP` then writes a local
+`ike_orbital_surveyor_ops` or `ike_impactor_ops` profile and reboots into its own
+Ike transfer. Payload identity, polar/capture targets, scan or impact settings,
+fuel reserves and coast automation survive fresh boots. The generated ids have
+no archive launch counterpart, so reconnecting cannot restart the Duna leg.
+`IKE_MISSION_SETTINGS` supplies the optional captured operations settings;
+an empty map retains the existing FalconHeavy flyby-to-Duna-entry behavior.
+
+The Ike impactor captures at25km Pe /75km Ap, then `SCIENCE_IMPACT` plans a
+fuel-checked deorbit to a negative periapsis. It preserves existing nodes and
+interrupted burns for review. After cutoff it collects/transmits continuously,
+uses the existing KAC/solar wait for distant checkpoints and stays at1x in low
+space near terrain. It remains in one band through descent; rebooting on an
+already-flown impact course does not plan a second deorbit. Its sea-level-impact
+alarm is an estimate: elevated terrain can be reached sooner. Destruction ends
+the CPU; it cannot confirm its own destruction or promise landed science.
+
+`duna_impactor` uses the existing continuous `SCIENCE_ENTRY` phase, targeting
+5km Pe with3km tolerance and no optional Ike detour. It performs no capture,
+chute deployment or powered landing. Powered entry assistance remains separate
+unfinished work; the400m/s allowance does not enable that controller by itself.
+The older `duna_science_impact` profile remains available with incidental Ike
+flyby sampling, subject to its safe subsequent Duna-entry check.
+
+The next additional profile should be an **Ike soft lander**: the impactor cannot
+replace the earlier plan to touch down and transmit landed-biome science. There
+is no new relay variant while the fleet lacks a suitable interplanetary relay.
+Landing science selection remains with the operator. The current flight sampler
+attempts every available typed science module; it does not reserve duplicate
+Goo/Science Jr units for later contexts. Instrument scheduling is still open.
+
+Source/control-flow checks cover the two-leg settings, fresh boots, legacy
+compatibility, deorbit ownership/fuel/cutoff and resident science/KAC waits.
+Native compilation, storage fit, arrival/refinement and flight validation remain
+pending, including the existing in-flight cache-prefetch and Duna arrival work.
+No mandatory blackout/cache gate is introduced. No bootstrap rebuild is needed.
+
+### Espoir: original Duna science and impact attempt
 
 `missions/Espoir/duna_science_impact.ks` is the first Espoir profile. Name
 the new probe **Espoir** (or use the normal fleet-name suffix convention)

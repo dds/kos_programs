@@ -237,7 +237,7 @@ def check_resident_wait():
                    coastAutoWarp=lambda *args:events.append(('warp',args[-1])),
                    trySolarHoldTick=lambda flow,*_:flow,fixture_wait=wait,
                    fixture_settled=lambda:None,DELETEALARM=lambda value:events.append(('delete',value)))
-        run(ENTRY,'_scienceEntryWait',env)
+        run(ENTRY,'scienceEntryWait',env)
         assert (('warp','owned') in events)==(bool(alarm) and healthy)
         assert env['WARP']==0
         assert env['TIME'].SECONDS==(105 if interrupt else 150)
@@ -266,14 +266,14 @@ def check_phase_lifecycle():
                    _scienceEntryHold=lambda why:events.append(('hold',why)))
         ship=env['SHIP'];ship.PERIAPSIS=5000;ship.VERTICALSPEED=-200;ship.AIRSPEED=1200
         ship.ALTITUDE=30000
-        def context():return run(ENTRY,'_scienceEntryContext',env)
+        def context():return run(ENTRY,'scienceEntryContext',env)
         def pulse(*args):events.append(('science',args[0]))
         def wait(dt):
             env['TIME'].SECONDS+=dt
             if case=='entry':
                 ship.ALTITUDE=10000
                 if env['TIME'].SECONDS>=102:env['ABORT']=True
-        env.update(scienceFlightPulse=pulse,_scienceEntryContext=context,fixture_wait=wait,
+        env.update(scienceFlightPulse=pulse,scienceEntryContext=context,fixture_wait=wait,
                    _scienceEntryWakeUt=lambda:run(ENTRY,'_scienceEntryWakeUt',env),
                    _scienceEntryMoonCheck=lambda primary:run(ENTRY,'_scienceEntryMoonCheck',dict(env,primary=primary)),
                    aerobrakeApEntryEta=lambda height:0 if ship.ALTITUDE<=height else -1)

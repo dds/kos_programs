@@ -9,6 +9,26 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-29 Espoir fleet profiles added: duna_orbital_surveyor (300km polar),
+ike_orbital_surveyor (150km polar), ike_impactor, duna_impactor. Ike missions
+capture high at Duna85x2880km then reuse IKE_SETUP with optional
+IKE_MISSION_SETTINGS for a generated *_ops id distinct from archive launch
+profiles. Identity/payload/complete leg settings serialize across boots;
+empty map keeps the existing FalconHeavy flyby->Duna entry. Operations handoff
+requires safe idle Duna orbit, no foreign node/next patch/interrupted burn.
+SCIENCE_IMPACT is a separate band: native negative-Pe deorbit, fuel/cap/lead
+and cutoff checks, resident science with shared public scienceEntryContext /
+scienceEntryWait helpers, KAC before solar waits and1x below low-space band.
+No second burn for a flown impact course; no destruction/delivery/soft-landing
+claim. All83routinechecks pass105.30s. Source fixtures include real recursive
+serialization/fresh boots, legacy behavior, unsafe-state refusal, native-node
+admission and alarm cleanup. No game changes/deployment/bootstrap rebuild.
+Next fleet variant is an Ike soft lander, not implemented by an impact profile.
+Hardware/native flight and existing Duna arrival/cache/controlled-entry work
+remain open; the parked nonpassing arrival patch was NOT merged. Current flight
+science deploys every available module, not one unused Goo/Jr per context.
+User is selecting physical science devices; scheduling is a separate open task.
+
 2026-10-29 boot018 at4918637 confirms hBias0/free13495, but differentrank1
 passseeds274m cross at21/64. Powered-21074,-13229,-18842; stalls48/64.
 Bias/scalarreplay insufficient for this trajectory. New orbitalfallback

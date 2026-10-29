@@ -6,6 +6,26 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Espoir fleet profiles requested29Oct: Duna and Ike polar SCANsat surveyors,
+  separate Duna and Ike science impactors now have source profiles. Optional
+  IKE_MISSION_SETTINGS extends the existing handoff, serializing the new local
+  operations identity, payload, capture/shape/scan/impact settings while empty
+  retains FalconHeavy flyby->Duna entry. New SCIENCE_IMPACT owns a validated
+  negative-Pe deorbit, cutoff, resident science, KAC/solar checkpoints and1x
+  near terrain. Shared entry context/wait helpers exported without changing
+  atmospheric behavior. No mission selection, game controls or deployment.
+  Recommend an Ike soft lander as the next distinct variant:
+  impact cannot collect a planned landed-biome observation. Hardware, native
+  arrival/refinement, power/radio and flight validation remain outstanding.
+  This resumes the profile work, not the parked nonpassing arrival WIP.
+  New source fixtures exercise real profile serialization through fresh boots,
+  unsafe-handoff refusal, legacy behavior, native-node admission, failed-burn
+  preservation and impact waits. All83routine check files pass105.30s; fleet
+  check0.49s, native compilation/storage/flight remain unverified. Existing
+  science_flight deploys every available module; it does NOT ration duplicate
+  non-rerunnable Goo/Science Jr units between contexts. Per-instrument context
+  scheduling remains open; user is choosing the physical science payload.
+
 - Latest retry boot018 at4918637 confirms hBias0, free13495. Different
   rank1 pass now seeds cross274m at21/64. Powered residuals-21074,-13229,
   -18842m; no-improving-step at48/64 despite16 trials left. Zero bias did

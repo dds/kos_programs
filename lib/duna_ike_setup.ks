@@ -23,6 +23,9 @@ GLOBAL IKE_TRANSFER_SCAN_SAMPLES_PER_ORBIT IS 32.
 GLOBAL IKE_BPLANE_DV_CAP IS 40.
 GLOBAL IKE_REFINE_BPLANE_DV_CAP IS 5.
 GLOBAL IKE_REFINE_BPLANE_MAX_BURNS IS 8.
+// Optional complete settings for a captured Ike operations leg. Empty keeps
+// the existing FalconHeavy flyby followed by Duna entry unchanged.
+GLOBAL IKE_MISSION_SETTINGS IS LEXICON().
 
 GLOBAL DUNA_ENTRY_SEQUENCE IS LIST(
     "DUNA_ENTRY_LOWER_PE", "AEROBRAKE", "ATMO_WALK", "DESCENT", "DONE"
@@ -303,20 +306,55 @@ GLOBAL FUNCTION phaseIkeSetup {
         RETURN.
     }
 
+    LOCAL legId IS "duna_ike_flyby".
+    LOCAL legName IS "Duna/Ike Flyby".
+    LOCAL legType IS "duna_ike_flyby".
+    LOCAL legPayloads IS LIST("SCISAT").
+    IF IKE_MISSION_SETTINGS:LENGTH > 0 {
+        // Operations profiles commit only from an idle, safe bound orbit.
+        // Preserve foreign nodes and interrupted burns for operator review.
+        IF ABORT OR HASNODE OR SHIP:ORBIT:HASNEXTPATCH
+                OR stateGet("vehicle", "") = ""
+                OR NOT (SHIP:PERIAPSIS > _diAtmHeight() AND SHIP:ORBIT:ECCENTRICITY < 1)
+                OR NOT (SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
+                    AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0)
+                OR (stateGet("burn_pending","false") = "true"
+                    AND stateGet("burn_started","false") = "true") {
+            _diHold("IKE SETUP HOLD", "operations handoff requires safe idle Duna orbit, no node or interrupted burn").
+            RETURN.
+        }
+        IF NOT IKE_MISSION_SETTINGS:HASKEY("MISSION_ID")
+                OR NOT IKE_MISSION_SETTINGS:HASKEY("MISSION_NAME")
+                OR NOT IKE_MISSION_SETTINGS:HASKEY("MISSION_TYPE")
+                OR NOT IKE_MISSION_SETTINGS:HASKEY("PAYLOADS") {
+            _diHold("IKE SETUP HOLD", "operations identity/payload settings missing").
+            RETURN.
+        }
+        IF IKE_FLYBY_SEQUENCE:LENGTH = 0 OR IKE_FLYBY_SEQUENCE[0] <> "XING"
+                OR NOT IKE_FLYBY_SEQUENCE:CONTAINS("CAPTURE") {
+            _diHold("IKE SETUP HOLD", "operations leg must transfer to and capture at Ike").
+            RETURN.
+        }
+        SET legId TO IKE_MISSION_SETTINGS["MISSION_ID"].
+        SET legName TO IKE_MISSION_SETTINGS["MISSION_NAME"].
+        SET legType TO IKE_MISSION_SETTINGS["MISSION_TYPE"].
+        SET legPayloads TO IKE_MISSION_SETTINGS["PAYLOADS"].
+    }
+
     _diArchiveLog().
     stateSet("target", "IKE").
-    stateSet("mission_type", "duna_ike_flyby").
-    stateSet("mission_id", "duna_ike_flyby").
-    stateSet("mission_name", "Duna/Ike Flyby").
-    stateSet("payloads", LIST("SCISAT")).
+    stateSet("mission_type", legType).
+    stateSet("mission_id", legId).
+    stateSet("mission_name", legName).
+    stateSet("payloads", legPayloads).
     missionOverrideClear().
-    SET DI_PROFILE_PATH TO missionProfileBegin(stateGet("vehicle", ""), "duna_ike_flyby").
+    SET DI_PROFILE_PATH TO missionProfileBegin(stateGet("vehicle", ""), legId).
 
-    LOG "SET MISSION_ID TO " + configLiteral("duna_ike_flyby") + "." TO DI_PROFILE_PATH.
-    LOG "SET MISSION_NAME TO " + configLiteral("Duna/Ike Flyby") + "." TO DI_PROFILE_PATH.
-    LOG "SET MISSION_TYPE TO " + configLiteral("duna_ike_flyby") + "." TO DI_PROFILE_PATH.
+    LOG "SET MISSION_ID TO " + configLiteral(legId) + "." TO DI_PROFILE_PATH.
+    LOG "SET MISSION_NAME TO " + configLiteral(legName) + "." TO DI_PROFILE_PATH.
+    LOG "SET MISSION_TYPE TO " + configLiteral(legType) + "." TO DI_PROFILE_PATH.
     LOG "SET TARGET_ TO " + configLiteral("IKE") + "." TO DI_PROFILE_PATH.
-    LOG "SET PAYLOADS TO " + configLiteral(LIST("SCISAT")) + "." TO DI_PROFILE_PATH.
+    LOG "SET PAYLOADS TO " + configLiteral(legPayloads) + "." TO DI_PROFILE_PATH.
     LOG "SET SEQUENCE TO " + configLiteral(IKE_FLYBY_SEQUENCE) + "." TO DI_PROFILE_PATH.
     LOG "SET CAPTURE_PE TO " + configLiteral(IKE_FLYBY_PE) + "." TO DI_PROFILE_PATH.
     LOG "SET BPLANE_TARGET TO " + configLiteral("IKE") + "." TO DI_PROFILE_PATH.
@@ -331,16 +369,25 @@ GLOBAL FUNCTION phaseIkeSetup {
         LOG "SET CAPTURE_INC TO " + configLiteral(IKE_FLYBY_INC) + "." TO DI_PROFILE_PATH.
     }
     _diPersistCoastAutomation().
-    _diPersistDunaEntryCfg().
+    IF IKE_MISSION_SETTINGS:LENGTH = 0 {
+        _diPersistDunaEntryCfg().
+    } ELSE {
+        // Literal settings survive offline reboots and supersede initial Duna
+        // capture/SHAPE defaults. The generated id differs from archive launch
+        // profiles, so a connected reboot cannot restart the Duna leg.
+        FOR key IN IKE_MISSION_SETTINGS:KEYS {
+            LOG "SET " + key + " TO " + configLiteral(IKE_MISSION_SETTINGS[key]) + "." TO DI_PROFILE_PATH.
+        }
+    }
 
     stateSet("phase", "XING").
     stateSet("lib_band", "XFER_PLAN").
     _diClearLibCache().
     stateSet("launch_time", ROUND(TIME:SECONDS)).
-    mLog("Ike flyby configured: sequence=" + IKE_FLYBY_SEQUENCE
+    mLog("STATS ike-setup mission=" + legId + " sequence=" + IKE_FLYBY_SEQUENCE
         + " Pe=" + ROUND(IKE_FLYBY_PE/1000,1) + "km.").
     PRINT " ".
-    PRINT "Ike flyby configured.".
+    PRINT legName + " configured.".
     PRINT "  Sequence: " + IKE_FLYBY_SEQUENCE.
     PRINT "  Ike Pe:   " + ROUND(IKE_FLYBY_PE/1000,1) + "km".
     PRINT "  Rebooting into XING.".

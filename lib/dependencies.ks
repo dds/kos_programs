@@ -72,6 +72,7 @@ GLOBAL FUNCTION dependencyLibs {
         "science", LIST(),
         "science_flight", LIST(),
         "science_entry", LIST("science_flight", "aerobrake_ap_math", "coast_wait", "thrust_cutoff"),
+        "science_impact", LIST("science_entry", "maneuver_plan"),
         "orbital_survey", LIST("science", "landing_math", "coast_wait", "thrust_cutoff"),
         "aerobrake", LIST("maneuver", "utils", "landing_config", "aerobrake_assist", "solar", "reentry_pe"),
         "reentry_pe", LIST("maneuver_plan"),
@@ -107,6 +108,7 @@ GLOBAL FUNCTION dependencyPhases {
         "SCIENCE_OPS", LIST("science", "orbit", "solar"),
         "SCIENCE_OPS_LOW", LIST("science", "orbit", "solar"),
         "SCIENCE_ENTRY", LIST("science_entry"),
+        "SCIENCE_IMPACT", LIST("science_impact"),
         "ORBITAL_SURVEY", LIST("orbital_survey"),
         "LAUNCH", LIST("launch"),
         "HOP", LIST("hop_control"),
@@ -207,6 +209,7 @@ GLOBAL FUNCTION dependencyBands {
         "LAND_PREP", LIST("LAND_PREP"),
         "ORBITAL_SURVEY", LIST("ORBITAL_SURVEY"),
         "SCIENCE_ENTRY", LIST("SCIENCE_ENTRY"),
+        "SCIENCE_IMPACT", LIST("SCIENCE_IMPACT"),
         "LANDING", LIST("LAND_ASSIST", "LAND"),
         "MOLNIYA", LIST("MOLNIYA", "MOLNIYA_INSERT"),
         "DONE", LIST("DONE")
@@ -225,6 +228,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "SCIENCE_OPS" { phaseMapSet(phaseMap, phaseKey, phaseScienceOps@). }
     ELSE IF phaseKey = "SCIENCE_OPS_LOW" { phaseMapSet(phaseMap, phaseKey, phaseScienceOpsLow@). }
     ELSE IF phaseKey = "SCIENCE_ENTRY" { phaseMapSet(phaseMap, phaseKey, phaseScienceEntry@). }
+    ELSE IF phaseKey = "SCIENCE_IMPACT" { phaseMapSet(phaseMap, phaseKey, phaseScienceImpact@). }
     ELSE IF phaseKey = "ORBITAL_SURVEY" { phaseMapSet(phaseMap, phaseKey, phaseOrbitalSurvey@). }
     ELSE IF phaseKey = "LAUNCH" { phaseMapSet(phaseMap, phaseKey, phaseLaunch@). }
     ELSE IF phaseKey = "HOP" { phaseMapSet(phaseMap, phaseKey, phaseHop@). }

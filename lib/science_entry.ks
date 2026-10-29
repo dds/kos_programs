@@ -11,7 +11,7 @@ GLOBAL SCIENCE_ENTRY_PREPARE_LEAD IS 180.
 GLOBAL SCIENCE_ENTRY_MAX_PASSES IS 3.
 GLOBAL SCIENCE_ENTRY_MIN_EC IS 0.05.
 
-LOCAL FUNCTION _scienceEntryContext {
+GLOBAL FUNCTION scienceEntryContext {
     LOCAL bands IS SCIENCE_ENTRY_BANDS[SHIP:BODY:NAME].
     LOCAL situation IS "SPACE_HIGH".
     IF SHIP:ALTITUDE < bands[0] { SET situation TO "SPACE_LOW". }
@@ -95,7 +95,7 @@ LOCAL FUNCTION _scienceEntryWakeUt {
     RETURN wakeUt.
 }
 
-LOCAL FUNCTION _scienceEntryWait {
+GLOBAL FUNCTION scienceEntryWait {
     PARAMETER wakeUt.
     LOCAL coastBody IS SHIP:BODY.
     LOCAL alarm IS kacEnsureAlarm("Science entry wake",wakeUt,
@@ -171,7 +171,7 @@ GLOBAL FUNCTION phaseScienceEntry {
         IF inAtmo <> stateGet("science_entry_in_atmo",FALSE) {
             stateSet("science_entry_in_atmo",inAtmo).
         }
-        scienceFlightPulse(_scienceEntryContext(),shipPowerFraction() >= SCIENCE_ENTRY_MIN_EC).
+        scienceFlightPulse(scienceEntryContext(),shipPowerFraction() >= SCIENCE_ENTRY_MIN_EC).
         IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
             SET WARP TO 0.
             UNLOCK STEERING.
@@ -179,7 +179,7 @@ GLOBAL FUNCTION phaseScienceEntry {
             // Give pending surface data a bounded chance to arrive and queue.
             LOCAL deadline IS TIME:SECONDS+60.
             UNTIL ABORT OR TIME:SECONDS >= deadline {
-                scienceFlightPulse(_scienceEntryContext(),shipPowerFraction() >= SCIENCE_ENTRY_MIN_EC).
+                scienceFlightPulse(scienceEntryContext(),shipPowerFraction() >= SCIENCE_ENTRY_MIN_EC).
                 WAIT 1.
             }
             IF ABORT { RETURN. }
@@ -201,7 +201,7 @@ GLOBAL FUNCTION phaseScienceEntry {
         LOCAL wakeUt IS _scienceEntryWakeUt().
         IF NOT inAtmo AND wakeUt > TIME:SECONDS+30 {
             SET entrySteering TO FALSE.
-            _scienceEntryWait(wakeUt).
+            scienceEntryWait(wakeUt).
         } ELSE {
             SET WARP TO 0.
             IF NOT entrySteering {
