@@ -6,6 +6,32 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Latest retry boot018 at4918637 confirms hBias0, free13495. Different
+  rank1 pass now seeds cross274m at21/64. Powered residuals-21074,-13229,
+  -18842m; no-improving-step at48/64 despite16 trials left. Zero bias did
+  not resolve this trajectory; old scalar-state replay was not native proof.
+  Orbital planner now reuses landingDeorbitNodeReady's actual powered dV
+  derivative on a stalled provisional node, fixed epoch/normal, max7 models.
+  Reserve7 inside64 before call; far frozen-goal inner fits keep8 slots
+  (one validation +7 direct), near-root polish unchanged. No tolerance or
+  geometry/terrain/fuel/light/normal/state guard relaxed, no new bootstrap.
+  Only fresh idle unflown orbital planning can own/remove the probe. Retained
+  nodes/interrupted burns stay on existing recovery. Shared admission returns
+  solution +matching fresh policy; compact refit suppresses intermediate full
+  snapshots, retains final once and reports last reason/error. Synthetic
+  flat-ballistic/finite-powered response anchored at29529/48370m reproduces
+  old48/64 hold and solves both derivative signs at55/64. Budget boundary,
+  bad models, physical/terrain/light/state guards and cleanup tested. Native
+  actual derivative/solve still unverified. All82routinecheckfiles pass106.58s.
+  Compact refit admission rows use
+  INFO reserve, original preburn rows stay SUMMARY; seven intermediate
+  samples cannot spend protected final model/result/error space.
+  Read-only evidence:/tmp/ksp-deck-20261029T182343Z-fetch-smx0jl1v/logs/
+  RO9_4854889/boot_018_core.log. Snapshot now gives actual exhaust2892.9618/
+  3089.0947, fuel.171711/.225, drop.42125/0, startMass1.40845. Previous
+  hardware assumptions345/290s were illustrative; use measured data next.
+  Duna/Ike remain paused; no game controls, code deployment or save edits.
+
 - Latest Mun retry: native RO9_4854889 boot017 at4918463 confirms storage
   improvement: phase free7038->13826bytes. New failure is an H-gate plateau:
   fresh powered residuals-687,-687,-682m while downfield57570->58091m and

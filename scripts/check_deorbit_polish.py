@@ -49,6 +49,7 @@ def context(fault='none',legacy=False,reported2=False):
             env['_targetDeorbitImproves']=lambda trial,best,lo,hi:env['_targetDeorbitMerit'](trial,lo,hi)<env['_targetDeorbitMerit'](best,lo,hi)
         else:env['_targetDeorbitLocalAlongTrack']=lambda *args:False
     source=powered_source().replace('SET _deorbitEvaluations TO _deorbitEvaluations+1.','charge_forecast().')
+    source=source.replace('SET _deorbitEvaluations TO _deorbitEvaluations+7.','fixture_charge_refit().')
     result=run(source,env)
     return env,count,trials,models,nodes,result
 

@@ -431,6 +431,16 @@ GLOBAL FUNCTION targetedDeorbitAt {
             LOCAL neededTrials IS 4.
             IF _targetDeorbitLocalAlongTrack(solved,minDownfield,maxDownfield) { SET neededTrials TO 3. }
             IF _deorbitEvaluations+neededTrials > TARGET_DEORBIT_MAX_EVALUATIONS { BREAK. }
+            LOCAL stepReserve IS 1.
+            IF ABS(solved["ERR"]) > maxDownfield-minDownfield
+                    AND _deorbitEvaluations+7 <= TARGET_DEORBIT_MAX_EVALUATIONS {
+                IF _deorbitEvaluations+neededTrials+7 > TARGET_DEORBIT_MAX_EVALUATIONS {
+                    SET poweredStop TO "direct-fit-budget". BREAK.
+                }
+                // Keep seven slots for direct powered measurements if a
+                // far-away frozen goal exhausts its useful local response.
+                SET stepReserve TO 8.
+            }
             LOCAL priorUT IS solved["UT"].
             LOCAL priorRetro IS solved["RETRO"].
             LOCAL priorNormal IS solved["NORMAL"].
@@ -449,7 +459,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
             SET solved["ERR"] TO solved["DOWNFIELD"]-stepAim["AIM"].
             SET solved TO _refineDeorbitFootprint(solved,targetLat,targetLng,minLead,
                 stepAim["AIM"],MAX(0,stepAim["AIM"]-stepTolerance),
-                stepAim["AIM"]+stepTolerance,minRetroDv,maxRetroDv,1,1).
+                stepAim["AIM"]+stepTolerance,minRetroDv,maxRetroDv,stepReserve,1).
             SET solved["ERR"] TO solved["DOWNFIELD"]-desiredDownfield.
             IF stepAim["MODE"] = "secant" AND _deorbitEvaluations+4 <= TARGET_DEORBIT_MAX_EVALUATIONS
                     AND ABS(solved["UT"]-priorUT) < 0.001 AND ABS(solved["RETRO"]-priorRetro) < 0.001
@@ -457,7 +467,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 // A bounded extrapolation can miss a nonlinear branch.
                 // Fall back to the measured model goal, not a wider gate.
                 SET solved TO _refineDeorbitFootprint(solved,targetLat,targetLng,minLead,
-                    desiredDownfield,minDownfield,maxDownfield,minRetroDv,maxRetroDv,1,1).
+                    desiredDownfield,minDownfield,maxDownfield,minRetroDv,maxRetroDv,stepReserve,1).
             }
             IF ABS(solved["UT"]-priorUT) < 0.001 AND ABS(solved["RETRO"]-priorRetro) < 0.001
                     AND ABS(solved["NORMAL"]-priorNormal) < 0.001 {
@@ -465,6 +475,33 @@ GLOBAL FUNCTION targetedDeorbitAt {
                 BREAK.
             }
         }
+    }
+    // Frozen ballistic goals can stall even with many trials left. Reuse
+    // the bounded live-model refitter: its derivative includes the changing
+    // ignition gate and powered travel. Charge its full seven-forecast
+    // ceiling before entering it; no reset or increase of the search cap.
+    IF NOT poweredAccepted AND NOT ABORT AND _deorbitEvaluations+7 <= TARGET_DEORBIT_MAX_EVALUATIONS
+            AND (poweredReason = "insufficient-braking-lead" OR poweredReason = "excessive-braking-lead") {
+        SET _deorbitEvaluations TO _deorbitEvaluations+7.
+        mLogSummary("STATS deorbit direct-fit status=begin reservedForecasts=7 trials="
+            + _deorbitEvaluations + "/" + TARGET_DEORBIT_MAX_EVALUATIONS
+            + " previousStop=" + poweredStop + " residualM=" + ROUND(solved["ERR"],0)).
+        LOCAL directFit IS _targetDeorbitPoweredFallback(solved,targetLat,targetLng,minLead).
+        IF directFit["VALID"] {
+            SET solved TO directFit["SOLUTION"].
+            LOCAL directPolicy IS directFit["POLICY"].
+            SET desiredDownfield TO directPolicy["AIM"].
+            SET minDownfield TO directPolicy["MIN"].
+            SET maxDownfield TO directPolicy["MAX"].
+            IF directPolicy:HASKEY("DIAGNOSTIC") { SET lastPoweredDiagnostic TO directPolicy["DIAGNOSTIC"]. }
+            SET poweredAccepted TO TRUE.
+            SET poweredReason TO "accepted".
+        }
+        mLogSummary("STATS deorbit direct-fit accepted=" + poweredAccepted
+            + " residualM=" + ROUND(solved["ERR"],0) + " retro=" + solved["RETRO"]
+            + " normal=" + solved["NORMAL"] + " nodeUt=" + solved["UT"]
+            + " lastReason=" + directFit["LAST_REASON"]
+            + " lastResidualM=" + ROUND(directFit["LAST_ERR"],0)).
     }
     IF ABORT OR NOT poweredAccepted {
         IF ABORT { SET poweredStop TO "abort". }
@@ -695,6 +732,7 @@ GLOBAL FUNCTION landingDeorbitNodeAccepted {
     PARAMETER nd.
     PARAMETER targetLat.
     PARAMETER targetLng.
+    PARAMETER emitModelDiagnostic IS TRUE.
     SET _deorbitLastCheck TO LEXICON("VALID",FALSE).
     WAIT 0.5.
     IF ABORT OR NOT HASNODE { RETURN FALSE. }
@@ -705,14 +743,19 @@ GLOBAL FUNCTION landingDeorbitNodeAccepted {
     }
     LOCAL solved IS _readGeometricDeorbitNode(nd, targetLat, targetLng, leadPolicy["AIM"]).
     LOCAL reason IS _targetDeorbitRejection(solved, leadPolicy["MIN"], leadPolicy["MAX"]).
-    SET _deorbitLastCheck TO LEXICON("VALID",TRUE,"REASON",reason,"ERR",solved["ERR"]).
-    mLogSummary("STATS deorbit retained-node geometryReason=" + reason
+    SET _deorbitLastCheck TO LEXICON("VALID",TRUE,"REASON",reason,"ERR",solved["ERR"],
+        "SOLUTION",solved,"POLICY",leadPolicy).
+    LOCAL checkLevel IS "INFO".
+    IF emitModelDiagnostic { SET checkLevel TO "SUMMARY". }
+    mLog("STATS deorbit retained-node geometryReason=" + reason
         + " targetLat=" + targetLat + " targetLng=" + targetLng
         + " downfieldM=" + solved["DOWNFIELD"] + " crossM=" + solved["CROSS"]
         + " aimM=" + leadPolicy["AIM"] + " minM=" + leadPolicy["MIN"]
         + " maxM=" + leadPolicy["MAX"] + " residualM=" + solved["ERR"]
-        + " nodeUt=" + nd:TIME + " nodeDv=" + nd:DELTAV:MAG).
-    IF reason <> "accepted" AND leadPolicy:HASKEY("DIAGNOSTIC") { mLogSummary(leadPolicy["DIAGNOSTIC"]). }
+        + " nodeUt=" + nd:TIME + " nodeDv=" + nd:DELTAV:MAG,checkLevel).
+    IF emitModelDiagnostic AND reason <> "accepted" AND leadPolicy:HASKEY("DIAGNOSTIC") {
+        mLogSummary(leadPolicy["DIAGNOSTIC"]).
+    }
     IF reason <> "accepted" { RETURN FALSE. }
     RETURN _targetDeorbitTerrainAccepted(nd:TIME, targetLat, targetLng).
 }
@@ -725,7 +768,8 @@ GLOBAL FUNCTION landingDeorbitNodeReady {
     PARAMETER nd.
     PARAMETER targetLat.
     PARAMETER targetLng.
-    IF landingDeorbitNodeAccepted(nd,targetLat,targetLng) { RETURN TRUE. }
+    PARAMETER emitModelDiagnostic IS TRUE.
+    IF landingDeorbitNodeAccepted(nd,targetLat,targetLng,emitModelDiagnostic) { RETURN TRUE. }
     IF LANDING_POWERED_LEAD <= 0 { RETURN FALSE. }
     IF NOT _deorbitLastCheck["VALID"] { RETURN FALSE. }
     LOCAL reason IS _deorbitLastCheck["REASON"].
@@ -753,7 +797,7 @@ GLOBAL FUNCTION landingDeorbitNodeReady {
         IF ABS(probeDv) < 0.01 { BREAK. }
         SET nd:PROGRADE TO -probeRetro.
         SET checks TO checks+1.
-        SET admitted TO landingDeorbitNodeAccepted(nd,targetLat,targetLng).
+        SET admitted TO landingDeorbitNodeAccepted(nd,targetLat,targetLng,emitModelDiagnostic).
         IF admitted { BREAK. }
         IF ABORT OR NOT HASNODE OR SHIP:BODY <> originalBody OR NOT _deorbitLastCheck["VALID"] { BREAK. }
         SET reason TO _deorbitLastCheck["REASON"].
@@ -765,7 +809,7 @@ GLOBAL FUNCTION landingDeorbitNodeReady {
         IF ABS(trialRetro-baseRetro) < 0.001 { BREAK. }
         SET nd:PROGRADE TO -trialRetro.
         SET checks TO checks+1.
-        SET admitted TO landingDeorbitNodeAccepted(nd,targetLat,targetLng).
+        SET admitted TO landingDeorbitNodeAccepted(nd,targetLat,targetLng,emitModelDiagnostic).
         IF admitted { BREAK. }
         IF ABORT OR NOT HASNODE OR SHIP:BODY <> originalBody OR NOT _deorbitLastCheck["VALID"] { BREAK. }
         SET reason TO _deorbitLastCheck["REASON"].
@@ -788,6 +832,50 @@ GLOBAL FUNCTION landingDeorbitNodeReady {
     IF HASNODE { SET nd:PROGRADE TO originalPro. WAIT 0.5. }
     mLogWarn("STATS deorbit preburn-refit status=hold forecasts=" + checks + " originalNodeRestored=" + HASNODE).
     RETURN FALSE.
+}
+
+// Only the fresh orbital planner owns this temporary node. Never enter from
+// a retained/interrupted burn, descent, foreign node or a throttled craft.
+// The caller has already reserved the shared refitter's seven forecasts.
+LOCAL FUNCTION _targetDeorbitPoweredFallback {
+    PARAMETER solved.
+    PARAMETER targetLat.
+    PARAMETER targetLng.
+    PARAMETER minLead.
+    LOCAL result IS LEXICON("VALID",FALSE,"LAST_REASON","not-run","LAST_ERR",0).
+    IF ABORT OR HASNODE OR LANDING_POWERED_LEAD <= 0 OR NOT solved["VALID"]
+            OR NOT solved["HAS_IMPACT"] OR SHIP:STATUS <> "ORBITING" OR SHIP:PERIAPSIS <= 0
+            OR SHIP:THRUST > 0.001 OR SHIP:CONTROL:MAINTHROTTLE > 0
+            OR SHIP:CONTROL:PILOTMAINTHROTTLE > 0
+            OR solved["UT"] <= TIME:SECONDS+minLead
+            OR solved["RETRO"] < 2 OR solved["RETRO"] > 120
+            OR ABS(solved["NORMAL"]) > MAX(0,TARGET_DEORBIT_NORMAL_DV_CAP)
+            OR solved["DV"] > SHIP:DELTAV:VACUUM
+            OR stateGet("deorbit_burn_started","false") = "true"
+            OR (stateGet("burn_pending","false") = "true" AND stateGet("burn_started","false") = "true") {
+        RETURN result.
+    }
+    LOCAL planningBody IS SHIP:BODY.
+    LOCAL nd IS _planRetroNode(solved["UT"],solved["RETRO"],solved["NORMAL"]).
+    WAIT 0.5.
+    LOCAL admitted IS landingDeorbitNodeReady(nd,targetLat,targetLng,FALSE).
+    SET result["LAST_REASON"] TO "invalid-model".
+    IF _deorbitLastCheck["VALID"] {
+        SET result["LAST_REASON"] TO _deorbitLastCheck["REASON"].
+        SET result["LAST_ERR"] TO _deorbitLastCheck["ERR"].
+    }
+    IF admitted AND NOT ABORT AND HASNODE AND SHIP:BODY = planningBody
+            AND SHIP:STATUS = "ORBITING" AND SHIP:PERIAPSIS > 0
+            AND solved["UT"] > TIME:SECONDS+minLead
+            AND SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
+            AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0
+            AND landingLightNodeAllowed(nd,targetLat,targetLng) {
+        SET result["VALID"] TO TRUE.
+        SET result["SOLUTION"] TO _deorbitLastCheck["SOLUTION"].
+        SET result["POLICY"] TO _deorbitLastCheck["POLICY"].
+    }
+    IF HASNODE { REMOVE nd. }
+    RETURN result.
 }
 
 LOCAL FUNCTION _targetDeorbitTerrainAccepted {

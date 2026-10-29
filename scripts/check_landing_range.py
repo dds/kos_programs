@@ -276,9 +276,9 @@ def check_powered_refinement():
             aim=env['solved']['DOWNFIELD']+10000 if kind=='nonconverging' else 63610
             return solver.Lex(VALID=kind!='model-fails',REASON='fixture',AIM=aim,MIN=aim-1500,MAX=aim+1500)
         def refine(best,lat,lng,lead,aim,lo,hi,min_dv,max_dv,reserve,max_steps):
-            assert reserve==1 and max_steps==1 and lo<=aim<=hi
+            assert reserve in (1,8) and max_steps==1 and lo<=aim<=hi
             refinements.append(aim)
-            assert env['_deorbitEvaluations']+3<=63
+            assert env['_deorbitEvaluations']+3<=64-reserve
             env['_deorbitEvaluations']+=3
             result=dict(best)
             if kind!='no-progress' and not (kind=='secant-fallback' and len(refinements)==2):
@@ -352,11 +352,13 @@ def check_coupled_powered_refinement(start=30,contraction=.6):
                charge_forecast=lambda:setattr(counter,'value',counter.value+1))
     source=powered_source().replace('SET _deorbitEvaluations TO _deorbitEvaluations+1.',
                                      'charge_forecast().')
+    source=source.replace('SET _deorbitEvaluations TO _deorbitEvaluations+7.','fixture_charge_refit().')
     run(source,env)
     assert env['poweredAccepted'] and not nodes,forecasts
     if contraction:assert 1<len(forecasts)<=3
     assert abs(forecasts[-1][0]-forecasts[-1][1])<=1500
-    assert counter.value<=64 and counter.value==start+len(forecasts)+len(trials)
+    reserved=7 if 'directFit' in env else 0
+    assert counter.value<=64 and counter.value==start+len(forecasts)+len(trials)+reserved
     if start==59:assert counter.value==64 and len(forecasts)==2 and len(trials)==3
     assert env['targetLat']==44.593 and env['targetLng']==-24.926
     assert env['solved']['CROSS']<=500 and abs(env['solved']['NORMAL'])<=10
@@ -460,9 +462,11 @@ def check_logged_moving_lead(curvature):
             # legacy comparison, not the revised powered-seed stopping rule.
             env['_targetDeorbitRefineDone']=lambda solved,lo,hi:env['_targetDeorbitSolutionAccepted'](solved,lo,hi) and solved['CROSS']<=250
         source=powered_source().replace('SET _deorbitEvaluations TO _deorbitEvaluations+1.','charge_forecast().')
+        source=source.replace('SET _deorbitEvaluations TO _deorbitEvaluations+7.','fixture_charge_refit().')
         run(source,env)
         assert not nodes and count.value<=64
-        assert count.value==18+len(trials)+len(forecasts)
+        reserved=7 if 'directFit' in env else 0
+        assert count.value==18+len(trials)+len(forecasts)+reserved
         assert env['targetLat']==44.593 and env['targetLng']==-24.926
         outcomes.append((env['poweredAccepted'],count.value,env['solved']['ERR']))
         if not legacy:

@@ -404,6 +404,16 @@ adjustment. `STATS deorbit powered-fit` reports actual downfield distance,
 the fresh lead aim, residual, cross-track and trial count. A hold includes
 `stop=trial-budget` or `stop=no-improving-step` and the remaining error.
 
+If the ballistic refinement stalls while the powered miss remains large,
+the orbital planner reuses the pre-burn refitter to measure powered residual
+against retrograde delta-v directly. It keeps the burn epoch and normal
+component, permits at most seven fresh forecasts and reserves that allowance
+inside the same 64-trial cap. Far-from-target inner steps preserve those
+slots; near-root polishing retains its existing budget. The refitter still
+checks terrain, fuel, light, cross-track, timing and interrupted-burn state.
+`STATS deorbit direct-fit` reports the reservation, outcome and last error.
+Intermediate refit rows stay compact; the final full model is retained once.
+
 Refinement prefers a candidate that meets all acceptance limits over one
 that fails a limit, before comparing their optimization scores. This avoids
 rejecting a valid range correction merely because its small lateral error

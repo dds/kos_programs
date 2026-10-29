@@ -9,6 +9,28 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-29 boot018 at4918637 confirms hBias0/free13495, but differentrank1
+passseeds274m cross at21/64. Powered-21074,-13229,-18842; stalls48/64.
+Bias/scalarreplay insufficient for this trajectory. New orbitalfallback
+reuses existing landingDeorbitNodeReady (max7 realpowered forecasts), after
+reserving7 inside64. Far inner fits keep8slots(validation+direct7); nearroot
+unchanged. Fresh unflown idleorbital/no-node only; same epoch/normal, same
+2..120/+-10 bounds, deadlines and everyterrain/light/fuel/cross/abort guard.
+Probe removed on success/failure, foreign node untouched. Shared admission
+returnsSOLVED/POLICY metadata (keys SOLUTION/POLICY), no persistentpayload.
+Optional emitModelDiagnostic defaultsTRUE; planner passesFALSE so only final
+full snapshot logged; new direct-fit rows show reservation/lastreason/error.
+Synthetic flatballistic/finitepowered curve anchored29529/48370m holdsold48,
+passesnew55/64 forbothsigns; models/state/bounds/cleanup reject casespass.
+Native actualderivative stillunknown. All82routinecheckfiles pass106.58s.
+Compact admission usesINFO reserve (defaultpreburn
+SUMMARYunchanged), protectsfullfinalmodel/result/errorfrom7samples.
+Duna/Ike stillPAUSED.
+Read-only native:/tmp/ksp-deck-20261029T182343Z-fetch-smx0jl1v/logs/
+RO9_4854889/boot_018_core.log. MeasuredmodelEX2892.9618/3089.0947,fuel
+.171711/.225,drop.42125/0,M1.40845; prior345/290s were assumptions only.
+No remote controls/deployment/saveedits; no bootstrapupdate needed.
+
 2026-10-29 latest Mun boot017 at4918463 confirms free13826 vs7038bytes.
 Feasibility scoring fix alone insufficient: powered residual-687,-687,-682
 as downfield57570->58091 andAIM58257->58773, cross41..42. Horizontal gate

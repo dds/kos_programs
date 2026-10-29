@@ -84,6 +84,32 @@ def check_priority_reserve_and_verbosity():
     print('PASS: routine saturation cannot spend final/error space; critical rows still stop at unchanged hard reserve; explicit verbose detail is recorded, archive deferral remains effective, and low disk never overruns storage')
 
 
+def check_direct_refit_reserve():
+    from check_runtime_contracts import run
+    admission=function_body(DEORBIT,'landingDeorbitNodeAccepted')
+    policy=admission[admission.index('LOCAL checkLevel IS'):admission.index('    mLog("STATS deorbit retained-node')]
+    env,disk,_,_=fixture()
+    for full in (False,True):
+        scope=dict(emitModelDiagnostic=full)
+        run(policy,scope)
+        assert scope['checkLevel']==('SUMMARY' if full else 'INFO')
+    # Fill routine telemetry to its soft floor, then exercise seven direct
+    # samples. They cannot consume the protected final diagnosis allowance.
+    for index in range(80):env['mLog']('STATS routine '+str(index)+' '+('x'*300))
+    begin=len(disk)
+    scope=dict(emitModelDiagnostic=False)
+    run(policy,scope)
+    for index in range(7):env['mLog']('STATS deorbit retained-node '+('y'*350),scope['checkLevel'])
+    assert len(disk)==begin
+    env['mLogSummary']('STATS deorbit direct-fit accepted=False '+('z'*200))
+    env['mLogSummary']('STATS deorbit powered-lead '+('p'*1700))
+    env['mLog']('STATS deorbit result=hold '+('q'*250),'WARN')
+    env['mLog']('Landing deorbit failed; holding for review.','ERROR')
+    assert len(disk)==begin+4 and env['CORE'].VOLUME.FREESPACE>=1024
+    print('PASS: source admission keeps ordinary preburn diagnostics critical but compact planner refits informational; seven samples cannot spend the protected final result/model/error reserve')
+
+
 if __name__=='__main__':
     check_rank_and_forecast_budget()
     check_priority_reserve_and_verbosity()
+    check_direct_refit_reserve()

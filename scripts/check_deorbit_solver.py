@@ -31,12 +31,14 @@ class Counter:
 
 def environment(oracle, cap=10, budget=64):
     counter, trials = Counter(), []
-    env = dict(LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),TIME=NS(SECONDS=0), ABORT=False, SHIP=NS(DELTAV=NS(VACUUM=1000)),
+    env = dict(LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),TIME=NS(SECONDS=0), ABORT=False,
+               SHIP=NS(DELTAV=NS(VACUUM=1000),STATUS='UNKNOWN'),HASNODE=False,
                TARGET_DEORBIT_NORMAL_DV_CAP=cap, TARGET_DEORBIT_MAX_EVALUATIONS=budget,
                TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=0, LANDING_POWERED_LEAD=0,
                TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM=.25, DEORBIT_MIN_FPA=0,
                vesselLandingPrepareRoles=lambda:True,
                fixture_charge_forecast=lambda:setattr(counter,'value',counter.value+1),
+               fixture_charge_refit=lambda:setattr(counter,'value',counter.value+7),
                _deorbitEvaluations=counter, LIST=lambda *xs: KList(xs),
                SQRT=math.sqrt, fixture_wait=lambda _: None)
     for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)', SOURCE + LEAD):
@@ -471,6 +473,7 @@ def planner_prefix(env, period=1000, target_pass=0,target_lat=19,target_lng=129)
                           'IF refineSite {')
     source=source.replace('SET _deorbitEvaluations TO 0.','fixture_reset().')
     source=source.replace('SET _deorbitEvaluations TO _deorbitEvaluations+1.','fixture_charge_forecast().')
+    source=source.replace('SET _deorbitEvaluations TO _deorbitEvaluations+7.','fixture_charge_refit().')
     source=source.replace('REMOVE NEXTNODE.','fixture_remove().')
     source=source.replace('REMOVE probeNode.','fixture_remove_probe(probeNode).')
     return run(source,env)
@@ -747,8 +750,8 @@ def check_preburn_refit():
             if case=='fuel':result['DV']=2000
             return result
         env.update(landingDeorbitLeadPolicy=policy,_readGeometricDeorbitNode=geometry)
-        def actual_admission(nd,lat,lng):
-            scope=dict(env,nd=nd,targetLat=lat,targetLng=lng)
+        def actual_admission(nd,lat,lng,emit=True):
+            scope=dict(env,nd=nd,targetLat=lat,targetLng=lng,emitModelDiagnostic=emit)
             result=run(admission,scope)
             env['_deorbitLastCheck']=scope['_deorbitLastCheck']
             return result
