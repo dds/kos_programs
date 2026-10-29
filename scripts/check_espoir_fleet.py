@@ -10,6 +10,7 @@ from check_surface_return import read_settings
 SETUP = (ROOT/'lib/duna_ike_setup.ks').read_text()
 IMPACT = (ROOT/'lib/science_impact.ks').read_text()
 ENTRY = (ROOT/'lib/science_entry.ks').read_text()
+SURFACE = (ROOT/'lib/science_surface.ks').read_text()
 CONFIG = (ROOT/'lib/config.ks').read_text()
 
 
@@ -24,6 +25,13 @@ class Number(float):
     def __radd__(self, other):
         if isinstance(other, str): return Text(other+str(self))
         return float.__radd__(self, other)
+
+
+class Boolean:
+    def __init__(self, value): self.value = value
+    def ISTYPE(self, kind): return kind == 'Boolean'
+    def __bool__(self): return self.value
+    def __eq__(self, other): return self.value == bool(other)
 
 
 class Items(KList):
@@ -43,6 +51,7 @@ def native(value):
     if isinstance(value, dict): return Map({key:native(item) for key,item in value.items()})
     if isinstance(value, list): return Items(native(item) for item in value)
     if isinstance(value, str): return Text(value)
+    if isinstance(value, bool): return Boolean(value)
     if isinstance(value, (int, float)): return Number(value)
     return value
 
@@ -63,12 +72,13 @@ def run(source, name, env):
     code = re.sub(r'LOG (.*?) TO DI_PROFILE_PATH\.', r'capture_log(\1).', code)
     code = code.replace('REBOOT.', 'fixture_reboot().').replace('REMOVE nd.', 'remove_node(nd).')
     code = code.replace('BRAKES ON.', 'fixture_brakes().')
+    code = code.replace('SAS OFF.', 'SET SAS TO FALSE.')
     return execute(code, env)
 
 
 def check_profiles_and_dependencies():
     deps, phases, bands = dependency_tables((ROOT/'lib/dependencies.ks').read_text())
-    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_impactor','duna_impactor'):
+    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_impactor','duna_impactor','ike_lander'):
         cfg = profile(name)
         assert cfg['MISSION_ID'] == name and cfg['TARGET_'] == 'DUNA'
         assert cfg['MISSION_TYPE'] == 'interplanetary' and cfg['PARKING_ALT'] == 85000
@@ -100,12 +110,29 @@ def check_profiles_and_dependencies():
         if name == 'ike_impactor':
             assert legs[-1]['SEQUENCE'][-3:] == ['CAPTURE','SCIENCE_IMPACT','DONE']
             assert legs[-1]['SCIENCE_IMPACT_PE'] < 0
+        if name == 'ike_lander':
+            leg = legs[-1]
+            assert leg['SEQUENCE'][-5:] == ['CAPTURE','LAND_DEORBIT','LAND_ASSIST','SURFACE_SCIENCE','DONE']
+            assert leg['CAPTURE_PE'] == leg['TARGET_AP'] == 25000
+            assert leg['CAPTURE_RESERVE_DV'] == leg['BPLANE_CAPTURE_MARGIN'] == 650
+            assert leg['LANDING_RADIO_MODE'] == 'DIRECT' and leg['LANDING_REQUIRE_KERBIN'] == 1
+            assert leg['LANDING_KERBIN_MIN_ELEV'] == 15
+            assert leg['LANDING_LIGHT_MODE'] == 'SUNLIT' and leg['LANDING_SUN_MIN_ELEV'] >= 5
+            assert leg['LANDING_FLEXIBLE_SITE'] == leg['LANDING_ECONOMY_BRAKE'] == leg['LANDING_POWERED_LEAD'] == 1
+            assert leg['LANDING_USE_WAYPOINTS'] == 0 and leg['LANDING_SKIP_TARGET_SEARCH'] == 0
+            assert leg['LANDING_SITE_MAX_SLOPE'] == leg['LANDING_TERRAIN_MAX_SLOPE'] == 5
+            assert leg['LANDING_DIVERT_EMERGENCY_SLOPE'] == 15 and bool(leg['TERRAIN_VALIDATE'])
+            assert leg['LANDING_RETURN_DECOUPLER_TAG'] == leg['LANDING_RELEASE_DECOUPLER_TAG'] == ''
+            assert leg['LANDING_STAGE_DISCARD_HSPEED'] == 0
+            assert leg['SCIENCE_SURFACE_DWELL'] == 600
+            assert leg['RELOAD_AFTER_LAND_ASSIST'] == leg['RELOAD_AFTER_LAND'] == 0
+            assert not {'PRELAUNCH','LAUNCH','ESCAPE','RETURN_SETUP','SURFACE_RETURN_SETUP','SCIENCE_IMPACT'} & set(leg['SEQUENCE'])
     assert bands['science_impact'] == ['science_impact']
     assert {'science_flight','science_entry','maneuver_plan','thrust_cutoff'} <= closure(['science_impact'],deps)
     assert 'science_impact' not in closure(['science_entry'],deps)
     bindings = function_body((ROOT/'lib/dependencies.ks').read_text(), 'dependencyBindPhase')
     assert 'phaseScienceImpact@' in bindings
-    print('PASS: four distinct launch profiles and generated Ike legs resolve; polar mappers retain hardware, impacts have no accidental flyby/return or atmospheric-capture route')
+    print('PASS: five distinct profiles/operations legs resolve; polar mappers retain hardware, impacts stay expendable, one-way Ike lander retains terrain/radio/fuel safeguards and surface science')
 
 
 def setup_fixture(name='ike_orbital_surveyor'):
@@ -137,7 +164,7 @@ def setup_fixture(name='ike_orbital_surveyor'):
 
 
 def check_ike_handoff_roundtrip_and_legacy():
-    for name in ('ike_orbital_surveyor','ike_impactor'):
+    for name in ('ike_orbital_surveyor','ike_impactor','ike_lander'):
         env,saved,events,output = setup_fixture(name)
         run(SETUP,'phaseIkeSetup',env)
         assert saved['target'] == 'IKE' and saved['phase'] == 'XING'
@@ -292,9 +319,130 @@ def check_airless_resident_science_and_guards():
     print('PASS: resident impact phase samples at1x near terrain, owns KAC before distant solar waits, cleans alarms on Abort, advances only on survived surface, and holds on foreign nodes/burns, invalid body/config or missed impact')
 
 
+def check_lander_provider_and_radio_policy():
+    cfg = profile('ike_lander')['IKE_MISSION_SETTINGS']
+    policy = (ROOT/'lib/mission_type.ks').read_text()
+    deps,phases,bands = dependency_tables((ROOT/'lib/dependencies.ks').read_text())
+    assert bands['surface_science'] == ['surface_science']
+    assert closure(['science_surface'],deps) == {'science_surface','science_flight','thrust_cutoff'}
+    for wanted in (False,True):
+        seq = Items(['LAND_ASSIST','SURFACE_SCIENCE','DONE'] if wanted else ['LAND_ASSIST','DONE'])
+        roots = execute(function_body(policy,'missionTypeConditionalRoots'),
+                        dict(bandKey='LANDING',SEQUENCE=seq,LIST=lambda *xs:Items(xs)))
+        loaded = closure(roots+phases['land_assist'],deps)
+        assert {'landing_coast','landing_brake'} <= loaded
+        assert ('science_surface' in loaded) == wanted
+        assert not {'return_setup','return_escape','maneuver_intersystem'} & loaded
+    roots = execute(function_body(policy,'missionTypeConditionalRoots'),
+                    dict(bandKey='LAND_DEORBIT',LIST=lambda *xs:Items(xs),
+                         LANDING_AUTO_TARGET=cfg['LANDING_AUTO_TARGET'],
+                         LANDING_REQUIRE_SITE=cfg['LANDING_REQUIRE_SITE'],
+                         LANDING_SITE_SCAN_ENABLE=cfg['LANDING_SITE_SCAN_ENABLE']))
+    assert {'landing_light_wait','landing_site'} <= set(roots)
+    assert 'landing_light_search' in closure(roots,deps)
+    radio=(ROOT/'lib/landing_radio.ks').read_text()
+    assert execute(function_body(radio,'landingRequireKerbin'),dict(cfg)) == 1
+    print('PASS: Ike explicitly requires direct Kerbin visibility; landing gets live light-window waits, both descent tracks and the small surface-science provider without return code or new cache admission')
+
+
+def surface_fixture(saved=None):
+    saved = {} if saved is None else saved
+    primary=NS(NAME='IKE')
+    ship=NS(BODY=primary,STATUS='LANDED',VERTICALSPEED=0,GROUNDSPEED=0,THRUST=0,
+            CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0))
+    events=[]
+    env=dict(SHIP=ship,TIME=NS(SECONDS=100),ABORT=False,WARP=0,SAS=True,
+             SCIENCE_SURFACE_DWELL=10,SCIENCE_SURFACE_MIN_EC=.05,
+             missionTargetBody=lambda:primary,thrustCutoffOk=lambda:events.append('cutoff') or True,
+             stateGet=lambda key,default='':saved.get(key,default),
+             stateGetNum=lambda key,default=0:saved.get(key,default),
+             stateSet=lambda key,value:saved.__setitem__(key,value),
+             flightStamp=lambda:Text('123'),
+             fixture_settled=lambda:None,fixture_unlock=lambda:events.append('unlock'),
+             fixture_brakes=lambda:events.append('brakes'),
+             kacEnsureAlarm=lambda *args:events.append(('alarm',args[1])) or 'surface-alarm',
+             DELETEALARM=lambda alarm:events.append(('delete',alarm)),
+             scienceFlightPulse=lambda context,can:events.append(('sample',context,can)),
+             HOMECONNECTION=NS(ISCONNECTED=True),shipPowerFraction=lambda:1,
+             nextPhase=lambda *_:events.append('advance'),launchSeq=Items(['SURFACE_SCIENCE','DONE']),
+             yieldToPrompt=lambda:events.append('held'))
+    env['fixture_wait']=lambda delay:setattr(env['TIME'],'SECONDS',env['TIME'].SECONDS+delay)
+    return env,saved,events
+
+
+def surface_run(env):
+    # Adapt native implicit number-to-string coercion only, as in entry tests.
+    source=SURFACE.replace('stateGetNum("launch_time",0)','flightStamp()')
+    return run(source,'phaseSurfaceScience',env)
+
+
+def check_surface_session_and_reboot():
+    for case in ('session','no-kac','no-link','low-power','abort','takeoff','body-change','reboot','full-dwell'):
+        env,saved,events=surface_fixture()
+        if case=='no-kac':env['kacEnsureAlarm']=lambda *_:''
+        if case=='no-link':env['HOMECONNECTION'].ISCONNECTED=False
+        if case=='low-power':env['shipPowerFraction']=lambda:0
+        if case=='full-dwell':env['SCIENCE_SURFACE_DWELL']=600
+        if case in ('abort','takeoff','body-change','reboot'):
+            def wait(delay):
+                env['TIME'].SECONDS+=delay
+                if env['TIME'].SECONDS>=103:
+                    if case in ('abort','reboot'):env['ABORT']=True
+                    if case=='takeoff':env['SHIP'].STATUS='FLYING'
+                    if case=='body-change':env['SHIP'].BODY=NS(NAME='DUNA')
+            env['fixture_wait']=wait
+        surface_run(env)
+        samples=[e for e in events if isinstance(e,tuple) and e[0]=='sample']
+        assert samples and env['WARP']==0 and env['SAS'] is False
+        assert all(row[2] == (case!='low-power') for row in samples)
+        if case=='no-kac':assert env['TIME'].SECONDS==110
+        else:
+            assert ('delete','surface-alarm') in events
+            assert events.index(('alarm',saved['surface_science_deadline'])) < events.index(samples[0])
+        if case in ('abort','reboot','takeoff','body-change'):
+            assert 'advance' not in events
+            assert ('held' in events) == (case in ('takeoff','body-change'))
+        else:
+            assert 'advance' in events
+            assert env['TIME'].SECONDS == (700 if case=='full-dwell' else 110)
+        if case=='reboot':
+            end=saved['surface_science_deadline']
+            fresh,_,new_events=surface_fixture(saved)
+            fresh['TIME'].SECONDS=105
+            surface_run(fresh)
+            assert saved['surface_science_deadline']==end==110
+            assert len([e for e in new_events if isinstance(e,tuple) and e[0]=='sample'])==5
+            assert 'advance' in new_events
+    print('PASS: settled surface session owns its review alarm before sampling, runs at1x without solar turns, keeps deadline across reboot, handles no KAC/link/power and stops safely on Abort or loss of touchdown')
+
+
+def check_surface_guards():
+    for fault in ('abort','body','airborne','vs','hs','thrust','raw','pilot','dwell','ec','cutoff','deadline'):
+        env,saved,events=surface_fixture()
+        if fault=='abort':env['ABORT']=True
+        if fault=='body':env['missionTargetBody']=lambda:NS(NAME='DUNA')
+        if fault=='airborne':env['SHIP'].STATUS='SUB_ORBITAL'
+        if fault=='vs':env['SHIP'].VERTICALSPEED=-1
+        if fault=='hs':env['SHIP'].GROUNDSPEED=1
+        if fault=='thrust':env['SHIP'].THRUST=.1
+        if fault=='raw':env['SHIP'].CONTROL.MAINTHROTTLE=.1
+        if fault=='pilot':env['SHIP'].CONTROL.PILOTMAINTHROTTLE=.1
+        if fault=='dwell':env['SCIENCE_SURFACE_DWELL']=float('nan')
+        if fault=='ec':env['SCIENCE_SURFACE_MIN_EC']=1
+        if fault=='cutoff':env['thrustCutoffOk']=lambda:False
+        if fault=='deadline':saved.update(surface_science_id=':IKE:LANDED:123',surface_science_deadline=float('nan'))
+        surface_run(env)
+        assert not any(isinstance(e,tuple) and e[0] in ('sample','alarm') for e in events),fault
+        assert 'advance' not in events
+    print('PASS: surface science refuses unsafe motion/body/controls, invalid settings/deadline or failed cutoff before any experiments or alarms')
+
+
 if __name__ == '__main__':
     check_profiles_and_dependencies()
     check_ike_handoff_roundtrip_and_legacy()
     check_ike_handoff_guards()
     check_airless_deorbit_admission()
     check_airless_resident_science_and_guards()
+    check_lander_provider_and_radio_policy()
+    check_surface_session_and_reboot()
+    check_surface_guards()

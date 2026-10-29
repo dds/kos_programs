@@ -23,7 +23,19 @@ No second burn for a flown impact course; no destruction/delivery/soft-landing
 claim. All83routinechecks pass105.30s. Source fixtures include real recursive
 serialization/fresh boots, legacy behavior, unsafe-state refusal, native-node
 admission and alarm cleanup. No game changes/deployment/bootstrap rebuild.
-Next fleet variant is an Ike soft lander, not implemented by an impact profile.
+Follow-up ike_lander profile adds a one-way soft landing via25km circular
+Ike capture with650m/s reserve. Flexible sunlit/DIRECT Kerbin>=15deg selection,
+resident light-window wait, shared powered-lead/economy/terrain checks,
+5deg normal/15deg emergency slope, no RO9 role tags, proactive disposal or
+return leg. SURFACE_SCIENCE is a separate small band using typed science_flight
+after settled touchdown and verified cutoff,600s persistent review deadline /
+KAC alarm at1x, no landed solar turn. Its provider is retained conditionally in
+LANDING for offline touchdown handoff. DONE stops landed for manual review.
+No orbital science phase consumes fresh one-shot units first. Data may remain
+after the bounded session if the link/power was unavailable; queue submission
+still is not receipt. Real-source handoff/retention/radio/surface/Abort/reboot
+fixtures pass; all83routinecheckfiles pass114.90s. Native compilation/storage/
+flight pending. No game controls/deployment/bootstrap change.
 Hardware/native flight and existing Duna arrival/cache/controlled-entry work
 remain open; the parked nonpassing arrival patch was NOT merged. Current flight
 science deploys every available module, not one unused Goo/Jr per context.

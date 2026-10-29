@@ -44,6 +44,9 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
         // reboot; descent must never compile/fetch its next braking state.
         roots:ADD("landing_coast").
         roots:ADD("landing_brake").
+        // Small landed science provider survives touchdown with no archive
+        // link. Other landing missions do not pay for this optional phase.
+        IF SEQUENCE:CONTAINS("SURFACE_SCIENCE") { roots:ADD("science_surface"). }
         IF SEQUENCE:CONTAINS("SURFACE_RETURN_SETUP")
                 AND NOT SEQUENCE:CONTAINS("HOP_ROUTE_SETUP")
                 AND NOT SEQUENCE:CONTAINS("HOP_AUTO_REVIEW") { roots:ADD("return_setup"). }

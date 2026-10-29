@@ -6,6 +6,23 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Espoir Ike soft lander requested29Oct: ike_lander profile and local
+  ike_lander_ops handoff added,25km circular capture with650m/s post-capture
+  floor, natural plane, flexible sunlit/DIRECT Kerbin>=15deg site. Shared
+  powered-lead/economy/terrain checks; normal5deg, existing emergency15deg;
+  no RO9 tags, proactive stage disposal, relaunch or return. SURFACE_SCIENCE
+  owns a600s persistent deadline/KAC review alarm, typed collection/transmit
+  at1x after verified settled touchdown/cutoff, no landed solar steering.
+  Small science_surface/science_flight/cutoff closure retained only in LANDING
+  missions that use the phase, so touchdown handoff can load offline. DONE
+  stops landed for manual review. Session is bounded even without radio;
+  queue submission is not R&D confirmation, retained data may need later
+  transmission. Physical payload/science selection remains operator-owned.
+  Source checks cover fresh-boot handoff settings, conditional retention,
+  DIRECT radio,600s session/no-KAC/low-power/no-link/Abort/motion/config and
+  resumed deadline; all83routinecheckfiles pass114.90s. Native compilation,
+  storage and flight remain pending. No game controls/deployment.
+
 - Espoir fleet profiles requested29Oct: Duna and Ike polar SCANsat surveyors,
   separate Duna and Ike science impactors now have source profiles. Optional
   IKE_MISSION_SETTINGS extends the existing handoff, serializing the new local
@@ -14,7 +31,7 @@ record remaining uncertainty before closing a task.
   negative-Pe deorbit, cutoff, resident science, KAC/solar checkpoints and1x
   near terrain. Shared entry context/wait helpers exported without changing
   atmospheric behavior. No mission selection, game controls or deployment.
-  Recommend an Ike soft lander as the next distinct variant:
+  Follow-up ike_lander now supplies the separate soft-landing variant;
   impact cannot collect a planned landed-biome observation. Hardware, native
   arrival/refinement, power/radio and flight validation remain outstanding.
   This resumes the profile work, not the parked nonpassing arrival WIP.

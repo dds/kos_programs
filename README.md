@@ -1066,6 +1066,7 @@ the actual departure window, thrust and hardware still determine affordability.
 | `ike_orbital_surveyor` | High Duna capture, Ike transfer,150km polar mapping orbit |1500 /800m/s |
 | `ike_impactor` | High Duna capture, Ike capture, science during deliberate impact |1500 /800m/s |
 | `duna_impactor` | Direct Duna atmospheric science and impact attempt |1500 /400m/s |
+| `ike_lander` | High Duna capture,25km Ike parking, flexible soft landing and surface science |1500 /1300m/s |
 
 Both surveyors retain the CPU, propulsion and scanners as one spacecraft. No
 `scansat_decoupler` is required, and neither automatically deorbits after mapping.
@@ -1100,15 +1101,42 @@ unfinished work; the400m/s allowance does not enable that controller by itself.
 The older `duna_science_impact` profile remains available with incidental Ike
 flyby sampling, subject to its safe subsequent Duna-entry check.
 
-The next additional profile should be an **Ike soft lander**: the impactor cannot
-replace the earlier plan to touch down and transmit landed-biome science. There
-is no new relay variant while the fleet lacks a suitable interplanetary relay.
-Landing science selection remains with the operator. The current flight sampler
+`ike_lander` is the **one-way soft lander** for the earlier touchdown-and-transmit
+plan. Its generated `ike_lander_ops` leg captures directly into25km parking,
+leaving at least650m/s before deorbit planning. The flexible ground-track search
+requires sunlight and a direct Kerbin elevation of at least15degrees; no relay
+coverage is assumed. If the geometry is unsuitable it retains orbit in the
+existing resident solar/KAC wait, then searches again. Elevation is a geometric
+policy, not proof of antenna range, terrain clearance to Kerbin or an unblocked
+route past Duna. Provide each probe with its own suitable direct antenna array.
+
+Landing reuses the powered-lead model, economy braking and terrain checks.
+Normal site slope is5degrees; the existing15degree emergency diversion is
+allowed only after normal search fails. SCANsat site refinement is opportunistic;
+the lander need not carry a scanner. No return stage or RO9 role tags are assumed,
+and proactive fueled-stage disposal is disabled. Retain the CPU, power, antennas,
+landing engine and legs together, with Ike surface TWR preferably around2 or more.
+Capture's650m/s reserve is a planning floor, not a measured landing guarantee.
+
+After settled touchdown, `SURFACE_SCIENCE` brakes and holds attitude idle while
+the existing typed science sampler gathers and requests transmission for600s
+at1x. A KAC review alarm and persistent deadline survive a reboot; no KAC or
+home link is required to keep the clock running. It never turns the grounded
+probe for solar or launches it. The small surface provider is retained in the
+LANDING band for the post-touchdown handoff without an archive link. At the end
+it advances to landed DONE/manual review; check the R&D ledger and retained data
+because queue submission is not confirmation of receipt. A lost link does not
+extend the ten-minute session automatically; retained data may need a later
+operator transmission attempt. No ascent or Kerbin return is scheduled.
+
+There is no new relay variant while the fleet lacks a suitable interplanetary
+relay. Landing science selection remains with the operator. The current flight sampler
 attempts every available typed science module; it does not reserve duplicate
 Goo/Science Jr units for later contexts. Instrument scheduling is still open.
 
 Source/control-flow checks cover the two-leg settings, fresh boots, legacy
-compatibility, deorbit ownership/fuel/cutoff and resident science/KAC waits.
+compatibility, deorbit ownership/fuel/cutoff, landing-provider retention and
+resident impact/surface science/KAC waits.
 Native compilation, storage fit, arrival/refinement and flight validation remain
 pending, including the existing in-flight cache-prefetch and Duna arrival work.
 No mandatory blackout/cache gate is introduced. No bootstrap rebuild is needed.
