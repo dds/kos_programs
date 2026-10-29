@@ -6,6 +6,19 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Duna/Ike arrival review (29Oct): the900s final BPLANE retry is a fixed
+  configurable pre-SOI wake, not a geometry/execution-time prediction.
+  _bplaneCoastEncounter explicitly excludes atmospheric targets; therefore
+  _bplaneRetryEncounter, minimum-correction arrival acceptance and the final
+  retry do not currently generalize to Duna. Do not just remove that guard:
+  distinguish intended atmospheric entry from orbital capture, retain parent
+  coast/plane/fuel/Abort/node ownership checks, and validate the actual future
+  atmospheric crossing. Add bounded, persistent approach checkpoints using
+  solve/alignment/burn time and sensitivity; remeasure after SOI changes and
+  any Ike encounter. Espoir currently samples only incidental native Ike
+  encounters with a subsequent Duna entry; active Ike targeting remains open.
+  These are identified readiness gaps, not implemented/flight-verified fixes.
+
 - Urgent entry follow-up (29Oct): RO9_4880796 boot026 holds42.617s before
   atmospheric interface despite Pe53km/Ap94.7km. Previous reentryresume was
   deliberately outside-only; do not relax its native-goal/cutoff acceptance
