@@ -26,6 +26,7 @@ LOCAL FUNCTION _cmdLandlight {
     // reboot. Load explicitly after the existing landing config/math deps.
     bootLibLoad("landing_light_math").
     bootLibLoad("landing_light").
+    bootLibLoad("landing_light_search").
     bootLibLoad("landing_light_wait").
     LOCAL profilePath IS "1:/missions/" + stateGet("vehicle", "")
         + "/" + stateGet("mission_id", "") + ".ks".

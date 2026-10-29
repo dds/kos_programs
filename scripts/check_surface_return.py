@@ -427,8 +427,12 @@ def check_minmus_landing_recovery():
     assert 'missionOverrideUpdate(' in overrides and 'missionOverrideClear(' not in overrides
     dependencies = (ROOT / 'lib/dependencies.ks').read_text()
     deps,_,_=dependency_tables(dependencies)
+    from check_runtime_contracts import KList, run
+    roots = run(body((ROOT/'lib/mission_type.ks').read_text(), 'missionTypeConditionalRoots'),
+                dict(cfg, bandKey='LAND_DEORBIT', SEQUENCE=KList(cfg['SEQUENCE']),
+                     LIST=lambda *xs:KList(xs)))
     assert {'landing_config','landing_math','landing_site','landing_light',
-            'landing_light_wait','coast_wait','solar'}<=closure(['landing_deorbit'],deps)
+            'landing_light_wait','landing_light_search','coast_wait','solar'}<=closure(['landing_deorbit']+roots,deps)
     targeting = body((ROOT / 'lib/deorbit_targeting.ks').read_text(), 'targetedDeorbitAt')
     assert 'PARAMETER refineSite IS TRUE.' in targeting
     assert 'IF refineSite AND DEFINED BOOT_LIB_RAN' in targeting

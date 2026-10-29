@@ -6,7 +6,7 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- Current priority: Mun deorbit near-root rejection AND selective disk logs.
+- Current priority: Mun deorbit near-root rejection AND onboard storage.
   User explicitly paused Duna/Ike on29Oct. Its uncommitted work is preserved
   separately at /tmp/kos-duna-ike-paused-20261029-1fk3rmgq (tracked.patch,
   files/, manifest.json); those edits are removed from the active checkout.
@@ -25,7 +25,26 @@ record remaining uncertainty before closing a task.
   console-only/explicit verbose. INFO stops at4096 free; final SUMMARY/WARN/
   ERROR/PHASE can use room down to unchanged1024-byte hard state reserve.
   Source disk replay retains final model/reason within the reported budget.
-  All79routinecheckfiles pass105.58s; native retry pending. No remote controls, log deletions or save edits.
+  Follow-up native boot015 captured the final forecast successfully, then
+  held at down44146/aim44648m (residual-502 vs500 tolerance), cross30m,
+  trial63/64. The raw merit charged lateral error inside its allowed band,
+  rejecting fully admissible range corrections with slightly higher cross.
+  Feasible candidates now outrank infeasible ones before raw cost; source
+  regression reproduces old hold and accepts~54m cross after fresh forecast
+  at63/64. Limits and target unchanged; native improvement still pending.
+  Storage: cleanup8428->8510 removed82bytes because all declared providers
+  were needed by its unconditional closure. Split landing_light_search
+  from runtime validation. LAND_DEORBIT conditionally loads wait/search only
+  for AUTO_TARGET and SCANsat picker for ENABLE/REQUIRE_SITE; fixed target
+  retains offline admission/forecast/staging/light/radio/cutoff providers.
+  Existing compiled wait3633 +picker1667 =5300bytes, plus search split;
+  exact new compiled fit/savings pending. Loader flags owned by core
+  mission_type, terrain scalar defaults by landing_config, so profile values
+  survive optional loads. Required-site still holds when no site found.
+  Source tests execute actual profile flags, planner/cleanup closure and
+  fixed target path without optional symbols. All80routinecheckfiles pass
+  105.15s; native compiled storage/flight retry remain pending.
+  No remote controls, log deletions, code deployment or save edits.
 
 - Duna/Ike arrival review (29Oct): the900s final BPLANE retry is a fixed
   configurable pre-SOI wake, not a geometry/execution-time prediction.

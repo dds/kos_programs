@@ -404,6 +404,22 @@ adjustment. `STATS deorbit powered-fit` reports actual downfield distance,
 the fresh lead aim, residual, cross-track and trial count. A hold includes
 `stop=trial-budget` or `stop=no-improving-step` and the remaining error.
 
+Refinement prefers a candidate that meets all acceptance limits over one
+that fails a limit, before comparing their optimization scores. This avoids
+rejecting a valid range correction merely because its small lateral error
+increases. The 500 m powered tolerance, cross-track, terrain, fuel and normal
+limits remain unchanged; every changed node still needs a fresh powered
+forecast. A stalled near-root fit records `STATS deorbit local-fit` with its
+rejection reason and scores.
+
+LAND_DEORBIT loads automatic ground-track search/wait code only when
+`LANDING_AUTO_TARGET` is enabled, and the optional SCANsat site picker only
+when `LANDING_SITE_SCAN_ENABLE` or `LANDING_REQUIRE_SITE` is enabled. Fixed
+sites retain the runtime Sun/radio checks, powered forecast, staging and burn
+admission code onboard. A connected reboot lets normal cleanup release the
+unused libraries; no installed bootstrap update is needed. Exact compiled
+space savings require a game boot. This adds no radio/cache admission gate.
+
 For an already-deorbited craft that may land off-target, interrupt automation,
 cut throttle fully, then run `RUNPATH("0:/cmd/landfallback.ks").` and reboot
 while linked. This permits the existing checked local-site diversion and

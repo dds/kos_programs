@@ -289,7 +289,7 @@ def check_coupled_correction():
     assert 'FOR mode IN LIST("TIME", "NORMAL")' in corrector
     assert 'FOR fraction IN LIST(1, 0.5, 0.25)' in corrector
     assert 'best["SIGNED_CROSS"]' in corrector
-    assert '_targetDeorbitMerit(trial,' in corrector
+    assert '_targetDeorbitImproves(trial,' in corrector
     planner = body(PLAN, 'targetedDeorbitAt')
     assert 'LOCAL bestRetroDv IS solved["RETRO"].' in planner
     assert 'LOCAL bestNormalDv IS solved["NORMAL"].' in planner

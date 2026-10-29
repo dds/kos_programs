@@ -1153,6 +1153,21 @@ LOCAL FUNCTION _targetDeorbitMerit {
     RETURN outsideBand ^ 2 + solved["CROSS"] ^ 2.
 }
 
+// Feasibility precedes the preference for a smaller cross-track distance.
+// Otherwise a 2m range-band violation can beat a valid point merely because
+// the valid point's already-small lateral error grew by a few metres.
+LOCAL FUNCTION _targetDeorbitImproves {
+    PARAMETER candidate.
+    PARAMETER best.
+    PARAMETER minDownfield.
+    PARAMETER maxDownfield.
+    LOCAL candidateOk IS _targetDeorbitSolutionAccepted(candidate,minDownfield,maxDownfield).
+    LOCAL bestOk IS _targetDeorbitSolutionAccepted(best,minDownfield,maxDownfield).
+    IF candidateOk <> bestOk { RETURN candidateOk. }
+    RETURN _targetDeorbitMerit(candidate,minDownfield,maxDownfield)
+        < _targetDeorbitMerit(best,minDownfield,maxDownfield).
+}
+
 LOCAL FUNCTION _targetDeorbitCorrection {
     PARAMETER alongError.
     PARAMETER crossError.
@@ -1274,23 +1289,34 @@ LOCAL FUNCTION _targetDeorbitPolishAlongTrack {
     LOCAL probe IS _evalGeometricDeorbitNode(best["UT"],best["RETRO"]+probeDv,
         targetLat,targetLng,minLead,desiredDownfield,best["NORMAL"]).
     LOCAL correction IS _targetDeorbitRetroCorrection(best,probe,probeDv,minDownfield,maxDownfield).
-    IF NOT correction["VALID"] { RETURN best. }
+    IF NOT correction["VALID"] {
+        mLogSummary("STATS deorbit local-fit result=no-response baseErr=" + best["ERR"]
+            + " cross=" + best["CROSS"] + " probeValid=" + probe["VALID"]
+            + " evaluations=" + _deorbitEvaluations).
+        RETURN best.
+    }
+    LOCAL lastReason IS "no-trial-budget".
+    LOCAL lastMerit IS -1.
     LOCAL stepDv IS MAX(minDv-best["RETRO"],MIN(maxDv-best["RETRO"],
         MAX(-1,MIN(1,correction["RETRO"])))).
     FOR fraction IN LIST(1,0.5,0.25) {
         IF ABORT OR _deorbitEvaluations >= trialLimit { BREAK. }
         LOCAL trial IS _evalGeometricDeorbitNode(best["UT"],best["RETRO"]+stepDv*fraction,
             targetLat,targetLng,minLead,desiredDownfield,best["NORMAL"]).
+        SET lastReason TO _targetDeorbitRejection(trial,minDownfield,maxDownfield).
+        SET lastMerit TO _targetDeorbitMerit(trial,minDownfield,maxDownfield).
         IF trial["VALID"] AND trial["HAS_IMPACT"]
                 AND trial["CROSS"] <= _targetDeorbitCrossAuthority(trial)
-                AND _targetDeorbitMerit(trial,minDownfield,maxDownfield)
-                    < _targetDeorbitMerit(best,minDownfield,maxDownfield) {
+                AND _targetDeorbitImproves(trial,best,minDownfield,maxDownfield) {
             mLogDetail("STATS deorbit local-polish retroDelta=" + stepDv*fraction
                 + " residualM=" + trial["ERR"] + " crossM=" + trial["CROSS"]
                 + " evaluations=" + _deorbitEvaluations).
             RETURN trial.
         }
     }
+    mLogSummary("STATS deorbit local-fit result=stalled baseErr=" + best["ERR"]
+        + " cross=" + best["CROSS"] + " baseMerit=" + _targetDeorbitMerit(best,minDownfield,maxDownfield)
+        + " lastMerit=" + lastMerit + " lastReason=" + lastReason + " evaluations=" + _deorbitEvaluations).
     RETURN best.
 }
 
@@ -1407,8 +1433,7 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                         LOCAL trial IS _evalGeometricDeorbitNode(trialUT,
                             best["RETRO"] + deltaRetro * scale * fraction,
                             targetLat, targetLng, minLead, desiredDownfield, trialNormal).
-                        IF _targetDeorbitMerit(trial, minDownfield, maxDownfield)
-                                < _targetDeorbitMerit(best, minDownfield, maxDownfield)
+                        IF _targetDeorbitImproves(trial,best,minDownfield,maxDownfield)
                                 AND (stepMethod <> "retro-only" OR trial["CROSS"] <= _targetDeorbitCrossAuthority(trial)) {
                             SET best TO trial.
                             SET improved TO TRUE.
@@ -1427,8 +1452,7 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                                 IF ABORT OR _deorbitEvaluations >= trialLimit { BREAK. }
                                 LOCAL trial IS _evalGeometricDeorbitNode(best["UT"],best["RETRO"],
                                     targetLat,targetLng,minLead,desiredDownfield,best["NORMAL"]+normalStep*fraction).
-                                IF _targetDeorbitMerit(trial,minDownfield,maxDownfield)
-                                        < _targetDeorbitMerit(best,minDownfield,maxDownfield) {
+                                IF _targetDeorbitImproves(trial,best,minDownfield,maxDownfield) {
                                     SET best TO trial.
                                     SET improved TO TRUE.
                                     BREAK.
@@ -1449,8 +1473,7 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                                 targetLat,targetLng,minLead,desiredDownfield,best["NORMAL"]).
                             IF trial["VALID"] AND trial["HAS_IMPACT"]
                                     AND trial["CROSS"] <= _targetDeorbitCrossAuthority(trial)
-                                    AND _targetDeorbitMerit(trial,minDownfield,maxDownfield)
-                                        < _targetDeorbitMerit(best,minDownfield,maxDownfield) {
+                                    AND _targetDeorbitImproves(trial,best,minDownfield,maxDownfield) {
                                 SET best TO trial.
                                 SET improved TO TRUE.
                                 BREAK.

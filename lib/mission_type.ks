@@ -13,6 +13,10 @@ GLOBAL MISSION_TYPE IS "".
 GLOBAL TARGET_ IS "".
 GLOBAL RENDEZVOUS_TARGET IS "".
 GLOBAL ASTEROID_TARGET IS "".
+// Loader decisions happen before optional landing libraries execute.
+GLOBAL LANDING_AUTO_TARGET IS 0.
+GLOBAL LANDING_REQUIRE_SITE IS 0.
+GLOBAL LANDING_SITE_SCAN_ENABLE IS 0.
 
 // Detect mission type from effective globals plus runtime state.
 // Returns "kerbin_moon", "kerbin_return", or "interplanetary".
@@ -31,6 +35,10 @@ GLOBAL FUNCTION missionTypeDetect {
 GLOBAL FUNCTION missionTypeConditionalRoots {
     PARAMETER bandKey.
     LOCAL roots IS LIST().
+    IF bandKey = "LAND_DEORBIT" {
+        IF LANDING_AUTO_TARGET > 0 { roots:ADD("landing_light_wait"). }
+        IF LANDING_SITE_SCAN_ENABLE > 0 OR LANDING_REQUIRE_SITE > 0 { roots:ADD("landing_site"). }
+    }
     IF bandKey = "LANDING" {
         // Both dynamic tracks must survive connected cleanup and an offline
         // reboot; descent must never compile/fetch its next braking state.

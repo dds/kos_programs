@@ -1,11 +1,9 @@
 // --- Config defaults owned by this file ---
 GLOBAL LANDING_SKIP_TARGET_SEARCH IS 0.
 GLOBAL LANDING_DEORBIT_LEAD_MINUTES IS 0.
-GLOBAL LANDING_AUTO_TARGET IS 0.
 GLOBAL LANDING_AUTO_TARGET_MINUTES IS 5.
 GLOBAL LANDING_CONFIRM_TARGET IS 1.
 // Opt-in: remain in orbit unless SCANsat finds a site within the slope limit.
-GLOBAL LANDING_REQUIRE_SITE IS 0.
 GLOBAL TARGET_DEORBIT_SCAN_ORBITS IS 0.
 GLOBAL TARGET_DEORBIT_SCAN_SAMPLES IS 128.
 GLOBAL TARGET_DEORBIT_SCAN_CENTER_MINUTES IS 0.
@@ -289,7 +287,10 @@ LOCAL FUNCTION _landingTargetedDeorbit {
 
     SET TARGET_LAT TO landingTarget["LAT"].
     SET TARGET_LNG TO landingTarget["LNG"].
-    LOCAL site IS selectScanSatLandingSite(TARGET_LAT, TARGET_LNG).
+    LOCAL site IS LEXICON("FOUND",FALSE).
+    IF LANDING_SITE_SCAN_ENABLE > 0 OR LANDING_REQUIRE_SITE > 0 {
+        SET site TO selectScanSatLandingSite(TARGET_LAT,TARGET_LNG).
+    }
     IF LANDING_REQUIRE_SITE > 0 AND NOT site["FOUND"] {
         mLogWarn("STATS landing-site result=hold reason=no-suitable-scanned-site").
         mLogWarn("No suitable scanned site nearby. Check SCANsat coverage or choose another ground-track site before retrying.").

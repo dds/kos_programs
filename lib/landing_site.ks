@@ -9,11 +9,8 @@
 // loaded this boot.
 // ============================================================
 
-// --- Config defaults owned by this file ---
-GLOBAL LANDING_SITE_SCAN_ENABLE IS 0.
-GLOBAL LANDING_SITE_SCAN_RADIUS IS 1500.
-GLOBAL LANDING_SITE_SCAN_STEP IS 250.
-GLOBAL LANDING_SITE_MAX_SLOPE IS 12.
+// Defaults live in mission_type/landing_config so omitting this optional
+// search library cannot erase the selected mission or its terrain settings.
 
 GLOBAL FUNCTION selectScanSatLandingSite {
     PARAMETER targetLat.

@@ -9,6 +9,26 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-29 follow-up Mun boot015 at4917363: compact logging retained final
+hold/forecast. down44146 aim44648 residual-502 vs500m, cross30, trials63.
+Raw merit outsideBand^2+cross^2 favored a point2m outside range over a valid
+point with~54m cross (well within500). Shared _targetDeorbitImproves gives
+full feasibility priority, then old merit; scalar/coupled/fallback steps use
+it. No tolerance/gate changes, fresh powered model mandatory. Source replay
+reproduces oldhold and newaccept63/64; native response remains unverified.
+User also reports storage8428->8510 cleanup. Optional landing_light_search
+split from runtime light validator. LAND_DEORBIT uses mission_type roots:
+AUTO_TARGET->light_wait->search; SITE_SCAN_ENABLE or REQUIRE_SITE->picker.
+Default flags owned by core mission_type, site scalars by landing_config.
+Fixed targets retain full offline powered/admission/staging/radio/cutoff
+closure without optional search symbols. REQUIRE_SITE still holds on no
+site. Actualbootplanner+cleanup fixtures retain the correct providers.
+Native archive sizes before split:wait3633,picker1667; removed5300 plus
+search portion, exact newcompiled space/fit pending. No archive-only
+planner, no restored mandatoryblackoutgate, no bootstrap change/deployment.
+All80routinecheckfiles pass105.15s; native compiled fit/flight retry pending.
+Duna/Ike still PAUSED in snapshot below.
+
 2026-10-29 current priority: Mun deorbit + disk logging. User explicitly
 PAUSED Duna/Ike. Its unfinished/nonpassing source/test changes are parked
 at /tmp/kos-duna-ike-paused-20261029-1fk3rmgq (tracked.patch/files/manifest),

@@ -11,7 +11,7 @@ from check_deorbit_geometry import Vec
 from check_runtime_contracts import KString, KList, run
 from check_surface_return import read_settings
 
-LIGHT = (ROOT / 'lib/landing_radio.ks').read_text() + '\n' + (ROOT / 'lib/landing_light_math.ks').read_text() + '\n' + (ROOT / 'lib/landing_light.ks').read_text()
+LIGHT = (ROOT / 'lib/landing_radio.ks').read_text() + '\n' + (ROOT / 'lib/landing_light_math.ks').read_text() + '\n' + (ROOT / 'lib/landing_light.ks').read_text() + '\n' + (ROOT / 'lib/landing_light_search.ks').read_text()
 COMMAND = (ROOT / 'cmd/landlight.ks').read_text()
 DEORBIT = (ROOT / 'lib/landing_deorbit.ks').read_text()
 CONFIG = (ROOT / 'lib/config.ks').read_text()

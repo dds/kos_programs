@@ -252,7 +252,7 @@ def check_forecast_fallback_and_dependencies():
     assert len(near)==3 and all(after-before>=100 for before,after in zip(near,near[1:]))
     assert not alarms and 'landing_light_wait' not in saved
     deps,_,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
-    assert {'landing_light_wait','coast_wait','solar','thrust_cutoff'}<=closure(['landing_deorbit'],deps)
+    assert {'landing_light_wait','coast_wait','solar','thrust_cutoff'}<=closure(['landing_deorbit','landing_light_wait'],deps)
     assert 'landing_light_wait' not in closure(['landing_main'],deps)
     assert 'landing_light_wait' not in closure(['landing_light'],deps) # Operator previews never wait.
     print('PASS: an exhausted coarse forecast schedules spaced rechecks rather than spinning or approving a site; offline solar/cutoff dependencies belong only to orbital landing setup')

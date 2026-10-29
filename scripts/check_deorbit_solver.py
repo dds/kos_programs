@@ -391,7 +391,8 @@ def check_resume_and_cpu():
     nodes = without_print(ks.parse(function_body(LANDING,'_landingTargetedDeorbit')))
     for prior,success,refined in ((150,True,False),(150,False,False),(2000,True,False),(150,True,True)):
         events,config = [],NS(IPU=prior)
-        env = dict(CONFIG=config,LANDING_MIN_IPU=2000,LANDING_REQUIRE_SITE=0,
+        env = dict(CONFIG=config,LANDING_MIN_IPU=2000,LANDING_REQUIRE_SITE=0,LANDING_SITE_SCAN_ENABLE=int(refined),
+                   LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),
                    _landingTargetPassUT=4607,
                    landingResolveTarget=lambda: dict(FOUND=True,LAT=19,LNG=129),
                    selectScanSatLandingSite=lambda *args: dict(FOUND=refined,LAT=19.2,LNG=129.1,SLOPE=2,DIST=400),
