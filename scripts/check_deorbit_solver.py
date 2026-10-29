@@ -19,6 +19,10 @@ LEAD = (ROOT/'lib/landing_deorbit_lead.ks').read_text()
 ks.SOURCES += '\n' + SOURCE + '\n' + LEAD
 
 
+class Lex(dict):
+    HASKEY=dict.__contains__
+
+
 class Counter:
     def __init__(self): self.value = 0
     def __add__(self, number): return self.value + number
@@ -27,7 +31,7 @@ class Counter:
 
 def environment(oracle, cap=10, budget=64):
     counter, trials = Counter(), []
-    env = dict(TIME=NS(SECONDS=0), ABORT=False, SHIP=NS(DELTAV=NS(VACUUM=1000)),
+    env = dict(LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),TIME=NS(SECONDS=0), ABORT=False, SHIP=NS(DELTAV=NS(VACUUM=1000)),
                TARGET_DEORBIT_NORMAL_DV_CAP=cap, TARGET_DEORBIT_MAX_EVALUATIONS=budget,
                TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=0, LANDING_POWERED_LEAD=0,
                TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM=.25, DEORBIT_MIN_FPA=0,
@@ -40,7 +44,7 @@ def environment(oracle, cap=10, budget=64):
     env['_targetDeorbitCrossAuthority'] = lambda _: 500
     def evaluate(ut, retro, lat, lng, lead, desired, normal=0):
         if counter.value >= budget or ut <= env['TIME'].SECONDS+lead:
-            return dict(VALID=False,HAS_IMPACT=False)
+            return Lex(VALID=False,HAS_IMPACT=False)
         assert 2-1e-8 <= retro <= 120+1e-8 and abs(normal) <= cap+1e-8
         counter.value += 1
         result = oracle(ut,retro,normal)
@@ -51,7 +55,7 @@ def environment(oracle, cap=10, budget=64):
 
 
 def impact(ut, retro, normal, along_error, signed_cross, valid=True):
-    return dict(VALID=valid, HAS_IMPACT=valid, UT=ut, RETRO=retro, NORMAL=normal,
+    return Lex(VALID=valid, HAS_IMPACT=valid, UT=ut, RETRO=retro, NORMAL=normal,
                 DV=math.hypot(retro,normal), DOWNFIELD=15000+along_error, ERR=along_error,
                 CROSS=abs(signed_cross), SIGNED_CROSS=signed_cross, ANGLE=20,
                 PE=-8000,LAT=19.,LNG=129.,DIST=math.hypot(15000+along_error,signed_cross),TTI=500)
@@ -144,7 +148,7 @@ def check_physical_solver():
     oracle = kepler_oracle()
     env,count,_ = environment(oracle)
     def ground_angle(ut,*args):
-        return dict(VALID=True,UT=ut,ANGLE=math.degrees(math.acos(np.clip(
+        return Lex(VALID=True,UT=ut,ANGLE=math.degrees(math.acos(np.clip(
             np.dot(oracle.ground(ut),oracle.target),-1,1))),LAT=0,LNG=0)
     env['_targetGroundAngleAt'] = ground_angle
     found = False
@@ -167,7 +171,7 @@ def check_selected_pass():
         # constructed backwards from a conveniently feasible deorbit.
         oracle.target = oracle.ground(pass_ut)
         env,count,_ = environment(oracle)
-        env['_targetGroundAngleAt'] = lambda ut,*args: dict(VALID=True,UT=ut,
+        env['_targetGroundAngleAt'] = lambda ut,*args: Lex(VALID=True,UT=ut,
             ANGLE=math.degrees(math.acos(np.clip(np.dot(oracle.ground(ut),oracle.target),-1,1))),
             LAT=0,LNG=0)
         return oracle,pass_ut,env,count
@@ -258,7 +262,7 @@ def check_progress_and_failure():
 def check_geometry_before_light():
     planner = function_body(SOURCE,'targetedDeorbitAt')
     start = planner.index('IF NOT solved["VALID"]')
-    stop = planner.index('\n            } ELSE {\n                mLogWarn("No deorbit node found',start)
+    stop = planner.index('\n            } ELSE {\n                mLogDetail("No deorbit node found',start)
     nodes = ks.parse(planner[start:stop])
     for kind in ('no-impact','cross-track','fuel','accepted','bad-light'):
         env,_,_ = environment(lambda *args: None)
@@ -269,7 +273,7 @@ def check_geometry_before_light():
         light_calls = []
         env.update(solved=candidate,geometry=dict(UT=1111),targetLat=19,targetLng=129,
                    minDownfield=10000,maxDownfield=20000,orbitScan=0,scanOrbits=4,
-                   candidateAngle=50,bestAccepted=dict(VALID=False),bestAcceptedCross=1e9,
+                   candidateAngle=50,bestAccepted=Lex(VALID=False),bestAcceptedCross=1e9,
                    newClosest=True,closestLight='not-checked',
                    preferredCrossTrack=250,acceptedSolution=False,
                    _targetDeorbitLightAccepted=lambda solved,ut,*args: light_calls.append(ut) or kind != 'bad-light')
@@ -424,7 +428,7 @@ def check_actual_trial_budget():
             events.append('remove')
             env['HASNODE'] = False
         env.update(_planRetroNode=plan,remove_node=remove,
-                   _readGeometricDeorbitNode=lambda *args: dict(VALID=True,HAS_IMPACT=True))
+                   _readGeometricDeorbitNode=lambda *args: Lex(VALID=True,HAS_IMPACT=True))
         try: ks.run(nodes,env)
         except ks.Returned as result: assert result.value['VALID'] is allowed
         assert env['_deorbitEvaluations'] == used + int(allowed)
@@ -476,7 +480,7 @@ def search_fixture(reachable_window=None):
     calls=[]
     env['fixture_reset']=lambda:setattr(count,'value',0)
     def geometry(lat,lng,start,end,step,angle):
-        return dict(VALID=True,UT=start+200,ANGLE=angle,LAT=19,LNG=129)
+        return Lex(VALID=True,UT=start+200,ANGLE=angle,LAT=19,LNG=129)
     def solve_at(ut,*args):
         window=int(ut/1000)
         calls.append(window)
@@ -484,7 +488,7 @@ def search_fixture(reachable_window=None):
         # the numerical source solver has independent conic fixtures.
         left=64-count.value
         count.value+=min(6,left)
-        if left<6:return dict(VALID=False,HAS_IMPACT=False)
+        if left<6:return Lex(VALID=False,HAS_IMPACT=False)
         cross=100 if window==reachable_window else 600+abs(window-4)*200
         return impact(ut,15,3,0,cross)
     env.update(_findDeorbitGeometryNode=geometry,_solveGeometricDeorbitDv=solve_at,
@@ -556,7 +560,7 @@ def check_reported_preference_budget():
         env.update(LANDING_POWERED_LEAD=1,fixture_reset=lambda:setattr(count,'value',0))
         searches=[];costs=[];models=[];nodes=[]
         def geometry(lat,lng,start,end,step,angle):
-            return dict(VALID=True,UT=start+200,ANGLE=angle,LAT=lat,LNG=lng)
+            return Lex(VALID=True,UT=start+200,ANGLE=angle,LAT=lat,LNG=lng)
         def coarse(ut,*args):
             searches.append(ut);cost=min(20,64-count.value);costs.append(cost);count.value+=cost
             if len(searches)==1:
@@ -576,7 +580,7 @@ def check_reported_preference_budget():
             return result
         def policy(node,lat,lng):
             models.append((node.TIME,node.retro,node.normal))
-            return dict(VALID=scenario!='model-fails',REASON='fixture-model-rejected',
+            return Lex(VALID=scenario!='model-fails',REASON='fixture-model-rejected',
                         AIM=35000,MIN=33500,MAX=36500)
         env.update(_findDeorbitGeometryNode=geometry,_solveGeometricDeorbitDv=coarse,
                    _evalGeometricDeorbitNode=measured,_planRetroNode=plan,
@@ -630,7 +634,7 @@ def check_normal_band_fallback():
             env['LANDING_POWERED_LEAD']=1
             base=oracle(1000,32.33,-5*mirror)
             correction=env['_targetDeorbitNormalCorrection']
-            env['_targetDeorbitNormalCorrection']=lambda *args:dict(VALID=False)
+            env['_targetDeorbitNormalCorrection']=lambda *args:Lex(VALID=False)
             old=solve(env,base)
             assert not env['_targetDeorbitSolutionAccepted'](old,10000,20000)
             count.value=0;trials.clear();env['_targetDeorbitNormalCorrection']=correction
@@ -680,7 +684,7 @@ def check_normal_fallback_search_budget():
         env,count,trials=environment(oracle)
         env.update(LANDING_POWERED_LEAD=1,fixture_reset=lambda:setattr(count,'value',0))
         models=[];nodes=[]
-        env['_findDeorbitGeometryNode']=lambda lat,lng,start,end,*args:dict(VALID=True,UT=start+200,ANGLE=50,LAT=lat,LNG=lng)
+        env['_findDeorbitGeometryNode']=lambda lat,lng,start,end,*args:Lex(VALID=True,UT=start+200,ANGLE=50,LAT=lat,LNG=lng)
         env['_targetDeorbitLightAccepted']=lambda *args:True
         def plan(ut,retro,normal):
             node=NS(TIME=ut,retro=retro,normal=normal);nodes.append(node);return node
@@ -689,9 +693,9 @@ def check_normal_fallback_search_budget():
         env['_readGeometricDeorbitNode']=lambda node,*args:oracle(node.TIME,node.retro,node.normal)
         def policy(*args):
             models.append(1)
-            return dict(VALID=True,AIM=15000,MIN=10000,MAX=20000)
+            return Lex(VALID=True,AIM=15000,MIN=10000,MAX=20000)
         env['landingDeorbitLeadPolicy']=policy
-        if legacy:env['_targetDeorbitNormalCorrection']=lambda *args:dict(VALID=False)
+        if legacy:env['_targetDeorbitNormalCorrection']=lambda *args:Lex(VALID=False)
         result=planner_prefix(env,target_lat=44.593,target_lng=-24.926)
         assert not nodes and count.value<=64 and count.value==len(trials)+len(models)
         if legacy:assert result is False and not models and count.value==64
@@ -725,7 +729,7 @@ def check_preburn_refit():
             if len(seen)>1 and case=='abort':env['ABORT']=True
             if len(seen)>1 and case=='removed':env['HASNODE']=False
             if len(seen)>1 and case=='body-change':env['SHIP'].BODY=NS(NAME='Kerbin')
-            return dict(VALID=case!='invalid',REASON='unsupported',AIM=126363.,MIN=124863.,MAX=127863.)
+            return Lex(VALID=case!='invalid',REASON='unsupported',AIM=126363.,MIN=124863.,MAX=127863.)
         def geometry(nd,lat,lng,aim):
             retro=-nd.PROGRADE
             error=-8149+(-1200)*(retro-14.59)
@@ -777,7 +781,7 @@ def check_retro_only_fallback():
                 return result
             env,count,trials=environment(response)
             env.update(LANDING_POWERED_LEAD=1,_targetDeorbitCrossAuthority=lambda _:2000)
-            if not enabled:env['_targetDeorbitRetroCorrection']=lambda *args:dict(VALID=False)
+            if not enabled:env['_targetDeorbitRetroCorrection']=lambda *args:Lex(VALID=False)
             base=response(1000,22.3587,sign*10)
             result=env['_refineDeorbitFootprint'](base,44.593,-24.926,120,68772,67272,70272,2,120,1,1)
             outcomes.append(result)

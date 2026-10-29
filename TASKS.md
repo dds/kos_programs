@@ -6,6 +6,27 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Current priority: Mun deorbit near-root rejection AND selective disk logs.
+  User explicitly paused Duna/Ike on29Oct. Its uncommitted work is preserved
+  separately at /tmp/kos-duna-ike-paused-20261029-1fk3rmgq (tracked.patch,
+  files/, manifest.json); those edits are removed from the active checkout.
+  Do not resume arrival work until requested; it was NOT fully passing.
+  Native RO9_4854889 boot014:14.94deg,14x15.1km, reaches locked-10.59deg
+  site. Solver cross=0 and final51265/51903m powered residual-638m; mission
+  tolerance500m, so rejection is legitimate, not a plane/reachability failure.
+  New near-root scalar polish uses one0.25m/s probe plus a~0.1m/s proposal
+  instead of coupled time/normal probes; full forecast still required.
+  Regression with reported residual + synthetic curved native response
+  improves to~42m at64/64; changed-model/invalid/cross/budget guards reject.
+  Native orbit does not need changing to fix this convergence issue.
+  Archive boot014 spent almost its whole8797-byte free budget on48 rank
+  rows; later powered failure is only console evidence. Disk now retains3
+  ranks, compact model rows and one full final forecast; routine details
+  console-only/explicit verbose. INFO stops at4096 free; final SUMMARY/WARN/
+  ERROR/PHASE can use room down to unchanged1024-byte hard state reserve.
+  Source disk replay retains final model/reason within the reported budget.
+  All79routinecheckfiles pass105.58s; native retry pending. No remote controls, log deletions or save edits.
+
 - Duna/Ike arrival review (29Oct): the900s final BPLANE retry is a fixed
   configurable pre-SOI wake, not a geometry/execution-time prediction.
   _bplaneCoastEncounter explicitly excludes atmospheric targets; therefore

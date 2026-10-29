@@ -153,12 +153,12 @@ def check_logging_and_integration():
             ('WARN', 'budget hold', 0, True),
             ('PHASE', 'BPLANE', 0, True)]:
         assert evaluate(persist, level=level, message=NS(STARTSWITH=message.startswith),
-                        LOG_INFO_TO_FILE=verbose) == expected
+                        LOG_INFO_TO_FILE=verbose,important=level not in ("INFO","DETAIL")) == expected
     space = re.search(r'LOCAL enoughSpace IS (.*?)\.', log, re.S)[1]
     assert evaluate(space, CORE=NS(VOLUME=NS(FREESPACE=2000)),
-                    LOG_FILE_RESERVE_BYTES=1024, line=NS(LENGTH=200))
+                    reserve=1024, line=NS(LENGTH=200))
     assert not evaluate(space, CORE=NS(VOLUME=NS(FREESPACE=1200)),
-                        LOG_FILE_RESERVE_BYTES=1024, line=NS(LENGTH=200))
+                        reserve=1024, line=NS(LENGTH=200))
     assert 'IF persist AND enoughSpace' in log
     assert 'IF wroteLocal AND LOG_ARCHIVE_DEFERRED <= 0' in log
     assert 'AND HOMECONNECTION:ISCONNECTED' in log

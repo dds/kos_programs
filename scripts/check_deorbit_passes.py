@@ -34,6 +34,13 @@ def fixture():
                     LAT=math.degrees(math.asin(np.clip(unit[2],-1,1))),
                     LNG=math.degrees(math.atan2(unit[1],unit[0])))
     env['_targetGroundAngleAt']=ground
+    # Physics fixtures omit mixed scalar/string rendering, as for mLog.
+    # The separate disk fixture executes the actual rank classification.
+    rank_body=re.sub(r'LOCAL rankLine IS .*?180000\.',
+                     'LOCAL rankLine IS "fixture rank".',
+                     function_body(solver.SOURCE,'_targetDeorbitFixedPasses'),flags=re.S)
+    env['_targetDeorbitFixedPasses']=lambda lat,lng,start,period,keep:run(rank_body,
+        dict(env,targetLat=lat,targetLng=lng,earliestPass=start,period=period,keepCount=keep))
     return env,oracle,count,trials
 
 

@@ -5,7 +5,12 @@ GLOBAL LOG_INFO_TO_FILE IS 0.
 // Keep local records during guidance, defer potentially slow archive copies.
 GLOBAL LOG_ARCHIVE_DEFERRED IS 0.
 GLOBAL LOG_FILE_RESERVE_BYTES IS 1024.
+// Routine telemetry stops earlier, leaving room for final decisions/errors
+// above the unchanged hard state/log reserve. Detail remains console-only
+// unless LOG_INFO_TO_FILE is explicitly enabled.
+GLOBAL LOG_INFO_RESERVE_BYTES IS 4096.
 LOCAL _logSpaceWarned IS FALSE.
+LOCAL _logInfoSpaceWarned IS FALSE.
 
 LOCAL FUNCTION _logPath {
     LOCAL flightDir IS localFlightLogDir().
@@ -171,16 +176,24 @@ GLOBAL FUNCTION mLog {
     // flightLogPath() is called for its side effect too: it ensures the
     // log file exists (with a header) before the LOG below writes to it.
     // Persist decision summaries; full iteration chatter remains opt-in.
-    LOCAL persist IS level <> "INFO" OR message:STARTSWITH("STATS ")
+    LOCAL important IS level <> "INFO" AND level <> "DETAIL".
+    LOCAL persist IS important OR (level = "INFO" AND message:STARTSWITH("STATS "))
         OR LOG_INFO_TO_FILE > 0.
+    LOCAL reserve IS MAX(150, LOG_FILE_RESERVE_BYTES).
+    IF NOT important { SET reserve TO MAX(reserve,LOG_INFO_RESERVE_BYTES). }
     LOCAL enoughSpace IS CORE:VOLUME:FREESPACE
-        > MAX(150, LOG_FILE_RESERVE_BYTES) + line:LENGTH + 100.
+        > reserve + line:LENGTH + 100.
     IF persist AND enoughSpace {
         LOG line TO flightLogPath().
         SET wroteLocal TO TRUE.
-    } ELSE IF persist AND NOT _logSpaceWarned {
-        PRINT "Flight log storage reserve reached; further lines are console-only.".
-        SET _logSpaceWarned TO TRUE.
+    } ELSE IF persist {
+        IF important AND NOT _logSpaceWarned {
+            PRINT "Flight log storage reserve reached; further lines are console-only.".
+            SET _logSpaceWarned TO TRUE.
+        } ELSE IF NOT important AND NOT _logInfoSpaceWarned {
+            PRINT "Routine log limit reached; space retained for final decisions and errors.".
+            SET _logInfoSpaceWarned TO TRUE.
+        }
     }
 
     IF wroteLocal AND LOG_ARCHIVE_DEFERRED <= 0
@@ -189,6 +202,8 @@ GLOBAL FUNCTION mLog {
 
 GLOBAL FUNCTION mLogWarn  { PARAMETER m. mLog(m, "WARN").  }
 GLOBAL FUNCTION mLogError { PARAMETER m. mLog(m, "ERROR"). }
+GLOBAL FUNCTION mLogDetail { PARAMETER m. mLog(m, "DETAIL"). }
+GLOBAL FUNCTION mLogSummary { PARAMETER m. mLog(m, "SUMMARY"). }
 GLOBAL FUNCTION mLogPhase {
     PARAMETER m.
     LOCAL sep IS "=== PHASE: " + m + " ===".

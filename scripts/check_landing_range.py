@@ -175,11 +175,17 @@ def lead_environment():
     def stack():
         mass=1.;retained=.6;exhaust=320*9.80665
         fuel=mass*(1-math.exp(-244/exhaust))
-        return dict(VALID=True,MASS=mass,STAGE=2,RESERVE_ACC=2.72,
+        return solver.Lex(VALID=True,MASS=mass,STAGE=2,RESERVE_ACC=2.72,
                     STAGES=KList([dict(THRUST=44.68,EXHAUST=exhaust,FUEL=fuel,DROP=mass-retained-fuel),
                                   dict(THRUST=2.72*retained,EXHAUST=300*9.80665,FUEL=.25,DROP=0)]))
     for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',LEAD+'\n'+prediction_source):
         env[name]=lambda *args,name=name:call(name,env,*args)
+    lead_body=function_body(LEAD,'landingDeorbitLeadPolicy')
+    lead_body=re.sub(r'LOCAL diagnostic IS .*?capture=true"\.',
+                     'LOCAL diagnostic IS "fixture diagnostic".',lead_body,flags=re.S)
+    env['landingDeorbitLeadPolicy']=lambda nd,lat,lng,legacy=15000:run(lead_body,
+        dict(env,nd=nd,targetLat=lat,targetLng=lng,legacyAim=legacy))
+    env['LEXICON']=lambda *xs:solver.Lex(zip(xs[::2],xs[1::2]))
     env['landingBrakeStack']=stack
     env['LANDING_FLEXIBLE_SITE']=1
     env['lmSurfaceTrackOffset']=lambda *args:call('lmSurfaceTrackOffset',env,*args)
@@ -243,8 +249,8 @@ def check_lead_refusals():
         if kind=='timing':nd.TIME=impact_ut
         if kind=='abort':env['ABORT']=True
         if kind=='no-coast':env['_landingLeadStateAt']=lambda *args:dict(HS=500,DOWN=80,HEIGHT=1)
-        if kind=='range':env['landingPredictBrake']=lambda *args:dict(VALID=False,REASON='test-range-failure')
-        if kind=='upfield':env['lmSurfaceTrackOffset']=lambda *args:dict(VALID=True,DOWNFIELD=-1)
+        if kind=='range':env['landingPredictBrake']=lambda *args:solver.Lex(VALID=False,REASON='test-range-failure')
+        if kind=='upfield':env['lmSurfaceTrackOffset']=lambda *args:solver.Lex(VALID=True,DOWNFIELD=-1)
         result=env['landingDeorbitLeadPolicy'](nd,0,0)
         assert not result['VALID'],(kind,result)
     print('PASS: unsupported models, insufficient/unknown transfer fuel, underpowered stages, missing/late impacts, absent coast, abort and invalid/upfield ranges cannot authorize a deorbit')
@@ -268,7 +274,7 @@ def check_powered_refinement():
         def policy(*args):
             policies.append(1)
             aim=env['solved']['DOWNFIELD']+10000 if kind=='nonconverging' else 63610
-            return dict(VALID=kind!='model-fails',REASON='fixture',AIM=aim,MIN=aim-1500,MAX=aim+1500)
+            return solver.Lex(VALID=kind!='model-fails',REASON='fixture',AIM=aim,MIN=aim-1500,MAX=aim+1500)
         def refine(best,lat,lng,lead,aim,lo,hi,min_dv,max_dv,reserve,max_steps):
             assert reserve==1 and max_steps==1 and lo<=aim<=hi
             refinements.append(aim)
@@ -337,7 +343,7 @@ def check_coupled_powered_refinement(start=30,contraction=.6):
         actual=oracle(node.TIME,node.retro,node.normal)['DOWNFIELD']
         aim=63610+contraction*(actual-63610)
         forecasts.append((actual,aim))
-        return dict(VALID=True,AIM=aim,MIN=aim-1500,MAX=aim+1500)
+        return solver.Lex(VALID=True,AIM=aim,MIN=aim-1500,MAX=aim+1500)
     env.update(solved=base,geometry=dict(UT=1000),LANDING_POWERED_LEAD=1,
                targetLat=44.593,targetLng=-24.926,minLead=120,minRetroDv=2,maxRetroDv=120,
                desiredDownfield=15000,minDownfield=10000,maxDownfield=20000,
@@ -360,12 +366,12 @@ def check_coupled_powered_refinement(start=30,contraction=.6):
 def check_shared_admission_and_rescue():
     env,_,_=solver.environment(lambda *args:None)
     calls=[]
-    env.update(HASNODE=True,_readGeometricDeorbitNode=lambda *args:dict(VALID=True,HAS_IMPACT=True,
+    env.update(HASNODE=True,_readGeometricDeorbitNode=lambda *args:solver.Lex(VALID=True,HAS_IMPACT=True,
                    DV=20,NORMAL=0,DOWNFIELD=35000,CROSS=0,ANGLE=20,ERR=0),
-               landingDeorbitLeadPolicy=lambda *args:dict(VALID=True,AIM=35000,MIN=33500,MAX=36500),
+               landingDeorbitLeadPolicy=lambda *args:solver.Lex(VALID=True,AIM=35000,MIN=33500,MAX=36500),
                _targetDeorbitTerrainAccepted=lambda *args:calls.append('terrain') or True)
     assert env['landingDeorbitNodeAccepted'](NS(TIME=1000),0,0) and calls==['terrain']
-    env['landingDeorbitLeadPolicy']=lambda *args:dict(VALID=True,AIM=15000,MIN=10000,MAX=20000)
+    env['landingDeorbitLeadPolicy']=lambda *args:solver.Lex(VALID=True,AIM=15000,MIN=10000,MAX=20000)
     assert not env['landingDeorbitNodeAccepted'](NS(TIME=1000),0,0)
     command=(ROOT/'cmd/landfallback.ks').read_text()
     saved=dict(SEQUENCE=['LAND_ASSIST','SURFACE_RETURN_SETUP'],RETURN_PE=53000)
@@ -440,7 +446,7 @@ def check_logged_moving_lead(curvature):
         def policy(node,*_):
             down=oracle(node.TIME,node.retro,node.normal)['DOWNFIELD'];aim=required(down)
             forecasts.append((down,aim))
-            return dict(VALID=True,AIM=aim,MIN=aim-1500,MAX=aim+1500)
+            return solver.Lex(VALID=True,AIM=aim,MIN=aim-1500,MAX=aim+1500)
         env.update(solved=oracle(1000,60,0),geometry=dict(UT=1000),LANDING_POWERED_LEAD=1,
             targetLat=44.593,targetLng=-24.926,minLead=120,minRetroDv=2,maxRetroDv=120,
             desiredDownfield=15000,minDownfield=10000,maxDownfield=20000,

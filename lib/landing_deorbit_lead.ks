@@ -180,7 +180,7 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         "MIN",MAX(0,leadM-tolerance),"MAX",leadM+tolerance,
         "REASON","powered-range","RANGE",rangeM,"BALLISTIC",ballistic["DOWNFIELD"],
         "IGNITION_UT",hi).
-    mLog("STATS deorbit powered-lead aimM=" + ROUND(leadM,0)
+    LOCAL diagnostic IS "STATS deorbit powered-lead aimM=" + ROUND(leadM,0)
         + " rangeM=" + ROUND(rangeM,0) + " ballisticM=" + ROUND(ballistic["DOWNFIELD"],0)
         + " ignitionUT=" + ROUND(hi,1) + " height=" + ROUND(ignition["HEIGHT"],0)
         + " ignitionLat=" + ROUND(ignition["LAT"],5) + " ignitionLng=" + ROUND(ignition["LNG"],5)
@@ -203,6 +203,13 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         + " poweredSeconds=" + ROUND(forecast["SECONDS"],1)
         + " impulseDv=" + ROUND(forecast["IMPULSE"],1) + " endMass=" + ROUND(forecast["MASS"],4)
         + " modelSteps=" + forecast["STEPS"]
-        + " model=variable-mass-controller capture=true").
+        + " model=variable-mass-controller capture=true".
+    SET policy["DIAGNOSTIC"] TO diagnostic.
+    mLogDetail(diagnostic).
+    mLog("STATS deorbit powered-summary aimM=" + ROUND(leadM,0)
+        + " rangeM=" + ROUND(rangeM,0) + " height=" + ROUND(ignition["HEIGHT"],0)
+        + " captureDownfield=" + ROUND(captureError["DOWNFIELD"],0)
+        + " captureCross=" + ROUND(captureError["CROSS"],0)
+        + " toleranceM=" + tolerance + " impulseDv=" + ROUND(forecast["IMPULSE"],1)).
     RETURN policy.
 }

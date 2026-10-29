@@ -310,7 +310,11 @@ may supply a bounded secant proposal; noisy/reversed slopes or a proposal
 that cannot improve the geometry fall back to the measured model goal.
 Each changed node still needs fresh powered validation, with one trial
 reserved for it. The64-trial cap, landing tolerance and admission limits
-remain unchanged. `STATS deorbit powered-step` records the proposal mode,
+remain unchanged. Near an already-aligned powered root, one small retrograde
+probe and one native trial replace unnecessary timing/normal probes, still
+reserving the fresh powered forecast. This also avoids a secant extrapolation
+when the actual residual is already close to tolerance. The requested target
+and tolerance stay unchanged. `STATS deorbit powered-step` records the proposal mode,
 goal and slope; its goal is not an accepted landing forecast.
 
 For powered landings, the preferred ballistic cross-track goal (typically
@@ -866,14 +870,20 @@ dependencyBands()                phases that load together
   `stateGet`/`stateSet` — never raw file I/O for mission state. Survives
   reboots, quickloads, power loss. Legacy SimpleJSON state can be converted
   once with `RUNPATH("0:/cmd/convertstatejson.ks").`.
-- **Flight log**: `mLog`/`mLogWarn`/`mLogError`; `STATS ...` summaries and
-  non-INFO events are persisted by default. Ordinary INFO chatter stays on
-  the console; `LOG_INFO_TO_FILE = 1` enables it in files too.
+- **Flight log**: `mLog`/`mLogWarn`/`mLogError` persist decision summaries;
+  `mLogSummary` gives final decisions the same reserved space as warnings,
+  errors and phase transitions. `mLogDetail` keeps routine search detail on
+  the console. `LOG_INFO_TO_FILE = 1` opts into recording detail too.
+  Deorbit stores only the top three ranked passes, compact powered-fit rows
+  and one full final powered forecast; the remaining ranking/probe/candidate
+  rows remain visible on the console.
   Each boot writes a numbered per-core log under `1:/run/logs/<flight>/`;
   archive copies land in `0:/logs/archive/<flight>/` after persisted lines
-  when linked and at phase transitions. `LOG_FILE_RESERVE_BYTES` leaves
-  1,024 bytes free by default; a console warning reports when further file
-  logging is suppressed to preserve room for mission state. Logs cannot
+  when linked and at phase transitions. Routine telemetry stops at
+  `LOG_INFO_RESERVE_BYTES` (4,096 bytes), leaving room for final decisions
+  and errors. All writes still preserve the unchanged hard
+  `LOG_FILE_RESERVE_BYTES` reserve (1,024 bytes) for mission state. Console
+  warnings distinguish routine suppression from exhaustion of that reserve. Logs cannot
   reconstruct console-only diagnostics from older flights.
 - **Observation telemetry** (`lib/observe.ks`): periodic one-line samples
   streamed straight to `0:/logs/obs/` when linked (offline lines buffer

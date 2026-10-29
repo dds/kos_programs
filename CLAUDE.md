@@ -9,6 +9,24 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-29 current priority: Mun deorbit + disk logging. User explicitly
+PAUSED Duna/Ike. Its unfinished/nonpassing source/test changes are parked
+at /tmp/kos-duna-ike-paused-20261029-1fk3rmgq (tracked.patch/files/manifest),
+removed from active checkout before Mun edits. Do not resume without request.
+RO9_4854889 boot014 at4915549:inc14.94 Pe14/Ap15.1km, correct for site's
+-10.59deg latitude. User finalgeometryReason insufficient-braking-lead,
+cross0, down51265 aim51903 residual-638 vs500m tolerance. No planechange
+needed for this failure. Add near-root scalarpolish (one0.25m/s probe,
+~0.1m/s adjustment), preserve full poweredforecast and64trial cap. Source
+curved-response regression reaches~42m at64/64; native retry pending.
+Disk had8797 free,48rankrows consumedmost, no finalnativeforecastarchived.
+mLogDetail is console-only unlessverbose; top3ranks +compactmodel rows +one
+fullfinalmodel retained. mLogSummary protectsfinaldecisions. NormalINFO
+reserves4096 bytes, importantrows retain unchanged1024hardreserve. Never
+silently widen500 tolerance or delete safety/terrain/normal/fuel gates.
+All79routinecheckfiles pass105.58s; native compiled storage/flight pending.
+No remote craft/code/save actions; no bootstrap replacement needed.
+
 2026-10-29 current RO9 entry emergency: boot026 at4898685 blocked42.617s
 before interface,Pe53/Ap94.7. User paused. Emergency console hold provided:
 SASOFF LOCKTHROTTLE0 LOCKSTEERING SHIP:SRFRETROGRADE WAITUNTILABORT; Ctrl+C
