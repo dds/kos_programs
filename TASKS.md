@@ -6,6 +6,23 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct native assist preview5028809 confirms bounded-native-drift-v2 works:
+  reference verified, drift0.000631781m/s within0.005312796 tolerance;
+  priceGuardDv0.010625592. Actual search runs62 node probes/667 position
+  samples in17.86game/18.15wall seconds. No admissible assist, restored=True,
+  noBurn=True, cancelled=False. Tiers33 unscored/29 closest-approach/0 moon/
+  0 terminal/0 proven route; bestTier0 loss18.84796 (distance/Ike SOI radius),
+  offsets(12.5,37.5,0)m/s within50m/s radius. Original Duna Pe27,388.6km.
+  No Ike encounter acquired in this fixed-epoch bounded search; this does
+  not prove none exists, nor validate an assist/capture flight. Keep the
+  original powered transfer; later targeted correction/capture nodes may
+  be more informative. Native search/normal restoration now observed;
+  successful acquisition/final admission remain unverified.
+  Evidence:/tmp/ksp-deck-20261030T223739Z-fetch-uu8a1xet/logs/_diagnostics/
+  assistsearch_Espoir-Duna-Surveyor1_5028809.log; matching boot006 in
+  fetch-uqqe6rv9/logs/Espoir-Duna-Surveyor1_5026703/boot_006_core.log also
+  confirms initial XING six-axis solar search returns aimed=True/flow1.09.
+
 - 30Oct native assist preview5027117 confirms reference-node-dv-changed:
   snapshot1062.33770850232/live1062.33822439338m/s, drift0.000515891m/s.
   Snapshot-price fix works, but original1e-5 derived-magnitude tolerance

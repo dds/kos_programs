@@ -291,6 +291,16 @@ invalidated during final reference refresh. All88 routine check files pass
 legacy KSC_DEORBIT warning. Report:
 `/tmp/kos-assist-native-drift-20261030.json` and `.log`. Native retry pending.
 
+Native5028809 confirms the new reference check passes (drift0.000631781,
+tolerance0.005312796m/s). The actual search runs62 probes/667 position samples
+in17.86game/18.15wall seconds and restores the original vector without a
+burn. No Ike encounter is acquired:33 trials are unscored and29 yield only
+closest-approach scores; best loss18.84796 is separation/Ike SOI radius at
+offsets(12.5,37.5,0)m/s. This establishes native search and normal restoration,
+not successful acquisition or absence of other opportunities. Keep the
+original powered transfer; later targeted nodes can provide a different
+search region and a more informative direct-cost baseline.
+
 Relevant native API references: [future-position prediction](https://ksp-kos.github.io/KOS/commands/prediction.html),
 [orbit patches](https://ksp-kos.github.io/KOS/structures/orbits/orbit.html), and
 [active vessel / real time](https://ksp-kos.github.io/KOS/structures/misc/kuniverse.html),
