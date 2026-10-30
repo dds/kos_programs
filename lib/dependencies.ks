@@ -94,7 +94,7 @@ GLOBAL FUNCTION dependencyLibs {
         "aerobrake_config", LIST(),
         "landing_atmo", LIST("landing_config", "utils", "orbit", "thrust_cutoff"),
         "descent", LIST("thrust_cutoff"),
-        "xfer_plan", LIST("maneuver_transfer", "orbit"),
+        "xfer_plan", LIST("maneuver_transfer", "orbit", "solar"),
         "orbit_nodes", LIST(),
         "orbit_shape", LIST("maneuver", "maneuver_plan", "orbit_nodes", "orbit"),
         "landing_orbit", LIST("orbit_shape", "landing_route", "vessel_hardware", "coast_wait"),

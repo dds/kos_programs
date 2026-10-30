@@ -6,6 +6,27 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct long-XING solar request: the executor already had a solar hook but
+  XFER_PLAN omitted the library. xfer_plan now declares solar; maneuver itself
+  remains independent so other burn bands may shed it. Long-coast threshold
+  unchanged (>8min before centered ignition). One initial cached-axis-first
+  aim, existing KAC-before-solar and optional warp policy; search and health
+  maintenance share the existing ignition-180s realignment deadline. Verified
+  idle bound parking orbit above atmosphere with no next patch may bypass
+  launch-age/first-boot guards; other contexts retain them. Initial aim skips
+  absent solar/Abort/nonzero controls/physical thrust/invalid deadlines.
+  Solar failure is nonfatal; the executor still reacquires the burn vector
+  at180s,60s,10s and ignition. Focused actual alarm/coast/relock source fixture
+  covers early/short waits, failed/deadline/unavailable solar, unsafe controls,
+  normal guards, no KAC and unchanged disabled automatic warp. Structural
+  audit0 errors/legacy KSC_DEORBIT warning. All88 routine files pass134.41s;
+  report:/tmp/kos-xing-solar-20261030.json and.log. New test originally took
+  5.125s reparsing each simulated health tick. Preparing fixture code once
+  preserves every tick/guard and reduces it to0.100s; the complete solar
+  fixture rerun passes in0.911s. Supplemental report:
+  /tmp/kos-xing-solar-focused-20261030.json and.log. No production edits after
+  the full suite. Native solar-coast/reacquisition validation remains pending.
+
 - 30Oct native assist preview5027134 fetched, Espoir-Ike-Surveyor1/XING:
   departure1061.872m/s, available3928.312, Duna Pe29,308,980m vs85km fallback.
   Stopped in0.02game/0.029wall seconds before any trial, reason
@@ -27,8 +48,8 @@ record remaining uncertainty before closing a task.
   127.71s; reported-case regression0.371s, structural0 errors/unchanged legacy
   KSC_DEORBIT warning. Report:/tmp/kos-assist-orbit-prefix-20261030.json and.log.
   Native retry remains pending. Operator reports Mun return override worked;
-  detailed correction/entry results not yet read. Next requested work after
-  this fix: one solar aim during a long pre-XING wait, retaining burn lead.
+  detailed correction/entry results not yet read. The requested long pre-XING
+  solar aim follows in the item above, retaining burn lead.
 
 - 30Oct Espoir entry profiles consolidated: duna_impactor is the single
   canonical launch profile, with interplanetary launch mode/16 transfer

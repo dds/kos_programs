@@ -166,6 +166,75 @@ def check_occultation():
     print('PASS: measured-flow cache can distinguish daylight from own-body and ancestor-body eclipses')
 
 
+def check_transfer_burn_coast():
+    from check_minmus_kolniya import executable
+    from check_codebase import dependency_tables,closure
+    maneuver=(ROOT/'lib/maneuver.ks').read_text()
+    def compile_body(source):return ks.compile_nodes(ks.freeze(executable(source)))
+    def execute(program,env):
+        try:ks.execute(program,env)
+        except ks.Returned as result:return result.value
+    helper=compile_body(function_body(maneuver,'_burnCoastSolar'))
+    maintenance=compile_body(function_body(PHASES,'trySolarHoldTick'))
+    auto_warp=compile_body(function_body(PHASES,'coastAutoWarp'))
+    owner=function_body(maneuver,'executeManeuver')
+    # Run the real alarm -> attitude -> coast -> burn-relock control flow.
+    # The rest of the executor's propulsion is tested in the burn fixtures.
+    prefix=owner[owner.index('LOCAL aid IS'):owner.index('LOCAL apt IS')]+'}'
+    prefix=re.sub(r'HUDTEXT\(.*?\)\.', '',prefix,flags=re.S)
+    prefix=compile_body(prefix)
+    cases=('parked','short','unavailable','failed','deadline','suborbital',
+           'low-pe','next-patch','physical','raw','pilot','other-phase','no-kac')
+    for case in cases:
+        events=[];saved=dict(phase='MCC' if case=='other-phase' else 'XING')
+        clock=NS(SECONDS=0)
+        ship=NS(STATUS='ORBITING',BODY=NS(ATM=NS(EXISTS=True,HEIGHT=70000)),
+                PERIAPSIS=85000,THRUST=0,ORBIT=NS(ECCENTRICITY=.001,HASNEXTPATCH=False),
+                CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0))
+        env=dict(TIME=clock,SHIP=ship,stateGet=saved.get,PHASES_HAS_SOLAR=case!='unavailable',
+                 ABORT=False,resuming=False,st=400 if case=='short' else 4000,
+                 bdv=1061.87,nd=NS(BURNVECTOR=Vec((1,0,0))),CRT=300,CRL=180,WARP=0,
+                 COAST_AUTO_WARP=0,COAST_AUTO_WARP_MIN=60)
+        if case=='suborbital':ship.STATUS='SUB_ORBITAL'
+        if case=='low-pe':ship.PERIAPSIS=65000
+        if case=='next-patch':ship.ORBIT.HASNEXTPATCH=True
+        if case=='physical':ship.THRUST=1
+        if case=='raw':ship.CONTROL.MAINTHROTTLE=.1
+        if case=='pilot':ship.CONTROL.PILOTMAINTHROTTLE=.1
+        def alarm(*args):events.append(('alarm',args[0]-60));return '' if case=='no-kac' else 'owned'
+        def aim(*args):
+            assert events[0][0]=='alarm' and args[:2]==(False,True)
+            assert args[3]==env['st']-180
+            events.append(('aim',args))
+            clock.SECONDS=args[3] if case=='deadline' else clock.SECONDS+2
+            return case not in ('failed','deadline')
+        def hold(ref,deadline):
+            assert deadline==env['st']-180
+            events.append(('health',deadline));return ref
+        env.update(maneuverEnsureBurnAlarm=alarm,orientForSolar=aim,
+                   solarHoldTick=hold,fixture_wait=lambda dt:setattr(clock,'SECONDS',clock.SECONDS+dt),
+                   fixture_lock=lambda statement:events.append(('lock',clock.SECONDS,statement)))
+        env['_burnCoastSolar']=lambda deadline:execute(helper,dict(env,deadlineUt=deadline))
+        env['trySolarHoldTick']=lambda *args:execute(maintenance,
+                                                    dict(env,refFlow=args[0],deadlineUt=args[1]))
+        env['coastAutoWarp']=lambda end,label,aid:execute(auto_warp,
+                                                        dict(env,endUt=end,label=label,alarmId=aid))
+        before=saved.copy();execute(prefix,env)
+        aims=[row for row in events if row[0]=='aim']
+        expected=case not in ('short','unavailable','physical','raw','pilot')
+        assert len(aims)==int(expected),(case,events[:4])
+        if aims:assert aims[0][1][2]==(case in ('parked','failed','deadline','no-kac'))
+        assert saved==before and env['WARP']==0
+        locks=[row for row in events if row[0]=='lock']
+        assert all('nd:BURNVECTOR' in row[2] for row in locks)
+        if case!='short':assert len(locks)==2 and abs(locks[-1][1]-(env['st']-180+.1))<1e-7
+        else:assert len(locks)==1
+    deps,phases,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
+    assert {'solar','solar_diagnostics'}<=closure(phases['xing'],deps)
+    assert 'solar' not in closure(['maneuver'],deps) # Other burn bands may shed it.
+    print('PASS: real long XING wait installs its alarm before one deadline-bounded cached solar aim, preserves health ticks and returns to burn alignment180s early; short/unavailable/unsafe controls skip, failed aim/no-KAC coast still resume, and only XING adds the solar dependency')
+
+
 def check_aerobrake_coast_entry(solar_available=True,aim_success=True,consume_budget=False):
     env,_,_,_,_,reading=environment()
     env.update(TIME=NS(SECONDS=0),WARP=4,wakeUt=40,PHASES_HAS_SOLAR=solar_available,
@@ -653,6 +722,7 @@ if __name__ == '__main__':
     check_cache_decisions()
     check_reference_and_persistence()
     check_occultation()
+    check_transfer_burn_coast()
     for args in ((True,True),(True,False),(False,True),(True,False,True)):check_aerobrake_coast_entry(*args)
     check_settle_deadline()
     check_long_turn_and_timeout_reason()

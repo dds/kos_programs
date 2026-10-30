@@ -1080,6 +1080,14 @@ surveyors, not relay satellites. Each needs its own Kerbin-range direct link.
 All Espoir profiles disable automatic coast warp with `COAST_AUTO_WARP=0`,
 including their generated Ike operations legs. KAC alarms and clock-based
 resumption remain active; the operator controls time warp.
+For XING burns more than eight minutes away, the long coast begins with a
+solar aim, reusing the measured panel axis before searching. The burn alarm
+is installed first. A stopped craft in a verified parking orbit can aim
+without the normal launch-age delay. Solar work ends by the existing
+three-minute burn-vector realignment checkpoint; power-health maintenance
+uses that same deadline. `STATS burn solar` records the aim result. This does
+not enable automatic warp. A linked reboot loads solar into the XING band;
+no installed bootstrap replacement is needed.
 
 Ike launch profiles first target an85km Pe /2880km Ap Duna capture orbit, avoiding
 low Duna circularization and atmospheric capture. `IKE_SETUP` then writes a local

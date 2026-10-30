@@ -47,6 +47,30 @@ LOCAL ATOL      IS 2.0.
 LOCAL CRT IS 300.
 LOCAL CRL  IS 180.
 
+LOCAL FUNCTION _burnCoastSolar {
+    PARAMETER deadlineUt.
+    IF NOT PHASES_HAS_SOLAR OR ABORT
+            OR NOT (deadlineUt > TIME:SECONDS AND deadlineUt < 1e30)
+            OR NOT (SHIP:THRUST >= 0 AND SHIP:THRUST <= 0.001
+                AND SHIP:CONTROL:MAINTHROTTLE <= 0 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0) {
+        RETURN FALSE.
+    }
+    LOCAL parkedDeparture IS FALSE.
+    IF stateGet("phase","") = "XING" AND SHIP:STATUS = "ORBITING" {
+        LOCAL floorAlt IS 0.
+        IF SHIP:BODY:ATM:EXISTS { SET floorAlt TO SHIP:BODY:ATM:HEIGHT. }
+        SET parkedDeparture TO SHIP:PERIAPSIS > floorAlt
+            AND SHIP:ORBIT:ECCENTRICITY >= 0 AND SHIP:ORBIT:ECCENTRICITY < 1
+            AND NOT SHIP:ORBIT:HASNEXTPATCH.
+    }
+    // A verified parking orbit needs no launch-age delay. Reuse the panel
+    // axis first; the deadline preserves the maneuver's realignment window.
+    LOCAL aimed IS orientForSolar(FALSE,TRUE,parkedDeparture,deadlineUt).
+    mLog("STATS burn solar phase=" + stateGet("phase","") + " aimed=" + aimed
+        + " parkedDeparture=" + parkedDeparture + " deadlineUt=" + deadlineUt).
+    RETURN aimed.
+}
+
 GLOBAL FUNCTION executeManeuver {
     LOCAL resumeRequested IS BURN_RESUME_REQUESTED.
     SET BURN_RESUME_REQUESTED TO FALSE.
@@ -148,15 +172,14 @@ GLOBAL FUNCTION executeManeuver {
         IF TIME:SECONDS < rt - CRT {
             // Spend the long coast sun-pointed for power; the checkpoint
             // re-locks below reacquire the burn vector before ignition.
-            // solar is sheddable (not a maneuver dep) — orient only when
-            // a phase in this band actually brought the lib aboard.
-            IF PHASES_HAS_SOLAR { orientForSolar(FALSE, TRUE). }
+            // XING brings solar; other bands can still shed that library.
+            _burnCoastSolar(rt).
             mLog("Long coast wait (" + ROUND(rt - TIME:SECONDS, 0) + "s).").
             HUDTEXT("Coasting. Burn in " + ROUND(st - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
             coastAutoWarp(rt, "Burn coast", aid).
             LOCAL sr IS -1.
             UNTIL TIME:SECONDS >= rt {
-                SET sr TO trySolarHoldTick(sr).
+                SET sr TO trySolarHoldTick(sr,rt).
                 WAIT MIN(10, MAX(0.5, rt - TIME:SECONDS)).
             }
             SET WARP TO 0.
