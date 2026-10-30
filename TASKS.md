@@ -16,6 +16,14 @@ record remaining uncertainty before closing a task.
   warp-settle/context recheck. Existing MCC affordability/actual-orbit handoff
   remain mandatory. Source replay covers reported reserve hold and unsafe
   contexts; native correction pending. Future RO9 default52km policy next.
+  Operator retry exposed an incorrect command state-only mission_type check:
+  bootApplyMissionConfig clears that field for profile-owned intent. Use
+  shared missionTypeDetect, with saved Kerbin target fallback after command
+  preamble, and print context/controls on refusal. Regression now models the
+  missing state field and executes the real resolver. Native boot036 confirms
+  Pe54.037km,10.7m/s, fuel-reserve after Kerbin SOI; no node or late-approach
+  evidence. Log:/tmp/ksp-deck-20261030T201306Z-fetch-ta9p32l6/logs/
+  RO9_5008684/boot_036_core.log.
 
 - 30Oct native assist test UT5016249: fetched requested diagnostic through the
   approved read-only Deck wrapper, plus boot004. Espoir-impacter1/duna_impactor

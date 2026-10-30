@@ -59,7 +59,10 @@ def check_low_fuel_override():
     code = body(command,'_cmdReturnmcc').replace('LOCAL FUNCTION ready {'+ready+'}', '')
     code = code.replace('WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED OR ABORT.', 'settle().')
     def fixture():
-        state = dict(phase='MCC',mission_type='kerbin_return',mission_id='kerbin_return',
+        # bootApplyMissionConfig intentionally removes mission_type from state.
+        # boot_lib's declarations can also reset the global at a command prompt;
+        # resolve the saved Kerbin target through the real shared resolver.
+        state = dict(phase='MCC',target='KERBIN',mission_id='kerbin_return',
                      launch_time=100, aerobrake_alarm='owned-alarm')
         settings = dict(MCC_RETURN_RESERVE_DV=50,MCC_RETURN_DV_CAP=150,
                         AEROBRAKE_AP_RESERVE_DV=10,AEROBRAKE_AP_BURN=1,
@@ -72,7 +75,9 @@ def check_low_fuel_override():
                          ALTITUDE=2e6,THRUST=0,DELTAV=NS(VACUUM=10.7),
                          CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)),
                  ETA=NS(PERIAPSIS=10000),LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),
-                 missionOverrideUpdate=save)
+                 MISSION_TYPE='',getTarget=lambda:state.get('target',''),missionOverrideUpdate=save)
+        env['missionTypeDetect']=lambda:execute(body((ROOT/'lib/mission_type.ks').read_text(),
+                                                    'missionTypeDetect'),env)
         env['ready']=lambda:execute(ready,env)
         env['settle']=lambda:None
         return env,state,settings,writes
@@ -101,7 +106,7 @@ def check_low_fuel_override():
         if fault=='reserve':env['reserveDv']=-1
         if fault=='nan-reserve':env['reserveDv']=math.nan
         if fault=='phase':state['phase']='BPLANE'
-        if fault=='mission':state['mission_type']='other'
+        if fault=='mission':env['MISSION_TYPE']='other'
         if fault=='body':env['SHIP'].BODY.NAME='Mun'
         if fault=='atmo':env['SHIP'].BODY.ATM.EXISTS=False
         if fault=='inside':env['SHIP'].ALTITUDE=65000

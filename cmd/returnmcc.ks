@@ -13,7 +13,7 @@ LOCAL FUNCTION _cmdReturnmcc {
     bootPreamble().
     LOCAL FUNCTION ready {
         RETURN stateGet("phase","") = "MCC"
-            AND stateGet("mission_type","") = "kerbin_return"
+            AND missionTypeDetect() = "kerbin_return"
             AND SHIP:BODY:NAME = "Kerbin" AND SHIP:BODY:ATM:EXISTS
             AND SHIP:ALTITUDE > SHIP:BODY:ATM:HEIGHT
             AND ETA:PERIAPSIS >= 600 AND ETA:PERIAPSIS < 1e30
@@ -24,7 +24,15 @@ LOCAL FUNCTION _cmdReturnmcc {
             AND SHIP:CONTROL:MAINTHROTTLE <= 0 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0.
     }
     IF NOT ready() {
-        PRINT "Requires a stopped Kerbin-return MCC outside atmosphere, at least600s to Pe, no node/interrupted burn and Abort clear. Nothing changed.". RETURN.
+        PRINT "Requires a stopped Kerbin-return MCC outside atmosphere, at least600s to Pe, no node/interrupted burn and Abort clear. Nothing changed.".
+        PRINT "Context: phase=" + stateGet("phase","") + " type=" + missionTypeDetect()
+            + " body=" + SHIP:BODY:NAME + " altitude=" + SHIP:ALTITUDE
+            + " etaPe=" + ETA:PERIAPSIS + " node=" + HASNODE + " abort=" + ABORT.
+        PRINT "Controls: thrust=" + SHIP:THRUST + " raw=" + SHIP:CONTROL:MAINTHROTTLE
+            + " pilot=" + SHIP:CONTROL:PILOTMAINTHROTTLE
+            + " burnPending=" + stateGet("burn_pending","false")
+            + " burnStarted=" + stateGet("burn_started","false").
+        RETURN.
     }
     SET WARP TO 0.
     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED OR ABORT.
