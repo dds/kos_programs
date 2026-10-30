@@ -441,7 +441,7 @@ GLOBAL FUNCTION bootResetMissionSelection {
     missionOverrideClear().
     stateRemovePrefix("burn_").
     FOR key IN LIST(
-        "mission_id", "mission_name", "phase", "fairing_deployed",
+        "mission_id", "mission_name", "phase", "fairing_deployed", "assist_flight",
         "lib_band", "lib_band_phase", "lib_band_libs",
         "reload_required", "reload_reason", "reload_next_phase",
         "reload_next_band", "secondary_active", "secondary_release_done",

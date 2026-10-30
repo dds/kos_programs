@@ -17,6 +17,11 @@ GLOBAL ASTEROID_TARGET IS "".
 GLOBAL MISSION_CACHE_NEXT_BAND IS 0.
 // Initial phase bands of a profile rewrite, retained before that boot.
 GLOBAL MISSION_CACHE_HANDOFF_PHASES IS LIST().
+// Optional ordered native-assist route and its terminal mission continuation.
+GLOBAL MISSION_ASSIST_ROUTE IS LIST().
+GLOBAL MISSION_ASSIST_SEQUENCE IS LIST().
+GLOBAL MISSION_ASSIST_SETTINGS IS LEXICON().
+GLOBAL MISSION_ASSIST_SCIENCE IS 0.
 // Loader decisions happen before optional landing libraries execute.
 GLOBAL LANDING_AUTO_TARGET IS 0.
 GLOBAL LANDING_REQUIRE_SITE IS 0.
@@ -39,6 +44,7 @@ GLOBAL FUNCTION missionTypeDetect {
 GLOBAL FUNCTION missionTypeConditionalRoots {
     PARAMETER bandKey.
     LOCAL roots IS LIST().
+    IF bandKey = "ASSIST_COAST" AND MISSION_ASSIST_SCIENCE > 0 { roots:ADD("science_entry"). }
     IF bandKey = "LAND_DEORBIT" {
         IF LANDING_AUTO_TARGET > 0 { roots:ADD("landing_light_wait"). }
         IF LANDING_SITE_SCAN_ENABLE > 0 OR LANDING_REQUIRE_SITE > 0 { roots:ADD("landing_site"). }
@@ -119,6 +125,33 @@ GLOBAL FUNCTION missionTypeCacheRoots {
                 LOCAL handoffBand IS bootLibBandForPhase(handoffPhase,handoffPhase).
                 missionAppendUnique(roots,bootLibBandRoots(handoffBand)).
                 missionAppendUnique(roots,missionTypeConditionalRoots(handoffBand)).
+            }
+            LOCAL assistAhead IS FALSE.
+            FOR phaseName IN SEQUENCE {
+                IF phaseName = currentPhase { SET assistAhead TO TRUE. }
+                IF phaseName = "ASSIST_COAST" { BREAK. }
+            }
+            IF assistAhead AND MISSION_ASSIST_ROUTE:LENGTH > 0 {
+                LOCAL afterAssist IS FALSE.
+                FOR fallbackPhase IN SEQUENCE {
+                    IF afterAssist {
+                        LOCAL fallbackBand IS bootLibBandForPhase(fallbackPhase,fallbackPhase).
+                        missionAppendUnique(roots,bootLibBandRoots(fallbackBand)).
+                        missionAppendUnique(roots,missionTypeConditionalRoots(fallbackBand)).
+                        BREAK.
+                    }
+                    IF fallbackPhase = "ASSIST_COAST" { SET afterAssist TO TRUE. }
+                }
+                // Either branch can be taken offline: keep the terminal
+                // capture/science provider before committing to an assist.
+                FOR terminalPhase IN MISSION_ASSIST_SEQUENCE {
+                    IF terminalPhase = "CAPTURE" OR terminalPhase = "SCIENCE_ENTRY" {
+                        LOCAL terminalBand IS bootLibBandForPhase(terminalPhase,terminalPhase).
+                        missionAppendUnique(roots,bootLibBandRoots(terminalBand)).
+                        missionAppendUnique(roots,missionTypeConditionalRoots(terminalBand)).
+                        BREAK.
+                    }
+                }
             }
         }
     }

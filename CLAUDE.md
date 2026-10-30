@@ -9,6 +9,39 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-30 follow-up: user requests actual Espoir assist integration. Six launch
+profiles insert ASSIST/ASSIST_COAST after XING. No complete safe native route
+-> original BPLANE powered fallback. Duna surveyor: Ike flyby -> Duna capture;
+Ike profiles: Duna flyby -> direct Ike capture/ops, skipping Duna parking and
+IKE_SETUP. Entry profiles adopt only an existing free Ike -> actual Duna entry
+chain; only legacy duna_science_impact samples flyby science (at1x).
+Shared assist_route is extracted from gravity_assist and supports terminal
+ENTRY plus ORBIT, partial route indices and completed outgoing patches.
+assist_plan/runtime/coast own automatic flight. assist_flight stores only
+bound serializable intent/node fingerprint/status/index/lastPeUt/alarms;
+node edits/interrupted burns preserve review, cleaned burns re-prove raw route
+without replanning/burning. Fresh preburn gain and whole-SOI-window proof.
+Repeated body legs MUST compare distinct lastPeUt: body-only progress double
+counts the same outgoing flyby. Completed-current patches also skip old Pe
+alarm scheduling. Native route re-proven after correction/every wake/SOI/Pe;
+terminal override snapshot preserves original mission id and remaining ops,
+then stateSaveReloadState commits terminal phase before consumed state removal
+and reboot. A crash after override copy but before checkpoint is idempotent.
+ASSIST_COAST excludes optimizer. One anchored midpoint per long body passage;
+native Pe/SOI alarms otherwise, KAC-before-solar + no-KAC clock; critical <=60s
+uses a plain1x wait (no new per-second alarm/search/log). Cache retains fallback
+and terminal providers only while assist branch is ahead, not forever after
+fallback. No new cache gate. Fresh mission reset clears assist_flight.
+Source fixtures use separate synthetic raw/node chains, not real gravity
+propagation. Native acquisition/direct alternative optimization/multi-capture
+tours and native compile/storage/flight remain unverified. All86 routine check
+files pass262.21s; every new assist case <1s (slowest0.886s),0 structural errors,
+unchanged legacy KSC_DEORBIT warning. Results:/tmp/kos-assist-missions-20261030.json
+and.log. Source test includes the real optimizer -> owned executor path,
+original-goal runtime overrides,8 recovery/control cases, consumed state cleanup,
+anchored multi-day/reboot cadence and repeated-body observation regression.
+No bootstrap rebuild, deployment, game control or save edits.
+
 2026-10-30 user resumes Duna/Ike: priorities are interplanetary reliability,
 efficient phase/band boundaries, and generic assists for later tours. This
 supersedes the29Oct pause notes below; the original parked snapshot remains

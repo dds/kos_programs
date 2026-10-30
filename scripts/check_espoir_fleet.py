@@ -43,6 +43,8 @@ class Map(dict):
     def HASKEY(self, key): return dict.__contains__(self, str(key))
     def __getitem__(self, key): return dict.__getitem__(self, str(key))
     LENGTH = property(len)
+    COPY = property(lambda self:Map(self))
+    REMOVE = dict.pop
     KEYS = property(lambda self: Items(Text(key) for key in self))
     def ISTYPE(self, kind): return kind == 'Lexicon'
 

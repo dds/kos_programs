@@ -1179,10 +1179,44 @@ phases load `duna_entry`. They no longer share an executing band or pull in one
 another's flight handlers. `duna_ike_setup` remains a compatibility root for
 explicit legacy loads. Shared conic timing lives in `conic_time`.
 
-The first generic gravity-assist tool refines an **already predicted native
-itinerary**. It supports an ordered list of flybys, including repeated bodies,
-followed by an orbital-capture goal. It is preview-only, with bounded trials and
-planning time; normal transfer/capture bands do not load it. Example from a
+All six Espoir launch profiles now run `ASSIST` after XING. This is an optional
+branch based on an **already predicted native itinerary**. Without a complete,
+safe and affordable chain, the phase skips `ASSIST_COAST` and continues through
+the original BPLANE/coast/powered-capture sequence.
+
+The Duna surveyor can pass Ike before its polar Duna capture. The three Ike
+profiles can use a Duna flyby followed by direct Ike capture, bypassing Duna
+parking and the separate Ike transfer. Their normal mapping, impact or landing
+operations follow that capture. Duna entry profiles can retain an existing free
+Ike pass only when the subsequent atmospheric entry is proven; they purchase
+no detour. Only `duna_science_impact` opts into sampling during this coast,
+preserving its existing Ike science intent. One-shot instrument scheduling
+remains the operator's responsibility.
+
+Useful corrections execute through the common maneuver executor. An already
+valid natural itinerary needs no burn. The flight record binds the route,
+terminal settings, owned node and consumed periapses to this mission/launch.
+Fresh admission rechecks gain, fuel and the entire pre-SOI burn interval.
+Interrupted/edited maneuvers hold for review; a reboot after burn cleanup
+revalidates the raw trajectory and does not burn again. `ASSIST_COAST` has its
+own band, without the optimizer. It observes ordered SOI/Pe events, schedules
+one persistent midpoint check per long body passage, and uses KAC before solar
+work with a clock fallback. Critical seconds run at1x without repeated searches.
+
+At terminal entry it writes the alternate continuation as local overrides
+before checkpointing CAPTURE or SCIENCE_ENTRY. The original profile identity
+survives connected/offline boots; Ike landing/science/reserve settings remain
+attached to that branch. Consumed route state is removed after the next phase
+is durable. Later route loss, manual controls or inadequate capture time/fuel
+hold the committed flight for review. No speculative fallback burn is flown.
+Boot retains both fallback and terminal providers while the optional branch
+is ahead; this adds no mandatory cache gate. Disable the branch in a profile
+by ending it with `SET MISSION_ASSIST_ROUTE TO LIST().`
+
+The standalone `assistcheck` command remains a preview. It supports an ordered
+list of flybys, including repeated bodies, and a terminal orbit/entry goal,
+with bounded trials and planning time. Normal transfer/capture bands do not
+load the optimizer. Example from a
 linked manual prompt when KSP already predicts Ike followed by Duna:
 
 ```kos
@@ -1202,12 +1236,13 @@ final node, and retains only an improvement of at least25m/s. Failed searches
 remove only their own probe; existing nodes, mission state and controls stay
 untouched. Successful previews leave a node for manual review and do not fly it.
 
-This does **not yet** acquire an absent moon encounter, compare a new assist
-with a separately optimized direct route, or execute an automatic grand tour.
+This does **not yet** acquire an absent moon encounter or compare a new assist
+with a separately optimized direct route. Ordered unpowered flybys followed
+by one terminal capture/entry are supported; multi-capture tour planning is not.
 Capture-cost estimates exclude landing/return and detailed finite-burn losses.
 KSP's patch-lookahead depth limits how many future legs can be proven. Broad
-opportunity acquisition, automatic encounter handoff and native flight tests
-remain queued; no Espoir mission automatically takes a speculative assist.
+opportunity acquisition and native flight tests remain queued. Native compilation
+and compiled storage fit of these new bands also remain unverified.
 
 ### Espoir: original Duna science and impact attempt
 

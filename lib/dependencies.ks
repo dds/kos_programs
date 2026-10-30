@@ -86,7 +86,11 @@ GLOBAL FUNCTION dependencyLibs {
         "aerobrake_ap_math", LIST("conic_time"),
         "conic_time", LIST(),
         "arrival_policy", LIST("conic_time"),
-        "gravity_assist", LIST("arrival_policy", "maneuver"),
+        "assist_route", LIST("arrival_policy"),
+        "gravity_assist", LIST("assist_route", "maneuver"),
+        "assist_runtime", LIST("assist_route", "maneuver", "coast_wait"),
+        "assist_plan", LIST("assist_runtime", "gravity_assist"),
+        "assist_coast", LIST("assist_runtime"),
         "aerobrake_config", LIST(),
         "landing_atmo", LIST("landing_config", "utils", "orbit", "thrust_cutoff"),
         "descent", LIST("thrust_cutoff"),
@@ -147,6 +151,8 @@ GLOBAL FUNCTION dependencyPhases {
         "COAST_1HALF", LIST("capture"),
         "COAST_2HALF", LIST("capture"),
         "CAPTURE", LIST("capture"),
+        "ASSIST", LIST("assist_plan"),
+        "ASSIST_COAST", LIST("assist_coast"),
         "FLYBY", LIST("capture"),
         "CIRC", LIST("maneuver_orbit"),
         "RAISE", LIST("maneuver_orbit"),
@@ -198,6 +204,8 @@ GLOBAL FUNCTION dependencyBands {
         "ESCAPE", LIST("ESCAPE"),
         "XFER_DEPARTURE_SHAPE", LIST("DEPARTURE_SHAPE"),
         "XFER_PLAN", LIST("XING"),
+        "ASSIST_PLAN", LIST("ASSIST"),
+        "ASSIST_COAST", LIST("ASSIST_COAST"),
         "SHAPE", LIST("SHAPE"),
         "RENDEZVOUS", LIST("MATCH", "CREW_XFER"),
         "COAST", LIST("COAST"),
@@ -305,6 +313,8 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "SHAPE" { phaseMapSet(phaseMap, phaseKey, phaseShape@). }
     ELSE IF phaseKey = "DEPARTURE_SHAPE" { phaseMapSet(phaseMap, phaseKey, phaseDepartureShape@). }
     ELSE IF phaseKey = "BPLANE" { phaseMapSet(phaseMap, phaseKey, phaseBplane@). }
+    ELSE IF phaseKey = "ASSIST" { phaseMapSet(phaseMap, phaseKey, phaseAssist@). }
+    ELSE IF phaseKey = "ASSIST_COAST" { phaseMapSet(phaseMap, phaseKey, phaseAssistCoast@). }
     ELSE IF phaseKey = "REFINE_BPLANE" { phaseMapSet(phaseMap, phaseKey, phaseRefineBplane@). }
     ELSE IF phaseKey = "FREE_RT_BPLANE" { phaseMapSet(phaseMap, phaseKey, phaseFreeRtBplane@). }
     ELSE IF phaseKey = "RETURN_TRIM" { phaseMapSet(phaseMap, phaseKey, phaseReturnTrim@). }

@@ -1,6 +1,7 @@
 """Ordered native itinerary/refinement fixtures, not KSP gravity propagation."""
 import math
 import re
+import ast
 from types import SimpleNamespace as NS
 from functools import lru_cache
 import check_landing_guidance as ks
@@ -9,7 +10,8 @@ from check_minmus_kolniya import execute, executable
 from check_espoir_fleet import Map,Items
 from arrival_fixture import EventEta
 
-SOURCE=(ROOT/'lib/gravity_assist.ks').read_text()
+SOURCE='\n'.join((ROOT/f'lib/{name}.ks').read_text() for name in
+    ('assist_route','gravity_assist','assist_runtime','assist_plan','assist_coast'))
 
 
 @lru_cache(None)
@@ -19,12 +21,17 @@ def prepared(name):
     code=code.replace('LIST BODIES IN bodies.','fixture_bodies(bodies).')
     code=code.replace('WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED OR ABORT.','fixture_settled().')
     code=code.replace('REMOVE nd.','fixture_remove(nd).')
-    return params,ks.compile_nodes(ks.freeze(executable(code)))
+    code=code.replace('REMOVE NEXTNODE.','fixture_remove(NEXTNODE).')
+    code=code.replace('REBOOT.','fixture_reboot().')
+    defaults={name:ast.literal_eval(value) for name,value in
+              re.findall(r'PARAMETER (\w+) IS ("[^"\n]*"|[0-9]+)\.',code)}
+    return params,defaults,ks.compile_nodes(ks.freeze(executable(code)))
 
 
 def call(name,env,*args):
-    params,compiled=prepared(name)
-    local=env if name=='planAssistRefinement' else dict(env)
+    params,defaults,compiled=prepared(name)
+    local=env if name in ('planAssistRefinement','phaseAssist','phaseAssistCoast','_assistWait','assistFlightHandoff') else dict(env)
+    local.update(defaults)
     local.update(zip(params,args))
     try:ks.execute(compiled,local)
     except ks.Returned as result:return result.value
@@ -52,8 +59,8 @@ def fixture():
         @property
         def DELTAV(self):return NS(MAG=math.sqrt(self.RADIALOUT**2+self.NORMAL**2+self.PROGRADE**2))
     env=dict(TIME=clock,ABORT=False,HASNODE=False,ALLNODES=nodes,NEXTNODE=None,WARP=0,
-        SHIP=NS(STATUS='ORBITING',THRUST=0,CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0),
-                DELTAV=NS(VACUUM=2000),ORBIT=NS(HASNEXTPATCH=True,NEXTPATCHETA=9000)),
+        SHIP=NS(BODY=sun,STATUS='ORBITING',THRUST=0,CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0),
+                DELTAV=NS(VACUUM=2000),ORBIT=initial),
         LIST=lambda *xs:Items(xs),LEXICON=lambda *xs:Map(zip(xs[::2],xs[1::2])),SQRT=math.sqrt,
         NODE=Node,ASSIST_MAX_TRIALS=48,ASSIST_PLAN_SECONDS=30,ASSIST_MIN_GAIN=25,ASSIST_DV_CAP=50,ASSIST_RESERVE_DV=100,
         fixture_bodies=lambda rows:rows.extend([sun,duna,ike]),
@@ -90,16 +97,16 @@ def check_native_itinerary():
         if fault=='parent':ps[1].PERIAPSIS=40000
         if fault=='plane':r[1]['INC']=90
         if fault=='nan':ps[3].ECCENTRICITY=float('nan')
-        if fault=='wrong-body':ps[2].BODY=NS(HASBODY=False)
+        if fault=='wrong-body':ps[2].BODY=NS(NAME='unlisted',HASBODY=False)
         if fault=='ap':r[1]['AP']=80000
-        assert not env['assistEvaluate'](nd,r,[bs[2],bs[1]])['OK'],fault
+        assert not env['assistEvaluate'](nd,r,Items([bs[2],bs[1]]))['OK'],fault
     # Repeated moon/parent legs are ordered by position, not phase-name lookup.
     env,r,bs,ps,_,_=fixture()
     r.insert(1,Map(BODY='Ike',MIN_PE=25000))
     second=NS(**vars(ps[2]));second.ETA=EventEta(env['TIME'],15000);second.NEXTPATCHETA=14500
     parent=NS(**vars(ps[1]));parent.NEXTPATCH=second;parent.NEXTPATCHETA=13500
     ps[2].NEXTPATCH=parent
-    result=env['assistEvaluate'](env['NODE'](1600,0,0,0),r,[bs[2],bs[2],bs[1]])
+    result=env['assistEvaluate'](env['NODE'](1600,0,0,0),r,Items([bs[2],bs[2],bs[1]]))
     assert result['OK'] and [x['BODY'] for x in result['LEGS']]==['Ike','Ike','Duna']
     print('PASS: actual ordered native patches, safe in-patch flybys and final capture cost; truncated/unsafe/bound/unlisted/plane-invalid paths reject, repeated moon legs work')
 

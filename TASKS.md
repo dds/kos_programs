@@ -6,6 +6,32 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct follow-up: user requests wiring assistcheck into Duna/Ike missions.
+  All six Espoir launch sequences now have ASSIST -> ASSIST_COAST after XING.
+  Optional already-native ordered chains: Ike flyby -> Duna orbit/entry,
+  or Duna flyby -> direct Ike capture, retaining original powered fallback.
+  Shared assist_route validates real future events, geometry and terminal
+  ORBIT/ENTRY goals. New burns retain25m/s gain/minimum/cap and live reserve;
+  valid natural itineraries require no burn. Generic assist_plan/runtime/coast
+  bind serializable route/settings/node/progress to mission/launch/vehicle;
+  native proof after burn/each encounter, explicit interrupted/edited-node
+  recovery, and idempotent terminal override -> phase checkpoint -> reboot.
+  Original profile identity survives; consumed route state clears afterward.
+  Coast excludes optimizer, KAC precedes solar, no-KAC polls the clock,
+  one anchored midpoint per long body passage plus native SOI/Pe events,
+  critical seconds at1x without per-second alarm/solar/log churn. Repeated
+  moons are consumed by distinct observed periapsis epochs, not body name.
+  Optional science only on existing duna_science_impact intent. Cache retains
+  fallback + terminal providers only while branch is ahead; no new cache gate.
+  Complete source tests cover all profiles/overrides, real optimizer/executor
+  path with synthetic native response, reboot boundaries, controls/budgets/
+  clocks/alarms, long cadence and repeated moons. All86 routine check files
+  pass262.21s; every new assist case <1s (slowest0.886s). Structural audit
+  has0 errors and the unchanged legacy KSC_DEORBIT handler warning.
+  Still opportunistic: absent encounter acquisition, optimized direct-route
+  comparison, multi-capture tour planning and native compile/storage/flight
+  evidence remain open. No bootstrap rebuild or remote game/code changes.
+
 - 30Oct priorities: user resumes interplanetary reliability, efficient phase/
   band boundaries, and generic gravity assists for future tours. Audit and
   finish parked arrival-intent/timing work first; validate orbital capture

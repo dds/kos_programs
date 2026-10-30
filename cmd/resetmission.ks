@@ -15,7 +15,7 @@ LOCAL FUNCTION _cmdResetmission {
     missionOverrideClear().
     stateRemovePrefix("burn_").
     FOR key IN LIST(
-        "mission_id", "mission_name", "target", "payloads", "phase",
+        "mission_id", "mission_name", "target", "payloads", "phase", "assist_flight",
         "lib_band", "lib_band_phase", "lib_band_libs",
         "reload_required", "reload_reason", "reload_next_phase",
         "reload_next_band", "fairing_deployed",

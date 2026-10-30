@@ -15,7 +15,7 @@ LOCAL FUNCTION _cmdAssistcheck {
     LOCAL result IS planAssistRefinement(route).
     IF NOT result["OK"] {
         PRINT "Assist preview unavailable: " + result["REASON"] + ".".
-        PRINT "A complete native flyby/capture chain is required; original trajectory retained.".
+        PRINT "A complete native flyby/arrival chain is required; original trajectory retained.".
         RETURN.
     }
     PRINT "ASSIST PREVIEW ONLY: no burn or mission change.".
