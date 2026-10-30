@@ -45,7 +45,8 @@ GLOBAL FUNCTION assistPreviewDirect {
     IF bodies:LENGTH <> 1 { RETURN rejected. }
     LOCAL bound IS "LOWER".
     LOCAL source IS "node-plus-capture".
-    LOCAL cost IS nd:DELTAV:MAG.
+    LOCAL nodeDv IS nd:DELTAV:MAG.
+    LOCAL cost IS nodeDv.
     LOCAL captureDv IS 0.
     LOCAL patch IS nd:ORBIT.
     IF _assistPreviewBoundGoal(patch,fallbackGoal) {
@@ -82,7 +83,7 @@ GLOBAL FUNCTION assistPreviewDirect {
             IF NOT prefix["OK"] { RETURN rejected. }
             IF NOT (prefix["PATCH"]:ECCENTRICITY > 1) { RETURN rejected. }
         } ELSE {
-            SET cost TO proof["COST"]. SET captureDv TO proof["CAPTURE_DV"].
+            SET captureDv TO proof["CAPTURE_DV"]. SET cost TO nodeDv+captureDv.
         }
         IF proof["OK"] AND terminal["BODY"] = fallbackGoal["BODY"] {
             // Different same-body entry/orbit intent is not an equivalent goal.
@@ -96,9 +97,9 @@ GLOBAL FUNCTION assistPreviewDirect {
             }
         }
     }
-    IF NOT assistSearchTimeLeft(budget) OR NOT (cost >= nd:DELTAV:MAG AND cost < 1e30) { RETURN rejected. }
+    IF NOT assistSearchTimeLeft(budget) OR NOT (nodeDv >= 0 AND cost >= nodeDv AND cost < 1e30) { RETURN rejected. }
     RETURN LEXICON("OK",TRUE,"GOAL",terminal:COPY,"BOUND",bound,"COST",cost,
-        "NODE_DV",nd:DELTAV:MAG,"UT",nd:TIME,"CAPTURE_DV",captureDv,
+        "NODE_DV",nodeDv,"UT",nd:TIME,"CAPTURE_DV",captureDv,
         "PRICED_BODY",fallbackGoal["BODY"],"SOURCE",source).
 }
 
@@ -149,6 +150,10 @@ GLOBAL FUNCTION assistPreviewResult {
     PARAMETER reportState.
     diagnosticArchiveLine(reportState,"STATS assist-search result ok=" + result["OK"]
         + " reason=" + result["REASON"] + " restored=" + result["RESTORED"] + " noBurn=True").
+    IF result:HASKEY("REFERENCE_CHECK") {
+        diagnosticArchiveLine(reportState,"STATS assist-search reference-check details="
+            + configLiteral(result["REFERENCE_CHECK"])).
+    }
     IF result:HASKEY("DIRECT_COST") {
         diagnosticArchiveLine(reportState,"STATS assist-search baseline totalDv=" + result["DIRECT_COST"]
             + " bound=" + result["DIRECT_BOUND"] + " source=" + result["DIRECT_SOURCE"]

@@ -286,6 +286,47 @@ def check_mission_policy_and_seek():
     print('PASS: all four Espoir profiles plus the retired entry alias supply their own fallback capture/entry policy; seek chooses the missing moon leg rather than refining an already-predicted parent encounter')
 
 
+def check_reference_snapshot_and_diagnostics():
+    env,nd,route,limits,direct,state,world,events,trace,fallback=rough_surveyor_fixture()
+    goal=route[-1]
+    live=1062.42445158483;snapshot=live-.000003
+    type(nd).DELTAV=property(lambda node:NS(MAG=live))
+    reference=Map(OK=True,BOUND='LOWER',GOAL=goal.COPY,COST=snapshot,NODE_DV=snapshot,UT=nd.TIME)
+    ctx=Map(NODE=nd,UT=nd.TIME,GOAL=goal)
+    assert not snapshot>=nd.DELTAV.MAG # The former exact live-price inequality.
+    check=env['_assistSearchReferenceCheck'](reference,ctx)
+    assert check['OK'] and check['REASON']=='verified' and 0<check['DV_DRIFT']<.00001
+    for fault,reason in (('bound','unsupported-reference-bound'),('goal','reference-goal-mismatch'),
+                         ('price','invalid-reference-price'),('nan','invalid-reference-price'),
+                         ('drift','reference-node-dv-changed'),('epoch','reference-node-epoch-changed')):
+        trial=reference.COPY
+        if fault=='bound':trial['BOUND']='APPROXIMATE'
+        if fault=='goal':trial['GOAL']=Map(goal,INC=0)
+        if fault=='price':trial['COST']=snapshot-.000001
+        if fault=='nan':trial['COST']=math.nan
+        if fault=='drift':trial['NODE_DV']=live-.00002
+        if fault=='epoch':trial['UT']+=.00002
+        checked=env['_assistSearchReferenceCheck'](trial,ctx)
+        assert not checked['OK'] and checked['REASON']==reason,(fault,checked)
+    # Exercise the actual adapter too: repeated API reads drift even though
+    # PRN/UT are untouched. The new price/certificate must share one snapshot.
+    env,nd,_,limits,_,state,world,events,trace,_=rough_surveyor_fixture()
+    cfg=profile('duna_orbital_surveyor');env.update(cfg,BPLANE_ARRIVAL_MODE='ORBIT')
+    fallback=env['assistPreviewMissionFallback']();goal=cfg['MISSION_ASSIST_ROUTE'][-1]
+    nd.RADIALOUT=40;nd.NORMAL=-90.6064343994207;nd.PROGRADE=1057.65919346699
+    nd.TIME=5044939.76832619
+    reads=[]
+    def delta(node):
+        value=live+len(reads)*.000002;reads.append(value);return NS(MAG=value)
+    type(nd).DELTAV=property(delta)
+    proof=env['assistPreviewDirect'](nd,goal,env['assistSearchBudget'](limits),fallback)
+    assert proof['OK'] and proof['COST']==proof['NODE_DV']==reads[0]==live,proof
+    checked=env['_assistSearchReferenceCheck'](proof,Map(NODE=nd,UT=nd.TIME,GOAL=goal))
+    assert checked['OK'] and 0<checked['DV_DRIFT']<.00001,checked
+    assert nd.RADIALOUT==40 and nd.NORMAL==-90.6064343994207 and nd.TIME==5044939.76832619
+    print('PASS: micro-drift reproduces the exact live-price rejection; consistent adapter snapshots pass the unchanged1e-5 live tolerance, while underpricing, large drift, wrong goal/bound and epoch mismatch reject with specific diagnostics')
+
+
 @lru_cache(None)
 def command_code():
     code=function_body(COMMAND,'_cmdAssistsearch')
@@ -373,4 +414,5 @@ if __name__=='__main__':
     check_capture_search_radius()
     check_rough_orbital_departure()
     check_mission_policy_and_seek()
+    check_reference_snapshot_and_diagnostics()
     check_command_control_flow()

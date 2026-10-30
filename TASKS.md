@@ -6,6 +6,36 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct native assist preview5027687: Espoir-Ike-Surveyor1 is currently using
+  duna_orbital_surveyor (craft name differs), fuel3907.233m/s, node1062.42445,
+  Duna Pe32,409km. New rough-arrival policy runs, but reference consistency
+  rejects before trials in0.04game/0.048wall seconds; restored/no burn.
+  Likely micro-drift issue: price sampled ND:DELTAV:MAG earlier, exact
+  COST>=freshMAG inequality contradicts the existing1e-5 snapshot/live
+  tolerance. Both adapter price and NODE_DV now use one snapshot; cost still
+  covers its own node snapshot exactly, live1e-5 and raw PRN/UT ownership
+  checks unchanged. Full and parent-prefix capture pricing unchanged.
+  New reference-check records numeric cost/snapshot/live/drift/epoch and
+  specific bound/goal/price/identity reasons on first/final validation.
+  referencePolicy=snapshot-price-v1 identifies updated diagnostics. Synthetic
+  micro-drift reproduces old refusal; unchanged tolerance/underprice/goal/
+  bound/epoch and takeover guards pass. Exact native cause remains unproven
+  until the new check row is captured; do not blindly widen its tolerance.
+  Evidence:/tmp/ksp-deck-20261030T215401Z-fetch-4bg87pes/logs/_diagnostics/
+  assistsearch_Espoir-Ike-Surveyor1_5027687.log; matching boot005 in
+  fetch-w0rm9hwq/logs/Espoir-Ike-Surveyor1_5026714/boot_005_core.log.
+  Boot005 confirms initial XING solar aim succeeds:5027610.7..5027647.5,
+  cached-axis settle then bounded fine probe/return; flow1.08, battery85%,
+  aimed=True/parkedDeparture=True. Native T-180 burn reacquisition unverified.
+  Operator advised normal XING can proceed (preview did not change node),
+  first of each role before duplicates, but park fleet first and use actual
+  departure/alarm order to preserve the pending Mun return appointment.
+  All88 routine files pass179.64s; new snapshot regression0.030s, structural
+  0 errors/unchanged legacy KSC_DEORBIT warning. Report:
+  /tmp/kos-assist-reference-snapshot-20261030.json and.log. Native reference
+  retry remains pending; new diagnostics can confirm or falsify micro-drift
+  as the cause of this specific native refusal.
+
 - 30Oct long-XING solar request: the executor already had a solar hook but
   XFER_PLAN omitted the library. xfer_plan now declares solar; maneuver itself
   remains independent so other burn bands may shed it. Long-coast threshold

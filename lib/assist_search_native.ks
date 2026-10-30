@@ -67,15 +67,35 @@ LOCAL FUNCTION _assistSearchSameGoal {
     RETURN TRUE.
 }
 
-LOCAL FUNCTION _assistSearchReferenceOk {
+LOCAL FUNCTION _assistSearchReferenceCheck {
     PARAMETER reference.
     PARAMETER ctx.
-    IF NOT reference["OK"] { RETURN FALSE. }
-    RETURN (reference["BOUND"] = "EXACT" OR reference["BOUND"] = "LOWER")
-        AND _assistSearchSameGoal(ctx["GOAL"],reference["GOAL"])
-        AND reference["COST"] >= ctx["NODE"]:DELTAV:MAG AND reference["COST"] < 1e30
-        AND ABS(reference["NODE_DV"]-ctx["NODE"]:DELTAV:MAG) < 0.00001
-        AND ABS(reference["UT"]-ctx["UT"]) < 0.00001.
+    LOCAL checked IS LEXICON("OK",FALSE,"REASON","direct-reference-unavailable").
+    IF NOT reference["OK"] {
+        IF reference:HASKEY("REASON") { SET checked["REASON"] TO reference["REASON"]. }
+        RETURN checked.
+    }
+    SET checked["COST"] TO reference["COST"].
+    SET checked["NODE_DV"] TO reference["NODE_DV"].
+    SET checked["REASON"] TO "unsupported-reference-bound".
+    IF reference["BOUND"] <> "EXACT" AND reference["BOUND"] <> "LOWER" { RETURN checked. }
+    SET checked["REASON"] TO "reference-goal-mismatch".
+    IF NOT _assistSearchSameGoal(ctx["GOAL"],reference["GOAL"]) { RETURN checked. }
+    // Price and NODE_DV belong to the same snapshot. The live check below
+    // retains its original tolerance; raw vector/time ownership is separate.
+    SET checked["REASON"] TO "invalid-reference-price".
+    IF NOT (reference["NODE_DV"] >= 0 AND reference["COST"] >= reference["NODE_DV"]
+            AND reference["COST"] < 1e30) { RETURN checked. }
+    LOCAL liveDv IS ctx["NODE"]:DELTAV:MAG.
+    SET checked["LIVE_NODE_DV"] TO liveDv.
+    SET checked["DV_DRIFT"] TO liveDv-reference["NODE_DV"].
+    SET checked["REASON"] TO "reference-node-dv-changed".
+    IF NOT (ABS(liveDv-reference["NODE_DV"]) < 0.00001) { RETURN checked. }
+    SET checked["UT_DRIFT"] TO reference["UT"]-ctx["UT"].
+    SET checked["REASON"] TO "reference-node-epoch-changed".
+    IF NOT (ABS(reference["UT"]-ctx["UT"]) < 0.00001) { RETURN checked. }
+    SET checked["OK"] TO TRUE. SET checked["REASON"] TO "verified".
+    RETURN checked.
 }
 
 // Numeric-only progress: partial scores guide exploration; ONLY assistEvaluate
@@ -279,14 +299,16 @@ GLOBAL FUNCTION searchAssistNode {
     IF NOT _assistSearchOwns(ctx) OR NOT assistSearchIdle() {
         SET rejected["RESTORED"] TO FALSE. SET rejected["CANCELLED"] TO TRUE. RETURN rejected.
     }
-    IF NOT _assistSearchReferenceOk(direct,ctx) {
-        SET rejected["REASON"] TO "direct-reference-unavailable".
-        IF direct:HASKEY("REASON") { SET rejected["REASON"] TO direct["REASON"]. }
+    LOCAL referenceCheck IS _assistSearchReferenceCheck(direct,ctx).
+    IF NOT referenceCheck["OK"] {
+        SET rejected["REASON"] TO referenceCheck["REASON"].
+        SET rejected["REFERENCE_CHECK"] TO referenceCheck.
         RETURN rejected.
     }
     SET ctx["DIRECT"] TO direct.
     SET ctx["BASE_HAS_ROUTE"] TO assistEvaluate(nd,route,bodies,0,"",SHIP:BODY:NAME)["OK"].
     LOCAL result IS assistSearchVectors(ctx,assistSearchNativeProbe@,limits,budget).
+    SET result["REFERENCE_CHECK"] TO referenceCheck.
     SET result["DIRECT_COST"] TO direct["COST"].
     SET result["DIRECT_BOUND"] TO direct["BOUND"].
     SET result["DIRECT_SOURCE"] TO "caller-provided".
@@ -296,15 +318,19 @@ GLOBAL FUNCTION searchAssistNode {
         SET direct TO directAssessor:CALL(nd,ctx["GOAL"],budget).
         IF NOT _assistSearchOwns(ctx) OR NOT assistSearchIdle() OR NOT assistSearchTimeLeft(budget) {
             SET result["OK"] TO FALSE. SET ctx["CANCELLED"] TO TRUE.
-        } ELSE IF NOT _assistSearchReferenceOk(direct,ctx) { SET result["OK"] TO FALSE. }
-        ELSE {
-            SET result["OK"] TO result["COST"]+limits["MIN_GAIN"] <= direct["COST"]
-                OR (limits["SCIENCE_EXTRA_DV"] > 0 AND NOT ctx["BASE_HAS_ROUTE"]
-                    AND result["COST"] <= direct["COST"]+limits["SCIENCE_EXTRA_DV"]).
-            SET result["DIRECT_COST"] TO direct["COST"].
-            SET result["DIRECT_BOUND"] TO direct["BOUND"].
-            IF direct:HASKEY("SOURCE") { SET result["DIRECT_SOURCE"] TO direct["SOURCE"]. }
-            SET result["EXTRA_DV"] TO result["COST"]-direct["COST"].
+        } ELSE {
+            SET referenceCheck TO _assistSearchReferenceCheck(direct,ctx).
+            SET result["REFERENCE_CHECK"] TO referenceCheck.
+            IF NOT referenceCheck["OK"] { SET result["OK"] TO FALSE. }
+            ELSE {
+                SET result["OK"] TO result["COST"]+limits["MIN_GAIN"] <= direct["COST"]
+                    OR (limits["SCIENCE_EXTRA_DV"] > 0 AND NOT ctx["BASE_HAS_ROUTE"]
+                        AND result["COST"] <= direct["COST"]+limits["SCIENCE_EXTRA_DV"]).
+                SET result["DIRECT_COST"] TO direct["COST"].
+                SET result["DIRECT_BOUND"] TO direct["BOUND"].
+                IF direct:HASKEY("SOURCE") { SET result["DIRECT_SOURCE"] TO direct["SOURCE"]. }
+                SET result["EXTRA_DV"] TO result["COST"]-direct["COST"].
+            }
         }
     } ELSE { SET result["OK"] TO FALSE. }
     IF NOT _assistSearchOwns(ctx) OR NOT assistSearchIdle() OR NOT assistSearchTimeLeft(budget) {
@@ -317,6 +343,7 @@ GLOBAL FUNCTION searchAssistNode {
     SET result["EPOCH"] TO ctx["UT"].
     SET result["REASON"] TO "no-admissible-assist".
     IF result["OK"] { SET result["REASON"] TO "candidate-requires-admission". }
+    IF NOT referenceCheck["OK"] { SET result["REASON"] TO referenceCheck["REASON"]. }
     IF ctx["CANCELLED"] { SET result["REASON"] TO "planning-cancelled". }
     IF result["OK"] {
         LOCAL offsets IS result["OFFSETS"].

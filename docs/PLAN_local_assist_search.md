@@ -259,6 +259,19 @@ structural0 errors and unchanged legacy KSC_DEORBIT warning. Report:
 `/tmp/kos-assist-orbit-prefix-20261030.json` and `.log`. Corrected native
 orbital search still requires a flight run.
 
+Native5027687 reaches the new rough-arrival policy but fails reference
+consistency before trials. An exact price>=later live-node-DV comparison
+can contradict the separate1e-5 drift tolerance for a departure-only bound.
+Price and NODE_DV now share one snapshot; the validator checks that price
+against its own snapshot, retaining the original live tolerance, goal,
+bound, epoch and raw-vector ownership checks. Specific reference-check
+metrics are recorded even on rejection. The synthetic micro-drift case
+demonstrates the bug; native causal confirmation still needs those metrics.
+No unpriced later costs are added and no admission limit is widened.
+All88 routine check files pass179.64s; snapshot regression0.030s, structural
+0 errors/unchanged legacy KSC_DEORBIT warning. Report:
+`/tmp/kos-assist-reference-snapshot-20261030.json` and `.log`.
+
 Relevant native API references: [future-position prediction](https://ksp-kos.github.io/KOS/commands/prediction.html),
 [orbit patches](https://ksp-kos.github.io/KOS/structures/orbits/orbit.html), and
 [active vessel / real time](https://ksp-kos.github.io/KOS/structures/misc/kuniverse.html),

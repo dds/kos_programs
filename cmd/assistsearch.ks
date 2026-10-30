@@ -90,6 +90,7 @@ LOCAL FUNCTION _cmdAssistsearch {
     IF NOT reportState["READY"] { RETURN. }
     diagnosticArchiveLine(reportState,"STATS assist-search schema=2 code=" + codeVersion()
         + " baselinePolicy=xing-arrival-lower"
+        + " referencePolicy=snapshot-price-v1"
         + " ut=" + TIME:SECONDS + " phase=" + stateGet("phase","")
         + " mission=" + stateGet("mission_id","") + " vessel=" + SHIP:NAME
         + " body=" + SHIP:BODY:NAME + " ipu=" + CONFIG:IPU

@@ -1310,6 +1310,10 @@ not the map's Conic Patch Limit setting). An `open-hyperbolic-tail` warning mean
 escape patch has no outgoing patch exposed; prediction depth is one possible
 cause. Check the game's Conic Patch Limit when the full itinerary is invisible.
 Copy that file back for review even when the search finds no useful route.
+`referencePolicy=snapshot-price-v1` prices the node and records its delta-v
+from one snapshot. The existing live-drift tolerance and vector/time
+ownership checks remain. A `reference-check` row reports the exact rejection
+reason, snapshot/live delta-v and drift, rather than only a generic failure.
 If a native error or takeover prevents restoration, inspect the archived
 original vector or reload the quicksave before using the remaining node.
 
