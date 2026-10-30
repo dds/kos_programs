@@ -80,6 +80,10 @@ LOCAL FUNCTION _mccReturnHold {
         + " body=" + SHIP:BODY:NAME
         + " PeKm=" + ROUND(SHIP:PERIAPSIS / 1000, 3)
         + " remainingDv=" + ROUND(SHIP:DELTAV:VACUUM, 1)).
+    IF reason = "fuel-reserve" {
+        PRINT "To explicitly spend the reserve toward52km entry: RUNPATH(" + CHAR(34)
+            + "0:/cmd/returnmcc.ks" + CHAR(34) + ",52000,0). Then REBOOT.".
+    }
     yieldToPrompt().
 }
 

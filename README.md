@@ -62,6 +62,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/reentrype.ks",53000).` | Restore Kerbin entry Pe at the upcoming apoapsis from an outbound orbit outside atmosphere; validates the native node, executes, preserves the mission |
 | `RUNPATH("0:/cmd/directreturn.ks").` | From a landed Mun/Minmus craft, model a single-stage direct ascent to Kerbin Pe 53 km with a 20 m/s reserve; preview only, no launch or mission change |
 | `RUNPATH("0:/cmd/returnrescue.ks").` | Repair an in-flight Kerbin return and resume at MCC |
+| `RUNPATH("0:/cmd/returnmcc.ks",52000,0).` | Retarget a held Kerbin-return MCC to52km and explicitly release its50m/s reserve; reboot to plan within live fuel. Keeps the mission, staging and entry policy |
 | `RUNPATH("0:/cmd/kerbinrecover.ks").` | Inspect the live current/predicted Kerbin orbit and stage fuel; archive a report without changing the mission. Pass `"apply"` to configure shallow recovery with optional KSC targeting and reboot into MCC |
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
 | `RUNPATH("0:/cmd/shaperetry.ks").` | Clear an interrupted SHAPE attempt in stable orbit, retaining mission/targets/budget; then reboot to replan from the achieved orbit. Preserves unrelated nodes |

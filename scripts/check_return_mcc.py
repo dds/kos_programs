@@ -51,6 +51,75 @@ def check_gates():
     print('PASS: ordinary150m/s cap, opt-in live full-stack budget, unchanged50m/s reserve, invalid-value rejection,52–54km corridor, tiny burns and stale nodes')
 
 
+def check_low_fuel_override():
+    from check_burn_completion import execute
+    from check_shape_minimum import Lex
+    command = (ROOT/'cmd/returnmcc.ks').read_text()
+    ready = body(command,'ready')
+    code = body(command,'_cmdReturnmcc').replace('LOCAL FUNCTION ready {'+ready+'}', '')
+    code = code.replace('WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED OR ABORT.', 'settle().')
+    def fixture():
+        state = dict(phase='MCC',mission_type='kerbin_return',mission_id='kerbin_return',
+                     launch_time=100, aerobrake_alarm='owned-alarm')
+        settings = dict(MCC_RETURN_RESERVE_DV=50,MCC_RETURN_DV_CAP=150,
+                        AEROBRAKE_AP_RESERVE_DV=10,AEROBRAKE_AP_BURN=1,
+                        BURN_STAGE_LIMIT=1,DESCENT_CHUTES_TAG='descent_chutes')
+        writes=[]
+        def save(values):writes.append(dict(values));settings.update(values)
+        env=dict(targetPe=52000,reserveDv=0,ABORT=False,HASNODE=False,WARP=7,
+                 stateGet=state.get,RUNPATH=lambda *_:None,bootPreamble=lambda:None,
+                 SHIP=NS(BODY=NS(NAME='Kerbin',ATM=NS(EXISTS=True,HEIGHT=70000)),
+                         ALTITUDE=2e6,THRUST=0,DELTAV=NS(VACUUM=10.7),
+                         CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)),
+                 ETA=NS(PERIAPSIS=10000),LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),
+                 missionOverrideUpdate=save)
+        env['ready']=lambda:execute(ready,env)
+        env['settle']=lambda:None
+        return env,state,settings,writes
+    env,state,settings,writes=fixture();before=state.copy()
+    assert execute(body(MCC,'_mccReturnBudget'),dict(env,**settings))==0
+    execute(code,env)
+    assert len(writes)==1 and state==before and env['WARP']==0
+    assert execute(body(MCC,'_mccReturnBudget'),dict(env,**settings))==10.7
+    assert all(settings[key]==52000 for key in ('CAPTURE_PE','REENTRY_PE','AEROBRAKE_PE'))
+    assert settings['MCC_AEROBRAKE_SAFE_PE_MIN']==52000
+    assert settings['MCC_AEROBRAKE_SAFE_PE_MAX']==52250
+    assert settings['AEROBRAKE_AP_RESERVE_DV']==10 and settings['AEROBRAKE_AP_BURN']==1
+    assert settings['BURN_STAGE_LIMIT']==1 and settings['DESCENT_CHUTES_TAG']=='descent_chutes'
+    for pe,accepted in ((54000,False),(52250,True),(52050,True),(52000,True),(51999,False)):
+        patch=NS(PERIAPSIS=pe)
+        env.update(patch=patch,target=env['SHIP'].BODY,targetPe=52000,
+                   _mccAerobrakeSafePeMin=lambda *_:settings['MCC_AEROBRAKE_SAFE_PE_MIN'],
+                   _mccAerobrakeSafePeMax=lambda *_:settings['MCC_AEROBRAKE_SAFE_PE_MAX'])
+        assert execute(body(MCC,'_mccAerobrakePatchSafe'),env)==accepted
+    for fault in ('target','nan-target','reserve','nan-reserve','phase','mission','body','atmo',
+                  'inside','late','nan-eta','node','interrupted','abort','thrust','nan-thrust',
+                  'raw','pilot','changed-while-settling'):
+        env,state,settings,writes=fixture();before=settings.copy()
+        if fault=='target':env['targetPe']=51999
+        if fault=='nan-target':env['targetPe']=math.nan
+        if fault=='reserve':env['reserveDv']=-1
+        if fault=='nan-reserve':env['reserveDv']=math.nan
+        if fault=='phase':state['phase']='BPLANE'
+        if fault=='mission':state['mission_type']='other'
+        if fault=='body':env['SHIP'].BODY.NAME='Mun'
+        if fault=='atmo':env['SHIP'].BODY.ATM.EXISTS=False
+        if fault=='inside':env['SHIP'].ALTITUDE=65000
+        if fault=='late':env['ETA'].PERIAPSIS=599
+        if fault=='nan-eta':env['ETA'].PERIAPSIS=math.nan
+        if fault=='node':env['HASNODE']=True
+        if fault=='interrupted':state.update(burn_pending='true',burn_started='true')
+        if fault=='abort':env['ABORT']=True
+        if fault=='thrust':env['SHIP'].THRUST=1
+        if fault=='nan-thrust':env['SHIP'].THRUST=math.nan
+        if fault=='raw':env['SHIP'].CONTROL.MAINTHROTTLE=.1
+        if fault=='pilot':env['SHIP'].CONTROL.PILOTMAINTHROTTLE=.1
+        if fault=='changed-while-settling':env['settle']=lambda:env.update(HASNODE=True)
+        saved=state.copy();execute(code,env)
+        assert not writes and settings==before and state==saved,fault
+    print('PASS: reported10.7m/s fuel-reserve hold explicitly releases reserve, requests52km acquisition within existing52–54km safety bounds, preserves mission/alarms/staging/assist/repair reserve; unsafe or changed contexts cannot write')
+
+
 def check_planner_fixture():
     # Independent two-body inbound trajectories, starting with the reported
     # 2200 km Pe. Exercise the existing Newton PE algorithm's scalar update
@@ -198,6 +267,7 @@ def check_recovery_guards():
 
 if __name__ == '__main__':
     check_gates()
+    check_low_fuel_override()
     check_planner_fixture()
     check_phase_flow()
     check_apo_recovery()

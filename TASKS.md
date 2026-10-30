@@ -6,6 +6,17 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct live Mun return MCC held with10.7m/s remaining, Pe54km, reason
+  fuel-reserve (default50). User requests spending it toward52km entry.
+  cmd/returnmcc.ks,52000,0 writes scoped overrides only, then operator REBOOT:
+  live vessel budget minus explicit reserve,52–52.25km acquisition inside
+  unchanged52–54km correction safety bounds. Keeps mission, phase, alarms,
+  staging, assistance and10m/s later aerobrake repair reserve. No node/burn
+  acceptance or deletion; stopped Kerbin-return MCC only,600s Pe lead,
+  warp-settle/context recheck. Existing MCC affordability/actual-orbit handoff
+  remain mandatory. Source replay covers reported reserve hold and unsafe
+  contexts; native correction pending. Future RO9 default52km policy next.
+
 - 30Oct native assist test UT5016249: fetched requested diagnostic through the
   approved read-only Deck wrapper, plus boot004. Espoir-impacter1/duna_impactor
   in XING: nd1063.910655m/s, Duna Pe19,907,948.56m vs entry2–8km. Old helper
