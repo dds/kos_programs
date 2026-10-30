@@ -133,6 +133,7 @@ def check_coarse_arrival_strict_final_orbit():
     env['_bplaneElementPlaneError']=lambda inc,lan,want_inc,want_lan:execute(element,
         dict(inc=inc,lan=lan,wantInc=want_inc,wantLan=want_lan))
     assert cfg['BPLANE_ANG_TOL']==1 and cfg['BPLANE_REQUIRE_PLANE']==1
+    env['arrivalGoalPolicyOk']=lambda *_:True # airless policy; atmospheric event proof is tested separately
     assert execute(current,env)
     env['BPLANE_ANG_TOL']=.2
     assert not execute(current,env) # Reproduce the overly strict old profile.

@@ -1,10 +1,46 @@
 # Flight automation work
 
-Updated 2026-10-29. Keep this list current as scope changes. A source check
+Updated 2026-10-30. Keep this list current as scope changes. A source check
 passing is not native flight validation. Preserve mission safeguards and
 record remaining uncertainty before closing a task.
 
 ## Compact working handoff
+
+- 30Oct priorities: user resumes interplanetary reliability, efficient phase/
+  band boundaries, and generic gravity assists for future tours. Audit and
+  finish parked arrival-intent/timing work first; validate orbital capture
+  versus atmospheric-entry policies, persistent approach/final wakes and safe
+  orbital disk prefetch. Then isolate Duna/Ike setup bands and implement a
+  bounded reusable assist planner with explicit encounter/final-body intent,
+  native-patch validation and powered fallback. No game control/deployment.
+  Do not count analytic candidates or source tests as flown assist validation.
+  Source changes now distinguish ORBIT/ENTRY/FLYBY, require actual in-patch
+  planetary Pe/atmospheric crossing, estimate finite correction duration with
+  the limiter applied once, and bound long approaches to approach+final wakes
+  while retaining the short-moon single retry. Espoir opts into safe idle
+  two-future-band orbital prefetch plus an explicit profile-rewrite handoff;
+  no falling-hop copy or new cache gate.
+  CAPTURE preserves existing/interrupted maneuvers and always checks finite
+  available fuel. Duna atmospheric handlers and Ike setup split into separate
+  providers/bands with shared settings and a compatibility root.
+  Generic gravity_assist/cmd/assistcheck previews bounded refinement of an
+  existing native ordered flyby/capture itinerary; repeated bodies supported.
+  It never flies nodes or changes the mission. Parent/flyby/event/plane/fuel/
+  ownership guards and a fresh final native check; comparison is with the
+  existing itinerary, not an optimized direct alternative. Default25m/s net
+  gain and100m/s post-capture reserve (command accepts explicit reserve).
+  Remaining: acquire missing opportunities, compare direct/capture/assist
+  alternatives, automatic flyby handoff/tour orchestration, powered Duna
+  science entry, native flight/compiled storage evidence. Capture deliberately
+  holds existing/unflown nodes after reboot until ownership can be persisted
+  and revalidated; interrupted burns still need explicit recovery.
+  All85 routine check files pass176.58s on final source, including legacy
+  Eve/Duna entry compatibility and the complete initial Ike transfer/refine/
+  capture cache manifest. Every new arrival/assist case runs under1s.
+  Structural audit:0 errors, unchanged legacy KSC_DEORBIT handler warning.
+  Source-token band comparison: combined Duna/Ike26097 -> Ike setup9306;
+  native KSM bytes unmeasured. No bootstrap rebuild required.
+  Native Deck diagnostics unavailable (no route to host).
 
 - Espoir Ike soft lander requested29Oct: ike_lander profile and local
   ike_lander_ops handoff added,25km circular capture with650m/s post-capture
@@ -34,7 +70,7 @@ record remaining uncertainty before closing a task.
   Follow-up ike_lander now supplies the separate soft-landing variant;
   impact cannot collect a planned landed-biome observation. Hardware, native
   arrival/refinement, power/radio and flight validation remain outstanding.
-  This resumes the profile work, not the parked nonpassing arrival WIP.
+  Historical29Oct profile work did not resume arrival WIP;30Oct does (above).
   New source fixtures exercise real profile serialization through fresh boots,
   unsafe-handoff refusal, legacy behavior, native-node admission, failed-burn
   preservation and impact waits. All83routine check files pass105.30s; fleet
@@ -67,7 +103,8 @@ record remaining uncertainty before closing a task.
   RO9_4854889/boot_018_core.log. Snapshot now gives actual exhaust2892.9618/
   3089.0947, fuel.171711/.225, drop.42125/0, startMass1.40845. Previous
   hardware assumptions345/290s were illustrative; use measured data next.
-  Duna/Ike remain paused; no game controls, code deployment or save edits.
+  Historical29Oct Duna/Ike pause superseded by30Oct work above.
+  No game controls, code deployment or save edits.
 
 - Latest Mun retry: native RO9_4854889 boot017 at4918463 confirms storage
   improvement: phase free7038->13826bytes. New failure is an H-gate plateau:
@@ -86,11 +123,11 @@ record remaining uncertainty before closing a task.
   All81routinecheckfiles pass140.10s; native corrected retry pending.
   No deployment, craft controls or save edits.
 
-- Current priority: Mun deorbit near-root rejection AND onboard storage.
-  User explicitly paused Duna/Ike on29Oct. Its uncommitted work is preserved
+- Historical29Oct priority: Mun deorbit near-root rejection AND storage.
+  User paused Duna/Ike on29Oct, resumed30Oct. The original WIP is preserved
   separately at /tmp/kos-duna-ike-paused-20261029-1fk3rmgq (tracked.patch,
-  files/, manifest.json); those edits are removed from the active checkout.
-  Do not resume arrival work until requested; it was NOT fully passing.
+  files/, manifest.json); restored and hardened in30Oct work above.
+  The parked snapshot was NOT fully passing; current validation is separate.
   Native RO9_4854889 boot014:14.94deg,14x15.1km, reaches locked-10.59deg
   site. Solver cross=0 and final51265/51903m powered residual-638m; mission
   tolerance500m, so rejection is legitimate, not a plane/reachability failure.
@@ -126,18 +163,20 @@ record remaining uncertainty before closing a task.
   105.15s; native compiled storage/flight retry remain pending.
   No remote controls, log deletions, code deployment or save edits.
 
-- Duna/Ike arrival review (29Oct): the900s final BPLANE retry is a fixed
+- Historical Duna/Ike arrival review (29Oct; source fixes30Oct above):
+  the900s final BPLANE retry was a fixed
   configurable pre-SOI wake, not a geometry/execution-time prediction.
   _bplaneCoastEncounter explicitly excludes atmospheric targets; therefore
   _bplaneRetryEncounter, minimum-correction arrival acceptance and the final
-  retry do not currently generalize to Duna. Do not just remove that guard:
+  retry did not generalize to Duna. Preserve the original guard's intent:
   distinguish intended atmospheric entry from orbital capture, retain parent
   coast/plane/fuel/Abort/node ownership checks, and validate the actual future
   atmospheric crossing. Add bounded, persistent approach checkpoints using
   solve/alignment/burn time and sensitivity; remeasure after SOI changes and
   any Ike encounter. Espoir currently samples only incidental native Ike
   encounters with a subsequent Duna entry; active Ike targeting remains open.
-  These are identified readiness gaps, not implemented/flight-verified fixes.
+  Intent/timing/prefetch now have source fixes; flight validation and active
+  opportunity acquisition remain open.
 
 - Urgent entry follow-up (29Oct): RO9_4880796 boot026 holds42.617s before
   atmospheric interface despite Pe53km/Ap94.7km. Previous reentryresume was

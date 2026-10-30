@@ -1,5 +1,12 @@
 # Plan: decouple Duna from Ike (make everything Duna and/or Ike)
 
+Implemented in source on2026-10-30: `duna_entry` owns the three atmospheric
+handlers, `ike_setup` owns the leg rewrite, and `duna_ike_config` owns shared
+settings/persistence. They have separate DUNA_ENTRY/IKE_SETUP bands; the old
+`duna_ike_setup` root loads both only for explicit compatibility callers.
+The original audit below describes the pre-refactor layout. Native compiled
+size, loading and flight still need game validation.
+
 ## Intent
 
 Today the Duna arrival/entry/landing machinery and the Ike flyby glue are
@@ -79,7 +86,14 @@ Duna entry; the combo uses both. None forces the other.
 
 ## Status
 
-Audit only — no split done yet. The `ATMO_WALK` insertion into the Duna
+Implemented30Oct: `duna_entry` owns atmospheric handlers, `ike_setup` owns
+the Ike-leg rewrite, and `duna_ike_config` owns shared configuration/persistence.
+The DUNA_ENTRY and IKE_SETUP bands resolve independently. The old
+`duna_ike_setup` root is a compatibility dependency on both providers.
+Source closures and legacy/new generated leg profiles are checked; native
+compilation, storage fit and flight validation remain pending.
+
+The `ATMO_WALK` insertion into the Duna
 entry sequences (both `duna_scisat_lander` and `DUNA_ENTRY_SEQUENCE`)
 landed alongside this doc. Related: [[powered-descent-roadmap]],
 `docs/PLAN_duna_precision_landing.md`,

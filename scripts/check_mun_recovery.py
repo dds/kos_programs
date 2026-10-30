@@ -64,7 +64,7 @@ def check_fuel_and_capture():
         (25, 300, 899, True), (50, 799, 899, True),
         (50, 800, 899, False), (10, 300, 0, False)]:
         env = dict(nd=NS(DELTAV=NS(MAG=correction)), targetBody=None,
-                   planned={'patch': object()}, bplaneCaptureCost=lambda *_: capture,
+                   planned={'patch': object()}, arrivalRequiredCaptureDv=lambda *_: capture,
                    BPLANE_CAPTURE_MARGIN=PROFILE['BPLANE_CAPTURE_MARGIN'])
         assert (evaluate(needed, **env) <= fuel) == allowed
     phase = body(CAPTURE, 'phaseCapture')

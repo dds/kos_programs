@@ -1137,9 +1137,77 @@ Goo/Science Jr units for later contexts. Instrument scheduling is still open.
 Source/control-flow checks cover the two-leg settings, fresh boots, legacy
 compatibility, deorbit ownership/fuel/cutoff, landing-provider retention and
 resident impact/surface science/KAC waits.
-Native compilation, storage fit, arrival/refinement and flight validation remain
-pending, including the existing in-flight cache-prefetch and Duna arrival work.
+Native compilation, storage fit and flight validation remain pending. The
+arrival-intent/timing and safe orbital prefetch changes below are source-tested.
 No mandatory blackout/cache gate is introduced. No bootstrap rebuild is needed.
+
+### Interplanetary arrival and optional assists
+
+`BPLANE_ARRIVAL_MODE` distinguishes `ORBIT` (default), `ENTRY`, and `FLYBY`.
+Espoir's Duna impact profiles explicitly request ENTRY; orbital profiles keep
+ORBIT. Atmospheric entry requires an actual future inbound atmospheric crossing
+and periapsis on the native patch. A Duna conic truncated by an Ike encounter
+cannot stand in for a proven subsequent Duna entry. Optional entry/flyby
+corrections do not reserve fuel for an unwanted orbital capture. Existing fuel,
+required-plane, parent-clearance, correction-minimum and node-ownership guards
+remain active. A tiny correction can hand forward only when the unburned native
+trajectory satisfies the configured arrival goal and fuel constraints.
+
+Late correction timing reserves solver/alignment time and an estimated finite
+burn interval from measured limited thrust. The engine's AVAILABLETHRUST already
+includes its limiter; it is not scaled twice. Long SOI transits can have one
+approach checkpoint and one final checkpoint, bound to the saved flight/phase.
+Short moon encounters retain one final retry. Reboot and ETA jitter do not reset
+consumed checkpoints. KAC alarms precede solar work, and the running clock wait
+still resumes when KAC is absent. CAPTURE preserves an existing/interrupted node
+for explicit recovery rather than deleting it and authorizing a replacement.
+
+Espoir opts into `MISSION_CACHE_NEXT_BAND=1`. Boot caches the next two distinct
+phase bands, including their conditional providers, without executing that code.
+This reaches capture even when coast and refinement alternate between bands.
+`MISSION_CACHE_HANDOFF_PHASES` retains explicitly listed bands of a profile
+rewrite. Espoir's initial Ike missions retain XING, BPLANE and COAST_1HALF
+(including capture), then clear that list in local ops. Orbital copying
+requires a link, idle controls, no node/interrupted burn and a safe coast
+with more than1800s before a predicted SOI change. Falling hops and atmospheric
+danger defer it. The existing4KiB reserve still applies; copy failure is not a
+new burn-admission gate. Native compiled fit must still be verified. Legacy
+missions keep their existing cache policy.
+
+`IKE_SETUP` now loads `ike_setup` plus shared leg configuration; Duna atmospheric
+phases load `duna_entry`. They no longer share an executing band or pull in one
+another's flight handlers. `duna_ike_setup` remains a compatibility root for
+explicit legacy loads. Shared conic timing lives in `conic_time`.
+
+The first generic gravity-assist tool refines an **already predicted native
+itinerary**. It supports an ordered list of flybys, including repeated bodies,
+followed by an orbital-capture goal. It is preview-only, with bounded trials and
+planning time; normal transfer/capture bands do not load it. Example from a
+linked manual prompt when KSP already predicts Ike followed by Duna:
+
+```kos
+RUNPATH("0:/cmd/assistcheck.ks", LIST(
+    LEXICON("BODY","Ike","MIN_PE",25000),
+    LEXICON("BODY","Duna","MIN_PE",75000,"AP",2880000)), 650).
+```
+
+The last argument retains650m/s after correction plus estimated capture; it
+defaults to100m/s. Body names are data, not Duna/Ike branches. Flybys require
+safe, real in-patch periapses and outgoing hyperbolic patches. Parent transits
+are checked conservatively; incomplete chains, unrequested encounters and
+required-plane misses reject. A terminal `MAX_PE` or `INC` can further constrain
+the final patch. Search compares correction plus impulsive capture cost with
+the unchanged itinerary, honors the correction cap and reserve, revalidates the
+final node, and retains only an improvement of at least25m/s. Failed searches
+remove only their own probe; existing nodes, mission state and controls stay
+untouched. Successful previews leave a node for manual review and do not fly it.
+
+This does **not yet** acquire an absent moon encounter, compare a new assist
+with a separately optimized direct route, or execute an automatic grand tour.
+Capture-cost estimates exclude landing/return and detailed finite-burn losses.
+KSP's patch-lookahead depth limits how many future legs can be proven. Broad
+opportunity acquisition, automatic encounter handoff and native flight tests
+remain queued; no Espoir mission automatically takes a speculative assist.
 
 ### Espoir: original Duna science and impact attempt
 
@@ -1188,11 +1256,10 @@ these messages are **not confirmed science credit**. See the
 [kOS experiment API](https://ksp-kos.github.io/KOS/structures/vessels/scienceexperiment.html)
 and [stock transmission implementation](https://github.com/KSP-KOS/KOS/blob/develop/src/kOS/Suffixed/PartModuleField/StockScienceExperimentFields.cs).
 Use the R&D ledger to confirm credited science. These STATS rows use the
-normal boot-log archive path. Entry cache roots are declared for arrival,
-but the current hop-oriented cache synchronizer still waits for a landed
-state. In-flight prefetch needs a follow-up before an offline entry handoff
-can rely on it; maintain a link for that reboot in the meantime. No mandatory
-cache gate was added. Native compilation, storage fit and flight are pending.
+normal boot-log archive path. Espoir now enables idle orbital entry-code
+prefetch; copy failures remain diagnostic and do not create a mandatory cache
+gate. Native compilation, storage fit and offline flight remain unverified;
+check the cache diagnostics before relying on an offline reboot.
 
 For the new build, provide a Duna-range communication link, deployable
 antennas/solar through the normal launcher tags, enough EC for instrument

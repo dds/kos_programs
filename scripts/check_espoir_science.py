@@ -55,7 +55,7 @@ def check_profile_and_boot():
     assert 'phaseScienceEntry@' in bindings
     cache_src = (ROOT/'lib/mission_type.ks').read_text()
     for band in ('XFER_BPLANE','XFER_ARRIVE','SCIENCE_ENTRY','LAUNCH'):
-        roots = run(cache_src,'missionTypeCacheRoots',dict(bandKey=band,SEQUENCE=KList(cfg['SEQUENCE']),
+        roots = run(cache_src,'missionTypeCacheRoots',dict(bandKey=band,currentPhase="",SEQUENCE=KList(cfg['SEQUENCE']),
                     LIST=lambda *xs:KList(xs)))
         assert ('science_entry' in roots) == (band in ('XFER_BPLANE','XFER_ARRIVE'))
     assert 'bootLibLoad("rocket_craft")' in (ROOT/'craft/Espoir.ks').read_text()

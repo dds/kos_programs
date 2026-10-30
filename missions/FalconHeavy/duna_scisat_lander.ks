@@ -14,6 +14,7 @@ SET TRANSFER_SCAN_SAMPLES_PER_ORBIT TO 16.
 // Direct Duna atmospheric arrival. Duna atmosphere ends near 50km;
 // this first-flight profile aims well inside it so DESCENT can commit
 // to landing instead of aerobraking into a skip-out orbit.
+SET BPLANE_ARRIVAL_MODE TO "ENTRY".
 SET CAPTURE_PE TO 18000.
 SET CAPTURE_INC TO 0.
 SET CAPTURE_DIR TO "PROGRADE".

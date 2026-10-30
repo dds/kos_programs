@@ -139,7 +139,8 @@ LOCAL FUNCTION _bplaneMinimumArrivalOk {
     IF NOT (planeErr >= 0 AND planeErr < 1e30) { RETURN FALSE. }
     IF BPLANE_REQUIRE_PLANE <> 0 AND planeErr > BPLANE_ANG_TOL { RETURN FALSE. }
     LOCAL reserve IS MAX(0,MAX(BPLANE_CAPTURE_MARGIN,BPLANE_TRIM_RESERVE_DV)).
-    LOCAL needed IS bplaneCaptureCost(patch,targetBody)+reserve.
+    IF NOT arrivalGoalPolicyOk(hit,targetBody,wantPe) { RETURN FALSE. }
+    LOCAL needed IS arrivalRequiredCaptureDv(patch,targetBody)+reserve.
     IF NOT (needed >= 0 AND needed <= SHIP:DELTAV:VACUUM) { RETURN FALSE. }
     mLog("STATS bplane minimum-handoff PeKm=" + ROUND(pe/1000,3)
         + " peTolerance=" + tolerance + " planeErr=" + ROUND(planeErr,3)
@@ -190,7 +191,7 @@ LOCAL FUNCTION _bplaneDeferPeToMidcourse {
     IF hit["entryUt"] - TIME:SECONDS <= 3 * MAX(1, BPLANE_LEAD) { RETURN FALSE. }
     LOCAL laterCap IS _bplaneTrimCap(targetBody, REFINE_BPLANE_DV_CAP).
     IF laterCap <= MIN_EXEC_DV { RETURN FALSE. }
-    LOCAL needed IS bplaneCaptureCost(hit["patch"], targetBody)
+    LOCAL needed IS arrivalRequiredCaptureDv(hit["patch"], targetBody)
         + MAX(0, BPLANE_CAPTURE_MARGIN) + laterCap.
     IF needed > SHIP:DELTAV:VACUUM { RETURN FALSE. }
     mLog("STATS bplane decision=defer-pe-to-midcourse PeKm=" + ROUND(peNow / 1000, 3)
@@ -282,7 +283,7 @@ LOCAL FUNCTION _bplaneRetryEncounter {
 
 LOCAL FUNCTION _bplaneCoastEncounter {
     PARAMETER targetBody.
-    IF targetBody:ATM:EXISTS OR SHIP:BODY = targetBody { RETURN 0. }
+    IF SHIP:BODY = targetBody { RETURN 0. }
     IF NOT SHIP:ORBIT:HASNEXTPATCH { RETURN 0. }
     IF SHIP:ORBIT:NEXTPATCH:BODY <> targetBody { RETURN 0. }
     LOCAL hit IS findArrivalPatch(0, targetBody).
@@ -295,6 +296,7 @@ LOCAL FUNCTION _bplaneCoastEncounter {
             AND hit["entryUt"] < 1e30
             AND hit["entryUt"] > TIME:SECONDS) { RETURN 0. }
     IF NOT _bplaneParentClearUntil(hit["entryUt"]) { RETURN 0. }
+    IF NOT arrivalCoastPolicyOk(hit,targetBody,CAPTURE_PE) { RETURN 0. }
     RETURN hit.
 }
 
@@ -429,15 +431,39 @@ LOCAL FUNCTION _bplaneRetryWaitPending {
 LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
     PARAMETER targetBody.
     PARAMETER retryReason IS "unconverged-optional-correction".
+    PARAMETER solutionDv IS -1.
+    PARAMETER retryCap IS -1.
     IF ABORT { RETURN FALSE. }
     _bplaneEnsureSoiAlarm(targetBody).
     LOCAL hit IS _bplaneCoastEncounter(targetBody).
     LOCAL latestUt IS 0.
     LOCAL wakeUt IS 0.
+    LOCAL checkpoint IS "final".
+    LOCAL finalOnly IS FALSE.
+    IF _bplaneRetryWaitPending(targetBody,FALSE) {
+        LOCAL previous IS stateGet("bplane_retry_wait",LEXICON()).
+        IF previous:HASKEY("checkpoint") {
+            IF previous["waiting"] {
+                SET finalOnly TO previous["checkpoint"] = "final".
+            } ELSE {
+                SET finalOnly TO previous["checkpoint"] = "approach".
+            }
+        }
+    }
     IF hit <> 0 {
-        SET latestUt TO hit["entryUt"] - SOI_BUFFER_TIME
-            - BPLANE_LEAD - MIDCOURSE_REFINE_MARGIN.
-        SET wakeUt TO MIN(latestUt,hit["entryUt"]-BPLANE_FINAL_REFINE_LEAD).
+        LOCAL phaseCap IS BPLANE_DV_CAP.
+        IF stateGet("phase","") = "REFINE_BPLANE" { SET phaseCap TO REFINE_BPLANE_DV_CAP. }
+        IF retryCap >= 0 { SET phaseCap TO retryCap. }
+        LOCAL timing IS arrivalRetryTiming(hit,_bplaneTrimCap(targetBody,phaseCap),
+            MIN_EXEC_DV,solutionDv,finalOnly).
+        IF timing["OK"] {
+            SET latestUt TO timing["LATEST"]. SET wakeUt TO timing["WAKE"].
+            SET checkpoint TO timing["CHECKPOINT"].
+            mLog("STATS bplane retry-timing checkpoint=" + checkpoint + " wakeUt=" + wakeUt
+                + " latestUt=" + latestUt + " peUt=" + timing["PE_UT"]
+                + " burnSeconds=" + timing["BURN_SECONDS"] + " solutionDv=" + solutionDv
+                + " arrivalMode=" + BPLANE_ARRIVAL_MODE).
+        }
     }
     IF _bplaneRetryWaitPending(targetBody,FALSE) AND hit <> 0 {
         // Resume the existing checkpoint, clipped to current native safety.
@@ -451,8 +477,8 @@ LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
                     + " latestUt=" + latestUt + " solvingNow=True").
                 RETURN TRUE.
             }
-        } ELSE {
-            // One final check per unburned trajectory, even if ETA jitters.
+        } ELSE IF NOT finalOnly {
+            // Legacy records and final checkpoints remain single-use.
             SET wakeUt TO 0.
         }
     }
@@ -462,10 +488,11 @@ LOCAL FUNCTION _bplaneWaitBeforeSolverRetry {
             "Running mission retries arrival correction; no rejected burn is flown.").
         stateSet("bplane_retry_wait",LEX("mission",stateGet("mission_id",""),
             "launch",stateGetNum("launch_time",0),"phase",stateGet("phase",""),
-            "target",targetBody:NAME,"wakeUt",wakeUt,"alarm",alarmId,"waiting",TRUE)).
+            "target",targetBody:NAME,"wakeUt",wakeUt,"alarm",alarmId,"waiting",TRUE,
+            "checkpoint",checkpoint)).
         mLogWarn("STATS bplane retry-wake target=" + targetBody:NAME
             + " wakeUt=" + wakeUt + " eta=" + (wakeUt-TIME:SECONDS)
-            + " latestUt=" + latestUt + " checkpoint=final automaticResume=True"
+            + " latestUt=" + latestUt + " checkpoint=" + checkpoint + " automaticResume=True"
             + " after=" + retryReason).
         PRINT "ARRIVAL RETRY: running coast until UT " + ROUND(wakeUt,1) + ".".
         LOCAL solarRef IS enterSolarCoast("BPLANE retry",TRUE,TRUE,wakeUt).
@@ -688,6 +715,10 @@ GLOBAL FUNCTION bplaneCorrectionAllowed {
     IF planned = 0 {
         _bplaneHoldCorrection("planned-encounter-missing",missionOwned). RETURN FALSE.
     }
+    IF NOT arrivalGoalPolicyOk(planned,targetBody,CAPTURE_PE) {
+        _bplaneHoldCorrection("arrival-intent-or-native-event",missionOwned). RETURN FALSE.
+    }
+    LOCAL burnSeconds IS arrivalBurnSeconds(nd:DELTAV:MAG).
     // Recheck after solving: a trial burn can shift entry, and planning
     // itself consumes some of the remaining alignment time.
     mLog("STATS bplane timing nodeUt=" + nd:TIME
@@ -696,8 +727,9 @@ GLOBAL FUNCTION bplaneCorrectionAllowed {
         + " soiGap=" + (planned["entryUt"]-nd:TIME)
         + " minLead=" + BPLANE_EXISTING_NODE_MIN_ETA
         + " minSoiGap=" + SOI_BUFFER_TIME).
-    IF NOT (nd:TIME-TIME:SECONDS >= BPLANE_EXISTING_NODE_MIN_ETA
-            AND planned["entryUt"]-nd:TIME > SOI_BUFFER_TIME) {
+    IF NOT (burnSeconds >= 0 AND burnSeconds < 1e30
+            AND nd:TIME-burnSeconds/2-TIME:SECONDS >= BPLANE_EXISTING_NODE_MIN_ETA
+            AND planned["entryUt"]-nd:TIME-burnSeconds/2 > SOI_BUFFER_TIME) {
         _bplaneHoldCorrection("insufficient-pre-soi-burn-lead",missionOwned). RETURN FALSE.
     }
     IF BPLANE_REQUIRE_PLANE <> 0 AND checkCorridor {
@@ -717,8 +749,8 @@ GLOBAL FUNCTION bplaneCorrectionAllowed {
     LOCAL afterCost IS 0.
     IF original <> 0 {
         SET shift TO ABS(planned["entryUt"] - original["entryUt"]).
-        SET beforeCost TO bplaneCaptureCost(original["patch"], targetBody).
-        SET afterCost TO bplaneCaptureCost(planned["patch"], targetBody).
+        SET beforeCost TO arrivalRequiredCaptureDv(original["patch"], targetBody).
+        SET afterCost TO arrivalRequiredCaptureDv(planned["patch"], targetBody).
         mLog("STATS bplane comparison originalPeKm=" + ROUND(original["patch"]:PERIAPSIS / 1000, 2)
             + " originalInc=" + ROUND(original["patch"]:INCLINATION, 2)
             + " originalEntryUt=" + ROUND(original["entryUt"], 1)
@@ -734,7 +766,7 @@ GLOBAL FUNCTION bplaneCorrectionAllowed {
     }
     IF BPLANE_CAPTURE_MARGIN >= 0 {
         LOCAL needed IS nd:DELTAV:MAG
-            + bplaneCaptureCost(planned["patch"], targetBody) + BPLANE_CAPTURE_MARGIN.
+            + arrivalRequiredCaptureDv(planned["patch"], targetBody) + BPLANE_CAPTURE_MARGIN.
         mLog("STATS bplane capture-budget neededDv=" + ROUND(needed, 2)
             + " marginDv=" + BPLANE_CAPTURE_MARGIN
             + " availableDv=" + ROUND(SHIP:DELTAV:VACUUM, 2)).
@@ -855,6 +887,9 @@ LOCAL FUNCTION _bplaneSafeEncounter {
 
     IF BPLANE_REQUIRE_PLANE <> 0 { RETURN FALSE. }
     IF meas = 0 { RETURN FALSE. }
+    IF targetBody:ATM:EXISTS {
+        RETURN _bplaneCurrentCorridorOk(targetBody,CAPTURE_PE,_bplaneWantInc(),CAPTURE_LAN).
+    }
     RETURN meas["pe"] <= targetBody:SOIRADIUS * BPLANE_SAFE_HANDOFF_SOI_MULT.
 }
 
@@ -922,6 +957,7 @@ LOCAL FUNCTION _bplaneCurrentCorridorOk {
     // not supply the geometry for this no-burn acceptance decision.
     LOCAL hit IS findArrivalPatch(0, targetBody).
     IF hit = 0 { RETURN FALSE. }
+    IF NOT arrivalGoalPolicyOk(hit,targetBody,wantPe) { RETURN FALSE. }
     LOCAL patch IS hit["patch"].
     LOCAL peErr IS ABS(patch:PERIAPSIS - wantPe).
     LOCAL planeErr IS _bplaneElementPlaneError(
@@ -1227,6 +1263,7 @@ LOCAL FUNCTION _acquireEncounter {
 LOCAL FUNCTION _bplaneCreateCorrectionNode {
     PARAMETER targetBody.
     PARAMETER missionOwned IS FALSE.
+    PARAMETER correctionCap IS 0.
     IF ABORT { RETURN 0. }
     IF WARP > 0 {
         SET WARP TO 0.
@@ -1236,7 +1273,12 @@ LOCAL FUNCTION _bplaneCreateCorrectionNode {
     IF SHIP:BODY = targetBody {
         _bplaneHoldCorrection("entered-target-before-correction-plan",missionOwned). RETURN 0.
     }
-    LOCAL nodeUt IS TIME:SECONDS+BPLANE_LEAD.
+    LOCAL capSeconds IS arrivalBurnSeconds(correctionCap).
+    LOCAL minimumSeconds IS arrivalBurnSeconds(MIN_EXEC_DV).
+    IF NOT (capSeconds >= 0 AND minimumSeconds >= 0) {
+        _bplaneHoldCorrection("burn-duration-unavailable",missionOwned). RETURN 0.
+    }
+    LOCAL nodeUt IS TIME:SECONDS+arrivalCorrectionLead(capSeconds).
     LOCAL hit IS findArrivalPatch(0,targetBody).
     IF hit <> 0 {
         IF NOT (hit["entryUt"] > TIME:SECONDS AND hit["entryUt"] < 1e30) {
@@ -1244,7 +1286,7 @@ LOCAL FUNCTION _bplaneCreateCorrectionNode {
         }
         // Keep the node in the current body's frame, including late boots.
         // Leave the existing SOI buffer plus a physics-update allowance.
-        SET nodeUt TO MIN(nodeUt,hit["entryUt"]-SOI_BUFFER_TIME-1).
+        SET nodeUt TO MIN(nodeUt,hit["entryUt"]-SOI_BUFFER_TIME-MAX(2,minimumSeconds/2)-1).
     }
     LOCAL lead IS nodeUt-TIME:SECONDS.
     mLog("STATS bplane node-time ut=" + nodeUt + " lead=" + lead
@@ -1268,7 +1310,7 @@ LOCAL FUNCTION _bplanePlanPeOnly {
     IF findArrivalPatch(0, targetBody) = 0 {
         _bplaneHoldCorrection("pe-recovery-encounter-missing"). RETURN 0.
     }
-    LOCAL nd IS _bplaneCreateCorrectionNode(targetBody,missionOwned).
+    LOCAL nd IS _bplaneCreateCorrectionNode(targetBody,missionOwned,dvCap).
     IF nd = 0 { RETURN 0. }
     WAIT 0.1.
     LOCAL iteration IS 0.
@@ -1436,6 +1478,7 @@ GLOBAL FUNCTION planBplaneCorrection {
         }
         IF phaseShouldYield OR ABORT OR nd = 0 { RETURN 0. }
         IF NOT _bplaneCorrectionAboveMinimum(nd) {
+            LOCAL solutionDv IS nd:DELTAV:MAG.
             REMOVE nd.
             IF NOT allowMidcourseRetry { RETURN 0. }
             WAIT 0.02.
@@ -1444,7 +1487,7 @@ GLOBAL FUNCTION planBplaneCorrection {
                 RETURN 0.
             }
             IF _bplaneQueueMidcourseRetry("below-execution-minimum") { RETURN 0. }
-            IF NOT _bplaneWaitBeforeSolverRetry(targetBody,"below-execution-minimum") { RETURN 0. }
+            IF NOT _bplaneWaitBeforeSolverRetry(targetBody,"below-execution-minimum",solutionDv,dvCap) { RETURN 0. }
         } ELSE {
             maneuverUiArchiveLog("bplane").
             RETURN nd.
@@ -1465,7 +1508,7 @@ LOCAL FUNCTION _bplanePlanFullCorrection {
         LOCAL nd IS _bplanePlanFullAttempt(targetBody,wantPe,wantInc,wantLan,
             _bplaneTrimCap(targetBody,dvCap),pristineLog,allowMidcourseRetry).
         IF nd <> -1 { RETURN nd. }
-        IF NOT _bplaneWaitBeforeSolverRetry(targetBody) { RETURN 0. }
+        IF NOT _bplaneWaitBeforeSolverRetry(targetBody,"unconverged-optional-correction",-1,dvCap) { RETURN 0. }
     }
     RETURN 0.
 }
@@ -1480,7 +1523,7 @@ LOCAL FUNCTION _bplanePlanFullAttempt {
     PARAMETER allowMidcourseRetry IS FALSE.
     LOCAL peTol IS BPLANE_PE_TOL.
     LOCAL angTol IS BPLANE_ANG_TOL.
-    LOCAL nd IS _bplaneCreateCorrectionNode(targetBody,allowMidcourseRetry).
+    LOCAL nd IS _bplaneCreateCorrectionNode(targetBody,allowMidcourseRetry,dvCap).
     IF nd = 0 { RETURN 0. }
     bplaneResetWarnings().
     WAIT 0.02.

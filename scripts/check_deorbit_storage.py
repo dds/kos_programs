@@ -92,7 +92,7 @@ def check_boot_planning_and_cleanup():
                    bootEnsureInitialPhase=lambda _:None, bootLibBandForPhase=lambda *_:'LAND_DEORBIT',
                    bootLibBandRoots=lambda _:KList(phases['land_deorbit']),
                    bootLibResolve=lambda roots:KList(closure(roots,deps)),
-                   missionTypeCacheRoots=lambda _:KList(), missionExtraLibs=lambda:KList(),
+                   missionTypeCacheRoots=lambda *_:KList(), missionExtraLibs=lambda:KList(),
                    missionAppendUnique=lambda dest,src:dest.extend(x for x in src if x not in dest))
         env['missionTypeConditionalRoots']=lambda band:run(
             function_body(TYPE,'missionTypeConditionalRoots'),dict(env,bandKey=band))

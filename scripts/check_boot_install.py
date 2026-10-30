@@ -99,6 +99,7 @@ def fixture(linked=True,capacity=200000):
     env['bootLibResolve']=lambda roots:roots
     env['bootLibArchiveOnly']=lambda _:False
     env['run_body']=lambda source:run(adapt(source),env)
+    env.setdefault("MISSION_CACHE_NEXT_BAND",0)
     return env,files,events,state
 
 

@@ -14,6 +14,7 @@ SET TRANSFER_SCAN_SAMPLES_PER_ORBIT TO 16.
 // Aggressive Duna aerocapture. The current direct-entry lander uses
 // ~18km Pe; 20km should provide useful braking while leaving a small
 // corridor for simulation tuning.
+SET BPLANE_ARRIVAL_MODE TO "ENTRY".
 SET CAPTURE_PE TO 20000.
 SET CAPTURE_INC TO 0.
 SET CAPTURE_DIR TO "PROGRADE".

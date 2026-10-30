@@ -6,6 +6,7 @@ from types import SimpleNamespace as NS
 import check_landing_guidance as ks
 from check_codebase import ROOT, function_body, dependency_tables, closure
 from check_runtime_contracts import KList, run
+from arrival_fixture import install, torch_hardware, EventEta
 
 MID = (ROOT/'lib/midcourse.ks').read_text()
 CAPTURE = (ROOT/'lib/capture.ks').read_text()
@@ -25,14 +26,15 @@ ks.SOURCES += '\n'+SOURCE
 class Lex(dict):
     LENGTH=property(len)
     COPY=property(lambda self:Lex(self))
+    HASKEY=dict.__contains__
 
 
 def environment():
     saved,events,alarms = {},[],{}
-    moon=NS(NAME='Mun',ATM=NS(EXISTS=False),RADIUS=200000,SOIRADIUS=2429559)
+    moon=NS(NAME='Mun',ATM=NS(EXISTS=False,HEIGHT=50000),RADIUS=200000,SOIRADIUS=2429559)
     native=NS(HASNEXTPATCH=True,NEXTPATCHETA=10000,
               NEXTPATCH=NS(BODY=moon,HASNEXTPATCH=False))
-    hit=dict(entryUt=11000,patch=NS(PERIAPSIS=15000))
+    hit=dict(entryUt=11000,patch=NS(PERIAPSIS=15000,HASNEXTPATCH=False))
     env=dict(TIME=NS(SECONDS=1000), ABORT=False,
              SHIP=NS(BODY=NS(NAME='Kerbin',ATM=NS(EXISTS=True,HEIGHT=70000),
                              RADIUS=600000,MU=3.5316e12),
@@ -53,7 +55,7 @@ def environment():
              nextPhase=lambda seq:events.append(('advance',seq)),
              xferSeq=KList(('BPLANE','COAST_1HALF','REFINE_BPLANE','COAST_2HALF')),
              PHASES_HAS_SOLAR=True,fixture_unlock=lambda:None,
-             LEXICON=lambda:Lex(),LEX=lambda *xs:Lex(zip(xs[::2],xs[1::2])),
+             LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),LEX=lambda *xs:Lex(zip(xs[::2],xs[1::2])),
              HASNODE=False,maneuverBurnInterrupted=lambda:False,
              trySolarHoldTick=lambda ref,deadline=0:ref,
              shipHasSolarPanels=lambda:True,shipSolarFlow=lambda:1,
@@ -61,6 +63,9 @@ def environment():
              HUDTEXT=lambda *_:None,YELLOW='yellow')
     env.update({name:float(value) for name,value in re.findall(
         r'GLOBAL (\w+) IS (\d+(?:\.\d+)?)\.',SOURCE)})
+    hit['patch'].ETA=EventEta(env['TIME'],13000)
+    hit['patch'].BODY=moon
+    install(env);torch_hardware(env)
     def alarm(name,ut,note):
         events.append(('alarm',name,ut,note))
         if not env['ADDONS'].KAC.AVAILABLE:return ''
@@ -244,7 +249,7 @@ def retry_environment():
         events.append(('yield',saved['phase']))
     def wait(dt):
         # Conic refresh waits have no native propagation in this fixture.
-        if dt<1:return
+        if dt in (0.02,0.1,0.2):return
         env['TIME'].SECONDS+=dt
         env['SHIP'].ORBIT.NEXTPATCHETA=hit['entryUt']-env['TIME'].SECONDS
     def forbidden(*_):raise AssertionError('rejected correction reached burn/capture')
@@ -298,7 +303,7 @@ def check_automatic_retry_through_coast():
         env['measureArrival']=lambda *_:dict(pe=15000,inc=45,lan=0)
         env['_bplaneCorridorError']=lambda *_:dict(planeErr=45,peErr=0)
         env['_bplaneCorridorOk']=lambda *_:False
-        def abort_retry(target):
+        def abort_retry(target, *unused):
             events.append(('resident-retry',saved['phase']))
             env['ABORT']=True
             return False
@@ -427,7 +432,7 @@ def check_later_live_solver_retries():
         caps=[]
         env['_bplaneTrimCap']=lambda target,cap:caps.append(cap) or cap
         result=env['_bplanePlanFullCorrection'](moon,15000,90,-1,30,'',True)
-        assert result is node and len(attempts)==2 and caps==[30]*2
+        assert result is node and len(attempts)==2 and caps==[30]*3
         assert attempts[1][0]==hit['entryUt']-env['BPLANE_FINAL_REFINE_LEAD']
         assert attempts[0][0]<attempts[1][0]<hit['entryUt']-env['BPLANE_LEAD']
         assert len(ticks)>500 and not alarms and saved['phase']=='REFINE_BPLANE'
@@ -674,8 +679,10 @@ def check_retry_cadence_has_one_final_check():
                 return -1
             env['_bplanePlanFullAttempt']=attempt
             result=env['_bplanePlanFullCorrection'](moon,15000,90,-1,30,'',True)
-            required_lead=env['SOI_BUFFER_TIME']+env['BPLANE_LEAD']+env['MIDCOURSE_REFINE_MARGIN']
-            final_ut=hit['entryUt']-max(configured_lead,required_lead)
+            seconds=env['arrivalBurnSeconds'](30)
+            required_lead=(env['SOI_BUFFER_TIME']+max(300,env['arrivalCorrectionLead'](seconds))
+                           +env['MIDCOURSE_REFINE_MARGIN']+seconds/2)
+            final_ut=hit['entryUt']-max(configured_lead,required_lead+max(1,env['MIDCOURSE_REFINE_MARGIN']))
             assert result==0 and attempts==[1000,final_ut]
             assert not alarms and env['phaseShouldYield'] and env['WARP']==0 and not env['ABORT']
             assert events[-1]==('yield','REFINE_BPLANE')
@@ -697,9 +704,9 @@ def check_reported_minmus_final_microburn():
     env['fixture_remove']=removed.append
     env['enterSolarCoast']=lambda *_:1
     env['waitUntilOrSOI']=lambda *args:ks.call('waitUntilOrSOI',env,*args)
-    def retry(target,reason='unconverged-optional-correction'):
+    def retry(target,reason='unconverged-optional-correction',solution=-1,cap=-1):
         requests.append(reason)
-        return ks.call('_bplaneWaitBeforeSolverRetry',env,target,reason)
+        return ks.call('_bplaneWaitBeforeSolverRetry',env,target,reason,solution,cap)
     env['_bplaneWaitBeforeSolverRetry']=retry
     result=ks.call('planBplaneCorrection',env,moon,9300,63.4,-1,100,'',True)
     assert result==0 and planned==[1000,hit['entryUt']-env['BPLANE_FINAL_REFINE_LEAD']]
@@ -752,7 +759,7 @@ def checkpoint_before_reboot():
 
 def check_retry_wait_resumes_before_solver():
     for resumed_at,entry_ut,wake_ut in ((2500,11000,10100),(10080,11000,10100),
-                                       (10400,11000,10100),(2500,10000,9100)):
+                                       (10300,11000,10100),(2500,10000,9100)):
         env,saved,events,alarms,moon,hit=checkpoint_before_reboot()
         env['TIME'].SECONDS=resumed_at
         hit['entryUt']=entry_ut

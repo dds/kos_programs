@@ -326,7 +326,7 @@ def check_orbit_return():
                                                (900, 20, 481, False), (891, 0, 491, True),
                                                (891, 0, 492, False)]:
         cost = evaluate(needed, nd=NS(DELTAV=NS(MAG=correction)),
-                        bplaneCaptureCost=lambda *_: capture, planned={'patch': None},
+                        arrivalRequiredCaptureDv=lambda *_: capture, planned={'patch': None},
                         targetBody=None, BPLANE_CAPTURE_MARGIN=cfg['BPLANE_CAPTURE_MARGIN'])
         assert (cost <= fuel) == allowed
     science = (ROOT / 'lib/science.ks').read_text()

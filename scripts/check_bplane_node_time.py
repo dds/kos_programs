@@ -71,10 +71,10 @@ def check_reported_boundary_and_both_seeds():
             result=ks.call('_bplanePlanPeOnly',env,moon,15000,100,True)
         assert result and not holds and nodes==[result]
         assert result.ORBIT.BODY is env['SHIP'].BODY
-        assert abs(result.TIME-(entry-121))<1e-8
+        assert abs(result.TIME-(entry-123))<1e-8
         assert 30<result.TIME-env['TIME'].SECONDS<43
         assert env['findArrivalPatch'](result,moon)
-    print('PASS: logged T-163s case reproduces a lost node-relative patch at old +300s; both solver seeds now choose a measurable pre-SOI node at +41.8s with the 120s buffer intact')
+    print('PASS: logged T-163s case reproduces a lost node-relative patch at old +300s; both solver seeds now choose a measurable pre-SOI node with an estimated half-burn margin with the 120s buffer intact')
 
 
 def check_timing_and_body_rejections():
@@ -105,7 +105,7 @@ def check_warp_settles_before_epoch_read():
         result=run(function_body(SOURCE,'_bplaneCreateCorrectionNode'),env)
         if abort:assert result==0 and not nodes
         else:
-            assert result.TIME==entry-121 and result.TIME-env['TIME'].SECONDS>=30
+            assert result.TIME==entry-123 and result.TIME-env['TIME'].SECONDS>=30
             assert not holds and result.ORBIT.BODY is env['SHIP'].BODY
     print('PASS: native time/frame is reread after settling warp; an abort during settling creates no node')
 

@@ -120,6 +120,9 @@ def check_polar_solver_and_budget():
                _bplaneFallbackSearch=lambda *_:False,
                _bplaneHoldCorrection=holds.append,
                _bplaneQueueMidcourseRetry=lambda reason:decisions.append(reason) or False)
+    from arrival_fixture import install, torch_hardware
+    install(env);torch_hardware(env)
+    env["MIN_EXEC_DV"]=.3
     env['_bplaneCreateCorrectionNode']=lambda *args:ks.call('_bplaneCreateCorrectionNode',env,*args)
     for name in ('_bplaneCorridorOk','_bplanePlanScore','_bplanePlaneFeasible'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)

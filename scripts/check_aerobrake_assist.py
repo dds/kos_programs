@@ -10,7 +10,7 @@ from check_surface_return import defaults, read_settings, emit_profile, expressi
 from check_runtime_contracts import KList
 
 SOURCE=(ROOT/'lib/aerobrake_assist.ks').read_text()
-MATH=(ROOT/'lib/aerobrake_ap_math.ks').read_text()
+MATH=(ROOT/'lib/aerobrake_ap_math.ks').read_text()+'\n'+(ROOT/'lib/conic_time.ks').read_text()
 CONFIG=(ROOT/'lib/aerobrake_config.ks').read_text()
 GUARD=(ROOT/'lib/aerobrake_guard.ks').read_text()
 STAGING=(ROOT/'lib/aerobrake_staging.ks').read_text()

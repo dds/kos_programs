@@ -8,6 +8,7 @@ import re
 from types import SimpleNamespace as NS
 import check_landing_guidance as ks
 from check_launch_and_staging import body
+from arrival_fixture import install, torch_hardware
 
 SOURCE = (ks.ROOT / 'lib/arrival_bplane.ks').read_text() + '\n' + (ks.ROOT / 'lib/midcourse.ks').read_text()
 COMMAND = (ks.ROOT / 'cmd/arrival.ks').read_text()
@@ -42,6 +43,8 @@ def solve(response, cap, tolerance=2000, public=False):
                _bplaneNodeAxisGet=lambda nd, axis: getattr(nd,axis),
                _bplaneNodeAxisSet=lambda nd, axis, value: setattr(nd,axis,value),
                _bplaneHoldCorrection=holds.append)
+    env['MIN_EXEC_DV']=.3
+    install(env);torch_hardware(env)
     env['_bplaneCreateCorrectionNode']=lambda *args:ks.call('_bplaneCreateCorrectionNode',env,*args)
     if public:
         env.update(MIN_EXEC_DV=float(re.search(r'LOCAL MIN_EXEC_DV\s+IS ([0-9.]+)\.', SOURCE)[1]),
@@ -148,6 +151,7 @@ def defer_fixture():
                xferSeq=KList(('XING','BPLANE','COAST_1HALF','REFINE_BPLANE','COAST_2HALF','CAPTURE')),
                findArrivalPatch=lambda *_:hit,_bplaneTrimCap=lambda *_:10,
                bplaneCaptureCost=lambda *_:180)
+    install(env)
     env['_bplaneHasMidcourseRefinement']=lambda:ks.call('_bplaneHasMidcourseRefinement',env)
     return env,moon,hit
 

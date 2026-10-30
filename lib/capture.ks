@@ -146,6 +146,10 @@ GLOBAL FUNCTION phaseCapture {
         mLogError("CAPTURE: vessel is not inside " + target:NAME + " SOI.").
         RETURN.
     }
+    IF HASNODE OR maneuverBurnInterrupted() {
+        mLogError("CAPTURE: existing/interrupted maneuver retained; inspect or explicitly resume it before replanning.").
+        yieldToPrompt(). RETURN.
+    }
     WAIT 2.
     mLog("Planning capture into elliptical orbit at " + target:NAME + ".").
     mLog("STATS capture phase setup target=" + target:NAME
@@ -157,8 +161,14 @@ GLOBAL FUNCTION phaseCapture {
     LOCAL retries IS 0.
 
     UNTIL success {
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-
+        // Recheck after the entry/retry waits: a new node, Abort or SOI
+        // transition must not authorize another planner/executor call.
+        IF ABORT OR SHIP:BODY <> target OR HASNODE OR maneuverBurnInterrupted()
+                OR NOT (SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
+                    AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0) {
+            mLogError("CAPTURE: context changed; existing maneuver retained, no replacement burn.").
+            yieldToPrompt(). RETURN.
+        }
         IF CAPTURE_ACCEPT_BOUND <> 0 AND SHIP:ORBIT:ECCENTRICITY < 1
                 AND SHIP:PERIAPSIS > MAX(0, CAPTURE_MIN_PE)
                 AND SHIP:APOAPSIS < target:SOIRADIUS {
@@ -182,6 +192,14 @@ GLOBAL FUNCTION phaseCapture {
             RETURN.
         }
 
+        IF NOT (nd:DELTAV:MAG >= 0 AND nd:DELTAV:MAG < 1e30
+                AND SHIP:DELTAV:VACUUM >= 0 AND SHIP:DELTAV:VACUUM < 1e30
+                AND nd:DELTAV:MAG <= SHIP:DELTAV:VACUUM) {
+            REMOVE nd.
+            mLogError("CAPTURE: native node exceeds finite available fuel; no burn authorized.").
+            yieldToPrompt(). RETURN.
+        }
+
         IF CAPTURE_RESERVE_DV >= 0 {
             mLog("STATS capture budget dv=" + ROUND(nd:DELTAV:MAG, 2)
                 + " remainingDv=" + ROUND(SHIP:DELTAV:VACUUM, 2)
@@ -201,6 +219,10 @@ GLOBAL FUNCTION phaseCapture {
         }
 
         IF NOT success {
+            IF maneuverBurnInterrupted() OR HASNODE {
+                mLogError("CAPTURE: failed maneuver retained; explicit recovery required, no replacement burn.").
+                yieldToPrompt(). RETURN.
+            }
             SET retries TO retries + 1.
             mLog("Capture missed (attempt " + retries + ") — waiting 10s.").
             IF retries >= MAX_RETRIES {

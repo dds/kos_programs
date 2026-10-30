@@ -846,15 +846,34 @@ GLOBAL FUNCTION bootCacheNextBand {
     IF BOOT_CACHE_LIBS:LENGTH = 0 { SET BOOT_CACHE_PENDING TO FALSE. RETURN. }
     // Future science is not fetched while a short hop is falling. Landing
     // wrappers call again after verified touchdown, before the next reboot.
-    IF SHIP:STATUS <> "LANDED" { RETURN. }
-    SET BOOT_CACHE_PENDING TO FALSE.
+    IF NOT bootCacheSafe() { RETURN. }
     // No RUNPATH: these files belong to the next reboot, not this CPU
     // program. Preserve at least4KiB for state growth and local logging.
     FOR ln IN BOOT_CACHE_LIBS {
+        IF NOT bootCacheSafe() { RETURN. }
         IF NOT BOOT_LIB_RAN:CONTAINS(ln) AND NOT bootLibArchiveOnly(ln) {
             bootLibSync(ln,4096).
         }
     }
+    SET BOOT_CACHE_PENDING TO FALSE.
+}
+
+GLOBAL FUNCTION bootCacheSafe {
+    IF SHIP:STATUS = "LANDED" { RETURN TRUE. }
+    IF MISSION_CACHE_NEXT_BAND <= 0 OR NOT HOMECONNECTION:ISCONNECTED OR ABORT OR HASNODE
+            OR NOT (SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
+                AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0)
+            OR (stateGet("burn_pending","false") = "true"
+                AND stateGet("burn_started","false") = "true") { RETURN FALSE. }
+    IF SHIP:ORBIT:HASNEXTPATCH {
+        IF NOT (SHIP:ORBIT:NEXTPATCHETA > 1800 AND SHIP:ORBIT:NEXTPATCHETA < 1e30) { RETURN FALSE. }
+    }
+    LOCAL atmosphere IS 0.
+    IF SHIP:BODY:ATM:EXISTS { SET atmosphere TO SHIP:BODY:ATM:HEIGHT. }
+    IF SHIP:STATUS = "ORBITING" AND SHIP:PERIAPSIS > atmosphere+10000 { RETURN TRUE. }
+    RETURN (SHIP:STATUS = "ESCAPING" OR SHIP:STATUS = "SUB_ORBITAL")
+        AND SHIP:ORBIT:HASNEXTPATCH AND SHIP:VERTICALSPEED >= 0
+        AND SHIP:ALTITUDE > atmosphere+20000.
 }
 
 GLOBAL FUNCTION bootLibLoad {
@@ -983,7 +1002,7 @@ GLOBAL FUNCTION bootPlannedMissionLibs {
         SET fb TO "".
     }
     LOCAL band IS bootLibBandForPhase(phase, fb).
-    SET BOOT_CACHE_LIBS TO bootLibResolve(missionTypeCacheRoots(band)).
+    SET BOOT_CACHE_LIBS TO bootLibResolve(missionTypeCacheRoots(band,phase)).
     SET BOOT_CACHE_PENDING TO TRUE.
     stateSet("lib_band", band).
     stateSet("lib_band_phase", phase).

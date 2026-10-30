@@ -269,7 +269,7 @@ def check_solar_dependency_and_wait():
              stateGet=lambda key,default='':'AEROBRAKE' if key=='phase' else default,
              stateSet=lambda *_:None,bootLibBandForPhase=lambda *_:'AEROBRAKE',
              bootLibBandRoots=lambda _:Seq(phases['aerobrake']),
-             missionTypeConditionalRoots=lambda _:Seq(),missionTypeCacheRoots=lambda _:Seq(),missionExtraLibs=lambda:Seq(),
+             missionTypeConditionalRoots=lambda _:Seq(),missionTypeCacheRoots=lambda *_:Seq(),missionExtraLibs=lambda:Seq(),
              bootLibResolve=lambda roots:Seq(closure(roots,deps)),
              missionAppendUnique=lambda dest,items:dest.extend(x for x in items if x not in dest))
     libs=execute(function_body((ROOT/'lib/boot_lib.ks').read_text(),'bootPlannedMissionLibs'),env)

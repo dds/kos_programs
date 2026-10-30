@@ -4,6 +4,7 @@
 SET MISSION_ID TO "duna_science_impact".
 SET MISSION_NAME TO "Espoir — Duna Science and Impact".
 SET MISSION_TYPE TO "interplanetary".
+SET MISSION_CACHE_NEXT_BAND TO 1.
 SET TARGET_ TO "DUNA".
 SET PAYLOADS TO LIST("PROBE").
 SET SEQUENCE TO LIST("PRELAUNCH","LAUNCH","FAIR","ANTS","PARK","XING","BPLANE","COAST_1HALF","REFINE_BPLANE","COAST_2HALF","SCIENCE_ENTRY","DONE").
@@ -13,6 +14,7 @@ SET LAUNCH_PLANE_MODE TO "".
 
 // Deep positive atmospheric Pe retains the shared arrival solver's domain.
 // This is an entry/impact attempt, not a promise of a particular impact site.
+SET BPLANE_ARRIVAL_MODE TO "ENTRY".
 SET CAPTURE_PE TO 5000.
 SET CAPTURE_INC TO -1.
 SET CAPTURE_LAN TO -1.

@@ -9,6 +9,50 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-30 user resumes Duna/Ike: priorities are interplanetary reliability,
+efficient phase/band boundaries, and generic assists for later tours. This
+supersedes the29Oct pause notes below; the original parked snapshot remains
+at /tmp/kos-duna-ike-paused-20261029-1fk3rmgq for historical comparison.
+Arrival policies now explicitly distinguish ORBIT/ENTRY/FLYBY, require actual
+future planetary Pe/entry events before any next patch, and reserve correction
+solver/alignment plus the full centered finite burn before SOI. AVAILABLETHRUST
+already includes the limiter. Shared arrivalCorrectionLead places the midpoint
+for both node creation and retry timing; slow burns wake earlier, with polling
+margin. Long approaches get at most approach+final checkpoints; pending final
+waits stay final across reboots. Short moon cadence remains one final retry.
+CAPTURE preserves existing/interrupted nodes for explicit recovery, rechecks
+context after waits and rejects nonfinite/unaffordable native nodes even with
+the optional reserve disabled. It does not auto-resume unflown capture nodes
+after a reboot; manual review is deliberate until ownership is persisted.
+Espoir opts into disk-only prefetch of two distinct future bands, conditional
+providers included. Idle linked safe orbital/outbound coasts only, >1800s to
+SOI; landed policy unchanged, falling hops defer. Explicit
+MISSION_CACHE_HANDOFF_PHASES lists XING/BPLANE/COAST_1HALF, preserving transfer,
+refinement and capture through initial Ike setup/cleanup; generated ops clears
+it. No new cache admission gate.
+Duna/Ike split: duna_entry, ike_setup, shared duna_ike_config; compatibility
+duna_ike_setup root retained. DI_PROFILE_PATH and shared dunaIke* helpers are
+GLOBAL across files. No bootstrap rebuild. Shared conic_time removes duplicate
+aerobrake/arrival math. Normal transfer/capture bands do not load gravity_assist.
+cmd/assistcheck previews bounded native refinement of a COMPLETE ALREADY
+PREDICTED ordered flyby/capture route (2..8 legs, repeated bodies allowed).
+It does not acquire absent encounters, execute a tour, stage or change state.
+Real finite-patch Pe, outgoing hyperbolic flyby, ancestor transit, optional
+plane, budget/reserve and node-ownership guards; compares correction+impulsive
+capture with existing itinerary (not optimized direct),25m/s minimum net gain,
+100m/s default post-capture reserve. Fresh final native validation required.
+Synthetic node fixtures test control flow, NOT gravity propagation/flight.
+Remaining: acquire opportunities, compare direct/assist alternatives, automatic
+encounter handoff, powered science entry, native compile/storage/flight evidence.
+Deck read-only diagnostics failed:10.200.26.154 has no route from this host.
+No remote code deployment, game control or save edits. All85 routine check
+files pass176.58s on final source; every new arrival/assist case <1s.
+Audit0 errors; unchanged legacy missing KSC_DEORBIT handler warning.
+Ike setup band9306 vs old combined26097 source tokens (NOT compiled bytes).
+Validation report:/tmp/kos-interplanetary-final-state-20261030.json and.log.
+Historical dated snapshots below retain earlier decisions/results;30Oct
+supersedes their arrival pause/readiness notes.
+
 2026-10-29 Espoir fleet profiles added: duna_orbital_surveyor (300km polar),
 ike_orbital_surveyor (150km polar), ike_impactor, duna_impactor. Ike missions
 capture high at Duna85x2880km then reuse IKE_SETUP with optional
@@ -974,7 +1018,7 @@ Looks like Python/JS; is neither.
 5. **Bands load the libraries of EVERY phase in the band**, not just the
    mission's. Code used by only some missions goes in its own phase/band
    (costs those missions one reboot; costs everyone else nothing) —
-   `payload_release`, `duna_ike_setup`, and the split landing tracks are
+   `payload_release`, `duna_entry`/`ike_setup`, and the split landing tracks are
    worked examples.
 6. **There is no kOS compiler or KSP flight runner here.** `make check` runs
    structural and source-driven Python fixtures; `make audit` reports band
@@ -1028,7 +1072,8 @@ Looks like Python/JS; is neither.
 | Transfer planners | `lib/xfer_plan.ks`, `lib/maneuver_transfer.ks`, `lib/maneuver_intersystem.ks`, `lib/lambert.ks`, `lib/lib_bplane_math.ks` |
 | Legacy/rescue maneuver libs | `lib/maneuver_targeting.ks`, `lib/maneuver_orbit.ks`, `lib/maneuver_rendezvous.ks`, `lib/maneuver_mcc.ks` |
 | Payloads/landing | `lib/payload_ops.ks`, `lib/payload_release.ks`, `lib/payload_landing.ks`, `lib/landing_main.ks`, `lib/landing_deorbit.ks`, `lib/deorbit_targeting.ks`, `lib/aerobrake.ks`, `lib/descent.ks` |
-| Duna/Ike | `lib/duna_ike_setup.ks`, `missions/FalconHeavy/duna_*` |
+| Duna/Ike | `lib/duna_entry.ks`, `lib/ike_setup.ks`, shared `lib/duna_ike_config.ks`, `missions/Espoir/` |
+| Optional assist preview | `lib/gravity_assist.ks`, `cmd/assistcheck.ks`; separate from flight bands |
 | Atmosphere craft | `lib/airplane.ks` (assists + `airplaneMain`), `lib/ssto.ks`, `lib/drone.ks`, `lib/rover.ks` |
 | Telemetry | `lib/observe.ks` (archive-first), `STATS` lines in every planner |
 | Operator | `cmd/` (see README table); `cmd/airtest.ks` is the assist tuning card |
@@ -1265,7 +1310,10 @@ Looks like Python/JS; is neither.
   turn that skip into finished-outside-required-corridor or waive the plane.
   Later full-solver failures use the same solar/clock wait from coast_wait,
   then one final check at entry-BPLANE_FINAL_REFINE_LEAD (default900s), bounded
-  by SOI/burn margins. Do not repeatedly halve the remaining time: the operator
+  by the shared arrivalCorrectionLead midpoint plus trailing half burn and
+  SOI margins. Long planetary approaches may also use one earlier geometry
+  checkpoint; consumed final checks stay consumed across reboots. Do not
+  repeatedly halve the remaining time: the operator
   reports4-5 wakes on one Mun trip. Persist waiting/completed checkpoint bound
   to mission/launch/phase/target; boot waits BEFORE a full solve, and ETA jitter
   cannot recreate a consumed final check. Explicit replan/flown corrections

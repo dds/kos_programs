@@ -16,6 +16,7 @@ SET KEEP_WARP TO 1.
 // Eve atmosphere starts near 90km. This profile intentionally only
 // enters the atmosphere and holds the configured entry attitude; it does
 // not attempt descent recovery or return.
+SET BPLANE_ARRIVAL_MODE TO "ENTRY".
 SET CAPTURE_PE TO 75000.
 SET CAPTURE_INC TO 0.
 SET CAPTURE_DIR TO "PROGRADE".

@@ -7,7 +7,7 @@ from check_minmus_kolniya import execute
 from check_runtime_contracts import KList, KString
 from check_surface_return import read_settings
 
-SETUP = (ROOT/'lib/duna_ike_setup.ks').read_text()
+SETUP = '\n'.join((ROOT/f'lib/{name}.ks').read_text() for name in ('duna_ike_config','ike_setup','duna_entry'))
 IMPACT = (ROOT/'lib/science_impact.ks').read_text()
 ENTRY = (ROOT/'lib/science_entry.ks').read_text()
 SURFACE = (ROOT/'lib/science_surface.ks').read_text()
@@ -145,21 +145,21 @@ def setup_fixture(name='ike_orbital_surveyor'):
     ship = NS(BODY=NS(NAME='DUNA'),STATUS='ORBITING',PERIAPSIS=85000,ORBIT=orbit,THRUST=0,
               CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0))
     env = dict(cfg,SHIP=ship,ABORT=False,HASNODE=False,TIME=NS(SECONDS=100),ROUND=round,
-               LIST=lambda *xs:Items(xs),_diBodyName=lambda:'DUNA',_diAtmHeight=lambda:50000,
+               LIST=lambda *xs:Items(xs),dunaIkeBodyName=lambda:'DUNA',dunaIkeAtmHeight=lambda:50000,
                stateGet=lambda key,default='':saved.get(key,default),
                stateSet=lambda key,value:saved.__setitem__(key,value),
                missionOverrideClear=lambda:events.append('clear-overrides'),
                missionProfileBegin=lambda *args:events.append(('profile',args)) or 'local.ks',
                configLiteral=literal,capture_log=output.append,
-               _diArchiveLog=lambda:events.append('archive'),
-               _diClearLibCache=lambda:events.append('clear-derived-cache'),
-               _diHold=lambda *args:events.append(('hold',args)),
+               dunaIkeArchiveLog=lambda:events.append('archive'),
+               dunaIkeClearCache=lambda:events.append('clear-derived-cache'),
+               dunaIkeHold=lambda *args:events.append(('hold',args)),
                fixture_wait=lambda delay:None,fixture_reboot=lambda:events.append('reboot'))
     # Execute both actual persistence helpers, including legacy Duna config.
-    for field in re.findall(r'configLiteral\((\w+)\)',function_body(SETUP,'_diPersistCoastAutomation')):
+    for field in re.findall(r'configLiteral\((\w+)\)',function_body(SETUP,'dunaIkeWriteCoast')):
         env.setdefault(field, 1)
-    env['_diPersistCoastAutomation'] = lambda:run(SETUP,'_diPersistCoastAutomation',env)
-    env['_diPersistDunaEntryCfg'] = lambda:run(SETUP,'_diPersistDunaEntryCfg',env)
+    env['dunaIkeWriteCoast'] = lambda:run(SETUP,'dunaIkeWriteCoast',env)
+    env['dunaIkeWriteEntry'] = lambda:run(SETUP,'dunaIkeWriteEntry',env)
     return env, saved, events, output
 
 
@@ -205,7 +205,7 @@ def check_ike_handoff_guards():
         if fault == 'identity':saved['vehicle'] = ''
         if fault == 'settings':env['IKE_MISSION_SETTINGS'].pop('MISSION_ID')
         if fault == 'sequence':env['IKE_FLYBY_SEQUENCE'] = Items(['XING','DONE'])
-        if fault == 'body':env['_diBodyName'] = lambda:'IKE'
+        if fault == 'body':env['dunaIkeBodyName'] = lambda:'IKE'
         if fault == 'status':env['SHIP'].STATUS = 'SUB_ORBITAL'
         before = saved.copy()
         run(SETUP,'phaseIkeSetup',env)

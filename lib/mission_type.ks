@@ -13,6 +13,10 @@ GLOBAL MISSION_TYPE IS "".
 GLOBAL TARGET_ IS "".
 GLOBAL RENDEZVOUS_TARGET IS "".
 GLOBAL ASTEROID_TARGET IS "".
+// Opt-in disk-only prefetch of the next two distinct phase bands.
+GLOBAL MISSION_CACHE_NEXT_BAND IS 0.
+// Initial phase bands of a profile rewrite, retained before that boot.
+GLOBAL MISSION_CACHE_HANDOFF_PHASES IS LIST().
 // Loader decisions happen before optional landing libraries execute.
 GLOBAL LANDING_AUTO_TARGET IS 0.
 GLOBAL LANDING_REQUIRE_SITE IS 0.
@@ -88,12 +92,36 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
 }
 
 // Next-band files are cached without executing them in the current program.
-// Retain one transition, rather than every flight/science/return provider at
-// once. Boot's cache sync reserves space for progress and logs; failure is
+// Retain two distinct bands so coast/refine loops do not hide capture, plus
+// an explicit profile-rewrite handoff. Boot reserves progress/log space; failure is
 // diagnostic, never a new blackout/deorbit admission gate.
 GLOBAL FUNCTION missionTypeCacheRoots {
     PARAMETER bandKey.
+    PARAMETER currentPhase IS "".
     LOCAL roots IS LIST().
+    IF currentPhase <> "" {
+        IF MISSION_CACHE_NEXT_BAND > 0 {
+            LOCAL seen IS FALSE.
+            LOCAL futureBands IS LIST().
+            FOR phaseName IN SEQUENCE {
+                IF seen {
+                    LOCAL nextBand IS bootLibBandForPhase(phaseName,phaseName).
+                    IF nextBand <> bandKey AND NOT futureBands:CONTAINS(nextBand) {
+                        missionAppendUnique(roots,bootLibBandRoots(nextBand)).
+                        missionAppendUnique(roots,missionTypeConditionalRoots(nextBand)).
+                        futureBands:ADD(nextBand).
+                        IF futureBands:LENGTH >= 2 { BREAK. }
+                    }
+                }
+                IF phaseName = currentPhase { SET seen TO TRUE. }
+            }
+            FOR handoffPhase IN MISSION_CACHE_HANDOFF_PHASES {
+                LOCAL handoffBand IS bootLibBandForPhase(handoffPhase,handoffPhase).
+                missionAppendUnique(roots,bootLibBandRoots(handoffBand)).
+                missionAppendUnique(roots,missionTypeConditionalRoots(handoffBand)).
+            }
+        }
+    }
     // Disk-only entry code prefetch before Duna/SOI handoff. No executing
     // a second band here and no mandatory new blackout/cache admission gate.
     IF SEQUENCE:CONTAINS("SCIENCE_ENTRY")
