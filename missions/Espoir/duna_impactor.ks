@@ -1,8 +1,8 @@
-// Espoir: direct Duna atmospheric-science entry and impact attempt.
+// Espoir: Duna atmospheric science; opportunistic parachute landing or impact.
 // Build allowance after85km LKO:1500m/s transfer +400m/s entry/corrections.
 // Optional science on a free Ike flyby: cmd/flybyscience.ks,1 then reboot.
 SET MISSION_ID TO "duna_impactor".
-SET MISSION_NAME TO "Espoir — Duna Atmospheric Science Impactor".
+SET MISSION_NAME TO "Espoir — Duna Atmospheric Science".
 SET MISSION_TYPE TO "interplanetary".
 SET MISSION_CACHE_NEXT_BAND TO 1.
 SET TARGET_ TO "DUNA".
@@ -33,6 +33,9 @@ SET MISSION_ASSIST_SCIENCE TO 0.
 SET SCIENCE_ENTRY_PREPARE_LEAD TO 180.
 SET SCIENCE_ENTRY_MAX_PASSES TO 3.
 SET SCIENCE_ENTRY_MIN_EC TO 0.05.
+// Deploy attached stock chutes only when native conditions are safe.
+// Chuteless probes keep their science/impact behavior. Use0 to opt out.
+SET SCIENCE_ENTRY_CHUTES TO 1.
 SET COAST_AUTO_WARP TO 0.
 
 // Only an existing free Ike flyby with a proven subsequent Duna entry.

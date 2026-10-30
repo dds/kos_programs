@@ -1368,7 +1368,7 @@ archived original vector and the retained node, explicit
 marker and resumes normal planning. Native midpoint execution remains to be
 flight-tested; source fixtures exercise both node paths and interruption.
 
-### Espoir: Duna science and impact attempt
+### Espoir: Duna science entry and optional parachute landing
 
 `missions/Espoir/duna_impactor.ks` is the consolidated entry profile. Name
 the new probe **Espoir** (or use the normal fleet-name suffix convention)
@@ -1380,13 +1380,28 @@ The sequence launches to85km parking, transfers to Duna, refines arrival,
 then runs `SCIENCE_ENTRY` continuously through approach and atmospheric
 descent. The requested Pe is5km ASL with3km tolerance. This deliberately
 targets deep entry; it does not promise an impact coordinate, survivable
-heating, or a soft landing. There is no capture, return, automatic entry
-staging, chute deployment or landing burn in this profile. Those depend on
-the actual new hardware. A passive drag capture can make another entry;
+heating, or a soft landing. The profile enables `SCIENCE_ENTRY_CHUTES=1`:
+while descending inside Duna's atmosphere at1x with thrust/controls idle,
+it repeatedly requests [kOS safe stock-chute deployment](https://ksp-kos.github.io/KOS/commands/flight/systems.html#chutessafe).
+The native check chooses safe stowed `ModuleParachute` chutes; unsafe chutes
+are revisited as conditions change. It leaves each chute's pressure and full
+deployment settings unchanged. Chuteless probes continue normally; this does
+not force RealChute deployment or prove any touchdown speed. Four chutes
+alone do not establish a safe landing without their type, craft mass and
+terrain conditions. There is no capture, return, automatic entry staging or
+landing burn in this profile. A passive drag capture can make another entry;
 each future pass gets a fresh KAC checkpoint/solar coast. After three passes
 without touchdown, or if no future atmospheric crossing remains, the phase
 reports the reason and returns to manual control instead of declaring a
 successful impact. Destruction naturally ends the running processor.
+
+If it survives touchdown, the existing loop sets brakes and collects/queues
+surface science for60s before ending. The mission id stays `duna_impactor`,
+so existing flights keep their progress. After pulling, reboot to apply the
+updated profile/code. Optional per-craft override:
+`RUNPATH("0:/cmd/entrychutes.ks",0). REBOOT.` disables chute requests; use1
+to re-enable. Other SCIENCE_ENTRY profiles default to no chute deployment.
+Native Duna chute performance and landing survival remain to be tested.
 
 Ike is opportunistic: with optional flyby science enabled, an **existing
 native encounter** is sampled at no added maneuver cost, only if its Pe clears20km and

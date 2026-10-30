@@ -1,6 +1,6 @@
 // ============================================================
 // science_entry.ks — continuous flyby/entry science (0:/lib/science_entry.ks)
-// No capture, automatic staging, thrust, or assumed soft-landing hardware.
+// No capture, automatic staging or thrust. Optional safe stock parachutes.
 // ============================================================
 @LAZYGLOBAL OFF.
 
@@ -10,6 +10,21 @@ GLOBAL SCIENCE_ENTRY_MOON_MIN_PE IS 20000.
 GLOBAL SCIENCE_ENTRY_PREPARE_LEAD IS 180.
 GLOBAL SCIENCE_ENTRY_MAX_PASSES IS 3.
 GLOBAL SCIENCE_ENTRY_MIN_EC IS 0.05.
+GLOBAL SCIENCE_ENTRY_CHUTES IS 0.
+
+LOCAL FUNCTION _scienceEntryChutes {
+    PARAMETER primary.
+    IF SCIENCE_ENTRY_CHUTES <= 0 OR ABORT OR WARP <> 0 { RETURN. }
+    IF SHIP <> KUNIVERSE:ACTIVEVESSEL OR SHIP:BODY <> primary { RETURN. }
+    IF NOT primary:ATM:EXISTS OR NOT (SHIP:ALTITUDE < primary:ATM:HEIGHT
+            AND SHIP:VERTICALSPEED < 0) { RETURN. }
+    IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" { RETURN. }
+    IF NOT (SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
+            AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0) { RETURN. }
+    // Native ModuleParachute safety gate, revisited as speed/pressure change.
+    // Never use CHUTESSAFE's getter as proof of deployment (empty is true).
+    CHUTESSAFE ON.
+}
 
 GLOBAL FUNCTION scienceEntrySample {
     PARAMETER primary.
@@ -152,6 +167,7 @@ GLOBAL FUNCTION phaseScienceEntry {
     }
     mLog("STATS science-entry setup primary=" + primary:NAME
         + " moon=" + SCIENCE_ENTRY_MOON + " minEc=" + SCIENCE_ENTRY_MIN_EC
+        + " safeChutes=" + (SCIENCE_ENTRY_CHUTES > 0)
         + " thrust=False deliveryConfirmationAvailable=False").
     LOCAL flightId IS stateGet("mission_id","")+":"+stateGetNum("launch_time",0)+":"+primary:NAME.
     IF stateGet("science_entry_id","") <> flightId {
@@ -212,6 +228,7 @@ GLOBAL FUNCTION phaseScienceEntry {
             scienceEntryWait(wakeUt).
         } ELSE {
             SET WARP TO 0.
+            _scienceEntryChutes(primary).
             IF NOT entrySteering {
                 SET SAS TO FALSE.
                 // Live surface retrograde follows the atmosphere-relative

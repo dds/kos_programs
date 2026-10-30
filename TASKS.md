@@ -6,6 +6,25 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct user added four parachutes to a Duna science impactor and welcomes
+  opportunistic landing. Keep duna_impactor mission id/entry5km+/-3km/sequence;
+  display name now Duna Atmospheric Science. Profile enables new
+  SCIENCE_ENTRY_CHUTES=1 (shared default0). Tiny inline helper requests native
+  CHUTESSAFE repeatedly only during primary atmospheric descent at1x, active
+  vessel, Abort clear and physical/raw/pilot throttle zero. No staging,
+  forced deploy, pressure/full-open changes, powered landing or new band.
+  Stock ModuleParachute support verified in official kOS docs/VesselUtils.cs;
+  RealChute not forced. Empty/safe getter is not interpreted as landing proof.
+  Existing60s landed science remains. cmd/entrychutes.ks,0/1 writes only its
+  override for reboot. Source fixtures cover four partially safe chutes,
+  changing safety/no hardware and flight/control/config refusals plus real
+  entry phase/surface dwell/command. Read-only Deck GameData lists ReStock
+  and no RealChute directory. All89 routine files pass133.01s; new chute
+  policy regression0.020s, structural0 errors/unchanged legacy KSC_DEORBIT
+  warning. Report:/tmp/kos-duna-entry-chutes-20261030.json and.log. Native
+  parachute deployment and survival depend on actual hardware/mass/settings/
+  terrain, still unverified.
+
 - 30Oct user authorizes opt-in automatic midpoint diagnostics. New
   cmd/assistmcc.ks,1 (or0) saves ASSIST_MIDCOURSE_PREVIEW, default0; reboot
   loads assist_midcourse/shared search+baseline+archive helpers only in

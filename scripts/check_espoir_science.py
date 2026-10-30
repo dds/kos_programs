@@ -29,6 +29,7 @@ def run(source, name, env):
     body = re.sub(r'PARAMETER [^.]+\.', '', body)
     body = re.sub(r'WAIT UNTIL [^.]+\.', 'fixture_settled().', body)
     body = body.replace('BRAKES ON.', 'fixture_brakes().')
+    body = body.replace('CHUTESSAFE ON.', 'fixture_chutes().')
     return execute(body, env)
 
 
@@ -42,6 +43,7 @@ def check_profile_and_boot():
     assert cfg['CAPTURE_INC'] == cfg['CAPTURE_LAN'] == -1
     assert cfg['BPLANE_PE_ONLY'] == 1 and cfg['BPLANE_TRIM_RESERVE_DV'] > 0
     assert cfg['SCIENCE_ENTRY_MOON'] == 'IKE' and cfg['SCIENCE_ENTRY_MAX_PASSES'] == 3
+    assert cfg['SCIENCE_ENTRY_CHUTES']==1
     assert not re.search(r'RO9|return_decoupler|lander_decoupler|SET .*STAGE TO',
                          '\n'.join(line for line in PROFILE.splitlines() if not line.startswith('//')))
     deps, phases, bands = dependency_tables((ROOT/'lib/dependencies.ks').read_text())
@@ -265,6 +267,9 @@ def check_phase_lifecycle():
                    nextPhase=lambda *_:events.append('advance'),
                    _scienceEntryHold=lambda why:events.append(('hold',why)))
         ship=env['SHIP'];ship.PERIAPSIS=5000;ship.VERTICALSPEED=-200;ship.AIRSPEED=1200
+        ship.THRUST=0;ship.CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)
+        env.update(KUNIVERSE=NS(ACTIVEVESSEL=ship),fixture_chutes=lambda:events.append('safe-chutes'),
+                   _scienceEntryChutes=lambda primary:run(ENTRY,'_scienceEntryChutes',dict(env,primary=primary)))
         ship.ALTITUDE=30000
         def context():return run(ENTRY,'scienceEntryContext',env)
         def pulse(*args):events.append(('science',args[0]))
@@ -295,6 +300,7 @@ def check_phase_lifecycle():
             assert any('FLYING_HIGH' in ctx for ctx in contexts) and any('FLYING_LOW' in ctx for ctx in contexts)
             assert saved['science_entry_passes']==1 and 'advance' not in events
             assert ('lock','LOCK STEERING TO SHIP:SRFRETROGRADE') in events
+            assert 'safe-chutes' in events
         elif case=='surface':
             assert events.count('advance')==1 and 'brakes' in events
             assert env['TIME'].SECONDS==160
@@ -305,6 +311,56 @@ def check_phase_lifecycle():
         elif case=='abort':assert events==['settled']
         assert not any(isinstance(e,tuple) and e[0]=='warp' for e in events)
     print('PASS: actual phase samples high/low atmosphere at1x with live retrograde, preserves pass count on reboot, stops on abort/node/invalid config/skipout and advances only after surface science dwell')
+
+
+def check_safe_chute_policy():
+    for fault in ('ok','off','abort','warp','inactive','other-body','above-atmo','rising','level',
+                  'landed','splashed','physical-thrust','pilot','raw','nan-alt','nan-vs','airless'):
+        env,primary=entry_fixture();ship=env['SHIP'];requests=[]
+        ship.ALTITUDE=30000;ship.VERTICALSPEED=-200;ship.THRUST=0
+        ship.CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)
+        env.update(primary=primary,SCIENCE_ENTRY_CHUTES=1,ABORT=False,WARP=0,
+                   KUNIVERSE=NS(ACTIVEVESSEL=ship),fixture_chutes=lambda:requests.append('native-safe'))
+        if fault=='off':env['SCIENCE_ENTRY_CHUTES']=0
+        if fault=='abort':env['ABORT']=True
+        if fault=='warp':env['WARP']=1
+        if fault=='inactive':env['KUNIVERSE'].ACTIVEVESSEL=NS()
+        if fault=='other-body':ship.BODY=NS(NAME='IKE')
+        if fault=='above-atmo':ship.ALTITUDE=50000
+        if fault=='rising':ship.VERTICALSPEED=1
+        if fault=='level':ship.VERTICALSPEED=0
+        if fault=='landed':ship.STATUS='LANDED'
+        if fault=='splashed':ship.STATUS='SPLASHED'
+        if fault=='physical-thrust':ship.THRUST=1
+        if fault=='pilot':ship.CONTROL.PILOTMAINTHROTTLE=.1
+        if fault=='raw':ship.CONTROL.MAINTHROTTLE=.1
+        if fault=='nan-alt':ship.ALTITUDE=float('nan')
+        if fault=='nan-vs':ship.VERTICALSPEED=float('nan')
+        if fault=='airless':primary.ATM.EXISTS=False
+        run(ENTRY,'_scienceEntryChutes',env)
+        assert requests==(['native-safe'] if fault=='ok' else []),(fault,requests)
+    # The native setter, not a speed guessed by this script, selects which
+    # of four stock chutes can open. Revisit rather than latch the first pass.
+    safe=[True,False,True,False];opened=set()
+    env,primary=entry_fixture();ship=env['SHIP']
+    ship.ALTITUDE=30000;ship.VERTICALSPEED=-100;ship.THRUST=0
+    ship.CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)
+    env.update(primary=primary,SCIENCE_ENTRY_CHUTES=1,ABORT=False,WARP=0,KUNIVERSE=NS(ACTIVEVESSEL=ship),
+               fixture_chutes=lambda:opened.update(i for i,allowed in enumerate(safe) if allowed))
+    run(ENTRY,'_scienceEntryChutes',env);assert opened=={0,2}
+    safe[:]=[True]*4
+    run(ENTRY,'_scienceEntryChutes',env);assert opened=={0,1,2,3}
+    safe.clear();run(ENTRY,'_scienceEntryChutes',env) # No hardware is also a no-op.
+    body=function_body(ENTRY,'_scienceEntryChutes')
+    assert 'CHUTESSAFE ON.' in body and 'CHUTES ON.' not in body
+    assert ':DOEVENT' not in body and 'STAGE.' not in body
+    command=(ROOT/'cmd/entrychutes.ks').read_text()
+    for enabled,mission,accepted in ((0,'test',True),(1,'test',True),(2,'test',False),(1,'',False)):
+        changes=[]
+        run(command,'_cmdEntrychutes',dict(enabled=enabled,RUNPATH=lambda *_:None,bootPreamble=lambda:None,
+            stateGet=lambda *_:mission,LEXICON=lex,missionOverrideUpdate=changes.append))
+        assert changes==([lex('SCIENCE_ENTRY_CHUTES',enabled)] if accepted else [])
+    print('PASS: optional chute requests require primary-body descent,1x, active craft and idle thrust/controls; native CHUTESSAFE gates each deployment, repeats as safety changes, tolerates no chutes and flag command changes only its override')
 
 
 def check_optional_flyby_sampling():
@@ -349,3 +405,4 @@ if __name__=='__main__':
     check_resident_wait()
     check_phase_lifecycle()
     check_optional_flyby_sampling()
+    check_safe_chute_policy()
