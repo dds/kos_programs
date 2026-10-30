@@ -133,7 +133,7 @@ then returns to the Godspeed prompt and prints these commands:
 
 - `RUNPATH("1:/run/hop").` — next route site; after the last site, resume the original return/DONE.
 - `RUNPATH("1:/run/hop","waypoint").` — replace the next hop with the currently selected navigation waypoint.
-- `RUNPATH("1:/run/hop","return").` — end hops and begin economy Kerbin return, targeting 53 km Pe without KSC targeting.
+- `RUNPATH("1:/run/hop","return").` — end hops and begin economy Kerbin return, targeting 52 km Pe without KSC targeting.
 
 The small script is saved locally before yielding, so these commands need no
 archive or radio link. They reload the cached libraries and mission settings,
@@ -1367,6 +1367,17 @@ has not yet been demonstrated.
 
 ### RO8 moon landing and return
 
+RO9's moon-return profiles now aim for **52 km Kerbin Pe**. They keep a
+separate `RETURN_PE_MIN=52000` lower bound when generating the surface-ascent
+and Kerbin-return profiles, so the existing 1 km tolerance permits 52–53 km
+MCC/site corrections. The normal 50 m/s MCC reserve and 10 m/s aerobrake repair
+reserve remain. Older RO8 profiles retain their 53 km target described below.
+An already-generated return keeps its saved settings. For a held Kerbin MCC,
+`RUNPATH("0:/cmd/returnmcc.ks",52000,0).` explicitly releases the MCC reserve
+and requests 52 km within 250 m; then `REBOOT.` to plan and execute within live
+fuel. This keeps the mission, alarms, staging and assistance policy. It
+refuses existing/interrupted nodes and does not start a burn itself.
+
 Arrival precision is budgeted separately from reaching the moon. Both RO8
 profiles limit corrections of an existing encounter to 10 m/s per burn and
 20 m/s total across BPLANE/REFINE_BPLANE, preserving 900 m/s on the Mun mission
@@ -1963,7 +1974,7 @@ Select RO9 profile `minmus_tundra_survey_return` for this sequence:
    checks. The locked site takes precedence over navigation waypoints;
    neither darkness nor lack of direct Kerbin view substitutes a new site.
    Surface return launches eastward into a low orbit near 29.189°
-   inclination, then departs for a **53 km Kerbin entry** with the readings.
+   inclination, then departs for a **52 km Kerbin entry** with the readings.
 
 The prelaunch thermometer/storage check was removed at operator request.
 The survey only collects into containers retained with the CPU; it never
@@ -2141,7 +2152,7 @@ tolerances. These limits do not guarantee fuel sufficiency for a given craft.
 After shaping, `SCIENCE_OPS` holds at the prompt without running experiments
 or automatically transmitting saved science. Check the contract, then run
 `RUNPATH("0:/cmd/setphase.ks","RETURN_SETUP").` and `REBOOT.` to return to
-Kerbin with the existing53km entry Pe and RO9 aerobrake assistance.
+Kerbin with 52 km entry Pe and RO9 aerobrake assistance.
 The initial arrival still captures directly into a15km/15deg Mun
 orbit, sufficient for the target latitude, without the older polar-survey
 detour. It keeps the target fixed, limits local terrain refinement to20m,
@@ -2371,8 +2382,9 @@ one on their next successful search. Explicit forced-search commands still work.
 These geometry/cache changes pass source-driven fixtures; in-game validation
 of site selection, finite burns and panel telemetry is still required.
 
-The return retains the 53 km entry target and 52–54 km correction corridor,
-but omits optional KSC targeting burns: recovery can occur anywhere on
+RO8 retains the 53 km entry target and 52–54 km correction corridor; RO9 aims
+for 52 km with a 52–53 km correction corridor. Both omit optional KSC
+targeting burns: recovery can occur anywhere on
 Kerbin. The engine/tank remains attached through aerobraking and separates
 below 6 km in DESCENT. Use `descent_decoupler` and `descent_chutes` tags.
 PRELAUNCH still auto-arms after surface touchdown; press **H** there to hold

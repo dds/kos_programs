@@ -54,7 +54,7 @@ def check_requested_orbits_across_boots():
     home=read_settings(emit_profile('phaseReturnSetup',surface),{})
     assert home['SEQUENCE']==['ESCAPE','COAST','MCC','AEROBRAKE','DESCENT','DONE']
     assert all(home[key]==52000 for key in ('ESCAPE_PE','CAPTURE_PE','REENTRY_PE','AEROBRAKE_PE'))
-    assert home['MCC_AEROBRAKE_SAFE_PE_MIN']==home['AEROBRAKE_BRAKE_PE_FLOOR']==51000
+    assert home['MCC_AEROBRAKE_SAFE_PE_MIN']==home['AEROBRAKE_BRAKE_PE_FLOOR']==52000
     assert home['MCC_AEROBRAKE_SAFE_PE_MAX']==53000 and home['CAPTURE_INC']==-1
     assert home['ESCAPE_KSC_TARGET']==home['AEROBRAKE_TARGETING']==0
     assert home['DESCENT_DECOUPLER_TAG']=='descent_decoupler' and home['AEROBRAKE_ARM_CHUTES']==1

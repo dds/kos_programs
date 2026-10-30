@@ -173,6 +173,47 @@ def check_profiles():
         assert 'DESCENT_HEAT_SHIELD_DROP_ALT' not in home
         print(f'{moon}: surface ascent -> Kerbin return preserves shallow entry and KSC settings')
 
+
+def check_ro9_entry_floor():
+    # Reload both generated legs: the landing profile is no longer present
+    # when the Kerbin profile is written. Old RO8/other targets stay opt-in.
+    count=0
+    for path in sorted((ROOT/'missions/RO9').glob('*.ks')):
+        if 'SET RETURN_PE TO ' not in path.read_text():continue
+        initial=read_settings(path.read_text(),defaults())
+        assert initial['RETURN_PE']==initial['RETURN_PE_MIN']==52000,path
+        initial.update(BODY_NAME='MINMUS',PARKING_ALT=initial['SURFACE_RETURN_PARKING_ALT'],
+                       LAUNCH_INCLINATION=initial['SURFACE_RETURN_INCLINATION'],LAUNCH_AZIMUTH=90)
+        surface=read_settings(emit_profile('phaseSurfaceReturnSetup',initial),defaults())
+        assert surface['RETURN_PE_MIN']==52000,path
+        surface['targetPe']=surface['RETURN_PE']
+        home=read_settings(emit_profile('phaseReturnSetup',surface),{})
+        assert all(home[key]==52000 for key in ('ESCAPE_PE','CAPTURE_PE','REENTRY_PE','AEROBRAKE_PE'))
+        for key in ('MCC_AEROBRAKE_SAFE_PE_MIN','AEROBRAKE_CORRECTION_PE_MIN',
+                    'RETURN_TRIM_PE_MIN','AEROBRAKE_BRAKE_PE_FLOOR'):
+            assert home[key]==52000,(path,key,home[key])
+        for key in ('MCC_AEROBRAKE_SAFE_PE_MAX','AEROBRAKE_CORRECTION_PE_MAX','RETURN_TRIM_PE_MAX'):
+            assert home[key]==53000,(path,key,home[key])
+        assert home['MCC_RETURN_RESERVE_DV']==50 # Only explicit operator rescue releases this.
+        assert home['DESCENT_CHUTES_TAG']==initial['RETURN_DESCENT_CHUTES_TAG']
+        count+=1
+    assert count==11,count
+    # Real entry-policy admission must reject a floor above the target or
+    # a floor without a tolerance before overwriting mission identity.
+    from check_minmus_kolniya import execute
+    prelude=body(SETUP,'phaseReturnSetup')
+    prelude=prelude[prelude.index('LOCAL targetPe IS'):prelude.index('stateSet("target",')]
+    for floor,tolerance,target,valid in ((-1,1000,35000,True),(52000,1000,52000,True),
+                                      (52001,1000,52000,False),(52000,-1,52000,False),
+                                      (-2,1000,52000,False),(math.nan,1000,52000,False),
+                                      (math.inf,1000,52000,False)):
+        events=[]
+        env=dict(RETURN_PE_MIN=floor,RETURN_PE_TOLERANCE=tolerance,RETURN_PE=target,
+                 REENTRY_PE=30000,yieldToPrompt=lambda:events.append('hold'))
+        execute(prelude,env)
+        assert (not events)==valid,(floor,tolerance,target,events)
+    print('PASS: all11 RO9 return profiles target52km; separate floor survives two fresh boots and preserves52km MCC/site/assist bounds,50m/s normal reserve and chute policy; invalid floor holds before replacing mission')
+
     legacy = defaults()
     legacy['targetPe'] = legacy['REENTRY_PE']
     home = read_settings(emit_profile('phaseReturnSetup', legacy), {})
@@ -441,6 +482,7 @@ def check_minmus_landing_recovery():
 
 if __name__ == '__main__':
     check_profiles()
+    check_ro9_entry_floor()
     check_site_corrections()
     check_shallow_command()
     check_economy_profiles()

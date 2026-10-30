@@ -8,6 +8,9 @@ GLOBAL RETURN_PE IS -1.
 // Opt-in entry corridor around RETURN_PE. Persist it through surface
 // ascent so MCC / site targeting cannot accept the default deep entry.
 GLOBAL RETURN_PE_TOLERANCE IS -1.
+// Optional lower bound for planned corrections, independent of target tolerance.
+// RO9 targets52km while retaining its existing52km lower bound.
+GLOBAL RETURN_PE_MIN IS -1.
 GLOBAL RETURN_REENTRY_DIR IS "RETROGRADE".
 GLOBAL RETURN_KSC_TARGET IS 0.
 GLOBAL RETURN_KSC_TRIM_DV_CAP IS 80.
@@ -158,6 +161,7 @@ GLOBAL FUNCTION phaseSurfaceReturnSetup {
     LOG "SET RETURN_SEQUENCE TO " + configLiteral(RETURN_SEQUENCE) + "." TO profilePath.
     LOG "SET RETURN_PE TO " + configLiteral(RETURN_PE) + "." TO profilePath.
     LOG "SET RETURN_PE_TOLERANCE TO " + configLiteral(RETURN_PE_TOLERANCE) + "." TO profilePath.
+    LOG "SET RETURN_PE_MIN TO " + configLiteral(RETURN_PE_MIN) + "." TO profilePath.
     LOG "SET RETURN_REENTRY_DIR TO " + configLiteral(RETURN_REENTRY_DIR) + "." TO profilePath.
     LOG "SET RETURN_KSC_TARGET TO " + configLiteral(RETURN_KSC_TARGET) + "." TO profilePath.
     LOG "SET RETURN_KSC_TRIM_DV_CAP TO " + configLiteral(RETURN_KSC_TRIM_DV_CAP) + "." TO profilePath.
@@ -253,6 +257,11 @@ GLOBAL FUNCTION phaseReturnSetup {
 
     LOCAL targetPe IS REENTRY_PE.
     IF RETURN_PE >= 0 { SET targetPe TO RETURN_PE. }
+    IF NOT (RETURN_PE_MIN >= -1 AND RETURN_PE_MIN < 1e30)
+            OR (RETURN_PE_MIN >= 0 AND (RETURN_PE_TOLERANCE < 0 OR targetPe < RETURN_PE_MIN)) {
+        mLogError("Return entry floor requires a finite bound no higher than the target and an enabled tolerance; mission unchanged.").
+        yieldToPrompt(). RETURN.
+    }
 
     stateSet("target", "KERBIN").
     stateSet("mission_type", "kerbin_return").
@@ -281,7 +290,7 @@ GLOBAL FUNCTION phaseReturnSetup {
         LOG "SET BURN_STAGE_LIMIT TO " + configLiteral(RETURN_BURN_STAGE_LIMIT) + "." TO profilePath.
     }
     IF RETURN_PE_TOLERANCE >= 0 {
-        LOCAL minPe IS MAX(0, targetPe - RETURN_PE_TOLERANCE).
+        LOCAL minPe IS MAX(RETURN_PE_MIN,MAX(0,targetPe-RETURN_PE_TOLERANCE)).
         LOCAL maxPe IS targetPe + RETURN_PE_TOLERANCE.
         LOG "SET MCC_AEROBRAKE_SAFE_PE_MIN TO " + configLiteral(minPe) + "." TO profilePath.
         LOG "SET MCC_AEROBRAKE_SAFE_PE_MAX TO " + configLiteral(maxPe) + "." TO profilePath.

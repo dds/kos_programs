@@ -81,11 +81,12 @@ SET SURFACE_RETURN_PARKING_ALT TO 10000.
 SET SURFACE_RETURN_INCLINATION TO 90.
 SET RETURN_SEQUENCE TO LIST(
     "ESCAPE", "COAST", "MCC", "RETURN_TRIM", "AEROBRAKE", "DESCENT", "DONE").
-// Unshielded craft: target a 53 km initial Pe and allow repeated passes.
-// Optional KSC corrections must preserve the 52-54 km entry corridor.
+// Target52km; drag may still require repeated passes.
+// MCC and optional KSC corrections retain the52km floor (52-53km corridor).
 // This is a planned orbit constraint, not a thermal guarantee.
-SET RETURN_PE TO 53000.
+SET RETURN_PE TO 52000.
 SET RETURN_PE_TOLERANCE TO 1000.
+SET RETURN_PE_MIN TO 52000.
 SET RETURN_REENTRY_DIR TO "RETROGRADE".
 SET RETURN_KSC_TARGET TO 1.
 SET RETURN_KSC_TRIM_DV_CAP TO 20.

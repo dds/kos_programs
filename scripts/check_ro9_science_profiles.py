@@ -94,7 +94,7 @@ def check_targeted_mun_return():
     surface.update(BODY_NAME='MUN', targetPe=surface['RETURN_PE'])
     home = read_settings(emit_profile('phaseReturnSetup',surface) + automation(surface),{})
     assert home['SEQUENCE'] == ['ESCAPE','COAST','MCC','AEROBRAKE','DESCENT','DONE']
-    assert home['ESCAPE_PE'] == home['AEROBRAKE_PE'] == 53000 and home['ESCAPE_KSC_TARGET'] == 0
+    assert home['ESCAPE_PE'] == home['AEROBRAKE_PE'] == 52000 and home['ESCAPE_KSC_TARGET'] == 0
     assert home['AEROBRAKE_AP_RESERVE_DV'] >= 10 and home['AEROBRAKE_AP_BURN'] == 1
     assert home['DESCENT_DECOUPLER_TAG']==cfg['RETURN_DESCENT_DECOUPLER_TAG']
     # Post-orbit review must stop without touching stored science or starting
@@ -110,7 +110,7 @@ def check_targeted_mun_return():
              stateGet=lambda *_:'SCIENCE_OPS',xferSeq=KList(surface['SEQUENCE']),
              yieldToPrompt=lambda:review.append('held'),nextPhase=lambda *_:forbidden()))
     assert review==[('wait',10),'held']
-    print('PASS: fixed Mun landing/science precedes11km westward ascent and exact1737680/1543150m retrograde contract orbit; fresh-boot review preserves science before53km assisted Kerbin return')
+    print('PASS: fixed Mun landing/science precedes11km westward ascent and exact1737680/1543150m retrograde contract orbit; fresh-boot review preserves science before52km assisted Kerbin return')
 
 
 def check_retrograde_mun_ascent():

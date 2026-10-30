@@ -339,6 +339,15 @@ def check_integration():
         clean = lambda text: re.sub(r'//[^\n]*', '', text)
         actual=path.read_text()
         expected=original.read_text().replace('RO8','RO9')
+        if 'SET RETURN_PE TO ' in actual:
+            # RO9's requested52km return and explicit52km correction floor
+            # differ from RO8. Every other inherited setting still matches;
+            # check_surface_return proves the floor across both profile boots.
+            assert actual.count('SET RETURN_PE TO 52000.\n')==1
+            assert actual.count('SET RETURN_PE_MIN TO 52000.\n')==1
+            assert expected.count('SET RETURN_PE TO 53000.\n')==1
+            actual=actual.replace('SET RETURN_PE_MIN TO 52000.\n','')
+            expected=expected.replace('SET RETURN_PE TO 53000.\n','SET RETURN_PE TO 52000.\n')
         if path==ROOT/'craft/RO9.ks':
             # The operator explicitly enabled fuel-assisted aerobraking on RO9.
             assert actual.count('SET AEROBRAKE_AP_BURN TO 1.\n')==1
@@ -352,7 +361,7 @@ def check_integration():
             actual=re.sub(r'SET ('+keys+r') TO -?\d+(?:\.\d+)?\.', '', actual)
             expected=re.sub(r'SET ('+keys+r') TO -?\d+(?:\.\d+)?\.', '', expected)
         assert clean(actual).split()==clean(expected).split(), path
-    print('PASS: brake code resident before coast; stage refresh precedes guidance; RO9 preserves RO8 landing behavior with explicit aerobrake, polar-budget and targeted-controller differences')
+    print('PASS: brake code resident before coast; stage refresh precedes guidance; RO9 preserves RO8 landing behavior with explicit aerobrake, polar-budget, targeted-controller and52km return-policy differences')
 
 
 if __name__=='__main__':

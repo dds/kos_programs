@@ -55,7 +55,7 @@ def check_selection_and_review():
         assert fresh['PARKING_ALT']==11000 and fresh['SHAPE_MIN_PE']==10000
         assert fresh['SEQUENCE']==updates['SURFACE_RETURN_SEQUENCE']
         assert [fresh['SHAPE_'+key] for key in ('AP','PE','INC','AOP')]==[659734,554472,0,.4]
-        assert fresh['RETURN_PE']==53000 and fresh['RETURN_DESCENT_DECOUPLER_TAG']=='return_decoupler'
+        assert fresh['RETURN_PE']==52000 and fresh['RETURN_PE_MIN']==52000 and fresh['RETURN_DESCENT_DECOUPLER_TAG']=='return_decoupler'
         review=[]
         def unexpected_science():
             raise AssertionError('orbital review must not reset/deploy/transmit stored science')

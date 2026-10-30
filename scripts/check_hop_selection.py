@@ -37,15 +37,15 @@ def check_gamma_and_original_return():
         assert state['phase']=='HOP' and state['hop_route_pending']==2
         assert state['hop_route_index']==0 and state['mission_id']=='minmus_polar_hops_return'
         assert [updates['HOP_TARGET_LAT'],updates['HOP_TARGET_LNG']]==[-1.554,2.780]
-        assert env['SURFACE_RETURN_ORBIT']['AP']==659734 and env['RETURN_PE']==53000
+        assert env['SURFACE_RETURN_ORBIT']['AP']==659734 and env['RETURN_PE']==52000
         assert 'SURFACE_RETURN_SETUP' in state['hop_route_restore']['SEQUENCE']
         assert not any(event=='reboot' for event in events) and not alarms
         state['phase']='HOP_AUTO_REVIEW';env['siteNumber']=0
         command(env)
         assert state['phase']=='SURFACE_RETURN_SETUP' and not state['hop_route_active']
-        assert env['SURFACE_RETURN_ORBIT']['AP']==659734 and env['RETURN_PE']==53000
+        assert env['SURFACE_RETURN_ORBIT']['AP']==659734 and env['RETURN_PE']==52000
     assert not command_entrypoint_errors((ROOT/'cmd/hopnext.ks').read_text())
-    print('PASS: Gamma skips Beta from saved or lost Alpha checkpoint without ignition/reboot/completion changes; configured final orbit and53km return survive selection and early route exit')
+    print('PASS: Gamma skips Beta from saved or lost Alpha checkpoint without ignition/reboot/completion changes; configured final orbit and52km return survive selection and early route exit')
 
 
 def check_selection_guards():

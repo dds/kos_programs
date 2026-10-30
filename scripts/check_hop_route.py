@@ -168,7 +168,8 @@ def check_waypoint_and_economy_return():
     try:execute('hopReturn',env)
     except Reboot:pass
     assert not state['hop_route_active'] and state['phase']=='SURFACE_RETURN_SETUP'
-    assert updates['SEQUENCE']==['SURFACE_RETURN_SETUP'] and updates['RETURN_PE']==53000
+    assert updates['SEQUENCE']==['SURFACE_RETURN_SETUP'] and updates['RETURN_PE']==52000
+    assert updates['RETURN_PE_MIN']==52000
     assert updates['RETURN_KSC_TARGET']==0 and updates['RETURN_PE_TOLERANCE']==1000
     assert updates['RETURN_SEQUENCE']==['ESCAPE','COAST','MCC','AEROBRAKE','DESCENT','DONE']
     assert updates['SURFACE_RETURN_PARKING_ALT']==10000

@@ -64,8 +64,9 @@ SET SCIENCE_SURVEY_POINTS TO LIST().
 
 // Return directly from orbit. No landing or surface-ascent phases.
 SET RETURN_SEQUENCE TO LIST("ESCAPE", "COAST", "MCC", "AEROBRAKE", "DESCENT", "DONE").
-SET RETURN_PE TO 53000.
+SET RETURN_PE TO 52000.
 SET RETURN_PE_TOLERANCE TO 1000.
+SET RETURN_PE_MIN TO 52000.
 SET RETURN_REENTRY_DIR TO "RETROGRADE".
 // Recover anywhere on Kerbin: no optional KSC-longitude/impact-site burns.
 SET RETURN_KSC_TARGET TO 0.

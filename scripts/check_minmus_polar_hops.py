@@ -103,13 +103,13 @@ def check_profile_and_return():
     assert surface['SHAPE_ALT_TOL']==100 and surface['SHAPE_RESERVE_DV']==300
     surface['targetPe']=surface['RETURN_PE']
     home=read_settings(emit_profile('phaseReturnSetup',surface),{})
-    assert all(home[k]==53000 for k in ('ESCAPE_PE','CAPTURE_PE','REENTRY_PE','AEROBRAKE_PE'))
+    assert all(home[k]==52000 for k in ('ESCAPE_PE','CAPTURE_PE','REENTRY_PE','AEROBRAKE_PE'))
     assert home['AEROBRAKE_TARGETING']==0 and home['DESCENT_DECOUPLER_TAG']=='return_decoupler'
     # Actual common serializer persists assist policy across both generated legs.
     policy=function_body((ROOT/'lib/return_setup.ks').read_text(),'_writeCoastAutomation')
     assert 'configLiteral(AEROBRAKE_AP_BURN)' in policy and 'configLiteral(AEROBRAKE_AP_RESERVE_DV)' in policy
     assert cfg['AEROBRAKE_AP_BURN']==1 and cfg['AEROBRAKE_AP_RESERVE_DV']==10
-    print('PASS: exact polar/landing/A-B-C-D/equatorial goals and53km assisted return persist through fresh generated return profiles;270m first hop cannot be skipped by the50m threshold')
+    print('PASS: exact polar/landing/A-B-C-D/equatorial goals and52km assisted return persist through fresh generated return profiles;270m first hop cannot be skipped by the50m threshold')
 
 
 def check_four_stops_three_hops():

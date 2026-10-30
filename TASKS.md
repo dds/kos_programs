@@ -15,7 +15,8 @@ record remaining uncertainty before closing a task.
   acceptance or deletion; stopped Kerbin-return MCC only,600s Pe lead,
   warp-settle/context recheck. Existing MCC affordability/actual-orbit handoff
   remain mandatory. Source replay covers reported reserve hold and unsafe
-  contexts; native correction pending. Future RO9 default52km policy next.
+  contexts; native correction pending. Rescue command commits c43dc61/ebc4a09
+  pushed; operator instructed to pull, run command and REBOOT.
   Operator retry exposed an incorrect command state-only mission_type check:
   bootApplyMissionConfig clears that field for profile-owned intent. Use
   shared missionTypeDetect, with saved Kerbin target fallback after command
@@ -24,6 +25,26 @@ record remaining uncertainty before closing a task.
   Pe54.037km,10.7m/s, fuel-reserve after Kerbin SOI; no node or late-approach
   evidence. Log:/tmp/ksp-deck-20261030T201306Z-fetch-ta9p32l6/logs/
   RO9_5008684/boot_036_core.log.
+
+- 30Oct return policy: all11 RO9 moon-return profiles now target52km. Optional
+  RETURN_PE_MIN survives surface-ascent profile generation and clamps the
+  generated MCC/site/aerobrake correction floor to52km; tolerance remains1km,
+  upper bound53km. Explicit economy hop return uses the same goal/floor.
+  New floor defaults-1, preserving older RO8/other profiles and53km helper
+  defaults. Invalid bounds hold before replacing the Kerbin-return mission.
+  Existing generated returns keep their saved intent until explicitly
+  retargeted. Normal MCC reserve50 and aerobrake repair reserve10 unchanged;
+  rescue command alone explicitly releases MCC reserve. Alarm ownership,
+  waiting, physical staging and assist enable flags unchanged. Focused source
+  checks pass through two fresh generated-profile loads for every RO9 return.
+  Routine88-file suite210.42s:87 passed, only the legacy exact RO8/RO9 profile
+  comparison failed on this requested policy difference. Updated comparison
+  asserts52km + floor explicitly, still compares every other inherited field;
+  its standalone rerun passes. No production edits after that suite. Report:
+  /tmp/kos-ro9-entry52-20261030.json and.log (first-pass failure retained).
+  Structural0 errors/unchanged legacy KSC_DEORBIT warning. Native52km
+  entry/thermal outcome and low-fuel MCC execution still require flight
+  evidence. No bootstrap replacement or remote game/control/save changes.
 
 - 30Oct native assist test UT5016249: fetched requested diagnostic through the
   approved read-only Deck wrapper, plus boot004. Espoir-impacter1/duna_impactor

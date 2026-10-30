@@ -125,9 +125,9 @@ def check_profile_and_return():
     assert ascent['LAUNCH_INCLINATION']==abs(cfg['TARGET_LAT']) and ascent['SURFACE_RETURN_ORBIT']=={}
     ascent['targetPe']=ascent['RETURN_PE']
     home=read_settings(emit_profile('phaseReturnSetup',ascent),{})
-    assert home['AEROBRAKE_PE']==home['ESCAPE_PE']==53000
+    assert home['AEROBRAKE_PE']==home['ESCAPE_PE']==52000
     assert home['CAPTURE_INC']==-1 and home['DESCENT_DECOUPLER_TAG']=='return_decoupler'
-    print('PASS: exact Tundra -> safe low survey orbit -> five above6600m sites -> review -> fixed landing -> eastward low-orbit ascent ->53km Kerbin return survives fresh generated profiles; survey band excludes maneuver/landing controllers')
+    print('PASS: exact Tundra -> safe low survey orbit -> five above6600m sites -> review -> fixed landing -> eastward low-orbit ascent ->52km Kerbin return survives fresh generated profiles; survey band excludes maneuver/landing controllers')
 
 
 def check_forecast_and_geometry():
