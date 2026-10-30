@@ -22,8 +22,9 @@ LOCAL FUNCTION _assistAncestor {
 
 GLOBAL FUNCTION assistRouteBodies {
     PARAMETER route.
+    PARAMETER minimumLegs IS 2.
     LOCAL bodies IS LIST().
-    IF route:LENGTH < 2 OR route:LENGTH > 8 { RETURN bodies. }
+    IF minimumLegs < 1 OR minimumLegs > 2 OR route:LENGTH < minimumLegs OR route:LENGTH > 8 { RETURN bodies. }
     LOCAL index IS 0.
     FOR leg IN route {
         IF NOT leg:HASKEY("BODY") OR NOT leg:HASKEY("MIN_PE") { RETURN LIST(). }
@@ -94,6 +95,7 @@ GLOBAL FUNCTION assistEvaluate {
     PARAMETER bodies.
     PARAMETER startIndex IS 0.
     PARAMETER lastBody IS "".
+    PARAMETER departureBody IS "".
     LOCAL rejected IS LEXICON("OK",FALSE,"REASON","incomplete-itinerary").
     IF NOT (startIndex >= 0 AND startIndex < route:LENGTH AND bodies:LENGTH = route:LENGTH) { RETURN rejected. }
     LOCAL patch IS SHIP:ORBIT.
@@ -138,9 +140,16 @@ GLOBAL FUNCTION assistEvaluate {
             SET legIndex TO legIndex+1.
         } ELSE {
             IF NOT _assistAncestor(patch:BODY,bodies[legIndex]) {
+                // Explicit opt-in for a caller's first, outward departure
+                // patch (e.g. Kerbin -> Sun). Other unrequested bodies still
+                // reject, and the unchanged Pe/chronology guards below apply.
+                LOCAL departing IS FALSE.
+                IF depth = 0 AND patch:BODY:NAME = departureBody AND patch:BODY:HASBODY AND patch:HASNEXTPATCH {
+                    SET departing TO patch:NEXTPATCH:BODY = patch:BODY:BODY.
+                }
                 // A confirmed flyby can still be the current patch while
                 // awaiting escape. No arbitrary unrequested body is allowed.
-                IF patch:BODY:NAME <> lastBody OR NOT (patch:ECCENTRICITY > 1) { RETURN rejected. }
+                IF NOT departing AND (patch:BODY:NAME <> lastBody OR NOT (patch:ECCENTRICITY > 1)) { RETURN rejected. }
             }
             LOCAL floorPe IS 0.
             IF patch:BODY:ATM:EXISTS { SET floorPe TO patch:BODY:ATM:HEIGHT. }

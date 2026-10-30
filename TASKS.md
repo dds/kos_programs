@@ -6,6 +6,43 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct manual assist preview: user now authorizes commit/push for Deck use,
+  but requests a COMMAND rather than automatic mission integration.
+  RUNPATH("0:/cmd/assistsearch.ks"). Requires a linked manual prompt,1x,
+  zero controls/physical thrust, Abort off and one unflown node >300s ahead.
+  Selected archive profile (cached fallback) + runtime overrides supply route
+  and mandatory capture goal. Custom route/fallback/reserve/radius/science/
+  seek arguments supported. Function-only archive helpers assist_search,
+  assist_search_native and assist_preview are absent from all phase bands.
+  Fixed epoch,50m/s command radius (kernel default20),64 node/1536 separation samples,20 game/30
+  wall seconds; STOP_UT ends180s before the estimated full burn start.
+  Three candidate basins, missing-moon closest-approach score, whole native
+  final goal; no extrapolated post-flyby savings. Baseline prices actual original
+  node + configured capture, charges an already-achieving bound node once;
+  EXACT equivalent goal or LOWER mandatory parent-capture prefix, never an
+  optimized direct-route claim. Science allowance0. Default reserve >=100m/s
+  and selected assist/capture policy.
+  The command radius exceeds25m/s minimum gain:20m/s cannot net25m/s saving
+  against an already-planned capture priced as just the original burn.
+  Each probe restores original node;
+  takeover/edits/frame/phase/burn changes cancel without overwriting.
+  Archive report writes original vector BEFORE probes, raw native chain,
+  policy/cost/progress/candidate legs/timing/restoration, directly under
+  0:/logs/archive/_diagnostics/assistsearch_*.log. Native error restoration is
+  not guaranteed: operator quicksaves and reviews the original record.
+  No candidate installation, burn, staging, alarm, phase or mission changes.
+  Shared validator's single-terminal/outward-departure args stay opt-in;
+  automatic callers/defaults unchanged. Earlier Sun-only tests missed the
+  initial Kerbin escape prefix. New source fixtures exercise real cost adapter,
+  all6 Espoir defaults, bound capture without double charging and actual command
+  unsafe/loading/profile/archive failure paths. All88 routine check files
+  pass136.97s; every new case <=0.564s. Structural0 errors, unchanged legacy
+  KSC_DEORBIT warning. Results:/tmp/kos-assistsearch-manual-20261030.json and.log.
+  Automatic phase hooks, durable intent/handoff, optimized direct comparison,
+  native compile/performance/storage/flight evidence remain open. No bootstrap
+  rebuild, Deck deployment/game controls/save edits. See
+  docs/PLAN_local_assist_search.md and README manual command section.
+
 - Current assist-search design scope (30Oct): user excludes departure-date
   selection. Explore nearby geometry around the existing XING node at its
   selected epoch, recheck the actual post-burn orbit, and consider an assist
@@ -18,7 +55,8 @@ record remaining uncertainty before closing a task.
   post-flyby mission goal. Avoid separate direct-then-assist corrective burns
   and repeated discretionary late searches. Direct atmospheric-entry science
   detours need explicit science/fuel policy when they cannot save delta-v.
-  Discussion/design only: opportunity acquisition is not implemented yet.
+  Manual acquisition preview above is source-validated and authorized for push;
+  automatic phase integration and optimized direct-route pricing remain open.
 
 - 30Oct follow-up: user requests wiring assistcheck into Duna/Ike missions.
   All six Espoir launch sequences now have ASSIST -> ASSIST_COAST after XING.

@@ -9,6 +9,32 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-30 latest user request: commit/push assist acquisition as a MANUAL
+command for Deck testing; do not integrate new search into flight phases.
+cmd/assistsearch.ks uses one existing unflown node, selected profile + runtime
+overrides, and archive-only assist_search/assist_search_native/assist_preview.
+No new phase/dependency-band roots. Function-only source refresh avoids stale
+RUNONCE bodies; profile archive first, cached generated profile fallback.
+Node transaction, same-epoch position samples, whole native route/goal,
+direct original-node + required capture model (EXACT equivalent, LOWER prefix),
+science extra0, reserve>=100/default profile policy; already-achieving capture
+priced once.64 node/1536 separation samples,20 game/30 wall sec,50m/s command
+radius(kernel20); radius must exceed25m/s gain to improve a capture-only node.
+Caller deadline180s before estimated full burn start. Original PRN/UT archived
+before probing, each probe restored; active-vessel check BEFORE node access,
+late reference callbacks recheck ownership before reading nodes.
+Return candidate only; no burn/installation/staging/phase/KAC changes.
+Quicksave for native testing: runtime errors cannot guarantee restoration.
+Report0:/logs/archive/_diagnostics/assistsearch_<craft>_<UT>.log.
+Automatic assist code/defaults stay unchanged; validator extensions opt in to
+single terminal and initial outward departure prefix. Source tests include
+actual manual command and baseline, all6 Espoir defaults. All88 routine checks
+pass136.97s; new cases <=0.564s. Structural0 errors, unchanged KSC_DEORBIT
+warning. Results:/tmp/kos-assistsearch-manual-20261030.json and.log.
+Native compilation/latency/storage/flight, automatic handoff/phase hooks and
+optimized direct comparison remain open. README/TASKS/design note updated.
+No bootstrap rebuild, Deck deployment/game controls/save edits.
+
 2026-10-30 follow-up: user requests actual Espoir assist integration. Six launch
 profiles insert ASSIST/ASSIST_COAST after XING. No complete safe native route
 -> original BPLANE powered fallback. Duna surveyor: Ike flyby -> Duna capture;
@@ -1106,7 +1132,7 @@ Looks like Python/JS; is neither.
 | Legacy/rescue maneuver libs | `lib/maneuver_targeting.ks`, `lib/maneuver_orbit.ks`, `lib/maneuver_rendezvous.ks`, `lib/maneuver_mcc.ks` |
 | Payloads/landing | `lib/payload_ops.ks`, `lib/payload_release.ks`, `lib/payload_landing.ks`, `lib/landing_main.ks`, `lib/landing_deorbit.ks`, `lib/deorbit_targeting.ks`, `lib/aerobrake.ks`, `lib/descent.ks` |
 | Duna/Ike | `lib/duna_entry.ks`, `lib/ike_setup.ks`, shared `lib/duna_ike_config.ks`, `missions/Espoir/` |
-| Optional assist preview | `lib/gravity_assist.ks`, `cmd/assistcheck.ks`; separate from flight bands |
+| Optional assist previews | `cmd/assistcheck.ks` refines existing chains; `cmd/assistsearch.ks` loads archive-only `assist_search` / `assist_search_native` / `assist_preview` to acquire opportunities around a node |
 | Atmosphere craft | `lib/airplane.ks` (assists + `airplaneMain`), `lib/ssto.ks`, `lib/drone.ks`, `lib/rover.ks` |
 | Telemetry | `lib/observe.ks` (archive-first), `STATS` lines in every planner |
 | Operator | `cmd/` (see README table); `cmd/airtest.ks` is the assist tuning card |

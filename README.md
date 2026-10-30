@@ -70,6 +70,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/arrival.ks", "budget", 100).` | Allow up to 100 m/s of further arrival corrections; preserves capture/return reserves and does not burn |
 | `RUNPATH("0:/cmd/arrival.ks", "plan").` | Preview an arrival correction and hold for review; does not burn or advance the mission |
 | `RUNPATH("0:/cmd/arrival.ks", "status").` | Show actual arrival Pe, capture fuel estimate, correction spending and interrupted-burn reason without flying |
+| `RUNPATH("0:/cmd/assistsearch.ks").` | Manually search for a missing assist encounter around the existing node using the selected Espoir profile; restores the node and archives the candidate/diagnostics, never burns |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
 | `RUNPATH("0:/cmd/hoproute.ks", LIST(LIST(lat1,lng1),LIST(lat2,lng2)),700).` | Save local airless rocket hops while landed; replace coordinates, review, then reboot. Stops after every landing for science; N continues, R restores return/DONE. Last argument reserves return dV |
@@ -1236,13 +1237,69 @@ final node, and retains only an improvement of at least25m/s. Failed searches
 remove only their own probe; existing nodes, mission state and controls stay
 untouched. Successful previews leave a node for manual review and do not fly it.
 
-This does **not yet** acquire an absent moon encounter or compare a new assist
-with a separately optimized direct route. Ordered unpowered flybys followed
-by one terminal capture/entry are supported; multi-capture tour planning is not.
+The older `assistcheck` command requires an existing encounter. The manual
+`assistsearch` command below can seek a missing encounter around an existing
+node. Automatic mission acquisition and comparison with a separately optimized
+direct route remain unimplemented. Ordered unpowered flybys followed by one
+terminal capture/entry are supported; multi-capture tour planning is not.
 Capture-cost estimates exclude landing/return and detailed finite-burn losses.
 KSP's patch-lookahead depth limits how many future legs can be proven. Broad
 opportunity acquisition and native flight tests remain queued. Native compilation
 and compiled storage fit of these new bands also remain unverified.
+
+### Manual assist opportunity search
+
+Quicksave first. From a linked manual prompt at 1x, with throttle and Abort off,
+keep exactly one planned, unflown maneuver more than five minutes ahead, then:
+
+```kos
+RUNPATH("0:/cmd/assistsearch.ks").
+```
+
+This command uses the selected Espoir profile's `MISSION_ASSIST_ROUTE` and
+original capture/entry goal, with local runtime overrides applied. It reads
+the current archive profile when available, otherwise the cached local profile
+(including generated operations profiles). It neither advances nor resumes the
+mission. An empty route or unpriceable original capture produces a diagnostic
+failure, rather than claiming a benefit.
+
+The search changes only the node's radial/normal/prograde vector, at its
+existing time, within 50 m/s by default. It can use closest approach before the
+moon patch exists, but a proposed success requires the complete native route,
+safe flybys, the terminal goal, fuel reserve and burn timing. Limits are 64
+node probes, 1536 separation samples, 20 game seconds and 30 wall seconds.
+The 50 m/s radius exceeds the 25 m/s minimum modeled savings; a radius below 25
+cannot save 25 m/s on an already-planned capture whose baseline is just that burn.
+It also stops 180s before the estimated start of the full modified burn.
+The command issues no warp, attitude, throttle, staging, KAC alarm or phase
+changes.
+The new helpers run from the archive and are absent from every flight band;
+no bootstrap rebuild is needed.
+
+Each probe restores the original vector. The candidate stays in the report,
+with no execution option. The report is written directly to
+`0:/logs/archive/_diagnostics/assistsearch_<craft>_<UT>.log`, including the
+original vector before probing, original patches, route/goals, cost baseline,
+progress counts, candidate encounters, timings and restoration status.
+Copy that file back for review even when the search finds no useful route.
+If a native error or takeover prevents restoration, inspect the archived
+original vector or reload the quicksave before using the remaining node.
+
+Advanced arguments are `route, fallbackGoal, reserveDv, changeDv,
+scienceExtraDv, seekIndex`. An empty route/goal uses the mission policy;
+reserve `-1` selects at least 100 m/s and the current assist/capture reserves.
+An explicit fallback goal declares a required capture prefix of the original
+plan. The cost model includes the original node plus that capture; an already
+achieving capture node is charged once. A complete equivalent direct goal is
+labeled `EXACT`; a mandatory parent-capture prefix before later moon operations
+is `LOWER`, excluding those later nonnegative costs. Neither is an optimized
+direct-route comparison or an exact finite-burn prediction.
+
+Science expenditure defaults to zero. A free direct entry usually has no
+capture cost to save, so a paid science detour requires an explicit
+`scienceExtraDv` allowance. `seekIndex=-1` selects the first missing route leg.
+Full design, API and remaining integration work:
+[`docs/PLAN_local_assist_search.md`](docs/PLAN_local_assist_search.md).
 
 ### Espoir: original Duna science and impact attempt
 
