@@ -10,7 +10,7 @@ from check_surface_return import read_settings
 
 FLIGHT = (ROOT/'lib/science_flight.ks').read_text()
 ENTRY = (ROOT/'lib/science_entry.ks').read_text()
-PROFILE = (ROOT/'missions/Espoir/duna_science_impact.ks').read_text()
+PROFILE = (ROOT/'missions/Espoir/duna_impactor.ks').read_text()
 
 
 class Map(dict):
@@ -274,12 +274,13 @@ def check_phase_lifecycle():
                 ship.ALTITUDE=10000
                 if env['TIME'].SECONDS>=102:env['ABORT']=True
         env.update(scienceFlightPulse=pulse,scienceEntryContext=context,fixture_wait=wait,
+                   scienceEntrySample=lambda primary:run(ENTRY,'scienceEntrySample',dict(env,primary=primary)),
                    _scienceEntryWakeUt=lambda:run(ENTRY,'_scienceEntryWakeUt',env),
                    _scienceEntryMoonCheck=lambda primary:run(ENTRY,'_scienceEntryMoonCheck',dict(env,primary=primary)),
                    aerobrakeApEntryEta=lambda height:0 if ship.ALTITUDE<=height else -1)
         if case=='surface':ship.STATUS='LANDED'
         if case in ('skipout','pass-limit'):ship.ALTITUDE=100000
-        if case=='pass-limit':saved.update(science_entry_id='duna_science_impact:0:DUNA',science_entry_passes=3)
+        if case=='pass-limit':saved.update(science_entry_id=cfg['MISSION_ID']+':0:DUNA',science_entry_passes=3)
         if case=='node':env['HASNODE']=True
         if case=='bad-config':env['SCIENCE_ENTRY_PREPARE_LEAD']=float('nan')
         if case=='abort':env['ABORT']=True
@@ -306,6 +307,39 @@ def check_phase_lifecycle():
     print('PASS: actual phase samples high/low atmosphere at1x with live retrograde, preserves pass count on reboot, stops on abort/node/invalid config/skipout and advances only after surface science dwell')
 
 
+def check_optional_flyby_sampling():
+    command=(ROOT/'cmd/flybyscience.ks').read_text()
+    for enabled in (0,1):
+        env,primary=entry_fixture();calls=[]
+        env.update(MISSION_ASSIST_SCIENCE=enabled,SCIENCE_ENTRY_MIN_EC=.05,
+                   scienceFlightPulse=lambda *args:calls.append(args),
+                   scienceEntryContext=lambda:env['SHIP'].BODY.NAME,shipPowerFraction=lambda:1,
+                   primary=primary)
+        run(ENTRY,'scienceEntrySample',env)
+        assert calls==[('DUNA',True)]
+        env['SHIP'].BODY=NS(NAME='IKE')
+        run(ENTRY,'scienceEntrySample',env)
+        assert calls==([('DUNA',True),('IKE',True)] if enabled else [('DUNA',True)])
+        # Turning sampling off must not waive the same native encounter gate.
+        env['SHIP'].ORBIT=NS(BODY=env['SHIP'].BODY,PERIAPSIS=10000,HASNEXTPATCH=False)
+        assert not run(ENTRY,'_scienceEntryMoonCheck',env)
+    for enabled,mission,accepted in ((0,'duna_impactor',True),(1,'duna_impactor',True),
+                                    (0,'duna_science_impact',True),(-1,'duna_impactor',False),
+                                    (2,'duna_impactor',False),(1,'',False)):
+        saved=dict(mission_id=mission,phase='ASSIST_COAST',launch_time=1000,soi_alarm_id='owned')
+        settings=dict(AEROBRAKE_AP_RESERVE_DV=10,BPLANE_TRIM_RESERVE_DV=50,
+                      MISSION_ASSIST_SCIENCE=1)
+        writes=[]
+        def update(values):writes.append(dict(values));settings.update(values)
+        env=dict(enabled=enabled,RUNPATH=lambda *_:None,bootPreamble=lambda:None,
+                 stateGet=saved.get,LEXICON=lex,missionOverrideUpdate=update)
+        before=saved.copy();run(command,'_cmdFlybyscience',env)
+        assert saved==before and bool(writes)==accepted
+        if accepted:assert writes==[dict(MISSION_ASSIST_SCIENCE=enabled)]
+        assert settings['AEROBRAKE_AP_RESERVE_DV']==10 and settings['BPLANE_TRIM_RESERVE_DV']==50
+    print('PASS: one persisted boolean controls optional moon science, primary science always samples, disabled science retains unsafe-Ike refusal, and command preserves mission/phase/alarms/budgets')
+
+
 if __name__=='__main__':
     check_profile_and_boot()
     check_data_lifecycle()
@@ -314,3 +348,4 @@ if __name__=='__main__':
     check_wakes_and_moon_geometry()
     check_resident_wait()
     check_phase_lifecycle()
+    check_optional_flyby_sampling()

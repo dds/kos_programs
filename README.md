@@ -72,6 +72,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/arrival.ks", "plan").` | Preview an arrival correction and hold for review; does not burn or advance the mission |
 | `RUNPATH("0:/cmd/arrival.ks", "status").` | Show actual arrival Pe, capture fuel estimate, correction spending and interrupted-burn reason without flying |
 | `RUNPATH("0:/cmd/assistsearch.ks").` | Manually search for a missing assist encounter around the existing node using the selected Espoir profile; restores the node and archives the candidate/diagnostics, never burns |
+| `RUNPATH("0:/cmd/flybyscience.ks",1).` | Enable optional science on configured flybys at the next reboot; `0` disables it. Adds no maneuver allowance |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
 | `RUNPATH("0:/cmd/hoproute.ks", LIST(LIST(lat1,lng1),LIST(lat2,lng2)),700).` | Save local airless rocket hops while landed; replace coordinates, review, then reboot. Stops after every landing for science; N continues, R restores return/DONE. Last argument reserves return dV |
@@ -1090,11 +1091,20 @@ no archive launch counterpart, so reconnecting cannot restart the Duna leg.
 an empty map retains the existing FalconHeavy flyby-to-Duna-entry behavior.
 
 `duna_impactor` uses the existing continuous `SCIENCE_ENTRY` phase, targeting
-5km Pe with3km tolerance and no optional Ike detour. It performs no capture,
+5km Pe with3km tolerance and no paid Ike detour. It performs no capture,
 chute deployment or powered landing. Powered entry assistance remains separate
 unfinished work; the400m/s allowance does not enable that controller by itself.
-The older `duna_science_impact` profile remains available with incidental Ike
-flyby sampling, subject to its safe subsequent Duna-entry check.
+Optional Ike science is off by default. To enable it on one selected craft,
+run `RUNPATH("0:/cmd/flybyscience.ks",1).` and `REBOOT.`; use `0` to disable.
+The shared `MISSION_ASSIST_SCIENCE` flag controls sampling during both assist
+coast and science entry. Duna science stays enabled. Ike must still clear
+20km and preserve a proven subsequent Duna entry, whether sampling is on or
+off. Sampling can consume one-use experiments before Duna.
+The retired `duna_science_impact` name no longer appears in the launch picker.
+Existing flights load the same canonical profile while retaining their old
+mission ID, science/assist checkpoints and enabled Ike sampling; a per-craft
+override can disable it. A connected boot caches the canonical profile for
+later offline reboots. No installed bootstrap replacement is needed.
 
 `ike_lander` is the **one-way soft lander** for the earlier touchdown-and-transmit
 plan. Its generated `ike_lander_ops` leg captures directly into25km parking,
@@ -1174,7 +1184,7 @@ phases load `duna_entry`. They no longer share an executing band or pull in one
 another's flight handlers. `duna_ike_setup` remains a compatibility root for
 explicit legacy loads. Shared conic timing lives in `conic_time`.
 
-All five Espoir launch profiles now run `ASSIST` after XING. This is an optional
+All four Espoir launch profiles run `ASSIST` after XING. This is an optional
 branch based on an **already predicted native itinerary**. Without a complete,
 safe and affordable chain, the phase skips `ASSIST_COAST` and continues through
 the original BPLANE/coast/powered-capture sequence.
@@ -1184,7 +1194,8 @@ profiles can use a Duna flyby followed by direct Ike capture, bypassing Duna
 parking and the separate Ike transfer. Their normal mapping or landing
 operations follow that capture. Duna entry profiles can retain an existing free
 Ike pass only when the subsequent atmospheric entry is proven; they purchase
-no detour. Only `duna_science_impact` opts into sampling during this coast,
+no detour. `duna_impactor` samples during this coast when optional flyby
+science is enabled (legacy `duna_science_impact` flights retain that opt-in),
 preserving its existing Ike science intent. One-shot instrument scheduling
 remains the operator's responsibility.
 
@@ -1306,9 +1317,9 @@ capture cost to save, so a paid science detour requires an explicit
 Full design, API and remaining integration work:
 [`docs/PLAN_local_assist_search.md`](docs/PLAN_local_assist_search.md).
 
-### Espoir: original Duna science and impact attempt
+### Espoir: Duna science and impact attempt
 
-`missions/Espoir/duna_science_impact.ks` is the first Espoir profile. Name
+`missions/Espoir/duna_impactor.ks` is the consolidated entry profile. Name
 the new probe **Espoir** (or use the normal fleet-name suffix convention)
 and select this profile in the normal mission picker when ready. No mission
 is selected or launched by adding these files. Espoir uses the shared rocket
@@ -1326,8 +1337,8 @@ without touchdown, or if no future atmospheric crossing remains, the phase
 reports the reason and returns to manual control instead of declaring a
 successful impact. Destruction naturally ends the running processor.
 
-Ike is opportunistic in this version: an **existing native encounter** is
-sampled at no added maneuver cost, only if its predicted Pe clears20km and
+Ike is opportunistic: with optional flyby science enabled, an **existing
+native encounter** is sampled at no added maneuver cost, only if its Pe clears20km and
 the subsequent Duna patch actually reaches an atmospheric Pe before its
 next transition. An unsafe/incomplete moon prediction holds for review.
 Espoir does not purchase a Duna capture or plan an extra Ike detour. An

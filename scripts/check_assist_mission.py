@@ -147,7 +147,25 @@ def check_profiles_and_native_continuations():
             assert fresh['TARGET_AP']==wanted['TARGET_AP'] and fresh['CAPTURE_RESERVE_DV']==wanted['CAPTURE_RESERVE_DV']
             if name=='ike_lander':assert fresh['LANDING_REQUIRE_KERBIN']==1 and fresh['SCIENCE_SURFACE_DWELL']==600
         if name=='duna_science_impact':assert any(e[0]=='science' for e in events)
-    print('PASS: all five Espoir profiles follow validated natural assists through actual ordered SOIs/Pe to correct capture or science entry; fresh-boot overrides preserve identity, mapping/landing/science settings and reserves')
+    print('PASS: all four Espoir profiles plus the retired entry alias follow validated natural assists through actual ordered SOIs/Pe to correct capture or science entry; fresh-boot overrides preserve identity, mapping/landing/science settings and reserves')
+
+
+def check_entry_sampling_override():
+    for enabled in (0,1):
+        env,saved,events,alarms,overrides,patches,_=fixture('duna_impactor')
+        env['MISSION_ASSIST_SCIENCE']=enabled
+        env['planAssistRefinement']=lambda _:Map(OK=False)
+        env['phaseAssist']();coast(env)
+        assert not env['phaseShouldYield'] and saved['phase']=='SCIENCE_ENTRY' and not alarms
+        assert any(row[0]=='science' for row in events)==bool(enabled)
+        assert not any(row[0]=='burn' for row in events)
+        # A scoped flag override merges with the terminal handoff. Reload it
+        # after the canonical defaults as boot does; no identity is replaced.
+        values=dict(MISSION_ASSIST_SCIENCE=enabled,**overrides[-1])
+        emitted='\n'.join('SET '+key+' TO '+str(literal(value))+'.' for key,value in values.items())
+        fresh=read_settings(emitted,dict(profile('duna_impactor')))
+        assert fresh['MISSION_ASSIST_SCIENCE']==enabled and fresh['MISSION_ID']=='duna_impactor'
+    print('PASS: canonical entry profile science override samples only when enabled, survives native assist handoff/fresh profile load and purchases no extra burn')
 
 
 def check_fallback_and_admission():
@@ -344,6 +362,7 @@ def check_repeated_flyby_progress():
 
 if __name__=='__main__':
     check_profiles_and_native_continuations()
+    check_entry_sampling_override()
     check_fallback_and_admission()
     check_owned_correction_and_reboot()
     check_live_wait_and_route_failures()

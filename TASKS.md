@@ -6,6 +6,32 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct Espoir entry profiles consolidated: duna_impactor is the single
+  canonical launch profile, with interplanetary launch mode/16 transfer
+  samples,5km Pe±3km, no automatic warp and unchanged assist/burn reserves.
+  Ike sampling defaults off; cmd/flybyscience.ks,1 (or0) writes only
+  MISSION_ASSIST_SCIENCE for the next boot. Shared flag now covers optional
+  moon sampling in both ASSIST_COAST and SCIENCE_ENTRY; Duna science stays
+  enabled. Ike bands/20km native encounter/subsequent-entry guards remain
+  active with sampling off. No new detour budget, entry burn or landing code.
+  Deleted duplicate duna_science_impact source. Its saved Espoir mission id
+  resolves to canonical config while retaining historical identity and its
+  old sampling opt-in before runtime overrides. Cleanup keeps the real
+  canonical bytecode; old-cache-only offline boots retain their provider.
+  Manual assist preview uses the same alias/intent helpers without saving
+  mission state. Existing science counters/assist records/phase/alarms do not
+  migrate. No new band or bootstrap replacement; a connected boot is needed
+  to cache the updated boot library/profile. Scalar capability keeps the
+  ordinary manual preview working with an older cached boot library too.
+  All88 routine files verified:87 passed the129.56s suite; the remaining
+  arrival-profile audit expected at least5 entries before consolidation.
+  Replaced that count with explicit coverage of the4 remaining atmospheric
+  entry profiles; its rerun passes. No production edits after the suite.
+  New alias/sampling/handoff regressions take0.017–0.051s. Structural0 errors,
+  unchanged legacy KSC_DEORBIT warning. Report:
+  /tmp/kos-espoir-consolidation-20261030.json and.log (original count failure
+  retained). Native compile/reboot/flight validation remains pending.
+
 - 30Oct live Mun return MCC held with10.7m/s remaining, Pe54km, reason
   fuel-reserve (default50). User requests spending it toward52km entry.
   cmd/returnmcc.ks,52000,0 writes scoped overrides only, then operator REBOOT:

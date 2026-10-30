@@ -12,6 +12,7 @@ IMPACT = (ROOT/'lib/science_impact.ks').read_text()
 ENTRY = (ROOT/'lib/science_entry.ks').read_text()
 SURFACE = (ROOT/'lib/science_surface.ks').read_text()
 CONFIG = (ROOT/'lib/config.ks').read_text()
+BOOT = (ROOT/'lib/boot_lib.ks').read_text()
 
 
 class Text(KString):
@@ -65,7 +66,12 @@ def literal(value):
 
 
 def profile(name):
-    return native(read_settings((ROOT/f'missions/Espoir/{name}.ks').read_text(), {}))
+    env=dict(cn='Espoir',mid=name)
+    selected=execute(function_body(BOOT,'bootMissionProfileId'),env)
+    cfg=read_settings((ROOT/f'missions/Espoir/{selected}.ks').read_text(),{})
+    env.update(cfg)
+    execute(function_body(BOOT,'bootMissionProfileIntent'),env)
+    return native({key:env[key] for key in cfg})
 
 
 def run(source, name, env):
@@ -107,7 +113,8 @@ def check_profiles_and_dependencies():
                 assert leg['SCANSAT_AUTO_DEORBIT'] == leg['SCANSAT_DISPOSE_CARRIER'] == 0
                 assert leg['SCANSAT_POWER_LOW'] < leg['SCANSAT_POWER_RESUME']
         if name == 'duna_impactor':
-            assert 'CAPTURE' not in cfg['SEQUENCE'] and cfg['SCIENCE_ENTRY_MOON'] == ''
+            assert 'CAPTURE' not in cfg['SEQUENCE'] and cfg['SCIENCE_ENTRY_MOON'] == 'IKE'
+            assert cfg['MISSION_ASSIST_SCIENCE']==0 and cfg['SCIENCE_ENTRY_MOON_MIN_PE']==20000
             assert 0 < cfg['CAPTURE_PE']-cfg['BPLANE_PE_TOL']
             assert cfg['CAPTURE_PE']+cfg['BPLANE_PE_TOL'] < 50000
         if name == 'ike_lander':
@@ -128,6 +135,9 @@ def check_profiles_and_dependencies():
             assert leg['RELOAD_AFTER_LAND_ASSIST'] == leg['RELOAD_AFTER_LAND'] == 0
             assert not {'PRELAUNCH','LAUNCH','ESCAPE','RETURN_SETUP','SURFACE_RETURN_SETUP','SCIENCE_IMPACT'} & set(leg['SEQUENCE'])
     assert profile('duna_science_impact')['COAST_AUTO_WARP'] == 0
+    assert not (ROOT/'missions/Espoir/duna_science_impact.ks').exists()
+    assert {p.stem for p in (ROOT/'missions/Espoir').glob('*.ks')}=={
+        'duna_orbital_surveyor','ike_orbital_surveyor','duna_impactor','ike_lander'}
     assert bands['science_impact'] == ['science_impact']
     assert {'science_flight','science_entry','maneuver_plan','thrust_cutoff'} <= closure(['science_impact'],deps)
     assert 'science_impact' not in closure(['science_entry'],deps)

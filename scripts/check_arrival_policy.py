@@ -70,7 +70,11 @@ def check_existing_entry_profiles():
         if float(pe[1])>=atmospheres[body[1].upper()] or not re.search(r'"(?:REFINE_)?BPLANE"',source):continue
         assert re.search(r'SET BPLANE_ARRIVAL_MODE TO "ENTRY"',source,re.I),path
         entries.append(path)
-    assert len(entries)>=5
+    # Consolidation removes the duplicate Espoir entry profile; preserve
+    # coverage of the canonical profile and each legacy atmospheric mission.
+    assert {ROOT/'missions'/name for name in (
+        'Espoir/duna_impactor.ks','FalconHeavy/duna_ike_scisat_lander.ks',
+        'FalconHeavy/eve_scisat_entry.ks','FalconHeavy/duna_scisat_lander.ks')} <= set(entries)
     print('PASS: every static B-plane atmospheric-entry profile explicitly retains entry intent, including legacy Eve and Duna missions')
 
 

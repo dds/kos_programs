@@ -209,7 +209,7 @@ def check_mission_policy_and_seek():
         assert env['assistPreviewSeekIndex'](nd,route)==0
         parent_first=Items([Map(BODY='Duna',MIN_PE=75000),Map(BODY='Ike',MIN_PE=25000,AP=75000)])
         assert env['assistPreviewSeekIndex'](nd,parent_first)==1
-    print('PASS: all five real Espoir profiles supply their own fallback capture/entry policy; seek chooses the missing moon leg rather than refining an already-predicted parent encounter')
+    print('PASS: all four Espoir profiles plus the retired entry alias supply their own fallback capture/entry policy; seek chooses the missing moon leg rather than refining an already-predicted parent encounter')
 
 
 @lru_cache(None)
@@ -230,7 +230,7 @@ def command_code():
 
 
 def check_command_control_flow():
-    faults=('ok','offline','abort','pilot','warp','imminent','extra-node','no-node','no-engines','loading-change','empty-route','missing-profile','unpriced','incomplete-report','generated-profile')
+    faults=('ok','offline','abort','pilot','warp','imminent','extra-node','no-node','no-engines','loading-change','empty-route','missing-profile','unpriced','incomplete-report','generated-profile','older-boot')
     for fault in faults:
         env,nd,route,limits,_,state,_,_,trace,fallback=fixture()
         events=[];results=[];before=dict(state)
@@ -238,6 +238,8 @@ def check_command_control_flow():
         env.update(route=Items(),fallbackGoal=Map(),reserveDv=-1,changeDv=50,scienceExtraDv=0,seekIndex=-1,
             HOMECONNECTION=NS(ISCONNECTED=fault!='offline'),CORE=NS(),CONFIG=NS(IPU=2000),
             bootPreamble=lambda:events.append('preamble'),bootLibLoad=lambda name:events.append(('load',name)),
+            bootMissionProfileId=lambda vehicle,mid:mid,bootMissionProfileIntent=lambda *_:None,
+            BOOT_HAS_MISSION_PROFILE_ALIAS=True,
             bootLocalScriptPath=lambda _: '1:/mission.ks' if fault!='missing-profile' else '',
             bootArchivePath=lambda _:'0:/mission.ks',EXISTS=lambda path:fault!='missing-profile' and (fault!='generated-profile' or path!='0:/mission.ks'),
             applyMissionOverrides=lambda:events.append('overrides'),
@@ -267,11 +269,14 @@ def check_command_control_flow():
         if fault=='no-node':env['HASNODE']=False
         if fault=='no-engines':env['arrivalBurnSeconds']=lambda _: -1
         if fault=='unpriced':env['assistPreviewMissionFallback']=lambda:Map(BODY='Duna',MIN_PE=1000,MAX_PE=2000,AP=300000)
+        if fault=='older-boot':
+            for key in ('BOOT_HAS_MISSION_PROFILE_ALIAS','bootMissionProfileId','bootMissionProfileIntent'):
+                env.pop(key)
         try:ks.execute(command_code(),env)
         except ks.Returned:pass
         assert state==before and (nd.RADIALOUT,nd.NORMAL,nd.PROGRADE)==(0,0,900),fault
-        assert len(results)==(1 if fault in ('ok','unpriced','generated-profile') else 0),(fault,results)
-        if fault in ('ok','generated-profile'):
+        assert len(results)==(1 if fault in ('ok','unpriced','generated-profile','older-boot') else 0),(fault,results)
+        if fault in ('ok','generated-profile','older-boot'):
             assert results[0]['OK'] and results[0]['RESTORED'] and env['limits']['RESERVE_DV']==150
             assert 'report' in events and events.index('overrides')<events.index('report')
             assert env['limits']['STOP_UT']<nd.TIME-180

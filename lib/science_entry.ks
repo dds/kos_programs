@@ -11,6 +11,14 @@ GLOBAL SCIENCE_ENTRY_PREPARE_LEAD IS 180.
 GLOBAL SCIENCE_ENTRY_MAX_PASSES IS 3.
 GLOBAL SCIENCE_ENTRY_MIN_EC IS 0.05.
 
+GLOBAL FUNCTION scienceEntrySample {
+    PARAMETER primary.
+    // Optional flyby measurements share the assist-coast science flag.
+    // Primary entry science and every encounter safety check remain active.
+    IF SHIP:BODY <> primary AND MISSION_ASSIST_SCIENCE <= 0 { RETURN. }
+    scienceFlightPulse(scienceEntryContext(),shipPowerFraction() >= SCIENCE_ENTRY_MIN_EC).
+}
+
 GLOBAL FUNCTION scienceEntryContext {
     LOCAL bands IS SCIENCE_ENTRY_BANDS[SHIP:BODY:NAME].
     LOCAL situation IS "SPACE_HIGH".
@@ -171,7 +179,7 @@ GLOBAL FUNCTION phaseScienceEntry {
         IF inAtmo <> stateGet("science_entry_in_atmo",FALSE) {
             stateSet("science_entry_in_atmo",inAtmo).
         }
-        scienceFlightPulse(scienceEntryContext(),shipPowerFraction() >= SCIENCE_ENTRY_MIN_EC).
+        scienceEntrySample(primary).
         IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
             SET WARP TO 0.
             UNLOCK STEERING.
@@ -179,7 +187,7 @@ GLOBAL FUNCTION phaseScienceEntry {
             // Give pending surface data a bounded chance to arrive and queue.
             LOCAL deadline IS TIME:SECONDS+60.
             UNTIL ABORT OR TIME:SECONDS >= deadline {
-                scienceFlightPulse(scienceEntryContext(),shipPowerFraction() >= SCIENCE_ENTRY_MIN_EC).
+                scienceEntrySample(primary).
                 WAIT 1.
             }
             IF ABORT { RETURN. }

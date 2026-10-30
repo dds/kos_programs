@@ -79,6 +79,7 @@ def fixture(linked=True,capacity=200000):
         source=re.sub(r'COMPILE (\w+) TO (\w+)\.',r'compile_file(\1,\2).',source)
         source=re.sub(r'COMPILE ("[^"]+") TO ("[^"]+")\.',r'compile_file(\1,\2).',source)
         source=source.replace('LIST FILES IN items.','listing(items).')
+        source=source.replace('LIST FILES IN dirs.','listing(dirs).')
         source=source.replace('DEFINED printStorageStatus','FALSE')
         source=source.replace('DEFINED BOOT_LIB_RAN','defined_boot_registry()')
         source=source.replace('SHUTDOWN.','shutdown().')
@@ -90,7 +91,7 @@ def fixture(linked=True,capacity=200000):
             body=function_body(fixture_source,name)
             prepared[name]=(re.findall(r'PARAMETER (\w+)',body),ks.compile_nodes(ks.freeze(ks.parse(adapt(body)))))
         params,compiled=prepared[name]
-        local=env if name in ('bootApplyMissionConfig','bootLibLoadList','bootCacheNextBand','main') else dict(env)
+        local=env if name in ('bootApplyMissionConfig','bootMissionProfileIntent','bootLibLoadList','bootCacheNextBand','main') else dict(env)
         local.update(zip(params,args))
         try:ks.execute(compiled,local)
         except ks.Returned as result:return result.value
@@ -224,6 +225,56 @@ def check_profile_listing_and_generation():
     assert env['TARGET_']=='KERBIN'
     print('PASS: cached KSM profiles retain correct IDs without duplicates; fresh onboard profiles invalidate stale bytecode and remain runnable offline as source')
 
+
+def check_retired_espoir_profile():
+    env,files,events,state=fixture()
+    env['LEXICON']=lambda *xs:dict(zip(xs[::2],xs[1::2]))
+    old=Text('duna_science_impact');vehicle=Text('Espoir')
+    canonical=(ROOT/'missions/Espoir/duna_impactor.ks').read_text()
+    files['0:/missions/Espoir/duna_impactor.ks']=canonical
+    files['1:/missions']=files['1:/missions/Espoir']=None
+    state.update(mission_id=old,target='DUNA',phase='SCIENCE_ENTRY',launch_time=1000,
+                 science_entry_id=old+':1000:DUNA',science_entry_passes=2,
+                 science_flight_samples={'sensor':'Ike:SPACE_LOW'},
+                 assist_flight={'mission':old,'index':1},soi_alarm_id='existing')
+    before=state.copy()
+    assert env['bootApplyMissionConfig'](vehicle,old,True)
+    assert state==before and env['MISSION_ID']==old
+    assert env['MISSION_ASSIST_SCIENCE']==1 and env['SCIENCE_ENTRY_MOON']=='IKE'
+    assert env['LAUNCH_PLANE_MODE']=='INTERPLANETARY'
+    assert env['TRANSFER_SCAN_SAMPLES_PER_ORBIT']==16
+    cached='1:/missions/Espoir/duna_impactor.ksm'
+    assert files[cached][0]=='ksm'
+    assert all('duna_science_impact' not in row[1] for row in events)
+    # Clean up the obsolete cached launch profile, retaining the canonical
+    # bytecode even though the durable mission identity stays historical.
+    files['1:/missions/Espoir/duna_science_impact.ksm']=('ksm','old source')
+    assert env['bootPruneMissionPlans'](vehicle,old)==1
+    assert cached in files and '1:/missions/Espoir/duna_science_impact.ksm' not in files
+    events.clear();env['HOMECONNECTION'].ISCONNECTED=False
+    env['MISSION_ASSIST_SCIENCE']=0
+    assert env['bootApplyMissionConfig'](vehicle,old,False)
+    assert state==before and env['MISSION_ASSIST_SCIENCE']==1
+    assert all(row[0]=='run' and row[1].startswith('1:/') for row in events)
+    # The operator's explicit flag beats legacy compatibility on every boot.
+    env['applyKnownMissionState']=lambda:env.update(MISSION_ASSIST_SCIENCE=0)
+    assert env['bootApplyMissionConfig'](vehicle,old,False)
+    assert env['MISSION_ASSIST_SCIENCE']==0 and state==before
+    # A craft offline before its first update retains its old cached source.
+    env,files,events,state=fixture(False)
+    state.update(mission_id=old,phase='SCIENCE_ENTRY')
+    files['1:/missions']=files['1:/missions/Espoir']=None
+    files['1:/missions/Espoir/duna_science_impact.ksm']=('ksm',
+        'SET MISSION_ID TO "duna_science_impact". SET TARGET_ TO "DUNA". '
+        'SET MISSION_ASSIST_SCIENCE TO 1.')
+    assert env['bootApplyMissionConfig'](vehicle,old,False)
+    assert env['bootPruneMissionPlans'](vehicle,old)==0
+    assert state['phase']=='SCIENCE_ENTRY' and env['MISSION_ID']==old
+    assert env['MISSION_ASSIST_SCIENCE']==1
+    assert env['bootMissionProfileId'](Text('RO9'),old)==old
+    assert env['bootMissionProfileId'](vehicle,Text('ike_lander'))=='ike_lander'
+    print('PASS: retired Espoir id loads canonical bytecode online/offline without changing science/assist/phase/alarm identity; cleanup retains its real provider, explicit sampling override wins and legacy-only offline cache survives')
+
 def check_boot_entry_and_missing_main():
     source=(ROOT/'boot/boot.ks').read_text()
     assert 'COPYPATH("0:/" + vehicleScript' not in source
@@ -271,5 +322,6 @@ if __name__=='__main__':
     check_full_hop_disk_and_reserved_cache()
     check_cache_is_not_executed()
     check_profile_listing_and_generation()
+    check_retired_espoir_profile()
     check_boot_entry_and_missing_main()
     check_boot_update_install()

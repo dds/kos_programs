@@ -8,6 +8,7 @@ GLOBAL BOOT_LIB_RAN IS LIST().
 GLOBAL BOOT_CACHE_LIBS IS LIST().
 GLOBAL BOOT_CACHE_PENDING IS FALSE.
 GLOBAL BOOT_HAS_SURFACE_CACHE_RECOVERY IS TRUE.
+GLOBAL BOOT_HAS_MISSION_PROFILE_ALIAS IS TRUE.
 
 // Safe before core/state initialization: read the durable checkpoint only.
 // Never remove descent code while airborne or without its archive source.
@@ -288,6 +289,25 @@ GLOBAL FUNCTION bootCachedMissionConfigIds {
     RETURN ids.
 }
 
+// Retired launch-profile names may still own durable in-flight records.
+GLOBAL FUNCTION bootMissionProfileId {
+    PARAMETER cn.
+    PARAMETER mid.
+    IF cn = "Espoir" AND mid = "duna_science_impact" { RETURN "duna_impactor". }
+    RETURN mid.
+}
+
+GLOBAL FUNCTION bootMissionProfileIntent {
+    PARAMETER cn.
+    PARAMETER mid.
+    IF cn = "Espoir" AND mid = "duna_science_impact" {
+        // Preserve science/assist checkpoint identity and the old opt-in.
+        // Runtime overrides are applied afterward and can disable sampling.
+        SET MISSION_ID TO mid.
+        SET MISSION_ASSIST_SCIENCE TO 1.
+    }
+}
+
 GLOBAL FUNCTION bootApplyMissionConfig {
     PARAMETER cn.
     PARAMETER mid.
@@ -296,17 +316,22 @@ GLOBAL FUNCTION bootApplyMissionConfig {
     // Persist the selected profile before any bulky copy/profile work.
     // If storage runs out later, the next boot can still recover intent.
     stateSet("mission_id", mid).
-    LOCAL script IS "missions/" + cn + "/" + mid.
+    LOCAL script IS "missions/" + cn + "/" + bootMissionProfileId(cn,mid).
     LOCAL ap IS bootArchivePath(script).
     IF hl AND EXISTS(ap) {
         bootLibSync(script).
     }
     LOCAL path_ IS bootLocalScriptPath(script).
     IF path_ = "" {
+        // An offline craft may only have its pre-consolidation profile.
+        SET path_ TO bootLocalScriptPath("missions/" + cn + "/" + mid).
+    }
+    IF path_ = "" {
         mLogError("Mission config unavailable locally: " + script).
         RETURN FALSE.
     }
     RUNPATH(path_).
+    bootMissionProfileIntent(cn,mid).
     applyKnownMissionState().
     IF MISSION_ID <> "" { stateSet("mission_id", MISSION_ID). }
     IF stateGet("mission_id", "") = "" { stateSet("mission_id", mid). }
@@ -556,6 +581,11 @@ GLOBAL FUNCTION bootPruneMissionPlans {
 
     LOCAL rm IS 0.
     IF mid = "" OR NOT EXISTS("1:/missions") { RETURN rm. }
+
+    LOCAL profileId IS bootMissionProfileId(cn,mid).
+    IF bootLocalScriptPath("missions/" + cn + "/" + profileId) <> "" {
+        SET mid TO profileId.
+    }
 
     LOCAL currentDir IS ("1:/missions/" + cn):TOUPPER.
     LOCAL sp IS PATH().

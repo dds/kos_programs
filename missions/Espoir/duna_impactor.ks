@@ -1,6 +1,6 @@
 // Espoir: direct Duna atmospheric-science entry and impact attempt.
 // Build allowance after85km LKO:1500m/s transfer +400m/s entry/corrections.
-// duna_science_impact remains available as the earlier opportunistic-Ike variant.
+// Optional science on a free Ike flyby: cmd/flybyscience.ks,1 then reboot.
 SET MISSION_ID TO "duna_impactor".
 SET MISSION_NAME TO "Espoir — Duna Atmospheric Science Impactor".
 SET MISSION_TYPE TO "interplanetary".
@@ -25,8 +25,11 @@ SET REFINE_BPLANE_DV_CAP TO 50.
 SET BPLANE_TRIM_DV_CAP TO 50.
 SET BPLANE_TRIM_TOTAL_DV_CAP TO 150.
 SET BPLANE_TRIM_RESERVE_DV TO 50.
-SET SCIENCE_ENTRY_BANDS TO LEXICON("DUNA",LIST(140000,12000)).
-SET SCIENCE_ENTRY_MOON TO "".
+SET SCIENCE_ENTRY_BANDS TO LEXICON("DUNA",LIST(140000,12000),"IKE",LIST(50000,0)).
+// Keep encounter safety checks active even when optional sampling is off.
+SET SCIENCE_ENTRY_MOON TO "IKE".
+SET SCIENCE_ENTRY_MOON_MIN_PE TO 20000.
+SET MISSION_ASSIST_SCIENCE TO 0.
 SET SCIENCE_ENTRY_PREPARE_LEAD TO 180.
 SET SCIENCE_ENTRY_MAX_PASSES TO 3.
 SET SCIENCE_ENTRY_MIN_EC TO 0.05.

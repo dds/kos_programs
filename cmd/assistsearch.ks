@@ -42,13 +42,21 @@ LOCAL FUNCTION _cmdAssistsearch {
         IF vehicle = "" OR mid = "" {
             PRINT "No selected mission; supply both an assist route and a fallback capture goal.". RETURN.
         }
-        LOCAL script IS "missions/" + vehicle + "/" + mid.
+        LOCAL profileId IS mid.
+        IF DEFINED BOOT_HAS_MISSION_PROFILE_ALIAS {
+            SET profileId TO bootMissionProfileId(vehicle,mid).
+        }
+        LOCAL script IS "missions/" + vehicle + "/" + profileId.
         LOCAL profilePath IS bootArchivePath(script).
         IF NOT EXISTS(profilePath) { SET profilePath TO bootLocalScriptPath(script). }
+        IF profilePath = "" {
+            SET profilePath TO bootLocalScriptPath("missions/" + vehicle + "/" + mid).
+        }
         IF profilePath = "" OR NOT EXISTS(profilePath) { PRINT "Selected mission profile unavailable: " + script. RETURN. }
         // Replay configuration only. Do not select a mission, save state,
         // load the vehicle's phase machine or run its main function.
         RUNPATH(profilePath).
+        IF DEFINED BOOT_HAS_MISSION_PROFILE_ALIAS { bootMissionProfileIntent(vehicle,mid). }
         applyMissionOverrides().
         IF route:LENGTH = 0 { SET route TO MISSION_ASSIST_ROUTE. }
         IF route:LENGTH < 2 { PRINT "Mission has no assist route; supply one explicitly.". RETURN. }
