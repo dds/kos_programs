@@ -1268,12 +1268,16 @@ the current archive profile when available, otherwise the cached local profile
 mission. An empty route or unsafe/unpriceable original plan produces a diagnostic
 failure, rather than claiming a benefit.
 
-An ENTRY mission in XING may still have a rough, safe planetary encounter,
-with final atmospheric Pe targeting left to BPLANE. That baseline is labeled
-`LOWER`, source `departure-only-pending-entry`: it prices only the mandatory
-departure burn and gives no credit for unknown later correction costs.
-The assist candidate still needs a complete native flyby and valid entry;
-the baseline's unfinished targeting cannot waive that check.
+In XING, a rough, safe encounter may leave final capture or atmospheric Pe
+targeting to BPLANE. That reference is labeled `LOWER`, source
+`departure-only-pending-capture` or `departure-only-pending-entry`: it prices
+only the mandatory departure and gives no credit for unpriced later costs.
+Orbital comparisons may target the same planet or its immediate moon; entry
+comparisons keep the same entry body. The candidate still needs the complete
+native itinerary and capture/entry proof. This conservative reference can
+reject a useful assist whose savings depend on those unpriced operations;
+a failure does not prove no better route exists. A later, targeted node can
+provide a more informative cost comparison.
 
 The search changes only the node's radial/normal/prograde vector, at its
 existing time, within 50 m/s by default. It can use closest approach before the
@@ -1294,7 +1298,7 @@ with no execution option. The report is written directly to
 original vector before probing, original patches, route/goals, cost baseline,
 progress counts, candidate encounters, timings and restoration status.
 Schema2 also records `CAREER():PATCHLIMIT` (the career prediction allowance,
-not a writable game setting). An `open-hyperbolic-tail` warning means a native
+not the map's Conic Patch Limit setting). An `open-hyperbolic-tail` warning means a native
 escape patch has no outgoing patch exposed; prediction depth is one possible
 cause. Check the game's Conic Patch Limit when the full itinerary is invisible.
 Copy that file back for review even when the search finds no useful route.

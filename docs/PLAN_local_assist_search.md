@@ -239,6 +239,26 @@ with the unchanged KSC_DEORBIT warning. Results:
 `/tmp/kos-assist-entry-prefix-20261030.json` and `.log`. A corrected native run
 with the user's increased prediction depth is still pending.
 
+Native follow-up5027134, Ike surveyor: original departure1061.872m/s,
+3928.312m/s available, Duna Pe29,308,980m versus85km capture target. The same
+reference gate still stopped orbital profiles before any trial (0.02s),
+restored=True. Extend the departure-only LOWER reference to XING ORBIT goals
+at the same parent or its immediate moon. Require an actual future unbound
+native passage above the fallback floor; keep other phases/mixed or unrelated
+goals strict. Source is departure-only-pending-capture. Full candidate route,
+capture, plane, reserve, timing and savings checks remain. Unknown later
+direct correction/capture costs are still unpriced, so this comparison can
+reject a useful assist; it cannot claim the uncalculated capture savings.
+Reported-case fixture runs the search and restores the node, but correctly
+rejects a complete synthetic Ike encounter whose capture defeats that bound.
+Deck settings.cfg is confirmed at CONIC_PATCH_LIMIT5; CAREER():PATCHLIMIT3
+is the tracking-station API value, not a reading of that map setting. Neither
+value caused this baseline refusal. No game settings are changed by the tool.
+All88 routine check files pass127.71s, new reported-case regression0.371s;
+structural0 errors and unchanged legacy KSC_DEORBIT warning. Report:
+`/tmp/kos-assist-orbit-prefix-20261030.json` and `.log`. Corrected native
+orbital search still requires a flight run.
+
 Relevant native API references: [future-position prediction](https://ksp-kos.github.io/KOS/commands/prediction.html),
 [orbit patches](https://ksp-kos.github.io/KOS/structures/orbits/orbit.html), and
 [active vessel / real time](https://ksp-kos.github.io/KOS/structures/misc/kuniverse.html),

@@ -6,6 +6,30 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct native assist preview5027134 fetched, Espoir-Ike-Surveyor1/XING:
+  departure1061.872m/s, available3928.312, Duna Pe29,308,980m vs85km fallback.
+  Stopped in0.02game/0.029wall seconds before any trial, reason
+  original-node-capture-not-validated, restored=True/noBurn=True. Matching
+  boot004 deliberately allows this rough transfer for later BPLANE targeting.
+  Extend the existing departure-only LOWER reference to XING ORBIT goals
+  at the same planet or its immediate moon; source pending-capture. Preserve
+  actual future/unbound passage, configured safe floor and full candidate
+  route/capture/plane/fuel/timing/savings guards. No invented later capture
+  savings: conservative reference can still reject useful assists. New
+  reported-case source fixture searches/restores, but rejects an otherwise
+  complete synthetic Ike route that fails the conservative cost comparison.
+  Diagnostic now marks baselinePolicy=xing-arrival-lower despite code=unknown.
+  Read-only settings confirms map CONIC_PATCH_LIMIT5; careerPatchesAhead3 is
+  separate tracking-station API metadata, not this failure's cause. Evidence:
+  /tmp/ksp-deck-20261030T212145Z-fetch-0pfhs4tz/logs/_diagnostics/
+  assistsearch_Espoir-Ike-Surveyor1_5027134.log and fetch-ykqlpbgg/logs/
+  Espoir-Ike-Surveyor1_5026596/boot_004_core.log. All88 routine files pass
+  127.71s; reported-case regression0.371s, structural0 errors/unchanged legacy
+  KSC_DEORBIT warning. Report:/tmp/kos-assist-orbit-prefix-20261030.json and.log.
+  Native retry remains pending. Operator reports Mun return override worked;
+  detailed correction/entry results not yet read. Next requested work after
+  this fix: one solar aim during a long pre-XING wait, retaining burn lead.
+
 - 30Oct Espoir entry profiles consolidated: duna_impactor is the single
   canonical launch profile, with interplanetary launch mode/16 transfer
   samples,5km Pe±3km, no automatic warp and unchanged assist/burn reserves.

@@ -54,19 +54,33 @@ GLOBAL FUNCTION assistPreviewDirect {
     } ELSE {
         LOCAL proof IS assistEvaluate(nd,route,bodies,0,"",SHIP:BODY:NAME).
         IF NOT proof["OK"] {
-            // XING deliberately leaves final atmospheric Pe to BPLANE. The
+            // XING deliberately leaves final arrival targeting to BPLANE. The
             // mandatory departure cost is a LOWER bound; later corrections
             // are nonnegative but unpriced. Prove a safe native approach,
-            // never claim it already meets the requested entry corridor.
-            IF stateGet("phase","") <> "XING" OR SHIP:BODY = bodies[0]
-                    OR assistGoalMode(route) <> "ENTRY"
-                    OR assistGoalMode(LIST(terminal)) <> "ENTRY"
-                    OR terminal["BODY"] <> fallbackGoal["BODY"] { RETURN rejected. }
-            LOCAL passage IS LEXICON("BODY",bodies[0]:NAME,"MIN_PE",bodies[0]:ATM:HEIGHT+1).
+            // never claim it already meets the requested capture/entry goal.
+            IF stateGet("phase","") <> "XING" OR SHIP:BODY = bodies[0] { RETURN rejected. }
+            LOCAL mode IS assistGoalMode(route).
+            IF assistGoalMode(LIST(terminal)) <> mode { RETURN rejected. }
+            LOCAL terminalBodies IS assistRouteBodies(LIST(terminal),1).
+            IF terminalBodies:LENGTH <> 1 { RETURN rejected. }
+            IF mode = "ENTRY" {
+                IF terminalBodies[0] <> bodies[0] { RETURN rejected. }
+                SET source TO "departure-only-pending-entry".
+            } ELSE {
+                // A parent-capture fallback can precede operations at its moon.
+                IF terminalBodies[0] <> bodies[0] {
+                    IF NOT terminalBodies[0]:HASBODY { RETURN rejected. }
+                    IF terminalBodies[0]:BODY <> bodies[0] { RETURN rejected. }
+                }
+                SET source TO "departure-only-pending-capture".
+            }
+            LOCAL floorPe IS 1.
+            IF bodies[0]:ATM:EXISTS { SET floorPe TO bodies[0]:ATM:HEIGHT+1. }
+            IF mode = "ORBIT" { SET floorPe TO MAX(floorPe,fallbackGoal["MIN_PE"]). }
+            LOCAL passage IS LEXICON("BODY",bodies[0]:NAME,"MIN_PE",floorPe).
             LOCAL prefix IS assistTrace(nd,LIST(passage),bodies,0,"",SHIP:BODY:NAME).
             IF NOT prefix["OK"] { RETURN rejected. }
             IF NOT (prefix["PATCH"]:ECCENTRICITY > 1) { RETURN rejected. }
-            SET source TO "departure-only-pending-entry".
         } ELSE {
             SET cost TO proof["COST"]. SET captureDv TO proof["CAPTURE_DV"].
         }

@@ -195,6 +195,80 @@ def check_capture_search_radius():
     print('PASS: a20m/s radius cannot net25m/s on a300m/s planned capture;50m/s permits a useful synthetic partial-capture assist, prices future capture and restores the original node')
 
 
+def rough_surveyor_fixture():
+    env,nd,_,limits,_,state,world,events,trace,_=fixture(departure=True)
+    cfg=profile('ike_orbital_surveyor');env.update(cfg,BPLANE_ARRIVAL_MODE='ORBIT')
+    route=cfg['MISSION_ASSIST_ROUTE'];fallback=env['assistPreviewMissionFallback']()
+    duna,ike=env['assistRouteBodies'](route);kerbin=env['SHIP'].BODY;sun=duna.BODY
+    env['TIME'].SECONDS=5027133.60832409
+    nd.TIME=5044821.42832884;nd.RADIALOUT=5.6843418860808e-14
+    nd.NORMAL=-96.1722065415761;nd.PROGRADE=1057.49861274319
+    env['SHIP'].DELTAV.VACUUM=3928.3115234375
+    env['SHIP'].ORBIT=NS(BODY=kerbin,HASNEXTPATCH=False)
+    limits.update(CHANGE_DV=50,RESERVE_DV=650,STOP_UT=env['TIME'].SECONDS+60)
+    def patch(body,pe,epoch,ecc,next_patch=None,exit_ut=0,inc=0):
+        return NS(BODY=body,PERIAPSIS=pe,ECCENTRICITY=ecc,INCLINATION=inc,PERIOD=20000,
+                  ETA=EventEta(env['TIME'],epoch),HASNEXTPATCH=next_patch is not None,
+                  NEXTPATCH=next_patch,NEXTPATCHETA=exit_ut-env['TIME'].SECONDS)
+    def orbit(node):
+        # Original geometry/goal/fuel are reported native values. Trial
+        # response is deliberately synthetic; it is not an Ike trajectory.
+        found=math.hypot((node.RADIALOUT-10)*400000,
+                         (node.NORMAL+96.1722065415761)*300000)<ike.SOIRADIUS
+        end=patch(sun,1e10,node.TIME+30000,.2)
+        moon=patch(ike,148000,node.TIME+9000,1.1,inc=90)
+        peri=29308980.4629666
+        if found:peri=85000
+        if world.get('unsafe'):peri=1000
+        transit=patch(duna,peri,node.TIME+7000,155.580177769734,
+                      moon if found and not world['lost_goal'] else end,
+                      node.TIME+(8000 if found else 10000))
+        if world.get('bound'):transit.ECCENTRICITY=.5
+        if world.get('late-pe'):transit.ETA=EventEta(env['TIME'],node.TIME+11000)
+        initial=patch(sun,1e10,node.TIME+4000,.2,
+                      end if world.get('missing-parent') else transit,node.TIME+6000)
+        return patch(kerbin,84889.354140788,node.TIME+500,1.15029745723494,initial,node.TIME+2000)
+    type(nd).ORBIT=property(orbit)
+    def position(obj,epoch):
+        env['KUNIVERSE'].REALTIME+=.00001
+        if obj is ike:return search.Vec((0,0,0))
+        assert obj is env['SHIP']
+        return search.Vec(((10-nd.RADIALOUT)*400000,(nd.NORMAL+96.1722065415761)*300000,
+                           (epoch-nd.TIME-9000)*10))
+    env['POSITIONAT']=position
+    direct=NS(CALL=lambda node,goal,budget:env['assistPreviewDirect'](node,goal,budget,fallback))
+    return env,nd,route,limits,direct,state,world,events,trace,fallback
+
+
+def check_rough_orbital_departure():
+    env,nd,route,limits,direct,state,world,events,trace,fallback=rough_surveyor_fixture()
+    before=dict(state);axes=(nd.RADIALOUT,nd.NORMAL,nd.PROGRADE)
+    measured=type(nd).DELTAV
+    type(nd).DELTAV=property(lambda node:NS(MAG=1061.87202745588))
+    reference=direct.CALL(nd,route[-1],env['assistSearchBudget'](limits))
+    assert reference['OK'] and reference['BOUND']=='LOWER',reference
+    assert reference['SOURCE']=='departure-only-pending-capture' and reference['CAPTURE_DV']==0
+    assert reference['COST']==1061.87202745588 and reference['GOAL']==route[-1]
+    type(nd).DELTAV=measured
+    # With only departure priced, a safe new encounter may still cost more
+    # after mandatory Ike capture. Do not invent the unpriced Duna savings.
+    result=env['searchAssistNode'](nd,route,1,direct,limits)
+    assert not result['OK'] and result['TRIALS']>1 and result['RESTORED'],result
+    assert result['BEST_TIER']==3 and result['DIRECT_SOURCE']=='departure-only-pending-capture'
+    assert result['DIRECT_BOUND']=='LOWER' and state==before
+    assert (nd.RADIALOUT,nd.NORMAL,nd.PROGRADE)==axes
+    for fault in ('unsafe','bound','late-pe','missing-parent','wrong-phase','current-parent','mixed-mode','unrelated-goal'):
+        env,nd,route,limits,direct,state,world,events,trace,fallback=rough_surveyor_fixture()
+        goal=route[-1]
+        if fault in ('unsafe','bound','late-pe','missing-parent'):world[fault]=True
+        if fault=='wrong-phase':state['phase']='REFINE_BPLANE'
+        if fault=='current-parent':env['SHIP'].BODY=env['assistRouteBodies'](route)[0]
+        if fault=='mixed-mode':goal=Map(BODY='Duna',MODE='ENTRY',MIN_PE=2000,MAX_PE=8000)
+        if fault=='unrelated-goal':goal=Map(BODY='Kerbin',MIN_PE=80000,MAX_PE=90000,AP=300000)
+        assert not direct.CALL(nd,goal,env['assistSearchBudget'](limits))['OK'],fault
+    print('PASS: reported1061.87m/s XING/29,309km Duna Pe allows a conservative departure-only reference for Ike capture; actual search runs/restores but cannot claim unpriced capture savings, and unsafe/incomplete/unrelated prefixes still reject')
+
+
 def check_mission_policy_and_seek():
     for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_lander','duna_impactor','duna_science_impact'):
         env,nd,route,limits,_,_,_,_,_,_=fixture()
@@ -297,5 +371,6 @@ if __name__=='__main__':
     check_rough_entry_departure()
     check_rough_entry_preserves_goal_and_horizon()
     check_capture_search_radius()
+    check_rough_orbital_departure()
     check_mission_policy_and_seek()
     check_command_control_flow()
