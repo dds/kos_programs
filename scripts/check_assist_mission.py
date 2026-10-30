@@ -120,7 +120,7 @@ def coast(env):
 
 
 def check_profiles_and_native_continuations():
-    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_lander','ike_impactor','duna_impactor','duna_science_impact'):
+    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_lander','duna_impactor','duna_science_impact'):
         env,saved,events,alarms,overrides,patches,_=fixture(name)
         # No profitable new correction: the existing safe native itinerary
         # can still replace Duna parking or preserve a free Ike science pass.
@@ -140,13 +140,14 @@ def check_profiles_and_native_continuations():
         emitted='\n'.join('SET '+key+' TO '+str(literal(value))+'.' for key,value in values.items())
         fresh=read_settings(emitted,dict(profile(name)))
         assert fresh['MISSION_ID']==name and fresh['TARGET_']==terminal and fresh['SEQUENCE'][0]==first
+        assert fresh['COAST_AUTO_WARP']==0
         assert 'ASSIST' not in fresh['SEQUENCE'] and 'XING' not in fresh['SEQUENCE']
         if name.startswith('ike_'):
             wanted=profile(name)['IKE_MISSION_SETTINGS']
             assert fresh['TARGET_AP']==wanted['TARGET_AP'] and fresh['CAPTURE_RESERVE_DV']==wanted['CAPTURE_RESERVE_DV']
             if name=='ike_lander':assert fresh['LANDING_REQUIRE_KERBIN']==1 and fresh['SCIENCE_SURFACE_DWELL']==600
         if name=='duna_science_impact':assert any(e[0]=='science' for e in events)
-    print('PASS: all six Espoir profiles follow validated natural assists through actual ordered SOIs/Pe to correct capture or science entry; fresh-boot overrides preserve identity, mapping/landing/science settings and reserves')
+    print('PASS: all five Espoir profiles follow validated natural assists through actual ordered SOIs/Pe to correct capture or science entry; fresh-boot overrides preserve identity, mapping/landing/science settings and reserves')
 
 
 def check_fallback_and_admission():

@@ -1065,7 +1065,6 @@ the actual departure window, thrust and hardware still determine affordability.
 |---|---|---|
 | `duna_orbital_surveyor` | Powered capture,300km polar Duna mapping orbit |1500 /1000m/s |
 | `ike_orbital_surveyor` | High Duna capture, Ike transfer,150km polar mapping orbit |1500 /800m/s |
-| `ike_impactor` | High Duna capture, Ike capture, science during deliberate impact |1500 /800m/s |
 | `duna_impactor` | Direct Duna atmospheric science and impact attempt |1500 /400m/s |
 | `ike_lander` | High Duna capture,25km Ike parking, flexible soft landing and surface science |1500 /1300m/s |
 
@@ -1076,24 +1075,18 @@ The baseline altitudes are editable to suit the installed SCANsat instruments.
 The configured types are low-resolution terrain, resource and biome mapping;
 fitting the necessary sensors remains a hardware choice. These are independent
 surveyors, not relay satellites. Each needs its own Kerbin-range direct link.
+All Espoir profiles disable automatic coast warp with `COAST_AUTO_WARP=0`,
+including their generated Ike operations legs. KAC alarms and clock-based
+resumption remain active; the operator controls time warp.
 
 Ike launch profiles first target an85km Pe /2880km Ap Duna capture orbit, avoiding
 low Duna circularization and atmospheric capture. `IKE_SETUP` then writes a local
-`ike_orbital_surveyor_ops` or `ike_impactor_ops` profile and reboots into its own
-Ike transfer. Payload identity, polar/capture targets, scan or impact settings,
+`ike_orbital_surveyor_ops` or `ike_lander_ops` profile and reboots into its own
+Ike transfer. Payload identity, polar/capture targets, scan or landing settings,
 fuel reserves and coast automation survive fresh boots. The generated ids have
 no archive launch counterpart, so reconnecting cannot restart the Duna leg.
 `IKE_MISSION_SETTINGS` supplies the optional captured operations settings;
 an empty map retains the existing FalconHeavy flyby-to-Duna-entry behavior.
-
-The Ike impactor captures at25km Pe /75km Ap, then `SCIENCE_IMPACT` plans a
-fuel-checked deorbit to a negative periapsis. It preserves existing nodes and
-interrupted burns for review. After cutoff it collects/transmits continuously,
-uses the existing KAC/solar wait for distant checkpoints and stays at1x in low
-space near terrain. It remains in one band through descent; rebooting on an
-already-flown impact course does not plan a second deorbit. Its sea-level-impact
-alarm is an estimate: elevated terrain can be reached sooner. Destruction ends
-the CPU; it cannot confirm its own destruction or promise landed science.
 
 `duna_impactor` uses the existing continuous `SCIENCE_ENTRY` phase, targeting
 5km Pe with3km tolerance and no optional Ike detour. It performs no capture,
@@ -1180,14 +1173,14 @@ phases load `duna_entry`. They no longer share an executing band or pull in one
 another's flight handlers. `duna_ike_setup` remains a compatibility root for
 explicit legacy loads. Shared conic timing lives in `conic_time`.
 
-All six Espoir launch profiles now run `ASSIST` after XING. This is an optional
+All five Espoir launch profiles now run `ASSIST` after XING. This is an optional
 branch based on an **already predicted native itinerary**. Without a complete,
 safe and affordable chain, the phase skips `ASSIST_COAST` and continues through
 the original BPLANE/coast/powered-capture sequence.
 
-The Duna surveyor can pass Ike before its polar Duna capture. The three Ike
+The Duna surveyor can pass Ike before its polar Duna capture. The two Ike
 profiles can use a Duna flyby followed by direct Ike capture, bypassing Duna
-parking and the separate Ike transfer. Their normal mapping, impact or landing
+parking and the separate Ike transfer. Their normal mapping or landing
 operations follow that capture. Duna entry profiles can retain an existing free
 Ike pass only when the subsequent atmospheric entry is proven; they purchase
 no detour. Only `duna_science_impact` opts into sampling during this coast,

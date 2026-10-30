@@ -6,6 +6,21 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct Espoir fleet policy update: user disables automatic warp in all
+  Espoir configs and removes the dedicated Ike impactor; Ike surface flights
+  now use ike_lander with the existing soft-landing/science safeguards.
+  All5 remaining launch profiles set COAST_AUTO_WARP=0. Both Ike operations
+  settings maps explicitly carry0; normal IKE_SETUP serialization and assist
+  terminal overrides preserve it through fresh boots. KAC/solar/resident-clock
+  wait logic is unchanged. Removed missions/Espoir/ike_impactor.ks and current
+  documentation/test enumerations; generic SCIENCE_IMPACT remains available
+  for other uses. Updated existing profile/handoff checks cover0 on all
+  profiles and both continuation paths. Fleet/assist/manual-preview/wait
+  checks pass; all88 routine check files pass136.62s. Structural0 errors,
+  unchanged legacy KSC_DEORBIT warning. Results:
+  /tmp/kos-espoir-fleet-policy-20261030.json and.log. No bootstrap/runtime code
+  change or remote game/profile deployment.
+
 - 30Oct manual assist preview: user now authorizes commit/push for Deck use,
   but requests a COMMAND rather than automatic mission integration.
   RUNPATH("0:/cmd/assistsearch.ks"). Requires a linked manual prompt,1x,

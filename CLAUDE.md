@@ -9,7 +9,17 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
-2026-10-30 latest user request: commit/push assist acquisition as a MANUAL
+2026-10-30 latest fleet policy: all5 remaining Espoir profiles explicitly set
+COAST_AUTO_WARP=0; generated Ike settings also carry0 through normal setup and
+assist handoff. KAC alarms/clock waits unchanged. Removed dedicated ike_impactor
+profile; retain ike_lander as the surface mission with existing landing/science
+guards. Shared SCIENCE_IMPACT is retained. Existing fleet/assist/preview/wait
+checks pass; all88 routine files pass136.62s,0 structural errors and the
+unchanged KSC_DEORBIT warning. Results:/tmp/kos-espoir-fleet-policy-20261030.json
+and.log. No bootstrap/runtime code change.
+Older six-profile notes below describe the pre-removal fleet.
+
+2026-10-30 manual search request: commit/push assist acquisition as a MANUAL
 command for Deck testing; do not integrate new search into flight phases.
 cmd/assistsearch.ks uses one existing unflown node, selected profile + runtime
 overrides, and archive-only assist_search/assist_search_native/assist_preview.

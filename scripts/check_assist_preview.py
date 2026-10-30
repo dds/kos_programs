@@ -112,7 +112,7 @@ def check_capture_search_radius():
 
 
 def check_mission_policy_and_seek():
-    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_impactor','ike_lander','duna_impactor','duna_science_impact'):
+    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_lander','duna_impactor','duna_science_impact'):
         env,nd,route,limits,_,_,_,_,_,_=fixture()
         env.update(BPLANE_ARRIVAL_MODE='ORBIT')
         env.update(profile(name))
@@ -125,7 +125,7 @@ def check_mission_policy_and_seek():
         assert env['assistPreviewSeekIndex'](nd,route)==0
         parent_first=Items([Map(BODY='Duna',MIN_PE=75000),Map(BODY='Ike',MIN_PE=25000,AP=75000)])
         assert env['assistPreviewSeekIndex'](nd,parent_first)==1
-    print('PASS: all six real Espoir profiles supply their own fallback capture/entry policy; seek chooses the missing moon leg rather than refining an already-predicted parent encounter')
+    print('PASS: all five real Espoir profiles supply their own fallback capture/entry policy; seek chooses the missing moon leg rather than refining an already-predicted parent encounter')
 
 
 @lru_cache(None)

@@ -80,9 +80,10 @@ def run(source, name, env):
 
 def check_profiles_and_dependencies():
     deps, phases, bands = dependency_tables((ROOT/'lib/dependencies.ks').read_text())
-    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_impactor','duna_impactor','ike_lander'):
+    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','duna_impactor','ike_lander'):
         cfg = profile(name)
         assert cfg['MISSION_ID'] == name and cfg['TARGET_'] == 'DUNA'
+        assert cfg['COAST_AUTO_WARP'] == 0
         assert cfg['MISSION_TYPE'] == 'interplanetary' and cfg['PARKING_ALT'] == 85000
         assert cfg['LAUNCH_INCLINATION'] == 0 and cfg['LAUNCH_PLANE_MODE'] == 'INTERPLANETARY'
         legs = [cfg]
@@ -109,9 +110,6 @@ def check_profiles_and_dependencies():
             assert 'CAPTURE' not in cfg['SEQUENCE'] and cfg['SCIENCE_ENTRY_MOON'] == ''
             assert 0 < cfg['CAPTURE_PE']-cfg['BPLANE_PE_TOL']
             assert cfg['CAPTURE_PE']+cfg['BPLANE_PE_TOL'] < 50000
-        if name == 'ike_impactor':
-            assert legs[-1]['SEQUENCE'][-3:] == ['CAPTURE','SCIENCE_IMPACT','DONE']
-            assert legs[-1]['SCIENCE_IMPACT_PE'] < 0
         if name == 'ike_lander':
             leg = legs[-1]
             assert leg['SEQUENCE'][-5:] == ['CAPTURE','LAND_DEORBIT','LAND_ASSIST','SURFACE_SCIENCE','DONE']
@@ -129,12 +127,13 @@ def check_profiles_and_dependencies():
             assert leg['SCIENCE_SURFACE_DWELL'] == 600
             assert leg['RELOAD_AFTER_LAND_ASSIST'] == leg['RELOAD_AFTER_LAND'] == 0
             assert not {'PRELAUNCH','LAUNCH','ESCAPE','RETURN_SETUP','SURFACE_RETURN_SETUP','SCIENCE_IMPACT'} & set(leg['SEQUENCE'])
+    assert profile('duna_science_impact')['COAST_AUTO_WARP'] == 0
     assert bands['science_impact'] == ['science_impact']
     assert {'science_flight','science_entry','maneuver_plan','thrust_cutoff'} <= closure(['science_impact'],deps)
     assert 'science_impact' not in closure(['science_entry'],deps)
     bindings = function_body((ROOT/'lib/dependencies.ks').read_text(), 'dependencyBindPhase')
     assert 'phaseScienceImpact@' in bindings
-    print('PASS: five distinct profiles/operations legs resolve; polar mappers retain hardware, impacts stay expendable, one-way Ike lander retains terrain/radio/fuel safeguards and surface science')
+    print('PASS: four fleet profiles/operations legs resolve; polar mappers retain hardware, impacts stay expendable, one-way Ike lander retains terrain/radio/fuel safeguards and surface science')
 
 
 def setup_fixture(name='ike_orbital_surveyor'):
@@ -166,7 +165,7 @@ def setup_fixture(name='ike_orbital_surveyor'):
 
 
 def check_ike_handoff_roundtrip_and_legacy():
-    for name in ('ike_orbital_surveyor','ike_impactor','ike_lander'):
+    for name in ('ike_orbital_surveyor','ike_lander'):
         env,saved,events,output = setup_fixture(name)
         run(SETUP,'phaseIkeSetup',env)
         assert saved['target'] == 'IKE' and saved['phase'] == 'XING'
@@ -180,7 +179,7 @@ def check_ike_handoff_roundtrip_and_legacy():
             assert fresh['SEQUENCE'] == env['IKE_FLYBY_SEQUENCE']
             assert fresh['MISSION_TYPE'] == saved['mission_type'] == 'moon_operations'
             assert fresh['PAYLOADS'] == saved['payloads']
-            assert fresh['COAST_AUTO_WARP'] == 1
+            assert fresh['COAST_AUTO_WARP'] == 0
             assert fresh['CAPTURE_MIN_PE'] >= 20000
             assert fresh['CAPTURE_RESERVE_DV'] > 0
     env,saved,events,output = setup_fixture()
@@ -189,7 +188,7 @@ def check_ike_handoff_roundtrip_and_legacy():
     fresh = read_settings('\n'.join(output), {})
     assert fresh['MISSION_ID'] == 'duna_ike_flyby' and fresh['PAYLOADS'] == ['SCISAT']
     assert 'DUNA_ENTRY_SEQUENCE' in fresh and events[-1] == 'reboot'
-    print('PASS: actual Ike handoff and recursive serializer preserve identity, payload, orbit, scan/impact config and budgets across fresh boots; empty settings retain the legacy flyby/Duna-entry recipe')
+    print('PASS: actual Ike handoff and recursive serializer preserve identity, payload, orbit, scan/landing config and budgets across fresh boots; empty settings retain the legacy flyby/Duna-entry recipe')
 
 
 def check_ike_handoff_guards():
@@ -220,7 +219,7 @@ def impact_fixture():
     ship = NS(BODY=primary,PERIAPSIS=-1000,ALTITUDE=30000,VERTICALSPEED=-100,
               STATUS='SUB_ORBITAL',ORBIT=NS(ECCENTRICITY=.8,HASNEXTPATCH=False,PERIOD=3000),
               THRUST=0,CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0),DELTAV=NS(VACUUM=400))
-    events, saved = [], {'mission_id':'ike_impactor_ops'}
+    events, saved = [], {'mission_id':'science_impact_fixture'}
     env = dict(SHIP=ship,primary=primary,ABORT=False,HASNODE=False,TIME=NS(SECONDS=100),
                WARP=0,SAS=True,SCIENCE_IMPACT_PE=-1000,SCIENCE_IMPACT_DV_CAP=150,
                SCIENCE_ENTRY_BANDS=Map(IKE=Items([50000,0])),SCIENCE_ENTRY_MIN_EC=.05,

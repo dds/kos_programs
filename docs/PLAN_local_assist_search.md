@@ -206,7 +206,7 @@ can miss narrow minima; limited game patch lookahead can hide downstream legs.
 Neither case authorizes an extrapolated assist.
 
 Historical sketch validation:87 routine check files passed124.86s. The manual
-command adds tests for its actual direct-cost adapter, all six Espoir policies,
+command adds tests for its actual direct-cost adapter, all current Espoir policies,
 already-achieving capture nodes and command control flow. Final routine timing
 results: all88 files passed136.97s, every new case <=0.564s; structural0
 errors and the unchanged legacy KSC_DEORBIT warning. Report:
