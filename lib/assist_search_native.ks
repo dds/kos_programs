@@ -1,5 +1,5 @@
-// Manual preview: transactional adapter for an existing planner-owned node.
-// Load assist_route + maneuver before these preview files. Not flight-wired.
+// Diagnostic preview: transactional adapter for an existing owned node.
+// Load assist_route + maneuver first. Proposed vectors are never executed here.
 // DirectAssessor(node, terminalGoal, budget) supplies a verified EXACT cost or
 // a certified LOWER bound for the current powered fallback. Never a guess.
 @LAZYGLOBAL OFF.
@@ -18,12 +18,28 @@ LOCAL FUNCTION _assistSearchPut {
     SET ctx["EXPECTED"] TO axes:COPY.
 }
 
-LOCAL FUNCTION _assistSearchOwns {
+GLOBAL FUNCTION assistSearchContext {
+    PARAMETER nd.
+    PARAMETER epoch IS 0.
+    LOCAL axes IS LIST(0,0,0).
+    IF nd <> 0 { SET axes TO _assistSearchAxes(nd). SET epoch TO nd:TIME. }
+    RETURN LEXICON("NODE",nd,"SHIP",SHIP,"BODY",SHIP:BODY,"UT",epoch,
+        "BASE",axes,"EXPECTED",axes,"PHASE",stateGet("phase",""),
+        "MISSION",stateGet("mission_id",""),"LAUNCH",stateGetNum("launch_time",0),
+        "CANCELLED",FALSE,"RESTORED",TRUE).
+}
+
+GLOBAL FUNCTION assistSearchContextBound {
+    PARAMETER ctx.
+    IF SHIP <> ctx["SHIP"] OR KUNIVERSE:ACTIVEVESSEL <> SHIP OR SHIP:BODY <> ctx["BODY"] { RETURN FALSE. }
+    RETURN stateGet("phase","") = ctx["PHASE"] AND stateGet("mission_id","") = ctx["MISSION"]
+        AND stateGetNum("launch_time",0) = ctx["LAUNCH"].
+}
+
+GLOBAL FUNCTION assistSearchOwns {
     PARAMETER ctx.
     // Check active vessel BEFORE querying maneuver-node state (kOS API limit).
-    IF SHIP <> ctx["SHIP"] OR KUNIVERSE:ACTIVEVESSEL <> SHIP OR SHIP:BODY <> ctx["BODY"] { RETURN FALSE. }
-    IF stateGet("phase","") <> ctx["PHASE"] OR stateGet("mission_id","") <> ctx["MISSION"]
-            OR stateGetNum("launch_time",0) <> ctx["LAUNCH"] { RETURN FALSE. }
+    IF NOT assistSearchContextBound(ctx) { RETURN FALSE. }
     IF NOT ALLNODES:CONTAINS(ctx["NODE"]) { RETURN FALSE. }
     LOCAL nd IS ctx["NODE"].
     LOCAL axes IS ctx["EXPECTED"].
@@ -45,12 +61,12 @@ GLOBAL FUNCTION assistSearchIdle {
 // move a node in another frame, or change a node after thrust has begun.
 LOCAL FUNCTION _assistSearchRestore {
     PARAMETER ctx.
-    IF NOT _assistSearchOwns(ctx) OR maneuverBurnInterrupted()
+    IF NOT assistSearchOwns(ctx) OR maneuverBurnInterrupted()
             OR NOT (SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
                 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0) { RETURN FALSE. }
     _assistSearchPut(ctx,ctx["BASE"]).
     WAIT 0.1.
-    RETURN _assistSearchOwns(ctx).
+    RETURN assistSearchOwns(ctx).
 }
 
 LOCAL FUNCTION _assistSearchSameGoal {
@@ -149,7 +165,7 @@ LOCAL FUNCTION _assistSearchSeparation {
     PARAMETER epoch.
     PARAMETER budget.
     IF budget["POSITIONS"] >= ctx["LIMITS"]["POSITIONS"] OR NOT assistSearchTimeLeft(budget)
-            OR NOT assistSearchIdle() OR NOT _assistSearchOwns(ctx) {
+            OR NOT assistSearchIdle() OR NOT assistSearchOwns(ctx) {
         SET budget["STOP"] TO "position-budget-or-context". RETURN 1e30.
     }
     SET budget["POSITIONS"] TO budget["POSITIONS"]+1.
@@ -236,13 +252,13 @@ GLOBAL FUNCTION assistSearchNativeProbe {
     PARAMETER offsets.
     PARAMETER budget.
     LOCAL sample IS LEXICON("TIER",-1,"LOSS",1e29,"ELIGIBLE",FALSE,"COST",1e29).
-    IF NOT assistSearchIdle() OR NOT _assistSearchOwns(ctx) OR ALLNODES:LENGTH <> 1 OR NOT assistSearchTimeLeft(budget) {
+    IF NOT assistSearchIdle() OR NOT assistSearchOwns(ctx) OR ALLNODES:LENGTH <> 1 OR NOT assistSearchTimeLeft(budget) {
         SET ctx["CANCELLED"] TO TRUE. RETURN sample.
     }
     LOCAL base IS ctx["BASE"].
     _assistSearchPut(ctx,LIST(base[0]+offsets[0],base[1]+offsets[1],base[2]+offsets[2])).
     WAIT 0.1.
-    IF assistSearchIdle() AND _assistSearchOwns(ctx) AND ALLNODES:LENGTH = 1 AND assistSearchTimeLeft(budget) {
+    IF assistSearchIdle() AND assistSearchOwns(ctx) AND ALLNODES:LENGTH = 1 AND assistSearchTimeLeft(budget) {
         LOCAL proof IS assistEvaluate(ctx["NODE"],ctx["ROUTE"],ctx["BODIES"],0,"",ctx["BODY"]:NAME).
         IF proof["OK"] {
             SET sample["TIER"] TO 3. SET sample["LOSS"] TO proof["COST"].
@@ -305,13 +321,12 @@ GLOBAL FUNCTION searchAssistNode {
     LOCAL bodies IS assistRouteBodies(route,1).
     IF bodies:LENGTH <> route:LENGTH OR NOT (seekIndex >= 0 AND seekIndex < route:LENGTH AND seekIndex = FLOOR(seekIndex)) { RETURN rejected. }
     LOCAL budget IS assistSearchBudget(limits).
-    LOCAL axes IS _assistSearchAxes(nd).
-    LOCAL ctx IS LEXICON("NODE",nd,"SHIP",SHIP,"BODY",SHIP:BODY,"UT",nd:TIME,
-        "BASE",axes,"EXPECTED",axes,"ROUTE",route,"BODIES",bodies,"SEEK",seekIndex,
-        "PHASE",stateGet("phase",""),"MISSION",stateGet("mission_id",""),"LAUNCH",stateGetNum("launch_time",0),
-        "GOAL",route[route:LENGTH-1],"LIMITS",limits,"CANCELLED",FALSE,"RESTORED",TRUE).
+    LOCAL ctx IS assistSearchContext(nd).
+    LOCAL axes IS ctx["BASE"].
+    SET ctx["ROUTE"] TO route. SET ctx["BODIES"] TO bodies. SET ctx["SEEK"] TO seekIndex.
+    SET ctx["GOAL"] TO route[route:LENGTH-1]. SET ctx["LIMITS"] TO limits.
     LOCAL direct IS directAssessor:CALL(nd,ctx["GOAL"],budget).
-    IF NOT _assistSearchOwns(ctx) OR NOT assistSearchIdle() {
+    IF NOT assistSearchOwns(ctx) OR NOT assistSearchIdle() {
         SET rejected["RESTORED"] TO FALSE. SET rejected["CANCELLED"] TO TRUE. RETURN rejected.
     }
     LOCAL referenceCheck IS _assistSearchReferenceCheck(direct,ctx).
@@ -333,7 +348,7 @@ GLOBAL FUNCTION searchAssistNode {
     IF result["OK"] AND ctx["RESTORED"] AND NOT ctx["CANCELLED"] AND assistSearchTimeLeft(budget) {
         // Refresh the direct cost only while the ORIGINAL vector is in place.
         SET direct TO directAssessor:CALL(nd,ctx["GOAL"],budget).
-        IF NOT _assistSearchOwns(ctx) OR NOT assistSearchIdle() OR NOT assistSearchTimeLeft(budget) {
+        IF NOT assistSearchOwns(ctx) OR NOT assistSearchIdle() OR NOT assistSearchTimeLeft(budget) {
             SET result["OK"] TO FALSE. SET ctx["CANCELLED"] TO TRUE.
         } ELSE {
             SET referenceCheck TO _assistSearchReferenceCheck(direct,ctx).
@@ -352,10 +367,10 @@ GLOBAL FUNCTION searchAssistNode {
             }
         }
     } ELSE { SET result["OK"] TO FALSE. }
-    IF NOT _assistSearchOwns(ctx) OR NOT assistSearchIdle() OR NOT assistSearchTimeLeft(budget) {
+    IF NOT assistSearchOwns(ctx) OR NOT assistSearchIdle() OR NOT assistSearchTimeLeft(budget) {
         SET result["OK"] TO FALSE. SET ctx["CANCELLED"] TO TRUE.
     }
-    SET ctx["RESTORED"] TO ctx["RESTORED"] AND _assistSearchOwns(ctx).
+    SET ctx["RESTORED"] TO ctx["RESTORED"] AND assistSearchOwns(ctx).
     SET result["RESTORED"] TO ctx["RESTORED"].
     SET result["CANCELLED"] TO ctx["CANCELLED"].
     SET result["NEEDS_ADMISSION"] TO TRUE.

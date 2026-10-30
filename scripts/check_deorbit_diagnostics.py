@@ -5,7 +5,7 @@ import re
 import numpy as np
 
 import check_landing_guidance as ks
-from check_codebase import ROOT, mask, command_entrypoint_errors, function_body
+from check_codebase import ROOT, mask, command_entrypoint_errors, function_body, dependency_tables, closure
 from check_deorbit_geometry import Vec, Geo, fixture
 from check_runtime_contracts import KString
 from types import SimpleNamespace as NS
@@ -74,7 +74,8 @@ def check_read_only():
         assert not re.search(r'\bSET\s+(?:WARP|THROTTLE|STEERING|SHIP:CONTROL)',clean)
     # Diagnostics do not become dependencies carried by every flight band.
     assert 'deorbitcheck' not in (ROOT/'lib/dependencies.ks').read_text()
-    assert 'diagnostic_log' not in (ROOT/'lib/dependencies.ks').read_text()
+    deps,phases,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
+    for roots in phases.values():assert 'diagnostic_log' not in closure(roots,deps)
     print('PASS: wrapped diagnostics and shared archive writer have no flight/node/mission-state mutation or added flight-band dependency')
 
 

@@ -2096,6 +2096,17 @@ GLOBAL FUNCTION phaseBplane {
     nextPhase(xferSeq).
 }
 
+// Optional provider is loaded only by the enabled interplanetary band.
+LOCAL FUNCTION _bplanePreviewMidcourse {
+    PARAMETER targetBody.
+    PARAMETER nd.
+    PARAMETER checkOnly IS FALSE.
+    IF DEFINED ASSIST_HAS_MIDCOURSE_PREVIEW {
+        RETURN previewMidcourseAssist(targetBody,nd,checkOnly).
+    }
+    RETURN TRUE.
+}
+
 GLOBAL FUNCTION phaseRefineBplane {
     IF maneuverBurnInterrupted() {
         _bplaneHoldCorrection("interrupted-correction-use-arrival-replan"). RETURN.
@@ -2108,6 +2119,7 @@ GLOBAL FUNCTION phaseRefineBplane {
         RETURN.
     }
 
+    IF NOT _bplanePreviewMidcourse(targetBody,0,TRUE) { RETURN. }
     _bplaneEnsureSoiAlarm(targetBody).
     IF bplanePauseForReview() { RETURN. }
     IF SHIP:BODY = targetBody {
@@ -2133,15 +2145,22 @@ GLOBAL FUNCTION phaseRefineBplane {
     UNTIL burns >= maxBurns {
         IF _bplaneCurrentCorridorOk(targetBody, wantPe, wantInc, wantLan) {
             UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-            mLog("STATS refine-bplane result status=already-in-corridor burns=" + burns).
-            nextPhase(xferSeq).
-            RETURN.
+            IF NOT _bplanePreviewMidcourse(targetBody,0) { RETURN. }
+            // Search/report I/O yields; never advance on the old measurement.
+            IF _bplaneCurrentCorridorOk(targetBody, wantPe, wantInc, wantLan) {
+                mLog("STATS refine-bplane result status=already-in-corridor burns=" + burns).
+                nextPhase(xferSeq).
+                RETURN.
+            }
         }
         IF NOT HASNODE AND BPLANE_PE_ONLY = 0 {
             LOCAL measLoop IS measureArrival(0, targetBody).
             IF measLoop = 0 { BREAK. }
             LOCAL errLoop IS _bplaneCorridorError(targetBody, measLoop, wantPe, wantInc, wantLan).
-            IF _bplaneCorridorOk(errLoop, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) { BREAK. }
+            IF _bplaneCorridorOk(errLoop, wantInc, BPLANE_PE_TOL, BPLANE_ANG_TOL) {
+                IF NOT _bplanePreviewMidcourse(targetBody,0) { RETURN. }
+                BREAK.
+            }
         }
 
         LOCAL nd IS 0.
@@ -2162,8 +2181,14 @@ GLOBAL FUNCTION phaseRefineBplane {
         }
 
         IF phaseShouldYield OR ABORT { RETURN. }
-        IF nd = 0 AND _bplaneFinishMinimumSkip(targetBody,wantPe,wantInc,wantLan) { RETURN. }
+        IF nd = 0 {
+            IF _bplaneMinimumSkip["ACCEPTED"] {
+                IF NOT _bplanePreviewMidcourse(targetBody,0) { RETURN. }
+            }
+            IF _bplaneFinishMinimumSkip(targetBody,wantPe,wantInc,wantLan) { RETURN. }
+        }
         IF nd = 0 { BREAK. }
+        IF NOT _bplanePreviewMidcourse(targetBody,nd) { RETURN. }
         IF NOT bplaneCorrectionAllowed(nd, targetBody, dvCap,TRUE,TRUE) { RETURN. }
         _bplaneReserveCorrection(nd, targetBody).
         _bplaneClearCoastTimes().

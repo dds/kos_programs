@@ -1,7 +1,7 @@
 // ============================================================
 // diagnostic_log.ks - Shared archive-only diagnostic reports
 // (0:/lib/diagnostic_log.ks)
-// Commands load this directly; it is absent from flight-band dependencies.
+// Commands load directly; opt-in midpoint previews declare it conditionally.
 // ============================================================
 @LAZYGLOBAL OFF.
 

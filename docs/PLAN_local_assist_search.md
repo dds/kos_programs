@@ -1,9 +1,10 @@
-# Local gravity-assist acquisition: manual preview
+# Local gravity-assist acquisition: diagnostic previews
 
-2026-10-30. User authorizes committing/pushing a manual command for Steam Deck
-testing, without automatic mission integration. These helpers are **not loaded
-by any flight band or mission**. Existing opportunistic ASSIST behavior is
-unchanged. Only the operator command loads the acquisition search.
+2026-10-30. Manual acquisition remains available. The user now also authorizes
+an opt-in diagnostic preview at the normal interplanetary midpoint. Default
+flight excludes these helpers; enabled XFER_BPLANE conditionally loads them.
+Candidate installation and automatic assist execution remain unimplemented.
+Existing direct correction/capture execution stays in control.
 
 - [Search kernel](../lib/assist_search.ks): candidate generation and budgets.
 - [Native adapter](../lib/assist_search_native.ks): node ownership, native
@@ -195,8 +196,9 @@ handoff and revalidation after the flown burn. Admission must understand the
 saved assist intent: direct-arrival-only constraints cannot silently veto a
 valid alternate itinerary, or silently disappear. Keep the common timing,
 fuel, staging and control guards, and validate the branch's complete goal.
-These phase hooks are **not**
-implemented. On an ordinary no-solution result with restoration
+Automatic candidate adoption at these phase hooks is **not**
+implemented. The opt-in midpoint diagnostic below does search/restore/report
+only. On an ordinary no-solution result with restoration
 confirmed, keep the existing powered plan. Interrupted/changed ownership
 continues to require review.
 
@@ -300,6 +302,44 @@ offsets(12.5,37.5,0)m/s. This establishes native search and normal restoration,
 not successful acquisition or absence of other opportunities. Keep the
 original powered transfer; later targeted nodes can provide a different
 search region and a more informative direct-cost baseline.
+
+## Opt-in midpoint diagnostic
+
+`cmd/assistmcc.ks,1` saves ASSIST_MIDCOURSE_PREVIEW=1; default0/off. After
+reboot, conditional XFER_BPLANE roots include assist_midcourse and its shared
+search/baseline/archive dependencies. Normal profiles and other bands exclude
+them. This adds no new phase or boot program and does not change KAC waits.
+
+REFINE_BPLANE first checks for an interrupted preview, before it can remove
+or replace a node. A viable direct correction is previewed before fresh
+normal admission/reservation/execution; pristine and accepted-minimum paths
+use an owned zero-delta-v node and remove it without firing an engine. The
+same native owner/context checks are shared by the search and phase caller.
+Both paths archive original time/vector before mutation and save a bound
+started marker. A completed pass records done even when no candidate exists;
+an interrupted/changed node stays held until explicit arrival action replan
+discards it and clears the marker. Disabling the flag cannot bypass this.
+
+Reports use assistmcc_<craft>_<UT>.log in the archive diagnostics directory.
+Candidate success is diagnostic only: restore, report, continue the original
+direct correction. No candidate installation, assist flight intent, extra
+science spending or alarms. Existing64-probe/1536-position/20game/30wall
+budgets and180s pre-ignition margin remain; zero-node epochs use the existing
+arrivalCorrectionLead. Planetary cruise only, no late arrival-retry scans.
+No link/unsupported goal/timing/engine evidence skips; compute exhaustion
+with verified restoration and idle context also keeps the direct plan.
+Controls, node, mission and active vessel are checked again after archive
+I/O and final marker persistence; unverified restoration fails closed.
+
+Source fixtures exercise actual synthetic native search/candidate reporting,
+seed cleanup, repeat/reboot binding, report/persistence takeover, disabled/
+offline/late/retry contexts, real REFINE branch order and conditional roots.
+The no-correction branch also refreshes the actual corridor after preview
+before advancing. All89 routine check files pass134.11s, every new case<0.77s,
+structural0 errors and unchanged legacy KSC_DEORBIT warning. Report:
+`/tmp/kos-assist-midcourse-final-20261030.json` and `.log`. Native midpoint
+compilation/latency/interruption and successful assist acquisition/adoption
+remain unverified.
 
 Relevant native API references: [future-position prediction](https://ksp-kos.github.io/KOS/commands/prediction.html),
 [orbit patches](https://ksp-kos.github.io/KOS/structures/orbits/orbit.html), and

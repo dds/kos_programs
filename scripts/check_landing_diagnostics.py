@@ -298,7 +298,7 @@ def check_candidate_capture_and_wiring():
     clean=mask(SOURCE)
     assert not re.search(r'(?<!:)\b(?:LOCK|UNLOCK|STAGE|REBOOT|WAIT|SHUTDOWN)\b(?!:)',clean)
     assert not re.search(r'\b(?:LATLNG|landingTerrainGrade|stateSet|missionOverrideUpdate|_landingSetThrottle|_landingSetState)\s*\(',clean)
-    assert '0:/cmd/' not in SOURCE and 'diagnostic_log' not in (ROOT/'lib/dependencies.ks').read_text()
+    assert '0:/cmd/' not in SOURCE and 'diagnostic_log' not in closure(['landing_main','landing_deorbit'],deps)
     print('PASS: actual terrain/rejection data and sparse reachability rows recorded with no second scan; recorder is resident only in powered landing, ticks after guidance, exports after cleanup, and never actuates or loads archive commands')
 
 

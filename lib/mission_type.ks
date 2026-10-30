@@ -22,6 +22,8 @@ GLOBAL MISSION_ASSIST_ROUTE IS LIST().
 GLOBAL MISSION_ASSIST_SEQUENCE IS LIST().
 GLOBAL MISSION_ASSIST_SETTINGS IS LEXICON().
 GLOBAL MISSION_ASSIST_SCIENCE IS 0.
+// Diagnostic-only acquisition at the normal interplanetary midpoint.
+GLOBAL ASSIST_MIDCOURSE_PREVIEW IS 0.
 // Loader decisions happen before optional landing libraries execute.
 GLOBAL LANDING_AUTO_TARGET IS 0.
 GLOBAL LANDING_REQUIRE_SITE IS 0.
@@ -44,6 +46,12 @@ GLOBAL FUNCTION missionTypeDetect {
 GLOBAL FUNCTION missionTypeConditionalRoots {
     PARAMETER bandKey.
     LOCAL roots IS LIST().
+    IF bandKey = "XFER_BPLANE" AND missionTypeDetect() = "interplanetary" {
+        LOCAL preview IS stateGet("assist_mcc_preview",LEXICON()).
+        LOCAL pending IS FALSE.
+        IF preview:HASKEY("status") { SET pending TO preview["status"] = "started". }
+        IF ASSIST_MIDCOURSE_PREVIEW > 0 OR pending { roots:ADD("assist_midcourse"). }
+    }
     IF bandKey = "ASSIST_COAST" AND MISSION_ASSIST_SCIENCE > 0 { roots:ADD("science_entry"). }
     IF bandKey = "LAND_DEORBIT" {
         IF LANDING_AUTO_TARGET > 0 { roots:ADD("landing_light_wait"). }

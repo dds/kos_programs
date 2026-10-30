@@ -6,6 +6,31 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct user authorizes opt-in automatic midpoint diagnostics. New
+  cmd/assistmcc.ks,1 (or0) saves ASSIST_MIDCOURSE_PREVIEW, default0; reboot
+  loads assist_midcourse/shared search+baseline+archive helpers only in
+  enabled interplanetary XFER_BPLANE. No new phase/bootstrap, automatic
+  candidate installation or assist execution. REFINE previews a planned
+  correction before fresh direct admission/reserve/burn; pristine/accepted
+  minimum paths create/remove a zero-dV seed. Native context/owner helpers
+  shared. Bound started/done marker saves before probing and prevents
+  repeat/reboot scans; interrupted preview holds before any node replan,
+  including when disabled. Explicit arrival action replan clears marker
+  and discards node. Existing KAC/midpoint schedule,64/1536/20game/30wall,
+  50m/s radius, science-extra0 and180s ignition margin retained. Archive
+  assistmcc_<craft>_<UT>.log reports original vector, native patches, policy,
+  results and elapsed; no-link/unsafe timing/unsupported/late-retry skips.
+  Verified compute expiry continues direct; restoration/context changes
+  hold and preserve foreign edits. Real-source synthetic search/seed/phase/
+  loading/command fixtures pass, including a corridor that changes during
+  preview: the no-correction path rechecks before advancing. All89 routine
+  files pass134.11s; every new case<0.77s. Structural0 errors/unchanged legacy
+  KSC_DEORBIT warning. Final report:/tmp/kos-assist-midcourse-final-20261030.json
+  and.log. Two old archive-writer assertions now check actual flight closures
+  rather than forbid declaring an optional dependency. No source edits after
+  final full suite. Native midpoint run and successful acquisition/adoption
+  still need flight proof.
+
 - 30Oct native assist preview5028809 confirms bounded-native-drift-v2 works:
   reference verified, drift0.000631781m/s within0.005312796 tolerance;
   priceGuardDv0.010625592. Actual search runs62 node probes/667 position

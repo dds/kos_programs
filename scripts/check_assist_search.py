@@ -256,9 +256,9 @@ def check_departure_rule_and_manual_isolation():
     assert env['assistRouteBodies'](Items([route[-1]]),1)
     assert not unscoped_returns(SEARCH) and not negated_defined_conditions(SEARCH)
     assert not re.search(r'(?m)^\s*(?:ADD|REMOVE|STAGE|REBOOT|LOCK|UNLOCK|LOG)\b|\b(?:stateSet|executeManeuver|missionOverrideUpdate)\s*\(',mask(SEARCH))
-    production='\n'.join((ROOT/f'lib/{name}.ks').read_text() for name in ('dependencies','xfer_plan','arrival_bplane','capture','assist_plan'))
+    production='\n'.join((ROOT/f'lib/{name}.ks').read_text() for name in ('xfer_plan','arrival_bplane','capture','assist_plan'))
     assert 'searchAssistNode' not in production and 'assist_search_native' not in production
-    print('PASS: departure escape is explicit and outward-only with existing clearance guards; live two-leg defaults remain, single terminal is opt-in, and manual acquisition has no phase/execution/state/staging hooks')
+    print('PASS: departure escape is explicit and outward-only with existing clearance guards; live two-leg defaults remain, single terminal is opt-in, and the search kernel has no execution/state/staging hooks')
 
 
 if __name__=='__main__':

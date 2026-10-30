@@ -20,6 +20,7 @@ SOURCE = re.sub(r'\bPRINT\s+(?:"[^"]*"|[^."])*\.', '', SOURCE)
 SOURCE = SOURCE.replace('UNLOCK STEERING.', 'fixture_unlock().')
 SOURCE = SOURCE.replace('REMOVE nd.', 'fixture_remove(nd).')
 SOURCE = SOURCE.replace('WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.', 'fixture_settle().')
+SOURCE = re.sub(r'\bDEFINED (\w+)',r'fixture_defined("\1")',SOURCE)
 ks.SOURCES += '\n'+SOURCE
 
 
@@ -61,6 +62,8 @@ def environment():
              shipHasSolarPanels=lambda:True,shipSolarFlow=lambda:1,
              shipPowerFraction=lambda:.5,
              HUDTEXT=lambda *_:None,YELLOW='yellow')
+    env['fixture_defined']=env.__contains__
+    env['_bplanePreviewMidcourse']=lambda *args:ks.call('_bplanePreviewMidcourse',env,*args)
     env.update({name:float(value) for name,value in re.findall(
         r'GLOBAL (\w+) IS (\d+(?:\.\d+)?)\.',SOURCE)})
     hit['patch'].ETA=EventEta(env['TIME'],13000)

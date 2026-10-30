@@ -1,4 +1,4 @@
-// Manual preview: bounded local vector search. Loaded only by cmd/assistsearch.
+// Diagnostic preview: bounded local vector search. No candidate execution.
 // Probe(ctx, offsets, budget) returns numeric progress and an admissible cost.
 // No nodes, bodies, mission state, engine controls or departure-date search here.
 @LAZYGLOBAL OFF.

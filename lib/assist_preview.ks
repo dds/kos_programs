@@ -1,4 +1,4 @@
-// Manual assist-search baseline and diagnostics. Archive-only command helper.
+// Shared assist-search baseline and diagnostics for preview-only callers.
 // Prices the original node and its configured capture, not an optimized route.
 @LAZYGLOBAL OFF.
 

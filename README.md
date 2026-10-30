@@ -1297,8 +1297,9 @@ cannot save 25 m/s on an already-planned capture whose baseline is just that bur
 It also stops 180s before the estimated start of the full modified burn.
 The command issues no warp, attitude, throttle, staging, KAC alarm or phase
 changes.
-The new helpers run from the archive and are absent from every flight band;
-no bootstrap rebuild is needed.
+The manual command runs its helpers from the archive. Normal flight bands
+exclude them unless midpoint previews are explicitly enabled as described
+below; no bootstrap rebuild is needed.
 
 Each probe restores the original vector. The candidate stays in the report,
 with no execution option. The report is written directly to
@@ -1335,6 +1336,37 @@ capture cost to save, so a paid science detour requires an explicit
 `scienceExtraDv` allowance. `seekIndex=-1` selects the first missing route leg.
 Full design, API and remaining integration work:
 [`docs/PLAN_local_assist_search.md`](docs/PLAN_local_assist_search.md).
+
+To collect an automatic preview at the normal interplanetary midpoint, run
+this at a stopped prompt before the checkpoint, then reboot:
+
+```kos
+RUNPATH("0:/cmd/assistmcc.ks",1).
+REBOOT.
+```
+
+The default is off; use `0` to disable. This enables diagnostics only. At
+`REFINE_BPLANE`, the mission searches around its planned correction before
+the ordinary fresh admission and burn. If no correction is needed, it creates
+and removes a temporary zero-delta-v node. Even a successful assist candidate
+stays in the report; the normal direct mission continues. No additional burn,
+science detour allowance, alarm or automatic warp is introduced.
+
+The same search limits apply: 50 m/s radius, 64 node probes, 1,536 position
+samples, 20 game seconds and 30 wall seconds. Reports go directly to
+`0:/logs/archive/_diagnostics/assistmcc_<craft>_<UT>.log`. The attempt is saved
+before probing and runs once per mission/launch/target unless explicitly
+replanned. Missing archive link, insufficient time, unsupported goals and
+later arrival-retry checkpoints skip the preview and retain normal flight.
+Conditional dependencies cache the helpers only for enabled interplanetary
+refinement; ordinary Mun/Minmus missions do not cache the preview helpers.
+
+An interrupted preview or unverified node restoration holds for review.
+Disabling previews does not clear that interruption. After inspecting the
+archived original vector and the retained node, explicit
+`RUNPATH("0:/cmd/arrival.ks","replan").` discards that node, clears the attempt
+marker and resumes normal planning. Native midpoint execution remains to be
+flight-tested; source fixtures exercise both node paths and interruption.
 
 ### Espoir: Duna science and impact attempt
 
