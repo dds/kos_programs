@@ -80,17 +80,18 @@ LOCAL FUNCTION _cmdAssistsearch {
     IF seekIndex = -1 { SET seekIndex TO assistPreviewSeekIndex(nd,route). }
     LOCAL reportState IS diagnosticArchiveOpen("assistsearch").
     IF NOT reportState["READY"] { RETURN. }
-    diagnosticArchiveLine(reportState,"STATS assist-search schema=1 code=" + codeVersion()
+    diagnosticArchiveLine(reportState,"STATS assist-search schema=2 code=" + codeVersion()
         + " ut=" + TIME:SECONDS + " phase=" + stateGet("phase","")
         + " mission=" + stateGet("mission_id","") + " vessel=" + SHIP:NAME
-        + " body=" + SHIP:BODY:NAME + " ipu=" + CONFIG:IPU).
+        + " body=" + SHIP:BODY:NAME + " ipu=" + CONFIG:IPU
+        + " careerPatchesAhead=" + CAREER():PATCHLIMIT).
     // Original vector is archived BEFORE the first mutation, including if a
     // native runtime error interrupts the search before normal restoration.
     diagnosticArchiveLine(reportState,"STATS assist-search original-node ut=" + nd:TIME
         + " radial=" + nd:RADIALOUT + " normal=" + nd:NORMAL + " prograde=" + nd:PROGRADE
         + " dv=" + nd:DELTAV:MAG + " fuel=" + SHIP:DELTAV:VACUUM).
-    diagnosticArchiveLine(reportState,"STATS assist-search policy route=" + route
-        + " fallback=" + fallbackGoal + " reserve=" + reserveDv + " changeDv=" + changeDv
+    diagnosticArchiveLine(reportState,"STATS assist-search policy route=" + configLiteral(route)
+        + " fallback=" + configLiteral(fallbackGoal) + " reserve=" + reserveDv + " changeDv=" + changeDv
         + " scienceExtraDv=" + scienceExtraDv + " seek=" + seekIndex
         + " stopUt=" + limits["STOP_UT"] + " maxTrials=" + limits["TRIALS"]
         + " maxPositions=" + limits["POSITIONS"]).

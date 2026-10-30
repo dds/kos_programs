@@ -116,6 +116,21 @@ restored; a price calculated on an assist trial is not a direct alternative.
   only if omitted future costs are nonnegative. An estimate of a convenient
   hypothetical Ike transfer cannot serve as this certificate.
 
+The first native report at UT5016249 exposed another prefix: XING entry
+missions intentionally permit a rough Duna approach before BPLANE targets the
+final2–8km atmospheric corridor. In XING only, a safe native approach above
+the atmosphere can establish a departure-only LOWER bound. The baseline must
+prove ordered parent clearance, an actual future in-patch planetary Pe and an
+unbound planetary approach. It prices the measured node DELTAV; future entry
+corrections remain nonnegative and unpriced. It does not claim the original
+node already achieves entry, or reserve an invented capture burn.
+
+The shared `assistTrace` factors ordered geometry checks out of
+`assistEvaluate`. Its transient PATCH reference is for immediate use only;
+it returns NODE_DV, not a complete-goal COST. Candidate validation always goes
+through `assistEvaluate`, which retains terminal geometry and actual
+atmospheric-crossing checks. No automatic flight caller uses a trace alone.
+
 For an already-created capture maneuver, inspect its actual bound post-node
 orbit and the requested Pe/Ap/plane. Do not mistake that post-burn orbit for
 an incoming hyperbola and charge another assumed capture. The manual baseline
@@ -159,6 +174,11 @@ retained in the result. The manual command writes summaries, progress counts
 and candidate leg events directly to the archive; no per-probe disk log.
 Telemetry tier codes are -1 invalid,0 near miss,1 encounter,2 unmet terminal
 goal,3 complete native proof. The five count-array entries follow that order.
+Schema2 uses compact configuration literals instead of multiline collection
+dumps, includes the direct reference SOURCE, records CAREER():PATCHLIMIT and
+warns on an exposed hyperbolic tail without a next patch. This is an observation
+of possibly truncated lookahead, not proof that every missing encounter is
+caused by the patch limit. The command never changes game/career limits.
 No mission phase is wired to consume these results.
 
 ## Integration points to review
@@ -213,6 +233,13 @@ errors and the unchanged legacy KSC_DEORBIT warning. Report:
 `/tmp/kos-assistsearch-manual-20261030.json` and `.log`. These source fixtures
 remain distinct from native flight evidence.
 
+After the first native report, the rough-XING entry fix passes all88 routine
+files in262.67s; reported-case regressions take0.375/0.718s, structural0 errors
+with the unchanged KSC_DEORBIT warning. Results:
+`/tmp/kos-assist-entry-prefix-20261030.json` and `.log`. A corrected native run
+with the user's increased prediction depth is still pending.
+
 Relevant native API references: [future-position prediction](https://ksp-kos.github.io/KOS/commands/prediction.html),
 [orbit patches](https://ksp-kos.github.io/KOS/structures/orbits/orbit.html), and
-[active vessel / real time](https://ksp-kos.github.io/KOS/structures/misc/kuniverse.html).
+[active vessel / real time](https://ksp-kos.github.io/KOS/structures/misc/kuniverse.html),
+and [career prediction limits](https://ksp-kos.github.io/KOS/general/career_limits.html).

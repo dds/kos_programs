@@ -44,16 +44,33 @@ GLOBAL FUNCTION assistPreviewDirect {
     LOCAL bodies IS assistRouteBodies(route,1).
     IF bodies:LENGTH <> 1 { RETURN rejected. }
     LOCAL bound IS "LOWER".
+    LOCAL source IS "node-plus-capture".
     LOCAL cost IS nd:DELTAV:MAG.
     LOCAL captureDv IS 0.
     LOCAL patch IS nd:ORBIT.
     IF _assistPreviewBoundGoal(patch,fallbackGoal) {
+        SET source TO "planned-capture".
         IF _assistPreviewBoundGoal(patch,terminal) { SET bound TO "EXACT". }
     } ELSE {
         LOCAL proof IS assistEvaluate(nd,route,bodies,0,"",SHIP:BODY:NAME).
-        IF NOT proof["OK"] { RETURN rejected. }
-        SET cost TO proof["COST"]. SET captureDv TO proof["CAPTURE_DV"].
-        IF terminal["BODY"] = fallbackGoal["BODY"] {
+        IF NOT proof["OK"] {
+            // XING deliberately leaves final atmospheric Pe to BPLANE. The
+            // mandatory departure cost is a LOWER bound; later corrections
+            // are nonnegative but unpriced. Prove a safe native approach,
+            // never claim it already meets the requested entry corridor.
+            IF stateGet("phase","") <> "XING" OR SHIP:BODY = bodies[0]
+                    OR assistGoalMode(route) <> "ENTRY"
+                    OR assistGoalMode(LIST(terminal)) <> "ENTRY"
+                    OR terminal["BODY"] <> fallbackGoal["BODY"] { RETURN rejected. }
+            LOCAL passage IS LEXICON("BODY",bodies[0]:NAME,"MIN_PE",bodies[0]:ATM:HEIGHT+1).
+            LOCAL prefix IS assistTrace(nd,LIST(passage),bodies,0,"",SHIP:BODY:NAME).
+            IF NOT prefix["OK"] { RETURN rejected. }
+            IF NOT (prefix["PATCH"]:ECCENTRICITY > 1) { RETURN rejected. }
+            SET source TO "departure-only-pending-entry".
+        } ELSE {
+            SET cost TO proof["COST"]. SET captureDv TO proof["CAPTURE_DV"].
+        }
+        IF proof["OK"] AND terminal["BODY"] = fallbackGoal["BODY"] {
             // Different same-body entry/orbit intent is not an equivalent goal.
             IF assistGoalMode(LIST(terminal)) <> assistGoalMode(route) { RETURN rejected. }
             LOCAL terminalBodies IS assistRouteBodies(LIST(terminal),1).
@@ -68,7 +85,7 @@ GLOBAL FUNCTION assistPreviewDirect {
     IF NOT assistSearchTimeLeft(budget) OR NOT (cost >= nd:DELTAV:MAG AND cost < 1e30) { RETURN rejected. }
     RETURN LEXICON("OK",TRUE,"GOAL",terminal:COPY,"BOUND",bound,"COST",cost,
         "NODE_DV",nd:DELTAV:MAG,"UT",nd:TIME,"CAPTURE_DV",captureDv,
-        "PRICED_BODY",fallbackGoal["BODY"]).
+        "PRICED_BODY",fallbackGoal["BODY"],"SOURCE",source).
 }
 
 GLOBAL FUNCTION assistPreviewSeekIndex {
@@ -101,7 +118,14 @@ GLOBAL FUNCTION assistPreviewPatchRows {
             + " body=" + patch:BODY:NAME + " pe=" + patch:PERIAPSIS + " ap=" + patch:APOAPSIS
             + " ecc=" + patch:ECCENTRICITY + " inc=" + patch:INCLINATION
             + " peEta=" + patch:ETA:PERIAPSIS + " hasNext=" + patch:HASNEXTPATCH).
-        IF NOT patch:HASNEXTPATCH { RETURN. }
+        IF NOT patch:HASNEXTPATCH {
+            IF patch:ECCENTRICITY > 1 {
+                diagnosticArchiveLine(reportState,"STATS assist-search prediction-warning=open-hyperbolic-tail"
+                    + " visibleSegments=" + (depth+1) + " tailBody=" + patch:BODY:NAME
+                    + " possibleLookaheadLimit=True").
+            }
+            RETURN.
+        }
         SET patch TO patch:NEXTPATCH. SET depth TO depth+1.
     }
 }
@@ -113,16 +137,17 @@ GLOBAL FUNCTION assistPreviewResult {
         + " reason=" + result["REASON"] + " restored=" + result["RESTORED"] + " noBurn=True").
     IF result:HASKEY("DIRECT_COST") {
         diagnosticArchiveLine(reportState,"STATS assist-search baseline totalDv=" + result["DIRECT_COST"]
-            + " bound=" + result["DIRECT_BOUND"] + " optimizedDirect=False").
+            + " bound=" + result["DIRECT_BOUND"] + " source=" + result["DIRECT_SOURCE"]
+            + " optimizedDirect=False").
     }
     IF result:HASKEY("TRIALS") {
         diagnosticArchiveLine(reportState,"STATS assist-search work trials=" + result["TRIALS"]
             + " positions=" + result["POSITIONS"] + " stop=" + result["STOP"]
-            + " cancelled=" + result["CANCELLED"] + " tiers=" + result["TIERS"]
+            + " cancelled=" + result["CANCELLED"] + " tiers=" + configLiteral(result["TIERS"])
             + " bestTier=" + result["BEST_TIER"]).
         IF result["BEST_TIER"] >= 0 {
             diagnosticArchiveLine(reportState,"STATS assist-search progress loss=" + result["BEST_LOSS"]
-                + " offsets=" + result["BEST_OFFSETS"]).
+                + " offsets=" + configLiteral(result["BEST_OFFSETS"])).
         }
     }
     IF NOT result["OK"] { RETURN. }

@@ -18,7 +18,17 @@ COMMAND=(ROOT/'cmd/assistsearch.ks').read_text()
 def prepared(name):
     code=function_body(PREVIEW,name)
     params=re.findall(r'PARAMETER (\w+)',code)
-    return params,ks.compile_nodes(ks.freeze(ks.parse(code)))
+    nodes=ks.parse(code)
+    if name=='assistPreviewPatchRows':
+        def instrument(rows):
+            output=[]
+            for text,yes,no in rows:
+                if text.startswith('diagnosticArchiveLine('):
+                    text='fixture_warning()' if 'prediction-warning' in text else 'fixture_patch()'
+                output.append((text,instrument(yes),instrument(no)))
+            return output
+        nodes=instrument(nodes)
+    return params,ks.compile_nodes(ks.freeze(nodes))
 
 
 def call(name,env,*args):
@@ -79,6 +89,80 @@ def check_already_planned_capture():
     patch.INCLINATION=0;patch.HASNEXTPATCH=True
     assert not env['_assistPreviewBoundGoal'](patch,fallback)
     print('PASS: an already-achieving bound capture node is priced once; wrong-plane and outgoing partial captures cannot masquerade as the final orbit')
+
+
+def rough_entry_fixture():
+    env,nd,route,limits,direct,state,world,events,trace,fallback=fixture(entry=True,departure=True)
+    # Native-reported first-run Duna miss; response to trial vectors remains
+    # synthetic. Only the baseline gets the logged19,907,948.56m periapsis.
+    original=type(nd).ORBIT.fget
+    def orbit(node):
+        root=original(node);patch=root
+        while patch.BODY.NAME!='Duna':patch=patch.NEXTPATCH
+        if patch.NEXTPATCH.BODY.NAME!='Ike':
+            patch.PERIAPSIS=19907948.5609205
+            if world.get('truncated'):patch.ETA=EventEta(env['TIME'],25000)
+            if world.get('below-atmosphere'):patch.PERIAPSIS=1000
+            if world.get('open-tail'):patch.HASNEXTPATCH=False
+        return root
+    type(nd).ORBIT=property(orbit)
+    return env,nd,route,limits,direct,state,world,events,trace,fallback
+
+
+def check_rough_entry_departure():
+    env,nd,route,limits,direct,state,world,events,trace,fallback=rough_entry_fixture()
+    before=dict(state)
+    nd.RADIALOUT=19.9999999999994;nd.NORMAL=-79.5907035875978;nd.PROGRADE=1060.74524651039
+    # Native DELTAV differs slightly from the PRN Euclidean norm in this log.
+    # Price the measured API value, not a recomputation from printed axes.
+    delta=type(nd).DELTAV
+    type(nd).DELTAV=property(lambda node:NS(MAG=1063.91065508142))
+    budget=env['assistSearchBudget'](limits)
+    assert not env['assistEvaluate'](nd,Items([fallback]),env['assistRouteBodies'](Items([fallback]),1),0,'','Kerbin')['OK']
+    reference=direct.CALL(nd,route[-1],budget)
+    assert reference['OK'] and reference['BOUND']=='LOWER' and reference['SOURCE']=='departure-only-pending-entry'
+    assert abs(reference['COST']-1063.91065508142)<1e-7 and reference['CAPTURE_DV']==0
+    assert reference['GOAL']==route[-1] and state==before
+    type(nd).DELTAV=delta
+    nd.RADIALOUT=0;nd.NORMAL=0;nd.PROGRADE=900
+    # With enough search radius an actual complete native response is still
+    # mandatory; a lower bound is not a waiver of the candidate's entry gate.
+    limits['CHANGE_DV']=50
+    result=search.search(env,nd,route,limits,direct)
+    assert result['OK'] and result['TRIALS']>1 and result['RESTORED'],result
+    assert result['DIRECT_BOUND']=='LOWER' and result['DIRECT_SOURCE']=='departure-only-pending-entry'
+    assert result['COST']+25<=900
+    assert (nd.RADIALOUT,nd.NORMAL,nd.PROGRADE)==(0,0,900) and state==before
+    nd.RADIALOUT,nd.NORMAL,nd.PROGRADE=result['AXES']
+    evidence=env['assistEvaluate'](nd,route,env['assistRouteBodies'](route),0,'','Kerbin')
+    assert evidence['OK'] and 2000<=evidence['LEGS'][-1]['PE']<=8000
+    for fault in ('truncated','below-atmosphere','wrong-phase','wrong-body'):
+        env,nd,route,limits,direct,state,world,events,trace,fallback=rough_entry_fixture()
+        if fault in ('truncated','below-atmosphere'):world[fault]=True
+        if fault=='wrong-phase':state['phase']='REFINE_BPLANE'
+        if fault=='wrong-body':env['SHIP'].BODY=env['assistRouteBodies'](Items([fallback]),1)[0]
+        reference=direct.CALL(nd,route[-1],env['assistSearchBudget'](limits))
+        assert not reference['OK'],(fault,reference)
+    print('PASS: reported1063.91m/s XING/19,908km Duna Pe gets a departure-only LOWER baseline; search can then prove full entry, while unsafe prefixes and non-XING contexts reject')
+
+
+def check_rough_entry_preserves_goal_and_horizon():
+    for fault in ('lost_goal','bad_moon'):
+        env,nd,route,limits,direct,state,world,events,trace,fallback=rough_entry_fixture()
+        world[fault]=True;limits['CHANGE_DV']=50
+        result=search.search(env,nd,route,limits,direct)
+        assert not result['OK'] and result['TRIALS']>1 and result['RESTORED']
+        assert (nd.RADIALOUT,nd.NORMAL,nd.PROGRADE)==(0,0,900)
+    for open_tail in (False,True):
+        env,nd,route,limits,direct,state,world,events,trace,fallback=rough_entry_fixture()
+        world['open-tail']=open_tail
+        env.update(fixture_warning=lambda:events.append('open-tail'),fixture_patch=lambda:events.append('patch'))
+        env['assistPreviewPatchRows'](nd,Map())
+        assert ('open-tail' in events)==open_tail
+        assert events.count('patch')==(3 if open_tail else 4)
+    assert 'careerPatchesAhead=' in COMMAND and 'CAREER():PATCHLIMIT' in COMMAND
+    assert 'schema=2' in COMMAND and 'configLiteral(route)' in COMMAND
+    print('PASS: a rough entry baseline cannot admit a missing terminal entry or unsafe moon; prediction-ended escape patches are diagnosed and compact reports include the career lookahead limit')
 
 
 def check_capture_search_radius():
@@ -205,6 +289,8 @@ def check_command_control_flow():
 if __name__=='__main__':
     check_actual_direct_baseline()
     check_already_planned_capture()
+    check_rough_entry_departure()
+    check_rough_entry_preserves_goal_and_horizon()
     check_capture_search_radius()
     check_mission_policy_and_seek()
     check_command_control_flow()

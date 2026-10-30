@@ -9,6 +9,24 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-10-30 first native assist preview5016249: original departure1063.91m/s
+predicts Duna Pe19,908km, ENTRY goal2–8km. Old reference gate stopped before
+search because XING deliberately leaves final entry targeting to BPLANE.
+User restarts with conic patch limit5 (read-only settings had3).
+Fix: XING/ENTRY safe planetary passage may establish a departure-only LOWER
+baseline; future MCC cost is unpriced/nonnegative. It does not validate the
+original node's final entry. Same native geometry guards extracted into
+assistTrace; no complete-goal COST on a trace or persisted native PATCH.
+assistEvaluate still proves every candidate's whole route and terminal entry.
+Other reference contexts stay strict. Measured DELTAV is authoritative (the
+logged PRN norm differs0.00436m/s). Schema2 compact literals, direct-source,
+CAREER():PATCHLIMIT (read-only, not CONFIG:PATCHLIMIT), open-hyperbolic-tail
+warning; never changes game prediction settings. All88 routine files pass
+262.67s; new regressions0.375/0.718s, structural0 errors/legacy KSC_DEORBIT
+warning unchanged. Results:/tmp/kos-assist-entry-prefix-20261030.json and.log.
+Manual only; native corrected search remains unverified.
+TASKS records diagnostic/boot paths and queued longer-lead MCC preview issue.
+
 2026-10-30 latest fleet policy: all5 remaining Espoir profiles explicitly set
 COAST_AUTO_WARP=0; generated Ike settings also carry0 through normal setup and
 assist handoff. KAC alarms/clock waits unchanged. Removed dedicated ike_impactor

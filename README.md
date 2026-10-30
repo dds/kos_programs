@@ -1253,8 +1253,15 @@ This command uses the selected Espoir profile's `MISSION_ASSIST_ROUTE` and
 original capture/entry goal, with local runtime overrides applied. It reads
 the current archive profile when available, otherwise the cached local profile
 (including generated operations profiles). It neither advances nor resumes the
-mission. An empty route or unpriceable original capture produces a diagnostic
+mission. An empty route or unsafe/unpriceable original plan produces a diagnostic
 failure, rather than claiming a benefit.
+
+An ENTRY mission in XING may still have a rough, safe planetary encounter,
+with final atmospheric Pe targeting left to BPLANE. That baseline is labeled
+`LOWER`, source `departure-only-pending-entry`: it prices only the mandatory
+departure burn and gives no credit for unknown later correction costs.
+The assist candidate still needs a complete native flyby and valid entry;
+the baseline's unfinished targeting cannot waive that check.
 
 The search changes only the node's radial/normal/prograde vector, at its
 existing time, within 50 m/s by default. It can use closest approach before the
@@ -1274,6 +1281,10 @@ with no execution option. The report is written directly to
 `0:/logs/archive/_diagnostics/assistsearch_<craft>_<UT>.log`, including the
 original vector before probing, original patches, route/goals, cost baseline,
 progress counts, candidate encounters, timings and restoration status.
+Schema2 also records `CAREER():PATCHLIMIT` (the career prediction allowance,
+not a writable game setting). An `open-hyperbolic-tail` warning means a native
+escape patch has no outgoing patch exposed; prediction depth is one possible
+cause. Check the game's Conic Patch Limit when the full itinerary is invisible.
 Copy that file back for review even when the search finds no useful route.
 If a native error or takeover prevents restoration, inspect the archived
 original vector or reload the quicksave before using the remaining node.

@@ -289,6 +289,8 @@ GLOBAL FUNCTION searchAssistNode {
     LOCAL result IS assistSearchVectors(ctx,assistSearchNativeProbe@,limits,budget).
     SET result["DIRECT_COST"] TO direct["COST"].
     SET result["DIRECT_BOUND"] TO direct["BOUND"].
+    SET result["DIRECT_SOURCE"] TO "caller-provided".
+    IF direct:HASKEY("SOURCE") { SET result["DIRECT_SOURCE"] TO direct["SOURCE"]. }
     IF result["OK"] AND ctx["RESTORED"] AND NOT ctx["CANCELLED"] AND assistSearchTimeLeft(budget) {
         // Refresh the direct cost only while the ORIGINAL vector is in place.
         SET direct TO directAssessor:CALL(nd,ctx["GOAL"],budget).
@@ -301,6 +303,7 @@ GLOBAL FUNCTION searchAssistNode {
                     AND result["COST"] <= direct["COST"]+limits["SCIENCE_EXTRA_DV"]).
             SET result["DIRECT_COST"] TO direct["COST"].
             SET result["DIRECT_BOUND"] TO direct["BOUND"].
+            IF direct:HASKEY("SOURCE") { SET result["DIRECT_SOURCE"] TO direct["SOURCE"]. }
             SET result["EXTRA_DV"] TO result["COST"]-direct["COST"].
         }
     } ELSE { SET result["OK"] TO FALSE. }

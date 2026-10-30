@@ -86,10 +86,11 @@ GLOBAL FUNCTION assistLegClear {
     RETURN TRUE.
 }
 
-// Every scored event must occur on the actual finite native patch. Parent
-// transits conservatively require safe Pe even if truncated before that Pe.
-// No extrapolated post-moon orbit or invisible future encounter earns credit.
-GLOBAL FUNCTION assistEvaluate {
+// Ordered native geometry only. A successful trace proves the requested
+// passage, NOT a terminal orbit/entry or its cost. PATCH is a borrowed native
+// reference for immediate use only; never persist it or read it after a probe.
+// Parent transits conservatively require safe Pe even if truncated before Pe.
+GLOBAL FUNCTION assistTrace {
     PARAMETER nd.
     PARAMETER route.
     PARAMETER bodies.
@@ -120,19 +121,9 @@ GLOBAL FUNCTION assistEvaluate {
             }
             report:ADD(LEXICON("BODY",patch:BODY:NAME,"PE",patch:PERIAPSIS,"ENTRY",entryUt,"PE_UT",peUt)).
             IF legIndex = route:LENGTH-1 {
-                IF assistGoalMode(route) = "ENTRY" {
-                    IF arrivalPatchRadiusUt(patch,patch:BODY:ATM:HEIGHT,entryUt) <= entryUt { RETURN rejected. }
-                    RETURN LEXICON("OK",TRUE,"REASON","native-entry-itinerary",
-                        "COST",correctionDv,"CAPTURE_DV",0,"LEGS",report).
-                }
-                LOCAL rp IS patch:BODY:RADIUS+patch:PERIAPSIS.
-                LOCAL ra IS patch:BODY:RADIUS+leg["AP"].
-                IF ra < rp OR NOT (patch:ECCENTRICITY >= 0 AND patch:ECCENTRICITY < 1e30) { RETURN rejected. }
-                LOCAL incoming IS SQRT(patch:BODY:MU*(1+patch:ECCENTRICITY)/rp).
-                LOCAL captured IS SQRT(patch:BODY:MU*(2/rp-2/(rp+ra))).
-                LOCAL captureDv IS ABS(incoming-captured).
-                RETURN LEXICON("OK",TRUE,"REASON","native-itinerary",
-                    "COST",correctionDv+captureDv,"CAPTURE_DV",captureDv,"LEGS",report).
+                RETURN LEXICON("OK",TRUE,"REASON","native-geometry-prefix",
+                    "PATCH",patch,"ENTRY",entryUt,"PE_UT",peUt,
+                    "NODE_DV",correctionDv,"LEGS",report).
             }
             // An unpowered flyby needs an outgoing patch; bound moon orbits
             // cannot masquerade as free assistance into the next tour leg.
@@ -167,3 +158,31 @@ GLOBAL FUNCTION assistEvaluate {
     RETURN rejected.
 }
 
+// Every scored event must occur on the actual finite native patch, AND the
+// terminal orbit/entry must be validated. A trace alone never earns savings.
+GLOBAL FUNCTION assistEvaluate {
+    PARAMETER nd.
+    PARAMETER route.
+    PARAMETER bodies.
+    PARAMETER startIndex IS 0.
+    PARAMETER lastBody IS "".
+    PARAMETER departureBody IS "".
+    LOCAL trace IS assistTrace(nd,route,bodies,startIndex,lastBody,departureBody).
+    IF NOT trace["OK"] { RETURN trace. }
+    LOCAL rejected IS LEXICON("OK",FALSE,"REASON","incomplete-itinerary").
+    LOCAL patch IS trace["PATCH"].
+    IF assistGoalMode(route) = "ENTRY" {
+        IF arrivalPatchRadiusUt(patch,patch:BODY:ATM:HEIGHT,trace["ENTRY"]) <= trace["ENTRY"] { RETURN rejected. }
+        RETURN LEXICON("OK",TRUE,"REASON","native-entry-itinerary",
+            "COST",trace["NODE_DV"],"CAPTURE_DV",0,"LEGS",trace["LEGS"]).
+    }
+    LOCAL goal IS route[route:LENGTH-1].
+    LOCAL rp IS patch:BODY:RADIUS+patch:PERIAPSIS.
+    LOCAL ra IS patch:BODY:RADIUS+goal["AP"].
+    IF ra < rp OR NOT (patch:ECCENTRICITY >= 0 AND patch:ECCENTRICITY < 1e30) { RETURN rejected. }
+    LOCAL incoming IS SQRT(patch:BODY:MU*(1+patch:ECCENTRICITY)/rp).
+    LOCAL captured IS SQRT(patch:BODY:MU*(2/rp-2/(rp+ra))).
+    LOCAL captureDv IS ABS(incoming-captured).
+    RETURN LEXICON("OK",TRUE,"REASON","native-itinerary",
+        "COST",trace["NODE_DV"]+captureDv,"CAPTURE_DV",captureDv,"LEGS",trace["LEGS"]).
+}

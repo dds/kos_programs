@@ -6,6 +6,38 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct native assist test UT5016249: fetched requested diagnostic through the
+  approved read-only Deck wrapper, plus boot004. Espoir-impacter1/duna_impactor
+  in XING: nd1063.910655m/s, Duna Pe19,907,948.56m vs entry2–8km. Old helper
+  stopped before probes (0.02game seconds), original node preserved, because
+  it demanded completed entry even for the reference. Boot calls this an
+  intentional rough/dumb departure with later BPLANE targeting. Deck settings
+  read-only confirmed CONIC_PATCH_LIMIT3; user is reverting/restarting with5.
+  No game/config changes made remotely.
+  New XING ENTRY reference can use only the mandatory departure cost as LOWER,
+  source departure-only-pending-entry, after safe native approach proof above
+  atmosphere. All future corrections unpriced/nonnegative; no invented capture
+  savings. Orbital reference and non-XING entry rules stay unchanged.
+  Shared assistTrace extracts the SAME ordered/Pe/parent/chronology guards;
+  assistEvaluate retains full candidate terminal orbit/entry checks. Traces
+  contain borrowed PATCH/NODE_DV, not a complete-goal cost; never persisted.
+  Schema2 logs measured native DELTAV, compact route/policy literals, reference
+  source, read-only CAREER():PATCHLIMIT, and an open-hyperbolic-tail warning.
+  Such a tail may be truncated lookahead, not a guaranteed patch-limit diagnosis.
+  New fixture uses reported Pe/PRN/measuredDV (native MAG differs0.00436m/s from
+  printed PRN norm), exercises positive full search, unsafe/truncated prefixes,
+  wrong phase, incomplete/unsafe candidates, and warning/no-warning horizons.
+  All88 routine check files pass262.67s; new reported-case regressions
+  take0.375/0.718s. Structural0 errors, unchanged KSC_DEORBIT warning.
+  Results:/tmp/kos-assist-entry-prefix-20261030.json and.log.
+  Remains manual, restores node, no burns/staging/warp/alarms/phase mutations.
+  Native rerun with5 patches pending; no claim of real assist acquisition.
+  Evidence:/tmp/ksp-deck-20261030T192429Z-fetch-27c_bh2q/logs/_diagnostics/
+  assistsearch_Espoir-impacter1_5016249.log and corresponding
+  /tmp/ksp-deck-20261030T192429Z-fetch-tkom900u/logs/Espoir-impacter1_5015869/
+  boot_004_core.log. Future usability: longer-lead manual MCC previews remain
+  queued; normal~300s correction lead can be too short for this command.
+
 - 30Oct Espoir fleet policy update: user disables automatic warp in all
   Espoir configs and removes the dedicated Ike impactor; Ike surface flights
   now use ike_lander with the existing soft-landing/science safeguards.
