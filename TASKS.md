@@ -6,6 +6,20 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Current assist-search design scope (30Oct): user excludes departure-date
+  selection. Explore nearby geometry around the existing XING node at its
+  selected epoch, recheck the actual post-burn orbit, and consider an assist
+  as an alternative at the normal midcourse refinement checkpoint. Also
+  consider inspecting an already-required Duna capture node for a useful
+  partial capture -> Ike -> final Duna orbit/entry. Searches consume compute,
+  not propellant; combine steering with an existing burn when practical and
+  compare total remaining cost from the actual current state. Reuse closest-
+  approach scoring before a moon patch exists, then require the whole native
+  post-flyby mission goal. Avoid separate direct-then-assist corrective burns
+  and repeated discretionary late searches. Direct atmospheric-entry science
+  detours need explicit science/fuel policy when they cannot save delta-v.
+  Discussion/design only: opportunity acquisition is not implemented yet.
+
 - 30Oct follow-up: user requests wiring assistcheck into Duna/Ike missions.
   All six Espoir launch sequences now have ASSIST -> ASSIST_COAST after XING.
   Optional already-native ordered chains: Ike flyby -> Duna orbit/entry,
