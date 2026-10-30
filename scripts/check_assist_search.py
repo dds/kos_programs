@@ -162,7 +162,7 @@ def check_context_cancellation():
 
 
 def check_cost_and_final_proof():
-    for fault in ('fuel','unknown-bound','goal-mismatch','unsupported-goal','unsupported-flyby','unpriced-node','no-gain','final-goal-lost','final-reference-changed','reference-edit','positions'):
+    for fault in ('fuel','unknown-bound','goal-mismatch','unsupported-goal','unsupported-flyby','unpriced-node','no-gain','final-goal-lost','final-reference-changed','final-fuel-lost','final-fuel-invalid','reference-edit','positions'):
         env,nd,route,limits,direct,state,world,events,trace=fixture()
         assess=direct.CALL
         if fault=='fuel':env['SHIP'].DELTAV.VACUUM=950
@@ -176,6 +176,8 @@ def check_cost_and_final_proof():
             if fault=='unpriced-node':result['NODE_DV']=0
             if fault=='no-gain':result['COST']=result['NODE_DV']
             if fault=='final-reference-changed' and len(events)>1:result['COST']=result['NODE_DV']
+            if fault=='final-fuel-lost' and len(events)>1:env['SHIP'].DELTAV.VACUUM=0
+            if fault=='final-fuel-invalid' and len(events)>1:env['SHIP'].DELTAV.VACUUM=math.inf
             if fault=='reference-edit':node.NORMAL=77
             return result
         direct.CALL=reference

@@ -304,7 +304,7 @@ def check_reference_snapshot_and_diagnostics():
         if fault=='goal':trial['GOAL']=Map(goal,INC=0)
         if fault=='price':trial['COST']=snapshot-.000001
         if fault=='nan':trial['COST']=math.nan
-        if fault=='drift':trial['NODE_DV']=live-.00002
+        if fault=='drift':trial['NODE_DV']=live-.1
         if fault=='epoch':trial['UT']+=.00002
         checked=env['_assistSearchReferenceCheck'](trial,ctx)
         assert not checked['OK'] and checked['REASON']==reason,(fault,checked)
@@ -324,7 +324,53 @@ def check_reference_snapshot_and_diagnostics():
     checked=env['_assistSearchReferenceCheck'](proof,Map(NODE=nd,UT=nd.TIME,GOAL=goal))
     assert checked['OK'] and 0<checked['DV_DRIFT']<.00001,checked
     assert nd.RADIALOUT==40 and nd.NORMAL==-90.6064343994207 and nd.TIME==5044939.76832619
-    print('PASS: micro-drift reproduces the exact live-price rejection; consistent adapter snapshots pass the unchanged1e-5 live tolerance, while underpricing, large drift, wrong goal/bound and epoch mismatch reject with specific diagnostics')
+    print('PASS: micro-drift reproduces the exact live-price rejection; consistent adapter snapshots pass bounded numerical tolerance, while underpricing, large drift, wrong goal/bound and epoch mismatch reject with specific diagnostics')
+
+
+def check_native_reference_drift_allowance():
+    env,nd,route,limits,direct,state,world,events,trace,fallback=fixture()
+    snapshot=1062.33770850232;live=1062.33822439338
+    type(nd).DELTAV=property(lambda node:NS(MAG=live))
+    reference=Map(OK=True,BOUND='LOWER',GOAL=route[-1].COPY,COST=snapshot,NODE_DV=snapshot,UT=nd.TIME)
+    ctx=Map(NODE=nd,UT=nd.TIME,GOAL=route[-1])
+    checked=env['_assistSearchReferenceCheck'](reference,ctx)
+    assert abs(checked['DV_DRIFT']-.000515891057830231)<1e-9
+    assert checked['DV_DRIFT']>.00001 and checked['OK'],checked
+    assert .005<checked['DV_TOLERANCE']<.006
+    for size in (0,.1,10,1000,10000,1e6):
+        reference.update(NODE_DV=size,COST=size)
+        tolerance=min(.01,max(.001,size*.000005))
+        for factor,accepted in ((.99,True),(1.01,False)):
+            live=size+factor*tolerance
+            result=env['_assistSearchReferenceCheck'](reference,ctx)
+            assert result['OK']==accepted and result['DV_TOLERANCE']==tolerance,(size,factor,result)
+    # Both gain and optional-science admission pay the same numerical margin.
+    for cost,science,known,expected in ((875,0,False,False),(874.98,0,False,True),
+                                      (904.995,5,False,False),(904.98,5,False,True),
+                                      (904.98,5,True,False)):
+        limits['SCIENCE_EXTRA_DV']=science
+        assert env['_assistSearchCostFits'](cost,900,limits,known,.01)==expected
+    env,nd,route,limits,direct,state,world,events,trace,fallback=fixture()
+    nd.RADIALOUT=12.5
+    proof=env['assistEvaluate'](nd,route,env['assistRouteBodies'](route),0,'','Sun')
+    assert proof['OK']
+    guard=.01
+    ctx=Map(NODE=nd,BODY=env['SHIP'].BODY,LIMITS=limits,DIRECT=Map(COST=proof['COST']+100),
+            BASE_HAS_ROUTE=False,PRICE_GUARD_DV=guard)
+    env['SHIP'].DELTAV.VACUUM=proof['COST']+limits['RESERVE_DV']+guard/2
+    assert not env['_assistSearchAdmissible'](ctx,proof)
+    env['SHIP'].DELTAV.VACUUM+=guard
+    assert env['_assistSearchAdmissible'](ctx,proof)
+    # Even an edit smaller than the derived-magnitude allowance remains an
+    # ownership change: preserve it and cancel instead of restoring over it.
+    env,nd,route,limits,direct,state,world,events,trace,fallback=fixture()
+    assess=direct.CALL
+    def edit(node,goal,budget):
+        result=assess(node,goal,budget);node.NORMAL+=.0001;return result
+    direct.CALL=edit
+    result=search.search(env,nd,route,limits,direct)
+    assert result['CANCELLED'] and not result['RESTORED'] and nd.NORMAL==.0001,result
+    print('PASS: measured0.000516m/s native drift passes5ppm bounded to1..10mm/s; larger drift and tiny raw edits reject, and the shared cost/fuel gates charge uncertainty against savings and science allowances')
 
 
 @lru_cache(None)
@@ -415,4 +461,5 @@ if __name__=='__main__':
     check_rough_orbital_departure()
     check_mission_policy_and_seek()
     check_reference_snapshot_and_diagnostics()
+    check_native_reference_drift_allowance()
     check_command_control_flow()

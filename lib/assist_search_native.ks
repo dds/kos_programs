@@ -81,21 +81,36 @@ LOCAL FUNCTION _assistSearchReferenceCheck {
     IF reference["BOUND"] <> "EXACT" AND reference["BOUND"] <> "LOWER" { RETURN checked. }
     SET checked["REASON"] TO "reference-goal-mismatch".
     IF NOT _assistSearchSameGoal(ctx["GOAL"],reference["GOAL"]) { RETURN checked. }
-    // Price and NODE_DV belong to the same snapshot. The live check below
-    // retains its original tolerance; raw vector/time ownership is separate.
+    // Price and NODE_DV belong to the same snapshot. Raw vector/time
+    // ownership is separate from small changes in the derived live magnitude.
     SET checked["REASON"] TO "invalid-reference-price".
     IF NOT (reference["NODE_DV"] >= 0 AND reference["COST"] >= reference["NODE_DV"]
             AND reference["COST"] < 1e30) { RETURN checked. }
     LOCAL liveDv IS ctx["NODE"]:DELTAV:MAG.
+    // Native report 5027117 drifted 0.000516 m/s with untouched PRN/UT.
+    // Allow 5 ppm, bounded to 1..10 mm/s; charge twice it against savings/fuel.
+    LOCAL tolerance IS MIN(0.01,MAX(0.001,reference["NODE_DV"]*0.000005)).
     SET checked["LIVE_NODE_DV"] TO liveDv.
     SET checked["DV_DRIFT"] TO liveDv-reference["NODE_DV"].
+    SET checked["DV_TOLERANCE"] TO tolerance.
     SET checked["REASON"] TO "reference-node-dv-changed".
-    IF NOT (ABS(liveDv-reference["NODE_DV"]) < 0.00001) { RETURN checked. }
+    IF NOT (ABS(liveDv-reference["NODE_DV"]) < tolerance) { RETURN checked. }
     SET checked["UT_DRIFT"] TO reference["UT"]-ctx["UT"].
     SET checked["REASON"] TO "reference-node-epoch-changed".
     IF NOT (ABS(reference["UT"]-ctx["UT"]) < 0.00001) { RETURN checked. }
     SET checked["OK"] TO TRUE. SET checked["REASON"] TO "verified".
     RETURN checked.
+}
+
+LOCAL FUNCTION _assistSearchCostFits {
+    PARAMETER cost.
+    PARAMETER referenceCost.
+    PARAMETER limits.
+    PARAMETER baseHasRoute.
+    PARAMETER guardDv.
+    IF cost+limits["MIN_GAIN"]+guardDv <= referenceCost { RETURN TRUE. }
+    RETURN limits["SCIENCE_EXTRA_DV"] > 0 AND NOT baseHasRoute
+        AND cost+guardDv <= referenceCost+limits["SCIENCE_EXTRA_DV"].
 }
 
 // Numeric-only progress: partial scores guide exploration; ONLY assistEvaluate
@@ -193,7 +208,8 @@ LOCAL FUNCTION _assistSearchAdmissible {
     LOCAL nd IS ctx["NODE"].
     LOCAL limits IS ctx["LIMITS"].
     LOCAL cost IS evidence["COST"].
-    IF NOT (cost >= 0 AND cost < 1e30 AND cost+limits["RESERVE_DV"] <= SHIP:DELTAV:VACUUM
+    IF NOT (cost >= 0 AND cost < 1e30
+            AND cost+limits["RESERVE_DV"]+ctx["PRICE_GUARD_DV"] <= SHIP:DELTAV:VACUUM
             AND SHIP:DELTAV:VACUUM < 1e30) { RETURN FALSE. }
     IF nd:DELTAV:MAG > 0 AND nd:DELTAV:MAG <= limits["MIN_BURN_DV"] { RETURN FALSE. }
     LOCAL duration IS 0.
@@ -210,10 +226,9 @@ LOCAL FUNCTION _assistSearchAdmissible {
     IF evidence["CAPTURE_DV"] > 0 { SET captureSeconds TO arrivalBurnSeconds(evidence["CAPTURE_DV"]). }
     IF NOT (captureSeconds >= 0 AND captureSeconds < 1e30
             AND goal["PE_UT"]-MAX(TIME:SECONDS,goal["ENTRY"]) > 300+captureSeconds/2) { RETURN FALSE. }
-    IF cost+limits["MIN_GAIN"] <= ctx["DIRECT"]["COST"] { RETURN TRUE. }
     // Science expenditure is opt-in and may buy only a NEW encounter chain.
-    RETURN limits["SCIENCE_EXTRA_DV"] > 0 AND NOT ctx["BASE_HAS_ROUTE"]
-        AND cost <= ctx["DIRECT"]["COST"]+limits["SCIENCE_EXTRA_DV"].
+    RETURN _assistSearchCostFits(cost,ctx["DIRECT"]["COST"],limits,
+        ctx["BASE_HAS_ROUTE"],ctx["PRICE_GUARD_DV"]).
 }
 
 GLOBAL FUNCTION assistSearchNativeProbe {
@@ -306,9 +321,11 @@ GLOBAL FUNCTION searchAssistNode {
         RETURN rejected.
     }
     SET ctx["DIRECT"] TO direct.
+    SET ctx["PRICE_GUARD_DV"] TO 2*referenceCheck["DV_TOLERANCE"].
     SET ctx["BASE_HAS_ROUTE"] TO assistEvaluate(nd,route,bodies,0,"",SHIP:BODY:NAME)["OK"].
     LOCAL result IS assistSearchVectors(ctx,assistSearchNativeProbe@,limits,budget).
     SET result["REFERENCE_CHECK"] TO referenceCheck.
+    SET result["PRICE_GUARD_DV"] TO ctx["PRICE_GUARD_DV"].
     SET result["DIRECT_COST"] TO direct["COST"].
     SET result["DIRECT_BOUND"] TO direct["BOUND"].
     SET result["DIRECT_SOURCE"] TO "caller-provided".
@@ -323,9 +340,11 @@ GLOBAL FUNCTION searchAssistNode {
             SET result["REFERENCE_CHECK"] TO referenceCheck.
             IF NOT referenceCheck["OK"] { SET result["OK"] TO FALSE. }
             ELSE {
-                SET result["OK"] TO result["COST"]+limits["MIN_GAIN"] <= direct["COST"]
-                    OR (limits["SCIENCE_EXTRA_DV"] > 0 AND NOT ctx["BASE_HAS_ROUTE"]
-                        AND result["COST"] <= direct["COST"]+limits["SCIENCE_EXTRA_DV"]).
+                SET result["PRICE_GUARD_DV"] TO 2*referenceCheck["DV_TOLERANCE"].
+                SET result["OK"] TO result["COST"]+limits["RESERVE_DV"]+result["PRICE_GUARD_DV"] <= SHIP:DELTAV:VACUUM
+                    AND SHIP:DELTAV:VACUUM < 1e30
+                    AND _assistSearchCostFits(result["COST"],direct["COST"],limits,
+                        ctx["BASE_HAS_ROUTE"],result["PRICE_GUARD_DV"]).
                 SET result["DIRECT_COST"] TO direct["COST"].
                 SET result["DIRECT_BOUND"] TO direct["BOUND"].
                 IF direct:HASKEY("SOURCE") { SET result["DIRECT_SOURCE"] TO direct["SOURCE"]. }

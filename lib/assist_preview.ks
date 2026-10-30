@@ -157,6 +157,7 @@ GLOBAL FUNCTION assistPreviewResult {
     IF result:HASKEY("DIRECT_COST") {
         diagnosticArchiveLine(reportState,"STATS assist-search baseline totalDv=" + result["DIRECT_COST"]
             + " bound=" + result["DIRECT_BOUND"] + " source=" + result["DIRECT_SOURCE"]
+            + " priceGuardDv=" + result["PRICE_GUARD_DV"]
             + " optimizedDirect=False").
     }
     IF result:HASKEY("TRIALS") {

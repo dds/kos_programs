@@ -1310,10 +1310,13 @@ not the map's Conic Patch Limit setting). An `open-hyperbolic-tail` warning mean
 escape patch has no outgoing patch exposed; prediction depth is one possible
 cause. Check the game's Conic Patch Limit when the full itinerary is invisible.
 Copy that file back for review even when the search finds no useful route.
-`referencePolicy=snapshot-price-v1` prices the node and records its delta-v
-from one snapshot. The existing live-drift tolerance and vector/time
-ownership checks remain. A `reference-check` row reports the exact rejection
-reason, snapshot/live delta-v and drift, rather than only a generic failure.
+`referencePolicy=bounded-native-drift-v2` prices the node and records its
+delta-v from one snapshot. Derived-magnitude drift permits five parts per
+million, bounded to 1–10 mm/s; raw vector and epoch ownership remain strict.
+Twice that allowance is charged against fuel, claimed savings and optional
+science spending through the same comparison at initial and final admission.
+A `reference-check` row reports the rejection reason, snapshot/live delta-v,
+drift and tolerance; `priceGuardDv` reports the conservative cost margin.
 If a native error or takeover prevents restoration, inspect the archived
 original vector or reload the quicksave before using the remaining node.
 

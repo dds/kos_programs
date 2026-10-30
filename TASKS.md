@@ -6,6 +6,24 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct native assist preview5027117 confirms reference-node-dv-changed:
+  snapshot1062.33770850232/live1062.33822439338m/s, drift0.000515891m/s.
+  Snapshot-price fix works, but original1e-5 derived-magnitude tolerance
+  rejects with raw PRN/UT ownership unchanged. No trials/burn; node restored.
+  Calibrate that check to5ppm bounded1..10mm/s; raw ownership1e-5, exact
+  price>=its own snapshot, native itinerary/capture/timing proofs unchanged.
+  Twice the allowance is charged against savings, optional science spending
+  and fuel reserve; initial/final cost comparison shared, final fuel freshly
+  rechecked. referencePolicy=bounded-native-drift-v2, DV_TOLERANCE and
+  priceGuardDv identify/report the change. Source fixtures replay measured
+  drift, tolerance boundaries, tiny raw edits, price/science/fuel limits.
+  All88 routine files pass133.06s; new measured-drift regression0.015s,
+  structural0 errors/unchanged legacy KSC_DEORBIT warning. Report:
+  /tmp/kos-assist-native-drift-20261030.json and.log. Native retry pending.
+  Evidence:/tmp/ksp-deck-20261030T222115Z-fetch-p24ztiga/logs/_diagnostics/
+  assistsearch_Espoir-Duna-Surveyor1_5027117.log; matching boot004 in
+  fetch-faou9mhu/logs/Espoir-Duna-Surveyor1_5026703/boot_004_core.log.
+
 - 30Oct native assist preview5027687: Espoir-Ike-Surveyor1 is currently using
   duna_orbital_surveyor (craft name differs), fuel3907.233m/s, node1062.42445,
   Duna Pe32,409km. New rough-arrival policy runs, but reference consistency

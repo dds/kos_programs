@@ -272,6 +272,25 @@ All88 routine check files pass179.64s; snapshot regression0.030s, structural
 0 errors/unchanged legacy KSC_DEORBIT warning. Report:
 `/tmp/kos-assist-reference-snapshot-20261030.json` and `.log`.
 
+Native5027117 supplies the missing causal evidence: snapshot price equals
+NODE_DV1062.33770850232m/s, but the unchanged owned node reports
+1062.33822439338m/s at validation. The0.000515891m/s drift exceeds1e-5, so
+the command stops before trials and restores the original node. The
+snapshot-price fix worked; its derived-magnitude tolerance was too strict.
+The replacement permits5ppm bounded to1..10mm/s. Raw PRN/epoch ownership
+retains1e-5, and price must still cover its own snapshot. Twice the allowance
+is charged against fuel, claimed savings and optional science spending using
+one shared cost comparison at initial/final admission. The final check also
+refreshes available fuel. Whole-route, terminal, timing and reserve proofs
+remain required. referencePolicy=bounded-native-drift-v2 identifies the
+change; reference-check includes DV_TOLERANCE, baseline includes priceGuardDv.
+Source fixtures replay the measured drift and tolerance boundaries, reject
+tiny raw edits and enforce price/science/fuel margins, including fuel lost or
+invalidated during final reference refresh. All88 routine check files pass
+133.06s; new measured-drift regression0.015s, structural0 errors/unchanged
+legacy KSC_DEORBIT warning. Report:
+`/tmp/kos-assist-native-drift-20261030.json` and `.log`. Native retry pending.
+
 Relevant native API references: [future-position prediction](https://ksp-kos.github.io/KOS/commands/prediction.html),
 [orbit patches](https://ksp-kos.github.io/KOS/structures/orbits/orbit.html), and
 [active vessel / real time](https://ksp-kos.github.io/KOS/structures/misc/kuniverse.html),
