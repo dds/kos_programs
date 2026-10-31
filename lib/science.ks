@@ -479,14 +479,14 @@ GLOBAL FUNCTION scansatDutyCycle {
         }
         IF flipped AND WARP = 0
                 AND TIME:SECONDS - lastOrient > 1800 {
-            orientForSolar().
+            orientForSolar(FALSE,TRUE).
             SET lastOrient TO TIME:SECONDS.
         }
         IF TIME:SECONDS - lastOrient > reorientPeriod {
             LOCAL savedWarp IS WARP.
             SET WARP TO 0.
             WAIT 2.
-            orientForSolar().
+            orientForSolar(FALSE,TRUE).
             SET lastOrient TO TIME:SECONDS.
             IF savedWarp > 0 {
                 setWarpWithKac(savedWarp, "SCANSAT solar reorient restore").

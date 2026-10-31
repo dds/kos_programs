@@ -1,10 +1,50 @@
 # Flight automation work
 
-Updated 2026-10-30. Keep this list current as scope changes. A source check
+Updated 2026-10-31. Keep this list current as scope changes. A source check
 passing is not native flight validation. Preserve mission safeguards and
 record remaining uncertainty before closing a task.
 
 ## Compact working handoff
+
+- ACTIVE31Oct: Minmus Espoir additions requested. Survey flight must achieve
+  Ap1041045/Pe465764m, inc21.6/LAN255.5/AoP157.3deg, then change to polar
+  mapping and start scanners on the COMPLETE probe (explicit user answer;
+  no payload separation). Separate lander should allow repeated land ->
+  orbit -> selected-site land excursions, coordinates supplied later. Keep
+  profiles simple; add guarded reusable orbit/site commands sharing existing
+  SHAPE/airless ascent/landing, preserve mission identity/progress and KAC
+  waits. Existing cmd/setorbit removes nodes and is circular-only; existing
+  surfaceorbit rewrites a Kerbin-return mission. Do not reuse those mutation
+  paths blindly. Need per-visit surface-science context so a second site can
+  gather new readings; stop after each site for commands. Implementation not
+  yet started. Working idea: lean operations review, command-scoped sequences
+  and existing flight phases; no bespoke repeated mission phase chains.
+  Solar hold drift follow-up completed below. User confirms re-aim happens soon, wants
+  fixed attitude/no deliberate rotation and one quick second verifying low
+  residual motion. Found old settle threshold0.03rad/s (~1.72deg/s), and
+  waitForSOI calls orientForSolar() with default lockSteeringFALSE. Fix both
+  continuous one-second settling and retained coast steering; keep deadlines,
+  cache reuse, wide readout tolerance and re-aim recovery. Do not add spin.
+
+- 31Oct solar fixed-hold patch checked: native Duna Lander2 reports5082559814
+  and5082641514 accepted7.244/7.401deg error with0.0282/~0.0292rad/s (about
+  1.6deg/s). Replaced0.03rad/s endpoint check+blind1.5s wait with continuous
+  0.1s polling,1 quiet second and0.1deg/s total-rate ceiling. Preserve initial
+  acquire vs wider readout tolerance, one original turn/deadline, Abort,
+  cache/flow/eclipses/CPU policies. SOI/scanner/relay coasts explicitly retain
+  the anchored Sun-following steering lock; aim-only API default unchanged.
+  No spin, raw steering, PID tuning or RCS introduced. SOI epoch now bounds
+  solar work with or without KAC; existing alarms still precede aiming.
+  Logs add rateDeg/stableSeconds/steeringHeld and recorder settle metadata.
+  Exact native spin regression refuses false settlement; already-quiet case
+  finishes in1..1.2s; damping/transient disturbances, no-KAC SOI coasts and
+  all finite-turn/readout/recorder cases pass. All93 routine files pass193.77s;
+  structural348/88/79/40,0 errors/unchanged KSC_DEORBIT warning. Report:
+  /tmp/kos-solar-hold-final-20261031.json and.log. No production changes after
+  final suite. One older SOI fixture updated to accept/assert explicit hold
+  arguments. Native post-update rate decay/long hold still to verify after a
+  connected coast reboot. Evidence:/tmp/ksp-deck-20261031T152312Z-fetch-
+  {k75ern92,u7itxz52}/logs/_diagnostics/ (those two solar reports).
 
 - 30Oct Kerbin Espoir profiles implemented/checked: user requests local surveying and
   landing, coordinates forthcoming; explicitly selected parachutes with

@@ -98,11 +98,11 @@ GLOBAL FUNCTION waitForSOI {
     // NEXTPATCHETA gives seconds until the next SOI boundary crossing.
     LOCAL kacAlarmId IS "".
     LOCAL soiUt IS 0.
-    IF ADDONS:KAC:AVAILABLE AND SHIP:ORBIT:HASNEXTPATCH {
+    IF SHIP:ORBIT:HASNEXTPATCH {
         SET soiUt TO TIME:SECONDS + SHIP:ORBIT:NEXTPATCHETA.
-        SET kacAlarmId TO ensureSoiAlarm(targetBody, soiUt).
+        IF ADDONS:KAC:AVAILABLE { SET kacAlarmId TO ensureSoiAlarm(targetBody, soiUt). }
     }
-    IF PHASES_HAS_SOLAR { orientForSolar(). }
+    IF PHASES_HAS_SOLAR { orientForSolar(FALSE,TRUE,FALSE,soiUt). }
     LOCAL solarRef IS trySolarHoldTick(-1).
     IF soiUt > TIME:SECONDS {
         IF PHASES_HAS_SOLAR

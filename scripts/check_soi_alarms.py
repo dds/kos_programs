@@ -185,8 +185,9 @@ def check_optional_kac_and_solar_order():
     env['TIME'].SECONDS=10000
     env['SHIP'].ORBIT.NEXTPATCHETA=1000
     env['coastHealthCheck']=lambda *_:False
-    def solar():
+    def solar(*args):
         assert named(alarms,'SOI: Mun').TIME==11000
+        assert args==(False,True,False,11000)
         return True
     env['orientForSolar']=solar
     original_wait=env['fixture_wait']

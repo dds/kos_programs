@@ -26,12 +26,13 @@ GLOBAL FUNCTION solarDiagnosticBegin {
     SET solarTrace TO LEXICON("ROWS",LIST(),"BYTES",0,"DROPPED",0,"PENDING",FALSE,"MEASUREMENTS",LIST(),
         "NAME","solardiag_" + slug() + "_" + ROUND(TIME:SECONDS*1000,0) + ".log",
         "LAST", "no turn sampled",
-        "HEADER","STATS solar-diag schema=2 algorithm=anchored-six-axis-refine settlePolicy=acquire-hold-retry code=" + codeVersion()
+        "HEADER","STATS solar-diag schema=2 algorithm=anchored-six-axis-refine settlePolicy=continuous-low-rate code=" + codeVersion()
             + " ut=" + TIME:SECONDS + " vessel=" + SHIP:NAME + " body=" + SHIP:BODY:NAME
             + " phase=" + stateGet("phase","") + " force=" + forceSearch
             + " deadline=" + deadlineUt + " priorIpu=" + priorIpu + " ipu=" + CONFIG:IPU
             + " aimTimeout=" + SOLAR_AIM_TIMEOUT + " searchTimeout=" + SOLAR_SEARCH_TIMEOUT
             + " aimTol=" + SOLAR_AIM_TOLERANCE + " holdTol=" + SOLAR_HOLD_TOLERANCE
+            + " settleSeconds=" + SOLAR_SETTLE_SECONDS + " settleRateDeg=" + SOLAR_SETTLE_RATE_DEG
             + " refineStep=" + SOLAR_REFINE_STEP + " refineTol=" + SOLAR_REFINE_TOLERANCE
             + " refineTimeout=" + SOLAR_REFINE_TIMEOUT + " refineMinGain=" + SOLAR_REFINE_MIN_GAIN
             + " peak=" + stateGetNum("solar_axis_peak",-1)
@@ -83,6 +84,7 @@ GLOBAL FUNCTION solarDiagnosticSample {
         + " label=" + label + " status=" + status
         + " err=" + ROUND(error,3)
         + " rate=" + _solarVectorText(angularVel)
+        + " rateDeg=" + ROUND(angularVel:MAG*180/CONSTANT:PI,3)
         + " axis=" + _solarVectorText(aShip)
         + " face=" + _solarVectorText(facing:FOREVECTOR)
         + " top=" + _solarVectorText(facing:TOPVECTOR)

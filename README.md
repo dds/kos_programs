@@ -3115,19 +3115,27 @@ Solar turns allow up to `SOLAR_AIM_TIMEOUT` (90 seconds, previously 30),
 within one `SOLAR_SEARCH_TIMEOUT` budget (300 seconds). An earlier coast wake
 deadline still wins. These are maximum waits: each turn finishes as soon as
 the axis is within `SOLAR_AIM_TOLERANCE` (5 degrees for search measurements)
-or `SOLAR_HOLD_TOLERANCE` (10 degrees for the cached solar attitude), with
-rotation below 0.03. After the 1.5-second panel/readout settle, coarse turns
+or `SOLAR_HOLD_TOLERANCE` (10 degrees for the cached solar attitude), followed
+by one continuous quiet second (`SOLAR_SETTLE_SECONDS=1`) with total rotation
+at most `SOLAR_SETTLE_RATE_DEG=0.1` degrees/second. A moving craft cannot count
+as settled just because it momentarily crosses the correct angle. Every0.1s
+sample must stay quiet; a disturbance restarts the one-second window. The
+old0.03 radians/second threshold admitted roughly1.72degrees/second of spin.
+During this panel/readout window, coarse turns
 may remain within the existing 10-degree hold tolerance; crossing back over
 5 degrees by a fraction no longer discards the whole search. Fine probes
 retain their requested 1-degree precision during readout. Excessive drift
 or renewed spin retries the same anchored target within the original turn
-and coast deadlines. Logs include both tolerances and `readout-reacquire`.
+and coast deadlines. Logs include both tolerances, angular rate in radians
+and degrees/second, stable duration, and `readout-reacquire`.
 Cache validation still requires 90% of a valid saved peak when flow is
 measurable in daylight; existing eclipse/unreadable handling remains.
 During maintenance, near-zero flow defers aiming only when body geometry
 confirms an eclipse. A panel facing away in daylight triggers recovery.
 The wider angular tolerance lets small drift settle sooner without changing
-the flow threshold. The steering lock continues following the Sun. These
+the flow threshold. SOI, scanner and relay coasts explicitly retain the solar
+steering lock; `steeringHeld` distinguishes this from an aim-only call that
+releases control. The target follows the Sun, with no intentional spin. These
 solar tolerances leave maneuver, landing and reentry pointing checks intact.
 Solar validates the cached axis first. If discovery is needed, it measures the
 six panel-part axes, then fine-tunes the winner. Four nearby tilts measure the

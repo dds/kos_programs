@@ -41,7 +41,7 @@ def environment():
     saved = dict(solar_axis=Items((1, 0, 0)), solar_axis_peak=10., solar_axis_distance=1e10,
                  solar_axis_panels=1, solar_axis_scaled=1,solar_axis_tolerance=1)
     attempts, finishes, unlocked, reading = [], [], [], [10.]
-    env = dict(SHIP=NS(STATUS='ORBITING', PARTS=Items([panel]), FACING=NS(INVERSE=Identity())),
+    env = dict(SHIP=NS(STATUS='ORBITING', PARTS=Items([panel]), FACING=NS(INVERSE=Identity()),ANGULARVEL=Vec((0,0,0))),
                SUN=NS(POSITION=Vec((1e10, 0, 0))), forceSearch=False, lockSteering=False,
                TIME=NS(SECONDS=0), WARP=0, ABORT=False,
                CONFIG=NS(IPU=150),LOG_ARCHIVE_DEFERRED=0,
@@ -53,7 +53,7 @@ def environment():
                SIN=lambda degrees:math.sin(math.radians(degrees)),
                fixedLabel=lambda index:'fixed-'+str(index),
                overrideLaunchGuard=False, SOLAR_REUSE_RATIO=.9, LIST=lambda *xs: Items(xs),
-               V=lambda *xs: Vec(xs), ROUND=round, stateGet=saved.get, stateGetNum=saved.get,
+               V=lambda *xs: Vec(xs), CONSTANT=NS(PI=math.pi),ROUND=round, stateGet=saved.get, stateGetNum=saved.get,
                stateSet=lambda key, value: saved.update({key: value}),
                stateRemove=lambda key: saved.pop(key, None),
                _solarSearchGuardReason=lambda _: '', _solarSunOccluded=lambda: False,
@@ -455,7 +455,7 @@ def check_cached_hold_tolerance():
         assert env['TIME'].SECONDS<=12
         if expected:
             assert len(attempts)==1 and finishes[0][2]=='cached axis validated'
-            assert env['TIME'].SECONDS==1.5
+            assert 1<=env['TIME'].SECONDS<1.2
         else:assert not finishes and saved==before
         if flow<9:assert used==[('cache',(10,)),('fixed-1',())]
     print('PASS: an eight-degree cached attitude is reused quickly only with near-peak flow; poor flow, excessive drift and forced search keep the stricter measurement path')
@@ -498,8 +498,11 @@ def check_native_readout_boundary():
         age=env['TIME'].SECONDS-turn_start[0]
         if age<4.8:return 94.8
         return 4.9 if age<5.2 else 5.252
+    def damped_tick(dt):
+        env['TIME'].SECONDS+=dt
+        env['SHIP'].ANGULARVEL.MAG=.0062 if env['TIME'].SECONDS-turn_start[0]<6 else .001
     env.update(VANG=error,_solarAim=aim,
-               fixture_wait=lambda dt:setattr(env['TIME'],'SECONDS',env['TIME'].SECONDS+dt),
+               fixture_wait=damped_tick,
                _solarAimSettle=lambda *args:ks.call('_solarAimSettle',env,*args))
     original=env['_solarFinish']
     def finish(*args):
@@ -509,7 +512,7 @@ def check_native_readout_boundary():
     assert ks.call('orientForSolar',env,False,True,True)
     assert len(attempts)==7 and finishes[-1][2]=='best of 6'
     assert saved['solar_axis']==[0,1,0] and saved['solar_axis_peak']>8.6
-    assert env['TIME'].SECONDS<50
+    assert env['TIME'].SECONDS<55
     # The completed scan now supplies a proven peak for the next call:
     # validate/reuse, rather than restarting the same unsuccessful first axis.
     attempts.clear()
@@ -529,17 +532,17 @@ def check_readout_reacquisition():
         def error(*_):
             # Coarse drift is outside10deg; fine drift is only1.05deg and
             # must STILL fail that readout, despite being well inside10deg.
-            if 1.4<=env['TIME'].SECONDS<1.7 and drift=='angle':
+            if .4<=env['TIME'].SECONDS<.7 and drift=='angle':
                 return 11 if tolerance==5 else 1.05
             return tolerance-.1
         def tick(dt):
             env['TIME'].SECONDS+=dt
-            env['SHIP'].ANGULARVEL.MAG=.04 if drift=='rate' and 1.4<=env['TIME'].SECONDS<1.7 else 0
+            env['SHIP'].ANGULARVEL.MAG=.04 if drift=='rate' and .4<=env['TIME'].SECONDS<.7 else 0
         env.update(VANG=error,fixture_wait=tick,
                    solarDiagnosticSample=lambda label,status,*_:samples.append(status))
         assert run_solar_body('_solarAimSettle',env)
         assert 'readout-reacquire' in samples and samples[-1]=='settled'
-        assert 3.2-1e-8<=env['TIME'].SECONDS<5 and len(attempts)==1
+        assert 1.7-1e-8<=env['TIME'].SECONDS<2 and len(attempts)==1
     # A tight configured coarse tolerance equal to refinement must never
     # accidentally inherit the10deg readout allowance either.
     env,_,_,_,_,_=environment()
@@ -551,6 +554,59 @@ def check_readout_reacquisition():
     assert not run_solar_body('_solarAimSettle',env)
     assert env['TIME'].SECONDS<=5
     print('PASS: transient coarse drift/spin reacquires the same target; fine probes retain1deg precision and all retries share the original deadline')
+
+
+def check_one_second_rotation_settle():
+    for case in ('quiet','native-spin','damped','mid-window-spin','deadline','abort'):
+        env,_,attempts,_,unlocked,_=environment()
+        env.update(aShip=Vec((0,0,1)),tolerance=10,deadlineUt=10,
+            keepOnFailure=False,VANG=lambda *_:7.244,_solarAim=attempts.append)
+        env['SHIP'].FACING=Identity()
+        env['SHIP'].ANGULARVEL=NS(MAG=.0282 if case in ('native-spin','damped','deadline') else 0)
+        if case=='deadline':env['deadlineUt']=1.5
+        def tick(dt):
+            env['TIME'].SECONDS+=dt;now=env['TIME'].SECONDS
+            if case=='damped':env['SHIP'].ANGULARVEL.MAG=.0282 if now<2 else .001
+            if case=='mid-window-spin':env['SHIP'].ANGULARVEL.MAG=.0282 if .4<=now<.7 else 0
+            if case=='abort' and now>=.4:env['ABORT']=True
+        env['fixture_wait']=tick
+        assert run_solar_body('_solarAimSettle',env)==(case in ('quiet','damped','mid-window-spin')),case
+        assert len(attempts)==1
+        end=env['TIME'].SECONDS
+        if case=='quiet':assert 1<=end<1.2
+        if case=='damped':assert 3<=end<3.2
+        if case=='mid-window-spin':assert 1.7<=end<1.9
+        if case=='native-spin':assert end<=9.01 and math.degrees(.0282)>1.6
+        if case=='deadline':assert end<=1.5
+        if case=='abort':assert end<.6
+    print('PASS: native7.244deg/0.0282rad/s cannot claim settled; already-quiet attitude needs only1s, residual spin must damp first, a mid-window disturbance restarts the timer and deadlines/Abort remain bounded')
+
+
+def check_soi_coast_keeps_steering():
+    from check_runtime_contracts import run
+    for solar,kac in ((True,True),(False,True),(True,False)):
+        events=[];saved={};clock=NS(SECONDS=0)
+        origin=NS(NAME='Kerbin');sun=NS(NAME='Sun')
+        ship=NS(ORBIT=NS(BODY=origin,HASNEXTPATCH=True,NEXTPATCHETA=30))
+        def aim(*args):
+            assert events==(['alarm'] if kac else []);events.append(('aim',args))
+            return True
+        def tick(dt):
+            clock.SECONDS+=dt
+            if clock.SECONDS>=30:ship.ORBIT.BODY=sun
+        source=function_body((ROOT/'lib/orbit.ks').read_text(),'waitForSOI')
+        env=dict(targetBody=sun,pollInterval=5,SHIP=ship,TIME=clock,PHASES_HAS_SOLAR=solar,
+            ADDONS=NS(KAC=NS(AVAILABLE=kac)),COAST_HEALTH_CHECK=0,COAST_AUTO_WARP_MIN=60,
+            ensureSoiAlarm=lambda *_:events.append('alarm') or 'soi',orientForSolar=aim,
+            trySolarHoldTick=lambda ref,*_:1,shipHasSolarPanels=lambda:True,
+            coastHealthCheck=lambda *_:True,coastAutoWarp=lambda *_:False,
+            fixture_wait=tick,DELETEALARM=lambda aid:events.append(('delete',aid)),
+            stateRemove=lambda key:saved.pop(key,None),LIST=lambda *xs:Items(xs))
+        run(source,env)
+        if solar:assert ('aim',(False,True,False,30)) in events
+        else:assert not any(isinstance(e,tuple) and e[0]=='aim' for e in events)
+        assert (('delete','soi') in events)==kac and clock.SECONDS==32
+    print('PASS: real Kerbin-to-Sun coast sets KAC before a deadline-bounded kept solar lock, retains clock-based SOI progression and cleans only its owned alarm')
 
 
 def refinement_fixture():
@@ -734,6 +790,8 @@ if __name__ == '__main__':
     check_readout_drift()
     check_native_readout_boundary()
     check_readout_reacquisition()
+    check_one_second_rotation_settle()
+    check_soi_coast_keeps_steering()
     check_refinement_measured_peak()
     check_refinement_fallback_and_budget()
     check_refined_cache_upgrade()

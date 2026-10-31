@@ -76,7 +76,7 @@ GLOBAL FUNCTION phaseScanSatOps {
     scienceScanStatus().
     // Sun-point before any release so the mapper separates with
     // its best measured solar attitude already set.
-    orientForSolar().
+    orientForSolar(FALSE,TRUE).
 
     IF tag <> "" AND SHIP:PARTSTAGGED(tag):LENGTH = 0 {
         mLogWarn("SCANsat decoupler tag '" + tag
@@ -133,7 +133,7 @@ GLOBAL FUNCTION phaseScanSatOps {
 // On-station: hold the best measured solar attitude, then, when
 // SCANSAT_POWER_GUARD is set, duty-cycle the scanners on battery state.
 LOCAL FUNCTION _scanSatOnStation {
-    orientForSolar().
+    orientForSolar(FALSE,TRUE).
     IF SCANSAT_POWER_GUARD > 0 {
         scansatDutyCycle().
     }
@@ -224,7 +224,7 @@ LOCAL FUNCTION _scanSatWaitForRequiredCoverage {
 
     scienceStartScanners().
     LOCAL scansOn IS TRUE.
-    orientForSolar().
+    orientForSolar(FALSE,TRUE).
     LOCAL lastOrient IS TIME:SECONDS.
     LOCAL reorientPeriod IS 43200.
     IF SOLAR_REORIENT_PERIOD > 0 {
@@ -241,7 +241,7 @@ LOCAL FUNCTION _scanSatWaitForRequiredCoverage {
             mLog("SCANsat scans off for charging at "
                 + ROUND(frac * 100, 0) + "% EC.").
         } ELSE IF NOT scansOn AND frac > resumeFrac {
-            orientForSolar().
+            orientForSolar(FALSE,TRUE).
             SET lastOrient TO TIME:SECONDS.
             scienceStartScanners().
             SET scansOn TO TRUE.
@@ -250,7 +250,7 @@ LOCAL FUNCTION _scanSatWaitForRequiredCoverage {
         }
 
         IF TIME:SECONDS - lastOrient > reorientPeriod {
-            orientForSolar().
+            orientForSolar(FALSE,TRUE).
             SET lastOrient TO TIME:SECONDS.
         }
 

@@ -19,6 +19,9 @@ GLOBAL SOLAR_AIM_TIMEOUT IS 90.
 GLOBAL SOLAR_SEARCH_TIMEOUT IS 300.
 GLOBAL SOLAR_AIM_TOLERANCE IS 5.
 GLOBAL SOLAR_HOLD_TOLERANCE IS 10.
+// Angular velocity is radians/s; configure the settle ceiling in degrees/s.
+GLOBAL SOLAR_SETTLE_RATE_DEG IS 0.1.
+GLOBAL SOLAR_SETTLE_SECONDS IS 1.
 GLOBAL SOLAR_MIN_IPU IS 2000.
 GLOBAL SOLAR_REFINE_STEP IS 15.
 GLOBAL SOLAR_REFINE_TOLERANCE IS 1.
@@ -214,6 +217,9 @@ LOCAL FUNCTION _solarAimSettle {
     PARAMETER keepOnFailure IS TRUE.
     PARAMETER label IS "axis".
     PARAMETER tolerance IS SOLAR_AIM_TOLERANCE.
+    IF NOT (SOLAR_SETTLE_RATE_DEG > 0 AND SOLAR_SETTLE_RATE_DEG <= 0.5
+            AND SOLAR_SETTLE_SECONDS >= 1 AND SOLAR_SETTLE_SECONDS <= 3) { RETURN FALSE. }
+    LOCAL maxRate IS SOLAR_SETTLE_RATE_DEG*CONSTANT:PI/180.
     // Acquire a coarse axis tightly, then allow the existing hold tolerance
     // during the panel-readout wait. Fine gradient probes stay at their
     // requested precision; their pointing error must not invent a gradient.
@@ -224,8 +230,8 @@ LOCAL FUNCTION _solarAimSettle {
     LOCAL began IS TIME:SECONDS.
     LOCAL deadline IS began + SOLAR_AIM_TIMEOUT.
     LOCAL timeoutReason IS "alignment-timeout".
-    IF deadlineUt > 0 AND deadlineUt-1.5 <= deadline {
-        SET deadline TO deadlineUt-1.5.
+    IF deadlineUt > 0 AND deadlineUt-1 <= deadline {
+        SET deadline TO deadlineUt-1.
         SET timeoutReason TO "search-deadline".
     }
     IF TIME:SECONDS >= deadline {
@@ -236,29 +242,37 @@ LOCAL FUNCTION _solarAimSettle {
     LOCAL startError IS VANG(SHIP:FACING * aShip,SUN:POSITION).
     mLog("STATS solar aim label=" + label + " status=begin err=" + ROUND(startError,2)
         + " tolerance=" + tolerance + " readoutTolerance=" + readoutTolerance
-        + " budget=" + ROUND(deadline-began,2) + " warp=" + WARP).
+        + " budget=" + ROUND(deadline-began,2) + " warp=" + WARP
+        + " settleSeconds=" + SOLAR_SETTLE_SECONDS + " rateLimitDeg=" + SOLAR_SETTLE_RATE_DEG).
     LOCAL aim IS _solarAim(aShip).
     LOCAL nextSample IS TIME:SECONDS.
     LOCAL settled IS FALSE.
+    LOCAL acquired IS FALSE.
+    LOCAL quietSince IS -1.
     UNTIL TIME:SECONDS >= deadline OR ABORT {
         IF TIME:SECONDS >= nextSample {
             solarDiagnosticSample(label,"turning",aShip,_solarAimDirection(aim)).
             SET nextSample TO TIME:SECONDS + 5.
         }
-        IF VANG(SHIP:FACING * aShip, SUN:POSITION) <= tolerance
-                AND SHIP:ANGULARVEL:MAG < 0.03 AND TIME:SECONDS + 1.5 <= deadline {
-            WAIT 1.5.   // let panel sun-tracking and the flow readout catch up
-            IF NOT ABORT AND TIME:SECONDS <= deadline
-                    AND VANG(SHIP:FACING * aShip,SUN:POSITION) <= readoutTolerance
-                    AND SHIP:ANGULARVEL:MAG < 0.03 {
+        LOCAL angleError IS VANG(SHIP:FACING*aShip,SUN:POSITION).
+        IF angleError <= tolerance { SET acquired TO TRUE. }
+        // Continuously check the readout window. A brief spin/drift inside
+        // the interval must restart it, even if both endpoints look quiet.
+        IF acquired AND angleError <= readoutTolerance
+                AND SHIP:ANGULARVEL:MAG <= maxRate {
+            IF quietSince < 0 { SET quietSince TO TIME:SECONDS. }
+            IF TIME:SECONDS-quietSince >= SOLAR_SETTLE_SECONDS {
                 SET settled TO TRUE.
                 BREAK.
             }
-            // A transient drift is not a failed search. Keep the same
-            // anchored target and reacquire within this turn's original budget.
-            solarDiagnosticSample(label,"readout-reacquire",aShip,_solarAimDirection(aim)).
+        } ELSE {
+            IF quietSince >= 0 {
+                solarDiagnosticSample(label,"readout-reacquire",aShip,_solarAimDirection(aim)).
+            }
+            SET quietSince TO -1.
+            IF angleError > readoutTolerance { SET acquired TO FALSE. }
         }
-        WAIT MIN(0.2,MAX(0,deadline-TIME:SECONDS)).
+        WAIT MIN(0.1,MAX(0,deadline-TIME:SECONDS)).
     }
     IF ABORT { SET timeoutReason TO "operator-abort". }
     IF ABORT OR NOT settled {
@@ -272,7 +286,7 @@ LOCAL FUNCTION _solarAimSettle {
         RETURN FALSE.
     }
     LOCAL success IS NOT ABORT AND (deadlineUt <= 0 OR TIME:SECONDS <= deadlineUt)
-        AND VANG(SHIP:FACING * aShip,SUN:POSITION) <= readoutTolerance AND SHIP:ANGULARVEL:MAG < 0.03.
+        AND VANG(SHIP:FACING * aShip,SUN:POSITION) <= readoutTolerance AND SHIP:ANGULARVEL:MAG <= maxRate.
     LOCAL resultStatus IS "settled".
     IF NOT success { SET resultStatus TO "readout-drift-or-deadline". }
     IF ABORT { SET resultStatus TO "operator-abort". }
@@ -281,7 +295,9 @@ LOCAL FUNCTION _solarAimSettle {
         + " elapsed=" + ROUND(TIME:SECONDS-began,2) + " startErr=" + ROUND(startError,2)
         + " err=" + ROUND(VANG(SHIP:FACING * aShip,SUN:POSITION),2)
         + " tolerance=" + tolerance + " readoutTolerance=" + readoutTolerance
-        + " rate=" + ROUND(SHIP:ANGULARVEL:MAG,4)).
+        + " rate=" + ROUND(SHIP:ANGULARVEL:MAG,4)
+        + " rateDeg=" + ROUND(SHIP:ANGULARVEL:MAG*180/CONSTANT:PI,3)
+        + " stableSeconds=" + ROUND(TIME:SECONDS-quietSince,2)).
     IF NOT success AND NOT keepOnFailure { UNLOCK STEERING. }
     RETURN success.
 }
@@ -308,7 +324,9 @@ LOCAL FUNCTION _solarFinish {
     mLog("Solar attitude set (" + note + "): flow="
         + ROUND(shipSolarFlow(), 2) + ".").
     mLog("STATS solar orient flow=" + ROUND(shipSolarFlow(), 2)
-        + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct").
+        + " charge=" + ROUND(shipPowerFraction() * 100, 1) + "pct"
+        + " steeringHeld=" + lockSteering
+        + " rateDeg=" + ROUND(SHIP:ANGULARVEL:MAG*180/CONSTANT:PI,3)).
 }
 
 LOCAL FUNCTION _solarPanelInfo {
