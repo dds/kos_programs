@@ -67,7 +67,8 @@ def fixture():
         VANG=lambda a,b:math.degrees(math.acos(max(-1,min(1,dot(a,b)/(a.MAG*b.MAG))))),
         landingResolveTarget=lambda:Map(FOUND=False),
         fixture_lock=lambda value:events.append(('lock',value)),fixture_unlock=lambda:events.append('unlock'),
-        fixture_log=lambda:None,thrustCutoffOk=lambda:events.append('cutoff') or True)
+        fixture_log=lambda:None,thrustCutoffOk=lambda:events.append('cutoff') or True,
+        missionExcursionCommands=lambda:None)
     for key,value in re.findall(r'GLOBAL (\w+) IS ([\d.]+)\.',SOURCE):env[key]=float(value)
     for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',SOURCE):
         env[name]=lambda *args,name=name:call(SOURCE,name,env,*args)

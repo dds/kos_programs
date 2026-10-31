@@ -28,6 +28,9 @@ GLOBAL FUNCTION phaseSurfaceScience {
     SAS OFF.
     BRAKES ON.
     LOCAL context IS stateGet("mission_id","")+":"+groundBody:NAME+":"+groundStatus.
+    // A new explicitly selected visit gets fresh readings/dwell; rebooting
+    // the same visit retains its science ledger and original deadline.
+    IF stateGetNum("surface_visit",0) > 0 { SET context TO context+":visit"+stateGetNum("surface_visit",0). }
     LOCAL flightId IS context+":"+stateGetNum("launch_time",0).
     IF stateGet("surface_science_id","") <> flightId {
         stateSet("surface_science_deadline",TIME:SECONDS+SCIENCE_SURFACE_DWELL).

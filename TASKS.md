@@ -6,25 +6,44 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- ACTIVE31Oct: Minmus Espoir additions requested. Survey flight must achieve
-  Ap1041045/Pe465764m, inc21.6/LAN255.5/AoP157.3deg, then change to polar
-  mapping and start scanners on the COMPLETE probe (explicit user answer;
-  no payload separation). Separate lander should allow repeated land ->
-  orbit -> selected-site land excursions, coordinates supplied later. Keep
-  profiles simple; add guarded reusable orbit/site commands sharing existing
-  SHAPE/airless ascent/landing, preserve mission identity/progress and KAC
-  waits. Existing cmd/setorbit removes nodes and is circular-only; existing
-  surfaceorbit rewrites a Kerbin-return mission. Do not reuse those mutation
-  paths blindly. Need per-visit surface-science context so a second site can
-  gather new readings; stop after each site for commands. Implementation not
-  yet started. Working idea: lean operations review, command-scoped sequences
-  and existing flight phases; no bespoke repeated mission phase chains.
-  Solar hold drift follow-up completed below. User confirms re-aim happens soon, wants
-  fixed attitude/no deliberate rotation and one quick second verifying low
-  residual motion. Found old settle threshold0.03rad/s (~1.72deg/s), and
-  waitForSOI calls orientForSolar() with default lockSteeringFALSE. Fix both
-  continuous one-second settling and retained coast steering; keep deadlines,
-  cache reuse, wide readout tolerance and re-aim recovery. Do not add spin.
+- 31Oct Minmus Espoir additions implemented; native validation pending.
+  minmus_orbital_surveyor achieves Ap1041045/Pe465764m,
+  inc21.6/LAN255.5/AoP157.3deg and stops for contract review. Then
+  cmd/orbit.ks,LEXICON("after","scan") + REBOOT selects70km polar mapping,
+  keeping the COMPLETE probe (explicit answer; no separation/disposal).
+  minmus_lander captures15km polar and waits at LANDING_REVIEW for landsite;
+  touchdown gives600s KAC science dwell, brakes and DONE prompt. Subsequent
+  cmd/visit.ks uses the selected same-body waypoint or lat/lng, from surface
+  or safe orbital review, with15km polar preparation and native targeted
+  descent. cmd/orbit.ks also accepts ap/pe/inc/lan/aop in metres/degrees;
+  default70km polar/review, optional after=scan. Both opt in via
+  MISSION_EXCURSIONS=1; no automatic relaunch or Kerbin-return profile rewrite.
+  Existing ascent/SHAPE/descent and KAC/solar waits reused. One lean
+  EXCURSION_READY band validates the persisted mission/body/vehicle after
+  parking, restores the mission epoch after ascent's real liftoff clock,
+  and publishes per-visit science identity idempotently. SHAPE spending,
+  science records and unrelated overrides retained; missing/unsafe checkpoint
+  holds. Commands cannot remove nodes, stage or burn; idle/review/Abort,
+  interruption, atmosphere, bound-orbit, finite options, active thrust/current
+  stage ascent fuel+300m/s reserve guards retained. Native descent still
+  checks terrain5deg/emergency15, light and shared AUTO radio15deg Kerbin
+  (until declared relays), staging/roles and fuel. Explicit site command is
+  target confirmation; no second blocking keypress in this new lander profile.
+  Scanning disables all disposal/separation options and uses30/60pct power
+  management. Review/DONE prints commands. Legacy commands unchanged.
+  Source regressions cover exact contract/polar handoff, actual override
+  serialization/fresh boots, actual local prelaunch dispatcher, checkpoint
+  reboots/epoch/budgets, surface/orbital/waypoint visits, all admission holds,
+  independent per-visit science deadlines/KAC and no repeat on reboot.
+  All94 routine files pass143.80s; structural353 scripts/90 profiles/
+  80 phases/41 bands,0 errors/known KSC_DEORBIT warning. After that pass,
+  tightened explicit no-disposal scanner settings and new-profile target
+  confirmation policy; focused Minmus regression rerun passes. Reports:
+  /tmp/kos-espoir-minmus-20261031.json and.log. Native contract completion,
+  live stock stage-dV admission, repeated ascents/landings and mapper duty
+  cycle still to test. Next fleet evidence remains first Sun-SOI BPLANE
+  after Kerbin exit around5114738 (Duna Lander2). Solar fix8e657ec pushed;
+  fixed attitude/no spin, continuous one quiet second, details below.
 
 - 31Oct solar fixed-hold patch checked: native Duna Lander2 reports5082559814
   and5082641514 accepted7.244/7.401deg error with0.0282/~0.0292rad/s (about

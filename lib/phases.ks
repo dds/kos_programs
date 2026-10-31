@@ -454,6 +454,7 @@ GLOBAL FUNCTION trySolarHoldTick {
 
 GLOBAL FUNCTION phaseDone {
     UNLOCK ALL.
+    missionExcursionCommands().
     mLog("Mission complete: " + SHIP:NAME).
     HUDTEXT("Mission Complete", 10, 2, 20, GREEN, FALSE).
     IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {

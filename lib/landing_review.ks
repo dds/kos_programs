@@ -24,6 +24,7 @@ GLOBAL FUNCTION phaseLandingReview {
     }
     IF NOT thrustCutoffOk() { RETURN. }
     orbitSummary().
+    missionExcursionCommands().
     // No known operator deadline: no fictitious timer or periodic wake.
     orientForSolar(FALSE,TRUE,FALSE,TIME:SECONDS+60).
     PRINT "PARKED FOR SURVEY: choose a landing site when the maps are ready.".

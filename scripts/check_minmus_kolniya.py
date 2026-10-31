@@ -23,6 +23,9 @@ def executable(source):
 
 
 def execute(source,env):
+    # Menu rendering is tested with the excursion source; existing flight
+    # fixtures do not load the always-present mission_type core provider.
+    env.setdefault('missionExcursionCommands',lambda:None)
     try:ks.run(executable(source),env)
     except ks.Returned as result:return result.value
 

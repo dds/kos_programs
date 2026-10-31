@@ -180,6 +180,7 @@ GLOBAL FUNCTION phaseScienceOps {
         + " ApKm=" + ROUND(SHIP:APOAPSIS / 1000, 1)
         + " ran=" + ran).
     IF SCIENCE_OPS_HOLD <> 0 {
+        missionExcursionCommands().
         mLog("STATS science-ops result=survey-hold remainingDv="
             + ROUND(SHIP:DELTAV:VACUUM, 1)).
         mLog("Science hold: inspect stored data and complete any required readings before advancing.").

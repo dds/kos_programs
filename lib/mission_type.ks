@@ -30,6 +30,18 @@ GLOBAL LANDING_TARGET_REVIEW_REQUIRED IS 0.
 GLOBAL LANDING_AUTO_TARGET IS 0.
 GLOBAL LANDING_REQUIRE_SITE IS 0.
 GLOBAL LANDING_SITE_SCAN_ENABLE IS 0.
+// Local command-selected orbit/site excursions; no automatic relaunch.
+GLOBAL MISSION_EXCURSIONS IS 0.
+
+GLOBAL FUNCTION missionExcursionCommands {
+    IF MISSION_EXCURSIONS <= 0 { RETURN. }
+    PRINT "Local excursions (then REBOOT.):".
+    PRINT "70km polar mapping: RUNPATH(" + CHAR(34) + "0:/cmd/orbit.ks" + CHAR(34)
+        + ",LEXICON(" + CHAR(34) + "after" + CHAR(34) + "," + CHAR(34) + "scan" + CHAR(34) + ")).".
+    PRINT "Orbit and review: RUNPATH(" + CHAR(34) + "0:/cmd/orbit.ks" + CHAR(34) + ").".
+    PRINT "Visit selected waypoint via15km polar orbit: RUNPATH(" + CHAR(34) + "0:/cmd/visit.ks" + CHAR(34) + ").".
+    PRINT "Custom orbit: pass ap/pe/inc/lan/aop; custom site: pass lat/lng. Quoted keys; metres/degrees.".
+}
 
 // Detect mission type from effective globals plus runtime state.
 // Returns "kerbin_moon", "kerbin_return", or "interplanetary".

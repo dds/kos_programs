@@ -97,6 +97,8 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/landlight.ks").` | Preview a lit ground-track site from Mun/Minmus parking orbit; `"status"` checks the saved target with live positions; `"apply", "AFTERNOON", 1` selects afternoon while preserving the return mission; final argument `0` waives direct Kerbin view |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
+| `RUNPATH("0:/cmd/orbit.ks",LEXICON("after","scan")).` | Enabled airless local mission: select70km polar mapping, keeping the probe together; then reboot |
+| `RUNPATH("0:/cmd/visit.ks").` | Enabled airless local mission: visit the selected same-body waypoint via15km polar parking; then reboot |
 | `RUNPATH("0:/cmd/geodistance.ks", lat1, lng1, lat2, lng2).` | Surface distance between two lat/lng points on the current body |
 | `RUNPATH("0:/cmd/kscsplash.ks").` | Target water splashdown offshore of KSC |
 | `RUNPATH("0:/cmd/zombie.ks").` | Power-cycle every *other* CPU on the vessel |
@@ -953,7 +955,7 @@ derived state, and use `RUNONCEPATH("0:/cmd/trimstate.ks").` to clear the old
 | `FR3` | Multi-payload launcher | Banded loading, profile-first, rover/mapper missions |
 | `Falcon` | Crew/science launcher | Banded profile flights for crew, tourists, and science returns |
 | `FalconHeavy` | Heavy Falcon variant | Falcon plumbing for heavier moon/interplanetary payloads |
-| `Espoir` | Duna science probe | New hardware; transmitted-science flyby and atmospheric impact attempt |
+| `Espoir` | Local and interplanetary science probe | New hardware; surveyed landings and orbital mapping at Kerbin, Minmus, Duna and Ike |
 | `FJ1A` | Juno trainer jet | `airplaneMain()` configuration |
 | `FJ4B` | Supersonic jet | No landing assist — pilot owns the rollout |
 | `FBIJ` | Business jet | GAP airline missions, multi-leg, touch-and-go aware |
@@ -1078,6 +1080,8 @@ The two local Kerbin profiles below launch directly to100km polar parking.
 | `ike_lander` | High Duna capture,25km polar Ike parking, surveyed landing and surface science |1500 /1300m/s |
 | `kerbin_orbital_surveyor` |100km polar Kerbin mapping, complete probe retained | Local orbit |
 | `kerbin_lander` |100km polar parking, operator-selected Kerbin landing, parachutes with optional engine assistance | Local orbit |
+| `minmus_orbital_surveyor` |1041045m Ap /465764m Pe,21.6deg inc,255.5deg LAN,157.3deg AoP; review before command-selected polar mapping | Minmus transfer and local operations |
+| `minmus_lander` |15km polar parking, selected-site landing, repeat orbital excursions by command | Minmus transfer and local operations |
 
 All surveyors retain the CPU, propulsion and scanners as one spacecraft. No
 `scansat_decoupler` is required, and none automatically deorbits after mapping.
@@ -1089,6 +1093,61 @@ surveyors, not relay satellites. Interplanetary probes each need a Kerbin-range 
 All Espoir profiles disable automatic coast warp with `COAST_AUTO_WARP=0`,
 including their generated Ike operations legs. KAC alarms and clock-based
 resumption remain active; the operator controls time warp.
+
+The Minmus surveyor stops in `SCIENCE_OPS` after achieving the requested
+contract orbit. Confirm the objective before changing it. To move to70km polar
+and start the attached scanners:
+
+```ks
+RUNPATH("0:/cmd/orbit.ks",LEXICON("after","scan")).
+REBOOT.
+```
+
+The Minmus lander stops in `LANDING_REVIEW` for its first site; use `landsite`
+as described below. After each touchdown it takes ten minutes for science,
+with a KAC review alarm, sets the brakes and returns to the prompt. No relaunch
+is automatic. For another site, select a waypoint on Minmus and run:
+
+```ks
+RUNPATH("0:/cmd/visit.ks").
+REBOOT.
+```
+
+Or pass `LEXICON("lat",latitude,"lng",longitude)` using numeric degrees.
+`visit` works from settled surface review or safe orbital review. It uses
+15km polar parking, the existing targeted deorbit and powered descent,
+then another science stop. This is an orbital excursion; nearby destinations
+can instead use the existing local hop commands. To ascend into a custom
+orbit and stop for review, with all altitudes in metres ASL:
+
+```ks
+RUNPATH("0:/cmd/orbit.ks",LEXICON("ap",659734,"pe",554472,"inc",0,"aop",0.4)).
+REBOOT.
+```
+
+Omit `lan`/`aop` to leave those elements unconstrained. With no arguments,
+`orbit` selects70km polar and stops for review; `after="scan"` starts scanning
+instead. These commands opt in through `MISSION_EXCURSIONS=1` (both Minmus
+profiles), operate only on the mission's current airless target, and require
+idle controls, Abort clear, no existing/interrupted burn or node, and a review
+or DONE prompt. Surface ascent requires measured active thrust and current-stage
+fuel for a conservative ascent estimate plus `EXCURSION_RESERVE_DV` (300m/s).
+Future stages do not supply speculative launch credit. Later native planners
+still enforce their own fuel, terrain, sunlight and radio checks. The lander
+uses the shared AUTO radio policy, requiring15deg Kerbin elevation until
+relays are explicitly declared. It retains5deg terrain and15deg emergency
+slope limits. Probe-specific decoupler tags are not assumed.
+
+Commands preserve the mission identity, science records, unrelated overrides
+and SHAPE spending ledger. They replace only the selected local sequence and
+orbit/site goal. A small `EXCURSION_READY` band restores the original mission
+epoch after the ascent's own liftoff clock; a reboot cannot reset SHAPE spending
+or increment a landing visit twice. Each explicitly selected visit has a fresh
+science context/dwell, while rebooting that visit retains its original deadline.
+Existing ascent, SHAPE, descent and KAC/solar waits are reused; no extra flight
+controller or automatic payload separation is added. Native contract completion,
+repeated ascent/descent and mapping performance still require flight testing.
+
 For XING burns more than eight minutes away, the long coast begins with a
 solar aim, reusing the measured panel axis before searching. The burn alarm
 is installed first. A stopped craft in a verified parking orbit can aim

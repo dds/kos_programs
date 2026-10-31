@@ -18,6 +18,7 @@ GLOBAL FUNCTION dependencyLibs {
         "inclination", LIST("orbit_nodes", "maneuver"),
         "landing_config", LIST("utils"),
         "landing_review", LIST("landing_config", "orbit", "coast_wait", "thrust_cutoff", "entry_landing_math"),
+        "excursion", LIST("landing_config", "thrust_cutoff"),
         "atmo_deorbit", LIST("landing_review", "landing_math", "deorbit_burn"),
         "entry_landing_math", LIST(),
         "entry_landing", LIST("entry_landing_math", "landing_config", "thrust_cutoff"),
@@ -129,6 +130,7 @@ GLOBAL FUNCTION dependencyPhases {
         "SCIENCE_OPS_LOW", LIST("science", "orbit", "solar"),
         "SCIENCE_ENTRY", LIST("science_entry"),
         "LANDING_REVIEW", LIST("landing_review"),
+        "EXCURSION_READY", LIST("excursion"),
         "ATMO_DEORBIT", LIST("atmo_deorbit"),
         "SCIENCE_IMPACT", LIST("science_impact"),
         "SURFACE_SCIENCE", LIST("science_surface"),
@@ -238,6 +240,7 @@ GLOBAL FUNCTION dependencyBands {
         "ORBITAL_SURVEY", LIST("ORBITAL_SURVEY"),
         "SCIENCE_ENTRY", LIST("SCIENCE_ENTRY"),
         "LANDING_REVIEW", LIST("LANDING_REVIEW"),
+        "EXCURSION", LIST("EXCURSION_READY"),
         "ATMO_DEORBIT", LIST("ATMO_DEORBIT"),
         "SCIENCE_IMPACT", LIST("SCIENCE_IMPACT"),
         "SURFACE_SCIENCE", LIST("SURFACE_SCIENCE"),
@@ -257,6 +260,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "POSTFLIGHT" { phaseMapSet(phaseMap, phaseKey, phasePostflight@). }
     ELSE IF phaseKey = "EVA_SCIENCE" { phaseMapSet(phaseMap, phaseKey, phaseEvaScience@). }
     ELSE IF phaseKey = "SCIENCE_OPS" { phaseMapSet(phaseMap, phaseKey, phaseScienceOps@). }
+    ELSE IF phaseKey = "EXCURSION_READY" { phaseMapSet(phaseMap, phaseKey, phaseExcursionReady@). }
     ELSE IF phaseKey = "SCIENCE_OPS_LOW" { phaseMapSet(phaseMap, phaseKey, phaseScienceOpsLow@). }
     ELSE IF phaseKey = "SCIENCE_ENTRY" { phaseMapSet(phaseMap, phaseKey, phaseScienceEntry@). }
     ELSE IF phaseKey = "LANDING_REVIEW" { phaseMapSet(phaseMap, phaseKey, phaseLandingReview@). }
