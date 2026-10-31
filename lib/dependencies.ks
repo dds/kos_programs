@@ -6,6 +6,7 @@ GLOBAL FUNCTION dependencyLibs {
     RETURN LEXICON(
         "core", LIST("state", "logs", "files", "phases", "dependencies", "config", "mission_type"),
         "capture", LIST("maneuver", "maneuver_plan", "orbit", "coast_wait", "midcourse"),
+        "flyby", LIST("coast_wait", "orbit", "science_flight", "conic_time", "thrust_cutoff"),
         "coast_wait", LIST("solar"),
         "midcourse", LIST(),
         "deorbit_burn", LIST("vessel_hardware", "landing_light", "coast_wait"),
@@ -166,7 +167,7 @@ GLOBAL FUNCTION dependencyPhases {
         "CAPTURE", LIST("capture"),
         "ASSIST", LIST("assist_plan"),
         "ASSIST_COAST", LIST("assist_coast"),
-        "FLYBY", LIST("capture"),
+        "FLYBY", LIST("flyby"),
         "CIRC", LIST("maneuver_orbit"),
         "RAISE", LIST("maneuver_orbit"),
         "INCLINE", LIST("maneuver_orbit"),

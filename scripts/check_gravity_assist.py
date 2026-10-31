@@ -157,6 +157,7 @@ def check_capture_recovery_and_separation():
             missionTargetBody=lambda:target,midcourseClearReviewAlarm=lambda:None,
             yieldToPrompt=lambda:events.append('held'),fixture_wait=lambda _:None,
             CAPTURE_ACCEPT_BOUND=0,CAPTURE_MIN_PE=75000,CAPTURE_MAX_PE=95000,CAPTURE_RESERVE_DV=100,
+            _captureContinueFlyby=lambda _:False,
             TARGET_AP=2880000,planCapture=lambda *_:events.append('plan') or node,
             fixture_remove=lambda _:events.append('remove'))
         if fault=='fuel':node.DELTAV.MAG=600

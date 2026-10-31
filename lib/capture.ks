@@ -3,21 +3,19 @@
 //
 // phaseCoast   — coast to target SOI
 // phaseCapture — capture into elliptical orbit at target
-// phaseFlyby   — wait through target periapsis without capture
 // ============================================================
 
+@LAZYGLOBAL OFF.
+
 // --- Config defaults owned by this file ---
-GLOBAL FLYBY_POST_PE_HOLD IS 0.
-GLOBAL FLYBY_EXIT_SOI IS 1.
-// After a flyby, the return-side phases work relative to the body we're
-// returning to. Retarget to FLYBY_NEXT_TARGET, or (unset) the flyby
-// body's parent (e.g. Mun -> Kerbin).
-GLOBAL FLYBY_NEXT_TARGET IS "".
 GLOBAL TARGET_AP IS -1.
 GLOBAL CAPTURE_RESERVE_DV IS -1.
 GLOBAL CAPTURE_MIN_PE IS -1.
 GLOBAL CAPTURE_MAX_PE IS -1.
 GLOBAL CAPTURE_ACCEPT_BOUND IS 0.
+// Opt-in only: an unaffordable, unflown airless capture may continue into
+// an immediately following FLYBY phase. No failed/interrupted burn waiver.
+GLOBAL CAPTURE_OPTIONAL_FLYBY IS 0.
 
 LOCAL MAX_RETRIES IS 5.
 
@@ -139,6 +137,33 @@ GLOBAL FUNCTION phaseCoast2Half {
     nextPhase(xferSeq).
 }
 
+LOCAL FUNCTION _captureContinueFlyby {
+    PARAMETER target.
+    IF CAPTURE_OPTIONAL_FLYBY <= 0 OR ABORT OR WARP <> 0 OR HASNODE
+            OR maneuverBurnInterrupted() OR SHIP <> KUNIVERSE:ACTIVEVESSEL
+            OR SHIP:BODY <> target OR target:ATM:EXISTS
+            OR NOT (SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
+                AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0)
+            OR NOT (SHIP:ORBIT:ECCENTRICITY >= 1 AND SHIP:ORBIT:ECCENTRICITY < 1e30
+                AND SHIP:PERIAPSIS >= MAX(1,CAPTURE_MIN_PE)
+                AND CAPTURE_MAX_PE >= SHIP:PERIAPSIS
+                AND ETA:PERIAPSIS > 0 AND ETA:PERIAPSIS < 1e30) { RETURN FALSE. }
+    IF SHIP:ORBIT:HASNEXTPATCH {
+        IF NOT (ETA:PERIAPSIS < SHIP:ORBIT:NEXTPATCHETA) { RETURN FALSE. }
+    }
+    LOCAL i IS 0.
+    UNTIL i+1 >= xferSeq:LENGTH {
+        IF xferSeq[i] = stateGet("phase","") AND xferSeq[i+1] = "FLYBY" {
+            mLogWarn("STATS capture decision=flyby reason=capture-budget noBurn=True").
+            PRINT "Capture exceeds the fuel budget; continuing the planned science flyby.".
+            nextPhase(xferSeq).
+            RETURN TRUE.
+        }
+        SET i TO i+1.
+    }
+    RETURN FALSE.
+}
+
 GLOBAL FUNCTION phaseCapture {
     midcourseClearReviewAlarm().
     LOCAL target IS missionTargetBody().
@@ -193,10 +218,15 @@ GLOBAL FUNCTION phaseCapture {
         }
 
         IF NOT (nd:DELTAV:MAG >= 0 AND nd:DELTAV:MAG < 1e30
-                AND SHIP:DELTAV:VACUUM >= 0 AND SHIP:DELTAV:VACUUM < 1e30
-                AND nd:DELTAV:MAG <= SHIP:DELTAV:VACUUM) {
+                AND SHIP:DELTAV:VACUUM >= 0 AND SHIP:DELTAV:VACUUM < 1e30) {
             REMOVE nd.
             mLogError("CAPTURE: native node exceeds finite available fuel; no burn authorized.").
+            yieldToPrompt(). RETURN.
+        }
+        IF nd:DELTAV:MAG > SHIP:DELTAV:VACUUM {
+            REMOVE nd.
+            IF _captureContinueFlyby(target) { RETURN. }
+            mLogError("CAPTURE: native node exceeds available fuel; no burn authorized.").
             yieldToPrompt(). RETURN.
         }
 
@@ -206,6 +236,7 @@ GLOBAL FUNCTION phaseCapture {
                 + " reserveDv=" + CAPTURE_RESERVE_DV).
             IF nd:DELTAV:MAG + CAPTURE_RESERVE_DV > SHIP:DELTAV:VACUUM {
                 REMOVE nd.
+                IF _captureContinueFlyby(target) { RETURN. }
                 mLogWarn("STATS capture decision=hold reason=capture-budget").
                 yieldToPrompt(). RETURN.
             }
@@ -239,78 +270,5 @@ GLOBAL FUNCTION phaseCapture {
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
         + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
     mLog("Capture complete. Moving to finalization phase.").
-    nextPhase(xferSeq).
-}
-
-GLOBAL FUNCTION phaseFlyby {
-    LOCAL target IS missionTargetBody().
-    WAIT 2.
-    IF SHIP:BODY:NAME <> target:NAME {
-        enterSolarCoast("FLYBY").
-        mLog("Flyby waiting for " + target:NAME + " SOI.").
-        waitForSOI(target).
-    }
-
-    enterSolarCoast("FLYBY").
-
-    LOCAL postPeHold IS 3600.
-    LOCAL exitSoi IS 0.
-    SET postPeHold TO FLYBY_POST_PE_HOLD.
-    SET exitSoi TO FLYBY_EXIT_SOI.
-
-    LOCAL peEta IS MAX(0, ETA:PERIAPSIS).
-    LOCAL peUt IS TIME:SECONDS + peEta.
-    IF peEta > 60 {
-        kacEnsureAlarm("Flyby Pe: " + target:NAME, peUt,
-            "Auto-created by phaseFlyby").
-    }
-
-    mLog("STATS flyby setup target=" + target:NAME
-        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
-        + " etaPe=" + ROUND(peEta,0)
-        + " holdS=" + ROUND(postPeHold,0)
-        + " exitSoi=" + exitSoi).
-
-    LOCAL solarRef IS -1.
-    UNTIL TIME:SECONDS >= peUt + postPeHold {
-        SET solarRef TO trySolarHoldTick(solarRef).
-        WAIT MIN(60, MAX(1, peUt + postPeHold - TIME:SECONDS)).
-    }
-
-    orbitSummary().
-
-    IF exitSoi > 0 AND SHIP:BODY:NAME = target:NAME {
-        mLog("Flyby complete; waiting to exit " + target:NAME + " SOI.").
-        IF SHIP:ORBIT:HASNEXTPATCH AND SHIP:ORBIT:NEXTPATCHETA > 60 {
-            kacEnsureAlarm("Exit SOI: " + target:NAME,
-                TIME:SECONDS + SHIP:ORBIT:NEXTPATCHETA,
-                "Auto-created by phaseFlyby").
-        }
-        UNTIL SHIP:BODY:NAME <> target:NAME {
-            SET solarRef TO trySolarHoldTick(solarRef).
-            WAIT 60.
-        }
-        mLog("Exited " + target:NAME + " SOI; current body=" + SHIP:BODY:NAME + ".").
-    }
-
-    mLog("STATS flyby result target=" + target:NAME
-        + " body=" + SHIP:BODY:NAME
-        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
-
-    // Retarget for the return: the moon is behind us, so ESCAPE/MCC/
-    // AEROBRAKE should work toward the body we're returning to — else
-    // they keep trying to re-acquire the moon. FLYBY_NEXT_TARGET if set,
-    // else the flyby body's parent. getTarget() reads state "target"
-    // first, so this sticks across the band-change reboot.
-    LOCAL nextTgt IS FLYBY_NEXT_TARGET.
-    IF nextTgt = "" AND target:HASBODY { SET nextTgt TO target:BODY:NAME. }
-    IF nextTgt <> "" {
-        stateSet("target", nextTgt).
-        mLog("Flyby: retargeting to " + nextTgt + " for the return leg.").
-    }
     nextPhase(xferSeq).
 }

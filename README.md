@@ -1083,6 +1083,9 @@ The two local Kerbin profiles below launch directly to100km polar parking.
 | `kerbin_lander` |100km polar parking, operator-selected Kerbin landing, parachutes with optional engine assistance | Local orbit |
 | `minmus_orbital_surveyor` |1041045m Ap /465764m Pe,21.6deg inc,255.5deg LAN,157.3deg AoP; review before command-selected polar mapping | Minmus transfer and local operations |
 | `minmus_lander` |15km polar parking, selected-site landing, repeat orbital excursions by command | Minmus transfer and local operations |
+| `eeloo_flyby` |25km science flyby; optional25km Pe /5000km Ap polar capture, then review | Window-dependent; live capture budget |
+| `moho_orbital_surveyor` | Powered70km polar Moho mapping orbit | Budget departure and capture for the actual window |
+| `moho_lander` |25km polar Moho parking, later site selection and powered surface science | Capture must retain1200m/s for descent |
 
 All surveyors retain the CPU, propulsion and scanners as one spacecraft. No
 `scansat_decoupler` is required, and none automatically deorbits after mapping.
@@ -1094,6 +1097,55 @@ surveyors, not relay satellites. Interplanetary probes each need a Kerbin-range 
 All Espoir profiles disable automatic coast warp with `COAST_AUTO_WARP=0`,
 including their generated Ike operations legs. KAC alarms and clock-based
 resumption remain active; the operator controls time warp.
+
+The Eeloo profile aims for a polar encounter before arrival. In `CAPTURE` it
+plans the native25km Pe /5000km Ap ellipse and burns only when the actual
+node leaves150m/s. If that unflown capture is unaffordable, it removes its own
+node and continues into `FLYBY`. This opt-in fallback requires a safe upcoming
+airless pass, idle controls, no interrupted/foreign maneuver, and `FLYBY`
+immediately after `CAPTURE`; invalid telemetry and execution failures still
+hold. Other profiles keep mandatory capture. There is no automatic SHAPE
+circularization, landing or Kerbin return on this mission.
+
+`FLYBY_SCIENCE=1` samples supported science in high/low space, using60km as
+Eeloo's low-space boundary. A conic-clock wake alarm precedes that boundary;
+solar searches stop for the close pass and sampling runs at1x twice a second.
+KAC periapsis/review alarms accompany a resident clock loop, which also works
+without KAC. The periapsis epoch survives reboot, including a capture that
+finishes just after Pe. After ten minutes past Pe, `SCIENCE_OPS` holds for
+review of the flown orbit and data. Power below30% or loss of link retains
+data; a queued transmission is not a delivery receipt. One-use instruments
+can be consumed in high space; this does not ration duplicates for low space.
+
+For Eeloo, the earlier3928m/s LKO build and the operator's3410m/s estimate
+leave518m/s before additional corrections. The
+[community delta-v map](https://forum.kerbalspaceprogram.com/topic/87463-173-community-delta-v-map-27/)
+gives about3460m/s from LKO to low Eeloo orbit before unfavorable plane costs
+(950+1140+1370). An independent coplanar, mean-distance vis-viva estimate is
+about2093m/s departure plus1153m/s for the high ellipse; low circular capture
+would be1369m/s. Thus this build is plausible at a favorable window, not a
+guaranteed capture. Eccentricity, inclination and the actual native encounter
+can exhaust that margin. Increasing Ap saves about216m/s in that example,
+not thousands; the arrival hyperbolic speed still has to be removed.
+
+Deck configuration checked31Oct2026: DTS-J1=2G/0.055t, HG-20=20M;
+the active save has rangeModifier=DSNModifier=1. With level3 DSN250G,
+one DTS-J1 reaches22.36Gm. Equal dishes combine with the default0.75 exponent,
+so the theoretical53.09–127.15Gm Eeloo distance bounds need11–104 DTS-J1s
+just to reach the edge of the link (104 weigh5.72t). Stronger antennas are
+the practical choice; two50G dishes reach about145Gm, or one100G dish158Gm.
+These are calculated limits, not guarantees against occultation or proof of
+useful signal at the edge. Moho is within one DTS-J1's nominal range.
+Eeloo solar flux is only about1.4–4.2% of Kerbin's inverse-square flux;
+allow for the actual probe load and science transmission when sizing power.
+
+The Moho surveyor retains the complete probe and power-managed scanners.
+The lander waits in `LANDING_REVIEW` for a surveyed waypoint or `landsite`
+coordinates, then uses the existing airless powered descent and ten-minute
+surface-science timer. It retains the5deg normal /15deg emergency slope,
+sunlight, direct-Kerbin and staging safeguards without assuming RO9 tags.
+Its1200m/s capture reserve is a descent allowance, not a promised return or
+a substitute for the actual lander thrust/fuel checks.
 
 The Minmus surveyor stops in `SCIENCE_OPS` after achieving the requested
 contract orbit. Confirm the objective before changing it. To move to70km polar
@@ -3415,6 +3467,7 @@ underscore (`TARGET_`).
 | MCC | maneuver_transfer | Legacy element-based mid-course correction |
 | BPLANE, REFINE_BPLANE | arrival_bplane | Initial and midpoint B-plane corrections |
 | COAST, COAST_1HALF, COAST_2HALF, CAPTURE | capture | SOI/midpoint coast + capture burn |
+| FLYBY | flyby | Unpowered encounter coast; optional high/low-space science |
 | SHAPE | orbit_shape | Closed-form orbit shaping to SHAPE_* |
 | DUNA_AEROCAPTURE, IKE_SETUP, DUNA_ENTRY_SETUP, DUNA_ENTRY_LOWER_PE | duna_ike_setup | Duna/Ike mission glue |
 | GOTO | goto_plan | Replan next hop toward `goto_dest` |

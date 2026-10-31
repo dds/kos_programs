@@ -6,6 +6,36 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 31Oct Espoir Eeloo/Moho profiles implemented and source-checked; native
+  flights pending. eeloo_flyby aims25km Pe/5000km Ap/polar; capture checks
+  its actual native node plus150m/s reserve. Only an unaffordable UNFLOWN
+  capture may fall back into the immediately following FLYBY. Finite-fuel,
+  idle/control/body/native-event checks remain; invalid data, foreign nodes
+  and failed/interrupted burns still hold. Separate flyby provider keeps
+  science out of ordinary capture dependencies. Opt-in high/low-space
+  science owns KAC boundary/Pe/review alarms before bounded solar work,
+  samples at1x near Pe without solar searches, retains data without
+  power/link and keeps the same pass epoch across reboot/post-Pe capture.
+  Legacy unpowered moon exit/parent retarget and no-KAC clocks checked.
+  Moho surveyor captures/shapes70km polar with attached power-managed
+  SCANsat; lander captures25km polar leaving1200m/s for airless descent,
+  requires later landsite selection and retains terrain/light/radio/stage
+  safeguards, then ten-minute surface science. No automatic return added.
+  User clarified Eeloo2510m/s beyond Kerbin escape, estimating3410 total;
+  prior3928m/s LKO build leaves518 before extra corrections. Independent
+  mean-distance coplanar estimate~2093 departure+1153 high-ellipse capture;
+  actual window/inclination/native arrival still decide affordability.
+  Deck cache verifies Eeloo references Squad/Sun (not Sarnus), DTS-J1=2G
+  at0.055t and HG-20=20M; active save range/DSN modifiers both1. At DSN3,
+  theoretical Eeloo distance bounds need11–104 DTS-J1s just for marginal
+  contact; stronger technology is practical. Moho fits one nominally.
+  All97 routine files pass287.09s; structural358 scripts/93 profiles/
+  80 phases/41 bands,0 errors/known KSC_DEORBIT warning. Reports:
+  /tmp/kos-espoir-eeloo-moho-20261031.{json,log}. No production edits
+  during/after the suite; only README/task documentation was completed.
+  Next: native mission trials with suitable payload power/antenna/fuel;
+  no game, save, settings, launch or flight controls were changed.
+
 - 31Oct Ike optional-plane convergence follow-up implemented/checked;
   native re-solve/burn pending. Native frame fix is
   confirmed on both Ike landers: valid patch-current snapshots, energy/h
