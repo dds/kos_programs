@@ -6,6 +6,64 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 31Oct native interplanetary BPLANE follow-up implemented/checked; native
+  vector report/reflight pending. Duna Lander2 boot018
+  at5114959 resumed18.943128m/s node UT5115043.9118548 (boot017 planned it).
+  Native planned Duna Pe71.526km/polar90.055deg; actual burn stopped6.6s
+  later with0.057702484m/s vs0.05 limit, live-thrust-axis-trim,
+  shutdownAttemptedFalse/thrustStoppedTrue, leaving actual Pe54.872km and
+  2072.23m/s. Strict executor correctly held; generic hold message falsely
+  said original trajectory retained. Spent37.886256 was the same18.943128
+  reservation charged again after reboot. Ike Lander1 boot015 discarded
+  unconverged16.11m/s candidate (Pe67.3km vs85km, planeErr0.39); actual Pe
+  33066.71km retained. It DID schedule resident COAST_1HALF refinement
+  UT7192609.1027567 before Duna entry9270292.73362905; boot017 confirms
+  clock/alarm and solar flow. No correction was flown on Ike Lander1.
+  Both logs paired native encounter Pe with impossible inside-patch sample
+  r~30billion metres, v8777m/s, inferred a~-3.9km/e~6million: the vessel/body
+  future wrappers were not measuring the selected conic. New measurement
+  reads p:POSITION-body:POSITION and p:VELOCITY:ORBIT at current UT,
+  anchored to native a/e/B magnitude, verifies energy/h/e within0.1%, uses
+  double-cross transverse vector and reports frame/consistency errors.
+  Native vectors still to verify; no claim of a successful KSP reflight.
+  Source fixtures recover independent Duna/Mun/Minmus Kepler states at
+  distant extrapolation in both handednesses and reject observed-scale
+  frame errors. New cmd/bplanecheck.ks archives read-only raw/native evidence
+  without node/phase/control edits, including during an interrupted burn.
+  BPLANE reservation now idempotent and recoverable across partial writes;
+  same unflown reservation alone receives cumulative-cap credit. No old
+  spent budget silently refunded. New intent-bound early stopped-trim
+  recovery preserves strict failure evidence and hands off only to the
+  existing midcourse pair: <=0.3m/s AND1% tail, verified stop/report/owner,
+  safe actual encounter/parent coast, future correction budget plus capture
+  and reserve. It never approves the final corridor. Legacy current Lander2
+  still needs explicit arrival replan; late/unbound/unsafe faults hold.
+  Recorded-tail regression tests actual guards and normal timed midpoint
+  continuation with/without KAC. Final95 routine files pass240.73s;
+  structural354 scripts/90 profiles/80 phases/41 bands,0 errors/known
+  KSC_DEORBIT warning. No production changes after final pass. Added actual
+  phase reboot-entry coverage afterward and reran the focused regression.
+  Initial95 routine files passed155.84s before the stopped-trim addition.
+  Evidence:/tmp/ksp-deck-20261031T164947Z-fetch-{y9typ8_w,zdjpovpy,u60m1bl6}
+  and164946Z-fetch-3x01iyn3/logs/. Final report target:
+  /tmp/kos-bplane-native-final-20261031.json and.log.
+  Native solar fix also confirmed: Lander2 boot017 settled after5.18s from
+  3deg, rate0.044deg/s with1.08s stable; Ike boot017 settled2.44s from0.19deg,
+  rate0.006deg/s with1.08s stable; steeringHeldTrue, full batteries/flow.
+  Next: pull/connected reboot; read-only cmd/bplanecheck on both before
+  new burns. Lander2: arrival action replan (legacy interrupted tail).
+  Ike Lander1: from idle coast/no node setphase BPLANE then REBOOT to
+  reconsider the early correction using the corrected measurement; its
+  existing midcourse alarm remains the fallback. Native validity and actual
+  solve/residual/phase continuation still require observation.
+
+- FOLLOWUP: standalone waitForSOI creates a midpoint health alarm even with
+  COAST_AUTO_WARP=0, but callback is gated on a successful automatic warp;
+  manual warp may stop at it without the health check and leave the alarm.
+  Regular solarHoldTick still runs. Move that health checkpoint to the live
+  clock independently of automatic warp, retaining KAC/solar/deadline/Abort
+  safety. Not changed during the native BPLANE fix.
+
 - 31Oct Minmus Espoir additions implemented; native validation pending.
   minmus_orbital_surveyor achieves Ap1041045/Pe465764m,
   inc21.6/LAN255.5/AoP157.3deg and stops for contract review. Then

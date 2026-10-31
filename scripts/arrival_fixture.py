@@ -15,6 +15,8 @@ class EventEta:
 
 
 def install(env):
+    env.setdefault('_bplaneReservationCredit',lambda *_:0)
+    env.setdefault('_bplaneRecoverStoppedTrim',lambda:False)
     for name,value in re.findall(r'GLOBAL (\w+) IS ("[^"\n]*"|-?\d+(?:\.\d+)?)\.',POLICY+'\n'+MANEUVER):
         env.setdefault(name,value[1:-1] if value.startswith('"') else float(value))
     for name in re.findall(r'GLOBAL FUNCTION (\w+)',POLICY+'\n'+CONIC):

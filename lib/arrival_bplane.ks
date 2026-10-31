@@ -28,8 +28,8 @@
 //   B_t = b_t * unit(n_t x S),  b_t from the requested PE.
 //
 // Robustness notes:
-//   - Velocities are sampled by numeric differentiation of
-//     POSITIONAT, sidestepping VELOCITYAT frame ambiguities.
+//   - State vectors come from the selected native patch at current UT,
+//     checked against its energy, angular momentum and eccentricity.
 //   - The eccentricity vector uses the cross-product-free form
 //     e = ((v·v - mu/r) r - (r·v) v) / mu, immune to handedness.
 //   - The B-plane handedness is calibrated against the measured
@@ -210,16 +210,24 @@ LOCAL FUNCTION _bplaneTrimSpent {
         stateSet("bplane_budget_id", id).
         stateSet("bplane_budget_spent", 0).
     }
-    RETURN stateGetNum("bplane_budget_spent", 0).
+    LOCAL spent IS stateGetNum("bplane_budget_spent", 0).
+    LOCAL reserved IS stateGet("bplane_budget_reservation",LEXICON()).
+    IF reserved:HASKEY("ID") AND reserved["ID"] = id AND reserved["TOTAL"] > spent {
+        // Complete a reservation whose second write was interrupted.
+        SET spent TO reserved["TOTAL"].
+        stateSet("bplane_budget_spent",spent).
+    }
+    RETURN spent.
 }
 
 LOCAL FUNCTION _bplaneTrimCap {
     PARAMETER targetBody, phaseCap.
+    PARAMETER reservedCredit IS 0.
     IF findArrivalPatch(0, targetBody) = 0 { RETURN phaseCap. }
     LOCAL cap IS phaseCap.
     IF BPLANE_TRIM_DV_CAP >= 0 { SET cap TO MIN(cap, BPLANE_TRIM_DV_CAP). }
     IF BPLANE_TRIM_TOTAL_DV_CAP >= 0 {
-        SET cap TO MIN(cap, BPLANE_TRIM_TOTAL_DV_CAP - _bplaneTrimSpent(targetBody)).
+        SET cap TO MIN(cap, BPLANE_TRIM_TOTAL_DV_CAP - _bplaneTrimSpent(targetBody) + MAX(0,reservedCredit)).
     }
     IF BPLANE_TRIM_RESERVE_DV >= 0 {
         // Stock vacuum dV is an estimate; zero leaves no optional budget.
@@ -243,8 +251,13 @@ LOCAL FUNCTION _bplaneHoldCorrection {
         _bplaneBlockedToPrompt(reason).
         RETURN.
     }
-    mLogWarn("Arrival correction rejected; original trajectory retained. "
-        + "Review the encounter and remaining mission before resuming.").
+    IF maneuverBurnInterrupted() {
+        mLogWarn("Correction execution stopped; achieved trajectory and interrupted node retained. "
+            + "Review the actual encounter; use arrival replan to discard the residual deliberately.").
+    } ELSE {
+        mLogWarn("Arrival correction rejected; original trajectory retained. "
+            + "Review the encounter and remaining mission before resuming.").
+    }
     _bplaneScheduleHoldReview(reason).
     yieldToPrompt().
 }
@@ -703,7 +716,7 @@ GLOBAL FUNCTION bplaneCorrectionAllowed {
     PARAMETER nd, targetBody, phaseCap.
     PARAMETER checkCorridor IS TRUE.
     PARAMETER missionOwned IS FALSE.
-    LOCAL cap IS _bplaneTrimCap(targetBody, phaseCap).
+    LOCAL cap IS _bplaneTrimCap(targetBody, phaseCap, _bplaneReservationCredit(nd,targetBody)).
     LOCAL original IS findArrivalPatch(0, targetBody).
     LOCAL planned IS findArrivalPatch(nd, targetBody).
     mLog("STATS bplane budget dv=" + ROUND(nd:DELTAV:MAG, 2)
@@ -878,7 +891,89 @@ LOCAL FUNCTION _bplaneReserveCorrection {
     IF findArrivalPatch(0, targetBody) = 0 { RETURN. }
     // Reserve planned cost before ignition; a power cut / partial burn
     // must not reset the allowance on the next boot.
-    stateSet("bplane_budget_spent", _bplaneTrimSpent(targetBody) + nd:DELTAV:MAG).
+    LOCAL spent IS _bplaneTrimSpent(targetBody).
+    LOCAL id IS stateGet("bplane_budget_id","").
+    LOCAL reserved IS stateGet("bplane_budget_reservation",LEXICON()).
+    LOCAL cost IS nd:DELTAV:MAG.
+    LOCAL additional IS cost.
+    IF reserved:HASKEY("ID") AND reserved["ID"] = id
+            AND ABS(reserved["UT"]-nd:TIME) < 0.01 {
+        SET additional TO MAX(0,cost-reserved["COST"]).
+    }
+    // Persist the pending charge first. Re-entering after a partial write
+    // completes it once; changed/new nodes still pay their full admission.
+    LOCAL total IS spent+additional.
+    IF reserved:HASKEY("ID") AND reserved["ID"] = id
+            AND ABS(reserved["UT"]-nd:TIME) < 0.01 {
+        SET total TO MAX(spent,reserved["TOTAL"]+additional).
+        SET cost TO MAX(cost,reserved["COST"]).
+    }
+    stateSet("bplane_budget_reservation",LEXICON("ID",id,"UT",nd:TIME,"COST",cost,"TOTAL",total,
+        "MISSION",stateGet("mission_id",""),"PHASE",stateGet("phase",""),"BODY",SHIP:BODY:NAME)).
+    stateSet("bplane_budget_spent",total).
+}
+
+LOCAL FUNCTION _bplaneReservationCredit {
+    PARAMETER nd, targetBody.
+    LOCAL reserved IS stateGet("bplane_budget_reservation",LEXICON()).
+    // _bplaneTrimSpent also completes a pending ledger write before reuse.
+    LOCAL spent IS _bplaneTrimSpent(targetBody).
+    IF reserved:HASKEY("ID") AND reserved["ID"] = stateGet("bplane_budget_id","")
+            AND ABS(reserved["UT"]-nd:TIME) < 0.01 AND NOT maneuverBurnInterrupted() {
+        RETURN MIN(spent,reserved["COST"]).
+    }
+    RETURN 0.
+}
+
+// A verified tiny trim tail can leave early arrival targeting assigned to
+// its existing midpoint. This is a coast handoff, never capture admission
+// or a successful executor report. Legacy/unbound burns require review.
+LOCAL FUNCTION _bplaneRecoverStoppedTrim {
+    IF ABORT OR WARP <> 0 OR SHIP <> KUNIVERSE:ACTIVEVESSEL
+            OR stateGet("phase","") <> "BPLANE" OR NOT _bplaneHasMidcourseRefinement()
+            OR NOT maneuverBurnInterrupted() OR NOT HASNODE
+            OR stateGet("burn_body","") <> SHIP:BODY:NAME
+            OR stateGet("burn_abort_reason","") <> "residual-outside-tolerance"
+            OR NOT (SHIP:THRUST >= 0 AND SHIP:THRUST <= 0.001
+                AND SHIP:CONTROL:MAINTHROTTLE <= 0 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0) { RETURN FALSE. }
+    LOCAL residual IS stateGetNum("burn_abort_residual",-1).
+    LOCAL planned IS stateGetNum("burn_dv",-1).
+    IF NOT (planned > MIN_EXEC_DV AND planned < 1e30
+            AND residual >= 0 AND residual <= MIN(MIN_EXEC_DV,planned*0.01)
+            AND ABS(NEXTNODE:TIME-stateGetNum("burn_node_time",-1)) < 0.5
+            AND NEXTNODE:DELTAV:MAG >= 0 AND NEXTNODE:DELTAV:MAG <= MIN(MIN_EXEC_DV,planned*0.01)) { RETURN FALSE. }
+    LOCAL report IS stateGet("last_burn_report","").
+    IF NOT (report:CONTAINS("cutoffFault=residual-outside-tolerance")
+            AND report:CONTAINS("shutdownAttempted=False") AND report:CONTAINS("thrustStopped=True")
+            AND (report:CONTAINS("reason=live-node-trim")
+                OR report:CONTAINS("reason=live-thrust-axis-trim"))) { RETURN FALSE. }
+    LOCAL targetBody IS _bplaneTargetBody().
+    IF targetBody = 0 { RETURN FALSE. }
+    LOCAL intent IS stateGet("bplane_budget_reservation",LEXICON()).
+    FOR key IN LIST("ID","UT","MISSION","PHASE","BODY") {
+        IF NOT intent:HASKEY(key) { RETURN FALSE. }
+    }
+    IF intent["ID"] <> targetBody:NAME+":"+stateGetNum("launch_time",0)
+            OR intent["MISSION"] <> stateGet("mission_id","") OR intent["PHASE"] <> "BPLANE"
+            OR intent["BODY"] <> SHIP:BODY:NAME OR ABS(intent["UT"]-NEXTNODE:TIME) >= 0.01 { RETURN FALSE. }
+    LOCAL hit IS _bplaneCoastEncounter(targetBody).
+    IF hit = 0 OR hit["entryUt"]-TIME:SECONDS <= 3*MAX(1,BPLANE_LEAD) { RETURN FALSE. }
+    IF NOT arrivalGoalPolicyOk(hit,targetBody,CAPTURE_PE)
+            OR NOT (hit["patch"]:PERIAPSIS >= BPLANE_REVIEW_MIN_PE) { RETURN FALSE. }
+    LOCAL laterCap IS _bplaneTrimCap(targetBody,REFINE_BPLANE_DV_CAP).
+    LOCAL needed IS arrivalRequiredCaptureDv(hit["patch"],targetBody)
+        + MAX(0,MAX(BPLANE_CAPTURE_MARGIN,BPLANE_TRIM_RESERVE_DV))+laterCap.
+    IF NOT (laterCap > MIN_EXEC_DV AND needed >= 0 AND needed <= SHIP:DELTAV:VACUUM) { RETURN FALSE. }
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
+    _bplaneEnsureSoiAlarm(targetBody).
+    maneuverAcceptHandoff().
+    mLogSummary("STATS bplane trim-recovery decision=midcourse residual=" + residual
+        + " PeKm=" + (hit["patch"]:PERIAPSIS/1000) + " neededDv=" + needed
+        + " finalCorridorAccepted=False").
+    IF _bplaneQueueMidcourseRetry("stopped-trim-needs-refinement")
+            AND _bplaneHandoffMidcourseRetry(targetBody) { RETURN TRUE. }
+    _bplaneHoldCorrection("stopped-trim-recovery-context-changed",TRUE).
+    RETURN TRUE.
 }
 
 LOCAL FUNCTION _bplaneSafeEncounter {
@@ -1952,6 +2047,7 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
 // ============================================================
 GLOBAL FUNCTION phaseBplane {
     IF maneuverBurnInterrupted() {
+        IF _bplaneRecoverStoppedTrim() { RETURN. }
         _bplaneHoldCorrection("interrupted-correction-use-arrival-replan"). RETURN.
     }
     LOCAL targetBody IS _bplaneTargetBody().
@@ -2040,6 +2136,7 @@ GLOBAL FUNCTION phaseBplane {
         LOCAL executed IS _bplaneExecuteCorrection().
         _bplaneEnsureSoiAlarm(targetBody).
         IF NOT executed {
+            IF _bplaneRecoverStoppedTrim() { RETURN. }
             bplaneArrivalStatus().
             _bplaneHoldCorrection("correction-execution-failed"). RETURN.
         }

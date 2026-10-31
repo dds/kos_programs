@@ -44,6 +44,7 @@ def check_budget():
 
     def cap(config, fuel, spent, phase_cap=150):
         env = dict(config, cap=phase_cap, targetBody=None,
+                   reservedCredit=0,
                    SHIP=NS(DELTAV=NS(VACUUM=fuel)),
                    _bplaneTrimSpent=lambda _: spent)
         for condition, expression in updates:

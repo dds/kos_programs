@@ -10,6 +10,7 @@
 
 GLOBAL ALLOW_GRAVITY_ASSIST IS 0.
 LOCAL _BPLANE_MEASURE_LOGGED IS FALSE.
+LOCAL _BPLANE_BAD_MEASURE_LOGGED IS FALSE.
 LOCAL _BPLANE_OFFPLANE_WARNED IS FALSE.
 
 GLOBAL FUNCTION bplaneResetWarnings {
@@ -62,8 +63,8 @@ GLOBAL FUNCTION findArrivalPatch {
 }
 
 // ============================================================
-// Arrival measurement — sample the hyperbolic patch shortly
-// after SOI entry and derive everything the solver needs.
+// Arrival measurement — read the selected hyperbolic conic's own
+// state vectors. Never combine vessel/body future-position wrappers.
 // Returns 0 on a missing encounter, else a LEX with:
 //   S (asymptote), B (aim vector), bt/br (B-plane coords),
 //   tHat/rHat (B-plane axes), hHat, vinf2, pe/inc/lan (elements)
@@ -77,48 +78,46 @@ GLOBAL FUNCTION measureArrival {
     LOCAL p IS hit["patch"].
     LOCAL mu IS targetBody:MU.
 
-    // Sample point safely inside the patch.
-    LOCAL tEntry IS hit["entryUt"].
-    LOCAL sampleDt IS 120.
-    IF p:HASNEXTPATCH {
-        LOCAL tEnd IS TIME:SECONDS + p:NEXTPATCHETA.
-        SET sampleDt TO MIN(sampleDt, MAX(10, (tEnd - tEntry) * 0.25)).
-    }
-    LOCAL t IS tEntry + sampleDt.
-
-    LOCAL rVec IS POSITIONAT(SHIP, t) - POSITIONAT(targetBody, t).
-    // Frame-proof velocity: numeric derivative of relative position.
-    LOCAL dt IS 1.
-    LOCAL rPlus IS POSITIONAT(SHIP, t + dt) - POSITIONAT(targetBody, t + dt).
-    LOCAL rMinus IS POSITIONAT(SHIP, t - dt) - POSITIONAT(targetBody, t - dt).
-    LOCAL vVec IS (rPlus - rMinus) / (2 * dt).
-
-    // (named rMag: bare "r" shadows kOS's R() constructor, and "t"
-    // is already this scope's sample time)
+    // Orbit:POSITION extrapolates THIS patch at current UT about its
+    // body's CURRENT center; Orbit:VELOCITY:ORBIT is relative to that
+    // body. Vessel POSITIONAT walks nodes/patches and adds SOI offsets;
+    // mixing it with Body POSITIONAT gave Sun-orbit velocities for Duna.
+    // Extrapolation outside the patch interval preserves its invariants.
+    LOCAL sampleUt IS TIME:SECONDS.
+    LOCAL rVec IS p:POSITION - targetBody:POSITION.
+    LOCAL vVec IS p:VELOCITY:ORBIT.
     LOCAL rMag IS rVec:MAG.
     LOCAL v2 IS vVec:SQRMAGNITUDE.
-    LOCAL rHatV IS rVec:NORMALIZED.
-
-    // Orbit constants from the sample (vis-viva, handedness-free e).
-    LOCAL sma IS 1 / (2 / rMag - v2 / mu).
-    IF sma >= 0 {
-        // Not hyperbolic at the sample — element-based phases can
-        // handle an (unusual) arriving ellipse.
-        RETURN 0.
-    }
+    LOCAL sma IS p:SEMIMAJORAXIS.
+    LOCAL ecc IS p:ECCENTRICITY.
+    IF NOT (rMag > 0 AND rMag < 1e30 AND v2 > 0 AND v2 < 1e30
+            AND mu > 0 AND mu < 1e30 AND sma < 0 AND sma > -1e30
+            AND ecc > 1 AND ecc < 1e15) { RETURN 0. }
     LOCAL vinf2 IS -mu / sma.
     LOCAL eVec IS ((v2 - mu / rMag) * rVec - VDOT(rVec, vVec) * vVec) / mu.
-    LOCAL ecc IS eVec:MAG.
+    LOCAL hVec IS VCRS(rVec,vVec).
+    LOCAL h IS SQRT(mu*(-sma)*(ecc^2-1)).
+    // Independently prove the RAW vectors belong to these native elements.
+    // A frame error must fail measurement, not steer a plausible native Pe
+    // with a physically unrelated B-vector. Bounds allow extrapolation's
+    // floating-point loss; they do not relax Pe/plane execution admission.
+    LOCAL energyError IS ABS(v2-mu*(2/rMag-1/sma))/MAX(1,vinf2).
+    LOCAL hError IS ABS(hVec:MAG-h)/MAX(1,h).
+    LOCAL eccError IS ABS(eVec:MAG-ecc)/MAX(1,ecc).
+    IF NOT (h > 0 AND h < 1e30 AND hVec:MAG > 0 AND eVec:MAG > 0
+            AND energyError <= 0.001 AND hError <= 0.001 AND eccError <= 0.001) {
+        IF NOT _BPLANE_BAD_MEASURE_LOGGED {
+            SET _BPLANE_BAD_MEASURE_LOGGED TO TRUE.
+            mLogWarn("STATS bplane-measure rejected=patch-state-inconsistent target=" + targetBody:NAME
+                + " energyError=" + energyError + " hError=" + hError + " eccError=" + eccError).
+        }
+        RETURN 0.
+    }
     LOCAL eHat IS eVec:NORMALIZED.
-    LOCAL hHat IS VCRS(rHatV, vVec:NORMALIZED):NORMALIZED.
-
-    // In-plane perpendicular to e, oriented toward increasing true
-    // anomaly — derived from the sample itself (no handedness bet):
-    // rHat = cos(TA) eHat + sin(TA) qHat, sign(sin TA) = sign(r·v).
-    LOCAL cosTa IS MAX(-1, MIN(1, VDOT(rHatV, eHat))).
-    LOCAL sinTa IS SQRT(MAX(1e-12, 1 - cosTa ^ 2)).
-    IF VDOT(rVec, vVec) < 0 { SET sinTa TO -sinTa. }
-    LOCAL qHat IS ((rHatV - cosTa * eHat) / sinTa):NORMALIZED.
+    LOCAL hHat IS hVec:NORMALIZED.
+    // Two cross products preserve the transverse direction in either
+    // handedness, without subtracting nearly parallel asymptotic vectors.
+    LOCAL qHat IS VCRS(hHat,eHat):NORMALIZED.
 
     // Incoming asymptote: position direction at TA -> -nu_inf,
     // velocity points inward along it.
@@ -129,7 +128,6 @@ GLOBAL FUNCTION measureArrival {
     // B vector: in-plane, perpendicular to S, on the periapsis side.
     LOCAL bHat IS VCRS(sHat, hHat):NORMALIZED.
     IF VDOT(bHat, eHat) < 0 { SET bHat TO -bHat. }
-    LOCAL h IS SQRT(rVec:SQRMAGNITUDE * v2 - VDOT(rVec, vVec) ^ 2).
     LOCAL bMag IS h / SQRT(vinf2).
 
     // B-plane axes from the body's polar axis.
@@ -144,6 +142,8 @@ GLOBAL FUNCTION measureArrival {
     IF NOT _BPLANE_MEASURE_LOGGED {
         SET _BPLANE_MEASURE_LOGGED TO TRUE.
         mLog("STATS bplane-measure target=" + targetBody:NAME
+            + " frame=patch-current sampleUt=" + sampleUt
+            + " energyError=" + energyError + " hError=" + hError + " eccError=" + eccError
             + " rKm=" + ROUND(rMag / 1000, 1)
             + " v=" + ROUND(SQRT(v2), 3)
             + " h=" + ROUND(h, 1)

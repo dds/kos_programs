@@ -72,6 +72,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/arrival.ks", "plan").` | Preview an arrival correction and hold for review; does not burn or advance the mission |
 | `RUNPATH("0:/cmd/arrival.ks", "status").` | Show actual arrival Pe, capture fuel estimate, correction spending and interrupted-burn reason without flying |
 | `RUNPATH("0:/cmd/assistsearch.ks").` | Manually search for a missing assist encounter around the existing node using the selected Espoir profile; restores the node and archives the candidate/diagnostics, never burns |
+| `RUNPATH("0:/cmd/bplanecheck.ks").` | Read-only archived arrival snapshot: native patch elements/state vectors, B-plane consistency and last executor report; run at1x with idle controls |
 | `RUNPATH("0:/cmd/flybyscience.ks",1).` | Enable optional science on configured flybys at the next reboot; `0` disables it. Adds no maneuver allowance |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
@@ -1555,6 +1556,52 @@ and antenna bursts, attitude authority, suitable instruments and the chosen
 entry protection. No thermometer or science-container prelaunch check has
 been added. Flight-computer configuration is prepared; hardware capability
 has not yet been demonstrated.
+
+### B-plane measurement and recovery
+
+Arrival geometry reads the selected encounter patch's own `POSITION` and
+`VELOCITY:ORBIT`, with position referred to that body's current center.
+These extrapolate that conic at current UT, so a large reported `rKm` before
+arrival is expected. They avoid combining vessel/body future-position wrappers
+or allowing a pending maneuver to contaminate an unburned-patch measurement.
+The patch-local vector behavior is implemented in
+[kOS OrbitInfo](https://github.com/KSP-KOS/KOS/blob/develop/src/kOS/Suffixed/OrbitInfo.cs).
+Energy, angular momentum and eccentricity must independently agree with
+the native elements within0.1%; otherwise measurement fails closed.
+`STATS bplane-measure frame=patch-current` reports the three consistency
+errors. This check does not widen the requested Pe/plane corridor.
+
+At a stopped prompt with idle thrust and warp off, run:
+
+```ks
+RUNPATH("0:/cmd/bplanecheck.ks").
+```
+
+It writes directly to `0:/logs/archive/_diagnostics/bplanecheck_*.log`,
+including native elements/raw vectors, measurement validity, B-vector and
+the unchanged last executor report. It does not create, delete or execute
+a maneuver, advance the phase, or change attitude/throttle. The snapshot
+can run while an interrupted correction is retained or from a coast phase.
+
+An unflown correction's reserved cost is charged once across reboot.
+Increasing that node's cost charges the difference; a different node pays
+its full cost. A pending reservation write is completed after a power loss.
+Only that same unflown reservation receives cumulative-budget credit when
+revalidating; per-burn limits and actual fuel reserves remain unchanged.
+Older recorded overcharges are not silently refunded.
+
+The executor still reports a failed burn if its residual exceeds its strict
+limit. Early `BPLANE` may hand a verified tiny trim tail to the existing timed
+midcourse only when the new durable reservation binds mission/launch/body/node,
+the trim cutoff and physical stop are verified, residual is at most0.3m/s and
+1% of planned delta-v, the actual encounter/parent coast is safe, and fuel
+covers capture, reserve and the next correction allowance. That handoff
+preserves the failed report and spent ledger; `finalCorridorAccepted=False`
+makes clear that refinement and final arrival admission still remain.
+Late refinements, legacy/unbound intent and any other fault retain review.
+For an already-held legacy correction, explicit
+`RUNPATH("0:/cmd/arrival.ks","replan").` discards its residual and replans
+from the achieved trajectory while preserving the spent budget.
 
 ### RO8 moon landing and return
 
