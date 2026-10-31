@@ -5,6 +5,7 @@ GLOBAL FUNCTION executeDeorbitNode {
     PARAMETER targetLat IS 999.
     PARAMETER targetLng IS 999.
     PARAMETER beforeBurn IS 0.
+    PARAMETER allowStage IS TRUE.
     LOCAL burnDV IS nd:DELTAV:MAG.
     LOCK THROTTLE TO 0.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
@@ -40,6 +41,11 @@ GLOBAL FUNCTION executeDeorbitNode {
         "STAGE_EVENTS", 0, "STAGE_ACTIVATED", FALSE,
         "STAGE_WARNED", FALSE, "TARGET_THROTTLE", 0).
     LOCAL stageDeadline IS TIME:SECONDS + 10.
+    IF NOT allowStage AND vesselNeedsStage() {
+        vesselLandingCleanup().
+        mLogError("Deorbit requires the measured active engine; automatic staging disabled. Node retained.").
+        RETURN FALSE.
+    }
     UNTIL NOT vesselNeedsStage() OR ABORT OR TIME:SECONDS >= stageDeadline {
         vesselStageForLanding(ctx).
         WAIT 0.05.

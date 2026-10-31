@@ -73,7 +73,7 @@ def check_existing_entry_profiles():
     # Consolidation removes the duplicate Espoir entry profile; preserve
     # coverage of the canonical profile and each legacy atmospheric mission.
     assert {ROOT/'missions'/name for name in (
-        'Espoir/duna_impactor.ks','FalconHeavy/duna_ike_scisat_lander.ks',
+        'FalconHeavy/duna_ike_scisat_lander.ks',
         'FalconHeavy/eve_scisat_entry.ks','FalconHeavy/duna_scisat_lander.ks')} <= set(entries)
     print('PASS: every static B-plane atmospheric-entry profile explicitly retains entry intent, including legacy Eve and Duna missions')
 
@@ -159,7 +159,7 @@ def check_next_distinct_band():
     src=(ROOT/'lib/mission_type.ks').read_text();deps,phases,bands=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     def band(phase,fallback=''):
         return next((key.upper() for key,ps in bands.items() if phase.lower() in ps),fallback)
-    for name,current in (('duna_impactor','REFINE_BPLANE'),('ike_lander','COAST_1HALF'),('ike_lander','IKE_SETUP')):
+    for name,current in (('duna_lander','REFINE_BPLANE'),('ike_lander','COAST_1HALF'),('ike_lander','IKE_SETUP')):
         cfg=profile(name)
         env=dict(cfg,MISSION_CACHE_HANDOFF_PHASES=cfg.get("MISSION_CACHE_HANDOFF_PHASES",KList()),currentPhase=current,bandKey=band(current),LIST=lambda *xs:KList(xs),
                  bootLibBandForPhase=band,
@@ -167,7 +167,7 @@ def check_next_distinct_band():
                  missionTypeConditionalRoots=lambda _:KList(),missionAppendUnique=lambda dest,rows:dest.extend(x for x in rows if x not in dest))
         # function has parameters, evaluated by the existing source harness.
         roots=run(function_body(src,'missionTypeCacheRoots'),env)
-        expected='science_entry' if name=='duna_impactor' else 'ike_setup'
+        expected='capture' if name=='duna_lander' else 'ike_setup'
         if current != 'IKE_SETUP':
             assert expected in closure(roots,deps),(name,roots)
         if name=='ike_lander':

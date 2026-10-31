@@ -10,10 +10,11 @@ from check_surface_return import read_settings
 
 FLIGHT = (ROOT/'lib/science_flight.ks').read_text()
 ENTRY = (ROOT/'lib/science_entry.ks').read_text()
-PROFILE = (ROOT/'missions/Espoir/duna_impactor.ks').read_text()
+PROFILE = (ROOT/'missions/Espoir/duna_lander.ks').read_text()
 
 
 class Map(dict):
+    LENGTH = property(len)
     HASKEY = dict.__contains__
     REMOVE = dict.pop
     COPY = property(lambda self: Map(self))
@@ -36,12 +37,12 @@ def run(source, name, env):
 def check_profile_and_boot():
     cfg = read_settings(PROFILE, {})
     assert cfg['TARGET_'] == 'DUNA' and cfg['MISSION_TYPE'] == 'interplanetary'
-    assert cfg['SEQUENCE'][-4:] == ['REFINE_BPLANE','COAST_2HALF','SCIENCE_ENTRY','DONE']
-    assert all(p not in cfg['SEQUENCE'] for p in ('CAPTURE','SHAPE','IKE_SETUP','DESCENT','FLYBY'))
-    assert 0 < cfg['CAPTURE_PE']-cfg['BPLANE_PE_TOL']
-    assert cfg['CAPTURE_PE']+cfg['BPLANE_PE_TOL'] < 50000
-    assert cfg['CAPTURE_INC'] == cfg['CAPTURE_LAN'] == -1
-    assert cfg['BPLANE_PE_ONLY'] == 1 and cfg['BPLANE_TRIM_RESERVE_DV'] > 0
+    assert cfg['SEQUENCE'][-6:] == ['SHAPE','LANDING_REVIEW','ATMO_DEORBIT','SCIENCE_ENTRY','SURFACE_SCIENCE','DONE']
+    assert cfg['CAPTURE_PE'] == cfg['TARGET_AP'] == cfg['SHAPE_PE'] == cfg['SHAPE_AP'] == 70000
+    assert cfg['CAPTURE_MIN_PE'] >= 60000 and cfg['CAPTURE_INC'] == 90
+    assert cfg['BPLANE_PE_ONLY'] == 0 and cfg['BPLANE_REQUIRE_PLANE'] == 1
+    assert cfg['ENTRY_POWERED_LANDING'] == cfg['LANDING_TARGET_REVIEW_REQUIRED'] == 1
+    assert cfg['TARGET_LOCK'] == cfg['LANDING_AUTO_TARGET'] == cfg['LANDING_FLEXIBLE_SITE'] == 0
     assert cfg['SCIENCE_ENTRY_MOON'] == 'IKE' and cfg['SCIENCE_ENTRY_MAX_PASSES'] == 3
     assert cfg['SCIENCE_ENTRY_CHUTES']==1
     assert not re.search(r'RO9|return_decoupler|lander_decoupler|SET .*STAGE TO',
@@ -58,10 +59,12 @@ def check_profile_and_boot():
     cache_src = (ROOT/'lib/mission_type.ks').read_text()
     for band in ('XFER_BPLANE','XFER_ARRIVE','SCIENCE_ENTRY','LAUNCH'):
         roots = run(cache_src,'missionTypeCacheRoots',dict(bandKey=band,currentPhase="",SEQUENCE=KList(cfg['SEQUENCE']),
+                    missionTypeConditionalRoots=lambda _:KList(['entry_landing']),
+                    missionAppendUnique=lambda dest,rows:dest.extend(x for x in rows if x not in dest),
                     LIST=lambda *xs:KList(xs)))
         assert ('science_entry' in roots) == (band in ('XFER_BPLANE','XFER_ARRIVE'))
     assert 'bootLibLoad("rocket_craft")' in (ROOT/'craft/Espoir.ks').read_text()
-    print('PASS: Espoir deep-entry profile has no capture/RO9 hardware assumptions; dedicated lean band, handler and disk-only prefetch resolve without changing ordinary missions')
+    print('PASS: Espoir polar parking/site review precedes atmospheric deorbit; optional terminal provider resolves without adding descent/RO9 hardware assumptions to ordinary science entry')
 
 
 class Experiment:
@@ -253,6 +256,7 @@ def check_phase_lifecycle():
         cfg=read_settings(PROFILE,{})
         saved['mission_id']=cfg['MISSION_ID']
         env.update(cfg)
+        env['ENTRY_POWERED_LANDING']=0 # Isolate shared science lifecycle; controller separately integrated.
         env['SCIENCE_ENTRY_BANDS']=Map({key:KList(value) for key,value in cfg['SCIENCE_ENTRY_BANDS'].items()})
         env.update(ABORT=False,HASNODE=False,WARP=4,SAS=True,xferSeq=KList(cfg['SEQUENCE']),
                    missionTargetBody=lambda:primary,thrustCutoffOk=lambda:events.append('cutoff') or True,

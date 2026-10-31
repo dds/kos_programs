@@ -113,7 +113,7 @@ def check_entrypoints_and_committed_recovery():
     phase=function_body(deorbit,'phaseLandDeorbit')
     for committed in (False,True):
         events=[]
-        env=dict(landingApplyMissionConfig=lambda:None,ABORT=False,
+        env=dict(landingApplyMissionConfig=lambda:None,ABORT=False,LANDING_TARGET_REVIEW_REQUIRED=0,
                  vesselLandingPrepareRoles=lambda:events.append('roles') or False,
                  SHIP=NS(STATUS='SUB_ORBITAL' if committed else 'ORBITING'),
                  LANDING_SKIP_TARGET_SEARCH=0,landingImpactAcceptableForAssist=lambda:True,

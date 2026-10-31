@@ -230,8 +230,8 @@ def check_retired_espoir_profile():
     env,files,events,state=fixture()
     env['LEXICON']=lambda *xs:dict(zip(xs[::2],xs[1::2]))
     old=Text('duna_science_impact');vehicle=Text('Espoir')
-    canonical=(ROOT/'missions/Espoir/duna_impactor.ks').read_text()
-    files['0:/missions/Espoir/duna_impactor.ks']=canonical
+    canonical=(ROOT/'missions/Espoir/duna_lander.ks').read_text()
+    files['0:/missions/Espoir/duna_lander.ks']=canonical
     files['1:/missions']=files['1:/missions/Espoir']=None
     state.update(mission_id=old,target='DUNA',phase='SCIENCE_ENTRY',launch_time=1000,
                  science_entry_id=old+':1000:DUNA',science_entry_passes=2,
@@ -243,7 +243,7 @@ def check_retired_espoir_profile():
     assert env['MISSION_ASSIST_SCIENCE']==1 and env['SCIENCE_ENTRY_MOON']=='IKE'
     assert env['LAUNCH_PLANE_MODE']=='INTERPLANETARY'
     assert env['TRANSFER_SCAN_SAMPLES_PER_ORBIT']==16
-    cached='1:/missions/Espoir/duna_impactor.ksm'
+    cached='1:/missions/Espoir/duna_lander.ksm'
     assert files[cached][0]=='ksm'
     assert all('duna_science_impact' not in row[1] for row in events)
     # Clean up the obsolete cached launch profile, retaining the canonical

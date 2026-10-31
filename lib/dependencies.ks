@@ -17,6 +17,10 @@ GLOBAL FUNCTION dependencyLibs {
         "flightplan", LIST("ui"),
         "inclination", LIST("orbit_nodes", "maneuver"),
         "landing_config", LIST("utils"),
+        "landing_review", LIST("landing_config", "orbit", "coast_wait", "thrust_cutoff", "entry_landing_math"),
+        "atmo_deorbit", LIST("landing_review", "landing_math", "deorbit_burn"),
+        "entry_landing_math", LIST(),
+        "entry_landing", LIST("entry_landing_math", "landing_config", "thrust_cutoff"),
         "landing_deorbit", LIST("landing_config", "landing_math", "vessel_hardware"),
         "landing_math", LIST("utils"),
         "landing_light_math", LIST("landing_config", "landing_math", "landing_radio"),
@@ -124,6 +128,8 @@ GLOBAL FUNCTION dependencyPhases {
         "SCIENCE_OPS", LIST("science", "orbit", "solar"),
         "SCIENCE_OPS_LOW", LIST("science", "orbit", "solar"),
         "SCIENCE_ENTRY", LIST("science_entry"),
+        "LANDING_REVIEW", LIST("landing_review"),
+        "ATMO_DEORBIT", LIST("atmo_deorbit"),
         "SCIENCE_IMPACT", LIST("science_impact"),
         "SURFACE_SCIENCE", LIST("science_surface"),
         "ORBITAL_SURVEY", LIST("orbital_survey"),
@@ -231,6 +237,8 @@ GLOBAL FUNCTION dependencyBands {
         "LAND_PREP", LIST("LAND_PREP"),
         "ORBITAL_SURVEY", LIST("ORBITAL_SURVEY"),
         "SCIENCE_ENTRY", LIST("SCIENCE_ENTRY"),
+        "LANDING_REVIEW", LIST("LANDING_REVIEW"),
+        "ATMO_DEORBIT", LIST("ATMO_DEORBIT"),
         "SCIENCE_IMPACT", LIST("SCIENCE_IMPACT"),
         "SURFACE_SCIENCE", LIST("SURFACE_SCIENCE"),
         "LANDING", LIST("LAND_ASSIST", "LAND"),
@@ -251,6 +259,8 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "SCIENCE_OPS" { phaseMapSet(phaseMap, phaseKey, phaseScienceOps@). }
     ELSE IF phaseKey = "SCIENCE_OPS_LOW" { phaseMapSet(phaseMap, phaseKey, phaseScienceOpsLow@). }
     ELSE IF phaseKey = "SCIENCE_ENTRY" { phaseMapSet(phaseMap, phaseKey, phaseScienceEntry@). }
+    ELSE IF phaseKey = "LANDING_REVIEW" { phaseMapSet(phaseMap, phaseKey, phaseLandingReview@). }
+    ELSE IF phaseKey = "ATMO_DEORBIT" { phaseMapSet(phaseMap, phaseKey, phaseAtmoDeorbit@). }
     ELSE IF phaseKey = "SCIENCE_IMPACT" { phaseMapSet(phaseMap, phaseKey, phaseScienceImpact@). }
     ELSE IF phaseKey = "SURFACE_SCIENCE" { phaseMapSet(phaseMap, phaseKey, phaseSurfaceScience@). }
     ELSE IF phaseKey = "ORBITAL_SURVEY" { phaseMapSet(phaseMap, phaseKey, phaseOrbitalSurvey@). }

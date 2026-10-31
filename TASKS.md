@@ -6,7 +6,54 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- 30Oct user added four parachutes to a Duna science impactor and welcomes
+- 30Oct implemented/checked; native flight validation pending: Espoir now
+  has four canonical choices: Duna/Ike70km polar surveyors, Duna70km polar
+  lander, Ike25km polar lander. Retired duna_impactor/duna_science_impact ids
+  alias to duna_lander without resetting durable identity. Old generated
+  Ike ops goals upgrade only while safely uncommitted in orbit. Both landers
+  stop at LANDING_REVIEW for surveyed coordinates; cmd/landsite.ks uses the
+  selected same-body waypoint or explicit lat/lng, persists a fixed target
+  and advances only from a safe idle orbit. Unselected old LAND_DEORBIT is
+  redirected before any node deletion/search. Direct Kerbin15deg policy
+  retained, plus new ancestor occultation ray check (Ike behind Duna).
+  Duna ATMO_DEORBIT uses native TR footprint in fixed spherical tangent
+  coordinates, bounded ground survey4096 samples and time/normal coupled
+  solve64 native probes; Pe5+/-3km, footprint1.5km,normal10m/s,total150m/s,
+  terrain5deg/light/radio and fresh owner/intent/preburn checks retained.
+  Existing compact executor supplies KAC/solar/polling/cutoff; its new
+  allowStage parameter defaults true for existing missions but is false
+  on this measured-active-engine atmospheric path. Owned failed probes
+  removed, foreign/interrupted nodes preserved; retry command generalized
+  to Ike and atmospheric deorbit. Shared airless descent retained for Ike,
+  with validated staging model credit enabled (old powered-lead+credit0
+  combination could never run that model).
+  Duna terminal controller loads only for ENTRY_POWERED_LANDING, leaving
+  ordinary science entry lean. Measured active-stage TWR>=1.5, attached stock
+  chutes and300m/s terminal fuel beyond deorbit required; no future-engine
+  credit or automatic staging. Drag/chutes handle high/fast entry, then
+  descending stopping curve and<=20deg lateral effort; no hover for a remote
+  miss. Live alignment/pilot/vessel/stage/stale/contact cutoffs, shared
+  verified stop, nominal50ms control delay beside0.5s science pulses and compact5s terminal
+  telemetry. Safe chute requests and600s post-touchdown science retained.
+  Native capture/drag/chute/targeting/touchdown still unverified. Hardware
+  question pending (attached engine/chutes and actual Duna TWR/fuel); generic
+  source checks cannot establish a particular probe can land. Legacy
+  ATMO_WALK is deliberately not wired: timeout can permit unaligned burn.
+  Final routine suite: all92 files pass180.61s, new individual cases<=0.413s;
+  structural346 scripts/86 profiles/79 phases/40 bands,0 errors and unchanged
+  legacy KSC_DEORBIT warning. First run found two legacy fixtures missing the
+  default-off review flag; fixed fixtures, then reran the whole suite against
+  unchanged production code. Source checks cover spherical time/normal fit,
+  node/target takeover, fresh/retained/flown handoff, hardware/radio/terrain
+  rejection, review command and old-id/profile boot behavior, independent
+  variable-mass/drag descent plus resident science/control cleanup. No source
+  changes after final suite. Report:/tmp/kos-espoir-polar-landing-final-20261030.json
+  and.log. Next: pull/reboot connected before arrival; at LANDING_REVIEW select
+  a surveyed same-body waypoint, RUNPATH("0:/cmd/landsite.ks"). then REBOOT.
+  Capture logs for native footprint convergence and terminal control/chutes.
+
+- Earlier30Oct (entry-only policy superseded above): user added four
+  parachutes to a Duna science impactor and welcomes
   opportunistic landing. Keep duna_impactor mission id/entry5km+/-3km/sequence;
   display name now Duna Atmospheric Science. Profile enables new
   SCIENCE_ENTRY_CHUTES=1 (shared default0). Tiny inline helper requests native

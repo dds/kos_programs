@@ -24,6 +24,8 @@ GLOBAL MISSION_ASSIST_SETTINGS IS LEXICON().
 GLOBAL MISSION_ASSIST_SCIENCE IS 0.
 // Diagnostic-only acquisition at the normal interplanetary midpoint.
 GLOBAL ASSIST_MIDCOURSE_PREVIEW IS 0.
+GLOBAL ENTRY_POWERED_LANDING IS 0.
+GLOBAL LANDING_TARGET_REVIEW_REQUIRED IS 0.
 // Loader decisions happen before optional landing libraries execute.
 GLOBAL LANDING_AUTO_TARGET IS 0.
 GLOBAL LANDING_REQUIRE_SITE IS 0.
@@ -53,6 +55,7 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
         IF ASSIST_MIDCOURSE_PREVIEW > 0 OR pending { roots:ADD("assist_midcourse"). }
     }
     IF bandKey = "ASSIST_COAST" AND MISSION_ASSIST_SCIENCE > 0 { roots:ADD("science_entry"). }
+    IF bandKey = "SCIENCE_ENTRY" AND ENTRY_POWERED_LANDING > 0 { roots:ADD("entry_landing"). }
     IF bandKey = "LAND_DEORBIT" {
         IF LANDING_AUTO_TARGET > 0 { roots:ADD("landing_light_wait"). }
         IF LANDING_SITE_SCAN_ENABLE > 0 OR LANDING_REQUIRE_SITE > 0 { roots:ADD("landing_site"). }
@@ -168,6 +171,7 @@ GLOBAL FUNCTION missionTypeCacheRoots {
     IF SEQUENCE:CONTAINS("SCIENCE_ENTRY")
             AND (bandKey = "XFER_BPLANE" OR bandKey = "XFER_ARRIVE") {
         roots:ADD("science_entry").
+        missionAppendUnique(roots,missionTypeConditionalRoots("SCIENCE_ENTRY")).
     }
     LOCAL automatic IS SEQUENCE:CONTAINS("HOP_ROUTE_SETUP") OR SEQUENCE:CONTAINS("HOP_AUTO_REVIEW").
     LOCAL manualRoute IS SEQUENCE:CONTAINS("HOP_REVIEW").

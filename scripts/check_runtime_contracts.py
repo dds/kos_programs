@@ -260,7 +260,7 @@ def check_compact_burn():
     source = re.sub(r'WAIT UNTIL (.*?)\.(?=\s*\n)', r'UNTIL \1 { WAIT 0.02. }', source, flags=re.S)
     source = re.sub(r'UNLOCK (\w+)\.', r'fixture_unlock("\1").', source)
     source = source.replace('REMOVE nd.', 'fixture_remove(nd).')
-    for scenario in ('normal', 'cutoff-fault', 'frozen', 'weak-thrust', 'abort', 'flameout', 'reversal', 'no-engine', 'expired', 'off-vector', 'unlit-site','missing-cache'):
+    for scenario in ('normal', 'cutoff-fault', 'frozen', 'weak-thrust', 'abort', 'flameout', 'reversal', 'no-engine', 'stage-disabled', 'expired', 'off-vector', 'unlit-site','missing-cache'):
         class AttachedNode:
             # Match kOS Node.GetBurnVector/Remove: both suffix aliases throw
             # after REMOVE invalidates this wrapper's NodeRef.
@@ -279,7 +279,7 @@ def check_compact_burn():
             @BURNVECTOR.setter
             def BURNVECTOR(self, value): self.vector = value
         node = AttachedNode()
-        ship = NS(MASS=10., THRUST=0., AVAILABLETHRUST=0. if scenario == 'no-engine' else 100.,
+        ship = NS(MASS=10., THRUST=0., AVAILABLETHRUST=0. if scenario in ('no-engine','stage-disabled') else 100.,
                   BODY=NS(NAME='Mun'),
                   CONTROL=NS(PILOTMAINTHROTTLE=0.), FACING=NS(FOREVECTOR=Vec((1, 0, 0))))
         removed, commands, elapsed = [], [], [0.]
@@ -290,7 +290,7 @@ def check_compact_burn():
             # Include an already queued callback even after UNLOCK, or an
             # owner trigger unknown to a different compiled cleanup library.
             for expression in history: evaluate(expression, env)
-        env = dict(nd=node, TIME=NS(SECONDS=0.), SHIP=ship, ABORT=False, throttle=0.,
+        env = dict(nd=node, TIME=NS(SECONDS=0.), SHIP=ship, ABORT=False, throttle=0.,allowStage=scenario!='stage-disabled',
                    CONFIG=NS(IPU=150), LANDING_MIN_IPU=2000,
                    KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),
                    ROUND=round, VANG=lambda *_: 30 if scenario == 'off-vector' else 0,
@@ -299,7 +299,7 @@ def check_compact_burn():
                    stateSet=lambda key, value: markers.update({key: value}),
                    stateRemove=lambda key: markers.pop(key, None),
                    vesselNeedsStage=lambda: ship.AVAILABLETHRUST <= 0,
-                   vesselStageForLanding=lambda _: None,
+                   vesselStageForLanding=lambda _:history.append('stage'),
                    maneuverEnsureBurnAlarm=lambda *_: '', coastAutoWarp=lambda *_: None,
                    enterSolarCoast=lambda *_:1,solarCoastCanWarp=lambda *_:True,
                    coastHealthCheck=lambda *_:True,
@@ -345,7 +345,8 @@ def check_compact_burn():
         assert result == (scenario in ('normal','missing-cache')), scenario
         assert bool(removed) == result and env['throttle'] == 0, scenario
         assert env['CONFIG'].IPU==150 and 'burn_prior_ipu' not in markers
-        if scenario in ('no-engine', 'expired', 'off-vector', 'unlit-site'): assert not any(commands)
+        if scenario in ('no-engine','stage-disabled', 'expired', 'off-vector', 'unlit-site'): assert not any(commands)
+        if scenario=='stage-disabled':assert 'stage' not in history and env['TIME'].SECONDS<.1
         burned = elapsed[0] > 0
         assert ('deorbit_burn_started' in markers) == (burned and not result), scenario
         if scenario == 'frozen': assert elapsed[0] < 1.1  # Old timeout allowed ~10 s of full thrust.

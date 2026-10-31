@@ -216,7 +216,7 @@ def rough_surveyor_fixture():
         found=math.hypot((node.RADIALOUT-10)*400000,
                          (node.NORMAL+96.1722065415761)*300000)<ike.SOIRADIUS
         end=patch(sun,1e10,node.TIME+30000,.2)
-        moon=patch(ike,148000,node.TIME+9000,1.1,inc=90)
+        moon=patch(ike,68000,node.TIME+9000,1.1,inc=90)
         peri=29308980.4629666
         if found:peri=85000
         if world.get('unsafe'):peri=1000
@@ -270,16 +270,15 @@ def check_rough_orbital_departure():
 
 
 def check_mission_policy_and_seek():
-    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_lander','duna_impactor','duna_science_impact'):
+    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_lander','duna_lander','duna_impactor','duna_science_impact'):
         env,nd,route,limits,_,_,_,_,_,_=fixture()
         env.update(BPLANE_ARRIVAL_MODE='ORBIT')
         env.update(profile(name))
         fallback=env['assistPreviewMissionFallback']()
         assert fallback['BODY']=='Duna' and env['assistRouteBodies'](Items([fallback]),1),name
-        if 'impactor' in name or name=='duna_science_impact':
-            if name.startswith('duna_'):assert fallback['MODE']=='ENTRY' and 'AP' not in fallback
+        assert fallback['MODE']=='ORBIT'
         if name.startswith('ike_'):assert fallback['AP']==2880000
-        if name=='duna_orbital_surveyor':assert fallback['INC']==90 and fallback['AP']==300000
+        else:assert fallback['INC']==90 and fallback['AP']==70000
         assert env['assistPreviewSeekIndex'](nd,route)==0
         parent_first=Items([Map(BODY='Duna',MIN_PE=75000),Map(BODY='Ike',MIN_PE=25000,AP=75000)])
         assert env['assistPreviewSeekIndex'](nd,parent_first)==1

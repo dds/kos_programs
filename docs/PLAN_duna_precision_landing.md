@@ -1,3 +1,10 @@
+Current implementation (2026-10-30): Espoir now uses polar parking,
+LANDING_REVIEW, a bounded Trajectories time/normal ATMO_DEORBIT fit and the
+small chute-assisted entry_landing controller in SCIENCE_ENTRY. See README.
+This older design is retained for reference. Its legacy ATMO_WALK controller
+is not wired into Espoir: its alignment timeout can currently allow thrust
+before alignment. Native atmospheric targeting/touchdown validation is pending.
+
 # Plan: Duna precision landing (aerobrake + drift-baselined atmo walk + powered terminal)
 
 ## Goal

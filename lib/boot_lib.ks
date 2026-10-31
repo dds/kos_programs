@@ -293,18 +293,40 @@ GLOBAL FUNCTION bootCachedMissionConfigIds {
 GLOBAL FUNCTION bootMissionProfileId {
     PARAMETER cn.
     PARAMETER mid.
-    IF cn = "Espoir" AND mid = "duna_science_impact" { RETURN "duna_impactor". }
+    IF cn = "Espoir" AND (mid = "duna_science_impact" OR mid = "duna_impactor") { RETURN "duna_lander". }
     RETURN mid.
 }
 
 GLOBAL FUNCTION bootMissionProfileIntent {
     PARAMETER cn.
     PARAMETER mid.
-    IF cn = "Espoir" AND mid = "duna_science_impact" {
+    IF cn = "Espoir" AND (mid = "duna_science_impact" OR mid = "duna_impactor") {
         // Preserve science/assist checkpoint identity and the old opt-in.
         // Runtime overrides are applied afterward and can disable sampling.
         SET MISSION_ID TO mid.
-        SET MISSION_ASSIST_SCIENCE TO 1.
+        IF mid = "duna_science_impact" { SET MISSION_ASSIST_SCIENCE TO 1. }
+    }
+    // Older generated Ike operations profiles have no archive replacement.
+    // Upgrade goals while safely uncommitted; never change airborne guidance.
+    IF cn = "Espoir" AND (mid = "ike_orbital_surveyor_ops" OR mid = "ike_lander_ops")
+            AND SHIP:STATUS = "ORBITING"
+            AND stateGet("deorbit_burn_started","false") <> "true" {
+        IF mid = "ike_orbital_surveyor_ops" {
+            SET CAPTURE_PE TO 70000. SET CAPTURE_MIN_PE TO 68000. SET CAPTURE_MAX_PE TO 72000.
+            SET TARGET_AP TO 70000. SET SHAPE_PE TO 70000. SET SHAPE_AP TO 70000.
+            SET CAPTURE_INC TO 90. SET CAPTURE_DIR TO "POLAR". SET SHAPE_INC TO 90.
+            SET BPLANE_PE_TOL TO 2000. SET SHAPE_ALT_TOL TO 1000.
+        }
+        IF mid = "ike_lander_ops" {
+            SET CAPTURE_INC TO 90. SET CAPTURE_DIR TO "POLAR".
+            SET BPLANE_PE_ONLY TO 0. SET BPLANE_REQUIRE_PLANE TO 1. SET BPLANE_ANG_TOL TO 0.5.
+            SET LANDING_TARGET_REVIEW_REQUIRED TO 1. SET LANDING_AUTO_TARGET TO 0.
+            SET LANDING_FLEXIBLE_SITE TO 0. SET LANDING_ECONOMY_TERMINAL_RETARGET TO 0.
+            SET LANDING_USE_WAYPOINTS TO 1.
+            SET LANDING_STAGE_BRAKE_CREDIT TO 1.
+            SET SEQUENCE TO LIST("XING","BPLANE","COAST_1HALF","REFINE_BPLANE","COAST_2HALF",
+                "CAPTURE","LANDING_REVIEW","LAND_DEORBIT","LAND_ASSIST","SURFACE_SCIENCE","DONE").
+        }
     }
 }
 

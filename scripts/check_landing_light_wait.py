@@ -40,7 +40,7 @@ def fixture():
     env['ADDONS'].TR=NS(AVAILABLE=True,HASIMPACT=False)
     saved.update(phase='LAND_DEORBIT',mission_id='minmus_economy_return',launch_time=12)
     env.update(ABORT=Flag(),LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),
-               LANDING_LIGHT_MODE='SUNLIT',LANDING_REQUIRE_KERBIN=1,
+               LANDING_LIGHT_MODE='SUNLIT',LANDING_REQUIRE_KERBIN=1,LANDING_TARGET_REVIEW_REQUIRED=0,
                landingRequireKerbin=lambda:env['LANDING_REQUIRE_KERBIN'],
                LANDING_KERBIN_MIN_ELEV=15,LANDING_LIGHT_TIME_MARGIN=300,
                landingSunBand=lambda:dict(MIN=5,MAX=30),landingPlanningRadius=lambda:21000,
@@ -135,7 +135,7 @@ def check_live_wait_and_target_selection():
         assert env['TIME'].SECONDS>=1200 and target['LAT']==19 and target['LNG']==37
         assert 'landing_light_wait' not in saved
         events.append(('execute',));return True
-    env.update(landingLitGroundTrack=search,LANDING_AUTO_TARGET=1,
+    env.update(landingLitGroundTrack=search,LANDING_AUTO_TARGET=1,LANDING_TARGET_REVIEW_REQUIRED=0,
                LANDING_AUTO_TARGET_MINUTES=5,LANDING_FLEXIBLE_SITE=1,
                LANDING_SKIP_TARGET_SEARCH=0,LANDING_CONFIRM_TARGET=0,
                launchSeq=NS(CONTAINS=lambda phase:phase in ('LAND_DEORBIT','LAND_ASSIST')),

@@ -1,6 +1,6 @@
 // ============================================================
 // science_entry.ks — continuous flyby/entry science (0:/lib/science_entry.ks)
-// No capture, automatic staging or thrust. Optional safe stock parachutes.
+// No capture or automatic staging. Optional chutes and terminal controller.
 // ============================================================
 @LAZYGLOBAL OFF.
 
@@ -53,6 +53,7 @@ GLOBAL FUNCTION scienceEntryContext {
 LOCAL FUNCTION _scienceEntryHold {
     PARAMETER reason.
     SET WARP TO 0.
+    IF NOT thrustCutoffOk() { RETURN. }
     UNLOCK STEERING.
     mLogError("STATS science-entry result status=hold reason=" + reason
         + " body=" + SHIP:BODY:NAME + " altitude=" + SHIP:ALTITUDE
@@ -168,7 +169,7 @@ GLOBAL FUNCTION phaseScienceEntry {
     mLog("STATS science-entry setup primary=" + primary:NAME
         + " moon=" + SCIENCE_ENTRY_MOON + " minEc=" + SCIENCE_ENTRY_MIN_EC
         + " safeChutes=" + (SCIENCE_ENTRY_CHUTES > 0)
-        + " thrust=False deliveryConfirmationAvailable=False").
+        + " poweredTerminal=" + (ENTRY_POWERED_LANDING > 0) + " deliveryConfirmationAvailable=False").
     LOCAL flightId IS stateGet("mission_id","")+":"+stateGetNum("launch_time",0)+":"+primary:NAME.
     IF stateGet("science_entry_id","") <> flightId {
         stateSet("science_entry_passes",0).
@@ -176,6 +177,9 @@ GLOBAL FUNCTION phaseScienceEntry {
         stateSet("science_entry_id",flightId).
     }
     LOCAL entrySteering IS FALSE.
+    LOCAL terminal IS LEXICON().
+    IF ENTRY_POWERED_LANDING > 0 { SET terminal TO entryLandingCreate(). }
+    LOCAL nextScience IS 0.
     LOCAL nextReport IS 0.
     LOCAL lastBody IS SHIP:BODY.
     UNTIL ABORT {
@@ -195,8 +199,12 @@ GLOBAL FUNCTION phaseScienceEntry {
         IF inAtmo <> stateGet("science_entry_in_atmo",FALSE) {
             stateSet("science_entry_in_atmo",inAtmo).
         }
-        scienceEntrySample(primary).
+        IF TIME:SECONDS >= nextScience {
+            scienceEntrySample(primary).
+            SET nextScience TO TIME:SECONDS+0.5.
+        }
         IF SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED" {
+            IF terminal:LENGTH > 0 { IF NOT entryLandingStop(terminal) { RETURN. } }
             SET WARP TO 0.
             UNLOCK STEERING.
             BRAKES ON.
@@ -224,12 +232,24 @@ GLOBAL FUNCTION phaseScienceEntry {
         }
         LOCAL wakeUt IS _scienceEntryWakeUt().
         IF NOT inAtmo AND wakeUt > TIME:SECONDS+30 {
+            IF terminal:LENGTH > 0 {
+                IF terminal["ACTIVE"] { IF NOT entryLandingStop(terminal) { RETURN. } }
+            }
             SET entrySteering TO FALSE.
             scienceEntryWait(wakeUt).
         } ELSE {
             SET WARP TO 0.
             _scienceEntryChutes(primary).
-            IF NOT entrySteering {
+            LOCAL controlled IS FALSE.
+            IF terminal:LENGTH > 0 {
+                SET controlled TO entryLandingTick(terminal).
+                IF ABORT { BREAK. }
+                IF NOT controlled AND terminal["ACTIVE"] {
+                    _scienceEntryHold("terminal-control-context-changed"). RETURN.
+                }
+                IF controlled { SET entrySteering TO FALSE. }
+            }
+            IF NOT controlled AND NOT entrySteering {
                 SET SAS TO FALSE.
                 // Live surface retrograde follows the atmosphere-relative
                 // velocity; never freeze a direction at a future periapsis.
@@ -243,9 +263,10 @@ GLOBAL FUNCTION phaseScienceEntry {
                     + " homeLink=" + HOMECONNECTION:ISCONNECTED + " inAtmo=" + inAtmo).
                 SET nextReport TO TIME:SECONDS+10.
             }
-            WAIT 0.5.
+            IF controlled { WAIT 0.05. } ELSE { WAIT 0.5. }
         }
     }
     SET WARP TO 0.
+    IF terminal:LENGTH > 0 { entryLandingStop(terminal). }
     UNLOCK STEERING.
 }

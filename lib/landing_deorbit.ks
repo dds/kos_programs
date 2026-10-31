@@ -20,6 +20,12 @@ LOCAL _landingTargetPassUT IS 0.
 
 GLOBAL FUNCTION phaseLandDeorbit {
     landingApplyMissionConfig().
+    IF LANDING_TARGET_REVIEW_REQUIRED > 0 AND SHIP:STATUS = "ORBITING"
+            AND stateGet("landing_site_context","") <> landingOrbitContext() {
+        stateSet("phase","LANDING_REVIEW").
+        mLogWarn("Landing target awaits operator selection; retained orbit/node. Use cmd/landsite from LANDING_REVIEW.").
+        yieldToPrompt(). RETURN.
+    }
     IF ABORT {
         mLogWarn("LAND_DEORBIT paused: Abort action group is ON; no site search or burn attempted.").
         PRINT "Clear Abort deliberately with SET ABORT TO FALSE. then REBOOT when ready.".

@@ -64,10 +64,9 @@ def fixture(name='duna_orbital_surveyor',kac=True,time_scale=1,repeated=False):
     if name.startswith('ike_'):
         patches[1].ETA=EventEta(env['TIME'],11000)
         patches[2].PERIAPSIS=cfg['IKE_MISSION_SETTINGS']['CAPTURE_PE']
-        if name=='ike_orbital_surveyor':patches[2].INCLINATION=90
-    elif name=='duna_orbital_surveyor':
-        patches[3].PERIAPSIS=300000;patches[3].INCLINATION=90
-    else:patches[3].PERIAPSIS=5000
+        patches[2].INCLINATION=90
+    else:
+        patches[3].PERIAPSIS=70000;patches[3].INCLINATION=90
     if repeated:
         final=patches[3];final.ETA=EventEta(env['TIME'],20000)
         moon=copy(patches[2]);moon.ETA=EventEta(env['TIME'],17000);moon.NEXTPATCHETA=17000;moon.NEXTPATCH=final
@@ -120,7 +119,7 @@ def coast(env):
 
 
 def check_profiles_and_native_continuations():
-    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_lander','duna_impactor','duna_science_impact'):
+    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','ike_lander','duna_lander','duna_impactor','duna_science_impact'):
         env,saved,events,alarms,overrides,patches,_=fixture(name)
         # No profitable new correction: the existing safe native itinerary
         # can still replace Duna parking or preserve a free Ike science pass.
@@ -132,7 +131,7 @@ def check_profiles_and_native_continuations():
         coast(env)
         assert not env['phaseShouldYield'] and overrides and not alarms,(name,saved,events[-10:])
         values=overrides[-1];terminal='Ike' if name.startswith('ike_') else 'Duna'
-        first='SCIENCE_ENTRY' if 'impactor'==name.split('_',1)[-1] and name.startswith('duna_') or name=='duna_science_impact' else 'CAPTURE'
+        first='CAPTURE'
         assert saved['target']==terminal and saved['phase']==first and saved['mission_id']==name
         assert 'MISSION_ID' not in values and not values['MISSION_ASSIST_ROUTE']
         # Apply the real recursive serializer to a fresh launch profile:
@@ -156,7 +155,7 @@ def check_entry_sampling_override():
         env['MISSION_ASSIST_SCIENCE']=enabled
         env['planAssistRefinement']=lambda _:Map(OK=False)
         env['phaseAssist']();coast(env)
-        assert not env['phaseShouldYield'] and saved['phase']=='SCIENCE_ENTRY' and not alarms
+        assert not env['phaseShouldYield'] and saved['phase']=='CAPTURE' and not alarms
         assert any(row[0]=='science' for row in events)==bool(enabled)
         assert not any(row[0]=='burn' for row in events)
         # A scoped flag override merges with the terminal handoff. Reload it

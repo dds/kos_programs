@@ -83,6 +83,27 @@ GLOBAL FUNCTION landingKerbinElevationNow {
     RETURN _landingElevation(surfaceNormal:NORMALIZED, BODY("Kerbin"):POSITION - sitePos).
 }
 
+// A positive horizon angle at a moon does not rule out its parent blocking
+// the homeward ray (notably Ike behind Duna). Kerbin itself is the endpoint.
+LOCAL FUNCTION _landingKerbinClear {
+    PARAMETER sitePos.
+    PARAMETER ut.
+    LOCAL home IS BODY("Kerbin").
+    LOCAL toHome IS landingBodyOffsetAt(home,ut)-sitePos.
+    IF toHome:MAG < 1 { RETURN FALSE. }
+    LOCAL ancestor IS SHIP:BODY.
+    UNTIL NOT ancestor:HASBODY {
+        SET ancestor TO ancestor:BODY.
+        IF ancestor = home OR ancestor:NAME = SUN:NAME { BREAK. }
+        LOCAL blocker IS landingBodyOffsetAt(ancestor,ut)-sitePos.
+        LOCAL along_ IS VDOT(blocker,toHome:NORMALIZED).
+        IF along_ > 0 AND along_ < toHome:MAG {
+            IF (blocker-along_*toHome:NORMALIZED):MAG <= ancestor:RADIUS { RETURN FALSE. }
+        }
+    }
+    RETURN TRUE.
+}
+
 // Reject even partial eclipses by an ancestor body. Surface horizon and
 // ridge shadows are separate: the elevation margin is not a terrain model.
 LOCAL FUNCTION _landingSunClear {
@@ -138,6 +159,11 @@ GLOBAL FUNCTION landingLightAt {
     SET out["SETTING"] TO nextSunElev < sunElev - 0.00001.
     SET out["KERBIN"] TO _landingElevation(offset:NORMALIZED,
         landingBodyOffsetAt(BODY("Kerbin"), ut) - sitePos).
+    IF requireKerbin > 0 {
+        IF NOT _landingKerbinClear(sitePos,ut) {
+            SET out["REASON"] TO "kerbin-occulted". RETURN out.
+        }
+    }
     // Independent live-position check for the stock Mun's circular tidal
     // lock: the same site must not acquire a different Kerbin view while
     // waiting in orbit. Hold if the runtime prediction convention disagrees.

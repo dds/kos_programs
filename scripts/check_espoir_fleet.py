@@ -86,7 +86,7 @@ def run(source, name, env):
 
 def check_profiles_and_dependencies():
     deps, phases, bands = dependency_tables((ROOT/'lib/dependencies.ks').read_text())
-    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','duna_impactor','ike_lander'):
+    for name in ('duna_orbital_surveyor','ike_orbital_surveyor','duna_lander','ike_lander'):
         cfg = profile(name)
         assert cfg['MISSION_ID'] == name and cfg['TARGET_'] == 'DUNA'
         assert cfg['COAST_AUTO_WARP'] == 0
@@ -108,25 +108,29 @@ def check_profiles_and_dependencies():
                 assert phase.lower() in phases and closure(phases[phase.lower()], deps)
             if 'SCANSAT_OPS' in seq:
                 assert leg['SHAPE_INC'] == leg['CAPTURE_INC'] == 90
-                assert leg['SHAPE_PE'] == leg['SHAPE_AP']
+                assert leg['SHAPE_PE'] == leg['SHAPE_AP'] == 70000
                 assert leg['SCANSAT_DECOUPLER_TAG'] == ''
                 assert leg['SCANSAT_AUTO_DEORBIT'] == leg['SCANSAT_DISPOSE_CARRIER'] == 0
                 assert leg['SCANSAT_POWER_LOW'] < leg['SCANSAT_POWER_RESUME']
-        if name == 'duna_impactor':
-            assert 'CAPTURE' not in cfg['SEQUENCE'] and cfg['SCIENCE_ENTRY_MOON'] == 'IKE'
+        if name == 'duna_lander':
+            assert cfg['SEQUENCE'][-6:] == ['SHAPE','LANDING_REVIEW','ATMO_DEORBIT','SCIENCE_ENTRY','SURFACE_SCIENCE','DONE'] and cfg['SCIENCE_ENTRY_MOON'] == 'IKE'
             assert cfg['MISSION_ASSIST_SCIENCE']==0 and cfg['SCIENCE_ENTRY_MOON_MIN_PE']==20000
             assert 0 < cfg['CAPTURE_PE']-cfg['BPLANE_PE_TOL']
-            assert cfg['CAPTURE_PE']+cfg['BPLANE_PE_TOL'] < 50000
+            assert cfg['CAPTURE_PE'] == cfg['TARGET_AP'] == 70000 and cfg['CAPTURE_INC'] == 90
+            assert cfg['LANDING_TARGET_REVIEW_REQUIRED'] == cfg['ENTRY_POWERED_LANDING'] == 1
         if name == 'ike_lander':
             leg = legs[-1]
-            assert leg['SEQUENCE'][-5:] == ['CAPTURE','LAND_DEORBIT','LAND_ASSIST','SURFACE_SCIENCE','DONE']
+            assert leg['SEQUENCE'][-6:] == ['CAPTURE','LANDING_REVIEW','LAND_DEORBIT','LAND_ASSIST','SURFACE_SCIENCE','DONE']
             assert leg['CAPTURE_PE'] == leg['TARGET_AP'] == 25000
             assert leg['CAPTURE_RESERVE_DV'] == leg['BPLANE_CAPTURE_MARGIN'] == 650
             assert leg['LANDING_RADIO_MODE'] == 'DIRECT' and leg['LANDING_REQUIRE_KERBIN'] == 1
             assert leg['LANDING_KERBIN_MIN_ELEV'] == 15
             assert leg['LANDING_LIGHT_MODE'] == 'SUNLIT' and leg['LANDING_SUN_MIN_ELEV'] >= 5
-            assert leg['LANDING_FLEXIBLE_SITE'] == leg['LANDING_ECONOMY_BRAKE'] == leg['LANDING_POWERED_LEAD'] == 1
-            assert leg['LANDING_USE_WAYPOINTS'] == 0 and leg['LANDING_SKIP_TARGET_SEARCH'] == 0
+            assert leg['LANDING_FLEXIBLE_SITE'] == leg['LANDING_AUTO_TARGET'] == leg['TARGET_LOCK'] == 0
+            assert leg['LANDING_TARGET_REVIEW_REQUIRED'] == leg['LANDING_STAGE_BRAKE_CREDIT'] == 1
+            assert leg['LANDING_ECONOMY_BRAKE'] == leg['LANDING_POWERED_LEAD'] == 1
+            assert leg['CAPTURE_INC'] == 90
+            assert leg['LANDING_USE_WAYPOINTS'] == 1 and leg['LANDING_SKIP_TARGET_SEARCH'] == 0
             assert leg['LANDING_SITE_MAX_SLOPE'] == leg['LANDING_TERRAIN_MAX_SLOPE'] == 5
             assert leg['LANDING_DIVERT_EMERGENCY_SLOPE'] == 15 and bool(leg['TERRAIN_VALIDATE'])
             assert leg['LANDING_RETURN_DECOUPLER_TAG'] == leg['LANDING_RELEASE_DECOUPLER_TAG'] == ''
@@ -135,15 +139,17 @@ def check_profiles_and_dependencies():
             assert leg['RELOAD_AFTER_LAND_ASSIST'] == leg['RELOAD_AFTER_LAND'] == 0
             assert not {'PRELAUNCH','LAUNCH','ESCAPE','RETURN_SETUP','SURFACE_RETURN_SETUP','SCIENCE_IMPACT'} & set(leg['SEQUENCE'])
     assert profile('duna_science_impact')['COAST_AUTO_WARP'] == 0
+    assert profile('duna_impactor')['MISSION_ID']=='duna_impactor'
+    assert profile('duna_impactor')['CAPTURE_PE']==70000
     assert not (ROOT/'missions/Espoir/duna_science_impact.ks').exists()
     assert {p.stem for p in (ROOT/'missions/Espoir').glob('*.ks')}=={
-        'duna_orbital_surveyor','ike_orbital_surveyor','duna_impactor','ike_lander'}
+        'duna_orbital_surveyor','ike_orbital_surveyor','duna_lander','ike_lander'}
     assert bands['science_impact'] == ['science_impact']
     assert {'science_flight','science_entry','maneuver_plan','thrust_cutoff'} <= closure(['science_impact'],deps)
     assert 'science_impact' not in closure(['science_entry'],deps)
     bindings = function_body((ROOT/'lib/dependencies.ks').read_text(), 'dependencyBindPhase')
     assert 'phaseScienceImpact@' in bindings
-    print('PASS: four fleet profiles/operations legs resolve; polar mappers retain hardware, impacts stay expendable, one-way Ike lander retains terrain/radio/fuel safeguards and surface science')
+    print('PASS: four polar fleet profiles/operations legs resolve; mappers use70km, both landers require later site selection and retain terrain/radio/fuel safeguards')
 
 
 def setup_fixture(name='ike_orbital_surveyor'):
@@ -349,8 +355,8 @@ def check_lander_provider_and_radio_policy():
                          LANDING_AUTO_TARGET=cfg['LANDING_AUTO_TARGET'],
                          LANDING_REQUIRE_SITE=cfg['LANDING_REQUIRE_SITE'],
                          LANDING_SITE_SCAN_ENABLE=cfg['LANDING_SITE_SCAN_ENABLE']))
-    assert {'landing_light_wait','landing_site'} <= set(roots)
-    assert 'landing_light_search' in closure(roots,deps)
+    assert 'landing_site' in roots and 'landing_light_wait' not in roots
+    assert 'landing_light' in closure(roots+phases['land_deorbit'],deps)
     radio=(ROOT/'lib/landing_radio.ks').read_text()
     assert execute(function_body(radio,'landingRequireKerbin'),dict(cfg)) == 1
     print('PASS: Ike explicitly requires direct Kerbin visibility; landing gets live light-window waits, both descent tracks and the small surface-science provider without return code or new cache admission')

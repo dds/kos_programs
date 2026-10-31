@@ -609,7 +609,29 @@ def check_planning_region():
     print('PASS: recorded Minmus aimpoint fails conservative 21km Sun/radio planning region; brighter sites/window checks pass; 320 spherical/parallax bounds, relay opt-out, precision and interrupted/suborbital recovery retained')
 
 
+def check_parent_occults_home():
+    env=environment()
+    ike=env['SHIP'].BODY;sun=env['SUN'];kerbin=env['BODY']('Kerbin')
+    duna=NS(NAME='Duna',RADIUS=320000,HASBODY=True,BODY=sun)
+    ike.NAME='Ike';ike.BODY=duna
+    env['landingBodyOffsetAt']=lambda obj,ut: {
+        id(ike):Vec((0,0,0)),id(duna):Vec((1e6,0,0)),
+        id(kerbin):Vec((1e10,0,0)),id(sun):Vec((2e10,0,0))}[id(obj)]
+    env.update(LANDING_LIGHT_MODE='ANY',LANDING_RADIO_MODE='DIRECT')
+    result=env['landingLightAt'](0,0,1000)
+    assert result['KERBIN']>80 and not result['OK'] and result['REASON']=='kerbin-occulted',result
+    # Move parent clear of the same ray; a relay/offline policy also opts out.
+    positions={id(ike):Vec((0,0,0)),id(duna):Vec((1e6,1e6,0)),
+        id(kerbin):Vec((1e10,0,0)),id(sun):Vec((2e10,0,0))}
+    env['landingBodyOffsetAt']=lambda obj,ut:positions[id(obj)]
+    assert env['landingLightAt'](0,0,1000)['OK']
+    positions[id(duna)]=Vec((1e6,0,0));env['LANDING_RADIO_MODE']='OFFLINE'
+    assert env['landingLightAt'](0,0,1000)['OK']
+    print('PASS: Duna can occult above-horizon Kerbin from Ike; direct mode rejects the blocked ray, clears after parent motion and preserves explicit offline policy')
+
+
 if __name__ == '__main__':
+    check_parent_occults_home()
     check_diversion_radio_margin()
     check_nested_radio_frame()
     check_afternoon()

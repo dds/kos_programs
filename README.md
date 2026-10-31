@@ -1065,10 +1065,10 @@ the actual departure window, thrust and hardware still determine affordability.
 
 | Profile ID | Objective | Transfer / operations allowance |
 |---|---|---|
-| `duna_orbital_surveyor` | Powered capture,300km polar Duna mapping orbit |1500 /1000m/s |
-| `ike_orbital_surveyor` | High Duna capture, Ike transfer,150km polar mapping orbit |1500 /800m/s |
-| `duna_impactor` | Direct Duna atmospheric science and impact attempt |1500 /400m/s |
-| `ike_lander` | High Duna capture,25km Ike parking, flexible soft landing and surface science |1500 /1300m/s |
+| `duna_orbital_surveyor` | Powered capture,70km polar Duna mapping orbit |1500 /1000m/s |
+| `ike_orbital_surveyor` | High Duna capture, Ike transfer,70km polar mapping orbit |1500 /800m/s |
+| `duna_lander` |70km polar Duna parking, surveyed site selection, chute-assisted powered landing |1500 /1300m/s |
+| `ike_lander` | High Duna capture,25km polar Ike parking, surveyed landing and surface science |1500 /1300m/s |
 
 Both surveyors retain the CPU, propulsion and scanners as one spacecraft. No
 `scansat_decoupler` is required, and neither automatically deorbits after mapping.
@@ -1098,30 +1098,46 @@ no archive launch counterpart, so reconnecting cannot restart the Duna leg.
 `IKE_MISSION_SETTINGS` supplies the optional captured operations settings;
 an empty map retains the existing FalconHeavy flyby-to-Duna-entry behavior.
 
-`duna_impactor` uses the existing continuous `SCIENCE_ENTRY` phase, targeting
-5km Pe with3km tolerance and no paid Ike detour. It performs no capture,
-chute deployment or powered landing. Powered entry assistance remains separate
-unfinished work; the400m/s allowance does not enable that controller by itself.
-Optional Ike science is off by default. To enable it on one selected craft,
-run `RUNPATH("0:/cmd/flybyscience.ks",1).` and `REBOOT.`; use `0` to disable.
-The shared `MISSION_ASSIST_SCIENCE` flag controls sampling during both assist
-coast and science entry. Duna science stays enabled. Ike must still clear
-20km and preserve a proven subsequent Duna entry, whether sampling is on or
-off. Sampling can consume one-use experiments before Duna.
-The retired `duna_science_impact` name no longer appears in the launch picker.
-Existing flights load the same canonical profile while retaining their old
-mission ID, science/assist checkpoints and enabled Ike sampling; a per-craft
-override can disable it. A connected boot caches the canonical profile for
-later offline reboots. No installed bootstrap replacement is needed.
+All four missions capture at their destination in polar orbits. Ike missions
+retain the high equatorial Duna transfer orbit described above before polar
+capture at Ike. There is no direct-impact launch profile. The retired
+`duna_impactor` and `duna_science_impact` IDs resolve to `duna_lander`, preserving
+saved flight identity, science records and assist checkpoints. The latter
+retains its old optional Ike-science opt-in; explicit per-craft overrides win.
+A connected reboot installs the canonical profile for later offline use.
+Generated Ike operations profiles receive the new goals while safely in orbit;
+an already committed descent keeps its existing guidance.
 
-`ike_lander` is the **one-way soft lander** for the earlier touchdown-and-transmit
-plan. Its generated `ike_lander_ops` leg captures directly into25km parking,
-leaving at least650m/s before deorbit planning. The flexible ground-track search
-requires sunlight and a direct Kerbin elevation of at least15degrees; no relay
-coverage is assumed. If the geometry is unsuitable it retains orbit in the
-existing resident solar/KAC wait, then searches again. Elevation is a geometric
-policy, not proof of antenna range, terrain clearance to Kerbin or an unblocked
-route past Duna. Provide each probe with its own suitable direct antenna array.
+Both landers stop at `LANDING_REVIEW` after capture (Duna70km, Ike25km).
+They aim for solar power once and return to the prompt until you choose a site.
+They do not automatically choose coordinates or start a deorbit. After reviewing
+the survey, select a waypoint on the current body and run:
+
+```ks
+RUNPATH("0:/cmd/landsite.ks").
+REBOOT.
+```
+
+Or supply numeric latitude and longitude in degrees:
+
+```ks
+RUNPATH("0:/cmd/landsite.ks",LEXICON("lat",12.3,"lng",45.6)).
+REBOOT.
+```
+
+The command requires a safe, idle parking orbit and no node/interrupted burn.
+It preserves the mission, saves a fixed target, and selects atmospheric deorbit
+at Duna or the existing airless deorbit at Ike. Duna additionally checks measured
+active-stage thrust, fuel and attached stock chutes before accepting the site.
+The planner still validates reachability, terrain, light and radio before a burn.
+
+Both landers require sunlight and direct Kerbin elevation of at least15degrees.
+Ike also checks whether Duna blocks the ray to Kerbin. No relay coverage is
+assumed. These are geometric checks, not proof of antenna range or ridge
+clearance. Provide each probe with its own suitable direct antenna array.
+An unsuitable fixed site retains orbit for operator review; no substitute site
+is silently selected. `ike_lander` remains a one-way soft lander and retains its
+650m/s capture reserve.
 
 Landing reuses the powered-lead model, economy braking and terrain checks.
 Normal site slope is5degrees; the existing15degree emergency diversion is
@@ -1202,7 +1218,7 @@ profiles can use a Duna flyby followed by direct Ike capture, bypassing Duna
 parking and the separate Ike transfer. Their normal mapping or landing
 operations follow that capture. Duna entry profiles can retain an existing free
 Ike pass only when the subsequent atmospheric entry is proven; they purchase
-no detour. `duna_impactor` samples during this coast when optional flyby
+no detour. `duna_lander` samples during this coast when optional flyby
 science is enabled (legacy `duna_science_impact` flights retain that opt-in),
 preserving its existing Ike science intent. One-shot instrument scheduling
 remains the operator's responsibility.
@@ -1368,48 +1384,57 @@ archived original vector and the retained node, explicit
 marker and resumes normal planning. Native midpoint execution remains to be
 flight-tested; source fixtures exercise both node paths and interruption.
 
-### Espoir: Duna science entry and optional parachute landing
+### Espoir: surveyed Duna landing and atmospheric science
 
-`missions/Espoir/duna_impactor.ks` is the consolidated entry profile. Name
-the new probe **Espoir** (or use the normal fleet-name suffix convention)
-and select this profile in the normal mission picker when ready. No mission
-is selected or launched by adding these files. Espoir uses the shared rocket
-flight computer; it inherits no RO9 stage numbers or decoupler tags.
+Select `duna_lander` for the former atmospheric-science probe. It launches to
+85km Kerbin parking, transfers to Duna, captures and shapes a70km polar orbit,
+then stops for surveyed landing coordinates. Capture and landing cost more fuel
+than direct entry; the build allowances above are estimates, not authorization
+to burn beyond measured reserves. No craft is launched by adding these profiles.
 
-The sequence launches to85km parking, transfers to Duna, refines arrival,
-then runs `SCIENCE_ENTRY` continuously through approach and atmospheric
-descent. The requested Pe is5km ASL with3km tolerance. This deliberately
-targets deep entry; it does not promise an impact coordinate, survivable
-heating, or a soft landing. The profile enables `SCIENCE_ENTRY_CHUTES=1`:
-while descending inside Duna's atmosphere at1x with thrust/controls idle,
-it repeatedly requests [kOS safe stock-chute deployment](https://ksp-kos.github.io/KOS/commands/flight/systems.html#chutessafe).
-The native check chooses safe stowed `ModuleParachute` chutes; unsafe chutes
-are revisited as conditions change. It leaves each chute's pressure and full
-deployment settings unchanged. Chuteless probes continue normally; this does
-not force RealChute deployment or prove any touchdown speed. Four chutes
-alone do not establish a safe landing without their type, craft mass and
-terrain conditions. There is no capture, return, automatic entry staging or
-landing burn in this profile. A passive drag capture can make another entry;
-each future pass gets a fresh KAC checkpoint/solar coast. After three passes
-without touchdown, or if no future atmospheric crossing remains, the phase
-reports the reason and returns to manual control instead of declaring a
-successful impact. Destruction naturally ends the running processor.
+After explicit site selection, `ATMO_DEORBIT` surveys future ground passes and
+solves burn time and normal impulse together using Trajectories' drag-inclusive
+impact. It keeps entry Pe near5km ASL, allows at most64 native probes, and
+requires a predicted footprint within1.5km, normal impulse within10m/s and total
+deorbit impulse within150m/s. Both the target and footprint must pass the normal
+5degree slope limit, sunlight and radio window checks. The executor keeps the
+existing KAC/solar coast and fresh preburn validation. A failed solve holds in
+orbit; `RUNPATH("0:/cmd/deorbitretry.ks"). REBOOT.` clears an unflown node and
+retries the saved site. Interrupted burns require inspection instead.
 
-If it survives touchdown, the existing loop sets brakes and collects/queues
-surface science for60s before ending. The mission id stays `duna_impactor`,
-so existing flights keep their progress. After pulling, reboot to apply the
-updated profile/code. Optional per-craft override:
-`RUNPATH("0:/cmd/entrychutes.ks",0). REBOOT.` disables chute requests; use1
-to re-enable. Other SCIENCE_ENTRY profiles default to no chute deployment.
-Native Duna chute performance and landing survival remain to be tested.
+Duna deorbit requires actual active-stage surface TWR of at least1.5, attached
+stock parachutes, and deorbit fuel plus300m/s of active-stage terminal reserve.
+Future stages do not supply hypothetical credit. The new atmospheric path does
+not stage automatically: keep the CPU, power, direct antenna, chutes and landing
+engine attached. The terminal controller uses measured thrust/mass and terrain
+height to follow a downward stopping curve, aligns before allowing thrust, and
+limits lateral correction to20degrees. It gives drag and chutes the high/fast
+entry, then arms the terminal engine below10km AGL and300m/s (or below1.5km for
+emergency arrest). It does not hover to recover a distant miss. Alignment, Abort,
+pilot input, vessel/stage changes, stale updates and contact cut thrust; stopping
+uses the shared verified throttle cutoff. Terminal telemetry records height,
+stopping height, descent target, lateral speed, aim error, throttle, fuel and
+applied impulse for flight tuning. This path has numerical/source fixtures;
+actual Trajectories convergence, chute aerodynamics and touchdown still need
+native flight tests. It is not a guarantee of a precise or survivable landing.
 
-Ike is opportunistic: with optional flyby science enabled, an **existing
-native encounter** is sampled at no added maneuver cost, only if its Pe clears20km and
-the subsequent Duna patch actually reaches an atmospheric Pe before its
-next transition. An unsafe/incomplete moon prediction holds for review.
-Espoir does not purchase a Duna capture or plan an extra Ike detour. An
-active detour optimizer remains future work once the probe's fuel and
-propulsion are known.
+`SCIENCE_ENTRY` remains resident through entry, running science alongside safe
+stock-chute requests and the optional terminal controller. Chutes are requested
+only while descending inside Duna's atmosphere at1x with idle thrust/controls,
+using [kOS safe deployment](https://ksp-kos.github.io/KOS/commands/flight/systems.html#chutessafe).
+It leaves pressure and full-deployment settings unchanged and does not force
+RealChute deployment. `RUNPATH("0:/cmd/entrychutes.ks",0). REBOOT.` disables the
+requests; use1 to re-enable. Atmospheric deorbit still requires attached chutes.
+An unexpected skip-out retains the existing bounded pass/KAC handling. Survived
+touchdown gets an initial60s science dwell, then the persistent600s
+`SURFACE_SCIENCE` session described above. No ascent or return is scheduled.
+
+Optional Ike flyby science stays off by default. Use
+`RUNPATH("0:/cmd/flybyscience.ks",1). REBOOT.` to enable it on one probe;0 disables.
+It samples a safe existing encounter without purchasing a detour and can consume
+one-use experiments before Duna. Any adopted assist must still deliver the
+requested polar parking orbit. The ordinary science-entry phase remains usable
+by legacy missions without loading the optional terminal controller.
 
 The science loop discovers kOS `ScienceExperimentModule` instruments,
 including supported DMagic types, by module index. It deploys in each
