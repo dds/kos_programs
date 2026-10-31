@@ -42,6 +42,19 @@ record remaining uncertainty before closing a task.
   Native compile/recovery, next-engine budget, safe corrected Pe and later
   capture remain to observe. No automatic staging, game controls, remote
   code deployment or save edits. No bootstrap replacement needed.
+  NATIVE FOLLOWUP: operator deleted the0.2m/s residual and explicitly set
+  BPLANE, retaining the transfer stage for THIS flight. Do not direct this
+  craft back to XING or discard that stage; manual staging remains a useful
+  general option. Boot0065165642..5165645 confirms valid native patch frame,
+  actual Mun Pe-39.81km/inc179.27,3380.2m/s remaining; planned1.7136m/s
+  correction predicts Pe13.4km/inc179.97 and passes capture+reserve budget
+  (1288.97 needed vs3380.22 available). Actual Mun SOI alarm created for
+  UT5182160.3; correction scheduled5165942.55,300s lead. Log ends at burn
+  setup, not execution. This validates planning from the manually selected
+  BPLANE/impact state, NOT the new automatic XING handoff/review or the
+  corrected burn/capture. No extra state reset needed for this attempt.
+  Evidence:/tmp/ksp-deck-20261031T223146Z-fetch-kxgoicqn/logs/
+  Espoir-Mun-Surveyor1_5156306/boot_006_core.log.
   Evidence:/tmp/ksp-deck-20261031T215736Z-fetch-hj3f77vm/logs/
   Espoir-Mun-Surveyor1_5156306/boot_003_core.log.
 
