@@ -654,6 +654,10 @@ LOCAL FUNCTION _peFloor {
     RETURN floorAlt.
 }
 
+GLOBAL FUNCTION shapePeFloor {
+    RETURN _peFloor().
+}
+
 // Evaluate a cost delegate until two consecutive reads agree.
 // Flight-found: nd:ORBIT readouts immediately after a node tweak
 // can be stale/noisy — a descent steering on phantom values
@@ -1137,6 +1141,12 @@ LOCAL FUNCTION _shapeReserveBurn {
     }
     stateSet("shape_budget_spent", spent + cost).
     RETURN TRUE.
+}
+
+// Explicit manual survey changes share the same cumulative allowance.
+GLOBAL FUNCTION shapeReserveBurn {
+    PARAMETER nd.
+    RETURN _shapeReserveBurn(nd).
 }
 
 LOCAL FUNCTION _shapeInterruptedHold {

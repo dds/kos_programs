@@ -6,6 +6,42 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked: cmd/scanorbit.ks manual survey-orbit helper.
+  Preview compares staying put, cheap period detuning(+Ap/-Pe), exactly
+  polar and mirrored inclination using192 live SCANsat points per track
+  at common epochs over6orbits. Mirror keeps LAN (85 ->95deg is10deg,
+  not a reversed orbit); only polar extends latitude coverage. Sparse
+  1deg unique cells/cos(lat) weighting is a ground-track proxy, NOT a
+  sensor swath, instrument availability/performance or coverage guarantee.
+  Auto chooses highest partial map; operator can specify type/mode.
+  Default50m/s cap/100reserve tighten existing mission limits; active
+  stage fuel required, near-polar75..105deg/e<0.1 and safe floor required.
+  Candidate altitude envelope within10% of current apsides; operator must
+  verify sensor altitude window. Useful gain per(dV+1) compared with
+  staying put; no gain ->no maneuver. preview cleans nodes/spends no budget;
+  plan re-searches and charges the shared SHAPE ledger before retaining
+  one node. Explicit cmd/exnode then uses existing KAC/executor safeguards;
+  this command never burns, stages, changes phase or rewrites mission goals.
+  Cancelled plans retain conservative allowance reservation like SHAPE.
+  Pending burns/foreign nodes/Abort/context changes preserved. Sampling
+  checks45game/60wall seconds between native planner calls; context switch
+  retains preview for inspection. Native errors cannot guarantee cleanup:
+  quicksave before first flight. Archive-only survey_orbit adds no band
+  roots; public wrappers reuse existing SHAPE admission and Pe floor without
+  copying or relaxing them. Generated local mission profiles are supported.
+  Diagnostics go directly to archive/_diagnostics/scanorbit*.
+  Independent impulse/Kepler/rotating-map source fixtures cover Minmus/Duna,
+  both mirror senses, missing polar caps, no-gain/unavailable maps,
+  ownership/deadlines, command preview/plan and budget preservation.
+  All101 routine check files pass on final production source; structural
+  372 scripts/100 profiles/82 phases/44 bands,0 errors and the unchanged
+  KSC_DEORBIT warning. New cases remain under1s. Reports:
+  /tmp/kos-survey-orbit-final-20261031.{json,log}. Earlier101-file pass
+  preceded the shared Pe-floor/generated-profile additions; final full
+  suite includes both. No production changes during either suite.
+  Native compilation, latency/storage, selected sensor suitability and
+  actual coverage gain remain unproven. No bootstrap/game/remote-save changes.
+
 - IMPLEMENTED/source-checked native Espoir-Mun-Surveyor1 XING fix;
   corrected native recovery/flight still pending. At5163659 planned856.600m/s,
   live-vector-passed-target at0.19444, final0.176211516 vs0.05 tolerance;

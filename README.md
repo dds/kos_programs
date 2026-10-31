@@ -95,6 +95,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/landingdisposal.ks").` | Save an optional transfer-stage handoff at 80 m/s horizontal speed with a 700 m/s lander reserve; preserves node, phase and other overrides; pass `0` to restore fuel-first staging |
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
+| `RUNPATH("0:/cmd/scanorbit.ks").` | Preview economical scan-track changes using the live SCANsat map; `"plan"` retains the best useful node for manual execution |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/landlight.ks").` | Preview a lit ground-track site from Mun/Minmus parking orbit; `"status"` checks the saved target with live positions; `"apply", "AFTERNOON", 1` selects afternoon while preserving the return mission; final argument `0` waives direct Kerbin view |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
@@ -1210,6 +1211,67 @@ actual fuel/engine and return affordability. Neither reserve guarantees
 completion for a particular spacecraft. Scanner altitude can be overridden
 in the orbit command to match the installed instruments. The contract
 review also permits an explicit early return instead of surveying.
+
+To fill remaining map gaps from an existing near-polar survey orbit, stop
+automation at the prompt, keep a link and quicksave, then run:
+
+```ks
+RUNPATH("0:/cmd/scanorbit.ks").
+```
+
+The command compares the next six orbits after a common preparation window:
+staying put, gently raising Ap or lowering Pe to change the period, moving
+to exactly90deg, and mirroring inclination across90deg with the same LAN
+(85deg becomes95deg). A mirror changes track direction but reaches the same
+maximum latitude; exactly polar is the candidate that can reach missing
+polar caps. Period changes often fill repeated-track gaps at much lower
+cost. The helper selects the largest estimated gain per m/s, requiring
+improvement over staying put, and may recommend no maneuver.
+
+It samples192 ground-track positions per candidate against live
+[`COMPLETEDSCANS`](https://github.com/KSP-KOS/Kos-Scansat#api) data,
+counts each1deg cell once and weights by surface area.
+This is a sparse coverage proxy, **not** a scanner-swath simulation or a
+guarantee of faster full coverage. The default scan type is the most advanced
+partially mapped type; verify that the probe carries its sensor. Check its
+usable altitude range in SCANsat: the command limits altitude changes to
+within10% of the current apsides but cannot discover sensor-specific
+field of view or altitude performance through the addon. You can specify
+the scan type and restrict candidates, for example:
+
+```ks
+RUNPATH("0:/cmd/scanorbit.ks","preview","mirror","BIOME",100,300).
+```
+
+Arguments are action(`preview`/`plan`), mode(`auto`/`drift`/`polar`/`mirror`),
+scan type, dV cap(default50m/s), and retained reserve(default100m/s).
+Use a scan-type name reported by your addon. Existing mission per-burn,
+cumulative and fuel-reserve limits still apply; the active stage must cover
+the maneuver. Near-polar inclinations75–105deg, eccentricity<0.1, safe Pe,
+no future SOI patch, no node/pending burn, idle throttle and clear Abort at1x
+are required. Start from a stopped SCANSAT_OPS, SCIENCE_OPS or DONE prompt.
+No changes are made to the mission's goals, phase, scanners or staging.
+
+To select and fly the recommended change:
+
+```ks
+RUNPATH("0:/cmd/scanorbit.ks","plan").
+// Inspect the retained node, then:
+RUNPATH("0:/cmd/exnode.ks").
+// After a successful burn:
+REBOOT.
+```
+
+`plan` repeats the live comparison and reserves the chosen dV in the shared
+SHAPE allowance before leaving its node. A later cancellation retains that
+conservative reservation, as with scheduled SHAPE burns. `preview` removes
+its temporary nodes and spends no allowance. Search scoring stops on Abort,
+context changes or deadlines(45game/60wall seconds, checked between native
+planner calls); node ownership is checked before cleanup. Quicksave because
+a native runtime error can leave a preview node. Each run writes a compact
+`scanorbit_<craft>_<UT>.log` directly to `0:/logs/archive/_diagnostics/` for
+comparing predicted gain with actual subsequent scans. Flight/coverage
+validation of this new helper is pending; Python checks are not a KSP run.
 
 The Minmus surveyor stops in `SCIENCE_OPS` after achieving the requested
 contract orbit. Confirm the objective before changing it. To move to70km polar

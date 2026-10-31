@@ -1,0 +1,231 @@
+// ============================================================
+// survey_orbit.ks - Manual, archive-only scan-track comparison.
+// Native maneuver propagation + existing rotating-body ground coordinates.
+// Samples are a coverage proxy, NOT a sensor swath/percentage forecast.
+// No phase, scanner, control, alarm or staging changes here.
+// ============================================================
+@LAZYGLOBAL OFF.
+
+GLOBAL FUNCTION surveyOrbitIdle {
+    PARAMETER craftRef.
+    PARAMETER occupied.
+    RETURN SHIP = craftRef AND SHIP = KUNIVERSE:ACTIVEVESSEL AND NOT ABORT
+        AND WARP = 0 AND KUNIVERSE:TIMEWARP:ISSETTLED AND HASNODE = occupied
+        AND (NOT occupied OR ALLNODES:LENGTH = 1)
+        AND SHIP:STATUS = "ORBITING" AND NOT SHIP:ORBIT:HASNEXTPATCH
+        AND SHIP:THRUST >= 0 AND SHIP:THRUST <= 0.001
+        AND SHIP:CONTROL:MAINTHROTTLE <= 0 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0
+        AND stateGet("burn_pending","false") <> "true"
+        AND stateGet("burn_started","false") <> "true"
+        AND NOT stateGet("hop_route_active",FALSE)
+        AND LIST("DONE","SCIENCE_OPS","SCANSAT_OPS"):CONTAINS(stateGet("phase","")).
+}
+
+GLOBAL FUNCTION surveyOrbitFloor {
+    RETURN MAX(10000,shapePeFloor()).
+}
+
+GLOBAL FUNCTION surveyOrbitOwned {
+    PARAMETER craftRef.
+    PARAMETER nd.
+    RETURN SHIP = craftRef AND KUNIVERSE:ACTIVEVESSEL = craftRef AND HASNODE
+        AND ALLNODES:LENGTH = 1 AND NEXTNODE = nd.
+}
+
+GLOBAL FUNCTION surveyOrbitSafe {
+    PARAMETER obt_.
+    PARAMETER lowerAlt.
+    PARAMETER upperAlt.
+    RETURN obt_:BODY = SHIP:BODY AND NOT obt_:HASNEXTPATCH
+        AND obt_:ECCENTRICITY >= 0 AND obt_:ECCENTRICITY < 0.1
+        AND obt_:PERIAPSIS >= MAX(lowerAlt,surveyOrbitFloor())
+        AND obt_:APOAPSIS >= obt_:PERIAPSIS AND obt_:APOAPSIS <= upperAlt
+        AND obt_:APOAPSIS < SHIP:BODY:SOIRADIUS-SHIP:BODY:RADIUS
+        AND obt_:INCLINATION >= 75 AND obt_:INCLINATION <= 105
+        AND obt_:PERIOD > 0 AND obt_:PERIOD < 1e30.
+}
+
+// The supplied cap/reserve can tighten, never relax, the selected mission.
+// Charge only a selected, explicitly retained plan, using the shared SHAPE
+// ledger. A cancelled plan keeps this conservative reservation like SHAPE.
+GLOBAL FUNCTION surveyOrbitAffordable {
+    PARAMETER cost.
+    PARAMETER cap.
+    PARAMETER reserve.
+    LOCAL spent IS 0.
+    LOCAL id IS SHIP:BODY:NAME + ":" + stateGetNum("launch_time",0).
+    IF stateGet("shape_budget_id","") = id { SET spent TO stateGetNum("shape_budget_spent",0). }
+    RETURN cost >= 0.3 AND cost <= cap AND cost < 1e30
+        AND spent >= 0 AND spent < 1e30
+        AND STAGE:DELTAV:VACUUM >= cost + 1
+        AND SHIP:AVAILABLETHRUST > 0
+        AND SHIP:DELTAV:VACUUM - cost >= reserve
+        AND (SHAPE_DV_CAP < 0 OR cost <= SHAPE_DV_CAP)
+        AND (SHAPE_TOTAL_DV_CAP < 0 OR spent + cost <= SHAPE_TOTAL_DV_CAP)
+        AND (SHAPE_RESERVE_DV < 0 OR SHIP:DELTAV:VACUUM - cost >= SHAPE_RESERVE_DV).
+}
+
+// Identical absolute times for every candidate. One point per 1deg cell;
+// cos(latitude) weights map area rather than overvaluing polar longitudes.
+// Sparse along-track samples omit swath width, sunlight and sensor altitude
+// performance. Return unknown on malformed addon data, never "all unscanned".
+GLOBAL FUNCTION surveyOrbitScore {
+    PARAMETER craftRef.
+    PARAMETER nd.
+    PARAMETER scanType.
+    PARAMETER startUt.
+    PARAMETER span.
+    PARAMETER stopUt.
+    PARAMETER wallEnd.
+    LOCAL seen IS LEXICON().
+    LOCAL score IS 0.
+    FROM { LOCAL j IS 0. } UNTIL j >= 192 STEP { SET j TO j + 1. } DO {
+        IF NOT surveyOrbitIdle(craftRef,nd <> 0) OR (nd <> 0 AND NOT surveyOrbitOwned(craftRef,nd)) OR TIME:SECONDS >= stopUt
+                OR KUNIVERSE:REALTIME >= wallEnd { RETURN -1. }
+        LOCAL geo IS lmGroundGeoAt(startUt + span * (j + 0.2 + MOD(j*0.61803398875,0.6)) / 192).
+        IF NOT (ABS(geo:LAT) <= 90 AND ABS(geo:LNG) < 1e30) { RETURN -1. }
+        LOCAL lng IS MOD(MOD(geo:LNG + 180,360) + 360,360) - 180.
+        LOCAL key IS FLOOR(geo:LAT+90) + ":" + FLOOR(lng+180).
+        IF NOT seen:HASKEY(key) {
+            SET seen[key] TO TRUE.
+            LOCAL complete IS ADDONS:SCANSAT:COMPLETEDSCANS(SHIP:BODY,LATLNG(geo:LAT,lng)).
+            IF NOT complete:ISTYPE("List") { RETURN -1. }
+            IF NOT complete:CONTAINS(scanType) { SET score TO score + COS(geo:LAT). }
+        }
+        IF MOD(j,16) = 0 { WAIT 0. }
+    }
+    RETURN score.
+}
+
+// One gentle apsis change detunes the period; no circularization needed.
+// Raising Ap at Pe / lowering Pe at Ap always keeps the other apsis fixed.
+GLOBAL FUNCTION surveyOrbitDriftNode {
+    PARAMETER raiseAp.
+    PARAMETER stepAlt.
+    LOCAL pe IS SHIP:PERIAPSIS.
+    LOCAL ap IS SHIP:APOAPSIS.
+    LOCAL burnRadius IS SHIP:BODY:RADIUS + ap.
+    LOCAL otherRadius IS SHIP:BODY:RADIUS + pe - stepAlt.
+    LOCAL burnEta IS ETA:APOAPSIS.
+    IF raiseAp {
+        SET burnRadius TO SHIP:BODY:RADIUS + pe.
+        SET otherRadius TO SHIP:BODY:RADIUS + ap + stepAlt.
+        SET burnEta TO ETA:PERIAPSIS.
+    }
+    IF otherRadius <= SHIP:BODY:RADIUS { RETURN 0. }
+    IF burnEta < 180 { SET burnEta TO burnEta + SHIP:ORBIT:PERIOD. }
+    LOCAL speedNow IS SQRT(SHIP:BODY:MU * (2/burnRadius - 1/SHIP:ORBIT:SEMIMAJORAXIS)).
+    LOCAL speedNew IS SQRT(SHIP:BODY:MU * (2/burnRadius - 2/(burnRadius+otherRadius))).
+    LOCAL nd IS NODE(TIME:SECONDS+burnEta,0,0,speedNew-speedNow).
+    ADD nd. WAIT 0.02.
+    RETURN nd.
+}
+
+GLOBAL FUNCTION surveyOrbitSearch {
+    PARAMETER scanType.
+    PARAMETER mode.
+    PARAMETER cap.
+    PARAMETER reserve.
+    PARAMETER report.
+    LOCAL craftRef IS SHIP.
+    LOCAL out IS LEXICON("OK",FALSE,"REASON","no-useful-change","NODE",0).
+    LOCAL period IS SHIP:ORBIT:PERIOD.
+    LOCAL startUt IS TIME:SECONDS + 2*period + 180.
+    LOCAL stopUt IS TIME:SECONDS + 45.
+    LOCAL wallEnd IS KUNIVERSE:REALTIME + 60.
+    LOCAL lowerAlt IS MAX(surveyOrbitFloor(),SHIP:PERIAPSIS*0.9).
+    LOCAL upperAlt IS SHIP:APOAPSIS*1.1.
+    LOCAL stepAlt IS MAX(500,(SHIP:PERIAPSIS+SHIP:APOAPSIS)*0.025).
+    LOCAL baseline IS surveyOrbitScore(craftRef,0,scanType,startUt,6*period,stopUt,wallEnd).
+    IF baseline < 0 { SET out["REASON"] TO "baseline-unavailable-or-deadline". RETURN out. }
+    diagnosticArchiveLine(report,"STATS scanorbit baseline type="+scanType+" score="+baseline
+        +" startUt="+startUt+" span="+(6*period)+" samples=192 model=ground-track-points"
+        +" lowerAlt="+lowerAlt+" upperAlt="+upperAlt).
+    LOCAL best IS LEXICON().
+    LOCAL bestMerit IS 0.
+    LOCAL inc IS SHIP:ORBIT:INCLINATION.
+    LOCAL lan IS SHIP:ORBIT:LAN.
+    FOR kind IN LIST("raise-ap","lower-pe","polar","mirror") {
+        IF NOT surveyOrbitIdle(craftRef,FALSE) OR TIME:SECONDS >= stopUt
+                OR KUNIVERSE:REALTIME >= wallEnd { SET out["REASON"] TO "context-or-deadline". RETURN out. }
+        LOCAL try_ IS mode = "auto" OR mode = kind OR (mode = "drift" AND (kind = "raise-ap" OR kind = "lower-pe")).
+        LOCAL nd IS 0.
+        IF try_ {
+            IF kind = "raise-ap" OR kind = "lower-pe" {
+                SET nd TO surveyOrbitDriftNode(kind = "raise-ap",stepAlt).
+            } ELSE {
+                LOCAL wantInc IS 90.
+                IF kind = "mirror" { SET wantInc TO 180-inc. }
+                // Cheap analytic lower estimate; don't run the plane solver
+                // for a maneuver already above the allowed cost at apoapsis.
+                LOCAL va IS SQRT(SHIP:BODY:MU*(2/(SHIP:BODY:RADIUS+SHIP:APOAPSIS)-1/SHIP:ORBIT:SEMIMAJORAXIS)).
+                LOCAL estimate IS 2*va*SIN(ABS(wantInc-inc)/2).
+                IF estimate >= 0.3 AND estimate <= cap {
+                    SET nd TO planPlaneMatch(wantInc,lan).
+                    IF nd <> 0 AND surveyOrbitOwned(craftRef,nd) {
+                        IF nd:ETA < 180 { SET nd:TIME TO nd:TIME+period. WAIT 0.02. }
+                        // planPlaneMatch's general guard allows5deg; surveying
+                        // needs a genuinely different, well-achieved plane.
+                        IF ABS(nd:ORBIT:INCLINATION-wantInc) > 0.2
+                                OR ABS(MOD(nd:ORBIT:LAN-lan+540,360)-180) > 0.2 {
+                            REMOVE nd. SET nd TO 0.
+                        }
+                    }
+                }
+            }
+        }
+        IF nd <> 0 {
+            IF NOT surveyOrbitOwned(craftRef,nd) {
+                SET out["REASON"] TO "node-ownership-changed". RETURN out.
+            }
+            LOCAL score IS -1.
+            LOCAL dv IS nd:DELTAV:MAG.
+            IF surveyOrbitIdle(craftRef,TRUE) AND surveyOrbitSafe(nd:ORBIT,lowerAlt,upperAlt)
+                    AND surveyOrbitAffordable(dv,cap,reserve) AND nd:ETA >= 180
+                    AND nd:TIME < startUt {
+                SET score TO surveyOrbitScore(craftRef,nd,scanType,startUt,6*period,stopUt,wallEnd).
+            }
+            IF NOT surveyOrbitOwned(craftRef,nd) {
+                SET out["REASON"] TO "node-ownership-changed". RETURN out.
+            }
+            diagnosticArchiveLine(report,"STATS scanorbit candidate mode="+kind+" dv="+dv
+                +" score="+score+" baseline="+baseline+" Pe="+nd:ORBIT:PERIAPSIS
+                +" Ap="+nd:ORBIT:APOAPSIS+" inc="+nd:ORBIT:INCLINATION+" lan="+nd:ORBIT:LAN).
+            IF score >= baseline+MAX(0.1,baseline*0.1) {
+                LOCAL merit IS (score-baseline)/(dv+1).
+                IF merit > bestMerit {
+                    SET bestMerit TO merit.
+                    SET best TO LEXICON("MODE",kind,"UT",nd:TIME,"PRO",nd:PROGRADE,
+                        "NRM",nd:NORMAL,"RAD",nd:RADIALOUT,"SCORE",score,"DV",dv).
+                }
+            }
+            // Only our node, only while still on the same active vessel.
+            // A context switch leaves the preview for manual inspection.
+            IF SHIP <> craftRef OR KUNIVERSE:ACTIVEVESSEL <> craftRef {
+                SET out["REASON"] TO "vessel-changed-preview-retained". RETURN out.
+            }
+            IF NOT HASNODE OR ALLNODES:LENGTH <> 1 OR NEXTNODE <> nd {
+                SET out["REASON"] TO "node-ownership-changed". RETURN out.
+            }
+            REMOVE nd.
+            IF score < 0 AND (TIME:SECONDS >= stopUt OR KUNIVERSE:REALTIME >= wallEnd) {
+                SET out["REASON"] TO "sampling-deadline". RETURN out.
+            }
+        }
+    }
+    IF best:LENGTH = 0 { RETURN out. }
+    IF NOT surveyOrbitIdle(craftRef,FALSE) { SET out["REASON"] TO "context-changed". RETURN out. }
+    LOCAL nd IS NODE(best["UT"],best["RAD"],best["NRM"],best["PRO"]).
+    ADD nd. WAIT 0.02.
+    IF NOT surveyOrbitOwned(craftRef,nd) { SET out["REASON"] TO "node-ownership-changed". RETURN out. }
+    IF NOT surveyOrbitSafe(nd:ORBIT,lowerAlt,upperAlt) OR NOT surveyOrbitAffordable(nd:DELTAV:MAG,cap,reserve)
+            OR nd:ETA < 180 OR NOT surveyOrbitIdle(craftRef,TRUE) {
+        IF SHIP = craftRef AND KUNIVERSE:ACTIVEVESSEL = craftRef AND HASNODE AND NEXTNODE = nd {
+            REMOVE nd.
+        }
+        SET out["REASON"] TO "final-validation". RETURN out.
+    }
+    SET out["OK"] TO TRUE. SET out["REASON"] TO "sampled-improvement".
+    SET out["NODE"] TO nd. SET out["BEST"] TO best.
+    RETURN out.
+}
