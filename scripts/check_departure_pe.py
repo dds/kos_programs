@@ -119,6 +119,41 @@ def check_alternate_windows():
     print('PASS: alternate window solves after flat 1058 km seed; expired/duplicate seeds skipped; best failure restored')
 
 
+def check_minmus_close_pass_probe():
+    mu,radius,vinf=1.7658e9,60000,100
+    def periapsis(impact):
+        return mu/vinf**2*(math.sqrt(1+(impact*vinf**2/mu)**2)-1)-radius
+    near_r=radius+25000
+    near_b=-math.sqrt(near_r**2+2*mu*near_r/vinf**2)
+    # Exact conic response: the large probe crosses the B-vector minimum.
+    # Its apparent derivative has the opposite sign from the local one.
+    coarse=(periapsis(near_b+1e6)-periapsis(near_b))/.1
+    fine=(periapsis(near_b+100)-periapsis(near_b))/.00001
+    assert coarse*fine<0
+    for axis in ('PROGRADE','RADIALOUT','NORMAL'):
+        for pe0 in (1e6,1.338e6,2e6):
+            rr=radius+pe0;b0=math.sqrt(rr**2+2*mu*rr/vinf**2)
+            seed=860 if axis=='PROGRADE' else 0
+            response=lambda node:periapsis(b0-6e6*(getattr(node,axis)-seed))
+            env,nd,target=fixture(response);samples=[]
+            original=env['_nodeAxisSet']
+            def set_axis(node,key,value):
+                samples.append(abs(value-getattr(node,key)));original(node,key,value)
+            env['_nodeAxisSet']=set_axis
+            assert ks.call('_refineLocalDeparturePe',env,nd,target,15000),(axis,pe0,response(nd))
+            assert abs(response(nd)-15000)<=500
+            assert any(abs(step-.01)<1e-8 for step in samples)
+            assert math.sqrt((nd.PROGRADE-860)**2+nd.NORMAL**2+nd.RADIALOUT**2)<=100
+            assert ks.call('transferDepartureReady',env,nd,target,15000)
+    # Even a false-flat coarse probe must shrink rather than reject the
+    # window: arrange equal Pe at the initial signed B and its0.1m/s probe.
+    rr=radius+30000;b0=math.sqrt(rr**2+2*mu*rr/vinf**2)
+    env,nd,target=fixture(lambda node:periapsis(b0-20*b0*node.NORMAL))
+    assert ks.call('_refineLocalDeparturePe',env,nd,target,15000)
+    assert abs(periapsis(b0-20*b0*nd.NORMAL)-15000)<=500
+    print('PASS: independent Minmus hyperbola proves reversed0.1m/s slope near25km; adaptive source solves9 far-to15km encounters across all3 axes plus false-flat probe, preserving2km gate/100m/s ball and24-iteration limit')
+
+
 def check_plan_gate():
     for pe, first, accepted in ((2200000, 'Mun', False), (15000, 'Mun', True),
                                 (13000, 'Mun', True), (17000, 'Mun', True),
@@ -144,4 +179,5 @@ def check_plan_gate():
 if __name__ == '__main__':
     check_refinement()
     check_alternate_windows()
+    check_minmus_close_pass_probe()
     check_plan_gate()

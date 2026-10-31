@@ -45,7 +45,8 @@ record remaining uncertainty before closing a task.
   release impulse/coverage, finite burns and both final orbits still
   unproven. No Deck/game/save changes. Use standalone north/south profiles
   if the active carrier stage cannot fund the one-launch transfer.
-- ACTIVE native Espoir-Minmus-Lander1 XING: boot0035154507..5154542,
+- IMPLEMENTED/source-checked native Espoir-Minmus-Lander1 XING fix;
+  corrected flight retry pending. Boot0035154507..5154542,
   six Pe solves stall24.7..33.3km vs15+/-2km with only0.33..0.53m/s
   vector correction of100m/s cap. Suspected coarse0.1m/s probe crosses
   close-encounter minimum and gives the wrong local slope. Independent
@@ -54,6 +55,22 @@ record remaining uncertainty before closing a task.
   encounter/Pe/first-body/budget gates. Evidence:
   /tmp/ksp-deck-20261031T210642Z-fetch-w2qdlkv2/logs/
   Espoir-Minmus-Lander1_5154039/boot_003_core.log.
+  Source now shrinks the probe0.1→0.01→0.001→0.0001m/s only on a
+  restored no-improvement/flat-gradient point. Same24-iteration bound,
+  100m/s whole-vector ball,15+/-2km final corridor and first-body gate.
+  Final solve row reports probeDv. Independent hyperbolic source tests
+  solve9 previously stalled encounters/all3 axes plus false-flat coarse
+  response; existing lost-patch/flat/budget/alternate-window gates pass.
+  New native retry still needed: pull connected, remove old UNFLOWN node,
+  cmd/transferretry.ks then REBOOT. Do not loosen capture Pe to mask it.
+  Final combined99 routine files pass153.69s, including the final
+  Molniya second-handoff recovery;369 scripts/99 profiles/82 phases/
+  44 bands,0 errors/unchanged KSC_DEORBIT warning. Reports:
+  /tmp/kos-departure-adaptive-probe-20261031.{json,log}.
+  No production changes during/after that suite; only this handoff updated.
+  Native derivative samples were absent, so coarse-probe diagnosis is
+  supported by the observed stall plus independent conics, not yet proven
+  by a corrected KSP solve. The solve row now exposes the final probe size.
 
 - 31Oct Espoir Mun/Minmus commnet tripacks implemented/source-checked;
   native deployment remains unproven. User chose three-relay equatorial

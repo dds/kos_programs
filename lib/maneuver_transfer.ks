@@ -224,6 +224,10 @@ LOCAL FUNCTION _refineLocalDeparturePe {
     LOCAL seedRad IS nd:RADIALOUT.
     LOCAL seedNrm IS nd:NORMAL.
     LOCAL iteration IS 0.
+    // A fixed0.1m/s probe can cross the entire Minmus B-plane footprint
+    // near a close pass, reversing the apparent Pe slope. Refine the probe
+    // at the SAME restored node before abandoning this departure window.
+    LOCAL probeDv IS 0.1.
     LOCAL status IS "iteration-limit".
     UNTIL iteration >= 24 {
         SET iteration TO iteration + 1.
@@ -241,7 +245,7 @@ LOCAL FUNCTION _refineLocalDeparturePe {
         FOR axis IN LIST("PROGRADE", "RADIALOUT", "NORMAL") {
             LOCAL oldVal IS _nodeAxisGet(nd, axis).
             LOCAL slope IS 0.
-            FOR probe IN LIST(0.1, -0.1) {
+            FOR probe IN LIST(probeDv, -probeDv) {
                 _nodeAxisSet(nd, axis, oldVal + probe).
                 WAIT 0.1.
                 LOCAL sample IS _getTargetPatch(nd, targetBody).
@@ -253,47 +257,51 @@ LOCAL FUNCTION _refineLocalDeparturePe {
             gradients:ADD(slope).
         }
         LOCAL grad2 IS gradients[0]^2 + gradients[1]^2 + gradients[2]^2.
-        IF grad2 < 0.000001 { SET status TO "flat-gradient". BREAK. }
-        LOCAL stepPro IS err * gradients[0] / grad2.
-        LOCAL stepRad IS err * gradients[1] / grad2.
-        LOCAL stepNrm IS err * gradients[2] / grad2.
-        LOCAL stepSize IS SQRT(stepPro^2 + stepRad^2 + stepNrm^2).
-        LOCAL scale IS MIN(1, 20 / MAX(0.000001, stepSize)).
-        LOCAL improved IS FALSE.
-        FOR fraction IN LIST(1, 0.5, 0.25, 0.125, 0.0625, 0.03125) {
-            SET nd:PROGRADE TO basePro + stepPro * scale * fraction.
-            SET nd:RADIALOUT TO baseRad + stepRad * scale * fraction.
-            SET nd:NORMAL TO baseNrm + stepNrm * scale * fraction.
-            LOCAL change IS SQRT((nd:PROGRADE - seedPro)^2
-                + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2).
-            // Keep the WHOLE correction inside its budget ball. Merely
-            // shrinking the next step can stall at the boundary even when
-            // a useful change in direction remains within the same budget.
-            IF change > TRANSFER_PE_REFINE_DV_CAP {
-                LOCAL budgetScale IS TRANSFER_PE_REFINE_DV_CAP / change.
-                SET nd:PROGRADE TO seedPro + (nd:PROGRADE - seedPro) * budgetScale.
-                SET nd:RADIALOUT TO seedRad + (nd:RADIALOUT - seedRad) * budgetScale.
-                SET nd:NORMAL TO seedNrm + (nd:NORMAL - seedNrm) * budgetScale.
-            }
-            WAIT 0.1.
-            SET change TO SQRT((nd:PROGRADE - seedPro)^2
-                + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2).
-            IF change <= TRANSFER_PE_REFINE_DV_CAP + 0.001 {
-                LOCAL trial IS _getTargetPatch(nd, targetBody).
-                IF trial <> 0 AND _firstPatchBodyName(nd) = targetBody:NAME {
-                    IF ABS(trial:PERIAPSIS - targetPe) < ABS(err) {
-                        SET improved TO TRUE. BREAK.
+        IF grad2 < 0.000001 {
+            IF probeDv <= 0.00010001 { SET status TO "flat-gradient". BREAK. }
+            SET probeDv TO MAX(0.0001,probeDv/10).
+        } ELSE {
+            LOCAL stepPro IS err * gradients[0] / grad2.
+            LOCAL stepRad IS err * gradients[1] / grad2.
+            LOCAL stepNrm IS err * gradients[2] / grad2.
+            LOCAL stepSize IS SQRT(stepPro^2 + stepRad^2 + stepNrm^2).
+            LOCAL scale IS MIN(1, 20 / MAX(0.000001, stepSize)).
+            LOCAL improved IS FALSE.
+            FOR fraction IN LIST(1, 0.5, 0.25, 0.125, 0.0625, 0.03125) {
+                SET nd:PROGRADE TO basePro + stepPro * scale * fraction.
+                SET nd:RADIALOUT TO baseRad + stepRad * scale * fraction.
+                SET nd:NORMAL TO baseNrm + stepNrm * scale * fraction.
+                LOCAL change IS SQRT((nd:PROGRADE - seedPro)^2
+                    + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2).
+                // Keep the WHOLE correction inside its budget ball. Merely
+                // shrinking the next step can stall at the boundary even when
+                // a useful change in direction remains within the same budget.
+                IF change > TRANSFER_PE_REFINE_DV_CAP {
+                    LOCAL budgetScale IS TRANSFER_PE_REFINE_DV_CAP / change.
+                    SET nd:PROGRADE TO seedPro + (nd:PROGRADE - seedPro) * budgetScale.
+                    SET nd:RADIALOUT TO seedRad + (nd:RADIALOUT - seedRad) * budgetScale.
+                    SET nd:NORMAL TO seedNrm + (nd:NORMAL - seedNrm) * budgetScale.
+                }
+                WAIT 0.1.
+                SET change TO SQRT((nd:PROGRADE - seedPro)^2
+                    + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2).
+                IF change <= TRANSFER_PE_REFINE_DV_CAP + 0.001 {
+                    LOCAL trial IS _getTargetPatch(nd, targetBody).
+                    IF trial <> 0 AND _firstPatchBodyName(nd) = targetBody:NAME {
+                        IF ABS(trial:PERIAPSIS - targetPe) < ABS(err) {
+                            SET improved TO TRUE. BREAK.
+                        }
                     }
                 }
             }
-        }
-        IF NOT improved {
-            SET nd:PROGRADE TO basePro.
-            SET nd:RADIALOUT TO baseRad.
-            SET nd:NORMAL TO baseNrm.
-            WAIT 0.1.
-            SET status TO "no-improving-step".
-            BREAK.
+            IF NOT improved {
+                SET nd:PROGRADE TO basePro.
+                SET nd:RADIALOUT TO baseRad.
+                SET nd:NORMAL TO baseNrm.
+                WAIT 0.1.
+                IF probeDv <= 0.00010001 { SET status TO "no-improving-step". BREAK. }
+                SET probeDv TO MAX(0.0001,probeDv/10).
+            }
         }
     }
     LOCAL finalPatch IS _getTargetPatch(nd, targetBody).
@@ -301,7 +309,7 @@ LOCAL FUNCTION _refineLocalDeparturePe {
     IF finalPatch <> 0 { SET finalPe TO finalPatch:PERIAPSIS. }
     LOCAL accepted IS transferDepartureReady(nd, targetBody, targetPe, FALSE).
     mLog("STATS departure-pe solve status=" + status + " accepted=" + accepted
-        + " iterations=" + iteration + " PeKm=" + ROUND(finalPe / 1000,3)
+        + " iterations=" + iteration + " probeDv=" + probeDv + " PeKm=" + ROUND(finalPe / 1000,3)
         + " targetPeKm=" + ROUND(targetPe / 1000,3)
         + " vectorChange=" + ROUND(SQRT((nd:PROGRADE - seedPro)^2
             + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2),3)
