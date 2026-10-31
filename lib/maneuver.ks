@@ -823,6 +823,7 @@ GLOBAL FUNCTION executeManeuver {
         + " cutoffFault=" + burnAbort
         + " shutdownAttempted=" + cutoffCheck["forced"]
         + " thrustStopped=" + cutoffCheck["stopped"].
+    stateRemove("last_burn_handoff").
     stateSet("last_burn_report", burnReport).
     mLogWarn(burnReport).
     // Flush only after the zero command has reached physics. mLog can
@@ -1246,8 +1247,19 @@ GLOBAL FUNCTION maneuverDepartureFlown {
 GLOBAL FUNCTION maneuverAcceptHandoff {
     SET BURN_RESUME_REQUESTED TO FALSE.
     IF stateGet("burn_phase", "") <> stateGet("phase", "") { RETURN. }
+    LOCAL priorAbort IS stateGet("burn_abort_reason", "").
+    LOCAL priorResidual IS stateGetNum("burn_abort_residual", -1).
     _ren(stateGetNum("burn_node_time", -1)).
     _cpb("arrival-handoff").
+    // Keep strict executor evidence intact. The caller has independently
+    // accepted the live trajectory; record that later mission decision too.
+    LOCAL outcome IS "STATS burn handoff decision=accept-live-trajectory phase=" + stateGet("phase", "")
+        + " ut=" + _fs(TIME:SECONDS,2) + " priorAbort=" + priorAbort
+        + " priorResidual=" + _fs(priorResidual,9)
+        + " burnPending=" + stateGet("burn_pending","false")
+        + " burnStarted=" + stateGet("burn_started","false").
+    stateSet("last_burn_handoff",outcome).
+    mLogSummary(outcome).
 }
 
 LOCAL FUNCTION _ren {

@@ -6,6 +6,36 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct native fleet update, operator UT5035205: archived logs show Duna
+  Lander1/Lander2 past XING into BPLANE/Sun-SOI coast; Ike Lander1 completes
+  XING at5035220.6 and hands off through ASSIST. Both recorded XING tail
+  residual holds retain a Duna patch: Duna Lander1 cutoffRem0.058263865 /
+  sampled0.07379429 (axis trim, limit0.05), Ike Lander1 cutoffRem0.048679966 /
+  sampled0.054309281 (full trim, limit0.051). thrustStopped=True. Operator
+  confirms no stale node/interrupted state. Code already reconciles actual
+  trajectory with maneuverAcceptHandoff/_ren/_cpb; this is an explanation
+  gap, not evidence to relax the residual guards. Added a separate durable
+  last_burn_handoff diagnostic and protected summary after existing cleanup;
+  burnreport prints it alongside unchanged strict cutoff evidence. Fresh
+  cutoff clears stale handoff diagnostics. Successful transfer handoff rows
+  now say decision=continue and use summary priority. Targeted burn completion,
+  watchdog, launch/staging, transfer retry, arrival review and entry-recovery
+  fixtures pass; exact native residual regression verifies guards still
+  reject, handoff cleanup/persistence/reporting and original evidence remain.
+  Structural audit0 errors/unchanged KSC_DEORBIT warning. Native richer
+  handoff logging will appear after pulling/rebooting for a subsequent burn.
+  Next useful flight: Duna Lander2 after Kerbin exit nearUT5114737.784;
+  Duna Lander1 exitUT5121323.830. Check first heliocentric BPLANE actual
+  correction/capture affordability and70km polar goal, then midpoint preview
+  if explicitly enabled. Duna arrivals currently9406062.142 and10036152.933.
+  Solar follow-up: Duna Lander1 XING search reached axis5 flow0.76 but left
+  only12.85s for best-hold, which timed out; later flow0.2326. Duna Lander2
+  six axes all0 at93.3pct battery, compatible with eclipse; no proof of a
+  panel-direction defect from that log. No flight control/settings changed.
+  Evidence:/tmp/ksp-deck-20261031T005219Z-fetch-{1rkb4hmc,umo9ymqw,
+  rz0skzsz,zwbwr6bd,m6vatjok}/logs/ (boot004/006 Duna Lander1, boot005
+  Duna Lander2, boot004 Ike Lander1, boot003 Ike Surveyor1 respectively).
+
 - 30Oct implemented/checked; native flight validation pending: Espoir now
   has four canonical choices: Duna/Ike70km polar surveyors, Duna70km polar
   lander, Ike25km polar lander. Retired duna_impactor/duna_science_impact ids

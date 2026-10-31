@@ -83,7 +83,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNONCEPATH("0:/cmd/trimstate.ks").` | Remove bulky stale state keys after a tight-storage boot |
 | `RUNPATH("0:/cmd/convertstatejson.ks").` | Convert legacy SimpleJSON state to native kOS JSON |
 | `RUNPATH("0:/cmd/logs.ks").` | Archive the current boot's flight log to KSC |
-| `RUNPATH("0:/cmd/burnreport.ks").` | Print the latest maneuver cutoff report, retained across reboots |
+| `RUNPATH("0:/cmd/burnreport.ks").` | Print the latest maneuver cutoff and subsequent accepted mission handoff, retained across reboots |
 | `RUNPATH("0:/cmd/burncheck.ks").` | Read-only ignition check: engine availability, autopilot suppression, CPU roles/IPU, and timed throttle-governor probes against the retained node; never fires engines |
 | `RUNPATH("0:/cmd/deorbitcheck.ks").` | Read-only deorbit snapshot: keep the suspect node attached and run in manual mode with an archive link; saves and verifies the report under `0:/logs/archive/_diagnostics/` |
 | `RUNPATH("0:/cmd/deorbitretry.ks").` | Discard the next unflown moon landing node while preserving the configured target, mission and overrides; then reboot to replan. Refuses committed/interrupted burns or unsafe controls/orbits |
@@ -803,6 +803,12 @@ whether thrust stopped. This compact record survives phase reboots even if
 the log fills; the next maneuver replaces it. It cannot reconstruct an older
 burn flown before this update. `RUNPATH("0:/cmd/logs.ks").` archives the current
 boot's log when connected to KSC.
+If the executor misses its strict residual tolerance but the calling phase
+independently accepts the live trajectory, `STATS burn handoff` records that
+later decision and the cleared pending/started flags. The original cutoff
+report is preserved; `burnreport` displays both. Accepted transfer handoffs
+also persist `STATS transfer handoff decision=continue` as a decision summary.
+This explains progression without changing burn tolerances or arrival checks.
 The report also prints the saved attempt status and **current** engine
 activation, flameout, thrust limiter and staging information. `BURN WAIT`
 means the executor is waiting for usable thrust; the previous cutoff report

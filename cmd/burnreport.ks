@@ -10,6 +10,8 @@ LOCAL FUNCTION _cmdBurnreport {
     PRINT stateGet("last_thrust_cutoff", "No shared cutoff report yet.").
     PRINT "Latest completed cutoff (may be from an earlier maneuver):".
     PRINT stateGet("last_burn_report", "No saved cutoff report; the last attempt may not have reached cutoff.").
+    PRINT "Subsequent mission handoff (separate from strict cutoff result):".
+    PRINT stateGet("last_burn_handoff", "No accepted handoff recorded for this cutoff.").
     PRINT "Saved attempt: phase=" + stateGet("phase", "")
         + " status=" + stateGet("burn_status", "")
         + " started=" + stateGet("burn_started", "false")

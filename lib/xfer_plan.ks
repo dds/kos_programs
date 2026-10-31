@@ -79,8 +79,8 @@ LOCAL FUNCTION _postBurnTransferHandoffOk {
     IF patch <> 0 AND patch:PERIAPSIS > 0 AND patch:PERIAPSIS <= peMax {
         _recordXingArrivalUt(targetBody).
         maneuverAcceptHandoff().
-        mLog("STATS transfer handoff label=" + label
-            + " status=patch"
+        mLogSummary("STATS transfer handoff label=" + label
+            + " decision=continue status=patch"
             + " target=" + targetBody:NAME
             + " PeKm=" + ROUND(patch:PERIAPSIS / 1000, 1)
             + " soiKm=" + ROUND(targetBody:SOIRADIUS / 1000, 1)
@@ -101,8 +101,8 @@ LOCAL FUNCTION _postBurnTransferHandoffOk {
         stateSet("xing_arrival_ut", ca["time"]).
         stateSet("xing_arrival_target", targetBody:NAME).
         maneuverAcceptHandoff().
-        mLog("STATS transfer handoff label=" + label
-            + " status=closest-approach"
+        mLogSummary("STATS transfer handoff label=" + label
+            + " decision=continue status=closest-approach"
             + " target=" + targetBody:NAME
             + " caKm=" + ROUND(ca["distance"] / 1000, 1)
             + " soiKm=" + ROUND(targetBody:SOIRADIUS / 1000, 1)

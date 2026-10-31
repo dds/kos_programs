@@ -40,6 +40,7 @@ def fixture():
                stateRemove=lambda key:saved.pop(key,None),saved=saved)
     env['STAGE'].DELTAV.VACUUM=10
     env.update(targetPe=53000,peLow=52000,peHigh=54000,atmHeight=70000,
+               _fs=lambda value,places:str(round(value,places)),
                HASNODE=False,ABORT=False,WARP=0,phaseShouldYield=False,
                BURN_TRIM_ABS_COMPLETE_DV=.05,BURN_TRIM_COMPLETE_MAX_DV=.05,
                LEXICON=lambda *xs:Map(zip(xs[::2],xs[1::2])),VDOT=lambda a,b:float(a@b),

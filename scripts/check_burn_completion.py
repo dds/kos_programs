@@ -80,6 +80,52 @@ def check_completion_evidence_and_faults():
     print('PASS: no allowance for missing/invalid/axis/reversal/rebound evidence; forced-cutoff/watchdog/invalid-data faults survive; allowance caps at0.001 and report records final failure with9-place residuals')
 
 
+def check_handoff_diagnostic_after_cutoff():
+    import json
+    for residual,reason in ((.054309281,'live-node-trim'),(.07379429,'live-thrust-axis-trim')):
+        original=f'STATS last-burn residual={residual} reason={reason} cutoffFault=residual-outside-tolerance thrustStopped=True'
+        state=dict(phase='XING',burn_phase='XING',burn_pending='true',burn_started='true',
+            burn_node_time=1000,burn_abort_reason='residual-outside-tolerance',
+            burn_abort_residual=residual,last_burn_report=original)
+        events=[]
+        node=NS(TIME=1000)
+        env=dict(TIME=NS(SECONDS=5035221.4),BURN_RESUME_REQUESTED=True,HASNODE=True,NEXTNODE=node,
+            stateGet=state.get,stateGetNum=state.get,
+            stateSet=lambda key,value:state.update({key:value}),stateRemove=lambda key:state.pop(key,None),
+            LIST=lambda *xs:xs,_fs=lambda value,places:str(round(value,places)),fixture_wait=lambda _:None)
+        def remove(nd):
+            assert nd is node;env['HASNODE']=False;events.append('remove')
+        env['fixture_remove']=remove
+        ren=function_body(SOURCE,'_ren').replace('REMOVE NEXTNODE.','fixture_remove(NEXTNODE).')
+        env['_ren']=lambda ntm:execute(ren,dict(env,ntm=ntm))
+        env['_cpb']=lambda reason:execute(function_body(SOURCE,'_cpb'),dict(env,reason=reason))
+        def summary(row):
+            assert 'burn_pending' not in state and 'burn_started' not in state and not env['HASNODE']
+            events.append(row)
+        env['capture_summary']=summary
+        handoff=function_body(SOURCE,'maneuverAcceptHandoff').replace('mLogSummary(outcome).','capture_summary(outcome).')
+        execute(handoff,env)
+        assert not env['BURN_RESUME_REQUESTED'] and events[0]=='remove'
+        assert state['last_burn_report']==original
+        restored=json.loads(json.dumps(state)) # Fresh boot retains both distinct outcomes.
+        assert restored['last_burn_handoff']==events[-1]
+        assert 'accept-live-trajectory' in events[-1] and str(residual) in events[-1]
+        assert 'burnPending=false burnStarted=false' in events[-1]
+        # The report is explanatory only: the existing strict residual gate
+        # still fails the two exact native post-cutoff residuals.
+        governor,_,_,_=governor_fixture();governor['BURN_TRIM_ABS_COMPLETE_DV']=.05
+        assert final_guard(governor,residual,reason,.048679966)[0]=='residual-outside-tolerance'
+        state['burn_phase']='SHAPE';before=state.copy();events.clear()
+        execute(handoff,env)
+        assert state==before and not events # Foreign phase gets no false disposition.
+        executor=function_body(SOURCE,'executeManeuver')
+        fragment=executor[executor.index('stateRemove("last_burn_handoff")'):executor.index('mLogWarn(burnReport)')]
+        execute(fragment,dict(env,burnReport='next cutoff'))
+        assert state['last_burn_report']=='next cutoff' and 'last_burn_handoff' not in state
+    assert 'stateGet("last_burn_handoff"' in (ROOT/'cmd/burnreport.ks').read_text()
+    print('PASS: exact native0.054309281/0.07379429 residuals retain strict failure evidence; accepted live-trajectory cleanup emits/persists a later disposition, survives reboot and clears on the next cutoff without changing admission')
+
+
 def retry_fixture():
     state = dict(phase='SHAPE', burn_phase='SHAPE', burn_body='Minmus',
                  burn_pending='true', burn_started='true', burn_node_time=1000,
@@ -183,5 +229,6 @@ def check_interrupted_shape_preserves_node():
 if __name__ == '__main__':
     check_latched_trim_after_settling()
     check_completion_evidence_and_faults()
+    check_handoff_diagnostic_after_cutoff()
     check_shape_recovery()
     check_interrupted_shape_preserves_node()
