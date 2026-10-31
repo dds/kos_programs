@@ -1571,6 +1571,20 @@ the native elements within0.1%; otherwise measurement fails closed.
 `STATS bplane-measure frame=patch-current` reports the three consistency
 errors. This check does not widen the requested Pe/plane corridor.
 
+With `BPLANE_REQUIRE_PLANE=0`, an infeasible requested plane is evaluated
+against its closest achievable normal. An arrival plane must contain the
+incoming asymptote: the Ike carriers' Duna85km solutions had irreducible
+inclinations near0.30/0.35deg, so comparing them only to the exact equator
+incorrectly failed the0.2deg check despite converged B-vectors. Projection
+now applies to small tilts too, and free-LAN requests use the analytically
+nearest feasible inclination boundary. Solver scoring, convergence and the
+fresh unburned-patch completion check share that goal. Optional completion
+requires valid vector evidence when native elements miss the original request.
+`STATS bplane plane-policy ... metric=closest-achievable` identifies this
+policy. Required-plane missions (`BPLANE_REQUIRE_PLANE=1`), including final
+polar Ike capture and Duna landers, still use the original requested elements
+and tolerances. Pe, native-event, fuel and burn-minimum guards remain.
+
 At a stopped prompt with idle thrust and warp off, run:
 
 ```ks

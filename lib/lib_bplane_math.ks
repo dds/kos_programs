@@ -227,9 +227,7 @@ LOCAL FUNCTION _arrivalInclinationNormal {
     LOCAL northInPlane IS north_ - VDOT(north_, sHat) * sHat.
     LOCAL span IS northInPlane:MAG.
     LOCAL wantCos IS COS(wantInc).
-    IF span < 1e-8 {
-        IF ABS(wantCos) < 1e-8 { RETURN meas["hHat"]. }
-    } ELSE IF ABS(wantCos) <= span {
+    IF span >= 1e-8 AND ABS(wantCos) <= span {
         LOCAL alongNorth IS northInPlane / span.
         LOCAL acrossNorth IS VCRS(sHat, alongNorth):NORMALIZED.
         LOCAL coeff IS MAX(-1, MIN(1, wantCos / span)).
@@ -241,9 +239,20 @@ LOCAL FUNCTION _arrivalInclinationNormal {
         }
         RETURN candidateA:NORMALIZED.
     }
-    // No plane at this inclination contains the incoming asymptote.
-    // Let the existing projection/feasibility handling report that case.
-    RETURN arrivalPlaneNormal(targetBody, wantInc, meas["lan"], meas).
+    // Outside the feasible inclination band, choose the nearest boundary.
+    // Return a normal on the REQUESTED cone whose projection reaches that
+    // boundary, so offPlane still records the irreducible angular error.
+    // A polar asymptote admits any transverse normal; keep the measured one.
+    LOCAL closest IS meas["hHat"].
+    IF span >= 1e-8 {
+        SET closest TO northInPlane/span.
+        IF wantCos < 0 { SET closest TO -closest. }
+    }
+    LOCAL closestInc IS ARCCOS(MAX(-1,MIN(1,VDOT(closest,north_)))).
+    LOCAL gap IS ABS(closestInc-wantInc).
+    LOCAL towardS IS 1.
+    IF VDOT(north_,sHat)*wantCos < 0 { SET towardS TO -1. }
+    RETURN (COS(gap)*closest+SIN(gap)*towardS*sHat):NORMALIZED.
 }
 
 // ============================================================
@@ -267,9 +276,11 @@ GLOBAL FUNCTION targetBplaneVector {
     // The achievable plane must contain the asymptote. Project the
     // requested normal perpendicular to S and report the compromise.
     LOCAL offPlane IS ABS(90 - VANG(nTgt, sHat)).
-    IF offPlane > 0.5 {
-        SET nTgt TO (nTgt - VDOT(nTgt, sHat) * sHat):NORMALIZED.
-        IF NOT quiet AND NOT _BPLANE_OFFPLANE_WARNED {
+    IF offPlane > 1e-8 {
+        LOCAL projected IS nTgt - VDOT(nTgt,sHat)*sHat.
+        IF projected:MAG > 1e-8 { SET nTgt TO projected:NORMALIZED. }
+        ELSE { SET nTgt TO meas["hHat"]. }
+        IF offPlane > 0.5 AND NOT quiet AND NOT _BPLANE_OFFPLANE_WARNED {
             SET _BPLANE_OFFPLANE_WARNED TO TRUE.
             mLogWarn("BPLANE: requested plane tilted " + ROUND(offPlane, 1)
                 + "deg off the arrival asymptote — using closest"

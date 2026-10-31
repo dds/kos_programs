@@ -6,6 +6,42 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 31Oct Ike optional-plane convergence follow-up implemented/checked;
+  native re-solve/burn pending. Native frame fix is
+  confirmed on both Ike landers: valid patch-current snapshots, energy/h
+  errors~1e-16/1e-14, eccentricity errors~1e-8, v-infinity1419.7/1541.3m/s.
+  Lander2 boot011 and012 repeatedly reached85km Pe at14.35m/s, then
+  asymptoted to zero B-vector residual while native inclination/offPlane
+  remained0.30deg > default0.2deg. Lander1 boot020 likewise reached85km Pe
+  at16.04m/s with inclination/offPlane0.35deg and got deferred. Both profiles
+  explicitly use BPLANE_REQUIRE_PLANE=0 on the parent Duna leg; final Ike
+  polar captures remain required. Cause: projection was skipped below0.5deg,
+  and closest-plane metric applied only to fixed-LAN requests above0.5deg;
+  free-LAN equatorial goals kept comparing to exact zero even when the
+  incoming asymptote made that impossible. The clock deferral itself worked.
+  New source projects every resolvable tilt, handles a parallel pole safely,
+  picks the analytically nearest feasible free-LAN inclination boundary,
+  and uses its normal for OPTIONAL corridor error when mismatch exceeds
+  angular tolerance. Fresh current-patch completion shares that metric,
+  requires valid vector evidence and rejects nonfinite plane errors.
+  Required original-element admission, Pe/event/fuel/correction-minimum
+  gates and all profile tolerances unchanged. New optional-plane test
+  reproduces85km/0.3deg admission vs strict rejection, runs real bounded
+  Newton source against independent linear/conic adapters at both native
+  B-vector scales/energies, preserves the unburned-patch distinction, and
+  checks99 analytic inclination/asymptote combinations incl polar and
+  retrograde degeneracies. These are source fixtures, NOT native replays.
+  All96 routine files pass200.78s; structural354 scripts/90 profiles/
+  80 phases/41 bands,0 errors/known KSC_DEORBIT warning. Reports:
+  /tmp/kos-bplane-optional-plane-20261031.{json,log}. No production edits
+  during/after that pass. Corrected the fixture's printed case count to
+  count executed cases, then reran focused checks. Native evidence:
+  /tmp/ksp-deck-20261031T172604Z-fetch-
+  {9oxt9jkz,pr3azzv8,ed3z0p8y} and173521Z-fetch-{7m_yja4h,a9cqcnhn}/logs/.
+  Next: pull connected, setphase BPLANE + REBOOT on either idle/no-node
+  Ike carrier in COAST_1HALF. Native re-solve, actual burn outcome and
+  continued midpoint/capture remain to observe; no game state changed.
+
 - 31Oct native interplanetary BPLANE follow-up implemented/checked; native
   vector report/reflight pending. Duna Lander2 boot018
   at5114959 resumed18.943128m/s node UT5115043.9118548 (boot017 planned it).

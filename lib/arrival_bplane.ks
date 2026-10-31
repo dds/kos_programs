@@ -1026,7 +1026,7 @@ LOCAL FUNCTION _bplaneCorridorError {
         meas["inc"], meas["lan"], wantInc, wantLan).
     // Keep the closest-achievable-plane policy for a tilted asymptote,
     // but never reject elements that already satisfy the actual request.
-    IF BPLANE_REQUIRE_PLANE = 0 AND wantInc >= 0 AND wantLan >= 0 AND tgt["offPlane"] > 0.5 {
+    IF BPLANE_REQUIRE_PLANE = 0 AND wantInc >= 0 AND tgt["offPlane"] > BPLANE_ANG_TOL {
         SET planeErr TO MIN(planeErr, VANG(meas["hHat"], tgt["normal"])).
     }
     RETURN LEX("peErr", meas["pe"] - wantPe,
@@ -1057,7 +1057,17 @@ LOCAL FUNCTION _bplaneCurrentCorridorOk {
     LOCAL peErr IS ABS(patch:PERIAPSIS - wantPe).
     LOCAL planeErr IS _bplaneElementPlaneError(
         patch:INCLINATION, patch:LAN, wantInc, wantLan).
-    IF peErr > BPLANE_PE_TOL OR planeErr > BPLANE_ANG_TOL { RETURN FALSE. }
+    IF peErr > BPLANE_PE_TOL { RETURN FALSE. }
+    IF planeErr > BPLANE_ANG_TOL AND BPLANE_REQUIRE_PLANE = 0 AND wantInc >= 0 {
+        // Optional-plane completion must use the same achievable normal as
+        // planning. Native elements alone cannot prove a projected goal;
+        // require a fresh, internally consistent unburned measurement.
+        LOCAL meas IS measureArrival(0,targetBody).
+        IF meas = 0 { RETURN FALSE. }
+        LOCAL err IS _bplaneCorridorError(targetBody,meas,wantPe,wantInc,wantLan).
+        SET planeErr TO err["planeErr"].
+    }
+    IF NOT (planeErr >= 0 AND planeErr <= BPLANE_ANG_TOL) { RETURN FALSE. }
     mLog("BPLANE: current trajectory already in corridor; no correction. "
         + "PeErrKm=" + ROUND(peErr / 1000, 2)
         + " planeErr=" + ROUND(planeErr, 3)).
@@ -1655,6 +1665,11 @@ LOCAL FUNCTION _bplanePlanFullAttempt {
     LOCAL tgt0 IS err0["target"].
     LOCAL planeErr0 IS err0["planeErr"].
     LOCAL planeMode IS "target-plane".
+    IF BPLANE_REQUIRE_PLANE = 0 AND wantInc >= 0 AND tgt0["offPlane"] > angTol {
+        mLog("STATS bplane plane-policy required=False metric=closest-achievable"
+            + " requestedInc=" + wantInc + " requestedLan=" + wantLan
+            + " offPlane=" + tgt0["offPlane"] + " tolerance=" + angTol).
+    }
     IF wantInc >= 0 AND NOT _bplanePlaneFeasible(err0) {
         IF BPLANE_REQUIRE_PLANE <> 0 {
             _bplaneHoldCorrection("required-plane-infeasible",allowMidcourseRetry). RETURN 0.
