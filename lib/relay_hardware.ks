@@ -104,6 +104,32 @@ GLOBAL FUNCTION relayAttachedCount {
     RETURN count.
 }
 
+// The carrier becomes a second relay. Do not count the departing branch's
+// antenna, panels or battery as its retained hardware.
+GLOBAL FUNCTION relayCarrierReady {
+    PARAMETER excluded, deployed IS FALSE.
+    LOCAL relays IS 0. LOCAL panels IS 0. LOCAL command IS 0.
+    LOCAL charge IS 0. LOCAL capacity IS 0.
+    FOR part_ IN SHIP:PARTS {
+        IF NOT excluded:CONTAINS(part_:UID) {
+            IF part_:HASMODULE("ModuleCommand") { SET command TO command+1. }
+            IF part_:HASMODULE("ModuleDeployableSolarPanel") { SET panels TO panels+1. }
+            IF part_:HASMODULE("ModuleDataTransmitter") AND RELAY_ANTENNA_PARTS:CONTAINS(part_:NAME) {
+                IF deployed AND NOT relayAntennaReady(LEXICON("PARTS",LIST(part_))) { RETURN FALSE. }
+                SET relays TO relays+1.
+            }
+            FOR res IN part_:RESOURCES {
+                IF res:NAME = "ElectricCharge" {
+                    SET charge TO charge+res:AMOUNT. SET capacity TO capacity+res:CAPACITY.
+                }
+            }
+        }
+    }
+    RETURN command > 0 AND relays > 0 AND panels >= RELAY_MIN_PANELS
+        AND capacity >= RELAY_MIN_EC AND capacity < 1e30
+        AND charge >= 0.8*capacity AND charge < 1e30.
+}
+
 GLOBAL FUNCTION relayActivatePayload {
     PARAMETER info.
     FOR part_ IN info["PARTS"] {

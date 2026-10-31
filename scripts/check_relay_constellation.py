@@ -13,6 +13,7 @@ from check_surface_return import read_settings
 
 HARDWARE=(ROOT/'lib/relay_hardware.ks').read_text()
 CONTROL=(ROOT/'lib/relay_constellation.ks').read_text()
+RELEASE=(ROOT/'lib/relay_release.ks').read_text()
 SHARED=set(re.findall(r'GLOBAL (\w+) IS',HARDWARE+CONTROL)) | {
     'BURN_STAGE_MAX_EVENTS','BURN_STAGE_MANUAL_WAIT','BURN_TRIM_ABS_COMPLETE_DV',
     'BURN_TRIM_COMPLETE_MAX_DV','ABORT','WARP','SAS','HASNODE','NEXTNODE'}
@@ -45,6 +46,8 @@ def prepared(source,name):
     code=re.sub(r'PARAMETER [^.]+\.','',code)
     code=re.sub(r'WAIT UNTIL [^.]+\.','fixture_settle().',code)
     code=code.replace('REMOVE nd.','fixture_remove(nd).')
+    code=code.replace('REBOOT.','fixture_reboot().')
+    code=re.sub(r'\b(\w+)@',r'fixture_delegate(\1)',code)
     # Native strings coerce scalars during concatenation; Python strings do
     # not. Keep actual control/math source, adapt only literal string values.
     code=re.sub(r'"(?:\\.|[^"\\])*"',lambda m:'fixture_text('+m[0]+')',code)
@@ -124,7 +127,7 @@ def fixture(body='Mun'):
     env=dict(cfg,**MATH,SHIP=ship,CORE=NS(PART=core),KUNIVERSE=NS(ACTIVEVESSEL=ship,TIMEWARP=NS(ISSETTLED=True)),
         TIME=clock,STAGE=stage,ETA=Eta(ship,clock),ABORT=False,WARP=0,HASNODE=False,
         CIRCULAR_ECC_LIMIT=.001,LIST=lambda *xs:Items(xs),LEXICON=lex,
-        fixture_text=Text,
+        fixture_text=Text,fixture_delegate=lambda fn:NS(CALL=fn),
         stateGet=lambda k,d='':saved.get(k,d),stateGetNum=lambda k,d=0:saved.get(k,d),stateSet=put,
         maneuverBurnInterrupted=lambda:False,missionTargetBody=lambda:bdy,BODY=lambda _:bdy,
         fixture_wait=wait,fixture_settle=lambda:None,
@@ -182,7 +185,7 @@ def fixture(body='Mun'):
     env.update(NODE=lambda ut,rad,nor,pro:Node(ut,pro),fixture_add=add,fixture_remove=remove,
         planCircularize=circularize,executeManeuver=burn,kacEnsureAlarm=alarm,
         DELETEALARM=lambda key:alarms.pop(key),enterSolarCoast=solar,waitUntilOrSOI=coast)
-    for source in (HARDWARE,CONTROL):
+    for source in (HARDWARE,RELEASE,CONTROL):
         for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',source):
             env[name]=lambda *args,source=source,name=name:invoke(source,name,env,*args)
     return env,ship,saved,events,alarms,released,nodes

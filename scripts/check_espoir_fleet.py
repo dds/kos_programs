@@ -146,7 +146,8 @@ def check_profiles_and_dependencies():
         'duna_orbital_surveyor','ike_orbital_surveyor','duna_lander','ike_lander',
         'kerbin_orbital_surveyor','kerbin_lander','minmus_orbital_surveyor','minmus_lander',
         'eeloo_flyby','moho_orbital_surveyor','moho_lander',
-        'mun_relay_tripack','minmus_relay_tripack','minmus_contract_lander_return'}
+        'mun_relay_tripack','minmus_relay_tripack','minmus_contract_lander_return',
+        'kerbin_molniya_north','kerbin_molniya_south','kerbin_molniya_pair'}
     assert bands['science_impact'] == ['science_impact']
     assert {'science_flight','science_entry','maneuver_plan','thrust_cutoff'} <= closure(['science_impact'],deps)
     assert 'science_impact' not in closure(['science_entry'],deps)

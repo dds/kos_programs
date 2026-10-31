@@ -3556,6 +3556,57 @@ uses 5, and longer waits cap at 6.
 | `landingExecute()` / `targetedDeorbit()` | landing, deorbit_targeting | Powered descent / precision deorbit |
 | `droneGoto(geo, agl)` etc. | drone | Drone mode commands |
 
+### Espoir Kerbin Molniya relay pair
+
+Use Espoir profile `kerbin_molniya_pair` for one launch carrying a passive
+northern relay; the powered carrier becomes the southern relay. Both target
+Ap2999751m/Pe163584m, inclination63.4deg, eccentricity0.65 and period10774s
+(2h59m34s). The northern orbit has AoP270deg and southern AoP90deg. These
+sit inside the requested e>0.6, inc63..64deg, AoP260..280/80..100deg and
+2h41m37s..3h17m32s period bounds. LAN is not prescribed. The final release
+and carrier checks use native orbit elements, including period and eccentricity.
+
+Build the northern payload as one independent child branch of a separator
+tagged `relay_1`, with normal staging **disabled** and low ejection force.
+It needs a probe core, HG-20 or stronger relay, at least200EC, and six fixed
+panels facing six directions. Keep the kOS computer and propulsion on the
+carrier. The carrier needs its **own** probe core, relay antenna,200EC and
+six panels; the departing payload's equipment cannot satisfy its inventory.
+Both batteries must be at least80% charged at release. No payload engine
+or nested separator is accepted. This is two final satellites, one of
+which retains the carrier engine; it is not a two-payload dispenser.
+
+The sequence launches directly toward63.4deg LKO, uses SHAPE to reach the
+northern orbit, aligns and releases the payload, then proves actual
+separation and its native northern orbit. It raises Pe at high Ap to make
+a temporary circular orbit, then lowers Pe on the opposite side to create
+the southern dwell. This avoids an expensive direct180deg apsidal impulse.
+Every burn still uses the shared SHAPE planner, live maneuver executor,
+KAC alarms, solar waits and physical cutoff. Automatic warp is disabled.
+The release/retarget phase has its own small band and no maneuver optimizer.
+
+Ideal impulsive estimates are about699m/s from85km LKO to the first orbit,
+then809m/s for the two opposite-apsis transfer burns. Budget at least
+roughly1.7km/s in the **active carrier stage at LKO**, plus actual execution
+margin; the profile retains1000m/s after initial shaping and requires the
+current stage to cover the remaining transfer plus150m/s before release.
+Orbital auto-staging is disabled. These estimates exclude ascent and are
+not a measured guarantee for a particular build. If fuel or hardware
+checks fail before release, the first payload stays attached and the phase holds.
+
+The mission keeps one identity, cumulative SHAPE spending and durable
+release/leg checkpoints across reboots. A crash between physical separation
+and its proof holds for inspection rather than guessing or releasing twice.
+Bad separator kicks are recorded as failed native placements. At completion,
+review both vessels' map orbits and radio links; two dwell relays alone do
+not establish guaranteed continuous coverage of all Kerbin, nor does this
+profile optimize geographic LAN or relative mean anomaly.
+
+For independent launches instead, use `kerbin_molniya_north` and
+`kerbin_molniya_south`. Each reaches its orbit and stops in SCIENCE_OPS for
+operator review without releasing any payload. The one-launch deployment
+and finite-burn accuracy still require native flight testing.
+
 ### Espoir Mun and Minmus relay tripacks
 
 Each profile launches one carrier with three separate, passive relay payloads.

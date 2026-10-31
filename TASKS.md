@@ -22,10 +22,38 @@ record remaining uncertainty before closing a task.
   /tmp/kos-espoir-minmus-contract-20261031.{json,log}.
   Native compile, contract completion, stage/fuel margins, both selected
   descents and return remain flight checks. No game controls/save edits.
-- QUEUED after committing Minmus work: Kerbin relay Molniya north/south
+- DONE/source-checked after Minmus commit a6ed6b0/push: Kerbin Molniya pair
   dwell, e>0.6, inc63..64deg, AoP270/90deg, period9697..11852s.
   Investigate one-launch deployment; separate flights acceptable. Do not
   claim opposite apsidal orbits from simple same-orbit phasing.
+  Implemented kerbin_molniya_north/south standalone fallbacks and
+  kerbin_molniya_pair: one passive relay_1 payload remains in northern
+  orbit, carrier becomes southern relay via high circular intermediate.
+  T10774s/e0.65/63.4deg, Ap2999751/Pe163584m, AoP270/90deg.
+  Independent impulse estimate698.57m/s from85km LKO +809.02m/s for
+  the opposite apsidal transfer, excluding ascent/errors/separation mass.
+  Both spacecraft require independent relay/power/command hardware;
+  payload staging disabled. No orbital auto-staging or speculative
+  future-stage fuel credit. Common relay_release extracted from tripack,
+  preserving physical UID/native orbit proof and rejecting ambiguity.
+  KAC/solar/burns remain the shared SHAPE/executor's responsibility.
+  All99 routine files pass162.23s;369 scripts/99 profiles/82 phases/
+  44 bands,0 errors and unchanged KSC_DEORBIT warning. Reports:
+  /tmp/kos-espoir-molniya-pair-20261031.{json,log}.
+  Final circle-to-south crash recovery and finite-thrust guard added
+  afterward; focused pair/structural checks rerun. Native compilation,
+  release impulse/coverage, finite burns and both final orbits still
+  unproven. No Deck/game/save changes. Use standalone north/south profiles
+  if the active carrier stage cannot fund the one-launch transfer.
+- ACTIVE native Espoir-Minmus-Lander1 XING: boot0035154507..5154542,
+  six Pe solves stall24.7..33.3km vs15+/-2km with only0.33..0.53m/s
+  vector correction of100m/s cap. Suspected coarse0.1m/s probe crosses
+  close-encounter minimum and gives the wrong local slope. Independent
+  hyperbolic Minmus response reproduces the no-improvement failure.
+  Implement smaller probes on stalled refinement; keep all original
+  encounter/Pe/first-body/budget gates. Evidence:
+  /tmp/ksp-deck-20261031T210642Z-fetch-w2qdlkv2/logs/
+  Espoir-Minmus-Lander1_5154039/boot_003_core.log.
 
 - 31Oct Espoir Mun/Minmus commnet tripacks implemented/source-checked;
   native deployment remains unproven. User chose three-relay equatorial

@@ -72,7 +72,9 @@ GLOBAL FUNCTION dependencyLibs {
         "return_mcc_config", LIST(),
         "return_escape", LIST("maneuver"),
         "return_direct", LIST(),
-        "relay_constellation", LIST("maneuver", "maneuver_plan", "orbit", "coast_wait", "relay_hardware"),
+        "relay_constellation", LIST("maneuver", "maneuver_plan", "orbit", "coast_wait", "relay_release"),
+        "relay_release", LIST("relay_hardware", "thrust_cutoff"),
+        "molniya_pair", LIST("relay_release"),
         "relay_hardware", LIST(),
         "scansat_ops", LIST("orbit", "solar", "science", "thrust_cutoff"),
         "solar", LIST("solar_diagnostics"),
@@ -179,6 +181,7 @@ GLOBAL FUNCTION dependencyPhases {
         "RELEASE_PROBE", LIST("payload_ops"),
         "RELAY_OPS", LIST("payload_ops"),
         "RELAY_CONSTELLATION", LIST("relay_constellation"),
+        "MOLNIYA_PAIR", LIST("molniya_pair"),
         "SCANSAT_OPS", LIST("scansat_ops", "science"),
         "RETURN_SETUP", LIST("return_setup"),
         "SURFACE_RETURN_SETUP", LIST("return_setup"),
@@ -235,6 +238,7 @@ GLOBAL FUNCTION dependencyBands {
         "PAYLOAD_OPS", LIST("TARGETED_DEORBIT", "RELEASE_PROBE"),
         "RELAY_OPS", LIST("RELAY_OPS"),
         "RELAY_CONSTELLATION", LIST("RELAY_CONSTELLATION"),
+        "MOLNIYA_PAIR", LIST("MOLNIYA_PAIR"),
         "RETURN_SETUP", LIST("RETURN_SETUP", "SURFACE_RETURN_SETUP"),
         "AEROBRAKE", LIST("AEROBRAKE"),
         "ATMO_WALK", LIST("ATMO_WALK"),
@@ -274,6 +278,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "SCIENCE_IMPACT" { phaseMapSet(phaseMap, phaseKey, phaseScienceImpact@). }
     ELSE IF phaseKey = "SURFACE_SCIENCE" { phaseMapSet(phaseMap, phaseKey, phaseSurfaceScience@). }
     ELSE IF phaseKey = "SURFACE_REVIEW" { phaseMapSet(phaseMap, phaseKey, phaseSurfaceReview@). }
+    ELSE IF phaseKey = "MOLNIYA_PAIR" { phaseMapSet(phaseMap, phaseKey, phaseMolniyaPair@). }
     ELSE IF phaseKey = "ORBITAL_SURVEY" { phaseMapSet(phaseMap, phaseKey, phaseOrbitalSurvey@). }
     ELSE IF phaseKey = "LAUNCH" { phaseMapSet(phaseMap, phaseKey, phaseLaunch@). }
     ELSE IF phaseKey = "HOP" { phaseMapSet(phaseMap, phaseKey, phaseHop@). }

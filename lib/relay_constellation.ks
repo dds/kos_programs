@@ -139,62 +139,22 @@ LOCAL FUNCTION _relayMatchPeriod {
     RETURN TRUE.
 }
 
-LOCAL FUNCTION _relayAlignRelease {
-    LOCAL deadline IS TIME:SECONDS+45.
-    LOCAL quiet IS -1.
-    SET SAS TO FALSE.
-    LOCK STEERING TO SHIP:PROGRADE.
-    UNTIL TIME:SECONDS >= deadline {
-        IF NOT _relayContext(SHIP:BODY) { UNLOCK STEERING. RETURN FALSE. }
-        IF VANG(SHIP:FACING:FOREVECTOR,SHIP:PROGRADE:FOREVECTOR) < 2 AND SHIP:ANGULARVEL:MAG < 0.002 {
-            IF quiet < 0 { SET quiet TO TIME:SECONDS. }
-            IF TIME:SECONDS-quiet >= 1 { RETURN TRUE. }
-        } ELSE { SET quiet TO -1. }
-        WAIT 0.1.
-    }
-    UNLOCK STEERING.
-    RETURN FALSE.
+LOCAL FUNCTION _relayReleaseContext {
+    RETURN _relayContext(SHIP:BODY).
+}
+
+LOCAL FUNCTION _relayReleasedOrbit {
+    PARAMETER idx, released.
+    LOCAL expected IS _relayReferencePeriod().
+    IF idx = 1 { SET expected TO released:ORBIT:PERIOD. }
+    RETURN LEXICON("REFERENCE",expected,"VALID",
+        released:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT
+        AND ABS(released:ORBIT:PERIOD-expected) <= RELAY_PERIOD_TOLERANCE).
 }
 
 LOCAL FUNCTION _deployOneRelay {
     PARAMETER idx.
-    LOCAL info IS relayPayloadInfo(idx).
-    IF NOT info["OK"] OR NOT _relayContext(SHIP:BODY) { RETURN FALSE. }
-    IF NOT _relayAlignRelease() { RETURN FALSE. }
-    relayActivatePayload(info).
-    LOCAL deadline IS TIME:SECONDS+30.
-    UNTIL relayAntennaReady(info) OR TIME:SECONDS >= deadline OR ABORT { WAIT 0.1. }
-    IF NOT relayAntennaReady(info) OR NOT _relayContext(SHIP:BODY) { RETURN FALSE. }
-    // Recheck the complete branch after alignment/deployment waits.
-    SET info TO relayPayloadInfo(idx).
-    IF NOT info["OK"] { RETURN FALSE. }
-    LOCAL dc IS info["DC"].
-    LOCAL root IS info["PARTS"][0].
-    LOCAL key IS "relay_"+idx.
-    mLog("STATS relay-release begin index="+idx+" carrierPeriod="+SHIP:ORBIT:PERIOD
-        +" ejectionForce="+info["FORCE"]+" battery="+info["EC"]+"/"+info["CAPACITY"]).
-    stateSet(key+"_intent",LEXICON("UIDS",info["UIDS"],"DC",dc:UID,"TIME",TIME:SECONDS)).
-    LOCAL modu IS 0.
-    IF dc:HASMODULE("ModuleDecouple") { SET modu TO dc:GETMODULE("ModuleDecouple"). }
-    ELSE { SET modu TO dc:GETMODULE("ModuleAnchoredDecoupler"). }
-    IF NOT modu:HASEVENT("Decouple") { RETURN FALSE. }
-    modu:DOEVENT("Decouple").
-    WAIT 1.
-    IF relayAttachedCount(info["UIDS"]) <> 0 OR root:SHIP = SHIP { RETURN FALSE. }
-    LOCAL released IS root:SHIP.
-    LOCAL period IS released:ORBIT:PERIOD.
-    LOCAL expected IS _relayReferencePeriod().
-    IF idx = 1 { SET expected TO period. }
-    LOCAL valid IS released:BODY = SHIP:BODY AND released:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT
-        AND period > 0 AND period < 1e30 AND ABS(period-expected) <= RELAY_PERIOD_TOLERANCE.
-    IF NOT (period > 0 AND period < 1e30) { SET period TO -1. }
-    stateSet(key+"_record",LEXICON("TIME",TIME:SECONDS,"PERIOD",period,"VALID",valid,"UID",root:UID)).
-    IF RELAY_NAME_PREFIX <> "" { SET released:NAME TO RELAY_NAME_PREFIX+"-"+idx. }
-    mLog("STATS relay-release index="+idx+" vessel="+released:NAME+" valid="+valid
-        +" period="+period+" reference="+expected+" errorSeconds="+(period-expected)).
-    UNLOCK STEERING.
-    SET SAS TO TRUE.
-    RETURN valid.
+    RETURN relayReleasePayload(idx,_relayReleaseContext@,_relayReleasedOrbit@).
 }
 
 LOCAL FUNCTION _phaseCarrierOneSlot {
