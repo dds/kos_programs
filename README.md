@@ -1068,6 +1068,7 @@ Select each profile independently for a new Espoir-family probe. Adding these
 files does not select a mission or launch a craft. Delta-v figures below are
 build allowances **remaining after85km Kerbin parking**, including the payload;
 the actual departure window, thrust and hardware still determine affordability.
+The two local Kerbin profiles below launch directly to100km polar parking.
 
 | Profile ID | Objective | Transfer / operations allowance |
 |---|---|---|
@@ -1075,14 +1076,16 @@ the actual departure window, thrust and hardware still determine affordability.
 | `ike_orbital_surveyor` | High Duna capture, Ike transfer,70km polar mapping orbit |1500 /800m/s |
 | `duna_lander` |70km polar Duna parking, surveyed site selection, chute-assisted powered landing |1500 /1300m/s |
 | `ike_lander` | High Duna capture,25km polar Ike parking, surveyed landing and surface science |1500 /1300m/s |
+| `kerbin_orbital_surveyor` |100km polar Kerbin mapping, complete probe retained | Local orbit |
+| `kerbin_lander` |100km polar parking, operator-selected Kerbin landing, parachutes with optional engine assistance | Local orbit |
 
-Both surveyors retain the CPU, propulsion and scanners as one spacecraft. No
-`scansat_decoupler` is required, and neither automatically deorbits after mapping.
+All surveyors retain the CPU, propulsion and scanners as one spacecraft. No
+`scansat_decoupler` is required, and none automatically deorbits after mapping.
 Scanning is power-managed between30% and60% battery, with periodic solar aims.
 The baseline altitudes are editable to suit the installed SCANsat instruments.
 The configured types are low-resolution terrain, resource and biome mapping;
 fitting the necessary sensors remains a hardware choice. These are independent
-surveyors, not relay satellites. Each needs its own Kerbin-range direct link.
+surveyors, not relay satellites. Interplanetary probes each need a Kerbin-range direct link.
 All Espoir profiles disable automatic coast warp with `COAST_AUTO_WARP=0`,
 including their generated Ike operations legs. KAC alarms and clock-based
 resumption remain active; the operator controls time warp.
@@ -1104,7 +1107,7 @@ no archive launch counterpart, so reconnecting cannot restart the Duna leg.
 `IKE_MISSION_SETTINGS` supplies the optional captured operations settings;
 an empty map retains the existing FalconHeavy flyby-to-Duna-entry behavior.
 
-All four missions capture at their destination in polar orbits. Ike missions
+All four interplanetary missions capture at their destination in polar orbits. Ike missions
 retain the high equatorial Duna transfer orbit described above before polar
 capture at Ike. There is no direct-impact launch profile. The retired
 `duna_impactor` and `duna_science_impact` IDs resolve to `duna_lander`, preserving
@@ -1114,7 +1117,8 @@ A connected reboot installs the canonical profile for later offline use.
 Generated Ike operations profiles receive the new goals while safely in orbit;
 an already committed descent keeps its existing guidance.
 
-Both landers stop at `LANDING_REVIEW` after capture (Duna70km, Ike25km).
+The Duna/Ike landers stop at `LANDING_REVIEW` after capture (Duna70km, Ike25km).
+The Kerbin lander uses the same review after100km polar parking and shaping.
 They aim for solar power once and return to the prompt until you choose a site.
 They do not automatically choose coordinates or start a deorbit. After reviewing
 the survey, select a waypoint on the current body and run:
@@ -1133,17 +1137,37 @@ REBOOT.
 
 The command requires a safe, idle parking orbit and no node/interrupted burn.
 It preserves the mission, saves a fixed target, and selects atmospheric deorbit
-at Duna or the existing airless deorbit at Ike. Duna additionally checks measured
-active-stage thrust, fuel and attached stock chutes before accepting the site.
+at Duna/Kerbin or the existing airless deorbit at Ike. Duna additionally requires
+measured powered-touchdown authority, fuel and attached stock chutes. Kerbin
+requires chutes and measured deorbit fuel plus50m/s reserve; strong touchdown
+thrust is optional.
 The planner still validates reachability, terrain, light and radio before a burn.
 
-Both landers require sunlight and direct Kerbin elevation of at least15degrees.
+The Duna/Ike landers require sunlight and direct Kerbin elevation of at least15degrees.
 Ike also checks whether Duna blocks the ray to Kerbin. No relay coverage is
 assumed. These are geometric checks, not proof of antenna range or ridge
 clearance. Provide each probe with its own suitable direct antenna array.
 An unsuitable fixed site retains orbit for operator review; no substitute site
 is silently selected. `ike_lander` remains a one-way soft lander and retains its
 650m/s capture reserve.
+
+The local `kerbin_lander` also requires a sunlit site, but does not apply the
+moon-to-Kerbin center/horizon test while already at Kerbin. Actual communication
+still depends on ground stations and antennas. It sets `ATMO_DEORBIT_PE=52000`
+with1km tolerance instead of inheriting Duna's5km entry depth. The native
+Trajectories footprint and unchanged terrain/time/normal/burn limits must pass
+before deorbit. If that shallow pass predicts no impact, the planner holds in
+orbit; it never invents a landing or silently lowers the entry corridor.
+
+`ENTRY_POWERED_LANDING=1` loads the optional terminal controller.
+`ENTRY_LANDING_REQUIRE_POWER=0` makes the Kerbin profile chute-led: inadequate
+engine TWR does not block an otherwise validated deorbit, and the runtime
+stopping/attitude guards still prevent unsupported thrust commands. The shared
+default remains1, so Duna still requires measured powered-touchdown authority
+and its300m/s reserve. Engines/chutes/CPU stay attached; no automatic entry
+staging is added. Use chutes suitable for the actual craft mass. Survived land
+or water touchdown can enter the600s science session. Native Kerbin targeting,
+chute performance and engine assistance remain to be flight-tested.
 
 Landing reuses the powered-lead model, economy braking and terrain checks.
 Normal site slope is5degrees; the existing15degree emergency diversion is

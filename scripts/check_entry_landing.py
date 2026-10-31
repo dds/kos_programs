@@ -154,15 +154,17 @@ def check_resident_science_and_terminal():
     science=(ROOT/'lib/science_entry.ks').read_text()
     science=science.replace('BRAKES ON.','fixture_brakes().')
     science=science.replace('stateGetNum("launch_time",0)+":"+primary:NAME','fixtureStamp()+":"+primary:NAME')
-    for outcome in ('surface','abort','pilot'):
+    for outcome in ('surface','abort','pilot','weak-power'):
         env,ship,state,events=fixture()
+        if outcome=='weak-power':
+            ship.AVAILABLETHRUST=1;env['ENTRY_LANDING_REQUIRE_POWER']=0
         ship.BOUNDS.BOTTOMALTRADAR=ship.ALTITUDE=100
         ship.PERIAPSIS=5000;ship.ORBIT=NS(HASNEXTPATCH=False)
         samples=[];ticks=[];ctxs=[];start=env['TIME'].SECONDS
         def wait(dt):
             env['TIME'].SECONDS+=dt
             if env['TIME'].SECONDS>=start+1.2:
-                if outcome=='surface':ship.STATUS='LANDED'
+                if outcome in ('surface','weak-power'):ship.STATUS='LANDED'
                 if outcome=='abort':env['ABORT']=True
                 if outcome=='pilot':ship.CONTROL.PILOTMAINTHROTTLE=.5
         create=env['entryLandingCreate'];tick=env['entryLandingTick']
@@ -187,12 +189,14 @@ def check_resident_science_and_terminal():
         # observed by both the resident loop and its callback functions.
         try:ks.execute(prepared(science,'phaseScienceEntry')[2],env)
         except ks.Returned:pass
-        assert len(samples)>=3 and len(ticks)>=20 and ctxs
-        assert all(b-a<.06 for a,b in zip(ticks,ticks[1:]))
+        assert len(samples)>=3 and len(ticks)>=(3 if outcome=='weak-power' else 20) and ctxs
+        assert all(b-a<(.51 if outcome=='weak-power' else .06) for a,b in zip(ticks,ticks[1:]))
         assert env['entryLandingThrottle'](ctxs[0])==0
         assert events.count('cutoff')>=2 and 'chute-request' in events
-        assert ('advance' in events)==(outcome=='surface')
+        assert ('advance' in events)==(outcome in ('surface','weak-power'))
         assert ('held' in events)==(outcome=='pilot'),(outcome,events)
+        if outcome=='weak-power':
+            assert not any(isinstance(e,tuple) and 'LOCK THROTTLE TO entryLandingThrottle' in e[1] for e in events)
     print('PASS: actual science entry keeps20Hz terminal updates beside science/chute requests, cuts thrust before surface dwell/advance and stops on Abort or pilot takeover')
 
 

@@ -1,5 +1,5 @@
 // ============================================================
-// Espoir.ks — Duna science probe flight computer (0:/craft/Espoir.ks)
+// Espoir.ks — local and interplanetary probe computer (0:/craft/Espoir.ks)
 // Hardware is a new build, not the RO9 staging/decoupler layout.
 // ============================================================
 

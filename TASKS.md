@@ -6,6 +6,31 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 30Oct Kerbin Espoir profiles implemented/checked: user requests local surveying and
+  landing, coordinates forthcoming; explicitly selected parachutes with
+  optional engine assistance. Added kerbin_orbital_surveyor/kerbin_lander,
+  both100km polar parking/SHAPE, no transfer/capture/body-orbit launch mode.
+  Mapper retains entire probe with existing power management; lander stops
+  at LANDING_REVIEW with target unlocked, uses existing cmd/landsite when
+  coordinates/waypoint are ready. Kerbin entry52+/-1km (not Duna5km), SUNLIT,
+  radioAUTO/requireKerbin0 (self-center is not a ground-station sightline).
+  New ENTRY_LANDING_REQUIRE_POWER defaults1; Kerbin explicitly0 while keeping
+  ENTRY_POWERED_LANDING1 to attempt measured-authority terminal help. Required
+  Duna TWR/300m/s policy untouched. Optional Kerbin preflight still requires
+  actual active engine/deorbit fuel plus50m/s, attached stock chutes and valid
+  finite measurements. Runtime stopping/attitude/live throttle guards unchanged;
+  no automatic staging. Surface science now accepts settled SPLASHED too,
+  preserves native status in science context and stops if it changes.
+  Focused local launch/profile/site/entry tests pass, including sub-unity
+  Kerbin TWR and unchanged required-powered refusal, retained Pe corridor,
+  weak-engine science/chute continuation and splashdown session/status change.
+  Structural348 scripts/88 profiles/79 phases/40 bands,0 errors/known warning.
+  All93 routine files pass131.94s; new Kerbin cases<0.07s. Report:
+  /tmp/kos-espoir-kerbin-20261030.json and.log. No production changes after
+  the full pass. Native52km TR footprint/chute performance and
+  optional engine assistance remain unverified; no fake impact/deeper-entry
+  fallback. No launch/selection/game-state modification performed.
+
 - 30Oct native fleet update, operator UT5035205: archived logs show Duna
   Lander1/Lander2 past XING into BPLANE/Sun-SOI coast; Ike Lander1 completes
   XING at5035220.6 and hands off through ASSIST. Both recorded XING tail

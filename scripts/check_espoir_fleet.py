@@ -143,13 +143,14 @@ def check_profiles_and_dependencies():
     assert profile('duna_impactor')['CAPTURE_PE']==70000
     assert not (ROOT/'missions/Espoir/duna_science_impact.ks').exists()
     assert {p.stem for p in (ROOT/'missions/Espoir').glob('*.ks')}=={
-        'duna_orbital_surveyor','ike_orbital_surveyor','duna_lander','ike_lander'}
+        'duna_orbital_surveyor','ike_orbital_surveyor','duna_lander','ike_lander',
+        'kerbin_orbital_surveyor','kerbin_lander'}
     assert bands['science_impact'] == ['science_impact']
     assert {'science_flight','science_entry','maneuver_plan','thrust_cutoff'} <= closure(['science_impact'],deps)
     assert 'science_impact' not in closure(['science_entry'],deps)
     bindings = function_body((ROOT/'lib/dependencies.ks').read_text(), 'dependencyBindPhase')
     assert 'phaseScienceImpact@' in bindings
-    print('PASS: four polar fleet profiles/operations legs resolve; mappers use70km, both landers require later site selection and retain terrain/radio/fuel safeguards')
+    print('PASS: four interplanetary polar profiles/operations legs resolve; mappers use70km, both landers require later site selection and retain terrain/radio/fuel safeguards')
 
 
 def setup_fixture(name='ike_orbital_surveyor'):
@@ -394,19 +395,22 @@ def surface_run(env):
 
 
 def check_surface_session_and_reboot():
-    for case in ('session','no-kac','no-link','low-power','abort','takeoff','body-change','reboot','full-dwell'):
+    for case in ('session','no-kac','no-link','low-power','abort','takeoff','body-change','reboot','full-dwell','splashed','splash-transition'):
         env,saved,events=surface_fixture()
+        if case in ('splashed','splash-transition'):
+            env['SHIP'].BODY.NAME='Kerbin';env['SHIP'].STATUS='SPLASHED'
         if case=='no-kac':env['kacEnsureAlarm']=lambda *_:''
         if case=='no-link':env['HOMECONNECTION'].ISCONNECTED=False
         if case=='low-power':env['shipPowerFraction']=lambda:0
         if case=='full-dwell':env['SCIENCE_SURFACE_DWELL']=600
-        if case in ('abort','takeoff','body-change','reboot'):
+        if case in ('abort','takeoff','body-change','reboot','splash-transition'):
             def wait(delay):
                 env['TIME'].SECONDS+=delay
                 if env['TIME'].SECONDS>=103:
                     if case in ('abort','reboot'):env['ABORT']=True
                     if case=='takeoff':env['SHIP'].STATUS='FLYING'
                     if case=='body-change':env['SHIP'].BODY=NS(NAME='DUNA')
+                    if case=='splash-transition':env['SHIP'].STATUS='LANDED'
             env['fixture_wait']=wait
         surface_run(env)
         samples=[e for e in events if isinstance(e,tuple) and e[0]=='sample']
@@ -416,9 +420,9 @@ def check_surface_session_and_reboot():
         else:
             assert ('delete','surface-alarm') in events
             assert events.index(('alarm',saved['surface_science_deadline'])) < events.index(samples[0])
-        if case in ('abort','reboot','takeoff','body-change'):
+        if case in ('abort','reboot','takeoff','body-change','splash-transition'):
             assert 'advance' not in events
-            assert ('held' in events) == (case in ('takeoff','body-change'))
+            assert ('held' in events) == (case in ('takeoff','body-change','splash-transition'))
         else:
             assert 'advance' in events
             assert env['TIME'].SECONDS == (700 if case=='full-dwell' else 110)
@@ -430,6 +434,7 @@ def check_surface_session_and_reboot():
             assert saved['surface_science_deadline']==end==110
             assert len([e for e in new_events if isinstance(e,tuple) and e[0]=='sample'])==5
             assert 'advance' in new_events
+        if case=='splashed':assert all(':SPLASHED' in row[1] for row in samples)
     print('PASS: settled surface session owns its review alarm before sampling, runs at1x without solar turns, keeps deadline across reboot, handles no KAC/link/power and stops safely on Abort or loss of touchdown')
 
 

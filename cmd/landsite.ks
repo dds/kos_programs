@@ -42,7 +42,7 @@ LOCAL FUNCTION _cmdLandsite {
     IF SHIP:BODY:ATM:EXISTS {
         SET next TO "ATMO_DEORBIT".
         LOCAL ready IS entryLandingPreflight().
-        IF NOT ready["OK"] { PRINT "Powered landing hardware/fuel check failed: " + ready["REASON"]. RETURN. }
+        IF NOT ready["OK"] { PRINT "Landing hardware/fuel check failed: " + ready["REASON"]. RETURN. }
     }
     IF NOT SEQUENCE:CONTAINS(next) { PRINT "This mission has no matching landing phase; nothing changed.". RETURN. }
     IF NOT landingReviewOrbitSafe() OR HASNODE { PRINT "Vehicle state changed; nothing applied.". RETURN. }

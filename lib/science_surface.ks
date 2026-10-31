@@ -13,7 +13,8 @@ GLOBAL FUNCTION phaseSurfaceScience {
     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED OR ABORT.
     IF ABORT { RETURN. }
     LOCAL groundBody IS SHIP:BODY.
-    IF SHIP:STATUS <> "LANDED" OR groundBody <> missionTargetBody()
+    LOCAL groundStatus IS SHIP:STATUS.
+    IF (groundStatus <> "LANDED" AND groundStatus <> "SPLASHED") OR groundBody <> missionTargetBody()
             OR NOT (ABS(SHIP:VERTICALSPEED) <= 0.5 AND SHIP:GROUNDSPEED <= 0.5)
             OR NOT (SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
                 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0)
@@ -26,7 +27,7 @@ GLOBAL FUNCTION phaseSurfaceScience {
     UNLOCK STEERING.
     SAS OFF.
     BRAKES ON.
-    LOCAL context IS stateGet("mission_id","")+":"+groundBody:NAME+":LANDED".
+    LOCAL context IS stateGet("mission_id","")+":"+groundBody:NAME+":"+groundStatus.
     LOCAL flightId IS context+":"+stateGetNum("launch_time",0).
     IF stateGet("surface_science_id","") <> flightId {
         stateSet("surface_science_deadline",TIME:SECONDS+SCIENCE_SURFACE_DWELL).
@@ -44,7 +45,7 @@ GLOBAL FUNCTION phaseSurfaceScience {
     }
     mLog("STATS surface-science setup body=" + groundBody:NAME
         + " deadline=" + deadline + " alarm=" + alarm + " resident=True").
-    UNTIL ABORT OR TIME:SECONDS >= deadline OR SHIP:BODY <> groundBody OR SHIP:STATUS <> "LANDED" {
+    UNTIL ABORT OR TIME:SECONDS >= deadline OR SHIP:BODY <> groundBody OR SHIP:STATUS <> groundStatus {
         // Remain at1x so native data gathering and transmission can progress.
         // Never turn the landed probe to search for solar power.
         scienceFlightPulse(context,shipPowerFraction() >= SCIENCE_SURFACE_MIN_EC).
@@ -53,7 +54,7 @@ GLOBAL FUNCTION phaseSurfaceScience {
     SET WARP TO 0.
     IF alarm <> "" { DELETEALARM(alarm). }
     IF ABORT { RETURN. }
-    IF SHIP:BODY <> groundBody OR SHIP:STATUS <> "LANDED" {
+    IF SHIP:BODY <> groundBody OR SHIP:STATUS <> groundStatus {
         mLogError("Surface science interrupted: craft left its settled surface state.").
         yieldToPrompt(). RETURN.
     }

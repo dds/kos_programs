@@ -1,6 +1,9 @@
 // Atmospheric terminal burn: measured authority, descending stopping curve.
 @LAZYGLOBAL OFF.
 GLOBAL ENTRY_LANDING_RESERVE_DV IS 300.
+//1 requires measured powered-touchdown authority before deorbit.0 permits
+// a chute-led descent; runtime thrust/attitude/stopping guards remain active.
+GLOBAL ENTRY_LANDING_REQUIRE_POWER IS 1.
 GLOBAL ENTRY_LANDING_MIN_TWR IS 1.5.
 GLOBAL ENTRY_LANDING_TOUCHDOWN_SPEED IS 2.
 GLOBAL ENTRY_LANDING_MAX_TILT IS 20.
@@ -14,6 +17,7 @@ GLOBAL FUNCTION entryLandingPreflight {
     PARAMETER extraDv IS 0.
     LOCAL out IS LEXICON("OK",FALSE,"REASON","invalid-landing-configuration").
     IF NOT (ENTRY_LANDING_RESERVE_DV > 0 AND ENTRY_LANDING_RESERVE_DV < 1e30
+            AND (ENTRY_LANDING_REQUIRE_POWER = 0 OR ENTRY_LANDING_REQUIRE_POWER = 1)
             AND ENTRY_LANDING_MIN_TWR > 1.2 AND ENTRY_LANDING_MIN_TWR <= 10
             AND ENTRY_LANDING_TOUCHDOWN_SPEED > 0 AND ENTRY_LANDING_TOUCHDOWN_SPEED <= 5
             AND ENTRY_LANDING_MAX_TILT >= 0 AND ENTRY_LANDING_MAX_TILT <= 30
@@ -29,7 +33,10 @@ GLOBAL FUNCTION entryLandingPreflight {
     LOCAL grav IS SHIP:BODY:MU/SHIP:BODY:RADIUS^2.
     LOCAL twr IS SHIP:AVAILABLETHRUST/SHIP:MASS/grav.
     SET out["TWR"] TO twr.
-    IF twr < ENTRY_LANDING_MIN_TWR OR 0.9*twr*COS(ENTRY_LANDING_MAX_TILT) <= 1 { RETURN out. }
+    IF NOT (twr > 0 AND twr < 1e30) { RETURN out. }
+    IF ENTRY_LANDING_REQUIRE_POWER > 0 {
+        IF twr < ENTRY_LANDING_MIN_TWR OR 0.9*twr*COS(ENTRY_LANDING_MAX_TILT) <= 1 { RETURN out. }
+    }
     SET out["REASON"] TO "active-stage-fuel-reserve".
     SET out["AVAILABLE"] TO STAGE:DELTAV:VACUUM.
     IF NOT (out["AVAILABLE"] >= extraDv+ENTRY_LANDING_RESERVE_DV AND out["AVAILABLE"] < 1e30) { RETURN out. }
@@ -39,6 +46,7 @@ GLOBAL FUNCTION entryLandingPreflight {
     SET out["CHUTES"] TO chutes.
     IF chutes = 0 { RETURN out. }
     SET out["OK"] TO TRUE. SET out["REASON"] TO "measured-active-stage".
+    IF ENTRY_LANDING_REQUIRE_POWER = 0 { SET out["REASON"] TO "chutes-with-optional-power". }
     RETURN out.
 }
 
