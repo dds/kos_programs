@@ -34,13 +34,14 @@ def fixture():
     env=dict(SHAPE_MIN_BURN_DV=.4,_shapeMinimumSkipped=False,
         SHAPE_BURN_TOLERANCE=-1,BURN_TRIM_ABS_COMPLETE_DV=.05,BURN_TRIM_COMPLETE_MAX_DV=.05,
         _shapeInterruptedHold=lambda _:False,
+        _shapeRecoverResidual=lambda _:False,
         _peFloor=lambda:9000,
         SHAPE_ALT_TOL=250,SHAPE_ANG_TOL=.1,SHAPE_AOP_TOL=.2,
         NEAR_CIRC_ECC=.01,MIN_AOP_TARGET_ECC=.004,
         SHIP=NS(PERIAPSIS=9300,APOAPSIS=410000,ALTITUDE=100000,
             ORBIT=NS(INCLINATION=63.4,LAN=79.2,ECCENTRICITY=.65,PERIOD=20000)),
         ETA=NS(PERIAPSIS=1000,APOAPSIS=14000),HASNODE=False,
-        WARP=0,ABORT=False,KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)))
+        WARP=0,ABORT=False,phaseShouldYield=False,KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)))
     def remove(node):
         removed.append(node);env['HASNODE']=False
     env.update(fixture_remove=remove,fixture_wait=lambda dt:events.append(('wait',dt)),

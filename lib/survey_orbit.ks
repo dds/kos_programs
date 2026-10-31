@@ -32,6 +32,34 @@ GLOBAL FUNCTION surveyOrbitOwned {
         AND ALLNODES:LENGTH = 1 AND NEXTNODE = nd.
 }
 
+// KSP may publish the updated maneuver list on the following physics tick.
+// Do not mistake our just-removed preview for a newly supplied foreign node.
+GLOBAL FUNCTION surveyOrbitRelease {
+    PARAMETER craftRef.
+    PARAMETER nd.
+    IF NOT surveyOrbitOwned(craftRef,nd) { RETURN FALSE. }
+    REMOVE nd. WAIT 0.1.
+    RETURN SHIP = craftRef AND KUNIVERSE:ACTIVEVESSEL = craftRef AND NOT HASNODE.
+}
+
+LOCAL FUNCTION _surveyOrbitStop {
+    PARAMETER craftRef.
+    PARAMETER stopUt.
+    PARAMETER wallEnd.
+    PARAMETER report.
+    IF TIME:SECONDS >= stopUt { RETURN "game-deadline". }
+    IF KUNIVERSE:REALTIME >= wallEnd { RETURN "wall-deadline". }
+    IF surveyOrbitIdle(craftRef,FALSE) { RETURN "". }
+    diagnosticArchiveLine(report,"STATS scanorbit context active="+(SHIP = KUNIVERSE:ACTIVEVESSEL)
+        +" sameCraft="+(SHIP = craftRef)+" abort="+ABORT+" warp="+WARP
+        +" settled="+KUNIVERSE:TIMEWARP:ISSETTLED+" hasNode="+HASNODE
+        +" nodes="+ALLNODES:LENGTH+" status="+SHIP:STATUS+" nextPatch="+SHIP:ORBIT:HASNEXTPATCH
+        +" thrust="+SHIP:THRUST+" raw="+SHIP:CONTROL:MAINTHROTTLE+" pilot="+SHIP:CONTROL:PILOTMAINTHROTTLE
+        +" pending="+stateGet("burn_pending","false")+" started="+stateGet("burn_started","false")
+        +" phase="+stateGet("phase","")).
+    RETURN "context-changed".
+}
+
 GLOBAL FUNCTION surveyOrbitSafe {
     PARAMETER obt_.
     PARAMETER lowerAlt.
@@ -146,8 +174,8 @@ GLOBAL FUNCTION surveyOrbitSearch {
     LOCAL inc IS SHIP:ORBIT:INCLINATION.
     LOCAL lan IS SHIP:ORBIT:LAN.
     FOR kind IN LIST("raise-ap","lower-pe","polar","mirror") {
-        IF NOT surveyOrbitIdle(craftRef,FALSE) OR TIME:SECONDS >= stopUt
-                OR KUNIVERSE:REALTIME >= wallEnd { SET out["REASON"] TO "context-or-deadline". RETURN out. }
+        LOCAL stopReason IS _surveyOrbitStop(craftRef,stopUt,wallEnd,report).
+        IF stopReason <> "" { SET out["REASON"] TO stopReason. RETURN out. }
         LOCAL try_ IS mode = "auto" OR mode = kind OR (mode = "drift" AND (kind = "raise-ap" OR kind = "lower-pe")).
         LOCAL nd IS 0.
         IF try_ {
@@ -168,7 +196,11 @@ GLOBAL FUNCTION surveyOrbitSearch {
                         // needs a genuinely different, well-achieved plane.
                         IF ABS(nd:ORBIT:INCLINATION-wantInc) > 0.2
                                 OR ABS(MOD(nd:ORBIT:LAN-lan+540,360)-180) > 0.2 {
-                            REMOVE nd. SET nd TO 0.
+                            IF NOT surveyOrbitRelease(craftRef,nd) {
+                                _surveyOrbitStop(craftRef,stopUt,wallEnd,report).
+                                SET out["REASON"] TO "preview-cleanup-context". RETURN out.
+                            }
+                            SET nd TO 0.
                         }
                     }
                 }
@@ -207,7 +239,10 @@ GLOBAL FUNCTION surveyOrbitSearch {
             IF NOT HASNODE OR ALLNODES:LENGTH <> 1 OR NEXTNODE <> nd {
                 SET out["REASON"] TO "node-ownership-changed". RETURN out.
             }
-            REMOVE nd.
+            IF NOT surveyOrbitRelease(craftRef,nd) {
+                _surveyOrbitStop(craftRef,stopUt,wallEnd,report).
+                SET out["REASON"] TO "preview-cleanup-context". RETURN out.
+            }
             IF score < 0 AND (TIME:SECONDS >= stopUt OR KUNIVERSE:REALTIME >= wallEnd) {
                 SET out["REASON"] TO "sampling-deadline". RETURN out.
             }
@@ -221,7 +256,7 @@ GLOBAL FUNCTION surveyOrbitSearch {
     IF NOT surveyOrbitSafe(nd:ORBIT,lowerAlt,upperAlt) OR NOT surveyOrbitAffordable(nd:DELTAV:MAG,cap,reserve)
             OR nd:ETA < 180 OR NOT surveyOrbitIdle(craftRef,TRUE) {
         IF SHIP = craftRef AND KUNIVERSE:ACTIVEVESSEL = craftRef AND HASNODE AND NEXTNODE = nd {
-            REMOVE nd.
+            surveyOrbitRelease(craftRef,nd).
         }
         SET out["REASON"] TO "final-validation". RETURN out.
     }

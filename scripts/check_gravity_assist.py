@@ -153,11 +153,12 @@ def check_capture_recovery_and_separation():
         events=[]
         env=dict(SHIP=NS(BODY=target,PERIAPSIS=85000,APOAPSIS=1e8,DELTAV=NS(VACUUM=500),ORBIT=NS(ECCENTRICITY=1.5),
                         THRUST=0,CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)),
-            HASNODE=fault=='node',ABORT=False,maneuverBurnInterrupted=lambda:fault=='interrupted',
+            HASNODE=fault=='node',ABORT=False,phaseShouldYield=False,maneuverBurnInterrupted=lambda:fault=='interrupted',
             missionTargetBody=lambda:target,midcourseClearReviewAlarm=lambda:None,
             yieldToPrompt=lambda:events.append('held'),fixture_wait=lambda _:None,
             CAPTURE_ACCEPT_BOUND=0,CAPTURE_MIN_PE=75000,CAPTURE_MAX_PE=95000,CAPTURE_RESERVE_DV=100,
             _captureContinueFlyby=lambda _:False,
+            _captureRecoverResidual=lambda _:False,
             TARGET_AP=2880000,planCapture=lambda *_:events.append('plan') or node,
             fixture_remove=lambda _:events.append('remove'))
         if fault=='fuel':node.DELTAV.MAG=600

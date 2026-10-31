@@ -1282,9 +1282,13 @@ LOCAL FUNCTION _mpb {
     PARAMETER nd.
     PARAMETER bdv.
     PARAMETER st.
+    // A receipt can reconcile cleanup after a reboot, never a later burn.
+    stateRemove("orbit_burn_recovery").
     stateSet("burn_pending", "true").
     stateSet("burn_started", "false").
     stateSet("burn_phase", stateGet("phase", "")).
+    stateSet("burn_mission_id", stateGet("mission_id", "")).
+    stateSet("burn_launch_time", stateGetNum("launch_time", 0)).
     stateSet("burn_node_time", nd:TIME).
     stateSet("burn_body", SHIP:BODY:NAME).
     stateSet("burn_start_time", st).
@@ -1297,7 +1301,7 @@ LOCAL FUNCTION _cpb {
         mLog("Clearing pending burn state: " + reason + ".").
     }
     FOR key IN LIST(
-        "burn_pending", "burn_started", "burn_phase", "burn_node_time",
+        "burn_pending", "burn_started", "burn_phase", "burn_mission_id", "burn_launch_time", "burn_node_time",
         "burn_start_time", "burn_dv", "burn_status", "burn_body",
         "burn_pause_reason", "burn_abort_reason", "burn_abort_detail",
         "burn_abort_time", "burn_abort_residual", "burn_abort_paused"

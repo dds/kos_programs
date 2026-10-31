@@ -91,10 +91,11 @@ def capture_fixture(fuel=1300, vinf=1760):
     state = dict(phase='CAPTURE')
     events = []
     env = dict(cfg, **MATH, SHIP=ship, KUNIVERSE=NS(ACTIVEVESSEL=ship), TIME=NS(SECONDS=100),
-        ETA=NS(PERIAPSIS=1000), WARP=0, ABORT=False, HASNODE=False,
+        ETA=NS(PERIAPSIS=1000), WARP=0, ABORT=False, HASNODE=False,phaseShouldYield=False,
         missionTargetBody=lambda:target, midcourseClearReviewAlarm=lambda:None,
         stateGet=lambda key,default='':state.get(key,default), xferSeq=cfg['SEQUENCE'],
         maneuverBurnInterrupted=lambda:False, yieldToPrompt=lambda:events.append('hold'),
+        _captureRecoverResidual=lambda _:False,
         fixture_wait=lambda _:None, orbitSummary=lambda:None, maneuverUiArchiveLog=lambda _:None,
         nextPhase=lambda _:events.append('next'), MAX_RETRIES=5)
     def node(ut, radial, normal, prograde):

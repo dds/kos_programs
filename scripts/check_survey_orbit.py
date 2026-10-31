@@ -134,7 +134,7 @@ def fixture(inc=85,body='Minmus'):
         GETCOVERAGE=lambda obj,kind:80 if kind=='BIOME' else 94)
     env['ADDONS']=NS(AVAILABLE=lambda _:True,SCANSAT=scan)
     env['lmGroundGeoAt']=lambda *args:harness.invoke(GROUND,'lmGroundGeoAt',env,*args)
-    for name in re.findall(r'GLOBAL FUNCTION (\w+)',SOURCE):
+    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',SOURCE):
         env[name]=lambda *args,name=name:harness.invoke(SOURCE,name,env,*args)
     env['shapeReserveBurn']=lambda nd:harness.invoke(SHAPE,'_shapeReserveBurn',env,nd)
     env['shapePeFloor']=lambda:harness.invoke(SHAPE,'shapePeFloor',dict(env,_peFloor=lambda:harness.invoke(SHAPE,'_peFloor',env)))
@@ -275,9 +275,38 @@ def check_isolation():
     print('PASS: shared proven ground projection, command-only search; no new library in flight bands, automatic burn/stage or mission rewrite')
 
 
+def check_deferred_native_node_removal():
+    env,_,_,events,nodes,world,cell=fixture();record_current_track(env,world,cell)
+    remove=env['fixture_remove'];pending=[]
+    def deferred(nd):
+        assert env['HASNODE'] and nd is env['NEXTNODE']
+        pending.append(nd)
+    def tick(dt):
+        if dt>0 and pending:remove(pending.pop())
+    env.update(fixture_remove=deferred,fixture_wait=tick)
+    # Reproduce the observed old sequencing: immediate next context check
+    # still sees our old node; only yielding publishes its removal.
+    nd=env['NODE'](2000,0,0,1);env['fixture_add'](nd);deferred(nd)
+    assert not env['surveyOrbitIdle'](env['SHIP'],False)
+    tick(.1)
+    result=search(env)
+    assert result['OK'] and len(nodes)>=6 and not pending
+    assert sum(n.alive for n in nodes)==1
+    # A real context change remains distinct from a timing deadline, with
+    # the flags included in the archived report for native falsification.
+    env['fixture_remove'](result['NODE']);tick(.1);env['ABORT']=True
+    assert env['_surveyOrbitStop'](env['SHIP'],1e9,1e9,harness.Record())=='context-changed'
+    assert any('scanorbit context' in row and 'abort=True' in row for row in events)
+    env['ABORT']=False
+    assert env['_surveyOrbitStop'](env['SHIP'],0,1e9,harness.Record())=='game-deadline'
+    assert env['_surveyOrbitStop'](env['SHIP'],1e9,0,harness.Record())=='wall-deadline'
+    print('PASS: native-like deferred REMOVE reproduces old immediate context rejection; settled cleanup evaluates subsequent candidates and preserves explicit context/game/wall diagnostics')
+
+
 if __name__=='__main__':
     check_drift_and_geometric_mirror()
     check_no_gain_failures_and_safety()
     check_polar_caps_and_opposite_tilt()
     check_command_ledger_context_and_deadlines()
     check_isolation()
+    check_deferred_native_node_removal()

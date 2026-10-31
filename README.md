@@ -759,6 +759,27 @@ it is not declared precise just because the engines stopped. Controls are
 unlocked after cutoff, including failed burns. This is cutoff protection,
 not a finite-duration transfer optimizer.
 
+CAPTURE and SHAPE can automatically reconcile a small harmless residual
+without weakening the executor's cutoff tolerance. Recovery requires a
+normal trim/axis/reversal stop, a residual at most0.25m/s **and**1% of the
+planned burn, the matching mission/body/phase and owned(or deleted) old
+node, idle controls and a fresh verified physical cutoff. The achieved
+orbit must be bound, above the phase's Pe floor and wholly inside its SOI;
+capture Pe corridor and remaining-fuel reserves still apply. Watchdogs,
+rebound, forced shutdown, wrong nodes, unsafe orbits and larger/invalid
+residuals continue to hold. `ORBIT_RESIDUAL_RECOVERY_DV=0` disables this
+phase-level recovery; its default ceiling is0.25m/s.
+
+The raw `last_burn_report` keeps the original residual failure.
+`last_burn_handoff` separately records acceptance of the achieved orbit.
+A compact recovery intent saved before cleanup lets CAPTURE resume after a
+reboot without repeating insertion; each new burn invalidates that intent.
+SHAPE remeasures and plans its next burn from the actual orbit, and still
+must meet every configured final orbit tolerance before it can advance.
+This recovery provider is excluded from ordinary departure, BPLANE and
+atmospheric-entry bands. Pull while linked and reboot to recover an existing
+eligible CAPTURE/SHAPE hold; retain the old node for ownership validation.
+
 Both maneuver burn modes also integrate actual thrust divided by mass,
 independently of the node residual. The delivered-dV cap is the requested
 burn plus the larger of 1% or 0.05 m/s; it survives staging within the burn.
@@ -1267,7 +1288,9 @@ SHAPE allowance before leaving its node. A later cancellation retains that
 conservative reservation, as with scheduled SHAPE burns. `preview` removes
 its temporary nodes and spends no allowance. Search scoring stops on Abort,
 context changes or deadlines(45game/60wall seconds, checked between native
-planner calls); node ownership is checked before cleanup. Quicksave because
+planner calls); node ownership is checked before cleanup. Preview removal
+waits one physics update before checking for another node. Failure reports
+distinguish game/wall deadlines and include live context flags. Quicksave because
 a native runtime error can leave a preview node. Each run writes a compact
 `scanorbit_<craft>_<UT>.log` directly to `0:/logs/archive/_diagnostics/` for
 comparing predicted gain with actual subsequent scans. Flight/coverage

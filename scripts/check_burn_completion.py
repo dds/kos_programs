@@ -210,6 +210,7 @@ def check_interrupted_shape_preserves_node():
                    maneuverBurnInterrupted=lambda: started[0],
                    shapeErrors=lambda _: Lex(AP=-770, PE=960), shapeConverged=lambda _: False,
                    _shapeReserveBurn=lambda _: True, executeManeuver=burn)
+        env['_shapeRecoverResidual']=lambda _:False
         # No existing node when initially planning; the planner attaches it.
         env['HASNODE'] = already_interrupted
         def attach(_):

@@ -164,6 +164,15 @@ LOCAL FUNCTION _captureContinueFlyby {
     RETURN FALSE.
 }
 
+LOCAL FUNCTION _captureRecoverResidual {
+    PARAMETER target.
+    IF SHIP:BODY <> target OR (CAPTURE_RESERVE_DV >= 0
+            AND NOT (SHIP:DELTAV:VACUUM >= CAPTURE_RESERVE_DV)) { RETURN FALSE. }
+    LOCAL floorAlt IS MAX(1,CAPTURE_MIN_PE).
+    IF target:ATM:EXISTS { SET floorAlt TO MAX(floorAlt,target:ATM:HEIGHT+10000). }
+    RETURN orbitBurnRecover("CAPTURE",floorAlt,CAPTURE_MAX_PE).
+}
+
 GLOBAL FUNCTION phaseCapture {
     midcourseClearReviewAlarm().
     LOCAL target IS missionTargetBody().
@@ -171,18 +180,20 @@ GLOBAL FUNCTION phaseCapture {
         mLogError("CAPTURE: vessel is not inside " + target:NAME + " SOI.").
         RETURN.
     }
-    IF HASNODE OR maneuverBurnInterrupted() {
+    LOCAL success IS _captureRecoverResidual(target).
+    IF NOT success AND (HASNODE OR maneuverBurnInterrupted()) {
         mLogError("CAPTURE: existing/interrupted maneuver retained; inspect or explicitly resume it before replanning.").
         yieldToPrompt(). RETURN.
     }
-    WAIT 2.
-    mLog("Planning capture into elliptical orbit at " + target:NAME + ".").
+    IF NOT success {
+        WAIT 2.
+        mLog("Planning capture into elliptical orbit at " + target:NAME + ".").
+    }
     mLog("STATS capture phase setup target=" + target:NAME
         + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
         + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
         + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
 
-    LOCAL success IS FALSE.
     LOCAL retries IS 0.
 
     UNTIL success {
@@ -244,6 +255,8 @@ GLOBAL FUNCTION phaseCapture {
 
         // 3. Execute with standard retry logic
         SET success TO executeManeuver().
+        IF NOT success { SET success TO _captureRecoverResidual(target). }
+        IF phaseShouldYield OR ABORT { yieldToPrompt(). RETURN. }
         IF success AND (SHIP:ORBIT:ECCENTRICITY >= 1 OR SHIP:PERIAPSIS <= 0) {
             mLogError("CAPTURE: burn ended without a bound orbit above the surface; holding phase.").
             RETURN.

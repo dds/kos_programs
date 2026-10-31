@@ -6,6 +6,49 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked: Espoir-Mun-Surveyor1 capture
+  residual recovery and first native
+  scanorbit deadline report(5188055). Capture boot011 at5187837.3 reached
+  Pe13.7/Ap1737km vs planned1737.7, ecc0.8012, inc179.97;87.3255m/s node
+  stopped on live-vector-passed-target with0.23022048m/s residual, normal
+  physical cutoff/no forced shutdown. Preserve strict executor report and
+  faults; accept a bounded harmless orbit residual at phase level and let
+  SHAPE remeasure/replan, retaining final goal/budget/floor checks. Reboot
+  recovery must not replay the capture burn or delete unrelated nodes.
+  Native evidence:/tmp/ksp-deck-20261031T231116Z-fetch-o0yl9vni/logs/
+  Espoir-Mun-Surveyor1_5156306/boot_011_core.log.
+  Shared orbit_burn_recovery provider belongs only to capture/shaping;
+  strict executor/governor tolerances and audit report stay unchanged.
+  Benign full/axis trim or reversal, recorded AND live tail<=0.25m/s and
+  <=1%planned, safe native bound orbit/phase floor/Pe corridor/SOI,
+  remaining reserve and physical cutoff are required. Faults/foreign
+  nodes/large or tiny-burn-fraction tails still hold. Durable mission/body/
+  phase/launch/node receipt before cleanup prevents a capture re-burn
+  after interrupted cleanup; new burns invalidate it and record provenance.
+  SHAPE resumes actual-orbit remeasurement and still needs exact goals.
+  Current legacy capture markers/report supported; no bootstrap replacement.
+  Source fixtures replay reported scalars,30 rejection cases and3 cleanup
+  crash checkpoints; SHAPE goal miss still holds. Native updated recovery
+  pending: pull while linked, REBOOT, keep the old capture residual node.
+  scanorbit5188055 stopped after1.96game/1.98wall seconds, after first
+  raised-Ap candidate(score36.56 vs baseline37.70), NOT its45/60s deadlines.
+  Suspect REMOVE published next tick while immediate loop expectedHASNODE
+  false; add settled owned-node release, separate deadline/context causes
+  and exact live flag diagnostics. Deferred-removal fixture reproduces old
+  rejection/new continuation; corrected native run needed to prove cause.
+  Evidence:/tmp/ksp-deck-20261031T231435Z-fetch-4wnh843f/logs/_diagnostics/
+  scanorbit_Espoir-Kerbin-Surveyor1_5188055.log. No Deck/game/save changes.
+  Operator confirms no vessel/Abort/warp/node manipulation during scanorbit.
+  All102 routine check files pass237.85s;373 scripts/100 profiles/82 phases/
+  44 bands,0 structural errors/unchanged KSC_DEORBIT warning. Reports:
+  /tmp/kos-orbit-recovery-scan-20261031.{json,log}. Recovery cases<=0.198s;
+  scan fixtures retained all samples/assertions (old combined two-body case
+  1.348s under this run's heavier load). After the full pass, added a narrow
+  SHAPE guard for a new manual node after reconciled cleanup; real recovery,
+  SHAPE precision/minimum/budget/floor, cutoff and structural checks pass
+  afterward. No production edits during the suite. Corrected native capture
+  handoff/next-burn convergence and scan comparison cleanup remain pending.
+
 - IMPLEMENTED/source-checked: cmd/scanorbit.ks manual survey-orbit helper.
   Preview compares staying put, cheap period detuning(+Ap/-Pe), exactly
   polar and mirrored inclination using192 live SCANsat points per track

@@ -84,7 +84,9 @@ LOCAL FUNCTION _cmdScanorbit {
     PRINT "Suggested "+best["MODE"]+": "+ROUND(nd:DELTAV:MAG,2)+"m/s, inc="+ROUND(nd:ORBIT:INCLINATION,2)
         +" Pe/Ap="+ROUND(nd:ORBIT:PERIAPSIS/1000,2)+"/"+ROUND(nd:ORBIT:APOAPSIS/1000,2)+"km.".
     IF action = "preview" {
-        IF SHIP = craftRef AND KUNIVERSE:ACTIVEVESSEL = craftRef AND HASNODE AND NEXTNODE = nd { REMOVE nd. }
+        IF NOT surveyOrbitRelease(craftRef,nd) {
+            PRINT "Preview cleanup context changed; inspect any remaining node.". RETURN.
+        }
         PRINT "Preview finished. Use the plan action to re-evaluate and create a node; mission goals remain unchanged.".
         diagnosticArchiveClose(report,"Scan orbit"). RETURN.
     }

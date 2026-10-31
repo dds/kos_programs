@@ -1149,9 +1149,25 @@ GLOBAL FUNCTION shapeReserveBurn {
     RETURN _shapeReserveBurn(nd).
 }
 
+LOCAL FUNCTION _shapeRecoverResidual {
+    PARAMETER phaseLabel.
+    RETURN (SHAPE_RESERVE_DV < 0 OR SHIP:DELTAV:VACUUM >= SHAPE_RESERVE_DV)
+        AND orbitBurnRecover(phaseLabel,_peFloor(),-1).
+}
+
 LOCAL FUNCTION _shapeInterruptedHold {
     PARAMETER phaseLabel.
-    IF NOT maneuverBurnInterrupted() { RETURN FALSE. }
+    IF NOT maneuverBurnInterrupted() {
+        IF HASNODE {
+            LOCAL receipt IS stateGet("orbit_burn_recovery",LEXICON()).
+            IF receipt:HASKEY("PHASE") AND receipt["PHASE"] = phaseLabel {
+                mLogError(phaseLabel + ": new node after reconciled burn; preserving it for review.").
+                yieldToPrompt(). RETURN TRUE.
+            }
+        }
+        RETURN FALSE.
+    }
+    IF _shapeRecoverResidual(phaseLabel) { RETURN FALSE. }
     mLogError(phaseLabel + ": interrupted burn retained; inspect node/orbit before replanning.").
     IF phaseLabel = "SHAPE" {
         PRINT "RUNPATH('0:/cmd/shaperetry.ks'). then REBOOT. to replan from the achieved orbit.".
@@ -1224,6 +1240,8 @@ LOCAL FUNCTION _runShapePhase {
             SET success TO executeManeuver().
             SET BURN_TRIM_ABS_COMPLETE_DV TO savedAbsTol.
             SET BURN_TRIM_COMPLETE_MAX_DV TO savedMaxTol.
+            IF NOT success { SET success TO _shapeRecoverResidual(phaseLabel). }
+            IF phaseShouldYield OR ABORT { yieldToPrompt(). RETURN. }
             IF NOT success {
                 IF _shapeInterruptedHold(phaseLabel) { RETURN. }
                 SET retries TO retries + 1.
