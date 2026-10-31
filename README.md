@@ -1086,6 +1086,8 @@ The two local Kerbin profiles below launch directly to100km polar parking.
 | `eeloo_flyby` |25km science flyby; optional25km Pe /5000km Ap polar capture, then review | Window-dependent; live capture budget |
 | `moho_orbital_surveyor` | Powered70km polar Moho mapping orbit | Budget departure and capture for the actual window |
 | `moho_lander` |25km polar Moho parking, later site selection and powered surface science | Capture must retain1200m/s for descent |
+| `mun_relay_tripack` | Three passive relays in a1000km equatorial Mun ring | Carrier deployment about158m/s plus trim/reserve |
+| `minmus_relay_tripack` | Three passive relays in a500km equatorial Minmus ring | Carrier deployment about38m/s plus trim/reserve |
 
 All surveyors retain the CPU, propulsion and scanners as one spacecraft. No
 `scansat_decoupler` is required, and none automatically deorbits after mapping.
@@ -3513,6 +3515,81 @@ uses 5, and longer waits cap at 6.
 | `lambertSolve(r1, r2, tof, mu, flip)` | lambert | Izzo Lambert solver |
 | `landingExecute()` / `targetedDeorbit()` | landing, deorbit_targeting | Powered descent / precision deorbit |
 | `droneGoto(geo, agl)` etc. | drone | Drone mode commands |
+
+### Espoir Mun and Minmus relay tripacks
+
+Each profile launches one carrier with three separate, passive relay payloads.
+It captures and shapes an equatorial circular orbit, releases the first relay,
+then lowers the carrier into a2:3-period phasing orbit and circularizes again.
+Repeating places the relays roughly120degrees apart. The carrier supplies all
+four main deployment burns and remains in safe orbit afterward. It is not
+counted as one of the three payloads and is not automatically discarded.
+These figures are deployment costs AFTER reaching the relay orbit; transfer,
+capture, shaping, precision trims and reserve must also fit.
+
+| Profile | Final altitude | Carrier phasing Pe | Ring period | Ideal local continuous latitude band |
+|---|---:|---:|---:|---:|
+| `mun_relay_tripack` |1000km |431.5km |8h59m |approximately±70degrees |
+| `minmus_relay_tripack` |500km |234.7km |17h24m |approximately±78degrees |
+
+The latitude limits assume equally spaced circular relays and a flat horizon.
+A5degree elevation margin reduces them to about±60/±67degrees. These starter
+rings cover broad far-side regions, not the poles or every possible terrain
+and inter-body occultation. Polar coverage can be added later. Period matching
+limits drift but does not prove perpetual coverage; inspect the constellation
+after a long warp. Deployment does not add either body to
+`LANDING_RELAY_BODIES` or waive the shared landing radio policy automatically.
+
+Build each relay as an independent CHILD branch of its own separator:
+
+- Tag the three separators `relay_1`, `relay_2`, `relay_3`; keep the carrier CPU
+  and engine on the parent side. Nested/stacked relay branches are rejected.
+- Disable staging on these separators in the VAB. Only the tagged release
+  event fires them. Use very low ejection force; a tangential kick changes
+  the orbital period. Radial mounts around the carrier's forward axis let
+  its prograde release attitude put the kick perpendicular to velocity.
+- Fit each payload with a probe core, one **HG-20 relay antenna**, at least
+  **200EC** battery capacity (at least80% charged), and **six fixed solar
+  panels facing the six different directions**. No engine or kOS processor
+  is required on the payload. The carrier needs its own power and antenna.
+  The six-panel count is checked; the mounting directions still need VAB
+  inspection. Nominal eclipses are about29min at the Mun and36min at Minmus.
+- Antenna/panel tags are unnecessary: the payload branch is discovered.
+  HG-20/HG-5/stock RA relay names are recognized; `RELAY_ANTENNA_PARTS` can
+  explicitly list other known relay parts. A DTS-J1 is DIRECT and cannot
+  replace the HG-20. Antennas and deployable panels are activated before
+  release; HG-20 deployment must expose its native Retract event.
+
+One HG-20 per payload readily spans these local rings and the Kerbin link.
+Clients need an external antenna: a Communotron16 or DTS-J1 suffices at these
+altitudes; the probe core's tiny internal antenna alone does not. Relays can
+be passive, but batteries/solar still need to sustain their own probe cores.
+
+At an idle1x prompt after selecting the mission, run the read-only inventory
+check before committing the launch. It also works in parking orbit:
+
+```ks
+RUNPATH("0:/cmd/relaycheck.ks").
+```
+
+The report is written directly to
+`0:/logs/archive/_diagnostics/relaycheck_<craft>_<UT>.log`. Deployment also
+checks every remaining payload before releasing any. It refuses foreign or
+interrupted maneuvers, validates physical separation and measures each
+released vessel's orbit before recording success. Later payload periods
+must match the first within2s at the Mun /5s at Minmus; bounded carrier trims
+use the existing executor with tighter residuals and automatic staging off.
+A bad period or an interruption between separation and its proof holds for
+review; it never fires another separator to guess its way forward.
+
+Phasing waits install their own KAC alarm before solar work, remain resident
+and resume by the clock even without KAC. Automatic warp stays disabled.
+Reboot preserves the return epoch; if it misses an apsis, three extra phasing
+orbits retain the intended spacing instead of adding one wrong lap. Existing
+nodes are preserved for explicit recovery. Deployment ledgers are bound to
+the mission/launch/body/config; old or foreign ledgers require review.
+Native release impulses, fine-trim accuracy, hardware field/event availability,
+power endurance and long-term spacing still need flight validation.
 
 ## Tagged parts (VAB)
 

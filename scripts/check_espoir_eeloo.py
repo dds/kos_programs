@@ -38,7 +38,7 @@ def invoke(source, name, env, *args):
 
 
 def check_profiles():
-    deps, phases, _ = dependency_tables((ROOT/'lib/dependencies.ks').read_text())
+    deps, phases, bands = dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     eeloo = profile('eeloo_flyby')
     assert eeloo['TARGET_'] == 'EELOO' and eeloo['BPLANE_ARRIVAL_MODE'] == 'FLYBY'
     assert eeloo['CAPTURE_INC'] == 90 and eeloo['BPLANE_REQUIRE_PLANE'] == 1
@@ -71,6 +71,9 @@ def check_profiles():
     assert 'science_flight' not in closure(phases['capture'], deps)
     assert {'science_flight','flyby'} <= closure(phases['flyby'], deps)
     assert 'maneuver' not in closure(phases['flyby'], deps)
+    assert bands['flyby'] == ['flyby']
+    assert 'flyby' not in bands['xfer_arrive']
+    assert 'science_flight' not in closure(sum((phases[p] for p in bands['xfer_arrive']),[]),deps)
     print('PASS: Eeloo optional high polar capture preserves flyby/science review; Moho mapper and selected-site airless lander resolve independently with fuel, terrain, radio and power guards')
 
 

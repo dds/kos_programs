@@ -6,6 +6,48 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- 31Oct Espoir Mun/Minmus commnet tripacks implemented/source-checked;
+  native deployment remains unproven. User chose three-relay equatorial
+  starter networks, polar additions later. mun_relay_tripack1000km and
+  minmus_relay_tripack500km capture/SHAPE then release3 detached passive
+  payloads; carrier does the2:3 phasing/circularization and stays in orbit.
+  Ideal local latitude bands~±70/±78deg (5deg margin~±60/±67), not polar/
+  terrain/inter-body-occlusion coverage guarantees. Deployment-only impulse
+  about158/38m/s; SHAPE reserves250/150 for deployment/trim/50m/s reserve.
+  Hardware: independent child branches on relay_1/2/3 separators with normal
+  staging DISABLED; each core/HG-20/200EC>=80%/six fixed panels on six faces.
+  Only carrier needs an engine/kOS. Branch inventory blocks overlap/carrier,
+  nested separators, absent/dead/direct-only payloads and future engines.
+  Deployment activates hardware, verifies native HG-20 Retract readiness,
+  points prograde/settles, saves separation intent, proves departing UIDs
+  left the carrier and samples released native orbit before recording VALID.
+  Periods reference the first relay,2s Mun/5s Minmus with bounded carrier
+  trims. Bad kicks are recorded as failed releases and stop the next one.
+  Foreign/interrupted nodes are preserved; burns use live conic elements,
+  finite active-stage fuel, no auto-staging, temporary0.001 residual limits
+  restored after the executor, and physical cutoff. Campaign-bound records
+  survive reboot; ambiguous separation-before-proof and legacy/foreign
+  ledgers hold. KAC-before-solar resident phasing waits share a deadline,
+  poll without KAC and clean alarms on Abort. Missed return skips3 phasing
+  laps (=2 relay periods), preserving spacing; no implicit wrong extra lap.
+  cmd/relaycheck is read-only, archive-only, loads no maneuver engine and
+  reports geometry, payload/battery inventory, force and existing controls.
+  FLYBY also moved to its own band after reading the all-phases-per-band
+  rule: the previous dependency split alone still loaded science into ALL
+  ordinary XFER_ARRIVE bands. Regression checks now enforce actual isolation.
+  All98 routine scripts pass221.96s; new relay cases<=0.307s each, file1.289s
+  including imports. Report:/tmp/kos-espoir-relays-20261031.{json,log}.
+  After that suite, restored the live atmosphere+5km phasing floor (nominal
+  geometry alone is insufficient after a changed reference period), released
+  steering on terminal review, and added a5cm/half-second boundary and jammed
+  antenna/manual-control regression; full relay and structural checks pass
+  afterward. Structural362 scripts/95 profiles/80 phases/42 bands,0 errors,
+  known KSC_DEORBIT warning unchanged. No production edits during the suite.
+  Next: native relaycheck then first deployment; verify impulses/precision,
+  event availability, power, KAC and spacing before declaring landing relay
+  coverage. Shared LANDING_RELAY_BODIES stays empty. No live craft/save/game
+  controls/settings or hardware were changed by this development work.
+
 - 31Oct Espoir Eeloo/Moho profiles implemented and source-checked; native
   flights pending. eeloo_flyby aims25km Pe/5000km Ap/polar; capture checks
   its actual native node plus150m/s reserve. Only an unaffordable UNFLOWN

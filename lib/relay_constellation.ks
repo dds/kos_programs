@@ -1,397 +1,324 @@
-// ============================================================
-// relay_constellation.ks  —  Multi-relay deployment
-// (0:/lib/relay_constellation.ks)
-// ============================================================
-
+// Passive relay placement: circular release, shorter resonant carrier orbit,
+// circularize and repeat. Persistent records never infer a successful release
+// from an event request or silently discard an interrupted/foreign maneuver.
 @LAZYGLOBAL OFF.
-
-// --- Config defaults owned by this file ---
-GLOBAL RELAY_COUNT IS 3.
-GLOBAL RELAY_ALT IS -1.
 GLOBAL TARGET_AP IS -1.
+LOCAL CIRCULAR_ECC_LIMIT IS 0.001.
 
+LOCAL FUNCTION _relayContext {
+    PARAMETER bdy, allowNode IS FALSE.
+    RETURN NOT ABORT AND WARP = 0 AND SHIP = KUNIVERSE:ACTIVEVESSEL
+        AND SHIP:BODY = bdy AND SHIP:STATUS = "ORBITING"
+        AND SHIP:BODY = missionTargetBody()
+        AND SHIP:PERIAPSIS > MAX(5000,bdy:ATM:HEIGHT)
+        AND SHIP:ORBIT:ECCENTRICITY >= 0 AND SHIP:ORBIT:ECCENTRICITY < 1
+        AND SHIP:ORBIT:PERIOD > 0 AND SHIP:ORBIT:PERIOD < 1e30
+        AND SHIP:ORBIT:SEMIMAJORAXIS > 0 AND SHIP:ORBIT:SEMIMAJORAXIS < 1e30
+        AND SHIP:APOAPSIS < bdy:SOIRADIUS-bdy:RADIUS AND NOT SHIP:ORBIT:HASNEXTPATCH
+        AND (allowNode OR NOT HASNODE) AND NOT maneuverBurnInterrupted()
+        AND SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
+        AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0.
+}
 
-LOCAL CIRCULAR_ECC_LIMIT IS 0.01.
+LOCAL FUNCTION _relayHold {
+    PARAMETER reason.
+    SET WARP TO 0.
+    UNLOCK STEERING.
+    mLogError("STATS constellation result=hold reason="+reason
+        +" released="+stateGetNum("relay_deployed_count",0)).
+    PRINT "RELAY DEPLOYMENT HELD: "+reason+". Existing maneuvers and release records retained.".
+    yieldToPrompt().
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _relayRecord {
+    PARAMETER idx.
+    RETURN stateGet("relay_"+idx+"_record",LEXICON()).
+}
+
+LOCAL FUNCTION _relayReleased {
+    PARAMETER idx.
+    RETURN _relayRecord(idx):LENGTH > 0.
+}
+
+LOCAL FUNCTION _relayReferencePeriod {
+    LOCAL first IS _relayRecord(1).
+    IF first:LENGTH > 0 { RETURN first["PERIOD"]. }
+    RETURN SHIP:ORBIT:PERIOD.
+}
+
+LOCAL FUNCTION _relayCampaign {
+    PARAMETER count, altitude, bdy.
+    LOCAL id IS stateGet("mission_id","")+":"+stateGetNum("launch_time",0)
+        +":"+bdy:NAME+":"+count+":"+altitude.
+    LOCAL old IS stateGet("relay_campaign_id","").
+    IF old <> "" { RETURN old = id. }
+    // Old ledgers have no physical/period evidence: never migrate by guessing.
+    IF stateGetNum("relay_deployed_count",0) > 0 { RETURN FALSE. }
+    LOCAL i IS 1.
+    UNTIL i > count {
+        IF stateGet("relay_"+i+"_released","") <> "" { RETURN FALSE. }
+        SET i TO i+1.
+    }
+    stateSet("relay_campaign_id",id).
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _relayExecute {
+    PARAMETER nd.
+    IF NOT _relayContext(SHIP:BODY,TRUE) OR NOT HASNODE OR NEXTNODE <> nd {
+        RETURN FALSE.
+    }
+    IF NOT (nd:DELTAV:MAG >= 0.001 AND nd:DELTAV:MAG < 1e30
+            AND STAGE:DELTAV:VACUUM < 1e30
+            AND STAGE:DELTAV:VACUUM >= nd:DELTAV:MAG+RELAY_RESERVE_DV) {
+        REMOVE nd. RETURN FALSE.
+    }
+    LOCAL savedEvents IS BURN_STAGE_MAX_EVENTS.
+    LOCAL savedWait IS BURN_STAGE_MANUAL_WAIT.
+    LOCAL savedAbs IS BURN_TRIM_ABS_COMPLETE_DV.
+    LOCAL savedMax IS BURN_TRIM_COMPLETE_MAX_DV.
+    // Deployment burns use the active carrier stage; never stage payloads.
+    SET BURN_STAGE_MAX_EVENTS TO 0.
+    SET BURN_STAGE_MANUAL_WAIT TO 0.
+    SET BURN_TRIM_ABS_COMPLETE_DV TO MIN(savedAbs,0.001).
+    SET BURN_TRIM_COMPLETE_MAX_DV TO MIN(savedMax,0.001).
+    LOCAL ok IS executeManeuver().
+    SET BURN_STAGE_MAX_EVENTS TO savedEvents.
+    SET BURN_STAGE_MANUAL_WAIT TO savedWait.
+    SET BURN_TRIM_ABS_COMPLETE_DV TO savedAbs.
+    SET BURN_TRIM_COMPLETE_MAX_DV TO savedMax.
+    IF NOT thrustCutoffOk() { RETURN FALSE. }
+    RETURN ok AND NOT HASNODE AND NOT maneuverBurnInterrupted().
+}
+
+LOCAL FUNCTION _circularizeCarrier {
+    IF NOT _relayContext(SHIP:BODY) { RETURN FALSE. }
+    LOCAL nd IS planCircularize().
+    IF nd:TIME < TIME:SECONDS+180 { SET nd:TIME TO nd:TIME+SHIP:ORBIT:PERIOD. }
+    RETURN _relayExecute(nd).
+}
+
+LOCAL FUNCTION _ensureCircularBeforeDeploy {
+    PARAMETER altitude.
+    IF NOT _relayContext(SHIP:BODY) { RETURN FALSE. }
+    IF SHIP:ORBIT:ECCENTRICITY > CIRCULAR_ECC_LIMIT {
+        IF NOT _circularizeCarrier() { RETURN FALSE. }
+    }
+    LOCAL tolerance IS MAX(1000,altitude*0.01).
+    RETURN SHIP:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT
+        AND ABS(SHIP:APOAPSIS-altitude) <= tolerance
+        AND ABS(SHIP:PERIAPSIS-altitude) <= tolerance.
+}
+
+LOCAL FUNCTION _relayMatchPeriod {
+    IF NOT _relayReleased(1) { RETURN TRUE. }
+    LOCAL desired IS _relayReferencePeriod().
+    LOCAL tries IS 0.
+    UNTIL ABS(SHIP:ORBIT:PERIOD-desired) <= RELAY_PERIOD_TOLERANCE {
+        IF tries >= 4 OR NOT _relayContext(SHIP:BODY) { RETURN FALSE. }
+        LOCAL period IS SHIP:ORBIT:PERIOD.
+        LOCAL apEta IS ETA:APOAPSIS.
+        LOCAL peEta IS ETA:PERIAPSIS.
+        UNTIL apEta >= 180 { SET apEta TO apEta+period. }
+        UNTIL peEta >= 180 { SET peEta TO peEta+period. }
+        LOCAL radius IS SHIP:BODY:RADIUS+SHIP:APOAPSIS.
+        LOCAL eta_ IS apEta.
+        IF peEta < apEta { SET radius TO SHIP:BODY:RADIUS+SHIP:PERIAPSIS. SET eta_ TO peEta. }
+        LOCAL mu IS SHIP:BODY:MU.
+        LOCAL sma IS (mu*(desired/(2*CONSTANT:PI))^2)^(1/3).
+        LOCAL dv IS SQRT(mu*(2/radius-1/sma))
+            -SQRT(mu*(2/radius-1/SHIP:ORBIT:SEMIMAJORAXIS)).
+        IF ABS(dv) < 0.001 { RETURN FALSE. }
+        LOCAL nd IS NODE(TIME:SECONDS+eta_,0,0,dv).
+        ADD nd.
+        mLog("STATS relay-period trim errorSeconds="+(period-desired)+" dv="+dv+" attempt="+tries).
+        IF NOT _relayExecute(nd) { RETURN FALSE. }
+        SET tries TO tries+1.
+    }
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _relayAlignRelease {
+    LOCAL deadline IS TIME:SECONDS+45.
+    LOCAL quiet IS -1.
+    SET SAS TO FALSE.
+    LOCK STEERING TO SHIP:PROGRADE.
+    UNTIL TIME:SECONDS >= deadline {
+        IF NOT _relayContext(SHIP:BODY) { UNLOCK STEERING. RETURN FALSE. }
+        IF VANG(SHIP:FACING:FOREVECTOR,SHIP:PROGRADE:FOREVECTOR) < 2 AND SHIP:ANGULARVEL:MAG < 0.002 {
+            IF quiet < 0 { SET quiet TO TIME:SECONDS. }
+            IF TIME:SECONDS-quiet >= 1 { RETURN TRUE. }
+        } ELSE { SET quiet TO -1. }
+        WAIT 0.1.
+    }
+    UNLOCK STEERING.
+    RETURN FALSE.
+}
+
+LOCAL FUNCTION _deployOneRelay {
+    PARAMETER idx.
+    LOCAL info IS relayPayloadInfo(idx).
+    IF NOT info["OK"] OR NOT _relayContext(SHIP:BODY) { RETURN FALSE. }
+    IF NOT _relayAlignRelease() { RETURN FALSE. }
+    relayActivatePayload(info).
+    LOCAL deadline IS TIME:SECONDS+30.
+    UNTIL relayAntennaReady(info) OR TIME:SECONDS >= deadline OR ABORT { WAIT 0.1. }
+    IF NOT relayAntennaReady(info) OR NOT _relayContext(SHIP:BODY) { RETURN FALSE. }
+    // Recheck the complete branch after alignment/deployment waits.
+    SET info TO relayPayloadInfo(idx).
+    IF NOT info["OK"] { RETURN FALSE. }
+    LOCAL dc IS info["DC"].
+    LOCAL root IS info["PARTS"][0].
+    LOCAL key IS "relay_"+idx.
+    mLog("STATS relay-release begin index="+idx+" carrierPeriod="+SHIP:ORBIT:PERIOD
+        +" ejectionForce="+info["FORCE"]+" battery="+info["EC"]+"/"+info["CAPACITY"]).
+    stateSet(key+"_intent",LEXICON("UIDS",info["UIDS"],"DC",dc:UID,"TIME",TIME:SECONDS)).
+    LOCAL modu IS 0.
+    IF dc:HASMODULE("ModuleDecouple") { SET modu TO dc:GETMODULE("ModuleDecouple"). }
+    ELSE { SET modu TO dc:GETMODULE("ModuleAnchoredDecoupler"). }
+    IF NOT modu:HASEVENT("Decouple") { RETURN FALSE. }
+    modu:DOEVENT("Decouple").
+    WAIT 1.
+    IF relayAttachedCount(info["UIDS"]) <> 0 OR root:SHIP = SHIP { RETURN FALSE. }
+    LOCAL released IS root:SHIP.
+    LOCAL period IS released:ORBIT:PERIOD.
+    LOCAL expected IS _relayReferencePeriod().
+    IF idx = 1 { SET expected TO period. }
+    LOCAL valid IS released:BODY = SHIP:BODY AND released:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT
+        AND period > 0 AND period < 1e30 AND ABS(period-expected) <= RELAY_PERIOD_TOLERANCE.
+    IF NOT (period > 0 AND period < 1e30) { SET period TO -1. }
+    stateSet(key+"_record",LEXICON("TIME",TIME:SECONDS,"PERIOD",period,"VALID",valid,"UID",root:UID)).
+    IF RELAY_NAME_PREFIX <> "" { SET released:NAME TO RELAY_NAME_PREFIX+"-"+idx. }
+    mLog("STATS relay-release index="+idx+" vessel="+released:NAME+" valid="+valid
+        +" period="+period+" reference="+expected+" errorSeconds="+(period-expected)).
+    UNLOCK STEERING.
+    SET SAS TO TRUE.
+    RETURN valid.
+}
+
+LOCAL FUNCTION _phaseCarrierOneSlot {
+    PARAMETER count, altitude, bdy, idx.
+    LOCAL key IS "relay_"+idx.
+    IF stateGetNum(key+"_phase_complete",0) > 0 { RETURN TRUE. }
+    LOCAL reference IS _relayReferencePeriod().
+    LOCAL phasePeriod IS reference*(count-1)/count.
+    LOCAL sma IS (bdy:MU*(phasePeriod/(2*CONSTANT:PI))^2)^(1/3).
+    LOCAL apRadius IS bdy:RADIUS+altitude.
+    LOCAL phasePe IS 2*sma-apRadius-bdy:RADIUS.
+    IF stateGetNum(key+"_phase_inserted",0) = 0 {
+        IF SHIP:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT {
+            IF NOT _relayContext(bdy) { RETURN FALSE. }
+            LOCAL eta_ IS ETA:APOAPSIS.
+            UNTIL eta_ >= 180 { SET eta_ TO eta_+SHIP:ORBIT:PERIOD. }
+            SET apRadius TO bdy:RADIUS+SHIP:APOAPSIS.
+            SET phasePe TO 2*sma-apRadius-bdy:RADIUS.
+            IF phasePe <= MAX(5000,bdy:ATM:HEIGHT+5000) { RETURN FALSE. }
+            LOCAL dv IS SQRT(bdy:MU*(2/apRadius-1/sma))
+                -SQRT(bdy:MU*(2/apRadius-1/SHIP:ORBIT:SEMIMAJORAXIS)).
+            LOCAL nd IS NODE(TIME:SECONDS+eta_,0,0,dv).
+            ADD nd.
+            IF NOT _relayExecute(nd) { RETURN FALSE. }
+        }
+        IF ABS(SHIP:APOAPSIS-altitude) > MAX(1000,altitude*0.01)
+                OR ABS(SHIP:ORBIT:PERIOD-phasePeriod) > MAX(5,phasePeriod*0.001) { RETURN FALSE. }
+        stateSet(key+"_phase_inserted",TIME:SECONDS).
+    }
+    IF SHIP:ORBIT:ECCENTRICITY > CIRCULAR_ECC_LIMIT {
+        LOCAL actualPeriod IS SHIP:ORBIT:PERIOD.
+        LOCAL returnUt IS stateGetNum(key+"_return_ut",0).
+        IF returnUt <= 0 { SET returnUt TO TIME:SECONDS+ETA:APOAPSIS. }
+        // If reboot misses an apsis, n extra phasing orbits preserve relative
+        // spacing: n*(n-1)/n is a whole number of final relay orbits.
+        IF returnUt < TIME:SECONDS+180 {
+            SET returnUt TO returnUt+CEILING((TIME:SECONDS+180-returnUt)/(count*actualPeriod))*count*actualPeriod.
+        }
+        stateSet(key+"_return_ut",returnUt).
+        LOCAL wakeUt IS returnUt-180.
+        LOCAL alarm IS kacEnsureAlarm("Relay phasing "+idx,wakeUt,"Carrier circularization preparation; running phase resumes.",1).
+        mLog("STATS relay-phase wait index="+idx+" returnUt="+returnUt+" wakeUt="+wakeUt+" alarm="+alarm+" resident=True").
+        LOCAL solarRef IS enterSolarCoast("Relay phasing",TRUE,TRUE,wakeUt).
+        waitUntilOrSOI(bdy,wakeUt,5,alarm,solarRef,TRUE,TRUE).
+        IF alarm <> "" { DELETEALARM(alarm). }
+        IF NOT _relayContext(bdy) OR ABS(TIME:SECONDS+ETA:APOAPSIS-returnUt) > 5 { RETURN FALSE. }
+        IF NOT _circularizeCarrier() { RETURN FALSE. }
+    }
+    IF NOT _ensureCircularBeforeDeploy(altitude) OR NOT _relayMatchPeriod() { RETURN FALSE. }
+    stateSet(key+"_phase_complete",TIME:SECONDS).
+    mLog("STATS relay-phase result index="+idx+" period="+SHIP:ORBIT:PERIOD+" reference="+reference).
+    RETURN TRUE.
+}
 
 GLOBAL FUNCTION constellationDeploy {
-    PARAMETER relayCount.
-    PARAMETER targetAlt.
-    PARAMETER bodyOverride IS "".
-
-    LOCAL targetBody IS SHIP:ORBIT:BODY.
-    IF bodyOverride <> "" { SET targetBody TO BODY(bodyOverride). }
-
-    IF relayCount < 2 {
-        mLogError("Constellation deploy requires at least two relays.").
-        RETURN FALSE.
-    }
-
-    mLogPhase("CONSTELLATION DEPLOY").
-    mLog("Deploying " + relayCount + " resonant relays at "
-        + ROUND(targetAlt/1000,0) + "km around " + targetBody:NAME).
-
-    LOCAL spacing IS 360 / relayCount.
-    LOCAL phaseRatio IS (relayCount - 1) / relayCount.
-    mLog("Angular spacing: " + ROUND(spacing,1)
-        + "deg  phasing period ratio=" + ROUND(phaseRatio,3)).
-
-    LOCAL releasedCount IS _syncRelayDeployedCount(relayCount).
-    LOCAL pendingPhaseIdx IS _firstPendingPhase(relayCount).
-    mLog("STATS constellation setup count=" + relayCount
-        + " released=" + releasedCount
-        + " pendingPhase=" + pendingPhaseIdx
-        + " targetAltKm=" + ROUND(targetAlt/1000,1)
-        + " body=" + targetBody:NAME
-        + " ecc=" + ROUND(SHIP:ORBIT:ECCENTRICITY,4)).
-
-    IF pendingPhaseIdx = 0 AND NOT _ensureCircularBeforeDeploy(targetAlt) {
-        mLog("STATS constellation result status=circularize-failed"
-            + " released=" + stateGetNum("relay_deployed_count", 0)).
-        RETURN FALSE.
-    }
-
-    LOCAL idx IS 1.
-    UNTIL idx > relayCount {
-        IF _relayReleased(idx) {
-            mLog("Relay " + idx + " already released; resuming ledger.").
+    PARAMETER relayCount, targetAlt, bodyOverride IS "".
+    LOCAL bdy IS SHIP:BODY.
+    IF bodyOverride <> "" { SET bdy TO BODY(bodyOverride). }
+    LOCAL geometry IS relayGeometry(relayCount,targetAlt,bdy).
+    IF NOT geometry["OK"] { RETURN _relayHold(geometry["REASON"]). }
+    IF NOT (RELAY_RESERVE_DV >= 0 AND RELAY_RESERVE_DV < 1e30
+            AND RELAY_PERIOD_TOLERANCE > 0 AND RELAY_PERIOD_TOLERANCE < 60)
+            OR NOT _relayContext(bdy) { RETURN _relayHold("unsafe-context-or-settings"). }
+    IF NOT _relayCampaign(relayCount,targetAlt,bdy) { RETURN _relayHold("ledger-belongs-to-another-or-legacy-mission"). }
+    LOCAL count IS 0.
+    LOCAL i IS 1.
+    UNTIL i > relayCount {
+        IF _relayReleased(i) {
+            IF NOT _relayRecord(i)["VALID"] { RETURN _relayHold("released-relay-period-needs-review"). }
+            SET count TO count+1.
         } ELSE {
-            mLog("Deploying relay " + idx + " of " + relayCount).
-            IF NOT _deployOneRelay(idx) {
-                mLogError("Relay " + idx + " was not deployed; holding.").
-                mLog("STATS constellation result status=deploy-failed"
-                    + " relay=" + idx
-                    + " released=" + stateGetNum("relay_deployed_count", 0)).
-                yieldToPrompt().
-                RETURN FALSE.
+            LOCAL intent IS stateGet("relay_"+i+"_intent",LEXICON()).
+            IF intent:LENGTH > 0 {
+                IF relayAttachedCount(intent["UIDS"]) <> intent["UIDS"]:LENGTH {
+                    RETURN _relayHold("separation-interrupted-before-physical-period-proof").
+                }
             }
+            LOCAL info IS relayPayloadInfo(i).
+            IF NOT info["OK"] { RETURN _relayHold("relay_"+i+":"+info["REASON"]). }
         }
-
-        IF idx < relayCount AND NOT _relayPhaseComplete(idx) {
-            IF NOT _phaseCarrierOneSlot(relayCount, targetAlt, targetBody, idx) {
-                mLogError("Relay phasing failed after relay " + idx
-                    + "; holding for operator review.").
-                mLog("STATS constellation result status=phase-failed"
-                    + " relay=" + idx
-                    + " released=" + stateGetNum("relay_deployed_count", 0)).
-                yieldToPrompt().
-                RETURN FALSE.
-            }
-        }
-        SET idx TO idx + 1.
+        SET i TO i+1.
     }
-
-    stateSet("relay_deployed_count", relayCount).
-    mLog("Constellation deployment complete.").
-    mLog("STATS constellation result status=complete"
-        + " released=" + relayCount
-        + " PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)).
-    HUDTEXT("Constellation deployed!", 8, 2, 18, GREEN, FALSE).
+    stateSet("relay_deployed_count",count).
+    IF count = 0 {
+        LOCAL needed IS geometry["DEPLOY_DV"]*1.1+20+RELAY_RESERVE_DV.
+        IF NOT (STAGE:DELTAV:VACUUM >= needed AND STAGE:DELTAV:VACUUM < 1e30) {
+            RETURN _relayHold("active-carrier-stage-deployment-budget").
+        }
+    }
+    mLog("STATS constellation setup count="+relayCount+" released="+count+" altitude="+targetAlt
+        +" body="+bdy:NAME+" periodTolerance="+RELAY_PERIOD_TOLERANCE).
+    SET i TO 1.
+    UNTIL i > relayCount {
+        IF NOT _relayReleased(i) {
+            IF NOT _ensureCircularBeforeDeploy(targetAlt) OR NOT _relayMatchPeriod() {
+                RETURN _relayHold("carrier-circular-or-period-check").
+            }
+            IF NOT _deployOneRelay(i) { RETURN _relayHold("release-or-period-proof-failed-relay-"+i). }
+            SET count TO count+1.
+            stateSet("relay_deployed_count",count).
+        }
+        IF i < relayCount {
+            IF NOT _phaseCarrierOneSlot(relayCount,targetAlt,bdy,i) { RETURN _relayHold("phasing-relay-"+i). }
+        }
+        SET i TO i+1.
+    }
+    mLog("STATS constellation result=complete released="+count+" referencePeriod="+_relayReferencePeriod()).
+    PRINT "Relays deployed. Verify CommNet paths and long-term spacing before declaring landing coverage.".
     RETURN TRUE.
 }
 
 GLOBAL FUNCTION phaseRelayConstellation {
-    LOCAL relayCount IS RELAY_COUNT.
-    LOCAL targetAlt IS RELAY_ALT.
-    IF targetAlt < 0 { SET targetAlt TO TARGET_AP. }
-    IF targetAlt < 0 { SET targetAlt TO 500000. }
-
-    IF constellationDeploy(relayCount, targetAlt) {
-        nextPhase(xferSeq).
-    }
-}
-
-LOCAL FUNCTION _deployOneRelay {
-    PARAMETER relayIdx.
-
-    LOCAL tag IS "relay_" + relayIdx.
-    LOCAL parts IS SHIP:PARTSTAGGED(tag).
-    IF parts:LENGTH = 0 {
-        mLogError("No part tagged '" + tag + "' — skipping relay " + relayIdx + ".").
-        RETURN FALSE.
-    }
-
-    SET SAS TO TRUE.
-    WAIT 0.5.
-
-    LOCAL dc IS parts[0].
-    LOCAL activatedCount IS _activateRelayHardware(relayIdx).
-    stateSet("relay_" + relayIdx + "_activation_count", activatedCount).
-    mLog("Relay " + relayIdx + " activation before release: "
-        + activatedCount + " deployable(s).").
-    WAIT 1.0.
-
-    IF dc:HASMODULE("ModuleDecouple") {
-        dc:GETMODULE("ModuleDecouple"):DOEVENT("Decouple").
-    } ELSE IF dc:HASMODULE("ModuleAnchoredDecoupler") {
-        dc:GETMODULE("ModuleAnchoredDecoupler"):DOEVENT("Decouple").
-    } ELSE {
-        mLogError("relay_" + relayIdx + " has no decouple module.").
-        RETURN FALSE.
-    }
-
-    WAIT 1.0.
-    mLog("Relay " + relayIdx + " released at TA="
-        + ROUND(SHIP:ORBIT:TRUEANOMALY,1) + "deg"
-        + "  alt=" + ROUND(SHIP:ALTITUDE/1000,1) + "km").
-    stateSet("relay_" + relayIdx + "_released", TIME:SECONDS).
-    stateSet("relay_deployed_count", _countReleasedRelays(relayIdx)).
-    RETURN TRUE.
-}
-
-LOCAL FUNCTION _phaseCarrierOneSlot {
-    PARAMETER relayCount.
-    PARAMETER targetAlt.
-    PARAMETER targetBody.
-    PARAMETER afterRelayIdx.
-
-    LOCAL bodyR IS targetBody:RADIUS.
-    LOCAL mu IS targetBody:MU.
-    LOCAL targetR IS bodyR + targetAlt.
-    LOCAL targetPeriod IS 2 * CONSTANT:PI * SQRT(targetR^3 / mu).
-    LOCAL phaseRatio IS (relayCount - 1) / relayCount.
-    LOCAL phasePeriod IS targetPeriod * phaseRatio.
-    LOCAL phaseSma IS (mu * (phasePeriod / (2 * CONSTANT:PI))^2)^(1/3).
-    LOCAL phasePeR IS 2 * phaseSma - targetR.
-    LOCAL phasePeAlt IS phasePeR - bodyR.
-
-    LOCAL floorAlt IS 5000.
-    IF targetBody:ATM:EXISTS { SET floorAlt TO targetBody:ATM:HEIGHT + 5000. }
-    IF phasePeAlt < floorAlt {
-        mLogError("Resonant phasing Pe would be unsafe: "
-            + ROUND(phasePeAlt/1000,1) + "km < floor "
-            + ROUND(floorAlt/1000,1) + "km.").
-        RETURN FALSE.
-    }
-
-    mLog("STATS relay-phase setup targetAltKm=" + ROUND(targetAlt/1000,1)
-        + " phasePeKm=" + ROUND(phasePeAlt/1000,1)
-        + " targetPeriod=" + ROUND(targetPeriod,0)
-        + " phasePeriod=" + ROUND(phasePeriod,0)
-        + " afterRelay=" + afterRelayIdx).
-
-    IF NOT _relayPhaseInserted(afterRelayIdx) {
-        IF _looksLikePhasingOrbit(targetAlt, phasePeAlt) {
-            mLog("Carrier is already in relay " + afterRelayIdx
-                + " phasing orbit; marking insertion complete.").
-            stateSet("relay_" + afterRelayIdx + "_phase_inserted", TIME:SECONDS).
-        } ELSE {
-            IF NOT _burnToPhasingOrbit(targetR, phaseSma, targetBody) {
-                RETURN FALSE.
-            }
-            stateSet("relay_" + afterRelayIdx + "_phase_inserted", TIME:SECONDS).
-        }
-    } ELSE {
-        mLog("Resuming relay " + afterRelayIdx + " phasing orbit.").
-    }
-
-    IF SHIP:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT {
-        mLog("Carrier already circular after relay " + afterRelayIdx
-            + "; marking phasing complete.").
-        stateSet("relay_" + afterRelayIdx + "_phase_complete", TIME:SECONDS).
-        RETURN TRUE.
-    }
-
-    LOCAL coastEnd IS TIME:SECONDS + MAX(0, ETA:APOAPSIS - 120).
-    mLog("Coasting one phasing orbit; next circularize in "
-        + ROUND(ETA:APOAPSIS,0) + "s.").
-    IF PHASES_HAS_SOLAR { orientForSolar(FALSE,TRUE,FALSE,coastEnd). }
-    LOCAL solarRef IS -1.
-    UNTIL TIME:SECONDS >= coastEnd {
-        SET solarRef TO trySolarHoldTick(solarRef).
-        WAIT MIN(60, MAX(1, coastEnd - TIME:SECONDS)).
-    }
-
-    IF NOT _circularizeCarrier() {
-        RETURN FALSE.
-    }
-
-    stateSet("relay_" + afterRelayIdx + "_phase_complete", TIME:SECONDS).
-    mLog("STATS relay-phase result PeKm=" + ROUND(SHIP:PERIAPSIS/1000,1)
-        + " ApKm=" + ROUND(SHIP:APOAPSIS/1000,1)
-        + " inc=" + ROUND(SHIP:ORBIT:INCLINATION,1)
-        + " afterRelay=" + afterRelayIdx).
-    RETURN TRUE.
-}
-
-LOCAL FUNCTION _burnToPhasingOrbit {
-    PARAMETER targetR.
-    PARAMETER phaseSma.
-    PARAMETER targetBody.
-
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    LOCAL mu IS targetBody:MU.
-    LOCAL vNow IS SQRT(mu / targetR).
-    LOCAL vPhase IS SQRT(mu * (2 / targetR - 1 / phaseSma)).
-    LOCAL dv IS vPhase - vNow.
-    LOCAL nd IS NODE(TIME:SECONDS + 60, 0, 0, dv).
-    ADD nd.
-    mLog("Relay phasing insertion: dV=" + ROUND(dv,1)
-        + "m/s  targetPe=" + ROUND((2 * phaseSma - targetR
-            - targetBody:RADIUS)/1000,1) + "km.").
-    maneuverUiArchiveLog("relay-phase-insert").
-    WAIT 1.
-    RETURN executeManeuver().
-}
-
-LOCAL FUNCTION _circularizeCarrier {
-    UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-    planCircularize().
-    WAIT 1.
-    RETURN executeManeuver().
-}
-
-LOCAL FUNCTION _relayReleased {
-    PARAMETER relayIdx.
-    RETURN stateGet("relay_" + relayIdx + "_released", "") <> "".
-}
-
-LOCAL FUNCTION _relayPhaseInserted {
-    PARAMETER relayIdx.
-    RETURN stateGet("relay_" + relayIdx + "_phase_inserted", "") <> "".
-}
-
-LOCAL FUNCTION _relayPhaseComplete {
-    PARAMETER relayIdx.
-    RETURN stateGet("relay_" + relayIdx + "_phase_complete", "") <> "".
-}
-
-LOCAL FUNCTION _countReleasedRelays {
-    PARAMETER relayCount.
-    LOCAL count IS 0.
-    LOCAL idx IS 1.
-    UNTIL idx > relayCount {
-        IF _relayReleased(idx) { SET count TO count + 1. }
-        SET idx TO idx + 1.
-    }
-    RETURN count.
-}
-
-LOCAL FUNCTION _syncRelayDeployedCount {
-    PARAMETER relayCount.
-    LOCAL count IS _countReleasedRelays(relayCount).
-    LOCAL oldCount IS stateGetNum("relay_deployed_count", 0).
-    IF count <> oldCount { stateSet("relay_deployed_count", count). }
-    RETURN count.
-}
-
-LOCAL FUNCTION _firstPendingPhase {
-    PARAMETER relayCount.
-    LOCAL idx IS 1.
-    UNTIL idx >= relayCount {
-        IF _relayReleased(idx) AND NOT _relayPhaseComplete(idx) { RETURN idx. }
-        SET idx TO idx + 1.
-    }
-    RETURN 0.
-}
-
-LOCAL FUNCTION _ensureCircularBeforeDeploy {
-    PARAMETER targetAlt.
-
-    IF SHIP:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT { RETURN TRUE. }
-
-    mLogWarn("Relay deploy entry orbit is eccentric (e="
-        + ROUND(SHIP:ORBIT:ECCENTRICITY,4)
-        + "); circularizing before release.").
-    IF NOT _circularizeCarrier() { RETURN FALSE. }
-
-    IF SHIP:ORBIT:ECCENTRICITY > CIRCULAR_ECC_LIMIT {
-        mLogWarn("Circularization still eccentric: e="
-            + ROUND(SHIP:ORBIT:ECCENTRICITY,4) + ".").
-        RETURN FALSE.
-    }
-
-    LOCAL altErr IS ABS(SHIP:APOAPSIS - targetAlt).
-    LOCAL altTol IS MAX(5000, targetAlt * 0.05).
-    IF altErr > altTol {
-        mLogWarn("Relay deploy circularized at ApKm="
-            + ROUND(SHIP:APOAPSIS/1000,1)
-            + " targetKm=" + ROUND(targetAlt/1000,1)
-            + "; continuing from live orbit.").
-    }
-    RETURN TRUE.
-}
-
-LOCAL FUNCTION _looksLikePhasingOrbit {
-    PARAMETER targetAlt.
-    PARAMETER phasePeAlt.
-
-    IF SHIP:ORBIT:ECCENTRICITY <= CIRCULAR_ECC_LIMIT { RETURN FALSE. }
-    LOCAL apTol IS MAX(5000, targetAlt * 0.03).
-    LOCAL peTol IS MAX(5000, MAX(ABS(phasePeAlt), targetAlt) * 0.05).
-    RETURN ABS(SHIP:APOAPSIS - targetAlt) <= apTol
-        AND ABS(SHIP:PERIAPSIS - phasePeAlt) <= peTol.
-}
-
-LOCAL FUNCTION _activateRelayHardware {
-    PARAMETER relayIdx.
-
-    LOCAL antCount IS _activateTaggedParts("relay_" + relayIdx + "_ant",
-        "ModuleDeployableAntenna",
-        LIST("extend antenna", "Extend Antenna", "Extend", "Deploy")).
-    LOCAL solCount IS _activateTaggedParts("relay_" + relayIdx + "_sol",
-        "ModuleDeployableSolarPanel",
-        LIST("Extend Solar Panel", "extend solar panel", "Extend", "Deploy")).
-
-    IF antCount = 0 {
-        mLogWarn("Relay " + relayIdx + ": no tagged deployable antenna "
-            + "'relay_" + relayIdx + "_ant' found.").
-    }
-    IF solCount = 0 {
-        mLogWarn("Relay " + relayIdx + ": no tagged deployable solar panel "
-            + "'relay_" + relayIdx + "_sol' found.").
-    }
-    RETURN antCount + solCount.
-}
-
-LOCAL FUNCTION _activateTaggedParts {
-    PARAMETER tagName.
-    PARAMETER moduleName.
-    PARAMETER events.
-
-    LOCAL parts IS SHIP:PARTSTAGGED(tagName).
-    LOCAL activated IS 0.
-    LOCAL unavailable IS 0.
-
-    FOR partRef IN parts {
-        IF partRef:HASMODULE(moduleName) {
-            LOCAL modu IS partRef:GETMODULE(moduleName).
-            LOCAL didEvent IS FALSE.
-            FOR eventName IN events {
-                IF NOT didEvent AND modu:HASEVENT(eventName) {
-                    modu:DOEVENT(eventName).
-                    SET didEvent TO TRUE.
-                    SET activated TO activated + 1.
-                }
-            }
-            IF NOT didEvent { SET unavailable TO unavailable + 1. }
-        } ELSE {
-            SET unavailable TO unavailable + 1.
-        }
-    }
-
-    IF parts:LENGTH > 0 {
-        mLog("Relay hardware tag '" + tagName + "': activated="
-            + activated + " unavailable=" + unavailable + ".").
-    }
-    RETURN activated.
+    SET WARP TO 0.
+    WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED OR ABORT.
+    LOCAL altitude IS RELAY_ALT.
+    IF altitude < 0 { SET altitude TO TARGET_AP. }
+    IF constellationDeploy(RELAY_COUNT,altitude) { nextPhase(xferSeq). }
 }
 
 GLOBAL FUNCTION constellationStatus {
-    PARAMETER relayCount.
-    mLog("Constellation status:").
-    LOCAL idx IS 1.
-    UNTIL idx > relayCount {
-        LOCAL releaseTime IS stateGet("relay_" + idx + "_released", "").
-        IF releaseTime <> "" {
-            LOCAL phaseText IS " phase-pending".
-            IF _relayPhaseComplete(idx) { SET phaseText TO " phase-complete". }
-            IF idx = relayCount { SET phaseText TO " final-slot". }
-            mLog("  Relay " + idx + ": released at T+" + ROUND(releaseTime:TONUMBER(0),0) + "s" + phaseText).
-        } ELSE {
-            mLog("  Relay " + idx + ": not yet released").
-        }
-        SET idx TO idx + 1.
+    PARAMETER count.
+    LOCAL i IS 1.
+    UNTIL i > count {
+        mLog("Relay "+i+" record="+_relayRecord(i)+" phaseComplete="+stateGetNum("relay_"+i+"_phase_complete",0)).
+        SET i TO i+1.
     }
 }
