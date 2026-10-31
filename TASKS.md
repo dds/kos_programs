@@ -6,6 +6,24 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked: Espoir mun_contract_survey_return.
+  Low15km Pe capture into high Ap, then contract Ap1737680/Pe1543150m,
+  inc180deg (retrograde equatorial); LAN/AoP unconstrained. Stop for
+  contract confirmation, existing orbit(after=scan) command selects70km
+  polar surveying with whole probe retained, preserving RETURN_SETUP.
+  52km assisted Kerbin return/10m/s repair reserve; no automatic warp,
+  separation, landing, or changes to runtime safeguards.
+  Capture reserve1200m/s; shared contract/survey SHAPE cap1800m/s with
+  400m/s retained for departure/corrections. Native affordability remains
+  authoritative. Mapping uses existing95% ACTIVE-type completion; missing
+  or already-complete sensors may remain on station, so explicit early
+  RETURN_SETUP command is documented. Whole probe stays attached.
+  Structural/fleet/moon excursion+return/generated-return checks pass:
+  370 scripts/100 profiles/82 phases/44 bands,0 errors and unchanged
+  KSC_DEORBIT warning. Actual contract, plane transfer, sensor altitude/
+  coverage and return fuel remain native flight checks. No runtime or
+  dependency changes; no game controls/deployment/save edits.
+
 - DONE/source-checked31Oct: Espoir minmus_contract_lander_return variant.
   Low-Pe capture then Ap1041045/Pe465764m, inc21.6/LAN255.5/AoP157.3;
   operator confirms contract, LAND_PREP makes15km polar, later waypoint

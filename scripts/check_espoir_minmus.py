@@ -1,4 +1,4 @@
-"""Local excursion intent/checkpoint/reboot regressions; no native flight VM."""
+"""Moon excursion/contract-return handoffs; source fixtures, no native flight VM."""
 import math
 import re
 from types import SimpleNamespace as NS
@@ -321,6 +321,69 @@ def check_surface_review_stop():
     print('PASS: surface review brakes and prints runnable visit/return commands then yields; unsafe context/interruption/cutoff cannot progress or relaunch, no invented KAC deadline')
 
 
+def check_mun_contract_survey_return():
+    import check_surface_return as home
+    import check_landing_orbit as prep
+    cfg=fleet.profile('mun_contract_survey_return')
+    assert [cfg['SHAPE_'+k] for k in ('AP','PE','INC','LAN','AOP')]==[1737680,1543150,180,-1,-1]
+    assert cfg['TARGET_']=='MUN' and cfg['MISSION_TYPE']=='kerbin_moon'
+    assert cfg['PARKING_ALT']==85000 and cfg['LAUNCH_PLANE_MODE']=='BODY_ORBIT'
+    assert cfg['CAPTURE_PE']==cfg['TARGET_PE']==15000 and cfg['TARGET_AP']==1737680
+    assert cfg['CAPTURE_MIN_PE']==13000 and cfg['CAPTURE_MAX_PE']==17000
+    assert cfg['CAPTURE_INC']==180 and cfg['CAPTURE_LAN']==cfg['CAPTURE_AOP']==-1
+    assert cfg['BPLANE_REQUIRE_PLANE']==0 and cfg['CAPTURE_RESERVE_DV']==1200
+    assert cfg['SEQUENCE'][-4:]==['CAPTURE','SHAPE','SCIENCE_OPS','RETURN_SETUP']
+    assert cfg['SCIENCE_OPS_HOLD']==1 and cfg['SCIENCE_OPS_RUN_ALL']==0
+    assert cfg['SCANSAT_TARGET_COVERAGE']==95 and cfg['SCANSAT_DECOUPLER_TAG']==''
+    assert cfg['SCANSAT_DISPOSE_CARRIER']==cfg['SCANSAT_AUTO_DEORBIT']==cfg['SCANSAT_STAGE_AFTER_RELEASE']==0
+    deps,phases,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
+    for phase in cfg['SEQUENCE']:assert phase.lower() in phases and closure(phases[phase.lower()],deps)
+    # Execute the actual operator command from the achieved retrograde orbit.
+    env,ship,state,events,updates,_=fixture(profile='mun_contract_survey_return')
+    ship.BODY=NS(NAME=fleet.Text('Mun'),RADIUS=200000,MU=6.5138398e10,SOIRADIUS=2429559,ATM=NS(EXISTS=False))
+    ship.PERIAPSIS=1543150;ship.APOAPSIS=1737680;ship.ORBIT.INCLINATION=180
+    state.update(phase='SCIENCE_OPS',shape_budget_id='Mun:1000')
+    env['EXCURSION_RESERVE_DV']=cfg['EXCURSION_RESERVE_DV']
+    env['opts']=fleet.native(dict(after='scan'))
+    entry.call((ROOT/'cmd/orbit.ks').read_text(),'_cmdOrbit',env)
+    assert updates['SEQUENCE']==['EXCURSION_READY','SHAPE','SCANSAT_OPS','RETURN_SETUP']
+    assert [updates['SHAPE_'+k] for k in ('AP','PE','INC','LAN','AOP')]==[70000,70000,90,-1,-1]
+    assert not events and state['phase']=='EXCURSION_READY'
+    assert state['shape_budget_spent']==70 and state['shape_budget_id']=='Mun:1000'
+    fresh=read_settings('\n'.join('SET '+k+' TO '+str(fleet.literal(v))+'.' for k,v in updates.items()),dict(cfg))
+    for key in ('MISSION_ID','SHAPE_DV_CAP','SHAPE_TOTAL_DV_CAP','SHAPE_RESERVE_DV','RETURN_PE','RETURN_PE_MIN','AEROBRAKE_AP_BURN','AEROBRAKE_AP_RESERVE_DV'):
+        assert fresh[key]==cfg[key]
+    env['phaseExcursionReady']()
+    assert events==['cutoff','advance']
+    assert state['launch_time']==1000 and state['mission_id']==cfg['MISSION_ID']
+    # Real SHAPE priority performs the90deg change before lowering apsides.
+    penv,_,_,_,refresh=prep.fixture(False);penv.update(fresh)
+    penv['SHIP'].BODY=ship.BODY
+    penv['SHIP'].PERIAPSIS=1543150;penv['SHIP'].APOAPSIS=1737680
+    penv['SHIP'].ORBIT.INCLINATION=180;penv['SHIP'].ORBIT.LAN=33;refresh()
+    chosen=[]
+    class FirstPlane(Exception):pass
+    def plane(inc,lan):chosen.append((inc,lan));raise FirstPlane
+    penv['planPlaneMatch']=plane
+    targets=prep.ks.call('shapeTargetsWithPrefix',penv,'SHAPE_')
+    try:prep.ks.call('shapeNextBurn',penv,targets)
+    except FirstPlane:pass
+    assert chosen==[(90,33)]
+    # The real return writer must clear the old180deg capture intent and
+    # retain the entry corridor/assist policy after the selected mapping leg.
+    initial=home.defaults()|read_settings((ROOT/'lib/aerobrake_config.ks').read_text(),{},'GLOBAL')
+    read_settings((ROOT/'lib/phases.ks').read_text().split('GLOBAL FUNCTION')[0],initial,'GLOBAL')
+    initial.update(fresh);initial.update(BODY_NAME='MUN',targetPe=cfg['RETURN_PE'])
+    rows=re.findall(r'LOG (.*?) TO profilePath\.',function_body(home.SETUP,'_writeCoastAutomation'))
+    returned=read_settings(home.emit_profile('phaseReturnSetup',initial)+'\n'+'\n'.join(home.expression(row,initial) for row in rows),{})
+    assert returned['TARGET_']=='KERBIN' and returned['CAPTURE_INC']==-1
+    assert returned['SEQUENCE']==cfg['RETURN_SEQUENCE'] and returned['AEROBRAKE_PE']==52000
+    assert returned['MCC_AEROBRAKE_SAFE_PE_MIN']==52000 and returned['MCC_AEROBRAKE_SAFE_PE_MAX']==53000
+    assert returned['AEROBRAKE_AP_BURN']==1 and returned['AEROBRAKE_AP_RESERVE_DV']==10
+    assert returned['COAST_AUTO_WARP']==0 and returned['DESCENT_DECOUPLER_TAG']=='none' and returned['AEROBRAKE_ARM_CHUTES']==1
+    print('PASS: Mun low-Pe capture/retrograde contract review -> real70km polar-map command/plane-first planner preserves identity, budgets and orbital return; fresh home boot clears180deg intent and keeps52km assisted entry/10m/s/chutes/no-autowarp')
+
+
 if __name__=='__main__':
     check_profiles_and_scanner_handoff()
     check_surface_relaunch_and_visit_checkpoint()
@@ -328,3 +391,4 @@ if __name__=='__main__':
     check_per_visit_surface_science()
     check_contract_two_sites_return()
     check_surface_review_stop()
+    check_mun_contract_survey_return()

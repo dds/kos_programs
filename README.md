@@ -1083,6 +1083,7 @@ The two local Kerbin profiles below launch directly to100km polar parking.
 | `kerbin_lander` |100km polar parking, operator-selected Kerbin landing, parachutes with optional engine assistance | Local orbit |
 | `minmus_orbital_surveyor` |1041045m Ap /465764m Pe,21.6deg inc,255.5deg LAN,157.3deg AoP; review before command-selected polar mapping | Minmus transfer and local operations |
 | `minmus_lander` |15km polar parking, selected-site landing, repeat orbital excursions by command | Minmus transfer and local operations |
+| `mun_contract_survey_return` |1737680m Ap /1543150m Pe,180deg contract orbit; review,70km polar mapping, Kerbin return | Mun transfer and local operations,400m/s return floor |
 | `eeloo_flyby` |25km science flyby; optional25km Pe /5000km Ap polar capture, then review | Window-dependent; live capture budget |
 | `moho_orbital_surveyor` | Powered70km polar Moho mapping orbit | Budget departure and capture for the actual window |
 | `moho_lander` |25km polar Moho parking, later site selection and powered surface science | Capture must retain1200m/s for descent |
@@ -1148,6 +1149,41 @@ surface-science timer. It retains the5deg normal /15deg emergency slope,
 sunlight, direct-Kerbin and staging safeguards without assuming RO9 tags.
 Its1200m/s capture reserve is a descent allowance, not a promised return or
 a substitute for the actual lander thrust/fuel checks.
+
+The Espoir Mun profile `mun_contract_survey_return` captures with15km Pe
+and the contract's high Ap, then reaches Ap1737680m/Pe1543150m at180deg
+inclination. This is a retrograde equatorial orbit; LAN and AoP are free.
+Confirm the contract at SCIENCE_OPS before selecting the polar survey:
+
+```ks
+RUNPATH("0:/cmd/orbit.ks",LEXICON("after","scan")).
+REBOOT.
+```
+
+This replaces the contract goals with70km circular/90deg polar goals,
+changes plane while the orbit is still high, then lowers the apsides.
+The complete probe stays together; its contract-era SHAPE expenditure,
+per-burn/cumulative caps and400m/s return reserve survive the command.
+Scanning uses the existing power-managed on-station loop. When it reports
+95% coverage for the scan types it has detected collecting new coverage,
+the mission continues to RETURN_SETUP. That is not a guarantee that every
+configured scan type is installed or complete. Review the SCANsat map;
+if sensors are missing, maps were already complete, or you want an early
+return, stop the loop and use:
+
+```ks
+RUNPATH("0:/cmd/setphase.ks","RETURN_SETUP").
+REBOOT.
+```
+
+Return targets52km Kerbin entry with excess-fuel aerobrake assistance and
+10m/s retained for periapsis repair. Fit parachutes to the retained return
+core. No automatic warp or RO9-specific stage separation is enabled.
+Capture retains1200m/s for later operations; live planners still enforce
+actual fuel/engine and return affordability. Neither reserve guarantees
+completion for a particular spacecraft. Scanner altitude can be overridden
+in the orbit command to match the installed instruments. The contract
+review also permits an explicit early return instead of surveying.
 
 The Minmus surveyor stops in `SCIENCE_OPS` after achieving the requested
 contract orbit. Confirm the objective before changing it. To move to70km polar
