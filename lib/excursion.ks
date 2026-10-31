@@ -12,7 +12,7 @@ GLOBAL FUNCTION excursionIdle {
         AND stateGet("burn_started","false") <> "true"
         AND stateGet("deorbit_burn_started","false") <> "true"
         AND NOT stateGet("hop_route_active",FALSE)
-        AND LIST("DONE","SCIENCE_OPS","SCANSAT_OPS","LANDING_REVIEW"):CONTAINS(stateGet("phase","")).
+        AND LIST("DONE","SCIENCE_OPS","SCANSAT_OPS","LANDING_REVIEW","SURFACE_REVIEW"):CONTAINS(stateGet("phase","")).
 }
 
 GLOBAL FUNCTION excursionOrbitSafe {
@@ -95,6 +95,17 @@ GLOBAL FUNCTION excursionSelect {
     LOCAL seq IS LIST("EXCURSION_READY","SHAPE","SCIENCE_OPS","DONE").
     IF after = "scan" { SET seq TO LIST("EXCURSION_READY","SHAPE","SCANSAT_OPS","DONE"). }
     IF visit { SET seq TO LIST("EXCURSION_READY","SHAPE","LAND_DEORBIT","LAND_ASSIST","SURFACE_SCIENCE","DONE"). }
+    // A return-capable surface campaign keeps its original return policy.
+    // Selecting another site must not silently replace that tail with DONE.
+    LOCAL returnMission IS SEQUENCE:CONTAINS("SURFACE_RETURN_SETUP") OR SEQUENCE:CONTAINS("RETURN_SETUP").
+    IF visit AND returnMission {
+        SET seq TO LIST("EXCURSION_READY","SHAPE","LAND_DEORBIT","LAND_ASSIST",
+            "SURFACE_SCIENCE","SURFACE_REVIEW","SURFACE_RETURN_SETUP").
+    }
+    IF NOT visit AND returnMission {
+        SET seq TO LIST("EXCURSION_READY","SHAPE","SCIENCE_OPS","RETURN_SETUP").
+        IF after = "scan" { SET seq TO LIST("EXCURSION_READY","SHAPE","SCANSAT_OPS","RETURN_SETUP"). }
+    }
     IF surface {
         LOCAL ascentSeq IS LIST("PRELAUNCH","LAUNCH","PARK").
         FOR phaseName IN seq { ascentSeq:ADD(phaseName). }

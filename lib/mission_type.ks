@@ -80,6 +80,7 @@ GLOBAL FUNCTION missionTypeConditionalRoots {
         // Small landed science provider survives touchdown with no archive
         // link. Other landing missions do not pay for this optional phase.
         IF SEQUENCE:CONTAINS("SURFACE_SCIENCE") { roots:ADD("science_surface"). }
+        IF SEQUENCE:CONTAINS("SURFACE_REVIEW") { roots:ADD("surface_review"). }
         IF SEQUENCE:CONTAINS("SURFACE_RETURN_SETUP")
                 AND NOT SEQUENCE:CONTAINS("HOP_ROUTE_SETUP")
                 AND NOT SEQUENCE:CONTAINS("HOP_AUTO_REVIEW") { roots:ADD("return_setup"). }

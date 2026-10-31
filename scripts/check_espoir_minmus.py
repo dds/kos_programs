@@ -1,5 +1,6 @@
 """Local excursion intent/checkpoint/reboot regressions; no native flight VM."""
 import math
+import re
 from types import SimpleNamespace as NS
 
 import check_entry_landing as entry
@@ -224,8 +225,106 @@ def check_per_visit_surface_science():
     print('PASS: each explicit landing visit gets a distinct science context and KAC dwell before returning to prompt; rebooting the same visit preserves its deadline and samples ledger')
 
 
+def check_contract_two_sites_return():
+    import check_surface_return as home
+    cfg=fleet.profile('minmus_contract_lander_return')
+    assert [cfg['SHAPE_'+key] for key in ('AP','PE','INC','LAN','AOP')]==[1041045,465764,21.6,255.5,157.3]
+    assert cfg['PARKING_ALT']==85000 and cfg['LAUNCH_PLANE_MODE']=='BODY_ORBIT'
+    assert cfg['CAPTURE_PE']==cfg['TARGET_PE']==15000 and cfg['TARGET_AP']==1041045
+    assert cfg['CAPTURE_INC']==21.6 and cfg['CAPTURE_LAN']==cfg['CAPTURE_AOP']==-1
+    assert cfg['CAPTURE_MIN_PE']<=cfg['CAPTURE_PE']<=cfg['CAPTURE_MAX_PE']
+    assert cfg['SCIENCE_OPS_HOLD']==1 and cfg['SCIENCE_OPS_RUN_ALL']==0
+    seq=cfg['SEQUENCE']
+    assert seq[seq.index('SHAPE'):]==['SHAPE','SCIENCE_OPS','LAND_PREP','LANDING_REVIEW',
+        'LAND_DEORBIT','LAND_ASSIST','SURFACE_SCIENCE','SURFACE_REVIEW','SURFACE_RETURN_SETUP']
+    assert cfg['LAND_PREP_AP']==cfg['LAND_PREP_PE']==15000 and cfg['LAND_PREP_INC']==90 and cfg['LAND_PREP_LAN']==-1
+    assert cfg['TARGET_LOCK']==cfg['LANDING_AUTO_TARGET']==0 and cfg['SCIENCE_SURFACE_DWELL']==600
+    # Native planner chooses plane before lowering this high contract orbit.
+    import check_landing_orbit as prep
+    env,saved,events,nodes,refresh=prep.fixture(False);env.update(cfg)
+    ship=env['SHIP'];ship.PERIAPSIS=465764;ship.APOAPSIS=1041045
+    ship.ORBIT.INCLINATION=21.6;ship.ORBIT.LAN=255.5;refresh()
+    targets=env['landingPrepTargets']()
+    assert targets['LAN']==255.5 and targets['INC']==90
+    planned=[]
+    env['shapeErrors']=lambda _:prep.Lex(PLANE=68.4,AP=1026045,PE=450764)
+    env['_shapeNodeAboveMinimum']=lambda *_:True
+    # First plane call is the actual planner's first attempted correction.
+    # Stop there to avoid replacing native plane propagation with a fake burn.
+    class FirstPlane(Exception):pass
+    def plane(inc,lan):planned.append((inc,lan));raise FirstPlane
+    env['planPlaneMatch']=plane
+    try:prep.ks.call('shapeNextBurn',env,targets)
+    except FirstPlane:pass
+    assert planned==[(90,255.5)]
+    deps,phases,bands=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
+    assert bands['surface_review']==['surface_review']
+    assert closure(phases['surface_review'],deps)=={'surface_review','thrust_cutoff'}
+    for phase in seq:assert phase.lower() in phases
+    # Two successive command/reboot visits preserve the return tail, settings
+    # and spending. They do not launch, stage or burn in the command itself.
+    for visit in (1,2):
+        env,ship,state,events,updates,_=fixture(True,'minmus_contract_lander_return')
+        env['EXCURSION_RESERVE_DV']=cfg['EXCURSION_RESERVE_DV']
+        state.update(phase='SURFACE_REVIEW',surface_visit=visit-1)
+        assert env['excursionSelect'](fleet.native(dict(lat=-10*visit,lng=20*visit)),True)
+        assert updates['SEQUENCE'][-3:]==['SURFACE_SCIENCE','SURFACE_REVIEW','SURFACE_RETURN_SETUP']
+        assert state['shape_budget_spent']==70 and not events
+        fresh=read_settings('\n'.join('SET '+key+' TO '+str(fleet.literal(value))+'.' for key,value in updates.items()),dict(cfg))
+        for key in ('RETURN_PE','RETURN_PE_MIN','RETURN_ARM_CHUTES','AEROBRAKE_AP_BURN','AEROBRAKE_AP_RESERVE_DV','COAST_AUTO_WARP'):
+            assert fresh[key]==cfg[key]
+    for after in ('review','scan'):
+        env,_,_,events,updates,_=fixture(True,'minmus_contract_lander_return')
+        assert env['excursionSelect'](fleet.native(dict(after=after)),False)
+        assert updates['SEQUENCE'][-1]=='RETURN_SETUP' and not events
+    # Execute both real return serializers with the real coast policy writer.
+    writer=function_body(home.SETUP,'_writeCoastAutomation')
+    rows=re.findall(r'LOG (.*?) TO profilePath\.',writer)
+    def coast(values):return '\n'.join(home.expression(row,values) for row in rows)
+    initial=home.defaults()|read_settings((ROOT/'lib/aerobrake_config.ks').read_text(),{},'GLOBAL')
+    read_settings((ROOT/'lib/phases.ks').read_text().split('GLOBAL FUNCTION')[0],initial,'GLOBAL')
+    initial.update(cfg)
+    initial.update(BODY_NAME='MINMUS',LAUNCH_AZIMUTH=90,COAST_HEALTH_CHECK=1,SOLAR_REORIENT_PERIOD=21600)
+    surface=read_settings(home.emit_profile('phaseSurfaceReturnSetup',initial)+'\n'+coast(initial),home.defaults())
+    surface['targetPe']=surface['RETURN_PE']
+    returned=read_settings(home.emit_profile('phaseReturnSetup',surface)+'\n'+coast(surface),{})
+    assert surface['SEQUENCE']==['PRELAUNCH','LAUNCH','PARK','RETURN_SETUP']
+    assert surface['PARKING_ALT']==15000 and surface['LAUNCH_INCLINATION']==0
+    assert returned['SEQUENCE']==['ESCAPE','COAST','MCC','AEROBRAKE','DESCENT','DONE']
+    assert returned['AEROBRAKE_PE']==returned['MCC_AEROBRAKE_SAFE_PE_MIN']==52000
+    assert returned['AEROBRAKE_AP_BURN']==1 and returned['AEROBRAKE_AP_RESERVE_DV']==10 and returned['COAST_AUTO_WARP']==0
+    assert returned['AEROBRAKE_ARM_CHUTES']==1 and returned['DESCENT_DECOUPLER_TAG']=='none'
+    print('PASS: low-Pe capture/strict contract precede high-orbit polar change and15km preparation; both later site visits retain return intent/fuel ledgers; two fresh return boots keep52km entry, chutes, excess-fuel assistance/10m/s and no autowarp')
+
+
+def check_surface_review_stop():
+    source=(ROOT/'lib/surface_review.ks').read_text()
+    source=source.replace('UNLOCK STEERING.','fixture_unlock().').replace('SAS OFF.','SET SAS TO FALSE.').replace('BRAKES ON.','fixture_brakes().')
+    source=re.sub(r'\bPRINT (.*?)\.(?=\s*(?:\n|$))',r'fixture_print(\1).',source,flags=re.S)
+    for fault in ('ok','node','abort','moving','wrong-body','thrust','pilot','pending','burn','deorbit','cutoff'):
+        env,ship,state,events,_,_=fixture(True,'minmus_contract_lander_return')
+        printed=[];env.update(CHAR=lambda n:chr(n),fixture_print=printed.append,fixture_brakes=lambda:events.append('brakes'))
+        if fault=='node':env['HASNODE']=True
+        if fault=='abort':env['ABORT']=True
+        if fault=='moving':ship.VELOCITY.SURFACE.MAG=1
+        if fault=='wrong-body':env['getTarget']=lambda:'Mun'
+        if fault=='thrust':ship.THRUST=1
+        if fault=='pilot':ship.CONTROL.PILOTMAINTHROTTLE=.1
+        if fault in ('pending','burn','deorbit'):state[{'pending':'burn_pending','burn':'burn_started','deorbit':'deorbit_burn_started'}[fault]]='true'
+        if fault=='cutoff':env['thrustCutoffOk']=lambda:False
+        entry.call(source,'phaseSurfaceReview',env)
+        assert events[-1]=='hold' and 'advance' not in events
+        assert ('brakes' in events)==(fault=='ok')
+        if fault=='ok':
+            assert any('RUNPATH("0:/cmd/visit.ks")' in row for row in printed)
+            assert any('RUNPATH("0:/cmd/setphase.ks","SURFACE_RETURN_SETUP")' in row for row in printed)
+    print('PASS: surface review brakes and prints runnable visit/return commands then yields; unsafe context/interruption/cutoff cannot progress or relaunch, no invented KAC deadline')
+
+
 if __name__=='__main__':
     check_profiles_and_scanner_handoff()
     check_surface_relaunch_and_visit_checkpoint()
     check_command_and_checkpoint_guards()
     check_per_visit_surface_science()
+    check_contract_two_sites_return()
+    check_surface_review_stop()

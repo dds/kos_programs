@@ -1158,7 +1158,47 @@ RUNPATH("0:/cmd/orbit.ks",LEXICON("after","scan")).
 REBOOT.
 ```
 
-The Minmus lander stops in `LANDING_REVIEW` for its first site; use `landsite`
+`minmus_contract_lander_return` adds a complete return-capable campaign. It
+launches into85km LKO, captures Minmus at15km Pe with the contract's high Ap,
+then shapes Ap1041045/Pe465764m, inc21.6/LAN255.5/AoP157.3deg. Confirm the
+contract at the `SCIENCE_OPS` prompt, then run:
+
+```ks
+RUNPATH("0:/cmd/setphase.ks","LAND_PREP").
+REBOOT.
+```
+
+Preparation changes the plane while the orbit is high, leaves LAN free,
+then lowers to15km polar parking. Contract elements and their tighter
+tolerances remain separate. At `LANDING_REVIEW`, select the first surveyed
+waypoint and run `RUNPATH("0:/cmd/landsite.ks").` then `REBOOT.`. Coordinates
+are deliberately unset until you select them; sunlight, radio, terrain and
+native powered-descent checks still apply. After ten minutes of surface
+science with a KAC timer, `SURFACE_REVIEW` brakes and returns to the prompt.
+Select the second waypoint, run `RUNPATH("0:/cmd/visit.ks").` and `REBOOT.`.
+This local orbital excursion returns to the same science/review stop and
+preserves the Kerbin return. After the second site, run:
+
+```ks
+RUNPATH("0:/cmd/setphase.ks","SURFACE_RETURN_SETUP").
+REBOOT.
+```
+
+Return ascends into15km parking without requiring an equatorial plane
+change, then targets52km Kerbin entry. Excess-fuel aerobraking is enabled
+with10m/s retained for Pe repair; parachutes on the retained core are
+required. No RO9-specific separator tags or automatic descent separation
+are assumed. Configure assist stage tags for the actual build if it should
+discard exhausted stages. Contract shaping uses the active transfer stage
+and normal guarded executor; landing preparation still requires each burn
+to fit its current stage. It can hold for deliberate staging if that fuel
+is exhausted. Reserves900m/s after capture/contract/preparation and500m/s
+after the visit command's conservative ascent allowance are admission
+floors, not a proven whole-campaign budget. They do not guarantee two sites
+and a return on any particular hardware. Extra visits and an early return
+remain explicit choices. No automatic warp is enabled.
+
+The original Minmus lander stops in `LANDING_REVIEW` for its first site; use `landsite`
 as described below. After each touchdown it takes ten minutes for science,
 with a KAC review alarm, sets the brakes and returns to the prompt. No relaunch
 is automatic. For another site, select a waypoint on Minmus and run:

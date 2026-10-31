@@ -6,6 +6,27 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- DONE/source-checked31Oct: Espoir minmus_contract_lander_return variant.
+  Low-Pe capture then Ap1041045/Pe465764m, inc21.6/LAN255.5/AoP157.3;
+  operator confirms contract, LAND_PREP makes15km polar, later waypoint
+  selects each of two sites. Ten-minute surface science/KAC and explicit
+  review between visits; preserve return route through command excursions.
+  Return52km Kerbin entry with optional excess-fuel braking/10m/s reserve.
+  Keep active-stage admission and native landing/fuel safeguards.
+  New lean SURFACE_REVIEW stops safely and prints runnable visit/return
+  commands. Visit retains surface return; orbit/scan excursions retain
+  orbital return. Original Minmus profiles/default behavior unchanged.
+  Both generated return boots preserve52km/10m/s/aeroassist/no-autowarp.
+  All98 routine files pass152.89s;364 scripts/96 profiles/81 phases/
+  43 bands,0 errors and unchanged KSC_DEORBIT warning. Reports:
+  /tmp/kos-espoir-minmus-contract-20261031.{json,log}.
+  Native compile, contract completion, stage/fuel margins, both selected
+  descents and return remain flight checks. No game controls/save edits.
+- QUEUED after committing Minmus work: Kerbin relay Molniya north/south
+  dwell, e>0.6, inc63..64deg, AoP270/90deg, period9697..11852s.
+  Investigate one-launch deployment; separate flights acceptable. Do not
+  claim opposite apsidal orbits from simple same-orbit phasing.
+
 - 31Oct Espoir Mun/Minmus commnet tripacks implemented/source-checked;
   native deployment remains unproven. User chose three-relay equatorial
   starter networks, polar additions later. mun_relay_tripack1000km and

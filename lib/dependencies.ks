@@ -84,6 +84,7 @@ GLOBAL FUNCTION dependencyLibs {
         "science_entry", LIST("science_flight", "aerobrake_ap_math", "coast_wait", "thrust_cutoff"),
         "science_impact", LIST("science_entry", "maneuver_plan"),
         "science_surface", LIST("science_flight", "thrust_cutoff"),
+        "surface_review", LIST("thrust_cutoff"),
         "orbital_survey", LIST("science", "landing_math", "coast_wait", "thrust_cutoff"),
         "aerobrake", LIST("maneuver", "utils", "landing_config", "aerobrake_assist", "solar", "reentry_pe"),
         "reentry_pe", LIST("maneuver_plan"),
@@ -136,6 +137,7 @@ GLOBAL FUNCTION dependencyPhases {
         "ATMO_DEORBIT", LIST("atmo_deorbit"),
         "SCIENCE_IMPACT", LIST("science_impact"),
         "SURFACE_SCIENCE", LIST("science_surface"),
+        "SURFACE_REVIEW", LIST("surface_review"),
         "ORBITAL_SURVEY", LIST("orbital_survey"),
         "LAUNCH", LIST("launch"),
         "HOP", LIST("hop_control"),
@@ -247,6 +249,7 @@ GLOBAL FUNCTION dependencyBands {
         "ATMO_DEORBIT", LIST("ATMO_DEORBIT"),
         "SCIENCE_IMPACT", LIST("SCIENCE_IMPACT"),
         "SURFACE_SCIENCE", LIST("SURFACE_SCIENCE"),
+        "SURFACE_REVIEW", LIST("SURFACE_REVIEW"),
         "LANDING", LIST("LAND_ASSIST", "LAND"),
         "MOLNIYA", LIST("MOLNIYA", "MOLNIYA_INSERT"),
         "DONE", LIST("DONE")
@@ -270,6 +273,7 @@ GLOBAL FUNCTION dependencyBindPhase {
     ELSE IF phaseKey = "ATMO_DEORBIT" { phaseMapSet(phaseMap, phaseKey, phaseAtmoDeorbit@). }
     ELSE IF phaseKey = "SCIENCE_IMPACT" { phaseMapSet(phaseMap, phaseKey, phaseScienceImpact@). }
     ELSE IF phaseKey = "SURFACE_SCIENCE" { phaseMapSet(phaseMap, phaseKey, phaseSurfaceScience@). }
+    ELSE IF phaseKey = "SURFACE_REVIEW" { phaseMapSet(phaseMap, phaseKey, phaseSurfaceReview@). }
     ELSE IF phaseKey = "ORBITAL_SURVEY" { phaseMapSet(phaseMap, phaseKey, phaseOrbitalSurvey@). }
     ELSE IF phaseKey = "LAUNCH" { phaseMapSet(phaseMap, phaseKey, phaseLaunch@). }
     ELSE IF phaseKey = "HOP" { phaseMapSet(phaseMap, phaseKey, phaseHop@). }
