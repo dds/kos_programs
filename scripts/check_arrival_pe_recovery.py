@@ -193,7 +193,9 @@ def check_midcourse_deferral():
     # change is needed. Only the existing coast/refinement pair is entered.
     base,target,_=defer_fixture()
     advanced,cleared=[],[]
-    base.update(HASNODE=False, maneuverBurnInterrupted=lambda:False,
+    base.update(HASNODE=False,phaseShouldYield=False,stateRemove=lambda *_:None,
+                stateGet=lambda key,default='':default,
+                maneuverBurnInterrupted=lambda:False,
                 _bplaneHandoffMidcourseRetry=lambda *_:False,
                 _bplaneTargetBody=lambda:target,bplanePauseForReview=lambda:False,
                 _bplaneEnsureSoiAlarm=lambda *_:None,

@@ -17,6 +17,92 @@ GLOBAL ESCAPE_AOP IS -1.
 LOCAL MAX_RETRIES IS 5.
 GLOBAL TRANSFER_POST_BURN_HANDOFF_SOI_MULT IS 1.0.
 
+// Impact is a correction-required route, never a safe coast/capture result.
+LOCAL FUNCTION _transferImpactHandoff {
+    PARAMETER targetBody.
+    IF ABORT OR phaseShouldYield OR WARP <> 0 OR SHIP <> KUNIVERSE:ACTIVEVESSEL
+            OR NOT transferCorrectionFollows(xferSeq) OR targetBody:BODY <> SHIP:BODY
+            OR NOT SHIP:ORBIT:HASNEXTPATCH OR SHIP:ORBIT:NEXTPATCH:BODY <> targetBody
+            OR targetBody:ATM:EXISTS OR NOT maneuverDepartureFlown()
+            OR stateGet("mission_id","") = "" OR stateGetNum("burn_departure_time",-1) < 0
+            OR stateGet("burn_departure_target","") <> targetBody:NAME
+            OR NOT (SHIP:THRUST >= 0 AND SHIP:THRUST <= 0.001
+                AND SHIP:CONTROL:MAINTHROTTLE <= 0 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0)
+            OR NOT (TRANSFER_IMPACT_MIN_LEAD >= 600 AND TRANSFER_IMPACT_MIN_LEAD < 1e30) { RETURN FALSE. }
+    LOCAL hit IS findArrivalPatch(0,targetBody).
+    IF hit = 0 { RETURN FALSE. }
+    LOCAL pe IS hit["patch"]:PERIAPSIS.
+    IF NOT (pe <= 0 AND pe > -targetBody:RADIUS
+            AND hit["entryUt"] < 1e30
+            AND hit["entryUt"]-TIME:SECONDS > TRANSFER_IMPACT_MIN_LEAD) { RETURN FALSE. }
+    LOCAL prior IS stateGet("xing_impact_handoff",LEXICON()).
+    LOCAL stamped IS prior:HASKEY("MISSION") AND prior:HASKEY("LAUNCH")
+        AND prior:HASKEY("TARGET") AND prior:HASKEY("DEPARTURE") AND prior:HASKEY("ORIGIN").
+    IF stamped {
+        SET stamped TO prior["MISSION"] = stateGet("mission_id","")
+            AND prior["LAUNCH"] = stateGetNum("launch_time",0) AND prior["TARGET"] = targetBody:NAME
+            AND prior["DEPARTURE"] = stateGetNum("burn_departure_time",-1)
+            AND prior["ORIGIN"] = SHIP:BODY:NAME.
+    }
+    IF NOT stamped {
+        LOCAL report IS stateGet("last_burn_report","").
+        IF NOT (report:CONTAINS("phase=XING ") AND report:CONTAINS("body="+SHIP:BODY:NAME+" ")
+                AND report:CONTAINS("shutdownAttempted=False") AND report:CONTAINS("thrustStopped=True")) { RETURN FALSE. }
+        IF maneuverBurnInterrupted() {
+            LOCAL residual IS stateGetNum("burn_abort_residual",-1).
+            LOCAL planned IS stateGetNum("burn_dv",-1).
+            IF stateGet("burn_abort_reason","") <> "residual-outside-tolerance"
+                    OR stateGet("burn_body","") <> SHIP:BODY:NAME OR NOT HASNODE
+                    OR ABS(NEXTNODE:TIME-stateGetNum("burn_node_time",-1)) >= 0.5
+                    OR NOT (stateGetNum("burn_abort_time",-1) >= stateGetNum("burn_departure_time",-1)
+                        AND stateGetNum("burn_abort_time",-1) <= TIME:SECONDS)
+                    OR NOT (planned > 0 AND planned < 1e30
+                        AND residual >= 0 AND residual <= MIN(0.3,planned*0.01))
+                    OR NOT report:CONTAINS("cutoffFault=residual-outside-tolerance")
+                    OR NOT (report:CONTAINS("reason=live-node-trim")
+                        OR report:CONTAINS("reason=live-thrust-axis-trim")
+                        OR report:CONTAINS("reason=live-vector-passed-target")) { RETURN FALSE. }
+        } ELSE IF HASNODE OR NOT report:CONTAINS("cutoffFault= shutdownAttempted=False") { RETURN FALSE. }
+        IF NOT thrustCutoffOk() { RETURN FALSE. }
+        // Persist intent before clearing the interrupted-node markers. A
+        // reboot between cleanup and phase advance cannot repeat departure.
+        stateSet("xing_impact_handoff",LEXICON("MISSION",stateGet("mission_id",""),
+            "LAUNCH",stateGetNum("launch_time",0),"TARGET",targetBody:NAME,
+            "ORIGIN",SHIP:BODY:NAME,"DEPARTURE",stateGetNum("burn_departure_time",-1))).
+    } ELSE IF HASNODE AND (NOT maneuverBurnInterrupted()
+            OR ABS(NEXTNODE:TIME-stateGetNum("burn_node_time",-1)) >= 0.5) { RETURN FALSE. }
+    _recordXingArrivalUt(targetBody).
+    maneuverAcceptHandoff("arrival-correction-required").
+    mLogSummary("STATS transfer handoff decision=correction-required target="+targetBody:NAME
+        +" PeKm="+(pe/1000)+" entryUt="+hit["entryUt"]+" automaticStaging=False").
+    RETURN TRUE.
+}
+
+LOCAL FUNCTION _advanceTransfer {
+    PARAMETER targetBody.
+    LOCAL patch IS _getTargetPatch(SHIP,targetBody).
+    LOCAL impact IS patch <> 0 AND patch:PERIAPSIS <= 0.
+    IF impact AND NOT _transferImpactHandoff(targetBody) {
+        _holdInterruptedTransfer(). RETURN.
+    }
+    _recordXingArrivalUt(targetBody).
+    IF impact {
+        LOCAL entryUt IS stateGetNum("xing_arrival_ut",0).
+        ensureSoiAlarm(targetBody,entryUt,"Impact encounter: BPLANE correction still required.").
+        LOCAL alarm IS kacEnsureAlarm("Correct impact: "+targetBody:NAME,
+            entryUt-TRANSFER_IMPACT_MIN_LEAD,"Manual stage review: REBOOT into BPLANE before this deadline.",1).
+        stateSet("xing_impact_review_alarm",alarm).
+    }
+    nextPhase(xferSeq).
+    IF impact {
+        PRINT "IMPACT ENCOUNTER RETAINED. BPLANE correction is required before arrival.".
+        PRINT "Optional: manually stage now with throttle off. No automatic separation.".
+        PRINT "Then REBOOT. to plan from the current orbit and current propulsion.".
+        PRINT "Do not resume or repeat the old XING node.".
+        yieldToPrompt().
+    }
+}
+
 LOCAL FUNCTION _holdInterruptedTransfer {
     IF NOT maneuverDepartureFlown() { RETURN FALSE. }
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
@@ -76,6 +162,12 @@ LOCAL FUNCTION _postBurnTransferHandoffOk {
 
     LOCAL peMax IS targetBody:SOIRADIUS * TRANSFER_POST_BURN_HANDOFF_SOI_MULT.
     LOCAL patch IS _getTargetPatch(SHIP, targetBody).
+    IF patch <> 0 AND patch:PERIAPSIS <= 0 {
+        IF _transferImpactHandoff(targetBody) { RETURN TRUE. }
+        mLogSummary("STATS transfer handoff label="+label+" decision=hold status=impact-recovery-not-ready"
+            +" target="+targetBody:NAME+" PeKm="+(patch:PERIAPSIS/1000)).
+        RETURN FALSE.
+    }
     IF patch <> 0 AND patch:PERIAPSIS > 0 AND patch:PERIAPSIS <= peMax {
         _recordXingArrivalUt(targetBody).
         maneuverAcceptHandoff().
@@ -90,6 +182,9 @@ LOCAL FUNCTION _postBurnTransferHandoffOk {
     }
 
     IF SHIP:STATUS <> "ESCAPING" AND SHIP:ORBIT:ECCENTRICITY < 1 {
+        mLogSummary("STATS transfer handoff label="+label+" decision=hold status=no-usable-target-patch"
+            +" target="+targetBody:NAME+" hasPatch="+(patch <> 0)
+            +" PeKm="+(SHIP:PERIAPSIS/1000)+" ApKm="+(SHIP:APOAPSIS/1000)).
         RETURN FALSE.
     }
 
@@ -128,7 +223,7 @@ GLOBAL FUNCTION phaseTransfer {
     IF (NOT HASNODE OR maneuverDepartureFlown())
             AND _postBurnTransferHandoffOk(target, "phase-entry") {
         orbitSummary().
-        nextPhase(xferSeq).
+        _advanceTransfer(target).
         RETURN.
     }
     IF maneuverDepartureFlown() AND NOT BURN_RESUME_REQUESTED {
@@ -156,12 +251,12 @@ GLOBAL FUNCTION phaseTransfer {
         IF success {
             _recordXingArrivalUt(target).
             orbitSummary().
-            nextPhase(xferSeq).
+            _advanceTransfer(target).
             RETURN.
         }
         IF _postBurnTransferHandoffOk(target, "existing-node-failed") {
             orbitSummary().
-            nextPhase(xferSeq).
+            _advanceTransfer(target).
             RETURN.
         }
         IF _holdInterruptedTransfer() { RETURN. }
@@ -170,7 +265,7 @@ GLOBAL FUNCTION phaseTransfer {
     } ELSE IF stateGet("burn_pending", "false") = "true" {
         IF _postBurnTransferHandoffOk(target, "missing-node-pending") {
             orbitSummary().
-            nextPhase(xferSeq).
+            _advanceTransfer(target).
             RETURN.
         }
         IF _holdInterruptedTransfer() { RETURN. }
@@ -201,7 +296,7 @@ GLOBAL FUNCTION phaseTransfer {
             IF NOT success {
                 IF _postBurnTransferHandoffOk(target, "planned-node-failed") {
                     orbitSummary().
-                    nextPhase(xferSeq).
+                    _advanceTransfer(target).
                     RETURN.
                 }
                 IF _holdInterruptedTransfer() { RETURN. }
@@ -217,7 +312,7 @@ GLOBAL FUNCTION phaseTransfer {
         }
     }
     _recordXingArrivalUt(target).
-    nextPhase(xferSeq).
+    _advanceTransfer(target).
 }
 
 GLOBAL FUNCTION phaseXing {

@@ -14,6 +14,11 @@ SET PARKING_ALT TO 85000.
 SET LAUNCH_INCLINATION TO 0.
 SET LAUNCH_PLANE_MODE TO "BODY_ORBIT".
 SET TRANSFER_SCAN_SAMPLES_PER_ORBIT TO 16.
+// Keep a cheap stage-impact path; pause for optional manual staging before
+// BPLANE repairs the probe. Never separate hardware automatically.
+SET TRANSFER_IMPACT_TARGET TO 1.
+SET TRANSFER_IMPACT_AIM_PE TO -5000.
+SET TRANSFER_IMPACT_REFINE_DV_CAP TO 5.
 // Capture low, retaining high Ap for inexpensive plane/apsis corrections.
 // Prefer retrograde arrival; SHAPE owns the required final180deg plane.
 SET CAPTURE_PE TO 15000.

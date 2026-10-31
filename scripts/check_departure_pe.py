@@ -14,6 +14,7 @@ ks.SOURCES += '\n' + SOURCE
 
 class KList(list):
     ADD = list.append
+    LENGTH = property(len)
 
 
 class Node:
@@ -33,7 +34,7 @@ class Node:
 def fixture(response, cap=100, first='Mun'):
     nd = Node()
     primary = NS(NAME='Kerbin', MU=3.5316e12, BODY=0)
-    target = NS(NAME='Mun', BODY=primary)
+    target = NS(NAME='Mun', BODY=primary,RADIUS=200000,ATM=NS(EXISTS=False))
 
     class LivePatch:
         @property
@@ -42,13 +43,18 @@ def fixture(response, cap=100, first='Mun'):
 
     patch = LivePatch()
     env = dict(BODY=primary, TIME=NS(SECONDS=0), TRANSFER_PE_TOL=2000, TRANSFER_PE_REFINE_DV_CAP=cap,
+               TRANSFER_IMPACT_TARGET=0,TRANSFER_IMPACT_AIM_PE=-5000,TRANSFER_IMPACT_REFINE_DV_CAP=5,
+               TRANSFER_IMPACT_MIN_LEAD=1800,SEQUENCE=KList(('XING','BPLANE')),
+               SHIP=NS(MASS=1,AVAILABLETHRUST=10),
                LIST=lambda *xs: KList(xs), SQRT=math.sqrt, ROUND=round,
                fixture_wait=lambda _: None,
                _getTargetPatch=lambda *_: 0 if response(nd) is None else patch,
                _nodeAxisGet=lambda node, axis: getattr(node, axis),
                _nodeAxisSet=lambda node, axis, value: setattr(node, axis, value),
                _firstPatchBodyName=lambda _: first)
-    for name in ('transferDepartureReady', '_refineLocalDeparturePe', '_refineLocalDepartureCandidates'):
+    env['findArrivalPatch']=lambda *_:{'patch':patch,'entryUt':nd.TIME+20000}
+    for name in ('transferCorrectionFollows','transferImpactTargetEnabled','transferDepartureAim',
+                 'transferDepartureReady', '_refineLocalDeparturePe', '_refineLocalDepartureCandidates'):
         env[name] = lambda *args, name=name: ks.call(name, env, *args)
     return env, nd, target
 

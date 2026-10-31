@@ -2061,6 +2061,11 @@ LOCAL FUNCTION _bplaneExistingNodeAcceptable {
 // is still outside the corridor; CAPTURE cannot fix a bad Pe/plane.
 // ============================================================
 GLOBAL FUNCTION phaseBplane {
+    IF NOT ABORT AND NOT phaseShouldYield {
+        LOCAL departureReview IS stateGet("xing_impact_review_alarm","").
+        IF departureReview <> "" { DELETEALARM(departureReview). }
+        stateRemove("xing_impact_review_alarm").
+    }
     IF maneuverBurnInterrupted() {
         IF _bplaneRecoverStoppedTrim() { RETURN. }
         _bplaneHoldCorrection("interrupted-correction-use-arrival-replan"). RETURN.

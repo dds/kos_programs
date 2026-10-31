@@ -24,6 +24,38 @@ GLOBAL TRANSFER_TMI_HANDOFF_SOI_MULT IS 1.0.
 GLOBAL TRANSFER_TMI_HANDOFF_MAX_STEPS IS 6.
 GLOBAL TRANSFER_PE_TOL IS 2000.
 GLOBAL TRANSFER_PE_REFINE_DV_CAP IS 100.
+// Prefer a cheap airless impact only when BPLANE is the immediate next phase.
+// CAPTURE_PE remains the later safe periapsis; positive departure is a fallback.
+GLOBAL TRANSFER_IMPACT_TARGET IS 0.
+GLOBAL TRANSFER_IMPACT_AIM_PE IS -5000.
+GLOBAL TRANSFER_IMPACT_REFINE_DV_CAP IS 5.
+GLOBAL TRANSFER_IMPACT_MIN_LEAD IS 1800.
+
+GLOBAL FUNCTION transferCorrectionFollows {
+    PARAMETER seq.
+    LOCAL idx IS 0.
+    UNTIL idx >= seq:LENGTH {
+        IF seq[idx] = "XING" { RETURN idx+1 < seq:LENGTH AND seq[idx+1] = "BPLANE". }
+        SET idx TO idx+1.
+    }
+    RETURN FALSE.
+}
+
+GLOBAL FUNCTION transferImpactTargetEnabled {
+    PARAMETER targetBody.
+    RETURN TRANSFER_IMPACT_TARGET > 0 AND targetBody:BODY = BODY
+        AND NOT targetBody:ATM:EXISTS AND transferCorrectionFollows(SEQUENCE)
+        AND TRANSFER_IMPACT_AIM_PE < 0 AND TRANSFER_IMPACT_AIM_PE > -targetBody:RADIUS
+        AND TRANSFER_IMPACT_REFINE_DV_CAP >= 0 AND TRANSFER_IMPACT_REFINE_DV_CAP < 1e30
+        AND TRANSFER_IMPACT_MIN_LEAD >= 600 AND TRANSFER_IMPACT_MIN_LEAD < 1e30.
+}
+
+GLOBAL FUNCTION transferDepartureAim {
+    PARAMETER targetBody.
+    PARAMETER capturePe.
+    IF transferImpactTargetEnabled(targetBody) { RETURN TRANSFER_IMPACT_AIM_PE. }
+    RETURN capturePe.
+}
 
 
 // ============================================================
@@ -63,10 +95,16 @@ GLOBAL FUNCTION planTransfer {
 
     LOCAL isLocal IS (targetBody:BODY = BODY).
     LOCAL isEscape IS (targetBody = BODY:BODY).
+    LOCAL departurePe IS targetPe.
+    IF isLocal { SET departurePe TO transferDepartureAim(targetBody,targetPe). }
     mLog("STATS transfer setup target=" + targetBody:NAME
         + " local=" + isLocal + " escape=" + isEscape
         + " mode=arrival-pretarget"
         + " requestedCapturePeKm=" + ROUND(targetPe/1000,1)).
+    IF departurePe <> targetPe {
+        mLog("STATS transfer departure-aim mode=impact-preferred peKm="+(departurePe/1000)
+            +" capturePeKm="+(targetPe/1000)+" refineCap="+TRANSFER_IMPACT_REFINE_DV_CAP).
+    }
 
     // Resolve capture orbit direction before seeding the raw transfer
     // so the raw planners can keep their existing scoring inputs. Exact
@@ -86,7 +124,7 @@ GLOBAL FUNCTION planTransfer {
     IF isEscape {
         SET nd TO _planEscapeTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
     } ELSE IF isLocal {
-        SET nd TO _planLocalTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
+        SET nd TO _planLocalTransfer(targetBody, departurePe, captureInc, lanTarget, aopTarget, centralBody, mu,targetPe).
     } ELSE {
         SET nd TO planInterplanetaryTransfer(targetBody, targetPe, captureInc, lanTarget, aopTarget, centralBody, mu).
     }
@@ -158,6 +196,7 @@ GLOBAL FUNCTION planTransfer {
         IF NOT bplaneHandoffOk { SET transferMode TO "coarse-bplane". }
     }
     IF isLocal { SET transferMode TO "local-pe-targeted". }
+    IF isLocal AND finalPatch:PERIAPSIS <= 0 { SET transferMode TO "local-impact-correction-required". }
     LOCAL status IS "planned".
     IF transferMode = "coarse-bplane" { SET status TO "planned-coarse". }
 
@@ -195,14 +234,29 @@ GLOBAL FUNCTION transferDepartureReady {
     LOCAL patch IS _getTargetPatch(nd, targetBody).
     LOCAL pe IS -1.
     IF patch <> 0 { SET pe TO patch:PERIAPSIS. }
-    LOCAL ok IS patch <> 0 AND targetPe > 0 AND pe > 0
-        AND ABS(pe - targetPe) <= TRANSFER_PE_TOL
+    LOCAL captureOk IS targetPe > 0 AND pe > 0 AND ABS(pe-targetPe) <= TRANSFER_PE_TOL.
+    LOCAL impactOk IS FALSE.
+    IF patch <> 0 AND transferImpactTargetEnabled(targetBody)
+            AND pe <= 0 AND pe > -targetBody:RADIUS
+            AND ABS(pe-TRANSFER_IMPACT_AIM_PE) <= TRANSFER_PE_TOL
+            AND SHIP:MASS > 0 AND SHIP:MASS < 1e30
+            AND SHIP:AVAILABLETHRUST > 0 AND SHIP:AVAILABLETHRUST < 1e30
+            AND nd:DELTAV:MAG >= 0 AND nd:DELTAV:MAG < 1e30
+            AND nd:TIME > TIME:SECONDS AND nd:TIME < 1e30 {
+        LOCAL hit IS findArrivalPatch(nd,targetBody).
+        IF hit <> 0 AND hit["entryUt"] < 1e30 {
+            LOCAL burnSeconds IS nd:DELTAV:MAG/(SHIP:AVAILABLETHRUST/SHIP:MASS).
+            SET impactOk TO hit["entryUt"]-nd:TIME > TRANSFER_IMPACT_MIN_LEAD+burnSeconds.
+        }
+    }
+    LOCAL ok IS patch <> 0 AND (captureOk OR impactOk)
         AND _firstPatchBodyName(nd) = targetBody:NAME.
     IF report {
         mLog("STATS transfer departure-check target=" + targetBody:NAME
             + " accepted=" + ok + " hasTargetPatch=" + (patch <> 0)
             + " PeKm=" + ROUND(pe / 1000,3)
             + " targetPeKm=" + ROUND(targetPe / 1000,3)
+            + " impactAimKm=" + (TRANSFER_IMPACT_AIM_PE/1000) + " impactAccepted=" + impactOk
             + " toleranceKm=" + (TRANSFER_PE_TOL / 1000)
             + " dv=" + ROUND(nd:DELTAV:MAG,3)).
         IF NOT ok {
@@ -219,7 +273,11 @@ LOCAL FUNCTION _refineLocalDeparturePe {
     PARAMETER nd.
     PARAMETER targetBody.
     PARAMETER targetPe.
-    IF targetPe <= 0 OR TRANSFER_PE_REFINE_DV_CAP < 0 { RETURN FALSE. }
+    LOCAL impact IS targetPe < 0 AND transferImpactTargetEnabled(targetBody)
+        AND targetPe = TRANSFER_IMPACT_AIM_PE.
+    IF (targetPe <= 0 AND NOT impact) OR TRANSFER_PE_REFINE_DV_CAP < 0 { RETURN FALSE. }
+    LOCAL refineCap IS TRANSFER_PE_REFINE_DV_CAP.
+    IF impact { SET refineCap TO MIN(refineCap,TRANSFER_IMPACT_REFINE_DV_CAP). }
     LOCAL seedPro IS nd:PROGRADE.
     LOCAL seedRad IS nd:RADIALOUT.
     LOCAL seedNrm IS nd:NORMAL.
@@ -276,8 +334,8 @@ LOCAL FUNCTION _refineLocalDeparturePe {
                 // Keep the WHOLE correction inside its budget ball. Merely
                 // shrinking the next step can stall at the boundary even when
                 // a useful change in direction remains within the same budget.
-                IF change > TRANSFER_PE_REFINE_DV_CAP {
-                    LOCAL budgetScale IS TRANSFER_PE_REFINE_DV_CAP / change.
+                IF change > refineCap {
+                    LOCAL budgetScale IS refineCap / change.
                     SET nd:PROGRADE TO seedPro + (nd:PROGRADE - seedPro) * budgetScale.
                     SET nd:RADIALOUT TO seedRad + (nd:RADIALOUT - seedRad) * budgetScale.
                     SET nd:NORMAL TO seedNrm + (nd:NORMAL - seedNrm) * budgetScale.
@@ -285,7 +343,7 @@ LOCAL FUNCTION _refineLocalDeparturePe {
                 WAIT 0.1.
                 SET change TO SQRT((nd:PROGRADE - seedPro)^2
                     + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2).
-                IF change <= TRANSFER_PE_REFINE_DV_CAP + 0.001 {
+                IF change <= refineCap + 0.001 {
                     LOCAL trial IS _getTargetPatch(nd, targetBody).
                     IF trial <> 0 AND _firstPatchBodyName(nd) = targetBody:NAME {
                         IF ABS(trial:PERIAPSIS - targetPe) < ABS(err) {
@@ -313,7 +371,7 @@ LOCAL FUNCTION _refineLocalDeparturePe {
         + " targetPeKm=" + ROUND(targetPe / 1000,3)
         + " vectorChange=" + ROUND(SQRT((nd:PROGRADE - seedPro)^2
             + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2),3)
-        + " cap=" + TRANSFER_PE_REFINE_DV_CAP
+        + " cap=" + refineCap
         + " dv=" + ROUND(nd:DELTAV:MAG,3)
         + " departT=" + ROUND(nd:TIME - TIME:SECONDS,1)).
     RETURN accepted.
@@ -754,6 +812,7 @@ LOCAL FUNCTION _planLocalTransfer {
     PARAMETER aopTarget.
     PARAMETER centralBody.
     PARAMETER mu.
+    PARAMETER safePe IS -1.
 
     LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
     LOCAL targetPeriod IS targetBody:ORBIT:PERIOD.
@@ -1035,7 +1094,12 @@ LOCAL FUNCTION _planLocalTransfer {
         + " radial=" + ROUND(nd:RADIALOUT,1)
         + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
 
-    _refineLocalDepartureCandidates(nd, targetBody, targetPe, scanTimes, hohmannDv).
+    LOCAL departureSolved IS _refineLocalDepartureCandidates(nd, targetBody, targetPe, scanTimes, hohmannDv).
+    IF NOT departureSolved AND targetPe < 0 AND safePe > 0 {
+        // Preference is optional: use the same shortlist to recover a safe
+        // positive arrival if cheap impact polishing cannot validate a node.
+        _refineLocalDepartureCandidates(nd,targetBody,safePe,scanTimes,hohmannDv).
+    }
     RETURN nd.
 }
 

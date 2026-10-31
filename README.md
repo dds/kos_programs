@@ -812,6 +812,32 @@ later decision and the cleared pending/started flags. The original cutoff
 report is preserved; `burnreport` displays both. Accepted transfer handoffs
 also persist `STATS transfer handoff decision=continue` as a decision summary.
 This explains progression without changing burn tolerances or arrival checks.
+For a direct airless moon encounter with negative Pe, XING can instead
+record `decision=correction-required`: it retains the trajectory and strict
+cutoff report, removes only its owned residual, and saves BPLANE as the next
+phase. It then stops at a manual staging review. Optionally stage with
+throttle off, then `REBOOT.` to plan a fresh correction using the remaining
+propulsion. No stage is ejected automatically. The native SOI alarm and a
+review deadline30minutes before it are installed first; BPLANE consumes
+the review alarm when resumed. This is not approval to coast to impact or
+capture: all later corridor, timing, correction and fuel checks still run.
+The route requires a complete stopped burn or a verified small residual
+tail (at most0.3m/s and1% of the planned burn), a real future encounter and
+immediate BPLANE continuation. Hard cutoff faults, larger unfinished burns,
+late/missing encounters and foreign nodes continue to hold in XING.
+
+`TRANSFER_IMPACT_TARGET=1` optionally prefers an impact at departure;
+the default is0. It is restricted to direct local airless transfers with
+BPLANE next. `TRANSFER_IMPACT_AIM_PE=-5000` requests a shallow impact,
+using the existing2km departure tolerance; `TRANSFER_IMPACT_REFINE_DV_CAP=5`
+bounds polishing from each selected departure seed. A safe positive arrival
+is still accepted as fallback. `CAPTURE_PE` is unchanged and BPLANE must
+remove the impact before safe arrival. `TRANSFER_IMPACT_MIN_LEAD=1800`
+reserves the correction/review window; it cannot be below600s. This is a
+bounded departure preference, not a full optimization of combined departure
+and correction cost. The Espoir Mun contract/survey return profile enables
+it; other profiles retain their existing departure aims.
+
 The report also prints the saved attempt status and **current** engine
 activation, flameout, thrust limiter and staging information. `BURN WAIT`
 means the executor is waiting for usable thrust; the previous cutoff report

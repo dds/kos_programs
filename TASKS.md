@@ -6,6 +6,45 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked native Espoir-Mun-Surveyor1 XING fix;
+  corrected native recovery/flight still pending. At5163659 planned856.600m/s,
+  live-vector-passed-target at0.19444, final0.176211516 vs0.05 tolerance;
+  thrustStoppedTrue/no shutdown,62.8s burn. Actual Mun Pe NEGATIVE
+  (operator confirmed). Existing handoff silently rejects impact patches
+  from bound Kerbin trajectories, then preserves old node in XING.
+  User explicitly wants impact departures retained, OPTIONAL MANUAL stage
+  release on that path, then BPLANE repairs the probe; prefers cheap impact targeting
+  for XING when close to the efficient departure. Preserve strict executor
+  and reversal/watchdog safeties; separate correction-required handoff
+  from safe arrival/capture admission. Later clarification: NO automatic
+  separation; operator can stage during the XING -> BPLANE review. No
+  separator tags or staging driver added. Saved craft files have no
+  transfer tag; do not infer a hardware boundary from part indices.
+  Implemented stopped tiny-tail/complete impact handoff with durable
+  intent, owned-node-only cleanup, real SOI +pre-correction review alarm,
+  and explicit BPLANE prompt. Current raw report remains unchanged.
+  Optional local airless shallow-impact preference(-5km/2km tolerance,
+  at most5m/s polish per selected seed) enabled only for Mun survey profile;
+  positive15km remains a fallback and CAPTURE_PE stays15km. No unsafe
+  coast/capture waiver; BPLANE retains its admission/correction minimum/
+  budget/lead gates. All100 routine files pass163.27s on final production
+  source;370 scripts/100 profiles/82 phases/44 bands,0 errors/unchanged
+  KSC_DEORBIT warning. Reports:/tmp/kos-xing-impact-final-20261031.{json,log}.
+  Initial100-file pass failed only two fixtures missing newly used native
+  globals/default parameters; fixed those harnesses, added stale/unknown
+  cutoff, direct-first-body and finite-entry guards, then reran the full
+  suite with no production edits during/after it. Regressions exercise the
+  actual phaseTransfer/cleanup/phase persistence on reported native cutoff
+  scalars and independent impact responses; they are not a KSP reflight.
+  NEXT: pull while linked, REBOOT the retained XING attempt (no deletion,
+  transferretry or resumeburn). It should enter BPLANE staging review;
+  optional manual stage with throttle off, REBOOT again for correction.
+  Native compile/recovery, next-engine budget, safe corrected Pe and later
+  capture remain to observe. No automatic staging, game controls, remote
+  code deployment or save edits. No bootstrap replacement needed.
+  Evidence:/tmp/ksp-deck-20261031T215736Z-fetch-hj3f77vm/logs/
+  Espoir-Mun-Surveyor1_5156306/boot_003_core.log.
+
 - IMPLEMENTED/source-checked: Espoir mun_contract_survey_return.
   Low15km Pe capture into high Ap, then contract Ap1737680/Pe1543150m,
   inc180deg (retrograde equatorial); LAN/AoP unconstrained. Stop for

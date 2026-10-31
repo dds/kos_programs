@@ -27,6 +27,7 @@ class Number(float):
 
 
 def execute(source, env):
+    for name,value in re.findall(r'PARAMETER (\w+) IS "([^"]*)"\.',source):env.setdefault(name,value)
     source = re.sub(r'PARAMETER [^.]+\.', '', source)
     def strip(nodes):
         return [(text,strip(yes),strip(no)) for text,yes,no in nodes

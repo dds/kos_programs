@@ -1245,6 +1245,7 @@ GLOBAL FUNCTION maneuverDepartureFlown {
 }
 
 GLOBAL FUNCTION maneuverAcceptHandoff {
+    PARAMETER decision IS "accept-live-trajectory".
     SET BURN_RESUME_REQUESTED TO FALSE.
     IF stateGet("burn_phase", "") <> stateGet("phase", "") { RETURN. }
     LOCAL priorAbort IS stateGet("burn_abort_reason", "").
@@ -1252,8 +1253,9 @@ GLOBAL FUNCTION maneuverAcceptHandoff {
     _ren(stateGetNum("burn_node_time", -1)).
     _cpb("arrival-handoff").
     // Keep strict executor evidence intact. The caller has independently
-    // accepted the live trajectory; record that later mission decision too.
-    LOCAL outcome IS "STATS burn handoff decision=accept-live-trajectory phase=" + stateGet("phase", "")
+    // accepted the trajectory or assigned immediate arrival correction;
+    // record that later mission decision without reclassifying the cutoff.
+    LOCAL outcome IS "STATS burn handoff decision=" + decision + " phase=" + stateGet("phase", "")
         + " ut=" + _fs(TIME:SECONDS,2) + " priorAbort=" + priorAbort
         + " priorResidual=" + _fs(priorResidual,9)
         + " burnPending=" + stateGet("burn_pending","false")
