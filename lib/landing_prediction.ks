@@ -92,6 +92,19 @@ GLOBAL FUNCTION landingPredictBrake {
         LOCAL hs IS VXCL(upVec,vel):MAG.
         LOCAL vs IS VDOT(vel,upVec).
         LOCAL desiredVs IS -lmDescentSpeed(height,TOUCHDOWN_SPEED,UPRIGHT_ALT,HIGH_DESCENT_SPEED).
+        IF LANDING_RELEASE_AFTER_BRAKE > 0 AND stageIndex = 0 AND stack["STAGES"]:LENGTH > 1
+                AND hs <= APPROACH_HSPEED {
+            LOCAL retainedMass IS massNow-item["DROP"]-fuelLeft.
+            LOCAL nextItem IS stack["STAGES"][1].
+            LOCAL gate IS lmBrakeEnvelope(hs,MAX(0,-vs),nextItem["THRUST"]/MAX(0.01,retainedMass),SHIP:BODY:MU/SHIP:BODY:RADIUS^2,
+                MAX(LANDING_BRAKE_REACTION_TIME,1+2*MAX(0.05,LANDING_STAGE_SETTLE))).
+            IF NOT (retainedMass > 0 AND height > gate["V"]) {
+                SET failure["REASON"] TO "tagged-release-clearance". RETURN failure.
+            }
+            SET massNow TO retainedMass. SET stageIndex TO 1.
+            SET item TO nextItem. SET fuelLeft TO item["FUEL"].
+            SET pauseLeft TO 2*MAX(0.05,LANDING_STAGE_SETTLE).
+        }
         IF height <= TERMINAL_ALT AND hs <= TERMINAL_HSPEED AND ABS(vs-desiredVs) <= 5 {
             RETURN LEXICON("VALID",TRUE,"REASON","brake-capture","POSITION",pos,
                 "VELOCITY",vel,"SECONDS",elapsed,"IMPULSE",impulse,"MASS",massNow,
@@ -118,7 +131,15 @@ GLOBAL FUNCTION landingPredictBrake {
         IF stageIndex = 0 AND stack["RESERVE_ACC"] > 0 {
             SET midpointPlan TO MIN(midpointAcc,stack["RESERVE_ACC"]).
         }
-        SET command TO _landingPredictionCommand(midpointPos,midpointVel,midpointAcc,midpointPlan,elevation,targetPosition).
+        LOCAL midpointCommand IS _landingPredictionCommand(midpointPos,midpointVel,midpointAcc,midpointPlan,elevation,targetPosition).
+        // The live controller holds a command between ticks. At a discrete
+        // brake/coast boundary, midpoint reevaluation must not erase the
+        // initial powered step (or integrate a position kick with no impulse).
+        // Keep its throttle/direction through this step; switch next tick.
+        IF command:MAG > 0.001 AND midpointCommand:MAG <= 0.001 {
+            SET midpointCommand TO command*midpointAcc/MAX(0.001,maxAcc).
+        }
+        SET command TO midpointCommand.
         IF pauseLeft > 0 { SET command TO pos*0. }
         // Bound midpoint fuel use at the exact depletion event.
         LOCAL used IS MIN(fuelLeft,command:MAG*midpointMass/item["EXHAUST"]*step).

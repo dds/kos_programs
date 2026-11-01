@@ -274,7 +274,7 @@ def check_powered_refinement():
         def policy(*args):
             policies.append(1)
             aim=env['solved']['DOWNFIELD']+10000 if kind=='nonconverging' else 63610
-            return solver.Lex(VALID=kind!='model-fails',REASON='fixture',AIM=aim,MIN=aim-1500,MAX=aim+1500)
+            return solver.Lex(VALID=kind!='model-fails',REASON='fixture',AIM=aim,MIN=aim-1500,MAX=aim+1500,CAPTURE_DIST=0,CAPTURE_CROSS=env["solved"]["SIGNED_CROSS"],CAPTURE_TOLERANCE=1500)
         def refine(best,lat,lng,lead,aim,lo,hi,min_dv,max_dv,reserve,max_steps):
             assert reserve in (1,8) and max_steps==1 and lo<=aim<=hi
             refinements.append(aim)
@@ -343,7 +343,7 @@ def check_coupled_powered_refinement(start=30,contraction=.6):
         actual=oracle(node.TIME,node.retro,node.normal)['DOWNFIELD']
         aim=63610+contraction*(actual-63610)
         forecasts.append((actual,aim))
-        return solver.Lex(VALID=True,AIM=aim,MIN=aim-1500,MAX=aim+1500)
+        return solver.Lex(VALID=True,AIM=aim,MIN=aim-1500,MAX=aim+1500,CAPTURE_DIST=0,CAPTURE_CROSS=env["solved"]["SIGNED_CROSS"],CAPTURE_TOLERANCE=1500)
     env.update(solved=base,geometry=dict(UT=1000),LANDING_POWERED_LEAD=1,
                targetLat=44.593,targetLng=-24.926,minLead=120,minRetroDv=2,maxRetroDv=120,
                desiredDownfield=15000,minDownfield=10000,maxDownfield=20000,
@@ -370,10 +370,10 @@ def check_shared_admission_and_rescue():
     calls=[]
     env.update(HASNODE=True,_readGeometricDeorbitNode=lambda *args:solver.Lex(VALID=True,HAS_IMPACT=True,
                    DV=20,NORMAL=0,DOWNFIELD=35000,CROSS=0,ANGLE=20,ERR=0),
-               landingDeorbitLeadPolicy=lambda *args:solver.Lex(VALID=True,AIM=35000,MIN=33500,MAX=36500),
+               landingDeorbitLeadPolicy=lambda *args:solver.Lex(VALID=True,AIM=35000,MIN=33500,MAX=36500,CAPTURE_DIST=0,CAPTURE_CROSS=0,CAPTURE_TOLERANCE=1500),
                _targetDeorbitTerrainAccepted=lambda *args:calls.append('terrain') or True)
     assert env['landingDeorbitNodeAccepted'](NS(TIME=1000),0,0) and calls==['terrain']
-    env['landingDeorbitLeadPolicy']=lambda *args:solver.Lex(VALID=True,AIM=15000,MIN=10000,MAX=20000)
+    env['landingDeorbitLeadPolicy']=lambda *args:solver.Lex(VALID=True,AIM=15000,MIN=10000,MAX=20000,CAPTURE_DIST=0,CAPTURE_CROSS=0,CAPTURE_TOLERANCE=1500)
     assert not env['landingDeorbitNodeAccepted'](NS(TIME=1000),0,0)
     command=(ROOT/'cmd/landfallback.ks').read_text()
     saved=dict(SEQUENCE=['LAND_ASSIST','SURFACE_RETURN_SETUP'],RETURN_PE=53000)
@@ -448,7 +448,7 @@ def check_logged_moving_lead(curvature):
         def policy(node,*_):
             down=oracle(node.TIME,node.retro,node.normal)['DOWNFIELD'];aim=required(down)
             forecasts.append((down,aim))
-            return solver.Lex(VALID=True,AIM=aim,MIN=aim-1500,MAX=aim+1500)
+            return solver.Lex(VALID=True,AIM=aim,MIN=aim-1500,MAX=aim+1500,CAPTURE_DIST=0,CAPTURE_CROSS=env["solved"]["SIGNED_CROSS"],CAPTURE_TOLERANCE=1500)
         env.update(solved=oracle(1000,60,0),geometry=dict(UT=1000),LANDING_POWERED_LEAD=1,
             targetLat=44.593,targetLng=-24.926,minLead=120,minRetroDv=2,maxRetroDv=120,
             desiredDownfield=15000,minDownfield=10000,maxDownfield=20000,
@@ -508,7 +508,56 @@ def check_geometric_hull_clearance():
     print('PASS: logged2299m false radar-derived hull would ignite at4039.5m gate; geometric~10.8m enclosing radius preserves4595.7m clearance, bounds every corner/attitude and is independent of current terrain/radar mismatch')
 
 
+def check_powered_cross_fit():
+    for mirror,cap in ((1,20),(-1,20),(1,1)):
+        def oracle(ut,retro,normal):
+            return solver.impact(ut,retro,normal,500*(ut-1000)-1000*(retro-15),2891+mirror*1000*normal)
+        env,count,trials=solver.environment(oracle,cap=cap)
+        count.value=30;nodes=[];forecasts=[]
+        measured=env['_evalGeometricDeorbitNode']
+        def evaluate(ut,retro,lat,lng,lead,aim,normal=0):
+            result=measured(ut,retro,lat,lng,lead,aim,normal)
+            result['ERR']=result.get('DOWNFIELD',aim)-aim
+            return result
+        def plan(ut,retro,normal):
+            node=NS(TIME=ut,retro=retro,normal=normal);nodes.append(node);return node
+        def read(node,*_):return oracle(node.TIME,node.retro,node.normal)
+        def policy(node,*_):
+            row=read(node);cross=row['SIGNED_CROSS']-656
+            forecasts.append((row['CROSS'],cross))
+            return solver.Lex(VALID=True,REASON='synthetic-powered',AIM=15000,MIN=14250,MAX=15750,
+                CAPTURE_DIST=math.hypot(row['DOWNFIELD']-15000,cross),CAPTURE_CROSS=cross,CAPTURE_TOLERANCE=750)
+        env.update(solved=oracle(1000,15,0),geometry=dict(UT=1000),LANDING_POWERED_LEAD=1,
+            targetLat=1.460223,targetLng=-42.637998,minLead=120,minRetroDv=2,maxRetroDv=120,
+            desiredDownfield=15000,minDownfield=10000,maxDownfield=20000,
+            _evalGeometricDeorbitNode=evaluate,_planRetroNode=plan,_readGeometricDeorbitNode=read,
+            _targetDeorbitCrossAuthority=lambda _:3000,landingDeorbitLeadPolicy=policy,
+            remove_probe=lambda node:nodes.remove(node),
+            fixture_charge_forecast=lambda:setattr(count,'value',count.value+1))
+        source=powered_source().replace('SET _deorbitEvaluations TO _deorbitEvaluations+1.','fixture_charge_forecast().')
+        result=run(source,env)
+        assert not nodes and count.value<=64 and forecasts[0][1]==2235
+        if cap==20:
+            assert result is None and env['poweredAccepted']
+            assert abs(forecasts[-1][1])<250 and abs(env['solved']['NORMAL'])>1
+            assert abs(env['solved']['CROSS']-656)<250
+        else:assert result is False and not env['poweredAccepted']
+        assert env['targetLat']==1.460223 and env['targetLng']==-42.637998
+    env,_,_=solver.environment(None);env['LANDING_POWERED_LEAD']=1
+    reason=env['landingPoweredFootprintReason']
+    good=solver.Lex(CAPTURE_DIST=212,CAPTURE_CROSS=100,CAPTURE_TOLERANCE=750)
+    assert reason(good)=='accepted'
+    for bad in (solver.Lex(),solver.Lex(CAPTURE_DIST=0,CAPTURE_CROSS=0),
+                solver.Lex(good,CAPTURE_CROSS=float('nan')),solver.Lex(good,CAPTURE_DIST=-1),
+                solver.Lex(good,CAPTURE_DIST=float('inf')),solver.Lex(good,CAPTURE_TOLERANCE=-1)):
+        assert reason(bad)!='accepted'
+    assert reason(solver.Lex(good,CAPTURE_DIST=2245,CAPTURE_CROSS=2235))=='powered-cross-track'
+    assert reason(solver.Lex(good,CAPTURE_DIST=800))=='powered-footprint-distance'
+    print('PASS: reported212m-along/2235m-powered-cross miss cannot pass; real bounded timing/normal refiner fits a nonzero ballistic lateral aim for both normal signs, cap saturation holds, fixed waypoint/64trial budget unchanged; malformed/nonfinite powered footprints refuse')
+
+
 if __name__=='__main__':
+    check_powered_cross_fit()
     check_reported_ignition()
     check_range_physics()
     check_controller_range()

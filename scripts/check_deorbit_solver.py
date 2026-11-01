@@ -34,7 +34,8 @@ def environment(oracle, cap=10, budget=64):
     env = dict(LEXICON=lambda *xs:Lex(zip(xs[::2],xs[1::2])),TIME=NS(SECONDS=0), ABORT=False,
                SHIP=NS(DELTAV=NS(VACUUM=1000),STATUS='UNKNOWN'),HASNODE=False,
                TARGET_DEORBIT_NORMAL_DV_CAP=cap, TARGET_DEORBIT_MAX_EVALUATIONS=budget,
-               TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=0, LANDING_POWERED_LEAD=0,
+               TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=0, LANDING_POWERED_LEAD=0, LANDING_FLEXIBLE_SITE=0,
+               _deorbitPoweredCrossAim=0,
                TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM=.25, DEORBIT_MIN_FPA=0,
                vesselLandingPrepareRoles=lambda:True,
                fixture_charge_forecast=lambda:setattr(counter,'value',counter.value+1),
@@ -445,7 +446,8 @@ def check_actual_trial_budget():
 def check_shared_terrain():
     env,_,_ = environment(lambda *args: None)
     requests = []
-    env.update(TERRAIN_VALIDATE=True,TERRAIN_MIN_CLEARANCE=100,TERRAIN_SAFE_ALT=6500)
+    env.update(TERRAIN_VALIDATE=True,TERRAIN_MIN_CLEARANCE=100,TERRAIN_SAFE_ALT=6500,
+               landingTerrainGrade=lambda *args:.02,LANDING_TERRAIN_MAX_SLOPE=5,TAN=lambda angle:math.tan(math.radians(angle)))
     for hit,downfield,expected in ((False,0,True),(True,-1,False),(True,19672,True)):
         env['lmTerrainClearanceInfo'] = lambda *args: requests.append(args) or dict(HIT=hit,DOWNFIELD=downfield)
         assert env['_targetDeorbitTerrainAccepted'](1000,19,129) is expected
@@ -601,7 +603,7 @@ def check_reported_preference_budget():
         def policy(node,lat,lng):
             models.append((node.TIME,node.retro,node.normal))
             return Lex(VALID=scenario!='model-fails',REASON='fixture-model-rejected',
-                        AIM=35000,MIN=33500,MAX=36500)
+                        AIM=35000,MIN=33500,MAX=36500,CAPTURE_DIST=0,CAPTURE_CROSS=0,CAPTURE_TOLERANCE=1500)
         env.update(_findDeorbitGeometryNode=geometry,_solveGeometricDeorbitDv=coarse,
                    _evalGeometricDeorbitNode=measured,_planRetroNode=plan,
                    _readGeometricDeorbitNode=read,landingDeorbitLeadPolicy=policy,
@@ -713,7 +715,7 @@ def check_normal_fallback_search_budget():
         env['_readGeometricDeorbitNode']=lambda node,*args:oracle(node.TIME,node.retro,node.normal)
         def policy(*args):
             models.append(1)
-            return Lex(VALID=True,AIM=15000,MIN=10000,MAX=20000)
+            return Lex(VALID=True,AIM=15000,MIN=10000,MAX=20000,CAPTURE_DIST=0,CAPTURE_CROSS=0,CAPTURE_TOLERANCE=1500)
         env['landingDeorbitLeadPolicy']=policy
         if legacy:env['_targetDeorbitNormalCorrection']=lambda *args:Lex(VALID=False)
         result=planner_prefix(env,target_lat=44.593,target_lng=-24.926)
@@ -749,7 +751,7 @@ def check_preburn_refit():
             if len(seen)>1 and case=='abort':env['ABORT']=True
             if len(seen)>1 and case=='removed':env['HASNODE']=False
             if len(seen)>1 and case=='body-change':env['SHIP'].BODY=NS(NAME='Kerbin')
-            return Lex(VALID=case!='invalid',REASON='unsupported',AIM=126363.,MIN=124863.,MAX=127863.)
+            return Lex(VALID=case!='invalid',REASON='unsupported',AIM=126363.,MIN=124863.,MAX=127863.,CAPTURE_DIST=0,CAPTURE_CROSS=0,CAPTURE_TOLERANCE=1500)
         def geometry(nd,lat,lng,aim):
             retro=-nd.PROGRADE
             error=-8149+(-1200)*(retro-14.59)

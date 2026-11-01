@@ -9,6 +9,27 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-11-01 Minmus landing handoff: lander_decoupler was already the role,
+but both Espoir Minmus lander profiles blanked its setting. They now use it
+with LANDING_RELEASE_AFTER_BRAKE1. Same-stage/same-DECOUPLEDIN/Isp/mixture engine
+pairs share one propellant budget and summed thrust; explicit floors and tagged
+return boundaries remain authoritative. Post-main-brake release requires
+physical cutoff, retained CPU/legs, safe whole-slot audit, flare clearance and
+existing fuel reserve. Orbital prediction includes unused-fuel/dry-mass disposal
+and the weak-stage flare gate. Predictor midpoint coast evaluation must not
+erase an initial powered step at a discontinuous brake/coast boundary: hold
+that command for the step, as the live controller does between ticks.
+Fixed terrain checks never move a waypoint. Fit/admit the POWERED surface
+footprint in both axes; ballistic cross-track alone hid a2.2km powered miss.
+Landing success rejects loss of initially present legs/core; keep descent
+control active before touchdown. science_surface and solar share the small
+power provider (no landed steering dependency). Two-second existing control
+rows mirror through KUNIVERSE:DEBUGLOG to local Unity Player.log when
+LANDING_DEBUG_TRACE>0, not to the archive during thrust.115 routine files pass;
+source/independent flat-terrain integration is not native separation, terrain,
+attitude or flare validation. The lost flight has no usable save/final archive
+tail; don't assert its precise ignition/crash cause. See TASKS for evidence.
+
 2026-11-01 rendezvous: current Kerbin surveyor experiment cancelled (opposite
 orbital directions); leave mapping missions alone. Manual cmd/rendezvous and
 cmd/docktest workflow is in docs/RENDEZVOUS.md. RDV now uses bounded Lambert

@@ -26,6 +26,7 @@ GLOBAL TARGET_DEORBIT_MAX_EVALUATIONS IS 64.
 GLOBAL TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS IS 0.
 LOCAL _deorbitEvaluations IS 0.
 LOCAL _deorbitLastCheck IS LEXICON("VALID",FALSE).
+LOCAL _deorbitPoweredCrossAim IS 0.
 
 GLOBAL FUNCTION targetedDeorbit {
     LOCAL targetInfo IS targetResolveDeorbitTarget().
@@ -98,6 +99,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
         RETURN FALSE.
     }
     SET _deorbitEvaluations TO 0.
+    SET _deorbitPoweredCrossAim TO 0.
 
     LOCAL site IS LEXICON("FOUND", FALSE).
     IF refineSite AND DEFINED BOOT_LIB_RAN AND BOOT_LIB_RAN:CONTAINS("landing_site") {
@@ -430,12 +432,19 @@ GLOBAL FUNCTION targetedDeorbitAt {
         SET solved["ERR"] TO solved["DOWNFIELD"]-desiredDownfield.
         SET poweredPass TO poweredPass+1.
         SET poweredReason TO _targetDeorbitRejection(solved,minDownfield,maxDownfield).
+        IF poweredReason = "accepted" { SET poweredReason TO landingPoweredFootprintReason(leadPolicy). }
+        IF leadPolicy:HASKEY("CAPTURE_CROSS") AND LANDING_FLEXIBLE_SITE <= 0 {
+            // Refine the ballistic lateral aim so the finite powered
+            // trajectory reaches the unchanged waypoint. The derivative
+            // convention is measured consistently by the existing probes.
+            SET _deorbitPoweredCrossAim TO solved["SIGNED_CROSS"]-leadPolicy["CAPTURE_CROSS"].
+        }
         mLog("STATS deorbit powered-fit pass=" + poweredPass
             + " downfieldM=" + ROUND(solved["DOWNFIELD"],0) + " aimM=" + ROUND(desiredDownfield,0)
             + " residualM=" + ROUND(solved["ERR"],0) + " crossM=" + ROUND(solved["CROSS"],0)
             + " reason=" + poweredReason + " trials=" + _deorbitEvaluations
             + "/" + TARGET_DEORBIT_MAX_EVALUATIONS).
-        IF _targetDeorbitSolutionAccepted(solved,minDownfield,maxDownfield) {
+        IF poweredReason = "accepted" {
             SET poweredAccepted TO TRUE.
         } ELSE {
             // A coupled step needs two probes; a near-root scalar polish
@@ -755,6 +764,7 @@ GLOBAL FUNCTION landingDeorbitNodeAccepted {
     }
     LOCAL solved IS _readGeometricDeorbitNode(nd, targetLat, targetLng, leadPolicy["AIM"]).
     LOCAL reason IS _targetDeorbitRejection(solved, leadPolicy["MIN"], leadPolicy["MAX"]).
+    IF reason = "accepted" { SET reason TO landingPoweredFootprintReason(leadPolicy). }
     SET _deorbitLastCheck TO LEXICON("VALID",TRUE,"REASON",reason,"ERR",solved["ERR"],
         "SOLUTION",solved,"POLICY",leadPolicy).
     LOCAL checkLevel IS "INFO".
@@ -895,6 +905,15 @@ LOCAL FUNCTION _targetDeorbitTerrainAccepted {
     PARAMETER targetLat.
     PARAMETER targetLng.
     IF NOT TERRAIN_VALIDATE { RETURN TRUE. }
+    IF LANDING_FLEXIBLE_SITE <= 0 {
+        // Reject an unsafe fixed waypoint while still in orbit. Committed
+        // descent keeps flying; it must not stop or substitute a new site.
+        LOCAL grade IS landingTerrainGrade(targetLat,targetLng,20).
+        IF NOT (grade >= 0 AND grade <= TAN(LANDING_TERRAIN_MAX_SLOPE)) {
+            mLogError("Fixed landing waypoint exceeds terrain slope policy; target and orbit retained. grade="+grade).
+            RETURN FALSE.
+        }
+    }
     LOCAL crashInfo IS lmTerrainClearanceInfo(targetLat, targetLng, burnUT,
         burnUT + 30, burnUT + 1800, 2, TERRAIN_MIN_CLEARANCE, TERRAIN_SAFE_ALT).
     IF crashInfo["HIT"] AND crashInfo["DOWNFIELD"] < 0 {
@@ -1236,10 +1255,13 @@ LOCAL FUNCTION _targetDeorbitRefineDone {
     // remaining trials on its mandatory finite-burn forecast and moving
     // downfield goal. This predicate also stops needless inner polishing;
     // the outer powered loop still requires its own fresh model acceptance.
-    IF LANDING_POWERED_LEAD > 0 { RETURN TRUE. }
+    IF LANDING_POWERED_LEAD > 0 AND _deorbitPoweredCrossAim = 0 { RETURN TRUE. }
     LOCAL aim IS _targetDeorbitCrossAuthority(solved).
     IF TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM > 0 {
         SET aim TO MIN(aim, TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM * 1000).
+    }
+    IF _deorbitPoweredCrossAim <> 0 {
+        RETURN ABS(solved["SIGNED_CROSS"]-_deorbitPoweredCrossAim) <= aim.
     }
     RETURN solved["CROSS"] <= aim.
 }
@@ -1250,7 +1272,9 @@ LOCAL FUNCTION _targetDeorbitMerit {
     PARAMETER maxDownfield.
     IF NOT solved["VALID"] OR NOT solved["HAS_IMPACT"] { RETURN 1e30. }
     LOCAL outsideBand IS MAX(0, MAX(minDownfield - solved["DOWNFIELD"], solved["DOWNFIELD"] - maxDownfield)).
-    RETURN outsideBand ^ 2 + solved["CROSS"] ^ 2.
+    LOCAL crossError IS solved["CROSS"].
+    IF _deorbitPoweredCrossAim <> 0 { SET crossError TO solved["SIGNED_CROSS"]-_deorbitPoweredCrossAim. }
+    RETURN outsideBand ^ 2 + crossError ^ 2.
 }
 
 // Feasibility precedes the preference for a smaller cross-track distance.
@@ -1300,7 +1324,7 @@ LOCAL FUNCTION _targetDeorbitNormalCorrection {
             OR ABS(probeDv) < 0.01 OR NOT (ABS(best["SIGNED_CROSS"]) < 1e30) { RETURN invalid. }
     LOCAL slope IS (probe["SIGNED_CROSS"]-best["SIGNED_CROSS"])/probeDv.
     IF NOT (ABS(slope) >= 1 AND ABS(slope) < 1e30) { RETURN invalid. }
-    LOCAL stepDv IS -best["SIGNED_CROSS"]/slope.
+    LOCAL stepDv IS -(best["SIGNED_CROSS"]-_deorbitPoweredCrossAim)/slope.
     IF NOT (ABS(stepDv) < 1e30) { RETURN invalid. }
     RETURN LEXICON("VALID",TRUE,"RETRO",0,"OTHER",stepDv).
 }
@@ -1367,7 +1391,7 @@ LOCAL FUNCTION _targetDeorbitLocalAlongTrack {
         SET crossLimit TO MIN(crossLimit,1000*TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM).
     }
     RETURN ABS(best["ERR"]) <= MAX(250,maxDownfield-minDownfield)
-        AND best["CROSS"] <= crossLimit
+        AND ABS(best["SIGNED_CROSS"]-_deorbitPoweredCrossAim) <= crossLimit
         AND (best["DOWNFIELD"] < minDownfield OR best["DOWNFIELD"] > maxDownfield).
 }
 
@@ -1477,7 +1501,7 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                 LOCAL other IS _evalGeometricDeorbitNode(otherUT, best["RETRO"],
                     targetLat, targetLng, minLead, desiredDownfield, otherNormal).
                 IF NOT retro["VALID"] OR NOT other["VALID"] { BREAK. }
-                LOCAL correction IS _targetDeorbitCorrection(best["ERR"], best["SIGNED_CROSS"],
+                LOCAL correction IS _targetDeorbitCorrection(best["ERR"], best["SIGNED_CROSS"]-_deorbitPoweredCrossAim,
                     (retro["ERR"] - best["ERR"]) / retroProbe,
                     (other["ERR"] - best["ERR"]) / otherProbe,
                     (retro["SIGNED_CROSS"] - best["SIGNED_CROSS"]) / retroProbe,
@@ -1592,7 +1616,8 @@ LOCAL FUNCTION _refineDeorbitFootprint {
                 }
                 IF _targetDeorbitSolutionAccepted(best, minDownfield, maxDownfield) {
                     IF NOT admissible["VALID"] { SET admissible TO best. }
-                    ELSE IF best["CROSS"] < admissible["CROSS"] { SET admissible TO best. }
+                    ELSE IF _targetDeorbitMerit(best,minDownfield,maxDownfield)
+                            < _targetDeorbitMerit(admissible,minDownfield,maxDownfield) { SET admissible TO best. }
                 }
                 mLogDetail("STATS deorbit step mode=" + mode + " ut=" + ROUND(best["UT"],1)
                     + " retro=" + ROUND(best["RETRO"],2) + " normal=" + ROUND(best["NORMAL"],2)

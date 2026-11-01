@@ -67,7 +67,9 @@ def check_profiles_and_scanner_handoff():
     assert land['TARGET_LOCK']==land['LANDING_AUTO_TARGET']==land['LANDING_FLEXIBLE_SITE']==land['LANDING_ECONOMY_TERMINAL_RETARGET']==0
     assert land['LANDING_CONFIRM_TARGET']==0 # The explicit site command authorizes planning.
     assert land['LANDING_POWERED_LEAD']==land['LANDING_STAGE_BRAKE_CREDIT']==land['LANDING_ECONOMY_BRAKE']==1
-    assert land['LANDING_RETURN_DECOUPLER_TAG']==land['LANDING_RELEASE_DECOUPLER_TAG']==''
+    assert land['LANDING_RETURN_DECOUPLER_TAG']==''
+    assert land['LANDING_RELEASE_DECOUPLER_TAG']=='lander_decoupler'
+    assert land['LANDING_RELEASE_AFTER_BRAKE']==1
     assert land['SCIENCE_SURFACE_DWELL']==600
     assert bands['excursion']==['excursion_ready']
     assert not {'maneuver','orbit_shape','launch','landing_main','return_setup'} & closure(phases['excursion_ready'],deps)

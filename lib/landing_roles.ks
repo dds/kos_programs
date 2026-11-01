@@ -8,6 +8,9 @@
 GLOBAL LANDING_STAGE_LIMIT IS 0.
 GLOBAL LANDING_RETURN_DECOUPLER_TAG IS "return_decoupler".
 GLOBAL LANDING_RELEASE_DECOUPLER_TAG IS "lander_decoupler".
+// Explicit opt-in: use the tagged transfer stage for main braking, then
+// hand the flare to the retained lander. The forecast must include this.
+GLOBAL LANDING_RELEASE_AFTER_BRAKE IS 0.
 GLOBAL landingRolePolicy IS LEXICON("VALID",TRUE,"RETURN",0,"RELEASE",0,"REASON","legacy").
 
 LOCAL FUNCTION _landingRoleSeparator {
@@ -104,4 +107,55 @@ GLOBAL FUNCTION vesselLandingPrepareRoles {
         + " returnTag=" + LANDING_RETURN_DECOUPLER_TAG
         + " releaseTag=" + LANDING_RELEASE_DECOUPLER_TAG).
     RETURN info["VALID"].
+}
+
+// Pure hardware audit for an elective, tagged serial handoff. STAGE fires
+// a whole slot: only the named separator and selected engine group may act.
+GLOBAL FUNCTION vesselLandingReleaseInfo {
+    LOCAL result IS LEXICON("OK",FALSE,"REASON","release-tag-unavailable","STAGE",-1).
+    IF NOT landingRolePolicy["VALID"] { RETURN result. }
+    LOCAL tagged IS _landingRoleSeparator(LANDING_RELEASE_DECOUPLER_TAG).
+    IF NOT tagged["VALID"] OR tagged["PART"] = 0 { RETURN result. }
+    LOCAL separator IS tagged["PART"].
+    LOCAL nextStage IS separator:STAGE.
+    SET result["STAGE"] TO nextStage.
+    SET result["REASON"] TO "release-boundary".
+    IF separator:ISDECOUPLED OR NOT separator:STAGED OR nextStage < vesselLandingStageFloor()
+            OR STAGE:NUMBER <> nextStage+1 OR CORE:PART:DECOUPLEDIN >= nextStage
+            OR vesselLandingNextEngineStage() <> nextStage { RETURN result. }
+    LOCAL arrivals IS LIST().
+    FOR eng IN SHIP:ENGINES {
+        IF eng:IGNITION AND NOT eng:FLAMEOUT AND eng:AVAILABLETHRUST > 0
+                AND eng:DECOUPLEDIN <> nextStage { RETURN result. }
+        IF eng:STAGE = nextStage AND eng:DECOUPLEDIN < nextStage AND eng:POSSIBLETHRUST > 0 {
+            IF eng:THROTTLELOCK OR eng:MULTIMODE OR eng:IGNITION { RETURN result. }
+            arrivals:ADD(eng:UID).
+        }
+    }
+    IF arrivals:LENGTH = 0 { RETURN result. }
+    LOCAL passive IS LIST("ModulePartVariants","ModuleCargoPart","KOSNameTag",
+        "KRnDModule","AYPart","GPWSGear","ModuleTestSubject","ModuleColorChanger",
+        "FXModuleThrottleEffects","ModuleWheelBase","ModuleWheelSuspension",
+        "ModuleWheelDeployment","ModuleWheelLock","ModuleWheelDamage",
+        "ModuleCargoBay","ModuleStructuralNode","ModuleStructuralNodeToggle",
+        "ModuleRestockModifyFairingMaterials").
+    FOR part IN SHIP:PARTS {
+        SET result["REASON"] TO "landing-legs-not-retained".
+        IF (part:HASMODULE("ModuleWheelBase") OR part:HASMODULE("ModuleLandingLeg"))
+                AND part:DECOUPLEDIN >= nextStage { RETURN result. }
+        IF part:STAGE = nextStage {
+            FOR moduleName IN part:MODULES {
+                LOCAL allowed IS passive:CONTAINS(moduleName).
+                IF arrivals:CONTAINS(part:UID) AND (moduleName = "ModuleEngines" OR moduleName = "ModuleEnginesFX"
+                        OR moduleName = "ModuleJettison") { SET allowed TO TRUE. }
+                IF part:UID = separator:UID AND (moduleName = "ModuleDecouple" OR moduleName = "ModuleAnchoredDecoupler"
+                        OR moduleName = "ModuleToggleCrossfeed") { SET allowed TO TRUE. }
+                IF NOT allowed {
+                    SET result["REASON"] TO "unexpected-release-slot-module:"+moduleName. RETURN result.
+                }
+            }
+        }
+    }
+    SET result["OK"] TO TRUE. SET result["REASON"] TO "tagged-serial-handoff".
+    RETURN result.
 }

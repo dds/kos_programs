@@ -57,6 +57,10 @@ LOCAL FUNCTION _landingLeadGateAt {
     LOCAL sample IS _landingLeadStateAt(ut,elevation,hullClearance).
     LOCAL envelope IS lmStagedBrakeEnvelope(sample["HS"],sample["DOWN"],
         activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
+    IF LANDING_RELEASE_AFTER_BRAKE > 0 AND stack["STAGES"]:LENGTH > 1 {
+        LOCAL handoff IS lmReleaseBrakeEnvelope(sample["HS"],sample["DOWN"],activeAcc,planAcc,gravAcc,delay).
+        SET envelope["V"] TO MAX(envelope["V"],handoff["V"]).
+    }
     IF sample["HEIGHT"] <= envelope["V"] { RETURN TRUE. }
     IF LANDING_FLEXIBLE_SITE > 0 { RETURN FALSE. }
     LOCAL velocityVec IS lmGroundVelocityAt(ut).
@@ -162,6 +166,10 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
     LOCAL ignition IS _landingLeadStateAt(hi,elevation,hullClearance).
     LOCAL gate IS lmStagedBrakeEnvelope(ignition["HS"],ignition["DOWN"],
         activeAcc,planAcc,stageDv,gravAcc,delay,TRUE).
+    IF LANDING_RELEASE_AFTER_BRAKE > 0 AND stack["STAGES"]:LENGTH > 1 {
+        LOCAL handoff IS lmReleaseBrakeEnvelope(ignition["HS"],ignition["DOWN"],activeAcc,planAcc,gravAcc,delay).
+        SET gate["V"] TO MAX(gate["V"],handoff["V"]).
+    }
     LOCAL targetPosition IS LATLNG(targetLat,targetLng):ALTITUDEPOSITION(elevation)-SHIP:BODY:POSITION.
     LOCAL forecast IS landingPredictBrake(lmGroundPositionAt(hi),lmGroundVelocityAt(hi),stack,elevation,1,targetPosition).
     IF NOT forecast["VALID"] { SET policy["REASON"] TO forecast["REASON"]. RETURN policy. }
@@ -183,10 +191,12 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         SET policy["REASON"] TO "no-positive-powered-lead". RETURN policy.
     }
     LOCAL tolerance IS MAX(250,MIN(2500,TARGET_TOLERANCE)).
+    IF LANDING_FLEXIBLE_SITE <= 0 { SET tolerance TO MIN(tolerance,MAX(250,APPROACH_RADIUS)). }
     SET policy TO LEXICON("VALID",TRUE,"AIM",leadM,
         "MIN",MAX(0,leadM-tolerance),"MAX",leadM+tolerance,
         "REASON","powered-range","RANGE",rangeM,"BALLISTIC",ballistic["DOWNFIELD"],
-        "IGNITION_UT",hi).
+        "IGNITION_UT",hi,"CAPTURE_DIST",captureError["DIST"],
+        "CAPTURE_CROSS",captureError["SIGNED_CROSS"],"CAPTURE_TOLERANCE",tolerance).
     LOCAL firstEngine IS stack["STAGES"][0].
     LOCAL lastEngine IS stack["STAGES"][stack["STAGES"]:LENGTH-1].
     LOCAL diagnostic IS "STATS deorbit powered-lead aimM=" + ROUND(leadM,0)
@@ -231,4 +241,20 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
         + " toleranceM=" + tolerance + " impulseDv=" + ROUND(forecast["IMPULSE"],1)
         + " hBiasM=" + MAX(0,LANDING_BRAKE_UNDERSHOOT_BIAS)).
     RETURN policy.
+}
+
+GLOBAL FUNCTION landingPoweredFootprintReason {
+    PARAMETER policy.
+    IF LANDING_POWERED_LEAD <= 0 OR LANDING_FLEXIBLE_SITE > 0 { RETURN "accepted". }
+    IF NOT policy:HASKEY("CAPTURE_DIST") OR NOT policy:HASKEY("CAPTURE_CROSS")
+            OR NOT policy:HASKEY("CAPTURE_TOLERANCE") {
+        RETURN "powered-footprint-unavailable".
+    }
+    LOCAL tolerance IS policy["CAPTURE_TOLERANCE"].
+    IF NOT (tolerance >= 0 AND tolerance < 1e30
+            AND policy["CAPTURE_DIST"] >= 0 AND policy["CAPTURE_DIST"] < 1e30
+            AND ABS(policy["CAPTURE_CROSS"]) < 1e30) { RETURN "powered-footprint-invalid". }
+    IF ABS(policy["CAPTURE_CROSS"]) > tolerance { RETURN "powered-cross-track". }
+    IF policy["CAPTURE_DIST"] > tolerance { RETURN "powered-footprint-distance". }
+    RETURN "accepted".
 }

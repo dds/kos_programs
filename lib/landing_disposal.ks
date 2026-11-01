@@ -63,6 +63,10 @@ GLOBAL FUNCTION landingStageDisposalInfo {
 
 GLOBAL FUNCTION landingStageDisposalTick {
     PARAMETER ctx.
+    IF LANDING_RELEASE_AFTER_BRAKE > 0 {
+        landingTaggedReleaseTick(ctx).
+        RETURN.
+    }
     IF ABORT {
         SET ctx["DISCARD_PENDING"] TO FALSE.
         _landingSetThrottle(ctx, 0).
@@ -114,4 +118,70 @@ GLOBAL FUNCTION landingStageDisposalTick {
     _landingSetThrottle(ctx, 0).
     SET SHIP:CONTROL:MAINTHROTTLE TO 0.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+}
+
+// Post-main-burn handoff uses the existing lander_decoupler role. It is
+// distinct from the old optional early, speed-triggered economy disposal.
+LOCAL FUNCTION _landingTaggedReleaseReady {
+    PARAMETER ctx.
+    LOCAL result IS vesselLandingReleaseInfo().
+    IF NOT result["OK"] { RETURN result. }
+    SET result["OK"] TO FALSE.
+    SET result["REASON"] TO "not-post-brake-coast".
+    IF ctx["STATE"] <> "BRAKING_BURN" OR ctx["H_SPEED"] > APPROACH_HSPEED
+            OR ctx["V_SPEED"] >= 0 OR HASNODE OR SHIP:BODY:ATM:EXISTS
+            OR SHIP:ORBIT:ECCENTRICITY >= 1 { RETURN result. }
+    LOCAL acceleration IS vesselLandingReserveAcc().
+    LOCAL gate IS lmBrakeEnvelope(ctx["H_SPEED"],ctx["DOWN_SPEED"],acceleration,ctx["BRAKE_GRAV"],
+        MAX(LANDING_BRAKE_REACTION_TIME,1+2*MAX(0.05,LANDING_STAGE_SETTLE))).
+    SET result["REASON"] TO "insufficient-flare-clearance".
+    IF NOT (acceleration > ctx["BRAKE_GRAV"] AND _landingBurnHeight(ctx) > gate["V"]) { RETURN result. }
+    // Preserve the existing future-fuel reserve, including any later return
+    // stage. No tank fuel or protected engine is borrowed from below its floor.
+    LOCAL remaining IS SHIP:DELTAV:VACUUM-STAGE:DELTAV:VACUUM.
+    LOCAL speed IS SQRT(ctx["H_SPEED"]^2+ctx["DOWN_SPEED"]^2).
+    LOCAL duration IS speed/MAX(0.01,lmBrakeNetAcc(acceleration,ctx["BRAKE_GRAV"])).
+    SET result["REASON"] TO "insufficient-lander-fuel".
+    IF NOT (remaining >= speed+ctx["BRAKE_GRAV"]*duration+MAX(0,LANDING_STAGE_DISCARD_RESERVE_DV)) { RETURN result. }
+    LOCAL periUT IS TIME:SECONDS+ETA:PERIAPSIS.
+    SET result["REASON"] TO "no-ballistic-disposal".
+    IF ORBITAT(SHIP,periUT):BODY:NAME <> SHIP:BODY:NAME { RETURN result. }
+    IF SHIP:PERIAPSIS+LANDING_BRAKE_CLEARANCE >= lmGroundGeoAt(periUT):TERRAINHEIGHT { RETURN result. }
+    SET result["OK"] TO TRUE. SET result["REASON"] TO "ready".
+    RETURN result.
+}
+
+GLOBAL FUNCTION landingTaggedReleaseTick {
+    PARAMETER ctx.
+    IF ABORT {
+        SET ctx["DISCARD_PENDING"] TO FALSE. _landingSetThrottle(ctx,0). RETURN.
+    }
+    IF ctx["DISCARD_TRIED"] AND NOT ctx["DISCARD_PENDING"] { RETURN. }
+    IF NOT ctx["DISCARD_PENDING"] AND (ctx["H_SPEED"] > APPROACH_HSPEED
+            OR ctx["STATE"] <> "BRAKING_BURN") { RETURN. }
+    LOCAL check IS _landingTaggedReleaseReady(ctx).
+    IF NOT ctx["DISCARD_PENDING"] {
+        IF NOT check["OK"] { RETURN. }
+        SET ctx["DISCARD_PENDING"] TO TRUE. SET ctx["DISCARD_SINCE"] TO TIME:SECONDS.
+        _landingSetThrottle(ctx,0).
+        SET SHIP:CONTROL:MAINTHROTTLE TO 0. SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+        RETURN.
+    }
+    _landingSetThrottle(ctx,0).
+    SET SHIP:CONTROL:MAINTHROTTLE TO 0. SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+    LOCAL elapsed IS TIME:SECONDS-ctx["DISCARD_SINCE"].
+    IF elapsed < 0.05 { RETURN. }
+    IF NOT check["OK"] OR elapsed >= 1 {
+        SET ctx["DISCARD_PENDING"] TO FALSE. SET ctx["DISCARD_TRIED"] TO TRUE.
+        mLogWarn("STATS landing-release canceled reason="+check["REASON"]+" thrust="+SHIP:THRUST).
+        RETURN.
+    }
+    IF NOT (SHIP:THRUST >= 0 AND SHIP:THRUST <= 0.001) OR NOT STAGE:READY { RETURN. }
+    SET ctx["STAGE_ENGINE"] TO check["STAGE"].
+    IF vesselLandingStageEvent(ctx,check["STAGE"]) {
+        SET ctx["DISCARD_PENDING"] TO FALSE. SET ctx["DISCARD_TRIED"] TO TRUE.
+        mLog("STATS landing-release tag="+LANDING_RELEASE_DECOUPLER_TAG
+            +" stage="+check["STAGE"]+" height="+_landingBurnHeight(ctx)
+            +" hs="+ctx["H_SPEED"]+" vs="+ctx["V_SPEED"]).
+    }
 }

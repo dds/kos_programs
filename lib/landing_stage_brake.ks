@@ -152,18 +152,45 @@ GLOBAL FUNCTION _landingStopEnvelope {
     PARAMETER downSpeed.
     LOCAL delay IS MAX(0,LANDING_BRAKE_REACTION_TIME).
     LOCAL fullVector IS LANDING_ECONOMY_BRAKE > 0 AND horizontalSpeed > APPROACH_HSPEED.
+    LOCAL envelope IS LEXICON().
     IF LANDING_STAGE_BRAKE_CREDIT > 0 {
         // Include both staging settle intervals and bounded control latency.
         SET delay TO MAX(delay,1+2*MAX(0.05,LANDING_STAGE_SETTLE)).
-        RETURN lmStagedBrakeEnvelope(horizontalSpeed,downSpeed,ctx["MAX_ACC"],
+        SET envelope TO lmStagedBrakeEnvelope(horizontalSpeed,downSpeed,ctx["MAX_ACC"],
             ctx["PLAN_ACC"],ctx["BRAKE_STAGE_DV"],ctx["BRAKE_GRAV"],delay,fullVector).
+    } ELSE IF fullVector {
+        SET envelope TO lmFullBrakeEnvelope(horizontalSpeed,downSpeed,ctx["PLAN_ACC"],ctx["BRAKE_GRAV"],delay).
+    } ELSE {
+        SET envelope TO lmBrakeEnvelope(horizontalSpeed,downSpeed,ctx["PLAN_ACC"],ctx["BRAKE_GRAV"],delay).
     }
-    // Match the actual controller even when transfer credit is disabled or
-    // unavailable. Credit controls fuel accounting, not thrust geometry.
-    IF fullVector {
-        RETURN lmFullBrakeEnvelope(horizontalSpeed,downSpeed,ctx["PLAN_ACC"],ctx["BRAKE_GRAV"],delay).
+    IF LANDING_RELEASE_AFTER_BRAKE > 0 AND ctx["RESERVE_ACC"] > 0 {
+        LOCAL handoff IS lmReleaseBrakeEnvelope(horizontalSpeed,downSpeed,
+            ctx["MAX_ACC"],ctx["PLAN_ACC"],ctx["BRAKE_GRAV"],delay).
+        SET envelope["V"] TO MAX(envelope["V"],handoff["V"]).
     }
-    RETURN lmBrakeEnvelope(horizontalSpeed,downSpeed,ctx["PLAN_ACC"],ctx["BRAKE_GRAV"],delay).
+    RETURN envelope.
+}
+
+// Keep enough height for an unpowered horizontal-arrest interval followed
+// by a complete weak-stage flare. Free fall during that first interval is
+// conservative: live thrust is never permitted to point below the horizon.
+GLOBAL FUNCTION lmReleaseBrakeEnvelope {
+    PARAMETER horizontalSpeed.
+    PARAMETER downSpeed.
+    PARAMETER activeAcc.
+    PARAMETER landerAcc.
+    PARAMETER gravAcc.
+    PARAMETER delay.
+    LOCAL horizontalNet IS lmBrakeNetAcc(activeAcc,gravAcc).
+    IF horizontalNet <= 0 OR landerAcc <= gravAcc {
+        RETURN LEXICON("H",999999999,"V",999999999).
+    }
+    LOCAL elapsed IS delay+MAX(0,horizontalSpeed-APPROACH_HSPEED)/horizontalNet*MAX(1,BURN_MARGIN).
+    LOCAL futureDown IS downSpeed+gravAcc*elapsed.
+    LOCAL flare IS lmBrakeEnvelope(MIN(horizontalSpeed,APPROACH_HSPEED),futureDown,
+        landerAcc,gravAcc,MAX(LANDING_BRAKE_REACTION_TIME,1+2*MAX(0.05,LANDING_STAGE_SETTLE))).
+    RETURN LEXICON("H",horizontalSpeed*elapsed,
+        "V",downSpeed*elapsed+gravAcc*elapsed^2/2+flare["V"]).
 }
 
 

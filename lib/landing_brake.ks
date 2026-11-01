@@ -184,6 +184,12 @@ GLOBAL FUNCTION _landingBrakeAlignTick {
 GLOBAL FUNCTION _landingBrakingTick {
     PARAMETER ctx.
 
+    IF ctx["DISCARD_PENDING"] {
+        _landingSetThrottle(ctx,0).
+        _landingBrakeSteeringInfo(ctx).
+        RETURN.
+    }
+
     IF NOT landingReviewReachableSite(ctx) {
         SET landingAbortFlag TO TRUE.
         RETURN.

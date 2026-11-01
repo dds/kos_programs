@@ -61,6 +61,16 @@ GLOBAL FUNCTION _landingTerrainCheck {
     LOCAL centerTerrain IS LATLNG(targetLat, targetLng):TERRAINHEIGHT.
     LOCAL centerGrade IS landingTerrainGrade(targetLat, targetLng, stepM).
     LOCAL bestScore IS centerGrade * 500.
+    IF LANDING_FLEXIBLE_SITE <= 0 OR NOT applyShift {
+        // A waypoint is mission intent, not a terrain-search seed. Measure
+        // and report it without silently moving either guidance or TR.
+        IF NOT (centerGrade >= 0 AND centerGrade <= TAN(LANDING_TERRAIN_MAX_SLOPE)) {
+            mLogWarn("STATS landing-terrain fixed-target retained lat="+targetLat
+                +" lng="+targetLng+" grade="+centerGrade+" slopeLimit="+LANDING_TERRAIN_MAX_SLOPE).
+        }
+        RETURN LEXICON("LAT",targetLat,"LNG",targetLng,"ELEVATION",centerTerrain,
+            "SHIFTED",FALSE,"GRADE",centerGrade).
+    }
     IF centerGrade <= TAN(LANDING_TERRAIN_MAX_SLOPE) {
         mLog("STATS landing-terrain shift=0 reason=center-within-slope-limit lat="
             + targetLat + " lng=" + targetLng + " grade=" + ROUND(centerGrade,4)).
@@ -721,11 +731,37 @@ GLOBAL FUNCTION _landingGuidanceTick {
     }
 }
 
+// Save identities before descent; a surviving CPU on a settled wreck is not
+// a successful landing. Intentional transfer separation must retain the legs.
+LOCAL FUNCTION _landingRequiredHardware {
+    LOCAL required IS LIST(CORE:PART:UID).
+    FOR part IN SHIP:PARTS {
+        IF part:HASMODULE("ModuleWheelBase") OR part:HASMODULE("ModuleLandingLeg") {
+            required:ADD(part:UID).
+        }
+    }
+    RETURN required.
+}
+
+LOCAL FUNCTION _landingHardwareIntact {
+    PARAMETER required.
+    LOCAL present IS LIST().
+    FOR part IN SHIP:PARTS { present:ADD(part:UID). }
+    FOR identity IN required {
+        IF NOT present:CONTAINS(identity) { RETURN FALSE. }
+    }
+    RETURN TRUE.
+}
+
 LOCAL FUNCTION _landingFinish {
     PARAMETER ctx.
 
     _landingSetState(ctx, "TOUCHDOWN", "surface contact").
     IF NOT vesselLandingCleanup() { RETURN FALSE. }
+    IF NOT _landingHardwareIntact(ctx["REQUIRED_HARDWARE"]) {
+        mLogError("STATS landing-result failed=retained-hardware-lost; settled wreck is not a successful touchdown.").
+        RETURN FALSE.
+    }
     vesselSetReactionWheelAuthority(100).
     mLog("TOUCHDOWN. vspd=" + ROUND(SHIP:VERTICALSPEED,1) + "m/s"
         + "  lat=" + ROUND(SHIP:LATITUDE,4)
@@ -812,6 +848,7 @@ GLOBAL FUNCTION landExecute {
 
     LOCAL ctx IS LEXICON(
         "STATE", "COAST",
+        "REQUIRED_HARDWARE", _landingRequiredHardware(),
         "STATE_ENTERED", TIME:SECONDS,
         "HAS_TARGET", _hasTarget,
         "REQUESTED_LAT", landingTarget["LAT"],
@@ -937,7 +974,7 @@ GLOBAL FUNCTION landingAssistStage {
     mLogPhase("LANDING ASSIST").
     SET landingAbortFlag TO FALSE.
 
-    landExecute().
+    IF NOT landExecute() { RETURN FALSE. }
 
     IF NOT (SHIP:STATUS = "LANDED" OR SHIP:STATUS = "SPLASHED") {
         mLogWarn("Not on surface after assist descent.").

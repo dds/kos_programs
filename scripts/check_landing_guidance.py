@@ -291,7 +291,24 @@ def check_terrain():
     assert not result['SHIFTED']  # Uniform slope: no forced move to the SW corner.
     assert max(abs(n) for n,e in requests) <= 40.01
     assert max(abs(e) for n,e in requests) <= 40.01
-    print('PASS: acceptable center retained; 20 m final grid works with 100 m configured spacing')
+    # A steep original site with a nearby flat alternative used to move even
+    # a locked waypoint. Flexible missions may still choose that alternative.
+    env['TERRAIN_CHECK_RADIUS']=500
+    def relief(lat,lng):
+        north=lat*60000*math.pi/180
+        return NS(TERRAINHEIGHT=100*math.exp(-(north/120)**2))
+    env['LATLNG']=relief
+    env['landingTerrainGrade']=lambda lat,lng,*_: .2 if abs(lat)<.01 else .01
+    env['LANDING_FLEXIBLE_SITE']=0
+    fixed=call('_landingTerrainCheck',env,0,0)
+    assert fixed['LAT']==fixed['LNG']==0 and not fixed['SHIFTED']
+    assert fixed['ELEVATION']==100 and fixed['GRADE']==.2
+    env['LANDING_FLEXIBLE_SITE']=1
+    flexible=call('_landingTerrainCheck',env,0,0)
+    assert flexible['SHIFTED'] and abs(flexible['LAT'])>.01
+    measure=call('_landingTerrainCheck',env,0,0,False)
+    assert not measure['SHIFTED'] and measure['LAT']==measure['LNG']==0
+    print('PASS: fixed waypoint stays unchanged beside a flatter alternative; flexible search still moves, measurement-only never moves; final20m grid remains bounded')
 
 
 def control_environment():

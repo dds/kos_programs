@@ -346,7 +346,8 @@ def check_lander_provider_and_radio_policy():
     policy = (ROOT/'lib/mission_type.ks').read_text()
     deps,phases,bands = dependency_tables((ROOT/'lib/dependencies.ks').read_text())
     assert bands['surface_science'] == ['surface_science']
-    assert closure(['science_surface'],deps) == {'science_surface','science_flight','thrust_cutoff'}
+    assert closure(['science_surface'],deps) == {'science_surface','science_flight','thrust_cutoff','power'}
+    assert 'power' in closure(['solar'],deps)
     for wanted in (False,True):
         seq = Items(['LAND_ASSIST','SURFACE_SCIENCE','DONE'] if wanted else ['LAND_ASSIST','DONE'])
         roots = execute(function_body(policy,'missionTypeConditionalRoots'),
@@ -396,6 +397,28 @@ def surface_run(env):
     # Adapt native implicit number-to-string coercion only, as in entry tests.
     source=SURFACE.replace('stateGetNum("launch_time",0)','flightStamp()')
     return run(source,'phaseSurfaceScience',env)
+
+
+def check_surface_power_provider():
+    # Load the real small provider into a FRESH surface environment. Earlier
+    # surface fixtures stubbed this name, concealing the native missing link.
+    import check_landing_guidance as ks
+    power=(ROOT/'lib/power.ks').read_text()
+    ks.SOURCES+='\n'+power
+    env,saved,events=surface_fixture()
+    charge=NS(NAME='ElectricCharge',AMOUNT=40,CAPACITY=100)
+    env['SHIP'].RESOURCES=Items([charge,NS(NAME='LiquidFuel',AMOUNT=900,CAPACITY=1000)])
+    for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',power):
+        env[name]=lambda *args,name=name:ks.call(name,env,*args)
+    assert env['shipPowerFraction']()==.4
+    assert not env['shipBatteriesCharging'](0)
+    surface_run(env)
+    assert 'advance' in events and any(e[0]=='sample' and e[2] for e in events if isinstance(e,tuple))
+    charge.AMOUNT=0
+    assert env['shipPowerFraction']()==0
+    charge.CAPACITY=0
+    assert env['shipPowerFraction']()==1 # Existing capacity-free semantics.
+    print('PASS: real electrical provider resolves from a fresh surface environment, reads EC only and supports the actual science session without a solar attitude dependency')
 
 
 def check_surface_session_and_reboot():
@@ -494,6 +517,7 @@ if __name__ == '__main__':
     check_airless_deorbit_admission()
     check_airless_resident_science_and_guards()
     check_lander_provider_and_radio_policy()
+    check_surface_power_provider()
     check_surface_session_and_reboot()
     check_surface_guards()
     check_mapping_ellipses()

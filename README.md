@@ -268,14 +268,35 @@ fallback remains `RUNPATH("0:/cmd/landingstages.ks", 2).` at a throttle-off
 manual point before deorbit, followed by reboot; it changes only that flight's
 landing stage limit. A manual floor can tighten a tagged boundary, not weaken it.
 
-Use the actual craft's staging numbers. A two-level stack with the landing
-engine in stage1 and return engines in stage0 needs
-`RUNPATH("0:/cmd/landingstages.ks",1).`, then `REBOOT.`. The serial powered
-forecast deliberately rejects an unreserved parallel future engine group;
-`multiple-future-engines` and the `STATS landing-stack` row identify that
-layout. Reserving the return stage excludes its engines/fuel from descent
-while retaining its wet mass. It does not make a parallel landing stage a
-supported serial model or guarantee the permitted landing fuel is sufficient.
+Use the actual craft's staging numbers and engine roles. A manual floor1
+reserves **all** stage0 engines; do not use it if those engines must finish the
+landing. Identical-Isp/mixture engines in the same staging and propellant group
+are modeled with summed thrust and shared fuel counted once. Independent or
+mixed future engine groups remain unsupported; `STATS landing-stack` explains
+why an orbital plan was rejected. Return-stage engines below the landing floor
+remain excluded from descent, while their wet mass is retained.
+
+Espoir's two Minmus lander profiles use `lander_decoupler` and enable
+`LANDING_RELEASE_AFTER_BRAKE=1`: brake with the transfer engine, then cut thrust
+and attempt the tagged handoff once horizontal speed reaches `APPROACH_HSPEED`.
+The separator and retained landing engines must share the next staging slot.
+The audit requires a unique separator, retained CPU/legs, compatible engines,
+no unexpected stage-slot modules, enough flare height and the existing fuel
+reserve. Actual thrust must reach zero before separation. Failed live checks
+retain descent guidance; they do not force a separator or stop a falling craft.
+The orbital forecast drops the same unused fuel/dry mass and reserves the
+weaker landing engines' flare height. Other profiles retain their existing
+policy unless explicitly enabled. Old saved numeric floors remain in force;
+review hardware before changing one with `cmd/landingstages`.
+
+Fixed landing waypoints remain fixed through setup and final terrain checks.
+An unsafe fixed site is rejected while still in orbit; a committed descent
+keeps useful guidance. Flexible economy-site searches retain terrain selection.
+Powered deorbit admission checks both predicted along-track and sideways miss,
+with tolerance no larger than the approach radius (750m by default), and fits
+normal corrections within the configured cap. The Espoir Minmus landers allow
+up to20m/s of normal correction. This is modeled capture accuracy, not a claim
+of native pinpoint touchdown.
 
 Keep crossfeed from reserved return tanks disabled: this policy controls
 staging, not fuel flow, and cannot prove descent fuel is sufficient. Surface
@@ -300,12 +321,21 @@ dV, and the saved last brake decision. It also saves every output row to
 `0:/logs/archive/_diagnostics/landingcheck_<vessel>_<UT>.log` and verifies the
 completion record. Copy that file for review; an archive link is required.
 There is no boot-sweep dependency or boot-module update.
+During descent, `LANDING_DEBUG_TRACE=1` also mirrors the existing two-second
+control samples into Unity's local debug log, including stage, throttle,
+physical thrust, attitude and both engine accelerations. On Linux this is
+`~/.config/unity3d/Squad/Kerbal Space Program/Player.log`. These rows can survive
+loss of the probe or radio link; no synchronous archive transfer is added to
+braking. Archive diagnostics retain their quiet-coast/post-cutoff export rules.
+Set the flag to0 to disable the local mirror. Native logging latency still
+needs observation.
+
 Braking accounts for the weaker of current and
 next-stage acceleration, combined horizontal/vertical motion, terrain
 clearance, and a three-second reaction allowance. It can therefore start
 earlier than a vertical-only suicide-burn estimate. The spent stage is
 discarded ballistically; this is not a separate disposal-targeting program.
-By default, a fueled transfer stage stays attached; the controller does not
+Without a release policy, a fueled transfer stage stays attached; the controller does not
 burn fuel merely to empty it. RO8/RO9 Minmus economy profiles instead enable
 `LANDING_STAGE_DISCARD_HSPEED=80`: after initial braking on the transfer engine,
 attempt separation while horizontal speed is between 30 and 80 m/s. This

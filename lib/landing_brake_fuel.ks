@@ -28,8 +28,28 @@ LOCAL FUNCTION _landingEngineFuelMass {
     RETURN units*density.
 }
 
-// Supported: one active throttleable engine and at most one eligible serial
-// landing engine. No parallel propulsion, atmospheric model, solids or
+// Identical-Isp, identical-mixture engines in one staging/fuel group are
+// equivalent to one engine with their summed thrust. Count shared fuel ONCE.
+// Do not combine independent stages, different mixtures or different Isp.
+LOCAL FUNCTION _landingSameEngineGroup {
+    PARAMETER first_.
+    PARAMETER other_.
+    IF first_:STAGE <> other_:STAGE OR first_:DECOUPLEDIN <> other_:DECOUPLEDIN
+            OR NOT (first_:VISP > 0 AND ABS(first_:VISP-other_:VISP) < 0.000001)
+            OR first_:CONSUMEDRESOURCES:LENGTH <> other_:CONSUMEDRESOURCES:LENGTH { RETURN FALSE. }
+    FOR fuel IN first_:CONSUMEDRESOURCES:VALUES {
+        LOCAL matched IS FALSE.
+        FOR otherFuel IN other_:CONSUMEDRESOURCES:VALUES {
+            IF fuel:NAME = otherFuel:NAME AND fuel:RATIO = otherFuel:RATIO
+                    AND fuel:DENSITY = otherFuel:DENSITY { SET matched TO TRUE. }
+        }
+        IF NOT matched { RETURN FALSE. }
+    }
+    RETURN TRUE.
+}
+
+// Supported: one active engine group and at most one eligible serial
+// landing engine group. No mixed/independent parallel propulsion, atmosphere, solids or
 // ambiguous mixture. Unsupported flight guidance retains its old safe gate;
 // an unflown precision deorbit must hold rather than silently trust a model.
 GLOBAL FUNCTION landingBrakeStack {
@@ -39,33 +59,49 @@ GLOBAL FUNCTION landingBrakeStack {
     IF LANDING_STAGE_DISCARD_HSPEED > 0 { SET result["REASON"] TO "elective-fueled-disposal". RETURN result. }
     LOCAL active IS 0.
     LOCAL nextEngine IS 0.
+    LOCAL currentThrust IS 0.
+    LOCAL nextThrust IS 0.
     LOCAL nextStage IS vesselLandingNextEngineStage().
     FOR eng IN SHIP:ENGINES {
         IF eng:IGNITION AND NOT eng:FLAMEOUT AND eng:AVAILABLETHRUST > 0 {
-            IF active <> 0 OR eng:THROTTLELOCK OR eng:MULTIMODE {
+            IF eng:THROTTLELOCK OR eng:MULTIMODE OR eng:STAGE < vesselLandingStageFloor() {
+                SET result["REASON"] TO "unsupported-active-engine-layout". RETURN result.
+            }
+            IF active <> 0 AND NOT _landingSameEngineGroup(active,eng) {
                 SET result["REASON"] TO "unsupported-active-engine-layout". RETURN result.
             }
             SET active TO eng.
+            SET currentThrust TO currentThrust+eng:AVAILABLETHRUST.
         } ELSE IF eng:POSSIBLETHRUST > 0 AND eng:STAGE >= vesselLandingStageFloor() {
-            IF nextEngine <> 0 {
+            IF nextEngine <> 0 AND NOT _landingSameEngineGroup(nextEngine,eng) {
                 SET result["REASON"] TO "multiple-future-engines". RETURN result.
             }
             IF eng:STAGE <> nextStage OR eng:THROTTLELOCK OR eng:MULTIMODE {
                 SET result["REASON"] TO "unsupported-next-engine-layout". RETURN result.
             }
             SET nextEngine TO eng.
+            SET nextThrust TO nextThrust+eng:POSSIBLETHRUSTAT(0).
         }
     }
     IF active = 0 OR active:VISP <= 0 { SET result["REASON"] TO "no-active-vacuum-engine". RETURN result. }
     LOCAL fuelMass IS _landingEngineFuelMass(active).
     IF fuelMass <= 0 OR fuelMass >= SHIP:MASS { SET result["REASON"] TO "current-local-propellant". RETURN result. }
-    LOCAL physicalDv IS active:VISP*9.80665*LN(SHIP:MASS/(SHIP:MASS-fuelMass)).
     LOCAL stockDv IS STAGE:DELTAV:VACUUM.
     IF stockDv <= 0 { SET result["REASON"] TO "current-stage-dv-unavailable". RETURN result. }
     SET fuelMass TO MIN(fuelMass,SHIP:MASS*(1-CONSTANT:E^(-stockDv/(active:VISP*9.80665)))).
-    LOCAL stages IS LIST(LEXICON("THRUST",active:AVAILABLETHRUST,
+    LOCAL stages IS LIST(LEXICON("THRUST",currentThrust,
         "EXHAUST",active:VISP*9.80665,"FUEL",fuelMass,"DROP",0)).
     LOCAL reserveAcc IS 0.
+    IF LANDING_RELEASE_AFTER_BRAKE > 0 {
+        LOCAL roles_ IS vesselLandingRoleInfo().
+        LOCAL attachedRelease IS roles_["RELEASE"].
+        IF attachedRelease <> 0 AND NOT attachedRelease:ISDECOUPLED {
+            LOCAL release_ IS vesselLandingReleaseInfo().
+            IF NOT release_["OK"] { SET result["REASON"] TO release_["REASON"]. RETURN result. }
+        } ELSE IF nextEngine <> 0 {
+            SET result["REASON"] TO "release-tag-unavailable". RETURN result.
+        }
+    }
     IF nextEngine <> 0 {
         IF STAGE:NUMBER <> nextStage+1 OR active:DECOUPLEDIN <> nextStage
                 OR nextEngine:DECOUPLEDIN >= nextStage
@@ -82,7 +118,6 @@ GLOBAL FUNCTION landingBrakeStack {
         SET retained TO retained+MAX(0,SHIP:MASS-accounted).
         LOCAL dropMass IS SHIP:MASS-retained-fuelMass.
         LOCAL nextFuel IS _landingEngineFuelMass(nextEngine).
-        LOCAL nextThrust IS nextEngine:POSSIBLETHRUSTAT(0).
         IF dropMass < 0 OR retained <= 0 OR nextFuel <= 0 OR nextFuel >= retained
                 OR nextThrust <= 0 {
             SET result["REASON"] TO "next-stage-mass-or-fuel". RETURN result.

@@ -94,10 +94,11 @@ def check_snapshot():
     lander.CONSUMEDRESOURCES['Oxidizer'].DENSITY=0
     assert not env['landingBrakeStack']()['VALID']
     lander.CONSUMEDRESOURCES['Oxidizer'].DENSITY=.005
-    # Native Minmus Lander1: active stage1 Torch; two inactive return engines
-    # in stage0. An explicit floor reserves them; never infer their role merely
-    # because this serial-only predictor cannot model a parallel group.
+    # Native Minmus Lander1 layout: stage1 Torch, matched stage0 engine pair.
+    # The pair shares propellant: prove equivalent summed thrust/one fuel mass.
+    # An explicit floor1 STILL excludes them; never weaken a saved floor.
     active.STAGE=1;active.DECOUPLEDIN=0;returning.STAGE=0
+    env["SHIP"].PARTS[2].RESOURCES=resources(.1)
     other_return=NS(**vars(returning))
     env['STAGE'].NUMBER=1
     env['SHIP'].PARTS[0].DECOUPLEDIN=0
@@ -106,8 +107,14 @@ def check_snapshot():
                     (returning,other_return,active)):
         env['SHIP'].ENGINES=KList(engines)
         env['LANDING_STAGE_LIMIT']=0
+        paired=env['landingBrakeStack']()
+        assert paired['VALID'] and len(paired['STAGES'])==2
+        assert paired['STAGES'][1]['THRUST']==8
+        assert abs(paired['STAGES'][1]['FUEL']-.32)<1e-10
+        other_return.DECOUPLEDIN=-2
         rejected=env['landingBrakeStack']()
-        assert not rejected['VALID'] and rejected['REASON']=='multiple-future-engines'
+        assert not rejected['VALID']
+        other_return.DECOUPLEDIN=-1
         env['LANDING_STAGE_LIMIT']=1
         current_only=env['landingBrakeStack']()
         assert current_only['VALID'] and len(current_only['STAGES'])==1
@@ -115,12 +122,13 @@ def check_snapshot():
         assert current_only['STAGES'][0]['DROP']==current_only['RESERVE_ACC']==0
         assert not returning.IGNITION and not other_return.IGNITION
     print('PASS: actual 3/2/1 snapshot isolates limiting mixtures and return wet mass, charges deorbit fuel once, copies without mutation and rejects unsupported/depleted hardware')
-    print('PASS: recorded1/0/0 engine ordering rejects a parallel future group at floor0; explicit floor1 models only the active landing engine while carrying return tanks and leaving both return engines off')
+    print('PASS: recorded1/0/0 ordering models matched stage0 engines as summed thrust with shared fuel counted once; separate fuel groups reject; explicit floor1 still reserves both and never ignites hardware')
 
 
-def independent_inertial_capture(env,stack,pos,ground_vel,dt=.25,target=None):
+def independent_inertial_capture(env,stack,pos,ground_vel,dt=.25,target=None,elevation=4113.1358):
     # An independent RK4 flight model in a NONROTATING frame. The production
     # model uses midpoint integration in a surface-fixed rotating frame.
+    bdy=env['SHIP'].BODY
     omega=env['landingRotationVector']();rate=omega.MAG
     axis=omega/rate if rate else Vec((0,0,1))
     def rotate(vec,angle):
@@ -131,21 +139,26 @@ def independent_inertial_capture(env,stack,pos,ground_vel,dt=.25,target=None):
         pos=rotate(inertial_pos,-rate*elapsed)
         vel=rotate(inertial_vel-cross(omega,inertial_pos),-rate*elapsed)
         up=pos.NORMALIZED;hs=(vel-up*float(up@vel)).MAG;vs=float(up@vel)
-        height=pos.MAG-200000-4113.1358
+        height=pos.MAG-bdy.RADIUS-elevation
         desired=env['lmDescentSpeed'](height,2,3,30)
+        if env['LANDING_RELEASE_AFTER_BRAKE'] and index==0 and len(stack['STAGES'])>1 and hs<=env['APPROACH_HSPEED']:
+            # Independent discrete mass accounting. No production staging
+            # helper is used: throw away dry mass AND unused transfer fuel.
+            mass-=item['DROP']+fuel;index=1
+            item=stack['STAGES'][index];fuel=item['FUEL'];pause=2*max(.05,env['LANDING_STAGE_SETTLE'])
         if height<=1000 and hs<=1 and abs(vs+desired)<=5:
             return pos,elapsed,mass
         assert height>3
         acc=item['THRUST']/mass
         planned=min(acc,stack['RESERVE_ACC']) if index==0 and stack['RESERVE_ACC'] else acc
-        force=env['_landingPredictionCommand'](pos,vel,acc,planned,4113.1358,
+        force=env['_landingPredictionCommand'](pos,vel,acc,planned,elevation,
             Vec((0,0,0)) if target is None else target)*mass
         if pause>0:force=force*0
         flow=force.MAG/item['EXHAUST']
         step=min(dt,fuel/flow) if flow else dt
         if pause>0:step=min(step,pause)
         def acceleration(position,offset):
-            return -65138397520.7807*position/position.MAG**3+rotate(force,rate*(elapsed+offset))/(mass-flow*offset)
+            return -bdy.MU*position/position.MAG**3+rotate(force,rate*(elapsed+offset))/(mass-flow*offset)
         k1p=inertial_vel;k1v=acceleration(inertial_pos,0)
         k2p=inertial_vel+k1v*step/2;k2v=acceleration(inertial_pos+k1p*step/2,step/2)
         k3p=inertial_vel+k2v*step/2;k3v=acceleration(inertial_pos+k2p*step/2,step/2)

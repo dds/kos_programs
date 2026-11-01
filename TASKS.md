@@ -6,6 +6,49 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- Minmus Lander1 crash fixes implemented; NEXT: validate a new lander.
+  Operator confirms no usable pre-impact save; existing lander_decoupler must
+  drive transfer disposal after first braking. Both Espoir Minmus lander
+  profiles had blanked that tag: now use it with RELEASE_AFTER_BRAKE1. Tag
+  audit/cutoff/whole-slot/retained CPU+legs/fuel/clearance guards remain; no
+  release is forced on a failed live check. Same-stage/Isp/mixture fuel groups
+  sum thrust and count shared propellant once. Saved floor1 was a prior
+  workaround and excluded both stage0 landing engines; don't override saved
+  floors silently. New flights use normal floor0, respecting real return tags.
+  Preflight/live gates reserve the weak flare; predictor performs the same
+  unused-fuel/dry-mass handoff. Independent inertial RK4 comparison exposed
+  midpoint coast samples erasing the initial powered step at capture threshold;
+  corrected held-command treatment removes the artificial delayed handoff.
+  Fixed-site terrain checks now retain the exact waypoint; unsafe slopes hold
+  while orbital. Existing flexible-site search remains. Powered forecast had
+  accepted212m along/2235m cross despite1500m tolerance: now full capture
+  footprint is checked, bounded normal fitting uses the powered cross residual,
+  tolerance is capped by approach radius(default750m), profile normal cap20m/s.
+  Source tests solve both normal signs without moving the waypoint, preserve
+  64trials/caps and refuse a saturated cap. Hardware losses no longer count
+  a settled surviving CPU as successful touchdown. Small shared power provider
+  fixes native undefined shipPowerFraction in the following surface science.
+  Existing2s control rows also mirror stage/thrust/attitude/accelerations to
+  Unity Player.log via KUNIVERSE:DEBUGLOG; no network/archive operation during
+  braking. Flag LANDING_DEBUG_TRACE0 disables it. Native logging latency and
+  actual separator/paired-engine actuation still require observation.
+  Routine115/115 passed22.74s(3cached/112executed), final dependency/doc pass
+  14.44s(47cached/68executed); independent tagged Minmus
+  forecast agrees within50m/2s/1kg under explicit flat-terrain/ideal-attitude
+  assumptions. These are source checks, not native crash-cause proof.
+  Evidence: saved target A(1.460223,-42.637998) never moved in exported portion.
+  COAST archive ends UT5805577.33: bottom3712.8,ASL7138.7,hs149.97,vs-33.71,
+  vGate388,vEta62,Heta71,thrust0. Terrain closure previously~75m/s vs32m/s
+  vertical descent. KSP.log: KAC brake alignment triggers5805695.834; physical
+  destruction22:03:10, surviving core enters SURFACE_SCIENCE22:04:42 and errors
+  on shipPowerFraction. Final ignition/attitude/flare tail remains missing.
+  Queue: inspect new durable final controls for terrain closure, alignment,
+  physical thrust and actual stage transition. Prediction still assumes the
+  target terrain datum during powered travel; terrain lookahead is OPEN.
+  Native logs:/tmp/ksp-deck-20261101T210354Z-fetch-js41q6i0/logs/_diagnostics/
+  landingdiag_Espoir-Minmus-Lander1_5805115088_boot_043_core.log;
+  /tmp/ksp-minmus-lander1-impact-20261101.log. No game/save/core control changes.
+
 - General rendezvous / docking rehearsal (2026-11-01): operator cancelled
   using the current Kerbin surveyor pair after discovering opposite orbital
   directions. Leave both mapping; no remote game controls/save edits. Both
@@ -44,8 +87,7 @@ record remaining uncertainty before closing a task.
   (Sun-54.92/Kerbin44.28). Retained node20.6564m/s UT5805097.9474 was accepted
   again at5804806: residual182.88m, powered captureDownfield212/cross2235m,
   impulse193.5m/s. User confirmed it performed the final check/turn and looked
-  ready to burn. Latest fetched log ends before ignition: execution/touchdown
-  remain unconfirmed. Initial long solar coast shows very large game-time
+  ready to burn. Later flight crashed; see the landing investigation above. Initial long solar coast shows very large game-time
   gaps during warp release; investigate separately, don't infer CPU timing
   or burn failure from those game-time deltas. Compact executor's final90s
   check/quiet alignment wait explains the apparent absence of a countdown.

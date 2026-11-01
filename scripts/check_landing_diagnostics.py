@@ -44,6 +44,8 @@ def fixture():
     env['SHIP'].THRUST=0
     env['SHIP'].CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)
     disk,dirs,operations={},{},[]
+    env["debug_rows"]=[]
+    env["KUNIVERSE"]=NS(DEBUGLOG=env["debug_rows"].append)
     def linked(op):
         assert env['HOMECONNECTION'].ISCONNECTED, op
         operations.append(op)
@@ -344,7 +346,29 @@ def check_phase_ledger():
     print('PASS: bounded per-phase time/impulse ledger survives 400 rotated rows, tracks slow powered descent/reentries and sampling gaps, and cannot count an unpowered stage mass drop as fuel use')
 
 
+def check_surviving_debug_trace():
+    env,ctx,disk,ops=fixture()
+    env['HOMECONNECTION'].ISCONNECTED=False
+    env['SHIP'].THRUST=20
+    ctx.update(STATE='BRAKING_BURN',TARGET_THROTTLE=1)
+    baseline=len(ops)
+    # These are the actual live HUD/control calls, whose recorder already
+    # limits cadence. No archive or flight-control operation is introduced.
+    for n in range(61):
+        env['TIME'].SECONDS=n*.1
+        env['landingDiagnosticHud'](ctx,Text('BRAKE'))
+    rows=env['debug_rows']
+    assert 2<=len(rows)<=4 and all('LANDING RO9 STATS landing-diag control' in row for row in rows)
+    assert len(ops)==baseline and ctx['TARGET_THROTTLE']==1
+    env['LANDING_DEBUG_TRACE']=0
+    env['TIME'].SECONDS+=3
+    env['landingDiagnosticHud'](ctx,Text('BRAKE'))
+    assert len(rows)<=4
+    print('PASS: existing2s controls mirror to local Unity debug log during offline powered descent with no archive operations or throttle changes; flag disables output')
+
+
 if __name__=='__main__':
+    check_surviving_debug_trace()
     check_retained_lateral_history()
     check_retained_approach_history()
     check_phase_ledger()

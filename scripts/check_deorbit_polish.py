@@ -36,7 +36,7 @@ def context(fault='none',legacy=False,reported2=False):
     def policy(node,*args):
         models.append(node.retro)
         goal=aim+(4000 if fault=='moving-model' and len(models)>1 else 0)
-        return solver.Lex(VALID=True,AIM=goal,MIN=goal-500,MAX=goal+500,DIAGNOSTIC='fixture')
+        return solver.Lex(VALID=True,AIM=goal,MIN=goal-500,MAX=goal+500,CAPTURE_DIST=0,CAPTURE_CROSS=oracle(node.TIME,node.retro,node.normal)["SIGNED_CROSS"],CAPTURE_TOLERANCE=500,DIAGNOSTIC='fixture')
     env.update(LANDING_POWERED_LEAD=1,solved=oracle(1000,retro0,0),geometry=dict(UT=1000),
         targetLat=-10.590,targetLng=99.490,minLead=120,minRetroDv=2,maxRetroDv=120,
         desiredDownfield=15000,minDownfield=10000,maxDownfield=20000,

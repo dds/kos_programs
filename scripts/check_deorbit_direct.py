@@ -65,7 +65,7 @@ def context(case='ok',used=43,legacy=False):
         if len(models)==3 and case=='abort':abort.value=True
         if len(models)==3 and case=='body':env['SHIP'].BODY=NS(NAME='Kerbin')
         return solver.Lex(VALID=case!='invalid' or len(models)<3,REASON='bad-model',
-                          AIM=29529-error,MIN=29529-error-500,MAX=29529-error+500,DIAGNOSTIC='fresh fixture')
+                          AIM=29529-error,MIN=29529-error-500,MAX=29529-error+500,CAPTURE_DIST=0,CAPTURE_CROSS=0,CAPTURE_TOLERANCE=500,DIAGNOSTIC='fresh fixture')
     def read(node,lat,lng,aim):
         row=oracle(node.TIME,-node.PROGRADE,node.NORMAL)
         row['ERR']=row['DOWNFIELD']-aim

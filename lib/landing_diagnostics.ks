@@ -3,6 +3,10 @@
 // (0:/lib/landing_diagnostics.ks)
 // ============================================================
 @LAZYGLOBAL OFF.
+// Unity's local debug log survives vessel destruction and radio loss.
+// Copy only the existing2s control samples; never export a whole RAM buffer
+// synchronously to the archive during a burn or its final coast.
+GLOBAL LANDING_DEBUG_TRACE IS 1.
 
 GLOBAL FUNCTION landingDiagnosticStart {
     PARAMETER ctx.
@@ -125,6 +129,8 @@ GLOBAL FUNCTION landingDiagnosticHud {
         + " pilotThrottle=" + SHIP:CONTROL:PILOTMAINTHROTTLE
         + " thrust=" + SHIP:THRUST + " mass=" + SHIP:MASS
         + " gravity=" + ctx["GRAV"] + " brakeStageDv=" + ctx["BRAKE_STAGE_DV"]
+        + " stage=" + STAGE:NUMBER + " activeAcc=" + ctx["MAX_ACC"]
+        + " planAcc=" + ctx["PLAN_ACC"] + " reserveAcc=" + ctx["RESERVE_ACC"]
         + " facingUp=" + VDOT(SHIP:FACING:FOREVECTOR,ctx["UP_VEC"])
         + " " + text, TRUE).
 }
@@ -151,6 +157,9 @@ GLOBAL FUNCTION landingDiagnosticRecord {
     PARAMETER row.
     PARAMETER control IS FALSE.
     LOCAL capture IS ctx["DIAGNOSTIC"].
+    IF control AND LANDING_DEBUG_TRACE > 0 {
+        KUNIVERSE:DEBUGLOG("LANDING "+SHIP:NAME+" "+row).
+    }
     // A prolonged hold must not evict all the terrain evidence that caused
     // it. Reserve half the buffer for control history, half for samples/events.
     LOCAL bucket IS "ROWS".
