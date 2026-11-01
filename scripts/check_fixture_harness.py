@@ -1,15 +1,22 @@
 """Regression guards for cached source execution used by the flight fixtures."""
 import ast
+import argparse
+from contextlib import redirect_stdout
+import io
 import math
+import os
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace as NS
+from unittest.mock import patch
 
 import numpy as np
 
 import check_landing_guidance as ks
 from check_deorbit_geometry import Vec, cross, evaluate
-from run_checks import instrument
+from check_codebase import function_body
+from check_minmus_kolniya import execute as run_adapted
+from run_checks import instrument, run_files, worker_environment, positive_jobs
 
 
 def check_live_values_and_literals():
@@ -99,6 +106,92 @@ def check_function_cache():
     print('PASS: function locals stay isolated, shared context mutates and changed source invalidates cached code')
 
 
+def check_immutable_source_caches():
+    source='LOCAL FUNCTION probe { RETURN value + 1. }'
+    body=function_body(source,'probe')
+    env=dict(value=2)
+    for current,result in ((source,3),(source.replace('+ 1','+ 2'),4),(source,3)):
+        extracted=function_body(current,'probe')
+        code=ks.compile_source(extracted)
+        try:ks.execute(code,env)
+        except ks.Returned as returned:assert returned.value==result
+        else:raise AssertionError('cached source lost RETURN')
+    env['value']=8
+    try:ks.execute(ks.compile_source(body),env)
+    except ks.Returned as returned:assert returned.value==9
+    else:raise AssertionError('cached source reused a result')
+    # A caller can still edit a public parsed tree without poisoning source caches.
+    tree=ks.parse(body);tree[0]=('RETURN 99',[],[])
+    assert run_adapted(body,env)==9
+    assert run_adapted(body.replace('+ 1','+ 2'),env)==10
+    env['fixture_unlock']=lambda:env.update(unlocked=True)
+    assert run_adapted('UNLOCK STEERING. PRINT "ignored menu". RETURN value.',env)==8
+    assert env['unlocked']
+    print('PASS: exact-source caches preserve edits, live values, returns and menu/unlock adaptation without sharing mutable parse trees or result values')
+
+
+def check_nested_execution_and_live_helpers():
+    env=dict(outer=0,inner=0,__fixture_steps_0=123)
+    def nested():
+        ks.run(ks.parse('UNTIL inner >= 2 { SET inner TO inner + 1. }'),env)
+    env['nested']=nested
+    ks.run(ks.parse('UNTIL outer >= 2 { nested(). SET outer TO outer + 1. }'),env)
+    assert env==dict(outer=2,inner=2,__fixture_steps_0=123,nested=nested,fixtureValue=2)
+    code=ks.compile_source('RETURN MIN(2,3).')
+    original=ks.EVAL_GLOBALS['MIN']
+    try:
+        for result in (5,7):
+            ks.EVAL_GLOBALS['MIN']=lambda *_,result=result:result
+            try:ks.execute(code,{})
+            except ks.Returned as returned:assert returned.value==result
+            else:raise AssertionError('live global helper was cached')
+        try:ks.execute(code,dict(MIN=lambda *_:11))
+        except ks.Returned as returned:assert returned.value==11
+        else:raise AssertionError('local helper override was hidden')
+    finally:ks.EVAL_GLOBALS['MIN']=original
+    print('PASS: nested execution restores outer loop counters, leaves no private context references and observes both live global and local helper overrides')
+
+
+def check_isolated_parallel_runner():
+    with tempfile.TemporaryDirectory(prefix='kos-runner-check-') as temp:
+        root=Path(temp);paths=[]
+        for name in ('a','b','c'):
+            path=root/f'check_{name}.py'
+            path.write_text('import builtins\n'
+                'def check_case():\n'
+                '    assert not hasattr(builtins, "_kos_fixture_seen")\n'
+                '    builtins._kos_fixture_seen=True\n'
+                f'    print("output-{name}")\n'
+                +('    raise AssertionError("expected runner failure")\n' if name=='b' else '')
+                +"if __name__ == '__main__':\n    check_case()\n")
+            paths.append(path)
+        for jobs in (1,2):
+            result_dir=root/f'results-{jobs}';result_dir.mkdir()
+            output=io.StringIO()
+            with redirect_stdout(output):rows=run_files(paths,'fast',jobs,result_dir)
+            assert [row['module'] for row in rows]==[path.name for path in paths]
+            assert [row['returncode'] for row in rows]==[0,1,0]
+            assert all([case['case'] for case in row['cases']]==['check_case'] for row in rows)
+            text=output.getvalue()
+            assert text.index('output-a')<text.index('output-b')<text.index('output-c')
+            assert 'expected runner failure' in text and 'Traceback' in text
+    print('PASS: serial/parallel runners retain isolated globals, ordered output, all case timings and failures, and continue after a failed file')
+
+
+def check_worker_thread_limits():
+    with patch.dict(os.environ,{},clear=True):
+        env=worker_environment()
+        assert all(env[key]=='1' for key in ('OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','MKL_NUM_THREADS'))
+    with patch.dict(os.environ,dict(OPENBLAS_NUM_THREADS='3',OMP_NUM_THREADS='2',MKL_NUM_THREADS='4')):
+        env=worker_environment()
+        assert [env[key] for key in ('OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','MKL_NUM_THREADS')]==['3','2','4']
+    assert positive_jobs('1')==1 and positive_jobs('4')==4
+    try:positive_jobs('0')
+    except argparse.ArgumentTypeError:pass
+    else:raise AssertionError('zero workers accepted')
+    print('PASS: worker BLAS pools default to one thread, explicit developer settings survive and zero-worker requests reject')
+
+
 def check_timing_instrumentation():
     with tempfile.TemporaryDirectory() as temp:
         path = Path(temp)/'check_fixture.py'
@@ -129,4 +222,8 @@ if __name__ == '__main__':
     check_live_values_and_literals()
     check_control_flow()
     check_function_cache()
+    check_immutable_source_caches()
+    check_nested_execution_and_live_helpers()
+    check_isolated_parallel_runner()
+    check_worker_thread_limits()
     check_timing_instrumentation()

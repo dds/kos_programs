@@ -1117,6 +1117,12 @@ Looks like Python/JS; is neither.
    Routine individual checks should take less than one second. Optimize the
    fixture harness before reducing frequency; preserve assertions, integration
    steps and tolerances. `make check-times` profiles files and individual calls;
+   it defaults to one worker for comparable measurements. Routine `make check`
+   uses up to four isolated processes; set CHECK_JOBS=1 for serial comparisons.
+   Cache only exact immutable source/code, never live fixture values or mutable
+   public parse trees. Keep deterministic output, all failure statuses and
+   per-file process isolation. Implicit worker BLAS pools default to one thread;
+   explicit developer environment settings remain authoritative.
    `make check-all` includes the explicitly requested `make check-slow` pass.
    Run that full pass when changing the direct-ascent predictor or its harness.
    The routine pass retains direct-return context, conic and orchestration checks.

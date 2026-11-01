@@ -4040,12 +4040,14 @@ state converter.
 - `make check` — routine repository contracts and source-driven numerical/control
   fixtures (Python 3 + NumPy; does not run kOS or KSP). Individual routine
   check calls target under one second; a file can contain several calls.
+  Runs up to four isolated check processes; `make check CHECK_JOBS=1` runs
+  serially. Output stays in file order and every failure is reported.
 - `make check-slow` — explicitly run the full finite-burn predictor/independent
   Heun comparison, which still exceeds one second after optimization.
 - `make check-all` — routine and slow checks together.
-- `make check-times` — run all checks and list the slowest files and individual
-  calls. For machine-readable results:
-  `python3 -B scripts/run_checks.py --suite all --timings --json /tmp/kos-check-times.json`.
+- `make check-times` — run all checks serially and list the slowest files and
+  individual calls, avoiding contention in the measurements. For machine-readable results:
+  `python3 -B scripts/run_checks.py --suite all --jobs 1 --timings --json /tmp/kos-check-times.json`.
   See [check performance](docs/CHECK_PERFORMANCE.md) for measurements and scope.
 - `make audit` — phase/dependency coverage and source-token counts by band,
   including warnings for guarded but unavailable handlers.

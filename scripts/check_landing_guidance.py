@@ -88,6 +88,14 @@ class Broken(Exception):
     pass
 
 
+# Keep the evaluator's live math globals, adding only fixed executor helpers.
+# locals() supplies this invocation's environment without allocating/capturing
+# another helper dictionary at every simulated control tick.
+EVAL_GLOBALS.update(__fixture_Returned=Returned, __fixture_Broken=Broken,
+                    __fixture_AssertionError=AssertionError,
+                    __fixture_evaluate=evaluate, __fixture_locals=locals)
+
+
 def freeze(nodes):
     return tuple((statement, freeze(yes), freeze(no)) for statement, yes, no in nodes)
 
@@ -104,7 +112,7 @@ def compile_nodes(nodes):
         try:
             compile(python_expression(source), '<fixture expression>', 'eval')
         except SyntaxError:
-            return f'__fixture_evaluate({source!r}, __fixture_env)'
+            return f'__fixture_evaluate({source!r}, __fixture_locals())'
         return python_expression(source)
     def emit(text, indent):
         lines.append('    '*indent + text)
@@ -136,7 +144,7 @@ def compile_nodes(nodes):
                     emit(f'assert {counter} < 10000, "fixture loop did not converge"', indent+1)
             elif statement.startswith('PARAMETER '):
                 match = re.fullmatch(r'PARAMETER (\w+)(?: IS (.*))?', statement, re.S)
-                emit(f'if not __fixture_has({match[1]!r}):', indent)
+                emit(f'if {match[1]!r} not in __fixture_locals():', indent)
                 if match[2] is None:
                     emit(f'raise __fixture_AssertionError({statement!r})', indent+1)
                 else:
@@ -167,7 +175,7 @@ def compile_nodes(nodes):
                 try:
                     compile(python_expression(expr), '<fixture statement>', 'eval')
                 except SyntaxError:
-                    emit(f'__fixture_evaluate({expr!r}, __fixture_env)', indent)
+                    emit(f'__fixture_evaluate({expr!r}, __fixture_locals())', indent)
                 else:
                     emit(python_expression(expr), indent)
     block(nodes, 0)
@@ -176,13 +184,13 @@ def compile_nodes(nodes):
 
 def execute(compiled, env):
     code, counters = compiled
-    helpers = dict(EVAL_GLOBALS, __fixture_Returned=Returned, __fixture_Broken=Broken,
-                   __fixture_AssertionError=AssertionError, __fixture_has=env.__contains__,
-                   __fixture_evaluate=evaluate, __fixture_env=env)
+    if not counters:
+        exec(code, EVAL_GLOBALS, env)
+        return
     # Generated loop counters must not leak into an externally inspected env.
     previous = {key: env[key] for key in counters if key in env}
     try:
-        exec(code, helpers, env)
+        exec(code, EVAL_GLOBALS, env)
     finally:
         for key in counters:
             env.pop(key, None)
@@ -191,6 +199,12 @@ def execute(compiled, env):
 
 def run(nodes, env):
     execute(compile_nodes(freeze(nodes)), env)
+
+
+@lru_cache(maxsize=1024)
+def compile_source(source):
+    # Cache immutable source/code, never an externally mutable parsed tree.
+    return compile_nodes(freeze(parse(source)))
 
 
 PARSED = {}

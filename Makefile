@@ -1,4 +1,6 @@
 TAG ?=
+CHECK_JOBS ?=
+CHECK_FLAGS = $(if $(CHECK_JOBS),--jobs $(CHECK_JOBS))
 
 .PHONY: help check check-slow check-all check-times audit pre-commit require-tag stamp-version commit-version tag-version push-version release-version watch-sync
 
@@ -16,16 +18,16 @@ help:
 pre-commit: check
 
 check:
-	python3 -B scripts/run_checks.py
+	python3 -B scripts/run_checks.py $(CHECK_FLAGS)
 
 check-slow:
-	python3 -B scripts/run_checks.py --suite slow --timings
+	python3 -B scripts/run_checks.py --suite slow --timings $(CHECK_FLAGS)
 
 check-all:
-	python3 -B scripts/run_checks.py --suite all
+	python3 -B scripts/run_checks.py --suite all $(CHECK_FLAGS)
 
 check-times:
-	python3 -B scripts/run_checks.py --suite all --timings
+	python3 -B scripts/run_checks.py --suite all --timings --jobs $(or $(CHECK_JOBS),1)
 
 audit:
 	python3 -B scripts/check_codebase.py --report

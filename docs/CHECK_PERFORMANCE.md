@@ -1,5 +1,42 @@
 # Check performance
 
+The suite has grown to110 check files. A2026-10-31 serial routine pass took
+165.45s before the next optimization. The runner now caches repeated exact
+function extraction and immutable adapted source compilation, while keeping
+public parsed trees mutable and fixture environments/results live. It also
+runs up to four separate check processes at once, with ordered output and
+every failure retained. `make check CHECK_JOBS=1` gives a serial comparison;
+`make check-times` defaults to serial so individual-call times are comparable.
+Each worker defaults small-vector BLAS pools to one thread, respecting
+explicit OPENBLAS_NUM_THREADS/OMP_NUM_THREADS/MKL_NUM_THREADS values. No cases,
+integration steps, numerical oracles or acceptance tolerances were reduced.
+Further work removes repeated executor dictionaries while retaining live math
+helpers and nested loop scope, uses the existing independently checked3D cross
+product in the plane oracle, and scans only lexical delimiters in the audit.
+Comment/string masking replaces whole tokens of equal width; newline and error
+offsets remain intact. No live physics result is memoized by these changes.
+
+|110-file routine pass, same host | Elapsed |
+|---|---:|
+|Before, serial |165.45s |
+|Initial cache-only changes, serial |181.76s |
+|Final optimized harness, serial |156.85s |
+|Final ordinary `make check`, four isolated workers |62.48s |
+
+The requested slow predictor/Heun comparison also passes in9.06s. Comparing
+timing records found no missing original check calls; four new harness
+regressions cover cache invalidation, nested execution/live helpers, isolated
+parallel failures and thread policy. The144-case plane rotation matrix falls
+from4.484s to0.412s serially. Some older routine calls still exceed one second:
+the audit3.896s, burn-timing group3.388s and staged-descent group3.172s. These
+remain routine checks. Wall times vary with load; parallel per-case times
+include CPU contention and should not be used for the one-second target.
+Final results: `/tmp/kos-check-final-serial-20261101.json`,
+`/tmp/kos-make-check-final-20261101.log`, and
+`/tmp/kos-make-check-slow-final-20261101.log`.
+
+The measurements below are the earlier, smaller suite.
+
 Measured locally on 2026-10-17 against archived commit `03b52a4`. Timings
 vary with CPU load. These are Python fixture times, not flight CPU timings
 or proof of kOS compilation/game behavior.
@@ -33,11 +70,12 @@ Use these commands:
 
 ```sh
 make check        # routine pass; also used by make pre-commit
+make check CHECK_JOBS=1  # serial routine pass
 make check-slow   # only the full predictor/Heun comparison
 make check-all    # routine and slow together
 make check-times # full pass with slowest files and individual calls
-python3 -B scripts/run_checks.py --suite fast --timings --json /tmp/kos-fast.json
-python3 -B scripts/run_checks.py --suite all --timings --json /tmp/kos-all.json
+python3 -B scripts/run_checks.py --suite fast --jobs 1 --timings --json /tmp/kos-fast.json
+python3 -B scripts/run_checks.py --suite all --jobs 1 --timings --json /tmp/kos-all.json
 python3 -B scripts/check_direct_return.py --slow  # focused full direct-return checks
 ```
 

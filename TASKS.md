@@ -6,7 +6,45 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- IMPLEMENTED/source-checked; native capture retry pending: Espoir-Minmus-Lander1 entered Minmus at17.4km Pe and CAPTURE
+- IMPLEMENTED/source-checked: optimize make check again without dropping cases or changing
+  numerical steps/tolerances. Final preceding baseline:110 files165.45s serial.
+  cProfile finds repeated function_body regex/bracket scans and adapted-source
+  parsing; cache only exact immutable source/compiled code. Keep mutable parse
+  APIs and live environments/results uncached. Add bounded isolated-process
+  concurrency, deterministic output/all failures, optional CHECK_JOBS=1 and
+  serial check-times; limit implicit per-worker BLAS pools, respecting explicit
+  environment settings. Harness/source invalidation and runner isolation/failure
+  tests added. First cached-only serial pass181.76s passed but did not improve
+  overall wall time. Further reduce per-tick executor dictionaries (live globals
+  and current locals, preserving nested counters), specialize plane-oracle3D
+  cross products, and remove per-character masking/delimiter work plus ambiguous
+  trigger-scope regex backtracking. Numerical equations/matrix unchanged.
+  Final110-file routine pass156.85s serial; ordinary make check62.48s with4
+  workers versus165.45s before. Full requested slow Heun/predictor pass9.06s
+  also passes. Original per-case call counts are all retained, plus4 harness
+  regressions; new serial cases<=0.861s. Plane matrix4.484->0.412s, all144
+  rotations retained. Some older calls still exceed1s (audit3.896s, burn timing
+  main3.388s, staged descent3.172s); further profiling remains useful, no cases
+  moved to slow. No flight code changes during/after final runs. Results:
+  /tmp/kos-check-final-serial-20261101.json/.log,
+  /tmp/kos-make-check-final-20261101.log and
+  /tmp/kos-make-check-slow-final-20261101.log. No game/save changes.
+
+- NATIVE capture succeeded; operator redirects Minmus-Lander1 away from the
+  contract now handled by Surveyor1. boot015 reused the104.206m/s unflown node,
+  captured17.4x1040.7km, accepted stopped0.13197m/s tail through existing
+  orbit recovery, remaining2248.1m/s. boot016 SHAPE queues59.0275m/s at+66068s
+  for the original21.6/LAN255.5/AoP157.3 contract. Operator command supplied:
+  interrupt wait, cmd/shaperetry("unflown"); ONLY after successful cancellation
+  cmd/setphase("LAND_PREP") + REBOOT. Existing preparation changes plane while
+  high then lowers to15km polar and stops at LANDING_REVIEW for a future site.
+  Preserve original return configuration/ledgers; do not reset mission or
+  overwrite a valid contract profile. Future simple launches: minmus_lander.
+  Native preparation retry pending. Logs:/tmp/ksp-deck-20261101T041215Z-fetch-
+  q44y9x4b/logs/Espoir-Minmus-Lander1_5154039/boot_016_core.log;
+  boot015fetch-wvhk96js.
+
+- NATIVE capture confirmed (boot015 above): Espoir-Minmus-Lander1 entered Minmus at17.4km Pe and CAPTURE
   held before planning because minmus_contract_lander_return capped Pe at17km.
   boot012's0.39435m/s correction stopped normally with0.04808m/s residual;
   subsequent0.17365m/s final trim was below the0.3m/s execution floor.
@@ -24,7 +62,7 @@ record remaining uncertainty before closing a task.
   Independent capture estimate costs<3m/s extra at17.4km versus15km; native
   node and900m/s reserve still govern actual admission. No production changes
   during/after the full suite. Report:/tmp/kos-minmus-capture-corridor-20261101.json
-  and.log. Native corrected capture remains pending.
+  and.log. Native corrected capture succeeded at17.4km Pe.
   Evidence:/tmp/ksp-deck-20261101T034038Z-fetch-_w0ej4mx/logs/
   Espoir-Minmus-Lander1_5154039/boot_013_core.log; boot012fetch-5ko_r5uk.
 

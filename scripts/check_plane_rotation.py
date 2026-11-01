@@ -7,6 +7,7 @@ import numpy as np
 from check_codebase import ROOT, function_body
 from check_minmus_kolniya import execute as run_source
 from check_arrival_budget import shape_admission
+from check_deorbit_geometry import cross
 
 SOURCE=(ROOT/'lib/orbit_shape.ks').read_text()
 
@@ -41,12 +42,12 @@ class Node:
         vt=math.sqrt(mu*p)/radius
         inc=math.radians(ship.ORBIT.INCLINATION)
         r=np.array([radius,0,0]);v=np.array([vr,vt*math.cos(inc),vt*math.sin(inc)])
-        h=np.cross(r,v);normal=h/np.linalg.norm(h)
+        h=cross(r,v);normal=h/np.linalg.norm(h)
         prograde=v/np.linalg.norm(v)
-        radial=np.cross(prograde,normal)
+        radial=cross(prograde,normal)
         after=v+self.PROGRADE*prograde+self.NORMAL*normal*env['normal_sign']+self.RADIALOUT*radial*env['radial_sign']
-        h=np.cross(r,after);energy=np.dot(after,after)/2-mu/radius
-        evec=np.cross(after,h)/mu-r/radius
+        h=cross(r,after);energy=np.dot(after,after)/2-mu/radius
+        evec=cross(after,h)/mu-r/radius
         e=float(np.linalg.norm(evec));sma=-mu/(2*energy)
         n=h/np.linalg.norm(h)
         o=NS(ECCENTRICITY=e,PERIAPSIS=sma*(1-e)-ship.BODY.RADIUS,

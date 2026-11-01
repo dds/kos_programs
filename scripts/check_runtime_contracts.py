@@ -36,7 +36,7 @@ class KList(list):
 
 def run(source, env):
     try:
-        ks.run(ks.parse(source), env)
+        ks.execute(ks.compile_source(source), env)
     except ks.Returned as result:
         return result.value
 
@@ -59,9 +59,11 @@ def check_command_scopes():
                    'FUNCTION outer { LOCAL FUNCTION inner { RETURN 1. } RETURN inner(). }',
                    'WHEN ABORT THEN { RETURN FALSE. }',
                    'ON AG1 { RETURN TRUE. }',
+                   'ON flag = 1.25 { IF flag { RETURN TRUE. } }',
                    'LOCAL callback IS { RETURN TRUE. }.',
                    '// RETURN.\nPRINT "RETURN. { }".'):
         assert not unscoped_returns(source), source
+    assert unscoped_returns('ON flag = 1.25 { RETURN TRUE. }\nRETURN.')==[2]
     valid = '''@LAZYGLOBAL OFF.
         GLOBAL LIMIT IS 0.5.
         PARAMETER opts IS LEXICON().

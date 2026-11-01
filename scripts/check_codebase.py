@@ -17,10 +17,12 @@ ROOT = Path(__file__).resolve().parents[1]
 @lru_cache(maxsize=512)
 def mask(source):
     """Preserve offsets/newlines while hiding comments and string contents."""
+    # Neither token can contain a newline; replace its whole width at once.
     return re.sub(r'"[^"\n]*"|//[^\n]*',
-                  lambda m: ''.join('\n' if c == '\n' else ' ' for c in m[0]), source)
+                  lambda m: ' ' * len(m[0]), source)
 
 
+@lru_cache(maxsize=4096)
 def function_body(source, name):
     clean = mask(source)
     match = re.search(r'\bFUNCTION\s+' + re.escape(name) + r'\s*\{', clean, re.I)
@@ -79,7 +81,7 @@ def unscoped_returns(source):
     """
     clean = mask(source)
     scopes = {match.end()-1 for match in re.finditer(
-        r'\bFUNCTION(?:\s+\w+)?\s*\{|\bTHEN\s*\{|\bON\b(?:[^{}.]+|\.(?=\d))*\{'
+        r'\bFUNCTION(?:\s+\w+)?\s*\{|\bTHEN\s*\{|\bON\b[^{}.]*(?:\.(?=\d)[^{}.]*)*\{'
         r'|(?:\bIS|\bTO|\(|,)\s*\{', clean, re.I)}
     stack, bad = [], []
     for match in re.finditer(r'\bRETURN\b|[{}]', clean, re.I):
@@ -136,15 +138,17 @@ def audit(report=False):
                for folder in ('boot', 'lib', 'craft', 'missions', 'roles', 'cmd', 'configs')
                for p in (ROOT / folder).rglob('*.ks')}
     clean = {path: mask(src) for path, src in sources.items()}
+    closing = {')':'(', '}':'{', ']':'['}
     for path, src in clean.items():
         stack = []
-        for pos, char in enumerate(src):
+        for match in re.finditer(r'["(){}\[\]]',src):
+            pos,char=match.start(),match[0]
             if char == '"':
                 errors.append(f'{path}: unterminated string on line {src[:pos].count(chr(10))+1}')
             elif char in '({[':
                 stack.append(char)
             elif char in ')}]':
-                if not stack or stack.pop() != dict(zip(')}]', '({['))[char]:
+                if not stack or stack.pop() != closing[char]:
                     errors.append(f'{path}: mismatched delimiter at offset {pos}')
         if stack:
             errors.append(f'{path}: unclosed delimiters {stack}')

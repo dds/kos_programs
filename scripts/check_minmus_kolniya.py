@@ -1,5 +1,6 @@
 """Specified two-orbit Minmus mission across fresh profile boots, not KSP."""
 import re
+from functools import lru_cache
 from types import SimpleNamespace as NS
 
 import check_landing_guidance as ks
@@ -22,11 +23,16 @@ def executable(source):
     return strip(ks.parse(source))
 
 
+@lru_cache(maxsize=1024)
+def compiled_executable(source):
+    return ks.compile_nodes(ks.freeze(executable(source)))
+
+
 def execute(source,env):
     # Menu rendering is tested with the excursion source; existing flight
     # fixtures do not load the always-present mission_type core provider.
     env.setdefault('missionExcursionCommands',lambda:None)
-    try:ks.run(executable(source),env)
+    try:ks.execute(compiled_executable(source),env)
     except ks.Returned as result:return result.value
 
 
