@@ -117,7 +117,14 @@ GLOBAL FUNCTION landingDeorbitLeadPolicy {
     LOCAL currentRadar IS ALT:RADAR.
     LOCAL legacyRadarHull IS MAX(0,currentRadar-vesselBounds:BOTTOMALTRADAR).
     LOCAL stack IS landingBrakeStackAt(landingBrakeStack(),SHIP:MASS,nd:DELTAV:MAG).
-    IF NOT stack["VALID"] { SET policy["REASON"] TO stack["REASON"]. RETURN policy. }
+    IF NOT stack["VALID"] {
+        SET policy["REASON"] TO stack["REASON"].
+        mLogWarn("STATS landing-stack rejected reason=" + stack["REASON"]
+            + " currentStage=" + STAGE:NUMBER + " landingFloor=" + vesselLandingStageFloor()
+            + " nextEngineStage=" + vesselLandingNextEngineStage()
+            + " engineCount=" + SHIP:ENGINES:LENGTH).
+        RETURN policy.
+    }
 
     LOCAL activeAcc IS stack["STAGES"][0]["THRUST"]/stack["MASS"].
     LOCAL planAcc IS vesselLandingReserveAcc().

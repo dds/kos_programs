@@ -266,6 +266,15 @@ fallback remains `RUNPATH("0:/cmd/landingstages.ks", 2).` at a throttle-off
 manual point before deorbit, followed by reboot; it changes only that flight's
 landing stage limit. A manual floor can tighten a tagged boundary, not weaken it.
 
+Use the actual craft's staging numbers. A two-level stack with the landing
+engine in stage1 and return engines in stage0 needs
+`RUNPATH("0:/cmd/landingstages.ks",1).`, then `REBOOT.`. The serial powered
+forecast deliberately rejects an unreserved parallel future engine group;
+`multiple-future-engines` and the `STATS landing-stack` row identify that
+layout. Reserving the return stage excludes its engines/fuel from descent
+while retaining its wet mass. It does not make a parallel landing stage a
+supported serial model or guarantee the permitted landing fuel is sufficient.
+
 Keep crossfeed from reserved return tanks disabled: this policy controls
 staging, not fuel flow, and cannot prove descent fuel is sufficient. Surface
 ascent uses its own staging and can use leftover lander fuel before shedding
@@ -1360,6 +1369,9 @@ the existing spent ledger remains. The nominal Molniya conversion costs about
 1340m/s impulsively; actual native plans and fuel gates determine feasibility.
 It does not launch, release payloads or automatically deorbit. Use it with no
 unfinished maneuver; later scanorbit previews can use the live coverage map.
+If earlier contract burns/reservations exhaust its cumulative allowance,
+`cmd/shapebudget.ks` grants explicitly requested further shaping dV without
+erasing expenditure or changing the per-burn limit and physical fuel reserve.
 
 To fill remaining map gaps from an existing near-polar survey orbit, stop
 automation at the prompt, keep a link and quicksave, then run:

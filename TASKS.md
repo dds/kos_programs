@@ -6,7 +6,44 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- IMPLEMENTED/source-checked; dark/direct policy command native retry pending:
+- NATIVE new holds diagnosed; operator recovery commands supplied:
+  Minmus Lander1 boot039 UT5756471..5756506 confirms ANY/DIRECT works: third
+  pass sun-54.92/Kerbin44.28 accepted, cross2891m under3163m physical cap,
+  50/64 geometric trials. Next hold is powered-lead-unsupported-stack, before
+  any finite forecast. Read-only latest persistent.sfs UT5756562 confirms a
+  stage1 restock-engine-torch active plus TWO inactive radialEngineMini.v2
+  return engines in stage0, no usable configured role boundary (floor0).
+  This is NOT the earlier3/2/1 RO9 stack. Explicit existing command
+  cmd/landingstages(1), REBOOT reserves stage0; the forecast then models only
+  the stage1 landing engine and carries the retained return tanks/engines.
+  No auto inference, physical staging or model exception. Actual-source
+  fixture covers the1/0/0 layout in three engine orders: floor0 still rejects
+  parallel future propulsion, explicit1 excludes it without return fuel credit.
+  Hardware-model rejection reasons now distinguish multiple future engines,
+  active/next engine layout, serial boundary and mass/fuel failures; orbital
+  lead rejection logs current stage/floor/next stage/engine count once.
+  Native fixed-floor forecast and landing still pending. Exact saved-source
+  diagnostic:/tmp/ksp-lander-stack-inspect.py (read-only streaming vessel data).
+  Log:/tmp/ksp-deck-20261101T200300Z-fetch-b1t4161q/logs/
+  Espoir-Minmus-Lander1_5154039/boot_039_core.log; boot038 fetch-98o80ht_.
+
+  Mun surveyor boot067 UT5756632 mapping retask reaches the correct160x230km
+  polar goal setup, current163.3x3022.3km/inc63.4. Plane745.1m/s, stock1467.7,
+  spent/reserved2224.12 vs cumulative2500, burnCap1500/reserve100. Burn and
+  fuel checks pass; cumulative check alone fails. Existing cmd/shapebudget
+  with1360 further allowance gives3584.12 cumulative; never clears old spent,
+  orbit goals,1500 per-burn or100m/s reserve. Supplied command then REBOOT.
+  Focused actual command/admission replay passes this recorded case and still
+  refuses a fuel-reserve breach. Native new allowance/shape flight pending.
+  Log:/tmp/ksp-deck-20261101T200608Z-fetch-3dbkkojm/logs/
+  Espoir-Mun-Surveyor1_5642520/boot_067_core.log. All113 routine files pass
+  54.13s (3 verified unchanged passes reused,110 executed),0 structural errors;
+  existing KSC_DEORBIT handler warning unchanged. New source fixtures retain
+  independent inertial brake physics, mixture/fuel isolation and all original
+  budget/unsafe-context checks. Native recovery outcomes remain pending.
+  No Deck/game/save writes or guard relaxation; commands already existed.
+
+- NATIVE dark/direct policy applied; remaining hardware hold above:
   Espoir-Minmus-Lander1 boot037 UT5754127..5754169 confirms new two-rotation
   survey ran (1665 samples/5.4s/8 ranked), exact A1.460223,-42.637998.
   Three geometrically valid candidates reject on policy: sun55.92/Kerbin-37.12,
@@ -28,7 +65,7 @@ record remaining uncertainty before closing a task.
   pass; solver fixture distinguishes policy from geometric failure. All113
   routine files pass38.84s (2 verified unchanged passes reused,111 executed),
   0 structural errors; existing KSC_DEORBIT handler warning unchanged.
-  Native new powered solution still needed.
+  Native policy succeeds in boot039 above; powered solution still needed.
   Log:/tmp/ksp-deck-20261101T193932Z-fetch-fgakfmef/logs/
   Espoir-Minmus-Lander1_5154039/boot_037_core.log. No game/save changes.
 

@@ -66,6 +66,23 @@ def check_command_rejections():
     print('PASS: invalid allowance/ledger, wrong phase/orbit, abort, node and nonzero/invalid controls leave overrides and mission untouched')
 
 
+def check_mapping_retask_allowance():
+    env,saved,settings,writes=command_fixture()
+    saved.update(mission_id='kerbin_mapping_retask',shape_budget_spent=2224.12)
+    settings.update(SHAPE_DV_CAP=1500,SHAPE_TOTAL_DV_CAP=2500,SHAPE_RESERVE_DV=100,
+                    SHAPE_PE=160000,SHAPE_AP=230000,SHAPE_INC=90)
+    env['additionalDv']=1360
+    before=dict(saved)
+    assert not shape_admission(settings,745.1,saved['shape_budget_spent'],1467.7)
+    run_source(COMMAND_BODY,env)
+    assert writes==[dict(SHAPE_TOTAL_DV_CAP=3584.12)] and saved==before
+    assert shape_admission(settings,745.1,saved['shape_budget_spent'],1467.7)
+    assert settings['SHAPE_RESERVE_DV']==100 and settings['SHAPE_DV_CAP']==1500
+    assert [settings['SHAPE_'+key] for key in ('PE','AP','INC')]==[160000,230000,90]
+    assert not shape_admission(settings,745.1,saved['shape_budget_spent'],845.0)
+    print('PASS: recorded mapping745.1m/s correction fails the old cumulative cap despite1467.7m/s fuel; explicit1360 allowance admits it without clearing2224.12 spent, target orbit or100m/s reserve')
+
+
 def check_expired_node_and_warp():
     env,_,removed,events=phase_fixture();calls=[]
     env.update(WARP=7,KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=False)),
@@ -95,4 +112,5 @@ def check_expired_node_and_warp():
 if __name__=='__main__':
     check_allowance_and_reserves()
     check_command_rejections()
+    check_mapping_retask_allowance()
     check_expired_node_and_warp()

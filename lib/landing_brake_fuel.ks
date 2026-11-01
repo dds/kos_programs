@@ -42,11 +42,17 @@ GLOBAL FUNCTION landingBrakeStack {
     LOCAL nextStage IS vesselLandingNextEngineStage().
     FOR eng IN SHIP:ENGINES {
         IF eng:IGNITION AND NOT eng:FLAMEOUT AND eng:AVAILABLETHRUST > 0 {
-            IF active <> 0 OR eng:THROTTLELOCK OR eng:MULTIMODE { RETURN result. }
+            IF active <> 0 OR eng:THROTTLELOCK OR eng:MULTIMODE {
+                SET result["REASON"] TO "unsupported-active-engine-layout". RETURN result.
+            }
             SET active TO eng.
         } ELSE IF eng:POSSIBLETHRUST > 0 AND eng:STAGE >= vesselLandingStageFloor() {
-            IF nextEngine <> 0 OR eng:STAGE <> nextStage
-                    OR eng:THROTTLELOCK OR eng:MULTIMODE { RETURN result. }
+            IF nextEngine <> 0 {
+                SET result["REASON"] TO "multiple-future-engines". RETURN result.
+            }
+            IF eng:STAGE <> nextStage OR eng:THROTTLELOCK OR eng:MULTIMODE {
+                SET result["REASON"] TO "unsupported-next-engine-layout". RETURN result.
+            }
             SET nextEngine TO eng.
         }
     }
@@ -64,6 +70,7 @@ GLOBAL FUNCTION landingBrakeStack {
         IF STAGE:NUMBER <> nextStage+1 OR active:DECOUPLEDIN <> nextStage
                 OR nextEngine:DECOUPLEDIN >= nextStage
                 OR CORE:PART:DECOUPLEDIN >= nextStage OR nextEngine:VISP <= 0 {
+            SET result["REASON"] TO "serial-stage-boundary".
             RETURN result.
         }
         LOCAL retained IS 0.
@@ -77,7 +84,9 @@ GLOBAL FUNCTION landingBrakeStack {
         LOCAL nextFuel IS _landingEngineFuelMass(nextEngine).
         LOCAL nextThrust IS nextEngine:POSSIBLETHRUSTAT(0).
         IF dropMass < 0 OR retained <= 0 OR nextFuel <= 0 OR nextFuel >= retained
-                OR nextThrust <= 0 { RETURN result. }
+                OR nextThrust <= 0 {
+            SET result["REASON"] TO "next-stage-mass-or-fuel". RETURN result.
+        }
         SET stages[0]["DROP"] TO dropMass.
         stages:ADD(LEXICON("THRUST",nextThrust,"EXHAUST",nextEngine:VISP*9.80665,
             "FUEL",nextFuel,"DROP",0)).

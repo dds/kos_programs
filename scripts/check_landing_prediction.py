@@ -93,7 +93,29 @@ def check_snapshot():
         setattr(active,attr,False)
     lander.CONSUMEDRESOURCES['Oxidizer'].DENSITY=0
     assert not env['landingBrakeStack']()['VALID']
+    lander.CONSUMEDRESOURCES['Oxidizer'].DENSITY=.005
+    # Native Minmus Lander1: active stage1 Torch; two inactive return engines
+    # in stage0. An explicit floor reserves them; never infer their role merely
+    # because this serial-only predictor cannot model a parallel group.
+    active.STAGE=1;active.DECOUPLEDIN=0;returning.STAGE=0
+    other_return=NS(**vars(returning))
+    env['STAGE'].NUMBER=1
+    env['SHIP'].PARTS[0].DECOUPLEDIN=0
+    env['SHIP'].PARTS[1].DECOUPLEDIN=-1
+    for engines in ((active,returning,other_return),(returning,active,other_return),
+                    (returning,other_return,active)):
+        env['SHIP'].ENGINES=KList(engines)
+        env['LANDING_STAGE_LIMIT']=0
+        rejected=env['landingBrakeStack']()
+        assert not rejected['VALID'] and rejected['REASON']=='multiple-future-engines'
+        env['LANDING_STAGE_LIMIT']=1
+        current_only=env['landingBrakeStack']()
+        assert current_only['VALID'] and len(current_only['STAGES'])==1
+        assert current_only['STAGES'][0]['FUEL']==original['STAGES'][0]['FUEL']
+        assert current_only['STAGES'][0]['DROP']==current_only['RESERVE_ACC']==0
+        assert not returning.IGNITION and not other_return.IGNITION
     print('PASS: actual 3/2/1 snapshot isolates limiting mixtures and return wet mass, charges deorbit fuel once, copies without mutation and rejects unsupported/depleted hardware')
+    print('PASS: recorded1/0/0 engine ordering rejects a parallel future group at floor0; explicit floor1 models only the active landing engine while carrying return tanks and leaving both return engines off')
 
 
 def independent_inertial_capture(env,stack,pos,ground_vel,dt=.25,target=None):
