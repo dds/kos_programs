@@ -6,6 +6,18 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- NATIVE scanraise plan verified while operator executes its node:
+  diagnostic5268851 costs22.83167575m/s, nodeUT5270691.06394;
+  Pe99.168391->99.168390km,Ap100.765286->130.000001km,
+  inc90.000544396->90.000544407deg,period1957.989293->2019.641213s.
+  Budget150/250m/s,reserve100,remaining2658.7m/s all pass; executor setup
+  dv22.8251/ETA1807.9s at5268882.1. Latest read has no cutoff or flown-orbit
+  result yet; operator should REBOOT after success to resume SCANSAT_OPS.
+  Coverage baseline38.083150%; compare after daylight scanning in the new
+  orbit before crediting any improvement. /tmp/ksp-deck-20261101T025405Z-
+  fetch-6t88f9vk/logs/_diagnostics/scanraise_Espoir-Kerbin-Surveyor1_5268851.log;
+  boot012fetch-b796tm71. Read-only log collection; no game/save changes.
+
 - IMPLEMENTED/source-checked; native experiment pending: user
   explicitly wants to move the Kerbin mapper after repeated no-useful-change.
   New archive-only cmd/scanraise.ks,130 plans one prograde periapsis burn
