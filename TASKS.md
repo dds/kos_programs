@@ -6,6 +6,17 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- FJ4B configuration refresh(2026-11-01): restore the existing jet using the
+  current airplaneMain/airplaneVehicleLibs hooks. Preserve5km/300m/s cruise,
+  450m/s top-speed reference and manual takeoff/landing. Opt-in PID assists
+  onAG7/AP andAG8/selected waypoint; controllers initially disengaged. No
+  passenger-jet gain copying. Automatic reversers disabled; reverse group0
+  prevents preflight from touching a pilot engine-mode AG2. Fresh aircraft
+  phase initialized before band selection; saved/explicit phases retained.
+  Routine115/115 passed2.53s(106verified cached/9executed). Native shakeout/
+  gain tuning and aircraft hardware bindings remain pending.
+  No KSP airframe, game settings or live flight controls changed.
+
 - Minmus Lander1 crash fixes implemented; NEXT: validate a new lander.
   Operator confirms no usable pre-impact save; existing lander_decoupler must
   drive transfer disposal after first braking. Both Espoir Minmus lander

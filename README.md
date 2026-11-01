@@ -1133,7 +1133,7 @@ derived state, and use `RUNONCEPATH("0:/cmd/trimstate.ks").` to clear the old
 | `FalconHeavy` | Heavy Falcon variant | Falcon plumbing for heavier moon/interplanetary payloads |
 | `Espoir` | Local and interplanetary science probe | New hardware; surveyed landings and orbital mapping at Kerbin, Minmus, Duna and Ike |
 | `FJ1A` | Juno trainer jet | `airplaneMain()` configuration |
-| `FJ4B` | Supersonic jet | No landing assist — pilot owns the rollout |
+| `FJ4B` | Supersonic jet | AG7 AP / AG8 navigation; manual takeoff and landing |
 | `FBIJ` | Business jet | GAP airline missions, multi-leg, touch-and-go aware |
 | `FSP1` | Seaplane | SPLASHDOWN/SURFACE_OPS water phases |
 | `FSS1` | SSTO spaceplane | Template for the Whiplash/RAPIER era |
@@ -1183,9 +1183,20 @@ All planes are thin configurations over `airplaneMain()` (`lib/airplane.ks`):
 PREFLIGHT (checklist + trim/reverser reset) → FLIGHT → POSTFLIGHT, with
 touch-and-go awareness via `MIN_FLIGHT_TIME`/`FINAL_LANDING_SPEED`.
 
-Assists (PID, gains in `PLANE_CFG`): **AG7** toggles the autopilot (wing
+FJ4B uses [craft/FJ4B.ks](craft/FJ4B.ks); name the aircraft `FJ4B` or, for
+automatic science collection, `FJ4B-KERBIN-SCIENCE-01`. Its existing cruise
+settings remain5,000m/300m/s, with450m/s as the configured top-speed reference.
+Bind flaps toAG1 and leaveAG7/AG8 free of part actions. After manual takeoff,
+AG7 toggles the autopilot; selecting a Waypoint Manager destination and toggling
+AG8 engages navigation. Controllers start disengaged. Landing, engine modes,
+airbrakes and rollout remain manual; automatic thrust reverse is disabled.
+The new setup uses the shared PID gains, which still need FJ4B flight tuning.
+Profile-less boots start in PREFLIGHT and preserve a saved airborne phase on
+reboot. Legacy POST_FLIGHT checkpoints remain supported by the shared framework.
+
+Assists use the `PLANE_*` settings in `lib/airplane.ks`: **AG7** toggles the autopilot (wing
 leveler + altitude hold + heading hold), **AG8** flies to the Waypoint
-Manager selection. Heading hold turns by **banking** (`HDG_BANK_SIGN` is the
+Manager selection. Heading hold turns by **banking** (`PLANE_HDG_BANK_SIGN` is the
 per-airframe escape hatch); altitude hold flies vertical speed; control
 authority gain-schedules with dynamic pressure. Thrust reversers engage
 automatically at touchdown when **brakes are held** (a touch-and-go never
@@ -1193,7 +1204,7 @@ brakes) and stow on bounce, brake release, or full stop.
 
 Shakeout: from manual mode, airborne, run `RUNPATH("0:/cmd/airtest.ks").` —
 scripted step inputs for each assist with metrics logged; it detects and
-flips a wrong `HDG_BANK_SIGN` automatically.
+flips a wrong `PLANE_HDG_BANK_SIGN` automatically.
 
 Approach data (runway position/headings/glideslope) lives in
 `PLANE_APPROACHES` (KSC, Island Airfield) plus optional hand-maintained
