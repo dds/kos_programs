@@ -159,6 +159,7 @@ def check_capture_recovery_and_separation():
             CAPTURE_ACCEPT_BOUND=0,CAPTURE_MIN_PE=75000,CAPTURE_MAX_PE=95000,CAPTURE_RESERVE_DV=100,
             _captureContinueFlyby=lambda _:False,
             _captureRecoverResidual=lambda _:False,
+            _captureUnflownNode=lambda _:False, # No saved capture provenance in these foreign-node cases.
             TARGET_AP=2880000,planCapture=lambda *_:events.append('plan') or node,
             fixture_remove=lambda _:events.append('remove'))
         if fault=='fuel':node.DELTAV.MAG=600

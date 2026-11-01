@@ -111,7 +111,7 @@ def capture_fixture(fuel=1300, vinf=1760):
         orbit.ECCENTRICITY=.9; ship.APOAPSIS=5000000
         return True
     env.update(NODE=node, fixture_add=add, fixture_remove=remove, executeManeuver=burn)
-    for source, names in ((PLAN,('_sar','planCapture')), (CAPTURE,('_captureContinueFlyby',))):
+    for source, names in ((PLAN,('_sar','planCapture')), (CAPTURE,('_captureContinueFlyby','_captureUnflownNode'))):
         for name in names:
             env[name]=lambda *args,source=source,name=name:invoke(source,name,env,*args)
     return env, ship, state, events

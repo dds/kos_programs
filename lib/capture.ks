@@ -173,6 +173,50 @@ LOCAL FUNCTION _captureRecoverResidual {
     RETURN orbitBurnRecover("CAPTURE",floorAlt,CAPTURE_MAX_PE).
 }
 
+// A connected/offline reboot during the scheduled coast must reuse our
+// never-ignited capture. A visible node alone is not authority to execute.
+LOCAL FUNCTION _captureUnflownNode {
+    PARAMETER target.
+    IF NOT HASNODE OR stateGet("phase","") <> "CAPTURE"
+            OR stateGet("burn_pending","false") <> "true"
+            OR stateGet("burn_started","") <> "false"
+            OR stateGet("burn_phase","") <> "CAPTURE"
+            OR stateGet("burn_body","") <> target:NAME
+            OR stateGet("mission_id","") = ""
+            OR stateGet("burn_mission_id","") <> stateGet("mission_id","") { RETURN FALSE. }
+    IF stateGetNum("burn_launch_time",-1) <> stateGetNum("launch_time",0)
+            OR ABORT OR WARP <> 0 OR SHIP <> KUNIVERSE:ACTIVEVESSEL OR SHIP:BODY <> target
+            OR ALLNODES:LENGTH <> 1
+            OR NOT (SHIP:THRUST >= 0 AND SHIP:THRUST <= 0.001
+                AND SHIP:CONTROL:MAINTHROTTLE <= 0 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0)
+            OR NOT (SHIP:ORBIT:ECCENTRICITY >= 1 AND SHIP:ORBIT:ECCENTRICITY < 1e30
+                AND ETA:PERIAPSIS > 0 AND ETA:PERIAPSIS < 1e30) { RETURN FALSE. }
+    LOCAL nd IS NEXTNODE.
+    LOCAL dv IS nd:DELTAV:MAG.
+    LOCAL savedDv IS stateGetNum("burn_dv",-1).
+    IF NOT (savedDv > 0 AND savedDv < 1e30 AND dv > 0 AND dv < 1e30
+            AND nd:ETA >= 60 AND ABS(nd:TIME-stateGetNum("burn_node_time",-1)) < 0.5
+            AND ABS(nd:TIME-TIME:SECONDS-ETA:PERIAPSIS) <= 60
+            AND ABS(dv-savedDv) <= MAX(0.05,savedDv*0.001)
+            AND nd:PROGRADE < 0 AND ABS(nd:NORMAL) <= MAX(0.01,dv*0.001)
+            AND ABS(nd:RADIALOUT) <= MAX(0.01,dv*0.001)) { RETURN FALSE. }
+    LOCAL floorAlt IS MAX(1,CAPTURE_MIN_PE).
+    IF target:ATM:EXISTS { SET floorAlt TO MAX(floorAlt,target:ATM:HEIGHT+10000). }
+    LOCAL wantAp IS MAX(35000,SHIP:PERIAPSIS).
+    IF TARGET_AP >= 0 { SET wantAp TO MAX(TARGET_AP,SHIP:PERIAPSIS). }
+    LOCAL obt_ IS nd:ORBIT.
+    LOCAL cosPlane IS COS(SHIP:ORBIT:INCLINATION)*COS(obt_:INCLINATION)
+        + SIN(SHIP:ORBIT:INCLINATION)*SIN(obt_:INCLINATION)*COS(SHIP:ORBIT:LAN-obt_:LAN).
+    RETURN obt_:BODY = target AND NOT obt_:HASNEXTPATCH
+        AND obt_:ECCENTRICITY >= 0 AND obt_:ECCENTRICITY < 1
+        AND SHIP:PERIAPSIS >= floorAlt AND obt_:PERIAPSIS >= floorAlt
+        AND (CAPTURE_MAX_PE < 0 OR (SHIP:PERIAPSIS <= CAPTURE_MAX_PE AND obt_:PERIAPSIS <= CAPTURE_MAX_PE))
+        AND obt_:APOAPSIS >= obt_:PERIAPSIS AND obt_:APOAPSIS+target:RADIUS < target:SOIRADIUS
+        AND ABS(obt_:APOAPSIS-wantAp) <= MAX(1000,wantAp*0.01)
+        AND cosPlane >= COS(0.1)
+        AND SHIP:DELTAV:VACUUM >= dv+MAX(0,CAPTURE_RESERVE_DV) AND SHIP:DELTAV:VACUUM < 1e30.
+}
+
 GLOBAL FUNCTION phaseCapture {
     midcourseClearReviewAlarm().
     LOCAL target IS missionTargetBody().
@@ -181,11 +225,13 @@ GLOBAL FUNCTION phaseCapture {
         RETURN.
     }
     LOCAL success IS _captureRecoverResidual(target).
-    IF NOT success AND (HASNODE OR maneuverBurnInterrupted()) {
+    LOCAL scheduled IS FALSE.
+    IF NOT success AND HASNODE { SET scheduled TO _captureUnflownNode(target). }
+    IF NOT success AND NOT scheduled AND (HASNODE OR maneuverBurnInterrupted()) {
         mLogError("CAPTURE: existing/interrupted maneuver retained; inspect or explicitly resume it before replanning.").
         yieldToPrompt(). RETURN.
     }
-    IF NOT success {
+    IF NOT success AND NOT scheduled {
         WAIT 2.
         mLog("Planning capture into elliptical orbit at " + target:NAME + ".").
     }
@@ -199,7 +245,7 @@ GLOBAL FUNCTION phaseCapture {
     UNTIL success {
         // Recheck after the entry/retry waits: a new node, Abort or SOI
         // transition must not authorize another planner/executor call.
-        IF ABORT OR SHIP:BODY <> target OR HASNODE OR maneuverBurnInterrupted()
+        IF ABORT OR SHIP:BODY <> target OR (HASNODE AND NOT scheduled) OR maneuverBurnInterrupted()
                 OR NOT (SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
                     AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0) {
             mLogError("CAPTURE: context changed; existing maneuver retained, no replacement burn.").
@@ -222,7 +268,18 @@ GLOBAL FUNCTION phaseCapture {
         IF TARGET_AP >= 0 { SET captureAlt TO TARGET_AP. }
 
         // 2. Delegate math to your existing library function
-        LOCAL nd IS planCapture(target, captureAlt).
+        LOCAL nd IS 0.
+        IF scheduled {
+            IF NOT _captureUnflownNode(target) {
+                mLogError("CAPTURE: saved node changed during validation; retained without execution.").
+                yieldToPrompt(). RETURN.
+            }
+            SET nd TO NEXTNODE.
+            mLog("STATS capture resume status=scheduled-unflown dv="+nd:DELTAV:MAG
+                +" eta="+nd:ETA+" plannedPe="+nd:ORBIT:PERIAPSIS+" plannedAp="+nd:ORBIT:APOAPSIS).
+        } ELSE {
+            SET nd TO planCapture(target, captureAlt).
+        }
         IF nd = 0 {
             mLogError("CAPTURE: no safe capture node; holding phase.").
             RETURN.
@@ -230,13 +287,15 @@ GLOBAL FUNCTION phaseCapture {
 
         IF NOT (nd:DELTAV:MAG >= 0 AND nd:DELTAV:MAG < 1e30
                 AND SHIP:DELTAV:VACUUM >= 0 AND SHIP:DELTAV:VACUUM < 1e30) {
-            REMOVE nd.
+            IF NOT scheduled { REMOVE nd. }
             mLogError("CAPTURE: native node exceeds finite available fuel; no burn authorized.").
             yieldToPrompt(). RETURN.
         }
         IF nd:DELTAV:MAG > SHIP:DELTAV:VACUUM {
-            REMOVE nd.
-            IF _captureContinueFlyby(target) { RETURN. }
+            IF NOT scheduled {
+                REMOVE nd.
+                IF _captureContinueFlyby(target) { RETURN. }
+            }
             mLogError("CAPTURE: native node exceeds available fuel; no burn authorized.").
             yieldToPrompt(). RETURN.
         }
@@ -246,15 +305,22 @@ GLOBAL FUNCTION phaseCapture {
                 + " remainingDv=" + ROUND(SHIP:DELTAV:VACUUM, 2)
                 + " reserveDv=" + CAPTURE_RESERVE_DV).
             IF nd:DELTAV:MAG + CAPTURE_RESERVE_DV > SHIP:DELTAV:VACUUM {
-                REMOVE nd.
-                IF _captureContinueFlyby(target) { RETURN. }
+                IF NOT scheduled {
+                    REMOVE nd.
+                    IF _captureContinueFlyby(target) { RETURN. }
+                }
                 mLogWarn("STATS capture decision=hold reason=capture-budget").
                 yieldToPrompt(). RETURN.
             }
         }
 
         // 3. Execute with standard retry logic
+        IF scheduled AND (NOT _captureUnflownNode(target) OR NEXTNODE <> nd) {
+            mLogError("CAPTURE: scheduled node or fuel/context changed; maneuver retained.").
+            yieldToPrompt(). RETURN.
+        }
         SET success TO executeManeuver().
+        SET scheduled TO FALSE.
         IF NOT success { SET success TO _captureRecoverResidual(target). }
         IF phaseShouldYield OR ABORT { yieldToPrompt(). RETURN. }
         IF success AND (SHIP:ORBIT:ECCENTRICITY >= 1 OR SHIP:PERIAPSIS <= 0) {

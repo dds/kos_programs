@@ -52,7 +52,7 @@ def fixture(phase='CAPTURE'):
     env.update(stateSet=put,fixture_remove=remove)
     for source,names in ((RECOVERY,re.findall(r'(?:LOCAL|GLOBAL) FUNCTION (\w+)',RECOVERY)),
                          (BURN,['maneuverBurnInterrupted','maneuverAcceptHandoff','_ren','_cpb']),
-                         (CAPTURE,['_captureRecoverResidual','phaseCapture'])):
+                         (CAPTURE,['_captureRecoverResidual','_captureUnflownNode','phaseCapture'])):
         for name in names:env[name]=lambda *args,source=source,name=name:harness.invoke(source,name,env,*args)
     def forbidden(*_):raise AssertionError('recovery repeated capture planning/execution')
     env.update(planCapture=forbidden,executeManeuver=forbidden)

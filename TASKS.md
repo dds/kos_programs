@@ -6,6 +6,27 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native automatic reuse pending: Minmus-Surveyor1 reboot at5291303.5,
+  ~22min before capture, holds because phaseCapture rejects every HASNODE.
+  boot014 planned187.8846m/s at5292633.3 from468.3km Pe to1041.045km Ap;
+  setup5283764.2 had never ignited. Operator workaround already supplied:
+  exnode with normal countdown, then ONLY after successful bound capture
+  setphase SHAPE + REBOOT. resumeburn is interrupted-XING-only, not this path.
+  New _captureUnflownNode proves single unignited saved mission/launch/phase/
+  body/time/dV identity, incoming pre-Pe orbit, near-pure retrograde node,
+  native safe bound Pe/Ap/plane/SOI and current fuel reserve. Reuse normal
+  executor/ignition/KAC, no planner replacement. Recheck after budget I/O and
+  reject replaced nodes; failed saved-node admission preserves node/attempt.
+  Started/interrupted/unowned/late/unsafe attempts remain held. Independent
+  Cartesian fixture reproduces the187.8846m/s insertion,31 refusal cases,
+  and late node/replacement/fuel/Abort changes. Native automatic-reuse test
+  remains pending. Logs:/tmp/ksp-deck-20261101T031208Z-fetch-8zwix4d1/logs/
+  Espoir-Minmus-Surveyor1_5143320/boot_015_core.log; boot014fetch-fik6ayl3.
+  All110 routine files pass165.06s;377 scripts/100 profiles/82 phases/44 bands,
+  0 structural errors and unchanged KSC_DEORBIT warning. New cases0.020..0.234s.
+  No production changes during/after the suite. Report:
+  /tmp/kos-capture-resume-final-20261101.json and.log. No extra flight libraries.
+
 - NATIVE scanraise plan verified while operator executes its node:
   diagnostic5268851 costs22.83167575m/s, nodeUT5270691.06394;
   Pe99.168391->99.168390km,Ap100.765286->130.000001km,

@@ -783,6 +783,20 @@ This recovery provider is excluded from ordinary departure, BPLANE and
 atmospheric-entry bands. Pull while linked and reboot to recover an existing
 eligible CAPTURE/SHAPE hold; retain the old node for ownership validation.
 
+A reboot while waiting for an unflown capture reuses the single saved node
+after checking its mission/body/launch/phase, epoch and dV signature. It must
+still be a retrograde periapsis capture with at least60s lead, predict the
+configured safe bound orbit (Ap within the larger of1% or1km, plane within0.1deg),
+and retain the fuel reserve. The checks run again after budget/log I/O;
+replaced, edited, expired, foreign or already-started attempts stay held.
+Watch for `STATS capture resume status=scheduled-unflown`; the existing
+executor preserves the scheduled ignition time and normal KAC/attitude/cutoff
+guards. This is separate from continuing an interrupted burn immediately.
+On older code, `RUNPATH("0:/cmd/exnode.ks").` can execute an inspected unflown
+node. Only after successful capture into a bound orbit, use
+`RUNPATH("0:/cmd/setphase.ks","SHAPE").` then `REBOOT.` for a mission whose
+next phase is SHAPE. `resumeburn.ks` remains scoped to interrupted XING.
+
 Both maneuver burn modes also integrate actual thrust divided by mass,
 independently of the node residual. The delivered-dV cap is the requested
 burn plus the larger of 1% or 0.05 m/s; it survives staging within the burn.
@@ -1613,8 +1627,8 @@ includes its limiter; it is not scaled twice. Long SOI transits can have one
 approach checkpoint and one final checkpoint, bound to the saved flight/phase.
 Short moon encounters retain one final retry. Reboot and ETA jitter do not reset
 consumed checkpoints. KAC alarms precede solar work, and the running clock wait
-still resumes when KAC is absent. CAPTURE preserves an existing/interrupted node
-for explicit recovery rather than deleting it and authorizing a replacement.
+still resumes when KAC is absent. CAPTURE validates and reuses its own scheduled
+unflown node; other existing/interrupted nodes stay held for explicit recovery.
 
 Espoir opts into `MISSION_CACHE_NEXT_BAND=1`. Boot caches the next two distinct
 phase bands, including their conditional providers, without executing that code.
