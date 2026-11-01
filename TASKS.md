@@ -6,6 +6,38 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IN PROGRESS: user wants10s make check; accepts verified-result reuse for
+  unchanged inputs with an explicit fresh full command. Preserve all assertions,
+  cases, steps/tolerances and failure reporting. Experimental compiled-call and
+  scalar-vector rewrites under/tmp did not justify complexity and were NOT
+  added. Warm forkserver8-worker prototype43.57s vs62.48s; codebase SystemExit(0)
+  incorrectly counted as failure in prototype, not a production regression.
+  Production runner still unchanged. Plan conservative per-check input manifests
+  including source/import reads, directory listings/missing paths, interpreter/
+  dependency/environment fingerprints; never reuse failures/uncertain inputs.
+
+- IN PROGRESS: operator reports Kerbin mapper coverage rose from~35% to perhaps
+  80% after100x100->100x130km scanraise. Exact new coverage unconfirmed. Apply
+  bounded altitude variation to other Espoir surveyor operations, respecting
+  sensor altitude limits, physical bounds, fuel/stage/mission reserves and
+  return intent; preserve contract orbits until survey release. Do not mistake
+  centerline proxy rejection for proof a real drift experiment cannot help.
+
+- IMPLEMENTED/source-checked; native legacy-profile retry pending: both Espoir Minmus landers skip the surveyor's orbital
+  contract. Update legacy minmus_contract_lander_return in place (saved identity
+  preserved) to90deg B-plane/capture,15km polar SHAPE, freeLAN/AoP; then landing
+  review with coordinates unset. Keep SHAPE/LAND_PREP for saved flights, existing
+  terrain/light/radio and return/site-science policies/reserves. Surveyor retains
+  1041045/465764m,21.6/255.5/157.3deg contract. Read-only saveUT5376744.835 confirms
+  Lander2 already has minmus_lander.ksm onboard; boot011 shows Pe15.34km/inc87.8
+  and a live REFINE retry toward90deg. No contract redirect/reboot needed there.
+  Legacy profile retains SHAPE/LAND_PREP phase compatibility and return ledgers.
+  All110 routine files pass on final mission changes; report:
+  /tmp/kos-minmus-polar-campaign-20261101.json/.log. Source audit0 errors/legacy
+  KSC_DEORBIT warning unchanged. No production edits during/after the suite.
+  Native logs:/tmp/ksp-deck-20261101T043739Z-fetch-17jmf_3t/logs/
+  Espoir-Minmus-Lander2_5197138/boot_011_core.log; boot010fetch-fgs3yfd6.
+
 - IMPLEMENTED/source-checked: optimize make check again without dropping cases or changing
   numerical steps/tolerances. Final preceding baseline:110 files165.45s serial.
   cProfile finds repeated function_body regex/bracket scans and adapted-source

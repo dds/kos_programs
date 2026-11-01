@@ -1423,19 +1423,16 @@ It preserves the strict cutoff report, current phase, fuel ledgers, departure
 history and engine-restoration intent. Marker removal is one state write;
 ordinary excursion commands and automatic residual recovery remain strict.
 
-`minmus_contract_lander_return` adds a complete return-capable campaign. It
-launches into85km LKO, captures Minmus at15km Pe with the contract's high Ap,
-then shapes Ap1041045/Pe465764m, inc21.6/LAN255.5/AoP157.3deg. Confirm the
-contract at the `SCIENCE_OPS` prompt, then run:
-
-```ks
-RUNPATH("0:/cmd/setphase.ks","LAND_PREP").
-REBOOT.
-```
-
-Preparation changes the plane while the orbit is high, leaves LAN free,
-then lowers to15km polar parking. Contract elements and their tighter
-tolerances remain separate. At `LANDING_REVIEW`, select the first surveyed
+`minmus_contract_lander_return` retains its legacy id for flights already
+underway, but now flies the polar two-site landing/return campaign. It launches
+into85km LKO, targets a90deg arrival in B-plane correction and captures toward
+15km polar parking. LAN/AoP are unconstrained; the high21.6deg contract belongs
+to `minmus_orbital_surveyor`. There is no contract-shaping or science-review
+detour. Existing high captures can still use LAND_PREP to change plane while
+high before lowering; SHAPE/LAND_PREP remain valid saved phases. Linked reboot
+loads the new arrival goal; an old saved burn must be reviewed/cancelled using
+its matching recovery command before changing that attempt.
+At `LANDING_REVIEW`, select the first surveyed
 waypoint and run `RUNPATH("0:/cmd/landsite.ks").` then `REBOOT.`. Coordinates
 are deliberately unset until you select them; sunlight, radio, terrain and
 native powered-descent checks still apply. After ten minutes of surface
@@ -1454,10 +1451,10 @@ change, then targets52km Kerbin entry. Excess-fuel aerobraking is enabled
 with10m/s retained for Pe repair; parachutes on the retained core are
 required. No RO9-specific separator tags or automatic descent separation
 are assumed. Configure assist stage tags for the actual build if it should
-discard exhausted stages. Contract shaping uses the active transfer stage
+discard exhausted stages. Orbit shaping uses the active transfer stage
 and normal guarded executor; landing preparation still requires each burn
 to fit its current stage. It can hold for deliberate staging if that fuel
-is exhausted. Reserves900m/s after capture/contract/preparation and500m/s
+is exhausted. Reserves900m/s after capture/shaping/preparation and500m/s
 after the visit command's conservative ascent allowance are admission
 floors, not a proven whole-campaign budget. They do not guarantee two sites
 and a return on any particular hardware. Extra visits and an early return

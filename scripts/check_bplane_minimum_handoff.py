@@ -171,7 +171,7 @@ def check_reported_lander_upper_miss():
         # actual native capture still enforces the unchanged reserve.
         mu=1.7658e9;radius=60000;vinf=225.602
         def cost(pe):
-            rp=radius+pe;ra=radius+cfg['TARGET_AP']
+            rp=radius+pe;ra=radius+max(pe,cfg['TARGET_AP'])
             return math.sqrt(vinf**2+2*mu/rp)-math.sqrt(mu*(2/rp-2/(rp+ra)))
         assert 0<cost(17400)-cost(15000)<3
         assert cost(17400)+cfg['CAPTURE_RESERVE_DV']<2352.7

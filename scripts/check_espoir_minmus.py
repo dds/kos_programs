@@ -264,18 +264,20 @@ def check_per_visit_surface_science():
 def check_contract_two_sites_return():
     import check_surface_return as home
     cfg=fleet.profile('minmus_contract_lander_return')
-    assert [cfg['SHAPE_'+key] for key in ('AP','PE','INC','LAN','AOP')]==[1041045,465764,21.6,255.5,157.3]
+    assert [cfg['SHAPE_'+key] for key in ('AP','PE','INC','LAN','AOP')]==[15000,15000,90,-1,-1]
     assert cfg['PARKING_ALT']==85000 and cfg['LAUNCH_PLANE_MODE']=='BODY_ORBIT'
-    assert cfg['CAPTURE_PE']==cfg['TARGET_PE']==15000 and cfg['TARGET_AP']==1041045
-    assert cfg['CAPTURE_INC']==21.6 and cfg['CAPTURE_LAN']==cfg['CAPTURE_AOP']==-1
+    assert cfg['CAPTURE_PE']==cfg['TARGET_PE']==cfg['TARGET_AP']==15000
+    assert cfg['CAPTURE_INC']==90 and cfg['CAPTURE_DIR']=='POLAR' and cfg['CAPTURE_LAN']==cfg['CAPTURE_AOP']==-1
+    assert cfg['BPLANE_REQUIRE_PLANE']==1 and cfg['BPLANE_PE_ONLY']==0
+    assert cfg['SHAPE_MIN_BURN_DV']==.1 and cfg['SHAPE_BURN_TOLERANCE']==.05
     assert cfg['CAPTURE_MIN_PE']<=cfg['CAPTURE_PE']<=cfg['CAPTURE_MAX_PE']
     assert cfg['SCIENCE_OPS_HOLD']==1 and cfg['SCIENCE_OPS_RUN_ALL']==0
     seq=cfg['SEQUENCE']
-    assert seq[seq.index('SHAPE'):]==['SHAPE','SCIENCE_OPS','LAND_PREP','LANDING_REVIEW',
+    assert seq[seq.index('SHAPE'):]==['SHAPE','LAND_PREP','LANDING_REVIEW',
         'LAND_DEORBIT','LAND_ASSIST','SURFACE_SCIENCE','SURFACE_REVIEW','SURFACE_RETURN_SETUP']
     assert cfg['LAND_PREP_AP']==cfg['LAND_PREP_PE']==15000 and cfg['LAND_PREP_INC']==90 and cfg['LAND_PREP_LAN']==-1
     assert cfg['TARGET_LOCK']==cfg['LANDING_AUTO_TARGET']==0 and cfg['SCIENCE_SURFACE_DWELL']==600
-    # Native planner chooses plane before lowering this high contract orbit.
+    # Older already-captured flights retain the high-orbit plane-first route.
     import check_landing_orbit as prep
     env,saved,events,nodes,refresh=prep.fixture(False);env.update(cfg)
     ship=env['SHIP'];ship.PERIAPSIS=465764;ship.APOAPSIS=1041045
@@ -330,7 +332,7 @@ def check_contract_two_sites_return():
     assert returned['AEROBRAKE_PE']==returned['MCC_AEROBRAKE_SAFE_PE_MIN']==52000
     assert returned['AEROBRAKE_AP_BURN']==1 and returned['AEROBRAKE_AP_RESERVE_DV']==10 and returned['COAST_AUTO_WARP']==0
     assert returned['AEROBRAKE_ARM_CHUTES']==1 and returned['DESCENT_DECOUPLER_TAG']=='none'
-    print('PASS: low-Pe capture/strict contract precede high-orbit polar change and15km preparation; both later site visits retain return intent/fuel ledgers; two fresh return boots keep52km entry, chutes, excess-fuel assistance/10m/s and no autowarp')
+    print('PASS: B-plane/capture and SHAPE target15km polar parking without the surveyor contract/review; older high captures retain plane-first preparation, later visits retain return ledgers, and two fresh return boots keep52km entry/chutes/assistance/10m/s/no-autowarp')
 
 
 def check_surface_review_stop():

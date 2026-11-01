@@ -1,14 +1,16 @@
-// Contract orbit, polar parking, two operator-selected sites, then Kerbin return.
+// Polar arrival/parking, two operator-selected sites, then Kerbin return.
+// Legacy mission id retained for already-launched landers. The surveyor owns
+// the high21.6deg orbital contract; these landers no longer repeat it.
 // Stop at each review; use visit once for the second site, then select return.
 SET MISSION_ID TO "minmus_contract_lander_return".
-SET MISSION_NAME TO "Espoir — Minmus Contract, Two Sites and Return".
+SET MISSION_NAME TO "Espoir — Minmus Polar, Two Sites and Return".
 SET MISSION_TYPE TO "kerbin_moon".
 SET MISSION_EXCURSIONS TO 1.
 SET MISSION_CACHE_NEXT_BAND TO 1.
 SET TARGET_ TO "MINMUS".
 SET PAYLOADS TO LIST("PROBE").
 SET SEQUENCE TO LIST("PRELAUNCH","LAUNCH","FAIR","ANTS","PARK","XING","BPLANE",
-    "COAST_1HALF","REFINE_BPLANE","COAST_2HALF","CAPTURE","SHAPE","SCIENCE_OPS","LAND_PREP","LANDING_REVIEW",
+    "COAST_1HALF","REFINE_BPLANE","COAST_2HALF","CAPTURE","SHAPE","LAND_PREP","LANDING_REVIEW",
     "LAND_DEORBIT","LAND_ASSIST","SURFACE_SCIENCE","SURFACE_REVIEW","SURFACE_RETURN_SETUP").
 SET PARKING_ALT TO 85000.
 SET LAUNCH_INCLINATION TO 0.
@@ -18,12 +20,11 @@ SET CAPTURE_PE TO 15000.
 SET CAPTURE_MIN_PE TO 13000.
 // Keep the low-Pe aim; accept benign upper misses without a tiny correction.
 SET CAPTURE_MAX_PE TO 20000.
-SET CAPTURE_INC TO 21.6.
+SET CAPTURE_INC TO 90.
 SET CAPTURE_LAN TO -1.
 SET CAPTURE_AOP TO -1.
-SET CAPTURE_DIR TO "PROGRADE".
-// Capture deep in Minmus gravity, raise Pe only after capture.
-SET TARGET_AP TO 1041045.
+SET CAPTURE_DIR TO "POLAR".
+SET TARGET_AP TO 15000.
 SET TARGET_PE TO 15000.
 SET BPLANE_PE_ONLY TO 0.
 SET BPLANE_REQUIRE_PLANE TO 1.
@@ -37,26 +38,26 @@ SET BPLANE_TRIM_TOTAL_DV_CAP TO 200.
 SET BPLANE_TRIM_RESERVE_DV TO 900.
 SET BPLANE_CAPTURE_MARGIN TO 900.
 SET CAPTURE_RESERVE_DV TO 900.
-SET SHAPE_AP TO 1041045.
-SET SHAPE_PE TO 465764.
-SET SHAPE_INC TO 21.6.
-SET SHAPE_LAN TO 255.5.
-SET SHAPE_AOP TO 157.3.
+SET SHAPE_AP TO 15000.
+SET SHAPE_PE TO 15000.
+SET SHAPE_INC TO 90.
+SET SHAPE_LAN TO -1.
+SET SHAPE_AOP TO -1.
 SET SHAPE_MIN_PE TO 10000.
 SET SHAPE_ALT_TOL TO 500.
-SET SHAPE_ANG_TOL TO 0.1.
-SET SHAPE_AOP_TOL TO 0.2.
-SET SHAPE_MIN_BURN_DV TO 0.002.
-SET SHAPE_BURN_TOLERANCE TO 0.001.
+SET SHAPE_ANG_TOL TO 0.5.
+SET SHAPE_AOP_TOL TO 0.5.
+SET SHAPE_MIN_BURN_DV TO 0.1.
+SET SHAPE_BURN_TOLERANCE TO 0.05.
 SET SHAPE_DV_CAP TO 500.
 SET SHAPE_TOTAL_DV_CAP TO 1500.
 SET SHAPE_RESERVE_DV TO 900.
 SET EXCURSION_RESERVE_DV TO 500.
-// Contract review prints continuation to LAND_PREP. No orbital experiments
-// consume one-shot science before the surface campaign.
+// LAND_PREP remains in the sequence for already-launched/redirected landers.
+// No contract review or orbital experiment delays the surface campaign.
 SET SCIENCE_OPS_HOLD TO 1.
 SET SCIENCE_OPS_RUN_ALL TO 0.
-// Change plane while high, then lower apsides using the shared native planner.
+// If recovering an older high capture, change plane before lowering apsides.
 // Current-stage admission remains in force: no speculative future fuel credit.
 SET LAND_PREP_AP TO 15000.
 SET LAND_PREP_PE TO 15000.
