@@ -71,7 +71,23 @@ record remaining uncertainty before closing a task.
   Native log:/tmp/ksp-deck-20261101T173723Z-fetch-mbqva00v/logs/
   Espoir-Mun-Surveyor1_5642520/boot_054_core.log. No Deck/game/save changes.
 
-- IMPLEMENTED/source-checked; native retry pending:
+- NATIVE low parking achieved; residual-attempt acknowledgement pending:
+  Espoir-Minmus-Lander1 boot024 at5631111 lowered Ap1050.8km to15.6km
+  with56.323568m/s planned; actual orbit Pe15.5/Ap15.6km,inc89.99.
+  Normal live-thrust-axis-trim stopped at0.143308197m/s against strict0.05;
+  shutdownAttemptedFalse/thrustStoppedTrue. LAND_PREP deliberately retained
+  the interrupted attempt. Boot028 at5753063 repeats this hold despite
+  already being inside the1km operational parking tolerance. Operator says
+  no node remains. Existing cmd/shaperetry (default interrupted mode), then
+  REBOOT, acknowledges this matching LAND_PREP attempt and rechecks the
+  achieved orbit while preserving mission/targets/budget. It can run without
+  a remaining node; no new recovery bypass or executor tolerance change.
+  Then select A with cmd/landsite from LANDING_REVIEW. Recovery still pending.
+  Logs:/tmp/ksp-deck-20261101T190542Z-fetch-h8mqym6w/logs/
+  Espoir-Minmus-Lander1_5154039/boot_028_core.log;
+  boot024 at fetch-ze0wnol6. Read-only diagnostics; no game/save changes.
+
+  Original operational-orbit fix and source validation:
   Espoir-Minmus-Lander1 boot023 UT5460373 LAND_PREP stalls at15.6x1050.8km
   because0.04938m/s Pe trim is below0.1m/s minimum and500m accuracy. Its
   nominal15km Ap is below current Pe, so old selector cannot lower the big
@@ -87,8 +103,9 @@ record remaining uncertainty before closing a task.
   explicitly rejects below-floor/nonfinite Pe even inside a wide corridor.
   Independent conics cover Minmus/Mun/Kerbin/Duna, engine authority, exact
   corridor edges, strict contracts, restored settings and conserved ledger.
-  Recorded rounded capture now reaches15.6km circular with one useful burn
-  and stops at LANDING_REVIEW; native retry still needed. No game/save changes.
+  Source replay reaches15.6km circular with one useful burn and stops at
+  LANDING_REVIEW. Native lowering above succeeded; residual acknowledgement
+  still needed before the actual LANDING_REVIEW handoff. No game/save changes.
   All112 routine check files pass29.23s (62 verified passes reused,50 executed),
   /tmp/kos-operational-orbits-final-20261101.log. Initial fresh76.10s pass
   caught an old contract-angle fixture lacking the newly required physical
