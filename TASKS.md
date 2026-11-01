@@ -6,6 +6,28 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native capture retry pending: Espoir-Minmus-Lander1 entered Minmus at17.4km Pe and CAPTURE
+  held before planning because minmus_contract_lander_return capped Pe at17km.
+  boot012's0.39435m/s correction stopped normally with0.04808m/s residual;
+  subsequent0.17365m/s final trim was below the0.3m/s execution floor.
+  Widen only both Espoir Minmus lander upper capture bounds to20km; retain
+  the13km lower bound,15km aim, required plane and all fuel reserves.
+  Opt in to5km no-burn B-plane tolerance, still bounded by the actual capture
+  corridor;2km precise solver tolerance remains. Small capture_config owns
+  defaults and corridor predicate, shared via arrival_policy without loading
+  the capture controller in BPLANE. Capture rejection now prints Pe/min/max.
+  Current craft needs linked pull + REBOOT in CAPTURE, no node to clear.
+  All110 routine check files pass165.45s;378 scripts/100 profiles/82 phases/
+  44 bands,0 structural errors and unchanged KSC_DEORBIT warning. New cases
+  0.009..0.274s cover recorded upper miss, exact boundaries, required plane,
+  invalid Pe, changed patch, unchanged flyby policy and lean dependency closure.
+  Independent capture estimate costs<3m/s extra at17.4km versus15km; native
+  node and900m/s reserve still govern actual admission. No production changes
+  during/after the full suite. Report:/tmp/kos-minmus-capture-corridor-20261101.json
+  and.log. Native corrected capture remains pending.
+  Evidence:/tmp/ksp-deck-20261101T034038Z-fetch-_w0ej4mx/logs/
+  Espoir-Minmus-Lander1_5154039/boot_013_core.log; boot012fetch-5ko_r5uk.
+
 - IMPLEMENTED/source-checked; native automatic reuse pending: Minmus-Surveyor1 reboot at5291303.5,
   ~22min before capture, holds because phaseCapture rejects every HASNODE.
   boot014 planned187.8846m/s at5292633.3 from468.3km Pe to1041.045km Ap;

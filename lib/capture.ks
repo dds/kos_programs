@@ -7,16 +7,6 @@
 
 @LAZYGLOBAL OFF.
 
-// --- Config defaults owned by this file ---
-GLOBAL TARGET_AP IS -1.
-GLOBAL CAPTURE_RESERVE_DV IS -1.
-GLOBAL CAPTURE_MIN_PE IS -1.
-GLOBAL CAPTURE_MAX_PE IS -1.
-GLOBAL CAPTURE_ACCEPT_BOUND IS 0.
-// Opt-in only: an unaffordable, unflown airless capture may continue into
-// an immediately following FLYBY phase. No failed/interrupted burn waiver.
-GLOBAL CAPTURE_OPTIONAL_FLYBY IS 0.
-
 LOCAL MAX_RETRIES IS 5.
 
 LOCAL FUNCTION _transferArrivalUt {
@@ -259,7 +249,8 @@ GLOBAL FUNCTION phaseCapture {
         }
         IF (CAPTURE_MIN_PE >= 0 AND SHIP:PERIAPSIS < CAPTURE_MIN_PE)
                 OR (CAPTURE_MAX_PE >= 0 AND SHIP:PERIAPSIS > CAPTURE_MAX_PE) {
-            mLogWarn("STATS capture decision=hold reason=periapsis-outside-recovery-corridor").
+            mLogWarn("STATS capture decision=hold reason=periapsis-outside-recovery-corridor"
+                +" peM="+SHIP:PERIAPSIS+" minM="+CAPTURE_MIN_PE+" maxM="+CAPTURE_MAX_PE).
             yieldToPrompt(). RETURN.
         }
 

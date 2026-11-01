@@ -81,7 +81,6 @@ GLOBAL BPLANE_TRIM_TOTAL_DV_CAP IS -1.
 GLOBAL BPLANE_TRIM_RESERVE_DV IS -1.
 GLOBAL BPLANE_MAX_ARRIVAL_SHIFT IS -1.
 GLOBAL BPLANE_MAX_CAPTURE_DV_INCREASE IS -1.
-GLOBAL TARGET_AP IS -1.
 // Opt-in capture recovery: solve only Pe, preserving fuel for capture.
 GLOBAL BPLANE_PE_ONLY IS 0.
 GLOBAL BPLANE_CAPTURE_MARGIN IS -1.
@@ -135,6 +134,9 @@ LOCAL FUNCTION _bplaneMinimumArrivalOk {
     IF BPLANE_MINIMUM_PE_TOL >= 0 { SET tolerance TO BPLANE_MINIMUM_PE_TOL. }
     IF NOT (pe > 0 AND ABS(pe-wantPe) <= tolerance
             AND pe < targetBody:SOIRADIUS-targetBody:RADIUS) { RETURN FALSE. }
+    // A no-burn orbital handoff must be accepted by the following capture.
+    // Entry/flyby goals do not inherit orbital-capture corridor restrictions.
+    IF BPLANE_ARRIVAL_MODE = "ORBIT" AND NOT capturePeriapsisOk(pe) { RETURN FALSE. }
     LOCAL planeErr IS _bplaneElementPlaneError(patch:INCLINATION,patch:LAN,wantInc,wantLan).
     IF NOT (planeErr >= 0 AND planeErr < 1e30) { RETURN FALSE. }
     IF BPLANE_REQUIRE_PLANE <> 0 AND planeErr > BPLANE_ANG_TOL { RETURN FALSE. }

@@ -797,6 +797,16 @@ node. Only after successful capture into a bound orbit, use
 `RUNPATH("0:/cmd/setphase.ks","SHAPE").` then `REBOOT.` for a mission whose
 next phase is SHAPE. `resumeburn.ks` remains scoped to interrupted XING.
 
+The Espoir Minmus lander profiles aim for15km capture Pe and accept13–20km.
+An otherwise valid correction at or below the0.3m/s execution floor may
+hand forward without burning only when the actual encounter also fits that
+capture window, the required plane and the capture fuel reserve. The normal
+solver still targets its2km Pe tolerance; the wider5km no-burn tolerance
+cannot waive the13km floor or20km ceiling. A capture rejection logs the
+actual Pe and both configured bounds. For an existing17.4km Pe hold with no
+node or started burn, pull while linked and `REBOOT.` in CAPTURE to replan
+from the current trajectory with the updated profile.
+
 Both maneuver burn modes also integrate actual thrust divided by mass,
 independently of the node residual. The delivered-dV cap is the requested
 burn plus the larger of 1% or 0.05 m/s; it survives staging within the burn.

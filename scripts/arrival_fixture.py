@@ -4,9 +4,10 @@ from types import SimpleNamespace as NS
 import check_landing_guidance as ks
 
 POLICY=(ks.ROOT/'lib/arrival_policy.ks').read_text()
+CAPTURE_CONFIG=(ks.ROOT/'lib/capture_config.ks').read_text()
 CONIC=(ks.ROOT/'lib/conic_time.ks').read_text()
 MANEUVER=(ks.ROOT/'lib/maneuver.ks').read_text()
-ks.SOURCES+='\n'+POLICY+'\n'+CONIC
+ks.SOURCES+='\n'+POLICY+'\n'+CONIC+'\n'+CAPTURE_CONFIG
 
 
 class EventEta:
@@ -17,9 +18,9 @@ class EventEta:
 def install(env):
     env.setdefault('_bplaneReservationCredit',lambda *_:0)
     env.setdefault('_bplaneRecoverStoppedTrim',lambda:False)
-    for name,value in re.findall(r'GLOBAL (\w+) IS ("[^"\n]*"|-?\d+(?:\.\d+)?)\.',POLICY+'\n'+MANEUVER):
+    for name,value in re.findall(r'GLOBAL (\w+) IS ("[^"\n]*"|-?\d+(?:\.\d+)?)\.',POLICY+'\n'+MANEUVER+'\n'+CAPTURE_CONFIG):
         env.setdefault(name,value[1:-1] if value.startswith('"') else float(value))
-    for name in re.findall(r'GLOBAL FUNCTION (\w+)',POLICY+'\n'+CONIC):
+    for name in re.findall(r'GLOBAL FUNCTION (\w+)',POLICY+'\n'+CONIC+'\n'+CAPTURE_CONFIG):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
 
 

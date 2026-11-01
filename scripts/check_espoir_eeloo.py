@@ -78,7 +78,7 @@ def check_profiles():
 
 
 def capture_fixture(fuel=1300, vinf=1760):
-    cfg = read_settings(CAPTURE, {}, 'GLOBAL')
+    cfg = read_settings((ROOT/'lib/capture_config.ks').read_text(), {}, 'GLOBAL')
     cfg.update(profile('eeloo_flyby'))
     cfg = native(cfg)
     target = NS(NAME=Text('Eeloo'), MU=7.4410815e10, RADIUS=210000, SOIRADIUS=119082940,
