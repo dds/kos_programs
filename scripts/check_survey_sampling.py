@@ -92,7 +92,7 @@ def check_smaller_detuning_finds_missed_corridor():
     def completed(obj,geo):
         return Items() if cell(geo) in missing else Items([Text('HIRESALTIMETRY')])
     env['ADDONS'].SCANSAT.COMPLETEDSCANS=completed
-    out=survey.search(env)
+    out=survey.search(env,'drift')
     assert out['OK'] and out['BEST']['MODE'] in ('raise-ap','lower-pe')
     assert out['BEST']['SAMPLES']['A']>.1 and out['BEST']['SAMPLES']['B']>.1
     assert out['NODE'].DELTAV.MAG<2.5 and out['NODE'].ORBIT.PERIAPSIS>=90000-1e-6
@@ -116,7 +116,7 @@ def check_recreated_node_requires_confirmation():
         calls.append(args)
         return (ChangedPrediction if len(calls)==9 else survey.Node)(env,*args)
     env['NODE']=make_node
-    out=survey.search(env)
+    out=survey.search(env,'drift')
     assert len(calls)==9 and not out['OK'] and out['REASON']=='final-score-unconfirmed'
     assert not env['HASNODE'] and not any(nd.alive for nd in nodes)
     assert state['shape_budget_spent']==10

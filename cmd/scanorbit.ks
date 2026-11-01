@@ -2,7 +2,7 @@
 // scanorbit.ks - Compare economical scan orbits from a manual prompt.
 // RUNPATH("0:/cmd/scanorbit.ks"). Preview; leaves no node.
 // RUNPATH("0:/cmd/scanorbit.ks","plan"). Re-search and retain best node.
-// Optional mode auto|drift|polar|mirror, scan type, dV cap, retained reserve.
+// Optional mode auto|drift|tilt|polar|mirror, scan type, dV cap, retained reserve.
 // Quicksave first: a native runtime error can leave a temporary preview node.
 // ============================================================
 @LAZYGLOBAL OFF.
@@ -17,9 +17,9 @@ LOCAL FUNCTION _cmdScanorbit {
     IF NOT cap:ISTYPE("Scalar") OR NOT reserve:ISTYPE("Scalar") {
         PRINT "dV cap and reserve must be numbers.". RETURN.
     }
-    IF NOT LIST("preview","plan"):CONTAINS(action) OR NOT LIST("auto","drift","polar","mirror"):CONTAINS(mode)
+    IF NOT LIST("preview","plan"):CONTAINS(action) OR NOT LIST("auto","drift","tilt","polar","mirror"):CONTAINS(mode)
             OR NOT (cap >= 0.3 AND cap <= 500 AND reserve >= 0 AND reserve < 1e30) {
-        PRINT "Use preview/plan, auto/drift/polar/mirror, scan type, cap(0.3..500m/s), reserve(m/s).". RETURN.
+        PRINT "Use preview/plan, auto/drift/tilt/polar/mirror, scan type, cap(0.3..500m/s), reserve(m/s).". RETURN.
     }
     RUNPATH("1:/lib/boot_lib"). bootPreamble().
     bootLibLoad("orbit_shape"). bootLibLoad("landing_math").
@@ -60,12 +60,12 @@ LOCAL FUNCTION _cmdScanorbit {
     }
     LOCAL report IS diagnosticArchiveOpen("scanorbit").
     IF NOT report["READY"] { RETURN. }
-    diagnosticArchiveLine(report,"STATS scanorbit setup schema=2 ut="+TIME:SECONDS
+    diagnosticArchiveLine(report,"STATS scanorbit setup schema=3 ut="+TIME:SECONDS
         +" mission="+mid+" phase="+stateGet("phase","")+" action="+action+" mode="+mode+" type="+scanType
         +" coverage="+ADDONS:SCANSAT:GETCOVERAGE(SHIP:BODY,scanType)+" cap="+cap+" reserve="+reserve
         +" body="+SHIP:BODY:NAME+" Pe="+SHIP:PERIAPSIS+" Ap="+SHIP:APOAPSIS
         +" inc="+SHIP:ORBIT:INCLINATION+" lan="+SHIP:ORBIT:LAN).
-    PRINT "Comparing several period changes with paired ground-track samples; verify scan type and altitude in SCANsat.".
+    PRINT "Comparing scan tracks with paired map samples; verify scan type and altitude in SCANsat.".
     LOCAL searchUt IS TIME:SECONDS.
     LOCAL searchWall IS KUNIVERSE:REALTIME.
     LOCAL result IS surveyOrbitSearch(scanType,mode,cap,reserve,report).

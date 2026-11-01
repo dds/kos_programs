@@ -1274,7 +1274,10 @@ to an ascending crossing. Repeated previews before that crossing use the
 same future sample times. It compares staying put, raising Ap or lowering Pe
 at four sizes (roughly1.25%,2.5%,5%,10% of mean altitude), moving
 to exactly90deg, and mirroring inclination across90deg with the same LAN
-(85deg becomes95deg). A mirror changes track direction but reaches the same
+(85deg becomes95deg). It also tries small inclination changes of+/-0.5deg
+and+/-1deg from the current plane, retaining LAN and the altitude limits.
+The default search has at most14 distinct candidates; duplicate planes are
+removed. A mirror changes track direction but reaches the same
 maximum latitude; exactly polar is the candidate that can reach missing
 polar caps. Period changes often fill repeated-track gaps at much lower
 cost. The helper selects the largest estimated gain per m/s, requiring
@@ -1287,7 +1290,9 @@ cell-centre map queries are shared across candidates. Both192-point grids
 must improve over staying put by at least10% (or0.1 weighted cell when
 the baseline is near zero); the recreated winning node is scored again.
 One favorable sample set cannot select a burn. Diagnostics include both
-grid scores, step size and period change for each candidate.
+grid scores, step size, intended/actual inclination and period change for
+each candidate. Unaffordable plane-change lower bounds skip the native solver
+and are recorded in the comparison; every actual node is still validated.
 This is a sparse coverage proxy, **not** a scanner-swath simulation or a
 guarantee of faster full coverage. The default scan type is the most complete
 partially mapped type; verify that the probe carries its sensor. Check its
@@ -1300,7 +1305,19 @@ the scan type and restrict candidates, for example:
 RUNPATH("0:/cmd/scanorbit.ks","preview","mirror","BIOME",100,300).
 ```
 
-Arguments are action(`preview`/`plan`), mode(`auto`/`drift`/`polar`/`mirror`),
+For an almost exactly90deg Kerbin surveyor, test just the four small tilts:
+
+```ks
+RUNPATH("0:/cmd/scanorbit.ks","preview","tilt","BIOME",50,100).
+```
+
+At100km Kerbin altitude, a0.5deg tilt costs about20m/s and1deg about39m/s.
+These are candidate costs, not a recommendation to burn without a measured
+gain. The same paired10% gain gate, fuel allowance and final native plane/map
+checks apply; a preview can still recommend no change. Use `plan` with the
+same remaining arguments only after reviewing the comparison.
+
+Arguments are action(`preview`/`plan`), mode(`auto`/`drift`/`tilt`/`polar`/`mirror`),
 scan type, dV cap(default50m/s), and retained reserve(default100m/s).
 Use a scan-type name reported by your addon. Existing mission per-burn,
 cumulative and fuel-reserve limits still apply; the active stage must cover

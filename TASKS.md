@@ -39,11 +39,31 @@ record remaining uncertainty before closing a task.
   /tmp/kos-excursion-clear-20261101.json and.log. No production changes during
   or after that suite. Pull/reboot once before using the new library helper.
 
-- QUEUED after the Mun excursion recovery: bounded nearby inclination
-  candidates for manual scanorbit. Current near-perfect90deg Kerbin plane
-  makes old polar/mirror trials sub-minimum; try small tilts on either side
-  under existing mission/stage/reserve/75..105deg/native-plane/paired-score
-  ownership and deadline guards. No inclination-search code changed yet.
+- IMPLEMENTED/source-checked; native preview pending: manual
+  scanorbit now tries current inclination+/-0.5deg,+/-1deg in auto mode or
+  isolated tilt mode. Near-perfect90deg Kerbin plane made old polar/mirror
+  sub-minimum; four real alternatives now cost~19.6/39.2m/s at100km. Shared
+  native plane planner, unchanged LAN and original altitude/75..105deg limits.
+  Deduplicate only included modes so tilt reaching90deg stays available;
+  ideal-cost mission/stage/reserve/cumulative filtering precedes the native
+  solver, actual costs are checked again, and recreated planes must still
+  meet0.2deg inc/LAN agreement plus the original paired10% map gain.
+  Max14 distinct trials;45game/60wall deadlines, ownership, no auto-execution,
+  command-only loading and phase/budget/scanner policies unchanged. Schema3
+  logs intended/actual inclination and skipped lower bounds. Tests use real
+  Cartesian/Kepler track cells with synthetic gaps missed by all drift trials,
+  both tilt signs, command preview/plan ledger, budget/dedup/bounds/deadline
+  and changed final-plane rejection. Native coverage improvement unproven.
+  Next command: cmd/scanorbit.ks,"preview","tilt","BIOME",50,100.
+  All108 routine files pass156.73s,0 structural errors, unchanged legacy
+  KSC_DEORBIT warning. Final production source was unchanged during/after
+  that pass. Follow-up test-only optimization caches exact immutable conic
+  ephemerides, preserves all8 Newton steps/samples/epochs and original vector
+  equations; every changed input forces recomputation. All5 affected check
+  files pass again. Repeat-preview case1.238->0.909s, no removed assertions.
+  Main report:/tmp/kos-survey-tilts-final-20261101.json and.log;
+  final timing:/tmp/kos-survey-sampling-isolated.json,
+  /tmp/kos-survey-orbit-cached.json. Native schema3 tilt run still needed.
 
 - NATIVE comparison read at user request: Espoir-Kerbin-Surveyor1
   scanorbit5202760 uses schema2/Biome,384 paired samples and all8 drift

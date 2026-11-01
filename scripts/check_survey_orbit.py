@@ -1,6 +1,7 @@
 """Manual scan changes against independent impulse/Kepler/map fixtures, not KSP."""
 import math
 import re
+from functools import lru_cache
 from types import SimpleNamespace as NS
 
 import check_relay_constellation as harness
@@ -36,6 +37,23 @@ def deg(x):return math.degrees(x)
 def rad(x):return math.radians(x)
 
 
+@lru_cache(maxsize=32768)
+def propagate(mu,a,e,mean,epoch,peri_axis,transverse_axis,ut):
+    # Exact immutable inputs only: repeated native-node previews can share
+    # ephemerides, while changed elements, bodies and epochs cannot. Preserve
+    # all eight Newton steps and every requested sample time without rounding.
+    n=2*math.pi/(2*math.pi*math.sqrt(a**3/mu))
+    mean=(mean+n*(ut-epoch)+math.pi)%(2*math.pi)-math.pi
+    ea=mean
+    for _ in range(8):ea-=(ea-e*math.sin(ea)-mean)/(1-e*math.cos(ea))
+    cos_ea=math.cos(ea);sin_ea=math.sin(ea);root=math.sqrt(1-e*e)
+    along=a*(cos_ea-e);across=a*root*sin_ea
+    rate=n*a/(1-e*cos_ea);v_along=-sin_ea;v_across=root*cos_ea
+    pos=tuple(peri_axis[k]*along+transverse_axis[k]*across for k in range(3))
+    vel=tuple((peri_axis[k]*v_along+transverse_axis[k]*v_across)*rate for k in range(3))
+    return pos,vel
+
+
 class Orbit:
     """Recover a conic from independent Cartesian states, then solve Kepler."""
     def __init__(self,bdy,pos,vel,epoch):
@@ -56,13 +74,7 @@ class Orbit:
     APOAPSIS=property(lambda s:s.SEMIMAJORAXIS*(1+s.ECCENTRICITY)-s.BODY.RADIUS)
     PERIAPSIS=property(lambda s:s.SEMIMAJORAXIS*(1-s.ECCENTRICITY)-s.BODY.RADIUS)
     def state(self,ut):
-        a=self.SEMIMAJORAXIS;e=self.ECCENTRICITY;n=2*math.pi/self.PERIOD
-        mean=(self.mean+n*(ut-self.epoch)+math.pi)%(2*math.pi)-math.pi
-        ea=mean
-        for _ in range(8):ea-=(ea-e*math.sin(ea)-mean)/(1-e*math.cos(ea))
-        pos=add(mul(self.p,a*(math.cos(ea)-e)),mul(self.qq,a*math.sqrt(1-e*e)*math.sin(ea)))
-        vel=mul(add(mul(self.p,-math.sin(ea)),mul(self.qq,math.sqrt(1-e*e)*math.cos(ea))),n*a/(1-e*math.cos(ea)))
-        return pos,vel
+        return propagate(self.BODY.MU,self.SEMIMAJORAXIS,self.ECCENTRICITY,self.mean,self.epoch,self.p,self.qq,ut)
 
 
 class Node:
@@ -204,7 +216,7 @@ def check_drift_and_geometric_mirror(body):
     old_lat=max(abs(env['SHIP'].BODY.GEOPOSITIONOF(ship.ORBIT.state(1000+j*ship.ORBIT.PERIOD/400)[0]).LAT) for j in range(401))
     new_lat=max(abs(env['SHIP'].BODY.GEOPOSITIONOF(nd.ORBIT.state(nd.TIME+j*nd.ORBIT.PERIOD/400)[0]).LAT) for j in range(401))
     assert abs(old_lat-85)<1e-7 and abs(new_lat-85)<1e-7
-    assert len(nodes)<=14 and world['query']<=384*14
+    assert len(nodes)<=17 and world['query']<=384*19 #14 distinct trials, winner, then mirror/winner; two baselines.
     print('PASS: '+body+' real search prefers cheap period detuning over10deg mirror; mirror keeps LAN, speed/apsides and85deg latitude envelope')
 
 

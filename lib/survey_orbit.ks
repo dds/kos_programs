@@ -167,6 +167,24 @@ GLOBAL FUNCTION surveyOrbitDriftNode {
     RETURN nd.
 }
 
+// Include each requested plane once. Explicit modes filter before
+// deduplication, so a tilt that reaches90deg is still tried in tilt mode.
+LOCAL FUNCTION _surveyOrbitAddPlane {
+    PARAMETER trials, kind, wantInc, mode.
+    IF mode <> "auto" AND mode <> kind { RETURN. }
+    IF NOT (wantInc >= 75 AND wantInc <= 105) { RETURN. }
+    FOR trial IN trials {
+        IF ABS(trial["INC"]-wantInc) < 0.0001 { RETURN. }
+    }
+    trials:ADD(LEXICON("KIND",kind,"STEP",0,"INC",wantInc)).
+}
+
+LOCAL FUNCTION _surveyOrbitPlaneOk {
+    PARAMETER nd, wantInc, lan.
+    RETURN wantInc < 0 OR (ABS(nd:ORBIT:INCLINATION-wantInc) <= 0.2
+        AND ABS(MOD(nd:ORBIT:LAN-lan+540,360)-180) <= 0.2).
+}
+
 GLOBAL FUNCTION surveyOrbitSearch {
     PARAMETER scanType.
     PARAMETER mode.
@@ -203,10 +221,14 @@ GLOBAL FUNCTION surveyOrbitSearch {
         FOR kind IN LIST("raise-ap","lower-pe") {
             LOCAL step_ IS MIN(stepAlt*scale_,MAX(0,SHIP:PERIAPSIS-lowerAlt-1)).
             IF kind = "raise-ap" { SET step_ TO MIN(stepAlt*scale_,MAX(0,upperAlt-SHIP:APOAPSIS-1)). }
-            IF step_ > 0 { trials:ADD(LEXICON("KIND",kind,"STEP",step_)). }
+            IF step_ > 0 { trials:ADD(LEXICON("KIND",kind,"STEP",step_,"INC",-1)). }
         }
     }
-    FOR kind IN LIST("polar","mirror") { trials:ADD(LEXICON("KIND",kind,"STEP",0)). }
+    _surveyOrbitAddPlane(trials,"polar",90,mode).
+    _surveyOrbitAddPlane(trials,"mirror",180-inc,mode).
+    FOR offset_ IN LIST(-0.5,0.5,-1,1) {
+        _surveyOrbitAddPlane(trials,"tilt",inc+offset_,mode).
+    }
     FOR trial IN trials {
         LOCAL kind IS trial["KIND"].
         LOCAL stopReason IS _surveyOrbitStop(craftRef,stopUt,wallEnd,report).
@@ -217,20 +239,18 @@ GLOBAL FUNCTION surveyOrbitSearch {
             IF kind = "raise-ap" OR kind = "lower-pe" {
                 SET nd TO surveyOrbitDriftNode(kind = "raise-ap",trial["STEP"]).
             } ELSE {
-                LOCAL wantInc IS 90.
-                IF kind = "mirror" { SET wantInc TO 180-inc. }
+                LOCAL wantInc IS trial["INC"].
                 // Cheap analytic lower estimate; don't run the plane solver
                 // for a maneuver already above the allowed cost at apoapsis.
                 LOCAL va IS SQRT(SHIP:BODY:MU*(2/(SHIP:BODY:RADIUS+SHIP:APOAPSIS)-1/SHIP:ORBIT:SEMIMAJORAXIS)).
                 LOCAL estimate IS 2*va*SIN(ABS(wantInc-inc)/2).
-                IF estimate >= 0.3 AND estimate <= cap {
+                IF surveyOrbitAffordable(estimate,cap,reserve) {
                     SET nd TO planPlaneMatch(wantInc,lan).
                     IF nd <> 0 AND surveyOrbitOwned(craftRef,nd) {
                         IF nd:ETA < 180 { SET nd:TIME TO nd:TIME+period. WAIT 0.02. }
                         // planPlaneMatch's general guard allows5deg; surveying
                         // needs a genuinely different, well-achieved plane.
-                        IF ABS(nd:ORBIT:INCLINATION-wantInc) > 0.2
-                                OR ABS(MOD(nd:ORBIT:LAN-lan+540,360)-180) > 0.2 {
+                        IF NOT _surveyOrbitPlaneOk(nd,wantInc,lan) {
                             IF NOT surveyOrbitRelease(craftRef,nd) {
                                 _surveyOrbitStop(craftRef,stopUt,wallEnd,report).
                                 SET out["REASON"] TO "preview-cleanup-context". RETURN out.
@@ -238,6 +258,9 @@ GLOBAL FUNCTION surveyOrbitSearch {
                             SET nd TO 0.
                         }
                     }
+                } ELSE {
+                    diagnosticArchiveLine(report,"STATS scanorbit skipped mode="+kind
+                        +" targetInc="+wantInc+" estimateDv="+estimate+" reason=lower-bound-outside-budget-or-minimum").
                 }
             }
         }
@@ -259,6 +282,7 @@ GLOBAL FUNCTION surveyOrbitSearch {
             diagnosticArchiveLine(report,"STATS scanorbit candidate mode="+kind+" dv="+dv
                 +" score="+score+" baseline="+baseline+" Pe="+nd:ORBIT:PERIAPSIS
                 +" Ap="+nd:ORBIT:APOAPSIS+" inc="+nd:ORBIT:INCLINATION+" lan="+nd:ORBIT:LAN
+                +" targetInc="+trial["INC"]+" deltaInc="+(nd:ORBIT:INCLINATION-inc)
                 +" stepM="+trial["STEP"]+" deltaPeriod="+(nd:ORBIT:PERIOD-period)
                 +" gridA="+samples["A"]+" gridB="+samples["B"]).
             IF score >= 0 AND _surveyOrbitGain(samples,baseSamples) {
@@ -266,7 +290,7 @@ GLOBAL FUNCTION surveyOrbitSearch {
                 IF merit > bestMerit {
                     SET bestMerit TO merit.
                     SET best TO LEXICON("MODE",kind,"UT",nd:TIME,"PRO",nd:PROGRADE,
-                        "NRM",nd:NORMAL,"RAD",nd:RADIALOUT,"SCORE",score,"DV",dv,"SAMPLES",samples).
+                        "NRM",nd:NORMAL,"RAD",nd:RADIALOUT,"SCORE",score,"DV",dv,"SAMPLES",samples,"INC",trial["INC"]).
                 }
             }
             // Only our node, only while still on the same active vessel.
@@ -292,6 +316,7 @@ GLOBAL FUNCTION surveyOrbitSearch {
     ADD nd. WAIT 0.02.
     IF NOT surveyOrbitOwned(craftRef,nd) { SET out["REASON"] TO "node-ownership-changed". RETURN out. }
     IF NOT surveyOrbitSafe(nd:ORBIT,lowerAlt,upperAlt) OR NOT surveyOrbitAffordable(nd:DELTAV:MAG,cap,reserve)
+            OR NOT _surveyOrbitPlaneOk(nd,best["INC"],lan)
             OR nd:ETA < 180 OR NOT surveyOrbitIdle(craftRef,TRUE) {
         IF SHIP = craftRef AND KUNIVERSE:ACTIVEVESSEL = craftRef AND HASNODE AND NEXTNODE = nd {
             surveyOrbitRelease(craftRef,nd).
