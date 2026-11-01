@@ -108,7 +108,7 @@ def check_profiles_and_dependencies():
                 assert phase.lower() in phases and closure(phases[phase.lower()], deps)
             if 'SCANSAT_OPS' in seq:
                 assert leg['SHAPE_INC'] == leg['CAPTURE_INC'] == 90
-                assert leg['SHAPE_PE'] == leg['SHAPE_AP'] == 70000
+                assert leg['SHAPE_PE'] == 70000 and leg['SHAPE_AP'] == leg['TARGET_AP'] == 90000
                 assert leg['SCANSAT_DECOUPLER_TAG'] == ''
                 assert leg['SCANSAT_AUTO_DEORBIT'] == leg['SCANSAT_DISPOSE_CARRIER'] == 0
                 assert leg['SCANSAT_POWER_LOW'] < leg['SCANSAT_POWER_RESUME']
@@ -463,6 +463,30 @@ def check_surface_guards():
     print('PASS: surface science refuses unsafe motion/body/controls, invalid settings/deadline or failed cutoff before any experiments or alarms')
 
 
+def check_mapping_ellipses():
+    import math
+    # Independent two-body cost/period comparison, not a map-coverage claim.
+    missions=(('kerbin_orbital_surveyor',600000,3.5316e12,100000,130000),
+              ('duna_orbital_surveyor',320000,3.0136321e11,70000,90000),
+              ('moho_orbital_surveyor',250000,1.6860938e11,70000,90000))
+    for name,radius,mu,pe,ap in missions:
+        cfg=profile(name)
+        assert cfg['SHAPE_PE']==pe and cfg['SHAPE_AP']==ap and cfg['SHAPE_INC']==90
+        rp,ra=radius+pe,radius+ap;semi=(rp+ra)/2
+        assert 0<(ap-pe)/(2*radius+ap+pe)<.1
+        delta=math.sqrt(mu*(2/rp-1/semi))-math.sqrt(mu/rp)
+        assert 0<delta<30 and (semi/rp)**1.5>1.03
+        assert cfg['SHAPE_RESERVE_DV']>=100 and cfg['SCANSAT_POWER_GUARD']==1
+    ike=profile('ike_orbital_surveyor');ops=ike['IKE_MISSION_SETTINGS']
+    assert ops['SHAPE_AP']==ops['TARGET_AP']==90000 and ops['SHAPE_PE']==70000
+    assert ike['MISSION_ASSIST_ROUTE'][-1]['AP']==90000
+    duna=profile('duna_orbital_surveyor')
+    assert duna['MISSION_ASSIST_ROUTE'][-1]['AP']==90000
+    assert duna['MISSION_ASSIST_SETTINGS']['TARGET_AP']==90000
+    assert profile('duna_lander')['SHAPE_AP']==70000
+    print('PASS: mapping ellipses preserve low passes/polar planes/power guards/reserves, alter periods with<30m/s ideal raise cost, and agree across direct/Ike/assist goals; landers retain their parking goals')
+
+
 if __name__ == '__main__':
     check_profiles_and_dependencies()
     check_ike_handoff_roundtrip_and_legacy()
@@ -472,3 +496,4 @@ if __name__ == '__main__':
     check_lander_provider_and_radio_policy()
     check_surface_session_and_reboot()
     check_surface_guards()
+    check_mapping_ellipses()

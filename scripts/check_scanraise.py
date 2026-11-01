@@ -50,7 +50,7 @@ def check_measured_mapper_raise():
     assert new.ECCENTRICITY<.1 and new.PERIAPSIS>=80000 and new.APOAPSIS<250000
     assert all(state[key]==value for key,value in before.items() if key!='shape_budget_spent')
     assert abs(state['shape_budget_spent']-before['shape_budget_spent']-nd.DELTAV.MAG)<1e-7
-    assert env['SHAPE_AP']==env['SHAPE_PE']==100000 # Profile goals unchanged.
+    assert env['SHAPE_AP']==130000 and env['SHAPE_PE']==100000 # Profile goals unchanged.
     assert any('coverageGain=operator-experiment' in row for row in events)
     assert not command_entrypoint_errors(SOURCE)
     assert 'VELOCITYAT' not in SOURCE and 'executeManeuver' not in SOURCE

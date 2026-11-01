@@ -75,7 +75,7 @@ def check_profiles_and_scanner_handoff():
     env['opts']=fleet.native(dict(after='scan'))
     entry.call((ROOT/'cmd/orbit.ks').read_text(),'_cmdOrbit',env)
     assert state['phase']=='EXCURSION_READY' and not events
-    assert [updates['SHAPE_'+key] for key in ('AP','PE','INC','LAN','AOP')]==[70000,70000,90,-1,-1]
+    assert [updates['SHAPE_'+key] for key in ('AP','PE','INC','LAN','AOP')]==[90000,70000,90,-1,-1]
     assert updates['SCANSAT_DECOUPLER_TAG']=='' and updates['SCANSAT_DISPOSE_CARRIER']==updates['SCANSAT_AUTO_DEORBIT']==0
     assert updates['SCANSAT_DISPOSE_BEFORE_RELEASE']==updates['SCANSAT_STAGE_AFTER_RELEASE']==0
     assert updates['SCANSAT_POWER_GUARD']==1 and updates['SCANSAT_POWER_LOW']==.3 and updates['SCANSAT_POWER_RESUME']==.6
@@ -385,7 +385,7 @@ def check_mun_contract_survey_return():
     env['opts']=fleet.native(dict(after='scan'))
     entry.call((ROOT/'cmd/orbit.ks').read_text(),'_cmdOrbit',env)
     assert updates['SEQUENCE']==['EXCURSION_READY','SHAPE','SCANSAT_OPS','RETURN_SETUP']
-    assert [updates['SHAPE_'+k] for k in ('AP','PE','INC','LAN','AOP')]==[70000,70000,90,-1,-1]
+    assert [updates['SHAPE_'+k] for k in ('AP','PE','INC','LAN','AOP')]==[90000,70000,90,-1,-1]
     assert not events and state['phase']=='EXCURSION_READY'
     assert state['shape_budget_spent']==70 and state['shape_budget_id']=='Mun:1000'
     fresh=read_settings('\n'.join('SET '+k+' TO '+str(fleet.literal(v))+'.' for k,v in updates.items()),dict(cfg))

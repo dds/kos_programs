@@ -102,7 +102,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/landlight.ks").` | Preview a lit ground-track site from Mun/Minmus parking orbit; `"status"` checks the saved target with live positions; `"apply", "AFTERNOON", 1` selects afternoon while preserving the return mission; final argument `0` waives direct Kerbin view |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
-| `RUNPATH("0:/cmd/orbit.ks",LEXICON("after","scan")).` | Enabled airless local mission: select70km polar mapping, keeping the probe together; then reboot |
+| `RUNPATH("0:/cmd/orbit.ks",LEXICON("after","scan")).` | Enabled airless local mission: select70×90km polar mapping, keeping the probe together; then reboot |
 | `RUNPATH("0:/cmd/visit.ks").` | Enabled airless local mission: visit the selected same-body waypoint via15km polar parking; then reboot |
 | `RUNPATH("0:/cmd/geodistance.ks", lat1, lng1, lat2, lng2).` | Surface distance between two lat/lng points on the current body |
 | `RUNPATH("0:/cmd/kscsplash.ks").` | Target water splashdown offshore of KSC |
@@ -1173,17 +1173,17 @@ The two local Kerbin profiles below launch directly to100km polar parking.
 
 | Profile ID | Objective | Transfer / operations allowance |
 |---|---|---|
-| `duna_orbital_surveyor` | Powered capture,70km polar Duna mapping orbit |1500 /1000m/s |
-| `ike_orbital_surveyor` | High Duna capture, Ike transfer,70km polar mapping orbit |1500 /800m/s |
+| `duna_orbital_surveyor` | Powered capture,70×90km polar Duna mapping orbit |1500 /1000m/s |
+| `ike_orbital_surveyor` | High Duna capture, Ike transfer,70×90km polar mapping orbit |1500 /800m/s |
 | `duna_lander` |70km polar Duna parking, surveyed site selection, chute-assisted powered landing |1500 /1300m/s |
 | `ike_lander` | High Duna capture,25km polar Ike parking, surveyed landing and surface science |1500 /1300m/s |
-| `kerbin_orbital_surveyor` |100km polar Kerbin mapping, complete probe retained | Local orbit |
+| `kerbin_orbital_surveyor` |100×130km polar Kerbin mapping, complete probe retained | Local orbit |
 | `kerbin_lander` |100km polar parking, operator-selected Kerbin landing, parachutes with optional engine assistance | Local orbit |
 | `minmus_orbital_surveyor` |1041045m Ap /465764m Pe,21.6deg inc,255.5deg LAN,157.3deg AoP; review before command-selected polar mapping | Minmus transfer and local operations |
 | `minmus_lander` |15km polar parking, selected-site landing, repeat orbital excursions by command | Minmus transfer and local operations |
-| `mun_contract_survey_return` |1737680m Ap /1543150m Pe,180deg/AoP34.3deg contract orbit; review,70km polar mapping, Kerbin return | Mun transfer and local operations,400m/s return floor |
+| `mun_contract_survey_return` |1737680m Ap /1543150m Pe,180deg/AoP34.3deg contract orbit; review,70×90km polar mapping, Kerbin return | Mun transfer and local operations,400m/s return floor |
 | `eeloo_flyby` |25km science flyby; optional25km Pe /5000km Ap polar capture, then review | Window-dependent; live capture budget |
-| `moho_orbital_surveyor` | Powered70km polar Moho mapping orbit | Budget departure and capture for the actual window |
+| `moho_orbital_surveyor` | Powered70×90km polar Moho mapping orbit | Budget departure and capture for the actual window |
 | `moho_lander` |25km polar Moho parking, later site selection and powered surface science | Capture must retain1200m/s for descent |
 | `mun_relay_tripack` | Three passive relays in a1000km equatorial Mun ring | Carrier deployment about158m/s plus trim/reserve |
 | `minmus_relay_tripack` | Three passive relays in a500km equatorial Minmus ring | Carrier deployment about38m/s plus trim/reserve |
@@ -1262,7 +1262,7 @@ RUNPATH("0:/cmd/orbit.ks",LEXICON("after","scan")).
 REBOOT.
 ```
 
-This replaces the contract goals with70km circular/90deg polar goals,
+This replaces the contract goals with70×90km/90deg polar goals,
 changes plane while the orbit is still high, then lowers the apsides.
 The complete probe stays together; its contract-era SHAPE expenditure,
 per-burn/cumulative caps and400m/s return reserve survive the command.
@@ -1286,6 +1286,18 @@ actual fuel/engine and return affordability. Neither reserve guarantees
 completion for a particular spacecraft. Scanner altitude can be overridden
 in the orbit command to match the installed instruments. The contract
 review also permits an explicit early return instead of surveying.
+
+The Kerbin mapper's measured Biome/VisualLoRes coverage rose from38.4% at
+UT5270725.8 to87.6% at5376664.1 after the100×130km experiment. Survey profiles
+now use modest ellipses to change period/ground-track spacing:100×130km for
+Kerbin and70×90km for Duna/Ike/Moho. Command-selected `after="scan"` excursions
+use70×90km for airless moons after contract review. The low pass and polar
+plane remain; capture and assist goals agree with the final ellipse. Explicit
+`ap`/`pe` options override these defaults. The installed MODIS sensor's20–250km
+range contains these mapping altitudes. Other payloads should use their own
+operating ranges. This is an empirical scheduling choice, not a forecast that
+every body will achieve the same gain. Existing on-station craft are not given
+an automatic burn by a reboot; use the explicit drift commands below.
 
 To fill remaining map gaps from an existing near-polar survey orbit, stop
 automation at the prompt, keep a link and quicksave, then run:
@@ -4038,7 +4050,12 @@ state converter.
   fixtures (Python 3 + NumPy; does not run kOS or KSP). Individual routine
   check calls target under one second; a file can contain several calls.
   Runs up to four isolated check processes; `make check CHECK_JOBS=1` runs
-  serially. Output stays in file order and every failure is reported.
+  serially. Verified passes are reused only while their observed inputs and
+  Python/environment context are unchanged; cached files are labelled. Changed,
+  uncertain or failed checks execute again. Cache files live in ignored
+  `.cache/checks`; no live fixture values or flight state are cached.
+  Output stays in file order and every failure is reported.
+- `make check-full` — fresh routine and slow checks, ignoring cached passes.
 - `make check-slow` — explicitly run the full finite-burn predictor/independent
   Heun comparison, which still exceeds one second after optimization.
 - `make check-all` — routine and slow checks together.

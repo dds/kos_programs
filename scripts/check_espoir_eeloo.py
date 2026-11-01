@@ -65,7 +65,7 @@ def check_profiles():
     assert lander['LANDING_RETURN_DECOUPLER_TAG'] == lander['LANDING_RELEASE_DECOUPLER_TAG'] == ''
     survey = profile('moho_orbital_surveyor')
     assert survey['TARGET_'] == 'MOHO' and survey['CAPTURE_INC'] == survey['SHAPE_INC'] == 90
-    assert survey['TARGET_AP'] == survey['SHAPE_AP'] == survey['SHAPE_PE'] == 70000
+    assert survey['TARGET_AP'] == survey['SHAPE_AP'] == 90000 and survey['SHAPE_PE'] == 70000
     assert survey['SCANSAT_DECOUPLER_TAG'] == '' and survey['SCANSAT_DISPOSE_CARRIER'] == 0
     assert survey['SCANSAT_POWER_LOW'] < survey['SCANSAT_POWER_RESUME']
     assert 'science_flight' not in closure(phases['capture'], deps)

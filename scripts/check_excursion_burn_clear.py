@@ -169,7 +169,7 @@ def check_clear_then_polar_excursion():
         env[name]=lambda *args,name=name:entry.call(excursions.SOURCE,name,env,*args)
     entry.call((ROOT/'cmd/orbit.ks').read_text(),'_cmdOrbit',env)
     assert state['phase']=='EXCURSION_READY' and events==['flush']
-    assert [values['SHAPE_'+key] for key in ('AP','PE','INC','LAN','AOP')]==[70000,70000,90,-1,-1]
+    assert [values['SHAPE_'+key] for key in ('AP','PE','INC','LAN','AOP')]==[90000,70000,90,-1,-1]
     assert values['SEQUENCE']==['EXCURSION_READY','SHAPE','SCANSAT_OPS','RETURN_SETUP']
     assert state['shape_budget_spent']==25 and state['mission_id']=='mun_contract_survey_return'
     assert 'operator-accept-achieved-orbit' in state['last_burn_handoff']

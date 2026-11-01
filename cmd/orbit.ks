@@ -1,4 +1,5 @@
 // Local orbit excursion; no arguments selects70km polar, stopping for review.
+// after=scan selects70x90km polar to vary mapping altitude/ground tracks.
 // RUNPATH("0:/cmd/orbit.ks",LEXICON("after","scan")). then REBOOT.
 @LAZYGLOBAL OFF.
 PARAMETER opts IS LEXICON().

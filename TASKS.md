@@ -6,22 +6,43 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- IN PROGRESS: user wants10s make check; accepts verified-result reuse for
-  unchanged inputs with an explicit fresh full command. Preserve all assertions,
-  cases, steps/tolerances and failure reporting. Experimental compiled-call and
-  scalar-vector rewrites under/tmp did not justify complexity and were NOT
-  added. Warm forkserver8-worker prototype43.57s vs62.48s; codebase SystemExit(0)
-  incorrectly counted as failure in prototype, not a production regression.
-  Production runner still unchanged. Plan conservative per-check input manifests
-  including source/import reads, directory listings/missing paths, interpreter/
-  dependency/environment fingerprints; never reuse failures/uncertain inputs.
+- DONE/source-checked: operator-approved verified-result reuse reaches10s target.
+  Repeated make check passes6.91s/6.95s:107 verified passes reused,4 uncertain
+  I/O checks executed. Cold manifest-building pass89.14s; fresh make check-full
+  passes all111 files including slow predictor in75.75s. No original routine
+  calls missing;4 new cache/mapping regression calls. No numerical steps,
+  matrices, tolerances or flight math changed. Context fingerprints include
+  interpreter/environment/import search paths and runner code; per-check
+  manifests include read/imported files, metadata, missing paths and listings.
+  Type/resolution probes ignore incidental directory timestamps; explicit
+  metadata reads remain guarded. Make/shell/CODEX_TOOL_CALL_ID bookkeeping
+  normalized before execution too. Changed imported helpers rerun consumers;
+  unrelated Python edits can retain results. Corrupt/uncertain/failed entries
+  never reused; fresh failures revoke old passes. Readonly/unavailable cache
+  executes fresh. New tests cover real cold/warm/fresh-failure CLI, restored
+  mtime, symlinks, independent missing/listing changes and metadata semantics.
+  No production edits during final runs. Reports:
+  /tmp/kos-cache-precise-{cold,warm1,full}-20261101.log;
+  /tmp/kos-cache-precise-warm2-20261101.json and.log. No game/save changes.
 
-- IN PROGRESS: operator reports Kerbin mapper coverage rose from~35% to perhaps
-  80% after100x100->100x130km scanraise. Exact new coverage unconfirmed. Apply
+- IMPLEMENTED/source-checked; other-body flights pending: native logs confirm Kerbin mapper coverage rose from38.4% at
+  UT5270725.8 to87.6% at5376664.1 (Biome/VisualLoRes) after100x100->100x130km
+  scanraise; measured later orbit99.1x129.9km. Apply
   bounded altitude variation to other Espoir surveyor operations, respecting
   sensor altitude limits, physical bounds, fuel/stage/mission reserves and
   return intent; preserve contract orbits until survey release. Do not mistake
   centerline proxy rejection for proof a real drift experiment cannot help.
+  Final goal: Kerbin100x130km, Duna/Ike/Moho70x90km, including capture/assist
+  variants; after=scan excursions70x90km only after explicit contract release.
+  Explicit apsides override, landing/contract profiles remain unchanged. No
+  new automatic maneuver loop or on-station reboot burn. Independent conic
+  checks bound eccentricity/period/cost/reserves. All111 fresh routine+slow
+  checks and cold routine checks pass; independent matrix bounds ecc<0.1,
+  period changes and<30m/s ideal raise cost. Direct capture, final SHAPE,
+  generated Ike operations and assist goals agree. Other-body native use
+  remains unverified. Source logs:boot013fetch-obyq0wkt and boot014fetch-6zt43cs3,
+  /tmp/ksp-deck-20261101T04510{6,7}Z-fetch-*/logs/
+  Espoir-Kerbin-Surveyor1_5146578/. No new flight libraries or game/save changes.
 
 - IMPLEMENTED/source-checked; native legacy-profile retry pending: both Espoir Minmus landers skip the surveyor's orbital
   contract. Update legacy minmus_contract_lander_return in place (saved identity

@@ -15,7 +15,8 @@ SET CAPTURE_LAN TO -1.
 SET TARGET_PE TO 100000.
 SET TARGET_AP TO 100000.
 SET SHAPE_PE TO 100000.
-SET SHAPE_AP TO 100000.
+// Preserve the low pass; vary altitude/period to reduce repeated ground tracks.
+SET SHAPE_AP TO 130000.
 SET SHAPE_INC TO 90.
 SET SHAPE_LAN TO -1.
 SET SHAPE_AOP TO -1.

@@ -278,7 +278,7 @@ def check_mission_policy_and_seek():
         assert fallback['BODY']=='Duna' and env['assistRouteBodies'](Items([fallback]),1),name
         assert fallback['MODE']=='ORBIT'
         if name.startswith('ike_'):assert fallback['AP']==2880000
-        else:assert fallback['INC']==90 and fallback['AP']==70000
+        else:assert fallback['INC']==90 and fallback['AP']==(90000 if name=='duna_orbital_surveyor' else 70000)
         assert env['assistPreviewSeekIndex'](nd,route)==0
         parent_first=Items([Map(BODY='Duna',MIN_PE=75000),Map(BODY='Ike',MIN_PE=25000,AP=75000)])
         assert env['assistPreviewSeekIndex'](nd,parent_first)==1

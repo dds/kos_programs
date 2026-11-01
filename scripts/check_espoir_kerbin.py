@@ -22,7 +22,8 @@ def check_profiles_and_local_launch():
     for name,terminal in (('kerbin_orbital_surveyor','SCANSAT_OPS'),('kerbin_lander','LANDING_REVIEW')):
         cfg=profile(name)
         assert cfg['MISSION_ID']==name and cfg['TARGET_']=='KERBIN' and cfg['MISSION_TYPE']=='kerbin_orbit'
-        assert cfg['PARKING_ALT']==cfg['TARGET_PE']==cfg['TARGET_AP']==cfg['SHAPE_PE']==cfg['SHAPE_AP']==100000
+        assert cfg['PARKING_ALT']==cfg['TARGET_PE']==cfg['TARGET_AP']==cfg['SHAPE_PE']==100000
+        assert cfg['SHAPE_AP']==(130000 if name=='kerbin_orbital_surveyor' else 100000)
         assert cfg['LAUNCH_INCLINATION']==cfg['TARGET_INCLINATION']==cfg['SHAPE_INC']==90
         assert cfg['LAUNCH_PLANE_MODE']=='' and cfg['CAPTURE_LAN']==-1
         assert cfg['COAST_AUTO_WARP']==0 and cfg['SHAPE_MIN_PE']>=80000

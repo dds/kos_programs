@@ -34,6 +34,7 @@ GLOBAL FUNCTION excursionOrbitSafe {
 }
 
 // opts: ap/pe/inc/lan/aop (metres/degrees), after=review|scan; visit uses lat/lng.
+// Default scan orbit is70x90km polar; explicit apsides always take precedence.
 GLOBAL FUNCTION excursionSelect {
     PARAMETER opts.
     PARAMETER visit.
@@ -99,6 +100,7 @@ GLOBAL FUNCTION excursionSelect {
         IF opts:HASKEY("lan") { SET lan TO opts["lan"]. }
         IF opts:HASKEY("aop") { SET aop TO opts["aop"]. }
         IF opts:HASKEY("after") { SET after TO opts["after"]. }
+        IF after = "scan" AND NOT opts:HASKEY("ap") { SET ap TO MAX(90000,pe). }
     }
     IF NOT (pe >= 10000 AND ap >= pe AND ap < SHIP:BODY:SOIRADIUS-SHIP:BODY:RADIUS
             AND inc >= 0 AND inc <= 180 AND (lan = -1 OR (lan >= 0 AND lan < 360))
