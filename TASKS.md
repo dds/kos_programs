@@ -6,6 +6,84 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native retry pending: Espoir-Mun-Surveyor1
+  SHAPE plans0.0124219975m/s set-ap at
+  UT5197782 +17501.5s(~4h52m, not4days), AP error-650m ahead of PE
+  error-1529.42km. Precision minimum0.002/tolerance0.001 is intentional;
+  improve burn selection/combination without waiving contract tolerances.
+  Boot0195197998 rejected because remainingVacDv=0 and400reserve;
+  per-burn600/cumulative1800 pass, spent0.01. Previousboot reported3290.8.
+  User resolved the empty UI/zero stock dV by waking the probe core.
+  Boot0225199559 now reports1718m/s and allowed=True, but still schedules
+  the old0.0124m/s node. Its predicted AoP31deg is not34.3deg.
+  Reserve400 is retained; unavailable readout now has a distinct warning.
+  Previous executor throttled ALL engines to0.000347 of original for tiny
+  node and had no saved originals. New burn_limits snapshots exact per-engine
+  UID/percent before mutation and restores on idle boot or executor exits;
+  hardware intent engine_thrust_restore survives burn_* resets. Explicit
+  cmd/enginelimits status/100 repairs positive legacy limits, including future
+  stages, without enabling zero-limit engines or changing mission/throttle.
+  No automatic legacy guess. Generic AoP-free joint-apsis option avoids the
+  precursor when current Ap lies inside the target ellipse, native node meets
+  both apsides/plane/floor, and extra ideal cost<=0.05m/s. Same budget/minimum/
+  precision tolerances. Independent impulsive fixture models~96.8m/s single
+  correction; NOT native kOS or finite-burn flight proof.
+  Follow-up confirmed AoP34.3deg is required: profile now requests it in
+  SHAPE only (CAPTURE_AOP remains unconstrained). Linked reboot applies to
+  this in-flight mission without clearing ledgers/return tail. Generic order
+  defers a barely-outside Ap trim behind a major Pe raise, then rotates AoP
+  before near-goal apsis cleanup; twice-altTolerance is an ordering margin,
+  NOT final acceptance. Exact500m/0.5deg goals remain. SHAPE passes its own
+  AoP tolerance to the planner instead of the generic2deg deadband.
+  SHAPE/DEPARTURE_SHAPE own solar dependency; shared executor alarms before
+  a bounded kept solar aim, maintains health ticks and re-locks atT-180s.
+  Failed aim/no KAC retain resident waits. No bootstrap rebuild.
+  Near180deg mirror warning is not itself a budget test. Evidence:
+  /tmp/ksp-deck-20261031T234136Z-fetch-q4m4rgz3/logs/
+  Espoir-Mun-Surveyor1_5156306/boot_019_core.log and earlierboot017
+  /tmp/ksp-deck-20261031T233631Z-fetch-tbn4xdll/logs/same-flight/.
+  Latest:/tmp/ksp-deck-20261101T001034Z-fetch-5fqg4b1v/logs/
+  Espoir-Mun-Surveyor1_5156306/boot_022_core.log.
+  scanorbit latest5197920 completes3.2s, both+Ap/-Pe~4m/s score33.93/
+  34.50 vs baseline37.38, no-useful-change. Already90.0001deg, so polar/
+  mirror changes below minimum. First-loop cleanup fix now runs both
+  candidates natively. Old5197881 failedafteronecandidate; it had+Ap38.48
+  vs baseline34.05 with identical37.978% coverage only40s earlier.
+  Sampling-window phase sensitivity limits confidence; consider anchoring
+  sample epochs to a stable orbital event. Current comparisons are sparse
+  ground-track proxies, not proof no better orbit exists. Archive evidence:
+  /tmp/ksp-deck-20261031T233911Z-fetch-4wxlwu49/logs/_diagnostics/
+  scanorbit_Espoir-Kerbin-Surveyor1_5197920.log (previousfetch-vpi5_n9i).
+
+- IMPLEMENTED/source-checked; native retry pending: saved unflown XING
+  drift on Espoir-Minmus-Lander2. Originalplan5197626 Pe14.894km/node917.421m/s;
+  reboot5198438 Pe12.448km just outside15+/-2km. Matching saved local departure
+  now receives <=1m/s,<=20 game-second vector-only polish at unchanged epoch,
+  only with no ignition/Abort/warp/control change and enough lead. Same native
+  first-body/Pe gate; failure restores original node, foreign nodes untouched.
+  No full replan/flown retry/corridor widening. Source fixture reproduces
+  boundary drift with synthetic linear Pe response; actual propagator pending.
+  User flew exnode before this patch. Nativeboot0065198875 found MinmusPe1300km,
+  executed4.17m/s BPLANE correction;0.0392m/s tail deferred normally.
+  SOI and midpoint KAC installed; boot007 resumed COAST_1HALF correctly.
+  Read-only evidence:/tmp/ksp-deck-20261101T000552Z-fetch-7056gx17/logs/
+  Espoir-Minmus-Lander2_5197138/boot_006_core.log; boot007fetch-a2oer0mx.
+  Do not repeat its already-flown departure.
+
+- VALIDATION for the SHAPE/AoP/solar/XING/engine-limit changes above:
+  all105 routine check files pass212.54s,375 scripts/100 profiles/82 phases/
+  44 bands,0 structural errors and unchanged legacy KSC_DEORBIT warning.
+  New check files0.424s(burn_limits),0.862s(shape_combined),0.461s(transfer
+  revalidation); each new individual case<0.15s. Actual source selector
+  tests Pe->AoP->Ap ordering and strict final tolerances; independent
+  Cartesian impulse test covers the AoP-free joint option. Alarm-before-
+  solar/clock/relock flow runs for XING/SHAPE/DEPARTURE_SHAPE.
+  Report:/tmp/kos-shape-aop-solar-xing-final-20261101.json and.log.
+  No production edits during/after the final suite; documentation updated
+  afterward. Native compilation, finite-burn AoP convergence, engine restore
+  and solar power/attitude across real long SHAPE waits still need flight
+  confirmation. No game controls, save edits or Deck code deployment.
+
 - IMPLEMENTED/source-checked: Espoir-Mun-Surveyor1 capture
   residual recovery and first native
   scanorbit deadline report(5188055). Capture boot011 at5187837.3 reached
@@ -139,7 +217,8 @@ record remaining uncertainty before closing a task.
 
 - IMPLEMENTED/source-checked: Espoir mun_contract_survey_return.
   Low15km Pe capture into high Ap, then contract Ap1737680/Pe1543150m,
-  inc180deg (retrograde equatorial); LAN/AoP unconstrained. Stop for
+  inc180deg (retrograde equatorial), AoP34.3deg (follow-up confirmed);
+  LAN unconstrained. Stop for
   contract confirmation, existing orbit(after=scan) command selects70km
   polar surveying with whole probe retained, preserving RETURN_SETUP.
   52km assisted Kerbin return/10m/s repair reserve; no automatic warp,

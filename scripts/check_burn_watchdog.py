@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace as NS
 import check_landing_guidance as ks
 from check_launch_and_staging import body
+from check_runtime_contracts import KList
 
 SOURCE=(ks.ROOT/'lib/maneuver.ks').read_text()
 CUTOFF=(ks.ROOT/'lib/thrust_cutoff.ks').read_text()
@@ -228,10 +229,11 @@ def check_cpu_budget_recovery():
         saved={}
         loaded=[]
         env=ks.environment()
-        env.update(CONFIG=NS(IPU=initial),BURN_MIN_IPU=floor,
+        env.update(CONFIG=NS(IPU=initial),BURN_MIN_IPU=floor,LIST=lambda *xs:KList(xs),
                    stateSet=lambda key,value: saved.update({key:value}),
                    stateRemove=lambda key: saved.pop(key,None),
                    stateGetNum=lambda key,default: saved.get(key,default),
+                   stateGet=lambda key,default: saved.get(key,default),
                    bootLibLoad=loaded.append)
         ks.run(ks.parse(setup),env)
         assert env['CONFIG'].IPU==expected

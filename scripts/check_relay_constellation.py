@@ -44,7 +44,8 @@ def prepared(source,name):
             fields=raw.strip().split(' IS ');names.append(fields[0])
             if len(fields)>1:
                 raw=fields[1]
-                defaults[fields[0]]=Text(raw[1:-1]) if raw.startswith('"') and raw.endswith('"') else {'FALSE':False,'TRUE':True}[raw]
+                defaults[fields[0]]=Text(raw[1:-1]) if raw.startswith('"') and raw.endswith('"') else (
+                    {'FALSE':False,'TRUE':True}[raw] if raw in ('FALSE','TRUE') else float(raw))
     code=re.sub(r'PARAMETER [^.]+\.','',code)
     code=re.sub(r'WAIT UNTIL [^.]+\.','fixture_settle().',code)
     code=code.replace('REMOVE nd.','fixture_remove(nd).')

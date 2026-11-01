@@ -54,7 +54,7 @@ def fixture(response, cap=100, first='Mun'):
                _firstPatchBodyName=lambda _: first)
     env['findArrivalPatch']=lambda *_:{'patch':patch,'entryUt':nd.TIME+20000}
     for name in ('transferCorrectionFollows','transferImpactTargetEnabled','transferDepartureAim',
-                 'transferDepartureReady', '_refineLocalDeparturePe', '_refineLocalDepartureCandidates'):
+                 'transferDepartureReady', '_departurePeCanProbe', '_refineLocalDeparturePe', '_refineLocalDepartureCandidates'):
         env[name] = lambda *args, name=name: ks.call(name, env, *args)
     return env, nd, target
 
@@ -177,7 +177,7 @@ def check_plan_gate():
         result = ks.call('planTransfer', env, target, 15000)
         assert (result is nd) == accepted
     phase = body((ks.ROOT/'lib/xfer_plan.ks').read_text(), 'phaseTransfer')
-    assert phase.index('transferDepartureReady(existing') < phase.index('executeManeuver()')
+    assert phase.index('transferRevalidateUnflown(existing') < phase.index('executeManeuver()')
     assert 'IF NOT maneuverBurnInterrupted() AND NOT maneuverDepartureFlown()' in phase
     print('PASS: bad/absent/impact/wrong-body plans rejected; valid corridor accepted; saved-node gate precedes burn')
 

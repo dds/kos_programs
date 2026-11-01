@@ -47,6 +47,7 @@ def check_duration_limits():
             env, _, _, _ = governor_fixture(acc=acc)
             engines = [NS(THRUSTLIMIT=x) for x in (100, 50, 0)]
             env['SHIP'].ENGINES = engines
+            env['burnThrustSave']=lambda:True
             scale = ks.call('_burnLimitThrust', env, dv)
             assert 0 < scale <= 1
             assert abs(scale - min(1, dv / (acc * 2))) < 1e-12
@@ -58,6 +59,7 @@ def check_duration_limits():
         env, _, _, _ = governor_fixture(acc=acc)
         engine = NS(THRUSTLIMIT=37)
         env['SHIP'].ENGINES = [engine]
+        env['burnThrustSave']=lambda:True
         assert ks.call('_burnLimitThrust', env, 9.7422) == 1
         assert engine.THRUSTLIMIT == 37
     print('PASS: actual duration limiter adapts to acceleration, preserves relative/zero engine limits and leaves slow burns at available power')

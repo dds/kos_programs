@@ -241,7 +241,8 @@ GLOBAL FUNCTION phaseTransfer {
             + " eta=" + ROUND(existing:ETA,1)
             + " body=" + SHIP:BODY:NAME).
         IF NOT maneuverBurnInterrupted() AND NOT maneuverDepartureFlown() {
-            IF NOT transferDepartureReady(existing, target, CAPTURE_PE) {
+            IF NOT transferRevalidateUnflown(existing, target, CAPTURE_PE) {
+                IF HASNODE AND NEXTNODE = existing { transferDepartureReady(existing,target,CAPTURE_PE). }
                 mLogError("Existing node is not a validated departure. It may be a parking/circularization remainder; inspect it, delete only if stale, then REBOOT to plan the transfer.").
                 yieldToPrompt().
                 RETURN.

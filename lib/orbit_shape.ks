@@ -932,8 +932,9 @@ LOCAL FUNCTION _shapeNodeAboveMinimum {
 // Returns LEX("node", nd, "label", text) or 0 when converged
 // (or nothing useful can be planned).
 //
-// Priority: PLANE -> placed apsis (circular start) -> AP -> PE
-// -> AOP. Apsides come BEFORE the AoP rotation: tangential apsis
+// Priority: PLANE -> placed apsis -> major size changes -> AOP ->
+// remaining apsis cleanup. Apsides come BEFORE the AoP rotation:
+// tangential apsis
 // burns never move the apsidal line, and rotating AoP at the
 // (usually lower) target eccentricity is cheaper. Every non-plane
 // burn is refined against nd:ORBIT before being returned. Each
@@ -986,6 +987,70 @@ LOCAL FUNCTION _shapeRepairPeriapsis {
     RETURN 0.
 }
 
+// At current Ap, one velocity change can meet BOTH apsides when this
+// radius lies inside the desired ellipse. A small radial component avoids
+// waiting an extra revolution just to trim a nearly-correct Ap first.
+// Only unconstrained AoP; price against the ordinary two tangent burns.
+LOCAL FUNCTION _shapeCombinedOwned {
+    PARAMETER nd.
+    RETURN SHIP = KUNIVERSE:ACTIVEVESSEL AND HASNODE AND ALLNODES:LENGTH = 1 AND NEXTNODE = nd.
+}
+
+LOCAL FUNCTION _shapeCombinedApsides {
+    PARAMETER targets.
+    IF targets:HASKEY("AOP") OR ABORT OR HASNODE OR WARP <> 0
+            OR SHIP <> KUNIVERSE:ACTIVEVESSEL { RETURN 0. }
+    LOCAL mu IS SHIP:BODY:MU.
+    LOCAL rb IS SHIP:BODY:RADIUS+SHIP:APOAPSIS.
+    LOCAL rp IS SHIP:BODY:RADIUS+targets["PE"].
+    LOCAL ra IS SHIP:BODY:RADIUS+targets["AP"].
+    IF NOT (rp > 0 AND rp <= rb AND rb <= ra AND ra < SHIP:BODY:SOIRADIUS
+            AND targets["PE"] >= _peFloor()) { RETURN 0. }
+    LOCAL nowSpeed IS _speedAtTa(180).
+    LOCAL desiredTangent IS SQRT(2*mu*rp*ra/(rp+ra))/rb.
+    LOCAL radialSquared IS mu*(2/rb-2/(rp+ra))-desiredTangent^2.
+    IF NOT (radialSquared >= -0.00001 AND radialSquared < 1e30) { RETURN 0. }
+    LOCAL desiredRadial IS SQRT(MAX(0,radialSquared)).
+    LOCAL progradeDv IS desiredTangent-nowSpeed.
+    LOCAL cost IS SQRT(progradeDv^2+desiredRadial^2).
+    LOCAL tangentFirst IS SQRT(mu*(2/rb-2/(rb+rp))).
+    LOCAL tangentSecond IS SQRT(mu*(2/rp-2/(rp+ra))).
+    LOCAL secondBefore IS SQRT(mu*(2/rp-2/(rp+rb))).
+    LOCAL separateCost IS ABS(tangentFirst-nowSpeed)+ABS(tangentSecond-secondBefore).
+    IF NOT (cost > 0 AND cost <= separateCost+0.05 AND cost < 1e30) { RETURN 0. }
+    LOCAL burnEta IS ETA:APOAPSIS.
+    IF burnEta < 60 { SET burnEta TO burnEta+SHIP:ORBIT:PERIOD. }
+    LOCAL nd IS NODE(TIME:SECONDS+burnEta,desiredRadial,0,progradeDv).
+    ADD nd. WAIT 0.1.
+    IF NOT _shapeCombinedOwned(nd) { yieldToPrompt(). RETURN 0. }
+    LOCAL currentNormal IS planeNormalFromIncLan(SHIP:ORBIT:INCLINATION,SHIP:ORBIT:LAN).
+    LOCAL solved IS FALSE.
+    FOR sign_ IN LIST(1,-1) {
+        SET nd:RADIALOUT TO sign_*desiredRadial.
+        WAIT 0.05.
+        IF NOT _shapeCombinedOwned(nd) OR ABORT {
+            IF _shapeCombinedOwned(nd) { REMOVE nd. WAIT 0.02. }
+            yieldToPrompt(). RETURN 0.
+        }
+        IF NOT _nodeUnsafe(nd) AND NOT nd:ORBIT:HASNEXTPATCH
+                AND ABS(nd:ORBIT:APOAPSIS-targets["AP"]) <= SHAPE_ALT_TOL
+                AND ABS(nd:ORBIT:PERIAPSIS-targets["PE"]) <= SHAPE_ALT_TOL
+                AND _planeErrOf(nd:ORBIT,currentNormal) <= SHAPE_ANG_TOL {
+            SET solved TO TRUE. BREAK.
+        }
+    }
+    IF NOT solved {
+        REMOVE nd. WAIT 0.02.
+        RETURN 0.
+    }
+    IF NOT _shapeNodeAboveMinimum(nd,"set-apsides") { RETURN 0. }
+    mLog("STATS shape combined-apsides dv="+nd:DELTAV:MAG+" separateDv="+separateCost
+        +" eta="+nd:ETA+" prograde="+nd:PROGRADE+" radial="+nd:RADIALOUT
+        +" predictedAp="+nd:ORBIT:APOAPSIS+" predictedPe="+nd:ORBIT:PERIAPSIS
+        +" tolerance="+SHAPE_ALT_TOL+" aopFree=True").
+    RETURN LEX("node",nd,"label","set-apsides").
+}
+
 GLOBAL FUNCTION shapeNextBurn {
     PARAMETER targets.
 
@@ -996,6 +1061,15 @@ GLOBAL FUNCTION shapeNextBurn {
     LOCAL aopTol IS SHAPE_AOP_TOL.
     LOCAL needAp2 IS errs:HASKEY("AP") AND ABS(errs["AP"]) > altTol.
     LOCAL needPe2 IS errs:HASKEY("PE") AND ABS(errs["PE"]) > altTol.
+    // Ordering only: final convergence still uses the exact configured
+    // tolerances. Do not wait a revolution for a barely-outside Ap trim
+    // before a major Pe raise, or before the remaining apsidal rotation.
+    LOCAL nearAp IS NOT needAp2 OR ABS(errs["AP"]) <= 2*altTol.
+    LOCAL nearPe IS NOT needPe2 OR ABS(errs["PE"]) <= 2*altTol.
+    LOCAL peFirst IS needAp2 AND needPe2 AND nearAp AND NOT nearPe
+        AND targets["PE"] > SHIP:PERIAPSIS.
+    LOCAL aopFirst IS errs:HASKEY("AOP") AND ABS(errs["AOP"]) > aopTol
+        AND nearAp AND nearPe AND SHIP:ORBIT:ECCENTRICITY >= NEAR_CIRC_ECC.
 
     // --- 1. If a high AP target is requested, get to the slow
     // side before paying for a big plane/LAN correction. A low
@@ -1055,18 +1129,23 @@ GLOBAL FUNCTION shapeNextBurn {
         }
     }
 
-    // --- 4 & 5. Apsides BEFORE the AoP rotation: tangential apsis
-    // burns never move the apsidal line, and the rotation is
-    // cheaper at the (usually lower) target eccentricity. Order by
-    // feasibility: an Ap target below the current Pe cannot be set
-    // from Pe, so fix Pe first then. ---
-    IF needAp2 AND targets["AP"] >= SHIP:PERIAPSIS {
+    // --- 4 & 5. Major apsis changes before AoP rotation, which is
+    // cheaper at the (usually lower) target eccentricity. Leave small
+    // apsis cleanup until after the rotation. An Ap target below the
+    // current Pe cannot be set from Pe, so fix Pe first then. ---
+    IF needAp2 AND needPe2 AND NOT targets:HASKEY("AOP") {
+        LOCAL combined IS _shapeCombinedApsides(targets).
+        IF combined:ISTYPE("Lexicon") { RETURN combined. }
+        IF ABORT OR phaseShouldYield { RETURN 0. }
+    }
+    IF needAp2 AND NOT peFirst AND NOT aopFirst AND targets["AP"] >= SHIP:PERIAPSIS {
         LOCAL etaPe IS ETA:PERIAPSIS.
         IF etaPe < 60 { SET etaPe TO etaPe + SHIP:ORBIT:PERIOD. }
         LOCAL r4 IS _apsisBurn(etaPe, 0, targets["AP"], "set-ap", targets).
         IF r4:ISTYPE("Lexicon") { RETURN r4. }
     }
-    IF needPe2 {
+    IF needPe2 AND NOT aopFirst {
+        IF peFirst { mLog("STATS shape order=pe-before-ap reason=major-pe-raise apError="+errs["AP"]+" peError="+errs["PE"]). }
         LOCAL etaAp IS ETA:APOAPSIS.
         IF etaAp < 60 { SET etaAp TO etaAp + SHIP:ORBIT:PERIOD. }
         LOCAL r5 IS _apsisBurn(etaAp, 180, targets["PE"], "set-pe", targets).
@@ -1076,8 +1155,9 @@ GLOBAL FUNCTION shapeNextBurn {
     // --- 5. Argument of periapsis (in-plane apsidal rotation) ---
     IF errs:HASKEY("AOP") AND ABS(errs["AOP"]) > aopTol
             AND SHIP:ORBIT:ECCENTRICITY >= NEAR_CIRC_ECC {
+        IF aopFirst { mLog("STATS shape order=aop-before-cleanup tolerance="+altTol). }
         LOCAL aopBurn IS _finishShapeNode(
-            planAoPChange(targets["AOP"]), "aop", targets).
+            planAoPChange(targets["AOP"],aopTol), "aop", targets).
         IF aopBurn:ISTYPE("Lexicon") { RETURN aopBurn. }
     }
     IF needAp2 AND targets["AP"] < SHIP:PERIAPSIS {
@@ -1134,6 +1214,10 @@ LOCAL FUNCTION _shapeReserveBurn {
         + " allowed=" + allowed).
     IF NOT allowed {
         REMOVE nd.
+        IF NOT (remaining > 0 AND remaining < 1e30) {
+            mLogWarn("SHAPE: stock fuel estimate is empty/unavailable; wake the probe core and check active-vessel/staging dV. Reserve not waived.").
+            yieldToPrompt(). RETURN FALSE.
+        }
         mLogWarn("SHAPE: correction exceeds mission budget; retaining current orbit. "
             + "Review landing feasibility before skipping this phase.").
         yieldToPrompt().

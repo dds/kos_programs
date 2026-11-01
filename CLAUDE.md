@@ -1206,6 +1206,11 @@ Looks like Python/JS; is neither.
   `nextPhase` saves the phase beyond XING. On reload, inspect the actual
   encounter first; never interpret a cleaned-up flown departure as unflown.
   Release throttle/steering locks after cutoff before archive log I/O.
+  Temporary maneuver thrust limits must snapshot exact per-engine values by
+  UID before mutation and restore at idle exit/boot. Keep the hardware restore
+  intent outside `burn_*` so resetting an attempt cannot lose it. Never infer
+  an interrupted legacy engine's original percentage or reset all engines to
+  100% automatically; `cmd/enginelimits` is an explicit operator override.
 
 ## Working in this repo
 

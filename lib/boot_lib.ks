@@ -935,6 +935,11 @@ GLOBAL FUNCTION bootLibLoad {
 
 GLOBAL FUNCTION bootPreamble {
     bootLibLoad("core").
+    LOCAL limits IS stateGet("engine_thrust_restore",LIST()).
+    IF limits:LENGTH > 0 {
+        bootLibLoad("burn_limits").
+        IF NOT burnThrustRestore() { mLogWarn("Pending maneuver thrust limits retained until controls are idle on the active vessel."). }
+    }
     // An interrupted maneuver can leave its temporary CPU budget active.
     // Restore before any command (including transferretry) clears burn_*.
     LOCAL priorIpu IS stateGetNum("burn_prior_ipu", -1).

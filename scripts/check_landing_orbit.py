@@ -101,6 +101,9 @@ def fixture(profile=True):
         except ks.Returned as result:return result.value
     env['_landPrepLinkWait']=link_wait
     env['_landPrepNextCached']=lambda:False
+    # This adapter propagates tangent-only impulses. Joint radial/apsis
+    # physics is exercised independently in check_shape_combined.
+    env['_shapeCombinedApsides']=lambda _:Scalar(0)
     for name in ('landingOrbitContext','shapeErrors','shapeConverged','_peFloor','_shapeRepairPeriapsis'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
     def next_burn(targets):

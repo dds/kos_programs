@@ -35,6 +35,7 @@ def fixture():
         SHAPE_BURN_TOLERANCE=-1,BURN_TRIM_ABS_COMPLETE_DV=.05,BURN_TRIM_COMPLETE_MAX_DV=.05,
         _shapeInterruptedHold=lambda _:False,
         _shapeRecoverResidual=lambda _:False,
+        _shapeCombinedApsides=lambda _:Skip('not-modeled'),
         _peFloor=lambda:9000,
         SHAPE_ALT_TOL=250,SHAPE_ANG_TOL=.1,SHAPE_AOP_TOL=.2,
         NEAR_CIRC_ECC=.01,MIN_AOP_TARGET_ECC=.004,

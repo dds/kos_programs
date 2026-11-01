@@ -325,7 +325,7 @@ def check_mun_contract_survey_return():
     import check_surface_return as home
     import check_landing_orbit as prep
     cfg=fleet.profile('mun_contract_survey_return')
-    assert [cfg['SHAPE_'+k] for k in ('AP','PE','INC','LAN','AOP')]==[1737680,1543150,180,-1,-1]
+    assert [cfg['SHAPE_'+k] for k in ('AP','PE','INC','LAN','AOP')]==[1737680,1543150,180,-1,34.3]
     assert cfg['TARGET_']=='MUN' and cfg['MISSION_TYPE']=='kerbin_moon'
     assert cfg['PARKING_ALT']==85000 and cfg['LAUNCH_PLANE_MODE']=='BODY_ORBIT'
     assert cfg['CAPTURE_PE']==cfg['TARGET_PE']==15000 and cfg['TARGET_AP']==1737680

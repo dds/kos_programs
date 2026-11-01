@@ -10,7 +10,7 @@ import re
 import check_landing_guidance as ks
 from check_landing_braking import fixture as brake_fixture, call, Vec
 from check_codebase import function_body
-from check_runtime_contracts import run
+from check_runtime_contracts import run,KList
 
 SOURCE = (ks.ROOT / 'lib/landing_divert.ks').read_text()
 
@@ -605,8 +605,9 @@ def check_cpu_and_scan_order():
     for initial in (150,500,2000,2500):
         saved={}
         env=ks.environment()
-        env.update(CONFIG=NS(IPU=initial),stateSet=lambda k,v: saved.update({k:v}),
+        env.update(CONFIG=NS(IPU=initial),LIST=lambda *xs:KList(xs),stateSet=lambda k,v: saved.update({k:v}),
                    stateGetNum=lambda k,d: saved.get(k,d),
+                   stateGet=lambda k,d: saved.get(k,d),
                    stateRemove=lambda k: saved.pop(k,None),bootLibLoad=lambda _: None)
         run(setup,env)
         assert env['CONFIG'].IPU==max(initial,2000)

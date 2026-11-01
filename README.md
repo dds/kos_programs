@@ -67,6 +67,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/resumeburn.ks").` | After inspection, continue an interrupted XING burn now using its retained node |
 | `RUNPATH("0:/cmd/shaperetry.ks").` | Clear an interrupted SHAPE attempt in stable orbit, retaining mission/targets/budget; then reboot to replan from the achieved orbit. Preserves unrelated nodes |
 | `RUNPATH("0:/cmd/shapebudget.ks",1500).` | Allow1500 m/s further SHAPE corrections; preserves recorded spending, per-burn cap and fuel reserve. Reboot to replan |
+| `RUNPATH("0:/cmd/enginelimits.ks").` | Inspect every remaining engine's thrust limit; pass `100` to explicitly reset positive limits while idle. Preserves zero-limit engines |
 | `RUNPATH("0:/cmd/arrival.ks", "review").` | Inspect a retained partial arrival; actions `accept` / `replan`, optional capture Ap in km |
 | `RUNPATH("0:/cmd/arrival.ks", "budget", 100).` | Allow up to 100 m/s of further arrival corrections; preserves capture/return reserves and does not burn |
 | `RUNPATH("0:/cmd/arrival.ks", "plan").` | Preview an arrival correction and hold for review; does not burn or advance the mission |
@@ -822,6 +823,20 @@ below 10 m/s. `STATS burn setup` records `thrustScale` and the resulting
 `maxAcc`; the duration floor describes the full-power impulse, not the final
 elapsed time including precision tapering or alignment pauses.
 
+Before reducing limits, the executor saves each engine's original percentage
+by part UID. Completion, failed alignment and missed windows restore those
+exact values; an interrupted setup restores them at the next idle boot.
+The restoration intent survives clearing a burn attempt. Disabled engines
+stay disabled, and engines attached later keep their own settings.
+Older interrupted burns have no saved originals. With the probe core awake,
+engines stopped, raw/pilot throttle zero, Abort clear and warp at1x, an explicit
+`RUNPATH("0:/cmd/enginelimits.ks",100).` resets every remaining positive limit,
+including future stages. Use the status-only form first if some engines have
+intentional partial limits. This does not activate engines, stage or burn;
+it requests one stock dV recalculation. An unavailable stock fuel estimate
+still holds SHAPE admission: wake the core and check the live staging readout
+before retrying; the fuel reserve is retained.
+
 After the next maneuver, run `RUNPATH("0:/cmd/burnreport.ks").` to see planned
 and measured thrust dV, the independent cap, residual, cutoff reason, and
 whether thrust stopped. This compact record survives phase reboots even if
@@ -1032,6 +1047,15 @@ If an older launch reaches XING with an expired small circularization node,
 the departure corridor check rejects it. Inspect and delete that stale node
 in the map, then `REBOOT.` to let XING create the actual transfer. Keep the
 departure Pe corridor intact; a missing encounter is not a solved bad Pe.
+If a saved, never-ignited XING node has drifted outside that corridor, XING
+can polish its vector at the original epoch before execution. This applies
+only to a matching saved local-moon departure with the correct first encounter,
+idle controls and sufficient burn/alignment lead. The correction is bounded
+to1m/s and20 game seconds, then must pass the original Pe corridor again.
+A failed solve restores the original node; foreign nodes and flown or
+interrupted departures are retained for their existing recovery path.
+`STATS transfer resume-polish` records the result. No new departure is planned
+over a burn that has already started.
 The installed addon exposes `ASCENT:ENABLED`; the handoff uses that signal
 and does not require the newer top-level `NODE` interface.
 
@@ -1131,7 +1155,7 @@ The two local Kerbin profiles below launch directly to100km polar parking.
 | `kerbin_lander` |100km polar parking, operator-selected Kerbin landing, parachutes with optional engine assistance | Local orbit |
 | `minmus_orbital_surveyor` |1041045m Ap /465764m Pe,21.6deg inc,255.5deg LAN,157.3deg AoP; review before command-selected polar mapping | Minmus transfer and local operations |
 | `minmus_lander` |15km polar parking, selected-site landing, repeat orbital excursions by command | Minmus transfer and local operations |
-| `mun_contract_survey_return` |1737680m Ap /1543150m Pe,180deg contract orbit; review,70km polar mapping, Kerbin return | Mun transfer and local operations,400m/s return floor |
+| `mun_contract_survey_return` |1737680m Ap /1543150m Pe,180deg/AoP34.3deg contract orbit; review,70km polar mapping, Kerbin return | Mun transfer and local operations,400m/s return floor |
 | `eeloo_flyby` |25km science flyby; optional25km Pe /5000km Ap polar capture, then review | Window-dependent; live capture budget |
 | `moho_orbital_surveyor` | Powered70km polar Moho mapping orbit | Budget departure and capture for the actual window |
 | `moho_lander` |25km polar Moho parking, later site selection and powered surface science | Capture must retain1200m/s for descent |
@@ -1200,7 +1224,10 @@ a substitute for the actual lander thrust/fuel checks.
 
 The Espoir Mun profile `mun_contract_survey_return` captures with15km Pe
 and the contract's high Ap, then reaches Ap1737680m/Pe1543150m at180deg
-inclination. This is a retrograde equatorial orbit; LAN and AoP are free.
+inclination and34.3deg AoP. LAN is unconstrained. A linked reboot refreshes
+this profile during an existing SHAPE phase while preserving the mission,
+return tail and recorded expenditure. An unflown SHAPE node is replanned;
+an interrupted burn retains its normal review/retry requirement.
 Confirm the contract at SCIENCE_OPS before selecting the polar survey:
 
 ```ks
@@ -1981,6 +2008,26 @@ declaring success. `STATS shape decision=skip` records the label, exact dV,
 floor and ETA; `STATS shape execution` records admitted burns and live errors.
 The `set-pe-for-ap` fallback is used only when the desired Ap really is below
 the current Pe, never just because a normal AP trim was below the minimum.
+
+When both apsides need adjustment and AoP is unconstrained, SHAPE first tests
+a combined radial/prograde burn at the next apoapsis. It can avoid a tiny
+Ap precursor and an extra revolution when the current apoapsis lies inside
+the target ellipse. Both native predicted apsides must meet the existing
+altitude tolerance, with the same safe Pe, plane, fuel and budget checks.
+The joint burn may cost at most0.05m/s more than the two ideal tangent burns;
+otherwise the ordinary separate-burn planner remains in use. An AoP contract
+always retains the existing placed-apsis planner.
+
+A barely-outside Ap trim is deferred behind a major Pe raise. Once both
+apsides lie within twice their configured altitude tolerance, an outstanding
+AoP correction precedes remaining apsis cleanup. This changes burn order
+only: completion still requires the original altitude and angular tolerances.
+AoP planning uses SHAPE's angular tolerance, including corrections below
+the generic planner's two-degree default. Long SHAPE/DEPARTURE_SHAPE waits
+load solar support, install the maneuver KAC alarm before aiming, maintain
+the solar hold and return to burn alignment180 seconds before ignition.
+No KAC or failed solar aim retains the resident clock wait and normal
+alignment/cutoff checks.
 
 Precision orbit profiles can explicitly lower `SHAPE_MIN_BURN_DV` and set
 `SHAPE_BURN_TOLERANCE` to a finer executor residual (minimum 0.001 m/s).

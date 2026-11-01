@@ -184,9 +184,10 @@ def check_transfer_burn_coast():
     prefix=re.sub(r'HUDTEXT\(.*?\)\.', '',prefix,flags=re.S)
     prefix=compile_body(prefix)
     cases=('parked','short','unavailable','failed','deadline','suborbital',
-           'low-pe','next-patch','physical','raw','pilot','other-phase','no-kac')
+           'low-pe','next-patch','physical','raw','pilot','other-phase','no-kac','shape','departure-shape')
     for case in cases:
         events=[];saved=dict(phase='MCC' if case=='other-phase' else 'XING')
+        if case in ('shape','departure-shape'):saved['phase']='SHAPE' if case=='shape' else 'DEPARTURE_SHAPE'
         clock=NS(SECONDS=0)
         ship=NS(STATUS='ORBITING',BODY=NS(ATM=NS(EXISTS=True,HEIGHT=70000)),
                 PERIAPSIS=85000,THRUST=0,ORBIT=NS(ECCENTRICITY=.001,HASNEXTPATCH=False),
@@ -223,16 +224,17 @@ def check_transfer_burn_coast():
         aims=[row for row in events if row[0]=='aim']
         expected=case not in ('short','unavailable','physical','raw','pilot')
         assert len(aims)==int(expected),(case,events[:4])
-        if aims:assert aims[0][1][2]==(case in ('parked','failed','deadline','no-kac'))
+        if aims:assert aims[0][1][2]==(case in ('parked','failed','deadline','no-kac','shape','departure-shape'))
         assert saved==before and env['WARP']==0
         locks=[row for row in events if row[0]=='lock']
         assert all('nd:BURNVECTOR' in row[2] for row in locks)
         if case!='short':assert len(locks)==2 and abs(locks[-1][1]-(env['st']-180+.1))<1e-7
         else:assert len(locks)==1
     deps,phases,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
-    assert {'solar','solar_diagnostics'}<=closure(phases['xing'],deps)
+    for phase in ('xing','shape','departure_shape'):
+        assert {'solar','solar_diagnostics'}<=closure(phases[phase],deps)
     assert 'solar' not in closure(['maneuver'],deps) # Other burn bands may shed it.
-    print('PASS: real long XING wait installs its alarm before one deadline-bounded cached solar aim, preserves health ticks and returns to burn alignment180s early; short/unavailable/unsafe controls skip, failed aim/no-KAC coast still resume, and only XING adds the solar dependency')
+    print('PASS: real long XING/SHAPE/DEPARTURE_SHAPE waits install alarms before deadline-bounded cached solar aims, preserve health ticks and return to burn alignment180s early; short/unavailable/unsafe controls skip, failed aim/no-KAC coast still resume, and bare maneuver keeps solar optional')
 
 
 def check_aerobrake_coast_entry(solar_available=True,aim_success=True,consume_budget=False):

@@ -55,19 +55,21 @@ LOCAL FUNCTION _burnCoastSolar {
                 AND SHIP:CONTROL:MAINTHROTTLE <= 0 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0) {
         RETURN FALSE.
     }
-    LOCAL parkedDeparture IS FALSE.
-    IF stateGet("phase","") = "XING" AND SHIP:STATUS = "ORBITING" {
+    LOCAL stableOrbit IS FALSE.
+    LOCAL phase_ IS stateGet("phase","").
+    IF (phase_ = "XING" OR phase_ = "SHAPE" OR phase_ = "DEPARTURE_SHAPE")
+            AND SHIP:STATUS = "ORBITING" {
         LOCAL floorAlt IS 0.
         IF SHIP:BODY:ATM:EXISTS { SET floorAlt TO SHIP:BODY:ATM:HEIGHT. }
-        SET parkedDeparture TO SHIP:PERIAPSIS > floorAlt
+        SET stableOrbit TO SHIP:PERIAPSIS > floorAlt
             AND SHIP:ORBIT:ECCENTRICITY >= 0 AND SHIP:ORBIT:ECCENTRICITY < 1
             AND NOT SHIP:ORBIT:HASNEXTPATCH.
     }
-    // A verified parking orbit needs no launch-age delay. Reuse the panel
+    // A verified bound orbit needs no launch-age delay. Reuse the panel
     // axis first; the deadline preserves the maneuver's realignment window.
-    LOCAL aimed IS orientForSolar(FALSE,TRUE,parkedDeparture,deadlineUt).
+    LOCAL aimed IS orientForSolar(FALSE,TRUE,stableOrbit,deadlineUt).
     mLog("STATS burn solar phase=" + stateGet("phase","") + " aimed=" + aimed
-        + " parkedDeparture=" + parkedDeparture + " deadlineUt=" + deadlineUt).
+        + " stableOrbit=" + stableOrbit + " deadlineUt=" + deadlineUt).
     RETURN aimed.
 }
 
@@ -79,6 +81,10 @@ GLOBAL FUNCTION executeManeuver {
     LOCK THROTTLE TO 0.0.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
     WAIT 0.1.
+    IF NOT burnThrustRestore() {
+        mLogError("Maneuver thrust-limit restore requires idle controls on the active vessel; node retained.").
+        RETURN FALSE.
+    }
     IF NOT HASNODE {
         mLogError("executeManeuver: no node on flight plan.").
         HUDTEXT("ERROR: No maneuver node!", 5, 2, 18, RED, FALSE).
@@ -109,6 +115,9 @@ GLOBAL FUNCTION executeManeuver {
         RETURN TRUE.
     }
     LOCAL thrustScale IS _burnLimitThrust(bdv).
+    IF thrustScale < 0 {
+        mLogError("Cannot save temporary engine limits; node retained, no burn."). RETURN FALSE.
+    }
     // Estimate the centered start with the thrust limits actually used.
     WAIT 0.1.
     LOCAL st IS TIME:SECONDS.
@@ -121,7 +130,7 @@ GLOBAL FUNCTION executeManeuver {
         mLogWarn("Burn window already passed by " + ROUND(TIME:SECONDS - st, 0) + "s — removing node.").
         HUDTEXT("Burn window missed — replanning", 5, 2, 15, YELLOW, FALSE).
         REMOVE nd.
-        _stl(1.0).
+        burnThrustRestore().
         _cpb("missed-window").
         RETURN FALSE.
     }
@@ -172,7 +181,7 @@ GLOBAL FUNCTION executeManeuver {
         IF TIME:SECONDS < rt - CRT {
             // Spend the long coast sun-pointed for power; the checkpoint
             // re-locks below reacquire the burn vector before ignition.
-            // XING brings solar; other bands can still shed that library.
+            // XING/SHAPE bring solar; other bands may shed that library.
             _burnCoastSolar(rt).
             mLog("Long coast wait (" + ROUND(rt - TIME:SECONDS, 0) + "s).").
             HUDTEXT("Coasting. Burn in " + ROUND(st - TIME:SECONDS, 0) + "s", 5, 2, 13, CYAN, FALSE).
@@ -251,7 +260,7 @@ GLOBAL FUNCTION executeManeuver {
         SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
         UNLOCK THROTTLE.
         UNLOCK STEERING.
-        _stl(1.0).
+        burnThrustRestore().
         SET SAS TO FALSE.
         RETURN FALSE.
     }
@@ -837,7 +846,7 @@ GLOBAL FUNCTION executeManeuver {
         + " residualLimit=" + _fs(finalResidualLimit,9)
         + " fixed=" + fixedBurnVector).
     IF burnAbort <> "" {
-        _stl(1.0).
+        burnThrustRestore().
         stateSet("burn_status", "interrupted").
         stateSet("burn_abort_reason", burnAbort).
         stateSet("burn_abort_detail", burnAbortDetail).
@@ -863,7 +872,7 @@ GLOBAL FUNCTION executeManeuver {
         RETURN FALSE.
     }
     _ren(ntm).
-    _stl(1.0).
+    burnThrustRestore().
     _cpb("complete").
 
     // Clean up the KAC alarm now that the burn is done.
@@ -1053,13 +1062,6 @@ GLOBAL FUNCTION maneuverThrottleCheck {
     }
 }
 
-LOCAL FUNCTION _stl {
-    PARAMETER pct.
-    FOR eng IN SHIP:ENGINES {
-        SET eng:THRUSTLIMIT TO pct * 100.
-    }
-}
-
 LOCAL FUNCTION _burnLimitThrust {
     PARAMETER dv.
     LOCAL acc IS _sma().
@@ -1069,6 +1071,7 @@ LOCAL FUNCTION _burnLimitThrust {
         // Scale the existing limits: _sma already includes those settings.
         SET fraction TO MIN(1, dv / (acc * MAX(1, BURN_MIN_FULL_THRUST_SECONDS))).
         IF fraction < 1 {
+            IF NOT burnThrustSave() { RETURN -1. }
             FOR eng IN SHIP:ENGINES {
                 SET eng:THRUSTLIMIT TO eng:THRUSTLIMIT * fraction.
             }

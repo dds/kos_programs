@@ -135,11 +135,12 @@ GLOBAL FUNCTION planLowerPe {
 
 GLOBAL FUNCTION planAoPChange {
     PARAMETER taop.
+    PARAMETER minAngle IS 2.
     LOCAL caop IS SHIP:ORBIT:ARGUMENTOFPERIAPSIS.
     LOCAL da IS taop - caop.
     IF da > 180  { SET da TO da - 360. }
     IF da < -180 { SET da TO da + 360. }
-    IF ABS(da) < 2 { RETURN 0. }
+    IF ABS(da) < MAX(0.000001,minAngle) { RETURN 0. }
     LOCAL mu IS SHIP:ORBIT:BODY:MU.
     LOCAL a  IS SHIP:ORBIT:SEMIMAJORAXIS.
     LOCAL e  IS SHIP:ORBIT:ECCENTRICITY.

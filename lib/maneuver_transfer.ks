@@ -269,10 +269,21 @@ GLOBAL FUNCTION transferDepartureReady {
 // Minimum-norm Pe correction of the existing departure vector. Prograde
 // alone can be nearly insensitive at a grazing encounter; probe all axes.
 // Read numeric Pe BEFORE restoring a probe; patch objects may be live.
+LOCAL FUNCTION _departurePeCanProbe {
+    PARAMETER nd.
+    PARAMETER stopUt.
+    RETURN stopUt < 0 OR (NOT ABORT AND WARP = 0 AND SHIP = KUNIVERSE:ACTIVEVESSEL
+        AND HASNODE AND ALLNODES:LENGTH = 1 AND NEXTNODE = nd AND TIME:SECONDS < stopUt
+        AND stateGet("phase","") = "XING" AND stateGet("burn_started","false") = "false"
+        AND SHIP:THRUST >= 0 AND SHIP:THRUST <= 0.001
+        AND SHIP:CONTROL:MAINTHROTTLE <= 0 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0).
+}
+
 LOCAL FUNCTION _refineLocalDeparturePe {
     PARAMETER nd.
     PARAMETER targetBody.
     PARAMETER targetPe.
+    PARAMETER stopUt IS -1.
     LOCAL impact IS targetPe < 0 AND transferImpactTargetEnabled(targetBody)
         AND targetPe = TRANSFER_IMPACT_AIM_PE.
     IF (targetPe <= 0 AND NOT impact) OR TRANSFER_PE_REFINE_DV_CAP < 0 { RETURN FALSE. }
@@ -288,6 +299,7 @@ LOCAL FUNCTION _refineLocalDeparturePe {
     LOCAL probeDv IS 0.1.
     LOCAL status IS "iteration-limit".
     UNTIL iteration >= 24 {
+        IF NOT _departurePeCanProbe(nd,stopUt) { RETURN FALSE. }
         SET iteration TO iteration + 1.
         LOCAL patch IS _getTargetPatch(nd, targetBody).
         IF patch = 0 { SET status TO "no-patch". BREAK. }
@@ -306,10 +318,12 @@ LOCAL FUNCTION _refineLocalDeparturePe {
             FOR probe IN LIST(probeDv, -probeDv) {
                 _nodeAxisSet(nd, axis, oldVal + probe).
                 WAIT 0.1.
+                IF NOT _departurePeCanProbe(nd,stopUt) { RETURN FALSE. }
                 LOCAL sample IS _getTargetPatch(nd, targetBody).
                 IF sample <> 0 { SET slope TO (sample:PERIAPSIS - peNow) / probe. }
                 _nodeAxisSet(nd, axis, oldVal).
                 WAIT 0.1.
+                IF NOT _departurePeCanProbe(nd,stopUt) { RETURN FALSE. }
                 IF sample <> 0 { BREAK. }
             }
             gradients:ADD(slope).
@@ -341,6 +355,7 @@ LOCAL FUNCTION _refineLocalDeparturePe {
                     SET nd:NORMAL TO seedNrm + (nd:NORMAL - seedNrm) * budgetScale.
                 }
                 WAIT 0.1.
+                IF NOT _departurePeCanProbe(nd,stopUt) { RETURN FALSE. }
                 SET change TO SQRT((nd:PROGRADE - seedPro)^2
                     + (nd:RADIALOUT - seedRad)^2 + (nd:NORMAL - seedNrm)^2).
                 IF change <= refineCap + 0.001 {
@@ -375,6 +390,56 @@ LOCAL FUNCTION _refineLocalDeparturePe {
         + " dv=" + ROUND(nd:DELTAV:MAG,3)
         + " departT=" + ROUND(nd:TIME - TIME:SECONDS,1)).
     RETURN accepted.
+}
+
+// A saved, never-ignited XING node can drift a little while coasting or
+// reloading. Polish ONLY its vector, at most1m/s and20s, retaining the
+// original Pe/first-body gate. Failure restores the exact original node.
+GLOBAL FUNCTION transferRevalidateUnflown {
+    PARAMETER nd.
+    PARAMETER targetBody.
+    PARAMETER targetPe.
+    IF SHIP <> KUNIVERSE:ACTIVEVESSEL OR NOT HASNODE OR NEXTNODE <> nd { RETURN FALSE. }
+    IF transferDepartureReady(nd,targetBody,targetPe,FALSE) { RETURN TRUE. }
+    IF ABORT OR WARP <> 0 OR SHIP <> KUNIVERSE:ACTIVEVESSEL
+            OR NOT HASNODE OR ALLNODES:LENGTH <> 1 OR NEXTNODE <> nd
+            OR stateGet("phase","") <> "XING" OR targetBody:BODY <> SHIP:BODY
+            OR stateGet("burn_pending","false") <> "true"
+            OR stateGet("burn_started","false") <> "false"
+            OR stateGet("burn_phase","") <> "XING" OR stateGet("burn_body","") <> SHIP:BODY:NAME
+            OR stateGet("burn_mission_id",stateGet("mission_id","")) <> stateGet("mission_id","")
+            OR stateGetNum("burn_launch_time",stateGetNum("launch_time",0)) <> stateGetNum("launch_time",0)
+            OR NOT (ABS(nd:TIME-stateGetNum("burn_node_time",-1)) < 0.5)
+            OR NOT (SHIP:THRUST >= 0 AND SHIP:THRUST <= 0.001
+                AND SHIP:CONTROL:MAINTHROTTLE <= 0 AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0
+                AND SHIP:MASS > 0 AND SHIP:AVAILABLETHRUST > 0)
+            OR _firstPatchBodyName(nd) <> targetBody:NAME OR _getTargetPatch(nd,targetBody) = 0 {
+        RETURN FALSE.
+    }
+    LOCAL nodeUt IS nd:TIME.
+    LOCAL pro IS nd:PROGRADE.
+    LOCAL rad IS nd:RADIALOUT.
+    LOCAL nrm IS nd:NORMAL.
+    LOCAL cost IS nd:DELTAV:MAG.
+    IF NOT (cost > 0 AND cost < 1e30 AND ABS(cost-stateGetNum("burn_dv",-1)) < 0.5) { RETURN FALSE. }
+    LOCAL stopUt IS MIN(TIME:SECONDS+20,nodeUt-MAX(180,cost/(SHIP:AVAILABLETHRUST/SHIP:MASS)/2+60)).
+    IF stopUt <= TIME:SECONDS+2 { RETURN FALSE. }
+    LOCAL savedCap IS TRANSFER_PE_REFINE_DV_CAP.
+    SET TRANSFER_PE_REFINE_DV_CAP TO MIN(savedCap,1).
+    LOCAL solved IS _refineLocalDeparturePe(nd,targetBody,transferDepartureAim(targetBody,targetPe),stopUt).
+    SET TRANSFER_PE_REFINE_DV_CAP TO savedCap.
+    IF SHIP <> KUNIVERSE:ACTIVEVESSEL OR NOT HASNODE OR NEXTNODE <> nd { RETURN FALSE. }
+    LOCAL change IS SQRT((nd:PROGRADE-pro)^2+(nd:RADIALOUT-rad)^2+(nd:NORMAL-nrm)^2).
+    SET solved TO solved AND _departurePeCanProbe(nd,stopUt) AND nd:TIME = nodeUt AND change <= 1.001
+        AND TIME:SECONDS <= stopUt AND transferDepartureReady(nd,targetBody,targetPe,FALSE).
+    IF NOT solved {
+        SET nd:TIME TO nodeUt. SET nd:PROGRADE TO pro.
+        SET nd:RADIALOUT TO rad. SET nd:NORMAL TO nrm.
+        WAIT 0.1.
+    }
+    mLog("STATS transfer resume-polish accepted="+solved+" vectorChange="+change
+        +" cap=1 nodeUt="+nodeUt+" originalRestored="+(NOT solved)).
+    RETURN solved.
 }
 
 LOCAL FUNCTION _refineLocalDepartureCandidates {
