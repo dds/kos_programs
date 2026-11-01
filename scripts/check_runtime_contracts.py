@@ -346,10 +346,15 @@ def check_compact_burn():
         result = run(source, env)
         assert result == (scenario in ('normal','missing-cache')), scenario
         assert bool(removed) == result and env['throttle'] == 0, scenario
+        # The provider-specific lock expression must still command zero both
+        # before preflight and when relinquishing the live command callback.
+        assert commands[0]==0
+        burned = elapsed[0]>0
+        if burned:
+            assert commands[-1]==0 and evaluate(history[-1],env)==0
         assert env['CONFIG'].IPU==150 and 'burn_prior_ipu' not in markers
         if scenario in ('no-engine','stage-disabled', 'expired', 'off-vector', 'unlit-site'): assert not any(commands)
         if scenario=='stage-disabled':assert 'stage' not in history and env['TIME'].SECONDS<.1
-        burned = elapsed[0] > 0
         assert ('deorbit_burn_started' in markers) == (burned and not result), scenario
         if scenario == 'frozen': assert elapsed[0] < 1.1  # Old timeout allowed ~10 s of full thrust.
     print('PASS: compact burn completion and failures; deferred callbacks survive removed nodes without reading suffixes; failed nodes retained')

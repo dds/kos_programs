@@ -1075,6 +1075,15 @@ Looks like Python/JS; is neither.
   sense probe in `planPlaneMatch`, `HDG_BANK_SIGN` in `lib/airplane.ks`), or
   use cross-product-free identities and numeric differentiation of
   `POSITIONAT` (see `lib/arrival_bplane.ks`).
+- **Separately compiled system locks can collide.** Native2026-11-01 boot
+  crashed loading deorbit_burn: both it and thrust_cutoff had
+  throttle`0-2090fc22 in their real KSM files, from LOCK THROTTLE TO0 at the
+  same line/column/containing scope. Upstream Compiler.ConcatenateNodes hashes
+  compile count/source position/scope/tokens, not the source path;
+  CompiledObject prefixes @ labels but leaves these named labels unchanged.
+  Deorbit's zero locks now use an immutable provider-specific local variable.
+  Do not restore a colliding literal, remove a cutoff, or merely shift lines
+  as the fix. Source tests cannot establish native compiled-label uniqueness.
 - **Never use `VELOCITYAT` to plan a future burn.** Its frame is offset
   by the body's own motion between now and t — flight-proven ~62 m/s at
   the Mun over a 2148s ETA, enough to flip a planned apoapsis burn

@@ -994,6 +994,16 @@ mission ID. Profiles generated during flight remain source; rewriting one
 invalidates any older bytecode with the same name. Missing craft/profile code
 holds the mission instead of continuing with empty defaults.
 
+`ProgramBuilder.ReplaceLabels: Cannot add label throttle... label already
+exists` is a kOS bytecode-linking failure. On2026-11-01 the archived compiled
+`thrust_cutoff` and `deorbit_burn` libraries both contained
+``throttle`0-2090fc22``, from identical zero-throttle locks at matching source
+positions. The deorbit executor now uses its own immutable zero variable for
+those locks, preserving cutoff behavior while changing the generated identity.
+Pull the corrected source and reboot with an archive link to replace the
+cached library; no installed bootstrap replacement or mission reset is needed.
+The large program dump kOS writes on this error can stall the game.
+
 Existing probes need the revised **installed bootstrap** to compile craft code
 on connected boots. While linked, with thrust and both throttle controls zero,
 run `RUNPATH("0:/cmd/updateboot.ks").` and reboot when ready. The command compiles

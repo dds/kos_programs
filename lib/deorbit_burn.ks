@@ -7,7 +7,12 @@ GLOBAL FUNCTION executeDeorbitNode {
     PARAMETER beforeBurn IS 0.
     PARAMETER allowStage IS TRUE.
     LOCAL burnDV IS nd:DELTAV:MAG.
-    LOCK THROTTLE TO 0.
+    // Separately compiled KSM files can collide on a system-lock label when
+    // an identical expression has the same source position/scope. Native
+    // deorbit_burn and thrust_cutoff both generated throttle`0-2090fc22.
+    // Keep this zero immutable and provider-specific; retain the actual lock.
+    LOCAL deorbitIdleThrottle IS 0.
+    LOCK THROTTLE TO deorbitIdleThrottle.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
     SET WARP TO 0.
     WAIT UNTIL KUNIVERSE:TIMEWARP:ISSETTLED.
@@ -207,7 +212,7 @@ GLOBAL FUNCTION executeDeorbitNode {
     SET throttleCmd TO 0.
     // Release the steering trigger in its owning compiled file. A different
     // library's UNLOCK need not know about this file's system-lock trigger.
-    LOCK THROTTLE TO 0.
+    LOCK THROTTLE TO deorbitIdleThrottle.
     UNLOCK STEERING.
     LOCAL stopped IS vesselLandingCleanup().
     SET CONFIG:IPU TO priorIpu.

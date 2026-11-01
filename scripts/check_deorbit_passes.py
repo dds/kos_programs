@@ -8,6 +8,7 @@ import numpy as np
 import check_deorbit_solver as solver
 from check_codebase import ROOT, function_body
 from check_runtime_contracts import run, KList
+from check_deorbit_geometry import evaluate
 
 
 class PassList(KList):
@@ -184,7 +185,8 @@ def check_long_coast_admission():
             assert env['TIME'].SECONDS==(99908.9 if scenario=='refined' else 99909.5) and 'cutoff' not in names
         else:
             assert 'cutoff' in names and ('delete','burn-alarm') in events
-        assert all('TO 0' in event[1] for event in events if event[0]=='lock')
+        assert all(evaluate(event[1].split(' TO ',1)[1],env)==0
+                   for event in events if event[0]=='lock')
         assert node.DELTAV.MAG==(22 if scenario=='refined' else 10) and ship.CONTROL.PILOTMAINTHROTTLE==0
         if scenario=='refined':
             assert env['burnDV']==22 and env['burnTime']==2.2 and env['startTime']==99998.9

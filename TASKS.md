@@ -6,6 +6,28 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native corrected boot pending:
+  Espoir-Minmus-Lander1 boot032..034 exits during LAND_DEORBIT library load;
+  operator reports~10s simulation stall and persistent error after reboot.
+  KSP.log proves ProgramBuilder.ReplaceLabels failure loading deorbit_burn,
+  called by boot_lib889/boot315, before executing a maneuver. Read-only
+  extraction of actual archive KSM files confirms BOTH thrust_cutoff and
+  deorbit_burn contain throttle`0-2090fc22; both sources have LOCK THROTTLE
+  TO0 at line10/same lexical position. Upstream compiler hashes source
+  position/scope/tokens without file path; KSM loader prefixes only @labels,
+  so this is a cross-library label collision, not a duplicate installed file
+  or an instruction to delete mission state. Deorbit now uses an immutable
+  provider-specific local zero for initial/final locks. Shutdown verification,
+  live expiring command, node guards/staging/budgets and band loader unchanged.
+  Focused actual executor scenarios and long-coast refusals pass, checking
+  evaluated zero throttle rather than literal spelling. All113 routine files
+  pass20.10s (17 unchanged verified passes reused,96 executed),0 structural
+  errors; existing KSC_DEORBIT handler warning unchanged.
+  Pull and linked REBOOT replaces deorbit_burn.ksm; no bootstrap rebuild.
+  Native recompiled labels/boot still require verification. No remote writes.
+  Diagnostic:/tmp/ksp-deck-20261101T191639Z-crash-d6c4tlh1/KSP.log.
+  Archive-bytecode evidence obtained by read-only/tmp/kos-label-inspect.py.
+
 - IMPLEMENTED/source-checked; native waypoint-hop command pending:
   Espoir-Minmus-Lander1 next surveyed sites are A1.460,-42.638,
   B1.214,-45.200 and C0.221,-47.220. Operator wants selected navigation
