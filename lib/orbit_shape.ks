@@ -1051,6 +1051,39 @@ LOCAL FUNCTION _shapeCombinedApsides {
     RETURN LEX("node",nd,"label","set-apsides").
 }
 
+// Ordering estimate only: when resizing costs at most a tenth of the
+// outstanding apsidal rotation, leave those trims until after the rotation.
+// Metres outside the final tolerance are not a useful measure of which burn
+// is major: a6km Ap error here can cost0.06m/s while AoP needs20m/s.
+// Analytic impulses compare the operations without creating trial nodes;
+// native refinement, minimum dV, safety and final convergence still govern.
+LOCAL FUNCTION _shapeCheapApsisCleanup {
+    PARAMETER targets, aopError.
+    LOCAL rp IS SHIP:BODY:RADIUS + SHIP:PERIAPSIS.
+    LOCAL ra IS SHIP:BODY:RADIUS + SHIP:APOAPSIS.
+    LOCAL mu IS SHIP:BODY:MU.
+    IF NOT (rp > 0 AND ra >= rp AND ra < 1e30 AND mu > 0 AND mu < 1e30) {
+        RETURN FALSE.
+    }
+    LOCAL span IS rp + ra.
+    LOCAL cleanupDv IS 0.
+    IF targets:HASKEY("AP") {
+        LOCAL wantRa IS SHIP:BODY:RADIUS + targets["AP"].
+        IF NOT (wantRa >= rp AND wantRa < 1e30) { RETURN FALSE. }
+        SET cleanupDv TO cleanupDv + ABS(SQRT(mu*(2/rp-2/(rp+wantRa)))
+            - SQRT(mu*(2/rp-2/span))).
+    }
+    IF targets:HASKEY("PE") {
+        LOCAL wantRp IS SHIP:BODY:RADIUS + targets["PE"].
+        IF NOT (wantRp > 0 AND wantRp <= ra) { RETURN FALSE. }
+        SET cleanupDv TO cleanupDv + ABS(SQRT(mu*(2/ra-2/(ra+wantRp)))
+            - SQRT(mu*(2/ra-2/span))).
+    }
+    LOCAL ecc IS (ra-rp)/span.
+    LOCAL rotationDv IS 2*SQRT(mu*span/(2*rp*ra))*ecc*ABS(SIN(aopError/2)).
+    RETURN rotationDv > 0 AND cleanupDv <= 0.1*rotationDv.
+}
+
 GLOBAL FUNCTION shapeNextBurn {
     PARAMETER targets.
 
@@ -1068,8 +1101,11 @@ GLOBAL FUNCTION shapeNextBurn {
     LOCAL nearPe IS NOT needPe2 OR ABS(errs["PE"]) <= 2*altTol.
     LOCAL peFirst IS needAp2 AND needPe2 AND nearAp AND NOT nearPe
         AND targets["PE"] > SHIP:PERIAPSIS.
-    LOCAL aopFirst IS errs:HASKEY("AOP") AND ABS(errs["AOP"]) > aopTol
-        AND nearAp AND nearPe AND SHIP:ORBIT:ECCENTRICITY >= NEAR_CIRC_ECC.
+    LOCAL aopFirst IS FALSE.
+    IF errs:HASKEY("AOP") AND ABS(errs["AOP"]) > aopTol
+            AND SHIP:ORBIT:ECCENTRICITY >= NEAR_CIRC_ECC {
+        SET aopFirst TO (nearAp AND nearPe) OR _shapeCheapApsisCleanup(targets,errs["AOP"]).
+    }
 
     // --- 1. If a high AP target is requested, get to the slow
     // side before paying for a big plane/LAN correction. A low
@@ -1155,7 +1191,10 @@ GLOBAL FUNCTION shapeNextBurn {
     // --- 5. Argument of periapsis (in-plane apsidal rotation) ---
     IF errs:HASKEY("AOP") AND ABS(errs["AOP"]) > aopTol
             AND SHIP:ORBIT:ECCENTRICITY >= NEAR_CIRC_ECC {
-        IF aopFirst { mLog("STATS shape order=aop-before-cleanup tolerance="+altTol). }
+        IF aopFirst {
+            mLog("STATS shape order=aop-before-cleanup tolerance="+altTol
+                + _errorSummary(errs)).
+        }
         LOCAL aopBurn IS _finishShapeNode(
             planAoPChange(targets["AOP"],aopTol), "aop", targets).
         IF aopBurn:ISTYPE("Lexicon") { RETURN aopBurn. }

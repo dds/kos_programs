@@ -2118,10 +2118,14 @@ The joint burn may cost at most0.05m/s more than the two ideal tangent burns;
 otherwise the ordinary separate-burn planner remains in use. An AoP contract
 always retains the existing placed-apsis planner.
 
-A barely-outside Ap trim is deferred behind a major Pe raise. Once both
-apsides lie within twice their configured altitude tolerance, an outstanding
-AoP correction precedes remaining apsis cleanup. This changes burn order
-only: completion still requires the original altitude and angular tolerances.
+A barely-outside Ap trim is deferred behind a major Pe raise. An outstanding
+AoP correction precedes apsis cleanup when both apsides lie within twice
+their configured altitude tolerance, or their combined ideal trim cost is
+at most10% of the ideal apsidal rotation cost. This avoids waiting a whole
+revolution for a0.06m/s trim before a20m/s rotation just because the altitude
+tolerance is strict. Larger orbit resizing still comes first. These estimates
+select burn order only; native node validation and the original final
+altitude/angular tolerances remain mandatory.
 AoP planning uses SHAPE's angular tolerance, including corrections below
 the generic planner's two-degree default. Long SHAPE/DEPARTURE_SHAPE waits
 load solar support, install the maneuver KAC alarm before aiming, maintain

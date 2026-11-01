@@ -40,13 +40,16 @@ def fixture():
         SHAPE_ALT_TOL=250,SHAPE_ANG_TOL=.1,SHAPE_AOP_TOL=.2,
         NEAR_CIRC_ECC=.01,MIN_AOP_TARGET_ECC=.004,
         SHIP=NS(PERIAPSIS=9300,APOAPSIS=410000,ALTITUDE=100000,
+            BODY=NS(RADIUS=60000,MU=1.7658e9),
             ORBIT=NS(INCLINATION=63.4,LAN=79.2,ECCENTRICITY=.65,PERIOD=20000)),
         ETA=NS(PERIAPSIS=1000,APOAPSIS=14000),HASNODE=False,
         WARP=0,ABORT=False,phaseShouldYield=False,KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)))
     def remove(node):
         removed.append(node);env['HASNODE']=False
     env.update(fixture_remove=remove,fixture_wait=lambda dt:events.append(('wait',dt)),
-        LEX=lambda *xs:Lex(zip(xs[::2],xs[1::2])),LEXICON=lambda:Lex())
+        LEX=lambda *xs:Lex(zip(xs[::2],xs[1::2])),LEXICON=lambda:Lex(),
+        SQRT=math.sqrt,SIN=lambda angle:math.sin(math.radians(angle)),
+        _errorSummary=lambda _: '')
     # Keep the shared flag and node-removal primitives visible across calls,
     # as the native library's captured file scope is in the real program.
     def above(node,label):
@@ -57,6 +60,8 @@ def fixture():
     env['_shapeNodeAboveMinimum']=above
     env['_shapePlanningReady']=lambda:execute('_shapePlanningReady',env)
     env['_shapeNodeTimingReady']=lambda node:execute('_shapeNodeTimingReady',dict(env,nd=node))
+    env['_shapeCheapApsisCleanup']=lambda target,error:execute('_shapeCheapApsisCleanup',
+        dict(env,targets=target,aopError=error))
     return env,removed,events
 
 

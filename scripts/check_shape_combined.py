@@ -121,6 +121,7 @@ def check_contract_order_and_final_tolerances():
     assert ordering.execute('shapeConverged',env)
     # A large AP change still precedes rotation; the extra ordering margin
     # can never make a650m error count as a500m goal success.
+    ship.APOAPSIS=targets['AP']+5000
     errors.update(AP=5000,AOP=-3.3);calls.clear()
     assert ordering.execute('shapeNextBurn',env)['label']=='set-ap' and calls==['set-ap']
     env['SHAPE_ALT_TOL']=cfg['SHAPE_ALT_TOL']
@@ -144,8 +145,79 @@ def check_aop_contract_deadband():
     print('PASS: actual AoP planner accepts required0.8deg correction at SHAPE0.5deg tolerance, preserves its two-degree generic default and does not create an already-in-tolerance node')
 
 
+def check_minmus_aop_before_tiny_cleanup():
+    env,_,_=ordering.fixture();cfg=fleet.profile('minmus_orbital_surveyor')
+    env.update(cfg);ship=env['SHIP']
+    ship.PERIAPSIS=469698.432992394;ship.APOAPSIS=1034646.10850534
+    rp=ship.BODY.RADIUS+ship.PERIAPSIS;ra=ship.BODY.RADIUS+ship.APOAPSIS
+    ship.ORBIT.ECCENTRICITY=(ra-rp)/(ra+rp)
+    targets=ordering.Lex(AP=cfg['SHAPE_AP'],PE=cfg['SHAPE_PE'],AOP=cfg['SHAPE_AOP'])
+    errors=ordering.Lex(AP=ship.APOAPSIS-targets['AP'],PE=ship.PERIAPSIS-targets['PE'],
+                        PLANE=.001,AOP=-71.227)
+    calls=[];node=NS(DELTAV=NS(MAG=20.15))
+    env.update(targets=targets,shapeErrors=lambda _:errors)
+    env['planAoPChange']=lambda *args:calls.append(('aop',args)) or node
+    env['_finishShapeNode']=lambda nd,label,goals:ordering.Lex(node=nd,label=label)
+    env['_apsisBurn']=lambda *args:calls.append(args[3]) or ordering.Lex(node=node,label=args[3])
+    assert ordering.execute('shapeNextBurn',env)['label']=='aop'
+    assert calls==[('aop',(157.3,.2))] and not ordering.execute('shapeConverged',env)
+    # Independent Cartesian states at the intersection of equal-size,
+    # rotated ellipses prove the physical rotation/size cost hierarchy.
+    # This is not the game's node radial basis or a finite-burn simulation.
+    mu=ship.BODY.MU;ecc=ship.ORBIT.ECCENTRICITY;p=2*rp*ra/(rp+ra)
+    half=math.radians(71.227/2);radius=p/(1+ecc*math.cos(half))
+    position=(radius,0,0);speed=math.sqrt(mu/p)
+    before=(speed*ecc*math.sin(half),speed*(1+ecc*math.cos(half)),0)
+    after=(-before[0],before[1],0)
+    original=physics.Orbit(ship.BODY,position,before,0)
+    rotated=physics.Orbit(ship.BODY,position,after,0)
+    assert abs(original.APOAPSIS-rotated.APOAPSIS)<1e-7
+    assert abs(original.PERIAPSIS-rotated.PERIAPSIS)<1e-7
+    angle=math.degrees(math.acos(physics.dot(original.p,rotated.p)))
+    assert abs(angle-71.227)<1e-9
+    rotation_dv=physics.norm(physics.add(after,physics.mul(before,-1)))
+    def tangent(radius,far):return math.sqrt(mu*(2/radius-2/(radius+far)))
+    ap_dv=abs(tangent(rp,ship.BODY.RADIUS+targets['AP'])-tangent(rp,ra))
+    pe_dv=abs(tangent(ra,ship.BODY.RADIUS+targets['PE'])-tangent(ra,rp))
+    assert .063<ap_dv<.064 and .14<ap_dv+pe_dv<.15 and 20<rotation_dv<21
+    # Every final element remains mandatory: after AoP, execute apsis trims
+    # even though their costs are small. No minimum/tolerance waiver.
+    errors['AOP']=0;calls.clear()
+    assert ordering.execute('shapeNextBurn',env)['label']=='set-ap' and calls==['set-ap']
+    errors['AP']=0;calls.clear()
+    assert ordering.execute('shapeNextBurn',env)['label']=='set-pe' and calls==['set-pe']
+    errors['PE']=0
+    assert ordering.execute('shapeConverged',env)
+    print('PASS: measured Minmus6.4km/3.9km apsis errors cost~0.145m/s versus~20.14m/s for71.227deg rotation; actual selector prioritizes AoP then both required trims with500m/.2deg goals unchanged')
+
+
+def check_apsis_order_cost_guards():
+    env,_,_=ordering.fixture();ship=env['SHIP']
+    ship.PERIAPSIS=469698.432992394;ship.APOAPSIS=1034646.10850534
+    goals=ordering.Lex(AP=1041045,PE=465764)
+    cheap=env['_shapeCheapApsisCleanup']
+    assert cheap(goals,71.227) and cheap(goals,-71.227)
+    # Tolerances and minimums cannot affect this ordering-only estimate.
+    env.update(SHAPE_ALT_TOL=.001,SHAPE_MIN_BURN_DV=100)
+    assert cheap(goals,71.227)
+    assert not cheap(goals,.01) and not cheap(goals,0)
+    for targets in (ordering.Lex(AP=ship.PERIAPSIS-1),ordering.Lex(PE=ship.APOAPSIS+1),
+                    ordering.Lex(PE=-60000),ordering.Lex(AP=math.nan)):
+        assert not cheap(targets,71.227),targets
+    assert cheap(ordering.Lex(AP=1041045),71.227)
+    assert cheap(ordering.Lex(PE=465764),71.227)
+    for field,value in (('MU',0),('MU',math.nan),('MU',math.inf)):
+        prior=getattr(ship.BODY,field);setattr(ship.BODY,field,value)
+        assert not cheap(goals,71.227);setattr(ship.BODY,field,prior)
+    ship.PERIAPSIS=ship.APOAPSIS=70000
+    assert not cheap(ordering.Lex(AP=90000,PE=70000),71.227)
+    print('PASS: cheap-cleanup estimate handles both rotation signs/partial goals, ignores acceptance tolerances, and refuses invalid geometry, nonfinite/zero gravity, circular rotation and insignificant AoP changes; major resize ordering remains covered')
+
+
 if __name__=='__main__':
     check_native_scalar_scenario()
     check_geometry_and_quality_guards()
     check_contract_order_and_final_tolerances()
     check_aop_contract_deadband()
+    check_minmus_aop_before_tiny_cleanup()
+    check_apsis_order_cost_guards()

@@ -6,6 +6,25 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native retry pending:
+  Espoir-Minmus-Surveyor1 boot019 UT5381324 schedules0.063607m/s set-ap at
+  UT5402146,~20813s away, before its71.227deg AoP correction. Actual orbit
+  Pe469698/Ap1034646m, plane error0.001deg; contract remains465764/1041045m,
+  LAN255.5/inc21.6/AoP157.3 with500m/.1deg/.2deg tolerances. The Ap error
+  is real6.4km, so do not waive the tiny final trim or skip the contract.
+  Old ordering calls only errors<=2*altTol cleanup. New cheap analytic
+  comparison also defers combined apsis trims<=10% of rotation cost, without
+  trial nodes or changing any final admission/safety/precision/budget gate.
+  Independent Cartesian proof: size trims~0.145m/s, rotation~20.14m/s.
+  Source selector prioritizes AoP then both remaining strict apsis trims;
+  major Pe/Ap changes still precede AoP. All111 routine files pass fresh in
+  88.21s; report:/tmp/kos-minmus-shape-order-20261101.log. Retained owned
+  unflown node needs explicit shaperetry("unflown") then connected REBOOT
+  after pull; no game/save changes. Native evidence:
+  /tmp/ksp-deck-20261101T061117Z-fetch-4h9amrda/logs/
+  Espoir-Minmus-Surveyor1_5143320/boot_019_core.log;
+  boot017fetch-7w6dbsof and boot018fetch-961bffv_.
+
 - DONE/source-checked: operator-approved verified-result reuse reaches10s target.
   Repeated make check passes6.91s/6.95s:107 verified passes reused,4 uncertain
   I/O checks executed. Cold manifest-building pass89.14s; fresh make check-full
