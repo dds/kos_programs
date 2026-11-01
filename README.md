@@ -1267,8 +1267,10 @@ automation at the prompt, keep a link and quicksave, then run:
 RUNPATH("0:/cmd/scanorbit.ks").
 ```
 
-The command compares the next six orbits after a common preparation window:
-staying put, gently raising Ap or lowering Pe to change the period, moving
+The command compares six orbits after a common preparation window anchored
+to an ascending crossing. Repeated previews before that crossing use the
+same future sample times. It compares staying put, raising Ap or lowering Pe
+at four sizes (roughly1.25%,2.5%,5%,10% of mean altitude), moving
 to exactly90deg, and mirroring inclination across90deg with the same LAN
 (85deg becomes95deg). A mirror changes track direction but reaches the same
 maximum latitude; exactly polar is the candidate that can reach missing
@@ -1276,11 +1278,16 @@ polar caps. Period changes often fill repeated-track gaps at much lower
 cost. The helper selects the largest estimated gain per m/s, requiring
 improvement over staying put, and may recommend no maneuver.
 
-It samples192 ground-track positions per candidate against live
+It samples384 ground-track positions in two interleaved grids against live
 [`COMPLETEDSCANS`](https://github.com/KSP-KOS/Kos-Scansat#api) data,
-counts each1deg cell once and weights by surface area.
+counts each1deg cell once per grid and weights by surface area. Canonical
+cell-centre map queries are shared across candidates. Both192-point grids
+must improve over staying put by at least10% (or0.1 weighted cell when
+the baseline is near zero); the recreated winning node is scored again.
+One favorable sample set cannot select a burn. Diagnostics include both
+grid scores, step size and period change for each candidate.
 This is a sparse coverage proxy, **not** a scanner-swath simulation or a
-guarantee of faster full coverage. The default scan type is the most advanced
+guarantee of faster full coverage. The default scan type is the most complete
 partially mapped type; verify that the probe carries its sensor. Check its
 usable altitude range in SCANsat: the command limits altitude changes to
 within10% of the current apsides but cannot discover sensor-specific

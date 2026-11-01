@@ -6,13 +6,24 @@ from types import SimpleNamespace as NS
 import check_relay_constellation as harness
 from check_codebase import ROOT, function_body, closure, dependency_tables, command_entrypoint_errors
 from check_espoir_fleet import Items, Text, native
+import check_landing_guidance as ks
 
 SOURCE=(ROOT/'lib/survey_orbit.ks').read_text().replace('ADD nd.','fixture_add(nd).')
-SOURCE=SOURCE.replace('FROM { LOCAL j IS 0. } UNTIL j >= 192 STEP { SET j TO j + 1. } DO {',
-    'FOR j IN fixture_indices(192) {')
+SOURCE=SOURCE.replace('FROM { LOCAL j IS 0. } UNTIL j >= 384 STEP { SET j TO j + 1. } DO {',
+    'FOR j IN fixture_indices(384) {')
 GROUND=(ROOT/'lib/landing_math.ks').read_text()
 COMMAND=(ROOT/'cmd/scanorbit.ks').read_text().replace('IF DEFINED EXCURSION_RESERVE_DV', 'IF fixtureDefined()')
 SHAPE=(ROOT/'lib/orbit_shape.ks').read_text()
+
+
+def source_call(source,name,env,*args):
+    # These helpers mutate passed records or call fixture primitives, never
+    # assign shared scalar globals. Plain function-local dicts avoid millions
+    # of Scope.__getitem__ calls while running the same compiled source.
+    names,defaults,(code,_)=harness.prepared(source,name)
+    assert '__fixture_evaluate' not in code.co_names
+    try:exec(code,env,{**defaults,**dict(zip(names,args))})
+    except ks.Returned as result:return result.value
 
 
 def dot(a,b):return sum(x*y for x,y in zip(a,b))
@@ -40,6 +51,7 @@ class Orbit:
         self.mean=ea-e*math.sin(ea)
         self.INCLINATION=deg(math.acos(max(-1,min(1,self.hat[2]))))
         node=cross((0,0,1),h);self.LAN=deg(math.atan2(node[1],node[0]))%360
+        self.ARGUMENTOFPERIAPSIS=deg(math.atan2(dot(cross(unit(node),self.p),self.hat),dot(unit(node),self.p)))%360 if norm(node)>1e-10 else 0
     PERIOD=property(lambda s:2*math.pi*math.sqrt(s.SEMIMAJORAXIS**3/s.BODY.MU))
     APOAPSIS=property(lambda s:s.SEMIMAJORAXIS*(1+s.ECCENTRICITY)-s.BODY.RADIUS)
     PERIAPSIS=property(lambda s:s.SEMIMAJORAXIS*(1-s.ECCENTRICITY)-s.BODY.RADIUS)
@@ -78,7 +90,10 @@ class Ship:
 def fixture(inc=85,body='Minmus'):
     bdy=NS(NAME=Text(body),RADIUS=60000,MU=1.7658e9,SOIRADIUS=2247428,ROTATIONPERIOD=40400,ATM=NS(EXISTS=False,HEIGHT=0))
     if body=='Duna':bdy.RADIUS=320000;bdy.MU=3.0136321e11;bdy.SOIRADIUS=47921949;bdy.ATM=NS(EXISTS=True,HEIGHT=50000)
-    radius=bdy.RADIUS+70000;speed=math.sqrt(bdy.MU/radius);ln=rad(40);ic=rad(inc)
+    if body=='Kerbin':
+        bdy.RADIUS=600000;bdy.MU=3.5316e12;bdy.SOIRADIUS=84159286;bdy.ROTATIONPERIOD=21549.425
+        bdy.ATM=NS(EXISTS=True,HEIGHT=70000)
+    radius=bdy.RADIUS+(100000 if body=='Kerbin' else 70000);speed=math.sqrt(bdy.MU/radius);ln=rad(40);ic=rad(inc)
     initial=Orbit(bdy,(radius*math.cos(ln),radius*math.sin(ln),0),
         (-speed*math.sin(ln)*math.cos(ic),speed*math.cos(ln)*math.cos(ic),speed*math.sin(ic)),1000)
     ship=Ship();ship.ORBIT=initial;ship.BODY=bdy;ship.STATUS=Text('ORBITING');ship.THRUST=0
@@ -121,6 +136,13 @@ def fixture(inc=85,body='Minmus'):
         return NS(LAT=deg(math.atan2(pos[2],math.hypot(pos[0],pos[1]))),
                   LNG=deg(math.atan2(pos[1],pos[0]))-360*clock.SECONDS/bdy.ROTATIONPERIOD)
     env.update(planPlaneMatch=plane,POSITIONAT=lambda obj,ut:position(ut))
+    def eta(ta):
+        orb=ship.ORBIT;ecc=orb.ECCENTRICITY
+        ea=2*math.atan2(math.sqrt(1-ecc)*math.sin(rad(ta)/2),math.sqrt(1+ecc)*math.cos(rad(ta)/2))
+        mean=ea-ecc*math.sin(ea)
+        live=orb.mean+2*math.pi*(clock.SECONDS-orb.epoch)/orb.PERIOD
+        return ((mean-live)%(2*math.pi))*orb.PERIOD/(2*math.pi)
+    env['etaToTrueAnomaly']=eta
     bdy.GEOPOSITIONOF=geo
     world=dict(bad_map=False,all_done=False,coverage=coverage,query=0)
     def cell(geo):return math.floor(geo.LAT+90),math.floor((geo.LNG+180)%360)
@@ -133,9 +155,9 @@ def fixture(inc=85,body='Minmus'):
         ALLSCANTYPES=Items([Text('BIOME'),Text('HIRESALTIMETRY')]),
         GETCOVERAGE=lambda obj,kind:80 if kind=='BIOME' else 94)
     env['ADDONS']=NS(AVAILABLE=lambda _:True,SCANSAT=scan)
-    env['lmGroundGeoAt']=lambda *args:harness.invoke(GROUND,'lmGroundGeoAt',env,*args)
+    env['lmGroundGeoAt']=lambda *args:source_call(GROUND,'lmGroundGeoAt',env,*args)
     for name in re.findall(r'(?:GLOBAL|LOCAL) FUNCTION (\w+)',SOURCE):
-        env[name]=lambda *args,name=name:harness.invoke(SOURCE,name,env,*args)
+        env[name]=lambda *args,name=name:source_call(SOURCE,name,env,*args)
     env['shapeReserveBurn']=lambda nd:harness.invoke(SHAPE,'_shapeReserveBurn',env,nd)
     env['shapePeFloor']=lambda:harness.invoke(SHAPE,'shapePeFloor',dict(env,_peFloor=lambda:harness.invoke(SHAPE,'_peFloor',env)))
     env.update(HOMECONNECTION=NS(ISCONNECTED=True),bootPreamble=lambda:None,bootLibLoad=lambda _:None,
@@ -145,6 +167,9 @@ def fixture(inc=85,body='Minmus'):
         EXISTS=lambda _:True,RUNPATH=lambda *_:None,RUNONCEPATH=lambda *_:None,
         diagnosticArchiveOpen=lambda _:harness.Record([('READY',True)]),
         diagnosticArchiveClose=lambda *_:True,action=Text('preview'),mode=Text('auto'),scanType=Text(''),cap=native(50),reserve=native(100))
+    for key,value in ks.EVAL_GLOBALS.items():env.setdefault(key,value)
+    env.update(__fixture_Returned=ks.Returned,__fixture_Broken=ks.Broken,
+               __fixture_AssertionError=AssertionError)
     return env,ship,state,events,nodes,world,cell
 
 
@@ -152,9 +177,9 @@ def record_current_track(env,world,cell):
     # Current path is completely mapped at the actual comparison epochs;
     # unchanged orbit must score0, with physical alternate tracks left blank.
     period=env['SHIP'].ORBIT.PERIOD
-    start=env['TIME'].SECONDS+2*period+180
-    for j in range(192):
-        ut=start+6*period*(j+.2+(j*.61803398875)%.6)/192
+    start=env['TIME'].SECONDS+env['etaToTrueAnomaly'](-env['SHIP'].ORBIT.ARGUMENTOFPERIAPSIS)+2*period
+    for j in range(384):
+        ut=start+6*period*(j+.5)/384
         world['coverage'].add(cell(env['lmGroundGeoAt'](ut)))
 
 
@@ -162,26 +187,25 @@ def search(env,mode='auto',cap=100):
     return env['surveyOrbitSearch'](Text('HIRESALTIMETRY'),Text(mode),cap,300,harness.Record())
 
 
-def check_drift_and_geometric_mirror():
-    for body in ('Minmus','Duna'):
-        env,ship,_,events,nodes,world,cell=fixture(body=body)
-        record_current_track(env,world,cell)
-        result=search(env)
-        assert result['OK'] and result['BEST']['MODE'] in ('raise-ap','lower-pe')
-        nd=result['NODE'];assert env['HASNODE'] and sum(n.alive for n in nodes)==1
-        assert .3<nd.DELTAV.MAG<10 and nd.DELTAV.MAG<2*math.sqrt(ship.BODY.MU/(ship.BODY.RADIUS+70000))*math.sin(rad(5))
-        assert nd.ORBIT.PERIAPSIS>=63000 and nd.ORBIT.APOAPSIS<=77000
-        assert nd.ORBIT.PERIOD!=ship.ORBIT.PERIOD
-        env['fixture_remove'](nd)
-        env['SHAPE_DV_CAP']=500
-        mirror=search(env,'mirror',500)
-        assert mirror['OK'];nd=mirror['NODE']
-        assert abs(nd.ORBIT.INCLINATION-95)<1e-7 and abs(nd.ORBIT.LAN-40)<1e-7
-        old_lat=max(abs(env['SHIP'].BODY.GEOPOSITIONOF(ship.ORBIT.state(1000+j*ship.ORBIT.PERIOD/400)[0]).LAT) for j in range(401))
-        new_lat=max(abs(env['SHIP'].BODY.GEOPOSITIONOF(nd.ORBIT.state(nd.TIME+j*nd.ORBIT.PERIOD/400)[0]).LAT) for j in range(401))
-        assert abs(old_lat-85)<1e-7 and abs(new_lat-85)<1e-7
-        assert len(nodes)<=12 and world['query']<=192*10
-    print('PASS: real search prefers cheap period detuning over10deg mirror on independent mapped-track fixtures; mirror keeps LAN, speed/apsides and85deg latitude envelope on Minmus/Duna')
+def check_drift_and_geometric_mirror(body):
+    env,ship,_,events,nodes,world,cell=fixture(body=body)
+    record_current_track(env,world,cell)
+    result=search(env)
+    assert result['OK'] and result['BEST']['MODE'] in ('raise-ap','lower-pe')
+    nd=result['NODE'];assert env['HASNODE'] and sum(n.alive for n in nodes)==1
+    assert .3<nd.DELTAV.MAG<10 and nd.DELTAV.MAG<2*math.sqrt(ship.BODY.MU/(ship.BODY.RADIUS+70000))*math.sin(rad(5))
+    assert nd.ORBIT.PERIAPSIS>=63000 and nd.ORBIT.APOAPSIS<=77000
+    assert nd.ORBIT.PERIOD!=ship.ORBIT.PERIOD
+    env['fixture_remove'](nd)
+    env['SHAPE_DV_CAP']=500
+    mirror=search(env,'mirror',500)
+    assert mirror['OK'];nd=mirror['NODE']
+    assert abs(nd.ORBIT.INCLINATION-95)<1e-7 and abs(nd.ORBIT.LAN-40)<1e-7
+    old_lat=max(abs(env['SHIP'].BODY.GEOPOSITIONOF(ship.ORBIT.state(1000+j*ship.ORBIT.PERIOD/400)[0]).LAT) for j in range(401))
+    new_lat=max(abs(env['SHIP'].BODY.GEOPOSITIONOF(nd.ORBIT.state(nd.TIME+j*nd.ORBIT.PERIOD/400)[0]).LAT) for j in range(401))
+    assert abs(old_lat-85)<1e-7 and abs(new_lat-85)<1e-7
+    assert len(nodes)<=14 and world['query']<=384*14
+    print('PASS: '+body+' real search prefers cheap period detuning over10deg mirror; mirror keeps LAN, speed/apsides and85deg latitude envelope')
 
 
 def check_no_gain_failures_and_safety():
@@ -227,15 +251,18 @@ def check_polar_caps_and_opposite_tilt():
     print('PASS: polar-cap gaps require exactly polar, not the mirrored latitude envelope;95->85deg mirror also keeps the prograde/retrograde plane-change geometry correct')
 
 
-def check_command_ledger_context_and_deadlines():
-    for action in ('preview','plan'):
-        env,_,state,_,nodes,world,cell=fixture();record_current_track(env,world,cell)
-        env['action']=Text(action);before=state.copy()
-        harness.invoke(COMMAND,'_cmdScanorbit',env)
-        assert env['HASNODE']==(action=='plan')
-        assert all(state[k]==v for k,v in before.items() if k!='shape_budget_spent')
-        if action=='plan':assert abs(state['shape_budget_spent']-10-env['NEXTNODE'].DELTAV.MAG)<1e-7
-        else:assert state==before and not any(n.alive for n in nodes)
+def check_command_ledger(action):
+    env,_,state,_,nodes,world,cell=fixture();record_current_track(env,world,cell)
+    env['action']=Text(action);before=state.copy()
+    harness.invoke(COMMAND,'_cmdScanorbit',env)
+    assert env['HASNODE']==(action=='plan')
+    assert all(state[k]==v for k,v in before.items() if k!='shape_budget_spent')
+    if action=='plan':assert abs(state['shape_budget_spent']-10-env['NEXTNODE'].DELTAV.MAG)<1e-7
+    else:assert state==before and not any(n.alive for n in nodes)
+    print('PASS: actual command '+action+' preserves mission/science/phase and reserves only its retained plan in the shared SHAPE ledger')
+
+
+def check_command_type_and_foreign_node():
     env,ship,state,events,nodes,world,cell=fixture();record_current_track(env,world,cell)
     harness.invoke(COMMAND,'_cmdScanorbit',env)
     assert any('type=HIRESALTIMETRY' in row for row in events)
@@ -244,12 +271,20 @@ def check_command_ledger_context_and_deadlines():
     foreign=NS();env.update(HASNODE=True,NEXTNODE=foreign,ALLNODES=Items([foreign]))
     harness.invoke(COMMAND,'_cmdScanorbit',env)
     assert env['NEXTNODE'] is foreign and env['HASNODE']
+    print('PASS: live scan type selected without a burn/stage primitive; a pre-existing foreign node is preserved without propagation')
+
+
+def check_generated_local_profile():
     # Ike/assist operations can have a generated local profile and no archive
     # profile. Replay it (plus runtime overrides) instead of dropping caps.
     env,_,state,_,_,world,cell=fixture();record_current_track(env,world,cell)
     loaded=[];env.update(bootArchivePath=lambda _:Text(''),RUNPATH=lambda path:loaded.append(str(path)))
     harness.invoke(COMMAND,'_cmdScanorbit',env)
     assert 'local_profile' in loaded and state['shape_budget_spent']==10 and not env['HASNODE']
+    print('PASS: generated local profile plus runtime overrides retain mission caps when no archive profile exists')
+
+
+def check_sampling_deadlines_and_context():
     env,ship,_,_,nodes,world,cell=fixture();record_current_track(env,world,cell)
     original=env['ADDONS'].SCANSAT.COMPLETEDSCANS
     def late(obj,geo):
@@ -264,7 +299,7 @@ def check_command_ledger_context_and_deadlines():
         return original(obj,geo)
     env['ADDONS'].SCANSAT.COMPLETEDSCANS=switch
     assert not search(env)['OK'] and env['HASNODE'] and nodes[-1].alive
-    print('PASS: actual command preview cleans its nodes; explicit plan shares SHAPE ledger without changing mission, protects foreign nodes and retains switched-vessel previews; expired sampling discards only owned probes')
+    print('PASS: expired sampling discards only owned probes; a vessel switch retains its preview for inspection')
 
 
 def check_isolation():
@@ -304,9 +339,14 @@ def check_deferred_native_node_removal():
 
 
 if __name__=='__main__':
-    check_drift_and_geometric_mirror()
+    check_drift_and_geometric_mirror('Minmus')
+    check_drift_and_geometric_mirror('Duna')
     check_no_gain_failures_and_safety()
     check_polar_caps_and_opposite_tilt()
-    check_command_ledger_context_and_deadlines()
+    check_command_ledger('preview')
+    check_command_ledger('plan')
+    check_command_type_and_foreign_node()
+    check_generated_local_profile()
+    check_sampling_deadlines_and_context()
     check_isolation()
     check_deferred_native_node_removal()

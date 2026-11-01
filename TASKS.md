@@ -6,6 +6,30 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native retry pending: improve scanorbit after Espoir-Kerbin-Surveyor1's unchanged
+  preview/no-useful-change at5197920. Nearly90deg orbit means polar/mirror
+  are sub-minimum; only +/-5km apsis probes were scored. Same map40s earlier
+  reversed their apparent merit. Anchor common epochs to the next ascending
+  crossing, compare two interleaved192-point grids and require gain in both,
+  cache canonical map cells and search multiple gentle period detunings under
+  unchanged10% altitude/mission/active-stage/ownership/deadline guards.
+  Manual preview/plan only; no forced maneuver or scanner-swath guarantee.
+  Each canonical1deg cell is queried once per search; both interleaved
+  grids must independently meet the original10%/0.1-cell gain gate, with
+  final recreated-node resampling before a plan can be retained. At most
+  eight drift +two plane trials; unchanged45game/60wall bounds, cached
+  map samples and command-only loading. Schema2 logs gridA/B, actual step,
+  period delta and final comparison. Source regressions cover unchanged
+  map40s repeatability, single-grid false positives, smaller~1m/s useful
+  detuning missed by the old5km pair, and changed final native-style node
+  prediction rejection. Synthetic maps/Cartesian orbits, not native swaths.
+  Fixture execution optimized without changing equations, sample counts or
+  assertions; independent command cases parameterized for timing visibility.
+  All106 routine files pass154.56s;0 structural errors, unchanged legacy
+  KSC_DEORBIT warning. Survey cases0.009..0.652s; new sampling cases
+  0.096..0.634s. No production edits during the suite. Report:
+  /tmp/kos-scanorbit-paired-final-20261101.json and.log.
+
 - IMPLEMENTED/source-checked; native retry pending: Espoir-Mun-Surveyor1
   SHAPE plans0.0124219975m/s set-ap at
   UT5197782 +17501.5s(~4h52m, not4days), AP error-650m ahead of PE

@@ -93,8 +93,9 @@ GLOBAL FUNCTION surveyOrbitAffordable {
         AND (SHAPE_RESERVE_DV < 0 OR SHIP:DELTAV:VACUUM - cost >= SHAPE_RESERVE_DV).
 }
 
-// Identical absolute times for every candidate. One point per 1deg cell;
-// cos(latitude) weights map area rather than overvaluing polar longitudes.
+// Identical absolute times for every candidate. Two interleaved192-point
+// grids must agree on a gain; one sparse sample set must not select a burn.
+// One count per1deg cell per grid; cell-centre cosine weights map area.
 // Sparse along-track samples omit swath width, sunlight and sensor altitude
 // performance. Return unknown on malformed addon data, never "all unscanned".
 GLOBAL FUNCTION surveyOrbitScore {
@@ -105,24 +106,41 @@ GLOBAL FUNCTION surveyOrbitScore {
     PARAMETER span.
     PARAMETER stopUt.
     PARAMETER wallEnd.
-    LOCAL seen IS LEXICON().
-    LOCAL score IS 0.
-    FROM { LOCAL j IS 0. } UNTIL j >= 192 STEP { SET j TO j + 1. } DO {
+    PARAMETER details.
+    PARAMETER mapCache.
+    LOCAL seen IS LIST(LEXICON(),LEXICON()).
+    LOCAL scores IS LIST(0,0).
+    FROM { LOCAL j IS 0. } UNTIL j >= 384 STEP { SET j TO j + 1. } DO {
         IF NOT surveyOrbitIdle(craftRef,nd <> 0) OR (nd <> 0 AND NOT surveyOrbitOwned(craftRef,nd)) OR TIME:SECONDS >= stopUt
                 OR KUNIVERSE:REALTIME >= wallEnd { RETURN -1. }
-        LOCAL geo IS lmGroundGeoAt(startUt + span * (j + 0.2 + MOD(j*0.61803398875,0.6)) / 192).
+        LOCAL geo IS lmGroundGeoAt(startUt + span * (j + 0.5) / 384).
         IF NOT (ABS(geo:LAT) <= 90 AND ABS(geo:LNG) < 1e30) { RETURN -1. }
         LOCAL lng IS MOD(MOD(geo:LNG + 180,360) + 360,360) - 180.
-        LOCAL key IS FLOOR(geo:LAT+90) + ":" + FLOOR(lng+180).
-        IF NOT seen:HASKEY(key) {
-            SET seen[key] TO TRUE.
-            LOCAL complete IS ADDONS:SCANSAT:COMPLETEDSCANS(SHIP:BODY,LATLNG(geo:LAT,lng)).
-            IF NOT complete:ISTYPE("List") { RETURN -1. }
-            IF NOT complete:CONTAINS(scanType) { SET score TO score + COS(geo:LAT). }
+        LOCAL latCell IS MIN(179,FLOOR(geo:LAT+90)).
+        LOCAL lngCell IS FLOOR(lng+180).
+        LOCAL key IS latCell + ":" + lngCell.
+        LOCAL lane IS MOD(j,2).
+        IF NOT seen[lane]:HASKEY(key) {
+            SET seen[lane][key] TO TRUE.
+            IF NOT mapCache:HASKEY(key) {
+                LOCAL complete IS ADDONS:SCANSAT:COMPLETEDSCANS(SHIP:BODY,LATLNG(latCell-89.5,lngCell-179.5)).
+                IF NOT complete:ISTYPE("List") { RETURN -1. }
+                SET mapCache[key] TO complete:CONTAINS(scanType).
+            }
+            IF NOT mapCache[key] { SET scores[lane] TO scores[lane] + COS(latCell-89.5). }
         }
         IF MOD(j,16) = 0 { WAIT 0. }
     }
-    RETURN score.
+    SET details["A"] TO scores[0]. SET details["B"] TO scores[1].
+    RETURN (scores[0]+scores[1])/2.
+}
+
+LOCAL FUNCTION _surveyOrbitGain {
+    PARAMETER trial.
+    PARAMETER baseline.
+    RETURN trial:HASKEY("A") AND trial:HASKEY("B")
+        AND trial["A"] >= baseline["A"]+MAX(0.1,baseline["A"]*0.1)
+        AND trial["B"] >= baseline["B"]+MAX(0.1,baseline["B"]*0.1).
 }
 
 // One gentle apsis change detunes the period; no circularization needed.
@@ -158,29 +176,46 @@ GLOBAL FUNCTION surveyOrbitSearch {
     LOCAL craftRef IS SHIP.
     LOCAL out IS LEXICON("OK",FALSE,"REASON","no-useful-change","NODE",0).
     LOCAL period IS SHIP:ORBIT:PERIOD.
-    LOCAL startUt IS TIME:SECONDS + 2*period + 180.
+    // Repeated previews before the same crossing compare the same epochs.
+    // A sliding now+offset window made192 sparse points reverse their ranking
+    // after40s with an unchanged native map. Reserve two whole orbits so all
+    // accepted burns precede the shared six-orbit comparison window.
+    LOCAL startUt IS TIME:SECONDS+etaToTrueAnomaly(-SHIP:ORBIT:ARGUMENTOFPERIAPSIS)+2*period.
     LOCAL stopUt IS TIME:SECONDS + 45.
     LOCAL wallEnd IS KUNIVERSE:REALTIME + 60.
     LOCAL lowerAlt IS MAX(surveyOrbitFloor(),SHIP:PERIAPSIS*0.9).
     LOCAL upperAlt IS SHIP:APOAPSIS*1.1.
     LOCAL stepAlt IS MAX(500,(SHIP:PERIAPSIS+SHIP:APOAPSIS)*0.025).
-    LOCAL baseline IS surveyOrbitScore(craftRef,0,scanType,startUt,6*period,stopUt,wallEnd).
+    LOCAL mapCache IS LEXICON().
+    LOCAL baseSamples IS LEXICON().
+    LOCAL baseline IS surveyOrbitScore(craftRef,0,scanType,startUt,6*period,stopUt,wallEnd,baseSamples,mapCache).
     IF baseline < 0 { SET out["REASON"] TO "baseline-unavailable-or-deadline". RETURN out. }
     diagnosticArchiveLine(report,"STATS scanorbit baseline type="+scanType+" score="+baseline
-        +" startUt="+startUt+" span="+(6*period)+" samples=192 model=ground-track-points"
+        +" gridA="+baseSamples["A"]+" gridB="+baseSamples["B"]
+        +" startUt="+startUt+" span="+(6*period)+" samples=384 model=paired-ground-track-points anchor=ascending-crossing"
         +" lowerAlt="+lowerAlt+" upperAlt="+upperAlt).
     LOCAL best IS LEXICON().
     LOCAL bestMerit IS 0.
     LOCAL inc IS SHIP:ORBIT:INCLINATION.
     LOCAL lan IS SHIP:ORBIT:LAN.
-    FOR kind IN LIST("raise-ap","lower-pe","polar","mirror") {
+    LOCAL trials IS LIST().
+    FOR scale_ IN LIST(0.25,0.5,1,2) {
+        FOR kind IN LIST("raise-ap","lower-pe") {
+            LOCAL step_ IS MIN(stepAlt*scale_,MAX(0,SHIP:PERIAPSIS-lowerAlt-1)).
+            IF kind = "raise-ap" { SET step_ TO MIN(stepAlt*scale_,MAX(0,upperAlt-SHIP:APOAPSIS-1)). }
+            IF step_ > 0 { trials:ADD(LEXICON("KIND",kind,"STEP",step_)). }
+        }
+    }
+    FOR kind IN LIST("polar","mirror") { trials:ADD(LEXICON("KIND",kind,"STEP",0)). }
+    FOR trial IN trials {
+        LOCAL kind IS trial["KIND"].
         LOCAL stopReason IS _surveyOrbitStop(craftRef,stopUt,wallEnd,report).
         IF stopReason <> "" { SET out["REASON"] TO stopReason. RETURN out. }
         LOCAL try_ IS mode = "auto" OR mode = kind OR (mode = "drift" AND (kind = "raise-ap" OR kind = "lower-pe")).
         LOCAL nd IS 0.
         IF try_ {
             IF kind = "raise-ap" OR kind = "lower-pe" {
-                SET nd TO surveyOrbitDriftNode(kind = "raise-ap",stepAlt).
+                SET nd TO surveyOrbitDriftNode(kind = "raise-ap",trial["STEP"]).
             } ELSE {
                 LOCAL wantInc IS 90.
                 IF kind = "mirror" { SET wantInc TO 180-inc. }
@@ -211,24 +246,27 @@ GLOBAL FUNCTION surveyOrbitSearch {
                 SET out["REASON"] TO "node-ownership-changed". RETURN out.
             }
             LOCAL score IS -1.
+            LOCAL samples IS LEXICON("A",-1,"B",-1).
             LOCAL dv IS nd:DELTAV:MAG.
             IF surveyOrbitIdle(craftRef,TRUE) AND surveyOrbitSafe(nd:ORBIT,lowerAlt,upperAlt)
                     AND surveyOrbitAffordable(dv,cap,reserve) AND nd:ETA >= 180
                     AND nd:TIME < startUt {
-                SET score TO surveyOrbitScore(craftRef,nd,scanType,startUt,6*period,stopUt,wallEnd).
+                SET score TO surveyOrbitScore(craftRef,nd,scanType,startUt,6*period,stopUt,wallEnd,samples,mapCache).
             }
             IF NOT surveyOrbitOwned(craftRef,nd) {
                 SET out["REASON"] TO "node-ownership-changed". RETURN out.
             }
             diagnosticArchiveLine(report,"STATS scanorbit candidate mode="+kind+" dv="+dv
                 +" score="+score+" baseline="+baseline+" Pe="+nd:ORBIT:PERIAPSIS
-                +" Ap="+nd:ORBIT:APOAPSIS+" inc="+nd:ORBIT:INCLINATION+" lan="+nd:ORBIT:LAN).
-            IF score >= baseline+MAX(0.1,baseline*0.1) {
+                +" Ap="+nd:ORBIT:APOAPSIS+" inc="+nd:ORBIT:INCLINATION+" lan="+nd:ORBIT:LAN
+                +" stepM="+trial["STEP"]+" deltaPeriod="+(nd:ORBIT:PERIOD-period)
+                +" gridA="+samples["A"]+" gridB="+samples["B"]).
+            IF score >= 0 AND _surveyOrbitGain(samples,baseSamples) {
                 LOCAL merit IS (score-baseline)/(dv+1).
                 IF merit > bestMerit {
                     SET bestMerit TO merit.
                     SET best TO LEXICON("MODE",kind,"UT",nd:TIME,"PRO",nd:PROGRADE,
-                        "NRM",nd:NORMAL,"RAD",nd:RADIALOUT,"SCORE",score,"DV",dv).
+                        "NRM",nd:NORMAL,"RAD",nd:RADIALOUT,"SCORE",score,"DV",dv,"SAMPLES",samples).
                 }
             }
             // Only our node, only while still on the same active vessel.
@@ -260,6 +298,17 @@ GLOBAL FUNCTION surveyOrbitSearch {
         }
         SET out["REASON"] TO "final-validation". RETURN out.
     }
+    LOCAL finalSamples IS LEXICON().
+    LOCAL finalScore IS surveyOrbitScore(craftRef,nd,scanType,startUt,6*period,stopUt,wallEnd,finalSamples,mapCache).
+    IF NOT surveyOrbitOwned(craftRef,nd) { SET out["REASON"] TO "node-ownership-changed". RETURN out. }
+    IF finalScore < 0 OR NOT _surveyOrbitGain(finalSamples,baseSamples) {
+        surveyOrbitRelease(craftRef,nd).
+        SET out["REASON"] TO "final-score-unconfirmed". RETURN out.
+    }
+    SET best["SCORE"] TO finalScore. SET best["SAMPLES"] TO finalSamples.
+    diagnosticArchiveLine(report,"STATS scanorbit confirmation score="+finalScore
+        +" gridA="+finalSamples["A"]+" gridB="+finalSamples["B"]+" baseline="+baseline
+        +" baselineA="+baseSamples["A"]+" baselineB="+baseSamples["B"]+" mapCells="+mapCache:LENGTH).
     SET out["OK"] TO TRUE. SET out["REASON"] TO "sampled-improvement".
     SET out["NODE"] TO nd. SET out["BEST"] TO best.
     RETURN out.

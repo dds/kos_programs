@@ -60,12 +60,12 @@ LOCAL FUNCTION _cmdScanorbit {
     }
     LOCAL report IS diagnosticArchiveOpen("scanorbit").
     IF NOT report["READY"] { RETURN. }
-    diagnosticArchiveLine(report,"STATS scanorbit setup schema=1 ut="+TIME:SECONDS
+    diagnosticArchiveLine(report,"STATS scanorbit setup schema=2 ut="+TIME:SECONDS
         +" mission="+mid+" phase="+stateGet("phase","")+" action="+action+" mode="+mode+" type="+scanType
         +" coverage="+ADDONS:SCANSAT:GETCOVERAGE(SHIP:BODY,scanType)+" cap="+cap+" reserve="+reserve
         +" body="+SHIP:BODY:NAME+" Pe="+SHIP:PERIAPSIS+" Ap="+SHIP:APOAPSIS
         +" inc="+SHIP:ORBIT:INCLINATION+" lan="+SHIP:ORBIT:LAN).
-    PRINT "Comparing sparse ground tracks; verify the selected scan type and sensor altitude in SCANsat.".
+    PRINT "Comparing several period changes with paired ground-track samples; verify scan type and altitude in SCANsat.".
     LOCAL searchUt IS TIME:SECONDS.
     LOCAL searchWall IS KUNIVERSE:REALTIME.
     LOCAL result IS surveyOrbitSearch(scanType,mode,cap,reserve,report).
