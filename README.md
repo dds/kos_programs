@@ -98,6 +98,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/scanorbit.ks").` | Preview economical scan-track changes using the live SCANsat map; `"plan"` retains the best useful node for manual execution |
+| `RUNPATH("0:/cmd/scanraise.ks",130).` | Explicitly plan one mapper apoapsis raise to130km, retaining Pe and plane; inspect then execute with exnode. Uses mission fuel limits; coverage improvement is experimental |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/landlight.ks").` | Preview a lit ground-track site from Mun/Minmus parking orbit; `"status"` checks the saved target with live positions; `"apply", "AFTERNOON", 1` selects afternoon while preserving the return mission; final argument `0` waives direct Kerbin view |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
@@ -1348,6 +1349,33 @@ a native runtime error can leave a preview node. Each run writes a compact
 `scanorbit_<craft>_<UT>.log` directly to `0:/logs/archive/_diagnostics/` for
 comparing predicted gain with actual subsequent scans. Flight/coverage
 validation of this new helper is pending; Python checks are not a KSP run.
+
+For an explicit period-change experiment when the limited comparison finds
+no useful change, `scanraise` plans one prograde burn at periapsis. For the
+Kerbin MODIS mapper at roughly99x101km, raising Ap to130km costs about23m/s
+and changes pass spacing relative to the old orbit by about1deg per orbit:
+
+```ks
+RUNPATH("0:/cmd/scanraise.ks",130).
+// Inspect the node and its predicted orbit, then:
+RUNPATH("0:/cmd/exnode.ks").
+// After a successful burn, resume the saved SCANSAT_OPS phase:
+REBOOT.
+```
+
+This is an operator-requested orbit experiment; it does not certify a10%
+coverage gain or change the automatic comparison's acceptance rules. The
+explicit target can exceed that comparison's conservative10% altitude range.
+The actual node must retain current Pe within500m, inc/LAN within0.1deg,
+near-polar bound orbit/eccentricity<0.1, the mission's safe Pe floor, a180s
+lead and every active-stage, per-burn, cumulative and reserve limit. Its dV
+is reserved even if later cancelled. No phase/goals/scanners/staging change
+and no burn begins here; exnode uses the existing burn/KAC machinery.
+Arguments are target Ap in km and optional dV cap(default50m/s). Check the
+installed scanner's altitude and daylight limits. The inspected Deck MODIS
+has ideal70km/max250km, requires daylight and already has full configured
+swath at100km. A new period can shift tracks; it does not widen that swath.
+`scanraise_<craft>_<UT>.log` is written directly to the diagnostic archive.
 
 The Minmus surveyor stops in `SCIENCE_OPS` after achieving the requested
 contract orbit. Confirm the objective before changing it. To move to70km polar

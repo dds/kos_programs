@@ -6,6 +6,29 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native experiment pending: user
+  explicitly wants to move the Kerbin mapper after repeated no-useful-change.
+  New archive-only cmd/scanraise.ks,130 plans one prograde periapsis burn
+  from measured99.204x100.725km to99.204x130km,~22.86m/s and~1.03deg/orbit
+  relative groundtrack shift. Retain90deg plane/Pe, profile and SCANSAT_OPS;
+  normal exnode/KAC execution then reboot resumes mapping. An explicit orbit
+  request may exceed the optimizer's conservative +/-10% altitude search;
+  automatic10% map-gain admission is unchanged. No claim of certified gain.
+  Shared survey drift planner/native validation + SHAPE ledger; reject missing
+  scanner, node/attempt/Abort/throttle/context changes, unsafe Pe/ecc/SOI,
+  native apsis/plane mismatch, late node or any mission/stage/fuel limit.
+  Read-only before execution; only retained plan allowance is reserved.
+  Direct archive diagnostic and README commands added. Source fixture uses
+  measured orbit with independent Cartesian propagation;27 unsafe contexts
+  and native/context/foreign-node rejection pass. Native experiment still needed.
+  Discovered legacy cmd/setorbit.ks still uses prohibited future VELOCITYAT
+  and deletes nodes; do not recommend it until refactored to shared planners.
+  That broader legacy repair is queued separately, not needed for scanraise.
+  All109 routine check files pass158.18s;377 scripts/100 profiles/82 phases/
+  44 bands,0 structural errors and unchanged KSC_DEORBIT warning. New cases
+  0.047..0.255s; repeat-preview stays0.902s. No production edits during/after
+  the suite. Report:/tmp/kos-scanraise-final-20261101.json and.log.
+
 - NATIVE scanorbit5267041: all4 tilt candidates propagated accurately;
   89.5deg scores33.9743,90.5deg37.8398,89deg30.9723,91deg38.7752 vs
   baseline36.6374. Best91deg costs39.1857m/s, mean+5.84%,gridA+4.86%/
