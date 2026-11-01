@@ -1,12 +1,40 @@
 # Flight automation work
 
-Updated 2026-10-31. Keep this list current as scope changes. A source check
+Updated 2026-11-01. Keep this list current as scope changes. A source check
 passing is not native flight validation. Preserve mission safeguards and
 record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
 - IMPLEMENTED/source-checked; native retry pending:
+  Espoir-Minmus-Lander1 boot023 UT5460373 LAND_PREP stalls at15.6x1050.8km
+  because0.04938m/s Pe trim is below0.1m/s minimum and500m accuracy. Its
+  nominal15km Ap is below current Pe, so old selector cannot lower the big
+  Ap without that trim. Generic tangent selection now circularizes at current
+  Pe when it is already inside the requested Ap corridor; outside it, Pe
+  must still be corrected. Generic operational accuracy uses target-orbit
+  impulse sensitivity, current acceleration times20ms, useful-burn minimum
+  and executor residual; added allowance bounded to10% of lower target
+  altitude. LAND_PREP uses it on all bodies; optional
+  SHAPE_OPERATIONAL_TOLERANCE defaults0 so orbital contracts remain strict.
+  Both Minmus landing profiles opt in, baseline1km; legacy LAND_PREP also1km.
+  No budget/minimum/plane/terrain/stage/cutoff relaxation; shapeConverged
+  explicitly rejects below-floor/nonfinite Pe even inside a wide corridor.
+  Independent conics cover Minmus/Mun/Kerbin/Duna, engine authority, exact
+  corridor edges, strict contracts, restored settings and conserved ledger.
+  Recorded rounded capture now reaches15.6km circular with one useful burn
+  and stops at LANDING_REVIEW; native retry still needed. No game/save changes.
+  All112 routine check files pass29.23s (62 verified passes reused,50 executed),
+  /tmp/kos-operational-orbits-final-20261101.log. Initial fresh76.10s pass
+  caught an old contract-angle fixture lacking the newly required physical
+  orbit/floor context; fixture corrected and also tests below-floor refusal.
+  New four-body authority/geometry/isolation checks all pass in<1s total.
+  Logs:/tmp/ksp-deck-20261101T071732Z-fetch-lu9b5yup/logs/
+  Espoir-Minmus-Lander1_5154039/boot_023_core.log; boot022fetch-6edties_
+  and boot021fetch-hbtnsoyi. Current failed attempt has no retained node;
+  linked pull/reboot in LAND_PREP should replan without a reset/phase skip.
+
+- OPERATOR CONFIRMED contract complete after fix; mapping transition pending:
   Espoir-Minmus-Surveyor1 boot019 UT5381324 schedules0.063607m/s set-ap at
   UT5402146,~20813s away, before its71.227deg AoP correction. Actual orbit
   Pe469698/Ap1034646m, plane error0.001deg; contract remains465764/1041045m,
@@ -24,6 +52,9 @@ record remaining uncertainty before closing a task.
   /tmp/ksp-deck-20261101T061117Z-fetch-4h9amrda/logs/
   Espoir-Minmus-Surveyor1_5143320/boot_019_core.log;
   boot017fetch-7w6dbsof and boot018fetch-961bffv_.
+  Operator reports the new correction satisfied the contract but final trim
+  remained queued. Supplied owned unflown cancellation, explicit SCIENCE_OPS
+  release, orbit(after=scan), REBOOT for70x90km polar mapping. No remote edits.
 
 - DONE/source-checked: operator-approved verified-result reuse reaches10s target.
   Repeated make check passes6.91s/6.95s:107 verified passes reused,4 uncertain

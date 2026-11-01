@@ -104,7 +104,9 @@ def fixture(profile=True):
     # This adapter propagates tangent-only impulses. Joint radial/apsis
     # physics is exercised independently in check_shape_combined.
     env['_shapeCombinedApsides']=lambda _:Scalar(0)
-    for name in ('landingOrbitContext','shapeErrors','shapeConverged','_peFloor','_shapeRepairPeriapsis'):
+    env['BURN_TRIM_ABS_COMPLETE_DV']=.05
+    for name in ('landingOrbitContext','shapeErrors','shapeConverged','_peFloor','_shapeRepairPeriapsis',
+                 'shapeOperationalAltitudeTolerance'):
         env[name]=lambda *args,name=name:ks.call(name,env,*args)
     def next_burn(targets):
         result=ks.call('shapeNextBurn',env,targets)
@@ -270,6 +272,9 @@ def check_polar_small_trim():
         read_settings(profile,env)
         assert env['LAND_PREP_MIN_BURN_DV']==.1
         env['LAND_PREP_MIN_BURN_DV']=minimum
+        # A weak motor leaves this small preparation goal at its explicit
+        #250m baseline. Strong-motor operational corridors are covered below.
+        env['SHIP'].AVAILABLETHRUST=1
         env['xferSeq']=env['launchSeq']=Seq(env['SEQUENCE'])
         saved['mission_id']='minmus_polar_hops_return'
         env['SHIP'].PERIAPSIS=achieved_pe;env['SHIP'].APOAPSIS=19300
@@ -278,15 +283,17 @@ def check_polar_small_trim():
         refresh()
         prior={k:env[k] for k in ('SHAPE_MIN_BURN_DV','SHAPE_ALT_TOL','SHAPE_MIN_PE','BURN_STAGE_LIMIT')}
         run(env)
-        assert len(nodes)==int(expected) and env['phaseShouldYield']==(not expected)
-        assert saved['phase']==('LAND_DEORBIT' if expected else 'LAND_PREP')
-        assert ('landing_orbit_ready' in saved)==expected
+        assert len(nodes)==int(expected) and not env['phaseShouldYield']
+        assert saved['phase']=='LAND_DEORBIT' and 'landing_orbit_ready' in saved
         assert all(env[k]==v for k,v in prior.items())
         if expected:
             assert abs(nodes[0].DELTAV.MAG-.297)<1e-9
             assert abs(env['SHIP'].PERIAPSIS-9300)<1e-6
             assert abs(saved['land_prep_budget']['SPENT']-.297)<1e-9
-    print('PASS: native-style0.297m/s polar Pe trim is blocked by0.3 but executes at0.1, meets unchanged250m tolerance, records readiness and advances to LAND_DEORBIT while restoring strict SHAPE/stage policy')
+        else:
+            assert saved['land_prep_budget']['SPENT']==0 and env['SHIP'].PERIAPSIS==achieved_pe
+            assert env['SHIP'].PERIAPSIS>=9000
+    print('PASS: native-style0.297m/s polar trim executes at0.1 when required by250m baseline; at0.3 the bounded operational allowance accepts its safe achieved orbit without a sub-minimum burn, while restoring strict SHAPE/stage policy')
 
 
 def check_wait_and_cancel():

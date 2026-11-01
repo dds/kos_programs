@@ -31,7 +31,7 @@ def execute(name,env):
 
 def fixture():
     removed=[];events=[]
-    env=dict(SHAPE_MIN_BURN_DV=.4,_shapeMinimumSkipped=False,
+    env=dict(SHAPE_MIN_BURN_DV=.4,SHAPE_OPERATIONAL_TOLERANCE=0,_shapeMinimumSkipped=False,
         SHAPE_BURN_TOLERANCE=-1,BURN_TRIM_ABS_COMPLETE_DV=.05,BURN_TRIM_COMPLETE_MAX_DV=.05,
         _shapeInterruptedHold=lambda _:False,
         _shapeRecoverResidual=lambda _:False,

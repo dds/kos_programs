@@ -59,6 +59,9 @@ GLOBAL SHAPE_INC IS -1.
 GLOBAL SHAPE_LAN IS -1.
 GLOBAL SHAPE_AOP IS -1.
 GLOBAL SHAPE_ALT_TOL IS 5000.
+// Opt-in for operational parking orbits. Explicit orbital contracts remain
+// strict by default; LAND_PREP always uses this separate accuracy policy.
+GLOBAL SHAPE_OPERATIONAL_TOLERANCE IS 0.
 GLOBAL SHAPE_ANG_TOL IS 0.2.
 GLOBAL SHAPE_AOP_TOL IS 0.5.
 // An apsis a few km off (vs SHAPE_ALT_TOL) can need essentially no dV
@@ -295,6 +298,9 @@ LOCAL FUNCTION _errorSummary {
 // shapeConverged — TRUE when every requested element is in tolerance.
 GLOBAL FUNCTION shapeConverged {
     PARAMETER targets.
+    // A broad operational accuracy corridor must never count an orbit below
+    // the independent terrain/atmosphere floor as complete.
+    IF NOT (SHIP:PERIAPSIS >= _peFloor() AND SHIP:PERIAPSIS < 1e30) { RETURN FALSE. }
     LOCAL errs IS shapeErrors(targets).
     LOCAL altTol IS SHAPE_ALT_TOL.
     LOCAL angTol IS SHAPE_ANG_TOL.
@@ -304,6 +310,42 @@ GLOBAL FUNCTION shapeConverged {
     IF errs:HASKEY("PLANE") AND errs["PLANE"]   > angTol    { RETURN FALSE. }
     IF errs:HASKEY("AOP")   AND ABS(errs["AOP"]) > aopTol   { RETURN FALSE. }
     RETURN TRUE.
+}
+
+// Operational accuracy, not an execution authorization. Price a conservative
+// 20ms full-thrust impulse, the configured useful-burn minimum and executor
+// residual in target-orbit metres. The executor can limit thrust more finely;
+// operational parking does not need to demand that precision. Cap the added
+// allowance at10% of the lower target altitude, retaining any wider explicit
+// tolerance. Use target geometry so the corridor does not chase the live orbit
+// as the major burns change its size. No plane/floor/budget policy changes.
+GLOBAL FUNCTION shapeOperationalAltitudeTolerance {
+    PARAMETER targets.
+    PARAMETER baseTolerance.
+    PARAMETER minimumDv.
+    IF NOT targets:HASKEY("AP") AND NOT targets:HASKEY("PE") { RETURN baseTolerance. }
+    LOCAL apAlt IS SHIP:APOAPSIS.
+    LOCAL peAlt IS SHIP:PERIAPSIS.
+    IF targets:HASKEY("AP") { SET apAlt TO targets["AP"]. }
+    IF targets:HASKEY("PE") { SET peAlt TO targets["PE"]. }
+    LOCAL rp IS SHIP:BODY:RADIUS+peAlt.
+    LOCAL ra IS SHIP:BODY:RADIUS+apAlt.
+    LOCAL mu IS SHIP:BODY:MU.
+    IF NOT (baseTolerance > 0 AND baseTolerance < 1e30
+            AND minimumDv >= 0 AND minimumDv < 1e30
+            AND peAlt > 0 AND ra >= rp AND ra < 1e30 AND rp > 0
+            AND mu > 0 AND mu < 1e30 AND SHIP:MASS > 0 AND SHIP:MASS < 1e30
+            AND SHIP:AVAILABLETHRUST >= 0 AND SHIP:AVAILABLETHRUST < 1e30
+            AND BURN_TRIM_ABS_COMPLETE_DV >= 0 AND BURN_TRIM_ABS_COMPLETE_DV < 1e30) { RETURN baseTolerance. }
+    LOCAL acc IS SHIP:AVAILABLETHRUST/SHIP:MASS.
+    LOCAL impulseDv IS MAX(MAX(minimumDv,BURN_TRIM_ABS_COMPLETE_DV),acc*0.02).
+    LOCAL span IS rp+ra.
+    LOCAL peSpeed IS SQRT(2*mu*ra/(rp*span)).
+    // d(opposite apsis radius)/d(tangential impulse)=v*(rp+ra)^2/mu.
+    // Pe is the faster apsis, so it bounds both tangent sensitivities.
+    LOCAL altitudeAllowance IS impulseDv*peSpeed*span^2/mu.
+    LOCAL limit IS MAX(baseTolerance,0.1*MIN(apAlt,peAlt)).
+    RETURN MAX(baseTolerance,MIN(limit,altitudeAllowance)).
 }
 
 // ============================================================
@@ -1174,10 +1216,20 @@ GLOBAL FUNCTION shapeNextBurn {
         IF combined:ISTYPE("Lexicon") { RETURN combined. }
         IF ABORT OR phaseShouldYield { RETURN 0. }
     }
-    IF needAp2 AND NOT peFirst AND NOT aopFirst AND targets["AP"] >= SHIP:PERIAPSIS {
+    IF needAp2 AND NOT peFirst AND NOT aopFirst
+            AND targets["AP"] + altTol >= SHIP:PERIAPSIS {
         LOCAL etaPe IS ETA:PERIAPSIS.
         IF etaPe < 60 { SET etaPe TO etaPe + SHIP:ORBIT:PERIOD. }
-        LOCAL r4 IS _apsisBurn(etaPe, 0, targets["AP"], "set-ap", targets).
+        // A tangent burn cannot put Ap below its own burn altitude. If
+        // current Pe already lies inside the requested Ap corridor, a
+        // circular orbit there is acceptable; do not require an otherwise
+        // unexecutable far-Ap Pe trim before this major size reduction.
+        LOCAL reachableAp IS MAX(targets["AP"],SHIP:PERIAPSIS).
+        IF reachableAp > targets["AP"] {
+            mLog("STATS shape apsis-within-tolerance label=set-ap requestedAp="+targets["AP"]
+                + " reachableAp="+reachableAp+" tolerance="+altTol).
+        }
+        LOCAL r4 IS _apsisBurn(etaPe, 0, reachableAp, "set-ap", targets).
         IF r4:ISTYPE("Lexicon") { RETURN r4. }
     }
     IF needPe2 AND NOT aopFirst {
@@ -1199,7 +1251,7 @@ GLOBAL FUNCTION shapeNextBurn {
             planAoPChange(targets["AOP"],aopTol), "aop", targets).
         IF aopBurn:ISTYPE("Lexicon") { RETURN aopBurn. }
     }
-    IF needAp2 AND targets["AP"] < SHIP:PERIAPSIS {
+    IF needAp2 AND targets["AP"] + altTol < SHIP:PERIAPSIS {
         // AP target below current Pe and PE already in tolerance:
         // dip via the Ap burn anyway; next round restores PE.
         LOCAL etaAp2 IS ETA:APOAPSIS.
@@ -1419,7 +1471,14 @@ LOCAL FUNCTION _runShapePhase {
 // requested element is in tolerance or the burn budget runs out.
 // ============================================================
 GLOBAL FUNCTION phaseShape {
+    LOCAL priorAlt IS SHAPE_ALT_TOL.
+    IF SHAPE_OPERATIONAL_TOLERANCE > 0 {
+        SET SHAPE_ALT_TOL TO shapeOperationalAltitudeTolerance(shapeTargets(),priorAlt,SHAPE_MIN_BURN_DV).
+        mLog("STATS shape accuracy policy=operational configuredAltTolerance="+priorAlt
+            + " altTolerance="+SHAPE_ALT_TOL+" acceleration="+SHIP:AVAILABLETHRUST/MAX(0.01,SHIP:MASS)).
+    }
     _runShapePhase("SHAPE", "SHAPE_").
+    SET SHAPE_ALT_TOL TO priorAlt.
 }
 
 // DEPARTURE_SHAPE uses the same burn planner as SHAPE, but reads

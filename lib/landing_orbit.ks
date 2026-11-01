@@ -224,10 +224,13 @@ GLOBAL FUNCTION phaseLandPrep {
     }
     stateRemove("landing_orbit_ready").
     LOCAL targets IS intent["TARGETS"].
+    LOCAL prepAltTolerance IS shapeOperationalAltitudeTolerance(targets,LAND_PREP_ALT_TOL,LAND_PREP_MIN_BURN_DV).
     FOR row IN landingRouteLines(landingRouteSnapshot(targets)) { mLog(row). }
     mLog("STATS land-prep setup Ap=" + targets["AP"] + " Pe=" + targets["PE"]
         + " inc=" + targets["INC"] + " lan=" + targets["LAN"]
-        + " altTolerance=" + LAND_PREP_ALT_TOL + " reserve=" + LAND_PREP_RESERVE_DV).
+        + " altTolerance=" + prepAltTolerance + " configuredAltTolerance=" + LAND_PREP_ALT_TOL
+        + " accuracyPolicy=operational acceleration="+SHIP:AVAILABLETHRUST/MAX(0.01,SHIP:MASS)
+        + " minimumDv="+LAND_PREP_MIN_BURN_DV+" reserve=" + LAND_PREP_RESERVE_DV).
     // Scope only the common planner's control policy. Contract SHAPE goals,
     // precision settings and budget ledger are never rewritten.
     LOCAL priorAlt IS SHAPE_ALT_TOL.
@@ -235,7 +238,7 @@ GLOBAL FUNCTION phaseLandPrep {
     LOCAL priorFloor IS SHAPE_MIN_PE.
     LOCAL priorMinimum IS SHAPE_MIN_BURN_DV.
     LOCAL priorStage IS BURN_STAGE_LIMIT.
-    SET SHAPE_ALT_TOL TO LAND_PREP_ALT_TOL.
+    SET SHAPE_ALT_TOL TO prepAltTolerance.
     SET SHAPE_ANG_TOL TO LAND_PREP_ANG_TOL.
     SET SHAPE_MIN_PE TO MAX(0,LAND_PREP_MIN_PE).
     IF SHIP:BODY:ATM:EXISTS { SET SHAPE_MIN_PE TO MAX(SHAPE_MIN_PE,SHIP:BODY:ATM:HEIGHT+10000). }

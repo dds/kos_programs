@@ -154,10 +154,14 @@ def check_coarse_arrival_strict_final_orbit():
     class Errors(dict):
         HASKEY=dict.__contains__
     converged=function_body((ROOT/'lib/orbit_shape.ks').read_text(),'shapeConverged')
-    final=dict(cfg,targets={},shapeErrors=lambda _:Errors(AP=0,PE=0,PLANE=.8,AOP=0))
+    final=dict(cfg,targets={},SHIP=NS(PERIAPSIS=cfg['SHAPE_PE']),
+               _peFloor=lambda:cfg['SHAPE_MIN_PE'],
+               shapeErrors=lambda _:Errors(AP=0,PE=0,PLANE=.8,AOP=0))
     assert not execute(converged,final)
     final['shapeErrors']=lambda _:Errors(AP=0,PE=0,PLANE=.09,AOP=0)
     assert execute(converged,final)
+    final['SHIP'].PERIAPSIS=cfg['SHAPE_MIN_PE']-1
+    assert not execute(converged,final)
     assert cfg['BPLANE_MINIMUM_PE_TOL']==1500
     assert cfg['CAPTURE_MIN_PE']==7800 and cfg['CAPTURE_MAX_PE']==10800
     assert cfg['SHAPE_ANG_TOL']==.1 and cfg['SHAPE_RESERVE_DV']==900

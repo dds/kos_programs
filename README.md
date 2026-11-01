@@ -2106,8 +2106,11 @@ useful correction; if only tiny corrections remain outside the configured
 orbit tolerances, it holds at the prompt with those errors rather than
 declaring success. `STATS shape decision=skip` records the label, exact dV,
 floor and ETA; `STATS shape execution` records admitted burns and live errors.
-The `set-pe-for-ap` fallback is used only when the desired Ap really is below
-the current Pe, never just because a normal AP trim was below the minimum.
+The `set-pe-for-ap` fallback is used only when the entire allowed Ap corridor
+lies below current Pe, never just because a normal AP trim
+was below the minimum. If current Pe already lies inside the requested Ap
+corridor, the planner can circularize there instead of demanding a tiny Pe
+trim before lowering a large Ap. Final orbit checks still use the same corridor.
 
 When both apsides need adjustment and AoP is unconstrained, SHAPE first tests
 a combined radial/prograde burn at the next apoapsis. It can avoid a tiny
@@ -2132,6 +2135,18 @@ load solar support, install the maneuver KAC alarm before aiming, maintain
 the solar hold and return to burn alignment180 seconds before ignition.
 No KAC or failed solar aim retains the resident clock wait and normal
 alignment/cutoff checks.
+
+Operational parking profiles can set `SHAPE_OPERATIONAL_TOLERANCE=1` to use
+the same bounded accuracy policy as `LAND_PREP`: translate a20ms full-thrust
+impulse allowance, the minimum useful burn and executor residual into target
+apsis errors. This is an accuracy policy; the executor can limit thrust more
+finely. The extra allowance is capped at10% of the lower requested altitude
+and never tightens a wider configured tolerance. Target geometry keeps the
+corridor from changing with each major orbit correction. Plane tolerances,
+native node validation, fuel/stage limits and hard Pe clearance still apply.
+The default is0, so explicit orbital contracts retain their exact configured
+tolerances. Both Espoir Minmus landing profiles opt in with a1km baseline;
+the separate Minmus orbital-contract surveyor remains strict.
 
 Precision orbit profiles can explicitly lower `SHAPE_MIN_BURN_DV` and set
 `SHAPE_BURN_TOLERANCE` to a finer executor residual (minimum 0.001 m/s).
@@ -2709,10 +2724,17 @@ checks in `LAND_DEORBIT`.
 | `LAND_PREP_AP`, `LAND_PREP_PE` | -1 | Automatic low apsides; nonnegative values request explicit altitudes in metres |
 | `LAND_PREP_INC`, `LAND_PREP_LAN` | -1 | Preserve the current plane; set explicitly for different coverage |
 | `LAND_PREP_MIN_PE` | 10,000 m | Body-specific safety floor; atmosphere+10 km remains a hard minimum |
-| `LAND_PREP_ALT_TOL`, `LAND_PREP_ANG_TOL` | 1,000 m / 0.5° | Parking-orbit tolerances |
+| `LAND_PREP_ALT_TOL`, `LAND_PREP_ANG_TOL` | 1,000 m / 0.5° | Baseline altitude / plane tolerance; altitude also uses the bounded operational impulse allowance |
 | `LAND_PREP_MIN_BURN_DV` | 0.1 m/s | Smallest preparation correction |
 | `LAND_PREP_DV_CAP`, `LAND_PREP_TOTAL_DV_CAP` | 150 / 300 m/s | Per-burn and cumulative preparation allowances |
 | `LAND_PREP_RESERVE_DV` | 900 m/s | Minimum vacuum dV retained after preparation burns |
+
+Preparation always uses the operational accuracy policy described under
+SHAPE. Its setup diagnostic prints both the configured baseline and resolved
+altitude tolerance, current acceleration and minimum burn. A strong engine
+can therefore accept a useful parking orbit without requiring sub-minimum
+trims. For a15km target, extra altitude tolerance is bounded to1.5km; this
+cannot waive the independent10km minimum Pe or the final deorbit checks.
 
 The floor needs to suit the body's terrain. The reserve is a planning
 allowance, not proof that landing, ascent and return are affordable.
