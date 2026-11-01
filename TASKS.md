@@ -103,8 +103,20 @@ record remaining uncertainty before closing a task.
 
 - OPERATOR CONFIRMED northern Molniya contract complete (either dwell qualified).
   New request: retask Espoir-Mun-Surveyor1 to a polar Kerbin mapping orbit to
-  fill remaining biome holes;1468m/s available. Mapping retask command/profile
-  pending. Keep normal fuel/reserve/ledger and scanner/whole-probe safeguards.
+  fill remaining biome holes;1468m/s available. New orbital-only profile
+  kerbin_mapping_retask uses SHAPE/SCANSAT_OPS/DONE,160x230km polar, freeLAN/
+  AoP and BIOME scanners; whole scanner+relay probe stays attached, no auto
+  staging/disposal/deorbit/warp. Same northern Molniya caps1500 per burn/2500
+  cumulative/100m/s reserve, spent ledger preserved. Higher160km Pe saves
+  fuel over the initially proposed100km: independent impulsive estimate1340
+  vs1384m/s from nominal Molniya; actual native burn/fuel gates still govern.
+  Source fixture validates parameter/band/hardware/budget invariants and
+  nominal budget,0.14s. All113 routine files pass9.36s (78 verified unchanged
+  passes reused,35 executed),0 structural errors; existing KSC_DEORBIT warning
+  unchanged. The first catalog check flagged the new profile as unlisted;
+  its explicit fleet set now includes it. Native retask and biome gains
+  pending. Command at idle prompt with no unfinished node:
+  cmd/setphase("SHAPE","kerbin_mapping_retask"), REBOOT. No game/save edits.
   Earlier intermediate-orbit diagnosis:
   Espoir-Mun-Surveyor1 boot059 UT5751199 still has goto targets Ap=Pe3020km,
   inc63.4, no AoP target, altitude tolerance5km, minimum0.4m/s. Achieved
@@ -114,7 +126,8 @@ record remaining uncertainty before closing a task.
   was explicitly cleared with shaperetry at5751186.8). Existing command:
   setphase("SHAPE","kerbin_molniya_north"), REBOOT. Goal then changes to
   Ap2999751/Pe163584m/inc63.4/AoP270/e0.65. No profile/flight-code change
-  required to release the extra circular trim. Final Molniya flight pending.
+  required to release the extra circular trim. Contract completion is now
+  operator-confirmed above.
   Native logs:/tmp/ksp-deck-20261101T183421Z-fetch-wtom2la_/logs/
   Espoir-Mun-Surveyor1_5642520/boot_059_core.log; boot058fetch-5c4s3bff.
   Future improvement: explicit operational accuracy option for generated goto

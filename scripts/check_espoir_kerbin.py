@@ -77,6 +77,37 @@ def check_chutes_with_optional_power():
     print('PASS: chute-led Kerbin descent permits sub-unity TWR but still pays deorbit+50m/s, requires current thrust/chutes/finite readings; the terminal controller issues no lift command without authority and required-powered mode still refuses the same craft')
 
 
+def check_mapping_retask():
+    cfg=profile('kerbin_mapping_retask')
+    previous=profile('kerbin_molniya_north')
+    deps,phases,_=dependency_tables((ROOT/'lib/dependencies.ks').read_text())
+    assert cfg['SEQUENCE']==['SHAPE','SCANSAT_OPS','DONE']
+    assert cfg['TARGET_']=='KERBIN' and cfg['MISSION_TYPE']=='kerbin_orbit'
+    assert [cfg['SHAPE_'+key] for key in ('PE','AP','INC','LAN','AOP')]==[160000,230000,90,-1,-1]
+    assert cfg['SHAPE_MIN_PE']==80000 and cfg['SHAPE_PE']>70000 and cfg['SHAPE_AP']<250000
+    for key in ('SHAPE_DV_CAP','SHAPE_TOTAL_DV_CAP','SHAPE_RESERVE_DV'):
+        assert cfg[key]==previous[key]
+    assert cfg['PAYLOADS']==['SCANSAT','RELAY'] and cfg['SCANSAT_REQUIRED_TYPES']==['BIOME']
+    assert cfg['SCANSAT_DECOUPLER_TAG']=='' and cfg['SCANSAT_POWER_GUARD']==1
+    assert cfg['SCANSAT_POWER_LOW']<cfg['SCANSAT_POWER_RESUME']
+    for key in ('SCANSAT_DISPOSE_CARRIER','SCANSAT_DISPOSE_BEFORE_RELEASE',
+                'SCANSAT_STAGE_AFTER_RELEASE','SCANSAT_AUTO_DEORBIT','COAST_AUTO_WARP'):
+        assert cfg[key]==0
+    for phase in cfg['SEQUENCE']:assert closure(phases[phase.lower()],deps)
+    # Independent impulsive estimate for the nominal completed northern
+    # orbit: transverse-only plane rotation at the equator, lower Ap at Pe,
+    # then the small final Pe trim. Finite/native fuel checks still govern.
+    mu=3.5316e12;radius=600000
+    rp=radius+previous['SHAPE_PE'];ra=radius+previous['SHAPE_AP']
+    latus=2*rp*ra/(rp+ra)
+    plane=2*math.sqrt(mu/latus)*math.sin(math.radians(90-previous['SHAPE_INC'])/2)
+    goal_ap=radius+cfg['SHAPE_AP'];goal_pe=radius+cfg['SHAPE_PE']
+    speed=lambda here,other:math.sqrt(mu*(2/here-2/(here+other)))
+    ideal_cost=plane+speed(rp,ra)-speed(rp,goal_ap)+abs(speed(goal_ap,rp)-speed(goal_ap,goal_pe))
+    assert ideal_cost+cfg['SHAPE_RESERVE_DV']<1468
+    print('PASS: orbital retask removes completed Molniya/AoP/launch goals, targets160x230km polar inside the250km scanner ceiling, fits nominal impulsive fuel plus the retained100m/s reserve, and preserves the complete relay/scanner probe')
+
+
 def check_site_selection_and_atmo_admission():
     env,ship,state,events,overrides,_=review.fixture(True);kerbin(ship)
     cfg=profile('kerbin_lander');env.update(cfg);state.update(mission_id='kerbin_lander')
@@ -103,4 +134,5 @@ def check_site_selection_and_atmo_admission():
 if __name__=='__main__':
     check_profiles_and_local_launch()
     check_chutes_with_optional_power()
+    check_mapping_retask()
     check_site_selection_and_atmo_admission()

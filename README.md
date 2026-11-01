@@ -1223,6 +1223,7 @@ The two local Kerbin profiles below launch directly to100km polar parking.
 | `duna_lander` |70km polar Duna parking, surveyed site selection, chute-assisted powered landing |1500 /1300m/s |
 | `ike_lander` | High Duna capture,25km polar Ike parking, surveyed landing and surface science |1500 /1300m/s |
 | `kerbin_orbital_surveyor` |100×130km polar Kerbin mapping, complete probe retained | Local orbit |
+| `kerbin_mapping_retask` |160×230km polar biome mapping after a completed orbital contract; scanner and relay retained | Already in Kerbin orbit |
 | `kerbin_lander` |100km polar parking, operator-selected Kerbin landing, parachutes with optional engine assistance | Local orbit |
 | `minmus_orbital_surveyor` |1041045m Ap /465764m Pe,21.6deg inc,255.5deg LAN,157.3deg AoP; review before command-selected polar mapping | Minmus transfer and local operations |
 | `minmus_lander` |15km polar parking, selected-site landing, repeat orbital excursions by command | Minmus transfer and local operations |
@@ -1343,6 +1344,22 @@ range contains these mapping altitudes. Other payloads should use their own
 operating ranges. This is an empirical scheduling choice, not a forecast that
 every body will achieve the same gain. Existing on-station craft are not given
 an automatic burn by a reboot; use the explicit drift commands below.
+
+After a completed Kerbin orbital contract, an idle probe with working scanners
+can switch to the orbital-only polar mapping retask:
+
+```ks
+RUNPATH("0:/cmd/setphase.ks","SHAPE","kerbin_mapping_retask").
+REBOOT.
+```
+
+This targets160×230km at90deg, clears the old AoP goal, starts biome scanners
+and retains the complete relay/scanner craft. The profile keeps the northern
+Molniya shaping caps1500m/s per burn/2500m/s cumulative and100m/s fuel reserve;
+the existing spent ledger remains. The nominal Molniya conversion costs about
+1340m/s impulsively; actual native plans and fuel gates determine feasibility.
+It does not launch, release payloads or automatically deorbit. Use it with no
+unfinished maneuver; later scanorbit previews can use the live coverage map.
 
 To fill remaining map gaps from an existing near-polar survey orbit, stop
 automation at the prompt, keep a link and quicksave, then run:
