@@ -6,7 +6,7 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- IMPLEMENTED/source-checked; native corrected boot pending:
+- OPERATOR CONFIRMED corrected boot works in-game (c4d852c):
   Espoir-Minmus-Lander1 boot032..034 exits during LAND_DEORBIT library load;
   operator reports~10s simulation stall and persistent error after reboot.
   KSP.log proves ProgramBuilder.ReplaceLabels failure loading deorbit_burn,
@@ -24,7 +24,9 @@ record remaining uncertainty before closing a task.
   pass20.10s (17 unchanged verified passes reused,96 executed),0 structural
   errors; existing KSC_DEORBIT handler warning unchanged.
   Pull and linked REBOOT replaces deorbit_burn.ksm; no bootstrap rebuild.
-  Native recompiled labels/boot still require verification. No remote writes.
+  Operator confirms the fix; no new compiled-label dump was collected after
+  the correction. Subsequent deorbit/landing/hop flight remains a separate
+  validation. No remote writes.
   Diagnostic:/tmp/ksp-deck-20261101T191639Z-crash-d6c4tlh1/KSP.log.
   Archive-bytecode evidence obtained by read-only/tmp/kos-label-inspect.py.
 
