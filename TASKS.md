@@ -6,6 +6,16 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- NATIVE Minmus-Surveyor1 arrival reviewed: boot011 correction atUT5265488
+  plans0.484714m/s from479.63km Pe to467.01km, target465.764km/inc21.6deg.
+  Cutoff residual0.047868193m/s accepted; fresh unburned native corridor gate
+  passes at5265493.4 and advances COAST_2HALF. High Pe is intentional in
+  minmus_orbital_surveyor's contract-first profile, not a70km survey target.
+  Node lead300s is time from planning to burn; logged SOI gap18265.84s is
+  ~5h04m after the burn. No flight-code change warranted by this evidence.
+  /tmp/ksp-deck-20261101T015304Z-fetch-is768e_o/logs/
+  Espoir-Minmus-Surveyor1_5143320/boot_011_core.log; boot012fetch-weuxf0y4.
+
 - IMPLEMENTED/source-checked; native recovery retry pending: Mun polar-survey excursion blocked
   at SCIENCE_OPS after operator deleted a manual burn tail. Nativeboot035
   UT5234802 cutoff residual0.050157477m/s vs0.05 limit; boot036 SCIENCE_OPS
