@@ -40,7 +40,7 @@ def fixture(surface=False,profile='minmus_lander'):
         bootPreamble=lambda:None,bootLibLoad=lambda *_:None,RUNPATH=lambda *_:None,
         HOMECONNECTION=NS(ISCONNECTED=True),bootApplyMissionConfig=lambda *_:world['loaded'])
     env['STAGE'].DELTAV.VACUUM=1200
-    for name in ('excursionIdle','excursionOrbitSafe','excursionSelect','phaseExcursionReady'):
+    for name in ('excursionBlockReason','excursionIdle','excursionOrbitSafe','excursionSelect','phaseExcursionReady'):
         env[name]=lambda *args,name=name:entry.call(SOURCE,name,env,*args)
     return env,ship,state,events,updates,world
 
@@ -202,6 +202,42 @@ def check_command_and_checkpoint_guards():
     for path in ('cmd/orbit.ks','cmd/visit.ks'):
         assert not command_entrypoint_errors((ROOT/path).read_text())
     print('PASS: control/node/interruption/orbit/identity/fuel/config/option guards preserve state; no current-stage ascent credit from future stages, no burn or staging in command/checkpoint, and no arbitrary phase dispatch')
+
+
+def check_excursion_block_reasons():
+    # Deleting a visible tail is independent of the durable executor intent.
+    # The shared admission predicate must explain that distinction without
+    # clearing the evidence or authorizing a new phase under an old attempt.
+    for pending,started,reason in ((False,False,''),(True,False,'saved-burn-pending'),
+                                   (True,True,'saved-burn-pending'),(False,True,'saved-burn-started')):
+        env,_,state,events,updates,_=fixture(profile='mun_contract_survey_return')
+        state['phase']='SCIENCE_OPS'
+        state['burn_pending']='true' if pending else 'false'
+        state['burn_started']='true' if started else 'false'
+        state['burn_status']='aborted-residual'
+        state['burn_abort_reason']='residual-outside-tolerance'
+        before=state.copy()
+        assert env['excursionBlockReason']()==reason
+        assert env['excursionIdle']()==(not pending and not started)
+        if reason:
+            assert not env['excursionSelect'](fleet.native(dict(after='scan')),False)
+            assert state==before and not events and not updates
+    for fault,reason in (('abort','abort-active'),('node','maneuver-node-present'),
+                        ('disabled','mission-disabled'),('body','wrong-target-body'),
+                        ('phase','outside-review-phase'),('nan-thrust','physical-thrust'),
+                        ('nan-raw','raw-throttle'),('nan-pilot','pilot-throttle')):
+        env,ship,state,_,_,_=fixture()
+        if fault=='abort':env['ABORT']=True
+        if fault=='node':env['HASNODE']=True
+        if fault=='disabled':env['MISSION_EXCURSIONS']=0
+        if fault=='body':env['getTarget']=lambda:'Mun'
+        if fault=='phase':state['phase']='SHAPE'
+        if fault=='nan-thrust':ship.THRUST=math.nan
+        if fault=='nan-raw':ship.CONTROL.MAINTHROTTLE=math.nan
+        if fault=='nan-pilot':ship.CONTROL.PILOTMAINTHROTTLE=math.nan
+        assert env['excursionBlockReason']()==reason,(fault,env['excursionBlockReason']())
+        assert not env['excursionIdle']()
+    print('PASS: excursion admission names saved attempts after visible node deletion, Abort, disabled profile, body/phase mismatch and invalid throttle; all original guards/evidence remain intact')
 
 
 def check_per_visit_surface_science():
@@ -388,6 +424,7 @@ if __name__=='__main__':
     check_profiles_and_scanner_handoff()
     check_surface_relaunch_and_visit_checkpoint()
     check_command_and_checkpoint_guards()
+    check_excursion_block_reasons()
     check_per_visit_surface_science()
     check_contract_two_sites_return()
     check_surface_review_stop()

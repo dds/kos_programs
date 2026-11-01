@@ -6,6 +6,35 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native recovery retry pending: Mun polar-survey excursion blocked
+  at SCIENCE_OPS after operator deleted a manual burn tail. Nativeboot035
+  UT5234802 cutoff residual0.050157477m/s vs0.05 limit; boot036 SCIENCE_OPS
+  Pe1549.5/Ap1724.7km, remaining1611m/s. Operator confirms Abort=false,
+  saved status=interrupted/started=true/reason=residual-outside-tolerance.
+  No visible node is needed for the durable attempt to block an excursion.
+  Preserve all automatic gates; excursionBlockReason names the exact guard
+  and logs context instead of the generic enabled/idle/Abort message.
+  Explicit cmd/burnclear accepts only a proven stopped residual-only manual
+  review attempt <=0.25m/s, matching mission/body/launch/phase, no node,
+  enabled airless bound orbit Pe>=10km, zero thrust/raw/pilot and Abort clear.
+  Atomic exact-field removal retains raw reports, phase, ledger, departure
+  history and engine restoration. No maneuver/staging/automatic progression.
+  Re-run cmd/orbit(after=scan), then REBOOT. Native cleanup retry pending.
+  boot035:/tmp/ksp-deck-20261101T012816Z-fetch-26xb19fe/logs/
+  Espoir-Mun-Surveyor1_5156306/boot_035_core.log; boot036fetch-dmbqk476.
+  All107 routine check files pass158.22s;376 scripts/100 profiles/82 phases/
+  44 bands,0 structural errors and unchanged KSC_DEORBIT warning. New cases
+  0.015..0.083s cover the real executor's interrupted status,44 unsafe/foreign
+  refusals, atomic real state cleanup and actual polar-excursion return tail.
+  /tmp/kos-excursion-clear-20261101.json and.log. No production changes during
+  or after that suite. Pull/reboot once before using the new library helper.
+
+- QUEUED after the Mun excursion recovery: bounded nearby inclination
+  candidates for manual scanorbit. Current near-perfect90deg Kerbin plane
+  makes old polar/mirror trials sub-minimum; try small tilts on either side
+  under existing mission/stage/reserve/75..105deg/native-plane/paired-score
+  ownership and deadline guards. No inclination-search code changed yet.
+
 - NATIVE comparison read at user request: Espoir-Kerbin-Surveyor1
   scanorbit5202760 uses schema2/Biome,384 paired samples and all8 drift
   trials; finishes18.56game/22.28wall seconds, no deadline/context failure.

@@ -3,16 +3,28 @@
 
 GLOBAL EXCURSION_RESERVE_DV IS 300.
 
+GLOBAL FUNCTION excursionBlockReason {
+    IF NOT (MISSION_EXCURSIONS > 0) { RETURN "mission-disabled". }
+    IF SHIP <> KUNIVERSE:ACTIVEVESSEL { RETURN "inactive-vessel". }
+    IF ABORT { RETURN "abort-active". }
+    IF WARP <> 0 { RETURN "warp-active". }
+    IF HASNODE { RETURN "maneuver-node-present". }
+    IF SHIP:BODY:NAME <> getTarget() { RETURN "wrong-target-body". }
+    IF NOT (SHIP:THRUST <= 0.001) { RETURN "physical-thrust". }
+    IF NOT (SHIP:CONTROL:MAINTHROTTLE <= 0) { RETURN "raw-throttle". }
+    IF NOT (SHIP:CONTROL:PILOTMAINTHROTTLE <= 0) { RETURN "pilot-throttle". }
+    IF stateGet("burn_pending","false") = "true" { RETURN "saved-burn-pending". }
+    IF stateGet("burn_started","false") = "true" { RETURN "saved-burn-started". }
+    IF stateGet("deorbit_burn_started","false") = "true" { RETURN "saved-deorbit-started". }
+    IF stateGet("hop_route_active",FALSE) { RETURN "hop-route-active". }
+    IF NOT LIST("DONE","SCIENCE_OPS","SCANSAT_OPS","LANDING_REVIEW","SURFACE_REVIEW"):CONTAINS(stateGet("phase","")) {
+        RETURN "outside-review-phase".
+    }
+    RETURN "".
+}
+
 GLOBAL FUNCTION excursionIdle {
-    RETURN MISSION_EXCURSIONS > 0 AND SHIP = KUNIVERSE:ACTIVEVESSEL AND NOT ABORT
-        AND WARP = 0 AND NOT HASNODE AND SHIP:BODY:NAME = getTarget()
-        AND SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
-        AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0
-        AND stateGet("burn_pending","false") <> "true"
-        AND stateGet("burn_started","false") <> "true"
-        AND stateGet("deorbit_burn_started","false") <> "true"
-        AND NOT stateGet("hop_route_active",FALSE)
-        AND LIST("DONE","SCIENCE_OPS","SCANSAT_OPS","LANDING_REVIEW","SURFACE_REVIEW"):CONTAINS(stateGet("phase","")).
+    RETURN excursionBlockReason() = "".
 }
 
 GLOBAL FUNCTION excursionOrbitSafe {
@@ -26,8 +38,24 @@ GLOBAL FUNCTION excursionSelect {
     PARAMETER opts.
     PARAMETER visit.
     IF NOT opts:ISTYPE("Lexicon") { RETURN FALSE. }
-    IF NOT excursionIdle() OR SHIP:BODY:ATM:EXISTS {
-        PRINT "Local excursions require an enabled airless mission at an idle review/DONE prompt, no node or interrupted burn, Abort clear.".
+    LOCAL blocked IS excursionBlockReason().
+    IF blocked = "" AND SHIP:BODY:ATM:EXISTS { SET blocked TO "atmospheric-body". }
+    IF blocked <> "" {
+        mLogWarn("STATS excursion blocked reason=" + blocked
+            + " phase=" + stateGet("phase","") + " body=" + SHIP:BODY:NAME
+            + " target=" + getTarget() + " enabled=" + MISSION_EXCURSIONS
+            + " abort=" + ABORT + " warp=" + WARP + " node=" + HASNODE
+            + " thrust=" + SHIP:THRUST + " raw=" + SHIP:CONTROL:MAINTHROTTLE
+            + " pilot=" + SHIP:CONTROL:PILOTMAINTHROTTLE
+            + " pending=" + stateGet("burn_pending","false")
+            + " started=" + stateGet("burn_started","false")
+            + " burnPhase=" + stateGet("burn_phase","")
+            + " burnStatus=" + stateGet("burn_status","")
+            + " burnReason=" + stateGet("burn_abort_reason","")).
+        PRINT "Local excursion blocked: " + blocked + ". Nothing changed.".
+        IF blocked = "saved-burn-pending" OR blocked = "saved-burn-started" {
+            PRINT "Removing a map node does not clear its saved maneuver attempt. Inspect with cmd/burnreport.ks.".
+        }
         RETURN FALSE.
     }
     LOCAL surface IS SHIP:STATUS = "LANDED" AND SHIP:VELOCITY:SURFACE:MAG <= 0.5.

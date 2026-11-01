@@ -86,6 +86,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/convertstatejson.ks").` | Convert legacy SimpleJSON state to native kOS JSON |
 | `RUNPATH("0:/cmd/logs.ks").` | Archive the current boot's flight log to KSC |
 | `RUNPATH("0:/cmd/burnreport.ks").` | Print the latest maneuver cutoff and subsequent accepted mission handoff, retained across reboots |
+| `RUNPATH("0:/cmd/burnclear.ks").` | Explicitly dismiss a stopped manual review burn's residual-only tail up to0.25m/s after deleting its node; safe enabled airless review orbit required. Keeps phase, reports and budget |
 | `RUNPATH("0:/cmd/burncheck.ks").` | Read-only ignition check: engine availability, autopilot suppression, CPU roles/IPU, and timed throttle-governor probes against the retained node; never fires engines |
 | `RUNPATH("0:/cmd/deorbitcheck.ks").` | Read-only deorbit snapshot: keep the suspect node attached and run in manual mode with an archive link; saves and verifies the report under `0:/logs/archive/_diagnostics/` |
 | `RUNPATH("0:/cmd/deorbitretry.ks").` | Discard the next unflown moon landing node while preserving the configured target, mission and overrides; then reboot to replan. Refuses committed/interrupted burns or unsafe controls/orbits |
@@ -1339,6 +1340,19 @@ and start the attached scanners:
 RUNPATH("0:/cmd/orbit.ks",LEXICON("after","scan")).
 REBOOT.
 ```
+
+Excursion rejection names the actual blocker and records a compact
+`STATS excursion blocked` row. Deleting a visible maneuver node does not
+clear the executor's saved `burn_pending`/`burn_started` markers. Inspect
+`RUNPATH("0:/cmd/burnreport.ks").` first. After a manually completed burn at
+an idle review prompt, if its only failure is a stopped residual tail of
+at most0.25m/s, delete that tail node and explicitly acknowledge the achieved
+orbit with `RUNPATH("0:/cmd/burnclear.ks").`, then repeat the orbit command.
+This requires the same mission/body/launch/phase, a bound airless orbit with
+Pe at least10km, Abort clear, zero thrust and throttle, and no remaining node.
+It preserves the strict cutoff report, current phase, fuel ledgers, departure
+history and engine-restoration intent. Marker removal is one state write;
+ordinary excursion commands and automatic residual recovery remain strict.
 
 `minmus_contract_lander_return` adds a complete return-capable campaign. It
 launches into85km LKO, captures Minmus at15km Pe with the contract's high Ap,
