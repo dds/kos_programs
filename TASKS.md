@@ -6,6 +6,27 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native retry pending: user requests wider tolerance
+  on Espoir-Mun-Surveyor1's0.015126m/s set-ap trim. Nativeboot026 confirms
+  majorPe raise96.76m/s done, AoP0.872827m/s executed and benign1.025mm/s
+  tail accepted; final errors Ap-623.923m/Pe+82.342m/AoP+.075deg/plane.033.
+  Mission-only SHAPE_ALT_TOL500->1000m; angular/minimum/burn precision,
+  budgets and400m/s reserve unchanged. Explicit shaperetry("unflown") cancels
+  only matching never-ignited scheduled node/attempt and owned timed Burn
+  alarm before reboot, preserving reports/ledgers/SOI/foreign alarms. Default
+  interrupted-only retry guard is retained. Needed because a now-converged
+  SHAPE could otherwise advance while the old unflown marker/node survives.
+  Native also confirms cached solar reacquisition51.86s to0.12deg/.051deg/s,
+  positiveflow1.14 and held steering on the long trim wait. Engine restore
+  and sequencing flight evidence has improved; full scanning remains open.
+  Read-only:/tmp/ksp-deck-20261101T004311Z-fetch-55a97xp2/logs/
+  Espoir-Mun-Surveyor1_5156306/boot_026_core.log.
+  All106 routine check files pass152.69s,0 structural errors and unchanged
+  KSC_DEORBIT warning. Cancellation/source-policy cases0.072/0.135s; prior
+  strict500m planner regression retained independently of this profile.
+  Report:/tmp/kos-mun-tolerance-cancel-final-20261101.json and.log.
+  No production edits during/after suite; documentation completed afterward.
+
 - IMPLEMENTED/source-checked; native retry pending: improve scanorbit after Espoir-Kerbin-Surveyor1's unchanged
   preview/no-useful-change at5197920. Nearly90deg orbit means polar/mirror
   are sub-minimum; only +/-5km apsis probes were scored. Same map40s earlier
@@ -73,8 +94,8 @@ record remaining uncertainty before closing a task.
   mirror changes below minimum. First-loop cleanup fix now runs both
   candidates natively. Old5197881 failedafteronecandidate; it had+Ap38.48
   vs baseline34.05 with identical37.978% coverage only40s earlier.
-  Sampling-window phase sensitivity limits confidence; consider anchoring
-  sample epochs to a stable orbital event. Current comparisons are sparse
+  Sampling-window phase sensitivity is addressed by the paired, anchored
+  helper above; native corrected comparison still pending. Comparisons are sparse
   ground-track proxies, not proof no better orbit exists. Archive evidence:
   /tmp/ksp-deck-20261031T233911Z-fetch-4wxlwu49/logs/_diagnostics/
   scanorbit_Espoir-Kerbin-Surveyor1_5197920.log (previousfetch-vpi5_n9i).

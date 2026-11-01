@@ -141,7 +141,7 @@ def retry_fixture():
     def remove_prefix(prefix):
         for key in list(state):
             if key.startswith(prefix): del state[key]
-    env = dict(SHIP=ship, ABORT=False, HASNODE=True, NEXTNODE=node,
+    env = dict(SHIP=ship, ABORT=False, HASNODE=True, NEXTNODE=node,mode='interrupted',
                stateGet=state.get, stateGetNum=state.get, stateRemovePrefix=remove_prefix,
                fixture_remove=removed.append, fixture_settle=lambda: None)
     env['ready'] = lambda: execute(function_body(RETRY, 'ready'), dict(env))
@@ -228,9 +228,39 @@ def check_interrupted_shape_preserves_node():
     print('PASS: interrupted SHAPE holds at entry and immediately after a failed flown burn, restores precision, retains node, and never spends retry waits or silently replaces the plan')
 
 
+def check_explicit_unflown_cancel():
+    from check_espoir_fleet import Items
+    for fault in ('none','started','default','foreign','mission','launch','dv','pilot','active'):
+        env,state,removed=retry_fixture();env['mode']='unflown'
+        state.update(burn_started='false',burn_mission_id=state['mission_id'],burn_launch_time=100,
+            burn_dv=.0151261459,burn_start_time=1000)
+        node=env['NEXTNODE'];node.DELTAV=NS(MAG=.0151261459)
+        env.update(KUNIVERSE=NS(ACTIVEVESSEL=env['SHIP']),ALLNODES=Items([node]),
+            ADDONS=NS(KAC=NS(AVAILABLE=True)),kacShipAlarmName=lambda label:'probe: '+label)
+        alarms=[NS(NAME='probe: Burn',TIME=940,ID='owned'),NS(NAME='other: Burn',TIME=940,ID='other'),
+            NS(NAME='probe: Enter SOI',TIME=940,ID='soi'),NS(NAME='probe: Burn',TIME=1940,ID='foreign')]
+        deleted=[];env.update(LISTALARMS=lambda _:alarms,DELETEALARM=deleted.append)
+        if fault=='started':state['burn_started']='true'
+        if fault=='default':env['mode']='interrupted'
+        if fault=='foreign':node.TIME=2000
+        if fault=='mission':state['burn_mission_id']='other'
+        if fault=='launch':state['burn_launch_time']=101
+        if fault=='dv':node.DELTAV.MAG=1
+        if fault=='pilot':env['SHIP'].CONTROL.PILOTMAINTHROTTLE=.1
+        if fault=='active':env['KUNIVERSE'].ACTIVEVESSEL=NS()
+        before=state.copy()
+        assert bool(retry(env))==(fault=='none'),fault
+        if fault=='none':
+            assert removed==[node] and deleted==['owned']
+            assert state=={k:v for k,v in before.items() if not k.startswith('burn_')}
+        else:assert not removed and not deleted and state==before,fault
+    print('PASS: explicit unflown mode cancels only its matching never-ignited node/attempt and timed burn alarm; preserves mission/budget/report/SOI/foreign alarms and refuses flown/default/unowned/unsafe cases')
+
+
 if __name__ == '__main__':
     check_latched_trim_after_settling()
     check_completion_evidence_and_faults()
     check_handoff_diagnostic_after_cutoff()
     check_shape_recovery()
     check_interrupted_shape_preserves_node()
+    check_explicit_unflown_cancel()

@@ -1,19 +1,32 @@
 // Replan SHAPE or LAND_PREP from the achieved orbit after an interrupted burn.
 // RUNPATH("0:/cmd/shaperetry.ks"). Then REBOOT. Does not ignite or advance.
+// Pass "unflown" to explicitly cancel an owned, never-ignited scheduled trim.
 @LAZYGLOBAL OFF.
+PARAMETER mode IS "interrupted".
 
 LOCAL FUNCTION _cmdShaperetry {
     RUNPATH("1:/lib/boot_lib").
     bootPreamble().
+    IF mode <> "interrupted" AND mode <> "unflown" {
+        PRINT "Use interrupted (default) or unflown. Nothing changed.". RETURN.
+    }
     LOCAL FUNCTION ready {
         LOCAL floorAlt IS 0.
         IF SHIP:BODY:ATM:EXISTS { SET floorAlt TO SHIP:BODY:ATM:HEIGHT. }
         LOCAL phase_ IS stateGet("phase","").
+        LOCAL expectedStarted IS "true".
+        IF mode = "unflown" {
+            SET expectedStarted TO "false".
+            IF SHIP <> KUNIVERSE:ACTIVEVESSEL OR NOT HASNODE OR ALLNODES:LENGTH <> 1
+                    OR stateGet("burn_mission_id","") <> stateGet("mission_id","")
+                    OR stateGetNum("burn_launch_time",-1) <> stateGetNum("launch_time",0)
+                    OR NOT (ABS(NEXTNODE:DELTAV:MAG-stateGetNum("burn_dv",-1)) <= 0.001) { RETURN FALSE. }
+        }
         RETURN (phase_ = "SHAPE" OR phase_ = "LAND_PREP")
             AND stateGet("burn_phase","") = phase_
             AND stateGet("burn_body","") = SHIP:BODY:NAME
             AND stateGet("burn_pending","false") = "true"
-            AND stateGet("burn_started","false") = "true"
+            AND stateGet("burn_started","false") = expectedStarted
             AND SHIP:STATUS = "ORBITING" AND SHIP:PERIAPSIS > floorAlt
             AND SHIP:ORBIT:ECCENTRICITY >= 0 AND SHIP:ORBIT:ECCENTRICITY < 1
             AND NOT SHIP:ORBIT:HASNEXTPATCH
@@ -22,7 +35,7 @@ LOCAL FUNCTION _cmdShaperetry {
     }
     LOCAL FUNCTION resetShape {
         IF NOT ready() {
-            PRINT "Orbit retry requires its SHAPE/LAND_PREP interrupted burn, matching body, stable orbit, Abort clear and all thrust/throttle zero. Nothing changed.".
+            PRINT "Orbit retry requires a matching SHAPE/LAND_PREP attempt in the requested mode, stable orbit, Abort clear and all thrust/throttle zero. Nothing changed.".
             RETURN FALSE.
         }
         SET WARP TO 0.
@@ -40,6 +53,14 @@ LOCAL FUNCTION _cmdShaperetry {
             }
             REMOVE NEXTNODE.
         }
+        IF mode = "unflown" AND ADDONS:KAC:AVAILABLE {
+            LOCAL alarmUt IS stateGetNum("burn_start_time",-1)-60.
+            FOR alarm_ IN LISTALARMS("All") {
+                IF alarm_:NAME = kacShipAlarmName("Burn") AND ABS(alarm_:TIME-alarmUt) < 60 {
+                    DELETEALARM(alarm_:ID).
+                }
+            }
+        }
         // Keep last_burn_report, budget ledger, mission, phase and overrides.
         // bootPreamble restores any interrupted CPU setting before clearing it.
         stateRemovePrefix("burn_").
@@ -47,7 +68,7 @@ LOCAL FUNCTION _cmdShaperetry {
         RETURN TRUE.
     }
     IF resetShape() {
-        PRINT "Interrupted orbit-shaping attempt cleared; achieved orbit and mission budget retained.".
+        PRINT "Orbit-shaping attempt cleared; achieved orbit and mission budget retained.".
         PRINT "REBOOT. to load updates and plan remaining corrections. No burn started here.".
     }
 }

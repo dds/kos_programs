@@ -95,7 +95,9 @@ def check_contract_order_and_final_tolerances():
     # Prescribed measured errors, with optimizer responses supplied separately:
     # this proves the actual selector's order, not native AoP propagation.
     env,_,_=ordering.fixture();cfg=fleet.profile('mun_contract_survey_return')
-    env.update(cfg,SHAPE_AOP_TOL=.5)
+    # Preserve the generic stricter500m ordering regression independently of
+    # this mission's operator-requested1km acceptance policy.
+    env.update(cfg,SHAPE_AOP_TOL=.5,SHAPE_ALT_TOL=500)
     targets=ordering.Lex(AP=cfg['SHAPE_AP'],PE=cfg['SHAPE_PE'],INC=cfg['SHAPE_INC'],AOP=cfg['SHAPE_AOP'])
     ship=env['SHIP'];ship.APOAPSIS=1737030;ship.PERIAPSIS=13730
     ship.ORBIT.ECCENTRICITY=.8012;ship.ORBIT.INCLINATION=179.967
@@ -121,7 +123,11 @@ def check_contract_order_and_final_tolerances():
     # can never make a650m error count as a500m goal success.
     errors.update(AP=5000,AOP=-3.3);calls.clear()
     assert ordering.execute('shapeNextBurn',env)['label']=='set-ap' and calls==['set-ap']
-    print('PASS: updated live Mun contract selects major Pe raise, then34.3deg AoP, then remaining Ap cleanup;650m error still fails500m final tolerance and large-size changes retain priority')
+    env['SHAPE_ALT_TOL']=cfg['SHAPE_ALT_TOL']
+    errors.update(AP=-623.9228707,PE=82.34217653,AOP=.075);calls.clear()
+    assert cfg['SHAPE_ALT_TOL']==1000 and ordering.execute('shapeConverged',env)
+    assert ordering.execute('shapeNextBurn',env)==0 and not calls
+    print('PASS: generic500m planner retains Pe->AoP->Ap priority and strict convergence; this mission1km policy accepts native624m Ap/82m Pe/.075deg AoP without the pointless0.015m/s trim')
 
 
 def check_aop_contract_deadband():

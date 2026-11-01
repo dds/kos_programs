@@ -1224,9 +1224,10 @@ a substitute for the actual lander thrust/fuel checks.
 
 The Espoir Mun profile `mun_contract_survey_return` captures with15km Pe
 and the contract's high Ap, then reaches Ap1737680m/Pe1543150m at180deg
-inclination and34.3deg AoP. LAN is unconstrained. A linked reboot refreshes
-this profile during an existing SHAPE phase while preserving the mission,
-return tail and recorded expenditure. An unflown SHAPE node is replanned;
+inclination and34.3deg AoP, with a 1 km apsis tolerance. LAN is unconstrained.
+A linked reboot refreshes this profile during an existing SHAPE phase while
+preserving the mission, return tail and recorded expenditure. Cancel an
+obsolete scheduled trim with `shaperetry.ks,"unflown"` before rebooting;
 an interrupted burn retains its normal review/retry requirement.
 Confirm the contract at SCIENCE_OPS before selecting the polar survey:
 
@@ -2055,6 +2056,15 @@ raw and pilot throttle; it clears only the attempt and matching next node,
 retaining the budget, profile, overrides and last burn report. If an older
 version left a different retry node, it preserves that node: inspect it and,
 if unwanted, `REMOVE NEXTNODE.` before retrying the command.
+
+To cancel a scheduled SHAPE/LAND_PREP trim that has never ignited, use
+`RUNPATH("0:/cmd/shaperetry.ks","unflown").` then `REBOOT.`. This explicit
+mode requires the saved mission/launch/body, node time and dV to match,
+idle controls and a safe orbit. It removes that node, its matching timed
+Burn alarm and attempt markers, preserving the mission, fuel ledger,
+last burn report and other alarms. Interrupted burns retain the default
+retry mode. For the Mun profile's old624m Ap trim, the updated1km tolerance
+then lets SHAPE complete without scheduling another correction.
 
 The executor distinguishes its full-vector live cutoff sample from the
 residual measured after thrust settles. Only a recorded `live-node-trim`
