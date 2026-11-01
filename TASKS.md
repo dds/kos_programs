@@ -6,7 +6,28 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- NATIVE intermediate Kerbin orbit reached; northern Molniya switch pending:
+- IMPLEMENTED/source-checked; native waypoint-hop command pending:
+  Espoir-Minmus-Lander1 next surveyed sites are A1.460,-42.638,
+  B1.214,-45.200 and C0.221,-47.220. Operator wants selected navigation
+  waypoints and suborbital hops, not the15km parking-orbit visit excursion.
+  Existing cmd/landsite with no arguments selects A from LANDING_REVIEW;
+  REBOOT starts guarded deorbit planning. cmd/hop now accepts no arguments
+  after A's surface science/review: resolve selected same-body B, delegate
+  to the existing one-site route with700m/s return allowance, then operator
+  REBOOT. Numeric arguments remain valid. During existing hop review the
+  same no-argument command delegates to hopWaypoint, retaining the original
+  route restore settings/reserve and rebooting through its existing guards.
+  Local printed1:/run/hop,"waypoint" selects C without an archive link;
+  printed continue after the last hop restores the configured Kerbin return.
+  No flight-library, band, staging or reserve-policy change. All9 focused
+  hop-route checks pass in0.09s, including actual selectedWaypoint -> actual
+  cmd/hop -> actual cmd/hoproute, original return identity and refusal cases.
+  All113 routine files pass2.63s (103 unchanged verified results reused,
+  10 executed),0 structural errors; existing KSC_DEORBIT handler warning
+  unchanged. New command's native execution pending. No Deck/game/save edits.
+
+- OPERATOR CONFIRMED northern Molniya maneuver now correctly configured;
+  final orbit completion pending:
   Espoir-Mun-Surveyor1 boot059 UT5751199 still has goto targets Ap=Pe3020km,
   inc63.4, no AoP target, altitude tolerance5km, minimum0.4m/s. Achieved
   3014.4x3023.2km/e0.0012; remaining Pe trim0.381m/s is skipped. This is the

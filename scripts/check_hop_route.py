@@ -277,6 +277,78 @@ def check_route_command_execution():
     print('PASS: actual command configures without launching, retains restore intent, and rejects Abort/nodes/non-surface/atmosphere/throttle/terrain/range/insufficient permitted-stage fuel before saving a route')
 
 
+def check_selected_waypoint_command():
+    cmd=(ROOT/'cmd/hop.ks').read_text()
+    assert not command_entrypoint_errors(cmd)
+    assert 'PARAMETER targetLat IS 999.' in cmd and 'PARAMETER targetLng IS 999.' in cmd
+    command_nodes=without_prints(ks.parse(function_body(cmd,'_cmdHop')))
+    route_nodes=without_prints(ks.parse(function_body((ROOT/'cmd/hoproute.ks').read_text(),'_cmdHoproute')))
+    waypoint_nodes=without_prints(ks.parse(function_body((ROOT/'lib/utils.ks').read_text(),'selectedWaypoint')))
+    def invoke(nodes,env):
+        try:ks.run(nodes,dict(env))
+        except ks.Returned as result:return result.value
+    for fault in ('valid','numeric','active','missing','unselected','foreign','abort','node',
+                  'airborne','moving','atmosphere','raw','pilot','physical','profile',
+                  'identity','fuel','terrain','active-wrong-phase'):
+        env,state,updates,events,keys=fixture()
+        active=fault in ('active','active-wrong-phase')
+        state.update(vehicle='Espoir',mission_id='minmus_contract_lander_return',
+                     phase='HOP_REVIEW' if active else 'SURFACE_REVIEW',hop_route_active=active)
+        wp=NS(LATITUDE=1.214,LONGITUDE=-45.200,ISSELECTED=True,BODY=NS(NAME='Minmus'))
+        waypoints=KList([wp]);runs=[]
+        env['SHIP'].THRUST=0;env['SHIP'].CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0)
+        env.update(targetLat=999,targetLng=999,toleranceM=750,pitchDeg=45,
+                   maxBurnSeconds=90,maxApKm=5,hopTwr=2.5,bootPreamble=lambda:None,
+                   bootLibLoad=lambda *_:None,bootApplyMissionConfig=lambda *_:fault!='profile',
+                   HOMECONNECTION=NS(ISCONNECTED=True),ALLWAYPOINTS=lambda:waypoints,
+                   SEQUENCE=Items(['LAND_ASSIST','SURFACE_SCIENCE','SURFACE_REVIEW','SURFACE_RETURN_SETUP']),
+                   TARGET_LAT=1.460,TARGET_LNG=-42.638,TARGET_LOCK=1,TARGET_WAYPOINT='',
+                   LANDING_USE_WAYPOINTS=0,LANDING_FLEXIBLE_SITE=0,LANDING_ECONOMY_BRAKE=1,
+                   LANDING_STAGE_BRAKE_CREDIT=1,LANDING_POWERED_LEAD=1,LANDING_STAGE_DISCARD_HSPEED=0,
+                   RELOAD_AFTER_LAND_ASSIST=0)
+        env['selectedWaypoint']=lambda:invoke(waypoint_nodes,env)
+        def runpath(path,*args):
+            runs.append(path)
+            if path=='0:/cmd/hoproute.ks':
+                child=dict(env);child.update(zip(('sites','returnReserveDv','toleranceM',
+                    'pitchDeg','maxBurnSeconds','maxApKm','hopTwr'),args))
+                invoke(route_nodes,child)
+        env['RUNPATH']=runpath
+        if fault=='numeric':env.update(targetLat=wp.LATITUDE,targetLng=wp.LONGITUDE);waypoints.clear()
+        if fault=='missing':waypoints.clear()
+        if fault=='unselected':wp.ISSELECTED=False
+        if fault=='foreign':wp.BODY.NAME='Mun'
+        if fault=='abort':env['ABORT']=True
+        if fault=='node':env['HASNODE']=True
+        if fault=='airborne':env['SHIP'].STATUS='FLYING'
+        if fault=='moving':env['SHIP'].VELOCITY.SURFACE.MAG=1
+        if fault=='atmosphere':env['SHIP'].BODY.ATM.EXISTS=True
+        if fault=='raw':env['SHIP'].CONTROL.MAINTHROTTLE=.1
+        if fault=='pilot':env['SHIP'].CONTROL.PILOTMAINTHROTTLE=.1
+        if fault=='physical':env['SHIP'].THRUST=1
+        if fault=='identity':state['mission_id']=''
+        if fault=='fuel':env['STAGE'].DELTAV.VACUUM=1
+        if fault=='terrain':env['landingTerrainGrade']=lambda *_:1
+        if fault=='active-wrong-phase':state['phase']='HOP'
+        restore=state['hop_route_restore'].copy()
+        rebooted=False
+        try:invoke(command_nodes,env)
+        except Reboot:rebooted=True
+        accepted=fault in ('valid','numeric','active')
+        assert bool(updates)==accepted,fault
+        assert rebooted==(fault=='active'),fault
+        assert state['mission_id']==('' if fault=='identity' else 'minmus_contract_lander_return')
+        if accepted:
+            assert state['phase']=='HOP' and updates['HOP_TARGET_LAT']==1.214 and updates['HOP_TARGET_LNG']==-45.200
+            if active:
+                assert state['hop_route_restore']==restore and state['hop_route_pending']==1
+                assert state['hop_route_sites'][1]==[1.214,-45.200] and '0:/cmd/hoproute.ks' not in runs
+            else:
+                assert state['hop_route_restore']['SEQUENCE']==env['SEQUENCE']
+                assert updates['HOP_RETURN_RESERVE_DV']==700 and state['hop_route_sites']==[[1.214,-45.200]]
+    print('PASS: selected same-body waypoint arms the real first-hop route without ignition, numeric calls still work, active reviews reuse the original return plan, and missing/foreign waypoints or unsafe contexts leave the route unchanged')
+
+
 def check_limits_and_finish():
     env,state,updates,events,keys=fixture()
     engine1=NS(UID=101,THRUSTLIMIT=100);engine2=NS(UID=102,THRUSTLIMIT=80)
@@ -309,4 +381,5 @@ if __name__=='__main__':
     check_local_prompt_script()
     check_command_and_offline_band()
     check_route_command_execution()
+    check_selected_waypoint_command()
     check_limits_and_finish()

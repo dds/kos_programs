@@ -77,7 +77,8 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/flybyscience.ks",1).` | Enable optional science on configured flybys at the next reboot; `0` disables it. Adds no maneuver allowance |
 | `RUNPATH("0:/cmd/airtest.ks").` | Airplane assist shakeout card (see [Aircraft](#aircraft)) |
 | `RUNPATH("0:/cmd/setphase.ks", "PHASE").` | Force a phase, keep the mission |
-| `RUNPATH("0:/cmd/hoproute.ks", LIST(LIST(lat1,lng1),LIST(lat2,lng2)),700).` | Save local airless rocket hops while landed; replace coordinates, review, then reboot. Stops after every landing for science; N continues, R restores return/DONE. Last argument reserves return dV |
+| `RUNPATH("0:/cmd/hoproute.ks", LIST(LIST(lat1,lng1),LIST(lat2,lng2)),700).` | Save local airless rocket hops while landed; replace coordinates, review, then reboot. Stops after every landing and prints commands to continue or return. Last argument reserves return dV |
+| `RUNPATH("0:/cmd/hop.ks").` | Suborbital rocket hop to the selected same-body waypoint. First hop saves a route; reboot to launch. At an existing hop review, validates and launches the next selected waypoint through the shared review action |
 | `RUNPATH("0:/cmd/hopnext.ks",3).` | Select site 3 of a saved hop route without igniting; reboot when ready. Omit the number for a site menu; 0 selects the configured return |
 | `RUNPATH("0:/cmd/minmusrecover.ks").` | Select RO8 landing recovery; use argument `"waypoint"` for a visually chosen selected site without SCANsat coverage; then reboot |
 | `RUNPATH("0:/cmd/resetmission.ks").` | Clear the profile; next boot shows the picker |
@@ -136,6 +137,18 @@ body, checking normal terrain slope and limiting each leg to a quarter of the
 body radius. Run it while landed, idle and linked; it does not launch until
 you reboot. `cmd/hop` is the one-site form. These are rocket ballistic hops,
 separate from FDR1's RCS drone missions. This new route path needs flight testing.
+
+For an orbital landing followed by short suborbital hops, select the first
+navigation waypoint in `LANDING_REVIEW`, run `RUNPATH("0:/cmd/landsite.ks").`
+and `REBOOT.`. After touchdown and surface science, select the next waypoint,
+run `RUNPATH("0:/cmd/hop.ks").` and `REBOOT.` to start the first hop. No
+coordinates need typing. The first hop uses the usual700m/s return allowance
+and preserves the original mission's return sequence. After each hop, select
+another waypoint and use the locally printed
+`RUNPATH("1:/run/hop","waypoint").`; it validates the leg and reboots to fly
+without an additional manual reboot. With a link, `cmd/hop.ks` with no
+arguments also invokes that same action during an existing hop review.
+These hops use ballistic launch and landing, without a parking-orbit leg.
 
 Every touchdown settles for two seconds with brakes set and throttle off,
 then returns to the Godspeed prompt and prints these commands:
