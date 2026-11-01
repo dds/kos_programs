@@ -100,6 +100,8 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/transferretry.ks").` | Clear a no-thrust XING attempt after deleting its node; then reboot to replan from low Kerbin orbit |
 | `RUNPATH("0:/cmd/scan.ks", "status").` | SCANsat/science: `start` / `status` / `transmit` |
 | `RUNPATH("0:/cmd/scanorbit.ks").` | Preview economical scan-track changes using the live SCANsat map; `"plan"` retains the best useful node for manual execution |
+| `RUNPATH("0:/cmd/rendezvous.ks","preview","Target").` | Preview a same-body intercept budgeting arrival braking; `plan` retains a node, `match` stops nearby. See [rendezvous testing](docs/RENDEZVOUS.md). |
+| `RUNPATH("0:/cmd/docktest.ks","check","Target").` | Diagnose labeled docking-port or fallback bow geometry; `hold`/`align` rehearse attitude at zero throttle, with no contact burn |
 | `RUNPATH("0:/cmd/scanraise.ks",130).` | Explicitly plan one mapper apoapsis raise to130km, retaining Pe and plane; inspect then execute with exnode. Uses mission fuel limits; coverage improvement is experimental |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/landlight.ks").` | Preview a lit ground-track site from Mun/Minmus parking orbit; `"status"` checks the saved target with live positions; `"apply", "AFTERNOON", 1` selects afternoon while preserving the return mission; final argument `0` waives direct Kerbin view |
@@ -3932,7 +3934,7 @@ underscore (`TARGET_`).
 | PRELAUNCH | prelaunch | Flight-plan card + launch-window setup |
 | LAUNCH, FAIR, ANTS, PARK | launch | MechJeb ascent → parking orbit |
 | XING, ESCAPE | xfer_plan, return_escape | Transfers and moon-return escapes |
-| RDV | rdv_plan | Lightweight same-body Hohmann rendezvous |
+| RDV | rdv_plan | Bounded same-body Lambert rendezvous with native validation and arrival-braking allowance |
 | MATCH, CREW_XFER | maneuver_rendezvous | Close approach and crew transfer |
 | MCC | maneuver_transfer | Legacy element-based mid-course correction |
 | BPLANE, REFINE_BPLANE | arrival_bplane | Initial and midpoint B-plane corrections |

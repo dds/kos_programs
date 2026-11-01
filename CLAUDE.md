@@ -9,6 +9,25 @@ mission.
 Read it when resuming and update it when work is added, completed or blocked;
 distinguish source-test results from native mission validation.
 
+2026-11-01 rendezvous: current Kerbin surveyor experiment cancelled (opposite
+orbital directions); leave mapping missions alone. Manual cmd/rendezvous and
+cmd/docktest workflow is in docs/RENDEZVOUS.md. RDV now uses bounded Lambert
+shortlisting plus native propagation, both departure/matching fuel, numeric
+same-epoch parent-relative velocity and measured native node axes. No blind
+node deletion/retry after executor failure. MATCH is a150m review stand-off,
+not docking: direct pulses have independent live throttle checks and a durable
+rendezvous_active interruption flag. Tagged docking_port wins over bow
+fallback; ambiguous/wrong tags refuse. Bow bounds never prove collision/contact;
+real docking requires reciprocal PARTNER. Zero-throttle hold/align only; no
+contact translation or pushing deorbit implemented/armed. Both cores can run
+resident scripts within2km, target hold allows background CPU, expiry KAC+clock.
+Native compilation, APIs, finite-burn/turn performance and close operations
+remain unverified. Source fixtures supplement, never certify, those tests.
+All114 routine check files pass; final2.62s with105 verified cached/9 executed
+(earlier cold21.31s). New direct check~0.3s; report in
+/tmp/kos-rendezvous-general-final-20261101.log. Structural0 errors, existing
+missing KSC_DEORBIT binding warning unchanged. No remote maneuver/deployment.
+
 2026-10-30 first native assist preview5016249: original departure1063.91m/s
 predicts Duna Pe19,908km, ENTRY goal2–8km. Old reference gate stopped before
 search because XING deliberately leaves final entry targeting to BPLANE.

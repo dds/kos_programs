@@ -411,32 +411,13 @@ def check_rendezvous():
                                             (100, 15, False, False), (100, .1, True, False)):
         assert evaluate(predicate, dict(separation=distance, relativeSpeed=speed,
                                         finalDist=150, ABORT=abort)) == expected
-    burn = function_body(source, '_matchBurnRel').replace('SAS OFF.', 'SET SAS TO FALSE.')
-    for scenario in ('normal', 'abort', 'no-engine', 'off-vector', 'already-matched'):
-        ship = NS(MASS=10., AVAILABLETHRUST=0. if scenario in ('no-engine', 'already-matched') else 100.,
-                  VELOCITY=NS(ORBIT=Vec((0 if scenario == 'already-matched' else 10., 0, 0))),
-                  FACING=NS(FOREVECTOR=Vec((1, 0, 0))))
-        env = dict(ves=NS(VELOCITY=NS(ORBIT=Vec((0, 0, 0)))), SHIP=ship,
-                   desiredVec=Vec((0, 0, 0)), TIME=NS(SECONDS=0.), ABORT=False,
-                   VANG=lambda *_: 30 if scenario == 'off-vector' else 0)
-        direction = [Vec((0, 0, 0))]
-
-        def lock(statement):
-            if statement.startswith('LOCK STEERING TO '): direction[0] = env['errVec'].NORMALIZED
-
-        def wait(dt):
-            env['TIME'].SECONDS += dt
-            ship.VELOCITY.ORBIT += direction[0] * env['throttleCmd'] * ship.AVAILABLETHRUST / ship.MASS * dt
-            if scenario == 'abort' and env['TIME'].SECONDS > .3: env['ABORT'] = True
-
-        env.update(fixture_lock=lock, fixture_wait=wait,
-                   _matchStopThrottle=lambda: (env.update(throttleCmd=0.) or True))
-        assert run(burn, env) == (scenario in ('normal', 'already-matched')), scenario
-        assert env['throttleCmd'] == 0
+    # Relative-burn integration and all previous refusal scenarios now live
+    # in check_rendezvous.py, including the independent lock watchdog.
     stop = function_body(source, '_matchStopThrottle')
     assert 'thrustCutoffOk()' in stop and 'RETURN stopped.' in stop
     phase = function_body(source, 'phaseMatch')
-    assert phase.index('_matchConverged(') < phase.index('nextPhase(')
+    assert phase.index('matchRendezvous(') < phase.index('nextPhase(')
+    assert '_matchConverged(' in function_body(source,'matchRendezvous')
     print('PASS: rendezvous requires distance AND relative speed; timeout/abort/no thrust hold; already-matched needs no engine')
 
 

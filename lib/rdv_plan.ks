@@ -1,258 +1,132 @@
-// ============================================================
-// rdv_plan.ks - Lightweight same-body rendezvous planning phase
-// (0:/lib/rdv_plan.ks)
-// ============================================================
-
-// --- Config defaults owned by this file ---
-GLOBAL RDV_SCAN_ORBITS IS 3.
-GLOBAL RDV_SCAN_SAMPLES_PER_ORBIT IS 48.
+// Bounded same-body rendezvous. Native node validation follows a Lambert
+// shortlist; budget BOTH departure and velocity matching. No blind retries.
+@LAZYGLOBAL OFF.
 GLOBAL RDV_MAX_CA IS 5000.
 GLOBAL RDV_MAX_RADIUS_ERR IS 2000.
+GLOBAL RDV_DV_CAP IS 500.
+GLOBAL RDV_RESERVE_DV IS 100.
 GLOBAL RENDEZVOUS_TARGET IS "".
 GLOBAL ASTEROID_TARGET IS "".
 
-LOCAL RDV_MAX_RETRIES IS 5.
-
-LOCAL FUNCTION _rdvScoreCandidate {
-    PARAMETER targetVessel.
-    PARAMETER ca.
-    PARAMETER dv.
-    PARAMETER hohmannDv.
-
-    LOCAL caT IS ca["time"].
-    LOCAL bodyPos IS POSITIONAT(SHIP:BODY, caT).
-    LOCAL shipRadius IS (POSITIONAT(SHIP, caT) - bodyPos):MAG.
-    LOCAL targetRadius IS (POSITIONAT(targetVessel, caT) - bodyPos):MAG.
-    LOCAL radiusErr IS ABS(shipRadius - targetRadius).
-    LOCAL relVel IS (VELOCITYAT(SHIP, caT):ORBIT
-        - VELOCITYAT(targetVessel, caT):ORBIT):MAG.
-    LOCAL score IS ca["distance"] / 1000
-        + (radiusErr / 250)^2
-        + relVel * 0.25
-        + ABS(dv - hohmannDv) * 0.5.
-
-    RETURN LEXICON(
-        "SCORE", score,
-        "CA", ca["distance"],
-        "RADIUS_ERR", radiusErr,
-        "RELVEL", relVel
-    ).
+LOCAL FUNCTION _rdvShortlist {
+    PARAMETER candidates, item.
+    LOCAL slot IS 0.
+    UNTIL slot >= candidates:LENGTH {
+        IF item["COST"] < candidates[slot]["COST"] { BREAK. }
+        SET slot TO slot+1.
+    }
+    IF slot < 8 { candidates:INSERT(slot,item). }
+    IF candidates:LENGTH > 8 { candidates:REMOVE(8). }
 }
 
-GLOBAL FUNCTION phaseRendezvous {
-    LOCAL targetName IS "".
-    SET targetName TO RENDEZVOUS_TARGET.
-    IF ASTEROID_TARGET <> "" { SET targetName TO ASTEROID_TARGET. }
+GLOBAL FUNCTION rendezvousAffordable {
+    PARAMETER departDv, brakeDv, cap, reserve.
+    RETURN departDv >= 0.3 AND departDv < 1e30 AND brakeDv >= 0 AND brakeDv < 1e30
+        AND departDv+brakeDv+10 <= cap
+        AND SHIP:DELTAV:VACUUM >= departDv+brakeDv+10+reserve
+        AND STAGE:DELTAV:VACUUM >= departDv+1
+        AND SHIP:AVAILABLETHRUST > 0 AND SHIP:MASS > 0.
+}
 
-    IF targetName = "" {
-        mLogWarn("RDV phase requested but no RENDEZVOUS_TARGET or ASTEROID_TARGET configured.").
-        nextPhase(xferSeq).
-        RETURN.
-    }
-
-    LOCAL targetVessel IS VESSEL(targetName).
-    LOCAL success IS FALSE.
-    LOCAL retries IS 0.
-
-    orbitSummary().
-    UNTIL success {
-        UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-        LOCAL nd IS planRendezvous(targetVessel).
-        IF nd = 0 {
-            mLogError("Rendezvous planner failed for " + targetName + ".").
-            RETURN.
-        }
-        mLog("Rendezvous planned with " + targetName + ".").
-        SET success TO executeManeuver().
-        IF NOT success {
-            SET retries TO retries + 1.
-            mLog("Rendezvous burn missed (attempt " + retries + ") - waiting 10s.").
-            IF retries >= RDV_MAX_RETRIES {
-                mLogError("Rendezvous failed after " + retries + " attempts.").
-                RETURN.
+// Leaves one inspection node only on success. Never burns, stages or changes
+// the selected mission. Eight native trials maximum, 20 game/30 wall seconds.
+GLOBAL FUNCTION rendezvousSearch {
+    PARAMETER other, cap IS 500, reserve IS 100, report IS 0.
+    LOCAL craftRef IS SHIP.
+    LOCAL failed IS LEX("OK",FALSE,"REASON","context-or-budget").
+    IF NOT rendezvousContext(craftRef,other) OR NOT (cap >= 0.3 AND cap < 1e6
+            AND reserve >= 0 AND reserve < 1e6) { RETURN failed. }
+    LOCAL epoch IS TIME:SECONDS. LOCAL stopUt IS epoch+20.
+    LOCAL stopWall IS KUNIVERSE:REALTIME+30.
+    LOCAL period_ IS MAX(SHIP:ORBIT:PERIOD,other:ORBIT:PERIOD).
+    LOCAL candidates IS LIST(). LOCAL evaluated IS 0.
+    LOCAL minimumCost IS 1e30.
+    // Single-revolution arcs; scan departures over two periods, then refine
+    // the chosen native encounter on a later explicit operator pass if needed.
+    FOR departIndex IN RANGE(0,12) {
+        LOCAL departUt IS epoch+300+period_*departIndex/6.
+        LOCAL startPos IS POSITIONAT(SHIP,departUt)-POSITIONAT(SHIP:BODY,departUt).
+        LOCAL startVel IS rendezvousVelocity(SHIP,departUt).
+        FOR timeIndex IN RANGE(0,8) {
+            IF TIME:SECONDS >= stopUt OR KUNIVERSE:REALTIME >= stopWall
+                    OR NOT rendezvousContext(craftRef,other) {
+                SET failed["REASON"] TO "context-or-deadline". RETURN failed.
             }
-            WAIT 10.
+            LOCAL tof IS period_*(0.2+timeIndex*0.15).
+            LOCAL arriveUt IS departUt+tof.
+            LOCAL endPos IS POSITIONAT(other,arriveUt)-POSITIONAT(SHIP:BODY,arriveUt).
+            LOCAL endVel IS rendezvousVelocity(other,arriveUt).
+            // Aim500m radially outside the target, never its centre of mass.
+            SET endPos TO endPos+endPos:NORMALIZED*500.
+            IF (startPos-endPos):MAG > 1 AND VCRS(startPos,endPos):MAG > startPos:MAG*endPos:MAG*0.00001 {
+                FOR flip_ IN LIST(FALSE,TRUE) {
+                    LOCAL sol IS lambertSolve(startPos,endPos,tof,SHIP:BODY:MU,flip_).
+                    LOCAL dvVec IS sol["v1"]-startVel.
+                    LOCAL brakeDv IS (endVel-sol["v2"]):MAG.
+                    LOCAL cost IS dvVec:MAG+brakeDv+10.
+                    IF cost >= 0 AND cost < minimumCost { SET minimumCost TO cost. }
+                    IF rendezvousAffordable(dvVec:MAG,brakeDv,cap,reserve) {
+                        _rdvShortlist(candidates,LEX("UT",departUt,"ARRIVE",arriveUt,
+                            "DV",dvVec,"BRAKE",brakeDv,"COST",cost)).
+                    }
+                    SET evaluated TO evaluated+1.
+                }
+            }
         }
+        WAIT 0.
     }
-
-    orbitSummary().
-    nextPhase(xferSeq).
-}
-
-GLOBAL FUNCTION phaseRdv {
-    phaseRendezvous().
+    rendezvousLog(report,"STATS rdv search lambertTrials="+evaluated+" shortlisted="+candidates:LENGTH
+        +" minimumCost="+minimumCost+" cap="+cap+" reserve="+reserve).
+    FOR item IN candidates {
+        IF TIME:SECONDS >= stopUt OR KUNIVERSE:REALTIME >= stopWall
+                OR NOT rendezvousContext(craftRef,other) {
+            SET failed["REASON"] TO "context-or-deadline". RETURN failed.
+        }
+        LOCAL nd IS rendezvousNode(item["UT"],item["DV"],other).
+        IF nd = 0 { SET failed["REASON"] TO "native-vector-or-context". RETURN failed. }
+        LOCAL stamp IS rendezvousStamp(nd).
+        LOCAL ca IS _findClosestApproach(other,MAX(nd:TIME+1,item["ARRIVE"]-period_*0.1),
+            item["ARRIVE"]+period_*0.1,24).
+        LOCAL sep IS ca["distance"].
+        LOCAL brakeDv IS (rendezvousVelocity(SHIP,ca["time"])-rendezvousVelocity(other,ca["time"])):MAG.
+        LOCAL radiusErr IS ABS((POSITIONAT(SHIP,ca["time"])-POSITIONAT(SHIP:BODY,ca["time"])):MAG
+            -(POSITIONAT(other,ca["time"])-POSITIONAT(SHIP:BODY,ca["time"])):MAG).
+        LOCAL accepted IS rendezvousSafeOrbit(nd:ORBIT)
+            AND sep >= 100 AND sep <= RDV_MAX_CA AND radiusErr <= RDV_MAX_RADIUS_ERR
+            AND rendezvousAffordable(nd:DELTAV:MAG,brakeDv,cap,reserve)
+            AND nd:ETA > 180+nd:DELTAV:MAG/(SHIP:AVAILABLETHRUST/SHIP:MASS)
+            AND TIME:SECONDS < stopUt AND KUNIVERSE:REALTIME < stopWall.
+        rendezvousLog(report,"STATS rdv candidate dv="+nd:DELTAV:MAG+" matchDv="+brakeDv
+            +" ca="+sep+" caUt="+ca["time"]+" radiusErr="+radiusErr+" accepted="+accepted).
+        IF NOT rendezvousOwned(craftRef,nd,stamp) { SET failed["REASON"] TO "node-changed". RETURN failed. }
+        IF accepted AND rendezvousContext(craftRef,other,TRUE) {
+            RETURN LEX("OK",TRUE,"REASON","native-validated","NODE",nd,"STAMP",stamp,
+                "CA",sep,"CAUT",ca["time"],"BRAKE",brakeDv,"CAP",cap,"RESERVE",reserve).
+        }
+        IF NOT rendezvousRelease(craftRef,nd,stamp) { SET failed["REASON"] TO "node-changed". RETURN failed. }
+    }
+    SET failed["REASON"] TO "no-affordable-native-intercept".
+    RETURN failed.
 }
 
 GLOBAL FUNCTION planRendezvous {
     PARAMETER targetVessel.
-
-    IF targetVessel:BODY:NAME <> SHIP:BODY:NAME {
-        mLogError("planRendezvous: target orbits " + targetVessel:BODY:NAME
-            + " but ship orbits " + SHIP:BODY:NAME + ".").
-        RETURN 0.
-    }
-    IF targetVessel:ORBIT:ECCENTRICITY > 0.1
-            OR ABS(targetVessel:ORBIT:INCLINATION - SHIP:ORBIT:INCLINATION) > 5 {
-        mLogWarn("RDV uses lightweight Hohmann planner; target orbit is eccentric or inclined.").
-    }
-
-    LOCAL mu IS SHIP:BODY:MU.
-    LOCAL shipSMA IS SHIP:ORBIT:SEMIMAJORAXIS.
-    LOCAL targetSMA IS targetVessel:ORBIT:SEMIMAJORAXIS.
-    LOCAL shipPeriod IS SHIP:ORBIT:PERIOD.
-    LOCAL targetPeriod IS targetVessel:ORBIT:PERIOD.
-    LOCAL seed IS _hohmannSeed(shipSMA, targetSMA, mu, targetPeriod).
-    LOCAL hohmannTof IS seed["TOF"].
-    LOCAL hohmannDv IS seed["DV"].
-
-    mLog("Rendezvous with " + targetVessel:NAME
-        + ": Hohmann dV=" + ROUND(hohmannDv, 1) + " m/s"
-        + "  TOF=" + ROUND(hohmannTof, 0) + "s").
-
-    SET TARGET TO targetVessel.
-    WAIT 0.1.
-    LOCAL currentPhase IS phaseAngle().
-    LOCAL idealPhaseAngle IS seed["IDEAL_PHASE"].
-    LOCAL phasePlan IS _hohmannPhaseWait(currentPhase, idealPhaseAngle,
-        shipPeriod, targetPeriod, 60).
-    LOCAL waitTime IS phasePlan["WAIT"].
-
-    LOCAL departUt IS TIME:SECONDS + waitTime.
-    mLog("Phase: current=" + ROUND(currentPhase, 1)
-        + "  ideal=" + ROUND(idealPhaseAngle, 1)
-        + "  diff=" + ROUND(phasePlan["DIFF"], 1)
-        + "  wait=" + ROUND(waitTime, 0) + "s").
-
-    LOCAL nd IS NODE(departUt, 0, 0, hohmannDv).
-    ADD nd.
-    WAIT 0.1.
-
-    LOCAL scanOrbits IS 2.
-    SET scanOrbits TO MAX(1, RDV_SCAN_ORBITS).
-    LOCAL samplesPerOrbit IS 8.
-    IF RDV_SCAN_SAMPLES_PER_ORBIT > 0 {
-        SET samplesPerOrbit TO MAX(4, RDV_SCAN_SAMPLES_PER_ORBIT).
-    }
-    LOCAL scanSteps IS scanOrbits * samplesPerOrbit.
-    LOCAL scanDt IS shipPeriod / samplesPerOrbit.
-    LOCAL bestTime IS departUt.
-    LOCAL bestCA IS _findClosestApproach(
-        targetVessel, departUt + hohmannTof * 0.5, departUt + hohmannTof * 1.5, 40).
-    LOCAL bestScore IS _rdvScoreCandidate(targetVessel, bestCA, nd:PROGRADE, hohmannDv).
-
-    FROM { LOCAL si IS -scanSteps. } UNTIL si > scanSteps STEP { SET si TO si + 1. } DO {
-        LOCAL tryTime IS departUt + si * scanDt.
-        IF tryTime > TIME:SECONDS + 30 {
-            SET nd:TIME TO tryTime.
-            WAIT 0.02.
-            LOCAL tryCa IS _findClosestApproach(
-                targetVessel, tryTime + hohmannTof * 0.5, tryTime + hohmannTof * 1.5, 40).
-            LOCAL tryScore IS _rdvScoreCandidate(targetVessel, tryCa, nd:PROGRADE, hohmannDv).
-            IF tryScore["SCORE"] < bestScore["SCORE"] {
-                SET bestCA TO tryCa.
-                SET bestScore TO tryScore.
-                SET bestTime TO tryTime.
-            }
-        }
-    }
-    SET nd:TIME TO bestTime.
-    WAIT 0.1.
-    mLog("Time scan: best CA=" + ROUND(bestCA["distance"]/1000, 1) + "km"
-        + " radiusErr=" + ROUND(bestScore["RADIUS_ERR"]/1000, 1) + "km"
-        + " score=" + ROUND(bestScore["SCORE"], 1)
-        + " at T+" + ROUND(bestCA["time"] - TIME:SECONDS, 0) + "s").
-
-    LOCAL tA IS MAX(TIME:SECONDS + 30, bestTime - scanDt).
-    LOCAL tB IS bestTime + scanDt.
-    LOCAL gr IS (SQRT(5) + 1) / 2.
-
-    FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
-        LOCAL tC IS tB - (tB - tA) / gr.
-        LOCAL tD IS tA + (tB - tA) / gr.
-        SET nd:TIME TO tC. WAIT 0.02.
-        LOCAL caC IS _findClosestApproach(targetVessel, tC + hohmannTof * 0.4, tC + hohmannTof * 1.6, 30).
-        LOCAL scoreC IS _rdvScoreCandidate(targetVessel, caC, nd:PROGRADE, hohmannDv).
-        SET nd:TIME TO tD. WAIT 0.02.
-        LOCAL caD IS _findClosestApproach(targetVessel, tD + hohmannTof * 0.4, tD + hohmannTof * 1.6, 30).
-        LOCAL scoreD IS _rdvScoreCandidate(targetVessel, caD, nd:PROGRADE, hohmannDv).
-        IF scoreC["SCORE"] < scoreD["SCORE"] { SET tB TO tD. } ELSE { SET tA TO tC. }
-    }
-    SET nd:TIME TO (tA + tB) / 2.
-    WAIT 0.1.
-
-    LOCAL dvRange IS MAX(0.5, ABS(hohmannDv) * 0.25).
-    LOCAL dvSteps IS 20.
-    LOCAL dvStep IS dvRange * 2 / dvSteps.
-    LOCAL bestDv IS hohmannDv.
-    LOCAL dvLow IS hohmannDv - dvRange.
-    LOCAL dvHigh IS hohmannDv + dvRange.
-    IF hohmannDv > 0 { SET dvLow TO MAX(hohmannDv * 0.5, dvLow). }
-    IF hohmannDv < 0 { SET dvHigh TO MIN(hohmannDv * 0.5, dvHigh). }
-    SET bestCA TO _findClosestApproach(
-        targetVessel, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-    SET bestScore TO _rdvScoreCandidate(targetVessel, bestCA, nd:PROGRADE, hohmannDv).
-
-    FROM { LOCAL di IS 0. } UNTIL di > dvSteps STEP { SET di TO di + 1. } DO {
-        LOCAL tryDv IS dvLow + di * (dvHigh - dvLow) / dvSteps.
-        SET nd:PROGRADE TO tryDv.
-        WAIT 0.02.
-        LOCAL tryCa IS _findClosestApproach(
-            targetVessel, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 40).
-        LOCAL tryScore IS _rdvScoreCandidate(targetVessel, tryCa, tryDv, hohmannDv).
-        IF tryScore["SCORE"] < bestScore["SCORE"] {
-            SET bestCA TO tryCa.
-            SET bestScore TO tryScore.
-            SET bestDv TO tryDv.
-        }
-    }
-    SET nd:PROGRADE TO bestDv.
-    WAIT 0.1.
-
-    LOCAL dvA IS MAX(bestDv - dvStep, dvLow).
-    LOCAL dvB IS MIN(bestDv + dvStep, dvHigh).
-    FROM { LOCAL gi IS 0. } UNTIL gi >= 15 STEP { SET gi TO gi + 1. } DO {
-        LOCAL dvC IS dvB - (dvB - dvA) / gr.
-        LOCAL dvD IS dvA + (dvB - dvA) / gr.
-        SET nd:PROGRADE TO dvC. WAIT 0.02.
-        LOCAL caC IS _findClosestApproach(targetVessel, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-        LOCAL scoreC IS _rdvScoreCandidate(targetVessel, caC, dvC, hohmannDv).
-        SET nd:PROGRADE TO dvD. WAIT 0.02.
-        LOCAL caD IS _findClosestApproach(targetVessel, nd:TIME + hohmannTof * 0.4, nd:TIME + hohmannTof * 1.6, 30).
-        LOCAL scoreD IS _rdvScoreCandidate(targetVessel, caD, dvD, hohmannDv).
-        IF scoreC["SCORE"] < scoreD["SCORE"] { SET dvB TO dvD. } ELSE { SET dvA TO dvC. }
-    }
-    SET nd:PROGRADE TO (dvA + dvB) / 2.
-    WAIT 0.1.
-
-    LOCAL finalCa IS _findClosestApproach(targetVessel, nd:TIME + hohmannTof * 0.3, nd:TIME + hohmannTof * 2.0, 60).
-    LOCAL finalScore IS _rdvScoreCandidate(targetVessel, finalCa, nd:PROGRADE, hohmannDv).
-    LOCAL relVel IS (VELOCITYAT(SHIP, finalCa["time"]):ORBIT
-        - VELOCITYAT(targetVessel, finalCa["time"]):ORBIT):MAG.
-    mLog("Rendezvous -> " + targetVessel:NAME
-        + ": dV=" + ROUND(nd:DELTAV:MAG, 1) + " m/s"
-        + "  CA=" + ROUND(finalCa["distance"]/1000, 1) + "km"
-        + "  radiusErr=" + ROUND(finalScore["RADIUS_ERR"]/1000, 1) + "km"
-        + "  relV=" + ROUND(relVel, 1) + " m/s"
-        + "  ETA=" + ROUND(nd:TIME - TIME:SECONDS, 0) + "s").
-    mLog("STATS rdv result target=" + targetVessel:NAME
-        + " dv=" + ROUND(nd:DELTAV:MAG,1)
-        + " caKm=" + ROUND(finalCa["distance"]/1000,1)
-        + " radiusErrKm=" + ROUND(finalScore["RADIUS_ERR"]/1000,1)
-        + " relV=" + ROUND(relVel,1)
-        + " departT=" + ROUND(nd:TIME - TIME:SECONDS,0)).
-
-    LOCAL maxCa IS 50000.
-    LOCAL maxRadiusErr IS 5000.
-    SET maxCa TO RDV_MAX_CA.
-    SET maxRadiusErr TO RDV_MAX_RADIUS_ERR.
-    IF finalCa["distance"] > maxCa OR finalScore["RADIUS_ERR"] > maxRadiusErr {
-        mLogError("Rendezvous planner refused weak intercept: CA="
-            + ROUND(finalCa["distance"]/1000,1) + "km radiusErr="
-            + ROUND(finalScore["RADIUS_ERR"]/1000,1) + "km.").
-        IF HASNODE { REMOVE nd. }
-        RETURN 0.
-    }
-    maneuverUiArchiveLog("rendezvous").
-
-    RETURN nd.
+    LOCAL result IS rendezvousSearch(targetVessel,RDV_DV_CAP,RDV_RESERVE_DV).
+    IF NOT result["OK"] { mLogError("RDV: "+result["REASON"]). RETURN 0. }
+    RETURN result["NODE"].
 }
+
+GLOBAL FUNCTION phaseRendezvous {
+    LOCAL name IS RENDEZVOUS_TARGET.
+    IF ASTEROID_TARGET <> "" { SET name TO ASTEROID_TARGET. }
+    LOCAL other IS rendezvousTarget(name).
+    IF other = 0 { mLogError("RDV: select one uniquely named vessel target."). yieldToPrompt(). RETURN. }
+    LOCAL nd IS planRendezvous(other).
+    IF nd = 0 { yieldToPrompt(). RETURN. }
+    // Failed/interrupted attempts belong to their executor. Preserve them
+    // for review instead of deleting their node and trying another burn.
+    IF NOT executeManeuver() { yieldToPrompt(). RETURN. }
+    nextPhase(xferSeq).
+}
+
+GLOBAL FUNCTION phaseRdv { phaseRendezvous(). }

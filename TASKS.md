@@ -6,6 +6,52 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- General rendezvous / docking rehearsal (2026-11-01): operator cancelled
+  using the current Kerbin surveyor pair after discovering opposite orbital
+  directions. Leave both mapping; no remote game controls/save edits. Both
+  cores can stay awake/run scripts within2km for a future suitable pair.
+  New manual cmd/rendezvous preview/plan/match preserves the selected mission;
+  bounded3D Lambert shortlist prices departure+match+10m/s, then up to8 native
+  node trials. Shared numeric position derivatives subtract parent position
+  at each sample; native node axes replace guessed normal/radial signs.
+  Failed executor attempts/nodes are never blindly deleted/retried. MATCH
+  brakes beforeCA, then bounded stand-off pulses with independent live lock
+  heartbeat/impulse/context/stage/fuel/alignment cutoff and shared verified
+  physical shutdown. Failed pulses retain rendezvous_active; explicit reset
+  requires a safe, separated, velocity-matched idle orbit and never clears
+  burn_* reports. cmd/docktest check/hold/align selects tagged docking_port
+  first, bow envelope only if absent, invalid tags refuse. No translation;
+  target resident10min hold works in background, KAC expiry/clock fallback,
+  chaser1s settle; no actual docking claim without reciprocal PARTNER links.
+  Docking geometry is manual-only, not added to normal RDV/MATCH bands.
+  Source/independent-conic fixtures pass; native compile/basis/finite burn/
+  braking/turn latency/part APIs still pending. docs/RENDEZVOUS.md has commands.
+  Queue: native preview on a suitable pair, match-to-150m and attitude reports;
+  only afterward design/test contact closure and coupled force verification
+  before separately commanded pushing deorbit. No contact/push burn armed.
+  Manual candidate/pulse summaries go straight to the diagnostic archive
+  only with thrust off; phase calls retain normal boot logging. First full
+  routine pass114/114 in21.31s (all executed), after which telemetry was added;
+  final routine pass114/114 in2.62s (105 verified cached,9 executed), including
+  real command/hold paths, independent conic intercept, ideal-attitude
+  stand-off integration and17 pulse/refusal cases. Results:
+  /tmp/kos-rendezvous-general-final-20261101.log. Structural0 errors,
+  unchanged legacy missing KSC_DEORBIT-handler warning. Native tests remain
+  open; no installation, core changes or game maneuvers executed remotely.
+
+- Native Minmus Lander1 boot042: floor1 now admits the measured active landing
+  engine while retaining both stage0 return engines. ANY/DIRECT policy passed
+  (Sun-54.92/Kerbin44.28). Retained node20.6564m/s UT5805097.9474 was accepted
+  again at5804806: residual182.88m, powered captureDownfield212/cross2235m,
+  impulse193.5m/s. User confirmed it performed the final check/turn and looked
+  ready to burn. Latest fetched log ends before ignition: execution/touchdown
+  remain unconfirmed. Initial long solar coast shows very large game-time
+  gaps during warp release; investigate separately, don't infer CPU timing
+  or burn failure from those game-time deltas. Compact executor's final90s
+  check/quiet alignment wait explains the apparent absence of a countdown.
+  Log:/tmp/ksp-deck-20261101T205014Z-fetch-0yv0ivgr/logs/
+  Espoir-Minmus-Lander1_5154039/boot_042_core.log. Read-only diagnostics.
+
 - NATIVE mapping recovery progressed; next apsis burn queued:
   Operator renamed Espoir-Mun-Surveyor1 to kerbin-surveyor2. Logs remain under
   Espoir-Mun-Surveyor1_5642520 because flightSlug uses saved vessel_name.
