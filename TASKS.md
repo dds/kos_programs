@@ -6,6 +6,27 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- NATIVE mapping recovery progressed; next apsis burn queued:
+  Operator renamed Espoir-Mun-Surveyor1 to kerbin-surveyor2. Logs remain under
+  Espoir-Mun-Surveyor1_5642520 because flightSlug uses saved vessel_name.
+  Boot069 accepts further allowance (total3584.1193) and flies745.1008m/s
+  plane change. Independent live-impulse-limit stops at752.550822 impulse vs
+  752.552 cap, node residual2.021112; shutdownAttemptedFalse/thrustStoppedTrue.
+  Preserve this hard cutoff as a failed attempt; do not reinterpret it as the
+  allowed0.25m/s normal-trim handoff. Operator explicitly shaperetry-reset at
+  UT5760604.2. Boot070 at5760614 then measures160.6x2987.1km/inc90.05,
+  planeErr0.052deg andPeErr0.61km already inside mapping accuracy. Next set-ap
+  node566.677445m/s is allowed: spent2969.22,stock713.1,reserve100,cap3584.1193.
+  Last archived line5760648.6 is successful solar hold (flow1.14,EC100%,rate
+  0.074deg/s), before scheduled burn start5761128.8/node5761171.8. Nominal
+  post-burn fuel146.4m/s; native finite burn/final mapping still pending.
+  Queue: diagnose143s plane-burn independent752.55 vs loop743.86 impulse
+  difference, separating steering/finite-burn losses from integration error;
+  do not widen watchdog limits without evidence. No flight code changed.
+  Logs:/tmp/ksp-deck-20261101T201942Z-fetch-cysys9bj/logs/
+  Espoir-Mun-Surveyor1_5642520/boot_070_core.log; boot069fetch-hojnk6cc.
+  Read-only Deck diagnostics; no game/save changes.
+
 - NATIVE new holds diagnosed; operator recovery commands supplied:
   Minmus Lander1 boot039 UT5756471..5756506 confirms ANY/DIRECT works: third
   pass sun-54.92/Kerbin44.28 accepted, cross2891m under3163m physical cap,
@@ -34,7 +55,8 @@ record remaining uncertainty before closing a task.
   with1360 further allowance gives3584.12 cumulative; never clears old spent,
   orbit goals,1500 per-burn or100m/s reserve. Supplied command then REBOOT.
   Focused actual command/admission replay passes this recorded case and still
-  refuses a fuel-reserve breach. Native new allowance/shape flight pending.
+  refuses a fuel-reserve breach. Native allowance/plane progress is above;
+  final mapping orbit and biome gains still pending.
   Log:/tmp/ksp-deck-20261101T200608Z-fetch-3dbkkojm/logs/
   Espoir-Mun-Surveyor1_5642520/boot_067_core.log. All113 routine files pass
   54.13s (3 verified unchanged passes reused,110 executed),0 structural errors;
