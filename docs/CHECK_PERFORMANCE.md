@@ -1,5 +1,49 @@
 # Check performance
 
+## Verified-result reuse
+
+The operator approved reusing verified results for unchanged inputs on
+2026-10-31. Ordinary `make check` caches successful checks individually;
+`make check-full`, `make check-all` and `make check-times` run fresh. No
+numerical steps, matrices or tolerances were reduced, and no original routine
+call was removed.
+
+| Current 111-file suite | Elapsed | Reused / executed |
+|---|---:|---:|
+| Cold routine run collecting input manifests | 89.14 s | 0 / 111 |
+| Repeated `make check` | 6.91 s | 107 / 4 |
+| Second repeated `make check` | 6.95 s | 107 / 4 |
+| `make check-full`, including the slow predictor | 75.75 s | 0 / 111 |
+
+The ten-second target applies to unchanged-input runs. Fresh verification and
+changes affecting many checks can take longer. Four checks with uncertain I/O
+keep running: diagnostics, snapshot, fixture-harness and cache regressions.
+Cache collection adds overhead to a cold run; the uncached full run skips it.
+
+Each pass records hashes for read/imported files, explicit metadata, missing
+paths and directory listings, with interpreter/code/environment and import-search
+context. Imported helpers invalidate their consumers; unrelated Python edits
+can retain a pass. Path resolution/type probes record path/type facts rather
+than incidental directory timestamps; explicit metadata reads remain guarded.
+Symlink changes, directory additions, changed contents even with restored
+mtime, corrupt records, external operations and fresh failures have regression
+coverage. Cache storage failure falls back to fresh results. Build/shell/tool-call
+bookkeeping is removed from both worker environments and cache keys; application
+settings remain inputs. Live fixture values, flight state and failed results
+are never cached.
+
+Results are labelled `CACHED`, with last-verification times and all case records
+in ignored `.cache/checks/last-run.json`. For a fresh routine run use
+`python3 -B scripts/run_checks.py --no-cache`; `make check-full` additionally
+runs the slow comparison. Comparing case counts found no missing original
+calls and four new mapping/cache regression calls. Reports:
+`/tmp/kos-cache-precise-cold-20261101.log`,
+`/tmp/kos-cache-precise-warm1-20261101.log`,
+`/tmp/kos-cache-precise-warm2-20261101.json`, and
+`/tmp/kos-cache-precise-full-20261101.log`.
+
+## Earlier execution optimizations
+
 The suite has grown to110 check files. A2026-10-31 serial routine pass took
 165.45s before the next optimization. The runner now caches repeated exact
 function extraction and immutable adapted source compilation, while keeping

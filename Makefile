@@ -2,7 +2,7 @@ TAG ?=
 CHECK_JOBS ?=
 CHECK_FLAGS = $(if $(CHECK_JOBS),--jobs $(CHECK_JOBS))
 
-.PHONY: help check check-slow check-all check-times audit pre-commit require-tag stamp-version commit-version tag-version push-version release-version watch-sync
+.PHONY: help check check-full check-slow check-all check-times audit pre-commit require-tag stamp-version commit-version tag-version push-version release-version watch-sync
 
 help:
 	@echo "Version/log tag workflow:"
@@ -12,7 +12,7 @@ help:
 	@echo "  make push-version TAG=kos-YYYYMMDD-N"
 	@echo "  make release-version TAG=kos-YYYYMMDD-N"
 	@echo "  make pre-commit"
-	@echo "  make check / make check-slow / make check-all / make check-times / make audit"
+	@echo "  make check / make check-full / make check-slow / make check-all / make check-times / make audit"
 	@echo "  make watch-sync"
 
 pre-commit: check
@@ -20,14 +20,16 @@ pre-commit: check
 check:
 	python3 -B scripts/run_checks.py $(CHECK_FLAGS)
 
+check-full: check-all
+
 check-slow:
 	python3 -B scripts/run_checks.py --suite slow --timings $(CHECK_FLAGS)
 
 check-all:
-	python3 -B scripts/run_checks.py --suite all $(CHECK_FLAGS)
+	python3 -B scripts/run_checks.py --suite all --no-cache $(CHECK_FLAGS)
 
 check-times:
-	python3 -B scripts/run_checks.py --suite all --timings --jobs $(or $(CHECK_JOBS),1)
+	python3 -B scripts/run_checks.py --suite all --no-cache --timings --jobs $(or $(CHECK_JOBS),1)
 
 audit:
 	python3 -B scripts/check_codebase.py --report

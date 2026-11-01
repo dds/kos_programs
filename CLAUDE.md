@@ -1123,6 +1123,12 @@ Looks like Python/JS; is neither.
    public parse trees. Keep deterministic output, all failure statuses and
    per-file process isolation. Implicit worker BLAS pools default to one thread;
    explicit developer environment settings remain authoritative.
+   Operator-approved verified-result reuse (2026-10-31): routine make check
+   can reuse passes whose traced input hashes, missing paths/directories,
+   Python code/environment/interpreter and imported module files still match.
+   Never reuse failures or uncertain external operations. Label cached files;
+   make check-full/check-all/check-times run fresh. This is a test-result cache,
+   not permission to memoize live fixture/control values or weaken assertions.
    `make check-all` includes the explicitly requested `make check-slow` pass.
    Run that full pass when changing the direct-ascent predictor or its harness.
    The routine pass retains direct-return context, conic and orchestration checks.

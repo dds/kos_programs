@@ -185,6 +185,10 @@ def check_worker_thread_limits():
     with patch.dict(os.environ,dict(OPENBLAS_NUM_THREADS='3',OMP_NUM_THREADS='2',MKL_NUM_THREADS='4')):
         env=worker_environment()
         assert [env[key] for key in ('OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','MKL_NUM_THREADS')]==['3','2','4']
+    with patch.dict(os.environ,dict(MAKEFLAGS='--jobs=8',MAKELEVEL='2',SHLVL='9',CODEX_TOOL_CALL_ID='transient',CUSTOM_CHECK_SETTING='retained')):
+        env=worker_environment()
+        assert not {'MAKEFLAGS','MAKELEVEL','MFLAGS','SHLVL','_','CODEX_TOOL_CALL_ID'} & env.keys()
+        assert env['CUSTOM_CHECK_SETTING']=='retained'
     assert positive_jobs('1')==1 and positive_jobs('4')==4
     try:positive_jobs('0')
     except argparse.ArgumentTypeError:pass
