@@ -6,6 +6,31 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native longer-horizon deorbit retry pending:
+  Espoir-Minmus-Lander1 boot036 UT5753598..5753635 now loads LAND_DEORBIT
+  after the label fix. Parking Pe15.5/Ap15.6km inc89.99. Search uses only
+  four consecutive orbits,64/64 trials; best window4/angle50 has normal-5,
+  retro19.28m/s,downfield19.615km,cross3.295km vs physical3.163km allowance.
+  Rejected for cross-track before light checks. Both Espoir Minmus lander
+  profiles lacked the existing fixed-pass rotation survey. They now opt in
+  to its bounded two-body-rotation horizon, best8 passes,512 coarse orbital
+  samples and120s burn lead;250m cross-track preference. No hard tolerance,
+  physical authority, normal10m/s cap, fuel/reserve or64-trial relaxation.
+  Shared solver/admission unchanged; policy STATS now persists exact lat/lng,
+  configured windows and lookahead so compact logs identify the actual policy.
+  Independent polar-Minmus conic at an adverse synthetic epoch with operator
+  A1.460,-42.638 reproduces old four-orbit64-trial failure; each actual updated
+  profile finds a later pass in19 trials with114m cross-track under a stricter
+  fixture500m hard cap. This is NOT exact boot036 replay: native anomaly/LAN/
+  body orientation and TR/terrain/powered-flight behavior are not reconstructed.
+  All6 focused pass checks pass0.54s. All113 routine files pass23.37s
+  (2 verified unchanged passes reused,111 executed),0 structural errors;
+  existing KSC_DEORBIT handler warning unchanged.
+  After pull, linked REBOOT retries saved A without changing the mission or
+  target; native solution/lighting/radio and landing still need verification.
+  Native log:/tmp/ksp-deck-20261101T192839Z-fetch-yd_qsv_6/logs/
+  Espoir-Minmus-Lander1_5154039/boot_036_core.log. No game/save changes.
+
 - OPERATOR CONFIRMED corrected boot works in-game (c4d852c):
   Espoir-Minmus-Lander1 boot032..034 exits during LAND_DEORBIT library load;
   operator reports~10s simulation stall and persistent error after reboot.

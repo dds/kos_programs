@@ -131,6 +131,9 @@ GLOBAL FUNCTION targetedDeorbitAt {
         + " preferredCrossKm=" + TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM
         + " crossCapKm=" + DEORBIT_CROSSTRACK_AUTHORITY_KM
         + " maxTrials=" + TARGET_DEORBIT_MAX_EVALUATIONS + " ipu=" + CONFIG:IPU
+        + " lookaheadRotations=" + TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS
+        + " configuredWindows=" + TARGET_DEORBIT_SCAN_ORBITS
+        + " targetLat=" + targetLat + " targetLng=" + targetLng
         + " targetPassUT=" + ROUND(targetPassUT,1)).
 
     LOCAL nowUt IS TIME:SECONDS.

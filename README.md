@@ -1502,6 +1502,15 @@ RUNPATH("0:/cmd/setphase.ks","SURFACE_RETURN_SETUP").
 REBOOT.
 ```
 
+Both Espoir Minmus lander profiles rank fixed-site ground-track passes over
+up to two body rotations before trying the best eight passes. The64-trial
+Trajectories budget and10m/s normal-burn cap remain;250m cross-track is a
+preference, and the existing physical acceptance/terrain/light/radio/fuel
+checks still decide admission. A selected waypoint may therefore get a
+deorbit several orbits later rather than an expensive sideways correction
+on the next pass. A site selected by the automatic light search retains its
+own pass time. The subsequent surface hops use their separate suborbital path.
+
 Return ascends into15km parking without requiring an equatorial plane
 change, then targets52km Kerbin entry. Excess-fuel aerobraking is enabled
 with10m/s retained for Pe repair; parachutes on the retained core are

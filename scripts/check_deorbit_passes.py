@@ -6,6 +6,7 @@ from types import SimpleNamespace as NS
 import numpy as np
 
 import check_deorbit_solver as solver
+import check_espoir_fleet as fleet
 from check_codebase import ROOT, function_body
 from check_runtime_contracts import run, KList
 from check_deorbit_geometry import evaluate
@@ -15,8 +16,8 @@ class PassList(KList):
     def REMOVE(self,index):self.pop(index)
 
 
-def fixture():
-    oracle=solver.kepler_oracle(mun=True)
+def fixture(mun=True):
+    oracle=solver.kepler_oracle(mun=mun,inclination=90)
     now=math.radians(44.593)*oracle.period/(2*math.pi)
     # Start exactly over the chosen latitude. A rotation of all axes puts
     # this synthetic meridian at any desired longitude without changing range.
@@ -26,7 +27,8 @@ def fixture():
                CONSTANT=NS(PI=math.pi),TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS=1)
     env.update(fixture_reset=lambda:setattr(count,'value',0),landingLightActive=lambda:False)
     env['TIME'].SECONDS=now
-    env['SHIP'].BODY=NS(NAME='Mun',RADIUS=200000,ROTATIONPERIOD=138984)
+    env['SHIP'].BODY=NS(NAME='Mun' if mun else 'Minmus',RADIUS=200000 if mun else 60000,
+                        ROTATIONPERIOD=138984 if mun else 40400)
     env['SHIP'].STATUS='ORBITING'
     env['SHIP'].PERIAPSIS=15000
     def ground(ut,*args):
@@ -59,6 +61,39 @@ def check_missed_polar_pass():
     assert env['solved']['CROSS']<=250 and abs(env['solved']['NORMAL'])<=10
     assert count.value<=64 and old_cross>10000
     print('PASS: an overhead polar Mun site misses the consecutive-eight-orbit search; ranked passes beyond that horizon solve the same conic footprint inside unchanged cross/normal/trial limits')
+
+
+def check_minmus_waypoint_horizon():
+    # Use the operator's fixed A coordinates on an independent circular polar
+    # Minmus conic. This is an adverse synthetic epoch, not the unknown native
+    # orbit anomaly/LAN/body-frame orientation from boot036.
+    lat,lng=1.460,-42.638
+    lat_rad,lng_rad=map(math.radians,(lat,lng))
+    def setup():
+        env,oracle,count,trials=fixture(False)
+        oracle.target=np.array((math.cos(lat_rad)*math.cos(lng_rad),
+                                math.cos(lat_rad)*math.sin(lng_rad),math.sin(lat_rad)))
+        env['TIME'].SECONDS=10000
+        return env,oracle,count,trials
+    env,oracle,count,_=setup()
+    env['TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS']=0
+    solver.planner_prefix(env,oracle.period,target_lat=lat,target_lng=lng,scan_orbits=4,scan_samples=128)
+    assert not env['acceptedSolution'] and count.value==64
+    for profile in ('minmus_lander','minmus_contract_lander_return'):
+        cfg=fleet.profile(profile)
+        env,oracle,count,trials=setup()
+        env.update({key:cfg[key] for key in ('TARGET_DEORBIT_PASS_LOOKAHEAD_ROTATIONS',
+                   'TARGET_DEORBIT_NORMAL_DV_CAP','TARGET_DEORBIT_PREFERRED_CROSSTRACK_KM')})
+        solver.planner_prefix(env,oracle.period,target_lat=lat,target_lng=lng,
+                              scan_orbits=cfg['TARGET_DEORBIT_SCAN_ORBITS'],
+                              scan_samples=cfg['TARGET_DEORBIT_SCAN_SAMPLES'])
+        solved=env['solved']
+        assert env['acceptedSolution'] and count.value<=64,(profile,solved,count.value)
+        assert 10000+4*oracle.period<solved['UT']<10000+2*40400
+        assert solved['CROSS']<=250 and 10000<=solved['DOWNFIELD']<=20000
+        assert all(abs(trial.get('NORMAL',0))<=10 for trial in trials)
+        assert cfg['TARGET_TOLERANCE']==1500 and cfg['TARGET_DEORBIT_MIN_LEAD']==120
+    print('PASS: fixed Minmus A waypoint exhausts the old four-orbit horizon; both actual lander profiles select a later geometrically ranked pass with <250m cross-track inside64 trials and the original10m/s lateral cap')
 
 
 def check_forecast_bounds_and_cancel():
@@ -195,6 +230,7 @@ def check_long_coast_admission():
 
 if __name__=='__main__':
     check_missed_polar_pass()
+    check_minmus_waypoint_horizon()
     check_forecast_bounds_and_cancel()
     check_ranked_pass_windows()
     check_range_seed_limits()

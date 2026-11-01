@@ -67,7 +67,7 @@ def solve(env, base):
     return env['_refineDeorbitFootprint'](base,19.,129.,120,15000,10000,20000,2,120)
 
 
-def kepler_oracle(true_ut=1000, true_retro=15, true_normal=3.5, mirror=1, mun=False):
+def kepler_oracle(true_ut=1000, true_retro=15, true_normal=3.5, mirror=1, mun=False, inclination=None):
     """Independent inclined circular orbit, instantaneous deorbit.
 
     Exact ellipse intersection with the surface, including Minmus rotation.
@@ -75,6 +75,7 @@ def kepler_oracle(true_ut=1000, true_retro=15, true_normal=3.5, mirror=1, mun=Fa
     """
     mu, orbital_radius, radius = (6.5138398e10,215000.,200000.) if mun else (1.7658e9,75000.,60000.)
     inc, spin = (math.pi/2,2*math.pi/138984.) if mun else (math.radians(20),2*math.pi/40400.)
+    if inclination is not None:inc=math.radians(inclination)
     rate = math.sqrt(mu/orbital_radius**3)
     def rotation(angle):
         return np.array(((math.cos(angle),-math.sin(angle),0),
@@ -457,14 +458,14 @@ def check_shared_terrain():
     print('PASS: new and retained unflown nodes share the original terrain window/clearance guard; pre-target collisions reject, intentional post-target contact remains allowed')
 
 
-def planner_prefix(env, period=1000, target_pass=0,target_lat=19,target_lng=129):
+def planner_prefix(env, period=1000, target_pass=0,target_lat=19,target_lng=129,scan_orbits=8,scan_samples=512):
     """Run real search ordering/admission, stopping before final node creation."""
     env.update(targetLat=target_lat,targetLng=target_lng,overrideTolerance=0,overrideOvershoot=0,
                refineSite=False,targetPassUT=target_pass,ADDONS=NS(TR=NS(AVAILABLE=True,ISVERTWOTWO=True,
                    SETTARGET=lambda _:None)),targetReachable=lambda _:True,
                LATLNG=lambda lat,lng:None,HUDTEXT=lambda *args:None,CYAN='cyan',
                CONFIG=NS(IPU=2000),TARGET_TOLERANCE=1500,TARGET_DEORBIT_MIN_LEAD=120,
-               TARGET_DEORBIT_SCAN_ORBITS=8,TARGET_DEORBIT_SCAN_SAMPLES=512,
+               TARGET_DEORBIT_SCAN_ORBITS=scan_orbits,TARGET_DEORBIT_SCAN_SAMPLES=scan_samples,
                TARGET_DEORBIT_SCAN_CENTER_MINUTES=0,TARGET_DEORBIT_SCAN_WINDOW_MINUTES=0,
                LANDING_SIM_MODE=0,HASNODE=False)
     env['SHIP'].ORBIT=NS(PERIOD=period,ECCENTRICITY=0,HASNEXTPATCH=False)
