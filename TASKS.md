@@ -6,6 +6,35 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- IMPLEMENTED/source-checked; native recovery pending:
+  Espoir-Mun-Surveyor1 goto boot054 UT5649093 normal live-vector-passed-target
+  cutoff:169.097883m/s planned,0.591772374 residual, thrustStoppedTrue, no
+  shutdown/watchdog fault. Old ESCAPE removes the tail then creates redundant
+  26.2m/s retries, rejected by the saved interrupted-burn guard. Route is
+  ESCAPE/COAST/SHAPE/DONE, not MCC; final SHAPE can repair the actual orbit.
+  New small escape_handoff provider accepts at most1m/s AND1% only with matching
+  mission/launch/phase/body/node provenance, normal cutoff and fresh physical
+  zero. Raw parent conic must be bound/inside SOI/no next encounter; SHAPE
+  requires safe Pe floor, MCC retains original configured Pe corridor.
+  No foreign/retry node deletion. Receipt before cleanup survives reboot/SOI;
+  new burns invalidate it. ESCAPE checks pending attempts before already-
+  escaping/foreign-node branches and never replans after a failed execution.
+  Manual cmd/escaperecover refreshes function-only files, handles held prompts,
+  uses the REAL void stateSaveReloadState then verifies COAST metadata; no burn.
+  Focused source fixtures pass32 refusal cases, late context mutations, original
+  entry/fuel guards, independent Cartesian parent conic, three cleanup crashes
+  and real command/state writer. CAPTURE/SHAPE0.25m/s/executor guards unchanged.
+  Final113 routine files pass2.76s (103 verified passes reused,10 executed),
+  /tmp/kos-escape-handoff-complete-20261101.log. Prior fresh113-file21.91s run
+  caught a structural fixture tied to the removed SET-style retry variable;
+  its guard-before-execution assertions remain after matching the new LOCAL.
+  New five recovery checks together<1s; include old26m/s retry preservation,
+  manual held-prompt acknowledgement with yield restored, actual void state
+  checkpoint writer, and stale mission/launch receipts not blocking fresh
+  routes. No production edits during/after final test pass.
+  Native log:/tmp/ksp-deck-20261101T173723Z-fetch-mbqva00v/logs/
+  Espoir-Mun-Surveyor1_5642520/boot_054_core.log. No Deck/game/save changes.
+
 - IMPLEMENTED/source-checked; native retry pending:
   Espoir-Minmus-Lander1 boot023 UT5460373 LAND_PREP stalls at15.6x1050.8km
   because0.04938m/s Pe trim is below0.1m/s minimum and500m accuracy. Its

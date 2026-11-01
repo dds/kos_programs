@@ -76,7 +76,7 @@ def check_preview():
         assert evaluate(expr, predictedPe=pe, targetPe=53000, RETURN_ESCAPE_PE_TOLERANCE=1000) == expected
     phase = body(src, 'phaseEscape')
     guard = phase.index('IF ABORT OR NOT _returnEscapeEntryValid(')
-    execute = phase.index('SET success TO executeManeuver().')
+    execute = phase.index('LOCAL success IS executeManeuver().')
     assert guard < execute and 'yieldToPrompt().' in phase[guard:execute]
     assert 'nd:DELTAV:MAG > SHIP:DELTAV:VACUUM' in phase[guard:execute]
     assert 'RETURN.' in phase[guard:execute]

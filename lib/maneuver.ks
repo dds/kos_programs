@@ -1287,6 +1287,7 @@ LOCAL FUNCTION _mpb {
     PARAMETER st.
     // A receipt can reconcile cleanup after a reboot, never a later burn.
     stateRemove("orbit_burn_recovery").
+    stateRemove("escape_burn_handoff").
     stateSet("burn_pending", "true").
     stateSet("burn_started", "false").
     stateSet("burn_phase", stateGet("phase", "")).

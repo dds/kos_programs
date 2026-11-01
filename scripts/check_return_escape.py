@@ -214,12 +214,18 @@ def without_prints(nodes):
 
 
 def check_rejected_plan_cleanup():
+    class Lex(dict):
+        LENGTH=property(len)
+        HASKEY=dict.__contains__
     source=function_body(SOURCE,'phaseEscape').replace('REMOVE nd.','fixture_remove(nd).')
     for fault in ('entry','fuel','lost-patch','abort','operator-node','accepted'):
         env,node,_=joint_fixture(lambda nd:1578586.16)
         nodes=[];events=[]
         parent=NS(NAME='Kerbin')
         env.update(BODY=NS(BODY=parent,NAME='Minmus'),HASNODE=fault=='operator-node',
+                   LEXICON=lambda *args:Lex(zip(args[::2],args[1::2])),
+                   stateGet=lambda key,default='':default,maneuverBurnInterrupted=lambda:False,
+                   returnEscapeRecover=lambda _:False,
                    xferSeq=['ESCAPE','COAST','MCC'],ROUND=round,
                    _returnTargetPe=lambda:53000,
                    fixture_remove=lambda nd:events.append(('remove',nd)) or nodes.remove(nd),

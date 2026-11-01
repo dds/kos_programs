@@ -86,6 +86,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/convertstatejson.ks").` | Convert legacy SimpleJSON state to native kOS JSON |
 | `RUNPATH("0:/cmd/logs.ks").` | Archive the current boot's flight log to KSC |
 | `RUNPATH("0:/cmd/burnreport.ks").` | Print the latest maneuver cutoff and subsequent accepted mission handoff, retained across reboots |
+| `RUNPATH("0:/cmd/escaperecover.ks").` | Reconcile a stopped ESCAPE with a small residual and a verified safe parent-body orbit; checkpoint COAST, then reboot. Never re-burns the old departure |
 | `RUNPATH("0:/cmd/burnclear.ks").` | Explicitly dismiss a stopped manual review burn's residual-only tail up to0.25m/s after deleting its node; safe enabled airless review orbit required. Keeps phase, reports and budget |
 | `RUNPATH("0:/cmd/burncheck.ks").` | Read-only ignition check: engine availability, autopilot suppression, CPU roles/IPU, and timed throttle-governor probes against the retained node; never fires engines |
 | `RUNPATH("0:/cmd/deorbitcheck.ks").` | Read-only deorbit snapshot: keep the suspect node attached and run in manual mode with an archive link; saves and verifies the report under `0:/logs/archive/_diagnostics/` |
@@ -782,6 +783,26 @@ must meet every configured final orbit tolerance before it can advance.
 This recovery provider is excluded from ordinary departure, BPLANE and
 atmospheric-entry bands. Pull while linked and reboot to recover an existing
 eligible CAPTURE/SHAPE hold; retain the old node for ownership validation.
+
+ESCAPE has a separate achieved-trajectory handoff when its sequence continues
+through COAST to SHAPE or MCC. A normal stopped residual may be at most1m/s
+and1% of the planned burn. SHAPE routes require a bound actual parent orbit
+above the terrain/atmosphere floor and inside its SOI; MCC routes additionally
+retain the original configured return-Pe corridor. The original node prediction
+cannot prove the escape; [kOS raw orbit patches](https://ksp-kos.github.io/KOS/structures/orbits/orbit.html#orbit-hasnextpatch)
+describe the trajectory without planned maneuver changes. Cutoff faults, foreign nodes, missing correction phases
+and unsafe trajectories hold without planning another departure. A receipt
+binds cleanup to the mission, launch and original burn across reboots.
+`ESCAPE_RESIDUAL_RECOVERY_DV=0` disables this handoff; the ceiling remains1m/s.
+CAPTURE/SHAPE's separate0.25m/s limits and executor tolerances are unchanged.
+
+For an existing stopped ESCAPE, use `RUNPATH("0:/cmd/escaperecover.ks").`
+with a link, then reboot after it confirms acceptance. The command refreshes
+function-only source, validates the flown parent-body orbit, retains the strict
+cutoff report and checkpoints COAST without burning. An unrelated node is
+preserved. If older code created an unwanted unflown escape retry, inspect and
+remove that retry explicitly before running recovery; do not execute it as the
+original residual. Ordinary SHAPE/MCC then plans from the actual orbit.
 
 A reboot while waiting for an unflown capture reuses the single saved node
 after checking its mission/body/launch/phase, epoch and dV signature. It must

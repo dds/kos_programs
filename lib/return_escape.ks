@@ -10,8 +10,6 @@ GLOBAL ESCAPE_KSC_TARGET IS 0.
 GLOBAL REENTRY_PE IS 30000.
 GLOBAL RETURN_ESCAPE_PE_TOLERANCE IS 1000.
 
-LOCAL MAX_RETRIES IS 5.
-
 LOCAL FUNCTION _returnTargetPe {
     LOCAL pe IS ESCAPE_PE.
     IF pe < 0 { SET pe TO REENTRY_PE. }
@@ -460,6 +458,11 @@ LOCAL FUNCTION _returnEscapeEntryValid {
     RETURN ABS(predictedPe - targetPe) <= RETURN_ESCAPE_PE_TOLERANCE.
 }
 
+GLOBAL FUNCTION returnEscapeRecover {
+    PARAMETER seq.
+    RETURN escapeBurnRecover(seq,_returnTargetPe(),RETURN_ESCAPE_PE_TOLERANCE).
+}
+
 GLOBAL FUNCTION phaseEscape {
     IF BODY:BODY = 0 {
         mLogError("Return escape requires a parent body.").
@@ -468,6 +471,28 @@ GLOBAL FUNCTION phaseEscape {
         PRINT "  Current body has no parent.".
         yieldToPrompt().
         RETURN.
+    }
+
+    // Reconcile a flown burn before the generic already-escaping branch.
+    // Never remove its tail or plan another departure after a cutoff hold.
+    LOCAL handoff IS stateGet("escape_burn_handoff",LEXICON()).
+    LOCAL relevant IS handoff:LENGTH > 0.
+    IF handoff:HASKEY("MISSION") AND handoff:HASKEY("LAUNCH") {
+        // A completed older mission's receipt cannot approve or block a
+        // newly selected route. A new burn invalidates it in the executor.
+        SET relevant TO handoff["MISSION"] = stateGet("mission_id","")
+            AND handoff["LAUNCH"] = stateGetNum("launch_time",0).
+    }
+    IF (stateGet("burn_pending","false") = "true" AND stateGet("burn_started","false") = "true")
+            OR relevant {
+        IF returnEscapeRecover(xferSeq) { nextPhase(xferSeq). RETURN. }
+        mLogError("ESCAPE: flown burn retained for trajectory review; no new escape planned.").
+        PRINT "Inspect the actual parent orbit, then RUNPATH('0:/cmd/escaperecover.ks').".
+        yieldToPrompt(). RETURN.
+    }
+    IF HASNODE {
+        PRINT "Existing maneuver retained; remove/review it before automatic return planning.".
+        yieldToPrompt(). RETURN.
     }
 
     // ESCAPE plans a burn to leave a CAPTURED (bound) orbit. On a
@@ -484,65 +509,47 @@ GLOBAL FUNCTION phaseEscape {
 
     LOCAL target IS BODY:BODY.
     LOCAL targetPe IS _returnTargetPe().
-    LOCAL success IS FALSE.
-    LOCAL retries IS 0.
-
-    IF HASNODE {
-        PRINT "Existing maneuver retained; remove/review it before automatic return planning.".
-        yieldToPrompt(). RETURN.
+    LOCAL nd IS _planReturnEscape(target, targetPe).
+    IF nd = 0 OR NOT nd:ISTYPE("Node") {
+        mLogError("Return escape planning failed.").
+        PRINT " ".
+        PRINT "  ESCAPE PLANNING FAILED".
+        PRINT "  No maneuver was executed. Manual control is available.".
+        yieldToPrompt().
+        RETURN.
     }
 
-    UNTIL success {
-        LOCAL nd IS _planReturnEscape(target, targetPe).
-        IF nd = 0 OR NOT nd:ISTYPE("Node") {
-            SET retries TO retries + 1.
-            mLogError("Return escape planning failed.").
-            PRINT " ".
-            PRINT "  ESCAPE PLANNING FAILED".
-            PRINT "  No maneuver was executed. Manual control is available.".
-            yieldToPrompt().
-            RETURN.
-        }
-
-        LOCAL returnPatch IS _targetPatch(nd, target).
-        IF returnPatch = 0 {
-            mLogError("STATS return-escape hold reason=lost-parent-patch").
-            REMOVE nd.
-            yieldToPrompt().
-            RETURN.
-        }
-        IF ABORT OR NOT _returnEscapeEntryValid(returnPatch:PERIAPSIS, targetPe)
-                OR nd:DELTAV:MAG > SHIP:DELTAV:VACUUM {
-            mLogError("STATS return-escape hold reason=entry-or-fuel dv="
-                + nd:DELTAV:MAG + " available=" + SHIP:DELTAV:VACUUM
-                + " predictedPe=" + returnPatch:PERIAPSIS + " targetPe=" + targetPe
-                + " peError=" + (returnPatch:PERIAPSIS-targetPe)
-                + " tolerance=" + RETURN_ESCAPE_PE_TOLERANCE
-                + " entryOk=" + _returnEscapeEntryValid(returnPatch:PERIAPSIS,targetPe)
-                + " fuelOk=" + (nd:DELTAV:MAG <= SHIP:DELTAV:VACUUM)).
-            PRINT "RETURN ESCAPE REJECTED - NO BURN".
-            PRINT "  dV required/available: " + ROUND(nd:DELTAV:MAG,1)
-                + "/" + ROUND(SHIP:DELTAV:VACUUM,1) + " m/s".
-            PRINT "  Predicted/target Kerbin Pe: " + ROUND(returnPatch:PERIAPSIS/1000,1)
-                + "/" + ROUND(targetPe/1000,1) + " km".
-            REMOVE nd.
-            PRINT "  Rejected planner node removed; mission held, no burn.".
-            yieldToPrompt().
-            RETURN.
-        }
-        SET success TO executeManeuver().
-        IF NOT success {
-            SET retries TO retries + 1.
-            mLog("Return escape burn missed (attempt " + retries
-                + ") - waiting 10s and replanning.").
-            UNTIL NOT HASNODE { REMOVE NEXTNODE. WAIT 0.1. }
-            IF retries >= MAX_RETRIES {
-                mLogError("Return escape failed after " + retries
-                    + " attempts - halting.").
-                RETURN.
-            }
-            WAIT 10.
-        }
+    LOCAL returnPatch IS _targetPatch(nd, target).
+    IF returnPatch = 0 {
+        mLogError("STATS return-escape hold reason=lost-parent-patch").
+        REMOVE nd.
+        yieldToPrompt().
+        RETURN.
+    }
+    IF ABORT OR NOT _returnEscapeEntryValid(returnPatch:PERIAPSIS, targetPe)
+            OR nd:DELTAV:MAG > SHIP:DELTAV:VACUUM {
+        mLogError("STATS return-escape hold reason=entry-or-fuel dv="
+            + nd:DELTAV:MAG + " available=" + SHIP:DELTAV:VACUUM
+            + " predictedPe=" + returnPatch:PERIAPSIS + " targetPe=" + targetPe
+            + " peError=" + (returnPatch:PERIAPSIS-targetPe)
+            + " tolerance=" + RETURN_ESCAPE_PE_TOLERANCE
+            + " entryOk=" + _returnEscapeEntryValid(returnPatch:PERIAPSIS,targetPe)
+            + " fuelOk=" + (nd:DELTAV:MAG <= SHIP:DELTAV:VACUUM)).
+        PRINT "RETURN ESCAPE REJECTED - NO BURN".
+        PRINT "  dV required/available: " + ROUND(nd:DELTAV:MAG,1)
+            + "/" + ROUND(SHIP:DELTAV:VACUUM,1) + " m/s".
+        PRINT "  Predicted/target Kerbin Pe: " + ROUND(returnPatch:PERIAPSIS/1000,1)
+            + "/" + ROUND(targetPe/1000,1) + " km".
+        REMOVE nd.
+        PRINT "  Rejected planner node removed; mission held, no burn.".
+        yieldToPrompt().
+        RETURN.
+    }
+    LOCAL success IS executeManeuver().
+    IF NOT success AND NOT returnEscapeRecover(xferSeq) {
+        mLogError("ESCAPE: burn incomplete; achieved trajectory and node retained for review.").
+        PRINT "Use cmd/escaperecover.ks after inspection; no automatic departure retry.".
+        yieldToPrompt(). RETURN.
     }
 
     nextPhase(xferSeq).
