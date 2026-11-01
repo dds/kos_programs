@@ -6,6 +6,38 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- NATIVE comparison read at user request: Espoir-Kerbin-Surveyor1
+  scanorbit5202760 uses schema2/Biome,384 paired samples and all8 drift
+  trials; finishes18.56game/22.28wall seconds, no deadline/context failure.
+  Baseline35.62194; best lowerPe89.285km costs8.03783m/s and scores37.05751
+  (~4.03% mean gain; gridA4.54%,gridB3.50%), below unchanged10%-per-grid
+  gate. No node retained. Current orbit99.205x100.724km/inc90.000118deg.
+  Boot010 coverage: AltimetryLoRes2.8%,VisualLoRes38.1%,Biome38.1%;
+  solar cache settles6.74s,flow1.11/charge100%. This proves native new-search
+  execution/cleanup and latency, NOT an actual flown coverage improvement.
+  Current candidate family remains +/-10% altitude, polar/mirror only;
+  no-useful-change is bounded-search evidence, not global optimality.
+  /tmp/ksp-deck-20261101T010627Z-fetch-lnrm10ta/logs/_diagnostics/
+  scanorbit_Espoir-Kerbin-Surveyor1_5202760.log; boot010fetch-93uu30wm.
+
+- QUEUED; user chose manual recovery and redirected investigation to the
+  Kerbin surveyor: Mun contract false SHAPE success despite complete raw
+  Ap/Pe/inc/AoP. Saved contract95f48139 requires LAN0, but current profile
+  leaves LAN=-1. Live saved vessel LAN207.82562/inc179.96662/AoP34.37505;
+  contract inc180/LAN0/AoP34.28711, SMA1840415.3671/ecc.0528495463,
+  deviationWindow3. Reach specified orbit remains incomplete. Near-equatorial
+  periapsis direction depends on LAN+AoP(prograde)/LAN-AoP(retrograde);
+  matching AoP alone is insufficient. Merely setting LAN0 is also insufficient
+  if convergence only checks plane-normal angle (LAN degenerates at180deg).
+  Generic apsidal direction measurement/aim/refinement needs correction and
+  independent Cartesian tests before changing flight code. No fix applied.
+  User visually corrects with exnode; keep SCIENCE_OPS afterward to avoid old
+  SHAPE undoing it, confirm contract before orbit(after=scan). Read-only
+  boot033:/tmp/ksp-deck-20261101T005948Z-fetch-i32d1px4/logs/
+  Espoir-Mun-Surveyor1_5156306/boot_033_core.log. Save read over SSH only;
+  no game controls or save writes. ContractConfigurator OrbitParameter delegates
+  specific orbit matching to FinePrint VesselUtilities.VesselAtOrbit.
+
 - IMPLEMENTED/source-checked; native retry pending: user requests wider tolerance
   on Espoir-Mun-Surveyor1's0.015126m/s set-ap trim. Nativeboot026 confirms
   majorPe raise96.76m/s done, AoP0.872827m/s executed and benign1.025mm/s
