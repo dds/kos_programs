@@ -6,7 +6,22 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- IMPLEMENTED/source-checked; native recovery pending:
+- NATIVE intermediate Kerbin orbit reached; northern Molniya switch pending:
+  Espoir-Mun-Surveyor1 boot059 UT5751199 still has goto targets Ap=Pe3020km,
+  inc63.4, no AoP target, altitude tolerance5km, minimum0.4m/s. Achieved
+  3014.4x3023.2km/e0.0012; remaining Pe trim0.381m/s is skipped. This is the
+  optional intermediate circle, not the requested northern Molniya. No node
+  or interrupted attempt blocks its current planning (boot058's1.168m/s tail
+  was explicitly cleared with shaperetry at5751186.8). Existing command:
+  setphase("SHAPE","kerbin_molniya_north"), REBOOT. Goal then changes to
+  Ap2999751/Pe163584m/inc63.4/AoP270/e0.65. No profile/flight-code change
+  required to release the extra circular trim. Final Molniya flight pending.
+  Native logs:/tmp/ksp-deck-20261101T183421Z-fetch-wtom2la_/logs/
+  Espoir-Mun-Surveyor1_5642520/boot_059_core.log; boot058fetch-5c4s3bff.
+  Future improvement: explicit operational accuracy option for generated goto
+  parking goals; do not silently loosen user-specified contract goals.
+
+- IMPLEMENTED/source-checked; native escape/coast reached Kerbin SHAPE above:
   Espoir-Mun-Surveyor1 goto boot054 UT5649093 normal live-vector-passed-target
   cutoff:169.097883m/s planned,0.591772374 residual, thrustStoppedTrue, no
   shutdown/watchdog fault. Old ESCAPE removes the tail then creates redundant
