@@ -460,6 +460,7 @@ def check_command():
                    TIME=NS(SECONDS=1000), ABORT=False, stateGet=state.get,
                    KUNIVERSE=NS(TIMEWARP=NS(ISSETTLED=True)),
                    RUNPATH=lambda _: None, bootPreamble=lambda: None, bootLibLoad=lambda _: None,
+                   bootApplyMissionConfig=lambda *_:True,HOMECONNECTION=NS(ISCONNECTED=True),
                    EXISTS=lambda _: True, applyMissionOverrides=lambda: None,
                    landingKerbinElevationNow=lambda *args: 10,
                    landingResolveTarget=lambda: dict(FOUND=True, LAT=2, LNG=-75),
@@ -482,6 +483,68 @@ def check_command():
             assert mutations[0]['LANDING_RADIO_MODE'] == ('OFFLINE' if scenario=='offline' else 'AUTO' if scenario=='inherit' else 'DIRECT')
             assert mutations[0]['LANDING_LIGHT_MODE'] == ('SUNLIT' if scenario=='saved-policy' else 'AFTERNOON' if scenario == 'afternoon' else 'MORNING')
     print('PASS: preview preserves node/mission; apply alone replaces target/node; no-site, begun burn, descent and positive throttle refuse mutation')
+
+
+def check_fixed_site_policy_command():
+    source=function_body(COMMAND,'_cmdLandlight')
+    def without_print(nodes):
+        return [(s,without_print(yes),without_print(no)) for s,yes,no in nodes if not s.startswith('PRINT ')]
+    parsed=without_print(ks.parse(source))
+    for fault in ('none','inherit','abort','thrust','raw','pilot','started','pending',
+                  'phase','unbound','soi','inactive','config','late-body','late-phase','late-mission'):
+        state=dict(vehicle='Espoir',mission_id='minmus_contract_lander_return',phase='LAND_DEORBIT')
+        saved=dict(TARGET_LAT=1.460,TARGET_LNG=-42.638,TARGET_LOCK=1,
+                   RETURN_PE=52000,CAPTURE_RESERVE_DV=900,LANDING_STAGE_LIMIT=2)
+        node=object();nodes=[node];loads=[];updates=[]
+        ship=NS(BODY=NS(NAME='Minmus'),STATUS='ORBITING',PERIAPSIS=15500,
+                ORBIT=NS(ECCENTRICITY=.0007,HASNEXTPATCH=False),THRUST=0,
+                CONTROL=NS(MAINTHROTTLE=0,PILOTMAINTHROTTLE=0))
+        warp=NS(ISSETTLED=not fault.startswith('late-'))
+        def write(values):updates.append(dict(values));saved.update(values)
+        def settled(_):
+            warp.ISSETTLED=True
+            if fault=='late-body':ship.BODY=NS(NAME='Mun')
+            if fault=='late-phase':state['phase']='LAND_ASSIST'
+            if fault=='late-mission':state['mission_id']='other'
+        def configured(vehicle,mid,linked):
+            assert (vehicle,mid,linked)==('Espoir','minmus_contract_lander_return',True)
+            return fault!='config'
+        env=dict(action='policy',mode='ANY',requireKerbin=-1 if fault=='inherit' else 1,
+                 LANDING_LIGHT_MODE='SUNLIT',LANDING_RADIO_MODE='AUTO',LANDING_REQUIRE_KERBIN=1,
+                 SHIP=ship,KUNIVERSE=NS(TIMEWARP=warp,ACTIVEVESSEL=ship),ABORT=False,
+                 stateGet=state.get,RUNPATH=lambda path:loads.append(path),bootPreamble=lambda:None,
+                 bootLibLoad=loads.append,bootApplyMissionConfig=configured,
+                 HOMECONNECTION=NS(ISCONNECTED=True),LEXICON=lambda *args:dict(zip(args[::2],args[1::2])),
+                 missionOverrideUpdate=write,fixture_wait=settled,HASNODE=True)
+        if fault=='abort':env['ABORT']=True
+        if fault=='thrust':ship.THRUST=1
+        if fault=='raw':ship.CONTROL.MAINTHROTTLE=.1
+        if fault=='pilot':ship.CONTROL.PILOTMAINTHROTTLE=.1
+        if fault=='started':state['deorbit_burn_started']='true'
+        if fault=='pending':state.update(burn_pending='true',burn_started='true')
+        if fault=='phase':state['phase']='LAND_ASSIST'
+        if fault=='unbound':ship.ORBIT.ECCENTRICITY=1.1
+        if fault=='soi':ship.ORBIT.HASNEXTPATCH=True
+        if fault=='inactive':env['KUNIVERSE'].ACTIVEVESSEL=object()
+        original=dict(saved)
+        try:ks.run(parsed,env)
+        except ks.Returned:pass
+        assert bool(updates)==(fault in ('none','inherit')),fault
+        assert nodes==[node] and not any(name in loads for name in ('landing_light_search','landing_light_wait'))
+        assert all(saved[key]==value for key,value in original.items()),fault
+        if updates:
+            expected=dict(LANDING_LIGHT_MODE='ANY')
+            if fault!='inherit':expected.update(LANDING_REQUIRE_KERBIN=1,LANDING_RADIO_MODE='DIRECT')
+            assert updates==[expected] and state['phase']=='LAND_DEORBIT'
+    # Recorded successful-geometry policy screens: two daylight far-side
+    # passes still reject; the dark near-side pass becomes eligible.
+    for sun,kerbin,allowed in ((55.92,-37.12,False),(54.01,-50.92,False),(-54.93,44.27,True)):
+        env=environment(sun_longitude=90-sun,kerbin_longitude=90-kerbin)
+        env.update(LANDING_LIGHT_MODE='SUNLIT',LANDING_RADIO_MODE='DIRECT')
+        assert not env['landingLightAt'](0,0,1000)['OK']
+        env['LANDING_LIGHT_MODE']='ANY'
+        assert bool(env['landingLightAt'](0,0,1000)['OK'])==allowed
+    print('PASS: policy-only ANY/DIRECT preserves fixed A, existing node, mission, return fuel/stage settings; unsafe or changed contexts reject, and recorded dark near-side geometry passes while daylight far-side sites still fail radio')
 
 
 class Text(KString):
@@ -641,5 +704,6 @@ if __name__ == '__main__':
     check_economy_radio_priority()
     check_economy_target_refresh()
     check_command()
+    check_fixed_site_policy_command()
     check_overrides()
     check_planning_region()

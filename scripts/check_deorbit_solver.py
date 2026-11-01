@@ -278,6 +278,7 @@ def check_geometry_before_light():
                    minDownfield=10000,maxDownfield=20000,orbitScan=0,scanOrbits=4,
                    candidateAngle=50,bestAccepted=Lex(VALID=False),bestAcceptedCross=1e9,
                    newClosest=True,closestLight='not-checked',
+                   geometryAcceptedCount=0,policyRejectedCount=0,
                    preferredCrossTrack=250,acceptedSolution=False,
                    _targetDeorbitLightAccepted=lambda solved,ut,*args: light_calls.append(ut) or kind != 'bad-light')
         ks.run(nodes,env)
@@ -519,12 +520,26 @@ def check_failure_candidate_summary():
     assert count.value==64 and env['windowsTried']==8
     assert env['closestWindow']==5 and env['closestRejected']['CROSS']==600
     assert env['closestLight']=='not-checked' and not env['acceptedSolution']
+    assert env['geometryAcceptedCount']==env['policyRejectedCount']==0
     assert env['_targetDeorbitRejection'](env['closestRejected'],10000,20000)=='cross-track'
     summary=SOURCE.split('STATS deorbit best-rejected window=',1)[1].split('} ELSE {',1)[0]
     for key in ('geometryReason=','light=','retro=','normal=','downfieldKm=',
                 'crossKm=','crossCapKm=','fpa=','PeKm=','burnUT='):
         assert key in summary
     print('PASS: a failed actual search keeps the nearest rejected footprint through later worse trials, reports its real window/reason/limits and stops at 64 without approval')
+
+
+def check_light_policy_failure_summary():
+    env,count,calls=search_fixture(reachable_window=2)
+    env['_targetDeorbitLightAccepted']=lambda *args:False
+    assert planner_prefix(env) is False
+    assert count.value==64 and env['geometryAcceptedCount']>0
+    assert env['policyRejectedCount']==env['geometryAcceptedCount']
+    assert not env['bestAccepted']['VALID'] and not env['acceptedSolution'] and not env['HASNODE']
+    assert env['closestLight']=='rejected'
+    result=SOURCE.split('ELSE IF geometryAcceptedCount > 0 AND policyRejectedCount = geometryAcceptedCount {',1)[1].split('} ELSE {',1)[0]
+    assert 'reason=light-radio-policy' in result and 'geometryCandidates=' in result and 'policyRejected=' in result
+    print('PASS: real search counts geometrically valid but light-rejected footprints, holds without a node/burn and reports light-radio-policy separately from geometric failure')
 
 
 def check_mun_normal_authority():
@@ -824,6 +839,7 @@ if __name__ == '__main__':
     check_shared_terrain()
     check_pass_first_order()
     check_failure_candidate_summary()
+    check_light_policy_failure_summary()
     check_mun_normal_authority()
     check_reported_preference_budget()
     check_normal_band_fallback()

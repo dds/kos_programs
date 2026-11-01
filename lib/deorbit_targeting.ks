@@ -203,6 +203,8 @@ GLOBAL FUNCTION targetedDeorbitAt {
     LOCAL orbitScan IS 0.
     LOCAL candidatesTried IS 0.
     LOCAL windowsTried IS 0.
+    LOCAL geometryAcceptedCount IS 0.
+    LOCAL policyRejectedCount IS 0.
     LOCAL closestRejected IS LEXICON("VALID", FALSE).
     LOCAL closestMerit IS 1e30.
     LOCAL closestWindow IS 0.
@@ -263,6 +265,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                         + " geometry did not solve a valid deorbit.").
                 } ELSE IF _targetDeorbitSolutionAccepted(solved,
                         minDownfield, maxDownfield) {
+                    SET geometryAcceptedCount TO geometryAcceptedCount+1.
                     // Correction may move the burn time. Geometry must pass
                     // before spending ephemeris work on sunlight/radio.
                     SET geometry["UT"] TO solved["UT"].
@@ -272,6 +275,7 @@ GLOBAL FUNCTION targetedDeorbitAt {
                         IF lightAllowed { SET closestLight TO "accepted". }
                     }
                     IF NOT lightAllowed {
+                        SET policyRejectedCount TO policyRejectedCount+1.
                         mLogWarn("Deorbit candidate rejected by light/Kerbin policy; scanning later passes.").
                     } ELSE {
                         LOCAL crossTrack IS _targetCrossTrackFromSolved(solved).
@@ -371,6 +375,11 @@ GLOBAL FUNCTION targetedDeorbitAt {
         IF NOT foundGeometry {
             mLogError("STATS deorbit result=hold: no approaching burn geometry; stop="
                 + searchStop + " windowsTried=" + windowsTried + "/" + scanOrbits + ".").
+        } ELSE IF geometryAcceptedCount > 0 AND policyRejectedCount = geometryAcceptedCount {
+            mLogError("STATS deorbit result=hold reason=light-radio-policy geometryCandidates="
+                + geometryAcceptedCount + " policyRejected=" + policyRejectedCount
+                + " stop=" + searchStop + " windowsTried=" + windowsTried + "/" + scanOrbits
+                + " trials=" + _deorbitEvaluations + "/" + TARGET_DEORBIT_MAX_EVALUATIONS).
         } ELSE {
             mLogError("STATS deorbit result=hold: search found no validated TR footprint "
                 + ROUND(minDownfield/1000,1) + "-"

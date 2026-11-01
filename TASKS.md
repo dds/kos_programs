@@ -6,7 +6,33 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
-- IMPLEMENTED/source-checked; native longer-horizon deorbit retry pending:
+- IMPLEMENTED/source-checked; dark/direct policy command native retry pending:
+  Espoir-Minmus-Lander1 boot037 UT5754127..5754169 confirms new two-rotation
+  survey ran (1665 samples/5.4s/8 ranked), exact A1.460223,-42.637998.
+  Three geometrically valid candidates reject on policy: sun55.92/Kerbin-37.12,
+  sun54.01/Kerbin-50.92, and sun-54.93/Kerbin44.27. Final generic footprint
+  failure was misleading. Solver now counts geometric accepts and policy
+  rejects, reporting reason=light-radio-policy when all admitted geometry
+  failed the policy; actual admission and64-trial budget unchanged.
+  OPERATOR explicitly selects dark landing allowed, direct Kerbin retained.
+  New cmd/landlight action policy with ANY,1 saves only LANDING_LIGHT_MODE,
+  LANDING_REQUIRE_KERBIN and LANDING_RADIO_MODE=DIRECT; keep fixed A/node,
+  phase, mission/return/reserves/staging and original elevation15deg margin.
+  No auto reset/site selection/burn/node deletion/reboot; require stable active
+  same-body/unflown/idle LAND_DEORBIT with fresh context after warp settles.
+  It uses normal bootApplyMissionConfig for KSM/source cached profiles, fixing
+  the command's old source-only path. Policy/status omit search/wait providers.
+  Policy override also survives later hops; profile defaults remain sunlit.
+  Command: RUNPATH("0:/cmd/landlight.ks","policy","ANY",1). then REBOOT.
+  Actual command refusal/preservation and recorded three elevation screens
+  pass; solver fixture distinguishes policy from geometric failure. All113
+  routine files pass38.84s (2 verified unchanged passes reused,111 executed),
+  0 structural errors; existing KSC_DEORBIT handler warning unchanged.
+  Native new powered solution still needed.
+  Log:/tmp/ksp-deck-20261101T193932Z-fetch-fgakfmef/logs/
+  Espoir-Minmus-Lander1_5154039/boot_037_core.log. No game/save changes.
+
+- NATIVE longer-horizon survey ran; policy rejection above:
   Espoir-Minmus-Lander1 boot036 UT5753598..5753635 now loads LAND_DEORBIT
   after the label fix. Parking Pe15.5/Ap15.6km inc89.99. Search uses only
   four consecutive orbits,64/64 trials; best window4/angle50 has normal-5,
@@ -75,8 +101,11 @@ record remaining uncertainty before closing a task.
   10 executed),0 structural errors; existing KSC_DEORBIT handler warning
   unchanged. New command's native execution pending. No Deck/game/save edits.
 
-- OPERATOR CONFIRMED northern Molniya maneuver now correctly configured;
-  final orbit completion pending:
+- OPERATOR CONFIRMED northern Molniya contract complete (either dwell qualified).
+  New request: retask Espoir-Mun-Surveyor1 to a polar Kerbin mapping orbit to
+  fill remaining biome holes;1468m/s available. Mapping retask command/profile
+  pending. Keep normal fuel/reserve/ledger and scanner/whole-probe safeguards.
+  Earlier intermediate-orbit diagnosis:
   Espoir-Mun-Surveyor1 boot059 UT5751199 still has goto targets Ap=Pe3020km,
   inc63.4, no AoP target, altitude tolerance5km, minimum0.4m/s. Achieved
   3014.4x3023.2km/e0.0012; remaining Pe trim0.381m/s is skipped. This is the

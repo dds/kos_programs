@@ -4,6 +4,7 @@
 // RUNPATH("0:/cmd/landlight.ks", "apply", "MORNING", 1).
 // RUNPATH("0:/cmd/landlight.ks", "preview", "AFTERNOON", 1).
 // RUNPATH("0:/cmd/landlight.ks", "status"). // saved policy/site, live geometry
+// RUNPATH("0:/cmd/landlight.ks", "policy", "ANY", 1). // keep the fixed site/node
 // Final argument: 1 requires direct Kerbin view; 0 permits offline landing.
 // Omit it to inherit the shared body/relay policy.
 // Apply replaces the unflown deorbit node/target, preserving mission intent.
@@ -12,8 +13,8 @@
 PARAMETER action IS "preview", mode IS "", requireKerbin IS -1.
 
 LOCAL FUNCTION _cmdLandlight {
-    IF action <> "preview" AND action <> "apply" AND action <> "status" {
-        PRINT "Use status/preview/apply, mode ANY/SUNLIT/MORNING/AFTERNOON, Kerbin view 0/1.". RETURN.
+    IF action <> "preview" AND action <> "apply" AND action <> "status" AND action <> "policy" {
+        PRINT "Use status/preview/apply/policy, mode ANY/SUNLIT/MORNING/AFTERNOON, Kerbin view 0/1.". RETURN.
     }
     IF (mode <> "" AND mode <> "ANY" AND mode <> "SUNLIT" AND mode <> "MORNING" AND mode <> "AFTERNOON")
             OR (requireKerbin <> -1 AND requireKerbin <> 0 AND requireKerbin <> 1) {
@@ -26,13 +27,16 @@ LOCAL FUNCTION _cmdLandlight {
     // reboot. Load explicitly after the existing landing config/math deps.
     bootLibLoad("landing_light_math").
     bootLibLoad("landing_light").
-    bootLibLoad("landing_light_search").
-    bootLibLoad("landing_light_wait").
-    LOCAL profilePath IS "1:/missions/" + stateGet("vehicle", "")
-        + "/" + stateGet("mission_id", "") + ".ks".
-    IF NOT EXISTS(profilePath) { PRINT "Cached mission profile missing; cannot preserve mission context.". RETURN. }
-    RUNPATH(profilePath).
-    applyMissionOverrides().
+    IF action <> "policy" AND action <> "status" {
+        bootLibLoad("landing_light_search").
+        bootLibLoad("landing_light_wait").
+    }
+    LOCAL vehicle IS stateGet("vehicle", "").
+    LOCAL mid IS stateGet("mission_id", "").
+    IF vehicle = "" OR mid = "" { PRINT "No selected mission; nothing changed.". RETURN. }
+    // Cached profiles are normally KSM, not source. Use the normal resolver
+    // and restore the existing per-flight overrides before editing policy.
+    IF NOT bootApplyMissionConfig(vehicle,mid,HOMECONNECTION:ISCONNECTED) { RETURN. }
     IF mode = "" { SET mode TO LANDING_LIGHT_MODE. }
     IF action = "status" {
         PRINT "Saved light policy=" + LANDING_LIGHT_MODE + "; require Kerbin=" + landingRequireKerbin()
@@ -61,8 +65,35 @@ LOCAL FUNCTION _cmdLandlight {
             OR SHIP:CONTROL:PILOTMAINTHROTTLE > 0 {
         PRINT "Requires abort clear, zero throttle and zero thrust.". RETURN.
     }
+    LOCAL selectedBody IS SHIP:BODY.
     SET WARP TO 0.
     UNTIL KUNIVERSE:TIMEWARP:ISSETTLED { WAIT 0.1. }
+    IF action = "policy" {
+        IF SHIP <> KUNIVERSE:ACTIVEVESSEL OR SHIP:BODY <> selectedBody
+                OR SHIP:STATUS <> "ORBITING" OR NOT (SHIP:PERIAPSIS > 0)
+                OR NOT (SHIP:ORBIT:ECCENTRICITY >= 0 AND SHIP:ORBIT:ECCENTRICITY < 1)
+                OR SHIP:ORBIT:HASNEXTPATCH OR ABORT
+                OR NOT (SHIP:THRUST <= 0.001 AND SHIP:CONTROL:MAINTHROTTLE <= 0
+                    AND SHIP:CONTROL:PILOTMAINTHROTTLE <= 0)
+                OR stateGet("vehicle", "") <> vehicle OR stateGet("mission_id", "") <> mid
+                OR stateGet("phase", "") <> "LAND_DEORBIT"
+                OR stateGet("deorbit_burn_started", "false") = "true"
+                OR (stateGet("burn_pending", "false") = "true"
+                    AND stateGet("burn_started", "false") = "true") {
+            PRINT "Policy change requires the same active, idle, unflown LAND_DEORBIT orbit. Nothing changed.".
+            RETURN.
+        }
+        LOCAL values IS LEXICON("LANDING_LIGHT_MODE",mode).
+        IF requireKerbin >= 0 {
+            SET values["LANDING_REQUIRE_KERBIN"] TO requireKerbin.
+            SET values["LANDING_RADIO_MODE"] TO "OFFLINE".
+            IF requireKerbin > 0 { SET values["LANDING_RADIO_MODE"] TO "DIRECT". }
+        }
+        missionOverrideUpdate(values).
+        PRINT "Landing policy saved; target, node, phase and return settings preserved.".
+        PRINT "REBOOT. to revalidate/plan the same landing site under this policy. No burn started.".
+        RETURN.
+    }
     SET LANDING_LIGHT_MODE TO mode.
     IF requireKerbin >= 0 {
         SET LANDING_REQUIRE_KERBIN TO requireKerbin.

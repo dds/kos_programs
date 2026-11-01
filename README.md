@@ -103,6 +103,7 @@ use `0:/cmd/...`; boot does not install phase commands onto the local volume.
 | `RUNPATH("0:/cmd/scanraise.ks",130).` | Explicitly plan one mapper apoapsis raise to130km, retaining Pe and plane; inspect then execute with exnode. Uses mission fuel limits; coverage improvement is experimental |
 | `RUNPATH("0:/cmd/setlanding.ks", "assist").` | Landing overrides from archive: `deorbit` / `assist` |
 | `RUNPATH("0:/cmd/landlight.ks").` | Preview a lit ground-track site from Mun/Minmus parking orbit; `"status"` checks the saved target with live positions; `"apply", "AFTERNOON", 1` selects afternoon while preserving the return mission; final argument `0` waives direct Kerbin view |
+| `RUNPATH("0:/cmd/landlight.ks","policy","ANY",1).` | Allow a dark landing at the existing fixed site while retaining direct Kerbin visibility. Saves only policy overrides; preserves target/node/phase. Run idle in unflown LAND_DEORBIT, then reboot |
 | `RUNPATH("0:/cmd/setorbit.ks", ...).` | Set orbit targets for the next phases |
 | `RUNPATH("0:/cmd/orbit.ks",LEXICON("after","scan")).` | Enabled airless local mission: select70×90km polar mapping, keeping the probe together; then reboot |
 | `RUNPATH("0:/cmd/visit.ks").` | Enabled airless local mission: visit the selected same-body waypoint via15km polar parking; then reboot |
@@ -3043,6 +3044,22 @@ older model is not automatically accepted by the updated one.
 
 `landlight apply` selects a new site; use it only when changing the landing
 location is intended, not merely to repair a node for a configured target.
+To change only the current flight's policy while keeping a surveyed target,
+use the policy action from idle, unflown `LAND_DEORBIT`:
+
+```ks
+RUNPATH("0:/cmd/landlight.ks","policy","ANY",1).
+REBOOT.
+```
+
+This permits darkness but retains direct Kerbin visibility and its configured
+elevation margin. Target, node, phase, mission and return/fuel/staging settings
+are preserved; later per-flight hops inherit the override. `SUNLIT` restores
+the sunlight requirement; omit the last argument to retain the current radio
+policy. No search, maneuver or reboot runs inside the policy command. All
+light/node checks run again when the mission resumes. Both compiled and source
+cached mission profiles use the normal mission resolver.
+
 For a vessel **already parked at the Mun/Minmus in LAND_DEORBIT**, stop at the
 manual prompt before ignition. With an archive link and the updated code synced:
 
