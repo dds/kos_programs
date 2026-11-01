@@ -6,6 +6,29 @@ record remaining uncertainty before closing a task.
 
 ## Compact working handoff
 
+- NATIVE scanorbit5267041: all4 tilt candidates propagated accurately;
+  89.5deg scores33.9743,90.5deg37.8398,89deg30.9723,91deg38.7752 vs
+  baseline36.6374. Best91deg costs39.1857m/s, mean+5.84%,gridA+4.86%/
+  gridB+6.84%, below unchanged10%-per-grid gate.12.70game/13.93wall seconds,
+  no node retained. This does not prove a globally optimal orbit: current
+  search is small, six-orbit centerline samples omit swath/daylight/operation.
+  Important new evidence: latest persistent save UT5267019.324 (22s before
+  preview) shows attached scansat-multi-modis-1, SCANsat enabled=True but
+  scanning=False. Coverage38.0831501932195% exactly unchanged from5202760.
+  Installed MODIS config: min20km,ideal70km,max250km,FOV3deg,requireLight=True.
+  Thus100km already gets its configured full swath; raising does not widen
+  it, although period/groundtrack spacing changes.70km is Kerbin's atmospheric
+  boundary and below the profile's80km floor. First resume SCANSAT_OPS/check
+  live scanner/daylight/power before spending fuel. A single paused/manual
+  save does not establish why it was off or how long it stayed off.
+  Follow-up: operational sensor/daylight diagnostics, swath-aware area gate
+  (_scanAreaUnscanned only checks nadir and caches300s), longitude/phasing/
+  broader altitude comparisons; preserve physical/fuel/reserve safeguards.
+  No flight changes made for this investigation. Native report:
+  /tmp/ksp-deck-20261101T022234Z-fetch-82c48pe7/logs/_diagnostics/
+  scanorbit_Espoir-Kerbin-Surveyor1_5267041.log; boot012fetch-gfm4h5ee.
+  Read-only save/config inspection script:/tmp/ksp-surveyor-sensors.py.
+
 - NATIVE Minmus-Surveyor1 arrival reviewed: boot011 correction atUT5265488
   plans0.484714m/s from479.63km Pe to467.01km, target465.764km/inc21.6deg.
   Cutoff residual0.047868193m/s accepted; fresh unburned native corridor gate
